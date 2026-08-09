@@ -1,4 +1,4 @@
-package macos
+package process
 
 import (
 	"context"
@@ -23,12 +23,12 @@ const (
 // 置き換えるのは、SSH_ASKPASS が SSH_ASKPASS_REQUIRE=force と組み合わさると、
 // ssh-add がその標準入力を無視して、このアプリケーションが選んだのではない
 // プログラムにパスフレーズを尋ねてしまうからだ。鍵のパスは常にワークスペース内の
-// 絶対パスなので、オプションとして読まれることは決して
-// ない。
+// 絶対パスなので、オプションとして読まれることは決してない。
 //
 // プログラムのパスは定数ではなく Toolchain から来る。そのためこのアダプタは、
 // アプリケーションの他の部分と同じ OpenSSH を実行し、PATH に依存することは
-// 決してない。
+// 決してない。ssh-add はどのプラットフォームでも同じ引数を取るので、ここに
+// プラットフォーム固有のものはない。
 type KeyAgent struct {
 	runner    platform.OutputRunner
 	toolchain platform.Toolchain
