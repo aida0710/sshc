@@ -129,6 +129,7 @@ func New(options Options) (*Server, error) {
 	e.GET("/api/v1/health", handlers.Health)
 	if options.Config != nil {
 		registerConfigRoutes(e, ConfigHandlers{Service: options.Config, Keys: options.Keys, Secrets: options.Passwords})
+		registerConnectionRoutes(e, ConnectionHandlers{Service: options.Config, Keys: options.Keys, Secrets: options.Passwords})
 	}
 
 	// 操作を確認するすべてのサブシステムは、自分の evidence resolver を
