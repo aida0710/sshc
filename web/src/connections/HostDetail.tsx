@@ -97,6 +97,10 @@ export function HostDetailPanel({
   const identityAlias = detail.form.entry.identity.alias;
   const formRaw = detail.form.raw;
   useEffect(() => {
+    setTab("Basic");
+  }, [identityPath, identityAlias]);
+
+  useEffect(() => {
     setDrafts({});
     setRemoved([]);
     setAdditions([]);

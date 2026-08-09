@@ -1,25 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { appendHostBlock, duplicateHostBlock, removeHostBlock } from "./blocks";
+import { duplicateHostBlock, removeHostBlock } from "./blocks";
 
 const contents = "# top\nHost bastion\n\tUser ops\n\nHost nas\n\tUser aida\n";
-
-describe("appendHostBlock", () => {
-  it("adds a block at the end and keeps every existing byte", () => {
-    expect(appendHostBlock(contents, "build01")).toBe(
-      "# top\nHost bastion\n\tUser ops\n\nHost nas\n\tUser aida\n\nHost build01\n\tHostName build01\n",
-    );
-  });
-
-  it("adds the missing final newline before appending", () => {
-    expect(appendHostBlock("Host nas\n\tUser aida", "build01")).toBe(
-      "Host nas\n\tUser aida\n\nHost build01\n\tHostName build01\n",
-    );
-  });
-
-  it("creates the first block of an empty file without a leading blank line", () => {
-    expect(appendHostBlock("", "build01")).toBe("Host build01\n\tHostName build01\n");
-  });
-});
 
 describe("duplicateHostBlock", () => {
   it("copies a block and renames only the alias on the header line", () => {

@@ -3,6 +3,7 @@ import { ApiError, failureCode, type Problem } from "../api/client";
 import {
   configApi,
   type EditRequest,
+  type CreateConnectionResponse,
   type FieldEdit,
   type HostDetail,
   type HostEntry,
@@ -14,14 +15,15 @@ import {
 import { ConnectionTree, type HostSelection } from "./ConnectionTree";
 import type { DragPayload } from "./dragdrop";
 import { HostDetailPanel } from "./HostDetail";
+import { CreateConnectionModal } from "./CreateConnectionModal";
 import { NoticeList } from "./SavePreview";
 import { OrphanPanel } from "./OrphanPanel";
 import { useTranslate } from "../i18n/context";
 import type { InspectorContent } from "../ui/Inspector";
 import { HostInspector, hostNeedsAttention } from "./HostInspector";
-import { control, fieldLabel, narrowControl } from "../ui/form";
+import { narrowControl } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
-import { appendHostBlock, duplicateHostBlock, removeHostBlock } from "./blocks";
+import { duplicateHostBlock, removeHostBlock } from "./blocks";
 import { integrationsApi, type TerminalID, type TerminalOptionsResponse } from "../api/integrations";
 import { Icon } from "../ui/icons";
 
@@ -85,11 +87,6 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
   const [detail, setDetail] = useState<HostDetail | null>(null);
   const [preview, setPreview] = useState<SavePreview | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [newAlias, setNewAlias] = useState("");
-  // 空文字は「サーバーが報告した entry file」を意味する。entry file は通常
-  // config だが、固定すると別の root を使う構成で存在しないファイルへ
-  // 新規接続を書こうとしてしまう。
-  const [targetFile, setTargetFile] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [localError, setLocalError] = useState("");
   const [moveTarget, setMoveTarget] = useState("");
@@ -366,23 +363,17 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
     void submit({ kind: "metadata", metadata });
   }
 
-  async function createHost() {
-    if (newAlias === "") {
-      setLocalError(t("conn.needsAlias"));
-      return;
-    }
+  async function onConnectionCreated(result: CreateConnectionResponse) {
+    setCreating(false);
+    setPreview(result.preview);
+    setProblem(null);
+    setLocalError("");
+    setManaging(false);
+    setConfirmingDelete(false);
     try {
-      const destination = targetFile || entryPath;
-      const current = await configApi.file(destination);
-      await submit({
-        kind: "file_raw",
-        path: destination,
-        base: current.contents,
-        raw: appendHostBlock(current.contents, newAlias),
-      });
-      setNewAlias("");
-      setLocalError("");
-      setCreating(false);
+      await reload();
+      setSelection(result.identity);
+      setDetail(await configApi.host(result.identity.path, result.identity.alias));
     } catch (error) {
       setProblem(toProblem(error));
     }
@@ -519,13 +510,9 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
   }
 
   return (
-    // ウィンドウの端まで届く二つのペインであり、padding の付いた箱に浮
-    // かぶ二つの column ではない——source list と同じように、リストは
-    // 自前の面、自前の border、自前のスクロールを持つ。
-    //
-    // detail に付けた minmax(0,…) は、inspector が開いたときに狭められる
-    // ようにするためだ。素の 1fr は minmax(auto,1fr) であり、コンテンツの
-    // 幅を保ち続けてしまい、ボタンをペインの下へ押し出してしまう。
+    <>
+    {/* ウィンドウの端まで届く二つのペイン。detail の minmax(0,…) は、
+        inspector が開いたときにも内容幅を保たず縮められるようにする。 */}
     <div className="grid h-full grid-cols-[19rem_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
       <div className="flex min-h-0 flex-col border-r border-line bg-tree">
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-3 py-3">
@@ -538,9 +525,9 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
           <Button
             kind="primary"
             className="shrink-0 px-2.5 py-1.5 text-xs"
-            onClick={() => setCreating((current) => !current)}
+            onClick={() => setCreating(true)}
           >
-            {creating ? t("conn.cancelCreate") : t("conn.new")}
+            {t("conn.new")}
           </Button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -552,35 +539,6 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
             onDrop={(payload, target) => void onTreeDrop(payload, target)}
           />
         </div>
-        {/*
-          connection を作ることは、リストの中の何かにではなくリスト自体に
-          対して行う唯一の操作であり、だからこそ source list が "+" を置くの
-          と同じ足元に置く——リストの上に置いて下へ押し出すのではなく。
-        */}
-        {creating ? <div className="flex shrink-0 flex-col gap-2 border-t border-line bg-card p-3">
-          <p className="text-sm font-medium">{t("conn.new")}</p>
-          <label htmlFor="new-alias" className={fieldLabel}>{t("conn.newAlias")}</label>
-          <input
-            id="new-alias"
-            value={newAlias}
-            onChange={(event) => setNewAlias(event.target.value)}
-            className={control}
-          />
-          <label htmlFor="new-file" className={fieldLabel}>{t("conn.targetFile")}</label>
-          <select
-            id="new-file"
-            value={targetFile || entryPath}
-            onChange={(event) => setTargetFile(event.target.value)}
-            className={control}
-          >
-            {overview.files
-              .filter((node) => node.editable && node.file.path !== undefined)
-              .map((node) => (
-                <option key={node.file.absolute} value={node.file.path}>{node.file.path}</option>
-              ))}
-          </select>
-          <Button kind="primary" onClick={() => void createHost()}>{t("conn.create")}</Button>
-        </div> : null}
       </div>
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6">
         {/*
@@ -732,5 +690,13 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
         )}
       </div>
     </div>
+    {creating ? (
+      <CreateConnectionModal
+        groups={overview.groups}
+        onClose={() => setCreating(false)}
+        onCreated={(result) => void onConnectionCreated(result)}
+      />
+    ) : null}
+    </>
   );
 }

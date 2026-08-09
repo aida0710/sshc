@@ -188,6 +188,21 @@ describe("CreateConnectionModal", () => {
     await waitFor(() => expect(locked.unlockVault).toHaveBeenCalledWith("the master password"));
   });
 
+  it("allows private-key creation while the password vault is locked", async () => {
+    const user = userEvent.setup();
+    const harness = renderModal({
+      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], minPassphraseLength: 12 }),
+    });
+    await fillConnection(user);
+    await user.click(await screen.findByRole("radio", { name: "SSH private key" }));
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+
+    await waitFor(() => expect(harness.createConnection).toHaveBeenCalledWith(expect.objectContaining({
+      authentication: { kind: "identity_file", keyId: privateKey.id },
+    })));
+    expect(harness.unlockVault).not.toHaveBeenCalled();
+  });
+
   it("shows inline validation and a server problem without retaining the submitted secret", async () => {
     const user = userEvent.setup();
     const createConnection = vi.fn().mockRejectedValue(new Error("rejected"));
