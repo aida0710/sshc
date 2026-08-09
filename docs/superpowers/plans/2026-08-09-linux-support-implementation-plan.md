@@ -1137,6 +1137,143 @@ macOS 版と同じく -open=false で起動し、標準出力をどこにも送�
 
 ---
 
+### Task 7b: 端末パスの形の検査をプラットフォームごとに分ける
+
+`platform.ValidateTerminalChoice` は custom について
+`filepath.Ext(choice.Application) != ".app"` を要求している。これは macOS の
+アプリケーションバンドルの約束であって、端末が `/usr/bin/foot` のような ELF
+実行ファイルである Linux には存在しない。
+
+これはテストの都合ではない。この関数は保存経路から呼ばれており
+（`internal/application/metadata.go:161,205`、`internal/application/service.go:232`）、
+このままでは Linux の利用者は端末の設定を保存できない。仕様が「それ以外に、
+Linux で欠ける機能はない」「端末は利用者がコマンドを書く」と言っている以上、
+ここを分けないと Linux の端末機能は成立しない。
+
+macOS の振る舞いは 1 ビットも変えない。`.app` の要求は darwin 側に残る。
+
+**Files:**
+- Modify: `internal/platform/terminal.go:86`
+- Create: `internal/platform/application_darwin.go`
+- Create: `internal/platform/application_linux.go`
+- Create: `internal/platform/application_darwin_test.go`
+
+**Interfaces:**
+- Consumes: なし
+- Produces: `platform.ValidateTerminalChoice` の意味が GOOS で変わる。タスク 8 が
+  `/usr/bin/foot` を通せるようになる。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+`internal/platform/application_darwin_test.go`（`package platform_test`、
+`//go:build darwin`）に、darwin での既存の振る舞いが変わっていないことを留める:
+
+```go
+// バンドルの要求は macOS のものである。ここが緩めば、保存の時点で弾けたはずの
+// 設定が起動の時点まで生き延びる。
+func TestCustomTerminalOnDarwinMustBeAnApplicationBundle(t *testing.T) {
+	for _, application := range []string{"/usr/bin/foot", "/Applications/Foo", "/Applications/Foo.APP"} {
+		choice := platform.TerminalChoice{ID: platform.TerminalCustom, Application: application}
+		if err := platform.ValidateTerminalChoice(choice); !errors.Is(err, platform.ErrTerminalApplication) {
+			t.Errorf("ValidateTerminalChoice(%q) = %v, want ErrTerminalApplication", application, err)
+		}
+	}
+	ok := platform.TerminalChoice{ID: platform.TerminalCustom, Application: "/Applications/Foo.app"}
+	if err := platform.ValidateTerminalChoice(ok); err != nil {
+		t.Errorf("ValidateTerminalChoice(bundle) = %v, want nil", err)
+	}
+}
+```
+
+これは書いた時点で通る杭である。RED は Step 3 で、フックを入れ違えたときに現れる。
+
+- [ ] **Step 2: フックを切り出す**
+
+`internal/platform/terminal.go` の custom の枝から拡張子の検査だけを外し、
+フックを呼ぶ形にする:
+
+```go
+	if !filepath.IsAbs(choice.Application) ||
+		filepath.Clean(choice.Application) != choice.Application ||
+		!validApplicationPath(choice.Application) {
+		return ErrTerminalApplication
+	}
+```
+
+絶対パスと `Clean` の一致はどちらのプラットフォームでも要る検査なので、共有側に
+残す。分けるのは形の約束だけである。
+
+- [ ] **Step 3: プラットフォームごとの実体を書く**
+
+`internal/platform/application_darwin.go`:
+
+```go
+//go:build darwin
+
+package platform
+
+import "path/filepath"
+
+// validApplicationPath は、開く先が macOS のアプリケーションバンドルかを答える。
+//
+// macOS で端末を開くのは Launch Services であり、それが受け取るのはバンドルで
+// ある。保存の時点でこれを要求するのは、起動の時点まで持ち越せば、設定した人が
+// 間違いに気づくのが「開こうとしたとき」になるからだ。
+func validApplicationPath(path string) bool {
+	return filepath.Ext(path) == ".app"
+}
+```
+
+`internal/platform/application_linux.go`:
+
+パッケージは `platform` である（`linux` ではない）。
+
+```go
+//go:build linux
+
+package platform
+
+// validApplicationPath は、開く先の形について Linux で言えることを答える。
+//
+// Linux の端末は実行ファイルそのものであり、バンドルという約束はない。だから
+// 拡張子について言えることは何もなく、形の検査は共有側の「絶対パスであること」
+// と「Clean と一致すること」で尽きている。そこにあるか、実行できるかは起動する
+// 側が見る。ここでディスクを見に行かないのは、アンインストールしただけで設定が
+// 保存できなくなるのを避けるためで、これは macOS 側と同じ判断である。
+func validApplicationPath(string) bool {
+	return true
+}
+```
+
+- [ ] **Step 4: 通ることを確認する**
+
+Run:
+```bash
+gofmt -l $(git ls-files '*.go' | grep -v models.gen.go)
+go build ./... && go vet ./... && go test -count=1 ./...
+GOOS=linux go vet ./internal/platform/ ./internal/application/
+```
+Expected: すべて成功。
+
+- [ ] **Step 5: コミット**
+
+```bash
+git add -A
+git commit -m "端末パスの形の検査をプラットフォームごとに分ける
+
+.app という拡張子の要求は macOS のアプリケーションバンドルの約束であって、
+端末が実行ファイルそのものである Linux には存在しない。
+
+これは検証のためだけの分岐ではない。この関数は設定の保存経路から呼ばれて
+いるので、分けなければ Linux の利用者は端末をひとつも保存できない。
+
+macOS の振る舞いは変えていない。絶対パスであることと Clean と一致することは
+どちらのプラットフォームでも要るので共有側に残し、分けたのは形の約束だけで
+ある。"
+```
+
+---
+
 ### Task 8: Linux の端末起動（custom のみ）
 
 **Files:**
