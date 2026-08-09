@@ -418,3 +418,91 @@ func TestSealedBytesCarryNothingFromEitherNamespace(t *testing.T) {
 		}
 	}
 }
+
+func TestDedicatedPasswordIsResolvedButNeverListedAsReusable(t *testing.T) {
+	vault, err := secret.Create(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set(secret.KindPassword, "office", "shared-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetDedicatedPassword("edge-1", "connection-only"); err != nil {
+		t.Fatalf("SetDedicatedPassword = %v", err)
+	}
+
+	if got, ok := vault.SecretFor(secret.KindPassword, "edge-1"); !ok || got != "connection-only" {
+		t.Errorf("SecretFor(edge-1) = %q, %v", got, ok)
+	}
+	if names := vault.Names(secret.KindPassword); !slices.Equal(names, []string{"office"}) {
+		t.Errorf("password credentials = %#v, want only the reusable credential", names)
+	}
+	if subjects := vault.Subjects(secret.KindPassword); !slices.Equal(subjects, []string{"edge-1"}) {
+		t.Errorf("password subjects = %#v, want the dedicated alias", subjects)
+	}
+
+	sealed, err := vault.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := secret.Open(sealed, passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := reopened.SecretFor(secret.KindPassword, "edge-1"); !ok || got != "connection-only" {
+		t.Errorf("reopened dedicated password = %q, %v", got, ok)
+	}
+}
+
+func TestDedicatedPasswordFollowsRenameAndCanBeRemoved(t *testing.T) {
+	vault, err := secret.Create(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetDedicatedPassword("old-edge", "connection-only"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Rename(secret.KindPassword, "old-edge", "new-edge"); err != nil {
+		t.Fatalf("Rename = %v", err)
+	}
+
+	if _, ok := vault.SecretFor(secret.KindPassword, "old-edge"); ok {
+		t.Error("the old alias still resolves its dedicated password")
+	}
+	if got, ok := vault.SecretFor(secret.KindPassword, "new-edge"); !ok || got != "connection-only" {
+		t.Errorf("renamed dedicated password = %q, %v", got, ok)
+	}
+	vault.RemoveDedicatedPassword("new-edge")
+	if _, ok := vault.SecretFor(secret.KindPassword, "new-edge"); ok {
+		t.Error("RemoveDedicatedPassword left the password resolvable")
+	}
+}
+
+func TestDedicatedAndReusableAssignmentsAreMutuallyExclusive(t *testing.T) {
+	vault, err := secret.Create(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set(secret.KindPassword, "office", "shared-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetDedicatedPassword("edge", "dedicated-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Assign(secret.KindPassword, "edge", "office"); err != nil {
+		t.Fatalf("Assign reusable password = %v", err)
+	}
+	if got, _ := vault.SecretFor(secret.KindPassword, "edge"); got != "shared-secret" {
+		t.Errorf("password after reusable assignment = %q", got)
+	}
+
+	if err := vault.SetDedicatedPassword("edge", "dedicated-again"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := vault.Assigned(secret.KindPassword, "edge"); ok {
+		t.Error("setting a dedicated password left a reusable assignment behind")
+	}
+	if got, _ := vault.SecretFor(secret.KindPassword, "edge"); got != "dedicated-again" {
+		t.Errorf("password after dedicated assignment = %q", got)
+	}
+}

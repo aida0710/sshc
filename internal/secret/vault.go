@@ -125,11 +125,12 @@ type SyncSettings struct {
 // subject が指していても一度だけ保存される。この形の理由はまさにそこにある —
 // 20 台のマシンが共有するパスワードを、一か所でローテーションできる。
 type document struct {
-	SchemaVersion  int               `json:"schemaVersion"`
-	Passwords      map[string]string `json:"passwords"`
-	KeyPassphrases map[string]string `json:"keyPassphrases"`
-	Hosts          map[string]string `json:"hosts"`
-	Keys           map[string]string `json:"keys"`
+	SchemaVersion      int               `json:"schemaVersion"`
+	Passwords          map[string]string `json:"passwords"`
+	DedicatedPasswords map[string]string `json:"dedicatedPasswords,omitempty"`
+	KeyPassphrases     map[string]string `json:"keyPassphrases"`
+	Hosts              map[string]string `json:"hosts"`
+	Keys               map[string]string `json:"keys"`
 }
 
 // Vault は、開かれた secrets ファイル。
@@ -138,9 +139,10 @@ type document struct {
 // 直せる。そしてパスフレーズは、Open が返ったあとどこにも保持されて
 // いない。
 type Vault struct {
-	key      envelope.Key
-	secrets  map[Kind]map[string]string
-	subjects map[Kind]map[string]string
+	key                envelope.Key
+	secrets            map[Kind]map[string]string
+	subjects           map[Kind]map[string]string
+	dedicatedPasswords map[string]string
 }
 
 func newMaps() (map[Kind]map[string]string, map[Kind]map[string]string) {
@@ -155,7 +157,10 @@ func Create(passphrase string) (*Vault, error) {
 		return nil, err
 	}
 	secrets, subjects := newMaps()
-	return &Vault{key: key, secrets: secrets, subjects: subjects}, nil
+	return &Vault{
+		key: key, secrets: secrets, subjects: subjects,
+		dedicatedPasswords: map[string]string{},
+	}, nil
 }
 
 // Open は、passphrase で sealed を復号する。
@@ -195,7 +200,14 @@ func Open(sealed []byte, passphrase string) (*Vault, error) {
 			subjects[kind][subject] = name
 		}
 	}
-	return &Vault{key: key, secrets: secrets, subjects: subjects}, nil
+	dedicatedPasswords := maps.Clone(parsed.DedicatedPasswords)
+	if dedicatedPasswords == nil {
+		dedicatedPasswords = map[string]string{}
+	}
+	return &Vault{
+		key: key, secrets: secrets, subjects: subjects,
+		dedicatedPasswords: dedicatedPasswords,
+	}, nil
 }
 
 // SealSettings は、オブジェクトストアの設定を vault 自身の鍵で暗号化する。隣に置く
@@ -255,11 +267,12 @@ func (v *Vault) OpenBytes(sealed []byte) ([]byte, error) {
 
 func (v *Vault) Seal() ([]byte, error) {
 	plaintext, err := json.Marshal(document{
-		SchemaVersion:  SchemaVersion,
-		Passwords:      v.secrets[KindPassword],
-		KeyPassphrases: v.secrets[KindKeyPassphrase],
-		Hosts:          v.subjects[KindPassword],
-		Keys:           v.subjects[KindKeyPassphrase],
+		SchemaVersion:      SchemaVersion,
+		Passwords:          v.secrets[KindPassword],
+		DedicatedPasswords: v.dedicatedPasswords,
+		KeyPassphrases:     v.secrets[KindKeyPassphrase],
+		Hosts:              v.subjects[KindPassword],
+		Keys:               v.subjects[KindKeyPassphrase],
 	})
 	if err != nil {
 		return nil, err
@@ -277,6 +290,42 @@ func (v *Vault) Names(kind Kind) []string {
 func (v *Vault) Secret(kind Kind, name string) (string, bool) {
 	value, ok := v.secrets[kind][name]
 	return value, ok
+}
+
+// SetDedicatedPassword stores a password whose owner is exactly one host.
+// It is structurally separate from named credentials, so it cannot appear in a
+// reusable-credential list or be assigned to another host.
+func (v *Vault) SetDedicatedPassword(alias, value string) error {
+	if err := platform.ValidateAlias(alias); err != nil {
+		return ErrUnsafeName
+	}
+	if value == "" {
+		return ErrEmptySecret
+	}
+	delete(v.subjects[KindPassword], alias)
+	v.dedicatedPasswords[alias] = value
+	return nil
+}
+
+// RemoveDedicatedPassword forgets a connection-owned password. A missing
+// alias is already the requested state and is therefore not an error.
+func (v *Vault) RemoveDedicatedPassword(alias string) {
+	delete(v.dedicatedPasswords, alias)
+}
+
+// clone returns a fully independent plaintext document with the same derived
+// key. Mutations made to it cannot become visible through the live vault until
+// its owner explicitly publishes the clone after a successful disk commit.
+func (v *Vault) clone() *Vault {
+	secrets, subjects := newMaps()
+	for kind := range secrets {
+		secrets[kind] = maps.Clone(v.secrets[kind])
+		subjects[kind] = maps.Clone(v.subjects[kind])
+	}
+	return &Vault{
+		key: v.key, secrets: secrets, subjects: subjects,
+		dedicatedPasswords: maps.Clone(v.dedicatedPasswords),
+	}
 }
 
 // Set は、名前の下に資格情報を保存する。新規作成か、値の置き換えである。
@@ -339,6 +388,9 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 	if _, ok := v.secrets[kind][name]; !ok {
 		return ErrUnknownCredential
 	}
+	if kind == KindPassword {
+		delete(v.dedicatedPasswords, subject)
+	}
 	v.subjects[kind][subject] = name
 	return nil
 }
@@ -356,11 +408,23 @@ func (v *Vault) Assigned(kind Kind, subject string) (string, bool) {
 
 // Subjects は、ある資格情報を参照している、ある種別のすべての subject を返す。
 func (v *Vault) Subjects(kind Kind) []string {
-	return slices.Sorted(maps.Keys(v.subjects[kind]))
+	if kind != KindPassword {
+		return slices.Sorted(maps.Keys(v.subjects[kind]))
+	}
+	subjects := maps.Clone(v.subjects[kind])
+	for alias := range v.dedicatedPasswords {
+		subjects[alias] = ""
+	}
+	return slices.Sorted(maps.Keys(subjects))
 }
 
 // SecretFor は、subject を、それに与えるべき値へ解決する。
 func (v *Vault) SecretFor(kind Kind, subject string) (string, bool) {
+	if kind == KindPassword {
+		if value, ok := v.dedicatedPasswords[subject]; ok {
+			return value, true
+		}
+	}
 	name, ok := v.subjects[kind][subject]
 	if !ok {
 		return "", false
@@ -372,6 +436,17 @@ func (v *Vault) SecretFor(kind Kind, subject string) (string, bool) {
 // しなければならず、さもなければ参照は、誰も尋ねない名前の下に黙って孤児に
 // なる。
 func (v *Vault) Rename(kind Kind, from, to string) error {
+	if kind == KindPassword {
+		if value, ok := v.dedicatedPasswords[from]; ok {
+			if err := platform.ValidateAlias(to); err != nil {
+				return ErrUnsafeName
+			}
+			delete(v.dedicatedPasswords, from)
+			delete(v.subjects[kind], to)
+			v.dedicatedPasswords[to] = value
+			return nil
+		}
+	}
 	name, ok := v.subjects[kind][from]
 	if !ok {
 		return nil
