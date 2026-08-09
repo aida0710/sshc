@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestGeneratedFoundationModels(t *testing.T) {
 	health := HealthResponse{Status: "ok", Version: "dev"}
@@ -10,6 +13,20 @@ func TestGeneratedFoundationModels(t *testing.T) {
 	bootstrap := BootstrapResponse{CsrfToken: "csrf"}
 	if bootstrap.CsrfToken != "csrf" {
 		t.Fatalf("unexpected bootstrap response: %#v", bootstrap)
+	}
+}
+
+func TestGeneratedConnectionCreationModels(t *testing.T) {
+	request := CreateConnectionRequest{
+		Alias: "edge", HostName: "edge.example",
+		Authentication: json.RawMessage(`{"kind":"identity_file","keyId":"0123456789abcdef0123456789abcdef"}`),
+	}
+	response := CreateConnectionResponse{
+		TransactionId: "transaction", Identity: HostIdentity{Path: "config", Alias: "edge"},
+		Preview: SavePreview{Operation: "connection.create", Diffs: []FileDiff{}},
+	}
+	if request.Alias != response.Identity.Alias || response.TransactionId == "" {
+		t.Fatalf("unexpected connection creation contract: %#v %#v", request, response)
 	}
 }
 
