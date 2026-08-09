@@ -34,16 +34,38 @@ test("edits a host through the form and writes only the line that changed", asyn
   expect(after.split("\n").length).toBe(before.split("\n").length);
 });
 
-test("offers no way to open a terminal, since this Linux binary cannot open one", async ({
+// このスイートが駆動するのは、このホストがビルドしたバイナリである
+// (`make e2e` は `make build` に依存し、それは GOOS を上書きしない素の
+// `go build`)。ビルドタグで組み立てが分かれるため、どちらが正しい振る舞い
+// かはホストが darwin か linux かで決まる——CI の ubuntu ランナーでは
+// linux、開発者の Mac では darwin だ。だから二つのテストに分け、自分の
+// ホストでないほうは test.skip で明示的にスキップする。片方の中で分岐
+// すると、レポートはどちらの期待を検査したかを言わずに green になる。
+test("darwin: stores kitty as the terminal used by Connect", async ({ page, installation }) => {
+  test.skip(process.platform !== "darwin", "this host did not build a darwin binary");
+  await openBastion(page, installation.url);
+  const saved = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/v1/config/save" && response.request().method() === "POST",
+  );
+  // 端末が入っているかに関わらず、選択肢そのものは消えない。このマシンに何が
+  // あるかで一覧の中身が変わると、設定は「消えた」ようにしか見えなくなる。
+  await expect(page.getByLabel("Open with").locator("option")).toHaveCount(6);
+  await page.getByLabel("Open with").selectOption("kitty");
+  expect((await saved).status()).toBe(200);
+  expect(await installation.read("sshc/metadata.json")).toContain('"terminal": "kitty"');
+  await expect(page.getByLabel("Open with")).toHaveValue("kitty");
+});
+
+test("linux: offers no way to open a terminal, since this binary cannot open one", async ({
   page,
   installation,
 }) => {
+  test.skip(process.platform !== "linux", "this host did not build a linux binary");
   await openBastion(page, installation.url);
 
-  // このスイートが駆動するのは Linux でビルドされたバイナリである。Linux は
-  // 端末を起動しないので、選ぶコントロールも Connect ボタンも出ない——出して
-  // も押せば必ず失敗するからだ。代わりに、コマンドを自分で実行するよう伝える
-  // 一文が出る。
+  // Linux は端末を起動しないので、選ぶコントロールも Connect ボタンも出ない
+  // ——出しても押せば必ず失敗するからだ。代わりに、コマンドを自分で実行する
+  // よう伝える一文が出る。
   await expect(page.getByLabel("Open with")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Connect", exact: true })).toHaveCount(0);
   await expect(page.getByText(/This platform does not open a terminal for you/)).toBeVisible();
