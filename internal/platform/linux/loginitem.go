@@ -107,12 +107,16 @@ func (l LoginItem) run(ctx context.Context, arguments ...string) (platform.Outpu
 // 標準出力を null へ送るのは、エージェントが表示する URL が有効な bootstrap
 // トークンを運ぶからである。journald に残せば、それを読める者が入口を得る。
 func unitFor(executablePath string) string {
+	// % は unit ファイルの中で specifier の接頭辞（%h、%i、%% など）なので、
+	// パスにリテラルの % が含まれていれば二重にする。ガードでは拒否できない。
+	// % はファイル名として合法な文字だからである。
+	escapedPath := strings.ReplaceAll(executablePath, "%", "%%")
 	return "[Unit]\n" +
 		"Description=sshc\n" +
 		"\n" +
 		"[Service]\n" +
 		"Type=simple\n" +
-		"ExecStart=" + executablePath + " -open=false\n" +
+		"ExecStart=" + escapedPath + " -open=false\n" +
 		"StandardOutput=null\n" +
 		"StandardError=journal\n" +
 		"Restart=on-failure\n" +

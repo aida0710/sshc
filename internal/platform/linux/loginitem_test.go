@@ -59,6 +59,43 @@ func TestEnableRefusesARelativeProgram(t *testing.T) {
 	}
 }
 
+// 改行が入ったパスも拒否する。改行は ExecStart= 行を終わらせ、その後に続くものを
+// unit ディレクティブとして書き込ませてしまうからである。
+func TestEnableRefusesAProgramWithANewline(t *testing.T) {
+	home := t.TempDir()
+	runner := &unitRunner{}
+	item := linux.LoginItem{Runner: runner, Home: home, Systemctl: "/usr/bin/systemctl"}
+
+	if err := item.Enable(context.Background(), "/usr/local/bin/sshc\nExecStart=/tmp/evil"); err == nil {
+		t.Fatal("a program path containing a newline was registered")
+	}
+	if len(runner.commands) != 0 {
+		t.Error("systemctl was run anyway")
+	}
+	if _, err := os.Stat(filepath.Join(home, ".config", "systemd", "user", "sshc.service")); !os.IsNotExist(err) {
+		t.Errorf("unit file was created despite the rejection: %v", err)
+	}
+}
+
+// % は unit ファイルの中で specifier の接頭辞なので、パスにリテラルの % があれば
+// 二重にして書かなければならない。そうしなければ systemd がそれを specifier として
+// 展開してしまう。
+func TestEnableEscapesPercentInTheProgramPath(t *testing.T) {
+	home := t.TempDir()
+	item := linux.LoginItem{Runner: &unitRunner{}, Home: home, Systemctl: "/usr/bin/systemctl"}
+
+	if err := item.Enable(context.Background(), "/opt/50%/sshc"); err != nil {
+		t.Fatal(err)
+	}
+	unit, err := os.ReadFile(filepath.Join(home, ".config", "systemd", "user", "sshc.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(unit), "ExecStart=/opt/50%%/sshc -open=false") {
+		t.Errorf("unit does not double the percent sign:\n%s", unit)
+	}
+}
+
 // 二度無効にすることは、呼び出し側が求めた状態である。
 func TestDisableTwiceIsTheStateTheCallerAskedFor(t *testing.T) {
 	home := t.TempDir()
