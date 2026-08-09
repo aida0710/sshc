@@ -1,4 +1,4 @@
-package macos_test
+package process_test
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"sshc/internal/platform"
-	"sshc/internal/platform/macos"
+	"sshc/internal/platform/process"
 )
 
 // ここのテストが実行するのは、固定の argv を持つローカルで非ネットワークな
@@ -17,7 +17,7 @@ import (
 // /usr/bin/yes。ssh を起動せず、ネットワークに触れず、本物のホームも読まない。
 
 func TestRunOutputCapturesStdoutAndExitStatus(t *testing.T) {
-	runner := macos.NewOutputRunner()
+	runner := process.NewOutputRunner()
 
 	output, err := runner.RunOutput(context.Background(), platform.Command{
 		Path:      "/bin/echo",
@@ -43,7 +43,7 @@ func TestRunOutputCapturesStdoutAndExitStatus(t *testing.T) {
 }
 
 func TestRunOutputFeedsFixedStandardInput(t *testing.T) {
-	output, err := macos.NewOutputRunner().RunOutput(context.Background(), platform.Command{
+	output, err := process.NewOutputRunner().RunOutput(context.Background(), platform.Command{
 		Path:  "/bin/cat",
 		Stdin: []byte("payload without a shell\n"),
 	})
@@ -56,7 +56,7 @@ func TestRunOutputFeedsFixedStandardInput(t *testing.T) {
 }
 
 func TestRunOutputStopsAtTheTimeoutAndTruncatesOutput(t *testing.T) {
-	runner := macos.NewOutputRunner()
+	runner := process.NewOutputRunner()
 
 	if _, err := runner.RunOutput(context.Background(), platform.Command{
 		Path:      "/bin/sleep",
@@ -84,7 +84,7 @@ func TestRunOutputStopsAtTheTimeoutAndTruncatesOutput(t *testing.T) {
 
 func TestRunOutputStopsAsSoonAsTheMarkerAppears(t *testing.T) {
 	started := time.Now()
-	output, err := macos.NewOutputRunner().RunOutput(context.Background(), platform.Command{
+	output, err := process.NewOutputRunner().RunOutput(context.Background(), platform.Command{
 		Path:      "/usr/bin/yes",
 		Arguments: []string{"authenticated-marker"},
 		Timeout:   10 * time.Second,
@@ -105,7 +105,7 @@ func TestRunOutputStopsAsSoonAsTheMarkerAppears(t *testing.T) {
 }
 
 func TestRunOutputRefusesRelativeProgramsAndHonoursCancellation(t *testing.T) {
-	runner := macos.NewOutputRunner()
+	runner := process.NewOutputRunner()
 
 	if _, err := runner.RunOutput(context.Background(), platform.Command{Path: "echo"}); !errors.Is(err, platform.ErrProgramPathNotAbsolute) {
 		t.Fatalf("relative program = %v, want ErrProgramPathNotAbsolute", err)
@@ -122,7 +122,7 @@ func TestRunOutputRefusesRelativeProgramsAndHonoursCancellation(t *testing.T) {
 }
 
 func TestRunOutputReplacesTheChildEnvironmentWhenAsked(t *testing.T) {
-	runner := macos.NewOutputRunner()
+	runner := process.NewOutputRunner()
 
 	inherited, err := runner.RunOutput(context.Background(), platform.Command{
 		Path:      "/usr/bin/env",

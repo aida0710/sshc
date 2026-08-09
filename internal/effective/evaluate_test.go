@@ -11,6 +11,7 @@ import (
 	"sshc/internal/effective"
 	"sshc/internal/platform"
 	"sshc/internal/platform/macos"
+	"sshc/internal/platform/process"
 )
 
 // recordingRunner は、実行を求められたコマンドを記録し、あらかじめ用意した結果を
@@ -186,7 +187,7 @@ func TestEvaluateParsesInstalledOpenSSHOutput(t *testing.T) {
 	}
 
 	evaluator := effective.Evaluator{
-		Runner:     macos.NewOutputRunner(),
+		Runner:     process.NewOutputRunner(),
 		Toolchain:  toolchain,
 		ConfigPath: configPath,
 	}

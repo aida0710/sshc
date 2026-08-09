@@ -1,4 +1,4 @@
-package macos
+package process
 
 import (
 	"bytes"
@@ -17,9 +17,12 @@ import (
 // シェルを起動することは決してなく、子プロセスが端末を読めないよう常に固定の
 // 標準入力を与え、どちらのストリームについても platform.MaxCapturedOutput
 // バイトを超えて保持することはない。
+//
+// このパッケージに macOS 固有のものは何もない。os/exec だけで書かれており、
+// プラットフォームごとに違うのは、ここが起動するプログラムのパスの方である。
 type OutputRunner struct{}
 
-// NewOutputRunner は macOS のプロセスアダプタを返す。
+// NewOutputRunner はプロセスアダプタを返す。
 func NewOutputRunner() platform.OutputRunner { return OutputRunner{} }
 
 func (OutputRunner) RunOutput(ctx context.Context, command platform.Command) (platform.Output, error) {
