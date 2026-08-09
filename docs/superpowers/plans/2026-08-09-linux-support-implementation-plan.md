@@ -16,7 +16,12 @@
 - テストは本物のブラウザ・systemd・端末・agent・`~/.ssh` に触れない。記録用ランナーが argv を受け取り、プロセスは起動しない。
 - コメントは日本語（だ・である調）。日本語と英数字の間に半角スペースを入れる。1 行は全角換算で 92 桁以内。
 - 各タスクの最後に `gofmt -l`、`go build ./...`、`go vet ./...` が通ること。
-- `GOOS=linux go build ./...` と `GOOS=linux go vet ./...` が、タスク 2 以降つねに通ること。
+- `GOOS=linux go build ./...` と `GOOS=linux go vet ./...` は、タスク 2〜4 では通ること。
+  タスク 5 でビルドタグを付けた時点から**意図的に落ちる**（それがタグの効いた証拠で
+  ある）。タスク 9 で `wiring_linux.go` を足して回復し、以降つねに通ること。
+  タスク 5〜8 の実装者とレビュアーは、この期間 `GOOS=linux` が落ちることを欠陥として
+  扱わない。`internal/platform/linux/` 単体（`GOOS=linux go vet ./internal/platform/linux/`）
+  はタスク 6 以降つねに通ること。
 
 ---
 
@@ -239,7 +244,7 @@ git mv internal/platform/macos/command_test.go internal/platform/process/command
 
 - [ ] **Step 3: 呼び出し元を直す**
 
-`cmd/sshc/main.go` の `runner := macos.NewOutputRunner()` を `runner := process.NewOutputRunner()` に変え、import に `"sshc/internal/platform/process"` を足す。
+`cmd/sshc/main.go` の `macos.NewOutputRunner()` を `process.NewOutputRunner()` に変え、import に `"sshc/internal/platform/process"` を足す。**呼び出しは 2 か所ある** — 239 行の `runner := …` と、144 行 `runOpen` の中の `macos.NewBrowser(macos.NewOutputRunner())`。後者は今回は `macos.NewBrowser(process.NewOutputRunner())` になる（Browser 自体はタスク 5 まで macos に残る）。`grep -n 'NewOutputRunner' cmd/sshc/*.go` で数を確かめること。
 
 - [ ] **Step 4: 通ることを確認する**
 
@@ -386,7 +391,7 @@ type platformParts struct {
 	Browser   platform.BrowserLauncher
 	KeyAgent  platform.KeyAgent
 	Terminal  platform.TerminalLauncher
-	LoginItem app.LoginItemController
+	LoginItem httpserver.LoginItemController
 }
 
 func newPlatformParts(home string) platformParts
@@ -417,7 +422,7 @@ Expected: FAIL。`cmd/sshc/main.go` が `macos` のシンボルを見つけら�
 package main
 
 import (
-	"sshc/internal/app"
+	"sshc/internal/httpserver"
 	"sshc/internal/platform"
 )
 
@@ -433,7 +438,7 @@ type platformParts struct {
 	Browser   platform.BrowserLauncher
 	KeyAgent  platform.KeyAgent
 	Terminal  platform.TerminalLauncher
-	LoginItem app.LoginItemController
+	LoginItem httpserver.LoginItemController
 }
 ```
 
@@ -504,7 +509,22 @@ func newPlatformParts(home string) platformParts {
 		Lookup:    os.LookupEnv,
 ```
 
-以降（`AskpassHelper` など）は変更しない。`main.go` から `macos` の import が不要になれば削る。`runOpen` の中の `macos.NewBrowser(macos.NewOutputRunner())` も `newPlatformParts(home).Browser` を使う形へ寄せる。
+以降（`AskpassHelper` など）は変更しない。
+
+**`cmd/sshc` から `macos.` の参照を 1 つ残らず消すこと。** タグを付けた以上、1 つでも
+残れば `GOOS=linux` では永久にビルドできない。タスク 2・3 の移動後に残っているのは
+次の 4 か所である（行番号は移動前のもの。実際の位置は `grep -n 'macos\.' cmd/sshc/*.go`
+で確かめること）:
+
+- `main.go:144` `runOpen` の `macos.NewBrowser(macos.NewOutputRunner())`
+  → `newPlatformParts(home).Browser`。この関数が `home` を持たないなら
+  `os.UserHomeDir()` から取る。
+- `main.go:186`、`main.go:201` の `macos.NewToolchain()` → `newPlatformParts(home).Toolchain`。
+  ここも同様に `home` を用意する。
+- `main.go:239-267` の組み立て（上記のとおり `parts` へ置換）。
+
+`grep -n 'macos\.' cmd/sshc/*.go` が何も返さないこと、そして `main.go` の import から
+`macos` が消えていることを確認する。
 
 - [ ] **Step 6: darwin で通ることを確認する**
 
@@ -534,7 +554,7 @@ Linux のバイナリに AppleScript の定数が入るのは、出荷物に何�
 
 **Interfaces:**
 - Consumes: `platform.OutputRunner`、`platform.Command`
-- Produces: `linux.NewToolchain() macosLikeToolchain`（下の実体は `linux.Toolchain`）と `linux.NewBrowser(runner platform.OutputRunner) Browser` — タスク 9 が使う。
+- Produces: `linux.NewToolchain() linux.Toolchain` と `linux.NewBrowser(runner platform.OutputRunner) linux.Browser` — タスク 9 が使う。`Toolchain` は `platform.Toolchain` を、`Browser` は `platform.BrowserLauncher` を満たす。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -549,7 +569,6 @@ import (
 	"io/fs"
 	"slices"
 	"testing"
-	"testing/fstest"
 
 	"sshc/internal/platform/linux"
 )
@@ -910,6 +929,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"sshc/internal/platform"
 )
