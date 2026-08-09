@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -29,7 +30,30 @@ var (
 	ErrUnknownToken = errors.New("that askpass token is not valid for this request")
 	// ErrNoPassword は、その alias に何も保存されていないことを報告する。
 	ErrNoPassword = errors.New("no password is stored for that host")
+	// ErrUnknownPasswordMutation は接続作成が扱う三つのパスワード源以外を拒否する。
+	ErrUnknownPasswordMutation = errors.New("that is not a password mutation kind")
 )
+
+// PasswordMutationKind は、接続作成が vault に行う変更を表す。専用パスワードと
+// 名前付き資格情報は保存構造が異なるため、単なるオプションフィールドの組ではなく
+// 判別可能な種類として運ぶ。
+type PasswordMutationKind string
+
+const (
+	PasswordMutationDedicated PasswordMutationKind = "dedicated_password"
+	PasswordMutationSaved     PasswordMutationKind = "saved_password"
+	PasswordMutationNewShared PasswordMutationKind = "new_shared_password"
+)
+
+// PasswordMutation は接続 alias に一つのパスワード源を割り当てる要求である。
+// Password はこのパッケージの外へ返らず、commit callback に渡す storage.Change にも
+// 封じられた bytes としてしか現れない。
+type PasswordMutation struct {
+	Kind       PasswordMutationKind
+	Alias      string
+	Credential string
+	Password   string
+}
 
 // TokenTTL は、askpass トークンが使える時間。
 //
@@ -69,8 +93,13 @@ type Service struct {
 	// よう注入する。
 	sleep func(time.Duration)
 
-	mu    sync.Mutex
-	vault *Vault
+	// mutationMu は vault の disk と memory の版をまたぐ変更を直列化する。storage
+	// commit はバックアップを封じるために下の mu を再取得するので、commit 中に保持
+	// するのはこちらだけである。
+	mutationMu sync.Mutex
+	mu         sync.Mutex
+	vault      *Vault
+	baseline   []byte
 	// refusals は、連続して誤ったマスターパスワードの回数を数える。これが、拒否のたび
 	// に前回より遅く答えさせている。
 	refusals int
@@ -104,6 +133,7 @@ func (s *Service) open() *Vault {
 	}
 	if s.now().Sub(s.used) >= IdleTimeout {
 		s.vault = nil
+		s.baseline = nil
 		s.tokens = map[string]pendingToken{}
 		return nil
 	}
@@ -151,6 +181,8 @@ func (s *Service) Unlocked() bool {
 // パスワードがすべて破壊されるし、鍵が失われた暗号化ファイルに復旧の道は
 // ない。
 func (s *Service) Initialise(passphrase string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	exists, err := s.Exists()
 	if err != nil {
 		return err
@@ -229,6 +261,8 @@ func (s *Service) refuse() {
 
 // Unlock は passphrase で vault を開く。
 func (s *Service) Unlock(passphrase string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	sealed, err := s.workspace.FileSystem().ReadFile(s.path())
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -246,6 +280,7 @@ func (s *Service) Unlock(passphrase string) error {
 
 	s.mu.Lock()
 	s.vault = vault
+	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
 	// 通ったパスワードは、誤ったものが積み上げたものを消し去る。
 	s.refusals = 0
@@ -258,9 +293,12 @@ func (s *Service) Unlock(passphrase string) error {
 // トークンも一緒に消えるのは、ロックより長生きするトークンがあれば、ロック前に
 // 始まった接続がロック後もパスワードを取得できてしまうからである。
 func (s *Service) Lock() {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.vault = nil
+	s.baseline = nil
 	s.tokens = map[string]pendingToken{}
 }
 
@@ -285,17 +323,15 @@ func (s *Service) Has(alias string) bool {
 // とにかくパスワードを保存する」とはそういう意味である。複数のホストで共有するに
 // は、代わりに既存の名前を割り当てる。
 func (s *Service) Set(alias, password string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
 		s.mu.Unlock()
 		return ErrLocked
 	}
-	if err := vault.Set(KindPassword, alias, password); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	if err := vault.Assign(KindPassword, alias, alias); err != nil {
+	if err := vault.SetDedicatedPassword(alias, password); err != nil {
 		s.mu.Unlock()
 		return err
 	}
@@ -305,6 +341,8 @@ func (s *Service) Set(alias, password string) error {
 
 // Remove はパスワードを忘れ、vault を書き込む。
 func (s *Service) Remove(alias string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
@@ -313,6 +351,7 @@ func (s *Service) Remove(alias string) error {
 	}
 	// 参照は消える。他に何かが指していれば資格情報は残り、何も指さなくなれば
 	// 一緒に消える。
+	vault.RemoveDedicatedPassword(alias)
 	vault.Unassign(KindPassword, alias)
 	_ = vault.Delete(KindPassword, alias)
 	s.mu.Unlock()
@@ -322,15 +361,13 @@ func (s *Service) Remove(alias string) error {
 // Rename は、保存済みのパスワードを新しい alias へ引き継ぐ。ホストの名前変更が
 // それを置き去りにすれば、二度と誰も尋ねない名前の下にパスワードが残る。
 func (s *Service) Rename(from, to string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
 		s.mu.Unlock()
 		return ErrLocked
-	}
-	if _, ok := vault.Assigned(KindPassword, from); !ok {
-		s.mu.Unlock()
-		return nil
 	}
 	if err := vault.Rename(KindPassword, from, to); err != nil {
 		s.mu.Unlock()
@@ -371,6 +408,8 @@ func (s *Service) Credentials() (map[Kind]map[string][]string, error) {
 // 置き換えは、共有された秘密をローテーションする方法である。その名前を指している
 // すべての subject が新しい値を読む。名前が存在する理由そのものだ。
 func (s *Service) SetCredential(kind Kind, name, value string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
@@ -387,6 +426,8 @@ func (s *Service) SetCredential(kind Kind, name, value string) error {
 
 // DeleteCredential は資格情報を忘れる。何かがそれを指しているあいだは拒否する。
 func (s *Service) DeleteCredential(kind Kind, name string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
@@ -404,6 +445,8 @@ func (s *Service) DeleteCredential(kind Kind, name string) error {
 // AssignCredential は、subject を同じ種別の資格情報に向ける。種別が防護である。
 // 他方の種別の名前が現れるマップは存在しない。
 func (s *Service) AssignCredential(kind Kind, subject, name string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
@@ -420,6 +463,8 @@ func (s *Service) AssignCredential(kind Kind, subject, name string) error {
 
 // UnassignCredential は subject の参照を忘れ、資格情報自体は残す。
 func (s *Service) UnassignCredential(kind Kind, subject string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
@@ -472,6 +517,8 @@ func (s *Service) KeyPassphraseFor(relativePath string) (string, bool) {
 // RelocateKeyPassphrases は鍵のパス変更に名前付きパスフレーズの割り当てを
 // 追従させる。秘密の値には触れず、vault 内の subject 参照だけを一度に移す。
 func (s *Service) RelocateKeyPassphrases(relocations map[string]string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
@@ -544,6 +591,8 @@ func (s *Service) SyncSettings() (SyncSettings, error) {
 
 // SetSyncSettings は、オブジェクトストアの設定を置き換える。
 func (s *Service) SetSyncSettings(settings SyncSettings) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
@@ -701,7 +750,82 @@ func (s *Service) write() error {
 			Precondition: precondition,
 		}},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.baseline = slices.Clone(sealed)
+	s.mu.Unlock()
+	return nil
+}
+
+// WithPasswordMutation prepares a password-vault replacement and lets the
+// application commit it beside the SSH configuration change. The live vault
+// remains unchanged until that callback succeeds. mutationMu stays held so a
+// second writer cannot overtake the transaction; mu is deliberately released
+// while storage runs because storage seals generational backups through this
+// same service.
+func (s *Service) WithPasswordMutation(
+	mutation PasswordMutation,
+	commit func(storage.Change) (storage.Result, error),
+) (storage.Result, error) {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	s.mu.Lock()
+	vault := s.use()
+	if vault == nil {
+		s.mu.Unlock()
+		return storage.Result{}, ErrLocked
+	}
+	clone := vault.clone()
+	switch mutation.Kind {
+	case PasswordMutationDedicated:
+		if err := clone.SetDedicatedPassword(mutation.Alias, mutation.Password); err != nil {
+			s.mu.Unlock()
+			return storage.Result{}, err
+		}
+	case PasswordMutationSaved:
+		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
+			s.mu.Unlock()
+			return storage.Result{}, err
+		}
+	case PasswordMutationNewShared:
+		if err := clone.Set(KindPassword, mutation.Credential, mutation.Password); err != nil {
+			s.mu.Unlock()
+			return storage.Result{}, err
+		}
+		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
+			s.mu.Unlock()
+			return storage.Result{}, err
+		}
+	default:
+		s.mu.Unlock()
+		return storage.Result{}, ErrUnknownPasswordMutation
+	}
+	sealed, err := clone.Seal()
+	baseline := slices.Clone(s.baseline)
+	s.mu.Unlock()
+	if err != nil {
+		return storage.Result{}, err
+	}
+	if len(baseline) == 0 {
+		return storage.Result{}, ErrNoVault
+	}
+
+	result, err := commit(storage.Change{
+		Path: s.path(), Contents: sealed,
+		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(baseline)},
+	})
+	if err != nil {
+		return storage.Result{}, err
+	}
+	s.mu.Lock()
+	s.vault = clone
+	s.baseline = slices.Clone(sealed)
+	s.used = s.now()
+	s.mu.Unlock()
+	return result, nil
 }
 
 // Aliases は、パスワードが保存されているホストを返す。ロック中は何も返さない。
@@ -732,6 +856,8 @@ func (s *Service) Aliases() []string {
 // リモートのスナップショットを封じ直すのはこの関数の仕事ではない。それはオブジェクト
 // ストアのものであり、このパッケージはそれを import しない。push は呼び出し側が行う。
 func (s *Service) ChangeMasterPassword(current, next string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	if ok, err := s.Verify(current); err != nil {
 		return err
 	} else if !ok {
@@ -777,8 +903,14 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 		Operation: "secret.rekey",
 		Changes:   changes,
 	}); err != nil {
+		s.mu.Lock()
+		vault.key = previous
+		s.mu.Unlock()
 		return err
 	}
+	s.mu.Lock()
+	s.baseline = slices.Clone(sealed)
+	s.mu.Unlock()
 	return nil
 }
 
