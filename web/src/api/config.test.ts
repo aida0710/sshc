@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient, ApiError } from "./client";
-import { configApi } from "./config";
+import { configApi, type CreateConnectionRequest } from "./config";
 
 const overviewPayload = {
   entry: { path: "config", absolute: "/home/tester/.ssh/config" },
@@ -119,5 +119,41 @@ describe("configApi", () => {
     expect(apiError.code).toBe("config_conflict");
     expect(apiError.status).toBe(409);
     expect(apiError.problem?.conflict?.externalChange).toHaveLength(1);
+  });
+
+  it("creates a connection from generated request types and accepts 201", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      transactionId: "tx-create",
+      identity: { path: "connections/home/edge.conf", alias: "edge" },
+      preview: { operation: "connection.create", diffs: [] },
+    }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetcher);
+    const request: CreateConnectionRequest = {
+      alias: "edge",
+      group: "home",
+      hostName: "edge.example",
+      user: "ops",
+      authentication: { kind: "identity_file", keyId: "0123456789abcdef0123456789abcdef" },
+    };
+
+    const created = await configApi.createConnection(request);
+
+    expect(created.identity).toEqual({ path: "connections/home/edge.conf", alias: "edge" });
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/connections");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual(request);
+  });
+
+  it("propagates a connection creation problem", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: "alias_already_declared", message: "request rejected",
+    }), { status: 409, headers: { "Content-Type": "application/problem+json" } })));
+
+    await expect(configApi.createConnection({
+      alias: "bastion",
+      hostName: "duplicate.example",
+      authentication: { kind: "dedicated_password", password: "secret" },
+    })).rejects.toMatchObject({ code: "alias_already_declared", status: 409 });
   });
 });

@@ -23,6 +23,9 @@ export type HostMetadata = components["schemas"]["HostMetadata"];
 export type Notice = components["schemas"]["Notice"];
 export type Diagnostic = components["schemas"]["Diagnostic"];
 export type EffectiveDiff = components["schemas"]["EffectiveDiff"];
+export type CreateConnectionRequest = components["schemas"]["CreateConnectionRequest"];
+export type CreateConnectionAuthentication = components["schemas"]["CreateConnectionAuthentication"];
+export type CreateConnectionResponse = components["schemas"]["CreateConnectionResponse"];
 
 // 生成された型は契約を記述するに過ぎない。これらの防護は UI が
 // 実際に受け取ったペイロードを検査する。型アサーションは実行時には何も証明しない。
@@ -99,6 +102,16 @@ function validateSaveResult(value: unknown): SaveResult {
   return record as unknown as SaveResult;
 }
 
+function validateCreateConnectionResponse(value: unknown): CreateConnectionResponse {
+  const record = asRecord(value);
+  asString(record.transactionId);
+  const identity = asRecord(record.identity);
+  asString(identity.path);
+  asString(identity.alias);
+  validateSavePreview(record.preview);
+  return record as unknown as CreateConnectionResponse;
+}
+
 function validateHistory(value: unknown): HistoryEntry[] {
   const record = asRecord(value);
   const entries = asArray(record.entries);
@@ -136,6 +149,9 @@ export const configApi = {
   },
   async save(request: EditRequest): Promise<SaveResult> {
     return validateSaveResult(await postJSON<unknown>("/api/v1/config/save", request));
+  },
+  async createConnection(request: CreateConnectionRequest): Promise<CreateConnectionResponse> {
+    return validateCreateConnectionResponse(await postJSON<unknown>("/api/v1/connections", request));
   },
   // グループの名前変更と削除はサーバー操作であり、クライアントが保持する
   // ドキュメントへの編集ではない。グループはディレクトリであるため、その変更は

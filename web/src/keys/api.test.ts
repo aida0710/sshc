@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../api/client";
-import { keysApi, PURGE_ACTION_KIND, REVEAL_ACTION_KIND } from "./api";
+import { keysApi, PURGE_ACTION_KIND, REVEAL_ACTION_KIND, selectablePrivateKeys, type KeyItem } from "./api";
 
 const csrfToken = "c".repeat(43);
 const actionToken = "a".repeat(43);
@@ -22,6 +22,21 @@ afterEach(() => {
 });
 
 describe("keysApi", () => {
+  it("offers only private-key inventory entries as connection identities", () => {
+    const base = {
+      container: "", algorithm: "", keyType: "", bits: 0, encrypted: false,
+      fingerprint: "", comment: "", permission: "0600", permissionRisk: false,
+      sizeBytes: 1, references: [], notes: [],
+    };
+    const items = [
+      { ...base, id: "private", relativePath: "id_work", kind: "private_key" },
+      { ...base, id: "public", relativePath: "id_work.pub", kind: "public_key" },
+      { ...base, id: "certificate", relativePath: "id_work-cert.pub", kind: "certificate" },
+    ] as KeyItem[];
+
+    expect(selectablePrivateKeys({ items }).map((item) => item.id)).toEqual(["private"]);
+  });
+
   // action の種類はサーバーの session パッケージが所有する。ここで
   // 綴りを変えれば、サーバーが拒否するトークンを鋳造してしまう。
   it("asks for a confirmation using the committed action vocabulary", () => {
