@@ -1274,134 +1274,143 @@ macOS の振る舞いは変えていない。絶対パスであることと Clea
 
 ---
 
-### Task 8: Linux の端末起動（custom のみ）
+### Task 8: Linux では端末を開かない
+
+方針を変えた。当初は `TerminalCustom` だけを実装するつもりだったが、Linux では
+成立しないことが実装して分かった。
+
+`RunOutput` は子プロセスの終了を待つ。macOS は `/usr/bin/open` を挟むので即座に
+戻るが、Linux は端末エミュレータを直接起動する。`foot -e` も `xterm -e` も
+ウィンドウが閉じるまで前面に留まるので、HTTP リクエストがセッションのあいだ
+ずっと開いたままになる。しかも `exec.CommandContext` に渡っているのは
+`c.Request().Context()` なので、利用者がタブを閉じた時点で SIGKILL が飛び、
+使用中の SSH セッションごと落ちる。
+
+待たない起動口を新設するか `setsid` を挟むかで直せるが、どちらも取らない。
+Linux はこの機能を提供せず、利用者が自分でコマンドを実行する。
+
+これは既に一級の設定である。`app.Dependencies.Terminal` は nil を許すと明記され
+（`internal/app/run.go:50-52`）、`internal/diagnostics/service.go:238,331` が
+panic せずに「端末が設定されていない」と報告する。
+
+ただし nil にするだけでは足りない。2 か所が嘘をつく。
 
 **Files:**
-- Create: `internal/platform/linux/terminal.go`
-- Create: `internal/platform/linux/terminal_test.go`
+- Delete: `internal/platform/linux/terminal.go`, `internal/platform/linux/terminal_test.go`
+- Modify: `internal/diagnostics/service.go` — `TerminalCommand` と `TerminalOptions`
+- Modify: `internal/diagnostics/service_test.go`
 
 **Interfaces:**
-- Consumes: `platform.OutputRunner`、`platform.TerminalChoice`、`platform.ValidateTerminalChoice`
-- Produces: `linux.NewTerminal(runner platform.OutputRunner) Terminal`。macos.Terminal と同じ面を満たす:
-
-```go
-Launch(ctx context.Context, alias string) error
-LaunchIn(ctx context.Context, choice platform.TerminalChoice, alias string) error
-LaunchWithPassword(ctx context.Context, alias, helperPath, endpoint, token string) error
-LaunchWithPasswordIn(ctx context.Context, choice platform.TerminalChoice, alias, helperPath, endpoint, token string) error
-Applications() []platform.Application
-Terminals() []platform.TerminalAvailability
-```
-
-表を持たないので `Applications()` は空スライスを返し、`Terminals()` は
-`TerminalCustom` の 1 件だけを返す。`Launch` と `LaunchWithPassword`（choice なし）は
-`platform.ErrTerminalApplication` を返す — 何を開くかを利用者が指定していないので、
-推測して開く先がない。タスク 9 が使う。
+- Consumes: なし
+- Produces: `linux` パッケージは端末を持たない。タスク 9 の `wiring_linux.go` は
+  `Terminal` を設定しない（nil のまま）。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
+`internal/diagnostics/service_test.go` に 2 つ足す。どちらも `Terminal` を nil に
+した `Service` に対して行う。
+
 ```go
-//go:build linux
-
-package linux_test
-
-import (
-	"context"
-	"slices"
-	"testing"
-
-	"sshc/internal/platform"
-	"sshc/internal/platform/linux"
-)
-
-type terminalRunner struct{ commands []platform.Command }
-
-func (runner *terminalRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
-	runner.commands = append(runner.commands, command)
-	return platform.Output{}, nil
-}
-
-// 端末の表は持たない。
-//
-// macOS では「CLI を持たない端末は Terminal.app と iTerm2 の二つで打ち止め」と
-// 言い切れるので profile の表が意味を持つ。Linux では端末が乱立していて、実行する
-// コマンドの渡し方も端末ごとに違う。表を用意すれば、そこに無い端末を使う人には
-// 効かず、そこにある端末でも規約を取り違えれば黙って壊れる。推測しない。
-func TestOnlyTheCustomTerminalIsOffered(t *testing.T) {
-	if got := linux.NewTerminal(&terminalRunner{}).Applications(); len(got) != 0 {
-		t.Fatalf("Applications() = %#v, want none", got)
+// 端末を持たないプラットフォームでは、開くボタンを出す根拠がない。
+// コマンド自体は返す。利用者が自分で実行できるからであり、それが
+// このプラットフォームでの答えである。
+func TestTerminalCommandIsNotLaunchableWithoutALauncher(t *testing.T) {
+	service := &diagnostics.Service{}
+	command, launchable, warning := service.TerminalCommand("bastion")
+	if command == "" {
+		t.Error("コマンドは返すこと。利用者が自分で実行する")
+	}
+	if launchable {
+		t.Error("launchable = true、端末を開く手段が無いのに")
+	}
+	if warning == "" {
+		t.Error("なぜ開けないかを言うこと")
 	}
 }
 
-// 利用者が書いたコマンドが、そのまま argv として届く。シェルは介在しない。
-func TestLaunchRunsTheChosenProgramWithTheAliasLast(t *testing.T) {
-	runner := &terminalRunner{}
-	terminal := linux.NewTerminal(runner)
-	choice := platform.TerminalChoice{
-		ID:          platform.TerminalCustom,
-		Application: "/usr/bin/foot",
-		Arguments:   []string{"-e"},
-	}
-
-	if err := terminal.LaunchIn(context.Background(), choice, "bastion"); err != nil {
-		t.Fatal(err)
-	}
-	if len(runner.commands) != 1 {
-		t.Fatalf("commands = %d, want 1", len(runner.commands))
-	}
-	command := runner.commands[0]
-	if command.Path != "/usr/bin/foot" {
-		t.Errorf("Path = %q", command.Path)
-	}
-	if !slices.Contains(command.Arguments, "bastion") {
-		t.Errorf("Arguments = %#v, want the alias", command.Arguments)
-	}
-}
-
-// 安全な文字集合の外にある alias は起動しない。
-func TestLaunchRefusesAnUnsafeAlias(t *testing.T) {
-	runner := &terminalRunner{}
-	choice := platform.TerminalChoice{
-		ID: platform.TerminalCustom, Application: "/usr/bin/foot", Arguments: []string{"-e"},
-	}
-	if err := linux.NewTerminal(runner).LaunchIn(context.Background(), choice, "a;rm -rf /"); err == nil {
-		t.Fatal("an unsafe alias was launched")
-	}
-	if len(runner.commands) != 0 {
-		t.Error("the process seam was reached anyway")
+// 在庫を「分からない」と扱ってはいけない。ランチャーが無いことは、
+// 選択肢が無いと分かっていることである。
+func TestTerminalOptionsOffersNothingWithoutALauncher(t *testing.T) {
+	service := &diagnostics.Service{}
+	available, applications, _ := service.TerminalOptions()
+	if len(available) != 0 || len(applications) != 0 {
+		t.Fatalf("TerminalOptions = %#v, %#v, want empty", available, applications)
 	}
 }
 ```
 
 - [ ] **Step 2: 落ちることを確認する**
 
-Run: `docker run --rm -v "$PWD":/src -w /src golang:1.26 go test ./internal/platform/linux/ -run Terminal -count=1`
-Expected: FAIL。`linux.NewTerminal` が未定義。
+Run: `go test ./internal/diagnostics/ -run 'TestTerminal(CommandIsNotLaunchable|OptionsOffersNothing)WithoutALauncher' -count=1 -v`
+Expected: FAIL。`TerminalCommand` は alias が安全なら無条件に `true` を返し、
+`TerminalOptions` はランチャーが在庫を答えられないとき全部 installed と答える。
 
-- [ ] **Step 3: 実装する**
+- [ ] **Step 3: 直す**
 
-`macos/terminal.go` の custom 分岐（378-404 行）を手本に、`open` を挟まず直接プログラムを起動する形で書く。要点:
+`TerminalCommand`（`internal/diagnostics/service.go:288`）に、alias の検証と同じ
+高さで分岐を足す:
 
-- `platform.ValidateTerminalChoice(choice)` を必ず通す。
-- `platform.ValidateAlias(alias)` を必ず通す。安全な文字集合の外は起動しない。
-- `choice.Application` は絶対パスであること。そうでなければ `platform.ErrTerminalApplication`。
-- 起動する argv は `[choice.Arguments..., <sshc の絶対パス>, alias]`。macOS 版が `program` を組み立てている箇所を読んで、同じ内容を渡すこと。
-- `LaunchWithPassword` は `macos.TerminalPasswordScript` と同じ意味を持たせる。すなわち **環境変数やトークンをコマンド行に置かない**。`sshc <alias>` を実行させ、トークンはそのプロセスが handoff から取る。
+```go
+	if s.Terminal == nil {
+		return command, false, TerminalUnavailableWarning
+	}
+```
 
-- [ ] **Step 4: 通ることを確認する**
+`UnsafeAliasWarning` の隣に定数を置く。文面は英語で、既存の警告と同じ調子にする
+（例: `"This platform does not open a terminal for you. Run the command above yourself."`）。
+`UnsafeAliasWarning` の綴りと置き場所を見て合わせること。
 
-Run: `docker run --rm -v "$PWD":/src -w /src golang:1.26 go test ./internal/platform/linux/ -count=1`
-Expected: PASS。
+`TerminalOptions`（同 `:263`）の型アサーションの前に足す:
 
-- [ ] **Step 5: コミット**
+```go
+	if s.Terminal == nil {
+		return nil, nil, selected
+	}
+```
+
+既存のコメントが「画面が選択肢を隠す根拠は『無いと分かっている』ことだけで、
+『分からない』ことではない」と言っている。nil は前者である。そのことをコメントに
+書き足すこと。
+
+- [ ] **Step 4: Linux の端末を消す**
 
 ```bash
-git add internal/platform/linux/terminal.go internal/platform/linux/terminal_test.go
-git commit -m "Linux の端末起動は custom のみ
+git rm internal/platform/linux/terminal.go internal/platform/linux/terminal_test.go
+```
 
-端末の表は持たない。Linux では端末が乱立していて、実行するコマンドの渡し方も
-端末ごとに違う。表を用意すれば、そこに無い端末を使う人には効かず、そこにある
-端末でも規約を取り違えれば黙って壊れる。推測しない。"
+- [ ] **Step 5: 通ることを確認する**
+
+Run:
+```bash
+gofmt -l $(git ls-files '*.go' | grep -v models.gen.go)
+go build ./... && go vet ./... && go test -count=1 ./...
+GOOS=linux go vet ./internal/platform/linux/ ./internal/diagnostics/
+docker run --rm -v "$PWD":/src -w /src golang:1.26 go test ./internal/platform/linux/ ./internal/diagnostics/ -count=1
+cd web && npm test
+```
+Expected: すべて成功。macOS の端末の挙動は 1 つも変わらないこと — `Terminal` が
+nil でないときの経路には手を触れていないので、既存の diagnostics のテストは
+すべてそのまま通るはずである。1 つでも落ちたら、それは触ってはいけないものを
+触った証拠なので報告すること。
+
+- [ ] **Step 6: コミット**
+
+```bash
+git add -A
+git commit -m "Linux では端末を開かない
+
+RunOutput は子プロセスの終了を待つ。macOS は /usr/bin/open を挟むので即座に
+戻るが、Linux は端末エミュレータを直接起動するので、ウィンドウが閉じるまで
+HTTP リクエストが開いたままになる。渡しているのはリクエストのコンテキスト
+なので、タブを閉じれば SIGKILL が飛び、使用中の SSH セッションごと落ちる。
+
+待たない起動口を作るか setsid を挟めば直るが、どちらも取らない。Linux では
+コマンドを表示し、利用者が自分で実行する。
+
+nil にするだけでは足りなかった。TerminalCommand は alias が安全なら無条件に
+launchable を返し、TerminalOptions はランチャーが在庫を答えられないとき
+「全部ある」と答えていた。後者の既定は「分からない」ための既定であって、
+「無いと分かっている」ときのものではない。"
 ```
 
 ---
@@ -1445,7 +1454,9 @@ func newPlatformParts(home string) platformParts {
 		Toolchain: toolchain,
 		Browser:   linux.NewBrowser(runner),
 		KeyAgent:  process.NewKeyAgent(runner, toolchain, os.LookupEnv),
-		Terminal:  linux.NewTerminal(runner),
+		// Terminal は設定しない。Linux では端末を開かず、コマンドを表示して
+		// 利用者が実行する。理由はタスク 8 にある。nil は diagnostics が
+		// 「端末が設定されていない」と報告する、支持された状態である。
 		LoginItem: linux.LoginItem{Runner: runner, Home: home},
 	}
 }
