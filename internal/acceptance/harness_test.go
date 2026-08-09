@@ -6,7 +6,7 @@
 // ホームディレクトリを構築し、それに対して app.Build 経由で
 // production server を起動し、プロセス、terminal、agent の継ぎ目を、プログラムを一切
 // 起動しない recorder に置き換える。ここにあるテストは、本物のホームディレクトリ、
-// 本物の Keychain、本物の agent、Terminal、リモートホストのいずれも読まない。
+// 本物の agent、Terminal、リモートホストのいずれも読まない。
 package acceptance_test
 
 import (
@@ -135,8 +135,8 @@ func (t *recordingTerminal) reset() {
 	t.aliases = nil
 }
 
-// fakeAgent は ssh-agent とログイン Keychain の代わりを務める。
-// このリポジトリのどのテストも、どちらとも話さない。
+// fakeAgent は ssh-agent の代わりを務める。
+// このリポジトリのどのテストも、本物のエージェントとは話さない。
 type fakeAgent struct{}
 
 func (fakeAgent) Available(context.Context) bool { return false }

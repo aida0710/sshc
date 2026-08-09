@@ -26,9 +26,6 @@ const (
 // 絶対パスなので、オプションとして読まれることは決して
 // ない。
 //
-// --apple-use-keychain は、パスフレーズをログインキーチェーンにも保存する、
-// 文書化された macOS のフラグ。ユーザーがそれを求めたときにだけ使う。
-//
 // プログラムのパスは定数ではなく Toolchain から来る。そのためこのアダプタは、
 // アプリケーションの他の部分と同じ OpenSSH を実行し、PATH に依存することは
 // 決してない。
@@ -70,12 +67,9 @@ func (agent KeyAgent) List(ctx context.Context) ([]platform.AgentIdentity, error
 }
 
 func (agent KeyAgent) Add(ctx context.Context, request platform.AgentAddRequest) error {
-	arguments := make([]string, 0, 4)
+	arguments := make([]string, 0, 3)
 	if request.LifetimeSeconds > 0 {
 		arguments = append(arguments, "-t", strconv.Itoa(request.LifetimeSeconds))
-	}
-	if request.StoreInKeychain {
-		arguments = append(arguments, "--apple-use-keychain")
 	}
 	arguments = append(arguments, request.PrivateKeyPath)
 

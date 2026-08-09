@@ -96,6 +96,30 @@ func assertScrubbedEnvironment(t *testing.T, command platform.Command) {
 	}
 }
 
+// Keychain 経路は廃止した。パスフレーズの保存先は自前の vault ひとつであり、
+// ssh-add に二つ目の保管場所を持たせない。--apple-use-keychain が復活すれば、
+// 鍵を移動したときに絶対パスで識別された項目が壊れる問題も一緒に戻ってくる。
+func TestAddNeverAsksSshAddToStoreThePassphrase(t *testing.T) {
+	recorder := &recordingRunner{}
+	agent := macos.NewKeyAgent(recorder, installedToolchain(), agentLookup)
+
+	err := agent.Add(context.Background(), platform.AgentAddRequest{
+		PrivateKeyPath:  "/home/u/.ssh/id_ed25519",
+		Passphrase:      []byte("secret"),
+		LifetimeSeconds: 3600,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range recorder.commands {
+		for _, argument := range command.Arguments {
+			if strings.Contains(argument, "keychain") {
+				t.Fatalf("argv がキーチェーンに触れている: %#v", command.Arguments)
+			}
+		}
+	}
+}
+
 func TestKeyAgentAddSendsThePassphraseOnlyOnStandardInput(t *testing.T) {
 	recorder := &recordingRunner{outputs: []platform.Output{{}}}
 	agent := macos.NewKeyAgent(recorder, installedToolchain(), agentLookup)
@@ -104,7 +128,6 @@ func TestKeyAgentAddSendsThePassphraseOnlyOnStandardInput(t *testing.T) {
 		PrivateKeyPath:  "/Users/example/.ssh/id_work",
 		Passphrase:      []byte("correct horse"),
 		LifetimeSeconds: 3600,
-		StoreInKeychain: true,
 	})
 	if err != nil {
 		t.Fatalf("Add error = %v", err)
@@ -116,7 +139,7 @@ func TestKeyAgentAddSendsThePassphraseOnlyOnStandardInput(t *testing.T) {
 	if command.Path != "/usr/bin/ssh-add" {
 		t.Errorf("Path = %q, want /usr/bin/ssh-add", command.Path)
 	}
-	want := []string{"-t", "3600", "--apple-use-keychain", "/Users/example/.ssh/id_work"}
+	want := []string{"-t", "3600", "/Users/example/.ssh/id_work"}
 	if strings.Join(command.Arguments, " ") != strings.Join(want, " ") {
 		t.Fatalf("Arguments = %#v, want %#v", command.Arguments, want)
 	}

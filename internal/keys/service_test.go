@@ -566,7 +566,6 @@ func TestRegisterSendsTheKeyPathAndPassphraseToTheAgentOnly(t *testing.T) {
 		KeyID:           ItemID("id_work"),
 		Passphrase:      passphrase,
 		LifetimeSeconds: 3600,
-		StoreInKeychain: true,
 	})
 	if err != nil {
 		t.Fatalf("Register error = %v", err)
@@ -578,7 +577,7 @@ func TestRegisterSendsTheKeyPathAndPassphraseToTheAgentOnly(t *testing.T) {
 	if request.PrivateKeyPath != filepath.Join(workspace.Root(), "id_work") {
 		t.Errorf("PrivateKeyPath = %q", request.PrivateKeyPath)
 	}
-	if request.LifetimeSeconds != 3600 || !request.StoreInKeychain {
+	if request.LifetimeSeconds != 3600 {
 		t.Errorf("request = %#v", request)
 	}
 	if string(agent.passphrases[0]) != "correct horse" {
@@ -592,7 +591,7 @@ func TestRegisterSendsTheKeyPathAndPassphraseToTheAgentOnly(t *testing.T) {
 	if len(result.Identities) != 1 {
 		t.Errorf("Identities = %#v, want the agent listing", result.Identities)
 	}
-	if result.Fingerprint == "" || !result.StoredInKeychain || result.LifetimeSeconds != 3600 {
+	if result.Fingerprint == "" || result.LifetimeSeconds != 3600 {
 		t.Errorf("result = %#v", result)
 	}
 

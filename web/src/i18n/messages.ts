@@ -773,14 +773,13 @@ export const en = {
   "keys.agentDelegationsNote": "These configuration entries expect the agent to supply a key rather than naming a file:",
   "keys.registerHeading": "Add to agent: {path}",
   "keys.registerNote":
-    "The passphrase is handed to ssh-add on standard input, so it reaches neither the command line nor the child environment. sshc does not store it. The login Keychain is the only place it can outlive this request, and only if you ask for that below.",
+    "The passphrase is handed to ssh-add on standard input, so it reaches neither the command line nor the child environment. sshc does not store it, and nothing here makes it outlive this request.",
   "keys.keyPassphrase": "Key passphrase",
   "keys.lifetime": "Lifetime",
   "keys.lifetimeForever": "Until the agent exits",
   "keys.lifetimeHour": "1 hour",
   "keys.lifetimeFourHours": "4 hours",
   "keys.lifetimeTwelveHours": "12 hours",
-  "keys.storeInKeychain": "Also store the passphrase in the login Keychain, so macOS unlocks this key without asking again",
   "keys.useStoredPassphrase": "Use a stored passphrase",
   "keys.choosePassphraseName": "— choose a name —",
   "keys.useThisPassphrase": "Use this passphrase",
@@ -860,8 +859,6 @@ export const en = {
   "keys.blockerDestinationIsConfig": "an Include would read {detail} as configuration",
   "keys.blockerStateDirectory": "{detail} is inside the engine's own state directory",
   "keys.blockerOther": "{detail}",
-  "keys.noteKeychainEntryStale":
-    "If you stored this key's passphrase in the login Keychain, that entry still names the old file. macOS owns it, so sshc cannot move it; update or remove it in Keychain Access if you no longer want it.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1617,14 +1614,13 @@ export const ja: Record<MessageKey, string> = {
   "keys.agentDelegationsNote": "これらの設定エントリは、ファイルを指定する代わりに agent が鍵を供給することを期待しています:",
   "keys.registerHeading": "agent に追加: {path}",
   "keys.registerNote":
-    "パスフレーズは ssh-add へ標準入力で渡されるため、コマンドラインにも子プロセスの環境変数にも載りません。sshc は保存しません。この要求より長く残りうるのは login Keychain だけで、それも下で指定した場合に限ります。",
+    "パスフレーズは ssh-add へ標準入力で渡されるため、コマンドラインにも子プロセスの環境変数にも載りません。sshc は保存せず、この要求より長く残る仕組みもありません。",
   "keys.keyPassphrase": "鍵のパスフレーズ",
   "keys.lifetime": "保持期間",
   "keys.lifetimeForever": "agent が終了するまで",
   "keys.lifetimeHour": "1 時間",
   "keys.lifetimeFourHours": "4 時間",
   "keys.lifetimeTwelveHours": "12 時間",
-  "keys.storeInKeychain": "パスフレーズを login Keychain にも保存し、macOS が次回から尋ねずにこの鍵を解錠できるようにする",
   "keys.useStoredPassphrase": "保存済みのパスフレーズを使う",
   "keys.choosePassphraseName": "— 名前を選ぶ —",
   "keys.useThisPassphrase": "このパスフレーズを使う",
@@ -1704,8 +1700,6 @@ export const ja: Record<MessageKey, string> = {
   "keys.blockerDestinationIsConfig": "{detail} は Include に設定ファイルとして読まれてしまいます",
   "keys.blockerStateDirectory": "{detail} はエンジン自身の状態ディレクトリの中です",
   "keys.blockerOther": "{detail}",
-  "keys.noteKeychainEntryStale":
-    "この鍵のパスフレーズをログインキーチェーンに保存している場合、その項目は古いファイル名のままです。キーチェーンは macOS が管理しているため sshc からは移動できません。不要であればキーチェーンアクセスで更新または削除してください。",
 };
 
 export const messages = { en, ja } satisfies Record<string, Record<MessageKey, string>>;

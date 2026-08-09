@@ -1415,14 +1415,12 @@ export interface components {
         RegisterKeyRequest: {
             passphrase: string;
             lifetimeSeconds: number;
-            storeInKeychain: boolean;
         };
         RegisterKeyResponse: {
             id: string;
             relativePath: string;
             fingerprint: string;
             lifetimeSeconds: number;
-            storedInKeychain: boolean;
             identities: components["schemas"]["AgentIdentity"][];
         };
         TrashFileSummary: {

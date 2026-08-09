@@ -800,17 +800,15 @@ type RecoverResponse struct {
 type RegisterKeyRequest struct {
 	LifetimeSeconds int    `json:"lifetimeSeconds"`
 	Passphrase      string `json:"passphrase"`
-	StoreInKeychain bool   `json:"storeInKeychain"`
 }
 
 // RegisterKeyResponse defines model for RegisterKeyResponse.
 type RegisterKeyResponse struct {
-	Fingerprint      string          `json:"fingerprint"`
-	Id               string          `json:"id"`
-	Identities       []AgentIdentity `json:"identities"`
-	LifetimeSeconds  int             `json:"lifetimeSeconds"`
-	RelativePath     string          `json:"relativePath"`
-	StoredInKeychain bool            `json:"storedInKeychain"`
+	Fingerprint     string          `json:"fingerprint"`
+	Id              string          `json:"id"`
+	Identities      []AgentIdentity `json:"identities"`
+	LifetimeSeconds int             `json:"lifetimeSeconds"`
+	RelativePath    string          `json:"relativePath"`
 }
 
 // RelocateKeyRequest defines model for RelocateKeyRequest.

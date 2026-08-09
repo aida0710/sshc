@@ -131,12 +131,12 @@ func TestGeneratedKeyVaultModels(t *testing.T) {
 	}
 	register := RegisterKeyResponse{
 		Id: item.Id, RelativePath: "id_work", Fingerprint: "SHA256:abcdef",
-		LifetimeSeconds: 3600, StoredInKeychain: true, Identities: []AgentIdentity{},
+		LifetimeSeconds: 3600, Identities: []AgentIdentity{},
 	}
 	trashed := TrashKeyResponse{EntryId: "e", Files: []TrashFileSummary{}, Skipped: []string{}, TransactionId: "t"}
 	restored := RestoreTrashResponse{EntryId: "e", Restored: []string{"id_work"}, Blockers: []string{}, TransactionId: "t"}
 	purged := PurgeTrashResponse{EntryId: "e", Removed: []string{"id_work"}, TransactionId: "t"}
-	if !passphrase.Encrypted || !register.StoredInKeychain || trashed.EntryId == "" ||
+	if !passphrase.Encrypted || register.LifetimeSeconds != 3600 || trashed.EntryId == "" ||
 		len(restored.Restored) != 1 || len(purged.Removed) != 1 {
 		t.Fatalf("unexpected key vault responses")
 	}

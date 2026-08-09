@@ -462,7 +462,7 @@ func TestAgentRejectionIsReportedWithASanitisedDetail(t *testing.T) {
 	}
 	engine, _, credentials := newKeyServer(t, service)
 
-	body := []byte(`{"passphrase":"wrong","lifetimeSeconds":0,"storeInKeychain":false}`)
+	body := []byte(`{"passphrase":"wrong","lifetimeSeconds":0}`)
 	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/keys/key-one/agent", body, "")
 	if response.Code != http.StatusBadGateway {
 		t.Fatalf("register = %d, want 502: %s", response.Code, response.Body.String())

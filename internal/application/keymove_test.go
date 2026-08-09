@@ -119,10 +119,8 @@ func TestRelocateKeyRenamesWithoutChangingGroup(t *testing.T) {
 	if got := readFile(t, workspace, "conf.d/30-keys.conf"); got != "Host build\n\tIdentityFile ~/.ssh/id_build\n" {
 		t.Errorf("configuration = %q", got)
 	}
-	// ログイン Keychain のパスフレーズは古い絶対パスの下に登録
-	// されており、macOS がそのエントリを所有しているので、結果は毎回そう述べる。
-	if len(result.Notes) != 1 || result.Notes[0] != NoteKeychainEntryStale {
-		t.Errorf("notes = %#v, want the Keychain warning", result.Notes)
+	if len(result.Notes) != 0 {
+		t.Errorf("notes = %#v, want none", result.Notes)
 	}
 }
 
