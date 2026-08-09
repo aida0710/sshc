@@ -1,5 +1,3 @@
-//go:build darwin
-
 package platform_test
 
 import (
@@ -9,9 +7,9 @@ import (
 	"sshc/internal/platform"
 )
 
-// バンドルの要求は macOS のものである。ここが緩めば、保存の時点で弾けたはずの
-// 設定が起動の時点まで生き延びる。
-func TestCustomTerminalOnDarwinMustBeAnApplicationBundle(t *testing.T) {
+// バンドルという形は、開く先のアプリケーションが実際に持つ約束である。ここが
+// 緩めば、保存の時点で拒めたはずの設定が起動の時点まで生き延びる。
+func TestCustomTerminalMustBeAnApplicationBundle(t *testing.T) {
 	for _, application := range []string{"/usr/bin/foot", "/Applications/Foo", "/Applications/Foo.APP"} {
 		choice := platform.TerminalChoice{ID: platform.TerminalCustom, Application: application}
 		if err := platform.ValidateTerminalChoice(choice); !errors.Is(err, platform.ErrTerminalApplication) {

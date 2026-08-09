@@ -79,13 +79,11 @@ func ValidateTerminalChoice(choice TerminalChoice) error {
 		}
 		return nil
 	}
-	// 絶対パスであることと Clean と一致することはどちらのプラットフォームでも
-	// 要る検査であり、その場所は組み立てではなく選択の結果でなければならない。
-	// 形の約束（バンドルか実行ファイルか）だけがプラットフォームで分かれるので
-	// validApplicationPath に委ねる。
+	// 開けるのはアプリケーションバンドルだけであり、その場所は組み立てではなく
+	// 選択の結果でなければならない。
 	if !filepath.IsAbs(choice.Application) ||
 		filepath.Clean(choice.Application) != choice.Application ||
-		!validApplicationPath(choice.Application) {
+		filepath.Ext(choice.Application) != ".app" {
 		return ErrTerminalApplication
 	}
 	if len(choice.Arguments) > MaxTerminalArguments {
