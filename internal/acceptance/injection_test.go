@@ -1,3 +1,5 @@
+//go:build darwin
+
 package acceptance_test
 
 import (
