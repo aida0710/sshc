@@ -10,6 +10,7 @@ import (
 	"sshc/internal/effective"
 	"sshc/internal/platform"
 	"sshc/internal/platform/macos"
+	"sshc/internal/platform/process"
 	"sshc/internal/storage"
 )
 
@@ -158,7 +159,7 @@ func TestProjectionMatchesInstalledOpenSSH(t *testing.T) {
 			// ~/.ssh/config が読まれるファイルになる。相対 Include を両者が
 			// 同じディレクトリへ解決するのは、それが成り立つときだけである。
 			evaluator := effective.Evaluator{
-				Runner:     macos.NewOutputRunner(),
+				Runner:     process.NewOutputRunner(),
 				Toolchain:  toolchain,
 				ConfigPath: configPath,
 				Environment: platform.MinimalEnvironment(func(name string) (string, bool) {
