@@ -339,6 +339,7 @@ func TestEveryRouteButTheGateRefusesWhileTheVaultIsShut(t *testing.T) {
 	locked := []struct{ method, path string }{
 		{http.MethodGet, "/api/v1/config/overview"},
 		{http.MethodPost, "/api/v1/config/save"},
+		{http.MethodPost, "/api/v1/connections"},
 		{http.MethodGet, "/api/v1/keys"},
 		{http.MethodGet, "/api/v1/known-hosts"},
 		{http.MethodGet, "/api/v1/sync"},

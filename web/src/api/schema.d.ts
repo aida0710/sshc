@@ -645,6 +645,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates one complete SSH Host entry. Password authentication stores its secret only in the encrypted vault and commits that vault change in the same journalled transaction as the configuration. Key authentication writes only an inventoried private-key reference. The response contains config diffs but never plaintext or encrypted vault bytes. */
+        post: operations["createConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/config/groups/rename": {
         parameters: {
             query?: never;
@@ -1385,6 +1402,53 @@ export interface components {
         GroupDeleteRequest: {
             name: string;
             destination?: string;
+        };
+        CreateConnectionRequest: {
+            alias: string;
+            group?: string;
+            hostName: string;
+            user?: string;
+            port?: number;
+            authentication: components["schemas"]["CreateConnectionAuthentication"];
+        };
+        CreateConnectionAuthentication: components["schemas"]["CreateDedicatedPasswordAuthentication"] | components["schemas"]["CreateSavedPasswordAuthentication"] | components["schemas"]["CreateNewSharedPasswordAuthentication"] | components["schemas"]["CreateIdentityFileAuthentication"];
+        CreateDedicatedPasswordAuthentication: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "dedicated_password";
+            password: string;
+        };
+        CreateSavedPasswordAuthentication: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "saved_password";
+            credential: string;
+        };
+        CreateNewSharedPasswordAuthentication: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "new_shared_password";
+            credential: string;
+            password: string;
+        };
+        CreateIdentityFileAuthentication: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "identity_file";
+            keyId: string;
+        };
+        CreateConnectionResponse: {
+            transactionId: string;
+            identity: components["schemas"]["HostIdentity"];
+            preview: components["schemas"]["SavePreview"];
         };
         RelocateKeyRequest: {
             newName?: string;
@@ -2873,6 +2937,37 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+        };
+    };
+    createConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Connection created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateConnectionResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
         };
     };
     renameGroup: {

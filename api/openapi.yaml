@@ -729,6 +729,33 @@ paths:
               schema: { $ref: "#/components/schemas/PublicKeyResponse" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/connections:
+    post:
+      operationId: createConnection
+      description: >-
+        Creates one complete SSH Host entry. Password authentication stores its
+        secret only in the encrypted vault and commits that vault change in the
+        same journalled transaction as the configuration. Key authentication
+        writes only an inventoried private-key reference. The response contains
+        config diffs but never plaintext or encrypted vault bytes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateConnectionRequest" }
+      responses:
+        "201":
+          description: Connection created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateConnectionResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/config/groups/rename:
     post:
       operationId: renameGroup
@@ -1854,6 +1881,72 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 400 }
         destination: { type: string, maxLength: 400 }
+    CreateConnectionRequest:
+      type: object
+      additionalProperties: false
+      required: [alias, hostName, authentication]
+      properties:
+        alias: { type: string, minLength: 1, maxLength: 64 }
+        group: { type: string, maxLength: 400 }
+        hostName: { type: string, minLength: 1, maxLength: 255 }
+        user: { type: string, maxLength: 255 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        authentication: { $ref: "#/components/schemas/CreateConnectionAuthentication" }
+    CreateConnectionAuthentication:
+      # TypeScript keeps the discriminated union below. Go receives the raw
+      # branch and decodes it strictly at the HTTP boundary; this avoids the
+      # optional oapi-codegen runtime dependency while still rejecting unknown
+      # fields in the selected branch.
+      x-go-type: json.RawMessage
+      oneOf:
+        - $ref: "#/components/schemas/CreateDedicatedPasswordAuthentication"
+        - $ref: "#/components/schemas/CreateSavedPasswordAuthentication"
+        - $ref: "#/components/schemas/CreateNewSharedPasswordAuthentication"
+        - $ref: "#/components/schemas/CreateIdentityFileAuthentication"
+      discriminator:
+        propertyName: kind
+        mapping:
+          dedicated_password: "#/components/schemas/CreateDedicatedPasswordAuthentication"
+          saved_password: "#/components/schemas/CreateSavedPasswordAuthentication"
+          new_shared_password: "#/components/schemas/CreateNewSharedPasswordAuthentication"
+          identity_file: "#/components/schemas/CreateIdentityFileAuthentication"
+    CreateDedicatedPasswordAuthentication:
+      type: object
+      additionalProperties: false
+      required: [kind, password]
+      properties:
+        kind: { type: string, enum: [dedicated_password], x-go-type: string }
+        password: { type: string, minLength: 1, maxLength: 1024 }
+    CreateSavedPasswordAuthentication:
+      type: object
+      additionalProperties: false
+      required: [kind, credential]
+      properties:
+        kind: { type: string, enum: [saved_password], x-go-type: string }
+        credential: { type: string, minLength: 1, maxLength: 128 }
+    CreateNewSharedPasswordAuthentication:
+      type: object
+      additionalProperties: false
+      required: [kind, credential, password]
+      properties:
+        kind: { type: string, enum: [new_shared_password], x-go-type: string }
+        credential: { type: string, minLength: 1, maxLength: 128 }
+        password: { type: string, minLength: 1, maxLength: 1024 }
+    CreateIdentityFileAuthentication:
+      type: object
+      additionalProperties: false
+      required: [kind, keyId]
+      properties:
+        kind: { type: string, enum: [identity_file], x-go-type: string }
+        keyId: { type: string, minLength: 32, maxLength: 32 }
+    CreateConnectionResponse:
+      type: object
+      additionalProperties: false
+      required: [transactionId, identity, preview]
+      properties:
+        transactionId: { type: string }
+        identity: { $ref: "#/components/schemas/HostIdentity" }
+        preview: { $ref: "#/components/schemas/SavePreview" }
     RelocateKeyRequest:
       type: object
       additionalProperties: false
