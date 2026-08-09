@@ -57,7 +57,7 @@ ESLint は導入していません。TypeScript の型検査（`tsc -b` と e2e 
 ## セキュリティ境界
 
 - HTTP サーバーは IPv4 の `127.0.0.1` だけに bind します。LAN、Tailnet、コンテナ外部など、ネットワークへ公開して安全な設計ではありません。
-- このアプリケーションは実際の `~/.ssh` を読み書きし、鍵を作り、Terminal を起動し、リモートホストへ接続します。それぞれの境界は以下の各節にあります。
+- このアプリケーションは実際の `~/.ssh` を読み書きし、鍵を作り、**macOS では** Terminal を起動し、リモートホストへ接続します。それぞれの境界は以下の各節にあります。
 - **cookie だけでは何の証明にもなりません。** cookie はポートを区別せず、`SameSite` の「サイト」判定にもポートは入らないため、同じブラウザで `http://127.0.0.1:<別ポート>` を開くと session cookie はそちらへも送られます。そこで、読み取りを含む全ての API 要求に `X-SSHC-CSRF` を要求します。このトークンはページのメモリにしか無く、別ポートへは決して送られません。例外は `POST /api/v1/session/renew`（リロード直後はトークンが無く、これがトークンを取り戻す手段そのものであるため）と `GET /api/v1/health`。
 - bootstrap、session、CSRF の値をログへ出してはいけません。bootstrap は URL fragment に置き、ブラウザが直ちに履歴から除去します。
 - 同一マシン上の悪意あるプロセス、侵害されたブラウザ、ブラウザ拡張から秘密を完全には保護できません。将来の秘密鍵 reveal/copy 機能でも、ブラウザ拡張やローカルのクリップボード監視・履歴ツールに対して秘密は脆弱です。
@@ -163,7 +163,7 @@ ESLint は導入していません。TypeScript の型検査（`tsc -b` と e2e 
 - ソースから使っている場合の更新は `make update`（`git pull --ff-only` + `make install`）です。
 
 - **インストールは `make install`** です。`~/.local/bin/sshc` へ入れます（sudo 不要）。1 箇所に固定するのはこのアプリでは特に効きます。`SSH_ASKPASS` と Terminal 起動は実行時のバイナリの絶対パスをその場で埋め込むため、リポジトリを移動したり別チェックアウトでビルドすると保存済みパスワードでの起動が静かに壊れます。`make uninstall` で戻せます。
-- **ログイン時起動は既定オフで、画面の「秘密」から切り替えます。** 書く場所と起動に使うコマンドは OS ごとに違います。**macOS** では `~/Library/LaunchAgents/com.github.aida0710.sshc.plist` を書いて `launchctl bootstrap` します。**Linux** では `~/.config/systemd/user/sshc.service` を書いて `systemctl --user enable --now sshc.service` します。エージェントはどちらも `-open=false` で起動します。あの出力には有効な bootstrap トークン付きの URL が乗るので、ログの置き場所としては不適切です。**macOS** は標準出力をどこにもリダイレクトせず、**Linux** の unit は `StandardOutput=null` で標準出力そのものを捨てます（`StandardError` だけ journal へ送ります）。journald にトークンを残さないためです。代わりに `sshc open` がその場で新しい入り口を発行してブラウザを開きます。常駐は施錠された状態で始まるので、最初に一度マスターパスワードを入れる必要があります。実行中バイナリの絶対パスを解決できないビルドでは、どちらの OS でもこの設定は動くふりをせず非対応と報告します。
+- **ログイン時起動は既定オフで、画面の「秘密」から切り替えます。** 書く場所と起動に使うコマンドは OS ごとに違います。**macOS** では `~/Library/LaunchAgents/com.github.aida0710.sshc.plist` を書いて `launchctl bootstrap` します。**Linux** では `~/.config/systemd/user/sshc.service` を書いて `systemctl --user enable --now sshc.service` します。エージェントはどちらも `-open=false` で起動します。あの出力には有効な bootstrap トークン付きの URL が乗るので、ログの置き場所としては不適切です。**macOS** は標準出力をどこにもリダイレクトせず、**Linux** の unit は `StandardOutput=null` で標準出力そのものを捨てます（`StandardError` だけ journal へ送ります）。journald にトークンを残さないためです。代わりに `sshc open` がその場で新しい入り口を発行してブラウザを開きます。常駐は施錠された状態で始まるので、最初に一度マスターパスワードを入れる必要があります。**Linux では systemd がある環境でのみこの設定が動き、`systemctl` が見つからない環境では起動時に probe して未対応と報告します。** これは macOS で `LoginItem` コントローラを渡さないビルドと同じ振る舞いで、Linux だけの欠落ではありません。押せば必ず失敗するスイッチを画面に出すより、非対応と答える方が正しいからです。
 - **`sshc list` は `~/.ssh/config` と到達できる `Include` を読み、具体的な接続先 alias を辞書順で 1 行ずつ表示します。** `Host *`、ワイルドカード、否定パターンは接続先の名前そのものではないので表示せず、同じ alias は一度だけ表示します。設定を読むだけで、`ssh` や `Match exec` を実行しません。
 - **`sshc connect` は現在のターミナル内に検索TUIを開きます。** alias・設定から投影した `HostName`・`User`・`Port`・metadata のタグを絞り込め、お気に入りを先に並べます。上下キーで選び、Enterで同じ端末を `ssh` に引き渡します。Web UIを起動する操作ではなく、既存の `sshc <接続先>` と同じ保存済みパスワード経路を使います。設定が存在するのに読めない場合は、`sshc list` と同じく「読めなかった」と言い、ホストが無いことにはしません。
 - TUI の入力は 1 バイトずつではなく端末が届けた読み取り単位で解釈します。`Esc` はそれ自体がキーであり、同時にすべての矢印キーの先頭でもあるため、読み取りの最後のバイトであるときだけキーとして扱います。扱わないキーは終端バイトまで読み捨てます — そうしないと `Delete` や `Ctrl-矢印` の残骸が検索語に入ります。行は端末の幅で切り、収まらなかった件数は「N more」として必ず表示します。
