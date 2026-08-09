@@ -25,7 +25,7 @@ type LoginItemHandlers struct {
 	// 自身のパスを解決できなかったビルドでは nil になる。どちらの場合も
 	// 設定は動くふりをせず、非対応であると報告する。
 	Controller LoginItemController
-	// Program は launchd に実行させる絶対パスである。
+	// Program は、ログイン時起動の仕組みに実行させる絶対パスである。
 	Program string
 }
 

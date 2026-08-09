@@ -80,13 +80,16 @@ bootstrap トークン付きの URL が乗るので、journald はその置き�
 このコントローラを組み立てず、設定を未対応として報告する。`LoginItemController`
 が nil を許す仕組みは既にある。
 
-**Terminal**: 表を持たず、`TerminalCustom` だけを実装する。
+**Terminal**: 実装しない。`platform.TerminalLauncher` を一切組み立てず、
+`s.Terminal` は nil のままにする。`TerminalCustom` すら持たない。
 
-macOS では「CLI を持たない端末は Terminal.app と iTerm2 の二つで打ち止め」と
-言い切れるので、profile の表が意味を持つ。Linux では端末が乱立していて、しかも
-実行するコマンドの渡し方 — `-e`、`--`、`-x`、引数を 1 つにまとめるか並べるか —
-が端末ごとに違う。表を用意すれば、そこに無い端末を使う人には効かず、そこに
-ある端末でも規約を取り違えれば黙って壊れる。推測しない方を選ぶ。
+理由は表の話ではない。`platform.OutputRunner.RunOutput` は子プロセスの終了を
+待つ。端末エミュレータをこの経路で直接起動すれば、SSH セッションが続く間
+HTTP リクエストが開いたままになり、リクエストがキャンセルされれば端末は
+SIGKILL される。macOS はこれを免れている——起動しているのは `/usr/bin/open`
+であり、対象のアプリケーションを起こしてすぐに戻るからだ。Linux の端末には
+その相当物がない。利用者は、画面が示すコマンド文字列（このバイナリと alias）を
+自分の端末で実行する。
 
 ## 権限とパス
 
@@ -109,13 +112,17 @@ uid になる。
 
 移動したものは、テストも一緒に移す。中身は変えない。
 
-Linux 版の 4 つは macOS 版と同じ形で試す。記録用のランナーが argv を受け取り、
-**プロセスは一切起動しない**。このリポジトリのどのテストも、本物のブラウザ、本物の
-systemd、本物の端末には触れない。
+Linux 版の 3 つ（Toolchain、Browser、LoginItem）は macOS 版と同じ形で試す。
+記録用のランナーが argv を受け取り、**プロセスは一切起動しない**。このリポジトリの
+どのテストも、本物のブラウザ、本物の systemd、本物の端末には触れない。
 
-CI に ubuntu のジョブを 1 つ足す。`go build`、`go vet`、`go test`、`gofmt -l`。
-macOS のジョブはそのまま。E2E は macOS だけで回す。Playwright が駆動するのは
-埋め込み UI であって、プラットフォーム層ではない。
+CI は既にすべてのジョブが `ubuntu-latest` で動いており、macOS のジョブは
+一つも無かった。ビルドタグで分けた結果、`internal/platform/macos` は ubuntu の
+ランナーでは一行もコンパイルされず、そのテストは静かに CI から消えていた。
+だから足すのは ubuntu のジョブではなく、`macos-14` で `go vet`、`go build`、
+`go test`、`go test -race` を走らせる macOS のジョブである。E2E は
+`ubuntu-latest` のまま変えない——Playwright が駆動するのは埋め込み UI であって、
+プラットフォーム層ではないからだ。
 
 `make build` は変えない。出力は `bin/sshc` のままで、Linux でビルドするときは
 `GOOS` が既に環境から決まっている。リリースワークフローも変えない。Linux の
@@ -125,6 +132,11 @@ macOS のジョブはそのまま。E2E は macOS だけで回す。Playwright �
 
 - ログイン時起動は systemd がある環境で動き、ない環境では未対応と報告する。これは
   macOS で `LoginItem` が nil のときと同じ振る舞いであり、Linux だけの欠落ではない。
-- それ以外に、Linux で欠ける機能はない。
-- 端末は利用者がコマンドを書く。既定は用意しない。
+- **Linux は端末を起動しない。** `platform.OutputRunner.RunOutput` は子プロセス
+  の終了を待つため、端末エミュレータをこの経路で直接起動すれば、SSH セッションが
+  続く間 HTTP リクエストが開いたままになり、キャンセルされれば端末は SIGKILL
+  される。macOS はこれを免れている——起動しているのは `/usr/bin/open` であり、
+  対象のアプリケーションを起こしてすぐに戻るからだ。Linux の端末にはその相当物が
+  なく、これは systemd の有無のような環境差ではない、Linux 全体で欠けている機能
+  である。利用者は画面が示すコマンド文字列を自分の端末で実行する。
 - Keychain は、どのプラットフォームにも存在しない。
