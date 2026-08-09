@@ -10,9 +10,9 @@ import (
 )
 
 func newPlatformParts(home string) platformParts {
-	// OpenSSH のプログラムを起動するすべてのサブシステムが、ひとつのプロセス
-	// ランナーとひとつのツールチェーンを共有する。これにより argv、子プロセスの
-	// 環境、出力の上限を決める場所はひとつだけになる。
+	// この組み立ての中では、OpenSSH のプログラムを起動するすべてのサブシステムが
+	// ひとつのプロセスランナーとひとつのツールチェーンを共有する。これにより argv、
+	// 子プロセスの環境、出力の上限を決める場所はひとつだけになる。
 	runner := process.NewOutputRunner()
 	toolchain := macos.NewToolchain()
 	return platformParts{

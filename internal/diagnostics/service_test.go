@@ -366,3 +366,21 @@ func TestTerminalCommandIsThisBinaryAndTheAlias(t *testing.T) {
 		t.Errorf("with no path = %q", command)
 	}
 }
+
+// Linux の配線はまさにこの形である（`cmd/sshc/wiring_linux.go`）。バイナリの
+// パスは分かっているので Self は立つが、開くランチャーは無いので Terminal は
+// nil のままである。答えるべきは「このコマンドを打ってください」であって、
+// 開くボタンではない。
+func TestTerminalCommandWithSelfButNoLauncherIsNotLaunchable(t *testing.T) {
+	service := &diagnostics.Service{Self: "/Applications/sshc"}
+	command, launchable, warning := service.TerminalCommand("bastion")
+	if command != "/Applications/sshc bastion" {
+		t.Errorf("command = %q, want the Self-based command", command)
+	}
+	if launchable {
+		t.Error("launchable = true、端末を開く手段が無いのに")
+	}
+	if warning != diagnostics.TerminalUnavailableWarning {
+		t.Errorf("warning = %q, want %q", warning, diagnostics.TerminalUnavailableWarning)
+	}
+}
