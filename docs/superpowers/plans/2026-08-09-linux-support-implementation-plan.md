@@ -1472,32 +1472,52 @@ Expected: どちらも成功。ここが Linux 対応の完了点である。
 Run: `docker run --rm -v "$PWD":/src -w /src golang:1.26 sh -c "go build ./... && go vet ./... && go test ./... -count=1"`
 Expected: すべて PASS。落ちるものがあれば、それは Linux で成り立たない前提を持つテストなので、そのテスト自身を直す（新しいタスクを立てる）。
 
-- [ ] **Step 4: CI に ubuntu ジョブを足す**
+- [ ] **Step 4: CI に macOS ジョブを足す**
 
-`.github/workflows/ci.yml` の `Go` ジョブの下に、同じ形で追加する:
+計画はここで「ubuntu ジョブを足し、macOS のジョブはそのまま」と書いていたが、
+前提が逆だった。`.github/workflows/ci.yml` の**全ジョブが `ubuntu-latest` で動いて
+おり、macOS のジョブは存在しない**（`macos-14` を使うのは `release.yml` だけである）。
+
+つまりこの作業以前は、ビルドタグが無かったおかげで ubuntu の CI が
+`internal/platform/macos` も込みで検査していた。タグを付けた今、あの
+600 行あまり — AppleScript の端末、launchd のログイン項目、ブラウザ — と
+そのテストは、CI のどこでもコンパイルされない。これは今回の作業が持ち込んだ
+後退であり、ubuntu ジョブをもう 1 つ足しても直らない。
+
+既存の `go` ジョブ（`ubuntu-latest`）が Linux 側の検査としてそのまま働く。
+足すのは macOS 側である。`go` ジョブの直後に、同じ形で置く:
 
 ```yaml
-  linux:
-    name: Linux
-    runs-on: ubuntu-24.04
+  macos:
+    name: macOS
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.sum
 
-      # macOS のジョブと同じゲートを Linux でも回す。プラットフォーム層は
-      # ビルドタグで分かれているので、片方だけを見ていると、もう片方が
-      # コンパイルすら通らなくなったことに誰も気づかない。
-      - name: Format
-        run: test -z "$(gofmt -l $(git ls-files '*.go' | grep -v models.gen.go))"
-      - name: Vet
+      # プラットフォーム層はビルドタグで分かれている。go ジョブは ubuntu で
+      # 走るので、darwin のファイルはそこでは 1 行もコンパイルされない。この
+      # ジョブが無ければ、macOS 側がコンパイルすら通らなくなったことに誰も
+      # 気づかない。逆も同じで、Linux 側は go ジョブが見ている。
+      - name: go vet
         run: go vet ./...
-      - name: Test
-        run: go test ./... -count=1
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test ./...
 ```
 
-既存のジョブが使っている actions の SHA をそのままコピーすること。
+`gofmt` と `-race` は `go` ジョブが全ファイルに対して実行済みなので繰り返さない。
+`gofmt` はビルドタグを見ないため、ubuntu 側で darwin のファイルも検査されている。
+actions の SHA は既存ジョブからそのまま複製すること。
+
+`runs-on` に `macos-14` を選ぶのは、`release.yml` が既にそれを使っており、
+出荷しているものと同じ土俵で検査するためである。
 
 - [ ] **Step 5: README を直す**
 
