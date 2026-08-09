@@ -18,6 +18,7 @@ import (
 	"sshc/internal/app"
 	"sshc/internal/platform"
 	"sshc/internal/platform/macos"
+	"sshc/internal/platform/process"
 	"sshc/internal/selfupdate"
 	"sshc/internal/ui"
 )
@@ -141,7 +142,7 @@ func main() {
 			context.Background(), app.HandoffDir(home),
 			&http.Client{Timeout: connectTimeout},
 			func(target string) error {
-				return macos.NewBrowser(macos.NewOutputRunner()).Open(context.Background(), target)
+				return macos.NewBrowser(process.NewOutputRunner()).Open(context.Background(), target)
 			},
 			os.Stderr,
 		))
@@ -236,7 +237,7 @@ func main() {
 	// OpenSSH のプログラムを起動するすべてのサブシステムが、ひとつのプロセスランナーと
 	// ひとつのツールチェーンを共有する。これにより argv、子プロセスの環境、出力の上限を
 	// 決める場所はひとつだけになる。
-	runner := macos.NewOutputRunner()
+	runner := process.NewOutputRunner()
 	toolchain := macos.NewToolchain()
 
 	var browser platform.BrowserLauncher = macos.NewBrowser(runner)
