@@ -255,6 +255,7 @@ export function CreateConnectionModal({
                 <div className="sm:col-span-2">
                   <Field label={t("conn.createName")}>
                     <input
+                      id="create-connection-name"
                       autoFocus
                       value={alias}
                       onChange={(event) => setAlias(event.target.value)}
@@ -266,7 +267,7 @@ export function CreateConnectionModal({
                   {touched.has("alias") && aliasError !== "" ? <p className="mt-1 text-xs text-danger">{aliasError}</p> : null}
                 </div>
                 <Field label={t("conn.createGroup")}>
-                  <select value={group} onChange={(event) => setGroup(event.target.value)} className={control}>
+                  <select id="create-connection-group" value={group} onChange={(event) => setGroup(event.target.value)} className={control}>
                     <option value="">{t("conn.createNoGroup")}</option>
                     {groups.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name}</option>)}
                   </select>
@@ -274,6 +275,7 @@ export function CreateConnectionModal({
                 <div>
                   <Field label={t("conn.createHostName")}>
                     <input
+                      id="create-connection-hostname"
                       value={hostName}
                       onChange={(event) => setHostName(event.target.value)}
                       onBlur={() => setTouched((current) => new Set(current).add("hostName"))}
@@ -286,6 +288,7 @@ export function CreateConnectionModal({
                 <div>
                   <Field label={t("conn.createUser")}>
                     <input
+                      id="create-connection-user"
                       value={user}
                       onChange={(event) => setUser(event.target.value)}
                       onBlur={() => setTouched((current) => new Set(current).add("user"))}
@@ -298,6 +301,7 @@ export function CreateConnectionModal({
                 <div>
                   <Field label={t("conn.createPort")} hint={t("conn.createPortHint")}>
                     <input
+                      id="create-connection-port"
                       type="number"
                       min={1}
                       max={65535}

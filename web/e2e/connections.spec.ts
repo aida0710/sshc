@@ -11,6 +11,91 @@ async function openBastion(page: Page, url: string) {
   await expect(page.getByRole("tablist", { name: "Host editor" })).toBeVisible();
 }
 
+test("creates a key-authenticated connection in an empty nested declared group", async ({
+  page,
+  installation,
+}) => {
+  const terminalLaunches: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/v1/terminal/launch") terminalLaunches.push(request.url());
+  });
+
+  await openApplication(page, installation);
+  await openSection(page, "Groups");
+  for (const name of ["home-lab", "home-lab/others"]) {
+    await page.getByLabel("New group name").fill(name);
+    await page.getByRole("button", { name: "Add group" }).click();
+  }
+  expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
+
+  await openSection(page, "Keys");
+  await page.getByLabel("File name").fill("id_connection_e2e");
+  await page.getByLabel(/Create without a passphrase/).check();
+  expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+
+  await openSection(page, "Connections");
+  await page.getByRole("button", { name: "New connection" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create connection" });
+  await expect(dialog.getByRole("option", { name: "home-lab/others" })).toHaveCount(1);
+  await dialog.getByLabel("Connection name").fill("lab-node");
+  await dialog.getByLabel("Save in group").selectOption("home-lab/others");
+  await dialog.getByLabel("Host name or IP address").fill("2001:db8::1");
+  await dialog.getByLabel("User (optional)").fill("root");
+  await dialog.getByRole("radio", { name: "SSH private key" }).check();
+  const keyChoice = dialog.getByRole("combobox", { name: "SSH private key" });
+  const keyID = await keyChoice.locator("option", { hasText: "id_connection_e2e" }).getAttribute("value");
+  expect(keyID).not.toBeNull();
+  await keyChoice.selectOption(keyID!);
+
+  expect(await clickAndAwait(page, "Create connection", "/api/v1/connections")).toBe(201);
+
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "lab-node", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
+  expect(terminalLaunches).toEqual([]);
+  expect(await installation.read("connections/home-lab/others/lab-node.conf")).toBe(
+    "Host lab-node\n" +
+    "\tHostName 2001:db8::1\n" +
+    "\tUser root\n" +
+    "\tPort 22\n" +
+    "\tIdentityFile ~/.ssh/id_connection_e2e\n",
+  );
+});
+
+test("creates a connection with a dedicated encrypted password and never starts it", async ({
+  page,
+  installation,
+}) => {
+  const password = "connection-only e2e password";
+  const terminalLaunches: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/v1/terminal/launch") terminalLaunches.push(request.url());
+  });
+
+  await openApplication(page, installation);
+  await openSection(page, "Connections");
+  await page.getByRole("button", { name: "New connection" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create connection" });
+  await dialog.getByLabel("Connection name").fill("password-node");
+  await dialog.getByLabel("Host name or IP address").fill("password.example");
+  await dialog.getByRole("textbox", { name: "Connection password", exact: true }).fill(password);
+
+  expect(await clickAndAwait(page, "Create connection", "/api/v1/connections")).toBe(201);
+
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "password-node", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
+  expect(terminalLaunches).toEqual([]);
+  const config = await installation.read("config");
+  expect(config).toContain(
+    "Host password-node\n\tHostName password.example\n\tPort 22\n",
+  );
+  expect(config).not.toContain(password);
+  const sealed = await installation.read("sshc/secrets");
+  expect(sealed).not.toContain(password);
+  expect(sealed).not.toContain("password-node");
+});
+
 test("edits a host through the form and writes only the line that changed", async ({
   page,
   installation,
