@@ -3,13 +3,10 @@ package process_test
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"strings"
 	"testing"
-	"testing/fstest"
 
 	"sshc/internal/platform"
-	"sshc/internal/platform/macos"
 	"sshc/internal/platform/process"
 )
 
@@ -34,16 +31,23 @@ func (recorder *recordingRunner) RunOutput(_ context.Context, command platform.C
 	return output, nil
 }
 
-// installedToolchain は、注入された Stat を通して ssh-add を解決する。これにより
+// toolchainStub は platform.Toolchain を満たす最小のスタブ。KeyAgent が呼ぶのは
+// KeyAdd だけなので、他の 3 メソッドは呼ばれることを想定せず、値を返すだけで
+// よい。
+type toolchainStub struct {
+	keyAddPath string
+	keyAddErr  error
+}
+
+func (t toolchainStub) SSH() (string, error)     { return "", nil }
+func (t toolchainStub) KeyScan() (string, error) { return "", nil }
+func (t toolchainStub) KeyGen() (string, error)  { return "", nil }
+func (t toolchainStub) KeyAdd() (string, error)  { return t.keyAddPath, t.keyAddErr }
+
+// installedToolchain は、ssh-add の絶対パスを直接返すスタブ。これにより
 // ここのどのテストも、このマシンにたまたま入っている OpenSSH に依存しない。
-func installedToolchain() macos.Toolchain {
-	programs := fstest.MapFS{"usr/bin/ssh-add": &fstest.MapFile{Mode: 0o755}}
-	return macos.Toolchain{
-		Directories: []string{"/usr/bin"},
-		Stat: func(name string) (fs.FileInfo, error) {
-			return programs.Stat(strings.TrimPrefix(name, "/"))
-		},
-	}
+func installedToolchain() toolchainStub {
+	return toolchainStub{keyAddPath: "/usr/bin/ssh-add"}
 }
 
 // agentLookup は、ssh-add を、このアプリケーションが供給する標準入力を読ませる
@@ -267,10 +271,7 @@ func TestKeyAgentRefusesWhenNoAgentSocketIsAdvertised(t *testing.T) {
 
 func TestKeyAgentRefusesWhenSSHAddIsNotInstalled(t *testing.T) {
 	recorder := &recordingRunner{}
-	missing := macos.Toolchain{
-		Directories: []string{"/usr/bin"},
-		Stat:        func(string) (fs.FileInfo, error) { return nil, fs.ErrNotExist },
-	}
+	missing := toolchainStub{keyAddErr: errors.New("ssh-add not found")}
 	agent := process.NewKeyAgent(recorder, missing, agentLookup)
 
 	if agent.Available(context.Background()) {
