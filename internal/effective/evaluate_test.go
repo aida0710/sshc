@@ -10,7 +10,6 @@ import (
 
 	"sshc/internal/effective"
 	"sshc/internal/platform"
-	"sshc/internal/platform/macos"
 	"sshc/internal/platform/process"
 )
 
@@ -175,7 +174,7 @@ func TestEvaluateRejectsUnsafeAliasesAndReportsOpenSSHFailures(t *testing.T) {
 // ティブを含まないフィクスチャを一時ディレクトリに置いて本物の ssh を使い、
 // OpenSSH が入っていなければスキップする。
 func TestEvaluateParsesInstalledOpenSSHOutput(t *testing.T) {
-	toolchain := macos.NewToolchain()
+	toolchain := systemToolchain()
 	if _, err := toolchain.SSH(); err != nil {
 		t.Skip("OpenSSH ssh is not installed; skipping the real-binary check")
 	}
