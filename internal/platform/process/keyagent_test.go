@@ -1,4 +1,4 @@
-package macos_test
+package process_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"sshc/internal/platform"
 	"sshc/internal/platform/macos"
+	"sshc/internal/platform/process"
 )
 
 // recordingRunner は、実行されたはずのコマンドを記録する。このパッケージのどの
@@ -101,7 +102,7 @@ func assertScrubbedEnvironment(t *testing.T, command platform.Command) {
 // 鍵を移動したときに絶対パスで識別された項目が壊れる問題も一緒に戻ってくる。
 func TestAddNeverAsksSshAddToStoreThePassphrase(t *testing.T) {
 	recorder := &recordingRunner{}
-	agent := macos.NewKeyAgent(recorder, installedToolchain(), agentLookup)
+	agent := process.NewKeyAgent(recorder, installedToolchain(), agentLookup)
 
 	err := agent.Add(context.Background(), platform.AgentAddRequest{
 		PrivateKeyPath:  "/home/u/.ssh/id_ed25519",
@@ -122,7 +123,7 @@ func TestAddNeverAsksSshAddToStoreThePassphrase(t *testing.T) {
 
 func TestKeyAgentAddSendsThePassphraseOnlyOnStandardInput(t *testing.T) {
 	recorder := &recordingRunner{outputs: []platform.Output{{}}}
-	agent := macos.NewKeyAgent(recorder, installedToolchain(), agentLookup)
+	agent := process.NewKeyAgent(recorder, installedToolchain(), agentLookup)
 
 	err := agent.Add(context.Background(), platform.AgentAddRequest{
 		PrivateKeyPath:  "/Users/example/.ssh/id_work",
@@ -159,7 +160,7 @@ func TestKeyAgentAddSendsThePassphraseOnlyOnStandardInput(t *testing.T) {
 
 func TestKeyAgentNeverGivesAChildAnAskpassEnvironment(t *testing.T) {
 	recorder := &recordingRunner{outputs: []platform.Output{{}, {}, {}}}
-	agent := macos.NewKeyAgent(recorder, installedToolchain(), agentLookup)
+	agent := process.NewKeyAgent(recorder, installedToolchain(), agentLookup)
 
 	if err := agent.Add(context.Background(), platform.AgentAddRequest{
 		PrivateKeyPath: "/Users/example/.ssh/id_work",
@@ -192,7 +193,7 @@ func TestKeyAgentReportsRejectionWithoutLeakingTheHomePath(t *testing.T) {
 		ExitCode: 1,
 		Stderr:   []byte("Bad passphrase, try again for /Users/example/.ssh/id_work: \n"),
 	}}}
-	agent := macos.NewKeyAgent(recorder, installedToolchain(), agentLookup)
+	agent := process.NewKeyAgent(recorder, installedToolchain(), agentLookup)
 
 	err := agent.Add(context.Background(), platform.AgentAddRequest{
 		PrivateKeyPath: "/Users/example/.ssh/id_work",
@@ -213,7 +214,7 @@ func TestKeyAgentListParsesIdentitiesAndAnEmptyAgent(t *testing.T) {
 	recorder := &recordingRunner{outputs: []platform.Output{{
 		Stdout: []byte("256 SHA256:abcdef aida@laptop (ED25519)\n2048 SHA256:012345 work key (RSA)\n"),
 	}}}
-	identities, err := macos.NewKeyAgent(recorder, installedToolchain(), agentLookup).List(context.Background())
+	identities, err := process.NewKeyAgent(recorder, installedToolchain(), agentLookup).List(context.Background())
 	if err != nil {
 		t.Fatalf("List error = %v", err)
 	}
@@ -234,7 +235,7 @@ func TestKeyAgentListParsesIdentitiesAndAnEmptyAgent(t *testing.T) {
 		ExitCode: 1,
 		Stdout:   []byte("The agent has no identities.\n"),
 	}}}
-	none, err := macos.NewKeyAgent(empty, installedToolchain(), agentLookup).List(context.Background())
+	none, err := process.NewKeyAgent(empty, installedToolchain(), agentLookup).List(context.Background())
 	if err != nil {
 		t.Fatalf("List error = %v", err)
 	}
@@ -245,7 +246,7 @@ func TestKeyAgentListParsesIdentitiesAndAnEmptyAgent(t *testing.T) {
 
 func TestKeyAgentRefusesWhenNoAgentSocketIsAdvertised(t *testing.T) {
 	recorder := &recordingRunner{}
-	agent := macos.NewKeyAgent(recorder, installedToolchain(), func(string) (string, bool) { return "", false })
+	agent := process.NewKeyAgent(recorder, installedToolchain(), func(string) (string, bool) { return "", false })
 
 	if agent.Available(context.Background()) {
 		t.Fatalf("Available = true without SSH_AUTH_SOCK")
@@ -270,7 +271,7 @@ func TestKeyAgentRefusesWhenSSHAddIsNotInstalled(t *testing.T) {
 		Directories: []string{"/usr/bin"},
 		Stat:        func(string) (fs.FileInfo, error) { return nil, fs.ErrNotExist },
 	}
-	agent := macos.NewKeyAgent(recorder, missing, agentLookup)
+	agent := process.NewKeyAgent(recorder, missing, agentLookup)
 
 	if agent.Available(context.Background()) {
 		t.Fatalf("Available = true without an ssh-add to run")
