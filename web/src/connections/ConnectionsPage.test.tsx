@@ -105,6 +105,25 @@ describe("ConnectionsPage", () => {
     expect(integrationsApi.terminalLaunch).toHaveBeenCalledWith("bastion");
   });
 
+  // サーバーが「選べる端末は一つも無い」と答えるプラットフォーム(Linux)
+  // では、選ぶコントロールも Connect ボタンも出さない——出しても押せば必ず
+  // 失敗するからだ。代わりに、コマンドを自分で実行するよう伝える一文を出す。
+  it("hides the terminal picker and Connect button when the server reports no terminals at all", async () => {
+    const user = userEvent.setup();
+    vi.mocked(integrationsApi.terminalOptions).mockResolvedValue({
+      selected: "terminal",
+      terminals: [],
+      applications: [],
+    } as never);
+
+    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+
+    await waitFor(() => expect(screen.queryByLabelText("Open with")).toBeNull());
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    expect(screen.getByText(/does not open a terminal for you/)).toBeInTheDocument();
+  });
+
   it("stores a predefined terminal choice without accepting a command string", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.save).mockResolvedValue({
