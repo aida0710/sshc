@@ -69,10 +69,10 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      # プラットフォーム層はビルドタグで分かれている。go ジョブは ubuntu で
-      # 走るので、darwin のファイルはそこでは 1 行もコンパイルされない。この
-      # ジョブが無ければ、macOS 側がコンパイルすら通らなくなったことに誰も
-      # 気づかない。逆も同じで、Linux 側は go ジョブが見ている。
+      # gofmt はソースのテキストを見るだけでビルドタグを見ないので、ubuntu の
+      # go ジョブがここでも重ねて実行する必要はない。一方 vet・build・test・
+      # race はいずれもコンパイルを要り、darwin のファイルは ubuntu ではどこも
+      # コンパイルされないので、ここで実行しない限りその健全性は誰も見ない。
       - name: go vet
         run: go vet ./...
 
@@ -81,6 +81,11 @@ jobs:
 
       - name: go test
         run: go test ./...
+
+      # race detector を別のステップにしてあるのは、それが遅い方だからであり、
+      # またデータ競合は、誤った答えとは別種の失敗だからである。
+      - name: go test -race
+        run: go test -race ./...
 
   web:
     name: Web
