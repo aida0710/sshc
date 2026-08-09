@@ -379,18 +379,16 @@ func (h KeyHandlers) Register(c *echo.Context) error {
 		KeyID:           c.Param("keyId"),
 		Passphrase:      []byte(body.Passphrase),
 		LifetimeSeconds: body.LifetimeSeconds,
-		StoreInKeychain: body.StoreInKeychain,
 	})
 	if err != nil {
 		return keyProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.RegisterKeyResponse{
-		Id:               result.ID,
-		RelativePath:     result.RelativePath,
-		Fingerprint:      result.Fingerprint,
-		LifetimeSeconds:  result.LifetimeSeconds,
-		StoredInKeychain: result.StoredInKeychain,
-		Identities:       agentIdentities(result.Identities),
+		Id:              result.ID,
+		RelativePath:    result.RelativePath,
+		Fingerprint:     result.Fingerprint,
+		LifetimeSeconds: result.LifetimeSeconds,
+		Identities:      agentIdentities(result.Identities),
 	})
 }
 

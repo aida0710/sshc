@@ -36,10 +36,6 @@ const (
 	BlockerKeyStateDirectory    = "key_in_state_directory"
 )
 
-// NoteKeychainEntryStale は、ユーザーが Keychain エントリを
-// 作っていた場合、それが以前のパスの下で鍵を名指ししたままであることを報告する。
-const NoteKeychainEntryStale = "keychain_entry_stale"
-
 // KeyRelocateRequest は、鍵の名前、グループ、あるいはその両方を変更する。
 //
 // nil フィールドは「これはそのままにする」を意味し、これに
@@ -239,14 +235,6 @@ func (s *Service) planKeyRelocation(inventory *keys.Inventory, request KeyReloca
 		Notes:        []string{},
 		Blockers:     []string{},
 	}
-	if item.Kind == keys.KindPrivateKey {
-		// ログイン Keychain に保存されたパスフレーズは、鍵の絶対パスの
-		// 下に登録される。macOS がそのエントリを所有しているので、
-		// ここでは何もそれを移動できず、このアプリケーションは
-		// Keychain を読まないので、存在するかどうかさえ判別できない。
-		result.Notes = append(result.Notes, NoteKeychainEntryStale)
-	}
-
 	blockers := s.keyRelocationBlockers(graph, inventory, members, relocations, newGroup, request.Group != nil)
 	if len(blockers) > 0 {
 		result.Blockers = blockers

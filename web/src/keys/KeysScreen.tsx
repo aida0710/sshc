@@ -98,7 +98,6 @@ const noteLabels: Record<string, MessageKey> = {
   empty_file: "keys.noteEmptyFile",
   not_regular_file: "keys.noteNotRegularFile",
   comment_not_preserved: "keys.noteCommentNotPreserved",
-  keychain_entry_stale: "keys.noteKeychainEntryStale",
 };
 
 // ブロッカーは安定したコード、':'、それが指す詳細から成る。コードが
@@ -192,7 +191,6 @@ export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsA
   const [storedPhraseSecret, setStoredPhraseSecret] = useState("");
   const [agentPassphrase, setAgentPassphrase] = useState("");
   const [agentLifetime, setAgentLifetime] = useState(0);
-  const [storeInKeychain, setStoreInKeychain] = useState(false);
   const [publicKeyView, setPublicKeyView] = useState<{ relativePath: string; text: string } | null>(null);
   const [relocating, setRelocating] = useState<KeyItem | null>(null);
   const [newName, setNewName] = useState("");
@@ -299,7 +297,6 @@ export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsA
   function closeAgentForm() {
     setAgentPassphrase("");
     setAgentLifetime(0);
-    setStoreInKeychain(false);
     setChosenPhrase("");
     setPhrases([]);
     setRegistering(null);
@@ -382,7 +379,6 @@ export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsA
       await api.registerWithAgent(item.id, {
         passphrase: agentPassphrase,
         lifetimeSeconds: agentLifetime,
-        storeInKeychain,
       });
       closeAgentForm();
       await refresh();
@@ -1053,11 +1049,6 @@ export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsA
               </button>
             </div>
           )}
-          <CheckboxField
-            label={t("keys.storeInKeychain")}
-            checked={storeInKeychain}
-            onChange={setStoreInKeychain}
-          />
           <div className="flex gap-2">
             <button type="submit" className={primaryAction}>
               {t("keys.registerSubmit")}

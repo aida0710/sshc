@@ -64,12 +64,9 @@ export type PassphraseInput = {
 
 // RegisterAgentInput は ssh-add が 1 つの鍵を読み込むのに必要な入力だ。lifetimeSeconds は
 // ssh-add 自身の -t で、0 はエージェントが終了するまで鍵を保持することを意味する。
-// storeInKeychain は --apple-use-keychain を追加する。パスフレーズがこのリクエスト
-// より長生きする唯一の方法であり、それを保持するのはこのアプリではなく macOS だ。
 export type RegisterAgentInput = {
   passphrase: string;
   lifetimeSeconds: number;
-  storeInKeychain: boolean;
 };
 
 export type KeysApi = {
@@ -198,7 +195,6 @@ function validateRegister(value: unknown): RegisterKeyResponse {
   asString(record.relativePath);
   asString(record.fingerprint);
   asNumber(record.lifetimeSeconds);
-  asBoolean(record.storedInKeychain);
   validateAgentIdentities(record.identities);
   return record as unknown as RegisterKeyResponse;
 }
