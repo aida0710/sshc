@@ -808,3 +808,201 @@ func TestWrongMasterPasswordsAreAnsweredMoreSlowly(t *testing.T) {
 		t.Errorf("a correct password waited: %v", waited)
 	}
 }
+
+func TestPasswordMutationsCommitEachSupportedSource(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "shared-secret"); err != nil {
+		t.Fatal(err)
+	}
+
+	commit := func(change storage.Change) (storage.Result, error) {
+		workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+		if err != nil {
+			return storage.Result{}, err
+		}
+		manager := storage.NewManager(workspace, time.Now, rand.Reader)
+		return manager.Commit(storage.Request{Operation: "test.password-mutation", Changes: []storage.Change{change}})
+	}
+	cases := []struct {
+		name     string
+		mutation secret.PasswordMutation
+		want     string
+	}{
+		{
+			name: "dedicated",
+			mutation: secret.PasswordMutation{
+				Kind: secret.PasswordMutationDedicated, Alias: "edge-1", Password: "connection-only",
+			},
+			want: "connection-only",
+		},
+		{
+			name: "saved reusable",
+			mutation: secret.PasswordMutation{
+				Kind: secret.PasswordMutationSaved, Alias: "edge-2", Credential: "office",
+			},
+			want: "shared-secret",
+		},
+		{
+			name: "new reusable",
+			mutation: secret.PasswordMutation{
+				Kind: secret.PasswordMutationNewShared, Alias: "edge-3", Credential: "lab", Password: "lab-secret",
+			},
+			want: "lab-secret",
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := service.WithPasswordMutation(test.mutation, commit)
+			if err != nil {
+				t.Fatalf("WithPasswordMutation = %v", err)
+			}
+			if result.ID == "" {
+				t.Error("commit returned no transaction ID")
+			}
+			if got := service.PasswordFor(test.mutation.Alias); got != test.want {
+				t.Errorf("PasswordFor(%s) = %q, want %q", test.mutation.Alias, got, test.want)
+			}
+		})
+	}
+
+	listed, err := service.Credentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := listed[secret.KindPassword]["edge-1"]; ok {
+		t.Error("the dedicated password appeared in reusable credentials")
+	}
+	if uses := listed[secret.KindPassword]["lab"]; !slices.Equal(uses, []string{"edge-3"}) {
+		t.Errorf("new shared credential uses = %#v", uses)
+	}
+
+	reopened := mustReopen(t, home)
+	if err := reopened.Unlock(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range cases {
+		if got := reopened.PasswordFor(test.mutation.Alias); got != test.want {
+			t.Errorf("reopened PasswordFor(%s) = %q, want %q", test.mutation.Alias, got, test.want)
+		}
+	}
+}
+
+func TestFailedPasswordMutationPublishesNeitherMemoryNorDisk(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(vaultPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("commit refused")
+
+	_, err = service.WithPasswordMutation(secret.PasswordMutation{
+		Kind: secret.PasswordMutationDedicated, Alias: "edge", Password: "must-not-survive",
+	}, func(change storage.Change) (storage.Result, error) {
+		if bytes.Contains(change.Contents, []byte("must-not-survive")) {
+			t.Error("the staged encrypted vault contains the password in clear")
+		}
+		return storage.Result{}, wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("WithPasswordMutation = %v, want commit error", err)
+	}
+	if got := service.PasswordFor("edge"); got != "" {
+		t.Errorf("failed mutation was published in memory: %q", got)
+	}
+	after, err := os.ReadFile(vaultPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Error("failed mutation changed the sealed vault on disk")
+	}
+}
+
+func TestPasswordMutationCanCommitAConfigBackupWithoutDeadlocking(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	service := secret.NewService(workspace, manager, time.Now)
+	manager.Seal = service.SealBackup
+	manager.Unseal = service.OpenBackup
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(workspace.Root(), "config")
+	if err := os.WriteFile(configPath, []byte("Host old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, mutationErr := service.WithPasswordMutation(secret.PasswordMutation{
+			Kind: secret.PasswordMutationDedicated, Alias: "edge", Password: "connection-only",
+		}, func(vaultChange storage.Change) (storage.Result, error) {
+			return manager.Commit(storage.Request{
+				Operation: "test.connection-create",
+				Changes: []storage.Change{
+					{
+						Path: configPath, Contents: []byte("Host old\nHost edge\n"),
+						Precondition: storage.Precondition{Exists: true, Digest: storage.Digest([]byte("Host old\n"))},
+					},
+					vaultChange,
+				},
+			})
+		})
+		done <- mutationErr
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("WithPasswordMutation = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("password mutation deadlocked while storage sealed the config backup")
+	}
+}
+
+func TestPasswordMutationUsesTheRekeyedVaultAsItsBaseline(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	const nextPassphrase = "the next correct horse battery staple"
+	if err := service.ChangeMasterPassword(passphrase, nextPassphrase); err != nil {
+		t.Fatalf("ChangeMasterPassword = %v", err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+
+	_, err = service.WithPasswordMutation(secret.PasswordMutation{
+		Kind: secret.PasswordMutationDedicated, Alias: "edge", Password: "after-rekey",
+	}, func(change storage.Change) (storage.Result, error) {
+		return manager.Commit(storage.Request{Operation: "test.after-rekey", Changes: []storage.Change{change}})
+	})
+	if err != nil {
+		t.Fatalf("WithPasswordMutation after rekey = %v", err)
+	}
+
+	reopened := mustReopen(t, home)
+	if err := reopened.Unlock(nextPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if got := reopened.PasswordFor("edge"); got != "after-rekey" {
+		t.Errorf("reopened password = %q", got)
+	}
+}
