@@ -6,7 +6,7 @@
 
 - 実施は使い捨ての `HOME` で行い、本番の `~/.ssh` では行いません。
   `work="$(mktemp -d)"; cp -R ~/.ssh "$work/.ssh"; HOME="$work" ./bin/sshc`
-- 本番の `~/.ssh` を使う項目（Keychain と Terminal）は、事前に `~/.ssh` と `~/.ssh/sshc` を別ディレクトリへ退避してから行います。
+- 本番の `~/.ssh` を使う項目（ssh-agent と Terminal）は、事前に `~/.ssh` と `~/.ssh/sshc` を別ディレクトリへ退避してから行います。
 - 各項目に日付、macOS と OpenSSH のバージョン、結果を記録します。
 
 ## M1. 実リモートホストへの接続テスト
