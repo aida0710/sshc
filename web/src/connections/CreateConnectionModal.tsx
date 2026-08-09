@@ -145,7 +145,8 @@ export function CreateConnectionModal({
       case "identity_file": return keyID !== "";
     }
   })();
-  const canSubmit = !loading && !busy && vault?.unlocked === true &&
+  const vaultReady = authentication === "identity_file" || vault?.unlocked === true;
+  const canSubmit = !loading && !busy && vaultReady &&
     aliasError === "" && hostError === "" && userError === "" && portError === "" && authenticationReady;
 
   function chooseAuthentication(kind: AuthenticationKind) {
@@ -198,12 +199,11 @@ export function CreateConnectionModal({
     setError("");
     const request: CreateConnectionRequest = {
       alias,
+      group,
       hostName,
       authentication: requestAuthentication(),
     };
-    const selectedGroup = optional(group);
     const selectedUser = optional(user);
-    if (selectedGroup !== undefined) request.group = selectedGroup;
     if (selectedUser !== undefined) request.user = selectedUser;
     if (port !== "") request.port = parsedPort;
 
@@ -316,7 +316,7 @@ export function CreateConnectionModal({
             <section className="flex flex-col gap-3 border-t border-line pt-5" aria-labelledby="create-auth-section">
               <h3 id="create-auth-section" className={sectionHeading}>{t("conn.createAuthenticationSection")}</h3>
               {loading ? <p className={hintText}>{t("conn.createLoadingOptions")}</p> : null}
-              {vault !== null && !vault.unlocked ? (
+              {vault !== null && !vault.unlocked && authentication !== "identity_file" ? (
                 <div className="flex flex-col gap-3 rounded-lg border border-notice-line bg-notice p-3">
                   <p className="text-sm text-notice-ink">
                     {t(vault.exists ? "conn.createVaultLocked" : "conn.createVaultMissing")}
@@ -335,7 +335,7 @@ export function CreateConnectionModal({
                 </div>
               ) : null}
 
-              <fieldset className="flex flex-col gap-2" disabled={loading || vault?.unlocked !== true}>
+              <fieldset className="flex flex-col gap-2" disabled={loading}>
                 <legend className={fieldLabel}>{t("conn.createAuthenticationMethod")}</legend>
                 {([
                   ["dedicated_password", "conn.createDedicatedPassword"],
@@ -357,7 +357,16 @@ export function CreateConnectionModal({
                 ))}
               </fieldset>
 
-              {vault?.unlocked !== true ? null : authentication === "dedicated_password" ? (
+              {authentication === "identity_file" ? (
+                <Field label={t("conn.createPrivateKey")}>
+                  <select value={keyID} onChange={(event) => setKeyID(event.target.value)} className={control}>
+                    {privateKeys.length === 0 ? <option value="">{t("conn.createNoPrivateKeys")}</option> : null}
+                    {privateKeys.map((key) => (
+                      <option key={key.id} value={key.id}>{key.relativePath}{key.fingerprint === "" ? "" : ` — ${key.fingerprint}`}</option>
+                    ))}
+                  </select>
+                </Field>
+              ) : vault?.unlocked !== true ? null : authentication === "dedicated_password" ? (
                 <PasswordField
                   label={t("conn.createConnectionPassword")}
                   value={dedicatedPassword}
@@ -380,16 +389,7 @@ export function CreateConnectionModal({
                   </Field>
                   <PasswordField label={t("conn.createNewPassword")} value={newSharedPassword} onChange={setNewSharedPassword} />
                 </div>
-              ) : (
-                <Field label={t("conn.createPrivateKey")}>
-                  <select value={keyID} onChange={(event) => setKeyID(event.target.value)} className={control}>
-                    {privateKeys.length === 0 ? <option value="">{t("conn.createNoPrivateKeys")}</option> : null}
-                    {privateKeys.map((key) => (
-                      <option key={key.id} value={key.id}>{key.relativePath}{key.fingerprint === "" ? "" : ` — ${key.fingerprint}`}</option>
-                    ))}
-                  </select>
-                </Field>
-              )}
+              ) : null}
             </section>
           </div>
 

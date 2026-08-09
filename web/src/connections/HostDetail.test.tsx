@@ -108,8 +108,8 @@ function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> =
     onMoveToGroup: vi.fn(),
     ...overrides,
   };
-  render(<HostDetailPanel {...handlers} />);
-  return handlers;
+  const rendered = render(<HostDetailPanel {...handlers} />);
+  return { ...handlers, rerender: rendered.rerender };
 }
 
 describe("HostDetailPanel", () => {
@@ -122,6 +122,41 @@ describe("HostDetailPanel", () => {
     await user.click(screen.getByRole("tab", { name: "Advanced" }));
 
     expect(screen.getByLabelText("UnknownFutureDirective")).toHaveValue("yes");
+  });
+
+  it("returns to Basic when the selected connection changes", async () => {
+    const user = userEvent.setup();
+    const panel = renderPanel();
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
+    expect(screen.getByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
+
+    const nextDetail: HostDetail = {
+      ...detail,
+      form: {
+        ...detail.form,
+        entry: {
+          ...detail.form.entry,
+          identity: { path: "connections/work/build01.conf", alias: "build01" },
+          patterns: ["build01"],
+        },
+        raw: "Host build01\n\tHostName build.example.com\n",
+      },
+      metadata: { ...detail.metadata, identity: { path: "connections/work/build01.conf", alias: "build01" } },
+      effective: { ...detail.effective, alias: "build01" },
+    };
+    panel.rerender(<HostDetailPanel
+      detail={nextDetail}
+      groups={panel.groups}
+      preview={panel.preview}
+      problem={panel.problem}
+      onFieldEdits={panel.onFieldEdits}
+      onBlockRaw={panel.onBlockRaw}
+      onRename={panel.onRename}
+      onComment={panel.onComment}
+      onMoveToGroup={panel.onMoveToGroup}
+    />);
+
+    expect(screen.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("marks executable directives instead of hiding them", async () => {
