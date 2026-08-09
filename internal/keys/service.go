@@ -586,20 +586,17 @@ type RegisterRequest struct {
 	KeyID           string
 	Passphrase      []byte
 	LifetimeSeconds int
-	StoreInKeychain bool
 }
 
 type RegisterResult struct {
-	ID               string
-	RelativePath     string
-	Fingerprint      string
-	LifetimeSeconds  int
-	StoredInKeychain bool
-	Identities       []platform.AgentIdentity
+	ID              string
+	RelativePath    string
+	Fingerprint     string
+	LifetimeSeconds int
+	Identities      []platform.AgentIdentity
 }
 
-// Register は秘密鍵をユーザーの ssh-agent へ読み込ませ、任意でそのパスフレーズを
-// ログインキーチェーンへ保存する。
+// Register は秘密鍵をユーザーの ssh-agent へ読み込ませる。
 //
 // 登録できるのは、いまインベントリに含まれる鍵だけである。したがって、ごみ箱に
 // ある鍵と ~/.ssh/sshc 配下のものは、構造上到達できない。パスフレーズは Register
@@ -639,7 +636,6 @@ func (service *Service) Register(ctx context.Context, request RegisterRequest) (
 		PrivateKeyPath:  absolute,
 		Passphrase:      passphrase,
 		LifetimeSeconds: request.LifetimeSeconds,
-		StoreInKeychain: request.StoreInKeychain,
 	}); err != nil {
 		return RegisterResult{}, err
 	}
@@ -652,12 +648,11 @@ func (service *Service) Register(ctx context.Context, request RegisterRequest) (
 		identities = nil
 	}
 	return RegisterResult{
-		ID:               item.ID,
-		RelativePath:     item.RelativePath,
-		Fingerprint:      item.Fingerprint,
-		LifetimeSeconds:  request.LifetimeSeconds,
-		StoredInKeychain: request.StoreInKeychain,
-		Identities:       identities,
+		ID:              item.ID,
+		RelativePath:    item.RelativePath,
+		Fingerprint:     item.Fingerprint,
+		LifetimeSeconds: request.LifetimeSeconds,
+		Identities:      identities,
 	}, nil
 }
 

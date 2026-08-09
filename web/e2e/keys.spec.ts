@@ -102,8 +102,8 @@ test("stores an encrypted key passphrase from the key row and shows only its nam
 
 // 試験対象のバイナリは HOME と PATH だけで起動されるため、SSH_AUTH_SOCK
 // を渡されずどの agent にも到達できない。これがこの試験を自動化
-// しても安全にしている理由だ。開発者自身の agent や Keychain には一
-// 切近づかず、実サーバーに対して登録インターフェースを検証する。
+// しても安全にしている理由だ。開発者自身の agent には一切近づかず、
+// 実サーバーに対して登録インターフェースを検証する。
 // 設計書§6.3 が残りの半分を担う——実際の登録は手動テスト M4 である。
 test("offers agent registration and refuses it honestly when no agent is reachable", async ({
   page,

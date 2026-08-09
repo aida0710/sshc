@@ -1894,21 +1894,19 @@ components:
     RegisterKeyRequest:
       type: object
       additionalProperties: false
-      required: [passphrase, lifetimeSeconds, storeInKeychain]
+      required: [passphrase, lifetimeSeconds]
       properties:
         passphrase: { type: string, maxLength: 1024 }
         lifetimeSeconds: { type: integer }
-        storeInKeychain: { type: boolean }
     RegisterKeyResponse:
       type: object
       additionalProperties: false
-      required: [id, relativePath, fingerprint, lifetimeSeconds, storedInKeychain, identities]
+      required: [id, relativePath, fingerprint, lifetimeSeconds, identities]
       properties:
         id: { type: string }
         relativePath: { type: string }
         fingerprint: { type: string }
         lifetimeSeconds: { type: integer }
-        storedInKeychain: { type: boolean }
         identities: { type: array, items: { $ref: "#/components/schemas/AgentIdentity" } }
     TrashFileSummary:
       type: object

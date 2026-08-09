@@ -148,7 +148,6 @@ function buildApi(overrides: Partial<KeysApi> = {}): KeysApi {
       relativePath: "id_work",
       fingerprint: "SHA256:abcdef",
       lifetimeSeconds: 0,
-      storedInKeychain: false,
       identities: [],
     }),
     deregisterFromAgent: vi.fn().mockResolvedValue({
@@ -174,7 +173,7 @@ function buildApi(overrides: Partial<KeysApi> = {}): KeysApi {
         },
       ],
       skipped: [],
-      notes: ["keychain_entry_stale"],
+      notes: [],
       blockers: [],
       transactionId: "tx",
     }),
@@ -467,7 +466,7 @@ describe("KeysScreen", () => {
     expect(api.registerWithAgent).not.toHaveBeenCalled();
   });
 
-  it("registers a key with the agent, with the lifetime and Keychain choice the user made", async () => {
+  it("registers a key with the agent and the lifetime the user chose", async () => {
     const api = buildApi({ inventory: vi.fn().mockResolvedValue(inventoryWithAgent()) });
     render(<KeysScreen api={api} />);
 
@@ -476,14 +475,12 @@ describe("KeysScreen", () => {
 
     await userEvent.type(screen.getByLabelText("Key passphrase"), "correct horse");
     await userEvent.selectOptions(screen.getByLabelText("Lifetime"), "3600");
-    await userEvent.click(screen.getByLabelText(/store the passphrase in the login Keychain/));
     await userEvent.click(screen.getByRole("button", { name: "Register with the agent" }));
 
     await waitFor(() =>
       expect(api.registerWithAgent).toHaveBeenCalledWith("key-one", {
         passphrase: "correct horse",
         lifetimeSeconds: 3600,
-        storeInKeychain: true,
       }),
     );
     // フォームは閉じ、パスフレーズを道連れにする。コンポーネント状態に
@@ -526,7 +523,6 @@ describe("KeysScreen", () => {
       expect(api.registerWithAgent).toHaveBeenCalledWith("key-one", {
         passphrase: "",
         lifetimeSeconds: 0,
-        storeInKeychain: false,
       }),
     );
   });
@@ -624,7 +620,6 @@ describe("KeysScreen", () => {
     // 部分なので、「完了」に要約せず画面に出さなければならない。
     expect(await screen.findByText(/IdentityFile ~\/\.ssh\/id_work → ~\/\.ssh\/id_build/)).toBeInTheDocument();
     expect(screen.getByText("id_work.pub → id_build.pub")).toBeInTheDocument();
-    expect(screen.getByText(/login Keychain/)).toBeInTheDocument();
   });
 
   it("keeps a blocked relocation on screen with the reasons it refused", async () => {
