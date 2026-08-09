@@ -230,6 +230,10 @@ var ErrTerminalNotConfigured = errors.New("terminal launcher is not configured")
 // UnsafeAliasWarning は、なぜその alias がコピー専用なのかを説明する。
 const UnsafeAliasWarning = "This alias contains characters that could change the meaning of a command line. Copy the command and check it before running it yourself."
 
+// TerminalUnavailableWarning は、端末ランチャーが配線されていないプラットフォーム
+// のために、なぜコピー専用なのかを説明する。
+const TerminalUnavailableWarning = "This platform does not open a terminal for you. Run the command above yourself."
+
 // LaunchTerminal は、alias のための対話セッションを開く。
 func (s *Service) LaunchTerminal(ctx context.Context, alias string) error {
 	if err := platform.ValidateAlias(alias); err != nil {
@@ -261,10 +265,15 @@ func (s *Service) selectedTerminal() platform.TerminalChoice {
 //
 // 在庫を答えられないランチャーでは、すべて見つかったことにする。画面が選択肢を
 // 隠す根拠は「無いと分かっている」ことだけで、「分からない」ことではない。
+// ランチャーが無いこと（s.Terminal == nil）は前者である。分からないのではなく、
+// 選べる端末が一つも無いと分かっているので、ここでは何も返さない。
 func (s *Service) TerminalOptions() (
 	[]platform.TerminalAvailability, []platform.Application, platform.TerminalChoice,
 ) {
 	selected := s.selectedTerminal()
+	if s.Terminal == nil {
+		return nil, nil, selected
+	}
 	if inventory, ok := s.Terminal.(platform.TerminalInventory); ok {
 		return inventory.Terminals(), inventory.Applications(), selected
 	}
@@ -292,6 +301,9 @@ func (s *Service) TerminalCommand(alias string) (string, bool, string) {
 	}
 	if err := platform.ValidateAlias(alias); err != nil {
 		return command, false, UnsafeAliasWarning
+	}
+	if s.Terminal == nil {
+		return command, false, TerminalUnavailableWarning
 	}
 	return command, true, ""
 }

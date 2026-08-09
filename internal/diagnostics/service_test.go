@@ -311,6 +311,33 @@ func TestInspectReplacesTheHomeDirectoryInEvaluatedValues(t *testing.T) {
 	}
 }
 
+// 端末を持たないプラットフォームでは、開くボタンを出す根拠がない。
+// コマンド自体は返す。利用者が自分で実行できるからであり、それが
+// このプラットフォームでの答えである。
+func TestTerminalCommandIsNotLaunchableWithoutALauncher(t *testing.T) {
+	service := &diagnostics.Service{}
+	command, launchable, warning := service.TerminalCommand("bastion")
+	if command == "" {
+		t.Error("コマンドは返すこと。利用者が自分で実行する")
+	}
+	if launchable {
+		t.Error("launchable = true、端末を開く手段が無いのに")
+	}
+	if warning == "" {
+		t.Error("なぜ開けないかを言うこと")
+	}
+}
+
+// 在庫を「分からない」と扱ってはいけない。ランチャーが無いことは、
+// 選択肢が無いと分かっていることである。
+func TestTerminalOptionsOffersNothingWithoutALauncher(t *testing.T) {
+	service := &diagnostics.Service{}
+	available, applications, _ := service.TerminalOptions()
+	if len(available) != 0 || len(applications) != 0 {
+		t.Fatalf("TerminalOptions = %#v, %#v, want empty", available, applications)
+	}
+}
+
 // ユーザーがコピーするコマンドは、このバイナリと alias である。
 //
 // 以前は五つの環境変数とフラグだった。それは Terminal のボタンが自前で組み立てる
@@ -318,7 +345,10 @@ func TestInspectReplacesTheHomeDirectoryInEvaluatedValues(t *testing.T) {
 // アプリケーションに保存済みパスワードを求め、なければ素の ssh にフォールバック
 // する。
 func TestTerminalCommandIsThisBinaryAndTheAlias(t *testing.T) {
-	service := &diagnostics.Service{Self: "/Applications/sshc"}
+	// このテストが立てるのはランチャーがある画面である。ランチャーが無い
+	// プラットフォームの launchable は別のテスト
+	// (TestTerminalCommandIsNotLaunchableWithoutALauncher) が持つ。
+	service := &diagnostics.Service{Self: "/Applications/sshc", Terminal: &recordingTerminal{}}
 	command, launchable, warning := service.TerminalCommand("bastion")
 	if command != "/Applications/sshc bastion" || !launchable || warning != "" {
 		t.Errorf("TerminalCommand = %q, %v, %q", command, launchable, warning)
