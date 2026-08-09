@@ -264,7 +264,7 @@ func main() {
 		Home:      home,
 		Runner:    runner,
 		Toolchain: toolchain,
-		KeyAgent:  macos.NewKeyAgent(runner, toolchain, os.LookupEnv),
+		KeyAgent:  process.NewKeyAgent(runner, toolchain, os.LookupEnv),
 		Terminal:  macos.NewTerminal(runner, home),
 		Lookup:    os.LookupEnv,
 		// ヘルパーとサーバーは同じ関数から同じルールを適用する。そのため「このプロンプト
