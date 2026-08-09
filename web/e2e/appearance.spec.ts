@@ -69,7 +69,11 @@ test("the connections controls are legible in light", async ({ page, installatio
 
   const readable = await page.evaluate(() => {
     const results: { where: string; colour: string; background: string }[] = [];
-    for (const selector of ["input#new-alias", "select#new-file", "input#field-2-HostName"]) {
+    for (const selector of [
+      "input#create-connection-name",
+      "select#create-connection-group",
+      "input#create-connection-hostname",
+    ]) {
       const element = document.querySelector(selector);
       if (element === null) continue;
       const style = window.getComputedStyle(element);
@@ -80,9 +84,11 @@ test("the connections controls are legible in light", async ({ page, installatio
 
   // 緩く数えるのではなく名指しする。マッチしなくなった
   // セレクタは、何も検証せずに通過するテストにこれを変えてしまう。
-  expect(readable.map((control) => control.where)).toEqual(
-    expect.arrayContaining(["input#new-alias", "select#new-file"]),
-  );
+  expect(readable.map((control) => control.where)).toEqual([
+    "input#create-connection-name",
+    "select#create-connection-group",
+    "input#create-connection-hostname",
+  ]);
   for (const control of readable) {
     expect(control.colour, `${control.where} text`).not.toBe(control.background);
     // ライトテーマでほぼ黒に塗られたコントロールこそ、この
