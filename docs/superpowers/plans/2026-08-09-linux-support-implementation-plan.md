@@ -372,6 +372,137 @@ linux 版を足すときに、macOS 側の順序が黙って変わらないよ�
 
 ---
 
+### Task 4b: Toolchain の機構を共有パッケージへ移す
+
+仕様はこう書いている — 「`Toolchain` は機構と一覧を分ける。ディレクトリの列を
+持って `Stat` で探すという中身は共有し、その列だけがプラットフォームごとに違う。」
+当初のタスク 6 はこれに反して 57 行を `linux/toolchain.go` へ丸ごと複製していた。
+しかもその複製の `find` は、本物にある `IsRegular()` と実行ビットの検査を落として
+おり、ディレクトリや実行不能なファイルを `ssh` として受け入れてしまう。複製は
+仕様違反であるだけでなく、劣化した複製だった。機構を先に共有側へ移す。
+
+**Files:**
+- Create: `internal/platform/process/toolchain.go`（`macos/toolchain.go` の移動）
+- Create: `internal/platform/process/toolchain_test.go`（機構のテストの移動）
+- Modify: `internal/platform/macos/toolchain.go` — 一覧だけを残す
+- Modify: `internal/platform/macos/toolchain_test.go` — 一覧の杭だけを残す
+- Modify: `internal/effective/evaluate_test.go`, `internal/effective/differential_test.go`
+
+**Interfaces:**
+- Consumes: なし
+- Produces: `process.Toolchain{Directories []string; Stat func(string) (fs.FileInfo, error)}` と `process.ErrProgramNotFound`。`platform.Toolchain` を満たす。`macos.NewToolchain() process.Toolchain` は据え置き。タスク 6 は 3 行の `linux.NewToolchain()` を書くだけになる。
+
+- [ ] **Step 1: 機構を移す**
+
+```bash
+git mv internal/platform/macos/toolchain.go internal/platform/process/toolchain.go
+```
+
+`package macos` を `package process` に変える。`find` の中身は 1 文字も変えない
+— `IsRegular()` と `Perm()&0o111` の検査はこの型が持つ意味そのものである。
+
+型コメントから macOS 固有の 2 文（`/usr/bin` が最初な理由と Homebrew の話）を
+外し、次に置き換える。あれは一覧の話であって機構の話ではない:
+
+```go
+// Toolchain は、固定の絶対パスで OpenSSH のプログラムを見つける。
+//
+// PATH は意図的に参照しない。このアプリケーションが実行するプログラムが、継承した
+// 環境に依存してはならないからだ。どのディレクトリをどの順で見るかはプラット
+// フォームごとに違うが、探し方は同じである。だからここには一覧を持たない。
+type Toolchain struct {
+	Directories []string
+	Stat        func(string) (fs.FileInfo, error)
+}
+```
+
+`NewToolchain` はこのファイルから消す。一覧はプラットフォーム側が持つ。
+
+- [ ] **Step 2: macOS 側に一覧だけを残す**
+
+`internal/platform/macos/toolchain.go` を次の内容にする:
+
+```go
+package macos
+
+import "sshc/internal/platform/process"
+
+// NewToolchain は、macOS の探索順を返す。
+//
+// /usr/bin が最初なのは、macOS に同梱される OpenSSH を設計上の対象にしている
+// からである。Homebrew の prefix は、Apple のコピーが取り除かれたマシンのための
+// フォールバックだ。探し方そのものは process.Toolchain が持つ。
+func NewToolchain() process.Toolchain {
+	return process.Toolchain{
+		Directories: []string{"/usr/bin", "/opt/homebrew/bin", "/usr/local/bin"},
+	}
+}
+```
+
+- [ ] **Step 3: テストを分ける**
+
+`internal/platform/macos/toolchain_test.go` から、機構を試す 3 つ
+（`TestToolchainPrefersTheFirstDirectoryThatHoldsAnExecutable`、
+`TestToolchainIgnoresMissingAndNonExecutableFiles`、
+`TestToolchainResolvesEveryProgramThroughTheInjectedStat`）と
+`var _ platform.Toolchain = macos.Toolchain{}` を
+`internal/platform/process/toolchain_test.go`（`package process_test`）へ移す。
+`macos.` を `process.` に置換し、表明は 1 つも変えない。宣言は
+`var _ platform.Toolchain = process.Toolchain{}` になる。
+
+`macos/toolchain_test.go` に残すのは一覧の杭 2 つ
+（`TestNewToolchainLooksAtTheSystemOpenSSHFirst` と、タスク 4 で足した
+`TestToolchainSearchesFixedDirectoriesInOrder`）だけである。不要になった import
+を落とすこと。
+
+- [ ] **Step 4: `internal/effective` のテストを直す**
+
+`evaluate_test.go:178` と `differential_test.go:27` の `macos.NewToolchain()` は、
+「このマシンに入っている本物の ssh を見つける、無ければスキップ」以上のことを
+求めていない。macOS を名指しする理由がないので、共有の型で書く。
+`internal/effective/differential_test.go` に helper を 1 つ置き、両方から使う:
+
+```go
+// systemToolchain は、このマシンに入っている本物の OpenSSH を探す。どちらの
+// プラットフォームの既定の置き場所も含める。ここが求めているのは「本物の ssh が
+// あるか、無ければスキップ」だけであり、プラットフォームの区別ではない。
+func systemToolchain() process.Toolchain {
+	return process.Toolchain{
+		Directories: []string{"/usr/bin", "/opt/homebrew/bin", "/usr/local/bin", "/bin"},
+	}
+}
+```
+
+両ファイルの `macos.NewToolchain()` を `systemToolchain()` に変え、import の
+`macos` を `process` に差し替える。
+
+- [ ] **Step 5: 通ることを確認する**
+
+Run:
+```bash
+gofmt -l $(git ls-files '*.go' | grep -v models.gen.go)
+go build ./... && go vet ./... && go test -count=1 ./...
+GOOS=linux go build ./... && GOOS=linux go vet ./...
+```
+Expected: すべて成功。`grep -rn 'macos' internal/platform/process/ internal/effective/` が
+何も返さないこと。
+
+- [ ] **Step 6: コミット**
+
+```bash
+git add -A
+git commit -m "Toolchain の機構を共有パッケージへ移す
+
+仕様は機構と一覧を分けよと言っている。ディレクトリの列を Stat で探すという
+中身はどのプラットフォームでも同じで、違うのはその列だけである。
+
+複製しなかったのは、複製が仕様違反だからだけではない。複製の find は本物に
+ある IsRegular と実行ビットの検査を落としがちで、そうなればディレクトリを
+ssh として受け入れる。検査は 1 か所にしかない方がよい。"
+```
+
+---
+
 ### Task 5: macOS にビルドタグを付け、組み立てを分ける
 
 **Files:**
@@ -553,8 +684,8 @@ Linux のバイナリに AppleScript の定数が入るのは、出荷物に何�
 - Create: `internal/platform/linux/browser_test.go`
 
 **Interfaces:**
-- Consumes: `platform.OutputRunner`、`platform.Command`
-- Produces: `linux.NewToolchain() linux.Toolchain` と `linux.NewBrowser(runner platform.OutputRunner) linux.Browser` — タスク 9 が使う。`Toolchain` は `platform.Toolchain` を、`Browser` は `platform.BrowserLauncher` を満たす。
+- Consumes: `process.Toolchain`（タスク 4b）、`platform.OutputRunner`、`platform.Command`
+- Produces: `linux.NewToolchain() process.Toolchain` と `linux.NewBrowser(runner platform.OutputRunner) linux.Browser` — タスク 9 が使う。`Browser` は `platform.BrowserLauncher` を満たす。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -566,7 +697,6 @@ Linux のバイナリに AppleScript の定数が入るのは、出荷物に何�
 package linux_test
 
 import (
-	"io/fs"
 	"slices"
 	"testing"
 
@@ -581,30 +711,13 @@ func TestToolchainSearchesFixedDirectoriesInOrder(t *testing.T) {
 		t.Fatalf("Directories = %#v, want %#v", got, want)
 	}
 }
-
-// installedInfo は Stat の戻り値だけを満たす。中身は誰も見ない。
-type installedInfo struct{ fs.FileInfo }
-
-// 見つかった最初のディレクトリを返す。存在しないものは飛ばす。
-func TestToolchainReturnsTheFirstDirectoryThatHasIt(t *testing.T) {
-	toolchain := linux.Toolchain{
-		Directories: []string{"/opt/absent", "/usr/bin"},
-		Stat: func(path string) (fs.FileInfo, error) {
-			if path == "/usr/bin/ssh" {
-				return installedInfo{}, nil
-			}
-			return nil, fs.ErrNotExist
-		},
-	}
-	got, err := toolchain.SSH()
-	if err != nil || got != "/usr/bin/ssh" {
-		t.Fatalf("SSH() = %q, %v", got, err)
-	}
-}
 ```
 
-import は `"io/fs"`、`"slices"`、`"testing"`、`"sshc/internal/platform/linux"` の 4 つ。
-`testing/fstest` は使わない。
+import は `"slices"`、`"testing"`、`"sshc/internal/platform/linux"` の 3 つだけ。
+
+探し方そのもの（`Stat` で回して最初に見つかった実行可能ファイルを返す）を試す
+テストはここには要らない。タスク 4b で `internal/platform/process` に移してあり、
+そこで試されている。ここで試すのは、この一覧とこの順序だけである。
 
 `internal/platform/linux/browser_test.go`:
 
@@ -683,60 +796,22 @@ Expected: FAIL。`linux` パッケージが存在しない。
 
 package linux
 
-import (
-	"errors"
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-)
+import "sshc/internal/platform/process"
 
-// ErrProgramNotFound は、このアプリケーションがプログラムを実行してよいどの
-// ディレクトリにも、その OpenSSH プログラムが入っていないことを報告する。
-var ErrProgramNotFound = errors.New("openssh program not found")
-
-// Toolchain は、固定の絶対パスで OpenSSH のプログラムを見つける。
+// NewToolchain は、Linux の探索順を返す。
 //
 // PATH は意図的に参照しない。このアプリケーションが実行するプログラムが、継承した
-// 環境に依存してはならないからだ。macOS 側と同じ理由であり、違うのは並びだけである。
-type Toolchain struct {
-	Directories []string
-	Stat        func(string) (fs.FileInfo, error)
-}
-
-// NewToolchain は、Linux の既定の探索順を返す。
-func NewToolchain() Toolchain {
-	return Toolchain{Directories: []string{"/usr/bin", "/usr/local/bin", "/bin"}}
-}
-
-// SSH は ssh クライアントの絶対パスを返す。
-func (t Toolchain) SSH() (string, error) { return t.find("ssh") }
-
-// KeyScan は ssh-keyscan の絶対パスを返す。
-func (t Toolchain) KeyScan() (string, error) { return t.find("ssh-keyscan") }
-
-// KeyGen は ssh-keygen の絶対パスを返す。
-func (t Toolchain) KeyGen() (string, error) { return t.find("ssh-keygen") }
-
-// KeyAdd は ssh-add の絶対パスを返す。
-func (t Toolchain) KeyAdd() (string, error) { return t.find("ssh-add") }
-
-func (t Toolchain) find(name string) (string, error) {
-	stat := t.Stat
-	if stat == nil {
-		stat = os.Stat
+// 環境に依存してはならないからだ。macOS 側と同じ理由であり、違うのは並びだけで
+// ある。探し方そのものは process.Toolchain が持つ。
+func NewToolchain() process.Toolchain {
+	return process.Toolchain{
+		Directories: []string{"/usr/bin", "/usr/local/bin", "/bin"},
 	}
-	for _, directory := range t.Directories {
-		candidate := filepath.Join(directory, name)
-		if _, err := stat(candidate); err == nil {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("%s: %w", name, ErrProgramNotFound)
 }
 ```
 
-`internal/platform/macos/toolchain.go` の `find` と見比べ、シグネチャと戻り値の形を一致させること。
+これで全部である。`Toolchain` 型も `find` も `ErrProgramNotFound` も書かない。
+タスク 4b で `internal/platform/process` に移してあり、そこが唯一の実装である。
 
 `internal/platform/linux/browser.go`:
 
