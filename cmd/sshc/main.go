@@ -17,8 +17,6 @@ import (
 
 	"sshc/internal/app"
 	"sshc/internal/platform"
-	"sshc/internal/platform/macos"
-	"sshc/internal/platform/process"
 	"sshc/internal/selfupdate"
 	"sshc/internal/ui"
 )
@@ -142,7 +140,7 @@ func main() {
 			context.Background(), app.HandoffDir(home),
 			&http.Client{Timeout: connectTimeout},
 			func(target string) error {
-				return macos.NewBrowser(process.NewOutputRunner()).Open(context.Background(), target)
+				return newPlatformParts(home).Browser.Open(context.Background(), target)
 			},
 			os.Stderr,
 		))
@@ -184,7 +182,7 @@ func main() {
 		}
 		os.Exit(runConnect(
 			context.Background(), alias, app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, macos.NewToolchain(), os.Stderr,
+			&http.Client{Timeout: connectTimeout}, newPlatformParts(home).Toolchain, os.Stderr,
 		))
 	}
 
@@ -199,7 +197,7 @@ func main() {
 		}
 		os.Exit(runConnect(
 			context.Background(), alias, app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, macos.NewToolchain(), os.Stderr,
+			&http.Client{Timeout: connectTimeout}, newPlatformParts(home).Toolchain, os.Stderr,
 		))
 	}
 
@@ -234,13 +232,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// OpenSSH のプログラムを起動するすべてのサブシステムが、ひとつのプロセスランナーと
-	// ひとつのツールチェーンを共有する。これにより argv、子プロセスの環境、出力の上限を
-	// 決める場所はひとつだけになる。
-	runner := process.NewOutputRunner()
-	toolchain := macos.NewToolchain()
+	parts := newPlatformParts(home)
 
-	var browser platform.BrowserLauncher = macos.NewBrowser(runner)
+	var browser platform.BrowserLauncher = parts.Browser
 	if !*openBrowser {
 		browser = urlPrinter{out: os.Stdout}
 	}
@@ -250,7 +244,7 @@ func main() {
 		Browser: browser,
 		// ユーザーがインターフェースから有効にしない限りオフ。ここでは何も登録しない。
 		// スイッチに手が届くようにするだけである。
-		LoginItem: macos.LoginItem{Runner: runner, Home: home},
+		LoginItem: parts.LoginItem,
 		// このアプリケーションが自分自身以外のホストに接触する唯一の場所であり、
 		// 誰かが求めたときにだけ行う。何も取得せず、何も置き換えない。
 		// 新しいバージョンが公開されているかを報告するだけである。
@@ -262,10 +256,10 @@ func main() {
 		UI:        assets,
 		Logger:    logger,
 		Home:      home,
-		Runner:    runner,
-		Toolchain: toolchain,
-		KeyAgent:  process.NewKeyAgent(runner, toolchain, os.LookupEnv),
-		Terminal:  macos.NewTerminal(runner, home),
+		Runner:    parts.Runner,
+		Toolchain: parts.Toolchain,
+		KeyAgent:  parts.KeyAgent,
+		Terminal:  parts.Terminal,
 		Lookup:    os.LookupEnv,
 		// ヘルパーとサーバーは同じ関数から同じルールを適用する。そのため「このプロンプト
 		// には答えるのか」という問いに対して、両者の答えが食い違っていくことは
