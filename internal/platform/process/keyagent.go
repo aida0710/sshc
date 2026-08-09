@@ -36,8 +36,8 @@ type KeyAgent struct {
 	timeout   time.Duration
 }
 
-// NewKeyAgent は macOS の ssh-add アダプタを組み立てる。lookup が子プロセスの
-// 環境を供給するので、テストが開発者自身の環境に依存することはない。
+// NewKeyAgent は ssh-add アダプタを組み立てる。lookup が子プロセスの環境を
+// 供給するので、テストが開発者自身の環境に依存することはない。
 func NewKeyAgent(runner platform.OutputRunner, toolchain platform.Toolchain, lookup func(string) (string, bool)) platform.KeyAgent {
 	return KeyAgent{runner: runner, toolchain: toolchain, lookup: lookup, timeout: defaultAgentTimeout}
 }
