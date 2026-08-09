@@ -59,6 +59,29 @@ jobs:
       - name: go test -race
         run: go test -race ./...
 
+  macos:
+    name: macOS
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # プラットフォーム層はビルドタグで分かれている。go ジョブは ubuntu で
+      # 走るので、darwin のファイルはそこでは 1 行もコンパイルされない。この
+      # ジョブが無ければ、macOS 側がコンパイルすら通らなくなったことに誰も
+      # 気づかない。逆も同じで、Linux 側は go ジョブが見ている。
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test ./...
+
   web:
     name: Web
     runs-on: ubuntu-latest
