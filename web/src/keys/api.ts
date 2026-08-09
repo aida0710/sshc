@@ -31,6 +31,12 @@ export type PurgeTrashResponse = components["schemas"]["PurgeTrashResponse"];
 export const REVEAL_ACTION_KIND = "private_key.reveal";
 export const PURGE_ACTION_KIND = "trash.purge";
 
+// 接続作成が IdentityFile として提示できるのは秘密鍵だけである。公開鍵・証明書・
+// known_hosts・設定ファイルは、インベントリには有用でも認証主体にはならない。
+export function selectablePrivateKeys(inventory: Pick<KeyInventoryResponse, "items">): KeyItem[] {
+  return inventory.items.filter((item) => item.kind === "private_key");
+}
+
 // KeyLocationInput は変更しないものを省く。名前とグループは別々の
 // 行き先なので、relocation はどちらか一方または両方を変えられ、
 // 空のグループは実在の答えだ: グループなしの鍵がある ~/.ssh のルートを指す。
