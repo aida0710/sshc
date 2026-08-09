@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -93,6 +94,32 @@ func TestEnableEscapesPercentInTheProgramPath(t *testing.T) {
 	}
 	if !strings.Contains(string(unit), "ExecStart=/opt/50%%/sshc -open=false") {
 		t.Errorf("unit does not double the percent sign:\n%s", unit)
+	}
+}
+
+// 上の五つはすべて Systemctl を明示していたため、それが空のときに本番が
+// 実際に取る DefaultSystemctl へのフォールバック（loginitem.go の
+// systemctl メソッド）は、一度も実行されずに済んでいた。ここでは Systemctl
+// を渡さず、記録された argv そのものを順序どおりに検査する。
+func TestEnableFallsBackToDefaultSystemctlWhenNoneIsGiven(t *testing.T) {
+	home := t.TempDir()
+	runner := &unitRunner{}
+	item := linux.LoginItem{Runner: runner, Home: home}
+
+	if err := item.Enable(context.Background(), "/home/u/.local/bin/sshc"); err != nil {
+		t.Fatal(err)
+	}
+	want := []platform.Command{
+		{Path: linux.DefaultSystemctl, Arguments: []string{"--user", "daemon-reload"}},
+		{Path: linux.DefaultSystemctl, Arguments: []string{"--user", "enable", "--now", linux.UnitName}},
+	}
+	if len(runner.commands) != len(want) {
+		t.Fatalf("systemctl calls = %#v, want %#v", runner.commands, want)
+	}
+	for i, got := range runner.commands {
+		if got.Path != want[i].Path || !slices.Equal(got.Arguments, want[i].Arguments) {
+			t.Errorf("call %d = %#v, want %#v", i, got, want[i])
+		}
 	}
 }
 
