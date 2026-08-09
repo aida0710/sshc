@@ -1,5 +1,5 @@
 // これらのヘルパーはファイル全体のそのままの編集の正確なテキストを組み立てる。
-// 自分が追加していないものを決して再整形しないため、ホストの作成・
+// 自分が追加していないものを決して再整形しないため、ホストの
 // 複製・削除においてもサーバーのバイト単位の保証は保たれる。
 
 function offsetOfLine(contents: string, line: number): number {
@@ -10,13 +10,6 @@ function offsetOfLine(contents: string, line: number): number {
     offset = next + 1;
   }
   return offset;
-}
-
-export function appendHostBlock(contents: string, alias: string): string {
-  const block = `Host ${alias}\n\tHostName ${alias}\n`;
-  if (contents === "") return block;
-  const terminated = contents.endsWith("\n") ? contents : `${contents}\n`;
-  return `${terminated}\n${block}`;
 }
 
 export function duplicateHostBlock(

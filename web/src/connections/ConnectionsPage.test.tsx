@@ -6,15 +6,30 @@ import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
 import { dragMimeType, type DragPayload } from "./dragdrop";
 import { integrationsApi } from "../api/integrations";
+import { keysApi } from "../keys/api";
 
 vi.mock("../api/config", async () => {
   const actual = await vi.importActual<typeof import("../api/config")>("../api/config");
-  return { ...actual, configApi: { overview: vi.fn(), host: vi.fn(), file: vi.fn(), preview: vi.fn(), save: vi.fn(), renameGroup: vi.fn() } };
+  return {
+    ...actual,
+    configApi: {
+      overview: vi.fn(), host: vi.fn(), file: vi.fn(), preview: vi.fn(), save: vi.fn(), renameGroup: vi.fn(),
+      createConnection: vi.fn(),
+    },
+  };
 });
 
 vi.mock("../api/integrations", () => ({
-  integrationsApi: { terminalLaunch: vi.fn(), terminalOptions: vi.fn() },
+  integrationsApi: {
+    terminalLaunch: vi.fn(), terminalOptions: vi.fn(), passwordVault: vi.fn(), credentials: vi.fn(),
+    initialiseVault: vi.fn(), unlockVault: vi.fn(),
+  },
 }));
+
+vi.mock("../keys/api", async () => {
+  const actual = await vi.importActual<typeof import("../keys/api")>("../keys/api");
+  return { ...actual, keysApi: { inventory: vi.fn() } };
+});
 
 const overview = {
   entry: { path: "config", absolute: "/home/tester/.ssh/config" },
@@ -65,6 +80,13 @@ beforeEach(() => {
       { name: "Term", path: "/Applications/Term.app" },
       { name: "Safari", path: "/Applications/Safari.app" },
     ],
+  } as never);
+  vi.mocked(integrationsApi.passwordVault).mockResolvedValue({
+    exists: true, unlocked: true, aliases: [], minPassphraseLength: 12,
+  } as never);
+  vi.mocked(integrationsApi.credentials).mockResolvedValue({ credentials: [] } as never);
+  vi.mocked(keysApi.inventory).mockResolvedValue({
+    items: [], unreadable: [], agentDelegations: [], unresolvedReferences: [], agentAvailable: false, agentIdentities: [],
   } as never);
 });
 
@@ -343,52 +365,45 @@ describe("ConnectionsPage", () => {
     expect(screen.getByLabelText("Port")).toHaveValue("2222");
   });
 
-  it("creates a host by appending a block to the chosen file", async () => {
+  it("creates a complete connection, refreshes the tree, and opens its Basic detail without launching a terminal", async () => {
     const user = userEvent.setup();
-    vi.mocked(configApi.save).mockResolvedValue({
-      transactionId: "t1", written: ["config"], preview: { operation: "config.file_raw", diffs: [] },
+    const createdDetail = {
+      ...detail,
+      form: {
+        ...detail.form,
+        entry: { ...detail.form.entry, identity: { path: "config", alias: "build01" }, patterns: ["build01"] },
+        raw: "Host build01\n\tHostName build.example.com\n\tPort 22\n",
+      },
+      metadata: { identity: { path: "config", alias: "build01" } },
+      effective: { ...detail.effective, alias: "build01" },
+    };
+    vi.mocked(configApi.createConnection).mockResolvedValue({
+      transactionId: "t-create",
+      identity: { path: "config", alias: "build01" },
+      preview: { operation: "connection.create", diffs: [] },
     } as never);
-    vi.mocked(configApi.file).mockResolvedValue({
-      file: { path: "config", absolute: "/home/tester/.ssh/config" },
-      contents: "Host bastion\n\tPort 22\n", digest: "digest", editable: true, exists: true,
-    } as never);
+    vi.mocked(configApi.host).mockResolvedValue(createdDetail as never);
 
     render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "New connection" }));
-    await user.type(await screen.findByLabelText("New connection alias"), "build01");
+    await user.type(await screen.findByLabelText("Connection name"), "build01");
+    await user.type(screen.getByLabelText("Host name or IP address"), "build.example.com");
+    await user.type(await screen.findByLabelText("Connection password"), "connection-only");
     await user.click(screen.getByRole("button", { name: "Create connection" }));
 
-    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
-      kind: "file_raw",
-      path: "config",
-      base: "Host bastion\n\tPort 22\n",
-      raw: "Host bastion\n\tPort 22\n\nHost build01\n\tHostName build01\n",
+    await waitFor(() => expect(configApi.createConnection).toHaveBeenCalledWith({
+      alias: "build01",
+      group: "",
+      hostName: "build.example.com",
+      authentication: { kind: "dedicated_password", password: "connection-only" },
     }));
-  });
-
-  it("uses the entry file reported by the server instead of assuming config", async () => {
-    const user = userEvent.setup();
-    vi.mocked(configApi.overview).mockResolvedValue({
-      ...overview,
-      entry: { path: "ssh_config", absolute: "/home/tester/.ssh/ssh_config" },
-      files: [{ file: { path: "ssh_config", absolute: "/home/tester/.ssh/ssh_config" }, editable: true, loads: 1 }],
-    } as never);
-    vi.mocked(configApi.file).mockResolvedValue({
-      file: { path: "ssh_config", absolute: "/home/tester/.ssh/ssh_config" },
-      contents: "", digest: "digest", editable: true, exists: true,
-    } as never);
-    vi.mocked(configApi.save).mockResolvedValue({
-      transactionId: "t1", written: ["ssh_config"], preview: { operation: "config.file_raw", diffs: [] },
-    } as never);
-
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
-    await user.click(await screen.findByRole("button", { name: "New connection" }));
-    await user.type(await screen.findByLabelText("New connection alias"), "build01");
-    await user.click(screen.getByRole("button", { name: "Create connection" }));
-
-    await waitFor(() => expect(configApi.file).toHaveBeenCalledWith("ssh_config"));
-    expect(configApi.save).toHaveBeenCalledWith(expect.objectContaining({ path: "ssh_config" }));
+    await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "build01"));
+    expect(configApi.overview).toHaveBeenCalledTimes(2);
+    expect(integrationsApi.terminalLaunch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "Create connection" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "build01" })).toBeInTheDocument();
   });
 
   it("moves a host to another file with both loaded bases", async () => {
