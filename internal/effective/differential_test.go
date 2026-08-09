@@ -9,10 +9,18 @@ import (
 	"sshc/internal/config"
 	"sshc/internal/effective"
 	"sshc/internal/platform"
-	"sshc/internal/platform/macos"
 	"sshc/internal/platform/process"
 	"sshc/internal/storage"
 )
+
+// systemToolchain は、このマシンに入っている本物の OpenSSH を探す。どちらの
+// プラットフォームの既定の置き場所も含める。ここが求めているのは「本物の ssh が
+// あるか、無ければスキップ」だけであり、プラットフォームの区別ではない。
+func systemToolchain() process.Toolchain {
+	return process.Toolchain{
+		Directories: []string{"/usr/bin", "/opt/homebrew/bin", "/usr/local/bin", "/bin"},
+	}
+}
 
 // TestProjectionMatchesInstalledOpenSSH は、設定エンジンの計画がこのサブシステム
 // に先送りした差分テストである。
@@ -24,7 +32,7 @@ import (
 // `ssh -G -F file` は、それ以外については依然として /etc/ssh/ssh_config を読む
 // からである。
 func TestProjectionMatchesInstalledOpenSSH(t *testing.T) {
-	toolchain := macos.NewToolchain()
+	toolchain := systemToolchain()
 	if _, err := toolchain.SSH(); err != nil {
 		t.Skip("OpenSSH ssh is not installed; skipping the differential test")
 	}
