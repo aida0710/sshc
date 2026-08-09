@@ -159,10 +159,10 @@ func completionConditions() []completionCondition {
 				{proofGoTest, "TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken"},
 				{proofGoTest, "TestNoResponseCarriesASecretItIsNotEntitledTo"},
 			},
-			Manual: []proof{{proofManual, "M3. 実 macOS Keychain と ssh-agent"}},
-			Gap: "agent and Keychain registration is exercised against a fake. That a " +
-				"real ssh-add accepts the passphrase on standard input, and that the " +
-				"passphrase reaches neither ps nor the environment, is manual test M3.",
+			Manual: []proof{{proofManual, "M3. 実 ssh-agent"}},
+			Gap: "agent registration is exercised against a fake. That a real ssh-add " +
+				"accepts the passphrase on standard input, and that the passphrase " +
+				"reaches neither ps nor the environment, is manual test M3.",
 		},
 		{
 			Number:  7,
