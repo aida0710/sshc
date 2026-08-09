@@ -16,6 +16,11 @@ import (
 // UnitName は、このアプリケーションが登録する systemd user unit の名前。
 const UnitName = "sshc.service"
 
+// DefaultSystemctl は Systemctl が空のときに使う絶対パスである。組み立て側が
+// systemd の有無を probe するときも同じ定数を読むので、probe と既定値が
+// 別々に書かれてずれることはない。
+const DefaultSystemctl = "/usr/bin/systemctl"
+
 // ErrLoginItemPathNotAbsolute は、systemd が PATH 経由で探さなければならない
 // プログラム、つまり他人が供給しうるプログラムの登録を拒否する。
 var ErrLoginItemPathNotAbsolute = errors.New("login item program path must be absolute")
@@ -45,7 +50,7 @@ func (l LoginItem) unitPath() string {
 
 func (l LoginItem) systemctl() string {
 	if l.Systemctl == "" {
-		return "/usr/bin/systemctl"
+		return DefaultSystemctl
 	}
 	return l.Systemctl
 }
