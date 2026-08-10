@@ -60,6 +60,20 @@ type PasswordMutation struct {
 	Password   string
 }
 
+// KeyPassphraseMutation replaces the unlock value owned by one private-key
+// path. Unlike a named credential, it cannot be reused by another key.
+type KeyPassphraseMutation struct {
+	RelativePath string
+	Passphrase   string
+}
+
+// ConnectionSecretsMutation groups every vault change made by one connection
+// save so callers can commit one sealed replacement beside the SSH config.
+type ConnectionSecretsMutation struct {
+	Password      *PasswordMutation
+	KeyPassphrase *KeyPassphraseMutation
+}
+
 // TokenTTL は、askpass トークンが使える時間。
 //
 // セッションのアクショントークンと同じ 2 分であり、理由も同じである。これは
@@ -530,12 +544,36 @@ func (s *Service) RelocateKeyPassphrases(relocations map[string]string) error {
 		s.mu.Unlock()
 		return ErrLocked
 	}
-	changed, err := vault.RelocateSubjects(KindKeyPassphrase, relocations)
+	clone := vault.clone()
+	changed, err := clone.RelocateSubjects(KindKeyPassphrase, relocations)
+	baseline := slices.Clone(s.baseline)
 	s.mu.Unlock()
 	if err != nil || !changed {
 		return err
 	}
-	return s.write()
+	if len(baseline) == 0 {
+		return ErrNoVault
+	}
+	sealed, err := clone.Seal()
+	if err != nil {
+		return err
+	}
+	_, err = s.transactions.Commit(storage.Request{
+		Operation: "secret.key-passphrase-relocate",
+		Changes: []storage.Change{{
+			Path: s.path(), Contents: sealed,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(baseline)},
+		}},
+	})
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.vault = clone
+	s.baseline = slices.Clone(sealed)
+	s.used = s.now()
+	s.mu.Unlock()
+	return nil
 }
 
 // SealBackup は世代バックアップをひとつ封じ、OpenBackup はそれを開く。
@@ -774,6 +812,16 @@ func (s *Service) WithPasswordMutation(
 	mutation PasswordMutation,
 	commit func(storage.Change) (storage.Result, error),
 ) (storage.Result, error) {
+	return s.WithConnectionSecretsMutation(ConnectionSecretsMutation{Password: &mutation}, commit)
+}
+
+// WithConnectionSecretsMutation prepares one encrypted vault replacement for
+// all secret changes belonging to a connection save. Disk and live memory are
+// published only after the caller's combined storage transaction succeeds.
+func (s *Service) WithConnectionSecretsMutation(
+	mutation ConnectionSecretsMutation,
+	commit func(storage.Change) (storage.Result, error),
+) (storage.Result, error) {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 
@@ -784,50 +832,31 @@ func (s *Service) WithPasswordMutation(
 		return storage.Result{}, ErrLocked
 	}
 	clone := vault.clone()
-	switch mutation.Kind {
-	case PasswordMutationDedicated:
-		if current, ok := vault.dedicatedPasswords[mutation.Alias]; ok &&
-			len(current) == len(mutation.Password) &&
-			subtle.ConstantTimeCompare([]byte(current), []byte(mutation.Password)) == 1 {
-			s.mu.Unlock()
-			return storage.Result{}, ErrNoPasswordMutation
-		}
-		if err := clone.SetDedicatedPassword(mutation.Alias, mutation.Password); err != nil {
+	changed := false
+	if mutation.Password != nil {
+		passwordChanged, err := applyPasswordMutation(vault, clone, *mutation.Password)
+		if err != nil {
 			s.mu.Unlock()
 			return storage.Result{}, err
 		}
-	case PasswordMutationSaved:
-		if current, ok := vault.Assigned(KindPassword, mutation.Alias); ok && current == mutation.Credential {
-			s.mu.Unlock()
-			return storage.Result{}, ErrNoPasswordMutation
+		changed = changed || passwordChanged
+	}
+	if mutation.KeyPassphrase != nil {
+		keyMutation := mutation.KeyPassphrase
+		current, hasDedicated := vault.dedicatedKeyPassphrases[keyMutation.RelativePath]
+		keyChanged := !hasDedicated || len(current) != len(keyMutation.Passphrase) ||
+			subtle.ConstantTimeCompare([]byte(current), []byte(keyMutation.Passphrase)) != 1
+		if keyChanged {
+			if err := clone.SetDedicatedKeyPassphrase(keyMutation.RelativePath, keyMutation.Passphrase); err != nil {
+				s.mu.Unlock()
+				return storage.Result{}, err
+			}
+			changed = true
 		}
-		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
-			s.mu.Unlock()
-			return storage.Result{}, err
-		}
-	case PasswordMutationNewShared:
-		if _, exists := vault.Secret(KindPassword, mutation.Credential); exists {
-			s.mu.Unlock()
-			return storage.Result{}, ErrCredentialAlreadyExists
-		}
-		if err := clone.Set(KindPassword, mutation.Credential, mutation.Password); err != nil {
-			s.mu.Unlock()
-			return storage.Result{}, err
-		}
-		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
-			s.mu.Unlock()
-			return storage.Result{}, err
-		}
-	case PasswordMutationRemove:
-		if _, ok := clone.SecretFor(KindPassword, mutation.Alias); !ok {
-			s.mu.Unlock()
-			return storage.Result{}, ErrNoPassword
-		}
-		clone.RemoveDedicatedPassword(mutation.Alias)
-		clone.Unassign(KindPassword, mutation.Alias)
-	default:
+	}
+	if !changed {
 		s.mu.Unlock()
-		return storage.Result{}, ErrUnknownPasswordMutation
+		return storage.Result{}, ErrNoPasswordMutation
 	}
 	sealed, err := clone.Seal()
 	baseline := slices.Clone(s.baseline)
@@ -852,6 +881,61 @@ func (s *Service) WithPasswordMutation(
 	s.used = s.now()
 	s.mu.Unlock()
 	return result, nil
+}
+
+func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool, error) {
+	switch mutation.Kind {
+	case PasswordMutationDedicated:
+		if current, ok := vault.dedicatedPasswords[mutation.Alias]; ok &&
+			len(current) == len(mutation.Password) &&
+			subtle.ConstantTimeCompare([]byte(current), []byte(mutation.Password)) == 1 {
+			return false, nil
+		}
+		if err := clone.SetDedicatedPassword(mutation.Alias, mutation.Password); err != nil {
+			return false, err
+		}
+		return true, nil
+	case PasswordMutationSaved:
+		if current, ok := vault.Assigned(KindPassword, mutation.Alias); ok && current == mutation.Credential {
+			return false, nil
+		}
+		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
+			return false, err
+		}
+		return true, nil
+	case PasswordMutationNewShared:
+		if _, exists := vault.Secret(KindPassword, mutation.Credential); exists {
+			return false, ErrCredentialAlreadyExists
+		}
+		if err := clone.Set(KindPassword, mutation.Credential, mutation.Password); err != nil {
+			return false, err
+		}
+		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
+			return false, err
+		}
+		return true, nil
+	case PasswordMutationRemove:
+		if _, ok := clone.SecretFor(KindPassword, mutation.Alias); !ok {
+			return false, ErrNoPassword
+		}
+		clone.RemoveDedicatedPassword(mutation.Alias)
+		clone.Unassign(KindPassword, mutation.Alias)
+		return true, nil
+	default:
+		return false, ErrUnknownPasswordMutation
+	}
+}
+
+// DedicatedKeyPassphrases returns only key paths with a non-reusable value.
+// Locked vaults reveal no subjects.
+func (s *Service) DedicatedKeyPassphrases() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.open()
+	if vault == nil {
+		return nil
+	}
+	return vault.DedicatedKeyPassphraseSubjects()
 }
 
 // Aliases は、パスワードが保存されているホストを返す。ロック中は何も返さない。
