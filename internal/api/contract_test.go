@@ -30,6 +30,19 @@ func TestGeneratedConnectionCreationModels(t *testing.T) {
 	}
 }
 
+func TestGeneratedConnectionUpdateModels(t *testing.T) {
+	hostName := json.RawMessage(`{"action":"set","value":"edge.example"}`)
+	request := UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "config", Alias: "edge"},
+		Base:     "Host edge\n",
+		HostName: &hostName,
+		Password: json.RawMessage(`{"kind":"unchanged"}`),
+	}
+	if request.Identity.Alias != "edge" || request.HostName == nil || len(request.Password) == 0 {
+		t.Fatalf("unexpected connection update contract: %#v", request)
+	}
+}
+
 func TestGeneratedKeyVaultModels(t *testing.T) {
 	item := KeyItem{
 		Id:             "0123456789abcdef0123456789abcdef",

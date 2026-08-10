@@ -177,6 +177,38 @@ type ConflictReport struct {
 	Path           string     `json:"path"`
 }
 
+// ConnectionIdentityFileChange defines model for ConnectionIdentityFileChange.
+type ConnectionIdentityFileChange = json.RawMessage
+
+// ConnectionIdentityFileSet defines model for ConnectionIdentityFileSet.
+type ConnectionIdentityFileSet struct {
+	Action string `json:"action"`
+	KeyId  string `json:"keyId"`
+}
+
+// ConnectionInherit defines model for ConnectionInherit.
+type ConnectionInherit struct {
+	Action string `json:"action"`
+}
+
+// ConnectionPortChange defines model for ConnectionPortChange.
+type ConnectionPortChange = json.RawMessage
+
+// ConnectionPortSet defines model for ConnectionPortSet.
+type ConnectionPortSet struct {
+	Action string `json:"action"`
+	Value  int    `json:"value"`
+}
+
+// ConnectionStringChange defines model for ConnectionStringChange.
+type ConnectionStringChange = json.RawMessage
+
+// ConnectionStringSet defines model for ConnectionStringSet.
+type ConnectionStringSet struct {
+	Action string `json:"action"`
+	Value  string `json:"value"`
+}
+
 // CreateConnectionAuthentication defines model for CreateConnectionAuthentication.
 type CreateConnectionAuthentication = json.RawMessage
 
@@ -1116,6 +1148,30 @@ type UnresolvedReference struct {
 	Value      string `json:"value"`
 }
 
+// UpdateConnectionPassword defines model for UpdateConnectionPassword.
+type UpdateConnectionPassword = json.RawMessage
+
+// UpdateConnectionRequest defines model for UpdateConnectionRequest.
+type UpdateConnectionRequest struct {
+	Base         string                        `json:"base"`
+	HostName     *ConnectionStringChange       `json:"hostName,omitempty"`
+	Identity     HostIdentity                  `json:"identity"`
+	IdentityFile *ConnectionIdentityFileChange `json:"identityFile,omitempty"`
+	Password     UpdateConnectionPassword      `json:"password"`
+	Port         *ConnectionPortChange         `json:"port,omitempty"`
+	User         *ConnectionStringChange       `json:"user,omitempty"`
+}
+
+// UpdatePasswordRemove defines model for UpdatePasswordRemove.
+type UpdatePasswordRemove struct {
+	Kind string `json:"kind"`
+}
+
+// UpdatePasswordUnchanged defines model for UpdatePasswordUnchanged.
+type UpdatePasswordUnchanged struct {
+	Kind string `json:"kind"`
+}
+
 // UpdateStatus defines model for UpdateStatus.
 type UpdateStatus struct {
 	Available bool    `json:"available"`
@@ -1180,6 +1236,9 @@ type PreviewConfigEditJSONRequestBody = EditRequest
 
 // SaveConfigEditJSONRequestBody defines body for SaveConfigEdit for application/json ContentType.
 type SaveConfigEditJSONRequestBody = EditRequest
+
+// UpdateConnectionJSONRequestBody defines body for UpdateConnection for application/json ContentType.
+type UpdateConnectionJSONRequestBody = UpdateConnectionRequest
 
 // CreateConnectionJSONRequestBody defines body for CreateConnection for application/json ContentType.
 type CreateConnectionJSONRequestBody = CreateConnectionRequest
