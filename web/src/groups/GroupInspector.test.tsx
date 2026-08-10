@@ -14,6 +14,8 @@ describe("GroupInspector", () => {
     const user = userEvent.setup();
     render(<GroupInspector group={group()} members={[]} onUpdate={onUpdate} />);
 
+    expect(screen.getByText(/staged until you choose Save groups/)).toBeInTheDocument();
+
     // 一文字ずつ。このコントロールはモックされた親が決して書き戻さない
     // メタデータに制御されているため、各キー入力は同じ値から始まる。
     await user.type(screen.getByLabelText("Display order"), "3");

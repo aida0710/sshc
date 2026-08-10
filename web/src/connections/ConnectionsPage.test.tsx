@@ -572,10 +572,11 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    await user.click(screen.getByRole("button", { name: "Advanced file actions" }));
-    expect(screen.getByRole("button", { name: "Move connection" })).toBeDisabled();
-    await user.selectOptions(await screen.findByLabelText("Move to file"), "conf.d/10-home.conf");
-    await user.click(screen.getByRole("button", { name: "Move connection" }));
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
+    expect(screen.getByText(/Primary group changes where sshc organises the connection/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change storage file" })).toBeDisabled();
+    await user.selectOptions(await screen.findByLabelText("Storage file"), "conf.d/10-home.conf");
+    await user.click(screen.getByRole("button", { name: "Change storage file" }));
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
       kind: "move",
@@ -607,7 +608,7 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    await user.click(screen.getByRole("button", { name: "Advanced file actions" }));
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
     await user.click(await screen.findByRole("button", { name: "Delete connection" }));
     await user.click(screen.getByRole("button", { name: "Confirm delete" }));
 

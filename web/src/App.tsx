@@ -288,6 +288,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         ) : (
           <span className="ml-auto">
             <InspectorToggle
+              label={inspector.label}
               open={inspectorOpen}
               attention={inspector.attention}
               onToggle={() => setInspectorOpen((open) => !open)}
@@ -431,7 +432,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           ) : null}
         </main>
         {inspector !== null && inspectorOpen ? (
-          <InspectorPane label={t("shell.inspector")}>{inspector.body}</InspectorPane>
+          <InspectorPane label={inspector.label}>{inspector.body}</InspectorPane>
         ) : null}
       </div>
     </div>

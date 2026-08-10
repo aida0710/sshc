@@ -63,6 +63,8 @@ describe("HostInspector", () => {
     const user = userEvent.setup();
     render(<HostInspector detail={build()} onMetadata={onMetadata} />);
 
+    expect(screen.getByText(/saved immediately/)).toBeInTheDocument();
+
     await user.click(screen.getByLabelText("Favourite"));
 
     expect(onMetadata).toHaveBeenCalledWith(expect.objectContaining({ favourite: true }));

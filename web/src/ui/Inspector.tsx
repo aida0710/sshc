@@ -6,21 +6,23 @@ import { useTranslate } from "../i18n/context";
 // 注意を必要とするかどうか。null を渡すセクションにはトグルすら付かない:
 // どこにでも提供されるのに 10 回のうち 9 回は空のペインは、人々にそれを
 // 開かないよう教え込んでしまう。
-export type InspectorContent = { attention: boolean; body: ReactNode } | null;
+export type InspectorContent = { label: string; attention: boolean; body: ReactNode } | null;
 
 export const inspectorId = "inspector";
 
 export function InspectorToggle({
+  label,
   open,
   attention,
   onToggle,
 }: {
+  label: string;
   open: boolean;
   attention: boolean;
   onToggle: () => void;
 }) {
   const t = useTranslate();
-  const action = t(open ? "shell.inspectorHide" : "shell.inspectorShow");
+  const action = t(open ? "shell.inspectorHideNamed" : "shell.inspectorShowNamed", { label });
   // 名前は 2 つの sr-only span から組み立てるのではなく、ここに直接書く。
   // 隣接する span はセパレータなしで連結され——「Show detailsNeeds
   // attention」——になる。両者の間にあるのは aria-hidden なアイコンだけで、
@@ -38,7 +40,7 @@ export function InspectorToggle({
       }`}
     >
       <Icon name="inspector" className="h-4 w-4" />
-      <span className="hidden text-xs sm:inline">{t("shell.inspector")}</span>
+      <span className="hidden max-w-44 truncate text-xs sm:inline">{label}</span>
       {/* ドットは目のためのもので、上の文はそれ以外のすべての人のためのものだ。 */}
       {attention ? (
         <span
