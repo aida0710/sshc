@@ -688,7 +688,7 @@ export function ConnectionsPage({
                     <option key={node.file.absolute} value={node.file.path}>{node.file.path}</option>
                   ))}
               </select>
-              <Button onClick={() => void moveHost()}>{t("conn.move")}</Button>
+              <Button disabled={moveTarget === ""} onClick={() => void moveHost()}>{t("conn.move")}</Button>
               {/*
                 どちらの状態も danger button である——確認とは別の単語であって、
                 別の種類の行為ではない。
