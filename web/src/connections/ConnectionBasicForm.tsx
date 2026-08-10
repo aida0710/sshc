@@ -14,6 +14,7 @@ import {
 } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
+import { eligibilityText } from "../diagnostics/PasswordPanel";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Card, Notice, Row } from "../ui/surface";
@@ -301,6 +302,20 @@ export function ConnectionBasicForm({
     try {
       await onSave(request);
       clearSecrets();
+      setPasswordAction("unchanged");
+      setConfirmRemove(false);
+      setNewCredential("");
+      // A password-only transaction leaves ssh_config byte-for-byte unchanged,
+      // so the detail snapshot key cannot reset this component for us. Refresh
+      // the vault side explicitly and return the action control to unchanged.
+      try {
+        const status = await secrets.passwordVault();
+        const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
+        setVault(status);
+        applyCredentialState(status, listed);
+      } catch {
+        setLocalError(t("conn.basicRefreshFailed"));
+      }
     } catch {
       clearSecrets();
       setLocalError(t("conn.basicSaveFailed"));
@@ -317,8 +332,7 @@ export function ConnectionBasicForm({
 
   return (
     <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
-      {problem === null ? null : <Notice tone="danger">{problem.detail ?? problem.message}</Notice>}
-      {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
+      {localError === "" || problem !== null ? null : <Notice tone="danger">{localError}</Notice>}
 
       <section className="flex flex-col gap-2" aria-labelledby="basic-connection-heading">
         <h3 id="basic-connection-heading" className={sectionHeading}>{t("conn.basicConnection")}</h3>
@@ -500,10 +514,10 @@ export function ConnectionBasicForm({
                   ) : null}
 
                   {passwordBlockers.map((blocker, index) => (
-                    <Notice key={`${blocker.code}-${index}`} tone="danger">{blocker.detail ?? blocker.code}</Notice>
+                    <Notice key={`${blocker.code}-${index}`} tone="danger">{eligibilityText(t, blocker.code)}</Notice>
                   ))}
                   {passwordWarnings.map((warning, index) => (
-                    <Notice key={`${warning.code}-${index}`}>{warning.detail ?? warning.code}</Notice>
+                    <Notice key={`${warning.code}-${index}`}>{eligibilityText(t, warning.code)}</Notice>
                   ))}
                 </>
               ) : null}
