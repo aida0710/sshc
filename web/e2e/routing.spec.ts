@@ -32,6 +32,40 @@ test("opens, reloads, and traverses section URLs", async ({ page, installation }
   await expect(page.getByRole("heading", { name: "History", level: 2 })).toBeVisible();
 });
 
+test("restores a selected connection and editor tab from its URL", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, { url: atPath(installation.url, "/connections") });
+
+  await page
+    .getByRole("navigation", { name: "Connections" })
+    .getByRole("button", { name: "bastion" })
+    .click();
+  let current = new URL(page.url());
+  expect(current.pathname).toBe("/connections");
+  expect(Object.fromEntries(current.searchParams)).toEqual({
+    path: "config",
+    host: "bastion",
+    tab: "basic",
+  });
+
+  await page.getByRole("tab", { name: "Advanced" }).click();
+  current = new URL(page.url());
+  expect(current.searchParams.get("tab")).toBe("advanced");
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Advanced" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  await page.goBack();
+  await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
+  expect(new URL(page.url()).searchParams.get("tab")).toBe("basic");
+});
+
 test("normalizes one trailing slash without leaving the requested section", async ({
   page,
   installation,
