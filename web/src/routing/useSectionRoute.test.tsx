@@ -9,17 +9,41 @@ afterEach(() => {
 
 describe("useSectionRoute", () => {
   it("reads a direct deep link and pushes a new section URL", () => {
-    window.history.replaceState(null, "", "/connections");
+    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
     const pushed = vi.spyOn(window.history, "pushState");
     const { result } = renderHook(() => useSectionRoute());
 
     expect(result.current.route).toMatchObject({ kind: "section", section: "Connections" });
+    expect(result.current.location).toEqual({
+      pathname: "/connections",
+      search: "?path=config&host=bastion&tab=basic",
+    });
 
     act(() => result.current.navigate("Keys"));
 
     expect(pushed).toHaveBeenCalledWith(null, "", "/keys");
     expect(window.location.pathname).toBe("/keys");
     expect(result.current.route).toMatchObject({ kind: "section", section: "Keys" });
+  });
+
+  it("pushes and replaces internal locations while updating consumers", () => {
+    const pushed = vi.spyOn(window.history, "pushState");
+    const replaced = vi.spyOn(window.history, "replaceState");
+    const { result } = renderHook(() => useSectionRoute());
+
+    act(() => result.current.navigateLocation("/connections?path=config&host=bastion&tab=basic"));
+
+    expect(pushed).toHaveBeenCalledWith(null, "", "/connections?path=config&host=bastion&tab=basic");
+    expect(result.current.location.search).toBe("?path=config&host=bastion&tab=basic");
+    expect(result.current.route).toMatchObject({ kind: "section", section: "Connections" });
+
+    act(() => result.current.navigateLocation(
+      "/connections?path=config&host=bastion&tab=raw",
+      { replace: true },
+    ));
+
+    expect(replaced).toHaveBeenCalledWith(null, "", "/connections?path=config&host=bastion&tab=raw");
+    expect(result.current.location.search).toBe("?path=config&host=bastion&tab=raw");
   });
 
   it("reparses the real pathname rather than history state on popstate", () => {
@@ -31,6 +55,21 @@ describe("useSectionRoute", () => {
     });
 
     expect(result.current.route).toMatchObject({ kind: "section", section: "History" });
+    expect(result.current.location).toEqual({ pathname: "/history", search: "" });
+  });
+
+  it("reparses query state on popstate even within the same section", () => {
+    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
+    const { result } = renderHook(() => useSectionRoute());
+
+    act(() => {
+      window.history.pushState(null, "", "/connections?path=conf.d%2F10-home.conf&host=nas&tab=diagnostics");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(result.current.location.search).toBe(
+      "?path=conf.d%2F10-home.conf&host=nas&tab=diagnostics",
+    );
   });
 
   it("canonicalizes one trailing slash without adding history and retains the query", () => {
