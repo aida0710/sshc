@@ -314,10 +314,11 @@ This catches the bug where a completed encrypted write is reported as failed bec
 
 ```bash
 go test ./internal/api ./internal/httpserver ./internal/application -count=1
-make verify-generated
+make generate
+git diff --check
 ```
 
-Expected: all tests pass and regeneration leaves generated files unchanged.
+Expected: all tests pass, regeneration succeeds, and the intended generated contract diff has no whitespace errors.
 
 - [ ] **Step 7: Commit**
 
@@ -325,6 +326,14 @@ Expected: all tests pass and regeneration leaves generated files unchanged.
 git add api/openapi.yaml internal/api/models.gen.go web/src/api/schema.d.ts internal/httpserver/password.go internal/httpserver/password_test.go internal/httpserver/server.go
 git commit -m "feat: expose credential host assignments"
 ```
+
+- [ ] **Step 8: Verify committed generated files**
+
+```bash
+make verify-generated
+```
+
+Expected: regeneration produces no change from the newly committed generated files.
 
 ---
 

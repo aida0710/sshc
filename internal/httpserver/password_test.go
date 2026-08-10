@@ -3,10 +3,12 @@ package httpserver
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +48,46 @@ func passwordEngineIn(t *testing.T) (*echo.Echo, *secret.Service, string) {
 		Answerable: func(_ string, prompt string) bool { return strings.HasSuffix(prompt, "password: ") },
 	})
 	return engine, service, home
+}
+
+func passwordEngineWithKeyHosts(
+	t *testing.T,
+	keyHosts func([]string) (map[string][]string, error),
+) (*echo.Echo, *secret.Service, string) {
+	t.Helper()
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	engine := echo.New()
+	registerPasswordRoutes(engine, PasswordHandlers{
+		Service:    service,
+		KeyHosts:   keyHosts,
+		Answerable: func(_ string, prompt string) bool { return strings.HasSuffix(prompt, "password: ") },
+	})
+	return engine, service, home
+}
+
+func storeDedicatedKeyPassphrase(t *testing.T, service *secret.Service, home, relativePath, passphrase string) {
+	t.Helper()
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	_, err = service.WithConnectionSecretsMutation(secret.ConnectionSecretsMutation{
+		KeyPassphrase: &secret.KeyPassphraseMutation{RelativePath: relativePath, Passphrase: passphrase},
+	}, func(change storage.Change) (storage.Result, error) {
+		return manager.Commit(storage.Request{Operation: "test.key-passphrase", Changes: []storage.Change{change}})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func send(t *testing.T, engine *echo.Echo, method, path, body string, headers map[string]string) *httptest.ResponseRecorder {
@@ -392,6 +434,114 @@ func TestCredentialsListNamesAndUses(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("list does not carry %q: %s", want, body)
 		}
+	}
+}
+
+func TestCredentialsListIncludesNamedAndDedicatedHostUsage(t *testing.T) {
+	engine, service, home := passwordEngineWithKeyHosts(t, func(paths []string) (map[string][]string, error) {
+		if !slices.Equal(paths, []string{"keys/id_a", "keys/id_b", "keys/id_owned"}) {
+			t.Fatalf("key host paths = %#v", paths)
+		}
+		return map[string][]string{
+			"keys/id_a":     {"build-a"},
+			"keys/id_b":     {"build-a", "build-b"},
+			"keys/id_owned": {"deploy"},
+		}, nil
+	})
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	for _, credential := range []struct {
+		kind  secret.Kind
+		name  string
+		value string
+	}{
+		{secret.KindPassword, "office", "account-secret-value"},
+		{secret.KindKeyPassphrase, "team-phrase", "shared-key-passphrase-value"},
+	} {
+		if err := service.SetCredential(credential.kind, credential.name, credential.value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := service.AssignCredential(secret.KindPassword, "web-1", "office"); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"keys/id_a", "keys/id_b"} {
+		if err := service.AssignCredential(secret.KindKeyPassphrase, key, "team-phrase"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	storeDedicatedKeyPassphrase(t, service, home, "keys/id_owned", "owned-key-passphrase-value")
+
+	response := send(t, engine, http.MethodGet, "/api/v1/credentials", "", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("list = %d: %s", response.Code, response.Body.String())
+	}
+	var answer api.CredentialList
+	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if !answer.KeyHostUsageComplete {
+		t.Fatal("key host usage unexpectedly incomplete")
+	}
+	byName := map[string]api.Credential{}
+	for _, credential := range answer.Credentials {
+		byName[credential.Name] = credential
+	}
+	if office := byName["office"]; !slices.Equal(office.Uses, []string{"web-1"}) || !slices.Equal(office.Hosts, []string{"web-1"}) {
+		t.Fatalf("office = %#v", office)
+	}
+	if team := byName["team-phrase"]; !slices.Equal(team.Uses, []string{"keys/id_a", "keys/id_b"}) ||
+		!slices.Equal(team.Hosts, []string{"build-a", "build-b"}) {
+		t.Fatalf("team phrase = %#v", team)
+	}
+	if len(answer.DedicatedKeyPassphrases) != 1 || answer.DedicatedKeyPassphrases[0].Key != "keys/id_owned" ||
+		!slices.Equal(answer.DedicatedKeyPassphrases[0].Hosts, []string{"deploy"}) {
+		t.Fatalf("dedicated = %#v", answer.DedicatedKeyPassphrases)
+	}
+	for _, absent := range []string{
+		"account-secret-value", "shared-key-passphrase-value", "owned-key-passphrase-value", testPassphrase,
+	} {
+		if strings.Contains(response.Body.String(), absent) {
+			t.Errorf("credential list contains secret %q: %s", absent, response.Body.String())
+		}
+	}
+}
+
+func TestCredentialMutationRemainsSuccessfulWhenKeyHostUsageIsUnavailable(t *testing.T) {
+	engine, service, _ := passwordEngineWithKeyHosts(t, func([]string) (map[string][]string, error) {
+		return nil, errors.New("broken include graph")
+	})
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "team", "key-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignCredential(secret.KindKeyPassphrase, "keys/id_team", "team"); err != nil {
+		t.Fatal(err)
+	}
+
+	response := send(t, engine, http.MethodPut, credentialPath("password", "/office"), `{"secret":"account-secret"}`, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("stored credential reported as failed: %d %s", response.Code, response.Body.String())
+	}
+	var answer api.CredentialList
+	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.KeyHostUsageComplete {
+		t.Fatal("failed key-host projection reported complete")
+	}
+	found := false
+	for _, credential := range answer.Credentials {
+		found = found || credential.Kind == string(secret.KindPassword) && credential.Name == "office"
+	}
+	if !found {
+		t.Fatalf("successful credential is absent: %s", response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "account-secret") || strings.Contains(response.Body.String(), "key-secret") {
+		t.Fatalf("response contains a secret: %s", response.Body.String())
 	}
 }
 

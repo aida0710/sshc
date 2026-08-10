@@ -1015,9 +1015,16 @@ export interface components {
             kind: string;
             name: string;
             uses: string[];
+            hosts: string[];
+        };
+        DedicatedKeyPassphraseUsage: {
+            key: string;
+            hosts: string[];
         };
         CredentialList: {
             credentials: components["schemas"]["Credential"][];
+            dedicatedKeyPassphrases: components["schemas"]["DedicatedKeyPassphraseUsage"][];
+            keyHostUsageComplete: boolean;
         };
         UpdateStatus: {
             current: string;
