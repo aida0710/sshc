@@ -135,19 +135,24 @@ Run:
 
 ```bash
 go test ./internal/api ./internal/secret -count=1
-make verify-generated
+make generate
 git diff --check
 ```
 
-Expected: all pass and generation is clean.
+Expected: tests pass, a second generation produces no additional model changes,
+and the diff is whitespace-clean.
 
 Commit:
 
 ```bash
 git add api/openapi.yaml internal/api/contract_test.go internal/api/models.gen.go \
-  web/src/api/schema.d.ts internal/secret/service.go internal/secret/service_test.go
+  web/src/api/schema.d.ts internal/secret/service.go internal/secret/service_test.go \
+  docs/superpowers/plans/2026-08-10-connection-basic-editing-implementation-plan.md
 git commit -m "feat: define connection update contract"
+make verify-generated
 ```
+
+Expected: the post-commit generated check passes with no model diff.
 
 ---
 

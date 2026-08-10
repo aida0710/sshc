@@ -43,6 +43,7 @@ const (
 	PasswordMutationDedicated PasswordMutationKind = "dedicated_password"
 	PasswordMutationSaved     PasswordMutationKind = "saved_password"
 	PasswordMutationNewShared PasswordMutationKind = "new_shared_password"
+	PasswordMutationRemove    PasswordMutationKind = "remove"
 )
 
 // PasswordMutation は接続 alias に一つのパスワード源を割り当てる要求である。
@@ -799,6 +800,17 @@ func (s *Service) WithPasswordMutation(
 			s.mu.Unlock()
 			return storage.Result{}, err
 		}
+	case PasswordMutationRemove:
+		if _, ok := clone.SecretFor(KindPassword, mutation.Alias); !ok {
+			s.mu.Unlock()
+			return storage.Result{}, ErrNoPassword
+		}
+		clone.RemoveDedicatedPassword(mutation.Alias)
+		clone.Unassign(KindPassword, mutation.Alias)
+		// A dedicated password is not present in the reusable map. This removes
+		// only a legacy alias-named reusable credential that no other subject
+		// uses; Delete refuses while another subject still points at it.
+		_ = clone.Delete(KindPassword, mutation.Alias)
 	default:
 		s.mu.Unlock()
 		return storage.Result{}, ErrUnknownPasswordMutation

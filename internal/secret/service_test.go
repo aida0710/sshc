@@ -890,6 +890,144 @@ func TestPasswordMutationsCommitEachSupportedSource(t *testing.T) {
 	}
 }
 
+func TestPasswordMutationRemoveDeletesDedicatedAndOnlyUnassignsReusable(t *testing.T) {
+	tests := []struct {
+		name    string
+		alias   string
+		prepare func(*testing.T, *secret.Service)
+		verify  func(*testing.T, *secret.Service)
+	}{
+		{
+			name:  "dedicated",
+			alias: "edge-dedicated",
+			prepare: func(t *testing.T, service *secret.Service) {
+				t.Helper()
+				if err := service.Set("edge-dedicated", "connection-only"); err != nil {
+					t.Fatal(err)
+				}
+			},
+			verify: func(t *testing.T, service *secret.Service) {
+				t.Helper()
+				if got := service.PasswordFor("edge-dedicated"); got != "" {
+					t.Errorf("dedicated password survived removal: %q", got)
+				}
+			},
+		},
+		{
+			name:  "reusable",
+			alias: "edge-shared",
+			prepare: func(t *testing.T, service *secret.Service) {
+				t.Helper()
+				if err := service.SetCredential(secret.KindPassword, "office", "shared-secret"); err != nil {
+					t.Fatal(err)
+				}
+				if err := service.AssignCredential(secret.KindPassword, "edge-shared", "office"); err != nil {
+					t.Fatal(err)
+				}
+			},
+			verify: func(t *testing.T, service *secret.Service) {
+				t.Helper()
+				if got := service.PasswordFor("edge-shared"); got != "" {
+					t.Errorf("shared assignment survived removal: %q", got)
+				}
+				listed, err := service.Credentials()
+				if err != nil {
+					t.Fatal(err)
+				}
+				uses, exists := listed[secret.KindPassword]["office"]
+				if !exists || len(uses) != 0 {
+					t.Errorf("shared credential after unassign = %#v, exists %t", uses, exists)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service, home := newService(t)
+			if err := service.Initialise(passphrase); err != nil {
+				t.Fatal(err)
+			}
+			test.prepare(t, service)
+			workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			manager := storage.NewManager(workspace, time.Now, rand.Reader)
+			_, err = service.WithPasswordMutation(secret.PasswordMutation{
+				Kind: secret.PasswordMutationRemove, Alias: test.alias,
+			}, func(change storage.Change) (storage.Result, error) {
+				return manager.Commit(storage.Request{
+					Operation: "test.password-remove", Changes: []storage.Change{change},
+				})
+			})
+			if err != nil {
+				t.Fatalf("WithPasswordMutation(remove) = %v", err)
+			}
+			test.verify(t, service)
+			reopened := mustReopen(t, home)
+			if err := reopened.Unlock(passphrase); err != nil {
+				t.Fatal(err)
+			}
+			test.verify(t, reopened)
+		})
+	}
+}
+
+func TestPasswordMutationRemoveRejectsAnUnassignedAlias(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	_, err := service.WithPasswordMutation(secret.PasswordMutation{
+		Kind: secret.PasswordMutationRemove, Alias: "absent",
+	}, func(change storage.Change) (storage.Result, error) {
+		called = true
+		return storage.Result{}, nil
+	})
+	if !errors.Is(err, secret.ErrNoPassword) {
+		t.Fatalf("WithPasswordMutation(remove absent) = %v, want ErrNoPassword", err)
+	}
+	if called {
+		t.Error("remove callback ran for an unassigned alias")
+	}
+}
+
+func TestFailedPasswordRemovalPublishesNeitherMemoryNorDisk(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Set("edge", "must-survive"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(vaultPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("commit refused")
+
+	_, err = service.WithPasswordMutation(secret.PasswordMutation{
+		Kind: secret.PasswordMutationRemove, Alias: "edge",
+	}, func(storage.Change) (storage.Result, error) {
+		return storage.Result{}, wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("WithPasswordMutation(remove) = %v, want commit error", err)
+	}
+	if got := service.PasswordFor("edge"); got != "must-survive" {
+		t.Errorf("failed removal changed memory: %q", got)
+	}
+	after, err := os.ReadFile(vaultPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Error("failed removal changed the sealed vault on disk")
+	}
+}
+
 func TestFailedPasswordMutationPublishesNeitherMemoryNorDisk(t *testing.T) {
 	service, home := newService(t)
 	if err := service.Initialise(passphrase); err != nil {
