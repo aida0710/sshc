@@ -15,7 +15,11 @@ import {
 import { ConnectionTree, type HostSelection } from "./ConnectionTree";
 import type { DragPayload } from "./dragdrop";
 import { HostDetailPanel } from "./HostDetail";
-import { CreateConnectionModal } from "./CreateConnectionModal";
+import {
+  CreateConnectionModal,
+  type CreateConnectionDraft,
+  type CreationPrerequisite,
+} from "./CreateConnectionModal";
 import { NoticeList } from "./SavePreview";
 import { OrphanPanel } from "./OrphanPanel";
 import { useTranslate } from "../i18n/context";
@@ -71,9 +75,18 @@ type ConnectionsPageProps = {
   // 右側ペインの中身を、シェルへ差し出す。connection が開いていない間は
   // null——何か開くまでは、調べるものが何も無いからだ。
   onInspector: (content: InspectorContent) => void;
+  creationDraft?: CreateConnectionDraft | null;
+  onCreationDraftChange?: (draft: CreateConnectionDraft | null) => void;
+  onNavigateForCreation?: (section: CreationPrerequisite) => void;
 };
 
-export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProps) {
+export function ConnectionsPage({
+  onOpenFile,
+  onInspector,
+  creationDraft = null,
+  onCreationDraftChange,
+  onNavigateForCreation,
+}: ConnectionsPageProps) {
   const t = useTranslate();
   const [overview, setOverview] = useState<Overview | null>(null);
   // どのグループにも属さない connection が向かう先。このページが決め
@@ -90,7 +103,7 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [localError, setLocalError] = useState("");
   const [moveTarget, setMoveTarget] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(creationDraft !== null);
   const [launching, setLaunching] = useState(false);
   const [managing, setManaging] = useState(false);
   const [savingTerminal, setSavingTerminal] = useState(false);
@@ -106,6 +119,17 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
   const [customArguments, setCustomArguments] = useState<string | null>(null);
   // custom を選んだが、まだ開く先を選んでいない状態。保存はされていない。
   const [pendingCustom, setPendingCustom] = useState(false);
+
+  function beginCreation() {
+    onCreationDraftChange?.(null);
+    setCreating(true);
+  }
+
+  function leaveForCreationPrerequisite(section: CreationPrerequisite, draft: CreateConnectionDraft) {
+    onCreationDraftChange?.(draft);
+    setCreating(false);
+    onNavigateForCreation?.(section);
+  }
 
   const reload = useCallback(async () => {
     try {
@@ -365,6 +389,7 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
 
   async function onConnectionCreated(result: CreateConnectionResponse) {
     setCreating(false);
+    onCreationDraftChange?.(null);
     setPreview(result.preview);
     setProblem(null);
     setLocalError("");
@@ -525,7 +550,7 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
           <Button
             kind="primary"
             className="shrink-0 px-2.5 py-1.5 text-xs"
-            onClick={() => setCreating(true)}
+            onClick={beginCreation}
           >
             {t("conn.new")}
           </Button>
@@ -564,7 +589,7 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
             </span>
             <h2 className="text-lg font-semibold text-ink">{t("conn.emptyHeading")}</h2>
             <p className="mt-1 text-sm leading-6 text-ink-muted">{t("conn.emptyHint")}</p>
-            <Button kind="primary" className="mt-4" onClick={() => setCreating(true)}>{t("conn.createAnother")}</Button>
+            <Button kind="primary" className="mt-4" onClick={beginCreation}>{t("conn.createAnother")}</Button>
           </section>
         ) : (
           <>
@@ -693,7 +718,12 @@ export function ConnectionsPage({ onOpenFile, onInspector }: ConnectionsPageProp
     {creating ? (
       <CreateConnectionModal
         groups={overview.groups}
-        onClose={() => setCreating(false)}
+        initialDraft={creationDraft ?? undefined}
+        onOpenPrerequisite={leaveForCreationPrerequisite}
+        onClose={() => {
+          setCreating(false);
+          onCreationDraftChange?.(null);
+        }}
         onCreated={(result) => void onConnectionCreated(result)}
       />
     ) : null}

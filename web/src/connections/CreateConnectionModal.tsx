@@ -21,6 +21,23 @@ import { Button, Notice } from "../ui/surface";
 
 type AuthenticationKind = CreateConnectionAuthentication["kind"];
 
+// This is the only connection-creation state allowed to leave the modal.
+// Passwords and the vault master password deliberately have no field here, so
+// a prerequisite detour cannot accidentally retain or render a secret.
+export type CreateConnectionDraft = {
+  alias: string;
+  group: string;
+  hostName: string;
+  user: string;
+  port: string;
+  authentication: AuthenticationKind;
+  savedCredential: string;
+  newCredential: string;
+  keyID: string;
+};
+
+export type CreationPrerequisite = "Groups" | "Keys";
+
 type CreateConnectionModalProps = {
   groups: Overview["groups"];
   config?: Pick<typeof configApi, "createConnection">;
@@ -29,6 +46,8 @@ type CreateConnectionModalProps = {
     IntegrationsApi,
     "passwordVault" | "credentials" | "initialiseVault" | "unlockVault"
   >;
+  initialDraft?: CreateConnectionDraft | undefined;
+  onOpenPrerequisite?: (section: CreationPrerequisite, draft: CreateConnectionDraft) => void;
   onClose: () => void;
   onCreated: (result: CreateConnectionResponse) => void;
 };
@@ -47,21 +66,25 @@ export function CreateConnectionModal({
   config = configApi,
   keys = keysApi,
   secrets = integrationsApi,
+  initialDraft,
+  onOpenPrerequisite,
   onClose,
   onCreated,
 }: CreateConnectionModalProps) {
   const t = useTranslate();
-  const [alias, setAlias] = useState("");
-  const [group, setGroup] = useState("");
-  const [hostName, setHostName] = useState("");
-  const [user, setUser] = useState("");
-  const [port, setPort] = useState("");
-  const [authentication, setAuthentication] = useState<AuthenticationKind>("dedicated_password");
+  const [alias, setAlias] = useState(initialDraft?.alias ?? "");
+  const [group, setGroup] = useState(initialDraft?.group ?? "");
+  const [hostName, setHostName] = useState(initialDraft?.hostName ?? "");
+  const [user, setUser] = useState(initialDraft?.user ?? "");
+  const [port, setPort] = useState(initialDraft?.port ?? "");
+  const [authentication, setAuthentication] = useState<AuthenticationKind>(
+    initialDraft?.authentication ?? "dedicated_password",
+  );
   const [dedicatedPassword, setDedicatedPassword] = useState("");
-  const [savedCredential, setSavedCredential] = useState("");
-  const [newCredential, setNewCredential] = useState("");
+  const [savedCredential, setSavedCredential] = useState(initialDraft?.savedCredential ?? "");
+  const [newCredential, setNewCredential] = useState(initialDraft?.newCredential ?? "");
   const [newSharedPassword, setNewSharedPassword] = useState("");
-  const [keyID, setKeyID] = useState("");
+  const [keyID, setKeyID] = useState(initialDraft?.keyID ?? "");
   const [privateKeys, setPrivateKeys] = useState<KeyItem[]>([]);
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [vault, setVault] = useState<PasswordVaultStatus | null>(null);
@@ -96,9 +119,14 @@ export function CreateConnectionModal({
         const identities = selectablePrivateKeys(inventory);
         setVault(status);
         setCredentials(passwordCredentials);
-        setSavedCredential(passwordCredentials[0]?.name ?? "");
+        setSavedCredential((current) =>
+          passwordCredentials.some((credential) => credential.name === current)
+            ? current
+            : passwordCredentials[0]?.name ?? "",
+        );
         setPrivateKeys(identities);
-        setKeyID(identities[0]?.id ?? "");
+        setKeyID((current) => identities.some((identity) => identity.id === current) ? current : identities[0]?.id ?? "");
+        if (initialDraft === undefined && identities.length > 0) setAuthentication("identity_file");
         setLoading(false);
       })
       .catch(() => {
@@ -109,7 +137,7 @@ export function CreateConnectionModal({
     return () => {
       active = false;
     };
-  }, [keys, secrets, t]);
+  }, [initialDraft, keys, secrets, t]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -153,6 +181,27 @@ export function CreateConnectionModal({
     clearSecrets();
     setError("");
     setAuthentication(kind);
+  }
+
+  function safeDraft(): CreateConnectionDraft {
+    return {
+      alias,
+      group,
+      hostName,
+      user,
+      port,
+      authentication,
+      savedCredential,
+      newCredential,
+      keyID,
+    };
+  }
+
+  function openPrerequisite(section: CreationPrerequisite) {
+    const draft = safeDraft();
+    clearSecrets();
+    setError("");
+    onOpenPrerequisite?.(section, draft);
   }
 
   async function openVault() {
@@ -230,6 +279,22 @@ export function CreateConnectionModal({
   const minimum = vault?.minPassphraseLength ?? 12;
   const canOpenVault = vault !== null && masterPassword.length >= minimum &&
     (vault.exists || masterConfirmation === masterPassword);
+  const disabledReason = (() => {
+    if (canSubmit || busy) return "";
+    if (loading) return t("conn.createLoadingOptions");
+    if (aliasError !== "") return touched.has("alias") ? "" : aliasError;
+    if (hostError !== "") return touched.has("hostName") ? "" : hostError;
+    if (userError !== "") return touched.has("user") ? "" : userError;
+    if (portError !== "") return touched.has("port") ? "" : portError;
+    if (!vaultReady) return t("conn.createNeedVault");
+    switch (authentication) {
+      case "dedicated_password": return t("conn.createNeedConnectionPassword");
+      case "saved_password": return t("conn.createNeedSavedPassword");
+      case "new_shared_password":
+        return newCredential === "" ? t("conn.createNeedSavedPasswordName") : t("conn.createNeedNewPassword");
+      case "identity_file": return t("conn.createNeedPrivateKey");
+    }
+  })();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4">
@@ -253,9 +318,11 @@ export function CreateConnectionModal({
               <h3 id="create-connection-section" className={sectionHeading}>{t("conn.createConnectionSection")}</h3>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <Field label={t("conn.createName")}>
+                  <Field label={t("conn.createNameRequired")}>
                     <input
                       id="create-connection-name"
+                      aria-label={t("conn.createName")}
+                      required
                       autoFocus
                       value={alias}
                       onChange={(event) => setAlias(event.target.value)}
@@ -266,16 +333,21 @@ export function CreateConnectionModal({
                   </Field>
                   {touched.has("alias") && aliasError !== "" ? <p className="mt-1 text-xs text-danger">{aliasError}</p> : null}
                 </div>
-                <Field label={t("conn.createGroup")}>
-                  <select id="create-connection-group" value={group} onChange={(event) => setGroup(event.target.value)} className={control}>
-                    <option value="">{t("conn.createNoGroup")}</option>
-                    {groups.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name}</option>)}
-                  </select>
-                </Field>
                 <div>
-                  <Field label={t("conn.createHostName")}>
+                  <Field label={t("conn.createGroup")}>
+                    <select id="create-connection-group" value={group} onChange={(event) => setGroup(event.target.value)} className={control}>
+                      <option value="">{t("conn.createNoGroup")}</option>
+                      {groups.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name}</option>)}
+                    </select>
+                  </Field>
+                  <Button className="mt-2" onClick={() => openPrerequisite("Groups")}>{t("conn.createManageGroups")}</Button>
+                </div>
+                <div>
+                  <Field label={t("conn.createHostNameRequired")}>
                     <input
                       id="create-connection-hostname"
+                      aria-label={t("conn.createHostName")}
+                      required
                       value={hostName}
                       onChange={(event) => setHostName(event.target.value)}
                       onBlur={() => setTouched((current) => new Set(current).add("hostName"))}
@@ -342,10 +414,10 @@ export function CreateConnectionModal({
               <fieldset className="flex flex-col gap-2" disabled={loading}>
                 <legend className={fieldLabel}>{t("conn.createAuthenticationMethod")}</legend>
                 {([
+                  ["identity_file", "conn.createIdentityFile"],
                   ["dedicated_password", "conn.createDedicatedPassword"],
                   ["saved_password", "conn.createSavedPassword"],
                   ["new_shared_password", "conn.createNewSharedPassword"],
-                  ["identity_file", "conn.createIdentityFile"],
                 ] as const).map(([kind, label]) => (
                   <label key={kind} className="flex items-center gap-2 text-sm text-ink">
                     <input
@@ -360,6 +432,13 @@ export function CreateConnectionModal({
                   </label>
                 ))}
               </fieldset>
+
+              {!loading && privateKeys.length === 0 ? (
+                <div>
+                  <p className={hintText}>{t("conn.createNoPrivateKeysHint")}</p>
+                  <Button className="mt-2" onClick={() => openPrerequisite("Keys")}>{t("conn.createCreatePrivateKey")}</Button>
+                </div>
+              ) : null}
 
               {authentication === "identity_file" ? (
                 <Field label={t("conn.createPrivateKey")}>
@@ -397,7 +476,8 @@ export function CreateConnectionModal({
             </section>
           </div>
 
-          <div className="flex shrink-0 justify-end gap-2 border-t border-line px-5 py-4">
+          <div className="flex shrink-0 items-center gap-2 border-t border-line px-5 py-4">
+            {disabledReason === "" ? <span className="grow" /> : <p className={`grow ${hintText}`}>{disabledReason}</p>}
             <Button disabled={busy || vaultBusy} onClick={close}>{t("conn.cancelCreate")}</Button>
             <Button type="submit" kind="primary" disabled={!canSubmit}>
               {busy ? t("conn.creating") : t("conn.create")}
