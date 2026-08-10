@@ -94,6 +94,60 @@ beforeEach(() => {
 });
 
 describe("ConnectionsPage", () => {
+  it("opens a connection and tab from the URL", async () => {
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        location={{ pathname: "/connections", search: "?path=config&host=bastion&tab=advanced" }}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "bastion"));
+    expect(await screen.findByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("writes connection selection and tab changes to browser history", async () => {
+    const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        location={{ pathname: "/connections", search: "" }}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    expect(onNavigateLocation).toHaveBeenCalledWith(
+      "/connections?path=config&host=bastion&tab=basic",
+    );
+
+    await user.click(await screen.findByRole("tab", { name: "Diagnostics" }));
+    expect(onNavigateLocation).toHaveBeenLastCalledWith(
+      "/connections?path=config&host=bastion&tab=diagnostics",
+    );
+  });
+
+  it("shows a recovery action when a deep-linked connection no longer exists", async () => {
+    const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
+    vi.mocked(configApi.host).mockRejectedValue(new Error("not found"));
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        location={{ pathname: "/connections", search: "?path=config&host=gone&tab=basic" }}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Back to connections" }));
+    expect(onNavigateLocation).toHaveBeenCalledWith("/connections", { replace: true });
+  });
+
   it("keeps selection-specific notices out of the empty detail pane", async () => {
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
@@ -414,6 +468,7 @@ describe("ConnectionsPage", () => {
 
   it("creates a complete connection, refreshes the tree, and opens its Basic detail without launching a terminal", async () => {
     const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
     const createdDetail = {
       ...detail,
       form: {
@@ -431,7 +486,13 @@ describe("ConnectionsPage", () => {
     } as never);
     vi.mocked(configApi.host).mockResolvedValue(createdDetail as never);
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
 
     await user.click(await screen.findByRole("button", { name: "New connection" }));
     await user.type(await screen.findByLabelText("Connection name"), "build01");
@@ -451,10 +512,40 @@ describe("ConnectionsPage", () => {
     expect(screen.queryByRole("dialog", { name: "Create connection" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "build01" })).toBeInTheDocument();
+    expect(onNavigateLocation).toHaveBeenLastCalledWith(
+      "/connections?path=config&host=build01&tab=basic",
+      { replace: true },
+    );
+  });
+
+  it("replaces the URL after renaming the selected connection", async () => {
+    const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t-rename", written: ["config"], preview: { operation: "config.rename", diffs: [] },
+    } as never);
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.clear(await screen.findByLabelText("Rename alias"));
+    await user.type(screen.getByLabelText("Rename alias"), "gateway");
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+
+    await waitFor(() => expect(onNavigateLocation).toHaveBeenLastCalledWith(
+      "/connections?path=config&host=gateway&tab=basic",
+      { replace: true },
+    ));
   });
 
   it("moves a host to another file with both loaded bases", async () => {
     const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
       files: [
@@ -472,7 +563,13 @@ describe("ConnectionsPage", () => {
       preview: { operation: "config.move", diffs: [] },
     } as never);
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "Advanced file actions" }));
@@ -488,15 +585,26 @@ describe("ConnectionsPage", () => {
       destinationPath: "conf.d/10-home.conf",
       destinationBase: "Host nas\n\tUser aida\n",
     }));
+    expect(onNavigateLocation).toHaveBeenLastCalledWith(
+      "/connections?path=conf.d%2F10-home.conf&host=bastion&tab=basic",
+      { replace: true },
+    );
   });
 
   it("deletes the selected host block without touching the rest of the file", async () => {
     const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "config.file_raw", diffs: [] },
     } as never);
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "Advanced file actions" }));
@@ -509,6 +617,7 @@ describe("ConnectionsPage", () => {
       base: "Host bastion\n\tPort 22\n",
       raw: "",
     }));
+    expect(onNavigateLocation).toHaveBeenLastCalledWith("/connections", { replace: true });
   });
 });
 

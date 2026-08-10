@@ -26,8 +26,7 @@ import {
 } from "../ui/form";
 import { Button, Card, Notice, Row } from "../ui/surface";
 import type { MessageKey } from "../i18n/messages";
-
-const tabs = ["Basic", "Jump", "Advanced", "Raw", "Effective", "Diagnostics"] as const;
+import { hostEditorTabs as tabs, type HostEditorTab } from "../routing/connectionRoute";
 
 // タブの識別子は英語のまま翻訳しない。下のフィールドカテゴリとレンダリング
 // スイッチのキーになっているため、翻訳すればどのタブが開いているかが
@@ -40,8 +39,6 @@ const tabLabels: Record<(typeof tabs)[number], MessageKey> = {
   Effective: "host.tabEffective",
   Diagnostics: "host.tabDiagnostics",
 };
-type Tab = (typeof tabs)[number];
-
 type HostDetailPanelProps = {
   detail: HostDetail;
   groups: GroupMetadata[];
@@ -61,6 +58,8 @@ type HostDetailPanelProps = {
   // するためだけであり、ない場合パネルは実物のクライアントへフォールバックする。
   integrations?: IntegrationsApi;
   keys?: Pick<KeysApi, "inventory">;
+  tab?: HostEditorTab;
+  onTabChange?: (tab: HostEditorTab) => void;
 };
 
 function fieldKey(field: FormField): string {
@@ -80,9 +79,12 @@ export function HostDetailPanel({
   onBasicSave,
   integrations = integrationsApi,
   keys,
+  tab: controlledTab,
+  onTabChange,
 }: HostDetailPanelProps) {
   const t = useTranslate();
-  const [tab, setTab] = useState<Tab>("Basic");
+  const [localTab, setLocalTab] = useState<HostEditorTab>("Basic");
+  const tab = controlledTab ?? localTab;
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [removed, setRemoved] = useState<number[]>([]);
   const [additions, setAdditions] = useState<FieldEdit[]>([]);
@@ -109,8 +111,8 @@ export function HostDetailPanel({
   const currentGroup = detail.form.entry.group ?? "";
   const initialComment = detail.form.comment || detail.metadata.note || "";
   useEffect(() => {
-    setTab("Basic");
-  }, [identityPath, identityAlias]);
+    if (controlledTab === undefined) setLocalTab("Basic");
+  }, [controlledTab, identityPath, identityAlias]);
 
   useEffect(() => {
     setDrafts({});
@@ -187,6 +189,11 @@ export function HostDetailPanel({
     setLocalError("");
   }
 
+  function selectTab(next: HostEditorTab) {
+    if (onTabChange !== undefined) onTabChange(next);
+    else setLocalTab(next);
+  }
+
   return (
     <section className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
@@ -204,7 +211,7 @@ export function HostDetailPanel({
             type="button"
             role="tab"
             aria-selected={tab === name}
-            onClick={() => setTab(name)}
+            onClick={() => selectTab(name)}
             className={`px-3 py-2 text-sm ${tab === name ? "border-b-2 border-ink text-ink" : "text-ink-muted"}`}
           >
             {t(tabLabels[name])}
@@ -335,7 +342,7 @@ export function HostDetailPanel({
           </p>
           <button
             type="button"
-            onClick={() => setTab("Diagnostics")}
+            onClick={() => selectTab("Diagnostics")}
             className="self-start rounded border border-control-line px-2 py-1 text-xs"
           >
             {t("host.openDiagnostics")}

@@ -121,6 +121,17 @@ function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> =
 }
 
 describe("HostDetailPanel", () => {
+  it("uses a route-controlled tab and reports tab changes to its owner", async () => {
+    const user = userEvent.setup();
+    const onTabChange = vi.fn();
+    renderPanel({ tab: "Advanced", onTabChange });
+
+    expect(screen.getByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: "Diagnostics" }));
+
+    expect(onTabChange).toHaveBeenCalledWith("Diagnostics");
+  });
+
   it("shows the stable Basic form and keeps raw directives editable in Advanced", async () => {
     const user = userEvent.setup();
     renderPanel();
