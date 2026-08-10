@@ -30,6 +30,8 @@ const plan: RemoteKeyPlan = {
     "Append the public key line shown above to ~/.ssh/authorized_keys as a single line.",
   ],
   executableDirectives: [],
+  actionToken: "a".repeat(43),
+  actionExpiresAt: "2026-08-05T09:02:00Z",
 };
 
 const proxyCommand = {
@@ -187,6 +189,7 @@ describe("RemoteKeyPanel", () => {
       keyPath: "~/.ssh/id_manual.pub",
       publicKey: manualKey,
       acknowledgeExecutable: false,
+      actionToken: plan.actionToken,
     }));
   });
 
@@ -229,6 +232,7 @@ describe("RemoteKeyPanel", () => {
         keyPath: "~/.ssh/id_ed25519.pub",
         publicKey,
         acknowledgeExecutable: false,
+        actionToken: plan.actionToken,
       }),
     );
     expect(await screen.findByText(/added/)).toBeInTheDocument();
@@ -290,6 +294,7 @@ describe("RemoteKeyPanel", () => {
         keyPath: "~/.ssh/id_ed25519.pub",
         publicKey,
         acknowledgeExecutable: true,
+        actionToken: plan.actionToken,
       }),
     );
   });

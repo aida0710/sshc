@@ -625,14 +625,9 @@ func (f *fixture) read(relative string) []byte {
 	return contents
 }
 
-// actionToken は、frontend と全く同じように、実行中のサーバーへ
-// 1 つの confirmation token を要求し、発行されなければテストを失敗させる。
-//
-// merge されたツリーは、{kind, target} を受けて 201 を返す
-// 単一の POST /api/v1/actions endpoint と、すべての guarded route に
-// 共通の 1 つの配送方式 — X-SSHC-Action ヘッダー — に落ち着いた。
-// plan が起草された時点では 2 通りの endpoint 綴りと body で運ぶ
-// token がまだ検討されていたが、どちらもツリーには生き残らなかった。
+// actionToken は、汎用の確認操作について frontend と全く同じように、
+// 実行中のサーバーへ token を要求する。表示内容が kind と target だけでは
+// 表せない公開鍵登録は、下の remoteKeyPlanToken を使う。
 func (f *fixture) actionToken(t testing.TB, kind, target string) string {
 	t.Helper()
 	token := f.tryActionToken(kind, target)
@@ -660,6 +655,29 @@ func (f *fixture) tryActionToken(kind, target string) string {
 		return ""
 	}
 	return payload.Token
+}
+
+// remoteKeyPlanToken は、公開鍵登録の確認画面と同じ request から、計画に
+// 同梱された token を取り出す。この操作だけは接続名だけでなく、表示された
+// 接続先・ユーザー・鍵・設置先・実行方式の全体へ確認が結び付く。
+func (f *fixture) remoteKeyPlanToken(t testing.TB, alias string) string {
+	t.Helper()
+	response := f.do(http.MethodPost, "/api/v1/remote-keys/plan", mustJSON(t, map[string]any{
+		"alias": alias, "keyPath": "id_ed25519.pub",
+		"publicKey": string(bytes.TrimSpace(f.read("id_ed25519.pub"))),
+	}))
+	status := response.StatusCode
+	body := readBody(t, response)
+	if status != http.StatusOK {
+		t.Fatalf("POST /api/v1/remote-keys/plan = %d: %s", status, body)
+	}
+	var payload struct {
+		ActionToken string `json:"actionToken"`
+	}
+	if err := json.Unmarshal([]byte(body), &payload); err != nil || payload.ActionToken == "" {
+		t.Fatalf("remote-key plan issued no token: %s", body)
+	}
+	return payload.ActionToken
 }
 
 // withAction は、すべての guarded route が期待する形で確認を届ける。

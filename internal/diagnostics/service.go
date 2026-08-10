@@ -41,6 +41,16 @@ type Inspection struct {
 	Failure              *effective.OpenSSHError
 }
 
+// ConnectionSnapshot は、1 回だけ読み取った設定グラフから導出された接続計画と、
+// OpenSSH に渡せる単一の不変設定。
+type ConnectionSnapshot struct {
+	Hostname string
+	Port     string
+	User     string
+	Report   effective.Report
+	Config   []byte
+}
+
 // Service は、設定エンジンとこのパッケージのチェックを組み合わせる。リクエストの
 // たびに設定を読み直す。ファイルこそが真実の源であり、二つのリクエストのあいだに
 // 変わりうるからである。
@@ -101,6 +111,39 @@ func (s *Service) Safety() (effective.Report, error) {
 		return effective.Report{}, err
 	}
 	return effective.Scan(graph), nil
+}
+
+// ConnectionSnapshot は宛先、ユーザー、安全性、実行用設定を同じ Graph から
+// 導出する。呼び出し中に設定が変わっても、互いに異なる世代を混ぜない。
+func (s *Service) ConnectionSnapshot(alias string) (ConnectionSnapshot, error) {
+	if err := platform.ValidateAlias(alias); err != nil {
+		return ConnectionSnapshot{}, err
+	}
+	graph, err := s.graph()
+	if err != nil {
+		return ConnectionSnapshot{}, err
+	}
+	flattened, err := config.Snapshot(graph)
+	if err != nil {
+		return ConnectionSnapshot{}, err
+	}
+	projection := effective.Project(graph, alias)
+	snapshot := ConnectionSnapshot{
+		Hostname: alias,
+		Port:     "22",
+		Report:   effective.Scan(graph),
+		Config:   flattened,
+	}
+	if source, ok := projection.Value("hostname"); ok {
+		snapshot.Hostname = source.Value
+	}
+	if source, ok := projection.Value("port"); ok {
+		snapshot.Port = source.Value
+	}
+	if source, ok := projection.Value("user"); ok {
+		snapshot.User = source.Value
+	}
+	return snapshot, nil
 }
 
 // ConfigCheck は、Include グラフとその診断を報告する。

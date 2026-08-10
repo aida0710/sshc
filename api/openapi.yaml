@@ -149,6 +149,11 @@ paths:
   /api/v1/remote-keys/register:
     post:
       operationId: registerRemoteKey
+      parameters:
+        - name: X-SSHC-Action
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
       requestBody:
         required: true
         content:
@@ -1580,7 +1585,7 @@ components:
     RemoteKeyPlan:
       type: object
       additionalProperties: false
-      required: [alias, user, hostname, port, valuesFrom, fingerprint, keyPath, keyLine, remotePath, routine, supported, manual, executableDirectives]
+      required: [alias, user, hostname, port, valuesFrom, fingerprint, keyPath, keyLine, remotePath, routine, supported, manual, executableDirectives, actionToken, actionExpiresAt]
       properties:
         alias: { type: string }
         user: { type: string }
@@ -1599,6 +1604,8 @@ components:
         executableDirectives:
           type: array
           items: { $ref: "#/components/schemas/ExecutableDirective" }
+        actionToken: { type: string }
+        actionExpiresAt: { type: string }
     RemoteKeyRegisterRequest:
       type: object
       additionalProperties: false

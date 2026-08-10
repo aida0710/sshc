@@ -73,22 +73,40 @@ func (h ActionHandlers) IssueAction(c *echo.Context) error {
 		return kind.fail(c, err)
 	}
 
+	issued, err := h.issueEvidence(c, body.Kind, body.Target, evidence)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, issued)
+}
+
+// issueEvidence は、別のレスポンスに確認トークンを同梱するサブシステム向けに、
+// サーバーが導出した計画全体へトークンを結び付ける。evidence を HTTP 入力から
+// 受け取る経路は公開しない。
+func (h ActionHandlers) issueEvidence(c *echo.Context, kind, target, evidence string) (api.IssueActionResponse, error) {
+	if h.Sessions == nil {
+		return api.IssueActionResponse{}, problem(c, http.StatusForbidden, "action_token_refused")
+	}
+	sessionID := h.sessionID(c)
+	if sessionID == "" {
+		return api.IssueActionResponse{}, problem(c, http.StatusUnauthorized, "session_required")
+	}
 	value, err := h.Sessions.IssueAction(sessionID, session.ActionRequest{
-		Kind: body.Kind, Target: body.Target, Evidence: evidence,
+		Kind: kind, Target: target, Evidence: evidence,
 	})
 	switch {
 	case err == nil:
 	case errors.Is(err, session.ErrTooManyActions):
-		return problem(c, http.StatusTooManyRequests, "too_many_confirmations")
+		return api.IssueActionResponse{}, problem(c, http.StatusTooManyRequests, "too_many_confirmations")
 	case errors.Is(err, session.ErrUnknownSession):
-		return problem(c, http.StatusUnauthorized, "session_required")
+		return api.IssueActionResponse{}, problem(c, http.StatusUnauthorized, "session_required")
 	default:
-		return problem(c, http.StatusForbidden, "action_token_refused")
+		return api.IssueActionResponse{}, problem(c, http.StatusForbidden, "action_token_refused")
 	}
-	return c.JSON(http.StatusCreated, api.IssueActionResponse{
+	return api.IssueActionResponse{
 		Token:     value,
 		ExpiresAt: time.Now().UTC().Add(session.ActionTokenTTL).Format(time.RFC3339),
-	})
+	}, nil
 }
 
 // consume は、この操作が必要とする一度限りのトークンを消費する。
@@ -117,8 +135,24 @@ func (h ActionHandlers) consume(c *echo.Context, kind, target string) (bool, err
 	if err != nil {
 		return false, registered.fail(c, err)
 	}
+	return h.consumeEvidence(c, kind, target, evidence)
+}
 
-	err = h.Sessions.ConsumeAction(sessionID, presented, session.ActionRequest{
+// consumeEvidence は issueEvidence と対になる。実行直前にサーバーが再構築した
+// 完全な計画だけを受け取り、確認時の計画と一致する場合に限り消費する。
+func (h ActionHandlers) consumeEvidence(c *echo.Context, kind, target, evidence string) (bool, error) {
+	if h.Sessions == nil {
+		return false, problem(c, http.StatusForbidden, "action_token_required")
+	}
+	sessionID := h.sessionID(c)
+	if sessionID == "" {
+		return false, problem(c, http.StatusUnauthorized, "session_required")
+	}
+	presented := c.Request().Header.Get(ActionHeader)
+	if presented == "" {
+		return false, problem(c, http.StatusForbidden, "action_token_required")
+	}
+	err := h.Sessions.ConsumeAction(sessionID, presented, session.ActionRequest{
 		Kind: kind, Target: target, Evidence: evidence,
 	})
 	switch {

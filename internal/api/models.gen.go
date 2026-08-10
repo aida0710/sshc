@@ -919,6 +919,8 @@ type RelocatedKeyFile struct {
 
 // RemoteKeyPlan defines model for RemoteKeyPlan.
 type RemoteKeyPlan struct {
+	ActionExpiresAt      string                `json:"actionExpiresAt"`
+	ActionToken          string                `json:"actionToken"`
 	Alias                string                `json:"alias"`
 	ExecutableDirectives []ExecutableDirective `json:"executableDirectives"`
 	Fingerprint          string                `json:"fingerprint"`
@@ -1210,6 +1212,11 @@ type RevealPrivateKeyParams struct {
 // ListKnownHostsParams defines parameters for ListKnownHosts.
 type ListKnownHostsParams struct {
 	Query *string `form:"query,omitempty" json:"query,omitempty"`
+}
+
+// RegisterRemoteKeyParams defines parameters for RegisterRemoteKey.
+type RegisterRemoteKeyParams struct {
+	XSSHCAction string `json:"X-SSHC-Action"`
 }
 
 // BootstrapSessionParams defines parameters for BootstrapSession.
