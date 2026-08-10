@@ -16,15 +16,34 @@ vi.mock("./connections/ConnectionsPage", () => ({
   ConnectionsPage: ({
     onOpenFile,
     onInspector,
+    creationDraft,
+    onCreationDraftChange,
+    onNavigateForCreation,
   }: {
     onOpenFile: (path: string, line: number) => void;
     onInspector: (content: { attention: boolean; body: ReactNode } | null) => void;
+    creationDraft?: { alias: string } | null;
+    onCreationDraftChange?: (draft: Record<string, string> | null) => void;
+    onNavigateForCreation?: (section: "Groups" | "Keys") => void;
   }) => (
     <div>
       connections panel
+      {creationDraft === null || creationDraft === undefined ? null : <span>{`draft ${creationDraft.alias}`}</span>}
       <button type="button" onClick={() => onOpenFile("config", 9)}>open pattern rule</button>
       <button type="button" onClick={() => onInspector({ attention: true, body: <p>inspector body</p> })}>
         offer inspector
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onCreationDraftChange?.({
+            alias: "lab-node", group: "", hostName: "host.example", user: "", port: "",
+            authentication: "dedicated_password", savedCredential: "", newCredential: "", keyID: "",
+          });
+          onNavigateForCreation?.("Keys");
+        }}
+      >
+        open key prerequisite
       </button>
     </div>
   ),
@@ -184,6 +203,27 @@ describe("App", () => {
     expect(screen.getByText("keys panel")).toBeInTheDocument();
     // ステータス領域を持つのはシェルだけであり、パネルが二つ目を追加してはならない。
     expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+
+  it("keeps a non-secret connection draft across a prerequisite detour", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Connections" }));
+    await user.click(screen.getByRole("button", { name: "open key prerequisite" }));
+
+    expect(screen.getByText("keys panel")).toBeInTheDocument();
+    expect(screen.getByText("Connection setup for lab-node is waiting.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Return to connection setup" }));
+
+    expect(screen.getByText("draft lab-node")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connections" })).toHaveAttribute("aria-current", "page");
   });
 
   it("switches to the known hosts and diagnostics panels", async () => {
