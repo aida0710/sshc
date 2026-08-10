@@ -34,7 +34,8 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
 
 describe("SecretsPanel", () => {
   it("lists both kinds apart, with what uses each and never a value", async () => {
-    render(<SecretsPanel api={buildApi()} />);
+    const api = buildApi();
+    render(<SecretsPanel api={api} />);
 
     const passwords = await screen.findByRole("region", { name: "Account passwords" });
     expect(within(passwords).getByText("office-vm")).toBeInTheDocument();
@@ -47,6 +48,10 @@ describe("SecretsPanel", () => {
     // 2 つのリストである理由のすべてだ。
     expect(within(passwords).queryByText("build-key")).not.toBeInTheDocument();
     expect(within(phrases).queryByText("office-vm")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Start at login" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Master password" })).not.toBeInTheDocument();
+    expect(api.loginItem).not.toHaveBeenCalled();
+    expect(api.changeMasterPassword).not.toHaveBeenCalled();
   });
 
   it("creates an account password under a name", async () => {
@@ -108,84 +113,4 @@ describe("SecretsPanel", () => {
     expect(api.credentials).not.toHaveBeenCalled();
   });
 
-  // それを変えると、古いパスワードが保持していたすべてが再封印される。
-  // だから画面は何が追随し何が追随しなかったかを伝える。届かなかったバケットは
-  // 古いパスワードでしか開けないスナップショットを持ち続け、それは些細ではない。
-  it("changes the master password and says whether the bucket followed", async () => {
-    const user = userEvent.setup();
-    const api = buildApi();
-    render(<SecretsPanel api={api} />);
-    await screen.findByRole("region", { name: "Master password" });
-
-    await user.type(screen.getByLabelText("Current master password"), "the old one is long");
-    await user.type(screen.getByLabelText("New master password"), "the new one is long");
-    // 片方のフィールドだけでは、誰も復元できないパスワードには足りない。
-    expect(screen.getByRole("button", { name: "Change the master password" })).toBeDisabled();
-
-    await user.type(screen.getByLabelText("Confirm new master password"), "the new one is long");
-    await user.click(screen.getByRole("button", { name: "Change the master password" }));
-
-    await waitFor(() =>
-      expect(api.changeMasterPassword).toHaveBeenCalledWith("the old one is long", "the new one is long"),
-    );
-    expect(await screen.findByRole("status")).toHaveTextContent(/live snapshot/i);
-  });
-
-  it("says the bucket still holds a snapshot the old password opens", async () => {
-    const user = userEvent.setup();
-    const api = buildApi({
-      changeMasterPassword: vi.fn().mockResolvedValue({
-        vault: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] },
-        snapshotResealed: false,
-        snapshotProblem: "sync_failed",
-      }),
-    });
-    render(<SecretsPanel api={api} />);
-    await screen.findByRole("region", { name: "Master password" });
-
-    await user.type(screen.getByLabelText("Current master password"), "the old one is long");
-    await user.type(screen.getByLabelText("New master password"), "the new one is long");
-    await user.type(screen.getByLabelText("Confirm new master password"), "the new one is long");
-    await user.click(screen.getByRole("button", { name: "Change the master password" }));
-
-    expect(await screen.findByRole("status")).toHaveTextContent(/still opens with the old password/i);
-  });
-
-  // 誰も復元できないパスワードは、押す前に読み返す価値のあるものだ。
-  it("shows what is being typed when asked", async () => {
-    const user = userEvent.setup();
-    render(<SecretsPanel api={buildApi()} />);
-    await screen.findByRole("region", { name: "Master password" });
-
-    expect(screen.getByLabelText("New master password")).toHaveAttribute("type", "password");
-    await user.click(screen.getByRole("button", { name: "Show New master password" }));
-    expect(screen.getByLabelText("New master password")).toHaveAttribute("type", "text");
-  });
-
-  // 求められない限りオフ。保存済みのあらゆるシークレットへの鍵を握る
-  // バックグラウンドプロセスは、誰かの代わりに勝手に設定してよいものではない。
-  it("offers to start at login, off, and turns it on when asked", async () => {
-    const user = userEvent.setup();
-    const api = buildApi();
-    render(<SecretsPanel api={api} />);
-
-    const section = await screen.findByRole("region", { name: "Start at login" });
-    const toggle = within(section).getByRole("checkbox", { name: "Start sshc when I log in" });
-    expect(toggle).not.toBeChecked();
-
-    await user.click(toggle);
-    await waitFor(() => expect(api.setLoginItem).toHaveBeenCalledWith(true));
-  });
-
-  // 自分のパスを解決できないビルドには登録するものが何もなく、
-  // 何もしないスイッチは、スイッチがないより悪い。
-  it("shows no switch where it is not supported", async () => {
-    const api = buildApi({
-      loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: false }),
-    });
-    render(<SecretsPanel api={api} />);
-    await screen.findByRole("region", { name: "Account passwords" });
-
-    expect(screen.queryByRole("region", { name: "Start at login" })).not.toBeInTheDocument();
-  });
 });

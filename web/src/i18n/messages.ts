@@ -61,6 +61,9 @@ export const en = {
   "section.knownHosts": "Known Hosts",
   "section.remoteKeys": "Install Key on Server",
   "section.diagnostics": "Ad hoc checks",
+  "section.settings": "Settings",
+  "settings.heading": "Settings",
+  "settings.pageDescription": "Control how sshc starts and how this machine's encrypted data is protected.",
   "secrets.heading": "The vault",
   "secrets.pageDescription": "Manage named account passwords and key passphrases without exposing their values after they are stored.",
   "secrets.metricPasswords": "Account passwords",
@@ -97,6 +100,7 @@ export const en = {
   "login.note":
     "Off by default. With it on, sshc runs in the background from the moment you log in, so `sshc <alias>` always finds it. It starts locked: the first time you want the interface, run `sshc open`, which mints a fresh way in rather than leaving one in a log file.",
   "login.enable": "Start sshc when I log in",
+  "login.loadFailed": "The start-at-login setting could not be read.",
   "login.failed": "That could not be changed.",
   "secrets.changeHeading": "Master password",
   "secrets.changeNote":
@@ -1059,6 +1063,9 @@ export const ja: Record<MessageKey, string> = {
   "section.knownHosts": "Known Hosts",
   "section.remoteKeys": "サーバーへ公開鍵を登録",
   "section.diagnostics": "任意ホストの検査",
+  "section.settings": "設定",
+  "settings.heading": "設定",
+  "settings.pageDescription": "sshc の起動方法と、このマシンの暗号化データを保護する方法を管理します。",
   "secrets.heading": "vault",
   "secrets.pageDescription": "保存後に値を再表示することなく、名前付きのアカウントパスワードと鍵パスフレーズを管理します。",
   "secrets.metricPasswords": "アカウントパスワード",
@@ -1095,6 +1102,7 @@ export const ja: Record<MessageKey, string> = {
   "login.note":
     "既定はオフです。オンにすると、ログイン時から sshc がバックグラウンドで動くので、`sshc <接続先>` が常に本体を見つけられます。起動直後は施錠された状態です。画面を見たくなったら `sshc open` を実行してください（その場で新しい入り口を発行します。ログファイルに残さないためです）。",
   "login.enable": "ログイン時に sshc を起動する",
+  "login.loadFailed": "ログイン時起動の設定を読み込めませんでした。",
   "login.failed": "変更できませんでした。",
   "secrets.changeHeading": "マスターパスワード",
   "secrets.changeNote":

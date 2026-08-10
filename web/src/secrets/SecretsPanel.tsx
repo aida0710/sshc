@@ -5,14 +5,12 @@ import {
   type Credential,
   type CredentialKind,
   type IntegrationsApi,
-  type LoginItem,
   type PasswordVaultStatus,
 } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { PasswordField } from "../ui/PasswordField";
 import {
-  CheckboxField,
   Field,
   control,
   dangerAction,
@@ -68,10 +66,6 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
   const [status, setStatus] = useState<PasswordVaultStatus | null>(null);
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [master, setMaster] = useState("");
-  const [currentMaster, setCurrentMaster] = useState("");
-  const [nextMaster, setNextMaster] = useState("");
-  const [confirmMaster, setConfirmMaster] = useState("");
-  const [changed, setChanged] = useState("");
   const [drafts, setDrafts] = useState<Record<string, { name: string; secret: string }>>({});
   const [error, setError] = useState("");
 
@@ -147,30 +141,6 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
     );
   }
 
-  async function changeMaster() {
-    setError("");
-    setChanged("");
-    try {
-      const result = await api.changeMasterPassword(currentMaster, nextMaster);
-      setCurrentMaster("");
-      setNextMaster("");
-      setConfirmMaster("");
-      // それを渡すことが vault を作るのか開くのかという点だ。
-      // 何が再封印され、何がそうならなかったか。バケット内の日付付きコピーは
-      // 設計上、古いパスワードの下にとどまり、届かなかったライブスナップショットは
-      // 偶然にその下にとどまる——その違いは、後でそこから復元する誰にとっても重要だ。
-      setChanged(
-        result.snapshotResealed
-          ? t("secrets.changedWithSnapshot")
-          : t("secrets.changedWithoutSnapshot", { reason: result.snapshotProblem ?? "" }),
-      );
-    } catch (caught) {
-      setError(
-        failureCode(caught) === "wrong_passphrase" ? t("secrets.wrongCurrent") : t("secrets.changeFailed"),
-      );
-    }
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("secrets.heading")} description={t("secrets.pageDescription")} />
@@ -189,7 +159,6 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
         />
       </MetricGrid>
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-      {changed === "" ? null : <p role="status" className="text-sm text-live">{changed}</p>}
       <div>
         <button
           type="button"
@@ -266,72 +235,6 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
         );
       })}
 
-      <LoginItemSection api={api} />
-
-      <section aria-label={t("secrets.changeHeading")} className={sectionCard}>
-        <h3 className={sectionHeading}>{t("secrets.changeHeading")}</h3>
-        <p className={hintText}>{t("secrets.changeNote")}</p>
-        <PasswordField label={t("secrets.currentMaster")} value={currentMaster} onChange={setCurrentMaster} />
-        <PasswordField label={t("secrets.newMaster")} value={nextMaster} onChange={setNextMaster} />
-        <PasswordField label={t("secrets.confirmMaster")} value={confirmMaster} onChange={setConfirmMaster} />
-        <button
-          type="button"
-          className={`self-start ${primaryAction}`}
-          disabled={currentMaster === "" || nextMaster.length < 12 || nextMaster !== confirmMaster}
-          onClick={() => void changeMaster()}
-        >
-          {t("secrets.change")}
-        </button>
-      </section>
     </div>
-  );
-}
-
-// ログイン時に起動、求められない限りオフ。
-//
-// これがここにあるのは、この画面が vault の在り処だからで、この設定が
-// 実際に手配するのはそれへの鍵を握るプロセスだ。誰も求めていない
-// バックグラウンドサービスは、誰かの代わりに勝手に設定してよいものではない。
-// だからスイッチは既定でオフになっており、これ以外の何もそれをオンにしない。
-function LoginItemSection({ api }: { api: IntegrationsApi }) {
-  const t = useTranslate();
-  const [item, setItem] = useState<LoginItem | null>(null);
-  const [failed, setFailed] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    void api
-      .loginItem()
-      .then((loaded) => {
-        if (active) setItem(loaded);
-      })
-      .catch(() => {
-        if (active) setItem({ enabled: false, supported: false });
-      });
-    return () => {
-      active = false;
-    };
-  }, [api]);
-
-  if (item === null || !item.supported) {
-    return null;
-  }
-  return (
-    <section aria-label={t("login.heading")} className={sectionCard}>
-      <h3 className={sectionHeading}>{t("login.heading")}</h3>
-      <p className={hintText}>{t("login.note")}</p>
-      {failed === "" ? null : <Notice tone="danger">{failed}</Notice>}
-      <CheckboxField
-        label={t("login.enable")}
-        checked={item.enabled}
-        onChange={(next) => {
-          setFailed("");
-          void api
-            .setLoginItem(next)
-            .then(setItem)
-            .catch(() => setFailed(t("login.failed")));
-        }}
-      />
-    </section>
   );
 }

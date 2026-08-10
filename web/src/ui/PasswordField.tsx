@@ -8,6 +8,7 @@ type PasswordFieldProps = {
   onChange: (value: string) => void;
   hint?: string;
   autoFocus?: boolean;
+  disabled?: boolean;
 };
 
 // 読み返せるパスワードフィールド。
@@ -22,7 +23,7 @@ type PasswordFieldProps = {
 // 包んで両者を関連付け、その中の他のすべての語がそのコントロールの
 // accessible name の一部になる: トグルをその中に置くと、フィールドは
 // 自身を「Master password Show」と読み上げ、名前で探す何ものもそれを見つけられなかった。
-export function PasswordField({ label, value, onChange, hint, autoFocus }: PasswordFieldProps): ReactNode {
+export function PasswordField({ label, value, onChange, hint, autoFocus, disabled = false }: PasswordFieldProps): ReactNode {
   const t = useTranslate();
   const [shown, setShown] = useState(false);
   return (
@@ -33,6 +34,7 @@ export function PasswordField({ label, value, onChange, hint, autoFocus }: Passw
             type={shown ? "text" : "password"}
             value={value}
             autoFocus={autoFocus ?? false}
+            disabled={disabled}
             onChange={(event) => onChange(event.target.value)}
             className={control}
           />
@@ -44,6 +46,7 @@ export function PasswordField({ label, value, onChange, hint, autoFocus }: Passw
       */}
       <button
         type="button"
+        disabled={disabled}
         onClick={() => setShown(!shown)}
         aria-pressed={shown}
         aria-label={t(shown ? "password.hideNamed" : "password.showNamed", { label })}
