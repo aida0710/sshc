@@ -104,7 +104,7 @@ test("edits a host through the form and writes only the line that changed", asyn
   await openBastion(page, installation.url);
 
   await page.getByLabel("Port", { exact: true }).fill("2244");
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections")).toBe(200);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
 
   const after = await installation.read("config");
   expect(after).toContain("Port 2244");
@@ -178,7 +178,7 @@ test("edits the same host through Raw and keeps every other byte", async ({
 test("shows a save preview diff of exactly what was written", async ({ page, installation }) => {
   await openBastion(page, installation.url);
   await page.getByLabel("Port", { exact: true }).fill("2299");
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections")).toBe(200);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
 
   const preview = page.getByRole("region", { name: "Save preview" });
   await expect(preview).toContainText("2299");
@@ -200,7 +200,7 @@ test("refuses a save whose base is stale and shows the three-way conflict", asyn
   await installation.write("config", external);
 
   await page.getByLabel("Port", { exact: true }).fill("2277");
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections")).toBe(409);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(409);
 
   await expect(page.getByText("Changed on disk since you loaded it")).toBeVisible();
   await expect(page.getByText("Your pending change")).toBeVisible();
@@ -473,7 +473,7 @@ test("opening the inspector narrows the detail rather than hiding it under the p
   expect(paneLeft).toBeGreaterThan(0);
 
   // 詳細が提供するすべてのコントロールは、ペインの端より左側にとどまる。
-  for (const name of ["Duplicate connection", "Move connection", "Delete connection", "Save changes"]) {
+  for (const name of ["Duplicate connection", "Move connection", "Delete connection", "Save Basic settings"]) {
     const box = await page.getByRole("button", { name, exact: true }).boundingBox();
     expect(box, `${name} has no box`).not.toBeNull();
     expect(box!.x + box!.width, `${name} runs under the inspector`).toBeLessThanOrEqual(paneLeft);

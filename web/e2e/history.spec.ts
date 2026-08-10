@@ -13,12 +13,12 @@ test("records a change in history and restores the previous bytes", async ({
     .getByRole("button", { name: "bastion" })
     .click();
   await page.getByLabel("Port", { exact: true }).fill("2233");
-  expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
   expect(await installation.read("config")).toContain("Port 2233");
 
   await openSection(page, "History");
   await expect(page.getByRole("heading", { name: "Completed changes" })).toBeVisible();
-  await expect(page.getByText("config.host_fields")).toBeVisible();
+  await expect(page.getByText("connection.update")).toBeVisible();
 
   expect(await clickAndAwait(page, "Restore config", "/api/v1/history/restore")).toBe(200);
 
