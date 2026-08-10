@@ -278,7 +278,7 @@ test("edits the display order it stores, and shows a favourite in the tree", asy
   // 存在しない設定なので、ファイルに書き出されるディレクティブの
   // 隣ではなくインスペクタに置かれる。ペインは求められる
   // まで閉じている。
-  await page.getByRole("button", { name: "Show details" }).click();
+  await page.getByRole("button", { name: "Show Display and classification" }).click();
 
   // ファイルをポーリングするのではなく書き込みを待つ。
   // メタデータのドキュメントは最初の保存が作るまで存在しない。
@@ -393,9 +393,9 @@ test("takes a comment with the connection it describes when the block moves", as
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
   await expect(page.getByLabel("Comment")).toHaveValue("the file server");
 
-  await page.getByRole("button", { name: "Advanced file actions" }).click();
-  await page.getByLabel("Move to file").selectOption("config");
-  expect(await clickAndAwait(page, "Move connection", "/api/v1/config/save")).toBe(200);
+  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByLabel("Storage file").selectOption("config");
+  expect(await clickAndAwait(page, "Change storage file", "/api/v1/config/save")).toBe(200);
 
   // コメントはブロックと一緒に届いた……
   expect(await installation.read("config")).toContain("# the file server\nHost nas\n");
@@ -417,7 +417,7 @@ test("takes a comment with the connection when the block is deleted", async ({
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
 
-  await page.getByRole("button", { name: "Advanced file actions" }).click();
+  await page.getByRole("button", { name: "More connection actions" }).click();
   await page.getByRole("button", { name: "Delete connection" }).click();
   expect(await clickAndAwait(page, "Confirm delete", "/api/v1/config/save")).toBe(200);
 
@@ -463,17 +463,22 @@ test("opening the inspector narrows the detail rather than hiding it under the p
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("button", { name: "Show details" }).click();
-  await page.getByRole("button", { name: "Advanced file actions" }).click();
+  await page.getByRole("button", { name: "Show Display and classification" }).click();
+  await page.getByRole("button", { name: "More connection actions" }).click();
 
-  const pane = page.getByRole("complementary", { name: "Details" });
+  const pane = page.getByRole("complementary", { name: "Display and classification" });
   await expect(pane).toBeVisible();
 
   const paneLeft = (await pane.boundingBox())?.x ?? 0;
   expect(paneLeft).toBeGreaterThan(0);
 
   // 詳細が提供するすべてのコントロールは、ペインの端より左側にとどまる。
-  for (const name of ["Duplicate connection", "Move connection", "Delete connection", "Save Basic settings"]) {
+  for (const name of [
+    "Duplicate connection",
+    "Change storage file",
+    "Delete connection",
+    "Save Basic settings",
+  ]) {
     const box = await page.getByRole("button", { name, exact: true }).boundingBox();
     expect(box, `${name} has no box`).not.toBeNull();
     expect(box!.x + box!.width, `${name} runs under the inspector`).toBeLessThanOrEqual(paneLeft);

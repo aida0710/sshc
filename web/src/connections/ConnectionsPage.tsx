@@ -454,32 +454,69 @@ export function ConnectionsPage({
   // かない——connection は移動であり、親が変わるグループは新しいパスへのリネームである。
   //
   // ドラッグされた connection は選択中のものとは限らないため、そのファ
-  // イルのバイトは開いている detail から取るのではなくここで読む。そし
-  // て submit には再選択しないよう伝える——ユーザーは何かをドロップし
-  // ただけで、それを開くよう求めたわけではないからだ。
+  // イルのバイトは開いている detail から取るのではなくここで読む。選択
+  // されていないものなら現在の detail は保ち、選択中のものなら保存後の
+  // identity だけを追う。後者をしないと、画面上は移動済みなのに URL は
+  // 存在しなくなった古いファイルを指し続ける。
   async function onTreeDrop(payload: DragPayload, target: string) {
     try {
       if (payload.kind === "group") {
         const base = payload.name.slice(payload.name.lastIndexOf("/") + 1);
-        const result = await configApi.renameGroup(payload.name, target === "" ? base : `${target}/${base}`);
+        const destinationName = target === "" ? base : `${target}/${base}`;
+        const selectedHost = overview?.hosts.find(
+          (host) =>
+            host.identity.path === selection?.path && host.identity.alias === selection.alias,
+        );
+        const selectedDestinationGroup =
+          selectedHost?.group === payload.name
+            ? destinationName
+            : selectedHost?.group?.startsWith(`${payload.name}/`)
+              ? `${destinationName}${selectedHost.group.slice(payload.name.length)}`
+              : null;
+        const result = await configApi.renameGroup(payload.name, destinationName);
         setPreview(result.preview);
         setProblem(null);
-        await reload();
+        const nextOverview = await reload();
+        if (selection !== null && selectedDestinationGroup !== null && nextOverview !== null) {
+          const moved = nextOverview.hosts.find(
+            (host) =>
+              host.identity.alias === selection.alias && host.group === selectedDestinationGroup,
+          );
+          if (moved !== undefined) {
+            setSelection(moved.identity);
+            setDetail(null);
+            navigateToConnection(moved.identity, activeTab, { replace: true });
+            setDetail(await configApi.host(moved.identity.path, moved.identity.alias));
+          }
+        }
         return;
       }
       const file = await configApi.file(payload.path);
+      const followsSelection =
+        selection?.path === payload.path && selection.alias === payload.alias;
       if (target !== "") {
-        await submit({
+        const nextOverview = await submit({
           kind: "move",
           path: payload.path,
           base: file.contents,
           alias: payload.alias,
           destinationGroup: target,
         }, false);
+        if (followsSelection && nextOverview !== null) {
+          const moved = nextOverview.hosts.find(
+            (host) => host.identity.alias === payload.alias && host.group === target,
+          );
+          if (moved !== undefined) {
+            setSelection(moved.identity);
+            setDetail(null);
+            navigateToConnection(moved.identity, activeTab, { replace: true });
+            setDetail(await configApi.host(moved.identity.path, moved.identity.alias));
+          }
+        }
         return;
       }
       const destination = await configApi.file(entryPath);
-      await submit({
+      const nextOverview = await submit({
         kind: "move",
         path: payload.path,
         base: file.contents,
@@ -487,6 +524,13 @@ export function ConnectionsPage({
         destinationPath: entryPath,
         destinationBase: destination.contents,
       }, false);
+      if (followsSelection && nextOverview !== null) {
+        const nextSelection = { path: entryPath, alias: payload.alias };
+        setSelection(nextSelection);
+        setDetail(null);
+        navigateToConnection(nextSelection, activeTab, { replace: true });
+        setDetail(await configApi.host(nextSelection.path, nextSelection.alias));
+      }
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));

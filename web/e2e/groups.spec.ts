@@ -144,7 +144,7 @@ test("shows a nested group inside its parent, and hides a container from the tre
   // グループを選択するとペインが埋まる。ペインは求められるまで閉じている。
   await openSection(page, "Groups");
   await page.getByRole("listitem").filter({ hasText: "work" }).first().click();
-  await page.getByRole("button", { name: /Show details/ }).click();
+  await page.getByRole("button", { name: "Show Group display settings" }).click();
   //
   // `check()` ではなくクリックしてから検証する。ペインの
   // 内容はパネルが組み立ててシェルへ渡すため、新しい状態は

@@ -713,6 +713,45 @@ describe("dropping in the tree", () => {
     );
   });
 
+  it("replaces the selected connection URL after dragging it into a group", async () => {
+    const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
+    const moved = {
+      ...grouped,
+      hosts: [{
+        ...grouped.hosts[0],
+        identity: { path: "connections/work/nas.conf", alias: "nas" },
+        file: {
+          path: "connections/work/nas.conf",
+          absolute: "/home/tester/.ssh/connections/work/nas.conf",
+        },
+        group: "work",
+      }],
+    };
+    vi.mocked(configApi.overview)
+      .mockResolvedValueOnce(grouped as never)
+      .mockResolvedValue(moved as never);
+
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
+    const row = await screen.findByRole("button", { name: /nas/ });
+    await user.click(row);
+
+    drag(row, screen.getByRole("heading", { name: "work" }), {
+      kind: "connection", path: "connections/home/nas.conf", alias: "nas", group: "home",
+    });
+
+    await waitFor(() => expect(onNavigateLocation).toHaveBeenLastCalledWith(
+      "/connections?path=connections%2Fwork%2Fnas.conf&host=nas&tab=basic",
+      { replace: true },
+    ));
+  });
+
   it("moves a connection out of every group by sending it to the entry file", async () => {
     render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
     const row = await screen.findByRole("button", { name: /nas/ });
@@ -738,6 +777,52 @@ describe("dropping in the tree", () => {
     drag(source, screen.getByRole("heading", { name: "home" }), { kind: "group", name: "work" });
 
     await waitFor(() => expect(configApi.renameGroup).toHaveBeenCalledWith("work", "home/work"));
+  });
+
+  it("replaces the selected connection URL when its group is dragged", async () => {
+    const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
+    const renamed = {
+      ...grouped,
+      hosts: [{
+        ...grouped.hosts[0],
+        identity: { path: "connections/work/home/nas.conf", alias: "nas" },
+        file: {
+          path: "connections/work/home/nas.conf",
+          absolute: "/home/tester/.ssh/connections/work/home/nas.conf",
+        },
+        group: "work/home",
+      }],
+      metadata: {
+        schemaVersion: 2,
+        groups: [{ name: "work" }, { name: "work/home" }, { name: "work/home/eu" }],
+      },
+    };
+    vi.mocked(configApi.overview)
+      .mockResolvedValueOnce(grouped as never)
+      .mockResolvedValue(renamed as never);
+    vi.mocked(configApi.renameGroup).mockResolvedValue({
+      transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
+    } as never);
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: /nas/ }));
+
+    drag(
+      screen.getByRole("heading", { name: "home" }),
+      screen.getByRole("heading", { name: "work" }),
+      { kind: "group", name: "home" },
+    );
+
+    await waitFor(() => expect(onNavigateLocation).toHaveBeenLastCalledWith(
+      "/connections?path=connections%2Fwork%2Fhome%2Fnas.conf&host=nas&tab=basic",
+      { replace: true },
+    ));
   });
 
   it("takes a nested group back to the top level", async () => {
