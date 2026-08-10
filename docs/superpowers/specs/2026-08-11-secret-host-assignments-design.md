@@ -48,7 +48,9 @@ named `Credential` objects gain a required `hosts` array:
 
 `CredentialList` gains a required `dedicatedKeyPassphrases` array. Each item
 contains only a workspace-relative `key` path and its `hosts` array. It contains
-no credential name and cannot be selected for another key.
+no credential name and cannot be selected for another key. The list also has a
+required `hostUsageComplete` boolean so an unavailable configuration projection
+cannot be confused with a confirmed empty host list.
 
 All arrays are non-null, sorted, and deduplicated. No password, passphrase,
 master password, ciphertext, prompt content, or value-derived metadata enters
@@ -72,10 +74,13 @@ The HTTP layer joins the vault relationship with the key-to-host index and
 returns the API model. The vault remains unaware of SSH configuration, and the
 frontend remains unaware of configuration parsing.
 
-If the Include graph cannot be resolved, the credentials request fails with a
-`credential_usage_unavailable` problem rather than returning an authoritative-
-looking empty host list. The page translates that code into an actionable
-reload/configuration notice while retaining the last successfully loaded list.
+If the Include graph cannot be resolved, the credentials request still returns
+the vault relationships with empty host arrays and `hostUsageComplete: false`.
+The page renders an actionable configuration notice and describes those arrays
+as unavailable, not empty. This distinction is necessary because the same list
+response follows credential mutations: a successful secret write must never be
+reported as failed merely because the subsequent read-only configuration
+projection failed.
 
 ## UI structure
 
@@ -109,8 +114,9 @@ copy. Secret values are never prefilled or rendered.
   key used by multiple hosts, multiple keys sharing a passphrase, stable
   deduplication, and an unresolved relative path that must not produce a guess.
 - HTTP tests cover password hosts, named passphrase keys and hosts, dedicated
-  passphrase entries, deterministic empty arrays, usage-lookup failure, and
-  absence of secret values.
+  passphrase entries, deterministic empty arrays, an incomplete usage lookup
+  that does not turn a successful mutation into an error, and absence of secret
+  values.
 - API-client tests reject missing or malformed host-assignment fields.
 - React tests verify labelled host lists, key lists, both empty states, and the
   dedicated removal operation.
