@@ -607,6 +607,8 @@ export const en = {
   "groups.unsaved": "Not saved",
   "groups.unsavedNote":
     "Colour, display order, a new group and a new setting are on this screen only until you press Save. Rename and Remove are different: they write files the moment you press them.",
+  "groups.unsavedBarLabel": "Unsaved group changes",
+  "groups.unsavedBarNote": "Group additions and display settings are not saved yet. Rename and remove still write immediately.",
   "groups.savedNote":
     "This page holds no unwritten changes. Colour, display order, new groups and new settings wait for Save; Rename and Remove write files immediately.",
   "groups.immediateActions": "Rename and remove write to disk immediately.",
@@ -1578,6 +1580,8 @@ export const ja: Record<MessageKey, string> = {
   "groups.unsaved": "未保存",
   "groups.unsavedNote":
     "色・表示順・追加したグループ・追加した設定は、保存を押すまでこの画面の中だけの変更です。名前の変更と削除だけは別で、押した瞬間にファイルへ書き込みます。",
+  "groups.unsavedBarLabel": "未保存のグループ変更",
+  "groups.unsavedBarNote": "グループ追加と表示設定はまだ保存されていません。名前変更と削除は引き続き即座に書き込みます。",
   "groups.savedNote":
     "未保存の変更はありません。色・表示順・グループの追加・設定の追加は保存が必要で、名前の変更と削除は押した時点で書き込みます。",
   "groups.immediateActions": "名前変更と削除は即座にディスクへ書き込みます。",

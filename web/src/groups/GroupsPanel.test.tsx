@@ -82,12 +82,33 @@ describe("GroupsPanel", () => {
     expect(screen.getByText("connections/company/ · keys/company/")).toBeInTheDocument();
   });
 
+  it("puts group creation before the group list and shows saving controls only for a draft", async () => {
+    const user = userEvent.setup();
+    render(<GroupsPanel />);
+
+    const addHeading = await screen.findByRole("heading", { name: "Add a group" });
+    const list = screen.getByRole("list", { name: "Groups, parent before child" });
+    expect(addHeading.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(screen.queryByRole("region", { name: "Unsaved group changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save groups" })).toBeNull();
+
+    await user.type(screen.getByLabelText("New group name"), "lab");
+    await user.click(screen.getByRole("button", { name: "Add group" }));
+
+    const bar = screen.getByRole("region", { name: "Unsaved group changes" });
+    expect(bar).toHaveClass("sticky");
+    expect(within(bar).getByText(/Rename and remove still write immediately/)).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Preview group changes" })).toBeEnabled();
+    expect(within(bar).getByRole("button", { name: "Save groups" })).toBeEnabled();
+  });
+
   it("adds a nested group by naming its path and saves it", async () => {
     const user = userEvent.setup();
     render(<GroupsPanel />);
 
-    expect(await screen.findByRole("button", { name: "Preview group changes" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Save groups" })).toBeDisabled();
+    expect(await screen.findByRole("heading", { name: "Add a group" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Preview group changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save groups" })).toBeNull();
 
     // スラッシュがネスト構文のすべてである。名前が階層を運ぶため、
     // それと食い違い得る親フィールドは存在しない。
@@ -224,7 +245,7 @@ describe("GroupsPanel", () => {
     expect(screen.getByRole("button", { name: "Rename lab" })).toBeDisabled();
     expect(screen.getByText(/no directory yet/)).toBeInTheDocument();
     // そしてページは、どちらの半分がそもそも Save を必要とするかを述べる。
-    expect(screen.getByText(/until you press Save/)).toBeInTheDocument();
+    expect(screen.getByText(/not saved yet/)).toBeInTheDocument();
   });
 
   // バグ。パネルは Include 順を決める規則——最も深いグループを先に——で
@@ -273,6 +294,7 @@ describe("GroupsPanel", () => {
     // 入力すればよい——以前ネストはページ下部のスラッシュについての一文
     // からしか発見できなかった。
     expect(screen.getByLabelText("New group name")).toHaveValue("company/");
+    expect(screen.getByLabelText("New group name")).toHaveFocus();
   });
 });
 
