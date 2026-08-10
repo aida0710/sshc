@@ -33,9 +33,31 @@ type stubKeyService struct {
 	registerErr   error
 	deregistered  []string
 	deregisterErr error
+	verifyPhrase  string
+	verifyErr     error
+	revalidateErr error
 }
 
 func (stub *stubKeyService) Inventory() (*keys.Inventory, error) { return stub.inventory, nil }
+
+func (stub *stubKeyService) VerifyPassphrase(keyID string, passphrase []byte) (keys.PassphraseVerification, error) {
+	defer keys.Wipe(passphrase)
+	if stub.verifyErr != nil {
+		return keys.PassphraseVerification{}, stub.verifyErr
+	}
+	if stub.verifyPhrase != "" && string(passphrase) != stub.verifyPhrase {
+		return keys.PassphraseVerification{}, keys.ErrWrongPassphrase
+	}
+	item, ok := stub.inventory.Find(keyID)
+	if !ok || item.Kind != keys.KindPrivateKey {
+		return keys.PassphraseVerification{}, keys.ErrUnknownKey
+	}
+	return keys.PassphraseVerification{KeyID: keyID, RelativePath: item.RelativePath, Digest: "fixture-digest"}, nil
+}
+
+func (stub *stubKeyService) RevalidatePassphrase(keys.PassphraseVerification) error {
+	return stub.revalidateErr
+}
 
 func (stub *stubKeyService) ConfirmationEvidence(keys.ConfirmationSubject, string) (string, error) {
 	if stub.evidenceErr != nil {

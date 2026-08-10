@@ -65,6 +65,7 @@ func (h ConnectionHandlers) Update(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	defer wipeBuffer(wire.Password)
+	defer wipeBuffer(wire.KeyPassphrase)
 	defer func() {
 		for _, value := range []*json.RawMessage{wire.HostName, wire.User, wire.Port, wire.IdentityFile} {
 			if value != nil {
@@ -137,6 +138,11 @@ func updateConnectionRequestFromAPI(wire api.UpdateConnectionRequest) (applicati
 		return application.UpdateConnectionRequest{}, false, err
 	}
 	request.Password = password
+	keyPassphrase, err := decodeUpdateConnectionKeyPassphrase(wire.KeyPassphrase)
+	if err != nil {
+		return application.UpdateConnectionRequest{}, false, err
+	}
+	request.KeyPassphrase = keyPassphrase
 	return request, needsInventory, nil
 }
 
@@ -279,6 +285,34 @@ func decodeUpdateConnectionPassword(value api.UpdateConnectionPassword) (applica
 	}
 }
 
+func decodeUpdateConnectionKeyPassphrase(value api.UpdateConnectionKeyPassphrase) (application.UpdateConnectionKeyPassphrase, error) {
+	kind, err := taggedValue(value, "kind")
+	if err != nil {
+		return application.UpdateConnectionKeyPassphrase{}, err
+	}
+	switch application.UpdateConnectionKeyPassphraseKind(kind) {
+	case application.UpdateKeyPassphraseUnchanged:
+		var unchanged api.ConnectionKeyPassphraseUnchanged
+		if err := decodeConnectionAuthentication(value, &unchanged); err != nil {
+			return application.UpdateConnectionKeyPassphrase{}, errInvalidEdit
+		}
+		return application.UpdateConnectionKeyPassphrase{Kind: application.UpdateKeyPassphraseUnchanged}, nil
+	case application.UpdateKeyPassphraseSetDedicated:
+		var dedicated api.ConnectionKeyPassphraseSetDedicated
+		if err := decodeConnectionAuthentication(value, &dedicated); err != nil ||
+			len(dedicated.KeyId) != 32 || dedicated.Passphrase == "" || len(dedicated.Passphrase) > 1024 {
+			return application.UpdateConnectionKeyPassphrase{}, errInvalidEdit
+		}
+		return application.UpdateConnectionKeyPassphrase{
+			Kind:       application.UpdateKeyPassphraseSetDedicated,
+			KeyID:      dedicated.KeyId,
+			Passphrase: dedicated.Passphrase,
+		}, nil
+	default:
+		return application.UpdateConnectionKeyPassphrase{}, errInvalidEdit
+	}
+}
+
 func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.CreateConnectionRequest, error) {
 	if len(wire.Alias) == 0 || len(wire.Alias) > 64 ||
 		len(wire.HostName) == 0 || len(wire.HostName) > platform.MaxHostnameLength ||
@@ -372,6 +406,7 @@ func connectionProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrUnknownCreateAuthentication),
 		errors.Is(err, application.ErrUnknownConnectionChange),
 		errors.Is(err, application.ErrUnknownUpdatePassword),
+		errors.Is(err, application.ErrUnknownUpdateKeyPhrase),
 		errors.Is(err, application.ErrUnquotableValue):
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	case errors.Is(err, platform.ErrUnsafeHostname):
@@ -387,6 +422,12 @@ func connectionProblem(c *echo.Context, err error) error {
 	case errors.Is(err, application.ErrPasswordIneligible):
 		return problem(c, http.StatusUnprocessableEntity, "password_ineligible")
 	case errors.Is(err, application.ErrInvalidIdentityFile):
+		return problem(c, http.StatusUnprocessableEntity, "identity_file_invalid")
+	case errors.Is(err, keys.ErrWrongPassphrase):
+		return problem(c, http.StatusForbidden, "wrong_passphrase")
+	case errors.Is(err, keys.ErrKeyChanged):
+		return problem(c, http.StatusConflict, "external_change")
+	case errors.Is(err, keys.ErrUnknownKey), errors.Is(err, keys.ErrKeyNotEncrypted):
 		return problem(c, http.StatusUnprocessableEntity, "identity_file_invalid")
 	case errors.Is(err, application.ErrConnectionDestinationExists):
 		return problem(c, http.StatusConflict, "connection_destination_exists")

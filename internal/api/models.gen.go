@@ -191,6 +191,18 @@ type ConnectionInherit struct {
 	Action string `json:"action"`
 }
 
+// ConnectionKeyPassphraseSetDedicated defines model for ConnectionKeyPassphraseSetDedicated.
+type ConnectionKeyPassphraseSetDedicated struct {
+	KeyId      string `json:"keyId"`
+	Kind       string `json:"kind"`
+	Passphrase string `json:"passphrase"`
+}
+
+// ConnectionKeyPassphraseUnchanged defines model for ConnectionKeyPassphraseUnchanged.
+type ConnectionKeyPassphraseUnchanged struct {
+	Kind string `json:"kind"`
+}
+
 // ConnectionPortChange defines model for ConnectionPortChange.
 type ConnectionPortChange = json.RawMessage
 
@@ -797,10 +809,11 @@ type PasswordEligibility struct {
 
 // PasswordVaultStatus defines model for PasswordVaultStatus.
 type PasswordVaultStatus struct {
-	Aliases             []string `json:"aliases"`
-	Exists              bool     `json:"exists"`
-	MinPassphraseLength *int     `json:"minPassphraseLength,omitempty"`
-	Unlocked            bool     `json:"unlocked"`
+	Aliases                 []string `json:"aliases"`
+	DedicatedKeyPassphrases []string `json:"dedicatedKeyPassphrases"`
+	Exists                  bool     `json:"exists"`
+	MinPassphraseLength     *int     `json:"minPassphraseLength,omitempty"`
+	Unlocked                bool     `json:"unlocked"`
 }
 
 // PendingTransaction defines model for PendingTransaction.
@@ -1150,18 +1163,22 @@ type UnresolvedReference struct {
 	Value      string `json:"value"`
 }
 
+// UpdateConnectionKeyPassphrase defines model for UpdateConnectionKeyPassphrase.
+type UpdateConnectionKeyPassphrase = json.RawMessage
+
 // UpdateConnectionPassword defines model for UpdateConnectionPassword.
 type UpdateConnectionPassword = json.RawMessage
 
 // UpdateConnectionRequest defines model for UpdateConnectionRequest.
 type UpdateConnectionRequest struct {
-	Base         string                        `json:"base"`
-	HostName     *ConnectionStringChange       `json:"hostName,omitempty"`
-	Identity     HostIdentity                  `json:"identity"`
-	IdentityFile *ConnectionIdentityFileChange `json:"identityFile,omitempty"`
-	Password     UpdateConnectionPassword      `json:"password"`
-	Port         *ConnectionPortChange         `json:"port,omitempty"`
-	User         *ConnectionStringChange       `json:"user,omitempty"`
+	Base          string                        `json:"base"`
+	HostName      *ConnectionStringChange       `json:"hostName,omitempty"`
+	Identity      HostIdentity                  `json:"identity"`
+	IdentityFile  *ConnectionIdentityFileChange `json:"identityFile,omitempty"`
+	KeyPassphrase UpdateConnectionKeyPassphrase `json:"keyPassphrase"`
+	Password      UpdateConnectionPassword      `json:"password"`
+	Port          *ConnectionPortChange         `json:"port,omitempty"`
+	User          *ConnectionStringChange       `json:"user,omitempty"`
 }
 
 // UpdatePasswordRemove defines model for UpdatePasswordRemove.

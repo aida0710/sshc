@@ -101,11 +101,16 @@ func (h PasswordHandlers) status(c *echo.Context) error {
 	if aliases == nil {
 		aliases = []string{}
 	}
+	dedicatedKeyPassphrases := h.Service.DedicatedKeyPassphrases()
+	if dedicatedKeyPassphrases == nil {
+		dedicatedKeyPassphrases = []string{}
+	}
 	return c.JSON(http.StatusOK, api.PasswordVaultStatus{
-		Exists:              exists,
-		Unlocked:            h.Service.Unlocked(),
-		Aliases:             aliases,
-		MinPassphraseLength: &minimum,
+		Exists:                  exists,
+		Unlocked:                h.Service.Unlocked(),
+		Aliases:                 aliases,
+		DedicatedKeyPassphrases: dedicatedKeyPassphrases,
+		MinPassphraseLength:     &minimum,
 	})
 }
 
@@ -172,8 +177,13 @@ func (h PasswordHandlers) Change(c *echo.Context) error {
 	if aliases == nil {
 		aliases = []string{}
 	}
+	dedicatedKeyPassphrases := h.Service.DedicatedKeyPassphrases()
+	if dedicatedKeyPassphrases == nil {
+		dedicatedKeyPassphrases = []string{}
+	}
 	answer.Vault = api.PasswordVaultStatus{
-		Exists: exists, Unlocked: h.Service.Unlocked(), Aliases: aliases, MinPassphraseLength: &minimum,
+		Exists: exists, Unlocked: h.Service.Unlocked(), Aliases: aliases,
+		DedicatedKeyPassphrases: dedicatedKeyPassphrases, MinPassphraseLength: &minimum,
 	}
 	return c.JSON(http.StatusOK, answer)
 }
