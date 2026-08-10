@@ -13,6 +13,7 @@ import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
 import { LockScreen } from "./secrets/LockScreen";
 import { UpdateBadge } from "./shell/UpdateBadge";
 import { SecretsPanel } from "./secrets/SecretsPanel";
+import { SettingsPanel } from "./settings/SettingsPanel";
 import { SyncPanel } from "./sync/SyncPanel";
 import { KnownHostsPanel } from "./knownhosts/KnownHostsPanel";
 import { RemoteKeyPanel } from "./remotekeys/RemoteKeyPanel";
@@ -56,6 +57,7 @@ const sectionLabels: Record<Section, MessageKey> = {
   "Remote Keys": "section.remoteKeys",
   Diagnostics: "section.diagnostics",
   Secrets: "section.secrets",
+  Settings: "section.settings",
   Sync: "section.sync",
   History: "section.history",
 };
@@ -75,6 +77,7 @@ const sectionIcons: Record<Section, IconName> = {
   "Remote Keys": "remoteKeys",
   Diagnostics: "diagnostics",
   Secrets: "secrets",
+  Settings: "settings",
   Sync: "sync",
   History: "history",
 };
@@ -89,7 +92,7 @@ const navGroups: { label: MessageKey; sections: Section[] }[] = [
   { label: "shell.navStart", sections: ["Home"] },
   { label: "shell.navConnections", sections: ["Connections", "Config", "Groups"] },
   { label: "shell.navKeysHosts", sections: ["Keys", "Known Hosts", "Remote Keys"] },
-  { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Sync", "History"] },
+  { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Settings", "Sync", "History"] },
 ];
 
 const themeLabels: Record<Theme, MessageKey> = {
@@ -534,6 +537,9 @@ function PaddedSection({
   }
   if (section === "Secrets") {
     return <SecretsPanel onLock={onLock} />;
+  }
+  if (section === "Settings") {
+    return <SettingsPanel />;
   }
   if (section === "Sync") {
     return <SyncPanel />;

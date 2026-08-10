@@ -8,6 +8,7 @@ export const sections = [
   "Remote Keys",
   "Diagnostics",
   "Secrets",
+  "Settings",
   "Sync",
   "History",
 ] as const;
@@ -24,6 +25,7 @@ const paths: Record<Section, string> = {
   "Remote Keys": "/install-key",
   Diagnostics: "/diagnostics",
   Secrets: "/secrets",
+  Settings: "/settings",
   Sync: "/sync",
   History: "/history",
 };

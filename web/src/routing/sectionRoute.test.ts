@@ -11,6 +11,7 @@ const routes = [
   ["Remote Keys", "/install-key"],
   ["Diagnostics", "/diagnostics"],
   ["Secrets", "/secrets"],
+  ["Settings", "/settings"],
   ["Sync", "/sync"],
   ["History", "/history"],
 ] as const;
