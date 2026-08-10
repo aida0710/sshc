@@ -115,7 +115,7 @@ func (s *Service) CreateConnection(
 			}
 			storageRequest := s.requestFor(prepared)
 			storageRequest.Changes = append(storageRequest.Changes, vaultChange)
-			result, commitErr := s.commitPlannedRequest(prepared, storageRequest)
+			result, commitErr := s.commitAtomicPlannedRequest(prepared, storageRequest)
 			if commitErr != nil {
 				return storage.Result{}, commitErr
 			}
@@ -126,6 +126,23 @@ func (s *Service) CreateConnection(
 			}
 			return result, nil
 		})
+		if errors.Is(err, secret.ErrNoPasswordMutation) {
+			s.saveMutex.Lock()
+			defer s.saveMutex.Unlock()
+			prepared, identity, planErr := s.planCreateConnection(inventory, request)
+			if planErr != nil {
+				return CreateConnectionResult{}, planErr
+			}
+			result, commitErr := s.commitCreatedConnection(prepared)
+			if commitErr != nil {
+				return CreateConnectionResult{}, commitErr
+			}
+			return CreateConnectionResult{
+				TransactionID: result.ID,
+				Identity:      identity,
+				Preview:       prepared.preview,
+			}, nil
+		}
 		if err != nil {
 			return CreateConnectionResult{}, err
 		}
@@ -342,11 +359,23 @@ func (s *Service) commitCreatedConnection(prepared planned) (storage.Result, err
 }
 
 func (s *Service) commitPlannedRequest(prepared planned, request storage.Request) (storage.Result, error) {
+	return s.commitPlannedRequestWith(prepared, request, s.manager.Commit)
+}
+
+func (s *Service) commitAtomicPlannedRequest(prepared planned, request storage.Request) (storage.Result, error) {
+	return s.commitPlannedRequestWith(prepared, request, s.manager.CommitAtomic)
+}
+
+func (s *Service) commitPlannedRequestWith(
+	prepared planned,
+	request storage.Request,
+	commit func(storage.Request) (storage.Result, error),
+) (storage.Result, error) {
 	s.pendingBase = prepared.base
 	s.pendingBaseline = prepared.baseline
 	defer func() { s.pendingBase, s.pendingBaseline = nil, nil }()
 
-	result, err := s.manager.Commit(request)
+	result, err := commit(request)
 	var conflict *storage.ConflictError
 	if errors.As(err, &conflict) {
 		cleaned := filepath.Clean(conflict.Path)

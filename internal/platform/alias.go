@@ -2,7 +2,9 @@ package platform
 
 import (
 	"errors"
+	"net"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -29,10 +31,9 @@ var (
 // 提示する。
 var safeAliasPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
-// safeHostnamePattern は、DNS 名・IPv4 リテラル・角括弧なしの IPv6 リテラルを許す。
-// 角括弧を除いてあるのは、既定以外のポートに対する known_hosts エントリを整形する
-// ときに、このアプリケーションが自分で付けるからである。
-var safeHostnamePattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9._:-]*[A-Za-z0-9])?$`)
+// safeHostnamePattern は DNS 名と IPv4 リテラルに使う。IPv6 は圧縮表記の先頭や
+// 末尾が ':' になりうるため、文字集合の正規表現ではなく net.ParseIP へ渡す。
+var safeHostnamePattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$`)
 
 // ValidateAlias は、alias を外部プログラムへ渡してよいかを報告する。
 func ValidateAlias(alias string) error {
@@ -44,7 +45,18 @@ func ValidateAlias(alias string) error {
 
 // ValidateHostname は、host を外部プログラムへ渡してよいかを報告する。
 func ValidateHostname(host string) error {
-	if len(host) == 0 || len(host) > MaxHostnameLength || !safeHostnamePattern.MatchString(host) {
+	if len(host) == 0 || len(host) > MaxHostnameLength {
+		return ErrUnsafeHostname
+	}
+	if strings.Contains(host, ":") {
+		// Brackets and zone identifiers are intentionally rejected. Callers add
+		// brackets themselves where OpenSSH's host:port notation requires them.
+		if net.ParseIP(host) == nil {
+			return ErrUnsafeHostname
+		}
+		return nil
+	}
+	if !safeHostnamePattern.MatchString(host) {
 		return ErrUnsafeHostname
 	}
 	return nil
