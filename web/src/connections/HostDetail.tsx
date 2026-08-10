@@ -96,6 +96,8 @@ export function HostDetailPanel({
   const identityPath = detail.form.entry.identity.path;
   const identityAlias = detail.form.entry.identity.alias;
   const formRaw = detail.form.raw;
+  const currentGroup = detail.form.entry.group ?? "";
+  const initialComment = detail.form.comment || detail.metadata.note || "";
   useEffect(() => {
     setTab("Basic");
   }, [identityPath, identityAlias]);
@@ -108,15 +110,23 @@ export function HostDetailPanel({
     setNewValue("");
     setBlockRaw(formRaw);
     setRenameTo(identityAlias);
-    setComment(detail.form.comment || detail.metadata.note || "");
+    setMoveTo(currentGroup);
+    setComment(initialComment);
     setLocalError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identityPath, identityAlias, formRaw]);
+  }, [identityPath, identityAlias, formRaw, currentGroup, initialComment]);
 
   const visibleFields = useMemo(
     () => detail.form.fields.filter((field) => field.category === categoryForTab[tab]),
     [detail.form.fields, tab],
   );
+  const fieldDirty = removed.length > 0 || additions.length > 0 || Object.entries(drafts).some(([key, value]) => {
+    const field = detail.form.fields.find((candidate) => fieldKey(candidate) === key);
+    return field !== undefined && value !== formatValues(field.values);
+  });
+  const rawDirty = blockRaw !== formRaw;
+  const renameDirty = renameTo !== "" && renameTo !== identityAlias;
+  const commentDirty = comment !== initialComment;
 
   function draftFor(field: FormField): string {
     return drafts[fieldKey(field)] ?? formatValues(field.values);
@@ -131,7 +141,7 @@ export function HostDetailPanel({
           continue;
         }
         const draft = drafts[fieldKey(field)];
-        if (draft === undefined) continue;
+        if (draft === undefined || draft === formatValues(field.values)) continue;
         edits.push({ action: "set", line: field.line, values: parseValues(draft) });
       }
       edits.push(...additions);
@@ -269,7 +279,7 @@ export function HostDetailPanel({
             </div>
           ) : null}
 
-          <button type="button" onClick={submitFieldEdits} className={`self-start ${primaryAction}`}>
+          <button type="button" onClick={submitFieldEdits} disabled={!fieldDirty} className={`self-start ${primaryAction}`}>
             {t("host.saveChanges")}
           </button>
         </div>
@@ -288,7 +298,7 @@ export function HostDetailPanel({
             spellCheck={false}
             className="rounded border border-control-line bg-canvas p-3 font-mono text-xs"
           />
-          <button type="button" onClick={() => onBlockRaw(blockRaw)} className={`self-start ${primaryAction}`}>
+          <button type="button" disabled={!rawDirty} onClick={() => onBlockRaw(blockRaw)} className={`self-start ${primaryAction}`}>
             {t("host.saveBlock")}
           </button>
         </div>
@@ -396,7 +406,7 @@ export function HostDetailPanel({
           </Row>
           <Row
             label={t("host.renameAlias")}
-            action={<Button onClick={() => onRename(renameTo)}>{t("host.rename")}</Button>}
+            action={<Button disabled={!renameDirty} onClick={() => onRename(renameTo)}>{t("host.rename")}</Button>}
           >
             <input
               id="host-rename"
@@ -421,7 +431,7 @@ export function HostDetailPanel({
               ? t("host.commentFromNote")
               : t("host.commentNote")}
           </p>
-          <Button className="self-start" onClick={() => onComment(comment)}>
+          <Button className="self-start" disabled={!commentDirty} onClick={() => onComment(comment)}>
             {t("host.saveComment")}
           </Button>
         </div>

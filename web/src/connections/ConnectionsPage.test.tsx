@@ -428,7 +428,8 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
+    await user.click(screen.getByRole("button", { name: "Advanced file actions" }));
+    expect(screen.getByRole("button", { name: "Move connection" })).toBeDisabled();
     await user.selectOptions(await screen.findByLabelText("Move to file"), "conf.d/10-home.conf");
     await user.click(screen.getByRole("button", { name: "Move connection" }));
 
@@ -451,7 +452,7 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
+    await user.click(screen.getByRole("button", { name: "Advanced file actions" }));
     await user.click(await screen.findByRole("button", { name: "Delete connection" }));
     await user.click(screen.getByRole("button", { name: "Confirm delete" }));
 

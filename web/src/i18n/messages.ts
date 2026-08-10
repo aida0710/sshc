@@ -599,6 +599,7 @@ export const en = {
     "Colour, display order, a new group and a new setting are on this screen only until you press Save. Rename and Remove are different: they write files the moment you press them.",
   "groups.savedNote":
     "This page holds no unwritten changes. Colour, display order, new groups and new settings wait for Save; Rename and Remove write files immediately.",
+  "groups.immediateActions": "Rename and remove write to disk immediately.",
   "groups.newGroupNote":
     "This group has no directory yet. Save creates it. Rename and Remove act on files, so they wait until then.",
   "groups.addHeading": "Add a group",
@@ -716,7 +717,7 @@ export const en = {
   "conn.opening": "Opening…",
   "conn.launchFailed": "Could not open {alias} in Terminal.",
   "conn.duplicate": "Duplicate connection",
-  "conn.manage": "Manage connection",
+  "conn.manage": "Advanced file actions",
   "conn.moveToFile": "Move to file",
   "conn.moveToFilePlaceholder": "Move to file…",
   "conn.move": "Move connection",
@@ -1503,6 +1504,7 @@ export const ja: Record<MessageKey, string> = {
     "色・表示順・追加したグループ・追加した設定は、保存を押すまでこの画面の中だけの変更です。名前の変更と削除だけは別で、押した瞬間にファイルへ書き込みます。",
   "groups.savedNote":
     "未保存の変更はありません。色・表示順・グループの追加・設定の追加は保存が必要で、名前の変更と削除は押した時点で書き込みます。",
+  "groups.immediateActions": "名前変更と削除は即座にディスクへ書き込みます。",
   "groups.newGroupNote":
     "このグループのディレクトリはまだありません。保存すると作られます。名前の変更と削除はファイルへの操作なので、それまで使えません。",
   "groups.addHeading": "グループを追加する",
@@ -1620,7 +1622,7 @@ export const ja: Record<MessageKey, string> = {
   "conn.opening": "開いています…",
   "conn.launchFailed": "{alias} をTerminalで開けませんでした。",
   "conn.duplicate": "接続を複製",
-  "conn.manage": "接続を管理",
+  "conn.manage": "高度なファイル操作",
   "conn.moveToFile": "移動先のファイル",
   "conn.moveToFilePlaceholder": "移動先のファイル…",
   "conn.move": "接続を移動",
