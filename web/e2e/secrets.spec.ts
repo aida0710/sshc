@@ -46,7 +46,11 @@ test("gives one named secret to two hosts and writes neither name into the file"
   }
 
   await openSection(page, "Secrets");
-  await expect(page.getByRole("region", { name: "Account passwords" })).toContainText("bastion, nas");
+  const office = page
+    .getByRole("region", { name: "Account passwords" })
+    .getByRole("article", { name: "office-vm" });
+  const assignedHosts = office.getByRole("list", { name: "Assigned hosts" });
+  await expect(assignedHosts.getByRole("listitem")).toHaveText(["bastion", "nas"]);
 
   // そして封印されたファイルはそのどれも含まない。secret も、
   // 名前も、それを指すホストも含まない。
