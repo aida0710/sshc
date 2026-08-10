@@ -137,6 +137,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       return;
     }
     onInspector({
+      label: t("inspector.groupLabel"),
       // ディレクトリのない宣言、あるいは何も宣言しないディレクトリはドットに
       // 値する。空のグループはそうではない——それは作られた直後の
       // すべてのグループが置かれる状態である。

@@ -389,8 +389,9 @@ export function ConnectionTree({
             draggable={grouping === "groups"}
             onDragStart={(event) => startDrag(event, { kind: "group", name: node.name })}
             onDragEnd={() => setDragging(null)}
-            className="rounded px-1 text-xs font-semibold uppercase tracking-wide text-ink-faint"
+            className="cursor-grab rounded px-1 text-xs font-semibold uppercase tracking-wide text-ink-faint active:cursor-grabbing"
           >
+            <span aria-hidden="true" className="me-1 font-normal tracking-tighter">⋮⋮</span>
             {node.label}
           </h2>
         </div>
@@ -456,6 +457,9 @@ export function ConnectionTree({
           {t("tree.favouritesOnly")}
         </button>
       </div>
+      {grouping === "groups" && groupTree.length > 0 ? (
+        <p className="text-xs text-ink-faint">{t("tree.dragGroupHint")}</p>
+      ) : null}
       <label className="text-xs text-ink-muted" htmlFor="connection-filter">
         {t("tree.filter")}
       </label>

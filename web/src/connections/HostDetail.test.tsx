@@ -146,6 +146,19 @@ describe("HostDetailPanel", () => {
     expect(screen.getByLabelText("UnknownFutureDirective")).toHaveValue("yes");
   });
 
+  it("keeps display organisation actions in Basic instead of repeating them under every tab", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(screen.getByRole("heading", { name: "Organisation" })).toBeInTheDocument();
+    expect(screen.getByText(/Each organisation action saves independently/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
+
+    expect(screen.queryByRole("heading", { name: "Organisation" })).toBeNull();
+    expect(screen.queryByLabelText("Rename alias")).toBeNull();
+  });
+
   it("returns to Basic when the selected connection changes", async () => {
     const user = userEvent.setup();
     const panel = renderPanel();
@@ -213,10 +226,10 @@ describe("HostDetailPanel", () => {
     renderPanel();
 
     expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Rename" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Save comment" })).toBeDisabled();
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
 
     await user.click(screen.getByRole("tab", { name: "Raw" }));
     expect(screen.getByRole("button", { name: "Save block" })).toBeDisabled();

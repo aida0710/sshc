@@ -390,8 +390,9 @@ export function HostDetailPanel({
         ボーダーのある箱がボーダーのある箱を抱えると、一つしかないのに
         二つのグループのように見えてしまう。
       */}
-      <section className="flex flex-col gap-3">
+      {tab === "Basic" ? <section className="flex flex-col gap-3">
         <h3 className={sectionHeading}>{t("host.organisation")}</h3>
+        <p className={hintText}>{t("host.organisationSaveNote")}</p>
 
         {/*
           グループと alias はそれぞれ一行であるため行にする。comment は
@@ -459,7 +460,7 @@ export function HostDetailPanel({
           </Button>
         </div>
 
-      </section>
+      </section> : null}
 
       <SavePreviewPanel
         preview={preview}

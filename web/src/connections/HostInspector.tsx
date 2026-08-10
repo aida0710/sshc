@@ -44,6 +44,7 @@ export function HostInspector({
       */}
       <section className="flex flex-col gap-3">
         <h3 className={fieldLabel}>{t("inspector.appOnly")}</h3>
+        <p className={hintText}>{t("inspector.hostSavesImmediately")}</p>
 
         <Card padded>
         <CheckboxField
