@@ -33,11 +33,12 @@ export function InspectorToggle({
       aria-expanded={open}
       aria-controls={inspectorId}
       onClick={onToggle}
-      className={`relative rounded-md border border-control-line px-2 py-1 text-ink ${
+      className={`relative flex items-center gap-1.5 rounded-md border border-control-line px-2 py-1 text-ink ${
         open ? "bg-select-fill" : "bg-card"
       }`}
     >
       <Icon name="inspector" className="h-4 w-4" />
+      <span className="hidden text-xs sm:inline">{t("shell.inspector")}</span>
       {/* ドットは目のためのもので、上の文はそれ以外のすべての人のためのものだ。 */}
       {attention ? (
         <span

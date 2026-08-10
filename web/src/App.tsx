@@ -122,6 +122,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // Keys 画面は移動先としてそれらを提示するだけで、ディレクトリからグルー
   // プを推測しない。ディレクトリがグループになるのはエントリファイルが宣言する場合だけだ。
   const [groups, setGroups] = useState<string[]>([]);
+  const [knownAliases, setKnownAliases] = useState<string[]>([]);
   // Only non-secret connection fields may outlive the creation modal. This
   // draft lets a person create a group or key and return without starting the
   // form again; passwords remain local to the modal and are cleared on exit.
@@ -204,7 +205,9 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     void configApi
       .overview()
       .then((overview) => {
-        if (active) setGroups((overview.metadata.groups ?? []).map((group) => group.name));
+        if (!active) return;
+        setGroups((overview.metadata.groups ?? []).map((group) => group.name));
+        setKnownAliases([...new Set(overview.hosts.map((host) => host.identity.alias).filter((alias) => alias !== ""))]);
       })
       // グループを列挙できないシェルでも動作は成立する——移動先リストが
       // 空になるだけで、他のあらゆる画面には影響しない。
@@ -389,6 +392,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                 section={section}
                 fileTarget={fileTarget}
                 groups={groups}
+                knownAliases={knownAliases}
                 connectionDraft={connectionDraft}
                 onConnectionDraftChange={setConnectionDraft}
                 onNavigateForCreation={(target: CreationPrerequisite) => setSection(target)}
@@ -413,6 +417,7 @@ type SectionViewProps = {
   // て提示する必要があるが、推測してはならない——ディレクトリがグルー
   // プなのは ~/.ssh/config の一行が宣言するからで、読むのは configuration API だけだ。
   groups: string[];
+  knownAliases: string[];
   connectionDraft: CreateConnectionDraft | null;
   section: Section;
   fileTarget: FileTarget | null;
@@ -443,7 +448,7 @@ function SectionView(props: SectionViewProps) {
   return <div className="h-full overflow-y-auto p-6">{<PaddedSection {...props} />}</div>;
 }
 
-function PaddedSection({ section, fileTarget, groups, onLock, onInspector, onNavigate }: SectionViewProps) {
+function PaddedSection({ section, fileTarget, groups, knownAliases, onLock, onInspector, onNavigate }: SectionViewProps) {
   if (section === "Home") {
     return <OverviewPanel onNavigate={onNavigate} />;
   }
@@ -472,7 +477,7 @@ function PaddedSection({ section, fileTarget, groups, onLock, onInspector, onNav
     return <RemoteKeyPanel />;
   }
   if (section === "Diagnostics") {
-    return <DiagnosticsPanel />;
+    return <DiagnosticsPanel hosts={knownAliases} />;
   }
   return (
     <section aria-labelledby="section-heading" className="flex flex-col gap-4">
