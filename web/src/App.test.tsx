@@ -22,6 +22,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
     location,
     onNavigateLocation,
     preferredKey,
+    onPreferredKeyApplied,
   }: {
     onOpenFile: (path: string, line: number) => void;
     onInspector: (content: { label: string; attention: boolean; body: ReactNode } | null) => void;
@@ -31,11 +32,13 @@ vi.mock("./connections/ConnectionsPage", () => ({
     location?: { pathname: string; search: string };
     onNavigateLocation?: (url: string) => void;
     preferredKey?: { privateKeyId: string; privateRelativePath: string } | null;
+    onPreferredKeyApplied?: () => void;
   }) => (
     <div>
       connections panel
       <span>{`connection location ${location?.pathname ?? "missing"}${location?.search ?? ""}`}</span>
       <span>{`preferred connection key ${preferredKey?.privateRelativePath ?? "none"}`}</span>
+      <button type="button" onClick={onPreferredKeyApplied}>consume connection key</button>
       {creationDraft === null || creationDraft === undefined ? null : <span>{`draft ${creationDraft.alias}`}</span>}
       <button type="button" onClick={() => onOpenFile("config", 9)}>open pattern rule</button>
       <button type="button" onClick={() => onInspector({ label: "Display and classification", attention: true, body: <p>inspector body</p> })}>
@@ -91,8 +94,17 @@ vi.mock("./keys/KeysScreen", () => ({
 vi.mock("./diagnostics/DiagnosticsPanel", () => ({ DiagnosticsPanel: () => <div>diagnostics panel</div> }));
 vi.mock("./knownhosts/KnownHostsPanel", () => ({ KnownHostsPanel: () => <div>known hosts panel</div> }));
 vi.mock("./remotekeys/RemoteKeyPanel", () => ({
-  RemoteKeyPanel: ({ preferredPublicKeyPath }: { preferredPublicKeyPath?: string | null }) => (
-    <div>{`remote keys panel ${preferredPublicKeyPath ?? "no key"}`}</div>
+  RemoteKeyPanel: ({
+    preferredPublicKeyPath,
+    onPreferredPublicKeyHandled,
+  }: {
+    preferredPublicKeyPath?: string | null;
+    onPreferredPublicKeyHandled?: () => void;
+  }) => (
+    <div>
+      {`remote keys panel ${preferredPublicKeyPath ?? "no key"}`}
+      <button type="button" onClick={onPreferredPublicKeyHandled}>consume public key</button>
+    </div>
   ),
 }));
 vi.mock("./secrets/LockScreen", () => ({
@@ -277,11 +289,17 @@ describe("App", () => {
     expect(await screen.findByText("preferred connection key id_new")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/connections");
     expect(window.location.search).toBe("");
+    await user.click(screen.getByRole("button", { name: "consume connection key" }));
+    expect(screen.getByText("preferred connection key none")).toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "Keys" }));
     await user.click(await screen.findByRole("button", { name: "hand key to server" }));
     expect(await screen.findByText("remote keys panel id_new.pub")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/install-key");
+    await user.click(screen.getByRole("button", { name: "consume public key" }));
+    await user.click(screen.getByRole("link", { name: "Keys" }));
+    await user.click(screen.getByRole("link", { name: "Install Key on Server" }));
+    expect(await screen.findByText("remote keys panel no key")).toBeInTheDocument();
   });
 
   it("passes the complete connection location through and clears it from the section link", async () => {

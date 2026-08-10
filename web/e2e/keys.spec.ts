@@ -1,5 +1,58 @@
 import { clickAndAwait, expect, openSection, test, openApplication } from "./support/environment";
 
+test("hands a generated private key to one connection exactly once", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, installation);
+  await openSection(page, "Keys");
+  await page.getByLabel("File name").fill("id_handoff_connection");
+  await page.getByLabel(/Create without a passphrase/).check();
+  expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+
+  await page.getByRole("button", { name: "Assign to a connection" }).click();
+  await page
+    .getByRole("navigation", { name: "Connections" })
+    .getByRole("button", { name: "bastion" })
+    .click();
+  const key = page.getByLabel("SSH private key");
+  await expect(key.getByRole("option", { name: /id_handoff_connection/ })).toHaveJSProperty(
+    "selected",
+    true,
+  );
+  await expect(page.getByText(/staged for this connection/)).toBeVisible();
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await installation.read("config")).toContain("IdentityFile ~/.ssh/id_handoff_connection");
+
+  await page
+    .getByRole("navigation", { name: "Connections" })
+    .getByRole("button", { name: "nas" })
+    .click();
+  await expect(page.getByLabel("SSH private key")).toHaveValue("");
+  await expect(page.getByText(/staged for this connection/)).toHaveCount(0);
+});
+
+test("preloads a generated public key only on the requested server workflow", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, installation);
+  await openSection(page, "Keys");
+  await page.getByLabel("File name").fill("id_handoff_server");
+  await page.getByLabel(/Create without a passphrase/).check();
+  expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+
+  await page.getByRole("button", { name: "Install on a server" }).click();
+  await expect(page).toHaveURL(/\/install-key$/);
+  await expect(page.getByLabel("Public key file")).toHaveValue("id_handoff_server.pub");
+  await expect(page.getByLabel("Public key line")).toHaveValue(/ssh-ed25519 /);
+
+  await openSection(page, "Keys");
+  await openSection(page, "Install Key on Server");
+  await expect(page.getByLabel("Public key file")).toHaveValue("");
+  await expect(page.getByLabel("Public key line")).toHaveValue("");
+});
+
 test("lists generated keys and reveals one only after an explicit confirmation", async ({
   page,
   installation,

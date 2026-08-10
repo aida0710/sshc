@@ -125,11 +125,13 @@ describe("RemoteKeyPanel", () => {
   it("preloads a handed-off public key from fresh inventory without planning or registering", async () => {
     const api = buildApi();
     const keys = buildKeys();
+    const onPreferredPublicKeyHandled = vi.fn();
     render(
       <RemoteKeyPanel
         api={api}
         keys={keys}
         preferredPublicKeyPath="id_ed25519.pub"
+        onPreferredPublicKeyHandled={onPreferredPublicKeyHandled}
       />,
     );
 
@@ -137,8 +139,55 @@ describe("RemoteKeyPanel", () => {
     expect(screen.getByLabelText("Public key line")).toHaveValue(publicKey);
     expect(keys.inventory).toHaveBeenCalled();
     expect(keys.publicKey).toHaveBeenCalledWith("key-pub");
+    expect(onPreferredPublicKeyHandled).toHaveBeenCalledOnce();
     expect(api.plan).not.toHaveBeenCalled();
     expect(api.register).not.toHaveBeenCalled();
+  });
+
+  it("does not let a delayed handed-off key replace inputs that were already planned", async () => {
+    const manualKey = publicKey.replace("deploy@laptop", "manual@laptop");
+    let resolvePublicKey!: (value: Awaited<ReturnType<KeysApi["publicKey"]>>) => void;
+    const pendingPublicKey = new Promise<Awaited<ReturnType<KeysApi["publicKey"]>>>((resolve) => {
+      resolvePublicKey = resolve;
+    });
+    const keys = buildKeys({ publicKey: vi.fn().mockReturnValue(pendingPublicKey) });
+    const api = buildApi();
+    const onPreferredPublicKeyHandled = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <RemoteKeyPanel
+        api={api}
+        keys={keys}
+        preferredPublicKeyPath="id_ed25519.pub"
+        onPreferredPublicKeyHandled={onPreferredPublicKeyHandled}
+      />,
+    );
+    await waitFor(() => expect(keys.publicKey).toHaveBeenCalledWith("key-pub"));
+
+    await user.type(screen.getByLabelText("Host alias"), "bastion");
+    await user.type(screen.getByLabelText("Public key file"), "~/.ssh/id_manual.pub");
+    await user.type(screen.getByLabelText("Public key line"), manualKey);
+    await user.click(screen.getByRole("button", { name: "Show what this would do" }));
+    await screen.findByRole("region", { name: "Confirm remote registration" });
+
+    resolvePublicKey({
+      id: "key-pub",
+      relativePath: "id_ed25519.pub",
+      publicKey: `${publicKey}\n`,
+      fingerprint,
+      comment: "aida@laptop",
+    });
+    await waitFor(() => expect(screen.getByLabelText("Public key file")).toHaveValue("~/.ssh/id_manual.pub"));
+    expect(screen.getByLabelText("Public key line")).toHaveValue(manualKey);
+    expect(onPreferredPublicKeyHandled).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole("button", { name: "Register the key" }));
+    await waitFor(() => expect(api.register).toHaveBeenCalledWith({
+      alias: "bastion",
+      keyPath: "~/.ssh/id_manual.pub",
+      publicKey: manualKey,
+      acknowledgeExecutable: false,
+    }));
   });
 
   it("names the task rather than the implementation area", () => {
