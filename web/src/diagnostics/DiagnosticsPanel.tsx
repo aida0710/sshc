@@ -25,6 +25,9 @@ import { PageHeader } from "../ui/page";
 
 type DiagnosticsPanelProps = {
   api?: IntegrationsApi;
+  // Standalone checks suggest known aliases, but the input remains free-form
+  // so a one-off hostname or address does not first have to become a saved connection.
+  hosts?: string[];
   // 診断対象のホスト。独立した section はこれを undefined のままにして
   // alias を尋ねるが、ホストエディタは既にどの接続が開いているか
   // 知っているため、それを渡し alias フィールドはレンダリングされない。固定
@@ -36,7 +39,7 @@ type DiagnosticsPanelProps = {
 // この画面のすべての検査はユーザーが意図して開始する。パネルを開く
 // ことは設定を読むだけで何も実行しない。他の各操作は
 // 確認を消費し、プロセスを起動し得る。
-export function DiagnosticsPanel({ api = integrationsApi, host }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: DiagnosticsPanelProps) {
   const t = useTranslate();
   const embedded = host !== undefined;
   const [typedAlias, setTypedAlias] = useState("");
@@ -74,7 +77,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host }: DiagnosticsPan
     setAuth(null);
     setTerminal(null);
     setError("");
-  }, [host]);
+  }, [alias]);
 
   async function run<T>(operation: () => Promise<T>, apply: (value: T) => void, failure: string) {
     setError("");
@@ -142,10 +145,14 @@ export function DiagnosticsPanel({ api = integrationsApi, host }: DiagnosticsPan
               <input
                 value={typedAlias}
                 onChange={(event) => setTypedAlias(event.target.value)}
+                list="diagnostic-host-options"
                 placeholder="bastion"
                 className={control}
               />
             </Field>
+            <datalist id="diagnostic-host-options">
+              {hosts.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}
+            </datalist>
           </div>
         )}
         {checks.map((check) => (
