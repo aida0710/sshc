@@ -8,20 +8,58 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/diagnostics"
+	"sshc/internal/effective"
 	"sshc/internal/platform"
 	"sshc/internal/remotekey"
 	"sshc/internal/session"
 )
 
+type preparedRemoteKeyPlan struct {
+	key    remotekey.PublicKey
+	plan   remotekey.Plan
+	report effective.Report
+	config []byte
+}
+
 // RemoteKeyHandlers はリモートホストに公開鍵を登録する。
 //
 // Diagnostics は、確認画面が表示する接続先と、接続時に実行される
-// 実行可能ディレクティブを供給する。登録自体は設定を二度読む
-// ことはない。
+// 実行可能ディレクティブを供給する。登録直前にも同じ計画を再構築し、
+// 表示後に設定が変わっていれば接続前に拒否する。
 type RemoteKeyHandlers struct {
 	Service     *remotekey.Service
 	Diagnostics *diagnostics.Service
 	Actions     ActionHandlers
+}
+
+// prepare は確認時と実行時に同じ計画を組み立てる。ここで得た全項目の
+// ダイジェストが一致しなければ、リモート接続は開始されない。
+func (h RemoteKeyHandlers) prepare(alias, keyPath, publicKey string) (preparedRemoteKeyPlan, error) {
+	if err := platform.ValidateAlias(alias); err != nil {
+		return preparedRemoteKeyPlan{}, err
+	}
+	key, fingerprint, err := remotekey.ParsePublicKey(publicKey)
+	if err != nil {
+		return preparedRemoteKeyPlan{}, err
+	}
+	key.Path = keyPath
+	snapshot, err := h.Diagnostics.ConnectionSnapshot(alias)
+	if err != nil {
+		return preparedRemoteKeyPlan{}, err
+	}
+	return preparedRemoteKeyPlan{
+		key:    key,
+		plan:   h.Service.Plan(alias, key, fingerprint, snapshot.User, snapshot.Hostname, snapshot.Port, "engine"),
+		report: snapshot.Report,
+		config: snapshot.Config,
+	}, nil
+}
+
+func remoteKeyPlanProblem(c *echo.Context, err error) error {
+	if errors.Is(err, remotekey.ErrInvalidPublicKey) || errors.Is(err, platform.ErrUnsafeAlias) {
+		return remoteKeyProblem(c, err)
+	}
+	return problem(c, http.StatusInternalServerError, "config_unreadable")
 }
 
 func registerRemoteKeyRoutes(engine *echo.Echo, handlers RemoteKeyHandlers) {
@@ -49,31 +87,18 @@ func (h RemoteKeyHandlers) Plan(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := platform.ValidateAlias(request.Alias); err != nil {
-		return problem(c, http.StatusBadRequest, "unsafe_alias")
-	}
-	key, fingerprint, err := remotekey.ParsePublicKey(request.PublicKey)
-	if err != nil {
-		return remoteKeyProblem(c, err)
-	}
-	key.Path = request.KeyPath
-
 	// 接続先はこの application 自身が設定を読んだ結果によるもので、
 	// プロセスを必要としない。plan の裏で ssh -G が実行されることはない。
-	hostname, port, err := h.Diagnostics.Destination(request.Alias)
+	prepared, err := h.prepare(request.Alias, request.KeyPath, request.PublicKey)
 	if err != nil {
-		return problem(c, http.StatusBadRequest, "unsafe_destination")
+		return remoteKeyPlanProblem(c, err)
 	}
-	user := ""
-	if projected, ok := h.Diagnostics.ProjectedValue(request.Alias, "user"); ok {
-		user = projected
-	}
-	report, err := h.Diagnostics.Safety()
+	plan := prepared.plan
+	issued, err := h.Actions.issueEvidence(c, session.ActionRemoteKeyRegister, plan.Alias,
+		plan.Evidence(prepared.report.Evidence(), prepared.config))
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "config_unreadable")
+		return err
 	}
-
-	plan := h.Service.Plan(request.Alias, key, fingerprint, user, hostname, port, "engine")
 	return c.JSON(http.StatusOK, api.RemoteKeyPlan{
 		Alias:                plan.Alias,
 		User:                 plan.User,
@@ -87,7 +112,9 @@ func (h RemoteKeyHandlers) Plan(c *echo.Context) error {
 		Routine:              plan.Routine,
 		Supported:            plan.Supported,
 		Manual:               plan.Manual,
-		ExecutableDirectives: describeDirectives(report.Directives),
+		ExecutableDirectives: describeDirectives(prepared.report.Directives),
+		ActionToken:          issued.Token,
+		ActionExpiresAt:      issued.ExpiresAt,
 	})
 }
 
@@ -97,24 +124,18 @@ func (h RemoteKeyHandlers) Register(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := platform.ValidateAlias(request.Alias); err != nil {
-		return problem(c, http.StatusBadRequest, "unsafe_alias")
-	}
-	key, _, err := remotekey.ParsePublicKey(request.PublicKey)
+	prepared, err := h.prepare(request.Alias, request.KeyPath, request.PublicKey)
 	if err != nil {
-		return remoteKeyProblem(c, err)
+		return remoteKeyPlanProblem(c, err)
 	}
-	key.Path = request.KeyPath
 
-	if allowed, response := h.Actions.consume(c, session.ActionRemoteKeyRegister, request.Alias); !allowed {
+	if allowed, response := h.Actions.consumeEvidence(c, session.ActionRemoteKeyRegister, request.Alias,
+		prepared.plan.Evidence(prepared.report.Evidence(), prepared.config)); !allowed {
 		return response
 	}
-	report, err := h.Diagnostics.Safety()
-	if err != nil {
-		return problem(c, http.StatusInternalServerError, "config_unreadable")
-	}
 
-	result, err := h.Service.Register(c.Request().Context(), report, request.Alias, key, request.AcknowledgeExecutable)
+	result, err := h.Service.Register(c.Request().Context(), prepared.report, prepared.config,
+		request.Alias, prepared.key, request.AcknowledgeExecutable)
 	if err != nil {
 		return remoteKeyProblem(c, err)
 	}

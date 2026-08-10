@@ -186,7 +186,11 @@ export function RemoteKeyPanel({
     setError("");
     setRegistering(true);
     try {
-      setResult(await api.register({ ...plannedInput, acknowledgeExecutable: acknowledged }));
+      setResult(await api.register({
+        ...plannedInput,
+        acknowledgeExecutable: acknowledged,
+        actionToken: plan.actionToken,
+      }));
     } catch (failure) {
       // サポートされていないリモートは、通信の失敗ではなく 1 つの答えだ:
       // 登録は提供されなくなり、手動の手順がその代わりを務める。

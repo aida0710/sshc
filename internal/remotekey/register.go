@@ -8,7 +8,11 @@ package remotekey
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -116,6 +120,23 @@ type Plan struct {
 	Manual      []string
 }
 
+// Evidence は、確認画面が表示したリモート登録計画全体の安定した
+// ダイジェスト。実行可能ディレクティブだけでなく、接続先・ユーザー・鍵・
+// 設置先も含むため、確認後に設定や入力のどれかが変わればトークンは無効になる。
+func (p Plan) Evidence(executableEvidence string, configSnapshot []byte) string {
+	configSum := sha256.Sum256(configSnapshot)
+	payload, _ := json.Marshal(struct {
+		Plan               Plan   `json:"plan"`
+		ExecutableEvidence string `json:"executableEvidence"`
+		ConfigEvidence     string `json:"configEvidence"`
+	}{
+		Plan: p, ExecutableEvidence: executableEvidence,
+		ConfigEvidence: hex.EncodeToString(configSum[:]),
+	})
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
+}
+
 // Result は、完了した登録ひとつ分。
 type Result struct {
 	Outcome   string
@@ -163,7 +184,7 @@ func (s Service) Plan(alias string, key PublicKey, fingerprint, user, hostname, 
 }
 
 // Register はリモートのシェルを調べ、そのうえで鍵をインストールする。
-func (s Service) Register(ctx context.Context, report effective.Report, alias string, key PublicKey, acknowledged bool) (Result, error) {
+func (s Service) Register(ctx context.Context, report effective.Report, configSnapshot []byte, alias string, key PublicKey, acknowledged bool) (Result, error) {
 	if err := platform.ValidateAlias(alias); err != nil {
 		return Result{}, err
 	}
@@ -177,8 +198,13 @@ func (s Service) Register(ctx context.Context, report effective.Report, alias st
 	if err != nil {
 		return Result{}, err
 	}
+	configPath, err := writeConfigSnapshot(configSnapshot)
+	if err != nil {
+		return Result{}, err
+	}
+	defer os.Remove(configPath)
 
-	probe, err := s.run(ctx, program, alias, ProbeCommand, nil)
+	probe, err := s.run(ctx, program, configPath, alias, ProbeCommand, nil)
 	if err != nil {
 		return Result{}, err
 	}
@@ -186,13 +212,13 @@ func (s Service) Register(ctx context.Context, report effective.Report, alias st
 		return Result{}, ErrUnsupportedRemote
 	}
 
-	output, err := s.run(ctx, program, alias, Routine, []byte(key.Line+"\n"))
+	output, err := s.run(ctx, program, configPath, alias, Routine, []byte(key.Line+"\n"))
 	if err != nil {
 		return Result{}, err
 	}
 	result := Result{
 		ExitCode:  output.ExitCode,
-		Stderr:    string(output.Stderr),
+		Stderr:    strings.ReplaceAll(string(output.Stderr), configPath, "<temporary SSH configuration>"),
 		Truncated: output.Truncated,
 	}
 	switch {
@@ -206,12 +232,38 @@ func (s Service) Register(ctx context.Context, report effective.Report, alias st
 	return result, nil
 }
 
-func (s Service) run(ctx context.Context, program, alias, remoteCommand string, stdin []byte) (platform.Output, error) {
+func writeConfigSnapshot(contents []byte) (string, error) {
+	file, err := os.CreateTemp("", "sshc-remote-key-*.conf")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	ok := false
+	defer func() {
+		file.Close()
+		if !ok {
+			os.Remove(path)
+		}
+	}()
+	if _, err := file.Write(contents); err != nil {
+		return "", err
+	}
+	if err := file.Sync(); err != nil {
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		return "", err
+	}
+	ok = true
+	return path, nil
+}
+
+func (s Service) run(ctx context.Context, program, configPath, alias, remoteCommand string, stdin []byte) (platform.Output, error) {
 	timeout := s.Timeout
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	arguments := []string{"-T", "-F", s.ConfigPath,
+	arguments := []string{"-T", "-F", configPath,
 		"-o", "BatchMode=yes",
 		"-o", "PermitLocalCommand=no",
 		"-o", "ClearAllForwardings=yes",

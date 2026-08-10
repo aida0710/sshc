@@ -59,9 +59,6 @@ func addDiagnosticsActions(registry actionRegistry, service *diagnostics.Service
 		session.ActionReachability,
 		session.ActionAuthentication,
 		session.ActionTerminalLaunch,
-		// 鍵を登録すると接続が開かれるので、その確認は接続が実行するのと
-		// 同じ実行可能なディレクティブを示す。
-		session.ActionRemoteKeyRegister,
 	} {
 		registry[kind] = actionKind{evidence: evidence, fail: diagnosticsProblem}
 	}

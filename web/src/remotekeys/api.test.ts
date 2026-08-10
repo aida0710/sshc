@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, apiClient } from "../api/client";
-import { remoteKeysApi, REMOTE_KEY_REGISTER_ACTION_KIND } from "./api";
+import { remoteKeysApi } from "./api";
 
 const csrfToken = "c".repeat(43);
 const actionToken = "a".repeat(43);
@@ -21,6 +21,8 @@ const plan = {
   supported: true,
   manual: ["Open a session to the host yourself."],
   executableDirectives: [],
+  actionToken,
+  actionExpiresAt: "2026-08-05T09:02:00Z",
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -40,13 +42,7 @@ afterEach(() => {
 });
 
 describe("remoteKeysApi", () => {
-  // action の語彙はサーバーの session パッケージが所有する。ここで
-  // 綴りを変えれば、サーバーが拒否するトークンを鋳造してしまう。
-  it("uses the committed action vocabulary", () => {
-    expect(REMOTE_KEY_REGISTER_ACTION_KIND).toBe("remote_key.register");
-  });
-
-  it("describes the change without spending a confirmation", async () => {
+  it("returns the confirmation minted with the described change", async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(jsonResponse(plan));
     vi.stubGlobal("fetch", fetcher);
 
@@ -56,6 +52,7 @@ describe("remoteKeysApi", () => {
       publicKey,
     });
     expect(described.remotePath).toBe("~/.ssh/authorized_keys");
+    expect(described.actionToken).toBe(actionToken);
 
     // plan は何にも接続せず何も変更しないのでトークンを消費しない。
     // それでも、この API のすべての mutation が運ぶ CSRF ヘッダーは運ぶ。
@@ -72,11 +69,10 @@ describe("remoteKeysApi", () => {
     });
   });
 
-  it("mints a token bound to the alias and sends no evidence of its own", async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ token: actionToken, expiresAt: "2026-08-05T09:02:00Z" }, 201))
-      .mockResolvedValueOnce(jsonResponse({ outcome: "added", exitCode: 0, stderr: "", truncated: false }));
+  it("registers with the token from the displayed plan without minting another", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      jsonResponse({ outcome: "added", exitCode: 0, stderr: "", truncated: false }),
+    );
     vi.stubGlobal("fetch", fetcher);
 
     const result = await remoteKeysApi.register({
@@ -84,17 +80,12 @@ describe("remoteKeysApi", () => {
       keyPath: "~/.ssh/id_ed25519.pub",
       publicKey,
       acknowledgeExecutable: true,
+      actionToken,
     });
     expect(result.outcome).toBe("added");
 
-    const [actionPath, actionInit] = fetcher.mock.calls[0] as [string, RequestInit];
-    expect(actionPath).toBe("/api/v1/actions");
-    expect(JSON.parse(String(actionInit.body))).toEqual({
-      kind: "remote_key.register",
-      target: "bastion",
-    });
-
-    const [registerPath, registerInit] = fetcher.mock.calls[1] as [string, RequestInit];
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const [registerPath, registerInit] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(registerPath).toBe("/api/v1/remote-keys/register");
     expect(new Headers(registerInit.headers).get("X-SSHC-Action")).toBe(actionToken);
     expect(JSON.parse(String(registerInit.body))).toEqual({
@@ -108,14 +99,13 @@ describe("remoteKeysApi", () => {
   });
 
   it("raises the server's refusal code when the remote is unsupported", async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ token: actionToken, expiresAt: "2026-08-05T09:02:00Z" }, 201))
-      .mockResolvedValueOnce(jsonResponse({ code: "unsupported_remote", message: "no POSIX shell" }, 422));
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      jsonResponse({ code: "unsupported_remote", message: "no POSIX shell" }, 422),
+    );
     vi.stubGlobal("fetch", fetcher);
 
     const failure = await remoteKeysApi
-      .register({ alias: "bastion", keyPath: "", publicKey, acknowledgeExecutable: false })
+      .register({ alias: "bastion", keyPath: "", publicKey, acknowledgeExecutable: false, actionToken })
       .catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(ApiError);
