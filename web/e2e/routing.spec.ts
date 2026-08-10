@@ -17,11 +17,15 @@ test("opens, reloads, and traverses section URLs", async ({ page, installation }
   await expect(page).toHaveURL(/\/keys$/);
   await expect(page.getByRole("heading", { name: "Keys", level: 2 })).toBeVisible();
 
+  await openSection(page, "Settings");
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("heading", { name: "Settings", level: 2 })).toBeVisible();
+
   await openSection(page, "History");
   await expect(page).toHaveURL(/\/history$/);
   await page.goBack();
-  await expect(page).toHaveURL(/\/keys$/);
-  await expect(page.getByRole("heading", { name: "Keys", level: 2 })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("heading", { name: "Settings", level: 2 })).toBeVisible();
 
   await page.goForward();
   await expect(page).toHaveURL(/\/history$/);

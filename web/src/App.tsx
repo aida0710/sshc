@@ -244,7 +244,19 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   }, [state]);
 
   if (state === "locked") {
-    return <LockScreen exists={vaultExists} onOpen={() => setState("ready")} />;
+    return (
+      <LockScreen
+        exists={vaultExists}
+        onOpen={() => {
+          // A successful initialise or unlock means the vault exists now. Keep
+          // that fact when this same process locks again; otherwise a freshly
+          // created vault is presented as an empty installation and the UI
+          // offers an operation the server must reject as already existing.
+          setVaultExists(true);
+          setState("ready");
+        }}
+      />
+    );
   }
 
   if (state === "error") {
