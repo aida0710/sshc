@@ -14,7 +14,7 @@
 - Never expose plaintext passwords or sealed-vault bytes in SSH config, preview, response, logs, browser history or a prefilled DOM value.
 - Opening or saving an unchanged form must not materialise inherited/default values into the selected Host block.
 - Basic must reject duplicate direct HostName, User, Port or IdentityFile values rather than flattening them.
-- Password `unchanged` must work with an absent or locked vault; any other password mutation requires an existing unlocked vault.
+- Password `unchanged` must not mutate the vault; every journalled config save still requires the unlocked vault key that seals history backups.
 - Configuration and vault changes in one request must commit atomically or leave disk and in-memory state unchanged.
 - Preserve unrelated configuration bytes, comments, line endings, unknown directives and Host blocks.
 - Keep alias rename, group move and comment editing in Organisation; keep complex/custom authentication in Advanced.
@@ -226,7 +226,9 @@ workspace-relative `~/.ssh/...` value. Do not accept a path from the request.
 `UpdateConnection` must validate identity/base, resolve the graph under
 `saveMutex`, locate the exact Host block, derive `FieldEdit`s, call the existing
 edit machinery, compare the supplied base with disk, and commit as
-`connection.update`. If password is `unchanged`, never inspect `secrets`.
+`connection.update`. If password is `unchanged`, never dispatch a password
+mutation; the storage manager still uses the already-unlocked vault key to seal
+the normal configuration backup.
 Return `SaveResult` with displayed written paths and the configuration preview.
 
 Extract the conflict-aware commit body currently named
@@ -477,7 +479,8 @@ Build injected config/key/secret API fixtures. Cover:
 - duplicate fields and custom/multiple IdentityFile remain visible read-only;
 - one inventoried direct key is selected, another key emits IdentityFile set,
   and agent/inherited emits IdentityFile inherit;
-- absent/locked/unlocked vault states do not block config-only edits;
+- absent/locked vault states keep non-secret drafts but block saving until the
+  vault is initialised/unlocked, because configuration history is sealed too;
 - password text is never prefilled, empty means `unchanged`, replace/assign/new
   shared/remove build the exact password union, and remove requires confirmation;
 - eligibility blockers prevent add/replace but not removal;

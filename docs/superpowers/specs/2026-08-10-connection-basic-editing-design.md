@@ -114,10 +114,13 @@ a connection field, direct key selection or password assignment has changed.
 The client submits only explicit changes; merely opening the page cannot
 materialise inherited values into the Host block.
 
-Configuration-only changes remain saveable while the vault is absent or
-locked. A password change requires an existing unlocked vault. Vault
-initialisation and unlock are preparatory operations and do not save Basic
-settings by themselves.
+Every journalled configuration save requires the vault to be unlocked because
+sshc seals configuration-history backups with that vault key. The normal
+application lock already returns the user to the front door; if the defensive
+absent/locked state is rendered inside this form, it offers initialisation or
+unlock and keeps non-secret drafts but disables saving until the vault is
+ready. Vault initialisation and unlock are preparatory operations and do not
+save Basic settings by themselves.
 
 On success the page reloads the overview and selected Host detail, keeps the
 same connection selected, resets dirty state and clears every typed secret.
@@ -193,8 +196,9 @@ An IdentityFile key ID is resolved against the current server-side private-key
 inventory. The browser never supplies a filesystem path. Inheritance removes
 the one direct IdentityFile only; multiple direct values are rejected.
 
-When password is `unchanged`, the operation does not require or write the
-vault. When it changes, extend the existing password-mutation transaction
+When password is `unchanged`, the operation does not mutate the vault; the
+storage layer may still require the unlocked vault key to seal the normal
+configuration backup. When password changes, extend the existing password-mutation transaction
 boundary with `remove`: clone the unlocked vault, prepare the config change,
 and commit the sealed vault change and any SSH-config change through one
 journalled `storage.Request`. Publish the cloned in-memory vault only after the
