@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { apiClient, whenLocked, type HealthResponse } from "./api/client";
 import { integrationsApi, type PasswordVaultStatus } from "./api/integrations";
 import { configApi } from "./api/config";
@@ -19,14 +19,15 @@ import { RemoteKeyPanel } from "./remotekeys/RemoteKeyPanel";
 import { OverviewPanel } from "./overview/OverviewPanel";
 import { useLanguage } from "./i18n/context";
 import { locales, type Locale } from "./i18n/locale";
-import { autoControl } from "./ui/form";
+import { autoControl, secondaryAction } from "./ui/form";
 import { Icon, IconSprite, type IconName } from "./ui/icons";
 import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
 import { themes, type Theme } from "./theme/theme";
 import type { MessageKey } from "./i18n/messages";
 import { Button } from "./ui/surface";
-import { sections, type Section } from "./routing/sectionRoute";
+import { sectionPath, type Section } from "./routing/sectionRoute";
+import { useSectionRoute } from "./routing/useSectionRoute";
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -36,8 +37,6 @@ type AppProps = {
   // あって、その下のトランスポートではないからだ。
   vault?: () => Promise<PasswordVaultStatus>;
 };
-
-const enabledSections: Section[] = [...sections];
 
 // セクション識別子は英語のまま訳さない。これはこのコンポーネント自身の
 // ルーティング語彙であり、訳してしまうとどのパネルが開いているかが表示
@@ -97,13 +96,14 @@ const themeLabels: Record<Theme, MessageKey> = {
 export function App({ bootstrap, health, vault = integrationsApi.passwordVault }: AppProps) {
   const { t, locale, setLocale } = useLanguage();
   const { theme, setTheme } = useTheme();
+  const { route, navigate } = useSectionRoute();
+  const section = route.kind === "section" ? route.section : null;
   // "locked" はアプリケーション全体を指し、その中の一画面ではない。あらゆる
   // 書き込みはマスターパスワードで封じたバックアップを残すため、vault が
   // 閉じたまま使える状態というものは存在しない。
   const [state, setState] = useState<"starting" | "locked" | "ready" | "error">("starting");
   const [vaultExists, setVaultExists] = useState(false);
   const [version, setVersion] = useState("");
-  const [section, setSection] = useState<Section>("Home");
   const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
   // 宣言済みのグループ名は、セッションが立ち上がった時点で一度だけ読む。
   // Keys 画面は移動先としてそれらを提示するだけで、ディレクトリからグルー
@@ -137,7 +137,22 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // か指し示せないビューは、自分でルーティングせずジャンプをここに委ねる。
   function openFile(path: string, line: number) {
     setFileTarget({ path, line });
-    setSection("Config");
+    navigate("Config");
+  }
+
+  function followSectionLink(event: MouseEvent<HTMLAnchorElement>, target: Section) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    navigate(target);
   }
 
   useEffect(() => {
@@ -257,7 +272,9 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         */}
         <h1 className="shrink-0 whitespace-nowrap text-xs font-medium text-ink-muted">{t("shell.title")}</h1>
         <span aria-hidden="true" className="text-xs text-ink-faint">/</span>
-        <p className="shrink-0 whitespace-nowrap text-sm font-semibold">{t(sectionLabels[section])}</p>
+        <p className="shrink-0 whitespace-nowrap text-sm font-semibold">
+          {route.kind === "section" ? t(sectionLabels[route.section]) : t("shell.pageNotFound")}
+        </p>
         <p role="status" className="flex min-w-0 items-center gap-1.5 truncate text-xs text-ink-muted">
           <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-live" />
           {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
@@ -328,22 +345,19 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
               <ul aria-label={t(group.label)}>
                 {group.sections.map((name) => (
                   <li key={name}>
-                    <button
-                      type="button"
-                      disabled={!enabledSections.includes(name)}
+                    <a
+                      href={sectionPath(name)}
                       aria-current={section === name ? "page" : undefined}
-                      onClick={() => setSection(name)}
+                      onClick={(event) => followSectionLink(event, name)}
                       className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
                         section === name
                           ? "bg-select-fill text-ink"
-                          : enabledSections.includes(name)
-                            ? "text-ink hover:bg-select-fill"
-                            : "text-ink-faint"
+                          : "text-ink hover:bg-select-fill"
                       }`}
                     >
                       <Icon name={sectionIcons[name]} className="h-4 w-4 text-ink-muted" />
                       {t(sectionLabels[name])}
-                    </button>
+                    </a>
                   </li>
                 ))}
               </ul>
@@ -368,26 +382,45 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
               <p className="min-w-0 grow truncate">
                 {t("conn.createDraftWaiting", { alias: connectionDraft.alias || t("conn.createUntitledDraft") })}
               </p>
-              <Button className="shrink-0" onClick={() => setSection("Connections")}>
+              <Button className="shrink-0" onClick={() => navigate("Connections")}>
                 {t("conn.createReturnToDraft")}
               </Button>
             </div>
           ) : null}
           {state === "ready" ? (
             <div className="relative min-h-0 flex-1 overflow-hidden">
-              <SectionView
-                section={section}
-                fileTarget={fileTarget}
-                groups={groups}
-                knownAliases={knownAliases}
-                connectionDraft={connectionDraft}
-                onConnectionDraftChange={setConnectionDraft}
-                onNavigateForCreation={(target: CreationPrerequisite) => setSection(target)}
-                onOpenFile={openFile}
-                onLock={() => setState("locked")}
-                onInspector={setInspector}
-                onNavigate={setSection}
-              />
+              {route.kind === "section" ? (
+                <SectionView
+                  section={route.section}
+                  fileTarget={fileTarget}
+                  groups={groups}
+                  knownAliases={knownAliases}
+                  connectionDraft={connectionDraft}
+                  onConnectionDraftChange={setConnectionDraft}
+                  onNavigateForCreation={(target: CreationPrerequisite) => navigate(target)}
+                  onOpenFile={openFile}
+                  onLock={() => setState("locked")}
+                  onInspector={setInspector}
+                  onNavigate={navigate}
+                />
+              ) : (
+                <div className="h-full overflow-y-auto p-6">
+                  <section aria-labelledby="not-found-heading" className="flex max-w-2xl flex-col gap-3">
+                    <h2 id="not-found-heading" className="font-medium">{t("shell.pageNotFound")}</h2>
+                    <p className="text-sm text-ink-muted">{t("shell.pageNotFoundDescription")}</p>
+                    <code className="w-fit rounded-md border border-line bg-card px-2 py-1 text-sm">
+                      {route.pathname}
+                    </code>
+                    <a
+                      href={sectionPath("Home")}
+                      onClick={(event) => followSectionLink(event, "Home")}
+                      className={`${secondaryAction} w-fit`}
+                    >
+                      {t("shell.goHome")}
+                    </a>
+                  </section>
+                </div>
+              )}
             </div>
           ) : null}
         </main>
