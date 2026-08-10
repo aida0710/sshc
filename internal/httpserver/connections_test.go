@@ -36,6 +36,7 @@ const connectionHTTPKeyID = "0123456789abcdef0123456789abcdef"
 type connectionHTTPHarness struct {
 	*testHarness
 	passwords *secret.Service
+	keys      *stubKeyService
 }
 
 func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarness {
@@ -79,17 +80,24 @@ func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarn
 		ExpectedHost: "127.0.0.1:43123", ExpectedOrigin: "http://127.0.0.1:43123",
 		Sessions: sessions, Unlocked: alwaysUnlocked,
 	}).Middleware)
-	keys := &stubKeyService{inventory: &keys.Inventory{Items: []keys.Item{{
-		ID: connectionHTTPKeyID, RelativePath: "id_http", Kind: keys.KindPrivateKey,
-	}}}}
-	registerConnectionRoutes(engine, ConnectionHandlers{Service: service, Secrets: passwords, Keys: keys})
+	keyStub := &stubKeyService{
+		verifyPhrase: "correct key phrase",
+		inventory: &keys.Inventory{
+			Items: []keys.Item{{
+				ID: connectionHTTPKeyID, RelativePath: "id_http", Kind: keys.KindPrivateKey, Encrypted: true,
+			}},
+		},
+	}
+	service.SetKeyPassphraseVerifier(keyStub)
+	registerConnectionRoutes(engine, ConnectionHandlers{Service: service, Secrets: passwords, Keys: keyStub})
+	registerPasswordRoutes(engine, PasswordHandlers{Service: passwords})
 
 	return &connectionHTTPHarness{
 		testHarness: &testHarness{
 			echo: engine, cookie: &http.Cookie{Name: SessionCookie, Value: credentials.SessionID},
 			csrf: credentials.CSRFToken, root: workspace.Root(), service: service,
 		},
-		passwords: passwords,
+		passwords: passwords, keys: keyStub,
 	}
 }
 
@@ -221,11 +229,12 @@ func TestCreateConnectionEndpointReportsMissingAndLockedVaults(t *testing.T) {
 
 func connectionUpdateBody(password map[string]any) map[string]any {
 	return map[string]any{
-		"identity": map[string]any{"path": "config", "alias": "existing"},
-		"base":     connectionHTTPConfig,
-		"user":     map[string]any{"action": "set", "value": "deploy"},
-		"port":     map[string]any{"action": "set", "value": 2222},
-		"password": password,
+		"identity":      map[string]any{"path": "config", "alias": "existing"},
+		"base":          connectionHTTPConfig,
+		"user":          map[string]any{"action": "set", "value": "deploy"},
+		"port":          map[string]any{"action": "set", "value": 2222},
+		"password":      password,
+		"keyPassphrase": map[string]any{"kind": "unchanged"},
 	}
 }
 
@@ -334,6 +343,7 @@ func TestUpdateConnectionEndpointMapsValidationAndConflicts(t *testing.T) {
 			name: "no change", body: map[string]any{
 				"identity": map[string]any{"path": "config", "alias": "existing"},
 				"base":     connectionHTTPConfig, "password": map[string]any{"kind": "unchanged"},
+				"keyPassphrase": map[string]any{"kind": "unchanged"},
 			}, wantStatus: 400, wantCode: "connection_no_change",
 		},
 		{
@@ -442,6 +452,114 @@ func TestUpdateConnectionEndpointMapsValidationAndConflicts(t *testing.T) {
 			}
 			if payload.Code != test.wantCode {
 				t.Fatalf("code = %q, want %q", payload.Code, test.wantCode)
+			}
+		})
+	}
+}
+
+func TestUpdateConnectionEndpointSavesDedicatedKeyPassphraseWithoutReturningIt(t *testing.T) {
+	harness := newConnectionHTTPHarness(t, true)
+	const passphrase = "correct key phrase"
+	body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+	body["identityFile"] = map[string]any{"action": "set", "keyId": connectionHTTPKeyID}
+	body["keyPassphrase"] = map[string]any{
+		"kind": "set_dedicated", "keyId": connectionHTTPKeyID, "passphrase": passphrase,
+	}
+	response := harness.call(t, http.MethodPatch, "/api/v1/connections", body, true, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("update = %d, body %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), passphrase) || strings.Contains(response.Body.String(), secret.WorkspacePath) {
+		t.Fatal("success response exposed the passphrase or vault path")
+	}
+	if got, ok := harness.passwords.KeyPassphraseFor("id_http"); !ok || got != passphrase {
+		t.Fatalf("stored key passphrase = %q, %v", got, ok)
+	}
+
+	status := harness.call(t, http.MethodGet, "/api/v1/passwords", nil, true, true)
+	if status.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", status.Code, status.Body.String())
+	}
+	var payload struct {
+		Dedicated []string `json:"dedicatedKeyPassphrases"`
+	}
+	if err := json.Unmarshal(status.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Dedicated) != 1 || payload.Dedicated[0] != "id_http" {
+		t.Fatalf("dedicated key paths = %#v", payload.Dedicated)
+	}
+	if strings.Contains(status.Body.String(), passphrase) {
+		t.Fatal("vault status exposed the key passphrase")
+	}
+}
+
+func TestUpdateConnectionEndpointRejectsInvalidKeyPassphraseUnionMembers(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+	}{
+		{name: "missing", value: nil},
+		{name: "unknown kind", value: map[string]any{"kind": "shared"}},
+		{name: "unchanged with secret", value: map[string]any{"kind": "unchanged", "passphrase": "secret"}},
+		{name: "set missing key", value: map[string]any{"kind": "set_dedicated", "passphrase": "secret"}},
+		{name: "set missing phrase", value: map[string]any{"kind": "set_dedicated", "keyId": connectionHTTPKeyID}},
+		{name: "set extra field", value: map[string]any{
+			"kind": "set_dedicated", "keyId": connectionHTTPKeyID, "passphrase": "secret", "extra": true,
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			harness := newConnectionHTTPHarness(t, true)
+			body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+			if test.value == nil {
+				delete(body, "keyPassphrase")
+			} else {
+				body["keyPassphrase"] = test.value
+			}
+			response := harness.call(t, http.MethodPatch, "/api/v1/connections", body, true, true)
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_request") {
+				t.Fatalf("response = %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestUpdateConnectionEndpointMapsWrongAndStaleKeyPassphrasesWithoutEchoingThem(t *testing.T) {
+	tests := []struct {
+		name       string
+		prepare    func(*connectionHTTPHarness)
+		passphrase string
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name: "wrong", passphrase: "wrong secret phrase",
+			wantStatus: http.StatusForbidden, wantCode: "wrong_passphrase",
+		},
+		{
+			name: "key changed", passphrase: "correct key phrase",
+			prepare:    func(h *connectionHTTPHarness) { h.keys.revalidateErr = keys.ErrKeyChanged },
+			wantStatus: http.StatusConflict, wantCode: "external_change",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			harness := newConnectionHTTPHarness(t, true)
+			if test.prepare != nil {
+				test.prepare(harness)
+			}
+			body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+			body["identityFile"] = map[string]any{"action": "set", "keyId": connectionHTTPKeyID}
+			body["keyPassphrase"] = map[string]any{
+				"kind": "set_dedicated", "keyId": connectionHTTPKeyID, "passphrase": test.passphrase,
+			}
+			response := harness.call(t, http.MethodPatch, "/api/v1/connections", body, true, true)
+			if response.Code != test.wantStatus || !strings.Contains(response.Body.String(), test.wantCode) {
+				t.Fatalf("response = %d %s", response.Code, response.Body.String())
+			}
+			if strings.Contains(response.Body.String(), test.passphrase) {
+				t.Fatal("problem response echoed the submitted passphrase")
 			}
 		})
 	}

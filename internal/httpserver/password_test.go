@@ -114,6 +114,22 @@ func TestStatusReportsWhichHostsHaveAPasswordAndNothingElse(t *testing.T) {
 	}
 }
 
+func TestPasswordVaultStatusAlwaysIncludesDedicatedKeyPassphrasePaths(t *testing.T) {
+	engine, _ := passwordEngine(t)
+	response := send(t, engine, http.MethodGet, "/api/v1/passwords", "", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d", response.Code)
+	}
+	var status map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	value, ok := status["dedicatedKeyPassphrases"]
+	if !ok || string(value) != "[]" {
+		t.Fatalf("locked status dedicatedKeyPassphrases = %s, present %t", value, ok)
+	}
+}
+
 func TestStoringRefusesWhileTheVaultIsLocked(t *testing.T) {
 	engine, _ := passwordEngine(t)
 
