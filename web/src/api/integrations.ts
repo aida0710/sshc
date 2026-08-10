@@ -345,7 +345,14 @@ function validateCredentialList(value: unknown): CredentialList {
     asString(entry.kind);
     asString(entry.name);
     for (const use of asArray(entry.uses)) asString(use);
+    for (const host of asArray(entry.hosts)) asString(host);
   }
+  for (const dedicated of asArray(record.dedicatedKeyPassphrases)) {
+    const entry = asRecord(dedicated);
+    asString(entry.key);
+    for (const host of asArray(entry.hosts)) asString(host);
+  }
+  asBoolean(record.keyHostUsageComplete);
   return record as unknown as CredentialList;
 }
 
