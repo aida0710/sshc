@@ -289,6 +289,12 @@ export function ConnectionsPage({
     // もう開いていないブロックのバイトを記述しているからだ。保存はここで
     // はなく submit を通じて再選択を行い、その diff は画面に残しておく。
     setPreview(null);
+    setProblem(null);
+    // The selection highlight changes immediately, so the detail must not keep
+    // showing the previous host while the new request is in flight. Otherwise
+    // a fast edit can be submitted against a connection the tree no longer
+    // appears to have selected.
+    setDetail(null);
     setManaging(false);
     setConfirmingDelete(false);
     setSelection({ path: host.identity.path, alias: host.identity.alias });

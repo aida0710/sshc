@@ -169,11 +169,12 @@ export async function clickAndAwait(
   page: Page,
   buttonName: string,
   pathFragment: string,
+  method = "POST",
 ): Promise<number> {
   const [response] = await Promise.all([
     page.waitForResponse(
       (candidate) =>
-        candidate.url().includes(pathFragment) && candidate.request().method() === "POST",
+        candidate.url().includes(pathFragment) && candidate.request().method() === method,
     ),
     page.getByRole("button", { name: buttonName, exact: true }).click(),
   ]);

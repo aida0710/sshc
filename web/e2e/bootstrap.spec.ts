@@ -203,6 +203,6 @@ test("survives a reload", async ({ page, installation }) => {
   // リロードが失っていた半分だ。cookie は常に無事で、トークンだけが無事でなかった。
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
   await page.getByLabel("Port", { exact: true }).fill("2255");
-  expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
   expect(await installation.read("config")).toContain("Port 2255");
 });

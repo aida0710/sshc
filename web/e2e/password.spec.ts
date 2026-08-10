@@ -11,10 +11,10 @@ test("stores a password for a host and never shows it again", async ({ page, ins
 
   const panel = page.getByRole("region", { name: "Authentication" });
   await expect(panel).toBeVisible();
-  await expect(panel.getByText(/An IdentityFile is configured/)).toBeVisible();
+  await expect(panel.getByText(/Keys and stored passwords are independent/)).toBeVisible();
 
   await panel.getByLabel("Stored password action").selectOption("dedicated_password");
-  await panel.getByLabel("Connection password").fill("hunter2");
+  await panel.getByRole("textbox", { name: "Connection password", exact: true }).fill("hunter2");
   const saved = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
   );

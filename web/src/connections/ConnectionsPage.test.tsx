@@ -334,6 +334,34 @@ describe("ConnectionsPage", () => {
         .toHaveTextContent("Change a value to see exactly what would be written."));
   });
 
+  it("hides the previous connection while a newly selected detail is still loading", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      hosts: [
+        ...overview.hosts,
+        {
+          identity: { path: "config", alias: "nas" },
+          file: { path: "config", absolute: "/home/tester/.ssh/config" },
+          line: 5, patterns: ["nas"], editable: true,
+        },
+      ],
+    } as never);
+    vi.mocked(configApi.host).mockImplementation(async (_path, alias) => {
+      if (alias === "bastion") return detail as never;
+      return await new Promise(() => undefined);
+    });
+
+    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    expect(await screen.findByRole("heading", { name: /^bastion$/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /nas/ }));
+
+    expect(screen.queryByRole("heading", { name: /^bastion$/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Choose a connection" })).toBeInTheDocument();
+  });
+
   it("sends a pattern rule to the file view and never asks for its host detail", async () => {
     const user = userEvent.setup();
     const onOpenFile = vi.fn();
