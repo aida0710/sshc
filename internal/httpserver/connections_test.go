@@ -218,3 +218,210 @@ func TestCreateConnectionEndpointReportsMissingAndLockedVaults(t *testing.T) {
 		t.Fatalf("locked vault = %d %s", response.Code, response.Body.String())
 	}
 }
+
+func connectionUpdateBody(password map[string]any) map[string]any {
+	return map[string]any{
+		"identity": map[string]any{"path": "config", "alias": "existing"},
+		"base":     connectionHTTPConfig,
+		"user":     map[string]any{"action": "set", "value": "deploy"},
+		"port":     map[string]any{"action": "set", "value": 2222},
+		"password": password,
+	}
+}
+
+func TestUpdateConnectionEndpointCommitsAndReturnsOnlySafeData(t *testing.T) {
+	harness := newConnectionHTTPHarness(t, true)
+	const password = "updated-connection-secret"
+	response := harness.call(t, http.MethodPatch, "/api/v1/connections", connectionUpdateBody(map[string]any{
+		"kind": "dedicated_password", "password": password,
+	}), true, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("update = %d, body %s", response.Code, response.Body.String())
+	}
+	var result api.SaveResult
+	decoder := json.NewDecoder(bytes.NewReader(response.Body.Bytes()))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&result); err != nil {
+		t.Fatalf("response contract = %v", err)
+	}
+	if result.TransactionId == "" || len(result.Written) != 1 || result.Written[0] != "config" {
+		t.Fatalf("result = %#v", result)
+	}
+	if got := harness.passwords.PasswordFor("existing"); got != password {
+		t.Fatalf("stored password = %q", got)
+	}
+	updated, err := os.ReadFile(filepath.Join(harness.root, "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(updated), "\tUser deploy\n") || !strings.Contains(string(updated), "\tPort 2222\n") {
+		t.Fatalf("updated config =\n%s", updated)
+	}
+	body := response.Body.String()
+	if strings.Contains(body, password) || strings.Contains(body, secret.WorkspacePath) {
+		t.Fatal("response exposed plaintext or the encrypted vault change")
+	}
+}
+
+func TestUpdateConnectionEndpointRequiresSessionAndCSRF(t *testing.T) {
+	harness := newConnectionHTTPHarness(t, true)
+	body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+	if got := harness.call(t, http.MethodPatch, "/api/v1/connections", body, false, false).Code; got != http.StatusUnauthorized {
+		t.Fatalf("without session = %d", got)
+	}
+	if got := harness.call(t, http.MethodPatch, "/api/v1/connections", body, true, false).Code; got != http.StatusForbidden {
+		t.Fatalf("without CSRF = %d", got)
+	}
+}
+
+func TestUpdateConnectionEndpointDecodesEveryPasswordMutation(t *testing.T) {
+	tests := []struct {
+		name     string
+		password map[string]any
+		prepare  func(*testing.T, *connectionHTTPHarness)
+		want     string
+	}{
+		{
+			name: "saved", password: map[string]any{"kind": "saved_password", "credential": "office"},
+			prepare: func(t *testing.T, harness *connectionHTTPHarness) {
+				t.Helper()
+				if err := harness.passwords.SetCredential(secret.KindPassword, "office", "shared-secret"); err != nil {
+					t.Fatal(err)
+				}
+			}, want: "shared-secret",
+		},
+		{
+			name: "new shared", password: map[string]any{
+				"kind": "new_shared_password", "credential": "lab", "password": "lab-secret",
+			}, want: "lab-secret",
+		},
+		{
+			name: "remove", password: map[string]any{"kind": "remove"},
+			prepare: func(t *testing.T, harness *connectionHTTPHarness) {
+				t.Helper()
+				if err := harness.passwords.Set("existing", "remove-me"); err != nil {
+					t.Fatal(err)
+				}
+			}, want: "",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			harness := newConnectionHTTPHarness(t, true)
+			if test.prepare != nil {
+				test.prepare(t, harness)
+			}
+			response := harness.call(t, http.MethodPatch, "/api/v1/connections", connectionUpdateBody(test.password), true, true)
+			if response.Code != http.StatusOK {
+				t.Fatalf("update = %d, body %s", response.Code, response.Body.String())
+			}
+			if got := harness.passwords.PasswordFor("existing"); got != test.want {
+				t.Errorf("PasswordFor(existing) = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestUpdateConnectionEndpointMapsValidationAndConflicts(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       map[string]any
+		prepare    func(*testing.T, *connectionHTTPHarness)
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name: "no change", body: map[string]any{
+				"identity": map[string]any{"path": "config", "alias": "existing"},
+				"base":     connectionHTTPConfig, "password": map[string]any{"kind": "unchanged"},
+			}, wantStatus: 400, wantCode: "connection_no_change",
+		},
+		{
+			name: "unknown top field", body: func() map[string]any {
+				body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+				body["unexpected"] = true
+				return body
+			}(), wantStatus: 400, wantCode: "invalid_request",
+		},
+		{
+			name: "unknown setting field", body: func() map[string]any {
+				body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+				body["port"] = map[string]any{"action": "set", "value": 2222, "unexpected": true}
+				return body
+			}(), wantStatus: 400, wantCode: "invalid_request",
+		},
+		{
+			name: "unknown password branch", body: connectionUpdateBody(map[string]any{
+				"kind": "agent_forwarding",
+			}), wantStatus: 400, wantCode: "invalid_request",
+		},
+		{
+			name: "password branch mixed with key", body: connectionUpdateBody(map[string]any{
+				"kind": "dedicated_password", "password": "secret", "keyId": connectionHTTPKeyID,
+			}), wantStatus: 400, wantCode: "invalid_request",
+		},
+		{
+			name: "unknown key", body: func() map[string]any {
+				body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+				delete(body, "user")
+				delete(body, "port")
+				body["identityFile"] = map[string]any{"action": "set", "keyId": strings.Repeat("f", 32)}
+				return body
+			}(), wantStatus: 422, wantCode: "identity_file_invalid",
+		},
+		{
+			name: "complex field", body: func() map[string]any {
+				body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+				body["base"] = strings.Replace(connectionHTTPConfig, "\tPort 22\n", "\tPort 22\n\tUser first\n\tUser second\n", 1)
+				return body
+			}(),
+			prepare: func(t *testing.T, harness *connectionHTTPHarness) {
+				t.Helper()
+				contents := strings.Replace(connectionHTTPConfig, "\tPort 22\n", "\tPort 22\n\tUser first\n\tUser second\n", 1)
+				if err := os.WriteFile(filepath.Join(harness.root, "config"), []byte(contents), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}, wantStatus: 422, wantCode: "connection_field_complex",
+		},
+		{
+			name: "stale base", body: func() map[string]any {
+				body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+				body["base"] = strings.Replace(connectionHTTPConfig, "203.0.113.10", "stale.example", 1)
+				return body
+			}(), wantStatus: 409, wantCode: "config_conflict",
+		},
+		{
+			name: "password ineligible", body: func() map[string]any {
+				body := connectionUpdateBody(map[string]any{"kind": "dedicated_password", "password": "secret"})
+				body["base"] = strings.Replace(connectionHTTPConfig, "\tPort 22\n", "\tPort 22\n\tPasswordAuthentication no\n", 1)
+				return body
+			}(),
+			prepare: func(t *testing.T, harness *connectionHTTPHarness) {
+				t.Helper()
+				contents := strings.Replace(connectionHTTPConfig, "\tPort 22\n", "\tPort 22\n\tPasswordAuthentication no\n", 1)
+				if err := os.WriteFile(filepath.Join(harness.root, "config"), []byte(contents), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}, wantStatus: 422, wantCode: "password_ineligible",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			harness := newConnectionHTTPHarness(t, true)
+			if test.prepare != nil {
+				test.prepare(t, harness)
+			}
+			response := harness.call(t, http.MethodPatch, "/api/v1/connections", test.body, true, true)
+			if response.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d, body %s", response.Code, test.wantStatus, response.Body.String())
+			}
+			var payload problemPayload
+			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Code != test.wantCode {
+				t.Fatalf("code = %q, want %q", payload.Code, test.wantCode)
+			}
+		})
+	}
+}

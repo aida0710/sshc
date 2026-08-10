@@ -26,6 +26,8 @@ export type EffectiveDiff = components["schemas"]["EffectiveDiff"];
 export type CreateConnectionRequest = components["schemas"]["CreateConnectionRequest"];
 export type CreateConnectionAuthentication = components["schemas"]["CreateConnectionAuthentication"];
 export type CreateConnectionResponse = components["schemas"]["CreateConnectionResponse"];
+export type UpdateConnectionRequest = components["schemas"]["UpdateConnectionRequest"];
+export type UpdateConnectionPassword = components["schemas"]["UpdateConnectionPassword"];
 
 // 生成された型は契約を記述するに過ぎない。これらの防護は UI が
 // 実際に受け取ったペイロードを検査する。型アサーションは実行時には何も証明しない。
@@ -124,12 +126,16 @@ function validateHistory(value: unknown): HistoryEntry[] {
   return entries as unknown as HistoryEntry[];
 }
 
-function postJSON<T>(path: string, body: unknown): Promise<T> {
+function mutateJSON<T>(path: string, method: "POST" | "PATCH", body: unknown): Promise<T> {
   return apiClient.mutate<T>(path, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function postJSON<T>(path: string, body: unknown): Promise<T> {
+  return mutateJSON<T>(path, "POST", body);
 }
 
 export const configApi = {
@@ -152,6 +158,9 @@ export const configApi = {
   },
   async createConnection(request: CreateConnectionRequest): Promise<CreateConnectionResponse> {
     return validateCreateConnectionResponse(await postJSON<unknown>("/api/v1/connections", request));
+  },
+  async updateConnection(request: UpdateConnectionRequest): Promise<SaveResult> {
+    return validateSaveResult(await mutateJSON<unknown>("/api/v1/connections", "PATCH", request));
   },
   // グループの名前変更と削除はサーバー操作であり、クライアントが保持する
   // ドキュメントへの編集ではない。グループはディレクトリであるため、その変更は
