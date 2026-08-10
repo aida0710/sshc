@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type Problem } from "../api/client";
 import { configApi, type GroupMetadata, type Metadata, type Overview, type SavePreview } from "../api/config";
 import { NoticeList, SavePreviewPanel } from "../connections/SavePreview";
@@ -110,6 +110,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   // インスペクターがどのグループを記述しているか。行が選ばれるまで何も
   // 選択されていないため、開いたばかりの画面ではペインは提示されない。
   const [selected, setSelected] = useState("");
+  const newNameInput = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -348,6 +349,23 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       */}
       <NoticeList notices={groupNotices} />
 
+      <section className={sectionCard}>
+        <h3 className={sectionHeading}>{t("groups.addHeading")}</h3>
+        <Field label={t("groups.newName")} hint={t("groups.nestingNote")}>
+          <input
+            ref={newNameInput}
+            id="group-name"
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            placeholder="work/eu"
+            className={control}
+          />
+        </Field>
+        <button type="button" onClick={addGroup} disabled={newName === ""} className={`self-start ${secondaryAction}`}>
+          {t("groups.add")}
+        </button>
+      </section>
+
       {groups.length === 0 ? (
         <p className="rounded-xl border border-line bg-card p-5 text-sm text-ink-muted">{t("groups.empty")}</p>
       ) : null}
@@ -499,7 +517,10 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
               */}
               <button
                 type="button"
-                onClick={() => setNewName(`${group.name}/`)}
+                onClick={() => {
+                  setNewName(`${group.name}/`);
+                  newNameInput.current?.focus();
+                }}
                 className={secondaryAction}
               >
                 {t("groups.addChild", { name: group.name })}
@@ -568,22 +589,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
         ))}
       </ul>
 
-      <section className={sectionCard}>
-        <h3 className={sectionHeading}>{t("groups.addHeading")}</h3>
-        <Field label={t("groups.newName")} hint={t("groups.nestingNote")}>
-          <input
-            id="group-name"
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            placeholder="work/eu"
-            className={control}
-          />
-        </Field>
-        <button type="button" onClick={addGroup} disabled={newName === ""} className={`self-start ${secondaryAction}`}>
-          {t("groups.add")}
-        </button>
-      </section>
-
       {/*
         選択したグループに絞られているため、以前ここにあったピッカー
         ——既にすべてを表示しているページ上の三つ目の"Choose a group"
@@ -624,18 +629,20 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
         られていなかった。それはここで一度だけ、書き込みを行う
         ボタンの横で述べられる。
       */}
-      <p className={unsaved ? "text-sm text-notice-ink" : hintText}>
-        {unsaved ? t("groups.unsavedNote") : t("groups.savedNote")}
-      </p>
-
-      <div className="flex gap-2">
-        <button type="button" disabled={!unsaved} onClick={() => void run("preview")} className={secondaryAction}>
-          {t("groups.previewChanges")}
-        </button>
-        <button type="button" disabled={!unsaved} onClick={() => void run("save")} className={primaryAction}>
-          {t("groups.save")}
-        </button>
-      </div>
+      {unsaved ? (
+        <section
+          aria-label={t("groups.unsavedBarLabel")}
+          className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-notice-line bg-notice p-3 shadow-lg"
+        >
+          <p className="min-w-0 grow text-sm text-notice-ink">{t("groups.unsavedBarNote")}</p>
+          <button type="button" onClick={() => void run("preview")} className={secondaryAction}>
+            {t("groups.previewChanges")}
+          </button>
+          <button type="button" onClick={() => void run("save")} className={primaryAction}>
+            {t("groups.save")}
+          </button>
+        </section>
+      ) : null}
 
       <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />
     </div>
