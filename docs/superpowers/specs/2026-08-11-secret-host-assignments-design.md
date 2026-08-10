@@ -49,8 +49,10 @@ named `Credential` objects gain a required `hosts` array:
 `CredentialList` gains a required `dedicatedKeyPassphrases` array. Each item
 contains only a workspace-relative `key` path and its `hosts` array. It contains
 no credential name and cannot be selected for another key. The list also has a
-required `hostUsageComplete` boolean so an unavailable configuration projection
-cannot be confused with a confirmed empty host list.
+required `keyHostUsageComplete` boolean so an unavailable configuration
+projection cannot be confused with a confirmed empty key-host list. Account
+password host assignments remain complete because they come directly from the
+vault relationship and do not depend on configuration projection.
 
 All arrays are non-null, sorted, and deduplicated. No password, passphrase,
 master password, ciphertext, prompt content, or value-derived metadata enters
@@ -75,12 +77,13 @@ returns the API model. The vault remains unaware of SSH configuration, and the
 frontend remains unaware of configuration parsing.
 
 If the Include graph cannot be resolved, the credentials request still returns
-the vault relationships with empty host arrays and `hostUsageComplete: false`.
-The page renders an actionable configuration notice and describes those arrays
-as unavailable, not empty. This distinction is necessary because the same list
-response follows credential mutations: a successful secret write must never be
-reported as failed merely because the subsequent read-only configuration
-projection failed.
+the vault relationships with empty key-host arrays and
+`keyHostUsageComplete: false`. The page renders an actionable configuration
+notice and describes only the key-derived host arrays as unavailable, not
+empty. Password host assignments remain visible. This distinction is necessary
+because the same list response follows credential mutations: a successful
+secret write must never be reported as failed merely because the subsequent
+read-only configuration projection failed.
 
 ## UI structure
 
