@@ -27,7 +27,7 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
   await openApplication(page, installation);
 
   await expect(page.getByRole("heading", { name: "Your connections" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Home" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("list", { name: "Available connections" }).getByText(/bastion/)).toBeVisible();
   await expect(page.getByText("nas", { exact: true })).toBeVisible();
   expect(terminalRequests).toEqual([]);

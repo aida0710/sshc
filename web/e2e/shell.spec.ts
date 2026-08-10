@@ -56,7 +56,7 @@ test("keeps the header and the primary navigation still while a panel scrolls", 
 
   expect(await header.boundingBox()).toEqual(resting);
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeInViewport();
-  await expect(page.getByRole("button", { name: "History", exact: true })).toBeInViewport();
+  await expect(page.getByRole("link", { name: "History", exact: true })).toBeInViewport();
 
   // スクロールされたパネルの下端には、それでも到達できなければならない。ビューポー
   // トに固定されながらパネルをスクロール可能にし忘れたシェルは、それを隠してしまう。
@@ -83,6 +83,6 @@ test("scrolls the primary navigation on its own when the viewport is short", asy
   // この高さでも最後のセクションに到達できなければならない。
   // シェルが自身のスクロールを持つ前は、そこへ到達するには
   // ドキュメント全体をスクロールし、途中でヘッダーを失う必要があった。
-  await expect(page.getByRole("button", { name: "History", exact: true })).toBeInViewport();
+  await expect(page.getByRole("link", { name: "History", exact: true })).toBeInViewport();
   await expect(page.getByRole("banner")).toBeInViewport();
 });
