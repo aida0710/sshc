@@ -92,6 +92,7 @@ export function ConnectionBasicForm({
   const [privateKeys, setPrivateKeys] = useState<KeyItem[]>([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [initialKey, setInitialKey] = useState("");
+  const [preferredSuperseded, setPreferredSuperseded] = useState(false);
   const [keyState, setKeyState] = useState<"loading" | "editable" | "custom" | "complex">("loading");
   const [customKey, setCustomKey] = useState("");
   const [vault, setVault] = useState<PasswordVaultStatus | null>(null);
@@ -143,6 +144,7 @@ export function ConnectionBasicForm({
     setLocalError("");
     setLoading(true);
     setKeyState("loading");
+    setPreferredSuperseded(false);
 
     let active = true;
     void Promise.all([
@@ -163,6 +165,7 @@ export function ConnectionBasicForm({
           );
       const direct = directIdentityFields(detail);
       setPrivateKeys(identities);
+      let preferredAlreadyApplied = false;
       if (direct.length > 1) {
         setKeyState("complex");
         setSelectedKey("");
@@ -179,6 +182,7 @@ export function ConnectionBasicForm({
           setKeyState("editable");
           setSelectedKey(preferred?.id ?? matched.id);
           setInitialKey(matched.id);
+          preferredAlreadyApplied = preferred?.id === matched.id;
         }
       } else {
         setKeyState("editable");
@@ -189,6 +193,7 @@ export function ConnectionBasicForm({
       setEligibility(nextEligibility);
       applyCredentialState(status, listed);
       setLoading(false);
+      if (preferredAlreadyApplied) onPreferredKeyApplied?.();
     }).catch(() => {
       if (!active) return;
       clearSecrets();
@@ -312,11 +317,10 @@ export function ConnectionBasicForm({
     setLocalError("");
     try {
       await onSave(request);
-      if (
-        identityFileChange?.action === "set" &&
-        preferredKey !== null &&
-        identityFileChange.keyId === preferredKey.privateKeyId
-      ) {
+      if (preferredKey !== null && (
+        preferredSuperseded ||
+        (identityFileChange?.action === "set" && identityFileChange.keyId === preferredKey.privateKeyId)
+      )) {
         onPreferredKeyApplied?.();
       }
       clearSecrets();
@@ -446,7 +450,15 @@ export function ConnectionBasicForm({
               aria-label={t("conn.basicPrivateKey")}
               value={selectedKey}
               disabled={loading || keyState === "custom" || keyState === "complex"}
-              onChange={(event) => setSelectedKey(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSelectedKey(value);
+                const superseded = preferredKey !== null && value !== preferredKey.privateKeyId;
+                setPreferredSuperseded(superseded);
+                // 戻した先がサーバーの現在値なら保存操作は発生しない。その場で
+                // handoff を破棄しても、effect の再初期化は同じ現在値を選ぶだけである。
+                if (superseded && value === initialKey) onPreferredKeyApplied?.();
+              }}
               className={control}
             >
               <option value="">{t("conn.basicAgentOrInherited")}</option>

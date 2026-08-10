@@ -105,6 +105,10 @@ type ConnectionsPageProps = {
   onPreferredKeyApplied?: () => void;
 };
 
+type SaveAttempt =
+  | { saved: false; overview: null }
+  | { saved: true; overview: Overview | null };
+
 export function ConnectionsPage({
   onOpenFile,
   onInspector,
@@ -167,6 +171,23 @@ export function ConnectionsPage({
   function navigateToConnectionList(options?: NavigateLocationOptions) {
     if (options === undefined) onNavigateLocation?.(connectionLocation(null));
     else onNavigateLocation?.(connectionLocation(null), options);
+  }
+
+  // 書き込み済みの identity は、後続の GET より先に画面と URL の正本にする。
+  // detail は selection effect が新しい identity から読み直す。GET が一時的に
+  // 失敗しても、URL がもう存在しない旧 alias/path を指し続けることはない。
+  function followCommittedIdentity(identity: HostSelection, tab: HostEditorTab = activeTab) {
+    setSelection(identity);
+    setDetail(null);
+    setMissingSelection(false);
+    navigateToConnection(identity, tab, { replace: true });
+  }
+
+  function leaveCommittedIdentityUnknown() {
+    setSelection(null);
+    setDetail(null);
+    setMissingSelection(false);
+    navigateToConnectionList({ replace: true });
   }
 
   function beginCreation() {
@@ -313,25 +334,38 @@ export function ConnectionsPage({
 
   // 編集で開いているホストが削除された場合、reselect は false になる
   // ——消したばかりのブロックをサーバーへすぐに問い合わせずに済ませるためだ。
-  async function submit(request: EditRequest, reselect = true): Promise<Overview | null> {
+  async function submit(request: EditRequest, reselect = true): Promise<SaveAttempt> {
+    let result: Awaited<ReturnType<typeof configApi.save>>;
     try {
-      const result = await configApi.save(request);
-      setPreview(result.preview);
-      setProblem(null);
-      const nextOverview = await reload();
-      if (reselect && selection !== null) {
-        const nextAlias = request.kind === "rename" ? request.newAlias ?? selection.alias : selection.alias;
-        const nextSelection = { path: selection.path, alias: nextAlias };
-        setSelection(nextSelection);
-        setDetail(await configApi.host(selection.path, nextAlias));
-        if (request.kind === "rename") navigateToConnection(nextSelection, activeTab, { replace: true });
-      }
-      return nextOverview;
+      result = await configApi.save(request);
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
-      return null;
+      return { saved: false, overview: null };
     }
+
+    setPreview(result.preview);
+    setProblem(null);
+    const selectedBeforeSave = selection;
+    const renamedSelection =
+      request.kind === "rename" && selectedBeforeSave !== null
+        ? {
+            path: selectedBeforeSave.path,
+            alias: request.newAlias ?? selectedBeforeSave.alias,
+          }
+        : null;
+    if (renamedSelection !== null) followCommittedIdentity(renamedSelection);
+
+    const nextOverview = await reload();
+    if (reselect && selectedBeforeSave !== null && renamedSelection === null) {
+      try {
+        setDetail(await configApi.host(selectedBeforeSave.path, selectedBeforeSave.alias));
+      } catch (error) {
+        setProblem(toProblem(error));
+        setMissingSelection(true);
+      }
+    }
+    return { saved: true, overview: nextOverview };
   }
 
   // Basic は ssh_config の共通フィールドと vault の関連付けを一つの
@@ -418,22 +452,26 @@ export function ConnectionsPage({
     const path = detail.form.entry.file.path ?? "";
     const alias = detail.form.entry.identity.alias;
     if (group !== "") {
-      const nextOverview = await submit(
+      const attempt = await submit(
         { kind: "move", path, base: detail.file.contents, alias, destinationGroup: group },
         false,
       );
-      const moved = nextOverview?.hosts.find((host) => host.identity.alias === alias && host.group === group);
+      if (!attempt.saved) return;
+      const moved = attempt.overview?.hosts.find(
+        (host) => host.identity.alias === alias && host.group === group,
+      );
       if (moved !== undefined) {
-        const nextSelection = moved.identity;
-        setSelection(nextSelection);
-        setDetail(await configApi.host(nextSelection.path, nextSelection.alias));
-        navigateToConnection(nextSelection, activeTab, { replace: true });
+        followCommittedIdentity(moved.identity);
+      } else {
+        // 保存は完了したが、新しい path を決める overview を読めなかった。
+        // 消えた旧 path を共有可能な URL として残すより一覧へ戻す方が正確である。
+        leaveCommittedIdentityUnknown();
       }
       return;
     }
     try {
       const destination = await configApi.file(entryPath);
-      await submit({
+      const attempt = await submit({
         kind: "move",
         path,
         base: detail.file.contents,
@@ -441,9 +479,8 @@ export function ConnectionsPage({
         destinationPath: entryPath,
         destinationBase: destination.contents,
       }, false);
-      setSelection({ path: entryPath, alias });
-      setDetail(await configApi.host(entryPath, alias));
-      navigateToConnection({ path: entryPath, alias }, activeTab, { replace: true });
+      if (!attempt.saved) return;
+      followCommittedIdentity({ path: entryPath, alias });
     } catch (error) {
       setProblem(toProblem(error));
     }
@@ -483,11 +520,12 @@ export function ConnectionsPage({
               host.identity.alias === selection.alias && host.group === selectedDestinationGroup,
           );
           if (moved !== undefined) {
-            setSelection(moved.identity);
-            setDetail(null);
-            navigateToConnection(moved.identity, activeTab, { replace: true });
-            setDetail(await configApi.host(moved.identity.path, moved.identity.alias));
+            followCommittedIdentity(moved.identity);
+          } else {
+            leaveCommittedIdentityUnknown();
           }
+        } else if (selection !== null && selectedDestinationGroup !== null) {
+          leaveCommittedIdentityUnknown();
         }
         return;
       }
@@ -495,28 +533,30 @@ export function ConnectionsPage({
       const followsSelection =
         selection?.path === payload.path && selection.alias === payload.alias;
       if (target !== "") {
-        const nextOverview = await submit({
+        const attempt = await submit({
           kind: "move",
           path: payload.path,
           base: file.contents,
           alias: payload.alias,
           destinationGroup: target,
         }, false);
-        if (followsSelection && nextOverview !== null) {
-          const moved = nextOverview.hosts.find(
+        if (!attempt.saved) return;
+        if (followsSelection && attempt.overview !== null) {
+          const moved = attempt.overview.hosts.find(
             (host) => host.identity.alias === payload.alias && host.group === target,
           );
           if (moved !== undefined) {
-            setSelection(moved.identity);
-            setDetail(null);
-            navigateToConnection(moved.identity, activeTab, { replace: true });
-            setDetail(await configApi.host(moved.identity.path, moved.identity.alias));
+            followCommittedIdentity(moved.identity);
+          } else {
+            leaveCommittedIdentityUnknown();
           }
+        } else if (followsSelection) {
+          leaveCommittedIdentityUnknown();
         }
         return;
       }
       const destination = await configApi.file(entryPath);
-      const nextOverview = await submit({
+      const attempt = await submit({
         kind: "move",
         path: payload.path,
         base: file.contents,
@@ -524,12 +564,9 @@ export function ConnectionsPage({
         destinationPath: entryPath,
         destinationBase: destination.contents,
       }, false);
-      if (followsSelection && nextOverview !== null) {
-        const nextSelection = { path: entryPath, alias: payload.alias };
-        setSelection(nextSelection);
-        setDetail(null);
-        navigateToConnection(nextSelection, activeTab, { replace: true });
-        setDetail(await configApi.host(nextSelection.path, nextSelection.alias));
+      if (!attempt.saved) return;
+      if (followsSelection) {
+        followCommittedIdentity({ path: entryPath, alias: payload.alias });
       }
     } catch (error) {
       setPreview(null);
@@ -567,15 +604,9 @@ export function ConnectionsPage({
     setLocalError("");
     setManaging(false);
     setConfirmingDelete(false);
-    try {
-      await reload();
-      setSelection(result.identity);
-      setDetail(await configApi.host(result.identity.path, result.identity.alias));
-      setActiveTab("Basic");
-      navigateToConnection(result.identity, "Basic", { replace: true });
-    } catch (error) {
-      setProblem(toProblem(error));
-    }
+    setActiveTab("Basic");
+    followCommittedIdentity(result.identity, "Basic");
+    await reload();
   }
 
   async function connectHost() {
@@ -664,7 +695,7 @@ export function ConnectionsPage({
     try {
       const destination = await configApi.file(moveTarget);
       const source = selection;
-      await submit({
+      const attempt = await submit({
         kind: "move",
         path: source.path,
         base: detail.file.contents,
@@ -672,9 +703,8 @@ export function ConnectionsPage({
         destinationPath: moveTarget,
         destinationBase: destination.contents,
       }, false);
-      setSelection({ path: moveTarget, alias: source.alias });
-      setDetail(await configApi.host(moveTarget, source.alias));
-      navigateToConnection({ path: moveTarget, alias: source.alias }, activeTab, { replace: true });
+      if (!attempt.saved) return;
+      followCommittedIdentity({ path: moveTarget, alias: source.alias });
       setMoveTarget("");
       setLocalError("");
     } catch (error) {
@@ -698,11 +728,12 @@ export function ConnectionsPage({
     }
     const path = selection.path;
     const base = detail.file.contents;
+    const attempt = await submit({ kind: "file_raw", path, base, raw }, false);
+    if (!attempt.saved) return;
     setSelection(null);
     setDetail(null);
     setConfirmingDelete(false);
     setLocalError("");
-    await submit({ kind: "file_raw", path, base, raw }, false);
     navigateToConnectionList({ replace: true });
   }
 

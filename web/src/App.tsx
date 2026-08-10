@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { apiClient, whenLocked, type HealthResponse } from "./api/client";
 import { integrationsApi, type PasswordVaultStatus } from "./api/integrations";
 import { configApi } from "./api/config";
@@ -123,6 +123,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // ID と ~/.ssh からの相対パスだけで、パスフレーズや鍵本文はここへ来ない。
   const [preferredConnectionKey, setPreferredConnectionKey] = useState<GeneratedPrivateKeyHandoff | null>(null);
   const [preferredPublicKey, setPreferredPublicKey] = useState<GeneratedPublicKeyHandoff | null>(null);
+  const consumePreferredConnectionKey = useCallback(() => setPreferredConnectionKey(null), []);
+  const consumePreferredPublicKey = useCallback(() => setPreferredPublicKey(null), []);
   // ペインはシェルに属するものであり、セクションに属するものではない。
   // Connections で開いたものは Keys でも開いたままになる——セクションを
   // 切り替えるたびに自分で閉じるペインでは、頻繁に開き直す羽目になる。
@@ -428,7 +430,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                   preferredPublicKey={preferredPublicKey}
                   onAssignGeneratedKey={assignGeneratedKey}
                   onInstallGeneratedKey={installGeneratedKey}
-                  onPreferredConnectionKeyApplied={() => setPreferredConnectionKey(null)}
+                  onPreferredConnectionKeyApplied={consumePreferredConnectionKey}
+                  onPreferredPublicKeyHandled={consumePreferredPublicKey}
                 />
               ) : (
                 <div className="h-full overflow-y-auto p-6">
@@ -478,6 +481,7 @@ type SectionViewProps = {
   onAssignGeneratedKey: (key: GeneratedPrivateKeyHandoff) => void;
   onInstallGeneratedKey: (key: GeneratedPublicKeyHandoff) => void;
   onPreferredConnectionKeyApplied: () => void;
+  onPreferredPublicKeyHandled: () => void;
   onConnectionDraftChange: (draft: CreateConnectionDraft | null) => void;
   onNavigateForCreation: (section: CreationPrerequisite) => void;
   // セクションは右側ペインの中身を提供するか、調べるものが無ければ
@@ -517,6 +521,7 @@ function PaddedSection({
   preferredPublicKey,
   onAssignGeneratedKey,
   onInstallGeneratedKey,
+  onPreferredPublicKeyHandled,
 }: SectionViewProps) {
   if (section === "Home") {
     return <OverviewPanel onNavigate={onNavigate} />;
@@ -549,7 +554,12 @@ function PaddedSection({
     return <KnownHostsPanel />;
   }
   if (section === "Remote Keys") {
-    return <RemoteKeyPanel preferredPublicKeyPath={preferredPublicKey?.publicRelativePath ?? null} />;
+    return (
+      <RemoteKeyPanel
+        preferredPublicKeyPath={preferredPublicKey?.publicRelativePath ?? null}
+        onPreferredPublicKeyHandled={onPreferredPublicKeyHandled}
+      />
+    );
   }
   if (section === "Diagnostics") {
     return <DiagnosticsPanel hosts={knownAliases} />;

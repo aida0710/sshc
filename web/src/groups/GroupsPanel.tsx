@@ -170,6 +170,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   // ホイストされた関数宣言は上の絞り込みを引き継がないため、
   // 読み込まれたドキュメントはクロージャが使える non-null な const として一度だけ捕捉する。
   const loaded: Metadata = metadata;
+  const savedMetadata: Metadata = overview.metadata;
   const hosts = overview.hosts;
   const groups = treeOrder(loaded.groups ?? []);
 
@@ -258,6 +259,10 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   // ——クライアントには組み立てられない一つのトランザクションである。これは
   // サーバー操作であり即座に適用される。このパネルが保持するドキュメントへの編集ではない。
   async function renameGroup(from: string) {
+    if (unsaved) {
+      setLocalError(t("groups.saveDraftFirst"));
+      return;
+    }
     const target = (renaming[from] ?? "").trim();
     if (target === "" || target === from) {
       setLocalError(t("groups.renameNeedsName"));
@@ -287,6 +292,10 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   }
 
   async function removeGroup(name: string) {
+    if (unsaved) {
+      setLocalError(t("groups.saveDraftFirst"));
+      return;
+    }
     try {
       const result = await configApi.deleteGroup(name, removing[name] ?? "");
       setConfirmingRemove({ ...confirmingRemove, [name]: false });
@@ -315,6 +324,16 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       setPreview(null);
       setProblem(toProblem(error));
     }
+  }
+
+  function discardDraft() {
+    setMetadata(savedMetadata);
+    setPreview(null);
+    setProblem(null);
+    setLocalError("");
+    setRenaming({});
+    setRemoving({});
+    setConfirmingRemove({});
   }
 
   return (
@@ -473,13 +492,14 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                     id={`group-rename-${group.name}`}
                     aria-label={t("groups.renameTo", { name: group.name })}
                     value={renaming[group.name] ?? ""}
+                    disabled={unsaved}
                     onChange={(event) => setRenaming({ ...renaming, [group.name]: event.target.value })}
                     className={narrowControl}
                   />
                   <button
                     type="button"
                     onClick={() => void renameGroup(group.name)}
-                    disabled={!savedGroups.has(group.name)}
+                    disabled={!savedGroups.has(group.name) || unsaved}
                     className={secondaryAction}
                   >
                     {t("groups.rename", { name: group.name })}
@@ -503,7 +523,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                 <button
                   type="button"
                   onClick={() => setConfirmingRemove({ ...confirmingRemove, [group.name]: true })}
-                  disabled={!savedGroups.has(group.name)}
+                  disabled={!savedGroups.has(group.name) || unsaved}
                   className={secondaryAction}
                 >
                   {t("groups.remove", { name: group.name })}
@@ -548,6 +568,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                     <select
                       id={`group-move-${group.name}`}
                       value={removing[group.name] ?? ""}
+                      disabled={unsaved}
                       onChange={(event) => setRemoving({ ...removing, [group.name]: event.target.value })}
                       className={`${control} w-56`}
                     >
@@ -572,7 +593,12 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                 */}
                 <p className={hintText}>{t("groups.removeKeepsFiles")}</p>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => void removeGroup(group.name)} className={dangerAction}>
+                  <button
+                    type="button"
+                    onClick={() => void removeGroup(group.name)}
+                    disabled={unsaved}
+                    className={dangerAction}
+                  >
                     {t("groups.removeConfirm", { name: group.name })}
                   </button>
                   <button
@@ -638,11 +664,16 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
           <button type="button" onClick={() => void run("preview")} className={secondaryAction}>
             {t("groups.previewChanges")}
           </button>
+          <button type="button" onClick={discardDraft} className={secondaryAction}>
+            {t("groups.discard")}
+          </button>
           <button type="button" onClick={() => void run("save")} className={primaryAction}>
             {t("groups.save")}
           </button>
         </section>
-      ) : null}
+      ) : (
+        <p className="text-xs text-ink-muted">{t("groups.savedNote")}</p>
+      )}
 
       <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />
     </div>

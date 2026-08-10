@@ -91,15 +91,40 @@ describe("GroupsPanel", () => {
     expect(addHeading.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(screen.queryByRole("region", { name: "Unsaved group changes" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save groups" })).toBeNull();
+    expect(screen.getByText(/holds no unwritten changes/)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("New group name"), "lab");
     await user.click(screen.getByRole("button", { name: "Add group" }));
 
     const bar = screen.getByRole("region", { name: "Unsaved group changes" });
     expect(bar).toHaveClass("sticky");
-    expect(within(bar).getByText(/Rename and remove still write immediately/)).toBeInTheDocument();
+    expect(within(bar).getByText(/Save or discard them before renaming or removing/)).toBeInTheDocument();
     expect(within(bar).getByRole("button", { name: "Preview group changes" })).toBeEnabled();
+    expect(within(bar).getByRole("button", { name: "Discard group changes" })).toBeEnabled();
     expect(within(bar).getByRole("button", { name: "Save groups" })).toBeEnabled();
+  });
+
+  it("protects staged edits from immediate group operations and can discard the draft", async () => {
+    const user = userEvent.setup();
+    render(<GroupsPanel />);
+
+    await user.type(await screen.findByLabelText("New group name"), "lab");
+    await user.click(screen.getByRole("button", { name: "Add group" }));
+    await select(user, "company");
+
+    expect(screen.getByLabelText("Rename company to")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Rename company" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove company" })).toBeDisabled();
+    expect(configApi.renameGroup).not.toHaveBeenCalled();
+    expect(configApi.deleteGroup).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Discard group changes" }));
+
+    expect(screen.queryByRole("heading", { name: "lab" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Unsaved group changes" })).toBeNull();
+    expect(screen.getByText(/holds no unwritten changes/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Rename company to")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Remove company" })).toBeEnabled();
   });
 
   it("adds a nested group by naming its path and saves it", async () => {

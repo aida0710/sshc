@@ -164,6 +164,24 @@ describe("ConnectionBasicForm", () => {
     expect(onPreferredKeyApplied).toHaveBeenCalledOnce();
   });
 
+  it("consumes a generated-key handoff when another key is saved instead", async () => {
+    const user = userEvent.setup();
+    const onPreferredKeyApplied = vi.fn();
+    const harness = renderForm({
+      preferredKey: { privateKeyId: secondKey.id, privateRelativePath: secondKey.relativePath },
+      onPreferredKeyApplied,
+    });
+
+    await waitFor(() => expect(screen.getByLabelText("SSH private key")).toHaveValue(secondKey.id));
+    await user.selectOptions(screen.getByLabelText("SSH private key"), privateKey.id);
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+
+    expect(harness.onSave).toHaveBeenCalledWith(expect.objectContaining({
+      identityFile: { action: "set", keyId: privateKey.id },
+    }));
+    expect(onPreferredKeyApplied).toHaveBeenCalledOnce();
+  });
+
   it("places stable server validation failures beside the affected control", async () => {
     const first = renderForm({
       problem: { code: "connection_hostname_invalid", message: "invalid host" },
