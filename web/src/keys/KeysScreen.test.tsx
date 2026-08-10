@@ -216,6 +216,32 @@ function buildApi(overrides: Partial<KeysApi> = {}): KeysApi {
 }
 
 describe("KeysScreen", () => {
+  it("links directly to key creation and offers safe next steps after in-process generation", async () => {
+    const api = buildApi();
+    const onAssignGeneratedKey = vi.fn();
+    const onInstallGeneratedKey = vi.fn();
+    render(
+      <KeysScreen
+        api={api}
+        onAssignGeneratedKey={onAssignGeneratedKey}
+        onInstallGeneratedKey={onInstallGeneratedKey}
+      />,
+    );
+
+    expect(await screen.findByRole("link", { name: "Create a key" })).toHaveAttribute("href", "#create-key-heading");
+    await userEvent.type(screen.getByLabelText("File name"), "id_new");
+    await userEvent.type(screen.getByLabelText("Passphrase"), "one-time secret");
+    await userEvent.click(screen.getByRole("button", { name: "Create key" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Assign to a connection" }));
+    expect(onAssignGeneratedKey).toHaveBeenCalledWith({
+      privateKeyId: "key-new",
+      privateRelativePath: "id_new",
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Install on a server" }));
+    expect(onInstallGeneratedKey).toHaveBeenCalledWith({ publicRelativePath: "id_new.pub" });
+  });
+
   it("lists classified files with fingerprint, permissions and referencing Hosts", async () => {
     render(<KeysScreen api={buildApi()} />);
 
@@ -259,6 +285,8 @@ describe("KeysScreen", () => {
       "ssh-keygen -t ed25519-sk -f /home/.ssh/id_yubikey",
     );
     expect(api.generate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Assign to a connection" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Install on a server" })).toBeNull();
   });
 
   it("changes a passphrase and keeps nothing in the form afterwards", async () => {

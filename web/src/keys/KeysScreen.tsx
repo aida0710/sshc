@@ -28,6 +28,7 @@ import {
   type RelocateKeyResponse,
   type TrashListResponse,
 } from "./api";
+import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./workflow";
 
 // groups は宣言済みのグループ名で、シェルが overview から渡す。
 // Keys 画面はそれらを推測しない: ディレクトリがグループなのは
@@ -37,7 +38,13 @@ import {
 // 第二の面である: 鍵とは何かはこのパッケージに属し、パスフレーズが
 // どこにあるかは vault に属する。これはサーバーが鍵サービスと
 // シークレットサービスの間で保つのと同じ分離だ。
-type KeysScreenProps = { api?: KeysApi; groups?: string[]; secrets?: IntegrationsApi };
+type KeysScreenProps = {
+  api?: KeysApi;
+  groups?: string[];
+  secrets?: IntegrationsApi;
+  onAssignGeneratedKey?: (key: GeneratedPrivateKeyHandoff) => void;
+  onInstallGeneratedKey?: (key: GeneratedPublicKeyHandoff) => void;
+};
 
 type ScreenState = "loading" | "ready" | "error";
 
@@ -166,7 +173,13 @@ function agentHolds(inventory: KeyInventoryResponse, item: KeyItem): boolean {
   return inventory.agentIdentities.some((identity) => identity.fingerprint === item.fingerprint);
 }
 
-export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsApi }: KeysScreenProps) {
+export function KeysScreen({
+  api = keysApi,
+  groups = [],
+  secrets = integrationsApi,
+  onAssignGeneratedKey,
+  onInstallGeneratedKey,
+}: KeysScreenProps) {
   const t = useTranslate();
   const [state, setState] = useState<ScreenState>("loading");
   const [inventory, setInventory] = useState<KeyInventoryResponse | null>(null);
@@ -202,6 +215,10 @@ export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsA
   const [failure, setFailure] = useState("");
   const [keyQuery, setKeyQuery] = useState("");
   const [moreActionsFor, setMoreActionsFor] = useState("");
+  const [generated, setGenerated] = useState<{
+    private: GeneratedPrivateKeyHandoff;
+    public: GeneratedPublicKeyHandoff;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -232,13 +249,14 @@ export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsA
   async function submitGeneration() {
     setFailure("");
     setTerminalCommand(null);
+    setGenerated(null);
     try {
       if (selected !== undefined && !selected.inProcess) {
         const response = await api.hardwareCommand({ algorithm, fileName, group: createGroup, comment });
         setTerminalCommand(response.command);
         return;
       }
-      await api.generate({
+      const response = await api.generate({
         algorithm,
         bits: selected?.bits ?? 0,
         fileName,
@@ -246,6 +264,13 @@ export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsA
         comment,
         passphrase,
         unencrypted,
+      });
+      setGenerated({
+        private: {
+          privateKeyId: response.id,
+          privateRelativePath: response.relativePath,
+        },
+        public: { publicRelativePath: response.publicRelativePath },
       });
       setPassphrase("");
       setFileName("");
@@ -507,16 +532,19 @@ export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsA
         title={t("keys.heading")}
         description={t("keys.pageDescription")}
         actions={
-          <label className="w-72 max-w-full">
-            <span className="sr-only">{t("keys.search")}</span>
-            <input
-              type="search"
-              value={keyQuery}
-              onChange={(event) => setKeyQuery(event.target.value)}
-              placeholder={t("keys.searchPlaceholder")}
-              className={control}
-            />
-          </label>
+          <>
+            <a href="#create-key-heading" className={secondaryAction}>{t("keys.createHeading")}</a>
+            <label className="w-72 max-w-full">
+              <span className="sr-only">{t("keys.search")}</span>
+              <input
+                type="search"
+                value={keyQuery}
+                onChange={(event) => setKeyQuery(event.target.value)}
+                placeholder={t("keys.searchPlaceholder")}
+                className={control}
+              />
+            </label>
+          </>
         }
       />
       <MetricGrid>
@@ -1289,6 +1317,31 @@ export function KeysScreen({ api = keysApi, groups = [], secrets = integrationsA
           {inProcess ? t("keys.createSubmit") : t("keys.showTerminalCommand")}
         </button>
       </form>
+
+      {generated === null ? null : (
+        <section aria-live="polite" className={sectionCard}>
+          <h3 className={sectionHeading}>{t("keys.generatedHeading")}</h3>
+          <p className={hintText}>
+            {t("keys.generatedNext", { path: generated.private.privateRelativePath })}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={primaryAction}
+              onClick={() => onAssignGeneratedKey?.(generated.private)}
+            >
+              {t("keys.assignGenerated")}
+            </button>
+            <button
+              type="button"
+              className={secondaryAction}
+              onClick={() => onInstallGeneratedKey?.(generated.public)}
+            >
+              {t("keys.installGenerated")}
+            </button>
+          </div>
+        </section>
+      )}
 
       {terminalCommand !== null && (
         <div>

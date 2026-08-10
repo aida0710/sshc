@@ -21,6 +21,7 @@ import { Button, Card, Notice, Row } from "../ui/surface";
 import { deriveBasicField, type BasicFieldState, type BasicKeyword } from "./basicFields";
 import { formatValues } from "./values";
 import { validHostNameInput } from "./hostValidation";
+import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 
 type PasswordAction = UpdateConnectionPassword["kind"];
 
@@ -33,6 +34,8 @@ type ConnectionBasicFormProps = {
     IntegrationsApi,
     "passwordVault" | "credentials" | "passwordEligibility" | "initialiseVault" | "unlockVault"
   >;
+  preferredKey?: GeneratedPrivateKeyHandoff | null | undefined;
+  onPreferredKeyApplied?: (() => void) | undefined;
 };
 
 type DraftField = {
@@ -72,6 +75,8 @@ export function ConnectionBasicForm({
   onSave,
   keys = keysApi,
   secrets = integrationsApi,
+  preferredKey = null,
+  onPreferredKeyApplied,
 }: ConnectionBasicFormProps) {
   const t = useTranslate();
   const identity = detail.form.entry.identity;
@@ -149,6 +154,13 @@ export function ConnectionBasicForm({
       if (!active) return;
 
       const identities = selectablePrivateKeys(inventory);
+      const preferred = preferredKey === null
+        ? undefined
+        : identities.find(
+            (candidate) =>
+              candidate.id === preferredKey.privateKeyId &&
+              candidate.relativePath === preferredKey.privateRelativePath,
+          );
       const direct = directIdentityFields(detail);
       setPrivateKeys(identities);
       if (direct.length > 1) {
@@ -165,12 +177,12 @@ export function ConnectionBasicForm({
           setInitialKey("__custom__");
         } else {
           setKeyState("editable");
-          setSelectedKey(matched.id);
+          setSelectedKey(preferred?.id ?? matched.id);
           setInitialKey(matched.id);
         }
       } else {
         setKeyState("editable");
-        setSelectedKey("");
+        setSelectedKey(preferred?.id ?? "");
         setInitialKey("");
       }
       setVault(status);
@@ -189,7 +201,7 @@ export function ConnectionBasicForm({
     };
     // resetKey deliberately represents the server snapshot this draft belongs to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetKey, keys, secrets, t]);
+  }, [resetKey, keys, secrets, t, preferredKey]);
 
   function updateField(setter: (value: DraftField) => void, current: DraftField, value: string) {
     setter({ ...current, value, inherit: false });
@@ -300,6 +312,13 @@ export function ConnectionBasicForm({
     setLocalError("");
     try {
       await onSave(request);
+      if (
+        identityFileChange?.action === "set" &&
+        preferredKey !== null &&
+        identityFileChange.keyId === preferredKey.privateKeyId
+      ) {
+        onPreferredKeyApplied?.();
+      }
       clearSecrets();
       setPasswordAction("unchanged");
       setConfirmRemove(false);
@@ -439,6 +458,12 @@ export function ConnectionBasicForm({
               ))}
             </select>
           </Row>
+          {preferredKey !== null && identityFileChange?.action === "set" &&
+          identityFileChange.keyId === preferredKey.privateKeyId ? (
+            <p className="border-t border-hairline px-3 py-2 text-xs text-notice-ink">
+              {t("conn.basicGeneratedKeyStaged", { path: preferredKey.privateRelativePath })}
+            </p>
+          ) : null}
 
           <div className="border-t border-hairline px-3 py-3">
             <div className="flex flex-col gap-3">

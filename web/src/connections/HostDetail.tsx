@@ -27,6 +27,7 @@ import {
 import { Button, Card, Notice, Row } from "../ui/surface";
 import type { MessageKey } from "../i18n/messages";
 import { hostEditorTabs as tabs, type HostEditorTab } from "../routing/connectionRoute";
+import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 
 // タブの識別子は英語のまま翻訳しない。下のフィールドカテゴリとレンダリング
 // スイッチのキーになっているため、翻訳すればどのタブが開いているかが
@@ -60,6 +61,8 @@ type HostDetailPanelProps = {
   keys?: Pick<KeysApi, "inventory">;
   tab?: HostEditorTab;
   onTabChange?: (tab: HostEditorTab) => void;
+  preferredKey?: GeneratedPrivateKeyHandoff | null | undefined;
+  onPreferredKeyApplied?: (() => void) | undefined;
 };
 
 function fieldKey(field: FormField): string {
@@ -81,6 +84,8 @@ export function HostDetailPanel({
   keys,
   tab: controlledTab,
   onTabChange,
+  preferredKey,
+  onPreferredKeyApplied,
 }: HostDetailPanelProps) {
   const t = useTranslate();
   const [localTab, setLocalTab] = useState<HostEditorTab>("Basic");
@@ -228,6 +233,8 @@ export function HostDetailPanel({
           onSave={onBasicSave}
           {...(keys === undefined ? {} : { keys })}
           secrets={integrations}
+          preferredKey={preferredKey}
+          onPreferredKeyApplied={onPreferredKeyApplied}
         />
       ) : null}
 
