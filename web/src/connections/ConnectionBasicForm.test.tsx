@@ -271,4 +271,22 @@ describe("ConnectionBasicForm", () => {
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("retry.example");
     expect(screen.getByLabelText("Connection password")).toHaveValue("");
   });
+
+  it("refreshes a password-only success even when the SSH file bytes do not change", async () => {
+    const user = userEvent.setup();
+    const passwordVault = vi.fn()
+      .mockResolvedValueOnce({ exists: true, unlocked: true, aliases: [], minPassphraseLength: 12 })
+      .mockResolvedValueOnce({ exists: true, unlocked: true, aliases: ["edge"], minPassphraseLength: 12 });
+    renderForm({ passwordVault });
+    await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText("Stored password action"), "dedicated_password");
+    await user.type(screen.getByLabelText("Connection password"), "password-only");
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+
+    expect(await screen.findByText(/connection-only password is assigned/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Stored password action")).toHaveValue("unchanged");
+    expect(screen.queryByLabelText("Connection password")).not.toBeInTheDocument();
+    expect(passwordVault).toHaveBeenCalledTimes(2);
+  });
 });

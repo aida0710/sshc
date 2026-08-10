@@ -11,6 +11,7 @@ import {
   type Metadata,
   type Overview,
   type SavePreview,
+  type UpdateConnectionRequest,
 } from "../api/config";
 import { ConnectionTree, type HostSelection } from "./ConnectionTree";
 import type { DragPayload } from "./dragdrop";
@@ -256,6 +257,25 @@ export function ConnectionsPage({
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
+    }
+  }
+
+  // Basic は ssh_config の共通フィールドと vault の関連付けを一つの
+  // トランザクションにする専用 use case である。失敗を再送出するのは、
+  // フォーム自身が入力済みの秘密だけを破棄し、非秘密の下書きを保持する
+  // 必要があるためである。ページは同時に、詳細な Problem と conflict diff
+  // を既存の Save preview に残す。
+  async function onBasicSave(request: UpdateConnectionRequest) {
+    try {
+      const result = await configApi.updateConnection(request);
+      setPreview(result.preview);
+      setProblem(null);
+      await reload();
+      setDetail(await configApi.host(request.identity.path, request.identity.alias));
+    } catch (error) {
+      setPreview(null);
+      setProblem(toProblem(error));
+      throw error;
     }
   }
 
@@ -727,6 +747,7 @@ export function ConnectionsPage({
               onRename={onRename}
               onComment={onComment}
               onMoveToGroup={(group) => void onMoveToGroup(group)}
+              onBasicSave={onBasicSave}
             />
           </>
         )}

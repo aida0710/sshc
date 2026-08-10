@@ -104,7 +104,7 @@ test("edits a host through the form and writes only the line that changed", asyn
   await openBastion(page, installation.url);
 
   await page.getByLabel("Port", { exact: true }).fill("2244");
-  expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections")).toBe(200);
 
   const after = await installation.read("config");
   expect(after).toContain("Port 2244");
@@ -178,7 +178,7 @@ test("edits the same host through Raw and keeps every other byte", async ({
 test("shows a save preview diff of exactly what was written", async ({ page, installation }) => {
   await openBastion(page, installation.url);
   await page.getByLabel("Port", { exact: true }).fill("2299");
-  expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections")).toBe(200);
 
   const preview = page.getByRole("region", { name: "Save preview" });
   await expect(preview).toContainText("2299");
@@ -200,7 +200,7 @@ test("refuses a save whose base is stale and shows the three-way conflict", asyn
   await installation.write("config", external);
 
   await page.getByLabel("Port", { exact: true }).fill("2277");
-  expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(409);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections")).toBe(409);
 
   await expect(page.getByText("Changed on disk since you loaded it")).toBeVisible();
   await expect(page.getByText("Your pending change")).toBeVisible();
@@ -235,6 +235,7 @@ test("diagnoses the open connection from its own tab, and starts nothing unasked
 
   const panel = page.getByRole("region", { name: "Diagnostics for bastion" });
   await expect(panel).toBeVisible();
+  await expect(page.getByText("Stored password", { exact: true })).toHaveCount(0);
   // 接続は既知であるため、タブは alias を尋ねない。
   await expect(panel.getByLabel("Host alias")).toHaveCount(0);
   expect(started.filter((path) => path.startsWith("/api/v1/diagnostics/"))).toEqual([]);

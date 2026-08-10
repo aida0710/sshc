@@ -14,7 +14,7 @@ vi.mock("../api/config", async () => {
     ...actual,
     configApi: {
       overview: vi.fn(), host: vi.fn(), file: vi.fn(), preview: vi.fn(), save: vi.fn(), renameGroup: vi.fn(),
-      createConnection: vi.fn(),
+      createConnection: vi.fn(), updateConnection: vi.fn(),
     },
   };
 });
@@ -22,7 +22,7 @@ vi.mock("../api/config", async () => {
 vi.mock("../api/integrations", () => ({
   integrationsApi: {
     terminalLaunch: vi.fn(), terminalOptions: vi.fn(), passwordVault: vi.fn(), credentials: vi.fn(),
-    initialiseVault: vi.fn(), unlockVault: vi.fn(),
+    passwordEligibility: vi.fn(), initialiseVault: vi.fn(), unlockVault: vi.fn(),
   },
 }));
 
@@ -85,6 +85,9 @@ beforeEach(() => {
     exists: true, unlocked: true, aliases: [], minPassphraseLength: 12,
   } as never);
   vi.mocked(integrationsApi.credentials).mockResolvedValue({ credentials: [] } as never);
+  vi.mocked(integrationsApi.passwordEligibility).mockResolvedValue({
+    alias: "bastion", storable: true, blockers: [], warnings: [],
+  } as never);
   vi.mocked(keysApi.inventory).mockResolvedValue({
     items: [], unreadable: [], agentDelegations: [], unresolvedReferences: [], agentAvailable: false, agentIdentities: [],
   } as never);
@@ -108,10 +111,10 @@ describe("ConnectionsPage", () => {
     expect(screen.queryByText(/no concrete alias/)).not.toBeInTheDocument();
   });
 
-  it("loads the tree, opens a host and saves a field edit with the loaded base", async () => {
+  it("loads the tree, opens a host and saves a Basic field with the loaded base", async () => {
     const user = userEvent.setup();
-    vi.mocked(configApi.save).mockResolvedValue({
-      transactionId: "t1", written: ["config"], preview: { operation: "config.host_fields", diffs: [] },
+    vi.mocked(configApi.updateConnection).mockResolvedValue({
+      transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
     } as never);
 
     render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
@@ -120,14 +123,13 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2222");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
 
-    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
-      kind: "host_fields",
-      path: "config",
-      alias: "bastion",
+    await waitFor(() => expect(configApi.updateConnection).toHaveBeenCalledWith({
+      identity: { path: "config", alias: "bastion" },
       base: "Host bastion\n\tPort 22\n",
-      fields: [{ action: "set", line: 2, values: ["2222"] }],
+      port: { action: "set", value: 2222 },
+      password: { kind: "unchanged" },
     }));
     expect(configApi.host).toHaveBeenCalledWith("config", "bastion");
   });
@@ -260,11 +262,11 @@ describe("ConnectionsPage", () => {
     // かかった時間だけだった。エンドツーエンドスイートはたまたまその
     // 窓の中を覗いていたため見えていたが、そうでなければ CI で失敗していた。
     const user = userEvent.setup();
-    vi.mocked(configApi.save).mockResolvedValue({
+    vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1",
       written: ["config"],
       preview: {
-        operation: "config.host_fields",
+        operation: "connection.update",
         diffs: [{
           path: "config",
           lines: [
@@ -281,7 +283,7 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2299");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
 
     // 流れ全体で二回。一回は選択のため、もう一回は save 自身が
     // 行うリロードのため。三回目は差分を消してしまう重複である。
@@ -306,11 +308,11 @@ describe("ConnectionsPage", () => {
         },
       ],
     } as never);
-    vi.mocked(configApi.save).mockResolvedValue({
+    vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1",
       written: ["config"],
       preview: {
-        operation: "config.host_fields",
+        operation: "connection.update",
         diffs: [{ path: "config", lines: [{ op: "insert", text: "\tPort 2299", newLine: 2 }] }],
       },
     } as never);
@@ -321,7 +323,7 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2299");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
     await screen.findByText(/Port 2299/);
 
     await user.click(screen.getByRole("button", { name: /nas/ }));
@@ -358,7 +360,7 @@ describe("ConnectionsPage", () => {
 
   it("keeps the edit visible and shows the conflict when the file changed on disk", async () => {
     const user = userEvent.setup();
-    vi.mocked(configApi.save).mockRejectedValue(new ApiError("config_conflict", 409, {
+    vi.mocked(configApi.updateConnection).mockRejectedValue(new ApiError("config_conflict", 409, {
       code: "config_conflict",
       message: "request rejected",
       path: "config",
@@ -375,11 +377,11 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2222");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/changed outside this application/i);
     expect(screen.getByText("Changed on disk since you loaded it")).toBeInTheDocument();
-    expect(screen.getByLabelText("Port")).toHaveValue("2222");
+    expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });
 
   it("creates a complete connection, refreshes the tree, and opens its Basic detail without launching a terminal", async () => {

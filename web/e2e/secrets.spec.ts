@@ -25,12 +25,16 @@ test("gives one named secret to two hosts and writes neither name into the file"
   for (const alias of ["bastion", "nas"]) {
     await openSection(page, "Connections");
     await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: alias }).click();
-    await page.getByRole("tab", { name: "Diagnostics" }).click();
 
-    const panel = page.getByRole("region", { name: "Stored password" });
-    await panel.getByLabel("Use a stored password").selectOption("office-vm");
-    await panel.getByRole("button", { name: `Point ${alias} at this stored password` }).click();
-    await expect(panel.getByText(`A password is stored for ${alias}.`)).toBeVisible();
+    const panel = page.getByRole("region", { name: "Authentication" });
+    await panel.getByLabel("Stored password action").selectOption("saved_password");
+    await panel.getByLabel("Saved password").selectOption("office-vm");
+    const saved = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
+    );
+    await page.getByRole("button", { name: "Save Basic settings" }).click();
+    expect((await saved).status()).toBe(200);
+    await expect(panel.getByText("Assigned: office-vm")).toBeVisible();
   }
 
   await openSection(page, "Secrets");
@@ -59,11 +63,11 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
 
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
-  await page.getByRole("tab", { name: "Diagnostics" }).click();
 
-  const panel = page.getByRole("region", { name: "Stored password" });
+  const panel = page.getByRole("region", { name: "Authentication" });
+  await panel.getByLabel("Stored password action").selectOption("saved_password");
   // アカウントパスワードはそもそも存在しないため、ピッカーは
   // 誤った種類のものを提供する場として存在しない。
-  await expect(panel.getByLabel("Use a stored password")).toHaveCount(0);
-  await expect(panel.getByLabel("Password for bastion")).toBeVisible();
+  await expect(panel.getByLabel("Saved password").locator("option")).toHaveCount(1);
+  await expect(panel.getByRole("option", { name: "build-key" })).toHaveCount(0);
 });

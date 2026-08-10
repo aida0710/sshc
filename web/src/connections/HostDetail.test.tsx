@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { HostDetailPanel } from "./HostDetail";
 import type { HostDetail } from "../api/config";
 import type { IntegrationsApi } from "../api/integrations";
+import type { KeysApi } from "../keys/api";
 
 // Diagnostics タブは Diagnostics section と同じ検査を行うため、
 // これは同じクライアントを注入する。どのメソッドもモックである。実物に届く
@@ -96,6 +97,10 @@ const detail: HostDetail = {
 };
 
 function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> = {}) {
+  const integrations = buildIntegrations();
+  const keys = { inventory: vi.fn().mockResolvedValue({
+    items: [], unreadable: [], agentDelegations: [], unresolvedReferences: [], agentAvailable: false, agentIdentities: [],
+  }) } as Pick<KeysApi, "inventory">;
   const handlers = {
     detail,
     groups: [{ name: "work" }],
@@ -106,6 +111,9 @@ function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> =
     onRename: vi.fn(),
     onComment: vi.fn(),
     onMoveToGroup: vi.fn(),
+    onBasicSave: vi.fn().mockResolvedValue(undefined),
+    integrations,
+    keys,
     ...overrides,
   };
   const rendered = render(<HostDetailPanel {...handlers} />);
@@ -113,14 +121,17 @@ function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> =
 }
 
 describe("HostDetailPanel", () => {
-  it("shows basic fields first and keeps unknown directives editable", async () => {
+  it("shows the stable Basic form and keeps raw directives editable in Advanced", async () => {
     const user = userEvent.setup();
     renderPanel();
 
-    expect(screen.getByLabelText("HostName")).toHaveValue("203.0.113.10");
+    expect(screen.getByLabelText("Host name or IP address")).toHaveValue("203.0.113.10");
+    expect(screen.getByLabelText("User")).toHaveValue("");
+    expect(screen.getByLabelText("Port")).toHaveValue(22);
 
     await user.click(screen.getByRole("tab", { name: "Advanced" }));
 
+    expect(screen.getByLabelText("HostName")).toHaveValue("203.0.113.10");
     expect(screen.getByLabelText("UnknownFutureDirective")).toHaveValue("yes");
   });
 
@@ -154,6 +165,9 @@ describe("HostDetailPanel", () => {
       onRename={panel.onRename}
       onComment={panel.onComment}
       onMoveToGroup={panel.onMoveToGroup}
+      onBasicSave={panel.onBasicSave}
+      integrations={panel.integrations}
+      keys={panel.keys}
     />);
 
     expect(screen.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
@@ -172,6 +186,7 @@ describe("HostDetailPanel", () => {
     const user = userEvent.setup();
     const handlers = renderPanel();
 
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
     const input = screen.getByLabelText("HostName");
     await user.clear(input);
     await user.type(input, "198.51.100.7");
@@ -186,6 +201,8 @@ describe("HostDetailPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Rename" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Save comment" })).toBeDisabled();
@@ -213,6 +230,7 @@ describe("HostDetailPanel", () => {
     const user = userEvent.setup();
     const handlers = renderPanel();
 
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
     const input = screen.getByLabelText("HostName");
     await user.clear(input);
     await user.type(input, '"unbalanced');
@@ -264,6 +282,7 @@ describe("HostDetailPanel", () => {
     // このタブは開いている接続によって指定されるため、alias を求めない。
     expect(screen.queryByLabelText("Host alias")).not.toBeInTheDocument();
     expect(integrations.reachability).not.toHaveBeenCalled();
+    expect(screen.queryByText("Stored password")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Check reachability" }));
 

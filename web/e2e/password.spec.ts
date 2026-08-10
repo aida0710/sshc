@@ -8,17 +8,20 @@ test("stores a password for a host and never shows it again", async ({ page, ins
   await openApplication(page, installation);
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
-  await page.getByRole("tab", { name: "Diagnostics" }).click();
 
-  const panel = page.getByRole("region", { name: "Stored password" });
+  const panel = page.getByRole("region", { name: "Authentication" });
   await expect(panel).toBeVisible();
-  // 警告はフィールドの上にあり、開示の裏には隠れていない。
-  await expect(panel.getByText(/A key is stronger/)).toBeVisible();
+  await expect(panel.getByText(/An IdentityFile is configured/)).toBeVisible();
 
-  await panel.getByLabel("Password for bastion").fill("hunter2");
-  await panel.getByRole("button", { name: "Store a new password for bastion" }).click();
+  await panel.getByLabel("Stored password action").selectOption("dedicated_password");
+  await panel.getByLabel("Connection password").fill("hunter2");
+  const saved = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
+  );
+  await page.getByRole("button", { name: "Save Basic settings" }).click();
+  expect((await saved).status()).toBe(200);
 
-  await expect(panel.getByText("A password is stored for bastion.")).toBeVisible();
+  await expect(panel.getByText(/connection-only password is assigned/)).toBeVisible();
   await expect(page.locator("body")).not.toContainText("hunter2");
 
   // そしてディスク上のファイルは暗号文であり、パスワードも alias も含まない。
