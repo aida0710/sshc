@@ -41,7 +41,7 @@ const SettingsPath = "sshc/sync-settings"
 
 // SchemaVersion は、暗号化の内側にある平文文書のバージョン。ヘッダーは envelope
 // 用に自前のバージョンを運ぶ。
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // envelope のエラーは再エクスポートしてある。vault を扱う呼び出し側が、どの
 // パッケージがそれを封じたかを知らずに済むようにするためだ。
@@ -125,12 +125,13 @@ type SyncSettings struct {
 // subject が指していても一度だけ保存される。この形の理由はまさにそこにある —
 // 20 台のマシンが共有するパスワードを、一か所でローテーションできる。
 type document struct {
-	SchemaVersion      int               `json:"schemaVersion"`
-	Passwords          map[string]string `json:"passwords"`
-	DedicatedPasswords map[string]string `json:"dedicatedPasswords,omitempty"`
-	KeyPassphrases     map[string]string `json:"keyPassphrases"`
-	Hosts              map[string]string `json:"hosts"`
-	Keys               map[string]string `json:"keys"`
+	SchemaVersion           int               `json:"schemaVersion"`
+	Passwords               map[string]string `json:"passwords"`
+	DedicatedPasswords      map[string]string `json:"dedicatedPasswords,omitempty"`
+	KeyPassphrases          map[string]string `json:"keyPassphrases"`
+	DedicatedKeyPassphrases map[string]string `json:"dedicatedKeyPassphrases,omitempty"`
+	Hosts                   map[string]string `json:"hosts"`
+	Keys                    map[string]string `json:"keys"`
 }
 
 // Vault は、開かれた secrets ファイル。
@@ -139,10 +140,11 @@ type document struct {
 // 直せる。そしてパスフレーズは、Open が返ったあとどこにも保持されて
 // いない。
 type Vault struct {
-	key                envelope.Key
-	secrets            map[Kind]map[string]string
-	subjects           map[Kind]map[string]string
-	dedicatedPasswords map[string]string
+	key                     envelope.Key
+	secrets                 map[Kind]map[string]string
+	subjects                map[Kind]map[string]string
+	dedicatedPasswords      map[string]string
+	dedicatedKeyPassphrases map[string]string
 }
 
 func newMaps() (map[Kind]map[string]string, map[Kind]map[string]string) {
@@ -159,7 +161,8 @@ func Create(passphrase string) (*Vault, error) {
 	secrets, subjects := newMaps()
 	return &Vault{
 		key: key, secrets: secrets, subjects: subjects,
-		dedicatedPasswords: map[string]string{},
+		dedicatedPasswords:      map[string]string{},
+		dedicatedKeyPassphrases: map[string]string{},
 	}, nil
 }
 
@@ -180,7 +183,7 @@ func Open(sealed []byte, passphrase string) (*Vault, error) {
 	// かった。世界に多くともひとつしか存在せず、そのための移行は移行する対象より
 	// 大きくなるので、黙って作り変えるのではなく、画面が「もう一度設定してください」
 	// に変えられるエラーで拒否する。
-	if parsed.SchemaVersion < SchemaVersion {
+	if parsed.SchemaVersion < 2 {
 		return nil, ErrOldVault
 	}
 	secrets, subjects := newMaps()
@@ -204,9 +207,14 @@ func Open(sealed []byte, passphrase string) (*Vault, error) {
 	if dedicatedPasswords == nil {
 		dedicatedPasswords = map[string]string{}
 	}
+	dedicatedKeyPassphrases := maps.Clone(parsed.DedicatedKeyPassphrases)
+	if dedicatedKeyPassphrases == nil {
+		dedicatedKeyPassphrases = map[string]string{}
+	}
 	return &Vault{
 		key: key, secrets: secrets, subjects: subjects,
-		dedicatedPasswords: dedicatedPasswords,
+		dedicatedPasswords:      dedicatedPasswords,
+		dedicatedKeyPassphrases: dedicatedKeyPassphrases,
 	}, nil
 }
 
@@ -267,12 +275,13 @@ func (v *Vault) OpenBytes(sealed []byte) ([]byte, error) {
 
 func (v *Vault) Seal() ([]byte, error) {
 	plaintext, err := json.Marshal(document{
-		SchemaVersion:      SchemaVersion,
-		Passwords:          v.secrets[KindPassword],
-		DedicatedPasswords: v.dedicatedPasswords,
-		KeyPassphrases:     v.secrets[KindKeyPassphrase],
-		Hosts:              v.subjects[KindPassword],
-		Keys:               v.subjects[KindKeyPassphrase],
+		SchemaVersion:           SchemaVersion,
+		Passwords:               v.secrets[KindPassword],
+		DedicatedPasswords:      v.dedicatedPasswords,
+		KeyPassphrases:          v.secrets[KindKeyPassphrase],
+		DedicatedKeyPassphrases: v.dedicatedKeyPassphrases,
+		Hosts:                   v.subjects[KindPassword],
+		Keys:                    v.subjects[KindKeyPassphrase],
 	})
 	if err != nil {
 		return nil, err
@@ -313,6 +322,34 @@ func (v *Vault) RemoveDedicatedPassword(alias string) {
 	delete(v.dedicatedPasswords, alias)
 }
 
+// SetDedicatedKeyPassphrase stores an unlock value owned by exactly one private
+// key. It is deliberately separate from named credentials so replacing it
+// cannot rotate the passphrase used by any other key.
+func (v *Vault) SetDedicatedKeyPassphrase(relativePath, value string) error {
+	if relativePath == "" || strings.ContainsRune(relativePath, '\x00') {
+		return ErrUnsafeName
+	}
+	if value == "" {
+		return ErrEmptySecret
+	}
+	delete(v.subjects[KindKeyPassphrase], relativePath)
+	v.dedicatedKeyPassphrases[relativePath] = value
+	return nil
+}
+
+// RemoveKeyPassphrase forgets either representation attached to one key. It
+// never removes the named credential itself because other keys may still use it.
+func (v *Vault) RemoveKeyPassphrase(relativePath string) {
+	delete(v.subjects[KindKeyPassphrase], relativePath)
+	delete(v.dedicatedKeyPassphrases, relativePath)
+}
+
+// DedicatedKeyPassphraseSubjects lists only the key-owned entries, never their
+// plaintext values.
+func (v *Vault) DedicatedKeyPassphraseSubjects() []string {
+	return slices.Sorted(maps.Keys(v.dedicatedKeyPassphrases))
+}
+
 // clone returns a fully independent plaintext document with the same derived
 // key. Mutations made to it cannot become visible through the live vault until
 // its owner explicitly publishes the clone after a successful disk commit.
@@ -324,7 +361,8 @@ func (v *Vault) clone() *Vault {
 	}
 	return &Vault{
 		key: v.key, secrets: secrets, subjects: subjects,
-		dedicatedPasswords: maps.Clone(v.dedicatedPasswords),
+		dedicatedPasswords:      maps.Clone(v.dedicatedPasswords),
+		dedicatedKeyPassphrases: maps.Clone(v.dedicatedKeyPassphrases),
 	}
 }
 
@@ -390,6 +428,8 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 	}
 	if kind == KindPassword {
 		delete(v.dedicatedPasswords, subject)
+	} else {
+		delete(v.dedicatedKeyPassphrases, subject)
 	}
 	v.subjects[kind][subject] = name
 	return nil
@@ -398,6 +438,9 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 // Unassign は subject の参照を忘れる。subject がなくてもエラーではない。
 func (v *Vault) Unassign(kind Kind, subject string) {
 	delete(v.subjects[kind], subject)
+	if kind == KindKeyPassphrase {
+		delete(v.dedicatedKeyPassphrases, subject)
+	}
 }
 
 // Assigned は、subject が参照している資格情報を返す。
@@ -408,12 +451,15 @@ func (v *Vault) Assigned(kind Kind, subject string) (string, bool) {
 
 // Subjects は、ある資格情報を参照している、ある種別のすべての subject を返す。
 func (v *Vault) Subjects(kind Kind) []string {
-	if kind != KindPassword {
-		return slices.Sorted(maps.Keys(v.subjects[kind]))
-	}
 	subjects := maps.Clone(v.subjects[kind])
-	for alias := range v.dedicatedPasswords {
-		subjects[alias] = ""
+	if kind == KindPassword {
+		for alias := range v.dedicatedPasswords {
+			subjects[alias] = ""
+		}
+	} else if kind == KindKeyPassphrase {
+		for relativePath := range v.dedicatedKeyPassphrases {
+			subjects[relativePath] = ""
+		}
 	}
 	return slices.Sorted(maps.Keys(subjects))
 }
@@ -422,6 +468,10 @@ func (v *Vault) Subjects(kind Kind) []string {
 func (v *Vault) SecretFor(kind Kind, subject string) (string, bool) {
 	if kind == KindPassword {
 		if value, ok := v.dedicatedPasswords[subject]; ok {
+			return value, true
+		}
+	} else if kind == KindKeyPassphrase {
+		if value, ok := v.dedicatedKeyPassphrases[subject]; ok {
 			return value, true
 		}
 	}
@@ -444,6 +494,17 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 			delete(v.dedicatedPasswords, from)
 			delete(v.subjects[kind], to)
 			v.dedicatedPasswords[to] = value
+			return nil
+		}
+	}
+	if kind == KindKeyPassphrase {
+		if value, ok := v.dedicatedKeyPassphrases[from]; ok {
+			if to == "" || strings.ContainsRune(to, '\x00') {
+				return ErrUnsafeName
+			}
+			delete(v.dedicatedKeyPassphrases, from)
+			delete(v.subjects[kind], to)
+			v.dedicatedKeyPassphrases[to] = value
 			return nil
 		}
 	}
@@ -474,6 +535,7 @@ func (v *Vault) RelocateSubjects(kind Kind, relocations map[string]string) (bool
 		return false, nil
 	}
 	moved := make(map[string]string)
+	movedDedicated := make(map[string]string)
 	for from, to := range relocations {
 		if from == to {
 			continue
@@ -488,15 +550,31 @@ func (v *Vault) RelocateSubjects(kind Kind, relocations map[string]string) (bool
 		if name, ok := v.subjects[kind][from]; ok {
 			moved[to] = name
 		}
+		if kind == KindKeyPassphrase {
+			if value, ok := v.dedicatedKeyPassphrases[from]; ok {
+				movedDedicated[to] = value
+				delete(moved, to)
+			}
+		}
 	}
-	if len(moved) == 0 {
+	if len(moved) == 0 && len(movedDedicated) == 0 {
 		return false, nil
 	}
 	for from := range relocations {
 		delete(v.subjects[kind], from)
+		if kind == KindKeyPassphrase {
+			delete(v.dedicatedKeyPassphrases, from)
+		}
 	}
 	for to, name := range moved {
+		if kind == KindKeyPassphrase {
+			delete(v.dedicatedKeyPassphrases, to)
+		}
 		v.subjects[kind][to] = name
+	}
+	for to, value := range movedDedicated {
+		delete(v.subjects[kind], to)
+		v.dedicatedKeyPassphrases[to] = value
 	}
 	return true, nil
 }
