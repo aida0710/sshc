@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient, ApiError } from "./client";
-import { configApi, type CreateConnectionRequest } from "./config";
+import { configApi, type CreateConnectionRequest, type UpdateConnectionRequest } from "./config";
 
 const overviewPayload = {
   entry: { path: "config", absolute: "/home/tester/.ssh/config" },
@@ -155,5 +155,42 @@ describe("configApi", () => {
       hostName: "duplicate.example",
       authentication: { kind: "dedicated_password", password: "secret" },
     })).rejects.toMatchObject({ code: "alias_already_declared", status: 409 });
+  });
+
+  it("updates a connection with PATCH and runtime-validates the save result", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      transactionId: "tx-update",
+      written: ["config"],
+      preview: { operation: "connection.update", diffs: [] },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetcher);
+    const request: UpdateConnectionRequest = {
+      identity: { path: "config", alias: "edge" },
+      base: "Host edge\n",
+      hostName: { action: "set", value: "edge.example" },
+      password: { kind: "unchanged" },
+    };
+
+    const updated = await configApi.updateConnection(request);
+
+    expect(updated.transactionId).toBe("tx-update");
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/connections");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(String(init.body))).toEqual(request);
+  });
+
+  it("rejects a malformed connection update response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      transactionId: "tx-update",
+      written: "config",
+      preview: { operation: "connection.update", diffs: [] },
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+
+    await expect(configApi.updateConnection({
+      identity: { path: "config", alias: "edge" },
+      base: "Host edge\n",
+      password: { kind: "remove" },
+    })).rejects.toThrow("invalid_response");
   });
 });
