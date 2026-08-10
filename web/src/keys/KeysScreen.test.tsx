@@ -234,7 +234,7 @@ describe("KeysScreen", () => {
     const user = userEvent.setup();
     render(<KeysScreen api={buildApi()} />);
 
-    expect((await screen.findByText("Key files")).parentElement).toHaveTextContent("2");
+    expect((await screen.findByText("Classified SSH files")).parentElement).toHaveTextContent("2");
     const search = screen.getByRole("searchbox", { name: "Search keys" });
     await user.type(search, "build-*");
     expect(screen.getByRole("row", { name: /id_work/ })).toBeInTheDocument();
