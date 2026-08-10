@@ -142,6 +142,7 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	transactions := storage.NewManager(workspace, time.Now, dependencies.Random)
 	configService := application.NewService(workspace, transactions)
 	keyService := buildKeyService(workspace, dependencies, configService)
+	configService.SetKeyPassphraseVerifier(keyService)
 	diagnosticsService := diagnostics.NewService(
 		workspace, dependencies.Runner, dependencies.Toolchain, dependencies.Terminal, dependencies.Lookup)
 	diagnosticsService.PreferredTerminal = configService.PreferredTerminal
