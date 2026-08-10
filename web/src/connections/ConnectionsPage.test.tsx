@@ -543,6 +543,34 @@ describe("ConnectionsPage", () => {
     ));
   });
 
+  it("replaces a renamed connection URL before refreshing its detail", async () => {
+    const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
+    vi.mocked(configApi.host)
+      .mockResolvedValueOnce(detail as never)
+      .mockRejectedValueOnce(new Error("detail refresh failed"));
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t-rename", written: ["config"], preview: { operation: "config.rename", diffs: [] },
+    } as never);
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.clear(await screen.findByLabelText("Rename alias"));
+    await user.type(screen.getByLabelText("Rename alias"), "gateway");
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+
+    await waitFor(() => expect(onNavigateLocation).toHaveBeenLastCalledWith(
+      "/connections?path=config&host=gateway&tab=basic",
+      { replace: true },
+    ));
+  });
+
   it("moves a host to another file with both loaded bases", async () => {
     const user = userEvent.setup();
     const onNavigateLocation = vi.fn();
@@ -592,6 +620,41 @@ describe("ConnectionsPage", () => {
     );
   });
 
+  it("keeps the original connection selected when moving it to another file fails", async () => {
+    const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      files: [
+        { file: { path: "config", absolute: "/home/tester/.ssh/config" }, editable: true, loads: 1 },
+        { file: { path: "conf.d/10-home.conf", absolute: "/home/tester/.ssh/conf.d/10-home.conf" }, editable: true, loads: 1 },
+      ],
+    } as never);
+    vi.mocked(configApi.file).mockResolvedValue({
+      file: { path: "conf.d/10-home.conf", absolute: "/home/tester/.ssh/conf.d/10-home.conf" },
+      contents: "Host nas\n", digest: "digest", editable: true, exists: true,
+    } as never);
+    vi.mocked(configApi.save).mockRejectedValue(new Error("move conflict"));
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
+    await user.selectOptions(await screen.findByLabelText("Storage file"), "conf.d/10-home.conf");
+    await user.click(screen.getByRole("button", { name: "Change storage file" }));
+
+    await screen.findByRole("alert");
+    expect(screen.getByRole("heading", { name: "bastion" })).toBeInTheDocument();
+    expect(onNavigateLocation).toHaveBeenLastCalledWith(
+      "/connections?path=config&host=bastion&tab=basic",
+    );
+  });
+
   it("deletes the selected host block without touching the rest of the file", async () => {
     const user = userEvent.setup();
     const onNavigateLocation = vi.fn();
@@ -619,6 +682,30 @@ describe("ConnectionsPage", () => {
       raw: "",
     }));
     expect(onNavigateLocation).toHaveBeenLastCalledWith("/connections", { replace: true });
+  });
+
+  it("keeps the selected host and URL when deletion fails", async () => {
+    const user = userEvent.setup();
+    const onNavigateLocation = vi.fn();
+    vi.mocked(configApi.save).mockRejectedValue(new Error("delete conflict"));
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
+    await user.click(await screen.findByRole("button", { name: "Delete connection" }));
+    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+
+    await screen.findByRole("alert");
+    expect(screen.getByRole("heading", { name: "bastion" })).toBeInTheDocument();
+    expect(onNavigateLocation).toHaveBeenLastCalledWith(
+      "/connections?path=config&host=bastion&tab=basic",
+    );
   });
 });
 

@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { keysApi, type KeyItem, type KeysApi } from "../keys/api";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import {
   remoteKeysApi,
+  type RemoteKeyInput,
   type RemoteKeyPlan,
   type RemoteKeyRegisterResponse,
   type RemoteKeysApi,
@@ -21,6 +22,7 @@ type RemoteKeyPanelProps = {
   // plan と registration だけだ。
   keys?: Pick<KeysApi, "inventory" | "publicKey">;
   preferredPublicKeyPath?: string | null;
+  onPreferredPublicKeyHandled?: () => void;
 };
 
 const outcomeLabels: Record<string, MessageKey> = {
@@ -49,25 +51,42 @@ export function RemoteKeyPanel({
   api = remoteKeysApi,
   keys = keysApi,
   preferredPublicKeyPath = null,
+  onPreferredPublicKeyHandled,
 }: RemoteKeyPanelProps) {
   const t = useTranslate();
   const [alias, setAlias] = useState("");
   const [keyPath, setKeyPath] = useState("");
   const [publicKey, setPublicKey] = useState("");
   const [plan, setPlan] = useState<RemoteKeyPlan | null>(null);
+  const [plannedInput, setPlannedInput] = useState<RemoteKeyInput | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [result, setResult] = useState<RemoteKeyRegisterResponse | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [planning, setPlanning] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [error, setError] = useState("");
   const [candidates, setCandidates] = useState<KeyItem[]>([]);
   const [chosen, setChosen] = useState("");
+  // publicKey() と plan() は読み取りでも、遅れて返った答えが新しい入力を
+  // 上書きすると確認内容と実行内容を分離してしまう。世代は、結果がまだ
+  // 現在の操作に属する場合だけ state へ入るための局所的な取消トークンである。
+  const keyLoadGeneration = useRef(0);
+  const planGeneration = useRef(0);
+  const preferredHandled = useRef(false);
+
+  function handlePreferredPublicKey() {
+    if (preferredPublicKeyPath === null || preferredHandled.current) return;
+    preferredHandled.current = true;
+    onPreferredPublicKeyHandled?.();
+  }
 
   // インベントリの読み取りに失敗すると、ピッカーは空のまま、下の
   // 2 つのフィールドは使える状態で残る。これが存在する前は手で鍵を
   // 打ち込むのが唯一の方法だった。それはエラーではなくフォールバックのままだ。
   useEffect(() => {
     let active = true;
+    if (preferredPublicKeyPath !== null) preferredHandled.current = false;
+    const preferredRequest = preferredPublicKeyPath === null ? null : ++keyLoadGeneration.current;
     void keys
       .inventory()
       .then(async (inventory) => {
@@ -78,22 +97,27 @@ export function RemoteKeyPanel({
         const preferred = publicKeys.find((item) => item.relativePath === preferredPublicKeyPath);
         if (preferred === undefined) return;
         const key = await keys.publicKey(preferred.id);
-        if (!active) return;
+        if (!active || preferredRequest !== keyLoadGeneration.current) return;
+        withdraw();
         setChosen(preferred.id);
         setKeyPath(key.relativePath);
         setPublicKey(key.publicKey.trimEnd());
         setError("");
+        handlePreferredPublicKey();
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
-  }, [keys, preferredPublicKeyPath]);
+  }, [keys, onPreferredPublicKeyHandled, preferredPublicKeyPath]);
 
   // withdraw は、それまでの plan が正当化していたすべてを捨てる。
   // 編集のたびに実行されるので、確認画面が変わった値のまま残ることはない。
   function withdraw() {
+    planGeneration.current += 1;
+    setPlanning(false);
     setPlan(null);
+    setPlannedInput(null);
     setAcknowledged(false);
     setUnsupported(false);
     setResult(null);
@@ -106,19 +130,34 @@ export function RemoteKeyPanel({
     };
   }
 
+  function editKey(apply: (value: string) => void) {
+    return (value: string) => {
+      keyLoadGeneration.current += 1;
+      handlePreferredPublicKey();
+      setChosen("");
+      edit(apply)(value);
+    };
+  }
+
   // 選択すると 1 か所から両方のフィールドが埋まるので、ファイルパスと
   // 鍵の行が別の鍵を記述することはあり得ない——別々に入力させると
   // まさにそれが起きた。他の編集と同様、既存の plan も取り下げる。
   async function choose(keyId: string) {
+    const request = ++keyLoadGeneration.current;
+    handlePreferredPublicKey();
     withdraw();
     setChosen(keyId);
     if (keyId === "") return;
     try {
       const key = await keys.publicKey(keyId);
+      if (request !== keyLoadGeneration.current) return;
+      // 読み込み中に作られた plan があれば、それはこの鍵についてではない。
+      withdraw();
       setKeyPath(key.relativePath);
       setPublicKey(key.publicKey.trimEnd());
       setError("");
     } catch {
+      if (request !== keyLoadGeneration.current) return;
       setError(t("rk.publicKeyUnreadable"));
     }
   }
@@ -126,35 +165,43 @@ export function RemoteKeyPanel({
   async function describe() {
     setError("");
     withdraw();
-    setBusy(true);
+    const request = planGeneration.current;
+    const input = { alias, keyPath, publicKey };
+    setPlanning(true);
     try {
-      setPlan(await api.plan({ alias, keyPath, publicKey }));
+      const described = await api.plan(input);
+      if (request !== planGeneration.current) return;
+      setPlan(described);
+      setPlannedInput(input);
     } catch (failure) {
+      if (request !== planGeneration.current) return;
       setError(describeFailure(failure, t, "rk.planFailed"));
     } finally {
-      setBusy(false);
+      if (request === planGeneration.current) setPlanning(false);
     }
   }
 
   async function register() {
-    if (plan === null) return;
+    if (plan === null || plannedInput === null) return;
     setError("");
-    setBusy(true);
+    setRegistering(true);
     try {
-      setResult(await api.register({ alias, keyPath, publicKey, acknowledgeExecutable: acknowledged }));
+      setResult(await api.register({ ...plannedInput, acknowledgeExecutable: acknowledged }));
     } catch (failure) {
       // サポートされていないリモートは、通信の失敗ではなく 1 つの答えだ:
       // 登録は提供されなくなり、手動の手順がその代わりを務める。
       if (failureCode(failure) === "unsupported_remote") setUnsupported(true);
       setError(describeFailure(failure, t, "rk.registerFailed"));
     } finally {
-      setBusy(false);
+      setRegistering(false);
     }
   }
 
   const unavoidable = (plan?.executableDirectives ?? []).filter((directive) => !directive.overridable);
   const manual = plan !== null && (!plan.supported || unsupported);
-  const blocked = plan === null || busy || (unavoidable.length > 0 && !acknowledged);
+  const busy = planning || registering;
+  const blocked = plan === null || plannedInput === null || busy ||
+    (unavoidable.length > 0 && !acknowledged);
 
   return (
     <section aria-label={t("rk.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6">
@@ -174,7 +221,12 @@ export function RemoteKeyPanel({
       */}
       <Card>
         <Row label={t("rk.pickFromSsh")}>
-          <select value={chosen} onChange={(event) => void choose(event.target.value)} className={control}>
+          <select
+            value={chosen}
+            disabled={busy}
+            onChange={(event) => void choose(event.target.value)}
+            className={control}
+          >
             <option value="">{t("rk.typeInstead")}</option>
             {candidates.map((item) => (
               <option key={item.id} value={item.id}>
@@ -184,15 +236,18 @@ export function RemoteKeyPanel({
           </select>
         </Row>
         <Row label={t("rk.hostAlias")}>
-          <input value={alias} onChange={(event) => edit(setAlias)(event.target.value)} className={control} />
+          <input
+            value={alias}
+            disabled={busy}
+            onChange={(event) => edit(setAlias)(event.target.value)}
+            className={control}
+          />
         </Row>
         <Row label={t("rk.publicKeyFile")}>
           <input
             value={keyPath}
-            onChange={(event) => {
-              setChosen("");
-              edit(setKeyPath)(event.target.value);
-            }}
+            disabled={busy}
+            onChange={(event) => editKey(setKeyPath)(event.target.value)}
             className={control}
           />
         </Row>
@@ -201,10 +256,8 @@ export function RemoteKeyPanel({
       <Field label={t("rk.publicKeyLine")}>
         <textarea
           value={publicKey}
-          onChange={(event) => {
-            setChosen("");
-            edit(setPublicKey)(event.target.value);
-          }}
+          disabled={busy}
+          onChange={(event) => editKey(setPublicKey)(event.target.value)}
           rows={3}
           className={`${control} font-mono`}
         />
@@ -216,7 +269,7 @@ export function RemoteKeyPanel({
         アクションではなく notice のために取っておく色だ。
       */}
       <div className="flex gap-2">
-        <Button onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
+        <Button disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
         {manual ? null : (
           <Button kind="primary" disabled={blocked} onClick={() => void register()}>
             {t("rk.register")}
