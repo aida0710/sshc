@@ -396,6 +396,55 @@ func TestAVersionOneDocumentIsRefused(t *testing.T) {
 	}
 }
 
+func TestVersion3OpensVersionTwoAndResealsWithoutLosingCredentials(t *testing.T) {
+	key, err := envelope.Derive(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := key.Seal([]byte(`{"schemaVersion":2,"passwords":{"office":"account-secret"},"dedicatedPasswords":{"edge":"dedicated-account"},"keyPassphrases":{"shared":"shared-phrase"},"hosts":{"web":"office"},"keys":{"keys/id_a":"shared"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vault, err := secret.Open(sealed, passphrase)
+	if err != nil {
+		t.Fatalf("Open(version 2) = %v", err)
+	}
+	if got, ok := vault.SecretFor(secret.KindPassword, "edge"); !ok || got != "dedicated-account" {
+		t.Fatalf("dedicated password after migration = %q, %v", got, ok)
+	}
+	if got, ok := vault.SecretFor(secret.KindKeyPassphrase, "keys/id_a"); !ok || got != "shared-phrase" {
+		t.Fatalf("named key passphrase after migration = %q, %v", got, ok)
+	}
+
+	resealed, err := vault.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	plaintext, _, err := envelope.Open(resealed, passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(plaintext, []byte(`"schemaVersion":3`)) {
+		t.Fatalf("resealed document = %s, want schema version 3", plaintext)
+	}
+}
+
+func TestVersion3RefusesAFuturePlaintextDocument(t *testing.T) {
+	key, err := envelope.Derive(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := key.Seal([]byte(`{"schemaVersion":4,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := secret.Open(sealed, passphrase); !errors.Is(err, secret.ErrUnsupportedVersion) {
+		t.Fatalf("Open(version 4) = %v, want ErrUnsupportedVersion", err)
+	}
+}
+
 func TestSealedBytesCarryNothingFromEitherNamespace(t *testing.T) {
 	vault, err := secret.Create(passphrase)
 	if err != nil {
@@ -504,5 +553,99 @@ func TestDedicatedAndReusableAssignmentsAreMutuallyExclusive(t *testing.T) {
 	}
 	if got, _ := vault.SecretFor(secret.KindPassword, "edge"); got != "dedicated-again" {
 		t.Errorf("password after dedicated assignment = %q", got)
+	}
+}
+
+func TestDedicatedKeyPassphraseChangesOnlyItsKey(t *testing.T) {
+	vault, err := secret.Create(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set(secret.KindKeyPassphrase, "shared", "old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Assign(secret.KindKeyPassphrase, "keys/id_a", "shared"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Assign(secret.KindKeyPassphrase, "keys/id_b", "shared"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := vault.SetDedicatedKeyPassphrase("keys/id_a", "new"); err != nil {
+		t.Fatalf("SetDedicatedKeyPassphrase = %v", err)
+	}
+	if got, ok := vault.SecretFor(secret.KindKeyPassphrase, "keys/id_a"); !ok || got != "new" {
+		t.Fatalf("id_a = %q, %v", got, ok)
+	}
+	if got, ok := vault.SecretFor(secret.KindKeyPassphrase, "keys/id_b"); !ok || got != "old" {
+		t.Fatalf("id_b = %q, %v; changing id_a changed the shared value", got, ok)
+	}
+	if _, ok := vault.Assigned(secret.KindKeyPassphrase, "keys/id_a"); ok {
+		t.Error("setting a dedicated key passphrase left the named assignment behind")
+	}
+	if got := vault.DedicatedKeyPassphraseSubjects(); !slices.Equal(got, []string{"keys/id_a"}) {
+		t.Fatalf("DedicatedKeyPassphraseSubjects = %#v", got)
+	}
+
+	sealed, err := vault.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := secret.Open(sealed, passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := reopened.SecretFor(secret.KindKeyPassphrase, "keys/id_a"); !ok || got != "new" {
+		t.Fatalf("reopened id_a = %q, %v", got, ok)
+	}
+}
+
+func TestDedicatedKeyPassphraseNamedTransitionsRemovalAndRelocation(t *testing.T) {
+	vault, err := secret.Create(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set(secret.KindKeyPassphrase, "shared", "named"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetDedicatedKeyPassphrase("keys/id_a", "dedicated"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Assign(secret.KindKeyPassphrase, "keys/id_a", "shared"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := vault.SecretFor(secret.KindKeyPassphrase, "keys/id_a"); got != "named" {
+		t.Fatalf("named assignment did not replace dedicated value: %q", got)
+	}
+	if got := vault.DedicatedKeyPassphraseSubjects(); len(got) != 0 {
+		t.Fatalf("dedicated subjects after named assignment = %#v", got)
+	}
+
+	if err := vault.SetDedicatedKeyPassphrase("keys/id_a", "replacement"); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := vault.RelocateSubjects(secret.KindKeyPassphrase, map[string]string{
+		"keys/id_a": "keys/team/id_a",
+	})
+	if err != nil || !changed {
+		t.Fatalf("RelocateSubjects = %v, %v", changed, err)
+	}
+	if _, ok := vault.SecretFor(secret.KindKeyPassphrase, "keys/id_a"); ok {
+		t.Error("old dedicated subject still resolves")
+	}
+	if got, ok := vault.SecretFor(secret.KindKeyPassphrase, "keys/team/id_a"); !ok || got != "replacement" {
+		t.Fatalf("relocated dedicated value = %q, %v", got, ok)
+	}
+
+	vault.RemoveKeyPassphrase("keys/team/id_a")
+	if _, ok := vault.SecretFor(secret.KindKeyPassphrase, "keys/team/id_a"); ok {
+		t.Error("RemoveKeyPassphrase left the dedicated value resolvable")
+	}
+	if err := vault.Assign(secret.KindKeyPassphrase, "keys/id_b", "shared"); err != nil {
+		t.Fatal(err)
+	}
+	vault.RemoveKeyPassphrase("keys/id_b")
+	if _, ok := vault.Assigned(secret.KindKeyPassphrase, "keys/id_b"); ok {
+		t.Error("RemoveKeyPassphrase left the named assignment behind")
 	}
 }
