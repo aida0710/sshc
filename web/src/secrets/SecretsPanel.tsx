@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import {
   integrationsApi,
-  type Credential,
+  type CredentialList,
   type CredentialKind,
   type IntegrationsApi,
   type PasswordVaultStatus,
@@ -61,10 +61,52 @@ const kinds: {
   },
 ];
 
+function emptyCredentialList(): CredentialList {
+  return {
+    credentials: [],
+    dedicatedKeyPassphrases: [],
+    keyHostUsageComplete: true,
+  };
+}
+
+type UsageListProps = {
+  label: string;
+  values: string[];
+  emptyLabel: string;
+};
+
+function UsageList({ label, values, emptyLabel }: UsageListProps) {
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+        {label}
+      </p>
+      {values.length === 0 ? (
+        <p className={hintText}>{emptyLabel}</p>
+      ) : (
+        <ul aria-label={label} className="flex flex-wrap gap-2">
+          {values.map((value) => (
+            <li
+              key={value}
+              className="rounded-md bg-tree px-2 py-1 font-mono text-xs text-ink"
+            >
+              {value}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function keyBasename(key: string): string {
+  return key.split("/").filter(Boolean).at(-1) ?? key;
+}
+
 export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProps) {
   const t = useTranslate();
   const [status, setStatus] = useState<PasswordVaultStatus | null>(null);
-  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [credentialList, setCredentialList] = useState<CredentialList>(emptyCredentialList);
   const [master, setMaster] = useState("");
   const [drafts, setDrafts] = useState<Record<string, { name: string; secret: string }>>({});
   const [error, setError] = useState("");
@@ -76,10 +118,10 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
       // 決して保持しない 2 つのリストになっている。
       // 閉じた vault にはその中身を尋ねない。起動時にも何も尋ねない:
       if (!vault.unlocked) {
-        setCredentials([]);
+        setCredentialList(emptyCredentialList());
         return;
       }
-      setCredentials((await api.credentials()).credentials);
+      setCredentialList(await api.credentials());
     } catch (caught) {
       setError(failureCode(caught) || t("secrets.failed"));
     }
@@ -141,6 +183,8 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
     );
   }
 
+  const { credentials, dedicatedKeyPassphrases, keyHostUsageComplete } = credentialList;
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("secrets.heading")} description={t("secrets.pageDescription")} />
@@ -151,14 +195,21 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
         />
         <MetricCard
           label={t("secrets.metricPassphrases")}
-          value={credentials.filter((credential) => credential.kind === "key_passphrase").length}
+          value={
+            credentials.filter((credential) => credential.kind === "key_passphrase").length +
+            dedicatedKeyPassphrases.length
+          }
         />
         <MetricCard
           label={t("secrets.metricAssignments")}
-          value={credentials.reduce((count, credential) => count + credential.uses.length, 0)}
+          value={
+            credentials.reduce((count, credential) => count + credential.uses.length, 0) +
+            dedicatedKeyPassphrases.length
+          }
         />
       </MetricGrid>
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
+      {keyHostUsageComplete ? null : <Notice>{t("secrets.keyHostUsageIncomplete")}</Notice>}
       <div>
         <button
           type="button"
@@ -172,30 +223,105 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
       {kinds.map((group) => {
         const draft = draftFor(group.kind);
         const mine = credentials.filter((credential) => credential.kind === group.kind);
+        const dedicated = group.kind === "key_passphrase" ? dedicatedKeyPassphrases : [];
         return (
           <section key={group.kind} aria-label={t(group.heading)} className={sectionCard}>
             <h3 className={sectionHeading}>{t(group.heading)}</h3>
-            {mine.length === 0 ? (
+            {mine.length === 0 && dedicated.length === 0 ? (
               <p className={hintText}>{t("secrets.none")}</p>
             ) : (
-              <ul className="flex flex-col gap-2">
+              <ul className="grid gap-3 sm:grid-cols-2">
                 {mine.map((credential) => (
-                  <li key={credential.name} className="flex flex-wrap items-center gap-3 text-sm">
-                    <span className="font-medium">{credential.name}</span>
-                    {/*
-                      何がそれを指しているか。それが削除を拒否可能にし、
-                      1 つのエントリを持つ価値にしているものだ。
-                    */}
-                    <span className={hintText}>
-                      {credential.uses.length === 0 ? t("secrets.unused") : credential.uses.join(", ")}
-                    </span>
-                    <button
-                      type="button"
-                      className={dangerAction}
-                      onClick={() => void run(() => api.deleteCredential(group.kind, credential.name), t("secrets.deleteFailed"))}
+                  <li key={credential.name}>
+                    <article
+                      aria-label={credential.name}
+                      className="flex h-full flex-col gap-4 rounded-xl border border-line bg-card p-4"
                     >
-                      {t("secrets.delete", { name: credential.name })}
-                    </button>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <h4 className="font-semibold text-ink">{credential.name}</h4>
+                        <button
+                          type="button"
+                          className={dangerAction}
+                          onClick={() =>
+                            void run(
+                              () => api.deleteCredential(group.kind, credential.name),
+                              t("secrets.deleteFailed"),
+                            )
+                          }
+                        >
+                          {t("secrets.delete", { name: credential.name })}
+                        </button>
+                      </div>
+                      {credential.kind === "key_passphrase" ? (
+                        <UsageList
+                          label={t("secrets.keys")}
+                          values={credential.uses}
+                          emptyLabel={t("secrets.noKeys")}
+                        />
+                      ) : null}
+                      {credential.kind === "password" || keyHostUsageComplete ? (
+                        <UsageList
+                          label={t("secrets.assignedHosts")}
+                          values={credential.hosts}
+                          emptyLabel={t("secrets.noAssignedHosts")}
+                        />
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                            {t("secrets.assignedHosts")}
+                          </p>
+                          <p className={hintText}>{t("secrets.keyHostsUnavailable")}</p>
+                        </div>
+                      )}
+                    </article>
+                  </li>
+                ))}
+                {dedicated.map((credential) => (
+                  <li key={credential.key}>
+                    <article
+                      aria-label={credential.key}
+                      className="flex h-full flex-col gap-4 rounded-xl border border-line bg-card p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex flex-col gap-1">
+                          <h4 className="font-semibold text-ink">
+                            {keyBasename(credential.key)}
+                          </h4>
+                          <p className={hintText}>{t("secrets.dedicated")}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className={dangerAction}
+                          onClick={() =>
+                            void run(
+                              () => api.unassignCredential("key_passphrase", credential.key),
+                              t("secrets.deleteFailed"),
+                            )
+                          }
+                        >
+                          {t("secrets.removeDedicated", { key: credential.key })}
+                        </button>
+                      </div>
+                      <UsageList
+                        label={t("secrets.keys")}
+                        values={[credential.key]}
+                        emptyLabel={t("secrets.noKeys")}
+                      />
+                      {keyHostUsageComplete ? (
+                        <UsageList
+                          label={t("secrets.assignedHosts")}
+                          values={credential.hosts}
+                          emptyLabel={t("secrets.noAssignedHosts")}
+                        />
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                            {t("secrets.assignedHosts")}
+                          </p>
+                          <p className={hintText}>{t("secrets.keyHostsUnavailable")}</p>
+                        </div>
+                      )}
+                    </article>
                   </li>
                 ))}
               </ul>

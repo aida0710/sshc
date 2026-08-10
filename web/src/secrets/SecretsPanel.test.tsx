@@ -13,9 +13,16 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     lockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),
     credentials: vi.fn().mockResolvedValue({
       credentials: [
-        { kind: "password", name: "office-vm", uses: ["web-1", "web-2"] },
-        { kind: "key_passphrase", name: "build-key", uses: ["keys/work/id_work"] },
+        { kind: "password", name: "office-vm", uses: ["web-1", "web-2"], hosts: ["web-1", "web-2"] },
+        {
+          kind: "key_passphrase",
+          name: "build-key",
+          uses: ["keys/work/id_work", "keys/work/id_release"],
+          hosts: ["build-1", "release-1"],
+        },
       ],
+      dedicatedKeyPassphrases: [{ key: "keys/id_owned", hosts: ["deploy-1"] }],
+      keyHostUsageComplete: true,
     }),
     storeCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     deleteCredential: vi.fn().mockResolvedValue({ credentials: [] }),
@@ -33,25 +40,87 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
 }
 
 describe("SecretsPanel", () => {
-  it("lists both kinds apart, with what uses each and never a value", async () => {
+  it("labels hosts and keys for named and dedicated secrets without mixing kinds", async () => {
     const api = buildApi();
     render(<SecretsPanel api={api} />);
 
     const passwords = await screen.findByRole("region", { name: "Account passwords" });
-    expect(within(passwords).getByText("office-vm")).toBeInTheDocument();
-    // シークレットに名前を付ける狙い: 1 エントリ、2 台のマシン。
-    expect(within(passwords).getByText(/web-1, web-2/)).toBeInTheDocument();
+    const office = within(passwords).getByRole("article", { name: "office-vm" });
+    expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-1");
+    expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-2");
 
     const phrases = screen.getByRole("region", { name: "Key passphrases" });
-    expect(within(phrases).getByText("build-key")).toBeInTheDocument();
-    // そして 2 つのリストは互いのエントリを決して保持しない。それが
-    // 2 つのリストである理由のすべてだ。
+    const build = within(phrases).getByRole("article", { name: "build-key" });
+    expect(within(build).getByRole("list", { name: "Keys" })).toHaveTextContent("keys/work/id_work");
+    expect(within(build).getByRole("list", { name: "Keys" })).toHaveTextContent("keys/work/id_release");
+    expect(within(build).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("build-1");
+    expect(within(build).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("release-1");
+
+    const dedicated = within(phrases).getByRole("article", { name: "keys/id_owned" });
+    expect(within(dedicated).getByText("Dedicated to this key")).toBeInTheDocument();
+    expect(within(dedicated).getByRole("list", { name: "Keys" })).toHaveTextContent("keys/id_owned");
+    expect(within(dedicated).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("deploy-1");
+
     expect(within(passwords).queryByText("build-key")).not.toBeInTheDocument();
     expect(within(phrases).queryByText("office-vm")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Start at login" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Master password" })).not.toBeInTheDocument();
     expect(api.loginItem).not.toHaveBeenCalled();
     expect(api.changeMasterPassword).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes confirmed empty assignments from unavailable key hosts", async () => {
+    const api = buildApi({
+      credentials: vi.fn().mockResolvedValue({
+        credentials: [
+          { kind: "password", name: "unused-password", uses: [], hosts: [] },
+          { kind: "key_passphrase", name: "unused-phrase", uses: [], hosts: [] },
+        ],
+        dedicatedKeyPassphrases: [],
+        keyHostUsageComplete: true,
+      }),
+    });
+    render(<SecretsPanel api={api} />);
+
+    const password = await screen.findByRole("article", { name: "unused-password" });
+    expect(within(password).getByText("No assigned hosts")).toBeInTheDocument();
+    const phrase = screen.getByRole("article", { name: "unused-phrase" });
+    expect(within(phrase).getByText("No assigned keys")).toBeInTheDocument();
+    expect(within(phrase).getByText("No assigned hosts")).toBeInTheDocument();
+  });
+
+  it("keeps password hosts visible when key-host projection is incomplete", async () => {
+    const api = buildApi({
+      credentials: vi.fn().mockResolvedValue({
+        credentials: [
+          { kind: "password", name: "office", uses: ["web-1"], hosts: ["web-1"] },
+          { kind: "key_passphrase", name: "team", uses: ["keys/id_team"], hosts: [] },
+        ],
+        dedicatedKeyPassphrases: [],
+        keyHostUsageComplete: false,
+      }),
+    });
+    render(<SecretsPanel api={api} />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent(/could not be fully confirmed/i);
+    const office = screen.getByRole("article", { name: "office" });
+    expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-1");
+    const team = screen.getByRole("article", { name: "team" });
+    expect(within(team).getByText("Could not confirm assigned hosts")).toBeInTheDocument();
+    expect(within(team).queryByText("No assigned hosts")).not.toBeInTheDocument();
+  });
+
+  it("removes a dedicated passphrase through its key subject", async () => {
+    const user = userEvent.setup();
+    const api = buildApi();
+    render(<SecretsPanel api={api} />);
+
+    const dedicated = await screen.findByRole("article", { name: "keys/id_owned" });
+    await user.click(within(dedicated).getByRole("button", { name: "Remove saved passphrase for keys/id_owned" }));
+
+    await waitFor(() =>
+      expect(api.unassignCredential).toHaveBeenCalledWith("key_passphrase", "keys/id_owned"),
+    );
   });
 
   it("creates an account password under a name", async () => {

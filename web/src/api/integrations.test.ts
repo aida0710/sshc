@@ -109,3 +109,36 @@ describe("integrationsApi.passwordVault", () => {
     await expect(integrationsApi.passwordVault()).rejects.toThrow("invalid_response");
   });
 });
+
+describe("integrationsApi.credentials", () => {
+  it("accepts named and dedicated host assignments", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      credentials: [
+        { kind: "password", name: "office", uses: ["web-1"], hosts: ["web-1"] },
+        { kind: "key_passphrase", name: "team", uses: ["keys/id_team"], hosts: ["build"] },
+      ],
+      dedicatedKeyPassphrases: [{ key: "keys/id_owned", hosts: ["deploy"] }],
+      keyHostUsageComplete: true,
+    })));
+
+    await expect(integrationsApi.credentials()).resolves.toMatchObject({
+      dedicatedKeyPassphrases: [{ key: "keys/id_owned", hosts: ["deploy"] }],
+      keyHostUsageComplete: true,
+    });
+  });
+
+  it.each([
+    {
+      credentials: [{ kind: "password", name: "office", uses: [] }],
+      dedicatedKeyPassphrases: [], keyHostUsageComplete: true,
+    },
+    { credentials: [], dedicatedKeyPassphrases: "keys/id_owned", keyHostUsageComplete: true },
+    { credentials: [], dedicatedKeyPassphrases: [{ key: false, hosts: [] }], keyHostUsageComplete: true },
+    { credentials: [], dedicatedKeyPassphrases: [{ key: "keys/id_owned", hosts: [false] }], keyHostUsageComplete: true },
+    { credentials: [], dedicatedKeyPassphrases: [], keyHostUsageComplete: "yes" },
+  ])("rejects malformed credential usage", async (body) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
+
+    await expect(integrationsApi.credentials()).rejects.toThrow("invalid_response");
+  });
+});
