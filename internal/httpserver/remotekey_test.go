@@ -26,11 +26,15 @@ const remoteKeyLine = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPr0nHGmQb99GXmUofxJM
 // sequencedRunner は呼び出しごとに用意した出力を 1 つずつ再生する。
 // これにより、プロセスを起動せずに probe と registration に別々の応答をさせられる。
 type sequencedRunner struct {
-	commands []platform.Command
-	outputs  []platform.Output
+	commands  []platform.Command
+	outputs   []platform.Output
+	beforeRun func(platform.Command)
 }
 
 func (runner *sequencedRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
+	if runner.beforeRun != nil {
+		runner.beforeRun(command)
+	}
 	runner.commands = append(runner.commands, command)
 	if len(runner.outputs) == 0 {
 		return platform.Output{}, nil
@@ -40,7 +44,18 @@ func (runner *sequencedRunner) RunOutput(_ context.Context, command platform.Com
 	return next, nil
 }
 
-func newRemoteKeyServer(t *testing.T, outputs []platform.Output) (*echo.Echo, session.Credentials, *sequencedRunner) {
+func commandConfigPath(t *testing.T, command platform.Command) string {
+	t.Helper()
+	for index, argument := range command.Arguments {
+		if argument == "-F" && index+1 < len(command.Arguments) {
+			return command.Arguments[index+1]
+		}
+	}
+	t.Fatalf("command has no -F configuration: %#v", command.Arguments)
+	return ""
+}
+
+func newRemoteKeyServer(t *testing.T, outputs []platform.Output) (*echo.Echo, session.Credentials, *sequencedRunner, string) {
 	t.Helper()
 
 	home := t.TempDir()
@@ -90,11 +105,28 @@ func newRemoteKeyServer(t *testing.T, outputs []platform.Output) (*echo.Echo, se
 		Diagnostics: diagnosticsService,
 		Actions:     actions,
 	})
-	return engine, credentials, runner
+	return engine, credentials, runner, diagnosticsService.ConfigPath()
+}
+
+func remoteKeyPlanToken(t *testing.T, engine *echo.Echo, credentials session.Credentials, request api.RemoteKeyPlanRequest) string {
+	t.Helper()
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/plan",
+		mustMarshal(t, request), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("plan = %d: %s", response.Code, response.Body.String())
+	}
+	var plan api.RemoteKeyPlan
+	if err := json.Unmarshal(response.Body.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.ActionToken == "" || plan.ActionExpiresAt == "" {
+		t.Fatalf("plan confirmation = %#v", plan)
+	}
+	return plan.ActionToken
 }
 
 func TestRemoteKeyPlanDescribesTheChangeWithoutContactingAnything(t *testing.T) {
-	engine, credentials, runner := newRemoteKeyServer(t, nil)
+	engine, credentials, runner, _ := newRemoteKeyServer(t, nil)
 
 	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/plan",
 		mustMarshal(t, api.RemoteKeyPlanRequest{
@@ -124,13 +156,16 @@ func TestRemoteKeyPlanDescribesTheChangeWithoutContactingAnything(t *testing.T) 
 	if len(payload.ExecutableDirectives) != 1 {
 		t.Errorf("executable directives = %#v", payload.ExecutableDirectives)
 	}
+	if payload.ActionToken == "" || payload.ActionExpiresAt == "" {
+		t.Fatal("the displayed plan must carry its own confirmation")
+	}
 	if len(runner.commands) != 0 {
 		t.Fatal("planning started a process")
 	}
 }
 
 func TestRemoteKeyRegisterNeedsAConfirmationAndSendsTheKeyOnStdin(t *testing.T) {
-	engine, credentials, runner := newRemoteKeyServer(t, []platform.Output{
+	engine, credentials, runner, _ := newRemoteKeyServer(t, []platform.Output{
 		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
 		{Stdout: []byte("sshc: added\n")},
 	})
@@ -146,7 +181,9 @@ func TestRemoteKeyRegisterNeedsAConfirmationAndSendsTheKeyOnStdin(t *testing.T) 
 		t.Fatal("an unconfirmed registration started a process")
 	}
 
-	token := diagnosticsToken(t, engine, credentials, session.ActionRemoteKeyRegister, "bastion")
+	token := remoteKeyPlanToken(t, engine, credentials, api.RemoteKeyPlanRequest{
+		Alias: "bastion", KeyPath: "~/.ssh/id_ed25519.pub", PublicKey: remoteKeyLine,
+	})
 	accepted := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/register", body, token)
 	if accepted.Code != http.StatusOK {
 		t.Fatalf("register = %d: %s", accepted.Code, accepted.Body.String())
@@ -179,12 +216,14 @@ func TestRemoteKeyRegisterNeedsAConfirmationAndSendsTheKeyOnStdin(t *testing.T) 
 }
 
 func TestRemoteKeyRegisterRefusesAnUnacknowledgedExecutableDirective(t *testing.T) {
-	engine, credentials, runner := newRemoteKeyServer(t, []platform.Output{
+	engine, credentials, runner, _ := newRemoteKeyServer(t, []platform.Output{
 		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
 		{Stdout: []byte("sshc: added\n")},
 	})
 
-	token := diagnosticsToken(t, engine, credentials, session.ActionRemoteKeyRegister, "bastion")
+	token := remoteKeyPlanToken(t, engine, credentials, api.RemoteKeyPlanRequest{
+		Alias: "bastion", KeyPath: "x", PublicKey: remoteKeyLine,
+	})
 	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/register",
 		mustMarshal(t, api.RemoteKeyRegisterRequest{
 			Alias: "bastion", KeyPath: "x", PublicKey: remoteKeyLine, AcknowledgeExecutable: false,
@@ -198,17 +237,153 @@ func TestRemoteKeyRegisterRefusesAnUnacknowledgedExecutableDirective(t *testing.
 }
 
 func TestRemoteKeyRegisterRejectsAKeyItCannotParse(t *testing.T) {
-	engine, credentials, runner := newRemoteKeyServer(t, nil)
+	engine, credentials, runner, _ := newRemoteKeyServer(t, nil)
 
-	token := diagnosticsToken(t, engine, credentials, session.ActionRemoteKeyRegister, "bastion")
 	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/register",
 		mustMarshal(t, api.RemoteKeyRegisterRequest{
 			Alias: "bastion", KeyPath: "x", PublicKey: "rm -rf / AAAA", AcknowledgeExecutable: true,
-		}), token)
+		}), "")
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid key = %d, want 400: %s", response.Code, response.Body.String())
 	}
 	if len(runner.commands) != 0 {
 		t.Fatal("an invalid key started a process")
+	}
+}
+
+func TestRemoteKeyConfirmationCannotBeMintedWithoutDisplayingAPlan(t *testing.T) {
+	engine, credentials, runner, _ := newRemoteKeyServer(t, nil)
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/actions",
+		mustMarshal(t, api.IssueActionRequest{Kind: session.ActionRemoteKeyRegister, Target: "bastion"}), "")
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("generic remote-key confirmation = %d, want 400: %s", response.Code, response.Body.String())
+	}
+	if code := problemCode(t, response.Body.Bytes()); code != "unknown_action_kind" {
+		t.Fatalf("problem code = %q, want unknown_action_kind", code)
+	}
+	if len(runner.commands) != 0 {
+		t.Fatal("minting a confirmation started a process")
+	}
+}
+
+func TestRemoteKeyRegisterRejectsAPlanAfterItsDestinationChanges(t *testing.T) {
+	engine, credentials, runner, configPath := newRemoteKeyServer(t, nil)
+	request := api.RemoteKeyPlanRequest{
+		Alias: "bastion", KeyPath: "~/.ssh/id_ed25519.pub", PublicKey: remoteKeyLine,
+	}
+
+	described := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/plan",
+		mustMarshal(t, request), "")
+	if described.Code != http.StatusOK {
+		t.Fatalf("plan = %d: %s", described.Code, described.Body.String())
+	}
+	var plan struct {
+		ActionToken string `json:"actionToken"`
+	}
+	if err := json.Unmarshal(described.Body.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.ActionToken == "" {
+		t.Fatal("plan did not carry its server-derived confirmation")
+	}
+
+	changed := strings.ReplaceAll(diagnosticsConfig, "203.0.113.10", "203.0.113.99")
+	changed = strings.ReplaceAll(changed, "User ops", "User deploy")
+	if err := os.WriteFile(configPath, []byte(changed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	registered := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/register",
+		mustMarshal(t, api.RemoteKeyRegisterRequest{
+			Alias: request.Alias, KeyPath: request.KeyPath, PublicKey: request.PublicKey,
+			AcknowledgeExecutable: true,
+		}), plan.ActionToken)
+	if registered.Code != http.StatusForbidden {
+		t.Fatalf("register after destination change = %d, want 403: %s", registered.Code, registered.Body.String())
+	}
+	if code := problemCode(t, registered.Body.Bytes()); code != "action_token_invalid" {
+		t.Fatalf("problem code = %q, want action_token_invalid", code)
+	}
+	if len(runner.commands) != 0 {
+		t.Fatal("a registration with a stale plan started a process")
+	}
+}
+
+func TestRemoteKeyRegisterRejectsAPlanAfterItsExecutionConfigChanges(t *testing.T) {
+	engine, credentials, runner, configPath := newRemoteKeyServer(t, nil)
+	request := api.RemoteKeyPlanRequest{
+		Alias: "bastion", KeyPath: "~/.ssh/id_ed25519.pub", PublicKey: remoteKeyLine,
+	}
+	initial := strings.Replace(diagnosticsConfig, "\tPort 2222\n", "\tPort 2222\n\tIdentityFile id_one\n", 1)
+	if err := os.WriteFile(configPath, []byte(initial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	token := remoteKeyPlanToken(t, engine, credentials, request)
+
+	changed := strings.Replace(initial, "IdentityFile id_one", "IdentityFile id_other", 1)
+	if err := os.WriteFile(configPath, []byte(changed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	registered := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/register",
+		mustMarshal(t, api.RemoteKeyRegisterRequest{
+			Alias: request.Alias, KeyPath: request.KeyPath, PublicKey: request.PublicKey,
+			AcknowledgeExecutable: true,
+		}), token)
+	if registered.Code != http.StatusForbidden {
+		t.Fatalf("register after config change = %d, want 403: %s", registered.Code, registered.Body.String())
+	}
+	if code := problemCode(t, registered.Body.Bytes()); code != "action_token_invalid" {
+		t.Fatalf("problem code = %q, want action_token_invalid", code)
+	}
+	if len(runner.commands) != 0 {
+		t.Fatal("a registration with a stale execution config started a process")
+	}
+}
+
+func TestRemoteKeyRegisterExecutesTheValidatedSnapshotAfterItsSourceChanges(t *testing.T) {
+	engine, credentials, runner, configPath := newRemoteKeyServer(t, []platform.Output{
+		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
+		{Stdout: []byte("sshc: added\n")},
+	})
+	request := api.RemoteKeyPlanRequest{
+		Alias: "bastion", KeyPath: "~/.ssh/id_ed25519.pub", PublicKey: remoteKeyLine,
+	}
+	token := remoteKeyPlanToken(t, engine, credentials, request)
+
+	var executedConfig []byte
+	changed := false
+	runner.beforeRun = func(command platform.Command) {
+		if !changed {
+			changed = true
+			mutated := strings.ReplaceAll(diagnosticsConfig, "203.0.113.10", "203.0.113.99")
+			if err := os.WriteFile(configPath, []byte(mutated), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		contents, err := os.ReadFile(commandConfigPath(t, command))
+		if err != nil {
+			t.Fatal(err)
+		}
+		executedConfig = contents
+	}
+
+	registered := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/register",
+		mustMarshal(t, api.RemoteKeyRegisterRequest{
+			Alias: request.Alias, KeyPath: request.KeyPath, PublicKey: request.PublicKey,
+			AcknowledgeExecutable: true,
+		}), token)
+	if registered.Code != http.StatusOK {
+		t.Fatalf("register = %d: %s", registered.Code, registered.Body.String())
+	}
+	if !strings.Contains(string(executedConfig), "203.0.113.10") || strings.Contains(string(executedConfig), "203.0.113.99") {
+		t.Fatalf("ssh received the changed source instead of the validated snapshot: %q", executedConfig)
+	}
+	if len(runner.commands) != 2 {
+		t.Fatalf("commands = %#v", runner.commands)
+	}
+	for _, command := range runner.commands {
+		if commandConfigPath(t, command) == configPath {
+			t.Fatal("ssh was pointed at the mutable source configuration")
+		}
 	}
 }

@@ -3,6 +3,7 @@ package remotekey_test
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -16,6 +17,8 @@ const (
 	keyLine     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPr0nHGmQb99GXmUofxJM4BXGwGzO0jGsQFBspODbkvS fixture@example"
 	fingerprint = "SHA256:bytFrSjxj2qRszG8sHhWN+YO3b9vDSU3gQtMorwKpEs"
 )
+
+var configSnapshot = []byte("Host bastion\n\tHostName 203.0.113.10\n\tUser ops\n")
 
 type scriptedRunner struct {
 	commands []platform.Command
@@ -78,7 +81,7 @@ func TestRegisterProbesThenSendsTheKeyOnStandardInput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := newService(runner).Register(context.Background(), effective.Report{}, "bastion", key, false)
+	result, err := newService(runner).Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false)
 	if err != nil {
 		t.Fatalf("Register = %v", err)
 	}
@@ -134,7 +137,7 @@ func TestRegisterReportsAnExistingKeyAndAnUnsupportedRemote(t *testing.T) {
 		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
 		{Stdout: []byte("sshc: already-present\n")},
 	}}
-	result, err := newService(existing).Register(context.Background(), effective.Report{}, "bastion", key, false)
+	result, err := newService(existing).Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false)
 	if err != nil {
 		t.Fatalf("Register = %v", err)
 	}
@@ -145,7 +148,7 @@ func TestRegisterReportsAnExistingKeyAndAnUnsupportedRemote(t *testing.T) {
 	unsupported := &scriptedRunner{outputs: []platform.Output{
 		{Stdout: []byte("Windows PowerShell\n"), ExitCode: 0},
 	}}
-	if _, err := newService(unsupported).Register(context.Background(), effective.Report{}, "bastion", key, false); !errors.Is(err, remotekey.ErrUnsupportedRemote) {
+	if _, err := newService(unsupported).Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false); !errors.Is(err, remotekey.ErrUnsupportedRemote) {
 		t.Fatalf("Register = %v, want ErrUnsupportedRemote", err)
 	}
 	if len(unsupported.commands) != 1 {
@@ -163,18 +166,73 @@ func TestRegisterRefusesUntilExecutableDirectivesAreAcknowledged(t *testing.T) {
 		{Keyword: "ProxyCommand", Command: "/usr/bin/nc %h %p", OnConnect: true},
 	}}
 
-	if _, err := newService(runner).Register(context.Background(), report, "bastion", key, false); !errors.Is(err, remotekey.ErrNotAcknowledged) {
+	if _, err := newService(runner).Register(context.Background(), report, configSnapshot, "bastion", key, false); !errors.Is(err, remotekey.ErrNotAcknowledged) {
 		t.Fatalf("Register = %v, want ErrNotAcknowledged", err)
 	}
 	if len(runner.commands) != 0 {
 		t.Fatal("a refused registration started a process")
 	}
 
-	if _, err := newService(runner).Register(context.Background(), effective.Report{}, "bad alias", key, false); !errors.Is(err, platform.ErrUnsafeAlias) {
+	if _, err := newService(runner).Register(context.Background(), effective.Report{}, configSnapshot, "bad alias", key, false); !errors.Is(err, platform.ErrUnsafeAlias) {
 		t.Fatalf("Register = %v, want ErrUnsafeAlias", err)
 	}
 	if len(runner.commands) != 0 {
 		t.Fatal("an unsafe alias started a process")
+	}
+}
+
+type snapshotReadingRunner struct {
+	paths   []string
+	configs [][]byte
+	outputs []platform.Output
+}
+
+func (runner *snapshotReadingRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
+	for index, argument := range command.Arguments {
+		if argument != "-F" || index+1 >= len(command.Arguments) {
+			continue
+		}
+		path := command.Arguments[index+1]
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return platform.Output{}, err
+		}
+		runner.paths = append(runner.paths, path)
+		runner.configs = append(runner.configs, contents)
+		break
+	}
+	next := runner.outputs[0]
+	runner.outputs = runner.outputs[1:]
+	return next, nil
+}
+
+func TestRegisterUsesOneTemporaryConfigSnapshotForBothSSHCommands(t *testing.T) {
+	runner := &snapshotReadingRunner{outputs: []platform.Output{
+		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
+		{Stdout: []byte("sshc: added\n")},
+	}}
+	key, _, err := remotekey.ParsePublicKey(keyLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := newService(runner)
+
+	if _, err := service.Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false); err != nil {
+		t.Fatalf("Register = %v", err)
+	}
+	if len(runner.paths) != 2 || runner.paths[0] != runner.paths[1] {
+		t.Fatalf("config paths = %#v, want one shared snapshot", runner.paths)
+	}
+	for _, contents := range runner.configs {
+		if string(contents) != string(configSnapshot) {
+			t.Fatalf("ssh read config %q, want %q", contents, configSnapshot)
+		}
+	}
+	if runner.paths[0] == service.ConfigPath {
+		t.Fatal("ssh was pointed back at the mutable user configuration")
+	}
+	if _, err := os.Stat(runner.paths[0]); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary config still exists after registration: %v", err)
 	}
 }
 

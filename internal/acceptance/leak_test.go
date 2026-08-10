@@ -17,9 +17,9 @@ import (
 // guardedRoute は、プロセスを起動する、通常の edit 経路の外で
 // ファイルを変更する、あるいは key material を渡す操作の 1 つである。
 //
-// そのどれもが X-SSHC-Action ヘッダーで確認を受け取る:
-// merge されたツリーは 1 つの配送方式に落ち着いたため、plan の
-// tokenInBody という variant は、記述すべき route を持たない。
+// そのどれもが X-SSHC-Action ヘッダーで確認を受け取る。多くは汎用 action
+// endpoint から発行されるが、公開鍵登録だけは表示された計画全体に結び付いた
+// token を plan response から受け取る。
 type guardedRoute struct {
 	Method string
 	// Path は Echo path であり、以下の router cross-check がそれと
@@ -36,6 +36,9 @@ type guardedRoute struct {
 	// Concrete は、解決済みの target から request path を組み立てる。
 	Concrete func(target string) string
 	Body     func(f *fixture, target string) map[string]any
+	// Token は、確認が汎用 /actions ではなく表示済み計画に同梱される
+	// 操作だけが上書きする。
+	Token func(f *fixture, t testing.TB, target string) string
 }
 
 func constantTarget(value string) func(testing.TB) string {
@@ -60,22 +63,22 @@ func guardedRoutes(f *fixture) []guardedRoute {
 	}
 	return []guardedRoute{
 		{http.MethodPost, "/api/v1/diagnostics/reachability", session.ActionReachability,
-			constantTarget("bastion"), fixedPath("/api/v1/diagnostics/reachability"), alias(nil)},
+			constantTarget("bastion"), fixedPath("/api/v1/diagnostics/reachability"), alias(nil), nil},
 		{http.MethodPost, "/api/v1/diagnostics/authentication", session.ActionAuthentication,
 			constantTarget("bastion"), fixedPath("/api/v1/diagnostics/authentication"),
-			alias(map[string]any{"acknowledgeExecutable": true})},
+			alias(map[string]any{"acknowledgeExecutable": true}), nil},
 		{http.MethodPost, "/api/v1/terminal/launch", session.ActionTerminalLaunch,
-			constantTarget("bastion"), fixedPath("/api/v1/terminal/launch"), alias(nil)},
+			constantTarget("bastion"), fixedPath("/api/v1/terminal/launch"), alias(nil), nil},
 		{http.MethodPost, "/api/v1/known-hosts/delete", session.ActionKnownHostsDelete,
 			constantTarget(knownHostsPath), fixedPath("/api/v1/known-hosts/delete"),
 			func(*fixture, string) map[string]any {
 				return map[string]any{"entries": []map[string]any{{"line": 2, "digest": strings.Repeat("0", 64)}}}
-			}},
+			}, nil},
 		{http.MethodPost, "/api/v1/known-hosts/scan", session.ActionKnownHostsScan,
 			constantTarget("203.0.113.10"), fixedPath("/api/v1/known-hosts/scan"),
 			func(*fixture, string) map[string]any {
 				return map[string]any{"host": "203.0.113.10", "port": 22}
-			}},
+			}, nil},
 		{http.MethodPost, "/api/v1/known-hosts/add", session.ActionKnownHostsAdd,
 			constantTarget("203.0.113.10"), fixedPath("/api/v1/known-hosts/add"),
 			func(*fixture, string) map[string]any {
@@ -84,7 +87,7 @@ func guardedRoutes(f *fixture) []guardedRoute {
 					"key":                 "AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl",
 					"expectedFingerprint": "", "acknowledged": true,
 				}
-			}},
+			}, nil},
 		{http.MethodPost, "/api/v1/remote-keys/register", session.ActionRemoteKeyRegister,
 			constantTarget("bastion"), fixedPath("/api/v1/remote-keys/register"),
 			func(f *fixture, _ string) map[string]any {
@@ -93,14 +96,24 @@ func guardedRoutes(f *fixture) []guardedRoute {
 					"publicKey":             string(bytes.TrimSpace(f.read("id_ed25519.pub"))),
 					"acknowledgeExecutable": true,
 				}
+			}, func(f *fixture, t testing.TB, target string) string {
+				return f.remoteKeyPlanToken(t, target)
 			}},
 		{http.MethodPost, "/api/v1/keys/:keyId/reveal", session.ActionRevealPrivateKey,
 			constantTarget(keyID),
-			func(target string) string { return "/api/v1/keys/" + target + "/reveal" }, nil},
+			func(target string) string { return "/api/v1/keys/" + target + "/reveal" }, nil, nil},
 		{http.MethodDelete, "/api/v1/trash/:entryId", session.ActionPurgeTrashEntry,
 			func(t testing.TB) string { return f.newTrashEntry(t) },
-			func(target string) string { return "/api/v1/trash/" + target }, nil},
+			func(target string) string { return "/api/v1/trash/" + target }, nil, nil},
 	}
+}
+
+func (f *fixture) guardedToken(t testing.TB, route guardedRoute, target string) string {
+	t.Helper()
+	if route.Token != nil {
+		return route.Token(f, t, target)
+	}
+	return f.actionToken(t, route.Kind, target)
 }
 
 // sendGuarded は、route が期待するヘッダーに token を載せて
@@ -124,7 +137,7 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 			// ならない。さもなければ以下の拒否は何も証明しない。
 			f.runner.reset()
 			controlTarget := route.Target(t)
-			valid := f.actionToken(t, route.Kind, controlTarget)
+			valid := f.guardedToken(t, route, controlTarget)
 			accepted := f.sendGuarded(t, route, controlTarget, valid)
 			acceptedStatus := accepted.StatusCode
 			acceptedBody := readBody(t, accepted)
@@ -145,15 +158,18 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 					return f.tryActionToken(other, target)
 				}},
 				{"token for another target", func(string) string {
+					if route.Token != nil {
+						return f.guardedToken(t, route, "some-other-target")
+					}
 					return f.tryActionToken(route.Kind, "some-other-target")
 				}},
 				{"token already spent", func(target string) string {
-					spent := f.actionToken(t, route.Kind, target)
+					spent := f.guardedToken(t, route, target)
 					readBody(t, f.sendGuarded(t, route, target, spent))
 					return spent
 				}},
 				{"token past its lifetime", func(target string) string {
-					aged := f.actionToken(t, route.Kind, target)
+					aged := f.guardedToken(t, route, target)
 					f.clock.advance(session.ActionTokenTTL + time.Minute)
 					return aged
 				}},

@@ -59,6 +59,50 @@ func newTestService(t *testing.T, runner platform.OutputRunner) *diagnostics.Ser
 
 var errRefusedForTest = net.UnknownNetworkError("refused in test")
 
+type countingFileSystem struct {
+	storage.OSFileSystem
+	reads int
+}
+
+func (fileSystem *countingFileSystem) ReadFile(path string) ([]byte, error) {
+	fileSystem.reads++
+	return fileSystem.OSFileSystem.ReadFile(path)
+}
+
+func TestConnectionSnapshotDerivesEverythingFromOneGraphRead(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "config"), []byte(serviceConfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fileSystem := &countingFileSystem{}
+	workspace, err := storage.NewWorkspace(fileSystem, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := diagnostics.NewService(workspace, &scriptedRunner{}, fixedToolchain{}, nil, nil)
+
+	snapshot, err := service.ConnectionSnapshot("bastion")
+	if err != nil {
+		t.Fatalf("ConnectionSnapshot = %v", err)
+	}
+	if fileSystem.reads != 1 {
+		t.Fatalf("configuration reads = %d, want 1", fileSystem.reads)
+	}
+	if snapshot.Hostname != "203.0.113.10" || snapshot.Port != "2222" || snapshot.User != "ops" {
+		t.Fatalf("snapshot = %#v", snapshot)
+	}
+	if string(snapshot.Config) != serviceConfig {
+		t.Fatalf("config snapshot = %q", snapshot.Config)
+	}
+	if len(snapshot.Report.Directives) != 1 {
+		t.Fatalf("report = %#v", snapshot.Report)
+	}
+}
+
 func TestServiceInspectEvaluatesSafeConfigurationsAutomatically(t *testing.T) {
 	runner := &scriptedRunner{output: platform.Output{Stdout: []byte("hostname 203.0.113.10\nuser ops\nport 2222\n")}}
 	service := newTestService(t, runner)

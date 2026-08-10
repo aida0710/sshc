@@ -4,11 +4,6 @@ import type { components } from "../api/schema";
 export type RemoteKeyPlan = components["schemas"]["RemoteKeyPlan"];
 export type RemoteKeyRegisterResponse = components["schemas"]["RemoteKeyRegisterResponse"];
 export type ExecutableDirective = components["schemas"]["ExecutableDirective"];
-export type IssueActionResponse = components["schemas"]["IssueActionResponse"];
-
-// action の語彙はサーバーの session パッケージに属し、操作を確認する
-// すべてのサブシステムのためにそれを所有する。これはその通信上の値だ。
-export const REMOTE_KEY_REGISTER_ACTION_KIND = "remote_key.register";
 
 export type RemoteKeyInput = {
   alias: string;
@@ -16,7 +11,10 @@ export type RemoteKeyInput = {
   publicKey: string;
 };
 
-export type RemoteKeyRegisterInput = RemoteKeyInput & { acknowledgeExecutable: boolean };
+export type RemoteKeyRegisterInput = RemoteKeyInput & {
+  acknowledgeExecutable: boolean;
+  actionToken: string;
+};
 
 export type RemoteKeysApi = {
   plan(input: RemoteKeyInput): Promise<RemoteKeyPlan>;
@@ -74,6 +72,8 @@ function validatePlan(value: unknown): RemoteKeyPlan {
     asNumber(entry.line);
     asBoolean(entry.overridable);
   }
+  asString(record.actionToken);
+  asString(record.actionExpiresAt);
   return record as unknown as RemoteKeyPlan;
 }
 
@@ -87,19 +87,6 @@ function validateRegistration(value: unknown): RemoteKeyRegisterResponse {
 }
 
 const jsonHeaders = { "Content-Type": "application/json" } as const;
-
-// issueAction は登録に必要なワンタイムトークンを鋳造する。リクエストが
-// 名指すのは操作とその対象だけであり、トークンが紐付く evidence は
-// サーバー側で発行時と消費時の両方で導出されるので、このクライアントが
-// ユーザーに一度も見せていない状態にトークンを結び付けることはできない。
-async function issueAction(kind: string, target: string): Promise<string> {
-  const response = await apiClient.mutate<IssueActionResponse>("/api/v1/actions", {
-    method: "POST",
-    headers: jsonHeaders,
-    body: JSON.stringify({ kind, target }),
-  });
-  return asString(asRecord(response).token);
-}
 
 export const remoteKeysApi: RemoteKeysApi = {
   // plan は設定を読むだけで何にも接続しないので、確認を消費しない。
@@ -115,11 +102,10 @@ export const remoteKeysApi: RemoteKeysApi = {
     );
   },
   async register(input) {
-    const token = await issueAction(REMOTE_KEY_REGISTER_ACTION_KIND, input.alias);
     return validateRegistration(
       await apiClient.mutate<unknown>("/api/v1/remote-keys/register", {
         method: "POST",
-        headers: { ...jsonHeaders, "X-SSHC-Action": token },
+        headers: { ...jsonHeaders, "X-SSHC-Action": input.actionToken },
         body: JSON.stringify({
           alias: input.alias,
           keyPath: input.keyPath,

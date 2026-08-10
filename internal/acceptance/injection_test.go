@@ -214,7 +214,7 @@ func TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 			}
 
 			runner.reset()
-			if _, err := service.Register(context.Background(), effective.Report{}, hostile, key, true); err == nil {
+			if _, err := service.Register(context.Background(), effective.Report{}, []byte("Host bastion\n"), hostile, key, true); err == nil {
 				t.Fatalf("Register(%q) was accepted", hostile)
 			}
 			if commands := runner.recorded(); len(commands) != 0 {
@@ -238,7 +238,7 @@ func TestRemoteRegistrationNeverInterpolatesInputIntoTheRemoteShell(t *testing.T
 		}
 		return platform.Output{Stdout: []byte("sshc: added\n")}, nil
 	})
-	token := f.actionToken(t, session.ActionRemoteKeyRegister, "bastion")
+	token := f.remoteKeyPlanToken(t, "bastion")
 	registered := f.do(http.MethodPost, "/api/v1/remote-keys/register", mustJSON(t, map[string]any{
 		"alias": "bastion", "keyPath": "id_ed25519.pub",
 		"publicKey": publicKey, "acknowledgeExecutable": true,
@@ -268,11 +268,10 @@ func TestRemoteRegistrationNeverInterpolatesInputIntoTheRemoteShell(t *testing.T
 	for _, hostile := range hostileArguments {
 		t.Run(quoteForName(hostile), func(t *testing.T) {
 			f.runner.reset()
-			issued := f.tryActionToken(session.ActionRemoteKeyRegister, hostile)
 			readBody(t, f.do(http.MethodPost, "/api/v1/remote-keys/register", mustJSON(t, map[string]any{
 				"alias": hostile, "keyPath": "id_ed25519.pub",
 				"publicKey": publicKey, "acknowledgeExecutable": true,
-			}), withAction(issued)))
+			})))
 			if commands := f.runner.recorded(); len(commands) != 0 {
 				t.Fatalf("a hostile alias reached the remote seam: %#v", commands)
 			}

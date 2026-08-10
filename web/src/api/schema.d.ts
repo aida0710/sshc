@@ -1238,6 +1238,8 @@ export interface components {
             supported: boolean;
             manual: string[];
             executableDirectives: components["schemas"]["ExecutableDirective"][];
+            actionToken: string;
+            actionExpiresAt: string;
         };
         RemoteKeyRegisterRequest: {
             alias: string;
@@ -2083,7 +2085,9 @@ export interface operations {
     registerRemoteKey: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
             path?: never;
             cookie?: never;
         };
