@@ -1364,6 +1364,7 @@ export interface components {
             exists: boolean;
             unlocked: boolean;
             aliases: string[];
+            dedicatedKeyPassphrases: string[];
             minPassphraseLength?: number;
         };
         PasswordEligibility: {
@@ -1461,6 +1462,7 @@ export interface components {
             port?: components["schemas"]["ConnectionPortChange"];
             identityFile?: components["schemas"]["ConnectionIdentityFileChange"];
             password: components["schemas"]["UpdateConnectionPassword"];
+            keyPassphrase: components["schemas"]["UpdateConnectionKeyPassphrase"];
         };
         ConnectionStringChange: components["schemas"]["ConnectionStringSet"] | components["schemas"]["ConnectionInherit"];
         ConnectionStringSet: {
@@ -1510,6 +1512,23 @@ export interface components {
              * @enum {string}
              */
             kind: "remove";
+        };
+        UpdateConnectionKeyPassphrase: components["schemas"]["ConnectionKeyPassphraseUnchanged"] | components["schemas"]["ConnectionKeyPassphraseSetDedicated"];
+        ConnectionKeyPassphraseUnchanged: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unchanged";
+        };
+        ConnectionKeyPassphraseSetDedicated: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "set_dedicated";
+            keyId: string;
+            passphrase: string;
         };
         RelocateKeyRequest: {
             newName?: string;

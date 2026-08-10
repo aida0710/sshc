@@ -1829,13 +1829,18 @@ components:
     PasswordVaultStatus:
       type: object
       additionalProperties: false
-      required: [exists, unlocked, aliases]
+      required: [exists, unlocked, aliases, dedicatedKeyPassphrases]
       properties:
         exists: { type: boolean }
         unlocked: { type: boolean }
         # パスワードが保存されているホスト。名前の集合は秘密ではない。秘密なのは
         # 値の方であり、どの操作もそれを返さない。
         aliases:
+          type: array
+          items: { type: string }
+        # 鍵専用の保存値がある workspace-relative path。値そのものは、どの
+        # レスポンスにも決して含めない。
+        dedicatedKeyPassphrases:
           type: array
           items: { type: string }
         minPassphraseLength: { type: integer }
@@ -1983,7 +1988,7 @@ components:
     UpdateConnectionRequest:
       type: object
       additionalProperties: false
-      required: [identity, base, password]
+      required: [identity, base, password, keyPassphrase]
       properties:
         identity: { $ref: "#/components/schemas/HostIdentity" }
         base: { type: string, maxLength: 1048576 }
@@ -1992,6 +1997,7 @@ components:
         port: { $ref: "#/components/schemas/ConnectionPortChange" }
         identityFile: { $ref: "#/components/schemas/ConnectionIdentityFileChange" }
         password: { $ref: "#/components/schemas/UpdateConnectionPassword" }
+        keyPassphrase: { $ref: "#/components/schemas/UpdateConnectionKeyPassphrase" }
     ConnectionStringChange:
       x-go-type: json.RawMessage
       oneOf:
@@ -2077,6 +2083,30 @@ components:
       required: [kind]
       properties:
         kind: { type: string, enum: [remove], x-go-type: string }
+    UpdateConnectionKeyPassphrase:
+      x-go-type: json.RawMessage
+      oneOf:
+        - $ref: "#/components/schemas/ConnectionKeyPassphraseUnchanged"
+        - $ref: "#/components/schemas/ConnectionKeyPassphraseSetDedicated"
+      discriminator:
+        propertyName: kind
+        mapping:
+          unchanged: "#/components/schemas/ConnectionKeyPassphraseUnchanged"
+          set_dedicated: "#/components/schemas/ConnectionKeyPassphraseSetDedicated"
+    ConnectionKeyPassphraseUnchanged:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [unchanged], x-go-type: string }
+    ConnectionKeyPassphraseSetDedicated:
+      type: object
+      additionalProperties: false
+      required: [kind, keyId, passphrase]
+      properties:
+        kind: { type: string, enum: [set_dedicated], x-go-type: string }
+        keyId: { type: string, minLength: 32, maxLength: 32 }
+        passphrase: { type: string, minLength: 1, maxLength: 1024 }
     RelocateKeyRequest:
       type: object
       additionalProperties: false
