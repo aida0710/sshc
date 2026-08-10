@@ -1,5 +1,5 @@
 import { StrictMode, type ReactNode } from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -92,6 +92,7 @@ vi.mock("./keys/KeysScreen", () => ({
   ),
 }));
 vi.mock("./diagnostics/DiagnosticsPanel", () => ({ DiagnosticsPanel: () => <div>diagnostics panel</div> }));
+vi.mock("./settings/SettingsPanel", () => ({ SettingsPanel: () => <div>settings panel</div> }));
 vi.mock("./knownhosts/KnownHostsPanel", () => ({ KnownHostsPanel: () => <div>known hosts panel</div> }));
 vi.mock("./remotekeys/RemoteKeyPanel", () => ({
   RemoteKeyPanel: ({
@@ -151,11 +152,16 @@ describe("App", () => {
       "Install Key on Server",
       "Ad hoc checks",
       "Secrets",
+      "Settings",
       "Sync",
       "History",
     ]) {
       expect(screen.getByRole("link", { name: label })).toHaveAttribute("href");
     }
+    const maintenance = screen.getByRole("list", { name: "Maintenance" });
+    const settings = within(maintenance).getByRole("link", { name: "Settings" });
+    expect(settings).toHaveAttribute("href", "/settings");
+    expect(settings.querySelector("use")).toHaveAttribute("href", "#icon-settings");
   });
 
   it("keeps the inspector open across a section change", async () => {
@@ -235,6 +241,7 @@ describe("App", () => {
       "Known Hosts",
       "Install Key on Server",
       "Ad hoc checks",
+      "Settings",
       "History",
     ]) {
       expect(screen.getByRole("link", { name: label })).toHaveAttribute("href");
@@ -255,6 +262,32 @@ describe("App", () => {
     expect(await screen.findByText("keys panel")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Keys" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute("href", "/connections");
+  });
+
+  it("renders Settings directly and follows browser history back to it", async () => {
+    window.history.replaceState(null, "", "/settings");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    expect(await screen.findByText("settings panel")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+
+    act(() => {
+      window.history.pushState(null, "", "/history");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByText("history panel")).toBeInTheDocument();
+
+    act(() => {
+      window.history.replaceState(null, "", "/settings");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByText("settings panel")).toBeInTheDocument();
   });
 
   it("updates the URL for link and programmatic navigation", async () => {

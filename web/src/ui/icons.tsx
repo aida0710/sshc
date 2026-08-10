@@ -23,6 +23,7 @@ export const iconNames = [
   "remoteKeys",
   "diagnostics",
   "secrets",
+  "settings",
   "sync",
   "history",
   "inspector",
@@ -74,6 +75,12 @@ const shapes: Record<IconName, ReactNode> = {
     <>
       <rect x="4" y="10" width="16" height="11" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />
     </>
   ),
   sync: (
