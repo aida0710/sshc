@@ -83,3 +83,29 @@ describe("integrationsApi.addKnownHost", () => {
     expect((failure as ApiError).status).toBe(409);
   });
 });
+
+describe("integrationsApi.passwordVault", () => {
+  it("accepts dedicated key-passphrase subjects", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      exists: true,
+      unlocked: true,
+      aliases: ["edge"],
+      dedicatedKeyPassphrases: ["keys/id_edge"],
+      minPassphraseLength: 12,
+    })));
+
+    await expect(integrationsApi.passwordVault()).resolves.toMatchObject({
+      dedicatedKeyPassphrases: ["keys/id_edge"],
+    });
+  });
+
+  it.each([
+    { exists: true, unlocked: true, aliases: [] },
+    { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: "keys/id_edge" },
+    { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [false] },
+  ])("rejects a malformed dedicated key-passphrase status", async (body) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
+
+    await expect(integrationsApi.passwordVault()).rejects.toThrow("invalid_response");
+  });
+});

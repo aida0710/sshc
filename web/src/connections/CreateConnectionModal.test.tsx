@@ -75,7 +75,7 @@ function renderModal(overrides: ModalOverrides = {}) {
   const createConnection = overrides.createConnection ?? vi.fn().mockResolvedValue(created);
   const keyInventory = overrides.inventory ?? vi.fn().mockResolvedValue(inventory);
   const passwordVault = overrides.passwordVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], minPassphraseLength: 12,
+    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
   });
   const credentials = overrides.credentials ?? vi.fn().mockResolvedValue({
     credentials: [
@@ -84,10 +84,10 @@ function renderModal(overrides: ModalOverrides = {}) {
     ],
   });
   const initialiseVault = overrides.initialiseVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], minPassphraseLength: 12,
+    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
   });
   const unlockVault = overrides.unlockVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], minPassphraseLength: 12,
+    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
   });
   const onClose = overrides.onClose ?? vi.fn();
   const onCreated = overrides.onCreated ?? vi.fn();
@@ -184,7 +184,7 @@ describe("CreateConnectionModal", () => {
   it("can initialise or unlock the vault before creation", async () => {
     const user = userEvent.setup();
     const missing = renderModal({
-      passwordVault: vi.fn().mockResolvedValue({ exists: false, unlocked: false, aliases: [], minPassphraseLength: 12 }),
+      passwordVault: vi.fn().mockResolvedValue({ exists: false, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 }),
     });
     await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
     await user.type(await screen.findByLabelText("Master password"), "a long master password");
@@ -194,7 +194,7 @@ describe("CreateConnectionModal", () => {
 
     missing.unmount();
     const locked = renderModal({
-      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], minPassphraseLength: 12 }),
+      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 }),
     });
     await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
     await user.type(await screen.findByLabelText("Master password"), "the master password");
@@ -205,7 +205,7 @@ describe("CreateConnectionModal", () => {
   it("allows private-key creation while the password vault is locked", async () => {
     const user = userEvent.setup();
     const harness = renderModal({
-      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], minPassphraseLength: 12 }),
+      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 }),
     });
     await fillConnection(user);
     await user.click(await screen.findByRole("radio", { name: "SSH private key" }));

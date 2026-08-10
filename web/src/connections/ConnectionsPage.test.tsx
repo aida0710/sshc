@@ -82,7 +82,7 @@ beforeEach(() => {
     ],
   } as never);
   vi.mocked(integrationsApi.passwordVault).mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], minPassphraseLength: 12,
+    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
   } as never);
   vi.mocked(integrationsApi.credentials).mockResolvedValue({ credentials: [] } as never);
   vi.mocked(integrationsApi.passwordEligibility).mockResolvedValue({
