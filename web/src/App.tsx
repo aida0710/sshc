@@ -26,6 +26,7 @@ import { useTheme } from "./theme/context";
 import { themes, type Theme } from "./theme/theme";
 import type { MessageKey } from "./i18n/messages";
 import { Button } from "./ui/surface";
+import { sections, type Section } from "./routing/sectionRoute";
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -36,20 +37,6 @@ type AppProps = {
   vault?: () => Promise<PasswordVaultStatus>;
 };
 
-const sections = [
-  "Home",
-  "Connections",
-  "Config",
-  "Groups",
-  "Keys",
-  "Known Hosts",
-  "Remote Keys",
-  "Diagnostics",
-  "Secrets",
-  "Sync",
-  "History",
-] as const;
-type Section = (typeof sections)[number];
 const enabledSections: Section[] = [...sections];
 
 // セクション識別子は英語のまま訳さない。これはこのコンポーネント自身の
