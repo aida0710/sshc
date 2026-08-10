@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FieldEdit, FormField, GroupMetadata, HostDetail, SavePreview } from "../api/config";
+import type {
+  FieldEdit,
+  FormField,
+  GroupMetadata,
+  HostDetail,
+  SavePreview,
+  UpdateConnectionRequest,
+} from "../api/config";
 import type { Problem } from "../api/client";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import { DiagnosticsPanel } from "../diagnostics/DiagnosticsPanel";
-import { PasswordPanel } from "../diagnostics/PasswordPanel";
+import type { KeysApi } from "../keys/api";
+import { ConnectionBasicForm } from "./ConnectionBasicForm";
 import { formatValues, parseValues } from "./values";
 import { NoticeList, SavePreviewPanel } from "./SavePreview";
 import { useTranslate } from "../i18n/context";
@@ -34,8 +42,6 @@ const tabLabels: Record<(typeof tabs)[number], MessageKey> = {
 };
 type Tab = (typeof tabs)[number];
 
-const categoryForTab: Record<string, string> = { Basic: "basic", Jump: "jump", Advanced: "advanced" };
-
 type HostDetailPanelProps = {
   detail: HostDetail;
   groups: GroupMetadata[];
@@ -49,10 +55,12 @@ type HostDetailPanelProps = {
   // ディレクトリであるため、それを変えることは移動であり、呼び出し側は
   // グループ名をサーバーへ送り、サーバーがそこから宛先パスを導出する。
   onMoveToGroup: (group: string) => void;
+  onBasicSave: (request: UpdateConnectionRequest) => Promise<void>;
   // Diagnostics タブは Diagnostics section と同じ検査を行うため、
   // 同じクライアントを使う。これがプロパティであるのはテストが注入できるように
   // するためだけであり、ない場合パネルは実物のクライアントへフォールバックする。
   integrations?: IntegrationsApi;
+  keys?: Pick<KeysApi, "inventory">;
 };
 
 function fieldKey(field: FormField): string {
@@ -69,7 +77,9 @@ export function HostDetailPanel({
   onRename,
   onComment,
   onMoveToGroup,
+  onBasicSave,
   integrations = integrationsApi,
+  keys,
 }: HostDetailPanelProps) {
   const t = useTranslate();
   const [tab, setTab] = useState<Tab>("Basic");
@@ -117,7 +127,11 @@ export function HostDetailPanel({
   }, [identityPath, identityAlias, formRaw, currentGroup, initialComment]);
 
   const visibleFields = useMemo(
-    () => detail.form.fields.filter((field) => field.category === categoryForTab[tab]),
+    () => detail.form.fields.filter((field) =>
+      tab === "Advanced"
+        ? field.category === "advanced" || field.category === "basic"
+        : tab === "Jump" && field.category === "jump",
+    ),
     [detail.form.fields, tab],
   );
   const fieldDirty = removed.length > 0 || additions.length > 0 || Object.entries(drafts).some(([key, value]) => {
@@ -200,7 +214,17 @@ export function HostDetailPanel({
 
       {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
 
-      {tab === "Basic" || tab === "Jump" || tab === "Advanced" ? (
+      {tab === "Basic" ? (
+        <ConnectionBasicForm
+          detail={detail}
+          problem={problem}
+          onSave={onBasicSave}
+          {...(keys === undefined ? {} : { keys })}
+          secrets={integrations}
+        />
+      ) : null}
+
+      {tab === "Jump" || tab === "Advanced" ? (
         <div className="flex flex-col gap-3">
           {/*
             一つのディレクティブに一つの行。keyword を左に、value を右に、
@@ -337,15 +361,7 @@ export function HostDetailPanel({
             {t("host.noDestination")}
           </p>
         ) : (
-          <div className="flex flex-col gap-4">
-            <DiagnosticsPanel api={integrations} host={identityAlias} />
-            {/*
-              保存されたパスワードはディレクティブではなく検査の側にある。
-              設定の一部ではないからであり、この機能は
-              ssh_config のバイトを一切書き込まない。
-            */}
-            <PasswordPanel api={integrations} alias={identityAlias} />
-          </div>
+          <DiagnosticsPanel api={integrations} host={identityAlias} />
         )
       ) : null}
 

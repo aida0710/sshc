@@ -36,7 +36,7 @@ const eligibilityKeys: Record<string, MessageKey> = {
   hostname_unresolved: "password.warn.hostNameUnresolved",
 };
 
-function eligibilityText(translate: (key: MessageKey) => string, code: string): string {
+export function eligibilityText(translate: (key: MessageKey) => string, code: string): string {
   return code in eligibilityKeys ? translate(eligibilityKeys[code]!) : code;
 }
 
