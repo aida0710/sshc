@@ -32,6 +32,7 @@ import {
   type BrowserLocation,
   type NavigateLocationOptions,
 } from "./routing/useSectionRoute";
+import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -118,6 +119,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // draft lets a person create a group or key and return without starting the
   // form again; passwords remain local to the modal and are cleared on exit.
   const [connectionDraft, setConnectionDraft] = useState<CreateConnectionDraft | null>(null);
+  // 鍵生成後の次アクションだけを、ページをまたぐ短命な状態として持つ。
+  // ID と ~/.ssh からの相対パスだけで、パスフレーズや鍵本文はここへ来ない。
+  const [preferredConnectionKey, setPreferredConnectionKey] = useState<GeneratedPrivateKeyHandoff | null>(null);
+  const [preferredPublicKey, setPreferredPublicKey] = useState<GeneratedPublicKeyHandoff | null>(null);
   // ペインはシェルに属するものであり、セクションに属するものではない。
   // Connections で開いたものは Keys でも開いたままになる——セクションを
   // 切り替えるたびに自分で閉じるペインでは、頻繁に開き直す羽目になる。
@@ -142,6 +147,16 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   function openFile(path: string, line: number) {
     setFileTarget({ path, line });
     navigate("Config");
+  }
+
+  function assignGeneratedKey(key: GeneratedPrivateKeyHandoff) {
+    setPreferredConnectionKey(key);
+    navigate("Connections");
+  }
+
+  function installGeneratedKey(key: GeneratedPublicKeyHandoff) {
+    setPreferredPublicKey(key);
+    navigate("Remote Keys");
   }
 
   function followSectionLink(event: MouseEvent<HTMLAnchorElement>, target: Section) {
@@ -409,6 +424,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                   onNavigate={navigate}
                   location={location}
                   onNavigateLocation={navigateLocation}
+                  preferredConnectionKey={preferredConnectionKey}
+                  preferredPublicKey={preferredPublicKey}
+                  onAssignGeneratedKey={assignGeneratedKey}
+                  onInstallGeneratedKey={installGeneratedKey}
+                  onPreferredConnectionKeyApplied={() => setPreferredConnectionKey(null)}
                 />
               ) : (
                 <div className="h-full overflow-y-auto p-6">
@@ -453,6 +473,11 @@ type SectionViewProps = {
   onNavigate: (section: Section) => void;
   location: BrowserLocation;
   onNavigateLocation: (url: string, options?: NavigateLocationOptions) => void;
+  preferredConnectionKey: GeneratedPrivateKeyHandoff | null;
+  preferredPublicKey: GeneratedPublicKeyHandoff | null;
+  onAssignGeneratedKey: (key: GeneratedPrivateKeyHandoff) => void;
+  onInstallGeneratedKey: (key: GeneratedPublicKeyHandoff) => void;
+  onPreferredConnectionKeyApplied: () => void;
   onConnectionDraftChange: (draft: CreateConnectionDraft | null) => void;
   onNavigateForCreation: (section: CreationPrerequisite) => void;
   // セクションは右側ペインの中身を提供するか、調べるものが無ければ
@@ -473,13 +498,26 @@ function SectionView(props: SectionViewProps) {
         onNavigateForCreation={props.onNavigateForCreation}
         location={props.location}
         onNavigateLocation={props.onNavigateLocation}
+        preferredKey={props.preferredConnectionKey}
+        onPreferredKeyApplied={props.onPreferredConnectionKeyApplied}
       />
     );
   }
   return <div className="h-full overflow-y-auto p-6">{<PaddedSection {...props} />}</div>;
 }
 
-function PaddedSection({ section, fileTarget, groups, knownAliases, onLock, onInspector, onNavigate }: SectionViewProps) {
+function PaddedSection({
+  section,
+  fileTarget,
+  groups,
+  knownAliases,
+  onLock,
+  onInspector,
+  onNavigate,
+  preferredPublicKey,
+  onAssignGeneratedKey,
+  onInstallGeneratedKey,
+}: SectionViewProps) {
   if (section === "Home") {
     return <OverviewPanel onNavigate={onNavigate} />;
   }
@@ -499,13 +537,19 @@ function PaddedSection({ section, fileTarget, groups, knownAliases, onLock, onIn
     return <HistoryPanel />;
   }
   if (section === "Keys") {
-    return <KeysScreen groups={groups} />;
+    return (
+      <KeysScreen
+        groups={groups}
+        onAssignGeneratedKey={onAssignGeneratedKey}
+        onInstallGeneratedKey={onInstallGeneratedKey}
+      />
+    );
   }
   if (section === "Known Hosts") {
     return <KnownHostsPanel />;
   }
   if (section === "Remote Keys") {
-    return <RemoteKeyPanel />;
+    return <RemoteKeyPanel preferredPublicKeyPath={preferredPublicKey?.publicRelativePath ?? null} />;
   }
   if (section === "Diagnostics") {
     return <DiagnosticsPanel hosts={knownAliases} />;

@@ -37,6 +37,7 @@ import {
   parseConnectionSearch,
   type HostEditorTab,
 } from "../routing/connectionRoute";
+import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 
 // Groups 画面が報告し、この画面は報告しないもの。
 //
@@ -100,6 +101,8 @@ type ConnectionsPageProps = {
   onNavigateForCreation?: (section: CreationPrerequisite) => void;
   location?: BrowserLocation;
   onNavigateLocation?: (url: string, options?: NavigateLocationOptions) => void;
+  preferredKey?: GeneratedPrivateKeyHandoff | null;
+  onPreferredKeyApplied?: () => void;
 };
 
 export function ConnectionsPage({
@@ -110,6 +113,8 @@ export function ConnectionsPage({
   onNavigateForCreation,
   location = { pathname: "/connections", search: "" },
   onNavigateLocation,
+  preferredKey = null,
+  onPreferredKeyApplied,
 }: ConnectionsPageProps) {
   const t = useTranslate();
   const initialTarget = parseConnectionSearch(location.search);
@@ -730,8 +735,14 @@ export function ConnectionsPage({
             >
               <Icon name="connections" className="size-7" />
             </span>
-            <h2 className="text-lg font-semibold text-ink">{t("conn.emptyHeading")}</h2>
-            <p className="mt-1 text-sm leading-6 text-ink-muted">{t("conn.emptyHint")}</p>
+            <h2 className="text-lg font-semibold text-ink">
+              {t(preferredKey === null ? "conn.emptyHeading" : "conn.assignKeyHeading")}
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-ink-muted">
+              {preferredKey === null
+                ? t("conn.emptyHint")
+                : t("conn.assignKeyHint", { path: preferredKey.privateRelativePath })}
+            </p>
             <Button kind="primary" className="mt-4" onClick={beginCreation}>{t("conn.createAnother")}</Button>
           </section>
         ) : (
@@ -860,6 +871,8 @@ export function ConnectionsPage({
                 setActiveTab(tab);
                 if (selection !== null) navigateToConnection(selection, tab);
               }}
+              preferredKey={preferredKey}
+              onPreferredKeyApplied={onPreferredKeyApplied}
             />
           </>
         )}

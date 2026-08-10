@@ -21,6 +21,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
     onNavigateForCreation,
     location,
     onNavigateLocation,
+    preferredKey,
   }: {
     onOpenFile: (path: string, line: number) => void;
     onInspector: (content: { label: string; attention: boolean; body: ReactNode } | null) => void;
@@ -29,10 +30,12 @@ vi.mock("./connections/ConnectionsPage", () => ({
     onNavigateForCreation?: (section: "Groups" | "Keys") => void;
     location?: { pathname: string; search: string };
     onNavigateLocation?: (url: string) => void;
+    preferredKey?: { privateKeyId: string; privateRelativePath: string } | null;
   }) => (
     <div>
       connections panel
       <span>{`connection location ${location?.pathname ?? "missing"}${location?.search ?? ""}`}</span>
+      <span>{`preferred connection key ${preferredKey?.privateRelativePath ?? "none"}`}</span>
       {creationDraft === null || creationDraft === undefined ? null : <span>{`draft ${creationDraft.alias}`}</span>}
       <button type="button" onClick={() => onOpenFile("config", 9)}>open pattern rule</button>
       <button type="button" onClick={() => onInspector({ label: "Display and classification", attention: true, body: <p>inspector body</p> })}>
@@ -66,10 +69,32 @@ vi.mock("./explorer/ConfigExplorer", () => ({
 }));
 vi.mock("./groups/GroupsPanel", () => ({ GroupsPanel: () => <div>groups panel</div> }));
 vi.mock("./history/HistoryPanel", () => ({ HistoryPanel: () => <div>history panel</div> }));
-vi.mock("./keys/KeysScreen", () => ({ KeysScreen: () => <div>keys panel</div> }));
+vi.mock("./keys/KeysScreen", () => ({
+  KeysScreen: ({
+    onAssignGeneratedKey,
+    onInstallGeneratedKey,
+  }: {
+    onAssignGeneratedKey?: (key: { privateKeyId: string; privateRelativePath: string }) => void;
+    onInstallGeneratedKey?: (key: { publicRelativePath: string }) => void;
+  }) => (
+    <div>
+      keys panel
+      <button type="button" onClick={() => onAssignGeneratedKey?.({ privateKeyId: "key-new", privateRelativePath: "id_new" })}>
+        hand key to connection
+      </button>
+      <button type="button" onClick={() => onInstallGeneratedKey?.({ publicRelativePath: "id_new.pub" })}>
+        hand key to server
+      </button>
+    </div>
+  ),
+}));
 vi.mock("./diagnostics/DiagnosticsPanel", () => ({ DiagnosticsPanel: () => <div>diagnostics panel</div> }));
 vi.mock("./knownhosts/KnownHostsPanel", () => ({ KnownHostsPanel: () => <div>known hosts panel</div> }));
-vi.mock("./remotekeys/RemoteKeyPanel", () => ({ RemoteKeyPanel: () => <div>remote keys panel</div> }));
+vi.mock("./remotekeys/RemoteKeyPanel", () => ({
+  RemoteKeyPanel: ({ preferredPublicKeyPath }: { preferredPublicKeyPath?: string | null }) => (
+    <div>{`remote keys panel ${preferredPublicKeyPath ?? "no key"}`}</div>
+  ),
+}));
 vi.mock("./secrets/LockScreen", () => ({
   LockScreen: ({ onOpen }: { onOpen: () => void }) => (
     <button type="button" onClick={onOpen}>unlock fixture</button>
@@ -235,6 +260,28 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "open pattern rule" }));
     expect(window.location.pathname).toBe("/config");
     expect(screen.getByText("config panel config:9")).toBeInTheDocument();
+  });
+
+  it("carries generated key identifiers to the next workflow without putting secrets in the URL", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/keys");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "hand key to connection" }));
+    expect(await screen.findByText("preferred connection key id_new")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/connections");
+    expect(window.location.search).toBe("");
+
+    await user.click(screen.getByRole("link", { name: "Keys" }));
+    await user.click(await screen.findByRole("button", { name: "hand key to server" }));
+    expect(await screen.findByText("remote keys panel id_new.pub")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/install-key");
   });
 
   it("passes the complete connection location through and clears it from the section link", async () => {
@@ -403,7 +450,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("link", { name: "Install Key on Server" }));
 
-    expect(screen.getByText("remote keys panel")).toBeInTheDocument();
+    expect(screen.getByText(/remote keys panel/)).toBeInTheDocument();
     // ステータス領域を持つのはシェルだけであり、パネルが二つ目を追加してはならない。
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });

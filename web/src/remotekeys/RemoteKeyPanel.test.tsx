@@ -122,6 +122,25 @@ async function fetchPlan(api: RemoteKeysApi) {
 }
 
 describe("RemoteKeyPanel", () => {
+  it("preloads a handed-off public key from fresh inventory without planning or registering", async () => {
+    const api = buildApi();
+    const keys = buildKeys();
+    render(
+      <RemoteKeyPanel
+        api={api}
+        keys={keys}
+        preferredPublicKeyPath="id_ed25519.pub"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("Public key file")).toHaveValue("id_ed25519.pub"));
+    expect(screen.getByLabelText("Public key line")).toHaveValue(publicKey);
+    expect(keys.inventory).toHaveBeenCalled();
+    expect(keys.publicKey).toHaveBeenCalledWith("key-pub");
+    expect(api.plan).not.toHaveBeenCalled();
+    expect(api.register).not.toHaveBeenCalled();
+  });
+
   it("names the task rather than the implementation area", () => {
     render(<RemoteKeyPanel api={buildApi()} keys={buildKeys()} />);
 

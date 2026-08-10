@@ -20,6 +20,7 @@ type RemoteKeyPanelProps = {
   // 何も始まらず何にも接続しない。リモートホストに触れるのは
   // plan と registration だけだ。
   keys?: Pick<KeysApi, "inventory" | "publicKey">;
+  preferredPublicKeyPath?: string | null;
 };
 
 const outcomeLabels: Record<string, MessageKey> = {
@@ -44,7 +45,11 @@ const valuesFromLabels: Record<string, MessageKey> = {
 // 確認画面が実際に送られるもの以外を記述することは決してない。
 // このアプリケーションが自動化しないリモートには、ボタンの代わりに
 // 手順が示される。
-export function RemoteKeyPanel({ api = remoteKeysApi, keys = keysApi }: RemoteKeyPanelProps) {
+export function RemoteKeyPanel({
+  api = remoteKeysApi,
+  keys = keysApi,
+  preferredPublicKeyPath = null,
+}: RemoteKeyPanelProps) {
   const t = useTranslate();
   const [alias, setAlias] = useState("");
   const [keyPath, setKeyPath] = useState("");
@@ -65,14 +70,25 @@ export function RemoteKeyPanel({ api = remoteKeysApi, keys = keysApi }: RemoteKe
     let active = true;
     void keys
       .inventory()
-      .then((inventory) => {
-        if (active) setCandidates(inventory.items.filter((item) => item.kind === "public_key"));
+      .then(async (inventory) => {
+        const publicKeys = inventory.items.filter((item) => item.kind === "public_key");
+        if (!active) return;
+        setCandidates(publicKeys);
+        if (preferredPublicKeyPath === null) return;
+        const preferred = publicKeys.find((item) => item.relativePath === preferredPublicKeyPath);
+        if (preferred === undefined) return;
+        const key = await keys.publicKey(preferred.id);
+        if (!active) return;
+        setChosen(preferred.id);
+        setKeyPath(key.relativePath);
+        setPublicKey(key.publicKey.trimEnd());
+        setError("");
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
-  }, [keys]);
+  }, [keys, preferredPublicKeyPath]);
 
   // withdraw は、それまでの plan が正当化していたすべてを捨てる。
   // 編集のたびに実行されるので、確認画面が変わった値のまま残ることはない。
