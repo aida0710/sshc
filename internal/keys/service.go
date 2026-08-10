@@ -27,6 +27,8 @@ var (
 	ErrInvalidComment              = errors.New("comment contains characters this application will not put in a command line")
 	ErrConflictingPassphraseChoice = errors.New("a passphrase was supplied together with the unencrypted flag")
 	ErrUnknownGroup                = errors.New("no declared group of that name")
+	ErrKeyNotEncrypted             = errors.New("this private key is not encrypted")
+	ErrKeyChanged                  = errors.New("the private key changed after its passphrase was verified")
 )
 
 // KeysDirectoryName は、グループごとにサブディレクトリをひとつ持つディレクトリ。
@@ -165,6 +167,58 @@ func NewService(options ServiceOptions) *Service {
 // 先にこのサービスを組み立てる配線のためである。
 func (service *Service) SetStoredPassphrase(lookup func(relativePath string) (string, bool)) {
 	service.storedPassphrase = lookup
+}
+
+// PassphraseVerification binds successful decryption to one inventory item and
+// the exact key bytes that were checked. It contains no key material or secret.
+type PassphraseVerification struct {
+	KeyID        string
+	RelativePath string
+	Digest       string
+}
+
+// VerifyPassphrase resolves only a current inventory ID, requires an encrypted
+// private key, and proves that the submitted passphrase decrypts its exact
+// bytes. Both caller-owned input and the temporary file buffer are wiped.
+func (service *Service) VerifyPassphrase(keyID string, passphrase []byte) (PassphraseVerification, error) {
+	defer Wipe(passphrase)
+	inventory, err := service.Inventory()
+	if err != nil {
+		return PassphraseVerification{}, err
+	}
+	item, ok := inventory.Find(keyID)
+	if !ok || item.Kind != KindPrivateKey {
+		return PassphraseVerification{}, ErrUnknownKey
+	}
+	if !item.Encrypted {
+		return PassphraseVerification{}, ErrKeyNotEncrypted
+	}
+	contents, err := service.workspace.FileSystem().ReadFile(service.absolutePath(item.RelativePath))
+	if err != nil {
+		return PassphraseVerification{}, err
+	}
+	defer Wipe(contents)
+	digest := storage.Digest(contents)
+	if _, err := DecodePrivateKey(contents, passphrase); err != nil {
+		return PassphraseVerification{}, err
+	}
+	return PassphraseVerification{
+		KeyID: keyID, RelativePath: item.RelativePath, Digest: digest,
+	}, nil
+}
+
+// RevalidatePassphrase refuses a stale verification if the selected key was
+// replaced, edited, or removed before the surrounding transaction commits.
+func (service *Service) RevalidatePassphrase(verification PassphraseVerification) error {
+	contents, err := service.workspace.FileSystem().ReadFile(service.absolutePath(verification.RelativePath))
+	if err != nil {
+		return ErrKeyChanged
+	}
+	defer Wipe(contents)
+	if storage.Digest(contents) != verification.Digest {
+		return ErrKeyChanged
+	}
+	return nil
 }
 
 // entryPath は、Include グラフの起点となるユーザー設定ファイル。
