@@ -115,7 +115,7 @@ func (s *Service) CreateConnection(
 			}
 			storageRequest := s.requestFor(prepared)
 			storageRequest.Changes = append(storageRequest.Changes, vaultChange)
-			result, commitErr := s.commitCreatedConnectionRequest(prepared, storageRequest)
+			result, commitErr := s.commitPlannedRequest(prepared, storageRequest)
 			if commitErr != nil {
 				return storage.Result{}, commitErr
 			}
@@ -338,10 +338,10 @@ func (s *Service) identityFileForCreate(inventory *keys.Inventory, keyID string)
 }
 
 func (s *Service) commitCreatedConnection(prepared planned) (storage.Result, error) {
-	return s.commitCreatedConnectionRequest(prepared, s.requestFor(prepared))
+	return s.commitPlannedRequest(prepared, s.requestFor(prepared))
 }
 
-func (s *Service) commitCreatedConnectionRequest(prepared planned, request storage.Request) (storage.Result, error) {
+func (s *Service) commitPlannedRequest(prepared planned, request storage.Request) (storage.Result, error) {
 	s.pendingBase = prepared.base
 	s.pendingBaseline = prepared.baseline
 	defer func() { s.pendingBase, s.pendingBaseline = nil, nil }()

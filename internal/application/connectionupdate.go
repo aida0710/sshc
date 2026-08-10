@@ -1,0 +1,334 @@
+package application
+
+import (
+	"bytes"
+	"errors"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"sshc/internal/config"
+	"sshc/internal/keys"
+	"sshc/internal/platform"
+	"sshc/internal/secret"
+	"sshc/internal/storage"
+)
+
+var (
+	ErrNoConnectionUpdate      = errors.New("connection update makes no change")
+	ErrComplexConnectionField  = errors.New("connection field has multiple direct directives")
+	ErrUnknownConnectionChange = errors.New("unknown connection field change action")
+	ErrUnknownUpdatePassword   = errors.New("unknown connection password update kind")
+	ErrPasswordIneligible      = errors.New("connection cannot use a stored password")
+)
+
+type ConnectionChangeAction string
+
+const (
+	ConnectionChangeSet     ConnectionChangeAction = "set"
+	ConnectionChangeInherit ConnectionChangeAction = "inherit"
+)
+
+type ConnectionStringChange struct {
+	Action ConnectionChangeAction `json:"action"`
+	Value  string                 `json:"value,omitempty"`
+}
+
+type ConnectionPortChange struct {
+	Action ConnectionChangeAction `json:"action"`
+	Value  int                    `json:"value,omitempty"`
+}
+
+type ConnectionIdentityFileChange struct {
+	Action ConnectionChangeAction `json:"action"`
+	KeyID  string                 `json:"keyId,omitempty"`
+}
+
+type UpdateConnectionPasswordKind string
+
+const (
+	UpdatePasswordUnchanged UpdateConnectionPasswordKind = "unchanged"
+	UpdatePasswordDedicated UpdateConnectionPasswordKind = "dedicated_password"
+	UpdatePasswordSaved     UpdateConnectionPasswordKind = "saved_password"
+	UpdatePasswordNewShared UpdateConnectionPasswordKind = "new_shared_password"
+	UpdatePasswordRemove    UpdateConnectionPasswordKind = "remove"
+)
+
+type UpdateConnectionPassword struct {
+	Kind       UpdateConnectionPasswordKind `json:"kind"`
+	Password   string                       `json:"password,omitempty"`
+	Credential string                       `json:"credential,omitempty"`
+}
+
+type UpdateConnectionRequest struct {
+	Identity     HostIdentity                  `json:"identity"`
+	Base         string                        `json:"base"`
+	HostName     *ConnectionStringChange       `json:"hostName,omitempty"`
+	User         *ConnectionStringChange       `json:"user,omitempty"`
+	Port         *ConnectionPortChange         `json:"port,omitempty"`
+	IdentityFile *ConnectionIdentityFileChange `json:"identityFile,omitempty"`
+	Password     UpdateConnectionPassword      `json:"password"`
+}
+
+// UpdateConnection changes the small, stable connection form. The browser
+// names semantic fields; line numbers are derived against the exact base file
+// here so a sparse block can add a value and a direct value can return to
+// inheritance without letting the client target another line.
+func (s *Service) UpdateConnection(
+	secrets *secret.Service,
+	inventory *keys.Inventory,
+	request UpdateConnectionRequest,
+) (SaveResult, error) {
+	if request.Password.Kind == UpdatePasswordUnchanged {
+		s.saveMutex.Lock()
+		defer s.saveMutex.Unlock()
+		prepared, changed, err := s.planConnectionUpdate(inventory, request)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		if !changed {
+			return SaveResult{}, ErrNoConnectionUpdate
+		}
+		result, err := s.commitPlannedRequest(prepared, s.requestFor(prepared))
+		if err != nil {
+			return SaveResult{}, err
+		}
+		return s.connectionUpdateResult(result, prepared), nil
+	}
+	mutation, err := passwordMutationForUpdate(request)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	if secrets == nil {
+		return SaveResult{}, secret.ErrNoVault
+	}
+	exists, err := secrets.Exists()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	if !exists {
+		return SaveResult{}, secret.ErrNoVault
+	}
+	if request.Password.Kind != UpdatePasswordRemove {
+		eligibility, err := s.PasswordEligibility(request.Identity.Alias)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		if !eligibility.Storable {
+			return SaveResult{}, ErrPasswordIneligible
+		}
+	}
+
+	var updated SaveResult
+	_, err = secrets.WithPasswordMutation(mutation, func(vaultChange storage.Change) (storage.Result, error) {
+		s.saveMutex.Lock()
+		defer s.saveMutex.Unlock()
+		prepared, _, planErr := s.planConnectionUpdate(inventory, request)
+		if planErr != nil {
+			return storage.Result{}, planErr
+		}
+		storageRequest := s.requestFor(prepared)
+		storageRequest.Changes = append(storageRequest.Changes, vaultChange)
+		result, commitErr := s.commitPlannedRequest(prepared, storageRequest)
+		if commitErr != nil {
+			return storage.Result{}, commitErr
+		}
+		updated = s.connectionUpdateResult(result, prepared)
+		return result, nil
+	})
+	if err != nil {
+		return SaveResult{}, err
+	}
+	return updated, nil
+}
+
+func passwordMutationForUpdate(request UpdateConnectionRequest) (secret.PasswordMutation, error) {
+	kind := secret.PasswordMutationKind("")
+	switch request.Password.Kind {
+	case UpdatePasswordDedicated:
+		kind = secret.PasswordMutationDedicated
+	case UpdatePasswordSaved:
+		kind = secret.PasswordMutationSaved
+	case UpdatePasswordNewShared:
+		kind = secret.PasswordMutationNewShared
+	case UpdatePasswordRemove:
+		kind = secret.PasswordMutationRemove
+	default:
+		return secret.PasswordMutation{}, ErrUnknownUpdatePassword
+	}
+	return secret.PasswordMutation{
+		Kind: kind, Alias: request.Identity.Alias,
+		Credential: request.Password.Credential, Password: request.Password.Password,
+	}, nil
+}
+
+func (s *Service) connectionUpdateResult(result storage.Result, prepared planned) SaveResult {
+	vaultPath := filepath.Clean(filepath.Join(s.workspace.Root(), filepath.FromSlash(secret.WorkspacePath)))
+	written := make([]string, 0, len(result.Written))
+	for _, path := range result.Written {
+		if filepath.Clean(path) == vaultPath {
+			continue
+		}
+		written = append(written, s.displayPath(path))
+	}
+	return SaveResult{TransactionID: result.ID, Written: written, Preview: prepared.preview}
+}
+
+func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request UpdateConnectionRequest) (planned, bool, error) {
+	if err := ValidateAlias(request.Identity.Alias); err != nil {
+		return planned{}, false, err
+	}
+	graph, err := s.resolve()
+	if err != nil {
+		return planned{}, false, err
+	}
+	absolute, err := AbsolutePath(s.workspace.Root(), request.Identity.Path)
+	if err != nil {
+		return planned{}, false, err
+	}
+	if _, err := s.workspace.ResolveForWrite(absolute); err != nil {
+		return planned{}, false, err
+	}
+	base := []byte(request.Base)
+	file := config.Parse(base)
+	block, ok := FindHostBlock(file, request.Identity.Alias)
+	if !ok {
+		return planned{}, false, ErrHostNotFound
+	}
+
+	edits := make([]FieldEdit, 0, 4)
+	appendEdit := func(keyword string, action ConnectionChangeAction, values []string) error {
+		edit, changed, editErr := connectionFieldEdit(file, block, keyword, action, values)
+		if editErr != nil {
+			return editErr
+		}
+		if changed {
+			edits = append(edits, edit)
+		}
+		return nil
+	}
+	if request.HostName != nil {
+		if request.HostName.Action == ConnectionChangeSet {
+			if err := platform.ValidateHostname(request.HostName.Value); err != nil {
+				return planned{}, false, err
+			}
+		}
+		if err := appendEdit("HostName", request.HostName.Action, []string{request.HostName.Value}); err != nil {
+			return planned{}, false, err
+		}
+	}
+	if request.User != nil {
+		if request.User.Action == ConnectionChangeSet {
+			if request.User.Value == "" {
+				return planned{}, false, ErrInvalidConnectionUser
+			}
+			if err := validateConnectionUser(request.User.Value); err != nil {
+				return planned{}, false, err
+			}
+		}
+		if err := appendEdit("User", request.User.Action, []string{request.User.Value}); err != nil {
+			return planned{}, false, err
+		}
+	}
+	if request.Port != nil {
+		if request.Port.Action == ConnectionChangeSet {
+			if err := platform.ValidatePort(request.Port.Value); err != nil {
+				return planned{}, false, err
+			}
+		}
+		if err := appendEdit("Port", request.Port.Action, []string{strconv.Itoa(request.Port.Value)}); err != nil {
+			return planned{}, false, err
+		}
+	}
+	if request.IdentityFile != nil {
+		value := ""
+		if request.IdentityFile.Action == ConnectionChangeSet {
+			value, err = s.identityFileForCreate(inventory, request.IdentityFile.KeyID)
+			if err != nil {
+				return planned{}, false, err
+			}
+		}
+		if err := appendEdit("IdentityFile", request.IdentityFile.Action, []string{value}); err != nil {
+			return planned{}, false, err
+		}
+	}
+
+	if len(edits) == 0 {
+		return planned{
+			operation: "connection.update", base: map[string][]byte{filepath.Clean(absolute): base},
+			baseline: diagnosticBaseline(graph), preview: SavePreview{Operation: "connection.update", Diffs: []FileDiff{}},
+		}, false, s.verifyConnectionUpdateBase(absolute, request.Identity.Path, base, base)
+	}
+	if err := ApplyFieldEdits(file, block, edits); err != nil {
+		return planned{}, false, err
+	}
+	updated := file.Render()
+	if err := s.verifyConnectionUpdateBase(absolute, request.Identity.Path, base, updated); err != nil {
+		return planned{}, false, err
+	}
+	prepared := planned{
+		operation: "connection.update",
+		changes: []storage.Change{{
+			Path: absolute, Contents: updated,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(base)},
+		}},
+		base:     map[string][]byte{filepath.Clean(absolute): base},
+		baseline: diagnosticBaseline(graph),
+		preview: SavePreview{
+			Operation: "connection.update",
+			Diffs:     []FileDiff{BuildFileDiff(request.Identity.Path, base, updated)},
+		},
+	}
+	after, err := s.resolveWith(map[string][]byte{filepath.Clean(absolute): updated})
+	if err != nil {
+		return planned{}, false, err
+	}
+	prepared.preview.Effective = []EffectiveDiff{DiffEffective(
+		ComputeEffective(graph, s.workspace.Root(), request.Identity.Alias),
+		ComputeEffective(after, s.workspace.Root(), request.Identity.Alias),
+	)}
+	return prepared, true, nil
+}
+
+func (s *Service) verifyConnectionUpdateBase(absolute, relative string, base, updated []byte) error {
+	disk, exists, err := s.readFile(absolute)
+	if err != nil {
+		return err
+	}
+	if !exists || !bytes.Equal(base, disk) {
+		return &ConflictError{Report: BuildConflictReport(relative, base, disk, updated)}
+	}
+	return nil
+}
+
+func connectionFieldEdit(
+	file *config.File,
+	block config.Block,
+	keyword string,
+	action ConnectionChangeAction,
+	values []string,
+) (FieldEdit, bool, error) {
+	if action != ConnectionChangeSet && action != ConnectionChangeInherit {
+		return FieldEdit{}, false, ErrUnknownConnectionChange
+	}
+	lines := make([]int, 0, 1)
+	for index := block.Start; index < block.End && index < len(file.Lines); index++ {
+		line := file.Lines[index]
+		if line.Kind == config.LineDirective && strings.EqualFold(line.Keyword, keyword) {
+			lines = append(lines, index+1)
+		}
+	}
+	if len(lines) > 1 {
+		return FieldEdit{}, false, ErrComplexConnectionField
+	}
+	if action == ConnectionChangeInherit {
+		if len(lines) == 0 {
+			return FieldEdit{}, false, nil
+		}
+		return FieldEdit{Action: ActionRemove, Line: lines[0]}, true, nil
+	}
+	if len(lines) == 0 {
+		return FieldEdit{Action: ActionAdd, Keyword: keyword, Values: values}, true, nil
+	}
+	return FieldEdit{Action: ActionSet, Line: lines[0], Values: values}, true, nil
+}
