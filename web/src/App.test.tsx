@@ -94,7 +94,7 @@ describe("App", () => {
       "Groups",
       "Keys",
       "Known Hosts",
-      "Remote Keys",
+      "Install Key on Server",
       "Ad hoc checks",
       "Secrets",
       "Sync",
@@ -179,7 +179,7 @@ describe("App", () => {
       "Groups",
       "Keys",
       "Known Hosts",
-      "Remote Keys",
+      "Install Key on Server",
       "Ad hoc checks",
       "History",
     ]) {
@@ -255,7 +255,7 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Remote Keys" }));
+    await user.click(await screen.findByRole("button", { name: "Install Key on Server" }));
 
     expect(screen.getByText("remote keys panel")).toBeInTheDocument();
     // ステータス領域を持つのはシェルだけであり、パネルが二つ目を追加してはならない。
