@@ -1,5 +1,5 @@
 import { StrictMode, type ReactNode } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -59,10 +59,16 @@ vi.mock("./keys/KeysScreen", () => ({ KeysScreen: () => <div>keys panel</div> })
 vi.mock("./diagnostics/DiagnosticsPanel", () => ({ DiagnosticsPanel: () => <div>diagnostics panel</div> }));
 vi.mock("./knownhosts/KnownHostsPanel", () => ({ KnownHostsPanel: () => <div>known hosts panel</div> }));
 vi.mock("./remotekeys/RemoteKeyPanel", () => ({ RemoteKeyPanel: () => <div>remote keys panel</div> }));
+vi.mock("./secrets/LockScreen", () => ({
+  LockScreen: ({ onOpen }: { onOpen: () => void }) => (
+    <button type="button" onClick={onOpen}>unlock fixture</button>
+  ),
+}));
 
 const csrfToken = "c".repeat(43);
 
 afterEach(() => {
+  window.history.replaceState(null, "", "/");
   window.localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
 });
@@ -100,7 +106,7 @@ describe("App", () => {
       "Sync",
       "History",
     ]) {
-      expect(screen.getByRole("button", { name: label })).toBeEnabled();
+      expect(screen.getByRole("link", { name: label })).toHaveAttribute("href");
     }
   });
 
@@ -114,7 +120,7 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Connections" }));
+    await user.click(await screen.findByRole("link", { name: "Connections" }));
     await screen.findByText("connections panel");
 
     // 中身がなければトグルも出さない。常に提示されながら
@@ -126,8 +132,8 @@ describe("App", () => {
 
     expect(screen.getByRole("complementary", { name: "Details" })).toHaveTextContent("inspector body");
 
-    await user.click(screen.getByRole("button", { name: "Keys" }));
-    await user.click(screen.getByRole("button", { name: "Connections" }));
+    await user.click(screen.getByRole("link", { name: "Keys" }));
+    await user.click(screen.getByRole("link", { name: "Connections" }));
     await user.click(screen.getByRole("button", { name: "offer inspector" }));
 
     expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument();
@@ -171,7 +177,7 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "sshc" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Local session active · 0.1.0");
-    expect(screen.getByRole("button", { name: "Home" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
     for (const label of [
       "Home",
       "Connections",
@@ -183,9 +189,115 @@ describe("App", () => {
       "Ad hoc checks",
       "History",
     ]) {
-      expect(screen.getByRole("button", { name: label })).toBeEnabled();
+      expect(screen.getByRole("link", { name: label })).toHaveAttribute("href");
     }
     expect(document.body).not.toHaveTextContent(csrfToken);
+  });
+
+  it("renders a direct section URL and links every primary destination", async () => {
+    window.history.replaceState(null, "", "/keys");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    expect(await screen.findByText("keys panel")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Keys" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute("href", "/connections");
+  });
+
+  it("updates the URL for link and programmatic navigation", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    await user.click(await screen.findByRole("link", { name: "Connections" }));
+    expect(window.location.pathname).toBe("/connections");
+    await user.click(screen.getByRole("button", { name: "open pattern rule" }));
+    expect(window.location.pathname).toBe("/config");
+    expect(screen.getByText("config panel config:9")).toBeInTheDocument();
+  });
+
+  it("follows the real pathname on popstate", async () => {
+    window.history.replaceState(null, "", "/keys");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+    expect(await screen.findByText("keys panel")).toBeInTheDocument();
+
+    act(() => {
+      window.history.pushState({ section: "Connections" }, "", "/history");
+      window.dispatchEvent(new PopStateEvent("popstate", { state: { section: "Connections" } }));
+    });
+
+    expect(screen.getByText("history panel")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "History" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("keeps a requested section while the vault is locked", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/connections");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], minPassphraseLength: 12 })}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "unlock fixture" }));
+
+    expect(await screen.findByText("connections panel")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/connections");
+  });
+
+  it("keeps an unknown URL and links back to Home", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/missing");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Page not found", level: 2 })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/missing");
+    const home = screen.getByRole("link", { name: "Go to Home" });
+    expect(home).toHaveAttribute("href", "/");
+
+    await user.click(home);
+    expect(window.location.pathname).toBe("/");
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("translates the unknown-route recovery", async () => {
+    window.history.replaceState(null, "", "/missing");
+    render(
+      <LanguageProvider initial="ja">
+        <App
+          bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+          health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+          vault={openVault}
+        />
+      </LanguageProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "ページが見つかりません", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "ホームへ移動" })).toHaveAttribute("href", "/");
   });
 
   it("switches to the keys panel", async () => {
@@ -198,7 +310,7 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Keys" }));
+    await user.click(await screen.findByRole("link", { name: "Keys" }));
 
     expect(screen.getByText("keys panel")).toBeInTheDocument();
     // ステータス領域を持つのはシェルだけであり、パネルが二つ目を追加してはならない。
@@ -215,7 +327,7 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Connections" }));
+    await user.click(await screen.findByRole("link", { name: "Connections" }));
     await user.click(screen.getByRole("button", { name: "open key prerequisite" }));
 
     expect(screen.getByText("keys panel")).toBeInTheDocument();
@@ -223,7 +335,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Return to connection setup" }));
 
     expect(screen.getByText("draft lab-node")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connections" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute("aria-current", "page");
   });
 
   it("switches to the known hosts and ad hoc checks panels", async () => {
@@ -236,11 +348,11 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Known Hosts" }));
+    await user.click(await screen.findByRole("link", { name: "Known Hosts" }));
     expect(screen.getByText("known hosts panel")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
 
-    await user.click(screen.getByRole("button", { name: "Ad hoc checks" }));
+    await user.click(screen.getByRole("link", { name: "Ad hoc checks" }));
     expect(screen.getByText("diagnostics panel")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
@@ -255,7 +367,7 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Install Key on Server" }));
+    await user.click(await screen.findByRole("link", { name: "Install Key on Server" }));
 
     expect(screen.getByText("remote keys panel")).toBeInTheDocument();
     // ステータス領域を持つのはシェルだけであり、パネルが二つ目を追加してはならない。
@@ -272,7 +384,7 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "History" }));
+    await user.click(await screen.findByRole("link", { name: "History" }));
 
     expect(screen.getByText("history panel")).toBeInTheDocument();
   });
@@ -287,11 +399,11 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Connections" }));
+    await user.click(await screen.findByRole("link", { name: "Connections" }));
     await user.click(await screen.findByRole("button", { name: "open pattern rule" }));
 
     expect(screen.getByText("config panel config:9")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Config" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Config" })).toHaveAttribute("aria-current", "page");
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
@@ -336,11 +448,11 @@ describe("App", () => {
 
     // シェル自身が翻訳を行う。
     expect(await screen.findByRole("status")).toHaveTextContent(ja["shell.active"].replace("{version}", "0.1.0"));
-    expect(screen.getByRole("button", { name: ja["section.keys"] })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: ja["section.keys"] })).toBeInTheDocument();
 
     // 切り替え先の section も同じプロバイダ内にあるため、シェルを
     // 経由して到達したパネルも翻訳される。
-    await user.click(screen.getByRole("button", { name: ja["section.keys"] }));
+    await user.click(screen.getByRole("link", { name: ja["section.keys"] }));
     expect(screen.getByText("keys panel")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: ja["shell.primaryNavigation"] })).toBeInTheDocument();
   });
@@ -357,14 +469,14 @@ describe("App", () => {
       </LanguageProvider>,
     );
 
-    await user.click(await screen.findByRole("button", { name: "History" }));
+    await user.click(await screen.findByRole("link", { name: "History" }));
     expect(screen.getByText("history panel")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Language"), "ja");
 
     // 変わったのはラベルであり、開いているパネルは変わっていない。section の
     // 識別子は section の名前ではない。
-    expect(screen.getByRole("button", { name: ja["section.history"] })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: ja["section.history"] })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("history panel")).toBeInTheDocument();
   });
 });
