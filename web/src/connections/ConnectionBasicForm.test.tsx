@@ -32,8 +32,16 @@ const secondKey = {
   fingerprint: "SHA256:home",
 };
 
+const unencryptedKey = {
+  ...privateKey,
+  id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  relativePath: "id_plain",
+  encrypted: false,
+  fingerprint: "SHA256:plain",
+};
+
 const inventory: KeyInventoryResponse = {
-  items: [privateKey, secondKey],
+  items: [privateKey, secondKey, unencryptedKey],
   unreadable: [],
   agentDelegations: [],
   unresolvedReferences: [],
@@ -92,7 +100,7 @@ type HarnessOverrides = {
 function renderForm(overrides: HarnessOverrides = {}) {
   const onSave = overrides.onSave ?? vi.fn().mockResolvedValue(undefined);
   const passwordVault = overrides.passwordVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], minPassphraseLength: 12,
+    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
   });
   const credentials = overrides.credentials ?? vi.fn().mockResolvedValue({
     credentials: [
@@ -104,10 +112,10 @@ function renderForm(overrides: HarnessOverrides = {}) {
     alias: "edge", storable: true, blockers: [], warnings: [],
   });
   const initialiseVault = overrides.initialiseVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], minPassphraseLength: 12,
+    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
   });
   const unlockVault = overrides.unlockVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], minPassphraseLength: 12,
+    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
   });
   const keyInventory = overrides.inventory ?? vi.fn().mockResolvedValue(inventory);
 
@@ -234,6 +242,7 @@ describe("ConnectionBasicForm", () => {
       user: { action: "inherit" },
       port: { action: "inherit" },
       password: { kind: "unchanged" },
+      keyPassphrase: { kind: "unchanged" },
     });
   });
 
@@ -257,13 +266,16 @@ describe("ConnectionBasicForm", () => {
       base: detail.file.contents,
       identityFile: { action: "set", keyId: secondKey.id },
       password: { kind: "dedicated_password", password: "new-secret" },
+      keyPassphrase: { kind: "unchanged" },
     });
   });
 
   it("requires unlock before any save while preserving non-secret drafts", async () => {
     const user = userEvent.setup();
     const harness = renderForm({
-      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [] }),
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [],
+      }),
     });
 
     await user.clear(screen.getByLabelText("Host name or IP address"));
@@ -283,7 +295,9 @@ describe("ConnectionBasicForm", () => {
     const detail = buildDetail();
     const harness = renderForm({
       detail,
-      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: ["edge"] }),
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [],
+      }),
       credentials: vi.fn().mockResolvedValue({
         credentials: [{ kind: "password", name: "office", uses: ["edge", "bastion"] }],
       }),
@@ -300,6 +314,7 @@ describe("ConnectionBasicForm", () => {
       identity: detail.form.entry.identity,
       base: detail.file.contents,
       password: { kind: "remove" },
+      keyPassphrase: { kind: "unchanged" },
     });
   });
 
@@ -339,8 +354,12 @@ describe("ConnectionBasicForm", () => {
   it("refreshes a password-only success even when the SSH file bytes do not change", async () => {
     const user = userEvent.setup();
     const passwordVault = vi.fn()
-      .mockResolvedValueOnce({ exists: true, unlocked: true, aliases: [], minPassphraseLength: 12 })
-      .mockResolvedValueOnce({ exists: true, unlocked: true, aliases: ["edge"], minPassphraseLength: 12 });
+      .mockResolvedValueOnce({
+        exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
+      })
+      .mockResolvedValueOnce({
+        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
+      });
     renderForm({ passwordVault });
     await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
 
@@ -352,5 +371,175 @@ describe("ConnectionBasicForm", () => {
     expect(screen.getByLabelText("Stored password action")).toHaveValue("unchanged");
     expect(screen.queryByLabelText("Connection password")).not.toBeInTheDocument();
     expect(passwordVault).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows no key-passphrase editor for no key, custom path, or multiple direct keys", async () => {
+    const first = renderForm();
+    await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
+    expect(screen.queryByLabelText("New saved key passphrase")).not.toBeInTheDocument();
+    first.unmount();
+
+    const custom = renderForm({
+      detail: buildDetail([
+        { line: 2, keyword: "IdentityFile", values: ["/opt/custom/key"], category: "basic", editable: true },
+      ]),
+    });
+    await waitFor(() => expect(screen.getByLabelText("SSH private key")).toBeDisabled());
+    expect(screen.queryByLabelText("New saved key passphrase")).not.toBeInTheDocument();
+    custom.unmount();
+
+    renderForm({
+      detail: buildDetail([
+        { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+        { line: 3, keyword: "IdentityFile", values: ["~/.ssh/id_plain"], category: "basic", editable: true },
+      ]),
+    });
+    await waitFor(() => expect(screen.getByLabelText("SSH private key")).toBeDisabled());
+    expect(screen.queryByLabelText("New saved key passphrase")).not.toBeInTheDocument();
+  });
+
+  it("explains that an unencrypted selected key needs no saved passphrase", async () => {
+    renderForm({
+      detail: buildDetail([
+        { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_plain"], category: "basic", editable: true },
+      ]),
+    });
+    expect(await screen.findByText("This private key is not encrypted, so it needs no saved passphrase.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("New saved key passphrase")).not.toBeInTheDocument();
+  });
+
+  it("distinguishes unsaved, shared named, and key-dedicated passphrases without prefilling values", async () => {
+    const detail = buildDetail([
+      { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+    ]);
+    const unsaved = renderForm({
+      detail,
+      credentials: vi.fn().mockResolvedValue({ credentials: [] }),
+    });
+    expect(await screen.findByText("No passphrase is saved for this key.")).toBeInTheDocument();
+    expect(screen.getByLabelText("New saved key passphrase")).toHaveValue("");
+    unsaved.unmount();
+
+    const shared = renderForm({
+      detail,
+      credentials: vi.fn().mockResolvedValue({
+        credentials: [{ kind: "key_passphrase", name: "team-key", uses: ["id_work", "id_other"] }],
+      }),
+    });
+    expect(await screen.findByText(/uses the shared saved passphrase “team-key”/i)).toBeInTheDocument();
+    expect(screen.getByText(/also used by 1 other key/i)).toBeInTheDocument();
+    shared.unmount();
+
+    renderForm({
+      detail,
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: ["id_work"], minPassphraseLength: 12,
+      }),
+    });
+    expect(await screen.findByText("A passphrase is saved only for this key.")).toBeInTheDocument();
+  });
+
+  it("requires matching key-passphrase fields and sends one mutation with the Basic save", async () => {
+    const user = userEvent.setup();
+    const detail = buildDetail([
+      { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+    ]);
+    const harness = renderForm({
+      detail,
+      credentials: vi.fn().mockResolvedValue({ credentials: [] }),
+    });
+    await screen.findByText("No passphrase is saved for this key.");
+    await user.type(screen.getByLabelText("New saved key passphrase"), "correct phrase");
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    await user.type(screen.getByLabelText("Confirm saved key passphrase"), "wrong phrase");
+    expect(screen.getByText("The key passphrases do not match.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    await user.clear(screen.getByLabelText("Confirm saved key passphrase"));
+    await user.type(screen.getByLabelText("Confirm saved key passphrase"), "correct phrase");
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+
+    expect(harness.onSave).toHaveBeenCalledWith({
+      identity: detail.form.entry.identity,
+      base: detail.file.contents,
+      password: { kind: "unchanged" },
+      keyPassphrase: { kind: "set_dedicated", keyId: privateKey.id, passphrase: "correct phrase" },
+    });
+  });
+
+  it("does not ignore a confirmation-only key-passphrase draft", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      detail: buildDetail([
+        { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+      ]),
+      credentials: vi.fn().mockResolvedValue({ credentials: [] }),
+    });
+
+    await user.type(await screen.findByLabelText("Confirm saved key passphrase"), "confirmation only");
+    expect(screen.getByText("The key passphrases do not match.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+  });
+
+  it("keeps a key-passphrase draft when the independent account-password action changes", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      detail: buildDetail([
+        { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+      ]),
+      credentials: vi.fn().mockResolvedValue({ credentials: [] }),
+    });
+
+    await user.type(await screen.findByLabelText("New saved key passphrase"), "independent phrase");
+    await user.type(screen.getByLabelText("Confirm saved key passphrase"), "independent phrase");
+    await user.selectOptions(screen.getByLabelText("Stored password action"), "dedicated_password");
+    expect(screen.getByLabelText("New saved key passphrase")).toHaveValue("independent phrase");
+    expect(screen.getByLabelText("Confirm saved key passphrase")).toHaveValue("independent phrase");
+  });
+
+  it("clears both key-passphrase fields when the selected key changes", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      detail: buildDetail([
+        { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+      ]),
+    });
+    await user.type(await screen.findByLabelText("New saved key passphrase"), "must clear");
+    await user.type(screen.getByLabelText("Confirm saved key passphrase"), "must clear");
+    await user.selectOptions(screen.getByLabelText("SSH private key"), secondKey.id);
+    expect(screen.getByLabelText("New saved key passphrase")).toHaveValue("");
+    expect(screen.getByLabelText("Confirm saved key passphrase")).toHaveValue("");
+  });
+
+  it("clears submitted key-passphrase fields after both success and failure", async () => {
+    const user = userEvent.setup();
+    const detail = buildDetail([
+      { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+    ]);
+    const success = renderForm({ detail });
+    await user.type(await screen.findByLabelText("New saved key passphrase"), "success phrase");
+    await user.type(screen.getByLabelText("Confirm saved key passphrase"), "success phrase");
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await waitFor(() => expect(screen.getByLabelText("New saved key passphrase")).toHaveValue(""));
+    expect(screen.getByLabelText("Confirm saved key passphrase")).toHaveValue("");
+    success.unmount();
+
+    renderForm({ detail, onSave: vi.fn().mockRejectedValue(new Error("wrong")) });
+    await user.type(await screen.findByLabelText("New saved key passphrase"), "failure phrase");
+    await user.type(screen.getByLabelText("Confirm saved key passphrase"), "failure phrase");
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await waitFor(() => expect(screen.getByLabelText("New saved key passphrase")).toHaveValue(""));
+    expect(screen.getByLabelText("Confirm saved key passphrase")).toHaveValue("");
+  });
+
+  it("shows wrong and stale key-passphrase problems beside the editor", async () => {
+    const detail = buildDetail([
+      { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+    ]);
+    const wrong = renderForm({ detail, problem: { code: "wrong_passphrase", message: "wrong" } });
+    expect(await screen.findByText("That passphrase does not unlock the selected private key.")).toBeInTheDocument();
+    wrong.unmount();
+    renderForm({ detail, problem: { code: "external_change", message: "changed" } });
+    expect(await screen.findByText("The selected private key changed. Reload before saving its passphrase.")).toBeInTheDocument();
   });
 });

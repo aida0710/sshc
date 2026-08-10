@@ -26,8 +26,8 @@ function buildApi(status: PasswordVaultStatus, overrides: Partial<IntegrationsAp
     passwordEligibility: vi.fn().mockResolvedValue({
       alias: "bastion", storable: true, blockers: [], warnings: [],
     }),
-    storePassword: vi.fn().mockResolvedValue({ ...status, aliases: ["bastion"] }),
-    forgetPassword: vi.fn().mockResolvedValue({ ...status, aliases: [] }),
+    storePassword: vi.fn().mockResolvedValue({ ...status, aliases: ["bastion"], dedicatedKeyPassphrases: [] }),
+    forgetPassword: vi.fn().mockResolvedValue({ ...status, aliases: [], dedicatedKeyPassphrases: [] }),
     // オーバーライドは宣言されるだけで一度も適用されておらず、それを渡した
     // テストは静かにデフォルトを受け取っていた。そのテストが書かれた対象の
     // ケースについて、何一つ証明していなかった。
@@ -35,10 +35,10 @@ function buildApi(status: PasswordVaultStatus, overrides: Partial<IntegrationsAp
   } as unknown as IntegrationsApi;
 }
 
-const locked: PasswordVaultStatus = { exists: true, unlocked: false, aliases: [], minPassphraseLength: 12 };
-const empty: PasswordVaultStatus = { exists: false, unlocked: false, aliases: [], minPassphraseLength: 12 };
-const unlocked: PasswordVaultStatus = { exists: true, unlocked: true, aliases: [], minPassphraseLength: 12 };
-const withPassword: PasswordVaultStatus = { exists: true, unlocked: true, aliases: ["bastion"], minPassphraseLength: 12 };
+const locked: PasswordVaultStatus = { exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
+const empty: PasswordVaultStatus = { exists: false, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
+const unlocked: PasswordVaultStatus = { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
+const withPassword: PasswordVaultStatus = { exists: true, unlocked: true, aliases: ["bastion"], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
 
 describe("PasswordPanel", () => {
   it("says what storing a password means before offering the field", async () => {
