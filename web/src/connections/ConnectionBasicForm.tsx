@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Problem } from "../api/client";
 import {
   type HostDetail,
+  type UpdateConnectionKeyPassphrase,
   type UpdateConnectionPassword,
   type UpdateConnectionRequest,
 } from "../api/config";
@@ -98,6 +99,7 @@ export function ConnectionBasicForm({
   const [vault, setVault] = useState<PasswordVaultStatus | null>(null);
   const [eligibility, setEligibility] = useState<PasswordEligibility | null>(null);
   const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [keyCredentials, setKeyCredentials] = useState<Credential[]>([]);
   const [assigned, setAssigned] = useState(false);
   const [assignedCredential, setAssignedCredential] = useState("");
   const [passwordAction, setPasswordAction] = useState<PasswordAction>("unchanged");
@@ -105,6 +107,8 @@ export function ConnectionBasicForm({
   const [savedCredential, setSavedCredential] = useState("");
   const [newCredential, setNewCredential] = useState("");
   const [newSharedPassword, setNewSharedPassword] = useState("");
+  const [keyPassphrase, setKeyPassphrase] = useState("");
+  const [keyPassphraseConfirmation, setKeyPassphraseConfirmation] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [masterPassword, setMasterPassword] = useState("");
   const [masterConfirmation, setMasterConfirmation] = useState("");
@@ -113,15 +117,26 @@ export function ConnectionBasicForm({
   const [vaultBusy, setVaultBusy] = useState(false);
   const [localError, setLocalError] = useState("");
 
-  function clearSecrets() {
+  function clearKeyPassphrase() {
+    setKeyPassphrase("");
+    setKeyPassphraseConfirmation("");
+  }
+
+  function clearPasswordSecrets() {
     setPassword("");
     setNewSharedPassword("");
     setMasterPassword("");
     setMasterConfirmation("");
   }
 
+  function clearSecrets() {
+    clearPasswordSecrets();
+    clearKeyPassphrase();
+  }
+
   function applyCredentialState(status: PasswordVaultStatus, listed: Credential[]) {
     const passwordCredentials = listed.filter((credential) => credential.kind === "password");
+    setKeyCredentials(listed.filter((credential) => credential.kind === "key_passphrase"));
     const reusable = passwordCredentials.find((credential) => credential.uses.includes(identity.alias));
     setCredentials(passwordCredentials);
     setSavedCredential((current) =>
@@ -234,6 +249,15 @@ export function ConnectionBasicForm({
     : selectedKey === ""
       ? { action: "inherit" as const }
       : { action: "set" as const, keyId: selectedKey };
+  const selectedPrivateKey = privateKeys.find((key) => key.id === selectedKey);
+  const namedKeyPassphrase = selectedPrivateKey === undefined
+    ? undefined
+    : keyCredentials.find((credential) => credential.uses.includes(selectedPrivateKey.relativePath));
+  const dedicatedKeyPassphrase = selectedPrivateKey !== undefined &&
+    (vault?.dedicatedKeyPassphrases ?? []).includes(selectedPrivateKey.relativePath);
+  const otherNamedKeyUses = namedKeyPassphrase === undefined || selectedPrivateKey === undefined
+    ? []
+    : namedKeyPassphrase.uses.filter((subject) => subject !== selectedPrivateKey.relativePath);
 
   const hostError = hostName.inherit
     ? ""
@@ -266,15 +290,23 @@ export function ConnectionBasicForm({
   }
 
   const passwordChange = effectivePassword();
+  const keyPassphraseChange: UpdateConnectionKeyPassphrase =
+    selectedPrivateKey !== undefined && selectedPrivateKey.encrypted && keyPassphrase !== ""
+      ? { kind: "set_dedicated", keyId: selectedPrivateKey.id, passphrase: keyPassphrase }
+      : { kind: "unchanged" };
   const changesPassword = passwordChange.kind !== "unchanged";
+  const hasKeyPassphraseDraft = keyPassphrase !== "" || keyPassphraseConfirmation !== "";
+  const keyPassphraseMatches = keyPassphrase === keyPassphraseConfirmation;
+  const keyPassphraseValid = !hasKeyPassphraseDraft || (keyPassphrase !== "" && keyPassphraseMatches);
   const passwordAllowed = passwordChange.kind === "remove" || passwordChange.kind === "unchanged" || eligibility?.storable === true;
   const dirty = hostNameChange !== undefined || userChange !== undefined || portChange !== undefined ||
-    identityFileChange !== undefined || changesPassword;
+    identityFileChange !== undefined || changesPassword || hasKeyPassphraseDraft;
   const canSave = !loading && !busy && vault?.unlocked === true && dirty &&
-    hostError === "" && userError === "" && portError === "" && passwordAllowed;
+    hostError === "" && userError === "" && portError === "" && passwordAllowed &&
+    keyPassphraseValid;
 
   function choosePasswordAction(action: PasswordAction) {
-    clearSecrets();
+    clearPasswordSecrets();
     setConfirmRemove(false);
     setPasswordAction(action);
     setLocalError("");
@@ -307,6 +339,7 @@ export function ConnectionBasicForm({
       identity,
       base: detail.file.contents,
       password: passwordChange,
+      keyPassphrase: keyPassphraseChange,
     };
     if (hostNameChange !== undefined) request.hostName = hostNameChange;
     if (userChange !== undefined) request.user = userChange;
@@ -355,6 +388,11 @@ export function ConnectionBasicForm({
   const serverUserError = problem?.code === "connection_user_invalid" ? t("conn.createUserInvalid") : "";
   const serverPortError = problem?.code === "connection_port_invalid" ? t("conn.createPortInvalid") : "";
   const serverKeyError = problem?.code === "identity_file_invalid" ? t("conn.basicServerKeyInvalid") : "";
+  const serverKeyPassphraseError = problem?.code === "wrong_passphrase"
+    ? t("conn.basicKeyPassphraseWrong")
+    : problem?.code === "external_change"
+      ? t("conn.basicKeyPassphraseChanged")
+      : "";
   const serverPasswordError = problem?.code === "credential_already_exists"
     ? t("conn.basicCredentialExists")
     : problem?.code === "unknown_credential"
@@ -452,6 +490,7 @@ export function ConnectionBasicForm({
               disabled={loading || keyState === "custom" || keyState === "complex"}
               onChange={(event) => {
                 const value = event.target.value;
+                clearKeyPassphrase();
                 setSelectedKey(value);
                 const superseded = preferredKey !== null && value !== preferredKey.privateKeyId;
                 setPreferredSuperseded(superseded);
@@ -475,6 +514,63 @@ export function ConnectionBasicForm({
             <p className="border-t border-hairline px-3 py-2 text-xs text-notice-ink">
               {t("conn.basicGeneratedKeyStaged", { path: preferredKey.privateRelativePath })}
             </p>
+          ) : null}
+
+          {vault?.unlocked === true && keyState === "editable" && selectedPrivateKey !== undefined ? (
+            <div className="border-t border-hairline px-3 py-3">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="text-sm text-ink-muted">{t("conn.basicKeyPassphraseHeading")}</p>
+                  <p className={hintText}>
+                    {!selectedPrivateKey.encrypted
+                      ? t("conn.basicKeyPassphraseUnencrypted")
+                      : dedicatedKeyPassphrase
+                        ? t("conn.basicKeyPassphraseDedicated")
+                        : namedKeyPassphrase !== undefined
+                          ? t("conn.basicKeyPassphraseShared", { name: namedKeyPassphrase.name })
+                          : t("conn.basicKeyPassphraseNone")}
+                  </p>
+                  {namedKeyPassphrase !== undefined && otherNamedKeyUses.length > 0 ? (
+                    <p className={hintText}>
+                      {t("conn.basicKeyPassphraseSharedOthers", { count: otherNamedKeyUses.length })}
+                    </p>
+                  ) : null}
+                  {namedKeyPassphrase !== undefined ? (
+                    <p className={hintText}>{t("conn.basicKeyPassphraseDetach")}</p>
+                  ) : null}
+                </div>
+
+                {selectedPrivateKey.encrypted ? (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <PasswordField
+                        label={t("conn.basicNewKeyPassphrase")}
+                        value={keyPassphrase}
+                        onChange={(value) => {
+                          setKeyPassphrase(value);
+                          setLocalError("");
+                        }}
+                      />
+                      <PasswordField
+                        label={t("conn.basicConfirmKeyPassphrase")}
+                        value={keyPassphraseConfirmation}
+                        onChange={(value) => {
+                          setKeyPassphraseConfirmation(value);
+                          setLocalError("");
+                        }}
+                      />
+                    </div>
+                    {hasKeyPassphraseDraft && !keyPassphraseValid ? (
+                      <Notice tone="danger">{t("conn.basicKeyPassphraseMismatch")}</Notice>
+                    ) : null}
+                    <p className={hintText}>{t("conn.basicKeyPassphraseStoredNote")}</p>
+                    {serverKeyPassphraseError === "" ? null : (
+                      <Notice tone="danger">{serverKeyPassphraseError}</Notice>
+                    )}
+                  </>
+                ) : null}
+              </div>
+            </div>
           ) : null}
 
           <div className="border-t border-hairline px-3 py-3">

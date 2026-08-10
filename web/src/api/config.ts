@@ -28,6 +28,7 @@ export type CreateConnectionAuthentication = components["schemas"]["CreateConnec
 export type CreateConnectionResponse = components["schemas"]["CreateConnectionResponse"];
 export type UpdateConnectionRequest = components["schemas"]["UpdateConnectionRequest"];
 export type UpdateConnectionPassword = components["schemas"]["UpdateConnectionPassword"];
+export type UpdateConnectionKeyPassphrase = components["schemas"]["UpdateConnectionKeyPassphrase"];
 
 // 生成された型は契約を記述するに過ぎない。これらの防護は UI が
 // 実際に受け取ったペイロードを検査する。型アサーションは実行時には何も証明しない。

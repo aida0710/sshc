@@ -169,6 +169,7 @@ describe("configApi", () => {
       base: "Host edge\n",
       hostName: { action: "set", value: "edge.example" },
       password: { kind: "unchanged" },
+      keyPassphrase: { kind: "unchanged" },
     };
 
     const updated = await configApi.updateConnection(request);
@@ -191,6 +192,7 @@ describe("configApi", () => {
       identity: { path: "config", alias: "edge" },
       base: "Host edge\n",
       password: { kind: "remove" },
+      keyPassphrase: { kind: "unchanged" },
     })).rejects.toThrow("invalid_response");
   });
 });

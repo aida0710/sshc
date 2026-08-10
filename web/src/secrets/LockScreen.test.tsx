@@ -7,8 +7,8 @@ import type { IntegrationsApi } from "../api/integrations";
 
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
-    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [] }),
-    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [] }),
+    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
+    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
     ...overrides,
   } as unknown as IntegrationsApi;
 }
