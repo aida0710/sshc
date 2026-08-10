@@ -18,6 +18,9 @@ export const en = {
   "shell.active": "Local session active · {version}",
   "shell.bootstrapFailed":
     "Secure local session could not be started. Restart sshc and use the newly opened tab.",
+  "shell.pageNotFound": "Page not found",
+  "shell.pageNotFoundDescription": "No sshc section exists at this URL.",
+  "shell.goHome": "Go to Home",
   "shell.primaryNavigation": "Primary",
   "shell.navStart": "Start",
   "shell.navConnections": "Connections",
@@ -934,6 +937,9 @@ export const ja: Record<MessageKey, string> = {
   "shell.active": "ローカルセッション有効 · {version}",
   "shell.bootstrapFailed":
     "ローカルセッションを開始できませんでした。sshc を再起動し、新しく開いたタブを使ってください。",
+  "shell.pageNotFound": "ページが見つかりません",
+  "shell.pageNotFoundDescription": "このURLに対応するsshcのセクションはありません。",
+  "shell.goHome": "ホームへ移動",
   "shell.primaryNavigation": "メインナビゲーション",
   "shell.navStart": "スタート",
   "shell.navConnections": "接続",
