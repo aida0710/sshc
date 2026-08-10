@@ -148,7 +148,7 @@ export function sessionStatus(page: Page) {
 
 // openSection はプライマリナビゲーションを操作する前にまずセッションを待つた
 // め、spec がシェルのまだ描画していないパネルをクリックしてしまうことはない。
-// 名前は完全一致で照合する。"Keys" は "Remote Keys" の
+// 名前は完全一致で照合する。"Keys" は "Install Key on Server" の
 // 接頭辞であるため、部分一致では組み立てられたナビゲーションの中で曖昧になる。
 export async function openSection(page: Page, name: string): Promise<void> {
   await expect(sessionStatus(page)).toContainText("Local session active");
@@ -181,4 +181,3 @@ export async function clickAndAwait(
 }
 
 export { expect };
-

@@ -13,8 +13,8 @@ test("shows the alias, effective user, fingerprint and the exact line before reg
   installation,
 }) => {
   await openApplication(page, installation);
-  await openSection(page, "Remote Keys");
-  await expect(page.getByRole("heading", { name: "Remote Keys" })).toBeVisible();
+  await openSection(page, "Install Key on Server");
+  await expect(page.getByRole("heading", { name: "Install Key on Server" })).toBeVisible();
 
   // まだ何も送信されておらず、パネルはそう告げる。
   await expect(page.getByText("Nothing is sent to the remote host until you confirm it.")).toBeVisible();
@@ -49,7 +49,7 @@ test("shows the alias, effective user, fingerprint and the exact line before reg
 
 test("refuses a public key that is not one valid line", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSection(page, "Remote Keys");
+  await openSection(page, "Install Key on Server");
 
   await page.getByLabel("Host alias").fill("bastion");
   await page.getByLabel("Public key file").fill("id_ed25519.pub");

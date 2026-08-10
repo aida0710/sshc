@@ -392,7 +392,7 @@ test("takes a comment with the connection it describes when the block moves", as
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
   await expect(page.getByLabel("Comment")).toHaveValue("the file server");
 
-  await page.getByRole("button", { name: "Manage connection" }).click();
+  await page.getByRole("button", { name: "Advanced file actions" }).click();
   await page.getByLabel("Move to file").selectOption("config");
   expect(await clickAndAwait(page, "Move connection", "/api/v1/config/save")).toBe(200);
 
@@ -416,7 +416,7 @@ test("takes a comment with the connection when the block is deleted", async ({
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
 
-  await page.getByRole("button", { name: "Manage connection" }).click();
+  await page.getByRole("button", { name: "Advanced file actions" }).click();
   await page.getByRole("button", { name: "Delete connection" }).click();
   expect(await clickAndAwait(page, "Confirm delete", "/api/v1/config/save")).toBe(200);
 
@@ -463,7 +463,7 @@ test("opening the inspector narrows the detail rather than hiding it under the p
 }) => {
   await openBastion(page, installation.url);
   await page.getByRole("button", { name: "Show details" }).click();
-  await page.getByRole("button", { name: "Manage connection" }).click();
+  await page.getByRole("button", { name: "Advanced file actions" }).click();
 
   const pane = page.getByRole("complementary", { name: "Details" });
   await expect(pane).toBeVisible();
