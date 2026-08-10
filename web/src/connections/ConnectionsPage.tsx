@@ -374,16 +374,35 @@ export function ConnectionsPage({
   // 必要があるためである。ページは同時に、詳細な Problem と conflict diff
   // を既存の Save preview に残す。
   async function onBasicSave(request: UpdateConnectionRequest) {
+    let result: Awaited<ReturnType<typeof configApi.updateConnection>>;
     try {
-      const result = await configApi.updateConnection(request);
-      setPreview(result.preview);
-      setProblem(null);
-      await reload();
-      setDetail(await configApi.host(request.identity.path, request.identity.alias));
+      result = await configApi.updateConnection(request);
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
       throw error;
+    }
+
+    // The commit is the success boundary. Discard the form immediately so its
+    // password fields do not linger through the follow-up reads, and never
+    // report a later GET failure as "nothing was changed".
+    setPreview(result.preview);
+    setProblem(null);
+    setLocalError("");
+    setDetail(null);
+    let refreshFailed = false;
+    try {
+      setOverview(await configApi.overview());
+    } catch {
+      refreshFailed = true;
+    }
+    try {
+      setDetail(await configApi.host(request.identity.path, request.identity.alias));
+    } catch {
+      refreshFailed = true;
+    }
+    if (refreshFailed) {
+      setLocalError(t("conn.basicConnectionRefreshFailed"));
     }
   }
 
@@ -790,6 +809,7 @@ export function ConnectionsPage({
           hosts={overview.hosts}
           onSave={(metadata) => void submit({ kind: "metadata", metadata })}
         />
+        {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
         {detail === null && missingSelection && selection !== null ? (
           <section className="m-auto flex max-w-sm flex-col items-center text-center" role="status">
             <h2 className="text-lg font-semibold text-ink">{t("conn.missingHeading")}</h2>
@@ -822,7 +842,6 @@ export function ConnectionsPage({
           </section>
         ) : (
           <>
-            {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
             {terminals !== null &&
             terminals.some((option) => option.id === selectedTerminal && !option.installed) ? (
               <Notice>{t("conn.terminalMissing", { terminal: terminalLabel(selectedTerminal) })}</Notice>

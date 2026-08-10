@@ -189,6 +189,30 @@ describe("ConnectionsPage", () => {
     expect(configApi.host).toHaveBeenCalledWith("config", "bastion");
   });
 
+  it("reports a post-commit reload failure as saved instead of inviting a duplicate save", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.updateConnection).mockResolvedValue({
+      transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
+    } as never);
+    vi.mocked(configApi.host)
+      .mockResolvedValueOnce(detail as never)
+      .mockRejectedValueOnce(new Error("reload failed"));
+
+    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    const input = await screen.findByLabelText("Port");
+    await user.clear(input);
+    await user.type(input, "2222");
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+
+    expect(await screen.findByText(
+      "The settings were saved, but the updated connection could not be loaded. Reload this connection.",
+    )).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
+    expect(configApi.updateConnection).toHaveBeenCalledTimes(1);
+  });
+
   it("opens the selected host in Terminal only after an explicit connect action", async () => {
     const user = userEvent.setup();
     render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
