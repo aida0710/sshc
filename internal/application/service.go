@@ -199,6 +199,7 @@ type Service struct {
 	saveMutex       sync.Mutex
 	pendingBase     map[string][]byte
 	pendingBaseline map[string]bool
+	keyPassphrases  KeyPassphraseVerifier
 }
 
 // resolverFor は、生成領域を答えられるリゾルバを組み立てる。これにより、この

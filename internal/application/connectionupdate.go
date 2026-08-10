@@ -20,8 +20,20 @@ var (
 	ErrComplexConnectionField  = errors.New("connection field has multiple direct directives")
 	ErrUnknownConnectionChange = errors.New("unknown connection field change action")
 	ErrUnknownUpdatePassword   = errors.New("unknown connection password update kind")
+	ErrUnknownUpdateKeyPhrase  = errors.New("unknown connection key passphrase update kind")
 	ErrPasswordIneligible      = errors.New("connection cannot use a stored password")
 )
+
+type KeyPassphraseVerifier interface {
+	VerifyPassphrase(keyID string, passphrase []byte) (keys.PassphraseVerification, error)
+	RevalidatePassphrase(verification keys.PassphraseVerification) error
+}
+
+// SetKeyPassphraseVerifier installs the key-vault boundary used by connection
+// saves. Application wiring calls this once before the server begins serving.
+func (s *Service) SetKeyPassphraseVerifier(verifier KeyPassphraseVerifier) {
+	s.keyPassphrases = verifier
+}
 
 type ConnectionChangeAction string
 
@@ -61,14 +73,28 @@ type UpdateConnectionPassword struct {
 	Credential string                       `json:"credential,omitempty"`
 }
 
+type UpdateConnectionKeyPassphraseKind string
+
+const (
+	UpdateKeyPassphraseUnchanged    UpdateConnectionKeyPassphraseKind = "unchanged"
+	UpdateKeyPassphraseSetDedicated UpdateConnectionKeyPassphraseKind = "set_dedicated"
+)
+
+type UpdateConnectionKeyPassphrase struct {
+	Kind       UpdateConnectionKeyPassphraseKind `json:"kind"`
+	KeyID      string                            `json:"keyId,omitempty"`
+	Passphrase string                            `json:"passphrase,omitempty"`
+}
+
 type UpdateConnectionRequest struct {
-	Identity     HostIdentity                  `json:"identity"`
-	Base         string                        `json:"base"`
-	HostName     *ConnectionStringChange       `json:"hostName,omitempty"`
-	User         *ConnectionStringChange       `json:"user,omitempty"`
-	Port         *ConnectionPortChange         `json:"port,omitempty"`
-	IdentityFile *ConnectionIdentityFileChange `json:"identityFile,omitempty"`
-	Password     UpdateConnectionPassword      `json:"password"`
+	Identity      HostIdentity                  `json:"identity"`
+	Base          string                        `json:"base"`
+	HostName      *ConnectionStringChange       `json:"hostName,omitempty"`
+	User          *ConnectionStringChange       `json:"user,omitempty"`
+	Port          *ConnectionPortChange         `json:"port,omitempty"`
+	IdentityFile  *ConnectionIdentityFileChange `json:"identityFile,omitempty"`
+	Password      UpdateConnectionPassword      `json:"password"`
+	KeyPassphrase UpdateConnectionKeyPassphrase `json:"keyPassphrase"`
 }
 
 // UpdateConnection changes the small, stable connection form. The browser
@@ -80,7 +106,12 @@ func (s *Service) UpdateConnection(
 	inventory *keys.Inventory,
 	request UpdateConnectionRequest,
 ) (SaveResult, error) {
-	if request.Password.Kind == UpdatePasswordUnchanged {
+	passwordUnchanged := request.Password.Kind == "" || request.Password.Kind == UpdatePasswordUnchanged
+	keyPassphraseUnchanged := request.KeyPassphrase.Kind == "" || request.KeyPassphrase.Kind == UpdateKeyPassphraseUnchanged
+	if !keyPassphraseUnchanged && request.KeyPassphrase.Kind != UpdateKeyPassphraseSetDedicated {
+		return SaveResult{}, ErrUnknownUpdateKeyPhrase
+	}
+	if passwordUnchanged && keyPassphraseUnchanged {
 		s.saveMutex.Lock()
 		defer s.saveMutex.Unlock()
 		prepared, changed, err := s.planConnectionUpdate(inventory, request)
@@ -96,10 +127,6 @@ func (s *Service) UpdateConnection(
 		}
 		return s.connectionUpdateResult(result, prepared), nil
 	}
-	mutation, err := passwordMutationForUpdate(request)
-	if err != nil {
-		return SaveResult{}, err
-	}
 	if secrets == nil {
 		return SaveResult{}, secret.ErrNoVault
 	}
@@ -110,7 +137,15 @@ func (s *Service) UpdateConnection(
 	if !exists {
 		return SaveResult{}, secret.ErrNoVault
 	}
-	if request.Password.Kind != UpdatePasswordRemove {
+	mutation := secret.ConnectionSecretsMutation{}
+	if !passwordUnchanged {
+		passwordMutation, err := passwordMutationForUpdate(request)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		mutation.Password = &passwordMutation
+	}
+	if !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove {
 		eligibility, err := s.PasswordEligibility(request.Identity.Alias)
 		if err != nil {
 			return SaveResult{}, err
@@ -119,14 +154,34 @@ func (s *Service) UpdateConnection(
 			return SaveResult{}, ErrPasswordIneligible
 		}
 	}
+	var verification *keys.PassphraseVerification
+	if !keyPassphraseUnchanged {
+		if s.keyPassphrases == nil {
+			return SaveResult{}, ErrInvalidIdentityFile
+		}
+		verified, err := s.keyPassphrases.VerifyPassphrase(
+			request.KeyPassphrase.KeyID, []byte(request.KeyPassphrase.Passphrase),
+		)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		verification = &verified
+		mutation.KeyPassphrase = &secret.KeyPassphraseMutation{
+			RelativePath: verified.RelativePath,
+			Passphrase:   request.KeyPassphrase.Passphrase,
+		}
+	}
 
 	var updated SaveResult
-	_, err = secrets.WithPasswordMutation(mutation, func(vaultChange storage.Change) (storage.Result, error) {
+	_, err = secrets.WithConnectionSecretsMutation(mutation, func(vaultChange storage.Change) (storage.Result, error) {
 		s.saveMutex.Lock()
 		defer s.saveMutex.Unlock()
 		prepared, _, planErr := s.planConnectionUpdate(inventory, request)
 		if planErr != nil {
 			return storage.Result{}, planErr
+		}
+		if validationErr := s.validateConnectionKeyPassphrase(prepared, request, verification); validationErr != nil {
+			return storage.Result{}, validationErr
 		}
 		storageRequest := s.requestFor(prepared)
 		storageRequest.Changes = append(storageRequest.Changes, vaultChange)
@@ -144,6 +199,9 @@ func (s *Service) UpdateConnection(
 		if planErr != nil {
 			return SaveResult{}, planErr
 		}
+		if validationErr := s.validateConnectionKeyPassphrase(prepared, request, verification); validationErr != nil {
+			return SaveResult{}, validationErr
+		}
 		if !changed {
 			return SaveResult{}, ErrNoConnectionUpdate
 		}
@@ -157,6 +215,52 @@ func (s *Service) UpdateConnection(
 		return SaveResult{}, err
 	}
 	return updated, nil
+}
+
+func (s *Service) validateConnectionKeyPassphrase(
+	prepared planned,
+	request UpdateConnectionRequest,
+	verification *keys.PassphraseVerification,
+) error {
+	if verification == nil {
+		return nil
+	}
+	if verification.KeyID != request.KeyPassphrase.KeyID {
+		return ErrInvalidIdentityFile
+	}
+	absolute, err := AbsolutePath(s.workspace.Root(), request.Identity.Path)
+	if err != nil {
+		return err
+	}
+	contents := []byte(request.Base)
+	for _, change := range prepared.changes {
+		if filepath.Clean(change.Path) == filepath.Clean(absolute) {
+			contents = change.Contents
+			break
+		}
+	}
+	file := config.Parse(contents)
+	block, ok := FindHostBlock(file, request.Identity.Alias)
+	if !ok {
+		return ErrInvalidIdentityFile
+	}
+	identityFiles := make([]string, 0, 1)
+	for index := block.Start; index < block.End && index < len(file.Lines); index++ {
+		line := file.Lines[index]
+		if line.Kind != config.LineDirective || !strings.EqualFold(line.Keyword, "IdentityFile") {
+			continue
+		}
+		values := line.Values()
+		if len(values) != 1 {
+			return ErrInvalidIdentityFile
+		}
+		identityFiles = append(identityFiles, values[0])
+	}
+	want := "~/.ssh/" + filepath.ToSlash(verification.RelativePath)
+	if len(identityFiles) != 1 || identityFiles[0] != want {
+		return ErrInvalidIdentityFile
+	}
+	return s.keyPassphrases.RevalidatePassphrase(*verification)
 }
 
 func passwordMutationForUpdate(request UpdateConnectionRequest) (secret.PasswordMutation, error) {

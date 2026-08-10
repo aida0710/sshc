@@ -1058,6 +1058,120 @@ func TestRegisterWithoutAStoredPassphraseSendsWhatItWasGiven(t *testing.T) {
 	}
 }
 
+func TestVerifyPassphraseAcceptsOnlyTheCurrentEncryptedPrivateKeyAndWipesInput(t *testing.T) {
+	service, workspace := newTestService(t, newQueryRunner())
+	if _, err := service.Generate(GenerateRequest{
+		Algorithm: AlgorithmEd25519, FileName: "id_verify", Comment: "verify",
+		Passphrase: []byte("correct key phrase"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(filepath.Join(workspace.Root(), "id_verify"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	submitted := []byte("correct key phrase")
+	verification, err := service.VerifyPassphrase(ItemID("id_verify"), submitted)
+	if err != nil {
+		t.Fatalf("VerifyPassphrase = %v", err)
+	}
+	if verification.KeyID != ItemID("id_verify") || verification.RelativePath != "id_verify" {
+		t.Fatalf("verification identity = %#v", verification)
+	}
+	if verification.Digest != storage.Digest(contents) {
+		t.Fatalf("verification digest = %q, want digest of exact key bytes", verification.Digest)
+	}
+	if !bytes.Equal(submitted, make([]byte, len(submitted))) {
+		t.Fatalf("submitted passphrase was not wiped: %q", submitted)
+	}
+	if err := service.RevalidatePassphrase(verification); err != nil {
+		t.Fatalf("RevalidatePassphrase = %v", err)
+	}
+}
+
+func TestVerifyPassphraseRejectsWrongValueAndWipesInput(t *testing.T) {
+	service, _ := newTestService(t, newQueryRunner())
+	if _, err := service.Generate(GenerateRequest{
+		Algorithm: AlgorithmEd25519, FileName: "id_verify", Comment: "verify",
+		Passphrase: []byte("correct key phrase"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	submitted := []byte("wrong key phrase")
+	_, err := service.VerifyPassphrase(ItemID("id_verify"), submitted)
+	if !errors.Is(err, ErrWrongPassphrase) {
+		t.Fatalf("VerifyPassphrase = %v, want ErrWrongPassphrase", err)
+	}
+	if !bytes.Equal(submitted, make([]byte, len(submitted))) {
+		t.Fatalf("rejected passphrase was not wiped: %q", submitted)
+	}
+}
+
+func TestVerifyPassphraseRejectsUnencryptedMissingAndNonPrivateFiles(t *testing.T) {
+	service, workspace := newTestService(t, newQueryRunner())
+	if _, err := service.Generate(GenerateRequest{
+		Algorithm: AlgorithmEd25519, FileName: "id_plain", Comment: "plain", Unencrypted: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace.Root(), "note"), []byte("not a key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		id   string
+		want error
+	}{
+		{name: "unencrypted", id: ItemID("id_plain"), want: ErrKeyNotEncrypted},
+		{name: "missing", id: ItemID("missing"), want: ErrUnknownKey},
+		{name: "non-private", id: ItemID("note"), want: ErrUnknownKey},
+		{name: "public", id: ItemID("id_plain.pub"), want: ErrUnknownKey},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			submitted := []byte("anything")
+			_, err := service.VerifyPassphrase(test.id, submitted)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("VerifyPassphrase = %v, want %v", err, test.want)
+			}
+			if !bytes.Equal(submitted, make([]byte, len(submitted))) {
+				t.Fatal("rejected passphrase was not wiped")
+			}
+		})
+	}
+}
+
+func TestVerifyPassphraseRevalidationRejectsChangedOrMissingKeyBytes(t *testing.T) {
+	service, workspace := newTestService(t, newQueryRunner())
+	if _, err := service.Generate(GenerateRequest{
+		Algorithm: AlgorithmEd25519, FileName: "id_verify", Comment: "verify",
+		Passphrase: []byte("correct key phrase"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	verification, err := service.VerifyPassphrase(ItemID("id_verify"), []byte("correct key phrase"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPath := filepath.Join(workspace.Root(), "id_verify")
+	contents, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, append(contents, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RevalidatePassphrase(verification); !errors.Is(err, ErrKeyChanged) {
+		t.Fatalf("changed revalidation = %v, want ErrKeyChanged", err)
+	}
+	if err := os.Remove(keyPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RevalidatePassphrase(verification); !errors.Is(err, ErrKeyChanged) {
+		t.Fatalf("missing revalidation = %v, want ErrKeyChanged", err)
+	}
+}
+
 // パスフレーズの変更は、いまでは取り消せる。
 //
 // 以前はバックアップを取らなかった。置き換える内容が秘密鍵であり、そのコピーが
