@@ -4,6 +4,7 @@ import { integrationsApi, type PasswordVaultStatus } from "./api/integrations";
 import { configApi } from "./api/config";
 import type { SessionState } from "./session/bootstrap";
 import { ConnectionsPage } from "./connections/ConnectionsPage";
+import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/CreateConnectionModal";
 import { ConfigExplorer, type FileTarget } from "./explorer/ConfigExplorer";
 import { GroupsPanel } from "./groups/GroupsPanel";
 import { HistoryPanel } from "./history/HistoryPanel";
@@ -24,6 +25,7 @@ import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Insp
 import { useTheme } from "./theme/context";
 import { themes, type Theme } from "./theme/theme";
 import type { MessageKey } from "./i18n/messages";
+import { Button } from "./ui/surface";
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -120,6 +122,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // Keys 画面は移動先としてそれらを提示するだけで、ディレクトリからグルー
   // プを推測しない。ディレクトリがグループになるのはエントリファイルが宣言する場合だけだ。
   const [groups, setGroups] = useState<string[]>([]);
+  // Only non-secret connection fields may outlive the creation modal. This
+  // draft lets a person create a group or key and return without starting the
+  // form again; passwords remain local to the modal and are cleared on exit.
+  const [connectionDraft, setConnectionDraft] = useState<CreateConnectionDraft | null>(null);
   // ペインはシェルに属するものであり、セクションに属するものではない。
   // Connections で開いたものは Keys でも開いたままになる——セクションを
   // 切り替えるたびに自分で閉じるペインでは、頻繁に開き直す羽目になる。
@@ -366,17 +372,32 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           の付いた箱の中ではそれができない。だから padding を適用するのは
           セクション側の役目であり、SectionView がそれを望む九画面に適用している。
         */}
-        <main className="relative overflow-hidden">
+        <main className="relative flex min-h-0 flex-col overflow-hidden">
+          {connectionDraft !== null && (section === "Groups" || section === "Keys") ? (
+            <div className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink">
+              <p className="min-w-0 grow truncate">
+                {t("conn.createDraftWaiting", { alias: connectionDraft.alias || t("conn.createUntitledDraft") })}
+              </p>
+              <Button className="shrink-0" onClick={() => setSection("Connections")}>
+                {t("conn.createReturnToDraft")}
+              </Button>
+            </div>
+          ) : null}
           {state === "ready" ? (
-            <SectionView
-              section={section}
-              fileTarget={fileTarget}
-              groups={groups}
-              onOpenFile={openFile}
-              onLock={() => setState("locked")}
-              onInspector={setInspector}
-              onNavigate={setSection}
-            />
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              <SectionView
+                section={section}
+                fileTarget={fileTarget}
+                groups={groups}
+                connectionDraft={connectionDraft}
+                onConnectionDraftChange={setConnectionDraft}
+                onNavigateForCreation={(target: CreationPrerequisite) => setSection(target)}
+                onOpenFile={openFile}
+                onLock={() => setState("locked")}
+                onInspector={setInspector}
+                onNavigate={setSection}
+              />
+            </div>
           ) : null}
         </main>
         {inspector !== null && inspectorOpen ? (
@@ -392,11 +413,14 @@ type SectionViewProps = {
   // て提示する必要があるが、推測してはならない——ディレクトリがグルー
   // プなのは ~/.ssh/config の一行が宣言するからで、読むのは configuration API だけだ。
   groups: string[];
+  connectionDraft: CreateConnectionDraft | null;
   section: Section;
   fileTarget: FileTarget | null;
   onOpenFile: (path: string, line: number) => void;
   onLock: () => void;
   onNavigate: (section: Section) => void;
+  onConnectionDraftChange: (draft: CreateConnectionDraft | null) => void;
+  onNavigateForCreation: (section: CreationPrerequisite) => void;
   // セクションは右側ペインの中身を提供するか、調べるものが無ければ
   // null を返す。現時点でそれを埋めているのは Connections だけだ。
   onInspector: (content: InspectorContent) => void;
@@ -410,6 +434,9 @@ function SectionView(props: SectionViewProps) {
       <ConnectionsPage
         onOpenFile={props.onOpenFile}
         onInspector={props.onInspector}
+        creationDraft={props.connectionDraft}
+        onCreationDraftChange={props.onConnectionDraftChange}
+        onNavigateForCreation={props.onNavigateForCreation}
       />
     );
   }

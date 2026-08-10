@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CreateConnectionRequest, CreateConnectionResponse, Overview } from "../api/config";
 import type { IntegrationsApi } from "../api/integrations";
 import type { KeyInventoryResponse, KeysApi } from "../keys/api";
-import { CreateConnectionModal } from "./CreateConnectionModal";
+import {
+  CreateConnectionModal,
+  type CreateConnectionDraft,
+  type CreationPrerequisite,
+} from "./CreateConnectionModal";
 
 const privateKey = {
   id: "0123456789abcdef0123456789abcdef",
@@ -60,6 +64,9 @@ type ModalOverrides = {
   credentials?: IntegrationsApi["credentials"];
   initialiseVault?: IntegrationsApi["initialiseVault"];
   unlockVault?: IntegrationsApi["unlockVault"];
+  groups?: Overview["groups"];
+  initialDraft?: CreateConnectionDraft;
+  onOpenPrerequisite?: (section: CreationPrerequisite, draft: CreateConnectionDraft) => void;
   onClose?: () => void;
   onCreated?: (result: CreateConnectionResponse) => void;
 };
@@ -84,10 +91,12 @@ function renderModal(overrides: ModalOverrides = {}) {
   });
   const onClose = overrides.onClose ?? vi.fn();
   const onCreated = overrides.onCreated ?? vi.fn();
+  const onOpenPrerequisite = vi.fn(overrides.onOpenPrerequisite ?? (() => undefined));
 
   const rendered = render(
     <CreateConnectionModal
-      groups={groups}
+      groups={overrides.groups ?? groups}
+      initialDraft={overrides.initialDraft}
       config={{ createConnection } as never}
       keys={{ inventory: keyInventory } as Pick<KeysApi, "inventory">}
       secrets={{ passwordVault, credentials, initialiseVault, unlockVault } as Pick<
@@ -96,10 +105,12 @@ function renderModal(overrides: ModalOverrides = {}) {
       >}
       onClose={onClose}
       onCreated={onCreated}
+      onOpenPrerequisite={onOpenPrerequisite}
     />,
   );
   return {
-    createConnection, keyInventory, passwordVault, credentials, initialiseVault, unlockVault, onClose, onCreated,
+    createConnection, keyInventory, passwordVault, credentials, initialiseVault, unlockVault,
+    onClose, onCreated, onOpenPrerequisite,
     unmount: rendered.unmount,
   };
 }
@@ -124,14 +135,15 @@ describe("CreateConnectionModal", () => {
     expect(screen.getByLabelText("Save in group")).toHaveDisplayValue("No group");
     expect(screen.getByRole("option", { name: "home-lab/others" })).toBeInTheDocument();
     expect(screen.getByLabelText("Port (optional)")).toHaveValue(null);
-    expect(screen.getByRole("radio", { name: "Encrypted password for this connection" })).toBeChecked();
     await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
+    expect(screen.getByRole("radio", { name: "SSH private key" })).toBeChecked();
   });
 
   it("submits blank Port without launching anything and clears its dedicated password on success", async () => {
     const user = userEvent.setup();
     const harness = renderModal();
     await fillConnection(user);
+    await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
     await user.type(screen.getByLabelText("Connection password"), "connection-only");
 
     await user.click(screen.getByRole("button", { name: "Create connection" }));
@@ -174,6 +186,7 @@ describe("CreateConnectionModal", () => {
     const missing = renderModal({
       passwordVault: vi.fn().mockResolvedValue({ exists: false, unlocked: false, aliases: [], minPassphraseLength: 12 }),
     });
+    await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
     await user.type(await screen.findByLabelText("Master password"), "a long master password");
     await user.type(screen.getByLabelText("Confirm master password"), "a long master password");
     await user.click(screen.getByRole("button", { name: "Create encrypted vault" }));
@@ -183,6 +196,7 @@ describe("CreateConnectionModal", () => {
     const locked = renderModal({
       passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], minPassphraseLength: 12 }),
     });
+    await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
     await user.type(await screen.findByLabelText("Master password"), "the master password");
     await user.click(screen.getByRole("button", { name: "Unlock vault" }));
     await waitFor(() => expect(locked.unlockVault).toHaveBeenCalledWith("the master password"));
@@ -207,6 +221,7 @@ describe("CreateConnectionModal", () => {
     const user = userEvent.setup();
     const createConnection = vi.fn().mockRejectedValue(new Error("rejected"));
     renderModal({ createConnection });
+    await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
     await user.type(screen.getByLabelText("Connection name"), "bad name");
     await user.tab();
     expect(screen.getByText("Use letters, numbers, dot, dash, or underscore; start with a letter or number.")).toBeInTheDocument();
@@ -224,6 +239,7 @@ describe("CreateConnectionModal", () => {
   it("clears secrets on Cancel and Escape", async () => {
     const user = userEvent.setup();
     const cancel = renderModal();
+    await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
     await user.type(await screen.findByLabelText("Connection password"), "cancel-secret");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(cancel.onClose).toHaveBeenCalledTimes(1);
@@ -233,5 +249,53 @@ describe("CreateConnectionModal", () => {
     await user.keyboard("{Escape}");
     expect(cancel.onClose).toHaveBeenCalledTimes(2);
     expect(screen.getByLabelText("Connection password")).toHaveValue("");
+  });
+
+  it("opens prerequisite screens with a resumable draft but never copies passwords into it", async () => {
+    const user = userEvent.setup();
+    const noKeys: KeyInventoryResponse = { ...inventory, items: [] };
+    const harness = renderModal({
+      groups: [],
+      inventory: vi.fn().mockResolvedValue(noKeys),
+    });
+
+    await user.type(screen.getByLabelText("Connection name"), "lab-node");
+    await user.type(screen.getByLabelText("Host name or IP address"), "host.example");
+    await user.type(await screen.findByLabelText("Connection password"), "must-not-leave-modal");
+    await user.click(screen.getByRole("button", { name: "Manage groups" }));
+
+    expect(harness.onOpenPrerequisite).toHaveBeenCalledWith("Groups", expect.objectContaining({
+      alias: "lab-node",
+      hostName: "host.example",
+      authentication: "dedicated_password",
+    }));
+    expect(JSON.stringify(harness.onOpenPrerequisite.mock.calls[0])).not.toContain("must-not-leave-modal");
+
+    await user.click(screen.getByRole("button", { name: "Create a private key" }));
+    expect(harness.onOpenPrerequisite).toHaveBeenCalledWith("Keys", expect.any(Object));
+  });
+
+  it("restores a safe draft and explains why creation is disabled", async () => {
+    renderModal({
+      initialDraft: {
+        alias: "lab-node",
+        group: "home-lab/others",
+        hostName: "host.example",
+        user: "root",
+        port: "2202",
+        authentication: "dedicated_password",
+        savedCredential: "office",
+        newCredential: "",
+        keyID: "",
+      },
+    });
+
+    expect(screen.getByLabelText("Connection name")).toHaveValue("lab-node");
+    expect(screen.getByLabelText("Save in group")).toHaveValue("home-lab/others");
+    expect(screen.getByLabelText("Host name or IP address")).toHaveValue("host.example");
+    expect(screen.getByLabelText("User (optional)")).toHaveValue("root");
+    expect(screen.getByLabelText("Port (optional)")).toHaveValue(2202);
+    expect(await screen.findByText("Enter a connection password to continue.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create connection" })).toBeDisabled();
   });
 });
