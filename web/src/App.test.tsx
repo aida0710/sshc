@@ -93,6 +93,11 @@ vi.mock("./keys/KeysScreen", () => ({
 }));
 vi.mock("./diagnostics/DiagnosticsPanel", () => ({ DiagnosticsPanel: () => <div>diagnostics panel</div> }));
 vi.mock("./settings/SettingsPanel", () => ({ SettingsPanel: () => <div>settings panel</div> }));
+vi.mock("./secrets/SecretsPanel", () => ({
+  SecretsPanel: ({ onLock }: { onLock: () => void }) => (
+    <button type="button" onClick={onLock}>lock fixture</button>
+  ),
+}));
 vi.mock("./knownhosts/KnownHostsPanel", () => ({ KnownHostsPanel: () => <div>known hosts panel</div> }));
 vi.mock("./remotekeys/RemoteKeyPanel", () => ({
   RemoteKeyPanel: ({
@@ -109,8 +114,11 @@ vi.mock("./remotekeys/RemoteKeyPanel", () => ({
   ),
 }));
 vi.mock("./secrets/LockScreen", () => ({
-  LockScreen: ({ onOpen }: { onOpen: () => void }) => (
-    <button type="button" onClick={onOpen}>unlock fixture</button>
+  LockScreen: ({ exists, onOpen }: { exists: boolean; onOpen: () => void }) => (
+    <div>
+      <span>{exists ? "existing vault fixture" : "new vault fixture"}</span>
+      <button type="button" onClick={onOpen}>unlock fixture</button>
+    </div>
   ),
 }));
 
@@ -393,6 +401,30 @@ describe("App", () => {
 
     expect(await screen.findByText("connections panel")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/connections");
+  });
+
+  it("remembers that a newly opened vault exists when it is locked again", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vi.fn().mockResolvedValue({
+          exists: false,
+          unlocked: false,
+          aliases: [],
+          dedicatedKeyPassphrases: [],
+          minPassphraseLength: 12,
+        })}
+      />,
+    );
+
+    expect(await screen.findByText("new vault fixture")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "unlock fixture" }));
+    await user.click(await screen.findByRole("link", { name: "Secrets" }));
+    await user.click(screen.getByRole("button", { name: "lock fixture" }));
+
+    expect(screen.getByText("existing vault fixture")).toBeInTheDocument();
   });
 
   it("keeps an unknown URL and links back to Home", async () => {
