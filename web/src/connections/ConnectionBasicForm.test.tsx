@@ -85,6 +85,8 @@ type HarnessOverrides = {
   unlockVault?: IntegrationsApi["unlockVault"];
   inventory?: KeysApi["inventory"];
   problem?: Problem | null;
+  preferredKey?: { privateKeyId: string; privateRelativePath: string } | null;
+  onPreferredKeyApplied?: () => void;
 };
 
 function renderForm(overrides: HarnessOverrides = {}) {
@@ -121,6 +123,8 @@ function renderForm(overrides: HarnessOverrides = {}) {
         IntegrationsApi,
         "passwordVault" | "credentials" | "passwordEligibility" | "initialiseVault" | "unlockVault"
       >}
+      preferredKey={overrides.preferredKey}
+      onPreferredKeyApplied={overrides.onPreferredKeyApplied}
     />,
   );
   return {
@@ -138,6 +142,27 @@ function renderForm(overrides: HarnessOverrides = {}) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ConnectionBasicForm", () => {
+
+  it("stages a freshly generated key from a fresh inventory and applies it only on Save", async () => {
+    const user = userEvent.setup();
+    const onPreferredKeyApplied = vi.fn();
+    const harness = renderForm({
+      preferredKey: { privateKeyId: secondKey.id, privateRelativePath: secondKey.relativePath },
+      onPreferredKeyApplied,
+    });
+
+    await waitFor(() => expect(screen.getByLabelText("SSH private key")).toHaveValue(secondKey.id));
+    expect(screen.getByText(/staged for this connection/)).toBeInTheDocument();
+    expect(harness.onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+
+    expect(harness.onSave).toHaveBeenCalledWith(expect.objectContaining({
+      identityFile: { action: "set", keyId: secondKey.id },
+    }));
+    expect(onPreferredKeyApplied).toHaveBeenCalledOnce();
+  });
 
   it("places stable server validation failures beside the affected control", async () => {
     const first = renderForm({
