@@ -15,6 +15,13 @@ function buildSecrets(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi
     ],
   };
   return {
+    passwordVault: vi.fn().mockResolvedValue({
+      exists: true,
+      unlocked: true,
+      aliases: [],
+      dedicatedKeyPassphrases: [],
+      minPassphraseLength: 12,
+    }),
     credentials: vi.fn().mockResolvedValue(listed),
     storeCredential: vi.fn().mockResolvedValue(listed),
     assignCredential: vi.fn().mockResolvedValue(listed),
@@ -808,6 +815,73 @@ describe("KeysScreen", () => {
     expect(screen.getByRole("option", { name: "build-key" })).toBeInTheDocument();
   });
 
+  it("reports a dedicated passphrase as saved only for this key", async () => {
+    const secrets = buildSecrets({
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true,
+        unlocked: true,
+        aliases: [],
+        dedicatedKeyPassphrases: ["id_work"],
+        minPassphraseLength: 12,
+      }),
+    });
+    render(<KeysScreen api={buildApi()} secrets={secrets} />);
+
+    expect(secrets.passwordVault).not.toHaveBeenCalled();
+    const row = await screen.findByRole("row", { name: /id_work/ });
+    await userEvent.click(within(row).getByRole("button", { name: "Save passphrase" }));
+
+    expect(await screen.findByText("A passphrase is saved only for this key.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("a dedicated secret value");
+  });
+
+  it("detaches a dedicated passphrase through the same key-owned removal", async () => {
+    const secrets = buildSecrets({
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true,
+        unlocked: true,
+        aliases: [],
+        dedicatedKeyPassphrases: ["id_work"],
+        minPassphraseLength: 12,
+      }),
+    });
+    render(<KeysScreen api={buildApi()} secrets={secrets} />);
+
+    const row = await screen.findByRole("row", { name: /id_work/ });
+    await userEvent.click(within(row).getByRole("button", { name: "Save passphrase" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Stop using it" }));
+
+    await waitFor(() =>
+      expect(secrets.unassignCredential).toHaveBeenCalledWith("key_passphrase", "id_work"),
+    );
+    expect(screen.queryByText("A passphrase is saved only for this key.")).not.toBeInTheDocument();
+  });
+
+  it("replaces only this key's dedicated value when a named passphrase is selected", async () => {
+    const secrets = buildSecrets({
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true,
+        unlocked: true,
+        aliases: [],
+        dedicatedKeyPassphrases: ["id_work"],
+        minPassphraseLength: 12,
+      }),
+      assignCredential: vi.fn().mockResolvedValue({
+        credentials: [{ kind: "key_passphrase", name: "build-key", uses: ["id_work"] }],
+      }),
+    });
+    render(<KeysScreen api={buildApi()} secrets={secrets} />);
+
+    const row = await screen.findByRole("row", { name: /id_work/ });
+    await userEvent.click(within(row).getByRole("button", { name: "Save passphrase" }));
+    expect(await screen.findByText("A passphrase is saved only for this key.")).toBeInTheDocument();
+    await userEvent.selectOptions(await screen.findByLabelText("Use a stored passphrase"), "build-key");
+    await userEvent.click(screen.getByRole("button", { name: "Use this passphrase" }));
+
+    expect(await screen.findByText(/uses the stored passphrase named build-key/)).toBeInTheDocument();
+    expect(screen.queryByText("A passphrase is saved only for this key.")).not.toBeInTheDocument();
+  });
+
   it("does not rotate a shared passphrase from the create-and-assign form", async () => {
     const user = userEvent.setup();
     const secrets = buildSecrets();
@@ -895,5 +969,27 @@ describe("taking a key back out of the agent", () => {
     // 入力した内容が常に勝つので、フィールドは残す: キーボードの前にいる人は
     // ファイルより現在に近い。
     expect(screen.getByLabelText("Key passphrase")).toBeEnabled();
+  });
+
+  it("uses a key-dedicated saved passphrase for agent registration without exposing it", async () => {
+    const api = buildApi({ inventory: vi.fn().mockResolvedValue(inventoryWithAgent()) });
+    const secrets = buildSecrets({
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true,
+        unlocked: true,
+        aliases: [],
+        dedicatedKeyPassphrases: ["id_work"],
+        minPassphraseLength: 12,
+      }),
+    });
+    render(<KeysScreen api={api} secrets={secrets} />);
+
+    const workRow = await screen.findByRole("row", { name: /id_work/ });
+    await userEvent.click(within(workRow).getByRole("button", { name: "Add to agent" }));
+
+    expect(await screen.findByText("A passphrase is saved only for this key.")).toBeInTheDocument();
+    expect(screen.getByText(/Leave empty to use the stored passphrase/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Key passphrase")).toHaveValue("");
+    expect(document.body).not.toHaveTextContent("a dedicated secret value");
   });
 });
