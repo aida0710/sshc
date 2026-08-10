@@ -122,6 +122,12 @@ async function fetchPlan(api: RemoteKeysApi) {
 }
 
 describe("RemoteKeyPanel", () => {
+  it("names the task rather than the implementation area", () => {
+    render(<RemoteKeyPanel api={buildApi()} keys={buildKeys()} />);
+
+    expect(screen.getByRole("heading", { name: "Install Key on Server" })).toBeInTheDocument();
+  });
+
   it("shows the alias, the effective user, the fingerprint and the change before any remote request", async () => {
     const api = buildApi();
     const confirmation = await fetchPlan(api);

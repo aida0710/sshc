@@ -44,6 +44,19 @@ const groupNoticeCodes = new Set([
   "group_directory_leftover",
 ]);
 
+// These describe one pattern block, host block, or effective-value view. The
+// tree and selected detail retain them; showing them above an empty detail pane
+// makes a warning look global while offering no object to inspect.
+const selectionNoticeCodes = new Set([
+  "complex_external_rule",
+  "wildcard_shadow",
+  "negated_pattern",
+  "unnamed_host_block",
+  "match_block",
+  "dangerous_directive",
+  "explained_values_only",
+]);
+
 type TerminalOption = TerminalOptionsResponse["terminals"][number];
 type TerminalApplication = TerminalOptionsResponse["applications"][number];
 type CustomTerminal = NonNullable<Metadata["customTerminal"]>;
@@ -573,7 +586,11 @@ export function ConnectionsPage({
           いたのは、overview が運ぶすべての notice をこのリストへ渡していた
           からにすぎない。
         */}
-        <NoticeList notices={overview.notices.filter((notice) => !groupNoticeCodes.has(notice.code))} />
+        <NoticeList
+          notices={overview.notices.filter(
+            (notice) => !groupNoticeCodes.has(notice.code) && !selectionNoticeCodes.has(notice.code),
+          )}
+        />
         <OrphanPanel
           metadata={overview.metadata}
           hosts={overview.hosts}

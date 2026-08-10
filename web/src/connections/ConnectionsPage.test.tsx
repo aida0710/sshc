@@ -91,6 +91,23 @@ beforeEach(() => {
 });
 
 describe("ConnectionsPage", () => {
+  it("keeps selection-specific notices out of the empty detail pane", async () => {
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      notices: [
+        { code: "wildcard_shadow", path: "config", line: 9 },
+        { code: "unnamed_host_block", path: "config", line: 9 },
+        { code: "duplicate_alias", path: "config", line: 1 },
+      ],
+    } as never);
+
+    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+
+    expect(await screen.findByText(/Another block declares the same alias/)).toBeInTheDocument();
+    expect(screen.queryByText(/catch-all block can override/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no concrete alias/)).not.toBeInTheDocument();
+  });
+
   it("loads the tree, opens a host and saves a field edit with the loaded base", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.save).mockResolvedValue({
