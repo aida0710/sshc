@@ -119,6 +119,91 @@ test("edits a host through the form and writes only the line that changed", asyn
   expect(after.split("\n").length).toBe(before.split("\n").length);
 });
 
+test("saves and replaces a key-owned passphrase without changing another key's shared value", async ({
+  page,
+  installation,
+}) => {
+  const firstPassphrase = "first connection key phrase";
+  const nextPassphrase = "next connection key phrase";
+  await openApplication(page, installation);
+  await openSection(page, "Keys");
+
+  for (const fileName of ["id_connection_owned", "id_connection_sibling"]) {
+    await page.getByLabel("File name").fill(fileName);
+    await page.getByRole("textbox", { name: "Passphrase" }).fill(firstPassphrase);
+    expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+  }
+
+  const sibling = page.getByRole("row", { name: /id_connection_sibling\b/ }).first();
+  await sibling.getByRole("button", { name: "Save passphrase" }).click();
+  await page.getByLabel("Passphrase name").fill("shared-sibling-phrase");
+  await page.getByLabel("Passphrase value").fill(firstPassphrase);
+  expect(await clickAndAwait(
+    page,
+    "Save and use for this key",
+    "/api/v1/credentials/key_passphrase/assign",
+    "PUT",
+  )).toBe(200);
+
+  const owned = page.getByRole("row", { name: /id_connection_owned\b/ }).first();
+  await owned.getByRole("button", { name: "Save passphrase" }).click();
+  await page.getByLabel("Use a stored passphrase").selectOption("shared-sibling-phrase");
+  expect(await clickAndAwait(
+    page,
+    "Use this passphrase",
+    "/api/v1/credentials/key_passphrase/assign",
+    "PUT",
+  )).toBe(200);
+
+  await openSection(page, "Connections");
+  await page
+    .getByRole("navigation", { name: "Connections" })
+    .getByRole("button", { name: "bastion" })
+    .click();
+  const keyChoice = page.getByLabel("SSH private key");
+  const ownedID = await keyChoice.locator("option", { hasText: "id_connection_owned" }).getAttribute("value");
+  expect(ownedID).not.toBeNull();
+  await keyChoice.selectOption(ownedID!);
+  await expect(page.getByText(/uses the shared saved passphrase “shared-sibling-phrase”/)).toBeVisible();
+  await page.getByLabel("New saved key passphrase", { exact: true }).fill(firstPassphrase);
+  await page.getByLabel("Confirm saved key passphrase", { exact: true }).fill(firstPassphrase);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
+
+  await openSection(page, "Secrets");
+  const shared = page
+    .getByRole("region", { name: "Key passphrases" })
+    .getByText("shared-sibling-phrase", { exact: true })
+    .locator("..");
+  await expect(shared).toContainText("id_connection_sibling");
+  await expect(shared).not.toContainText("id_connection_owned");
+
+  await openSection(page, "Keys");
+  const ownedAfterSave = page.getByRole("row", { name: /id_connection_owned\b/ }).first();
+  await ownedAfterSave.getByRole("button", { name: "More actions" }).click();
+  await ownedAfterSave.getByRole("button", { name: "Change passphrase" }).click();
+  await page.getByLabel("Current passphrase").fill(firstPassphrase);
+  await page.getByLabel("New passphrase").fill(nextPassphrase);
+  expect(await clickAndAwait(page, "Save new passphrase", "/passphrase")).toBe(200);
+
+  await openSection(page, "Connections");
+  await page
+    .getByRole("navigation", { name: "Connections" })
+    .getByRole("button", { name: "bastion" })
+    .click();
+  await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
+  await page.getByLabel("New saved key passphrase", { exact: true }).fill(nextPassphrase);
+  await page.getByLabel("Confirm saved key passphrase", { exact: true }).fill(nextPassphrase);
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(firstPassphrase);
+  await expect(page.locator("body")).not.toContainText(nextPassphrase);
+
+  const sealed = await installation.read("sshc/secrets");
+  expect(sealed).not.toContain(firstPassphrase);
+  expect(sealed).not.toContain(nextPassphrase);
+});
+
 // このスイートが駆動するのは、このホストがビルドしたバイナリである
 // (`make e2e` は `make build` に依存し、それは GOOS を上書きしない素の
 // `go build`)。ビルドタグで組み立てが分かれるため、どちらが正しい振る舞い
