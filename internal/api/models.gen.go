@@ -268,20 +268,29 @@ type CreateSavedPasswordAuthentication struct {
 
 // Credential defines model for Credential.
 type Credential struct {
-	Kind string   `json:"kind"`
-	Name string   `json:"name"`
-	Uses []string `json:"uses"`
+	Hosts []string `json:"hosts"`
+	Kind  string   `json:"kind"`
+	Name  string   `json:"name"`
+	Uses  []string `json:"uses"`
 }
 
 // CredentialList defines model for CredentialList.
 type CredentialList struct {
-	Credentials []Credential `json:"credentials"`
+	Credentials             []Credential                  `json:"credentials"`
+	DedicatedKeyPassphrases []DedicatedKeyPassphraseUsage `json:"dedicatedKeyPassphrases"`
+	KeyHostUsageComplete    bool                          `json:"keyHostUsageComplete"`
 }
 
 // CustomTerminal defines model for CustomTerminal.
 type CustomTerminal struct {
 	Application string    `json:"application"`
 	Arguments   *[]string `json:"arguments,omitempty"`
+}
+
+// DedicatedKeyPassphraseUsage defines model for DedicatedKeyPassphraseUsage.
+type DedicatedKeyPassphraseUsage struct {
+	Hosts []string `json:"hosts"`
+	Key   string   `json:"key"`
 }
 
 // Diagnostic defines model for Diagnostic.
