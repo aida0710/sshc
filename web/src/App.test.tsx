@@ -19,19 +19,30 @@ vi.mock("./connections/ConnectionsPage", () => ({
     creationDraft,
     onCreationDraftChange,
     onNavigateForCreation,
+    location,
+    onNavigateLocation,
   }: {
     onOpenFile: (path: string, line: number) => void;
     onInspector: (content: { attention: boolean; body: ReactNode } | null) => void;
     creationDraft?: { alias: string } | null;
     onCreationDraftChange?: (draft: Record<string, string> | null) => void;
     onNavigateForCreation?: (section: "Groups" | "Keys") => void;
+    location?: { pathname: string; search: string };
+    onNavigateLocation?: (url: string) => void;
   }) => (
     <div>
       connections panel
+      <span>{`connection location ${location?.pathname ?? "missing"}${location?.search ?? ""}`}</span>
       {creationDraft === null || creationDraft === undefined ? null : <span>{`draft ${creationDraft.alias}`}</span>}
       <button type="button" onClick={() => onOpenFile("config", 9)}>open pattern rule</button>
       <button type="button" onClick={() => onInspector({ attention: true, body: <p>inspector body</p> })}>
         offer inspector
+      </button>
+      <button
+        type="button"
+        onClick={() => onNavigateLocation?.("/connections?path=config&host=build01&tab=advanced")}
+      >
+        open routed host
       </button>
       <button
         type="button"
@@ -224,6 +235,29 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "open pattern rule" }));
     expect(window.location.pathname).toBe("/config");
     expect(screen.getByText("config panel config:9")).toBeInTheDocument();
+  });
+
+  it("passes the complete connection location through and clears it from the section link", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    expect(await screen.findByText("connection location /connections?path=config&host=bastion&tab=basic"))
+      .toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "open routed host" }));
+    expect(window.location.search).toBe("?path=config&host=build01&tab=advanced");
+    expect(screen.getByText("connection location /connections?path=config&host=build01&tab=advanced"))
+      .toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Connections" }));
+    expect(window.location.pathname).toBe("/connections");
+    expect(window.location.search).toBe("");
   });
 
   it("follows the real pathname on popstate", async () => {

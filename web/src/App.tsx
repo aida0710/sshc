@@ -27,7 +27,11 @@ import { themes, type Theme } from "./theme/theme";
 import type { MessageKey } from "./i18n/messages";
 import { Button } from "./ui/surface";
 import { sectionPath, type Section } from "./routing/sectionRoute";
-import { useSectionRoute } from "./routing/useSectionRoute";
+import {
+  useSectionRoute,
+  type BrowserLocation,
+  type NavigateLocationOptions,
+} from "./routing/useSectionRoute";
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -96,7 +100,7 @@ const themeLabels: Record<Theme, MessageKey> = {
 export function App({ bootstrap, health, vault = integrationsApi.passwordVault }: AppProps) {
   const { t, locale, setLocale } = useLanguage();
   const { theme, setTheme } = useTheme();
-  const { route, navigate } = useSectionRoute();
+  const { route, location, navigate, navigateLocation } = useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
   // "locked" はアプリケーション全体を指し、その中の一画面ではない。あらゆる
   // 書き込みはマスターパスワードで封じたバックアップを残すため、vault が
@@ -402,6 +406,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                   onLock={() => setState("locked")}
                   onInspector={setInspector}
                   onNavigate={navigate}
+                  location={location}
+                  onNavigateLocation={navigateLocation}
                 />
               ) : (
                 <div className="h-full overflow-y-auto p-6">
@@ -444,6 +450,8 @@ type SectionViewProps = {
   onOpenFile: (path: string, line: number) => void;
   onLock: () => void;
   onNavigate: (section: Section) => void;
+  location: BrowserLocation;
+  onNavigateLocation: (url: string, options?: NavigateLocationOptions) => void;
   onConnectionDraftChange: (draft: CreateConnectionDraft | null) => void;
   onNavigateForCreation: (section: CreationPrerequisite) => void;
   // セクションは右側ペインの中身を提供するか、調べるものが無ければ
@@ -462,6 +470,8 @@ function SectionView(props: SectionViewProps) {
         creationDraft={props.connectionDraft}
         onCreationDraftChange={props.onConnectionDraftChange}
         onNavigateForCreation={props.onNavigateForCreation}
+        location={props.location}
+        onNavigateLocation={props.onNavigateLocation}
       />
     );
   }

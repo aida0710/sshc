@@ -31,6 +31,12 @@ import { Button, Notice } from "../ui/surface";
 import { duplicateHostBlock, removeHostBlock } from "./blocks";
 import { integrationsApi, type TerminalID, type TerminalOptionsResponse } from "../api/integrations";
 import { Icon } from "../ui/icons";
+import type { BrowserLocation, NavigateLocationOptions } from "../routing/useSectionRoute";
+import {
+  connectionLocation,
+  parseConnectionSearch,
+  type HostEditorTab,
+} from "../routing/connectionRoute";
 
 // Groups 画面が報告し、この画面は報告しないもの。
 //
@@ -92,6 +98,8 @@ type ConnectionsPageProps = {
   creationDraft?: CreateConnectionDraft | null;
   onCreationDraftChange?: (draft: CreateConnectionDraft | null) => void;
   onNavigateForCreation?: (section: CreationPrerequisite) => void;
+  location?: BrowserLocation;
+  onNavigateLocation?: (url: string, options?: NavigateLocationOptions) => void;
 };
 
 export function ConnectionsPage({
@@ -100,8 +108,11 @@ export function ConnectionsPage({
   creationDraft = null,
   onCreationDraftChange,
   onNavigateForCreation,
+  location = { pathname: "/connections", search: "" },
+  onNavigateLocation,
 }: ConnectionsPageProps) {
   const t = useTranslate();
+  const initialTarget = parseConnectionSearch(location.search);
   const [overview, setOverview] = useState<Overview | null>(null);
   // どのグループにも属さない connection が向かう先。このページが決め
   // つけるのではなく、サーバーがエントリファイルを報告する。"config" は
@@ -110,7 +121,10 @@ export function ConnectionsPage({
   // 開く先は metadata が正本である。サーバーの起動経路も同じ値を読むので、
   // ここが表示するものと実際に開くものは同じである。
   const selectedTerminal: TerminalID = overview?.metadata.terminal ?? "terminal";
-  const [selection, setSelection] = useState<HostSelection | null>(null);
+  const [selection, setSelection] = useState<HostSelection | null>(
+    initialTarget === null ? null : { path: initialTarget.path, alias: initialTarget.alias },
+  );
+  const [activeTab, setActiveTab] = useState<HostEditorTab>(initialTarget?.tab ?? "Basic");
   const [detail, setDetail] = useState<HostDetail | null>(null);
   const [preview, setPreview] = useState<SavePreview | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -133,6 +147,22 @@ export function ConnectionsPage({
   const [customArguments, setCustomArguments] = useState<string | null>(null);
   // custom を選んだが、まだ開く先を選んでいない状態。保存はされていない。
   const [pendingCustom, setPendingCustom] = useState(false);
+  const [missingSelection, setMissingSelection] = useState(false);
+
+  function navigateToConnection(
+    identity: HostSelection,
+    tab: HostEditorTab,
+    options?: NavigateLocationOptions,
+  ) {
+    const target = connectionLocation({ path: identity.path, alias: identity.alias, tab });
+    if (options === undefined) onNavigateLocation?.(target);
+    else onNavigateLocation?.(target, options);
+  }
+
+  function navigateToConnectionList(options?: NavigateLocationOptions) {
+    if (options === undefined) onNavigateLocation?.(connectionLocation(null));
+    else onNavigateLocation?.(connectionLocation(null), options);
+  }
 
   function beginCreation() {
     onCreationDraftChange?.(null);
@@ -145,17 +175,46 @@ export function ConnectionsPage({
     onNavigateForCreation?.(section);
   }
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (): Promise<Overview | null> => {
     try {
-      setOverview(await configApi.overview());
+      const loaded = await configApi.overview();
+      setOverview(loaded);
+      return loaded;
     } catch (error) {
       setProblem(toProblem(error));
+      return null;
     }
   }, []);
 
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // URL は、選択とタブの共有可能な正本である。popstate を受けた親が
+  // location を更新すると、戻る/進むでも同じ connection とタブを復元する。
+  // URL に秘密や絶対パスは入らず、parser が安全な相対パスだけを通す。
+  useEffect(() => {
+    const target = parseConnectionSearch(location.search);
+    setMissingSelection(false);
+    setPreview(null);
+    setProblem(null);
+    setManaging(false);
+    setConfirmingDelete(false);
+    if (target === null) {
+      setSelection(null);
+      setDetail(null);
+      setActiveTab("Basic");
+      return;
+    }
+    setSelection({ path: target.path, alias: target.alias });
+    setActiveTab(target.tab);
+    setDetail((current) =>
+      current?.form.entry.identity.path === target.path &&
+      current.form.entry.identity.alias === target.alias
+        ? current
+        : null,
+    );
+  }, [location.search]);
 
   // 一覧が届く前と、読み取りに失敗したときの選択肢。語彙そのものであり、
   // どれも見つからなかったとは言わない。サーバーが空配列で答えたときは
@@ -231,10 +290,15 @@ export function ConnectionsPage({
         if (active) {
           setDetail(loaded);
           setProblem(null);
+          setMissingSelection(false);
         }
       })
       .catch((error: unknown) => {
-        if (active) setProblem(toProblem(error));
+        if (active) {
+          setDetail(null);
+          setProblem(toProblem(error));
+          setMissingSelection(true);
+        }
       });
     return () => {
       active = false;
@@ -243,20 +307,24 @@ export function ConnectionsPage({
 
   // 編集で開いているホストが削除された場合、reselect は false になる
   // ——消したばかりのブロックをサーバーへすぐに問い合わせずに済ませるためだ。
-  async function submit(request: EditRequest, reselect = true) {
+  async function submit(request: EditRequest, reselect = true): Promise<Overview | null> {
     try {
       const result = await configApi.save(request);
       setPreview(result.preview);
       setProblem(null);
-      await reload();
+      const nextOverview = await reload();
       if (reselect && selection !== null) {
         const nextAlias = request.kind === "rename" ? request.newAlias ?? selection.alias : selection.alias;
-        setSelection({ path: selection.path, alias: nextAlias });
+        const nextSelection = { path: selection.path, alias: nextAlias };
+        setSelection(nextSelection);
         setDetail(await configApi.host(selection.path, nextAlias));
+        if (request.kind === "rename") navigateToConnection(nextSelection, activeTab, { replace: true });
       }
+      return nextOverview;
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
+      return null;
     }
   }
 
@@ -295,9 +363,13 @@ export function ConnectionsPage({
     // a fast edit can be submitted against a connection the tree no longer
     // appears to have selected.
     setDetail(null);
+    setMissingSelection(false);
     setManaging(false);
     setConfirmingDelete(false);
-    setSelection({ path: host.identity.path, alias: host.identity.alias });
+    const nextSelection = { path: host.identity.path, alias: host.identity.alias };
+    setSelection(nextSelection);
+    setActiveTab("Basic");
+    navigateToConnection(nextSelection, "Basic");
   }
 
   function onFieldEdits(fields: FieldEdit[]) {
@@ -340,7 +412,17 @@ export function ConnectionsPage({
     const path = detail.form.entry.file.path ?? "";
     const alias = detail.form.entry.identity.alias;
     if (group !== "") {
-      void submit({ kind: "move", path, base: detail.file.contents, alias, destinationGroup: group });
+      const nextOverview = await submit(
+        { kind: "move", path, base: detail.file.contents, alias, destinationGroup: group },
+        false,
+      );
+      const moved = nextOverview?.hosts.find((host) => host.identity.alias === alias && host.group === group);
+      if (moved !== undefined) {
+        const nextSelection = moved.identity;
+        setSelection(nextSelection);
+        setDetail(await configApi.host(nextSelection.path, nextSelection.alias));
+        navigateToConnection(nextSelection, activeTab, { replace: true });
+      }
       return;
     }
     try {
@@ -355,6 +437,7 @@ export function ConnectionsPage({
       }, false);
       setSelection({ path: entryPath, alias });
       setDetail(await configApi.host(entryPath, alias));
+      navigateToConnection({ path: entryPath, alias }, activeTab, { replace: true });
     } catch (error) {
       setProblem(toProblem(error));
     }
@@ -438,6 +521,8 @@ export function ConnectionsPage({
       await reload();
       setSelection(result.identity);
       setDetail(await configApi.host(result.identity.path, result.identity.alias));
+      setActiveTab("Basic");
+      navigateToConnection(result.identity, "Basic", { replace: true });
     } catch (error) {
       setProblem(toProblem(error));
     }
@@ -539,6 +624,7 @@ export function ConnectionsPage({
       }, false);
       setSelection({ path: moveTarget, alias: source.alias });
       setDetail(await configApi.host(moveTarget, source.alias));
+      navigateToConnection({ path: moveTarget, alias: source.alias }, activeTab, { replace: true });
       setMoveTarget("");
       setLocalError("");
     } catch (error) {
@@ -567,6 +653,7 @@ export function ConnectionsPage({
     setConfirmingDelete(false);
     setLocalError("");
     await submit({ kind: "file_raw", path, base, raw }, false);
+    navigateToConnectionList({ replace: true });
   }
 
   if (overview === null) {
@@ -622,7 +709,19 @@ export function ConnectionsPage({
           hosts={overview.hosts}
           onSave={(metadata) => void submit({ kind: "metadata", metadata })}
         />
-        {detail === null ? (
+        {detail === null && missingSelection && selection !== null ? (
+          <section className="m-auto flex max-w-sm flex-col items-center text-center" role="status">
+            <h2 className="text-lg font-semibold text-ink">{t("conn.missingHeading")}</h2>
+            <p className="mt-1 text-sm leading-6 text-ink-muted">{t("conn.missingHint")}</p>
+            <Button
+              kind="primary"
+              className="mt-4"
+              onClick={() => navigateToConnectionList({ replace: true })}
+            >
+              {t("conn.backToList")}
+            </Button>
+          </section>
+        ) : detail === null ? (
           <section className="m-auto flex max-w-sm flex-col items-center text-center" role="status">
             <span
               aria-hidden="true"
@@ -754,6 +853,11 @@ export function ConnectionsPage({
               onComment={onComment}
               onMoveToGroup={(group) => void onMoveToGroup(group)}
               onBasicSave={onBasicSave}
+              tab={activeTab}
+              onTabChange={(tab) => {
+                setActiveTab(tab);
+                if (selection !== null) navigateToConnection(selection, tab);
+              }}
             />
           </>
         )}
