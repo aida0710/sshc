@@ -267,6 +267,7 @@ export function ConnectionsPage({
       return;
     }
     onInspector({
+      label: t("inspector.hostLabel"),
       attention: hostNeedsAttention(detail),
       body: <HostInspector detail={detail} onMetadata={onMetadata} />,
     });
@@ -816,6 +817,7 @@ export function ConnectionsPage({
               </Button>
               {managing ? <div className="flex w-full flex-wrap items-center gap-2 border-t border-line pt-3">
               <Button onClick={duplicateHost}>{t("conn.duplicate")}</Button>
+              <p className="w-full text-xs text-ink-muted">{t("conn.storageFileNote")}</p>
               <label htmlFor="move-target" className="sr-only">{t("conn.moveToFile")}</label>
               <select
                 id="move-target"

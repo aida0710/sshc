@@ -79,6 +79,8 @@ describe("ConnectionTree", () => {
     expect(screen.getByRole("button", { name: /nas/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /nas/ })).toHaveAccessibleDescription(/favourite/i);
     expect(screen.getByRole("heading", { name: "Ungrouped" })).toBeInTheDocument();
+    expect(screen.getByText(/Drag the handle to nest or reorder groups/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "home" })).toHaveTextContent("⋮⋮");
   });
 
   it("shows a wildcard block as a pattern rule rather than a host", () => {

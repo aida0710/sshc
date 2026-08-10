@@ -23,7 +23,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
     onNavigateLocation,
   }: {
     onOpenFile: (path: string, line: number) => void;
-    onInspector: (content: { attention: boolean; body: ReactNode } | null) => void;
+    onInspector: (content: { label: string; attention: boolean; body: ReactNode } | null) => void;
     creationDraft?: { alias: string } | null;
     onCreationDraftChange?: (draft: Record<string, string> | null) => void;
     onNavigateForCreation?: (section: "Groups" | "Keys") => void;
@@ -35,7 +35,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
       <span>{`connection location ${location?.pathname ?? "missing"}${location?.search ?? ""}`}</span>
       {creationDraft === null || creationDraft === undefined ? null : <span>{`draft ${creationDraft.alias}`}</span>}
       <button type="button" onClick={() => onOpenFile("config", 9)}>open pattern rule</button>
-      <button type="button" onClick={() => onInspector({ attention: true, body: <p>inspector body</p> })}>
+      <button type="button" onClick={() => onInspector({ label: "Display and classification", attention: true, body: <p>inspector body</p> })}>
         offer inspector
       </button>
       <button
@@ -139,15 +139,15 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: /details/i })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "offer inspector" }));
-    await user.click(screen.getByRole("button", { name: "Show details Needs attention" }));
+    await user.click(screen.getByRole("button", { name: "Show Display and classification Needs attention" }));
 
-    expect(screen.getByRole("complementary", { name: "Details" })).toHaveTextContent("inspector body");
+    expect(screen.getByRole("complementary", { name: "Display and classification" })).toHaveTextContent("inspector body");
 
     await user.click(screen.getByRole("link", { name: "Keys" }));
     await user.click(screen.getByRole("link", { name: "Connections" }));
     await user.click(screen.getByRole("button", { name: "offer inspector" }));
 
-    expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Display and classification" })).toBeInTheDocument();
   });
 
   it("offers the three appearances and remembers the chosen one", async () => {

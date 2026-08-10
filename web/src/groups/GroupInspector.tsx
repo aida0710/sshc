@@ -24,6 +24,7 @@ export function GroupInspector({
   return (
     <div className="flex flex-col gap-4">
       <h3 className={fieldLabel}>{t("inspector.appOnly")}</h3>
+      <p className={hintText}>{t("inspector.groupChangesStaged")}</p>
 
       <Card padded>
         <Field label={t("groups.colour")}>
