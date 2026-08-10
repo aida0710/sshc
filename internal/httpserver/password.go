@@ -40,6 +40,9 @@ const maxAskpassBody = 8 << 10
 // PasswordHandlers は vault とヘルパーを提供する。
 type PasswordHandlers struct {
 	Service *secret.Service
+	// KeyHosts projects saved key subjects through the current SSH configuration.
+	// It returns relationships only; the vault values never cross this boundary.
+	KeyHosts func(relativePaths []string) (map[string][]string, error)
 	// Eligibility は alias と保存されたパスワードの間に何があるかを答える。
 	// これが注入されているのは、答えが設定グラフと known_hosts から
 	// 来るためで、そのどちらについても vault は何も知らない。nil の
@@ -286,7 +289,41 @@ func (h PasswordHandlers) listCredentials(c *echo.Context) error {
 	if err != nil {
 		return credentialProblem(c, err, nil)
 	}
-	answer := api.CredentialList{Credentials: []api.Credential{}}
+	dedicated := h.Service.DedicatedKeyPassphrases()
+	keySet := map[string]bool{}
+	for _, uses := range listed[secret.KindKeyPassphrase] {
+		for _, key := range uses {
+			keySet[key] = true
+		}
+	}
+	for _, key := range dedicated {
+		keySet[key] = true
+	}
+	keyPaths := make([]string, 0, len(keySet))
+	for key := range keySet {
+		keyPaths = append(keyPaths, key)
+	}
+	sort.Strings(keyPaths)
+
+	hostsByKey := map[string][]string{}
+	keyHostUsageComplete := true
+	if len(keyPaths) > 0 {
+		keyHostUsageComplete = h.KeyHosts != nil
+		if h.KeyHosts != nil {
+			projected, projectionErr := h.KeyHosts(keyPaths)
+			if projectionErr != nil {
+				keyHostUsageComplete = false
+			} else {
+				hostsByKey = projected
+			}
+		}
+	}
+
+	answer := api.CredentialList{
+		Credentials:             []api.Credential{},
+		DedicatedKeyPassphrases: []api.DedicatedKeyPassphraseUsage{},
+		KeyHostUsageComplete:    keyHostUsageComplete,
+	}
 	for _, kind := range []secret.Kind{secret.KindPassword, secret.KindKeyPassphrase} {
 		names := make([]string, 0, len(listed[kind]))
 		for name := range listed[kind] {
@@ -294,12 +331,37 @@ func (h PasswordHandlers) listCredentials(c *echo.Context) error {
 		}
 		sort.Strings(names)
 		for _, name := range names {
+			uses := listed[kind][name]
+			hosts := append([]string{}, uses...)
+			if kind == secret.KindKeyPassphrase {
+				hosts = joinedKeyHosts(uses, hostsByKey)
+			}
 			answer.Credentials = append(answer.Credentials, api.Credential{
-				Kind: string(kind), Name: name, Uses: listed[kind][name],
+				Kind: string(kind), Name: name, Uses: uses, Hosts: hosts,
 			})
 		}
 	}
+	for _, key := range dedicated {
+		answer.DedicatedKeyPassphrases = append(answer.DedicatedKeyPassphrases, api.DedicatedKeyPassphraseUsage{
+			Key: key, Hosts: append([]string{}, hostsByKey[key]...),
+		})
+	}
 	return c.JSON(http.StatusOK, answer)
+}
+
+func joinedKeyHosts(keys []string, hostsByKey map[string][]string) []string {
+	set := map[string]bool{}
+	for _, key := range keys {
+		for _, host := range hostsByKey[key] {
+			set[host] = true
+		}
+	}
+	hosts := make([]string, 0, len(set))
+	for host := range set {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	return hosts
 }
 
 func (h PasswordHandlers) ListCredentials(c *echo.Context) error {

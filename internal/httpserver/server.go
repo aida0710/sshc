@@ -187,8 +187,13 @@ func New(options Options) (*Server, error) {
 		if options.Sync != nil {
 			reseal = options.Sync.Push
 		}
+		var keyHosts func([]string) (map[string][]string, error)
+		if options.Config != nil {
+			keyHosts = options.Config.KeyHosts
+		}
 		registerPasswordRoutes(e, PasswordHandlers{
 			Service:        options.Passwords,
+			KeyHosts:       keyHosts,
 			Answerable:     options.Answerable,
 			Eligibility:    eligibility,
 			ResealSnapshot: reseal,

@@ -1240,19 +1240,36 @@ components:
     Credential:
       type: object
       additionalProperties: false
-      required: [kind, name, uses]
+      required: [kind, name, uses, hosts]
       properties:
         kind: { type: string }
         name: { type: string }
         # この資格情報を指しているもの。パスワードなら alias、パスフレーズなら
         # 鍵のパスである。値そのものは決して含まない。
         uses: { type: array, items: { type: string } }
+        # パスワードなら uses と同じ alias。パスフレーズなら、その鍵を
+        # effective IdentityFile として使う、確認できた具体的な alias。
+        hosts: { type: array, items: { type: string } }
+    DedicatedKeyPassphraseUsage:
+      type: object
+      additionalProperties: false
+      required: [key, hosts]
+      properties:
+        # 共有名を持たず、この鍵だけが所有する保存値。値は返さない。
+        key: { type: string }
+        hosts: { type: array, items: { type: string } }
     CredentialList:
       type: object
       additionalProperties: false
-      required: [credentials]
+      required: [credentials, dedicatedKeyPassphrases, keyHostUsageComplete]
       properties:
         credentials: { type: array, items: { $ref: "#/components/schemas/Credential" } }
+        dedicatedKeyPassphrases:
+          type: array
+          items: { $ref: "#/components/schemas/DedicatedKeyPassphraseUsage" }
+        # false なら key_passphrase の hosts は空ではなく未確認。password の
+        # hosts は vault の割り当てなので、この値に関わらず完全である。
+        keyHostUsageComplete: { type: boolean }
     UpdateStatus:
       type: object
       additionalProperties: false
