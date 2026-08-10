@@ -659,7 +659,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** @description Updates common settings for one existing SSH Host entry. Semantic setting changes are derived into config edits by the server. When a password assignment changes, the config and sealed vault are committed in one journalled transaction. The response contains configuration diffs but never plaintext or sealed vault bytes. */
+        patch: operations["updateConnection"];
         trace?: never;
     };
     "/api/v1/config/groups/rename": {
@@ -1449,6 +1450,64 @@ export interface components {
             transactionId: string;
             identity: components["schemas"]["HostIdentity"];
             preview: components["schemas"]["SavePreview"];
+        };
+        UpdateConnectionRequest: {
+            identity: components["schemas"]["HostIdentity"];
+            base: string;
+            hostName?: components["schemas"]["ConnectionStringChange"];
+            user?: components["schemas"]["ConnectionStringChange"];
+            port?: components["schemas"]["ConnectionPortChange"];
+            identityFile?: components["schemas"]["ConnectionIdentityFileChange"];
+            password: components["schemas"]["UpdateConnectionPassword"];
+        };
+        ConnectionStringChange: components["schemas"]["ConnectionStringSet"] | components["schemas"]["ConnectionInherit"];
+        ConnectionStringSet: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "set";
+            value: string;
+        };
+        ConnectionPortChange: components["schemas"]["ConnectionPortSet"] | components["schemas"]["ConnectionInherit"];
+        ConnectionPortSet: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "set";
+            value: number;
+        };
+        ConnectionIdentityFileChange: components["schemas"]["ConnectionIdentityFileSet"] | components["schemas"]["ConnectionInherit"];
+        ConnectionIdentityFileSet: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "set";
+            keyId: string;
+        };
+        ConnectionInherit: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "inherit";
+        };
+        UpdateConnectionPassword: components["schemas"]["UpdatePasswordUnchanged"] | components["schemas"]["CreateDedicatedPasswordAuthentication"] | components["schemas"]["CreateSavedPasswordAuthentication"] | components["schemas"]["CreateNewSharedPasswordAuthentication"] | components["schemas"]["UpdatePasswordRemove"];
+        UpdatePasswordUnchanged: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unchanged";
+        };
+        UpdatePasswordRemove: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "remove";
         };
         RelocateKeyRequest: {
             newName?: string;
@@ -2959,6 +3018,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateConnectionResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    updateConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Connection updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveResult"];
                 };
             };
             400: components["responses"]["Problem"];

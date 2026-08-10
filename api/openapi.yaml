@@ -756,6 +756,32 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateConnection
+      description: >-
+        Updates common settings for one existing SSH Host entry. Semantic
+        setting changes are derived into config edits by the server. When a
+        password assignment changes, the config and sealed vault are committed
+        in one journalled transaction. The response contains configuration
+        diffs but never plaintext or sealed vault bytes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateConnectionRequest" }
+      responses:
+        "200":
+          description: Connection updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/config/groups/rename:
     post:
       operationId: renameGroup
@@ -1947,6 +1973,103 @@ components:
         transactionId: { type: string }
         identity: { $ref: "#/components/schemas/HostIdentity" }
         preview: { $ref: "#/components/schemas/SavePreview" }
+    UpdateConnectionRequest:
+      type: object
+      additionalProperties: false
+      required: [identity, base, password]
+      properties:
+        identity: { $ref: "#/components/schemas/HostIdentity" }
+        base: { type: string, maxLength: 1048576 }
+        hostName: { $ref: "#/components/schemas/ConnectionStringChange" }
+        user: { $ref: "#/components/schemas/ConnectionStringChange" }
+        port: { $ref: "#/components/schemas/ConnectionPortChange" }
+        identityFile: { $ref: "#/components/schemas/ConnectionIdentityFileChange" }
+        password: { $ref: "#/components/schemas/UpdateConnectionPassword" }
+    ConnectionStringChange:
+      x-go-type: json.RawMessage
+      oneOf:
+        - $ref: "#/components/schemas/ConnectionStringSet"
+        - $ref: "#/components/schemas/ConnectionInherit"
+      discriminator:
+        propertyName: action
+        mapping:
+          set: "#/components/schemas/ConnectionStringSet"
+          inherit: "#/components/schemas/ConnectionInherit"
+    ConnectionStringSet:
+      type: object
+      additionalProperties: false
+      required: [action, value]
+      properties:
+        action: { type: string, enum: [set], x-go-type: string }
+        value: { type: string, maxLength: 255 }
+    ConnectionPortChange:
+      x-go-type: json.RawMessage
+      oneOf:
+        - $ref: "#/components/schemas/ConnectionPortSet"
+        - $ref: "#/components/schemas/ConnectionInherit"
+      discriminator:
+        propertyName: action
+        mapping:
+          set: "#/components/schemas/ConnectionPortSet"
+          inherit: "#/components/schemas/ConnectionInherit"
+    ConnectionPortSet:
+      type: object
+      additionalProperties: false
+      required: [action, value]
+      properties:
+        action: { type: string, enum: [set], x-go-type: string }
+        value: { type: integer, minimum: 1, maximum: 65535 }
+    ConnectionIdentityFileChange:
+      x-go-type: json.RawMessage
+      oneOf:
+        - $ref: "#/components/schemas/ConnectionIdentityFileSet"
+        - $ref: "#/components/schemas/ConnectionInherit"
+      discriminator:
+        propertyName: action
+        mapping:
+          set: "#/components/schemas/ConnectionIdentityFileSet"
+          inherit: "#/components/schemas/ConnectionInherit"
+    ConnectionIdentityFileSet:
+      type: object
+      additionalProperties: false
+      required: [action, keyId]
+      properties:
+        action: { type: string, enum: [set], x-go-type: string }
+        keyId: { type: string, minLength: 32, maxLength: 32 }
+    ConnectionInherit:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [inherit], x-go-type: string }
+    UpdateConnectionPassword:
+      x-go-type: json.RawMessage
+      oneOf:
+        - $ref: "#/components/schemas/UpdatePasswordUnchanged"
+        - $ref: "#/components/schemas/CreateDedicatedPasswordAuthentication"
+        - $ref: "#/components/schemas/CreateSavedPasswordAuthentication"
+        - $ref: "#/components/schemas/CreateNewSharedPasswordAuthentication"
+        - $ref: "#/components/schemas/UpdatePasswordRemove"
+      discriminator:
+        propertyName: kind
+        mapping:
+          unchanged: "#/components/schemas/UpdatePasswordUnchanged"
+          dedicated_password: "#/components/schemas/CreateDedicatedPasswordAuthentication"
+          saved_password: "#/components/schemas/CreateSavedPasswordAuthentication"
+          new_shared_password: "#/components/schemas/CreateNewSharedPasswordAuthentication"
+          remove: "#/components/schemas/UpdatePasswordRemove"
+    UpdatePasswordUnchanged:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [unchanged], x-go-type: string }
+    UpdatePasswordRemove:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [remove], x-go-type: string }
     RelocateKeyRequest:
       type: object
       additionalProperties: false
