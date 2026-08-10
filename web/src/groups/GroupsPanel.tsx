@@ -437,6 +437,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
             */}
             {selected !== group.name ? null : (
             <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-3 border-t border-line pt-3">
+              <p className={`w-full ${hintText}`}>{t("groups.immediateActions")}</p>
               {/*
                 目に見えるキャプションは短く、グループの名前は代わりに
                 アクセシブルネームに宿る。画面に全て書き出せば、四つの
@@ -627,10 +628,10 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       </p>
 
       <div className="flex gap-2">
-        <button type="button" onClick={() => void run("preview")} className={secondaryAction}>
+        <button type="button" disabled={!unsaved} onClick={() => void run("preview")} className={secondaryAction}>
           {t("groups.previewChanges")}
         </button>
-        <button type="button" onClick={() => void run("save")} className={primaryAction}>
+        <button type="button" disabled={!unsaved} onClick={() => void run("save")} className={primaryAction}>
           {t("groups.save")}
         </button>
       </div>

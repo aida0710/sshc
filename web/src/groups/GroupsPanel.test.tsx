@@ -86,10 +86,15 @@ describe("GroupsPanel", () => {
     const user = userEvent.setup();
     render(<GroupsPanel />);
 
+    expect(await screen.findByRole("button", { name: "Preview group changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save groups" })).toBeDisabled();
+
     // スラッシュがネスト構文のすべてである。名前が階層を運ぶため、
     // それと食い違い得る親フィールドは存在しない。
     await user.type(await screen.findByLabelText("New group name"), "company/work");
     await user.click(screen.getByRole("button", { name: "Add group" }));
+    expect(screen.getByRole("button", { name: "Preview group changes" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save groups" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Preview group changes" }));
 
     await waitFor(() => expect(configApi.preview).toHaveBeenCalledWith(expect.objectContaining({ kind: "groups" })));
@@ -135,6 +140,7 @@ describe("GroupsPanel", () => {
     render(<GroupsPanel />);
 
     await select(user, "company");
+    expect(screen.getByText("Rename and remove write to disk immediately.")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Rename company to"), "corp");
     await user.click(screen.getByRole("button", { name: "Rename company" }));
 

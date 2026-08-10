@@ -182,6 +182,18 @@ describe("HostDetailPanel", () => {
     ]);
   });
 
+  it("disables every save action until its own value meaningfully changes", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Rename" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save comment" })).toBeDisabled();
+
+    await user.click(screen.getByRole("tab", { name: "Raw" }));
+    expect(screen.getByRole("button", { name: "Save block" })).toBeDisabled();
+  });
+
   it("sends an add edit for a new arbitrary directive", async () => {
     const user = userEvent.setup();
     const handlers = renderPanel();
@@ -220,14 +232,15 @@ describe("HostDetailPanel", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/ssh -G/);
   });
 
-  it("submits the block raw editor unchanged", async () => {
+  it("submits the block raw editor after it changes", async () => {
     const user = userEvent.setup();
     const handlers = renderPanel();
 
     await user.click(screen.getByRole("tab", { name: "Raw" }));
+    await user.type(screen.getByLabelText(/Block text/), "\tUser root\n");
     await user.click(screen.getByRole("button", { name: "Save block" }));
 
-    expect(handlers.onBlockRaw).toHaveBeenCalledWith("Host bastion\n\tHostName 203.0.113.10\n");
+    expect(handlers.onBlockRaw).toHaveBeenCalledWith("Host bastion\n\tHostName 203.0.113.10\n\tUser root\n");
   });
 
   it("sends the Effective tab to the authoritative check rather than describing it", async () => {
