@@ -10,6 +10,7 @@ describe("InspectorToggle", () => {
     const button = screen.getByRole("button", { name: "Show details" });
     expect(button).toHaveAttribute("aria-expanded", "false");
     expect(button).toHaveAttribute("aria-controls", "inspector");
+    expect(button).toHaveTextContent("Details");
   });
 
   it("changes its name when open", () => {

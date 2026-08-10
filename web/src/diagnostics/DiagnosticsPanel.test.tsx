@@ -112,6 +112,33 @@ describe("DiagnosticsPanel", () => {
     expect(screen.getByRole("button", { name: "Explain" })).toBeEnabled();
   });
 
+  it("suggests saved aliases while still accepting an arbitrary SSH target", async () => {
+    render(<DiagnosticsPanel api={buildApi()} hosts={["bastion", "database"]} />);
+
+    const target = screen.getByLabelText("Host alias");
+    expect(target).toHaveAttribute("list", "diagnostic-host-options");
+    const suggestions = document.querySelectorAll<HTMLOptionElement>("#diagnostic-host-options option");
+    expect([...suggestions].map((option) => option.value)).toEqual(["bastion", "database"]);
+
+    await userEvent.type(target, "one-off.example.com");
+    expect(target).toHaveValue("one-off.example.com");
+    expect(screen.getByRole("button", { name: "Explain" })).toBeEnabled();
+  });
+
+  it("clears a standalone result when the typed target changes", async () => {
+    const api = buildApi();
+    render(<DiagnosticsPanel api={api} hosts={["bastion", "nas"]} />);
+
+    const target = screen.getByLabelText("Host alias");
+    await userEvent.type(target, "bastion");
+    await userEvent.click(screen.getByRole("button", { name: "Check reachability" }));
+    expect(await screen.findByText(/203\.0\.113\.10:22/)).toBeInTheDocument();
+
+    await userEvent.clear(target);
+    await userEvent.type(target, "nas");
+    expect(screen.queryByText(/203\.0\.113\.10:22/)).not.toBeInTheDocument();
+  });
+
   it("names the columns of the sources table", async () => {
     // パス、条件、判定を三つの無ラベル灰色として描いても、
     // キャプションがどれほど良くても自己説明的にはならない。

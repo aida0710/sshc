@@ -87,7 +87,7 @@ describe("OverviewPanel", () => {
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
   });
 
-  it("routes management shortcuts without starting network diagnostics", async () => {
+  it("routes configuration warnings to Config instead of an empty diagnostics form", async () => {
     const navigate = vi.fn();
     const loadOverview = vi.fn().mockResolvedValue(overview);
     render(
@@ -100,8 +100,38 @@ describe("OverviewPanel", () => {
     );
 
     await screen.findByText("database");
-    await userEvent.click(screen.getByRole("button", { name: "Open diagnostics" }));
-    expect(navigate).toHaveBeenCalledWith("Diagnostics");
+    await userEvent.click(screen.getByRole("button", { name: "Review configuration" }));
+    expect(navigate).toHaveBeenCalledWith("Config");
+    expect(screen.queryByRole("button", { name: "Open diagnostics" })).not.toBeInTheDocument();
     expect(loadOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes an interrupted write to History without showing a configuration action", async () => {
+    const navigate = vi.fn();
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue({
+          ...overview,
+          diagnostics: [],
+          pending: [{
+            id: "tx-pending",
+            operation: "config.save",
+            status: "interrupted",
+            startedAt: "2026-08-10T00:00:00Z",
+            committed: 0,
+            paths: ["config"],
+            canComplete: false,
+          }],
+        })}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        launch={vi.fn()}
+        onNavigate={navigate}
+      />,
+    );
+
+    await screen.findByText("database");
+    expect(screen.queryByRole("button", { name: "Review configuration" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Recover changes" }));
+    expect(navigate).toHaveBeenCalledWith("History");
   });
 });

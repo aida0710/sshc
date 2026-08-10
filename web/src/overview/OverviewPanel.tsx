@@ -5,7 +5,7 @@ import { useTranslate } from "../i18n/context";
 import { control, hintText, secondaryAction } from "../ui/form";
 import { Notice } from "../ui/surface";
 
-export type OverviewDestination = "Connections" | "Diagnostics" | "Sync" | "History";
+export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
 type OverviewPanelProps = {
   loadOverview?: () => Promise<Overview>;
@@ -110,12 +110,12 @@ export function OverviewPanel({
     }
   }
 
-  const attention =
-    overview === null
-      ? 0
-      : overview.diagnostics.filter((item) => item.severity === "error" || item.severity === "warning").length +
-        overview.notices.filter((item) => !informationalNoticeCodes.has(item.code)).length +
-        (overview.pending?.length ?? 0);
+  const configurationAttention = overview === null
+    ? 0
+    : overview.diagnostics.filter((item) => item.severity === "error" || item.severity === "warning").length +
+      overview.notices.filter((item) => !informationalNoticeCodes.has(item.code)).length;
+  const recoveryAttention = overview?.pending?.length ?? 0;
+  const attention = configurationAttention + recoveryAttention;
 
   return (
     <section aria-labelledby="home-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -208,8 +208,10 @@ export function OverviewPanel({
                 : t("home.workspaceAttention", { count: attention })}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className={secondaryAction} onClick={() => onNavigate("Diagnostics")}>{t("home.openDiagnostics")}</button>
-            {(overview?.pending?.length ?? 0) === 0 ? null : (
+            {configurationAttention === 0 ? null : (
+              <button type="button" className={secondaryAction} onClick={() => onNavigate("Config")}>{t("home.openConfig")}</button>
+            )}
+            {recoveryAttention === 0 ? null : (
               <button type="button" className={secondaryAction} onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</button>
             )}
           </div>

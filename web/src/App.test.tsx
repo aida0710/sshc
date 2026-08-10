@@ -95,7 +95,7 @@ describe("App", () => {
       "Keys",
       "Known Hosts",
       "Remote Keys",
-      "Diagnostics",
+      "Ad hoc checks",
       "Secrets",
       "Sync",
       "History",
@@ -180,7 +180,7 @@ describe("App", () => {
       "Keys",
       "Known Hosts",
       "Remote Keys",
-      "Diagnostics",
+      "Ad hoc checks",
       "History",
     ]) {
       expect(screen.getByRole("button", { name: label })).toBeEnabled();
@@ -226,7 +226,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Connections" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("switches to the known hosts and diagnostics panels", async () => {
+  it("switches to the known hosts and ad hoc checks panels", async () => {
     const user = userEvent.setup();
     render(
       <App
@@ -240,7 +240,7 @@ describe("App", () => {
     expect(screen.getByText("known hosts panel")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
 
-    await user.click(screen.getByRole("button", { name: "Diagnostics" }));
+    await user.click(screen.getByRole("button", { name: "Ad hoc checks" }));
     expect(screen.getByText("diagnostics panel")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
