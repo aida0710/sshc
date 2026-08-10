@@ -369,13 +369,17 @@ func connectionProblem(c *echo.Context, err error) error {
 	switch {
 	case errors.Is(err, errInvalidBody), errors.Is(err, errInvalidEdit),
 		errors.Is(err, application.ErrInvalidAlias),
-		errors.Is(err, application.ErrInvalidConnectionUser),
 		errors.Is(err, application.ErrUnknownCreateAuthentication),
 		errors.Is(err, application.ErrUnknownConnectionChange),
 		errors.Is(err, application.ErrUnknownUpdatePassword),
-		errors.Is(err, application.ErrUnquotableValue),
-		errors.Is(err, platform.ErrUnsafeHostname), errors.Is(err, platform.ErrUnsafePort):
+		errors.Is(err, application.ErrUnquotableValue):
 		return problem(c, http.StatusBadRequest, "invalid_request")
+	case errors.Is(err, platform.ErrUnsafeHostname):
+		return problem(c, http.StatusBadRequest, "connection_hostname_invalid")
+	case errors.Is(err, application.ErrInvalidConnectionUser):
+		return problem(c, http.StatusBadRequest, "connection_user_invalid")
+	case errors.Is(err, platform.ErrUnsafePort):
+		return problem(c, http.StatusBadRequest, "connection_port_invalid")
 	case errors.Is(err, application.ErrNoConnectionUpdate):
 		return problem(c, http.StatusBadRequest, "connection_no_change")
 	case errors.Is(err, application.ErrComplexConnectionField):
@@ -388,6 +392,8 @@ func connectionProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "connection_destination_exists")
 	case errors.Is(err, secret.ErrUnknownCredential):
 		return problem(c, http.StatusNotFound, "unknown_credential")
+	case errors.Is(err, secret.ErrCredentialAlreadyExists):
+		return problem(c, http.StatusConflict, "credential_already_exists")
 	case errors.Is(err, secret.ErrNoPassword):
 		return problem(c, http.StatusNotFound, "password_missing")
 	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoVault),

@@ -20,6 +20,7 @@ import { PasswordField } from "../ui/PasswordField";
 import { Button, Card, Notice, Row } from "../ui/surface";
 import { deriveBasicField, type BasicFieldState, type BasicKeyword } from "./basicFields";
 import { formatValues } from "./values";
+import { validHostNameInput } from "./hostValidation";
 
 type PasswordAction = UpdateConnectionPassword["kind"];
 
@@ -39,8 +40,6 @@ type DraftField = {
   value: string;
   inherit: boolean;
 };
-
-const hostPattern = /^[A-Za-z0-9]([A-Za-z0-9._:-]*[A-Za-z0-9])?$/;
 
 function sameKeyword(left: string, right: string): boolean {
   return left.toLocaleLowerCase() === right.toLocaleLowerCase();
@@ -223,7 +222,7 @@ export function ConnectionBasicForm({
     ? ""
     : hostName.value === ""
       ? t("conn.createHostRequired")
-      : hostName.value.length <= 255 && hostPattern.test(hostName.value)
+      : validHostNameInput(hostName.value)
         ? ""
         : t("conn.createHostInvalid");
   const userError = user.value !== "" && /[\s\p{Cc}]/u.test(user.value) ? t("conn.createUserInvalid") : "";
@@ -329,6 +328,21 @@ export function ConnectionBasicForm({
     (vault.exists || masterConfirmation === masterPassword);
   const passwordBlockers = eligibility?.blockers ?? [];
   const passwordWarnings = eligibility?.warnings ?? [];
+  const serverHostError = problem?.code === "connection_hostname_invalid" ? t("conn.createHostInvalid") : "";
+  const serverUserError = problem?.code === "connection_user_invalid" ? t("conn.createUserInvalid") : "";
+  const serverPortError = problem?.code === "connection_port_invalid" ? t("conn.createPortInvalid") : "";
+  const serverKeyError = problem?.code === "identity_file_invalid" ? t("conn.basicServerKeyInvalid") : "";
+  const serverPasswordError = problem?.code === "credential_already_exists"
+    ? t("conn.basicCredentialExists")
+    : problem?.code === "unknown_credential"
+      ? t("conn.basicCredentialMissing")
+      : problem?.code === "password_missing"
+        ? t("conn.basicPasswordMissing")
+        : problem?.code === "password_ineligible"
+          ? t("conn.basicPasswordBlocked")
+          : problem?.code === "password_empty"
+            ? t("conn.createNeedConnectionPassword")
+            : "";
 
   return (
     <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
@@ -340,7 +354,7 @@ export function ConnectionBasicForm({
           <Row
             label={t("conn.basicHostName")}
             hint={sourceText(hostName.state, t)}
-            warning={hostName.state.origin === "complex" ? t("conn.basicComplex", { keyword: "HostName" }) : hostError || undefined}
+            warning={hostName.state.origin === "complex" ? t("conn.basicComplex", { keyword: "HostName" }) : hostError || serverHostError || undefined}
             action={hostName.state.origin === "direct" ? (
               <Button onClick={() => setHostName({ ...hostName, inherit: !hostName.inherit })}>
                 {hostName.inherit ? t("conn.basicKeepDirect") : t("conn.basicUseInheritedHost")}
@@ -358,7 +372,7 @@ export function ConnectionBasicForm({
           <Row
             label={t("conn.basicUser")}
             hint={sourceText(user.state, t)}
-            warning={user.state.origin === "complex" ? t("conn.basicComplex", { keyword: "User" }) : userError || undefined}
+            warning={user.state.origin === "complex" ? t("conn.basicComplex", { keyword: "User" }) : userError || serverUserError || undefined}
             action={user.state.origin === "direct" ? (
               <Button onClick={() => setUser({ ...user, inherit: !user.inherit })}>
                 {user.inherit ? t("conn.basicKeepDirect") : t("conn.basicUseInheritedUser")}
@@ -376,7 +390,7 @@ export function ConnectionBasicForm({
           <Row
             label={t("conn.basicPort")}
             hint={sourceText(port.state, t)}
-            warning={port.state.origin === "complex" ? t("conn.basicComplex", { keyword: "Port" }) : portError || undefined}
+            warning={port.state.origin === "complex" ? t("conn.basicComplex", { keyword: "Port" }) : portError || serverPortError || undefined}
             action={port.state.origin === "direct" ? (
               <Button onClick={() => setPort({ ...port, inherit: !port.inherit })}>
                 {port.inherit ? t("conn.basicKeepDirect") : t("conn.basicUseInheritedPort")}
@@ -402,6 +416,7 @@ export function ConnectionBasicForm({
         <Card>
           <Row
             label={t("conn.basicPrivateKey")}
+            warning={serverKeyError || undefined}
             hint={keyState === "custom"
               ? t("conn.basicCustomKey", { path: customKey })
               : keyState === "complex"
@@ -519,6 +534,7 @@ export function ConnectionBasicForm({
                   {passwordWarnings.map((warning, index) => (
                     <Notice key={`${warning.code}-${index}`}>{eligibilityText(t, warning.code)}</Notice>
                   ))}
+                  {serverPasswordError === "" ? null : <Notice tone="danger">{serverPasswordError}</Notice>}
                 </>
               ) : null}
             </div>

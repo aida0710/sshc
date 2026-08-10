@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HostDetail, UpdateConnectionRequest } from "../api/config";
+import type { Problem } from "../api/client";
 import type { IntegrationsApi } from "../api/integrations";
 import type { KeyInventoryResponse, KeysApi } from "../keys/api";
 import { ConnectionBasicForm } from "./ConnectionBasicForm";
@@ -83,6 +84,7 @@ type HarnessOverrides = {
   initialiseVault?: IntegrationsApi["initialiseVault"];
   unlockVault?: IntegrationsApi["unlockVault"];
   inventory?: KeysApi["inventory"];
+  problem?: Problem | null;
 };
 
 function renderForm(overrides: HarnessOverrides = {}) {
@@ -110,7 +112,7 @@ function renderForm(overrides: HarnessOverrides = {}) {
   const rendered = render(
     <ConnectionBasicForm
       detail={overrides.detail ?? buildDetail()}
-      problem={null}
+      problem={overrides.problem ?? null}
       onSave={onSave}
       keys={{ inventory: keyInventory } as Pick<KeysApi, "inventory">}
       secrets={{
@@ -136,6 +138,25 @@ function renderForm(overrides: HarnessOverrides = {}) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ConnectionBasicForm", () => {
+
+  it("places stable server validation failures beside the affected control", async () => {
+    const first = renderForm({
+      problem: { code: "connection_hostname_invalid", message: "invalid host" },
+    });
+    expect(screen.getByText("Enter a DNS name, IPv4 address, or unbracketed IPv6 address.")).toBeInTheDocument();
+    first.unmount();
+
+    const second = renderForm({
+      problem: { code: "identity_file_invalid", message: "invalid key" },
+    });
+    expect(screen.getByText("That SSH private key is no longer selectable. Reload and choose it again.")).toBeInTheDocument();
+    second.unmount();
+
+    renderForm({
+      problem: { code: "credential_already_exists", message: "credential exists" },
+    });
+    expect(await screen.findByText(/saved password name already exists/i)).toBeInTheDocument();
+  });
   it("always renders sparse connection fields without materialising inherited defaults", async () => {
     renderForm();
 
