@@ -163,11 +163,11 @@ test("keeps the chosen language across a reload, and translates the panels", asy
   await expect(sessionStatus(page)).toContainText("Local session active");
 
   await page.getByLabel("Language").selectOption("ja");
-  await expect(page.getByRole("button", { name: "鍵", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "鍵", exact: true })).toBeVisible();
 
   // シェルだけでなくパネルでも。provider は描画される
   // セクションより上位になければならず、それは実ページでしか証明できない。
-  await page.getByRole("button", { name: "鍵", exact: true }).click();
+  await page.getByRole("link", { name: "鍵", exact: true }).click();
   await expect(page.getByRole("heading", { name: "鍵", level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "鍵を作成" })).toBeVisible();
 
@@ -176,12 +176,9 @@ test("keeps the chosen language across a reload, and translates the panels", asy
   // 復元できず、言語が生き残った証拠は*拒否*が日本語で届く
   // ことだった。その拒否は、テストが事実として書き留めていた不具合だった。
   await page.reload();
-  // シェルは日本語で戻ってくる。これは選択がページより長生きしたとい
-  // うことであり、そもそも戻ってくること自体がセッションがページより
-  // 長生きしたということだ。開いていたセクションは記憶されないし、その
-  // 必要もないため、まだそこにあると期待せずパネルへ改めて到達する。
-  await expect(page.getByRole("button", { name: "鍵", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "鍵", exact: true }).click();
+  // シェルは日本語かつ同じURLで戻る。言語は保存設定から、セクションは
+  // URLから復元され、どちらも再クリックを必要としない。
+  await expect(page.getByRole("link", { name: "鍵", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("button", { name: "鍵を作成" })).toBeVisible();
   expect(await page.evaluate(() => Object.keys(window.localStorage).sort())).toEqual(["sshc.language"]);
 });
@@ -197,7 +194,7 @@ test("survives a reload", async ({ page, installation }) => {
 
   await page.reload();
 
-  await openSection(page, "Connections");
+  await expect(page).toHaveURL(/\/connections$/);
   await expect(
     page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }),
   ).toBeVisible();
