@@ -46,7 +46,10 @@ func TestValidateAliasAcceptsOnlyTheSafeCharacterSet(t *testing.T) {
 }
 
 func TestValidateHostnameAcceptsNamesAndAddressesOnly(t *testing.T) {
-	accepted := []string{"example.com", "bastion-1.internal", "203.0.113.10", "2001:db8::1", "host_name"}
+	accepted := []string{
+		"example.com", "bastion-1.internal", "203.0.113.10", "2001:db8::1",
+		"::1", "2001:db8::", "::ffff:192.0.2.1", "host_name",
+	}
 	for _, host := range accepted {
 		if err := platform.ValidateHostname(host); err != nil {
 			t.Errorf("ValidateHostname(%q) = %v, want nil", host, err)

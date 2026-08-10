@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -129,13 +130,29 @@ func (s *Service) UpdateConnection(
 		}
 		storageRequest := s.requestFor(prepared)
 		storageRequest.Changes = append(storageRequest.Changes, vaultChange)
-		result, commitErr := s.commitPlannedRequest(prepared, storageRequest)
+		result, commitErr := s.commitAtomicPlannedRequest(prepared, storageRequest)
 		if commitErr != nil {
 			return storage.Result{}, commitErr
 		}
 		updated = s.connectionUpdateResult(result, prepared)
 		return result, nil
 	})
+	if errors.Is(err, secret.ErrNoPasswordMutation) {
+		s.saveMutex.Lock()
+		defer s.saveMutex.Unlock()
+		prepared, changed, planErr := s.planConnectionUpdate(inventory, request)
+		if planErr != nil {
+			return SaveResult{}, planErr
+		}
+		if !changed {
+			return SaveResult{}, ErrNoConnectionUpdate
+		}
+		result, commitErr := s.commitPlannedRequest(prepared, s.requestFor(prepared))
+		if commitErr != nil {
+			return SaveResult{}, commitErr
+		}
+		return s.connectionUpdateResult(result, prepared), nil
+	}
 	if err != nil {
 		return SaveResult{}, err
 	}
@@ -189,7 +206,23 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 	if _, err := s.workspace.ResolveForWrite(absolute); err != nil {
 		return planned{}, false, err
 	}
+	node, reached := graph.Nodes[absolute]
+	if !reached || node.File == nil {
+		return planned{}, false, ErrHostNotFound
+	}
+	if !node.Editable {
+		return planned{}, false, ErrNotEditable
+	}
+	if _, ok := FindHostBlock(node.File, request.Identity.Alias); !ok {
+		return planned{}, false, ErrHostNotFound
+	}
 	base := []byte(request.Base)
+	current := node.File.Render()
+	if !bytes.Equal(base, current) {
+		return planned{}, false, &ConflictError{Report: BuildConflictReport(
+			request.Identity.Path, base, current, base,
+		)}
+	}
 	file := config.Parse(base)
 	block, ok := FindHostBlock(file, request.Identity.Alias)
 	if !ok {
@@ -329,6 +362,9 @@ func connectionFieldEdit(
 	}
 	if len(lines) == 0 {
 		return FieldEdit{Action: ActionAdd, Keyword: keyword, Values: values}, true, nil
+	}
+	if slices.Equal(file.Lines[lines[0]-1].Values(), values) {
+		return FieldEdit{}, false, nil
 	}
 	return FieldEdit{Action: ActionSet, Line: lines[0], Values: values}, true, nil
 }

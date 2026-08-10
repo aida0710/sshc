@@ -13,6 +13,7 @@ import (
 var (
 	ErrUnknownTransaction = errors.New("no pending transaction with that identifier")
 	ErrCannotComplete     = errors.New("staged contents are missing or altered")
+	ErrAtomicStateUnknown = errors.New("an atomic transaction target no longer matches its old or staged state")
 )
 
 // PendingEntry は、中断されたトランザクションに含まれるファイルひとつ。
@@ -54,13 +55,21 @@ func (m *Manager) Pending() ([]Pending, error) {
 	}
 	pending := make([]Pending, 0, len(records))
 	for _, record := range records {
+		if changed, reconcileErr := m.reconcileAtomicRecord(&record); reconcileErr != nil {
+			return nil, reconcileErr
+		} else if changed {
+			journalPath := filepath.Join(m.journalDirectory(), record.ID+".json")
+			if err := m.writeRecord(journalPath, record); err != nil {
+				return nil, err
+			}
+		}
 		item := Pending{
 			ID:          record.ID,
 			Operation:   record.Operation,
 			Status:      record.Status,
 			StartedAt:   record.StartedAt,
 			Committed:   record.Committed,
-			CanComplete: true,
+			CanComplete: !record.Atomic,
 			CanRollback: true,
 		}
 		for index, entry := range record.Entries {
@@ -97,6 +106,13 @@ func (m *Manager) Complete(identifier string) error {
 	if err != nil {
 		return err
 	}
+	// Atomic records pair persisted documents with process-local state (the
+	// opened password vault). Completing only the disk half after the original
+	// callback failed would leave that state stale. Their safe recovery action
+	// is rollback; a fresh request can then publish disk and memory together.
+	if record.Atomic {
+		return ErrCannotComplete
+	}
 	for index := record.Committed; index < len(record.Entries); index++ {
 		if record.Entries[index].action() != actionWrite {
 			continue
@@ -121,6 +137,14 @@ func (m *Manager) Rollback(identifier string) error {
 	if err != nil {
 		return err
 	}
+	return m.rollbackRecord(record, journalPath)
+}
+
+// rollbackRecord is also used by CommitAtomic. In that path the in-memory
+// record can be ahead of the last durable journal update (for example when a
+// target rename succeeded but SyncDir or the journal rewrite failed), so it is
+// the only complete account of what this still-running process applied.
+func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) error {
 	for index := 0; index < record.Committed; index++ {
 		entry := record.Entries[index]
 		// バックアップを残した削除は、置き換えと同じくらい可逆である。バイト列は
@@ -243,7 +267,85 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 	if err := json.Unmarshal(contents, &record); err != nil {
 		return nil, "", err
 	}
+	if changed, err := m.reconcileAtomicRecord(&record); err != nil {
+		return nil, "", err
+	} else if changed {
+		if err := m.writeRecord(journalPath, record); err != nil {
+			return nil, "", err
+		}
+	}
 	return &record, journalPath, nil
+}
+
+// reconcileAtomicRecord derives the applied prefix of a reversible atomic
+// transaction from target digests. This is needed when the target rename made
+// progress but both its journal update and the immediate rollback failed. A
+// later recovery must not trust the stale Committed counter and declare the
+// transaction rolled back while staged bytes remain on disk.
+func (m *Manager) reconcileAtomicRecord(record *journalRecord) (bool, error) {
+	if !record.Atomic || record.Status == statusCompleted || record.Status == statusRolledBack {
+		return false, nil
+	}
+	applied := make([]bool, len(record.Entries))
+	for index, entry := range record.Entries {
+		switch entry.action() {
+		case actionMakeDir:
+			info, err := m.workspace.FileSystem().Lstat(entry.Path)
+			switch {
+			case err == nil && info.IsDir():
+				applied[index] = true
+			case errors.Is(err, fs.ErrNotExist):
+				applied[index] = false
+			case err != nil:
+				return false, err
+			default:
+				return false, ErrAtomicStateUnknown
+			}
+		case actionWrite:
+			contents, err := m.workspace.FileSystem().ReadFile(entry.Path)
+			if errors.Is(err, fs.ErrNotExist) {
+				if entry.HadPrevious {
+					return false, ErrAtomicStateUnknown
+				}
+				applied[index] = false
+				continue
+			}
+			if err != nil {
+				return false, err
+			}
+			digest := Digest(contents)
+			switch {
+			case digest == entry.Digest:
+				applied[index] = true
+			case entry.HadPrevious && digest == entry.PreviousDigest:
+				applied[index] = false
+			default:
+				return false, ErrAtomicStateUnknown
+			}
+		default:
+			return false, ErrAtomicWriteOnly
+		}
+	}
+
+	committed := 0
+	gap := false
+	for index, isApplied := range applied {
+		if !isApplied {
+			gap = true
+			continue
+		}
+		if gap {
+			// commit and rollback both move through the list in opposite order,
+			// so an applied entry after a gap cannot be attributed safely.
+			return false, ErrAtomicStateUnknown
+		}
+		committed = index + 1
+	}
+	if record.Committed == committed {
+		return false, nil
+	}
+	record.Committed = committed
+	return true, nil
 }
 
 // readRecords は、ディレクトリ内のすべてのジャーナル文書を古い順に読み込む。

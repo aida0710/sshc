@@ -30,6 +30,10 @@ var (
 	ErrUnknownToken = errors.New("that askpass token is not valid for this request")
 	// ErrNoPassword は、その alias に何も保存されていないことを報告する。
 	ErrNoPassword = errors.New("no password is stored for that host")
+	// ErrNoPasswordMutation は、要求が vault の意味上の状態を変えないことを報告する。
+	ErrNoPasswordMutation = errors.New("password mutation makes no change")
+	// ErrCredentialAlreadyExists は、新規共有資格情報が既存名を上書きするのを防ぐ。
+	ErrCredentialAlreadyExists = errors.New("a credential of that kind already has that name")
 	// ErrUnknownPasswordMutation は接続作成が扱う三つのパスワード源以外を拒否する。
 	ErrUnknownPasswordMutation = errors.New("that is not a password mutation kind")
 )
@@ -782,16 +786,30 @@ func (s *Service) WithPasswordMutation(
 	clone := vault.clone()
 	switch mutation.Kind {
 	case PasswordMutationDedicated:
+		if current, ok := vault.dedicatedPasswords[mutation.Alias]; ok &&
+			len(current) == len(mutation.Password) &&
+			subtle.ConstantTimeCompare([]byte(current), []byte(mutation.Password)) == 1 {
+			s.mu.Unlock()
+			return storage.Result{}, ErrNoPasswordMutation
+		}
 		if err := clone.SetDedicatedPassword(mutation.Alias, mutation.Password); err != nil {
 			s.mu.Unlock()
 			return storage.Result{}, err
 		}
 	case PasswordMutationSaved:
+		if current, ok := vault.Assigned(KindPassword, mutation.Alias); ok && current == mutation.Credential {
+			s.mu.Unlock()
+			return storage.Result{}, ErrNoPasswordMutation
+		}
 		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
 			s.mu.Unlock()
 			return storage.Result{}, err
 		}
 	case PasswordMutationNewShared:
+		if _, exists := vault.Secret(KindPassword, mutation.Credential); exists {
+			s.mu.Unlock()
+			return storage.Result{}, ErrCredentialAlreadyExists
+		}
 		if err := clone.Set(KindPassword, mutation.Credential, mutation.Password); err != nil {
 			s.mu.Unlock()
 			return storage.Result{}, err
@@ -807,10 +825,6 @@ func (s *Service) WithPasswordMutation(
 		}
 		clone.RemoveDedicatedPassword(mutation.Alias)
 		clone.Unassign(KindPassword, mutation.Alias)
-		// A dedicated password is not present in the reusable map. This removes
-		// only a legacy alias-named reusable credential that no other subject
-		// uses; Delete refuses while another subject still points at it.
-		_ = clone.Delete(KindPassword, mutation.Alias)
 	default:
 		s.mu.Unlock()
 		return storage.Result{}, ErrUnknownPasswordMutation

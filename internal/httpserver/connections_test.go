@@ -351,6 +351,27 @@ func TestUpdateConnectionEndpointMapsValidationAndConflicts(t *testing.T) {
 			}(), wantStatus: 400, wantCode: "invalid_request",
 		},
 		{
+			name: "unsafe host name", body: func() map[string]any {
+				body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+				body["hostName"] = map[string]any{"action": "set", "value": "bad host"}
+				return body
+			}(), wantStatus: 400, wantCode: "connection_hostname_invalid",
+		},
+		{
+			name: "unsafe user", body: func() map[string]any {
+				body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+				body["user"] = map[string]any{"action": "set", "value": "bad user"}
+				return body
+			}(), wantStatus: 400, wantCode: "connection_user_invalid",
+		},
+		{
+			name: "unsafe port", body: func() map[string]any {
+				body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+				body["port"] = map[string]any{"action": "set", "value": 70000}
+				return body
+			}(), wantStatus: 400, wantCode: "connection_port_invalid",
+		},
+		{
 			name: "unknown password branch", body: connectionUpdateBody(map[string]any{
 				"kind": "agent_forwarding",
 			}), wantStatus: 400, wantCode: "invalid_request",

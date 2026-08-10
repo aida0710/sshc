@@ -236,6 +236,41 @@ func TestCreateConnectionCommitsEveryPasswordModeWithTheConfig(t *testing.T) {
 	}
 }
 
+func TestCreateConnectionContinuesWhenAnOrphanedVaultAssignmentAlreadyMatches(t *testing.T) {
+	harness := newConnectionCreateHarness(t)
+	if err := harness.secrets.SetCredential(secret.KindPassword, "office", "shared-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.secrets.AssignCredential(secret.KindPassword, "restored", "office"); err != nil {
+		t.Fatal(err)
+	}
+	vaultPath := filepath.Join(harness.workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
+	vaultBefore, err := os.ReadFile(vaultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := harness.service.CreateConnection(harness.secrets, harness.inventory, CreateConnectionRequest{
+		Alias: "restored", HostName: "restored.example", User: "deploy",
+		Authentication: CreateAuthentication{Kind: CreateAuthenticationSavedPassword, Credential: "office"},
+	})
+	if err != nil {
+		t.Fatalf("CreateConnection with matching orphaned assignment = %v", err)
+	}
+	if result.Identity != (HostIdentity{Path: "config", Alias: "restored"}) {
+		t.Fatalf("created identity = %#v", result.Identity)
+	}
+	if got := readFile(t, harness.workspace, "config"); !strings.Contains(got, "Host restored\n") {
+		t.Fatalf("connection was not created:\n%s", got)
+	}
+	vaultAfter, err := os.ReadFile(vaultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(vaultAfter, vaultBefore) {
+		t.Fatal("matching orphaned assignment resealed the vault")
+	}
+}
+
 func TestCreateConnectionRejectsInvalidOrConflictingInputsWithoutWriting(t *testing.T) {
 	tests := []struct {
 		name    string

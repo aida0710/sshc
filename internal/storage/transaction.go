@@ -52,6 +52,7 @@ var (
 	ErrMoveTargetExists    = errors.New("move target already exists")
 	ErrMissingSource       = errors.New("file to move or remove does not exist")
 	ErrIrreversibleRemoval = errors.New("a committed removal that kept no backup cannot be rolled back")
+	ErrAtomicWriteOnly     = errors.New("atomic commit accepts only reversible writes and directory creation")
 )
 
 // Precondition は、呼び出し側が新しい内容の前提とした状態を記録する。
@@ -223,6 +224,7 @@ type journalRecord struct {
 	StartedAt  time.Time      `json:"startedAt"`
 	FinishedAt *time.Time     `json:"finishedAt,omitempty"`
 	Committed  int            `json:"committed"`
+	Atomic     bool           `json:"atomic,omitempty"`
 	Entries    []journalEntry `json:"entries"`
 }
 
@@ -261,6 +263,27 @@ func NewManager(workspace *Workspace, now func() time.Time, random io.Reader) *M
 // は「完了させる」か「復元する」かを選べる。複数のファイルが関わるとき、それが
 // 唯一の誠実な選択肢である。
 func (m *Manager) Commit(request Request) (Result, error) {
+	return m.commit(request, false)
+}
+
+// CommitAtomic applies a write transaction with a narrower failure contract
+// than Commit: if any staged filesystem action fails, every action already
+// applied in this process is rolled back before the error is returned. It is
+// used when two persisted documents represent one logical value, such as an
+// SSH connection and its encrypted password assignment.
+func (m *Manager) CommitAtomic(request Request) (Result, error) {
+	if len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
+		return Result{}, ErrAtomicWriteOnly
+	}
+	for _, change := range request.Changes {
+		if change.SkipBackup {
+			return Result{}, ErrAtomicWriteOnly
+		}
+	}
+	return m.commit(request, true)
+}
+
+func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) {
 	if len(request.Changes)+len(request.Moves)+len(request.Removals)+
 		len(request.Directories)+len(request.RemoveDirectories) == 0 {
 		return Result{}, ErrNoChanges
@@ -522,10 +545,28 @@ func (m *Manager) Commit(request Request) (Result, error) {
 		Status:    statusStaging,
 		StartedAt: m.now().UTC(),
 		Entries:   entries,
+		Atomic:    rollbackOnError,
 	}
 	journalPath := filepath.Join(journalDirectory, identifier+".json")
 	if err := m.writeRecord(journalPath, record); err != nil {
 		return Result{}, err
+	}
+	result := Result{ID: identifier, BackupDir: backupDirectory, Written: written}
+	fail := func(commitErr error) (Result, error) {
+		if !rollbackOnError {
+			return result, commitErr
+		}
+		// Persist the in-process progress before attempting rollback. A target
+		// rename can succeed even when its following SyncDir or journal rewrite
+		// fails; without this retry, a failed rollback could leave the durable
+		// record behind the filesystem state.
+		if progressErr := m.writeRecord(journalPath, record); progressErr != nil {
+			commitErr = errors.Join(commitErr, progressErr)
+		}
+		if rollbackErr := m.rollbackRecord(&record, journalPath); rollbackErr != nil {
+			return result, errors.Join(commitErr, rollbackErr)
+		}
+		return Result{}, commitErr
 	}
 
 	// ディレクトリはここで作る。バリデータがリクエストを受理したあとなので、拒否
@@ -539,8 +580,9 @@ func (m *Manager) Commit(request Request) (Result, error) {
 			continue
 		}
 		if err := m.workspace.EnsureDirectory(entry.Path); err != nil {
-			return Result{}, err
+			return fail(err)
 		}
+		record.Committed = index + 1
 	}
 
 	// 何かが置き換えられたり unlink されたりする前に、以前の内容をコピーする。移動に
@@ -562,18 +604,18 @@ func (m *Manager) Commit(request Request) (Result, error) {
 		}
 		backupPath := filepath.Join(backupDirectory, relative)
 		if err := m.workspace.EnsureDirectory(filepath.Dir(backupPath)); err != nil {
-			return Result{}, err
+			return fail(err)
 		}
 		contents := previousContents[index]
 		if m.Seal != nil {
 			sealed, err := m.Seal(contents)
 			if err != nil {
-				return Result{}, err
+				return fail(err)
 			}
 			contents = sealed
 		}
 		if err := m.writeFile(backupPath, contents, fs.FileMode(entry.Mode)); err != nil {
-			return Result{}, err
+			return fail(err)
 		}
 		entry.Backup = backupPath
 	}
@@ -591,22 +633,22 @@ func (m *Manager) Commit(request Request) (Result, error) {
 			stagedContents[index],
 		)
 		if err != nil {
-			return Result{}, err
+			return fail(err)
 		}
 		entry.Temp = temporaryPath
 	}
 	record.Status = statusStaged
 	if err := m.writeRecord(journalPath, record); err != nil {
-		return Result{}, err
+		return fail(err)
 	}
 
 	if err := m.commitStaged(&record, journalPath); err != nil {
-		return Result{}, err
+		return fail(err)
 	}
 	if err := m.finish(&record, journalPath, statusCompleted); err != nil {
-		return Result{}, err
+		return fail(err)
 	}
-	return Result{ID: identifier, BackupDir: backupDirectory, Written: written}, nil
+	return result, nil
 }
 
 func (m *Manager) commitStaged(record *journalRecord, journalPath string) error {
@@ -618,6 +660,7 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 			if err := fileSystem.Rename(entry.Path, entry.Target); err != nil {
 				return err
 			}
+			record.Committed = index + 1
 			if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
 				return err
 			}
@@ -628,6 +671,7 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 			if err := fileSystem.Remove(entry.Path); err != nil {
 				return err
 			}
+			record.Committed = index + 1
 			if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
 				return err
 			}
@@ -635,6 +679,7 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 			if err := m.workspace.EnsureDirectory(entry.Path); err != nil {
 				return err
 			}
+			record.Committed = index + 1
 			if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
 				return err
 			}
@@ -642,6 +687,7 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 			if err := fileSystem.Remove(entry.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
+			record.Committed = index + 1
 			if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
 				return err
 			}
@@ -649,11 +695,11 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 			if err := fileSystem.Rename(entry.Temp, entry.Path); err != nil {
 				return err
 			}
+			record.Committed = index + 1
 			if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
 				return err
 			}
 		}
-		record.Committed = index + 1
 		record.Entries[index].Temp = ""
 		if err := m.writeRecord(journalPath, *record); err != nil {
 			return err

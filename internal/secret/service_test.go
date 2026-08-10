@@ -974,6 +974,123 @@ func TestPasswordMutationRemoveDeletesDedicatedAndOnlyUnassignsReusable(t *testi
 	}
 }
 
+func TestPasswordMutationRemovePreservesAnUnrelatedAliasNamedCredential(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "edge", "unrelated-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "assigned-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignCredential(secret.KindPassword, "edge", "office"); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	_, err = service.WithPasswordMutation(secret.PasswordMutation{
+		Kind: secret.PasswordMutationRemove, Alias: "edge",
+	}, func(change storage.Change) (storage.Result, error) {
+		return manager.Commit(storage.Request{Operation: "test.password-remove", Changes: []storage.Change{change}})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := service.Credentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uses, exists := listed[secret.KindPassword]["edge"]; !exists || len(uses) != 0 {
+		t.Fatalf("unrelated alias-named credential = %#v, exists %t", uses, exists)
+	}
+}
+
+func TestPasswordMutationNewSharedRefusesAnExistingCredential(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "must-survive"); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	_, err := service.WithPasswordMutation(secret.PasswordMutation{
+		Kind: secret.PasswordMutationNewShared, Alias: "edge", Credential: "office", Password: "replacement",
+	}, func(change storage.Change) (storage.Result, error) {
+		called = true
+		return storage.Result{}, nil
+	})
+	if !errors.Is(err, secret.ErrCredentialAlreadyExists) {
+		t.Fatalf("existing new-shared mutation = %v, want ErrCredentialAlreadyExists", err)
+	}
+	if called {
+		t.Error("commit callback ran for a colliding credential")
+	}
+	if err := service.AssignCredential(secret.KindPassword, "probe", "office"); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.PasswordFor("probe"); got != "must-survive" {
+		t.Fatalf("existing credential was overwritten: %q", got)
+	}
+}
+
+func TestPasswordMutationRejectsSemanticNoOps(t *testing.T) {
+	tests := []struct {
+		name     string
+		prepare  func(*testing.T, *secret.Service)
+		mutation secret.PasswordMutation
+	}{
+		{
+			name: "same dedicated password",
+			prepare: func(t *testing.T, service *secret.Service) {
+				t.Helper()
+				if err := service.Set("edge", "unchanged"); err != nil {
+					t.Fatal(err)
+				}
+			},
+			mutation: secret.PasswordMutation{Kind: secret.PasswordMutationDedicated, Alias: "edge", Password: "unchanged"},
+		},
+		{
+			name: "same reusable assignment",
+			prepare: func(t *testing.T, service *secret.Service) {
+				t.Helper()
+				if err := service.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
+					t.Fatal(err)
+				}
+				if err := service.AssignCredential(secret.KindPassword, "edge", "office"); err != nil {
+					t.Fatal(err)
+				}
+			},
+			mutation: secret.PasswordMutation{Kind: secret.PasswordMutationSaved, Alias: "edge", Credential: "office"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service, _ := newService(t)
+			if err := service.Initialise(passphrase); err != nil {
+				t.Fatal(err)
+			}
+			test.prepare(t, service)
+			called := false
+			_, err := service.WithPasswordMutation(test.mutation, func(change storage.Change) (storage.Result, error) {
+				called = true
+				return storage.Result{}, nil
+			})
+			if !errors.Is(err, secret.ErrNoPasswordMutation) {
+				t.Fatalf("WithPasswordMutation = %v, want ErrNoPasswordMutation", err)
+			}
+			if called {
+				t.Error("commit callback ran for a semantic no-op")
+			}
+		})
+	}
+}
+
 func TestPasswordMutationRemoveRejectsAnUnassignedAlias(t *testing.T) {
 	service, _ := newService(t)
 	if err := service.Initialise(passphrase); err != nil {

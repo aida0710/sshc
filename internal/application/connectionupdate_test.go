@@ -175,6 +175,117 @@ func TestUpdateConnectionRejectsInvalidOrEmptyChanges(t *testing.T) {
 	}
 }
 
+func TestUpdateConnectionRejectsDirectSetToTheExistingValues(t *testing.T) {
+	const before = "Host edge\n\tHostName edge.example\n\tUser deploy\n\tPort 22\n"
+	harness := newConnectionUpdateHarness(t, before)
+	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
+		HostName: &ConnectionStringChange{Action: ConnectionChangeSet, Value: "edge.example"},
+		User:     &ConnectionStringChange{Action: ConnectionChangeSet, Value: "deploy"},
+		Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 22},
+		Password: unchangedPassword(),
+	})
+	if !errors.Is(err, ErrNoConnectionUpdate) {
+		t.Fatalf("UpdateConnection = %v, want ErrNoConnectionUpdate", err)
+	}
+}
+
+func TestUpdateConnectionRejectsAFileOutsideTheResolvedGraph(t *testing.T) {
+	const before = "Host edge\n\tHostName edge.example\n"
+	harness := newConnectionUpdateHarness(t, "Host root\n")
+	outside := filepath.Join(harness.workspace.Root(), "outside.conf")
+	if err := os.WriteFile(outside, []byte(before), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "outside.conf", Alias: "edge"}, Base: before,
+		Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
+		Password: unchangedPassword(),
+	})
+	if !errors.Is(err, ErrHostNotFound) {
+		t.Fatalf("UpdateConnection outside graph = %v, want ErrHostNotFound", err)
+	}
+	if got := readFile(t, harness.workspace, "outside.conf"); got != before {
+		t.Fatalf("outside graph file changed: %q", got)
+	}
+}
+
+type failRenameOnceFileSystem struct {
+	storage.FileSystem
+	path string
+	err  error
+}
+
+func (f *failRenameOnceFileSystem) Rename(oldPath, newPath string) error {
+	if f.err != nil && filepath.Clean(newPath) == filepath.Clean(f.path) {
+		err := f.err
+		f.err = nil
+		return err
+	}
+	return f.FileSystem.Rename(oldPath, newPath)
+}
+
+func TestUpdateConnectionRollsBackWhenTheSecondFileCommitFails(t *testing.T) {
+	const before = "Host edge\n\tHostName edge.example\n\tPort 22\n"
+	fileSystem := &failRenameOnceFileSystem{FileSystem: storage.OSFileSystem{}}
+	workspace, err := storage.NewWorkspace(fileSystem, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.EnsureDirectory(workspace.Root()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(before), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeKeyPair(t, workspace, "id_update")
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	service := NewService(workspace, manager)
+	secrets := secret.NewService(workspace, manager, time.Now)
+	manager.Seal = secrets.SealBackup
+	manager.Unseal = secrets.OpenBackup
+	if err := secrets.Initialise(connectionUpdatePassphrase); err != nil {
+		t.Fatal(err)
+	}
+	inventory := keyInventory(t, workspace)
+	vaultPath := filepath.Join(workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
+	vaultBefore, err := os.ReadFile(vaultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileSystem.path = vaultPath
+	fileSystem.err = errors.New("injected second rename failure")
+
+	_, err = service.UpdateConnection(secrets, inventory, UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
+		Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
+		Password: UpdateConnectionPassword{Kind: UpdatePasswordDedicated, Password: "must-not-publish"},
+	})
+	if err == nil {
+		t.Fatal("UpdateConnection unexpectedly succeeded")
+	}
+	if got := readFile(t, workspace, "config"); got != before {
+		t.Fatalf("config survived failed rollback as %q", got)
+	}
+	vaultAfter, readErr := os.ReadFile(vaultPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(vaultAfter, vaultBefore) {
+		t.Fatal("sealed vault changed after failed transaction")
+	}
+	if got := secrets.PasswordFor("edge"); got != "" {
+		t.Fatalf("memory vault published failed password: %q", got)
+	}
+	pending, pendingErr := manager.Pending()
+	if pendingErr != nil {
+		t.Fatal(pendingErr)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("rollback left pending transactions: %#v", pending)
+	}
+}
+
 func TestUpdateConnectionReportsAStaleBaseAsAConflict(t *testing.T) {
 	const disk = "Host edge\n\tHostName disk.example\n"
 	harness := newConnectionUpdateHarness(t, disk)
@@ -298,6 +409,74 @@ func TestUpdateConnectionCanChangeOnlyTheStoredPassword(t *testing.T) {
 	}
 	if len(result.Written) != 0 || len(result.Preview.Diffs) != 0 {
 		t.Errorf("password-only public result exposes vault path: %#v", result)
+	}
+}
+
+func TestUpdateConnectionSkipsASemanticallyUnchangedPasswordAssignment(t *testing.T) {
+	const before = "Host edge\n\tHostName edge.example\n\tPort 22\n"
+	harness := newConnectionUpdateHarness(t, before)
+	if err := harness.secrets.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.secrets.AssignCredential(secret.KindPassword, "edge", "office"); err != nil {
+		t.Fatal(err)
+	}
+	vaultPath := filepath.Join(harness.workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
+	vaultBefore, err := os.ReadFile(vaultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
+		Password: UpdateConnectionPassword{Kind: UpdatePasswordSaved, Credential: "office"},
+	}
+	if _, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, request); !errors.Is(err, ErrNoConnectionUpdate) {
+		t.Fatalf("same assignment = %v, want ErrNoConnectionUpdate", err)
+	}
+	request.Port = &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222}
+	if _, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, request); err != nil {
+		t.Fatalf("config change with same assignment = %v", err)
+	}
+	if got := readFile(t, harness.workspace, "config"); !strings.Contains(got, "Port 2222") {
+		t.Fatalf("config-only part was not saved: %q", got)
+	}
+	vaultAfter, err := os.ReadFile(vaultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(vaultAfter, vaultBefore) {
+		t.Fatal("same assignment resealed the vault")
+	}
+}
+
+func TestUpdateConnectionNewSharedCollisionChangesNeitherConfigNorVault(t *testing.T) {
+	const before = "Host edge\n\tHostName edge.example\n\tPort 22\n"
+	harness := newConnectionUpdateHarness(t, before)
+	if err := harness.secrets.SetCredential(secret.KindPassword, "office", "must-survive"); err != nil {
+		t.Fatal(err)
+	}
+	vaultPath := filepath.Join(harness.workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
+	vaultBefore, err := os.ReadFile(vaultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
+		Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
+		Password: UpdateConnectionPassword{Kind: UpdatePasswordNewShared, Credential: "office", Password: "replacement"},
+	})
+	if !errors.Is(err, secret.ErrCredentialAlreadyExists) {
+		t.Fatalf("new shared collision = %v, want ErrCredentialAlreadyExists", err)
+	}
+	if got := readFile(t, harness.workspace, "config"); got != before {
+		t.Fatalf("collision changed config: %q", got)
+	}
+	vaultAfter, err := os.ReadFile(vaultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(vaultAfter, vaultBefore) {
+		t.Fatal("collision changed sealed vault")
 	}
 }
 

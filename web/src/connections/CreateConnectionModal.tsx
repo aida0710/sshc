@@ -17,6 +17,7 @@ import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { control, Field, fieldLabel, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
+import { validHostNameInput } from "./hostValidation";
 import { Button, Notice } from "../ui/surface";
 
 type AuthenticationKind = CreateConnectionAuthentication["kind"];
@@ -55,8 +56,6 @@ type CreateConnectionModalProps = {
 type TouchedField = "alias" | "hostName" | "user" | "port";
 
 const aliasPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const hostPattern = /^[A-Za-z0-9]([A-Za-z0-9._:-]*[A-Za-z0-9])?$/;
-
 function optional(value: string): string | undefined {
   return value === "" ? undefined : value;
 }
@@ -156,7 +155,7 @@ export function CreateConnectionModal({
       : t("conn.createAliasInvalid");
   const hostError = hostName === ""
     ? t("conn.createHostRequired")
-    : hostName.length <= 255 && hostPattern.test(hostName)
+    : validHostNameInput(hostName)
       ? ""
       : t("conn.createHostInvalid");
   const userError = user !== "" && /[\s\p{Cc}]/u.test(user) ? t("conn.createUserInvalid") : "";

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -290,6 +291,222 @@ func TestCommitFailureWhileStagingLeavesEveryFileUntouched(t *testing.T) {
 	}
 	// 何も rename されなかったので、Task 7 の復旧テストは、ファイルをひとつも復元
 	// せずにこれを巻き戻せる。
+}
+
+func TestCommitAtomicRollsBackAppliedWritesForLateFailures(t *testing.T) {
+	tests := []struct {
+		name   string
+		failOn func(root, first, second string) func(string, string) error
+	}{
+		{
+			name: "second target rename",
+			failOn: func(_, _, second string) func(string, string) error {
+				failed := false
+				return func(operation, path string) error {
+					if !failed && operation == "rename" && path == second {
+						failed = true
+						return errors.New("second rename failed")
+					}
+					return nil
+				}
+			},
+		},
+		{
+			name: "target directory sync",
+			failOn: func(root, _, _ string) func(string, string) error {
+				failed := false
+				return func(operation, path string) error {
+					if !failed && operation == "syncDir" && path == root {
+						failed = true
+						return errors.New("target sync failed")
+					}
+					return nil
+				}
+			},
+		},
+		{
+			name: "journal progress update",
+			failOn: func(root, _, _ string) func(string, string) error {
+				journalRenames := 0
+				journalDirectory := filepath.Join(root, "sshc", journalDirectoryName)
+				return func(operation, path string) error {
+					if operation == "rename" && filepath.Dir(path) == journalDirectory {
+						journalRenames++
+						if journalRenames == 3 {
+							return errors.New("journal progress update failed")
+						}
+					}
+					return nil
+				}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			workspace := newTestWorkspace(t)
+			first := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)
+			second := writeWorkspaceFile(t, workspace, "second.conf", "second before\n", 0o600)
+			workspace.fileSystem = faultyFileSystem{
+				FileSystem: OSFileSystem{},
+				failOn:     test.failOn(workspace.Root(), first, second),
+			}
+			manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x41}, 4096)))
+			_, err := manager.CommitAtomic(Request{
+				Operation: "connection.update",
+				Changes: []Change{
+					{Path: first, Contents: []byte("first after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("first before\n"))}},
+					{Path: second, Contents: []byte("second after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("second before\n"))}},
+				},
+			})
+			if err == nil {
+				t.Fatal("CommitAtomic unexpectedly succeeded")
+			}
+			for path, want := range map[string]string{first: "first before\n", second: "second before\n"} {
+				contents, readErr := os.ReadFile(path)
+				if readErr != nil || string(contents) != want {
+					t.Fatalf("%s = %q, %v; want %q", path, contents, readErr, want)
+				}
+			}
+			pending, pendingErr := manager.Pending()
+			if pendingErr != nil {
+				t.Fatal(pendingErr)
+			}
+			if len(pending) != 0 {
+				t.Fatalf("pending after atomic rollback = %#v", pending)
+			}
+		})
+	}
+}
+
+func TestCommitAtomicRecoveryReconstructsProgressAfterRollbackAlsoFails(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	first := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)
+	second := writeWorkspaceFile(t, workspace, "second.conf", "second before\n", 0o600)
+	journalRenames := 0
+	firstTargetRenames := 0
+	failure := errors.New("injected nested recovery failure")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation != "rename" {
+				return nil
+			}
+			if filepath.Dir(path) == filepath.Join(workspace.Root(), "sshc", journalDirectoryName) {
+				journalRenames++
+				// The third journal replacement records the first applied target.
+				// The fourth is CommitAtomic's attempt to durably record progress
+				// before rolling back.
+				if journalRenames == 3 || journalRenames == 4 {
+					return failure
+				}
+			}
+			if path == first {
+				firstTargetRenames++
+				if firstTargetRenames == 2 {
+					return failure
+				}
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x42}, 4096)))
+	result, err := manager.CommitAtomic(Request{
+		Operation: "connection.update",
+		Changes: []Change{
+			{Path: first, Contents: []byte("first after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("first before\n"))}},
+			{Path: second, Contents: []byte("second after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("second before\n"))}},
+		},
+	})
+	if !errors.Is(err, failure) || result.ID == "" {
+		t.Fatalf("CommitAtomic = %#v, %v", result, err)
+	}
+	if got, readErr := os.ReadFile(first); readErr != nil || string(got) != "first after\n" {
+		t.Fatalf("first after failed rollback = %q, %v", got, readErr)
+	}
+	journalPath := filepath.Join(workspace.Root(), "sshc", journalDirectoryName, result.ID+".json")
+	journalBytes, readErr := os.ReadFile(journalPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var stale journalRecord
+	if err := json.Unmarshal(journalBytes, &stale); err != nil {
+		t.Fatal(err)
+	}
+	if stale.Committed != 0 {
+		t.Fatalf("fixture journal committed = %d, want stale 0", stale.Committed)
+	}
+
+	if err := manager.Rollback(result.ID); err != nil {
+		t.Fatalf("later Rollback = %v", err)
+	}
+	for path, want := range map[string]string{first: "first before\n", second: "second before\n"} {
+		contents, readErr := os.ReadFile(path)
+		if readErr != nil || string(contents) != want {
+			t.Fatalf("%s = %q, %v; want %q", path, contents, readErr, want)
+		}
+	}
+	pending, err := manager.Pending()
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("pending after later rollback = %#v, %v", pending, err)
+	}
+}
+
+func TestAtomicPendingTransactionCanOnlyBeRolledBack(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	first := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)
+	second := writeWorkspaceFile(t, workspace, "second.conf", "second before\n", 0o600)
+	historyFailureInjected := false
+	secondTargetRenames := 0
+	failure := errors.New("injected completion and rollback failure")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation != "rename" {
+				return nil
+			}
+			if !historyFailureInjected && filepath.Dir(path) == filepath.Join(workspace.Root(), "sshc", historyDirectoryName) {
+				historyFailureInjected = true
+				return failure
+			}
+			if path == second {
+				secondTargetRenames++
+				if secondTargetRenames == 2 {
+					return failure
+				}
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x43}, 4096)))
+	result, err := manager.CommitAtomic(Request{
+		Operation: "connection.update",
+		Changes: []Change{
+			{Path: first, Contents: []byte("first after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("first before\n"))}},
+			{Path: second, Contents: []byte("second after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("second before\n"))}},
+		},
+	})
+	if !errors.Is(err, failure) || result.ID == "" {
+		t.Fatalf("CommitAtomic = %#v, %v", result, err)
+	}
+	pending, err := manager.Pending()
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("Pending = %#v, %v", pending, err)
+	}
+	if pending[0].CanComplete {
+		t.Fatal("atomic pending transaction was offered as completable")
+	}
+	if err := manager.Complete(result.ID); !errors.Is(err, ErrCannotComplete) {
+		t.Fatalf("Complete(atomic) = %v, want ErrCannotComplete", err)
+	}
+	for path, want := range map[string]string{first: "first after\n", second: "second after\n"} {
+		contents, readErr := os.ReadFile(path)
+		if readErr != nil || string(contents) != want {
+			t.Fatalf("rejected Complete changed %s to %q, %v", path, contents, readErr)
+		}
+	}
+	if err := manager.Rollback(result.ID); err != nil {
+		t.Fatalf("Rollback(atomic) = %v", err)
+	}
 }
 
 // faultyFileSystem は、それ以外は本物のファイルシステムに失敗をひとつ注入する。
