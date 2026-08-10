@@ -1261,3 +1261,208 @@ func TestPasswordMutationUsesTheRekeyedVaultAsItsBaseline(t *testing.T) {
 		t.Errorf("reopened password = %q", got)
 	}
 }
+
+func TestConnectionSecretsMutationCommitsDedicatedKeyPassphraseWithoutChangingSharedUsers(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "team", "shared-old"); err != nil {
+		t.Fatal(err)
+	}
+	for _, subject := range []string{"keys/id_a", "keys/id_b"} {
+		if err := service.AssignCredential(secret.KindKeyPassphrase, subject, "team"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	callbackCalls := 0
+	_, err = service.WithConnectionSecretsMutation(secret.ConnectionSecretsMutation{
+		KeyPassphrase: &secret.KeyPassphraseMutation{RelativePath: "keys/id_a", Passphrase: "dedicated-new"},
+	}, func(change storage.Change) (storage.Result, error) {
+		callbackCalls++
+		if bytes.Contains(change.Contents, []byte("dedicated-new")) {
+			t.Error("the staged vault contains the passphrase in clear")
+		}
+		return manager.Commit(storage.Request{Operation: "test.connection-secrets", Changes: []storage.Change{change}})
+	})
+	if err != nil {
+		t.Fatalf("WithConnectionSecretsMutation = %v", err)
+	}
+	if callbackCalls != 1 {
+		t.Fatalf("commit callback calls = %d, want 1", callbackCalls)
+	}
+	if got, ok := service.KeyPassphraseFor("keys/id_a"); !ok || got != "dedicated-new" {
+		t.Fatalf("id_a = %q, %v", got, ok)
+	}
+	if got, ok := service.KeyPassphraseFor("keys/id_b"); !ok || got != "shared-old" {
+		t.Fatalf("id_b = %q, %v; shared user changed", got, ok)
+	}
+	if got := service.DedicatedKeyPassphrases(); !slices.Equal(got, []string{"keys/id_a"}) {
+		t.Fatalf("DedicatedKeyPassphrases = %#v", got)
+	}
+
+	reopened := mustReopen(t, home)
+	if err := reopened.Unlock(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := reopened.KeyPassphraseFor("keys/id_a"); !ok || got != "dedicated-new" {
+		t.Fatalf("reopened id_a = %q, %v", got, ok)
+	}
+}
+
+func TestConnectionSecretsMutationSealsPasswordAndKeyTogether(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	callbackCalls := 0
+	_, err = service.WithConnectionSecretsMutation(secret.ConnectionSecretsMutation{
+		Password: &secret.PasswordMutation{
+			Kind: secret.PasswordMutationDedicated, Alias: "edge", Password: "account-secret",
+		},
+		KeyPassphrase: &secret.KeyPassphraseMutation{
+			RelativePath: "keys/id_edge", Passphrase: "key-secret",
+		},
+	}, func(change storage.Change) (storage.Result, error) {
+		callbackCalls++
+		return manager.Commit(storage.Request{Operation: "test.connection-secrets", Changes: []storage.Change{change}})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if callbackCalls != 1 {
+		t.Fatalf("commit callback calls = %d, want one sealed write", callbackCalls)
+	}
+	if got := service.PasswordFor("edge"); got != "account-secret" {
+		t.Fatalf("account password = %q", got)
+	}
+	if got, ok := service.KeyPassphraseFor("keys/id_edge"); !ok || got != "key-secret" {
+		t.Fatalf("key passphrase = %q, %v", got, ok)
+	}
+}
+
+func TestConnectionSecretsMutationRejectsSameDedicatedKeyPassphrase(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	mutation := secret.ConnectionSecretsMutation{KeyPassphrase: &secret.KeyPassphraseMutation{
+		RelativePath: "keys/id_a", Passphrase: "unchanged",
+	}}
+	if _, err := service.WithConnectionSecretsMutation(mutation, func(change storage.Change) (storage.Result, error) {
+		return manager.Commit(storage.Request{Operation: "test.connection-secrets", Changes: []storage.Change{change}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	_, err = service.WithConnectionSecretsMutation(mutation, func(storage.Change) (storage.Result, error) {
+		called = true
+		return storage.Result{}, nil
+	})
+	if !errors.Is(err, secret.ErrNoPasswordMutation) {
+		t.Fatalf("same value mutation = %v, want ErrNoPasswordMutation", err)
+	}
+	if called {
+		t.Error("commit callback ran for a semantic no-op")
+	}
+}
+
+func TestConnectionSecretsMutationRequiresAnUnlockedExistingVault(t *testing.T) {
+	service, _ := newService(t)
+	called := false
+	_, err := service.WithConnectionSecretsMutation(secret.ConnectionSecretsMutation{
+		KeyPassphrase: &secret.KeyPassphraseMutation{RelativePath: "keys/id_a", Passphrase: "secret"},
+	}, func(storage.Change) (storage.Result, error) {
+		called = true
+		return storage.Result{}, nil
+	})
+	if !errors.Is(err, secret.ErrLocked) {
+		t.Fatalf("locked mutation = %v, want ErrLocked", err)
+	}
+	if called {
+		t.Error("commit callback ran while locked")
+	}
+	if got := service.DedicatedKeyPassphrases(); got != nil {
+		t.Fatalf("locked dedicated subjects = %#v, want nil", got)
+	}
+}
+
+func TestConnectionSecretsMutationFailurePublishesNeitherKeyMemoryNorDisk(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(vaultPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("commit refused")
+	_, err = service.WithConnectionSecretsMutation(secret.ConnectionSecretsMutation{
+		KeyPassphrase: &secret.KeyPassphraseMutation{RelativePath: "keys/id_a", Passphrase: "must-not-survive"},
+	}, func(storage.Change) (storage.Result, error) {
+		return storage.Result{}, wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("WithConnectionSecretsMutation = %v, want commit error", err)
+	}
+	if _, ok := service.KeyPassphraseFor("keys/id_a"); ok {
+		t.Error("failed mutation was published in memory")
+	}
+	after, err := os.ReadFile(vaultPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Error("failed mutation changed the sealed vault on disk")
+	}
+}
+
+func TestDedicatedKeyPassphraseRelocationPersists(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	_, err = service.WithConnectionSecretsMutation(secret.ConnectionSecretsMutation{
+		KeyPassphrase: &secret.KeyPassphraseMutation{RelativePath: "keys/work/id_a", Passphrase: "dedicated"},
+	}, func(change storage.Change) (storage.Result, error) {
+		return manager.Commit(storage.Request{Operation: "test.connection-secrets", Changes: []storage.Change{change}})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RelocateKeyPassphrases(map[string]string{
+		"keys/work/id_a": "keys/client/id_a",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.DedicatedKeyPassphrases(); !slices.Equal(got, []string{"keys/client/id_a"}) {
+		t.Fatalf("dedicated subjects after relocation = %#v", got)
+	}
+	reopened := mustReopen(t, home)
+	if err := reopened.Unlock(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := reopened.KeyPassphraseFor("keys/client/id_a"); !ok || got != "dedicated" {
+		t.Fatalf("reopened relocated passphrase = %q, %v", got, ok)
+	}
+}
