@@ -48,11 +48,19 @@ type KeysScreenProps = {
 
 type ScreenState = "loading" | "ready" | "error";
 
-// storedFor は、この鍵が既に指しているパスフレーズ(あれば)だ。vault は
-// 名前とその使い道には答えるが値には決して答えないので、これが画面に
-// 分かる唯一のことだ——そしてフィールドを空欄のままにしてよいと言うには十分だ。
-function storedFor(phrases: Credential[], item: KeyItem): Credential | undefined {
+// namedStoredFor と dedicatedStoredFor は、この鍵が既に指している保存値の
+// 種類だけを返す。vault は名前・用途・鍵専用 subject には答えるが、値には
+// 決して答えない。それでもフィールドを空欄のままにしてよいとは判断できる。
+function namedStoredFor(phrases: Credential[], item: KeyItem): Credential | undefined {
   return phrases.find((credential) => credential.uses.includes(item.relativePath));
+}
+
+function dedicatedStoredFor(paths: string[], item: KeyItem): boolean {
+  return paths.includes(item.relativePath);
+}
+
+function hasStoredFor(phrases: Credential[], dedicatedPaths: string[], item: KeyItem): boolean {
+  return namedStoredFor(phrases, item) !== undefined || dedicatedStoredFor(dedicatedPaths, item);
 }
 
 // certificateLines は OpenSSH の証明書を、使えるかどうかを決める
@@ -199,6 +207,7 @@ export function KeysScreen({
   const [registering, setRegistering] = useState<KeyItem | null>(null);
   const [managingPassphrase, setManagingPassphrase] = useState<KeyItem | null>(null);
   const [phrases, setPhrases] = useState<Credential[]>([]);
+  const [dedicatedPhrasePaths, setDedicatedPhrasePaths] = useState<string[]>([]);
   const [chosenPhrase, setChosenPhrase] = useState("");
   const [storedPhraseName, setStoredPhraseName] = useState("");
   const [storedPhraseSecret, setStoredPhraseSecret] = useState("");
@@ -324,6 +333,7 @@ export function KeysScreen({
     setAgentLifetime(0);
     setChosenPhrase("");
     setPhrases([]);
+    setDedicatedPhrasePaths([]);
     setRegistering(null);
   }
 
@@ -333,10 +343,17 @@ export function KeysScreen({
   // 表示される: このフォームは vault がなくても動作するし、以前からそうだった。
   async function loadPhrases() {
     try {
+      const status = await secrets.passwordVault();
+      setDedicatedPhrasePaths(status.dedicatedKeyPassphrases);
+      if (!status.unlocked) {
+        setPhrases([]);
+        return;
+      }
       const listed = await secrets.credentials();
       setPhrases(listed.credentials.filter((credential) => credential.kind === "key_passphrase"));
     } catch {
       setPhrases([]);
+      setDedicatedPhrasePaths([]);
     }
   }
 
@@ -344,6 +361,7 @@ export function KeysScreen({
     try {
       const listed = await secrets.assignCredential("key_passphrase", item.relativePath, chosenPhrase);
       setPhrases(listed.credentials.filter((credential) => credential.kind === "key_passphrase"));
+      setDedicatedPhrasePaths((current) => current.filter((path) => path !== item.relativePath));
       setChosenPhrase("");
     } catch {
       setFailure(t("keys.assignPassphraseFailed"));
@@ -354,6 +372,8 @@ export function KeysScreen({
     setStoredPhraseName("");
     setStoredPhraseSecret("");
     setChosenPhrase("");
+    setPhrases([]);
+    setDedicatedPhrasePaths([]);
     setManagingPassphrase(null);
   }
 
@@ -373,6 +393,7 @@ export function KeysScreen({
       await secrets.storeCredential("key_passphrase", storedPhraseName, storedPhraseSecret);
       const listed = await secrets.assignCredential("key_passphrase", item.relativePath, storedPhraseName);
       setPhrases(listed.credentials.filter((credential) => credential.kind === "key_passphrase"));
+      setDedicatedPhrasePaths((current) => current.filter((path) => path !== item.relativePath));
       closeStoredPassphraseForm();
     } catch {
       // 値は成功時にも失敗時にもDOMから消す。名前は、入力を直せるよう
@@ -387,6 +408,7 @@ export function KeysScreen({
     try {
       const listed = await secrets.unassignCredential("key_passphrase", item.relativePath);
       setPhrases(listed.credentials.filter((credential) => credential.kind === "key_passphrase"));
+      setDedicatedPhrasePaths((current) => current.filter((path) => path !== item.relativePath));
       setChosenPhrase("");
     } catch {
       setFailure(t("keys.unassignPassphraseFailed"));
@@ -760,10 +782,12 @@ export function KeysScreen({
             {t("keys.storedPassphraseHeading", { path: managingPassphrase.relativePath })}
           </h3>
           <p className={hintText}>{t("keys.storedPassphraseNote")}</p>
-          {storedFor(phrases, managingPassphrase) === undefined ? null : (
+          {!hasStoredFor(phrases, dedicatedPhrasePaths, managingPassphrase) ? null : (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-card p-3">
               <p className="grow text-sm text-ink">
-                {t("keys.usesStoredPassphrase", { name: storedFor(phrases, managingPassphrase)!.name })}
+                {dedicatedStoredFor(dedicatedPhrasePaths, managingPassphrase)
+                  ? t("keys.usesDedicatedPassphrase")
+                  : t("keys.usesStoredPassphrase", { name: namedStoredFor(phrases, managingPassphrase)!.name })}
               </p>
               <button type="button" className={secondaryAction} onClick={() => void unassignPhrase(managingPassphrase)}>
                 {t("keys.unassignPassphrase")}
@@ -1017,7 +1041,7 @@ export function KeysScreen({
               // ユーザーが見分けられない。
               <Row
                 label={t("keys.keyPassphrase")}
-                {...(storedFor(phrases, registering) === undefined ? {} : { hint: t("keys.typedWins") })}
+                {...(!hasStoredFor(phrases, dedicatedPhrasePaths, registering) ? {} : { hint: t("keys.typedWins") })}
               >
                 <input
                   className={control}
@@ -1046,9 +1070,11 @@ export function KeysScreen({
             アカウントパスワードを提供すれば、リモートホストのログイン資格情報を
             ローカルの鍵に渡すことになる。だからこそ vault は 2 つの名前空間を分けている。
           */}
-          {registering.encrypted && storedFor(phrases, registering) !== undefined && (
+          {registering.encrypted && hasStoredFor(phrases, dedicatedPhrasePaths, registering) && (
             <p className={hintText}>
-              {t("keys.usesStoredPassphrase", { name: storedFor(phrases, registering)!.name })}
+              {dedicatedStoredFor(dedicatedPhrasePaths, registering)
+                ? t("keys.usesDedicatedPassphrase")
+                : t("keys.usesStoredPassphrase", { name: namedStoredFor(phrases, registering)!.name })}
             </p>
           )}
           {registering.encrypted && phrases.length > 0 && (
