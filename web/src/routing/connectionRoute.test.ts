@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  checksExpandedForTab,
+  connectionAreaForTab,
   connectionLocation,
   parseConnectionSearch,
+  tabForConnectionArea,
   type ConnectionTarget,
 } from "./connectionRoute";
 
@@ -56,5 +59,25 @@ describe("connection routes", () => {
 
   it("returns the section root for an absent target", () => {
     expect(connectionLocation(null)).toBe("/connections");
+  });
+
+  it("maps every legacy tab to the three visible connection areas", () => {
+    expect(connectionAreaForTab("Basic")).toEqual({ area: "Basic", advanced: "Jump" });
+    expect(connectionAreaForTab("Diagnostics")).toEqual({ area: "Basic", advanced: "Jump" });
+    expect(connectionAreaForTab("Effective")).toEqual({ area: "Analysis", advanced: "Jump" });
+    expect(connectionAreaForTab("Jump")).toEqual({ area: "Advanced", advanced: "Jump" });
+    expect(connectionAreaForTab("Advanced")).toEqual({ area: "Advanced", advanced: "Directives" });
+    expect(connectionAreaForTab("Raw")).toEqual({ area: "Advanced", advanced: "Raw" });
+  });
+
+  it("keeps diagnostics as an explicit expanded Basic state and emits compatible tabs", () => {
+    expect(checksExpandedForTab("Basic")).toBe(false);
+    expect(checksExpandedForTab("Diagnostics")).toBe(true);
+    expect(tabForConnectionArea("Basic", "Raw", false)).toBe("Basic");
+    expect(tabForConnectionArea("Basic", "Raw", true)).toBe("Diagnostics");
+    expect(tabForConnectionArea("Analysis", "Jump", false)).toBe("Effective");
+    expect(tabForConnectionArea("Advanced", "Jump", false)).toBe("Jump");
+    expect(tabForConnectionArea("Advanced", "Directives", false)).toBe("Advanced");
+    expect(tabForConnectionArea("Advanced", "Raw", false)).toBe("Raw");
   });
 });

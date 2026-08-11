@@ -105,6 +105,45 @@ describe("useSectionRoute", () => {
     expect(replaced).not.toHaveBeenCalled();
   });
 
+  it("keeps the current URL when an in-memory blocker rejects direct and popstate navigation", () => {
+    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
+    const replaced = vi.spyOn(window.history, "replaceState");
+    const { result } = renderHook(() => useSectionRoute());
+
+    act(() => result.current.setNavigationBlocker(() => false));
+    act(() => result.current.navigate("Keys"));
+
+    expect(window.location.href).toBe(
+      `${window.location.origin}/connections?path=config&host=bastion&tab=basic`,
+    );
+    expect(result.current.location).toEqual({
+      pathname: "/connections",
+      search: "?path=config&host=bastion&tab=basic",
+    });
+
+    act(() => {
+      window.history.pushState(null, "", "/history");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(replaced).toHaveBeenLastCalledWith(
+      null,
+      "",
+      "/connections?path=config&host=bastion&tab=basic",
+    );
+    expect(result.current.route).toMatchObject({ kind: "section", section: "Connections" });
+  });
+
+  it("allows navigation after the blocker is cleared", () => {
+    const { result } = renderHook(() => useSectionRoute());
+    act(() => result.current.setNavigationBlocker(() => false));
+    act(() => result.current.setNavigationBlocker(null));
+    act(() => result.current.navigate("Keys"));
+
+    expect(window.location.pathname).toBe("/keys");
+    expect(result.current.route).toMatchObject({ kind: "section", section: "Keys" });
+  });
+
   it("does not duplicate the current route and removes non-route URL data", () => {
     window.history.replaceState(null, "", "/keys?source=test#panel");
     const pushed = vi.spyOn(window.history, "pushState");
