@@ -19,6 +19,10 @@ import (
 type DiagnosticsHandlers struct {
 	Service *diagnostics.Service
 	Actions ActionHandlers
+	// SetPreferredTerminal is the narrow metadata mutation owned by the
+	// configuration service. It is optional so diagnostics-only platforms can
+	// still expose read-only terminal inventory.
+	SetPreferredTerminal func(platform.TerminalChoice) (bool, error)
 	// Passwords、AskpassHelper、AskpassURL は、保存されたパスワードを持つ
 	// host に対して起動に武装させる。3 つすべてが nil または空であれば、
 	// すべての起動は素の経路をたどる。これは vault を持たないサーバーのふるまいである。
@@ -34,6 +38,7 @@ func registerDiagnosticsRoutes(engine *echo.Echo, handlers DiagnosticsHandlers) 
 	engine.POST("/api/v1/diagnostics/authentication", handlers.Authentication)
 	engine.POST("/api/v1/terminal/command", handlers.TerminalCommand)
 	engine.GET("/api/v1/terminal/options", handlers.TerminalOptions)
+	engine.PUT("/api/v1/terminal/preference", handlers.TerminalPreference)
 	engine.POST("/api/v1/terminal/launch", handlers.TerminalLaunch)
 }
 
@@ -261,6 +266,10 @@ func (h DiagnosticsHandlers) TerminalCommand(c *echo.Context) error {
 // 何も起動せず、設定も変えない。画面が「選べるが、このマシンには無い」を
 // 選ぶ前に言えるようにするためだけの読み取りである。
 func (h DiagnosticsHandlers) TerminalOptions(c *echo.Context) error {
+	return c.JSON(http.StatusOK, h.terminalOptionsResponse())
+}
+
+func (h DiagnosticsHandlers) terminalOptionsResponse() api.TerminalOptionsResponse {
 	available, applications, selected := h.Service.TerminalOptions()
 	response := api.TerminalOptionsResponse{
 		Selected:     api.TerminalID(selected.ID),
@@ -278,7 +287,44 @@ func (h DiagnosticsHandlers) TerminalOptions(c *echo.Context) error {
 			Name: application.Name, Path: application.Path,
 		})
 	}
-	return c.JSON(http.StatusOK, response)
+	if selected.ID == platform.TerminalCustom {
+		arguments := append([]string(nil), selected.Arguments...)
+		response.CustomTerminal = &api.CustomTerminal{
+			Application: selected.Application,
+			Arguments:   &arguments,
+		}
+	}
+	return response
+}
+
+// TerminalPreference replaces only the global launcher choice. The request
+// cannot carry the rest of metadata, which is what prevents a stale Settings
+// tab from overwriting unrelated host or group changes.
+func (h DiagnosticsHandlers) TerminalPreference(c *echo.Context) error {
+	if h.SetPreferredTerminal == nil {
+		return problem(c, http.StatusServiceUnavailable, "terminal_preference_unavailable")
+	}
+	var request api.TerminalPreferenceRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_terminal_preference")
+	}
+	choice := platform.TerminalChoice{ID: platform.TerminalID(request.Selected)}
+	if request.CustomTerminal != nil {
+		choice.Application = request.CustomTerminal.Application
+		if request.CustomTerminal.Arguments != nil {
+			choice.Arguments = append([]string(nil), (*request.CustomTerminal.Arguments)...)
+		}
+	}
+	if (choice.ID == platform.TerminalCustom) != (request.CustomTerminal != nil) {
+		return problem(c, http.StatusBadRequest, "invalid_terminal_preference")
+	}
+	if err := platform.ValidateTerminalChoice(choice); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_terminal_preference")
+	}
+	if _, err := h.SetPreferredTerminal(choice); err != nil {
+		return problem(c, http.StatusInternalServerError, "terminal_preference_failed")
+	}
+	return c.JSON(http.StatusOK, h.terminalOptionsResponse())
 }
 
 // TerminalLaunch は、確認済みで安全な alias に対して Terminal を開く。

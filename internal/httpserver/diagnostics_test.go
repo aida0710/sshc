@@ -357,6 +357,111 @@ func TestTerminalOptionsAreReadableAndAMissingTerminalIsItsOwnAnswer(t *testing.
 	}
 }
 
+func TestTerminalPreferenceStoresAValidatedChoiceAndReturnsRefreshedOptions(t *testing.T) {
+	engine, credentials, _, service := newDiagnosticsServer(t)
+	launcher := &inventoryLauncher{}
+	service.Terminal = launcher
+	selected := platform.TerminalChoice{ID: platform.TerminalApple}
+	service.PreferredTerminal = func() platform.TerminalChoice { return selected }
+	var received platform.TerminalChoice
+	handler := DiagnosticsHandlers{
+		Service: service,
+		SetPreferredTerminal: func(choice platform.TerminalChoice) (bool, error) {
+			received = choice
+			selected = choice
+			return true, nil
+		},
+	}
+	engine.PUT("/api/v1/terminal/preference", handler.TerminalPreference)
+
+	response := sendKeyRequest(t, engine, credentials, http.MethodPut, "/api/v1/terminal/preference", []byte(`{
+		"selected":"custom",
+		"customTerminal":{"application":"/Applications/Term.app","arguments":["--new-window"]}
+	}`), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("terminal preference = %d: %s", response.Code, response.Body.String())
+	}
+	if received.ID != platform.TerminalCustom || received.Application != "/Applications/Term.app" ||
+		len(received.Arguments) != 1 || received.Arguments[0] != "--new-window" {
+		t.Fatalf("setter received %#v", received)
+	}
+	var payload struct {
+		Selected       string `json:"selected"`
+		CustomTerminal *struct {
+			Application string   `json:"application"`
+			Arguments   []string `json:"arguments"`
+		} `json:"customTerminal"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Selected != "custom" || payload.CustomTerminal == nil ||
+		payload.CustomTerminal.Application != "/Applications/Term.app" ||
+		len(payload.CustomTerminal.Arguments) != 1 {
+		t.Fatalf("response = %#v", payload)
+	}
+}
+
+func TestTerminalPreferenceRejectsMalformedOrInvalidChoices(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed JSON", body: `{`},
+		{name: "unknown ID", body: `{"selected":"unknown"}`},
+		{name: "custom without application", body: `{"selected":"custom"}`},
+		{name: "custom relative application", body: `{"selected":"custom","customTerminal":{"application":"Term.app","arguments":[]}}`},
+		{name: "standard with custom payload", body: `{"selected":"terminal","customTerminal":{"application":"/Applications/Term.app","arguments":[]}}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine, credentials, _, service := newDiagnosticsServer(t)
+			calls := 0
+			handler := DiagnosticsHandlers{
+				Service: service,
+				SetPreferredTerminal: func(platform.TerminalChoice) (bool, error) {
+					calls++
+					return true, nil
+				},
+			}
+			engine.PUT("/api/v1/terminal/preference", handler.TerminalPreference)
+			response := sendKeyRequest(t, engine, credentials, http.MethodPut, "/api/v1/terminal/preference", []byte(test.body), "")
+			if response.Code != http.StatusBadRequest || problemCode(t, response.Body.Bytes()) != "invalid_terminal_preference" {
+				t.Fatalf("response = %d: %s", response.Code, response.Body.String())
+			}
+			if calls != 0 {
+				t.Fatalf("invalid request called setter %d time(s)", calls)
+			}
+		})
+	}
+}
+
+func TestTerminalPreferenceDistinguishesUnavailableAndFailedPersistence(t *testing.T) {
+	tests := []struct {
+		name   string
+		setter func(platform.TerminalChoice) (bool, error)
+		status int
+		code   string
+	}{
+		{name: "unavailable", status: http.StatusServiceUnavailable, code: "terminal_preference_unavailable"},
+		{name: "failed", setter: func(platform.TerminalChoice) (bool, error) {
+			return false, fmt.Errorf("disk refused write")
+		}, status: http.StatusInternalServerError, code: "terminal_preference_failed"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine, credentials, _, service := newDiagnosticsServer(t)
+			handler := DiagnosticsHandlers{Service: service, SetPreferredTerminal: test.setter}
+			engine.PUT("/api/v1/terminal/preference", handler.TerminalPreference)
+			response := sendKeyRequest(t, engine, credentials, http.MethodPut, "/api/v1/terminal/preference",
+				[]byte(`{"selected":"kitty"}`), "")
+			if response.Code != test.status || problemCode(t, response.Body.Bytes()) != test.code {
+				t.Fatalf("response = %d: %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 // TestTerminalEndpointsSeparateCopyableCommandsFromLaunches は、
 // alias の関門が HTTP 境界で保たれていることを証明する: AppleScript の
 // クォートと `do shell script` ペイロードを運ぶ alias は、コピー可能な

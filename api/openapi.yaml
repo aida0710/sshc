@@ -264,6 +264,24 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TerminalOptionsResponse" }
         "401": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/preference:
+    put:
+      operationId: setTerminalPreference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalPreferenceRequest" }
+      responses:
+        "200":
+          description: Saved machine-wide terminal preference and refreshed availability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalOptionsResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/launch:
     post:
       operationId: launchTerminal
@@ -1752,6 +1770,13 @@ components:
       properties:
         name: { type: string }
         path: { type: string }
+    TerminalPreferenceRequest:
+      type: object
+      additionalProperties: false
+      required: [selected]
+      properties:
+        selected: { $ref: "#/components/schemas/TerminalID" }
+        customTerminal: { $ref: "#/components/schemas/CustomTerminal" }
     TerminalOptionsResponse:
       type: object
       additionalProperties: false
@@ -1760,6 +1785,7 @@ components:
         selected: { $ref: "#/components/schemas/TerminalID" }
         terminals: { type: array, items: { $ref: "#/components/schemas/TerminalOption" } }
         applications: { type: array, items: { $ref: "#/components/schemas/TerminalApplication" } }
+        customTerminal: { $ref: "#/components/schemas/CustomTerminal" }
     # このマシンがどちら向きにデータを動かしてよいか。支配するのは書き込みだけで、
     # それ以外は何も支配しない。"push" はこのディスクへのスナップショット適用を
     # 拒否し、"pull" はバケットへの書き込みを拒否する。プレビューは読むだけで何も
@@ -2357,7 +2383,10 @@ components:
       required: [application]
       properties:
         application: { type: string }
-        arguments: { type: array, items: { type: string } }
+        arguments:
+          type: array
+          maxItems: 8
+          items: { type: string, minLength: 1, maxLength: 64 }
     PendingTransaction:
       type: object
       additionalProperties: false
