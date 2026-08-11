@@ -1,57 +1,4 @@
-export const hostEditorTabs = [
-  "Basic",
-  "Jump",
-  "Advanced",
-  "Raw",
-  "Effective",
-  "Diagnostics",
-] as const;
-
-export type HostEditorTab = (typeof hostEditorTabs)[number];
-
-export type ConnectionArea = "Basic" | "Analysis" | "Advanced";
 export type AdvancedArea = "Jump" | "Directives" | "Raw";
-
-export function connectionAreaForTab(tab: HostEditorTab): {
-  area: ConnectionArea;
-  advanced: AdvancedArea;
-} {
-  switch (tab) {
-    case "Basic":
-    case "Diagnostics":
-      return { area: "Basic", advanced: "Jump" };
-    case "Effective":
-      return { area: "Analysis", advanced: "Jump" };
-    case "Jump":
-      return { area: "Advanced", advanced: "Jump" };
-    case "Advanced":
-      return { area: "Advanced", advanced: "Directives" };
-    case "Raw":
-      return { area: "Advanced", advanced: "Raw" };
-  }
-}
-
-export function checksExpandedForTab(tab: HostEditorTab): boolean {
-  return tab === "Diagnostics";
-}
-
-export function tabForConnectionArea(
-  area: ConnectionArea,
-  advanced: AdvancedArea,
-  checksExpanded: boolean,
-): HostEditorTab {
-  if (area === "Basic") return checksExpanded ? "Diagnostics" : "Basic";
-  if (area === "Analysis") return "Effective";
-  if (advanced === "Jump") return "Jump";
-  if (advanced === "Directives") return "Advanced";
-  return "Raw";
-}
-
-type LegacyConnectionTarget = {
-  path: string;
-  alias: string;
-  tab: HostEditorTab;
-};
 
 export type ConnectionPanel = "Basic" | "Analysis" | "Advanced";
 
@@ -77,19 +24,6 @@ export type ParsedConnectionLocation =
       target: ConnectionTarget | null;
     };
 
-const tabSlugs: Record<HostEditorTab, string> = {
-  Basic: "basic",
-  Jump: "jump",
-  Advanced: "advanced",
-  Raw: "raw",
-  Effective: "effective",
-  Diagnostics: "diagnostics",
-};
-
-const tabsBySlug = new Map(
-  Object.entries(tabSlugs).map(([tab, slug]) => [slug, tab as HostEditorTab]),
-);
-
 function safeRelativePath(path: string): boolean {
   if (path === "" || path.startsWith("/") || path.startsWith("~")) return false;
   if (path.includes("\0") || path.includes("\\")) return false;
@@ -98,19 +32,6 @@ function safeRelativePath(path: string): boolean {
 
 function safeAlias(alias: string): boolean {
   return alias !== "" && !/[\p{Cc}]/u.test(alias);
-}
-
-export function parseConnectionSearch(search: string): LegacyConnectionTarget | null {
-  const query = new URLSearchParams(search);
-  const path = query.get("path");
-  const alias = query.get("host");
-  if (path === null && alias === null) return null;
-  if (path === null || alias === null || !safeRelativePath(path) || !safeAlias(alias)) return null;
-  return {
-    path,
-    alias,
-    tab: tabsBySlug.get(query.get("tab") ?? "") ?? "Basic",
-  };
 }
 
 const panelSlugs: Record<ConnectionPanel, string> = {
@@ -248,7 +169,7 @@ function browserPath(browser: ConnectionBrowserLocation, query: URLSearchParams)
   return `/connections/groups/${group}`;
 }
 
-function currentConnectionLocation(
+export function connectionLocation(
   browser: ConnectionBrowserLocation,
   target: ConnectionTarget | null,
 ): string {
@@ -268,28 +189,4 @@ function currentConnectionLocation(
     query.set("advanced", advancedSlugs[target.advanced]);
   }
   return `${pathname}?${query.toString()}`;
-}
-
-function legacyConnectionLocation(target: LegacyConnectionTarget | null): string {
-  if (target === null) return "/connections";
-  const query = new URLSearchParams();
-  query.set("path", target.path);
-  query.set("host", target.alias);
-  query.set("tab", tabSlugs[target.tab]);
-  return `/connections?${query.toString()}`;
-}
-
-export function connectionLocation(target: LegacyConnectionTarget | null): string;
-export function connectionLocation(
-  browser: ConnectionBrowserLocation,
-  target: ConnectionTarget | null,
-): string;
-export function connectionLocation(
-  browserOrTarget: ConnectionBrowserLocation | LegacyConnectionTarget | null,
-  target?: ConnectionTarget | null,
-): string {
-  if (arguments.length === 1) {
-    return legacyConnectionLocation(browserOrTarget as LegacyConnectionTarget | null);
-  }
-  return currentConnectionLocation(browserOrTarget as ConnectionBrowserLocation, target ?? null);
 }

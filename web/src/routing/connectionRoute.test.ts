@@ -1,19 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  checksExpandedForTab,
-  connectionAreaForTab,
   connectionLocation,
   parseConnectionLocation,
-  parseConnectionSearch,
-  tabForConnectionArea,
   type ConnectionBrowserLocation,
 } from "./connectionRoute";
-
-const legacyTarget = {
-  path: "connections/work/api.conf",
-  alias: "api prod",
-  tab: "Advanced",
-} as const;
 
 const servers: ConnectionBrowserLocation = { view: "servers" };
 const namedGroup: ConnectionBrowserLocation = {
@@ -107,30 +97,4 @@ describe("connection routes", () => {
     expect(parseConnectionLocation({ pathname, search })).toEqual({ kind: "invalid" });
   });
 
-  it("keeps the legacy parser available while the page migration is in progress", () => {
-    expect(connectionLocation(legacyTarget)).toBe(
-      "/connections?path=connections%2Fwork%2Fapi.conf&host=api+prod&tab=advanced",
-    );
-    expect(parseConnectionSearch("?path=config&host=bastion&tab=raw")?.tab).toBe("Raw");
-  });
-
-  it("maps every legacy tab to the three visible connection areas", () => {
-    expect(connectionAreaForTab("Basic")).toEqual({ area: "Basic", advanced: "Jump" });
-    expect(connectionAreaForTab("Diagnostics")).toEqual({ area: "Basic", advanced: "Jump" });
-    expect(connectionAreaForTab("Effective")).toEqual({ area: "Analysis", advanced: "Jump" });
-    expect(connectionAreaForTab("Jump")).toEqual({ area: "Advanced", advanced: "Jump" });
-    expect(connectionAreaForTab("Advanced")).toEqual({ area: "Advanced", advanced: "Directives" });
-    expect(connectionAreaForTab("Raw")).toEqual({ area: "Advanced", advanced: "Raw" });
-  });
-
-  it("keeps diagnostics as an explicit expanded Basic state and emits compatible tabs", () => {
-    expect(checksExpandedForTab("Basic")).toBe(false);
-    expect(checksExpandedForTab("Diagnostics")).toBe(true);
-    expect(tabForConnectionArea("Basic", "Raw", false)).toBe("Basic");
-    expect(tabForConnectionArea("Basic", "Raw", true)).toBe("Diagnostics");
-    expect(tabForConnectionArea("Analysis", "Jump", false)).toBe("Effective");
-    expect(tabForConnectionArea("Advanced", "Jump", false)).toBe("Jump");
-    expect(tabForConnectionArea("Advanced", "Directives", false)).toBe("Advanced");
-    expect(tabForConnectionArea("Advanced", "Raw", false)).toBe("Raw");
-  });
 });
