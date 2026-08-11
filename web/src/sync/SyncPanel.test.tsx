@@ -190,6 +190,72 @@ describe("SyncPanel", () => {
     expect(await screen.findByText(/already matches the snapshot/)).toBeInTheDocument();
   });
 
+  it("shows the measured push result instead of only saying it succeeded", async () => {
+    const api = buildApi(configured, nothingToDo);
+    render(<SyncPanel api={api} />);
+
+    await userEvent.type(await screen.findByLabelText("Master password"), "a passphrase");
+    await userEvent.click(screen.getByRole("button", { name: "Push this workspace" }));
+
+    expect(await screen.findByRole("heading", { name: "This push" })).toBeInTheDocument();
+    expect(screen.getByText("7 files · 1.2 kB")).toBeInTheDocument();
+    expect(screen.getByText("S3 transfer 1.8 kB (2 objects, history + live)")).toBeInTheDocument();
+  });
+
+  it("shows preview and apply as two separately measured downloads", async () => {
+    const preview = { ...nothingToDo, written: ["config"] };
+    const applied = { ...preview, applied: true, completedAt: "2026-08-12T01:03:00Z" };
+    const api = buildApi(configured, preview, {
+      pullSnapshot: vi.fn().mockResolvedValueOnce(preview).mockResolvedValueOnce(applied),
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.type(await screen.findByLabelText("Master password"), "a passphrase");
+    await userEvent.click(screen.getByRole("button", { name: "Check for changes" }));
+    expect(await screen.findByRole("heading", { name: "Pull preview" })).toBeInTheDocument();
+    expect(screen.getByText("Downloaded 900 B · 1.2 kB after opening")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Apply the snapshot" }));
+    expect(await screen.findByRole("heading", { name: "Apply result" })).toBeInTheDocument();
+    expect(screen.getByText("Downloaded again for apply: 900 B")).toBeInTheDocument();
+  });
+
+  it("shows a persisted operation as the previous success after reload", async () => {
+    const lastOperation = {
+      kind: "push" as const,
+      summary: measuredSummary,
+      objectCount: 2,
+      uploadedBytes: 1800,
+      completedAt: "2026-08-12T01:02:04Z",
+    };
+    render(<SyncPanel api={buildApi({ ...configured, lastOperation }, nothingToDo)} />);
+
+    expect(await screen.findByRole("heading", { name: "Previous success" })).toBeInTheDocument();
+    expect(screen.getByText("S3 transfer 1.8 kB (2 objects, history + live)")).toBeInTheDocument();
+  });
+
+  it("keeps the previous success separate when a later push fails partway", async () => {
+    const lastOperation = {
+      kind: "push" as const,
+      summary: measuredSummary,
+      objectCount: 2,
+      uploadedBytes: 1800,
+      completedAt: "2026-08-12T01:02:04Z",
+    };
+    const api = buildApi({ ...configured, lastOperation }, nothingToDo, {
+      pushSnapshot: vi.fn().mockRejectedValue(new ApiError("sync_remote_moved", 409, null)),
+    });
+    render(<SyncPanel api={api} />);
+
+    expect(await screen.findByRole("heading", { name: "Previous success" })).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Master password"), "a passphrase");
+    await userEvent.click(screen.getByRole("button", { name: "Push this workspace" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/live snapshot was not updated/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/dated history copy.*may remain/i);
+    expect(screen.getByRole("heading", { name: "Previous success" })).toBeInTheDocument();
+  });
+
   it("sends the chosen direction with the bucket", async () => {
     const api = buildApi(unconfigured, nothingToDo);
     render(<SyncPanel api={api} />);
