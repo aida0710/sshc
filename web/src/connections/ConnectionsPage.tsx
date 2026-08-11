@@ -31,7 +31,11 @@ import { Button, Notice } from "../ui/surface";
 import { duplicateHostBlock, removeHostBlock } from "./blocks";
 import { integrationsApi, type TerminalID, type TerminalOptionsResponse } from "../api/integrations";
 import { Icon } from "../ui/icons";
-import type { BrowserLocation, NavigateLocationOptions } from "../routing/useSectionRoute";
+import type {
+  BrowserLocation,
+  NavigationBlocker,
+  NavigateLocationOptions,
+} from "../routing/useSectionRoute";
 import {
   connectionLocation,
   parseConnectionSearch,
@@ -101,6 +105,7 @@ type ConnectionsPageProps = {
   onNavigateForCreation?: (section: CreationPrerequisite) => void;
   location?: BrowserLocation;
   onNavigateLocation?: (url: string, options?: NavigateLocationOptions) => void;
+  onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
 };
@@ -117,6 +122,7 @@ export function ConnectionsPage({
   onNavigateForCreation,
   location = { pathname: "/connections", search: "" },
   onNavigateLocation,
+  onNavigationBlockerChange: _onNavigationBlockerChange,
   preferredKey = null,
   onPreferredKeyApplied,
 }: ConnectionsPageProps) {

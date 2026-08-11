@@ -21,6 +21,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
     onNavigateForCreation,
     location,
     onNavigateLocation,
+    onNavigationBlockerChange,
     preferredKey,
     onPreferredKeyApplied,
   }: {
@@ -31,6 +32,9 @@ vi.mock("./connections/ConnectionsPage", () => ({
     onNavigateForCreation?: (section: "Groups" | "Keys") => void;
     location?: { pathname: string; search: string };
     onNavigateLocation?: (url: string) => void;
+    onNavigationBlockerChange?: (
+      blocker: ((next: { pathname: string; search: string }) => boolean) | null,
+    ) => void;
     preferredKey?: { privateKeyId: string; privateRelativePath: string } | null;
     onPreferredKeyApplied?: () => void;
   }) => (
@@ -49,6 +53,12 @@ vi.mock("./connections/ConnectionsPage", () => ({
         onClick={() => onNavigateLocation?.("/connections?path=config&host=build01&tab=advanced")}
       >
         open routed host
+      </button>
+      <button type="button" onClick={() => onNavigationBlockerChange?.(() => false)}>
+        block connection navigation
+      </button>
+      <button type="button" onClick={() => onNavigationBlockerChange?.(null)}>
+        allow connection navigation
       </button>
       <button
         type="button"
@@ -364,6 +374,28 @@ describe("App", () => {
     await user.click(screen.getByRole("link", { name: "Connections" }));
     expect(window.location.pathname).toBe("/connections");
     expect(window.location.search).toBe("");
+  });
+
+  it("lets the connection editor block and later allow shell navigation", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "block connection navigation" }));
+    await user.click(screen.getByRole("link", { name: "Keys" }));
+    expect(window.location.pathname).toBe("/connections");
+    expect(screen.getByText("connections panel")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "allow connection navigation" }));
+    await user.click(screen.getByRole("link", { name: "Keys" }));
+    expect(window.location.pathname).toBe("/keys");
+    expect(screen.getByText("keys panel")).toBeInTheDocument();
   });
 
   it("follows the real pathname on popstate", async () => {

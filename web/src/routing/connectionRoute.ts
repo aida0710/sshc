@@ -9,6 +9,44 @@ export const hostEditorTabs = [
 
 export type HostEditorTab = (typeof hostEditorTabs)[number];
 
+export type ConnectionArea = "Basic" | "Analysis" | "Advanced";
+export type AdvancedArea = "Jump" | "Directives" | "Raw";
+
+export function connectionAreaForTab(tab: HostEditorTab): {
+  area: ConnectionArea;
+  advanced: AdvancedArea;
+} {
+  switch (tab) {
+    case "Basic":
+    case "Diagnostics":
+      return { area: "Basic", advanced: "Jump" };
+    case "Effective":
+      return { area: "Analysis", advanced: "Jump" };
+    case "Jump":
+      return { area: "Advanced", advanced: "Jump" };
+    case "Advanced":
+      return { area: "Advanced", advanced: "Directives" };
+    case "Raw":
+      return { area: "Advanced", advanced: "Raw" };
+  }
+}
+
+export function checksExpandedForTab(tab: HostEditorTab): boolean {
+  return tab === "Diagnostics";
+}
+
+export function tabForConnectionArea(
+  area: ConnectionArea,
+  advanced: AdvancedArea,
+  checksExpanded: boolean,
+): HostEditorTab {
+  if (area === "Basic") return checksExpanded ? "Diagnostics" : "Basic";
+  if (area === "Analysis") return "Effective";
+  if (advanced === "Jump") return "Jump";
+  if (advanced === "Directives") return "Advanced";
+  return "Raw";
+}
+
 export type ConnectionTarget = {
   path: string;
   alias: string;
