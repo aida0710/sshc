@@ -105,7 +105,8 @@ describe("ConnectionsPage", () => {
     );
 
     await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "bastion"));
-    expect(await screen.findByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("tab", { name: "Advanced settings" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Directives" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("writes connection selection and tab changes to browser history", async () => {
@@ -125,9 +126,9 @@ describe("ConnectionsPage", () => {
       "/connections?path=config&host=bastion&tab=basic",
     );
 
-    await user.click(await screen.findByRole("tab", { name: "Diagnostics" }));
+    await user.click(await screen.findByRole("tab", { name: "Settings analysis" }));
     expect(onNavigateLocation).toHaveBeenLastCalledWith(
-      "/connections?path=config&host=bastion&tab=diagnostics",
+      "/connections?path=config&host=bastion&tab=effective",
     );
   });
 
@@ -189,6 +190,142 @@ describe("ConnectionsPage", () => {
     expect(configApi.host).toHaveBeenCalledWith("config", "bastion");
   });
 
+  it("shares one committed resource load between the summary and persistent Basic editor", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    expect(await screen.findByText("bastion:22")).toBeInTheDocument();
+    expect(keysApi.inventory).toHaveBeenCalledTimes(1);
+    expect(integrationsApi.passwordVault).toHaveBeenCalledTimes(1);
+    expect(integrationsApi.credentials).toHaveBeenCalledTimes(1);
+    expect(integrationsApi.passwordEligibility).toHaveBeenCalledTimes(1);
+
+    const port = screen.getByLabelText("Port");
+    await user.clear(port);
+    await user.type(port, "2222");
+    expect(screen.getByText("bastion:22")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
+    expect(screen.getByRole("region", { name: "Manage connection" })).toHaveAttribute("aria-disabled", "true");
+    await user.click(screen.getByRole("tab", { name: "Settings analysis" }));
+    await user.click(screen.getByRole("tab", { name: "Basic" }));
+    expect(screen.getByLabelText("Port")).toHaveValue(2222);
+  });
+
+  it("registers a same-identity-aware navigation blocker and beforeunload guard for drafts", async () => {
+    const user = userEvent.setup();
+    let blocker: ((next: { pathname: string; search: string }) => boolean) | null = null;
+    const onNavigationBlockerChange = vi.fn((next) => {
+      blocker = next;
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigationBlockerChange={onNavigationBlockerChange}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.clear(screen.getByLabelText("Port"));
+    await user.type(screen.getByLabelText("Port"), "2222");
+    await waitFor(() => expect(blocker).not.toBeNull());
+    const activeBlocker = blocker as unknown as (next: { pathname: string; search: string }) => boolean;
+
+    expect(activeBlocker({ pathname: "/connections", search: "?path=config&host=bastion&tab=effective" })).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(activeBlocker({ pathname: "/keys", search: "" })).toBe(false);
+    expect(confirm).toHaveBeenCalledOnce();
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+
+    confirm.mockReturnValue(true);
+    expect(activeBlocker({ pathname: "/keys", search: "" })).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(onNavigationBlockerChange).toHaveBeenLastCalledWith(null));
+  });
+
+  it("keeps the selected connection and draft when a guarded host switch is rejected", async () => {
+    const user = userEvent.setup();
+    const edgeHost = {
+      ...overview.hosts[0],
+      identity: { path: "config", alias: "edge" },
+      patterns: ["edge"],
+      line: 4,
+    };
+    const edgeDetail = {
+      ...detail,
+      form: { ...detail.form, entry: edgeHost, raw: "Host edge\n\tPort 22\n" },
+      metadata: { identity: edgeHost.identity },
+      effective: { ...detail.effective, alias: "edge" },
+      file: { ...detail.file, contents: "Host edge\n\tPort 22\n", digest: "edge" },
+    };
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      hosts: [...overview.hosts, edgeHost],
+    } as never);
+    vi.mocked(configApi.host).mockImplementation(async (_path, alias) =>
+      alias === "edge" ? edgeDetail as never : detail as never);
+    let blocker: ((next: { pathname: string; search: string }) => boolean) | null = null;
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const onNavigateLocation = vi.fn((url: string) => {
+      const next = new URL(url, "http://localhost");
+      return blocker?.({ pathname: next.pathname, search: next.search }) ?? true;
+    });
+    render(
+      <ConnectionsPage
+        onOpenFile={vi.fn()}
+        onInspector={() => undefined}
+        onNavigateLocation={onNavigateLocation}
+        onNavigationBlockerChange={(next) => {
+          blocker = next;
+        }}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /^bastion/ }));
+    await user.clear(screen.getByLabelText("Port"));
+    await user.type(screen.getByLabelText("Port"), "2222");
+    await user.click(screen.getByRole("button", { name: /^edge/ }));
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(configApi.host).not.toHaveBeenCalledWith("config", "edge");
+    expect(screen.getByRole("heading", { name: "bastion" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Port")).toHaveValue(2222);
+
+    confirm.mockReturnValue(true);
+    await user.click(screen.getByRole("button", { name: /^edge/ }));
+    expect(await screen.findByRole("heading", { name: "edge" })).toBeInTheDocument();
+    expect(configApi.host).toHaveBeenCalledWith("config", "edge");
+  });
+
+  it("does not replace a Basic draft when terminal metadata saves", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t-terminal", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
+    } as never);
+    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.clear(screen.getByLabelText("Port"));
+    await user.type(screen.getByLabelText("Port"), "2222");
+    await user.selectOptions(screen.getByLabelText("Open with"), "kitty");
+
+    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
+      kind: "metadata",
+      metadata: expect.objectContaining({ terminal: "kitty" }),
+    }));
+    expect(screen.getByLabelText("Port")).toHaveValue(2222);
+    expect(screen.getByText("bastion:22")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
   it("reports a post-commit reload failure as saved instead of inviting a duplicate save", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.updateConnection).mockResolvedValue({
@@ -211,6 +348,11 @@ describe("ConnectionsPage", () => {
     )).toBeInTheDocument();
     expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
     expect(configApi.updateConnection).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reload saved connection" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Reload saved connection" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled());
   });
 
   it("opens the selected host in Terminal only after an explicit connect action", async () => {
@@ -240,7 +382,7 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
 
     await waitFor(() => expect(screen.queryByLabelText("Open with")).toBeNull());
-    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(screen.getByText(/does not open a terminal for you/)).toBeInTheDocument();
   });
 
@@ -558,6 +700,7 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
     await user.clear(await screen.findByLabelText("Rename alias"));
     await user.type(screen.getByLabelText("Rename alias"), "gateway");
     await user.click(screen.getByRole("button", { name: "Rename" }));
@@ -586,6 +729,7 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
     await user.clear(await screen.findByLabelText("Rename alias"));
     await user.type(screen.getByLabelText("Rename alias"), "gateway");
     await user.click(screen.getByRole("button", { name: "Rename" }));
@@ -753,6 +897,7 @@ describe("taking a connection out of every group", () => {
 
     render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
     await user.selectOptions(await screen.findByLabelText("Primary group"), "");
     await user.click(screen.getByRole("button", { name: "Move to this group" }));
 

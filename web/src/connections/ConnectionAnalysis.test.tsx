@@ -57,6 +57,13 @@ const effective: EffectiveResponse = {
 };
 
 describe("ConnectionAnalysis", () => {
+  it("keeps authoritative OpenSSH evaluation disabled while another editor is dirty", () => {
+    const api = { effective: vi.fn() } as Pick<IntegrationsApi, "effective">;
+    render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} disabled />);
+
+    expect(screen.getByRole("button", { name: "Run authoritative ssh -G" })).toBeDisabled();
+  });
+
   it("shows explained saved values without running OpenSSH", () => {
     const api = { effective: vi.fn() } as Pick<IntegrationsApi, "effective">;
     render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} />);

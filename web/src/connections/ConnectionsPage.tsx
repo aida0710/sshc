@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, failureCode, type Problem } from "../api/client";
 import {
   configApi,
@@ -42,6 +42,13 @@ import {
   type HostEditorTab,
 } from "../routing/connectionRoute";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
+import { keysApi } from "../keys/api";
+import { ConnectionSummary } from "./ConnectionSummary";
+import {
+  loadConnectionSavedState,
+  type ConnectionSavedState,
+} from "./connectionSavedState";
+import { ManageConnection } from "./ManageConnection";
 
 // Groups 画面が報告し、この画面は報告しないもの。
 //
@@ -104,7 +111,7 @@ type ConnectionsPageProps = {
   onCreationDraftChange?: (draft: CreateConnectionDraft | null) => void;
   onNavigateForCreation?: (section: CreationPrerequisite) => void;
   location?: BrowserLocation;
-  onNavigateLocation?: (url: string, options?: NavigateLocationOptions) => void;
+  onNavigateLocation?: (url: string, options?: NavigateLocationOptions) => boolean | void;
   onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
@@ -122,7 +129,7 @@ export function ConnectionsPage({
   onNavigateForCreation,
   location = { pathname: "/connections", search: "" },
   onNavigateLocation,
-  onNavigationBlockerChange: _onNavigationBlockerChange,
+  onNavigationBlockerChange,
   preferredKey = null,
   onPreferredKeyApplied,
 }: ConnectionsPageProps) {
@@ -139,13 +146,17 @@ export function ConnectionsPage({
   const [selection, setSelection] = useState<HostSelection | null>(
     initialTarget === null ? null : { path: initialTarget.path, alias: initialTarget.alias },
   );
+  const selectionRef = useRef<HostSelection | null>(selection);
   const [activeTab, setActiveTab] = useState<HostEditorTab>(initialTarget?.tab ?? "Basic");
   const [detail, setDetail] = useState<HostDetail | null>(null);
+  const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
+  const [savedRevision, setSavedRevision] = useState(0);
+  const basicDiscardRef = useRef<(() => void) | null>(null);
   const [preview, setPreview] = useState<SavePreview | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [localError, setLocalError] = useState("");
-  const [moveTarget, setMoveTarget] = useState("");
   const [creating, setCreating] = useState(creationDraft !== null);
   const [launching, setLaunching] = useState(false);
   const [managing, setManaging] = useState(false);
@@ -164,39 +175,53 @@ export function ConnectionsPage({
   const [pendingCustom, setPendingCustom] = useState(false);
   const [missingSelection, setMissingSelection] = useState(false);
 
+  useEffect(() => {
+    selectionRef.current = selection;
+  }, [selection]);
+
   function navigateToConnection(
     identity: HostSelection,
     tab: HostEditorTab,
     options?: NavigateLocationOptions,
-  ) {
+  ): boolean {
     const target = connectionLocation({ path: identity.path, alias: identity.alias, tab });
-    if (options === undefined) onNavigateLocation?.(target);
-    else onNavigateLocation?.(target, options);
+    const result = options === undefined
+      ? onNavigateLocation?.(target)
+      : onNavigateLocation?.(target, options);
+    return result !== false;
   }
 
-  function navigateToConnectionList(options?: NavigateLocationOptions) {
-    if (options === undefined) onNavigateLocation?.(connectionLocation(null));
-    else onNavigateLocation?.(connectionLocation(null), options);
+  function navigateToConnectionList(options?: NavigateLocationOptions): boolean {
+    const result = options === undefined
+      ? onNavigateLocation?.(connectionLocation(null))
+      : onNavigateLocation?.(connectionLocation(null), options);
+    return result !== false;
   }
 
   // 書き込み済みの identity は、後続の GET より先に画面と URL の正本にする。
   // detail は selection effect が新しい identity から読み直す。GET が一時的に
   // 失敗しても、URL がもう存在しない旧 alias/path を指し続けることはない。
   function followCommittedIdentity(identity: HostSelection, tab: HostEditorTab = activeTab) {
+    selectionRef.current = identity;
     setSelection(identity);
     setDetail(null);
+    setSavedState(null);
     setMissingSelection(false);
     navigateToConnection(identity, tab, { replace: true });
   }
 
   function leaveCommittedIdentityUnknown() {
+    selectionRef.current = null;
     setSelection(null);
     setDetail(null);
+    setSavedState(null);
     setMissingSelection(false);
     navigateToConnectionList({ replace: true });
   }
 
   function beginCreation() {
+    if (editorDirty && !window.confirm(t("conn.discardPrompt"))) return;
+    if (editorDirty) basicDiscardRef.current?.();
     onCreationDraftChange?.(null);
     setCreating(true);
   }
@@ -231,14 +256,19 @@ export function ConnectionsPage({
     setPreview(null);
     setProblem(null);
     setManaging(false);
-    setConfirmingDelete(false);
     if (target === null) {
+      selectionRef.current = null;
       setSelection(null);
       setDetail(null);
+      setSavedState(null);
+      setEditorDirty(false);
+      setRefreshState("idle");
       setActiveTab("Basic");
       return;
     }
-    setSelection({ path: target.path, alias: target.alias });
+    const nextSelection = { path: target.path, alias: target.alias };
+    selectionRef.current = nextSelection;
+    setSelection(nextSelection);
     setActiveTab(target.tab);
     setDetail((current) =>
       current?.form.entry.identity.path === target.path &&
@@ -246,7 +276,41 @@ export function ConnectionsPage({
         ? current
         : null,
     );
+    setSavedState((current) =>
+      current?.detail.form.entry.identity.path === target.path &&
+      current.detail.form.entry.identity.alias === target.alias
+        ? current
+        : null,
+    );
   }, [location.search]);
+
+  useEffect(() => {
+    if (!editorDirty) {
+      onNavigationBlockerChange?.(null);
+      return;
+    }
+    const blocker: NavigationBlocker = (next) => {
+      if (next.pathname === "/connections" && selection !== null) {
+        const target = parseConnectionSearch(next.search);
+        if (target !== null && target.path === selection.path && target.alias === selection.alias) {
+          return true;
+        }
+      }
+      return window.confirm(t("conn.discardPrompt"));
+    };
+    onNavigationBlockerChange?.(blocker);
+    return () => onNavigationBlockerChange?.(null);
+  }, [editorDirty, onNavigationBlockerChange, selection, t]);
+
+  useEffect(() => {
+    if (!editorDirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [editorDirty]);
 
   // 一覧が届く前と、読み取りに失敗したときの選択肢。語彙そのものであり、
   // どれも見つからなかったとは言わない。サーバーが空配列で答えたときは
@@ -319,9 +383,15 @@ export function ConnectionsPage({
     let active = true;
     void configApi
       .host(selectedPath, selectedAlias)
-      .then((loaded) => {
+      .then(async (loaded) => ({
+        detail: loaded,
+        saved: await loadConnectionSavedState(loaded, keysApi, integrationsApi),
+      }))
+      .then(({ detail: loaded, saved }) => {
         if (active) {
           setDetail(loaded);
+          setSavedState(saved);
+          setRefreshState("idle");
           setProblem(null);
           setMissingSelection(false);
         }
@@ -329,6 +399,7 @@ export function ConnectionsPage({
       .catch((error: unknown) => {
         if (active) {
           setDetail(null);
+          setSavedState(null);
           setProblem(toProblem(error));
           setMissingSelection(true);
         }
@@ -363,12 +434,22 @@ export function ConnectionsPage({
     if (renamedSelection !== null) followCommittedIdentity(renamedSelection);
 
     const nextOverview = await reload();
-    if (reselect && selectedBeforeSave !== null && renamedSelection === null) {
+    if (reselect && selectedBeforeSave !== null && renamedSelection === null && request.kind !== "metadata") {
       try {
-        setDetail(await configApi.host(selectedBeforeSave.path, selectedBeforeSave.alias));
+        const loaded = await configApi.host(selectedBeforeSave.path, selectedBeforeSave.alias);
+        const saved = await loadConnectionSavedState(loaded, keysApi, integrationsApi);
+        const currentSelection = selectionRef.current;
+        if (currentSelection?.path === selectedBeforeSave.path && currentSelection.alias === selectedBeforeSave.alias) {
+          setDetail(loaded);
+          setSavedState(saved);
+          setSavedRevision((current) => current + 1);
+        }
       } catch (error) {
-        setProblem(toProblem(error));
-        setMissingSelection(true);
+        const currentSelection = selectionRef.current;
+        if (currentSelection?.path === selectedBeforeSave.path && currentSelection.alias === selectedBeforeSave.alias) {
+          setProblem(toProblem(error));
+          setMissingSelection(true);
+        }
       }
     }
     return { saved: true, overview: nextOverview };
@@ -389,25 +470,47 @@ export function ConnectionsPage({
       throw error;
     }
 
-    // The commit is the success boundary. Discard the form immediately so its
-    // password fields do not linger through the follow-up reads, and never
-    // report a later GET failure as "nothing was changed".
+    // The commit is the success boundary. Reset the draft immediately so
+    // secret and non-secret inputs cannot be submitted twice while the saved
+    // snapshot is being confirmed by follow-up reads.
     setPreview(result.preview);
     setProblem(null);
     setLocalError("");
-    setDetail(null);
-    let refreshFailed = false;
+    basicDiscardRef.current?.();
+    setRefreshState("refreshing");
+  }
+
+  function savedResourcesConfirmed(saved: ConnectionSavedState): boolean {
+    return saved.keys.status !== "failed" &&
+      saved.vault.status !== "failed" &&
+      saved.credentials.status !== "failed" &&
+      saved.eligibility.status !== "failed";
+  }
+
+  async function refreshCommittedConnection() {
+    if (selection === null) return;
+    const identity = selection;
+    setRefreshState("refreshing");
     try {
-      setOverview(await configApi.overview());
+      const [nextOverview, nextDetail] = await Promise.all([
+        configApi.overview(),
+        configApi.host(identity.path, identity.alias),
+      ]);
+      const nextSaved = await loadConnectionSavedState(nextDetail, keysApi, integrationsApi);
+      if (!savedResourcesConfirmed(nextSaved)) throw new Error("saved_state_refresh_failed");
+      const currentSelection = selectionRef.current;
+      if (currentSelection?.path !== identity.path || currentSelection.alias !== identity.alias) return;
+      setOverview(nextOverview);
+      setDetail(nextDetail);
+      setSavedState(nextSaved);
+      setSavedRevision((current) => current + 1);
+      setRefreshState("idle");
+      setLocalError("");
+      setProblem(null);
     } catch {
-      refreshFailed = true;
-    }
-    try {
-      setDetail(await configApi.host(request.identity.path, request.identity.alias));
-    } catch {
-      refreshFailed = true;
-    }
-    if (refreshFailed) {
+      const currentSelection = selectionRef.current;
+      if (currentSelection?.path !== identity.path || currentSelection.alias !== identity.alias) return;
+      setRefreshState("failed");
       setLocalError(t("conn.basicConnectionRefreshFailed"));
     }
   }
@@ -418,6 +521,8 @@ export function ConnectionsPage({
   // alias の無い selection は将来の呼び出し元が作っても、サーバーへ届いてはならない。
   function onSelect(host: HostEntry) {
     if (host.identity.alias === "") return;
+    const nextSelection = { path: host.identity.path, alias: host.identity.alias };
+    if (!navigateToConnection(nextSelection, "Basic")) return;
     // 別の connection を選ぶと、直前の保存の diff は破棄される——それは
     // もう開いていないブロックのバイトを記述しているからだ。保存はここで
     // はなく submit を通じて再選択を行い、その diff は画面に残しておく。
@@ -428,13 +533,12 @@ export function ConnectionsPage({
     // a fast edit can be submitted against a connection the tree no longer
     // appears to have selected.
     setDetail(null);
+    setSavedState(null);
     setMissingSelection(false);
     setManaging(false);
-    setConfirmingDelete(false);
-    const nextSelection = { path: host.identity.path, alias: host.identity.alias };
+    selectionRef.current = nextSelection;
     setSelection(nextSelection);
     setActiveTab("Basic");
-    navigateToConnection(nextSelection, "Basic");
   }
 
   function onFieldEdits(fields: FieldEdit[]) {
@@ -521,6 +625,8 @@ export function ConnectionsPage({
   // identity だけを追う。後者をしないと、画面上は移動済みなのに URL は
   // 存在しなくなった古いファイルを指し続ける。
   async function onTreeDrop(payload: DragPayload, target: string) {
+    if (editorDirty && !window.confirm(t("conn.discardPrompt"))) return;
+    if (editorDirty) basicDiscardRef.current?.();
     try {
       if (payload.kind === "group") {
         const base = payload.name.slice(payload.name.lastIndexOf("/") + 1);
@@ -628,14 +734,13 @@ export function ConnectionsPage({
     setProblem(null);
     setLocalError("");
     setManaging(false);
-    setConfirmingDelete(false);
     setActiveTab("Basic");
     followCommittedIdentity(result.identity, "Basic");
     await reload();
   }
 
   async function connectHost() {
-    if (selection === null || launching) return;
+    if (selection === null || launching || editorDirty || refreshState !== "idle" || !launchable) return;
     setLaunching(true);
     setLocalError("");
     try {
@@ -715,22 +820,21 @@ export function ConnectionsPage({
   // この移動は読み込み済みの base を両方運び、サーバーが各ファイルをそ
   // れぞれの事前条件で守れるようにする。再選択は submit ではなくここで
   // 行う——移動がコミットされた時点で、ホストは新しいパスに存在するからだ。
-  async function moveHost() {
-    if (detail === null || selection === null || moveTarget === "") return;
+  async function moveHost(target: string) {
+    if (detail === null || selection === null || target === "") return;
     try {
-      const destination = await configApi.file(moveTarget);
+      const destination = await configApi.file(target);
       const source = selection;
       const attempt = await submit({
         kind: "move",
         path: source.path,
         base: detail.file.contents,
         alias: source.alias,
-        destinationPath: moveTarget,
+        destinationPath: target,
         destinationBase: destination.contents,
       }, false);
       if (!attempt.saved) return;
-      followCommittedIdentity({ path: moveTarget, alias: source.alias });
-      setMoveTarget("");
+      followCommittedIdentity({ path: target, alias: source.alias });
       setLocalError("");
     } catch (error) {
       setProblem(toProblem(error));
@@ -756,8 +860,9 @@ export function ConnectionsPage({
     const attempt = await submit({ kind: "file_raw", path, base, raw }, false);
     if (!attempt.saved) return;
     setSelection(null);
+    selectionRef.current = null;
     setDetail(null);
-    setConfirmingDelete(false);
+    setSavedState(null);
     setLocalError("");
     navigateToConnectionList({ replace: true });
   }
@@ -828,7 +933,7 @@ export function ConnectionsPage({
               {t("conn.backToList")}
             </Button>
           </section>
-        ) : detail === null ? (
+        ) : detail === null || savedState === null ? (
           <section className="m-auto flex max-w-sm flex-col items-center text-center" role="status">
             <span
               aria-hidden="true"
@@ -852,15 +957,18 @@ export function ConnectionsPage({
             terminals.some((option) => option.id === selectedTerminal && !option.installed) ? (
               <Notice>{t("conn.terminalMissing", { terminal: terminalLabel(selectedTerminal) })}</Notice>
             ) : null}
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-card p-3 shadow-sm">
-              {launchable ? (
+            <ConnectionSummary
+              state={savedState}
+              dirty={editorDirty}
+              refreshing={refreshState !== "idle"}
+              terminal={launchable ? (
                 <>
                   <label className="flex items-center gap-2 text-sm text-ink-muted">
                     <span>{t("conn.openWith")}</span>
                     <select
                       aria-label={t("conn.openWith")}
                       value={pendingCustom ? "custom" : selectedTerminal}
-                      disabled={savingTerminal}
+                      disabled={savingTerminal || refreshState !== "idle"}
                       onChange={(event) => void chooseTerminal(event.target.value as TerminalID)}
                       className={narrowControl}
                     >
@@ -889,7 +997,7 @@ export function ConnectionsPage({
                         <select
                           aria-label={t("conn.application")}
                           value={custom?.application ?? ""}
-                          disabled={savingTerminal}
+                          disabled={savingTerminal || refreshState !== "idle"}
                           onChange={(event) => void chooseApplication(event.target.value)}
                           className={narrowControl}
                         >
@@ -905,7 +1013,7 @@ export function ConnectionsPage({
                           aria-label={t("conn.terminalArguments")}
                           placeholder="-e"
                           value={customArgumentText}
-                          disabled={savingTerminal}
+                          disabled={savingTerminal || refreshState !== "idle"}
                           onChange={(event) => setCustomArguments(event.target.value)}
                           onBlur={() => void saveCustomArguments()}
                           className={narrowControl}
@@ -913,9 +1021,6 @@ export function ConnectionsPage({
                       </label>
                     </>
                   ) : null}
-                  <Button kind="primary" disabled={launching || savingTerminal} onClick={() => void connectHost()}>
-                    {launching ? t("conn.opening") : t("conn.connect")}
-                  </Button>
                 </>
               ) : (
                 // サーバーが「選べる端末は一つも無い」と答えたプラットフォーム。
@@ -923,56 +1028,53 @@ export function ConnectionsPage({
                 // する代わりに何をすればよいかを、消えた場所に書く。
                 <p className="text-sm text-notice-ink">{t("conn.terminalUnsupported")}</p>
               )}
-              <Button aria-expanded={managing} onClick={() => setManaging((current) => !current)}>
-                {t("conn.manage")}
+              connectAvailable={launchable}
+              onConnect={() => void connectHost()}
+              connecting={launching || savingTerminal}
+              onToggleManage={() => setManaging((current) => !current)}
+              managing={managing}
+            />
+            {refreshState === "failed" ? (
+              <Button className="self-start" onClick={() => void refreshCommittedConnection()}>
+                {t("conn.reloadConnection")}
               </Button>
-              {managing ? <div className="flex w-full flex-wrap items-center gap-2 border-t border-line pt-3">
-              <Button onClick={duplicateHost}>{t("conn.duplicate")}</Button>
-              <p className="w-full text-xs text-ink-muted">{t("conn.storageFileNote")}</p>
-              <label htmlFor="move-target" className="sr-only">{t("conn.moveToFile")}</label>
-              <select
-                id="move-target"
-                value={moveTarget}
-                onChange={(event) => setMoveTarget(event.target.value)}
-                className={narrowControl}
-              >
-                <option value="">{t("conn.moveToFilePlaceholder")}</option>
-                {overview.files
-                  .filter((node) => node.editable && node.file.path !== undefined && node.file.path !== selection?.path)
-                  .map((node) => (
-                    <option key={node.file.absolute} value={node.file.path}>{node.file.path}</option>
-                  ))}
-              </select>
-              <Button disabled={moveTarget === ""} onClick={() => void moveHost()}>{t("conn.move")}</Button>
-              {/*
-                どちらの状態も danger button である——確認とは別の単語であって、
-                別の種類の行為ではない。
-              */}
-              {confirmingDelete ? (
-                <Button kind="danger" onClick={() => void deleteHost()}>{t("conn.confirmDelete")}</Button>
-              ) : (
-                <Button kind="danger" onClick={() => setConfirmingDelete(true)}>{t("conn.delete")}</Button>
-              )}
-              </div> : null}
-            </div>
+            ) : null}
+            {managing ? (
+              <ManageConnection
+                detail={detail}
+                groups={overview.groups}
+                files={overview.files}
+                disabled={editorDirty || refreshState !== "idle"}
+                onRename={onRename}
+                onMoveToGroup={(group) => void onMoveToGroup(group)}
+                onComment={onComment}
+                onDuplicate={duplicateHost}
+                onMoveToFile={(path) => void moveHost(path)}
+                onDelete={() => void deleteHost()}
+              />
+            ) : null}
             <HostDetailPanel
               detail={detail}
-              groups={overview.metadata.groups ?? []}
+              savedState={savedState}
               preview={preview}
               problem={problem}
               onFieldEdits={onFieldEdits}
               onBlockRaw={onBlockRaw}
-              onRename={onRename}
-              onComment={onComment}
-              onMoveToGroup={(group) => void onMoveToGroup(group)}
               onBasicSave={onBasicSave}
+              integrations={integrationsApi}
               tab={activeTab}
               onTabChange={(tab) => {
-                setActiveTab(tab);
-                if (selection !== null) navigateToConnection(selection, tab);
+                if (selection === null || navigateToConnection(selection, tab)) setActiveTab(tab);
               }}
               preferredKey={preferredKey}
               onPreferredKeyApplied={onPreferredKeyApplied}
+              onDirtyChange={setEditorDirty}
+              onBasicDiscardReady={(discard) => {
+                basicDiscardRef.current = discard;
+              }}
+              onRequestRefresh={refreshCommittedConnection}
+              savedRevision={savedRevision}
+              disabled={refreshState !== "idle"}
             />
           </>
         )}

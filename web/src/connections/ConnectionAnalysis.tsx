@@ -10,9 +10,10 @@ type ConnectionAnalysisProps = {
   detail: HostDetail;
   alias: string;
   api: Pick<IntegrationsApi, "effective">;
+  disabled?: boolean;
 };
 
-export function ConnectionAnalysis({ detail, alias, api }: ConnectionAnalysisProps) {
+export function ConnectionAnalysis({ detail, alias, api, disabled = false }: ConnectionAnalysisProps) {
   const t = useTranslate();
   const [effective, setEffective] = useState<EffectiveResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -25,7 +26,7 @@ export function ConnectionAnalysis({ detail, alias, api }: ConnectionAnalysisPro
   }, [alias, detail.file.contents]);
 
   async function inspect(confirm: boolean) {
-    if (busy) return;
+    if (busy || disabled) return;
     setBusy(true);
     setError("");
     try {
@@ -58,7 +59,7 @@ export function ConnectionAnalysis({ detail, alias, api }: ConnectionAnalysisPro
           <h3 className={sectionHeading}>{t("conn.analysisAuthoritative")}</h3>
           <p className={hintText}>{t("conn.analysisAuthoritativeHint")}</p>
         </div>
-        <Button className="self-start" disabled={busy} onClick={() => void inspect(false)}>
+        <Button className="self-start" disabled={busy || disabled} onClick={() => void inspect(false)}>
           {busy ? t("conn.analysisRunning") : t("conn.analysisRun")}
         </Button>
         {error === "" ? null : <Notice tone="danger">{error}</Notice>}
@@ -89,7 +90,7 @@ export function ConnectionAnalysis({ detail, alias, api }: ConnectionAnalysisPro
               ))}
             </ul>
             {effective.requiresConfirmation && !effective.evaluated ? (
-              <Button className="mt-3" disabled={busy} onClick={() => void inspect(true)}>
+              <Button className="mt-3" disabled={busy || disabled} onClick={() => void inspect(true)}>
                 {t("conn.analysisRunConfirmed")}
               </Button>
             ) : null}

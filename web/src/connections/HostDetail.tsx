@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { FieldEdit, GroupMetadata, HostDetail, SavePreview, UpdateConnectionRequest } from "../api/config";
+import type { FieldEdit, HostDetail, SavePreview, UpdateConnectionRequest } from "../api/config";
 import type { Problem } from "../api/client";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
@@ -20,7 +20,7 @@ import { NoticeList, SavePreviewPanel } from "./SavePreview";
 
 type HostDetailPanelProps = {
   detail: HostDetail;
-  savedState?: ConnectionSavedState | undefined;
+  savedState: ConnectionSavedState;
   preview: SavePreview | null;
   problem: Problem | null;
   onFieldEdits: (edits: FieldEdit[]) => void;
@@ -35,12 +35,7 @@ type HostDetailPanelProps = {
   onBasicDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
   onRequestRefresh?: (() => Promise<void>) | undefined;
   disabled?: boolean | undefined;
-  // Transitional compatibility for the page while management is moved into
-  // ManageConnection. HostDetail deliberately does not render these actions.
-  groups?: GroupMetadata[] | undefined;
-  onRename?: ((alias: string) => void) | undefined;
-  onComment?: ((comment: string) => void) | undefined;
-  onMoveToGroup?: ((group: string) => void) | undefined;
+  savedRevision?: number | undefined;
 };
 
 const areas: { area: ConnectionArea; label: "conn.areaBasic" | "conn.areaAnalysis" | "conn.areaAdvanced" }[] = [
@@ -66,6 +61,7 @@ export function HostDetailPanel({
   onBasicDiscardReady,
   onRequestRefresh,
   disabled = false,
+  savedRevision = 0,
 }: HostDetailPanelProps) {
   const t = useTranslate();
   const [localTab, setLocalTab] = useState<HostEditorTab>("Basic");
@@ -77,7 +73,7 @@ export function HostDetailPanel({
   const advancedArea = route.area === "Advanced" ? route.advanced : lastAdvanced;
   const dirty = basicDirty || advancedDirty;
   const identity = detail.form.entry.identity;
-  const resetKey = `${identity.path}\u0000${identity.alias}\u0000${detail.file.contents}`;
+  const resetKey = `${identity.path}\u0000${identity.alias}\u0000${detail.file.contents}\u0000${savedRevision}`;
 
   useEffect(() => {
     if (route.area === "Advanced") setLastAdvanced(route.advanced);
@@ -157,7 +153,7 @@ export function HostDetailPanel({
       </div>
 
       <div hidden={route.area !== "Analysis"}>
-        <ConnectionAnalysis detail={detail} alias={identity.alias} api={integrations} />
+        <ConnectionAnalysis detail={detail} alias={identity.alias} api={integrations} disabled={disabled || dirty} />
       </div>
 
       <div hidden={route.area !== "Advanced"}>

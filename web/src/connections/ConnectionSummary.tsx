@@ -10,6 +10,7 @@ type ConnectionSummaryProps = {
   terminal: ReactNode;
   onConnect: () => void;
   connecting: boolean;
+  connectAvailable?: boolean;
   onToggleManage: () => void;
   managing: boolean;
 };
@@ -21,6 +22,7 @@ export function ConnectionSummary({
   terminal,
   onConnect,
   connecting,
+  connectAvailable = true,
   onToggleManage,
   managing,
 }: ConnectionSummaryProps) {
@@ -94,7 +96,7 @@ export function ConnectionSummary({
         {terminal}
         <Button
           kind="primary"
-          disabled={blocked || connecting}
+          disabled={blocked || connecting || !connectAvailable}
           aria-describedby={blocked ? reasonID : undefined}
           onClick={onConnect}
         >
