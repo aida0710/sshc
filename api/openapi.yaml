@@ -280,6 +280,7 @@ paths:
               schema: { $ref: "#/components/schemas/TerminalOptionsResponse" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/launch:
