@@ -40,3 +40,31 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
   await page.getByRole("button", { name: "Manage connections" }).click();
   await expect(page.getByRole("navigation", { name: "Connections" })).toBeVisible();
 });
+
+test("opens the action menu without connecting, then keeps settings and connect distinct", async ({
+  page,
+  installation,
+}) => {
+  const launches: unknown[] = [];
+  await page.route("**/api/v1/terminal/launch", async (route) => {
+    launches.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ launched: true }),
+    });
+  });
+  await openApplication(page, installation);
+
+  await page.getByRole("button", { name: "Actions for bastion" }).click();
+  expect(launches).toEqual([]);
+  await page.getByRole("menuitem", { name: "Open connection settings" }).click();
+  await expect(page).toHaveURL(/\/connections\/servers\?path=config&host=bastion&panel=basic$/);
+  await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
+  expect(launches).toEqual([]);
+
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home" }).click();
+  await page.getByRole("button", { name: "Actions for bastion" }).click();
+  await page.getByRole("menuitem", { name: "Connect", exact: true }).click();
+  await expect.poll(() => launches).toEqual([{ alias: "bastion" }]);
+});
