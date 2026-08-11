@@ -19,6 +19,7 @@ import {
 } from "../ui/form";
 import { Card, Notice, Row } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { SyncResultCard, type SyncResultView } from "./SyncResultCard";
 
 type SyncPanelProps = { api?: IntegrationsApi };
 
@@ -31,6 +32,7 @@ const refusals: Record<string, MessageKey> = {
   bucket_refused: "sync.unreachable",
   sync_failed: "sync.unreachable",
   endpoint_must_have_no_path: "sync.endpointPath",
+  sync_remote_moved: "sync.remoteMoved",
 };
 
 // リモートのスナップショット。
@@ -51,6 +53,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [master, setMaster] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [preview, setPreview] = useState<PullResponse | null>(null);
+  const [resultView, setResultView] = useState<SyncResultView | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -332,6 +335,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 (next) => {
                   setStatus(next.status);
                   setPreview(null);
+                  setResultView({ kind: "push", result: next.result });
                   setNotice(t("sync.pushed"));
                 },
                 t("sync.pushFailed"),
@@ -349,6 +353,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 () => api.pullSnapshot(passphrase, false),
                 (next) => {
                   setPreview(next);
+                  setResultView({ kind: "preview", result: next });
                   setNotice(
                     next.written.length + next.removed.length + next.conflicts.length === 0
                       ? t("sync.alreadyMatches")
@@ -364,6 +369,12 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           </button>
         </div>
       </section>
+
+      {resultView !== null ? (
+        <SyncResultCard view={resultView} />
+      ) : status.lastOperation === undefined ? null : (
+        <SyncResultCard view={{ kind: "previous", operation: status.lastOperation }} />
+      )}
 
       {preview === null ? null : (
         <section className="flex flex-col gap-3 rounded-xl border border-line bg-card p-5">
@@ -416,6 +427,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 () => api.pullSnapshot(passphrase, true),
                 (next) => {
                   setPreview(next);
+                  setResultView({ kind: "apply", result: next });
                   setNotice(t("sync.applied"));
                   void reload();
                 },
