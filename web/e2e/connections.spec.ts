@@ -152,15 +152,24 @@ test("asks before a connection switch would discard a Basic draft", async ({
 }) => {
   await openBastion(page, installation.url);
   await page.getByLabel("Port", { exact: true }).fill("2244");
-  const tree = page.getByRole("navigation", { name: "Connections" });
+  const browser = page.getByRole("navigation", { name: "Connections" });
+
+  // 表示方法だけを変えても connection identity は同じなので、確認を出さず
+  // 下書きと右ペインを保つ。URL はブラウザー位置だけを進める。
+  await browser.getByRole("button", { name: "Groups", exact: true }).click();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups");
+  await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
+  await browser.getByRole("button", { name: "Servers", exact: true }).click();
+  expect(new URL(page.url()).pathname).toBe("/connections/servers");
+  await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
   page.once("dialog", async (dialog) => dialog.dismiss());
-  await tree.getByRole("button", { name: "nas" }).click();
+  await browser.getByRole("button", { name: "nas" }).click();
   await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
   page.once("dialog", async (dialog) => dialog.accept());
-  await tree.getByRole("button", { name: "nas" }).click();
+  await browser.getByRole("button", { name: "nas" }).click();
   await expect(page.getByRole("heading", { name: "nas", exact: true })).toBeVisible();
 });
 
@@ -550,7 +559,10 @@ test("takes a comment with the connection when the block is deleted", async ({
   expect(after).toContain("# the printer\nHost printer\n");
 });
 
-test("moves a connection into a group by dragging it", async ({ page, installation }) => {
+test("browses an empty group and moves an ungrouped connection into it", async ({
+  page,
+  installation,
+}) => {
   await openApplication(page, installation);
   await openSection(page, "Groups");
   await page.getByLabel("New group name").fill("work");
@@ -558,13 +570,21 @@ test("moves a connection into a group by dragging it", async ({ page, installati
   expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
 
   await openSection(page, "Connections");
-  const tree = page.getByRole("navigation", { name: "Connections" });
-  // 見出しはグループに何も入っていない段階から画面にある。
-  // それこそがドロップ先になりうる理由であり、何かを持つまで
-  // 隠れているグループには、ドラッグで中身を入れることが決してできない。
-  await expect(tree.getByRole("heading", { name: "work" })).toBeVisible();
+  const browser = page.getByRole("navigation", { name: "Connections" });
+  await browser.getByRole("button", { name: "Groups", exact: true }).click();
+  const work = browser.getByRole("button", { name: "work, 0 servers" });
+  await expect(work).toBeVisible();
+  await work.click();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups/work");
+  await expect(browser.getByText("No servers are directly in this group.")).toBeVisible();
 
-  await tree.getByRole("button", { name: "bastion" }).dragTo(tree.getByRole("heading", { name: "work" }));
+  // 画面外の任意グループへの移動はドラッグへ増やさず、接続詳細の
+  // 明示的な所属変更を使う。
+  await browser.getByRole("button", { name: "Servers", exact: true }).click();
+  await browser.getByRole("button", { name: "bastion" }).click();
+  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByLabel("Primary group").selectOption("work");
+  expect(await clickAndAwait(page, "Move to this group", "/api/v1/config/save")).toBe(200);
 
   // ファイルを読み返して、グループの Include 名を確かめる。
   // ブロックが connections/work/config.conf にあることこそ、
@@ -573,6 +593,14 @@ test("moves a connection into a group by dragging it", async ({ page, installati
     expect(await installation.read("connections/work/config.conf")).toContain("Host bastion");
   }).toPass();
   expect(await installation.read("config")).not.toContain("Host bastion\n");
+
+  await browser.getByRole("button", { name: "Groups", exact: true }).click();
+  await browser.getByRole("button", { name: "work, 1 server" }).click();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups/work");
+  await expect(browser.getByRole("button", { name: "bastion, work" })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
 });
 
 // インスペクタを開くと 3 列目が追加される。中央の列がその
