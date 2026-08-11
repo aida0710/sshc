@@ -48,5 +48,13 @@ export function parseSectionPath(pathname: string): SectionRoute {
       return { kind: "section", section, canonicalPath, canonical: false };
     }
   }
+  if (pathname.startsWith("/connections/")) {
+    return {
+      kind: "section",
+      section: "Connections",
+      canonicalPath: paths.Connections,
+      canonical: true,
+    };
+  }
   return { kind: "not-found", pathname };
 }
