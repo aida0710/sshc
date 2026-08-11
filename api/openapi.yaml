@@ -342,7 +342,7 @@ paths:
           description: Snapshot written
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SyncStatus" }
+              schema: { $ref: "#/components/schemas/PushResponse" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -1819,6 +1819,53 @@ components:
         lastSyncedAt: { type: string }
         origin: { type: string }
         fileCount: { type: integer }
+        # push または apply の最後の成功だけを保持する。preview と失敗はここを
+        # 上書きしないため、新しい失敗と以前の成功を画面で別々に説明できる。
+        lastOperation: { $ref: "#/components/schemas/SyncOperation" }
+    SnapshotSummary:
+      type: object
+      additionalProperties: false
+      required: [createdAt, fileCount, sourceBytes, snapshotBytes]
+      properties:
+        createdAt: { type: string }
+        fileCount: { type: integer, minimum: 0 }
+        # 利用者が管理しているファイル内容の合計。tar header と manifest は含まない。
+        sourceBytes: { type: integer, format: int64, minimum: 0 }
+        # オブジェクトストアが保持する暗号化済みスナップショット一個の大きさ。
+        snapshotBytes: { type: integer, format: int64, minimum: 0 }
+    SyncOperationKind:
+      type: string
+      enum: [push, apply]
+    PushResult:
+      type: object
+      additionalProperties: false
+      required: [summary, objectCount, uploadedBytes, completedAt]
+      properties:
+        summary: { $ref: "#/components/schemas/SnapshotSummary" }
+        objectCount: { type: integer, minimum: 0 }
+        # 日付付きコピーとライブオブジェクトへの各 PUT body の合計。
+        uploadedBytes: { type: integer, format: int64, minimum: 0 }
+        completedAt: { type: string }
+    PushResponse:
+      type: object
+      additionalProperties: false
+      required: [status, result]
+      properties:
+        status: { $ref: "#/components/schemas/SyncStatus" }
+        result: { $ref: "#/components/schemas/PushResult" }
+    SyncOperation:
+      type: object
+      additionalProperties: false
+      required: [kind, summary, completedAt]
+      properties:
+        kind: { $ref: "#/components/schemas/SyncOperationKind" }
+        summary: { $ref: "#/components/schemas/SnapshotSummary" }
+        objectCount: { type: integer, minimum: 0 }
+        uploadedBytes: { type: integer, format: int64, minimum: 0 }
+        downloadedBytes: { type: integer, format: int64, minimum: 0 }
+        written: { type: integer, minimum: 0 }
+        removed: { type: integer, minimum: 0 }
+        completedAt: { type: string }
     SyncSettingsRequest:
       type: object
       additionalProperties: false
@@ -1855,9 +1902,14 @@ components:
     PullResponse:
       type: object
       additionalProperties: false
-      required: [applied, conflicts, written, removed]
+      required: [applied, conflicts, written, removed, summary, downloadedBytes, completedAt]
       properties:
         applied: { type: boolean }
+        summary: { $ref: "#/components/schemas/SnapshotSummary" }
+        # この一回の GET で受け取った暗号化オブジェクトの byte 数。preview と
+        # apply は別々に取得するため、それぞれの応答が自分の転送量を返す。
+        downloadedBytes: { type: integer, format: int64, minimum: 0 }
+        completedAt: { type: string }
         conflicts:
           type: array
           items: { $ref: "#/components/schemas/SyncConflict" }
