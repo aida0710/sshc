@@ -191,7 +191,10 @@ func New(options Options) (*Server, error) {
 		// ものがなく、応答はそう伝える。
 		var reseal func(context.Context, string) error
 		if options.Sync != nil {
-			reseal = options.Sync.Push
+			reseal = func(ctx context.Context, passphrase string) error {
+				_, err := options.Sync.Push(ctx, passphrase)
+				return err
+			}
 		}
 		var keyHosts func([]string) (map[string][]string, error)
 		if options.Config != nil {
