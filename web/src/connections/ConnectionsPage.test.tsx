@@ -207,6 +207,7 @@ describe("ConnectionsPage", () => {
     expect(screen.getByText("bastion:22")).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^bastion/ })).not.toHaveAttribute("draggable", "true");
 
     await user.click(screen.getByRole("button", { name: "More connection actions" }));
     expect(screen.getByRole("region", { name: "Manage connection" })).toHaveAttribute("aria-disabled", "true");
