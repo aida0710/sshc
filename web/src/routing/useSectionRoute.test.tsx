@@ -9,14 +9,14 @@ afterEach(() => {
 
 describe("useSectionRoute", () => {
   it("reads a direct deep link and pushes a new section URL", () => {
-    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
+    window.history.replaceState(null, "", "/connections/servers?path=config&host=bastion&panel=basic");
     const pushed = vi.spyOn(window.history, "pushState");
     const { result } = renderHook(() => useSectionRoute());
 
     expect(result.current.route).toMatchObject({ kind: "section", section: "Connections" });
     expect(result.current.location).toEqual({
-      pathname: "/connections",
-      search: "?path=config&host=bastion&tab=basic",
+      pathname: "/connections/servers",
+      search: "?path=config&host=bastion&panel=basic",
     });
 
     act(() => result.current.navigate("Keys"));
@@ -31,19 +31,19 @@ describe("useSectionRoute", () => {
     const replaced = vi.spyOn(window.history, "replaceState");
     const { result } = renderHook(() => useSectionRoute());
 
-    act(() => result.current.navigateLocation("/connections?path=config&host=bastion&tab=basic"));
+    act(() => result.current.navigateLocation("/connections/servers?path=config&host=bastion&panel=basic"));
 
-    expect(pushed).toHaveBeenCalledWith(null, "", "/connections?path=config&host=bastion&tab=basic");
-    expect(result.current.location.search).toBe("?path=config&host=bastion&tab=basic");
+    expect(pushed).toHaveBeenCalledWith(null, "", "/connections/servers?path=config&host=bastion&panel=basic");
+    expect(result.current.location.search).toBe("?path=config&host=bastion&panel=basic");
     expect(result.current.route).toMatchObject({ kind: "section", section: "Connections" });
 
     act(() => result.current.navigateLocation(
-      "/connections?path=config&host=bastion&tab=raw",
+      "/connections/servers?path=config&host=bastion&panel=advanced&advanced=raw",
       { replace: true },
     ));
 
-    expect(replaced).toHaveBeenCalledWith(null, "", "/connections?path=config&host=bastion&tab=raw");
-    expect(result.current.location.search).toBe("?path=config&host=bastion&tab=raw");
+    expect(replaced).toHaveBeenCalledWith(null, "", "/connections/servers?path=config&host=bastion&panel=advanced&advanced=raw");
+    expect(result.current.location.search).toBe("?path=config&host=bastion&panel=advanced&advanced=raw");
   });
 
   it("reparses the real pathname rather than history state on popstate", () => {
@@ -59,16 +59,16 @@ describe("useSectionRoute", () => {
   });
 
   it("reparses query state on popstate even within the same section", () => {
-    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
+    window.history.replaceState(null, "", "/connections/servers?path=config&host=bastion&panel=basic");
     const { result } = renderHook(() => useSectionRoute());
 
     act(() => {
-      window.history.pushState(null, "", "/connections?path=conf.d%2F10-home.conf&host=nas&tab=diagnostics");
+      window.history.pushState(null, "", "/connections/groups/home?path=conf.d%2F10-home.conf&host=nas&panel=advanced&advanced=jump");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
     expect(result.current.location.search).toBe(
-      "?path=conf.d%2F10-home.conf&host=nas&tab=diagnostics",
+      "?path=conf.d%2F10-home.conf&host=nas&panel=advanced&advanced=jump",
     );
   });
 
@@ -106,7 +106,7 @@ describe("useSectionRoute", () => {
   });
 
   it("keeps the current URL when an in-memory blocker rejects direct and popstate navigation", () => {
-    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
+    window.history.replaceState(null, "", "/connections/servers?path=config&host=bastion&panel=basic");
     const replaced = vi.spyOn(window.history, "replaceState");
     const { result } = renderHook(() => useSectionRoute());
 
@@ -114,11 +114,11 @@ describe("useSectionRoute", () => {
     act(() => result.current.navigate("Keys"));
 
     expect(window.location.href).toBe(
-      `${window.location.origin}/connections?path=config&host=bastion&tab=basic`,
+      `${window.location.origin}/connections/servers?path=config&host=bastion&panel=basic`,
     );
     expect(result.current.location).toEqual({
-      pathname: "/connections",
-      search: "?path=config&host=bastion&tab=basic",
+      pathname: "/connections/servers",
+      search: "?path=config&host=bastion&panel=basic",
     });
 
     act(() => {
@@ -129,7 +129,7 @@ describe("useSectionRoute", () => {
     expect(replaced).toHaveBeenLastCalledWith(
       null,
       "",
-      "/connections?path=config&host=bastion&tab=basic",
+      "/connections/servers?path=config&host=bastion&panel=basic",
     );
     expect(result.current.route).toMatchObject({ kind: "section", section: "Connections" });
   });

@@ -103,9 +103,6 @@ function toProblem(error: unknown): Problem {
 }
 
 type ConnectionsPageProps = {
-  // App から旧 callback を外すまでの移行用。新ブラウザーは具体的な alias
-  // だけを扱い、パターン規則は Config 画面から編集する。
-  onOpenFile?: (path: string, line: number) => void;
   // 右側ペインの中身を、シェルへ差し出す。connection が開いていない間は
   // null——何か開くまでは、調べるものが何も無いからだ。
   onInspector: (content: InspectorContent) => void;

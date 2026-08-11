@@ -194,7 +194,7 @@ test("survives a reload", async ({ page, installation }) => {
 
   await page.reload();
 
-  await expect(page).toHaveURL(/\/connections$/);
+  await expect(page).toHaveURL(/\/connections\/servers$/);
   await expect(
     page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }),
   ).toBeVisible();

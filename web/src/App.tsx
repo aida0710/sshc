@@ -513,7 +513,6 @@ function SectionView(props: SectionViewProps) {
   if (props.section === "Connections") {
     return (
       <ConnectionsPage
-        onOpenFile={props.onOpenFile}
         onInspector={props.onInspector}
         creationDraft={props.connectionDraft}
         onCreationDraftChange={props.onConnectionDraftChange}
