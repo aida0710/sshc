@@ -8,7 +8,7 @@ async function openBastion(page: Page, url: string) {
     .getByRole("navigation", { name: "Connections" })
     .getByRole("button", { name: "bastion" })
     .click();
-  await expect(page.getByRole("tablist", { name: "Host editor" })).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
 }
 
 test("creates a key-authenticated connection in an empty nested declared group", async ({
@@ -117,6 +117,51 @@ test("edits a host through the form and writes only the line that changed", asyn
   expect(after).toContain("User    ops");
   expect(after).toContain("Include conf.d/*.conf");
   expect(after.split("\n").length).toBe(before.split("\n").length);
+});
+
+test("keeps the committed summary stable while a Basic draft crosses editor areas", async ({
+  page,
+  installation,
+}) => {
+  await openBastion(page, installation.url);
+
+  await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
+  await expect(page.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2222");
+
+  await page.getByLabel("Port", { exact: true }).fill("2244");
+  await expect(page.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
+  await expect(page.getByText("Unsaved changes", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Check reachability" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Check authentication with saved settings" })).toBeDisabled();
+
+  await page.getByRole("tab", { name: "Settings analysis" }).click();
+  await page.getByRole("tab", { name: "Basic" }).click();
+  await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
+
+  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  await expect(page.getByText("ops@203.0.113.10:2244", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
+  await expect(page.getByRole("button", { name: "Check reachability" })).toBeEnabled();
+});
+
+test("asks before a connection switch would discard a Basic draft", async ({
+  page,
+  installation,
+}) => {
+  await openBastion(page, installation.url);
+  await page.getByLabel("Port", { exact: true }).fill("2244");
+  const tree = page.getByRole("navigation", { name: "Connections" });
+
+  page.once("dialog", async (dialog) => dialog.dismiss());
+  await tree.getByRole("button", { name: "nas" }).click();
+  await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
+
+  page.once("dialog", async (dialog) => dialog.accept());
+  await tree.getByRole("button", { name: "nas" }).click();
+  await expect(page.getByRole("heading", { name: "nas", exact: true })).toBeVisible();
 });
 
 test("saves and replaces a key-owned passphrase without changing another key's shared value", async ({
@@ -232,11 +277,10 @@ test("linux: offers no way to open a terminal, since this binary cannot open one
   test.skip(process.platform !== "linux", "this host did not build a linux binary");
   await openBastion(page, installation.url);
 
-  // Linux は端末を起動しないので、選ぶコントロールも Connect ボタンも出ない
-  // ——出しても押せば必ず失敗するからだ。代わりに、コマンドを自分で実行する
-  // よう伝える一文が出る。
+  // Linux は端末を起動しないので選ぶコントロールは出さず、保存済み概要の
+  // Connect は無効にする。代わりにコマンドを自分で実行するよう伝える。
   await expect(page.getByLabel("Open with")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Connect", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
   await expect(page.getByText(/This platform does not open a terminal for you/)).toBeVisible();
 });
 
@@ -245,6 +289,7 @@ test("edits the same host through Raw and keeps every other byte", async ({
   installation,
 }) => {
   await openBastion(page, installation.url);
+  await page.getByRole("tab", { name: "Advanced settings" }).click();
   await page.getByRole("tab", { name: "Raw" }).click();
 
   const editor = page.getByLabel(/Block text/);
@@ -296,58 +341,49 @@ test("refuses a save whose base is stale and shows the three-way conflict", asyn
   expect(after).not.toContain("Port 2277");
 });
 
-// Diagnostics タブはかつて、検査は後のサブシステムで届くと
-// 言っていたが、実際にはとうに届いていた。今では開いている
-// 接続を宛先として、本物の検査を実行する。
-//
-// ここで検証するのはコマンドビルダーだけだ。argv を組み立てるだけ
-// で何も起動しない。到達性テストと認証テストは実際にホストへ接続
-// するため、このリポジトリのどの自動テストもそれを行ってはなら
-// ない——それらは手動テスト M2 と M3 である。ボタンが存在し、それ自体
-// では何も起動しないことこそ、この試験が正直に主張できる性質だ。
-test("diagnoses the open connection from its own tab, and starts nothing unasked", async ({
+// 旧 Diagnostics URL は基本画面の接続確認へ対応する。開いただけでは
+// 到達性、認証、ssh -G、Terminal のいずれも開始しない。
+test("opens connection checks from the legacy diagnostics URL and starts nothing unasked", async ({
   page,
   installation,
 }) => {
   const started: string[] = [];
   page.on("request", (request) => {
-    if (request.method() === "POST") started.push(new URL(request.url()).pathname);
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "POST" &&
+      (path.startsWith("/api/v1/diagnostics/") || path === "/api/v1/terminal/launch")) {
+      started.push(path);
+    }
   });
 
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "Diagnostics" }).click();
+  const legacy = new URL(page.url());
+  legacy.searchParams.set("tab", "diagnostics");
+  await page.goto(legacy.toString());
 
-  const panel = page.getByRole("region", { name: "Diagnostics for bastion" });
+  await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
+  const panel = page.getByRole("region", { name: "Connection checks" });
   await expect(panel).toBeVisible();
-  await expect(page.getByText("Stored password", { exact: true })).toHaveCount(0);
-  // 接続は既知であるため、タブは alias を尋ねない。
-  await expect(panel.getByLabel("Host alias")).toHaveCount(0);
-  expect(started.filter((path) => path.startsWith("/api/v1/diagnostics/"))).toEqual([]);
-  expect(started.filter((path) => path.startsWith("/api/v1/terminal/"))).toEqual([]);
-
-  expect(await clickAndAwait(page, "Terminal command", "/api/v1/terminal/command")).toBe(200);
-  // このバイナリと alias。かつては 5 つの環境変数と 1 つの
-  // フラグだったが、それは Terminal ボタンが自分で組み立てる
-  // ものであり、有効な使い捨てトークンをシェルの履歴に残していた。
-  await expect(panel.getByText(/sshc bastion$/)).toBeVisible();
-  await expect(panel.getByText(/SSHC_ASKPASS_TOKEN/)).toHaveCount(0);
-
-  // それでも何も起動しない。コマンドの組み立てと実行は
-  // 別の操作であり、確認が必要なのは後者だけだ。
-  expect(started).not.toContain("/api/v1/terminal/launch");
+  await expect(panel.getByRole("button", { name: "Check reachability" })).toBeEnabled();
+  await expect(panel.getByRole("button", { name: "Check authentication with saved settings" })).toBeEnabled();
+  expect(started).toEqual([]);
 });
 
-test("sends the Effective tab to the authoritative check instead of describing it", async ({
+test("shows saved explanations in Settings analysis without running ssh -G", async ({
   page,
   installation,
 }) => {
+  const evaluations: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "POST" && path === "/api/v1/diagnostics/effective") evaluations.push(path);
+  });
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "Effective" }).click();
+  await page.getByRole("tab", { name: "Settings analysis" }).click();
 
-  await expect(page.getByText(/only it evaluates `Match`/)).toBeVisible();
-  await page.getByRole("button", { name: "Open the Diagnostics tab" }).click();
-
-  await expect(page.getByRole("region", { name: "Diagnostics for bastion" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Settings analysis" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run authoritative ssh -G" })).toBeEnabled();
+  expect(evaluations).toEqual([]);
 });
 
 // スキーマが常に持っていながらどの画面からも編集できな
@@ -433,7 +469,9 @@ test("writes a comment into the configuration file above the Host line", async (
   const before = await installation.read("config");
   await openBastion(page, installation.url);
 
-  await page.getByLabel("Comment").fill("the production bastion\nask infra before changing it");
+  await page.getByRole("button", { name: "More connection actions" }).click();
+  const management = page.getByRole("region", { name: "Manage connection" });
+  await management.getByLabel("Comment", { exact: true }).fill("the production bastion\nask infra before changing it");
   expect(await clickAndAwait(page, "Save comment", "/api/v1/config/save")).toBe(200);
 
   const after = await installation.read("config");
@@ -450,11 +488,14 @@ test("removes the comment lines when the comment is cleared", async ({ page, ins
   const before = await installation.read("config");
   await openBastion(page, installation.url);
 
-  await page.getByLabel("Comment").fill("temporary");
+  await page.getByRole("button", { name: "More connection actions" }).click();
+  const management = page.getByRole("region", { name: "Manage connection" });
+  await management.getByLabel("Comment", { exact: true }).fill("temporary");
   expect(await clickAndAwait(page, "Save comment", "/api/v1/config/save")).toBe(200);
-  await expect(page.getByLabel("Comment")).toHaveValue("temporary");
+  await expect(management.getByLabel("Comment", { exact: true })).toHaveValue("temporary");
+  await expect(management.getByRole("button", { name: "Save comment" })).toBeDisabled();
 
-  await page.getByLabel("Comment").fill("");
+  await management.getByLabel("Comment", { exact: true }).fill("");
   expect(await clickAndAwait(page, "Save comment", "/api/v1/config/save")).toBe(200);
 
   // 元のバイト列に戻る。コメントの追加と削除は往復である。
@@ -475,9 +516,10 @@ test("takes a comment with the connection it describes when the block moves", as
   await openApplication(page, installation);
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
-  await expect(page.getByLabel("Comment")).toHaveValue("the file server");
-
   await page.getByRole("button", { name: "More connection actions" }).click();
+  const management = page.getByRole("region", { name: "Manage connection" });
+  await expect(management.getByLabel("Comment", { exact: true })).toHaveValue("the file server");
+
   await page.getByLabel("Storage file").selectOption("config");
   expect(await clickAndAwait(page, "Change storage file", "/api/v1/config/save")).toBe(200);
 

@@ -54,20 +54,66 @@ test("restores a selected connection and editor tab from its URL", async ({
     tab: "basic",
   });
 
-  await page.getByRole("tab", { name: "Advanced" }).click();
+  await page.getByRole("tab", { name: "Advanced settings" }).click();
+  await page.getByRole("tab", { name: "Directives" }).click();
   current = new URL(page.url());
   expect(current.searchParams.get("tab")).toBe("advanced");
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Advanced" })).toHaveAttribute(
+  await expect(page.getByRole("tab", { name: "Advanced settings" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
+  await expect(page.getByRole("tab", { name: "Directives" })).toHaveAttribute("aria-selected", "true");
 
+  await page.goBack();
+  await expect(page.getByRole("tab", { name: "Jump" })).toHaveAttribute("aria-selected", "true");
+  expect(new URL(page.url()).searchParams.get("tab")).toBe("jump");
   await page.goBack();
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
   expect(new URL(page.url()).searchParams.get("tab")).toBe("basic");
+});
+
+test("maps every legacy connection tab URL without starting an operation", async ({
+  page,
+  installation,
+}) => {
+  const started: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "POST" &&
+      (path.startsWith("/api/v1/diagnostics/") || path === "/api/v1/terminal/launch")) {
+      started.push(path);
+    }
+  });
+  await openApplication(page, { url: atPath(installation.url, "/connections") });
+
+  const cases = [
+    { tab: "basic", area: "Basic" },
+    { tab: "diagnostics", area: "Basic", region: "Connection checks" },
+    { tab: "effective", area: "Settings analysis" },
+    { tab: "jump", area: "Advanced settings", advanced: "Jump" },
+    { tab: "advanced", area: "Advanced settings", advanced: "Directives" },
+    { tab: "raw", area: "Advanced settings", advanced: "Raw" },
+  ];
+
+  for (const item of cases) {
+    const target = new URL("/connections", page.url());
+    target.searchParams.set("path", "config");
+    target.searchParams.set("host", "bastion");
+    target.searchParams.set("tab", item.tab);
+    await page.goto(target.toString());
+    await expect(page.getByRole("tab", { name: item.area })).toHaveAttribute("aria-selected", "true");
+    if (item.advanced !== undefined) {
+      await expect(page.getByRole("tab", { name: item.advanced })).toHaveAttribute("aria-selected", "true");
+    }
+    if (item.region !== undefined) {
+      await expect(page.getByRole("region", { name: item.region })).toBeVisible();
+    }
+  }
+
+  expect(started).toEqual([]);
 });
 
 test("normalizes one trailing slash without leaving the requested section", async ({
