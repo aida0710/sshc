@@ -1,4 +1,4 @@
-import { StrictMode, type ReactNode } from "react";
+import { StrictMode, useEffect, type ReactNode } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +14,6 @@ import { ja } from "./i18n/messages";
 
 vi.mock("./connections/ConnectionsPage", () => ({
   ConnectionsPage: ({
-    onOpenFile,
     onInspector,
     creationDraft,
     onCreationDraftChange,
@@ -25,32 +24,35 @@ vi.mock("./connections/ConnectionsPage", () => ({
     preferredKey,
     onPreferredKeyApplied,
   }: {
-    onOpenFile: (path: string, line: number) => void;
     onInspector: (content: { label: string; attention: boolean; body: ReactNode } | null) => void;
     creationDraft?: { alias: string } | null;
     onCreationDraftChange?: (draft: Record<string, string> | null) => void;
     onNavigateForCreation?: (section: "Groups" | "Keys") => void;
     location?: { pathname: string; search: string };
-    onNavigateLocation?: (url: string) => void;
+    onNavigateLocation?: (url: string, options?: { replace?: boolean }) => void;
     onNavigationBlockerChange?: (
       blocker: ((next: { pathname: string; search: string }) => boolean) | null,
     ) => void;
     preferredKey?: { privateKeyId: string; privateRelativePath: string } | null;
     onPreferredKeyApplied?: () => void;
-  }) => (
-    <div>
+  }) => {
+    useEffect(() => {
+      if (location?.pathname === "/connections") {
+        onNavigateLocation?.("/connections/servers", { replace: true });
+      }
+    }, [location?.pathname, onNavigateLocation]);
+    return <div>
       connections panel
       <span>{`connection location ${location?.pathname ?? "missing"}${location?.search ?? ""}`}</span>
       <span>{`preferred connection key ${preferredKey?.privateRelativePath ?? "none"}`}</span>
       <button type="button" onClick={onPreferredKeyApplied}>consume connection key</button>
       {creationDraft === null || creationDraft === undefined ? null : <span>{`draft ${creationDraft.alias}`}</span>}
-      <button type="button" onClick={() => onOpenFile("config", 9)}>open pattern rule</button>
       <button type="button" onClick={() => onInspector({ label: "Display and classification", attention: true, body: <p>inspector body</p> })}>
         offer inspector
       </button>
       <button
         type="button"
-        onClick={() => onNavigateLocation?.("/connections?path=config&host=build01&tab=advanced")}
+        onClick={() => onNavigateLocation?.("/connections/servers?path=config&host=build01&panel=advanced&advanced=directives")}
       >
         open routed host
       </button>
@@ -72,8 +74,8 @@ vi.mock("./connections/ConnectionsPage", () => ({
       >
         open key prerequisite
       </button>
-    </div>
-  ),
+    </div>;
+  },
 }));
 vi.mock("./explorer/ConfigExplorer", () => ({
   ConfigExplorer: ({ target }: { target?: { path: string; line: number } | null }) => (
@@ -282,6 +284,24 @@ describe("App", () => {
     expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute("href", "/connections");
   });
 
+  it("keeps a nested group URL inside the Connections section", async () => {
+    window.history.replaceState(null, "", "/connections/groups/home/eu");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    expect(await screen.findByText("connection location /connections/groups/home/eu"))
+      .toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
   it("renders Settings directly and follows browser history back to it", async () => {
     window.history.replaceState(null, "", "/settings");
     render(
@@ -319,10 +339,10 @@ describe("App", () => {
     );
 
     await user.click(await screen.findByRole("link", { name: "Connections" }));
-    expect(window.location.pathname).toBe("/connections");
-    await user.click(screen.getByRole("button", { name: "open pattern rule" }));
-    expect(window.location.pathname).toBe("/config");
-    expect(screen.getByText("config panel config:9")).toBeInTheDocument();
+    await waitFor(() => expect(window.location.pathname).toBe("/connections/servers"));
+    await user.click(screen.getByRole("button", { name: "open routed host" }));
+    expect(window.location.pathname).toBe("/connections/servers");
+    expect(window.location.search).toBe("?path=config&host=build01&panel=advanced&advanced=directives");
   });
 
   it("carries generated key identifiers to the next workflow without putting secrets in the URL", async () => {
@@ -338,7 +358,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "hand key to connection" }));
     expect(await screen.findByText("preferred connection key id_new")).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/connections");
+    await waitFor(() => expect(window.location.pathname).toBe("/connections/servers"));
     expect(window.location.search).toBe("");
     await user.click(screen.getByRole("button", { name: "consume connection key" }));
     expect(screen.getByText("preferred connection key none")).toBeInTheDocument();
@@ -355,7 +375,7 @@ describe("App", () => {
 
   it("passes the complete connection location through and clears it from the section link", async () => {
     const user = userEvent.setup();
-    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
+    window.history.replaceState(null, "", "/connections/servers?path=config&host=bastion&panel=basic");
     render(
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
@@ -364,21 +384,21 @@ describe("App", () => {
       />,
     );
 
-    expect(await screen.findByText("connection location /connections?path=config&host=bastion&tab=basic"))
+    expect(await screen.findByText("connection location /connections/servers?path=config&host=bastion&panel=basic"))
       .toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "open routed host" }));
-    expect(window.location.search).toBe("?path=config&host=build01&tab=advanced");
-    expect(screen.getByText("connection location /connections?path=config&host=build01&tab=advanced"))
+    expect(window.location.search).toBe("?path=config&host=build01&panel=advanced&advanced=directives");
+    expect(screen.getByText("connection location /connections/servers?path=config&host=build01&panel=advanced&advanced=directives"))
       .toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "Connections" }));
-    expect(window.location.pathname).toBe("/connections");
+    await waitFor(() => expect(window.location.pathname).toBe("/connections/servers"));
     expect(window.location.search).toBe("");
   });
 
   it("lets the connection editor block and later allow shell navigation", async () => {
     const user = userEvent.setup();
-    window.history.replaceState(null, "", "/connections?path=config&host=bastion&tab=basic");
+    window.history.replaceState(null, "", "/connections/servers?path=config&host=bastion&panel=basic");
     render(
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
@@ -389,7 +409,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "block connection navigation" }));
     await user.click(screen.getByRole("link", { name: "Keys" }));
-    expect(window.location.pathname).toBe("/connections");
+    expect(window.location.pathname).toBe("/connections/servers");
     expect(screen.getByText("connections panel")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "allow connection navigation" }));
@@ -432,7 +452,7 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "unlock fixture" }));
 
     expect(await screen.findByText("connections panel")).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/connections");
+    expect(window.location.pathname).toBe("/connections/servers");
   });
 
   it("remembers that a newly opened vault exists when it is locked again", async () => {
@@ -583,24 +603,6 @@ describe("App", () => {
     await user.click(await screen.findByRole("link", { name: "History" }));
 
     expect(screen.getByText("history panel")).toBeInTheDocument();
-  });
-
-  it("opens the config file view on the line a pattern rule asks for", async () => {
-    const user = userEvent.setup();
-    render(
-      <App
-        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
-        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-      vault={openVault}
-      />,
-    );
-
-    await user.click(await screen.findByRole("link", { name: "Connections" }));
-    await user.click(await screen.findByRole("button", { name: "open pattern rule" }));
-
-    expect(screen.getByText("config panel config:9")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Config" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
   it("shows a recovery action when bootstrap fails", async () => {

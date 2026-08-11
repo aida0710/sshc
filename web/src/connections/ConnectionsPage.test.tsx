@@ -98,7 +98,6 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         location={{ pathname: "/connections", search: "?tab=raw" }}
         onNavigateLocation={onNavigateLocation}
@@ -113,7 +112,6 @@ describe("ConnectionsPage", () => {
   it("opens a connection and tab from the URL", async () => {
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         location={{
           pathname: "/connections/servers",
@@ -133,7 +131,6 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "" }}
         onNavigateLocation={onNavigateLocation}
@@ -167,7 +164,6 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         location={{
           pathname: "/connections/servers",
@@ -198,7 +194,6 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     const harness = render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         location={{ pathname: "/connections/files", search: "" }}
         onNavigateLocation={onNavigateLocation}
@@ -211,7 +206,6 @@ describe("ConnectionsPage", () => {
 
     harness.rerender(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         location={{ pathname: "/connections/groups/gone", search: "" }}
         onNavigateLocation={onNavigateLocation}
@@ -227,7 +221,6 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.host).mockRejectedValue(new Error("not found"));
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "?path=config&host=gone&panel=basic" }}
         onNavigateLocation={onNavigateLocation}
@@ -248,7 +241,7 @@ describe("ConnectionsPage", () => {
       ],
     } as never);
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     expect(await screen.findByText(/Another block declares the same alias/)).toBeInTheDocument();
     expect(screen.queryByText(/catch-all block can override/)).not.toBeInTheDocument();
@@ -261,7 +254,7 @@ describe("ConnectionsPage", () => {
       transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
     } as never);
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -281,7 +274,7 @@ describe("ConnectionsPage", () => {
 
   it("shares one committed resource load between the summary and persistent Basic editor", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     expect(await screen.findByText("bastion:22")).toBeInTheDocument();
@@ -314,7 +307,6 @@ describe("ConnectionsPage", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigationBlockerChange={onNavigationBlockerChange}
       />,
@@ -373,7 +365,6 @@ describe("ConnectionsPage", () => {
     });
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
         onNavigationBlockerChange={(next) => {
@@ -403,7 +394,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t-terminal", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
     } as never);
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.clear(screen.getByLabelText("Port"));
@@ -428,7 +419,7 @@ describe("ConnectionsPage", () => {
       .mockResolvedValueOnce(detail as never)
       .mockRejectedValueOnce(new Error("reload failed"));
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -450,7 +441,7 @@ describe("ConnectionsPage", () => {
 
   it("opens the selected host in Terminal only after an explicit connect action", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     expect(integrationsApi.terminalLaunch).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
@@ -471,7 +462,7 @@ describe("ConnectionsPage", () => {
       applications: [],
     } as never);
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
 
     await waitFor(() => expect(screen.queryByLabelText("Open with")).toBeNull());
@@ -484,7 +475,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t-terminal", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
     } as never);
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.selectOptions(screen.getByLabelText("Open with"), "kitty");
@@ -500,7 +491,7 @@ describe("ConnectionsPage", () => {
   // 欠落になる。開けないことは名前の横に書き、選んだ時点で伝える。
   it("marks a terminal this Mac does not have, and says so when it is the one chosen", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await waitFor(() =>
@@ -527,7 +518,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t-custom", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
     } as never);
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.selectOptions(await screen.findByLabelText("Open with"), "custom");
@@ -554,7 +545,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(integrationsApi.terminalLaunch).mockRejectedValue(
       new ApiError("terminal_not_installed", 409, { code: "terminal_not_installed", message: "not installed" }),
     );
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(await screen.findByRole("button", { name: "Connect" }));
@@ -591,7 +582,7 @@ describe("ConnectionsPage", () => {
       },
     } as never);
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -631,7 +622,7 @@ describe("ConnectionsPage", () => {
       },
     } as never);
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -666,7 +657,7 @@ describe("ConnectionsPage", () => {
       return await new Promise(() => undefined);
     });
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     expect(await screen.findByRole("heading", { name: /^bastion$/ })).toBeInTheDocument();
 
@@ -677,7 +668,6 @@ describe("ConnectionsPage", () => {
   });
 
   it("keeps pattern rules out of the server browser and never asks for their host detail", async () => {
-    const onOpenFile = vi.fn();
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
       hosts: [
@@ -690,11 +680,10 @@ describe("ConnectionsPage", () => {
       ],
     } as never);
 
-    render(<ConnectionsPage onOpenFile={onOpenFile} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     expect(await screen.findByRole("button", { name: "bastion" })).toBeInTheDocument();
     expect(screen.queryByText("Host *")).not.toBeInTheDocument();
-    expect(onOpenFile).not.toHaveBeenCalled();
     expect(configApi.host).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "Choose a connection" })).toBeInTheDocument();
   });
@@ -712,7 +701,7 @@ describe("ConnectionsPage", () => {
       },
     }));
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -747,7 +736,6 @@ describe("ConnectionsPage", () => {
 
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -785,7 +773,6 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -814,7 +801,6 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -854,7 +840,6 @@ describe("ConnectionsPage", () => {
 
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -898,7 +883,6 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockRejectedValue(new Error("move conflict"));
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -925,7 +909,6 @@ describe("ConnectionsPage", () => {
 
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -951,7 +934,6 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockRejectedValue(new Error("delete conflict"));
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -987,7 +969,7 @@ describe("taking a connection out of every group", () => {
       transactionId: "tx", written: [], preview: { operation: "config.move", diffs: [] },
     } as never);
 
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "More connection actions" }));
     await user.selectOptions(await screen.findByLabelText("Primary group"), "");
@@ -1063,7 +1045,7 @@ describe("dropping in the tree", () => {
 
   it("moves a direct connection into a visible child group", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     await user.click(screen.getByRole("button", { name: "Groups" }));
     await user.click(within(screen.getByRole("list", { name: "Groups" })).getByRole("button", { name: /^home,/ }));
@@ -1101,7 +1083,6 @@ describe("dropping in the tree", () => {
 
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1123,7 +1104,7 @@ describe("dropping in the tree", () => {
 
   it("moves a connection out of every group by sending it to the entry file", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     await user.click(screen.getByRole("button", { name: "Groups" }));
     await user.click(within(screen.getByRole("list", { name: "Groups" })).getByRole("button", { name: /^home,/ }));
@@ -1145,7 +1126,7 @@ describe("dropping in the tree", () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     } as never);
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     await user.click(screen.getByRole("button", { name: "Groups" }));
     const groups = screen.getByRole("list", { name: "Groups" });
@@ -1197,7 +1178,6 @@ describe("dropping in the tree", () => {
     } as never);
     render(
       <ConnectionsPage
-        onOpenFile={vi.fn()}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1223,7 +1203,7 @@ describe("dropping in the tree", () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     } as never);
-    render(<ConnectionsPage onOpenFile={vi.fn()} onInspector={() => undefined} />);
+    render(<ConnectionsPage onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     await user.click(screen.getByRole("button", { name: "Groups" }));
     await user.click(within(screen.getByRole("list", { name: "Groups" })).getByRole("button", { name: /^home,/ }));

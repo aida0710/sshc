@@ -341,9 +341,8 @@ test("refuses a save whose base is stale and shows the three-way conflict", asyn
   expect(after).not.toContain("Port 2277");
 });
 
-// 旧 Diagnostics URL は基本画面の接続確認へ対応する。開いただけでは
-// 到達性、認証、ssh -G、Terminal のいずれも開始しない。
-test("opens connection checks from the legacy diagnostics URL and starts nothing unasked", async ({
+// Basic を開いただけでは到達性、認証、ssh -G、Terminal のいずれも開始しない。
+test("shows connection checks on Basic and starts nothing unasked", async ({
   page,
   installation,
 }) => {
@@ -357,9 +356,6 @@ test("opens connection checks from the legacy diagnostics URL and starts nothing
   });
 
   await openBastion(page, installation.url);
-  const legacy = new URL(page.url());
-  legacy.searchParams.set("tab", "diagnostics");
-  await page.goto(legacy.toString());
 
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
   const panel = page.getByRole("region", { name: "Connection checks" });
