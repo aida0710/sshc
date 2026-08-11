@@ -132,6 +132,27 @@ test("normalizes one trailing slash without leaving the requested section", asyn
   );
 });
 
+test("distinguishes a missing connection group from an invalid connection URL", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, {
+    url: atPath(installation.url, "/connections/groups/not-declared"),
+  });
+
+  await expect(page).toHaveURL(/\/connections\/groups\/not-declared$/);
+  await expect(page.getByText("Group not found.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back to group root" }).click();
+  await expect(page).toHaveURL(/\/connections\/groups$/);
+
+  await page.goto(new URL("/connections/groups?scope=unknown", page.url()).toString());
+  await expect(
+    page.getByText("This connection URL is not recognised.", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to servers" }).click();
+  await expect(page).toHaveURL(/\/connections\/servers$/);
+});
+
 test("keeps an unknown URL until the person chooses Home", async ({ page, installation }) => {
   await openApplication(page, { url: atPath(installation.url, "/missing") });
 

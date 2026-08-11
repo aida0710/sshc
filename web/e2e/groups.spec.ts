@@ -122,7 +122,7 @@ test("refuses to move a connection into a group nothing declares", async ({
   expect(await installation.read("conf.d/10-home.conf")).toContain("Host nas");
 });
 
-test("shows a nested group inside its parent, and hides a container from the tree", async ({
+test("drills into a nested group and promotes it when its container is hidden", async ({
   page,
   installation,
 }) => {
@@ -135,10 +135,34 @@ test("shows a nested group inside its parent, and hides a container from the tre
   expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
 
   await openSection(page, "Connections");
-  const tree = page.getByRole("navigation", { name: "Connections" });
-  // 子は親のブロックの横ではなく内側に描画され、その
-  // 見出しは自分自身のセグメントだけを持つ。
-  await expect(tree.getByRole("region", { name: "work" }).getByRole("heading", { name: "eu" })).toBeVisible();
+  const browser = page.getByRole("navigation", { name: "Connections" });
+  await browser.getByRole("button", { name: "Groups", exact: true }).click();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups");
+
+  // 一度に一階層だけを表示する。親を選ぶまでは子を出さず、選ぶと
+  // 同じ左ペインを子グループへ置き換える。
+  await expect(browser.getByRole("button", { name: "work, 0 servers" })).toBeVisible();
+  await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toHaveCount(0);
+  await browser.getByRole("button", { name: "work, 0 servers" }).click();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups/work");
+  await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toBeVisible();
+  await browser.getByRole("button", { name: "eu, 0 servers" }).click();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups/work/eu");
+  await expect(
+    browser.getByRole("navigation", { name: "Group path" }).getByText("eu", { exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await page.reload();
+  await expect(browser.getByText("No servers are directly in this group.")).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups/work/eu");
+  await page.goBack();
+  await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups/work");
+  await page.goBack();
+  await expect(browser.getByRole("button", { name: "work, 0 servers" })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups");
+  await page.goForward();
+  await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toBeVisible();
 
   // "work" は自分自身のものを何も持たないため、隠す操作が提供される。
   //
@@ -159,7 +183,11 @@ test("shows a nested group inside its parent, and hides a container from the tre
   expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
 
   await openSection(page, "Connections");
-  await expect(tree.getByRole("region", { name: "work", exact: true })).toHaveCount(0);
-  // 子は親の見出しが消えても生き残る。
-  await expect(tree.getByRole("region", { name: "work/eu" })).toBeVisible();
+  await browser.getByRole("button", { name: "Groups", exact: true }).click();
+  await expect(browser.getByRole("button", { name: "work, 0 servers" })).toHaveCount(0);
+  // 子は親が消えてもルートへ昇格し、元の完全な path へ遷移する。
+  const promoted = browser.getByRole("button", { name: "eu, 0 servers" });
+  await expect(promoted).toBeVisible();
+  await promoted.click();
+  expect(new URL(page.url()).pathname).toBe("/connections/groups/work/eu");
 });
