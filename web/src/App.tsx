@@ -31,6 +31,7 @@ import { sectionPath, type Section } from "./routing/sectionRoute";
 import {
   useSectionRoute,
   type BrowserLocation,
+  type NavigationBlocker,
   type NavigateLocationOptions,
 } from "./routing/useSectionRoute";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
@@ -104,7 +105,7 @@ const themeLabels: Record<Theme, MessageKey> = {
 export function App({ bootstrap, health, vault = integrationsApi.passwordVault }: AppProps) {
   const { t, locale, setLocale } = useLanguage();
   const { theme, setTheme } = useTheme();
-  const { route, location, navigate, navigateLocation } = useSectionRoute();
+  const { route, location, navigate, navigateLocation, setNavigationBlocker } = useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
   // "locked" はアプリケーション全体を指し、その中の一画面ではない。あらゆる
   // 書き込みはマスターパスワードで封じたバックアップを残すため、vault が
@@ -441,6 +442,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                   onNavigate={navigate}
                   location={location}
                   onNavigateLocation={navigateLocation}
+                  onNavigationBlockerChange={setNavigationBlocker}
                   preferredConnectionKey={preferredConnectionKey}
                   preferredPublicKey={preferredPublicKey}
                   onAssignGeneratedKey={assignGeneratedKey}
@@ -491,6 +493,7 @@ type SectionViewProps = {
   onNavigate: (section: Section) => void;
   location: BrowserLocation;
   onNavigateLocation: (url: string, options?: NavigateLocationOptions) => void;
+  onNavigationBlockerChange: (blocker: NavigationBlocker | null) => void;
   preferredConnectionKey: GeneratedPrivateKeyHandoff | null;
   preferredPublicKey: GeneratedPublicKeyHandoff | null;
   onAssignGeneratedKey: (key: GeneratedPrivateKeyHandoff) => void;
@@ -517,6 +520,7 @@ function SectionView(props: SectionViewProps) {
         onNavigateForCreation={props.onNavigateForCreation}
         location={props.location}
         onNavigateLocation={props.onNavigateLocation}
+        onNavigationBlockerChange={props.onNavigationBlockerChange}
         preferredKey={props.preferredConnectionKey}
         onPreferredKeyApplied={props.onPreferredConnectionKeyApplied}
       />
