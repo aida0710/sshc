@@ -1,479 +1,178 @@
-import { useEffect, useMemo, useState } from "react";
-import type {
-  FieldEdit,
-  FormField,
-  GroupMetadata,
-  HostDetail,
-  SavePreview,
-  UpdateConnectionRequest,
-} from "../api/config";
+import { useCallback, useEffect, useState } from "react";
+import type { FieldEdit, GroupMetadata, HostDetail, SavePreview, UpdateConnectionRequest } from "../api/config";
 import type { Problem } from "../api/client";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
-import { DiagnosticsPanel } from "../diagnostics/DiagnosticsPanel";
-import type { KeysApi } from "../keys/api";
-import { ConnectionBasicForm } from "./ConnectionBasicForm";
-import { formatValues, parseValues } from "./values";
-import { NoticeList, SavePreviewPanel } from "./SavePreview";
 import { useTranslate } from "../i18n/context";
-import {
-  control,
-  fieldLabel,
-  hintText,
-  narrowControl,
-  primaryAction,
-  secondaryAction,
-  sectionHeading,
-} from "../ui/form";
-import { Button, Card, Notice, Row } from "../ui/surface";
-import type { MessageKey } from "../i18n/messages";
-import { hostEditorTabs as tabs, type HostEditorTab } from "../routing/connectionRoute";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
+import {
+  connectionAreaForTab,
+  tabForConnectionArea,
+  type AdvancedArea,
+  type ConnectionArea,
+  type HostEditorTab,
+} from "../routing/connectionRoute";
+import { AdvancedSettings } from "./AdvancedSettings";
+import { ConnectionAnalysis } from "./ConnectionAnalysis";
+import { ConnectionBasicForm } from "./ConnectionBasicForm";
+import { ConnectionChecks } from "./ConnectionChecks";
+import type { ConnectionSavedState } from "./connectionSavedState";
+import { NoticeList, SavePreviewPanel } from "./SavePreview";
 
-// タブの識別子は英語のまま翻訳しない。下のフィールドカテゴリとレンダリング
-// スイッチのキーになっているため、翻訳すればどのタブが開いているかが
-// 表示言語に依存してしまう。
-const tabLabels: Record<(typeof tabs)[number], MessageKey> = {
-  Basic: "host.tabBasic",
-  Jump: "host.tabJump",
-  Advanced: "host.tabAdvanced",
-  Raw: "host.tabRaw",
-  Effective: "host.tabEffective",
-  Diagnostics: "host.tabDiagnostics",
-};
 type HostDetailPanelProps = {
   detail: HostDetail;
-  groups: GroupMetadata[];
+  savedState?: ConnectionSavedState | undefined;
   preview: SavePreview | null;
   problem: Problem | null;
   onFieldEdits: (edits: FieldEdit[]) => void;
   onBlockRaw: (raw: string) => void;
-  onRename: (newAlias: string) => void;
-  onComment: (comment: string) => void;
-  // onMoveToGroup はフィールドを編集するのではなくファイルを移動する。グループは
-  // ディレクトリであるため、それを変えることは移動であり、呼び出し側は
-  // グループ名をサーバーへ送り、サーバーがそこから宛先パスを導出する。
-  onMoveToGroup: (group: string) => void;
   onBasicSave: (request: UpdateConnectionRequest) => Promise<void>;
-  // Diagnostics タブは Diagnostics section と同じ検査を行うため、
-  // 同じクライアントを使う。これがプロパティであるのはテストが注入できるように
-  // するためだけであり、ない場合パネルは実物のクライアントへフォールバックする。
   integrations?: IntegrationsApi;
-  keys?: Pick<KeysApi, "inventory">;
   tab?: HostEditorTab;
   onTabChange?: (tab: HostEditorTab) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null | undefined;
   onPreferredKeyApplied?: (() => void) | undefined;
+  onDirtyChange?: ((dirty: boolean) => void) | undefined;
+  onBasicDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
+  onRequestRefresh?: (() => Promise<void>) | undefined;
+  disabled?: boolean | undefined;
+  // Transitional compatibility for the page while management is moved into
+  // ManageConnection. HostDetail deliberately does not render these actions.
+  groups?: GroupMetadata[] | undefined;
+  onRename?: ((alias: string) => void) | undefined;
+  onComment?: ((comment: string) => void) | undefined;
+  onMoveToGroup?: ((group: string) => void) | undefined;
 };
 
-function fieldKey(field: FormField): string {
-  return `${field.line}-${field.keyword}`;
-}
+const areas: { area: ConnectionArea; label: "conn.areaBasic" | "conn.areaAnalysis" | "conn.areaAdvanced" }[] = [
+  { area: "Basic", label: "conn.areaBasic" },
+  { area: "Analysis", label: "conn.areaAnalysis" },
+  { area: "Advanced", label: "conn.areaAdvanced" },
+];
 
 export function HostDetailPanel({
   detail,
-  groups,
+  savedState,
   preview,
   problem,
   onFieldEdits,
   onBlockRaw,
-  onRename,
-  onComment,
-  onMoveToGroup,
   onBasicSave,
   integrations = integrationsApi,
-  keys,
   tab: controlledTab,
   onTabChange,
   preferredKey,
   onPreferredKeyApplied,
+  onDirtyChange,
+  onBasicDiscardReady,
+  onRequestRefresh,
+  disabled = false,
 }: HostDetailPanelProps) {
   const t = useTranslate();
   const [localTab, setLocalTab] = useState<HostEditorTab>("Basic");
+  const [lastAdvanced, setLastAdvanced] = useState<AdvancedArea>("Jump");
+  const [basicDirty, setBasicDirty] = useState(false);
+  const [advancedDirty, setAdvancedDirty] = useState(false);
   const tab = controlledTab ?? localTab;
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [removed, setRemoved] = useState<number[]>([]);
-  const [additions, setAdditions] = useState<FieldEdit[]>([]);
-  const [newKeyword, setNewKeyword] = useState("");
-  const [newValue, setNewValue] = useState("");
-  const [blockRaw, setBlockRaw] = useState(detail.form.raw);
-  const [renameTo, setRenameTo] = useState(detail.form.entry.identity.alias);
-  // ファイルが実際にあるグループから始まる。これは射影がパスから
-  // 読み取ったものであり、コントロールはそれを移動する前に、接続が
-  // どこにあるかを示す。
-  const [moveTo, setMoveTo] = useState(detail.form.entry.group ?? "");
-  // レガシーの note は、ブロックにまだ comment がないときエディタの初期値になる。
-  // 最初の save がそれを設定へ移し、両者が食い違ったままに
-  // ならないようにする。書き込まれた後は、comment が唯一の由来である。
-  const [comment, setComment] = useState(detail.form.comment || detail.metadata.note || "");
-  const [localError, setLocalError] = useState("");
+  const route = connectionAreaForTab(tab);
+  const advancedArea = route.area === "Advanced" ? route.advanced : lastAdvanced;
+  const dirty = basicDirty || advancedDirty;
+  const identity = detail.form.entry.identity;
+  const resetKey = `${identity.path}\u0000${identity.alias}\u0000${detail.file.contents}`;
 
-  // 別のホストを開く、あるいは save の後に同じホストを再読み込みすると、
-  // すべての draft を破棄する。draft はそれを生んだブロックに対してのみ
-  // 意味を持つ行番号を記述しているからである。
-  const identityPath = detail.form.entry.identity.path;
-  const identityAlias = detail.form.entry.identity.alias;
-  const formRaw = detail.form.raw;
-  const currentGroup = detail.form.entry.group ?? "";
-  const initialComment = detail.form.comment || detail.metadata.note || "";
+  useEffect(() => {
+    if (route.area === "Advanced") setLastAdvanced(route.advanced);
+  }, [route.advanced, route.area]);
+
   useEffect(() => {
     if (controlledTab === undefined) setLocalTab("Basic");
-  }, [controlledTab, identityPath, identityAlias]);
-
-  useEffect(() => {
-    setDrafts({});
-    setRemoved([]);
-    setAdditions([]);
-    setNewKeyword("");
-    setNewValue("");
-    setBlockRaw(formRaw);
-    setRenameTo(identityAlias);
-    setMoveTo(currentGroup);
-    setComment(initialComment);
-    setLocalError("");
+    setBasicDirty(false);
+    setAdvancedDirty(false);
+    // resetKey is the committed snapshot the mounted drafts belong to. A
+    // controlled tab change is only a view change and must not clear dirtiness.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identityPath, identityAlias, formRaw, currentGroup, initialComment]);
+  }, [resetKey]);
 
-  const visibleFields = useMemo(
-    () => detail.form.fields.filter((field) =>
-      tab === "Advanced"
-        ? field.category === "advanced" || field.category === "basic"
-        : tab === "Jump" && field.category === "jump",
-    ),
-    [detail.form.fields, tab],
-  );
-  const fieldDirty = removed.length > 0 || additions.length > 0 || Object.entries(drafts).some(([key, value]) => {
-    const field = detail.form.fields.find((candidate) => fieldKey(candidate) === key);
-    return field !== undefined && value !== formatValues(field.values);
-  });
-  const rawDirty = blockRaw !== formRaw;
-  const renameDirty = renameTo !== "" && renameTo !== identityAlias;
-  const commentDirty = comment !== initialComment;
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
-  function draftFor(field: FormField): string {
-    return drafts[fieldKey(field)] ?? formatValues(field.values);
-  }
-
-  function submitFieldEdits() {
-    const edits: FieldEdit[] = [];
-    try {
-      for (const field of detail.form.fields) {
-        if (removed.includes(field.line)) {
-          edits.push({ action: "remove", line: field.line });
-          continue;
-        }
-        const draft = drafts[fieldKey(field)];
-        if (draft === undefined || draft === formatValues(field.values)) continue;
-        edits.push({ action: "set", line: field.line, values: parseValues(draft) });
-      }
-      edits.push(...additions);
-    } catch {
-      setLocalError(t("host.unbalancedQuote"));
-      return;
-    }
-    if (edits.length === 0) {
-      setLocalError(t("host.nothingChanged"));
-      return;
-    }
-    setLocalError("");
-    onFieldEdits(edits);
-  }
-
-  function addDirective() {
-    if (newKeyword === "") {
-      setLocalError(t("host.needsKeyword"));
-      return;
-    }
-    try {
-      setAdditions([...additions, { action: "add", keyword: newKeyword, values: parseValues(newValue) }]);
-    } catch {
-      setLocalError(t("host.unbalancedQuote"));
-      return;
-    }
-    setNewKeyword("");
-    setNewValue("");
-    setLocalError("");
-  }
+  const handleBasicDirty = useCallback((next: boolean) => setBasicDirty(next), []);
+  const handleAdvancedDirty = useCallback((next: boolean) => setAdvancedDirty(next), []);
 
   function selectTab(next: HostEditorTab) {
     if (onTabChange !== undefined) onTabChange(next);
     else setLocalTab(next);
   }
 
+  function selectArea(area: ConnectionArea) {
+    selectTab(tabForConnectionArea(area, advancedArea, false));
+  }
+
+  function selectAdvanced(area: AdvancedArea) {
+    setLastAdvanced(area);
+    selectTab(tabForConnectionArea("Advanced", area, false));
+  }
+
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-lg font-medium">{detail.form.entry.identity.alias || detail.form.entry.patterns.join(" ")}</h2>
-        <p className="text-xs text-ink-muted">
-          {`${detail.form.entry.file.path ?? detail.form.entry.file.absolute}:${detail.form.entry.line}`}
-        </p>
-        <NoticeList notices={detail.form.notices ?? []} />
-      </header>
+      <NoticeList notices={detail.form.notices ?? []} />
 
-      <div role="tablist" aria-label={t("host.editorLabel")} className="flex gap-1 border-b border-line">
-        {tabs.map((name) => (
+      <div role="tablist" aria-label={t("conn.editorLabel")} className="flex gap-1 border-b border-line">
+        {areas.map((item) => (
           <button
-            key={name}
+            key={item.area}
             type="button"
             role="tab"
-            aria-selected={tab === name}
-            onClick={() => selectTab(name)}
-            className={`px-3 py-2 text-sm ${tab === name ? "border-b-2 border-ink text-ink" : "text-ink-muted"}`}
+            aria-selected={route.area === item.area}
+            onClick={() => selectArea(item.area)}
+            className={`px-3 py-2 text-sm ${route.area === item.area ? "border-b-2 border-ink text-ink" : "text-ink-muted"}`}
           >
-            {t(tabLabels[name])}
+            {t(item.label)}
           </button>
         ))}
       </div>
 
-      {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
-
-      {tab === "Basic" ? (
+      <div hidden={route.area !== "Basic"} className="flex flex-col gap-5">
+        {identity.alias === "" ? (
+          <p className="text-sm text-ink-muted">{t("host.noDestination")}</p>
+        ) : (
+          <ConnectionChecks
+            alias={identity.alias}
+            api={integrations}
+            disabled={disabled || dirty}
+            resetKey={resetKey}
+          />
+        )}
         <ConnectionBasicForm
           detail={detail}
+          savedState={savedState}
           problem={problem}
           onSave={onBasicSave}
-          {...(keys === undefined ? {} : { keys })}
           secrets={integrations}
           preferredKey={preferredKey}
           onPreferredKeyApplied={onPreferredKeyApplied}
+          onDirtyChange={handleBasicDirty}
+          onDiscardReady={onBasicDiscardReady}
+          onRequestRefresh={onRequestRefresh}
+          disabled={disabled || advancedDirty}
         />
-      ) : null}
+      </div>
 
-      {tab === "Jump" || tab === "Advanced" ? (
-        <div className="flex flex-col gap-3">
-          {/*
-            一つのディレクティブに一つの行。keyword を左に、value を右に、
-            その間にヘアライン、グループ全体を囲む一つのボーダー。"Remove"
-            ボタンはこの行の子の一つではなく行自身のアクションであるため、
-            ラベルの外側にとどめる——内側に置けば、Remove を押すことが
-            フィールドへのフォーカスも兼ねてしまう。
-          */}
-          {visibleFields.length === 0 ? null : (
-            <Card>
-              {visibleFields.map((field) => (
-                <Row
-                  key={fieldKey(field)}
-                  label={field.keyword}
-                  warning={
-                    [
-                      field.dangerous === true ? t("host.dangerousField", { keyword: field.keyword }) : "",
-                      field.duplicate === true ? t("host.duplicateKeyword") : "",
-                    ]
-                      .filter((part) => part !== "")
-                      .join(" ") || undefined
-                  }
-                  action={
-                    <Button
-                      className="px-2 py-1 text-xs"
-                      onClick={() =>
-                        setRemoved(removed.includes(field.line)
-                          ? removed.filter((line) => line !== field.line)
-                          : [...removed, field.line])
-                      }
-                    >
-                      {removed.includes(field.line) ? t("host.keep") : t("host.remove")}
-                    </Button>
-                  }
-                >
-                  <input
-                    id={`field-${fieldKey(field)}`}
-                    value={draftFor(field)}
-                    disabled={!field.editable || removed.includes(field.line)}
-                    onChange={(event) => setDrafts({ ...drafts, [fieldKey(field)]: event.target.value })}
-                    className={control}
-                  />
-                </Row>
-              ))}
-            </Card>
-          )}
+      <div hidden={route.area !== "Analysis"}>
+        <ConnectionAnalysis detail={detail} alias={identity.alias} api={integrations} />
+      </div>
 
-          {tab === "Advanced" ? (
-            <div className="flex flex-col gap-2 rounded border border-line p-3">
-              <label htmlFor="new-directive" className="text-xs text-ink-muted">{t("host.newDirective")}</label>
-              <input
-                id="new-directive"
-                value={newKeyword}
-                onChange={(event) => setNewKeyword(event.target.value)}
-                className={control}
-              />
-              <label htmlFor="new-value" className="text-xs text-ink-muted">{t("host.newValue")}</label>
-              <input
-                id="new-value"
-                value={newValue}
-                onChange={(event) => setNewValue(event.target.value)}
-                className={control}
-              />
-              <button type="button" onClick={addDirective} className={`self-start ${secondaryAction}`}>
-                {t("host.addDirective")}
-              </button>
-              {additions.length === 0 ? null : (
-                <ul className="text-xs text-ink-muted">
-                  {additions.map((addition, index) => (
-                    <li key={`${addition.keyword ?? ""}-${index}`}>
-                      {`${addition.keyword ?? ""} ${formatValues(addition.values ?? [])}`}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ) : null}
+      <div hidden={route.area !== "Advanced"}>
+        <AdvancedSettings
+          detail={detail}
+          area={advancedArea}
+          onAreaChange={selectAdvanced}
+          onFieldEdits={onFieldEdits}
+          onBlockRaw={onBlockRaw}
+          disabled={disabled || basicDirty}
+          onDirtyChange={handleAdvancedDirty}
+        />
+      </div>
 
-          <button type="button" onClick={submitFieldEdits} disabled={!fieldDirty} className={`self-start ${primaryAction}`}>
-            {t("host.saveChanges")}
-          </button>
-        </div>
-      ) : null}
-
-      {tab === "Raw" ? (
-        <div className="flex flex-col gap-2">
-          <label htmlFor="block-raw" className="text-xs text-ink-muted">
-            {t("host.blockText")}
-          </label>
-          <textarea
-            id="block-raw"
-            value={blockRaw}
-            onChange={(event) => setBlockRaw(event.target.value)}
-            rows={16}
-            spellCheck={false}
-            className="rounded border border-control-line bg-canvas p-3 font-mono text-xs"
-          />
-          <button type="button" disabled={!rawDirty} onClick={() => onBlockRaw(blockRaw)} className={`self-start ${primaryAction}`}>
-            {t("host.saveBlock")}
-          </button>
-        </div>
-      ) : null}
-
-      {tab === "Effective" ? (
-        <div className="flex flex-col gap-2">
-          <p role="status" className="text-xs text-notice-ink">
-            {t("host.effectiveNote")}
-          </p>
-          <button
-            type="button"
-            onClick={() => selectTab("Diagnostics")}
-            className="self-start rounded border border-control-line px-2 py-1 text-xs"
-          >
-            {t("host.openDiagnostics")}
-          </button>
-          <ul className="flex flex-col gap-1">
-            {detail.effective.entries.map((entry, index) => (
-              <li key={`${entry.keyword}-${index}`} className="text-xs text-ink-muted">
-                {`${entry.keyword} ${entry.values.join(" ")} — ${entry.source.path ?? entry.source.absolute ?? ""}:${entry.source.line ?? 0}`}
-              </li>
-            ))}
-          </ul>
-          <NoticeList notices={detail.effective.notices ?? []} />
-        </div>
-      ) : null}
-
-      {tab === "Diagnostics" ? (
-        // パターンで一致するブロックは宛先を名指さないため、発信・evaluate・
-        // Terminal を開く対象が何もない。ConnectionsPage はそうしたものを
-        // ここへ決してルーティングしないが、すべての検査を指定するのは alias で
-        // あるため、空の alias はどこからもパネルへ届いてはならない。
-        identityAlias === "" ? (
-          <p className="text-sm text-ink-muted">
-            {t("host.noDestination")}
-          </p>
-        ) : (
-          <DiagnosticsPanel api={integrations} host={identityAlias} />
-        )
-      ) : null}
-
-      {/*
-        ここにあるものはすべて接続の一つのプロパティであり、
-        以前はキャプションとコントロールを交互に並べた単一の列として、
-        グルーピングなしにレイアウトされていた——次のコントロールのキャプションが
-        前のものへのヒントのように読めてしまう壁だった。各プロパティは
-        今や自分自身の隙間を持つ自分自身の行である。
-
-        残っているものはファイルへ書き込まれる。グループはディレクトリである
-        ため、それを変えることはブロックの移動であり、comment は`Host`の
-        上の行であり、名前変更は`Host`行そのものである。colour、tags、
-        favourite flag、display order は metadata.json にのみ存在する
-        ため、インスペクターへ移った——それこそがそのペインの存在理由である。
-      */}
-      {/*
-        自分自身のボーダーは持たない。内側のカードが既に一つ描いており、
-        ボーダーのある箱がボーダーのある箱を抱えると、一つしかないのに
-        二つのグループのように見えてしまう。
-      */}
-      {tab === "Basic" ? <section className="flex flex-col gap-3">
-        <h3 className={sectionHeading}>{t("host.organisation")}</h3>
-        <p className={hintText}>{t("host.organisationSaveNote")}</p>
-
-        {/*
-          グループと alias はそれぞれ一行であるため行にする。comment は
-          そうではない。三行の散文であり、その高さの箱の横に
-          キャプションを置くと、その下の隙間のキャプションのように読めてしまう。
-        */}
-        <Card>
-          <Row
-            label={t("host.primaryGroup")}
-            hint={`${t("host.groupIsADirectory")} ${t("host.groupNoneMeans")}`}
-            action={
-              <Button
-                // 無効化するのは、選んだ先がすでに接続のいる場所である
-                // ときだけである。以前は"None"も無効化されており、接続を
-                // グループから外に戻す方法がマウスでもキーボードでも
-                // まったくなかった。
-                disabled={moveTo === (detail.form.entry.group ?? "")}
-                onClick={() => onMoveToGroup(moveTo)}
-              >
-                {t("host.moveToGroup")}
-              </Button>
-            }
-          >
-            <select
-              id="host-group"
-              value={moveTo}
-              onChange={(event) => setMoveTo(event.target.value)}
-              className={narrowControl}
-            >
-              <option value="">{t("host.groupNone")}</option>
-              {groups.map((group) => (
-                <option key={group.name} value={group.name}>{group.name}</option>
-              ))}
-            </select>
-          </Row>
-          <Row
-            label={t("host.renameAlias")}
-            action={<Button disabled={!renameDirty} onClick={() => onRename(renameTo)}>{t("host.rename")}</Button>}
-          >
-            <input
-              id="host-rename"
-              value={renameTo}
-              onChange={(event) => setRenameTo(event.target.value)}
-              className={control}
-            />
-          </Row>
-        </Card>
-
-        <div className="flex flex-col gap-2">
-          <label htmlFor="host-comment" className={fieldLabel}>{t("host.comment")}</label>
-          <textarea
-            id="host-comment"
-            value={comment}
-            onChange={(event) => setComment(event.target.value)}
-            rows={3}
-            className={control}
-          />
-          <p className={hintText}>
-            {detail.form.comment === "" && (detail.metadata.note ?? "") !== ""
-              ? t("host.commentFromNote")
-              : t("host.commentNote")}
-          </p>
-          <Button className="self-start" disabled={!commentDirty} onClick={() => onComment(comment)}>
-            {t("host.saveComment")}
-          </Button>
-        </div>
-
-      </section> : null}
-
-      <SavePreviewPanel
-        preview={preview}
-        conflict={problem?.conflict ?? null}
-        problem={problem}
-      />
+      <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />
     </section>
   );
 }

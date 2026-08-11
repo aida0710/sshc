@@ -1,65 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { HostDetailPanel } from "./HostDetail";
 import type { HostDetail } from "../api/config";
 import type { IntegrationsApi } from "../api/integrations";
-import type { KeysApi } from "../keys/api";
-
-// Diagnostics タブは Diagnostics section と同じ検査を行うため、
-// これは同じクライアントを注入する。どのメソッドもモックである。実物に届く
-// テストはホストへ発信してしまい、このスイートのどのテストもプロセスを起動してはならない。
-function buildIntegrations(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
-  return {
-    configCheck: vi.fn(),
-    effective: vi.fn(),
-    reachability: vi.fn().mockResolvedValue({
-      address: "203.0.113.10:22",
-      outcome: "reached",
-      elapsedMs: 12,
-      detail: "",
-      notice: "This check dialled the destination directly.",
-    }),
-    authentication: vi.fn(),
-    terminalCommand: vi.fn(),
-    terminalOptions: vi.fn().mockResolvedValue({
-      selected: "terminal",
-      terminals: [
-        { id: "terminal", installed: true },
-        { id: "iterm2", installed: true },
-        { id: "kitty", installed: true },
-      ],
-    }),
-    terminalLaunch: vi.fn(),
-    knownHosts: vi.fn(),
-    deleteKnownHosts: vi.fn(),
-    scanKnownHosts: vi.fn(),
-    addKnownHost: vi.fn(),
-    passwordVault: vi.fn().mockResolvedValue({ exists: false, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),
-    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    lockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),
-    changeMasterPassword: vi.fn(),
-    loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: true }),
-    updateStatus: vi.fn().mockResolvedValue({ current: "dev", available: false, restartRequired: false }),
-    setLoginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
-    credentials: vi.fn().mockResolvedValue({ credentials: [] }),
-    storeCredential: vi.fn().mockResolvedValue({ credentials: [] }),
-    deleteCredential: vi.fn().mockResolvedValue({ credentials: [] }),
-    assignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
-    unassignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
-    passwordEligibility: vi.fn().mockResolvedValue({
-      alias: "bastion", storable: true, blockers: [], warnings: [],
-    }),
-    storePassword: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    forgetPassword: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    syncStatus: vi.fn().mockResolvedValue({ configured: false, endpoint: "", bucket: "", synced: false }),
-    configureSync: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: false }),
-    pushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
-    pullSnapshot: vi.fn().mockResolvedValue({ applied: false, conflicts: [], written: [], removed: [] }),
-    ...overrides,
-  };
-}
+import { HostDetailPanel } from "./HostDetail";
+import type { ConnectionSavedState } from "./connectionSavedState";
 
 const detail: HostDetail = {
   form: {
@@ -73,13 +18,11 @@ const detail: HostDetail = {
     fields: [
       { line: 2, keyword: "HostName", values: ["203.0.113.10"], category: "basic", editable: true },
       { line: 3, keyword: "ProxyJump", values: ["edge"], category: "jump", editable: true },
-      { line: 4, keyword: "UnknownFutureDirective", values: ["yes"], category: "advanced", editable: true },
-      { line: 5, keyword: "ProxyCommand", values: ["/usr/bin/nc %h %p"], category: "jump", dangerous: true, editable: true },
+      { line: 4, keyword: "Compression", values: ["yes"], category: "advanced", editable: true },
     ],
-    raw: "Host bastion\n\tHostName 203.0.113.10\n",
+    raw: "Host bastion\n\tHostName 203.0.113.10\n\tProxyJump edge\n",
     comment: "",
     commentLines: 0,
-    notices: [{ code: "dangerous_directive", path: "config", line: 5, detail: "ProxyCommand" }],
   },
   metadata: { identity: { path: "config", alias: "bastion" }, favourite: false },
   effective: {
@@ -89,323 +32,106 @@ const detail: HostDetail = {
   },
   file: {
     file: { path: "config", absolute: "/home/tester/.ssh/config" },
-    contents: "Host bastion\n\tHostName 203.0.113.10\n",
+    contents: "Host bastion\n\tHostName 203.0.113.10\n\tProxyJump edge\n",
     digest: "digest",
     editable: true,
     exists: true,
   },
 };
 
-function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> = {}) {
-  const integrations = buildIntegrations();
-  const keys = { inventory: vi.fn().mockResolvedValue({
-    items: [], unreadable: [], agentDelegations: [], unresolvedReferences: [], agentAvailable: false, agentIdentities: [],
-  }) } as Pick<KeysApi, "inventory">;
-  const handlers = {
+function savedState(): ConnectionSavedState {
+  return {
     detail,
-    groups: [{ name: "work" }],
+    keys: { status: "ready", value: [] },
+    vault: {
+      status: "ready",
+      value: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 },
+    },
+    credentials: { status: "ready", value: [] },
+    eligibility: { status: "ready", value: { alias: "bastion", storable: true, blockers: [], warnings: [] } },
+  };
+}
+
+function integrations(): IntegrationsApi {
+  return {
+    effective: vi.fn().mockResolvedValue({
+      alias: "bastion", evaluated: true, tokenWarning: "", executableDirectives: [], sources: [],
+      failure: { failed: false, exitCode: 0, stderr: "" },
+    }),
+    reachability: vi.fn(),
+    authentication: vi.fn(),
+    passwordVault: vi.fn(),
+    credentials: vi.fn(),
+    passwordEligibility: vi.fn(),
+    initialiseVault: vi.fn(),
+    unlockVault: vi.fn(),
+  } as unknown as IntegrationsApi;
+}
+
+function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> = {}) {
+  const props = {
+    detail,
+    savedState: savedState(),
     preview: null,
     problem: null,
     onFieldEdits: vi.fn(),
     onBlockRaw: vi.fn(),
-    onRename: vi.fn(),
-    onComment: vi.fn(),
-    onMoveToGroup: vi.fn(),
     onBasicSave: vi.fn().mockResolvedValue(undefined),
-    integrations,
-    keys,
+    integrations: integrations(),
+    onDirtyChange: vi.fn(),
     ...overrides,
   };
-  const rendered = render(<HostDetailPanel {...handlers} />);
-  return { ...handlers, rerender: rendered.rerender };
+  const rendered = render(<HostDetailPanel {...props} />);
+  return { props, ...rendered };
 }
 
 describe("HostDetailPanel", () => {
-  it("uses a route-controlled tab and reports tab changes to its owner", async () => {
+  it("folds legacy route tabs into three connection areas without running checks", async () => {
     const user = userEvent.setup();
     const onTabChange = vi.fn();
-    renderPanel({ tab: "Advanced", onTabChange });
+    const harness = renderPanel({ tab: "Diagnostics", onTabChange });
 
-    expect(screen.getByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
-    await user.click(screen.getByRole("tab", { name: "Diagnostics" }));
+    const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
+    expect(within(areaTabs).getAllByRole("tab")).toHaveLength(3);
+    expect(within(areaTabs).getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Check reachability" })).toBeEnabled();
+    expect(harness.props.integrations.reachability).not.toHaveBeenCalled();
 
-    expect(onTabChange).toHaveBeenCalledWith("Diagnostics");
+    await user.click(within(areaTabs).getByRole("tab", { name: "Settings analysis" }));
+    expect(onTabChange).toHaveBeenCalledWith("Effective");
   });
 
-  it("shows the stable Basic form and keeps raw directives editable in Advanced", async () => {
+  it("keeps a Basic draft mounted across areas and blocks connection checks", async () => {
     const user = userEvent.setup();
-    renderPanel();
+    const harness = renderPanel({ tab: "Basic" });
+    const hostName = screen.getByLabelText("Host name or IP address");
+    await user.clear(hostName);
+    await user.type(hostName, "198.51.100.7");
 
-    expect(screen.getByLabelText("Host name or IP address")).toHaveValue("203.0.113.10");
-    expect(screen.getByLabelText("User")).toHaveValue("");
-    expect(screen.getByLabelText("Port")).toHaveValue(22);
+    expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole("button", { name: "Check reachability" })).toBeDisabled();
 
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
-
-    expect(screen.getByLabelText("HostName")).toHaveValue("203.0.113.10");
-    expect(screen.getByLabelText("UnknownFutureDirective")).toHaveValue("yes");
+    harness.rerender(<HostDetailPanel {...harness.props} tab="Effective" />);
+    expect(screen.getByRole("region", { name: "Settings analysis" })).toBeVisible();
+    harness.rerender(<HostDetailPanel {...harness.props} tab="Basic" />);
+    expect(screen.getByLabelText("Host name or IP address")).toHaveValue("198.51.100.7");
   });
 
-  it("keeps display organisation actions in Basic instead of repeating them under every tab", async () => {
+  it("maps old advanced URLs to the matching internal advanced view", () => {
+    renderPanel({ tab: "Raw" });
+
+    const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
+    expect(within(areaTabs).getByRole("tab", { name: "Advanced settings" })).toHaveAttribute("aria-selected", "true");
+    const advancedTabs = screen.getByRole("tablist", { name: "Advanced setting views" });
+    expect(within(advancedTabs).getByRole("tab", { name: "Raw" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("reports the legacy route corresponding to an advanced subview", async () => {
     const user = userEvent.setup();
-    renderPanel();
+    const onTabChange = vi.fn();
+    renderPanel({ tab: "Jump", onTabChange });
 
-    expect(screen.getByRole("heading", { name: "Organisation" })).toBeInTheDocument();
-    expect(screen.getByText(/Each organisation action saves independently/)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
-
-    expect(screen.queryByRole("heading", { name: "Organisation" })).toBeNull();
-    expect(screen.queryByLabelText("Rename alias")).toBeNull();
-  });
-
-  it("returns to Basic when the selected connection changes", async () => {
-    const user = userEvent.setup();
-    const panel = renderPanel();
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
-    expect(screen.getByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
-
-    const nextDetail: HostDetail = {
-      ...detail,
-      form: {
-        ...detail.form,
-        entry: {
-          ...detail.form.entry,
-          identity: { path: "connections/work/build01.conf", alias: "build01" },
-          patterns: ["build01"],
-        },
-        raw: "Host build01\n\tHostName build.example.com\n",
-      },
-      metadata: { ...detail.metadata, identity: { path: "connections/work/build01.conf", alias: "build01" } },
-      effective: { ...detail.effective, alias: "build01" },
-    };
-    panel.rerender(<HostDetailPanel
-      detail={nextDetail}
-      groups={panel.groups}
-      preview={panel.preview}
-      problem={panel.problem}
-      onFieldEdits={panel.onFieldEdits}
-      onBlockRaw={panel.onBlockRaw}
-      onRename={panel.onRename}
-      onComment={panel.onComment}
-      onMoveToGroup={panel.onMoveToGroup}
-      onBasicSave={panel.onBasicSave}
-      integrations={panel.integrations}
-      keys={panel.keys}
-    />);
-
-    expect(screen.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
-  });
-
-  it("marks executable directives instead of hiding them", async () => {
-    const user = userEvent.setup();
-    renderPanel();
-
-    await user.click(screen.getByRole("tab", { name: "Jump" }));
-
-    expect(screen.getByText(/ProxyCommand can run a command/i)).toBeInTheDocument();
-  });
-
-  it("sends a set edit with the parsed values", async () => {
-    const user = userEvent.setup();
-    const handlers = renderPanel();
-
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
-    const input = screen.getByLabelText("HostName");
-    await user.clear(input);
-    await user.type(input, "198.51.100.7");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
-
-    expect(handlers.onFieldEdits).toHaveBeenCalledWith([
-      { action: "set", line: 2, values: ["198.51.100.7"] },
-    ]);
-  });
-
-  it("disables every save action until its own value meaningfully changes", async () => {
-    const user = userEvent.setup();
-    renderPanel();
-
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Rename" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Save comment" })).toBeDisabled();
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-
-    await user.click(screen.getByRole("tab", { name: "Raw" }));
-    expect(screen.getByRole("button", { name: "Save block" })).toBeDisabled();
-  });
-
-  it("sends an add edit for a new arbitrary directive", async () => {
-    const user = userEvent.setup();
-    const handlers = renderPanel();
-
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
-    await user.type(screen.getByLabelText("New directive"), "SetEnv");
-    await user.type(screen.getByLabelText("New value"), "EDITOR=vi");
-    await user.click(screen.getByRole("button", { name: "Add directive" }));
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
-
-    expect(handlers.onFieldEdits).toHaveBeenCalledWith([
-      { action: "add", keyword: "SetEnv", values: ["EDITOR=vi"] },
-    ]);
-  });
-
-  it("keeps an unbalanced quote in the editor and refuses to submit it", async () => {
-    const user = userEvent.setup();
-    const handlers = renderPanel();
-
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
-    const input = screen.getByLabelText("HostName");
-    await user.clear(input);
-    await user.type(input, '"unbalanced');
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
-
-    expect(handlers.onFieldEdits).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent(/quote/i);
-    expect(input).toHaveValue('"unbalanced');
-  });
-
-  it("labels the explained values as not being ssh -G", async () => {
-    const user = userEvent.setup();
-    renderPanel();
-
-    await user.click(screen.getByRole("tab", { name: "Effective" }));
-
-    expect(screen.getByRole("status")).toHaveTextContent(/ssh -G/);
-  });
-
-  it("submits the block raw editor after it changes", async () => {
-    const user = userEvent.setup();
-    const handlers = renderPanel();
-
-    await user.click(screen.getByRole("tab", { name: "Raw" }));
-    await user.type(screen.getByLabelText(/Block text/), "\tUser root\n");
-    await user.click(screen.getByRole("button", { name: "Save block" }));
-
-    expect(handlers.onBlockRaw).toHaveBeenCalledWith("Host bastion\n\tHostName 203.0.113.10\n\tUser root\n");
-  });
-
-  it("sends the Effective tab to the authoritative check rather than describing it", async () => {
-    const user = userEvent.setup();
-    renderPanel({ integrations: buildIntegrations() });
-
-    await user.click(screen.getByRole("tab", { name: "Effective" }));
-    await user.click(screen.getByRole("button", { name: "Open the Diagnostics tab" }));
-
-    expect(screen.getByRole("tab", { name: "Diagnostics" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("region", { name: "Diagnostics for bastion" })).toBeInTheDocument();
-  });
-
-  it("runs the real checks on the Diagnostics tab, against this host and only when asked", async () => {
-    const user = userEvent.setup();
-    const integrations = buildIntegrations();
-    renderPanel({ integrations });
-
-    await user.click(screen.getByRole("tab", { name: "Diagnostics" }));
-
-    // このタブは開いている接続によって指定されるため、alias を求めない。
-    expect(screen.queryByLabelText("Host alias")).not.toBeInTheDocument();
-    expect(integrations.reachability).not.toHaveBeenCalled();
-    expect(screen.queryByText("Stored password")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Check reachability" }));
-
-    await waitFor(() => expect(integrations.reachability).toHaveBeenCalledWith("bastion"));
-  });
-
-  it("has nothing to diagnose for a block that names no destination", async () => {
-    const user = userEvent.setup();
-    const patternDetail: HostDetail = {
-      ...detail,
-      form: {
-        ...detail.form,
-        entry: { ...detail.form.entry, identity: { path: "config", alias: "" }, patterns: ["*"] },
-      },
-    };
-    const integrations = buildIntegrations();
-    renderPanel({ detail: patternDetail, integrations });
-
-    await user.click(screen.getByRole("tab", { name: "Diagnostics" }));
-
-    expect(screen.getByText(/names no destination of its own/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Check reachability" })).not.toBeInTheDocument();
-  });
-  // colour、tags、favourite flag、display order はインスペクターへ
-  // 移った。以前ここで検証されていたものは HostInspector.test.tsx にある。
-  it("writes a comment into the configuration rather than into metadata", async () => {
-    const user = userEvent.setup();
-    const handlers = renderPanel();
-
-    await user.type(screen.getByLabelText("Comment"), "the production bastion");
-    await user.click(screen.getByRole("button", { name: "Save comment" }));
-
-    expect(handlers.onComment).toHaveBeenCalledWith("the production bastion");
-    // comment がメタデータではなく設定への編集であることは、
-    // 以前ここで、決して呼ばれない onMetadata を監視することで
-    // 検証されていた。パネルにはもうそうしたプロパティはない——メタデータ
-    // コントロールはインスペクターのものである——ため型がそれを示しており、
-    // その検証はどこにも届かないコールバックを監視することになってしまう。
-  });
-
-  it("seeds the editor from a legacy note and says the save retires it", () => {
-    renderPanel({
-      detail: { ...detail, metadata: { ...detail.metadata, note: "written before comments existed" } },
-    });
-
-    expect(screen.getByLabelText("Comment")).toHaveValue("written before comments existed");
-    expect(screen.getByText(/retires the note/)).toBeInTheDocument();
-  });
-
-  it("prefers the configuration comment over a stale note", () => {
-    renderPanel({
-      detail: {
-        ...detail,
-        form: { ...detail.form, comment: "in the file" },
-        metadata: { ...detail.metadata, note: "left over" },
-      },
-    });
-
-    // comment が存在すればそれが唯一の由来となる。note は廃止に
-    // 向かっており、ファイルが述べることに勝ってはならない。
-    expect(screen.getByLabelText("Comment")).toHaveValue("in the file");
-    expect(screen.queryByText(/retires the note/)).not.toBeInTheDocument();
-  });
-});
-
-describe("taking a connection out of every group", () => {
-  // ボタンは空の選択に対して無効化されていたため、マウスなしで
-  // 接続をグループから外に戻す方法がまったくなかった——そして
-  // ドラッグ操作が存在する前は、マウスを使っても方法がなかった。
-  const grouped: HostDetail = {
-    ...detail,
-    form: { ...detail.form, entry: { ...detail.form.entry, group: "work" } },
-  };
-
-  it("offers the empty choice for a connection that is in a group", async () => {
-    const user = userEvent.setup();
-    const handlers = renderPanel({ detail: grouped });
-
-    await user.selectOptions(screen.getByLabelText("Primary group"), "");
-    const button = screen.getByRole("button", { name: "Move to this group" });
-    expect(button).toBeEnabled();
-
-    await user.click(button);
-    expect(handlers.onMoveToGroup).toHaveBeenCalledWith("");
-  });
-
-  it("offers nothing to do for a connection that is in no group already", async () => {
-    const user = userEvent.setup();
-    renderPanel();
-
-    await user.selectOptions(screen.getByLabelText("Primary group"), "");
-    expect(screen.getByRole("button", { name: "Move to this group" })).toBeDisabled();
-  });
-
-  it("still offers nothing to do for the group the connection is already in", async () => {
-    const user = userEvent.setup();
-    renderPanel({ detail: grouped });
-
-    await user.selectOptions(screen.getByLabelText("Primary group"), "work");
-    expect(screen.getByRole("button", { name: "Move to this group" })).toBeDisabled();
+    await user.click(screen.getByRole("tab", { name: "Directives" }));
+    expect(onTabChange).toHaveBeenCalledWith("Advanced");
   });
 });
