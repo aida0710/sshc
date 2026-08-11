@@ -32,13 +32,36 @@ function buildApi(status: SyncStatus, pull: PullResponse, overrides: Partial<Int
   return {
     syncStatus: vi.fn().mockResolvedValue(status),
     configureSync: vi.fn().mockResolvedValue({ ...status, configured: true }),
-    pushSnapshot: vi.fn().mockResolvedValue({ ...status, synced: true }),
+    pushSnapshot: vi.fn().mockResolvedValue({
+      status: { ...status, synced: true },
+      result: {
+        summary: measuredSummary,
+        objectCount: 2,
+        uploadedBytes: 1800,
+        completedAt: "2026-08-12T01:02:04Z",
+      },
+    }),
     pullSnapshot: vi.fn().mockResolvedValue(pull),
     ...overrides,
   } as unknown as IntegrationsApi;
 }
 
-const nothingToDo: PullResponse = { applied: false, conflicts: [], written: [], removed: [] };
+const measuredSummary = {
+  createdAt: "2026-08-12T01:02:03Z",
+  fileCount: 7,
+  sourceBytes: 1200,
+  snapshotBytes: 900,
+};
+
+const nothingToDo: PullResponse = {
+  applied: false,
+  conflicts: [],
+  written: [],
+  removed: [],
+  summary: measuredSummary,
+  downloadedBytes: 900,
+  completedAt: "2026-08-12T01:02:04Z",
+};
 
 describe("SyncPanel", () => {
   it("says what travels before the form asks for anything", async () => {
@@ -119,6 +142,7 @@ describe("SyncPanel", () => {
     // 最初の押下で書き込んでしまう pull は、このアプリケーションで
     // プレビューを飛ばす唯一の書き込みになってしまう。
     const api = buildApi(configured, {
+      ...nothingToDo,
       applied: false,
       conflicts: [],
       written: ["config", "connections/work/lon.conf"],
@@ -141,6 +165,7 @@ describe("SyncPanel", () => {
     // 同じブロックを両方が変更した 2 つの設定に正しいマージはないので、
     // これはファイルを名指して止まる。
     const api = buildApi(configured, {
+      ...nothingToDo,
       applied: false,
       conflicts: [{ path: "config", changedHere: true, changedThere: true }],
       written: [],
@@ -196,6 +221,7 @@ describe("SyncPanel", () => {
 
   it("offers no apply on a machine set to send only, but still shows what would change", async () => {
     const api = buildApi({ ...configured, direction: "push" }, {
+      ...nothingToDo,
       applied: false,
       conflicts: [],
       written: ["config"],

@@ -189,3 +189,81 @@ describe("integrationsApi.credentials", () => {
     await expect(integrationsApi.credentials()).rejects.toThrow("invalid_response");
   });
 });
+
+describe("integrationsApi remote sync measurements", () => {
+  const summary = {
+    createdAt: "2026-08-12T01:02:03Z",
+    fileCount: 3,
+    sourceBytes: 1200,
+    snapshotBytes: 900,
+  };
+  const status = {
+    configured: true,
+    locked: false,
+    endpoint: "https://s3.example.invalid",
+    bucket: "sshc",
+    synced: true,
+    direction: "both" as const,
+    lastOperation: {
+      kind: "push" as const,
+      summary,
+      objectCount: 2,
+      uploadedBytes: 1800,
+      completedAt: "2026-08-12T01:02:04Z",
+    },
+  };
+
+  it("returns the push result separately from the refreshed status", async () => {
+    const response = {
+      status,
+      result: {
+        summary,
+        objectCount: 2,
+        uploadedBytes: 1800,
+        completedAt: "2026-08-12T01:02:04Z",
+      },
+    };
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse(response));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.pushSnapshot("correct horse battery staple")).resolves.toEqual(response);
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/sync/push");
+    expect(JSON.parse(String(init.body))).toEqual({ passphrase: "correct horse battery staple" });
+  });
+
+  it("accepts the measured result of an apply download", async () => {
+    const response = {
+      applied: true,
+      conflicts: [],
+      written: ["config"],
+      removed: [],
+      summary,
+      downloadedBytes: 900,
+      completedAt: "2026-08-12T01:03:00Z",
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(response)));
+
+    await expect(integrationsApi.pullSnapshot("correct horse battery staple", true)).resolves.toEqual(response);
+  });
+
+  it.each([
+    { status, result: { summary, objectCount: 2, uploadedBytes: -1, completedAt: "now" } },
+    { status, result: { summary: { ...summary, fileCount: "three" }, objectCount: 2, uploadedBytes: 1800, completedAt: "now" } },
+    { status: { ...status, lastOperation: { ...status.lastOperation, kind: "copy" } }, result: { summary, objectCount: 2, uploadedBytes: 1800, completedAt: "now" } },
+  ])("rejects malformed push measurements %#", async (body) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
+
+    await expect(integrationsApi.pushSnapshot("correct horse battery staple")).rejects.toThrow("invalid_response");
+  });
+
+  it.each([
+    { applied: false, conflicts: [], written: [], removed: [], downloadedBytes: 900, completedAt: "now" },
+    { applied: false, conflicts: [], written: [], removed: [], summary, downloadedBytes: "900", completedAt: "now" },
+    { applied: false, conflicts: [], written: [], removed: [], summary, downloadedBytes: 900 },
+  ])("rejects malformed pull measurements %#", async (body) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
+
+    await expect(integrationsApi.pullSnapshot("correct horse battery staple", false)).rejects.toThrow("invalid_response");
+  });
+});

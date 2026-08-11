@@ -330,7 +330,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               void run(
                 () => api.pushSnapshot(passphrase),
                 (next) => {
-                  setStatus(next);
+                  setStatus(next.status);
                   setPreview(null);
                   setNotice(t("sync.pushed"));
                 },

@@ -29,6 +29,10 @@ export type CredentialKind = "password" | "key_passphrase";
 export type SyncStatus = components["schemas"]["SyncStatus"];
 export type SyncSettingsRequest = components["schemas"]["SyncSettingsRequest"];
 export type SyncDirection = components["schemas"]["SyncDirection"];
+export type SnapshotSummary = components["schemas"]["SnapshotSummary"];
+export type SyncOperation = components["schemas"]["SyncOperation"];
+export type PushResult = components["schemas"]["PushResult"];
+export type PushResponse = components["schemas"]["PushResponse"];
 export type PullResponse = components["schemas"]["PullResponse"];
 
 // アクション語彙はサーバーのセッションパッケージに属し、操作を確認する
@@ -91,7 +95,7 @@ export type IntegrationsApi = {
   // ステータスはエンドポイントとバケットを運び、pull はパスを運ぶ。
   syncStatus(): Promise<SyncStatus>;
   configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
-  pushSnapshot(passphrase: string): Promise<SyncStatus>;
+  pushSnapshot(passphrase: string): Promise<PushResponse>;
   pullSnapshot(passphrase: string, apply: boolean): Promise<PullResponse>;
 };
 
@@ -137,6 +141,13 @@ function asString(value: unknown): string {
 
 function asNumber(value: unknown): number {
   if (typeof value !== "number") throw new Error("invalid_response");
+  return value;
+}
+
+function asNonnegativeInteger(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error("invalid_response");
+  }
   return value;
 }
 
@@ -387,6 +398,7 @@ function validatePasswordEligibility(value: unknown): PasswordEligibility {
 function validateSyncStatus(value: unknown): SyncStatus {
   const record = asRecord(value);
   asBoolean(record.configured);
+  asBoolean(record.locked);
   asString(record.endpoint);
   asString(record.bucket);
   asBoolean(record.synced);
@@ -396,12 +408,59 @@ function validateSyncStatus(value: unknown): SyncStatus {
   if (direction !== "both" && direction !== "push" && direction !== "pull") {
     throw new Error(`unexpected sync direction: ${direction}`);
   }
+  if (record.path !== undefined) asString(record.path);
+  if (record.region !== undefined) asString(record.region);
+  if (record.lastSyncedAt !== undefined) asString(record.lastSyncedAt);
+  if (record.origin !== undefined) asString(record.origin);
+  if (record.fileCount !== undefined) asNonnegativeInteger(record.fileCount);
+  if (record.lastOperation !== undefined) validateSyncOperation(record.lastOperation);
   return record as unknown as SyncStatus;
+}
+
+function validateSnapshotSummary(value: unknown): SnapshotSummary {
+  const record = asRecord(value);
+  asString(record.createdAt);
+  asNonnegativeInteger(record.fileCount);
+  asNonnegativeInteger(record.sourceBytes);
+  asNonnegativeInteger(record.snapshotBytes);
+  return record as unknown as SnapshotSummary;
+}
+
+function validateSyncOperation(value: unknown): SyncOperation {
+  const record = asRecord(value);
+  const kind = asString(record.kind);
+  validateSnapshotSummary(record.summary);
+  asString(record.completedAt);
+  if (kind === "push") {
+    asNonnegativeInteger(record.objectCount);
+    asNonnegativeInteger(record.uploadedBytes);
+  } else if (kind === "apply") {
+    asNonnegativeInteger(record.downloadedBytes);
+    asNonnegativeInteger(record.written);
+    asNonnegativeInteger(record.removed);
+  } else {
+    throw new Error("invalid_response");
+  }
+  return record as unknown as SyncOperation;
+}
+
+function validatePushResponse(value: unknown): PushResponse {
+  const record = asRecord(value);
+  validateSyncStatus(record.status);
+  const result = asRecord(record.result);
+  validateSnapshotSummary(result.summary);
+  asNonnegativeInteger(result.objectCount);
+  asNonnegativeInteger(result.uploadedBytes);
+  asString(result.completedAt);
+  return record as unknown as PushResponse;
 }
 
 function validatePullResponse(value: unknown): PullResponse {
   const record = asRecord(value);
   asBoolean(record.applied);
+  validateSnapshotSummary(record.summary);
+  asNonnegativeInteger(record.downloadedBytes);
+  asString(record.completedAt);
   for (const conflict of asArray(record.conflicts)) {
     const entry = asRecord(conflict);
     asString(entry.path);
@@ -553,7 +612,7 @@ export const integrationsApi: IntegrationsApi = {
     );
   },
   async pushSnapshot(passphrase) {
-    return validateSyncStatus(await postJSON<unknown>("/api/v1/sync/push", { passphrase }));
+    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/push", { passphrase }));
   },
   async pullSnapshot(passphrase, apply) {
     return validatePullResponse(await postJSON<unknown>("/api/v1/sync/pull", { passphrase, apply }));

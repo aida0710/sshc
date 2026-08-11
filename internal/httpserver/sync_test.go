@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -84,6 +86,224 @@ func settings(direction string) string {
 		body += `,"direction":"` + direction + `"`
 	}
 	return body + "}"
+}
+
+type measuredSyncObject struct {
+	body []byte
+	etag string
+}
+
+// measuredSyncBucket is deliberately an HTTP server, not a stubbed Service.
+// The API measurements must describe the bytes that crossed the object-store
+// boundary, so this test observes that boundary directly.
+type measuredSyncBucket struct {
+	mu         sync.Mutex
+	objects    map[string]measuredSyncObject
+	putBytes   []int
+	generation int
+}
+
+func (b *measuredSyncBucket) handler(w http.ResponseWriter, request *http.Request) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.objects == nil {
+		b.objects = map[string]measuredSyncObject{}
+	}
+	key := strings.TrimPrefix(strings.TrimPrefix(request.URL.Path, "/"), "sshc/")
+	stored, present := b.objects[key]
+	switch request.Method {
+	case http.MethodGet, http.MethodHead:
+		if !present {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("ETag", stored.etag)
+		if request.Method == http.MethodGet {
+			_, _ = w.Write(stored.body)
+		}
+	case http.MethodPut:
+		if request.Header.Get("If-None-Match") == "*" && present {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		if expected := request.Header.Get("If-Match"); expected != "" && expected != stored.etag {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		b.generation++
+		etag := `"generation-` + string(rune('0'+b.generation)) + `"`
+		b.objects[key] = measuredSyncObject{body: body, etag: etag}
+		b.putBytes = append(b.putBytes, len(body))
+		w.Header().Set("ETag", etag)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (b *measuredSyncBucket) liveBytes() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.objects[remotesync.ObjectName].body)
+}
+
+func (b *measuredSyncBucket) uploadedBytes() (int, int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	total := 0
+	for _, size := range b.putBytes {
+		total += size
+	}
+	return len(b.putBytes), total
+}
+
+func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[string]string) (*echo.Echo, *remotesync.Service) {
+	t.Helper()
+	home := t.TempDir()
+	root := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	paths := make([]string, 0, len(files))
+	for name, contents := range files {
+		absolute := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(absolute), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(absolute, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, name)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := remotesync.NewService(
+		workspace,
+		storage.NewManager(workspace, time.Now, rand.Reader),
+		func() ([]string, error) { return paths, nil },
+		func() string { return "2026-08-12T01:02:03Z" },
+		func() (string, error) { return "origin-api-test", nil },
+	)
+	server := httptest.NewTLSServer(http.HandlerFunc(bucket.handler))
+	t.Cleanup(server.Close)
+	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
+	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto"}
+	service.Configure(config, credentials, &objectstore.Client{
+		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
+	})
+	engine := echo.New()
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Reach: reachable})
+	return engine, service
+}
+
+func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	engine, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
+
+	response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", `{"passphrase":"correct horse battery staple"}`)
+	if response.Code != http.StatusOK {
+		t.Fatalf("push = %d: %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Status struct {
+			LastOperation *remotesync.SyncOperation `json:"lastOperation"`
+		} `json:"status"`
+		Result remotesync.PushResult `json:"result"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	putCount, uploadedBytes := bucket.uploadedBytes()
+	if body.Result.Summary.FileCount != 1 || body.Result.Summary.SourceBytes != int64(len("Host edge\n")) {
+		t.Errorf("source summary = %+v", body.Result.Summary)
+	}
+	if body.Result.Summary.SnapshotBytes != int64(bucket.liveBytes()) {
+		t.Errorf("snapshot bytes = %d, live object = %d", body.Result.Summary.SnapshotBytes, bucket.liveBytes())
+	}
+	if body.Result.ObjectCount != putCount || body.Result.UploadedBytes != int64(uploadedBytes) {
+		t.Errorf("transfer = %+v, HTTP observed %d objects / %d bytes", body.Result, putCount, uploadedBytes)
+	}
+	if body.Result.CompletedAt == "" || body.Result.Summary.CreatedAt == "" {
+		t.Errorf("timestamps are missing: %+v", body.Result)
+	}
+	if body.Status.LastOperation == nil || body.Status.LastOperation.Kind != remotesync.OperationPush {
+		t.Errorf("push status did not carry its last successful operation: %+v", body.Status.LastOperation)
+	}
+
+	reloaded := sendSync(t, engine, http.MethodGet, "/api/v1/sync", "")
+	var reloadedBody struct {
+		LastOperation *remotesync.SyncOperation `json:"lastOperation"`
+	}
+	if err := json.Unmarshal(reloaded.Body.Bytes(), &reloadedBody); err != nil {
+		t.Fatal(err)
+	}
+	if reloadedBody.LastOperation == nil || reloadedBody.LastOperation.Kind != remotesync.OperationPush {
+		t.Errorf("reloaded status lost the persisted operation: %s", reloaded.Body.String())
+	}
+}
+
+func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	_, producer := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
+	if _, err := producer.Push(context.Background(), "correct horse battery staple"); err != nil {
+		t.Fatal(err)
+	}
+	engine, _ := measuredSyncEngine(t, bucket, map[string]string{})
+
+	preview := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"passphrase":"correct horse battery staple","apply":false}`)
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview = %d: %s", preview.Code, preview.Body.String())
+	}
+	var previewBody struct {
+		Applied         bool                       `json:"applied"`
+		Summary         remotesync.SnapshotSummary `json:"summary"`
+		DownloadedBytes int64                      `json:"downloadedBytes"`
+		CompletedAt     string                     `json:"completedAt"`
+		Written         []string                   `json:"written"`
+	}
+	if err := json.Unmarshal(preview.Body.Bytes(), &previewBody); err != nil {
+		t.Fatal(err)
+	}
+	if previewBody.Applied || previewBody.Summary.FileCount != 1 || previewBody.DownloadedBytes != int64(bucket.liveBytes()) || previewBody.CompletedAt == "" {
+		t.Errorf("preview measurements = %+v", previewBody)
+	}
+	if len(previewBody.Written) != 1 {
+		t.Errorf("preview written = %v", previewBody.Written)
+	}
+
+	applied := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"passphrase":"correct horse battery staple","apply":true}`)
+	if applied.Code != http.StatusOK {
+		t.Fatalf("apply = %d: %s", applied.Code, applied.Body.String())
+	}
+	var appliedBody struct {
+		Applied         bool   `json:"applied"`
+		DownloadedBytes int64  `json:"downloadedBytes"`
+		CompletedAt     string `json:"completedAt"`
+	}
+	if err := json.Unmarshal(applied.Body.Bytes(), &appliedBody); err != nil {
+		t.Fatal(err)
+	}
+	if !appliedBody.Applied || appliedBody.DownloadedBytes != int64(bucket.liveBytes()) || appliedBody.CompletedAt == "" {
+		t.Errorf("apply measurements = %+v", appliedBody)
+	}
+
+	status := sendSync(t, engine, http.MethodGet, "/api/v1/sync", "")
+	var statusBody struct {
+		LastOperation *remotesync.SyncOperation `json:"lastOperation"`
+	}
+	if err := json.Unmarshal(status.Body.Bytes(), &statusBody); err != nil {
+		t.Fatal(err)
+	}
+	if statusBody.LastOperation == nil || statusBody.LastOperation.Kind != remotesync.OperationApply ||
+		statusBody.LastOperation.DownloadedBytes != int64(bucket.liveBytes()) || statusBody.LastOperation.Written != 1 {
+		t.Errorf("applied operation = %+v", statusBody.LastOperation)
+	}
 }
 
 func TestTheDirectionIsReportedAndDefaultsToBoth(t *testing.T) {

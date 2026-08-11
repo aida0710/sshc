@@ -9,19 +9,37 @@ import (
 
 // Defines values for SyncDirection.
 const (
-	Both SyncDirection = "both"
-	Pull SyncDirection = "pull"
-	Push SyncDirection = "push"
+	SyncDirectionBoth SyncDirection = "both"
+	SyncDirectionPull SyncDirection = "pull"
+	SyncDirectionPush SyncDirection = "push"
 )
 
 // Valid indicates whether the value is a known member of the SyncDirection enum.
 func (e SyncDirection) Valid() bool {
 	switch e {
-	case Both:
+	case SyncDirectionBoth:
 		return true
-	case Pull:
+	case SyncDirectionPull:
 		return true
-	case Push:
+	case SyncDirectionPush:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SyncOperationKind.
+const (
+	SyncOperationKindApply SyncOperationKind = "apply"
+	SyncOperationKindPush  SyncOperationKind = "push"
+)
+
+// Valid indicates whether the value is a known member of the SyncOperationKind enum.
+func (e SyncOperationKind) Valid() bool {
+	switch e {
+	case SyncOperationKindApply:
+		return true
+	case SyncOperationKindPush:
 		return true
 	default:
 		return false
@@ -865,11 +883,14 @@ type PullRequest struct {
 
 // PullResponse defines model for PullResponse.
 type PullResponse struct {
-	Applied   bool           `json:"applied"`
-	Conflicts []SyncConflict `json:"conflicts"`
-	Origin    *string        `json:"origin,omitempty"`
-	Removed   []string       `json:"removed"`
-	Written   []string       `json:"written"`
+	Applied         bool            `json:"applied"`
+	CompletedAt     string          `json:"completedAt"`
+	Conflicts       []SyncConflict  `json:"conflicts"`
+	DownloadedBytes int64           `json:"downloadedBytes"`
+	Origin          *string         `json:"origin,omitempty"`
+	Removed         []string        `json:"removed"`
+	Summary         SnapshotSummary `json:"summary"`
+	Written         []string        `json:"written"`
 }
 
 // PurgeTrashResponse defines model for PurgeTrashResponse.
@@ -877,6 +898,20 @@ type PurgeTrashResponse struct {
 	EntryId       string   `json:"entryId"`
 	Removed       []string `json:"removed"`
 	TransactionId string   `json:"transactionId"`
+}
+
+// PushResponse defines model for PushResponse.
+type PushResponse struct {
+	Result PushResult `json:"result"`
+	Status SyncStatus `json:"status"`
+}
+
+// PushResult defines model for PushResult.
+type PushResult struct {
+	CompletedAt   string          `json:"completedAt"`
+	ObjectCount   int             `json:"objectCount"`
+	Summary       SnapshotSummary `json:"summary"`
+	UploadedBytes int64           `json:"uploadedBytes"`
 }
 
 // ReachabilityResponse defines model for ReachabilityResponse.
@@ -1035,6 +1070,14 @@ type Setting struct {
 	Values  []string `json:"values"`
 }
 
+// SnapshotSummary defines model for SnapshotSummary.
+type SnapshotSummary struct {
+	CreatedAt     string `json:"createdAt"`
+	FileCount     int    `json:"fileCount"`
+	SnapshotBytes int64  `json:"snapshotBytes"`
+	SourceBytes   int64  `json:"sourceBytes"`
+}
+
 // Source defines model for Source.
 type Source struct {
 	Absolute  *string `json:"absolute,omitempty"`
@@ -1063,6 +1106,21 @@ type SyncConflict struct {
 // SyncDirection defines model for SyncDirection.
 type SyncDirection string
 
+// SyncOperation defines model for SyncOperation.
+type SyncOperation struct {
+	CompletedAt     string            `json:"completedAt"`
+	DownloadedBytes *int64            `json:"downloadedBytes,omitempty"`
+	Kind            SyncOperationKind `json:"kind"`
+	ObjectCount     *int              `json:"objectCount,omitempty"`
+	Removed         *int              `json:"removed,omitempty"`
+	Summary         SnapshotSummary   `json:"summary"`
+	UploadedBytes   *int64            `json:"uploadedBytes,omitempty"`
+	Written         *int              `json:"written,omitempty"`
+}
+
+// SyncOperationKind defines model for SyncOperationKind.
+type SyncOperationKind string
+
 // SyncSettingsRequest defines model for SyncSettingsRequest.
 type SyncSettingsRequest struct {
 	AccessKeyId     string         `json:"accessKeyId"`
@@ -1076,17 +1134,18 @@ type SyncSettingsRequest struct {
 
 // SyncStatus defines model for SyncStatus.
 type SyncStatus struct {
-	Bucket       string        `json:"bucket"`
-	Configured   bool          `json:"configured"`
-	Direction    SyncDirection `json:"direction"`
-	Endpoint     string        `json:"endpoint"`
-	FileCount    *int          `json:"fileCount,omitempty"`
-	LastSyncedAt *string       `json:"lastSyncedAt,omitempty"`
-	Locked       bool          `json:"locked"`
-	Origin       *string       `json:"origin,omitempty"`
-	Path         *string       `json:"path,omitempty"`
-	Region       *string       `json:"region,omitempty"`
-	Synced       bool          `json:"synced"`
+	Bucket        string         `json:"bucket"`
+	Configured    bool           `json:"configured"`
+	Direction     SyncDirection  `json:"direction"`
+	Endpoint      string         `json:"endpoint"`
+	FileCount     *int           `json:"fileCount,omitempty"`
+	LastOperation *SyncOperation `json:"lastOperation,omitempty"`
+	LastSyncedAt  *string        `json:"lastSyncedAt,omitempty"`
+	Locked        bool           `json:"locked"`
+	Origin        *string        `json:"origin,omitempty"`
+	Path          *string        `json:"path,omitempty"`
+	Region        *string        `json:"region,omitempty"`
+	Synced        bool           `json:"synced"`
 }
 
 // TerminalApplication defines model for TerminalApplication.
