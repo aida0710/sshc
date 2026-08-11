@@ -260,6 +260,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminal/preference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setTerminalPreference"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/launch": {
         parameters: {
             query?: never;
@@ -1322,10 +1338,15 @@ export interface components {
             name: string;
             path: string;
         };
+        TerminalPreferenceRequest: {
+            selected: components["schemas"]["TerminalID"];
+            customTerminal?: components["schemas"]["CustomTerminal"];
+        };
         TerminalOptionsResponse: {
             selected: components["schemas"]["TerminalID"];
             terminals: components["schemas"]["TerminalOption"][];
             applications: components["schemas"]["TerminalApplication"][];
+            customTerminal?: components["schemas"]["CustomTerminal"];
         };
         /** @enum {string} */
         SyncDirection: "both" | "push" | "pull";
@@ -2290,6 +2311,34 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+        };
+    };
+    setTerminalPreference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalPreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved machine-wide terminal preference and refreshed availability */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalOptionsResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     launchTerminal: {

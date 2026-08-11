@@ -1118,9 +1118,16 @@ type TerminalOption struct {
 
 // TerminalOptionsResponse defines model for TerminalOptionsResponse.
 type TerminalOptionsResponse struct {
-	Applications []TerminalApplication `json:"applications"`
-	Selected     TerminalID            `json:"selected"`
-	Terminals    []TerminalOption      `json:"terminals"`
+	Applications   []TerminalApplication `json:"applications"`
+	CustomTerminal *CustomTerminal       `json:"customTerminal,omitempty"`
+	Selected       TerminalID            `json:"selected"`
+	Terminals      []TerminalOption      `json:"terminals"`
+}
+
+// TerminalPreferenceRequest defines model for TerminalPreferenceRequest.
+type TerminalPreferenceRequest struct {
+	CustomTerminal *CustomTerminal `json:"customTerminal,omitempty"`
+	Selected       TerminalID      `json:"selected"`
 }
 
 // TrashEntrySummary defines model for TrashEntrySummary.
@@ -1356,3 +1363,6 @@ type GetTerminalCommandJSONRequestBody = AliasRequest
 
 // LaunchTerminalJSONRequestBody defines body for LaunchTerminal for application/json ContentType.
 type LaunchTerminalJSONRequestBody = AliasRequest
+
+// SetTerminalPreferenceJSONRequestBody defines body for SetTerminalPreference for application/json ContentType.
+type SetTerminalPreferenceJSONRequestBody = TerminalPreferenceRequest

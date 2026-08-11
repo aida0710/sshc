@@ -19,6 +19,7 @@ import (
 	"sshc/internal/application"
 	"sshc/internal/diagnostics"
 	"sshc/internal/knownhosts"
+	"sshc/internal/platform"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
@@ -154,12 +155,17 @@ func New(options Options) (*Server, error) {
 		})
 	}
 	if options.Diagnostics != nil {
+		var setPreferredTerminal func(platform.TerminalChoice) (bool, error)
+		if options.Config != nil {
+			setPreferredTerminal = options.Config.SetPreferredTerminal
+		}
 		registerDiagnosticsRoutes(e, DiagnosticsHandlers{
-			Service:       options.Diagnostics,
-			Actions:       actions,
-			Passwords:     options.Passwords,
-			AskpassHelper: options.AskpassHelper,
-			AskpassURL:    "http://" + host + AskpassPath,
+			Service:              options.Diagnostics,
+			Actions:              actions,
+			SetPreferredTerminal: setPreferredTerminal,
+			Passwords:            options.Passwords,
+			AskpassHelper:        options.AskpassHelper,
+			AskpassURL:           "http://" + host + AskpassPath,
 		})
 	}
 	if options.KnownHosts != nil {

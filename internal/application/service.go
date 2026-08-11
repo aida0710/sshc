@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -234,6 +235,53 @@ func (s *Service) PreferredTerminal() platform.TerminalChoice {
 		return platform.TerminalChoice{ID: platform.TerminalApple}
 	}
 	return choice
+}
+
+// SetPreferredTerminal updates only the machine-wide launcher preference from
+// metadata loaded while holding the save lock. Callers never send the rest of
+// metadata back, so a stale Settings tab cannot overwrite newer host or group
+// presentation changes.
+func (s *Service) SetPreferredTerminal(choice platform.TerminalChoice) (bool, error) {
+	if err := platform.ValidateTerminalChoice(choice); err != nil {
+		return false, err
+	}
+
+	s.saveMutex.Lock()
+	defer s.saveMutex.Unlock()
+
+	metadata, precondition, err := s.metadata.Load()
+	if err != nil {
+		return false, err
+	}
+	current := metadata.TerminalChoice()
+	if current.ID == choice.ID && current.Application == choice.Application &&
+		slices.Equal(current.Arguments, choice.Arguments) {
+		return false, nil
+	}
+
+	updated := metadata
+	updated.Terminal = choice.ID
+	updated.CustomTerminal = nil
+	if choice.ID == platform.TerminalCustom {
+		updated.CustomTerminal = &CustomTerminal{
+			Application: choice.Application,
+			Arguments:   append([]string(nil), choice.Arguments...),
+		}
+	}
+	change, err := s.metadata.Change(updated, precondition)
+	if err != nil {
+		return false, err
+	}
+	if err := s.metadata.EnsureDirectory(); err != nil {
+		return false, err
+	}
+	if _, err := s.manager.Commit(storage.Request{
+		Operation: "terminal.preference",
+		Changes:   []storage.Change{change},
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // displayPath は、UI とエラー payload のために path を表す。ファイルが
