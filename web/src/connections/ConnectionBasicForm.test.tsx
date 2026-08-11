@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HostDetail, UpdateConnectionRequest } from "../api/config";
@@ -6,6 +6,7 @@ import type { Problem } from "../api/client";
 import type { IntegrationsApi } from "../api/integrations";
 import type { KeyInventoryResponse, KeysApi } from "../keys/api";
 import { ConnectionBasicForm } from "./ConnectionBasicForm";
+import type { ConnectionSavedState } from "./connectionSavedState";
 
 const privateKey = {
   id: "0123456789abcdef0123456789abcdef",
@@ -95,6 +96,9 @@ type HarnessOverrides = {
   problem?: Problem | null;
   preferredKey?: { privateKeyId: string; privateRelativePath: string } | null;
   onPreferredKeyApplied?: () => void;
+  savedState?: ConnectionSavedState;
+  onDirtyChange?: (dirty: boolean) => void;
+  onDiscardReady?: (discard: (() => void) | null) => void;
 };
 
 function renderForm(overrides: HarnessOverrides = {}) {
@@ -133,6 +137,9 @@ function renderForm(overrides: HarnessOverrides = {}) {
       >}
       preferredKey={overrides.preferredKey}
       onPreferredKeyApplied={overrides.onPreferredKeyApplied}
+      savedState={overrides.savedState}
+      onDirtyChange={overrides.onDirtyChange}
+      onDiscardReady={overrides.onDiscardReady}
     />,
   );
   return {
@@ -288,6 +295,96 @@ describe("ConnectionBasicForm", () => {
     await waitFor(() => expect(harness.unlockVault).toHaveBeenCalledWith("the master password"));
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("draft.example");
     expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
+  });
+
+  it("saves config-only changes from shared state when credential metadata is unavailable", async () => {
+    const user = userEvent.setup();
+    const detail = buildDetail([
+      { line: 2, keyword: "HostName", values: ["edge.example"], category: "basic", editable: true },
+      { line: 3, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+    ]);
+    const savedState: ConnectionSavedState = {
+      detail,
+      keys: { status: "ready", value: [privateKey, secondKey, unencryptedKey] },
+      vault: {
+        status: "ready",
+        value: {
+          exists: true,
+          unlocked: true,
+          aliases: ["edge"],
+          dedicatedKeyPassphrases: [],
+          minPassphraseLength: 12,
+        },
+      },
+      credentials: { status: "failed" },
+      eligibility: {
+        status: "ready",
+        value: { alias: "edge", storable: true, blockers: [], warnings: [] },
+      },
+    };
+    const onDirtyChange = vi.fn();
+    const harness = renderForm({
+      detail,
+      savedState,
+      onDirtyChange,
+      inventory: vi.fn().mockRejectedValue(new Error("must not load")),
+      passwordVault: vi.fn().mockRejectedValue(new Error("must not load")),
+      credentials: vi.fn().mockRejectedValue(new Error("must not load")),
+      passwordEligibility: vi.fn().mockRejectedValue(new Error("must not load")),
+    });
+
+    await user.clear(screen.getByLabelText("Host name or IP address"));
+    await user.type(screen.getByLabelText("Host name or IP address"), "retry.example");
+    expect(screen.getByText("Saved password options could not be loaded.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Stored password action")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+
+    expect(harness.onSave).toHaveBeenCalledWith({
+      identity: detail.form.entry.identity,
+      base: detail.file.contents,
+      hostName: { action: "set", value: "retry.example" },
+      password: { kind: "unchanged" },
+      keyPassphrase: { kind: "unchanged" },
+    });
+    expect(onDirtyChange).toHaveBeenCalledWith(true);
+    expect(harness.keyInventory).not.toHaveBeenCalled();
+    expect(harness.passwordVault).not.toHaveBeenCalled();
+    expect(harness.credentials).not.toHaveBeenCalled();
+  });
+
+  it("registers a discard action that restores committed fields and clears secrets", async () => {
+    const user = userEvent.setup();
+    let discard: (() => void) | null = null;
+    renderForm({
+      onDiscardReady: (next) => {
+        discard = next;
+      },
+    });
+    await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
+
+    await user.clear(screen.getByLabelText("Host name or IP address"));
+    await user.type(screen.getByLabelText("Host name or IP address"), "draft.example");
+    await user.selectOptions(screen.getByLabelText("Stored password action"), "dedicated_password");
+    await user.type(screen.getByLabelText("Connection password"), "must disappear");
+    expect(discard).not.toBeNull();
+    act(() => discard!());
+
+    expect(screen.getByLabelText("Host name or IP address")).toHaveValue("inherited.example");
+    expect(screen.queryByLabelText("Connection password")).not.toBeInTheDocument();
+  });
+
+  it("offers an explicit discard action in the save bar", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
+
+    await user.clear(screen.getByLabelText("Host name or IP address"));
+    await user.type(screen.getByLabelText("Host name or IP address"), "draft.example");
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    expect(screen.getByLabelText("Host name or IP address")).toHaveValue("inherited.example");
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
   });
 
   it("requires explicit confirmation before removing an assigned password", async () => {
