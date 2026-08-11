@@ -127,6 +127,8 @@ func main() {
 			&http.Client{Timeout: 15 * time.Second},
 			os.Stdout,
 			os.Stderr,
+			// 答えられないプロンプトは制御端末の向こうにいる人間へ渡す。
+			openControllingTerminal,
 		))
 	}
 
