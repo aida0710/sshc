@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { useTranslate } from "../i18n/context";
 import { Button, Card, Row } from "../ui/surface";
 import { summarizeConnection, type ConnectionSavedState } from "./connectionSavedState";
@@ -7,7 +6,6 @@ type ConnectionSummaryProps = {
   state: ConnectionSavedState;
   dirty: boolean;
   refreshing: boolean;
-  terminal: ReactNode;
   onConnect: () => void;
   connecting: boolean;
   connectAvailable?: boolean;
@@ -19,7 +17,6 @@ export function ConnectionSummary({
   state,
   dirty,
   refreshing,
-  terminal,
   onConnect,
   connecting,
   connectAvailable = true,
@@ -93,7 +90,6 @@ export function ConnectionSummary({
       </Card>
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-card p-3 shadow-sm">
-        {terminal}
         <Button
           kind="primary"
           disabled={blocked || connecting || !connectAvailable}

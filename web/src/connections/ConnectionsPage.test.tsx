@@ -389,27 +389,6 @@ describe("ConnectionsPage", () => {
     expect(configApi.host).toHaveBeenCalledWith("config", "edge");
   });
 
-  it("does not replace a Basic draft when terminal metadata saves", async () => {
-    const user = userEvent.setup();
-    vi.mocked(configApi.save).mockResolvedValue({
-      transactionId: "t-terminal", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
-    } as never);
-    render(<ConnectionsPage onInspector={() => undefined} />);
-
-    await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    await user.clear(screen.getByLabelText("Port"));
-    await user.type(screen.getByLabelText("Port"), "2222");
-    await user.selectOptions(screen.getByLabelText("Open with"), "kitty");
-
-    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
-      kind: "metadata",
-      metadata: expect.objectContaining({ terminal: "kitty" }),
-    }));
-    expect(screen.getByLabelText("Port")).toHaveValue(2222);
-    expect(screen.getByText("bastion:22")).toBeInTheDocument();
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
-  });
-
   it("reports a post-commit reload failure as saved instead of inviting a duplicate save", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.updateConnection).mockResolvedValue({
@@ -451,10 +430,20 @@ describe("ConnectionsPage", () => {
     expect(integrationsApi.terminalLaunch).toHaveBeenCalledWith("bastion");
   });
 
-  // サーバーが「選べる端末は一つも無い」と答えるプラットフォーム(Linux)
-  // では、選ぶコントロールも Connect ボタンも出さない——出しても押せば必ず
-  // 失敗するからだ。代わりに、コマンドを自分で実行するよう伝える一文を出す。
-  it("hides the terminal picker and Connect button when the server reports no terminals at all", async () => {
+  it("keeps global terminal editing out of connection detail", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionsPage onInspector={() => undefined} />);
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+
+    expect(screen.queryByLabelText("Open with")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Application")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Arguments")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+  });
+
+  // サーバーが「選べる端末は一つも無い」と答えるプラットフォームでは、
+  // Connect を無効にし、コマンドを自分で実行するよう伝える。
+  it("keeps Connect unavailable when the server reports no terminal launcher", async () => {
     const user = userEvent.setup();
     vi.mocked(integrationsApi.terminalOptions).mockResolvedValue({
       selected: "terminal",
@@ -465,77 +454,8 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
 
-    await waitFor(() => expect(screen.queryByLabelText("Open with")).toBeNull());
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(screen.getByText(/does not open a terminal for you/)).toBeInTheDocument();
-  });
-
-  it("stores a predefined terminal choice without accepting a command string", async () => {
-    const user = userEvent.setup();
-    vi.mocked(configApi.save).mockResolvedValue({
-      transactionId: "t-terminal", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
-    } as never);
-    render(<ConnectionsPage onInspector={() => undefined} />);
-
-    await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    await user.selectOptions(screen.getByLabelText("Open with"), "kitty");
-
-    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
-      kind: "metadata",
-      metadata: expect.objectContaining({ terminal: "kitty" }),
-    }));
-    expect(screen.getByLabelText("Open with")).toHaveValue("terminal");
-  });
-
-  // 入っていない端末を選択肢から消すと、これから入れる人には理由の分からない
-  // 欠落になる。開けないことは名前の横に書き、選んだ時点で伝える。
-  it("marks a terminal this Mac does not have, and says so when it is the one chosen", async () => {
-    const user = userEvent.setup();
-    render(<ConnectionsPage onInspector={() => undefined} />);
-
-    await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    await waitFor(() =>
-      expect(screen.getByRole("option", { name: /kitty/ })).toHaveTextContent("not installed"),
-    );
-    expect(screen.queryByText(/was not found on this Mac/)).toBeNull();
-
-    vi.mocked(configApi.overview).mockResolvedValue({
-      ...overview, metadata: { schemaVersion: 1, terminal: "kitty" },
-    } as never);
-    vi.mocked(configApi.save).mockResolvedValue({
-      transactionId: "t-terminal", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
-    } as never);
-    await user.selectOptions(screen.getByLabelText("Open with"), "kitty");
-
-    expect(await screen.findByText(/kitty was not found on this Mac/)).toBeInTheDocument();
-  });
-
-  // 開く先は、このマシンで見つかったアプリケーションの中からしか選べない。
-  // 引数はシェルの文字列ではなく argv の語なので、空白で区切る以外の構文を
-  // 持たない。
-  it("opens another application by choosing it, and splits its arguments into words", async () => {
-    const user = userEvent.setup();
-    vi.mocked(configApi.save).mockResolvedValue({
-      transactionId: "t-custom", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
-    } as never);
-    render(<ConnectionsPage onInspector={() => undefined} />);
-
-    await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    await user.selectOptions(await screen.findByLabelText("Open with"), "custom");
-    // 開く先を選ぶまでは何も保存しない。保存できない状態を保存しに行くと、
-    // 「選んだのに戻った」だけが残る。
-    expect(configApi.save).not.toHaveBeenCalled();
-
-    await user.type(screen.getByLabelText("Arguments"), "-e");
-    await user.selectOptions(screen.getByLabelText("Application"), "/Applications/Term.app");
-
-    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
-      kind: "metadata",
-      metadata: expect.objectContaining({
-        terminal: "custom",
-        customTerminal: { application: "/Applications/Term.app", arguments: ["-e"] },
-      }),
-    }));
   });
 
   // 「入っていない」と「開けなかった」は別の答えである。片方をもう片方の

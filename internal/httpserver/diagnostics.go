@@ -321,6 +321,26 @@ func (h DiagnosticsHandlers) TerminalPreference(c *echo.Context) error {
 	if err := platform.ValidateTerminalChoice(choice); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_terminal_preference")
 	}
+	available, applications, _ := h.Service.TerminalOptions()
+	choiceAvailable := false
+	if choice.ID == platform.TerminalCustom {
+		for _, application := range applications {
+			if application.Path == choice.Application {
+				choiceAvailable = true
+				break
+			}
+		}
+	} else {
+		for _, terminal := range available {
+			if terminal.ID == choice.ID && terminal.Installed {
+				choiceAvailable = true
+				break
+			}
+		}
+	}
+	if !choiceAvailable {
+		return problem(c, http.StatusConflict, "terminal_not_available")
+	}
 	if _, err := h.SetPreferredTerminal(choice); err != nil {
 		return problem(c, http.StatusInternalServerError, "terminal_preference_failed")
 	}
