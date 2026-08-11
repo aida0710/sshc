@@ -77,27 +77,60 @@ func (h SyncHandlers) restore() {
 	})
 }
 
-func (h SyncHandlers) status(c *echo.Context) error {
+func snapshotSummaryResponse(summary remotesync.SnapshotSummary) api.SnapshotSummary {
+	return api.SnapshotSummary{
+		CreatedAt: summary.CreatedAt, FileCount: summary.FileCount,
+		SourceBytes: summary.SourceBytes, SnapshotBytes: summary.SnapshotBytes,
+	}
+}
+
+func syncOperationResponse(operation remotesync.SyncOperation) api.SyncOperation {
+	response := api.SyncOperation{
+		Kind: api.SyncOperationKind(operation.Kind), Summary: snapshotSummaryResponse(operation.Summary),
+		CompletedAt: operation.CompletedAt,
+	}
+	switch operation.Kind {
+	case remotesync.OperationPush:
+		response.ObjectCount = &operation.ObjectCount
+		response.UploadedBytes = &operation.UploadedBytes
+	case remotesync.OperationApply:
+		response.DownloadedBytes = &operation.DownloadedBytes
+		response.Written = &operation.Written
+		response.Removed = &operation.Removed
+	}
+	return response
+}
+
+func (h SyncHandlers) statusResponse() api.SyncStatus {
 	h.restore()
 	endpoint, bucket, path, region := h.Service.Target()
-	synced, at, origin, files := h.Service.LastSync()
+	state := h.Service.SyncState()
 	response := api.SyncStatus{
 		Configured: h.Service.Configured(),
 		Endpoint:   endpoint,
 		Bucket:     bucket,
 		Path:       &path,
 		Region:     &region,
-		Synced:     synced,
+		Synced:     state.Synced,
 		Direction:  api.SyncDirection(h.Service.Direction()),
 		// form が空である理由を、空であるときに伝える。access key や
 		// secret は決して含まない。それらは封印されたファイルへ一方通行である。
 		Locked: h.Secrets != nil && !h.Secrets.Unlocked(),
 	}
-	if synced {
-		response.LastSyncedAt = &at
-		response.Origin = &origin
-		response.FileCount = &files
+	if state.Synced {
+		response.LastSyncedAt = &state.At
+		response.Origin = &state.Origin
+		response.FileCount = &state.Files
 	}
+	if state.LastOperation != nil {
+		operation := syncOperationResponse(*state.LastOperation)
+		response.LastOperation = &operation
+	}
+	return response
+}
+
+func (h SyncHandlers) status(c *echo.Context) error {
+	response := h.statusResponse()
 	return c.JSON(http.StatusOK, response)
 }
 
@@ -226,10 +259,17 @@ func (h SyncHandlers) Push(c *echo.Context) error {
 	if allowed, err := h.masterPassword(c, request.Passphrase); !allowed {
 		return err
 	}
-	if _, err := h.Service.Push(c.Request().Context(), request.Passphrase); err != nil {
+	result, err := h.Service.Push(c.Request().Context(), request.Passphrase)
+	if err != nil {
 		return syncProblem(c, err)
 	}
-	return h.status(c)
+	return c.JSON(http.StatusOK, api.PushResponse{
+		Status: h.statusResponse(),
+		Result: api.PushResult{
+			Summary: snapshotSummaryResponse(result.Summary), ObjectCount: result.ObjectCount,
+			UploadedBytes: result.UploadedBytes, CompletedAt: result.CompletedAt,
+		},
+	})
 }
 
 // Pull は既定でプレビューし、求められたときだけ適用する。
@@ -252,7 +292,8 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 	}
 
 	response := api.PullResponse{
-		Applied:   false,
+		Applied: false, Summary: snapshotSummaryResponse(result.Summary),
+		DownloadedBytes: result.DownloadedBytes, CompletedAt: result.CompletedAt,
 		Conflicts: make([]api.SyncConflict, 0, len(result.Conflicts)),
 		Written:   make([]string, 0, len(result.Request.Changes)),
 		Removed:   make([]string, 0, len(result.Request.Removals)),
@@ -280,6 +321,13 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 			return syncProblem(c, err)
 		}
 		response.Applied = true
+		// Apply is a second request and therefore a second download. Its
+		// completion is the point after the workspace transaction and state
+		// write, not the earlier moment when this request finished downloading.
+		state := h.Service.SyncState()
+		if state.LastOperation != nil && state.LastOperation.Kind == remotesync.OperationApply {
+			response.CompletedAt = state.LastOperation.CompletedAt
+		}
 	}
 	return c.JSON(http.StatusOK, response)
 }

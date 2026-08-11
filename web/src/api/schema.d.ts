@@ -1362,6 +1362,40 @@ export interface components {
             lastSyncedAt?: string;
             origin?: string;
             fileCount?: number;
+            lastOperation?: components["schemas"]["SyncOperation"];
+        };
+        SnapshotSummary: {
+            createdAt: string;
+            fileCount: number;
+            /** Format: int64 */
+            sourceBytes: number;
+            /** Format: int64 */
+            snapshotBytes: number;
+        };
+        /** @enum {string} */
+        SyncOperationKind: "push" | "apply";
+        PushResult: {
+            summary: components["schemas"]["SnapshotSummary"];
+            objectCount: number;
+            /** Format: int64 */
+            uploadedBytes: number;
+            completedAt: string;
+        };
+        PushResponse: {
+            status: components["schemas"]["SyncStatus"];
+            result: components["schemas"]["PushResult"];
+        };
+        SyncOperation: {
+            kind: components["schemas"]["SyncOperationKind"];
+            summary: components["schemas"]["SnapshotSummary"];
+            objectCount?: number;
+            /** Format: int64 */
+            uploadedBytes?: number;
+            /** Format: int64 */
+            downloadedBytes?: number;
+            written?: number;
+            removed?: number;
+            completedAt: string;
         };
         SyncSettingsRequest: {
             endpoint: string;
@@ -1383,6 +1417,10 @@ export interface components {
         };
         PullResponse: {
             applied: boolean;
+            summary: components["schemas"]["SnapshotSummary"];
+            /** Format: int64 */
+            downloadedBytes: number;
+            completedAt: string;
             conflicts: components["schemas"]["SyncConflict"][];
             written: string[];
             removed: string[];
@@ -2438,7 +2476,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SyncStatus"];
+                    "application/json": components["schemas"]["PushResponse"];
                 };
             };
             400: components["responses"]["Problem"];
