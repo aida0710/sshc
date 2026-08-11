@@ -264,19 +264,35 @@ test("saves and replaces a key-owned passphrase without changing another key's s
 // linux、開発者の Mac では darwin だ。だから二つのテストに分け、自分の
 // ホストでないほうは test.skip で明示的にスキップする。片方の中で分岐
 // すると、レポートはどちらの期待を検査したかを言わずに green になる。
-test("darwin: stores kitty as the terminal used by Connect", async ({ page, installation }) => {
+test("darwin: stores one global terminal choice in Settings and uses it from both entry points", async ({ page, installation }) => {
   test.skip(process.platform !== "darwin", "this host did not build a darwin binary");
-  await openBastion(page, installation.url);
+  const launches: unknown[] = [];
+  await page.route("**/api/v1/terminal/launch", async (route) => {
+    launches.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ launched: true }) });
+  });
+  await openApplication(page, installation);
+
+  await openSection(page, "Settings");
+  const terminal = page.getByRole("region", { name: "Default connection application" });
+  await terminal.getByLabel("Open connections with").selectOption("custom");
+  await terminal.getByLabel("Application").selectOption({ label: "Terminal" });
   const saved = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === "/api/v1/config/save" && response.request().method() === "POST",
+    (response) => new URL(response.url()).pathname === "/api/v1/terminal/preference" && response.request().method() === "PUT",
   );
-  // 端末が入っているかに関わらず、選択肢そのものは消えない。このマシンに何が
-  // あるかで一覧の中身が変わると、設定は「消えた」ようにしか見えなくなる。
-  await expect(page.getByLabel("Open with").locator("option")).toHaveCount(6);
-  await page.getByLabel("Open with").selectOption("kitty");
+  await terminal.getByRole("button", { name: "Save custom application" }).click();
   expect((await saved).status()).toBe(200);
-  expect(await installation.read("sshc/metadata.json")).toContain('"terminal": "kitty"');
-  await expect(page.getByLabel("Open with")).toHaveValue("kitty");
+  expect(await installation.read("sshc/metadata.json")).toContain('"terminal": "custom"');
+
+  await openSection(page, "Connections");
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  await expect(page.getByLabel("Open with")).toHaveCount(0);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+
+  await openSection(page, "Home");
+  await page.getByRole("button", { name: "Actions for bastion" }).click();
+  await page.getByRole("menuitem", { name: "Connect", exact: true }).click();
+  await expect.poll(() => launches).toEqual([{ alias: "bastion" }, { alias: "bastion" }]);
 });
 
 test("linux: offers no way to open a terminal, since this binary cannot open one", async ({
