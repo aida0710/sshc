@@ -107,6 +107,17 @@ const (
 	askpassNoEntry = 2
 )
 
+// terminalPrompter は、人間に問い、その答えを返す。
+//
+// インターフェースにしてあるのは、テストが本物の端末に触れないためである。この
+// リポジトリのどのテストも、制御端末を開かない。
+type terminalPrompter interface {
+	// Prompt は question を人間に見せ、打たれた 1 行を返す。echo が偽なら入力を
+	// 画面に出さない。
+	Prompt(question string, echo bool) (string, error)
+	Close() error
+}
+
 type askpassRequest struct {
 	Alias  string `json:"alias"`
 	Prompt string `json:"prompt"`
@@ -128,6 +139,7 @@ func runAskpass(
 	client *http.Client,
 	out io.Writer,
 	errOut io.Writer,
+	openTerminal func() (terminalPrompter, error),
 ) int {
 	if len(arguments) == 0 {
 		return refuse(errOut, "sshc askpass expects the prompt as its argument")
@@ -149,10 +161,7 @@ func runAskpass(
 	}
 
 	if !AnswerablePrompt(prompt) {
-		return refuse(errOut,
-			"sshc askpass answers the remote password prompt only. This prompt was "+
-				"something else, so nothing was supplied — answer it yourself, or add "+
-				"the host key through the Known Hosts screen first.")
+		return relayToHuman(prompt, out, errOut, openTerminal)
 	}
 
 	password, status := fetchPassword(ctx, client, endpoint, token, alias, prompt)
@@ -245,6 +254,56 @@ var errNotLoopback = &endpointError{}
 type endpointError struct{}
 
 func (*endpointError) Error() string { return "the askpass endpoint is not 127.0.0.1" }
+
+// hostKeyPromptSuffix は、OpenSSH がホスト鍵の確認の末尾に置く文字列。
+//
+// 使うのは、答えを画面に出してよいかの判定にだけである。合致しなければ伏せる側へ
+// 倒れるので、OpenSSH が文言を変えても、最悪 yes が見えなくなるだけで済む。
+// パスフレーズが画面に残る方へは倒れない。
+const hostKeyPromptSuffix = "(yes/no/[fingerprint])?"
+
+// noTerminalMessage は、答える人間がいないときに残す説明である。
+const noTerminalMessage = "sshc askpass could not reach a terminal to ask. " +
+	"Answer the prompt yourself, or add the host key through the Known Hosts screen first."
+
+// echoesTheAnswer は、この問いの答えを打ち手に見せてよいかを報告する。
+//
+// ホスト鍵への yes/no は秘密ではないので見せる。それ以外は、パスフレーズかもしれず
+// ワンタイムコードかもしれないので伏せる。
+func echoesTheAnswer(prompt string) bool {
+	return strings.HasSuffix(strings.TrimRight(prompt, " \t\r\n"), hostKeyPromptSuffix)
+}
+
+// relayToHuman は、このヘルパーが答えられない問いを持ち主へ渡す。
+//
+// SSH_ASKPASS_REQUIRE=force は対話的な問いを *すべて* ここへ通す。ホスト鍵の確認も、
+// 鍵のパスフレーズも、2FA のコードもである。答えられないからといって握りつぶせば、
+// パスワードを保存したという操作が、それらに答える手段を奪ってしまう。保存して
+// いなければ素の ssh が端末で訊いていたのだから、それは後退である。
+//
+// 答えるのは人間であって、このプログラムではない。ホスト鍵の検査は取り除かれず、
+// 信頼モデルは素の ssh と同じままである。プロンプトは加工せずに見せる。別名で既知か
+// 初見かを OpenSSH が本文で述べており、こちらが言い換えれば情報が減るだけである。
+func relayToHuman(prompt string, out, errOut io.Writer, open func() (terminalPrompter, error)) int {
+	if open == nil {
+		return refuse(errOut, noTerminalMessage)
+	}
+	terminal, err := open()
+	if err != nil {
+		return refuse(errOut, noTerminalMessage)
+	}
+	defer func() { _ = terminal.Close() }()
+
+	answer, err := terminal.Prompt(prompt, echoesTheAnswer(prompt))
+	if err != nil {
+		return refuse(errOut, "sshc askpass could not read the answer from the terminal")
+	}
+	// パスワードの経路と同じ形で返す。OpenSSH は末尾の改行をひとつだけ取り除く。
+	if _, err := io.WriteString(out, answer+"\n"); err != nil {
+		return askpassRefused
+	}
+	return askpassOK
+}
 
 func refuse(errOut io.Writer, message string) int {
 	writeLine(errOut, message)

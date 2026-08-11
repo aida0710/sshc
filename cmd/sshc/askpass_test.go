@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -73,7 +74,7 @@ func TestAskpassWritesOnlyThePasswordOnStandardOutput(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 	status := runAskpass(context.Background(), []string{"ops@203.0.113.10's password: "},
-		fullEnvironment(server.URL).lookup, server.Client(), &out, &errOut)
+		fullEnvironment(server.URL).lookup, server.Client(), &out, &errOut, nil)
 
 	if status != askpassOK {
 		t.Fatalf("status = %d, stderr = %q", status, errOut.String())
@@ -115,7 +116,7 @@ func TestAskpassWritesNothingOnStandardOutputWhenItRefuses(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var out, errOut bytes.Buffer
 			status := runAskpass(context.Background(), test.arguments,
-				test.environment.lookup, server.Client(), &out, &errOut)
+				test.environment.lookup, server.Client(), &out, &errOut, nil)
 
 			if status == askpassOK {
 				t.Fatalf("status = %d, want a refusal", status)
@@ -153,7 +154,7 @@ func TestAskpassRefusesAnEndpointThatIsNotLoopback(t *testing.T) {
 			var out, errOut bytes.Buffer
 			environment := fullEnvironment(endpoint)
 			status := runAskpass(context.Background(), []string{"x's password: "},
-				environment.lookup, server.Client(), &out, &errOut)
+				environment.lookup, server.Client(), &out, &errOut, nil)
 
 			if status == askpassOK || out.Len() != 0 {
 				t.Errorf("status = %d, stdout = %q", status, out.String())
@@ -182,7 +183,7 @@ func TestAskpassDistinguishesNothingStoredFromRefused(t *testing.T) {
 		var out, errOut bytes.Buffer
 		environment := fullEnvironment(server.URL)
 		got := runAskpass(context.Background(), []string{"x's password: "},
-			environment.lookup, server.Client(), &out, &errOut)
+			environment.lookup, server.Client(), &out, &errOut, nil)
 		server.Close()
 
 		if got != want {
@@ -202,7 +203,7 @@ func TestAskpassRefusesAnEmptyPasswordFromTheServer(t *testing.T) {
 	var out, errOut bytes.Buffer
 	environment := fullEnvironment(server.URL)
 	if status := runAskpass(context.Background(), []string{"x's password: "},
-		environment.lookup, server.Client(), &out, &errOut); status != askpassNoEntry {
+		environment.lookup, server.Client(), &out, &errOut, nil); status != askpassNoEntry {
 		t.Fatalf("status = %d, want askpassNoEntry", status)
 	}
 	if out.Len() != 0 {
@@ -252,6 +253,156 @@ func TestAnOrdinaryStartIsNotTurnedIntoTheHelper(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if _, ok := askpassInvocation([]string{"/opt/sshc", "-open=false"}, environment.lookup); ok {
 				t.Error("an ordinary start was taken for an askpass invocation")
+			}
+		})
+	}
+}
+
+// recordingTerminal は、問われたことを記録し、決めた答えを返す。このパッケージの
+// どのテストも本物の制御端末を開かない。開けば、テストを走らせている人の端末が
+// 入力を待って止まる。
+type recordingTerminal struct {
+	questions []string
+	echoes    []bool
+	answer    string
+	closed    bool
+}
+
+func (t *recordingTerminal) Prompt(question string, echo bool) (string, error) {
+	t.questions = append(t.questions, question)
+	t.echoes = append(t.echoes, echo)
+	return t.answer, nil
+}
+
+func (t *recordingTerminal) Close() error { t.closed = true; return nil }
+
+// 答えられないプロンプトは握りつぶさず、持ち主に渡す。
+//
+// パスワードを保存した alias だけが SSH_ASKPASS_REQUIRE=force を立てるので、保存
+// という操作がホスト鍵の確認に答える手段を奪っていた。ここが、それを返す場所である。
+func TestAskpassRelaysAHostKeyPromptToTheTerminal(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("答えられないプロンプトで保存済みパスワードを取りに行った")
+	}))
+	defer server.Close()
+
+	prompt := "The authenticity of host '203.0.113.10 (203.0.113.10)' can't be established.\n" +
+		"ED25519 key fingerprint is SHA256:PJfawn3ikvzrqo7nENLU3P83u5j1zb+SYeshHR8tOmk\n" +
+		"This host key is known by the following other names/addresses:\n" +
+		"    ~/.ssh/known_hosts:956: 10.0.10.161\n" +
+		"Are you sure you want to continue connecting (yes/no/[fingerprint])? "
+	terminal := &recordingTerminal{answer: "yes"}
+	var out, errOut bytes.Buffer
+
+	status := runAskpass(context.Background(), []string{prompt},
+		fullEnvironment(server.URL).lookup, server.Client(), &out, &errOut,
+		func() (terminalPrompter, error) { return terminal, nil })
+
+	if status != askpassOK {
+		t.Fatalf("status = %d, stderr = %q", status, errOut.String())
+	}
+	// 人間が打った行だけが回答になる。OpenSSH は末尾の改行をひとつ取り除く。
+	if out.String() != "yes\n" {
+		t.Errorf("stdout = %q, want %q", out.String(), "yes\n")
+	}
+	if len(terminal.questions) != 1 || terminal.questions[0] != prompt {
+		t.Fatalf("questions = %#v, want the prompt verbatim", terminal.questions)
+	}
+	// 別名で既知か初見かの区別は OpenSSH が本文で述べている。加工せずに見せる。
+	if !strings.Contains(terminal.questions[0], "known_hosts:956: 10.0.10.161") {
+		t.Error("プロンプトから、既知の別名を告げる行が落ちている")
+	}
+	if !terminal.echoes[0] {
+		t.Error("echo = false。yes/no は秘密ではないので伏せる理由がない")
+	}
+	if !terminal.closed {
+		t.Error("端末が閉じられていない")
+	}
+}
+
+// 秘密を尋ねる問いは中継するが、打った文字は画面に残さない。
+func TestAskpassRelaysASecretPromptWithoutEchoingIt(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("答えられないプロンプトで保存済みパスワードを取りに行った")
+	}))
+	defer server.Close()
+
+	secrets := []string{
+		"Enter passphrase for key '/Users/tester/.ssh/id_ed25519': ",
+		"Verification code: ",
+		"Enter PIN for authenticator: ",
+	}
+	for _, prompt := range secrets {
+		t.Run(prompt, func(t *testing.T) {
+			terminal := &recordingTerminal{answer: "s3cret"}
+			var out, errOut bytes.Buffer
+
+			status := runAskpass(context.Background(), []string{prompt},
+				fullEnvironment(server.URL).lookup, server.Client(), &out, &errOut,
+				func() (terminalPrompter, error) { return terminal, nil })
+
+			if status != askpassOK {
+				t.Fatalf("status = %d, stderr = %q", status, errOut.String())
+			}
+			if out.String() != "s3cret\n" {
+				t.Errorf("stdout = %q", out.String())
+			}
+			if len(terminal.echoes) != 1 || terminal.echoes[0] {
+				t.Errorf("echoes = %#v, want [false] — 秘密を画面に残さない", terminal.echoes)
+			}
+		})
+	}
+}
+
+// 答えられるプロンプトでは端末に触れない。保存したパスワードが使われる経路は、
+// 人間を煩わせないためにこそある。
+func TestAskpassNeverOpensTheTerminalForAPromptItCanAnswer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"password":"hunter2"}`))
+	}))
+	defer server.Close()
+
+	var out, errOut bytes.Buffer
+	status := runAskpass(context.Background(), []string{"ops@203.0.113.10's password: "},
+		fullEnvironment(server.URL).lookup, server.Client(), &out, &errOut,
+		func() (terminalPrompter, error) {
+			t.Error("保存済みパスワードで答えられるのに制御端末を開いた")
+			return nil, errors.New("must not be called")
+		})
+
+	if status != askpassOK {
+		t.Fatalf("status = %d, stderr = %q", status, errOut.String())
+	}
+	if out.String() != "hunter2\n" {
+		t.Errorf("stdout = %q", out.String())
+	}
+}
+
+// 答える人間がいない起動では、従来どおり断る。systemd や launchd から -open=false
+// で上がったエージェントには制御端末がない。
+func TestAskpassRefusesWhenThereIsNoTerminalToAsk(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+
+	openers := map[string]func() (terminalPrompter, error){
+		"opener is nil": nil,
+		"no controlling terminal": func() (terminalPrompter, error) {
+			return nil, errors.New("open /dev/tty: device not configured")
+		},
+	}
+	for name, open := range openers {
+		t.Run(name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			status := runAskpass(context.Background(),
+				[]string{"Are you sure you want to continue connecting (yes/no/[fingerprint])? "},
+				fullEnvironment(server.URL).lookup, server.Client(), &out, &errOut, open)
+
+			if status == askpassOK {
+				t.Fatal("status = OK、端末が無いのに")
+			}
+			if out.Len() != 0 {
+				t.Errorf("stdout = %q, want nothing", out.String())
 			}
 		})
 	}
