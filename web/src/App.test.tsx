@@ -284,6 +284,24 @@ describe("App", () => {
     expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute("href", "/connections");
   });
 
+  it("keeps the shell visible while a direct section module resolves without loading copy", async () => {
+    window.history.replaceState(null, "", "/keys");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    expect(await screen.findByRole("link", { name: "Keys" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+    expect(await screen.findByText("keys panel")).toBeInTheDocument();
+  });
+
   it("keeps a nested group URL inside the Connections section", async () => {
     window.history.replaceState(null, "", "/connections/groups/home/eu");
     render(
@@ -319,7 +337,7 @@ describe("App", () => {
       window.history.pushState(null, "", "/history");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
-    expect(screen.getByText("history panel")).toBeInTheDocument();
+    expect(await screen.findByText("history panel")).toBeInTheDocument();
 
     act(() => {
       window.history.replaceState(null, "", "/settings");
@@ -474,7 +492,7 @@ describe("App", () => {
     expect(await screen.findByText("new vault fixture")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "unlock fixture" }));
     await user.click(await screen.findByRole("link", { name: "Secrets" }));
-    await user.click(screen.getByRole("button", { name: "lock fixture" }));
+    await user.click(await screen.findByRole("button", { name: "lock fixture" }));
 
     expect(screen.getByText("existing vault fixture")).toBeInTheDocument();
   });
@@ -565,11 +583,11 @@ describe("App", () => {
     );
 
     await user.click(await screen.findByRole("link", { name: "Known Hosts" }));
-    expect(screen.getByText("known hosts panel")).toBeInTheDocument();
+    expect(await screen.findByText("known hosts panel")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
 
     await user.click(screen.getByRole("link", { name: "Ad hoc checks" }));
-    expect(screen.getByText("diagnostics panel")).toBeInTheDocument();
+    expect(await screen.findByText("diagnostics panel")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
