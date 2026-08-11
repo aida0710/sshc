@@ -562,13 +562,14 @@ function PaddedSection({
   onLock,
   onInspector,
   onNavigate,
+  onNavigateLocation,
   preferredPublicKey,
   onAssignGeneratedKey,
   onInstallGeneratedKey,
   onPreferredPublicKeyHandled,
 }: SectionViewProps) {
   if (section === "Home") {
-    return <OverviewPanel onNavigate={onNavigate} />;
+    return <OverviewPanel onNavigate={onNavigate} onNavigateLocation={onNavigateLocation} />;
   }
   if (section === "Config") {
     return <ConfigExplorer target={fileTarget} />;
