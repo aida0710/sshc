@@ -99,6 +99,7 @@ type HarnessOverrides = {
   savedState?: ConnectionSavedState;
   onDirtyChange?: (dirty: boolean) => void;
   onDiscardReady?: (discard: (() => void) | null) => void;
+  disabled?: boolean;
 };
 
 function renderForm(overrides: HarnessOverrides = {}) {
@@ -140,6 +141,7 @@ function renderForm(overrides: HarnessOverrides = {}) {
       savedState={overrides.savedState}
       onDirtyChange={overrides.onDirtyChange}
       onDiscardReady={overrides.onDiscardReady}
+      disabled={overrides.disabled}
     />,
   );
   return {
@@ -157,6 +159,15 @@ function renderForm(overrides: HarnessOverrides = {}) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ConnectionBasicForm", () => {
+
+  it("keeps its draft visible but disables editing while another editor owns the connection", async () => {
+    renderForm({ disabled: true });
+
+    expect(await screen.findByLabelText("Host name or IP address")).toBeDisabled();
+    expect(screen.getByLabelText("User")).toBeDisabled();
+    expect(screen.getByLabelText("Port")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+  });
 
   it("stages a freshly generated key from a fresh inventory and applies it only on Save", async () => {
     const user = userEvent.setup();

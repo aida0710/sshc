@@ -42,6 +42,7 @@ type ConnectionBasicFormProps = {
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
   onDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
   onRequestRefresh?: (() => Promise<void>) | undefined;
+  disabled?: boolean | undefined;
 };
 
 type DraftField = {
@@ -87,6 +88,7 @@ export function ConnectionBasicForm({
   onDirtyChange,
   onDiscardReady,
   onRequestRefresh,
+  disabled = false,
 }: ConnectionBasicFormProps) {
   const t = useTranslate();
   const identity = detail.form.entry.identity;
@@ -349,7 +351,7 @@ export function ConnectionBasicForm({
   const passwordResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready" && eligibility !== null;
   const keyPassphraseResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready" && keyOptionsStatus === "ready";
   const vaultAllowsConfig = vault === null || vault.unlocked;
-  const canSave = !loading && !busy && vaultAllowsConfig && dirty &&
+  const canSave = !disabled && !loading && !busy && vaultAllowsConfig && dirty &&
     hostError === "" && userError === "" && portError === "" && passwordAllowed &&
     keyPassphraseValid && (!changesPassword || passwordResourcesReady) &&
     (!hasKeyPassphraseDraft || keyPassphraseResourcesReady);
@@ -491,6 +493,7 @@ export function ConnectionBasicForm({
     <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
       {localError === "" || problem !== null ? null : <Notice tone="danger">{localError}</Notice>}
 
+      <fieldset disabled={disabled} className="contents">
       <section className="flex flex-col gap-2" aria-labelledby="basic-connection-heading">
         <h3 id="basic-connection-heading" className={sectionHeading}>{t("conn.basicConnection")}</h3>
         <Card>
@@ -773,6 +776,7 @@ export function ConnectionBasicForm({
           {busy ? t("conn.basicSaving") : t("conn.basicSave")}
         </Button>
       </div>
+      </fieldset>
     </form>
   );
 }
