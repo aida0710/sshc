@@ -86,10 +86,10 @@ function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> =
 }
 
 describe("HostDetailPanel", () => {
-  it("folds legacy route tabs into three connection areas without running checks", async () => {
+  it("uses the three direct route panels without running checks", async () => {
     const user = userEvent.setup();
-    const onTabChange = vi.fn();
-    const harness = renderPanel({ tab: "Diagnostics", onTabChange });
+    const onLocationChange = vi.fn();
+    const harness = renderPanel({ panel: "Basic", advanced: "Jump", onLocationChange });
 
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
     expect(within(areaTabs).getAllByRole("tab")).toHaveLength(3);
@@ -98,12 +98,12 @@ describe("HostDetailPanel", () => {
     expect(harness.props.integrations.reachability).not.toHaveBeenCalled();
 
     await user.click(within(areaTabs).getByRole("tab", { name: "Settings analysis" }));
-    expect(onTabChange).toHaveBeenCalledWith("Effective");
+    expect(onLocationChange).toHaveBeenCalledWith("Analysis", "Jump");
   });
 
   it("keeps a Basic draft mounted across areas and blocks connection checks", async () => {
     const user = userEvent.setup();
-    const harness = renderPanel({ tab: "Basic" });
+    const harness = renderPanel({ panel: "Basic", advanced: "Jump" });
     const hostName = screen.getByLabelText("Host name or IP address");
     await user.clear(hostName);
     await user.type(hostName, "198.51.100.7");
@@ -111,14 +111,14 @@ describe("HostDetailPanel", () => {
     expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
     expect(screen.getByRole("button", { name: "Check reachability" })).toBeDisabled();
 
-    harness.rerender(<HostDetailPanel {...harness.props} tab="Effective" />);
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Analysis" advanced="Jump" />);
     expect(screen.getByRole("region", { name: "Settings analysis" })).toBeVisible();
-    harness.rerender(<HostDetailPanel {...harness.props} tab="Basic" />);
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Basic" advanced="Jump" />);
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("198.51.100.7");
   });
 
-  it("maps old advanced URLs to the matching internal advanced view", () => {
-    renderPanel({ tab: "Raw" });
+  it("shows the advanced subview named directly by the route", () => {
+    renderPanel({ panel: "Advanced", advanced: "Raw" });
 
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
     expect(within(areaTabs).getByRole("tab", { name: "Advanced settings" })).toHaveAttribute("aria-selected", "true");
@@ -126,12 +126,12 @@ describe("HostDetailPanel", () => {
     expect(within(advancedTabs).getByRole("tab", { name: "Raw" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("reports the legacy route corresponding to an advanced subview", async () => {
+  it("reports an advanced subview as a direct canonical location", async () => {
     const user = userEvent.setup();
-    const onTabChange = vi.fn();
-    renderPanel({ tab: "Jump", onTabChange });
+    const onLocationChange = vi.fn();
+    renderPanel({ panel: "Advanced", advanced: "Jump", onLocationChange });
 
     await user.click(screen.getByRole("tab", { name: "Directives" }));
-    expect(onTabChange).toHaveBeenCalledWith("Advanced");
+    expect(onLocationChange).toHaveBeenCalledWith("Advanced", "Directives");
   });
 });

@@ -13,7 +13,7 @@ import {
   type SavePreview,
   type UpdateConnectionRequest,
 } from "../api/config";
-import { ConnectionTree, type HostSelection } from "./ConnectionTree";
+import { ConnectionBrowser, type HostSelection } from "./ConnectionBrowserView";
 import type { DragPayload } from "./dragdrop";
 import { HostDetailPanel } from "./HostDetail";
 import {
@@ -38,8 +38,10 @@ import type {
 } from "../routing/useSectionRoute";
 import {
   connectionLocation,
-  parseConnectionSearch,
-  type HostEditorTab,
+  parseConnectionLocation,
+  type AdvancedArea,
+  type ConnectionBrowserLocation,
+  type ConnectionPanel,
 } from "../routing/connectionRoute";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import { keysApi } from "../keys/api";
@@ -101,9 +103,9 @@ function toProblem(error: unknown): Problem {
 }
 
 type ConnectionsPageProps = {
-  // configuration ファイルを file view で指定行から開く。ツリーはパター
-  // ンルールのためにこれを必要とする——identity が無く、開くべき host detail も無いからだ。
-  onOpenFile: (path: string, line: number) => void;
+  // App から旧 callback を外すまでの移行用。新ブラウザーは具体的な alias
+  // だけを扱い、パターン規則は Config 画面から編集する。
+  onOpenFile?: (path: string, line: number) => void;
   // 右側ペインの中身を、シェルへ差し出す。connection が開いていない間は
   // null——何か開くまでは、調べるものが何も無いからだ。
   onInspector: (content: InspectorContent) => void;
@@ -122,7 +124,6 @@ type SaveAttempt =
   | { saved: true; overview: Overview | null };
 
 export function ConnectionsPage({
-  onOpenFile,
   onInspector,
   creationDraft = null,
   onCreationDraftChange,
@@ -134,7 +135,10 @@ export function ConnectionsPage({
   onPreferredKeyApplied,
 }: ConnectionsPageProps) {
   const t = useTranslate();
-  const initialTarget = parseConnectionSearch(location.search);
+  const initialRoute = parseConnectionLocation(location);
+  const initialBrowser: ConnectionBrowserLocation =
+    initialRoute.kind === "valid" ? initialRoute.browser : { view: "servers" };
+  const initialTarget = initialRoute.kind === "valid" ? initialRoute.target : null;
   const [overview, setOverview] = useState<Overview | null>(null);
   // どのグループにも属さない connection が向かう先。このページが決め
   // つけるのではなく、サーバーがエントリファイルを報告する。"config" は
@@ -147,7 +151,10 @@ export function ConnectionsPage({
     initialTarget === null ? null : { path: initialTarget.path, alias: initialTarget.alias },
   );
   const selectionRef = useRef<HostSelection | null>(selection);
-  const [activeTab, setActiveTab] = useState<HostEditorTab>(initialTarget?.tab ?? "Basic");
+  const [browser, setBrowser] = useState<ConnectionBrowserLocation>(initialBrowser);
+  const [invalidLocation, setInvalidLocation] = useState(initialRoute.kind === "invalid");
+  const [activePanel, setActivePanel] = useState<ConnectionPanel>(initialTarget?.panel ?? "Basic");
+  const [activeAdvanced, setActiveAdvanced] = useState<AdvancedArea>(initialTarget?.advanced ?? "Jump");
   const [detail, setDetail] = useState<HostDetail | null>(null);
   const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
@@ -179,35 +186,67 @@ export function ConnectionsPage({
     selectionRef.current = selection;
   }, [selection]);
 
-  function navigateToConnection(
-    identity: HostSelection,
-    tab: HostEditorTab,
-    options?: NavigateLocationOptions,
-  ): boolean {
-    const target = connectionLocation({ path: identity.path, alias: identity.alias, tab });
+  function emitLocation(url: string, options?: NavigateLocationOptions): boolean {
     const result = options === undefined
-      ? onNavigateLocation?.(target)
-      : onNavigateLocation?.(target, options);
+      ? onNavigateLocation?.(url)
+      : onNavigateLocation?.(url, options);
     return result !== false;
   }
 
-  function navigateToConnectionList(options?: NavigateLocationOptions): boolean {
-    const result = options === undefined
-      ? onNavigateLocation?.(connectionLocation(null))
-      : onNavigateLocation?.(connectionLocation(null), options);
-    return result !== false;
+  function navigateBrowser(
+    next: ConnectionBrowserLocation,
+    options?: NavigateLocationOptions,
+  ): boolean {
+    const target = selection === null
+      ? null
+      : {
+          path: selection.path,
+          alias: selection.alias,
+          panel: activePanel,
+          advanced: activeAdvanced,
+        };
+    if (!emitLocation(connectionLocation(next, target), options)) return false;
+    setBrowser(next);
+    setInvalidLocation(false);
+    return true;
+  }
+
+  function navigateTarget(
+    identity: HostSelection,
+    panel: ConnectionPanel,
+    advanced: AdvancedArea,
+    options?: NavigateLocationOptions,
+  ): boolean {
+    if (!emitLocation(connectionLocation(browser, {
+      path: identity.path,
+      alias: identity.alias,
+      panel,
+      advanced,
+    }), options)) return false;
+    setActivePanel(panel);
+    setActiveAdvanced(advanced);
+    setInvalidLocation(false);
+    return true;
+  }
+
+  function clearTarget(options?: NavigateLocationOptions): boolean {
+    return emitLocation(connectionLocation(browser, null), options);
   }
 
   // 書き込み済みの identity は、後続の GET より先に画面と URL の正本にする。
   // detail は selection effect が新しい identity から読み直す。GET が一時的に
   // 失敗しても、URL がもう存在しない旧 alias/path を指し続けることはない。
-  function followCommittedIdentity(identity: HostSelection, tab: HostEditorTab = activeTab) {
+  function followCommittedIdentity(
+    identity: HostSelection,
+    panel: ConnectionPanel = activePanel,
+    advanced: AdvancedArea = activeAdvanced,
+  ) {
     selectionRef.current = identity;
     setSelection(identity);
     setDetail(null);
     setSavedState(null);
     setMissingSelection(false);
-    navigateToConnection(identity, tab, { replace: true });
+    navigateTarget(identity, panel, advanced, { replace: true });
   }
 
   function leaveCommittedIdentityUnknown() {
@@ -216,7 +255,7 @@ export function ConnectionsPage({
     setDetail(null);
     setSavedState(null);
     setMissingSelection(false);
-    navigateToConnectionList({ replace: true });
+    clearTarget({ replace: true });
   }
 
   function beginCreation() {
@@ -247,42 +286,87 @@ export function ConnectionsPage({
     void reload();
   }, [reload]);
 
-  // URL は、選択とタブの共有可能な正本である。popstate を受けた親が
-  // location を更新すると、戻る/進むでも同じ connection とタブを復元する。
+  // URL は、ブラウザー位置・選択・表示パネルの共有可能な正本である。popstate を受けた親が
+  // location を更新すると、戻る/進むでも同じ位置と connection を復元する。
   // URL に秘密や絶対パスは入らず、parser が安全な相対パスだけを通す。
   useEffect(() => {
-    const target = parseConnectionSearch(location.search);
-    setMissingSelection(false);
-    setPreview(null);
-    setProblem(null);
-    setManaging(false);
-    if (target === null) {
+    const parsed = parseConnectionLocation(location);
+    if (parsed.kind === "redirect") {
+      emitLocation(parsed.location, { replace: true });
+      setBrowser({ view: "servers" });
+      setInvalidLocation(false);
+      if (selectionRef.current === null) return;
       selectionRef.current = null;
       setSelection(null);
       setDetail(null);
       setSavedState(null);
       setEditorDirty(false);
       setRefreshState("idle");
-      setActiveTab("Basic");
+      setActivePanel("Basic");
+      setActiveAdvanced("Jump");
+      setMissingSelection(false);
+      setPreview(null);
+      setProblem(null);
+      setManaging(false);
       return;
     }
+    if (parsed.kind === "invalid") {
+      setInvalidLocation(true);
+      if (selectionRef.current === null) return;
+      selectionRef.current = null;
+      setSelection(null);
+      setDetail(null);
+      setSavedState(null);
+      setEditorDirty(false);
+      setRefreshState("idle");
+      setActivePanel("Basic");
+      setActiveAdvanced("Jump");
+      setMissingSelection(false);
+      setPreview(null);
+      setProblem(null);
+      setManaging(false);
+      return;
+    }
+
+    setBrowser(parsed.browser);
+    setInvalidLocation(false);
+    const target = parsed.target;
+    const current = selectionRef.current;
+    if (target === null) {
+      if (current === null) return;
+      selectionRef.current = null;
+      setSelection(null);
+      setDetail(null);
+      setSavedState(null);
+      setEditorDirty(false);
+      setRefreshState("idle");
+      setActivePanel("Basic");
+      setActiveAdvanced("Jump");
+      setMissingSelection(false);
+      setPreview(null);
+      setProblem(null);
+      setManaging(false);
+      return;
+    }
+
+    setActivePanel(target.panel);
+    setActiveAdvanced(target.advanced);
+    if (current?.path === target.path && current.alias === target.alias) return;
     const nextSelection = { path: target.path, alias: target.alias };
     selectionRef.current = nextSelection;
     setSelection(nextSelection);
-    setActiveTab(target.tab);
-    setDetail((current) =>
-      current?.form.entry.identity.path === target.path &&
-      current.form.entry.identity.alias === target.alias
-        ? current
-        : null,
-    );
-    setSavedState((current) =>
-      current?.detail.form.entry.identity.path === target.path &&
-      current.detail.form.entry.identity.alias === target.alias
-        ? current
-        : null,
-    );
-  }, [location.search]);
+    setDetail(null);
+    setSavedState(null);
+    setEditorDirty(false);
+    setRefreshState("idle");
+    setMissingSelection(false);
+    setPreview(null);
+    setProblem(null);
+    setManaging(false);
+    // emitLocation はこの effect と同じ render の location callback を使う。
+    // 親が callback を作り直すこと自体は URL state の変化ではない。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     if (!editorDirty) {
@@ -290,8 +374,9 @@ export function ConnectionsPage({
       return;
     }
     const blocker: NavigationBlocker = (next) => {
-      if (next.pathname === "/connections" && selection !== null) {
-        const target = parseConnectionSearch(next.search);
+      const parsed = parseConnectionLocation(next);
+      if (parsed.kind === "valid" && selection !== null) {
+        const target = parsed.target;
         if (target !== null && target.path === selection.path && target.alias === selection.alias) {
           return true;
         }
@@ -522,7 +607,7 @@ export function ConnectionsPage({
   function onSelect(host: HostEntry) {
     if (host.identity.alias === "") return;
     const nextSelection = { path: host.identity.path, alias: host.identity.alias };
-    if (!navigateToConnection(nextSelection, "Basic")) return;
+    if (!navigateTarget(nextSelection, "Basic", "Jump")) return;
     // 別の connection を選ぶと、直前の保存の diff は破棄される——それは
     // もう開いていないブロックのバイトを記述しているからだ。保存はここで
     // はなく submit を通じて再選択を行い、その diff は画面に残しておく。
@@ -538,7 +623,8 @@ export function ConnectionsPage({
     setManaging(false);
     selectionRef.current = nextSelection;
     setSelection(nextSelection);
-    setActiveTab("Basic");
+    setActivePanel("Basic");
+    setActiveAdvanced("Jump");
   }
 
   function onFieldEdits(fields: FieldEdit[]) {
@@ -733,8 +819,9 @@ export function ConnectionsPage({
     setProblem(null);
     setLocalError("");
     setManaging(false);
-    setActiveTab("Basic");
-    followCommittedIdentity(result.identity, "Basic");
+    setActivePanel("Basic");
+    setActiveAdvanced("Jump");
+    followCommittedIdentity(result.identity, "Basic", "Jump");
     await reload();
   }
 
@@ -863,7 +950,7 @@ export function ConnectionsPage({
     setDetail(null);
     setSavedState(null);
     setLocalError("");
-    navigateToConnectionList({ replace: true });
+    clearTarget({ replace: true });
   }
 
   if (overview === null) {
@@ -892,14 +979,33 @@ export function ConnectionsPage({
           </Button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <ConnectionTree
-            overview={overview}
-            selected={selection}
-            onSelect={onSelect}
-            onOpenPatternRule={onOpenFile}
-            onDrop={(payload, target) => void onTreeDrop(payload, target)}
-            movesDisabled={editorDirty || refreshState !== "idle"}
-          />
+          {invalidLocation ? (
+            <section className="flex flex-col gap-2 rounded-lg border border-line bg-card p-3 text-sm" role="status">
+              <p className="font-medium">{t("browser.invalidUrl")}</p>
+              <Button
+                className="self-start"
+                onClick={() => {
+                  const next: ConnectionBrowserLocation = { view: "servers" };
+                  if (emitLocation(connectionLocation(next, null), { replace: true })) {
+                    setBrowser(next);
+                    setInvalidLocation(false);
+                  }
+                }}
+              >
+                {t("browser.backToServers")}
+              </Button>
+            </section>
+          ) : (
+            <ConnectionBrowser
+              overview={overview}
+              browser={browser}
+              selected={selection}
+              onBrowse={navigateBrowser}
+              onSelect={onSelect}
+              onDrop={(payload, target) => void onTreeDrop(payload, target)}
+              movesDisabled={editorDirty || refreshState !== "idle"}
+            />
+          )}
         </div>
       </div>
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6">
@@ -928,7 +1034,7 @@ export function ConnectionsPage({
             <Button
               kind="primary"
               className="mt-4"
-              onClick={() => navigateToConnectionList({ replace: true })}
+              onClick={() => clearTarget({ replace: true })}
             >
               {t("conn.backToList")}
             </Button>
@@ -1062,9 +1168,10 @@ export function ConnectionsPage({
               onBlockRaw={onBlockRaw}
               onBasicSave={onBasicSave}
               integrations={integrationsApi}
-              tab={activeTab}
-              onTabChange={(tab) => {
-                if (selection === null || navigateToConnection(selection, tab)) setActiveTab(tab);
+              panel={activePanel}
+              advanced={activeAdvanced}
+              onLocationChange={(panel, advanced) => {
+                if (selection !== null) navigateTarget(selection, panel, advanced);
               }}
               preferredKey={preferredKey}
               onPreferredKeyApplied={onPreferredKeyApplied}

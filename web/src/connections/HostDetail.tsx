@@ -5,11 +5,8 @@ import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import {
-  connectionAreaForTab,
-  tabForConnectionArea,
   type AdvancedArea,
-  type ConnectionArea,
-  type HostEditorTab,
+  type ConnectionPanel,
 } from "../routing/connectionRoute";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { ConnectionAnalysis } from "./ConnectionAnalysis";
@@ -27,8 +24,9 @@ type HostDetailPanelProps = {
   onBlockRaw: (raw: string) => void;
   onBasicSave: (request: UpdateConnectionRequest) => Promise<void>;
   integrations?: IntegrationsApi;
-  tab?: HostEditorTab;
-  onTabChange?: (tab: HostEditorTab) => void;
+  panel?: ConnectionPanel;
+  advanced?: AdvancedArea;
+  onLocationChange?: (panel: ConnectionPanel, advanced: AdvancedArea) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null | undefined;
   onPreferredKeyApplied?: (() => void) | undefined;
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
@@ -38,7 +36,7 @@ type HostDetailPanelProps = {
   savedRevision?: number | undefined;
 };
 
-const areas: { area: ConnectionArea; label: "conn.areaBasic" | "conn.areaAnalysis" | "conn.areaAdvanced" }[] = [
+const areas: { area: ConnectionPanel; label: "conn.areaBasic" | "conn.areaAnalysis" | "conn.areaAdvanced" }[] = [
   { area: "Basic", label: "conn.areaBasic" },
   { area: "Analysis", label: "conn.areaAnalysis" },
   { area: "Advanced", label: "conn.areaAdvanced" },
@@ -53,8 +51,9 @@ export function HostDetailPanel({
   onBlockRaw,
   onBasicSave,
   integrations = integrationsApi,
-  tab: controlledTab,
-  onTabChange,
+  panel: controlledPanel,
+  advanced: controlledAdvanced,
+  onLocationChange,
   preferredKey,
   onPreferredKeyApplied,
   onDirtyChange,
@@ -64,23 +63,23 @@ export function HostDetailPanel({
   savedRevision = 0,
 }: HostDetailPanelProps) {
   const t = useTranslate();
-  const [localTab, setLocalTab] = useState<HostEditorTab>("Basic");
+  const [localPanel, setLocalPanel] = useState<ConnectionPanel>("Basic");
   const [lastAdvanced, setLastAdvanced] = useState<AdvancedArea>("Jump");
   const [basicDirty, setBasicDirty] = useState(false);
   const [advancedDirty, setAdvancedDirty] = useState(false);
-  const tab = controlledTab ?? localTab;
-  const route = connectionAreaForTab(tab);
-  const advancedArea = route.area === "Advanced" ? route.advanced : lastAdvanced;
+  const panel = controlledPanel ?? localPanel;
+  const advancedArea = panel === "Advanced" ? (controlledAdvanced ?? lastAdvanced) : lastAdvanced;
   const dirty = basicDirty || advancedDirty;
   const identity = detail.form.entry.identity;
   const resetKey = `${identity.path}\u0000${identity.alias}\u0000${detail.file.contents}\u0000${savedRevision}`;
 
   useEffect(() => {
-    if (route.area === "Advanced") setLastAdvanced(route.advanced);
-  }, [route.advanced, route.area]);
+    if (panel === "Advanced") setLastAdvanced(advancedArea);
+  }, [advancedArea, panel]);
 
   useEffect(() => {
-    if (controlledTab === undefined) setLocalTab("Basic");
+    if (controlledPanel === undefined) setLocalPanel("Basic");
+    setLastAdvanced("Jump");
     setBasicDirty(false);
     setAdvancedDirty(false);
     // resetKey is the committed snapshot the mounted drafts belong to. A
@@ -93,18 +92,15 @@ export function HostDetailPanel({
   const handleBasicDirty = useCallback((next: boolean) => setBasicDirty(next), []);
   const handleAdvancedDirty = useCallback((next: boolean) => setAdvancedDirty(next), []);
 
-  function selectTab(next: HostEditorTab) {
-    if (onTabChange !== undefined) onTabChange(next);
-    else setLocalTab(next);
-  }
-
-  function selectArea(area: ConnectionArea) {
-    selectTab(tabForConnectionArea(area, advancedArea, false));
+  function selectArea(area: ConnectionPanel) {
+    if (onLocationChange !== undefined) onLocationChange(area, advancedArea);
+    else setLocalPanel(area);
   }
 
   function selectAdvanced(area: AdvancedArea) {
     setLastAdvanced(area);
-    selectTab(tabForConnectionArea("Advanced", area, false));
+    if (onLocationChange !== undefined) onLocationChange("Advanced", area);
+    else setLocalPanel("Advanced");
   }
 
   return (
@@ -117,16 +113,16 @@ export function HostDetailPanel({
             key={item.area}
             type="button"
             role="tab"
-            aria-selected={route.area === item.area}
+            aria-selected={panel === item.area}
             onClick={() => selectArea(item.area)}
-            className={`px-3 py-2 text-sm ${route.area === item.area ? "border-b-2 border-ink text-ink" : "text-ink-muted"}`}
+            className={`px-3 py-2 text-sm ${panel === item.area ? "border-b-2 border-ink text-ink" : "text-ink-muted"}`}
           >
             {t(item.label)}
           </button>
         ))}
       </div>
 
-      <div hidden={route.area !== "Basic"} className="flex flex-col gap-5">
+      <div hidden={panel !== "Basic"} className="flex flex-col gap-5">
         {identity.alias === "" ? (
           <p className="text-sm text-ink-muted">{t("host.noDestination")}</p>
         ) : (
@@ -152,11 +148,11 @@ export function HostDetailPanel({
         />
       </div>
 
-      <div hidden={route.area !== "Analysis"}>
+      <div hidden={panel !== "Analysis"}>
         <ConnectionAnalysis detail={detail} alias={identity.alias} api={integrations} disabled={disabled || dirty} />
       </div>
 
-      <div hidden={route.area !== "Advanced"}>
+      <div hidden={panel !== "Advanced"}>
         <AdvancedSettings
           detail={detail}
           area={advancedArea}
