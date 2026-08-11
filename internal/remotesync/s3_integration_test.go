@@ -129,7 +129,7 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	default:
 		t.Fatalf("Pull before push = %v", err)
 	}
-	if err := first.service.Push(context.Background(), syncPassphrase); err != nil {
+	if _, err := first.service.Push(context.Background(), syncPassphrase); err != nil {
 		t.Fatalf("Push = %v", err)
 	}
 
@@ -159,13 +159,13 @@ func TestAgainstARealBucketAStalePushIsRefused(t *testing.T) {
 	// 「自動」という語が乗っている性質を、このリポジトリを読んでいないサーバーに
 	// 対して検査する。
 	first := realInstallation(t, map[string]string{"config": "first\n"})
-	if err := first.service.Push(context.Background(), syncPassphrase); err != nil &&
+	if _, err := first.service.Push(context.Background(), syncPassphrase); err != nil &&
 		!errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("Push = %v", err)
 	}
 
 	behind := realInstallation(t, map[string]string{"config": "second\n"})
-	if err := behind.service.Push(context.Background(), syncPassphrase); !errors.Is(err, remotesync.ErrRemoteMoved) {
+	if _, err := behind.service.Push(context.Background(), syncPassphrase); !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("a machine that has never synced pushed anyway: %v", err)
 	}
 }
@@ -175,7 +175,7 @@ func TestAgainstARealBucketTheObjectIsCiphertext(t *testing.T) {
 		"config":               "Host bastion\n\tHostName 203.0.113.10\n",
 		"keys/work/id_ed25519": "PRIVATE KEY MATERIAL",
 	})
-	if err := machine.service.Push(context.Background(), syncPassphrase); err != nil &&
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil &&
 		!errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("Push = %v", err)
 	}
@@ -194,7 +194,7 @@ func TestAgainstARealBucketTheObjectIsCiphertext(t *testing.T) {
 
 func TestAgainstARealBucketTheWrongPassphraseCannotRead(t *testing.T) {
 	machine := realInstallation(t, map[string]string{"config": "Host bastion\n"})
-	if err := machine.service.Push(context.Background(), syncPassphrase); err != nil &&
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil &&
 		!errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("Push = %v", err)
 	}

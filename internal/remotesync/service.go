@@ -136,6 +136,51 @@ type Config struct {
 	Direction Direction
 }
 
+// SnapshotSummary distinguishes the source files users manage from one sealed
+// object stored remotely. SourceBytes excludes archive headers and the
+// manifest; SnapshotBytes is the exact encrypted HTTP body size.
+type SnapshotSummary struct {
+	CreatedAt     string `json:"createdAt"`
+	FileCount     int    `json:"fileCount"`
+	SourceBytes   int64  `json:"sourceBytes"`
+	SnapshotBytes int64  `json:"snapshotBytes"`
+}
+
+type PushResult struct {
+	Summary       SnapshotSummary `json:"summary"`
+	ObjectCount   int             `json:"objectCount"`
+	UploadedBytes int64           `json:"uploadedBytes"`
+	CompletedAt   string          `json:"completedAt"`
+}
+
+type OperationKind string
+
+const (
+	OperationPush  OperationKind = "push"
+	OperationApply OperationKind = "apply"
+)
+
+// SyncOperation is the last successful write operation. Fields which do not
+// apply to its Kind stay zero and are omitted from the local state document.
+type SyncOperation struct {
+	Kind            OperationKind   `json:"kind"`
+	Summary         SnapshotSummary `json:"summary"`
+	ObjectCount     int             `json:"objectCount,omitempty"`
+	UploadedBytes   int64           `json:"uploadedBytes,omitempty"`
+	DownloadedBytes int64           `json:"downloadedBytes,omitempty"`
+	Written         int             `json:"written,omitempty"`
+	Removed         int             `json:"removed,omitempty"`
+	CompletedAt     string          `json:"completedAt"`
+}
+
+type SyncStateView struct {
+	Synced        bool
+	At            string
+	Origin        string
+	Files         int
+	LastOperation *SyncOperation
+}
+
 // state は、最後に成功した同期についての、このマシンの記録。
 type state struct {
 	// ETag は、このマシンが最後に push または pull したスナップショットを識別する。
@@ -155,6 +200,9 @@ type state struct {
 	// Origin は、このインストールの不透明な ID。一度だけ生成され、マシンに関する何から
 	// も導出されない。
 	Origin string `json:"origin"`
+	// LastOperation was added after the original state format. Omitting it is
+	// valid and keeps old installations readable without a migration.
+	LastOperation *SyncOperation `json:"lastOperation,omitempty"`
 }
 
 // FileSource は、スナップショットに含めるべきワークスペース相対のパスを列挙する。
@@ -407,42 +455,43 @@ func Check(ctx context.Context, client *objectstore.Client, key string) error {
 // すべての書き込みには If-Match: <最後に見た ETag>。これにより、どの push も別の
 // マシンの作業を黙って踏み潰せない — それが、これについて「自動」という語を安全に
 // 使えるようにしている。
-func (s *Service) Push(ctx context.Context, passphrase string) error {
+func (s *Service) Push(ctx context.Context, passphrase string) (PushResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
-		return err
+		return PushResult{}, err
 	}
 	if binding.config.Direction == DirectionPull {
-		return ErrPushRefused
+		return PushResult{}, ErrPushRefused
 	}
 	client := binding.client
 	current, err := s.readState()
 	if err != nil {
-		return err
+		return PushResult{}, err
 	}
 	if current.Origin == "" {
 		if current.Origin, err = s.newOrigin(); err != nil {
-			return err
+			return PushResult{}, err
 		}
 	}
 
 	manifest, contents, err := s.Collect()
 	if err != nil {
-		return err
+		return PushResult{}, err
 	}
 	manifest.Origin = current.Origin
 	archive, err := Build(manifest, contents)
 	if err != nil {
-		return err
+		return PushResult{}, err
 	}
 	key, err := envelope.Derive(passphrase)
 	if err != nil {
-		return err
+		return PushResult{}, err
 	}
 	sealed, err := key.Seal(archive)
 	if err != nil {
-		return err
+		return PushResult{}, err
 	}
+	result := PushResult{Summary: snapshotSummary(manifest, contents, len(sealed))}
 
 	objectKey := ObjectKeyFor(binding.config)
 	if current.Key != objectKey {
@@ -461,30 +510,60 @@ func (s *Service) Push(ctx context.Context, passphrase string) error {
 	// ものそのものである。
 	dated, err := SnapshotKeyFor(binding.config, manifest.CreatedAt)
 	if err != nil {
-		return err
+		return result, err
 	}
 	if _, err := client.Put(ctx, dated, sealed, "", ""); err != nil {
-		return err
+		return result, err
 	}
+	result.ObjectCount++
+	result.UploadedBytes += int64(len(sealed))
 
 	etag, err := client.Put(ctx, objectKey, sealed, ifMatch, ifNoneMatch)
 	if err != nil {
 		if errors.Is(err, objectstore.ErrPreconditionFailed) {
-			return ErrRemoteMoved
+			return result, ErrRemoteMoved
 		}
-		return err
+		return result, err
 	}
-	return s.writeState(state{ETag: etag, Key: objectKey, Base: &manifest, Origin: current.Origin})
+	result.ObjectCount++
+	result.UploadedBytes += int64(len(sealed))
+	result.CompletedAt = s.now()
+	operation := SyncOperation{
+		Kind: OperationPush, Summary: result.Summary,
+		ObjectCount: result.ObjectCount, UploadedBytes: result.UploadedBytes,
+		CompletedAt: result.CompletedAt,
+	}
+	if err := s.writeState(state{
+		ETag: etag, Key: objectKey, Base: &manifest, Origin: current.Origin,
+		LastOperation: &operation,
+	}); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func snapshotSummary(manifest Manifest, contents map[string][]byte, snapshotBytes int) SnapshotSummary {
+	var sourceBytes int64
+	for _, body := range contents {
+		sourceBytes += int64(len(body))
+	}
+	return SnapshotSummary{
+		CreatedAt: manifest.CreatedAt, FileCount: len(manifest.Files),
+		SourceBytes: sourceBytes, SnapshotBytes: int64(snapshotBytes),
+	}
 }
 
 // PullResult は、適用する前の、pull が行うであろう内容。
 type PullResult struct {
-	Request   storage.Request
-	Conflicts []Conflict
-	Manifest  Manifest
-	ETag      string
-	Origin    string
-	objectKey string
+	Request         storage.Request
+	Conflicts       []Conflict
+	Manifest        Manifest
+	Summary         SnapshotSummary
+	DownloadedBytes int64
+	CompletedAt     string
+	ETag            string
+	Origin          string
+	objectKey       string
 }
 
 // Pull はスナップショットを取得し、それを適用すると何が変わるかを算出する。
@@ -532,6 +611,8 @@ func (s *Service) Pull(ctx context.Context, passphrase string) (PullResult, erro
 	}
 	return PullResult{
 		Request: request, Conflicts: conflicts, Manifest: manifest,
+		Summary:         snapshotSummary(manifest, contents, len(object.Body)),
+		DownloadedBytes: int64(len(object.Body)), CompletedAt: s.now(),
 		ETag: object.ETag, Origin: manifest.Origin, objectKey: objectKey,
 	}, err
 }
@@ -572,7 +653,16 @@ func (s *Service) Apply(result PullResult) error {
 		}
 	}
 	manifest := result.Manifest
-	return s.writeState(state{ETag: result.ETag, Key: result.objectKey, Base: &manifest, Origin: origin})
+	operation := SyncOperation{
+		Kind: OperationApply, Summary: result.Summary,
+		DownloadedBytes: result.DownloadedBytes,
+		Written:         len(result.Request.Changes), Removed: len(result.Request.Removals),
+		CompletedAt: s.now(),
+	}
+	return s.writeState(state{
+		ETag: result.ETag, Key: result.objectKey, Base: &manifest, Origin: origin,
+		LastOperation: &operation,
+	})
 }
 
 // changeDirectories は、変更が着地する先のディレクトリを重複なく返す。
@@ -682,11 +772,26 @@ func (s *Service) Target() (endpoint, bucket, path, region string) {
 
 // LastSync は、state ファイルから、このマシンが最後に同期した内容を報告する。
 func (s *Service) LastSync() (synced bool, at, origin string, files int) {
+	view := s.SyncState()
+	return view.Synced, view.At, view.Origin, view.Files
+}
+
+// SyncState returns a detached view so callers cannot mutate the state value
+// retained by a later response.
+func (s *Service) SyncState() SyncStateView {
 	current, err := s.readState()
 	if err != nil || current.ETag == "" || current.Base == nil {
-		return false, "", "", 0
+		return SyncStateView{}
 	}
-	return true, current.Base.CreatedAt, current.Base.Origin, len(current.Base.Files)
+	view := SyncStateView{
+		Synced: true, At: current.Base.CreatedAt, Origin: current.Base.Origin,
+		Files: len(current.Base.Files),
+	}
+	if current.LastOperation != nil {
+		operation := *current.LastOperation
+		view.LastOperation = &operation
+	}
+	return view
 }
 
 // DisplayPath は、ワークスペースの絶対パスを、このアプリケーションの他の部分が

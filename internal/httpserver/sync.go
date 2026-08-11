@@ -226,7 +226,7 @@ func (h SyncHandlers) Push(c *echo.Context) error {
 	if allowed, err := h.masterPassword(c, request.Passphrase); !allowed {
 		return err
 	}
-	if err := h.Service.Push(c.Request().Context(), request.Passphrase); err != nil {
+	if _, err := h.Service.Push(c.Request().Context(), request.Passphrase); err != nil {
 		return syncProblem(c, err)
 	}
 	return h.status(c)
