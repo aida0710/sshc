@@ -343,6 +343,28 @@ describe("dragging in the tree", () => {
     expect(onDrop).toHaveBeenCalledWith(nasPayload, "work");
   });
 
+  it("disables connection and group moves while the saved base is unavailable", () => {
+    const onDrop = vi.fn();
+    render(
+      <ConnectionTree
+        overview={withGroups}
+        selected={null}
+        onSelect={vi.fn()}
+        onOpenPatternRule={vi.fn()}
+        onDrop={onDrop}
+        movesDisabled
+      />,
+    );
+    const connection = screen.getByRole("button", { name: /nas/ });
+    const group = screen.getByRole("heading", { name: "work" });
+
+    expect(connection).not.toHaveAttribute("draggable", "true");
+    expect(group).not.toHaveAttribute("draggable", "true");
+    expect(screen.queryByText("Drag the handle to nest or reorder groups.")).not.toBeInTheDocument();
+    drag(connection, group, nasPayload);
+    expect(onDrop).not.toHaveBeenCalled();
+  });
+
   it("moves a connection onto the no-group heading", () => {
     const onDrop = renderTree();
     drag(screen.getByRole("button", { name: /nas/ }), screen.getByRole("heading", { name: "Ungrouped" }), nasPayload);

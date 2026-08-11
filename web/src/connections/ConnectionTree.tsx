@@ -41,6 +41,9 @@ type ConnectionTreeProps = {
   // ドラッグした connection やグループがドロップされた先。ターゲットは
   // グループ名か、"no group" 見出しを表す空文字列のいずれかである。
   onDrop: (payload: DragPayload, target: string) => void;
+  // 保存前の下書きや保存後の未確認 snapshot がある間は、接続やグループを
+  // 別ファイルへ移して編集の base を変えてはならない。選択と検索は使える。
+  movesDisabled?: boolean;
 };
 
 type Grouping = "groups" | "files";
@@ -64,6 +67,7 @@ export function ConnectionTree({
   onSelect,
   onOpenPatternRule,
   onDrop,
+  movesDisabled = false,
 }: ConnectionTreeProps) {
   const t = useTranslate();
   // ツリーの並び順を表す、このコンポーネント自身の state である。これを
@@ -90,6 +94,7 @@ export function ConnectionTree({
   );
 
   function startDrag(event: DragEvent, payload: DragPayload) {
+    if (movesDisabled) return;
     event.dataTransfer.setData(dragMimeType, JSON.stringify(payload));
     event.dataTransfer.effectAllowed = "move";
     setDragging(payload);
@@ -99,7 +104,7 @@ export function ConnectionTree({
   // connection を置ける場所ではない——move API が受け取るのはグループ
   // かパスであって、ユーザーがたまたま指したファイルではないからだ。
   function accepts(target: string): boolean {
-    return grouping === "groups" && dragging !== null && canDrop(dragging, target, groupNames);
+    return !movesDisabled && grouping === "groups" && dragging !== null && canDrop(dragging, target, groupNames);
   }
 
 
@@ -243,9 +248,9 @@ export function ConnectionTree({
                         // alias によってブロックを指し示すが、パターンルールには alias が無
                         // い。そのような行は上の分岐でレンダリングされ、ここでは何もしない
                         // ままにしてある。
-                        draggable={grouping === "groups"}
+                        draggable={grouping === "groups" && !movesDisabled}
                         onDragStart={(event) => {
-                          if (grouping !== "groups") return;
+                          if (grouping !== "groups" || movesDisabled) return;
                           startDrag(event, {
                             kind: "connection",
                             path: item.host.identity.path,
@@ -386,10 +391,10 @@ export function ConnectionTree({
             すると、その中の connection をつかむ操作が曖昧になってしまう。
           */}
           <h2
-            draggable={grouping === "groups"}
+            draggable={grouping === "groups" && !movesDisabled}
             onDragStart={(event) => startDrag(event, { kind: "group", name: node.name })}
             onDragEnd={() => setDragging(null)}
-            className="cursor-grab rounded px-1 text-xs font-semibold uppercase tracking-wide text-ink-faint active:cursor-grabbing"
+            className={`${movesDisabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"} rounded px-1 text-xs font-semibold uppercase tracking-wide text-ink-faint`}
           >
             <span aria-hidden="true" className="me-1 font-normal tracking-tighter">⋮⋮</span>
             {node.label}
@@ -457,7 +462,7 @@ export function ConnectionTree({
           {t("tree.favouritesOnly")}
         </button>
       </div>
-      {grouping === "groups" && groupTree.length > 0 ? (
+      {grouping === "groups" && groupTree.length > 0 && !movesDisabled ? (
         <p className="text-xs text-ink-faint">{t("tree.dragGroupHint")}</p>
       ) : null}
       <label className="text-xs text-ink-muted" htmlFor="connection-filter">
