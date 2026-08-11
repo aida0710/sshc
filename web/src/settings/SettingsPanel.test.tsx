@@ -7,6 +7,12 @@ import { SettingsPanel } from "./SettingsPanel";
 
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
+    terminalOptions: vi.fn().mockResolvedValue({
+      selected: "terminal",
+      terminals: [{ id: "terminal", installed: true }],
+      applications: [],
+    }),
+    setTerminalPreference: vi.fn(),
     loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: true }),
     setLoginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
     changeMasterPassword: vi.fn().mockResolvedValue({
@@ -30,6 +36,12 @@ async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("SettingsPanel", () => {
+  it("owns the machine-wide connection application setting", async () => {
+    render(<SettingsPanel api={buildApi()} />);
+
+    expect(await screen.findByRole("region", { name: "Default connection application" })).toBeInTheDocument();
+  });
+
   it("offers start at login off by default and saves an explicit toggle", async () => {
     const user = userEvent.setup();
     const api = buildApi();

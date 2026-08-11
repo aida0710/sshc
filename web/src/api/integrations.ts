@@ -8,6 +8,7 @@ export type AuthenticationResponse = components["schemas"]["AuthenticationRespon
 export type TerminalCommandResponse = components["schemas"]["TerminalCommandResponse"];
 export type TerminalLaunchResponse = components["schemas"]["TerminalLaunchResponse"];
 export type TerminalOptionsResponse = components["schemas"]["TerminalOptionsResponse"];
+export type TerminalPreferenceRequest = components["schemas"]["TerminalPreferenceRequest"];
 export type TerminalID = components["schemas"]["TerminalID"];
 export type KnownHostsResponse = components["schemas"]["KnownHostsResponse"];
 export type KnownHostEntry = components["schemas"]["KnownHostEntry"];
@@ -52,6 +53,7 @@ export type IntegrationsApi = {
   authentication(alias: string, acknowledgeExecutable: boolean): Promise<AuthenticationResponse>;
   terminalCommand(alias: string): Promise<TerminalCommandResponse>;
   terminalOptions(): Promise<TerminalOptionsResponse>;
+  setTerminalPreference(request: TerminalPreferenceRequest): Promise<TerminalOptionsResponse>;
   terminalLaunch(alias: string): Promise<TerminalLaunchResponse>;
   knownHosts(query: string): Promise<KnownHostsResponse>;
   deleteKnownHosts(entries: { line: number; digest: string }[], path: string): Promise<KnownHostsChangeResponse>;
@@ -248,11 +250,27 @@ function validateTerminalCommand(value: unknown): TerminalCommandResponse {
 
 function validateTerminalOptions(value: unknown): TerminalOptionsResponse {
   const record = asRecord(value);
-  asString(record.selected);
+  const terminalIDs = new Set<TerminalID>(["terminal", "iterm2", "kitty", "ghostty", "wezterm", "custom"]);
+  const selected = asString(record.selected);
+  if (!terminalIDs.has(selected as TerminalID)) throw new Error("invalid_response");
   for (const entry of asArray(record.terminals)) {
     const option = asRecord(entry);
-    asString(option.id);
+    if (!terminalIDs.has(asString(option.id) as TerminalID)) throw new Error("invalid_response");
     asBoolean(option.installed);
+  }
+  for (const entry of asArray(record.applications)) {
+    const application = asRecord(entry);
+    asString(application.name);
+    asString(application.path);
+  }
+  const custom = record.customTerminal;
+  if ((selected === "custom") !== (custom !== undefined)) throw new Error("invalid_response");
+  if (custom !== undefined) {
+    const terminal = asRecord(custom);
+    asString(terminal.application);
+    if (terminal.arguments !== undefined) {
+      for (const argument of asArray(terminal.arguments)) asString(argument);
+    }
   }
   return record as unknown as TerminalOptionsResponse;
 }
@@ -420,6 +438,13 @@ export const integrationsApi: IntegrationsApi = {
   },
   async terminalOptions() {
     return validateTerminalOptions(await apiClient.read("/api/v1/terminal/options"));
+  },
+  async setTerminalPreference(request) {
+    return validateTerminalOptions(await apiClient.mutate<unknown>("/api/v1/terminal/preference", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify(request),
+    }));
   },
   async terminalLaunch(alias) {
     const token = await issueAction(TERMINAL_LAUNCH_ACTION_KIND, alias);

@@ -451,12 +451,45 @@ func TestTerminalPreferenceDistinguishesUnavailableAndFailedPersistence(t *testi
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			engine, credentials, _, service := newDiagnosticsServer(t)
+			service.Terminal = &inventoryLauncher{}
 			handler := DiagnosticsHandlers{Service: service, SetPreferredTerminal: test.setter}
 			engine.PUT("/api/v1/terminal/preference", handler.TerminalPreference)
 			response := sendKeyRequest(t, engine, credentials, http.MethodPut, "/api/v1/terminal/preference",
-				[]byte(`{"selected":"kitty"}`), "")
+				[]byte(`{"selected":"iterm2"}`), "")
 			if response.Code != test.status || problemCode(t, response.Body.Bytes()) != test.code {
 				t.Fatalf("response = %d: %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestTerminalPreferenceRejectsAnUnavailableTerminalOrUndetectedApplication(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "uninstalled terminal", body: `{"selected":"kitty"}`},
+		{name: "undetected application", body: `{"selected":"custom","customTerminal":{"application":"/Applications/Unknown.app","arguments":[]}}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine, credentials, _, service := newDiagnosticsServer(t)
+			service.Terminal = &inventoryLauncher{}
+			calls := 0
+			handler := DiagnosticsHandlers{
+				Service: service,
+				SetPreferredTerminal: func(platform.TerminalChoice) (bool, error) {
+					calls++
+					return true, nil
+				},
+			}
+			engine.PUT("/api/v1/terminal/preference", handler.TerminalPreference)
+			response := sendKeyRequest(t, engine, credentials, http.MethodPut, "/api/v1/terminal/preference", []byte(test.body), "")
+			if response.Code != http.StatusConflict || problemCode(t, response.Body.Bytes()) != "terminal_not_available" {
+				t.Fatalf("response = %d: %s", response.Code, response.Body.String())
+			}
+			if calls != 0 {
+				t.Fatalf("unavailable choice called setter %d time(s)", calls)
 			}
 		})
 	}

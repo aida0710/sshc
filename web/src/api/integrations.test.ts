@@ -84,6 +84,53 @@ describe("integrationsApi.addKnownHost", () => {
   });
 });
 
+describe("integrationsApi terminal preferences", () => {
+  const customOptions = {
+    selected: "custom",
+    terminals: [
+      { id: "terminal", installed: true },
+      { id: "kitty", installed: false },
+      { id: "custom", installed: true },
+    ],
+    applications: [{ name: "Warp", path: "/Applications/Warp.app" }],
+    customTerminal: { application: "/Applications/Warp.app", arguments: ["--new-window"] },
+  };
+
+  it("sends only the global custom preference and validates the refreshed options", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse(customOptions));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.setTerminalPreference({
+      selected: "custom",
+      customTerminal: { application: "/Applications/Warp.app", arguments: ["--new-window"] },
+    })).resolves.toEqual(customOptions);
+
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/terminal/preference");
+    expect(init.method).toBe("PUT");
+    expect(new Headers(init.headers).get("X-SSHC-CSRF")).toBe(csrfToken);
+    expect(JSON.parse(String(init.body))).toEqual({
+      selected: "custom",
+      customTerminal: { application: "/Applications/Warp.app", arguments: ["--new-window"] },
+    });
+  });
+
+  it.each([
+    { ...customOptions, selected: "unknown" },
+    { ...customOptions, terminals: [{ id: "unknown", installed: true }] },
+    { ...customOptions, terminals: [{ id: "terminal", installed: "yes" }] },
+    { ...customOptions, applications: [{ name: "Warp", path: false }] },
+    { ...customOptions, customTerminal: { arguments: [] } },
+    { ...customOptions, customTerminal: { application: "/Applications/Warp.app", arguments: [false] } },
+    { ...customOptions, selected: "terminal" },
+    { ...customOptions, selected: "custom", customTerminal: undefined },
+  ])("rejects malformed terminal option payload %#", async (body) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
+
+    await expect(integrationsApi.terminalOptions()).rejects.toThrow("invalid_response");
+  });
+});
+
 describe("integrationsApi.passwordVault", () => {
   it("accepts dedicated key-passphrase subjects", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
