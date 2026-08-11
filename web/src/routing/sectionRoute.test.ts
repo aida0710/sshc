@@ -39,12 +39,28 @@ describe("section routes", () => {
       canonical: false,
     });
     expect(parseSectionPath("/connections//")).toEqual({
-      kind: "not-found",
-      pathname: "/connections//",
+      kind: "section",
+      section: "Connections",
+      canonicalPath: "/connections",
+      canonical: true,
     });
   });
 
-  it.each(["/missing", "/Connections", "/connections/child"])(
+  it.each([
+    "/connections/servers",
+    "/connections/groups",
+    "/connections/groups/home/eu",
+    "/connections/not-a-real-view",
+  ])("keeps the connection sub-route %s inside the Connections section", (path) => {
+    expect(parseSectionPath(path)).toEqual({
+      kind: "section",
+      section: "Connections",
+      canonicalPath: "/connections",
+      canonical: true,
+    });
+  });
+
+  it.each(["/missing", "/Connections"])(
     "rejects unknown path %s",
     (path) => {
       expect(parseSectionPath(path)).toEqual({ kind: "not-found", pathname: path });
