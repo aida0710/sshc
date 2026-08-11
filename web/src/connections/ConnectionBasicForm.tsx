@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Problem } from "../api/client";
 import {
   type HostDetail,
@@ -23,6 +23,7 @@ import { deriveBasicField, type BasicFieldState, type BasicKeyword } from "./bas
 import { formatValues } from "./values";
 import { validHostNameInput } from "./hostValidation";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
+import type { ConnectionSavedState } from "./connectionSavedState";
 
 type PasswordAction = UpdateConnectionPassword["kind"];
 
@@ -37,6 +38,10 @@ type ConnectionBasicFormProps = {
   >;
   preferredKey?: GeneratedPrivateKeyHandoff | null | undefined;
   onPreferredKeyApplied?: (() => void) | undefined;
+  savedState?: ConnectionSavedState | undefined;
+  onDirtyChange?: ((dirty: boolean) => void) | undefined;
+  onDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
+  onRequestRefresh?: (() => Promise<void>) | undefined;
 };
 
 type DraftField = {
@@ -78,6 +83,10 @@ export function ConnectionBasicForm({
   secrets = integrationsApi,
   preferredKey = null,
   onPreferredKeyApplied,
+  savedState,
+  onDirtyChange,
+  onDiscardReady,
+  onRequestRefresh,
 }: ConnectionBasicFormProps) {
   const t = useTranslate();
   const identity = detail.form.entry.identity;
@@ -113,6 +122,8 @@ export function ConnectionBasicForm({
   const [masterPassword, setMasterPassword] = useState("");
   const [masterConfirmation, setMasterConfirmation] = useState("");
   const [loading, setLoading] = useState(true);
+  const [keyOptionsStatus, setKeyOptionsStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [credentialOptionsStatus, setCredentialOptionsStatus] = useState<"loading" | "ready" | "locked" | "failed">("loading");
   const [busy, setBusy] = useState(false);
   const [vaultBusy, setVaultBusy] = useState(false);
   const [localError, setLocalError] = useState("");
@@ -158,19 +169,13 @@ export function ConnectionBasicForm({
     clearSecrets();
     setLocalError("");
     setLoading(true);
+    setKeyOptionsStatus("loading");
+    setCredentialOptionsStatus("loading");
     setKeyState("loading");
     setPreferredSuperseded(false);
 
     let active = true;
-    void Promise.all([
-      keys.inventory(),
-      secrets.passwordVault(),
-      secrets.passwordEligibility(identity.alias),
-    ]).then(async ([inventory, status, nextEligibility]) => {
-      const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
-      if (!active) return;
-
-      const identities = selectablePrivateKeys(inventory);
+    const applyKeys = (identities: KeyItem[], available: boolean) => {
       const preferred = preferredKey === null
         ? undefined
         : identities.find(
@@ -188,7 +193,7 @@ export function ConnectionBasicForm({
       } else if (direct.length === 1) {
         const configured = formatValues(direct[0]!.values);
         const matched = identities.find((candidate) => keyConfigValue(candidate) === configured);
-        if (matched === undefined) {
+        if (!available || matched === undefined) {
           setKeyState("custom");
           setCustomKey(configured);
           setSelectedKey("__custom__");
@@ -200,19 +205,59 @@ export function ConnectionBasicForm({
           preferredAlreadyApplied = preferred?.id === matched.id;
         }
       } else {
-        setKeyState("editable");
-        setSelectedKey(preferred?.id ?? "");
+        setKeyState(available ? "editable" : "loading");
+        setSelectedKey(available ? preferred?.id ?? "" : "");
         setInitialKey("");
       }
+      if (preferredAlreadyApplied) onPreferredKeyApplied?.();
+    };
+
+    if (savedState !== undefined) {
+      const keysReady = savedState.keys.status === "ready";
+      const identities = savedState.keys.status === "ready" ? savedState.keys.value : [];
+      applyKeys(identities, keysReady);
+      setKeyOptionsStatus(keysReady ? "ready" : "failed");
+      const status = savedState.vault.status === "ready" ? savedState.vault.value : null;
+      setVault(status);
+      setEligibility(savedState.eligibility.status === "ready" ? savedState.eligibility.value : null);
+      if (status !== null && savedState.credentials.status === "ready") {
+        applyCredentialState(status, savedState.credentials.value);
+        setCredentialOptionsStatus("ready");
+      } else {
+        setCredentials([]);
+        setKeyCredentials([]);
+        setAssigned(status?.aliases.includes(identity.alias) ?? false);
+        setAssignedCredential("");
+        setCredentialOptionsStatus(savedState.credentials.status === "locked" ? "locked" : "failed");
+      }
+      setLoading(false);
+      return () => {
+        active = false;
+        clearSecrets();
+      };
+    }
+
+    void Promise.all([
+      keys.inventory(),
+      secrets.passwordVault(),
+      secrets.passwordEligibility(identity.alias),
+    ]).then(async ([inventory, status, nextEligibility]) => {
+      const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
+      if (!active) return;
+
+      applyKeys(selectablePrivateKeys(inventory), true);
+      setKeyOptionsStatus("ready");
       setVault(status);
       setEligibility(nextEligibility);
       applyCredentialState(status, listed);
+      setCredentialOptionsStatus(status.unlocked ? "ready" : "locked");
       setLoading(false);
-      if (preferredAlreadyApplied) onPreferredKeyApplied?.();
     }).catch(() => {
       if (!active) return;
       clearSecrets();
       setLocalError(t("conn.basicOptionsFailed"));
+      setKeyOptionsStatus("failed");
+      setCredentialOptionsStatus("failed");
       setLoading(false);
     });
     return () => {
@@ -221,7 +266,7 @@ export function ConnectionBasicForm({
     };
     // resetKey deliberately represents the server snapshot this draft belongs to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetKey, keys, secrets, t, preferredKey]);
+  }, [resetKey, keys, secrets, t, preferredKey, savedState]);
 
   function updateField(setter: (value: DraftField) => void, current: DraftField, value: string) {
     setter({ ...current, value, inherit: false });
@@ -301,9 +346,39 @@ export function ConnectionBasicForm({
   const passwordAllowed = passwordChange.kind === "remove" || passwordChange.kind === "unchanged" || eligibility?.storable === true;
   const dirty = hostNameChange !== undefined || userChange !== undefined || portChange !== undefined ||
     identityFileChange !== undefined || changesPassword || hasKeyPassphraseDraft;
-  const canSave = !loading && !busy && vault?.unlocked === true && dirty &&
+  const passwordResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready" && eligibility !== null;
+  const keyPassphraseResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready" && keyOptionsStatus === "ready";
+  const vaultAllowsConfig = vault === null || vault.unlocked;
+  const canSave = !loading && !busy && vaultAllowsConfig && dirty &&
     hostError === "" && userError === "" && portError === "" && passwordAllowed &&
-    keyPassphraseValid;
+    keyPassphraseValid && (!changesPassword || passwordResourcesReady) &&
+    (!hasKeyPassphraseDraft || keyPassphraseResourcesReady);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  const discardDraft = useCallback(() => {
+    setHostName(initial.hostName);
+    setUser(initial.user);
+    setPort(initial.port);
+    setSelectedKey(initialKey);
+    setPasswordAction("unchanged");
+    setConfirmRemove(false);
+    setNewCredential("");
+    setPassword("");
+    setNewSharedPassword("");
+    setMasterPassword("");
+    setMasterConfirmation("");
+    setKeyPassphrase("");
+    setKeyPassphraseConfirmation("");
+    setLocalError("");
+  }, [initial, initialKey]);
+
+  useEffect(() => {
+    onDiscardReady?.(discardDraft);
+    return () => onDiscardReady?.(null);
+  }, [discardDraft, onDiscardReady]);
 
   function choosePasswordAction(action: PasswordAction) {
     clearPasswordSecrets();
@@ -323,6 +398,7 @@ export function ConnectionBasicForm({
       const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
       setVault(status);
       applyCredentialState(status, listed);
+      setCredentialOptionsStatus(status.unlocked ? "ready" : "locked");
       clearSecrets();
     } catch {
       clearSecrets();
@@ -360,16 +436,22 @@ export function ConnectionBasicForm({
       setPasswordAction("unchanged");
       setConfirmRemove(false);
       setNewCredential("");
-      // A password-only transaction leaves ssh_config byte-for-byte unchanged,
-      // so the detail snapshot key cannot reset this component for us. Refresh
-      // the vault side explicitly and return the action control to unchanged.
-      try {
-        const status = await secrets.passwordVault();
-        const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
-        setVault(status);
-        applyCredentialState(status, listed);
-      } catch {
-        setLocalError(t("conn.basicRefreshFailed"));
+      if (onRequestRefresh !== undefined) {
+        await onRequestRefresh();
+      } else if (savedState === undefined) {
+        // A password-only transaction leaves ssh_config byte-for-byte unchanged,
+        // so the detail snapshot key cannot reset this component for us. Refresh
+        // the vault side explicitly and return the action control to unchanged.
+        try {
+          const status = await secrets.passwordVault();
+          const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
+          setVault(status);
+          applyCredentialState(status, listed);
+          setCredentialOptionsStatus(status.unlocked ? "ready" : "locked");
+        } catch {
+          setCredentialOptionsStatus("failed");
+          setLocalError(t("conn.basicRefreshFailed"));
+        }
       }
     } catch {
       clearSecrets();
@@ -487,7 +569,7 @@ export function ConnectionBasicForm({
             <select
               aria-label={t("conn.basicPrivateKey")}
               value={selectedKey}
-              disabled={loading || keyState === "custom" || keyState === "complex"}
+              disabled={loading || keyOptionsStatus !== "ready" || keyState === "custom" || keyState === "complex"}
               onChange={(event) => {
                 const value = event.target.value;
                 clearKeyPassphrase();
@@ -516,7 +598,8 @@ export function ConnectionBasicForm({
             </p>
           ) : null}
 
-          {vault?.unlocked === true && keyState === "editable" && selectedPrivateKey !== undefined ? (
+          {vault?.unlocked === true && credentialOptionsStatus === "ready" &&
+          keyState === "editable" && selectedPrivateKey !== undefined ? (
             <div className="border-t border-hairline px-3 py-3">
               <div className="flex flex-col gap-3">
                 <div>
@@ -577,8 +660,11 @@ export function ConnectionBasicForm({
             <div className="flex flex-col gap-3">
               <div>
                 <p className="text-sm text-ink-muted">{t("conn.basicStoredPassword")}</p>
-                {loading ? <p className={hintText}>{t("conn.createLoadingOptions")}</p> : null}
-                {vault?.unlocked === true ? (
+                {loading || credentialOptionsStatus === "loading" ? <p className={hintText}>{t("conn.createLoadingOptions")}</p> : null}
+                {credentialOptionsStatus === "failed" ? (
+                  <p className={hintText}>{t("conn.basicCredentialOptionsFailed")}</p>
+                ) : null}
+                {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
                   <p className={hintText}>
                     {assigned
                       ? assignedCredential === ""
@@ -608,7 +694,7 @@ export function ConnectionBasicForm({
                 </div>
               ) : null}
 
-              {vault?.unlocked === true ? (
+              {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
                 <>
                   <label className="flex flex-col gap-1">
                     <span className="text-xs font-medium tracking-wide text-ink-muted">{t("conn.basicPasswordAction")}</span>
@@ -675,10 +761,14 @@ export function ConnectionBasicForm({
         </Card>
       </section>
 
-      <div className="flex items-center gap-3">
+      <div className="sticky bottom-0 z-10 flex items-center gap-3 border-t border-line bg-canvas py-3">
         {!dirty ? <p className={`grow ${hintText}`}>{t("conn.basicNothingChanged")}</p> :
-          vault?.unlocked !== true ? <p className={`grow ${hintText}`}>{t("conn.basicNeedVault")}</p> :
+          (changesPassword && !passwordResourcesReady) || (hasKeyPassphraseDraft && !keyPassphraseResourcesReady) ?
+            <p className={`grow ${hintText}`}>{t("conn.basicNeedVault")}</p> :
             !passwordAllowed ? <p className={`grow ${hintText}`}>{t("conn.basicPasswordBlocked")}</p> : <span className="grow" />}
+        <Button type="button" disabled={!dirty || busy} onClick={discardDraft}>
+          {t("conn.discardChanges")}
+        </Button>
         <Button type="submit" kind="primary" disabled={!canSave}>
           {busy ? t("conn.basicSaving") : t("conn.basicSave")}
         </Button>
