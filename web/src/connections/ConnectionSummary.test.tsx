@@ -123,4 +123,22 @@ describe("ConnectionSummary", () => {
     expect(onConnect).not.toHaveBeenCalled();
     expect(onToggleManage).toHaveBeenCalledOnce();
   });
+
+  it("keeps Connect unavailable when this platform cannot launch a terminal", () => {
+    render(
+      <ConnectionSummary
+        state={state}
+        dirty={false}
+        refreshing={false}
+        terminal={<span>No launcher</span>}
+        connectAvailable={false}
+        onConnect={vi.fn()}
+        connecting={false}
+        onToggleManage={vi.fn()}
+        managing={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+  });
 });
