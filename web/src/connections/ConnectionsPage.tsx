@@ -625,8 +625,7 @@ export function ConnectionsPage({
   // identity だけを追う。後者をしないと、画面上は移動済みなのに URL は
   // 存在しなくなった古いファイルを指し続ける。
   async function onTreeDrop(payload: DragPayload, target: string) {
-    if (editorDirty && !window.confirm(t("conn.discardPrompt"))) return;
-    if (editorDirty) basicDiscardRef.current?.();
+    if (editorDirty || refreshState !== "idle") return;
     try {
       if (payload.kind === "group") {
         const base = payload.name.slice(payload.name.lastIndexOf("/") + 1);
@@ -899,6 +898,7 @@ export function ConnectionsPage({
             onSelect={onSelect}
             onOpenPatternRule={onOpenFile}
             onDrop={(payload, target) => void onTreeDrop(payload, target)}
+            movesDisabled={editorDirty || refreshState !== "idle"}
           />
         </div>
       </div>
