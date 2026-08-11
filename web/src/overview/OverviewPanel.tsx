@@ -4,6 +4,7 @@ import { integrationsApi, type SyncStatus } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { control, hintText, secondaryAction } from "../ui/form";
 import { Notice } from "../ui/surface";
+import { ConnectionActions } from "./ConnectionActions";
 
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
@@ -12,6 +13,7 @@ type OverviewPanelProps = {
   loadSync?: () => Promise<SyncStatus>;
   launch?: (alias: string) => Promise<unknown>;
   onNavigate: (destination: OverviewDestination) => void;
+  onNavigateLocation: (location: string) => void;
 };
 
 type HostCard = {
@@ -36,6 +38,7 @@ export function OverviewPanel({
   loadSync = loadDefaultSync,
   launch = launchDefault,
   onNavigate,
+  onNavigateLocation,
 }: OverviewPanelProps) {
   const t = useTranslate();
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -175,14 +178,14 @@ export function OverviewPanel({
                       {item.group === "" ? t("home.ungrouped") : item.group}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    disabled={launching !== ""}
-                    onClick={() => void connect(item.alias)}
-                    className={secondaryAction}
-                  >
-                    {launching === item.alias ? t("home.opening") : t("home.connect")}
-                  </button>
+                  <ConnectionActions
+                    alias={item.alias}
+                    path={item.host.identity.path}
+                    busy={launching !== ""}
+                    opening={launching === item.alias}
+                    onOpenSettings={onNavigateLocation}
+                    onConnect={() => void connect(item.alias)}
+                  />
                 </div>
                 {item.tags.length === 0 ? null : (
                   <ul aria-label={t("home.tagsFor", { alias: item.alias })} className="flex flex-wrap gap-1">

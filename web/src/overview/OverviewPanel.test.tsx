@@ -58,7 +58,7 @@ const sync = {
 } as SyncStatus;
 
 describe("OverviewPanel", () => {
-  it("puts favourites first, searches groups and launches only after a click", async () => {
+  it("puts favourites first, searches groups and launches only from the explicit action", async () => {
     const launch = vi.fn().mockResolvedValue({ launched: true });
     render(
       <OverviewPanel
@@ -66,6 +66,7 @@ describe("OverviewPanel", () => {
         loadSync={vi.fn().mockResolvedValue(sync)}
         launch={launch}
         onNavigate={vi.fn()}
+        onNavigateLocation={vi.fn()}
       />,
     );
 
@@ -83,8 +84,35 @@ describe("OverviewPanel", () => {
 
     const card = screen.getByText("database").closest("li");
     expect(card).not.toBeNull();
-    await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Connect" }));
+    await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
+    expect(launch).not.toHaveBeenCalled();
+    await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Connect" }));
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
+  });
+
+  it("opens the exact connection settings URL without launching", async () => {
+    const launch = vi.fn();
+    const navigateLocation = vi.fn();
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue(overview)}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        launch={launch}
+        onNavigate={vi.fn()}
+        onNavigateLocation={navigateLocation}
+      />,
+    );
+
+    const database = await screen.findByText("database");
+    const card = database.closest("li");
+    expect(card).not.toBeNull();
+    await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
+    await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Open connection settings" }));
+
+    expect(navigateLocation).toHaveBeenCalledWith(
+      "/connections/servers?path=connections%2Fwork.conf&host=database&panel=basic",
+    );
+    expect(launch).not.toHaveBeenCalled();
   });
 
   it("routes configuration warnings to Config instead of an empty diagnostics form", async () => {
@@ -96,6 +124,7 @@ describe("OverviewPanel", () => {
         loadSync={vi.fn().mockResolvedValue(sync)}
         launch={vi.fn()}
         onNavigate={navigate}
+        onNavigateLocation={vi.fn()}
       />,
     );
 
@@ -126,6 +155,7 @@ describe("OverviewPanel", () => {
         loadSync={vi.fn().mockResolvedValue(sync)}
         launch={vi.fn()}
         onNavigate={navigate}
+        onNavigateLocation={vi.fn()}
       />,
     );
 
