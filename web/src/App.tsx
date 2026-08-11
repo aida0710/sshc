@@ -1,22 +1,12 @@
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState, type MouseEvent } from "react";
 import { apiClient, whenLocked, type HealthResponse } from "./api/client";
 import { integrationsApi, type PasswordVaultStatus } from "./api/integrations";
 import { configApi } from "./api/config";
 import type { SessionState } from "./session/bootstrap";
-import { ConnectionsPage } from "./connections/ConnectionsPage";
 import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/CreateConnectionModal";
-import { ConfigExplorer, type FileTarget } from "./explorer/ConfigExplorer";
-import { GroupsPanel } from "./groups/GroupsPanel";
-import { HistoryPanel } from "./history/HistoryPanel";
-import { KeysScreen } from "./keys/KeysScreen";
-import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
+import type { FileTarget } from "./explorer/ConfigExplorer";
 import { LockScreen } from "./secrets/LockScreen";
 import { UpdateBadge } from "./shell/UpdateBadge";
-import { SecretsPanel } from "./secrets/SecretsPanel";
-import { SettingsPanel } from "./settings/SettingsPanel";
-import { SyncPanel } from "./sync/SyncPanel";
-import { KnownHostsPanel } from "./knownhosts/KnownHostsPanel";
-import { RemoteKeyPanel } from "./remotekeys/RemoteKeyPanel";
 import { OverviewPanel } from "./overview/OverviewPanel";
 import { useLanguage } from "./i18n/context";
 import { locales, type Locale } from "./i18n/locale";
@@ -35,6 +25,40 @@ import {
   type NavigateLocationOptions,
 } from "./routing/useSectionRoute";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
+
+const ConnectionsPage = lazy(() =>
+  import("./connections/ConnectionsPage").then(({ ConnectionsPage }) => ({ default: ConnectionsPage })),
+);
+const ConfigExplorer = lazy(() =>
+  import("./explorer/ConfigExplorer").then(({ ConfigExplorer }) => ({ default: ConfigExplorer })),
+);
+const GroupsPanel = lazy(() =>
+  import("./groups/GroupsPanel").then(({ GroupsPanel }) => ({ default: GroupsPanel })),
+);
+const HistoryPanel = lazy(() =>
+  import("./history/HistoryPanel").then(({ HistoryPanel }) => ({ default: HistoryPanel })),
+);
+const KeysScreen = lazy(() =>
+  import("./keys/KeysScreen").then(({ KeysScreen }) => ({ default: KeysScreen })),
+);
+const DiagnosticsPanel = lazy(() =>
+  import("./diagnostics/DiagnosticsPanel").then(({ DiagnosticsPanel }) => ({ default: DiagnosticsPanel })),
+);
+const SecretsPanel = lazy(() =>
+  import("./secrets/SecretsPanel").then(({ SecretsPanel }) => ({ default: SecretsPanel })),
+);
+const SettingsPanel = lazy(() =>
+  import("./settings/SettingsPanel").then(({ SettingsPanel }) => ({ default: SettingsPanel })),
+);
+const SyncPanel = lazy(() =>
+  import("./sync/SyncPanel").then(({ SyncPanel }) => ({ default: SyncPanel })),
+);
+const KnownHostsPanel = lazy(() =>
+  import("./knownhosts/KnownHostsPanel").then(({ KnownHostsPanel }) => ({ default: KnownHostsPanel })),
+);
+const RemoteKeyPanel = lazy(() =>
+  import("./remotekeys/RemoteKeyPanel").then(({ RemoteKeyPanel }) => ({ default: RemoteKeyPanel })),
+);
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -428,28 +452,30 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           {state === "ready" ? (
             <div className="relative min-h-0 flex-1 overflow-hidden">
               {route.kind === "section" ? (
-                <SectionView
-                  section={route.section}
-                  fileTarget={fileTarget}
-                  groups={groups}
-                  knownAliases={knownAliases}
-                  connectionDraft={connectionDraft}
-                  onConnectionDraftChange={setConnectionDraft}
-                  onNavigateForCreation={(target: CreationPrerequisite) => navigate(target)}
-                  onOpenFile={openFile}
-                  onLock={() => setState("locked")}
-                  onInspector={setInspector}
-                  onNavigate={navigate}
-                  location={location}
-                  onNavigateLocation={navigateLocation}
-                  onNavigationBlockerChange={setNavigationBlocker}
-                  preferredConnectionKey={preferredConnectionKey}
-                  preferredPublicKey={preferredPublicKey}
-                  onAssignGeneratedKey={assignGeneratedKey}
-                  onInstallGeneratedKey={installGeneratedKey}
-                  onPreferredConnectionKeyApplied={consumePreferredConnectionKey}
-                  onPreferredPublicKeyHandled={consumePreferredPublicKey}
-                />
+                <Suspense fallback={null}>
+                  <SectionView
+                    section={route.section}
+                    fileTarget={fileTarget}
+                    groups={groups}
+                    knownAliases={knownAliases}
+                    connectionDraft={connectionDraft}
+                    onConnectionDraftChange={setConnectionDraft}
+                    onNavigateForCreation={(target: CreationPrerequisite) => navigate(target)}
+                    onOpenFile={openFile}
+                    onLock={() => setState("locked")}
+                    onInspector={setInspector}
+                    onNavigate={navigate}
+                    location={location}
+                    onNavigateLocation={navigateLocation}
+                    onNavigationBlockerChange={setNavigationBlocker}
+                    preferredConnectionKey={preferredConnectionKey}
+                    preferredPublicKey={preferredPublicKey}
+                    onAssignGeneratedKey={assignGeneratedKey}
+                    onInstallGeneratedKey={installGeneratedKey}
+                    onPreferredConnectionKeyApplied={consumePreferredConnectionKey}
+                    onPreferredPublicKeyHandled={consumePreferredPublicKey}
+                  />
+                </Suspense>
               ) : (
                 <div className="h-full overflow-y-auto p-6">
                   <section aria-labelledby="not-found-heading" className="flex max-w-2xl flex-col gap-3">

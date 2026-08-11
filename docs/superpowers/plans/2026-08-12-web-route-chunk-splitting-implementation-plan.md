@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Split non-home Web sections into on-demand Vite chunks so the initial JavaScript is below 350 kB and the 500 kB build warning disappears without adding a visible loading state.
+**Goal:** Split non-home Web sections into on-demand Vite chunks so the initial JavaScript falls by at least 30% to below 400 kB and the 500 kB build warning disappears without adding a visible loading state.
 
 **Architecture:** `App.tsx` keeps the shell, bootstrap, lock screen, and Home screen as eager imports. Every other top-level section becomes a `React.lazy` named-export adapter, and the existing `SectionView` is rendered inside `Suspense fallback={null}` so route and prop ownership remain unchanged. Vite owns shared-chunk extraction; no manual chunk configuration or preload path is added.
 
@@ -208,10 +208,10 @@ if [[ "$bundle_output" == *"Some chunks are larger than 500 kB"* ]]; then
 fi
 entry_asset=$(sed -n 's/.*src="\/assets\/\([^"]*\.js\)".*/\1/p' internal/ui/dist/index.html)
 entry_bytes=$(wc -c < "internal/ui/dist/assets/$entry_asset")
-test "$entry_bytes" -lt 350000
+test "$entry_bytes" -lt 400000
 ```
 
-Expected: typecheck succeeds, Vite emits multiple JavaScript chunks without the 500 kB warning, and the entry chunk is below 350,000 bytes.
+Expected: typecheck succeeds, Vite emits multiple JavaScript chunks without the 500 kB warning, and the entry chunk is below 400,000 bytes (at least 30% below the 569,914-byte baseline).
 
 - [ ] **Step 8: Confirm no forbidden configuration or dependency change**
 

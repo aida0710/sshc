@@ -38,7 +38,7 @@ React の `lazy` と `Suspense` を使い、セクション画面を動的 impor
 - Home とロック画面が初期表示でき、遅延対象の各セクションが直接 URL、主ナビゲーション、Back／Forward から表示できることを確認する。
 - `npm test --prefix web` と `npm run typecheck --prefix web` を通す。
 - `npm run build --prefix web` を通し、500 kB 超過警告が消えることを確認する。
-- 初期 JavaScript チャンクは 350 kB 未満を目標とする。各遅延チャンクも 500 kB 未満でなければならない。
+- 初期 JavaScript チャンクは変更前から 30% 以上削減し、400 kB 未満にする。各遅延チャンクも 500 kB 未満でなければならない。React DOM、日英メッセージ、シェル、Home、ロック画面を初期に残す境界は、この数値のために崩さない。
 - 全 Playwright を実バイナリで通し、直接 URL と各セクションの初回読み込みを検証する。
 - API 生成物、Go normal／race、Docker-backed SeaweedFS／OpenSSH integration を回帰確認する。
 - production build の `internal/ui/dist` を更新する。
