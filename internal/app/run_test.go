@@ -404,3 +404,20 @@ func TestTheBoundPromptWithNoShapeRuleAnswersNothing(t *testing.T) {
 		t.Error("a nil shape rule allowed a prompt")
 	}
 }
+
+func TestPasswordAnswerableFailsClosedWhenCurrentConfigDisallowsStoredPasswords(t *testing.T) {
+	shape := func(_ string, prompt string) bool { return strings.HasSuffix(prompt, "password: ") }
+	allowed := false
+	answerable := passwordAnswerable(shape, func(string) (bool, error) { return allowed, nil })
+	if answerable("bastion", "ops@host's password: ") {
+		t.Error("direct-key policy allowed a password response")
+	}
+	allowed = true
+	if !answerable("bastion", "ops@host's password: ") {
+		t.Error("allowed connection lost the prompt response")
+	}
+	broken := passwordAnswerable(shape, func(string) (bool, error) { return false, errors.New("config unreadable") })
+	if broken("bastion", "ops@host's password: ") {
+		t.Error("unreadable config allowed a password response")
+	}
+}

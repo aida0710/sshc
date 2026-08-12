@@ -354,6 +354,72 @@ func TestStoreRefusesAPasswordTheHostWouldNeverBeOffered(t *testing.T) {
 	}
 }
 
+func TestAssignCredentialRefusesAPasswordForADirectKeyButNotAKeyPassphrase(t *testing.T) {
+	_, service := passwordEngine(t)
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "keys", "phrase"); err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	registerPasswordRoutes(engine, PasswordHandlers{
+		Service: service,
+		Eligibility: func(alias string) (application.PasswordEligibility, error) {
+			return application.PasswordEligibility{
+				Alias: alias, Storable: false,
+				Blockers: []application.Notice{{Code: application.BlockerIdentityFileConfigured}},
+			}, nil
+		},
+	})
+
+	password := send(t, engine, http.MethodPut, credentialPath("password", "/assign"),
+		`{"subject":"bastion","name":"office"}`, nil)
+	if password.Code != http.StatusConflict || service.PasswordFor("bastion") != "" {
+		t.Fatalf("password assignment = %d: %s", password.Code, password.Body.String())
+	}
+	keyPhrase := send(t, engine, http.MethodPut, credentialPath("key_passphrase", "/assign"),
+		`{"subject":"id_ed25519","name":"keys"}`, nil)
+	if keyPhrase.Code != http.StatusOK {
+		t.Fatalf("key passphrase assignment = %d: %s", keyPhrase.Code, keyPhrase.Body.String())
+	}
+}
+
+func TestAskpassRechecksCurrentPasswordPolicyAndConsumesDeniedToken(t *testing.T) {
+	_, service := passwordEngine(t)
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Set("bastion", "legacy-password"); err != nil {
+		t.Fatal(err)
+	}
+	allowed := false
+	engine := echo.New()
+	registerPasswordRoutes(engine, PasswordHandlers{
+		Service: service,
+		Answerable: func(_ string, prompt string) bool {
+			return allowed && strings.HasSuffix(prompt, "password: ")
+		},
+	})
+	token, err := service.IssueToken("bastion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"alias":"bastion","prompt":"ops@h's password: "}`
+	denied := send(t, engine, http.MethodPost, AskpassPath, body, askpassHeaders(token))
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("denied redeem = %d", denied.Code)
+	}
+	allowed = true
+	reused := send(t, engine, http.MethodPost, AskpassPath, body, askpassHeaders(token))
+	if reused.Code != http.StatusForbidden {
+		t.Fatalf("reused denied token = %d", reused.Code)
+	}
+}
+
 func TestEligibilityIsReadableAndCarriesTheWarnings(t *testing.T) {
 	engine, service := passwordEngine(t)
 	if err := service.Initialise(testPassphrase); err != nil {

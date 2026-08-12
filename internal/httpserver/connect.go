@@ -34,6 +34,9 @@ type ConnectHandlers struct {
 	// Passwords は一度限りの askpass トークンを発行する。nil であれば
 	// 保存されたパスワードは一切提供されず、それはプロンプトが出る正常な接続である。
 	Passwords *secret.Service
+	// PasswordAllowed rechecks current SSH configuration before a saved
+	// password token is minted. false or an unreadable policy means plain SSH.
+	PasswordAllowed func(alias string) (bool, error)
 	// AskpassURL は、ヘルパーがそのトークンを引き換える場所である。
 	AskpassURL string
 	// Warnings は、OpenSSH がこの host に対して実行するディレクティブを報告する。
@@ -130,7 +133,12 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 	// トークンが存在するのは、それと引き換えるものがある場合だけである。
 	// それ以外——閉じた vault、保存されたパスワードなし、エンドポイントなし——は
 	// すべて OpenSSH 自身がパスワードを尋ねる接続であり、それは正常な接続である。
-	if h.Passwords != nil && h.AskpassURL != "" {
+	passwordAllowed := true
+	if h.PasswordAllowed != nil {
+		allowed, err := h.PasswordAllowed(decoded.Alias)
+		passwordAllowed = err == nil && allowed
+	}
+	if passwordAllowed && h.Passwords != nil && h.AskpassURL != "" {
 		if token, err := h.Passwords.IssueToken(decoded.Alias); err == nil {
 			answer.AskpassToken = token
 		}
