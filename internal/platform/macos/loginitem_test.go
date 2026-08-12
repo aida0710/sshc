@@ -15,11 +15,24 @@ import (
 
 // 本物のエージェントを読み込むテストはない。ランナーは launchctl が何を求められた
 // はずかを記録するだけで、何もしない。
-type recordingLaunchctl struct{ commands [][]string }
+type recordingLaunchctl struct {
+	commands []platform.Command
+	outputs  []platform.Output
+	errors   []error
+}
 
 func (r *recordingLaunchctl) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
-	r.commands = append(r.commands, append([]string{command.Path}, command.Arguments...))
-	return platform.Output{}, nil
+	r.commands = append(r.commands, command)
+	index := len(r.commands) - 1
+	var output platform.Output
+	var err error
+	if index < len(r.outputs) {
+		output = r.outputs[index]
+	}
+	if index < len(r.errors) {
+		err = r.errors[index]
+	}
+	return output, err
 }
 
 func TestEnablingWritesAnAgentThatOpensNoBrowserAndLogsNothing(t *testing.T) {
@@ -64,7 +77,7 @@ func TestEnablingWritesAnAgentThatOpensNoBrowserAndLogsNothing(t *testing.T) {
 	// boot in の前に boot out するので、パスが変わったときは古いものが残らずに
 	// 置き換わる。
 	if len(runner.commands) != 2 ||
-		runner.commands[0][1] != "bootout" || runner.commands[1][1] != "bootstrap" {
+		runner.commands[0].Arguments[0] != "bootout" || runner.commands[1].Arguments[0] != "bootstrap" {
 		t.Errorf("launchctl calls = %#v", runner.commands)
 	}
 
@@ -78,6 +91,76 @@ func TestEnablingWritesAnAgentThatOpensNoBrowserAndLogsNothing(t *testing.T) {
 	if err := item.Disable(context.Background()); err != nil {
 		t.Errorf("Disable twice = %v", err)
 	}
+}
+
+// OutputRunnerは非zero終了をerrorではなくOutputへ入れる。ここを見落とすとlaunchdが
+// 登録を拒否してもinstallは成功を報告する。
+func TestEnableReportsLaunchctlExitFailures(t *testing.T) {
+	t.Run("bootout failure", func(t *testing.T) {
+		runner := &recordingLaunchctl{outputs: []platform.Output{{ExitCode: 5}}}
+		item := macos.LoginItem{Runner: runner, Home: t.TempDir()}
+		if err := item.Enable(context.Background(), "/Users/tester/.local/bin/sshc"); err == nil {
+			t.Fatal("bootout exit 5 was reported as success")
+		}
+		if len(runner.commands) != 1 {
+			t.Fatalf("commands after failed bootout = %#v", runner.commands)
+		}
+	})
+
+	t.Run("bootstrap failure", func(t *testing.T) {
+		runner := &recordingLaunchctl{outputs: []platform.Output{{ExitCode: 3}, {ExitCode: 5}}}
+		item := macos.LoginItem{Runner: runner, Home: t.TempDir()}
+		if err := item.Enable(context.Background(), "/Users/tester/.local/bin/sshc"); err == nil {
+			t.Fatal("bootstrap exit 5 was reported as success")
+		}
+		if len(runner.commands) != 2 {
+			t.Fatalf("commands = %#v", runner.commands)
+		}
+	})
+}
+
+func TestDisableIgnoresOnlyAnAlreadyUnloadedService(t *testing.T) {
+	t.Run("not loaded", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "Library", "LaunchAgents", macos.LoginItemLabel+".plist")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("plist"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		item := macos.LoginItem{
+			Runner: &recordingLaunchctl{outputs: []platform.Output{{ExitCode: 3}}},
+			Home:   home,
+		}
+		if err := item.Disable(context.Background()); err != nil {
+			t.Fatalf("Disable = %v", err)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("plist remains: %v", err)
+		}
+	})
+
+	t.Run("real failure", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "Library", "LaunchAgents", macos.LoginItemLabel+".plist")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("plist"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		item := macos.LoginItem{
+			Runner: &recordingLaunchctl{outputs: []platform.Output{{ExitCode: 5}}},
+			Home:   home,
+		}
+		if err := item.Disable(context.Background()); err == nil {
+			t.Fatal("bootout exit 5 was reported as success")
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("plist was removed despite bootout failure: %v", err)
+		}
+	})
 }
 
 func TestEnablingRefusesAProgramLaunchdWouldHaveToFind(t *testing.T) {

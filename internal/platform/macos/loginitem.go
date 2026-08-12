@@ -79,17 +79,34 @@ func (l LoginItem) Enable(ctx context.Context, program string) error {
 	}
 	// 先に bootout するのは、以前のものを読み込んだままにせず、プログラムパスの
 	// 変更を拾わせるためである。
-	_ = l.launchctl(ctx, "bootout", l.domain()+"/"+LoginItemLabel)
+	if err := l.bootout(ctx); err != nil {
+		return err
+	}
 	return l.launchctl(ctx, "bootstrap", l.domain(), path)
 }
 
 // Disable はエージェントを止め、ファイルを取り除く。
 func (l LoginItem) Disable(ctx context.Context) error {
-	_ = l.launchctl(ctx, "bootout", l.domain()+"/"+LoginItemLabel)
+	if err := l.bootout(ctx); err != nil {
+		return err
+	}
 	if err := os.Remove(l.plistPath()); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
+}
+
+func (l LoginItem) bootout(ctx context.Context) error {
+	output, err := l.runLaunchctl(ctx, "bootout", l.domain()+"/"+LoginItemLabel)
+	if err != nil {
+		return err
+	}
+	// launchctl 3 はNo such process、つまりplistはあっても今は未ロードである。
+	// Disableには既に望んだ状態であり、Enableもそのままbootstrapへ進めてよい。
+	if output.ExitCode == 0 || output.ExitCode == 3 {
+		return nil
+	}
+	return fmt.Errorf("launchctl bootout exited with status %d", output.ExitCode)
 }
 
 func (l LoginItem) domain() string {
@@ -97,15 +114,25 @@ func (l LoginItem) domain() string {
 }
 
 func (l LoginItem) launchctl(ctx context.Context, arguments ...string) error {
+	output, err := l.runLaunchctl(ctx, arguments...)
+	if err != nil {
+		return err
+	}
+	if output.ExitCode != 0 {
+		return fmt.Errorf("launchctl %s exited with status %d", arguments[0], output.ExitCode)
+	}
+	return nil
+}
+
+func (l LoginItem) runLaunchctl(ctx context.Context, arguments ...string) (platform.Output, error) {
 	program := l.Launchctl
 	if program == "" {
 		program = "/bin/launchctl"
 	}
 	if l.Runner == nil {
-		return errors.New("no runner to start launchctl with")
+		return platform.Output{}, errors.New("no runner to start launchctl with")
 	}
-	_, err := l.Runner.RunOutput(ctx, platform.Command{Path: program, Arguments: arguments})
-	return err
+	return l.Runner.RunOutput(ctx, platform.Command{Path: program, Arguments: arguments})
 }
 
 // agentPlist は launchd が読むプロパティリスト。

@@ -100,6 +100,7 @@ UIでログイン時起動を切り替える既存APIも同じ LoginItem 実装�
 - service refresh中の失敗は、vaultやSSH設定ファイルを変更しない。
 - refreshは登録済み状態を検査してから動き、オフだったログイン時起動をオンにしない。
 - plistまたはunitの登録状態を読み取れない場合は、未登録扱いにせず失敗する。
+- `launchctl`と`systemctl`の非zero終了を成功扱いにしない。macOSの`bootout`は、未ロードを示す終了コード3だけを安全なno-opとして許す。
 - uninstallはdisable失敗時に停止し、KeepAlive設定が削除済みバイナリを起動し続ける状態を作らない。
 - 再起動でvaultが施錠されることをREADMEとinstall出力で明示する。
 
