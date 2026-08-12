@@ -39,7 +39,6 @@ import {
   connectionLocation,
   parseConnectionLocation,
   type AdvancedArea,
-  type ConnectionBrowserLocation,
   type ConnectionPanel,
 } from "../routing/connectionRoute";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
@@ -128,8 +127,6 @@ export function ConnectionsPage({
 }: ConnectionsPageProps) {
   const t = useTranslate();
   const initialRoute = parseConnectionLocation(location);
-  const initialBrowser: ConnectionBrowserLocation =
-    initialRoute.kind === "valid" ? initialRoute.browser : { view: "servers" };
   const initialTarget = initialRoute.kind === "valid" ? initialRoute.target : null;
   const [overview, setOverview] = useState<Overview | null>(null);
   // どのグループにも属さない connection が向かう先。このページが決め
@@ -140,7 +137,6 @@ export function ConnectionsPage({
     initialTarget === null ? null : { path: initialTarget.path, alias: initialTarget.alias },
   );
   const selectionRef = useRef<HostSelection | null>(selection);
-  const [browser, setBrowser] = useState<ConnectionBrowserLocation>(initialBrowser);
   const [invalidLocation, setInvalidLocation] = useState(initialRoute.kind === "invalid");
   const [activePanel, setActivePanel] = useState<ConnectionPanel>(initialTarget?.panel ?? "Basic");
   const [activeAdvanced, setActiveAdvanced] = useState<AdvancedArea>(initialTarget?.advanced ?? "Jump");
@@ -178,7 +174,7 @@ export function ConnectionsPage({
     advanced: AdvancedArea,
     options?: NavigateLocationOptions,
   ): boolean {
-    if (!emitLocation(connectionLocation(browser, {
+    if (!emitLocation(connectionLocation({
       path: identity.path,
       alias: identity.alias,
       panel,
@@ -191,7 +187,7 @@ export function ConnectionsPage({
   }
 
   function clearTarget(options?: NavigateLocationOptions): boolean {
-    return emitLocation(connectionLocation(browser, null), options);
+    return emitLocation(connectionLocation(null), options);
   }
 
   // 書き込み済みの identity は、後続の GET より先に画面と URL の正本にする。
@@ -254,7 +250,6 @@ export function ConnectionsPage({
     const parsed = parseConnectionLocation(location);
     if (parsed.kind === "redirect") {
       emitLocation(parsed.location, { replace: true });
-      setBrowser({ view: "servers" });
       setInvalidLocation(false);
       if (selectionRef.current === null) return;
       selectionRef.current = null;
@@ -289,7 +284,6 @@ export function ConnectionsPage({
       return;
     }
 
-    setBrowser(parsed.browser);
     setInvalidLocation(false);
     const target = parsed.target;
     const current = selectionRef.current;
@@ -902,9 +896,7 @@ export function ConnectionsPage({
               <Button
                 className="self-start"
                 onClick={() => {
-                  const next: ConnectionBrowserLocation = { view: "servers" };
-                  if (emitLocation(connectionLocation(next, null), { replace: true })) {
-                    setBrowser(next);
+                  if (emitLocation(connectionLocation(null), { replace: true })) {
                     setInvalidLocation(false);
                   }
                 }}

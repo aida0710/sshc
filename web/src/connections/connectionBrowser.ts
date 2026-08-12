@@ -1,5 +1,10 @@
 import type { HostEntry, Overview } from "../api/config";
-import type { ConnectionBrowserLocation } from "../routing/connectionRoute";
+
+export type ConnectionBrowserLocation =
+  | { view: "servers" }
+  | { view: "groups"; scope: "root" }
+  | { view: "groups"; scope: "named"; group: string }
+  | { view: "groups"; scope: "ungrouped" };
 
 export type BrowserServer = {
   host: HostEntry;

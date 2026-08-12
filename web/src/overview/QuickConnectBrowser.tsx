@@ -5,9 +5,9 @@ import {
   projectConnectionBrowser,
   type BrowserGroup,
   type BrowserServer,
+  type ConnectionBrowserLocation,
 } from "../connections/connectionBrowser";
 import { useTranslate } from "../i18n/context";
-import type { ConnectionBrowserLocation } from "../routing/connectionRoute";
 import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
 import { ConnectionActions } from "./ConnectionActions";
