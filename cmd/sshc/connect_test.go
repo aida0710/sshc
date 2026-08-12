@@ -23,6 +23,7 @@ func TestWhatCountsAsAConnectInvocation(t *testing.T) {
 		{[]string{"sshc", "open"}, "", false},
 		{[]string{"sshc", "list"}, "", false},
 		{[]string{"sshc", "connect"}, "", false},
+		{[]string{"sshc", "service"}, "", false},
 		// OpenSSH が実行するヘルパー。プロンプトを引数に取る。
 		{[]string{"sshc", "askpass"}, "", false},
 		{[]string{"sshc", "askpass", "password:"}, "", false},
