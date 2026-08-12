@@ -55,14 +55,26 @@ func (l LoginItem) systemctl() string {
 	return l.Systemctl
 }
 
-// Enabled は、unit が登録されているかを報告する。
-//
-// error を返さないのは、呼び出し側のインターフェースがそう決めているからである。
-// 読めないことと登録されていないことは、この設定を表示する画面にとって同じ答えで
-// ある。
-func (l LoginItem) Enabled() bool {
+// Registered はunitの有無と、それを確かめられなかった状態を区別する。Webの表示は
+// boolだけを必要とするが、install/uninstallは「読めない」を「無い」とみなして
+// 壊れた常駐設定を残したまま成功してはならない。
+func (l LoginItem) Registered() (bool, error) {
 	_, err := os.Stat(l.unitPath())
-	return err == nil
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
+}
+
+// Enabled は、unit が登録されているかをWeb設定用のboolで報告する。
+// 読めない場合はスイッチをオンとは表示しない。保守コマンドはRegisteredを直接使い、
+// そのエラーを失わない。
+func (l LoginItem) Enabled() bool {
+	enabled, err := l.Registered()
+	return err == nil && enabled
 }
 
 // Enable は unit を書き出し、systemd に取り込ませる。
@@ -84,7 +96,13 @@ func (l LoginItem) Enable(ctx context.Context, program string) error {
 	if _, err := l.run(ctx, "--user", "daemon-reload"); err != nil {
 		return err
 	}
-	_, err := l.run(ctx, "--user", "enable", "--now", UnitName)
+	if _, err := l.run(ctx, "--user", "enable", UnitName); err != nil {
+		return err
+	}
+	// enable --now は未起動のunitを始めるが、既に動いているunitを再起動しない。
+	// ExecStartのパスを書き換えた更新では、明示的なrestartだけが新しい実行ファイルへ
+	// プロセスを付け替える。
+	_, err := l.run(ctx, "--user", "restart", UnitName)
 	return err
 }
 
