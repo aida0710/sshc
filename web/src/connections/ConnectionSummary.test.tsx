@@ -76,7 +76,7 @@ const state: ConnectionSavedState = {
 };
 
 describe("ConnectionSummary", () => {
-  it("renders only the committed endpoint and independent authentication statuses", () => {
+  it("renders a direct key and legacy password assignment only as pending cleanup", () => {
     render(
       <ConnectionSummary
         state={state}
@@ -93,8 +93,25 @@ describe("ConnectionSummary", () => {
     expect(screen.getByText("ops@203.0.113.10:2222")).toBeInTheDocument();
     expect(screen.getByText("id_work — SHA256:work")).toBeInTheDocument();
     expect(screen.getByText("Saved only for this key")).toBeInTheDocument();
-    expect(screen.getByText("Saved password: office")).toBeInTheDocument();
+    expect(screen.queryByText("Saved password: office")).not.toBeInTheDocument();
+    expect(screen.getByText(/is not used and will be unassigned/i)).toBeInTheDocument();
     expect(screen.getByText("work")).toBeInTheDocument();
+  });
+
+  it("does not claim a password cleanup when credential metadata is unavailable", () => {
+    render(
+      <ConnectionSummary
+        state={{ ...state, credentials: { status: "failed" } }}
+        dirty={false}
+        refreshing={false}
+        onConnect={vi.fn()}
+        connecting={false}
+        onToggleManage={vi.fn()}
+        managing={false}
+      />,
+    );
+
+    expect(screen.queryByText(/is not used and will be unassigned/i)).not.toBeInTheDocument();
   });
 
   it("keeps committed text while disabling saved-state actions for a draft", async () => {

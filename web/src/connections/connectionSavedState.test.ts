@@ -131,6 +131,22 @@ function apis(overrides: {
 }
 
 describe("connection saved state", () => {
+  it("treats a direct IdentityFile none as agent or inherited authentication", () => {
+    const detail = detailWithIdentityFile();
+    detail.form.fields = detail.form.fields.map((field) =>
+      field.keyword === "IdentityFile" ? { ...field, values: ["none"] } : field,
+    );
+    const saved: ConnectionSavedState = {
+      detail,
+      keys: { status: "ready", value: [privateKey] },
+      vault: { status: "ready", value: { ...unlockedVault, aliases: [] } },
+      credentials: { status: "ready", value: [] },
+      eligibility: { status: "ready", value: eligibility },
+    };
+
+    expect(summarizeConnection(saved).privateKey).toEqual({ state: "none" });
+  });
+
   it("keeps successful vault resources when key inventory fails", async () => {
     const dependencies = apis({ inventory: vi.fn().mockRejectedValue(new Error("unreadable")) });
 
