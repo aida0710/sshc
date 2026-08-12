@@ -39,11 +39,12 @@ make build            # UI を生成し bin/sshc へ単一バイナリを作成
 
 ## CI
 
-`.github/workflows/ci.yml` が push と pull request のたびに上と同じゲートを回します。ジョブは 6 つで、赤くなったチェック名がそのまま壊れた箇所を指します。
+`.github/workflows/ci.yml` が push と pull request のたびに上と同じゲートを回します。ジョブは 7 つで、赤くなったチェック名がそのまま壊れた箇所を指します。
 
 | ジョブ | 内容 |
 | --- | --- |
 | Go | `gofmt -l`、`go vet`、`go build`、`go test`、`go test -race` |
+| macOS | darwin 上の `go vet`、`go build`、`go test`、`go test -race`（`gofmt` はソースのテキストしか見ないので Go ジョブと重複させません） |
 | Web | `npm ci`、`npm run typecheck`、`npm test`、`npm run build` |
 | Generated files | `make verify-generated` |
 | End to end | `make build`、`internal/ui/dist` が最新かの確認、Playwright |
@@ -58,7 +59,7 @@ ESLint は導入していません。TypeScript の型検査（`tsc -b` と e2e 
 
 - HTTP サーバーは IPv4 の `127.0.0.1` だけに bind します。LAN、Tailnet、コンテナ外部など、ネットワークへ公開して安全な設計ではありません。
 - このアプリケーションは実際の `~/.ssh` を読み書きし、鍵を作り、**macOS では** Terminal を起動し、リモートホストへ接続します。それぞれの境界は以下の各節にあります。
-- **cookie だけでは何の証明にもなりません。** cookie はポートを区別せず、`SameSite` の「サイト」判定にもポートは入らないため、同じブラウザで `http://127.0.0.1:<別ポート>` を開くと session cookie はそちらへも送られます。そこで、読み取りを含む全ての API 要求に `X-SSHC-CSRF` を要求します。このトークンはページのメモリにしか無く、別ポートへは決して送られません。例外は `POST /api/v1/session/renew`（リロード直後はトークンが無く、これがトークンを取り戻す手段そのものであるため）と `GET /api/v1/health`。
+- **cookie だけでは何の証明にもなりません。** cookie はポートを区別せず、`SameSite` の「サイト」判定にもポートは入らないため、同じブラウザで `http://127.0.0.1:<別ポート>` を開くと session cookie はそちらへも送られます。そこで、読み取りを含む全ての API 要求に `X-SSHC-CSRF` を要求します。このトークンはページのメモリにしか無く、別ポートへは決して送られません。例外は 3 つです。`POST /api/v1/session/bootstrap`（最初のトークンを発行する当のルートなので、提示できるトークンがまだ存在しません。代わりに `Origin` の完全一致を要求します）、`POST /api/v1/session/renew`（リロード直後はトークンが無く、これがトークンを取り戻す手段そのものであるため）、`GET /api/v1/health`。
 - bootstrap、session、CSRF の値をログへ出してはいけません。bootstrap は URL fragment に置き、ブラウザが直ちに履歴から除去します。
 - 同一マシン上の悪意あるプロセス、侵害されたブラウザ、ブラウザ拡張から秘密を完全には保護できません。将来の秘密鍵 reveal/copy 機能でも、ブラウザ拡張やローカルのクリップボード監視・履歴ツールに対して秘密は脆弱です。
 - UI は埋め込みファイルシステムからのみ配信し、URL を OS ファイルパスへ変換しません。存在しない API は SPA へフォールバックしません。
@@ -131,7 +132,7 @@ ESLint は導入していません。TypeScript の型検査（`tsc -b` と e2e 
 
 ## アプリケーションの施錠と秘密の保管庫の境界
 
-- **マスターパスワードを入れるまで、どの画面にも入れません。** 初回起動では設定が初期設定として必須です。`/api/v1` は全て `vault_locked` で拒否します（例外は vault 自身のルート、`GET /api/v1/health`、`POST /api/v1/session/renew` の 3 つだけ。解錠する前に動く必要があるものです）。ゲートは middleware の 1 箇所なので、後から足したルートが忘れることはできません。`Unlocked` が未設定の server は閉じたままです。
+- **マスターパスワードを入れるまで、どの画面にも入れません。** 初回起動では設定が初期設定として必須です。`/api/v1` は全て `vault_locked` で拒否します（例外は vault 自身のルート、`GET /api/v1/health`、`POST /api/v1/session/bootstrap`、`POST /api/v1/session/renew` だけ。解錠する前に動く必要があるものです）。ゲートは middleware の 1 箇所なので、後から足したルートが忘れることはできません。`Unlocked` が未設定の server は閉じたままです。
 - 8 時間使われなかった vault は自分で閉じ、アプリケーションごと施錠されます。状態の読み取りは「使用」に数えません。開いたタブが 1 つあるだけで開き続けてしまうためです。
 - **このゲートは `~/.ssh` を暗号化しません。** config も鍵も OpenSSH が読める場所に平文で置かれたままです。守られるのはこの UI、vault の中身、そして世代バックアップであって、ディスクを持っている相手には効きません。
 
@@ -199,7 +200,7 @@ ESLint は導入していません。TypeScript の型検査（`tsc -b` と e2e 
 - リクエスト本文には二段の上限があります。middleware の `MaxRequestBodyCeiling`（2 MiB）が全 `/api/` 要求の天井で、各ハンドラーはさらに小さい上限を持ちます。宣言された `Content-Length` が天井を超える要求はハンドラーへ届く前に 413 で拒否し、長さを宣言しない chunked 要求は読み取り自体を天井で打ち切ります。本文を読まないルート（`/api/v1/diagnostics/config` や `/api/v1/keys/{keyId}/trash`）にも同じ天井が掛かるのは前者のためです。
 - 外部コマンドの出力は `platform.MaxCapturedOutput`（64 KiB）で打ち切られます。打ち切られた `ssh -G` 出力は解析せず、部分的な実効値として返しません。認証テストの stderr は `MaxReportedOutput`（8 KiB）までに制限して表示します。
 - `make fuzz` は `FUZZ_TARGETS` に列挙した全 target を順に実行します。`go test -fuzz` は一度に 1 target しか動かせないため、1 行で書くと最初の target しか回りません。target を追加して一覧に加え忘れると `TestMakefileFuzzTargetsCoverEveryFuzzFunction` が失敗します。
-- fuzz の対象は、設定パーサーのラウンドトリップ、Include パターン展開、`known_hosts` リーダー、`ssh -G` 出力パーサー、HTTP リクエストデコーダーの 5 つです。いずれも実 fixture を seed にしています。
+- fuzz の対象は、設定パーサーのラウンドトリップ、Include パターン展開、`known_hosts` リーダー、`ssh -G` 出力パーサー、HTTP リクエストデコーダー、リモートスナップショットのリーダーの 6 つです。いずれも実 fixture を seed にしています。
 - `./bin/sshc -open=false` は既定ブラウザを開かず、bootstrap fragment 付き URL を標準出力へ 1 行だけ出します。自動化用の明示的なオプションであり、通常の利用では使いません。token は `open <url>` の argv と同程度の露出であり、それ以上ではありません。
 - 配布物は UI を埋め込んだ単一バイナリです。`otool -L` はシステムライブラリのみを表示し、同梱ランタイムはありません。`make e2e` は毎回ビルドし直した実バイナリを Playwright で駆動するため、埋め込み済み UI が古いままだと E2E が失敗します。
 - `make verify-generated` は `api/openapi.yaml` から Go と TypeScript の型を再生成し、コミット済みの生成物と一致しなければ失敗します。生成物を手で編集してはいけません。
