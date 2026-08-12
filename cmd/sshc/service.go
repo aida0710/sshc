@@ -27,13 +27,6 @@ func serviceInvocation(argv []string) bool {
 	return len(argv) > 1 && argv[1] == ServiceSubcommand
 }
 
-// newServiceLoginItem はTask 1の中間実装であり、現在Web画面が使うものと同じ
-// controllerを返す。Linuxで取り残されたunitを見落とさないOS専用の組み立てへ、
-// 次のTDDサイクルで置き換える。
-func newServiceLoginItem(home string) (serviceLoginItem, error) {
-	return newPlatformParts(home).LoginItem, nil
-}
-
 // runService はブラウザもサーバーもSSHも起動せず、ログインサービスだけを保守する。
 // executableはrefreshが本当に必要な場合にだけ呼び、argvからプログラムパスを受けない。
 func runService(
