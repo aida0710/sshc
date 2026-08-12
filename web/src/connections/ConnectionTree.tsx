@@ -3,6 +3,7 @@ import type { HostEntry, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
+import { duplicateAliasesOf } from "./connectionBrowser";
 import { canDrop, dragMimeType, type DragPayload } from "./dragdrop";
 
 export type HostSelection = { path: string; alias: string };
@@ -86,12 +87,7 @@ export function ConnectionTree({
         entry,
       ]),
     );
-    const aliases = new Map<string, number>();
-    for (const host of overview.hosts) {
-      if (host.identity.alias !== "") {
-        aliases.set(host.identity.alias, (aliases.get(host.identity.alias) ?? 0) + 1);
-      }
-    }
+    const duplicates = duplicateAliasesOf(overview.hosts);
     return overview.hosts
       .map((host, sourceOrder) => {
         const display = metadata.get(identityKey(host));
@@ -102,7 +98,7 @@ export function ConnectionTree({
           favourite: display?.favourite === true,
           colour: display?.colour ?? "",
           order: display?.order ?? 0,
-          duplicateAlias: host.identity.alias !== "" && (aliases.get(host.identity.alias) ?? 0) > 1,
+          duplicateAlias: duplicates.has(host.identity.alias),
           sourceOrder,
         };
       })
