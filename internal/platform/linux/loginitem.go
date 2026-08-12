@@ -108,13 +108,20 @@ func (l LoginItem) Enable(ctx context.Context, program string) error {
 
 // Disable は unit を止め、ファイルを取り除く。
 func (l LoginItem) Disable(ctx context.Context) error {
+	registered, err := l.Registered()
+	if err != nil {
+		return err
+	}
+	if !registered {
+		return nil
+	}
 	if _, err := l.run(ctx, "--user", "disable", "--now", UnitName); err != nil {
 		return err
 	}
 	if err := os.Remove(l.unitPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	_, err := l.run(ctx, "--user", "daemon-reload")
+	_, err = l.run(ctx, "--user", "daemon-reload")
 	return err
 }
 
