@@ -155,7 +155,10 @@ export function AdvancedSettings({
               <Row
                 key={fieldKey(field)}
                 label={field.keyword}
-                warning={field.dangerous === true ? t("host.dangerousField", { keyword: field.keyword }) : undefined}
+                warning={[
+                  field.dangerous === true ? t("host.dangerousField", { keyword: field.keyword }) : "",
+                  field.duplicate === true ? t("host.duplicateKeyword") : "",
+                ].filter(Boolean).join(" ") || undefined}
                 action={
                   <Button
                     className="px-2 py-1 text-xs"
