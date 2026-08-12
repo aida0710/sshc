@@ -135,18 +135,9 @@ func main() {
 	}
 
 	if serviceInvocation(os.Args) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
-		}
-		item, err := newServiceLoginItem(home)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
-		}
-		os.Exit(runService(
-			context.Background(), os.Args[2:], item, os.Executable, os.Stdout, os.Stderr,
+		os.Exit(runServiceCommand(
+			context.Background(), os.Args[2:], os.UserHomeDir, newServiceLoginItem,
+			os.Executable, os.Stdout, os.Stderr,
 		))
 	}
 
