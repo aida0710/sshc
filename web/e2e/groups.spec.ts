@@ -122,10 +122,15 @@ test("refuses to move a connection into a group nothing declares", async ({
   expect(await installation.read("conf.d/10-home.conf")).toContain("Host nas");
 });
 
-test("drills into a nested group and promotes it when its container is hidden", async ({
+test("quick connect drills into a nested group and promotes it when its container is hidden", async ({
   page,
   installation,
 }) => {
+  const terminalRequests: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/v1/terminal/")) terminalRequests.push(path);
+  });
   await openApplication(page, installation);
   await openSection(page, "Groups");
   for (const name of ["work", "work/eu"]) {
@@ -134,35 +139,32 @@ test("drills into a nested group and promotes it when its container is hidden", 
   }
   expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
 
-  await openSection(page, "Connections");
-  const browser = page.getByRole("navigation", { name: "Connections" });
-  await browser.getByRole("button", { name: "Groups", exact: true }).click();
-  expect(new URL(page.url()).pathname).toBe("/connections/groups");
+  await openSection(page, "Home");
+  let browser = page.getByRole("region", { name: "Quick connect" });
+  let modes = browser.getByRole("group", { name: "Browse connections by" });
+  await expect(modes.getByRole("button", { name: "Servers", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await modes.getByRole("button", { name: "Groups", exact: true }).click();
+  expect(new URL(page.url()).pathname).toBe("/");
 
   // 一度に一階層だけを表示する。親を選ぶまでは子を出さず、選ぶと
   // 同じ左ペインを子グループへ置き換える。
   await expect(browser.getByRole("button", { name: "work, 0 servers" })).toBeVisible();
   await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toHaveCount(0);
   await browser.getByRole("button", { name: "work, 0 servers" }).click();
-  expect(new URL(page.url()).pathname).toBe("/connections/groups/work");
+  expect(new URL(page.url()).pathname).toBe("/");
   await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toBeVisible();
   await browser.getByRole("button", { name: "eu, 0 servers" }).click();
-  expect(new URL(page.url()).pathname).toBe("/connections/groups/work/eu");
+  expect(new URL(page.url()).pathname).toBe("/");
   await expect(
     browser.getByRole("navigation", { name: "Group path" }).getByText("eu", { exact: true }),
   ).toHaveAttribute("aria-current", "page");
+  expect(terminalRequests).toEqual([]);
 
+  // クイック接続内の閲覧位置は一時的で、再読込後は既定のサーバー一覧へ戻る。
   await page.reload();
-  await expect(browser.getByText("No servers are directly in this group.")).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe("/connections/groups/work/eu");
-  await page.goBack();
-  await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe("/connections/groups/work");
-  await page.goBack();
-  await expect(browser.getByRole("button", { name: "work, 0 servers" })).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe("/connections/groups");
-  await page.goForward();
-  await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toBeVisible();
+  browser = page.getByRole("region", { name: "Quick connect" });
+  modes = browser.getByRole("group", { name: "Browse connections by" });
+  await expect(modes.getByRole("button", { name: "Servers", exact: true })).toHaveAttribute("aria-pressed", "true");
 
   // "work" は自分自身のものを何も持たないため、隠す操作が提供される。
   //
@@ -182,12 +184,14 @@ test("drills into a nested group and promotes it when its container is hidden", 
   await expect(hide).toBeChecked();
   expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
 
-  await openSection(page, "Connections");
-  await browser.getByRole("button", { name: "Groups", exact: true }).click();
+  await openSection(page, "Home");
+  browser = page.getByRole("region", { name: "Quick connect" });
+  modes = browser.getByRole("group", { name: "Browse connections by" });
+  await modes.getByRole("button", { name: "Groups", exact: true }).click();
   await expect(browser.getByRole("button", { name: "work, 0 servers" })).toHaveCount(0);
-  // 子は親が消えてもルートへ昇格し、元の完全な path へ遷移する。
+  // 子は親が消えてもルートへ昇格する。
   const promoted = browser.getByRole("button", { name: "eu, 0 servers" });
   await expect(promoted).toBeVisible();
   await promoted.click();
-  expect(new URL(page.url()).pathname).toBe("/connections/groups/work/eu");
+  expect(new URL(page.url()).pathname).toBe("/");
 });
