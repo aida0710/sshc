@@ -593,6 +593,43 @@ describe("ConnectionBasicForm", () => {
     expect(await screen.findByText("A passphrase is saved only for this key.")).toBeInTheDocument();
   });
 
+  it("opens key-passphrase editing only when the selected key has no saved value", async () => {
+    const user = userEvent.setup();
+    const detail = buildDetail([
+      { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+    ]);
+    const unsaved = renderForm({
+      detail,
+      credentials: vi.fn().mockResolvedValue({ credentials: [] }),
+    });
+    await screen.findByText("No passphrase is saved for this key.");
+    const unsavedSection = screen.getByText("Save or change key passphrase").closest("details");
+    await waitFor(() => expect(unsavedSection).toHaveAttribute("open"));
+    expect(screen.getByLabelText("New saved key passphrase")).toBeVisible();
+    unsaved.unmount();
+
+    const named = renderForm({ detail });
+    await screen.findByText(/uses the shared saved passphrase “id_work”/i);
+    const namedSection = screen.getByText("Save or change key passphrase").closest("details");
+    expect(namedSection).not.toHaveAttribute("open");
+    expect(screen.getByLabelText("New saved key passphrase")).not.toBeVisible();
+    await user.click(screen.getByText("Save or change key passphrase"));
+    expect(namedSection).toHaveAttribute("open");
+    expect(screen.getByLabelText("New saved key passphrase")).toBeVisible();
+    named.unmount();
+
+    renderForm({
+      detail,
+      credentials: vi.fn().mockResolvedValue({ credentials: [] }),
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: ["id_work"], minPassphraseLength: 12,
+      }),
+    });
+    await screen.findByText("A passphrase is saved only for this key.");
+    expect(screen.getByText("Save or change key passphrase").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByLabelText("New saved key passphrase")).not.toBeVisible();
+  });
+
   it("requires matching key-passphrase fields and sends one mutation with the Basic save", async () => {
     const user = userEvent.setup();
     const detail = buildDetail([

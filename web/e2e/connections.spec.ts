@@ -236,11 +236,13 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   const ownedID = await keyChoice.locator("option", { hasText: "id_connection_owned" }).getAttribute("value");
   expect(ownedID).not.toBeNull();
   await keyChoice.selectOption(ownedID!);
+  await expect(page.getByText(/uses the shared saved passphrase “shared-sibling-phrase”/)).not.toBeVisible();
+  await page.getByText("Save or change key passphrase").click();
   await expect(page.getByText(/uses the shared saved passphrase “shared-sibling-phrase”/)).toBeVisible();
   await page.getByLabel("New saved key passphrase", { exact: true }).fill(firstPassphrase);
   await page.getByLabel("Confirm saved key passphrase", { exact: true }).fill(firstPassphrase);
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
-  await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
+  await expect(page.getByText("A passphrase is saved only for this key.")).not.toBeVisible();
 
   await openSection(page, "Secrets");
   const shared = page
@@ -262,11 +264,13 @@ test("saves and replaces a key-owned passphrase without changing another key's s
     .getByRole("navigation", { name: "Connections" })
     .getByRole("button", { name: "bastion" })
     .click();
+  await expect(page.getByText("A passphrase is saved only for this key.")).not.toBeVisible();
+  await page.getByText("Save or change key passphrase").click();
   await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
   await page.getByLabel("New saved key passphrase", { exact: true }).fill(nextPassphrase);
   await page.getByLabel("Confirm saved key passphrase", { exact: true }).fill(nextPassphrase);
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
-  await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
+  await expect(page.getByText("A passphrase is saved only for this key.")).not.toBeVisible();
   await expect(page.locator("body")).not.toContainText(firstPassphrase);
   await expect(page.locator("body")).not.toContainText(nextPassphrase);
 
