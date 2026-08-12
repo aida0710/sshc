@@ -74,10 +74,6 @@ type Server struct {
 	http     *http.Server
 	url      string
 	engine   *echo.Echo
-	// cliSecret は `sshc <alias>` が提示すべきものである。これを保持する
-	// のは、handoff の置き場所を知る呼び出し元が、別途持ち歩くのではなく
-	// 読み戻せるようにするためだ。
-	cliSecret string
 }
 
 // Route はこの server が登録したルートの 1 つである。
@@ -240,9 +236,8 @@ func New(options Options) (*Server, error) {
 			Handler:           e,
 			ReadHeaderTimeout: 5 * time.Second,
 		},
-		url:       "http://" + host,
-		cliSecret: options.CLISecret,
-		engine:    e,
+		url:    "http://" + host,
+		engine: e,
 	}, nil
 }
 
@@ -307,10 +302,6 @@ func acceptsHTML(header string) bool {
 	}
 	return false
 }
-
-// CLISecret は `sshc <alias>` が提示すべきものであり、handoff の
-// 書き込み先を知る呼び出し元が、別途保持せずに読み戻せるようにする。
-func (s *Server) CLISecret() string { return s.cliSecret }
 
 func (s *Server) URL() string {
 	return s.url
