@@ -302,8 +302,8 @@ describe("App", () => {
     expect(await screen.findByText("keys panel")).toBeInTheDocument();
   });
 
-  it("keeps a nested group URL inside the Connections section", async () => {
-    window.history.replaceState(null, "", "/connections/groups/home/eu");
+  it("keeps an invalid connection sub-route inside the Connections section for its local recovery", async () => {
+    window.history.replaceState(null, "", "/connections/removed-view");
     render(
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
@@ -312,7 +312,7 @@ describe("App", () => {
       />,
     );
 
-    expect(await screen.findByText("connection location /connections/groups/home/eu"))
+    expect(await screen.findByText("connection location /connections/removed-view"))
       .toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute(
       "aria-current",

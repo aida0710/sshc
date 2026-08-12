@@ -219,7 +219,7 @@ describe("ConnectionsPage", () => {
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });
 
-  it("recovers from an invalid connection URL and keeps a stale group URL usable", async () => {
+  it("recovers from invalid connection URLs, including removed group routes", async () => {
     const onNavigateLocation = vi.fn();
     const harness = render(
       <ConnectionsPage
@@ -240,8 +240,7 @@ describe("ConnectionsPage", () => {
         onNavigateLocation={onNavigateLocation}
       />,
     );
-    expect(await screen.findByRole("navigation", { name: "Connections" })).toBeInTheDocument();
-    expect(screen.queryByText("This connection URL is not recognised.")).not.toBeInTheDocument();
+    expect(await screen.findByText("This connection URL is not recognised.")).toBeInTheDocument();
   });
 
   it("shows a recovery action when a deep-linked connection no longer exists", async () => {
@@ -348,7 +347,7 @@ describe("ConnectionsPage", () => {
     const activeBlocker = blocker as unknown as (next: { pathname: string; search: string }) => boolean;
 
     expect(activeBlocker({
-      pathname: "/connections/groups/home",
+      pathname: "/connections/servers",
       search: "?path=config&host=bastion&panel=analysis",
     })).toBe(true);
     expect(confirm).not.toHaveBeenCalled();

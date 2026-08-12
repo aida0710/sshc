@@ -16,7 +16,7 @@
 - alias を持たないパターンルールは接続詳細ではなく設定ファイルの該当行を開く。
 - 接続詳細、保存、認証、診断、管理操作は変更しない。
 
-接続の canonical URL は現在の `/connections/servers` と接続 identity query を維持する。今回変えるのは左ペインの表示責務であり、URL・履歴・接続詳細の契約まで戻す必要はない。既存の `/connections/groups/...` を新たな導線から生成しないが、ルーターから積極的に削除する作業も本変更には含めない。
+接続の canonical URL は `/connections/servers` と接続 identity query に一本化する。グループ位置はクイック接続内の一時状態になり、既存の `/connections/groups/...` は互換対象とせず無効な接続 URL として扱う。
 
 ## ホームのクイック接続
 

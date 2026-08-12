@@ -43,10 +43,7 @@ export function ConnectionActions({
     };
   }, [open]);
 
-  const settingsLocation = connectionLocation(
-    { view: "servers" },
-    { path, alias, panel: "Basic", advanced: "Jump" },
-  );
+  const settingsLocation = connectionLocation({ path, alias, panel: "Basic", advanced: "Jump" });
 
   return (
     <div ref={rootRef} className="relative shrink-0">

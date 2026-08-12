@@ -2,15 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   connectionLocation,
   parseConnectionLocation,
-  type ConnectionBrowserLocation,
 } from "./connectionRoute";
-
-const servers: ConnectionBrowserLocation = { view: "servers" };
-const namedGroup: ConnectionBrowserLocation = {
-  view: "groups",
-  scope: "named",
-  group: "home/eu",
-};
 
 describe("connection routes", () => {
   it("redirects only the bare section root to the default server browser", () => {
@@ -21,7 +13,7 @@ describe("connection routes", () => {
   });
 
   it("round-trips the server browser and a duplicate-safe connection identity", () => {
-    const location = connectionLocation(servers, {
+    const location = connectionLocation({
       path: "connections/work/api.conf",
       alias: "api prod",
       panel: "Basic",
@@ -35,7 +27,6 @@ describe("connection routes", () => {
       search: "?path=connections%2Fwork%2Fapi.conf&host=api+prod&panel=basic",
     })).toEqual({
       kind: "valid",
-      browser: servers,
       target: {
         path: "connections/work/api.conf",
         alias: "api prod",
@@ -45,44 +36,14 @@ describe("connection routes", () => {
     });
   });
 
-  it("round-trips a nested group and its advanced sub-area", () => {
-    const location = connectionLocation(namedGroup, {
-      path: "connections/home/eu.conf",
-      alias: "münchen",
-      panel: "Advanced",
-      advanced: "Raw",
-    });
-    expect(location).toBe(
-      "/connections/groups/home/eu?path=connections%2Fhome%2Feu.conf&host=m%C3%BCnchen&panel=advanced&advanced=raw",
-    );
-    expect(parseConnectionLocation({
-      pathname: "/connections/groups/home/eu",
-      search: "?path=connections%2Fhome%2Feu.conf&host=m%C3%BCnchen&panel=advanced&advanced=raw",
-    })).toEqual({
-      kind: "valid",
-      browser: namedGroup,
-      target: {
-        path: "connections/home/eu.conf",
-        alias: "münchen",
-        panel: "Advanced",
-        advanced: "Raw",
-      },
-    });
-  });
-
-  it("formats root, nested, and ungrouped browser locations canonically", () => {
-    expect(connectionLocation(servers, null)).toBe("/connections/servers");
-    expect(connectionLocation({ view: "groups", scope: "root" }, null)).toBe(
-      "/connections/groups",
-    );
-    expect(connectionLocation(namedGroup, null)).toBe("/connections/groups/home/eu");
-    expect(connectionLocation({ view: "groups", scope: "ungrouped" }, null)).toBe(
-      "/connections/groups?scope=ungrouped",
-    );
+  it("formats the connection collection URL canonically", () => {
+    expect(connectionLocation(null)).toBe("/connections/servers");
   });
 
   it.each([
     ["/connections/files", ""],
+    ["/connections/groups", ""],
+    ["/connections/groups/home/eu", ""],
     ["/connections/groups/home/%2Fetc", ""],
     ["/connections/groups", "?scope=missing"],
     ["/connections/servers", "?scope=ungrouped"],
