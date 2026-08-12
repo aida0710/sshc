@@ -240,7 +240,10 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		Passwords:     passwordService,
 		Sync:          syncService,
 		AskpassHelper: dependencies.AskpassHelper,
-		Answerable:    boundPrompt(dependencies.Answerable, projectionOf(diagnosticsService)),
+		Answerable: passwordAnswerable(
+			boundPrompt(dependencies.Answerable, projectionOf(diagnosticsService)),
+			configService.StoredPasswordAllowed,
+		),
 	})
 	if err != nil {
 		listener.Close()
@@ -352,6 +355,22 @@ func boundPrompt(
 			return true
 		}
 		return strings.Contains(strings.ToLower(prompt), strings.ToLower(user+"@"+hostname))
+	}
+}
+
+// passwordAnswerable rechecks the live config at redemption time. A token
+// issued before a direct key was added is still consumed by Redeem, but this
+// predicate prevents the password from crossing the process boundary.
+func passwordAnswerable(
+	promptRule func(alias, prompt string) bool,
+	allowed func(alias string) (bool, error),
+) func(alias, prompt string) bool {
+	return func(alias, prompt string) bool {
+		if promptRule == nil || !promptRule(alias, prompt) || allowed == nil {
+			return false
+		}
+		permitted, err := allowed(alias)
+		return err == nil && permitted
 	}
 }
 

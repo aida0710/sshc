@@ -152,14 +152,17 @@ func New(options Options) (*Server, error) {
 	}
 	if options.Diagnostics != nil {
 		var setPreferredTerminal func(platform.TerminalChoice) (bool, error)
+		var passwordAllowed func(string) (bool, error)
 		if options.Config != nil {
 			setPreferredTerminal = options.Config.SetPreferredTerminal
+			passwordAllowed = options.Config.StoredPasswordAllowed
 		}
 		registerDiagnosticsRoutes(e, DiagnosticsHandlers{
 			Service:              options.Diagnostics,
 			Actions:              actions,
 			SetPreferredTerminal: setPreferredTerminal,
 			Passwords:            options.Passwords,
+			PasswordAllowed:      passwordAllowed,
 			AskpassHelper:        options.AskpassHelper,
 			AskpassURL:           "http://" + host + AskpassPath,
 		})
@@ -213,8 +216,14 @@ func New(options Options) (*Server, error) {
 		Program:    options.AskpassHelper,
 	})
 	registerConnectRoutes(e, ConnectHandlers{
-		Secret:     options.CLISecret,
-		Passwords:  options.Passwords,
+		Secret:    options.CLISecret,
+		Passwords: options.Passwords,
+		PasswordAllowed: func(alias string) (bool, error) {
+			if options.Config == nil {
+				return true, nil
+			}
+			return options.Config.StoredPasswordAllowed(alias)
+		},
 		AskpassURL: "http://" + host + AskpassPath,
 		Warnings:   options.ConnectWarnings,
 		Sessions:   options.Sessions,

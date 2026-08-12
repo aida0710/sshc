@@ -1,13 +1,19 @@
 package httpserver
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/handoff"
+	"sshc/internal/secret"
+	"sshc/internal/storage"
 )
 
 func connectEngine(t *testing.T, handlers ConnectHandlers) *echo.Echo {
@@ -15,6 +21,41 @@ func connectEngine(t *testing.T, handlers ConnectHandlers) *echo.Echo {
 	engine := echo.New()
 	registerConnectRoutes(engine, handlers)
 	return engine
+}
+
+func TestConnectDoesNotIssueAStoredPasswordTokenForADirectKey(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set("bastion", "legacy-password"); err != nil {
+		t.Fatal(err)
+	}
+	engine := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault, AskpassURL: "http://127.0.0.1:1/askpass",
+		PasswordAllowed: func(string) (bool, error) { return false, nil },
+	})
+	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("connect = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer connectResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.AskpassToken != "" {
+		t.Fatal("direct-key connection received an askpass token")
+	}
 }
 
 // secret がなければ、このエンドポイントは何も語らない——alias が

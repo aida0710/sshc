@@ -26,9 +26,10 @@ type DiagnosticsHandlers struct {
 	// Passwords、AskpassHelper、AskpassURL は、保存されたパスワードを持つ
 	// host に対して起動に武装させる。3 つすべてが nil または空であれば、
 	// すべての起動は素の経路をたどる。これは vault を持たないサーバーのふるまいである。
-	Passwords     *secret.Service
-	AskpassHelper string
-	AskpassURL    string
+	Passwords       *secret.Service
+	PasswordAllowed func(alias string) (bool, error)
+	AskpassHelper   string
+	AskpassURL      string
 }
 
 func registerDiagnosticsRoutes(engine *echo.Echo, handlers DiagnosticsHandlers) {
@@ -426,6 +427,12 @@ func severityName(severity config.Severity) string {
 // 欠けている部品があれば、失敗するのではなく素の起動にフォールバックする。
 // 開いて手でパスワードを尋ねる terminal は、それでも正常な接続だからである。
 func (h DiagnosticsHandlers) armed(alias string) bool {
+	if h.PasswordAllowed != nil {
+		allowed, err := h.PasswordAllowed(alias)
+		if err != nil || !allowed {
+			return false
+		}
+	}
 	return h.Passwords != nil &&
 		h.AskpassHelper != "" &&
 		h.AskpassURL != "" &&

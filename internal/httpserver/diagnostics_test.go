@@ -3,6 +3,7 @@ package httpserver
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -12,12 +13,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
 	"sshc/internal/diagnostics"
 	"sshc/internal/platform"
+	"sshc/internal/secret"
 	"sshc/internal/session"
 	"sshc/internal/storage"
 )
@@ -285,6 +288,72 @@ type recordingLauncher struct{ aliases []string }
 func (launcher *recordingLauncher) Launch(_ context.Context, alias string) error {
 	launcher.aliases = append(launcher.aliases, alias)
 	return nil
+}
+
+type recordingPasswordLauncher struct {
+	recordingLauncher
+	passwordLaunches int
+}
+
+func (launcher *recordingPasswordLauncher) LaunchWithPassword(
+	_ context.Context, alias, _, _, _ string,
+) error {
+	launcher.passwordLaunches++
+	launcher.aliases = append(launcher.aliases, alias)
+	return nil
+}
+
+func TestTerminalLaunchUsesPlainSSHWhenDirectKeyDisallowsStoredPassword(t *testing.T) {
+	engine, credentials, _, diagnosticsService := newDiagnosticsServer(t)
+	launcher := &recordingPasswordLauncher{}
+	diagnosticsService.Terminal = launcher
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set("bastion", "legacy-password"); err != nil {
+		t.Fatal(err)
+	}
+	handler := DiagnosticsHandlers{
+		Service: diagnosticsService, Actions: ActionHandlers{}, Passwords: vault,
+		AskpassHelper: "/usr/local/bin/sshc", AskpassURL: "http://127.0.0.1:1/askpass",
+		PasswordAllowed: func(string) (bool, error) { return false, nil },
+	}
+	// The action route already consumed by this focused handler is not relevant;
+	// register a second isolated endpoint with an action set that accepts once.
+	registry := actionRegistry{}
+	addDiagnosticsActions(registry, diagnosticsService)
+	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x5d}, 8192)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, err = manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine = echo.New()
+	engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked}).Middleware)
+	handler.Actions = ActionHandlers{Sessions: manager, Kinds: registry}
+	registerActionRoutes(engine, handler.Actions)
+	engine.POST("/api/v1/terminal/launch", handler.TerminalLaunch)
+
+	token := diagnosticsToken(t, engine, credentials, session.ActionTerminalLaunch, "bastion")
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/launch",
+		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("launch = %d: %s", response.Code, response.Body.String())
+	}
+	if launcher.passwordLaunches != 0 || len(launcher.aliases) != 1 {
+		t.Fatalf("launcher = passwords %d, aliases %#v", launcher.passwordLaunches, launcher.aliases)
+	}
 }
 
 // inventoryLauncher は、選べる端末のうち一つだけがこのマシンに無い状態を表す。
