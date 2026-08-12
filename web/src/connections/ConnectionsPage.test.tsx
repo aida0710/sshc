@@ -94,6 +94,38 @@ beforeEach(() => {
 });
 
 describe("ConnectionsPage", () => {
+  it("uses the expanded management tree instead of the quick-connect browser", async () => {
+    const onOpenFile = vi.fn();
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      hosts: [
+        ...overview.hosts,
+        {
+          identity: { path: "", alias: "" },
+          file: { path: "config", absolute: "/home/tester/.ssh/config" },
+          line: 9,
+          patterns: ["*"],
+          wildcard: true,
+          editable: true,
+        },
+      ],
+    } as never);
+    render(
+      <ConnectionsPage
+        onOpenFile={onOpenFile}
+        onInspector={() => undefined}
+        location={{ pathname: "/connections/servers", search: "" }}
+      />,
+    );
+
+    const tree = await screen.findByRole("navigation", { name: "Connections" });
+    expect(within(tree).getByRole("group", { name: "Arrange connections by" })).toBeInTheDocument();
+    expect(within(tree).queryByRole("group", { name: "Browse connections by" })).not.toBeInTheDocument();
+
+    await userEvent.click(within(tree).getByRole("button", { name: /Host \*/ }));
+    expect(onOpenFile).toHaveBeenCalledWith("config", 9);
+  });
+
   it("replaces the bare section URL with the default server browser and discards old query state", async () => {
     const onNavigateLocation = vi.fn();
     render(
@@ -148,7 +180,7 @@ describe("ConnectionsPage", () => {
     );
   });
 
-  it("changes group browser paths without refetching or losing the selected draft", async () => {
+  it("changes the management arrangement without refetching or losing the selected draft", async () => {
     const user = userEvent.setup();
     const onNavigateLocation = vi.fn();
     vi.mocked(configApi.overview).mockResolvedValue({
@@ -178,19 +210,16 @@ describe("ConnectionsPage", () => {
     await user.type(screen.getByLabelText("Port"), "2222");
     expect(configApi.host).toHaveBeenCalledTimes(1);
 
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    expect(screen.getByRole("heading", { name: "config" })).toBeInTheDocument();
+    expect(onNavigateLocation).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Groups" }));
-    expect(onNavigateLocation).toHaveBeenLastCalledWith(
-      "/connections/groups?path=config&host=bastion&panel=basic",
-    );
-    await user.click(screen.getByRole("button", { name: /^home,/ }));
-    expect(onNavigateLocation).toHaveBeenLastCalledWith(
-      "/connections/groups/home?path=config&host=bastion&panel=basic",
-    );
+    expect(screen.getByRole("heading", { name: "home" })).toBeInTheDocument();
     expect(configApi.host).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });
 
-  it("distinguishes an invalid connection URL from a missing declared group", async () => {
+  it("recovers from an invalid connection URL and keeps a stale group URL usable", async () => {
     const onNavigateLocation = vi.fn();
     const harness = render(
       <ConnectionsPage
@@ -211,7 +240,7 @@ describe("ConnectionsPage", () => {
         onNavigateLocation={onNavigateLocation}
       />,
     );
-    expect(await screen.findByText("Group not found.")).toBeInTheDocument();
+    expect(await screen.findByRole("navigation", { name: "Connections" })).toBeInTheDocument();
     expect(screen.queryByText("This connection URL is not recognised.")).not.toBeInTheDocument();
   });
 
@@ -587,7 +616,8 @@ describe("ConnectionsPage", () => {
     expect(screen.getByRole("heading", { name: "Choose a connection" })).toBeInTheDocument();
   });
 
-  it("keeps pattern rules out of the server browser and never asks for their host detail", async () => {
+  it("opens a pattern rule in Config and never asks for its host detail", async () => {
+    const onOpenFile = vi.fn();
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
       hosts: [
@@ -600,10 +630,11 @@ describe("ConnectionsPage", () => {
       ],
     } as never);
 
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenFile={onOpenFile} onInspector={() => undefined} />);
 
     expect(await screen.findByRole("button", { name: "bastion" })).toBeInTheDocument();
-    expect(screen.queryByText("Host *")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Host \*/ }));
+    expect(onOpenFile).toHaveBeenCalledWith("config", 9);
     expect(configApi.host).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "Choose a connection" })).toBeInTheDocument();
   });
@@ -964,14 +995,10 @@ describe("dropping in the tree", () => {
   });
 
   it("moves a direct connection into a visible child group", async () => {
-    const user = userEvent.setup();
     render(<ConnectionsPage onInspector={() => undefined} />);
-    await screen.findByRole("button", { name: /nas/ });
-    await user.click(screen.getByRole("button", { name: "Groups" }));
-    await user.click(within(screen.getByRole("list", { name: "Groups" })).getByRole("button", { name: /^home,/ }));
-    const row = screen.getByRole("button", { name: /nas/ });
+    const row = await screen.findByRole("button", { name: /nas/ });
 
-    drag(row, screen.getByRole("button", { name: /^eu,/ }), {
+    drag(row, screen.getByRole("heading", { name: "eu" }), {
       kind: "connection", path: "connections/home/nas.conf", alias: "nas", group: "home",
     });
 
@@ -1009,28 +1036,21 @@ describe("dropping in the tree", () => {
     );
     const row = await screen.findByRole("button", { name: /nas/ });
     await user.click(row);
-    await user.click(screen.getByRole("button", { name: "Groups" }));
-    await user.click(within(screen.getByRole("list", { name: "Groups" })).getByRole("button", { name: /^home,/ }));
-
-    drag(screen.getByRole("button", { name: /nas/ }), screen.getByRole("button", { name: /^eu,/ }), {
+    drag(screen.getByRole("button", { name: /nas/ }), screen.getByRole("heading", { name: "eu" }), {
       kind: "connection", path: "connections/home/nas.conf", alias: "nas", group: "home",
     });
 
     await waitFor(() => expect(onNavigateLocation).toHaveBeenLastCalledWith(
-      "/connections/groups/home?path=connections%2Fhome%2Feu%2Fnas.conf&host=nas&panel=basic",
+      "/connections/servers?path=connections%2Fhome%2Feu%2Fnas.conf&host=nas&panel=basic",
       { replace: true },
     ));
   });
 
   it("moves a connection out of every group by sending it to the entry file", async () => {
-    const user = userEvent.setup();
     render(<ConnectionsPage onInspector={() => undefined} />);
-    await screen.findByRole("button", { name: /nas/ });
-    await user.click(screen.getByRole("button", { name: "Groups" }));
-    await user.click(within(screen.getByRole("list", { name: "Groups" })).getByRole("button", { name: /^home,/ }));
-    const row = screen.getByRole("button", { name: /nas/ });
+    const row = await screen.findByRole("button", { name: /nas/ });
 
-    drag(row, within(screen.getByRole("navigation", { name: "Group path" })).getByRole("button", { name: "Groups" }), {
+    drag(row, screen.getByRole("heading", { name: "Ungrouped" }), {
       kind: "connection", path: "connections/home/nas.conf", alias: "nas", group: "home",
     });
 
@@ -1042,17 +1062,14 @@ describe("dropping in the tree", () => {
   });
 
   it("nests a group by renaming it under its new parent", async () => {
-    const user = userEvent.setup();
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     } as never);
     render(<ConnectionsPage onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
-    await user.click(screen.getByRole("button", { name: "Groups" }));
-    const groups = screen.getByRole("list", { name: "Groups" });
-    const source = within(groups).getByRole("button", { name: /^work,/ });
+    const source = screen.getByRole("heading", { name: "work" });
 
-    drag(source, within(groups).getByRole("button", { name: /^home,/ }), { kind: "group", name: "work" });
+    drag(source, screen.getByRole("heading", { name: "home" }), { kind: "group", name: "work" });
 
     await waitFor(() => expect(configApi.renameGroup).toHaveBeenCalledWith("work", "home/work"));
   });
@@ -1103,35 +1120,29 @@ describe("dropping in the tree", () => {
       />,
     );
     await user.click(await screen.findByRole("button", { name: /nas/ }));
-    await user.click(screen.getByRole("button", { name: "Groups" }));
-    const groups = screen.getByRole("list", { name: "Groups" });
-
     drag(
-      within(groups).getByRole("button", { name: /^home,/ }),
-      within(groups).getByRole("button", { name: /^work,/ }),
+      screen.getByRole("heading", { name: "home" }),
+      screen.getByRole("heading", { name: "work" }),
       { kind: "group", name: "home" },
     );
 
     await waitFor(() => expect(onNavigateLocation).toHaveBeenLastCalledWith(
-      "/connections/groups?path=connections%2Fwork%2Fhome%2Fnas.conf&host=nas&panel=basic",
+      "/connections/servers?path=connections%2Fwork%2Fhome%2Fnas.conf&host=nas&panel=basic",
       { replace: true },
     ));
   });
 
   it("takes a nested group back to the top level", async () => {
-    const user = userEvent.setup();
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     } as never);
     render(<ConnectionsPage onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
-    await user.click(screen.getByRole("button", { name: "Groups" }));
-    await user.click(within(screen.getByRole("list", { name: "Groups" })).getByRole("button", { name: /^home,/ }));
-    const source = screen.getByRole("button", { name: /^eu,/ });
+    const source = screen.getByRole("heading", { name: "eu" });
 
     drag(
       source,
-      within(screen.getByRole("navigation", { name: "Group path" })).getByRole("button", { name: "Groups" }),
+      screen.getByRole("heading", { name: "Ungrouped" }),
       { kind: "group", name: "home/eu" },
     );
 
