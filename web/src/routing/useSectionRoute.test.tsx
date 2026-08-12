@@ -63,7 +63,7 @@ describe("useSectionRoute", () => {
     const { result } = renderHook(() => useSectionRoute());
 
     act(() => {
-      window.history.pushState(null, "", "/connections/groups/home?path=conf.d%2F10-home.conf&host=nas&panel=advanced&advanced=jump");
+      window.history.pushState(null, "", "/connections/servers?path=conf.d%2F10-home.conf&host=nas&panel=advanced&advanced=jump");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 

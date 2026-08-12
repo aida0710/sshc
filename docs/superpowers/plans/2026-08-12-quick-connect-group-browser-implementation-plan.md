@@ -4,7 +4,7 @@
 
 **Goal:** 接続画面を常時展開の管理ツリーへ戻し、サーバー／グループのドリルダウンをホームのクイック接続へ移す。
 
-**Architecture:** `connectionBrowser.ts` の副作用を持たない index／projection はホームで再利用し、接続画面には管理操作を持つ `ConnectionTree` を復元する。接続 URL は現在の `/connections/servers` 契約を保ち、クイック接続のブラウザー位置は `OverviewPanel` の一時 state に限定する。
+**Architecture:** `connectionBrowser.ts` の副作用を持たない index／projection はホームで再利用し、接続画面には管理操作を持つ `ConnectionTree` を復元する。接続 URL は `/connections/servers` に一本化し、クイック接続のブラウザー位置は `OverviewPanel` の一時 state に限定する。
 
 **Tech Stack:** React 19、TypeScript、Tailwind CSS、Vitest、Testing Library、Playwright、Vite、Go embedded UI
 
@@ -14,7 +14,7 @@
 - ホームの閲覧だけでは Terminal、SSH、診断、`ssh -G` を開始しない。
 - 接続画面のグループ／ファイル表示、パターンルール、ドラッグ移動を復元する。
 - クイック接続にドラッグ移動を持ち込まない。
-- 接続 URL、API、SSH config、vault、秘密情報モデルを変更しない。
+- 接続 identity URL は `/connections/servers` に一本化し、API、SSH config、vault、秘密情報モデルは変更しない。
 - クイック接続の表示状態を URL、localStorage、metadata へ保存しない。
 - 新しい依存パッケージを追加しない。
 
