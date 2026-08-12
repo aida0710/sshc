@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -48,55 +49,35 @@ const (
 	URLVariable = "SSHC_ASKPASS_URL"
 	// TokenVariable は、この接続のためのワンタイムトークン。
 	TokenVariable = "SSHC_ASKPASS_TOKEN"
+	// KindVariable は、トークンが回答できる認証情報の種類を保持する。
+	// アカウントパスワードと鍵パスフレーズをプロンプトの文面だけで取り違えない。
+	KindVariable = "SSHC_ASKPASS_KIND"
+	// KeyPathVariable is the exact, resolved private-key path selected when
+	// the token was issued. The helper compares it before presenting the bearer
+	// token, so a prompt for another key never consumes or exposes that token.
+	KeyPathVariable = "SSHC_ASKPASS_KEY_PATH"
+
+	askpassKindKeyPassphrase = "key_passphrase"
 
 	// AskpassTokenHeader はトークンを運ぶ。独自ヘッダーは CORS のプリフライトを強制し、
 	// このサーバーはそれに応答しないため、エンドポイントをどれだけ知っていてもウェブ
 	// ページから到達することはできない。
 	AskpassTokenHeader = "X-SSHC-Askpass"
-
-	// passwordPromptSuffix は、リモートアカウントのパスワードを求めるときに OpenSSH が
-	// 末尾に付ける文字列。書式は "%.30s@%.128s's password: " である。
-	passwordPromptSuffix = "'s password:"
 )
 
-// refusalMarkers はプロンプトを無条件に失格させる。下のルールは許可リスト方式なので、
-// これは二重の安全策である。万一パスワードのサフィックスで終わりつつこれらのいずれか
-// に触れているプロンプトがあっても、やはり拒否される。
-var refusalMarkers = []string{
-	"passphrase",
-	"continue connecting",
-	"fingerprint",
-	"yes/no",
-	"verification code",
-	"one-time",
-	"token",
-}
-
-// AnswerablePrompt は、このプロンプトがリモートアカウントのパスワードを求めている
-// のか、そしてそれ以外の何物でもないのかを報告する。
-//
-// 既定は拒否であり、それこそがこの関数の要点である。askpass を強制すると、対話的な
-// 問いが *すべて* このプログラムを通る。最初の接続が行う唯一の検査であるホスト鍵の
-// 確認 — "Are you sure you want to continue connecting
-// (yes/no/[fingerprint])?" — も含めてだ。その問いに答えるヘルパーは、検査を取り
-// 除いてしまっている。鍵のパスフレーズを求めるプロンプトにアカウントのパスワードで
-// 答えるヘルパーは、求めてもいない問いにアカウントのパスワードを渡してしまって
-// いる。
-//
-// サーバーも何かを返す前に同じルールを適用するので、ヘルパーの呼び方を変えてこの
-// 検査を飛ばすことはできない。ここにも置いてあるのは、答えられないプロンプトが往復の
-// コストもトークンの消費も生まないようにするためである。
-func AnswerablePrompt(prompt string) bool {
-	trimmed := strings.ToLower(strings.TrimRight(prompt, " \t\r\n"))
-	if trimmed == "" {
+// keyPassphrasePrompt は OpenSSH が秘密鍵の復号値を求める問いだけを受け入れる。
+// どの鍵かの照合は、トークンを発行したサーバー側でも行う。
+func keyPassphrasePrompt(prompt, expectedPath string) bool {
+	if expectedPath == "" {
 		return false
 	}
-	for _, marker := range refusalMarkers {
-		if strings.Contains(trimmed, marker) {
-			return false
-		}
+	trimmed := strings.TrimRight(prompt, " \t\r\n")
+	const prefix = "Enter passphrase for key '"
+	if !strings.HasPrefix(trimmed, prefix) || !strings.HasSuffix(trimmed, "':") {
+		return false
 	}
-	return strings.HasSuffix(trimmed, passwordPromptSuffix)
+	promptPath := strings.TrimSuffix(strings.TrimPrefix(trimmed, prefix), "':")
+	return filepath.Clean(promptPath) == filepath.Clean(expectedPath)
 }
 
 // 終了ステータス。OpenSSH は非ゼロをすべて「回答なし」として扱うので、この区別は
@@ -149,6 +130,8 @@ func runAskpass(
 	alias := lookup(AliasVariable)
 	endpoint := lookup(URLVariable)
 	token := lookup(TokenVariable)
+	kind := lookup(KindVariable)
+	keyPath := lookup(KeyPathVariable)
 	if alias == "" || endpoint == "" || token == "" {
 		// 三つがそろわなければ問い合わせる相手もなく、その問いが認可されたものだと
 		// 示す手段もない。違うホストに答えれば、そのホストへ資格情報を漏らすことに
@@ -160,19 +143,17 @@ func runAskpass(
 		return refuse(errOut, "sshc askpass refuses to send a password to "+endpoint)
 	}
 
-	if !AnswerablePrompt(prompt) {
+	answerable := kind == askpassKindKeyPassphrase && keyPassphrasePrompt(prompt, keyPath)
+	if !answerable {
 		return relayToHuman(prompt, out, errOut, openTerminal)
 	}
 
 	password, status := fetchPassword(ctx, client, endpoint, token, alias, prompt)
 	if status != askpassOK {
-		switch status {
-		case askpassNoEntry:
-			writeLine(errOut, "sshc has no stored password for "+alias+", or its vault is locked")
-		default:
-			writeLine(errOut, "sshc refused the request for "+alias+"'s password")
-		}
-		return status
+		// A saved value is an optimisation, not the only way to unlock a key.
+		// If the vault was locked or the assignment changed, preserve ordinary
+		// OpenSSH behaviour and let the owner answer.
+		return relayToHuman(prompt, out, errOut, openTerminal)
 	}
 
 	// OpenSSH は末尾の改行をひとつだけ取り除くので、正当に空白で終わるパスワードも

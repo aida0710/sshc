@@ -1,6 +1,11 @@
 package main
 
 import (
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -39,9 +44,9 @@ func TestWhatCountsAsAConnectInvocation(t *testing.T) {
 
 // ここで設定する変数は、OpenSSH が読むものと一致していなければならない。
 //
-// syscall.Exec は配列をそのまま渡し、getenv はその中で最初に一致したものを返す。
+// exec.Cmd は配列をそのまま渡し、getenv はその中で最初に一致したものを返す。
 // したがって継承した環境に追記する方式では、ユーザーが何年も前にシェルのプロファイル
-// でエクスポートした SSH_ASKPASS に負ける — しかも負けながら、保存済みパスワードと
+// でエクスポートした SSH_ASKPASS に負ける — しかも負けながら、保存済み鍵パスフレーズと
 // 引き換えられるワンタイムトークンをそのプログラムに渡してしまう。この攻撃の敷居は、
 // エクスポートされた変数ひとつである。
 func TestConnectEnvironmentReplacesWhatItSetsRatherThanAppending(t *testing.T) {
@@ -52,8 +57,9 @@ func TestConnectEnvironmentReplacesWhatItSetsRatherThanAppending(t *testing.T) {
 		"SSHC_ASKPASS_TOKEN=stale",
 		"PATH=/usr/bin",
 	}
-	built := connectEnvironment(inherited, "/Users/tester/.local/bin/sshc",
-		"http://127.0.0.1:1/askpass", "the-one-time-token", "bastion")
+	built := connectEnvironmentForCredential(inherited, "/Users/tester/.local/bin/sshc",
+		"http://127.0.0.1:1/askpass", "the-one-time-token", "bastion",
+		askpassKindKeyPassphrase, "/Users/tester/.ssh/id_server")
 
 	counted := map[string][]string{}
 	for _, entry := range built {
@@ -69,6 +75,7 @@ func TestConnectEnvironmentReplacesWhatItSetsRatherThanAppending(t *testing.T) {
 		URLVariable:           "http://127.0.0.1:1/askpass",
 		TokenVariable:         "the-one-time-token",
 		AliasVariable:         "bastion",
+		KeyPathVariable:       "/Users/tester/.ssh/id_server",
 	} {
 		if len(counted[name]) != 1 {
 			t.Errorf("%s appears %d times: %v", name, len(counted[name]), counted[name])
@@ -88,10 +95,78 @@ func TestConnectEnvironmentReplacesWhatItSetsRatherThanAppending(t *testing.T) {
 	}
 }
 
+func TestKeyPassphraseConnectionCarriesItsCredentialKindToAskpass(t *testing.T) {
+	built := connectEnvironmentForCredential(nil, "/opt/sshc", "http://127.0.0.1:1/askpass",
+		"one-time-token", "bastion", askpassKindKeyPassphrase, "/resolved/.ssh/id_server")
+	found := false
+	pathFound := false
+	for _, entry := range built {
+		if entry == KindVariable+"="+askpassKindKeyPassphrase {
+			found = true
+		}
+		if entry == KeyPathVariable+"=/resolved/.ssh/id_server" {
+			pathFound = true
+		}
+	}
+	if !found {
+		t.Fatalf("environment = %#v, want the key-passphrase kind", built)
+	}
+	if !pathFound {
+		t.Fatalf("environment = %#v, want the exact key path", built)
+	}
+}
+
+func TestOnlyKeyPassphraseConnectionsUseTheFrozenConfiguration(t *testing.T) {
+	if got := connectArguments("bastion", askpassKindKeyPassphrase, "/dev/fd/3", "/resolved/.ssh/id_server"); !slices.Equal(got,
+		[]string{"ssh", "-F", "/dev/fd/3", "-i", "/resolved/.ssh/id_server", "-o", "IdentitiesOnly=yes", "--", "bastion"}) {
+		t.Fatalf("key-passphrase arguments = %#v", got)
+	}
+	if got := connectArguments("bastion", "", "", ""); !slices.Equal(got,
+		[]string{"ssh", "--", "bastion"}) {
+		t.Fatalf("unarmed arguments = %#v", got)
+	}
+}
+
+func TestConnectionConfigIsPrivateReadableByRealSSHAndRemovedAfterUse(t *testing.T) {
+	path, cleanup, err := createConnectionConfig("Host bastion\n\tHostName example.invalid\n\tUser tester\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("temporary config mode = %04o, want 0600", info.Mode().Perm())
+	}
+	directory, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if directory.Mode().Perm() != 0o700 {
+		t.Fatalf("temporary directory mode = %04o, want 0700", directory.Mode().Perm())
+	}
+	ssh, err := exec.LookPath("ssh")
+	if err != nil {
+		t.Skip("OpenSSH is not installed")
+	}
+	var output, errOut strings.Builder
+	status := executeSSH(ssh, []string{"ssh", "-G", "-F", path, "--", "bastion"}, os.Environ(),
+		strings.NewReader(""), &output, &errOut)
+	if status != 0 || !strings.Contains(output.String(), "user tester") {
+		t.Fatalf("status = %d, stdout = %q, stderr = %q", status, output.String(), errOut.String())
+	}
+	cleanup()
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary config survived cleanup: %v", err)
+	}
+}
+
 // トークンがなければ何も武装されない。ユーザーの環境に残った古い変数もまた、それを
 // 武装させてはならない。
 func TestConnectEnvironmentDropsStaleArmingWhenNothingIsStored(t *testing.T) {
-	built := connectEnvironment([]string{"SSH_ASKPASS=/tmp/not-ours", "SSHC_ASKPASS_TOKEN=stale"}, "", "", "", "")
+	built := connectEnvironmentForCredential([]string{"SSH_ASKPASS=/tmp/not-ours", "SSHC_ASKPASS_TOKEN=stale"}, "", "", "", "", "", "")
 	for _, entry := range built {
 		for _, name := range []string{"SSH_ASKPASS=", TokenVariable + "=", URLVariable + "=", AliasVariable + "="} {
 			if strings.HasPrefix(entry, name) {

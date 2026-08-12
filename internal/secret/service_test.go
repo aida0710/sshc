@@ -203,6 +203,106 @@ func TestATokenIsSpentByItsFirstUse(t *testing.T) {
 	}
 }
 
+func TestAKeyPassphraseTokenReturnsOnlyThePassphraseBoundToItsKey(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "server-key", "saved key phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignCredential(secret.KindKeyPassphrase, "id_ed25519_server", "server-key"); err != nil {
+		t.Fatal(err)
+	}
+
+	const promptPath = "/Users/tester/.ssh/id_ed25519_server"
+	token, err := service.IssueKeyPassphraseToken("bastion", "id_ed25519_server", promptPath, "evidence-v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := service.RedeemKeyPassphrase(token, "bastion",
+		"Enter passphrase for key '/Users/tester/.ssh/id_ed25519_server': ",
+		func(alias, relativePath, expectedPath, evidence, _ string) bool {
+			return alias == "bastion" && relativePath == "id_ed25519_server" && expectedPath == promptPath && evidence == "evidence-v1"
+		})
+	if err != nil {
+		t.Fatalf("RedeemKeyPassphrase = %v", err)
+	}
+	if value != "saved key phrase" {
+		t.Fatalf("passphrase = %q", value)
+	}
+	if _, err := service.RedeemKeyPassphrase(token, "bastion", "same prompt", func(_, _, _, _, _ string) bool { return true }); !errors.Is(err, secret.ErrUnknownToken) {
+		t.Fatalf("second redemption = %v, want ErrUnknownToken", err)
+	}
+}
+
+func TestAKeyPassphraseTokenRejectsUnsafeSubjectsAndMissingValues(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	for _, subject := range []string{"", "../outside", "/absolute", "a/../../outside"} {
+		if _, err := service.IssueKeyPassphraseToken("bastion", subject, "/Users/tester/.ssh/id_key", "evidence"); !errors.Is(err, secret.ErrUnsafeName) {
+			t.Errorf("subject %q = %v, want ErrUnsafeName", subject, err)
+		}
+	}
+	if _, err := service.IssueKeyPassphraseToken("bastion", "id_missing", "/Users/tester/.ssh/id_missing", "evidence"); !errors.Is(err, secret.ErrNoPassword) {
+		t.Fatalf("missing passphrase = %v, want ErrNoPassword", err)
+	}
+}
+
+func TestAKeyPassphraseTokenIsSpentByTheFirstPresentedKeyPrompt(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "server-key", "saved key phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignCredential(secret.KindKeyPassphrase, "id_server", "server-key"); err != nil {
+		t.Fatal(err)
+	}
+	token, err := service.IssueKeyPassphraseToken("bastion", "id_server", "/Users/tester/.ssh/id_server", "evidence")
+	if err != nil {
+		t.Fatal(err)
+	}
+	answerable := func(_ string, _ string, expectedPath, _ string, prompt string) bool {
+		return strings.Contains(prompt, expectedPath)
+	}
+	if _, err := service.RedeemKeyPassphrase(token, "bastion",
+		"Enter passphrase for key '/Users/tester/.ssh/id_default': ", answerable); !errors.Is(err, secret.ErrUnknownToken) {
+		t.Fatalf("other key prompt = %v, want ErrUnknownToken", err)
+	}
+	value, err := service.RedeemKeyPassphrase(token, "bastion",
+		"Enter passphrase for key '/Users/tester/.ssh/id_server': ", answerable)
+	if !errors.Is(err, secret.ErrUnknownToken) || value != "" {
+		t.Fatalf("spent token = %q, %v, want ErrUnknownToken", value, err)
+	}
+}
+
+func TestAKeyTokenDoesNotSurvivePassphraseReplacement(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "server-key", "old phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignCredential(secret.KindKeyPassphrase, "id_server", "server-key"); err != nil {
+		t.Fatal(err)
+	}
+	token, err := service.IssueKeyPassphraseToken("bastion", "id_server", "/Users/tester/.ssh/id_server", "evidence")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "server-key", "new phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.RedeemKeyPassphrase(token, "bastion", "prompt", func(_, _, _, _, _ string) bool { return true }); !errors.Is(err, secret.ErrUnknownToken) {
+		t.Fatalf("redeem after replacement = %v, want ErrUnknownToken", err)
+	}
+}
+
 func TestATokenIsBoundToItsAlias(t *testing.T) {
 	// 盗まれたトークンの価値は、多くともユーザーがいま接続を選んだホスト一つ分で
 	// あるべきで、vault 全体であってはならない。

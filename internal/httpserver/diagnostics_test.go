@@ -325,7 +325,6 @@ func TestTerminalLaunchUsesPlainSSHWhenDirectKeyDisallowsStoredPassword(t *testi
 	handler := DiagnosticsHandlers{
 		Service: diagnosticsService, Actions: ActionHandlers{}, Passwords: vault,
 		AskpassHelper: "/usr/local/bin/sshc", AskpassURL: "http://127.0.0.1:1/askpass",
-		PasswordAllowed: func(string) (bool, error) { return false, nil },
 	}
 	// The action route already consumed by this focused handler is not relevant;
 	// register a second isolated endpoint with an action set that accepts once.
@@ -353,6 +352,62 @@ func TestTerminalLaunchUsesPlainSSHWhenDirectKeyDisallowsStoredPassword(t *testi
 	}
 	if launcher.passwordLaunches != 0 || len(launcher.aliases) != 1 {
 		t.Fatalf("launcher = passwords %d, aliases %#v", launcher.passwordLaunches, launcher.aliases)
+	}
+}
+
+func TestTerminalLaunchUsesSshcWhenTheDirectKeyHasAStoredPassphrase(t *testing.T) {
+	engine, credentials, _, diagnosticsService := newDiagnosticsServer(t)
+	launcher := &recordingPasswordLauncher{}
+	diagnosticsService.Terminal = launcher
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetCredential(secret.KindKeyPassphrase, "server-key", "saved key phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.AssignCredential(secret.KindKeyPassphrase, "id_ed25519_server", "server-key"); err != nil {
+		t.Fatal(err)
+	}
+	handler := DiagnosticsHandlers{
+		Service: diagnosticsService, Actions: ActionHandlers{}, Passwords: vault,
+		AskpassHelper: "/usr/local/bin/sshc", AskpassURL: "http://127.0.0.1:1/askpass",
+		KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
+			return "id_ed25519_server", filepath.Join(home, ".ssh", "id_ed25519_server"), "config", "evidence", alias == "bastion", nil
+		},
+	}
+	registry := actionRegistry{}
+	addDiagnosticsActions(registry, diagnosticsService)
+	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x6d}, 8192)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, err = manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine = echo.New()
+	engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked}).Middleware)
+	handler.Actions = ActionHandlers{Sessions: manager, Kinds: registry}
+	registerActionRoutes(engine, handler.Actions)
+	engine.POST("/api/v1/terminal/launch", handler.TerminalLaunch)
+
+	token := diagnosticsToken(t, engine, credentials, session.ActionTerminalLaunch, "bastion")
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/launch",
+		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("launch = %d: %s", response.Code, response.Body.String())
+	}
+	if launcher.passwordLaunches != 1 || len(launcher.aliases) != 1 {
+		t.Fatalf("launcher = credentials %d, aliases %#v", launcher.passwordLaunches, launcher.aliases)
 	}
 }
 

@@ -1,13 +1,17 @@
 package application
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"sshc/internal/config"
 	"sshc/internal/effective"
+	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
 )
 
@@ -128,8 +132,231 @@ func (s *Service) StoredPasswordAllowed(alias string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if credentialEnvironmentUnsafe(graph, alias) {
+		return false, nil
+	}
 	_, configured := directIdentityFileForAlias(graph, alias)
 	return !configured, nil
+}
+
+// credentialEnvironmentUnsafe reports configuration that can execute or
+// spawn another process while SSHC_ASKPASS_TOKEN is present. Environment
+// variables are inherited by every child, so such configurations must use
+// ordinary interactive OpenSSH rather than receive a bearer capability.
+func credentialEnvironmentUnsafe(graph *config.Graph, alias string) bool {
+	for _, diagnostic := range graph.Diagnostics {
+		if diagnostic.Code == config.DiagnosticIncludeConditional {
+			return true
+		}
+	}
+	unsafe := false
+	WalkDirectives(graph, func(visit Visit) bool {
+		if visit.Block.Kind == config.BlockMatch {
+			unsafe = true
+			return false
+		}
+		if visit.Block.Kind == config.BlockHost && !MatchHostLine(visit.Block.Patterns, alias) {
+			return true
+		}
+		if config.EqualKeyword(visit.Line.Keyword, "CanonicalizeHostname") {
+			for _, value := range visit.Line.Values() {
+				// Canonicalisation makes OpenSSH parse the configuration again
+				// against a different host name. A Host block that does not match
+				// alias here could then add another key or executable directive.
+				// This static policy deliberately does not predict DNS results.
+				if value != "" && !strings.EqualFold(value, "no") {
+					unsafe = true
+					return false
+				}
+			}
+		}
+		if executableCredentialDirective(visit.Line) {
+			unsafe = true
+			return false
+		}
+		return true
+	})
+	return unsafe
+}
+
+// DirectKeyPassphraseTarget is the one concrete, workspace-owned private-key
+// path selected directly by a host block. RelativePath is the vault subject;
+// PromptPath is the spelling OpenSSH uses when asking to decrypt that key.
+type DirectKeyPassphraseTarget struct {
+	RelativePath string
+	PromptPath   string
+	// ConfigSnapshot is the resolved user configuration with Includes inlined
+	// and the one eligible IdentityFile removed. The CLI supplies PromptPath
+	// with -i instead. Running ssh with this file disables the unchecked system
+	// configuration and prevents a later ~/.ssh symlink change from selecting
+	// another private key.
+	ConfigSnapshot string
+	// Evidence commits the capability to the exact configuration snapshot and
+	// private-key bytes observed when the connection was requested.
+	Evidence string
+}
+
+// directKeyPassphraseTarget accepts only a configuration whose complete,
+// statically evaluable IdentityFile set contains one workspace key. Match,
+// conditional Include, executable directives, and ProxyJump are deliberately
+// refused: all can make a bearer-token environment reach another process or
+// make the effective key set depend on facts this parser does not execute.
+func (s *Service) directKeyPassphraseTarget(alias string) (DirectKeyPassphraseTarget, bool, error) {
+	if err := ValidateAlias(alias); err != nil {
+		return DirectKeyPassphraseTarget{}, false, err
+	}
+	graph, err := s.resolve()
+	if err != nil {
+		return DirectKeyPassphraseTarget{}, false, err
+	}
+	if credentialEnvironmentUnsafe(graph, alias) {
+		return DirectKeyPassphraseTarget{}, false, nil
+	}
+	values := make([]string, 0, 2)
+	sawNone := false
+	WalkDirectives(graph, func(visit Visit) bool {
+		if visit.Block.Kind == config.BlockHost && !MatchHostLine(visit.Block.Patterns, alias) {
+			return true
+		}
+		if !config.EqualKeyword(visit.Line.Keyword, "IdentityFile") {
+			return true
+		}
+		for _, value := range visit.Line.Values() {
+			value = strings.TrimSpace(value)
+			if strings.EqualFold(value, "none") {
+				sawNone = true
+			} else if value != "" {
+				values = append(values, value)
+			}
+		}
+		return true
+	})
+	if sawNone || len(values) != 1 {
+		return DirectKeyPassphraseTarget{}, false, nil
+	}
+	relative, promptPath, ok := keys.ResolveWorkspaceKeyPath(s.workspace, values[0])
+	if !ok {
+		return DirectKeyPassphraseTarget{}, false, nil
+	}
+	// OpenSSH prints this field through %.100s. A truncated path is not a
+	// unique key identity, so it is never eligible for automatic disclosure.
+	if len([]byte(promptPath)) > 100 {
+		return DirectKeyPassphraseTarget{}, false, nil
+	}
+	configurationDigest, err := config.Digest(graph)
+	if err != nil {
+		return DirectKeyPassphraseTarget{}, false, nil
+	}
+	snapshot, err := config.Snapshot(graph)
+	if err != nil {
+		return DirectKeyPassphraseTarget{}, false, nil
+	}
+	frozen, ok := freezeIdentityFile(snapshot, alias)
+	if !ok {
+		return DirectKeyPassphraseTarget{}, false, nil
+	}
+	return DirectKeyPassphraseTarget{
+		RelativePath:   relative,
+		PromptPath:     promptPath,
+		ConfigSnapshot: string(frozen),
+		Evidence:       configurationDigest,
+	}, true, nil
+}
+
+// freezeIdentityFile removes the sole effective IdentityFile from the already
+// inlined snapshot; the CLI supplies its resolved path through -i. The
+// eligibility pass above has proved there is exactly one. Rechecking keeps this
+// helper fail-closed if parsing and policy ever drift apart.
+func freezeIdentityFile(snapshot []byte, alias string) ([]byte, bool) {
+	file := config.Parse(snapshot)
+	rewritten := 0
+	for index, line := range file.Lines {
+		if line.Kind != config.LineDirective || !config.EqualKeyword(line.Keyword, "IdentityFile") {
+			continue
+		}
+		block := file.BlockAt(index)
+		if block.Kind == config.BlockHost && !MatchHostLine(block.Patterns, alias) {
+			continue
+		}
+		values := line.Values()
+		if len(values) != 1 || strings.EqualFold(strings.TrimSpace(values[0]), "none") {
+			return nil, false
+		}
+		// The CLI supplies this one key with -i. Removing the source directive
+		// avoids offering the same encrypted file twice while preserving the
+		// original block and every other connection option in the snapshot.
+		file.Lines[index] = config.Line{Kind: config.LineBlank, Ending: line.Ending}
+		rewritten++
+	}
+	if rewritten != 1 {
+		return nil, false
+	}
+	return file.Render(), true
+}
+
+func executableCredentialDirective(line config.Line) bool {
+	switch strings.ToLower(line.Keyword) {
+	case "proxycommand", "proxyjump", "knownhostscommand", "localcommand", "remotecommand",
+		"pkcs11provider", "securitykeyprovider", "xauthlocation":
+		for _, value := range line.Values() {
+			if value != "" && !strings.EqualFold(value, "none") {
+				return true
+			}
+		}
+	case "sendenv":
+		// SendEnv patterns select variables from ssh's own environment and can
+		// therefore transmit the bearer capability to a cooperating server.
+		for _, pattern := range line.Values() {
+			pattern = strings.TrimSpace(pattern)
+			if strings.HasPrefix(pattern, "-") {
+				continue
+			}
+			for _, name := range []string{
+				"SSHC_ASKPASS_TOKEN", "SSHC_ASKPASS_URL", "SSHC_ASKPASS_ALIAS",
+				"SSHC_ASKPASS_KIND", "SSHC_ASKPASS_KEY_PATH",
+			} {
+				if matched, err := filepath.Match(pattern, name); err == nil && matched {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func digestKeyTarget(configurationDigest, keyDigest string) string {
+	digest := sha256.New()
+	digest.Write([]byte(configurationDigest))
+	digest.Write([]byte{0})
+	digest.Write([]byte(keyDigest))
+	return hex.EncodeToString(digest.Sum(nil))
+}
+
+// DirectKeyPassphraseTarget additionally requires the resolved path to remain
+// a current encrypted private key. A stale vault entry for a replaced or plain
+// file must never arm askpass.
+func (s *Service) DirectKeyPassphraseTarget(
+	alias string,
+	inventory func() (*keys.Inventory, error),
+) (DirectKeyPassphraseTarget, bool, error) {
+	target, ok, err := s.directKeyPassphraseTarget(alias)
+	if err != nil || !ok || inventory == nil {
+		return DirectKeyPassphraseTarget{}, false, err
+	}
+	current, err := inventory()
+	if err != nil {
+		return DirectKeyPassphraseTarget{}, false, err
+	}
+	for _, item := range current.Items {
+		if filepath.Clean(item.RelativePath) == filepath.Clean(filepath.FromSlash(target.RelativePath)) {
+			if item.Kind != keys.KindPrivateKey || !item.Encrypted || item.ContentDigest == "" {
+				return DirectKeyPassphraseTarget{}, false, nil
+			}
+			target.Evidence = digestKeyTarget(target.Evidence, item.ContentDigest)
+			return target, true, nil
+		}
+	}
+	return DirectKeyPassphraseTarget{}, false, nil
 }
 
 // hostKeyIsKnown は、known_hosts が既にこのホストの鍵を保持しているかを報告する。
