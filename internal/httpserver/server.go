@@ -62,6 +62,9 @@ type Options struct {
 	// Answerable はプロンプトの規則であり、server とヘルパーが 2 つの
 	// 異なる規則へずれないよう注入されている。
 	Answerable func(alias, prompt string) bool
+	// KeyPassphraseAnswerable verifies the exact OpenSSH prompt path bound into
+	// a key-passphrase token.
+	KeyPassphraseAnswerable func(alias, relativePath, expectedPath, evidence, prompt string) bool
 	// Sync はワークスペースを object store へ運ぶ。nil の service は
 	// すべての sync ルートを未登録のままにする。
 	Sync *remotesync.Service
@@ -152,19 +155,23 @@ func New(options Options) (*Server, error) {
 	}
 	if options.Diagnostics != nil {
 		var setPreferredTerminal func(platform.TerminalChoice) (bool, error)
-		var passwordAllowed func(string) (bool, error)
 		if options.Config != nil {
 			setPreferredTerminal = options.Config.SetPreferredTerminal
-			passwordAllowed = options.Config.StoredPasswordAllowed
 		}
 		registerDiagnosticsRoutes(e, DiagnosticsHandlers{
 			Service:              options.Diagnostics,
 			Actions:              actions,
 			SetPreferredTerminal: setPreferredTerminal,
 			Passwords:            options.Passwords,
-			PasswordAllowed:      passwordAllowed,
-			AskpassHelper:        options.AskpassHelper,
-			AskpassURL:           "http://" + host + AskpassPath,
+			KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
+				if options.Config == nil || options.Keys == nil {
+					return "", "", "", "", false, nil
+				}
+				target, ok, err := options.Config.DirectKeyPassphraseTarget(alias, options.Keys.Inventory)
+				return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
+			},
+			AskpassHelper: options.AskpassHelper,
+			AskpassURL:    "http://" + host + AskpassPath,
 		})
 	}
 	if options.KnownHosts != nil {
@@ -200,11 +207,12 @@ func New(options Options) (*Server, error) {
 			keyHosts = options.Config.KeyHosts
 		}
 		registerPasswordRoutes(e, PasswordHandlers{
-			Service:        options.Passwords,
-			KeyHosts:       keyHosts,
-			Answerable:     options.Answerable,
-			Eligibility:    eligibility,
-			ResealSnapshot: reseal,
+			Service:                 options.Passwords,
+			KeyHosts:                keyHosts,
+			Answerable:              options.Answerable,
+			KeyPassphraseAnswerable: options.KeyPassphraseAnswerable,
+			Eligibility:             eligibility,
+			ResealSnapshot:          reseal,
 		})
 	}
 	// `sshc <alias>` は、1 つの接続に必要なものをここに求める。secret は
@@ -218,11 +226,12 @@ func New(options Options) (*Server, error) {
 	registerConnectRoutes(e, ConnectHandlers{
 		Secret:    options.CLISecret,
 		Passwords: options.Passwords,
-		PasswordAllowed: func(alias string) (bool, error) {
-			if options.Config == nil {
-				return true, nil
+		KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
+			if options.Config == nil || options.Keys == nil {
+				return "", "", "", "", false, nil
 			}
-			return options.Config.StoredPasswordAllowed(alias)
+			target, ok, err := options.Config.DirectKeyPassphraseTarget(alias, options.Keys.Inventory)
+			return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
 		},
 		AskpassURL: "http://" + host + AskpassPath,
 		Warnings:   options.ConnectWarnings,

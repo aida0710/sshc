@@ -2,8 +2,53 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 )
+
+func TestDigestChangesWithAnyResolvedConfigurationBytes(t *testing.T) {
+	first, err := resolverFor(map[string]string{
+		"/Users/tester/.ssh/config": "Host bastion\n\tHostName first.example\n",
+	}).Resolve("/Users/tester/.ssh/config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := resolverFor(map[string]string{
+		"/Users/tester/.ssh/config": "Host bastion\n\tHostName second.example\n",
+	}).Resolve("/Users/tester/.ssh/config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstDigest, err := Digest(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDigest, err := Digest(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstDigest == "" || firstDigest == secondDigest {
+		t.Fatalf("digests = %q / %q", firstDigest, secondDigest)
+	}
+}
+
+func TestSnapshotRefusesAnInlinedGraphLargerThanTheCLIResponseLimit(t *testing.T) {
+	files := map[string]string{
+		"/Users/tester/.ssh/config": "Include conf.d/*.conf\n",
+	}
+	chunk := strings.Repeat("# padding\n", (1<<20)/len("# padding\n")-1)
+	for index := range 5 {
+		files[fmt.Sprintf("/Users/tester/.ssh/conf.d/%d.conf", index)] = chunk
+	}
+	graph, err := resolverFor(files).Resolve("/Users/tester/.ssh/config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Snapshot(graph); !errors.Is(err, ErrSnapshotIncomplete) {
+		t.Fatalf("Snapshot = %v, want ErrSnapshotIncomplete", err)
+	}
+}
 
 func TestSnapshotInlinesEveryResolvedIncludeInOpenSSHOrder(t *testing.T) {
 	graph, err := resolverFor(map[string]string{

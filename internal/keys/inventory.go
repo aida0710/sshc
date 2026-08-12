@@ -81,9 +81,12 @@ type Item struct {
 	Permission     string
 	PermissionRisk bool
 	SizeBytes      int64
-	Certificate    *CertificateInfo
-	References     []Reference
-	Notes          []string
+	// ContentDigest binds short-lived local capabilities to the exact private
+	// key bytes without exposing those bytes through HTTP responses.
+	ContentDigest string `json:"-"`
+	Certificate   *CertificateInfo
+	References    []Reference
+	Notes         []string
 }
 
 // UnreadableFile は、スキャナが意図的に解釈を拒んだファイル。
@@ -259,6 +262,7 @@ func (scanner *Scanner) classifyFile(inventory *Inventory, absolute, relative st
 		inventory.Unreadable = append(inventory.Unreadable, UnreadableFile{RelativePath: relative, Reason: reason})
 		return item
 	}
+	item.ContentDigest = storage.Digest(contents)
 	classify(&item, contents)
 	if item.Kind == KindPrivateKey && info.Mode().Perm()&0o077 != 0 {
 		item.PermissionRisk = true

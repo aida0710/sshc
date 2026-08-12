@@ -56,8 +56,8 @@ build:
 
 # 統合テストのスイートは、コンテナ内の本物の S3 実装と本物の sshd に対して走る。
 # 密閉されたスイートには答えられない二つの問いに答える。本物のオブジェクトストアが
-# 条件付き PUT に何をするのか、そして askpass ヘルパーが、パスワードを求めてくる
-# サーバーに対して実際に認証を通せるのか、である。
+# 条件付き PUT に何をするのか、そして askpass ヘルパーが、暗号化された秘密鍵を
+# 保存済みの鍵パスフレーズで実際に開いて認証を通せるのか、である。
 #
 # どちらのスイートも、環境変数が設定されていなければスキップする。したがって
 # `make test` は密閉されたまま、オフラインのままである。
@@ -71,6 +71,7 @@ S3_KEY     ?= SSHUITESTKEY
 S3_SECRET  ?= sshuitestsecret
 SSH_USER   ?= tester
 SSH_PASS   ?= integration-only-password
+SSH_KEY_PASSPHRASE ?= integration-key-passphrase
 
 integration-up:
 	@printf '{"identities":[{"name":"sshc","credentials":[{"accessKey":"$(S3_KEY)","secretKey":"$(S3_SECRET)"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' > .integration-s3.json
@@ -81,12 +82,22 @@ integration-up:
 	docker run -d --name sshc-sshd -p 127.0.0.1:$(SSHD_PORT):2222 \
 		-e PASSWORD_ACCESS=true -e USER_NAME=$(SSH_USER) -e USER_PASSWORD=$(SSH_PASS) \
 		$(SSHD_IMAGE)
+	@rm -f .integration-key/id_integration .integration-key/id_integration.pub
+	@mkdir -p .integration-key
+	@ssh-keygen -q -t ed25519 -N "$(SSH_KEY_PASSPHRASE)" \
+		-f .integration-key/id_integration -C sshc-integration
 	@echo "waiting for the containers to answer"
 	@for i in $$(seq 1 60); do \
 		curl -s -o /dev/null http://127.0.0.1:$(S3_PORT)/ && break; sleep 1; done
 	@for i in $$(seq 1 60); do \
 		(exec 3<>/dev/tcp/127.0.0.1/$(SSHD_PORT)) 2>/dev/null && break; sleep 1; done
 	@$(MAKE) --no-print-directory integration-sshd-relax
+	@docker exec -i sshc-sshd sh -c ' \
+		umask 077; \
+		install -d -m 700 /config/.ssh; \
+		touch /config/.ssh/authorized_keys; \
+		chmod 600 /config/.ssh/authorized_keys; \
+		cat >> /config/.ssh/authorized_keys' < .integration-key/id_integration.pub
 
 # OpenSSH 10 は PerSourcePenalties を既定で有効にし、このイメージは 10.3 を積んで
 # いる。ペナルティは送信元アドレスごとに課され、認証せずに切断する接続（すべての
@@ -134,6 +145,8 @@ integration-sshd-relax:
 integration-down:
 	docker rm -f sshc-s3 sshc-sshd >/dev/null 2>&1 || true
 	rm -f .integration-s3.json
+	rm -f .integration-key/id_integration .integration-key/id_integration.pub
+	rmdir .integration-key 2>/dev/null || true
 
 # 最初の PUT より前にバケットが存在していなければならない。クライアントに意図的に
 # CreateBucket がないのは、アプリケーションもバケットを作らないからである。
@@ -145,12 +158,14 @@ integration: build
 	SSHC_TEST_SSH_ADDR=127.0.0.1:$(SSHD_PORT) \
 	SSHC_TEST_SSH_USER=$(SSH_USER) \
 	SSHC_TEST_SSH_PASSWORD=$(SSH_PASS) \
+	SSHC_TEST_SSH_KEY="$(CURDIR)/.integration-key/id_integration" \
+	SSHC_TEST_SSH_KEY_PASSPHRASE="$(SSH_KEY_PASSPHRASE)" \
 	go test ./internal/objectstore ./internal/remotesync ./internal/sshintegration -count=1 -v
 
 # バイナリはひとつの安定したパスへ置く。これは通常より重要な意味を持つ。
 # SSH_ASKPASS と Terminal の起動は、どちらも実行時にこのバイナリの絶対パスを
 # その場で埋め込むので、別のチェックアウトでビルドし直したり、リポジトリを移動
-# したりすると、保存済みパスワードでの接続が黙って壊れる。
+# したりすると、保存済み鍵パスフレーズでの接続が黙って壊れる。
 #
 # ~/.local/bin は sudo もシステムディレクトリの所有権も必要としない。PATH に
 # 入っていない場合は、誰も見ない場所へインストールするのではなく、その旨を告げる。

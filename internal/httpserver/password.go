@@ -53,6 +53,9 @@ type PasswordHandlers struct {
 	// のは、その規則とそれを適用するヘルパーとが、テストに気づかれず
 	// 別々の規則へとずれてしまうことがないようにするためだ。
 	Answerable func(alias, prompt string) bool
+	// KeyPassphraseAnswerable binds an OpenSSH key prompt to the exact
+	// workspace-relative key subject authorised by the token.
+	KeyPassphraseAnswerable func(alias, relativePath, expectedPath, evidence, prompt string) bool
 	// ResealSnapshot は新しいマスターパスワードでワークスペースを再度 push し、
 	// bucket の最新スナップショットが古いパスワードでしか開けないままにはしない。
 	// これが注入されているのは、スナップショットの行き先が object store に
@@ -512,13 +515,13 @@ func (h PasswordHandlers) Askpass(c *echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	answerable := h.Answerable
-	if answerable == nil {
+	if h.Answerable == nil && h.KeyPassphraseAnswerable == nil {
 		// 規則がなければ応答もない。nil の predicate が「許可」を意味してはならない。
 		return c.NoContent(http.StatusForbidden)
 	}
 
-	password, err := h.Service.Redeem(token, decoded.Alias, decoded.Prompt, answerable)
+	password, err := h.Service.RedeemCredential(
+		token, decoded.Alias, decoded.Prompt, h.Answerable, h.KeyPassphraseAnswerable)
 	switch {
 	case err == nil:
 	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoPassword):

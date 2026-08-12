@@ -18,6 +18,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"sshc/internal/application"
 	"sshc/internal/platform"
 )
 
@@ -362,62 +363,36 @@ func (listener *trackingListener) Close() error {
 	return listener.Listener.Close()
 }
 
-// プロンプトのルールは、問いの形だけでなく、誰が尋ねているかを問う。
-//
-// keyboard-interactive のプロンプトはリモートサーバーが書くので、形のルールだけ
-// では "password:" で終わる何かを送ってくるどのサーバーにも保存済みパスワードを
-// 渡してしまう。この alias が解決するユーザーとホストをプロンプトが名指ししている
-// ことを要求するのは、OpenSSH 自身のパスワードプロンプトがしていることである。
-func TestTheBoundPromptRequiresTheProjectedHost(t *testing.T) {
-	shape := func(prompt string) bool { return strings.HasSuffix(prompt, "password: ") }
-	// 射影するものがなければ、形のルールだけが残る。このアプリケーションが読めない
-	// ホストは、接続を拒否するホストではない。
-	unprojected := boundPrompt(shape, func(string) (string, string, bool) { return "", "", false })
-	if !unprojected("bastion", "ops@203.0.113.10's password: ") {
-		t.Error("an unprojectable host was refused")
+func TestKeyPassphraseAnswerableRechecksTheCurrentDirectKey(t *testing.T) {
+	target := application.DirectKeyPassphraseTarget{
+		RelativePath: "id_ed25519_server",
+		PromptPath:   "/Users/tester/.ssh/id_ed25519_server",
+		Evidence:     "config-and-key-v1",
 	}
-	if unprojected("bastion", "Are you sure you want to continue connecting? ") {
-		t.Error("the shape rule stopped applying")
+	resolver := func(string) (application.DirectKeyPassphraseTarget, bool, error) {
+		return target, true, nil
+	}
+	answerable := keyPassphraseAnswerable(keyPassphrasePrompt, resolver)
+	prompt := "Enter passphrase for key '/Users/tester/.ssh/id_ed25519_server': "
+	if !answerable("bastion", "id_ed25519_server", target.PromptPath, target.Evidence, prompt) {
+		t.Fatal("the current direct key's exact prompt was refused")
 	}
 
-	// 射影があるなら、プロンプトはそれを名指ししていなければならない。
-	// keyboard-interactive のプロンプトはリモートサーバーが書くものであり、これが、
-	// パスワードの問いの形をしたプロンプトが別アカウントのパスワードを集めてしまう
-	// のを止めている。
-	projected := boundPrompt(shape, func(string) (string, string, bool) {
-		return "ops", "203.0.113.10", true
-	})
-	if !projected("bastion", "ops@203.0.113.10's password: ") {
-		t.Error("OpenSSH's own prompt was refused")
+	target = application.DirectKeyPassphraseTarget{
+		RelativePath: "id_replacement",
+		PromptPath:   "/Users/tester/.ssh/id_replacement",
+		Evidence:     "config-and-key-v2",
 	}
-	if projected("bastion", "admin's password: ") {
-		t.Error("a prompt naming another account was answered")
-	}
-	if projected("bastion", "ops@elsewhere.invalid's password: ") {
-		t.Error("a prompt naming another host was answered")
+	if answerable("bastion", "id_ed25519_server", "/Users/tester/.ssh/id_ed25519_server", "config-and-key-v1", prompt) {
+		t.Fatal("a token for the previous IdentityFile survived a config change")
 	}
 }
 
-// 形のルールが nil なら何にも答えない。ルールがないことが「許可」を意味してはならない。
-func TestTheBoundPromptWithNoShapeRuleAnswersNothing(t *testing.T) {
-	if boundPrompt(nil, nil)("bastion", "ops@host's password: ") {
-		t.Error("a nil shape rule allowed a prompt")
-	}
-}
-
-func TestPasswordAnswerableFailsClosedWhenCurrentConfigDisallowsStoredPasswords(t *testing.T) {
-	shape := func(_ string, prompt string) bool { return strings.HasSuffix(prompt, "password: ") }
-	allowed := false
-	answerable := passwordAnswerable(shape, func(string) (bool, error) { return allowed, nil })
-	if answerable("bastion", "ops@host's password: ") {
-		t.Error("direct-key policy allowed a password response")
-	}
-	allowed = true
-	if !answerable("bastion", "ops@host's password: ") {
-		t.Error("allowed connection lost the prompt response")
-	}
-	broken := passwordAnswerable(shape, func(string) (bool, error) { return false, errors.New("config unreadable") })
-	if broken("bastion", "ops@host's password: ") {
-		t.Error("unreadable config allowed a password response")
+func TestKeyPassphrasePromptRefusesTruncatedPaths(t *testing.T) {
+	expected := "/Users/tester/.ssh/" + strings.Repeat("nested/", 20) + "id_ed25519_server"
+	shown := expected[:100]
+	prompt := "Enter passphrase for key '" + shown + "': "
+	if keyPassphrasePrompt(expected, prompt) {
+		t.Fatal("a truncated display cannot uniquely identify the private key")
 	}
 }

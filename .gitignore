@@ -12,3 +12,4 @@
 
 /.superpowers/
 .integration-s3.json
+.integration-key/
