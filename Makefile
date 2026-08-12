@@ -1,4 +1,4 @@
-.PHONY: generate test build fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install uninstall update
+.PHONY: generate test build fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
 # なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
@@ -155,15 +155,38 @@ integration: build
 # ~/.local/bin は sudo もシステムディレクトリの所有権も必要としない。PATH に
 # 入っていない場合は、誰も見ない場所へインストールするのではなく、その旨を告げる。
 INSTALL_DIR ?= $(HOME)/.local/bin
+INSTALL_SOURCE ?= bin/sshc
+MAINTENANCE_BINARY ?= bin/sshc
 
 install: build
-	mkdir -p "$(INSTALL_DIR)"
-	install -m 0755 bin/sshc "$(INSTALL_DIR)/sshc"
-	@echo "installed $(INSTALL_DIR)/sshc"
+	@$(MAKE) --no-print-directory install-binary \
+		INSTALL_SOURCE="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
 	@case ":$$PATH:" in \
 		*":$(INSTALL_DIR):"*) ;; \
 		*) echo "note: $(INSTALL_DIR) is not on PATH; add it to run 'sshc <alias>' by name" ;; \
 	esac
+
+# build済みバイナリを同じdirectory内へstageしてからrenameする。実行中の古いinodeを
+# 壊さず、途中でcopyに失敗しても既存のCLIを半分だけ書き換えない。分離targetなのは、
+# fake binaryと一時directoryでこの境界を実行テストするためである。
+install-binary:
+	@set -eu; \
+		destination="$(INSTALL_DIR)/sshc"; \
+		if [ -d "$$destination" ]; then \
+			echo "sshc: install destination is a directory: $$destination" >&2; \
+			exit 1; \
+		fi; \
+		mkdir -p "$(INSTALL_DIR)"; \
+		temporary="$(INSTALL_DIR)/.sshc.install.$$$$"; \
+		trap 'rm -f "$$temporary"' 0 1 2 15; \
+		install -m 0755 "$(INSTALL_SOURCE)" "$$temporary"; \
+		mv -f "$$temporary" "$$destination"; \
+		trap - 0 1 2 15; \
+		if ! "$$destination" service refresh; then \
+			echo "sshc: CLI was installed at $$destination, but the login service was not refreshed" >&2; \
+			exit 1; \
+		fi; \
+		echo "installed $$destination"
 
 # ソースからのチェックアウトにおける更新とは、取得し直してインストールし直すこと
 # である。アプリケーション自身の更新ボタンとは別物だ。あちらは、ビルドするソースを
@@ -176,6 +199,17 @@ update:
 	git pull --ff-only
 	$(MAKE) install
 
-uninstall:
+uninstall: build
+	@$(MAKE) --no-print-directory uninstall-binary \
+		MAINTENANCE_BINARY="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
+
+# インストール済みの旧版がserviceサブコマンドを持たない場合もあるため、現在のsource
+# からbuildしたバイナリで先に解除する。失敗時はKeepAliveの参照先を消さない。
+uninstall-binary:
+	@"$(MAINTENANCE_BINARY)" service disable
+	@if [ -d "$(INSTALL_DIR)/sshc" ]; then \
+		echo "sshc: uninstall destination is a directory: $(INSTALL_DIR)/sshc" >&2; \
+		exit 1; \
+	fi
 	rm -f "$(INSTALL_DIR)/sshc"
 	@echo "removed $(INSTALL_DIR)/sshc"
