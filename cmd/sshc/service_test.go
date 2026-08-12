@@ -183,6 +183,51 @@ func TestServiceRejectsUnknownOrMalformedActionsWithoutTouchingTheService(t *tes
 	}
 }
 
+// mainの入口もactionを先に検証する。そうしないとLinuxでsystemctlやunitの状態が
+// 壊れているときだけ、単なる打ち間違いがusageではなく環境エラーになってしまう。
+func TestServiceCommandRejectsInvalidUsageBeforeInspectingHomeOrPlatform(t *testing.T) {
+	for _, arguments := range [][]string{nil, {"restart"}, {"disable", "extra"}} {
+		var stderr bytes.Buffer
+		code := runServiceCommand(
+			context.Background(), arguments,
+			func() (string, error) {
+				t.Fatal("invalid usage inspected the home directory")
+				return "", nil
+			},
+			func(string) (serviceLoginItem, error) {
+				t.Fatal("invalid usage inspected the platform service")
+				return nil, nil
+			},
+			func() (string, error) {
+				t.Fatal("invalid usage resolved the executable")
+				return "", nil
+			},
+			io.Discard, &stderr,
+		)
+		if code != 2 || !strings.Contains(stderr.String(), serviceUsage) {
+			t.Errorf("arguments=%q code=%d stderr=%q", arguments, code, stderr.String())
+		}
+	}
+}
+
+func TestServiceCommandBuildsThePlatformControllerOnlyForAValidAction(t *testing.T) {
+	item := &recordingServiceLoginItem{}
+	var receivedHome string
+	code := runServiceCommand(
+		context.Background(), []string{"refresh"},
+		func() (string, error) { return "/Users/tester", nil },
+		func(home string) (serviceLoginItem, error) {
+			receivedHome = home
+			return item, nil
+		},
+		func() (string, error) { return "/tmp/sshc", nil },
+		io.Discard, io.Discard,
+	)
+	if code != 0 || receivedHome != "/Users/tester" {
+		t.Fatalf("code=%d home=%q", code, receivedHome)
+	}
+}
+
 func TestUsageNamesBothServiceMaintenanceActions(t *testing.T) {
 	var output bytes.Buffer
 	previous := flag.CommandLine.Output()

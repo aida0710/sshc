@@ -27,6 +27,38 @@ func serviceInvocation(argv []string) bool {
 	return len(argv) > 1 && argv[1] == ServiceSubcommand
 }
 
+func serviceArgumentsValid(arguments []string) bool {
+	return len(arguments) == 1 && (arguments[0] == "refresh" || arguments[0] == "disable")
+}
+
+// runServiceCommand はactionを確定してから初めてHOMEとOSのサービス状態へ触る。
+// usageの打ち間違いが、そのマシン固有のエラーや副作用へ変わらないための入口である。
+func runServiceCommand(
+	ctx context.Context,
+	arguments []string,
+	homeDirectory func() (string, error),
+	loginItem func(string) (serviceLoginItem, error),
+	executable func() (string, error),
+	stdout io.Writer,
+	stderr io.Writer,
+) int {
+	if !serviceArgumentsValid(arguments) {
+		fmt.Fprintln(stderr, serviceUsage)
+		return 2
+	}
+	home, err := homeDirectory()
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: resolve home directory: %v\n", err)
+		return 1
+	}
+	item, err := loginItem(home)
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: inspect login service: %v\n", err)
+		return 1
+	}
+	return runService(ctx, arguments, item, executable, stdout, stderr)
+}
+
 // runService はブラウザもサーバーもSSHも起動せず、ログインサービスだけを保守する。
 // executableはrefreshが本当に必要な場合にだけ呼び、argvからプログラムパスを受けない。
 func runService(
@@ -37,7 +69,7 @@ func runService(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
-	if len(arguments) != 1 || (arguments[0] != "refresh" && arguments[0] != "disable") {
+	if !serviceArgumentsValid(arguments) {
 		fmt.Fprintln(stderr, serviceUsage)
 		return 2
 	}
