@@ -822,6 +822,24 @@ func (s *Service) WithConnectionSecretsMutation(
 	mutation ConnectionSecretsMutation,
 	commit func(storage.Change) (storage.Result, error),
 ) (storage.Result, error) {
+	return s.WithConnectionSecretsTransaction(mutation, func(change *storage.Change) (storage.Result, error) {
+		if change == nil {
+			if mutation.Password != nil && mutation.Password.Kind == PasswordMutationRemove {
+				return storage.Result{}, ErrNoPassword
+			}
+			return storage.Result{}, ErrNoPasswordMutation
+		}
+		return commit(*change)
+	})
+}
+
+// WithConnectionSecretsTransaction keeps vault writers serialized across a
+// connection commit even when the requested cleanup is a semantic no-op. A nil
+// change lets the caller commit config without needlessly sealing the vault.
+func (s *Service) WithConnectionSecretsTransaction(
+	mutation ConnectionSecretsMutation,
+	commit func(*storage.Change) (storage.Result, error),
+) (storage.Result, error) {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 
@@ -829,12 +847,26 @@ func (s *Service) WithConnectionSecretsMutation(
 	vault := s.use()
 	if vault == nil {
 		s.mu.Unlock()
+		exists, err := s.Exists()
+		if err != nil {
+			return storage.Result{}, err
+		}
+		if !exists {
+			if mutation.Password != nil && mutation.Password.Kind == PasswordMutationRemove && mutation.KeyPassphrase == nil {
+				return commit(nil)
+			}
+			return storage.Result{}, ErrNoVault
+		}
 		return storage.Result{}, ErrLocked
 	}
 	clone := vault.clone()
 	changed := false
 	if mutation.Password != nil {
 		passwordChanged, err := applyPasswordMutation(vault, clone, *mutation.Password)
+		if errors.Is(err, ErrNoPassword) && mutation.Password.Kind == PasswordMutationRemove {
+			err = nil
+			passwordChanged = false
+		}
 		if err != nil {
 			s.mu.Unlock()
 			return storage.Result{}, err
@@ -856,7 +888,7 @@ func (s *Service) WithConnectionSecretsMutation(
 	}
 	if !changed {
 		s.mu.Unlock()
-		return storage.Result{}, ErrNoPasswordMutation
+		return commit(nil)
 	}
 	sealed, err := clone.Seal()
 	baseline := slices.Clone(s.baseline)
@@ -868,10 +900,11 @@ func (s *Service) WithConnectionSecretsMutation(
 		return storage.Result{}, ErrNoVault
 	}
 
-	result, err := commit(storage.Change{
+	change := storage.Change{
 		Path: s.path(), Contents: sealed,
 		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(baseline)},
-	})
+	}
+	result, err := commit(&change)
 	if err != nil {
 		return storage.Result{}, err
 	}

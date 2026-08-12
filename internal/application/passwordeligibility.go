@@ -21,11 +21,10 @@ const (
 	// BlockerAliasNotSimple は、ホストではなく pattern であることを報告する。パスワードは
 	// 1 台のマシンの 1 個のアカウントに属するものであり、`*`にはそのようなものは存在しない。
 	BlockerAliasNotSimple = "alias_not_simple"
-	// WarnIdentityFileConfigured は、このホストに既に鍵が設定されている
-	// ことを報告する。それでもパスワードを尋ねてくる可能性はある——その鍵が
-	// 向こう側で認可されていないかもしれない——のでこれは block しないが、決してパスワードを
-	// 尋ねてこないホストのために保存されたパスワードは、何の見返りもない露出である。
-	WarnIdentityFileConfigured = "identity_file_configured"
+	// BlockerIdentityFileConfigured は、具体的な Host ブロック自身が秘密鍵を
+	// 指定していることを報告する。sshc は明示鍵と保存済みアカウントパスワードを
+	// 排他にし、鍵が失敗した後の手入力は OpenSSH に任せる。
+	BlockerIdentityFileConfigured = "identity_file_configured"
 	// WarnHostKeyUnknown は、known_hosts にこのホストの情報が何もないことを
 	// 報告する。したがって最初の接続は鍵を信頼するかどうかを尋ねることに
 	// なり、このアプリケーションはユーザーに代わってその問いに答えることを
@@ -78,19 +77,15 @@ func (s *Service) PasswordEligibility(alias string) (PasswordEligibility, error)
 	}
 	projection := effective.Project(graph, alias)
 
-	if source, ok := projection.Value("PasswordAuthentication"); ok {
-		if strings.EqualFold(strings.TrimSpace(source.Value), "no") {
-			report.Blockers = append(report.Blockers, Notice{
-				Code: BlockerPasswordAuthenticationOff,
-				Path: s.displayPath(source.Path), Line: source.Line,
-			})
-		}
-	}
-	if source, ok := projection.Value("IdentityFile"); ok {
-		report.Warnings = append(report.Warnings, Notice{
-			Code: WarnIdentityFileConfigured,
-			Path: s.displayPath(source.Path), Line: source.Line, Detail: source.Value,
+	if source, off := passwordAuthenticationDisabled(projection); off {
+		report.Blockers = append(report.Blockers, Notice{
+			Code: BlockerPasswordAuthenticationOff,
+			Path: s.displayPath(source.Path), Line: source.Line,
 		})
+	}
+	if notice, ok := directIdentityFileForAlias(graph, alias); ok {
+		notice.Path = s.displayPath(notice.Path)
+		report.Blockers = append(report.Blockers, notice)
 	}
 
 	host := alias
@@ -116,6 +111,25 @@ func (s *Service) PasswordEligibility(alias string) (PasswordEligibility, error)
 
 	report.Storable = len(report.Blockers) == 0
 	return report, nil
+}
+
+func passwordAuthenticationDisabled(projection effective.Projection) (effective.Source, bool) {
+	source, ok := projection.Value("PasswordAuthentication")
+	return source, ok && strings.EqualFold(strings.TrimSpace(source.Value), "no")
+}
+
+// StoredPasswordAllowed は、保存済みのリモートアカウントパスワードをこの
+// alias に割り当て、接続時に自動入力してよいかを現在の具体的な Host ブロックから答える。
+func (s *Service) StoredPasswordAllowed(alias string) (bool, error) {
+	if err := ValidateAlias(alias); err != nil {
+		return false, err
+	}
+	graph, err := s.resolve()
+	if err != nil {
+		return false, err
+	}
+	_, configured := directIdentityFileForAlias(graph, alias)
+	return !configured, nil
 }
 
 // hostKeyIsKnown は、known_hosts が既にこのホストの鍵を保持しているかを報告する。

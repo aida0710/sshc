@@ -43,9 +43,6 @@ func newConnectionUpdateHarness(t *testing.T, contents string) connectionUpdateH
 	if err := secrets.Initialise(connectionUpdatePassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := secrets.Set("edge", "must-be-cleaned"); err != nil {
-		t.Fatal(err)
-	}
 	keyService := keys.NewService(keys.ServiceOptions{
 		Workspace: workspace, Transactions: manager, Resolver: storage.NewResolver(workspace),
 	})
@@ -265,6 +262,9 @@ func TestUpdateConnectionRollsBackWhenTheSecondFileCommitFails(t *testing.T) {
 	if err := secrets.Initialise(connectionUpdatePassphrase); err != nil {
 		t.Fatal(err)
 	}
+	if err := secrets.Set("edge", "must-be-cleaned"); err != nil {
+		t.Fatal(err)
+	}
 	keyService := keys.NewService(keys.ServiceOptions{
 		Workspace: workspace, Transactions: manager, Resolver: storage.NewResolver(workspace),
 	})
@@ -309,8 +309,8 @@ func TestUpdateConnectionRollsBackWhenTheSecondFileCommitFails(t *testing.T) {
 	if !bytes.Equal(vaultAfter, vaultBefore) {
 		t.Fatal("sealed vault changed after failed transaction")
 	}
-	if got := secrets.PasswordFor("edge"); got != "" {
-		t.Fatalf("memory vault published failed password: %q", got)
+	if got := secrets.PasswordFor("edge"); got != "must-be-cleaned" {
+		t.Fatalf("memory vault did not preserve original password: %q", got)
 	}
 	if _, ok := secrets.KeyPassphraseFor("id_update"); ok {
 		t.Fatal("memory vault published failed key passphrase")

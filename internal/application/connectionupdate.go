@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/effective"
 	"sshc/internal/keys"
 	"sshc/internal/platform"
 	"sshc/internal/secret"
@@ -111,10 +112,31 @@ func (s *Service) UpdateConnection(
 	if !keyPassphraseUnchanged && request.KeyPassphrase.Kind != UpdateKeyPassphraseSetDedicated {
 		return SaveResult{}, ErrUnknownUpdateKeyPhrase
 	}
-	if passwordUnchanged && keyPassphraseUnchanged {
+
+	// Plan before inspecting policy so a stale base remains a conflict rather
+	// than being masked by the authentication state of newer disk contents.
+	s.saveMutex.Lock()
+	prepared, changed, err := s.planConnectionUpdate(inventory, request)
+	s.saveMutex.Unlock()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	if prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove {
+		return SaveResult{}, ErrPasswordIneligible
+	}
+	if !prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove &&
+		prepared.passwordAuthenticationOff {
+		return SaveResult{}, ErrPasswordIneligible
+	}
+
+	passwordCleanup := prepared.explicitIdentityFile && passwordUnchanged
+	if passwordUnchanged && keyPassphraseUnchanged && !passwordCleanup {
+		if !changed {
+			return SaveResult{}, ErrNoConnectionUpdate
+		}
 		s.saveMutex.Lock()
 		defer s.saveMutex.Unlock()
-		prepared, changed, err := s.planConnectionUpdate(inventory, request)
+		prepared, changed, err = s.planConnectionUpdate(inventory, request)
 		if err != nil {
 			return SaveResult{}, err
 		}
@@ -130,29 +152,17 @@ func (s *Service) UpdateConnection(
 	if secrets == nil {
 		return SaveResult{}, secret.ErrNoVault
 	}
-	exists, err := secrets.Exists()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	if !exists {
-		return SaveResult{}, secret.ErrNoVault
-	}
 	mutation := secret.ConnectionSecretsMutation{}
-	if !passwordUnchanged {
+	if passwordCleanup {
+		mutation.Password = &secret.PasswordMutation{
+			Kind: secret.PasswordMutationRemove, Alias: request.Identity.Alias,
+		}
+	} else if !passwordUnchanged {
 		passwordMutation, err := passwordMutationForUpdate(request)
 		if err != nil {
 			return SaveResult{}, err
 		}
 		mutation.Password = &passwordMutation
-	}
-	if !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove {
-		eligibility, err := s.PasswordEligibility(request.Identity.Alias)
-		if err != nil {
-			return SaveResult{}, err
-		}
-		if !eligibility.Storable {
-			return SaveResult{}, ErrPasswordIneligible
-		}
 	}
 	var verification *keys.PassphraseVerification
 	if !keyPassphraseUnchanged {
@@ -173,44 +183,41 @@ func (s *Service) UpdateConnection(
 	}
 
 	var updated SaveResult
-	_, err = secrets.WithConnectionSecretsMutation(mutation, func(vaultChange storage.Change) (storage.Result, error) {
+	_, err = secrets.WithConnectionSecretsTransaction(mutation, func(vaultChange *storage.Change) (storage.Result, error) {
 		s.saveMutex.Lock()
 		defer s.saveMutex.Unlock()
-		prepared, _, planErr := s.planConnectionUpdate(inventory, request)
+		prepared, changed, planErr := s.planConnectionUpdate(inventory, request)
 		if planErr != nil {
 			return storage.Result{}, planErr
+		}
+		if prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove {
+			return storage.Result{}, ErrPasswordIneligible
+		}
+		if !prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove &&
+			prepared.passwordAuthenticationOff {
+			return storage.Result{}, ErrPasswordIneligible
 		}
 		if validationErr := s.validateConnectionKeyPassphrase(prepared, request, verification); validationErr != nil {
 			return storage.Result{}, validationErr
 		}
+		if vaultChange == nil && !changed {
+			return storage.Result{}, ErrNoConnectionUpdate
+		}
 		storageRequest := s.requestFor(prepared)
-		storageRequest.Changes = append(storageRequest.Changes, vaultChange)
-		result, commitErr := s.commitAtomicPlannedRequest(prepared, storageRequest)
+		var result storage.Result
+		var commitErr error
+		if vaultChange == nil {
+			result, commitErr = s.commitPlannedRequest(prepared, storageRequest)
+		} else {
+			storageRequest.Changes = append(storageRequest.Changes, *vaultChange)
+			result, commitErr = s.commitAtomicPlannedRequest(prepared, storageRequest)
+		}
 		if commitErr != nil {
 			return storage.Result{}, commitErr
 		}
 		updated = s.connectionUpdateResult(result, prepared)
 		return result, nil
 	})
-	if errors.Is(err, secret.ErrNoPasswordMutation) {
-		s.saveMutex.Lock()
-		defer s.saveMutex.Unlock()
-		prepared, changed, planErr := s.planConnectionUpdate(inventory, request)
-		if planErr != nil {
-			return SaveResult{}, planErr
-		}
-		if validationErr := s.validateConnectionKeyPassphrase(prepared, request, verification); validationErr != nil {
-			return SaveResult{}, validationErr
-		}
-		if !changed {
-			return SaveResult{}, ErrNoConnectionUpdate
-		}
-		result, commitErr := s.commitPlannedRequest(prepared, s.requestFor(prepared))
-		if commitErr != nil {
-			return SaveResult{}, commitErr
-		}
-		return s.connectionUpdateResult(result, prepared), nil
-	}
 	if err != nil {
 		return SaveResult{}, err
 	}
@@ -391,10 +398,13 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 	}
 
 	if len(edits) == 0 {
-		return planned{
+		prepared := planned{
 			operation: "connection.update", base: map[string][]byte{filepath.Clean(absolute): base},
 			baseline: diagnosticBaseline(graph), preview: SavePreview{Operation: "connection.update", Diffs: []FileDiff{}},
-		}, false, s.verifyConnectionUpdateBase(absolute, request.Identity.Path, base, base)
+		}
+		_, prepared.explicitIdentityFile = directIdentityFile(file, block)
+		_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(effective.Project(graph, request.Identity.Alias))
+		return prepared, false, s.verifyConnectionUpdateBase(absolute, request.Identity.Path, base, base)
 	}
 	if err := ApplyFieldEdits(file, block, edits); err != nil {
 		return planned{}, false, err
@@ -424,6 +434,12 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 		ComputeEffective(graph, s.workspace.Root(), request.Identity.Alias),
 		ComputeEffective(after, s.workspace.Root(), request.Identity.Alias),
 	)}
+	updatedBlock, ok := FindHostBlock(file, request.Identity.Alias)
+	if !ok {
+		return planned{}, false, ErrHostNotFound
+	}
+	_, prepared.explicitIdentityFile = directIdentityFile(file, updatedBlock)
+	_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(effective.Project(after, request.Identity.Alias))
 	return prepared, true, nil
 }
 

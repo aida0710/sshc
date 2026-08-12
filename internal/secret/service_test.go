@@ -1382,6 +1382,126 @@ func TestConnectionSecretsMutationRejectsSameDedicatedKeyPassphrase(t *testing.T
 	}
 }
 
+func TestConnectionSecretsTransactionCommitsConfigWhenPasswordRemovalIsANoop(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(vaultPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := 0
+	result, err := service.WithConnectionSecretsTransaction(secret.ConnectionSecretsMutation{
+		Password: &secret.PasswordMutation{Kind: secret.PasswordMutationRemove, Alias: "edge"},
+	}, func(change *storage.Change) (storage.Result, error) {
+		called++
+		if change != nil {
+			t.Fatal("absent password produced a vault change")
+		}
+		return storage.Result{ID: "config-only"}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called != 1 || result.ID != "config-only" {
+		t.Fatalf("callback calls/result = %d / %#v", called, result)
+	}
+	after, err := os.ReadFile(vaultPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Error("no-op removal resealed the vault")
+	}
+}
+
+func TestConnectionSecretsTransactionKeepsAReusableCredentialWhenRemovingOneUse(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "shared-secret"); err != nil {
+		t.Fatal(err)
+	}
+	for _, alias := range []string{"edge", "nas"} {
+		if err := service.AssignCredential(secret.KindPassword, alias, "office"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	_, err = service.WithConnectionSecretsTransaction(secret.ConnectionSecretsMutation{
+		Password: &secret.PasswordMutation{Kind: secret.PasswordMutationRemove, Alias: "edge"},
+	}, func(change *storage.Change) (storage.Result, error) {
+		if change == nil {
+			t.Fatal("assigned password produced no vault change")
+		}
+		return manager.Commit(storage.Request{Operation: "test.cleanup", Changes: []storage.Change{*change}})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := service.PasswordFor("edge"); got != "" {
+		t.Errorf("removed edge password = %q", got)
+	}
+	if got := service.PasswordFor("nas"); got != "shared-secret" {
+		t.Errorf("other shared user = %q", got)
+	}
+	listed, err := service.Credentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uses, ok := listed[secret.KindPassword]["office"]; !ok || !slices.Equal(uses, []string{"nas"}) {
+		t.Fatalf("office credential after cleanup = %#v, exists %t", uses, ok)
+	}
+}
+
+func TestConnectionSecretsTransactionSerializesAWouldBeNoopWithVaultWriters(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	transactionDone := make(chan error, 1)
+	go func() {
+		_, err := service.WithConnectionSecretsTransaction(secret.ConnectionSecretsMutation{
+			Password: &secret.PasswordMutation{Kind: secret.PasswordMutationRemove, Alias: "edge"},
+		}, func(change *storage.Change) (storage.Result, error) {
+			if change != nil {
+				return storage.Result{}, errors.New("unexpected vault change")
+			}
+			close(entered)
+			<-release
+			return storage.Result{}, nil
+		})
+		transactionDone <- err
+	}()
+	<-entered
+
+	writerDone := make(chan error, 1)
+	go func() { writerDone <- service.Set("edge", "arrived-later") }()
+	select {
+	case err := <-writerDone:
+		t.Fatalf("writer overtook transaction: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-transactionDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-writerDone; err != nil {
+		t.Fatal(err)
+	}
+	if got := service.PasswordFor("edge"); got != "arrived-later" {
+		t.Fatalf("serialized writer value = %q", got)
+	}
+}
+
 func TestConnectionSecretsMutationRequiresAnUnlockedExistingVault(t *testing.T) {
 	service, _ := newService(t)
 	called := false
@@ -1391,8 +1511,8 @@ func TestConnectionSecretsMutationRequiresAnUnlockedExistingVault(t *testing.T) 
 		called = true
 		return storage.Result{}, nil
 	})
-	if !errors.Is(err, secret.ErrLocked) {
-		t.Fatalf("locked mutation = %v, want ErrLocked", err)
+	if !errors.Is(err, secret.ErrNoVault) {
+		t.Fatalf("missing-vault mutation = %v, want ErrNoVault", err)
 	}
 	if called {
 		t.Error("commit callback ran while locked")
