@@ -17,7 +17,10 @@ describe("ConnectionActions", () => {
       />,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Actions for database" }));
+    const trigger = screen.getByRole("button", { name: "Actions for database" });
+    expect(trigger.querySelector("use")).toHaveAttribute("href", "#icon-moreHorizontal");
+    expect(trigger).not.toHaveTextContent("…");
+    await userEvent.click(trigger);
     expect(connect).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("menuitem", { name: "Open connection settings" }));

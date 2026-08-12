@@ -28,6 +28,18 @@ test("keeps the selected connection open when its tree item is clicked again", a
   expect(page.url()).toBe(connectionURL);
 });
 
+test("keeps the Basic save actions in the form instead of pinning them to the viewport", async ({
+  page,
+  installation,
+}) => {
+  await openBastion(page, installation.url);
+  const save = page.getByRole("button", { name: "Save Basic settings" });
+
+  await expect(save).not.toBeInViewport();
+  await save.scrollIntoViewIfNeeded();
+  await expect(save).toBeInViewport();
+});
+
 test("creates a key-authenticated connection in an empty nested declared group", async ({
   page,
   installation,

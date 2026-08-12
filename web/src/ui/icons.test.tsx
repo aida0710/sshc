@@ -22,4 +22,9 @@ describe("icons", () => {
     const { container } = render(<Icon name="sync" />);
     expect(container.querySelector("use")?.getAttribute("href")).toBe("#icon-sync");
   });
+
+  it("provides the horizontal-more symbol used by icon-only action buttons", () => {
+    const { container } = render(<IconSprite />);
+    expect(container.querySelector("#icon-moreHorizontal")).not.toBeNull();
+  });
 });
