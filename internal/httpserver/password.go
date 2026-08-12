@@ -405,6 +405,11 @@ func (h PasswordHandlers) AssignCredential(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
+	if kind == secret.KindPassword {
+		if blocked, response := h.ensurePasswordStorable(c, request.Subject); blocked {
+			return response
+		}
+	}
 	if err := h.Service.AssignCredential(kind, request.Subject, request.Name); err != nil {
 		return credentialProblem(c, err, nil)
 	}
@@ -431,29 +436,35 @@ func (h PasswordHandlers) Store(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	// blocker があるということは、保存したパスワードが決して提示され
-	// ないことを意味し、保存すれば使い道のない secret をディスクに
-	// 置くことになる。interface だけでなくここでも拒否を確認するのは、
-	// interface は差し替え可能でも、こちら側はそうではないからだ。
-	if h.Eligibility != nil {
-		report, err := h.Eligibility(alias)
-		if err != nil {
-			return problem(c, http.StatusInternalServerError, "config_unreadable")
-		}
-		if !report.Storable {
-			blockers := make([]string, 0, len(report.Blockers))
-			for _, notice := range report.Blockers {
-				blockers = append(blockers, notice.Code)
-			}
-			return problemWith(c, http.StatusConflict, problemPayload{
-				Code: "password_not_storable", Blockers: blockers,
-			})
-		}
+	if blocked, response := h.ensurePasswordStorable(c, alias); blocked {
+		return response
 	}
 	if err := h.Service.Set(alias, request.Password); err != nil {
 		return passwordProblem(c, err)
 	}
 	return h.status(c)
+}
+
+// ensurePasswordStorable guards every route that creates a password-to-host
+// relationship. Removal stays available even when current config blocks use.
+func (h PasswordHandlers) ensurePasswordStorable(c *echo.Context, alias string) (bool, error) {
+	if h.Eligibility == nil {
+		return false, nil
+	}
+	report, err := h.Eligibility(alias)
+	if err != nil {
+		return true, problem(c, http.StatusInternalServerError, "config_unreadable")
+	}
+	if report.Storable {
+		return false, nil
+	}
+	blockers := make([]string, 0, len(report.Blockers))
+	for _, notice := range report.Blockers {
+		blockers = append(blockers, notice.Code)
+	}
+	return true, problemWith(c, http.StatusConflict, problemPayload{
+		Code: "password_not_storable", Blockers: blockers,
+	})
 }
 
 func (h PasswordHandlers) Forget(c *echo.Context) error {
