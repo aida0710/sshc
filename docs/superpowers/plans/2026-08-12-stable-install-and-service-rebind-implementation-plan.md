@@ -252,13 +252,14 @@
 
   Run: `go test ./internal/acceptance -run 'Test(InstallBinary|UninstallBinary)' -count=1`
 
-  Then run with temporary paths so the live LaunchAgent is untouched:
+  Then build with the normal toolchain location and run only the lifecycle steps with a temporary HOME, so neither Go's toolchain lookup nor the live LaunchAgent is redirected:
 
   ```bash
   smoke_home=$(mktemp -d)
-  HOME="$smoke_home" make install INSTALL_DIR="$smoke_home/.local/bin"
+  make build
+  HOME="$smoke_home" make install-binary INSTALL_SOURCE="$PWD/bin/sshc" INSTALL_DIR="$smoke_home/.local/bin"
   HOME="$smoke_home" "$smoke_home/.local/bin/sshc" service refresh
-  HOME="$smoke_home" make uninstall INSTALL_DIR="$smoke_home/.local/bin"
+  HOME="$smoke_home" make uninstall-binary MAINTENANCE_BINARY="$PWD/bin/sshc" INSTALL_DIR="$smoke_home/.local/bin"
   test ! -e "$smoke_home/.local/bin/sshc"
   ```
 
