@@ -52,7 +52,7 @@
 - Produces: `type serviceLoginItem interface { Enabled() bool; Enable(context.Context, string) error; Disable(context.Context) error }`
 - Produces: `func serviceInvocation(argv []string) bool`
 - Produces: `func runService(context.Context, []string, serviceLoginItem, func() (string, error), io.Writer, io.Writer) int`
-- Consumes later: `newServiceLoginItem(home string) (serviceLoginItem, error)` from the OS-specific files in Task 2.
+- Produces temporarily: `newServiceLoginItem(home string) (serviceLoginItem, error)` using the existing platform assembly, replaced by OS-specific files in Task 2.
 
 - [ ] **Step 1: Write failing command tests**
 

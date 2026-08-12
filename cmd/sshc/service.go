@@ -1,0 +1,84 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"path/filepath"
+)
+
+// ServiceSubcommand は、インストールと削除がログインサービスを保守するときの入口。
+// 任意の実行ファイルを登録できる一般用途のサービス管理コマンドではない。
+const ServiceSubcommand = "service"
+
+const serviceUsage = "usage: sshc service refresh|disable"
+
+// serviceLoginItem はWebの設定スイッチと同じ境界である。ここでもOS固有のplistや
+// systemd unitを組み立て直さず、既存の実装に状態遷移だけを依頼する。
+type serviceLoginItem interface {
+	Enabled() bool
+	Enable(context.Context, string) error
+	Disable(context.Context) error
+}
+
+// serviceInvocation は、actionの正しさにかかわらずserviceという語を予約する。
+// 打ち間違えた保守コマンドをSSHホスト名として扱わないためである。
+func serviceInvocation(argv []string) bool {
+	return len(argv) > 1 && argv[1] == ServiceSubcommand
+}
+
+// newServiceLoginItem はTask 1の中間実装であり、現在Web画面が使うものと同じ
+// controllerを返す。Linuxで取り残されたunitを見落とさないOS専用の組み立てへ、
+// 次のTDDサイクルで置き換える。
+func newServiceLoginItem(home string) (serviceLoginItem, error) {
+	return newPlatformParts(home).LoginItem, nil
+}
+
+// runService はブラウザもサーバーもSSHも起動せず、ログインサービスだけを保守する。
+// executableはrefreshが本当に必要な場合にだけ呼び、argvからプログラムパスを受けない。
+func runService(
+	ctx context.Context,
+	arguments []string,
+	item serviceLoginItem,
+	executable func() (string, error),
+	stdout io.Writer,
+	stderr io.Writer,
+) int {
+	if len(arguments) != 1 || (arguments[0] != "refresh" && arguments[0] != "disable") {
+		fmt.Fprintln(stderr, serviceUsage)
+		return 2
+	}
+
+	if item == nil || !item.Enabled() {
+		fmt.Fprintln(stdout, "sshc: login service is not enabled; nothing changed")
+		return 0
+	}
+
+	switch arguments[0] {
+	case "refresh":
+		program, err := executable()
+		if err != nil {
+			fmt.Fprintf(stderr, "sshc: resolve this executable: %v\n", err)
+			return 1
+		}
+		if !filepath.IsAbs(program) {
+			fmt.Fprintln(stderr, "sshc: resolved executable path is not absolute")
+			return 1
+		}
+		if err := item.Enable(ctx, filepath.Clean(program)); err != nil {
+			fmt.Fprintf(stderr, "sshc: refresh login service: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "sshc: login service refreshed; vault is locked after restart")
+		return 0
+	case "disable":
+		if err := item.Disable(ctx); err != nil {
+			fmt.Fprintf(stderr, "sshc: disable login service: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "sshc: login service disabled")
+		return 0
+	default:
+		panic("validated service action became unreachable")
+	}
+}
