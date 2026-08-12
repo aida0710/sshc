@@ -29,6 +29,7 @@ import (
 
 	"crypto/rand"
 
+	"sshc/internal/application"
 	"sshc/internal/httpserver"
 	"sshc/internal/secret"
 	"sshc/internal/session"
@@ -209,6 +210,10 @@ func startServer(t *testing.T, home string) (*secret.Service, string, *countingL
 	if err := vault.Initialise(passphrase); err != nil {
 		t.Fatal(err)
 	}
+	configService := application.NewService(
+		workspace,
+		storage.NewManager(workspace, time.Now, rand.Reader),
+	)
 
 	bare, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -220,12 +225,15 @@ func startServer(t *testing.T, home string) (*secret.Service, string, *countingL
 		t.Fatal(err)
 	}
 	server, err := httpserver.New(httpserver.Options{
-		Listener:   listener,
-		Sessions:   sessions,
-		UI:         os.DirFS(home),
-		Version:    "integration",
-		Passwords:  vault,
-		Answerable: answerable,
+		Listener:  listener,
+		Sessions:  sessions,
+		UI:        os.DirFS(home),
+		Version:   "integration",
+		Passwords: vault,
+		Answerable: func(alias, prompt string) bool {
+			allowed, err := configService.StoredPasswordAllowed(alias)
+			return err == nil && allowed && answerable(alias, prompt)
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -303,6 +311,43 @@ func TestTheHelperAuthenticatesAgainstARealServer(t *testing.T) {
 	if !strings.Contains(output, "authenticated-by-askpass") {
 		t.Errorf("the remote command did not run:\n%s", output)
 	}
+}
+
+func TestAddingADirectKeyInvalidatesAnAlreadyIssuedPasswordToken(t *testing.T) {
+	destination := requireTarget(t)
+	home := buildHome(t, destination)
+	vault, endpoint, listener := startServer(t, home)
+
+	if err := vault.Set(alias, destination.password); err != nil {
+		t.Fatal(err)
+	}
+	token, err := vault.IssueToken(alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	configPath := filepath.Join(home, ".ssh", "config")
+	configuration, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const marker = "\tStrictHostKeyChecking yes\n"
+	updated := strings.Replace(string(configuration), marker,
+		marker+"\tIdentityFile /nonexistent/sshc-policy-test-key\n", 1)
+	if updated == string(configuration) {
+		t.Fatal("the direct IdentityFile fixture was not inserted")
+	}
+	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	asked := listener.connections.Load()
+	output, err := runSSH(t, home, endpoint, token, "true")
+	if err == nil {
+		t.Fatalf("an already-issued token authenticated after a direct key was added:\n%s", output)
+	}
+	requireTheHelperAsked(t, listener, asked, output)
+	requireAuthenticationWasAttempted(t, output)
 }
 
 func TestTheWrongStoredPasswordFailsOnceRatherThanRepeatedly(t *testing.T) {
