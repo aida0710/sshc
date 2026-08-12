@@ -67,7 +67,7 @@
 
 1. 通常どおりproduction UIとGoバイナリをビルドする。
 2. `$(INSTALL_DIR)` を作る。
-3. 同じディレクトリ内の一時ファイルへ mode `0755` でコピーする。
+3. 同じディレクトリ内に `mktemp` で排他的な一時ファイルを作り、そこへ mode `0755` でコピーする。
 4. rename で `$(INSTALL_DIR)/sshc` と置き換える。実行中の古いinodeは、再起動までそのプロセスだけが保持する。
 5. 新しく配置した `$(INSTALL_DIR)/sshc service refresh` を実行する。
 6. PATHに含まれない場合の既存の注意を維持する。
@@ -99,6 +99,7 @@ UIでログイン時起動を切り替える既存APIも同じ LoginItem 実装�
 - 相対パス、改行、systemdの `%`、plistのXML特殊文字に対する既存防護を維持する。
 - service refresh中の失敗は、vaultやSSH設定ファイルを変更しない。
 - refreshは登録済み状態を検査してから動き、オフだったログイン時起動をオンにしない。
+- plistまたはunitの登録状態を読み取れない場合は、未登録扱いにせず失敗する。
 - uninstallはdisable失敗時に停止し、KeepAlive設定が削除済みバイナリを起動し続ける状態を作らない。
 - 再起動でvaultが施錠されることをREADMEとinstall出力で明示する。
 
