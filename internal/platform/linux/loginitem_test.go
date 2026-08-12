@@ -111,7 +111,8 @@ func TestEnableFallsBackToDefaultSystemctlWhenNoneIsGiven(t *testing.T) {
 	}
 	want := []platform.Command{
 		{Path: linux.DefaultSystemctl, Arguments: []string{"--user", "daemon-reload"}},
-		{Path: linux.DefaultSystemctl, Arguments: []string{"--user", "enable", "--now", linux.UnitName}},
+		{Path: linux.DefaultSystemctl, Arguments: []string{"--user", "enable", linux.UnitName}},
+		{Path: linux.DefaultSystemctl, Arguments: []string{"--user", "restart", linux.UnitName}},
 	}
 	if len(runner.commands) != len(want) {
 		t.Fatalf("systemctl calls = %#v, want %#v", runner.commands, want)
@@ -121,6 +122,48 @@ func TestEnableFallsBackToDefaultSystemctlWhenNoneIsGiven(t *testing.T) {
 			t.Errorf("call %d = %#v, want %#v", i, got, want[i])
 		}
 	}
+}
+
+// Enabledのboolだけでは「無い」と「読めない」を区別できないが、保守コマンドが
+// 後者を無視すると、取り残されたunitを更新も解除もできないまま成功を報告してしまう。
+func TestRegisteredDistinguishesAbsentPresentAndUnreadableUnitState(t *testing.T) {
+	t.Run("absent", func(t *testing.T) {
+		item := linux.LoginItem{Home: t.TempDir()}
+		registered, err := item.Registered()
+		if err != nil || registered {
+			t.Fatalf("Registered = %v, %v; want false, nil", registered, err)
+		}
+	})
+
+	t.Run("present", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, ".config", "systemd", "user", linux.UnitName)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("[Service]\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		item := linux.LoginItem{Home: home}
+		registered, err := item.Registered()
+		if err != nil || !registered {
+			t.Fatalf("Registered = %v, %v; want true, nil", registered, err)
+		}
+	})
+
+	t.Run("unknown", func(t *testing.T) {
+		home := t.TempDir()
+		// .configがdirectoryでなければ、その下のunitをstatした結果は「存在しない」
+		// ではなくENOTDIRである。保守操作はこの不明な状態をno-opにしてはならない。
+		if err := os.WriteFile(filepath.Join(home, ".config"), []byte("not a directory"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		item := linux.LoginItem{Home: home}
+		registered, err := item.Registered()
+		if err == nil || registered {
+			t.Fatalf("Registered = %v, %v; want false and an error", registered, err)
+		}
+	})
 }
 
 // 二度無効にすることは、呼び出し側が求めた状態である。
