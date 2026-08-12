@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "generate:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts",
     "test": "vitest run",
+    "check:i18n": "vitest run src/i18n/catalogue.test.ts --reporter=verbose",
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.e2e.json --pretty false",
     "e2e": "playwright test"
   },
