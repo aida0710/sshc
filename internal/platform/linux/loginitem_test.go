@@ -182,13 +182,17 @@ func TestRegisteredDistinguishesAbsentPresentAndUnreadableUnitState(t *testing.T
 // 二度無効にすることは、呼び出し側が求めた状態である。
 func TestDisableTwiceIsTheStateTheCallerAskedFor(t *testing.T) {
 	home := t.TempDir()
-	item := linux.LoginItem{Runner: &unitRunner{}, Home: home, Systemctl: "/usr/bin/systemctl"}
+	runner := &unitRunner{}
+	item := linux.LoginItem{Runner: runner, Home: home, Systemctl: "/usr/bin/systemctl"}
 
 	if err := item.Disable(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if err := item.Disable(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	if len(runner.commands) != 0 {
+		t.Fatalf("an absent unit still ran systemctl: %#v", runner.commands)
 	}
 }
 
