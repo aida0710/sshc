@@ -164,15 +164,6 @@ func (s *Service) RelocateKey(inventory *keys.Inventory, request KeyRelocateRequ
 	return result, nil
 }
 
-// PreviewKeyRelocation は同じトランザクションを準備し、何も
-// 書き込まずにそれが行うはずのことを返す。
-func (s *Service) PreviewKeyRelocation(inventory *keys.Inventory, request KeyRelocateRequest) (KeyRelocateResult, error) {
-	s.saveMutex.Lock()
-	defer s.saveMutex.Unlock()
-	_, result, err := s.planKeyRelocation(inventory, request)
-	return result, err
-}
-
 func (s *Service) planKeyRelocation(inventory *keys.Inventory, request KeyRelocateRequest) (planned, KeyRelocateResult, error) {
 	graph, err := s.resolve()
 	if err != nil {

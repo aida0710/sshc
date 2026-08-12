@@ -156,11 +156,6 @@ type Service struct {
 	Environment []string
 }
 
-// NewService は本番用の依存を配線する。
-func NewService(runner platform.OutputRunner, toolchain platform.Toolchain, configPath string) *Service {
-	return &Service{Runner: runner, Toolchain: toolchain, ConfigPath: configPath}
-}
-
 // Plan は、どこにも接触せずに変更内容を説明する。
 //
 // valuesFrom は、アカウントの詳細が `ssh -G` から来たのか、このアプリケーション

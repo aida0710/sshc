@@ -770,12 +770,6 @@ func (s *Service) Target() (endpoint, bucket, path, region string) {
 	return s.binding.config.Endpoint, s.binding.config.Bucket, s.binding.config.Path, s.binding.config.Region
 }
 
-// LastSync は、state ファイルから、このマシンが最後に同期した内容を報告する。
-func (s *Service) LastSync() (synced bool, at, origin string, files int) {
-	view := s.SyncState()
-	return view.Synced, view.At, view.Origin, view.Files
-}
-
 // SyncState returns a detached view so callers cannot mutate the state value
 // retained by a later response.
 func (s *Service) SyncState() SyncStateView {
