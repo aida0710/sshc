@@ -13,7 +13,7 @@ import {
   type SavePreview,
   type UpdateConnectionRequest,
 } from "../api/config";
-import { ConnectionBrowser, type HostSelection } from "./ConnectionBrowserView";
+import { ConnectionTree, type HostSelection } from "./ConnectionTree";
 import type { DragPayload } from "./dragdrop";
 import { HostDetailPanel } from "./HostDetail";
 import {
@@ -94,6 +94,9 @@ function toProblem(error: unknown): Problem {
 }
 
 type ConnectionsPageProps = {
+  // alias を持たない Host パターンには connection identity がないため、
+  // 管理ツリーから Config の該当行へ渡す。
+  onOpenFile?: (path: string, line: number) => void;
   // 右側ペインの中身を、シェルへ差し出す。connection が開いていない間は
   // null——何か開くまでは、調べるものが何も無いからだ。
   onInspector: (content: InspectorContent) => void;
@@ -112,6 +115,7 @@ type SaveAttempt =
   | { saved: true; overview: Overview | null };
 
 export function ConnectionsPage({
+  onOpenFile = () => undefined,
   onInspector,
   creationDraft = null,
   onCreationDraftChange,
@@ -166,24 +170,6 @@ export function ConnectionsPage({
       ? onNavigateLocation?.(url)
       : onNavigateLocation?.(url, options);
     return result !== false;
-  }
-
-  function navigateBrowser(
-    next: ConnectionBrowserLocation,
-    options?: NavigateLocationOptions,
-  ): boolean {
-    const target = selection === null
-      ? null
-      : {
-          path: selection.path,
-          alias: selection.alias,
-          panel: activePanel,
-          advanced: activeAdvanced,
-        };
-    if (!emitLocation(connectionLocation(next, target), options)) return false;
-    setBrowser(next);
-    setInvalidLocation(false);
-    return true;
   }
 
   function navigateTarget(
@@ -927,12 +913,11 @@ export function ConnectionsPage({
               </Button>
             </section>
           ) : (
-            <ConnectionBrowser
+            <ConnectionTree
               overview={overview}
-              browser={browser}
               selected={selection}
-              onBrowse={navigateBrowser}
               onSelect={onSelect}
+              onOpenPatternRule={onOpenFile}
               onDrop={(payload, target) => void onTreeDrop(payload, target)}
               movesDisabled={editorDirty || refreshState !== "idle"}
             />
