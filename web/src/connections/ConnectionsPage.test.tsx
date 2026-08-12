@@ -158,6 +158,28 @@ describe("ConnectionsPage", () => {
     expect(screen.getByRole("tab", { name: "Directives" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("keeps an open connection visible when the selected tree item is clicked again", async () => {
+    const user = userEvent.setup();
+    render(
+      <ConnectionsPage
+        onInspector={() => undefined}
+        location={{
+          pathname: "/connections/servers",
+          search: "?path=config&host=bastion&panel=basic",
+        }}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+
+    const port = await screen.findByLabelText("Port");
+    const tree = screen.getByRole("navigation", { name: "Connections" });
+    await user.click(within(tree).getByRole("button", { name: /bastion/ }));
+
+    expect(screen.getByLabelText("Port")).toBe(port);
+    expect(screen.getByRole("heading", { name: "bastion" })).toBeInTheDocument();
+    expect(configApi.host).toHaveBeenCalledTimes(1);
+  });
+
   it("writes connection selection and tab changes to browser history", async () => {
     const user = userEvent.setup();
     const onNavigateLocation = vi.fn();
