@@ -171,6 +171,8 @@
 
   On darwin, construct `macos.LoginItem` with `process.NewOutputRunner()`. On linux, use an injected stat seam to decide whether `/usr/bin/systemctl` is available; if it is absent, call `Registered` and reject a present/unknown unit rather than silently treating it as disabled.
 
+  Both LoginItem implementations must inspect `platform.Output.ExitCode` as well as the returned error. Treat every nonzero service-manager exit as failure except macOS `launchctl bootout` status 3, which means the requested service is already not loaded.
+
 - [ ] **Step 4: Verify platform tests GREEN**
 
   Run: `go test ./internal/platform/macos ./cmd/sshc -count=1`

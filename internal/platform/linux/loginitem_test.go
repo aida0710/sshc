@@ -16,11 +16,24 @@ import (
 
 // 本物の systemd を読み込むテストはない。ランナーは systemctl が何を求められた
 // はずかを記録するだけで、何もしない。
-type unitRunner struct{ commands []platform.Command }
+type unitRunner struct {
+	commands []platform.Command
+	outputs  []platform.Output
+	errors   []error
+}
 
 func (runner *unitRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
 	runner.commands = append(runner.commands, command)
-	return platform.Output{}, nil
+	index := len(runner.commands) - 1
+	var output platform.Output
+	var err error
+	if index < len(runner.outputs) {
+		output = runner.outputs[index]
+	}
+	if index < len(runner.errors) {
+		err = runner.errors[index]
+	}
+	return output, err
 }
 
 // ログイン時には何も開かず、標準出力をどこにも送らない。エージェントが表示する
@@ -177,4 +190,36 @@ func TestDisableTwiceIsTheStateTheCallerAskedFor(t *testing.T) {
 	if err := item.Disable(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestLoginItemReportsNonZeroSystemctlExits(t *testing.T) {
+	t.Run("enable stops at daemon reload", func(t *testing.T) {
+		runner := &unitRunner{outputs: []platform.Output{{ExitCode: 1}}}
+		item := linux.LoginItem{Runner: runner, Home: t.TempDir(), Systemctl: "/usr/bin/systemctl"}
+		if err := item.Enable(context.Background(), "/home/u/.local/bin/sshc"); err == nil {
+			t.Fatal("daemon-reload exit 1 was reported as success")
+		}
+		if len(runner.commands) != 1 {
+			t.Fatalf("commands after failure = %#v", runner.commands)
+		}
+	})
+
+	t.Run("disable keeps the unit", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, ".config", "systemd", "user", linux.UnitName)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("[Service]\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		runner := &unitRunner{outputs: []platform.Output{{ExitCode: 1}}}
+		item := linux.LoginItem{Runner: runner, Home: home, Systemctl: "/usr/bin/systemctl"}
+		if err := item.Disable(context.Background()); err == nil {
+			t.Fatal("disable exit 1 was reported as success")
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("unit was removed despite systemctl failure: %v", err)
+		}
+	})
 }

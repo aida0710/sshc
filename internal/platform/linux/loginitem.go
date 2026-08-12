@@ -119,10 +119,20 @@ func (l LoginItem) Disable(ctx context.Context) error {
 }
 
 func (l LoginItem) run(ctx context.Context, arguments ...string) (platform.Output, error) {
-	return l.Runner.RunOutput(ctx, platform.Command{
+	if l.Runner == nil {
+		return platform.Output{}, errors.New("no runner to start systemctl with")
+	}
+	output, err := l.Runner.RunOutput(ctx, platform.Command{
 		Path:      l.systemctl(),
 		Arguments: arguments,
 	})
+	if err != nil {
+		return output, err
+	}
+	if output.ExitCode != 0 {
+		return output, fmt.Errorf("systemctl %s exited with status %d", strings.Join(arguments, " "), output.ExitCode)
+	}
+	return output, nil
 }
 
 // unitFor は systemd が読む unit ファイル。
