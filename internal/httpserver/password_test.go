@@ -420,6 +420,42 @@ func TestAskpassRechecksCurrentPasswordPolicyAndConsumesDeniedToken(t *testing.T
 	}
 }
 
+func TestAskpassRedeemsAKeyTokenOnlyForItsBoundKeyPrompt(t *testing.T) {
+	_, service := passwordEngine(t)
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "server-key", "saved key phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignCredential(secret.KindKeyPassphrase, "id_ed25519_server", "server-key"); err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	registerPasswordRoutes(engine, PasswordHandlers{
+		Service: service,
+		KeyPassphraseAnswerable: func(alias, relativePath, expectedPath, evidence, prompt string) bool {
+			return alias == "bastion" && relativePath == "id_ed25519_server" &&
+				expectedPath == "/Users/tester/.ssh/id_ed25519_server" &&
+				evidence == "evidence" && prompt == "Enter passphrase for key '/Users/tester/.ssh/id_ed25519_server': "
+		},
+	})
+	token, err := service.IssueKeyPassphraseToken(
+		"bastion", "id_ed25519_server", "/Users/tester/.ssh/id_ed25519_server", "evidence")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := send(t, engine, http.MethodPost, AskpassPath,
+		`{"alias":"bastion","prompt":"Enter passphrase for key '/Users/tester/.ssh/id_ed25519_server': "}`,
+		askpassHeaders(token))
+	if response.Code != http.StatusOK {
+		t.Fatalf("redeem = %d: %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "server-key") || !strings.Contains(response.Body.String(), "saved key phrase") {
+		t.Fatalf("response did not contain exactly the resolved value: %s", response.Body.String())
+	}
+}
+
 func TestEligibilityIsReadableAndCarriesTheWarnings(t *testing.T) {
 	engine, service := passwordEngine(t)
 	if err := service.Initialise(testPassphrase); err != nil {

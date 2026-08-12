@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,7 +43,6 @@ func TestConnectDoesNotIssueAStoredPasswordTokenForADirectKey(t *testing.T) {
 	}
 	engine := connectEngine(t, ConnectHandlers{
 		Secret: cliSecret, Passwords: vault, AskpassURL: "http://127.0.0.1:1/askpass",
-		PasswordAllowed: func(string) (bool, error) { return false, nil },
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -55,6 +55,121 @@ func TestConnectDoesNotIssueAStoredPasswordTokenForADirectKey(t *testing.T) {
 	}
 	if answer.AskpassToken != "" {
 		t.Fatal("direct-key connection received an askpass token")
+	}
+}
+
+func TestConnectNeverIssuesAStoredAccountPasswordToken(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set("password-only", "stored-account-password"); err != nil {
+		t.Fatal(err)
+	}
+	engine := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault, AskpassURL: "http://127.0.0.1:1/askpass",
+	})
+	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"password-only"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("connect = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer connectResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.AskpassToken != "" || answer.AskpassKind != "" {
+		t.Fatalf("stored account password armed askpass: %+v", answer)
+	}
+}
+
+func TestConnectIssuesAKeyPassphraseTokenForTheDirectStoredKey(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetCredential(secret.KindKeyPassphrase, "server-key", "saved key phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.AssignCredential(secret.KindKeyPassphrase, "id_ed25519_server", "server-key"); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault, AskpassURL: "http://127.0.0.1:1/askpass",
+		KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
+			return "id_ed25519_server", filepath.Join(home, ".ssh", "id_ed25519_server"),
+				"Host bastion\n\tIdentityFile " + filepath.Join(home, ".ssh", "id_ed25519_server") + "\n",
+				"evidence", alias == "bastion", nil
+		},
+	})
+	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("connect = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer connectResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.AskpassToken == "" || answer.AskpassKind != AskpassKindKeyPassphrase {
+		t.Fatalf("connect answer = %+v, want a key-passphrase token", answer)
+	}
+	if answer.IdentityFile != filepath.Join(home, ".ssh", "id_ed25519_server") ||
+		!strings.Contains(answer.SSHConfig, "IdentityFile ") {
+		t.Fatalf("connect answer = %+v, want the frozen config and exact key", answer)
+	}
+}
+
+func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set("bastion", "legacy-password"); err != nil {
+		t.Fatal(err)
+	}
+	engine := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault, AskpassURL: "http://127.0.0.1:1/askpass",
+		KeyPassphraseTarget: func(string) (string, string, string, string, bool, error) {
+			return "", "", "", "", false, os.ErrPermission
+		},
+	})
+	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	var answer connectResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.AskpassToken != "" {
+		t.Fatal("an unreadable key policy fell back to the account-password namespace")
 	}
 }
 

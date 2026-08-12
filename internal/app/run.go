@@ -51,7 +51,7 @@ type Dependencies struct {
 	// diagnostics サービスは panic せずに「端末が設定されていない」と報告する。
 	// ここのテストはその挙動に依存している。
 	Terminal platform.TerminalLauncher
-	// AskpassHelper は実行中バイナリの絶対パス。OpenSSH が保存済みパスワードを得る
+	// AskpassHelper は実行中バイナリの絶対パス。OpenSSH が保存済み鍵パスフレーズを得る
 	// ために実行するプログラムである。これを知り得るのは cmd/sshc だけで、パスが空
 	// なら、すべての端末起動は素の経路のままになる。
 	AskpassHelper string
@@ -63,9 +63,6 @@ type Dependencies struct {
 	// Updates はプロジェクトのリリースを調べる。nil なら何も提示しない。リリースで
 	// ないビルドはそうあるべきである。
 	Updates *selfupdate.Checker
-	// Answerable は askpass エンドポイントが適用するプロンプトのルール。nil のルールは
-	// どのプロンプトにも答えないことを意味し、これが安全な既定である。
-	Answerable func(prompt string) bool
 	// Lookup は親の環境を読み、このプロセスが起動する OpenSSH プログラムが
 	// platform.MinimalEnvironment を受け取れるようにする。os.LookupEnv を渡してよいのは
 	// cmd/sshc だけ。nil なら子は継承する形になり、テストにはそれが向く。
@@ -240,10 +237,14 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		Passwords:     passwordService,
 		Sync:          syncService,
 		AskpassHelper: dependencies.AskpassHelper,
-		Answerable: passwordAnswerable(
-			boundPrompt(dependencies.Answerable, projectionOf(diagnosticsService)),
-			configService.StoredPasswordAllowed,
-		),
+		// Account-password tokens are no longer issued. Keep the server-side
+		// namespace closed too, so an old or directly minted token cannot turn
+		// the retained encrypted records back into automatic SSH answers.
+		Answerable: func(string, string) bool { return false },
+		KeyPassphraseAnswerable: keyPassphraseAnswerable(
+			keyPassphrasePrompt, func(alias string) (application.DirectKeyPassphraseTarget, bool, error) {
+				return configService.DirectKeyPassphraseTarget(alias, keyService.Inventory)
+			}),
 	})
 	if err != nil {
 		listener.Close()
@@ -257,10 +258,58 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	// なく後片付けである。
 	if _, err := handoff.Write(HandoffDir(dependencies.Home), server.URL(), cliSecret); err != nil {
 		dependencies.Logger.Warn(
-			"write the command-line handoff; sshc <alias> will connect without a stored password",
+			"write the command-line handoff; sshc <alias> will connect without a saved key passphrase",
 			"error", err)
 	}
 	return server, bootstrap, nil
+}
+
+// keyPassphrasePrompt accepts only OpenSSH's exact question for the absolute
+// key path resolved when the token was issued. Other keys, 2FA, host-key
+// confirmation, and account-password prompts cannot redeem it.
+func keyPassphrasePrompt(expectedPath, prompt string) bool {
+	if expectedPath == "" {
+		return false
+	}
+	trimmed := strings.TrimRight(prompt, " \t\r\n")
+	const prefix = "Enter passphrase for key '"
+	if !strings.HasPrefix(trimmed, prefix) || !strings.HasSuffix(trimmed, "':") {
+		return false
+	}
+	promptPath := strings.TrimSuffix(strings.TrimPrefix(trimmed, prefix), "':")
+	expectedPath = filepath.Clean(expectedPath)
+	promptPath = filepath.Clean(promptPath)
+	if promptPath == expectedPath {
+		return true
+	}
+	// OpenSSH formats the filename with %.100s. A truncated value cannot
+	// uniquely identify a key, so eligible targets are limited to paths that
+	// fit and every truncation is refused here.
+	return false
+}
+
+func keyPassphraseAnswerable(
+	promptRule func(expectedPath, prompt string) bool,
+	currentTarget func(alias string) (application.DirectKeyPassphraseTarget, bool, error),
+) func(alias, relativePath, expectedPath, evidence, prompt string) bool {
+	return func(alias, relativePath, expectedPath, evidence, prompt string) bool {
+		if promptRule == nil || currentTarget == nil || !promptRule(expectedPath, prompt) {
+			return false
+		}
+		current, ok, err := currentTarget(alias)
+		return err == nil && ok && current.RelativePath == relativePath &&
+			filepath.Clean(current.PromptPath) == filepath.Clean(expectedPath) &&
+			current.Evidence == evidence
+	}
+}
+
+// KeyPassphraseAnswerable exposes the exact production prompt and snapshot
+// policy to the black-box OpenSSH integration suite. Keeping the constructor
+// here means the integration test cannot accidentally validate a looser copy.
+func KeyPassphraseAnswerable(
+	currentTarget func(alias string) (application.DirectKeyPassphraseTarget, bool, error),
+) func(alias, relativePath, expectedPath, evidence, prompt string) bool {
+	return keyPassphraseAnswerable(keyPassphrasePrompt, currentTarget)
 }
 
 // HandoffDir は、動作中のアプリケーションが `sshc <alias>` の読むファイルを置く
@@ -323,66 +372,5 @@ func newOrigin(random io.Reader) func() (string, error) {
 			return "", err
 		}
 		return hex.EncodeToString(raw), nil
-	}
-}
-
-// boundPrompt は、プロンプトのルールを「問いの形」に対する検査から「誰が尋ねて
-// いるか」に対する検査へと変える。
-//
-// 形のルールは正しいが、それだけでは足りない。keyboard-interactive のプロンプトは
-// リモートサーバーが書くので、"admin's password: " を送るサーバーは、パスワード
-// 認証がまったく使われていなくても保存済みパスワードを得てしまう。ここで加える
-// のは射影 — この alias が解決するユーザー名とホスト名 — と、プロンプトがそれらを
-// 名指ししていることの要求である。これは OpenSSH 自身のパスワードプロンプトが
-// していることでもある。
-//
-// 設定を射影できない場合は、形のルールだけが残る。それはこのアプリケーションが
-// 読めないホストの状態であり、そこへの接続をすべて拒否するのは、以前の答えより
-// 悪い答えになってしまう。
-func boundPrompt(
-	shape func(prompt string) bool,
-	projection func(alias string) (user, hostname string, ok bool),
-) func(alias, prompt string) bool {
-	return func(alias, prompt string) bool {
-		if shape == nil || !shape(prompt) {
-			return false
-		}
-		if projection == nil {
-			return true
-		}
-		user, hostname, ok := projection(alias)
-		if !ok {
-			return true
-		}
-		return strings.Contains(strings.ToLower(prompt), strings.ToLower(user+"@"+hostname))
-	}
-}
-
-// passwordAnswerable rechecks the live config at redemption time. A token
-// issued before a direct key was added is still consumed by Redeem, but this
-// predicate prevents the password from crossing the process boundary.
-func passwordAnswerable(
-	promptRule func(alias, prompt string) bool,
-	allowed func(alias string) (bool, error),
-) func(alias, prompt string) bool {
-	return func(alias, prompt string) bool {
-		if promptRule == nil || !promptRule(alias, prompt) || allowed == nil {
-			return false
-		}
-		permitted, err := allowed(alias)
-		return err == nil && permitted
-	}
-}
-
-// projectionOf は、alias が解決するユーザー名とホスト名を読む。これは OpenSSH が
-// 自身のパスワードプロンプトに入れるものである。
-func projectionOf(service *diagnostics.Service) func(string) (string, string, bool) {
-	return func(alias string) (string, string, bool) {
-		user, hasUser := service.ProjectedValue(alias, "user")
-		hostname, _, err := service.Destination(alias)
-		if !hasUser || user == "" || err != nil || hostname == "" {
-			return "", "", false
-		}
-		return user, hostname, true
 	}
 }

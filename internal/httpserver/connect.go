@@ -34,9 +34,9 @@ type ConnectHandlers struct {
 	// Passwords は一度限りの askpass トークンを発行する。nil であれば
 	// 保存されたパスワードは一切提供されず、それはプロンプトが出る正常な接続である。
 	Passwords *secret.Service
-	// PasswordAllowed rechecks current SSH configuration before a saved
-	// password token is minted. false or an unreadable policy means plain SSH.
-	PasswordAllowed func(alias string) (bool, error)
+	// KeyPassphraseTarget resolves the one direct workspace key whose saved
+	// passphrase may answer this connection. A false result is never guessed.
+	KeyPassphraseTarget func(alias string) (relativePath, promptPath, configSnapshot, evidence string, ok bool, err error)
 	// AskpassURL は、ヘルパーがそのトークンを引き換える場所である。
 	AskpassURL string
 	// Warnings は、OpenSSH がこの host に対して実行するディレクティブを報告する。
@@ -56,8 +56,51 @@ type connectRequest struct {
 type connectResponse struct {
 	Alias        string   `json:"alias"`
 	AskpassToken string   `json:"askpassToken,omitempty"`
+	AskpassKind  string   `json:"askpassKind,omitempty"`
 	AskpassURL   string   `json:"askpassUrl"`
+	IdentityFile string   `json:"identityFile,omitempty"`
+	SSHConfig    string   `json:"sshConfig,omitempty"`
 	Warnings     []string `json:"warnings"`
+}
+
+const (
+	AskpassKindKeyPassphrase = "key_passphrase"
+)
+
+type issuedAskpassCredential struct {
+	token        string
+	kind         string
+	identityFile string
+	sshConfig    string
+}
+
+func issueAskpassCredential(
+	passwords *secret.Service,
+	alias string,
+	keyPassphraseTarget func(string) (string, string, string, string, bool, error),
+) issuedAskpassCredential {
+	if passwords == nil {
+		return issuedAskpassCredential{}
+	}
+	if keyPassphraseTarget != nil {
+		relativePath, promptPath, configSnapshot, evidence, ok, err := keyPassphraseTarget(alias)
+		if err != nil {
+			return issuedAskpassCredential{}
+		}
+		if ok {
+			if token, issueErr := passwords.IssueKeyPassphraseToken(alias, relativePath, promptPath, evidence); issueErr == nil {
+				return issuedAskpassCredential{
+					token: token, kind: AskpassKindKeyPassphrase,
+					identityFile: promptPath, sshConfig: configSnapshot,
+				}
+			}
+			return issuedAskpassCredential{}
+		}
+	}
+	// Stored account passwords remain encrypted records only. They are never
+	// offered to OpenSSH: password, keyboard-interactive, PAM and 2FA prompts
+	// are deliberately left to the user's normal interactive SSH session.
+	return issuedAskpassCredential{}
 }
 
 // OpenPath は、コマンドラインがブラウザへの入口を求める場所である。
@@ -133,15 +176,11 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 	// トークンが存在するのは、それと引き換えるものがある場合だけである。
 	// それ以外——閉じた vault、保存されたパスワードなし、エンドポイントなし——は
 	// すべて OpenSSH 自身がパスワードを尋ねる接続であり、それは正常な接続である。
-	passwordAllowed := true
-	if h.PasswordAllowed != nil {
-		allowed, err := h.PasswordAllowed(decoded.Alias)
-		passwordAllowed = err == nil && allowed
-	}
-	if passwordAllowed && h.Passwords != nil && h.AskpassURL != "" {
-		if token, err := h.Passwords.IssueToken(decoded.Alias); err == nil {
-			answer.AskpassToken = token
-		}
+	if h.AskpassURL != "" {
+		issued := issueAskpassCredential(
+			h.Passwords, decoded.Alias, h.KeyPassphraseTarget)
+		answer.AskpassToken, answer.AskpassKind = issued.token, issued.kind
+		answer.IdentityFile, answer.SSHConfig = issued.identityFile, issued.sshConfig
 	}
 	return c.JSON(http.StatusOK, answer)
 }

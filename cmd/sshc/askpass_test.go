@@ -11,44 +11,6 @@ import (
 	"testing"
 )
 
-// OpenSSH が実際に出すプロンプトを書き写したもの。この表の要点は、答えてよいのが
-// 最初のひとつだけで、残りはこのヘルパーが決して答えてはならない問いだという
-// ことだ。ホスト鍵のものは、この関数が存在する理由そのものである。
-func TestAnswerablePromptAcceptsOnlyThePasswordPrompt(t *testing.T) {
-	answerable := []string{
-		"ops@203.0.113.10's password: ",
-		"ops@203.0.113.10's password:",
-		"root@nas's password: ",
-		"a-very-long-user-name@some.host.example's password: ",
-	}
-	for _, prompt := range answerable {
-		if !AnswerablePrompt(prompt) {
-			t.Errorf("AnswerablePrompt(%q) = false, want true", prompt)
-		}
-	}
-
-	refused := []string{
-		"",
-		"   ",
-		"Are you sure you want to continue connecting (yes/no/[fingerprint])? ",
-		"Please type 'yes', 'no' or the fingerprint: ",
-		"Enter passphrase for key '/Users/tester/.ssh/id_ed25519': ",
-		"Enter passphrase for /Users/tester/.ssh/id_rsa: ",
-		"Verification code: ",
-		"Enter your one-time token: ",
-		"(ops@203.0.113.10) Password: ",   // keyboard-interactive、別のフロー
-		"Enter PIN for authenticator: ",   // FIDO
-		"Confirm user presence for key: ", // FIDO
-		"password",
-		"Enter passphrase for key 'x': ops@h's password: ", // 両方に該当、拒否される
-	}
-	for _, prompt := range refused {
-		if AnswerablePrompt(prompt) {
-			t.Errorf("AnswerablePrompt(%q) = true, want false", prompt)
-		}
-	}
-}
-
 type askpassEnvironment map[string]string
 
 func (e askpassEnvironment) lookup(name string) string { return e[name] }
@@ -58,10 +20,11 @@ func fullEnvironment(endpoint string) askpassEnvironment {
 		AliasVariable: "bastion",
 		URLVariable:   endpoint,
 		TokenVariable: "one-time-token",
+		KindVariable:  "password",
 	}
 }
 
-func TestAskpassWritesOnlyThePasswordOnStandardOutput(t *testing.T) {
+func TestLegacyPasswordKindIsRelayedInsteadOfReturningAStoredAccountPassword(t *testing.T) {
 	var seen askpassRequest
 	var token string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -72,23 +35,98 @@ func TestAskpassWritesOnlyThePasswordOnStandardOutput(t *testing.T) {
 	}))
 	defer server.Close()
 
+	prompter := &recordingTerminal{answer: "typed account password"}
 	var out, errOut bytes.Buffer
 	status := runAskpass(context.Background(), []string{"ops@203.0.113.10's password: "},
-		fullEnvironment(server.URL).lookup, server.Client(), &out, &errOut, nil)
+		fullEnvironment(server.URL).lookup, server.Client(), &out, &errOut,
+		func() (terminalPrompter, error) { return prompter, nil })
 
 	if status != askpassOK {
 		t.Fatalf("status = %d, stderr = %q", status, errOut.String())
 	}
 	// 末尾の改行ひとつは OpenSSH が取り除くので、空白で終わるパスワードもそのまま
 	// 無傷で残る。
-	if out.String() != "hunter2 \n" {
-		t.Errorf("stdout = %q, want %q", out.String(), "hunter2 \n")
+	if out.String() != "typed account password\n" {
+		t.Errorf("stdout = %q", out.String())
 	}
-	if token != "one-time-token" {
-		t.Errorf("token header = %q", token)
+	if token != "" || seen.Alias != "" {
+		t.Errorf("legacy password prompt reached the server: token %q, request %+v", token, seen)
 	}
-	if seen.Alias != "bastion" {
-		t.Errorf("alias = %q", seen.Alias)
+}
+
+func TestAskpassUsesAKeyBoundTokenForAnOpenSSHKeyPassphrasePrompt(t *testing.T) {
+	requested := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"password":"saved key phrase"}`))
+	}))
+	defer server.Close()
+
+	environment := fullEnvironment(server.URL)
+	environment["SSHC_ASKPASS_KIND"] = "key_passphrase"
+	environment[KeyPathVariable] = "/Users/tester/.ssh/id_ed25519_server"
+	var out, errOut bytes.Buffer
+	status := runAskpass(context.Background(),
+		[]string{"Enter passphrase for key '/Users/tester/.ssh/id_ed25519_server': "},
+		environment.lookup, server.Client(), &out, &errOut, nil)
+
+	if status != askpassOK {
+		t.Fatalf("status = %d, stderr = %q", status, errOut.String())
+	}
+	if !requested {
+		t.Fatal("the saved key-passphrase endpoint was never asked")
+	}
+	if out.String() != "saved key phrase\n" {
+		t.Fatalf("stdout = %q, want only the saved key passphrase", out.String())
+	}
+}
+
+func TestAskpassRelaysAnotherKeyWithoutPresentingTheToken(t *testing.T) {
+	requested := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requested = true
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	environment := fullEnvironment(server.URL)
+	environment[KindVariable] = askpassKindKeyPassphrase
+	environment[KeyPathVariable] = "/Users/tester/.ssh/id_server"
+	prompter := &recordingTerminal{answer: "typed by human"}
+	var out, errOut bytes.Buffer
+	status := runAskpass(context.Background(),
+		[]string{"Enter passphrase for key '/Users/tester/.ssh/id_other': "},
+		environment.lookup, server.Client(), &out, &errOut,
+		func() (terminalPrompter, error) { return prompter, nil })
+	if status != askpassOK || out.String() != "typed by human\n" {
+		t.Fatalf("status = %d, stdout = %q, stderr = %q", status, out.String(), errOut.String())
+	}
+	if requested {
+		t.Fatal("another key's prompt presented the one-time token to the server")
+	}
+}
+
+func TestAskpassRelaysAKeyPromptWhenTheBoundTokenCannotAnswerIt(t *testing.T) {
+	for _, responseStatus := range []int{http.StatusForbidden, http.StatusNotFound, http.StatusConflict} {
+		t.Run(http.StatusText(responseStatus), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(responseStatus)
+			}))
+			defer server.Close()
+			environment := fullEnvironment(server.URL)
+			environment[KindVariable] = askpassKindKeyPassphrase
+			environment[KeyPathVariable] = "/Users/tester/.ssh/id_other"
+			prompter := &recordingTerminal{answer: "typed by human"}
+			var out, errOut bytes.Buffer
+			status := runAskpass(context.Background(),
+				[]string{"Enter passphrase for key '/Users/tester/.ssh/id_other': "},
+				environment.lookup, server.Client(), &out, &errOut,
+				func() (terminalPrompter, error) { return prompter, nil })
+			if status != askpassOK || out.String() != "typed by human\n" {
+				t.Fatalf("status = %d, stdout = %q, stderr = %q", status, out.String(), errOut.String())
+			}
+		})
 	}
 }
 
@@ -166,7 +204,7 @@ func TestAskpassRefusesAnEndpointThatIsNotLoopback(t *testing.T) {
 	}
 }
 
-func TestAskpassDistinguishesNothingStoredFromRefused(t *testing.T) {
+func TestFetchPasswordDistinguishesNothingStoredFromRefused(t *testing.T) {
 	// 「このホストにパスワードがない、または vault がロックされている」ことと
 	// 「リクエストが拒否された」ことは、Terminal のウィンドウを見つめている人に
 	// 伝える内容として別物である。
@@ -180,10 +218,8 @@ func TestAskpassDistinguishesNothingStoredFromRefused(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(status)
 		}))
-		var out, errOut bytes.Buffer
-		environment := fullEnvironment(server.URL)
-		got := runAskpass(context.Background(), []string{"x's password: "},
-			environment.lookup, server.Client(), &out, &errOut, nil)
+		_, got := fetchPassword(context.Background(), server.Client(), server.URL,
+			"one-time-token", "bastion", "x's password: ")
 		server.Close()
 
 		if got != want {
@@ -192,7 +228,7 @@ func TestAskpassDistinguishesNothingStoredFromRefused(t *testing.T) {
 	}
 }
 
-func TestAskpassRefusesAnEmptyPasswordFromTheServer(t *testing.T) {
+func TestFetchPasswordRefusesAnEmptyPasswordFromTheServer(t *testing.T) {
 	// 空の回答はプロンプト上で誤ったパスワードと区別がつかず、それを書けばパスワードの
 	// 試行回数を無駄にひとつ消費することになる。
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -200,14 +236,13 @@ func TestAskpassRefusesAnEmptyPasswordFromTheServer(t *testing.T) {
 	}))
 	defer server.Close()
 
-	var out, errOut bytes.Buffer
-	environment := fullEnvironment(server.URL)
-	if status := runAskpass(context.Background(), []string{"x's password: "},
-		environment.lookup, server.Client(), &out, &errOut, nil); status != askpassNoEntry {
+	password, status := fetchPassword(context.Background(), server.Client(), server.URL,
+		"one-time-token", "bastion", "x's password: ")
+	if status != askpassNoEntry {
 		t.Fatalf("status = %d, want askpassNoEntry", status)
 	}
-	if out.Len() != 0 {
-		t.Errorf("stdout = %q", out.String())
+	if password != "" {
+		t.Errorf("password = %q", password)
 	}
 }
 
@@ -356,7 +391,7 @@ func TestAskpassRelaysASecretPromptWithoutEchoingIt(t *testing.T) {
 
 // 答えられるプロンプトでは端末に触れない。保存したパスワードが使われる経路は、
 // 人間を煩わせないためにこそある。
-func TestAskpassNeverOpensTheTerminalForAPromptItCanAnswer(t *testing.T) {
+func TestAskpassNeverOpensTheTerminalForTheBoundKeyPrompt(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"password":"hunter2"}`))
@@ -364,10 +399,13 @@ func TestAskpassNeverOpensTheTerminalForAPromptItCanAnswer(t *testing.T) {
 	defer server.Close()
 
 	var out, errOut bytes.Buffer
-	status := runAskpass(context.Background(), []string{"ops@203.0.113.10's password: "},
-		fullEnvironment(server.URL).lookup, server.Client(), &out, &errOut,
+	environment := fullEnvironment(server.URL)
+	environment[KindVariable] = askpassKindKeyPassphrase
+	environment[KeyPathVariable] = "/Users/tester/.ssh/id_server"
+	status := runAskpass(context.Background(), []string{"Enter passphrase for key '/Users/tester/.ssh/id_server': "},
+		environment.lookup, server.Client(), &out, &errOut,
 		func() (terminalPrompter, error) {
-			t.Error("保存済みパスワードで答えられるのに制御端末を開いた")
+			t.Error("保存済み鍵パスフレーズで答えられるのに制御端末を開いた")
 			return nil, errors.New("must not be called")
 		})
 

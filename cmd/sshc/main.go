@@ -233,7 +233,7 @@ func main() {
 	// なく、すべての端末起動を素の経路のままにしておく。
 	helperPath, err := os.Executable()
 	if err != nil {
-		logger.Warn("resolve this binary; stored passwords will not be offered", "error", err)
+		logger.Warn("resolve this binary; saved key passphrases will not be offered", "error", err)
 		helperPath = ""
 	}
 
@@ -263,20 +263,16 @@ func main() {
 			API:  "https://api.github.com/repos/aida0710/sshc/releases/latest",
 			HTTP: &http.Client{Timeout: 30 * time.Second},
 		},
-		Listen:    net.Listen,
-		UI:        assets,
-		Logger:    logger,
-		Home:      home,
-		Runner:    parts.Runner,
-		Toolchain: parts.Toolchain,
-		KeyAgent:  parts.KeyAgent,
-		Terminal:  parts.Terminal,
-		Lookup:    os.LookupEnv,
-		// ヘルパーとサーバーは同じ関数から同じルールを適用する。そのため「このプロンプト
-		// には答えるのか」という問いに対して、両者の答えが食い違っていくことは
-		// あり得ない。
+		Listen:        net.Listen,
+		UI:            assets,
+		Logger:        logger,
+		Home:          home,
+		Runner:        parts.Runner,
+		Toolchain:     parts.Toolchain,
+		KeyAgent:      parts.KeyAgent,
+		Terminal:      parts.Terminal,
+		Lookup:        os.LookupEnv,
 		AskpassHelper: helperPath,
-		Answerable:    AnswerablePrompt,
 	}
 	if err := app.Run(ctx, dependencies, version); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("sshc stopped", "error", err)

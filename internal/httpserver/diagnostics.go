@@ -26,10 +26,10 @@ type DiagnosticsHandlers struct {
 	// Passwords、AskpassHelper、AskpassURL は、保存されたパスワードを持つ
 	// host に対して起動に武装させる。3 つすべてが nil または空であれば、
 	// すべての起動は素の経路をたどる。これは vault を持たないサーバーのふるまいである。
-	Passwords       *secret.Service
-	PasswordAllowed func(alias string) (bool, error)
-	AskpassHelper   string
-	AskpassURL      string
+	Passwords           *secret.Service
+	KeyPassphraseTarget func(alias string) (relativePath, promptPath, configSnapshot, evidence string, ok bool, err error)
+	AskpassHelper       string
+	AskpassURL          string
 }
 
 func registerDiagnosticsRoutes(engine *echo.Echo, handlers DiagnosticsHandlers) {
@@ -367,12 +367,8 @@ func (h DiagnosticsHandlers) TerminalLaunch(c *echo.Context) error {
 	// トークンは確認が消費された後、ここで発行される。したがって、トークンが
 	// 存在するのはユーザーがまさに承認した起動に対してだけである。
 	if h.armed(request.Alias) {
-		token, err := h.Passwords.IssueToken(request.Alias)
-		if err != nil {
-			return problem(c, http.StatusConflict, "vault_locked")
-		}
 		if err := h.Service.LaunchTerminalWithPassword(
-			c.Request().Context(), request.Alias, h.AskpassHelper, h.AskpassURL, token,
+			c.Request().Context(), request.Alias, h.AskpassHelper, h.AskpassURL, "",
 		); err != nil {
 			return terminalProblem(c, err)
 		}
@@ -427,14 +423,14 @@ func severityName(severity config.Severity) string {
 // 欠けている部品があれば、失敗するのではなく素の起動にフォールバックする。
 // 開いて手でパスワードを尋ねる terminal は、それでも正常な接続だからである。
 func (h DiagnosticsHandlers) armed(alias string) bool {
-	if h.PasswordAllowed != nil {
-		allowed, err := h.PasswordAllowed(alias)
-		if err != nil || !allowed {
-			return false
+	if h.Passwords == nil || h.AskpassHelper == "" || h.AskpassURL == "" {
+		return false
+	}
+	if h.KeyPassphraseTarget != nil {
+		relativePath, _, _, _, ok, err := h.KeyPassphraseTarget(alias)
+		if err == nil && ok {
+			return h.Passwords.HasKeyPassphrase(relativePath)
 		}
 	}
-	return h.Passwords != nil &&
-		h.AskpassHelper != "" &&
-		h.AskpassURL != "" &&
-		h.Passwords.Has(alias)
+	return false
 }

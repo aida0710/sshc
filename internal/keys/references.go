@@ -212,3 +212,24 @@ func ExpandsTo(workspace *storage.Workspace, value, absolute string) bool {
 	expanded, reason := expandKeyPath(value, workspace.Home())
 	return reason == "" && workspace.Normalise(expanded) == workspace.Normalise(absolute)
 }
+
+// ResolveWorkspaceKeyPath resolves the same conservative IdentityFile forms as
+// the reference index and returns both the vault subject and the stable,
+// symlink-resolved path sshc must pass to OpenSSH. Relative paths and paths
+// outside ~/.ssh are deliberately not guessed.
+func ResolveWorkspaceKeyPath(workspace *storage.Workspace, value string) (relative, promptPath string, ok bool) {
+	expanded, reason := expandKeyPath(value, workspace.Home())
+	if reason != "" {
+		return "", "", false
+	}
+	normalised := workspace.Normalise(filepath.Clean(expanded))
+	if !workspace.Contains(normalised) || normalised == workspace.Root() {
+		return "", "", false
+	}
+	relative, err := filepath.Rel(workspace.Root(), normalised)
+	if err != nil || relative == "." || relative == ".." ||
+		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", "", false
+	}
+	return filepath.ToSlash(relative), filepath.Clean(normalised), true
+}

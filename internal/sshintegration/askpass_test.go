@@ -16,8 +16,10 @@ package sshintegration_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,17 +31,23 @@ import (
 
 	"crypto/rand"
 
+	"sshc/internal/app"
 	"sshc/internal/application"
+	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
+	"sshc/internal/keys"
+	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/session"
 	"sshc/internal/storage"
 )
 
 const (
-	addressVariable  = "SSHC_TEST_SSH_ADDR"
-	userVariable     = "SSHC_TEST_SSH_USER"
-	passwordVariable = "SSHC_TEST_SSH_PASSWORD"
+	addressVariable   = "SSHC_TEST_SSH_ADDR"
+	userVariable      = "SSHC_TEST_SSH_USER"
+	passwordVariable  = "SSHC_TEST_SSH_PASSWORD"
+	keyVariable       = "SSHC_TEST_SSH_KEY"
+	keyPhraseVariable = "SSHC_TEST_SSH_KEY_PASSPHRASE"
 
 	alias      = "integration"
 	passphrase = "correct horse battery staple"
@@ -81,7 +89,14 @@ func helperPath(t *testing.T) string {
 // なってしまう。
 func buildHome(t *testing.T, destination target) string {
 	t.Helper()
-	home := t.TempDir()
+	// OpenSSH renders key paths through %.100s. Keep this black-box fixture
+	// below that bound so the production policy can bind the full path instead
+	// of accepting an ambiguous truncated prefix.
+	home, err := os.MkdirTemp("/tmp", "sshc-it-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
 	root := filepath.Join(home, ".ssh")
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
@@ -200,7 +215,7 @@ func requireTheHelperAsked(t *testing.T, listener *countingListener, before int6
 }
 
 // startServer は、本物の /askpass エンドポイントを持つ本物の HTTP サーバーを動かす。
-func startServer(t *testing.T, home string) (*secret.Service, string, *countingListener) {
+func startServer(t *testing.T, home string) (*secret.Service, *application.Service, *keys.Service, string, string, *countingListener) {
 	t.Helper()
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {
@@ -214,6 +229,11 @@ func startServer(t *testing.T, home string) (*secret.Service, string, *countingL
 		workspace,
 		storage.NewManager(workspace, time.Now, rand.Reader),
 	)
+	keyService := keys.NewService(keys.ServiceOptions{
+		Workspace: workspace, Transactions: storage.NewManager(workspace, time.Now, rand.Reader),
+		Resolver: storage.NewResolver(workspace), Catalogue: keys.CatalogueReader{},
+		Agent: platform.KeyAgent(nil), Now: time.Now, Random: rand.Reader,
+	})
 
 	bare, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -225,15 +245,18 @@ func startServer(t *testing.T, home string) (*secret.Service, string, *countingL
 		t.Fatal(err)
 	}
 	server, err := httpserver.New(httpserver.Options{
-		Listener:  listener,
-		Sessions:  sessions,
-		UI:        os.DirFS(home),
-		Version:   "integration",
-		Passwords: vault,
-		Answerable: func(alias, prompt string) bool {
-			allowed, err := configService.StoredPasswordAllowed(alias)
-			return err == nil && allowed && answerable(alias, prompt)
-		},
+		Listener:   listener,
+		Sessions:   sessions,
+		UI:         os.DirFS(home),
+		Version:    "integration",
+		Passwords:  vault,
+		CLISecret:  "integration-cli-secret",
+		Config:     configService,
+		Keys:       keyService,
+		Answerable: func(string, string) bool { return false },
+		KeyPassphraseAnswerable: app.KeyPassphraseAnswerable(func(alias string) (application.DirectKeyPassphraseTarget, bool, error) {
+			return configService.DirectKeyPassphraseTarget(alias, keyService.Inventory)
+		}),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -247,35 +270,84 @@ func startServer(t *testing.T, home string) (*secret.Service, string, *countingL
 	if index := strings.Index(origin, "#"); index >= 0 {
 		origin = origin[:index]
 	}
-	return vault, strings.TrimSuffix(origin, "/") + httpserver.AskpassPath, listener
+	return vault, configService, keyService, origin,
+		strings.TrimSuffix(origin, "/") + httpserver.AskpassPath, listener
 }
 
-// answerable は本番のルールである。cmd/sshc は main パッケージで import できない
-// ため、ここで書き直してある。より緩いルールを使うテストは、出荷されるものに
-// ついて何も証明しない。したがってこれは同じ述語だ。プロンプトが OpenSSH の
-// パスワードサフィックスで終わり、それ以外の何にも触れていないこと。
-func answerable(_ string, prompt string) bool {
-	trimmed := strings.ToLower(strings.TrimRight(prompt, " \t\r\n"))
-	for _, marker := range []string{"passphrase", "continue connecting", "fingerprint", "yes/no"} {
-		if strings.Contains(trimmed, marker) {
-			return false
-		}
+func issueThroughCLI(t *testing.T, origin string) (token, kind, endpoint, identityFile, sshConfig string) {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodPost, origin+httpserver.ConnectPath,
+		strings.NewReader(`{"alias":"`+alias+`"}`))
+	if err != nil {
+		t.Fatal(err)
 	}
-	return strings.HasSuffix(trimmed, "'s password:")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(handoff.HeaderName, "integration-cli-secret")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("cli connect = %s", response.Status)
+	}
+	var answer struct {
+		AskpassToken string `json:"askpassToken"`
+		AskpassKind  string `json:"askpassKind"`
+		AskpassURL   string `json:"askpassUrl"`
+		IdentityFile string `json:"identityFile"`
+		SSHConfig    string `json:"sshConfig"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&answer); err != nil {
+		t.Fatal(err)
+	}
+	return answer.AskpassToken, answer.AskpassKind, answer.AskpassURL, answer.IdentityFile, answer.SSHConfig
 }
 
 func runSSH(t *testing.T, home, endpoint, token string, arguments ...string) (string, error) {
+	return runSSHWithKind(t, home, endpoint, token, "password", arguments...)
+}
+
+func runSSHWithKind(t *testing.T, home, endpoint, token, kind string, arguments ...string) (string, error) {
+	return runSSHWithCredential(t, home, endpoint, token, kind, "", "", arguments...)
+}
+
+func runSSHWithCredential(t *testing.T, home, endpoint, token, kind, identityFile, sshConfig string, arguments ...string) (string, error) {
 	t.Helper()
 	// TerminalPasswordScript がシェルに実行させるものそのもの。
 	// -F を明示するのは UserKnownHostsFile と同じ理由である。既定のユーザー設定の
 	// パスは HOME ではなく passwd データベースから来るので、HOME しか設定しない
 	// テストは、設定なしで黙って走ってしまう。
-	command := exec.Command("ssh", append([]string{
-		"-F", filepath.Join(home, ".ssh", "config"),
+	configPath := filepath.Join(home, ".ssh", "config")
+	if sshConfig != "" {
+		file, err := os.CreateTemp("", "sshc-integration-connect-*.conf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		configPath = file.Name()
+		if err := file.Chmod(0o600); err != nil {
+			file.Close()
+			t.Fatal(err)
+		}
+		if _, err := file.WriteString(sshConfig); err != nil {
+			file.Close()
+			t.Fatal(err)
+		}
+		if err := file.Close(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(configPath) })
+	}
+	sshArguments := []string{
+		"-F", configPath,
 		"-o", "NumberOfPasswordPrompts=1",
 		"-o", "BatchMode=no",
-		"--", alias,
-	}, arguments...)...)
+	}
+	if identityFile != "" {
+		sshArguments = append(sshArguments, "-i", identityFile, "-o", "IdentitiesOnly=yes")
+	}
+	sshArguments = append(sshArguments, "--", alias)
+	command := exec.Command("ssh", append(sshArguments, arguments...)...)
 	command.Env = []string{
 		"HOME=" + home,
 		"PATH=" + os.Getenv("PATH"),
@@ -284,108 +356,77 @@ func runSSH(t *testing.T, home, endpoint, token string, arguments ...string) (st
 		"SSHC_ASKPASS_URL=" + endpoint,
 		"SSHC_ASKPASS_TOKEN=" + token,
 		"SSHC_ASKPASS_ALIAS=" + alias,
+		"SSHC_ASKPASS_KIND=" + kind,
+	}
+	if identityFile != "" {
+		command.Env = append(command.Env, "SSHC_ASKPASS_KEY_PATH="+identityFile)
 	}
 	output, err := command.CombinedOutput()
 	return string(output), err
 }
 
-func TestTheHelperAuthenticatesAgainstARealServer(t *testing.T) {
+func TestTheHelperDecryptsARealPrivateKeyWithItsStoredPassphrase(t *testing.T) {
 	destination := requireTarget(t)
+	sourceKey := os.Getenv(keyVariable)
+	keyPassphrase := os.Getenv(keyPhraseVariable)
+	if sourceKey == "" || keyPassphrase == "" {
+		t.Skipf("%s and %s are not set; the integration target has no encrypted key fixture", keyVariable, keyPhraseVariable)
+	}
 	home := buildHome(t, destination)
-	vault, endpoint, listener := startServer(t, home)
-
-	if err := vault.Set(alias, destination.password); err != nil {
-		t.Fatal(err)
-	}
-	token, err := vault.IssueToken(alias)
+	keyPath := filepath.Join(home, ".ssh", "id_integration")
+	keyBytes, err := os.ReadFile(sourceKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	asked := listener.connections.Load()
-	output, err := runSSH(t, home, endpoint, token, "echo", "authenticated-by-askpass")
-	if err != nil {
-		t.Fatalf("ssh = %v\n%s", err, output)
-	}
-	requireTheHelperAsked(t, listener, asked, output)
-	if !strings.Contains(output, "authenticated-by-askpass") {
-		t.Errorf("the remote command did not run:\n%s", output)
-	}
-}
-
-func TestAddingADirectKeyInvalidatesAnAlreadyIssuedPasswordToken(t *testing.T) {
-	destination := requireTarget(t)
-	home := buildHome(t, destination)
-	vault, endpoint, listener := startServer(t, home)
-
-	if err := vault.Set(alias, destination.password); err != nil {
+	if err := os.WriteFile(keyPath, keyBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	token, err := vault.IssueToken(alias)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	configPath := filepath.Join(home, ".ssh", "config")
 	configuration, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const marker = "\tStrictHostKeyChecking yes\n"
-	updated := strings.Replace(string(configuration), marker,
-		marker+"\tIdentityFile /nonexistent/sshc-policy-test-key\n", 1)
-	if updated == string(configuration) {
-		t.Fatal("the direct IdentityFile fixture was not inserted")
-	}
-	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
+	configuration = []byte(strings.ReplaceAll(string(configuration),
+		"\tPubkeyAuthentication no\n\tPreferredAuthentications password\n",
+		"\tPubkeyAuthentication yes\n\tPreferredAuthentications publickey\n\tIdentityFile "+keyPath+"\n"))
+	if err := os.WriteFile(configPath, configuration, 0o600); err != nil {
 		t.Fatal(err)
+	}
+	vault, configService, keyService, origin, endpoint, listener := startServer(t, home)
+	if err := vault.SetCredential(secret.KindKeyPassphrase, "integration-key", keyPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.AssignCredential(secret.KindKeyPassphrase, "id_integration", "integration-key"); err != nil {
+		t.Fatal(err)
+	}
+	target, ok, err := configService.DirectKeyPassphraseTarget(alias, keyService.Inventory)
+	if err != nil || !ok {
+		t.Fatalf("production key target = %+v, ok %v, err %v", target, ok, err)
+	}
+	token, kind, issuedEndpoint, identityFile, sshConfig := issueThroughCLI(t, origin)
+	if token == "" || kind != "key_passphrase" || issuedEndpoint != endpoint {
+		t.Fatalf("CLI issue = token %t, kind %q, endpoint %q", token != "", kind, issuedEndpoint)
+	}
+	if identityFile != target.PromptPath || sshConfig != target.ConfigSnapshot {
+		t.Fatalf("CLI target = identity %q, config bytes %d; want %q / %d", identityFile, len(sshConfig), target.PromptPath, len(target.ConfigSnapshot))
 	}
 
 	asked := listener.connections.Load()
-	output, err := runSSH(t, home, endpoint, token, "true")
-	if err == nil {
-		t.Fatalf("an already-issued token authenticated after a direct key was added:\n%s", output)
-	}
-	requireTheHelperAsked(t, listener, asked, output)
-	requireAuthenticationWasAttempted(t, output)
-}
-
-func TestTheWrongStoredPasswordFailsOnceRatherThanRepeatedly(t *testing.T) {
-	// 出荷されるコマンドに NumberOfPasswordPrompts=1 が入っているのは、誤った保存済み
-	// パスワードを三度差し出すと、サーバーによってはロックアウトに数えられるからだ。
-	// ここが、それが主張で終わらなくなる場所である。
-	destination := requireTarget(t)
-	home := buildHome(t, destination)
-	vault, endpoint, listener := startServer(t, home)
-
-	if err := vault.Set(alias, destination.password+"-wrong"); err != nil {
-		t.Fatal(err)
-	}
-	token, err := vault.IssueToken(alias)
+	output, err := runSSHWithCredential(t, home, endpoint, token, "key_passphrase", identityFile, sshConfig,
+		"echo", "authenticated-by-key-passphrase")
 	if err != nil {
-		t.Fatal(err)
-	}
-
-	asked := listener.connections.Load()
-	output, err := runSSH(t, home, endpoint, token)
-	if err == nil {
-		t.Fatalf("ssh authenticated with the wrong password:\n%s", output)
+		t.Fatalf("ssh = %v\n%s", err, output)
 	}
 	requireTheHelperAsked(t, listener, asked, output)
-	requireAuthenticationWasAttempted(t, output)
-	if attempts := strings.Count(output, "Permission denied"); attempts > 1 {
-		t.Errorf("the password was offered %d times:\n%s", attempts, output)
+	if !strings.Contains(output, "authenticated-by-key-passphrase") {
+		t.Fatalf("the remote command did not run:\n%s", output)
 	}
 }
 
-func TestASpentTokenDoesNotAuthenticate(t *testing.T) {
-	// トークンは、それが作られた接続によって使い切られる。そうでなければ、プロセス
-	// 一覧で一度見えただけのトークンが、その 2 分間が尽きるまで使えてしまうことに
-	// なる。
+func TestAStoredAccountPasswordIsNeverReturnedToOpenSSH(t *testing.T) {
 	destination := requireTarget(t)
 	home := buildHome(t, destination)
-	vault, endpoint, listener := startServer(t, home)
-
+	vault, _, _, _, endpoint, listener := startServer(t, home)
 	if err := vault.Set(alias, destination.password); err != nil {
 		t.Fatal(err)
 	}
@@ -393,40 +434,19 @@ func TestASpentTokenDoesNotAuthenticate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output, err := runSSH(t, home, endpoint, token, "true"); err != nil {
-		t.Fatalf("the first connection = %v\n%s", err, output)
-	}
 
 	asked := listener.connections.Load()
 	output, err := runSSH(t, home, endpoint, token, "true")
 	if err == nil {
-		t.Fatalf("the spent token authenticated a second connection:\n%s", output)
+		t.Fatalf("a stored account password authenticated despite the disabled policy:\n%s", output)
 	}
-	// ヘルパーは二度目も尋ねたうえで断られたのであって、尋ねなかったのではない。
-	requireTheHelperAsked(t, listener, asked, output)
-	requireAuthenticationWasAttempted(t, output)
-}
-
-func TestALockedVaultCannotAnswer(t *testing.T) {
-	destination := requireTarget(t)
-	home := buildHome(t, destination)
-	vault, endpoint, listener := startServer(t, home)
-
-	if err := vault.Set(alias, destination.password); err != nil {
-		t.Fatal(err)
+	// The production helper only presents key-passphrase tokens to the server.
+	// A legacy account-password token must be rejected locally, before the
+	// bearer token or its stored value reaches the HTTP endpoint.
+	if got := listener.connections.Load(); got != asked {
+		t.Fatalf("the helper presented an account-password token to the application: connections %d -> %d\n%s",
+			asked, got, output)
 	}
-	token, err := vault.IssueToken(alias)
-	if err != nil {
-		t.Fatal(err)
-	}
-	vault.Lock()
-
-	asked := listener.connections.Load()
-	output, err := runSSH(t, home, endpoint, token, "true")
-	if err == nil {
-		t.Fatalf("a locked vault still answered:\n%s", output)
-	}
-	requireTheHelperAsked(t, listener, asked, output)
 	requireAuthenticationWasAttempted(t, output)
 }
 

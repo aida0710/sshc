@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
+	"sshc/internal/config"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/platform"
@@ -22,7 +24,10 @@ import (
 type connectAnswer struct {
 	Alias        string   `json:"alias"`
 	AskpassToken string   `json:"askpassToken"`
+	AskpassKind  string   `json:"askpassKind"`
 	AskpassURL   string   `json:"askpassUrl"`
+	IdentityFile string   `json:"identityFile"`
+	SSHConfig    string   `json:"sshConfig"`
 	Warnings     []string `json:"warnings"`
 }
 
@@ -102,13 +107,13 @@ type sshFinder interface{ SSH() (string, error) }
 // だからである。askpass ヘルパーを武装させる五つの変数は引き継がない。いったん
 // 取り除いてから設定するので、OpenSSH が読むのは、このコードが決めた値になる。
 //
-// これは見た目以上に重要である。syscall.Exec は配列をそのまま渡し、getenv は
+// これは見た目以上に重要である。exec.Cmd は配列をそのまま渡し、getenv は
 // その中で最初に一致したものを返す。したがって追記方式では、ユーザーが何年も前に
-// エクスポートした SSH_ASKPASS に負ける — しかも負けながら、保存済みパスワードと
+// エクスポートした SSH_ASKPASS に負ける — しかも負けながら、保存済み鍵パスフレーズと
 // 引き換えられるワンタイムトークンをそのプログラムに渡してしまう。武装しない接続
 // でもこれらを取り除くのは、古い変数が接続を武装させてしまわないようにするため
 // である。
-func connectEnvironment(inherited []string, helper, url, token, alias string) []string {
+func connectEnvironmentForCredential(inherited []string, helper, url, token, alias, kind, keyPath string) []string {
 	decided := map[string]string{}
 	if helper != "" && token != "" {
 		decided = map[string]string{
@@ -117,11 +122,15 @@ func connectEnvironment(inherited []string, helper, url, token, alias string) []
 			URLVariable:           url,
 			TokenVariable:         token,
 			AliasVariable:         alias,
+			KindVariable:          kind,
+		}
+		if kind == askpassKindKeyPassphrase && keyPath != "" {
+			decided[KeyPathVariable] = keyPath
 		}
 	}
 	ours := map[string]bool{
 		"SSH_ASKPASS": true, "SSH_ASKPASS_REQUIRE": true,
-		URLVariable: true, TokenVariable: true, AliasVariable: true,
+		URLVariable: true, TokenVariable: true, AliasVariable: true, KindVariable: true, KeyPathVariable: true,
 	}
 
 	environment := make([]string, 0, len(inherited)+len(decided))
@@ -132,12 +141,79 @@ func connectEnvironment(inherited []string, helper, url, token, alias string) []
 		}
 		environment = append(environment, entry)
 	}
-	for _, name := range []string{"SSH_ASKPASS", "SSH_ASKPASS_REQUIRE", URLVariable, TokenVariable, AliasVariable} {
+	for _, name := range []string{"SSH_ASKPASS", "SSH_ASKPASS_REQUIRE", URLVariable, TokenVariable, AliasVariable, KindVariable, KeyPathVariable} {
 		if value, set := decided[name]; set {
 			environment = append(environment, name+"="+value)
 		}
 	}
 	return environment
+}
+
+func connectArguments(alias, askpassKind, configPath, identityFile string) []string {
+	arguments := []string{"ssh"}
+	if askpassKind == askpassKindKeyPassphrase && configPath != "" && identityFile != "" {
+		arguments = append(arguments,
+			"-F", configPath,
+			"-i", identityFile,
+			"-o", "IdentitiesOnly=yes",
+		)
+	}
+	return append(arguments, "--", alias)
+}
+
+// createConnectionConfig creates the frozen configuration in a private
+// directory and returns an idempotent cleanup function. OpenSSH closes
+// inherited descriptors before reading -F on macOS and may reopen the file for
+// hostname canonicalisation, so this must remain a named, reopenable file until
+// the ssh process exits.
+func createConnectionConfig(contents string) (string, func(), error) {
+	directory, err := os.MkdirTemp("", "sshc-connect-*")
+	if err != nil {
+		return "", func() {}, err
+	}
+	path := filepath.Join(directory, "config")
+	cleaned := false
+	cleanup := func() {
+		if cleaned {
+			return
+		}
+		cleaned = true
+		_ = os.Remove(path)
+		_ = os.Remove(directory)
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	if _, err := io.WriteString(file, contents); err != nil {
+		_ = file.Close()
+		cleanup()
+		return "", func() {}, err
+	}
+	if err := file.Close(); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	return path, cleanup, nil
+}
+
+func executeSSH(ssh string, arguments, environment []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	command := exec.Command(ssh, arguments[1:]...)
+	command.Env = environment
+	command.Stdin = stdin
+	command.Stdout = stdout
+	command.Stderr = stderr
+	err := command.Run()
+	if err == nil {
+		return 0
+	}
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) {
+		return exitError.ExitCode()
+	}
+	fmt.Fprintf(stderr, "sshc: %v\n", err)
+	return 1
 }
 
 // runConnect は、この接続に必要なものを起動中のアプリケーションに尋ね、端末を ssh に
@@ -153,12 +229,11 @@ func runConnect(ctx context.Context, alias string, stateDir string, client *http
 		return 2
 	}
 
-	armed := false
-	helper, url, token := "", "", ""
+	helper, url, token, askpassKind, identityFile, sshConfig := "", "", "", "", "", ""
 	answer, err := askApplication(ctx, alias, stateDir, client)
 	switch {
 	case err != nil:
-		fmt.Fprintf(stderr, "sshc: connecting without a stored password (%v)\n", err)
+		fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%v)\n", err)
 	default:
 		for _, warning := range answer.Warnings {
 			fmt.Fprintf(stderr, "sshc: %s\n", warning)
@@ -166,13 +241,23 @@ func runConnect(ctx context.Context, alias string, stateDir string, client *http
 		if answer.AskpassToken != "" {
 			resolved, pathErr := os.Executable()
 			if pathErr != nil {
-				fmt.Fprintf(stderr, "sshc: connecting without a stored password (%v)\n", pathErr)
+				fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%v)\n", pathErr)
 			} else {
-				armed, helper, url, token = true, resolved, answer.AskpassURL, answer.AskpassToken
+				askpassKind = answer.AskpassKind
+				if askpassKind != askpassKindKeyPassphrase {
+					fmt.Fprintln(stderr, "sshc: connecting without a saved key passphrase (the running sshc returned an unsupported credential kind)")
+					askpassKind = ""
+				} else if answer.IdentityFile == "" || answer.SSHConfig == "" {
+					fmt.Fprintln(stderr, "sshc: connecting without a saved key passphrase (the running sshc did not provide a fixed SSH configuration)")
+					askpassKind = ""
+				} else {
+					helper, url, token = resolved, answer.AskpassURL, answer.AskpassToken
+					identityFile, sshConfig = answer.IdentityFile, answer.SSHConfig
+				}
 			}
 		}
 	}
-	environment := connectEnvironment(os.Environ(), helper, url, token, alias)
+	environment := connectEnvironmentForCredential(os.Environ(), helper, url, token, alias, askpassKind, identityFile)
 
 	// このアプリケーションが起動する他のすべての OpenSSH プログラムと同じやり方で
 	// 解決する。固定のディレクトリ一覧から絶対パスへ、である。PATH は参照しない。
@@ -183,23 +268,19 @@ func runConnect(ctx context.Context, alias string, stateDir string, client *http
 		fmt.Fprintf(stderr, "sshc: ssh was not found where it is expected: %v\n", err)
 		return 1
 	}
-	// ここから先、端末は ssh のものである。子プロセスではなく exec を使うのは、ユーザーと
-	// 接続のあいだに二つ目のものを挟まないためだ — シグナルを転送する相手も、翻訳すべき
-	// 終了ステータスもなくなる。
-	arguments := []string{"ssh"}
-	if armed {
-		// 誤った保存済みパスワードを三度差し出すと、サーバーによってはロックアウトに数えられる。
-		// そこで武装した接続には試行を一度だけ与える。保存済みパスワードがない場合は手を
-		// 触れない。打っているのはユーザーであり、一度打ち間違えたことは、あきらめる理由に
-		// ならない。
-		arguments = append(arguments, "-o", "NumberOfPasswordPrompts=1")
+	configPath := ""
+	cleanupConfig := func() {}
+	if askpassKind == askpassKindKeyPassphrase {
+		configPath, cleanupConfig, err = createConnectionConfig(sshConfig)
+		if err != nil {
+			fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%v)\n", err)
+			helper, url, token, askpassKind, identityFile = "", "", "", "", ""
+			environment = connectEnvironmentForCredential(os.Environ(), "", "", "", alias, "", "")
+		}
 	}
-	arguments = append(arguments, "--", alias)
-	if err := syscall.Exec(ssh, arguments, environment); err != nil {
-		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
-	}
-	return 0
+	defer cleanupConfig()
+	arguments := connectArguments(alias, askpassKind, configPath, identityFile)
+	return executeSSH(ssh, arguments, environment, os.Stdin, os.Stdout, stderr)
 }
 
 // askApplication はハンドオフを読み、接続一回分を要求する。
@@ -229,7 +310,7 @@ func askApplication(ctx context.Context, alias, stateDir string, client *http.Cl
 		return connectAnswer{}, fmt.Errorf("sshc refused the request")
 	}
 	var answer connectAnswer
-	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&answer); err != nil {
+	if err := json.NewDecoder(io.LimitReader(response.Body, config.MaxSnapshotSize+(64<<10))).Decode(&answer); err != nil {
 		return connectAnswer{}, err
 	}
 	return answer, nil
