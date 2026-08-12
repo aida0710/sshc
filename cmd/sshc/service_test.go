@@ -12,6 +12,7 @@ import (
 
 type recordingServiceLoginItem struct {
 	enabled        bool
+	registeredErr  error
 	enableCalls    int
 	disableCalls   int
 	enabledProgram string
@@ -19,7 +20,9 @@ type recordingServiceLoginItem struct {
 	disableErr     error
 }
 
-func (item *recordingServiceLoginItem) Enabled() bool { return item.enabled }
+func (item *recordingServiceLoginItem) Registered() (bool, error) {
+	return item.enabled, item.registeredErr
+}
 
 func (item *recordingServiceLoginItem) Enable(_ context.Context, program string) error {
 	item.enableCalls++
@@ -84,6 +87,18 @@ func TestServiceMaintenanceIsANoopWhenThePlatformHasNoController(t *testing.T) {
 		if code != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "not enabled") {
 			t.Errorf("%s: code=%d stdout=%q stderr=%q", action, code, stdout.String(), stderr.String())
 		}
+	}
+}
+
+// 「登録なし」と「登録状態を読めない」は違う。後者をno-op成功にすると、uninstallが
+// KeepAlive設定の有無を確かめられないまま実行ファイルだけ消せてしまう。
+func TestServiceMaintenanceRefusesAnUnknownRegistrationState(t *testing.T) {
+	item := &recordingServiceLoginItem{registeredErr: errors.New("permission denied")}
+	var stderr bytes.Buffer
+	code := runService(context.Background(), []string{"disable"}, item,
+		func() (string, error) { return "", nil }, io.Discard, &stderr)
+	if code == 0 || item.disableCalls != 0 || !strings.Contains(stderr.String(), "permission denied") {
+		t.Fatalf("code=%d disableCalls=%d stderr=%q", code, item.disableCalls, stderr.String())
 	}
 }
 

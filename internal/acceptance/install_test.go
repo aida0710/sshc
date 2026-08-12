@@ -133,6 +133,38 @@ func TestInstallBinaryKeepsTheOldCLIWhenStagingFails(t *testing.T) {
 	}
 }
 
+// stage先は推測した名前へ直接copyせず、mktempが排他的に作ったregular fileでなければ
+// ならない。このshimはproductionのinstallを置き換え、呼ばれた時点の宛先を観察する。
+// PID名へ事前配置されたsymlinkを追う実装では、この検査に失敗する。
+func TestInstallBinaryStagesIntoAnExclusivelyCreatedRegularFile(t *testing.T) {
+	root := t.TempDir()
+	source := writeMaintenanceFixture(t, root)
+	installDirectory := filepath.Join(root, "installed")
+	shimDirectory := filepath.Join(root, "shim")
+	if err := os.MkdirAll(shimDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	installShim := `#!/bin/sh
+if [ "$1" != "-m" ] || [ "$2" != "0755" ] || [ ! -f "$4" ] || [ -L "$4" ]; then
+	exit 91
+fi
+/bin/cp "$3" "$4"
+/bin/chmod 0755 "$4"
+`
+	if err := os.WriteFile(filepath.Join(shimDirectory, "install"), []byte(installShim), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(root, "service.log")
+
+	output, err := runInstallMake(t, []string{
+		"PATH=" + shimDirectory + ":" + os.Getenv("PATH"),
+		"SSHC_TEST_SERVICE_LOG=" + logPath,
+	}, "install-binary", "INSTALL_SOURCE="+source, "INSTALL_DIR="+installDirectory)
+	if err != nil {
+		t.Fatalf("make install-binary: %v\n%s", err, output)
+	}
+}
+
 // disableが失敗したのに実行ファイルだけ消すと、KeepAliveが存在しないパスを起動し
 // 続ける。削除よりdisableが先であることを、失敗側の状態で証明する。
 func TestUninstallBinaryKeepsTheCLIWhenServiceDisableFails(t *testing.T) {
