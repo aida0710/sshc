@@ -243,8 +243,8 @@ export function ConnectionsPage({
     void reload();
   }, [reload]);
 
-  // URL は、ブラウザー位置・選択・表示パネルの共有可能な正本である。popstate を受けた親が
-  // location を更新すると、戻る/進むでも同じ位置と connection を復元する。
+  // URL は、選択・表示パネルの共有可能な正本である。popstate を受けた親が
+  // location を更新すると、戻る/進むでも同じ connection を復元する。
   // URL に秘密や絶対パスは入らず、parser が安全な相対パスだけを通す。
   useEffect(() => {
     const parsed = parseConnectionLocation(location);
