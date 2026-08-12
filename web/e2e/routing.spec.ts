@@ -132,7 +132,7 @@ test("normalizes one trailing slash without leaving the requested section", asyn
   );
 });
 
-test("distinguishes a missing connection group from an invalid connection URL", async ({
+test("keeps a stale legacy group URL usable and distinguishes an invalid connection URL", async ({
   page,
   installation,
 }) => {
@@ -141,9 +141,8 @@ test("distinguishes a missing connection group from an invalid connection URL", 
   });
 
   await expect(page).toHaveURL(/\/connections\/groups\/not-declared$/);
-  await expect(page.getByText("Group not found.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Back to group root" }).click();
-  await expect(page).toHaveURL(/\/connections\/groups$/);
+  await expect(page.getByRole("navigation", { name: "Connections" })).toBeVisible();
+  await expect(page.getByText("Group not found.", { exact: true })).toHaveCount(0);
 
   await page.goto(new URL("/connections/groups?scope=unknown", page.url()).toString());
   await expect(
