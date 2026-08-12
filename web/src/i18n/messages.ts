@@ -152,7 +152,7 @@ export const en = {
   "section.history": "History",
 
   "home.heading": "Your connections",
-  "home.intro": "Find a host and open it in Terminal. Nothing is contacted until you choose Connect.",
+  "home.intro": "Find a host and open it in Terminal.",
   "home.manageConnections": "Manage connections",
   "home.connections": "Connections",
   "home.groups": "Groups",
@@ -1249,7 +1249,7 @@ export const ja: Record<MessageKey, string> = {
   "section.history": "履歴",
 
   "home.heading": "接続先",
-  "home.intro": "ホストを探して Terminal で開きます。「接続」を選ぶまで通信は行いません。",
+  "home.intro": "ホストを探して Terminal で開きます。",
   "home.manageConnections": "接続を管理",
   "home.connections": "接続",
   "home.groups": "グループ",
