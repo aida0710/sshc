@@ -11,6 +11,23 @@ async function openBastion(page: Page, url: string) {
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
 }
 
+test("keeps the selected connection open when its tree item is clicked again", async ({
+  page,
+  installation,
+}) => {
+  await openBastion(page, installation.url);
+  const connectionURL = page.url();
+
+  await page
+    .getByRole("navigation", { name: "Connections" })
+    .getByRole("button", { name: "bastion" })
+    .click();
+
+  await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
+  await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2222");
+  expect(page.url()).toBe(connectionURL);
+});
+
 test("creates a key-authenticated connection in an empty nested declared group", async ({
   page,
   installation,
