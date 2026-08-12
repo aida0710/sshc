@@ -124,19 +124,3 @@ func parseVersion(value string) ([3]int, bool) {
 	}
 	return parts, true
 }
-
-func (c Checker) download(ctx context.Context, url string, limit int64) ([]byte, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	response, err := c.client().Do(request)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("the download answered %d", response.StatusCode)
-	}
-	return io.ReadAll(io.LimitReader(response.Body, limit))
-}
