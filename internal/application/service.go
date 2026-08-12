@@ -530,6 +530,13 @@ func directoryRemovals(root string, relative []string) []storage.DirectoryRemova
 type planned struct {
 	operation string
 	changes   []storage.Change
+	// explicitIdentityFile is meaningful for a connection.update plan. It is
+	// derived from the resulting concrete Host block, never from inherited
+	// effective configuration.
+	explicitIdentityFile bool
+	// passwordAuthenticationOff is evaluated against the resulting graph so a
+	// request that removes a direct key can assign a password in the same save.
+	passwordAuthenticationOff bool
 	// move と removal は、変更と同じ transaction で運ばれるので、ファイルの
 	// 再配置とそれを名指す設定は一緒に着地するか、まったく着地しないか
 	// のどちらかになる。ディレクトリは、Commit がその書き込み path を解決する前に作成される。

@@ -327,6 +327,48 @@ func FindHostBlock(file *config.File, alias string) (config.Block, bool) {
 	return config.Block{}, false
 }
 
+// directIdentityFile は、一つの具体的な Host ブロック自身が指定する秘密鍵を返す。
+// OpenSSH の特殊値 none は鍵を指定しない値なので無視する。継承値は file と block の
+// 外側にあるため、ここへ混ざらない。
+func directIdentityFile(file *config.File, block config.Block) (Notice, bool) {
+	for index := block.Start; index < block.End && index < len(file.Lines); index++ {
+		line := file.Lines[index]
+		if line.Kind != config.LineDirective || !strings.EqualFold(line.Keyword, "IdentityFile") {
+			continue
+		}
+		for _, value := range line.Values() {
+			value = strings.TrimSpace(value)
+			if value == "" || strings.EqualFold(value, "none") {
+				continue
+			}
+			return Notice{Code: BlockerIdentityFileConfigured, Line: index + 1, Detail: value}, true
+		}
+	}
+	return Notice{}, false
+}
+
+// directIdentityFileForAlias は OpenSSH の読み取り順で最初に現れる具体的な
+// Host ブロックだけを調べる。同名ブロックの後続は shadowed なので、そこにある
+// IdentityFile が勝者の認証方式を変えることはない。
+func directIdentityFileForAlias(graph *config.Graph, alias string) (Notice, bool) {
+	var notice Notice
+	found := false
+	WalkDirectives(graph, func(visit Visit) bool {
+		if visit.Block.Kind != config.BlockHost || visit.Block.Header != visit.Index ||
+			PrimaryAlias(visit.Block.Patterns) != alias {
+			return true
+		}
+		found = true
+		node := graph.Nodes[visit.Path]
+		if node.File != nil {
+			notice, _ = directIdentityFile(node.File, visit.Block)
+			notice.Path = visit.Path
+		}
+		return false
+	})
+	return notice, found && notice.Code != ""
+}
+
 // DiagnosticView は、HTTP contract 向けに準備された config.Diagnostic である。
 type DiagnosticView struct {
 	Severity string `json:"severity"`

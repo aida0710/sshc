@@ -18,6 +18,10 @@ func newEligibilityService(t *testing.T) *Service {
 		"\tHostName 198.51.100.7\n" +
 		"\tIdentityFile ~/.ssh/keys/id_ed25519\n" +
 		"\n" +
+		"Host none\n" +
+		"\tHostName 198.51.100.9\n" +
+		"\tIdentityFile none\n" +
+		"\n" +
 		"Host nopassword\n" +
 		"\tHostName 198.51.100.8\n" +
 		"\tPasswordAuthentication no\n" +
@@ -60,18 +64,68 @@ func TestAHostThatRefusesPasswordAuthenticationCannotStoreOne(t *testing.T) {
 	}
 }
 
-func TestAConfiguredKeyIsAWarningAndNotARefusal(t *testing.T) {
-	// 鍵が向こう側で認可されていないかもしれないというのは普通の状況
-	// なので、これは言明されるだけで判断はユーザーに委ねられる。
+func TestAConfiguredDirectKeyBlocksAStoredPassword(t *testing.T) {
 	report, err := newEligibilityService(t).PasswordEligibility("keyed")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !report.Storable {
-		t.Error("a configured key refused a password outright")
+	if report.Storable {
+		t.Error("a direct key accepted a stored password")
 	}
-	if !codesOf(report.Warnings)[WarnIdentityFileConfigured] {
-		t.Errorf("warnings = %#v", report.Warnings)
+	if !codesOf(report.Blockers)[BlockerIdentityFileConfigured] {
+		t.Errorf("blockers = %#v", report.Blockers)
+	}
+	if codesOf(report.Warnings)[BlockerIdentityFileConfigured] {
+		t.Errorf("direct key remained a warning: %#v", report.Warnings)
+	}
+}
+
+func TestIdentityFileNoneDoesNotBlockAStoredPassword(t *testing.T) {
+	report, err := newEligibilityService(t).PasswordEligibility("none")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Storable || codesOf(report.Blockers)[BlockerIdentityFileConfigured] {
+		t.Errorf("IdentityFile none reported %#v / %#v", report.Blockers, report.Warnings)
+	}
+}
+
+func TestStoredPasswordAllowedUsesTheFirstConcreteBlockAndNotInheritedKeys(t *testing.T) {
+	service, workspace := newTestService(t)
+	entry := "Host *\n" +
+		"\tIdentityFile ~/.ssh/inherited\n" +
+		"\n" +
+		"Host inherited\n" +
+		"\tHostName inherited.example\n" +
+		"\n" +
+		"Host direct\n" +
+		"\tIdentityFile none\n" +
+		"\tIdentityFile ~/.ssh/direct\n" +
+		"\n" +
+		"Host duplicate\n" +
+		"\tUser first\n" +
+		"\n" +
+		"Host duplicate\n" +
+		"\tIdentityFile ~/.ssh/shadowed\n"
+	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(entry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, alias := range []string{"inherited", "duplicate"} {
+		allowed, err := service.StoredPasswordAllowed(alias)
+		if err != nil {
+			t.Fatalf("StoredPasswordAllowed(%q) = %v", alias, err)
+		}
+		if !allowed {
+			t.Errorf("StoredPasswordAllowed(%q) = false, want true", alias)
+		}
+	}
+	allowed, err := service.StoredPasswordAllowed("direct")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allowed {
+		t.Error("direct concrete IdentityFile was allowed")
 	}
 }
 
