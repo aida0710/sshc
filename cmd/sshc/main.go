@@ -104,6 +104,8 @@ func usage(out io.Writer) {
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
   sshc open            ask the running application for a new way in
+  sshc service refresh rebind an enabled login service to this binary
+  sshc service disable stop and remove the login service
   sshc askpass         answer an OpenSSH prompt; OpenSSH runs this, not you
   sshc help            print this
 
@@ -129,6 +131,22 @@ func main() {
 			os.Stderr,
 			// 答えられないプロンプトは制御端末の向こうにいる人間へ渡す。
 			openControllingTerminal,
+		))
+	}
+
+	if serviceInvocation(os.Args) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
+			os.Exit(1)
+		}
+		item, err := newServiceLoginItem(home)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(runService(
+			context.Background(), os.Args[2:], item, os.Executable, os.Stdout, os.Stderr,
 		))
 	}
 
