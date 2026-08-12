@@ -33,6 +33,7 @@ make test             # Go、race detector、Vitest、TypeScript を検証
 make fuzz             # 全 fuzz target を既定 30 秒ずつ実行（FUZZTIME で変更）
 make e2e              # バイナリをビルドし Playwright で主要フローを検証
 make build            # UI を生成し bin/sshc へ単一バイナリを作成
+npm run check:i18n --prefix web # 英語を正本として各言語の不足・余分なキーを表示
 ```
 
 `./bin/sshc` を起動すると、OS の既定ブラウザで一度限りの bootstrap fragment を持つ URL を開きます。Ctrl-C または SIGTERM で localhost サーバーを停止します。
