@@ -11,8 +11,8 @@ import type { ReactNode } from "react";
 // リポジトリは、誰かが読むたびにその呼び出しの隣の文字列がいまだに
 // 定数のままだと証明せずに済むべきだ。
 //
-// ここにあるすべてのアイコンは自分自身のラベルの隣に座る。それらは
-// 装飾なので accessibility tree から隠され、accessible name は語の方になる。
+// アイコンは accessibility tree から隠す。accessible name は、隣の語または
+// アイコンだけを包むボタンの aria-label が提供する。
 export const iconNames = [
   "home",
   "connections",
@@ -27,6 +27,7 @@ export const iconNames = [
   "sync",
   "history",
   "inspector",
+  "moreHorizontal",
 ] as const;
 
 export type IconName = (typeof iconNames)[number];
@@ -101,6 +102,13 @@ const shapes: Record<IconName, ReactNode> = {
     <>
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M15 4v16" />
+    </>
+  ),
+  moreHorizontal: (
+    <>
+      <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
     </>
   ),
 };

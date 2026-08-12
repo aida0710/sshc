@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { connectionLocation } from "../routing/connectionRoute";
+import { Icon } from "../ui/icons";
 
 type ConnectionActionsProps = {
   alias: string;
@@ -54,9 +55,9 @@ export function ConnectionActions({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="flex size-9 items-center justify-center rounded-md border border-control-line bg-card text-lg leading-none text-ink hover:bg-select-fill"
+        className="flex size-9 items-center justify-center rounded-md border border-control-line bg-card text-ink hover:bg-select-fill"
       >
-        <span aria-hidden="true">…</span>
+        <Icon name="moreHorizontal" className="size-5" />
       </button>
       {open ? (
         <div
