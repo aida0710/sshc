@@ -177,7 +177,7 @@ install-binary:
 			exit 1; \
 		fi; \
 		mkdir -p "$(INSTALL_DIR)"; \
-		temporary="$(INSTALL_DIR)/.sshc.install.$$$$"; \
+		temporary=$$(mktemp "$(INSTALL_DIR)/.sshc.install.XXXXXX"); \
 		trap 'rm -f "$$temporary"' 0 1 2 15; \
 		install -m 0755 "$(INSTALL_SOURCE)" "$$temporary"; \
 		mv -f "$$temporary" "$$destination"; \

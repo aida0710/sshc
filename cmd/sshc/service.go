@@ -16,7 +16,7 @@ const serviceUsage = "usage: sshc service refresh|disable"
 // serviceLoginItem はWebの設定スイッチと同じ境界である。ここでもOS固有のplistや
 // systemd unitを組み立て直さず、既存の実装に状態遷移だけを依頼する。
 type serviceLoginItem interface {
-	Enabled() bool
+	Registered() (bool, error)
 	Enable(context.Context, string) error
 	Disable(context.Context) error
 }
@@ -74,7 +74,16 @@ func runService(
 		return 2
 	}
 
-	if item == nil || !item.Enabled() {
+	if item == nil {
+		fmt.Fprintln(stdout, "sshc: login service is not enabled; nothing changed")
+		return 0
+	}
+	registered, err := item.Registered()
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: inspect login service registration: %v\n", err)
+		return 1
+	}
+	if !registered {
 		fmt.Fprintln(stdout, "sshc: login service is not enabled; nothing changed")
 		return 0
 	}

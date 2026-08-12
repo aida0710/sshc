@@ -45,10 +45,24 @@ func (l LoginItem) plistPath() string {
 	return filepath.Join(l.Home, "Library", "LaunchAgents", LoginItemLabel+".plist")
 }
 
-// Enabled は、エージェントが登録されているかを報告する。
-func (l LoginItem) Enabled() bool {
+// Registered はplistの有無と、それを確かめられなかった状態を区別する。Web表示は
+// boolだけを必要とするが、install/uninstallは不明な状態を「無効」として成功させない。
+func (l LoginItem) Registered() (bool, error) {
 	_, err := os.Stat(l.plistPath())
-	return err == nil
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
+}
+
+// Enabled はWeb設定用のboolを返す。保守コマンドはRegisteredを直接使い、判定時の
+// エラーを失わない。
+func (l LoginItem) Enabled() bool {
+	enabled, err := l.Registered()
+	return err == nil && enabled
 }
 
 // Enable はエージェントを書き出し、launchd に取り込むよう求める。

@@ -242,7 +242,7 @@
   MAINTENANCE_BINARY ?= bin/sshc
   ```
 
-  `install-binary` must create `INSTALL_DIR`, reject a directory at the destination, stage with mode `0755` in the destination directory, install via `mv -f`, clear the cleanup trap, then run the installed `sshc service refresh`. A refresh failure leaves the new CLI installed but exits nonzero with an explicit partial-success message.
+  `install-binary` must create `INSTALL_DIR`, reject a directory at the destination, use `mktemp` to exclusively create a stage file in the destination directory, copy with mode `0755`, install via `mv -f`, clear the cleanup trap, then run the installed `sshc service refresh`. A refresh failure leaves the new CLI installed but exits nonzero with an explicit partial-success message.
 
   `uninstall-binary` must first run `$(MAINTENANCE_BINARY) service disable`, then remove `$(INSTALL_DIR)/sshc`. `install: build` and `uninstall: build` invoke these primitives with the freshly built `bin/sshc`.
 

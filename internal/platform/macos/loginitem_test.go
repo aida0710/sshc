@@ -86,3 +86,41 @@ func TestEnablingRefusesAProgramLaunchdWouldHaveToFind(t *testing.T) {
 		t.Error("a relative program was accepted")
 	}
 }
+
+func TestRegisteredDistinguishesAbsentPresentAndUnreadableAgentState(t *testing.T) {
+	t.Run("absent", func(t *testing.T) {
+		item := macos.LoginItem{Home: t.TempDir()}
+		registered, err := item.Registered()
+		if err != nil || registered {
+			t.Fatalf("Registered = %v, %v; want false, nil", registered, err)
+		}
+	})
+
+	t.Run("present", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "Library", "LaunchAgents", macos.LoginItemLabel+".plist")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("plist"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		item := macos.LoginItem{Home: home}
+		registered, err := item.Registered()
+		if err != nil || !registered {
+			t.Fatalf("Registered = %v, %v; want true, nil", registered, err)
+		}
+	})
+
+	t.Run("unknown", func(t *testing.T) {
+		home := t.TempDir()
+		if err := os.WriteFile(filepath.Join(home, "Library"), []byte("not a directory"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		item := macos.LoginItem{Home: home}
+		registered, err := item.Registered()
+		if err == nil || registered {
+			t.Fatalf("Registered = %v, %v; want false and an error", registered, err)
+		}
+	})
+}
