@@ -6,8 +6,11 @@ import { defineConfig, devices } from "@playwright/test";
 // 所だ。失敗は検証のメッセージとサーバー自身の出力から診断する。
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: false,
-  workers: 1,
+  // 各 test は専用の一時 HOME と、その中で起動した専用 sshc を持つ。
+  // 同じ spec 内も並列化できるが、各 worker が Chromium と Go process を
+  // 一つずつ動かすので、local は 4 に抑えて操作中の machine を塞がない。
+  fullyParallel: true,
+  workers: process.env.CI ? 2 : 4,
   retries: 0,
   forbidOnly: true,
   timeout: 30_000,

@@ -555,7 +555,14 @@ export function ConnectionsPage({
   function onSelect(host: HostEntry) {
     if (host.identity.alias === "") return;
     const nextSelection = { path: host.identity.path, alias: host.identity.alias };
+    const currentSelection = selectionRef.current;
+    const selectingCurrent = currentSelection?.path === nextSelection.path
+      && currentSelection.alias === nextSelection.alias;
     if (!navigateTarget(nextSelection, "Basic", "Jump")) return;
+    // URL と selection が同じなら、そのクリックは何も破棄しない。ここで
+    // detail を空にしても selection effect は identity の変化を検出できず、
+    // 同じ connection を再び開けなくなる。下書きも同じ identity のものなので保つ。
+    if (selectingCurrent) return;
     // 別の connection を選ぶと、直前の保存の diff は破棄される——それは
     // もう開いていないブロックのバイトを記述しているからだ。保存はここで
     // はなく submit を通じて再選択を行い、その diff は画面に残しておく。
