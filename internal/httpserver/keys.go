@@ -125,11 +125,6 @@ func wipeBuffer(buffer []byte) {
 	}
 }
 
-func (h KeyHandlers) sessionID(c *echo.Context) string {
-	value, _ := c.Get(SessionContextKey).(string)
-	return value
-}
-
 // consumeAction は、この操作が必要とする一度限りのトークンを消費する。
 //
 // evidence はリクエストから受け取るのではなく再計算される。そのため

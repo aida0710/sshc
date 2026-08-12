@@ -43,6 +43,9 @@ func newConnectionUpdateHarness(t *testing.T, contents string) connectionUpdateH
 	if err := secrets.Initialise(connectionUpdatePassphrase); err != nil {
 		t.Fatal(err)
 	}
+	if err := secrets.Set("edge", "must-be-cleaned"); err != nil {
+		t.Fatal(err)
+	}
 	keyService := keys.NewService(keys.ServiceOptions{
 		Workspace: workspace, Transactions: manager, Resolver: storage.NewResolver(workspace),
 	})
@@ -66,10 +69,6 @@ func updatePrivateKeyID(t *testing.T, inventory *keys.Inventory) string {
 
 func unchangedPassword() UpdateConnectionPassword {
 	return UpdateConnectionPassword{Kind: UpdatePasswordUnchanged}
-}
-
-func unchangedKeyPassphrase() UpdateConnectionKeyPassphrase {
-	return UpdateConnectionKeyPassphrase{Kind: UpdateKeyPassphraseUnchanged}
 }
 
 func encryptUpdateKey(t *testing.T, harness *connectionUpdateHarness, passphrase string) {
@@ -291,7 +290,7 @@ func TestUpdateConnectionRollsBackWhenTheSecondFileCommitFails(t *testing.T) {
 		IdentityFile: &ConnectionIdentityFileChange{
 			Action: ConnectionChangeSet, KeyID: updatePrivateKeyID(t, inventory),
 		},
-		Password: UpdateConnectionPassword{Kind: UpdatePasswordDedicated, Password: "must-not-publish"},
+		Password: unchangedPassword(),
 		KeyPassphrase: UpdateConnectionKeyPassphrase{
 			Kind: UpdateKeyPassphraseSetDedicated, KeyID: updatePrivateKeyID(t, inventory),
 			Passphrase: "correct key phrase",
@@ -721,11 +720,15 @@ func TestUpdateConnectionSavesPassphraseForTheSelectedEncryptedKeyOnly(t *testin
 	}
 }
 
-func TestUpdateConnectionSavesIdentityPasswordAndKeyPassphraseInOneTransaction(t *testing.T) {
+func TestUpdateConnectionRejectsIdentityPasswordAndKeyPassphraseTogether(t *testing.T) {
 	const before = "Host edge\n\tHostName edge.example\n"
 	harness := newConnectionUpdateHarness(t, before)
 	encryptUpdateKey(t, &harness, "correct key phrase")
-	result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	beforeVault, err := os.ReadFile(filepath.Join(harness.workspace.Root(), filepath.FromSlash(secret.WorkspacePath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		IdentityFile: &ConnectionIdentityFileChange{
 			Action: ConnectionChangeSet, KeyID: updatePrivateKeyID(t, harness.inventory),
@@ -736,30 +739,106 @@ func TestUpdateConnectionSavesIdentityPasswordAndKeyPassphraseInOneTransaction(t
 			Passphrase: "correct key phrase",
 		},
 	})
-	if err != nil {
-		t.Fatalf("UpdateConnection = %v", err)
+	if !errors.Is(err, ErrPasswordIneligible) {
+		t.Fatalf("UpdateConnection = %v, want ErrPasswordIneligible", err)
 	}
-	if got := readFile(t, harness.workspace, "config"); !strings.Contains(got, "IdentityFile ~/.ssh/id_update") {
-		t.Fatalf("config = %q", got)
+	if got := readFile(t, harness.workspace, "config"); got != before {
+		t.Fatalf("rejected key/password update changed config: %q", got)
 	}
-	if harness.secrets.PasswordFor("edge") != "account-secret" {
-		t.Fatal("account password was not committed")
+	afterVault, readErr := os.ReadFile(filepath.Join(harness.workspace.Root(), filepath.FromSlash(secret.WorkspacePath)))
+	if readErr != nil {
+		t.Fatal(readErr)
 	}
-	if got, ok := harness.secrets.KeyPassphraseFor("id_update"); !ok || got != "correct key phrase" {
-		t.Fatalf("key passphrase = %q, %v", got, ok)
+	if !bytes.Equal(beforeVault, afterVault) || harness.secrets.PasswordFor("edge") != "" {
+		t.Fatal("rejected key/password update changed vault")
 	}
-	if !slices.Equal(result.Written, []string{"config"}) {
-		t.Fatalf("written = %#v", result.Written)
+	if _, ok := harness.secrets.KeyPassphraseFor("id_update"); ok {
+		t.Fatal("rejected update saved the key passphrase")
 	}
-	history, err := harness.manager.History()
+}
+
+func TestUpdateConnectionDirectKeyCleansDedicatedOrReusablePassword(t *testing.T) {
+	const before = "Host edge\n\tIdentityFile ~/.ssh/id_update\n"
+	tests := []struct {
+		name    string
+		prepare func(*testing.T, *secret.Service)
+		verify  func(*testing.T, *secret.Service)
+	}{
+		{
+			name: "dedicated",
+			prepare: func(t *testing.T, service *secret.Service) {
+				if err := service.Set("edge", "dedicated"); err != nil {
+					t.Fatal(err)
+				}
+			},
+			verify: func(t *testing.T, service *secret.Service) {
+				if got := service.PasswordFor("edge"); got != "" {
+					t.Fatalf("dedicated password survived cleanup: %q", got)
+				}
+			},
+		},
+		{
+			name: "reusable association only",
+			prepare: func(t *testing.T, service *secret.Service) {
+				if err := service.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
+					t.Fatal(err)
+				}
+				for _, alias := range []string{"edge", "nas"} {
+					if err := service.AssignCredential(secret.KindPassword, alias, "office"); err != nil {
+						t.Fatal(err)
+					}
+				}
+			},
+			verify: func(t *testing.T, service *secret.Service) {
+				listed, err := service.Credentials()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if uses, ok := listed[secret.KindPassword]["office"]; !ok || !slices.Equal(uses, []string{"nas"}) {
+					t.Fatalf("shared credential = %#v, exists %t", uses, ok)
+				}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			harness := newConnectionUpdateHarness(t, before)
+			test.prepare(t, harness.secrets)
+			result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+				Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
+				Password: unchangedPassword(),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.verify(t, harness.secrets)
+			if len(result.Written) != 0 || len(result.Preview.Diffs) != 0 {
+				t.Fatalf("cleanup exposed vault path: %#v", result)
+			}
+		})
+	}
+}
+
+func TestUpdateConnectionCanInheritDirectKeyAndAssignPasswordTogether(t *testing.T) {
+	const before = "Host edge\n\tIdentityFile ~/.ssh/id_update\n\nHost *\n\tIdentityFile ~/.ssh/inherited\n"
+	harness := newConnectionUpdateHarness(t, before)
+	result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+		Identity:     HostIdentity{Path: "config", Alias: "edge"},
+		Base:         before,
+		IdentityFile: &ConnectionIdentityFileChange{Action: ConnectionChangeInherit},
+		Password:     UpdateConnectionPassword{Kind: UpdatePasswordDedicated, Password: "account-secret"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	configPath := filepath.Join(harness.workspace.Root(), "config")
-	vaultPath := filepath.Join(harness.workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
-	if len(history) == 0 || history[0].Operation != "connection.update" ||
-		!slices.Contains(history[0].Paths, configPath) || !slices.Contains(history[0].Paths, vaultPath) {
-		t.Fatalf("combined transaction history = %#v", history)
+	if got := readFile(t, harness.workspace, "config"); strings.Contains(got, "\tIdentityFile ~/.ssh/id_update") {
+		t.Fatalf("direct key survived: %q", got)
+	}
+	if got := harness.secrets.PasswordFor("edge"); got != "account-secret" {
+		t.Fatalf("password = %q", got)
+	}
+	if !slices.Equal(result.Written, []string{"config"}) {
+		t.Fatalf("written = %#v", result.Written)
 	}
 }
 
