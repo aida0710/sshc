@@ -16,6 +16,7 @@ import {
 import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { eligibilityText } from "../diagnostics/PasswordPanel";
+import { directIdentityFields, isConcreteIdentityValue } from "./authenticationPolicy";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Card, Notice, Row } from "../ui/surface";
@@ -51,17 +52,9 @@ type DraftField = {
   inherit: boolean;
 };
 
-function sameKeyword(left: string, right: string): boolean {
-  return left.toLocaleLowerCase() === right.toLocaleLowerCase();
-}
-
 function initialDraft(detail: HostDetail, keyword: BasicKeyword): DraftField {
   const state = deriveBasicField(detail, keyword);
   return { state, value: state.value, inherit: false };
-}
-
-function directIdentityFields(detail: HostDetail) {
-  return detail.form.fields.filter((field) => sameKeyword(field.keyword, "IdentityFile"));
 }
 
 function keyConfigValue(key: KeyItem): string {
@@ -185,7 +178,9 @@ export function ConnectionBasicForm({
               candidate.id === preferredKey.privateKeyId &&
               candidate.relativePath === preferredKey.privateRelativePath,
           );
-      const direct = directIdentityFields(detail);
+      const direct = directIdentityFields(detail).filter((field) =>
+        field.values.some(isConcreteIdentityValue),
+      );
       setPrivateKeys(identities);
       let preferredAlreadyApplied = false;
       if (direct.length > 1) {
@@ -297,6 +292,9 @@ export function ConnectionBasicForm({
       ? { action: "inherit" as const }
       : { action: "set" as const, keyId: selectedKey };
   const selectedPrivateKey = privateKeys.find((key) => key.id === selectedKey);
+  const draftHasExplicitKey = keyState === "custom" || keyState === "complex" ||
+    (keyState === "editable" && selectedKey !== "");
+  const passwordCleanup = assigned && draftHasExplicitKey;
   const namedKeyPassphrase = selectedPrivateKey === undefined
     ? undefined
     : keyCredentials.find((credential) => credential.uses.includes(selectedPrivateKey.relativePath));
@@ -320,6 +318,7 @@ export function ConnectionBasicForm({
     : t("conn.createPortInvalid");
 
   function effectivePassword(): UpdateConnectionPassword {
+    if (passwordCleanup) return { kind: "remove" };
     switch (passwordAction) {
       case "dedicated_password":
         return password === "" ? { kind: "unchanged" } : { kind: "dedicated_password", password };
@@ -345,7 +344,9 @@ export function ConnectionBasicForm({
   const hasKeyPassphraseDraft = keyPassphrase !== "" || keyPassphraseConfirmation !== "";
   const keyPassphraseMatches = keyPassphrase === keyPassphraseConfirmation;
   const keyPassphraseValid = !hasKeyPassphraseDraft || (keyPassphrase !== "" && keyPassphraseMatches);
-  const passwordAllowed = passwordChange.kind === "remove" || passwordChange.kind === "unchanged" || eligibility?.storable === true;
+  const nonIdentityBlockers = (eligibility?.blockers ?? []).filter((notice) => notice.code !== "identity_file_configured");
+  const passwordAllowed = passwordChange.kind === "remove" || passwordChange.kind === "unchanged" ||
+    (!draftHasExplicitKey && nonIdentityBlockers.length === 0);
   const dirty = hostNameChange !== undefined || userChange !== undefined || portChange !== undefined ||
     identityFileChange !== undefined || changesPassword || hasKeyPassphraseDraft;
   const passwordResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready" && eligibility !== null;
@@ -355,6 +356,14 @@ export function ConnectionBasicForm({
     hostError === "" && userError === "" && portError === "" && passwordAllowed &&
     keyPassphraseValid && (!changesPassword || passwordResourcesReady) &&
     (!hasKeyPassphraseDraft || keyPassphraseResourcesReady);
+
+  useEffect(() => {
+    if (!draftHasExplicitKey) return;
+    clearPasswordSecrets();
+    setPasswordAction("unchanged");
+    setConfirmRemove(false);
+    setNewCredential("");
+  }, [draftHasExplicitKey]);
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -466,8 +475,10 @@ export function ConnectionBasicForm({
   const minimum = vault?.minPassphraseLength ?? 12;
   const canOpenVault = vault !== null && masterPassword.length >= minimum &&
     (vault.exists || masterConfirmation === masterPassword);
-  const passwordBlockers = eligibility?.blockers ?? [];
-  const passwordWarnings = eligibility?.warnings ?? [];
+  const passwordBlockers = nonIdentityBlockers;
+  const passwordWarnings = (eligibility?.warnings ?? []).filter(
+    (notice) => notice.code !== "identity_file_configured",
+  );
   const serverHostError = problem?.code === "connection_hostname_invalid" ? t("conn.createHostInvalid") : "";
   const serverUserError = problem?.code === "connection_user_invalid" ? t("conn.createUserInvalid") : "";
   const serverPortError = problem?.code === "connection_port_invalid" ? t("conn.createPortInvalid") : "";
@@ -567,7 +578,9 @@ export function ConnectionBasicForm({
               ? t("conn.basicCustomKey", { path: customKey })
               : keyState === "complex"
                 ? t("conn.basicComplexKey")
-                : t("conn.basicKeyIndependent")}
+                : draftHasExplicitKey
+                  ? t("conn.basicThisConnection")
+                  : t("conn.basicAgentOrInherited")}
           >
             <select
               aria-label={t("conn.basicPrivateKey")}
@@ -602,15 +615,13 @@ export function ConnectionBasicForm({
           ) : null}
 
           {vault?.unlocked === true && credentialOptionsStatus === "ready" &&
-          keyState === "editable" && selectedPrivateKey !== undefined ? (
+          keyState === "editable" && selectedPrivateKey !== undefined && selectedPrivateKey.encrypted ? (
             <div className="border-t border-hairline px-3 py-3">
               <div className="flex flex-col gap-3">
                 <div>
                   <p className="text-sm text-ink-muted">{t("conn.basicKeyPassphraseHeading")}</p>
                   <p className={hintText}>
-                    {!selectedPrivateKey.encrypted
-                      ? t("conn.basicKeyPassphraseUnencrypted")
-                      : dedicatedKeyPassphrase
+                    {dedicatedKeyPassphrase
                         ? t("conn.basicKeyPassphraseDedicated")
                         : namedKeyPassphrase !== undefined
                           ? t("conn.basicKeyPassphraseShared", { name: namedKeyPassphrase.name })
@@ -626,8 +637,7 @@ export function ConnectionBasicForm({
                   ) : null}
                 </div>
 
-                {selectedPrivateKey.encrypted ? (
-                  <>
+                <>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <PasswordField
                         label={t("conn.basicNewKeyPassphrase")}
@@ -654,12 +664,23 @@ export function ConnectionBasicForm({
                       <Notice tone="danger">{serverKeyPassphraseError}</Notice>
                     )}
                   </>
-                ) : null}
               </div>
             </div>
           ) : null}
 
-          <div className="border-t border-hairline px-3 py-3">
+          {selectedPrivateKey !== undefined && !selectedPrivateKey.encrypted ? (
+            <p className={`border-t border-hairline px-3 py-3 ${hintText}`}>
+              {t("conn.basicKeyPassphraseUnencrypted")}
+            </p>
+          ) : null}
+
+          {draftHasExplicitKey ? (
+            passwordCleanup ? (
+              <div className="border-t border-hairline px-3 py-3">
+                <Notice>{t("conn.basicPasswordCleanup")}</Notice>
+              </div>
+            ) : null
+          ) : <div className="border-t border-hairline px-3 py-3">
             <div className="flex flex-col gap-3">
               <div>
                 <p className="text-sm text-ink-muted">{t("conn.basicStoredPassword")}</p>
@@ -760,7 +781,7 @@ export function ConnectionBasicForm({
                 </>
               ) : null}
             </div>
-          </div>
+          </div>}
         </Card>
       </section>
 

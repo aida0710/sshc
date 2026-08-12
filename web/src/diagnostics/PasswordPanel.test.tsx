@@ -162,6 +162,22 @@ describe("PasswordPanel", () => {
     expect(api.storePassword).not.toHaveBeenCalled();
   });
 
+  it("treats an explicit identity file as a blocker rather than fallback advice", async () => {
+    const api = buildApi(unlocked, {
+      passwordEligibility: vi.fn().mockResolvedValue({
+        alias: "bastion",
+        storable: false,
+        blockers: [{ code: "identity_file_configured", path: "config", line: 4 }],
+        warnings: [],
+      }),
+    });
+    render(<PasswordPanel api={api} alias="bastion" />);
+
+    expect(await screen.findByText(/direct private key/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Password for bastion")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Store a new password for bastion" })).toBeDisabled();
+  });
+
   // 秘密に名前を付ける意義。一つのエントリ、複数のマシン。これが
   // 実装される前、二つのホストに同じパスワードを与える唯一の方法は二度入力することであり、
   // ローテーションするにはどのホストが共有していたか覚えておく必要があった。

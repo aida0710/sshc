@@ -7,6 +7,7 @@ import type {
 } from "../api/integrations";
 import { selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { deriveBasicField } from "./basicFields";
+import { directIdentityFields, isConcreteIdentityValue } from "./authenticationPolicy";
 import { formatValues } from "./values";
 
 export type Loadable<T> =
@@ -91,14 +92,11 @@ export async function loadConnectionSavedState(
   };
 }
 
-function sameKeyword(left: string, right: string): boolean {
-  return left.toLocaleLowerCase() === right.toLocaleLowerCase();
-}
-
 function directIdentityValues(detail: HostDetail): string[] {
-  return detail.form.fields
-    .filter((field) => sameKeyword(field.keyword, "IdentityFile"))
-    .map((field) => formatValues(field.values));
+  return directIdentityFields(detail)
+    .map((field) => field.values.filter(isConcreteIdentityValue))
+    .filter((values) => values.length > 0)
+    .map(formatValues);
 }
 
 function configuredKey(

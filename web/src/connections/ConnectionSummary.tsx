@@ -26,6 +26,10 @@ export function ConnectionSummary({
   const t = useTranslate();
   const summary = summarizeConnection(state);
   const blocked = dirty || refreshing;
+  const explicitKey = summary.privateKey.state !== "none";
+  const passwordConflict = explicitKey && (
+    summary.accountPassword.state === "dedicated" || summary.accountPassword.state === "named"
+  );
   const reasonID = `connection-actions-${encodeURIComponent(summary.alias)}`;
 
   function privateKeyText() {
@@ -84,9 +88,15 @@ export function ConnectionSummary({
         <Row label={t("conn.summaryKeyPassphrase")}>
           <p className="text-sm text-ink">{keyPassphraseText()}</p>
         </Row>
-        <Row label={t("conn.summaryAccountPassword")}>
-          <p className="text-sm text-ink">{accountPasswordText()}</p>
-        </Row>
+        {!explicitKey ? (
+          <Row label={t("conn.summaryAccountPassword")}>
+            <p className="text-sm text-ink">{accountPasswordText()}</p>
+          </Row>
+        ) : passwordConflict ? (
+          <Row label={t("conn.summaryAccountPassword")}>
+            <p className="text-sm text-notice-ink">{t("conn.summaryPasswordCleanup")}</p>
+          </Row>
+        ) : null}
       </Card>
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-card p-3 shadow-sm">

@@ -264,28 +264,74 @@ describe("ConnectionBasicForm", () => {
     });
   });
 
-  it("keeps key and password changes independent and never prefills a password", async () => {
+  it("removes password controls and clears a typed secret when a direct key is selected", async () => {
     const user = userEvent.setup();
-    const detail = buildDetail([
-      { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
-    ]);
+    const detail = buildDetail();
     const harness = renderForm({ detail });
     await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
 
-    expect(screen.getByLabelText("SSH private key")).toHaveValue(privateKey.id);
-    await user.selectOptions(screen.getByLabelText("SSH private key"), secondKey.id);
     await user.selectOptions(screen.getByLabelText("Stored password action"), "dedicated_password");
     expect(screen.getByLabelText("Connection password")).toHaveValue("");
     await user.type(screen.getByLabelText("Connection password"), "new-secret");
+    await user.selectOptions(screen.getByLabelText("SSH private key"), secondKey.id);
+    expect(screen.queryByLabelText("Stored password action")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Connection password")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("SSH private key"), "");
+    expect(screen.getByLabelText("Stored password action")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Connection password")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("SSH private key"), secondKey.id);
     await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: detail.form.entry.identity,
       base: detail.file.contents,
       identityFile: { action: "set", keyId: secondKey.id },
-      password: { kind: "dedicated_password", password: "new-secret" },
+      password: { kind: "unchanged" },
       keyPassphrase: { kind: "unchanged" },
     });
+  });
+
+  it("marks a legacy direct-key password assignment for cleanup without confirmation", async () => {
+    const user = userEvent.setup();
+    const detail = buildDetail([
+      { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
+    ]);
+    const harness = renderForm({
+      detail,
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
+      }),
+      credentials: vi.fn().mockResolvedValue({
+        credentials: [{ kind: "password", name: "office", uses: ["edge", "bastion"] }],
+      }),
+      passwordEligibility: vi.fn().mockResolvedValue({
+        alias: "edge", storable: false,
+        blockers: [{ code: "identity_file_configured", path: "connections/work/edge.conf", line: 2 }],
+        warnings: [],
+      }),
+    });
+
+    expect(await screen.findByText(/will remove this connection's assignment/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Stored password action")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Confirm stored password removal/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(harness.onSave).toHaveBeenCalledWith({
+      identity: detail.form.entry.identity,
+      base: detail.file.contents,
+      password: { kind: "remove" },
+      keyPassphrase: { kind: "unchanged" },
+    });
+  });
+
+  it("treats IdentityFile none as agent or inherited authentication", async () => {
+    renderForm({
+      detail: buildDetail([
+        { line: 2, keyword: "IdentityFile", values: ["none"], category: "basic", editable: true },
+      ]),
+    });
+    await waitFor(() => expect(screen.getByLabelText("SSH private key")).toHaveValue(""));
+    expect(screen.getByLabelText("Stored password action")).toBeInTheDocument();
   });
 
   it("requires unlock before any save while preserving non-secret drafts", async () => {
@@ -322,7 +368,7 @@ describe("ConnectionBasicForm", () => {
         value: {
           exists: true,
           unlocked: true,
-          aliases: ["edge"],
+          aliases: [],
           dedicatedKeyPassphrases: [],
           minPassphraseLength: 12,
         },
@@ -346,7 +392,6 @@ describe("ConnectionBasicForm", () => {
 
     await user.clear(screen.getByLabelText("Host name or IP address"));
     await user.type(screen.getByLabelText("Host name or IP address"), "retry.example");
-    expect(screen.getByText("Saved password options could not be loaded.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Stored password action")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
@@ -513,6 +558,7 @@ describe("ConnectionBasicForm", () => {
       ]),
     });
     expect(await screen.findByText("This private key is not encrypted, so it needs no saved passphrase.")).toBeInTheDocument();
+    expect(screen.queryByText("Saved key passphrase")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("New saved key passphrase")).not.toBeInTheDocument();
   });
 
@@ -589,7 +635,7 @@ describe("ConnectionBasicForm", () => {
     expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
   });
 
-  it("keeps a key-passphrase draft when the independent account-password action changes", async () => {
+  it("keeps a key-passphrase draft while another Basic field changes", async () => {
     const user = userEvent.setup();
     renderForm({
       detail: buildDetail([
@@ -600,7 +646,9 @@ describe("ConnectionBasicForm", () => {
 
     await user.type(await screen.findByLabelText("New saved key passphrase"), "independent phrase");
     await user.type(screen.getByLabelText("Confirm saved key passphrase"), "independent phrase");
-    await user.selectOptions(screen.getByLabelText("Stored password action"), "dedicated_password");
+    await user.clear(screen.getByLabelText("Host name or IP address"));
+    await user.type(screen.getByLabelText("Host name or IP address"), "changed.example");
+    expect(screen.queryByLabelText("Stored password action")).not.toBeInTheDocument();
     expect(screen.getByLabelText("New saved key passphrase")).toHaveValue("independent phrase");
     expect(screen.getByLabelText("Confirm saved key passphrase")).toHaveValue("independent phrase");
   });
