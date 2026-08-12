@@ -31,7 +31,7 @@ type PasswordPanelProps = {
 const eligibilityKeys: Record<string, MessageKey> = {
   password_authentication_off: "password.blocker.authenticationOff",
   alias_not_simple: "password.blocker.aliasNotSimple",
-  identity_file_configured: "password.warn.identityFile",
+  identity_file_configured: "password.blocker.identityFile",
   host_key_unknown: "password.warn.hostKeyUnknown",
   hostname_unresolved: "password.warn.hostNameUnresolved",
 };

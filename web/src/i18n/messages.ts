@@ -322,8 +322,8 @@ export const en = {
     "PasswordAuthentication is off for this host, so the client will never offer a password.",
   "password.blocker.aliasNotSimple":
     "This is a pattern, not a host. A password belongs to one account on one machine.",
-  "password.warn.identityFile":
-    "A key is already configured for this host. It may still ask for a password, but a password stored for a host that never asks is exposure bought for nothing.",
+  "password.blocker.identityFile":
+    "This host has a direct private key. sshc leaves any password prompt to OpenSSH instead of storing or supplying one.",
   "password.warn.hostKeyUnknown":
     "This host's key is not in known_hosts. With a stored password armed, ssh asks the helper every question — including the host key one, which it refuses — so the first connection stops there. Add the key through Known Hosts first.",
   "password.warn.hostNameUnresolved":
@@ -793,7 +793,6 @@ export const en = {
   "conn.basicUseInheritedPort": "Use inherited/default port",
   "conn.basicKeepDirect": "Keep this connection value",
   "conn.basicAgentOrInherited": "SSH agent or inherited keys",
-  "conn.basicKeyIndependent": "Keys and stored passwords are independent; OpenSSH may try both.",
   "conn.basicKeyPassphraseHeading": "Saved key passphrase",
   "conn.basicKeyPassphraseUnencrypted": "This private key is not encrypted, so it needs no saved passphrase.",
   "conn.basicKeyPassphraseNone": "No passphrase is saved for this key.",
@@ -813,6 +812,8 @@ export const en = {
   "conn.basicAssignedDedicated": "A connection-only password is assigned. Its value is never displayed.",
   "conn.basicAssignedNamed": "Assigned: {name}",
   "conn.basicNoPassword": "No stored password is assigned.",
+  "conn.basicPasswordCleanup":
+    "A stored password is still assigned, but sshc will not use it. Saving Basic settings will remove this connection's assignment; a shared credential and its other hosts remain unchanged.",
   "conn.basicPasswordAction": "Stored password action",
   "conn.basicPasswordUnchanged": "No password change",
   "conn.basicReplaceDedicated": "Replace with a connection-only password",
@@ -858,6 +859,8 @@ export const en = {
   "conn.summaryPasswordNone": "No saved password",
   "conn.summaryPasswordDedicated": "Connection-only password saved",
   "conn.summaryPasswordNamed": "Saved password: {name}",
+  "conn.summaryPasswordCleanup":
+    "A stored password is assigned but is not used and will be unassigned when Basic settings are saved.",
   "conn.summaryLocked": "Locked; status unavailable",
   "conn.summaryUnavailable": "Could not load this status",
   "conn.summaryDraftBlocksActions": "Save or discard this draft before using the saved connection.",
@@ -1412,8 +1415,8 @@ export const ja: Record<MessageKey, string> = {
   "password.blocker.authenticationOff":
     "このホストは PasswordAuthentication が no のため、クライアントがパスワードを提示することはありません。",
   "password.blocker.aliasNotSimple": "これはホストではなくパターンです。パスワードは 1 台の 1 アカウントに属します。",
-  "password.warn.identityFile":
-    "このホストには鍵が設定済みです。それでもパスワードを訊かれることはありますが、訊かれないホストに保存したパスワードは、見返りのない露出です。",
+  "password.blocker.identityFile":
+    "このホストには秘密鍵が直接設定されています。sshc はパスワードを保存・供給せず、必要な手入力を OpenSSH に任せます。",
   "password.warn.hostKeyUnknown":
     "このホストの鍵が known_hosts にありません。保存済みパスワードを使う状態では ssh は全ての質問をヘルパに回し、ホスト鍵の確認も含まれます。ヘルパはそれを拒否するので、初回接続はそこで止まります。先に Known Hosts で鍵を登録してください。",
   "password.warn.hostNameUnresolved": "この alias の HostName を特定できませんでした。パスワードは alias に紐づけて保存されます。",
@@ -1878,7 +1881,6 @@ export const ja: Record<MessageKey, string> = {
   "conn.basicUseInheritedPort": "ポートを継承値・既定値に戻す",
   "conn.basicKeepDirect": "この接続の値を維持",
   "conn.basicAgentOrInherited": "SSH agent または継承した鍵",
-  "conn.basicKeyIndependent": "鍵と保存済みパスワードは独立しています。OpenSSH は両方を試すことがあります。",
   "conn.basicKeyPassphraseHeading": "保存済みの鍵パスフレーズ",
   "conn.basicKeyPassphraseUnencrypted": "この秘密鍵は暗号化されていないため、保存するパスフレーズは不要です。",
   "conn.basicKeyPassphraseNone": "この鍵にはパスフレーズが保存されていません。",
@@ -1898,6 +1900,8 @@ export const ja: Record<MessageKey, string> = {
   "conn.basicAssignedDedicated": "この接続専用のパスワードが割り当てられています。値は表示しません。",
   "conn.basicAssignedNamed": "割り当て済み: {name}",
   "conn.basicNoPassword": "保存済みパスワードは割り当てられていません。",
+  "conn.basicPasswordCleanup":
+    "保存済みパスワードがまだ割り当てられていますが、sshc は使用しません。基本設定を保存すると、この接続との関連だけを解除します。共有資格情報とほかの接続は変更しません。",
   "conn.basicPasswordAction": "保存済みパスワードの操作",
   "conn.basicPasswordUnchanged": "パスワードは変更しない",
   "conn.basicReplaceDedicated": "この接続専用パスワードで置き換える",
@@ -1943,6 +1947,8 @@ export const ja: Record<MessageKey, string> = {
   "conn.summaryPasswordNone": "保存済みパスワードなし",
   "conn.summaryPasswordDedicated": "この接続専用のパスワードを保存済み",
   "conn.summaryPasswordNamed": "保存済みパスワード: {name}",
+  "conn.summaryPasswordCleanup":
+    "保存済みパスワードが割り当てられていますが使用されません。基本設定の保存時に関連を解除します。",
   "conn.summaryLocked": "施錠中のため確認できません",
   "conn.summaryUnavailable": "この状態を読み込めませんでした",
   "conn.summaryDraftBlocksActions": "下書きを保存または破棄してから、保存済みの接続を使用してください。",
