@@ -5,6 +5,7 @@
 /web/.playwright-browsers/
 /web/playwright-report/
 /web/test-results/
+/test-results/
 .DS_Store
 .worktrees/
 /.claude/worktrees/
