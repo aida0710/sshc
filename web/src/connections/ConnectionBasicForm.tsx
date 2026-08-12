@@ -113,6 +113,7 @@ export function ConnectionBasicForm({
   const [newSharedPassword, setNewSharedPassword] = useState("");
   const [keyPassphrase, setKeyPassphrase] = useState("");
   const [keyPassphraseConfirmation, setKeyPassphraseConfirmation] = useState("");
+  const [keyPassphraseOpen, setKeyPassphraseOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [masterPassword, setMasterPassword] = useState("");
   const [masterConfirmation, setMasterConfirmation] = useState("");
@@ -300,6 +301,14 @@ export function ConnectionBasicForm({
     : keyCredentials.find((credential) => credential.uses.includes(selectedPrivateKey.relativePath));
   const dedicatedKeyPassphrase = selectedPrivateKey !== undefined &&
     (vault?.dedicatedKeyPassphrases ?? []).includes(selectedPrivateKey.relativePath);
+  const keyPassphraseStorageState = dedicatedKeyPassphrase
+    ? "dedicated"
+    : namedKeyPassphrase === undefined
+      ? "none"
+      : `named:${namedKeyPassphrase.name}`;
+  const keyPassphraseDisclosureSubject = selectedPrivateKey?.encrypted === true
+    ? selectedPrivateKey.id
+    : "";
   const otherNamedKeyUses = namedKeyPassphrase === undefined || selectedPrivateKey === undefined
     ? []
     : namedKeyPassphrase.uses.filter((subject) => subject !== selectedPrivateKey.relativePath);
@@ -356,6 +365,13 @@ export function ConnectionBasicForm({
     hostError === "" && userError === "" && portError === "" && passwordAllowed &&
     keyPassphraseValid && (!changesPassword || passwordResourcesReady) &&
     (!hasKeyPassphraseDraft || keyPassphraseResourcesReady);
+
+  useEffect(() => {
+    if (credentialOptionsStatus !== "ready" || keyPassphraseDisclosureSubject === "") {
+      return;
+    }
+    setKeyPassphraseOpen(keyPassphraseStorageState === "none");
+  }, [credentialOptionsStatus, keyPassphraseDisclosureSubject, keyPassphraseStorageState]);
 
   useEffect(() => {
     if (!draftHasExplicitKey) return;
@@ -437,6 +453,9 @@ export function ConnectionBasicForm({
     setLocalError("");
     try {
       await onSave(request);
+      if (keyPassphraseChange.kind !== "unchanged") {
+        setKeyPassphraseOpen(false);
+      }
       if (preferredKey !== null && (
         preferredSuperseded ||
         (identityFileChange?.action === "set" && identityFileChange.keyId === preferredKey.privateKeyId)
@@ -616,8 +635,15 @@ export function ConnectionBasicForm({
 
           {vault?.unlocked === true && credentialOptionsStatus === "ready" &&
           keyState === "editable" && selectedPrivateKey !== undefined && selectedPrivateKey.encrypted ? (
-            <div className="border-t border-hairline px-3 py-3">
-              <div className="flex flex-col gap-3">
+            <details
+              open={keyPassphraseOpen}
+              onToggle={(event) => setKeyPassphraseOpen(event.currentTarget.open)}
+              className="border-t border-hairline"
+            >
+              <summary className="cursor-pointer px-3 py-3 text-sm font-medium text-ink">
+                {t("conn.basicManageKeyPassphrase")}
+              </summary>
+              <div className="flex flex-col gap-3 border-t border-hairline px-3 py-3">
                 <div>
                   <p className="text-sm text-ink-muted">{t("conn.basicKeyPassphraseHeading")}</p>
                   <p className={hintText}>
@@ -637,35 +663,33 @@ export function ConnectionBasicForm({
                   ) : null}
                 </div>
 
-                <>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <PasswordField
-                        label={t("conn.basicNewKeyPassphrase")}
-                        value={keyPassphrase}
-                        onChange={(value) => {
-                          setKeyPassphrase(value);
-                          setLocalError("");
-                        }}
-                      />
-                      <PasswordField
-                        label={t("conn.basicConfirmKeyPassphrase")}
-                        value={keyPassphraseConfirmation}
-                        onChange={(value) => {
-                          setKeyPassphraseConfirmation(value);
-                          setLocalError("");
-                        }}
-                      />
-                    </div>
-                    {hasKeyPassphraseDraft && !keyPassphraseValid ? (
-                      <Notice tone="danger">{t("conn.basicKeyPassphraseMismatch")}</Notice>
-                    ) : null}
-                    <p className={hintText}>{t("conn.basicKeyPassphraseStoredNote")}</p>
-                    {serverKeyPassphraseError === "" ? null : (
-                      <Notice tone="danger">{serverKeyPassphraseError}</Notice>
-                    )}
-                  </>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <PasswordField
+                    label={t("conn.basicNewKeyPassphrase")}
+                    value={keyPassphrase}
+                    onChange={(value) => {
+                      setKeyPassphrase(value);
+                      setLocalError("");
+                    }}
+                  />
+                  <PasswordField
+                    label={t("conn.basicConfirmKeyPassphrase")}
+                    value={keyPassphraseConfirmation}
+                    onChange={(value) => {
+                      setKeyPassphraseConfirmation(value);
+                      setLocalError("");
+                    }}
+                  />
+                </div>
+                {hasKeyPassphraseDraft && !keyPassphraseValid ? (
+                  <Notice tone="danger">{t("conn.basicKeyPassphraseMismatch")}</Notice>
+                ) : null}
+                <p className={hintText}>{t("conn.basicKeyPassphraseStoredNote")}</p>
+                {serverKeyPassphraseError === "" ? null : (
+                  <Notice tone="danger">{serverKeyPassphraseError}</Notice>
+                )}
               </div>
-            </div>
+            </details>
           ) : null}
 
           {selectedPrivateKey !== undefined && !selectedPrivateKey.encrypted ? (
