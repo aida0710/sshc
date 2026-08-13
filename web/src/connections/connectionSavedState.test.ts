@@ -92,7 +92,7 @@ function detailWithIdentityFile(): HostDetail {
     },
     effective: {
       alias: "edge",
-      approximate: true,
+
       entries: [],
     },
     file: {

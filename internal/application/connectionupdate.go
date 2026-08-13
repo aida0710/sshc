@@ -431,8 +431,8 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 		return planned{}, false, err
 	}
 	prepared.preview.Effective = []EffectiveDiff{DiffEffective(
-		ComputeEffective(graph, s.workspace.Root(), request.Identity.Alias),
-		ComputeEffective(after, s.workspace.Root(), request.Identity.Alias),
+		ComputeEffective(graph, s.workspace.Root(), request.Identity.Alias, s.localFacts()),
+		ComputeEffective(after, s.workspace.Root(), request.Identity.Alias, s.localFacts()),
 	)}
 	updatedBlock, ok := FindHostBlock(file, request.Identity.Alias)
 	if !ok {

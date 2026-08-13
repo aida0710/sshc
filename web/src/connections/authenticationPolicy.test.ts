@@ -16,7 +16,7 @@ function detail(values: string[][]): HostDetail {
       raw: "Host edge\n", comment: "", commentLines: 0,
     },
     metadata: { identity: { path: "config", alias: "edge" }, favourite: false },
-    effective: { alias: "edge", approximate: true, entries: [] },
+    effective: { alias: "edge", entries: [] },
     file: {
       file: { path: "config", absolute: "/home/tester/.ssh/config" },
       contents: "Host edge\n", digest: "digest", editable: true, exists: true,
