@@ -67,8 +67,6 @@ func guardedRoutes(f *fixture) []guardedRoute {
 		{http.MethodPost, "/api/v1/diagnostics/authentication", session.ActionAuthentication,
 			constantTarget("bastion"), fixedPath("/api/v1/diagnostics/authentication"),
 			alias(map[string]any{"acknowledgeExecutable": true}), nil},
-		{http.MethodPost, "/api/v1/terminal/launch", session.ActionTerminalLaunch,
-			constantTarget("bastion"), fixedPath("/api/v1/terminal/launch"), alias(nil), nil},
 		{http.MethodPost, "/api/v1/known-hosts/delete", session.ActionKnownHostsDelete,
 			constantTarget(knownHostsPath), fixedPath("/api/v1/known-hosts/delete"),
 			func(*fixture, string) map[string]any {
@@ -153,7 +151,7 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 				{"token from another kind", func(target string) string {
 					other := session.ActionReachability
 					if route.Kind == other {
-						other = session.ActionTerminalLaunch
+						other = session.ActionAuthentication
 					}
 					return f.tryActionToken(other, target)
 				}},
@@ -198,7 +196,7 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 						t.Fatalf("the refused request still started %d command(s): %#v", len(commands), commands)
 					}
 					if launched := f.terminal.launched(); len(launched) != 0 {
-						t.Fatalf("the refused request still launched Terminal for %#v", launched)
+						t.Fatalf("the refused request still opened a terminal for %#v", launched)
 					}
 					if !bytes.Equal(before, f.read("known_hosts")) {
 						t.Fatal("the refused request still changed known_hosts")
@@ -253,8 +251,11 @@ func requiresConfirmation(path string) bool {
 		return false
 	case strings.HasPrefix(path, "/api/v1/diagnostics/"):
 		return true
-	case path == "/api/v1/terminal/launch":
-		return true
+	// 埋め込みターミナルは action token を要求しない。vault ゲート
+	// （マスターパスワード）だけを条件とするという決定であり、README の
+	// 「SSH 実行の境界」がその代償を書いている。
+	case strings.HasPrefix(path, "/api/v1/terminal/"):
+		return false
 	case strings.HasPrefix(path, "/api/v1/known-hosts/"):
 		return true
 	case path == "/api/v1/remote-keys/register":

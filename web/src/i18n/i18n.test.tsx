@@ -40,7 +40,6 @@ describe("the catalogue", () => {
     expect(untranslated.sort()).toEqual(
       [
         "diag.hostAlias",
-        "diag.terminal",
         "explorer.fileState",
         "groups.directories",
         "host.tabRaw",
@@ -60,6 +59,8 @@ describe("the catalogue", () => {
         "shell.languageEnglish",
         "shell.languageJapanese",
         "shell.title",
+        "terminal.localhost",
+        "terminal.rowDetail",
       ].sort(),
     );
   });
