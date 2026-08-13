@@ -45,6 +45,12 @@ type ConnectHandlers struct {
 	// これは session manager を持たないビルドの状態である。
 	Sessions *session.Manager
 	BaseURL  string
+	// Shutdown は、この常駐を終わらせる。nil なら止める手段が無いと答える。
+	//
+	// **これを呼ぶのはデスクトップの外殻であって、画面ではない。** 画面から
+	// 常駐を止める道は用意しない——窓を閉じることと、常駐を終わらせることは
+	// 別の意思である。
+	Shutdown func()
 }
 
 type connectRequest struct {
@@ -103,9 +109,31 @@ type openResponse struct {
 	URL string `json:"url"`
 }
 
+// StopPath は、走っているエンジンへ終了を頼む場所である。
+//
+// /api/ の外にあるのは、セッションではなく handoff の秘密で認証するからで
+// ある。**これを呼ぶのはデスクトップの外殻であって、画面ではない。**
+const StopPath = "/cli/engine/stop"
+
 func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
+	engine.POST(StopPath, handlers.Stop)
+}
+
+// Stop は、この常駐を終わらせる。
+//
+// **答えてから止める。** 止めてから答えると、呼んだ側は成功と切断を区別
+// できない。実際の停止は応答が出ていったあとに起きる。
+func (h ConnectHandlers) Stop(c *echo.Context) error {
+	if !h.authorised(c.Request()) {
+		return c.NoContent(http.StatusForbidden)
+	}
+	if h.Shutdown == nil {
+		return c.NoContent(http.StatusServiceUnavailable)
+	}
+	go h.Shutdown()
+	return c.NoContent(http.StatusAccepted)
 }
 
 // Open は、セッションを確立する URL で応答する。

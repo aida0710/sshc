@@ -40,7 +40,9 @@ func connectInvocation(argv []string) (string, bool) {
 		return "", false
 	}
 	word := argv[1]
-	if word == "" || word[0] == '-' || word == AskpassSubcommand || word == OpenSubcommand || word == ListSubcommand || word == ConnectSubcommand || word == HelpSubcommand || word == ServiceSubcommand {
+	if word == "" || word[0] == '-' || word == OpenSubcommand || word == ListSubcommand ||
+		word == ConnectSubcommand || word == HelpSubcommand || word == ServiceSubcommand ||
+		word == EngineSubcommand {
 		return "", false
 	}
 	return word, true
@@ -55,8 +57,31 @@ func connectInvocation(argv []string) (string, bool) {
 // ホストになる。語はひとつだけで、それがこれである。
 const OpenSubcommand = "open"
 
-// runOpen は、起動中のアプリケーションに入口を求め、ブラウザを開く。
-func runOpen(ctx context.Context, stateDir string, client *http.Client, browser func(string) error, stderr io.Writer) int {
+// PrintURLFlag は、開く代わりに入口を出力させる。
+//
+// **端末に出す語ではない。** これを打つのは、自分でその URL を開く親プロセス
+// ——デスクトップの外殻——である。usage に書いてあるのは、打てば動くものは
+// すべて書くという規則によるものである。
+const PrintURLFlag = "--print-url"
+
+// openInvocation は、`sshc open` とその引数を切り出す。
+func openInvocation(argv []string) ([]string, bool) {
+	if len(argv) >= 2 && argv[1] == OpenSubcommand {
+		return argv[2:], true
+	}
+	return nil, false
+}
+
+// runOpen は、起動中のアプリケーションに入口を求め、それを開く。
+//
+// print が真なら、開く代わりに URL を標準出力へ 1 行だけ出す。**親プロセスが
+// 自分で開く場合は、渡す先が端末ではなくその親である。** これは
+// `-open=false` が「自動化用の明示的なオプション」として同じことをしている
+// のと同じ形であり、**既定では決して表示しない**という約束は変わらない。
+func runOpen(
+	ctx context.Context, stateDir string, client *http.Client,
+	browser func(string) error, print bool, stdout, stderr io.Writer,
+) int {
 	found, err := handoff.Read(stateDir)
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: not running")
@@ -86,8 +111,13 @@ func runOpen(ctx context.Context, stateDir string, client *http.Client, browser 
 		fmt.Fprintln(stderr, "sshc: the answer carried no way in")
 		return 1
 	}
-	// URL はブラウザに渡すだけで、決して表示しない。有効なブートストラップトークンを
-	// 運んでおり、端末は見せられたものを残すからだ。
+	// 既定では、URL はブラウザに渡すだけで表示しない。有効なブートストラップ
+	// トークンを運んでおり、端末は見せられたものを残すからだ。求められたときだけ
+	// 出す——求めるのは、自分で開く親プロセスである。
+	if print {
+		fmt.Fprintln(stdout, answer.URL)
+		return 0
+	}
 	if err := browser(answer.URL); err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1
