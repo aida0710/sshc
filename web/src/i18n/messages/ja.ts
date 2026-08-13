@@ -182,7 +182,7 @@ export const ja = {
   "copy.done": "コピーしました。",
   "copy.refused": "ブラウザがクリップボードへの書き込みを拒否しました。",
   "copy.command": "コマンド",
-  "copy.terminalCommand": "別の端末へ貼るコマンド",
+  "copy.terminalCommand": "Terminal コマンド",
   "copy.privateKey": "秘密鍵",
   "copy.publicKey": "公開鍵",
   "copy.keyLine": "鍵の行",
