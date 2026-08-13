@@ -81,16 +81,6 @@ func helpInvocation(argv []string) bool {
 //
 // 目印にトークンを使うのは、それがちょうどひとつの接続のために存在し、この
 // アプリケーション以外に設定するものがないからだ。エンドポイントも併せて必須なのは、
-// 古い変数ひとつでアプリケーションが黙ってヘルパーに変わらないようにするためである。
-func askpassInvocation(argv []string, lookup func(string) string) ([]string, bool) {
-	if len(argv) > 1 && argv[1] == AskpassSubcommand {
-		return argv[2:], true
-	}
-	if lookup(TokenVariable) != "" && lookup(URLVariable) != "" {
-		return argv[1:], true
-	}
-	return nil, false
-}
 
 // usage は、このバイナリが答える語をすべて並べる。
 //
@@ -106,7 +96,6 @@ func usage(out io.Writer) {
   sshc open            ask the running application for a new way in
   sshc service refresh rebind an enabled login service to this binary
   sshc service disable stop and remove the login service
-  sshc askpass         answer an OpenSSH prompt; OpenSSH runs this, not you
   sshc help            print this
 
 flags:
@@ -119,21 +108,6 @@ still reachable with ssh itself, but not through this command.
 }
 
 func main() {
-	// この分岐が flag.Parse より前にあるのは、OpenSSH が渡すプロンプトが任意の文字列で
-	// あり、そうしなければフラグとして読まれてしまうからである。
-	if arguments, ok := askpassInvocation(os.Args, os.Getenv); ok {
-		os.Exit(runAskpass(
-			context.Background(),
-			arguments,
-			os.Getenv,
-			&http.Client{Timeout: 15 * time.Second},
-			os.Stdout,
-			os.Stderr,
-			// 答えられないプロンプトは制御端末の向こうにいる人間へ渡す。
-			openControllingTerminal,
-		))
-	}
-
 	if serviceInvocation(os.Args) {
 		os.Exit(runServiceCommand(
 			context.Background(), os.Args[2:], os.UserHomeDir, newServiceLoginItem,
@@ -227,16 +201,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// askpass ヘルパーはこのバイナリである。ここで一度だけ解決するのが唯一それの可能な
-	// 場所だ。アプリケーションの内側には、それがどこにインストールされたかを知るものが
-	// ない。解決できないパスの場合は、そこにないかもしれないヘルパーを武装させるのでは
-	// なく、すべての端末起動を素の経路のままにしておく。
-	helperPath, err := os.Executable()
-	if err != nil {
-		logger.Warn("resolve this binary; saved key passphrases will not be offered", "error", err)
-		helperPath = ""
-	}
-
 	home, err := os.UserHomeDir()
 	if err != nil {
 		logger.Error("resolve home directory", "error", err)
@@ -263,16 +227,15 @@ func main() {
 			API:  "https://api.github.com/repos/aida0710/sshc/releases/latest",
 			HTTP: &http.Client{Timeout: 30 * time.Second},
 		},
-		Listen:        net.Listen,
-		UI:            assets,
-		Logger:        logger,
-		Home:          home,
-		Runner:        parts.Runner,
-		Toolchain:     parts.Toolchain,
-		KeyAgent:      parts.KeyAgent,
-		Lookup:        os.LookupEnv,
-		Environ:       os.Environ,
-		AskpassHelper: helperPath,
+		Listen:    net.Listen,
+		UI:        assets,
+		Logger:    logger,
+		Home:      home,
+		Runner:    parts.Runner,
+		Toolchain: parts.Toolchain,
+		KeyAgent:  parts.KeyAgent,
+		Lookup:    os.LookupEnv,
+		Environ:   os.Environ,
 	}
 	if err := app.Run(ctx, dependencies, version); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("sshc stopped", "error", err)
