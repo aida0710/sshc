@@ -5,6 +5,7 @@ export type ConfigCheckResponse = components["schemas"]["ConfigCheckResponse"];
 export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
 export type ReachabilityResponse = components["schemas"]["ReachabilityResponse"];
 export type AuthenticationResponse = components["schemas"]["AuthenticationResponse"];
+export type Desktop = components["schemas"]["Desktop"];
 export type TerminalForward = components["schemas"]["TerminalForward"];
 export type TerminalSession = components["schemas"]["TerminalSession"];
 export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
@@ -82,6 +83,9 @@ export type IntegrationsApi = {
   updateStatus(): Promise<UpdateStatus>;
   loginItem(): Promise<LoginItem>;
   setLoginItem(enabled: boolean): Promise<LoginItem>;
+  // デスクトップの外殻の設定。アプリを閉じたあともエンジンを残すか。
+  desktopSettings(): Promise<Desktop>;
+  setDesktopSettings(keepRunning: boolean): Promise<void>;
   passwordEligibility(alias: string): Promise<PasswordEligibility>;
   // Credential は名前を持つ秘密である。ホストはアカウントパスワードを参照し、
   // 鍵はパスフレーズを参照する。この二つの名前空間は決して
@@ -550,6 +554,19 @@ export const integrationsApi: IntegrationsApi = {
         body: JSON.stringify({ enabled, supported: true }),
       }),
     );
+  },
+  async desktopSettings() {
+    const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
+    if (metadata.desktop === undefined) return { keepRunning: false };
+    const desktop = asRecord(metadata.desktop);
+    return { keepRunning: desktop.keepRunning === true };
+  },
+  async setDesktopSettings(keepRunning) {
+    await apiClient.mutate("/api/v1/metadata/desktop", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify({ keepRunning }),
+    });
   },
   async changeMasterPassword(current, next) {
     const answer = await postJSON<unknown>("/api/v1/passwords/change", { current, next });

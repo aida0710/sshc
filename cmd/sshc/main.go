@@ -93,6 +93,7 @@ func usage(out io.Writer) {
   sshc service disable stop and remove the login service
   sshc engine start    make sure the background engine is answering
   sshc engine stop     ask the background engine to finish
+  sshc engine quit     finish it unless the setting says to keep it
   sshc help            print this
 
 flags:
@@ -113,7 +114,7 @@ func main() {
 	}
 
 	if arguments, ok := engineInvocation(os.Args); ok {
-		stateDir, err := engineStateDir()
+		home, err := os.UserHomeDir()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
 			os.Exit(1)
@@ -124,7 +125,7 @@ func main() {
 			os.Exit(1)
 		}
 		os.Exit(runEngineCommand(
-			context.Background(), arguments, stateDir,
+			context.Background(), arguments, home, app.HandoffDir(home),
 			&http.Client{Timeout: connectTimeout}, spawnEngine(executable),
 			os.Stdout, os.Stderr,
 		))

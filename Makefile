@@ -1,4 +1,4 @@
-.PHONY: generate test build release-binaries fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test build desktop desktop-run desktop-dist release-binaries fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
 # なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
@@ -54,6 +54,22 @@ build:
 	npm run build --prefix web
 	mkdir -p bin
 	go build -trimpath -ldflags "-X main.version=$${VERSION}" -o bin/sshc ./cmd/sshc
+
+# デスクトップの外殻。束に入れる sshc は 1 つだけである——二つのコピーが
+# あると、どちらが走っているのか分からなくなる。
+desktop: build
+	mkdir -p desktop/resources
+	cp bin/sshc desktop/resources/sshc
+	npm install --prefix desktop
+
+# desktop-run は、束を作らずにその場で外殻を開く。開発中の入口である。
+desktop-run: desktop
+	npm start --prefix desktop
+
+# desktop-dist は配布物を作る。**1 台の macOS から macOS と Linux の両方を
+# 作れる**——それが Tauri ではなく Electron を選んだ理由である。
+desktop-dist: desktop
+	npm run dist --prefix desktop
 
 # リリースの成果物。UI のバンドルは 1 度だけ作り、Go だけをターゲットごとに
 # ビルドする。バンドルは埋め込まれるだけで、どの OS 向けかを知らないからだ。

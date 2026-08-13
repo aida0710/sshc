@@ -58,6 +58,8 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: true }),
     updateStatus: vi.fn().mockResolvedValue({ current: "dev", available: false, restartRequired: false }),
     setLoginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
+    desktopSettings: vi.fn().mockResolvedValue({ keepRunning: false }),
+    setDesktopSettings: vi.fn(),
     credentials: vi.fn().mockResolvedValue({ credentials: [] }),
     storeCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     deleteCredential: vi.fn().mockResolvedValue({ credentials: [] }),

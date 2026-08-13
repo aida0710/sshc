@@ -1402,6 +1402,9 @@ type ScanKnownHostsJSONRequestBody = KnownHostsScanRequest
 // SetLoginItemJSONRequestBody defines body for SetLoginItem for application/json ContentType.
 type SetLoginItemJSONRequestBody = LoginItem
 
+// SetDesktopSettingsJSONRequestBody defines body for SetDesktopSettings for application/json ContentType.
+type SetDesktopSettingsJSONRequestBody = Desktop
+
 // ChangeMasterPasswordJSONRequestBody defines body for ChangeMasterPassword for application/json ContentType.
 type ChangeMasterPasswordJSONRequestBody = ChangeMasterPasswordRequest
 

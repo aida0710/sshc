@@ -8,6 +8,8 @@ import { SettingsPanel } from "./SettingsPanel";
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
     loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: true }),
+    desktopSettings: vi.fn().mockResolvedValue({ keepRunning: false }),
+    setDesktopSettings: vi.fn().mockResolvedValue(undefined),
     setLoginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
     changeMasterPassword: vi.fn().mockResolvedValue({
       vault: {
@@ -153,5 +155,28 @@ describe("SettingsPanel", () => {
     expect(screen.getByLabelText("New master password")).toHaveAttribute("type", "password");
     await user.click(screen.getByRole("button", { name: "Show New master password" }));
     expect(screen.getByLabelText("New master password")).toHaveAttribute("type", "text");
+  });
+  // **書かれていなければ止める側に倒す。** 動かし続けるのは明示的な選択である。
+  it("offers keeping the engine running, off unless it was chosen", async () => {
+    const user = userEvent.setup();
+    const setDesktopSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setDesktopSettings })} />);
+
+    const toggle = await screen.findByLabelText("Keep running after the window closes");
+    expect(toggle).not.toBeChecked();
+
+    await user.click(toggle);
+    expect(setDesktopSettings).toHaveBeenCalledWith(true);
+    await waitFor(() => expect(toggle).toBeChecked());
+  });
+
+  // 読めないときも止める側に倒す。**読めない設定を「続けろ」と解釈しない。**
+  it("falls back to stopping when the setting cannot be read", async () => {
+    render(<SettingsPanel api={buildApi({
+      desktopSettings: vi.fn().mockRejectedValue(new Error("offline")),
+    })} />);
+
+    const toggle = await screen.findByLabelText("Keep running after the window closes");
+    expect(toggle).not.toBeChecked();
   });
 });

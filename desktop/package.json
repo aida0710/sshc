@@ -1,0 +1,23 @@
+{
+  "name": "sshc-desktop",
+  "productName": "sshc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The desktop shell for sshc",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac --linux"
+  },
+  "devDependencies": {
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.github.aida0710.sshc",
+    "files": ["main.js", "preload.js"],
+    "extraResources": [{ "from": "resources", "to": "." }],
+    "mac": { "target": "dmg", "category": "public.app-category.developer-tools" },
+    "linux": { "target": ["AppImage"], "category": "Development" }
+  }
+}
