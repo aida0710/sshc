@@ -3,14 +3,13 @@ package remotekey_test
 import (
 	"context"
 	"errors"
-	"os"
-	"slices"
 	"strings"
 	"testing"
 
 	"sshc/internal/effective"
 	"sshc/internal/platform"
 	"sshc/internal/remotekey"
+	"sshc/internal/sshclient"
 )
 
 const (
@@ -20,30 +19,43 @@ const (
 
 var configSnapshot = []byte("Host bastion\n\tHostName 203.0.113.10\n\tUser ops\n")
 
-type scriptedRunner struct {
-	commands []platform.Command
-	outputs  []platform.Output
+// remoteCall は、リモートで走らせた 1 本のコマンドである。
+type remoteCall struct {
+	alias   string
+	command string
+	stdin   []byte
 }
 
-func (runner *scriptedRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
-	runner.commands = append(runner.commands, command)
+// scriptedRunner は、リモート実行の継ぎ目を差し替える。
+//
+// 本物の握手を見るのは internal/sshclient の側である。ここが確かめるのは、
+// **何がコマンドとして渡り、何が標準入力を通るか**である。
+type scriptedRunner struct {
+	calls    []remoteCall
+	outputs  []sshclient.Output
+	resolved int
+}
+
+func (runner *scriptedRunner) run(
+	_ context.Context, target sshclient.Target, command string, stdin []byte,
+) (sshclient.Output, error) {
+	runner.calls = append(runner.calls, remoteCall{alias: target.Alias, command: command, stdin: stdin})
 	if len(runner.outputs) == 0 {
-		return platform.Output{}, nil
+		return sshclient.Output{}, nil
 	}
 	next := runner.outputs[0]
 	runner.outputs = runner.outputs[1:]
 	return next, nil
 }
 
-type stubToolchain struct{}
-
-func (stubToolchain) SSH() (string, error)     { return "/usr/bin/ssh", nil }
-func (stubToolchain) KeyScan() (string, error) { return "/usr/bin/ssh-keyscan", nil }
-func (stubToolchain) KeyGen() (string, error)  { return "/usr/bin/ssh-keygen", nil }
-func (stubToolchain) KeyAdd() (string, error)  { return "/usr/bin/ssh-add", nil }
-
-func newService(runner platform.OutputRunner) remotekey.Service {
-	return remotekey.Service{Runner: runner, Toolchain: stubToolchain{}, ConfigPath: "/Users/tester/.ssh/config"}
+func newService(runner *scriptedRunner) remotekey.Service {
+	return remotekey.Service{
+		Resolve: func(alias string) (sshclient.Target, error) {
+			runner.resolved++
+			return sshclient.Target{Alias: alias, HostName: "203.0.113.10", Port: "22", User: "ops"}, nil
+		},
+		Run: runner.run,
+	}
 }
 
 func TestParsePublicKeyAcceptsOnlyOneValidLine(t *testing.T) {
@@ -72,7 +84,7 @@ func TestParsePublicKeyAcceptsOnlyOneValidLine(t *testing.T) {
 }
 
 func TestRegisterProbesThenSendsTheKeyOnStandardInput(t *testing.T) {
-	runner := &scriptedRunner{outputs: []platform.Output{
+	runner := &scriptedRunner{outputs: []sshclient.Output{
 		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
 		{Stdout: []byte("sshc: added\n")},
 	}}
@@ -88,42 +100,36 @@ func TestRegisterProbesThenSendsTheKeyOnStandardInput(t *testing.T) {
 	if result.Outcome != remotekey.RegistrationAdded {
 		t.Fatalf("result = %#v", result)
 	}
-	if len(runner.commands) != 2 {
-		t.Fatalf("commands = %#v", runner.commands)
+	if len(runner.calls) != 2 {
+		t.Fatalf("calls = %#v", runner.calls)
 	}
 
-	probe := runner.commands[0]
-	if probe.Arguments[len(probe.Arguments)-1] != remotekey.ProbeCommand {
-		t.Errorf("probe argv = %#v", probe.Arguments)
+	probe := runner.calls[0]
+	if probe.command != remotekey.ProbeCommand || probe.alias != "bastion" {
+		t.Errorf("probe = %#v", probe)
 	}
-	register := runner.commands[1]
-	if register.Arguments[len(register.Arguments)-1] != remotekey.Routine {
-		t.Errorf("registration argv = %#v", register.Arguments)
+	if len(probe.stdin) != 0 {
+		t.Errorf("the probe sent %q on standard input", probe.stdin)
 	}
-	if string(register.Stdin) != keyLine+"\n" {
-		t.Errorf("stdin = %q, want the key line", register.Stdin)
+
+	register := runner.calls[1]
+	if register.command != remotekey.Routine {
+		t.Errorf("registration command = %q", register.command)
+	}
+	// **公開鍵は標準入力を通る。コマンドには決して乗らない。**
+	if string(register.stdin) != keyLine+"\n" {
+		t.Errorf("stdin = %q, want the key line", register.stdin)
+	}
+	if strings.Contains(register.command, "AAAAC3Nza") || strings.Contains(register.command, "fixture@example") {
+		t.Fatalf("the command carried key material: %q", register.command)
 	}
 	if strings.Contains(remotekey.Routine, "fixture@example") {
 		t.Error("the remote routine must never contain caller input")
 	}
-	if !slices.Contains(register.Arguments, "-T") {
-		t.Errorf("registration argv = %#v, want -T", register.Arguments)
-	}
-	for _, argument := range register.Arguments {
-		if strings.Contains(argument, "sh -c") {
-			t.Fatalf("argv smuggled a shell invocation: %q", argument)
-		}
-	}
-
-	// 鍵・コメント・alias 由来のデータを引数が運んではならない。変動するものは
-	// すべて標準入力を通る。
-	for _, argument := range register.Arguments {
-		if argument == remotekey.Routine {
-			continue
-		}
-		if strings.Contains(argument, "AAAAC3Nza") || strings.Contains(argument, "fixture@example") {
-			t.Fatalf("argv carried key material: %q", argument)
-		}
+	// **行き先は一度だけ決める。** 二度解決すると、その間に設定を書き換えた者が
+	// 二本目の行き先を変えられる。
+	if runner.resolved != 1 {
+		t.Errorf("the destination was resolved %d times, want once", runner.resolved)
 	}
 }
 
@@ -133,7 +139,7 @@ func TestRegisterReportsAnExistingKeyAndAnUnsupportedRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	existing := &scriptedRunner{outputs: []platform.Output{
+	existing := &scriptedRunner{outputs: []sshclient.Output{
 		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
 		{Stdout: []byte("sshc: already-present\n")},
 	}}
@@ -145,13 +151,13 @@ func TestRegisterReportsAnExistingKeyAndAnUnsupportedRemote(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 
-	unsupported := &scriptedRunner{outputs: []platform.Output{
+	unsupported := &scriptedRunner{outputs: []sshclient.Output{
 		{Stdout: []byte("Windows PowerShell\n"), ExitCode: 0},
 	}}
 	if _, err := newService(unsupported).Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false); !errors.Is(err, remotekey.ErrUnsupportedRemote) {
 		t.Fatalf("Register = %v, want ErrUnsupportedRemote", err)
 	}
-	if len(unsupported.commands) != 1 {
+	if len(unsupported.calls) != 1 {
 		t.Fatal("an unsupported remote still received the registration routine")
 	}
 }
@@ -169,70 +175,15 @@ func TestRegisterRefusesUntilExecutableDirectivesAreAcknowledged(t *testing.T) {
 	if _, err := newService(runner).Register(context.Background(), report, configSnapshot, "bastion", key, false); !errors.Is(err, remotekey.ErrNotAcknowledged) {
 		t.Fatalf("Register = %v, want ErrNotAcknowledged", err)
 	}
-	if len(runner.commands) != 0 {
-		t.Fatal("a refused registration started a process")
+	if len(runner.calls) != 0 {
+		t.Fatal("a refused registration reached the remote")
 	}
 
 	if _, err := newService(runner).Register(context.Background(), effective.Report{}, configSnapshot, "bad alias", key, false); !errors.Is(err, platform.ErrUnsafeAlias) {
 		t.Fatalf("Register = %v, want ErrUnsafeAlias", err)
 	}
-	if len(runner.commands) != 0 {
-		t.Fatal("an unsafe alias started a process")
-	}
-}
-
-type snapshotReadingRunner struct {
-	paths   []string
-	configs [][]byte
-	outputs []platform.Output
-}
-
-func (runner *snapshotReadingRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
-	for index, argument := range command.Arguments {
-		if argument != "-F" || index+1 >= len(command.Arguments) {
-			continue
-		}
-		path := command.Arguments[index+1]
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return platform.Output{}, err
-		}
-		runner.paths = append(runner.paths, path)
-		runner.configs = append(runner.configs, contents)
-		break
-	}
-	next := runner.outputs[0]
-	runner.outputs = runner.outputs[1:]
-	return next, nil
-}
-
-func TestRegisterUsesOneTemporaryConfigSnapshotForBothSSHCommands(t *testing.T) {
-	runner := &snapshotReadingRunner{outputs: []platform.Output{
-		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
-		{Stdout: []byte("sshc: added\n")},
-	}}
-	key, _, err := remotekey.ParsePublicKey(keyLine)
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := newService(runner)
-
-	if _, err := service.Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false); err != nil {
-		t.Fatalf("Register = %v", err)
-	}
-	if len(runner.paths) != 2 || runner.paths[0] != runner.paths[1] {
-		t.Fatalf("config paths = %#v, want one shared snapshot", runner.paths)
-	}
-	for _, contents := range runner.configs {
-		if string(contents) != string(configSnapshot) {
-			t.Fatalf("ssh read config %q, want %q", contents, configSnapshot)
-		}
-	}
-	if runner.paths[0] == service.ConfigPath {
-		t.Fatal("ssh was pointed back at the mutable user configuration")
-	}
-	if _, err := os.Stat(runner.paths[0]); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("temporary config still exists after registration: %v", err)
+	if len(runner.calls) != 0 {
+		t.Fatal("an unsafe alias reached the remote")
 	}
 }
 

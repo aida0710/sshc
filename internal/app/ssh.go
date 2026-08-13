@@ -85,6 +85,13 @@ func (p sshParts) probe() func(ctx context.Context, alias string) (sshclient.Pro
 	}
 }
 
+// run は、決まった接続でコマンドを 1 本走らせる。**何も尋ねない。**
+func (p sshParts) run() func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error) {
+	return func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error) {
+		return p.dialer.Run(ctx, target, command, stdin)
+	}
+}
+
 // storedPassphrase は、鍵の絶対パスを vault の保存値へ対応づける。
 //
 // vault が知っているのはワークスペース相対のパスである。~/.ssh の外にある鍵は

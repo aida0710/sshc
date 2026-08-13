@@ -245,7 +245,7 @@ func completionConditions() []completionCondition {
 				// connection gate。
 				{proofGoTest, "TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken"},
 				{proofGoTest, "TestNoRouteEverPutsAHostileValueOnACommandLine"},
-				{proofGoTest, "TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard"},
+				{proofGoTest, "TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard"},
 			},
 			Manual: []proof{{proofManual, "M1. 実リモートホストへの接続テスト"}},
 			Gap: "what is proven is that this application starts no process to read the " +

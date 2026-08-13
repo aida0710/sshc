@@ -15,47 +15,47 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/diagnostics"
-	"sshc/internal/platform"
 	"sshc/internal/remotekey"
 	"sshc/internal/session"
+	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 )
 
 const remoteKeyLine = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPr0nHGmQb99GXmUofxJM4BXGwGzO0jGsQFBspODbkvS fixture@example"
 
-// sequencedRunner は呼び出しごとに用意した出力を 1 つずつ再生する。
-// これにより、プロセスを起動せずに probe と registration に別々の応答をさせられる。
-type sequencedRunner struct {
-	commands  []platform.Command
-	outputs   []platform.Output
-	beforeRun func(platform.Command)
+// remoteCall は、リモートで走らせた 1 本のコマンドである。
+type remoteCall struct {
+	target  sshclient.Target
+	command string
+	stdin   []byte
 }
 
-func (runner *sequencedRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
+// sequencedRunner は呼び出しごとに用意した出力を 1 つずつ再生する。
+// これにより、ネットワークへ出ずに probe と registration に別々の応答をさせられる。
+type sequencedRunner struct {
+	commands  []remoteCall
+	outputs   []sshclient.Output
+	resolved  []string
+	beforeRun func(remoteCall)
+}
+
+func (runner *sequencedRunner) run(
+	_ context.Context, target sshclient.Target, command string, stdin []byte,
+) (sshclient.Output, error) {
+	call := remoteCall{target: target, command: command, stdin: stdin}
 	if runner.beforeRun != nil {
-		runner.beforeRun(command)
+		runner.beforeRun(call)
 	}
-	runner.commands = append(runner.commands, command)
+	runner.commands = append(runner.commands, call)
 	if len(runner.outputs) == 0 {
-		return platform.Output{}, nil
+		return sshclient.Output{}, nil
 	}
 	next := runner.outputs[0]
 	runner.outputs = runner.outputs[1:]
 	return next, nil
 }
 
-func commandConfigPath(t *testing.T, command platform.Command) string {
-	t.Helper()
-	for index, argument := range command.Arguments {
-		if argument == "-F" && index+1 < len(command.Arguments) {
-			return command.Arguments[index+1]
-		}
-	}
-	t.Fatalf("command has no -F configuration: %#v", command.Arguments)
-	return ""
-}
-
-func newRemoteKeyServer(t *testing.T, outputs []platform.Output) (*echo.Echo, session.Credentials, *sequencedRunner, string) {
+func newRemoteKeyServer(t *testing.T, outputs []sshclient.Output) (*echo.Echo, session.Credentials, *sequencedRunner, string) {
 	t.Helper()
 
 	home := t.TempDir()
@@ -80,9 +80,17 @@ func newRemoteKeyServer(t *testing.T, outputs []platform.Output) (*echo.Echo, se
 
 	runner := &sequencedRunner{outputs: outputs}
 	remote := &remotekey.Service{
-		Runner:     runner,
-		Toolchain:  stubToolchain{},
-		ConfigPath: diagnosticsService.ConfigPath(),
+		// **行き先は登録一回につき一度だけ決まる。** 実際の解決は
+		// internal/app が配線するので、ここでは設定を読んで宛先を返す。
+		Resolve: func(alias string) (sshclient.Target, error) {
+			runner.resolved = append(runner.resolved, alias)
+			hostname, port, err := diagnosticsService.Destination(alias)
+			if err != nil {
+				return sshclient.Target{}, err
+			}
+			return sshclient.Target{Alias: alias, HostName: hostname, Port: port}, nil
+		},
+		Run: runner.run,
 	}
 
 	sessions, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x77}, 8192)))
@@ -165,7 +173,7 @@ func TestRemoteKeyPlanDescribesTheChangeWithoutContactingAnything(t *testing.T) 
 }
 
 func TestRemoteKeyRegisterNeedsAConfirmationAndSendsTheKeyOnStdin(t *testing.T) {
-	engine, credentials, runner, _ := newRemoteKeyServer(t, []platform.Output{
+	engine, credentials, runner, _ := newRemoteKeyServer(t, []sshclient.Output{
 		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
 		{Stdout: []byte("sshc: added\n")},
 	})
@@ -200,23 +208,21 @@ func TestRemoteKeyRegisterNeedsAConfirmationAndSendsTheKeyOnStdin(t *testing.T) 
 		t.Fatalf("commands = %#v", runner.commands)
 	}
 	register := runner.commands[1]
-	if string(register.Stdin) != remoteKeyLine+"\n" {
-		t.Errorf("stdin = %q, want the key line", register.Stdin)
+	if string(register.stdin) != remoteKeyLine+"\n" {
+		t.Errorf("stdin = %q, want the key line", register.stdin)
 	}
-	// argv に可変のものが現れてはならない。routine は定数であり、
+	// コマンドに可変のものが現れてはならない。routine は定数であり、
 	// 鍵は標準入力に乗せて運ばれる。
-	for _, argument := range register.Arguments {
-		if argument == remotekey.Routine {
-			continue
-		}
-		if strings.Contains(argument, "AAAAC3Nza") || strings.Contains(argument, "fixture@example") {
-			t.Fatalf("argv carried key material: %q", argument)
-		}
+	if register.command != remotekey.Routine {
+		t.Fatalf("command = %q, want the fixed routine", register.command)
+	}
+	if strings.Contains(register.command, "AAAAC3Nza") || strings.Contains(register.command, "fixture@example") {
+		t.Fatalf("the command carried key material: %q", register.command)
 	}
 }
 
 func TestRemoteKeyRegisterRefusesAnUnacknowledgedExecutableDirective(t *testing.T) {
-	engine, credentials, runner, _ := newRemoteKeyServer(t, []platform.Output{
+	engine, credentials, runner, _ := newRemoteKeyServer(t, []sshclient.Output{
 		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
 		{Stdout: []byte("sshc: added\n")},
 	})
@@ -340,8 +346,14 @@ func TestRemoteKeyRegisterRejectsAPlanAfterItsExecutionConfigChanges(t *testing.
 	}
 }
 
-func TestRemoteKeyRegisterExecutesTheValidatedSnapshotAfterItsSourceChanges(t *testing.T) {
-	engine, credentials, runner, configPath := newRemoteKeyServer(t, []platform.Output{
+// **行き先は登録一回につき一度だけ決まる。**
+//
+// かつては設定を凍結してファイルへ書き、`ssh -F` にそれを読ませることで同じ
+// 性質を守っていた。プロセス内では読むファイルが無いので、代わりに解決を
+// 一度に限る。probe と routine の間に設定を書き換えた者が、二本目の行き先を
+// 変えられてはならない。
+func TestRemoteKeyRegisterResolvesTheDestinationOnce(t *testing.T) {
+	engine, credentials, runner, configPath := newRemoteKeyServer(t, []sshclient.Output{
 		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
 		{Stdout: []byte("sshc: added\n")},
 	})
@@ -350,21 +362,16 @@ func TestRemoteKeyRegisterExecutesTheValidatedSnapshotAfterItsSourceChanges(t *t
 	}
 	token := remoteKeyPlanToken(t, engine, credentials, request)
 
-	var executedConfig []byte
 	changed := false
-	runner.beforeRun = func(command platform.Command) {
-		if !changed {
-			changed = true
-			mutated := strings.ReplaceAll(diagnosticsConfig, "203.0.113.10", "203.0.113.99")
-			if err := os.WriteFile(configPath, []byte(mutated), 0o600); err != nil {
-				t.Fatal(err)
-			}
+	runner.beforeRun = func(remoteCall) {
+		if changed {
+			return
 		}
-		contents, err := os.ReadFile(commandConfigPath(t, command))
-		if err != nil {
+		changed = true
+		mutated := strings.ReplaceAll(diagnosticsConfig, "203.0.113.10", "203.0.113.99")
+		if err := os.WriteFile(configPath, []byte(mutated), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		executedConfig = contents
 	}
 
 	registered := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/register",
@@ -375,15 +382,15 @@ func TestRemoteKeyRegisterExecutesTheValidatedSnapshotAfterItsSourceChanges(t *t
 	if registered.Code != http.StatusOK {
 		t.Fatalf("register = %d: %s", registered.Code, registered.Body.String())
 	}
-	if !strings.Contains(string(executedConfig), "203.0.113.10") || strings.Contains(string(executedConfig), "203.0.113.99") {
-		t.Fatalf("ssh received the changed source instead of the validated snapshot: %q", executedConfig)
+	if len(runner.resolved) != 1 {
+		t.Fatalf("the destination was resolved %d times, want once", len(runner.resolved))
 	}
 	if len(runner.commands) != 2 {
 		t.Fatalf("commands = %#v", runner.commands)
 	}
-	for _, command := range runner.commands {
-		if commandConfigPath(t, command) == configPath {
-			t.Fatal("ssh was pointed at the mutable source configuration")
+	for _, call := range runner.commands {
+		if call.target.HostName != "203.0.113.10" {
+			t.Fatalf("a command was redirected to %q by an edit made mid-flight", call.target.HostName)
 		}
 	}
 }

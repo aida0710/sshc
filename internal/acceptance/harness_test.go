@@ -38,6 +38,7 @@ import (
 	"sshc/internal/terminal"
 
 	"golang.org/x/crypto/ssh"
+	"sshc/internal/remotekey"
 	"sshc/internal/sshclient"
 )
 
@@ -320,6 +321,7 @@ func newFixture(t testing.TB) *fixture {
 		// 認証を試す継ぎ目も、プロセスの継ぎ目と同じく記録係で置き換える。
 		ScanHostKeys: scanner.collect,
 		Probe:        scanner.probe,
+		RemoteRun:    scanner.remoteRun,
 		SessionNow:   clock.now,
 	}, "acceptance")
 	if err != nil {
@@ -812,6 +814,7 @@ type recordingScanner struct {
 	mutex     sync.Mutex
 	addresses []string
 	probed    []string
+	ran       []remoteCall
 	// answer は、認証の継ぎ目が返す答えである。既定は「届かなかった」。
 	answer func() (sshclient.Probe, error)
 }
@@ -845,7 +848,7 @@ func (s *recordingScanner) reached() []string {
 func (s *recordingScanner) reset() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.addresses = nil
+	s.addresses, s.probed, s.ran = nil, nil, nil
 }
 
 // probe は、認証テストの継ぎ目である。**このスイートは認証しない。**
@@ -872,4 +875,31 @@ func (s *recordingScanner) authenticated() []string {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return append([]string(nil), s.probed...)
+}
+
+// remoteRun は、リモートで 1 本のコマンドを走らせる継ぎ目である。
+func (s *recordingScanner) remoteRun(
+	_ context.Context, target sshclient.Target, command string, stdin []byte,
+) (sshclient.Output, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.ran = append(s.ran, remoteCall{alias: target.Alias, command: command, stdin: string(stdin)})
+	if command == remotekey.ProbeCommand {
+		return sshclient.Output{Stdout: []byte(remotekey.ProbeMarker + "\n")}, nil
+	}
+	return sshclient.Output{Stdout: []byte("sshc: added\n")}, nil
+}
+
+// remoteCall は、リモートで走らせた 1 本のコマンドである。
+type remoteCall struct {
+	alias   string
+	command string
+	stdin   string
+}
+
+// remoted は、リモート実行の継ぎ目に届いたものである。
+func (s *recordingScanner) remoted() []remoteCall {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return append([]remoteCall(nil), s.ran...)
 }

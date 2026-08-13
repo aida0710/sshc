@@ -62,6 +62,7 @@ type Dependencies struct {
 	// **検査がネットワークへ出ないようにするためにここにある。**
 	ScanHostKeys func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
 	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
+	RemoteRun    func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error)
 	// AskpassHelper は実行中バイナリの絶対パス。OpenSSH が保存済み鍵パスフレーズを得る
 	// ために実行するプログラムである。これを知り得るのは cmd/sshc だけで、パスが空
 	// なら、すべての端末起動は素の経路のままになる。
@@ -171,10 +172,6 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	// エントリポイントが一度だけ解決して渡す。
 	// known_hosts は設定のトランザクションマネージャを共有する。どちらも ~/.ssh 配下の
 	// 通常の管理対象ファイルを書くので、ジャーナルはひとつで足りる。
-	var scanEnvironment []string
-	if dependencies.Lookup != nil {
-		scanEnvironment = platform.MinimalEnvironment(dependencies.Lookup)
-	}
 	// 鍵を集めるのはこのプロセスである。ssh-keyscan は起こさない。
 	collectHostKeys := dependencies.ScanHostKeys
 	if collectHostKeys == nil {
@@ -184,12 +181,6 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	}
 	knownHostsService := knownhosts.NewService(workspace, transactions,
 		knownhosts.Scanner{Collect: collectHostKeys})
-	remoteKeyService := &remotekey.Service{
-		Runner:      dependencies.Runner,
-		Toolchain:   dependencies.Toolchain,
-		ConfigPath:  diagnosticsService.ConfigPath(),
-		Environment: scanEnvironment,
-	}
 
 	// パスワード保管用の vault も設定のトランザクションマネージャを共有する。~/.ssh
 	// 配下のもうひとつの通常の管理対象ファイルにすぎず、ジャーナルはひとつで足り、
@@ -205,6 +196,13 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		probe = ssh.probe()
 	}
 	diagnosticsService.Authentication.Dial = probe
+
+	// 公開鍵のリモート登録も同じ接続を通る。**外部の ssh は起こさない。**
+	remoteRun := dependencies.RemoteRun
+	if remoteRun == nil {
+		remoteRun = ssh.run()
+	}
+	remoteKeyService := &remotekey.Service{Resolve: ssh.target, Run: remoteRun}
 
 	// パスフレーズが保存されている鍵は、二段階ではなく一度の操作でエージェントに
 	// 追加される。この参照関数を internal/keys に import させず、ここで取り付けるのは、
