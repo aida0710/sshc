@@ -36,6 +36,36 @@
   --ui-notice-ink: #7a5a10;
   --ui-danger: #d70015;
   --ui-live: #34794a;
+
+  /* 端末の配色。
+   *
+   * xterm.js は色を JS のオプションとして受け取るので、コンポーネントは
+   * getComputedStyle でこれらを読んで渡す。生の hex をコンポーネントに書かない
+   * ので、palette.test.ts に例外を足さずに済み、ライトとダークで別の値を与えられる。
+   *
+   * 上のパレットと違い、ここでの名前は色そのものである。ANSI の 16 色は
+   * 意味ではなく番号で、リモート側のプログラムがどう使うかをこちらは知らない。
+   */
+  --ui-term-bg: #ffffff;
+  --ui-term-fg: #1d1d1f;
+  --ui-term-cursor: #1d1d1f;
+  --ui-term-selection: rgb(0 122 255 / 0.24);
+  --ui-term-black: #2b2b2b;
+  --ui-term-red: #c02c38;
+  --ui-term-green: #23794a;
+  --ui-term-yellow: #8a6300;
+  --ui-term-blue: #1a56c4;
+  --ui-term-magenta: #9333a8;
+  --ui-term-cyan: #0f6f78;
+  --ui-term-white: #cfcfd4;
+  --ui-term-bright-black: #6e6e73;
+  --ui-term-bright-red: #e2453f;
+  --ui-term-bright-green: #2f9d5f;
+  --ui-term-bright-yellow: #b07d05;
+  --ui-term-bright-blue: #2f6fe0;
+  --ui-term-bright-magenta: #b455ca;
+  --ui-term-bright-cyan: #158b96;
+  --ui-term-bright-white: #f5f5f7;
 }
 
 [data-theme="dark"] {
@@ -61,6 +91,27 @@
   --ui-notice-ink: #f0b429;
   --ui-danger: #ff6961;
   --ui-live: #5fd88a;
+
+  --ui-term-bg: #1c1c1e;
+  --ui-term-fg: #f5f5f7;
+  --ui-term-cursor: #f5f5f7;
+  --ui-term-selection: rgb(10 132 255 / 0.36);
+  --ui-term-black: #3a3a3c;
+  --ui-term-red: #ff6961;
+  --ui-term-green: #5fd88a;
+  --ui-term-yellow: #f0b429;
+  --ui-term-blue: #6fa8ff;
+  --ui-term-magenta: #d78cf0;
+  --ui-term-cyan: #5fd6e0;
+  --ui-term-white: #d4d4d8;
+  --ui-term-bright-black: #6e6e73;
+  --ui-term-bright-red: #ff8a80;
+  --ui-term-bright-green: #86efac;
+  --ui-term-bright-yellow: #ffd25f;
+  --ui-term-bright-blue: #9ec5ff;
+  --ui-term-bright-magenta: #e9b3f7;
+  --ui-term-bright-cyan: #8fe6ee;
+  --ui-term-bright-white: #ffffff;
 }
 
 @theme inline {
@@ -84,6 +135,9 @@
   --color-notice-ink: var(--ui-notice-ink);
   --color-danger: var(--ui-danger);
   --color-live: var(--ui-live);
+  /* 端末の面だけがユーティリティとして要る。残りの 16 色は xterm.js が
+   * JS のオプションとして受け取るので、クラス名にはならない。 */
+  --color-term-bg: var(--ui-term-bg);
 }
 
 :root {

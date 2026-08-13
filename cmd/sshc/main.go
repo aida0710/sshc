@@ -270,8 +270,8 @@ func main() {
 		Runner:        parts.Runner,
 		Toolchain:     parts.Toolchain,
 		KeyAgent:      parts.KeyAgent,
-		Terminal:      parts.Terminal,
 		Lookup:        os.LookupEnv,
+		Environ:       os.Environ,
 		AskpassHelper: helperPath,
 	}
 	if err := app.Run(ctx, dependencies, version); err != nil && !errors.Is(err, context.Canceled) {

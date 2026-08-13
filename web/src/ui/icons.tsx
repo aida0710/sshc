@@ -28,6 +28,9 @@ export const iconNames = [
   "history",
   "inspector",
   "moreHorizontal",
+  "terminal",
+  "close",
+  "plus",
 ] as const;
 
 export type IconName = (typeof iconNames)[number];
@@ -111,6 +114,14 @@ const shapes: Record<IconName, ReactNode> = {
       <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
     </>
   ),
+  terminal: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 9.5l3 2.5-3 2.5M12.5 15.5h4.5" />
+    </>
+  ),
+  close: <path d="M6 6l12 12M18 6L6 18" />,
+  plus: <path d="M12 5v14M5 12h14" />,
 };
 
 export function IconSprite() {

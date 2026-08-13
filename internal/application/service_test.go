@@ -6,13 +6,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"sshc/internal/platform"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 const serviceMainConfig = `# personal configuration
@@ -84,110 +83,30 @@ func writeServiceMetadata(t *testing.T, service *Service, workspace *storage.Wor
 	return contents
 }
 
-func TestServiceSetPreferredTerminalChangesOnlyTheTerminalFields(t *testing.T) {
+// 上限を読むのは端末を開くときだけである。metadata が読めない場合も、端末が
+// 開けなくなるより既定へ戻る方がよい。この設定が壊れていることに対する答えとして
+// 「端末が使えない」は重すぎる。
+func TestServiceTerminalLimitsFallBackToTheDefaults(t *testing.T) {
 	service, workspace := newTestService(t)
-	metadata := NewMetadata()
-	metadata.Groups = []GroupMetadata{{Name: "work", Note: "keep group"}}
-	metadata.Hosts = []HostMetadata{{
-		Identity: HostIdentity{Path: "config", Alias: "bastion"},
-		Tags:     []string{"keep-host"},
-	}}
-	writeServiceMetadata(t, service, workspace, metadata)
 
-	changed, err := service.SetPreferredTerminal(platform.TerminalChoice{ID: platform.TerminalKitty})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !changed {
-		t.Fatal("a different terminal must be reported as changed")
-	}
-	stored, _, err := service.metadata.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.Terminal != platform.TerminalKitty || stored.CustomTerminal != nil {
-		t.Fatalf("terminal = %#v", stored.TerminalChoice())
-	}
-	if !reflect.DeepEqual(stored.Groups, metadata.Groups) || !reflect.DeepEqual(stored.Hosts, metadata.Hosts) {
-		t.Fatalf("unrelated metadata changed: groups=%#v hosts=%#v", stored.Groups, stored.Hosts)
-	}
-	history, err := service.History()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(history) != 1 || history[0].Operation != "terminal.preference" {
-		t.Fatalf("history = %#v", history)
-	}
-}
-
-func TestServiceSetPreferredTerminalStoresValidatedCustomArgv(t *testing.T) {
-	service, workspace := newTestService(t)
-	writeServiceMetadata(t, service, workspace, NewMetadata())
-	choice := platform.TerminalChoice{
-		ID: platform.TerminalCustom, Application: "/Applications/Warp.app", Arguments: []string{"--new-window"},
+	// 何も書かれていない状態は既定である。
+	if limits := service.TerminalLimits(); limits != terminal.DefaultLimits() {
+		t.Fatalf("limits with no metadata = %#v", limits)
 	}
 
-	changed, err := service.SetPreferredTerminal(choice)
-	if err != nil {
-		t.Fatal(err)
+	stored := NewMetadata()
+	stored.EmbeddedTerminal = &EmbeddedTerminal{MaxSessions: 8, ScrollbackBytes: 32768}
+	writeServiceMetadata(t, service, workspace, stored)
+	if limits := service.TerminalLimits(); limits.MaxSessions != 8 || limits.Scrollback != 32768 {
+		t.Fatalf("stored limits = %#v", limits)
 	}
-	if !changed {
-		t.Fatal("custom selection was not reported as changed")
-	}
-	stored, _, err := service.metadata.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(stored.TerminalChoice(), choice) {
-		t.Fatalf("stored choice = %#v, want %#v", stored.TerminalChoice(), choice)
-	}
-}
 
-func TestServiceSetPreferredTerminalNoOpDoesNotJournal(t *testing.T) {
-	service, workspace := newTestService(t)
-	metadata := NewMetadata()
-	metadata.Terminal = platform.TerminalKitty
-	before := writeServiceMetadata(t, service, workspace, metadata)
-
-	changed, err := service.SetPreferredTerminal(platform.TerminalChoice{ID: platform.TerminalKitty})
-	if err != nil {
+	// 読めない metadata でも端末は開ける。
+	if err := os.WriteFile(service.metadata.Path(), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if changed {
-		t.Fatal("an identical selection must be a no-op")
-	}
-	after, err := os.ReadFile(service.metadata.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(after, before) {
-		t.Fatal("a no-op rewrote metadata")
-	}
-	history, err := service.History()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(history) != 0 {
-		t.Fatalf("a no-op created journal history: %#v", history)
-	}
-}
-
-func TestServiceSetPreferredTerminalRejectsInvalidChoiceWithoutWriting(t *testing.T) {
-	service, workspace := newTestService(t)
-	before := writeServiceMetadata(t, service, workspace, NewMetadata())
-
-	changed, err := service.SetPreferredTerminal(platform.TerminalChoice{
-		ID: platform.TerminalCustom, Application: "relative.app",
-	})
-	if err == nil || changed {
-		t.Fatalf("SetPreferredTerminal = (%v, %v), want rejected", changed, err)
-	}
-	after, readErr := os.ReadFile(service.metadata.Path())
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	if !bytes.Equal(after, before) {
-		t.Fatal("an invalid selection changed metadata")
+	if limits := service.TerminalLimits(); limits != terminal.DefaultLimits() {
+		t.Fatalf("limits with unreadable metadata = %#v", limits)
 	}
 }
 
