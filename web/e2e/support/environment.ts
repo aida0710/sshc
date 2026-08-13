@@ -63,7 +63,9 @@ function startBinary(home: string): Promise<{ child: ChildProcess; url: string }
     // HOME は使い捨てのディレクトリであり、PATH が継承される
     // のは子プロセスが報告対象になりうる OpenSSH のプログラムを
     // 見つけるためだけだ。このスイートのどの spec も、それを起動するルートを引き起こさない。
-    const child = spawn(binaryPath, ["-open=false"], {
+    // 既定で入口を書き出す。**ブラウザはもう開かない**ので、フラグは要らない
+    // ——`-open=false` は「何も言わない」を意味するようになった。
+    const child = spawn(binaryPath, [], {
       env: { HOME: home, PATH: process.env.PATH ?? "" },
       stdio: ["ignore", "pipe", "pipe"],
     });

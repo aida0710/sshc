@@ -19,7 +19,6 @@ func newPlatformParts(home string) platformParts {
 	parts := platformParts{
 		Runner:    runner,
 		Toolchain: toolchain,
-		Browser:   linux.NewBrowser(runner),
 		KeyAgent:  keys.NewAgent(os.LookupEnv),
 	}
 	// systemd が無い環境で LoginItem を組み立てると、画面にはスイッチが出るのに

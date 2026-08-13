@@ -14,7 +14,6 @@ import (
 type platformParts struct {
 	Runner    platform.OutputRunner
 	Toolchain platform.Toolchain
-	Browser   platform.BrowserLauncher
 	KeyAgent  platform.KeyAgent
 	LoginItem httpserver.LoginItemController
 }

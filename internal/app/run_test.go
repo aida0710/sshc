@@ -21,12 +21,6 @@ import (
 	"sshc/internal/platform"
 )
 
-type browserFunc func(context.Context, string) error
-
-func (function browserFunc) Open(ctx context.Context, target string) error {
-	return function(ctx, target)
-}
-
 func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -35,10 +29,10 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 	var gotNetwork, gotAddress string
 	dependencies := Dependencies{
 		Random: bytes.NewReader(bytes.Repeat([]byte{0x81}, 96)),
-		Browser: browserFunc(func(_ context.Context, target string) error {
+		Announce: func(target string) error {
 			opened <- target
 			return nil
-		}),
+		},
 		Listen: func(network, address string) (net.Listener, error) {
 			gotNetwork, gotAddress = network, address
 			return net.Listen(network, address)
@@ -89,12 +83,12 @@ func (failingListener) Addr() net.Addr {
 
 func TestRunReturnsServerFailureWithoutWaitingForCancellation(t *testing.T) {
 	dependencies := Dependencies{
-		Random:  bytes.NewReader(bytes.Repeat([]byte{0x91}, 96)),
-		Browser: browserFunc(func(context.Context, string) error { return nil }),
-		Listen:  func(string, string) (net.Listener, error) { return failingListener{}, nil },
-		UI:      fstest.MapFS{"index.html": {Data: []byte("ok")}},
-		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Home:    t.TempDir(),
+		Random:   bytes.NewReader(bytes.Repeat([]byte{0x91}, 96)),
+		Announce: func(string) error { return nil },
+		Listen:   func(string, string) (net.Listener, error) { return failingListener{}, nil },
+		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home:     t.TempDir(),
 	}
 
 	done := make(chan error, 1)
@@ -110,20 +104,20 @@ func TestRunReturnsServerFailureWithoutWaitingForCancellation(t *testing.T) {
 	}
 }
 
-func TestRunShutsServerDownWhenBrowserFails(t *testing.T) {
-	browserErr := errors.New("browser unavailable")
+func TestRunShutsServerDownWhenTheEntranceCannotBeAnnounced(t *testing.T) {
+	announceErr := errors.New("browser unavailable")
 	listener := &trackingListener{Listener: mustListen(t)}
 	dependencies := Dependencies{
-		Random:  bytes.NewReader(bytes.Repeat([]byte{0x72}, 96)),
-		Browser: browserFunc(func(context.Context, string) error { return browserErr }),
-		Listen:  func(string, string) (net.Listener, error) { return listener, nil },
-		UI:      fstest.MapFS{"index.html": {Data: []byte("ok")}},
-		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Home:    t.TempDir(),
+		Random:   bytes.NewReader(bytes.Repeat([]byte{0x72}, 96)),
+		Announce: func(string) error { return announceErr },
+		Listen:   func(string, string) (net.Listener, error) { return listener, nil },
+		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home:     t.TempDir(),
 	}
 
 	err := Run(context.Background(), dependencies, "test")
-	if !errors.Is(err, browserErr) {
+	if !errors.Is(err, announceErr) {
 		t.Fatalf("Run error = %v", err)
 	}
 	if !listener.closed {
@@ -199,10 +193,10 @@ func TestRunExposesTheKeyVaultAndItsTrashThroughTheWiredProcess(t *testing.T) {
 	opened := make(chan string, 1)
 	dependencies := Dependencies{
 		Random: rand.Reader,
-		Browser: browserFunc(func(_ context.Context, target string) error {
+		Announce: func(target string) error {
 			opened <- target
 			return nil
-		}),
+		},
 		Listen:    net.Listen,
 		UI:        fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -304,12 +298,11 @@ func TestRunExposesTheKeyVaultAndItsTrashThroughTheWiredProcess(t *testing.T) {
 func TestBuildReturnsAServerAndAOneTimeBootstrapToken(t *testing.T) {
 	home := t.TempDir()
 	server, bootstrap, err := Build(Dependencies{
-		Home:    home,
-		Random:  bytes.NewReader(bytes.Repeat([]byte{0x24}, 512)),
-		Browser: refusingBrowser{},
-		Listen:  net.Listen,
-		UI:      fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
-		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home:   home,
+		Random: bytes.NewReader(bytes.Repeat([]byte{0x24}, 512)),
+		Listen: net.Listen,
+		UI:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}, "build-test")
 	if err != nil {
 		t.Fatalf("Build() = %v", err)
@@ -331,12 +324,6 @@ func TestBuildReturnsAServerAndAOneTimeBootstrapToken(t *testing.T) {
 	if err := <-served; err != nil {
 		t.Fatalf("Serve() = %v", err)
 	}
-}
-
-type refusingBrowser struct{}
-
-func (refusingBrowser) Open(context.Context, string) error {
-	return errors.New("a test must never open a browser")
 }
 
 func mustListen(t *testing.T) net.Listener {
