@@ -229,19 +229,41 @@ func TestAnErrorBodyIsDiscardedBeforeTheSDKReadsIt(t *testing.T) {
 }
 
 func TestARequestThatStopsRespondingTimesOut(t *testing.T) {
-	client, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+	// ハンドラはリクエストの context ではなく、この channel で待つ。
+	//
+	// 以前は `<-r.Context().Done()` で待っており、それはクライアント自身の
+	// タイムアウトが閉じるものだった。つまりキャンセルがハンドラを終わらせ、
+	// chunked の本文が 0 バイトで「正常に」終わる。その EOF がキャンセルの
+	// エラーより先に転送層へ届くと Get は成功してしまい、このテストは CI で
+	// 時々落ちていた。応答は決して完成しない、が表明したいことである。
+	stop := make(chan struct{})
+	client, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("ETag", `"v"`)
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
-		<-r.Context().Done()
+		<-stop
 	})
+	// newClient が server.Close を先に登録しているので、LIFO によりこちらが
+	// 先に走る。ハンドラを解放してからでないと Close は戻らない。
+	t.Cleanup(func() { close(stop) })
 	client.RequestTimeout = 25 * time.Millisecond
 
+	// 表明するのは「タイムアウトで終わったこと」であって、それが何ミリ秒で
+	// 起きたかではない。以前は経過時間が 1 秒未満であることを求めており、
+	// それは製品ではなく走っているマシンを測っていた——負荷の高いランナーでは
+	// スケジューリングだけで 1 秒を超え、CI が理由もなく赤くなる。
 	started := time.Now()
-	if _, err := client.Get(context.Background(), "k"); err == nil {
+	_, err := client.Get(context.Background(), "k")
+	if err == nil {
 		t.Fatal("Get succeeded after the server stopped responding")
 	}
-	if elapsed := time.Since(started); elapsed > time.Second {
+	var timeout interface{ Timeout() bool }
+	if !errors.As(err, &timeout) || !timeout.Timeout() {
+		t.Fatalf("Get = %v, want a timeout", err)
+	}
+	// 上限は、ぶら下がっていないことだけを見る保険である。タイムアウトが
+	// まったく効いていなければ、この応答は永遠に完成しない。
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
 		t.Fatalf("Get took %s despite its request timeout", elapsed)
 	}
 }
