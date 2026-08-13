@@ -48,6 +48,9 @@ type testServer struct {
 	usedKey   ssh.PublicKey
 	dialed    []string
 	connected int
+	// attempts は、認証がこのサーバーへ届いた回数である。鍵を集めるだけの
+	// 操作が資格情報を差し出していないことを、これで言う。
+	attempts int
 }
 
 type serverOptions struct {
@@ -94,6 +97,7 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 	config.AddHostKey(signer)
 	if len(options.AcceptKeys) > 0 {
 		config.PublicKeyCallback = func(_ ssh.ConnMetadata, offered ssh.PublicKey) (*ssh.Permissions, error) {
+			server.noteAttempt()
 			for _, accepted := range server.acceptKeys {
 				if string(accepted.Marshal()) == string(offered.Marshal()) {
 					server.mutex.Lock()
@@ -107,6 +111,7 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 	}
 	if options.Password != "" {
 		config.PasswordCallback = func(_ ssh.ConnMetadata, offered []byte) (*ssh.Permissions, error) {
+			server.noteAttempt()
 			if string(offered) == server.password {
 				return &ssh.Permissions{}, nil
 			}
@@ -117,6 +122,7 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 		config.KeyboardInteractiveCallback = func(
 			_ ssh.ConnMetadata, challenge ssh.KeyboardInteractiveChallenge,
 		) (*ssh.Permissions, error) {
+			server.noteAttempt()
 			questions := make([]string, 0, len(server.keyboard))
 			for question := range server.keyboard {
 				questions = append(questions, question)
@@ -320,6 +326,19 @@ func (s *testServer) ShellRan() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.shellRan
+}
+
+func (s *testServer) noteAttempt() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.attempts++
+}
+
+// Attempts は、認証がこのサーバーへ届いた回数である。
+func (s *testServer) Attempts() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.attempts
 }
 
 func (s *testServer) Dialed() []string {
