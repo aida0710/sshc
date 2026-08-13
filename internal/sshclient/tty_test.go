@@ -111,6 +111,15 @@ func TestAttachDoesNotChangeAPipe(t *testing.T) {
 	if _, err := process.sink.Write([]byte("from the remote\n")); err != nil {
 		t.Fatal(err)
 	}
+	// 打たれたものが届くのを待ってから終わらせる。終わらせてから見ると、
+	// この検査は「まだ写している最中だった」を失敗として報告する。
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if written, _ := process.recorded(); strings.Contains(string(written), "typed") {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	_ = writer.Close()
 	process.finish()
 

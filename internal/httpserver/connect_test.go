@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +23,7 @@ func connectEngine(t *testing.T, handlers ConnectHandlers) *echo.Echo {
 	return engine
 }
 
-func TestConnectDoesNotIssueAStoredPasswordTokenForADirectKey(t *testing.T) {
+func TestConnectDoesNotAnswerWithAStoredAccountPasswordForADirectKey(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -42,7 +41,7 @@ func TestConnectDoesNotIssueAStoredPasswordTokenForADirectKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault, AskpassURL: "http://127.0.0.1:1/askpass",
+		Secret: cliSecret, Passwords: vault,
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -53,12 +52,12 @@ func TestConnectDoesNotIssueAStoredPasswordTokenForADirectKey(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.AskpassToken != "" {
+	if answer.Passphrase != "" {
 		t.Fatal("direct-key connection received an askpass token")
 	}
 }
 
-func TestConnectNeverIssuesAStoredAccountPasswordToken(t *testing.T) {
+func TestConnectNeverAnswersWithAStoredAccountPassword(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -76,7 +75,7 @@ func TestConnectNeverIssuesAStoredAccountPasswordToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault, AskpassURL: "http://127.0.0.1:1/askpass",
+		Secret: cliSecret, Passwords: vault,
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"password-only"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -87,12 +86,12 @@ func TestConnectNeverIssuesAStoredAccountPasswordToken(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.AskpassToken != "" || answer.AskpassKind != "" {
+	if answer.Passphrase != "" || answer.KeyPath != "" {
 		t.Fatalf("stored account password armed askpass: %+v", answer)
 	}
 }
 
-func TestConnectIssuesAKeyPassphraseTokenForTheDirectStoredKey(t *testing.T) {
+func TestConnectAnswersWithTheKeyPassphraseForTheDirectStoredKey(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -114,7 +113,7 @@ func TestConnectIssuesAKeyPassphraseTokenForTheDirectStoredKey(t *testing.T) {
 	}
 
 	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault, AskpassURL: "http://127.0.0.1:1/askpass",
+		Secret: cliSecret, Passwords: vault,
 		KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
 			return "id_ed25519_server", filepath.Join(home, ".ssh", "id_ed25519_server"),
 				"Host bastion\n\tIdentityFile " + filepath.Join(home, ".ssh", "id_ed25519_server") + "\n",
@@ -130,12 +129,14 @@ func TestConnectIssuesAKeyPassphraseTokenForTheDirectStoredKey(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.AskpassToken == "" || answer.AskpassKind != AskpassKindKeyPassphrase {
-		t.Fatalf("connect answer = %+v, want a key-passphrase token", answer)
+	// **答えそのものが返る。** 単回トークンにしていたのは、引き換える相手が
+	// 別のプログラムだったからである。要求を出した本人が受け取るなら、
+	// 発行と引き換えを分ける理由が無い。
+	if answer.KeyPath != "id_ed25519_server" {
+		t.Fatalf("connect answer = %+v, want the workspace-relative key path", answer)
 	}
-	if answer.IdentityFile != filepath.Join(home, ".ssh", "id_ed25519_server") ||
-		!strings.Contains(answer.SSHConfig, "IdentityFile ") {
-		t.Fatalf("connect answer = %+v, want the frozen config and exact key", answer)
+	if answer.Passphrase == "" {
+		t.Fatalf("connect answer = %+v, want the stored passphrase", answer)
 	}
 }
 
@@ -157,7 +158,7 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault, AskpassURL: "http://127.0.0.1:1/askpass",
+		Secret: cliSecret, Passwords: vault,
 		KeyPassphraseTarget: func(string) (string, string, string, string, bool, error) {
 			return "", "", "", "", false, os.ErrPermission
 		},
@@ -168,7 +169,7 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.AskpassToken != "" {
+	if answer.Passphrase != "" {
 		t.Fatal("an unreadable key policy fell back to the account-password namespace")
 	}
 }
@@ -203,12 +204,11 @@ func TestConnectWithNoSecretConfiguredRefusesEveryone(t *testing.T) {
 
 // vault がない場合の答えはトークンなしの接続であり、それは正常な接続である。
 // OpenSSH 自身がパスワードを尋ねる。
-func TestConnectAnswersWithoutATokenWhenNothingIsStored(t *testing.T) {
+func TestConnectAnswersWithNothingWhenNothingIsStored(t *testing.T) {
 	const secret = "the secret for this run"
 	engine := connectEngine(t, ConnectHandlers{
-		Secret:     secret,
-		AskpassURL: "http://127.0.0.1:1/askpass",
-		Warnings:   func(string) []string { return []string{"ProxyCommand runs on connect"} },
+		Secret:   secret,
+		Warnings: func(string) []string { return []string{"ProxyCommand runs on connect"} },
 	})
 
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
@@ -220,7 +220,7 @@ func TestConnectAnswersWithoutATokenWhenNothingIsStored(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.AskpassToken != "" {
+	if answer.Passphrase != "" {
 		t.Errorf("a token was minted with no vault: %+v", answer)
 	}
 	if len(answer.Warnings) != 1 {

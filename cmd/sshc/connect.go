@@ -9,25 +9,24 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"time"
 
+	"sshc/internal/app"
 	"sshc/internal/config"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/platform"
+	"sshc/internal/sshclient"
 )
 
-// connectResponse は、起動中のアプリケーションが返す内容。
+// connectAnswer は、起動中のアプリケーションが返す内容。
 type connectAnswer struct {
-	Alias        string   `json:"alias"`
-	AskpassToken string   `json:"askpassToken"`
-	AskpassKind  string   `json:"askpassKind"`
-	AskpassURL   string   `json:"askpassUrl"`
-	IdentityFile string   `json:"identityFile"`
-	SSHConfig    string   `json:"sshConfig"`
-	Warnings     []string `json:"warnings"`
+	Alias string `json:"alias"`
+	// KeyPath は、その接続に使う鍵のワークスペース相対パス。
+	KeyPath string `json:"keyPath"`
+	// Passphrase は、その鍵について保存されている答え。無ければ空である。
+	Passphrase string   `json:"passphrase"`
+	Warnings   []string `json:"warnings"`
 }
 
 // connectInvocation は、このプロセスが接続のために起動されたかを報告する。
@@ -100,38 +99,22 @@ func runOpen(ctx context.Context, stateDir string, client *http.Client, browser 
 // 使うのと同じ継ぎ目なので、「どの ssh か」への答えはひとつしかない。
 type sshFinder interface{ SSH() (string, error) }
 
-func executeSSH(ssh string, arguments, environment []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	command := exec.Command(ssh, arguments...)
-	command.Env = environment
-	command.Stdin = stdin
-	command.Stdout = stdout
-	command.Stderr = stderr
-	err := command.Run()
-	if err == nil {
-		return 0
-	}
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		return exitError.ExitCode()
-	}
-	fmt.Fprintf(stderr, "sshc: %v\n", err)
-	return 1
-}
-
-// runConnect は、この接続に必要なものを起動中のアプリケーションに尋ね、端末を ssh に
-// 引き渡す。
+// runConnect は、この接続に必要なものを起動中のアプリケーションに尋ね、
+// **このプロセスの中で** SSH を話す。
 //
-// アプリケーションが動いていないことはエラーではない。ユーザーはホストへ接続したいの
-// であり、`ssh <alias>` は本人が打ち込んだであろうコマンドだ。OpenSSH が自分で
-// パスワードを尋ねる以上、それは機能する接続である。stderr にその旨を書けば、邪魔に
-// ならずに違いが見える。
-func runConnect(ctx context.Context, alias string, stateDir string, client *http.Client, toolchain sshFinder, stderr io.Writer) int {
+// アプリケーションが動いていないことはエラーではない。保存済みパスフレーズが
+// 手に入らないだけで、その鍵のパスフレーズは端末で尋ねられる——尋ねられる端末が
+// ここにはある。stderr にその旨を書けば、邪魔にならずに違いが見える。
+func runConnect(
+	ctx context.Context, alias, home, stateDir string, client *http.Client,
+	stdin *os.File, stdout, stderr io.Writer,
+) int {
 	if err := platform.ValidateAlias(alias); err != nil {
-		fmt.Fprintf(stderr, "sshc: %q is not an alias this will put on a command line\n", alias)
+		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
 		return 2
 	}
 
-	var credential platform.AskpassCredential
+	var saved func(string) (string, bool)
 	answer, err := askApplication(ctx, alias, stateDir, client)
 	switch {
 	case err != nil:
@@ -140,43 +123,40 @@ func runConnect(ctx context.Context, alias string, stateDir string, client *http
 		for _, warning := range answer.Warnings {
 			fmt.Fprintf(stderr, "sshc: %s\n", warning)
 		}
-		if answer.AskpassToken != "" {
-			resolved, pathErr := os.Executable()
-			if pathErr != nil {
-				fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%v)\n", pathErr)
-			} else {
-				credential = platform.AskpassCredential{
-					Helper: resolved, URL: answer.AskpassURL, Token: answer.AskpassToken,
-					Kind: answer.AskpassKind, IdentityFile: answer.IdentityFile, SSHConfig: answer.SSHConfig,
+		if answer.KeyPath != "" && answer.Passphrase != "" {
+			saved = func(relativePath string) (string, bool) {
+				if relativePath != answer.KeyPath {
+					return "", false
 				}
+				return answer.Passphrase, true
 			}
 		}
 	}
 
-	// このアプリケーションが起動する他のすべての OpenSSH プログラムと同じやり方で
-	// 解決する。固定のディレクトリ一覧から絶対パスへ、である。PATH は参照しない。
-	// さもなければ、上のトークンが PATH の先頭にあるものへ渡されてしまうから
-	// である。
-	ssh, err := toolchain.SSH()
-	if err != nil || !filepath.IsAbs(ssh) {
-		fmt.Fprintf(stderr, "sshc: ssh was not found where it is expected: %v\n", err)
-		return 1
-	}
-
-	// 起動一式の組み立ては internal/platform が持つ。埋め込みターミナルが同じ
-	// 関数を呼ぶので、環境から五つの変数を取り除く処理はこのリポジトリに一つしかない。
-	session, cleanup, err := platform.InteractiveSSH(platform.InteractiveRequest{
-		SSH: ssh, Alias: alias, Inherited: os.Environ(), Credential: credential,
-	})
+	connection, err := app.NewCLIConnection(home, saved)
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1
 	}
-	defer cleanup()
-	if session.Notice != "" {
-		fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%s)\n", session.Notice)
+	process, err := connection.Open(ctx, alias, sshclient.DefaultLocalSize)
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: %v\n", connectAdvice(err))
+		return 1
 	}
-	return executeSSH(session.Path, session.Arguments, session.Env, os.Stdin, os.Stdout, stderr)
+	code, err := sshclient.Attach(ctx, process, stdin, stdout)
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: %v\n", err)
+		return 1
+	}
+	return code
+}
+
+// connectAdvice は、断った理由に「では何をすればよいか」を添える。
+func connectAdvice(err error) error {
+	if errors.Is(err, sshclient.ErrProxyCommand) {
+		return fmt.Errorf("%w; ~/.ssh/config is untouched, so ssh %s still works", err, "<alias>")
+	}
+	return err
 }
 
 // askApplication はハンドオフを読み、接続一回分を要求する。

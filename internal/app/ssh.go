@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"sshc/internal/application"
 	"sshc/internal/effective"
@@ -13,6 +15,7 @@ import (
 	"sshc/internal/knownhosts"
 	"sshc/internal/secret"
 	"sshc/internal/sshclient"
+	"sshc/internal/storage"
 	"sshc/internal/terminal"
 )
 
@@ -141,4 +144,65 @@ func addKnownHost(hosts *knownhosts.Service) func(knownhosts.Candidate) error {
 		_, err := hosts.Add(candidate, candidate.Fingerprint, false)
 		return err
 	}
+}
+
+// CLIConnection は、`sshc <接続先>` が使うプロセス内 SSH である。
+//
+// 常駐しているアプリケーションとは別のプロセスなので、vault は開けない——
+// あれの鍵は向こうのメモリにしかない。保存済みパスフレーズは向こうへ尋ね、
+// 届かなければ端末で尋ねる。**尋ねられる端末がここにはある**ので、届かない
+// ことは失敗ではない。問いは開いたセッションの出力を通って端末へ出る。
+type CLIConnection struct {
+	dialer  sshclient.Dialer
+	resolve sshclient.Resolver
+	home    string
+}
+
+// NewCLIConnection は、ホームディレクトリひとつからコマンドライン用の接続を組む。
+//
+// passphrase は、鍵のワークスペース相対パスに対する保存済みの答えを返す。nil
+// なら端末で尋ねる。
+func NewCLIConnection(
+	home string,
+	passphrase func(relativePath string) (string, bool),
+) (CLIConnection, error) {
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		return CLIConnection{}, err
+	}
+	transactions := storage.NewManager(workspace, time.Now, rand.Reader)
+	config := application.NewService(workspace, transactions)
+	hosts := knownhosts.NewService(workspace, transactions, knownhosts.Scanner{})
+
+	stored := func(absolute string) (string, bool) {
+		if passphrase == nil {
+			return "", false
+		}
+		relative, err := filepath.Rel(workspace.Root(), absolute)
+		if err != nil || strings.HasPrefix(relative, "..") {
+			return "", false
+		}
+		return passphrase(filepath.ToSlash(relative))
+	}
+
+	return CLIConnection{
+		dialer: sshclient.Dialer{
+			Auth: sshclient.Auth{AgentSocket: os.Getenv("SSH_AUTH_SOCK"), Stored: stored},
+			HostKeys: sshclient.HostKeys{
+				Read: readKnownHosts(hosts),
+				Add:  addKnownHost(hosts),
+			},
+		},
+		resolve: config.ResolveConnection,
+		home:    workspace.Home(),
+	}, nil
+}
+
+// Open は、この alias のセッションをひとつ開く。
+func (c CLIConnection) Open(ctx context.Context, alias string, size terminal.Size) (terminal.Process, error) {
+	target, _, err := sshclient.NewTarget(alias, c.resolve, c.home)
+	if err != nil {
+		return nil, err
+	}
+	return c.dialer.Open(ctx, target, size)
 }
