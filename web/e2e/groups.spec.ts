@@ -126,10 +126,14 @@ test("quick connect drills into a nested group and promotes it when its containe
   page,
   installation,
 }) => {
+  // 一覧の読み取りはナビゲーションがどの画面でも行う。数えるのは、閲覧が
+  // 端末を起こしていないことを言うための、起こす側の要求だけである。
   const terminalRequests: string[] = [];
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (path.startsWith("/api/v1/terminal/")) terminalRequests.push(path);
+    if (!path.startsWith("/api/v1/terminal/")) return;
+    if (request.method() === "GET") return;
+    terminalRequests.push(`${request.method()} ${path}`);
   });
   await openApplication(page, installation);
   await openSection(page, "Groups");

@@ -26,6 +26,7 @@ import (
 	"sshc/internal/selfupdate"
 	"sshc/internal/session"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 type ListenFunc func(network, address string) (net.Listener, error)
@@ -47,10 +48,6 @@ type Dependencies struct {
 	Runner    platform.OutputRunner
 	Toolchain platform.Toolchain
 	KeyAgent  platform.KeyAgent
-	// Terminal は対話セッションを開く。launcher が nil でも有効で、その場合
-	// diagnostics サービスは panic せずに「端末が設定されていない」と報告する。
-	// ここのテストはその挙動に依存している。
-	Terminal platform.TerminalLauncher
 	// AskpassHelper は実行中バイナリの絶対パス。OpenSSH が保存済み鍵パスフレーズを得る
 	// ために実行するプログラムである。これを知り得るのは cmd/sshc だけで、パスが空
 	// なら、すべての端末起動は素の経路のままになる。
@@ -67,6 +64,14 @@ type Dependencies struct {
 	// platform.MinimalEnvironment を受け取れるようにする。os.LookupEnv を渡してよいのは
 	// cmd/sshc だけ。nil なら子は継承する形になり、テストにはそれが向く。
 	Lookup func(string) (string, bool)
+	// TerminalStarter は PTY を確保する継ぎ目である。nil なら本物を確保する。
+	// ハードニングのスイートはここを差し替え、プロセスを一つも起こさずに
+	// 「拒否された要求が端末を開いていないこと」を表明する。
+	TerminalStarter terminal.Starter
+	// Environ は、埋め込みターミナルのセッションが継ぐ環境である。これは利用者が
+	// 自分で行ったであろう接続なので、検査が使う最小環境ではなく本人の環境を継ぐ。
+	// 本番では os.Environ で、nil ならセッションはこのプロセスの環境を継承する。
+	Environ func() []string
 	// SessionNow は、セッションマネージャがアクショントークンの失効に使う時計。
 	// 本番では nil で、time.Now が使われる。ハードニングのスイートはこれを設定し、
 	// sleep せずにトークンを老化させる。
@@ -141,8 +146,7 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	keyService := buildKeyService(workspace, dependencies, configService)
 	configService.SetKeyPassphraseVerifier(keyService)
 	diagnosticsService := diagnostics.NewService(
-		workspace, dependencies.Runner, dependencies.Toolchain, dependencies.Terminal, dependencies.Lookup)
-	diagnosticsService.PreferredTerminal = configService.PreferredTerminal
+		workspace, dependencies.Runner, dependencies.Toolchain, dependencies.Lookup)
 	// 生成領域の書式を知っているのは設定エンジンであり、それを尋ねられるのは
 	// diagnostics ではなくここである。あちらは internal/application を import
 	// しない。これがないと、宣言済みで空のグループのために書かれた Include が
@@ -202,6 +206,22 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		newOrigin(dependencies.Random),
 	)
 
+	// 埋め込みターミナルの PTY は、この常駐プロセスの中で存続する。ブラウザの
+	// タブを閉じてもリロードしてもセッションは生きており、終わるのは子プロセスが
+	// 終了したとき、人が閉じたとき、このプロセスが終了したときだけである。
+	//
+	// 上限を読むのは開くときだけなので、metadata を書き換えても、すでに開いて
+	// いるセッションが閉じられることはない。
+	starter := dependencies.TerminalStarter
+	if starter == nil {
+		starter = terminal.NewStarter()
+	}
+	terminals := &terminal.Registry{
+		Start:  starter,
+		Limits: configService.TerminalLimits,
+		Random: dependencies.Random,
+	}
+
 	// `sshc <alias>` は、動作中のアプリケーションを見つけるためにこれを読む。秘密は
 	// ここで実行ごとに発行され、リスナーが立ち上がったあとに書かれる。そのため、
 	// 書かれた URL は実際に応答する URL になる。
@@ -220,7 +240,7 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		// が起動しないホストについて端末に伝えられる内容は、画面に出るのと同じ一文に
 		// なる。
 		ConnectWarnings: func(alias string) []string {
-			if _, _, warning := diagnosticsService.TerminalCommand(alias); warning != "" {
+			if _, warning := diagnosticsService.TerminalCommand(alias); warning != "" {
 				return []string{warning}
 			}
 			return nil
@@ -237,6 +257,22 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		Passwords:     passwordService,
 		Sync:          syncService,
 		AskpassHelper: dependencies.AskpassHelper,
+		Terminals:     terminals,
+		// PTY の中で起こすプログラムは PATH では解決しない。他のすべての
+		// OpenSSH プログラムと同じく、固定の場所から絶対パスで解決する。
+		SSHProgram: func() (string, error) {
+			if dependencies.Toolchain == nil {
+				return "", platform.ErrInteractiveProgram
+			}
+			return dependencies.Toolchain.SSH()
+		},
+		LoginShell: func() (string, error) { return platform.LoginShell(dependencies.Lookup) },
+		TerminalEnvironment: func() []string {
+			if dependencies.Environ == nil {
+				return nil
+			}
+			return dependencies.Environ()
+		},
 		// Account-password tokens are no longer issued. Keep the server-side
 		// namespace closed too, so an old or directly minted token cannot turn
 		// the retained encrypted records back into automatic SSH answers.
@@ -324,6 +360,10 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	if err != nil {
 		return err
 	}
+	// 埋め込みターミナルのセッションは、このプロセスが終わるときに終わる。
+	// 待たないのは、応答しないリモートに向いた ssh のために終了が引き延ばされて
+	// はならないからである。
+	defer server.CloseTerminals()
 
 	target := server.URL() + "/#bootstrap=" + bootstrap
 	serverCtx, stopServer := context.WithCancel(ctx)

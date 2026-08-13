@@ -56,4 +56,12 @@ describe("InspectorPane", () => {
     expect(pane).toHaveAttribute("id", "inspector");
     expect(pane).toHaveTextContent("nothing yet");
   });
+
+  // 面はひとつである。開いているコンソールの一覧は一番左のナビゲーションに
+  // あるので、このペインが切り替えるものは何も持たない。
+  it("draws no segmented control", () => {
+    render(<InspectorPane label="Details">nothing yet</InspectorPane>);
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+  });
 });

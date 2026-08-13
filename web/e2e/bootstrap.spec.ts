@@ -62,9 +62,15 @@ test("enforces the content security policy in the browser, not only in the heade
   installation,
 }) => {
   const response = await openApplication(page, installation);
+  // style-src だけが 'unsafe-inline' を持つ。xterm.js が測った文字の実寸を
+  // <style> 要素として差し込み、DOM レンダラーが style 属性を書くためであり、
+  // その理由は internal/httpserver/security.go にある。**script 側は緩めて
+  // いない。** 下の二つの表明がそれを、ヘッダーの文字列ではなくブラウザの
+  // 挙動として確かめる。
   expect(response?.headers()["content-security-policy"]).toBe(
     "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; " +
-      "form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; require-trusted-types-for 'script'",
+      "form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data:; connect-src 'self'; require-trusted-types-for 'script'",
   );
 
   // インラインスクリプトは実行されてはならない。textContent 付きの

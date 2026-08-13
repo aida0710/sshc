@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { failureCode } from "../api/client";
 import { configApi, type Overview } from "../api/config";
 import { integrationsApi, type SyncStatus } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
@@ -11,25 +12,29 @@ export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 type OverviewPanelProps = {
   loadOverview?: () => Promise<Overview>;
   loadSync?: () => Promise<SyncStatus>;
-  launch?: (alias: string) => Promise<unknown>;
+  launch?: (alias: string) => Promise<{ session: { id: string } }>;
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
+  // 開いたコンソールは接続画面で見る。開く場所と見る場所が違うので、
+  // その受け渡しだけをシェルが仲介する。
+  onConsoleOpened?: (id: string) => void;
 };
 
 const loadDefaultOverview = () => configApi.overview();
 const loadDefaultSync = () => integrationsApi.syncStatus();
-const launchDefault = (alias: string) => integrationsApi.terminalLaunch(alias);
+const launchDefault = (alias: string) => integrationsApi.openTerminalSession({ kind: "ssh", alias });
 const informationalNoticeCodes = new Set(["group_empty"]);
 
 // Home は管理画面の要約ではなく接続の入口である。画面を開いただけでは
-// DNS、TCP、ssh のどれにも触れず、Terminal を開く操作だけが明示的な
-// action token を消費する。
+// DNS、TCP、ssh のどれにも触れない。接続はこのアプリケーションの中で開き、
+// 開いたコンソールは接続画面へ持っていく。
 export function OverviewPanel({
   loadOverview = loadDefaultOverview,
   loadSync = loadDefaultSync,
   launch = launchDefault,
   onNavigate,
   onNavigateLocation,
+  onConsoleOpened,
 }: OverviewPanelProps) {
   const t = useTranslate();
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -56,9 +61,15 @@ export function OverviewPanel({
     setLaunching(alias);
     setProblem("");
     try {
-      await launch(alias);
-    } catch {
-      setProblem(t("home.launchFailed", { alias }));
+      const opened = await launch(alias);
+      onConsoleOpened?.(opened.session.id);
+      onNavigate("Connections");
+    } catch (error) {
+      setProblem(
+        failureCode(error) === "terminal_session_limit"
+          ? t("terminal.limitRefused")
+          : t("terminal.openFailed"),
+      );
     } finally {
       setLaunching("");
     }

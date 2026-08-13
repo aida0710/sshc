@@ -6,7 +6,6 @@ import { PasswordField } from "../ui/PasswordField";
 import { CheckboxField, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
 import { PageHeader } from "../ui/page";
 import { Notice } from "../ui/surface";
-import { TerminalPreferenceSection } from "./TerminalPreferenceSection";
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
@@ -92,8 +91,6 @@ export function SettingsPanel({ api = integrationsApi }: SettingsPanelProps) {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("settings.heading")} description={t("settings.pageDescription")} />
-
-      <TerminalPreferenceSection api={api} />
 
       {loginError === "" ? null : <Notice tone="danger">{loginError}</Notice>}
       {loginLoaded && loginItem?.supported ? (

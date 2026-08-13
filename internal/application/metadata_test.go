@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"sshc/internal/platform"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 func newTestWorkspace(t *testing.T) *storage.Workspace {
@@ -31,8 +31,11 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsAFutureSchema(t *testing.T) 
 	if empty.SchemaVersion != MetadataSchemaVersion || len(empty.Hosts) != 0 || len(empty.Groups) != 0 {
 		t.Fatalf("empty metadata = %#v", empty)
 	}
-	if empty.Terminal != platform.TerminalApple {
-		t.Errorf("default terminal = %q", empty.Terminal)
+	if empty.EmbeddedTerminal != nil {
+		t.Errorf("a new document already carries terminal settings = %#v", empty.EmbeddedTerminal)
+	}
+	if limits := empty.TerminalLimits(); limits != terminal.DefaultLimits() {
+		t.Errorf("default limits = %#v, want %#v", limits, terminal.DefaultLimits())
 	}
 	if _, err := DecodeMetadata([]byte(`{"schemaVersion":99}`)); !errors.Is(err, ErrMetadataVersion) {
 		t.Fatalf("future schema error = %v, want ErrMetadataVersion", err)
@@ -40,31 +43,70 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsAFutureSchema(t *testing.T) 
 	if _, err := DecodeMetadata([]byte(`{"schemaVersion":1,`)); err == nil {
 		t.Fatal("truncated metadata was accepted")
 	}
-	// 知らない端末で文書全体を失わない。読み取り側の答えは既定の端末であり、
-	// グループもお気に入りも、そのまま読めていなければならない。
-	unknown, err := DecodeMetadata([]byte(
-		`{"schemaVersion":2,"terminal":"$(id)","hosts":[{"identity":{"path":"config","alias":"bastion"},"favourite":true}]}`))
+	// バージョン 2 の文書は端末の選択を文字列として持っている。**同じキーを
+	// オブジェクトへ変えると json.Unmarshal は文書全体で失敗する**ので、埋め込み
+	// ターミナルの設定は別のキーに置いてある。この検査がその判断を留めている。
+	previous, err := DecodeMetadata([]byte(`{"schemaVersion":2,"terminal":"iterm2",` +
+		`"customTerminal":{"application":"/Applications/Term.app","arguments":["-e"]},` +
+		`"hosts":[{"identity":{"path":"config","alias":"bastion"},"favourite":true}]}`))
 	if err != nil {
-		t.Fatalf("unknown terminal = %v, want the document to survive", err)
+		t.Fatalf("a version 2 document = %v, want it to survive", err)
 	}
-	if unknown.Terminal != platform.TerminalApple || len(unknown.Hosts) != 1 {
-		t.Fatalf("metadata with an unknown terminal = %#v", unknown)
+	if len(previous.Hosts) != 1 || !previous.Hosts[0].Favourite {
+		t.Fatalf("a version 2 document lost its hosts: %#v", previous)
 	}
-	// 書き込み側は語彙の外を受け付けない。UI が新しい語を作れないための境界である。
-	rejected := unknown
-	rejected.Terminal = "$(id)"
-	if _, err := EncodeMetadata(rejected); !errors.Is(err, ErrMetadataTerminal) {
-		t.Fatalf("encoding an unknown terminal = %v, want ErrMetadataTerminal", err)
+	if previous.EmbeddedTerminal != nil {
+		t.Fatalf("the old terminal choice became embedded settings: %#v", previous.EmbeddedTerminal)
 	}
 }
 
-// custom が運ぶのはアプリケーションバンドルと argv の要素である。シェルの
-// 文字列ではないので、語の中に空白は入らず、開く先はバンドルでしかありえない。
-func TestMetadataAcceptsAChosenApplicationAndRefusesAnythingElse(t *testing.T) {
-	chosen := NewMetadata()
-	chosen.Terminal = platform.TerminalCustom
-	chosen.CustomTerminal = &CustomTerminal{Application: "/Applications/Term.app", Arguments: []string{"-e"}}
-	encoded, err := EncodeMetadata(chosen)
+// 範囲の外の上限は既定へ戻る。ここは読み取りであり、数字ひとつが色もタグも
+// お気に入りも道連れに読めなくしてよい理由はない。
+func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
+	for name, document := range map[string]string{
+		"zero":        `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":0}}`,
+		"below range": `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":1}}`,
+		"above range": `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":9999,"scrollbackBytes":99999999}}`,
+		"negative":    `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":-1,"scrollbackBytes":-1}}`,
+	} {
+		decoded, err := DecodeMetadata([]byte(document))
+		if err != nil {
+			t.Fatalf("%s = %v, want the document to survive", name, err)
+		}
+		if limits := decoded.TerminalLimits(); limits != terminal.DefaultLimits() {
+			t.Errorf("%s limits = %#v, want the defaults", name, limits)
+		}
+	}
+
+	// 範囲の中の値はそのまま通る。
+	kept, err := DecodeMetadata([]byte(`{"schemaVersion":3,"embeddedTerminal":{"maxSessions":8,"scrollbackBytes":32768}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limits := kept.TerminalLimits(); limits.MaxSessions != 8 || limits.Scrollback != 32768 {
+		t.Fatalf("limits = %#v", limits)
+	}
+}
+
+// 書き込み側は範囲の外を拒否する。読み取りが既定へ戻すのとは対称ではない
+// ——書き込みはこのアプリケーション自身の操作だからである。
+func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
+	for name, settings := range map[string]EmbeddedTerminal{
+		"too few sessions":     {MaxSessions: 0, ScrollbackBytes: terminal.DefaultScrollback},
+		"too many sessions":    {MaxSessions: terminal.MaxMaxSessions + 1, ScrollbackBytes: terminal.DefaultScrollback},
+		"scrollback too small": {MaxSessions: 1, ScrollbackBytes: terminal.MinScrollback - 1},
+		"scrollback too large": {MaxSessions: 1, ScrollbackBytes: terminal.MaxScrollback + 1},
+	} {
+		broken := NewMetadata()
+		broken.EmbeddedTerminal = &settings
+		if _, err := EncodeMetadata(broken); !errors.Is(err, ErrMetadataTerminal) {
+			t.Errorf("%s = %v, want ErrMetadataTerminal", name, err)
+		}
+	}
+
+	kept := NewMetadata()
+	kept.EmbeddedTerminal = &EmbeddedTerminal{MaxSessions: 8, ScrollbackBytes: 32768}
+	encoded, err := EncodeMetadata(kept)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,45 +114,12 @@ func TestMetadataAcceptsAChosenApplicationAndRefusesAnythingElse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	choice := decoded.TerminalChoice()
-	if choice.ID != platform.TerminalCustom || choice.Application != "/Applications/Term.app" {
-		t.Fatalf("choice = %#v", choice)
-	}
-
-	for name, broken := range map[string]Metadata{
-		// 開く先を持たない custom は選択として成立しない。
-		"no application":  {Terminal: platform.TerminalCustom},
-		"not a bundle":    {Terminal: platform.TerminalCustom, CustomTerminal: &CustomTerminal{Application: "/usr/bin/ssh"}},
-		"relative bundle": {Terminal: platform.TerminalCustom, CustomTerminal: &CustomTerminal{Application: "Term.app"}},
-		"traversal": {Terminal: platform.TerminalCustom,
-			CustomTerminal: &CustomTerminal{Application: "/Applications/../usr/bin/Evil.app"}},
-		// 空白を含む語は、それを二つの引数だと思って書いた人の設定を黙って
-		// 別の意味にする。argv は分かち書きしない。
-		"argument with a space": {Terminal: platform.TerminalCustom,
-			CustomTerminal: &CustomTerminal{Application: "/Applications/Term.app", Arguments: []string{"-e ssh"}}},
-		// 表にある端末は、開く先を設定から受け取らない。
-		"application on a listed terminal": {Terminal: platform.TerminalKitty,
-			CustomTerminal: &CustomTerminal{Application: "/Applications/Term.app"}},
-	} {
-		if _, err := EncodeMetadata(broken); !errors.Is(err, ErrMetadataTerminal) {
-			t.Errorf("%s = %v, want ErrMetadataTerminal", name, err)
-		}
-	}
-
-	// 読み取りは文書ごと落とさない。開く先が壊れていれば既定の端末へ戻る。
-	recovered, err := DecodeMetadata([]byte(
-		`{"schemaVersion":2,"terminal":"custom","customTerminal":{"application":"/usr/bin/ssh"},"hosts":[]}`))
-	if err != nil || recovered.Terminal != platform.TerminalApple || recovered.CustomTerminal != nil {
-		t.Fatalf("recovered = %#v, %v", recovered, err)
+	if limits := decoded.TerminalLimits(); limits.MaxSessions != 8 || limits.Scrollback != 32768 {
+		t.Fatalf("round trip = %#v", limits)
 	}
 }
 
 func TestValidateMetadataRefusesKeyMaterialAndUnknownPaths(t *testing.T) {
-	withUnknownTerminal := NewMetadata()
-	withUnknownTerminal.Terminal = "$(open -a Calculator)"
-	if err := ValidateMetadata(withUnknownTerminal); !errors.Is(err, ErrMetadataTerminal) {
-		t.Fatalf("terminal error = %v, want ErrMetadataTerminal", err)
-	}
 	withNote := NewMetadata()
 	withNote.Hosts = []HostMetadata{{
 		Identity: HostIdentity{Path: "config", Alias: "bastion"},
@@ -168,14 +177,15 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 		t.Fatalf("EncodeMetadata error = %v", err)
 	}
 	// membership はディレクトリであり、note はコメントなので、ここにはどちら
-	// のキーも無い。バイト列そのものを assert することが、こっそり戻るのを防ぐ。
-	for _, absent := range []string{`"group"`, `"parent"`} {
+	// のキーも無い。端末の選択もこのアプリケーションが持たなくなったので無い。
+	// バイト列そのものを assert することが、こっそり戻るのを防ぐ。
+	for _, absent := range []string{`"group"`, `"parent"`, `"terminal"`, `"customTerminal"`} {
 		if strings.Contains(string(encoded), absent) {
 			t.Errorf("encoded metadata still carries %s:\n%s", absent, encoded)
 		}
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 2`) {
-		t.Errorf("encoded metadata is not version 2:\n%s", encoded)
+	if !strings.Contains(string(encoded), `"schemaVersion": 3`) {
+		t.Errorf("encoded metadata is not version 3:\n%s", encoded)
 	}
 }
 

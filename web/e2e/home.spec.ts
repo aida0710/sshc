@@ -18,10 +18,14 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
     }),
   );
 
+  // 開いているコンソールの一覧はナビゲーションが持つので、どの画面でも読む。
+  // 読むこと自体は何にも接触しない——数えるのは、端末を起こす要求だけである。
   const terminalRequests: string[] = [];
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (path.startsWith("/api/v1/terminal/")) terminalRequests.push(path);
+    if (!path.startsWith("/api/v1/terminal/")) return;
+    if (request.method() === "GET") return;
+    terminalRequests.push(`${request.method()} ${path}`);
   });
 
   await openApplication(page, installation);
@@ -45,26 +49,26 @@ test("opens the action menu without connecting, then keeps settings and connect 
   page,
   installation,
 }) => {
-  const launches: unknown[] = [];
-  await page.route("**/api/v1/terminal/launch", async (route) => {
-    launches.push(route.request().postDataJSON());
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ launched: true }),
-    });
+  const opened: unknown[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/v1/terminal/sessions" && request.method() === "POST") {
+      opened.push(request.postDataJSON());
+    }
   });
   await openApplication(page, installation);
 
   await page.getByRole("button", { name: "Actions for bastion" }).click();
-  expect(launches).toEqual([]);
+  expect(opened).toEqual([]);
   await page.getByRole("menuitem", { name: "Open connection settings" }).click();
   await expect(page).toHaveURL(/\/connections\/servers\?path=config&host=bastion&panel=basic$/);
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
-  expect(launches).toEqual([]);
+  expect(opened).toEqual([]);
 
+  // 接続はこのアプリケーションの中で開く。Home で押すと、そのコンソールを
+  // 抱えたまま接続画面へ移る。
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home" }).click();
   await page.getByRole("button", { name: "Actions for bastion" }).click();
   await page.getByRole("menuitem", { name: "Connect", exact: true }).click();
-  await expect.poll(() => launches).toEqual([{ alias: "bastion" }]);
+  await expect.poll(() => opened).toEqual([{ kind: "ssh", alias: "bastion" }]);
 });
