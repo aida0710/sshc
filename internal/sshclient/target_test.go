@@ -160,10 +160,10 @@ func TestProxyJumpNoneLeavesNoChain(t *testing.T) {
 func TestUnhonouredKeywordsBecomeNoticesRatherThanRefusals(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"work": {
-			"hostname":     {"10.0.0.9"},
-			"localforward": {"8080 127.0.0.1:80"},
-			"forwardagent": {"yes"},
-			"forwardx11":   {"no"},
+			"hostname":      {"10.0.0.9"},
+			"remoteforward": {"8080 127.0.0.1:80"},
+			"controlmaster": {"auto"},
+			"forwardx11":    {"no"},
 		},
 	})
 
@@ -178,7 +178,7 @@ func TestUnhonouredKeywordsBecomeNoticesRatherThanRefusals(t *testing.T) {
 	for _, notice := range notices {
 		found[notice.Keyword] = true
 	}
-	if !found["localforward"] || !found["forwardagent"] {
+	if !found["remoteforward"] || !found["controlmaster"] {
 		t.Errorf("notices = %#v", notices)
 	}
 	// no と書いてあるものは、無いことが望みなので黙っている。
@@ -276,26 +276,72 @@ func TestDroppedKeywordsSayWhyRatherThanPromisingThemLater(t *testing.T) {
 	}
 }
 
-// まだ無いものは、そう言ってよい。
-func TestKeywordsStillToComeSaySo(t *testing.T) {
+// 転送は Target に載り、notice にはならない。**実装されたからである。**
+func TestForwardsAreCarriedRatherThanNoticed(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"work": {
 			"hostname":       {"10.0.0.9"},
-			"localforward":   {"8080 127.0.0.1:80"},
+			"localforward":   {"8080 10.0.0.5:80"},
 			"dynamicforward": {"1080"},
 			"forwardagent":   {"yes"},
 		},
 	})
-	_, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	target, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(notices) != 3 {
-		t.Fatalf("notices = %#v", notices)
+	if len(notices) != 0 {
+		t.Fatalf("an implemented feature still produced notices: %#v", notices)
 	}
-	for _, notice := range notices {
-		if !strings.Contains(notice.Detail, "not implemented yet") {
-			t.Errorf("%s = %q, want it to say it is still to come", notice.Keyword, notice.Detail)
-		}
+	if !target.AgentForward {
+		t.Error("ForwardAgent yes did not reach the target")
+	}
+	if len(target.Forwards) != 2 {
+		t.Fatalf("forwards = %#v", target.Forwards)
+	}
+	// 並びは固定である。接続のたびに一覧が並び替わってはならない。
+	if target.Forwards[0].Kind != "dynamic" || target.Forwards[1].Kind != "local" {
+		t.Fatalf("forwards = %#v, want a stable order", target.Forwards)
+	}
+	if target.Forwards[1].To != "10.0.0.5:80" || target.Forwards[1].ListenPort != "8080" {
+		t.Errorf("forward = %#v", target.Forwards[1])
+	}
+}
+
+// **bind するのはループバックだけである。** それ以外が書かれていたら束ねて
+// notice を出す——転送の設定ひとつで繋がらなくなる方が困る。
+func TestANonLoopbackBindIsFoldedOntoLoopback(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"work": {"hostname": {"10.0.0.9"}, "localforward": {"0.0.0.0:8080 10.0.0.5:80"}},
+	})
+	target, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(target.Forwards) != 1 || target.Forwards[0].Address() != "127.0.0.1:8080" {
+		t.Fatalf("forwards = %#v", target.Forwards)
+	}
+	if len(notices) != 1 || !strings.Contains(notices[0].Detail, "127.0.0.1") {
+		t.Fatalf("notices = %#v, want the fold to be said out loud", notices)
+	}
+}
+
+// 読めない値は notice を出して飛ばす。書式ひとつで接続できなくなる理由が無い。
+func TestAnUnreadableForwardIsSkippedRatherThanFatal(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"work": {
+			"hostname":     {"10.0.0.9"},
+			"localforward": {"nonsense", "8080 10.0.0.5:80"},
+		},
+	})
+	target, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	if err != nil {
+		t.Fatalf("an unreadable forward refused the connection: %v", err)
+	}
+	if len(target.Forwards) != 1 {
+		t.Fatalf("forwards = %#v, want the readable one", target.Forwards)
+	}
+	if len(notices) != 1 {
+		t.Fatalf("notices = %#v", notices)
 	}
 }

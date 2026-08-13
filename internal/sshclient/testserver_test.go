@@ -68,6 +68,8 @@ type serverOptions struct {
 	Reached map[string]func() net.Conn
 	// OnShell は、シェルが開いたあとにサーバー側が行うことである。
 	OnShell func(channel ssh.Channel)
+	// OnAgentChannel は、借りた agent へリモート側から話しかける。
+	OnAgentChannel func(conn net.Conn)
 	// Banner は、認証の前にサーバーが送る文言である。
 	Banner string
 }
@@ -151,6 +153,24 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 	return server
 }
 
+// allow は、direct-tcpip でこの宛先へ通してよいと登録する。
+//
+// 本物の TCP へ繋ぐので、転送されたバイト列が端から端まで届くことを見られる。
+func (s *testServer) allow(address string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.options.Reached == nil {
+		s.options.Reached = map[string]func() net.Conn{}
+	}
+	s.options.Reached[address] = func() net.Conn {
+		conn, err := net.Dial("tcp", address)
+		if err != nil {
+			return nil
+		}
+		return conn
+	}
+}
+
 // Address は、このサーバーが待ち受けている 127.0.0.1 の宛先である。
 func (s *testServer) Address() string { return s.listener.Addr().String() }
 
@@ -205,7 +225,7 @@ func (s *testServer) serve(conn net.Conn) {
 			if err != nil {
 				return
 			}
-			go s.session(channel, channelRequests)
+			go s.session(connection, channel, channelRequests)
 		case "direct-tcpip":
 			s.forward(newChannel)
 		default:
@@ -244,11 +264,30 @@ func (s *testServer) forward(newChannel ssh.NewChannel) {
 	}
 	go ssh.DiscardRequests(requests)
 	remote := open()
+	if remote == nil {
+		_ = channel.Close()
+		return
+	}
 	go func() { _, _ = io.Copy(remote, channel); _ = remote.Close() }()
 	go func() { _, _ = io.Copy(channel, remote); _ = channel.Close() }()
 }
 
-func (s *testServer) session(channel ssh.Channel, requests <-chan *ssh.Request) {
+// channelConn は、SSH のチャンネルを net.Conn として見せる。agent の
+// クライアントがそれを求めるからである。
+type channelConn struct{ ssh.Channel }
+
+func (channelConn) LocalAddr() net.Addr              { return dummyAddr{} }
+func (channelConn) RemoteAddr() net.Addr             { return dummyAddr{} }
+func (channelConn) SetDeadline(time.Time) error      { return nil }
+func (channelConn) SetReadDeadline(time.Time) error  { return nil }
+func (channelConn) SetWriteDeadline(time.Time) error { return nil }
+
+type dummyAddr struct{}
+
+func (dummyAddr) Network() string { return "ssh" }
+func (dummyAddr) String() string  { return "channel" }
+
+func (s *testServer) session(connection ssh.Conn, channel ssh.Channel, requests <-chan *ssh.Request) {
 	for request := range requests {
 		switch request.Type {
 		case "pty-req":
@@ -268,6 +307,13 @@ func (s *testServer) session(channel ssh.Channel, requests <-chan *ssh.Request) 
 			s.env = append(s.env, name+"="+value)
 			s.mutex.Unlock()
 			s.reply(request, true)
+		case "auth-agent-req@openssh.com":
+			s.reply(request, true)
+			// **agent のチャンネルはサーバーが開く。** 借りた側から
+			// 話しかけるものなので、向きはこちらからである。
+			if s.options.OnAgentChannel != nil {
+				go s.openAgent(connection)
+			}
 		case "shell":
 			s.mutex.Lock()
 			s.shellRan = true
@@ -284,6 +330,17 @@ func (s *testServer) session(channel ssh.Channel, requests <-chan *ssh.Request) 
 			s.reply(request, false)
 		}
 	}
+}
+
+// openAgent は、借りた agent へリモート側から繋ぐ。
+func (s *testServer) openAgent(connection ssh.Conn) {
+	channel, requests, err := connection.OpenChannel("auth-agent@openssh.com", nil)
+	if err != nil {
+		return
+	}
+	go ssh.DiscardRequests(requests)
+	s.options.OnAgentChannel(channelConn{channel})
+	_ = channel.Close()
 }
 
 func (s *testServer) run(channel ssh.Channel) {
