@@ -1,4 +1,5 @@
 /bin/
+/dist/
 /coverage/
 /web/node_modules/
 /web/tsconfig.tsbuildinfo
