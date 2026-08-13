@@ -58,6 +58,14 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 	}
 
 	size := session.attach(remote, closers)
+
+	// 転送はチャンネルを開いたあと、シェルを起こす前に開く。**開いていることを
+	// 端末の一行目に書く**ためであり、失敗しても接続は続ける。
+	session.forwarded.open(client, target.Forwards, session.writer)
+	if target.AgentForward {
+		session.forwarded.note(forwardAgent(client, remote, d.Auth.AgentSocket, session.writer))
+	}
+
 	if err := d.start(remote, target, size, session); err != nil {
 		session.fail("sshc: " + err.Error())
 		closeAll(closers)

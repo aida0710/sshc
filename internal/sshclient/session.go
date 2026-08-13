@@ -43,6 +43,10 @@ type Session struct {
 	size    terminal.Size
 	closers []io.Closer
 
+	// forwarded は、この接続の上に開いた転送である。セッションの寿命に縛る
+	// ——**閉じ忘れるものを増やさない。**
+	forwarded forwards
+
 	exit      terminal.ExitInfo
 	done      chan struct{}
 	closeOnce sync.Once
@@ -56,6 +60,9 @@ func newSession(size terminal.Size, cancel context.CancelFunc) *Session {
 		size: size, cancel: cancel, done: make(chan struct{}),
 	}
 }
+
+// Forwards は、このセッションが開いている転送を報告する。
+func (s *Session) Forwards() []terminal.Forward { return s.forwarded.list() }
 
 // Prompter は、この端末のストリームへ問いを出す。
 func (s *Session) Prompter() Prompter {
@@ -116,6 +123,7 @@ func (s *Session) Close() error {
 		s.mutex.Lock()
 		remote, closers := s.remote, s.closers
 		s.mutex.Unlock()
+		s.forwarded.close()
 		if remote != nil {
 			_ = remote.Close()
 		}
@@ -185,6 +193,7 @@ func (s *Session) run(remote *ssh.Session, keepAlive func()) {
 		_, _ = io.WriteString(s.writer, "\r\n"+err.Error()+"\r\n")
 	}
 	s.finish(info)
+	s.forwarded.close()
 	_ = s.writer.Close()
 	_ = s.input.Close()
 

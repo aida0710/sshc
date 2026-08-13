@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -47,11 +48,6 @@ type Notice struct {
 // **「まだ無い」と「無い」を区別して書く。** 永久に無いものを、来週来るかの
 // ように言わない。落とすと決めた理由はそれぞれの文言に入れてある。
 var unhonoured = map[string]string{
-	// まだ無い。開いたポートを見せて閉じる画面と一緒に来る。
-	"localforward":   "port forwarding is not implemented yet",
-	"dynamicforward": "port forwarding is not implemented yet",
-	"forwardagent":   "agent forwarding is not implemented yet",
-
 	// 無い。
 	"remoteforward":   "sshc does not ask the remote to listen; that inverts the direction of trust and depends on the server's AllowTcpForwarding",
 	"forwardx11":      "sshc has no X server behind it; a browser terminal cannot show an X window",
@@ -120,6 +116,14 @@ type Target struct {
 	// Jump は ProxyJump の連鎖である。手前から順に繋ぐ。
 	Jump []Target
 
+	// Forwards は、この接続の上に開く転送である。
+	//
+	// **bind するのはループバックだけである。** 設定がそれ以外を求めていたら
+	// 束ねて notice を出す——転送の設定ひとつで繋がらなくなる方が困る。
+	Forwards []ForwardSpec
+	// AgentForward は、こちらの agent をリモートへ貸すかである。
+	AgentForward bool
+
 	SetEnv        []EnvVar
 	KeepAlive     time.Duration
 	KeepAliveMax  int
@@ -177,7 +181,11 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 		return Target{}, nil, ErrNoHostName
 	}
 
-	notices := noticesFor(values)
+	forwards, forwardNotices := parseForwards(values)
+	target.Forwards = forwards
+	target.AgentForward = yes(values.First("forwardagent"))
+
+	notices := append(noticesFor(values), forwardNotices...)
 	chain, err := effective.ParseChain(values.First("proxyjump"))
 	if err != nil {
 		return Target{}, nil, err
@@ -201,6 +209,51 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 		}
 	}
 	return target, notices, nil
+}
+
+// parseForwards は、設定に書かれた転送を読む。
+//
+// **読めない値は notice を出して飛ばす。** 転送の書式ひとつで接続できなく
+// なる理由が無い。
+func parseForwards(values effective.Values) ([]ForwardSpec, []Notice) {
+	var specs []ForwardSpec
+	var notices []Notice
+
+	for keyword, parse := range map[string]func(string) (ForwardSpec, error){
+		"localforward":   ParseLocalForward,
+		"dynamicforward": ParseDynamicForward,
+	} {
+		for _, entry := range values.All(keyword) {
+			if strings.EqualFold(strings.TrimSpace(entry), "none") {
+				continue
+			}
+			spec, err := parse(entry)
+			if err != nil {
+				notices = append(notices, Notice{
+					Keyword: keyword,
+					Detail:  "sshc does not understand this forwarding specification: " + entry,
+				})
+				continue
+			}
+			if spec.Bound() {
+				notices = append(notices, Notice{
+					Keyword: keyword,
+					Detail: "sshc binds forwards to " + LoopbackHost + " only, so " + entry +
+						" listens on this machine and nowhere else",
+				})
+			}
+			specs = append(specs, spec)
+		}
+	}
+	// map の走査は順序を持たない。開く順を固定する——同じ設定が毎回同じ
+	// 順で報告されないと、画面の一覧が接続のたびに並び替わる。
+	sort.Slice(specs, func(i, j int) bool {
+		if specs[i].Kind != specs[j].Kind {
+			return specs[i].Kind < specs[j].Kind
+		}
+		return specs[i].ListenPort < specs[j].ListenPort
+	})
+	return specs, notices
 }
 
 func noticesFor(values effective.Values) []Notice {
