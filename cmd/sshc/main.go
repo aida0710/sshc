@@ -16,29 +16,26 @@ import (
 	"time"
 
 	"sshc/internal/app"
-	"sshc/internal/platform"
 	"sshc/internal/selfupdate"
 	"sshc/internal/ui"
 )
 
 var version = "dev"
 
-// openBrowser はここで宣言される。フラグを解析するのはサブコマンドを見分けた
+// announceEntrance はここで宣言される。フラグを解析するのはサブコマンドを見分けた
 // 後だが、usage はどの経路からでもフラグを一覧できなければならないからである。
+//
+// **ブラウザは開かない。** 画面はデスクトップの外殻が出すので、このプロセスが
+// 既定のブラウザを起こす経路は無くなった。書き出す先は、`sshc` を打った人の
+// 端末である。
+//
+// 既定で書き出すのは、端末から打った人がそこを読むからである。**背後で上がる
+// エージェントは -open=false を渡す**——あの 1 行は有効な bootstrap トークンを
+// 運ぶので、journal やログファイルの置き場所として不適切である。フラグ名を
+// 変えないのは、既に書かれている launchd と systemd の unit を壊さないためで
+// ある。
 var openBrowser = flag.Bool("open", true,
-	"open the UI in the default browser; -open=false prints the URL on standard output instead")
-
-// urlPrinter は URL を開く代わりに書き出すことで platform.BrowserLauncher を満たす。
-// これは自動化のためにある — エンドツーエンドのスイートとパッケージングのスモーク
-// テストで、ユーザー自身のブラウザに有効なブートストラップトークンを渡してはならない
-// からだ。トークンの露出は `open` の argv にすでにある以上のものではなく、しかもこの
-// フラグは明示的に指定しなければならない。
-type urlPrinter struct{ out io.Writer }
-
-func (p urlPrinter) Open(_ context.Context, target string) error {
-	_, err := fmt.Fprintln(p.out, target)
-	return err
-}
+	"print the way into the UI on standard output; -open=false prints nothing")
 
 // HelpSubcommand は使い方を出す語。
 //
@@ -87,8 +84,7 @@ func usage(out io.Writer) {
   sshc <alias>         connect to a host from ~/.ssh/config in this terminal
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
-  sshc open            ask the running application for a new way in
-  sshc open --print-url  print that way in instead of opening it
+  sshc open            print a new way into the UI
   sshc service refresh rebind an enabled login service to this binary
   sshc service disable stop and remove the login service
   sshc engine start    make sure the background engine is answering
@@ -137,18 +133,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
 			os.Exit(1)
 		}
-		print := len(arguments) == 1 && arguments[0] == PrintURLFlag
-		if len(arguments) > 1 || (len(arguments) == 1 && !print) {
-			fmt.Fprintf(os.Stderr, "sshc: open takes nothing or %s\n", PrintURLFlag)
+		if len(arguments) != 0 {
+			fmt.Fprintln(os.Stderr, "sshc: open takes nothing")
 			os.Exit(2)
 		}
 		os.Exit(runOpen(
 			context.Background(), app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout},
-			func(target string) error {
-				return newPlatformParts(home).Browser.Open(context.Background(), target)
-			},
-			print, os.Stdout, os.Stderr,
+			&http.Client{Timeout: connectTimeout}, os.Stdout, os.Stderr,
 		))
 	}
 	if helpInvocation(os.Args) {
@@ -230,14 +221,17 @@ func main() {
 
 	parts := newPlatformParts(home)
 
-	var browser platform.BrowserLauncher = parts.Browser
-	if !*openBrowser {
-		browser = urlPrinter{out: os.Stdout}
+	var announce func(string) error
+	if *openBrowser {
+		announce = func(entrance string) error {
+			_, err := fmt.Fprintln(os.Stdout, entrance)
+			return err
+		}
 	}
 
 	dependencies := app.Dependencies{
-		Random:  rand.Reader,
-		Browser: browser,
+		Random:   rand.Reader,
+		Announce: announce,
 		// ユーザーがインターフェースから有効にしない限りオフ。ここでは何も登録しない。
 		// スイッチに手が届くようにするだけである。
 		LoginItem: parts.LoginItem,

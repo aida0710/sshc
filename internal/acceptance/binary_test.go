@@ -40,7 +40,10 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	}
 
 	home := t.TempDir()
-	process := exec.Command(binary, "-open=false")
+	// 既定で入口を書き出す。**ブラウザはもう開かない**ので、-open=false は
+	// 「何も言わない」を意味するようになった——背後で上がるエージェントは
+	// それを渡す。ここは端末から打った人と同じ道を通る。
+	process := exec.Command(binary)
 	process.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
 	stdout, err := process.StdoutPipe()
 	if err != nil {

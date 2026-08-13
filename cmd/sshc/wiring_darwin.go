@@ -19,7 +19,6 @@ func newPlatformParts(home string) platformParts {
 	return platformParts{
 		Runner:    runner,
 		Toolchain: toolchain,
-		Browser:   macos.NewBrowser(runner),
 		KeyAgent:  keys.NewAgent(os.LookupEnv),
 		LoginItem: macos.LoginItem{Runner: runner, Home: home},
 	}
