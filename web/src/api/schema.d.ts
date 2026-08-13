@@ -1294,6 +1294,12 @@ export interface components {
             expectedFingerprint: string;
             acknowledged: boolean;
         };
+        TerminalForward: {
+            kind: string;
+            listen: string;
+            to: string;
+            problem: string;
+        };
         TerminalSession: {
             id: string;
             /** @enum {string} */
@@ -1302,6 +1308,7 @@ export interface components {
             title: string;
             startedAt: string;
             exited?: components["schemas"]["TerminalExit"];
+            forwards?: components["schemas"]["TerminalForward"][];
         };
         TerminalExit: {
             code: number;
