@@ -49,65 +49,19 @@ describe("InspectorToggle", () => {
 });
 
 describe("InspectorPane", () => {
-  const single = {
-    label: "Details",
-    attention: false,
-    panes: [{ key: "only", label: "Only", body: "nothing yet" }],
-  };
-
   it("is a labelled complementary region the toggle can address", () => {
-    render(<InspectorPane label="Details" content={single} />);
+    render(<InspectorPane label="Details">nothing yet</InspectorPane>);
 
     const pane = screen.getByRole("complementary", { name: "Details" });
     expect(pane).toHaveAttribute("id", "inspector");
     expect(pane).toHaveTextContent("nothing yet");
   });
 
-  // 1 面しか持たないセクションの見た目は、ペインが 2 面を持てるように
-  // なる前と変わらない。切り替える先が無いのにセグメントを出すのは、
-  // 押しても何も起きないコントロールを置くことである。
-  it("draws no segmented control for a single face", () => {
-    render(<InspectorPane label="Details" content={single} />);
+  // 面はひとつである。開いているコンソールの一覧は一番左のナビゲーションに
+  // あるので、このペインが切り替えるものは何も持たない。
+  it("draws no segmented control", () => {
+    render(<InspectorPane label="Details">nothing yet</InspectorPane>);
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-  });
-
-  it("pins the header above both faces and switches only what is below it", async () => {
-    const user = userEvent.setup();
-    render(
-      <InspectorPane
-        label="Connection"
-        content={{
-          label: "Connection",
-          attention: false,
-          header: <p>ops@203.0.113.10:22</p>,
-          panes: [
-            { key: "consoles", label: "Consoles", body: <p>console list</p> },
-            { key: "settings", label: "Settings", body: <p>display settings</p> },
-          ],
-        }}
-      />,
-    );
-
-    // 先頭の面が既定で開いている。
-    expect(screen.getByText("console list")).toBeInTheDocument();
-    expect(screen.queryByText("display settings")).not.toBeInTheDocument();
-    expect(screen.getByText("ops@203.0.113.10:22")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: "Settings" }));
-
-    expect(screen.getByText("display settings")).toBeInTheDocument();
-    expect(screen.queryByText("console list")).not.toBeInTheDocument();
-    // 接続セクションは切り替わらない。どちらの面を見ていても、いま開いて
-    // いるものが何かは見えていなければならない。
-    expect(screen.getByText("ops@203.0.113.10:22")).toBeInTheDocument();
-  });
-
-  // 中身を持たないセクションはトグルすら出さない。ペインが 2 面を持てるように
-  // なってもその規則は変わらない。
-  it("renders nothing when a section has no pane", () => {
-    const { container } = render(<InspectorPane label="Details" content={null} />);
-
-    expect(container).toBeEmptyDOMElement();
   });
 });

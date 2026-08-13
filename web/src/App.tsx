@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useState, type MouseEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { apiClient, whenLocked, type HealthResponse } from "./api/client";
 import { integrationsApi, type PasswordVaultStatus } from "./api/integrations";
 import { configApi } from "./api/config";
@@ -25,6 +25,8 @@ import {
   type NavigateLocationOptions,
 } from "./routing/useSectionRoute";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
+import { ConsoleList } from "./terminal/ConsoleList";
+import { useTerminalSessions, type TerminalSessionsState } from "./terminal/sessions";
 
 const ConnectionsPage = lazy(() =>
   import("./connections/ConnectionsPage").then(({ ConnectionsPage }) => ({ default: ConnectionsPage })),
@@ -120,6 +122,10 @@ const navGroups: { label: MessageKey; sections: Section[] }[] = [
   { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Settings", "Sync", "History"] },
 ];
 
+// ナビゲーションの下半分が見せる 2 つの面。Start は上に固定されるので、
+// どちらの面でも出口はある。
+type NavFace = "settings" | "terminal";
+
 const themeLabels: Record<Theme, MessageKey> = {
   system: "shell.themeSystem",
   light: "shell.themeLight",
@@ -159,10 +165,75 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // これはホストについての好みではなく、ウィンドウについての好みだからだ。
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
-  // Home で開かれたコンソールは接続画面で見る。開く場所と見る場所が違うので、
-  // その受け渡しだけをここが仲介する。URL には載せない——共有可能な URL に
-  // 載せる価値のある状態ではない。
-  const [pendingConsole, setPendingConsole] = useState<string | null>(null);
+  // 開いているセッションはセクションに属さない。どの画面を見ていても同じ
+  // ものが開いているので、一覧はナビゲーションと同じ高さ——シェル——が持つ。
+  // URL には載せない。共有可能な URL に載せる価値のある状態ではない。
+  const consoles = useTerminalSessions(integrationsApi, t, state === "ready");
+  const [activeConsole, setActiveConsole] = useState<string | null>(null);
+  const [navFace, setNavFace] = useState<NavFace | null>(null);
+
+  // 既定はターミナル側だが、セッションが 1 本も無ければ設定側から始める。
+  //
+  // セッションはこのプロセスの寿命までしか生きないので、起動直後は必ず 0 本で
+  // ある。無条件にターミナル側を既定にすると、毎回の起動が空の一覧から始まり、
+  // 他の画面へ行くにはトグルを探すことになる。決めるのは最初の一覧が届いた
+  // 一度だけで、そのあとは人が選んだ面のままにする。
+  useEffect(() => {
+    if (navFace !== null || !consoles.loaded) return;
+    setNavFace(consoles.sessions.length > 0 ? "terminal" : "settings");
+  }, [consoles.loaded, consoles.sessions.length, navFace]);
+
+  // 閉じられたセッションを主画面に残さない。
+  useEffect(() => {
+    if (activeConsole === null) return;
+    if (!consoles.sessions.some((session) => session.id === activeConsole)) setActiveConsole(null);
+  }, [consoles.sessions, activeConsole]);
+
+  // 端末が描かれるのは Connections である。ナビゲーションはどの画面からでも
+  // 押せるので、選んだらそこへ連れて行く。
+  const showConsole = useCallback(
+    (id: string) => {
+      setActiveConsole(id);
+      navigate("Connections");
+      // Home から開かれたセッションは、この写しにまだ載っていない。
+      void consoles.refresh();
+    },
+    [navigate, consoles],
+  );
+
+  // 並び順はこの画面のものであって、セッションの性質ではない。サーバーは
+  // 開いた順に返し、人が動かした分だけをここが覚える。metadata へ書かないのは
+  // セッションがこのプロセスの寿命までしか生きないからで、書けば孤児が残る。
+  const [consoleOrder, setConsoleOrder] = useState<string[]>([]);
+  const orderedConsoles = useMemo(() => {
+    const rank = new Map(consoleOrder.map((id, index) => [id, index]));
+    // 並べ替えたことのないセッションは、サーバーが返した順のまま後ろに続く。
+    return consoles.sessions
+      .map((session, index) => ({ session, rank: rank.get(session.id) ?? consoleOrder.length + index }))
+      .sort((left, right) => left.rank - right.rank)
+      .map((entry) => entry.session);
+  }, [consoles.sessions, consoleOrder]);
+
+  const openLocalShell = useCallback(async () => {
+    const opened = await consoles.open({ kind: "shell" });
+    if (opened !== null) showConsole(opened.id);
+  }, [consoles, showConsole]);
+
+  // 複製は「同じ相手にもう 1 本」である。設定ファイルには触れない——接続
+  // そのものの複製は Connections 画面にある別の操作である。
+  const duplicateConsole = useCallback(
+    async (id: string) => {
+      const session = consoles.sessions.find((candidate) => candidate.id === id);
+      if (session === undefined) return;
+      const opened = await consoles.open(
+        session.kind === "ssh" && session.alias !== undefined
+          ? { kind: "ssh", alias: session.alias }
+          : { kind: "shell" },
+      );
+      if (opened !== null) showConsole(opened.id);
+    },
+    [consoles, showConsole],
+  );
 
   // ペインの中身はどのセクションが開いているかに属するが、開閉状態自体は
   // そうではない。したがってセクションを離れるとペインの中身は消去され
@@ -206,6 +277,26 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     }
     event.preventDefault();
     navigate(target);
+  }
+
+  // 面が決まるまでは設定側を描く。最初の一覧が届くのを待つあいだ、空の
+  // ターミナル面を一瞬見せてから入れ替えるより、静かである。
+  const currentFace: NavFace = navFace ?? "settings";
+
+  function navigationLink(name: Section) {
+    return (
+      <a
+        href={sectionPath(name)}
+        aria-current={section === name ? "page" : undefined}
+        onClick={(event) => followSectionLink(event, name)}
+        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
+          section === name ? "bg-select-fill text-ink" : "text-ink hover:bg-select-fill"
+        }`}
+      >
+        <Icon name={sectionIcons[name]} className="h-4 w-4 text-ink-muted" />
+        {t(sectionLabels[name])}
+      </a>
+    );
   }
 
   useEffect(() => {
@@ -403,32 +494,70 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           className="relative flex flex-col overflow-y-auto border-r border-line bg-sidebar p-2"
         >
           <div className="grow">
-          {navGroups.map((group) => (
+          {/*
+            Start はトグルより上に固定する。ターミナルの面を見ているときでも
+            出口がひとつも無い状態を作らないためである。
+          */}
+          {navGroups.slice(0, 1).map((group) => (
             <div key={group.label} className="mb-2">
               <span aria-hidden="true" className="block px-2 pt-2 pb-1 text-xs font-semibold text-ink-muted">
                 {t(group.label)}
               </span>
               <ul aria-label={t(group.label)}>
                 {group.sections.map((name) => (
-                  <li key={name}>
-                    <a
-                      href={sectionPath(name)}
-                      aria-current={section === name ? "page" : undefined}
-                      onClick={(event) => followSectionLink(event, name)}
-                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-                        section === name
-                          ? "bg-select-fill text-ink"
-                          : "text-ink hover:bg-select-fill"
-                      }`}
-                    >
-                      <Icon name={sectionIcons[name]} className="h-4 w-4 text-ink-muted" />
-                      {t(sectionLabels[name])}
-                    </a>
-                  </li>
+                  <li key={name}>{navigationLink(name)}</li>
                 ))}
               </ul>
             </div>
           ))}
+          <div
+            role="tablist"
+            aria-label={t("shell.navFaces")}
+            className="my-2 grid grid-flow-col rounded-lg border border-control-line bg-control p-0.5"
+          >
+            {(["settings", "terminal"] as NavFace[]).map((face) => (
+              <button
+                key={face}
+                type="button"
+                role="tab"
+                aria-selected={face === currentFace}
+                onClick={() => setNavFace(face)}
+                className={`rounded-md px-2 py-1 text-xs ${
+                  face === currentFace ? "bg-card text-ink shadow-sm" : "text-ink-muted"
+                }`}
+              >
+                {t(face === "settings" ? "shell.navFaceSettings" : "shell.navFaceTerminal")}
+              </button>
+            ))}
+          </div>
+          {currentFace === "terminal" ? (
+            <ConsoleList
+              sessions={orderedConsoles}
+              selected={activeConsole}
+              maxSessions={consoles.maxSessions}
+              busy={consoles.busy}
+              problem={consoles.problem}
+              onSelect={showConsole}
+              onClose={(id) => void consoles.close(id)}
+              onRename={(id, title) => consoles.rename(id, title)}
+              onDuplicate={duplicateConsole}
+              onReorder={setConsoleOrder}
+              onOpenShell={openLocalShell}
+            />
+          ) : (
+            navGroups.slice(1).map((group) => (
+              <div key={group.label} className="mb-2">
+                <span aria-hidden="true" className="block px-2 pt-2 pb-1 text-xs font-semibold text-ink-muted">
+                  {t(group.label)}
+                </span>
+                <ul aria-label={t(group.label)}>
+                  {group.sections.map((name) => (
+                    <li key={name}>{navigationLink(name)}</li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
           </div>
           {/*
             バージョンはナビゲーションの最下部に置く。めったに見ない
@@ -478,9 +607,9 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     onInstallGeneratedKey={installGeneratedKey}
                     onPreferredConnectionKeyApplied={consumePreferredConnectionKey}
                     onPreferredPublicKeyHandled={consumePreferredPublicKey}
-                    pendingConsole={pendingConsole}
-                    onPendingConsoleHandled={() => setPendingConsole(null)}
-                    onConsoleOpened={setPendingConsole}
+                    consoles={consoles}
+                    activeConsole={activeConsole}
+                    onShowConsole={showConsole}
                   />
                 </Suspense>
               ) : (
@@ -505,7 +634,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           ) : null}
         </main>
         {inspector !== null && inspectorOpen ? (
-          <InspectorPane label={inspector.label} content={inspector} />
+          <InspectorPane label={inspector.label}>{inspector.body}</InspectorPane>
         ) : null}
       </div>
     </div>
@@ -535,9 +664,9 @@ type SectionViewProps = {
   onPreferredPublicKeyHandled: () => void;
   onConnectionDraftChange: (draft: CreateConnectionDraft | null) => void;
   onNavigateForCreation: (section: CreationPrerequisite) => void;
-  pendingConsole: string | null;
-  onPendingConsoleHandled: () => void;
-  onConsoleOpened: (id: string) => void;
+  consoles: TerminalSessionsState;
+  activeConsole: string | null;
+  onShowConsole: (id: string) => void;
   // セクションは右側ペインの中身を提供するか、調べるものが無ければ
   // null を返す。現時点でそれを埋めているのは Connections だけだ。
   onInspector: (content: InspectorContent) => void;
@@ -559,8 +688,9 @@ function SectionView(props: SectionViewProps) {
         onNavigationBlockerChange={props.onNavigationBlockerChange}
         preferredKey={props.preferredConnectionKey}
         onPreferredKeyApplied={props.onPreferredConnectionKeyApplied}
-        pendingConsole={props.pendingConsole}
-        onPendingConsoleHandled={props.onPendingConsoleHandled}
+        consoles={props.consoles}
+        activeConsole={props.activeConsole}
+        onShowConsole={props.onShowConsole}
       />
     );
   }
@@ -576,7 +706,7 @@ function PaddedSection({
   onInspector,
   onNavigate,
   onNavigateLocation,
-  onConsoleOpened,
+  onShowConsole,
   preferredPublicKey,
   onAssignGeneratedKey,
   onInstallGeneratedKey,
@@ -587,7 +717,7 @@ function PaddedSection({
       <OverviewPanel
         onNavigate={onNavigate}
         onNavigateLocation={onNavigateLocation}
-        onConsoleOpened={onConsoleOpened}
+        onConsoleOpened={onShowConsole}
       />
     );
   }

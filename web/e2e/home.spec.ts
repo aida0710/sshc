@@ -18,10 +18,14 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
     }),
   );
 
+  // 開いているコンソールの一覧はナビゲーションが持つので、どの画面でも読む。
+  // 読むこと自体は何にも接触しない——数えるのは、端末を起こす要求だけである。
   const terminalRequests: string[] = [];
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (path.startsWith("/api/v1/terminal/")) terminalRequests.push(path);
+    if (!path.startsWith("/api/v1/terminal/")) return;
+    if (request.method() === "GET") return;
+    terminalRequests.push(`${request.method()} ${path}`);
   });
 
   await openApplication(page, installation);
