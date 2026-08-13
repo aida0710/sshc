@@ -64,3 +64,43 @@ func TestTheHandoffLetsTheCommandLineAskForOneConnection(t *testing.T) {
 		t.Errorf("connect without the secret = %d, want 403", refused.StatusCode)
 	}
 }
+
+// **窓を閉じることと、常駐を終わらせることは別の意思である。**
+//
+// 終了を頼めるのは handoff の秘密を持つ者——つまりこのバイナリ自身——だけで
+// ある。画面から常駐を止める道は用意していない。
+func TestOnlyTheHandoffSecretCanStopTheEngine(t *testing.T) {
+	f := newFixture(t)
+
+	// セッションを持つ画面からは止められない。あそこは cookie と CSRF を
+	// 持っているが、handoff の秘密は持たない。
+	refused := f.do(http.MethodPost, httpserver.StopPath, []byte(`{}`))
+	status := refused.StatusCode
+	readBody(t, refused)
+	if status != http.StatusForbidden {
+		t.Fatalf("a session-authenticated request stopped the engine with %d", status)
+	}
+
+	// 秘密なしの匿名も同じである。
+	anonymous := f.doAnonymous(http.MethodPost, httpserver.StopPath, []byte(`{}`))
+	defer func() { _ = anonymous.Body.Close() }()
+	if anonymous.StatusCode != http.StatusForbidden {
+		t.Fatalf("an anonymous request stopped the engine with %d", anonymous.StatusCode)
+	}
+
+	// 正のコントロール: 秘密を持つ者は止められる。**これが無いと、上の 2 つは
+	// 「この経路が誰にも効かない」ことしか言っていない。**
+	found, err := handoff.Read(filepath.Join(f.root, "sshc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	accepted := f.doAnonymous(http.MethodPost, httpserver.StopPath, []byte(`{}`),
+		func(request *http.Request) {
+			request.Header.Set(handoff.HeaderName, found.Secret)
+			request.Header.Set("Content-Type", "application/json")
+		})
+	defer func() { _ = accepted.Body.Close() }()
+	if accepted.StatusCode != http.StatusAccepted {
+		t.Fatalf("the handoff secret was refused with %d", accepted.StatusCode)
+	}
+}

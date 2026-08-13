@@ -40,12 +40,6 @@ func (p urlPrinter) Open(_ context.Context, target string) error {
 	return err
 }
 
-// AskpassSubcommand は、このバイナリを「OpenSSH がパスワードを尋ねる相手のプログラム」
-// に変える argv の語。二つ目のバイナリではなくサブコマンドにしてあるのは、インストール・
-// 署名・公証、そして武装元のアプリケーションとの歩調合わせを、余計にひとつ増やさない
-// ためである。
-const AskpassSubcommand = "askpass"
-
 // HelpSubcommand は使い方を出す語。
 //
 // これを予約するのは `open` と同じ理由である。裸の語は alias なので、これがないと
@@ -94,8 +88,11 @@ func usage(out io.Writer) {
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
   sshc open            ask the running application for a new way in
+  sshc open --print-url  print that way in instead of opening it
   sshc service refresh rebind an enabled login service to this binary
   sshc service disable stop and remove the login service
+  sshc engine start    make sure the background engine is answering
+  sshc engine stop     ask the background engine to finish
   sshc help            print this
 
 flags:
@@ -115,11 +112,34 @@ func main() {
 		))
 	}
 
-	if len(os.Args) == 2 && os.Args[1] == OpenSubcommand {
+	if arguments, ok := engineInvocation(os.Args); ok {
+		stateDir, err := engineStateDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
+			os.Exit(1)
+		}
+		executable, err := os.Executable()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(runEngineCommand(
+			context.Background(), arguments, stateDir,
+			&http.Client{Timeout: connectTimeout}, spawnEngine(executable),
+			os.Stdout, os.Stderr,
+		))
+	}
+
+	if arguments, ok := openInvocation(os.Args); ok {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
 			os.Exit(1)
+		}
+		print := len(arguments) == 1 && arguments[0] == PrintURLFlag
+		if len(arguments) > 1 || (len(arguments) == 1 && !print) {
+			fmt.Fprintf(os.Stderr, "sshc: open takes nothing or %s\n", PrintURLFlag)
+			os.Exit(2)
 		}
 		os.Exit(runOpen(
 			context.Background(), app.HandoffDir(home),
@@ -127,7 +147,7 @@ func main() {
 			func(target string) error {
 				return newPlatformParts(home).Browser.Open(context.Background(), target)
 			},
-			os.Stderr,
+			print, os.Stdout, os.Stderr,
 		))
 	}
 	if helpInvocation(os.Args) {

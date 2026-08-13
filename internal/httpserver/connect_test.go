@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -237,5 +238,51 @@ func TestConnectRefusesAnAliasItWouldNotPutOnACommandLine(t *testing.T) {
 			map[string]string{handoff.HeaderName: secret}).Code; code != http.StatusBadRequest {
 			t.Errorf("alias %q = %d, want 400", alias, code)
 		}
+	}
+}
+
+// 止める要求は、答えてから止める。**止めてから答えると、呼んだ側は成功と
+// 切断を区別できない。**
+func TestStopAnswersAndThenClosesTheStopChannel(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	stopped := make(chan struct{})
+	var once sync.Once
+
+	engine := connectEngine(t, ConnectHandlers{
+		Secret:   cliSecret,
+		Shutdown: func() { once.Do(func() { close(stopped) }) },
+	})
+
+	refused := send(t, engine, http.MethodPost, StopPath, "{}", nil)
+	if refused.Code != http.StatusForbidden {
+		t.Fatalf("stop without the secret = %d, want 403", refused.Code)
+	}
+	select {
+	case <-stopped:
+		t.Fatal("a refused request still stopped the engine")
+	default:
+	}
+
+	accepted := send(t, engine, http.MethodPost, StopPath, "{}",
+		map[string]string{handoff.HeaderName: cliSecret})
+	if accepted.Code != http.StatusAccepted {
+		t.Fatalf("stop = %d, want 202", accepted.Code)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the engine was never asked to stop")
+	}
+}
+
+// 止める手段が配線されていなければ、止まったふりをしない。
+func TestStopSaysSoWhenThereIsNoWayToStop(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret})
+
+	response := send(t, engine, http.MethodPost, StopPath, "{}",
+		map[string]string{handoff.HeaderName: cliSecret})
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("stop without a shutdown = %d, want 503", response.Code)
 	}
 }
