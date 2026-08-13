@@ -1,6 +1,7 @@
 package application
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -350,5 +351,36 @@ func TestAGroupThatIsNotHiddenWritesNoHiddenKey(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "hidden") {
 		t.Errorf("encoded metadata carries a hidden key it did not need:\n%s", encoded)
+	}
+}
+
+// **書かれていなければ止める側に倒す。** 動かし続けるのは明示的な選択である。
+func TestKeepEngineRunningDefaultsToStopping(t *testing.T) {
+	if (Metadata{}).KeepEngineRunning() {
+		t.Error("metadata with no desktop section asked to keep running")
+	}
+	if (Metadata{Desktop: &Desktop{}}).KeepEngineRunning() {
+		t.Error("an empty desktop section asked to keep running")
+	}
+	if !(Metadata{Desktop: &Desktop{KeepRunning: true}}).KeepEngineRunning() {
+		t.Error("an explicit choice was not honoured")
+	}
+}
+
+// 設定は往復する。**書いたものが読めなければ、切り替えは効かない。**
+func TestTheDesktopSectionSurvivesARoundTrip(t *testing.T) {
+	encoded, err := json.Marshal(Metadata{SchemaVersion: 3, Desktop: &Desktop{KeepRunning: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"keepRunning":true`) {
+		t.Fatalf("encoded = %s", encoded)
+	}
+	var decoded Metadata
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !decoded.KeepEngineRunning() {
+		t.Fatalf("decoded = %#v", decoded.Desktop)
 	}
 }
