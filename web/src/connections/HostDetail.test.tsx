@@ -56,7 +56,6 @@ function integrations(): IntegrationsApi {
   return {
     effective: vi.fn().mockResolvedValue({
       alias: "bastion", tokenWarning: "", executableDirectives: [], sources: [],
-      failure: { failed: false, exitCode: 0, stderr: "" },
     }),
     reachability: vi.fn(),
     authentication: vi.fn(),

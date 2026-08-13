@@ -2,6 +2,7 @@ package diagnostics_test
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -9,7 +10,6 @@ import (
 	"testing"
 
 	"sshc/internal/diagnostics"
-	"sshc/internal/platform"
 	"sshc/internal/storage"
 )
 
@@ -38,14 +38,9 @@ func newServiceWorkspace(t *testing.T, contents string) *storage.Workspace {
 	return workspace
 }
 
-func newTestService(t *testing.T, runner platform.OutputRunner) *diagnostics.Service {
+func newTestService(t *testing.T, probe *scriptedProbe) *diagnostics.Service {
 	t.Helper()
-	service := diagnostics.NewService(
-		newServiceWorkspace(t, serviceConfig),
-		runner,
-		fixedToolchain{ssh: "/usr/bin/ssh", keyscan: "/usr/bin/ssh-keyscan"},
-		nil,
-	)
+	service := diagnostics.NewService(newServiceWorkspace(t, serviceConfig), probe.dial)
 	service.Reachability = diagnostics.Reachability{
 		Dialer: dialerFunc(func(context.Context, string, string) (net.Conn, error) {
 			return nil, &net.OpError{Op: "dial", Err: errRefusedForTest}
@@ -80,7 +75,7 @@ func TestConnectionSnapshotDerivesEverythingFromOneGraphRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := diagnostics.NewService(workspace, &scriptedRunner{}, fixedToolchain{}, nil)
+	service := diagnostics.NewService(workspace, (&scriptedProbe{}).dial)
 
 	snapshot, err := service.ConnectionSnapshot("bastion")
 	if err != nil {
@@ -101,8 +96,8 @@ func TestConnectionSnapshotDerivesEverythingFromOneGraphRead(t *testing.T) {
 }
 
 func TestServiceDestinationUsesTheEngineSoABlockedEvaluationStillWorks(t *testing.T) {
-	runner := &scriptedRunner{}
-	service := newTestService(t, runner)
+	probe := &scriptedProbe{}
+	service := newTestService(t, probe)
 
 	hostname, port, err := service.Destination("bastion")
 	if err != nil {
@@ -127,13 +122,13 @@ func TestServiceDestinationUsesTheEngineSoABlockedEvaluationStillWorks(t *testin
 	if result.Address != "203.0.113.10:2222" || result.Notice == "" {
 		t.Errorf("result = %#v", result)
 	}
-	if len(runner.commands) != 0 {
-		t.Fatal("reachability must not start ssh")
+	if len(probe.calls) != 0 {
+		t.Fatal("reachability must not authenticate")
 	}
 }
 
 func TestServiceConfigCheckSummarisesTheIncludeGraph(t *testing.T) {
-	report, err := newTestService(t, &scriptedRunner{}).ConfigCheck()
+	report, err := newTestService(t, &scriptedProbe{}).ConfigCheck()
 	if err != nil {
 		t.Fatalf("ConfigCheck = %v", err)
 	}
@@ -148,35 +143,32 @@ func TestServiceConfigCheckSummarisesTheIncludeGraph(t *testing.T) {
 }
 
 // TestServiceAuthenticateSanitisesTheHomePathOutOfReportedOutput は、このプロセス
-// から出ていくものを守る。冗長な ssh の出力は読んだファイルをすべて絶対パスで
-// 名指しするので、アカウント名がレスポンスの本文へ運ばれてしまう。
+// から出ていくものを守る。失敗の説明には鍵のパスが入りうるので、そこに書かれた
+// ホームディレクトリを ~ へ置き換えてから返す。
 func TestServiceAuthenticateSanitisesTheHomePathOutOfReportedOutput(t *testing.T) {
-	service := newTestService(t, &scriptedRunner{})
+	probe := &scriptedProbe{}
+	service := newTestService(t, probe)
 	home := service.Workspace.Home()
-	service.Authentication.Runner = &scriptedRunner{output: platform.Output{
-		ExitCode: 255,
-		Stderr: []byte("debug1: Reading configuration data " + home + "/.ssh/config\n" +
-			"ops@203.0.113.10: Permission denied (publickey).\n"),
-	}}
+	probe.err = errors.New("ssh: unable to authenticate; " + home + "/.ssh/id_ed25519 was refused")
 
 	result, err := service.Authenticate(context.Background(), "bastion", true)
 	if err != nil {
 		t.Fatalf("Authenticate = %v", err)
 	}
-	if strings.Contains(result.Stderr, home) {
-		t.Fatalf("reported stderr names the home directory: %q", result.Stderr)
+	if strings.Contains(result.Detail, home) {
+		t.Fatalf("the reported detail names the home directory: %q", result.Detail)
 	}
-	if !strings.Contains(result.Stderr, "~/.ssh/config") {
-		t.Errorf("stderr = %q, want the path rewritten to ~", result.Stderr)
+	if !strings.Contains(result.Detail, "~/.ssh/id_ed25519") {
+		t.Errorf("detail = %q, want the path rewritten to ~", result.Detail)
 	}
-	if !strings.Contains(result.Stderr, "Permission denied") {
+	if !strings.Contains(result.Detail, "unable to authenticate") {
 		t.Error("sanitising removed the reason for the failure")
 	}
 }
 
 func TestServiceProjectedValueReadsTheEngineWithoutRunningSSH(t *testing.T) {
-	runner := &scriptedRunner{}
-	service := newTestService(t, runner)
+	probe := &scriptedProbe{}
+	service := newTestService(t, probe)
 
 	user, ok := service.ProjectedValue("bastion", "user")
 	if !ok || user != "ops" {
@@ -188,7 +180,7 @@ func TestServiceProjectedValueReadsTheEngineWithoutRunningSSH(t *testing.T) {
 	if _, ok := service.ProjectedValue("bad alias", "user"); ok {
 		t.Error("an unsafe alias must not be projected")
 	}
-	if len(runner.commands) != 0 {
-		t.Fatal("projecting a value started a process")
+	if len(probe.calls) != 0 {
+		t.Fatal("projecting a value reached the network")
 	}
 }

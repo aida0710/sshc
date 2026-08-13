@@ -26,8 +26,8 @@ function api(overrides: Partial<Pick<IntegrationsApi, "effective" | "reachabilit
     authentication: vi.fn().mockResolvedValue({
       outcome: "authenticated",
       authenticated: true,
-      exitCode: 0,
-      stderr: "",
+      method: "publickey",
+      detail: "",
       truncated: false,
       elapsedMs: 40,
     }),

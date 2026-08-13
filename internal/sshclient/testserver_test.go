@@ -68,6 +68,8 @@ type serverOptions struct {
 	Reached map[string]func() net.Conn
 	// OnShell は、シェルが開いたあとにサーバー側が行うことである。
 	OnShell func(channel ssh.Channel)
+	// Banner は、認証の前にサーバーが送る文言である。
+	Banner string
 }
 
 func newTestServer(t *testing.T, options serverOptions) *testServer {
@@ -139,6 +141,9 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 			}
 			return &ssh.Permissions{}, nil
 		}
+	}
+	if options.Banner != "" {
+		config.BannerCallback = func(ssh.ConnMetadata) string { return options.Banner }
 	}
 	server.config = config
 	server.options = options

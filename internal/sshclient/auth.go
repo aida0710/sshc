@@ -33,6 +33,17 @@ type Auth struct {
 	// ReadFile は鍵ファイルを読む。テストがフィクスチャを渡すためにある。
 	// nil なら os.ReadFile。
 	ReadFile func(path string) ([]byte, error)
+	// Observe は、方式が実際に試された瞬間に呼ばれる。
+	//
+	// **ssh.AuthMethod は封じられた interface なので、外から包めない。**
+	// どの方式で通ったかを言えるのは、方式を組み立てるここだけである。
+	Observe func(method string)
+}
+
+func (a Auth) observe(method string) {
+	if a.Observe != nil {
+		a.Observe(method)
+	}
 }
 
 // Methods は、この接続で試す認証方式を、試す順に返す。
@@ -49,11 +60,18 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 			}
 		case "keyboard-interactive":
 			if prompt != nil {
-				methods = append(methods, ssh.KeyboardInteractive(keyboardChallenge(prompt)))
+				challenge := keyboardChallenge(prompt)
+				methods = append(methods, ssh.KeyboardInteractive(func(
+					name, instruction string, questions []string, echos []bool,
+				) ([]string, error) {
+					a.observe("keyboard-interactive")
+					return challenge(name, instruction, questions, echos)
+				}))
 			}
 		case "password":
 			if prompt != nil {
 				methods = append(methods, ssh.PasswordCallback(func() (string, error) {
+					a.observe("password")
 					return prompt.Secret("Password: ")
 				}))
 			}
@@ -74,6 +92,7 @@ func (a Auth) publicKey(target Target, prompt Prompter) (ssh.AuthMethod, bool) {
 		return nil, false
 	}
 	return ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
+		a.observe("publickey")
 		return a.Signers(target, prompt)
 	}), true
 }

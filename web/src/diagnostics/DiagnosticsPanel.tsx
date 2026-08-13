@@ -331,8 +331,11 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
         <div className={`${sectionCard} text-sm`}>
           <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
           <p className="text-ink">{auth.outcome}</p>
-          {auth.stderr ? (
-            <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink-muted">{auth.stderr}</pre>
+          {auth.method ? (
+            <p className={hintText}>{t("diag.authenticationMethod", { method: auth.method })}</p>
+          ) : null}
+          {auth.detail ? (
+            <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink-muted">{auth.detail}</pre>
           ) : null}
         </div>
       ) : null}

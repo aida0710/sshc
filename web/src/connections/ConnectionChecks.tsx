@@ -138,9 +138,12 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
         <div className={`${sectionCard} text-sm`}>
           <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
           <p className="text-ink">{authentication.outcome}</p>
-          {authentication.stderr === "" ? null : (
+          {authentication.method === "" ? null : (
+            <p className={hintText}>{t("diag.authenticationMethod", { method: authentication.method })}</p>
+          )}
+          {authentication.detail === "" ? null : (
             <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink-muted">
-              {authentication.stderr}
+              {authentication.detail}
             </pre>
           )}
         </div>
