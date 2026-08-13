@@ -1,6 +1,7 @@
 package effective_test
 
 import (
+	"strings"
 	"testing"
 
 	"sshc/internal/effective"
@@ -144,6 +145,50 @@ func TestMatchPatternFollowsOpenSSHSemantics(t *testing.T) {
 	for _, test := range tests {
 		if got := effective.MatchPattern(test.pattern, test.value); got != test.want {
 			t.Errorf("MatchPattern(%q, %q) = %v, want %v", test.pattern, test.value, got, test.want)
+		}
+	}
+}
+
+// OpenSSH は IdentityFile を積み上げる。最初の 1 つだけを勝たせると、2 行目を
+// 書いた人には「この行は効いていない」と表示されることになる。
+//
+// 積み上がるキーワードの表は internal/application にだけあり、この射影は一律の
+// 先勝ちしか持っていなかった。同じ問いに答えるものが 2 つあれば、片方だけずれる。
+func TestProjectKeepsEveryValueOfACumulativeKeyword(t *testing.T) {
+	graph := graphFor(t, map[string]string{
+		testConfig: "Host bastion\n" +
+			"\tIdentityFile ~/.ssh/a\n" +
+			"\tIdentityFile ~/.ssh/b\n" +
+			"\tUser first\n" +
+			"\tUser second\n",
+	})
+
+	projection := effective.Project(graph, "bastion")
+	winners := map[string][]string{}
+	for _, source := range projection.Sources {
+		if source.Winner {
+			winners[strings.ToLower(source.Keyword)] = append(
+				winners[strings.ToLower(source.Keyword)], source.Value)
+		}
+	}
+	if len(winners["identityfile"]) != 2 {
+		t.Errorf("identityfile winners = %#v, want both lines", winners["identityfile"])
+	}
+	// 先勝ちのキーワードは 1 つだけが勝つ。こちらの規則は変わらない。
+	if len(winners["user"]) != 1 || winners["user"][0] != "first" {
+		t.Errorf("user winners = %#v, want only the first", winners["user"])
+	}
+}
+
+func TestCumulativeNamesOnlyTheKeywordsOpenSSHAccumulates(t *testing.T) {
+	for _, keyword := range []string{"IdentityFile", "certificatefile", "LocalForward", "SetEnv"} {
+		if !effective.Cumulative(keyword) {
+			t.Errorf("Cumulative(%q) = false", keyword)
+		}
+	}
+	for _, keyword := range []string{"User", "Port", "HostName", "ProxyJump"} {
+		if effective.Cumulative(keyword) {
+			t.Errorf("Cumulative(%q) = true", keyword)
 		}
 	}
 }
