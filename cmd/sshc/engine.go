@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"os/exec"
 	"time"
 
-	"sshc/internal/app"
+	"sshc/internal/application"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
+	"sshc/internal/storage"
 )
 
 // EngineSubcommand は、常駐そのものを起こしたり止めたりする。
@@ -25,6 +25,7 @@ const EngineSubcommand = "engine"
 const (
 	engineStart = "start"
 	engineStop  = "stop"
+	engineQuit  = "quit"
 )
 
 // engineReadyTimeout は、起こしたエンジンが handoff を書くまで待つ上限である。
@@ -45,11 +46,11 @@ func engineInvocation(argv []string) ([]string, bool) {
 
 // runEngineCommand は `sshc engine …` を実行する。
 func runEngineCommand(
-	ctx context.Context, arguments []string, stateDir string,
+	ctx context.Context, arguments []string, home, stateDir string,
 	client *http.Client, spawn func() error, stdout, stderr io.Writer,
 ) int {
 	if len(arguments) != 1 {
-		fmt.Fprintf(stderr, "sshc: engine takes %s or %s\n", engineStart, engineStop)
+		fmt.Fprintln(stderr, engineUsage)
 		return 2
 	}
 	switch arguments[0] {
@@ -57,10 +58,41 @@ func runEngineCommand(
 		return runEngineStart(ctx, stateDir, client, spawn, stdout, stderr)
 	case engineStop:
 		return runEngineStop(ctx, stateDir, client, stderr)
+	case engineQuit:
+		return runEngineQuit(ctx, home, stateDir, client, stderr)
 	default:
-		fmt.Fprintf(stderr, "sshc: engine takes %s or %s\n", engineStart, engineStop)
+		fmt.Fprintln(stderr, engineUsage)
 		return 2
 	}
+}
+
+const engineUsage = "sshc: engine takes start, stop or quit"
+
+// runEngineQuit は「アプリが終了する」という意思を受ける。
+//
+// **止めるかどうかを決めるのは設定である。** 外殻がそれを読むと、metadata の
+// 形を知る場所が二つになる——だからここで読む。読めなければ止める側に倒す。
+// 動かし続けるのは明示的な選択である。
+func runEngineQuit(
+	ctx context.Context, home, stateDir string, client *http.Client, stderr io.Writer,
+) int {
+	if keepEngineRunning(home) {
+		return 0
+	}
+	return runEngineStop(ctx, stateDir, client, stderr)
+}
+
+// keepEngineRunning は、設定が「閉じても動かし続ける」と言っているかを読む。
+func keepEngineRunning(home string) bool {
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		return false
+	}
+	metadata, _, err := application.NewMetadataStore(workspace).Load()
+	if err != nil {
+		return false
+	}
+	return metadata.KeepEngineRunning()
 }
 
 // runEngineStart は、エンジンが応答している状態にして戻る。
@@ -173,13 +205,4 @@ func spawnEngine(executable string) func() error {
 		// プロセスの終了ではない。**
 		return command.Process.Release()
 	}
-}
-
-// engineStateDir は、この利用者の state ディレクトリである。
-func engineStateDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return app.HandoffDir(home), nil
 }

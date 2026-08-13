@@ -1132,6 +1132,23 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Metadata" }
         "401": { $ref: "#/components/responses/Problem" }
+  /api/v1/metadata/desktop:
+    put:
+      operationId: setDesktopSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Desktop" }
+      responses:
+        "200":
+          description: The choice was written
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/history:
     get:
       operationId: getHistory

@@ -14,3 +14,8 @@
 /.superpowers/
 .integration-s3.json
 .integration-key/
+
+# デスクトップの外殻。束は作るたびに変わるので追跡しない。
+desktop/node_modules/
+desktop/dist/
+desktop/resources/

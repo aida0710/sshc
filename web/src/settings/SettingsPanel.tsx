@@ -23,6 +23,35 @@ export function SettingsPanel({ api = integrationsApi }: SettingsPanelProps) {
   const [masterBusy, setMasterBusy] = useState(false);
   const [masterError, setMasterError] = useState("");
   const [changed, setChanged] = useState("");
+  const [keepRunning, setKeepRunning] = useState(false);
+  const [desktopBusy, setDesktopBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void api.desktopSettings()
+      .then((settings) => {
+        if (active) setKeepRunning(settings.keepRunning === true);
+      })
+      .catch(() => {
+        // 読めなければ止める側に倒す。**動かし続けるのは明示的な選択である。**
+        if (active) setKeepRunning(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api]);
+
+  async function updateKeepRunning(next: boolean) {
+    setDesktopBusy(true);
+    try {
+      await api.setDesktopSettings(next);
+      setKeepRunning(next);
+    } catch {
+      setLoginError(t("desktop.saveFailed"));
+    } finally {
+      setDesktopBusy(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -105,6 +134,17 @@ export function SettingsPanel({ api = integrationsApi }: SettingsPanelProps) {
           />
         </section>
       ) : null}
+
+      <section aria-label={t("desktop.heading")} className={sectionCard}>
+        <h3 className={sectionHeading}>{t("desktop.heading")}</h3>
+        <p className={hintText}>{t("desktop.note")}</p>
+        <CheckboxField
+          label={t("desktop.keepRunning")}
+          checked={keepRunning}
+          disabled={desktopBusy}
+          onChange={(next) => void updateKeepRunning(next)}
+        />
+      </section>
 
       <section aria-label={t("secrets.changeHeading")} className={sectionCard}>
         <h3 className={sectionHeading}>{t("secrets.changeHeading")}</h3>
