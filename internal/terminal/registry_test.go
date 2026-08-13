@@ -552,3 +552,65 @@ func TestRenameRefusesNamesTheListCannotShow(t *testing.T) {
 		t.Errorf("Rename of an unknown session = %v, want ErrNotFound", err)
 	}
 }
+
+// Spec.Open は、レジストリが PTY を知らないまま別のものを持てる継ぎ目である。
+//
+// プロセス内で話す SSH がここを通る。向こうにプロセスが無いので確保する PTY も
+// 無く、Starter を通す理由がひとつも無い。この検査が Start を nil にしているのは、
+// その経路が本当に Starter を必要としないことを言うためである。
+func TestRegistryUsesTheSpecOwnOpenerWhenItHasOne(t *testing.T) {
+	registry := &terminal.Registry{Limits: terminal.DefaultLimits}
+	process := newFakeProcess()
+
+	var asked terminal.Size
+	session, err := registry.Open(terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "bastion", Title: "bastion",
+		Size: terminal.Size{Cols: 120, Rows: 40},
+		Open: func(size terminal.Size) (terminal.Process, error) {
+			asked = size
+			return process, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open() = %v", err)
+	}
+	if asked != (terminal.Size{Cols: 120, Rows: 40}) {
+		t.Errorf("the opener was asked for %+v", asked)
+	}
+	if !session.Live() {
+		t.Error("the session is not live")
+	}
+	if err := registry.Close(session.ID()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// 開けなかったときの扱いは Starter と同じでなければならない。片方だけが
+// セッションを残すと、一覧に何も起きていない行が並ぶ。
+func TestAFailedOpenerCreatesNoSessionAndRunsTheCleanup(t *testing.T) {
+	registry := &terminal.Registry{Limits: terminal.DefaultLimits}
+
+	cleaned := false
+	_, err := registry.Open(terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "bastion",
+		Open:    func(terminal.Size) (terminal.Process, error) { return nil, errors.New("no route to host") },
+		Cleanup: func() { cleaned = true },
+	})
+	if err == nil {
+		t.Fatal("Open() accepted an opener that failed")
+	}
+	if len(registry.Sessions()) != 0 {
+		t.Fatalf("a failed opener left %d session(s)", len(registry.Sessions()))
+	}
+	if !cleaned {
+		t.Fatal("a failed opener did not run the cleanup")
+	}
+}
+
+// 手段がひとつも無いレジストリは、開いたふりをしない。
+func TestARegistryWithNeitherAStarterNorAnOpenerRefuses(t *testing.T) {
+	registry := &terminal.Registry{Limits: terminal.DefaultLimits}
+	if _, err := registry.Open(terminal.Spec{Kind: terminal.KindShell}); !errors.Is(err, terminal.ErrNoStarter) {
+		t.Fatalf("Open() = %v, want ErrNoStarter", err)
+	}
+}

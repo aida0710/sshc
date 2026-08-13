@@ -16,6 +16,13 @@ type Spec struct {
 	Title   string
 	Command Command
 	Size    Size
+	// Open は、このセッションの Process を呼び出し側が自分で作る継ぎ目である。
+	//
+	// 設定されていれば Starter は使われない。プロセス内で話す SSH がここを通る
+	// ——向こうにプロセスが無いので、確保する PTY も無い。このパッケージが
+	// SSH を知らないままでいられるのは、知る必要のあるものが全部この関数の
+	// 内側にあるからである。
+	Open func(Size) (Process, error)
 	// Cleanup は子プロセスが終わったあとに一度だけ呼ばれる。凍結した ssh 設定の
 	// ような、その接続のためだけに作られたものを片付けるためにある。
 	Cleanup func()
@@ -72,7 +79,7 @@ func (r *Registry) Open(spec Spec) (*Session, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	if r.Start == nil {
+	if r.Start == nil && spec.Open == nil {
 		return nil, ErrNoStarter
 	}
 	live := 0
@@ -93,7 +100,11 @@ func (r *Registry) Open(spec Spec) (*Session, error) {
 	if !size.Valid() {
 		size = Size{Cols: 80, Rows: 24}
 	}
-	process, err := r.Start.Start(spec.Command, size)
+	start := func() (Process, error) { return r.Start.Start(spec.Command, size) }
+	if spec.Open != nil {
+		start = func() (Process, error) { return spec.Open(size) }
+	}
+	process, err := start()
 	if err != nil {
 		if spec.Cleanup != nil {
 			spec.Cleanup()
