@@ -1,4 +1,4 @@
-import { expect, openApplication, openSection, test } from "./support/environment";
+import { expect, openApplication, test } from "./support/environment";
 
 // 埋め込みターミナルの end-to-end。
 //
@@ -35,16 +35,13 @@ async function typeIntoConsole(page: import("@playwright/test").Page, line: stri
   return screen;
 }
 
+// 一覧は一番左のナビゲーションにある。セクションに属さないので、どの画面から
+// でも同じ場所にあり、開いてある一本を選べばそこへ連れて行かれる。
 async function openConsolePanel(page: import("@playwright/test").Page) {
-  await openSection(page, "Connections");
-  // トグルは接続を開いていなくても出る。コンソールの面には常に開くべきものが
-  // あるからだ。すでに開いていれば押さない——押せば閉じてしまう。
-  const toggle = page.getByRole("button", { name: /^Show |^Hide / });
-  await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
-  const panel = page.getByRole("complementary");
-  await expect(panel.getByRole("button", { name: "Local shell" })).toBeVisible();
-  return panel;
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await nav.getByRole("tab", { name: "Terminals" }).click();
+  await expect(nav.getByRole("button", { name: "Local shell" })).toBeVisible();
+  return nav;
 }
 
 test("opens a local shell, runs a command and shows its output", async ({ page, installation }) => {
@@ -79,10 +76,12 @@ test("keeps the session and replays its scrollback after a reload", async ({ pag
   // 生きており、繋ぎ直すとスクロールバックが先に再生される。
   await page.reload();
   await expect(page.getByRole("heading", { name: "sshc" })).toBeVisible();
+  // 行の名前はログインシェルの basename なので、環境によって違う。開いている
+  // のは一本だけなので、名前ではなく一覧の先頭を選ぶ。
   const reopened = await openConsolePanel(page);
-  const row = reopened.getByRole("button", { name: /^zsh|^bash|^sh / }).first();
+  const row = reopened.getByRole("list", { name: "Open consoles" }).getByRole("listitem").first();
   await expect(row).toBeVisible();
-  await row.click();
+  await row.getByRole("button").first().click();
 
   await expect(page.getByRole("region", { name: /^Console for / }))
     .toContainText("survives-a-reload", { timeout: 20_000 });
@@ -100,9 +99,14 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   const panel = await openConsolePanel(page);
   const openShell = panel.getByRole("button", { name: "Local shell" });
 
+  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
   await openShell.click();
   await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(rows).toHaveCount(1);
   await openShell.click();
+  // 二本目が一覧に載ってから数える。載る前に上限を問うと、まだ一本しか
+  // 無い状態を見て「上限に達していない」と答えてしまう。
+  await expect(rows).toHaveCount(2);
 
   // 二本開いた時点で入口は閉じ、その理由が書かれる。
   await expect(openShell).toBeDisabled();

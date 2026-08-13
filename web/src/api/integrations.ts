@@ -61,6 +61,9 @@ export type IntegrationsApi = {
   terminalSessions(): Promise<TerminalSessionList>;
   openTerminalSession(request: OpenTerminalSessionRequest): Promise<OpenTerminalSessionResponse>;
   terminalStreamTicket(id: string): Promise<TerminalStreamTicket>;
+  // 改名は一覧の表示だけを変える。走っているプロセスにも ssh の相手にも
+  // 触れず、metadata へも書かない。セッションと一緒に消える。
+  renameTerminalSession(id: string, title: string): Promise<TerminalSessionList>;
   closeTerminalSession(id: string): Promise<TerminalSessionList>;
   knownHosts(query: string): Promise<KnownHostsResponse>;
   deleteKnownHosts(entries: { line: number; digest: string }[], path: string): Promise<KnownHostsChangeResponse>;
@@ -514,6 +517,15 @@ export const integrationsApi: IntegrationsApi = {
   async terminalStreamTicket(id) {
     return validateStreamTicket(
       await postJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/stream`, {}),
+    );
+  },
+  async renameTerminalSession(id, title) {
+    return validateTerminalSessionList(
+      await apiClient.mutate<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { ...jsonHeaders },
+        body: JSON.stringify({ title }),
+      }),
     );
   },
   async closeTerminalSession(id) {

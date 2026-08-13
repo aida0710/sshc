@@ -59,7 +59,8 @@ describe("the catalogue", () => {
         "shell.languageEnglish",
         "shell.languageJapanese",
         "shell.title",
-        "terminal.kindSsh",
+        "terminal.localhost",
+        "terminal.rowDetail",
       ].sort(),
     );
   });

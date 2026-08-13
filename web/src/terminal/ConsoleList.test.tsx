@@ -24,6 +24,9 @@ function renderList(overrides: Partial<Parameters<typeof ConsoleList>[0]> = {}) 
     problem: "",
     onSelect: vi.fn(),
     onClose: vi.fn(),
+    onRename: vi.fn(async () => true),
+    onDuplicate: vi.fn(),
+    onReorder: vi.fn(),
     onOpenShell: vi.fn(),
     ...overrides,
   };
@@ -32,25 +35,86 @@ function renderList(overrides: Partial<Parameters<typeof ConsoleList>[0]> = {}) 
 }
 
 describe("ConsoleList", () => {
-  // 終了したセッションは一覧に残る。最後の出力を読めるようにするためであり、
-  // それが「接続できなかった理由」を読む唯一の場所になる。
-  it("keeps exited sessions in the list and says so in words", () => {
+  // 終了したセッションは一覧に残り、位置も動かない。最後の出力を読めるように
+  // するためであり、それが「接続できなかった理由」を読む唯一の場所になる。
+  //
+  // 状態でグループ分けはしない。2 行目が「状態 · 行き先」を語で言うので、
+  // 見出しで囲う必要がない——点の色は目のためのもので、語はそれ以外の
+  // すべての人のためのものだ。
+  it("keeps every session in one flat list and says the state in words", () => {
     renderList();
 
-    expect(screen.getByRole("button", { name: /^bastion/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^db-primary/ })).toBeInTheDocument();
-    // 状態は点の色だけでなく語でも言う。色は目のためのもので、語は
-    // それ以外のすべての人のためのものだ。
-    expect(screen.getByRole("button", { name: /^db-primary/ })).toHaveTextContent("exited");
-    expect(screen.getByRole("button", { name: /^bastion/ })).toHaveTextContent("ssh");
-    expect(screen.getByRole("button", { name: /^zsh/ })).toHaveTextContent("shell");
+    const rows = screen.getAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent("connected · bastion");
+    // ローカルシェルの行き先は localhost である。種類を別に書かないのは、
+    // 行き先がそれを言っているからだ。
+    expect(rows[1]).toHaveTextContent("connected · localhost");
+    expect(rows[2]).toHaveTextContent("exited 255 · db-primary");
+  });
+
+  // 同じ相手へ複数本開くと 2 行とも同じになる。だから改名がある。
+  it("renames a session in place and leaves its destination alone", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const field = screen.getByRole("textbox", { name: "New name for bastion" });
+    await user.clear(field);
+    await user.type(field, "prod bastion{Enter}");
+
+    expect(props.onRename).toHaveBeenCalledWith("a", "prod bastion");
+  });
+
+  it("keeps the old name when a rename is abandoned", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    await user.type(screen.getByRole("textbox", { name: "New name for bastion" }), "x{Escape}");
+
+    expect(props.onRename).not.toHaveBeenCalled();
+  });
+
+  it("opens another console to the same place", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
+    await user.click(screen.getByRole("menuitem", { name: "Open another to the same place" }));
+
+    expect(props.onDuplicate).toHaveBeenCalledWith("a");
+  });
+
+  // 並べ替えはドラッグでも行えるが、メニューにも置く。既存の drag and drop は
+  // 矢印キーの経路を持たないので、ドラッグ専用にすると同じ穴を新設することになる。
+  it("reorders from the menu so a keyboard can do it too", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    await user.click(screen.getByRole("button", { name: "Actions for zsh" }));
+    await user.click(screen.getByRole("menuitem", { name: "Move up" }));
+
+    expect(props.onReorder).toHaveBeenCalledWith(["b", "a", "c"]);
+  });
+
+  it("offers no move past either end", async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
+
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Move down" })).toBeEnabled();
   });
 
   it("reports selection and closing separately", async () => {
     const user = userEvent.setup();
     const props = renderList();
 
-    await user.click(screen.getByRole("button", { name: /^bastion/ }));
+    await user.click(screen.getByRole("button", { name: "bastion" }));
     expect(props.onSelect).toHaveBeenCalledWith("a");
 
     await user.click(screen.getByRole("button", { name: "Close bastion" }));
@@ -82,6 +146,15 @@ describe("ConsoleList", () => {
     renderList({ sessions: [live, dead], maxSessions: 2 });
 
     expect(screen.getByRole("button", { name: "Local shell" })).toBeEnabled();
+  });
+
+  // 上限をまだ知らないうちは、上限に達したことにしない。最初の一覧が届く前は
+  // maxSessions が 0 であり、そのまま比べると入口が最初から無効になる。
+  it("does not call itself full before the limit is known", () => {
+    renderList({ sessions: [], maxSessions: 0 });
+
+    expect(screen.getByRole("button", { name: "Local shell" })).toBeEnabled();
+    expect(screen.queryByText(/limit of/)).not.toBeInTheDocument();
   });
 
   it("shows nothing to open and no list when there is no session", () => {

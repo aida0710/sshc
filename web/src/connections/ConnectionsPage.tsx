@@ -29,8 +29,7 @@ import { HostInspector, hostNeedsAttention } from "./HostInspector";
 import { Button, Notice } from "../ui/surface";
 import { duplicateHostBlock, removeHostBlock } from "./blocks";
 import { integrationsApi } from "../api/integrations";
-import { ConsoleList } from "../terminal/ConsoleList";
-import { useTerminalSessions } from "../terminal/sessions";
+import type { TerminalSessionsState } from "../terminal/sessions";
 import { Icon } from "../ui/icons";
 import type {
   BrowserLocation,
@@ -46,11 +45,7 @@ import {
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import { keysApi } from "../keys/api";
 import { ConnectionSummary } from "./ConnectionSummary";
-import {
-  loadConnectionSavedState,
-  summarizeConnection,
-  type ConnectionSavedState,
-} from "./connectionSavedState";
+import { loadConnectionSavedState, type ConnectionSavedState } from "./connectionSavedState";
 import { ManageConnection } from "./ManageConnection";
 
 // xterm.js は 400 kB を超える。それを接続画面の chunk に入れると、一覧を開く
@@ -110,10 +105,11 @@ type ConnectionsPageProps = {
   onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
-  // Home で開かれたセッションは、この画面へ来てから選択される。開いた場所と
-  // 見る場所が違うので、その受け渡しだけをシェルが仲介する。
-  pendingConsole?: string | null;
-  onPendingConsoleHandled?: () => void;
+  // 開いているセッションはシェルが持つ。一覧は一番左のナビゲーションにあり、
+  // この画面はそのうち選ばれた一本を描くだけである。
+  consoles: TerminalSessionsState;
+  activeConsole: string | null;
+  onShowConsole: (id: string) => void;
 };
 
 type SaveAttempt =
@@ -131,8 +127,9 @@ export function ConnectionsPage({
   onNavigationBlockerChange,
   preferredKey = null,
   onPreferredKeyApplied,
-  pendingConsole = null,
-  onPendingConsoleHandled,
+  consoles,
+  activeConsole,
+  onShowConsole,
 }: ConnectionsPageProps) {
   const t = useTranslate();
   const initialRoute = parseConnectionLocation(location);
@@ -162,11 +159,6 @@ export function ConnectionsPage({
   const [launching, setLaunching] = useState(false);
   const [managing, setManaging] = useState(false);
   const [missingSelection, setMissingSelection] = useState(false);
-  // 開いているコンソール。URL には載せない——他人のマシンで開いても、その
-  // セッションは存在しないからだ。リロード後も一覧には残る。そちらはサーバー
-  // 側の状態なので URL とは関係がない。
-  const [activeConsole, setActiveConsole] = useState<string | null>(null);
-  const consoles = useTerminalSessions(integrationsApi, t);
 
   useEffect(() => {
     selectionRef.current = selection;
@@ -364,83 +356,24 @@ export function ConnectionsPage({
   }, [editorDirty]);
 
   // Home で開かれたセッションは、この画面へ来た時点で選択される。
-  useEffect(() => {
-    if (pendingConsole === null) return;
-    setActiveConsole(pendingConsole);
-    void consoles.refresh();
-    onPendingConsoleHandled?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingConsole]);
 
-  // 閉じられたセッションが主画面に残らないようにする。
-  useEffect(() => {
-    if (activeConsole === null) return;
-    if (!consoles.sessions.some((session) => session.id === activeConsole)) setActiveConsole(null);
-  }, [consoles.sessions, activeConsole]);
 
-  // ペインは開いている connection に追従し、開くまでは空である——背後
-  // に何も無いトグルは、トグルが無いことより悪い。
-  //
-  // body はすべての overview とすべての detail のたびに再構築される。
-  // onMetadata が他のホストのエントリを保つために overview をクロージャ
-  // に取り込んでいるためだ。memo 化した body では古い metadata 文書を編集し続けてしまう。
-  // コンソールの一覧はどちらの状態でも同じものである。接続を開いていなくても
-  // ローカルシェルは開けるので、この面は常にある。
-  const consoleList = (
-    <ConsoleList
-      sessions={consoles.sessions}
-      selected={activeConsole}
-      maxSessions={consoles.maxSessions}
-      busy={consoles.busy}
-      problem={consoles.problem}
-      onSelect={setActiveConsole}
-      onClose={closeConsole}
-      onOpenShell={() => void openLocalShell()}
-    />
-  );
 
   useEffect(() => {
     if (detail === null || overview === null) {
-      // 接続を開いていなくても、コンソールの一覧には開くべきものがある。
-      // ここで null を返すと、ローカルシェルへ行く道がどこにも無くなる。
-      onInspector({
-        label: t("inspector.consoles"),
-        attention: false,
-        panes: [{ key: "consoles", label: t("inspector.consoles"), body: consoleList }],
-      });
+      // 開いている接続が無ければ、このペインに調べるものは無い。開いている
+      // コンソールの一覧は一番左のナビゲーションにあるので、ここが空でも
+      // ローカルシェルへ行く道は残っている。
+      onInspector(null);
       return;
     }
-    // 接続セクションの中身は、主画面の見出しと同じ二行である。別の要約を
-    // 書くのではなく、同じ関数から取る。
-    const summary = savedState === null ? null : summarizeConnection(savedState);
-    const header = (
-      <section aria-label={t("inspector.connectionSection")} className="rounded-lg border border-line bg-card p-2.5">
-        <p className="truncate text-sm font-semibold text-ink">
-          {summary?.alias ?? detail.form.entry.identity.alias}
-        </p>
-        {summary === null ? null : (
-          <p className="mt-0.5 truncate font-mono text-xs text-ink-muted">{summary.endpoint}</p>
-        )}
-      </section>
-    );
     onInspector({
       label: t("inspector.hostLabel"),
       attention: hostNeedsAttention(detail),
-      // 接続セクションは上に固定され、セグメントでは切り替わらない。いま開いて
-      // いるものが何かは、どちらの面を見ていても見えていなければならない。
-      header: header,
-      panes: [
-        { key: "consoles", label: t("inspector.consoles"), body: consoleList },
-        {
-          key: "settings",
-          label: t("inspector.settings"),
-          body: <HostInspector detail={detail} onMetadata={onMetadata} />,
-        },
-      ],
+      body: <HostInspector detail={detail} onMetadata={onMetadata} />,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail, overview, savedState, onInspector, consoles.sessions, consoles.maxSessions,
-      consoles.busy, consoles.problem, activeConsole]);
+  }, [detail, overview, onInspector]);
 
   // 依存配列にしているのは selection オブジェクトではなく二つの値その
   // ものである。保存すると、たった今書き込んだホストを再選択するからだ。
@@ -826,19 +759,8 @@ export function ConnectionsPage({
     setLaunching(true);
     setLocalError("");
     const opened = await consoles.open({ kind: "ssh", alias: selection.alias });
-    if (opened !== null) setActiveConsole(opened.id);
+    if (opened !== null) onShowConsole(opened.id);
     setLaunching(false);
-  }
-
-  async function openLocalShell() {
-    const opened = await consoles.open({ kind: "shell" });
-    if (opened !== null) setActiveConsole(opened.id);
-  }
-
-  function closeConsole(id: string) {
-    void consoles.close(id).then(() => {
-      if (activeConsole === id) setActiveConsole(null);
-    });
   }
 
   function duplicateHost() {

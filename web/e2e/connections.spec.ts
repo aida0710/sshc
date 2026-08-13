@@ -443,8 +443,6 @@ test("edits the display order it stores, and shows a favourite in the tree", asy
   // 隣ではなくインスペクタに置かれる。ペインは求められる
   // まで閉じている。
   await page.getByRole("button", { name: "Show Display and classification" }).click();
-  // ペインは 2 面になった。接続の表示設定は「設定」側にある。
-  await page.getByRole("complementary").getByRole("tab", { name: "Settings" }).click();
 
   // ファイルをポーリングするのではなく書き込みを待つ。
   // メタデータのドキュメントは最初の保存が作るまで存在しない。
