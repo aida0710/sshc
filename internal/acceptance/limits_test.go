@@ -38,7 +38,6 @@ func TestNoAPIRouteReadsAnUnboundedBody(t *testing.T) {
 		}
 		path := f.concretePath(route.Path)
 		t.Run(route.Method+" "+route.Path, func(t *testing.T) {
-			f.runner.reset()
 			f.terminal.reset()
 			before := f.read("config")
 
@@ -54,9 +53,6 @@ func TestNoAPIRouteReadsAnUnboundedBody(t *testing.T) {
 			}
 			if strings.Contains(body, strings.Repeat("a", 256)) {
 				t.Fatal("the refusal echoed the oversized body back")
-			}
-			if commands := f.runner.recorded(); len(commands) != 0 {
-				t.Fatalf("an oversized body still started %d command(s)", len(commands))
 			}
 			if launched := f.terminal.launched(); len(launched) != 0 {
 				t.Fatalf("an oversized body still opened a terminal for %#v", launched)

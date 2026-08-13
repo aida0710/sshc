@@ -8,17 +8,18 @@ import (
 	"sshc/internal/session"
 )
 
-// TestNoConnectionRouteStartsAnExternalProgram は、B3 の完成条件である。
+// TestNoConnectionRouteOpensAPseudoTerminal は、接続に関わる経路——設定の解決、
+// 実効値、到達性、認証、ホスト鍵の取得、公開鍵のリモート登録、対話ターミナル
+// ——のどれも PTY を確保しないことを見る。
 //
-// 接続に関わる経路——設定の解決、実効値、到達性、認証、ホスト鍵の取得、
-// 公開鍵のリモート登録、対話ターミナル——のどれも、外部プログラムを起こさない。
-// **ここが緑でなくなったら、OpenSSH のプログラムが戻ってきている。**
+// **プロセスの継ぎ目はもうこのハーネスに無い。** 外部プログラムを起こす場所を
+// 押さえるのは TestOnlyTheNamedSubsystemsStartAProgram であり、ここでそれを
+// 表明しても落ちようがない——落ちないテストは、守っているふりをするだけ悪い。
 //
-// この検査が置かれたのは askpass の一式を消す直前である。消せることの証明を
-// 先に置き、そのうえで消す。
-func TestNoConnectionRouteStartsAnExternalProgram(t *testing.T) {
+// PTY の継ぎ目は残っている。SSH はプロセス内で話すので、この一覧のどれも
+// そこへ届いてはならない。
+func TestNoConnectionRouteOpensAPseudoTerminal(t *testing.T) {
 	f := newFixture(t)
-	f.runner.reset()
 	f.scanner.reset()
 
 	// 確認を要する経路には正しい token を渡す。**拒否されたから起動しなかった、
@@ -63,12 +64,9 @@ func TestNoConnectionRouteStartsAnExternalProgram(t *testing.T) {
 	}
 
 	// 正のコントロール: 上のいくつかは実際に働かなければならない。全部が
-	// 拒否されていたら、「何も起動しなかった」は当たり前の話になる。
+	// 拒否されていたら、「何も開かなかった」は当たり前の話になる。
 	if reached < len(requests)-1 {
 		t.Fatalf("only %d of %d routes did anything; the claim below proves little", reached, len(requests))
-	}
-	if commands := f.runner.recorded(); len(commands) != 0 {
-		t.Fatalf("a connection route started %#v", commands)
 	}
 	if launched := f.terminal.launched(); len(launched) != 0 {
 		t.Fatalf("a connection route went through the PTY seam: %#v", launched)

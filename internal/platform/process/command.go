@@ -39,7 +39,6 @@ func (OutputRunner) RunOutput(ctx context.Context, command platform.Command) (pl
 	}
 
 	process := exec.CommandContext(runContext, command.Path, command.Arguments...)
-	process.Stdin = bytes.NewReader(command.Stdin)
 	if command.Env != nil {
 		process.Env = command.Env
 	}
@@ -47,8 +46,8 @@ func (OutputRunner) RunOutput(ctx context.Context, command platform.Command) (pl
 	// ブロックするかに上限を設ける。詰まった子がリクエストを開けたままにできない。
 	process.WaitDelay = 2 * time.Second
 
-	stdout := &boundedBuffer{limit: platform.MaxCapturedOutput, marker: command.StopAfter, stop: stop}
-	stderr := &boundedBuffer{limit: platform.MaxCapturedOutput, marker: command.StopAfter, stop: stop}
+	stdout := &boundedBuffer{limit: platform.MaxCapturedOutput}
+	stderr := &boundedBuffer{limit: platform.MaxCapturedOutput}
 	process.Stdout = stdout
 	process.Stderr = stderr
 
@@ -58,18 +57,12 @@ func (OutputRunner) RunOutput(ctx context.Context, command platform.Command) (pl
 		Stdout:    stdout.contents(),
 		Stderr:    stderr.contents(),
 		Truncated: stdout.overflowed() || stderr.overflowed(),
-		Stopped:   stdout.sawMarker() || stderr.sawMarker(),
 		Elapsed:   time.Since(started),
 	}
 
 	var exitError *exec.ExitError
 	switch {
 	case runErr == nil:
-		return output, nil
-	case output.Stopped:
-		// 呼び出し側がマーカーで止めるよう求めたので、非ゼロのステータスはこの
-		// アプリケーション自身のキャンセルを反映しているにすぎない。
-		output.ExitCode = -1
 		return output, nil
 	case errors.Is(ctx.Err(), context.Canceled):
 		output.ExitCode = -1
@@ -85,18 +78,14 @@ func (OutputRunner) RunOutput(ctx context.Context, command platform.Command) (pl
 	}
 }
 
-// boundedBuffer は最大 limit バイトを集め、marker が現れた時点でプロセスを止め
+// boundedBuffer は最大 limit バイトを集め、それ以上は捨て
 // られる。os/exec がコピー用の goroutine からここへ書くので、すべてのフィールドは
 // 保護されている。
 type boundedBuffer struct {
 	mutex     sync.Mutex
 	buffer    bytes.Buffer
-	tail      []byte
 	limit     int
-	marker    []byte
-	stop      context.CancelFunc
 	truncated bool
-	found     bool
 }
 
 func (b *boundedBuffer) Write(chunk []byte) (int, error) {
@@ -111,24 +100,7 @@ func (b *boundedBuffer) Write(chunk []byte) (int, error) {
 		b.buffer.Write(chunk)
 	}
 
-	if len(b.marker) > 0 && !b.found {
-		// 直前の marker-1 バイトを保持して、チャンクの境界をまたいで探索する。
-		window := append(append([]byte(nil), b.tail...), chunk...)
-		if bytes.Contains(window, b.marker) {
-			b.found = true
-		}
-		if len(window) >= len(b.marker) {
-			b.tail = append([]byte(nil), window[len(window)-len(b.marker)+1:]...)
-		} else {
-			b.tail = window
-		}
-	}
-	found := b.found
 	b.mutex.Unlock()
-
-	if found && b.stop != nil {
-		b.stop()
-	}
 	return len(chunk), nil
 }
 
@@ -142,10 +114,4 @@ func (b *boundedBuffer) overflowed() bool {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 	return b.truncated
-}
-
-func (b *boundedBuffer) sawMarker() bool {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-	return b.found
 }

@@ -133,7 +133,6 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 		t.Run(route.Method+" "+route.Path, func(t *testing.T) {
 			// まず positive control: 正しい token は operation に届かねば
 			// ならない。さもなければ以下の拒否は何も証明しない。
-			f.runner.reset()
 			controlTarget := route.Target(t)
 			valid := f.guardedToken(t, route, controlTarget)
 			accepted := f.sendGuarded(t, route, controlTarget, valid)
@@ -181,7 +180,6 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 					// 生きた subject が残っている。
 					target := route.Target(t)
 					presented := refusal.token(target)
-					f.runner.reset()
 					f.terminal.reset()
 					before := f.read("known_hosts")
 
@@ -191,9 +189,6 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 
 					if status < 400 || status >= 500 {
 						t.Fatalf("status = %d, want a 4xx refusal", status)
-					}
-					if commands := f.runner.recorded(); len(commands) != 0 {
-						t.Fatalf("the refused request still started %d command(s): %#v", len(commands), commands)
 					}
 					if launched := f.terminal.launched(); len(launched) != 0 {
 						t.Fatalf("the refused request still opened a terminal for %#v", launched)

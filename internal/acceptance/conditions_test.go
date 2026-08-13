@@ -244,7 +244,7 @@ func completionConditions() []completionCondition {
 				{proofGoTest, "TestResolveRefusesWhatItWillNotEvaluate"},
 				// connection gate。
 				{proofGoTest, "TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken"},
-				{proofGoTest, "TestNoRouteEverPutsAHostileValueOnACommandLine"},
+				{proofGoTest, "TestNoRouteEverLetsAHostileAliasReachAnExternalEffect"},
 				{proofGoTest, "TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard"},
 			},
 			Manual: []proof{{proofManual, "M1. 実リモートホストへの接続テスト"}},

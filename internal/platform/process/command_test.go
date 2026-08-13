@@ -29,7 +29,7 @@ func TestRunOutputCapturesStdoutAndExitStatus(t *testing.T) {
 	if got := string(output.Stdout); got != "one two three\n" {
 		t.Errorf("stdout = %q", got)
 	}
-	if output.ExitCode != 0 || output.Truncated || output.Stopped {
+	if output.ExitCode != 0 || output.Truncated {
 		t.Errorf("output = %#v", output)
 	}
 
@@ -39,19 +39,6 @@ func TestRunOutputCapturesStdoutAndExitStatus(t *testing.T) {
 	}
 	if failure.ExitCode != 1 {
 		t.Errorf("exit code = %d, want 1", failure.ExitCode)
-	}
-}
-
-func TestRunOutputFeedsFixedStandardInput(t *testing.T) {
-	output, err := process.NewOutputRunner().RunOutput(context.Background(), platform.Command{
-		Path:  "/bin/cat",
-		Stdin: []byte("payload without a shell\n"),
-	})
-	if err != nil {
-		t.Fatalf("RunOutput = %v", err)
-	}
-	if got := string(output.Stdout); got != "payload without a shell\n" {
-		t.Errorf("stdout = %q", got)
 	}
 }
 
@@ -79,28 +66,6 @@ func TestRunOutputStopsAtTheTimeoutAndTruncatesOutput(t *testing.T) {
 	}
 	if len(flood.Stdout) > platform.MaxCapturedOutput {
 		t.Errorf("captured %d bytes, want at most %d", len(flood.Stdout), platform.MaxCapturedOutput)
-	}
-}
-
-func TestRunOutputStopsAsSoonAsTheMarkerAppears(t *testing.T) {
-	started := time.Now()
-	output, err := process.NewOutputRunner().RunOutput(context.Background(), platform.Command{
-		Path:      "/usr/bin/yes",
-		Arguments: []string{"authenticated-marker"},
-		Timeout:   10 * time.Second,
-		StopAfter: []byte("authenticated-marker"),
-	})
-	if err != nil {
-		t.Fatalf("RunOutput = %v", err)
-	}
-	if !output.Stopped {
-		t.Fatalf("output = %#v, want Stopped", output)
-	}
-	if !bytes.Contains(output.Stdout, []byte("authenticated-marker")) {
-		t.Error("captured output does not contain the marker")
-	}
-	if elapsed := time.Since(started); elapsed > 5*time.Second {
-		t.Errorf("marker did not stop the process early: %s", elapsed)
 	}
 }
 

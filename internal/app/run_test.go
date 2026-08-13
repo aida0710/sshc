@@ -207,7 +207,6 @@ func TestRunExposesTheKeyVaultAndItsTrashThroughTheWiredProcess(t *testing.T) {
 		UI:        fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:      home,
-		Runner:    stubRunner{},
 		Toolchain: stubToolchain{},
 		KeyAgent:  stubKeyAgent{},
 	}
