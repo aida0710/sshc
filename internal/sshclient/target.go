@@ -43,18 +43,23 @@ type Notice struct {
 //
 // **ここに無いものは黙って無視される。** OpenSSH の全キーワードを列挙するのでは
 // なく、「利用者が書いたのに効かない」と気づける必要があるものだけを挙げる。
-// 最終的に何を落とすかを決めるのは B4 であり、この表は「まだ無い」と言うためのもの
-// である。
+//
+// **「まだ無い」と「無い」を区別して書く。** 永久に無いものを、来週来るかの
+// ように言わない。落とすと決めた理由はそれぞれの文言に入れてある。
 var unhonoured = map[string]string{
+	// まだ無い。開いたポートを見せて閉じる画面と一緒に来る。
 	"localforward":   "port forwarding is not implemented yet",
-	"remoteforward":  "port forwarding is not implemented yet",
 	"dynamicforward": "port forwarding is not implemented yet",
 	"forwardagent":   "agent forwarding is not implemented yet",
-	"forwardx11":     "X11 forwarding is not implemented yet",
-	"controlmaster":  "connection sharing has no meaning inside this process",
-	"controlpath":    "connection sharing has no meaning inside this process",
-	"localcommand":   "this client starts no local program",
-	"sendenv":        "the value would come from this application's environment, not from your shell",
+
+	// 無い。
+	"remoteforward":   "sshc does not ask the remote to listen; that inverts the direction of trust and depends on the server's AllowTcpForwarding",
+	"forwardx11":      "sshc has no X server behind it; a browser terminal cannot show an X window",
+	"controlmaster":   "connection sharing has no meaning inside this process; sshc reuses the connection it already holds",
+	"controlpath":     "connection sharing has no meaning inside this process; sshc reuses the connection it already holds",
+	"localcommand":    "sshc starts no program to connect",
+	"certificatefile": "sshc does not read host or user certificates; an organisation that hands out certificates hands out ssh with them",
+	"sendenv":         "the value would come from this application's environment, not from your shell, so sshc sends nothing rather than the wrong thing",
 }
 
 // EnvVar は、チャンネルへ送る環境変数ひとつである。

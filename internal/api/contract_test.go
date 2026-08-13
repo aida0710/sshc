@@ -137,9 +137,8 @@ func TestGeneratedKeyVaultModels(t *testing.T) {
 	}
 
 	algorithms := KeyAlgorithmsResponse{
-		Variants:   []KeyVariant{{Algorithm: "ed25519-sk", Bits: 0, Label: "Ed25519 security key", InProcess: false, Reason: "hardware_token_required"}},
-		Source:     "ssh -Q key",
-		Diagnostic: "",
+		Variants: []KeyVariant{{Algorithm: "ed25519-sk", Bits: 0, Label: "Ed25519 security key", InProcess: false, Reason: "hardware_token_required"}},
+		Source:   "ssh -Q key",
 	}
 	generate := GenerateKeyResponse{
 		Id: item.Id, RelativePath: "id_work", PublicRelativePath: "id_work.pub",

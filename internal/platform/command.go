@@ -87,11 +87,14 @@ type OutputRunner interface {
 
 // Toolchain は、このマシンにインストールされた OpenSSH のプログラムを見つける。
 //
+// **残っているのは ssh-keygen だけである。** 接続も、agent への登録も、
+// アルゴリズムの一覧も、このプロセスの中で行う。ssh-keygen が残るのは、
+// ハードウェアトークンとのやり取り（PIN、タッチ、libfido2）が x/crypto に
+// 無いからである。
+//
 // このアプリケーションが実行してよいプログラムはすべてここに名前があるので、
 // 呼び出し側が自前でプログラムパスを組み立てることは決してできない。必要なものを
 // 要求し、絶対パスかエラーを受け取る。
 type Toolchain interface {
-	SSH() (string, error)
 	KeyGen() (string, error)
-	KeyAdd() (string, error)
 }

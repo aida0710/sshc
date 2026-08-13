@@ -36,9 +36,7 @@ func (runner *stubRunner) RunOutput(_ context.Context, command platform.Command)
 
 type stubToolchain struct{}
 
-func (stubToolchain) SSH() (string, error)    { return "/usr/bin/ssh", nil }
 func (stubToolchain) KeyGen() (string, error) { return "/usr/bin/ssh-keygen", nil }
-func (stubToolchain) KeyAdd() (string, error) { return "/usr/bin/ssh-add", nil }
 
 type dialerStub func(ctx context.Context, network, address string) (net.Conn, error)
 

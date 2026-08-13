@@ -147,9 +147,8 @@ func (h KeyHandlers) List(c *echo.Context) error {
 func (h KeyHandlers) Algorithms(c *echo.Context) error {
 	catalogue := h.Keys.Algorithms(c.Request().Context())
 	response := api.KeyAlgorithmsResponse{
-		Variants:   make([]api.KeyVariant, 0, len(catalogue.Variants)),
-		Source:     catalogue.Source,
-		Diagnostic: catalogue.Diagnostic,
+		Variants: make([]api.KeyVariant, 0, len(catalogue.Variants)),
+		Source:   catalogue.Source,
 	}
 	for _, variant := range catalogue.Variants {
 		response.Variants = append(response.Variants, api.KeyVariant{

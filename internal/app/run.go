@@ -108,13 +108,10 @@ func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, co
 		Workspace:    workspace,
 		Transactions: transactions,
 		Resolver:     storage.NewResolver(workspace),
-		Catalogue: keys.CatalogueReader{
-			Runner:    dependencies.Runner,
-			Toolchain: dependencies.Toolchain,
-		},
-		Agent:  dependencies.KeyAgent,
-		Now:    time.Now,
-		Random: dependencies.Random,
+		Catalogue:    keys.CatalogueReader{Toolchain: dependencies.Toolchain},
+		Agent:        dependencies.KeyAgent,
+		Now:          time.Now,
+		Random:       dependencies.Random,
 		// グループとは何かは設定エンジンの領分であり、その宣言は ~/.ssh/config から
 		// 読まれる。鍵 vault は自分で決めずに尋ねる。そのため鍵は、存在するグループへ
 		// しか生成できない。

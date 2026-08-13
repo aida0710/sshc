@@ -2,6 +2,7 @@ package sshclient_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -238,5 +239,63 @@ func TestNumericValuesBecomeDurations(t *testing.T) {
 	// 読めない値は既定へ戻す。設定の数字ひとつで接続できなくなる理由はない。
 	if target.Timeout != 0 {
 		t.Errorf("timeout = %v", target.Timeout)
+	}
+}
+
+// **「まだ無い」と「無い」を区別して書く。** 永久に無いものを、来週来るかの
+// ように言わない。B4 で落とすと決めたキーワードは、その理由を添えて notice を
+// 出し続ける——黙って無視すると、書いた設定が効いていないことに気づけない。
+func TestDroppedKeywordsSayWhyRatherThanPromisingThemLater(t *testing.T) {
+	entries := map[string][]string{"hostname": {"10.0.0.9"}}
+	dropped := []string{
+		"remoteforward", "forwardx11", "controlmaster", "controlpath",
+		"localcommand", "certificatefile", "sendenv",
+	}
+	for _, keyword := range dropped {
+		entries[keyword] = []string{"something the user wrote"}
+	}
+	resolve := resolverFor(map[string]map[string][]string{"work": entries})
+
+	_, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]string{}
+	for _, notice := range notices {
+		seen[notice.Keyword] = notice.Detail
+	}
+	for _, keyword := range dropped {
+		detail, found := seen[keyword]
+		if !found {
+			t.Errorf("%s was dropped silently", keyword)
+			continue
+		}
+		if strings.Contains(detail, "not implemented yet") {
+			t.Errorf("%s says it is coming later, but it was dropped: %q", keyword, detail)
+		}
+	}
+}
+
+// まだ無いものは、そう言ってよい。
+func TestKeywordsStillToComeSaySo(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"work": {
+			"hostname":       {"10.0.0.9"},
+			"localforward":   {"8080 127.0.0.1:80"},
+			"dynamicforward": {"1080"},
+			"forwardagent":   {"yes"},
+		},
+	})
+	_, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notices) != 3 {
+		t.Fatalf("notices = %#v", notices)
+	}
+	for _, notice := range notices {
+		if !strings.Contains(notice.Detail, "not implemented yet") {
+			t.Errorf("%s = %q, want it to say it is still to come", notice.Keyword, notice.Detail)
+		}
 	}
 }

@@ -1398,11 +1398,12 @@ components:
     KeyAlgorithmsResponse:
       type: object
       additionalProperties: false
-      required: [variants, source, diagnostic]
+      # diagnostic は無い。尋ねる相手がいなくなったので、尋ねられなかったと
+      # 報告することも無い。
+      required: [variants, source]
       properties:
         variants: { type: array, items: { $ref: "#/components/schemas/KeyVariant" } }
         source: { type: string }
-        diagnostic: { type: string }
     GenerateKeyRequest:
       type: object
       additionalProperties: false

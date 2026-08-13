@@ -113,9 +113,7 @@ func (r *recordingRunner) answer(reply func(platform.Command) (platform.Output, 
 // なぜなら、それに添えられたランナーが一切プロセスを起動しないからである。
 type fixedToolchain struct{}
 
-func (fixedToolchain) SSH() (string, error)    { return "/usr/bin/ssh", nil }
 func (fixedToolchain) KeyGen() (string, error) { return "/usr/bin/ssh-keygen", nil }
-func (fixedToolchain) KeyAdd() (string, error) { return "/usr/bin/ssh-add", nil }
 
 // recordingTerminal は、埋め込みターミナルが確保するはずの擬似端末をすべて
 // 記録し、1 つも確保しない。このスイートのどのテストも本物の PTY を開かず、

@@ -639,9 +639,8 @@ type JumpStage struct {
 
 // KeyAlgorithmsResponse defines model for KeyAlgorithmsResponse.
 type KeyAlgorithmsResponse struct {
-	Diagnostic string       `json:"diagnostic"`
-	Source     string       `json:"source"`
-	Variants   []KeyVariant `json:"variants"`
+	Source   string       `json:"source"`
+	Variants []KeyVariant `json:"variants"`
 }
 
 // KeyCertificate defines model for KeyCertificate.
