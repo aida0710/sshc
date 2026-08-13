@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import type { TerminalSession } from "../api/integrations";
-import { useTranslate } from "../i18n/context";
+import type { TerminalForward, TerminalSession } from "../api/integrations";
+import { useTranslate, type Translate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 
 type ConsoleListProps = {
@@ -31,6 +31,21 @@ const dragMimeType = "application/x-sshc-console";
 // ローカルシェルの入口はここだけである。localhost はローカルシェルであって ssh
 // 接続ではないので、Home の接続一覧には出さない。あの一覧は ~/.ssh/config の
 // 投影であり、localhost はそこに存在しない。
+// describeForward は、開いている転送ひとつを 1 行にする。
+//
+// 短く書くのは、これが一覧の行の下にぶら下がるからである。詳しい形は
+// 端末の一行目に出ている。
+function describeForward(t: Translate, forward: TerminalForward): string {
+  switch (forward.kind) {
+    case "agent":
+      return t("terminal.forwardAgent");
+    case "dynamic":
+      return t("terminal.forwardDynamic", { listen: forward.listen });
+    default:
+      return t("terminal.forwardLocal", { listen: forward.listen, to: forward.to });
+  }
+}
+
 export function ConsoleList({
   sessions,
   selected,
@@ -194,6 +209,19 @@ export function ConsoleList({
                     <p className="truncate text-xs text-ink-faint">
                       {t("terminal.rowDetail", { status, destination })}
                     </p>
+                    {/*
+                      転送はこのマシンにポートを開く。**開いていることが
+                      見えないまま開かない。** 開けなかったものは、開いた
+                      ものと同じ場所で理由まで言う。
+                    */}
+                    {(session.forwards ?? []).map((forward) => (
+                      <p
+                        key={`${forward.kind}:${forward.listen}:${forward.to}`}
+                        className={`truncate text-xs ${forward.problem === "" ? "text-ink-faint" : "text-notice-ink"}`}
+                      >
+                        {forward.problem === "" ? describeForward(t, forward) : forward.problem}
+                      </p>
+                    ))}
                   </div>
                   <button
                     type="button"

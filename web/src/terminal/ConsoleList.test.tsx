@@ -170,4 +170,36 @@ describe("ConsoleList", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("No more consoles can be opened");
   });
+  // 転送はこのマシンにポートを開く。**開いていることが見えないまま開かない。**
+  it("shows the forwards a console has open", () => {
+    renderList({
+      sessions: [{
+        ...live,
+        forwards: [
+          { kind: "local", listen: "127.0.0.1:8080", to: "10.0.0.5:80", problem: "" },
+          { kind: "dynamic", listen: "127.0.0.1:1080", to: "", problem: "" },
+          { kind: "agent", listen: "", to: "", problem: "" },
+        ],
+      }],
+    });
+
+    expect(screen.getByText("forwarding 127.0.0.1:8080 → 10.0.0.5:80")).toBeVisible();
+    expect(screen.getByText("SOCKS5 proxy on 127.0.0.1:1080")).toBeVisible();
+    expect(screen.getByText("lending this agent to the remote")).toBeVisible();
+  });
+
+  // 開けなかったものは、開いたものと同じ場所で理由まで言う。
+  it("says why a forward could not be opened", () => {
+    renderList({
+      sessions: [{
+        ...live,
+        forwards: [
+          { kind: "local", listen: "127.0.0.1:8080", to: "10.0.0.5:80", problem: "address already in use" },
+        ],
+      }],
+    });
+
+    expect(screen.getByText("address already in use")).toBeVisible();
+    expect(screen.queryByText(/forwarding 127/)).toBeNull();
+  });
 });

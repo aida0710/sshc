@@ -63,6 +63,8 @@ type View struct {
 	Title   string
 	Started time.Time
 	Exited  *ExitInfo
+	// Forwards は、このセッションが開いている転送である。
+	Forwards []Forward
 }
 
 func (s *Session) ID() string    { return s.id }
@@ -122,6 +124,11 @@ func (s *Session) View() View {
 	if s.exited != nil {
 		info := *s.exited
 		view.Exited = &info
+	}
+	// **開いていることが見えないまま開かない。** 転送を報告できる Process だけが
+	// 答える——ローカルシェルは何も転送しない。
+	if forwarder, ok := s.process.(Forwarder); ok {
+		view.Forwards = forwarder.Forwards()
 	}
 	return view
 }

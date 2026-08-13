@@ -1747,6 +1747,15 @@ components:
         acknowledged: { type: boolean }
     # 開いている端末セッションひとつ。スクロールバックは決してここに現れない。
     # 中身が出ていくのは WebSocket だけである。
+    TerminalForward:
+      type: object
+      additionalProperties: false
+      required: [kind, listen, to, problem]
+      properties:
+        kind: { type: string }
+        listen: { type: string }
+        to: { type: string }
+        problem: { type: string }
     TerminalSession:
       type: object
       additionalProperties: false
@@ -1760,6 +1769,8 @@ components:
         title: { type: string }
         startedAt: { type: string }
         exited: { $ref: "#/components/schemas/TerminalExit" }
+        # 開いている転送。**開いていることが見えないまま開かない。**
+        forwards: { type: array, items: { $ref: "#/components/schemas/TerminalForward" } }
     TerminalExit:
       type: object
       additionalProperties: false
