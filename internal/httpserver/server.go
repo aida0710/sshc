@@ -41,14 +41,18 @@ type Options struct {
 	// Updates はプロジェクトのリリースを調べる。nil の場合、バージョンを
 	// 報告するのみで何も提示しない。比較すべきリリースを持たないビルドが
 	// すべきことはこれである。
-	Updates     *selfupdate.Checker
-	Listener    net.Listener
-	Sessions    *session.Manager
-	UI          fs.FS
-	Version     string
-	Logger      *slog.Logger
-	Config      *application.Service
-	Keys        KeyService
+	Updates  *selfupdate.Checker
+	Listener net.Listener
+	Sessions *session.Manager
+	UI       fs.FS
+	Version  string
+	Logger   *slog.Logger
+	Config   *application.Service
+	Keys     KeyService
+	// Home と SSHRoot は、鍵のパスを解くために要る。~ の展開と、vault が
+	// 知っているワークスペース相対のパスへの変換がそこで起きる。
+	Home        string
+	SSHRoot     string
 	Diagnostics *diagnostics.Service
 	KnownHosts  *knownhosts.Service
 	RemoteKeys  *remotekey.Service
@@ -251,19 +255,12 @@ func New(options Options) (*Server, error) {
 		registerTerminalRoutes(e, TerminalHandlers{
 			Registry:    options.Terminals,
 			Tickets:     &terminal.Tickets{},
-			SSH:         options.SSHProgram,
+			Connect:     newConnector(options, options.Home, options.SSHRoot),
 			Shell:       options.LoginShell,
 			Environment: options.TerminalEnvironment,
-			Passwords:   options.Passwords,
-			KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
-				if options.Config == nil || options.Keys == nil {
-					return "", "", "", "", false, nil
-				}
-				target, ok, err := options.Config.DirectKeyPassphraseTarget(alias, options.Keys.Inventory)
-				return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
-			},
-			AskpassHelper:  options.AskpassHelper,
-			AskpassURL:     "http://" + host + AskpassPath,
+			// askpass はここに無い。**この経路はもう外部の ssh を起こさない。**
+			// パスフレーズは vault から直接読むか、端末で尋ねる。ヘルパーが
+			// 残っているのは、CLI と診断がまだ OpenSSH を起こすからである。
 			ExpectedOrigin: "http://" + host,
 		})
 	}
