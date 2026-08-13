@@ -35,18 +35,20 @@ type HostKeys struct {
 	Read func() ([]byte, error)
 	// Add は受け入れた鍵を書く。nil なら覚えない——接続はできるが、次も尋ねる。
 	Add func(candidate knownhosts.Candidate) error
-	// Ask は未知のホストについて人に尋ねる。nil なら尋ねられないので断る。
-	Ask func(prompt string) (bool, error)
 }
 
 // Callback は、この接続のためのホスト鍵検証を返す。
-func (h HostKeys) Callback(target Target) ssh.HostKeyCallback {
+//
+// 問いを出す先を引数で受け取るのは、それが接続ごとに違うからである。**尋ねる
+// のは、その接続を開いた端末でなければならない。** 別の端末に出た問いは、
+// 誰も答えられないまま接続を止める。
+func (h HostKeys) Callback(target Target, prompt Prompter) ssh.HostKeyCallback {
 	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
-		return h.verify(target, key)
+		return h.verify(target, key, prompt)
 	}
 }
 
-func (h HostKeys) verify(target Target, key ssh.PublicKey) error {
+func (h HostKeys) verify(target Target, key ssh.PublicKey, prompt Prompter) error {
 	field := hostField(target.HostName, target.Port)
 	offered := base64.StdEncoding.EncodeToString(key.Marshal())
 
@@ -82,11 +84,11 @@ func (h HostKeys) verify(target Target, key ssh.PublicKey) error {
 	if matchedHost {
 		return ErrHostKeyChanged
 	}
-	return h.accept(target, key, offered)
+	return h.accept(target, key, offered, prompt)
 }
 
 // accept は、未知のホストをどう扱うかを StrictHostKeyChecking で決める。
-func (h HostKeys) accept(target Target, key ssh.PublicKey, offered string) error {
+func (h HostKeys) accept(target Target, key ssh.PublicKey, offered string, prompt Prompter) error {
 	switch target.Strict {
 	case "yes":
 		return ErrHostKeyUnknown
@@ -94,10 +96,10 @@ func (h HostKeys) accept(target Target, key ssh.PublicKey, offered string) error
 		return h.remember(target, key, offered)
 	}
 
-	if h.Ask == nil {
+	if prompt == nil {
 		return ErrHostKeyUnknown
 	}
-	accepted, err := h.Ask(UnknownHostPrompt(target, key))
+	accepted, err := prompt.Confirm(UnknownHostPrompt(target, key))
 	if err != nil {
 		return err
 	}
