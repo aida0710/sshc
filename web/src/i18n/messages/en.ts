@@ -26,7 +26,7 @@ export const en = {
   "shell.navFaceSettings": "Settings",
   "shell.navFaceTerminal": "Terminals",
   "shell.navStart": "Start",
-  "shell.navConnections": "Connections",
+  "shell.navConnections": "Connection files",
   "shell.navKeysHosts": "Keys and hosts",
   "shell.navMaintenance": "Maintenance",
   "shell.inspectorShowNamed": "Show {label}",

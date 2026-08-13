@@ -14,7 +14,7 @@ export const ja = {
   "shell.navFaceSettings": "設定",
   "shell.navFaceTerminal": "ターミナル",
   "shell.navStart": "スタート",
-  "shell.navConnections": "接続",
+  "shell.navConnections": "接続ファイル",
   "shell.navKeysHosts": "鍵とホスト",
   "shell.navMaintenance": "保守",
   "shell.inspectorShowNamed": "{label}を表示",
