@@ -61,7 +61,6 @@ type aliasRoute struct {
 func aliasRoutes() []aliasRoute {
 	plain := func(alias string) map[string]any { return map[string]any{"alias": alias} }
 	return []aliasRoute{
-		{"/api/v1/diagnostics/effective", session.ActionEvaluate, plain},
 		{"/api/v1/diagnostics/reachability", session.ActionReachability, plain},
 		{"/api/v1/diagnostics/authentication", session.ActionAuthentication, func(alias string) map[string]any {
 			return map[string]any{"alias": alias, "acknowledgeExecutable": true}
@@ -85,10 +84,11 @@ func TestNoRouteEverPutsAHostileValueOnACommandLine(t *testing.T) {
 	f.runner.answer(func(platform.Command) (platform.Output, error) {
 		return platform.Output{Stdout: []byte("hostname 203.0.113.10\nport 2222\n")}, nil
 	})
-	token := f.actionToken(t, session.ActionEvaluate, "bastion")
-	readBody(t, f.do(http.MethodPost, "/api/v1/diagnostics/effective", mustJSON(t, map[string]any{
-		"alias": "bastion",
-	}), withAction(token)))
+	// 到達性チェックを正のコントロールに使う。設定の解決はもうプロセスを
+	// 起こさないので、あちらでは process seam に何も届かない。
+	readBody(t, f.do(http.MethodPost, "/api/v1/diagnostics/authentication", mustJSON(t, map[string]any{
+		"alias": "bastion", "acknowledgeExecutable": true,
+	}), withAction(f.actionToken(t, session.ActionAuthentication, "bastion"))))
 	control := f.runner.recorded()
 	if len(control) == 0 {
 		t.Fatal("a safe alias never reached the process seam; every refusal below would prove nothing")
@@ -172,11 +172,6 @@ func assertAliasArrivesInert(t testing.TB, arguments []string, alias string) {
 // このテストは command builder を直接呼ぶので、各層が自分自身に対して責任を持つ。
 func TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 	runner := &recordingRunner{}
-	evaluator := effective.Evaluator{
-		Runner:     runner,
-		Toolchain:  fixedToolchain{},
-		ConfigPath: "/nonexistent/config",
-	}
 	service := remotekey.Service{
 		Runner:     runner,
 		Toolchain:  fixedToolchain{},
@@ -188,13 +183,21 @@ func TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 正のコントロール: 安全な alias は両方の継ぎ目を通ってランナーに届く。
+	// 正のコントロール: 安全な alias は継ぎ目を通ってランナーに届く。
 	runner.reset()
-	if _, err := evaluator.Evaluate(context.Background(), effective.Report{}, "bastion", true); err != nil {
-		t.Fatalf("Evaluate(bastion) = %v", err)
+	runner.answer(func(command platform.Command) (platform.Output, error) {
+		if strings.Contains(strings.Join(command.Arguments, " "), remotekey.ProbeCommand) {
+			return platform.Output{Stdout: []byte(remotekey.ProbeMarker + "\n")}, nil
+		}
+		return platform.Output{Stdout: []byte("sshc: added\n")}, nil
+	})
+	if _, err := service.Register(
+		context.Background(), effective.Report{}, []byte("Host bastion\n"), "bastion", key, true,
+	); err != nil {
+		t.Fatalf("Register(bastion) = %v", err)
 	}
-	if len(runner.recorded()) != 1 {
-		t.Fatalf("a safe alias produced %d commands, want 1", len(runner.recorded()))
+	if len(runner.recorded()) == 0 {
+		t.Fatal("a safe alias never reached the runner; every refusal below would prove nothing")
 	}
 	assertAliasArrivesInert(t, runner.recorded()[0].Arguments, "bastion")
 
@@ -202,14 +205,6 @@ func TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 		t.Run(quoteForName(hostile), func(t *testing.T) {
 			if err := platform.ValidateAlias(hostile); err == nil {
 				t.Fatalf("ValidateAlias(%q) = nil", hostile)
-			}
-
-			runner.reset()
-			if _, err := evaluator.Evaluate(context.Background(), effective.Report{}, hostile, true); err == nil {
-				t.Fatalf("Evaluate(%q) was accepted", hostile)
-			}
-			if commands := runner.recorded(); len(commands) != 0 {
-				t.Fatalf("Evaluate(%q) still ran %#v", hostile, commands)
 			}
 
 			runner.reset()
@@ -533,7 +528,7 @@ func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testin
 			} {
 				response := f.do(http.MethodPost, path, mustJSON(t, map[string]any{
 					"alias": alias, "acknowledgeExecutable": true,
-				}), withAction(f.tryActionToken(session.ActionEvaluate, alias)))
+				}), withAction(f.tryActionToken(session.ActionReachability, alias)))
 				status := response.StatusCode
 				readBody(t, response)
 				if status >= 200 && status < 300 {

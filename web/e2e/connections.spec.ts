@@ -413,21 +413,17 @@ test("shows connection checks on Basic and starts nothing unasked", async ({
   expect(started).toEqual([]);
 });
 
-test("shows saved explanations in Settings analysis without running ssh -G", async ({
-  page,
-  installation,
-}) => {
-  const evaluations: string[] = [];
-  page.on("request", (request) => {
-    const path = new URL(request.url()).pathname;
-    if (request.method() === "POST" && path === "/api/v1/diagnostics/effective") evaluations.push(path);
-  });
+// 出所の読み取りには確認が要らない。**この経路は何も起動しない。**
+test("shows where each value comes from without a confirmation", async ({ page, installation }) => {
   await openBastion(page, installation.url);
   await page.getByRole("tab", { name: "Settings analysis" }).click();
 
   await expect(page.getByRole("region", { name: "Settings analysis" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Run authoritative ssh -G" })).toBeEnabled();
-  expect(evaluations).toEqual([]);
+  const show = page.getByRole("button", { name: "Show the sources" });
+  await expect(show).toBeEnabled();
+  await show.click();
+
+  await expect(page.getByRole("table", { name: "Authoritative value sources" })).toBeVisible();
 });
 
 // スキーマが常に持っていながらどの画面からも編集できな

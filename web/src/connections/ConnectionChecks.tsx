@@ -70,7 +70,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
     setAuthenticationError("");
     setPendingDirectives([]);
     try {
-      const inspection = await api.effective(alias, false);
+      const inspection = await api.effective(alias);
       if (inspection.executableDirectives.length > 0) {
         setPendingDirectives(inspection.executableDirectives);
         return;

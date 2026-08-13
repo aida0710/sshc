@@ -1,8 +1,10 @@
 package effective_test
 
 import (
+	"strings"
 	"testing"
 
+	"sshc/internal/config"
 	"sshc/internal/effective"
 )
 
@@ -211,4 +213,54 @@ func TestResolveLeavesPercentAloneWhereOpenSSHDoes(t *testing.T) {
 	if values.First("setenv") != "PROMPT=100%%" {
 		t.Errorf("setenv = %q, want it untouched", values.First("setenv"))
 	}
+}
+
+// FuzzResolve は、任意の設定テキストに対して解決器が全域であることを確かめる。
+//
+// `ssh -G` の出力パーサをファズしていたのは、こちらが制御しないプログラムから
+// バイト列が届いていたからである。権威が移ったいま、こちらが制御しない入力は
+// 利用者が書いた `~/.ssh/config` そのものである。不変条件は 2 つ——panic しない
+// こと、そして**部分的な答えを返さない**こと。拒んだなら値は空でなければならず、
+// 答えたなら接続に要る 3 つが揃っていなければならない。
+func FuzzResolve(f *testing.F) {
+	for _, seed := range []string{
+		"",
+		"Host bastion\n\tHostName 203.0.113.10\n",
+		"Host *\n\tUser deploy\n\tPort %p\n",
+		"Match exec \"true\"\n\tUser hidden\n",
+		"Match\n",
+		"Host\n",
+		"Host bastion\n\tHostName %C\n",
+		"Host bastion\n\tCanonicalizeHostname yes\n",
+		"Include\n\nHost bastion\n\tIdentityFile %d/%r/%h/%p/%%\n",
+		strings.Repeat("Host a\n\tUser b\n", 512),
+	} {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, contents string) {
+		resolver := config.Resolver{
+			Loader: fakeLoader{files: map[string]string{testConfig: contents}},
+			Home:   testHome,
+			Root:   testRoot,
+			Tokens: map[byte]string{'d': testHome},
+		}
+		graph, err := resolver.Resolve(testConfig)
+		if err != nil {
+			return
+		}
+
+		resolution := effective.Resolve(graph, "bastion", resolveFacts())
+		if len(resolution.Refusals) > 0 {
+			if len(resolution.Values.Entries) != 0 {
+				t.Fatalf("a refusal carried values: %#v", resolution.Values.Entries)
+			}
+			return
+		}
+		for _, keyword := range []string{"hostname", "user", "port"} {
+			if resolution.Values.First(keyword) == "" {
+				t.Fatalf("accepted without %s: %#v", keyword, resolution.Values.Entries)
+			}
+		}
+	})
 }

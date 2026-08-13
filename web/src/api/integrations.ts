@@ -37,7 +37,6 @@ export type PullResponse = components["schemas"]["PullResponse"];
 
 // アクション語彙はサーバーのセッションパッケージに属し、操作を確認する
 // すべてのサブシステムに対してそれを所有する。これらはその通信上の値である。
-export const EVALUATE_ACTION_KIND = "diagnostics.evaluate";
 export const REACHABILITY_ACTION_KIND = "diagnostics.reachability";
 export const AUTHENTICATION_ACTION_KIND = "diagnostics.authentication";
 export const KNOWN_HOSTS_DELETE_ACTION_KIND = "known_hosts.delete";
@@ -51,7 +50,7 @@ export type KnownHostAddition = Pick<KnownHostCandidate, "host" | "port" | "keyT
 
 export type IntegrationsApi = {
   configCheck(): Promise<ConfigCheckResponse>;
-  effective(alias: string, confirm: boolean): Promise<EffectiveResponse>;
+  effective(alias: string): Promise<EffectiveResponse>;
   reachability(alias: string): Promise<ReachabilityResponse>;
   authentication(alias: string, acknowledgeExecutable: boolean): Promise<AuthenticationResponse>;
   // 埋め込みターミナル。開くことに action token は要らない——vault ゲート
@@ -185,8 +184,6 @@ function validateConfigCheck(value: unknown): ConfigCheckResponse {
 function validateEffective(value: unknown): EffectiveResponse {
   const record = asRecord(value);
   asString(record.alias);
-  asBoolean(record.evaluated);
-  asBoolean(record.requiresConfirmation);
   asString(record.tokenWarning);
   for (const directive of asArray(record.executableDirectives)) {
     const entry = asRecord(directive);
@@ -206,7 +203,6 @@ function validateEffective(value: unknown): EffectiveResponse {
     asNumber(entry.line);
     asBoolean(entry.winner);
   }
-  asArray(record.values);
   for (const note of asArray(record.complexities)) {
     const entry = asRecord(note);
     asString(entry.code);
@@ -226,11 +222,6 @@ function validateEffective(value: unknown): EffectiveResponse {
     asString(entry.port);
     asBoolean(entry.complex);
   }
-  const failure = asRecord(record.failure);
-  asBoolean(failure.failed);
-  asNumber(failure.exitCode);
-  asString(failure.stderr);
-  asBoolean(failure.truncated);
   return record as unknown as EffectiveResponse;
 }
 
@@ -478,11 +469,10 @@ export const integrationsApi: IntegrationsApi = {
   async configCheck() {
     return validateConfigCheck(await postJSON<unknown>("/api/v1/diagnostics/config", {}));
   },
-  async effective(alias, confirm) {
-    // 確認が消費されるのは、evaluate がコマンドを実行する場合
-    // だけであり、安全な設定は確認なしで読める。
-    const token = confirm ? await issueAction(EVALUATE_ACTION_KIND, alias) : undefined;
-    return validateEffective(await postJSON<unknown>("/api/v1/diagnostics/effective", { alias }, token));
+  async effective(alias) {
+    // 確認トークンは要らない。この経路はもう何も実行しない——値を決めるのは
+    // このアプリケーション自身であり、ここが返すのはその出所である。
+    return validateEffective(await postJSON<unknown>("/api/v1/diagnostics/effective", { alias }));
   },
   async reachability(alias) {
     const token = await issueAction(REACHABILITY_ACTION_KIND, alias);

@@ -96,7 +96,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
   const checks: { label: string; start: () => void }[] = [
     {
       label: t("diag.explain"),
-      start: () => void run(() => api.effective(alias, false), setEffective, t("diag.explainFailed")),
+      start: () => void run(() => api.effective(alias), setEffective, t("diag.explainFailed")),
     },
     {
       label: t("diag.checkReachability"),
@@ -192,29 +192,6 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
         </div>
       ) : null}
 
-      {/*
-        失敗した`ssh -G`は理由を内側に持つ 200 を返すため何も
-        スローせず、パネルは以前沈黙をレンダリングしていた。ソース
-        テーブルは空で、実行可能なディレクティブがないこともあり、
-        他のどのブロックも条件付きである。Explain を押しても
-        何もしていないように見えていた。OpenSSH が自身の拒否に
-        ついて語ったことだけが、それを説明する唯一のものである。
-      */}
-      {effective?.failure.failed ? (
-        <div className="rounded border border-control-line p-3 text-sm">
-          <h3 className="font-medium text-danger">{t("diag.refused")}</h3>
-          <p className="text-ink-muted">{t("diag.exited", { code: effective.failure.exitCode })}</p>
-          {effective.failure.stderr ? (
-            <pre className="mt-1 whitespace-pre-wrap break-all text-ink-muted">{effective.failure.stderr}</pre>
-          ) : (
-            <p className="text-ink-muted">{t("diag.noStderr")}</p>
-          )}
-          {effective.failure.truncated ? (
-            <p className="text-notice-ink">{t("diag.outputTruncated")}</p>
-          ) : null}
-        </div>
-      ) : null}
-
       {directives.length > 0 ? (
         <div className="rounded border border-notice-line p-3 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.canRunCommand")}</h3>
@@ -233,18 +210,6 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
               </li>
             ))}
           </ul>
-          {effective?.requiresConfirmation && !effective.evaluated ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void run(() => api.effective(alias, true), setEffective, t("diag.explainFailed"))
-              }
-              className="mt-2 rounded border border-notice-line px-3 py-1.5 text-sm text-notice-ink hover:bg-notice disabled:border-line disabled:text-ink-faint"
-            >
-              {t("diag.runAnyway")}
-            </button>
-          ) : null}
         </div>
       ) : null}
 
