@@ -48,12 +48,14 @@ type Dependencies struct {
 	// Home はユーザーのホームディレクトリ。オペレーティングシステムから読んでよいのは
 	// cmd/sshc だけで、テストはいずれも一時ディレクトリを注入する。
 	Home string
-	// Runner、Toolchain、KeyAgent は、鍵 vault とオペレーティングシステムとの境界。
-	// Runner や Toolchain が nil の場合、アルゴリズムカタログは Ed25519 への
-	// フォールバックのままになる。KeyAgent が nil の場合、エージェント登録は到達
-	// できるエージェントがないと報告する。どちらも致命的ではないので、プロセスは
-	// 他のすべての面を提供し続ける。
-	Runner    platform.OutputRunner
+	// Toolchain と KeyAgent は、鍵 vault とオペレーティングシステムとの境界。
+	//
+	// **このアプリケーションは OpenSSH のプログラムを一つも実行しない。**
+	// Toolchain に残っているのは ssh-keygen だけで、それも走らせるのは利用者で
+	// ある——見つかるかどうかで、ハードウェア鍵の項目を一覧に出してよいかを
+	// 決める。KeyAgent が nil の場合、エージェント登録は到達できるエージェントが
+	// ないと報告する。どちらも致命的ではないので、プロセスは他のすべての面を
+	// 提供し続ける。
 	Toolchain platform.Toolchain
 	KeyAgent  platform.KeyAgent
 	// ScanHostKeys と Probe は、ネットワークへ出る 2 つの継ぎ目である。nil なら
@@ -70,9 +72,9 @@ type Dependencies struct {
 	// Updates はプロジェクトのリリースを調べる。nil なら何も提示しない。リリースで
 	// ないビルドはそうあるべきである。
 	Updates *selfupdate.Checker
-	// Lookup は親の環境を読み、このプロセスが起動する OpenSSH プログラムが
-	// platform.MinimalEnvironment を受け取れるようにする。os.LookupEnv を渡してよいのは
-	// cmd/sshc だけ。nil なら子は継承する形になり、テストにはそれが向く。
+	// Lookup は親の環境を読み、利用者のログインシェルを見つけるために使う。
+	// os.LookupEnv を渡してよいのは cmd/sshc だけ。nil ならこのプロセスの環境を
+	// 継ぐ形になり、テストにはそれが向く。
 	Lookup func(string) (string, bool)
 	// TerminalStarter は PTY を確保する継ぎ目である。nil なら本物を確保する。
 	// ハードニングのスイートはここを差し替え、プロセスを一つも起こさずに

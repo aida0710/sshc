@@ -60,57 +60,12 @@ type fixtureCanaries struct {
 	CSRF           string
 }
 
-type recordedCommand struct {
-	Path      string
-	Arguments []string
-	Stdin     []byte
-	Env       []string
-}
-
-// recordingRunner は、アプリケーションが実行するはずのコマンドをすべて
-// 記録し、1 つも起動しない。reply を設定すると、特定のテストが必要とする出力を返す。
-type recordingRunner struct {
-	mutex    sync.Mutex
-	commands []recordedCommand
-	reply    func(platform.Command) (platform.Output, error)
-}
-
-func (r *recordingRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
-	r.mutex.Lock()
-	r.commands = append(r.commands, recordedCommand{
-		Path:      command.Path,
-		Arguments: append([]string(nil), command.Arguments...),
-		Stdin:     append([]byte(nil), command.Stdin...),
-		Env:       append([]string(nil), command.Env...),
-	})
-	reply := r.reply
-	r.mutex.Unlock()
-	if reply == nil {
-		return platform.Output{}, nil
-	}
-	return reply(command)
-}
-
-func (r *recordingRunner) recorded() []recordedCommand {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-	return append([]recordedCommand(nil), r.commands...)
-}
-
-func (r *recordingRunner) reset() {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-	r.commands = nil
-}
-
-func (r *recordingRunner) answer(reply func(platform.Command) (platform.Output, error)) {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-	r.reply = reply
-}
-
-// fixedToolchain は決して実行されない絶対パスを返す。
-// なぜなら、それに添えられたランナーが一切プロセスを起動しないからである。
+// fixedToolchain は、ssh-keygen が見つかったことにする。
+//
+// **走らせはしない。** このアプリケーションが OpenSSH のプログラムを実行しない
+// ことは TestOnlyTheNamedSubsystemsStartAProgram が押さえている——このハーネスは
+// プロセスの継ぎ目そのものを持たないので、ここで「起動しなかった」と表明しても
+// 落ちようがない。
 type fixedToolchain struct{}
 
 func (fixedToolchain) KeyGen() (string, error) { return "/usr/bin/ssh-keygen", nil }
@@ -278,7 +233,6 @@ type fixture struct {
 	// session なしでサーバーに届く。
 	anonymous    *http.Client
 	server       *httpserver.Server
-	runner       *recordingRunner
 	terminal     *recordingTerminal
 	scanner      *recordingScanner
 	clock        *testClock
@@ -297,7 +251,6 @@ func newFixture(t testing.TB) *fixture {
 	root := filepath.Join(home, ".ssh")
 	writeFixtureTree(t, home, root)
 
-	runner := &recordingRunner{}
 	terminalStarter := &recordingTerminal{}
 	scanner := newRecordingScanner(t)
 	clock := newTestClock()
@@ -310,7 +263,6 @@ func newFixture(t testing.TB) *fixture {
 		Listen:          net.Listen,
 		UI:              fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>fixture</title><div id=\"root\"></div>")}},
 		Logger:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Runner:          runner,
 		Toolchain:       fixedToolchain{},
 		TerminalStarter: terminalStarter,
 		KeyAgent:        fakeAgent{},
@@ -348,7 +300,6 @@ func newFixture(t testing.TB) *fixture {
 		client:    &http.Client{Jar: jar, Timeout: 15 * time.Second},
 		anonymous: &http.Client{Timeout: 15 * time.Second},
 		server:    server,
-		runner:    runner,
 		terminal:  terminalStarter,
 		scanner:   scanner,
 		clock:     clock,
