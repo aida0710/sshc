@@ -1728,12 +1728,16 @@ export interface components {
             schemaVersion: number;
             groupsFile?: string;
             embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
+            desktop?: components["schemas"]["Desktop"];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
         };
         EmbeddedTerminal: {
             maxSessions?: number;
             scrollbackBytes?: number;
+        };
+        Desktop: {
+            keepRunning?: boolean;
         };
         PendingTransaction: {
             id: string;

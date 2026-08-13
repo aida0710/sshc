@@ -311,6 +311,11 @@ type DedicatedKeyPassphraseUsage struct {
 	Key   string   `json:"key"`
 }
 
+// Desktop defines model for Desktop.
+type Desktop struct {
+	KeepRunning *bool `json:"keepRunning,omitempty"`
+}
+
 // Diagnostic defines model for Diagnostic.
 type Diagnostic struct {
 	Absolute *string `json:"absolute,omitempty"`
@@ -777,6 +782,7 @@ type LoginItem struct {
 
 // Metadata defines model for Metadata.
 type Metadata struct {
+	Desktop          *Desktop          `json:"desktop,omitempty"`
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
 	Groups           *[]GroupMetadata  `json:"groups,omitempty"`
 	GroupsFile       *string           `json:"groupsFile,omitempty"`

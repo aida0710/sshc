@@ -2448,6 +2448,7 @@ components:
         schemaVersion: { type: integer }
         groupsFile: { type: string }
         embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
+        desktop: { $ref: "#/components/schemas/Desktop" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
     # 埋め込みターミナルの上限。範囲の外は読み取りで既定へ戻し、書き込みでは拒否する。
@@ -2457,6 +2458,13 @@ components:
       properties:
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
+    # デスクトップの外殻の設定。
+    Desktop:
+      type: object
+      additionalProperties: false
+      properties:
+        # アプリを閉じたあともエンジンを動かし続けるか。書かれていなければ止める。
+        keepRunning: { type: boolean }
     PendingTransaction:
       type: object
       additionalProperties: false
