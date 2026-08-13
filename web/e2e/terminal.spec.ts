@@ -1,4 +1,4 @@
-import { expect, openApplication, test } from "./support/environment";
+import { expect, openApplication, openSection, test } from "./support/environment";
 
 // 埋め込みターミナルの end-to-end。
 //
@@ -111,4 +111,27 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   // 二本開いた時点で入口は閉じ、その理由が書かれる。
   await expect(openShell).toBeDisabled();
   await expect(panel).toContainText("limit of 2 open consoles");
+});
+
+// 接続できなかった理由は端末に残る。
+//
+// **このスイートは OpenSSH を一度も起動しない。** それでもこの検査が成り立つ
+// のは、SSH をプロセス内で話すようになったからである——接続を試みるのはこの
+// バイナリ自身であり、拒否されたのは即座に返る 127.0.0.1 のポートである。
+test("shows why a connection failed in the console itself", async ({ page, installation }) => {
+  await installation.write(
+    "conf.d/20-refused.conf",
+    ["Host refused", "\tHostName 127.0.0.1", "\tPort 1", "\tConnectTimeout 2", ""].join("\n"),
+  );
+  await openApplication(page, installation);
+
+  await openSection(page, "Connections");
+  const nav = page.getByRole("navigation", { name: "Connections" });
+  await nav.getByRole("button", { name: "refused" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+
+  // セッションは作られる。理由が読める場所がそこだけだからである。
+  const screen = page.getByRole("region", { name: /^Console for / });
+  await expect(screen).toBeVisible();
+  await expect(screen).toContainText(/sshc:.*(refused|connect)/i, { timeout: 20_000 });
 });

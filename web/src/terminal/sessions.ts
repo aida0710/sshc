@@ -6,6 +6,7 @@ import {
   type TerminalSession,
 } from "../api/integrations";
 import type { Translate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 
 export type TerminalSessionsApi = Pick<
   IntegrationsApi,
@@ -78,13 +79,9 @@ export function useTerminalSessions(
         await refresh();
         return opened.session;
       } catch (error) {
-        // 上限に達したことと、開けなかったことは別の答えである。前者は
-        // どれかを閉じれば直り、それが画面の言えることの中でいちばん役に立つ。
-        setProblem(
-          failureCode(error) === "terminal_session_limit"
-            ? translate("terminal.limitRefused")
-            : translate("terminal.openFailed"),
-        );
+        // 「開けませんでした」だけでは、次に何をすればよいか分からない。
+        // 設定そのものが接続を許さない場合は、その理由を名指しする。
+        setProblem(translate(openFailureKey(failureCode(error))));
         return null;
       } finally {
         setBusy(false);
@@ -137,4 +134,23 @@ export function useTerminalSessions(
   }, []);
 
   return { sessions, maxSessions, busy, problem, loaded, rename, open, close, refresh, markExited };
+}
+
+// openFailureKey は、サーバーが名指しした理由を画面の文言へ移す。
+//
+// ここに無い符号は「開けませんでした」になる。**推測して言い換えない**——
+// 知らない理由に説明を付けると、その説明は必ずいつか嘘になる。
+function openFailureKey(code: string): MessageKey {
+  switch (code) {
+    case "terminal_session_limit":
+      return "terminal.limitRefused";
+    case "alias_unresolvable":
+      return "terminal.unresolvable";
+    case "proxy_command_refused":
+      return "terminal.proxyCommandRefused";
+    case "jump_depth_exceeded":
+      return "terminal.jumpDepthExceeded";
+    default:
+      return "terminal.openFailed";
+  }
 }

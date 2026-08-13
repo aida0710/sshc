@@ -87,4 +87,32 @@ describe("useTerminalSessions", () => {
     expect(outcome).toBe(false);
     expect(result.current.problem).toBe("terminal.renameFailed");
   });
+  // 「開けませんでした」だけでは、次に何をすればよいか分からない。設定そのものが
+  // 接続を許さない場合は、その理由を名指しする。
+  it("names why a connection the configuration does not allow was refused", async () => {
+    const openTerminalSession = vi.fn().mockRejectedValue(
+      new ApiError("proxy_command_refused", 422, { code: "proxy_command_refused", message: "no" }),
+    );
+    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      await result.current.open({ kind: "ssh", alias: "jump" });
+    });
+    expect(result.current.problem).toBe("terminal.proxyCommandRefused");
+  });
+
+  // 知らない符号に説明を付けない。付ければ、その説明は必ずいつか嘘になる。
+  it("falls back to the plain refusal for a code it does not know", async () => {
+    const openTerminalSession = vi.fn().mockRejectedValue(
+      new ApiError("something_new", 500, { code: "something_new", message: "no" }),
+    );
+    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      await result.current.open({ kind: "ssh", alias: "jump" });
+    });
+    expect(result.current.problem).toBe("terminal.openFailed");
+  });
 });
