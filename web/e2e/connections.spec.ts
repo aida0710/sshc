@@ -46,7 +46,9 @@ test("creates a key-authenticated connection in an empty nested declared group",
 }) => {
   const terminalLaunches: string[] = [];
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/v1/terminal/launch") terminalLaunches.push(request.url());
+    if (new URL(request.url()).pathname === "/api/v1/terminal/sessions" && request.method() === "POST") {
+      terminalLaunches.push(request.url());
+    }
   });
 
   await openApplication(page, installation);
@@ -98,7 +100,9 @@ test("creates a connection with a dedicated encrypted password and never starts 
   const password = "connection-only e2e password";
   const terminalLaunches: string[] = [];
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/v1/terminal/launch") terminalLaunches.push(request.url());
+    if (new URL(request.url()).pathname === "/api/v1/terminal/sessions" && request.method() === "POST") {
+      terminalLaunches.push(request.url());
+    }
   });
 
   await openApplication(page, installation);
@@ -291,56 +295,41 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   expect(sealed).not.toContain(nextPassphrase);
 });
 
-// このスイートが駆動するのは、このホストがビルドしたバイナリである
-// (`make e2e` は `make build` に依存し、それは GOOS を上書きしない素の
-// `go build`)。ビルドタグで組み立てが分かれるため、どちらが正しい振る舞い
-// かはホストが darwin か linux かで決まる——CI の ubuntu ランナーでは
-// linux、開発者の Mac では darwin だ。だから二つのテストに分け、自分の
-// ホストでないほうは test.skip で明示的にスキップする。片方の中で分岐
-// すると、レポートはどちらの期待を検査したかを言わずに green になる。
-test("darwin: stores one global terminal choice in Settings and uses it from both entry points", async ({ page, installation }) => {
-  test.skip(process.platform !== "darwin", "this host did not build a darwin binary");
-  const launches: unknown[] = [];
-  await page.route("**/api/v1/terminal/launch", async (route) => {
-    launches.push(route.request().postDataJSON());
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ launched: true }) });
+// 端末をどれで開くかという設定は無くなった。接続はこのアプリケーションの中で
+// 開くので、開く先を選ぶという問い自体が存在しない。darwin と linux で分けて
+// いた二つのテストも、同じ理由で一つになった——どちらのビルドでも同じ答えに
+// なるものを、ホストごとに分ける理由はない。
+test("opens a connection inside the application, with nothing to choose and nothing to install", async ({
+  page,
+  installation,
+}) => {
+  const opened: unknown[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/v1/terminal/sessions" && request.method() === "POST") {
+      opened.push(request.postDataJSON());
+    }
   });
   await openApplication(page, installation);
 
+  // 設定に端末の節はもう無い。
   await openSection(page, "Settings");
-  const terminal = page.getByRole("region", { name: "Default connection application" });
-  await terminal.getByLabel("Open connections with").selectOption("custom");
-  await terminal.getByLabel("Application").selectOption({ label: "Terminal" });
-  const saved = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === "/api/v1/terminal/preference" && response.request().method() === "PUT",
-  );
-  await terminal.getByRole("button", { name: "Save custom application" }).click();
-  expect((await saved).status()).toBe(200);
-  expect(await installation.read("sshc/metadata.json")).toContain('"terminal": "custom"');
+  await expect(page.getByRole("region", { name: "Default connection application" })).toHaveCount(0);
+  await expect(page.getByLabel("Open connections with")).toHaveCount(0);
 
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
   await expect(page.getByLabel("Open with")).toHaveCount(0);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  // Connect はどのプラットフォームでも押せる。Linux にも端末ができた。
+  const connect = page.getByRole("button", { name: "Connect", exact: true });
+  await expect(connect).toBeEnabled();
+  await connect.click();
 
-  await openSection(page, "Home");
-  await page.getByRole("button", { name: "Actions for bastion" }).click();
-  await page.getByRole("menuitem", { name: "Connect", exact: true }).click();
-  await expect.poll(() => launches).toEqual([{ alias: "bastion" }, { alias: "bastion" }]);
-});
-
-test("linux: offers no way to open a terminal, since this binary cannot open one", async ({
-  page,
-  installation,
-}) => {
-  test.skip(process.platform !== "linux", "this host did not build a linux binary");
-  await openBastion(page, installation.url);
-
-  // Linux は端末を起動しないので選ぶコントロールは出さず、保存済み概要の
-  // Connect は無効にする。代わりにコマンドを自分で実行するよう伝える。
-  await expect(page.getByLabel("Open with")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
-  await expect(page.getByText(/This platform does not open a terminal for you/)).toBeVisible();
+  // 押した結果として出ていくのは、外部の端末を起こす要求ではなく、埋め込み
+  // セッションを開く要求である。**ここから先は追わない。** このスイートは
+  // OpenSSH を一度も起動しない約束で書かれており、実際にコンソールが描かれる
+  // ところは、リモートに触れないローカルシェルの spec が見ている。
+  await expect.poll(() => opened).toEqual([{ kind: "ssh", alias: "bastion" }]);
 });
 
 test("edits the same host through Raw and keeps every other byte", async ({

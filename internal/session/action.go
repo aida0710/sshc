@@ -21,7 +21,6 @@ const (
 	ActionEvaluate          = "diagnostics.evaluate"
 	ActionReachability      = "diagnostics.reachability"
 	ActionAuthentication    = "diagnostics.authentication"
-	ActionTerminalLaunch    = "terminal.launch"
 	ActionKnownHostsDelete  = "known_hosts.delete"
 	ActionKnownHostsScan    = "known_hosts.scan"
 	ActionKnownHostsAdd     = "known_hosts.add"
@@ -41,7 +40,6 @@ var knownActionKinds = map[string]bool{
 	ActionEvaluate:          true,
 	ActionReachability:      true,
 	ActionAuthentication:    true,
-	ActionTerminalLaunch:    true,
 	ActionKnownHostsDelete:  true,
 	ActionKnownHostsScan:    true,
 	ActionKnownHostsAdd:     true,

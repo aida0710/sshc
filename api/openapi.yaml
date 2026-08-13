@@ -254,53 +254,93 @@ paths:
               schema: { $ref: "#/components/schemas/TerminalCommandResponse" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
-  /api/v1/terminal/options:
+  # 埋め込みターミナルのセッション。WebSocket のルート (/terminal/stream) は
+  # ここに現れない。/api/ の外にあり、ブラウザが CSRF ヘッダを付けられない
+  # ハンドシェイクを使うためである。/cli/connect と同じ扱いになる。
+  /api/v1/terminal/sessions:
     get:
-      operationId: getTerminalOptions
+      operationId: listTerminalSessions
       responses:
         "200":
-          description: Which terminals this machine can open, and which one Connect uses
+          description: Every open and retained terminal session
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TerminalOptionsResponse" }
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
         "401": { $ref: "#/components/responses/Problem" }
-  /api/v1/terminal/preference:
-    put:
-      operationId: setTerminalPreference
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/TerminalPreferenceRequest" }
-      responses:
-        "200":
-          description: Saved machine-wide terminal preference and refreshed availability
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/TerminalOptionsResponse" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-        "500": { $ref: "#/components/responses/Problem" }
-  /api/v1/terminal/launch:
     post:
-      operationId: launchTerminal
+      operationId: openTerminalSession
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/AliasRequest" }
+            schema: { $ref: "#/components/schemas/OpenTerminalSessionRequest" }
       responses:
-        "200":
-          description: Terminal opened
+        "201":
+          description: The session and a single-use ticket for its stream
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TerminalLaunchResponse" }
+              schema: { $ref: "#/components/schemas/OpenTerminalSessionResponse" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+  # リロードしたページは、一覧から自分のセッションを見つけ、そこへ繋ぎ直す。
+  # チケットは使い捨てなので、繋ぎ直すたびに新しいものが要る。開くことと
+  # 繋ぐことを別のルートにしてあるのはそのためである。
+  /api/v1/terminal/sessions/{id}/stream:
+    post:
+      operationId: issueTerminalStreamTicket
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "201":
+          description: A single-use ticket bound to this session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalStreamTicket" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/sessions/{id}:
+    patch:
+      operationId: renameTerminalSession
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenameTerminalSessionRequest" }
+      responses:
+        "200":
+          description: The session list after the rename
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: closeTerminalSession
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: The session list after the close
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /api/v1/sync:
     get:
       operationId: getSyncStatus
@@ -1747,46 +1787,73 @@ components:
     TerminalCommandResponse:
       type: object
       additionalProperties: false
-      required: [command, launchable, warning]
+      required: [command, warning]
       properties:
         command: { type: string }
-        launchable: { type: boolean }
         warning: { type: string }
-    # 見つからなかった端末も一覧には残る。選択肢を隠すと、これから
-    # インストールする人には理由の分からない欠落になるからである。
-    TerminalOption:
+    # 開いている端末セッションひとつ。スクロールバックは決してここに現れない。
+    # 中身が出ていくのは WebSocket だけである。
+    TerminalSession:
       type: object
       additionalProperties: false
-      required: [id, installed]
+      required: [id, kind, title, startedAt]
       properties:
-        id: { $ref: "#/components/schemas/TerminalID" }
-        installed: { type: boolean }
-    # custom として選べるアプリケーション。ユーザーはここに出たものだけを選べ、
-    # 保存されるのはここに出たパスだけなので、設定からパスを組み立てて渡す経路は
-    # どこにもない。
-    TerminalApplication:
+        id: { type: string }
+        kind: { type: string, enum: [ssh, shell] }
+        # alias を持つのは kind が ssh のときだけである。localhost はローカル
+        # シェルであって ssh 接続ではないので、alias を持たない。
+        alias: { type: string }
+        title: { type: string }
+        startedAt: { type: string }
+        exited: { $ref: "#/components/schemas/TerminalExit" }
+    TerminalExit:
       type: object
       additionalProperties: false
-      required: [name, path]
+      required: [code, signal, at]
       properties:
-        name: { type: string }
-        path: { type: string }
-    TerminalPreferenceRequest:
+        code: { type: integer }
+        signal: { type: string }
+        at: { type: string }
+    TerminalSessionList:
       type: object
       additionalProperties: false
-      required: [selected]
+      required: [sessions, maxSessions]
       properties:
-        selected: { $ref: "#/components/schemas/TerminalID" }
-        customTerminal: { $ref: "#/components/schemas/CustomTerminal" }
-    TerminalOptionsResponse:
+        sessions: { type: array, items: { $ref: "#/components/schemas/TerminalSession" } }
+        maxSessions: { type: integer }
+    OpenTerminalSessionRequest:
       type: object
       additionalProperties: false
-      required: [selected, terminals, applications]
+      required: [kind]
       properties:
-        selected: { $ref: "#/components/schemas/TerminalID" }
-        terminals: { type: array, items: { $ref: "#/components/schemas/TerminalOption" } }
-        applications: { type: array, items: { $ref: "#/components/schemas/TerminalApplication" } }
-        customTerminal: { $ref: "#/components/schemas/CustomTerminal" }
+        kind: { type: string, enum: [ssh, shell] }
+        alias: { type: string, minLength: 1, maxLength: 255 }
+        cols: { type: integer }
+        rows: { type: integer }
+    # 名前は一覧の表示だけのものである。走っているプロセスにも ssh の相手にも
+    # 触れず、metadata へも書かない。セッションと一緒に消える。
+    RenameTerminalSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 64 }
+    # streamTicket は使い捨てで、このセッション ID に束縛され、10 秒で失効する。
+    # ブラウザは WebSocket のハンドシェイクにカスタムヘッダを付けられないので、
+    # これがそのアップグレードを認可する唯一のものである。
+    TerminalStreamTicket:
+      type: object
+      additionalProperties: false
+      required: [streamTicket]
+      properties:
+        streamTicket: { type: string }
+    OpenTerminalSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [session, streamTicket]
+      properties:
+        session: { $ref: "#/components/schemas/TerminalSession" }
+        streamTicket: { type: string }
     # このマシンがどちら向きにデータを動かしてよいか。支配するのは書き込みだけで、
     # それ以外は何も支配しない。"push" はこのディスクへのスナップショット適用を
     # 拒否し、"pull" はバケットへの書き込みを拒否する。プレビューは読むだけで何も
@@ -1971,12 +2038,6 @@ components:
       required: [password]
       properties:
         password: { type: string, minLength: 1, maxLength: 1024 }
-    TerminalLaunchResponse:
-      type: object
-      additionalProperties: false
-      required: [launched]
-      properties:
-        launched: { type: boolean }
     IssueActionRequest:
       type: object
       additionalProperties: false
@@ -2421,25 +2482,16 @@ components:
       properties:
         schemaVersion: { type: integer }
         groupsFile: { type: string }
-        terminal: { $ref: "#/components/schemas/TerminalID" }
-        customTerminal: { $ref: "#/components/schemas/CustomTerminal" }
+        embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
-    TerminalID:
-      type: string
-      enum: [terminal, iterm2, kitty, ghostty, wezterm, custom]
-    # custom で開く先。application はこのマシンで見つかったバンドルのパスで、
-    # arguments はその前に置く argv の要素である。シェルは間に無い。
-    CustomTerminal:
+    # 埋め込みターミナルの上限。範囲の外は読み取りで既定へ戻し、書き込みでは拒否する。
+    EmbeddedTerminal:
       type: object
       additionalProperties: false
-      required: [application]
       properties:
-        application: { type: string }
-        arguments:
-          type: array
-          maxItems: 8
-          items: { type: string, minLength: 1, maxLength: 64 }
+        maxSessions: { type: integer, minimum: 1, maximum: 200 }
+        scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
     PendingTransaction:
       type: object
       additionalProperties: false
