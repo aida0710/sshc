@@ -1,0 +1,438 @@
+package sshclient_test
+
+import (
+	"context"
+	"crypto/rand"
+	"io"
+	"net"
+	"strings"
+	"testing"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+
+	"sshc/internal/keys"
+	"sshc/internal/knownhosts"
+	"sshc/internal/sshclient"
+	"sshc/internal/terminal"
+)
+
+// dialerFor は、このサーバーのホスト鍵を既知として組み立てた Dialer である。
+func dialerFor(t *testing.T, server *testServer, auth sshclient.Auth) sshclient.Dialer {
+	t.Helper()
+	known := knownHostsLine(server.Host(), server.HostKey.PublicKey())
+	if server.Port() != "22" {
+		known = knownHostsLine("["+server.Host()+"]:"+server.Port(), server.HostKey.PublicKey())
+	}
+	return sshclient.Dialer{
+		Auth:     auth,
+		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+	}
+}
+
+// keyPair は、この検査が使う鍵ひとつをメモリ上に作る。
+func keyPair(t *testing.T) (path string, contents []byte, public ssh.PublicKey) {
+	t.Helper()
+	private, err := keys.GeneratePrivateKey(keys.AlgorithmEd25519, 0, rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := keys.EncodePrivateKey(private, "fixture", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := ssh.NewSignerFromKey(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return "/keys/id_ed25519", encoded, signer.PublicKey()
+}
+
+// drain は、この Process を読み続ける goroutine を置く。
+//
+// **本番では terminal.Registry の pump がこれをしている。** 出力の道は
+// io.Pipe なので、誰も読まない Process は書き込みで止まる。読み手を置かない
+// 検査は、その事実を「動かない」と誤って報告する。
+func drain(process terminal.Process) {
+	go func() { _, _ = io.Copy(io.Discard, process) }()
+}
+
+// readUntil は、その断片が現れるまで Process を読む。
+func readUntil(t *testing.T, process terminal.Process, wanted string) string {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	var seen strings.Builder
+	buffer := make([]byte, 4096)
+	for time.Now().Before(deadline) {
+		read, err := process.Read(buffer)
+		seen.Write(buffer[:read])
+		if strings.Contains(seen.String(), wanted) {
+			return seen.String()
+		}
+		if err != nil {
+			t.Fatalf("read stopped before %q appeared: %v (saw %q)", wanted, err, seen.String())
+		}
+	}
+	t.Fatalf("%q never appeared (saw %q)", wanted, seen.String())
+	return ""
+}
+
+func TestOpenRunsAShellAndCarriesItsOutput(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell: func(channel ssh.Channel) {
+			_, _ = io.WriteString(channel, "welcome to the fixture\r\n")
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	target := targetWith(server, path)
+
+	process, err := dialerFor(t, server, auth).Open(context.Background(), target, terminal.Size{Cols: 120, Rows: 40})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "welcome to the fixture")
+	if info := process.Wait(); info.Code != 0 {
+		t.Errorf("exit = %+v, want a clean exit", info)
+	}
+	// 端末の大きさは pty-req で届く。届かないと vim も top も壊れた幅で描く。
+	term, size := server.PTY()
+	if term != sshclient.TermName || size != [2]uint32{120, 40} {
+		t.Errorf("pty-req = %q %v", term, size)
+	}
+}
+
+func TestTheRemoteExitCodeReachesTheSessionListing(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}, ExitCode: 42})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	if info := process.Wait(); info.Code != 42 {
+		t.Fatalf("exit = %+v, want 42", info)
+	}
+}
+
+func TestWhatIsTypedReachesTheRemoteStdin(t *testing.T) {
+	path, contents, public := keyPair(t)
+	echoed := make(chan string, 1)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell: func(channel ssh.Channel) {
+			line := make([]byte, 64)
+			read, _ := channel.Read(line)
+			echoed <- string(line[:read])
+			_, _ = channel.Write(line[:read])
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	// シェルが始まってから書く。始まる前に書いたぶんは、まだ問いの答えとして
+	// 読まれうる——それは握手の間だけ成り立つ約束である。
+	time.Sleep(200 * time.Millisecond)
+	if _, err := process.Write([]byte("echo hello\r")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-echoed:
+		if got != "echo hello\r" {
+			t.Fatalf("the remote received %q", got)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("nothing reached the remote stdin")
+	}
+}
+
+func TestResizeSendsAWindowChange(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell: func(channel ssh.Channel) {
+			_, _ = io.WriteString(channel, "ready\r\n")
+			// 開いたままにする。閉じたセッションへ window-change は送れない。
+			_, _ = io.Copy(io.Discard, channel)
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "ready")
+	if err := process.Resize(terminal.Size{Cols: 200, Rows: 60}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, size := range server.Sizes() {
+			if size == [2]uint32{200, 60} {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("window-change never arrived: %v", server.Sizes())
+}
+
+func TestSetEnvReachesTheRemote(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(channel ssh.Channel) { _, _ = io.WriteString(channel, "ready\r\n") },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	target := targetWith(server, path)
+	target.SetEnv = []sshclient.EnvVar{{Name: "SSHC", Value: "yes"}}
+
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "ready")
+	found := false
+	for _, entry := range server.Env() {
+		if entry == "SSHC=yes" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("env = %#v", server.Env())
+	}
+}
+
+func TestARemoteCommandRunsInsteadOfAShell(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(channel ssh.Channel) { _, _ = io.WriteString(channel, "ran\r\n") },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	target := targetWith(server, path)
+	target.RemoteCommand = "tmux attach"
+
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "ran")
+	if server.Command() != "tmux attach" {
+		t.Fatalf("command = %q", server.Command())
+	}
+	if server.ShellRan() {
+		t.Error("a RemoteCommand still started a shell")
+	}
+}
+
+// **プログラムは一つも起こさない。** 各ホップの SSH チャンネルの上に、次の
+// ホップへの TCP を載せるだけである。
+func TestProxyJumpReachesTheFinalHostThroughTheFirst(t *testing.T) {
+	path, contents, public := keyPair(t)
+	inner := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(channel ssh.Channel) { _, _ = io.WriteString(channel, "the far side\r\n") },
+	})
+	edge := newTestServer(t, serverOptions{
+		AcceptKeys:       []ssh.PublicKey{public},
+		AllowDirectTCPIP: true,
+		Reached: map[string]func() net.Conn{
+			inner.Address(): func() net.Conn { return inner.Dial() },
+		},
+	})
+
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	known := knownHostsLine("["+edge.Host()+"]:"+edge.Port(), edge.HostKey.PublicKey()) +
+		knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())
+	dialer := sshclient.Dialer{
+		Auth:     auth,
+		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+	}
+
+	target := targetWith(inner, path)
+	target.Jump = []sshclient.Target{targetWith(edge, path)}
+
+	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "the far side")
+	if dialed := edge.Dialed(); len(dialed) != 1 || dialed[0] != inner.Address() {
+		t.Fatalf("the first hop dialed %#v", dialed)
+	}
+}
+
+// 接続できなかった理由は端末に残る。**セッションは残す**——理由が読めるのは
+// そこだけである。
+func TestAFailedHandshakeWritesItsReasonToTheTerminal(t *testing.T) {
+	path, contents, _ := keyPair(t)
+	// サーバーは別の鍵しか受け付けない。
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{newHostKey(t).PublicKey()}})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatalf("Open returned an error instead of a session: %v", err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "sshc:")
+	if info := process.Wait(); info.Code == 0 {
+		t.Fatalf("a failed handshake reported a clean exit: %+v", info)
+	}
+}
+
+// ホスト鍵が食い違えば接続しない。認証まで進んではならない。
+func TestAChangedHostKeyStopsTheConnectionBeforeAuthentication(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	// known_hosts には別の鍵が書いてある。
+	other := knownHostsLine("["+server.Host()+"]:"+server.Port(), newHostKey(t).PublicKey())
+	dialer := sshclient.Dialer{
+		Auth:     auth,
+		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(other), nil }},
+	}
+
+	process, err := dialer.Open(context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	seen := readUntil(t, process, "sshc:")
+	if !strings.Contains(seen, sshclient.ErrHostKeyChanged.Error()) {
+		t.Fatalf("the terminal does not say why: %q", seen)
+	}
+}
+
+// 未知のホストの問いは端末に出て、答えがそこから戻る。
+func TestAnUnknownHostIsAskedThroughTheTerminal(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(channel ssh.Channel) { _, _ = io.WriteString(channel, "accepted\r\n") },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	added := make(chan knownhosts.Candidate, 1)
+	dialer := sshclient.Dialer{
+		Auth: auth,
+		HostKeys: sshclient.HostKeys{
+			Read: func() ([]byte, error) { return nil, nil },
+			Add:  func(candidate knownhosts.Candidate) error { added <- candidate; return nil },
+		},
+	}
+
+	process, err := dialer.Open(context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "Are you sure you want to continue connecting")
+	if _, err := process.Write([]byte("yes\r")); err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, process, "accepted")
+	select {
+	case candidate := <-added:
+		if candidate.Host != server.Host() {
+			t.Errorf("the written key names %q", candidate.Host)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("the accepted key was never written to known_hosts")
+	}
+}
+
+func TestAnUnreachableAddressFailsWithinItsTimeout(t *testing.T) {
+	target := sshclient.Target{
+		Alias: "gone", HostName: "203.0.113.10", Port: "22", User: "ops",
+		Timeout: 200 * time.Millisecond, Methods: sshclient.DefaultMethods(),
+	}
+	dialer := sshclient.Dialer{
+		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+
+	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+	drain(process)
+
+	done := make(chan terminal.ExitInfo, 1)
+	go func() { done <- process.Wait() }()
+	select {
+	case info := <-done:
+		if info.Code == 0 {
+			t.Fatalf("an unreachable address reported a clean exit: %+v", info)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the connection did not give up within its timeout")
+	}
+}
+
+func TestHangupEndsTheSession(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell: func(channel ssh.Channel) {
+			_, _ = io.WriteString(channel, "ready\r\n")
+			// 何も来ないまま待つ。閉じるのはこちら側の仕事である。
+			_, _ = io.Copy(io.Discard, channel)
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, process, "ready")
+	drain(process)
+
+	if err := process.Hangup(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan terminal.ExitInfo, 1)
+	go func() { done <- process.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Hangup did not end the session")
+	}
+	_ = process.Close()
+}

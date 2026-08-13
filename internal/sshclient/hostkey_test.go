@@ -41,13 +41,18 @@ func hostKeysFor(contents string) *recordingHostKeys {
 			recorder.added = append(recorder.added, candidate)
 			return nil
 		},
-		Ask: func(prompt string) (bool, error) {
-			recorder.asked = append(recorder.asked, prompt)
-			return recorder.answer, nil
-		},
 	}
 	return recorder
 }
+
+// Confirm は、この記録係自身が Prompter として答える。
+func (r *recordingHostKeys) Confirm(prompt string) (bool, error) {
+	r.asked = append(r.asked, prompt)
+	return r.answer, nil
+}
+
+func (r *recordingHostKeys) Line(string) (string, error)   { return "", sshclient.ErrPromptAborted }
+func (r *recordingHostKeys) Secret(string) (string, error) { return "", sshclient.ErrPromptAborted }
 
 type recordingHostKeys struct {
 	sshclient.HostKeys
@@ -56,8 +61,8 @@ type recordingHostKeys struct {
 	answer bool
 }
 
-func verify(keys sshclient.HostKeys, target sshclient.Target, key ssh.PublicKey) error {
-	return keys.Callback(target)("ignored", &net.TCPAddr{}, key)
+func verify(keys sshclient.HostKeys, target sshclient.Target, key ssh.PublicKey, prompt sshclient.Prompter) error {
+	return keys.Callback(target, prompt)("ignored", &net.TCPAddr{}, key)
 }
 
 func TestAKnownHostWithTheSameKeyConnects(t *testing.T) {
@@ -65,7 +70,7 @@ func TestAKnownHostWithTheSameKeyConnects(t *testing.T) {
 	recorder := hostKeysFor(knownHostsLine("203.0.113.10", host.PublicKey()))
 	target := sshclient.Target{Alias: "bastion", HostName: "203.0.113.10", Port: "22"}
 
-	if err := verify(recorder.HostKeys, target, host.PublicKey()); err != nil {
+	if err := verify(recorder.HostKeys, target, host.PublicKey(), recorder); err != nil {
 		t.Fatalf("verify = %v", err)
 	}
 	if len(recorder.asked) != 0 {
@@ -84,7 +89,7 @@ func TestAChangedHostKeyIsRefusedWithoutAsking(t *testing.T) {
 	recorder.answer = true // 尋ねられたら「はい」と答える用意がある。尋ねてはならない。
 	target := sshclient.Target{Alias: "bastion", HostName: "203.0.113.10", Port: "22"}
 
-	err := verify(recorder.HostKeys, target, offered.PublicKey())
+	err := verify(recorder.HostKeys, target, offered.PublicKey(), recorder)
 	if !errors.Is(err, sshclient.ErrHostKeyChanged) {
 		t.Fatalf("verify = %v, want ErrHostKeyChanged", err)
 	}
@@ -102,7 +107,7 @@ func TestAnUnknownHostIsPutToTheUserAndRememberedWhenAccepted(t *testing.T) {
 	recorder.answer = true
 	target := sshclient.Target{Alias: "bastion", HostName: "203.0.113.10", Port: "2222"}
 
-	if err := verify(recorder.HostKeys, target, host.PublicKey()); err != nil {
+	if err := verify(recorder.HostKeys, target, host.PublicKey(), recorder); err != nil {
 		t.Fatalf("verify = %v", err)
 	}
 	if len(recorder.asked) != 1 {
@@ -123,7 +128,7 @@ func TestAnUnknownHostIsRefusedWhenTheUserSaysNo(t *testing.T) {
 	recorder.answer = false
 	target := sshclient.Target{HostName: "203.0.113.10", Port: "22"}
 
-	if err := verify(recorder.HostKeys, target, host.PublicKey()); !errors.Is(err, sshclient.ErrHostKeyUnknown) {
+	if err := verify(recorder.HostKeys, target, host.PublicKey(), recorder); !errors.Is(err, sshclient.ErrHostKeyUnknown) {
 		t.Fatalf("verify = %v, want ErrHostKeyUnknown", err)
 	}
 	if len(recorder.added) != 0 {
@@ -149,7 +154,7 @@ func TestStrictHostKeyCheckingDecidesWhatHappensToAnUnknownHost(t *testing.T) {
 		recorder.answer = true
 		target := sshclient.Target{HostName: "203.0.113.10", Port: "22", Strict: test.strict}
 
-		err := verify(recorder.HostKeys, target, host.PublicKey())
+		err := verify(recorder.HostKeys, target, host.PublicKey(), recorder)
 		switch {
 		case test.wantFail && !errors.Is(err, sshclient.ErrHostKeyUnknown):
 			t.Errorf("StrictHostKeyChecking %q = %v, want ErrHostKeyUnknown", test.strict, err)
@@ -172,7 +177,7 @@ func TestANonDefaultPortMatchesTheBracketedForm(t *testing.T) {
 	recorder := hostKeysFor(knownHostsLine("[203.0.113.10]:2222", host.PublicKey()))
 	target := sshclient.Target{HostName: "203.0.113.10", Port: "2222"}
 
-	if err := verify(recorder.HostKeys, target, host.PublicKey()); err != nil {
+	if err := verify(recorder.HostKeys, target, host.PublicKey(), recorder); err != nil {
 		t.Fatalf("verify = %v", err)
 	}
 	if len(recorder.asked) != 0 {
@@ -188,7 +193,7 @@ func TestANonDefaultPortDoesNotMatchThePlainForm(t *testing.T) {
 	recorder.answer = false
 	target := sshclient.Target{HostName: "203.0.113.10", Port: "2222"}
 
-	if err := verify(recorder.HostKeys, target, host.PublicKey()); !errors.Is(err, sshclient.ErrHostKeyUnknown) {
+	if err := verify(recorder.HostKeys, target, host.PublicKey(), recorder); !errors.Is(err, sshclient.ErrHostKeyUnknown) {
 		t.Fatalf("verify = %v, want the port to make this a different host", err)
 	}
 }
@@ -199,7 +204,7 @@ func TestARevokedKeyIsRefused(t *testing.T) {
 	recorder.answer = true
 	target := sshclient.Target{HostName: "203.0.113.10", Port: "22"}
 
-	if err := verify(recorder.HostKeys, target, host.PublicKey()); !errors.Is(err, sshclient.ErrHostKeyRevoked) {
+	if err := verify(recorder.HostKeys, target, host.PublicKey(), recorder); !errors.Is(err, sshclient.ErrHostKeyRevoked) {
 		t.Fatalf("verify = %v, want ErrHostKeyRevoked", err)
 	}
 }
@@ -210,7 +215,7 @@ func TestWithoutAWayToAskAnUnknownHostIsRefused(t *testing.T) {
 	keys := sshclient.HostKeys{Read: func() ([]byte, error) { return nil, nil }}
 	target := sshclient.Target{HostName: "203.0.113.10", Port: "22"}
 
-	if err := verify(keys, target, host.PublicKey()); !errors.Is(err, sshclient.ErrHostKeyUnknown) {
+	if err := verify(keys, target, host.PublicKey(), nil); !errors.Is(err, sshclient.ErrHostKeyUnknown) {
 		t.Fatalf("verify = %v, want ErrHostKeyUnknown", err)
 	}
 }
