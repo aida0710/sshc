@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -9,7 +10,6 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/platform"
-	"sshc/internal/secret"
 	"sshc/internal/terminal"
 )
 
@@ -27,20 +27,16 @@ const StreamPath = "/terminal/stream"
 type TerminalHandlers struct {
 	Registry *terminal.Registry
 	Tickets  *terminal.Tickets
-	// SSH は ssh の絶対パスを解決する。PATH は見ない。
-	SSH func() (string, error)
+	// Connect は、alias ひとつ分の対話セッションを開く。
+	//
+	// **外部の ssh は起こさない。** プロセス内で SSH を話すので、確保する
+	// PTY も無い。nil なら SSH のセッションは開けない。
+	Connect Connector
 	// Shell はローカルシェルの絶対パスを解決する。
 	Shell func() (string, error)
 	// Environment は、セッションが継ぐ環境である。これは利用者が自分で行った
 	// であろう接続なので、検査が使う最小環境ではなく本人の環境を継ぐ。
 	Environment func() []string
-	// Passwords、KeyPassphraseTarget、AskpassHelper、AskpassURL は、保存済み
-	// 鍵パスフレーズを持つ接続を武装させる。ConnectHandlers と同じ部品であり、
-	// 欠けているものがあれば OpenSSH 自身が尋ねる普通の接続になる。
-	Passwords           *secret.Service
-	KeyPassphraseTarget func(alias string) (relativePath, promptPath, configSnapshot, evidence string, ok bool, err error)
-	AskpassHelper       string
-	AskpassURL          string
 	// ExpectedOrigin は、アップグレードで完全一致を求める値である。
 	ExpectedOrigin string
 }
@@ -160,36 +156,19 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 	if err := platform.ValidateAlias(*alias); err != nil {
 		return terminal.Spec{}, err
 	}
-	ssh, err := h.resolveSSH()
-	if err != nil {
-		return terminal.Spec{}, err
+	if h.Connect == nil {
+		return terminal.Spec{}, terminal.ErrNoStarter
 	}
 
-	// 保存済み鍵パスフレーズは、この 1 個の接続に対してヘルパーを武装させる。
-	// トークンはここで発行され、その接続に使い切られる。
-	var credential platform.AskpassCredential
-	if h.AskpassHelper != "" && h.AskpassURL != "" {
-		issued := issueAskpassCredential(h.Passwords, *alias, h.KeyPassphraseTarget)
-		if issued.token != "" {
-			credential = platform.AskpassCredential{
-				Helper: h.AskpassHelper, URL: h.AskpassURL, Token: issued.token,
-				Kind: issued.kind, IdentityFile: issued.identityFile, SSHConfig: issued.sshConfig,
-			}
-		}
-	}
-
-	// 組み立ては internal/platform が持つ。`sshc <alias>` が呼ぶのと同じ関数な
-	// ので、環境から五つの変数を取り除く処理はこのリポジトリに一つしかない。
-	built, cleanup, err := platform.InteractiveSSH(platform.InteractiveRequest{
-		SSH: ssh, Alias: *alias, Inherited: h.environment(), Credential: credential,
-	})
-	if err != nil {
-		return terminal.Spec{}, err
-	}
+	// 設定を読むのはここである。読めなければセッションを作らない——設定の
+	// 問題は接続画面が表示できるので、端末に理由を書く必要が無い。接続そのものの
+	// 出来事（届かない、認証が通らない）は、開いたセッションの中で語られる。
+	target := *alias
 	return terminal.Spec{
-		Kind: terminal.KindSSH, Alias: *alias, Title: *alias, Size: size,
-		Command: terminal.Command{Path: built.Path, Arguments: built.Arguments, Env: built.Env},
-		Cleanup: cleanup,
+		Kind: terminal.KindSSH, Alias: target, Title: target, Size: size,
+		Open: func(size terminal.Size) (terminal.Process, error) {
+			return h.Connect(context.Background(), target, size)
+		},
 	}, nil
 }
 
@@ -211,13 +190,6 @@ func (h TerminalHandlers) resolveShell() (string, error) {
 	return h.Shell()
 }
 
-func (h TerminalHandlers) resolveSSH() (string, error) {
-	if h.SSH == nil {
-		return "", platform.ErrInteractiveProgram
-	}
-	return h.SSH()
-}
-
 func (h TerminalHandlers) environment() []string {
 	if h.Environment == nil {
 		return nil
@@ -233,6 +205,11 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "terminal_session_limit")
 	case errors.Is(err, platform.ErrUnsafeAlias), errors.Is(err, errMissingAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
+	}
+	// 設定そのものが接続を許さない場合は、その理由を名指しする。
+	// 「開けませんでした」だけでは、次に何をすればよいか分からない。
+	if code, named := connectProblem(err); named {
+		return problem(c, http.StatusUnprocessableEntity, code)
 	}
 	return problem(c, http.StatusInternalServerError, "terminal_start_failed")
 }

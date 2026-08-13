@@ -34,7 +34,8 @@ type Dialer struct {
 // 接続できなかった理由は、端末へ書かれて終了済みセッションとして残る。
 // 理由が読めるのはそこだけである。
 func (d Dialer) Open(ctx context.Context, target Target, size terminal.Size) (terminal.Process, error) {
-	session := newSession(size)
+	ctx, cancel := context.WithCancel(ctx)
+	session := newSession(size, cancel)
 	go d.connect(ctx, target, session)
 	return session, nil
 }

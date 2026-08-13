@@ -134,6 +134,22 @@ type terminalFixture struct {
 	starter  *scriptedStarter
 	registry *terminal.Registry
 	origin   string
+	mutex    sync.Mutex
+	// connected は、プロセス内 SSH に渡された alias である。
+	connected []string
+}
+
+func (f *terminalFixture) connect(alias string) terminal.Process {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.connected = append(f.connected, alias)
+	return newScriptedPTY()
+}
+
+func (f *terminalFixture) aliases() []string {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return append([]string(nil), f.connected...)
 }
 
 func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
@@ -152,10 +168,14 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
 
 	engine := echo.New()
 	registerTerminalRoutes(engine, TerminalHandlers{
-		Registry:       registry,
-		Tickets:        &terminal.Tickets{},
-		Shell:          func() (string, error) { return "/bin/zsh", nil },
-		SSH:            func() (string, error) { return "/usr/bin/ssh", nil },
+		Registry: registry,
+		Tickets:  &terminal.Tickets{},
+		Shell:    func() (string, error) { return "/bin/zsh", nil },
+		// SSH はプロセス内で話す。この検査は PTY の継ぎ目を見ているので、
+		// 開いたことだけを記録する接続で足りる。
+		Connect: func(_ context.Context, alias string, _ terminal.Size) (terminal.Process, error) {
+			return fixture.connect(alias), nil
+		},
 		ExpectedOrigin: fixture.origin,
 	})
 	server.Config.Handler = engine

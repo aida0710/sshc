@@ -252,3 +252,39 @@ func equivalentSource(first, second Source) bool {
 		first.Absolute == second.Absolute &&
 		first.Condition == second.Condition
 }
+
+// ErrUnresolvable は、その alias に接続できない理由を運ぶ。
+//
+// Refusal は「値を出さない理由」であり、接続もできない。理由の符号をそのまま
+// 持つのは、呼び出し側が画面の文言へ移せるようにするためである。
+type ErrUnresolvable struct {
+	Alias   string
+	Codes   []string
+	Details []string
+}
+
+func (e *ErrUnresolvable) Error() string {
+	return e.Alias + ": " + strings.Join(e.Details, "; ")
+}
+
+// ResolveConnection は、この alias に接続したときに実際に使われる値を返す。
+//
+// **接続はこの答えだけを使う。** 設定を読むのはここ一箇所であり、SSH を話す
+// パッケージは ~/.ssh/config を開かない——開けば「この alias に接続すると何が
+// 使われるか」に答えるものがまた二つになる。
+func (s *Service) ResolveConnection(alias string) (effective.Values, error) {
+	graph, err := s.resolve()
+	if err != nil {
+		return effective.Values{}, err
+	}
+	resolution := effective.Resolve(graph, alias, s.localFacts())
+	if len(resolution.Refusals) > 0 {
+		failure := &ErrUnresolvable{Alias: alias}
+		for _, refusal := range resolution.Refusals {
+			failure.Codes = append(failure.Codes, refusal.Code)
+			failure.Details = append(failure.Details, refusal.Detail)
+		}
+		return effective.Values{}, failure
+	}
+	return resolution.Values, nil
+}

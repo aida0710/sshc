@@ -1,6 +1,7 @@
 package sshclient
 
 import (
+	"context"
 	"io"
 	"sync"
 	"time"
@@ -31,6 +32,12 @@ type Session struct {
 	reader *io.PipeReader
 	writer *io.PipeWriter
 
+	// cancel は、まだ握手の途中なら、それごと止める。
+	//
+	// **閉じたセッションが繋ぎ続けてはならない。** 届かないアドレスへの接続は
+	// タイムアウトまで生き、その間ずっと goroutine とソケットを保持する。
+	cancel context.CancelFunc
+
 	mutex   sync.Mutex
 	remote  *ssh.Session
 	size    terminal.Size
@@ -42,11 +49,11 @@ type Session struct {
 	doneOnce  sync.Once
 }
 
-func newSession(size terminal.Size) *Session {
+func newSession(size terminal.Size, cancel context.CancelFunc) *Session {
 	reader, writer := io.Pipe()
 	return &Session{
 		input: NewInputBuffer(), reader: reader, writer: writer,
-		size: size, done: make(chan struct{}),
+		size: size, cancel: cancel, done: make(chan struct{}),
 	}
 }
 
@@ -103,6 +110,9 @@ func (s *Session) Wait() terminal.ExitInfo {
 // Close は、繋いだものを手前まで含めて手放す。
 func (s *Session) Close() error {
 	s.closeOnce.Do(func() {
+		if s.cancel != nil {
+			s.cancel()
+		}
 		s.mutex.Lock()
 		remote, closers := s.remote, s.closers
 		s.mutex.Unlock()
