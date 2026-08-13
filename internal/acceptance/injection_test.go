@@ -75,12 +75,14 @@ func aliasRoutes() []aliasRoute {
 	}
 }
 
-func TestNoRouteEverPutsAHostileValueOnACommandLine(t *testing.T) {
+func TestNoRouteEverLetsAHostileAliasReachAnExternalEffect(t *testing.T) {
 	f := newFixture(t)
 	publicKey := string(bytes.TrimSpace(f.read("id_ed25519.pub")))
 
-	// 正のコントロール: 安全な alias は process seam に届かねばならず、
-	// "--" separator の後に 1 つの完全な argument として到達しなければならない。
+	// 正のコントロール: 安全な alias は継ぎ目に届かねばならず、そのままの
+	// 1 つの値として到達しなければならない。**かつてはこれが argv の "--" の
+	// 後ろに来ることを見ていた。** コマンドラインがもう無いので、見るのは
+	// 継ぎ目へ渡る値そのものである。
 	//
 	// 公開鍵のリモート登録を使う。**認証テストも設定の解決もプロセスを
 	// 起こさなくなった**ので、あちらの継ぎ目はネットワークであり、この検査が
@@ -104,7 +106,6 @@ func TestNoRouteEverPutsAHostileValueOnACommandLine(t *testing.T) {
 	for _, route := range aliasRoutes() {
 		for _, hostile := range hostileArguments {
 			t.Run(route.path+" "+quoteForName(hostile), func(t *testing.T) {
-				f.runner.reset()
 				f.terminal.reset()
 				// 敵対的な target に対しても、それが可能な場合は token を
 				// 発行する。そうすることで、リクエストは token rule だけでなく
@@ -116,9 +117,6 @@ func TestNoRouteEverPutsAHostileValueOnACommandLine(t *testing.T) {
 				}
 				readBody(t, f.do(http.MethodPost, route.path, mustJSON(t, body), withAction(issued)))
 
-				if commands := f.runner.recorded(); len(commands) != 0 {
-					t.Fatalf("a hostile alias reached the process seam: %#v", commands)
-				}
 				for _, launched := range f.terminal.launched() {
 					t.Fatalf("Terminal was launched for the hostile alias %q", launched)
 				}
@@ -518,7 +516,6 @@ func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testin
 			if err := platform.ValidateAlias(alias); err == nil {
 				t.Fatalf("ValidateAlias(%q) = nil", alias)
 			}
-			f.runner.reset()
 			f.terminal.reset()
 			for _, path := range []string{
 				"/api/v1/diagnostics/effective",
@@ -544,9 +541,6 @@ func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testin
 			if openedStatus >= 200 && openedStatus < 300 {
 				t.Errorf("opening a terminal accepted the alias with %d", openedStatus)
 			}
-			if commands := f.runner.recorded(); len(commands) != 0 {
-				t.Fatalf("a refused alias still started %#v", commands)
-			}
 			if reached := f.scanner.remoted(); len(reached) != 0 {
 				t.Fatalf("a refused alias still reached %#v", reached)
 			}
@@ -554,10 +548,6 @@ func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testin
 				t.Fatalf("a refused alias still launched Terminal: %#v", launched)
 			}
 		})
-	}
-
-	if commands := f.runner.recorded(); len(commands) != 0 {
-		t.Fatalf("describing a command started %#v", commands)
 	}
 }
 

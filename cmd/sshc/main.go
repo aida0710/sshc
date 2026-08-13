@@ -231,7 +231,6 @@ func main() {
 		UI:        assets,
 		Logger:    logger,
 		Home:      home,
-		Runner:    parts.Runner,
 		Toolchain: parts.Toolchain,
 		KeyAgent:  parts.KeyAgent,
 		Lookup:    os.LookupEnv,
