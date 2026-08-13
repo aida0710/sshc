@@ -140,11 +140,11 @@ func completionConditions() []completionCondition {
 			Text:    "多段 ProxyJump と値の出所を表示できる",
 			Verdict: verdictConditional,
 			Automated: []proof{
-				{proofGoTest, "TestProjectionMatchesInstalledOpenSSH"},
-				{proofGoTest, "FuzzParseValues"},
+				{proofGoTest, "TestResolveMatchesInstalledOpenSSH"},
+				{proofGoTest, "FuzzResolve"},
 			},
 			Gap: "the differential proof runs the installed OpenSSH. On a machine " +
-				"without it TestProjectionMatchesInstalledOpenSSH skips, and this " +
+				"without it TestResolveMatchesInstalledOpenSSH skips, and this " +
 				"condition is then unproven rather than passing quietly.",
 		},
 		{
@@ -240,22 +240,21 @@ func completionConditions() []completionCondition {
 			Text:    "危険ディレクティブを暗黙実行しない",
 			Verdict: verdictPartial,
 			Automated: []proof{
-				// evaluation ゲート、継ぎ目においても HTTP 経由でも。
-				{proofGoTest, "TestEvaluateRefusesToRunWhenEvaluationCanExecuteACommand"},
-				{proofGoTest, "TestEvaluationOfAnExecutableConfigurationNeedsAConfirmation"},
+				// 設定を読むことは、もう何も起動しない。Match exec は評価せず拒む。
+				{proofGoTest, "TestResolveRefusesWhatItWillNotEvaluate"},
 				// connection gate。
 				{proofGoTest, "TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken"},
 				{proofGoTest, "TestNoRouteEverPutsAHostileValueOnACommandLine"},
 				{proofGoTest, "TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard"},
 			},
 			Manual: []proof{{proofManual, "M1. 実リモートホストへの接続テスト"}},
-			Gap: "what is proven is that this application starts no process without a " +
-				"confirmation bound to the directives it displayed. What is NOT proven " +
-				"automatically is that a real OpenSSH, once started, honours the -o " +
-				"options used to disable LocalCommand and forwarding: every automated " +
-				"proof replaces the process with a recorder. That half is manual test " +
-				"M1. Note also that the alias guard is three layers deep, so removing " +
-				"any one layer alone leaves the route-level test green.",
+			Gap: "what is proven is that this application starts no process to read the " +
+				"configuration, and none to connect without a confirmation bound to the " +
+				"directives it displayed. What is NOT proven automatically is that a real " +
+				"OpenSSH, once started, honours the -o options used to disable LocalCommand " +
+				"and forwarding: every automated proof replaces the process with a recorder. " +
+				"That half is manual test M1. Note also that the alias guard is three layers " +
+				"deep, so removing any one layer alone leaves the route-level test green.",
 		},
 		{
 			Number:  12,

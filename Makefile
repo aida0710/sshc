@@ -11,6 +11,7 @@ FUZZ_TARGETS = \
 	internal/config:FuzzParseRendersOriginalBytes \
 	internal/config:FuzzExpandIncludePattern \
 	internal/effective:FuzzParseValues \
+	internal/effective:FuzzResolve \
 	internal/knownhosts:FuzzParseKnownHostsRoundTrip \
 	internal/acceptance:FuzzAPIRequestBodies \
 	internal/remotesync:FuzzReadSnapshot

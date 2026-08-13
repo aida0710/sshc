@@ -45,7 +45,6 @@ func addDiagnosticsActions(registry actionRegistry, service *diagnostics.Service
 		return report.Evidence(), nil
 	}
 	for _, kind := range []string{
-		session.ActionEvaluate,
 		session.ActionReachability,
 		session.ActionAuthentication,
 	} {
@@ -105,37 +104,18 @@ func (h DiagnosticsHandlers) Effective(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 
-	confirmed := false
-	if c.Request().Header.Get(ActionHeader) != "" {
-		allowed, response := h.Actions.consume(c, session.ActionEvaluate, request.Alias)
-		if !allowed {
-			return response
-		}
-		confirmed = true
-	}
-
-	inspection, err := h.Service.Inspect(c.Request().Context(), request.Alias, confirmed)
+	inspection, err := h.Service.Inspect(request.Alias)
 	if err != nil {
 		return problem(c, http.StatusInternalServerError, "inspection_failed")
 	}
 
 	response := api.EffectiveResponse{
 		Alias:                inspection.Alias,
-		Evaluated:            inspection.Evaluated,
-		RequiresConfirmation: inspection.RequiresConfirmation,
 		TokenWarning:         effective.TokenEscapeWarning,
 		ExecutableDirectives: describeDirectives(inspection.Report.Directives),
-		Values:               make([]api.EffectiveValue, 0, len(inspection.Values.Keywords)),
 		Sources:              make([]api.ValueSource, 0, len(inspection.Projection.Sources)),
 		Complexities:         make([]api.ComplexityNote, 0, len(inspection.Projection.Complexities)),
 		Route:                make([]api.JumpStage, 0, len(inspection.Route)),
-		Failure:              api.OpenSSHFailure{},
-	}
-	for _, keyword := range inspection.Values.Keywords {
-		response.Values = append(response.Values, api.EffectiveValue{
-			Keyword: keyword,
-			Values:  inspection.Values.All(keyword),
-		})
 	}
 	for _, source := range inspection.Projection.Sources {
 		response.Sources = append(response.Sources, api.ValueSource{
@@ -154,14 +134,6 @@ func (h DiagnosticsHandlers) Effective(c *echo.Context) error {
 			Order: stage.Order, Depth: stage.Depth, Parent: stage.Parent, Hop: stage.Hop.Raw,
 			Hostname: stage.Hostname, User: stage.User, Port: stage.Port, Complex: stage.Complex,
 		})
-	}
-	if inspection.Failure != nil {
-		response.Failure = api.OpenSSHFailure{
-			Failed:    true,
-			ExitCode:  inspection.Failure.ExitCode,
-			Stderr:    inspection.Failure.Stderr,
-			Truncated: inspection.Failure.Truncated,
-		}
 	}
 	return c.JSON(http.StatusOK, response)
 }

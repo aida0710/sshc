@@ -241,10 +241,9 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 // もの、private key を reveal するもの、あるいはそれを完全削除するもの。
 //
 // POST /api/v1/diagnostics/effective は意図的に含まれていない。
-// design §8.3 はその確認を条件付きにしている — 評価が
-// コマンドを実行するのは、設定が Match exec を持つときだけである —
-// そのためここでは token がないことは拒否ではなく、単に評価されていない答えにすぎない。
-// その条件付きゲートには、Match exec を持つ設定に対する専用テストが以下にある。
+// **あれはもう何も実行しない。** 設定を読んで値を決めるのはこの
+// アプリケーション自身であり、そこに確認すべき副作用は無い。
+// 実行を伴わない読み取りに action token を要求しても、守るものが無い。
 func requiresConfirmation(path string) bool {
 	switch {
 	case path == "/api/v1/diagnostics/config", path == "/api/v1/diagnostics/effective":
@@ -266,68 +265,6 @@ func requiresConfirmation(path string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-// TestEvaluationOfAnExecutableConfigurationNeedsAConfirmation は、
-// 上の表が漏らしたゲートをカバーする。
-//
-// Match exec は、OpenSSH が設定ファイルを読むだけの際に実行する
-// 唯一のディレクティブであり、そのため `ssh -G` をそうしたファイルに
-// かけるのは、ユーザーが見せられた正確なコマンドを確認するまで始まってはならない。
-func TestEvaluationOfAnExecutableConfigurationNeedsAConfirmation(t *testing.T) {
-	f := newFixture(t)
-
-	// diagnostics token が運ぶ evidence は、その時点の設定が持つ
-	// 実行可能なディレクティブから導かれるため、token を発行する前に
-	// ファイルは書き換えられている。
-	mustWrite(t, filepath.Join(f.root, "config"), []byte(""+
-		"Match exec \"true\"\n"+
-		"\tUser matched\n"+
-		"\n"+
-		"Host bastion\n"+
-		"\tHostName 203.0.113.10\n"), 0o600)
-
-	f.runner.reset()
-	unconfirmed := f.do(http.MethodPost, "/api/v1/diagnostics/effective", mustJSON(t, map[string]any{
-		"alias": "bastion",
-	}))
-	unconfirmedBody := readBody(t, unconfirmed)
-	if commands := f.runner.recorded(); len(commands) != 0 {
-		t.Fatalf("evaluating an executable configuration ran %#v without a confirmation", commands)
-	}
-	if !strings.Contains(unconfirmedBody, `"requiresConfirmation":true`) {
-		t.Fatalf("the unconfirmed answer does not report that a confirmation is required: %s", unconfirmedBody)
-	}
-	if strings.Contains(unconfirmedBody, `"evaluated":true`) {
-		t.Fatal("an executable configuration was evaluated without a confirmation")
-	}
-
-	// 誤った token は、未確認の答えへ黙って格下げされるのではなく、
-	// きっぱりと拒否される。
-	f.runner.reset()
-	refused := f.do(http.MethodPost, "/api/v1/diagnostics/effective", mustJSON(t, map[string]any{
-		"alias": "bastion",
-	}), withAction(strings.Repeat("B", 43)))
-	refusedStatus := refused.StatusCode
-	readBody(t, refused)
-	if refusedStatus != http.StatusForbidden {
-		t.Fatalf("an invented token = %d, want 403", refusedStatus)
-	}
-	if commands := f.runner.recorded(); len(commands) != 0 {
-		t.Fatalf("an invented token still ran %#v", commands)
-	}
-
-	// 正のコントロール: 確認があれば評価は実際に走る。
-	// つまり上の 2 つの拒否は、一度も動かない route ではなくゲートが機能している証拠である。
-	f.runner.reset()
-	token := f.actionToken(t, session.ActionEvaluate, "bastion")
-	confirmed := f.do(http.MethodPost, "/api/v1/diagnostics/effective", mustJSON(t, map[string]any{
-		"alias": "bastion",
-	}), withAction(token))
-	confirmedBody := readBody(t, confirmed)
-	if commands := f.runner.recorded(); len(commands) == 0 {
-		t.Fatalf("a confirmed evaluation started no process: %s", confirmedBody)
 	}
 }
 

@@ -71,16 +71,21 @@ const defaultPort = "22"
 // 選ぶのはプロセス内 SSH クライアント（B2）であり、そちらは OpenSSH の探索順
 // ではなく、利用者が選んだ鍵と鍵の一覧を使う。
 
-// expandsTokens は、解決の時点でトークンを展開するキーワードを列挙する。
+// expandsTokens は、解決の時点でトークンを展開するキーワードと、そこで
+// 許されるトークンを対応づける。
 //
 // **HostName だけである。実機の ssh -G で確かめた。** IdentityFile と
 // CertificateFile のトークンは、-G の出力では展開されないまま出てくる——
 // OpenSSH がそれらを展開するのは接続する瞬間であり、設定を読み終えた時点では
 // ない。ここで展開すると、設定について報告する値が ssh の報告とずれる。
 //
+// **HostName が受け付けるのは %% と %h だけである。これも実機で確かめた。**
+// `HostName %r.example.com` は "unknown key %r" で落ちる。全トークンを
+// 展開すると、本物なら起動しない設定に、こちらだけが答えを出すことになる。
+//
 // 接続に使うときの展開はプロセス内 SSH クライアント（B2）の仕事である。
 // ExpandTokens はそのために置いてある。
-var expandsTokens = map[string]bool{"hostname": true}
+var expandsTokens = map[string]string{"hostname": "h"}
 
 // Resolve は、この alias に接続したときに実際に使われる値を返す。
 //
@@ -101,7 +106,15 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 	applies := true
 
 	set := func(keyword, value string) bool {
+		// 引数の無いディレクティブは値を主張しない。`User` とだけ書かれた行を
+		// 通すと、user が空文字のまま接続に使われる——それは alias と同じ扱いを
+		// 受けるべき欠落であって、確定した空の値ではない。本物の ssh は設定
+		// 全体を撥ねるが、こちらは書かれていないものとして既定値を埋める。
+		// 行そのものは config の診断が別に報告する。
 		lowered := strings.ToLower(keyword)
+		if value == "" {
+			return false
+		}
 		if claimed[lowered] && !cumulativeKeywords[lowered] {
 			return false
 		}
@@ -275,8 +288,12 @@ func applyDefaults(values *Values, alias string, facts LocalFacts) {
 // `HostName %h.example.com` は自分自身を参照しない。
 func expandAll(values *Values, alias string, facts LocalFacts) (Refusal, bool) {
 	expand := func(keyword string, target TokenTarget) (Refusal, bool) {
+		allowed := expandsTokens[keyword]
 		for index, entry := range values.Entries[keyword] {
 			expanded, err := ExpandTokens(entry, facts, target)
+			if err == nil && !usesOnlyTokens(entry, allowed) {
+				err = ErrUnknownToken
+			}
 			if err != nil {
 				return Refusal{
 					Code:   RefusalUnknownToken,
@@ -302,7 +319,7 @@ func expandAll(values *Values, alias string, facts LocalFacts) (Refusal, bool) {
 		RemoteUser: valueOr(*values, "user", facts.User),
 	}
 	for keyword := range values.Entries {
-		if keyword == "hostname" || !expandsTokens[keyword] {
+		if _, expands := expandsTokens[keyword]; keyword == "hostname" || !expands {
 			continue
 		}
 		if refusal, ok := expand(keyword, target); !ok {
@@ -310,6 +327,27 @@ func expandAll(values *Values, alias string, facts LocalFacts) (Refusal, bool) {
 		}
 	}
 	return Refusal{}, true
+}
+
+// usesOnlyTokens は、値に現れる %X が allowed にあるものと %% だけかを報告する。
+//
+// ExpandTokens が知っているトークンの集合と、そのキーワードが受け付ける集合は
+// 別である。前者は接続の瞬間に使えるすべてで、後者は OpenSSH が設定を読む時点で
+// そのディレクティブに許すものである。
+func usesOnlyTokens(value, allowed string) bool {
+	for index := 0; index < len(value); index++ {
+		if value[index] != '%' {
+			continue
+		}
+		index++
+		if index >= len(value) {
+			return false
+		}
+		if value[index] != '%' && strings.IndexByte(allowed, value[index]) < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func valueOr(values Values, keyword, fallback string) string {
