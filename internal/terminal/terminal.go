@@ -29,6 +29,32 @@ const (
 
 func ValidKind(kind Kind) bool { return kind == KindSSH || kind == KindShell }
 
+// 転送の種類。
+const (
+	ForwardLocal   = "local"
+	ForwardDynamic = "dynamic"
+	ForwardAgent   = "agent"
+)
+
+// Forward は、そのセッションが開いている転送ひとつである。
+//
+// **このパッケージは SSH を知らない。** 型だけを置き、開くのは
+// internal/sshclient である——Spec.Open と同じ理由による。
+type Forward struct {
+	Kind string
+	// Listen は、このマシンで開いている場所。agent 転送では空。
+	Listen string
+	// To は、その先。dynamic と agent では空。
+	To string
+	// Problem は、開けなかった理由。空なら開いている。
+	Problem string
+}
+
+// Forwarder は、そのセッションが開いている転送を報告する。
+//
+// Process が満たしていなくてよい。**ローカルシェルは何も転送しない。**
+type Forwarder interface{ Forwards() []Forward }
+
 // Size は端末の桁数と行数である。
 //
 // これが無いと、全画面を使うプログラム（vim、top、less）が壊れた幅で描画する。
