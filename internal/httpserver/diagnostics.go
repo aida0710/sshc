@@ -188,8 +188,8 @@ func (h DiagnosticsHandlers) Authentication(c *echo.Context) error {
 	return c.JSON(http.StatusOK, api.AuthenticationResponse{
 		Outcome:       result.Outcome,
 		Authenticated: result.Authenticated,
-		ExitCode:      result.ExitCode,
-		Stderr:        result.Stderr,
+		Method:        result.Method,
+		Detail:        result.Detail,
 		Truncated:     result.Truncated,
 		ElapsedMs:     int(result.Elapsed.Milliseconds()),
 	})

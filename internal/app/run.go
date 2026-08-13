@@ -57,10 +57,11 @@ type Dependencies struct {
 	Runner    platform.OutputRunner
 	Toolchain platform.Toolchain
 	KeyAgent  platform.KeyAgent
-	// ScanHostKeys は、あるアドレスが提示するホスト鍵を集める。nil なら
-	// internal/sshclient がこのプロセスの中で集める。Runner と同じ性質の継ぎ目で
-	// あり、**検査がネットワークへ出ないようにするためにここにある。**
+	// ScanHostKeys と Probe は、ネットワークへ出る 2 つの継ぎ目である。nil なら
+	// internal/sshclient がこのプロセスの中で話す。Runner と同じ性質のものであり、
+	// **検査がネットワークへ出ないようにするためにここにある。**
 	ScanHostKeys func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
+	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
 	// AskpassHelper は実行中バイナリの絶対パス。OpenSSH が保存済み鍵パスフレーズを得る
 	// ために実行するプログラムである。これを知り得るのは cmd/sshc だけで、パスが空
 	// なら、すべての端末起動は素の経路のままになる。
@@ -158,8 +159,7 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	configService := application.NewService(workspace, transactions)
 	keyService := buildKeyService(workspace, dependencies, configService)
 	configService.SetKeyPassphraseVerifier(keyService)
-	diagnosticsService := diagnostics.NewService(
-		workspace, dependencies.Runner, dependencies.Toolchain, dependencies.Lookup)
+	diagnosticsService := diagnostics.NewService(workspace, nil)
 	// 生成領域の書式を知っているのは設定エンジンであり、それを尋ねられるのは
 	// diagnostics ではなくここである。あちらは internal/application を import
 	// しない。これがないと、宣言済みで空のグループのために書かれた Include が
@@ -195,6 +195,16 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	// 配下のもうひとつの通常の管理対象ファイルにすぎず、ジャーナルはひとつで足り、
 	// ワークスペースが持つ他のすべてと一緒に移動する。
 	passwordService := secret.NewService(workspace, transactions, time.Now)
+
+	// プロセス内で SSH を話すのに要るものは、ここで一度だけ組み立てる。
+	// 対話セッションも認証テストも、同じ鍵・同じ known_hosts・同じ解決器を使う。
+	ssh := newSSHParts(configService, passwordService, knownHostsService,
+		workspace.Home(), workspace.Root())
+	probe := dependencies.Probe
+	if probe == nil {
+		probe = ssh.probe()
+	}
+	diagnosticsService.Authentication.Dial = probe
 
 	// パスフレーズが保存されている鍵は、二段階ではなく一度の操作でエージェントに
 	// 追加される。この参照関数を internal/keys に import させず、ここで取り付けるのは、
@@ -267,12 +277,11 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		Logger:        dependencies.Logger,
 		Config:        configService,
 		Keys:          keyService,
-		Home:          workspace.Home(),
-		SSHRoot:       workspace.Root(),
 		Diagnostics:   diagnosticsService,
 		KnownHosts:    knownHostsService,
 		RemoteKeys:    remoteKeyService,
 		Passwords:     passwordService,
+		Connect:       ssh.connector(),
 		Sync:          syncService,
 		AskpassHelper: dependencies.AskpassHelper,
 		Terminals:     terminals,

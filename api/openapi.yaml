@@ -1599,12 +1599,15 @@ components:
     AuthenticationResponse:
       type: object
       additionalProperties: false
-      required: [outcome, authenticated, exitCode, stderr, truncated, elapsedMs]
+      # exitCode と stderr は無い。外部の ssh を起こさないので、終了コードも
+      # 診断出力も存在しない。代わりに method（通った認証方式）と detail
+      # （人へ向けた説明）を返す。
+      required: [outcome, authenticated, method, detail, truncated, elapsedMs]
       properties:
         outcome: { type: string }
         authenticated: { type: boolean }
-        exitCode: { type: integer }
-        stderr: { type: string }
+        method: { type: string }
+        detail: { type: string }
         truncated: { type: boolean }
         elapsedMs: { type: integer }
     RemoteKeyPlanRequest:

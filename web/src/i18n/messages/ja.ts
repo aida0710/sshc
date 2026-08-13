@@ -466,6 +466,7 @@ export const ja = {
   "diag.inside": "{condition} の内側",
   "diag.reachability": "到達性",
   "diag.authentication": "認証",
+  "diag.authenticationMethod": "{method} で認証されました。",
   "diag.forHost": "{host} の診断",
 
   "kh.heading": "Known Hosts",

@@ -8,6 +8,7 @@ import (
 	"sshc/internal/config"
 	"sshc/internal/effective"
 	"sshc/internal/platform"
+	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 )
 
@@ -62,25 +63,18 @@ type Service struct {
 
 // NewService は本番用の依存を配線する。
 //
-// lookup は親の環境を読む。テストでは nil でもよく、その場合、子はこのプロセスの
-// 環境を継承する。本番ではエントリポイントの os.LookupEnv であり、このサービスが
-// 起動するすべての OpenSSH プログラムは代わりに platform.MinimalEnvironment を
-// 受け取る。SSH_ASKPASS は与えられないので、パスフレーズのプロンプトは、ユーザーが
-// たまたまエクスポートしていたプログラムではなく、このアプリケーションが用意する
-// 標準入力にしか向かえない。
-func NewService(workspace *storage.Workspace, runner platform.OutputRunner, toolchain platform.Toolchain, lookup func(string) (string, bool)) *Service {
-	configPath := filepath.Join(workspace.Root(), "config")
-	var environment []string
-	if lookup != nil {
-		environment = platform.MinimalEnvironment(lookup)
-	}
+// probe は、接続ひとつ分を組み立てて認証だけを試す。**外部プログラムは
+// 起こさない。** nil なら認証テストは「手段が無い」と答える——できないことを
+// できるふりで隠さない。
+func NewService(
+	workspace *storage.Workspace,
+	probe func(ctx context.Context, alias string) (sshclient.Probe, error),
+) *Service {
 	return &Service{
-		Workspace:    workspace,
-		Resolver:     storage.NewResolver(workspace),
-		Reachability: Reachability{Dialer: &net.Dialer{}},
-		Authentication: Authentication{
-			Runner: runner, Toolchain: toolchain, ConfigPath: configPath, Environment: environment,
-		},
+		Workspace:      workspace,
+		Resolver:       storage.NewResolver(workspace),
+		Reachability:   Reachability{Dialer: &net.Dialer{}},
+		Authentication: Authentication{Dial: probe},
 	}
 }
 
@@ -249,6 +243,6 @@ func (s *Service) Authenticate(ctx context.Context, alias string, acknowledged b
 	if err != nil {
 		return AuthenticationResult{}, err
 	}
-	result.Stderr = platform.SanitiseHomePaths(result.Stderr, s.Workspace.Home())
+	result.Detail = platform.SanitiseHomePaths(result.Detail, s.Workspace.Home())
 	return result, nil
 }

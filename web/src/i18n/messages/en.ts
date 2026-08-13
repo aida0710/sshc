@@ -488,6 +488,7 @@ export const en = {
   "diag.inside": "inside {condition}",
   "diag.reachability": "Reachability",
   "diag.authentication": "Authentication",
+  "diag.authenticationMethod": "Authenticated with {method}.",
   "diag.forHost": "Diagnostics for {host}",
 
   "kh.heading": "Known Hosts",

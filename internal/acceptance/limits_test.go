@@ -2,13 +2,14 @@ package acceptance_test
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
 
 	"sshc/internal/httpserver"
-	"sshc/internal/platform"
 	"sshc/internal/session"
+	"sshc/internal/sshclient"
 )
 
 // maxAcceptableResponseBytes は、単一のレスポンスが取りうる上限を定める。
@@ -95,15 +96,13 @@ func TestNoAPIRouteReadsAnUnboundedBody(t *testing.T) {
 func TestReportedCommandOutputStaysWithinItsPublishedCeiling(t *testing.T) {
 	f := newFixture(t)
 
-	f.runner.answer(func(platform.Command) (platform.Output, error) {
-		return platform.Output{
-			Stderr:    bytes.Repeat([]byte("noisy stderr line\n"), 64<<10),
-			ExitCode:  255,
-			Truncated: true,
-		}, nil
+	// 相手が延々と喋る。**取り込む量にも、返す量にも上限がある。**
+	f.scanner.answers(func() (sshclient.Probe, error) {
+		return sshclient.Probe{Banner: strings.Repeat("noisy banner line\n", 64<<10)},
+			errors.New("ssh: unable to authenticate")
 	})
 
-	f.runner.reset()
+	f.scanner.reset()
 	token := f.actionToken(t, session.ActionAuthentication, "bastion")
 	response := f.do(http.MethodPost, "/api/v1/diagnostics/authentication", mustJSON(t, map[string]any{
 		"alias":                 "bastion",
@@ -112,13 +111,13 @@ func TestReportedCommandOutputStaysWithinItsPublishedCeiling(t *testing.T) {
 	status := response.StatusCode
 	body := readBody(t, response)
 
-	// 正のコントロール。理由は上と同じである: 上限を検査できるのは、
-	// authentication check が実際に走った場合に限られる。
-	if commands := f.runner.recorded(); len(commands) == 0 {
-		t.Fatalf("ssh was never reached (status %d, body %s); the ceiling was not exercised", status, body)
+	// 正のコントロール。上限を検査できるのは、authentication check が実際に
+	// 走った場合に限られる。
+	if reached := f.scanner.authenticated(); len(reached) == 0 {
+		t.Fatalf("the remote was never reached (status %d, body %s); the ceiling was not exercised", status, body)
 	}
-	if count := strings.Count(body, "noisy stderr line"); count > 1024 {
-		t.Fatalf("the response relayed %d stderr lines; the ceiling is not applied", count)
+	if count := strings.Count(body, "noisy banner line"); count > 1024 {
+		t.Fatalf("the response relayed %d banner lines; the ceiling is not applied", count)
 	}
 	if len(body) > maxAcceptableResponseBytes {
 		t.Fatalf("response = %d bytes", len(body))

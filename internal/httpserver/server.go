@@ -49,10 +49,8 @@ type Options struct {
 	Logger   *slog.Logger
 	Config   *application.Service
 	Keys     KeyService
-	// Home と SSHRoot は、鍵のパスを解くために要る。~ の展開と、vault が
-	// 知っているワークスペース相対のパスへの変換がそこで起きる。
-	Home        string
-	SSHRoot     string
+	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
+	Connect     Connector
 	Diagnostics *diagnostics.Service
 	KnownHosts  *knownhosts.Service
 	RemoteKeys  *remotekey.Service
@@ -255,7 +253,7 @@ func New(options Options) (*Server, error) {
 		registerTerminalRoutes(e, TerminalHandlers{
 			Registry:    options.Terminals,
 			Tickets:     &terminal.Tickets{},
-			Connect:     newConnector(options, options.Home, options.SSHRoot),
+			Connect:     options.Connect,
 			Shell:       options.LoginShell,
 			Environment: options.TerminalEnvironment,
 			// askpass はここに無い。**この経路はもう外部の ssh を起こさない。**
