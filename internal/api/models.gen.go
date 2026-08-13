@@ -1162,10 +1162,19 @@ type TerminalExit struct {
 	Signal string `json:"signal"`
 }
 
+// TerminalForward defines model for TerminalForward.
+type TerminalForward struct {
+	Kind    string `json:"kind"`
+	Listen  string `json:"listen"`
+	Problem string `json:"problem"`
+	To      string `json:"to"`
+}
+
 // TerminalSession defines model for TerminalSession.
 type TerminalSession struct {
 	Alias     *string             `json:"alias,omitempty"`
 	Exited    *TerminalExit       `json:"exited,omitempty"`
+	Forwards  *[]TerminalForward  `json:"forwards,omitempty"`
 	Id        string              `json:"id"`
 	Kind      TerminalSessionKind `json:"kind"`
 	StartedAt string              `json:"startedAt"`

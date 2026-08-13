@@ -64,6 +64,16 @@ func describeSession(view terminal.View) api.TerminalSession {
 		alias := view.Alias
 		described.Alias = &alias
 	}
+	if len(view.Forwards) > 0 {
+		forwards := make([]api.TerminalForward, 0, len(view.Forwards))
+		for _, forward := range view.Forwards {
+			forwards = append(forwards, api.TerminalForward{
+				Kind: forward.Kind, Listen: forward.Listen,
+				To: forward.To, Problem: forward.Problem,
+			})
+		}
+		described.Forwards = &forwards
+	}
 	if view.Exited != nil {
 		described.Exited = &api.TerminalExit{
 			Code:   view.Exited.Code,

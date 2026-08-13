@@ -5,6 +5,7 @@ export type ConfigCheckResponse = components["schemas"]["ConfigCheckResponse"];
 export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
 export type ReachabilityResponse = components["schemas"]["ReachabilityResponse"];
 export type AuthenticationResponse = components["schemas"]["AuthenticationResponse"];
+export type TerminalForward = components["schemas"]["TerminalForward"];
 export type TerminalSession = components["schemas"]["TerminalSession"];
 export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
 export type OpenTerminalSessionRequest = components["schemas"]["OpenTerminalSessionRequest"];
@@ -261,6 +262,16 @@ function validateTerminalSession(value: unknown): TerminalSession {
     asNumber(exited.code);
     asString(exited.signal);
     asString(exited.at);
+  }
+  // 転送を持つのは、それを開いたセッションだけである。
+  if (record.forwards !== undefined) {
+    for (const forward of asArray(record.forwards)) {
+      const entry = asRecord(forward);
+      asString(entry.kind);
+      asString(entry.listen);
+      asString(entry.to);
+      asString(entry.problem);
+    }
   }
   return record as unknown as TerminalSession;
 }
