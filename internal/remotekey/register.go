@@ -12,7 +12,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"sshc/internal/effective"
 	"sshc/internal/knownhosts"
 	"sshc/internal/platform"
+	"sshc/internal/sshclient"
 )
 
 const (
@@ -145,22 +145,27 @@ type Result struct {
 	Truncated bool
 }
 
-// Service は、プロセスの継ぎ目を通してリモート登録を実行する。
+// Service は、リモート登録を実行する。
+//
+// **外部プログラムは起こさない。** リモートで走らせる 1 本のコマンドは、この
+// プロセスが開いた exec チャンネルの上を通る。凍結した設定ファイルも要らない
+// ——接続に使う値を決めるのはこのアプリケーション自身である。
 type Service struct {
-	Runner     platform.OutputRunner
-	Toolchain  platform.Toolchain
-	ConfigPath string
-	Timeout    time.Duration
-	// Environment は子プロセスの完全な環境。通常は platform.MinimalEnvironment で
-	// ある。
-	Environment []string
+	// Resolve は、alias ひとつ分の接続を決める。**登録一回につき一度だけ呼ばれる。**
+	//
+	// 一度なのは、probe と routine が同じ相手へ届かなければならないからである。
+	// 二度解決すると、その間に設定を書き換えた者が二本目の行き先を変えられる。
+	// かつては設定を凍結してファイルへ書くことで同じ性質を守っていた。
+	Resolve func(alias string) (sshclient.Target, error)
+	// Run は、決まった接続でコマンドを 1 本走らせる。nil なら登録はできない。
+	Run     func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error)
+	Timeout time.Duration
 }
 
+// ErrNoRunner は、リモートで走らせる手段が配線されていないことを報告する。
+var ErrNoRunner = errors.New("no remote command runner is available")
+
 // Plan は、どこにも接触せずに変更内容を説明する。
-//
-// valuesFrom は、アカウントの詳細が `ssh -G` から来たのか、このアプリケーション
-// 自身の設定読み取りから来たのかを記録する。確認ダイアログがどちらかを言える
-// ようにするためである。
 func (s Service) Plan(alias string, key PublicKey, fingerprint, user, hostname, port, valuesFrom string) Plan {
 	return Plan{
 		Alias:       alias,
@@ -189,17 +194,18 @@ func (s Service) Register(ctx context.Context, report effective.Report, configSn
 	if len(report.Unavoidable()) > 0 && !acknowledged {
 		return Result{}, ErrNotAcknowledged
 	}
-	program, err := s.Toolchain.SSH()
-	if err != nil {
-		return Result{}, err
+	if s.Run == nil || s.Resolve == nil {
+		return Result{}, ErrNoRunner
 	}
-	configPath, err := writeConfigSnapshot(configSnapshot)
-	if err != nil {
-		return Result{}, err
-	}
-	defer os.Remove(configPath)
 
-	probe, err := s.run(ctx, program, configPath, alias, ProbeCommand, nil)
+	// **行き先は一度だけ決める。** probe と routine は同じ相手へ届かなければ
+	// ならない。
+	target, err := s.Resolve(alias)
+	if err != nil {
+		return Result{}, err
+	}
+
+	probe, err := s.Run(ctx, target, ProbeCommand, nil)
 	if err != nil {
 		return Result{}, err
 	}
@@ -207,13 +213,14 @@ func (s Service) Register(ctx context.Context, report effective.Report, configSn
 		return Result{}, ErrUnsupportedRemote
 	}
 
-	output, err := s.run(ctx, program, configPath, alias, Routine, []byte(key.Line+"\n"))
+	// **公開鍵は stdin を通る。argv には決して乗らない。**
+	output, err := s.Run(ctx, target, Routine, []byte(key.Line+"\n"))
 	if err != nil {
 		return Result{}, err
 	}
 	result := Result{
 		ExitCode:  output.ExitCode,
-		Stderr:    strings.ReplaceAll(string(output.Stderr), configPath, "<temporary SSH configuration>"),
+		Stderr:    string(output.Stderr),
 		Truncated: output.Truncated,
 	}
 	switch {
@@ -225,54 +232,4 @@ func (s Service) Register(ctx context.Context, report effective.Report, configSn
 		return result, ErrUnsupportedRemote
 	}
 	return result, nil
-}
-
-func writeConfigSnapshot(contents []byte) (string, error) {
-	file, err := os.CreateTemp("", "sshc-remote-key-*.conf")
-	if err != nil {
-		return "", err
-	}
-	path := file.Name()
-	ok := false
-	defer func() {
-		file.Close()
-		if !ok {
-			os.Remove(path)
-		}
-	}()
-	if _, err := file.Write(contents); err != nil {
-		return "", err
-	}
-	if err := file.Sync(); err != nil {
-		return "", err
-	}
-	if err := file.Close(); err != nil {
-		return "", err
-	}
-	ok = true
-	return path, nil
-}
-
-func (s Service) run(ctx context.Context, program, configPath, alias, remoteCommand string, stdin []byte) (platform.Output, error) {
-	timeout := s.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-	arguments := []string{"-T", "-F", configPath,
-		"-o", "BatchMode=yes",
-		"-o", "PermitLocalCommand=no",
-		"-o", "ClearAllForwardings=yes",
-		"-o", "ForwardAgent=no",
-		"-o", "RequestTTY=no",
-		"-o", "StrictHostKeyChecking=yes",
-		"-o", "NumberOfPasswordPrompts=0",
-		"--", alias, remoteCommand,
-	}
-	return s.Runner.RunOutput(ctx, platform.Command{
-		Path:      program,
-		Arguments: arguments,
-		Stdin:     stdin,
-		Timeout:   timeout,
-		Env:       s.Environment,
-	})
 }
