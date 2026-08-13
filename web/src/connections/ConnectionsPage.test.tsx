@@ -6,6 +6,7 @@ import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
 import { dragMimeType, type DragPayload } from "./dragdrop";
 import { integrationsApi } from "../api/integrations";
+import type { InspectorContent } from "../ui/Inspector";
 import { keysApi } from "../keys/api";
 
 vi.mock("../api/config", async () => {
@@ -21,7 +22,8 @@ vi.mock("../api/config", async () => {
 
 vi.mock("../api/integrations", () => ({
   integrationsApi: {
-    terminalLaunch: vi.fn(), terminalOptions: vi.fn(), passwordVault: vi.fn(), credentials: vi.fn(),
+    terminalSessions: vi.fn(), openTerminalSession: vi.fn(), terminalStreamTicket: vi.fn(),
+    closeTerminalSession: vi.fn(), passwordVault: vi.fn(), credentials: vi.fn(),
     passwordEligibility: vi.fn(), initialiseVault: vi.fn(), unlockVault: vi.fn(),
   },
 }));
@@ -59,27 +61,34 @@ const detail = {
   },
 };
 
+// インスペクタの中身はページの DOM ではなくシェルへ渡されるので、
+// 表明するにはその callback が受け取った React 要素を描かなければならない。
+function inspectorText(inspector: ReturnType<typeof vi.fn>): string {
+  const calls = inspector.mock.calls as [InspectorContent][];
+  for (let index = calls.length - 1; index >= 0; index -= 1) {
+    const content = calls[index]?.[0];
+    if (content === null || content === undefined) continue;
+    const { container, unmount } = render(<>{content.panes.map((pane) => (
+      <div key={pane.key}>{pane.body}</div>
+    ))}</>);
+    const text = container.textContent ?? "";
+    unmount();
+    if (text !== "") return text;
+  }
+  return "";
+}
+
 beforeEach(() => {
   // モジュールの factory はこれらを vi.fn()で作っており、restoreMocks は
   // それに手を触れないため、呼び出し記録はテストごとに手動でクリアする必要がある。
   vi.clearAllMocks();
   vi.mocked(configApi.overview).mockResolvedValue(overview as never);
   vi.mocked(configApi.host).mockResolvedValue(detail as never);
-  vi.mocked(integrationsApi.terminalLaunch).mockResolvedValue({ command: "ssh bastion" } as never);
-  vi.mocked(integrationsApi.terminalOptions).mockResolvedValue({
-    selected: "terminal",
-    terminals: [
-      { id: "terminal", installed: true },
-      { id: "iterm2", installed: true },
-      { id: "kitty", installed: false },
-      { id: "ghostty", installed: true },
-      { id: "wezterm", installed: false },
-      { id: "custom", installed: true },
-    ],
-    applications: [
-      { name: "Term", path: "/Applications/Term.app" },
-      { name: "Safari", path: "/Applications/Safari.app" },
-    ],
+  vi.mocked(integrationsApi.terminalSessions).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
+  vi.mocked(integrationsApi.closeTerminalSession).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
+  vi.mocked(integrationsApi.openTerminalSession).mockResolvedValue({
+    session: { id: "console-1", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z" },
+    streamTicket: "one-time",
   } as never);
   vi.mocked(integrationsApi.passwordVault).mockResolvedValue({
     exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
@@ -468,16 +477,18 @@ describe("ConnectionsPage", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled());
   });
 
-  it("opens the selected host in Terminal only after an explicit connect action", async () => {
+  it("opens the selected host in an embedded console only after an explicit connect action", async () => {
     const user = userEvent.setup();
     render(<ConnectionsPage onInspector={() => undefined} />);
 
-    expect(integrationsApi.terminalLaunch).not.toHaveBeenCalled();
+    expect(integrationsApi.openTerminalSession).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    expect(integrationsApi.terminalLaunch).not.toHaveBeenCalled();
+    expect(integrationsApi.openTerminalSession).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: "Connect" }));
 
-    expect(integrationsApi.terminalLaunch).toHaveBeenCalledWith("bastion");
+    // 外部の端末アプリケーションは起こさない。開くのはこのアプリケーションの
+    // 中の PTY であり、action token は要らない。
+    expect(integrationsApi.openTerminalSession).toHaveBeenCalledWith({ kind: "ssh", alias: "bastion" });
   });
 
   it("keeps global terminal editing out of connection detail", async () => {
@@ -491,42 +502,28 @@ describe("ConnectionsPage", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
-  // サーバーが「選べる端末は一つも無い」と答えるプラットフォームでは、
-  // Connect を無効にし、コマンドを自分で実行するよう伝える。
-  it("keeps Connect unavailable when the server reports no terminal launcher", async () => {
+  // 上限に達したことと、開けなかったことは別の答えである。前者はどれかを
+  // 閉じれば直り、それが画面の言えることの中でいちばん役に立つ。
+  it("separates the session limit from a console that could not be opened", async () => {
     const user = userEvent.setup();
-    vi.mocked(integrationsApi.terminalOptions).mockResolvedValue({
-      selected: "terminal",
-      terminals: [],
-      applications: [],
-    } as never);
-
-    render(<ConnectionsPage onInspector={() => undefined} />);
-    await user.click(await screen.findByRole("button", { name: /bastion/ }));
-
-    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
-    expect(screen.getByText(/does not open a terminal for you/)).toBeInTheDocument();
-  });
-
-  // 「入っていない」と「開けなかった」は別の答えである。片方をもう片方の
-  // 言葉で伝えると、直し方が消える。
-  it("separates a terminal that is missing from a launch that failed", async () => {
-    const user = userEvent.setup();
-    vi.mocked(integrationsApi.terminalLaunch).mockRejectedValue(
-      new ApiError("terminal_not_installed", 409, { code: "terminal_not_installed", message: "not installed" }),
+    vi.mocked(integrationsApi.openTerminalSession).mockRejectedValue(
+      new ApiError("terminal_session_limit", 409, { code: "terminal_session_limit", message: "full" }),
     );
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    const inspector = vi.fn();
+    render(<ConnectionsPage onInspector={inspector} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(await screen.findByRole("button", { name: "Connect" }));
 
-    expect(await screen.findByText(/Terminal\.app was not found on this Mac/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(inspectorText(inspector)).toMatch(/No more consoles can be opened/),
+    );
 
-    vi.mocked(integrationsApi.terminalLaunch).mockRejectedValue(
-      new ApiError("terminal_launch_failed", 500, { code: "terminal_launch_failed", message: "refused" }),
+    vi.mocked(integrationsApi.openTerminalSession).mockRejectedValue(
+      new ApiError("terminal_start_failed", 500, { code: "terminal_start_failed", message: "refused" }),
     );
     await user.click(screen.getByRole("button", { name: "Connect" }));
-    expect(await screen.findByText(/Could not open bastion in Terminal/)).toBeInTheDocument();
+    await waitFor(() => expect(inspectorText(inspector)).toMatch(/could not be opened/));
   });
 
   it("keeps the diff of what was written on screen after the save reloads the host", async () => {
@@ -727,7 +724,6 @@ describe("ConnectionsPage", () => {
     }));
     await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "build01"));
     expect(configApi.overview).toHaveBeenCalledTimes(2);
-    expect(integrationsApi.terminalLaunch).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog", { name: "Create connection" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "build01" })).toBeInTheDocument();

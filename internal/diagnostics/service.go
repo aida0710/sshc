@@ -55,13 +55,11 @@ type ConnectionSnapshot struct {
 // たびに設定を読み直す。ファイルこそが真実の源であり、二つのリクエストのあいだに
 // 変わりうるからである。
 type Service struct {
-	Workspace         *storage.Workspace
-	Resolver          config.Resolver
-	Evaluator         effective.Evaluator
-	Reachability      Reachability
-	Authentication    Authentication
-	Terminal          platform.TerminalLauncher
-	PreferredTerminal func() platform.TerminalChoice
+	Workspace      *storage.Workspace
+	Resolver       config.Resolver
+	Evaluator      effective.Evaluator
+	Reachability   Reachability
+	Authentication Authentication
 	// Self はこのバイナリの絶対パス。ユーザーに見せるコマンドを、実際に実行できる
 	// ものにするためである。アプリケーションの内側には、それがどこにインストール
 	// されたかを知るものがない。エントリポイントが一度だけ解決して渡す。空の場合は
@@ -77,7 +75,7 @@ type Service struct {
 // 受け取る。SSH_ASKPASS は与えられないので、パスフレーズのプロンプトは、ユーザーが
 // たまたまエクスポートしていたプログラムではなく、このアプリケーションが用意する
 // 標準入力にしか向かえない。
-func NewService(workspace *storage.Workspace, runner platform.OutputRunner, toolchain platform.Toolchain, terminal platform.TerminalLauncher, lookup func(string) (string, bool)) *Service {
+func NewService(workspace *storage.Workspace, runner platform.OutputRunner, toolchain platform.Toolchain, lookup func(string) (string, bool)) *Service {
 	configPath := filepath.Join(workspace.Root(), "config")
 	var environment []string
 	if lookup != nil {
@@ -91,7 +89,6 @@ func NewService(workspace *storage.Workspace, runner platform.OutputRunner, tool
 		Authentication: Authentication{
 			Runner: runner, Toolchain: toolchain, ConfigPath: configPath, Environment: environment,
 		},
-		Terminal: terminal,
 	}
 }
 
@@ -267,88 +264,30 @@ func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, 
 	return s.Reachability.Check(ctx, hostname, port), nil
 }
 
-// ErrTerminalNotConfigured は、端末ランチャーが配線されていないことを報告する。
-var ErrTerminalNotConfigured = errors.New("terminal launcher is not configured")
-
 // UnsafeAliasWarning は、なぜその alias がコピー専用なのかを説明する。
 const UnsafeAliasWarning = "This alias contains characters that could change the meaning of a command line. Copy the command and check it before running it yourself."
 
-// TerminalUnavailableWarning は、端末ランチャーが配線されていないプラットフォーム
-// のために、なぜコピー専用なのかを説明する。
-const TerminalUnavailableWarning = "This platform does not open a terminal for you. Run the command above yourself."
-
-// LaunchTerminal は、alias のための対話セッションを開く。
-func (s *Service) LaunchTerminal(ctx context.Context, alias string) error {
-	if err := platform.ValidateAlias(alias); err != nil {
-		return err
-	}
-	if s.Terminal == nil {
-		return ErrTerminalNotConfigured
-	}
-	terminal := s.selectedTerminal()
-	if selectable, ok := s.Terminal.(platform.SelectableTerminalLauncher); ok {
-		return selectable.LaunchIn(ctx, terminal, alias)
-	}
-	if terminal.ID != platform.TerminalApple {
-		return ErrTerminalNotConfigured
-	}
-	return s.Terminal.Launch(ctx, alias)
-}
-
-// selectedTerminal は、いま開く先として選ばれている端末を返す。
-func (s *Service) selectedTerminal() platform.TerminalChoice {
-	if s.PreferredTerminal == nil {
-		return platform.TerminalChoice{ID: platform.TerminalApple}
-	}
-	return s.PreferredTerminal()
-}
-
-// TerminalOptions は、選べる端末、custom として選べるアプリケーション、そして
-// いま選ばれているものを返す。
-//
-// 在庫を答えられないランチャーでは、すべて見つかったことにする。画面が選択肢を
-// 隠す根拠は「無いと分かっている」ことだけで、「分からない」ことではない。
-// ランチャーが無いこと（s.Terminal == nil）は前者である。分からないのではなく、
-// 選べる端末が一つも無いと分かっているので、ここでは何も返さない。
-func (s *Service) TerminalOptions() (
-	[]platform.TerminalAvailability, []platform.Application, platform.TerminalChoice,
-) {
-	selected := s.selectedTerminal()
-	if s.Terminal == nil {
-		return nil, nil, selected
-	}
-	if inventory, ok := s.Terminal.(platform.TerminalInventory); ok {
-		return inventory.Terminals(), inventory.Applications(), selected
-	}
-	available := make([]platform.TerminalAvailability, 0, len(platform.TerminalIDs))
-	for _, id := range platform.TerminalIDs {
-		available = append(available, platform.TerminalAvailability{ID: id, Installed: true})
-	}
-	return available, nil, selected
-}
-
-// TerminalCommand は、ユーザーが手で実行するであろうコマンドを返す。
+// TerminalCommand は、ユーザーが別の端末へ貼るであろうコマンドを返す。
 //
 // これはこのバイナリと alias である。それがコマンドの全体だからだ。動作中の
-// アプリケーションに保存済みパスワードを求め、なければ素の ssh にフォールバック
-// する。これが置き換えたのは五つの環境変数とフラグで、それは Terminal のボタンが
-// 自前で組み立てているものを手書きにした形にすぎず、そもそも人が打ち込むための
-// ものではなかった。
+// アプリケーションに保存済みパスフレーズを求め、なければ素の ssh にフォールバック
+// する。
 //
-// 安全な文字集合の外にある alias が起動されることは決してない。コマンド自体は
-// テキストとして返るので、ユーザーは自分で内容を確かめ、引用符で囲める。
-func (s *Service) TerminalCommand(alias string) (string, bool, string) {
+// 埋め込みターミナルができたあともこれが残っているのは、自分の端末で開きたい人が
+// いるからである。起動可否はもう報告しない。このアプリケーションは端末アプリ
+// ケーションを起こさなくなったので、「起動できるか」という問い自体が無くなった。
+//
+// 安全な文字集合の外にある alias でも、コマンド自体はテキストとして返る。
+// ユーザーは自分で内容を確かめ、引用符で囲める。
+func (s *Service) TerminalCommand(alias string) (string, string) {
 	command := "ssh -- " + alias
 	if s.Self != "" {
 		command = s.Self + " " + alias
 	}
 	if err := platform.ValidateAlias(alias); err != nil {
-		return command, false, UnsafeAliasWarning
+		return command, UnsafeAliasWarning
 	}
-	if s.Terminal == nil {
-		return command, false, TerminalUnavailableWarning
-	}
-	return command, true, ""
+	return command, ""
 }
 
 // Authenticate は、alias に対する認証テストを実行する。
@@ -367,37 +306,6 @@ func (s *Service) Authenticate(ctx context.Context, alias string, acknowledged b
 	}
 	result.Stderr = platform.SanitiseHomePaths(result.Stderr, s.Workspace.Home())
 	return result, nil
-}
-
-// ErrPasswordLaunchUnsupported は、設定された端末では askpass ヘルパーを武装
-// できないことを報告する。
-var ErrPasswordLaunchUnsupported = errors.New("this terminal cannot open a session with a stored password")
-
-// LaunchTerminalWithPassword は、ヘルパーを武装させた状態でセッションを開く。
-//
-// ヘルパーのパスとエンドポイントは呼び出し側が決める。このバイナリがどこにあり、
-// どのアドレスで待ち受けているかを知るのはそこだけだからだ。ここではパスワードを
-// 一切読まない。ヘルパーが提示するのはトークンであり、パスワードがこのプロセスの
-// リクエスト経路に入ることはそもそもない。
-func (s *Service) LaunchTerminalWithPassword(ctx context.Context, alias, helperPath, endpoint, token string) error {
-	if err := platform.ValidateAlias(alias); err != nil {
-		return err
-	}
-	if s.Terminal == nil {
-		return ErrTerminalNotConfigured
-	}
-	terminal := s.selectedTerminal()
-	if selectable, ok := s.Terminal.(platform.SelectablePasswordTerminalLauncher); ok {
-		return selectable.LaunchWithPasswordIn(ctx, terminal, alias, helperPath, endpoint, token)
-	}
-	launcher, ok := s.Terminal.(platform.PasswordTerminalLauncher)
-	if !ok {
-		return ErrPasswordLaunchUnsupported
-	}
-	if terminal.ID != platform.TerminalApple {
-		return ErrPasswordLaunchUnsupported
-	}
-	return launcher.LaunchWithPassword(ctx, alias, helperPath, endpoint, token)
 }
 
 // sanitiseValues は、ssh が報告したすべての値の中で、ホームディレクトリを "~" に

@@ -3,9 +3,7 @@ package httpserver
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
-	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,14 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
 	"sshc/internal/diagnostics"
 	"sshc/internal/platform"
-	"sshc/internal/secret"
 	"sshc/internal/session"
 	"sshc/internal/storage"
 )
@@ -70,7 +66,7 @@ func newDiagnosticsServer(t *testing.T) (*echo.Echo, session.Credentials, *stubR
 	}
 
 	runner := &stubRunner{output: platform.Output{Stdout: []byte("hostname 203.0.113.10\nport 2222\n")}}
-	service := diagnostics.NewService(workspace, runner, stubToolchain{}, nil, nil)
+	service := diagnostics.NewService(workspace, runner, stubToolchain{}, nil)
 	service.Reachability = diagnostics.Reachability{
 		Dialer: dialerStub(func(context.Context, string, string) (net.Conn, error) {
 			return nil, net.UnknownNetworkError("unreachable in test")
@@ -283,350 +279,11 @@ func TestConfigCheckNeedsNoActionTokenAndStartsNoProcess(t *testing.T) {
 	}
 }
 
-type recordingLauncher struct{ aliases []string }
-
-func (launcher *recordingLauncher) Launch(_ context.Context, alias string) error {
-	launcher.aliases = append(launcher.aliases, alias)
-	return nil
-}
-
-type recordingPasswordLauncher struct {
-	recordingLauncher
-	passwordLaunches int
-}
-
-func (launcher *recordingPasswordLauncher) LaunchWithPassword(
-	_ context.Context, alias, _, _, _ string,
-) error {
-	launcher.passwordLaunches++
-	launcher.aliases = append(launcher.aliases, alias)
-	return nil
-}
-
-func TestTerminalLaunchUsesPlainSSHWhenDirectKeyDisallowsStoredPassword(t *testing.T) {
-	engine, credentials, _, diagnosticsService := newDiagnosticsServer(t)
-	launcher := &recordingPasswordLauncher{}
-	diagnosticsService.Terminal = launcher
-	home := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
-	if err := vault.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	if err := vault.Set("bastion", "legacy-password"); err != nil {
-		t.Fatal(err)
-	}
-	handler := DiagnosticsHandlers{
-		Service: diagnosticsService, Actions: ActionHandlers{}, Passwords: vault,
-		AskpassHelper: "/usr/local/bin/sshc", AskpassURL: "http://127.0.0.1:1/askpass",
-	}
-	// The action route already consumed by this focused handler is not relevant;
-	// register a second isolated endpoint with an action set that accepts once.
-	registry := actionRegistry{}
-	addDiagnosticsActions(registry, diagnosticsService)
-	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x5d}, 8192)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	credentials, err = manager.Bootstrap(bootstrap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	engine = echo.New()
-	engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked}).Middleware)
-	handler.Actions = ActionHandlers{Sessions: manager, Kinds: registry}
-	registerActionRoutes(engine, handler.Actions)
-	engine.POST("/api/v1/terminal/launch", handler.TerminalLaunch)
-
-	token := diagnosticsToken(t, engine, credentials, session.ActionTerminalLaunch, "bastion")
-	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/launch",
-		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), token)
-	if response.Code != http.StatusOK {
-		t.Fatalf("launch = %d: %s", response.Code, response.Body.String())
-	}
-	if launcher.passwordLaunches != 0 || len(launcher.aliases) != 1 {
-		t.Fatalf("launcher = passwords %d, aliases %#v", launcher.passwordLaunches, launcher.aliases)
-	}
-}
-
-func TestTerminalLaunchUsesSshcWhenTheDirectKeyHasAStoredPassphrase(t *testing.T) {
-	engine, credentials, _, diagnosticsService := newDiagnosticsServer(t)
-	launcher := &recordingPasswordLauncher{}
-	diagnosticsService.Terminal = launcher
-	home := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
-	if err := vault.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	if err := vault.SetCredential(secret.KindKeyPassphrase, "server-key", "saved key phrase"); err != nil {
-		t.Fatal(err)
-	}
-	if err := vault.AssignCredential(secret.KindKeyPassphrase, "id_ed25519_server", "server-key"); err != nil {
-		t.Fatal(err)
-	}
-	handler := DiagnosticsHandlers{
-		Service: diagnosticsService, Actions: ActionHandlers{}, Passwords: vault,
-		AskpassHelper: "/usr/local/bin/sshc", AskpassURL: "http://127.0.0.1:1/askpass",
-		KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
-			return "id_ed25519_server", filepath.Join(home, ".ssh", "id_ed25519_server"), "config", "evidence", alias == "bastion", nil
-		},
-	}
-	registry := actionRegistry{}
-	addDiagnosticsActions(registry, diagnosticsService)
-	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x6d}, 8192)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	credentials, err = manager.Bootstrap(bootstrap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	engine = echo.New()
-	engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked}).Middleware)
-	handler.Actions = ActionHandlers{Sessions: manager, Kinds: registry}
-	registerActionRoutes(engine, handler.Actions)
-	engine.POST("/api/v1/terminal/launch", handler.TerminalLaunch)
-
-	token := diagnosticsToken(t, engine, credentials, session.ActionTerminalLaunch, "bastion")
-	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/launch",
-		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), token)
-	if response.Code != http.StatusOK {
-		t.Fatalf("launch = %d: %s", response.Code, response.Body.String())
-	}
-	if launcher.passwordLaunches != 1 || len(launcher.aliases) != 1 {
-		t.Fatalf("launcher = credentials %d, aliases %#v", launcher.passwordLaunches, launcher.aliases)
-	}
-}
-
-// inventoryLauncher は、選べる端末のうち一つだけがこのマシンに無い状態を表す。
-type inventoryLauncher struct{ recordingLauncher }
-
-func (launcher *inventoryLauncher) Terminals() []platform.TerminalAvailability {
-	return []platform.TerminalAvailability{
-		{ID: platform.TerminalApple, Installed: true},
-		{ID: platform.TerminalITerm2, Installed: true},
-		{ID: platform.TerminalKitty, Installed: false},
-	}
-}
-
-func (launcher *inventoryLauncher) Applications() []platform.Application {
-	return []platform.Application{{Name: "Term", Path: "/Applications/Term.app"}}
-}
-
-func (launcher *inventoryLauncher) LaunchIn(
-	_ context.Context, choice platform.TerminalChoice, alias string,
-) error {
-	if choice.ID == platform.TerminalKitty {
-		return fmt.Errorf("%s: %w", choice.ID, platform.ErrTerminalNotInstalled)
-	}
-	launcher.aliases = append(launcher.aliases, alias)
-	return nil
-}
-
-// 「入っていない」は「開けなかった」とは別の答えとして届かなければならない。
-// 前者は選び直せば直り、画面はそれを言える。
-func TestTerminalOptionsAreReadableAndAMissingTerminalIsItsOwnAnswer(t *testing.T) {
-	engine, credentials, _, service := newDiagnosticsServer(t)
-	launcher := &inventoryLauncher{}
-	service.Terminal = launcher
-	service.PreferredTerminal = func() platform.TerminalChoice {
-		return platform.TerminalChoice{ID: platform.TerminalKitty}
-	}
-
-	listed := sendKeyRequest(t, engine, credentials, http.MethodGet, "/api/v1/terminal/options", nil, "")
-	if listed.Code != http.StatusOK {
-		t.Fatalf("terminal options = %d: %s", listed.Code, listed.Body.String())
-	}
-	var options api.TerminalOptionsResponse
-	if err := json.Unmarshal(listed.Body.Bytes(), &options); err != nil {
-		t.Fatal(err)
-	}
-	if options.Selected != api.TerminalID(platform.TerminalKitty) || len(options.Terminals) != 3 {
-		t.Fatalf("options = %#v", options)
-	}
-	// 見つからなかった端末も一覧からは消えない。消せば、これから入れる人には
-	// 理由の分からない欠落になる。
-	if options.Terminals[2].Id != api.Kitty || options.Terminals[2].Installed {
-		t.Errorf("kitty = %#v, want it listed as missing", options.Terminals[2])
-	}
-	// custom の選択肢は、このマシンで見つかったアプリケーションそのものである。
-	if len(options.Applications) != 1 || options.Applications[0].Path != "/Applications/Term.app" {
-		t.Errorf("applications = %#v", options.Applications)
-	}
-
-	token := diagnosticsToken(t, engine, credentials, session.ActionTerminalLaunch, "bastion")
-	refused := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/launch",
-		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), token)
-	if refused.Code != http.StatusConflict {
-		t.Fatalf("launch into a missing terminal = %d, want 409", refused.Code)
-	}
-	if code := problemCode(t, refused.Body.Bytes()); code != "terminal_not_installed" {
-		t.Fatalf("problem code = %q, want terminal_not_installed", code)
-	}
-	if len(launcher.aliases) != 0 {
-		t.Fatalf("a launch happened anyway: %#v", launcher.aliases)
-	}
-}
-
-func TestTerminalPreferenceStoresAValidatedChoiceAndReturnsRefreshedOptions(t *testing.T) {
-	engine, credentials, _, service := newDiagnosticsServer(t)
-	launcher := &inventoryLauncher{}
-	service.Terminal = launcher
-	selected := platform.TerminalChoice{ID: platform.TerminalApple}
-	service.PreferredTerminal = func() platform.TerminalChoice { return selected }
-	var received platform.TerminalChoice
-	handler := DiagnosticsHandlers{
-		Service: service,
-		SetPreferredTerminal: func(choice platform.TerminalChoice) (bool, error) {
-			received = choice
-			selected = choice
-			return true, nil
-		},
-	}
-	engine.PUT("/api/v1/terminal/preference", handler.TerminalPreference)
-
-	response := sendKeyRequest(t, engine, credentials, http.MethodPut, "/api/v1/terminal/preference", []byte(`{
-		"selected":"custom",
-		"customTerminal":{"application":"/Applications/Term.app","arguments":["--new-window"]}
-	}`), "")
-	if response.Code != http.StatusOK {
-		t.Fatalf("terminal preference = %d: %s", response.Code, response.Body.String())
-	}
-	if received.ID != platform.TerminalCustom || received.Application != "/Applications/Term.app" ||
-		len(received.Arguments) != 1 || received.Arguments[0] != "--new-window" {
-		t.Fatalf("setter received %#v", received)
-	}
-	var payload struct {
-		Selected       string `json:"selected"`
-		CustomTerminal *struct {
-			Application string   `json:"application"`
-			Arguments   []string `json:"arguments"`
-		} `json:"customTerminal"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload.Selected != "custom" || payload.CustomTerminal == nil ||
-		payload.CustomTerminal.Application != "/Applications/Term.app" ||
-		len(payload.CustomTerminal.Arguments) != 1 {
-		t.Fatalf("response = %#v", payload)
-	}
-}
-
-func TestTerminalPreferenceRejectsMalformedOrInvalidChoices(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-	}{
-		{name: "malformed JSON", body: `{`},
-		{name: "unknown ID", body: `{"selected":"unknown"}`},
-		{name: "custom without application", body: `{"selected":"custom"}`},
-		{name: "custom relative application", body: `{"selected":"custom","customTerminal":{"application":"Term.app","arguments":[]}}`},
-		{name: "standard with custom payload", body: `{"selected":"terminal","customTerminal":{"application":"/Applications/Term.app","arguments":[]}}`},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			engine, credentials, _, service := newDiagnosticsServer(t)
-			calls := 0
-			handler := DiagnosticsHandlers{
-				Service: service,
-				SetPreferredTerminal: func(platform.TerminalChoice) (bool, error) {
-					calls++
-					return true, nil
-				},
-			}
-			engine.PUT("/api/v1/terminal/preference", handler.TerminalPreference)
-			response := sendKeyRequest(t, engine, credentials, http.MethodPut, "/api/v1/terminal/preference", []byte(test.body), "")
-			if response.Code != http.StatusBadRequest || problemCode(t, response.Body.Bytes()) != "invalid_terminal_preference" {
-				t.Fatalf("response = %d: %s", response.Code, response.Body.String())
-			}
-			if calls != 0 {
-				t.Fatalf("invalid request called setter %d time(s)", calls)
-			}
-		})
-	}
-}
-
-func TestTerminalPreferenceDistinguishesUnavailableAndFailedPersistence(t *testing.T) {
-	tests := []struct {
-		name   string
-		setter func(platform.TerminalChoice) (bool, error)
-		status int
-		code   string
-	}{
-		{name: "unavailable", status: http.StatusServiceUnavailable, code: "terminal_preference_unavailable"},
-		{name: "failed", setter: func(platform.TerminalChoice) (bool, error) {
-			return false, fmt.Errorf("disk refused write")
-		}, status: http.StatusInternalServerError, code: "terminal_preference_failed"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			engine, credentials, _, service := newDiagnosticsServer(t)
-			service.Terminal = &inventoryLauncher{}
-			handler := DiagnosticsHandlers{Service: service, SetPreferredTerminal: test.setter}
-			engine.PUT("/api/v1/terminal/preference", handler.TerminalPreference)
-			response := sendKeyRequest(t, engine, credentials, http.MethodPut, "/api/v1/terminal/preference",
-				[]byte(`{"selected":"iterm2"}`), "")
-			if response.Code != test.status || problemCode(t, response.Body.Bytes()) != test.code {
-				t.Fatalf("response = %d: %s", response.Code, response.Body.String())
-			}
-		})
-	}
-}
-
-func TestTerminalPreferenceRejectsAnUnavailableTerminalOrUndetectedApplication(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-	}{
-		{name: "uninstalled terminal", body: `{"selected":"kitty"}`},
-		{name: "undetected application", body: `{"selected":"custom","customTerminal":{"application":"/Applications/Unknown.app","arguments":[]}}`},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			engine, credentials, _, service := newDiagnosticsServer(t)
-			service.Terminal = &inventoryLauncher{}
-			calls := 0
-			handler := DiagnosticsHandlers{
-				Service: service,
-				SetPreferredTerminal: func(platform.TerminalChoice) (bool, error) {
-					calls++
-					return true, nil
-				},
-			}
-			engine.PUT("/api/v1/terminal/preference", handler.TerminalPreference)
-			response := sendKeyRequest(t, engine, credentials, http.MethodPut, "/api/v1/terminal/preference", []byte(test.body), "")
-			if response.Code != http.StatusConflict || problemCode(t, response.Body.Bytes()) != "terminal_not_available" {
-				t.Fatalf("response = %d: %s", response.Code, response.Body.String())
-			}
-			if calls != 0 {
-				t.Fatalf("unavailable choice called setter %d time(s)", calls)
-			}
-		})
-	}
-}
-
-// TestTerminalEndpointsSeparateCopyableCommandsFromLaunches は、
-// alias の関門が HTTP 境界で保たれていることを証明する: AppleScript の
-// クォートと `do shell script` ペイロードを運ぶ alias は、コピー可能な
-// テキストとして記述され、起動は拒否され、どんなエスケープ形式でも launcher に届かない。
-func TestTerminalEndpointsSeparateCopyableCommandsFromLaunches(t *testing.T) {
-	engine, credentials, _, service := newDiagnosticsServer(t)
-	terminal := &recordingLauncher{}
-	service.Terminal = terminal
+// 端末へ貼るための文字列は、埋め込みターミナルができたあとも要る場面がある。
+// これは起動しないので、コマンドラインに載せない alias についても説明する
+// ——確認したうえで自分で実行するために、その人はコマンドを見る必要がある。
+func TestTerminalCommandDescribesEvenAnAliasThisWillNotPutOnACommandLine(t *testing.T) {
+	engine, credentials, _, _ := newDiagnosticsServer(t)
 
 	hostile := `bastion" & (do shell script "id") & "`
 	described := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/command",
@@ -638,45 +295,20 @@ func TestTerminalEndpointsSeparateCopyableCommandsFromLaunches(t *testing.T) {
 	if err := json.Unmarshal(described.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Launchable || payload.Warning == "" {
-		t.Fatalf("response = %#v", payload)
+	if payload.Warning == "" {
+		t.Fatalf("an unsafe alias carried no warning: %#v", payload)
 	}
 	if payload.Command != "ssh -- "+hostile {
 		t.Errorf("command = %q, want the alias verbatim for copying", payload.Command)
 	}
 
-	refused := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/launch",
-		mustMarshal(t, api.AliasRequest{Alias: hostile}), strings.Repeat("a", 43))
-	if refused.Code != http.StatusBadRequest {
-		t.Fatalf("launching an unsafe alias = %d, want 400", refused.Code)
-	}
-	// status だけでなく code も表明される。これにより、たまたま後段の層も
-	// 400 で応答したのではなく、launch ハンドラ自身の関門が alias を
-	// 拒否したことが証明される。
-	if code := problemCode(t, refused.Body.Bytes()); code != "alias_not_launchable" {
-		t.Fatalf("problem code = %q, want alias_not_launchable from the launch gate", code)
-	}
-	if len(terminal.aliases) != 0 {
-		t.Fatalf("an unsafe alias reached the launcher: %#v", terminal.aliases)
-	}
-
-	noToken := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/launch",
+	safe := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/command",
 		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), "")
-	if noToken.Code != http.StatusForbidden {
-		t.Fatalf("launch without a confirmation = %d, want 403", noToken.Code)
+	if err := json.Unmarshal(safe.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
 	}
-	if len(terminal.aliases) != 0 {
-		t.Fatalf("an unconfirmed launch reached the launcher: %#v", terminal.aliases)
-	}
-
-	token := diagnosticsToken(t, engine, credentials, session.ActionTerminalLaunch, "bastion")
-	launched := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/launch",
-		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), token)
-	if launched.Code != http.StatusOK {
-		t.Fatalf("launch = %d: %s", launched.Code, launched.Body.String())
-	}
-	if len(terminal.aliases) != 1 || terminal.aliases[0] != "bastion" {
-		t.Fatalf("aliases = %#v", terminal.aliases)
+	if payload.Warning != "" {
+		t.Fatalf("a safe alias carried a warning: %#v", payload)
 	}
 }
 

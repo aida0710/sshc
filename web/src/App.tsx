@@ -159,6 +159,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // これはホストについての好みではなく、ウィンドウについての好みだからだ。
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
+  // Home で開かれたコンソールは接続画面で見る。開く場所と見る場所が違うので、
+  // その受け渡しだけをここが仲介する。URL には載せない——共有可能な URL に
+  // 載せる価値のある状態ではない。
+  const [pendingConsole, setPendingConsole] = useState<string | null>(null);
 
   // ペインの中身はどのセクションが開いているかに属するが、開閉状態自体は
   // そうではない。したがってセクションを離れるとペインの中身は消去され
@@ -474,6 +478,9 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     onInstallGeneratedKey={installGeneratedKey}
                     onPreferredConnectionKeyApplied={consumePreferredConnectionKey}
                     onPreferredPublicKeyHandled={consumePreferredPublicKey}
+                    pendingConsole={pendingConsole}
+                    onPendingConsoleHandled={() => setPendingConsole(null)}
+                    onConsoleOpened={setPendingConsole}
                   />
                 </Suspense>
               ) : (
@@ -498,7 +505,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           ) : null}
         </main>
         {inspector !== null && inspectorOpen ? (
-          <InspectorPane label={inspector.label}>{inspector.body}</InspectorPane>
+          <InspectorPane label={inspector.label} content={inspector} />
         ) : null}
       </div>
     </div>
@@ -528,6 +535,9 @@ type SectionViewProps = {
   onPreferredPublicKeyHandled: () => void;
   onConnectionDraftChange: (draft: CreateConnectionDraft | null) => void;
   onNavigateForCreation: (section: CreationPrerequisite) => void;
+  pendingConsole: string | null;
+  onPendingConsoleHandled: () => void;
+  onConsoleOpened: (id: string) => void;
   // セクションは右側ペインの中身を提供するか、調べるものが無ければ
   // null を返す。現時点でそれを埋めているのは Connections だけだ。
   onInspector: (content: InspectorContent) => void;
@@ -549,6 +559,8 @@ function SectionView(props: SectionViewProps) {
         onNavigationBlockerChange={props.onNavigationBlockerChange}
         preferredKey={props.preferredConnectionKey}
         onPreferredKeyApplied={props.onPreferredConnectionKeyApplied}
+        pendingConsole={props.pendingConsole}
+        onPendingConsoleHandled={props.onPendingConsoleHandled}
       />
     );
   }
@@ -564,13 +576,20 @@ function PaddedSection({
   onInspector,
   onNavigate,
   onNavigateLocation,
+  onConsoleOpened,
   preferredPublicKey,
   onAssignGeneratedKey,
   onInstallGeneratedKey,
   onPreferredPublicKeyHandled,
 }: SectionViewProps) {
   if (section === "Home") {
-    return <OverviewPanel onNavigate={onNavigate} onNavigateLocation={onNavigateLocation} />;
+    return (
+      <OverviewPanel
+        onNavigate={onNavigate}
+        onNavigateLocation={onNavigateLocation}
+        onConsoleOpened={onConsoleOpened}
+      />
+    );
   }
   if (section === "Config") {
     return <ConfigExplorer target={fileTarget} />;

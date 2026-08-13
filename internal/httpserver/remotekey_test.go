@@ -71,7 +71,7 @@ func newRemoteKeyServer(t *testing.T, outputs []platform.Output) (*echo.Echo, se
 		t.Fatal(err)
 	}
 
-	diagnosticsService := diagnostics.NewService(workspace, &stubRunner{}, stubToolchain{}, nil, nil)
+	diagnosticsService := diagnostics.NewService(workspace, &stubRunner{}, stubToolchain{}, nil)
 	diagnosticsService.Reachability = diagnostics.Reachability{
 		Dialer: dialerStub(func(context.Context, string, string) (net.Conn, error) {
 			return nil, net.UnknownNetworkError("unreachable in test")

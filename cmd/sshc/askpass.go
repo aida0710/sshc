@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"sshc/internal/platform"
 )
 
 // askpass ヘルパー。
@@ -37,6 +39,9 @@ import (
 // プログラムはこのアプリケーション自身であり、絶対パスで、ひとつの alias に対して、
 // ユーザーが求めたひとつの接続のためだけに武装されている。
 
+// 武装した接続の語彙は internal/platform が持つ。ヘルパー（このファイル）と、
+// それを武装させる側——コマンドラインと埋め込みターミナル——が同じ文字列を読む
+// ようにするためであり、名前をここに残しているのは既存の読み手のためである。
 const (
 	// AliasVariable は回答が属するホストの名前を保持する。
 	//
@@ -44,20 +49,20 @@ const (
 	// のプロンプトが運ぶのは *解決後の* ユーザー名とホスト名であり、パスワードが登録
 	// されている名前とは違ううえ、解析すれば他人のソースにある書式文字列にこちらが
 	// 縛られることになるからだ。
-	AliasVariable = "SSHC_ASKPASS_ALIAS"
+	AliasVariable = platform.AskpassAliasVariable
 	// URLVariable は、これを武装した sshc のループバックエンドポイント。
-	URLVariable = "SSHC_ASKPASS_URL"
+	URLVariable = platform.AskpassURLVariable
 	// TokenVariable は、この接続のためのワンタイムトークン。
-	TokenVariable = "SSHC_ASKPASS_TOKEN"
+	TokenVariable = platform.AskpassTokenVariable
 	// KindVariable は、トークンが回答できる認証情報の種類を保持する。
 	// アカウントパスワードと鍵パスフレーズをプロンプトの文面だけで取り違えない。
-	KindVariable = "SSHC_ASKPASS_KIND"
+	KindVariable = platform.AskpassKindVariable
 	// KeyPathVariable is the exact, resolved private-key path selected when
 	// the token was issued. The helper compares it before presenting the bearer
 	// token, so a prompt for another key never consumes or exposes that token.
-	KeyPathVariable = "SSHC_ASKPASS_KEY_PATH"
+	KeyPathVariable = platform.AskpassKeyPathVariable
 
-	askpassKindKeyPassphrase = "key_passphrase"
+	askpassKindKeyPassphrase = platform.AskpassKindKeyPassphrase
 
 	// AskpassTokenHeader はトークンを運ぶ。独自ヘッダーは CORS のプリフライトを強制し、
 	// このサーバーはそれに応答しないため、エンドポイントをどれだけ知っていてもウェブ

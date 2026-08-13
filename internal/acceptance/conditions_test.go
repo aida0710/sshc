@@ -199,25 +199,26 @@ func completionConditions() []completionCondition {
 		},
 		{
 			Number:  9,
-			Text:    "接続テスト、Terminal 起動、Known Hosts、公開鍵登録が明示操作で機能する",
+			Text:    "接続テスト、埋め込みターミナル、Known Hosts、公開鍵登録が明示操作で機能する",
 			Verdict: verdictPartial,
 			Automated: []proof{
 				{proofGoTest, "TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken"},
-				{proofGoTest, "TestTerminalLaunchNeverBuildsAppleScriptFromInput"},
+				{proofGoTest, "TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus"},
 				{proofGoTest, "TestRemoteRegistrationNeverInterpolatesInputIntoTheRemoteShell"},
+				{proofPlaywright, "opens a local shell, runs a command and shows its output"},
 				{proofPlaywright, "lists the known_hosts entries and deletes one through a confirmation"},
 				{proofPlaywright, "shows the alias, effective user, fingerprint and the exact line before registering"},
 			},
 			Manual: []proof{
 				{proofManual, "M1. 実リモートホストへの接続テスト"},
 				{proofManual, "M2. 実 `authorized_keys` への公開鍵登録"},
-				{proofManual, "M4. 実 Terminal 起動"},
 			},
-			Gap: "every automated proof stops at the process seam. That a connection " +
-				"succeeds, that an authorized_keys line appears, that ssh-keyscan " +
-				"returns a real key and that Terminal opens are manual tests M1, M2 " +
-				"and M4. The end-to-end suite deliberately stops before ssh-keyscan " +
-				"and before Register, because both contact a host.",
+			Gap: "端末を開くところまでは自動化された。埋め込みターミナルはローカル" +
+				"シェルを本物の PTY で起こすので、end-to-end はキーを打って出力が" +
+				"画面に出るところまでを見る。残っているのはリモートに触れる二つ" +
+				"——接続が成功すること、authorized_keys に行が現れること——で、" +
+				"それらは M1 と M2 である。end-to-end は ssh-keyscan と Register の" +
+				"手前で意図的に止まる。どちらもホストへ接触するからだ。",
 		},
 		{
 			Number:  10,

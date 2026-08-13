@@ -19,12 +19,12 @@ import (
 	"sshc/internal/application"
 	"sshc/internal/diagnostics"
 	"sshc/internal/knownhosts"
-	"sshc/internal/platform"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
 	"sshc/internal/session"
+	"sshc/internal/terminal"
 )
 
 type Options struct {
@@ -68,6 +68,17 @@ type Options struct {
 	// Sync はワークスペースを object store へ運ぶ。nil の service は
 	// すべての sync ルートを未登録のままにする。
 	Sync *remotesync.Service
+	// Terminals は埋め込みターミナルのセッションを持つ。nil の registry は
+	// セッションのルートと WebSocket を未登録のままにする。これは、それを
+	// 配線しないテストが当てにしていることである。
+	Terminals *terminal.Registry
+	// SSHProgram と LoginShell は、PTY の中で起こすプログラムを解決する。
+	// どちらも PATH を見ず、絶対パスかエラーを返す。
+	SSHProgram func() (string, error)
+	LoginShell func() (string, error)
+	// TerminalEnvironment は、端末セッションが継ぐ環境である。これは利用者が
+	// 自分で行ったであろう接続なので、検査が使う最小環境ではなく本人の環境を継ぐ。
+	TerminalEnvironment func() []string
 }
 
 var ErrNonLoopbackListener = errors.New("listener must use 127.0.0.1")
@@ -77,6 +88,19 @@ type Server struct {
 	http     *http.Server
 	url      string
 	engine   *echo.Echo
+	// terminals は、このプロセスが終わるときに畳むべき PTY を持つ。
+	terminals *terminal.Registry
+}
+
+// CloseTerminals は、生きているすべての端末セッションへ SIGHUP を送る。
+//
+// PTY はこの常駐プロセスの中で存続するので、終わらせるのはここである。
+// 待たない——応答しないリモートに向いた ssh のために終了が引き延ばされては
+// ならない。
+func (s *Server) CloseTerminals() {
+	if s.terminals != nil {
+		s.terminals.Shutdown()
+	}
 }
 
 // Route はこの server が登録したルートの 1 つである。
@@ -154,25 +178,7 @@ func New(options Options) (*Server, error) {
 		})
 	}
 	if options.Diagnostics != nil {
-		var setPreferredTerminal func(platform.TerminalChoice) (bool, error)
-		if options.Config != nil {
-			setPreferredTerminal = options.Config.SetPreferredTerminal
-		}
-		registerDiagnosticsRoutes(e, DiagnosticsHandlers{
-			Service:              options.Diagnostics,
-			Actions:              actions,
-			SetPreferredTerminal: setPreferredTerminal,
-			Passwords:            options.Passwords,
-			KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
-				if options.Config == nil || options.Keys == nil {
-					return "", "", "", "", false, nil
-				}
-				target, ok, err := options.Config.DirectKeyPassphraseTarget(alias, options.Keys.Inventory)
-				return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
-			},
-			AskpassHelper: options.AskpassHelper,
-			AskpassURL:    "http://" + host + AskpassPath,
-		})
+		registerDiagnosticsRoutes(e, DiagnosticsHandlers{Service: options.Diagnostics, Actions: actions})
 	}
 	if options.KnownHosts != nil {
 		registerKnownHostsRoutes(e, KnownHostsHandlers{Service: options.KnownHosts, Actions: actions})
@@ -241,6 +247,26 @@ func New(options Options) (*Server, error) {
 	if options.Sync != nil {
 		registerSyncRoutes(e, SyncHandlers{Service: options.Sync, Secrets: options.Passwords})
 	}
+	if options.Terminals != nil {
+		registerTerminalRoutes(e, TerminalHandlers{
+			Registry:    options.Terminals,
+			Tickets:     &terminal.Tickets{},
+			SSH:         options.SSHProgram,
+			Shell:       options.LoginShell,
+			Environment: options.TerminalEnvironment,
+			Passwords:   options.Passwords,
+			KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
+				if options.Config == nil || options.Keys == nil {
+					return "", "", "", "", false, nil
+				}
+				target, ok, err := options.Config.DirectKeyPassphraseTarget(alias, options.Keys.Inventory)
+				return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
+			},
+			AskpassHelper:  options.AskpassHelper,
+			AskpassURL:     "http://" + host + AskpassPath,
+			ExpectedOrigin: "http://" + host,
+		})
+	}
 	if len(registry) > 0 {
 		registerActionRoutes(e, actions)
 	}
@@ -249,7 +275,8 @@ func New(options Options) (*Server, error) {
 	e.HEAD("/*", static)
 
 	return &Server{
-		listener: options.Listener,
+		listener:  options.Listener,
+		terminals: options.Terminals,
 		http: &http.Server{
 			Handler:           e,
 			ReadHeaderTimeout: 5 * time.Second,

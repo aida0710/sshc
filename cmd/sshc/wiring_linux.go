@@ -20,9 +20,6 @@ func newPlatformParts(home string) platformParts {
 		Toolchain: toolchain,
 		Browser:   linux.NewBrowser(runner),
 		KeyAgent:  process.NewKeyAgent(runner, toolchain, os.LookupEnv),
-		// Terminal は設定しない。Linux では端末を開かず、コマンドを表示して
-		// 利用者が実行する。理由はタスク 8 にある。nil は diagnostics が
-		// 「端末が設定されていない」と報告する、支持された状態である。
 	}
 	// systemd が無い環境で LoginItem を組み立てると、画面にはスイッチが出るのに
 	// 押すと必ず失敗する。それより「非対応」と答える方が正しいので、この一度

@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, type ReactNode } from "react";
+import { StrictMode, useEffect } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const openVault = () =>
   Promise.resolve({ exists: true, unlocked: true, aliases: [] as string[], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
 import { App } from "./App";
+import type { InspectorContent } from "./ui/Inspector";
 import { LanguageProvider } from "./i18n/context";
 import { ThemeProvider } from "./theme/context";
 import { ja } from "./i18n/messages";
@@ -24,7 +25,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
     preferredKey,
     onPreferredKeyApplied,
   }: {
-    onInspector: (content: { label: string; attention: boolean; body: ReactNode } | null) => void;
+    onInspector: (content: InspectorContent) => void;
     creationDraft?: { alias: string } | null;
     onCreationDraftChange?: (draft: Record<string, string> | null) => void;
     onNavigateForCreation?: (section: "Groups" | "Keys") => void;
@@ -47,7 +48,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
       <span>{`preferred connection key ${preferredKey?.privateRelativePath ?? "none"}`}</span>
       <button type="button" onClick={onPreferredKeyApplied}>consume connection key</button>
       {creationDraft === null || creationDraft === undefined ? null : <span>{`draft ${creationDraft.alias}`}</span>}
-      <button type="button" onClick={() => onInspector({ label: "Display and classification", attention: true, body: <p>inspector body</p> })}>
+      <button type="button" onClick={() => onInspector({ label: "Display and classification", attention: true, panes: [{ key: "only", label: "Only", body: <p>inspector body</p> }] })}>
         offer inspector
       </button>
       <button
