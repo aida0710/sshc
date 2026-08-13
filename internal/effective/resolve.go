@@ -31,25 +31,27 @@ type Refusal struct {
 // defaultPort は、Port が書かれていないときの値。
 const defaultPort = "22"
 
-// defaultIdentityFiles は、IdentityFile が書かれていないときに OpenSSH が試す並び。
+// IdentityFile に既定値は持たない。
 //
-// **これは OpenSSH の版に依存する。** 差分テストが、入っている OpenSSH に対して
-// これを確かめる。ずれたらテストが言うので、ここを推測で直さない。
-var defaultIdentityFiles = []string{
-	"~/.ssh/id_rsa",
-	"~/.ssh/id_ecdsa",
-	"~/.ssh/id_ecdsa_sk",
-	"~/.ssh/id_ed25519",
-	"~/.ssh/id_ed25519_sk",
-}
+// **これは実測に基づく判断である。** 一度は OpenSSH の既定の並びを写したが、
+// 差分テストが macOS と Linux で違う答えを返した——Linux 側のビルドは
+// ~/.ssh/id_xmss を含んでいた。版とビルドオプションで変わる表であり、
+// 「OpenSSH の既定値表を丸ごと持たない」という判断がここにも当てはまる。
+//
+// 書かれていなければ、この解決器は IdentityFile を答えない。接続に使う鍵を
+// 選ぶのはプロセス内 SSH クライアント（B2）であり、そちらは OpenSSH の探索順
+// ではなく、利用者が選んだ鍵と鍵の一覧を使う。
 
-// expandsTokens は、トークンを展開してよいキーワードを列挙する。
+// expandsTokens は、解決の時点でトークンを展開するキーワードを列挙する。
 //
-// どこでも展開すると、`%` を正当に含む値を壊す。OpenSSH もディレクティブごとに
-// 決めている。ここに無いキーワードの値は、書かれたまま返る。
-var expandsTokens = map[string]bool{
-	"hostname": true, "identityfile": true, "certificatefile": true,
-}
+// **HostName だけである。実機の ssh -G で確かめた。** IdentityFile と
+// CertificateFile のトークンは、-G の出力では展開されないまま出てくる——
+// OpenSSH がそれらを展開するのは接続する瞬間であり、設定を読み終えた時点では
+// ない。ここで展開すると、設定について報告する値が ssh の報告とずれる。
+//
+// 接続に使うときの展開はプロセス内 SSH クライアント（B2）の仕事である。
+// ExpandTokens はそのために置いてある。
+var expandsTokens = map[string]bool{"hostname": true}
 
 // Resolve は、この alias に接続したときに実際に使われる値を返す。
 //
@@ -182,7 +184,6 @@ func applyDefaults(values *Values, alias string, facts LocalFacts) {
 	fill("hostname", alias)
 	fill("user", facts.User)
 	fill("port", defaultPort)
-	fill("identityfile", defaultIdentityFiles...)
 }
 
 // expandAll は、トークンを受け取るキーワードの値を展開する。

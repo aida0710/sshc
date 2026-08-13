@@ -181,12 +181,14 @@ func TestProjectKeepsEveryValueOfACumulativeKeyword(t *testing.T) {
 }
 
 func TestCumulativeNamesOnlyTheKeywordsOpenSSHAccumulates(t *testing.T) {
-	for _, keyword := range []string{"IdentityFile", "certificatefile", "LocalForward", "SetEnv"} {
+	for _, keyword := range []string{"IdentityFile", "certificatefile", "LocalForward", "SendEnv"} {
 		if !effective.Cumulative(keyword) {
 			t.Errorf("Cumulative(%q) = false", keyword)
 		}
 	}
-	for _, keyword := range []string{"User", "Port", "HostName", "ProxyJump"} {
+	// SetEnv はここにある。実機の ssh -G は、二行書くと最初の行しか出力しない
+	// ——複数の変数は `SetEnv ONE=1 TWO=2` と一行に並べる。
+	for _, keyword := range []string{"User", "Port", "HostName", "ProxyJump", "SetEnv"} {
 		if effective.Cumulative(keyword) {
 			t.Errorf("Cumulative(%q) = true", keyword)
 		}
