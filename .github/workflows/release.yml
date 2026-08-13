@@ -40,6 +40,21 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: make release-binaries
 
+      # デスクトップの外殻を 4 つ作る。**1 台の macOS から macOS と Linux の
+      # 両方が出る**——それが Tauri ではなく Electron を選んだ理由であり、
+      # 手元で確かめてある。束ごとに入る sshc は、その束のプラットフォームの
+      # ものである（Makefile がそう並べる）。
+      #
+      # 署名はまだ無い。macOS では初回に右クリック→開くが要る。
+      - name: Build the desktop shell
+        env:
+          VERSION: ${{ github.ref_name }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: make desktop-dist
+
+      - name: Collect the desktop bundles
+        run: cp desktop/dist/*.dmg desktop/dist/*.AppImage dist/
+
       # チェックサムは、手でダウンロードしたものを検証する人のためにある。
       # それが記述する対象の隣に公開されるので、転送の途中切断は捕まえられるが、
       # このリリースが正直かどうかについては何も言わない — README がどちらで

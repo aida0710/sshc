@@ -55,20 +55,47 @@ build:
 	mkdir -p bin
 	go build -trimpath -ldflags "-X main.version=$${VERSION}" -o bin/sshc ./cmd/sshc
 
-# デスクトップの外殻。束に入れる sshc は 1 つだけである——二つのコピーが
-# あると、どちらが走っているのか分からなくなる。
-desktop: build
-	mkdir -p desktop/resources
-	cp bin/sshc desktop/resources/sshc
+# デスクトップの外殻。
+#
+# **束ごとに入る sshc は、その束のプラットフォームのものでなければならない。**
+# 一つを使い回すと、Linux の AppImage に macOS のバイナリが入る——ビルドは
+# 通り、配ってから初めて壊れる種類の間違いである。electron-builder の
+# ${os}-${arch} がその選択を行うので、こちらはその名前で置く。
+DESKTOP_BUNDLES = mac-arm64:darwin:arm64:1 mac-x64:darwin:amd64:1 \
+	linux-x64:linux:amd64:0 linux-arm64:linux:arm64:0
+
+# desktop は、外殻を動かすのに要るものを揃える。開発中はホストの bin/sshc を
+# 使うので、束ごとのバイナリはここでは作らない。
+desktop:
 	npm install --prefix desktop
 
 # desktop-run は、束を作らずにその場で外殻を開く。開発中の入口である。
-desktop-run: desktop
+desktop-run: build desktop
 	npm start --prefix desktop
 
 # desktop-dist は配布物を作る。**1 台の macOS から macOS と Linux の両方を
-# 作れる**——それが Tauri ではなく Electron を選んだ理由である。
+# 作れる**——それが Tauri ではなく Electron を選んだ理由であり、実際に
+# 確かめてある（DMG と AppImage が同じ実行で出る）。
 desktop-dist: desktop
+	npm run build --prefix web
+	@set -eu; for bundle in $(DESKTOP_BUNDLES); do \
+		name="$${bundle%%:*}"; rest="$${bundle#*:}"; \
+		goos="$${rest%%:*}"; rest="$${rest#*:}"; \
+		goarch="$${rest%%:*}"; cgo="$${rest##*:}"; \
+		echo "==> desktop/resources/$$name ($$goos/$$goarch)"; \
+		mkdir -p "desktop/resources/$$name"; \
+		GOOS="$$goos" GOARCH="$$goarch" CGO_ENABLED="$$cgo" \
+			go build -trimpath -ldflags "-X main.version=$${VERSION}" \
+			-o "desktop/resources/$$name/sshc" ./cmd/sshc; \
+	done
+	@# **版はひとつである。** 束の中の sshc と、その束自身が別の版を名乗ると、
+	@# どちらが本当かを言えるものが無くなる。dev のときは package.json の
+	@# 既定のままにする——npm は "dev" を版として受け付けない。
+	@if [ "$${VERSION}" != "dev" ]; then \
+		npm version --prefix desktop --allow-same-version --no-git-tag-version \
+			"$${VERSION#v}" >/dev/null; \
+		echo "desktop version -> $${VERSION#v}"; \
+	fi
 	npm run dist --prefix desktop
 
 # リリースの成果物。UI のバンドルは 1 度だけ作り、Go だけをターゲットごとに
