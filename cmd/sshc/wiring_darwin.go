@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 
+	"sshc/internal/keys"
 	"sshc/internal/platform/macos"
 	"sshc/internal/platform/process"
 )
@@ -19,7 +20,7 @@ func newPlatformParts(home string) platformParts {
 		Runner:    runner,
 		Toolchain: toolchain,
 		Browser:   macos.NewBrowser(runner),
-		KeyAgent:  process.NewKeyAgent(runner, toolchain, os.LookupEnv),
+		KeyAgent:  keys.NewAgent(os.LookupEnv),
 		LoginItem: macos.LoginItem{Runner: runner, Home: home},
 	}
 }

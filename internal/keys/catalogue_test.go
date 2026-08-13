@@ -2,25 +2,10 @@ package keys
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"testing"
-	"time"
-
-	"sshc/internal/platform"
 )
-
-// fakeRunner は、実行されたはずの内容を記録し、用意された出力を返す。この
-// パッケージのどのテストも、本物の子プロセスを起動しない。
-type fakeRunner struct {
-	commands []platform.Command
-	output   platform.Output
-	err      error
-}
-
-func (fake *fakeRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
-	fake.commands = append(fake.commands, command)
-	return fake.output, fake.err
-}
 
 // fakeToolchain は固定の絶対パスで答えるので、どのテストも、開発者のマシンに
 // たまたま入っている OpenSSH のプログラムに依存しない。
@@ -28,10 +13,7 @@ type fakeToolchain struct {
 	err error
 }
 
-func (fake fakeToolchain) SSH() (string, error)     { return fake.resolve("/usr/bin/ssh") }
-func (fake fakeToolchain) KeyScan() (string, error) { return fake.resolve("/usr/bin/ssh-keyscan") }
-func (fake fakeToolchain) KeyGen() (string, error)  { return fake.resolve("/usr/bin/ssh-keygen") }
-func (fake fakeToolchain) KeyAdd() (string, error)  { return fake.resolve("/usr/bin/ssh-add") }
+func (fake fakeToolchain) KeyGen() (string, error) { return fake.resolve("/usr/bin/ssh-keygen") }
 
 func (fake fakeToolchain) resolve(path string) (string, error) {
 	if fake.err != nil {
@@ -40,108 +22,63 @@ func (fake fakeToolchain) resolve(path string) (string, error) {
 	return path, nil
 }
 
-func newFakeCatalogue(runner platform.OutputRunner, toolchain platform.Toolchain) CatalogueReader {
-	return CatalogueReader{Runner: runner, Toolchain: toolchain, Timeout: time.Second}
-}
-
-const opensshQueryOutput = "ssh-ed25519\n" +
-	"ssh-ed25519-cert-v01@openssh.com\n" +
-	"sk-ssh-ed25519@openssh.com\n" +
-	"ecdsa-sha2-nistp256\n" +
-	"ecdsa-sha2-nistp384\n" +
-	"ecdsa-sha2-nistp521\n" +
-	"sk-ecdsa-sha2-nistp256@openssh.com\n" +
-	"ssh-rsa\n"
-
-func TestCatalogueOffersTheVariantsTheInstalledOpenSSHSupports(t *testing.T) {
-	runner := &fakeRunner{output: platform.Output{Stdout: []byte(opensshQueryOutput)}}
-	catalogue := newFakeCatalogue(runner, fakeToolchain{}).Read(context.Background())
-
-	if catalogue.Source != "ssh -Q key" {
-		t.Fatalf("Source = %q, want %q", catalogue.Source, "ssh -Q key")
+// **一覧に載っているものは必ず作れなければならない。** 載っているのに作れない
+// 項目は、画面のボタンが必ず失敗するということである。
+func TestEveryInProcessVariantCanActuallyBeGenerated(t *testing.T) {
+	catalogue := CatalogueReader{}.Read(context.Background())
+	if len(catalogue.Variants) == 0 {
+		t.Fatal("the catalogue is empty")
 	}
-	if len(runner.commands) != 1 {
-		t.Fatalf("commands = %#v, want exactly one", runner.commands)
-	}
-	command := runner.commands[0]
-	wantArguments := []string{"-F", "/dev/null", "-Q", "key"}
-	if command.Path != "/usr/bin/ssh" || len(command.Arguments) != len(wantArguments) {
-		t.Fatalf("command = %s %v", command.Path, command.Arguments)
-	}
-	for index, want := range wantArguments {
-		if command.Arguments[index] != want {
-			t.Fatalf("Arguments[%d] = %q, want %q", index, command.Arguments[index], want)
+	for _, variant := range catalogue.Variants {
+		if !variant.InProcess {
+			continue
 		}
-	}
-	if len(command.Stdin) != 0 {
-		t.Errorf("Stdin = %q, want an empty standard input", command.Stdin)
-	}
-
-	tests := []struct {
-		algorithm Algorithm
-		bits      int
-		inProcess bool
-	}{
-		{AlgorithmEd25519, 256, true},
-		{AlgorithmRSA, 2048, true},
-		{AlgorithmRSA, 3072, true},
-		{AlgorithmRSA, 4096, true},
-		{AlgorithmECDSA, 256, true},
-		{AlgorithmECDSA, 384, true},
-		{AlgorithmECDSA, 521, true},
-		{AlgorithmEd25519SK, 0, false},
-		{AlgorithmECDSASK, 256, false},
-	}
-	if len(catalogue.Variants) != len(tests) {
-		t.Fatalf("variants = %#v, want %d", catalogue.Variants, len(tests))
-	}
-	for index, test := range tests {
-		variant := catalogue.Variants[index]
-		if variant.Algorithm != test.algorithm || variant.Bits != test.bits {
-			t.Errorf("variant[%d] = %s/%d, want %s/%d", index, variant.Algorithm, variant.Bits, test.algorithm, test.bits)
-		}
-		if variant.InProcess != test.inProcess {
-			t.Errorf("variant[%d].InProcess = %v, want %v", index, variant.InProcess, test.inProcess)
-		}
-		if !variant.InProcess && variant.Reason == "" {
-			t.Errorf("variant[%d] has no reason for leaving the process", index)
+		if _, err := GeneratePrivateKey(variant.Algorithm, variant.Bits, rand.Reader); err != nil {
+			t.Errorf("the catalogue offers %s/%d but generating it = %v",
+				variant.Algorithm, variant.Bits, err)
 		}
 	}
 }
 
-func TestCatalogueFallsBackToEd25519WhenOpenSSHCannotBeQueried(t *testing.T) {
-	tests := []struct {
-		name      string
-		runner    *fakeRunner
-		toolchain fakeToolchain
-	}{
-		{
-			name:   "the program could not be run",
-			runner: &fakeRunner{err: errors.New("child process failed to start")},
-		},
-		{
-			name:   "the program reported a non-zero exit status",
-			runner: &fakeRunner{output: platform.Output{ExitCode: 1}},
-		},
-		{
-			name:      "the program is not installed",
-			runner:    &fakeRunner{output: platform.Output{Stdout: []byte(opensshQueryOutput)}},
-			toolchain: fakeToolchain{err: errors.New("OpenSSH program not found")},
-		},
+// **インストール済みの OpenSSH には尋ねない。** ここが並べているのは
+// 「ここで生成できる鍵」であり、あちらが何に対応しているかは別の問いである。
+func TestTheCatalogueDoesNotDependOnTheInstalledOpenSSH(t *testing.T) {
+	without := CatalogueReader{}.Read(context.Background())
+	broken := CatalogueReader{Toolchain: fakeToolchain{err: errors.New("no programs here")}}.
+		Read(context.Background())
+
+	if len(without.Variants) != len(broken.Variants) {
+		t.Fatalf("a missing toolchain changed the answer: %d vs %d",
+			len(without.Variants), len(broken.Variants))
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			catalogue := newFakeCatalogue(test.runner, test.toolchain).Read(context.Background())
-			if catalogue.Source != "fallback" {
-				t.Fatalf("Source = %q, want %q", catalogue.Source, "fallback")
-			}
-			if catalogue.Diagnostic != DiagnosticAlgorithmQueryFailed {
-				t.Fatalf("Diagnostic = %q, want %q", catalogue.Diagnostic, DiagnosticAlgorithmQueryFailed)
-			}
-			if len(catalogue.Variants) != 1 || catalogue.Variants[0].Algorithm != AlgorithmEd25519 {
-				t.Fatalf("variants = %#v, want Ed25519 only", catalogue.Variants)
-			}
-		})
+	for _, variant := range without.Variants {
+		if !variant.InProcess {
+			t.Errorf("without ssh-keygen the catalogue still offered %s", variant.Algorithm)
+		}
+	}
+}
+
+// ハードウェア鍵だけは ssh-keygen が要る。無ければ出さない——押せば必ず失敗する
+// ボタンを画面に出さない。
+func TestHardwareVariantsAppearOnlyWhenKeygenIsAvailable(t *testing.T) {
+	present := CatalogueReader{Toolchain: fakeToolchain{}}.Read(context.Background())
+	found := map[Algorithm]bool{}
+	for _, variant := range present.Variants {
+		found[variant.Algorithm] = true
+		if variant.Algorithm == AlgorithmEd25519SK && variant.Reason != ReasonHardwareToken {
+			t.Errorf("a hardware variant does not say why it is not in process: %#v", variant)
+		}
+	}
+	if !found[AlgorithmEd25519SK] || !found[AlgorithmECDSASK] {
+		t.Fatalf("ssh-keygen is available but the hardware variants are missing: %#v", present.Variants)
+	}
+
+	absent := CatalogueReader{Toolchain: fakeToolchain{err: errors.New("absent")}}.
+		Read(context.Background())
+	for _, variant := range absent.Variants {
+		if variant.Algorithm == AlgorithmEd25519SK || variant.Algorithm == AlgorithmECDSASK {
+			t.Fatalf("a hardware variant was offered without ssh-keygen: %#v", variant)
+		}
 	}
 }
 

@@ -139,9 +139,7 @@ func (stubRunner) RunOutput(context.Context, platform.Command) (platform.Output,
 
 type stubToolchain struct{}
 
-func (stubToolchain) SSH() (string, error)    { return "/usr/bin/ssh", nil }
 func (stubToolchain) KeyGen() (string, error) { return "/usr/bin/ssh-keygen", nil }
-func (stubToolchain) KeyAdd() (string, error) { return "/usr/bin/ssh-add", nil }
 
 type stubKeyAgent struct{}
 

@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 
+	"sshc/internal/keys"
 	"sshc/internal/platform/linux"
 	"sshc/internal/platform/process"
 )
@@ -19,7 +20,7 @@ func newPlatformParts(home string) platformParts {
 		Runner:    runner,
 		Toolchain: toolchain,
 		Browser:   linux.NewBrowser(runner),
-		KeyAgent:  process.NewKeyAgent(runner, toolchain, os.LookupEnv),
+		KeyAgent:  keys.NewAgent(os.LookupEnv),
 	}
 	// systemd が無い環境で LoginItem を組み立てると、画面にはスイッチが出るのに
 	// 押すと必ず失敗する。それより「非対応」と答える方が正しいので、この一度

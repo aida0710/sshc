@@ -1075,7 +1075,6 @@ export interface components {
         KeyAlgorithmsResponse: {
             variants: components["schemas"]["KeyVariant"][];
             source: string;
-            diagnostic: string;
         };
         GenerateKeyRequest: {
             algorithm: string;

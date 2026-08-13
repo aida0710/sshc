@@ -124,7 +124,6 @@ function buildApi(overrides: Partial<KeysApi> = {}): KeysApi {
         },
       ],
       source: "ssh -Q key",
-      diagnostic: "",
     }),
     generate: vi.fn().mockResolvedValue({
       id: "key-new",

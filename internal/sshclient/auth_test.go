@@ -275,7 +275,7 @@ func TestNoIdentityIsItsOwnError(t *testing.T) {
 }
 
 // runTestAgent は、プロセス内の ssh-agent を unix ソケットで待ち受けさせる。
-func runTestAgent(t *testing.T, directory string) (string, ssh.Signer) {
+func runTestAgent(t *testing.T, _ string) (string, ssh.Signer) {
 	t.Helper()
 	_, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -290,11 +290,19 @@ func runTestAgent(t *testing.T, directory string) (string, ssh.Signer) {
 		t.Fatal(err)
 	}
 
-	// ソケットのパスには長さの上限があるので、t.TempDir() の下ではなく短い名前を使う。
-	socket := filepath.Join(directory, "agent.sock")
+	// **t.TempDir() は使わない。** unix ソケットのパスには 100 バイト程度の
+	// 上限があり、テスト名を含むあの長いパスは macOS でそれを超える。超えると
+	// bind が失敗し、この検査は skip として静かに消える。
+	socketDirectory, err := os.MkdirTemp("", "sshc-agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(socketDirectory) })
+
+	socket := filepath.Join(socketDirectory, "s")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
-		t.Skipf("this platform does not allow a unix socket here: %v", err)
+		t.Fatalf("listen on %q: %v", socket, err)
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 	go func() {
