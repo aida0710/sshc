@@ -19,9 +19,13 @@ const (
 // この表がここにあるのは、同じ問いに答えるものを 2 つ持たないためである。
 // 以前は internal/application にだけあり、この射影は一律の先勝ちだった。その結果、
 // IdentityFile を 2 行書いた設定では 2 行目が「採用されない」と画面に出ていた。
+// SetEnv はここに無い。**実機の ssh -G で確かめた結果である。** 二行書くと
+// 最初の行しか出力されない——複数の変数を渡すには `SetEnv ONE=1 TWO=2` と
+// 一行に並べる。SendEnv は ssh_config(5) が「複数の SendEnv に分けてよい」と
+// 明記しているので残す。
 var cumulativeKeywords = map[string]bool{
 	"identityfile": true, "certificatefile": true, "localforward": true,
-	"remoteforward": true, "dynamicforward": true, "sendenv": true, "setenv": true,
+	"remoteforward": true, "dynamicforward": true, "sendenv": true,
 }
 
 // Cumulative は、そのキーワードが積み上がるかを報告する。大文字小文字は問わない。

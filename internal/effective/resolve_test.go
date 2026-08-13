@@ -166,17 +166,19 @@ func TestResolveExpandsTokensAfterTheValuesAreKnown(t *testing.T) {
 	if values.First("hostname") != "bastion.example.com" {
 		t.Errorf("hostname = %q", values.First("hostname"))
 	}
-	// 他のキーワードの %h は、解決したあとの HostName である。
-	want := testHome + "/.ssh/ops@bastion.example.com:2222"
-	if values.First("identityfile") != want {
-		t.Errorf("identityfile = %q, want %q", values.First("identityfile"), want)
+	// **IdentityFile のトークンは展開しない。** ssh -G もそうする——OpenSSH が
+	// それを展開するのは接続する瞬間であって、設定を読み終えた時点ではない。
+	// ここで展開すると、設定について報告する値が ssh の報告とずれる。
+	if values.First("identityfile") != "%d/.ssh/%r@%h:%p" {
+		t.Errorf("identityfile = %q, want it unexpanded", values.First("identityfile"))
 	}
 }
 
-// 展開できないトークンを黙って残せば、その文字列はファイル名としてそのまま使われる。
+// 展開するキーワードの中に展開できないトークンがあれば、黙って残さない。その
+// 文字列はホスト名としてそのまま使われてしまう。
 func TestResolveRefusesATokenItCannotExpand(t *testing.T) {
 	graph := graphFor(t, map[string]string{
-		testConfig: "Host bastion\n\tIdentityFile ~/.ssh/%C\n",
+		testConfig: "Host bastion\n\tHostName %C.example.com\n",
 	})
 
 	values, refusals := effective.Resolve(graph, "bastion", resolveFacts())
