@@ -19,7 +19,7 @@ import (
 // ハンドシェイクにカスタムヘッダを付けられない。** Security ミドルウェアは
 // /api/ 配下の要求すべてに X-SSHC-CSRF を要求するので、そこに置いた
 // アップグレードは必ず弾かれる。代わりに、直前の CSRF 付き要求が発行した
-// 使い捨てのチケットで認可する。/cli/connect と askpass のエンドポイントが
+// 使い捨てのチケットで認可する。/cli/connect のエンドポイントが
 // /api/ の外にあるのと同じ規則である。
 const StreamPath = "/terminal/stream"
 

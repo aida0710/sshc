@@ -2,9 +2,7 @@ package httpserver
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"sort"
 
@@ -16,26 +14,6 @@ import (
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 )
-
-// AskpassPath はヘルパーがパスワードを尋ねる先である。
-//
-// これはわざと /api/ の配下に置いていない。API 表面はブラウザ向けで、
-// セッション cookie と CSRF ヘッダ、Fetch Metadata で守られているが、
-// ヘルパーはブラウザではなく、そのいずれも持たない。このエンドポイントは
-// 代わりに使い捨てトークンで認証しており、/api/ パスしか調べない
-// ルート表のテストは、この存在によって弱まることはない。
-const AskpassPath = "/askpass"
-
-// AskpassTokenHeader はワンタイムトークンを運ぶ。
-//
-// 独自ヘッダと JSON の content type の両方により、このリクエストは
-// プリフライトなしにはどのブラウザもクロスオリジンで送れず、この
-// サーバーはプリフライトに応えないので、どんな Web ページもこの
-// エンドポイントについてどれほど知っていても到達できない。
-const AskpassTokenHeader = "X-SSHC-Askpass"
-
-// maxAskpassBody はヘルパーのリクエストの上限を定める。プロンプトは 1 行のテキストである。
-const maxAskpassBody = 8 << 10
 
 // PasswordHandlers は vault とヘルパーを提供する。
 type PasswordHandlers struct {
@@ -49,13 +27,6 @@ type PasswordHandlers struct {
 	// 関数は何もチェックしないことを意味し、これはこの仕組みができる
 	// 前に vault がしていたことである。
 	Eligibility func(alias string) (application.PasswordEligibility, error)
-	// Answerable はプロンプトの規則である。import ではなく注入している
-	// のは、その規則とそれを適用するヘルパーとが、テストに気づかれず
-	// 別々の規則へとずれてしまうことがないようにするためだ。
-	Answerable func(alias, prompt string) bool
-	// KeyPassphraseAnswerable binds an OpenSSH key prompt to the exact
-	// workspace-relative key subject authorised by the token.
-	KeyPassphraseAnswerable func(alias, relativePath, expectedPath, evidence, prompt string) bool
 	// ResealSnapshot は新しいマスターパスワードでワークスペースを再度 push し、
 	// bucket の最新スナップショットが古いパスワードでしか開けないままにはしない。
 	// これが注入されているのは、スナップショットの行き先が object store に
@@ -92,7 +63,6 @@ func registerPasswordRoutes(engine *echo.Echo, handlers PasswordHandlers) {
 	engine.DELETE("/api/v1/credentials/:kind/assign/:subject", handlers.UnassignCredential)
 	engine.PUT("/api/v1/credentials/:kind/:name", handlers.SetCredential)
 	engine.DELETE("/api/v1/credentials/:kind/:name", handlers.DeleteCredential)
-	engine.POST(AskpassPath, handlers.Askpass)
 }
 
 // status はこのファイルの全ルートが返す唯一のレスポンスである。
@@ -479,57 +449,6 @@ func (h PasswordHandlers) Forget(c *echo.Context) error {
 		return passwordProblem(c, err)
 	}
 	return h.status(c)
-}
-
-type askpassRequest struct {
-	Alias  string `json:"alias"`
-	Prompt string `json:"prompt"`
-}
-
-type askpassResponse struct {
-	Password string `json:"password"`
-}
-
-// Askpass はヘルパーに応答する。
-//
-// すべての拒否は外から見て同じ形——status のみで body がない——
-// なので、このエンドポイントはどの alias にパスワードがあるかを
-// 列挙する手段にはならない。ヘルパーは「何も保存されていないか施錠中」と
-// 「拒否された」しか区別しない。Terminal を見つめる人に伝える内容としては
-// この 2 つが別物であり、有効なトークンを持たない呼び出し元には何も明かさない。
-func (h PasswordHandlers) Askpass(c *echo.Context) error {
-	request := c.Request()
-	if request.Header.Get(echo.HeaderContentType) != "application/json" {
-		return c.NoContent(http.StatusUnsupportedMediaType)
-	}
-	token := request.Header.Get(AskpassTokenHeader)
-	if token == "" {
-		return c.NoContent(http.StatusForbidden)
-	}
-
-	var decoded askpassRequest
-	if err := json.NewDecoder(io.LimitReader(request.Body, maxAskpassBody)).Decode(&decoded); err != nil {
-		return c.NoContent(http.StatusBadRequest)
-	}
-	if err := platform.ValidateAlias(decoded.Alias); err != nil {
-		return c.NoContent(http.StatusBadRequest)
-	}
-
-	if h.Answerable == nil && h.KeyPassphraseAnswerable == nil {
-		// 規則がなければ応答もない。nil の predicate が「許可」を意味してはならない。
-		return c.NoContent(http.StatusForbidden)
-	}
-
-	password, err := h.Service.RedeemCredential(
-		token, decoded.Alias, decoded.Prompt, h.Answerable, h.KeyPassphraseAnswerable)
-	switch {
-	case err == nil:
-	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoPassword):
-		return c.NoContent(http.StatusNotFound)
-	default:
-		return c.NoContent(http.StatusForbidden)
-	}
-	return c.JSON(http.StatusOK, askpassResponse{Password: password})
 }
 
 func passwordProblem(c *echo.Context, err error) error {

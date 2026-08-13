@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"net"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -63,10 +62,6 @@ type Dependencies struct {
 	ScanHostKeys func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
 	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
 	RemoteRun    func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error)
-	// AskpassHelper は実行中バイナリの絶対パス。OpenSSH が保存済み鍵パスフレーズを得る
-	// ために実行するプログラムである。これを知り得るのは cmd/sshc だけで、パスが空
-	// なら、すべての端末起動は素の経路のままになる。
-	AskpassHelper string
 	// LoginItem は「ログイン時に起動」を切り替える。既定はオフで、ここでそれを変える
 	// ことはない。保存済みのあらゆる秘密の鍵を握るバックグラウンドプロセスは、他人に
 	// 代わって勝手に用意してよいものではないからだ。nil の場合、この設定は未対応だと
@@ -269,28 +264,21 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 			}
 			return nil
 		},
-		Sessions:      sessions,
-		UI:            dependencies.UI,
-		Version:       version,
-		Logger:        dependencies.Logger,
-		Config:        configService,
-		Keys:          keyService,
-		Diagnostics:   diagnosticsService,
-		KnownHosts:    knownHostsService,
-		RemoteKeys:    remoteKeyService,
-		Passwords:     passwordService,
-		Connect:       ssh.connector(),
-		Sync:          syncService,
-		AskpassHelper: dependencies.AskpassHelper,
-		Terminals:     terminals,
-		// PTY の中で起こすプログラムは PATH では解決しない。他のすべての
-		// OpenSSH プログラムと同じく、固定の場所から絶対パスで解決する。
-		SSHProgram: func() (string, error) {
-			if dependencies.Toolchain == nil {
-				return "", platform.ErrInteractiveProgram
-			}
-			return dependencies.Toolchain.SSH()
-		},
+		Sessions:    sessions,
+		UI:          dependencies.UI,
+		Version:     version,
+		Logger:      dependencies.Logger,
+		Config:      configService,
+		Keys:        keyService,
+		Diagnostics: diagnosticsService,
+		KnownHosts:  knownHostsService,
+		RemoteKeys:  remoteKeyService,
+		Passwords:   passwordService,
+		Connect:     ssh.connector(),
+		Sync:        syncService,
+		Terminals:   terminals,
+		// SSH のプログラムはもう要らない。**接続はこのプロセスの中で話す。**
+		// PTY を確保するのはローカルシェルだけである。
 		LoginShell: func() (string, error) { return platform.LoginShell(dependencies.Lookup) },
 		TerminalEnvironment: func() []string {
 			if dependencies.Environ == nil {
@@ -298,14 +286,6 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 			}
 			return dependencies.Environ()
 		},
-		// Account-password tokens are no longer issued. Keep the server-side
-		// namespace closed too, so an old or directly minted token cannot turn
-		// the retained encrypted records back into automatic SSH answers.
-		Answerable: func(string, string) bool { return false },
-		KeyPassphraseAnswerable: keyPassphraseAnswerable(
-			keyPassphrasePrompt, func(alias string) (application.DirectKeyPassphraseTarget, bool, error) {
-				return configService.DirectKeyPassphraseTarget(alias, keyService.Inventory)
-			}),
 	})
 	if err != nil {
 		listener.Close()
@@ -323,54 +303,6 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 			"error", err)
 	}
 	return server, bootstrap, nil
-}
-
-// keyPassphrasePrompt accepts only OpenSSH's exact question for the absolute
-// key path resolved when the token was issued. Other keys, 2FA, host-key
-// confirmation, and account-password prompts cannot redeem it.
-func keyPassphrasePrompt(expectedPath, prompt string) bool {
-	if expectedPath == "" {
-		return false
-	}
-	trimmed := strings.TrimRight(prompt, " \t\r\n")
-	const prefix = "Enter passphrase for key '"
-	if !strings.HasPrefix(trimmed, prefix) || !strings.HasSuffix(trimmed, "':") {
-		return false
-	}
-	promptPath := strings.TrimSuffix(strings.TrimPrefix(trimmed, prefix), "':")
-	expectedPath = filepath.Clean(expectedPath)
-	promptPath = filepath.Clean(promptPath)
-	if promptPath == expectedPath {
-		return true
-	}
-	// OpenSSH formats the filename with %.100s. A truncated value cannot
-	// uniquely identify a key, so eligible targets are limited to paths that
-	// fit and every truncation is refused here.
-	return false
-}
-
-func keyPassphraseAnswerable(
-	promptRule func(expectedPath, prompt string) bool,
-	currentTarget func(alias string) (application.DirectKeyPassphraseTarget, bool, error),
-) func(alias, relativePath, expectedPath, evidence, prompt string) bool {
-	return func(alias, relativePath, expectedPath, evidence, prompt string) bool {
-		if promptRule == nil || currentTarget == nil || !promptRule(expectedPath, prompt) {
-			return false
-		}
-		current, ok, err := currentTarget(alias)
-		return err == nil && ok && current.RelativePath == relativePath &&
-			filepath.Clean(current.PromptPath) == filepath.Clean(expectedPath) &&
-			current.Evidence == evidence
-	}
-}
-
-// KeyPassphraseAnswerable exposes the exact production prompt and snapshot
-// policy to the black-box OpenSSH integration suite. Keeping the constructor
-// here means the integration test cannot accidentally validate a looser copy.
-func KeyPassphraseAnswerable(
-	currentTarget func(alias string) (application.DirectKeyPassphraseTarget, bool, error),
-) func(alias, relativePath, expectedPath, evidence, prompt string) bool {
-	return keyPassphraseAnswerable(keyPassphrasePrompt, currentTarget)
 }
 
 // HandoffDir は、動作中のアプリケーションが `sshc <alias>` の読むファイルを置く

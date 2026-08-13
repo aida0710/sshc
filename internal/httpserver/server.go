@@ -55,18 +55,12 @@ type Options struct {
 	KnownHosts  *knownhosts.Service
 	RemoteKeys  *remotekey.Service
 	// Passwords は保存されたパスワードの vault である。nil の service は
-	// すべてのパスワード用ルートと askpass エンドポイントを未登録のままに
+	// すべてのパスワード用ルートを未登録のままに
 	// する。これは、それを配線しないテストが当てにしていることである。
 	Passwords *secret.Service
-	// AskpassHelper はこのバイナリの絶対パスであり、OpenSSH がパスワードを
-	// 得るために実行する program である。これを知り得るのは cmd/sshc だけだ。
-	AskpassHelper string
-	// Answerable はプロンプトの規則であり、server とヘルパーが 2 つの
-	// 異なる規則へずれないよう注入されている。
-	Answerable func(alias, prompt string) bool
-	// KeyPassphraseAnswerable verifies the exact OpenSSH prompt path bound into
-	// a key-passphrase token.
-	KeyPassphraseAnswerable func(alias, relativePath, expectedPath, evidence, prompt string) bool
+	// Program はこのバイナリの絶対パスである。ログイン時起動のサービスが
+	// 何を起こすかを書くのに要る。これを知り得るのは cmd/sshc だけだ。
+	Program string
 	// Sync はワークスペースを object store へ運ぶ。nil の service は
 	// すべての sync ルートを未登録のままにする。
 	Sync *remotesync.Service
@@ -74,9 +68,8 @@ type Options struct {
 	// セッションのルートと WebSocket を未登録のままにする。これは、それを
 	// 配線しないテストが当てにしていることである。
 	Terminals *terminal.Registry
-	// SSHProgram と LoginShell は、PTY の中で起こすプログラムを解決する。
-	// どちらも PATH を見ず、絶対パスかエラーを返す。
-	SSHProgram func() (string, error)
+	// LoginShell は、PTY の中で起こすローカルシェルを解決する。
+	// PATH を見ず、絶対パスかエラーを返す。
 	LoginShell func() (string, error)
 	// TerminalEnvironment は、端末セッションが継ぐ環境である。これは利用者が
 	// 自分で行ったであろう接続なので、検査が使う最小環境ではなく本人の環境を継ぐ。
@@ -215,12 +208,10 @@ func New(options Options) (*Server, error) {
 			keyHosts = options.Config.KeyHosts
 		}
 		registerPasswordRoutes(e, PasswordHandlers{
-			Service:                 options.Passwords,
-			KeyHosts:                keyHosts,
-			Answerable:              options.Answerable,
-			KeyPassphraseAnswerable: options.KeyPassphraseAnswerable,
-			Eligibility:             eligibility,
-			ResealSnapshot:          reseal,
+			Service:        options.Passwords,
+			KeyHosts:       keyHosts,
+			Eligibility:    eligibility,
+			ResealSnapshot: reseal,
 		})
 	}
 	// `sshc <alias>` は、1 つの接続に必要なものをここに求める。secret は
@@ -229,7 +220,7 @@ func New(options Options) (*Server, error) {
 	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})
 	registerLoginItemRoutes(e, LoginItemHandlers{
 		Controller: options.LoginItem,
-		Program:    options.AskpassHelper,
+		Program:    options.Program,
 	})
 	registerConnectRoutes(e, ConnectHandlers{
 		Secret:    options.CLISecret,
@@ -241,10 +232,9 @@ func New(options Options) (*Server, error) {
 			target, ok, err := options.Config.DirectKeyPassphraseTarget(alias, options.Keys.Inventory)
 			return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
 		},
-		AskpassURL: "http://" + host + AskpassPath,
-		Warnings:   options.ConnectWarnings,
-		Sessions:   options.Sessions,
-		BaseURL:    "http://" + host,
+		Warnings: options.ConnectWarnings,
+		Sessions: options.Sessions,
+		BaseURL:  "http://" + host,
 	})
 	if options.Sync != nil {
 		registerSyncRoutes(e, SyncHandlers{Service: options.Sync, Secrets: options.Passwords})

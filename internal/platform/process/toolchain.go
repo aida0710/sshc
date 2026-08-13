@@ -25,9 +25,6 @@ type Toolchain struct {
 // SSH は ssh クライアントの絶対パスを返す。
 func (t Toolchain) SSH() (string, error) { return t.find("ssh") }
 
-// KeyScan は ssh-keyscan の絶対パスを返す。
-func (t Toolchain) KeyScan() (string, error) { return t.find("ssh-keyscan") }
-
 // KeyGen は ssh-keygen の絶対パスを返す。
 func (t Toolchain) KeyGen() (string, error) { return t.find("ssh-keygen") }
 

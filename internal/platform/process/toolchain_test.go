@@ -27,7 +27,6 @@ func TestToolchainPrefersTheFirstDirectoryThatHoldsAnExecutable(t *testing.T) {
 	fallback := t.TempDir()
 	writeProgram(t, fallback, "ssh", 0o755)
 	writeProgram(t, preferred, "ssh", 0o755)
-	writeProgram(t, fallback, "ssh-keyscan", 0o755)
 	writeProgram(t, fallback, "ssh-keygen", 0o755)
 	writeProgram(t, preferred, "ssh-keygen", 0o755)
 	writeProgram(t, fallback, "ssh-add", 0o755)
@@ -40,14 +39,6 @@ func TestToolchainPrefersTheFirstDirectoryThatHoldsAnExecutable(t *testing.T) {
 	}
 	if want := filepath.Join(preferred, "ssh"); sshPath != want {
 		t.Errorf("SSH() = %q, want %q", sshPath, want)
-	}
-
-	keyscanPath, err := toolchain.KeyScan()
-	if err != nil {
-		t.Fatalf("KeyScan() = %v", err)
-	}
-	if want := filepath.Join(fallback, "ssh-keyscan"); keyscanPath != want {
-		t.Errorf("KeyScan() = %q, want %q", keyscanPath, want)
 	}
 
 	keygenPath, err := toolchain.KeyGen()
@@ -82,9 +73,6 @@ func TestToolchainIgnoresMissingAndNonExecutableFiles(t *testing.T) {
 	if _, err := toolchain.SSH(); !errors.Is(err, process.ErrProgramNotFound) {
 		t.Errorf("SSH() = %v, want ErrProgramNotFound", err)
 	}
-	if _, err := toolchain.KeyScan(); !errors.Is(err, process.ErrProgramNotFound) {
-		t.Errorf("KeyScan() = %v, want ErrProgramNotFound", err)
-	}
 	if _, err := toolchain.KeyGen(); !errors.Is(err, process.ErrProgramNotFound) {
 		t.Errorf("KeyGen() = %v, want ErrProgramNotFound", err)
 	}
@@ -110,10 +98,9 @@ func TestToolchainResolvesEveryProgramThroughTheInjectedStat(t *testing.T) {
 	}
 
 	resolvers := map[string]func() (string, error){
-		"ssh":         toolchain.SSH,
-		"ssh-keyscan": toolchain.KeyScan,
-		"ssh-keygen":  toolchain.KeyGen,
-		"ssh-add":     toolchain.KeyAdd,
+		"ssh":        toolchain.SSH,
+		"ssh-keygen": toolchain.KeyGen,
+		"ssh-add":    toolchain.KeyAdd,
 	}
 	for program, resolve := range resolvers {
 		path, err := resolve()

@@ -92,7 +92,6 @@ type OutputRunner interface {
 // 要求し、絶対パスかエラーを受け取る。
 type Toolchain interface {
 	SSH() (string, error)
-	KeyScan() (string, error)
 	KeyGen() (string, error)
 	KeyAdd() (string, error)
 }
