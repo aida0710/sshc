@@ -4,6 +4,7 @@ const { app, BrowserWindow, shell, dialog } = require("electron");
 const { execFile } = require("node:child_process");
 const { join } = require("node:path");
 const { existsSync } = require("node:fs");
+const { relink } = require("./link");
 
 // engineTimeout は、sshc 側のコマンドひとつに掛ける上限である。
 //
@@ -47,11 +48,16 @@ function run(args) {
  *
  * 二つの呼び出しで済むのは、**どちらの知識も Go 側にあるから**である。
  * 起きているかを確かめ、居なければ起こし、handoff が書かれるまで待つのは
- * `engine start` であり、bootstrap を発行するのは `open --print-url` である。
+ * `engine start` であり、bootstrap を発行するのは `open` である。
  */
 async function entrance() {
+  // **実体を 1 つにする。** 二つのコピーがあると、コマンドラインと画面が
+  // 別の版を走らせることになる。失敗しても続ける——リンクが張れないことは、
+  // アプリが開けない理由にはならない。
+  await relink(binary());
+
   await run(["engine", "start"]);
-  const url = await run(["open", "--print-url"]);
+  const url = await run(["open"]);
   if (!url.startsWith("http://127.0.0.1:")) {
     throw new Error(`the engine answered with an address this shell will not open: ${url}`);
   }

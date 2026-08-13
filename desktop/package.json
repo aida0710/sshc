@@ -15,9 +15,46 @@
   },
   "build": {
     "appId": "com.github.aida0710.sshc",
-    "files": ["main.js", "preload.js"],
-    "extraResources": [{ "from": "resources", "to": "." }],
-    "mac": { "target": "dmg", "category": "public.app-category.developer-tools" },
-    "linux": { "target": ["AppImage"], "category": "Development" }
+    "files": [
+      "main.js",
+      "preload.js",
+      "link.js"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/${os}-${arch}/sshc",
+        "to": "sshc"
+      }
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "Development",
+      "desktop": {
+        "entry": {
+          "Name": "sshc",
+          "Comment": "Manage OpenSSH configuration and connect from one window"
+        }
+      }
+    }
   }
 }
