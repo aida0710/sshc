@@ -228,22 +228,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/terminal/command": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["getTerminalCommand"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/terminal/sessions": {
         parameters: {
             query?: never;
@@ -1325,10 +1309,6 @@ export interface components {
             expectedFingerprint: string;
             acknowledged: boolean;
         };
-        TerminalCommandResponse: {
-            command: string;
-            warning: string;
-        };
         TerminalSession: {
             id: string;
             /** @enum {string} */
@@ -2312,32 +2292,6 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
-        };
-    };
-    getTerminalCommand: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AliasRequest"];
-            };
-        };
-        responses: {
-            /** @description Command text and whether it may be launched */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TerminalCommandResponse"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
         };
     };
     listTerminalSessions: {

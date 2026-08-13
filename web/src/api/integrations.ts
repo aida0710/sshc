@@ -5,7 +5,6 @@ export type ConfigCheckResponse = components["schemas"]["ConfigCheckResponse"];
 export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
 export type ReachabilityResponse = components["schemas"]["ReachabilityResponse"];
 export type AuthenticationResponse = components["schemas"]["AuthenticationResponse"];
-export type TerminalCommandResponse = components["schemas"]["TerminalCommandResponse"];
 export type TerminalSession = components["schemas"]["TerminalSession"];
 export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
 export type OpenTerminalSessionRequest = components["schemas"]["OpenTerminalSessionRequest"];
@@ -55,7 +54,6 @@ export type IntegrationsApi = {
   effective(alias: string, confirm: boolean): Promise<EffectiveResponse>;
   reachability(alias: string): Promise<ReachabilityResponse>;
   authentication(alias: string, acknowledgeExecutable: boolean): Promise<AuthenticationResponse>;
-  terminalCommand(alias: string): Promise<TerminalCommandResponse>;
   // 埋め込みターミナル。開くことに action token は要らない——vault ゲート
   // （マスターパスワード）だけが条件である。README がその代償を書いている。
   terminalSessions(): Promise<TerminalSessionList>;
@@ -255,13 +253,6 @@ function validateAuthentication(value: unknown): AuthenticationResponse {
   asBoolean(record.truncated);
   asNumber(record.elapsedMs);
   return record as unknown as AuthenticationResponse;
-}
-
-function validateTerminalCommand(value: unknown): TerminalCommandResponse {
-  const record = asRecord(value);
-  asString(record.command);
-  asString(record.warning);
-  return record as unknown as TerminalCommandResponse;
 }
 
 function validateTerminalSession(value: unknown): TerminalSession {
@@ -502,9 +493,6 @@ export const integrationsApi: IntegrationsApi = {
     return validateAuthentication(
       await postJSON<unknown>("/api/v1/diagnostics/authentication", { alias, acknowledgeExecutable }, token),
     );
-  },
-  async terminalCommand(alias) {
-    return validateTerminalCommand(await postJSON<unknown>("/api/v1/terminal/command", { alias }));
   },
   async terminalSessions() {
     return validateTerminalSessionList(await apiClient.read("/api/v1/terminal/sessions"));

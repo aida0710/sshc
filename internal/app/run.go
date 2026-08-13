@@ -31,6 +31,12 @@ import (
 
 type ListenFunc func(network, address string) (net.Listener, error)
 
+// unsafeAliasWarning は、`sshc <alias>` がこの先で止まる理由を先に言う。
+//
+// 安全な文字集合の外にある alias は、ssh を起こす直前に platform 層が拒否する。
+// その拒否だけを見ると、打った本人には何が悪かったのか分からない。
+const unsafeAliasWarning = "This alias contains characters that could change the meaning of a command line, so this connection will be refused."
+
 type Dependencies struct {
 	Random  io.Reader
 	Browser platform.BrowserLauncher
@@ -156,7 +162,6 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	// ユーザーに見せるコマンドはこのバイナリと alias なので、このバイナリがどこに
 	// あるかを知る必要がある。アプリケーションの内側でそれを割り出せるものはない。
 	// エントリポイントが一度だけ解決して渡す。
-	diagnosticsService.Self = dependencies.AskpassHelper
 	// known_hosts は設定のトランザクションマネージャを共有する。どちらも ~/.ssh 配下の
 	// 通常の管理対象ファイルを書くので、ジャーナルはひとつで足りる。
 	var scanEnvironment []string
@@ -236,12 +241,12 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		CLISecret: cliSecret,
 		LoginItem: dependencies.LoginItem,
 		Updates:   dependencies.Updates,
-		// alias はコマンドラインだけでなくここでも検査する。そのため、このアプリケーション
-		// が起動しないホストについて端末に伝えられる内容は、画面に出るのと同じ一文に
-		// なる。
+		// alias はコマンドラインでも検査されるが、その拒否が起きるのは ssh を
+		// 起こす直前である。ここで先に一言置くのは、何が理由で止まるのかを
+		// 打った本人に伝えるためだ。
 		ConnectWarnings: func(alias string) []string {
-			if _, warning := diagnosticsService.TerminalCommand(alias); warning != "" {
-				return []string{warning}
+			if err := platform.ValidateAlias(alias); err != nil {
+				return []string{unsafeAliasWarning}
 			}
 			return nil
 		},

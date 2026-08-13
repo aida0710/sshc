@@ -279,39 +279,6 @@ func TestConfigCheckNeedsNoActionTokenAndStartsNoProcess(t *testing.T) {
 	}
 }
 
-// 端末へ貼るための文字列は、埋め込みターミナルができたあとも要る場面がある。
-// これは起動しないので、コマンドラインに載せない alias についても説明する
-// ——確認したうえで自分で実行するために、その人はコマンドを見る必要がある。
-func TestTerminalCommandDescribesEvenAnAliasThisWillNotPutOnACommandLine(t *testing.T) {
-	engine, credentials, _, _ := newDiagnosticsServer(t)
-
-	hostile := `bastion" & (do shell script "id") & "`
-	described := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/command",
-		mustMarshal(t, api.AliasRequest{Alias: hostile}), "")
-	if described.Code != http.StatusOK {
-		t.Fatalf("terminal command = %d: %s", described.Code, described.Body.String())
-	}
-	var payload api.TerminalCommandResponse
-	if err := json.Unmarshal(described.Body.Bytes(), &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload.Warning == "" {
-		t.Fatalf("an unsafe alias carried no warning: %#v", payload)
-	}
-	if payload.Command != "ssh -- "+hostile {
-		t.Errorf("command = %q, want the alias verbatim for copying", payload.Command)
-	}
-
-	safe := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/terminal/command",
-		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), "")
-	if err := json.Unmarshal(safe.Body.Bytes(), &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload.Warning != "" {
-		t.Fatalf("a safe alias carried a warning: %#v", payload)
-	}
-}
-
 func TestAuthenticationEndpointRefusesUnacknowledgedExecutableDirectives(t *testing.T) {
 	engine, credentials, _, service := newDiagnosticsServer(t)
 	// ProxyCommand はコマンドラインから無効化できないので、接続すればそれが

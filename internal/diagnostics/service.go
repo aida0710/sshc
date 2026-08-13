@@ -60,11 +60,6 @@ type Service struct {
 	Evaluator      effective.Evaluator
 	Reachability   Reachability
 	Authentication Authentication
-	// Self はこのバイナリの絶対パス。ユーザーに見せるコマンドを、実際に実行できる
-	// ものにするためである。アプリケーションの内側には、それがどこにインストール
-	// されたかを知るものがない。エントリポイントが一度だけ解決して渡す。空の場合は
-	// 素の ssh にフォールバックし、それでも接続はできる。
-	Self string
 }
 
 // NewService は本番用の依存を配線する。
@@ -262,32 +257,6 @@ func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, 
 		return ReachabilityResult{}, err
 	}
 	return s.Reachability.Check(ctx, hostname, port), nil
-}
-
-// UnsafeAliasWarning は、なぜその alias がコピー専用なのかを説明する。
-const UnsafeAliasWarning = "This alias contains characters that could change the meaning of a command line. Copy the command and check it before running it yourself."
-
-// TerminalCommand は、ユーザーが別の端末へ貼るであろうコマンドを返す。
-//
-// これはこのバイナリと alias である。それがコマンドの全体だからだ。動作中の
-// アプリケーションに保存済みパスフレーズを求め、なければ素の ssh にフォールバック
-// する。
-//
-// 埋め込みターミナルができたあともこれが残っているのは、自分の端末で開きたい人が
-// いるからである。起動可否はもう報告しない。このアプリケーションは端末アプリ
-// ケーションを起こさなくなったので、「起動できるか」という問い自体が無くなった。
-//
-// 安全な文字集合の外にある alias でも、コマンド自体はテキストとして返る。
-// ユーザーは自分で内容を確かめ、引用符で囲める。
-func (s *Service) TerminalCommand(alias string) (string, string) {
-	command := "ssh -- " + alias
-	if s.Self != "" {
-		command = s.Self + " " + alias
-	}
-	if err := platform.ValidateAlias(alias); err != nil {
-		return command, UnsafeAliasWarning
-	}
-	return command, ""
 }
 
 // Authenticate は、alias に対する認証テストを実行する。
