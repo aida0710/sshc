@@ -15,6 +15,7 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/remotekey"
 	"sshc/internal/session"
+	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 )
 
@@ -84,22 +85,14 @@ func TestNoRouteEverPutsAHostileValueOnACommandLine(t *testing.T) {
 	// 公開鍵のリモート登録を使う。**認証テストも設定の解決もプロセスを
 	// 起こさなくなった**ので、あちらの継ぎ目はネットワークであり、この検査が
 	// 守っているのはコマンドラインである。
-	f.runner.reset()
-	f.runner.answer(func(command platform.Command) (platform.Output, error) {
-		if strings.Contains(strings.Join(command.Arguments, " "), remotekey.ProbeCommand) {
-			return platform.Output{Stdout: []byte(remotekey.ProbeMarker + "\n")}, nil
-		}
-		return platform.Output{Stdout: []byte("sshc: added\n")}, nil
-	})
+	f.scanner.reset()
 	readBody(t, f.do(http.MethodPost, "/api/v1/remote-keys/register", mustJSON(t, map[string]any{
 		"alias": "bastion", "keyPath": "id_ed25519.pub", "publicKey": publicKey,
 		"acknowledgeExecutable": true,
 	}), withAction(f.remoteKeyPlanToken(t, "bastion"))))
-	control := f.runner.recorded()
-	if len(control) == 0 {
-		t.Fatal("a safe alias never reached the process seam; every refusal below would prove nothing")
+	if control := f.scanner.remoted(); len(control) == 0 {
+		t.Fatal("a safe alias never reached the remote seam; every refusal below would prove nothing")
 	}
-	assertAliasArrivesInert(t, control[0].Arguments, "bastion")
 
 	// 敵対的な側。あらゆる敵対的な値は platform.ValidateAlias に
 	// 落ちるため、ここで主張する性質は決定的なもの: 外部効果が一切起きないことである。
@@ -168,20 +161,27 @@ func assertAliasArrivesInert(t testing.TB, arguments []string, alias string) {
 	}
 }
 
-// TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard は、
+// TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard は、
 // 前段に handler を置かずに継ぎ目を直接駆動する。
 //
 // 上の HTTP テストでは、2 つの alias check のどちらがリクエストを
-// 拒否したのか区別できない: handler も検証するし、コマンドを
-// 組み立てるコードも検証する。片方だけ消してももう片方が残るため、
+// 拒否したのか区別できない: handler も検証するし、接続を組み立てる
+// コードも検証する。片方だけ消してももう片方が残るため、
 // そのテストは本物の防御を取り除いた mutation を生き延びてしまう。
-// このテストは command builder を直接呼ぶので、各層が自分自身に対して責任を持つ。
-func TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
-	runner := &recordingRunner{}
+// このテストはサービスを直接呼ぶので、各層が自分自身に対して責任を持つ。
+func TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
+	var reached []string
 	service := remotekey.Service{
-		Runner:     runner,
-		Toolchain:  fixedToolchain{},
-		ConfigPath: "/nonexistent/config",
+		Resolve: func(alias string) (sshclient.Target, error) {
+			return sshclient.Target{Alias: alias, HostName: "203.0.113.10", Port: "22"}, nil
+		},
+		Run: func(_ context.Context, target sshclient.Target, command string, _ []byte) (sshclient.Output, error) {
+			reached = append(reached, target.Alias)
+			if command == remotekey.ProbeCommand {
+				return sshclient.Output{Stdout: []byte(remotekey.ProbeMarker + "\n")}, nil
+			}
+			return sshclient.Output{Stdout: []byte("sshc: added\n")}, nil
+		},
 	}
 	key, _, err := remotekey.ParsePublicKey(
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl fixture")
@@ -189,23 +189,22 @@ func TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 正のコントロール: 安全な alias は継ぎ目を通ってランナーに届く。
-	runner.reset()
-	runner.answer(func(command platform.Command) (platform.Output, error) {
-		if strings.Contains(strings.Join(command.Arguments, " "), remotekey.ProbeCommand) {
-			return platform.Output{Stdout: []byte(remotekey.ProbeMarker + "\n")}, nil
-		}
-		return platform.Output{Stdout: []byte("sshc: added\n")}, nil
-	})
+	// 正のコントロール: 安全な alias は継ぎ目に届く。
 	if _, err := service.Register(
-		context.Background(), effective.Report{}, []byte("Host bastion\n"), "bastion", key, true,
+		context.Background(), effective.Report{}, nil, "bastion", key, true,
 	); err != nil {
 		t.Fatalf("Register(bastion) = %v", err)
 	}
-	if len(runner.recorded()) == 0 {
-		t.Fatal("a safe alias never reached the runner; every refusal below would prove nothing")
+	if len(reached) == 0 {
+		t.Fatal("a safe alias never reached the seam; every refusal below would prove nothing")
 	}
-	assertAliasArrivesInert(t, runner.recorded()[0].Arguments, "bastion")
+	// **alias はそのままの 1 つの文字列として届く。** かつてはこれが argv の
+	// "--" の後ろに来ることを見ていた。argv がもう無いので、見るのは値そのものである。
+	for _, seen := range reached {
+		if seen != "bastion" {
+			t.Fatalf("the alias arrived as %q", seen)
+		}
+	}
 
 	for _, hostile := range hostileArguments {
 		t.Run(quoteForName(hostile), func(t *testing.T) {
@@ -213,12 +212,14 @@ func TestTheProcessSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 				t.Fatalf("ValidateAlias(%q) = nil", hostile)
 			}
 
-			runner.reset()
-			if _, err := service.Register(context.Background(), effective.Report{}, []byte("Host bastion\n"), hostile, key, true); err == nil {
+			reached = nil
+			if _, err := service.Register(
+				context.Background(), effective.Report{}, nil, hostile, key, true,
+			); err == nil {
 				t.Fatalf("Register(%q) was accepted", hostile)
 			}
-			if commands := runner.recorded(); len(commands) != 0 {
-				t.Fatalf("Register(%q) still ran %#v", hostile, commands)
+			if len(reached) != 0 {
+				t.Fatalf("Register(%q) still reached %#v", hostile, reached)
 			}
 		})
 	}
@@ -230,14 +231,8 @@ func TestRemoteRegistrationNeverInterpolatesInputIntoTheRemoteShell(t *testing.T
 	publicKey := string(bytes.TrimSpace(f.read("id_ed25519.pub")))
 
 	// 正のコントロール: 本物の登録は継ぎ目に 2 回届く — POSIX の
-	// probe と固定の routine — そして key は stdin を伝わり、argv には決して乗らない。
-	f.runner.reset()
-	f.runner.answer(func(command platform.Command) (platform.Output, error) {
-		if strings.Contains(strings.Join(command.Arguments, " "), remotekey.ProbeCommand) {
-			return platform.Output{Stdout: []byte(remotekey.ProbeMarker + "\n")}, nil
-		}
-		return platform.Output{Stdout: []byte("sshc: added\n")}, nil
-	})
+	// probe と固定の routine — そして key は stdin を伝わり、コマンドには決して乗らない。
+	f.scanner.reset()
 	token := f.remoteKeyPlanToken(t, "bastion")
 	registered := f.do(http.MethodPost, "/api/v1/remote-keys/register", mustJSON(t, map[string]any{
 		"alias": "bastion", "keyPath": "id_ed25519.pub",
@@ -245,35 +240,33 @@ func TestRemoteRegistrationNeverInterpolatesInputIntoTheRemoteShell(t *testing.T
 	}), withAction(token))
 	registeredBody := readBody(t, registered)
 
-	recorded := f.runner.recorded()
+	recorded := f.scanner.remoted()
 	if len(recorded) < 2 {
-		t.Fatalf("registration ran %d commands (%d %s), want the probe and the routine",
+		t.Fatalf("registration reached the remote %d time(s) (%d %s), want the probe and the routine",
 			len(recorded), registered.StatusCode, registeredBody)
 	}
 	routine := recorded[len(recorded)-1]
-	if routine.Arguments[len(routine.Arguments)-1] != remotekey.Routine {
-		t.Fatal("the last argument is not the fixed remote routine constant")
+	if routine.command != remotekey.Routine {
+		t.Fatal("the command is not the fixed remote routine constant")
 	}
-	if !strings.Contains(string(routine.Stdin), publicKey) {
+	if !strings.Contains(routine.stdin, publicKey) {
 		t.Fatal("the public key did not travel on standard input")
 	}
-	for _, argument := range routine.Arguments {
-		if strings.Contains(argument, publicKey) {
-			t.Fatal("the public key was placed in the argument vector")
-		}
+	if strings.Contains(routine.command, publicKey) {
+		t.Fatal("the public key was placed in the command")
 	}
 
 	// この routine は定数である: どんな入力も 1 バイトたりとも変えられない。
 	before := remotekey.Routine
 	for _, hostile := range hostileArguments {
 		t.Run(quoteForName(hostile), func(t *testing.T) {
-			f.runner.reset()
+			f.scanner.reset()
 			readBody(t, f.do(http.MethodPost, "/api/v1/remote-keys/register", mustJSON(t, map[string]any{
 				"alias": hostile, "keyPath": "id_ed25519.pub",
 				"publicKey": publicKey, "acknowledgeExecutable": true,
 			})))
-			if commands := f.runner.recorded(); len(commands) != 0 {
-				t.Fatalf("a hostile alias reached the remote seam: %#v", commands)
+			if reached := f.scanner.remoted(); len(reached) != 0 {
+				t.Fatalf("a hostile alias reached the remote seam: %#v", reached)
 			}
 			if remotekey.Routine != before {
 				t.Fatal("the remote routine constant changed")
@@ -553,6 +546,9 @@ func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testin
 			}
 			if commands := f.runner.recorded(); len(commands) != 0 {
 				t.Fatalf("a refused alias still started %#v", commands)
+			}
+			if reached := f.scanner.remoted(); len(reached) != 0 {
+				t.Fatalf("a refused alias still reached %#v", reached)
 			}
 			if launched := f.terminal.launched(); len(launched) != 0 {
 				t.Fatalf("a refused alias still launched Terminal: %#v", launched)
