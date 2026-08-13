@@ -75,7 +75,7 @@ func TestActionTokenIsSingleUseAndBoundToKindTargetAndEvidence(t *testing.T) {
 	}
 
 	mismatches := []ActionRequest{
-		{Kind: ActionTerminalLaunch, Target: "bastion", Evidence: "digest-a"},
+		{Kind: ActionKnownHostsScan, Target: "bastion", Evidence: "digest-a"},
 		{Kind: ActionAuthentication, Target: "other", Evidence: "digest-a"},
 		{Kind: ActionAuthentication, Target: "bastion", Evidence: "digest-b"},
 	}
@@ -125,7 +125,7 @@ func TestActionTokenCannotBeConsumedByAnotherSession(t *testing.T) {
 	manager, sessionID := newTestManager(t)
 	const otherSessionID = "another-authenticated-session"
 	addSession(t, manager, otherSessionID)
-	request := ActionRequest{Kind: ActionTerminalLaunch, Target: "bastion", Evidence: "digest"}
+	request := ActionRequest{Kind: ActionKnownHostsScan, Target: "bastion", Evidence: "digest"}
 
 	issued, err := manager.IssueAction(sessionID, request)
 	if err != nil {
@@ -242,7 +242,7 @@ func TestActionTokensAreSafeForConcurrentUse(t *testing.T) {
 
 func TestKnownActionKindListsEveryConfirmedOperation(t *testing.T) {
 	for _, kind := range []string{
-		ActionEvaluate, ActionReachability, ActionAuthentication, ActionTerminalLaunch,
+		ActionEvaluate, ActionReachability, ActionAuthentication, ActionKnownHostsScan,
 		ActionKnownHostsDelete, ActionKnownHostsScan, ActionKnownHostsAdd, ActionRemoteKeyRegister,
 		ActionRevealPrivateKey, ActionPurgeTrashEntry,
 	} {

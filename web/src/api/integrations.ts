@@ -6,10 +6,11 @@ export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
 export type ReachabilityResponse = components["schemas"]["ReachabilityResponse"];
 export type AuthenticationResponse = components["schemas"]["AuthenticationResponse"];
 export type TerminalCommandResponse = components["schemas"]["TerminalCommandResponse"];
-export type TerminalLaunchResponse = components["schemas"]["TerminalLaunchResponse"];
-export type TerminalOptionsResponse = components["schemas"]["TerminalOptionsResponse"];
-export type TerminalPreferenceRequest = components["schemas"]["TerminalPreferenceRequest"];
-export type TerminalID = components["schemas"]["TerminalID"];
+export type TerminalSession = components["schemas"]["TerminalSession"];
+export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
+export type OpenTerminalSessionRequest = components["schemas"]["OpenTerminalSessionRequest"];
+export type OpenTerminalSessionResponse = components["schemas"]["OpenTerminalSessionResponse"];
+export type TerminalStreamTicket = components["schemas"]["TerminalStreamTicket"];
 export type KnownHostsResponse = components["schemas"]["KnownHostsResponse"];
 export type KnownHostEntry = components["schemas"]["KnownHostEntry"];
 export type KnownHostsChangeResponse = components["schemas"]["KnownHostsChangeResponse"];
@@ -40,7 +41,6 @@ export type PullResponse = components["schemas"]["PullResponse"];
 export const EVALUATE_ACTION_KIND = "diagnostics.evaluate";
 export const REACHABILITY_ACTION_KIND = "diagnostics.reachability";
 export const AUTHENTICATION_ACTION_KIND = "diagnostics.authentication";
-export const TERMINAL_LAUNCH_ACTION_KIND = "terminal.launch";
 export const KNOWN_HOSTS_DELETE_ACTION_KIND = "known_hosts.delete";
 export const KNOWN_HOSTS_SCAN_ACTION_KIND = "known_hosts.scan";
 export const KNOWN_HOSTS_ADD_ACTION_KIND = "known_hosts.add";
@@ -56,9 +56,12 @@ export type IntegrationsApi = {
   reachability(alias: string): Promise<ReachabilityResponse>;
   authentication(alias: string, acknowledgeExecutable: boolean): Promise<AuthenticationResponse>;
   terminalCommand(alias: string): Promise<TerminalCommandResponse>;
-  terminalOptions(): Promise<TerminalOptionsResponse>;
-  setTerminalPreference(request: TerminalPreferenceRequest): Promise<TerminalOptionsResponse>;
-  terminalLaunch(alias: string): Promise<TerminalLaunchResponse>;
+  // 埋め込みターミナル。開くことに action token は要らない——vault ゲート
+  // （マスターパスワード）だけが条件である。README がその代償を書いている。
+  terminalSessions(): Promise<TerminalSessionList>;
+  openTerminalSession(request: OpenTerminalSessionRequest): Promise<OpenTerminalSessionResponse>;
+  terminalStreamTicket(id: string): Promise<TerminalStreamTicket>;
+  closeTerminalSession(id: string): Promise<TerminalSessionList>;
   knownHosts(query: string): Promise<KnownHostsResponse>;
   deleteKnownHosts(entries: { line: number; digest: string }[], path: string): Promise<KnownHostsChangeResponse>;
   scanKnownHosts(host: string, port: number): Promise<KnownHostsScanResponse>;
@@ -254,42 +257,47 @@ function validateAuthentication(value: unknown): AuthenticationResponse {
 function validateTerminalCommand(value: unknown): TerminalCommandResponse {
   const record = asRecord(value);
   asString(record.command);
-  asBoolean(record.launchable);
   asString(record.warning);
   return record as unknown as TerminalCommandResponse;
 }
 
-function validateTerminalOptions(value: unknown): TerminalOptionsResponse {
+function validateTerminalSession(value: unknown): TerminalSession {
   const record = asRecord(value);
-  const terminalIDs = new Set<TerminalID>(["terminal", "iterm2", "kitty", "ghostty", "wezterm", "custom"]);
-  const selected = asString(record.selected);
-  if (!terminalIDs.has(selected as TerminalID)) throw new Error("invalid_response");
-  for (const entry of asArray(record.terminals)) {
-    const option = asRecord(entry);
-    if (!terminalIDs.has(asString(option.id) as TerminalID)) throw new Error("invalid_response");
-    asBoolean(option.installed);
+  asString(record.id);
+  const kind = asString(record.kind);
+  if (kind !== "ssh" && kind !== "shell") throw new Error("invalid_response");
+  asString(record.title);
+  asString(record.startedAt);
+  // alias を持つのは ssh のときだけである。localhost はローカルシェルであって
+  // ssh 接続ではないので、alias を持たない。
+  if (record.alias !== undefined) asString(record.alias);
+  if (record.exited !== undefined) {
+    const exited = asRecord(record.exited);
+    asNumber(exited.code);
+    asString(exited.signal);
+    asString(exited.at);
   }
-  for (const entry of asArray(record.applications)) {
-    const application = asRecord(entry);
-    asString(application.name);
-    asString(application.path);
-  }
-  const custom = record.customTerminal;
-  if ((selected === "custom") !== (custom !== undefined)) throw new Error("invalid_response");
-  if (custom !== undefined) {
-    const terminal = asRecord(custom);
-    asString(terminal.application);
-    if (terminal.arguments !== undefined) {
-      for (const argument of asArray(terminal.arguments)) asString(argument);
-    }
-  }
-  return record as unknown as TerminalOptionsResponse;
+  return record as unknown as TerminalSession;
 }
 
-function validateTerminalLaunch(value: unknown): TerminalLaunchResponse {
+function validateTerminalSessionList(value: unknown): TerminalSessionList {
   const record = asRecord(value);
-  asBoolean(record.launched);
-  return record as unknown as TerminalLaunchResponse;
+  for (const session of asArray(record.sessions)) validateTerminalSession(session);
+  asNonnegativeInteger(record.maxSessions);
+  return record as unknown as TerminalSessionList;
+}
+
+function validateOpenTerminalSession(value: unknown): OpenTerminalSessionResponse {
+  const record = asRecord(value);
+  validateTerminalSession(record.session);
+  asString(record.streamTicket);
+  return record as unknown as OpenTerminalSessionResponse;
+}
+
+function validateStreamTicket(value: unknown): TerminalStreamTicket {
+  const record = asRecord(value);
+  asString(record.streamTicket);
+  return record as unknown as TerminalStreamTicket;
 }
 
 function validateKnownHosts(value: unknown): KnownHostsResponse {
@@ -495,19 +503,25 @@ export const integrationsApi: IntegrationsApi = {
   async terminalCommand(alias) {
     return validateTerminalCommand(await postJSON<unknown>("/api/v1/terminal/command", { alias }));
   },
-  async terminalOptions() {
-    return validateTerminalOptions(await apiClient.read("/api/v1/terminal/options"));
+  async terminalSessions() {
+    return validateTerminalSessionList(await apiClient.read("/api/v1/terminal/sessions"));
   },
-  async setTerminalPreference(request) {
-    return validateTerminalOptions(await apiClient.mutate<unknown>("/api/v1/terminal/preference", {
-      method: "PUT",
-      headers: jsonHeaders,
-      body: JSON.stringify(request),
-    }));
+  async openTerminalSession(request) {
+    return validateOpenTerminalSession(
+      await postJSON<unknown>("/api/v1/terminal/sessions", request),
+    );
   },
-  async terminalLaunch(alias) {
-    const token = await issueAction(TERMINAL_LAUNCH_ACTION_KIND, alias);
-    return validateTerminalLaunch(await postJSON<unknown>("/api/v1/terminal/launch", { alias }, token));
+  async terminalStreamTicket(id) {
+    return validateStreamTicket(
+      await postJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/stream`, {}),
+    );
+  },
+  async closeTerminalSession(id) {
+    return validateTerminalSessionList(
+      await apiClient.mutate<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
+    );
   },
   async passwordVault() {
     return validateVaultStatus(await apiClient.read("/api/v1/passwords"));

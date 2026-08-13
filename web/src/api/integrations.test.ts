@@ -84,50 +84,36 @@ describe("integrationsApi.addKnownHost", () => {
   });
 });
 
-describe("integrationsApi terminal preferences", () => {
-  const customOptions = {
-    selected: "custom",
-    terminals: [
-      { id: "terminal", installed: true },
-      { id: "kitty", installed: false },
-      { id: "custom", installed: true },
-    ],
-    applications: [{ name: "Warp", path: "/Applications/Warp.app" }],
-    customTerminal: { application: "/Applications/Warp.app", arguments: ["--new-window"] },
+describe("integrationsApi terminal sessions", () => {
+  const session = {
+    id: "3f9c", kind: "shell", title: "zsh", startedAt: "2026-08-13T09:00:00Z",
   };
 
-  it("sends only the global custom preference and validates the refreshed options", async () => {
-    const fetcher = vi.fn().mockResolvedValue(jsonResponse(customOptions));
+  it("opens a session and returns the single-use stream ticket", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ session, streamTicket: "one-time" }));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.setTerminalPreference({
-      selected: "custom",
-      customTerminal: { application: "/Applications/Warp.app", arguments: ["--new-window"] },
-    })).resolves.toEqual(customOptions);
+    await expect(integrationsApi.openTerminalSession({ kind: "shell" }))
+      .resolves.toEqual({ session, streamTicket: "one-time" });
 
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
-    expect(path).toBe("/api/v1/terminal/preference");
-    expect(init.method).toBe("PUT");
+    expect(path).toBe("/api/v1/terminal/sessions");
+    expect(init.method).toBe("POST");
+    // 起動に action token は要らない。CSRF ヘッダだけが条件である。
     expect(new Headers(init.headers).get("X-SSHC-CSRF")).toBe(csrfToken);
-    expect(JSON.parse(String(init.body))).toEqual({
-      selected: "custom",
-      customTerminal: { application: "/Applications/Warp.app", arguments: ["--new-window"] },
-    });
+    expect(new Headers(init.headers).get("X-SSHC-Action")).toBeNull();
   });
 
   it.each([
-    { ...customOptions, selected: "unknown" },
-    { ...customOptions, terminals: [{ id: "unknown", installed: true }] },
-    { ...customOptions, terminals: [{ id: "terminal", installed: "yes" }] },
-    { ...customOptions, applications: [{ name: "Warp", path: false }] },
-    { ...customOptions, customTerminal: { arguments: [] } },
-    { ...customOptions, customTerminal: { application: "/Applications/Warp.app", arguments: [false] } },
-    { ...customOptions, selected: "terminal" },
-    { ...customOptions, selected: "custom", customTerminal: undefined },
-  ])("rejects malformed terminal option payload %#", async (body) => {
+    { sessions: [{ ...session, kind: "telnet" }], maxSessions: 50 },
+    { sessions: [{ ...session, id: 3 }], maxSessions: 50 },
+    { sessions: [{ ...session, exited: { code: "0", signal: "", at: "" } }], maxSessions: 50 },
+    { sessions: [], maxSessions: -1 },
+    { sessions: {}, maxSessions: 50 },
+  ])("rejects a malformed session list %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
-    await expect(integrationsApi.terminalOptions()).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.terminalSessions()).rejects.toThrow("invalid_response");
   });
 });
 
