@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -77,7 +79,7 @@ func TestEngineStartDoesNotSpawnWhenOneIsAlreadyAnswering(t *testing.T) {
 	var out, errOut strings.Builder
 
 	status := runEngineCommand(
-		context.Background(), []string{"start"}, fixture.stateDir,
+		context.Background(), []string{"start"}, t.TempDir(), fixture.stateDir,
 		&http.Client{Timeout: 5 * time.Second},
 		func() error { spawned++; return nil }, &out, &errOut)
 
@@ -100,7 +102,7 @@ func TestEngineStartReplacesAStaleHandoff(t *testing.T) {
 
 	spawned := 0
 	status := runEngineCommand(
-		context.Background(), []string{"start"}, fixture.stateDir,
+		context.Background(), []string{"start"}, t.TempDir(), fixture.stateDir,
 		&http.Client{Timeout: time.Second},
 		func() error {
 			spawned++
@@ -122,7 +124,7 @@ func TestEngineStartWaitsForTheEngineToAnswer(t *testing.T) {
 	var out, errOut strings.Builder
 
 	status := runEngineCommand(
-		context.Background(), []string{"start"}, fixture.stateDir,
+		context.Background(), []string{"start"}, t.TempDir(), fixture.stateDir,
 		&http.Client{Timeout: time.Second},
 		func() error {
 			go func() {
@@ -146,7 +148,7 @@ func TestEngineStopPresentsTheHandoffSecret(t *testing.T) {
 	var errOut strings.Builder
 
 	status := runEngineCommand(
-		context.Background(), []string{"stop"}, fixture.stateDir,
+		context.Background(), []string{"stop"}, t.TempDir(), fixture.stateDir,
 		&http.Client{Timeout: 5 * time.Second}, nil, &strings.Builder{}, &errOut)
 
 	if status != 0 {
@@ -161,7 +163,7 @@ func TestEngineStopPresentsTheHandoffSecret(t *testing.T) {
 func TestEngineStopSucceedsWhenNothingIsRunning(t *testing.T) {
 	var errOut strings.Builder
 	status := runEngineCommand(
-		context.Background(), []string{"stop"}, t.TempDir(),
+		context.Background(), []string{"stop"}, t.TempDir(), t.TempDir(),
 		&http.Client{Timeout: time.Second}, nil, &strings.Builder{}, &errOut)
 	if status != 0 {
 		t.Fatalf("status = %d: %s", status, errOut.String())
@@ -172,7 +174,7 @@ func TestEngineRefusesWordsItDoesNotKnow(t *testing.T) {
 	for _, arguments := range [][]string{{}, {"restart"}, {"start", "extra"}} {
 		var errOut strings.Builder
 		status := runEngineCommand(
-			context.Background(), arguments, t.TempDir(),
+			context.Background(), arguments, t.TempDir(), t.TempDir(),
 			&http.Client{Timeout: time.Second}, nil, &strings.Builder{}, &errOut)
 		if status != 2 {
 			t.Errorf("engine %v = %d, want 2", arguments, status)
@@ -228,5 +230,48 @@ func TestOpenPrintsTheURLOnlyWhenAsked(t *testing.T) {
 	}
 	if strings.TrimSpace(out.String()) != entry {
 		t.Fatalf("stdout = %q, want exactly the entry", out.String())
+	}
+}
+
+// **止めるかどうかを決めるのは設定である。** 外殻がそれを読むと、metadata の
+// 形を知る場所が二つになる。
+func TestEngineQuitHonoursTheKeepRunningSetting(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		metadata string
+		wantStop int64
+	}{
+		{name: "no metadata at all", wantStop: 1},
+		{name: "no desktop section", metadata: `{"schemaVersion":3}`, wantStop: 1},
+		{name: "asked to stop", metadata: `{"schemaVersion":3,"desktop":{"keepRunning":false}}`, wantStop: 1},
+		{name: "asked to keep", metadata: `{"schemaVersion":3,"desktop":{"keepRunning":true}}`, wantStop: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newEngineFixture(t, true)
+			home := t.TempDir()
+			if test.metadata != "" {
+				stateDir := filepath.Join(home, ".ssh", "sshc")
+				if err := os.MkdirAll(stateDir, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(
+					filepath.Join(stateDir, "metadata.json"), []byte(test.metadata), 0o600,
+				); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			var errOut strings.Builder
+			status := runEngineCommand(
+				context.Background(), []string{"quit"}, home, fixture.stateDir,
+				&http.Client{Timeout: 5 * time.Second}, nil, &strings.Builder{}, &errOut)
+			if status != 0 {
+				t.Fatalf("status = %d: %s", status, errOut.String())
+			}
+			if fixture.stops.Load() != test.wantStop {
+				t.Fatalf("the engine was asked to stop %d time(s), want %d",
+					fixture.stops.Load(), test.wantStop)
+			}
+		})
 	}
 }

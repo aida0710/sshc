@@ -5,6 +5,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/secret"
 )
@@ -61,6 +62,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.POST("/api/v1/config/groups/rename", handlers.RenameGroup)
 	engine.POST("/api/v1/config/groups/delete", handlers.DeleteGroup)
 	engine.GET("/api/v1/metadata", handlers.Metadata)
+	engine.PUT("/api/v1/metadata/desktop", handlers.SetDesktop)
 	engine.GET("/api/v1/history", handlers.History)
 	engine.POST("/api/v1/history/restore", handlers.Restore)
 	engine.POST("/api/v1/history/recover", handlers.Recover)
@@ -187,6 +189,24 @@ func (h ConfigHandlers) Metadata(c *echo.Context) error {
 		return serviceProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, overview.Metadata)
+}
+
+// SetDesktop は、デスクトップの外殻の設定を書く。
+//
+// **action token は要らない。** これが変えるのは、アプリを閉じたあとに
+// エンジンを残すかどうかだけであり、リモートにも鍵にも触れない。守るのは
+// セッションと CSRF——他の metadata の書き込みと同じである。
+func (h ConfigHandlers) SetDesktop(c *echo.Context) error {
+	var request api.Desktop
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	keep := request.KeepRunning != nil && *request.KeepRunning
+	result, err := h.Service.SetKeepEngineRunning(keep)
+	if err != nil {
+		return serviceProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, result)
 }
 
 func (h ConfigHandlers) History(c *echo.Context) error {

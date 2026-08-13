@@ -121,6 +121,10 @@ export const ja = {
   "update.version": "バージョン {version}",
   "update.available": "{version} が公開されています — 変更点を読む",
   "login.heading": "ログイン時に起動",
+  "desktop.heading": "アプリを閉じたとき",
+  "desktop.note": "エンジンは開いているコンソールと解錠済みの vault を持っています。動かし続けると、次に開いたときもそれらが残ります。どちらでも vault はアイドルの時間を過ぎれば自分で施錠します。",
+  "desktop.keepRunning": "窓を閉じたあとも動かし続ける",
+  "desktop.saveFailed": "その選択を保存できませんでした。",
   "login.note":
     "既定はオフです。オンにすると、ログイン時から sshc がバックグラウンドで動くので、`sshc <接続先>` が常に本体を見つけられます。起動直後は施錠された状態です。画面を見たくなったら `sshc open` を実行してください（その場で新しい入り口を発行します。ログファイルに残さないためです）。",
   "login.enable": "ログイン時に sshc を起動する",
