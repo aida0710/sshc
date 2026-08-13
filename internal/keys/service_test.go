@@ -26,10 +26,18 @@ func steppingClock(start time.Time) func() time.Time {
 	}
 }
 
-// newQueryRunner は、実物の OpenSSH 10.2p1 の出力でアルゴリズムの問い合わせに
-// 答える。一度取得して定数として保持したものである。
-func newQueryRunner() *fakeRunner {
-	return &fakeRunner{output: platform.Output{Stdout: []byte(opensshQueryOutput)}}
+// newQueryRunner は、外部プログラムの継ぎ目を差し替える記録係である。
+//
+// **カタログはもうプログラムを起こさない。** それでも Service には他の用途で
+// ランナーが渡るので、この名前は「実プロセスを起こさない」という約束のまま残す。
+func newQueryRunner() *recordingRunner { return &recordingRunner{} }
+
+// recordingRunner は、呼ばれたことを記録して空の出力を返す。
+type recordingRunner struct{ commands []platform.Command }
+
+func (r *recordingRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
+	r.commands = append(r.commands, command)
+	return platform.Output{}, nil
 }
 
 func newTestService(t *testing.T, runner platform.OutputRunner) (*Service, *storage.Workspace) {
@@ -54,7 +62,7 @@ func newServiceWithAgent(t *testing.T, runner platform.OutputRunner, agent platf
 		Workspace:    workspace,
 		Transactions: manager,
 		Resolver:     storage.NewResolver(workspace),
-		Catalogue:    newFakeCatalogue(runner, fakeToolchain{}),
+		Catalogue:    CatalogueReader{Toolchain: fakeToolchain{}},
 		Agent:        agent,
 		Now:          clock,
 		Random:       rand.Reader,
@@ -388,21 +396,18 @@ func TestRevealReturnsTheKeyAndRecordsAnAuditFact(t *testing.T) {
 	}
 }
 
-func TestAlgorithmsAreReadThroughTheCommandSeam(t *testing.T) {
+// **カタログはプログラムを一つも起こさない。** 並べているのはここで生成できる
+// 鍵であり、それを知っているのはこのプロセス自身である。
+func TestAlgorithmsStartNoProcess(t *testing.T) {
 	runner := newQueryRunner()
 	service, _ := newTestService(t, runner)
 
 	catalogue := service.Algorithms(context.Background())
-	if catalogue.Source != "ssh -Q key" {
-		t.Fatalf("Source = %q", catalogue.Source)
+	if len(catalogue.Variants) == 0 {
+		t.Fatal("the catalogue is empty")
 	}
-	if len(runner.commands) != 1 {
-		t.Fatalf("commands = %#v, want one", runner.commands)
-	}
-	for _, argument := range runner.commands[0].Arguments {
-		if argument == "-G" {
-			t.Fatalf("the catalogue must never run an effective-configuration evaluation")
-		}
+	if len(runner.commands) != 0 {
+		t.Fatalf("reading the catalogue started %#v", runner.commands)
 	}
 }
 
@@ -829,7 +834,7 @@ func newGroupKeyService(t *testing.T, groups ...string) (*Service, *storage.Work
 		Workspace:     workspace,
 		Transactions:  storage.NewManager(workspace, clock, rand.Reader),
 		Resolver:      storage.NewResolver(workspace),
-		Catalogue:     newFakeCatalogue(newQueryRunner(), fakeToolchain{}),
+		Catalogue:     CatalogueReader{Toolchain: fakeToolchain{}},
 		Now:           clock,
 		Random:        rand.Reader,
 		ValidateGroup: declaredGroups(groups...),
@@ -1189,7 +1194,7 @@ func TestChangingAPassphraseKeepsASealedBackup(t *testing.T) {
 		Workspace:    workspace,
 		Transactions: manager,
 		Resolver:     storage.NewResolver(workspace),
-		Catalogue:    newFakeCatalogue(&fakeRunner{}, fakeToolchain{}),
+		Catalogue:    CatalogueReader{Toolchain: fakeToolchain{}},
 		Now:          clock,
 		Random:       rand.Reader,
 	})

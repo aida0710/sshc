@@ -22,14 +22,8 @@ type Toolchain struct {
 	Stat        func(string) (fs.FileInfo, error)
 }
 
-// SSH は ssh クライアントの絶対パスを返す。
-func (t Toolchain) SSH() (string, error) { return t.find("ssh") }
-
 // KeyGen は ssh-keygen の絶対パスを返す。
 func (t Toolchain) KeyGen() (string, error) { return t.find("ssh-keygen") }
-
-// KeyAdd は ssh-add の絶対パスを返す。
-func (t Toolchain) KeyAdd() (string, error) { return t.find("ssh-add") }
 
 func (t Toolchain) find(program string) (string, error) {
 	stat := t.Stat
