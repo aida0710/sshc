@@ -16,7 +16,7 @@
 - 新しい文言は `web/src/i18n/messages` の en と ja の両方へ
 - Linux は Docker で確かめる（`GOOS=linux go vet` では足りない）
 - コミット前に `git diff --cached` そのものを読む（別セッションが同じ木を編集する）
-- テストは実リモートへ接続しない。プロセス内の SSH サーバーを `net.Pipe` の上に立てる
+- テストは実リモートへ接続しない。プロセス内の SSH サーバーを 127.0.0.1 の任意ポートに立てる（`net.Pipe` は同期的で、版文字列の交換で相互に固まる）
 
 ---
 
@@ -63,7 +63,7 @@
 **Interfaces:**
 - Produces:（テスト内のみ）`newTestServer(t, options) *testServer`, `testServer.Dial() net.Conn`, `.HostKey`, `.Authorised`, `.LastPTY`, `.LastEnv`, `.ExitCode`
 
-`net.Pipe` の上で `ssh.NewServerConn` を回す。公開鍵・パスワード・keyboard-interactive を受け付け、session チャンネルで `pty-req`、`window-change`、`env`、`shell`、`exec` を記録する。
+127.0.0.1 の任意ポートで `ssh.NewServerConn` を回す。公開鍵・パスワード・keyboard-interactive を受け付け、session チャンネルで `pty-req`、`window-change`、`env`、`shell`、`exec` を記録する。
 
 - [ ] **Step 1:** サーバーを書き、`TestTheTestServerCompletesAHandshake` で自分自身を検査する
 - [ ] **Step 2:** `go test ./internal/sshclient/`
