@@ -55,7 +55,7 @@ const detail = {
     raw: "Host bastion\n\tPort 22\n",
   },
   metadata: { identity: { path: "config", alias: "bastion" } },
-  effective: { alias: "bastion", approximate: true, entries: [] },
+  effective: { alias: "bastion", entries: [] },
   file: {
     file: { path: "config", absolute: "/home/tester/.ssh/config" },
     contents: "Host bastion\n\tPort 22\n", digest: "digest", editable: true, exists: true,

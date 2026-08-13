@@ -19,7 +19,8 @@ func TestResolveAnswersWithTheValuesTheConnectionUses(t *testing.T) {
 			"\tPort 2222\n",
 	})
 
-	values, refusals := effective.Resolve(graph, "bastion", resolveFacts())
+	resolution := effective.Resolve(graph, "bastion", resolveFacts())
+	values, refusals := resolution.Values, resolution.Refusals
 	if len(refusals) != 0 {
 		t.Fatalf("refusals = %#v", refusals)
 	}
@@ -35,7 +36,8 @@ func TestResolveAnswersWithTheValuesTheConnectionUses(t *testing.T) {
 func TestResolveFillsOnlyTheDefaultsItOwns(t *testing.T) {
 	graph := graphFor(t, map[string]string{testConfig: "Host bare\n\tCompression yes\n"})
 
-	values, refusals := effective.Resolve(graph, "bare", resolveFacts())
+	resolution := effective.Resolve(graph, "bare", resolveFacts())
+	values, refusals := resolution.Values, resolution.Refusals
 	if len(refusals) != 0 {
 		t.Fatalf("refusals = %#v", refusals)
 	}
@@ -68,7 +70,7 @@ func TestResolveAccumulatesTheKeywordsOpenSSHAccumulates(t *testing.T) {
 			"\tUser second\n",
 	})
 
-	values, _ := effective.Resolve(graph, "bastion", resolveFacts())
+	values := effective.Resolve(graph, "bastion", resolveFacts()).Values
 	if got := values.All("identityfile"); len(got) != 2 || got[0] != "~/.ssh/a" || got[1] != "~/.ssh/b" {
 		t.Errorf("identityfile = %#v, want both in order", got)
 	}
@@ -87,7 +89,8 @@ func TestResolveEvaluatesMatchBlocks(t *testing.T) {
 			"\tPort 9999\n",
 	})
 
-	values, refusals := effective.Resolve(graph, "db", resolveFacts())
+	resolution := effective.Resolve(graph, "db", resolveFacts())
+	values, refusals := resolution.Values, resolution.Refusals
 	if len(refusals) != 0 {
 		t.Fatalf("refusals = %#v", refusals)
 	}
@@ -121,7 +124,8 @@ func TestResolveRefusesWhatItWillNotEvaluate(t *testing.T) {
 		},
 	} {
 		graph := graphFor(t, map[string]string{testConfig: test.contents})
-		values, refusals := effective.Resolve(graph, "bastion", resolveFacts())
+		resolution := effective.Resolve(graph, "bastion", resolveFacts())
+		values, refusals := resolution.Values, resolution.Refusals
 
 		if len(refusals) == 0 || refusals[0].Code != test.want {
 			t.Errorf("%s: refusals = %#v, want %s", test.name, refusals, test.want)
@@ -140,7 +144,8 @@ func TestResolveAcceptsCanonicalisationTurnedOff(t *testing.T) {
 		testConfig: "Host bastion\n\tCanonicalizeHostname no\n\tUser ops\n",
 	})
 
-	values, refusals := effective.Resolve(graph, "bastion", resolveFacts())
+	resolution := effective.Resolve(graph, "bastion", resolveFacts())
+	values, refusals := resolution.Values, resolution.Refusals
 	if len(refusals) != 0 {
 		t.Fatalf("refusals = %#v", refusals)
 	}
@@ -158,7 +163,8 @@ func TestResolveExpandsTokensAfterTheValuesAreKnown(t *testing.T) {
 			"\tIdentityFile %d/.ssh/%r@%h:%p\n",
 	})
 
-	values, refusals := effective.Resolve(graph, "bastion", resolveFacts())
+	resolution := effective.Resolve(graph, "bastion", resolveFacts())
+	values, refusals := resolution.Values, resolution.Refusals
 	if len(refusals) != 0 {
 		t.Fatalf("refusals = %#v", refusals)
 	}
@@ -181,7 +187,8 @@ func TestResolveRefusesATokenItCannotExpand(t *testing.T) {
 		testConfig: "Host bastion\n\tHostName %C.example.com\n",
 	})
 
-	values, refusals := effective.Resolve(graph, "bastion", resolveFacts())
+	resolution := effective.Resolve(graph, "bastion", resolveFacts())
+	values, refusals := resolution.Values, resolution.Refusals
 	if len(refusals) != 1 || refusals[0].Code != effective.RefusalUnknownToken {
 		t.Fatalf("refusals = %#v", refusals)
 	}
@@ -196,7 +203,8 @@ func TestResolveLeavesPercentAloneWhereOpenSSHDoes(t *testing.T) {
 		testConfig: "Host bastion\n\tSetEnv PROMPT=100%%\n",
 	})
 
-	values, refusals := effective.Resolve(graph, "bastion", resolveFacts())
+	resolution := effective.Resolve(graph, "bastion", resolveFacts())
+	values, refusals := resolution.Values, resolution.Refusals
 	if len(refusals) != 0 {
 		t.Fatalf("refusals = %#v", refusals)
 	}

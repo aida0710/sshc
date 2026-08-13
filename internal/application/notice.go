@@ -27,6 +27,15 @@ const (
 	NoticeGroupCycle          = "group_cycle"
 	NoticeGroupMemberMissing  = "group_member_missing"
 	NoticeExplainedValuesOnly = "explained_values_only"
+	// 解決を諦めた理由。値の代わりにこれが出る。
+	//
+	// 以前の explained_values_only は「ここに出る値は説明であって答えではない」
+	// という常時の但し書きだった。エンジンが権威になったので、但し書きは消え、
+	// 代わりに**答えられなかったときだけ**その理由が出る。
+	NoticeMatchExecRefused    = "match_exec_refused"
+	NoticeMatchFinalRefused   = "match_final_refused"
+	NoticeCanonicaliseRefused = "canonicalise_refused"
+	NoticeUnknownTokenRefused = "unknown_token_refused"
 	// NoticeDestinationNotIncluded は、どの Include も届かない destination
 	// ファイルに印を付ける。そこに移動したブロックは OpenSSH に読まれなくなる。
 	NoticeDestinationNotIncluded = "destination_not_included"

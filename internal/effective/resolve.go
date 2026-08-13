@@ -12,12 +12,11 @@ import (
 // Complexity とは別のものである。あちらは「説明はできるが単純ではない」という
 // 印で、値は出る。こちらは**値を出さない**理由である。
 const (
-	RefusalMatchExec      = "match_exec"
-	RefusalMatchUnknown   = "match_unsupported"
-	RefusalMatchFinal     = "match_final"
-	RefusalCanonicalize   = "canonicalize_hostname"
-	RefusalUnknownToken   = "unknown_token"
-	RefusalUnresolvedPath = "unresolved_include"
+	RefusalMatchExec    = "match_exec"
+	RefusalMatchUnknown = "match_unsupported"
+	RefusalMatchFinal   = "match_final"
+	RefusalCanonicalize = "canonicalize_hostname"
+	RefusalUnknownToken = "unknown_token"
 )
 
 // Refusal は、この設定について答えを出さない理由ひとつ。
@@ -26,6 +25,36 @@ type Refusal struct {
 	Path   string
 	Line   int
 	Detail string
+}
+
+// Accepted は、解決が採用したディレクティブひとつと、それが書かれている場所。
+//
+// 値と出所を同じ走査から出すのは、別々に歩くとまた「同じ問いに答えるものが 2 つ」
+// になるからである。画面が出所を示せるのは、決定そのものがここから来ているときだけ
+// 意味を持つ。
+type Accepted struct {
+	Keyword   string
+	Values    []string
+	Path      string
+	Line      int
+	Condition string
+}
+
+// Resolution は、ひとつの alias についての答えである。
+//
+// Refusals が空でないとき、Values と Accepted は空である。部分的な答えを黙って
+// 返さない——接続に使う値がひとつでも確定しないなら、その alias は解決できていない。
+type Resolution struct {
+	Values   Values
+	Accepted []Accepted
+	Refusals []Refusal
+	// Notes は、答えは確定しているが読み手が知っておくべきこと。
+	//
+	// 権威になる前は、これらは「だから ssh -G に委ねる」という意味の
+	// complexity だった。いまは答えが出るので意味が変わる——同じ alias を
+	// 二つのブロックが主張していても、勝つのはどちらかが決まっている。
+	// それでも書いた本人には見えていないので、印は残す。
+	Notes []Complexity
 }
 
 // defaultPort は、Port が書かれていないときの値。
@@ -58,26 +87,30 @@ var expandsTokens = map[string]bool{"hostname": true}
 // **何も実行しない。** Match exec を含む設定は、値ではなく理由を返す。部分的な
 // 答えを黙って返さないのは、接続に使う値がひとつでも確定しないなら、その alias は
 // 解決できていないからである。
-func Resolve(graph *config.Graph, alias string, facts LocalFacts) (Values, []Refusal) {
+func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 	values := Values{Entries: map[string][]string{}}
 	if graph == nil {
-		return values, nil
+		return Resolution{Values: values}
 	}
 
 	var refusals []Refusal
+	var accepted []Accepted
+	var notes []Complexity
+	matchedHostBlocks := 0
 	claimed := map[string]bool{}
 	applies := true
 
-	set := func(keyword, value string) {
+	set := func(keyword, value string) bool {
 		lowered := strings.ToLower(keyword)
 		if claimed[lowered] && !cumulativeKeywords[lowered] {
-			return
+			return false
 		}
 		if _, seen := values.Entries[lowered]; !seen {
 			values.Keywords = append(values.Keywords, lowered)
 		}
 		values.Entries[lowered] = append(values.Entries[lowered], value)
 		claimed[lowered] = true
+		return true
 	}
 
 	// Match の判定は、そこまでに解決した値を見る。OpenSSH も同じ順で決めるので、
@@ -90,12 +123,46 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) (Values, []Ref
 		}
 	}
 
-	enterBlock := func(filePath string, _ *config.File, block config.Block) {
+	condition := ""
+	enterBlock := func(filePath string, file *config.File, block config.Block) {
+		condition = file.Condition(block)
 		switch block.Kind {
 		case config.BlockGlobal:
 			applies = true
 		case config.BlockHost:
-			_, applies = blockApplies(block, alias)
+			var kind string
+			kind, applies = blockApplies(block, alias)
+			if !applies {
+				return
+			}
+			// 数えるのは alias を名指ししているブロックだけである。たまたま
+			// 一致した catch-all は「二つのブロックがこの名前を主張している」
+			// ではない。それはワイルドカードで一致したという別の話である。
+			if declaresExactly(block.Patterns, alias) {
+				matchedHostBlocks++
+				if matchedHostBlocks > 1 {
+					notes = append(notes, Complexity{
+						Code: ComplexityDuplicateAlias, Path: filePath, Line: block.Header + 1,
+						Condition: condition, Detail: "more than one Host block claims this alias",
+					})
+				}
+			}
+			if kind == SourceWildcard {
+				notes = append(notes, Complexity{
+					Code: ComplexityWildcardPattern, Path: filePath, Line: block.Header + 1,
+					Condition: condition, Detail: "this block matched through a wildcard pattern",
+				})
+			}
+			for _, pattern := range block.Patterns {
+				if !pattern.Negated {
+					continue
+				}
+				notes = append(notes, Complexity{
+					Code: ComplexityNegatedPattern, Path: filePath, Line: block.Header + 1,
+					Condition: condition, Detail: "this block excludes hosts through " + pattern.Raw,
+				})
+				break
+			}
 		case config.BlockMatch:
 			applies = false
 			for _, criterion := range block.Criteria {
@@ -137,31 +204,44 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) (Values, []Ref
 			})
 			return
 		}
-		set(line.Keyword, argumentText(line))
+		if set(line.Keyword, argumentText(line)) {
+			accepted = append(accepted, Accepted{
+				Keyword: line.Keyword, Values: line.Values(),
+				Path: filePath, Line: index + 1, Condition: condition,
+			})
+		}
 	}
 
 	walkLoadOrder(graph, graph.Root, map[string]bool{}, enterBlock, directive)
 
+	// 読めない Include は拒否ではなく印である。**読めた範囲で解決する。**
+	//
+	// 拒否にすると、まだ作られていないディレクトリを Include が指している間、
+	// その alias について何も答えられなくなる。グループを作る保存はまさにその
+	// 状態を通るので、保存前後の比較が空になっていた。
 	for _, diagnostic := range graph.Diagnostics {
 		if diagnostic.Severity == config.SeverityInfo {
 			continue
 		}
-		refusals = append(refusals, Refusal{
-			Code: RefusalUnresolvedPath, Path: diagnostic.Path,
+		notes = append(notes, Complexity{
+			Code: ComplexityUnresolvedInclude, Path: diagnostic.Path,
 			Line: diagnostic.Line, Detail: diagnostic.Code,
 		})
 	}
 
 	if len(refusals) > 0 {
 		// 部分的な答えを返さない。ひとつでも確定しないなら解決できていない。
-		return Values{Entries: map[string][]string{}}, refusals
+		return Resolution{Values: Values{Entries: map[string][]string{}}, Refusals: refusals}
 	}
 
 	applyDefaults(&values, alias, facts)
 	if refusal, ok := expandAll(&values, alias, facts); !ok {
-		return Values{Entries: map[string][]string{}}, []Refusal{refusal}
+		return Resolution{
+			Values:   Values{Entries: map[string][]string{}},
+			Refusals: []Refusal{refusal},
+		}
 	}
-	return values, nil
+	return Resolution{Values: values, Accepted: accepted, Notes: notes}
 }
 
 // applyDefaults は、この解決器が既定値を持つ 5 つだけを埋める。
@@ -237,4 +317,18 @@ func valueOr(values Values, keyword, fallback string) string {
 		return found
 	}
 	return fallback
+}
+
+// declaresExactly は、Host 行がパターンによる一致ではなくこの alias を名指しして
+// いるかを報告する。catch-all は全 alias に一致し、何も宣言しない。
+func declaresExactly(patterns []config.Pattern, alias string) bool {
+	for _, pattern := range patterns {
+		if pattern.Negated || pattern.Wildcard {
+			continue
+		}
+		if pattern.Value == alias {
+			return true
+		}
+	}
+	return false
 }

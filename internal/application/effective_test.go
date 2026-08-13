@@ -1,6 +1,16 @@
 package application
 
-import "testing"
+import (
+	"testing"
+
+	"sshc/internal/effective"
+)
+
+// testFacts は、トークン展開に要る事実を固定する。本物のホームやアカウント名を
+// 読むと、テストが走るマシンによって結果が変わる。
+func testFacts() effective.LocalFacts {
+	return effective.LocalFacts{User: "tester", Home: testHome, Hostname: "fixture.local", UID: "501"}
+}
 
 const effectiveFiles = `Include conf.d/*.conf
 Host bastion
@@ -20,9 +30,14 @@ func TestComputeEffectiveTakesTheFirstValueAndKeepsItsSource(t *testing.T) {
 		"conf.d/10-first.conf": "Host bastion\n\tPort 2200\n",
 	})
 
-	effective := ComputeEffective(graph, testRoot, "bastion")
-	if !effective.Approximate {
-		t.Fatal("explained values must be marked approximate until ssh -G arrives")
+	effective := ComputeEffective(graph, testRoot, "bastion", testFacts())
+	// 但し書きは無くなった。この値は説明ではなく答えである。答えられなかった
+	// ことを言う notice が出ていないことを確かめる——重複 alias のような、
+	// 答えは確定しているが読み手に伝えたい印は出てよい。
+	for _, notice := range effective.Notices {
+		if notice.Code == NoticeExplainedValuesOnly || notice.Code == NoticeMatchExecRefused {
+			t.Fatalf("a configuration this engine can answer refused: %#v", notice)
+		}
 	}
 	want := []struct {
 		keyword string
@@ -53,8 +68,17 @@ func TestComputeEffectiveTakesTheFirstValueAndKeepsItsSource(t *testing.T) {
 	for _, notice := range effective.Notices {
 		codes[notice.Code] = true
 	}
-	if !codes[NoticeMatchBlock] || !codes[NoticeComplexExternalRule] || !codes[NoticeExplainedValuesOnly] {
-		t.Fatalf("notices = %#v", effective.Notices)
+	// 二つのブロックが bastion を名乗っているので、その印は残る。答えは
+	// 確定しているが、書いた本人には見えていないからである。
+	if !codes[NoticeDuplicateAlias] {
+		t.Fatalf("notices = %#v, want a duplicate_alias", effective.Notices)
+	}
+	// 権威に委ねるための但し書きは、もう出ない。Match ブロックは評価されるので
+	// 「評価されない」という警告も出ない。
+	for _, gone := range []string{NoticeExplainedValuesOnly, NoticeComplexExternalRule, NoticeMatchBlock} {
+		if codes[gone] {
+			t.Errorf("notice %q outlived the deferral to ssh -G: %#v", gone, effective.Notices)
+		}
 	}
 }
 
@@ -62,7 +86,7 @@ func TestComputeEffectiveIgnoresBlocksThatDoNotMatch(t *testing.T) {
 	graph := newTestGraph(t, map[string]string{
 		"config": "Host other\n\tUser other-user\nHost !bastion *\n\tUser negated\n",
 	})
-	effective := ComputeEffective(graph, testRoot, "bastion")
+	effective := ComputeEffective(graph, testRoot, "bastion", testFacts())
 	if len(effective.Entries) != 0 {
 		t.Fatalf("entries = %#v", effective.Entries)
 	}
@@ -135,7 +159,7 @@ func TestComputeEffectiveReportsAnAliasClaimedByTwoFiles(t *testing.T) {
 		"conf.d/10-home.conf": "Host nas\n\tUser someone-else\n",
 	})
 
-	effective := ComputeEffective(graph, testRoot, "nas")
+	effective := ComputeEffective(graph, testRoot, "nas", testFacts())
 	found := false
 	for _, notice := range effective.Notices {
 		if notice.Code == NoticeDuplicateAlias {
@@ -150,7 +174,7 @@ func TestComputeEffectiveReportsAnAliasClaimedByTwoFiles(t *testing.T) {
 func TestComputeEffectiveDoesNotCallOneBlockADuplicate(t *testing.T) {
 	graph := newTestGraph(t, map[string]string{"config": "Host nas\n\tUser aida\n"})
 
-	for _, notice := range ComputeEffective(graph, testRoot, "nas").Notices {
+	for _, notice := range ComputeEffective(graph, testRoot, "nas", testFacts()).Notices {
 		if notice.Code == NoticeDuplicateAlias {
 			t.Errorf("a single block was reported as a duplicate: %#v", notice)
 		}

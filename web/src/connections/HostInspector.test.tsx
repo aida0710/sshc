@@ -25,7 +25,7 @@ function build(): HostDetail {
       notices: [],
     },
     metadata: { identity: { path: "connections/work/bastion.conf", alias: "bastion" }, favourite: false },
-    effective: { alias: "bastion", approximate: true, entries: [], notices: [] },
+    effective: { alias: "bastion", entries: [], notices: [] },
     file: {
       file: {
         path: "connections/work/bastion.conf",

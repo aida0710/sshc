@@ -22,9 +22,9 @@ const detail: HostDetail = {
   metadata: { identity: { path: "config", alias: "bastion" }, favourite: false },
   effective: {
     alias: "bastion",
-    approximate: true,
+
     entries: [{ keyword: "HostName", values: ["203.0.113.10"], source: { path: "config", line: 2 } }],
-    notices: [{ code: "explained_values_only", path: "config", line: 1, detail: "OpenSSH is authoritative." }],
+    notices: [],
   },
   file: {
     file: { path: "config", absolute: "/home/tester/.ssh/config" },
@@ -64,13 +64,14 @@ describe("ConnectionAnalysis", () => {
     expect(screen.getByRole("button", { name: "Run authoritative ssh -G" })).toBeDisabled();
   });
 
-  it("shows explained saved values without running OpenSSH", () => {
+  it("shows the resolved saved values without running anything", () => {
     const api = { effective: vi.fn() } as Pick<IntegrationsApi, "effective">;
     render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} />);
 
     expect(screen.getByText("HostName 203.0.113.10")).toBeInTheDocument();
     expect(screen.getByText("config:2")).toBeInTheDocument();
-    expect(screen.getByText(/These values explain what this engine reads/)).toBeInTheDocument();
+    // 但し書きは無くなった。この値は説明ではなく答えである。
+    expect(screen.getByText(/These values are what this connection uses/)).toBeInTheDocument();
     expect(api.effective).not.toHaveBeenCalled();
   });
 

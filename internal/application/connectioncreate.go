@@ -292,8 +292,8 @@ func (s *Service) planCreateConnection(
 		return planned{}, HostIdentity{}, err
 	}
 	prepared.preview.Effective = []EffectiveDiff{DiffEffective(
-		ComputeEffective(graph, s.workspace.Root(), request.Alias),
-		ComputeEffective(after, s.workspace.Root(), request.Alias),
+		ComputeEffective(graph, s.workspace.Root(), request.Alias, s.localFacts()),
+		ComputeEffective(after, s.workspace.Root(), request.Alias, s.localFacts()),
 	)}
 	return prepared, HostIdentity{Path: relative, Alias: request.Alias}, nil
 }
