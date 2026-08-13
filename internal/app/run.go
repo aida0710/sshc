@@ -256,6 +256,8 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		Logger:        dependencies.Logger,
 		Config:        configService,
 		Keys:          keyService,
+		Home:          workspace.Home(),
+		SSHRoot:       workspace.Root(),
 		Diagnostics:   diagnosticsService,
 		KnownHosts:    knownHostsService,
 		RemoteKeys:    remoteKeyService,
