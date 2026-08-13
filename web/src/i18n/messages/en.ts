@@ -196,7 +196,7 @@ export const en = {
   "copy.done": "Copied.",
   "copy.refused": "The browser refused to write to the clipboard.",
   "copy.command": "command",
-  "copy.terminalCommand": "Command to paste elsewhere",
+  "copy.terminalCommand": "Terminal command",
   "copy.privateKey": "private key",
   "copy.publicKey": "public key",
   "copy.keyLine": "key line",
