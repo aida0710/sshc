@@ -13,6 +13,20 @@ const (
 	SourceGlobal   = "global"
 )
 
+// cumulativeKeywords は、最初の値だけを残すのではなく OpenSSH が積み上げる
+// ディレクティブである。他のキーワードはすべて先勝ちに従う。
+//
+// この表がここにあるのは、同じ問いに答えるものを 2 つ持たないためである。
+// 以前は internal/application にだけあり、この射影は一律の先勝ちだった。その結果、
+// IdentityFile を 2 行書いた設定では 2 行目が「採用されない」と画面に出ていた。
+var cumulativeKeywords = map[string]bool{
+	"identityfile": true, "certificatefile": true, "localforward": true,
+	"remoteforward": true, "dynamicforward": true, "sendenv": true, "setenv": true,
+}
+
+// Cumulative は、そのキーワードが積み上がるかを報告する。大文字小文字は問わない。
+func Cumulative(keyword string) bool { return cumulativeKeywords[strings.ToLower(keyword)] }
+
 // 射影を、ひとつの整った継承の連鎖として示せない理由。
 const (
 	ComplexityWildcardPattern   = "wildcard_pattern"
@@ -156,7 +170,9 @@ func Project(graph *config.Graph, alias string) Projection {
 			Line:      index + 1,
 			Condition: condition,
 			Kind:      kind,
-			Winner:    !claimed[keyword],
+			// 積み上がるキーワードは、二行目以降も採用される。OpenSSH が
+			// そうするので、一律の先勝ちで印を付けると嘘になる。
+			Winner: !claimed[keyword] || cumulativeKeywords[keyword],
 		})
 		claimed[keyword] = true
 	}

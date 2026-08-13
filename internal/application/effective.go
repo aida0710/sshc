@@ -6,14 +6,8 @@ import (
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/effective"
 )
-
-// cumulativeKeywords は、最初の値だけを残すのではなく
-// OpenSSH が累積するディレクティブである。他の keyword はすべて先勝ちに従う。
-var cumulativeKeywords = map[string]bool{
-	"identityfile": true, "certificatefile": true, "localforward": true,
-	"remoteforward": true, "dynamicforward": true, "sendenv": true, "setenv": true,
-}
 
 // Source は値がどこから来たかを表す。
 type Source struct {
@@ -63,8 +57,8 @@ func declaresExactly(patterns []config.Pattern, alias string) bool {
 // Match ブロックは、`Match exec` がユーザーのシェルを
 // 実行しうるため決して評価されない。その存在は代わりに複雑な外部ルールとして報告される。
 func ComputeEffective(graph *config.Graph, root, alias string) Effective {
-	effective := Effective{Alias: alias, Approximate: true, Entries: []EffectiveEntry{}}
-	effective.Notices = appendNotice(effective.Notices, Notice{Code: NoticeExplainedValuesOnly})
+	computed := Effective{Alias: alias, Approximate: true, Entries: []EffectiveEntry{}}
+	computed.Notices = appendNotice(computed.Notices, Notice{Code: NoticeExplainedValuesOnly})
 	seen := map[string]bool{}
 	// この alias を名指ししているブロックを、それがある場所を
 	// キーにして保持する。走査はディレクティブごとに 1 回ブロックを
@@ -85,10 +79,10 @@ func ComputeEffective(graph *config.Graph, root, alias string) Effective {
 
 		switch visit.Block.Kind {
 		case config.BlockMatch:
-			effective.Notices = appendNotice(effective.Notices, Notice{
+			computed.Notices = appendNotice(computed.Notices, Notice{
 				Code: NoticeMatchBlock, Path: reference.Path, Line: visit.Block.Header + 1, Detail: visit.Condition,
 			})
-			effective.Notices = appendNotice(effective.Notices, Notice{
+			computed.Notices = appendNotice(computed.Notices, Notice{
 				Code: NoticeComplexExternalRule, Path: reference.Path, Line: visit.Block.Header + 1, Detail: visit.Condition,
 			})
 			return true
@@ -101,7 +95,7 @@ func ComputeEffective(graph *config.Graph, root, alias string) Effective {
 				if !declaring[where] {
 					declaring[where] = true
 					if len(declaring) > 1 {
-						effective.Notices = appendNotice(effective.Notices, Notice{
+						computed.Notices = appendNotice(computed.Notices, Notice{
 							Code: NoticeDuplicateAlias, Path: reference.Path,
 							Line: visit.Block.Header + 1, Detail: alias,
 						})
@@ -112,18 +106,18 @@ func ComputeEffective(graph *config.Graph, root, alias string) Effective {
 				if !pattern.Negated {
 					continue
 				}
-				effective.Notices = appendNotice(effective.Notices, Notice{
+				computed.Notices = appendNotice(computed.Notices, Notice{
 					Code: NoticeNegatedPattern, Path: reference.Path, Line: visit.Block.Header + 1, Detail: visit.Condition,
 				})
 			}
 		}
 
 		lowered := strings.ToLower(visit.Line.Keyword)
-		if seen[lowered] && !cumulativeKeywords[lowered] {
+		if seen[lowered] && !effective.Cumulative(lowered) {
 			return true
 		}
 		seen[lowered] = true
-		effective.Entries = append(effective.Entries, EffectiveEntry{
+		computed.Entries = append(computed.Entries, EffectiveEntry{
 			Keyword: visit.Line.Keyword,
 			Values:  visit.Line.Values(),
 			Source: Source{
@@ -136,10 +130,10 @@ func ComputeEffective(graph *config.Graph, root, alias string) Effective {
 		return true
 	})
 
-	sort.SliceStable(effective.Entries, func(first, second int) bool {
-		return strings.ToLower(effective.Entries[first].Keyword) < strings.ToLower(effective.Entries[second].Keyword)
+	sort.SliceStable(computed.Entries, func(first, second int) bool {
+		return strings.ToLower(computed.Entries[first].Keyword) < strings.ToLower(computed.Entries[second].Keyword)
 	})
-	return effective
+	return computed
 }
 
 // EffectiveChange は、説明付きの値が変化する 1 つの keyword である。
