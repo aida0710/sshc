@@ -25,7 +25,6 @@ func registerDiagnosticsRoutes(engine *echo.Echo, handlers DiagnosticsHandlers) 
 	engine.POST("/api/v1/diagnostics/effective", handlers.Effective)
 	engine.POST("/api/v1/diagnostics/reachability", handlers.Reachability)
 	engine.POST("/api/v1/diagnostics/authentication", handlers.Authentication)
-	engine.POST("/api/v1/terminal/command", handlers.TerminalCommand)
 }
 
 // addDiagnosticsActions は、このサブシステムが所有する確認を登録する。
@@ -228,17 +227,6 @@ func (h DiagnosticsHandlers) Authentication(c *echo.Context) error {
 //
 // 埋め込みターミナルができたあともこれが残っているのは、自分の端末で開きたい人が
 // いるからである。何も起動しないので確認も要らない。
-func (h DiagnosticsHandlers) TerminalCommand(c *echo.Context) error {
-	var request api.AliasRequest
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	if request.Alias == "" || len(request.Alias) > maxAliasLength {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	command, warning := h.Service.TerminalCommand(request.Alias)
-	return c.JSON(http.StatusOK, api.TerminalCommandResponse{Command: command, Warning: warning})
-}
 
 func describeDirectives(directives []effective.Executable) []api.ExecutableDirective {
 	described := make([]api.ExecutableDirective, 0, len(directives))

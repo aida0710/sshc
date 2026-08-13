@@ -238,25 +238,6 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/terminal/command:
-    post:
-      operationId: getTerminalCommand
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/AliasRequest" }
-      responses:
-        "200":
-          description: Command text and whether it may be launched
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/TerminalCommandResponse" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-  # 埋め込みターミナルのセッション。WebSocket のルート (/terminal/stream) は
-  # ここに現れない。/api/ の外にあり、ブラウザが CSRF ヘッダを付けられない
-  # ハンドシェイクを使うためである。/cli/connect と同じ扱いになる。
   /api/v1/terminal/sessions:
     get:
       operationId: listTerminalSessions
@@ -1784,13 +1765,6 @@ components:
         key: { type: string, minLength: 1, maxLength: 4096 }
         expectedFingerprint: { type: string, maxLength: 128 }
         acknowledged: { type: boolean }
-    TerminalCommandResponse:
-      type: object
-      additionalProperties: false
-      required: [command, warning]
-      properties:
-        command: { type: string }
-        warning: { type: string }
     # 開いている端末セッションひとつ。スクロールバックは決してここに現れない。
     # 中身が出ていくのは WebSocket だけである。
     TerminalSession:

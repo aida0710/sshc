@@ -36,9 +36,6 @@ export const en = {
   // 一度も届かなかった。だから日本語版でも英語のままだった。
   "host.duplicateKeyword": "A previous line in this block uses the same keyword. OpenSSH keeps the first one.",
 
-  "inspector.consoles": "Consoles",
-  "inspector.settings": "Settings",
-  "inspector.connectionSection": "Open connection",
   "terminal.consoleList": "Open consoles",
   "terminal.noSessions": "No console is open.",
   "terminal.openShell": "Local shell",
@@ -65,8 +62,6 @@ export const en = {
   "terminal.screenLabel": "Console for {title}",
   "terminal.exitedWithCode": "The program exited with status {code}. The output above is kept until you close this console.",
   "terminal.exitedWithSignal": "The program was ended by {signal}. The output above is kept until you close this console.",
-  "terminal.emptyHeading": "Nothing is open",
-  "terminal.emptyHint": "Choose a console from the panel, or open a local shell.",
   "inspector.appOnly": "This application only",
   "inspector.hostLabel": "Display and classification",
   "inspector.groupLabel": "Group display settings",
@@ -460,8 +455,6 @@ export const en = {
   "diag.reachabilityFailed": "The reachability check could not be run.",
   "diag.testAuthentication": "Test authentication",
   "diag.authenticationFailed": "The authentication test could not be run.",
-  "diag.terminalCommand": "Terminal command",
-  "diag.commandFailed": "The command could not be built.",
   "diag.configuration": "Configuration",
   "diag.missingSuffix": " (missing)",
   "diag.refused": "OpenSSH refused to explain this alias",
@@ -488,7 +481,6 @@ export const en = {
   "diag.inside": "inside {condition}",
   "diag.reachability": "Reachability",
   "diag.authentication": "Authentication",
-  "diag.terminal": "Command to paste elsewhere",
   "diag.forHost": "Diagnostics for {host}",
 
   "kh.heading": "Known Hosts",
@@ -911,7 +903,6 @@ export const en = {
   "conn.advancedRawBlocksFields": "Raw has unsaved changes. Discard or save it before editing directives.",
   "conn.advancedFieldsBlockRaw": "Directives have unsaved changes. Discard or save them before editing Raw.",
   "conn.connect": "Connect",
-  "conn.otherApplication": "Another application…",
   "conn.opening": "Opening…",
   "conn.duplicate": "Duplicate connection",
   "conn.manage": "More connection actions",

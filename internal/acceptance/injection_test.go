@@ -559,16 +559,6 @@ func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testin
 		})
 	}
 
-	// POST /api/v1/terminal/command は、unsafe な alias に対しても意図的に応答を
-	// 許されている。UI は開く代わりにコピー可能なコマンドを提示する。ただし、
-	// そのコマンドがそのままでは打てないことを必ず添えなければならない。
-	response := f.do(http.MethodPost, "/api/v1/terminal/command", mustJSON(t, map[string]any{
-		"alias": "bastion evil",
-	}))
-	body := readBody(t, response)
-	if !strings.Contains(body, `"warning"`) || strings.Contains(body, `"warning":""`) {
-		t.Fatalf("an unsafe alias carried no warning: %s", body)
-	}
 	if commands := f.runner.recorded(); len(commands) != 0 {
 		t.Fatalf("describing a command started %#v", commands)
 	}

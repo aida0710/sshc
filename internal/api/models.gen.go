@@ -1175,12 +1175,6 @@ type SyncStatus struct {
 	Synced        bool           `json:"synced"`
 }
 
-// TerminalCommandResponse defines model for TerminalCommandResponse.
-type TerminalCommandResponse struct {
-	Command string `json:"command"`
-	Warning string `json:"warning"`
-}
-
 // TerminalExit defines model for TerminalExit.
 type TerminalExit struct {
 	At     string `json:"at"`
@@ -1439,9 +1433,6 @@ type PushSnapshotJSONRequestBody = PassphraseRequest
 
 // ConfigureSyncJSONRequestBody defines body for ConfigureSync for application/json ContentType.
 type ConfigureSyncJSONRequestBody = SyncSettingsRequest
-
-// GetTerminalCommandJSONRequestBody defines body for GetTerminalCommand for application/json ContentType.
-type GetTerminalCommandJSONRequestBody = AliasRequest
 
 // OpenTerminalSessionJSONRequestBody defines body for OpenTerminalSession for application/json ContentType.
 type OpenTerminalSessionJSONRequestBody = OpenTerminalSessionRequest

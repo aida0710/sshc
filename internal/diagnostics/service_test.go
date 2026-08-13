@@ -225,31 +225,3 @@ func TestServiceProjectedValueReadsTheEngineWithoutRunningSSH(t *testing.T) {
 		t.Fatal("projecting a value started a process")
 	}
 }
-
-// 以前は五つの環境変数とフラグだった。それは Terminal のボタンが自前で組み立てる
-// もので、誰かが打ち込むようなものではない。こちらは同じやり方で接続する。動作中の
-// アプリケーションに保存済みパスワードを求め、なければ素の ssh にフォールバック
-// する。
-//
-// 埋め込みターミナルができたあともこれが残っているのは、自分の端末で開きたい人が
-// いるからである。起動可否はもう報告しない——このアプリケーションは端末
-// アプリケーションを起こさなくなったので、その問い自体が無くなった。
-func TestTerminalCommandIsThisBinaryAndTheAlias(t *testing.T) {
-	service := &diagnostics.Service{Self: "/Applications/sshc"}
-	command, warning := service.TerminalCommand("bastion")
-	if command != "/Applications/sshc bastion" || warning != "" {
-		t.Errorf("TerminalCommand = %q, %q", command, warning)
-	}
-
-	// コマンドラインに載せない alias も、その理由とともに表示される。
-	command, warning = service.TerminalCommand("-oProxyCommand=id")
-	if command == "" || warning != diagnostics.UnsafeAliasWarning {
-		t.Errorf("an unsafe alias = %q, %q", command, warning)
-	}
-
-	// 解決済みのパスがなくても、素の ssh なら接続できる。
-	plain := &diagnostics.Service{}
-	if command, _ := plain.TerminalCommand("bastion"); command != "ssh -- bastion" {
-		t.Errorf("with no path = %q", command)
-	}
-}
