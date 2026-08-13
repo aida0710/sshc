@@ -32,20 +32,20 @@ jobs:
       - name: Verify
         run: make test
 
+      # 4 つの成果物を 1 台のランナーで作る。このプロジェクトは cgo を 1 行も
+      # 使っていないので、Linux はクロスコンパイルで足りる。darwin だけは cgo を
+      # 有効にしたままにする理由が Makefile に書いてある。
       - name: Build
         env:
           VERSION: ${{ github.ref_name }}
-        run: make build
+        run: make release-binaries
 
       # チェックサムは、手でダウンロードしたものを検証する人のためにある。
       # それが記述する対象の隣に公開されるので、転送の途中切断は捕まえられるが、
       # このリリースが正直かどうかについては何も言わない — README がどちらで
       # あるかを述べており、そうでないかのようにほのめかしてはいない。
       - name: Package
-        run: |
-          mkdir -p dist
-          cp bin/sshc "dist/sshc-darwin-arm64"
-          cd dist && shasum -a 256 sshc-darwin-arm64 > checksums.txt
+        run: cd dist && shasum -a 256 sshc-* > checksums.txt
 
       - name: Publish
         env:
@@ -55,4 +55,4 @@ jobs:
           gh release create "$RELEASE_TAG" \
             --title "$RELEASE_TAG" \
             --generate-notes \
-            dist/sshc-darwin-arm64 dist/checksums.txt
+            dist/sshc-* dist/checksums.txt

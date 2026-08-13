@@ -1,4 +1,4 @@
-.PHONY: generate test build fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test build release-binaries fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
 # なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
@@ -53,6 +53,31 @@ build:
 	npm run build --prefix web
 	mkdir -p bin
 	go build -trimpath -ldflags "-X main.version=$${VERSION}" -o bin/sshc ./cmd/sshc
+
+# リリースの成果物。UI のバンドルは 1 度だけ作り、Go だけをターゲットごとに
+# ビルドする。バンドルは埋め込まれるだけで、どの OS 向けかを知らないからだ。
+#
+# **darwin は cgo を有効にしたままにする。** 設定エンジンは `%u` と `%i` を
+# 展開するために os/user.Current() を読む。CGO_ENABLED=0 の Go は代わりに
+# /etc/passwd を読み、macOS の通常のアカウントはそこに載っていない。ビルドは
+# 通り、テストも通り、実行時にそのトークンだけが黙って非対応になる——リリース
+# でだけ起きる種類の壊れ方である。Linux は /etc/passwd が本物なので 0 でよい。
+#
+# darwin/amd64 を arm64 のランナーから作れるのは、macOS の SDK が両方の
+# アーキテクチャを持っているからである。
+RELEASE_TARGETS = darwin/arm64:1 darwin/amd64:1 linux/amd64:0 linux/arm64:0
+
+release-binaries:
+	npm run build --prefix web
+	mkdir -p dist
+	@set -eu; for target in $(RELEASE_TARGETS); do \
+		platform="$${target%%:*}"; cgo="$${target##*:}"; \
+		goos="$${platform%%/*}"; goarch="$${platform##*/}"; \
+		echo "==> $$goos/$$goarch (CGO_ENABLED=$$cgo)"; \
+		GOOS="$$goos" GOARCH="$$goarch" CGO_ENABLED="$$cgo" \
+			go build -trimpath -ldflags "-X main.version=$${VERSION}" \
+			-o "dist/sshc-$$goos-$$goarch" ./cmd/sshc; \
+	done
 
 # 統合テストのスイートは、コンテナ内の本物の S3 実装と本物の sshd に対して走る。
 # 密閉されたスイートには答えられない二つの問いに答える。本物のオブジェクトストアが
