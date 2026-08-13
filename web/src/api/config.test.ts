@@ -55,7 +55,7 @@ describe("configApi", () => {
       JSON.stringify({
         form: { entry: overviewPayload.hosts[0], fields: [], raw: "" },
         metadata: { identity: { path: "config", alias: "a b" } },
-        effective: { alias: "a b", approximate: true, entries: [] },
+        effective: { alias: "a b", entries: [] },
         file: {
           file: { path: "config", absolute: "/home/tester/.ssh/config" },
           contents: "", digest: "", editable: true, exists: true,

@@ -348,10 +348,9 @@ type EditRequest struct {
 
 // Effective defines model for Effective.
 type Effective struct {
-	Alias       string           `json:"alias"`
-	Approximate bool             `json:"approximate"`
-	Entries     []EffectiveEntry `json:"entries"`
-	Notices     *[]Notice        `json:"notices,omitempty"`
+	Alias   string           `json:"alias"`
+	Entries []EffectiveEntry `json:"entries"`
+	Notices *[]Notice        `json:"notices,omitempty"`
 }
 
 // EffectiveChange defines model for EffectiveChange.

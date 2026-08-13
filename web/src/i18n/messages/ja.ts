@@ -241,7 +241,11 @@ export const ja = {
   "notice.group_empty": "このグループは宣言されていますが、中身がありません。",
   "notice.generated_region_damaged":
     "~/.ssh/config に、このアプリが生成するブロックの開始マーカーはありますが終了マーカーがありません。自分が書いた行がどこまでかを判断できない状態です。中の Include 行は今も有効ですが、終了マーカーを戻すまでグループの保存はできません。生成された最後の Include 行の次に「# <<< sshc groups」という行を足すか、ブロックごと削除してからグループを保存し直してください。",
-  "notice.explained_values_only": "これらの値はこのエンジンが読んだ内容の説明です。権威ある答えは Diagnostics タブの ssh -G で確認してください。",
+  "notice.explained_values_only": "設定の一部を読めなかったため、これらの値は読めた範囲から出しています。",
+  "notice.match_exec_refused": "この設定には Match exec があります。ここでは何も実行しないので、値を解決できません。端末から ssh で接続してください。",
+  "notice.match_final_refused": "この設定には Match final があります。OpenSSH はそのために設定を二度読みますが、このエンジンはそれを行わないので値を解決できません。",
+  "notice.canonicalise_refused": "この設定は CanonicalizeHostname を有効にしています。設定を読み直す必要があるため、ここでは値を解決できません。",
+  "notice.unknown_token_refused": "この設定は、このエンジンが展開しないトークンを使っています。値を解決できません。",
   "notice.destination_not_included": "このファイルへ届く Include がまだないため、移動した接続を OpenSSH は読みません。Include を追加してください。",
   "notice.group_file_unreached":
     "このファイルは connections/ にありますが、どの Include も名指ししていないため OpenSSH は読みません。宣言済みのグループへ移動すると再び読まれます。",
@@ -863,7 +867,7 @@ export const ja = {
   "conn.checksAcknowledge": "確認して認証を実行",
   "conn.analysisLabel": "設定解析",
   "conn.analysisExplained": "保存済み設定から説明できる値",
-  "conn.analysisExplainedHint": "OpenSSHを実行せずに読み取った値と出所です。複雑なMatchの挙動は概算のままです。",
+  "conn.analysisExplainedHint": "この接続が実際に使う値です。何も実行せずに読み取っており、解決できない設定は推測せずにその旨を伝えます。",
   "conn.analysisAuthoritative": "OpenSSHによる権威ある結果",
   "conn.analysisAuthoritativeHint": "保存済み接続をOpenSSHが最終的にどう解釈するか必要なときだけ、明示的に ssh -G を実行します。",
   "conn.analysisRun": "権威ある ssh -G を実行",

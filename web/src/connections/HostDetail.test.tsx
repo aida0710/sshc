@@ -27,7 +27,7 @@ const detail: HostDetail = {
   metadata: { identity: { path: "config", alias: "bastion" }, favourite: false },
   effective: {
     alias: "bastion",
-    approximate: true,
+
     entries: [{ keyword: "HostName", values: ["203.0.113.10"], source: { path: "config", line: 2 } }],
   },
   file: {

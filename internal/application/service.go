@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"sshc/internal/config"
+	"sshc/internal/effective"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 )
@@ -257,6 +258,11 @@ func (s *Service) readFile(absolute string) (contents []byte, exists bool, err e
 	return contents, true, nil
 }
 
+// localFacts は、トークン展開に要るこのプロセスの事実である。
+func (s *Service) localFacts() effective.LocalFacts {
+	return LocalFactsFor(s.workspace.Home())
+}
+
 func (s *Service) resolve() (*config.Graph, error) {
 	return s.resolver.Resolve(s.entryPath)
 }
@@ -390,7 +396,7 @@ func (s *Service) HostDetail(relative, alias string) (HostDetail, error) {
 	}
 	detail := HostDetail{
 		Form:      form,
-		Effective: ComputeEffective(graph, s.workspace.Root(), alias),
+		Effective: ComputeEffective(graph, s.workspace.Root(), alias, s.localFacts()),
 		File:      contents,
 		Metadata:  HostMetadata{Identity: identity},
 	}
@@ -714,8 +720,8 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 			alias = request.NewAlias
 		}
 		prepared.preview.Effective = []EffectiveDiff{DiffEffective(
-			ComputeEffective(graph, s.workspace.Root(), request.Alias),
-			ComputeEffective(after, s.workspace.Root(), alias),
+			ComputeEffective(graph, s.workspace.Root(), request.Alias, s.localFacts()),
+			ComputeEffective(after, s.workspace.Root(), alias, s.localFacts()),
 		)}
 	}
 	return prepared, nil
@@ -1067,8 +1073,8 @@ func (s *Service) planMoveHost(graph *config.Graph, request EditRequest) (planne
 			break
 		}
 		prepared.preview.Effective = append(prepared.preview.Effective, DiffEffective(
-			ComputeEffective(graph, root, alias),
-			ComputeEffective(after, root, alias),
+			ComputeEffective(graph, root, alias, s.localFacts()),
+			ComputeEffective(after, root, alias, s.localFacts()),
 		))
 	}
 	return prepared, nil
@@ -1213,8 +1219,8 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 			continue
 		}
 		diff := DiffEffective(
-			ComputeEffective(graph, root, host.Identity.Alias),
-			ComputeEffective(after, root, host.Identity.Alias),
+			ComputeEffective(graph, root, host.Identity.Alias, s.localFacts()),
+			ComputeEffective(after, root, host.Identity.Alias, s.localFacts()),
 		)
 		if len(diff.Changes) == 0 {
 			continue

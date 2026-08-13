@@ -2563,10 +2563,9 @@ components:
     Effective:
       type: object
       additionalProperties: false
-      required: [alias, approximate, entries]
+      required: [alias, entries]
       properties:
         alias: { type: string }
-        approximate: { type: boolean }
         entries: { type: array, items: { $ref: "#/components/schemas/EffectiveEntry" } }
         notices: { type: array, items: { $ref: "#/components/schemas/Notice" } }
     FileContents:

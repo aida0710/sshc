@@ -179,7 +179,8 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 			wanted := runSSHG(t, sshPath, home, configPath, test.alias)
 
 			facts := effective.LocalFacts{User: current.Username, Home: home}
-			values, refusals := effective.Resolve(graph, test.alias, facts)
+			resolution := effective.Resolve(graph, test.alias, facts)
+			values, refusals := resolution.Values, resolution.Refusals
 			if len(refusals) != 0 {
 				t.Fatalf("Resolve refused a fixture it should answer: %#v", refusals)
 			}

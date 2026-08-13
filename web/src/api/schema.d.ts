@@ -1806,7 +1806,6 @@ export interface components {
         };
         Effective: {
             alias: string;
-            approximate: boolean;
             entries: components["schemas"]["EffectiveEntry"][];
             notices?: components["schemas"]["Notice"][];
         };

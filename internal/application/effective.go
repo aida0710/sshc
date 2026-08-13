@@ -1,8 +1,9 @@
 package application
 
 import (
+	"os"
+	"os/user"
 	"sort"
-	"strconv"
 	"strings"
 
 	"sshc/internal/config"
@@ -24,17 +25,16 @@ type EffectiveEntry struct {
 	Source  Source   `json:"source"`
 }
 
-// Effective は、alias が受け取る値についてのこのエンジンの説明である。
+// Effective は、alias が受け取る値である。
 //
-// Approximate は常に true である。設計 §5.5 はインストール
-// 済みの OpenSSH の `ssh -G` を権威としており、その評価は
-// ユーザーのコマンドを実行しうるため後段のサブシステムに属する。このビューは
-// 値がどこから来るかを示すために存在し、最終的な答えだと主張する代わりにそう言っている。
+// **説明ではなく答えである。** 以前は Approximate を常に true にして「これは
+// 出所の説明であって最終的な答えではない、権威は ssh -G だ」と言っていた。
+// エンジンが権威になったので、その但し書きは無くなった。答えられない設定では
+// 値の代わりに理由が notice として出る。
 type Effective struct {
-	Alias       string           `json:"alias"`
-	Approximate bool             `json:"approximate"`
-	Entries     []EffectiveEntry `json:"entries"`
-	Notices     []Notice         `json:"notices,omitempty"`
+	Alias   string           `json:"alias"`
+	Entries []EffectiveEntry `json:"entries"`
+	Notices []Notice         `json:"notices,omitempty"`
 }
 
 // declaresExactly は、Host 行がパターンによる一致ではなく
@@ -52,88 +52,91 @@ func declaresExactly(patterns []config.Pattern, alias string) bool {
 	return false
 }
 
-// ComputeEffective は読み込み順にグラフをたどり、各 keyword の
-// 最初の値を記録し、OpenSSH が累積する keyword は累積する。
-// Match ブロックは、`Match exec` がユーザーのシェルを
-// 実行しうるため決して評価されない。その存在は代わりに複雑な外部ルールとして報告される。
-func ComputeEffective(graph *config.Graph, root, alias string) Effective {
-	computed := Effective{Alias: alias, Approximate: true, Entries: []EffectiveEntry{}}
-	computed.Notices = appendNotice(computed.Notices, Notice{Code: NoticeExplainedValuesOnly})
-	seen := map[string]bool{}
-	// この alias を名指ししているブロックを、それがある場所を
-	// キーにして保持する。走査はディレクティブごとに 1 回ブロックを
-	// 訪れるからだ。たまたま一致した catch-all はこれに含まれない。
-	// それは別の話であるワイルドカードシャドウとして報告される。
-	// 2 つのブロックが 1 つの alias を宣言している場合、画面上の値とユーザーが実際に得る
-	// 値が異なる。「実際には何を得るのか?」に答えるためのタブは、それを言わなければならない。
-	declaring := map[string]bool{}
+// ComputeEffective は、この alias が受け取る値を答える。
+//
+// 決めているのは effective.Resolve である。**この関数は歩かない。** 以前はここに
+// 二つ目の走査があり、片方は「出所の説明」もう片方は「接続画面の値」と名乗って
+// 共存していた。どちらも「権威ではない」と言うことで釣り合っていたが、権威を
+// 持つ以上、同じ問いに答えるものが二つあってはならない。
+//
+// 解決できない設定（Match exec、Match final、CanonicalizeHostname など）では、
+// 値の代わりに理由を notice として返す。部分的な答えを黙って返さない。
+func ComputeEffective(graph *config.Graph, root, alias string, facts effective.LocalFacts) Effective {
+	computed := Effective{Alias: alias, Entries: []EffectiveEntry{}}
+	resolution := effective.Resolve(graph, alias, facts)
 
-	WalkDirectives(graph, func(visit Visit) bool {
-		if visit.Block.Header == visit.Index {
-			return true
-		}
-		if config.EqualKeyword(visit.Line.Keyword, "Include") {
-			return true
-		}
-		reference := NewFileRef(root, visit.Path)
+	for _, refusal := range resolution.Refusals {
+		computed.Notices = appendNotice(computed.Notices, Notice{
+			Code: refusalNotices[refusal.Code], Path: refusal.Path,
+			Line: refusal.Line, Detail: refusal.Detail,
+		})
+	}
+	if len(resolution.Refusals) > 0 {
+		return computed
+	}
 
-		switch visit.Block.Kind {
-		case config.BlockMatch:
-			computed.Notices = appendNotice(computed.Notices, Notice{
-				Code: NoticeMatchBlock, Path: reference.Path, Line: visit.Block.Header + 1, Detail: visit.Condition,
-			})
-			computed.Notices = appendNotice(computed.Notices, Notice{
-				Code: NoticeComplexExternalRule, Path: reference.Path, Line: visit.Block.Header + 1, Detail: visit.Condition,
-			})
-			return true
-		case config.BlockHost:
-			if !MatchHostLine(visit.Block.Patterns, alias) {
-				return true
-			}
-			if declaresExactly(visit.Block.Patterns, alias) {
-				where := visit.Path + "\x00" + strconv.Itoa(visit.Block.Header)
-				if !declaring[where] {
-					declaring[where] = true
-					if len(declaring) > 1 {
-						computed.Notices = appendNotice(computed.Notices, Notice{
-							Code: NoticeDuplicateAlias, Path: reference.Path,
-							Line: visit.Block.Header + 1, Detail: alias,
-						})
-					}
-				}
-			}
-			for _, pattern := range visit.Block.Patterns {
-				if !pattern.Negated {
-					continue
-				}
-				computed.Notices = appendNotice(computed.Notices, Notice{
-					Code: NoticeNegatedPattern, Path: reference.Path, Line: visit.Block.Header + 1, Detail: visit.Condition,
-				})
-			}
-		}
+	// 答えは確定しているが、書いた本人には見えていないこと。
+	for _, note := range resolution.Notes {
+		computed.Notices = appendNotice(computed.Notices, Notice{
+			Code: noteNotices[note.Code], Path: note.Path, Line: note.Line, Detail: note.Detail,
+		})
+	}
 
-		lowered := strings.ToLower(visit.Line.Keyword)
-		if seen[lowered] && !effective.Cumulative(lowered) {
-			return true
-		}
-		seen[lowered] = true
+	for _, entry := range resolution.Accepted {
+		reference := NewFileRef(root, entry.Path)
 		computed.Entries = append(computed.Entries, EffectiveEntry{
-			Keyword: visit.Line.Keyword,
-			Values:  visit.Line.Values(),
+			Keyword: entry.Keyword,
+			Values:  entry.Values,
 			Source: Source{
 				Path:      reference.Path,
 				Absolute:  reference.Absolute,
-				Line:      visit.Index + 1,
-				Condition: visit.Condition,
+				Line:      entry.Line,
+				Condition: entry.Condition,
 			},
 		})
-		return true
-	})
-
+	}
 	sort.SliceStable(computed.Entries, func(first, second int) bool {
 		return strings.ToLower(computed.Entries[first].Keyword) < strings.ToLower(computed.Entries[second].Keyword)
 	})
 	return computed
+}
+
+// LocalFactsFor は、トークン展開に要るこのプロセスの事実を読む。
+//
+// ユーザー名と uid はプロセスの性質であってワークスペースの性質ではないので、
+// home のように注入するのではなくここで読む。ファイルには触れないため、これで
+// テストが本物のホームディレクトリに届くことはない。読めない環境では、その
+// トークンを供給しないことで、解決が拒む形になる。
+func LocalFactsFor(home string) effective.LocalFacts {
+	facts := effective.LocalFacts{Home: home}
+	if current, err := user.Current(); err == nil {
+		facts.User = current.Username
+		facts.UID = current.Uid
+	}
+	if hostname, err := os.Hostname(); err == nil {
+		facts.Hostname = hostname
+	}
+	return facts
+}
+
+// noteNotices は、確定した答えに添える印を画面の語彙へ移す。
+var noteNotices = map[string]string{
+	effective.ComplexityDuplicateAlias:    NoticeDuplicateAlias,
+	effective.ComplexityWildcardPattern:   NoticeWildcardShadow,
+	effective.ComplexityNegatedPattern:    NoticeNegatedPattern,
+	effective.ComplexityUnresolvedInclude: NoticeExplainedValuesOnly,
+}
+
+// refusalNotices は、解決を諦めた理由を画面の語彙へ移す。
+//
+// 知らないコードは explained_values_only へ落とす。新しい理由が増えたときに、
+// 画面が黙って何も言わなくなるより、但し書きが出る方がよい。
+var refusalNotices = map[string]string{
+	effective.RefusalMatchExec:    NoticeMatchExecRefused,
+	effective.RefusalMatchFinal:   NoticeMatchFinalRefused,
+	effective.RefusalMatchUnknown: NoticeMatchExecRefused,
+	effective.RefusalCanonicalize: NoticeCanonicaliseRefused,
+	effective.RefusalUnknownToken: NoticeUnknownTokenRefused,
 }
 
 // EffectiveChange は、説明付きの値が変化する 1 つの keyword である。

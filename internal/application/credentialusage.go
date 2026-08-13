@@ -41,7 +41,7 @@ func (s *Service) KeyHosts(relativePaths []string) (map[string][]string, error) 
 		if alias == "" || host.Duplicate {
 			continue
 		}
-		for _, entry := range ComputeEffective(graph, s.workspace.Root(), alias).Entries {
+		for _, entry := range ComputeEffective(graph, s.workspace.Root(), alias, s.localFacts()).Entries {
 			if !config.EqualKeyword(entry.Keyword, "IdentityFile") {
 				continue
 			}
