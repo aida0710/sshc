@@ -58,7 +58,7 @@ func TestNoAPIRouteReadsAnUnboundedBody(t *testing.T) {
 				t.Fatalf("an oversized body still started %d command(s)", len(commands))
 			}
 			if launched := f.terminal.launched(); len(launched) != 0 {
-				t.Fatalf("an oversized body still launched Terminal for %#v", launched)
+				t.Fatalf("an oversized body still opened a terminal for %#v", launched)
 			}
 			if !bytes.Equal(before, f.read("config")) {
 				t.Fatal("an oversized body changed a configuration file")

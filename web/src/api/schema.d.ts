@@ -244,39 +244,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/terminal/options": {
+    "/api/v1/terminal/sessions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getTerminalOptions"];
+        get: operations["listTerminalSessions"];
         put?: never;
-        post?: never;
+        post: operations["openTerminalSession"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/terminal/preference": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["setTerminalPreference"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/terminal/launch": {
+    "/api/v1/terminal/sessions/{id}/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -285,11 +269,27 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["launchTerminal"];
+        post: operations["issueTerminalStreamTicket"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["closeTerminalSession"];
+        options?: never;
+        head?: never;
+        patch: operations["renameTerminalSession"];
         trace?: never;
     };
     "/api/v1/sync": {
@@ -1327,26 +1327,42 @@ export interface components {
         };
         TerminalCommandResponse: {
             command: string;
-            launchable: boolean;
             warning: string;
         };
-        TerminalOption: {
-            id: components["schemas"]["TerminalID"];
-            installed: boolean;
+        TerminalSession: {
+            id: string;
+            /** @enum {string} */
+            kind: "ssh" | "shell";
+            alias?: string;
+            title: string;
+            startedAt: string;
+            exited?: components["schemas"]["TerminalExit"];
         };
-        TerminalApplication: {
-            name: string;
-            path: string;
+        TerminalExit: {
+            code: number;
+            signal: string;
+            at: string;
         };
-        TerminalPreferenceRequest: {
-            selected: components["schemas"]["TerminalID"];
-            customTerminal?: components["schemas"]["CustomTerminal"];
+        TerminalSessionList: {
+            sessions: components["schemas"]["TerminalSession"][];
+            maxSessions: number;
         };
-        TerminalOptionsResponse: {
-            selected: components["schemas"]["TerminalID"];
-            terminals: components["schemas"]["TerminalOption"][];
-            applications: components["schemas"]["TerminalApplication"][];
-            customTerminal?: components["schemas"]["CustomTerminal"];
+        OpenTerminalSessionRequest: {
+            /** @enum {string} */
+            kind: "ssh" | "shell";
+            alias?: string;
+            cols?: number;
+            rows?: number;
+        };
+        RenameTerminalSessionRequest: {
+            title: string;
+        };
+        TerminalStreamTicket: {
+            streamTicket: string;
+        };
+        OpenTerminalSessionResponse: {
+            session: components["schemas"]["TerminalSession"];
+            streamTicket: string;
         };
         /** @enum {string} */
         SyncDirection: "both" | "push" | "pull";
@@ -1446,9 +1462,6 @@ export interface components {
         };
         StorePasswordRequest: {
             password: string;
-        };
-        TerminalLaunchResponse: {
-            launched: boolean;
         };
         IssueActionRequest: {
             kind: string;
@@ -1742,16 +1755,13 @@ export interface components {
         Metadata: {
             schemaVersion: number;
             groupsFile?: string;
-            terminal?: components["schemas"]["TerminalID"];
-            customTerminal?: components["schemas"]["CustomTerminal"];
+            embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
         };
-        /** @enum {string} */
-        TerminalID: "terminal" | "iterm2" | "kitty" | "ghostty" | "wezterm" | "custom";
-        CustomTerminal: {
-            application: string;
-            arguments?: string[];
+        EmbeddedTerminal: {
+            maxSessions?: number;
+            scrollbackBytes?: number;
         };
         PendingTransaction: {
             id: string;
@@ -2330,7 +2340,7 @@ export interface operations {
             401: components["responses"]["Problem"];
         };
     };
-    getTerminalOptions: {
+    listTerminalSessions: {
         parameters: {
             query?: never;
             header?: never;
@@ -2339,19 +2349,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Which terminals this machine can open, and which one Connect uses */
+            /** @description Every open and retained terminal session */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TerminalOptionsResponse"];
+                    "application/json": components["schemas"]["TerminalSessionList"];
                 };
             };
             401: components["responses"]["Problem"];
         };
     };
-    setTerminalPreference: {
+    openTerminalSession: {
         parameters: {
             query?: never;
             header?: never;
@@ -2360,52 +2370,101 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TerminalPreferenceRequest"];
+                "application/json": components["schemas"]["OpenTerminalSessionRequest"];
             };
         };
         responses: {
-            /** @description Saved machine-wide terminal preference and refreshed availability */
-            200: {
+            /** @description The session and a single-use ticket for its stream */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TerminalOptionsResponse"];
+                    "application/json": components["schemas"]["OpenTerminalSessionResponse"];
                 };
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
         };
     };
-    launchTerminal: {
+    issueTerminalStreamTicket: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AliasRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Terminal opened */
+            /** @description A single-use ticket bound to this session */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalStreamTicket"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    closeTerminalSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session list after the close */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TerminalLaunchResponse"];
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    renameTerminalSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameTerminalSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The session list after the rename */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
                 };
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
         };
     };
     getSyncStatus: {

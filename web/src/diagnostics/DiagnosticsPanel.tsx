@@ -388,25 +388,13 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
           </pre>
           <div className="flex items-center gap-2">
             <CopyButton value={terminal.command} label="copy.command" />
-            {terminal.launchable ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void run(() => api.terminalLaunch(alias), () => undefined, t("diag.terminalFailed"))
-                }
-                className={secondaryAction}
-              >
-                {t("diag.openInTerminal")}
-              </button>
-            ) : null}
           </div>
           {/*
-            このアプリケーションが起動を拒否する alias にも、その
-            コマンドは与えられる。それを見せる目的はコピーできる
-            ことに尽きる。design §6.5 はコピーを許し、起動だけを差し止める。
+            接続はこのアプリケーションの中で開く。ここにあるのは、自分の端末へ
+            貼るための文字列である。コマンドラインに載せられない alias にも
+            その文字列は与えられ、そのときは理由が添えられる。
           */}
-          {terminal.launchable ? null : <p className="text-notice-ink">{terminal.warning}</p>}
+          {terminal.warning === "" ? null : <p className="text-notice-ink">{terminal.warning}</p>}
         </div>
       ) : null}
     </section>

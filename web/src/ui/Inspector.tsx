@@ -6,6 +6,10 @@ import { useTranslate } from "../i18n/context";
 // 注意を必要とするかどうか。null を渡すセクションにはトグルすら付かない:
 // どこにでも提供されるのに 10 回のうち 9 回は空のペインは、人々にそれを
 // 開かないよう教え込んでしまう。
+//
+// 面はひとつである。開いているコンソールの一覧は、ここではなく一番左の
+// ナビゲーションにある——セクションごとに中身が変わって既定で閉じている
+// ペインは、「いま何本繋がっているか」を答える場所として噛み合わない。
 export type InspectorContent = { label: string; attention: boolean; body: ReactNode } | null;
 
 export const inspectorId = "inspector";

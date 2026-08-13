@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"sshc/internal/platform"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 const (
@@ -22,7 +22,17 @@ const (
 	// 存在するかを宣言するので、hosts[].group にも groups[].parent にも
 	// 語ることはもう何も残っていない。バージョン 1 の文書はデコードされ、その
 	// 2 つのフィールドを単に失う。json.Unmarshal は構造体にもう存在しないものを無視するからだ。
-	MetadataSchemaVersion = 2
+	//
+	// バージョン 3 で端末の選択を廃止した。端末はこのアプリケーションの中で開く
+	// ようになり、外部の端末アプリケーションを起こす経路そのものが無くなったので、
+	// terminal と customTerminal には語ることが残っていない。バージョン 2 の文書は
+	// 同じやり方でデコードされ、その 2 つを失う。
+	//
+	// **新しい設定に terminal というキーは使えない。** バージョン 2 の文書はそこに
+	// 文字列を持っており、同じキーをオブジェクトへ変えると json.Unmarshal は文書
+	// 全体で失敗する。グループも色もお気に入りも道連れに読めなくなるので、
+	// 埋め込みターミナルの設定は embeddedTerminal という別のキーに置く。
+	MetadataSchemaVersion = 3
 	// MetadataFileName はワークスペースの状態ディレクトリに置かれ、設定ツリーには
 	// 置かれないので、SSH 設定として読まれることは決してない。
 	MetadataFileName = "metadata.json"
@@ -37,7 +47,7 @@ var (
 	ErrMetadataSecret   = errors.New("metadata may not contain key material")
 	ErrMetadataPath     = errors.New("metadata host path must be relative to the ssh directory")
 	ErrMetadataGroup    = errors.New("metadata group definition is invalid")
-	ErrMetadataTerminal = errors.New("metadata terminal is invalid")
+	ErrMetadataTerminal = errors.New("metadata terminal settings are invalid")
 )
 
 // secretMarkers は、整理用のフィールドに鍵材料を保存しようとした痕跡を示す
@@ -94,38 +104,43 @@ type GroupMetadata struct {
 	Settings []Setting `json:"settings,omitempty"`
 }
 
-// CustomTerminal は、表に無いアプリケーションで開くための選択である。
+// EmbeddedTerminal は、埋め込みターミナルの上限である。
 //
-// Application はこのマシンで実際に見つかったバンドルのパスで、Arguments は
-// その前に置く argv の要素である。**シェルは間に無い。** それでも開く先へは
-// 渡るので、値は platform.ValidateTerminalChoice が検証する。
-type CustomTerminal struct {
-	Application string   `json:"application"`
-	Arguments   []string `json:"arguments,omitempty"`
+// 0 は「書かれていない」であって「0 本」ではない。読み取り側は範囲の外の値と
+// 同じように既定へ戻す。
+type EmbeddedTerminal struct {
+	MaxSessions     int `json:"maxSessions,omitempty"`
+	ScrollbackBytes int `json:"scrollbackBytes,omitempty"`
 }
 
 // Metadata は~/.ssh/sshc/metadata.json の全体である。
 type Metadata struct {
-	SchemaVersion  int                 `json:"schemaVersion"`
-	GroupsFile     string              `json:"groupsFile,omitempty"`
-	Terminal       platform.TerminalID `json:"terminal,omitempty"`
-	CustomTerminal *CustomTerminal     `json:"customTerminal,omitempty"`
-	Groups         []GroupMetadata     `json:"groups,omitempty"`
-	Hosts          []HostMetadata      `json:"hosts,omitempty"`
+	SchemaVersion int    `json:"schemaVersion"`
+	GroupsFile    string `json:"groupsFile,omitempty"`
+	// EmbeddedTerminal はポインタである。書かれていない文書と、既定と同じ値が
+	// 明示的に書かれた文書を、書き戻すときに区別できるようにするためだ。
+	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
+	Groups           []GroupMetadata   `json:"groups,omitempty"`
+	Hosts            []HostMetadata    `json:"hosts,omitempty"`
 }
 
-// TerminalChoice は、保存された選択を起動側の語彙へ移す。
-func (metadata Metadata) TerminalChoice() platform.TerminalChoice {
-	choice := platform.TerminalChoice{ID: metadata.Terminal}
-	if metadata.Terminal == platform.TerminalCustom && metadata.CustomTerminal != nil {
-		choice.Application = metadata.CustomTerminal.Application
-		choice.Arguments = metadata.CustomTerminal.Arguments
+// TerminalLimits は、保存された設定を埋め込みターミナルの語彙へ移す。
+//
+// 範囲の外は拒否ではなく既定へ戻す。ここは読み取りであり、手で書かれた数字ひとつが
+// 色もタグもお気に入りも道連れに読めなくしてよい理由はない。書き込み側は
+// ValidateMetadata が範囲の外を拒否し続ける。
+func (metadata Metadata) TerminalLimits() terminal.Limits {
+	if metadata.EmbeddedTerminal == nil {
+		return terminal.DefaultLimits()
 	}
-	return choice
+	return terminal.Limits{
+		MaxSessions: metadata.EmbeddedTerminal.MaxSessions,
+		Scrollback:  metadata.EmbeddedTerminal.ScrollbackBytes,
+	}.Normalise()
 }
 
 func NewMetadata() Metadata {
-	return Metadata{SchemaVersion: MetadataSchemaVersion, GroupsFile: DefaultGroupsFile, Terminal: platform.TerminalApple}
+	return Metadata{SchemaVersion: MetadataSchemaVersion, GroupsFile: DefaultGroupsFile}
 }
 
 // GroupsPath は設定されたグループファイルを返し、無ければデフォルトに fallback する。
@@ -155,16 +170,13 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile
 	}
-	// 知らない端末は既定へ戻す。ここは読み取りであり、これは画面の飾りひとつで
-	// ある。グループも色もお気に入りも道連れに読めなくするほどの値ではない。
-	// 書き込み側は依然として厳格で、ValidateMetadata が語彙の外を拒否する。
-	if err := platform.ValidateTerminalChoice(metadata.TerminalChoice()); err != nil {
-		metadata.Terminal = platform.TerminalApple
-		metadata.CustomTerminal = nil
-	}
-	if (metadata.Terminal == platform.TerminalCustom) != (metadata.CustomTerminal != nil) {
-		metadata.Terminal = platform.TerminalApple
-		metadata.CustomTerminal = nil
+	// 範囲の外の上限は既定へ戻す。ここは読み取りであり、これは数字ひとつである。
+	// 書き込み側は依然として厳格で、ValidateMetadata が範囲の外を拒否する。
+	if metadata.EmbeddedTerminal != nil {
+		limits := metadata.TerminalLimits()
+		metadata.EmbeddedTerminal = &EmbeddedTerminal{
+			MaxSessions: limits.MaxSessions, ScrollbackBytes: limits.Scrollback,
+		}
 	}
 	return metadata, nil
 }
@@ -174,9 +186,6 @@ func EncodeMetadata(metadata Metadata) ([]byte, error) {
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile
-	}
-	if metadata.Terminal == "" {
-		metadata.Terminal = platform.TerminalApple
 	}
 	if err := ValidateMetadata(metadata); err != nil {
 		return nil, err
@@ -202,12 +211,16 @@ func EncodeMetadata(metadata Metadata) ([]byte, error) {
 
 // ValidateMetadata は設計の不変条件を破る文書を拒否する。
 func ValidateMetadata(metadata Metadata) error {
-	if err := platform.ValidateTerminalChoice(metadata.TerminalChoice()); err != nil {
-		return fmt.Errorf("%w: %w", ErrMetadataTerminal, err)
-	}
-	// custom は開く先を持たなければ選択として成立せず、それ以外は持ってはならない。
-	if (metadata.Terminal == platform.TerminalCustom) != (metadata.CustomTerminal != nil) {
-		return ErrMetadataTerminal
+	// 上限は範囲の中でなければ書けない。読み取りが既定へ戻すのとは対称ではない
+	// ——書き込みはこのアプリケーション自身の操作であり、そこに範囲外が現れたら
+	// それは利用者の古いファイルではなく、こちらの間違いだからである。
+	if settings := metadata.EmbeddedTerminal; settings != nil {
+		if settings.MaxSessions < terminal.MinMaxSessions || settings.MaxSessions > terminal.MaxMaxSessions {
+			return fmt.Errorf("%w: maxSessions %d", ErrMetadataTerminal, settings.MaxSessions)
+		}
+		if settings.ScrollbackBytes < terminal.MinScrollback || settings.ScrollbackBytes > terminal.MaxScrollback {
+			return fmt.Errorf("%w: scrollbackBytes %d", ErrMetadataTerminal, settings.ScrollbackBytes)
+		}
 	}
 	if _, err := checkRelative(metadata.GroupsPath()); err != nil {
 		return err

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, failureCode, type Problem } from "../api/client";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { ApiError, type Problem } from "../api/client";
 import {
   configApi,
   type EditRequest,
@@ -28,7 +28,8 @@ import type { InspectorContent } from "../ui/Inspector";
 import { HostInspector, hostNeedsAttention } from "./HostInspector";
 import { Button, Notice } from "../ui/surface";
 import { duplicateHostBlock, removeHostBlock } from "./blocks";
-import { integrationsApi, type TerminalID, type TerminalOptionsResponse } from "../api/integrations";
+import { integrationsApi } from "../api/integrations";
+import type { TerminalSessionsState } from "../terminal/sessions";
 import { Icon } from "../ui/icons";
 import type {
   BrowserLocation,
@@ -44,11 +45,18 @@ import {
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import { keysApi } from "../keys/api";
 import { ConnectionSummary } from "./ConnectionSummary";
-import {
-  loadConnectionSavedState,
-  type ConnectionSavedState,
-} from "./connectionSavedState";
+import { loadConnectionSavedState, type ConnectionSavedState } from "./connectionSavedState";
 import { ManageConnection } from "./ManageConnection";
+
+// xterm.js は 400 kB を超える。それを接続画面の chunk に入れると、一覧を開く
+// たびにその重さを払うことになる——端末を開かない人も含めて。だから端末だけを
+// 別の chunk に切り、コンソールを選んだときに初めて読む。
+//
+// これは体感の話にとどまらない。接続画面は URL の正規化をマウント後に行うので、
+// chunk が重くなるとそのリダイレクトも遅れる。end-to-end はそれを捉えた。
+const TerminalView = lazy(() =>
+  import("../terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
+);
 
 // Groups 画面が報告し、この画面は報告しないもの。
 //
@@ -76,16 +84,6 @@ const selectionNoticeCodes = new Set([
   "explained_values_only",
 ]);
 
-// 端末の表示名。ID は語彙であって、画面に出す名前ではない。custom だけは
-// 翻訳される——それはアプリケーションの名前ではなく、選び方の名前だからだ。
-const terminalNames: Record<Exclude<TerminalID, "custom">, string> = {
-  terminal: "Terminal.app",
-  iterm2: "iTerm2",
-  kitty: "kitty",
-  ghostty: "Ghostty",
-  wezterm: "WezTerm",
-};
-
 function toProblem(error: unknown): Problem {
   if (error instanceof ApiError && error.problem !== null) return error.problem;
   if (error instanceof ApiError) return { code: error.code, message: "request rejected" };
@@ -107,6 +105,11 @@ type ConnectionsPageProps = {
   onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
+  // 開いているセッションはシェルが持つ。一覧は一番左のナビゲーションにあり、
+  // この画面はそのうち選ばれた一本を描くだけである。
+  consoles: TerminalSessionsState;
+  activeConsole: string | null;
+  onShowConsole: (id: string) => void;
 };
 
 type SaveAttempt =
@@ -124,6 +127,9 @@ export function ConnectionsPage({
   onNavigationBlockerChange,
   preferredKey = null,
   onPreferredKeyApplied,
+  consoles,
+  activeConsole,
+  onShowConsole,
 }: ConnectionsPageProps) {
   const t = useTranslate();
   const initialRoute = parseConnectionLocation(location);
@@ -152,9 +158,6 @@ export function ConnectionsPage({
   const [creating, setCreating] = useState(creationDraft !== null);
   const [launching, setLaunching] = useState(false);
   const [managing, setManaging] = useState(false);
-  // null は未取得または取得失敗、空の terminals はランチャー非対応という
-  // 異なる答えなので、一つの options オブジェクトのまま保持する。
-  const [terminalChoice, setTerminalChoice] = useState<TerminalOptionsResponse | null>(null);
   const [missingSelection, setMissingSelection] = useState(false);
 
   useEffect(() => {
@@ -352,46 +355,15 @@ export function ConnectionsPage({
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [editorDirty]);
 
-  // このプラットフォームが端末を起動できるか。null(未確定)と、中身のある
-  // 配列は起動できる側として扱う——起動できないと言い切れるのは、サーバー
-  // が空配列で答えたときだけである。
-  const terminals = terminalChoice?.terminals ?? null;
-  const launchable = terminals === null || terminals.length > 0;
-  const selectedTerminal: TerminalID = terminalChoice?.selected ?? overview?.metadata.terminal ?? "terminal";
-  const custom = terminalChoice?.customTerminal ?? overview?.metadata.customTerminal;
+  // Home で開かれたセッションは、この画面へ来た時点で選択される。
 
-  // 画面に出す名前。custom は選ばれているアプリケーションの名前で呼ぶ。
-  // 「その他のアプリ」では、開けなかったときに何が開けなかったか分からない。
-  function terminalLabel(id: TerminalID): string {
-    if (id !== "custom") return terminalNames[id];
-    const chosen = terminalChoice?.applications.find((application) => application.path === custom?.application);
-    return chosen?.name ?? custom?.application ?? t("conn.otherApplication");
-  }
 
-  // 端末の一覧は設定を変えず、何も起動しない。読み取りに失敗しても画面は
-  // そのまま使えるので、ここでは何も報告しない。
-  useEffect(() => {
-    let active = true;
-    void integrationsApi
-      .terminalOptions()
-      .then((options) => {
-        if (!active) return;
-        setTerminalChoice(options);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
 
-  // ペインは開いている connection に追従し、開くまでは空である——背後
-  // に何も無いトグルは、トグルが無いことより悪い。
-  //
-  // body はすべての overview とすべての detail のたびに再構築される。
-  // onMetadata が他のホストのエントリを保つために overview をクロージャ
-  // に取り込んでいるためだ。memo 化した body では古い metadata 文書を編集し続けてしまう。
   useEffect(() => {
     if (detail === null || overview === null) {
+      // 開いている接続が無ければ、このペインに調べるものは無い。開いている
+      // コンソールの一覧は一番左のナビゲーションにあるので、ここが空でも
+      // ローカルシェルへ行く道は残っている。
       onInspector(null);
       return;
     }
@@ -780,23 +752,15 @@ export function ConnectionsPage({
     await reload();
   }
 
+  // 接続はこのアプリケーションの中で開く。外部の端末アプリケーションは
+  // 起こさない。action token も要らない——vault ゲートだけが条件である。
   async function connectHost() {
-    if (selection === null || launching || editorDirty || refreshState !== "idle" || !launchable) return;
+    if (selection === null || launching || editorDirty || refreshState !== "idle") return;
     setLaunching(true);
     setLocalError("");
-    try {
-      await integrationsApi.terminalLaunch(selection.alias);
-    } catch (error) {
-      // 「入っていない」と「開けなかった」は別の答えである。前者は選び直すか
-      // インストールすれば直り、それは画面が言えることの中でいちばん役に立つ。
-      setLocalError(
-        failureCode(error) === "terminal_not_installed"
-          ? t("conn.terminalMissing", { terminal: terminalLabel(selectedTerminal) })
-          : t("conn.launchFailed", { alias: selection.alias }),
-      );
-    } finally {
-      setLaunching(false);
-    }
+    const opened = await consoles.open({ kind: "ssh", alias: selection.alias });
+    if (opened !== null) onShowConsole(opened.id);
+    setLaunching(false);
   }
 
   function duplicateHost() {
@@ -871,6 +835,8 @@ export function ConnectionsPage({
     clearTarget({ replace: true });
   }
 
+  const activeConsoleSession = consoles.sessions.find((session) => session.id === activeConsole);
+
   if (overview === null) {
     return <p role="status" className="text-sm text-ink-muted">{t("conn.loading")}</p>;
   }
@@ -923,6 +889,19 @@ export function ConnectionsPage({
           )}
         </div>
       </div>
+      {activeConsoleSession !== undefined ? (
+        // コンソールを選んでいるあいだ、右のカラムは端末そのものである。
+        // 余白もスクロールも端末が自分で持つので、この列は素の箱でよい。
+        <div className="flex min-h-0 flex-col">
+          <Suspense fallback={null}>
+            <TerminalView
+              key={activeConsoleSession.id}
+              session={activeConsoleSession}
+              onExit={() => consoles.markExited(activeConsoleSession.id)}
+            />
+          </Suspense>
+        </div>
+      ) : (
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6">
         {/*
           グループ単位の notice は Groups 画面のものであり、README にもそう
@@ -974,18 +953,10 @@ export function ConnectionsPage({
           </section>
         ) : (
           <>
-            {terminals !== null &&
-            terminals.some((option) => option.id === selectedTerminal && !option.installed) ? (
-              <Notice>{t("conn.terminalMissing", { terminal: terminalLabel(selectedTerminal) })}</Notice>
-            ) : null}
-            {terminals !== null && terminals.length === 0 ? (
-              <Notice>{t("conn.terminalUnsupported")}</Notice>
-            ) : null}
             <ConnectionSummary
               state={savedState}
               dirty={editorDirty}
               refreshing={refreshState !== "idle"}
-              connectAvailable={launchable}
               onConnect={() => void connectHost()}
               connecting={launching}
               onToggleManage={() => setManaging((current) => !current)}
@@ -1037,6 +1008,7 @@ export function ConnectionsPage({
           </>
         )}
       </div>
+      )}
     </div>
     {creating ? (
       <CreateConnectionModal

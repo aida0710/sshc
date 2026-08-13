@@ -11,7 +11,6 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/effective"
 	"sshc/internal/platform"
-	"sshc/internal/secret"
 	"sshc/internal/session"
 )
 
@@ -19,17 +18,6 @@ import (
 type DiagnosticsHandlers struct {
 	Service *diagnostics.Service
 	Actions ActionHandlers
-	// SetPreferredTerminal is the narrow metadata mutation owned by the
-	// configuration service. It is optional so diagnostics-only platforms can
-	// still expose read-only terminal inventory.
-	SetPreferredTerminal func(platform.TerminalChoice) (bool, error)
-	// Passwords、AskpassHelper、AskpassURL は、保存されたパスワードを持つ
-	// host に対して起動に武装させる。3 つすべてが nil または空であれば、
-	// すべての起動は素の経路をたどる。これは vault を持たないサーバーのふるまいである。
-	Passwords           *secret.Service
-	KeyPassphraseTarget func(alias string) (relativePath, promptPath, configSnapshot, evidence string, ok bool, err error)
-	AskpassHelper       string
-	AskpassURL          string
 }
 
 func registerDiagnosticsRoutes(engine *echo.Echo, handlers DiagnosticsHandlers) {
@@ -38,9 +26,6 @@ func registerDiagnosticsRoutes(engine *echo.Echo, handlers DiagnosticsHandlers) 
 	engine.POST("/api/v1/diagnostics/reachability", handlers.Reachability)
 	engine.POST("/api/v1/diagnostics/authentication", handlers.Authentication)
 	engine.POST("/api/v1/terminal/command", handlers.TerminalCommand)
-	engine.GET("/api/v1/terminal/options", handlers.TerminalOptions)
-	engine.PUT("/api/v1/terminal/preference", handlers.TerminalPreference)
-	engine.POST("/api/v1/terminal/launch", handlers.TerminalLaunch)
 }
 
 // addDiagnosticsActions は、このサブシステムが所有する確認を登録する。
@@ -64,7 +49,6 @@ func addDiagnosticsActions(registry actionRegistry, service *diagnostics.Service
 		session.ActionEvaluate,
 		session.ActionReachability,
 		session.ActionAuthentication,
-		session.ActionTerminalLaunch,
 	} {
 		registry[kind] = actionKind{evidence: evidence, fail: diagnosticsProblem}
 	}
@@ -240,12 +224,10 @@ func (h DiagnosticsHandlers) Authentication(c *echo.Context) error {
 	})
 }
 
-// TerminalCommand は、alias に対するコマンドテキストと、このアプリケーションが
-// それを起動する意思があるかどうかを返す。
+// TerminalCommand は、alias に対するコマンドテキストを返す。
 //
-// これは、起動を拒否するはずの alias についても意図的に説明する。
-// alias が安全な集合から外れているユーザーであっても、確認したうえで
-// 自分自身で実行するためにコマンドを見る必要があるからだ。
+// 埋め込みターミナルができたあともこれが残っているのは、自分の端末で開きたい人が
+// いるからである。何も起動しないので確認も要らない。
 func (h DiagnosticsHandlers) TerminalCommand(c *echo.Context) error {
 	var request api.AliasRequest
 	if err := decodeJSON(c, &request); err != nil {
@@ -254,138 +236,8 @@ func (h DiagnosticsHandlers) TerminalCommand(c *echo.Context) error {
 	if request.Alias == "" || len(request.Alias) > maxAliasLength {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	command, launchable, warning := h.Service.TerminalCommand(request.Alias)
-	return c.JSON(http.StatusOK, api.TerminalCommandResponse{
-		Command:    command,
-		Launchable: launchable,
-		Warning:    warning,
-	})
-}
-
-// TerminalOptions は、選べる端末と、いま接続に使われるものを返す。
-//
-// 何も起動せず、設定も変えない。画面が「選べるが、このマシンには無い」を
-// 選ぶ前に言えるようにするためだけの読み取りである。
-func (h DiagnosticsHandlers) TerminalOptions(c *echo.Context) error {
-	return c.JSON(http.StatusOK, h.terminalOptionsResponse())
-}
-
-func (h DiagnosticsHandlers) terminalOptionsResponse() api.TerminalOptionsResponse {
-	available, applications, selected := h.Service.TerminalOptions()
-	response := api.TerminalOptionsResponse{
-		Selected:     api.TerminalID(selected.ID),
-		Terminals:    make([]api.TerminalOption, 0, len(available)),
-		Applications: make([]api.TerminalApplication, 0, len(applications)),
-	}
-	for _, option := range available {
-		response.Terminals = append(response.Terminals, api.TerminalOption{
-			Id:        api.TerminalID(option.ID),
-			Installed: option.Installed,
-		})
-	}
-	for _, application := range applications {
-		response.Applications = append(response.Applications, api.TerminalApplication{
-			Name: application.Name, Path: application.Path,
-		})
-	}
-	if selected.ID == platform.TerminalCustom {
-		arguments := append([]string(nil), selected.Arguments...)
-		response.CustomTerminal = &api.CustomTerminal{
-			Application: selected.Application,
-			Arguments:   &arguments,
-		}
-	}
-	return response
-}
-
-// TerminalPreference replaces only the global launcher choice. The request
-// cannot carry the rest of metadata, which is what prevents a stale Settings
-// tab from overwriting unrelated host or group changes.
-func (h DiagnosticsHandlers) TerminalPreference(c *echo.Context) error {
-	if h.SetPreferredTerminal == nil {
-		return problem(c, http.StatusServiceUnavailable, "terminal_preference_unavailable")
-	}
-	var request api.TerminalPreferenceRequest
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_terminal_preference")
-	}
-	choice := platform.TerminalChoice{ID: platform.TerminalID(request.Selected)}
-	if request.CustomTerminal != nil {
-		choice.Application = request.CustomTerminal.Application
-		if request.CustomTerminal.Arguments != nil {
-			choice.Arguments = append([]string(nil), (*request.CustomTerminal.Arguments)...)
-		}
-	}
-	if (choice.ID == platform.TerminalCustom) != (request.CustomTerminal != nil) {
-		return problem(c, http.StatusBadRequest, "invalid_terminal_preference")
-	}
-	if err := platform.ValidateTerminalChoice(choice); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_terminal_preference")
-	}
-	available, applications, _ := h.Service.TerminalOptions()
-	choiceAvailable := false
-	if choice.ID == platform.TerminalCustom {
-		for _, application := range applications {
-			if application.Path == choice.Application {
-				choiceAvailable = true
-				break
-			}
-		}
-	} else {
-		for _, terminal := range available {
-			if terminal.ID == choice.ID && terminal.Installed {
-				choiceAvailable = true
-				break
-			}
-		}
-	}
-	if !choiceAvailable {
-		return problem(c, http.StatusConflict, "terminal_not_available")
-	}
-	if _, err := h.SetPreferredTerminal(choice); err != nil {
-		return problem(c, http.StatusInternalServerError, "terminal_preference_failed")
-	}
-	return c.JSON(http.StatusOK, h.terminalOptionsResponse())
-}
-
-// TerminalLaunch は、確認済みで安全な alias に対して Terminal を開く。
-//
-// alias は確認が消費される前にチェックされる。したがって、このアプリケーションが
-// 起動しない alias は、トークンを消費することもできない。
-func (h DiagnosticsHandlers) TerminalLaunch(c *echo.Context) error {
-	var request api.AliasRequest
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	if err := platform.ValidateAlias(request.Alias); err != nil {
-		return problem(c, http.StatusBadRequest, "alias_not_launchable")
-	}
-	if allowed, response := h.Actions.consume(c, session.ActionTerminalLaunch, request.Alias); !allowed {
-		return response
-	}
-	// 保存されたパスワードは、この 1 個の接続に対してヘルパーを武装させる。
-	// トークンは確認が消費された後、ここで発行される。したがって、トークンが
-	// 存在するのはユーザーがまさに承認した起動に対してだけである。
-	if h.armed(request.Alias) {
-		if err := h.Service.LaunchTerminalWithPassword(
-			c.Request().Context(), request.Alias, h.AskpassHelper, h.AskpassURL, "",
-		); err != nil {
-			return terminalProblem(c, err)
-		}
-		return c.JSON(http.StatusOK, api.TerminalLaunchResponse{Launched: true})
-	}
-	if err := h.Service.LaunchTerminal(c.Request().Context(), request.Alias); err != nil {
-		return terminalProblem(c, err)
-	}
-	return c.JSON(http.StatusOK, api.TerminalLaunchResponse{Launched: true})
-}
-
-// terminalProblem は、選び直せば直る失敗を、そうでないものと区別して返す。
-func terminalProblem(c *echo.Context, err error) error {
-	if errors.Is(err, platform.ErrTerminalNotInstalled) {
-		return problem(c, http.StatusConflict, "terminal_not_installed")
-	}
-	return problem(c, http.StatusInternalServerError, "terminal_launch_failed")
+	command, warning := h.Service.TerminalCommand(request.Alias)
+	return c.JSON(http.StatusOK, api.TerminalCommandResponse{Command: command, Warning: warning})
 }
 
 func describeDirectives(directives []effective.Executable) []api.ExecutableDirective {
@@ -414,23 +266,4 @@ func severityName(severity config.Severity) string {
 	default:
 		return "info"
 	}
-}
-
-// armed は、この起動が askpass ヘルパーを伴うべきかどうかを報告する。
-//
-// すべての部品がそろっていなければならない: vault、解錠済みであること、
-// この alias 用の保存されたパスワード、ヘルパーのパス、そしてエンドポイント。
-// 欠けている部品があれば、失敗するのではなく素の起動にフォールバックする。
-// 開いて手でパスワードを尋ねる terminal は、それでも正常な接続だからである。
-func (h DiagnosticsHandlers) armed(alias string) bool {
-	if h.Passwords == nil || h.AskpassHelper == "" || h.AskpassURL == "" {
-		return false
-	}
-	if h.KeyPassphraseTarget != nil {
-		relativePath, _, _, _, ok, err := h.KeyPassphraseTarget(alias)
-		if err == nil && ok {
-			return h.Passwords.HasKeyPassphrase(relativePath)
-		}
-	}
-	return false
 }

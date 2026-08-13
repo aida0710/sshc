@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"sshc/internal/config"
@@ -101,105 +100,8 @@ func runOpen(ctx context.Context, stateDir string, client *http.Client, browser 
 // 使うのと同じ継ぎ目なので、「どの ssh か」への答えはひとつしかない。
 type sshFinder interface{ SSH() (string, error) }
 
-// connectEnvironment は、ssh を実行する環境である。
-//
-// ユーザー自身の環境はそのまま引き継ぐ。これはユーザーが自分で行ったであろう接続
-// だからである。askpass ヘルパーを武装させる五つの変数は引き継がない。いったん
-// 取り除いてから設定するので、OpenSSH が読むのは、このコードが決めた値になる。
-//
-// これは見た目以上に重要である。exec.Cmd は配列をそのまま渡し、getenv は
-// その中で最初に一致したものを返す。したがって追記方式では、ユーザーが何年も前に
-// エクスポートした SSH_ASKPASS に負ける — しかも負けながら、保存済み鍵パスフレーズと
-// 引き換えられるワンタイムトークンをそのプログラムに渡してしまう。武装しない接続
-// でもこれらを取り除くのは、古い変数が接続を武装させてしまわないようにするため
-// である。
-func connectEnvironmentForCredential(inherited []string, helper, url, token, alias, kind, keyPath string) []string {
-	decided := map[string]string{}
-	if helper != "" && token != "" {
-		decided = map[string]string{
-			"SSH_ASKPASS":         helper,
-			"SSH_ASKPASS_REQUIRE": "force",
-			URLVariable:           url,
-			TokenVariable:         token,
-			AliasVariable:         alias,
-			KindVariable:          kind,
-		}
-		if kind == askpassKindKeyPassphrase && keyPath != "" {
-			decided[KeyPathVariable] = keyPath
-		}
-	}
-	ours := map[string]bool{
-		"SSH_ASKPASS": true, "SSH_ASKPASS_REQUIRE": true,
-		URLVariable: true, TokenVariable: true, AliasVariable: true, KindVariable: true, KeyPathVariable: true,
-	}
-
-	environment := make([]string, 0, len(inherited)+len(decided))
-	for _, entry := range inherited {
-		name, _, found := strings.Cut(entry, "=")
-		if found && ours[name] {
-			continue
-		}
-		environment = append(environment, entry)
-	}
-	for _, name := range []string{"SSH_ASKPASS", "SSH_ASKPASS_REQUIRE", URLVariable, TokenVariable, AliasVariable, KindVariable, KeyPathVariable} {
-		if value, set := decided[name]; set {
-			environment = append(environment, name+"="+value)
-		}
-	}
-	return environment
-}
-
-func connectArguments(alias, askpassKind, configPath, identityFile string) []string {
-	arguments := []string{"ssh"}
-	if askpassKind == askpassKindKeyPassphrase && configPath != "" && identityFile != "" {
-		arguments = append(arguments,
-			"-F", configPath,
-			"-i", identityFile,
-			"-o", "IdentitiesOnly=yes",
-		)
-	}
-	return append(arguments, "--", alias)
-}
-
-// createConnectionConfig creates the frozen configuration in a private
-// directory and returns an idempotent cleanup function. OpenSSH closes
-// inherited descriptors before reading -F on macOS and may reopen the file for
-// hostname canonicalisation, so this must remain a named, reopenable file until
-// the ssh process exits.
-func createConnectionConfig(contents string) (string, func(), error) {
-	directory, err := os.MkdirTemp("", "sshc-connect-*")
-	if err != nil {
-		return "", func() {}, err
-	}
-	path := filepath.Join(directory, "config")
-	cleaned := false
-	cleanup := func() {
-		if cleaned {
-			return
-		}
-		cleaned = true
-		_ = os.Remove(path)
-		_ = os.Remove(directory)
-	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		cleanup()
-		return "", func() {}, err
-	}
-	if _, err := io.WriteString(file, contents); err != nil {
-		_ = file.Close()
-		cleanup()
-		return "", func() {}, err
-	}
-	if err := file.Close(); err != nil {
-		cleanup()
-		return "", func() {}, err
-	}
-	return path, cleanup, nil
-}
-
 func executeSSH(ssh string, arguments, environment []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	command := exec.Command(ssh, arguments[1:]...)
+	command := exec.Command(ssh, arguments...)
 	command.Env = environment
 	command.Stdin = stdin
 	command.Stdout = stdout
@@ -229,7 +131,7 @@ func runConnect(ctx context.Context, alias string, stateDir string, client *http
 		return 2
 	}
 
-	helper, url, token, askpassKind, identityFile, sshConfig := "", "", "", "", "", ""
+	var credential platform.AskpassCredential
 	answer, err := askApplication(ctx, alias, stateDir, client)
 	switch {
 	case err != nil:
@@ -243,21 +145,13 @@ func runConnect(ctx context.Context, alias string, stateDir string, client *http
 			if pathErr != nil {
 				fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%v)\n", pathErr)
 			} else {
-				askpassKind = answer.AskpassKind
-				if askpassKind != askpassKindKeyPassphrase {
-					fmt.Fprintln(stderr, "sshc: connecting without a saved key passphrase (the running sshc returned an unsupported credential kind)")
-					askpassKind = ""
-				} else if answer.IdentityFile == "" || answer.SSHConfig == "" {
-					fmt.Fprintln(stderr, "sshc: connecting without a saved key passphrase (the running sshc did not provide a fixed SSH configuration)")
-					askpassKind = ""
-				} else {
-					helper, url, token = resolved, answer.AskpassURL, answer.AskpassToken
-					identityFile, sshConfig = answer.IdentityFile, answer.SSHConfig
+				credential = platform.AskpassCredential{
+					Helper: resolved, URL: answer.AskpassURL, Token: answer.AskpassToken,
+					Kind: answer.AskpassKind, IdentityFile: answer.IdentityFile, SSHConfig: answer.SSHConfig,
 				}
 			}
 		}
 	}
-	environment := connectEnvironmentForCredential(os.Environ(), helper, url, token, alias, askpassKind, identityFile)
 
 	// このアプリケーションが起動する他のすべての OpenSSH プログラムと同じやり方で
 	// 解決する。固定のディレクトリ一覧から絶対パスへ、である。PATH は参照しない。
@@ -268,19 +162,21 @@ func runConnect(ctx context.Context, alias string, stateDir string, client *http
 		fmt.Fprintf(stderr, "sshc: ssh was not found where it is expected: %v\n", err)
 		return 1
 	}
-	configPath := ""
-	cleanupConfig := func() {}
-	if askpassKind == askpassKindKeyPassphrase {
-		configPath, cleanupConfig, err = createConnectionConfig(sshConfig)
-		if err != nil {
-			fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%v)\n", err)
-			helper, url, token, askpassKind, identityFile = "", "", "", "", ""
-			environment = connectEnvironmentForCredential(os.Environ(), "", "", "", alias, "", "")
-		}
+
+	// 起動一式の組み立ては internal/platform が持つ。埋め込みターミナルが同じ
+	// 関数を呼ぶので、環境から五つの変数を取り除く処理はこのリポジトリに一つしかない。
+	session, cleanup, err := platform.InteractiveSSH(platform.InteractiveRequest{
+		SSH: ssh, Alias: alias, Inherited: os.Environ(), Credential: credential,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: %v\n", err)
+		return 1
 	}
-	defer cleanupConfig()
-	arguments := connectArguments(alias, askpassKind, configPath, identityFile)
-	return executeSSH(ssh, arguments, environment, os.Stdin, os.Stdout, stderr)
+	defer cleanup()
+	if session.Notice != "" {
+		fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%s)\n", session.Notice)
+	}
+	return executeSSH(session.Path, session.Arguments, session.Env, os.Stdin, os.Stdout, stderr)
 }
 
 // askApplication はハンドオフを読み、接続一回分を要求する。

@@ -16,6 +16,5 @@ type platformParts struct {
 	Toolchain platform.Toolchain
 	Browser   platform.BrowserLauncher
 	KeyAgent  platform.KeyAgent
-	Terminal  platform.TerminalLauncher
 	LoginItem httpserver.LoginItemController
 }
