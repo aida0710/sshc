@@ -41,14 +41,20 @@ func TestTheHandoffLetsTheCommandLineAskForOneConnection(t *testing.T) {
 	}
 	var answer struct {
 		Alias      string   `json:"alias"`
-		AskpassURL string   `json:"askpassUrl"`
+		KeyPath    string   `json:"keyPath"`
+		Passphrase string   `json:"passphrase"`
 		Warnings   []string `json:"warnings"`
 	}
 	if err := json.Unmarshal([]byte(body), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.Alias != "bastion" || answer.AskpassURL == "" {
+	if answer.Alias != "bastion" {
 		t.Errorf("answer = %+v", answer)
+	}
+	// このフィクスチャには保存済みパスフレーズが無い。**答えは空でよい**
+	// ——コマンドラインは端末で尋ねられる。
+	if answer.Passphrase != "" {
+		t.Errorf("the answer carried a passphrase nobody stored: %+v", answer)
 	}
 
 	// secret がなければ、何も語らない。

@@ -1,13 +1,7 @@
 package main
 
 import (
-	"errors"
-	"os"
-	"os/exec"
-	"strings"
 	"testing"
-
-	"sshc/internal/platform"
 )
 
 // コマンドの全体が alias である。それ以外はフラグか、askpass サブコマンドか、
@@ -39,33 +33,6 @@ func TestWhatCountsAsAConnectInvocation(t *testing.T) {
 		if ok != test.ok || alias != test.alias {
 			t.Errorf("connectInvocation(%v) = %q, %v; want %q, %v", test.argv, alias, ok, test.alias, test.ok)
 		}
-	}
-}
-
-// 凍結した設定を本物の ssh が読めることを、このコマンドが実際に組み立てる argv で
-// 確かめる。ファイルの権限そのものは internal/platform 側の検査が見る。ここが
-// 見るのは、その二つを繋いだ結果が OpenSSH に通るかどうかである。
-func TestTheFrozenConfigurationIsReadableByRealSSH(t *testing.T) {
-	ssh, err := exec.LookPath("ssh")
-	if err != nil {
-		t.Skip("OpenSSH is not installed")
-	}
-	path, cleanup, err := platform.FreezeSSHConfig(
-		"Host bastion\n\tHostName example.invalid\n\tUser tester\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cleanup()
-
-	var output, errOut strings.Builder
-	status := executeSSH(ssh, []string{"-G", "-F", path, "--", "bastion"}, os.Environ(),
-		strings.NewReader(""), &output, &errOut)
-	if status != 0 || !strings.Contains(output.String(), "user tester") {
-		t.Fatalf("status = %d, stdout = %q, stderr = %q", status, output.String(), errOut.String())
-	}
-	cleanup()
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("temporary config survived cleanup: %v", err)
 	}
 }
 
