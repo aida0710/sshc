@@ -68,7 +68,32 @@ type View struct {
 func (s *Session) ID() string    { return s.id }
 func (s *Session) Kind() Kind    { return s.kind }
 func (s *Session) Alias() string { return s.alias }
-func (s *Session) Title() string { return s.title }
+
+// Title は一覧に出す名前である。改名できるので、ロックの中で読む。
+func (s *Session) Title() string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.title
+}
+
+// Rename は一覧に出す名前を変える。
+//
+// 変えるのは表示だけである。ssh の相手も、走っているプロセスも、この
+// セッションの識別子も動かない。名前が要るのは、同じ相手へ複数本開いたときに
+// 行が見分けられなくなるからであって、それ以外の意味は持たせない。
+//
+// 終了したセッションも改名できる。読むために残してある行なので、印を付ける
+// 価値はそこにもある。
+func (s *Session) Rename(title string) error {
+	cleaned, err := CleanTitle(title)
+	if err != nil {
+		return err
+	}
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.title = cleaned
+	return nil
+}
 
 // Exit は、終了していればその理由を返し、生きていれば nil を返す。
 func (s *Session) Exit() *ExitInfo {
@@ -83,11 +108,22 @@ func (s *Session) Exit() *ExitInfo {
 
 func (s *Session) Live() bool { return s.Exit() == nil }
 
+// View は一覧に出すための写しである。
+//
+// title と exited はどちらもロックの中で読む。改名は接続中にも起きるので、
+// 直接読むとその瞬間の一覧取得と競合する。
 func (s *Session) View() View {
-	return View{
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	view := View{
 		ID: s.id, Kind: s.kind, Alias: s.alias, Title: s.title,
-		Started: s.started, Exited: s.Exit(),
+		Started: s.started,
 	}
+	if s.exited != nil {
+		info := *s.exited
+		view.Exited = &info
+	}
+	return view
 }
 
 // Snapshot は、いまスクロールバックに残っているバイト列を返す。
