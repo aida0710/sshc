@@ -182,8 +182,10 @@ func TestEngineRefusesWordsItDoesNotKnow(t *testing.T) {
 	}
 }
 
-// **既定では URL を決して表示しない。** 有効な bootstrap トークンを運ぶ。
-func TestOpenPrintsTheURLOnlyWhenAsked(t *testing.T) {
+// **開く相手はもう居ない。** このコマンドの仕事は「入口をひとつ発行して
+// 渡す」ことだけである。渡す先は、自分でそれを開く親プロセスか、それを読む人で
+// ある。
+func TestOpenPrintsTheEntranceAndOpensNothing(t *testing.T) {
 	entry := "http://127.0.0.1:1/#bootstrap=a-live-token"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != httpserver.OpenPath {
@@ -200,36 +202,14 @@ func TestOpenPrintsTheURLOnlyWhenAsked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var opened []string
 	var out, errOut strings.Builder
-	status := runOpen(
-		context.Background(), stateDir, &http.Client{Timeout: 5 * time.Second},
-		func(target string) error { opened = append(opened, target); return nil },
-		false, &out, &errOut)
+	status := runOpen(context.Background(), stateDir,
+		&http.Client{Timeout: 5 * time.Second}, &out, &errOut)
 	if status != 0 {
 		t.Fatalf("status = %d: %s", status, errOut.String())
-	}
-	if len(opened) != 1 || opened[0] != entry {
-		t.Fatalf("opened = %#v", opened)
-	}
-	if strings.Contains(out.String(), "bootstrap") {
-		t.Fatalf("the default printed a live token: %q", out.String())
-	}
-
-	opened = nil
-	out.Reset()
-	status = runOpen(
-		context.Background(), stateDir, &http.Client{Timeout: 5 * time.Second},
-		func(target string) error { opened = append(opened, target); return nil },
-		true, &out, &errOut)
-	if status != 0 {
-		t.Fatalf("status = %d: %s", status, errOut.String())
-	}
-	if len(opened) != 0 {
-		t.Fatalf("--print-url also opened something: %#v", opened)
 	}
 	if strings.TrimSpace(out.String()) != entry {
-		t.Fatalf("stdout = %q, want exactly the entry", out.String())
+		t.Fatalf("stdout = %q, want exactly the entrance", out.String())
 	}
 }
 

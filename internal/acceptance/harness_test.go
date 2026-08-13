@@ -184,12 +184,6 @@ func (fakeAgent) Add(context.Context, platform.AgentAddRequest) error {
 }
 func (fakeAgent) Remove(context.Context, string) error { return platform.ErrAgentUnavailable }
 
-// silentBrowser は macOS の `open` アダプタを置き換える。テストから本物のブラウザを開けば、
-// デスクで動いている何かに生きた bootstrap token を渡すことになる。
-type silentBrowser struct{}
-
-func (silentBrowser) Open(context.Context, string) error { return nil }
-
 // testClock はサーバー側の goroutine から読まれ、テスト側から
 // 進められるため、時刻は素の field ではなく atomic に保持する。
 type testClock struct{ nanoseconds atomic.Int64 }
@@ -259,7 +253,6 @@ func newFixture(t testing.TB) *fixture {
 	server, bootstrap, err := app.Build(app.Dependencies{
 		Home:            home,
 		Random:          rand.Reader,
-		Browser:         silentBrowser{},
 		Listen:          net.Listen,
 		UI:              fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>fixture</title><div id=\"root\"></div>")}},
 		Logger:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),

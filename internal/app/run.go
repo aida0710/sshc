@@ -40,11 +40,17 @@ type ListenFunc func(network, address string) (net.Listener, error)
 const unsafeAliasWarning = "This alias contains characters that could change the meaning of a command line, so this connection will be refused."
 
 type Dependencies struct {
-	Random  io.Reader
-	Browser platform.BrowserLauncher
-	Listen  ListenFunc
-	UI      fs.FS
-	Logger  *slog.Logger
+	Random io.Reader
+	// Announce は、この常駐への入口を人へ伝える。
+	//
+	// **ブラウザは開かない。** 画面はデスクトップの外殻が出すので、この
+	// プロセスが既定のブラウザを起こす理由はもう無い。書き出す先は、
+	// `sshc` を打った人の端末である。nil なら何も言わない——ログへ
+	// トークンを落とさないための、自動化からの明示的な選択である。
+	Announce func(entrance string) error
+	Listen   ListenFunc
+	UI       fs.FS
+	Logger   *slog.Logger
 	// Home はユーザーのホームディレクトリ。オペレーティングシステムから読んでよいのは
 	// cmd/sshc だけで、テストはいずれも一時ディレクトリを注入する。
 	Home string
@@ -338,10 +344,12 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	serveErrors := make(chan error, 1)
 	go func() { serveErrors <- server.Serve(serverCtx) }()
 
-	if err := dependencies.Browser.Open(ctx, target); err != nil {
-		stopServer()
-		<-serveErrors
-		return fmt.Errorf("open browser: %w", err)
+	if dependencies.Announce != nil {
+		if err := dependencies.Announce(target); err != nil {
+			stopServer()
+			<-serveErrors
+			return fmt.Errorf("announce the entrance: %w", err)
+		}
 	}
 
 	select {

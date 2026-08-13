@@ -21,10 +21,10 @@ const startsAProcess = "RunOutput(ctx"
 // **一覧を持つ形にしてあるのは、増えたときに気づくためである。** 「OpenSSH が
 // 無いこと」を検査すると、OpenSSH でない何かが増えても緑のままになる。
 var allowedToStartPrograms = []string{
-	// 既定ブラウザを開く。
-	"internal/platform/macos/browser.go",
-	"internal/platform/linux/browser.go",
-	// ログイン時起動を登録する。
+	// ログイン時起動を登録する。**これだけである。**
+	//
+	// 既定ブラウザを開く経路は消えた。画面を出すのはデスクトップの外殻で
+	// あり、このプロセスが誰かのブラウザを起こす理由はもう無い。
 	"internal/platform/macos/loginitem.go",
 	"internal/platform/linux/loginitem.go",
 }
