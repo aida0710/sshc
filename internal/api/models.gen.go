@@ -1038,6 +1038,11 @@ type RemoteKeyRegisterResponse struct {
 	Truncated bool   `json:"truncated"`
 }
 
+// RenameTerminalSessionRequest defines model for RenameTerminalSessionRequest.
+type RenameTerminalSessionRequest struct {
+	Title string `json:"title"`
+}
+
 // RestoreRequest defines model for RestoreRequest.
 type RestoreRequest struct {
 	Path          string `json:"path"`
@@ -1440,3 +1445,6 @@ type GetTerminalCommandJSONRequestBody = AliasRequest
 
 // OpenTerminalSessionJSONRequestBody defines body for OpenTerminalSession for application/json ContentType.
 type OpenTerminalSessionJSONRequestBody = OpenTerminalSessionRequest
+
+// RenameTerminalSessionJSONRequestBody defines body for RenameTerminalSession for application/json ContentType.
+type RenameTerminalSessionJSONRequestBody = RenameTerminalSessionRequest

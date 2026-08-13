@@ -189,6 +189,18 @@ func (r *Registry) Lookup(id string) (*Session, bool) {
 }
 
 // Close は、生存中なら子プロセスに SIGHUP を送り、終了済みなら一覧から消す。
+// Rename は、一覧に出す名前を変える。
+//
+// 名前は表示だけのもので、この一覧の中で一意である必要は無い。同じ名前を
+// 二つ付けられるのは、どちらが何かを決めるのは利用者だからである。
+func (r *Registry) Rename(id, title string) error {
+	session, ok := r.Lookup(id)
+	if !ok {
+		return ErrNotFound
+	}
+	return session.Rename(title)
+}
+
 func (r *Registry) Close(id string) error {
 	session, ok := r.Lookup(id)
 	if !ok {

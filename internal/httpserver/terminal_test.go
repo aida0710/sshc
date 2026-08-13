@@ -510,3 +510,42 @@ func waitUntil(t *testing.T, condition func() bool) {
 	}
 	t.Fatal("the condition never became true")
 }
+
+// 改名は表示だけを変え、応答は一覧を返す。名前が要るのは、同じ相手へ
+// 複数本開いたときに行が見分けられなくなるからである。
+func TestRenamingASessionChangesTheListedTitle(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	id, _ := fixture.openShell(t)
+
+	response, body := fixture.do(t, http.MethodPatch,
+		"/api/v1/terminal/sessions/"+id, `{"title":"  ログ監視  "}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("rename = %d: %s", response.StatusCode, body)
+	}
+	var listed api.TerminalSessionList
+	if err := json.Unmarshal([]byte(body), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Sessions) != 1 || listed.Sessions[0].Title != "ログ監視" {
+		t.Fatalf("the rename response did not carry the trimmed title: %s", body)
+	}
+
+	// 拒否された名前は、以前の名前を残す。制御文字はそのまま画面へ出る
+	// ので、名前としては受け取らない。
+	refusals := []string{`{"title":""}`, `{"title":"esc\u001b[2J"}`, `{"nope":1}`}
+	for _, refused := range refusals {
+		response, body := fixture.do(t, http.MethodPatch, "/api/v1/terminal/sessions/"+id, refused)
+		if response.StatusCode != http.StatusBadRequest {
+			t.Errorf("rename %s = %d, want 400: %s", refused, response.StatusCode, body)
+		}
+	}
+	_, body = fixture.do(t, http.MethodGet, "/api/v1/terminal/sessions", "")
+	if !strings.Contains(body, "ログ監視") {
+		t.Errorf("a refused rename replaced the name: %s", body)
+	}
+
+	response, _ = fixture.do(t, http.MethodPatch, "/api/v1/terminal/sessions/absent", `{"title":"x"}`)
+	if response.StatusCode != http.StatusNotFound {
+		t.Errorf("rename of an unknown session = %d, want 404", response.StatusCode)
+	}
+}

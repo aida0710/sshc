@@ -289,7 +289,7 @@ export interface paths {
         delete: operations["closeTerminalSession"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["renameTerminalSession"];
         trace?: never;
     };
     "/api/v1/sync": {
@@ -1353,6 +1353,9 @@ export interface components {
             alias?: string;
             cols?: number;
             rows?: number;
+        };
+        RenameTerminalSessionRequest: {
+            title: string;
         };
         TerminalStreamTicket: {
             streamTicket: string;
@@ -2431,6 +2434,35 @@ export interface operations {
                     "application/json": components["schemas"]["TerminalSessionList"];
                 };
             };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    renameTerminalSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameTerminalSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The session list after the rename */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
         };

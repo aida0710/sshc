@@ -49,6 +49,7 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.GET("/api/v1/terminal/sessions", handlers.List)
 	engine.POST("/api/v1/terminal/sessions", handlers.Open)
 	engine.POST("/api/v1/terminal/sessions/:id/stream", handlers.Ticket)
+	engine.PATCH("/api/v1/terminal/sessions/:id", handlers.Rename)
 	engine.DELETE("/api/v1/terminal/sessions/:id", handlers.Close)
 	engine.GET(StreamPath, handlers.Stream)
 }
@@ -260,6 +261,34 @@ func (h TerminalHandlers) Ticket(c *echo.Context) error {
 }
 
 // Close は、生存中なら子プロセスに SIGHUP、終了済みなら一覧から消す。
+// Rename は、一覧に出す名前を変える。
+//
+// 変わるのは表示だけである。走っているプロセスにも、ssh の相手にも、この
+// セッションの識別子にも触れない。名前が要るのは、同じ相手へ複数本開いたときに
+// 行が見分けられなくなるからである。
+//
+// 名前は metadata へ書かない。セッションはこのプロセスの寿命までしか生きない
+// ので、ディスクへ書けば必ず孤児が残る。
+func (h TerminalHandlers) Rename(c *echo.Context) error {
+	id := c.Param("id")
+	if id == "" || len(id) > maxSessionIdentifier {
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	}
+	var request api.RenameTerminalSessionRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	switch err := h.Registry.Rename(id, request.Title); {
+	case errors.Is(err, terminal.ErrNotFound):
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	case errors.Is(err, terminal.ErrInvalidTitle):
+		return problem(c, http.StatusBadRequest, "invalid_terminal_title")
+	case err != nil:
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	return c.JSON(http.StatusOK, h.list())
+}
+
 func (h TerminalHandlers) Close(c *echo.Context) error {
 	id := c.Param("id")
 	if id == "" || len(id) > maxSessionIdentifier {

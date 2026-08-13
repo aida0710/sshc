@@ -9,7 +9,10 @@ package terminal
 import (
 	"errors"
 	"io"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Kind は、そのセッションの向こうにいるものである。
@@ -108,7 +111,34 @@ var (
 	ErrNoStarter = errors.New("no pseudo-terminal is available")
 	// ErrInvalidSize は、TIOCSWINSZ へ渡せない大きさを拒否する。
 	ErrInvalidSize = errors.New("the terminal size is out of range")
+	// ErrInvalidTitle は、一覧に出せない名前を拒否する。
+	ErrInvalidTitle = errors.New("that is not a usable session name")
 )
+
+// MaxTitle は、一覧に出す名前の長さの上限である。
+//
+// 一覧はナビゲーションの幅しか持たないので、長い名前は切り詰められて読めなく
+// なる。切り詰めて受け取るのではなく拒否するのは、保存された値と表示される値が
+// 違う状態を作らないためである。
+const MaxTitle = 64
+
+// CleanTitle は、一覧に出してよい名前だけを通す。
+//
+// 前後の空白は落とす。空になるもの、制御文字を含むもの、上限を超えるものは
+// 拒否する。制御文字を拒むのは、この文字列がそのまま画面へ出るからであり、
+// エスケープ列を名前に持たせる用途はひとつも無いからである。
+func CleanTitle(title string) (string, error) {
+	cleaned := strings.TrimSpace(title)
+	if cleaned == "" || utf8.RuneCountInString(cleaned) > MaxTitle {
+		return "", ErrInvalidTitle
+	}
+	for _, character := range cleaned {
+		if character == utf8.RuneError || unicode.IsControl(character) {
+			return "", ErrInvalidTitle
+		}
+	}
+	return cleaned, nil
+}
 
 // Limits は、metadata が運ぶ埋め込みターミナルの上限である。
 type Limits struct {
