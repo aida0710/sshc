@@ -12,8 +12,8 @@ package acceptance_test
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -302,7 +302,7 @@ func newFixture(t testing.TB) *fixture {
 
 	runner := &recordingRunner{}
 	terminalStarter := &recordingTerminal{}
-	scanner := &recordingScanner{}
+	scanner := newRecordingScanner(t)
 	clock := newTestClock()
 	logs := &syncBuffer{}
 
@@ -811,6 +811,12 @@ func TestHarnessStartsTheProductionServerAgainstAnIsolatedHome(t *testing.T) {
 // internal/sshclient の側であり、ここが確かめるのは、確認の無い要求が
 // この継ぎ目に届かないことである。
 type recordingScanner struct {
+	// hostKey は、この記録係が「そのアドレスにあった」と答える鍵である。
+	//
+	// **本物の鍵でなければならない。** known_hosts のフィクスチャに書いてある
+	// 合成の行は wire format として短く、公開鍵として読み戻せない。
+	hostKey ssh.PublicKey
+
 	mutex     sync.Mutex
 	addresses []string
 	probed    []string
@@ -825,17 +831,7 @@ func (s *recordingScanner) collect(
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.addresses = append(s.addresses, address)
-
-	blob, err := base64.StdEncoding.DecodeString(
-		"AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl")
-	if err != nil {
-		return nil, err
-	}
-	key, err := ssh.ParsePublicKey(blob)
-	if err != nil {
-		return nil, err
-	}
-	return []ssh.PublicKey{key}, nil
+	return []ssh.PublicKey{s.hostKey}, nil
 }
 
 // reached は、この継ぎ目に届いた宛先である。
@@ -902,4 +898,17 @@ func (s *recordingScanner) remoted() []remoteCall {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return append([]remoteCall(nil), s.ran...)
+}
+
+func newRecordingScanner(t testing.TB) *recordingScanner {
+	t.Helper()
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := ssh.NewSignerFromKey(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &recordingScanner{hostKey: signer.PublicKey()}
 }
