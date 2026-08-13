@@ -23,9 +23,8 @@ func TestWhatCountsAsAConnectInvocation(t *testing.T) {
 		{[]string{"sshc", "list"}, "", false},
 		{[]string{"sshc", "connect"}, "", false},
 		{[]string{"sshc", "service"}, "", false},
-		// OpenSSH が実行するヘルパー。プロンプトを引数に取る。
-		{[]string{"sshc", "askpass"}, "", false},
-		{[]string{"sshc", "askpass", "password:"}, "", false},
+		// 常駐そのものを起こしたり止めたりする語。
+		{[]string{"sshc", "engine"}, "", false},
 		// 二語は alias ではない。このコマンドには存在しないものだ。
 		{[]string{"sshc", "connect", "bastion"}, "", false},
 	} {
