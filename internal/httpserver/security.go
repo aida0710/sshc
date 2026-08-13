@@ -15,7 +15,23 @@ const (
 	CSRFHeader        = "X-SSHC-CSRF"
 	SessionContextKey = "sshc-session"
 
-	contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; require-trusted-types-for 'script'"
+	// style-src だけが 'unsafe-inline' を持つ。
+	//
+	// **実測の結果である。** xterm.js は文字の実寸を測ってから、その寸法を
+	// 持つ規則を <style> 要素として差し込み、DOM レンダラーは各セルへ
+	// setAttribute("style", …) を書く。nonce を渡す口は無い。したがって
+	// 埋め込みターミナルを持つには、インラインのスタイルを許すしかない。
+	//
+	// **緩めたのはここだけである。** script-src は 'self' のままで、
+	// require-trusted-types-for 'script' もそのままである。xterm.js の配布物には
+	// innerHTML も document.write も new Function も eval も無いので（5.5.0 と
+	// 6.0.0 の両方で 0 件）、スクリプト側は一文字も緩めずに済んでいる。
+	//
+	// 失ったもの: HTML を注入できる者は CSS も注入できる。得たもの: 端末が
+	// 描画できる。前者に必要な注入点をこのアプリケーションは持たない——React が
+	// エスケープし、dangerouslySetInnerHTML はどこにも無く、スクリプトは
+	// 依然として止まる。README の「SSH 実行の境界」に同じことが書いてある。
+	contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; require-trusted-types-for 'script'"
 
 	// spaFallbackRoute は single-page application を配信するパターンである。
 	// これにしかマッチしなかったリクエストは、どの API ルートにもマッチしなかったことになる。

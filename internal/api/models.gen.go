@@ -7,6 +7,24 @@ import (
 	"encoding/json"
 )
 
+// Defines values for OpenTerminalSessionRequestKind.
+const (
+	OpenTerminalSessionRequestKindShell OpenTerminalSessionRequestKind = "shell"
+	OpenTerminalSessionRequestKindSsh   OpenTerminalSessionRequestKind = "ssh"
+)
+
+// Valid indicates whether the value is a known member of the OpenTerminalSessionRequestKind enum.
+func (e OpenTerminalSessionRequestKind) Valid() bool {
+	switch e {
+	case OpenTerminalSessionRequestKindShell:
+		return true
+	case OpenTerminalSessionRequestKindSsh:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SyncDirection.
 const (
 	SyncDirectionBoth SyncDirection = "both"
@@ -46,30 +64,18 @@ func (e SyncOperationKind) Valid() bool {
 	}
 }
 
-// Defines values for TerminalID.
+// Defines values for TerminalSessionKind.
 const (
-	Custom   TerminalID = "custom"
-	Ghostty  TerminalID = "ghostty"
-	Iterm2   TerminalID = "iterm2"
-	Kitty    TerminalID = "kitty"
-	Terminal TerminalID = "terminal"
-	Wezterm  TerminalID = "wezterm"
+	TerminalSessionKindShell TerminalSessionKind = "shell"
+	TerminalSessionKindSsh   TerminalSessionKind = "ssh"
 )
 
-// Valid indicates whether the value is a known member of the TerminalID enum.
-func (e TerminalID) Valid() bool {
+// Valid indicates whether the value is a known member of the TerminalSessionKind enum.
+func (e TerminalSessionKind) Valid() bool {
 	switch e {
-	case Custom:
+	case TerminalSessionKindShell:
 		return true
-	case Ghostty:
-		return true
-	case Iterm2:
-		return true
-	case Kitty:
-		return true
-	case Terminal:
-		return true
-	case Wezterm:
+	case TerminalSessionKindSsh:
 		return true
 	default:
 		return false
@@ -299,12 +305,6 @@ type CredentialList struct {
 	KeyHostUsageComplete    bool                          `json:"keyHostUsageComplete"`
 }
 
-// CustomTerminal defines model for CustomTerminal.
-type CustomTerminal struct {
-	Application string    `json:"application"`
-	Arguments   *[]string `json:"arguments,omitempty"`
-}
-
 // DedicatedKeyPassphraseUsage defines model for DedicatedKeyPassphraseUsage.
 type DedicatedKeyPassphraseUsage struct {
 	Hosts []string `json:"hosts"`
@@ -394,6 +394,12 @@ type EffectiveResponse struct {
 type EffectiveValue struct {
 	Keyword string   `json:"keyword"`
 	Values  []string `json:"values"`
+}
+
+// EmbeddedTerminal defines model for EmbeddedTerminal.
+type EmbeddedTerminal struct {
+	MaxSessions     *int `json:"maxSessions,omitempty"`
+	ScrollbackBytes *int `json:"scrollbackBytes,omitempty"`
 }
 
 // ExecutableDirective defines model for ExecutableDirective.
@@ -783,12 +789,11 @@ type LoginItem struct {
 
 // Metadata defines model for Metadata.
 type Metadata struct {
-	CustomTerminal *CustomTerminal  `json:"customTerminal,omitempty"`
-	Groups         *[]GroupMetadata `json:"groups,omitempty"`
-	GroupsFile     *string          `json:"groupsFile,omitempty"`
-	Hosts          *[]HostMetadata  `json:"hosts,omitempty"`
-	SchemaVersion  int              `json:"schemaVersion"`
-	Terminal       *TerminalID      `json:"terminal,omitempty"`
+	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
+	Groups           *[]GroupMetadata  `json:"groups,omitempty"`
+	GroupsFile       *string           `json:"groupsFile,omitempty"`
+	Hosts            *[]HostMetadata   `json:"hosts,omitempty"`
+	SchemaVersion    int               `json:"schemaVersion"`
 }
 
 // Notice defines model for Notice.
@@ -805,6 +810,23 @@ type OpenSSHFailure struct {
 	Failed    bool   `json:"failed"`
 	Stderr    string `json:"stderr"`
 	Truncated bool   `json:"truncated"`
+}
+
+// OpenTerminalSessionRequest defines model for OpenTerminalSessionRequest.
+type OpenTerminalSessionRequest struct {
+	Alias *string                        `json:"alias,omitempty"`
+	Cols  *int                           `json:"cols,omitempty"`
+	Kind  OpenTerminalSessionRequestKind `json:"kind"`
+	Rows  *int                           `json:"rows,omitempty"`
+}
+
+// OpenTerminalSessionRequestKind defines model for OpenTerminalSessionRequest.Kind.
+type OpenTerminalSessionRequestKind string
+
+// OpenTerminalSessionResponse defines model for OpenTerminalSessionResponse.
+type OpenTerminalSessionResponse struct {
+	Session      TerminalSession `json:"session"`
+	StreamTicket string          `json:"streamTicket"`
 }
 
 // Overview defines model for Overview.
@@ -1016,6 +1038,11 @@ type RemoteKeyRegisterResponse struct {
 	Truncated bool   `json:"truncated"`
 }
 
+// RenameTerminalSessionRequest defines model for RenameTerminalSessionRequest.
+type RenameTerminalSessionRequest struct {
+	Title string `json:"title"`
+}
+
 // RestoreRequest defines model for RestoreRequest.
 type RestoreRequest struct {
 	Path          string `json:"path"`
@@ -1148,45 +1175,41 @@ type SyncStatus struct {
 	Synced        bool           `json:"synced"`
 }
 
-// TerminalApplication defines model for TerminalApplication.
-type TerminalApplication struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-}
-
 // TerminalCommandResponse defines model for TerminalCommandResponse.
 type TerminalCommandResponse struct {
-	Command    string `json:"command"`
-	Launchable bool   `json:"launchable"`
-	Warning    string `json:"warning"`
+	Command string `json:"command"`
+	Warning string `json:"warning"`
 }
 
-// TerminalID defines model for TerminalID.
-type TerminalID string
-
-// TerminalLaunchResponse defines model for TerminalLaunchResponse.
-type TerminalLaunchResponse struct {
-	Launched bool `json:"launched"`
+// TerminalExit defines model for TerminalExit.
+type TerminalExit struct {
+	At     string `json:"at"`
+	Code   int    `json:"code"`
+	Signal string `json:"signal"`
 }
 
-// TerminalOption defines model for TerminalOption.
-type TerminalOption struct {
-	Id        TerminalID `json:"id"`
-	Installed bool       `json:"installed"`
+// TerminalSession defines model for TerminalSession.
+type TerminalSession struct {
+	Alias     *string             `json:"alias,omitempty"`
+	Exited    *TerminalExit       `json:"exited,omitempty"`
+	Id        string              `json:"id"`
+	Kind      TerminalSessionKind `json:"kind"`
+	StartedAt string              `json:"startedAt"`
+	Title     string              `json:"title"`
 }
 
-// TerminalOptionsResponse defines model for TerminalOptionsResponse.
-type TerminalOptionsResponse struct {
-	Applications   []TerminalApplication `json:"applications"`
-	CustomTerminal *CustomTerminal       `json:"customTerminal,omitempty"`
-	Selected       TerminalID            `json:"selected"`
-	Terminals      []TerminalOption      `json:"terminals"`
+// TerminalSessionKind defines model for TerminalSession.Kind.
+type TerminalSessionKind string
+
+// TerminalSessionList defines model for TerminalSessionList.
+type TerminalSessionList struct {
+	MaxSessions int               `json:"maxSessions"`
+	Sessions    []TerminalSession `json:"sessions"`
 }
 
-// TerminalPreferenceRequest defines model for TerminalPreferenceRequest.
-type TerminalPreferenceRequest struct {
-	CustomTerminal *CustomTerminal `json:"customTerminal,omitempty"`
-	Selected       TerminalID      `json:"selected"`
+// TerminalStreamTicket defines model for TerminalStreamTicket.
+type TerminalStreamTicket struct {
+	StreamTicket string `json:"streamTicket"`
 }
 
 // TrashEntrySummary defines model for TrashEntrySummary.
@@ -1420,8 +1443,8 @@ type ConfigureSyncJSONRequestBody = SyncSettingsRequest
 // GetTerminalCommandJSONRequestBody defines body for GetTerminalCommand for application/json ContentType.
 type GetTerminalCommandJSONRequestBody = AliasRequest
 
-// LaunchTerminalJSONRequestBody defines body for LaunchTerminal for application/json ContentType.
-type LaunchTerminalJSONRequestBody = AliasRequest
+// OpenTerminalSessionJSONRequestBody defines body for OpenTerminalSession for application/json ContentType.
+type OpenTerminalSessionJSONRequestBody = OpenTerminalSessionRequest
 
-// SetTerminalPreferenceJSONRequestBody defines body for SetTerminalPreference for application/json ContentType.
-type SetTerminalPreferenceJSONRequestBody = TerminalPreferenceRequest
+// RenameTerminalSessionJSONRequestBody defines body for RenameTerminalSession for application/json ContentType.
+type RenameTerminalSessionJSONRequestBody = RenameTerminalSessionRequest

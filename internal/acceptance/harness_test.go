@@ -33,6 +33,7 @@ import (
 	"sshc/internal/httpserver"
 	"sshc/internal/keys"
 	"sshc/internal/platform"
+	"sshc/internal/terminal"
 )
 
 // canaryPassphrase は fixture の private key を保護する。
@@ -111,29 +112,106 @@ func (fixedToolchain) KeyScan() (string, error) { return "/usr/bin/ssh-keyscan",
 func (fixedToolchain) KeyGen() (string, error)  { return "/usr/bin/ssh-keygen", nil }
 func (fixedToolchain) KeyAdd() (string, error)  { return "/usr/bin/ssh-add", nil }
 
+// recordingTerminal は、埋め込みターミナルが確保するはずの擬似端末をすべて
+// 記録し、1 つも確保しない。このスイートのどのテストも本物の PTY を開かず、
+// ssh もシェルも起動しない。
 type recordingTerminal struct {
-	mutex   sync.Mutex
-	aliases []string
+	mutex    sync.Mutex
+	commands []terminal.Command
+	ptys     []*idlePTY
 }
 
-func (t *recordingTerminal) Launch(_ context.Context, alias string) error {
+func (t *recordingTerminal) Start(command terminal.Command, _ terminal.Size) (terminal.Process, error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	t.aliases = append(t.aliases, alias)
-	return nil
+	t.commands = append(t.commands, command)
+	process := newIdlePTY()
+	t.ptys = append(t.ptys, process)
+	return process, nil
 }
 
+// emit は、いちばん最後に開かれた擬似端末が出力したことにする。
+func (t *recordingTerminal) emit(chunk string) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if len(t.ptys) == 0 {
+		return
+	}
+	t.ptys[len(t.ptys)-1].feed(chunk)
+}
+
+// launched は、開かれた端末セッションのプログラムを報告する。
 func (t *recordingTerminal) launched() []string {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	return append([]string(nil), t.aliases...)
+	programs := make([]string, 0, len(t.commands))
+	for _, command := range t.commands {
+		programs = append(programs, command.Path)
+	}
+	return programs
+}
+
+func (t *recordingTerminal) opened() []terminal.Command {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return append([]terminal.Command(nil), t.commands...)
 }
 
 func (t *recordingTerminal) reset() {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	t.aliases = nil
+	t.commands = nil
+	t.ptys = nil
 }
+
+// idlePTY は、テストが押し込んだものだけを出力し、閉じられるまで生きている
+// 擬似端末である。実プロセスは一つも起きない。
+type idlePTY struct {
+	mutex     sync.Mutex
+	pending   [][]byte
+	ready     chan struct{}
+	closeOnce sync.Once
+	done      chan struct{}
+}
+
+func newIdlePTY() *idlePTY {
+	return &idlePTY{ready: make(chan struct{}, 1), done: make(chan struct{})}
+}
+
+// feed は、端末が出力したことにする。
+func (p *idlePTY) feed(chunk string) {
+	p.mutex.Lock()
+	p.pending = append(p.pending, []byte(chunk))
+	p.mutex.Unlock()
+	select {
+	case p.ready <- struct{}{}:
+	default:
+	}
+}
+
+func (p *idlePTY) Read(b []byte) (int, error) {
+	for {
+		p.mutex.Lock()
+		if len(p.pending) > 0 {
+			chunk := p.pending[0]
+			p.pending = p.pending[1:]
+			p.mutex.Unlock()
+			return copy(b, chunk), nil
+		}
+		p.mutex.Unlock()
+		select {
+		case <-p.ready:
+		case <-p.done:
+			return 0, io.EOF
+		}
+	}
+}
+
+func (p *idlePTY) Write(b []byte) (int, error) { return len(b), nil }
+func (p *idlePTY) Resize(terminal.Size) error  { return nil }
+func (p *idlePTY) Hangup() error               { p.closeOnce.Do(func() { close(p.done) }); return nil }
+func (p *idlePTY) Wait() terminal.ExitInfo     { <-p.done; return terminal.ExitInfo{Signal: "hangup"} }
+func (p *idlePTY) Close() error                { p.closeOnce.Do(func() { close(p.done) }); return nil }
 
 // fakeAgent は ssh-agent の代わりを務める。
 // このリポジトリのどのテストも、本物のエージェントとは話さない。
@@ -216,22 +294,22 @@ func newFixture(t testing.TB) *fixture {
 	writeFixtureTree(t, home, root)
 
 	runner := &recordingRunner{}
-	terminal := &recordingTerminal{}
+	terminalStarter := &recordingTerminal{}
 	clock := newTestClock()
 	logs := &syncBuffer{}
 
 	server, bootstrap, err := app.Build(app.Dependencies{
-		Home:       home,
-		Random:     rand.Reader,
-		Browser:    silentBrowser{},
-		Listen:     net.Listen,
-		UI:         fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>fixture</title><div id=\"root\"></div>")}},
-		Logger:     slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Runner:     runner,
-		Toolchain:  fixedToolchain{},
-		Terminal:   terminal,
-		KeyAgent:   fakeAgent{},
-		SessionNow: clock.now,
+		Home:            home,
+		Random:          rand.Reader,
+		Browser:         silentBrowser{},
+		Listen:          net.Listen,
+		UI:              fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>fixture</title><div id=\"root\"></div>")}},
+		Logger:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Runner:          runner,
+		Toolchain:       fixedToolchain{},
+		TerminalStarter: terminalStarter,
+		KeyAgent:        fakeAgent{},
+		SessionNow:      clock.now,
 	}, "acceptance")
 	if err != nil {
 		t.Fatalf("app.Build() = %v", err)
@@ -261,7 +339,7 @@ func newFixture(t testing.TB) *fixture {
 		anonymous: &http.Client{Timeout: 15 * time.Second},
 		server:    server,
 		runner:    runner,
-		terminal:  terminal,
+		terminal:  terminalStarter,
 		clock:     clock,
 		logs:      logs,
 		canaries: fixtureCanaries{
