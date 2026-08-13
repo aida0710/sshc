@@ -53,14 +53,20 @@ type connectRequest struct {
 	Alias string `json:"alias"`
 }
 
+// connectResponse は、`sshc <接続先>` が接続に使うものである。
+//
+// **単回トークンではなく答えそのものを返す。** トークンにしていたのは、
+// 引き換える相手が OpenSSH の起こす別のプログラムだったからである。要求を
+// 出した本人が答えを受け取るなら、発行と引き換えを分ける理由が無い。
+// localhost を通るものは変わっていない——いままでもパスフレーズはこの経路を
+// 通っており、間に立つプログラムがひとつ消えただけである。
 type connectResponse struct {
-	Alias        string   `json:"alias"`
-	AskpassToken string   `json:"askpassToken,omitempty"`
-	AskpassKind  string   `json:"askpassKind,omitempty"`
-	AskpassURL   string   `json:"askpassUrl"`
-	IdentityFile string   `json:"identityFile,omitempty"`
-	SSHConfig    string   `json:"sshConfig,omitempty"`
-	Warnings     []string `json:"warnings"`
+	Alias string `json:"alias"`
+	// KeyPath は、その接続に使う鍵のワークスペース相対パス。
+	KeyPath string `json:"keyPath,omitempty"`
+	// Passphrase は、その鍵について保存されている答え。無ければ空である。
+	Passphrase string   `json:"passphrase,omitempty"`
+	Warnings   []string `json:"warnings"`
 }
 
 const (
@@ -74,33 +80,27 @@ type issuedAskpassCredential struct {
 	sshConfig    string
 }
 
-func issueAskpassCredential(
+// savedPassphrase は、その alias が使う鍵と、保存されているパスフレーズを返す。
+//
+// 保存済みアカウントパスワードはここに現れない。password、keyboard-interactive、
+// PAM、2FA の問いは、意図して利用者自身の対話へ残してある。
+func savedPassphrase(
 	passwords *secret.Service,
 	alias string,
-	keyPassphraseTarget func(string) (string, string, string, string, bool, error),
-) issuedAskpassCredential {
-	if passwords == nil {
-		return issuedAskpassCredential{}
+	target func(string) (relativePath, promptPath, configSnapshot, evidence string, ok bool, err error),
+) (string, string) {
+	if passwords == nil || target == nil {
+		return "", ""
 	}
-	if keyPassphraseTarget != nil {
-		relativePath, promptPath, configSnapshot, evidence, ok, err := keyPassphraseTarget(alias)
-		if err != nil {
-			return issuedAskpassCredential{}
-		}
-		if ok {
-			if token, issueErr := passwords.IssueKeyPassphraseToken(alias, relativePath, promptPath, evidence); issueErr == nil {
-				return issuedAskpassCredential{
-					token: token, kind: AskpassKindKeyPassphrase,
-					identityFile: promptPath, sshConfig: configSnapshot,
-				}
-			}
-			return issuedAskpassCredential{}
-		}
+	relativePath, _, _, _, ok, err := target(alias)
+	if err != nil || !ok {
+		return "", ""
 	}
-	// Stored account passwords remain encrypted records only. They are never
-	// offered to OpenSSH: password, keyboard-interactive, PAM and 2FA prompts
-	// are deliberately left to the user's normal interactive SSH session.
-	return issuedAskpassCredential{}
+	passphrase, found := passwords.KeyPassphraseFor(relativePath)
+	if !found {
+		return "", ""
+	}
+	return relativePath, passphrase
 }
 
 // OpenPath は、コマンドラインがブラウザへの入口を求める場所である。
@@ -167,20 +167,16 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	answer := connectResponse{Alias: decoded.Alias, AskpassURL: h.AskpassURL, Warnings: []string{}}
+	answer := connectResponse{Alias: decoded.Alias, Warnings: []string{}}
 	if h.Warnings != nil {
 		if warnings := h.Warnings(decoded.Alias); len(warnings) > 0 {
 			answer.Warnings = warnings
 		}
 	}
-	// トークンが存在するのは、それと引き換えるものがある場合だけである。
-	// それ以外——閉じた vault、保存されたパスワードなし、エンドポイントなし——は
-	// すべて OpenSSH 自身がパスワードを尋ねる接続であり、それは正常な接続である。
-	if h.AskpassURL != "" {
-		issued := issueAskpassCredential(
-			h.Passwords, decoded.Alias, h.KeyPassphraseTarget)
-		answer.AskpassToken, answer.AskpassKind = issued.token, issued.kind
-		answer.IdentityFile, answer.SSHConfig = issued.identityFile, issued.sshConfig
-	}
+	// 答えが返るのは、保存されているものがある場合だけである。それ以外
+	// ——施錠された vault、保存が無い、鍵が一つに定まらない——では、
+	// コマンドラインが自分で尋ねる接続になる。それは正常な接続である。
+	answer.KeyPath, answer.Passphrase = savedPassphrase(
+		h.Passwords, decoded.Alias, h.KeyPassphraseTarget)
 	return c.JSON(http.StatusOK, answer)
 }

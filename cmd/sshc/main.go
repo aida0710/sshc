@@ -192,8 +192,8 @@ func main() {
 			os.Exit(1)
 		}
 		os.Exit(runConnect(
-			context.Background(), alias, app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, newPlatformParts(home).Toolchain, os.Stderr,
+			context.Background(), alias, home, app.HandoffDir(home),
+			&http.Client{Timeout: connectTimeout}, os.Stdin, os.Stdout, os.Stderr,
 		))
 	}
 
@@ -207,8 +207,8 @@ func main() {
 			os.Exit(1)
 		}
 		os.Exit(runConnect(
-			context.Background(), alias, app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, newPlatformParts(home).Toolchain, os.Stderr,
+			context.Background(), alias, home, app.HandoffDir(home),
+			&http.Client{Timeout: connectTimeout}, os.Stdin, os.Stdout, os.Stderr,
 		))
 	}
 
