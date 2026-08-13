@@ -23,7 +23,8 @@ vi.mock("../api/config", async () => {
 vi.mock("../api/integrations", () => ({
   integrationsApi: {
     terminalSessions: vi.fn(), openTerminalSession: vi.fn(), terminalStreamTicket: vi.fn(),
-    closeTerminalSession: vi.fn(), passwordVault: vi.fn(), credentials: vi.fn(),
+    closeTerminalSession: vi.fn(), renameTerminalSession: vi.fn(),
+    passwordVault: vi.fn(), credentials: vi.fn(),
     passwordEligibility: vi.fn(), initialiseVault: vi.fn(), unlockVault: vi.fn(),
   },
 }));
@@ -68,15 +69,25 @@ function inspectorText(inspector: ReturnType<typeof vi.fn>): string {
   for (let index = calls.length - 1; index >= 0; index -= 1) {
     const content = calls[index]?.[0];
     if (content === null || content === undefined) continue;
-    const { container, unmount } = render(<>{content.panes.map((pane) => (
-      <div key={pane.key}>{pane.body}</div>
-    ))}</>);
+    const { container, unmount } = render(<>{content.body}</>);
     const text = container.textContent ?? "";
     unmount();
     if (text !== "") return text;
   }
   return "";
 }
+
+// 開いているセッションはシェルが持つ。この画面は選ばれた一本を描くだけなので、
+// どのテストも空の一覧を渡せば足りる。
+const consoleProps = {
+  consoles: {
+    sessions: [], maxSessions: 50, busy: false, problem: "", loaded: true,
+    rename: vi.fn(async () => true), open: vi.fn(async () => null), close: vi.fn(async () => undefined),
+    refresh: vi.fn(async () => undefined), markExited: vi.fn(),
+  },
+  activeConsole: null,
+  onShowConsole: vi.fn(),
+};
 
 beforeEach(() => {
   // モジュールの factory はこれらを vi.fn()で作っており、restoreMocks は
@@ -121,6 +132,7 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
+        {...consoleProps}
         onOpenFile={onOpenFile}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "" }}
@@ -139,6 +151,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections", search: "?tab=raw" }}
         onNavigateLocation={onNavigateLocation}
@@ -153,6 +166,7 @@ describe("ConnectionsPage", () => {
   it("opens a connection and tab from the URL", async () => {
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         location={{
           pathname: "/connections/servers",
@@ -171,6 +185,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         location={{
           pathname: "/connections/servers",
@@ -194,6 +209,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "" }}
         onNavigateLocation={onNavigateLocation}
@@ -227,6 +243,7 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         location={{
           pathname: "/connections/servers",
@@ -254,6 +271,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     const harness = render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/files", search: "" }}
         onNavigateLocation={onNavigateLocation}
@@ -266,6 +284,7 @@ describe("ConnectionsPage", () => {
 
     harness.rerender(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/groups/gone", search: "" }}
         onNavigateLocation={onNavigateLocation}
@@ -280,6 +299,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.host).mockRejectedValue(new Error("not found"));
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "?path=config&host=gone&panel=basic" }}
         onNavigateLocation={onNavigateLocation}
@@ -300,7 +320,7 @@ describe("ConnectionsPage", () => {
       ],
     } as never);
 
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
 
     expect(await screen.findByText(/Another block declares the same alias/)).toBeInTheDocument();
     expect(screen.queryByText(/catch-all block can override/)).not.toBeInTheDocument();
@@ -313,7 +333,7 @@ describe("ConnectionsPage", () => {
       transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
     } as never);
 
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -333,7 +353,7 @@ describe("ConnectionsPage", () => {
 
   it("shares one committed resource load between the summary and persistent Basic editor", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     expect(await screen.findByText("bastion:22")).toBeInTheDocument();
@@ -366,6 +386,7 @@ describe("ConnectionsPage", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigationBlockerChange={onNavigationBlockerChange}
       />,
@@ -424,6 +445,7 @@ describe("ConnectionsPage", () => {
     });
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
         onNavigationBlockerChange={(next) => {
@@ -457,7 +479,7 @@ describe("ConnectionsPage", () => {
       .mockResolvedValueOnce(detail as never)
       .mockRejectedValueOnce(new Error("reload failed"));
 
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -479,51 +501,58 @@ describe("ConnectionsPage", () => {
 
   it("opens the selected host in an embedded console only after an explicit connect action", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    const opened = {
+      id: "console-1", kind: "ssh" as const, alias: "bastion", title: "bastion",
+      startedAt: "2026-08-13T09:00:00Z",
+    };
+    const consoles = { ...consoleProps.consoles, open: vi.fn(async () => opened) };
+    const onShowConsole = vi.fn();
+    render(
+      <ConnectionsPage
+        {...consoleProps}
+        consoles={consoles}
+        onShowConsole={onShowConsole}
+        onInspector={() => undefined}
+      />,
+    );
 
-    expect(integrationsApi.openTerminalSession).not.toHaveBeenCalled();
+    expect(consoles.open).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    expect(integrationsApi.openTerminalSession).not.toHaveBeenCalled();
+    expect(consoles.open).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: "Connect" }));
 
     // 外部の端末アプリケーションは起こさない。開くのはこのアプリケーションの
-    // 中の PTY であり、action token は要らない。
-    expect(integrationsApi.openTerminalSession).toHaveBeenCalledWith({ kind: "ssh", alias: "bastion" });
+    // 中の PTY であり、action token は要らない。開いた一本は、一覧を持って
+    // いるシェルへ渡す——この画面は選ばれた一本を描くだけである。
+    expect(consoles.open).toHaveBeenCalledWith({ kind: "ssh", alias: "bastion" });
+    await waitFor(() => expect(onShowConsole).toHaveBeenCalledWith("console-1"));
+  });
+
+  // 右のペインが持つのは接続の表示設定だけである。開いているコンソールの
+  // 一覧は一番左のナビゲーションにあり、この画面はそこへ何も差し出さない。
+  it("offers the display settings to the pane, and nothing at all until a connection is open", async () => {
+    const user = userEvent.setup();
+    const inspector = vi.fn();
+    render(<ConnectionsPage {...consoleProps} onInspector={inspector} />);
+
+    await waitFor(() => expect(inspector).toHaveBeenCalled());
+    expect(inspector.mock.calls.every(([content]) => content === null)).toBe(true);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+
+    await waitFor(() => expect(inspectorText(inspector)).toMatch(/This application only/));
+    expect(inspectorText(inspector)).not.toMatch(/Local shell/);
   });
 
   it("keeps global terminal editing out of connection detail", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
 
     expect(screen.queryByLabelText("Open with")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Application")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Arguments")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
-  });
-
-  // 上限に達したことと、開けなかったことは別の答えである。前者はどれかを
-  // 閉じれば直り、それが画面の言えることの中でいちばん役に立つ。
-  it("separates the session limit from a console that could not be opened", async () => {
-    const user = userEvent.setup();
-    vi.mocked(integrationsApi.openTerminalSession).mockRejectedValue(
-      new ApiError("terminal_session_limit", 409, { code: "terminal_session_limit", message: "full" }),
-    );
-    const inspector = vi.fn();
-    render(<ConnectionsPage onInspector={inspector} />);
-
-    await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    await user.click(await screen.findByRole("button", { name: "Connect" }));
-
-    await waitFor(() =>
-      expect(inspectorText(inspector)).toMatch(/No more consoles can be opened/),
-    );
-
-    vi.mocked(integrationsApi.openTerminalSession).mockRejectedValue(
-      new ApiError("terminal_start_failed", 500, { code: "terminal_start_failed", message: "refused" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Connect" }));
-    await waitFor(() => expect(inspectorText(inspector)).toMatch(/could not be opened/));
   });
 
   it("keeps the diff of what was written on screen after the save reloads the host", async () => {
@@ -549,7 +578,7 @@ describe("ConnectionsPage", () => {
       },
     } as never);
 
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -589,7 +618,7 @@ describe("ConnectionsPage", () => {
       },
     } as never);
 
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -624,7 +653,7 @@ describe("ConnectionsPage", () => {
       return await new Promise(() => undefined);
     });
 
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     expect(await screen.findByRole("heading", { name: /^bastion$/ })).toBeInTheDocument();
 
@@ -648,7 +677,7 @@ describe("ConnectionsPage", () => {
       ],
     } as never);
 
-    render(<ConnectionsPage onOpenFile={onOpenFile} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onOpenFile={onOpenFile} onInspector={() => undefined} />);
 
     expect(await screen.findByRole("button", { name: "bastion" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Host \*/ }));
@@ -670,7 +699,7 @@ describe("ConnectionsPage", () => {
       },
     }));
 
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -705,6 +734,7 @@ describe("ConnectionsPage", () => {
 
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -741,6 +771,7 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -769,6 +800,7 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -808,6 +840,7 @@ describe("ConnectionsPage", () => {
 
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -851,6 +884,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockRejectedValue(new Error("move conflict"));
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -877,6 +911,7 @@ describe("ConnectionsPage", () => {
 
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -902,6 +937,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockRejectedValue(new Error("delete conflict"));
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -937,7 +973,7 @@ describe("taking a connection out of every group", () => {
       transactionId: "tx", written: [], preview: { operation: "config.move", diffs: [] },
     } as never);
 
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "More connection actions" }));
     await user.selectOptions(await screen.findByLabelText("Primary group"), "");
@@ -1012,7 +1048,7 @@ describe("dropping in the tree", () => {
   });
 
   it("moves a direct connection into a visible child group", async () => {
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     const row = await screen.findByRole("button", { name: /nas/ });
 
     drag(row, screen.getByRole("heading", { name: "eu" }), {
@@ -1047,6 +1083,7 @@ describe("dropping in the tree", () => {
 
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1064,7 +1101,7 @@ describe("dropping in the tree", () => {
   });
 
   it("moves a connection out of every group by sending it to the entry file", async () => {
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     const row = await screen.findByRole("button", { name: /nas/ });
 
     drag(row, screen.getByRole("heading", { name: "Ungrouped" }), {
@@ -1082,7 +1119,7 @@ describe("dropping in the tree", () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     } as never);
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     const source = screen.getByRole("heading", { name: "work" });
 
@@ -1132,6 +1169,7 @@ describe("dropping in the tree", () => {
     } as never);
     render(
       <ConnectionsPage
+        {...consoleProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1153,7 +1191,7 @@ describe("dropping in the tree", () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     } as never);
-    render(<ConnectionsPage onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     const source = screen.getByRole("heading", { name: "eu" });
 

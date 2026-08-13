@@ -48,7 +48,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
       <span>{`preferred connection key ${preferredKey?.privateRelativePath ?? "none"}`}</span>
       <button type="button" onClick={onPreferredKeyApplied}>consume connection key</button>
       {creationDraft === null || creationDraft === undefined ? null : <span>{`draft ${creationDraft.alias}`}</span>}
-      <button type="button" onClick={() => onInspector({ label: "Display and classification", attention: true, panes: [{ key: "only", label: "Only", body: <p>inspector body</p> }] })}>
+      <button type="button" onClick={() => onInspector({ label: "Display and classification", attention: true, body: <p>inspector body</p> })}>
         offer inspector
       </button>
       <button
