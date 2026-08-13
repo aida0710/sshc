@@ -488,3 +488,67 @@ func exited(registry *terminal.Registry, id string) func() bool {
 		return ok && session.Exit() != nil
 	}
 }
+
+// 名前は表示だけのものである。走っているプロセスにも、ssh の相手にも、
+// 識別子にも触れないことをここで固定する。触れば、同じ相手へ複数本開いた
+// ときに行を見分けるという用途を超えてしまう。
+func TestRenameChangesOnlyTheDisplayedName(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	session := openShell(t, registry)
+	before := starter.count()
+
+	if err := registry.Rename(session.ID(), "  ログ監視  "); err != nil {
+		t.Fatalf("Rename() = %v", err)
+	}
+	if got := session.Title(); got != "ログ監視" {
+		t.Errorf("Title() = %q, want the trimmed name", got)
+	}
+	if got := session.View().Title; got != "ログ監視" {
+		t.Errorf("View().Title = %q", got)
+	}
+	if session.Kind() != terminal.KindShell || !session.Live() {
+		t.Errorf("rename disturbed the session: %#v", session.View())
+	}
+	if starter.count() != before {
+		t.Error("rename started another process")
+	}
+}
+
+// 終了した行も改名できる。読むために残してある行なので、印を付ける価値は
+// そこにもある。
+func TestRenameWorksOnAnExitedSession(t *testing.T) {
+	registry, _ := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	session := openShell(t, registry)
+	session.Hangup()
+	waitFor(t, func() bool { return !session.Live() })
+
+	if err := registry.Rename(session.ID(), "落ちた方"); err != nil {
+		t.Fatalf("Rename() on an exited session = %v", err)
+	}
+	if got := session.Title(); got != "落ちた方" {
+		t.Errorf("Title() = %q", got)
+	}
+}
+
+func TestRenameRefusesNamesTheListCannotShow(t *testing.T) {
+	registry, _ := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	session := openShell(t, registry)
+
+	for _, refused := range []string{
+		"",
+		"   ",
+		"esc\x1b[2J",
+		"newline\nsecond",
+		strings.Repeat("x", terminal.MaxTitle+1),
+	} {
+		if err := registry.Rename(session.ID(), refused); !errors.Is(err, terminal.ErrInvalidTitle) {
+			t.Errorf("Rename(%q) = %v, want ErrInvalidTitle", refused, err)
+		}
+	}
+	if got := session.Title(); got != "zsh" {
+		t.Errorf("a refused rename changed the name to %q", got)
+	}
+	if err := registry.Rename("no-such-session", "name"); !errors.Is(err, terminal.ErrNotFound) {
+		t.Errorf("Rename of an unknown session = %v, want ErrNotFound", err)
+	}
+}
