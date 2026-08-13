@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -34,6 +35,8 @@ import (
 	"sshc/internal/keys"
 	"sshc/internal/platform"
 	"sshc/internal/terminal"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // canaryPassphrase は fixture の private key を保護する。
@@ -277,6 +280,7 @@ type fixture struct {
 	server       *httpserver.Server
 	runner       *recordingRunner
 	terminal     *recordingTerminal
+	scanner      *recordingScanner
 	clock        *testClock
 	logs         *syncBuffer
 	canaries     fixtureCanaries
@@ -295,6 +299,7 @@ func newFixture(t testing.TB) *fixture {
 
 	runner := &recordingRunner{}
 	terminalStarter := &recordingTerminal{}
+	scanner := &recordingScanner{}
 	clock := newTestClock()
 	logs := &syncBuffer{}
 
@@ -309,7 +314,10 @@ func newFixture(t testing.TB) *fixture {
 		Toolchain:       fixedToolchain{},
 		TerminalStarter: terminalStarter,
 		KeyAgent:        fakeAgent{},
-		SessionNow:      clock.now,
+		// このスイートはネットワークへ出ない。ホスト鍵を集める継ぎ目も、
+		// プロセスの継ぎ目と同じく記録係で置き換える。
+		ScanHostKeys: scanner.collect,
+		SessionNow:   clock.now,
 	}, "acceptance")
 	if err != nil {
 		t.Fatalf("app.Build() = %v", err)
@@ -340,6 +348,7 @@ func newFixture(t testing.TB) *fixture {
 		server:    server,
 		runner:    runner,
 		terminal:  terminalStarter,
+		scanner:   scanner,
 		clock:     clock,
 		logs:      logs,
 		canaries: fixtureCanaries{
@@ -789,4 +798,46 @@ func TestHarnessStartsTheProductionServerAgainstAnIsolatedHome(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.home, ".ssh", "config")); err != nil {
 		t.Fatalf("fixture config missing: %v", err)
 	}
+}
+
+// recordingScanner は、ホスト鍵を集める継ぎ目である。
+//
+// **このスイートはネットワークへ出ない。** 本物の握手を見るのは
+// internal/sshclient の側であり、ここが確かめるのは、確認の無い要求が
+// この継ぎ目に届かないことである。
+type recordingScanner struct {
+	mutex     sync.Mutex
+	addresses []string
+}
+
+func (s *recordingScanner) collect(
+	_ context.Context, address string, _ time.Duration,
+) ([]ssh.PublicKey, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.addresses = append(s.addresses, address)
+
+	blob, err := base64.StdEncoding.DecodeString(
+		"AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl")
+	if err != nil {
+		return nil, err
+	}
+	key, err := ssh.ParsePublicKey(blob)
+	if err != nil {
+		return nil, err
+	}
+	return []ssh.PublicKey{key}, nil
+}
+
+// reached は、この継ぎ目に届いた宛先である。
+func (s *recordingScanner) reached() []string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return append([]string(nil), s.addresses...)
+}
+
+func (s *recordingScanner) reset() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.addresses = nil
 }

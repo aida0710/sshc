@@ -2,20 +2,24 @@ package knownhosts
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
+	"net"
 	"strconv"
-	"strings"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/platform"
 )
 
 // UnverifiedNotice は、すべてのスキャン結果に付随する。
-const UnverifiedNotice = "ssh-keyscan proves only that something answered at this address. It does not prove the host's identity. Compare the fingerprint with one you obtained another way before trusting it."
+const UnverifiedNotice = "Reaching this address proves only that something answered there. It does not prove the host's identity. Compare the fingerprint with one you obtained another way before trusting it."
 
-// DefaultScanTimeout は、ssh-keyscan の実行一回に上限を設ける。
+// DefaultScanTimeout は、ひとつのホストを尋ねるのに掛ける上限である。
 const DefaultScanTimeout = 15 * time.Second
 
-// Candidate は ssh-keyscan が報告した鍵ひとつ。ここでは Verified は常に false で
+// Candidate は、そのアドレスが提示した鍵ひとつ。ここでは Verified は常に false で
 // ある。鍵が本物だと判断できるのはユーザーだけだ。
 type Candidate struct {
 	Host        string
@@ -27,16 +31,23 @@ type Candidate struct {
 }
 
 // Scanner はホスト鍵の候補を取得する。
+//
+// **外部プログラムは起こさない。** 種別ごとに握手を始め、鍵を受け取ったところで
+// 断る——ssh-keyscan がしているのと同じことを、このプロセスの中で行う。
 type Scanner struct {
-	Runner    platform.OutputRunner
-	Toolchain platform.Toolchain
-	Timeout   time.Duration
-	// Environment は子プロセスの完全な環境。通常は platform.MinimalEnvironment で
-	// あり、nil ならこのプロセスの環境を継承する。
-	Environment []string
+	// Collect は、そのアドレスが提示するホスト鍵を集める。
+	//
+	// 関数で受け取るのは、SSH を話すパッケージがこのパッケージのパーサーを
+	// 使っているからである。逆向きにも依存すると輪になる——読む場所を一つに
+	// するという判断は、依存の向きを一つにするという判断でもある。
+	Collect func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
+	Timeout time.Duration
 }
 
-// Scan は、あるホストの鍵を ssh-keyscan に尋ねる。
+// ErrNoScanner は、鍵を集める手段が配線されていないことを報告する。
+var ErrNoScanner = errors.New("no host key scanner is available")
+
+// Scan は、あるホストの鍵を尋ねる。
 //
 // 結果に Verified が付くことはない。アドレスに到達できたことが証明するのは、そこで
 // 何かが応答したという事実だけであり、鍵を信頼する判断はユーザーのもとに残る。
@@ -47,44 +58,30 @@ func (s Scanner) Scan(ctx context.Context, host string, port int) ([]Candidate, 
 	if err := platform.ValidatePort(port); err != nil {
 		return nil, err
 	}
-	program, err := s.Toolchain.KeyScan()
-	if err != nil {
-		return nil, err
-	}
-
 	timeout := s.Timeout
 	if timeout <= 0 {
 		timeout = DefaultScanTimeout
 	}
-	output, err := s.Runner.RunOutput(ctx, platform.Command{
-		Path:      program,
-		Arguments: []string{"-T", "5", "-p", strconv.Itoa(port), host},
-		Timeout:   timeout,
-		Env:       s.Environment,
-	})
+	if s.Collect == nil {
+		return nil, ErrNoScanner
+	}
+	keys, err := s.Collect(ctx, net.JoinHostPort(host, strconv.Itoa(port)), timeout)
 	if err != nil {
 		return nil, err
 	}
 
 	var candidates []Candidate
-	for _, line := range strings.Split(string(output.Stdout), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		fields := strings.Fields(trimmed)
-		if len(fields) < 3 {
-			continue
-		}
-		fingerprint, fingerprintErr := Fingerprint(fields[2])
+	for _, key := range keys {
+		encoded := base64.StdEncoding.EncodeToString(key.Marshal())
+		fingerprint, fingerprintErr := Fingerprint(encoded)
 		if fingerprintErr != nil {
 			continue
 		}
 		candidates = append(candidates, Candidate{
 			Host:        host,
 			Port:        port,
-			KeyType:     fields[1],
-			Key:         fields[2],
+			KeyType:     key.Type(),
+			Key:         encoded,
 			Fingerprint: fingerprint,
 		})
 	}

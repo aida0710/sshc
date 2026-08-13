@@ -500,7 +500,7 @@ export const ja = {
   "kh.add": "追加",
   "kh.addHeading": "未検証のホスト鍵を追加",
   "kh.addExplain":
-    "ssh-keyscan は {host} からこの鍵を受け取りました。そのアドレスで応答したものなら何でも送れるため、sshc はこれだけでこのホストの鍵とは扱いません。別経路で入手した fingerprint を入力するか、誰も検証していない鍵を信頼することを承認してください。",
+    "{host} がこの鍵を提示しました。そのアドレスで応答したものなら何でも送れるため、sshc はこれだけでこのホストの鍵とは扱いません。別経路で入手した fingerprint を入力するか、誰も検証していない鍵を信頼することを承認してください。",
   "kh.expectedFingerprint": "別経路で入手した fingerprint",
   "kh.acknowledge": "この鍵を検証できませんでしたが、信頼するリスクを受け入れます",
   "kh.addToKnownHosts": "known_hosts に追加",

@@ -13,7 +13,7 @@ import (
 	"sshc/internal/storage"
 )
 
-func newTestService(t *testing.T, contents string, runner *stubRunner) *knownhosts.Service {
+func newTestService(t *testing.T, contents string, collector *recordingCollector) *knownhosts.Service {
 	t.Helper()
 	home := t.TempDir()
 	root := filepath.Join(home, ".ssh")
@@ -30,11 +30,11 @@ func newTestService(t *testing.T, contents string, runner *stubRunner) *knownhos
 		t.Fatal(err)
 	}
 	manager := storage.NewManager(workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x2f}, 4096)))
-	return knownhosts.NewService(workspace, manager, knownhosts.Scanner{Runner: runner, Toolchain: stubToolchain{}})
+	return knownhosts.NewService(workspace, manager, knownhosts.Scanner{Collect: collector.collect})
 }
 
 func TestDeleteRemovesOnlyTheRequestedLinesThroughTheTransactionManager(t *testing.T) {
-	service := newTestService(t, fixtureFile, &stubRunner{})
+	service := newTestService(t, fixtureFile, &recordingCollector{})
 
 	listing, err := service.Listing("")
 	if err != nil {
@@ -84,7 +84,7 @@ func TestDeleteRemovesOnlyTheRequestedLinesThroughTheTransactionManager(t *testi
 // ユーザーは、その後に編集された行に対して削除を確認した。したがってリクエストは、
 // いまその行を占めているものを取り除くのではなく、拒否されなければならない。
 func TestDeleteRefusesWhenTheLineOnDiskChanged(t *testing.T) {
-	service := newTestService(t, fixtureFile, &stubRunner{})
+	service := newTestService(t, fixtureFile, &recordingCollector{})
 
 	listing, err := service.Listing("")
 	if err != nil {
@@ -120,7 +120,7 @@ func TestDeleteRefusesWhenTheLineOnDiskChanged(t *testing.T) {
 }
 
 func TestAddRequiresAFingerprintOrAnExplicitAcknowledgement(t *testing.T) {
-	service := newTestService(t, "", &stubRunner{})
+	service := newTestService(t, "", &recordingCollector{})
 	candidate := knownhosts.Candidate{
 		Host: "bastion.example.com", Port: 22, KeyType: fixtureKeyType, Key: fixtureKey,
 	}
@@ -173,7 +173,7 @@ func TestAddRequiresAFingerprintOrAnExplicitAcknowledgement(t *testing.T) {
 }
 
 func TestAddRejectsAKeyTypeOrBlobItDoesNotUnderstand(t *testing.T) {
-	service := newTestService(t, "", &stubRunner{})
+	service := newTestService(t, "", &recordingCollector{})
 
 	invalidType := knownhosts.Candidate{Host: "a.example.com", Port: 22, KeyType: "rm -rf /", Key: fixtureKey}
 	if _, err := service.Add(invalidType, "", true); !errors.Is(err, knownhosts.ErrUnsupportedKeyType) {
@@ -189,7 +189,7 @@ func TestAddRejectsAKeyTypeOrBlobItDoesNotUnderstand(t *testing.T) {
 }
 
 func TestEvidenceChangesWithTheFile(t *testing.T) {
-	service := newTestService(t, fixtureFile, &stubRunner{})
+	service := newTestService(t, fixtureFile, &recordingCollector{})
 
 	before, err := service.Evidence()
 	if err != nil {
