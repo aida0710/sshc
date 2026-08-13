@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"sshc/internal/application"
 	"sshc/internal/diagnostics"
 	"sshc/internal/handoff"
@@ -25,6 +27,7 @@ import (
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
 	"sshc/internal/session"
+	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 )
@@ -54,6 +57,10 @@ type Dependencies struct {
 	Runner    platform.OutputRunner
 	Toolchain platform.Toolchain
 	KeyAgent  platform.KeyAgent
+	// ScanHostKeys は、あるアドレスが提示するホスト鍵を集める。nil なら
+	// internal/sshclient がこのプロセスの中で集める。Runner と同じ性質の継ぎ目で
+	// あり、**検査がネットワークへ出ないようにするためにここにある。**
+	ScanHostKeys func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
 	// AskpassHelper は実行中バイナリの絶対パス。OpenSSH が保存済み鍵パスフレーズを得る
 	// ために実行するプログラムである。これを知り得るのは cmd/sshc だけで、パスが空
 	// なら、すべての端末起動は素の経路のままになる。
@@ -168,11 +175,15 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	if dependencies.Lookup != nil {
 		scanEnvironment = platform.MinimalEnvironment(dependencies.Lookup)
 	}
-	knownHostsService := knownhosts.NewService(workspace, transactions, knownhosts.Scanner{
-		Runner:      dependencies.Runner,
-		Toolchain:   dependencies.Toolchain,
-		Environment: scanEnvironment,
-	})
+	// 鍵を集めるのはこのプロセスである。ssh-keyscan は起こさない。
+	collectHostKeys := dependencies.ScanHostKeys
+	if collectHostKeys == nil {
+		collectHostKeys = func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error) {
+			return sshclient.ScanHostKeys(ctx, nil, address, timeout)
+		}
+	}
+	knownHostsService := knownhosts.NewService(workspace, transactions,
+		knownhosts.Scanner{Collect: collectHostKeys})
 	remoteKeyService := &remotekey.Service{
 		Runner:      dependencies.Runner,
 		Toolchain:   dependencies.Toolchain,

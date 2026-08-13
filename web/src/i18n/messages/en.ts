@@ -522,7 +522,7 @@ export const en = {
   "kh.add": "Add",
   "kh.addHeading": "Add an unverified host key",
   "kh.addExplain":
-    "ssh-keyscan returned this key from {host}. Anything answering at that address could have sent it, so sshc will not treat it as this host’s key on its own. Type the fingerprint you obtained through another channel, or acknowledge that you are trusting a key nobody verified.",
+    "{host} offered this key. Anything answering at that address could have sent it, so sshc will not treat it as this host’s key on its own. Type the fingerprint you obtained through another channel, or acknowledge that you are trusting a key nobody verified.",
   "kh.expectedFingerprint": "Fingerprint you obtained through another channel",
   "kh.acknowledge": "I could not verify this key and I accept the risk of trusting it",
   "kh.addToKnownHosts": "Add to known_hosts",
