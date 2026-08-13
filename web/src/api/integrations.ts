@@ -239,8 +239,8 @@ function validateAuthentication(value: unknown): AuthenticationResponse {
   const record = asRecord(value);
   asString(record.outcome);
   asBoolean(record.authenticated);
-  asNumber(record.exitCode);
-  asString(record.stderr);
+  asString(record.method);
+  asString(record.detail);
   asBoolean(record.truncated);
   asNumber(record.elapsedMs);
   return record as unknown as AuthenticationResponse;

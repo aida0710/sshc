@@ -18,6 +18,7 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/platform"
 	"sshc/internal/session"
+	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 )
 
@@ -49,7 +50,7 @@ func (dial dialerStub) DialContext(ctx context.Context, network, address string)
 const diagnosticsConfig = "Host bastion\n\tHostName 203.0.113.10\n\tUser ops\n\tPort 2222\n" +
 	"\nHost risky\n\tProxyCommand /usr/bin/nc %h %p\n"
 
-func newDiagnosticsServer(t *testing.T) (*echo.Echo, session.Credentials, *stubRunner, *diagnostics.Service) {
+func newDiagnosticsServer(t *testing.T) (*echo.Echo, session.Credentials, *recordingProbe, *diagnostics.Service) {
 	t.Helper()
 
 	home := t.TempDir()
@@ -65,8 +66,10 @@ func newDiagnosticsServer(t *testing.T) (*echo.Echo, session.Credentials, *stubR
 		t.Fatal(err)
 	}
 
-	runner := &stubRunner{output: platform.Output{Stdout: []byte("hostname 203.0.113.10\nport 2222\n")}}
-	service := diagnostics.NewService(workspace, runner, stubToolchain{}, nil)
+	// 認証の継ぎ目を記録係で置き換える。**この検査はネットワークへ出ない。**
+	// 本物の握手を見るのは internal/sshclient の側である。
+	probe := &recordingProbe{}
+	service := diagnostics.NewService(workspace, probe.dial)
 	service.Reachability = diagnostics.Reachability{
 		Dialer: dialerStub(func(context.Context, string, string) (net.Conn, error) {
 			return nil, net.UnknownNetworkError("unreachable in test")
@@ -89,7 +92,7 @@ func newDiagnosticsServer(t *testing.T) (*echo.Echo, session.Credentials, *stubR
 	actions := ActionHandlers{Sessions: manager, Kinds: registry}
 	registerActionRoutes(engine, actions)
 	registerDiagnosticsRoutes(engine, DiagnosticsHandlers{Service: service, Actions: actions})
-	return engine, credentials, runner, service
+	return engine, credentials, probe, service
 }
 
 // diagnosticsToken は、UI と全く同じ方法でサーバーに確認を求める。
@@ -227,15 +230,15 @@ func TestActionTokenIsUselessForAnotherOperationOrTarget(t *testing.T) {
 }
 
 func TestDiagnosticsRejectUnsafeAliasesAndOversizedBodies(t *testing.T) {
-	engine, credentials, runner, _ := newDiagnosticsServer(t)
+	engine, credentials, probe, _ := newDiagnosticsServer(t)
 
 	unsafe := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/diagnostics/effective",
 		mustMarshal(t, api.AliasRequest{Alias: "-oProxyCommand=id"}), "")
 	if unsafe.Code != http.StatusBadRequest {
 		t.Fatalf("unsafe alias = %d, want 400", unsafe.Code)
 	}
-	if len(runner.commands) != 0 {
-		t.Fatal("an unsafe alias started a process")
+	if len(probe.calls) != 0 {
+		t.Fatal("an unsafe alias reached the network")
 	}
 
 	// 上限を超えるボディは、ハンドラが何かをデコードする前に、いまでは
@@ -250,13 +253,13 @@ func TestDiagnosticsRejectUnsafeAliasesAndOversizedBodies(t *testing.T) {
 	if !strings.Contains(oversized.Body.String(), "request_body_too_large") {
 		t.Fatalf("oversized body = %q, want the request_body_too_large problem code", oversized.Body.String())
 	}
-	if len(runner.commands) != 0 {
-		t.Fatal("an oversized body started a process")
+	if len(probe.calls) != 0 {
+		t.Fatal("an oversized body reached the network")
 	}
 }
 
 func TestConfigCheckNeedsNoActionTokenAndStartsNoProcess(t *testing.T) {
-	engine, credentials, runner, _ := newDiagnosticsServer(t)
+	engine, credentials, probe, _ := newDiagnosticsServer(t)
 
 	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/diagnostics/config", []byte(`{}`), "")
 	if response.Code != http.StatusOK {
@@ -269,8 +272,8 @@ func TestConfigCheckNeedsNoActionTokenAndStartsNoProcess(t *testing.T) {
 	if len(payload.Files) != 1 {
 		t.Fatalf("files = %#v", payload.Files)
 	}
-	if len(runner.commands) != 0 {
-		t.Fatal("the configuration check started a process")
+	if len(probe.calls) != 0 {
+		t.Fatal("the configuration check reached the network")
 	}
 	if got := response.Result().Header.Get("Cache-Control"); got != "no-store" {
 		t.Errorf("Cache-Control = %q", got)
@@ -278,10 +281,9 @@ func TestConfigCheckNeedsNoActionTokenAndStartsNoProcess(t *testing.T) {
 }
 
 func TestAuthenticationEndpointRefusesUnacknowledgedExecutableDirectives(t *testing.T) {
-	engine, credentials, _, service := newDiagnosticsServer(t)
-	// ProxyCommand はコマンドラインから無効化できないので、接続すればそれが
-	// 実行される。呼び出し側は、まずその正確なコマンドを承認しなければならない。
-	service.Authentication.ConfigPath = service.ConfigPath()
+	engine, credentials, _, _ := newDiagnosticsServer(t)
+	// ProxyCommand を持つ設定は、そもそもこのクライアントが接続を断る。
+	// 呼び出し側は、まずその正確なコマンドを承認しなければならない。
 
 	token := diagnosticsToken(t, engine, credentials, session.ActionAuthentication, "risky")
 	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/diagnostics/authentication",
@@ -296,4 +298,22 @@ func TestAuthenticationEndpointRefusesUnacknowledgedExecutableDirectives(t *test
 	if allowed.Code != http.StatusOK {
 		t.Fatalf("acknowledged test = %d: %s", allowed.Code, allowed.Body.String())
 	}
+}
+
+// recordingProbe は、認証の継ぎ目である。何が届いたかを数えるためにある。
+type recordingProbe struct {
+	calls  []string
+	result sshclient.Probe
+	err    error
+}
+
+func (p *recordingProbe) dial(_ context.Context, alias string) (sshclient.Probe, error) {
+	p.calls = append(p.calls, alias)
+	if p.err != nil {
+		return p.result, p.err
+	}
+	if p.result.Method == "" {
+		return sshclient.Probe{Method: "publickey", Tried: []string{"publickey"}}, nil
+	}
+	return p.result, nil
 }

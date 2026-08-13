@@ -80,15 +80,21 @@ func TestNoRouteEverPutsAHostileValueOnACommandLine(t *testing.T) {
 
 	// 正のコントロール: 安全な alias は process seam に届かねばならず、
 	// "--" separator の後に 1 つの完全な argument として到達しなければならない。
+	//
+	// 公開鍵のリモート登録を使う。**認証テストも設定の解決もプロセスを
+	// 起こさなくなった**ので、あちらの継ぎ目はネットワークであり、この検査が
+	// 守っているのはコマンドラインである。
 	f.runner.reset()
-	f.runner.answer(func(platform.Command) (platform.Output, error) {
-		return platform.Output{Stdout: []byte("hostname 203.0.113.10\nport 2222\n")}, nil
+	f.runner.answer(func(command platform.Command) (platform.Output, error) {
+		if strings.Contains(strings.Join(command.Arguments, " "), remotekey.ProbeCommand) {
+			return platform.Output{Stdout: []byte(remotekey.ProbeMarker + "\n")}, nil
+		}
+		return platform.Output{Stdout: []byte("sshc: added\n")}, nil
 	})
-	// 到達性チェックを正のコントロールに使う。設定の解決はもうプロセスを
-	// 起こさないので、あちらでは process seam に何も届かない。
-	readBody(t, f.do(http.MethodPost, "/api/v1/diagnostics/authentication", mustJSON(t, map[string]any{
-		"alias": "bastion", "acknowledgeExecutable": true,
-	}), withAction(f.actionToken(t, session.ActionAuthentication, "bastion"))))
+	readBody(t, f.do(http.MethodPost, "/api/v1/remote-keys/register", mustJSON(t, map[string]any{
+		"alias": "bastion", "keyPath": "id_ed25519.pub", "publicKey": publicKey,
+		"acknowledgeExecutable": true,
+	}), withAction(f.remoteKeyPlanToken(t, "bastion"))))
 	control := f.runner.recorded()
 	if len(control) == 0 {
 		t.Fatal("a safe alias never reached the process seam; every refusal below would prove nothing")

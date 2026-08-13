@@ -1207,8 +1207,8 @@ export interface components {
         AuthenticationResponse: {
             outcome: string;
             authenticated: boolean;
-            exitCode: number;
-            stderr: string;
+            method: string;
+            detail: string;
             truncated: boolean;
             elapsedMs: number;
         };

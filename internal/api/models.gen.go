@@ -117,10 +117,10 @@ type AuthenticationRequest struct {
 // AuthenticationResponse defines model for AuthenticationResponse.
 type AuthenticationResponse struct {
 	Authenticated bool   `json:"authenticated"`
+	Detail        string `json:"detail"`
 	ElapsedMs     int    `json:"elapsedMs"`
-	ExitCode      int    `json:"exitCode"`
+	Method        string `json:"method"`
 	Outcome       string `json:"outcome"`
-	Stderr        string `json:"stderr"`
 	Truncated     bool   `json:"truncated"`
 }
 

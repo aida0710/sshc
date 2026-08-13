@@ -15,6 +15,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -37,6 +38,7 @@ import (
 	"sshc/internal/terminal"
 
 	"golang.org/x/crypto/ssh"
+	"sshc/internal/sshclient"
 )
 
 // canaryPassphrase は fixture の private key を保護する。
@@ -315,8 +317,9 @@ func newFixture(t testing.TB) *fixture {
 		TerminalStarter: terminalStarter,
 		KeyAgent:        fakeAgent{},
 		// このスイートはネットワークへ出ない。ホスト鍵を集める継ぎ目も、
-		// プロセスの継ぎ目と同じく記録係で置き換える。
+		// 認証を試す継ぎ目も、プロセスの継ぎ目と同じく記録係で置き換える。
 		ScanHostKeys: scanner.collect,
+		Probe:        scanner.probe,
 		SessionNow:   clock.now,
 	}, "acceptance")
 	if err != nil {
@@ -808,6 +811,9 @@ func TestHarnessStartsTheProductionServerAgainstAnIsolatedHome(t *testing.T) {
 type recordingScanner struct {
 	mutex     sync.Mutex
 	addresses []string
+	probed    []string
+	// answer は、認証の継ぎ目が返す答えである。既定は「届かなかった」。
+	answer func() (sshclient.Probe, error)
 }
 
 func (s *recordingScanner) collect(
@@ -840,4 +846,30 @@ func (s *recordingScanner) reset() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.addresses = nil
+}
+
+// probe は、認証テストの継ぎ目である。**このスイートは認証しない。**
+func (s *recordingScanner) probe(_ context.Context, alias string) (sshclient.Probe, error) {
+	s.mutex.Lock()
+	answer := s.answer
+	s.probed = append(s.probed, alias)
+	s.mutex.Unlock()
+	if answer != nil {
+		return answer()
+	}
+	return sshclient.Probe{}, errors.New("no route to host")
+}
+
+// answers は、以降の認証がどう答えるかを決める。
+func (s *recordingScanner) answers(answer func() (sshclient.Probe, error)) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.answer = answer
+}
+
+// authenticated は、この継ぎ目に届いた alias である。
+func (s *recordingScanner) authenticated() []string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return append([]string(nil), s.probed...)
 }

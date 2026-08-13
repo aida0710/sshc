@@ -3,7 +3,7 @@ package diagnostics_test
 import (
 	"context"
 	"errors"
-	"slices"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -12,25 +12,23 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/effective"
 	"sshc/internal/platform"
+	"sshc/internal/sshclient"
 )
 
-type scriptedRunner struct {
-	commands []platform.Command
-	output   platform.Output
-	err      error
+// scriptedProbe は、認証テストの継ぎ目を差し替える。
+//
+// 本物の握手を見るのは internal/sshclient の側である。ここが確かめるのは、
+// 継ぎ目に届くまでの関門と、答えの符号への移し方である。
+type scriptedProbe struct {
+	calls  []string
+	result sshclient.Probe
+	err    error
 }
 
-func (runner *scriptedRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
-	runner.commands = append(runner.commands, command)
-	return runner.output, runner.err
+func (p *scriptedProbe) dial(_ context.Context, alias string) (sshclient.Probe, error) {
+	p.calls = append(p.calls, alias)
+	return p.result, p.err
 }
-
-type fixedToolchain struct{ ssh, keyscan, keygen, keyadd string }
-
-func (t fixedToolchain) SSH() (string, error)     { return t.ssh, nil }
-func (t fixedToolchain) KeyScan() (string, error) { return t.keyscan, nil }
-func (t fixedToolchain) KeyGen() (string, error)  { return t.keygen, nil }
-func (t fixedToolchain) KeyAdd() (string, error)  { return t.keyadd, nil }
 
 func reportFrom(t *testing.T, contents string) effective.Report {
 	t.Helper()
@@ -44,101 +42,32 @@ func reportFrom(t *testing.T, contents string) effective.Report {
 	return effective.Scan(graph)
 }
 
-func TestHardeningOptionsDisableForwardingAndLocalCommand(t *testing.T) {
-	options := diagnostics.HardeningOptions(7 * time.Second)
-	joined := strings.Join(options, " ")
-	for _, want := range []string{
-		"BatchMode=yes",
-		"PermitLocalCommand=no",
-		"ClearAllForwardings=yes",
-		"ForwardAgent=no",
-		"ForwardX11=no",
-		"ForwardX11Trusted=no",
-		"ControlMaster=no",
-		"ControlPath=none",
-		"RemoteCommand=none",
-		"RequestTTY=no",
-		"SessionType=none",
-		"StrictHostKeyChecking=yes",
-		"NumberOfPasswordPrompts=0",
-		"ConnectTimeout=7",
-	} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("hardening options are missing %q: %v", want, options)
-		}
-	}
-	for index := 0; index < len(options); index += 2 {
-		if options[index] != "-o" {
-			t.Fatalf("option %d = %q, want -o", index, options[index])
-		}
-	}
-}
-
-func TestAuthenticationTestBuildsASafeCommandAndReadsTheMarker(t *testing.T) {
-	runner := &scriptedRunner{output: platform.Output{
-		Stderr:  []byte("debug1: Authenticated to bastion ([203.0.113.10]:22) using \"publickey\".\n"),
-		Stopped: true,
+func TestAuthenticationTestReportsTheMethodThatWorked(t *testing.T) {
+	probe := &scriptedProbe{result: sshclient.Probe{
+		Method: "publickey", Tried: []string{"publickey"}, Elapsed: 12 * time.Millisecond,
 	}}
-	authentication := diagnostics.Authentication{
-		Runner:     runner,
-		Toolchain:  fixedToolchain{ssh: "/usr/bin/ssh"},
-		ConfigPath: "/Users/tester/.ssh/config",
-	}
+	authentication := diagnostics.Authentication{Dial: probe.dial}
 
 	result, err := authentication.Test(context.Background(), effective.Report{}, "bastion", false)
 	if err != nil {
 		t.Fatalf("Test = %v", err)
 	}
 	if !result.Authenticated || result.Outcome != diagnostics.OutcomeAuthenticated {
-		t.Fatalf("result = %#v", result)
+		t.Fatalf("result = %+v", result)
 	}
-
-	command := runner.commands[0]
-	if command.Path != "/usr/bin/ssh" {
-		t.Errorf("path = %q", command.Path)
+	// **推測ではない。** 方式は順に試され、通った時点で握手が終わる。
+	if result.Method != "publickey" {
+		t.Errorf("method = %q", result.Method)
 	}
-	if string(command.StopAfter) != diagnostics.AuthenticatedMarker {
-		t.Errorf("stop marker = %q", command.StopAfter)
-	}
-	if command.Timeout != diagnostics.DefaultAuthenticationTimeout {
-		t.Errorf("timeout = %s", command.Timeout)
-	}
-	if last := command.Arguments[len(command.Arguments)-2:]; !slices.Equal(last, []string{"--", "bastion"}) {
-		t.Errorf("argv tail = %#v, want -- bastion", last)
-	}
-	if !slices.Contains(command.Arguments, "-v") || !slices.Contains(command.Arguments, "-F") {
-		t.Errorf("argv = %#v", command.Arguments)
+	if len(probe.calls) != 1 || probe.calls[0] != "bastion" {
+		t.Errorf("calls = %#v", probe.calls)
 	}
 }
 
-// TestAuthenticationTestHandsOpenSSHTheEnvironmentItWasGiven は子プロセスの環境を
-// 守る。SSH_ASKPASS がエクスポートされていると、ssh は外部プログラムにパスフレーズ
-// を尋ねられるようになり、BatchMode を打ち破って、上限付きで非対話的なこのテストを
-// ダイアログ待ちにしてしまう。
-func TestAuthenticationTestHandsOpenSSHTheEnvironmentItWasGiven(t *testing.T) {
-	runner := &scriptedRunner{output: platform.Output{Stopped: true, Stderr: []byte(diagnostics.AuthenticatedMarker + "host\n")}}
-	authentication := diagnostics.Authentication{
-		Runner:      runner,
-		Toolchain:   fixedToolchain{ssh: "/usr/bin/ssh"},
-		ConfigPath:  "/Users/tester/.ssh/config",
-		Environment: []string{"HOME=/Users/tester", "PATH=/usr/bin"},
-	}
-
-	if _, err := authentication.Test(context.Background(), effective.Report{}, "bastion", false); err != nil {
-		t.Fatalf("Test = %v", err)
-	}
-	if got := runner.commands[0].Env; !slices.Equal(got, []string{"HOME=/Users/tester", "PATH=/usr/bin"}) {
-		t.Errorf("env = %#v, want the configured environment", got)
-	}
-}
-
+// 実行を伴うディレクティブは、確認されるまで継ぎ目に届かない。
 func TestAuthenticationTestRefusesUntilUnavoidableCommandsAreAcknowledged(t *testing.T) {
-	runner := &scriptedRunner{output: platform.Output{Stopped: true, Stderr: []byte(diagnostics.AuthenticatedMarker + "host\n")}}
-	authentication := diagnostics.Authentication{
-		Runner:     runner,
-		Toolchain:  fixedToolchain{ssh: "/usr/bin/ssh"},
-		ConfigPath: "/Users/tester/.ssh/config",
-	}
+	probe := &scriptedProbe{}
+	authentication := diagnostics.Authentication{Dial: probe.dial}
 	report := reportFrom(t, "Host jump\n\tProxyCommand /usr/bin/nc %h %p\n")
 
 	_, err := authentication.Test(context.Background(), report, "jump", false)
@@ -149,83 +78,91 @@ func TestAuthenticationTestRefusesUntilUnavoidableCommandsAreAcknowledged(t *tes
 	if len(directiveError.Directives) != 1 || directiveError.Directives[0].Keyword != "ProxyCommand" {
 		t.Fatalf("directives = %#v", directiveError.Directives)
 	}
-	if len(runner.commands) != 0 {
-		t.Fatal("a refused authentication test started a process")
+	if len(probe.calls) != 0 {
+		t.Fatal("a refused authentication test reached the network")
 	}
 
 	if _, err := authentication.Test(context.Background(), report, "jump", true); err != nil {
 		t.Fatalf("acknowledged Test = %v", err)
 	}
-	if len(runner.commands) != 1 {
-		t.Fatalf("acknowledged test did not run: %#v", runner.commands)
+	if len(probe.calls) != 1 {
+		t.Fatalf("acknowledged test did not run: %#v", probe.calls)
 	}
 
 	overridable := reportFrom(t, "Host jump\n\tLocalCommand /usr/bin/say hi\n")
 	if _, err := authentication.Test(context.Background(), overridable, "jump", false); err != nil {
-		t.Fatalf("a directive the command line disables must not block the test: %v", err)
+		t.Fatalf("a directive this client does not have must not block the test: %v", err)
 	}
 }
 
-func TestAuthenticationTestClassifiesFailures(t *testing.T) {
-	tests := []struct {
-		name   string
-		output platform.Output
-		runErr error
-		want   string
+// **型で判断する。** 出力の語句を読んでいたのは、外部のプログラムが理由を
+// 型で返す手段を持たなかったからである。
+func TestAuthenticationTestClassifiesFailuresByType(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		want string
 	}{
-		{"denied", platform.Output{ExitCode: 255, Stderr: []byte("ops@203.0.113.10: Permission denied (publickey).\n")}, nil, diagnostics.OutcomeDenied},
-		{"unknown host key", platform.Output{ExitCode: 255, Stderr: []byte("Host key verification failed.\n")}, nil, diagnostics.OutcomeHostKeyUnknown},
-		{"changed host key", platform.Output{ExitCode: 255, Stderr: []byte("@@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@@\nHost key verification failed.\n")}, nil, diagnostics.OutcomeHostKeyChanged},
-		{"dns", platform.Output{ExitCode: 255, Stderr: []byte("ssh: Could not resolve hostname missing.invalid: nodename nor servname provided\n")}, nil, diagnostics.OutcomeDNSFailure},
-		{"refused", platform.Output{ExitCode: 255, Stderr: []byte("ssh: connect to host 203.0.113.10 port 22: Connection refused\n")}, nil, diagnostics.OutcomeRefused},
-		{"timeout", platform.Output{}, platform.ErrTimedOut, diagnostics.OutcomeTimeout},
-		{"other", platform.Output{ExitCode: 1, Stderr: []byte("something else\n")}, nil, diagnostics.OutcomeFailed},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			authentication := diagnostics.Authentication{
-				Runner:     &scriptedRunner{output: test.output, err: test.runErr},
-				Toolchain:  fixedToolchain{ssh: "/usr/bin/ssh"},
-				ConfigPath: "/Users/tester/.ssh/config",
-			}
-			result, err := authentication.Test(context.Background(), effective.Report{}, "bastion", false)
-			if err != nil {
-				t.Fatalf("Test = %v", err)
-			}
-			if result.Outcome != test.want || result.Authenticated {
-				t.Fatalf("result = %#v, want outcome %q", result, test.want)
-			}
-		})
+		{"host key changed", sshclient.ErrHostKeyChanged, diagnostics.OutcomeHostKeyChanged},
+		{"host key unknown", sshclient.ErrHostKeyUnknown, diagnostics.OutcomeHostKeyUnknown},
+		{"host key revoked", sshclient.ErrHostKeyRevoked, diagnostics.OutcomeHostKeyUnknown},
+		{"nothing to offer", sshclient.ErrNoAuthMethod, diagnostics.OutcomeDenied},
+		{"denied", errors.New("ssh: unable to authenticate, attempted methods [none publickey]"), diagnostics.OutcomeDenied},
+		{"dns", &net.DNSError{Err: "no such host", Name: "nowhere.invalid"}, diagnostics.OutcomeDNSFailure},
+		{"deadline", context.DeadlineExceeded, diagnostics.OutcomeTimeout},
+		{"refused", errors.New("dial tcp 127.0.0.1:1: connect: connection refused"), diagnostics.OutcomeRefused},
+		{"anything else", errors.New("something nobody has seen"), diagnostics.OutcomeFailed},
+	} {
+		probe := &scriptedProbe{err: test.err, result: sshclient.Probe{Tried: []string{"publickey"}}}
+		authentication := diagnostics.Authentication{Dial: probe.dial}
+
+		result, err := authentication.Test(context.Background(), effective.Report{}, "bastion", false)
+		if err != nil {
+			t.Fatalf("%s: Test = %v", test.name, err)
+		}
+		if result.Outcome != test.want {
+			t.Errorf("%s: outcome = %q, want %q", test.name, result.Outcome, test.want)
+		}
+		if result.Authenticated {
+			t.Errorf("%s: a failure reported authentication", test.name)
+		}
+		// 失敗の説明には、試した方式が入る。何も試していないのか、試して
+		// 断られたのかは別の答えである。
+		if !strings.Contains(result.Detail, "publickey") {
+			t.Errorf("%s: detail = %q", test.name, result.Detail)
+		}
 	}
 }
 
 func TestAuthenticationTestRejectsUnsafeAliasesAndCapsReportedOutput(t *testing.T) {
-	runner := &scriptedRunner{output: platform.Output{
-		ExitCode:  255,
-		Stderr:    []byte(strings.Repeat("x", diagnostics.MaxReportedOutput+4096)),
-		Truncated: true,
-	}}
-	authentication := diagnostics.Authentication{
-		Runner:     runner,
-		Toolchain:  fixedToolchain{ssh: "/usr/bin/ssh"},
-		ConfigPath: "/Users/tester/.ssh/config",
-	}
+	probe := &scriptedProbe{}
+	authentication := diagnostics.Authentication{Dial: probe.dial}
 
-	if _, err := authentication.Test(context.Background(), effective.Report{}, "bad alias", false); !errors.Is(err, platform.ErrUnsafeAlias) {
+	if _, err := authentication.Test(
+		context.Background(), effective.Report{}, "-oProxyCommand=id", false,
+	); !errors.Is(err, platform.ErrUnsafeAlias) {
 		t.Fatalf("unsafe alias = %v, want ErrUnsafeAlias", err)
 	}
-	if len(runner.commands) != 0 {
-		t.Fatal("an unsafe alias started a process")
+	if len(probe.calls) != 0 {
+		t.Fatal("an unsafe alias reached the network")
 	}
 
+	long := strings.Repeat("b", diagnostics.MaxReportedOutput*2)
+	probe.result = sshclient.Probe{Method: "publickey", Banner: long}
 	result, err := authentication.Test(context.Background(), effective.Report{}, "bastion", false)
 	if err != nil {
-		t.Fatalf("Test = %v", err)
+		t.Fatal(err)
 	}
-	if len(result.Stderr) > diagnostics.MaxReportedOutput {
-		t.Errorf("reported %d bytes, want at most %d", len(result.Stderr), diagnostics.MaxReportedOutput)
+	if len(result.Detail) > diagnostics.MaxReportedOutput || !result.Truncated {
+		t.Fatalf("detail = %d bytes, truncated = %v", len(result.Detail), result.Truncated)
 	}
-	if !result.Truncated {
-		t.Error("truncation was not reported")
+}
+
+// 手段が無いなら、試したふりをしない。
+func TestAuthenticationTestWithoutAProbeRefuses(t *testing.T) {
+	if _, err := (diagnostics.Authentication{}).Test(
+		context.Background(), effective.Report{}, "bastion", false,
+	); !errors.Is(err, diagnostics.ErrNoAuthenticator) {
+		t.Fatalf("Test = %v, want ErrNoAuthenticator", err)
 	}
 }
