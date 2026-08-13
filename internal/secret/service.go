@@ -1,20 +1,15 @@
 package secret
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/base64"
 	"errors"
 	"io/fs"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"sshc/internal/envelope"
-	"sshc/internal/platform"
 	"sshc/internal/storage"
 )
 
@@ -83,10 +78,6 @@ type ConnectionSecretsMutation struct {
 // 間隔であって、誰かが計画を立てられるような窓ではない。
 const TokenTTL = 2 * time.Minute
 
-// MaxPendingTokens は、未使用のトークンを同時にいくつ保持できるかを制限する。
-// 端末をたくさん開くユーザーが、このマップを際限なく育てられないようにするためだ。
-const MaxPendingTokens = 32
-
 // IdleTimeout は、開いた vault が使われないまま生き続ける時間。
 //
 // プロセスの寿命のあいだずっと開いたままの vault は、ノートパソコンが鞄の中に
@@ -94,16 +85,6 @@ const MaxPendingTokens = 32
 // パスフレーズを保持している。8 時間は 1 日の勤務時間だ。朝に使った人は午後に
 // 再度尋ねられず、夜に手を止めた人は尋ねられる。
 const IdleTimeout = 8 * time.Hour
-
-type pendingToken struct {
-	alias      string
-	kind       Kind
-	subject    string
-	promptPath string
-	evidence   string
-	valueHash  [sha256.Size]byte
-	expires    time.Time
-}
 
 // Service は、プロセスの寿命のあいだ、開いた vault を所有する。
 //
@@ -129,7 +110,6 @@ type Service struct {
 	// refusals は、連続して誤ったマスターパスワードの回数を数える。これが、拒否のたび
 	// に前回より遅く答えさせている。
 	refusals int
-	tokens   map[string]pendingToken
 	// used は、秘密が最後に読み書きされた時刻。ステータスの読み取りは意図的に「使用」
 	// に含めない。開いたブラウザタブは画面がマウントされるたびにそれを尋ねるので、
 	// 忘れられたタブがひとつあるだけで、マシンの電源が入っているあいだじゅう vault が
@@ -143,7 +123,6 @@ func NewService(workspace *storage.Workspace, transactions *storage.Manager, now
 		workspace:    workspace,
 		transactions: transactions,
 		now:          now,
-		tokens:       map[string]pendingToken{},
 	}
 }
 
@@ -160,7 +139,6 @@ func (s *Service) open() *Vault {
 	if s.now().Sub(s.used) >= IdleTimeout {
 		s.vault = nil
 		s.baseline = nil
-		s.tokens = map[string]pendingToken{}
 		return nil
 	}
 	return s.vault
@@ -308,7 +286,6 @@ func (s *Service) Unlock(passphrase string) error {
 	s.vault = vault
 	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
-	s.tokens = map[string]pendingToken{}
 	// 通ったパスワードは、誤ったものが積み上げたものを消し去る。
 	s.refusals = 0
 	s.mu.Unlock()
@@ -326,7 +303,6 @@ func (s *Service) Lock() {
 	defer s.mu.Unlock()
 	s.vault = nil
 	s.baseline = nil
-	s.tokens = map[string]pendingToken{}
 }
 
 // Has は、alias にパスワードが保存されているかを報告する。ロック中はエラーでは
@@ -587,7 +563,6 @@ func (s *Service) RelocateKeyPassphrases(relocations map[string]string) error {
 	s.vault = clone
 	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
-	s.tokens = map[string]pendingToken{}
 	s.mu.Unlock()
 	return nil
 }
@@ -680,205 +655,6 @@ func (s *Service) SetSyncSettings(settings SyncSettings) error {
 	return err
 }
 
-// IssueToken は、alias ひとつ分の単回使用トークンを発行する。
-//
-// これはユーザーが端末を開こうとしたときに発行され、その接続が行う askpass の
-// リクエストによって使い切られる。他の何もこれを得ることはできない。
-func (s *Service) IssueToken(alias string) (string, error) {
-	if err := platform.ValidateAlias(alias); err != nil {
-		return "", ErrUnsafeName
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	vault := s.use()
-	if vault == nil {
-		return "", ErrLocked
-	}
-	password, ok := vault.SecretFor(KindPassword, alias)
-	if !ok {
-		return "", ErrNoPassword
-	}
-	s.expireLocked()
-	if len(s.tokens) >= MaxPendingTokens {
-		return "", ErrUnknownToken
-	}
-
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
-	s.tokens[token] = pendingToken{
-		alias: alias, kind: KindPassword, subject: alias,
-		valueHash: sha256.Sum256([]byte(password)), expires: s.now().Add(TokenTTL),
-	}
-	return token, nil
-}
-
-// IssueKeyPassphraseToken issues a single-use token for one connection and one
-// workspace-relative private-key path. The token does not authorize any account
-// password or any other key passphrase.
-func (s *Service) IssueKeyPassphraseToken(alias, relativePath, promptPath, evidence string) (string, error) {
-	if err := platform.ValidateAlias(alias); err != nil || relativePath == "" ||
-		filepath.IsAbs(relativePath) || strings.ContainsRune(relativePath, '\x00') ||
-		!filepath.IsAbs(promptPath) || strings.ContainsRune(promptPath, '\x00') || evidence == "" {
-		return "", ErrUnsafeName
-	}
-	cleaned := filepath.Clean(filepath.FromSlash(relativePath))
-	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-		return "", ErrUnsafeName
-	}
-	relativePath = filepath.ToSlash(cleaned)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	vault := s.use()
-	if vault == nil {
-		return "", ErrLocked
-	}
-	passphrase, ok := vault.SecretFor(KindKeyPassphrase, relativePath)
-	if !ok {
-		return "", ErrNoPassword
-	}
-	s.expireLocked()
-	if len(s.tokens) >= MaxPendingTokens {
-		return "", ErrUnknownToken
-	}
-
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
-	s.tokens[token] = pendingToken{
-		alias: alias, kind: KindKeyPassphrase, subject: relativePath,
-		promptPath: filepath.Clean(promptPath), evidence: evidence,
-		valueHash: sha256.Sum256([]byte(passphrase)), expires: s.now().Add(TokenTTL),
-	}
-	return token, nil
-}
-
-// Redeem はトークンを使い切り、その alias のパスワードを返す。
-//
-// プロンプトはヘルパーだけでなくここでも検査する。こちら側は置き換えられない側
-// だからだ。他人がコンパイルしたヘルパーも、同じヘルパーを別の引数で呼び出した
-// ものも、このアプリケーションが答えると同意していない問いには、やはり答えを
-// 得られない。プロンプトが受理できるかどうかにかかわらずトークンは使い切られる
-// ので、誤ったプロンプトを正しいもので再試行することは
-// できない。
-func (s *Service) Redeem(token, alias, prompt string, answerable func(alias, prompt string) bool) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	vault := s.use()
-	if vault == nil {
-		return "", ErrLocked
-	}
-	s.expireLocked()
-
-	pending, ok := s.lookupTokenLocked(token)
-	if !ok || pending.alias != alias || pending.kind != KindPassword || pending.subject != alias {
-		return "", ErrUnknownToken
-	}
-	delete(s.tokens, token)
-
-	if !answerable(alias, prompt) {
-		return "", ErrUnknownToken
-	}
-	password, ok := vault.SecretFor(KindPassword, alias)
-	if !ok {
-		return "", ErrNoPassword
-	}
-	if sha256.Sum256([]byte(password)) != pending.valueHash {
-		return "", ErrUnknownToken
-	}
-	return password, nil
-}
-
-// RedeemKeyPassphrase spends a key-bound token and returns only the value for
-// its exact private-key subject. The prompt predicate is evaluated server-side
-// so replacing or invoking the helper differently cannot widen the token.
-func (s *Service) RedeemKeyPassphrase(
-	token, alias, prompt string,
-	answerable func(alias, relativePath, expectedPath, evidence, prompt string) bool,
-) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	vault := s.use()
-	if vault == nil {
-		return "", ErrLocked
-	}
-	s.expireLocked()
-
-	pending, ok := s.lookupTokenLocked(token)
-	if !ok || pending.alias != alias || pending.kind != KindKeyPassphrase {
-		return "", ErrUnknownToken
-	}
-	// Once a caller presents a token for the right alias and credential kind,
-	// every outcome spends it. Otherwise a changed configuration could reject
-	// it, be reverted within the TTL, and make the old capability valid again.
-	delete(s.tokens, token)
-	passphrase, present := vault.SecretFor(KindKeyPassphrase, pending.subject)
-	if !present || sha256.Sum256([]byte(passphrase)) != pending.valueHash {
-		return "", ErrUnknownToken
-	}
-	if answerable == nil || !answerable(alias, pending.subject, pending.promptPath, pending.evidence, prompt) {
-		return "", ErrUnknownToken
-	}
-	return passphrase, nil
-}
-
-// RedeemCredential dispatches redemption by the kind already bound into the
-// opaque token. Callers cannot select a different credential namespace.
-func (s *Service) RedeemCredential(
-	token, alias, prompt string,
-	passwordAnswerable func(alias, prompt string) bool,
-	keyPassphraseAnswerable func(alias, relativePath, expectedPath, evidence, prompt string) bool,
-) (string, error) {
-	s.mu.Lock()
-	pending, ok := s.lookupTokenLocked(token)
-	s.mu.Unlock()
-	if !ok {
-		return "", ErrUnknownToken
-	}
-	switch pending.kind {
-	case KindPassword:
-		if passwordAnswerable == nil {
-			passwordAnswerable = func(string, string) bool { return false }
-		}
-		return s.Redeem(token, alias, prompt, passwordAnswerable)
-	case KindKeyPassphrase:
-		return s.RedeemKeyPassphrase(token, alias, prompt, keyPassphraseAnswerable)
-	default:
-		return "", ErrUnknownToken
-	}
-}
-
-// lookupTokenLocked は、生きているすべてのトークンと定数時間で比較する。
-//
-// マップの検索は素直なやり方だが、推測した接頭辞が近づいているかどうかを、
-// タイミングを通して漏らしてしまう。集合は MaxPendingTokens で上限が定まっている
-// ので、それを走査するコストは測る価値もない。
-func (s *Service) lookupTokenLocked(presented string) (pendingToken, bool) {
-	var found pendingToken
-	matched := false
-	for token, pending := range s.tokens {
-		if len(token) == len(presented) && subtle.ConstantTimeCompare([]byte(token), []byte(presented)) == 1 {
-			found = pending
-			matched = true
-		}
-	}
-	return found, matched
-}
-
-func (s *Service) expireLocked() {
-	now := s.now()
-	for token, pending := range s.tokens {
-		if now.After(pending.expires) {
-			delete(s.tokens, token)
-		}
-	}
-}
-
 // write は vault を封じ、トランザクションマネージャを通してコミットする。これに
 // より、書きかけの秘密ファイルは、このアプリケーションが到達しうる状態ではなくなる。
 //
@@ -926,7 +702,6 @@ func (s *Service) write() error {
 	// A token is a capability for the value observed at issuance. Any vault
 	// write may change an assignment or shared value, so invalidate all of
 	// them instead of trying to infer which references moved.
-	s.tokens = map[string]pendingToken{}
 	s.mu.Unlock()
 	return nil
 }
@@ -1041,7 +816,6 @@ func (s *Service) WithConnectionSecretsTransaction(
 	s.vault = clone
 	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
-	s.tokens = map[string]pendingToken{}
 	s.mu.Unlock()
 	return result, nil
 }
@@ -1183,7 +957,6 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 	}
 	s.mu.Lock()
 	s.baseline = slices.Clone(sealed)
-	s.tokens = map[string]pendingToken{}
 	s.mu.Unlock()
 	return nil
 }

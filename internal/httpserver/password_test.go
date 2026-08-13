@@ -44,8 +44,7 @@ func passwordEngineIn(t *testing.T) (*echo.Echo, *secret.Service, string) {
 
 	engine := echo.New()
 	registerPasswordRoutes(engine, PasswordHandlers{
-		Service:    service,
-		Answerable: func(_ string, prompt string) bool { return strings.HasSuffix(prompt, "password: ") },
+		Service: service,
 	})
 	return engine, service, home
 }
@@ -66,9 +65,8 @@ func passwordEngineWithKeyHosts(
 	service := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
 	engine := echo.New()
 	registerPasswordRoutes(engine, PasswordHandlers{
-		Service:    service,
-		KeyHosts:   keyHosts,
-		Answerable: func(_ string, prompt string) bool { return strings.HasSuffix(prompt, "password: ") },
+		Service:  service,
+		KeyHosts: keyHosts,
 	})
 	return engine, service, home
 }
@@ -194,120 +192,6 @@ func TestInitialiseRefusesAShortPassphraseAndDoesNotCreateAVault(t *testing.T) {
 	}
 }
 
-func askpassHeaders(token string) map[string]string {
-	return map[string]string{
-		echo.HeaderContentType: "application/json",
-		AskpassTokenHeader:     token,
-	}
-}
-
-func TestAskpassAnswersOnceWithAValidToken(t *testing.T) {
-	engine, service := passwordEngine(t)
-	if err := service.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.Set("bastion", "hunter2"); err != nil {
-		t.Fatal(err)
-	}
-	token, err := service.IssueToken("bastion")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	body := `{"alias":"bastion","prompt":"ops@203.0.113.10's password: "}`
-	first := send(t, engine, http.MethodPost, AskpassPath, body, askpassHeaders(token))
-	if first.Code != http.StatusOK {
-		t.Fatalf("code = %d, body = %s", first.Code, first.Body.String())
-	}
-	var answer struct {
-		Password string `json:"password"`
-	}
-	if err := json.Unmarshal(first.Body.Bytes(), &answer); err != nil || answer.Password != "hunter2" {
-		t.Fatalf("answer = %#v, err = %v", answer, err)
-	}
-
-	second := send(t, engine, http.MethodPost, AskpassPath, body, askpassHeaders(token))
-	if second.Code == http.StatusOK {
-		t.Fatal("the token was accepted a second time")
-	}
-}
-
-func TestAskpassRefusesWithoutAValidRequest(t *testing.T) {
-	engine, service := passwordEngine(t)
-	if err := service.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.Set("bastion", "hunter2"); err != nil {
-		t.Fatal(err)
-	}
-	token, err := service.IssueToken("bastion")
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := `{"alias":"bastion","prompt":"ops@h's password: "}`
-
-	cases := map[string]struct {
-		headers map[string]string
-		body    string
-	}{
-		"no token":    {map[string]string{echo.HeaderContentType: "application/json"}, body},
-		"wrong token": {askpassHeaders("not-the-token"), body},
-		// form の content type は、クロスオリジンのページがプリフライトなしに
-		// 送れるものなので、侵入経路になってはならない。
-		"form content type": {map[string]string{
-			echo.HeaderContentType: "application/x-www-form-urlencoded",
-			AskpassTokenHeader:     token,
-		}, body},
-		"host key prompt": {askpassHeaders(token),
-			`{"alias":"bastion","prompt":"Are you sure you want to continue connecting (yes/no)? "}`},
-		"unsafe alias": {askpassHeaders(token), `{"alias":"bad alias","prompt":"x's password: "}`},
-		"not json":     {askpassHeaders(token), `not json at all`},
-	}
-	for name, test := range cases {
-		t.Run(name, func(t *testing.T) {
-			response := send(t, engine, http.MethodPost, AskpassPath, test.body, test.headers)
-			if response.Code == http.StatusOK {
-				t.Fatalf("the request was answered: %s", response.Body.String())
-			}
-			if strings.Contains(response.Body.String(), "hunter2") {
-				t.Error("a refusal carried the password")
-			}
-		})
-	}
-}
-
-func TestAskpassNeverAnswersWithoutAPromptRule(t *testing.T) {
-	// nil の predicate は「何も答えない」を意味し、決して「何でも答える」ではない。
-	home := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
-	if err := service.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.Set("bastion", "hunter2"); err != nil {
-		t.Fatal(err)
-	}
-	token, err := service.IssueToken("bastion")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	engine := echo.New()
-	registerPasswordRoutes(engine, PasswordHandlers{Service: service, Answerable: nil})
-
-	response := send(t, engine, http.MethodPost, AskpassPath,
-		`{"alias":"bastion","prompt":"ops@h's password: "}`, askpassHeaders(token))
-	if response.Code == http.StatusOK {
-		t.Fatalf("a handler with no prompt rule answered: %s", response.Body.String())
-	}
-}
-
 func TestStoreRefusesAPasswordTheHostWouldNeverBeOffered(t *testing.T) {
 	// interface はこのフィールドを無効化するが、interface は差し替え
 	// 可能でもこちら側はそうではない。blocker があれば保存された
@@ -317,8 +201,7 @@ func TestStoreRefusesAPasswordTheHostWouldNeverBeOffered(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerPasswordRoutes(engine, PasswordHandlers{
-		Service:    service,
-		Answerable: func(_ string, prompt string) bool { return strings.HasSuffix(prompt, "password: ") },
+		Service: service,
 		Eligibility: func(alias string) (application.PasswordEligibility, error) {
 			return application.PasswordEligibility{
 				Alias:    alias,
@@ -385,74 +268,6 @@ func TestAssignCredentialRefusesAPasswordForADirectKeyButNotAKeyPassphrase(t *te
 		`{"subject":"id_ed25519","name":"keys"}`, nil)
 	if keyPhrase.Code != http.StatusOK {
 		t.Fatalf("key passphrase assignment = %d: %s", keyPhrase.Code, keyPhrase.Body.String())
-	}
-}
-
-func TestAskpassRechecksCurrentPasswordPolicyAndConsumesDeniedToken(t *testing.T) {
-	_, service := passwordEngine(t)
-	if err := service.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.Set("bastion", "legacy-password"); err != nil {
-		t.Fatal(err)
-	}
-	allowed := false
-	engine := echo.New()
-	registerPasswordRoutes(engine, PasswordHandlers{
-		Service: service,
-		Answerable: func(_ string, prompt string) bool {
-			return allowed && strings.HasSuffix(prompt, "password: ")
-		},
-	})
-	token, err := service.IssueToken("bastion")
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := `{"alias":"bastion","prompt":"ops@h's password: "}`
-	denied := send(t, engine, http.MethodPost, AskpassPath, body, askpassHeaders(token))
-	if denied.Code != http.StatusForbidden {
-		t.Fatalf("denied redeem = %d", denied.Code)
-	}
-	allowed = true
-	reused := send(t, engine, http.MethodPost, AskpassPath, body, askpassHeaders(token))
-	if reused.Code != http.StatusForbidden {
-		t.Fatalf("reused denied token = %d", reused.Code)
-	}
-}
-
-func TestAskpassRedeemsAKeyTokenOnlyForItsBoundKeyPrompt(t *testing.T) {
-	_, service := passwordEngine(t)
-	if err := service.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.SetCredential(secret.KindKeyPassphrase, "server-key", "saved key phrase"); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.AssignCredential(secret.KindKeyPassphrase, "id_ed25519_server", "server-key"); err != nil {
-		t.Fatal(err)
-	}
-	engine := echo.New()
-	registerPasswordRoutes(engine, PasswordHandlers{
-		Service: service,
-		KeyPassphraseAnswerable: func(alias, relativePath, expectedPath, evidence, prompt string) bool {
-			return alias == "bastion" && relativePath == "id_ed25519_server" &&
-				expectedPath == "/Users/tester/.ssh/id_ed25519_server" &&
-				evidence == "evidence" && prompt == "Enter passphrase for key '/Users/tester/.ssh/id_ed25519_server': "
-		},
-	})
-	token, err := service.IssueKeyPassphraseToken(
-		"bastion", "id_ed25519_server", "/Users/tester/.ssh/id_ed25519_server", "evidence")
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := send(t, engine, http.MethodPost, AskpassPath,
-		`{"alias":"bastion","prompt":"Enter passphrase for key '/Users/tester/.ssh/id_ed25519_server': "}`,
-		askpassHeaders(token))
-	if response.Code != http.StatusOK {
-		t.Fatalf("redeem = %d: %s", response.Code, response.Body.String())
-	}
-	if strings.Contains(response.Body.String(), "server-key") || !strings.Contains(response.Body.String(), "saved key phrase") {
-		t.Fatalf("response did not contain exactly the resolved value: %s", response.Body.String())
 	}
 }
 

@@ -18,7 +18,6 @@ import (
 	"testing/fstest"
 	"time"
 
-	"sshc/internal/application"
 	"sshc/internal/platform"
 )
 
@@ -140,10 +139,9 @@ func (stubRunner) RunOutput(context.Context, platform.Command) (platform.Output,
 
 type stubToolchain struct{}
 
-func (stubToolchain) SSH() (string, error)     { return "/usr/bin/ssh", nil }
-func (stubToolchain) KeyScan() (string, error) { return "/usr/bin/ssh-keyscan", nil }
-func (stubToolchain) KeyGen() (string, error)  { return "/usr/bin/ssh-keygen", nil }
-func (stubToolchain) KeyAdd() (string, error)  { return "/usr/bin/ssh-add", nil }
+func (stubToolchain) SSH() (string, error)    { return "/usr/bin/ssh", nil }
+func (stubToolchain) KeyGen() (string, error) { return "/usr/bin/ssh-keygen", nil }
+func (stubToolchain) KeyAdd() (string, error) { return "/usr/bin/ssh-add", nil }
 
 type stubKeyAgent struct{}
 
@@ -361,38 +359,4 @@ type trackingListener struct {
 func (listener *trackingListener) Close() error {
 	listener.closed = true
 	return listener.Listener.Close()
-}
-
-func TestKeyPassphraseAnswerableRechecksTheCurrentDirectKey(t *testing.T) {
-	target := application.DirectKeyPassphraseTarget{
-		RelativePath: "id_ed25519_server",
-		PromptPath:   "/Users/tester/.ssh/id_ed25519_server",
-		Evidence:     "config-and-key-v1",
-	}
-	resolver := func(string) (application.DirectKeyPassphraseTarget, bool, error) {
-		return target, true, nil
-	}
-	answerable := keyPassphraseAnswerable(keyPassphrasePrompt, resolver)
-	prompt := "Enter passphrase for key '/Users/tester/.ssh/id_ed25519_server': "
-	if !answerable("bastion", "id_ed25519_server", target.PromptPath, target.Evidence, prompt) {
-		t.Fatal("the current direct key's exact prompt was refused")
-	}
-
-	target = application.DirectKeyPassphraseTarget{
-		RelativePath: "id_replacement",
-		PromptPath:   "/Users/tester/.ssh/id_replacement",
-		Evidence:     "config-and-key-v2",
-	}
-	if answerable("bastion", "id_ed25519_server", "/Users/tester/.ssh/id_ed25519_server", "config-and-key-v1", prompt) {
-		t.Fatal("a token for the previous IdentityFile survived a config change")
-	}
-}
-
-func TestKeyPassphrasePromptRefusesTruncatedPaths(t *testing.T) {
-	expected := "/Users/tester/.ssh/" + strings.Repeat("nested/", 20) + "id_ed25519_server"
-	shown := expected[:100]
-	prompt := "Enter passphrase for key '" + shown + "': "
-	if keyPassphrasePrompt(expected, prompt) {
-		t.Fatal("a truncated display cannot uniquely identify the private key")
-	}
 }

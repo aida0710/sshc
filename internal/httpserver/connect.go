@@ -20,7 +20,7 @@ import (
 // セッション cookie と CSRF ヘッダーと Fetch Metadata で守られている。
 // シェルはそのいずれでもなく、そのいずれも持たない。このルートは代わりに、
 // 実行中のアプリケーションが state ディレクトリに残した secret で認証する。
-// askpass エンドポイントも /api/ の外に置かれているのと同じ理由による。
+// 埋め込みターミナルのストリームも /api/ の外に置かれているのと同じ理由による。
 const ConnectPath = "/cli/connect"
 
 // maxConnectBody はリクエストを制限する。alias は 1 語である。
@@ -31,14 +31,12 @@ type ConnectHandlers struct {
 	// Secret は呼び出し側が提示すべきものである。空であればすべての
 	// リクエストを拒否する。handoff を書けなかったサーバーは受け付けてはならない。
 	Secret string
-	// Passwords は一度限りの askpass トークンを発行する。nil であれば
+	// Passwords は保存済みの鍵パスフレーズを持つ。nil であれば
 	// 保存されたパスワードは一切提供されず、それはプロンプトが出る正常な接続である。
 	Passwords *secret.Service
 	// KeyPassphraseTarget resolves the one direct workspace key whose saved
 	// passphrase may answer this connection. A false result is never guessed.
 	KeyPassphraseTarget func(alias string) (relativePath, promptPath, configSnapshot, evidence string, ok bool, err error)
-	// AskpassURL は、ヘルパーがそのトークンを引き換える場所である。
-	AskpassURL string
 	// Warnings は、OpenSSH がこの host に対して実行するディレクティブを報告する。
 	// 接続の最中に気付くのではなく、事前に伝えられる。
 	Warnings func(alias string) []string
@@ -67,17 +65,6 @@ type connectResponse struct {
 	// Passphrase は、その鍵について保存されている答え。無ければ空である。
 	Passphrase string   `json:"passphrase,omitempty"`
 	Warnings   []string `json:"warnings"`
-}
-
-const (
-	AskpassKindKeyPassphrase = "key_passphrase"
-)
-
-type issuedAskpassCredential struct {
-	token        string
-	kind         string
-	identityFile string
-	sshConfig    string
 }
 
 // savedPassphrase は、その alias が使う鍵と、保存されているパスフレーズを返す。

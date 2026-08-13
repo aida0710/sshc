@@ -39,10 +39,9 @@ type toolchainStub struct {
 	keyAddErr  error
 }
 
-func (t toolchainStub) SSH() (string, error)     { return "", nil }
-func (t toolchainStub) KeyScan() (string, error) { return "", nil }
-func (t toolchainStub) KeyGen() (string, error)  { return "", nil }
-func (t toolchainStub) KeyAdd() (string, error)  { return t.keyAddPath, t.keyAddErr }
+func (t toolchainStub) SSH() (string, error)    { return "", nil }
+func (t toolchainStub) KeyGen() (string, error) { return "", nil }
+func (t toolchainStub) KeyAdd() (string, error) { return t.keyAddPath, t.keyAddErr }
 
 // installedToolchain は、ssh-add の絶対パスを直接返すスタブ。これにより
 // ここのどのテストも、このマシンにたまたま入っている OpenSSH に依存しない。
