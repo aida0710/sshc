@@ -115,9 +115,12 @@ const sectionIcons: Record<Section, IconName> = {
 // span である——意図的に見出しにはしていない。Playwright はアクセシブル
 // ネームを部分一致で照合するため、見出しを "Keys and hosts" にすると、end-to-end
 // スイートの "Keys" へのページレベルクエリが二重に一致し、strict モードで失敗する。
+// 先頭のグループはトグルより上に固定される。Home と Connections がそこに
+// あるのは、端末が描かれるのが Connections だからである。ターミナルの面から
+// 行を選ぶとそこへ連れて行かれるので、戻る道も同じ高さに無いと釣り合わない。
 const navGroups: { label: MessageKey; sections: Section[] }[] = [
-  { label: "shell.navStart", sections: ["Home"] },
-  { label: "shell.navConnections", sections: ["Connections", "Config", "Groups"] },
+  { label: "shell.navStart", sections: ["Home", "Connections"] },
+  { label: "shell.navConnections", sections: ["Config", "Groups"] },
   { label: "shell.navKeysHosts", sections: ["Keys", "Known Hosts", "Remote Keys"] },
   { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Settings", "Sync", "History"] },
 ];
