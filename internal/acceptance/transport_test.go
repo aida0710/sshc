@@ -18,7 +18,7 @@ import (
 // policy を緩めるにはサーバー側だけでなくここでも意図的な編集が
 // 要るようにし、迷い込んだ 'unsafe-inline' が気づかれず紛れ込めないようにする。
 const expectedContentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; " +
-	"frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; " +
+	"frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data:; connect-src 'self'; require-trusted-types-for 'script'"
 
 // transportProblemCodes は、検査対象の transport check が拒否した
@@ -145,10 +145,21 @@ func TestEveryAPIResponseIsNoStoreAndCarriesTheExactPolicy(t *testing.T) {
 	if policy != expectedContentSecurityPolicy {
 		t.Fatalf("navigation CSP = %q", policy)
 	}
-	for _, forbidden := range []string{"unsafe-inline", "unsafe-eval", "http:", "https:", "*"} {
+	// 'unsafe-inline' はもう一律には禁じられない。style-src ひとつだけがそれを
+	// 持ち、その理由は internal/httpserver/security.go にある。したがって
+	// 禁じるのはディレクティブ単位である——スクリプト側にそれが現れたら、
+	// それは実測ではなく諦めである。
+	for _, forbidden := range []string{"unsafe-eval", "http:", "https:", "*"} {
 		if strings.Contains(policy, forbidden) {
 			t.Errorf("CSP contains %q", forbidden)
 		}
+	}
+	if strings.Contains(policy, "script-src 'self' 'unsafe-inline'") {
+		t.Error("script-src was relaxed; only style-src may carry 'unsafe-inline'")
+	}
+	if strings.Count(policy, "unsafe-inline") != 1 {
+		t.Errorf("CSP carries %d 'unsafe-inline'; exactly one (style-src) is allowed",
+			strings.Count(policy, "unsafe-inline"))
 	}
 	for _, required := range []string{"default-src 'self'", "object-src 'none'", "frame-ancestors 'none'", "base-uri 'none'"} {
 		if !strings.Contains(policy, required) {

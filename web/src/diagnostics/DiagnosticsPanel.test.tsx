@@ -44,18 +44,11 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
       truncated: false,
       elapsedMs: 40,
     }),
-    terminalCommand: vi.fn().mockResolvedValue({ command: "ssh -- bastion", launchable: true, warning: "" }),
-    terminalOptions: vi.fn().mockResolvedValue({
-      selected: "terminal",
-      terminals: [
-        { id: "terminal", installed: true },
-        { id: "iterm2", installed: true },
-        { id: "kitty", installed: true },
-      ],
-      applications: [],
-    }),
-    setTerminalPreference: vi.fn(),
-    terminalLaunch: vi.fn().mockResolvedValue({ launched: true }),
+    terminalSessions: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
+    openTerminalSession: vi.fn(),
+    terminalStreamTicket: vi.fn(),
+    closeTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
+    terminalCommand: vi.fn().mockResolvedValue({ command: "ssh -- bastion", warning: "" }),
     knownHosts: vi.fn().mockResolvedValue({ path: "~/.ssh/known_hosts", entries: [] }),
     deleteKnownHosts: vi.fn().mockResolvedValue({ changed: true, transactionId: "tx" }),
     scanKnownHosts: vi.fn().mockResolvedValue({ notice: "unverified", candidates: [] }),
@@ -95,7 +88,6 @@ describe("DiagnosticsPanel", () => {
     expect(api.effective).not.toHaveBeenCalled();
     expect(api.reachability).not.toHaveBeenCalled();
     expect(api.authentication).not.toHaveBeenCalled();
-    expect(api.terminalLaunch).not.toHaveBeenCalled();
   });
 
   it("offers no check until an alias is typed", async () => {
@@ -213,7 +205,6 @@ describe("DiagnosticsPanel", () => {
     const api = buildApi({
       terminalCommand: vi.fn().mockResolvedValue({
         command: `ssh -- weird "alias"`,
-        launchable: false,
         warning: "This alias contains characters that could change the meaning of a command line.",
       }),
     });
@@ -225,7 +216,6 @@ describe("DiagnosticsPanel", () => {
     expect(await screen.findByText(`ssh -- weird "alias"`)).toBeInTheDocument();
     expect(screen.getByText(/could change the meaning/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open in Terminal" })).not.toBeInTheDocument();
-    expect(api.terminalLaunch).not.toHaveBeenCalled();
   });
 
   it("says that a reachability check ignored ProxyJump", async () => {
@@ -441,7 +431,6 @@ describe("DiagnosticsPanel", () => {
     expect(api.reachability).not.toHaveBeenCalled();
     expect(api.authentication).not.toHaveBeenCalled();
     expect(api.terminalCommand).not.toHaveBeenCalled();
-    expect(api.terminalLaunch).not.toHaveBeenCalled();
   });
 
   it("drops the previous host's results when the fixed host changes", async () => {

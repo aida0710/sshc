@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, failureCode, type Problem } from "../api/client";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { ApiError, type Problem } from "../api/client";
 import {
   configApi,
   type EditRequest,
@@ -28,7 +28,9 @@ import type { InspectorContent } from "../ui/Inspector";
 import { HostInspector, hostNeedsAttention } from "./HostInspector";
 import { Button, Notice } from "../ui/surface";
 import { duplicateHostBlock, removeHostBlock } from "./blocks";
-import { integrationsApi, type TerminalID, type TerminalOptionsResponse } from "../api/integrations";
+import { integrationsApi } from "../api/integrations";
+import { ConsoleList } from "../terminal/ConsoleList";
+import { useTerminalSessions } from "../terminal/sessions";
 import { Icon } from "../ui/icons";
 import type {
   BrowserLocation,
@@ -46,9 +48,20 @@ import { keysApi } from "../keys/api";
 import { ConnectionSummary } from "./ConnectionSummary";
 import {
   loadConnectionSavedState,
+  summarizeConnection,
   type ConnectionSavedState,
 } from "./connectionSavedState";
 import { ManageConnection } from "./ManageConnection";
+
+// xterm.js は 400 kB を超える。それを接続画面の chunk に入れると、一覧を開く
+// たびにその重さを払うことになる——端末を開かない人も含めて。だから端末だけを
+// 別の chunk に切り、コンソールを選んだときに初めて読む。
+//
+// これは体感の話にとどまらない。接続画面は URL の正規化をマウント後に行うので、
+// chunk が重くなるとそのリダイレクトも遅れる。end-to-end はそれを捉えた。
+const TerminalView = lazy(() =>
+  import("../terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
+);
 
 // Groups 画面が報告し、この画面は報告しないもの。
 //
@@ -76,16 +89,6 @@ const selectionNoticeCodes = new Set([
   "explained_values_only",
 ]);
 
-// 端末の表示名。ID は語彙であって、画面に出す名前ではない。custom だけは
-// 翻訳される——それはアプリケーションの名前ではなく、選び方の名前だからだ。
-const terminalNames: Record<Exclude<TerminalID, "custom">, string> = {
-  terminal: "Terminal.app",
-  iterm2: "iTerm2",
-  kitty: "kitty",
-  ghostty: "Ghostty",
-  wezterm: "WezTerm",
-};
-
 function toProblem(error: unknown): Problem {
   if (error instanceof ApiError && error.problem !== null) return error.problem;
   if (error instanceof ApiError) return { code: error.code, message: "request rejected" };
@@ -107,6 +110,10 @@ type ConnectionsPageProps = {
   onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
+  // Home で開かれたセッションは、この画面へ来てから選択される。開いた場所と
+  // 見る場所が違うので、その受け渡しだけをシェルが仲介する。
+  pendingConsole?: string | null;
+  onPendingConsoleHandled?: () => void;
 };
 
 type SaveAttempt =
@@ -124,6 +131,8 @@ export function ConnectionsPage({
   onNavigationBlockerChange,
   preferredKey = null,
   onPreferredKeyApplied,
+  pendingConsole = null,
+  onPendingConsoleHandled,
 }: ConnectionsPageProps) {
   const t = useTranslate();
   const initialRoute = parseConnectionLocation(location);
@@ -152,10 +161,12 @@ export function ConnectionsPage({
   const [creating, setCreating] = useState(creationDraft !== null);
   const [launching, setLaunching] = useState(false);
   const [managing, setManaging] = useState(false);
-  // null は未取得または取得失敗、空の terminals はランチャー非対応という
-  // 異なる答えなので、一つの options オブジェクトのまま保持する。
-  const [terminalChoice, setTerminalChoice] = useState<TerminalOptionsResponse | null>(null);
   const [missingSelection, setMissingSelection] = useState(false);
+  // 開いているコンソール。URL には載せない——他人のマシンで開いても、その
+  // セッションは存在しないからだ。リロード後も一覧には残る。そちらはサーバー
+  // 側の状態なので URL とは関係がない。
+  const [activeConsole, setActiveConsole] = useState<string | null>(null);
+  const consoles = useTerminalSessions(integrationsApi, t);
 
   useEffect(() => {
     selectionRef.current = selection;
@@ -352,37 +363,20 @@ export function ConnectionsPage({
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [editorDirty]);
 
-  // このプラットフォームが端末を起動できるか。null(未確定)と、中身のある
-  // 配列は起動できる側として扱う——起動できないと言い切れるのは、サーバー
-  // が空配列で答えたときだけである。
-  const terminals = terminalChoice?.terminals ?? null;
-  const launchable = terminals === null || terminals.length > 0;
-  const selectedTerminal: TerminalID = terminalChoice?.selected ?? overview?.metadata.terminal ?? "terminal";
-  const custom = terminalChoice?.customTerminal ?? overview?.metadata.customTerminal;
-
-  // 画面に出す名前。custom は選ばれているアプリケーションの名前で呼ぶ。
-  // 「その他のアプリ」では、開けなかったときに何が開けなかったか分からない。
-  function terminalLabel(id: TerminalID): string {
-    if (id !== "custom") return terminalNames[id];
-    const chosen = terminalChoice?.applications.find((application) => application.path === custom?.application);
-    return chosen?.name ?? custom?.application ?? t("conn.otherApplication");
-  }
-
-  // 端末の一覧は設定を変えず、何も起動しない。読み取りに失敗しても画面は
-  // そのまま使えるので、ここでは何も報告しない。
+  // Home で開かれたセッションは、この画面へ来た時点で選択される。
   useEffect(() => {
-    let active = true;
-    void integrationsApi
-      .terminalOptions()
-      .then((options) => {
-        if (!active) return;
-        setTerminalChoice(options);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (pendingConsole === null) return;
+    setActiveConsole(pendingConsole);
+    void consoles.refresh();
+    onPendingConsoleHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingConsole]);
+
+  // 閉じられたセッションが主画面に残らないようにする。
+  useEffect(() => {
+    if (activeConsole === null) return;
+    if (!consoles.sessions.some((session) => session.id === activeConsole)) setActiveConsole(null);
+  }, [consoles.sessions, activeConsole]);
 
   // ペインは開いている connection に追従し、開くまでは空である——背後
   // に何も無いトグルは、トグルが無いことより悪い。
@@ -390,18 +384,63 @@ export function ConnectionsPage({
   // body はすべての overview とすべての detail のたびに再構築される。
   // onMetadata が他のホストのエントリを保つために overview をクロージャ
   // に取り込んでいるためだ。memo 化した body では古い metadata 文書を編集し続けてしまう。
+  // コンソールの一覧はどちらの状態でも同じものである。接続を開いていなくても
+  // ローカルシェルは開けるので、この面は常にある。
+  const consoleList = (
+    <ConsoleList
+      sessions={consoles.sessions}
+      selected={activeConsole}
+      maxSessions={consoles.maxSessions}
+      busy={consoles.busy}
+      problem={consoles.problem}
+      onSelect={setActiveConsole}
+      onClose={closeConsole}
+      onOpenShell={() => void openLocalShell()}
+    />
+  );
+
   useEffect(() => {
     if (detail === null || overview === null) {
-      onInspector(null);
+      // 接続を開いていなくても、コンソールの一覧には開くべきものがある。
+      // ここで null を返すと、ローカルシェルへ行く道がどこにも無くなる。
+      onInspector({
+        label: t("inspector.consoles"),
+        attention: false,
+        panes: [{ key: "consoles", label: t("inspector.consoles"), body: consoleList }],
+      });
       return;
     }
+    // 接続セクションの中身は、主画面の見出しと同じ二行である。別の要約を
+    // 書くのではなく、同じ関数から取る。
+    const summary = savedState === null ? null : summarizeConnection(savedState);
+    const header = (
+      <section aria-label={t("inspector.connectionSection")} className="rounded-lg border border-line bg-card p-2.5">
+        <p className="truncate text-sm font-semibold text-ink">
+          {summary?.alias ?? detail.form.entry.identity.alias}
+        </p>
+        {summary === null ? null : (
+          <p className="mt-0.5 truncate font-mono text-xs text-ink-muted">{summary.endpoint}</p>
+        )}
+      </section>
+    );
     onInspector({
       label: t("inspector.hostLabel"),
       attention: hostNeedsAttention(detail),
-      body: <HostInspector detail={detail} onMetadata={onMetadata} />,
+      // 接続セクションは上に固定され、セグメントでは切り替わらない。いま開いて
+      // いるものが何かは、どちらの面を見ていても見えていなければならない。
+      header: header,
+      panes: [
+        { key: "consoles", label: t("inspector.consoles"), body: consoleList },
+        {
+          key: "settings",
+          label: t("inspector.settings"),
+          body: <HostInspector detail={detail} onMetadata={onMetadata} />,
+        },
+      ],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail, overview, onInspector]);
+  }, [detail, overview, savedState, onInspector, consoles.sessions, consoles.maxSessions,
+      consoles.busy, consoles.problem, activeConsole]);
 
   // 依存配列にしているのは selection オブジェクトではなく二つの値その
   // ものである。保存すると、たった今書き込んだホストを再選択するからだ。
@@ -780,23 +819,26 @@ export function ConnectionsPage({
     await reload();
   }
 
+  // 接続はこのアプリケーションの中で開く。外部の端末アプリケーションは
+  // 起こさない。action token も要らない——vault ゲートだけが条件である。
   async function connectHost() {
-    if (selection === null || launching || editorDirty || refreshState !== "idle" || !launchable) return;
+    if (selection === null || launching || editorDirty || refreshState !== "idle") return;
     setLaunching(true);
     setLocalError("");
-    try {
-      await integrationsApi.terminalLaunch(selection.alias);
-    } catch (error) {
-      // 「入っていない」と「開けなかった」は別の答えである。前者は選び直すか
-      // インストールすれば直り、それは画面が言えることの中でいちばん役に立つ。
-      setLocalError(
-        failureCode(error) === "terminal_not_installed"
-          ? t("conn.terminalMissing", { terminal: terminalLabel(selectedTerminal) })
-          : t("conn.launchFailed", { alias: selection.alias }),
-      );
-    } finally {
-      setLaunching(false);
-    }
+    const opened = await consoles.open({ kind: "ssh", alias: selection.alias });
+    if (opened !== null) setActiveConsole(opened.id);
+    setLaunching(false);
+  }
+
+  async function openLocalShell() {
+    const opened = await consoles.open({ kind: "shell" });
+    if (opened !== null) setActiveConsole(opened.id);
+  }
+
+  function closeConsole(id: string) {
+    void consoles.close(id).then(() => {
+      if (activeConsole === id) setActiveConsole(null);
+    });
   }
 
   function duplicateHost() {
@@ -871,6 +913,8 @@ export function ConnectionsPage({
     clearTarget({ replace: true });
   }
 
+  const activeConsoleSession = consoles.sessions.find((session) => session.id === activeConsole);
+
   if (overview === null) {
     return <p role="status" className="text-sm text-ink-muted">{t("conn.loading")}</p>;
   }
@@ -923,6 +967,19 @@ export function ConnectionsPage({
           )}
         </div>
       </div>
+      {activeConsoleSession !== undefined ? (
+        // コンソールを選んでいるあいだ、右のカラムは端末そのものである。
+        // 余白もスクロールも端末が自分で持つので、この列は素の箱でよい。
+        <div className="flex min-h-0 flex-col">
+          <Suspense fallback={null}>
+            <TerminalView
+              key={activeConsoleSession.id}
+              session={activeConsoleSession}
+              onExit={() => consoles.markExited(activeConsoleSession.id)}
+            />
+          </Suspense>
+        </div>
+      ) : (
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6">
         {/*
           グループ単位の notice は Groups 画面のものであり、README にもそう
@@ -974,18 +1031,10 @@ export function ConnectionsPage({
           </section>
         ) : (
           <>
-            {terminals !== null &&
-            terminals.some((option) => option.id === selectedTerminal && !option.installed) ? (
-              <Notice>{t("conn.terminalMissing", { terminal: terminalLabel(selectedTerminal) })}</Notice>
-            ) : null}
-            {terminals !== null && terminals.length === 0 ? (
-              <Notice>{t("conn.terminalUnsupported")}</Notice>
-            ) : null}
             <ConnectionSummary
               state={savedState}
               dirty={editorDirty}
               refreshing={refreshState !== "idle"}
-              connectAvailable={launchable}
               onConnect={() => void connectHost()}
               connecting={launching}
               onToggleManage={() => setManaging((current) => !current)}
@@ -1037,6 +1086,7 @@ export function ConnectionsPage({
           </>
         )}
       </div>
+      )}
     </div>
     {creating ? (
       <CreateConnectionModal

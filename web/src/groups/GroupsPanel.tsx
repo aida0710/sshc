@@ -147,15 +147,21 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
           notice.detail === group.name &&
           ["group_not_declared", "group_directory_missing"].includes(notice.code),
       ),
-      body: (
-        <GroupInspector
-          group={group}
-          members={(overview?.hosts ?? [])
-            .filter((host) => host.group === group.name)
-            .map((host) => host.identity.alias)}
-          onUpdate={(patch) => updateGroup(group.name, patch)}
-        />
-      ),
+      // 1 面しか持たないので、セグメントは描かれない。この画面の見た目は
+      // ペインが 2 面を持てるようになる前と変わらない。
+      panes: [{
+        key: "group",
+        label: t("inspector.groupLabel"),
+        body: (
+          <GroupInspector
+            group={group}
+            members={(overview?.hosts ?? [])
+              .filter((host) => host.group === group.name)
+              .map((host) => host.identity.alias)}
+            onUpdate={(patch) => updateGroup(group.name, patch)}
+          />
+        ),
+      }],
     });
     // updateGroup は draft を閉じ込め、それはメタデータと共に変わる。
     // 本体はメモ化されるのではなくそれと共に再構築されるため、ペインが

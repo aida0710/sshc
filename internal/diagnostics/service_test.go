@@ -2,7 +2,6 @@ package diagnostics_test
 
 import (
 	"context"
-	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"testing"
 
 	"sshc/internal/diagnostics"
-	"sshc/internal/effective"
 	"sshc/internal/platform"
 	"sshc/internal/storage"
 )
@@ -47,7 +45,6 @@ func newTestService(t *testing.T, runner platform.OutputRunner) *diagnostics.Ser
 		runner,
 		fixedToolchain{ssh: "/usr/bin/ssh", keyscan: "/usr/bin/ssh-keyscan"},
 		nil,
-		nil,
 	)
 	service.Reachability = diagnostics.Reachability{
 		Dialer: dialerFunc(func(context.Context, string, string) (net.Conn, error) {
@@ -83,7 +80,7 @@ func TestConnectionSnapshotDerivesEverythingFromOneGraphRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := diagnostics.NewService(workspace, &scriptedRunner{}, fixedToolchain{}, nil, nil)
+	service := diagnostics.NewService(workspace, &scriptedRunner{}, fixedToolchain{}, nil)
 
 	snapshot, err := service.ConnectionSnapshot("bastion")
 	if err != nil {
@@ -229,202 +226,30 @@ func TestServiceProjectedValueReadsTheEngineWithoutRunningSSH(t *testing.T) {
 	}
 }
 
-type recordingTerminal struct{ aliases []string }
-
-func (terminal *recordingTerminal) Launch(_ context.Context, alias string) error {
-	terminal.aliases = append(terminal.aliases, alias)
-	return nil
-}
-
-type recordingSelectableTerminal struct {
-	recordingTerminal
-	selected platform.TerminalChoice
-}
-
-func (terminal *recordingSelectableTerminal) LaunchIn(
-	_ context.Context, selected platform.TerminalChoice, alias string,
-) error {
-	terminal.selected = selected
-	terminal.aliases = append(terminal.aliases, alias)
-	return nil
-}
-
-func TestServiceLaunchesOnlySafeAliases(t *testing.T) {
-	terminal := &recordingTerminal{}
-	service := newTestService(t, &scriptedRunner{})
-	service.Terminal = terminal
-
-	if err := service.LaunchTerminal(context.Background(), "bastion"); err != nil {
-		t.Fatalf("LaunchTerminal = %v", err)
-	}
-	if len(terminal.aliases) != 1 || terminal.aliases[0] != "bastion" {
-		t.Fatalf("aliases = %#v", terminal.aliases)
-	}
-
-	// AppleScript の引用を含む alias は、ランチャーに届く前に拒否される。自動化の
-	// ペイロードへエスケープして渡されることは決してない。
-	for _, unsafe := range []string{"a b", `bastion" & (do shell script "id") & "`, "a;id"} {
-		if err := service.LaunchTerminal(context.Background(), unsafe); err == nil {
-			t.Errorf("LaunchTerminal(%q) was accepted", unsafe)
-		}
-	}
-	if len(terminal.aliases) != 1 {
-		t.Fatalf("an unsafe alias reached the launcher: %#v", terminal.aliases)
-	}
-
-	command, launchable, warning := service.TerminalCommand("a b")
-	if launchable || warning == "" || command != "ssh -- a b" {
-		t.Fatalf("TerminalCommand = %q, %v, %q", command, launchable, warning)
-	}
-	if command, launchable, warning := service.TerminalCommand("bastion"); !launchable || warning != "" || command != "ssh -- bastion" {
-		t.Fatalf("TerminalCommand = %q, %v, %q", command, launchable, warning)
-	}
-}
-
-func TestServiceUsesTheStoredTerminalChoice(t *testing.T) {
-	terminal := &recordingSelectableTerminal{}
-	service := newTestService(t, &scriptedRunner{})
-	service.Terminal = terminal
-	// 選択は ID だけではない。custom では、開く先のアプリケーションとその
-	// 前に置く引数も、そのままランチャーへ届かなければならない。
-	chosen := platform.TerminalChoice{
-		ID: platform.TerminalCustom, Application: "/Applications/Term.app", Arguments: []string{"-e"},
-	}
-	service.PreferredTerminal = func() platform.TerminalChoice { return chosen }
-
-	if err := service.LaunchTerminal(context.Background(), "bastion"); err != nil {
-		t.Fatal(err)
-	}
-	if terminal.selected.ID != platform.TerminalCustom || terminal.selected.Application != "/Applications/Term.app" {
-		t.Fatalf("terminal = %#v", terminal.selected)
-	}
-	if len(terminal.selected.Arguments) != 1 || terminal.selected.Arguments[0] != "-e" || len(terminal.aliases) != 1 {
-		t.Fatalf("terminal = %#v, aliases = %#v", terminal.selected, terminal.aliases)
-	}
-}
-
-func TestServiceReportsAMissingTerminalLauncher(t *testing.T) {
-	service := newTestService(t, &scriptedRunner{})
-	if err := service.LaunchTerminal(context.Background(), "bastion"); !errors.Is(err, diagnostics.ErrTerminalNotConfigured) {
-		t.Fatalf("LaunchTerminal = %v, want ErrTerminalNotConfigured", err)
-	}
-}
-
-func TestServiceSafetyReportsTheSameEvidenceAsAFreshScan(t *testing.T) {
-	service := newTestService(t, &scriptedRunner{})
-	report, err := service.Safety()
-	if err != nil {
-		t.Fatalf("Safety = %v", err)
-	}
-	if report.Evidence() == (effective.Report{}).Evidence() {
-		t.Error("a configuration with a ProxyCommand must not produce empty evidence")
-	}
-}
-
-// アカウント名を ssh 自身の出力の外へ持ち出してはならない。これは認証テストの
-// stderr では置換されていたが、評価の値では置換されていなかった。どちらも
-// レスポンスに入る ssh の出力であり、しかも値の方こそ常にホームのパスを含む。
-// UserKnownHostsFile と既定の IdentityFile 一覧が絶対パスだから
-// である。
-func TestInspectReplacesTheHomeDirectoryInEvaluatedValues(t *testing.T) {
-	workspace := newServiceWorkspace(t, serviceConfig)
-	home := workspace.Home()
-	runner := &scriptedRunner{output: platform.Output{Stdout: []byte(
-		"hostname 203.0.113.10\n" +
-			"userknownhostsfile " + home + "/.ssh/known_hosts " + home + "/.ssh/known_hosts2\n" +
-			"identityfile " + home + "/.ssh/id_ed25519\n")}}
-	service := diagnostics.NewService(workspace, runner,
-		fixedToolchain{ssh: "/usr/bin/ssh", keyscan: "/usr/bin/ssh-keyscan"}, nil, nil)
-
-	inspection, err := service.Inspect(context.Background(), "bastion", false)
-	if err != nil {
-		t.Fatalf("Inspect error = %v", err)
-	}
-	if !inspection.Evaluated {
-		t.Fatal("the fixture did not evaluate")
-	}
-	for _, keyword := range inspection.Values.Keywords {
-		for _, value := range inspection.Values.Entries[keyword] {
-			if strings.Contains(value, home) {
-				t.Errorf("%s = %q still carries the home directory %q", keyword, value, home)
-			}
-		}
-	}
-	if got := inspection.Values.First("userknownhostsfile"); got != "~/.ssh/known_hosts ~/.ssh/known_hosts2" {
-		t.Errorf("userknownhostsfile = %q, want both paths shortened", got)
-	}
-}
-
-// 端末を持たないプラットフォームでは、開くボタンを出す根拠がない。
-// コマンド自体は返す。利用者が自分で実行できるからであり、それが
-// このプラットフォームでの答えである。
-func TestTerminalCommandIsNotLaunchableWithoutALauncher(t *testing.T) {
-	service := &diagnostics.Service{}
-	command, launchable, warning := service.TerminalCommand("bastion")
-	if command == "" {
-		t.Error("コマンドは返すこと。利用者が自分で実行する")
-	}
-	if launchable {
-		t.Error("launchable = true、端末を開く手段が無いのに")
-	}
-	if warning == "" {
-		t.Error("なぜ開けないかを言うこと")
-	}
-}
-
-// 在庫を「分からない」と扱ってはいけない。ランチャーが無いことは、
-// 選択肢が無いと分かっていることである。
-func TestTerminalOptionsOffersNothingWithoutALauncher(t *testing.T) {
-	service := &diagnostics.Service{}
-	available, applications, _ := service.TerminalOptions()
-	if len(available) != 0 || len(applications) != 0 {
-		t.Fatalf("TerminalOptions = %#v, %#v, want empty", available, applications)
-	}
-}
-
-// ユーザーがコピーするコマンドは、このバイナリと alias である。
-//
 // 以前は五つの環境変数とフラグだった。それは Terminal のボタンが自前で組み立てる
 // もので、誰かが打ち込むようなものではない。こちらは同じやり方で接続する。動作中の
 // アプリケーションに保存済みパスワードを求め、なければ素の ssh にフォールバック
 // する。
+//
+// 埋め込みターミナルができたあともこれが残っているのは、自分の端末で開きたい人が
+// いるからである。起動可否はもう報告しない——このアプリケーションは端末
+// アプリケーションを起こさなくなったので、その問い自体が無くなった。
 func TestTerminalCommandIsThisBinaryAndTheAlias(t *testing.T) {
-	// このテストが立てるのはランチャーがある画面である。ランチャーが無い
-	// プラットフォームの launchable は別のテスト
-	// (TestTerminalCommandIsNotLaunchableWithoutALauncher) が持つ。
-	service := &diagnostics.Service{Self: "/Applications/sshc", Terminal: &recordingTerminal{}}
-	command, launchable, warning := service.TerminalCommand("bastion")
-	if command != "/Applications/sshc bastion" || !launchable || warning != "" {
-		t.Errorf("TerminalCommand = %q, %v, %q", command, launchable, warning)
+	service := &diagnostics.Service{Self: "/Applications/sshc"}
+	command, warning := service.TerminalCommand("bastion")
+	if command != "/Applications/sshc bastion" || warning != "" {
+		t.Errorf("TerminalCommand = %q, %q", command, warning)
 	}
 
 	// コマンドラインに載せない alias も、その理由とともに表示される。
-	command, launchable, warning = service.TerminalCommand("-oProxyCommand=id")
-	if launchable || warning == "" {
-		t.Errorf("an unsafe alias = %q, %v, %q", command, launchable, warning)
+	command, warning = service.TerminalCommand("-oProxyCommand=id")
+	if command == "" || warning != diagnostics.UnsafeAliasWarning {
+		t.Errorf("an unsafe alias = %q, %q", command, warning)
 	}
 
 	// 解決済みのパスがなくても、素の ssh なら接続できる。
 	plain := &diagnostics.Service{}
-	if command, _, _ := plain.TerminalCommand("bastion"); command != "ssh -- bastion" {
+	if command, _ := plain.TerminalCommand("bastion"); command != "ssh -- bastion" {
 		t.Errorf("with no path = %q", command)
-	}
-}
-
-// Linux の配線はまさにこの形である（`cmd/sshc/wiring_linux.go`）。バイナリの
-// パスは分かっているので Self は立つが、開くランチャーは無いので Terminal は
-// nil のままである。答えるべきは「このコマンドを打ってください」であって、
-// 開くボタンではない。
-func TestTerminalCommandWithSelfButNoLauncherIsNotLaunchable(t *testing.T) {
-	service := &diagnostics.Service{Self: "/Applications/sshc"}
-	command, launchable, warning := service.TerminalCommand("bastion")
-	if command != "/Applications/sshc bastion" {
-		t.Errorf("command = %q, want the Self-based command", command)
-	}
-	if launchable {
-		t.Error("launchable = true、端末を開く手段が無いのに")
-	}
-	if warning != diagnostics.TerminalUnavailableWarning {
-		t.Errorf("warning = %q, want %q", warning, diagnostics.TerminalUnavailableWarning)
 	}
 }

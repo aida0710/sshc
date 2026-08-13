@@ -66,7 +66,6 @@ func aliasRoutes() []aliasRoute {
 		{"/api/v1/diagnostics/authentication", session.ActionAuthentication, func(alias string) map[string]any {
 			return map[string]any{"alias": alias, "acknowledgeExecutable": true}
 		}},
-		{"/api/v1/terminal/launch", session.ActionTerminalLaunch, plain},
 		{"/api/v1/remote-keys/register", session.ActionRemoteKeyRegister, func(alias string) map[string]any {
 			return map[string]any{
 				"alias": alias, "keyPath": "id_ed25519.pub",
@@ -531,16 +530,25 @@ func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testin
 				"/api/v1/diagnostics/effective",
 				"/api/v1/diagnostics/reachability",
 				"/api/v1/diagnostics/authentication",
-				"/api/v1/terminal/launch",
 			} {
 				response := f.do(http.MethodPost, path, mustJSON(t, map[string]any{
 					"alias": alias, "acknowledgeExecutable": true,
-				}), withAction(f.tryActionToken(session.ActionTerminalLaunch, alias)))
+				}), withAction(f.tryActionToken(session.ActionEvaluate, alias)))
 				status := response.StatusCode
 				readBody(t, response)
 				if status >= 200 && status < 300 {
 					t.Errorf("%s accepted the alias with %d", path, status)
 				}
+			}
+			// 埋め込みターミナルは action token を要求しないが、alias の関門は
+			// 同じ場所にある。安全な文字集合の外にある alias では PTY を開かない。
+			opened := f.do(http.MethodPost, "/api/v1/terminal/sessions", mustJSON(t, map[string]any{
+				"kind": "ssh", "alias": alias,
+			}))
+			openedStatus := opened.StatusCode
+			readBody(t, opened)
+			if openedStatus >= 200 && openedStatus < 300 {
+				t.Errorf("opening a terminal accepted the alias with %d", openedStatus)
 			}
 			if commands := f.runner.recorded(); len(commands) != 0 {
 				t.Fatalf("a refused alias still started %#v", commands)
@@ -551,15 +559,15 @@ func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testin
 		})
 	}
 
-	// POST /api/v1/terminal/command は、unsafe な alias に対しても
-	// 意図的に応答を許されている: design §6.5 は、UI が起動の代わりにコピー可能なコマンドを
-	// 提示すると定めている。そう述べねばならず、alias が起動可能だと主張してはならない。
+	// POST /api/v1/terminal/command は、unsafe な alias に対しても意図的に応答を
+	// 許されている。UI は開く代わりにコピー可能なコマンドを提示する。ただし、
+	// そのコマンドがそのままでは打てないことを必ず添えなければならない。
 	response := f.do(http.MethodPost, "/api/v1/terminal/command", mustJSON(t, map[string]any{
 		"alias": "bastion evil",
 	}))
 	body := readBody(t, response)
-	if strings.Contains(body, `"launchable":true`) {
-		t.Fatal("an unsafe alias was reported as launchable")
+	if !strings.Contains(body, `"warning"`) || strings.Contains(body, `"warning":""`) {
+		t.Fatalf("an unsafe alias carried no warning: %s", body)
 	}
 	if commands := f.runner.recorded(); len(commands) != 0 {
 		t.Fatalf("describing a command started %#v", commands)

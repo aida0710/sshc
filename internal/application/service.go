@@ -6,15 +6,14 @@ import (
 	"io/fs"
 	"path"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"sshc/internal/config"
-	"sshc/internal/platform"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 const (
@@ -223,65 +222,17 @@ func NewService(workspace *storage.Workspace, manager *storage.Manager) *Service
 	return service
 }
 
-// PreferredTerminal は画面と端末ランチャーが共有する現在の選択を返す。
-// metadata が壊れて読めない場合は、起動そのものを失わせず安全な既定へ戻る。
-func (s *Service) PreferredTerminal() platform.TerminalChoice {
+// TerminalLimits は、埋め込みターミナルが開くたびに読む上限を返す。
+//
+// 読むのは開くときだけなので、設定を変えても、すでに開いているセッションが
+// 閉じられることはない。metadata が壊れて読めない場合は既定へ戻る。端末が
+// 開けなくなることは、この設定が壊れていることに対する答えとして重すぎる。
+func (s *Service) TerminalLimits() terminal.Limits {
 	metadata, _, err := s.metadata.Load()
 	if err != nil {
-		return platform.TerminalChoice{ID: platform.TerminalApple}
+		return terminal.DefaultLimits()
 	}
-	choice := metadata.TerminalChoice()
-	if platform.ValidateTerminalChoice(choice) != nil {
-		return platform.TerminalChoice{ID: platform.TerminalApple}
-	}
-	return choice
-}
-
-// SetPreferredTerminal updates only the machine-wide launcher preference from
-// metadata loaded while holding the save lock. Callers never send the rest of
-// metadata back, so a stale Settings tab cannot overwrite newer host or group
-// presentation changes.
-func (s *Service) SetPreferredTerminal(choice platform.TerminalChoice) (bool, error) {
-	if err := platform.ValidateTerminalChoice(choice); err != nil {
-		return false, err
-	}
-
-	s.saveMutex.Lock()
-	defer s.saveMutex.Unlock()
-
-	metadata, precondition, err := s.metadata.Load()
-	if err != nil {
-		return false, err
-	}
-	current := metadata.TerminalChoice()
-	if current.ID == choice.ID && current.Application == choice.Application &&
-		slices.Equal(current.Arguments, choice.Arguments) {
-		return false, nil
-	}
-
-	updated := metadata
-	updated.Terminal = choice.ID
-	updated.CustomTerminal = nil
-	if choice.ID == platform.TerminalCustom {
-		updated.CustomTerminal = &CustomTerminal{
-			Application: choice.Application,
-			Arguments:   append([]string(nil), choice.Arguments...),
-		}
-	}
-	change, err := s.metadata.Change(updated, precondition)
-	if err != nil {
-		return false, err
-	}
-	if err := s.metadata.EnsureDirectory(); err != nil {
-		return false, err
-	}
-	if _, err := s.manager.Commit(storage.Request{
-		Operation: "terminal.preference",
-		Changes:   []storage.Change{change},
-	}); err != nil {
-		return false, err
-	}
-	return true, nil
+	return metadata.TerminalLimits()
 }
 
 // displayPath は、UI とエラー payload のために path を表す。ファイルが
