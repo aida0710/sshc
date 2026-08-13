@@ -49,7 +49,6 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     terminalStreamTicket: vi.fn(),
     closeTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
     renameTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
-    terminalCommand: vi.fn().mockResolvedValue({ command: "ssh -- bastion", warning: "" }),
     knownHosts: vi.fn().mockResolvedValue({ path: "~/.ssh/known_hosts", entries: [] }),
     deleteKnownHosts: vi.fn().mockResolvedValue({ changed: true, transactionId: "tx" }),
     scanKnownHosts: vi.fn().mockResolvedValue({ notice: "unverified", candidates: [] }),
@@ -100,7 +99,6 @@ describe("DiagnosticsPanel", () => {
     expect(screen.getByRole("button", { name: "Explain" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Check reachability" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Test authentication" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Terminal command" })).toBeDisabled();
 
     await userEvent.type(screen.getByLabelText("Host alias"), "bastion");
 
@@ -200,23 +198,6 @@ describe("DiagnosticsPanel", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Run ssh -G anyway" }));
     await waitFor(() => expect(api.effective).toHaveBeenLastCalledWith("risky", true));
-  });
-
-  it("offers a copyable command instead of a launch for an unsafe alias", async () => {
-    const api = buildApi({
-      terminalCommand: vi.fn().mockResolvedValue({
-        command: `ssh -- weird "alias"`,
-        warning: "This alias contains characters that could change the meaning of a command line.",
-      }),
-    });
-    render(<DiagnosticsPanel api={api} />);
-
-    await userEvent.type(screen.getByLabelText("Host alias"), "weird");
-    await userEvent.click(screen.getByRole("button", { name: "Terminal command" }));
-
-    expect(await screen.findByText(`ssh -- weird "alias"`)).toBeInTheDocument();
-    expect(screen.getByText(/could change the meaning/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open in Terminal" })).not.toBeInTheDocument();
   });
 
   it("says that a reachability check ignored ProxyJump", async () => {
@@ -431,7 +412,6 @@ describe("DiagnosticsPanel", () => {
     expect(api.effective).not.toHaveBeenCalled();
     expect(api.reachability).not.toHaveBeenCalled();
     expect(api.authentication).not.toHaveBeenCalled();
-    expect(api.terminalCommand).not.toHaveBeenCalled();
   });
 
   it("drops the previous host's results when the fixed host changes", async () => {

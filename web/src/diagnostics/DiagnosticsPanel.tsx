@@ -6,9 +6,7 @@ import {
   type EffectiveResponse,
   type IntegrationsApi,
   type ReachabilityResponse,
-  type TerminalCommandResponse,
 } from "../api/integrations";
-import { CopyButton } from "../ui/CopyButton";
 import {
   Field,
   control,
@@ -48,7 +46,6 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
   const [effective, setEffective] = useState<EffectiveResponse | null>(null);
   const [reach, setReach] = useState<ReachabilityResponse | null>(null);
   const [auth, setAuth] = useState<AuthenticationResponse | null>(null);
-  const [terminal, setTerminal] = useState<TerminalCommandResponse | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -75,7 +72,6 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
     setEffective(null);
     setReach(null);
     setAuth(null);
-    setTerminal(null);
     setError("");
   }, [alias]);
 
@@ -114,10 +110,6 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
           setAuth,
           t("diag.authenticationFailed"),
         ),
-    },
-    {
-      label: t("diag.terminalCommand"),
-      start: () => void run(() => api.terminalCommand(alias), setTerminal, t("diag.commandFailed")),
     },
   ];
   const blocked = busy || alias === "";
@@ -380,23 +372,6 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
         </div>
       ) : null}
 
-      {terminal ? (
-        <div className={`${sectionCard} text-sm`}>
-          <h3 className={sectionHeading}>{t("diag.terminal")}</h3>
-          <pre className="whitespace-pre-wrap break-all rounded bg-control p-2 font-mono text-xs text-ink">
-            {terminal.command}
-          </pre>
-          <div className="flex items-center gap-2">
-            <CopyButton value={terminal.command} label="copy.command" />
-          </div>
-          {/*
-            接続はこのアプリケーションの中で開く。ここにあるのは、自分の端末へ
-            貼るための文字列である。コマンドラインに載せられない alias にも
-            その文字列は与えられ、そのときは理由が添えられる。
-          */}
-          {terminal.warning === "" ? null : <p className="text-notice-ink">{terminal.warning}</p>}
-        </div>
-      ) : null}
     </section>
   );
 }
