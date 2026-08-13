@@ -1528,18 +1528,13 @@ components:
     EffectiveResponse:
       type: object
       additionalProperties: false
-      required: [alias, evaluated, requiresConfirmation, tokenWarning, executableDirectives, values, sources, complexities, route, failure]
+      required: [alias, tokenWarning, executableDirectives, sources, complexities, route]
       properties:
         alias: { type: string }
-        evaluated: { type: boolean }
-        requiresConfirmation: { type: boolean }
         tokenWarning: { type: string }
         executableDirectives:
           type: array
           items: { $ref: "#/components/schemas/ExecutableDirective" }
-        values:
-          type: array
-          items: { $ref: "#/components/schemas/EffectiveValue" }
         sources:
           type: array
           items: { $ref: "#/components/schemas/ValueSource" }
@@ -1549,16 +1544,6 @@ components:
         route:
           type: array
           items: { $ref: "#/components/schemas/JumpStage" }
-        failure: { $ref: "#/components/schemas/OpenSSHFailure" }
-    EffectiveValue:
-      type: object
-      additionalProperties: false
-      required: [keyword, values]
-      properties:
-        keyword: { type: string }
-        values:
-          type: array
-          items: { type: string }
     ValueSource:
       type: object
       additionalProperties: false
@@ -1594,15 +1579,6 @@ components:
         user: { type: string }
         port: { type: string }
         complex: { type: boolean }
-    OpenSSHFailure:
-      type: object
-      additionalProperties: false
-      required: [failed, exitCode, stderr, truncated]
-      properties:
-        failed: { type: boolean }
-        exitCode: { type: integer }
-        stderr: { type: string }
-        truncated: { type: boolean }
     ReachabilityResponse:
       type: object
       additionalProperties: false

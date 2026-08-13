@@ -98,7 +98,7 @@ func TestActionTokenExpiresAndIsScopedToOneSession(t *testing.T) {
 	manager, sessionID := newTestManager(t)
 	now := time.Unix(1_800_000_000, 0).UTC()
 	manager.Now = func() time.Time { return now }
-	request := ActionRequest{Kind: ActionEvaluate, Target: "bastion", Evidence: "digest"}
+	request := ActionRequest{Kind: ActionReachability, Target: "bastion", Evidence: "digest"}
 
 	token, err := manager.IssueAction(sessionID, request)
 	if err != nil {
@@ -146,16 +146,16 @@ func TestIssueActionRejectsUnknownKindsAndBoundsStoredTokens(t *testing.T) {
 	if _, err := manager.IssueAction(sessionID, ActionRequest{Kind: "shell.exec", Target: "bastion"}); !errors.Is(err, ErrInvalidAction) {
 		t.Fatalf("unknown kind = %v, want ErrInvalidAction", err)
 	}
-	if _, err := manager.IssueAction(sessionID, ActionRequest{Kind: ActionEvaluate}); !errors.Is(err, ErrInvalidAction) {
+	if _, err := manager.IssueAction(sessionID, ActionRequest{Kind: ActionReachability}); !errors.Is(err, ErrInvalidAction) {
 		t.Fatalf("empty target = %v, want ErrInvalidAction", err)
 	}
 
 	for index := 0; index < MaxActionTokensPerSession; index++ {
-		if _, err := manager.IssueAction(sessionID, ActionRequest{Kind: ActionEvaluate, Target: "bastion"}); err != nil {
+		if _, err := manager.IssueAction(sessionID, ActionRequest{Kind: ActionReachability, Target: "bastion"}); err != nil {
 			t.Fatalf("IssueAction %d = %v", index, err)
 		}
 	}
-	if _, err := manager.IssueAction(sessionID, ActionRequest{Kind: ActionEvaluate, Target: "bastion"}); !errors.Is(err, ErrTooManyActions) {
+	if _, err := manager.IssueAction(sessionID, ActionRequest{Kind: ActionReachability, Target: "bastion"}); !errors.Is(err, ErrTooManyActions) {
 		t.Fatalf("exceeded limit = %v, want ErrTooManyActions", err)
 	}
 }
@@ -242,7 +242,7 @@ func TestActionTokensAreSafeForConcurrentUse(t *testing.T) {
 
 func TestKnownActionKindListsEveryConfirmedOperation(t *testing.T) {
 	for _, kind := range []string{
-		ActionEvaluate, ActionReachability, ActionAuthentication, ActionKnownHostsScan,
+		ActionReachability, ActionAuthentication, ActionKnownHostsScan,
 		ActionKnownHostsDelete, ActionKnownHostsScan, ActionKnownHostsAdd, ActionRemoteKeyRegister,
 		ActionRevealPrivateKey, ActionPurgeTrashEntry,
 	} {

@@ -2,7 +2,6 @@ package diagnostics
 
 import (
 	"context"
-	"errors"
 	"net"
 	"path/filepath"
 
@@ -29,16 +28,16 @@ type ConfigReport struct {
 }
 
 // Inspection は、実効設定の画面が必要とするすべて。
+//
+// **ssh を回さないので、実行の可否も確認も結果もここには無い。** 値を決めるのは
+// effective.Resolve であり、この検査が運ぶのは出所と、単純に説明できない理由と、
+// ジャンプ経路である。
 type Inspection struct {
-	Alias                string
-	Report               effective.Report
-	RequiresConfirmation bool
-	Evaluated            bool
-	Values               effective.Values
-	Projection           effective.Projection
-	Route                []effective.Stage
-	RouteComplexities    []effective.Complexity
-	Failure              *effective.OpenSSHError
+	Alias             string
+	Report            effective.Report
+	Projection        effective.Projection
+	Route             []effective.Stage
+	RouteComplexities []effective.Complexity
 }
 
 // ConnectionSnapshot は、1 回だけ読み取った設定グラフから導出された接続計画と、
@@ -57,7 +56,6 @@ type ConnectionSnapshot struct {
 type Service struct {
 	Workspace      *storage.Workspace
 	Resolver       config.Resolver
-	Evaluator      effective.Evaluator
 	Reachability   Reachability
 	Authentication Authentication
 }
@@ -79,7 +77,6 @@ func NewService(workspace *storage.Workspace, runner platform.OutputRunner, tool
 	return &Service{
 		Workspace:    workspace,
 		Resolver:     storage.NewResolver(workspace),
-		Evaluator:    effective.Evaluator{Runner: runner, Toolchain: toolchain, ConfigPath: configPath, Environment: environment},
 		Reachability: Reachability{Dialer: &net.Dialer{}},
 		Authentication: Authentication{
 			Runner: runner, Toolchain: toolchain, ConfigPath: configPath, Environment: environment,
@@ -166,7 +163,7 @@ func (s *Service) ConfigCheck() (ConfigReport, error) {
 // 拒否された評価も、失敗した ssh も、どちらもデータとして返る。画面には、エンジン
 // 自身の射影と、先に確認しなければならないコマンドそのものが引き続き表示
 // される。
-func (s *Service) Inspect(ctx context.Context, alias string, confirmed bool) (Inspection, error) {
+func (s *Service) Inspect(alias string) (Inspection, error) {
 	if err := platform.ValidateAlias(alias); err != nil {
 		return Inspection{}, err
 	}
@@ -178,27 +175,6 @@ func (s *Service) Inspect(ctx context.Context, alias string, confirmed bool) (In
 	inspection := Inspection{Alias: alias, Report: effective.Scan(graph)}
 	inspection.Projection = effective.Project(graph, alias)
 	inspection.Route, inspection.RouteComplexities = effective.ExpandRoute(graph, alias)
-	inspection.RequiresConfirmation = inspection.Report.EvaluationNeedsConfirmation()
-
-	values, err := s.Evaluator.Evaluate(ctx, inspection.Report, alias, confirmed)
-	var opensshError *effective.OpenSSHError
-	switch {
-	case err == nil:
-		// ssh は絶対パスを報告する — UserKnownHostsFile と既定の IdentityFile 一覧は
-		// 常に、ControlPath などは設定されているときに — そして、そのどれもがユーザーの
-		// ホームディレクトリで始まる。認証テストの stderr は、書かれたあとに短縮する
-		// 処理が入った。一方でこれらの値は、同じ ssh の出力が同じ種類のレスポンスへ
-		// 入るものであるにもかかわらず、その処理が入っていなかった。だからここで
-		// 行う。
-		inspection.Values = sanitiseValues(values, s.Workspace.Home())
-		inspection.Evaluated = true
-	case errors.Is(err, effective.ErrEvaluationNotConfirmed):
-		// 想定内。呼び出し側はまだ確認していない。
-	case errors.As(err, &opensshError):
-		inspection.Failure = opensshError
-	default:
-		return Inspection{}, err
-	}
 	return inspection, nil
 }
 
@@ -275,25 +251,4 @@ func (s *Service) Authenticate(ctx context.Context, alias string, acknowledged b
 	}
 	result.Stderr = platform.SanitiseHomePaths(result.Stderr, s.Workspace.Home())
 	return result, nil
-}
-
-// sanitiseValues は、ssh が報告したすべての値の中で、ホームディレクトリを "~" に
-// 書き換える。キーワードの一覧には手を触れない。キーワードは OpenSSH の固定名で
-// あり、パスを含みようがないからだ。
-func sanitiseValues(values effective.Values, home string) effective.Values {
-	if home == "" {
-		return values
-	}
-	sanitised := effective.Values{
-		Keywords: values.Keywords,
-		Entries:  make(map[string][]string, len(values.Entries)),
-	}
-	for keyword, entries := range values.Entries {
-		shortened := make([]string, 0, len(entries))
-		for _, entry := range entries {
-			shortened = append(shortened, platform.SanitiseHomePaths(entry, home))
-		}
-		sanitised.Entries[keyword] = shortened
-	}
-	return sanitised
 }

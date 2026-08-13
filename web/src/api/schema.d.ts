@@ -1161,19 +1161,11 @@ export interface components {
         };
         EffectiveResponse: {
             alias: string;
-            evaluated: boolean;
-            requiresConfirmation: boolean;
             tokenWarning: string;
             executableDirectives: components["schemas"]["ExecutableDirective"][];
-            values: components["schemas"]["EffectiveValue"][];
             sources: components["schemas"]["ValueSource"][];
             complexities: components["schemas"]["ComplexityNote"][];
             route: components["schemas"]["JumpStage"][];
-            failure: components["schemas"]["OpenSSHFailure"];
-        };
-        EffectiveValue: {
-            keyword: string;
-            values: string[];
         };
         ValueSource: {
             keyword: string;
@@ -1200,12 +1192,6 @@ export interface components {
             user: string;
             port: string;
             complex: boolean;
-        };
-        OpenSSHFailure: {
-            failed: boolean;
-            exitCode: number;
-            stderr: string;
-            truncated: boolean;
         };
         ReachabilityResponse: {
             address: string;

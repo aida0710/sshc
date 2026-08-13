@@ -379,20 +379,10 @@ type EffectiveEntry struct {
 type EffectiveResponse struct {
 	Alias                string                `json:"alias"`
 	Complexities         []ComplexityNote      `json:"complexities"`
-	Evaluated            bool                  `json:"evaluated"`
 	ExecutableDirectives []ExecutableDirective `json:"executableDirectives"`
-	Failure              OpenSSHFailure        `json:"failure"`
-	RequiresConfirmation bool                  `json:"requiresConfirmation"`
 	Route                []JumpStage           `json:"route"`
 	Sources              []ValueSource         `json:"sources"`
 	TokenWarning         string                `json:"tokenWarning"`
-	Values               []EffectiveValue      `json:"values"`
-}
-
-// EffectiveValue defines model for EffectiveValue.
-type EffectiveValue struct {
-	Keyword string   `json:"keyword"`
-	Values  []string `json:"values"`
 }
 
 // EmbeddedTerminal defines model for EmbeddedTerminal.
@@ -801,14 +791,6 @@ type Notice struct {
 	Detail *string `json:"detail,omitempty"`
 	Line   *int    `json:"line,omitempty"`
 	Path   *string `json:"path,omitempty"`
-}
-
-// OpenSSHFailure defines model for OpenSSHFailure.
-type OpenSSHFailure struct {
-	ExitCode  int    `json:"exitCode"`
-	Failed    bool   `json:"failed"`
-	Stderr    string `json:"stderr"`
-	Truncated bool   `json:"truncated"`
 }
 
 // OpenTerminalSessionRequest defines model for OpenTerminalSessionRequest.

@@ -25,12 +25,12 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
     setBusy(false);
   }, [alias, detail.file.contents]);
 
-  async function inspect(confirm: boolean) {
+  async function inspect() {
     if (busy || disabled) return;
     setBusy(true);
     setError("");
     try {
-      setEffective(await api.effective(alias, confirm));
+      setEffective(await api.effective(alias));
     } catch {
       setError(t("diag.explainFailed"));
     } finally {
@@ -59,17 +59,10 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
           <h3 className={sectionHeading}>{t("conn.analysisAuthoritative")}</h3>
           <p className={hintText}>{t("conn.analysisAuthoritativeHint")}</p>
         </div>
-        <Button className="self-start" disabled={busy || disabled} onClick={() => void inspect(false)}>
+        <Button className="self-start" disabled={busy || disabled} onClick={() => void inspect()}>
           {busy ? t("conn.analysisRunning") : t("conn.analysisRun")}
         </Button>
         {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-
-        {effective?.failure.failed ? (
-          <Notice tone="danger">
-            {t("conn.analysisRefused", { code: effective.failure.exitCode })}
-            {effective.failure.stderr === "" ? "" : ` ${effective.failure.stderr}`}
-          </Notice>
-        ) : null}
 
         {effective !== null && effective.executableDirectives.length > 0 ? (
           <div className="rounded border border-notice-line bg-notice p-3 text-sm">
@@ -89,11 +82,6 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
                 </li>
               ))}
             </ul>
-            {effective.requiresConfirmation && !effective.evaluated ? (
-              <Button className="mt-3" disabled={busy || disabled} onClick={() => void inspect(true)}>
-                {t("conn.analysisRunConfirmed")}
-              </Button>
-            ) : null}
           </div>
         ) : null}
 

@@ -131,7 +131,8 @@ func mustMarshal(t *testing.T, value any) []byte {
 	return encoded
 }
 
-func TestEffectiveEndpointEvaluatesASafeConfigurationWithoutAConfirmation(t *testing.T) {
+// 設定を読むのに確認は要らない。**この経路はもう何も起動しない。**
+func TestEffectiveEndpointAnswersWithoutStartingAnything(t *testing.T) {
 	engine, credentials, _, _ := newDiagnosticsServer(t)
 
 	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/diagnostics/effective",
@@ -143,9 +144,6 @@ func TestEffectiveEndpointEvaluatesASafeConfigurationWithoutAConfirmation(t *tes
 	var payload api.EffectiveResponse
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
-	}
-	if !payload.Evaluated {
-		t.Fatalf("a configuration without Match exec evaluates automatically: %#v", payload)
 	}
 	if len(payload.ExecutableDirectives) != 1 || payload.ExecutableDirectives[0].Command != "/usr/bin/nc %h %p" {
 		t.Errorf("executable directives = %#v", payload.ExecutableDirectives)

@@ -17,8 +17,6 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     }),
     effective: vi.fn().mockResolvedValue({
       alias: "bastion",
-      evaluated: true,
-      requiresConfirmation: false,
       tokenWarning: "OpenSSH does not shell-escape the tokens it expands.",
       executableDirectives: [],
       values: [{ keyword: "hostname", values: ["203.0.113.10"] }],
@@ -27,7 +25,6 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
       ],
       complexities: [],
       route: [],
-      failure: { failed: false, exitCode: 0, stderr: "", truncated: false },
     }),
     reachability: vi.fn().mockResolvedValue({
       address: "203.0.113.10:22",
@@ -154,51 +151,11 @@ describe("DiagnosticsPanel", () => {
     await userEvent.type(screen.getByLabelText("Host alias"), "bastion");
     await userEvent.click(screen.getByRole("button", { name: "Explain" }));
 
-    await waitFor(() => expect(api.effective).toHaveBeenCalledWith("bastion", false));
+    await waitFor(() => expect(api.effective).toHaveBeenCalledWith("bastion"));
     expect(await screen.findByText("203.0.113.10")).toBeInTheDocument();
     expect(screen.getByText(/~\/\.ssh\/config:2/)).toBeInTheDocument();
   });
 
-  it("requires an explicit confirmation before evaluating a configuration that can run a command", async () => {
-    const api = buildApi({
-      effective: vi.fn().mockResolvedValue({
-        alias: "risky",
-        evaluated: false,
-        requiresConfirmation: true,
-        tokenWarning: "OpenSSH does not shell-escape the tokens it expands.",
-        executableDirectives: [
-          {
-            keyword: "Match exec",
-            command: "test -f /tmp/at-work",
-            path: "~/.ssh/config",
-            line: 6,
-            condition: "",
-            onEvaluate: true,
-            onConnect: true,
-            overridable: false,
-          },
-        ],
-        values: [],
-        sources: [],
-        complexities: [],
-        route: [],
-        failure: { failed: false, exitCode: 0, stderr: "", truncated: false },
-      }),
-    });
-    render(<DiagnosticsPanel api={api} />);
-
-    await userEvent.type(screen.getByLabelText("Host alias"), "risky");
-    await userEvent.click(screen.getByRole("button", { name: "Explain" }));
-
-    // 正確なコマンドとトークンエスケープの警告は両方とも表示される。
-    expect(await screen.findByText("test -f /tmp/at-work")).toBeInTheDocument();
-    expect(screen.getByText(/does not shell-escape/)).toBeInTheDocument();
-    expect(api.effective).toHaveBeenCalledTimes(1);
-    expect(api.effective).toHaveBeenLastCalledWith("risky", false);
-
-    await userEvent.click(screen.getByRole("button", { name: "Run ssh -G anyway" }));
-    await waitFor(() => expect(api.effective).toHaveBeenLastCalledWith("risky", true));
-  });
 
   it("says that a reachability check ignored ProxyJump", async () => {
     const api = buildApi();
@@ -222,69 +179,14 @@ describe("DiagnosticsPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not/i);
   });
 
-  it("shows what OpenSSH said when it refused, instead of rendering nothing", async () => {
-    // 失敗した`ssh -G`は理由を内側に持つ 200 である。何もスローしない
-    // ため、パネルは以前沈黙をレンダリングし、クリックは何もしていないように見えていた。
-    const api = buildApi({
-      effective: vi.fn().mockResolvedValue({
-        alias: "broken",
-        evaluated: false,
-        requiresConfirmation: false,
-        tokenWarning: "",
-        executableDirectives: [],
-        values: [],
-        sources: [],
-        complexities: [],
-        route: [],
-        failure: {
-          failed: true,
-          exitCode: 255,
-          stderr: "/home/tester/.ssh/config line 12: Bad configuration option: HostNam",
-          truncated: false,
-        },
-      }),
-    });
-    render(<DiagnosticsPanel api={api} />);
 
-    await userEvent.type(screen.getByLabelText("Host alias"), "broken");
-    await userEvent.click(screen.getByRole("button", { name: "Explain" }));
-
-    expect(await screen.findByText(/ssh -G exited with 255/)).toBeInTheDocument();
-    expect(screen.getByText(/Bad configuration option: HostNam/)).toBeInTheDocument();
-  });
-
-  it("says when the captured output was cut off rather than presenting it whole", async () => {
-    const api = buildApi({
-      effective: vi.fn().mockResolvedValue({
-        alias: "broken",
-        evaluated: false,
-        requiresConfirmation: false,
-        tokenWarning: "",
-        executableDirectives: [],
-        values: [],
-        sources: [],
-        complexities: [],
-        route: [],
-        failure: { failed: true, exitCode: 255, stderr: "the first 64 KiB", truncated: true },
-      }),
-    });
-    render(<DiagnosticsPanel api={api} />);
-
-    await userEvent.type(screen.getByLabelText("Host alias"), "broken");
-    await userEvent.click(screen.getByRole("button", { name: "Explain" }));
-
-    expect(await screen.findByText(/hit the capture limit and was cut off/)).toBeInTheDocument();
-  });
 
   it("marks the rules it will not project instead of answering for them", async () => {
     const api = buildApi({
       effective: vi.fn().mockResolvedValue({
         alias: "lab",
-        evaluated: true,
-        requiresConfirmation: false,
         tokenWarning: "",
         executableDirectives: [],
-        values: [],
         sources: [],
         complexities: [
           {
@@ -296,7 +198,6 @@ describe("DiagnosticsPanel", () => {
           },
         ],
         route: [],
-        failure: { failed: false, exitCode: 0, stderr: "", truncated: false },
       }),
     });
     render(<DiagnosticsPanel api={api} />);
@@ -314,18 +215,14 @@ describe("DiagnosticsPanel", () => {
     const api = buildApi({
       effective: vi.fn().mockResolvedValue({
         alias: "deep",
-        evaluated: true,
-        requiresConfirmation: false,
         tokenWarning: "",
         executableDirectives: [],
-        values: [],
         sources: [],
         complexities: [],
         route: [
           { order: 0, depth: 0, parent: "", hop: "edge", hostname: "198.51.100.1", user: "ops", port: "22", complex: false },
           { order: 1, depth: 1, parent: "edge", hop: "inner-*", hostname: "", user: "", port: "", complex: true },
         ],
-        failure: { failed: false, exitCode: 0, stderr: "", truncated: false },
       }),
     });
     render(<DiagnosticsPanel api={api} />);
@@ -344,18 +241,14 @@ describe("DiagnosticsPanel", () => {
     const api = buildApi({
       effective: vi.fn().mockResolvedValue({
         alias: "bastion",
-        evaluated: true,
-        requiresConfirmation: false,
         tokenWarning: "",
         executableDirectives: [],
-        values: [],
         sources: [
           { keyword: "Port", value: "2222", path: "~/.ssh/config", line: 4, condition: "Host bastion", kind: "exact", winner: true },
           { keyword: "Port", value: "22", path: "~/.ssh/config", line: 11, condition: "Host *", kind: "wildcard", winner: false },
         ],
         complexities: [],
         route: [],
-        failure: { failed: false, exitCode: 0, stderr: "", truncated: false },
       }),
     });
     render(<DiagnosticsPanel api={api} />);

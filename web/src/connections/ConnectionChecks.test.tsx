@@ -6,15 +6,11 @@ import { ConnectionChecks } from "./ConnectionChecks";
 
 const safeInspection: EffectiveResponse = {
   alias: "bastion",
-  evaluated: false,
-  requiresConfirmation: false,
   tokenWarning: "OpenSSH does not shell-escape expanded tokens.",
   executableDirectives: [],
-  values: [],
   sources: [],
   complexities: [],
   route: [],
-  failure: { failed: false, exitCode: 0, stderr: "", truncated: false },
 };
 
 function api(overrides: Partial<Pick<IntegrationsApi, "effective" | "reachability" | "authentication">> = {}) {
@@ -67,14 +63,13 @@ describe("ConnectionChecks", () => {
     await userEvent.click(screen.getByRole("button", { name: "Check authentication with saved settings" }));
 
     expect(await screen.findByText("authenticated")).toBeInTheDocument();
-    expect(integrations.effective).toHaveBeenCalledWith("bastion", false);
+    expect(integrations.effective).toHaveBeenCalledWith("bastion");
     expect(integrations.authentication).toHaveBeenCalledWith("bastion", false);
   });
 
   it("requires a second explicit acknowledgement when authentication can execute a directive", async () => {
     const risky: EffectiveResponse = {
       ...safeInspection,
-      requiresConfirmation: true,
       executableDirectives: [{
         keyword: "ProxyCommand",
         command: "/usr/bin/nc %h %p",

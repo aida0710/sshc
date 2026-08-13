@@ -100,39 +100,6 @@ func TestConnectionSnapshotDerivesEverythingFromOneGraphRead(t *testing.T) {
 	}
 }
 
-func TestServiceInspectEvaluatesSafeConfigurationsAutomatically(t *testing.T) {
-	runner := &scriptedRunner{output: platform.Output{Stdout: []byte("hostname 203.0.113.10\nuser ops\nport 2222\n")}}
-	service := newTestService(t, runner)
-
-	inspection, err := service.Inspect(context.Background(), "bastion", false)
-	if err != nil {
-		t.Fatalf("Inspect = %v", err)
-	}
-	if !inspection.Evaluated || inspection.RequiresConfirmation {
-		t.Fatalf("inspection = %#v", inspection)
-	}
-	if got := inspection.Values.First("hostname"); got != "203.0.113.10" {
-		t.Errorf("hostname = %q", got)
-	}
-	if source, ok := inspection.Projection.Value("hostname"); !ok || source.Line != 2 {
-		t.Errorf("projection = %#v", inspection.Projection)
-	}
-	if len(inspection.Report.Directives) != 1 || inspection.Report.Directives[0].Keyword != "ProxyCommand" {
-		t.Errorf("report = %#v", inspection.Report)
-	}
-}
-
-func TestServiceInspectReportsAnOpenSSHFailureAsData(t *testing.T) {
-	runner := &scriptedRunner{output: platform.Output{ExitCode: 255, Stderr: []byte("Bad configuration option\n")}}
-	inspection, err := newTestService(t, runner).Inspect(context.Background(), "bastion", false)
-	if err != nil {
-		t.Fatalf("Inspect = %v", err)
-	}
-	if inspection.Evaluated || inspection.Failure == nil || inspection.Failure.ExitCode != 255 {
-		t.Fatalf("inspection = %#v", inspection)
-	}
-}
-
 func TestServiceDestinationUsesTheEngineSoABlockedEvaluationStillWorks(t *testing.T) {
 	runner := &scriptedRunner{}
 	service := newTestService(t, runner)

@@ -92,45 +92,6 @@ func TestNoAPIRouteReadsAnUnboundedBody(t *testing.T) {
 	}
 }
 
-// fabricatedHostname は、合成した `ssh -G` transcript のうち
-// truncation で失われるはずの部分にだけ置かれる。それを示すレスポンスは、
-// 切り詰められた transcript を完全な答えとして扱ったことになる。
-const fabricatedHostname = "truncated-transcript-must-not-be-parsed.invalid"
-
-func TestTruncatedCommandOutputIsRefusedRatherThanParsed(t *testing.T) {
-	f := newFixture(t)
-
-	transcript := []byte("hostname " + fabricatedHostname + "\nuser ops\nport 2222\n")
-	transcript = append(transcript, bytes.Repeat([]byte("identityfile /padding\n"), 4096)...)
-	f.runner.answer(func(platform.Command) (platform.Output, error) {
-		return platform.Output{
-			Stdout:    transcript[:platform.MaxCapturedOutput],
-			Truncated: true,
-		}, nil
-	})
-
-	f.runner.reset()
-	token := f.actionToken(t, session.ActionEvaluate, "bastion")
-	response := f.do(http.MethodPost, "/api/v1/diagnostics/effective", mustJSON(t, map[string]any{
-		"alias": "bastion",
-	}), withAction(token))
-	status := response.StatusCode
-	body := readBody(t, response)
-
-	// 正のコントロール。これがなければ、このテストは ssh に到達する前に
-	// 確認が拒否されていても平然と通ってしまう。それは
-	// セキュリティテストを無価値にする失敗モードである。
-	if commands := f.runner.recorded(); len(commands) == 0 {
-		t.Fatalf("ssh -G was never reached (status %d, body %s); the truncation rule was not exercised", status, body)
-	}
-	if strings.Contains(body, fabricatedHostname) {
-		t.Fatal("a truncated ssh -G transcript was parsed and served as an effective value")
-	}
-	if len(body) > maxAcceptableResponseBytes {
-		t.Fatalf("response = %d bytes", len(body))
-	}
-}
-
 func TestReportedCommandOutputStaysWithinItsPublishedCeiling(t *testing.T) {
 	f := newFixture(t)
 

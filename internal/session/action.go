@@ -18,7 +18,6 @@ const (
 
 // アクションの種別。ある種別に発行されたトークンは、他のどの種別にも使えない。
 const (
-	ActionEvaluate          = "diagnostics.evaluate"
 	ActionReachability      = "diagnostics.reachability"
 	ActionAuthentication    = "diagnostics.authentication"
 	ActionKnownHostsDelete  = "known_hosts.delete"
@@ -37,7 +36,6 @@ var (
 )
 
 var knownActionKinds = map[string]bool{
-	ActionEvaluate:          true,
 	ActionReachability:      true,
 	ActionAuthentication:    true,
 	ActionKnownHostsDelete:  true,

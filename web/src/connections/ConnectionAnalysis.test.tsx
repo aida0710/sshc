@@ -37,11 +37,8 @@ const detail: HostDetail = {
 
 const effective: EffectiveResponse = {
   alias: "bastion",
-  evaluated: true,
-  requiresConfirmation: false,
   tokenWarning: "OpenSSH token warning.",
   executableDirectives: [],
-  values: [{ keyword: "hostname", values: ["203.0.113.10"] }],
   sources: [{
     keyword: "HostName",
     value: "203.0.113.10",
@@ -53,15 +50,14 @@ const effective: EffectiveResponse = {
   }],
   complexities: [],
   route: [],
-  failure: { failed: false, exitCode: 0, stderr: "", truncated: false },
 };
 
 describe("ConnectionAnalysis", () => {
-  it("keeps authoritative OpenSSH evaluation disabled while another editor is dirty", () => {
+  it("keeps the sources view disabled while another editor is dirty", () => {
     const api = { effective: vi.fn() } as Pick<IntegrationsApi, "effective">;
     render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} disabled />);
 
-    expect(screen.getByRole("button", { name: "Run authoritative ssh -G" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Show the sources" })).toBeDisabled();
   });
 
   it("shows the resolved saved values without running anything", () => {
@@ -75,44 +71,15 @@ describe("ConnectionAnalysis", () => {
     expect(api.effective).not.toHaveBeenCalled();
   });
 
-  it("runs authoritative ssh -G only after the explicit action", async () => {
+  it("reads the sources only after the explicit action", async () => {
     const api = { effective: vi.fn().mockResolvedValue(effective) };
     render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Run authoritative ssh -G" }));
+    await userEvent.click(screen.getByRole("button", { name: "Show the sources" }));
 
-    expect(api.effective).toHaveBeenCalledWith("bastion", false);
+    expect(api.effective).toHaveBeenCalledWith("bastion");
     expect(await screen.findByRole("table", { name: "Authoritative value sources" })).toBeInTheDocument();
     expect(screen.getByText("in effect")).toBeInTheDocument();
   });
 
-  it("requires explicit confirmation before ssh -G can execute Match exec", async () => {
-    const risky: EffectiveResponse = {
-      ...effective,
-      evaluated: false,
-      requiresConfirmation: true,
-      executableDirectives: [{
-        keyword: "Match exec",
-        command: "/usr/local/bin/check-network",
-        path: "config",
-        line: 12,
-        condition: "Match exec",
-        onEvaluate: true,
-        onConnect: false,
-        overridable: false,
-      }],
-    };
-    const api = {
-      effective: vi.fn()
-        .mockResolvedValueOnce(risky)
-        .mockResolvedValueOnce({ ...effective, evaluated: true }),
-    };
-    render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} />);
-
-    await userEvent.click(screen.getByRole("button", { name: "Run authoritative ssh -G" }));
-    expect(await screen.findByText("/usr/local/bin/check-network")).toBeInTheDocument();
-    expect(api.effective).toHaveBeenCalledTimes(1);
-    await userEvent.click(screen.getByRole("button", { name: "Run ssh -G with these directives" }));
-    expect(api.effective).toHaveBeenLastCalledWith("bastion", true);
-  });
 });
