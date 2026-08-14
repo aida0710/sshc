@@ -353,11 +353,6 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	select {
 	case err := <-serveErrors:
 		return err
-	case <-server.Stopped():
-		// デスクトップの外殻が終了を頼んだ。**ウィンドウを閉じることとは別の意思で
-		// ある**ので、頼まれたときだけここへ来る。
-		stopServer()
-		return <-serveErrors
 	case <-ctx.Done():
 		stopServer()
 		return <-serveErrors
