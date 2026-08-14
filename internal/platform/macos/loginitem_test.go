@@ -107,16 +107,45 @@ func TestEnableReportsLaunchctlExitFailures(t *testing.T) {
 		}
 	})
 
+	// 断られ続けたら諦める。**「10 回とも断られた」は「断られた」である。**
 	t.Run("bootstrap failure", func(t *testing.T) {
-		runner := &recordingLaunchctl{outputs: []platform.Output{{ExitCode: 3}, {ExitCode: 5}}}
+		refused := []platform.Output{{ExitCode: 3}}
+		for attempt := 0; attempt < 32; attempt++ {
+			refused = append(refused, platform.Output{ExitCode: 5})
+		}
+		runner := &recordingLaunchctl{outputs: refused}
 		item := macos.LoginItem{Runner: runner, Home: t.TempDir()}
 		if err := item.Enable(context.Background(), "/Users/tester/.local/bin/sshc"); err == nil {
 			t.Fatal("bootstrap exit 5 was reported as success")
 		}
-		if len(runner.commands) != 2 {
-			t.Fatalf("commands = %#v", runner.commands)
+		if len(runner.commands) < 3 {
+			t.Fatalf("it gave up without trying again: %#v", runner.commands)
 		}
 	})
+}
+
+// bootout は非同期である。
+//
+// **0 で戻ってきても、走っていたプロセスはまだ片付いていないことがある。**
+// そこへ bootstrap すると launchd は断る——エンジンが動いている状態で
+// `make install` を走らせると実際にそうなった。片付くのを待って、もう一度出す。
+func TestEnableWaitsForTheOldServiceToFinishGoingAway(t *testing.T) {
+	runner := &recordingLaunchctl{outputs: []platform.Output{
+		{ExitCode: 0}, // bootout: 頼んだ。まだ終わってはいない
+		{ExitCode: 5}, // bootstrap: まだ居る
+		{ExitCode: 0}, // bootstrap: 片付いた
+	}}
+	item := macos.LoginItem{Runner: runner, Home: t.TempDir()}
+
+	if err := item.Enable(context.Background(), "/Users/tester/.local/bin/sshc"); err != nil {
+		t.Fatalf("Enable() = %v, want it to wait and try again", err)
+	}
+	if len(runner.commands) != 3 {
+		t.Fatalf("commands = %#v", runner.commands)
+	}
+	if runner.commands[2].Arguments[0] != "bootstrap" {
+		t.Fatalf("the second attempt was %#v", runner.commands[2])
+	}
 }
 
 func TestDisableIgnoresOnlyAnAlreadyUnloadedService(t *testing.T) {
