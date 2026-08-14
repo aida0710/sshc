@@ -43,11 +43,17 @@ type ConnectHandlers struct {
 	// Aliases は、この接続に現れる alias を、ProxyJump の手前も含めて返す。
 	// nil なら行き先ひとつだけを見る。
 	Aliases func(alias string) []string
-	// Sessions はブラウザへの入口を発行し、BaseURL はその入口が導く先である。
+	// Bootstrap はブラウザへの入口を発行し、BaseURL はその入口が導く先である。
 	// 両方が nil であれば、このアプリケーションはコマンドラインから開けない。
 	// これは session manager を持たないビルドの状態である。
-	Sessions *session.Manager
-	BaseURL  string
+	//
+	// **かつては Sessions という名だった。** その名は下の、生きているコンソール
+	// の本数を返す field に譲った——メニューバーが尋ねるのは本数であり、
+	// *session.Manager そのものではないので、そちらのほうが呼び出し側に近い名である。
+	Bootstrap *session.Manager
+	BaseURL   string
+	// Sessions は、生きているコンソールの本数を返す。nil なら 0。
+	Sessions func() int
 	// Shutdown は、この常駐を終わらせる。nil なら止める手段が無いと答える。
 	//
 	// **これを呼ぶのはデスクトップの外殻であって、画面ではない。** 画面から
@@ -178,11 +184,26 @@ const HealthPath = "/cli/engine/health"
 // ある。**これを呼ぶのはデスクトップの外殻であって、画面ではない。**
 const StopPath = "/cli/engine/stop"
 
+// StatusPath は、外殻が「いまどうなっているか」を尋ねる場所である。
+//
+// **これは画面のための口ではない。** 画面は自分の session を持っている。
+// ここが答える相手はメニューバーであり、認可は handoff の秘密ひとつである。
+const StatusPath = "/cli/status"
+
+type statusResponse struct {
+	// Unlocked は vault が開いているか。
+	Unlocked bool `json:"unlocked"`
+	// Sessions は生きているコンソールの本数。終了済みは数えない——
+	// 「閉じてよいか」を問うための数だからである。
+	Sessions int `json:"sessions"`
+}
+
 func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
 	engine.POST(StopPath, handlers.Stop)
 	engine.POST(HealthPath, handlers.Health)
+	engine.GET(StatusPath, handlers.Status)
 }
 
 // Health は、我々のエンジンがここに居ることを答える。
@@ -211,15 +232,30 @@ func (h ConnectHandlers) Stop(c *echo.Context) error {
 	return c.NoContent(http.StatusAccepted)
 }
 
+// Status は、メニューバーと終了時の確認が読む現在地である。
+func (h ConnectHandlers) Status(c *echo.Context) error {
+	if !h.authorised(c.Request()) {
+		return c.NoContent(http.StatusForbidden)
+	}
+	answer := statusResponse{}
+	if h.Passwords != nil {
+		answer.Unlocked = h.Passwords.Unlocked()
+	}
+	if h.Sessions != nil {
+		answer.Sessions = h.Sessions()
+	}
+	return c.JSON(http.StatusOK, answer)
+}
+
 // Open は、セッションを確立する URL で応答する。
 func (h ConnectHandlers) Open(c *echo.Context) error {
 	if !h.authorised(c.Request()) {
 		return c.NoContent(http.StatusForbidden)
 	}
-	if h.Sessions == nil || h.BaseURL == "" {
+	if h.Bootstrap == nil || h.BaseURL == "" {
 		return c.NoContent(http.StatusServiceUnavailable)
 	}
-	bootstrap, err := h.Sessions.Reissue()
+	bootstrap, err := h.Bootstrap.Reissue()
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}

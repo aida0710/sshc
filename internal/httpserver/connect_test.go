@@ -347,3 +347,45 @@ func TestStopSaysSoWhenThereIsNoWayToStop(t *testing.T) {
 		t.Fatalf("stop without a shutdown = %d, want 503", response.Code)
 	}
 }
+
+// メニューバーと終了時の確認が読む口である。**数えるのは生きている本数だけ**
+// で、終了済みは残っていても数に入らない——閉じてよいかを問うための数だからだ。
+func TestStatusAnswersWithTheLockAndTheLiveCount(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	engine := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault, Sessions: func() int { return 3 },
+	})
+
+	recorder := send(t, engine, http.MethodGet, StatusPath, "",
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer statusResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if !answer.Unlocked || answer.Sessions != 3 {
+		t.Fatalf("answer = %+v", answer)
+	}
+}
+
+// handoff の秘密を持たないものには答えない。
+func TestStatusRefusesWithoutTheSecret(t *testing.T) {
+	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
+	if recorder := send(t, engine, http.MethodGet, StatusPath, "", nil); recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", recorder.Code)
+	}
+}
