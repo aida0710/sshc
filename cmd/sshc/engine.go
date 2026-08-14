@@ -98,12 +98,21 @@ func keepEngineRunning(home string) bool {
 // runEngineStart は、エンジンが応答している状態にして戻る。
 //
 // **既に居るなら起こさない。** 二つ動くと、どちらが handoff を書いたかで
-// 接続先が変わる。生死は /api/v1/health で確かめる——**あれは token も
-// ゲートも要求しない唯一の経路**であり、そのために既にそうなっている。
+// 接続先が変わり、先に繋いだ画面は誰も見ていないエンジンを見続ける。
 func runEngineStart(
 	ctx context.Context, stateDir string, client *http.Client,
 	spawn func() error, stdout, stderr io.Writer,
 ) int {
+	// **起こす資格はひとつである。** ロックの外で確かめて起こすと、二つの
+	// アプリが同時に「居ない」と判断して二つ起こす。確かめるところから
+	// 起こし終えるところまでを、まとめて中に入れる。
+	unlock, err := lockEngineStart(stateDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: %v\n", err)
+		return 1
+	}
+	defer unlock()
+
 	if url, alive := liveEngine(ctx, stateDir, client); alive {
 		fmt.Fprintln(stdout, url)
 		return 0
@@ -163,23 +172,34 @@ func runEngineStop(ctx context.Context, stateDir string, client *http.Client, st
 	return 0
 }
 
-// liveEngine は、handoff が指す先が答えるかを確かめる。
+// liveEngine は、handoff が指す先に**我々のエンジンが**居るかを確かめる。
+//
+// handoff の秘密を提示するので、答えたのが我々のものだと言える。ポートが
+// 別のものに再利用されていたら、あちらはこの秘密を知らない。
+//
+// **/api/v1/health は使えない。** あちらは /api/ の下にあり、すべての /api/
+// 要求は Sec-Fetch-Site: same-origin を要求する——ブラウザでないものは通れない。
+// 最初はそこへ問いに行き、製品が壊れていた。
 func liveEngine(ctx context.Context, stateDir string, client *http.Client) (string, bool) {
 	found, err := handoff.Read(stateDir)
 	if err != nil {
 		return "", false
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, found.URL+"/api/v1/health", nil)
+	request, err := http.NewRequestWithContext(
+		ctx, http.MethodPost, found.URL+httpserver.HealthPath, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		return "", false
 	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(handoff.HeaderName, found.Secret)
+
 	response, err := client.Do(request)
 	if err != nil {
 		return "", false
 	}
 	defer func() { _ = response.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4<<10))
-	if response.StatusCode != http.StatusOK {
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusNoContent {
 		return "", false
 	}
 	return found.URL, true
