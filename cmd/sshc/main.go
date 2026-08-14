@@ -80,7 +80,7 @@ func helpInvocation(argv []string) bool {
 // どこにも書かれていないことになる。
 func usage(out io.Writer) {
 	fmt.Fprint(out, `usage:
-  sshc                 open the user interface in the default browser
+  sshc                 run the engine here, or print the way into a running one
   sshc <alias>         connect to a host from ~/.ssh/config in this terminal
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
@@ -191,8 +191,9 @@ func main() {
 	defer stop()
 
 	// **アプリが消えたらエンジンも消える。** 親を見張るのは、通常の終了
-	// 経路（親が kill する）が働かなかったときのためである。
-	go watchParent(ctx, os.Getppid, parentTick, stop)
+	// 経路（親が kill する）が働かなかったときのためである。起こしてくれた
+	// 親をいま控えるのは、孤児の引き取り手が init とは限らないからである。
+	go watchParent(ctx, os.Getppid, os.Getppid(), parentTick, stop)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	assets, err := ui.FS()
@@ -206,6 +207,32 @@ func main() {
 		logger.Error("resolve home directory", "error", err)
 		os.Exit(1)
 	}
+
+	// **エンジンの寿命ぶんロックを握る。** ここへ来る経路はサブコマンドの
+	// どれにも当たらなかった起動——外殻が spawn した子と、端末で裸の `sshc` を
+	// 打った人——の両方であり、後者を塞ぐものは今まで何も無かった。
+	//
+	// 握れなければ 1 台目が生きている。**そのときは走っている方の入口を出して
+	// 終わる。** 打った人にとっては「入口が出る」という自然な結果であり、
+	// handoff を上書きする 2 台目はどこにも生まれない。
+	release, err := lockEngineStart(app.HandoffDir(home))
+	switch {
+	case errors.Is(err, errEngineRunning) && !*openBrowser:
+		// **-open=false は「何も書かない」という意味である。** 入口の 1 行は
+		// 有効な bootstrap トークンを運ぶので、それを求めていない相手の
+		// 標準出力——journal やログファイル——へ落とさない。求めていた状態
+		// （エンジンが 1 台居る）は既に成立しているので、黙って終わる。
+		os.Exit(0)
+	case errors.Is(err, errEngineRunning):
+		os.Exit(runOpen(
+			ctx, app.HandoffDir(home),
+			&http.Client{Timeout: connectTimeout}, os.Stdout, os.Stderr,
+		))
+	case err != nil:
+		logger.Error("take the engine lock", "error", err)
+		os.Exit(1)
+	}
+	defer release()
 
 	parts := newPlatformParts()
 
