@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, shell, dialog } = require("electron");
+const { app, BrowserWindow, Menu, nativeImage, shell, dialog } = require("electron");
 const { execFile } = require("node:child_process");
 const { join } = require("node:path");
 const { existsSync } = require("node:fs");
@@ -87,6 +87,8 @@ function openWindow(url) {
     minHeight: 480,
     title: "sshc",
     backgroundColor: "#111111",
+    // Linux はウィンドウ自身が図を運ぶ。macOS は束から読むので無視される。
+    ...(icon() === null ? {} : { icon: icon() }),
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -122,6 +124,20 @@ function showFailure(error) {
 }
 
 /**
+ * icon は、束に入っている図を返す。無ければ null。
+ *
+ * **packaged された束では要らない。** あちらのアイコンは OS が束から読む。
+ * ここが効くのは開発中だけであり、そこでは走っているのが Electron.app
+ * そのものなので、放っておくと Electron の図が出る。
+ */
+function icon() {
+  const path = join(__dirname, "build", "icon.png");
+  if (!existsSync(path)) return null;
+  const image = nativeImage.createFromPath(path);
+  return image.isEmpty() ? null : image;
+}
+
+/**
  * installMenu は、この外殻のメニューを置く。
  *
  * **役割（role）だけで組む。** コピーも貼り付けも、OS が既に知っている操作で
@@ -146,6 +162,8 @@ function installMenu() {
 
 app.whenReady().then(async () => {
   installMenu();
+  const image = icon();
+  if (image !== null && app.dock !== undefined) app.dock.setIcon(image);
   try {
     openWindow(await entrance());
   } catch (error) {
