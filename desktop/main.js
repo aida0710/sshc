@@ -65,7 +65,7 @@ async function entrance() {
 }
 
 /**
- * openWindow は窓をひとつ開き、その URL を読み込む。
+ * openWindow はウィンドウをひとつ開き、その URL を読み込む。
  */
 function openWindow(url) {
   const window = new BrowserWindow({
@@ -83,9 +83,9 @@ function openWindow(url) {
     },
   });
 
-  // **この窓は自分の origin から動かない。** cookie はポートに紐づかないので、
+  // **このウィンドウは自分の origin から動かない。** cookie はポートに紐づかないので、
   // 同じ 127.0.0.1 の別のポートへ移動できると、そこがこの session の cookie を
-  // 受け取る。外部のリンクは既定のブラウザへ渡す——窓の中では開かない。
+  // 受け取る。外部のリンクは既定のブラウザへ渡す——ウィンドウの中では開かない。
   const origin = new URL(url).origin;
   window.webContents.setWindowOpenHandler(({ url: target }) => {
     void shell.openExternal(target);
@@ -103,7 +103,7 @@ function openWindow(url) {
 }
 
 /**
- * showFailure は、窓の代わりに理由を出す。**白い画面を見せない。**
+ * showFailure は、ウィンドウの代わりに理由を出す。**白い画面を見せない。**
  */
 function showFailure(error) {
   dialog.showErrorBox("sshc could not start", String(error.message ?? error));
@@ -128,9 +128,9 @@ app.whenReady().then(async () => {
   });
 });
 
-// macOS でも窓を閉じたら終わる。
+// macOS でもウィンドウを閉じたら終わる。
 //
-// **窓が無いのに動き続ける外殻には意味が無い。** エンジンを残すかどうかは
+// **ウィンドウが無いのに動き続ける外殻には意味が無い。** エンジンを残すかどうかは
 // 別の話であり、それは設定が決める——下の before-quit がそれを Go 側へ尋ねる。
 app.on("window-all-closed", () => app.quit());
 

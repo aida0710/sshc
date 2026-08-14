@@ -763,6 +763,7 @@ function PaddedSection({
   onNavigate,
   onNavigateLocation,
   onShowConsole,
+  consoles,
   preferredPublicKey,
   onAssignGeneratedKey,
   onInstallGeneratedKey,
@@ -787,7 +788,7 @@ function PaddedSection({
     return <SecretsPanel onLock={onLock} />;
   }
   if (section === "Settings") {
-    return <SettingsPanel />;
+    return <SettingsPanel consoles={consoles} />;
   }
   if (section === "Sync") {
     return <SyncPanel />;

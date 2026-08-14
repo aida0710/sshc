@@ -195,4 +195,42 @@ describe("SettingsPanel", () => {
     await screen.findByLabelText("Keep running after the window closes");
     expect(screen.queryByText(/Start at login is on/)).toBeNull();
   });
+
+  // 繋ぎっぱなしをまとめて片付ける入口。**エンジンは止めない。**
+  it("closes every open connection at once", async () => {
+    const user = userEvent.setup();
+    const closeAll = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SettingsPanel
+        api={buildApi()}
+        consoles={{
+          sessions: [
+            { id: "a", title: "one", kind: "shell", forwards: [] },
+            { id: "b", title: "two", kind: "shell", forwards: [] },
+          ] as never,
+          busy: false,
+          closeAll,
+        }}
+      />,
+    );
+
+    const region = await screen.findByRole("region", { name: "Open connections" });
+    expect(within(region).getByText("2 open")).toBeVisible();
+    await user.click(within(region).getByRole("button", { name: "Close every connection" }));
+
+    expect(closeAll).toHaveBeenCalledTimes(1);
+  });
+
+  // 閉じるものが無いときに押せると、押した人は何かが起きたと思う。
+  it("cannot be pressed when nothing is open", async () => {
+    render(
+      <SettingsPanel
+        api={buildApi()}
+        consoles={{ sessions: [], busy: false, closeAll: vi.fn() }}
+      />,
+    );
+
+    const region = await screen.findByRole("region", { name: "Open connections" });
+    expect(within(region).getByRole("button", { name: "Close every connection" })).toBeDisabled();
+  });
 });

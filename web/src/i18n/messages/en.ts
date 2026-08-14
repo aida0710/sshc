@@ -144,6 +144,10 @@ export const en = {
   "desktop.note": "The engine holds your open consoles and the unlocked vault. Keeping it running means they are still there when you open the app again; the vault still locks itself after the idle timeout either way.",
   "desktop.keepRunning": "Keep running after the window closes",
   "desktop.loginItemWins": "Start at login is on, so the engine runs whatever this says: stopping it only makes the system start it again. Turn that off first if you want closing the window to end it.",
+  "desktop.closeAllHeading": "Open connections",
+  "desktop.closeAllNote": "Closing them ends every console, its port forwards and any agent lent to the remote. The engine keeps running.",
+  "desktop.openCount": "{count} open",
+  "desktop.closeAll": "Close every connection",
   "desktop.saveFailed": "That choice could not be saved.",
   "login.note":
     "Off by default. With it on, sshc runs in the background from the moment you log in, so `sshc <alias>` always finds it. It starts locked: the first time you want the interface, run `sshc open`, which mints a fresh way in rather than leaving one in a log file.",

@@ -25,6 +25,7 @@ export type TerminalSessionsState = {
   rename: (id: string, title: string) => Promise<boolean>;
   open: (request: OpenTerminalSessionRequest) => Promise<TerminalSession | null>;
   close: (id: string) => Promise<void>;
+  closeAll: () => Promise<void>;
   refresh: () => Promise<void>;
   // markExited は、WebSocket が終了を告げた行を、一覧を取り直さずに描き直す。
   markExited: (id: string) => void;
@@ -106,6 +107,49 @@ export function useTerminalSessions(
     [api, translate],
   );
 
+  // closeAll は、開いているものを全部閉じる。
+  //
+  // **一本ずつ閉じる。** 一括の口をサーバーに足さないのは、閉じるという操作の
+  // 意味が 1 本のときと変わらないからである——転送も agent の貸し出しも、
+  // セッションに紐づいて一緒に終わる。
+  //
+  // 一巡では終わらない。**生きているセッションを閉じると SIGHUP が飛ぶだけで、
+  // 一覧からは消えない**——死んだと分かってからもう一度閉じたときに消える
+  // （registry がそう決めており、終わった理由を読めるようにするためである）。
+  // だから一覧が空になるまで巡り直す。
+  //
+  // 巡る回数には上限を置く。応答しないリモートに繋がったセッションは
+  // SIGHUP を送っても即座には死なないので、上限が無いとここが終わらない。
+  // 残ったものは一覧に残る——**黙って消えたことにしない。**
+  const closeAll = useCallback(async () => {
+    setBusy(true);
+    let failed = false;
+    try {
+      let remaining = sessions;
+      for (let round = 0; round < 4 && remaining.length > 0; round += 1) {
+        for (const session of remaining) {
+          try {
+            const listed = await api.closeTerminalSession(session.id);
+            setSessions(listed.sessions);
+            setMaxSessions(listed.maxSessions);
+            remaining = listed.sessions;
+          } catch {
+            // 見つからないものは、もう閉じている。それ以外は次の巡回で拾う。
+            failed = true;
+          }
+        }
+        const listed = await api.terminalSessions().catch(() => null);
+        if (listed === null) break;
+        setSessions(listed.sessions);
+        setMaxSessions(listed.maxSessions);
+        remaining = listed.sessions;
+      }
+      if (failed && remaining.length > 0) setProblem(translate("terminal.closeFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }, [api, sessions, translate]);
+
   // rename は表示だけを変える。走っているプロセスにも ssh の相手にも触れない。
   // 応答が一覧を返すので、それをそのまま写しに使う。
   const rename = useCallback(
@@ -133,7 +177,7 @@ export function useTerminalSessions(
     );
   }, []);
 
-  return { sessions, maxSessions, busy, problem, loaded, rename, open, close, refresh, markExited };
+  return { sessions, maxSessions, busy, problem, loaded, rename, open, close, closeAll, refresh, markExited };
 }
 
 // openFailureKey は、サーバーが名指しした理由を画面の文言へ移す。

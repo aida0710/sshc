@@ -5,13 +5,17 @@ import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
 import { CheckboxField, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
 import { PageHeader } from "../ui/page";
-import { Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
+import type { TerminalSessionsState } from "../terminal/sessions";
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
+  // 開いているセッションはシェルが持つ。ここはその数を見せ、まとめて
+  // 閉じる入口を出すだけである。
+  consoles?: Pick<TerminalSessionsState, "sessions" | "busy" | "closeAll">;
 };
 
-export function SettingsPanel({ api = integrationsApi }: SettingsPanelProps) {
+export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanelProps) {
   const t = useTranslate();
   const [loginItem, setLoginItem] = useState<LoginItem | null>(null);
   const [loginLoaded, setLoginLoaded] = useState(false);
@@ -153,6 +157,32 @@ export function SettingsPanel({ api = integrationsApi }: SettingsPanelProps) {
           <p className={hintText}>{t("desktop.loginItemWins")}</p>
         ) : null}
       </section>
+
+      {/*
+        開いている接続をまとめて閉じる。**エンジンは止めない**——止めると
+        画面ごと落ちるうえ、ログイン項目が有効なら勝手に戻ってくる。ここが
+        引き受けるのは「繋ぎっぱなしを片付けたい」という用であり、それは
+        セッションを閉じれば済む。転送も agent の貸し出しも一緒に終わる。
+
+        取り消しは開き直すことである。だから確認は挟まない——**問いを挟んで
+        いいのは、押し戻せない操作だけである。**
+      */}
+      {consoles === undefined ? null : (
+        <section aria-label={t("desktop.closeAllHeading")} className={sectionCard}>
+          <h3 className={sectionHeading}>{t("desktop.closeAllHeading")}</h3>
+          <p className={hintText}>{t("desktop.closeAllNote")}</p>
+          <p role="status" className="text-sm text-ink-muted">
+            {t("desktop.openCount", { count: consoles.sessions.length })}
+          </p>
+          <Button
+            className="self-start"
+            disabled={consoles.busy || consoles.sessions.length === 0}
+            onClick={() => void consoles.closeAll()}
+          >
+            {t("desktop.closeAll")}
+          </Button>
+        </section>
+      )}
 
       <section aria-label={t("secrets.changeHeading")} className={sectionCard}>
         <h3 className={sectionHeading}>{t("secrets.changeHeading")}</h3>
