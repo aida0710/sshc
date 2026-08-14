@@ -39,9 +39,6 @@ type Options struct {
 	// ConnectAliases は、その接続に現れる alias を ProxyJump の手前も含めて
 	// 返す。保存済みパスワードを渡す相手をそこに限るために使う。
 	ConnectAliases func(alias string) []string
-	// LoginItem は「ログイン時に起動」の on/off を切り替える。nil の場合、
-	// launchd のないプラットフォームがそうであるように、非対応と報告する。
-	LoginItem LoginItemController
 	// Updates はプロジェクトのリリースを調べる。nil の場合、バージョンを
 	// 報告するのみで何も提示しない。比較すべきリリースを持たないビルドが
 	// すべきことはこれである。
@@ -62,9 +59,6 @@ type Options struct {
 	// すべてのパスワード用ルートを未登録のままに
 	// する。これは、それを配線しないテストが当てにしていることである。
 	Passwords *secret.Service
-	// Program はこのバイナリの絶対パスである。ログイン時起動のサービスが
-	// 何を起こすかを書くのに要る。これを知り得るのは cmd/sshc だけだ。
-	Program string
 	// Sync はワークスペースを object store へ運ぶ。nil の service は
 	// すべての sync ルートを未登録のままにする。
 	Sync *remotesync.Service
@@ -235,10 +229,6 @@ func New(options Options) (*Server, error) {
 	// 呼び出し元が state directory から読み出しているはずのものであり、
 	// それがなければこのルートはすべてを拒否する。
 	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})
-	registerLoginItemRoutes(e, LoginItemHandlers{
-		Controller: options.LoginItem,
-		Program:    options.Program,
-	})
 	stopped := make(chan struct{})
 	var stopOnce sync.Once
 	requestStop := func() { stopOnce.Do(func() { close(stopped) }) }

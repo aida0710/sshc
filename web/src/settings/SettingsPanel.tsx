@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
-import { integrationsApi, type IntegrationsApi, type LoginItem } from "../api/integrations";
+import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
 import { CheckboxField, Field, control, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
@@ -17,10 +17,7 @@ type SettingsPanelProps = {
 
 export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanelProps) {
   const t = useTranslate();
-  const [loginItem, setLoginItem] = useState<LoginItem | null>(null);
-  const [loginLoaded, setLoginLoaded] = useState(false);
-  const [loginBusy, setLoginBusy] = useState(false);
-  const [loginError, setLoginError] = useState("");
+  const [desktopError, setDesktopError] = useState("");
   const [currentMaster, setCurrentMaster] = useState("");
   const [nextMaster, setNextMaster] = useState("");
   const [confirmMaster, setConfirmMaster] = useState("");
@@ -122,40 +119,9 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
       await api.setDesktopSettings(next);
       setKeepRunning(next);
     } catch {
-      setLoginError(t("desktop.saveFailed"));
+      setDesktopError(t("desktop.saveFailed"));
     } finally {
       setDesktopBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    let active = true;
-    void api.loginItem()
-      .then((loaded) => {
-        if (!active) return;
-        setLoginItem(loaded);
-        setLoginLoaded(true);
-      })
-      .catch(() => {
-        if (!active) return;
-        setLoginItem(null);
-        setLoginLoaded(true);
-        setLoginError(t("login.loadFailed"));
-      });
-    return () => {
-      active = false;
-    };
-  }, [api, t]);
-
-  async function updateLoginItem(enabled: boolean) {
-    setLoginBusy(true);
-    setLoginError("");
-    try {
-      setLoginItem(await api.setLoginItem(enabled));
-    } catch {
-      setLoginError(t("login.failed"));
-    } finally {
-      setLoginBusy(false);
     }
   }
 
@@ -196,19 +162,7 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("settings.heading")} description={t("settings.pageDescription")} />
 
-      {loginError === "" ? null : <Notice tone="danger">{loginError}</Notice>}
-      {loginLoaded && loginItem?.supported ? (
-        <section aria-label={t("login.heading")} className={sectionCard}>
-          <h3 className={sectionHeading}>{t("login.heading")}</h3>
-          <p className={hintText}>{t("login.note")}</p>
-          <CheckboxField
-            label={t("login.enable")}
-            checked={loginItem.enabled}
-            disabled={loginBusy}
-            onChange={(next) => void updateLoginItem(next)}
-          />
-        </section>
-      ) : null}
+      {desktopError === "" ? null : <Notice tone="danger">{desktopError}</Notice>}
 
       <section aria-label={t("desktop.heading")} className={sectionCard}>
         <h3 className={sectionHeading}>{t("desktop.heading")}</h3>
@@ -219,14 +173,6 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
           disabled={desktopBusy}
           onChange={(next) => void updateKeepRunning(next)}
         />
-        {/*
-          ログイン時起動が有効なら、この選択は効かない。**二つの仕組みが同じ
-          ものの寿命を決めていて、あちらの方が強い**——止めても launchd や
-          systemd が起こし直す。黙って効かないより、効かないと言う。
-        */}
-        {loginItem?.enabled === true ? (
-          <p className={hintText}>{t("desktop.loginItemWins")}</p>
-        ) : null}
       </section>
 
       {/*

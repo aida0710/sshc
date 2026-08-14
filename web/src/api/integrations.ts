@@ -20,7 +20,6 @@ export type KnownHostsScanResponse = components["schemas"]["KnownHostsScanRespon
 export type KnownHostCandidate = components["schemas"]["KnownHostCandidate"];
 export type IssueActionResponse = components["schemas"]["IssueActionResponse"];
 export type ChangeMasterPasswordResult = components["schemas"]["ChangeMasterPasswordResult"];
-export type LoginItem = components["schemas"]["LoginItem"];
 export type UpdateStatus = components["schemas"]["UpdateStatus"];
 export type PasswordVaultStatus = components["schemas"]["PasswordVaultStatus"];
 export type PasswordEligibility = components["schemas"]["PasswordEligibility"];
@@ -82,8 +81,6 @@ export type IntegrationsApi = {
   lockVault(): Promise<PasswordVaultStatus>;
   changeMasterPassword(current: string, next: string): Promise<ChangeMasterPasswordResult>;
   updateStatus(): Promise<UpdateStatus>;
-  loginItem(): Promise<LoginItem>;
-  setLoginItem(enabled: boolean): Promise<LoginItem>;
   // デスクトップの外殻の設定。アプリを閉じたあともエンジンを残すか。
   desktopSettings(): Promise<Desktop>;
   // 開始位置は書かれた綴りのまま往復する。`~/work` は `~/work` のままで
@@ -129,14 +126,6 @@ function validateUpdate(value: unknown): UpdateStatus {
     ...(typeof record.latest === "string" ? { latest: record.latest } : {}),
     ...(typeof record.pageUrl === "string" ? { pageUrl: record.pageUrl } : {}),
   };
-}
-
-function validateLoginItem(value: unknown): LoginItem {
-  const record = asRecord(value);
-  if (typeof record.enabled !== "boolean" || typeof record.supported !== "boolean") {
-    throw new Error("invalid_response");
-  }
-  return { enabled: record.enabled, supported: record.supported };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -551,18 +540,6 @@ export const integrationsApi: IntegrationsApi = {
   },
   async updateStatus() {
     return validateUpdate(await apiClient.read("/api/v1/update"));
-  },
-  async loginItem() {
-    return validateLoginItem(await apiClient.read("/api/v1/login-item"));
-  },
-  async setLoginItem(enabled) {
-    return validateLoginItem(
-      await apiClient.mutate("/api/v1/login-item", {
-        method: "PUT",
-        headers: jsonHeaders,
-        body: JSON.stringify({ enabled, supported: true }),
-      }),
-    );
   },
   async desktopSettings() {
     const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
