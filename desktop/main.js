@@ -29,6 +29,14 @@ if (!app.requestSingleInstanceLock()) app.exit(0);
 // 値そのものは「フリーズしたまま待ち続けない」ための保険でしかない。
 const engineTimeout = 30_000;
 
+// engineBusy は、「エンジンの持ち主が別に居た」とエンジンが答える終了コードで
+// ある。**cmd/sshc/main.go の engineBusyExit と対である。**
+//
+// この番号があるのは、「自分が起こしたエンジンが死んだ」と「別の持ち主が既に
+// 居た」を、外殻が区別できなければならないからである。前者はアプリを終える
+// 理由だが、後者は理由を出す理由である。
+const engineBusy = 3;
+
 // hidden は、窓を作らずに上がるべきかを言う。
 //
 // **端末から起こされたときの姿である。** `launchApp()`（Go 側）が
@@ -95,10 +103,17 @@ function entrance() {
     // アプリが開けない理由にはならない。
     relink(binary()).catch(() => {});
 
-    // **stderr は捨てる。** エンジンのログを読む者がここには居らず、読まれない
-    // パイプは 64 KiB で埋まる。埋まった先で止まるのは write を呼んだエンジン
-    // 自身であり、症状は「アプリが黙って固まる」になる。
-    const child = spawn(binary(), [], { stdio: ["ignore", "pipe", "ignore"] });
+    // **stderr はこちらの stderr へそのまま流す。** パイプを作らないので
+    // 64 KiB で埋まることが無く（埋まった先で止まるのは write を呼んだエンジン
+    // 自身で、症状は「アプリが黙って固まる」になる）、それでいて
+    // `make desktop-run` の端末にはエンジンの理由が出る。捨ててしまうと、
+    // 上がらなかった理由——ロックが取れない、home が解決できない——を書いて
+    // いる logger.Error が、どこからも読めなくなる。
+    //
+    // **--own-engine を渡す。** 他人のエンジンの入口を受け取ると、窓は開くのに
+    // Cmd+Q でそのエンジンが残る——このアプリが「終了すれば全部止まる」と
+    // 言えなくなる。あちらは入口を出さずに engineBusy で終わる。
+    const child = spawn(binary(), ["--own-engine"], { stdio: ["ignore", "pipe", "inherit"] });
     engine = child;
 
     let buffered = "";
@@ -128,6 +143,20 @@ function entrance() {
     });
     child.on("error", (error) => settle(error));
     child.on("exit", (code) => {
+      // **持ち主が別に居たなら、断る。** この番号で終わった子は入口を 1 行も
+      // 書いていないので、ここは必ず settled より先に来る。
+      //
+      // 相乗りしない理由は、相乗りできないからである。engine に入っているのは
+      // 他人の死んだ子なので、終了時の engine.kill() は何も殺さない——窓は
+      // 開くが、Cmd+Q でエンジンだけが残る。**持ち主はアプリひとつ**という
+      // 決めごとを、窓を開くために曲げる方が高くつく。
+      if (code === engineBusy) {
+        settle(new Error(
+          "端末で動いている sshc がエンジンです。" +
+            "その端末で Ctrl-C を押して終わらせてから、もう一度開いてください。",
+        ));
+        return;
+      }
       // **アプリはエンジンの寿命そのものである。** 上がったあとに落ちたなら、
       // 窓もメニューバーの項目も、もう何も配れない——残しておく意味がない。
       if (settled) {
@@ -245,6 +274,11 @@ app.whenReady().then(async () => {
     if (!hidden) openWindow(url);
   } catch (error) {
     showFailure(error);
+    // **ここで確認は出さない。** 上がらなかったのだから、このアプリが抱えて
+    // いるコンソールは 1 本も無い。それでも before-quit を素通りさせると、
+    // 端末で動いている別のエンジンの本数を数えて「終了しますか」と訊き、
+    // 「やめる」と答えた人には窓もエンジンも無い外殻だけが残る。
+    quitting = true;
     app.quit();
     return;
   }
