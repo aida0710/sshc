@@ -11,6 +11,8 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/term"
+
 	"sshc/internal/app"
 	"sshc/internal/config"
 	"sshc/internal/handoff"
@@ -45,7 +47,7 @@ func connectInvocation(argv []string) (string, bool) {
 	word := argv[1]
 	if word == "" || word[0] == '-' || word == OpenSubcommand || word == ListSubcommand ||
 		word == ConnectSubcommand || word == HelpSubcommand || word == ServiceSubcommand ||
-		word == EngineSubcommand {
+		word == EngineSubcommand || word == StatusSubcommand {
 		return "", false
 	}
 	return word, true
@@ -131,6 +133,29 @@ func runConnect(
 	var saved func(string) (string, bool)
 	var password func(string) (string, bool)
 	answer, err := askApplication(ctx, alias, stateDir, client)
+	if err != nil && launchApp() {
+		// **上がるまで待つ。** 待ち方を知っているのはここだけで、
+		// 上限は外殻が入口を書き出すのに掛ける時間と同じにしてある。
+		for attempt := 0; attempt < 40 && err != nil; attempt++ {
+			time.Sleep(500 * time.Millisecond)
+			answer, err = askApplication(ctx, alias, stateDir, client)
+		}
+	}
+
+	// **ブラウザを開かずに答えられる。** 解錠はエンジンの中に残るので、
+	// あとで窓を開けば解錠済みである。
+	if err == nil && locked(ctx, stateDir, client) {
+		fmt.Fprint(stderr, "sshc: master password (leave empty to skip): ")
+		typed, readErr := term.ReadPassword(int(stdin.Fd()))
+		fmt.Fprintln(stderr)
+		if readErr == nil && len(typed) > 0 {
+			// **間違えても聞き直さない。** 繋げることの方が強い要求であり、
+			// 誤りの遅延を端末で待たせる価値が無い。
+			if unlock(ctx, stateDir, client, string(typed)) {
+				answer, _ = askApplication(ctx, alias, stateDir, client)
+			}
+		}
+	}
 	switch {
 	case err != nil:
 		fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%v)\n", err)
@@ -219,3 +244,100 @@ func askApplication(ctx context.Context, alias, stateDir string, client *http.Cl
 // connectTimeout は、これが行う唯一のリクエストに上限を設ける。ネットワーク越しに何か
 // をするのではなく、このマシン上のプロセスにトークンを尋ねているだけだ。
 const connectTimeout = 5 * time.Second
+
+// engineStatus は、エンジンがいまどうなっているかを尋ねる。
+func engineStatus(ctx context.Context, stateDir string, client *http.Client) (statusAnswer, error) {
+	found, err := handoff.Read(stateDir)
+	if err != nil {
+		return statusAnswer{}, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		found.URL+httpserver.StatusPath, nil)
+	if err != nil {
+		return statusAnswer{}, err
+	}
+	request.Header.Set(handoff.HeaderName, found.Secret)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return statusAnswer{}, err
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		return statusAnswer{}, fmt.Errorf("sshc refused the request")
+	}
+	var answer statusAnswer
+	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&answer); err != nil {
+		return statusAnswer{}, err
+	}
+	return answer, nil
+}
+
+// statusAnswer は、エンジンが答える「いまどうなっているか」である。
+type statusAnswer struct {
+	Unlocked bool `json:"unlocked"`
+	Sessions int  `json:"sessions"`
+}
+
+// locked は、いま施錠されたままかを尋ねる。尋ねられなければ、施錠されて
+// いないものとして扱う——聞けないなら聞かずに繋ぐ経路へ任せる。
+func locked(ctx context.Context, stateDir string, client *http.Client) bool {
+	status, err := engineStatus(ctx, stateDir, client)
+	return err == nil && !status.Unlocked
+}
+
+// unlock は、答えられたマスターパスワードをエンジンへ渡す。
+//
+// **開いたかどうかしか返らない。** どう間違っていたかを、この経路は言わない。
+func unlock(ctx context.Context, stateDir string, client *http.Client, passphrase string) bool {
+	found, err := handoff.Read(stateDir)
+	if err != nil {
+		return false
+	}
+	body, err := json.Marshal(map[string]string{"passphrase": passphrase})
+	if err != nil {
+		return false
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		found.URL+httpserver.UnlockPath, bytes.NewReader(body))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(handoff.HeaderName, found.Secret)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = response.Body.Close() }()
+	return response.StatusCode == http.StatusNoContent
+}
+
+// StatusSubcommand は、外殻がエンジンの様子を尋ねる語である。
+//
+// **人が打つためのものではない。** 出力は整形も翻訳もしない JSON であり、
+// 読むのはメニューバーだけである。それでも usage に出すのは、「sshc -h に
+// 出ないサブコマンドを作らない」という決めごとのためである。
+const StatusSubcommand = "status"
+
+// runStatus は、エンジンの様子をそのまま JSON で書き出す。
+//
+// **これは人のための表示ではない。** 読むのはメニューバーであり、だから
+// 整形もしないし、翻訳もしない。エンジンが居なければ 1 で終わる。
+func runStatus(
+	ctx context.Context, stateDir string, client *http.Client, stdout, stderr io.Writer,
+) int {
+	answer, err := engineStatus(ctx, stateDir, client)
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: %v\n", err)
+		return 1
+	}
+	encoded, err := json.Marshal(answer)
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: %v\n", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, string(encoded))
+	return 0
+}

@@ -26,10 +26,15 @@ if (!app.requestSingleInstanceLock()) app.exit(0);
 
 // engineTimeout は、run() が execFile ひとつに掛ける上限である。
 //
-// **いまはまだ誰も呼んでいない。** `sshc status` を叩く Task 6 まで出番を
-// 待つ定数であり、値そのものは「フリーズしたまま待ち続けない」ための
-// 保険でしかない。
+// 値そのものは「フリーズしたまま待ち続けない」ための保険でしかない。
 const engineTimeout = 30_000;
+
+// hidden は、窓を作らずに上がるべきかを言う。
+//
+// **端末から起こされたときの姿である。** `launchApp()`（Go 側）が
+// `open -g -b <bundleID> --args --hidden` で起こすので、メニューバーの
+// 項目だけが出て、画面を奪わない。
+const hidden = process.argv.includes("--hidden");
 
 /**
  * binary は、束に同梱した sshc の絶対パスを返す。
@@ -59,6 +64,17 @@ function run(args) {
       resolve(String(stdout).trim());
     });
   });
+}
+
+/**
+ * status は、エンジンがいまどうなっているかを尋ねる。
+ *
+ * **handoff の秘密を持つのは Go 側だけ**なので、外殻は `sshc status` を
+ * 叩いて尋ねる。自分では handoff を読まない。メニューバーと
+ * before-quit の本数、両方がここを通る。
+ */
+function status() {
+  return run(["status"]).then((line) => JSON.parse(line));
 }
 
 // engine は、このアプリが起こしたエンジンひとつである。
@@ -201,7 +217,12 @@ app.whenReady().then(async () => {
     // するのはここだけでよい——以降の開き直しは、走っているエンジンに
     // 新しい入口を出させる run(["open"]) を使う。ここで entrance() を
     // 使い回すと、窓を閉じて開くたびにエンジンがもう 1 台増える。
-    openWindow(await entrance());
+    //
+    // **--hidden のときは窓を作らない。** エンジンは起こす——メニューバーの
+    // 項目が「動いている」ことの証拠であり、端末はここが上げたエンジンに
+    // 繋ぎに行く。
+    const url = await entrance();
+    if (!hidden) openWindow(url);
   } catch (error) {
     showFailure(error);
     app.quit();
@@ -228,9 +249,7 @@ app.whenReady().then(async () => {
   tray = installTray({
     onOpen: reopen,
     onQuit: () => app.quit(),
-    // Task 6 で `sshc status` を足してから本物に差し替える。**handoff の
-    // 秘密を持つのは Go 側だけ**なので、外殻は自分では叩けない。
-    status: async () => ({ unlocked: false, sessions: 0 }),
+    status,
   });
 
   app.on("activate", reopen);
@@ -243,22 +262,32 @@ app.on("window-all-closed", () => {
 });
 
 /**
- * liveSessions は、生きているコンソールの本数を返す。
- *
- * **いまは仮の実装である。** handoff の秘密を持つのは Go 側だけなので、
- * 外殻はまだ `sshc status` を叩けない——Task 6 でそこを足してから、
- * 本当の本数に差し替える。
+ * liveSessions は、生きているコンソールの本数を返す。エンジンに尋ねられ
+ * なければ 0 を返す——**終了を止める理由にはできない**。本数が分からない
+ * ことは、開いているコンソールが無いことの証明にはならないが、それを理由に
+ * 終了できなくしてよいわけでもない。
  */
 async function liveSessions() {
-  return 0;
+  try {
+    return (await status()).sessions;
+  } catch {
+    return 0;
+  }
 }
 
 let quitting = false;
+// **確認の最中かどうかの印。** liveSessions() やダイアログを待っている間に
+// before-quit がもう一度届く道がある——メニューから終了を選んだ直後に
+// Ctrl-C を叩く、など。quitting は確認が終わってからでないと立たないので、
+// 待っている間の二度目をこれだけでは弾けない。ここを await の手前で立てる
+// ことで、二枚目のダイアログを防ぐ。
+let confirmingQuit = false;
 app.on("before-quit", async (event) => {
   if (quitting) return;
   event.preventDefault();
+  if (confirmingQuit) return;
+  confirmingQuit = true;
   // **SSH のセッションは閉じたら戻らない。** 本数を出して一度だけ問う。
-  // Task 6 で `sshc status` を足すまでは 0 を返す。
   const open = await liveSessions();
   if (open > 0) {
     const answer = await dialog.showMessageBox({
@@ -268,7 +297,10 @@ app.on("before-quit", async (event) => {
       cancelId: 1,
       message: `開いているコンソールが ${open} 本あります。終了しますか。`,
     });
-    if (answer.response !== 0) return;
+    if (answer.response !== 0) {
+      confirmingQuit = false;
+      return;
+    }
   }
   quitting = true;
   if (engine !== null) engine.kill();
