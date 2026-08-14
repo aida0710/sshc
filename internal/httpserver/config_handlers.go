@@ -1,12 +1,14 @@
 package httpserver
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
 	"sshc/internal/application"
+	"sshc/internal/platform"
 	"sshc/internal/secret"
 )
 
@@ -63,6 +65,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.POST("/api/v1/config/groups/delete", handlers.DeleteGroup)
 	engine.GET("/api/v1/metadata", handlers.Metadata)
 	engine.PUT("/api/v1/metadata/desktop", handlers.SetDesktop)
+	engine.PUT("/api/v1/metadata/terminal", handlers.SetTerminal)
 	engine.GET("/api/v1/history", handlers.History)
 	engine.POST("/api/v1/history/restore", handlers.Restore)
 	engine.POST("/api/v1/history/recover", handlers.Recover)
@@ -204,6 +207,33 @@ func (h ConfigHandlers) SetDesktop(c *echo.Context) error {
 	keep := request.KeepRunning != nil && *request.KeepRunning
 	result, err := h.Service.SetKeepEngineRunning(keep)
 	if err != nil {
+		return serviceProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+// SetTerminal は、ローカルシェルの開始位置を書き戻す。
+//
+// **通らない指定はここで断る。** 保存を受け入れておいて、次に端末を開いた
+// ときに初めて失敗させると、設定画面と失敗の現れる場所が離れる。
+func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
+	var request api.TerminalSettings
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	directory := ""
+	if request.StartDirectory != nil {
+		directory = *request.StartDirectory
+	}
+	result, err := h.Service.SetTerminalStartDirectory(directory)
+	switch {
+	case errors.Is(err, platform.ErrDirectoryRelative), errors.Is(err, platform.ErrDirectoryUser):
+		return problem(c, http.StatusBadRequest, "start_directory_unusable")
+	case errors.Is(err, application.ErrStartDirectoryMissing):
+		return problem(c, http.StatusBadRequest, "start_directory_missing")
+	case errors.Is(err, application.ErrStartDirectoryNotADirectory):
+		return problem(c, http.StatusBadRequest, "start_directory_not_a_directory")
+	case err != nil:
 		return serviceProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, result)

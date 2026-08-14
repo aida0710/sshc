@@ -85,6 +85,10 @@ export type IntegrationsApi = {
   setLoginItem(enabled: boolean): Promise<LoginItem>;
   // デスクトップの外殻の設定。アプリを閉じたあともエンジンを残すか。
   desktopSettings(): Promise<Desktop>;
+  // 開始位置は書かれた綴りのまま往復する。`~/work` は `~/work` のままで
+  // あり、home の綴りに展開されたものが画面へ戻ることはない。
+  terminalStartDirectory(): Promise<string>;
+  setTerminalStartDirectory(directory: string): Promise<void>;
   setDesktopSettings(keepRunning: boolean): Promise<void>;
   passwordEligibility(alias: string): Promise<PasswordEligibility>;
   // Credential は名前を持つ秘密である。ホストはアカウントパスワードを参照し、
@@ -560,6 +564,19 @@ export const integrationsApi: IntegrationsApi = {
     if (metadata.desktop === undefined) return { keepRunning: false };
     const desktop = asRecord(metadata.desktop);
     return { keepRunning: desktop.keepRunning === true };
+  },
+  async terminalStartDirectory() {
+    const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
+    if (metadata.embeddedTerminal === undefined) return "";
+    const terminal = asRecord(metadata.embeddedTerminal);
+    return typeof terminal.startDirectory === "string" ? terminal.startDirectory : "";
+  },
+  async setTerminalStartDirectory(directory) {
+    await apiClient.mutate("/api/v1/metadata/terminal", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify({ startDirectory: directory }),
+    });
   },
   async setDesktopSettings(keepRunning) {
     await apiClient.mutate("/api/v1/metadata/desktop", {

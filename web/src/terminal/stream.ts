@@ -36,6 +36,28 @@ export function openStream(ticket: string, handlers: StreamHandlers): TerminalSt
   const encoder = new TextEncoder();
   let exited = false;
 
+  // 開くまでに渡されたフレームは溜めて、開いたときに順番どおり流す。
+  //
+  // **捨ててはならない。** 端末を開いた直後に送る最初のサイズがここを通る。
+  // WebSocket は new した直後には CONNECTING なので、その場で送ろうとすれば
+  // 必ず落ちる——落ちれば PTY は 80×24 のまま残り、折り返しも、全画面を使う
+  // プログラムも、壊れた幅で描く。次に窓の大きさが変わるまで直らない。
+  let pending: (string | Uint8Array)[] | null = [];
+  socket.addEventListener("open", () => {
+    const queued = pending ?? [];
+    pending = null;
+    for (const frame of queued) socket.send(frame);
+  });
+
+  const push = (frame: string | Uint8Array) => {
+    if (pending !== null) {
+      pending.push(frame);
+      return;
+    }
+    if (socket.readyState !== WebSocket.OPEN) return;
+    socket.send(frame);
+  };
+
   socket.addEventListener("message", (event: MessageEvent<unknown>) => {
     if (event.data instanceof ArrayBuffer) {
       handlers.onOutput(new Uint8Array(event.data));
@@ -65,15 +87,15 @@ export function openStream(ticket: string, handlers: StreamHandlers): TerminalSt
 
   return {
     send(data) {
-      if (socket.readyState !== WebSocket.OPEN) return;
-      socket.send(encoder.encode(data));
+      push(encoder.encode(data));
     },
     resize(cols, rows) {
-      if (socket.readyState !== WebSocket.OPEN) return;
-      socket.send(JSON.stringify({ resize: { cols, rows } }));
+      push(JSON.stringify({ resize: { cols, rows } }));
     },
     close() {
       exited = true;
+      // 閉じたあとに溜めていたものを送らない。相手はもう居ない。
+      pending = null;
       socket.close();
     },
   };

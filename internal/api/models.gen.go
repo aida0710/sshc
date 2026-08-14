@@ -392,8 +392,9 @@ type EffectiveResponse struct {
 
 // EmbeddedTerminal defines model for EmbeddedTerminal.
 type EmbeddedTerminal struct {
-	MaxSessions     *int `json:"maxSessions,omitempty"`
-	ScrollbackBytes *int `json:"scrollbackBytes,omitempty"`
+	MaxSessions     *int    `json:"maxSessions,omitempty"`
+	ScrollbackBytes *int    `json:"scrollbackBytes,omitempty"`
+	StartDirectory  *string `json:"startDirectory,omitempty"`
 }
 
 // ExecutableDirective defines model for ExecutableDirective.
@@ -1196,6 +1197,11 @@ type TerminalSessionList struct {
 	Sessions    []TerminalSession `json:"sessions"`
 }
 
+// TerminalSettings defines model for TerminalSettings.
+type TerminalSettings struct {
+	StartDirectory *string `json:"startDirectory,omitempty"`
+}
+
 // TerminalStreamTicket defines model for TerminalStreamTicket.
 type TerminalStreamTicket struct {
 	StreamTicket string `json:"streamTicket"`
@@ -1404,6 +1410,9 @@ type SetLoginItemJSONRequestBody = LoginItem
 
 // SetDesktopSettingsJSONRequestBody defines body for SetDesktopSettings for application/json ContentType.
 type SetDesktopSettingsJSONRequestBody = Desktop
+
+// SetTerminalSettingsJSONRequestBody defines body for SetTerminalSettings for application/json ContentType.
+type SetTerminalSettingsJSONRequestBody = TerminalSettings
 
 // ChangeMasterPasswordJSONRequestBody defines body for ChangeMasterPassword for application/json ContentType.
 type ChangeMasterPasswordJSONRequestBody = ChangeMasterPasswordRequest
