@@ -144,6 +144,14 @@ export function SettingsPanel({ api = integrationsApi }: SettingsPanelProps) {
           disabled={desktopBusy}
           onChange={(next) => void updateKeepRunning(next)}
         />
+        {/*
+          ログイン時起動が有効なら、この選択は効かない。**二つの仕組みが同じ
+          ものの寿命を決めていて、あちらの方が強い**——止めても launchd や
+          systemd が起こし直す。黙って効かないより、効かないと言う。
+        */}
+        {loginItem?.enabled === true ? (
+          <p className={hintText}>{t("desktop.loginItemWins")}</p>
+        ) : null}
       </section>
 
       <section aria-label={t("secrets.changeHeading")} className={sectionCard}>

@@ -179,4 +179,20 @@ describe("SettingsPanel", () => {
     const toggle = await screen.findByLabelText("Keep running after the window closes");
     expect(toggle).not.toBeChecked();
   });
+  // **二つの仕組みが同じものの寿命を決めていて、あちらの方が強い。**
+  // 黙って効かないより、効かないと言う。
+  it("says when start at login makes the choice moot", async () => {
+    render(<SettingsPanel api={buildApi({
+      loginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
+    })} />);
+
+    expect(await screen.findByText(/Start at login is on/)).toBeVisible();
+  });
+
+  it("stays quiet when start at login is off", async () => {
+    render(<SettingsPanel api={buildApi()} />);
+
+    await screen.findByLabelText("Keep running after the window closes");
+    expect(screen.queryByText(/Start at login is on/)).toBeNull();
+  });
 });

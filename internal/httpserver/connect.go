@@ -109,6 +109,15 @@ type openResponse struct {
 	URL string `json:"url"`
 }
 
+// HealthPath は、そこに我々のエンジンが居るかを確かめる場所である。
+//
+// **/api/v1/health ではない。** あちらは /api/ の下にあり、すべての /api/
+// 要求は Sec-Fetch-Site: same-origin を要求する——ブラウザでないものは
+// 通れない。ここが /cli/ にあるのはそのためであり、**handoff の秘密で
+// 認証するので「何かが答えた」ではなく「我々のエンジンが答えた」と言える。**
+// ポートが別のものに再利用されていたら、あちらはこの秘密を知らない。
+const HealthPath = "/cli/engine/health"
+
 // StopPath は、走っているエンジンへ終了を頼む場所である。
 //
 // /api/ の外にあるのは、セッションではなく handoff の秘密で認証するからで
@@ -119,6 +128,18 @@ func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
 	engine.POST(StopPath, handlers.Stop)
+	engine.POST(HealthPath, handlers.Health)
+}
+
+// Health は、我々のエンジンがここに居ることを答える。
+//
+// 運ぶのは「居る」という事実だけである。版も、設定も、施錠の状態も返さない
+// ——**この経路が答えるのは、繋ぎ直してよい相手かどうかだけ**である。
+func (h ConnectHandlers) Health(c *echo.Context) error {
+	if !h.authorised(c.Request()) {
+		return c.NoContent(http.StatusForbidden)
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // Stop は、この常駐を終わらせる。
