@@ -23,11 +23,11 @@ app.setName("sshc");
 // 名簿もロックファイルも要らない。
 if (!app.requestSingleInstanceLock()) app.exit(0);
 
-// engineTimeout は、sshc 側のコマンドひとつに掛ける上限である。
+// engineTimeout は、run() が execFile ひとつに掛ける上限である。
 //
-// `sshc engine start` は自分の中でも待つ（handoff が書かれるまで）ので、
-// ここはその上限より長くしてある。**待ち方を知っているのは Go 側だけ**で
-// あり、こちらはそれを追い越さない。
+// **いまはまだ誰も呼んでいない。** `sshc status` を叩く Task 6 まで出番を
+// 待つ定数であり、値そのものは「フリーズしたまま待ち続けない」ための
+// 保険でしかない。
 const engineTimeout = 30_000;
 
 /**
