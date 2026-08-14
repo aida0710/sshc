@@ -12,6 +12,7 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/session"
+	"sshc/internal/terminal"
 )
 
 // ConnectPath は、コマンドラインが接続に必要なものを尋ねる場所である。
@@ -196,6 +197,18 @@ type statusResponse struct {
 	// Sessions は生きているコンソールの本数。終了済みは数えない——
 	// 「閉じてよいか」を問うための数だからである。
 	Sessions int `json:"sessions"`
+}
+
+// liveSessions は、まだ終わっていないものだけを数える。**終了済みは registry に
+// 残っていても数えない**——この数は「閉じてよいか」を問うためのものだからである。
+func liveSessions(views []terminal.View) int {
+	live := 0
+	for _, view := range views {
+		if view.Exited == nil {
+			live++
+		}
+	}
+	return live
 }
 
 func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
