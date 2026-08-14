@@ -204,6 +204,19 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     if (!consoles.sessions.some((session) => session.id === activeConsole)) setActiveConsole(null);
   }, [consoles.sessions, activeConsole]);
 
+  // 開いているものがあるなら、どれかを選んでおく。
+  //
+  // **選ばれていない状態は、リロードのあとに必ず起きる。** セッションは常駐
+  // プロセス側で生きているが、どれを見ていたかはこのプロセスの記憶であり、
+  // 読み込み直せば消える。そのとき Terminal の画面は「開いているコンソールが
+  // ありません」と言っていた——**一覧に何本も並んでいる隣で。**
+  //
+  // 閉じた直後にも起きる。上の効果が選択を外すので、そこで次の 1 本へ移る。
+  useEffect(() => {
+    if (activeConsole !== null || consoles.sessions.length === 0) return;
+    setActiveConsole(consoles.sessions[0]?.id ?? null);
+  }, [consoles.sessions, activeConsole]);
+
   // 端末が描かれるのは Terminal である。ナビゲーションはどの画面からでも
   // 押せるので、選んだらそこへ連れて行く。
   const showConsole = useCallback(
