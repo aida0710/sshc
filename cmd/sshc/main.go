@@ -228,7 +228,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	parts := newPlatformParts(home)
+	parts := newPlatformParts()
 
 	var announce func(string) error
 	if *openBrowser {
