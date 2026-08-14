@@ -95,7 +95,7 @@ type Client struct {
 
 // ErrInsecureEndpoint は、ループバックでない平文のエンドポイントを拒否する。
 // 本文はここへ届く前に暗号化されているが、資格情報はそうではない。回線から
-// 拾った署名を再生すれば、そのクロックスキューの窓が閉じるまでは有効な
+// 拾った署名を再生すれば、そのクロックスキューのウィンドウが閉じるまでは有効な
 // リクエストである。
 var ErrInsecureEndpoint = errors.New("the object store endpoint must be https unless it is loopback")
 

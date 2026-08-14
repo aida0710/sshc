@@ -75,7 +75,7 @@ type ConnectionSecretsMutation struct {
 //
 // セッションのアクショントークンと同じ 2 分であり、理由も同じである。これは
 // ユーザーがボタンを押してから OpenSSH がパスワードのプロンプトに到達するまでの
-// 間隔であって、誰かが計画を立てられるような窓ではない。
+// 間隔であって、誰かが計画を立てられるようなウィンドウではない。
 const TokenTTL = 2 * time.Minute
 
 // IdleTimeout は、開いた vault が使われないまま生き続ける時間。

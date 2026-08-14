@@ -115,4 +115,58 @@ describe("useTerminalSessions", () => {
     });
     expect(result.current.problem).toBe("terminal.openFailed");
   });
+
+  // まとめて閉じるには一巡では足りない。
+  //
+  // **生きているセッションを閉じると SIGHUP が飛ぶだけで、一覧からは消えない。**
+  // 消えるのは、死んだと分かってからもう一度閉じたときである（registry が
+  // そう決めており、終わった理由を読めるようにするためである）。ここでは
+  // その振る舞いをそのまま持つ相手を置いて、一覧が空になるまで巡ることを見る。
+  it("closes each session again once it is no longer live", async () => {
+    const server = [
+      { id: "a", live: true },
+      { id: "b", live: true },
+    ];
+    const listing = () => ({
+      sessions: server.map(({ id }) => ({ id })) as never,
+      maxSessions: 50,
+    });
+    const closeTerminalSession = vi.fn(async (id: string) => {
+      const found = server.find((session) => session.id === id);
+      if (found === undefined) return listing();
+      if (found.live) found.live = false;
+      else server.splice(server.indexOf(found), 1);
+      return listing();
+    });
+    const client = api({ terminalSessions: vi.fn(async () => listing()), closeTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.closeAll();
+    });
+
+    // 2 本 × 2 巡。一巡で終わると信じている実装なら、ここで 2 本残る。
+    expect(closeTerminalSession).toHaveBeenCalledTimes(4);
+    expect(result.current.sessions).toEqual([]);
+    expect(result.current.problem).toBe("");
+  });
+
+  // 閉じられなかったものを黙って消えたことにしない。
+  it("says so when one of them refuses to close", async () => {
+    const one = [{ id: "a" }] as never;
+    const client = api({
+      terminalSessions: vi.fn().mockResolvedValue({ sessions: one, maxSessions: 50 }),
+      closeTerminalSession: vi.fn().mockRejectedValue(new Error("refused")),
+    });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(1));
+
+    await act(async () => {
+      await result.current.closeAll();
+    });
+
+    expect(result.current.problem).toBe("terminal.closeFailed");
+    expect(result.current.sessions).toHaveLength(1);
+  });
 });

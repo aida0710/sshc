@@ -52,7 +52,7 @@ FIDO 鍵（`sk-ssh-ed25519@openssh.com`、`sk-ecdsa-sha2-nistp256@openssh.com`�
 | キーワード | 決定 | 理由 |
 | --- | --- | --- |
 | `RemoteForward` | **落とす** | 相手に listen させる。信頼の向きが逆で、サーバー側の `AllowTcpForwarding` と `GatewayPorts` に依存する |
-| `ForwardX11` | **落とす** | X サーバーがこのプロセスの向こうに無い。ブラウザの端末に X の窓は出せない |
+| `ForwardX11` | **落とす** | X サーバーがこのプロセスの向こうに無い。ブラウザの端末に X のウィンドウは出せない |
 | `ControlMaster` / `ControlPath` | **落とす** | **プロセス内では意味が無い。** 接続の再利用は `ssh.Client` を持ち回るだけで済み、ソケットも別プロセスも要らない |
 | `SendEnv` | **落とす** | 送る値がこのアプリケーションの環境変数であって、利用者のシェルのものではない。**間違った値を送るくらいなら送らない** |
 | `CertificateFile` | **落とす** | 証明書を配る仕組みを持つ組織は、その配布と一緒に `ssh` も配っている |
