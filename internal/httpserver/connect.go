@@ -31,8 +31,8 @@ type ConnectHandlers struct {
 	// Secret は呼び出し側が提示すべきものである。空であればすべての
 	// リクエストを拒否する。handoff を書けなかったサーバーは受け付けてはならない。
 	Secret string
-	// Passwords は保存済みの鍵パスフレーズを持つ。nil であれば
-	// 保存されたパスワードは一切提供されず、それはプロンプトが出る正常な接続である。
+	// Passwords は保存済みの鍵パスフレーズとアカウントパスワードを持つ。nil で
+	// あれば保存された答えは一切提供されず、それはプロンプトが出る正常な接続である。
 	Passwords *secret.Service
 	// KeyPassphraseTarget resolves the one direct workspace key whose saved
 	// passphrase may answer this connection. A false result is never guessed.
@@ -40,6 +40,9 @@ type ConnectHandlers struct {
 	// Warnings は、OpenSSH がこの host に対して実行するディレクティブを報告する。
 	// 接続の最中に気付くのではなく、事前に伝えられる。
 	Warnings func(alias string) []string
+	// Aliases は、この接続に現れる alias を、ProxyJump の手前も含めて返す。
+	// nil なら行き先ひとつだけを見る。
+	Aliases func(alias string) []string
 	// Sessions はブラウザへの入口を発行し、BaseURL はその入口が導く先である。
 	// 両方が nil であれば、このアプリケーションはコマンドラインから開けない。
 	// これは session manager を持たないビルドの状態である。
@@ -69,14 +72,65 @@ type connectResponse struct {
 	// KeyPath は、その接続に使う鍵のワークスペース相対パス。
 	KeyPath string `json:"keyPath,omitempty"`
 	// Passphrase は、その鍵について保存されている答え。無ければ空である。
-	Passphrase string   `json:"passphrase,omitempty"`
-	Warnings   []string `json:"warnings"`
+	Passphrase string `json:"passphrase,omitempty"`
+	// Passwords は、この接続に現れる alias ごとの保存済みアカウントパスワード。
+	//
+	// **行き先ひとつではなく連鎖ぶんである。** ProxyJump の手前に立つホストは
+	// それ自身が alias であり、そこにもパスワードは保存されうる。行き先のぶん
+	// だけを渡すと、手前で止まる接続がそのたびに手入力を求める。
+	//
+	// **Passphrase とは別の名前空間である。** あちらはローカルの秘密鍵を開く
+	// ための秘密で、こちらはリモートのアカウントへログインするための秘密である。
+	// 混ぜれば、鍵を開くための秘密がそのままリモートへ送られる。
+	Passwords map[string]string `json:"passwords,omitempty"`
+	Warnings  []string          `json:"warnings"`
+}
+
+// savedPassword は、その alias について保存されているアカウントパスワードを返す。
+//
+// **これが載るのは、この経路がもう外部のプログラムへ渡さないからである。**
+// askpass だった頃は、答えを受け取るのが OpenSSH の起こす別のプログラムだった。
+// いまは要求を出した `sshc` 自身が受け取り、自分でプロトコルを話す。渡す先が
+// 増えないなら、埋め込みターミナルと違う答えを返す理由も無い。
+//
+// この経路を読めるのは `~/.ssh/sshc/cli`（0600）を読める者だけであり、その者は
+// すでに、どの alias についても保存済みパスフレーズを引き出せる。**秘密が一種類
+// 増えることは書いておく**——境界は動かないが、動かないことは自明ではない。
+// **返すのはこの接続に現れる alias のぶんだけである。** 保管庫を一覧にはしない
+// ——尋ねられた接続に要るものと、要らないものを区別する。
+func savedPasswords(passwords *secret.Service, aliases []string) map[string]string {
+	if passwords == nil {
+		return nil
+	}
+	found := map[string]string{}
+	for _, alias := range aliases {
+		if password := passwords.PasswordFor(alias); password != "" {
+			found[alias] = password
+		}
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	return found
+}
+
+// connectionAliases は、この接続に現れる alias を返す。行き先と、ProxyJump の
+// 手前に立つホストである。連鎖を解決できなければ行き先だけを返す——解決の失敗は
+// このあとの接続そのものが報告するので、ここで二度言わない。
+func (h ConnectHandlers) connectionAliases(alias string) []string {
+	if h.Aliases == nil {
+		return []string{alias}
+	}
+	if listed := h.Aliases(alias); len(listed) > 0 {
+		return listed
+	}
+	return []string{alias}
 }
 
 // savedPassphrase は、その alias が使う鍵と、保存されているパスフレーズを返す。
 //
-// 保存済みアカウントパスワードはここに現れない。password、keyboard-interactive、
-// PAM、2FA の問いは、意図して利用者自身の対話へ残してある。
+// アカウントのパスワードはここに現れない。名前空間が別だからであり、混ぜれば、
+// ローカルの鍵を開くための秘密がリモートへログインパスワードとして送られる。
 func savedPassphrase(
 	passwords *secret.Service,
 	alias string,
@@ -214,5 +268,6 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 	// コマンドラインが自分で尋ねる接続になる。それは正常な接続である。
 	answer.KeyPath, answer.Passphrase = savedPassphrase(
 		h.Passwords, decoded.Alias, h.KeyPassphraseTarget)
+	answer.Passwords = savedPasswords(h.Passwords, h.connectionAliases(decoded.Alias))
 	return c.JSON(http.StatusOK, answer)
 }

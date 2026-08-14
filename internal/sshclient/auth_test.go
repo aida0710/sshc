@@ -316,3 +316,66 @@ func runTestAgent(t *testing.T, _ string) (string, ssh.Signer) {
 	}()
 	return socket, signer
 }
+
+// **保管庫に置いてあるのに毎回尋ねるなら、置く意味が無い。**
+func TestAStoredPasswordAnswersWithoutAskingTheUser(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	// 答えを持たない。尋ねられた時点でこの接続は失敗する。
+	prompt := &scriptedPrompter{}
+	auth := sshclient.Auth{Password: func(alias string) (string, bool) {
+		return "hunter2", alias == "bastion"
+	}}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.asked) != 0 {
+		t.Fatalf("the stored password was not used: %#v", prompt.asked)
+	}
+}
+
+// 普通の Linux はパスワードを keyboard-interactive で聞いてくる。**問いがひとつで
+// 画面に出さないなら、それはパスワードを聞かれている形である。**
+func TestAStoredPasswordAnswersASingleHiddenQuestion(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Password: ": "hunter2"}})
+	prompt := &scriptedPrompter{}
+	auth := sshclient.Auth{Password: func(string) (string, bool) { return "hunter2", true }}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.asked) != 0 {
+		t.Fatalf("the stored password was not used: %#v", prompt.asked)
+	}
+}
+
+// 問いが複数あるものに、保存されたパスワードを差し出す意味は無い。**2FA の
+// 二つ目の問いに対して、それは間違った答えである。**
+func TestAStoredPasswordDoesNotAnswerATwoQuestionChallenge(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{
+		"Password: ": "hunter2", "Verification code: ": "123456",
+	}})
+	prompt := &scriptedPrompter{answers: []string{"one", "two"}}
+	auth := sshclient.Auth{Password: func(string) (string, bool) { return "hunter2", true }}
+
+	_ = connect(t, server, targetWith(server), auth, prompt)
+
+	if len(prompt.asked) < 2 {
+		t.Fatalf("the server's two questions did not reach the user: %#v", prompt.asked)
+	}
+}
+
+// **保存された答えは古いことがある。** 断られたら人に尋ね直す——一度で諦めると、
+// その alias は保管庫を直すまで開けなくなる。
+func TestAStaleStoredPasswordStillLetsTheUserAnswer(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	prompt := &scriptedPrompter{answers: []string{"hunter2"}}
+	auth := sshclient.Auth{Password: func(string) (string, bool) { return "what it used to be", true }}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.secretly) != 1 {
+		t.Fatalf("the user was never asked after the stored password was refused: %#v", prompt.secretly)
+	}
+}

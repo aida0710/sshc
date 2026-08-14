@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sshc/internal/sshclient"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -343,4 +344,28 @@ type trackingListener struct {
 func (listener *trackingListener) Close() error {
 	listener.closed = true
 	return listener.Listener.Close()
+}
+
+// **ProxyJump の手前に立つホストは、それ自身が alias である。**
+//
+// 保存済みパスワードを渡す相手をこの一覧が決めるので、手前が落ちると、連鎖の
+// 途中でだけ手入力を求められる接続になる。並びは手前から順で、行き先が最後に来る。
+func TestConnectionAliasesCarryTheJumpChainBeforeTheDestination(t *testing.T) {
+	listed := appendAliases(nil, sshclient.Target{
+		Alias: "far",
+		Jump: []sshclient.Target{{
+			Alias: "edge",
+			Jump:  []sshclient.Target{{Alias: "outer"}},
+		}},
+	})
+
+	want := []string{"outer", "edge", "far"}
+	if len(listed) != len(want) {
+		t.Fatalf("aliases = %#v, want %#v", listed, want)
+	}
+	for index := range want {
+		if listed[index] != want[index] {
+			t.Fatalf("aliases = %#v, want %#v", listed, want)
+		}
+	}
 }
