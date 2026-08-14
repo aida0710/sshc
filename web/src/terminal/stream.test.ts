@@ -21,7 +21,10 @@ type Listener = (event: unknown) => void;
 
 class FakeSocket {
   static last: FakeSocket | null = null;
-  readyState = 1;
+  // **繋がる前から始まる。** 本物の WebSocket は new した直後 CONNECTING で
+  // あり、そこを OPEN として検査すると、開く前に送られたフレームが落ちること
+  // に気づけない。
+  readyState = 0;
   binaryType = "";
   sent: unknown[] = [];
   closed = false;
@@ -45,6 +48,11 @@ class FakeSocket {
 
   emit(name: string, event: unknown) {
     for (const listener of this.listeners[name] ?? []) listener(event);
+  }
+
+  open() {
+    this.readyState = 1;
+    this.emit("open", {});
   }
 }
 
@@ -81,12 +89,42 @@ describe("openStream", () => {
     withFakeSocket();
     const stream = openStream("one-time", { onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
     const socket = FakeSocket.last!;
+    socket.open();
 
     stream.send("echo hi\r");
     stream.resize(120, 34);
 
     expect(new TextDecoder().decode(socket.sent[0] as Uint8Array)).toBe("echo hi\r");
     expect(JSON.parse(String(socket.sent[1]))).toEqual({ resize: { cols: 120, rows: 34 } });
+  });
+
+  // 端末を開いた直後の最初のサイズは、まだ CONNECTING のこの通信路を通る。
+  // ここで落とすと PTY は 80×24 のまま残り、窓の大きさが変わるまで直らない。
+  it("holds frames sent before the socket opens and delivers them in order", () => {
+    withFakeSocket();
+    const stream = openStream("one-time", { onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
+    const socket = FakeSocket.last!;
+
+    stream.resize(120, 34);
+    stream.send("x");
+    expect(socket.sent).toHaveLength(0);
+
+    socket.open();
+
+    expect(JSON.parse(String(socket.sent[0]))).toEqual({ resize: { cols: 120, rows: 34 } });
+    expect(new TextDecoder().decode(socket.sent[1] as Uint8Array)).toBe("x");
+  });
+
+  it("does not deliver held frames when it was closed before opening", () => {
+    withFakeSocket();
+    const stream = openStream("one-time", { onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
+    const socket = FakeSocket.last!;
+
+    stream.resize(120, 34);
+    stream.close();
+    socket.open();
+
+    expect(socket.sent).toHaveLength(0);
   });
 
   // 通信路が切れることと、子プロセスが終わることは別の事実である。前者では

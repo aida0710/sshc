@@ -111,6 +111,15 @@ type GroupMetadata struct {
 type EmbeddedTerminal struct {
 	MaxSessions     int `json:"maxSessions,omitempty"`
 	ScrollbackBytes int `json:"scrollbackBytes,omitempty"`
+	// StartDirectory は、ローカルシェルが始まる場所である。
+	//
+	// 空は「書かれていない」であり、そのとき始まるのは home である。
+	// **エンジンの作業ディレクトリは継がない**——あれはエンジンを起こした
+	// ものがたまたま居た場所で、利用者はそれを選んでいない。
+	//
+	// `~` の綴りのまま持つ。**home の綴りを設定に焼き付けない**ので、
+	// 別の機械へ持って行っても同じ意味になる。
+	StartDirectory string `json:"startDirectory,omitempty"`
 }
 
 // Desktop は、デスクトップの外殻の設定である。
@@ -137,6 +146,15 @@ type Metadata struct {
 	Desktop          *Desktop          `json:"desktop,omitempty"`
 	Groups           []GroupMetadata   `json:"groups,omitempty"`
 	Hosts            []HostMetadata    `json:"hosts,omitempty"`
+}
+
+// TerminalStartDirectory は、ローカルシェルが始まる場所を、書かれたままの
+// 綴りで返す。空なら書かれていない。
+func (metadata Metadata) TerminalStartDirectory() string {
+	if metadata.EmbeddedTerminal == nil {
+		return ""
+	}
+	return metadata.EmbeddedTerminal.StartDirectory
 }
 
 // KeepEngineRunning は、アプリを閉じたあともエンジンを残すかを報告する。
@@ -194,11 +212,13 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	}
 	// 範囲の外の上限は既定へ戻す。ここは読み取りであり、これは数字ひとつである。
 	// 書き込み側は依然として厳格で、ValidateMetadata が範囲の外を拒否する。
+	//
+	// **戻すのは数字だけである。** この節にはもう数字以外のもの（開始位置）が
+	// 入っているので、丸ごと作り直すとそれが落ちる——実際落とした。
 	if metadata.EmbeddedTerminal != nil {
 		limits := metadata.TerminalLimits()
-		metadata.EmbeddedTerminal = &EmbeddedTerminal{
-			MaxSessions: limits.MaxSessions, ScrollbackBytes: limits.Scrollback,
-		}
+		metadata.EmbeddedTerminal.MaxSessions = limits.MaxSessions
+		metadata.EmbeddedTerminal.ScrollbackBytes = limits.Scrollback
 	}
 	return metadata, nil
 }
@@ -236,11 +256,17 @@ func ValidateMetadata(metadata Metadata) error {
 	// 上限は範囲の中でなければ書けない。読み取りが既定へ戻すのとは対称ではない
 	// ——書き込みはこのアプリケーション自身の操作であり、そこに範囲外が現れたら
 	// それは利用者の古いファイルではなく、こちらの間違いだからである。
+	//
+	// **0 は「書かれていない」である。** この節には上限以外のものも入るので
+	// (開始位置)、上限に触れずにそこだけを書く文書が成立する。0 を範囲外として
+	// 断ると、その文書が書けない。読み取り側は前からそう読んでいる。
 	if settings := metadata.EmbeddedTerminal; settings != nil {
-		if settings.MaxSessions < terminal.MinMaxSessions || settings.MaxSessions > terminal.MaxMaxSessions {
+		if settings.MaxSessions != 0 &&
+			(settings.MaxSessions < terminal.MinMaxSessions || settings.MaxSessions > terminal.MaxMaxSessions) {
 			return fmt.Errorf("%w: maxSessions %d", ErrMetadataTerminal, settings.MaxSessions)
 		}
-		if settings.ScrollbackBytes < terminal.MinScrollback || settings.ScrollbackBytes > terminal.MaxScrollback {
+		if settings.ScrollbackBytes != 0 &&
+			(settings.ScrollbackBytes < terminal.MinScrollback || settings.ScrollbackBytes > terminal.MaxScrollback) {
 			return fmt.Errorf("%w: scrollbackBytes %d", ErrMetadataTerminal, settings.ScrollbackBytes)
 		}
 	}

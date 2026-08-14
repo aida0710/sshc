@@ -37,14 +37,16 @@ type TerminalHandlers struct {
 	// Environment は、セッションが継ぐ環境である。これは利用者が自分で行った
 	// であろう接続なので、検査が使う最小環境ではなく本人の環境を継ぐ。
 	Environment func() []string
-	// Home は、ローカルシェルが始まる場所である。
+	// StartDirectory は、ローカルシェルが始まる場所を返す。
 	//
 	// **継がない。** エンジンの作業ディレクトリは、それを起こしたものが
 	// たまたま居た場所である——デスクトップの外殻から起こせば `desktop/`、
 	// launchd から起こせば `/` になる。**利用者はそのどれも選んでいない。**
-	// 端末を開いた人が期待するのは自分の home であり、それは端末を開くという
-	// 操作の意味が「シェルを 1 つ始める」であることから来ている。
-	Home string
+	//
+	// 関数なのは、設定が動いている最中に変わるからである。起動時に一度だけ
+	// 読むと、変えた人は次に端末を開いても前の場所に立つ。nil ならこの
+	// プロセスの作業ディレクトリを継ぐ。
+	StartDirectory func() string
 	// ExpectedOrigin は、アップグレードで完全一致を求める値である。
 	ExpectedOrigin string
 }
@@ -163,7 +165,8 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 		return terminal.Spec{
 			Kind: terminal.KindShell, Title: shellTitle(shell), Size: size,
 			Command: terminal.Command{
-				Path: shell, Argv0: platform.LoginArgv0(shell), Env: h.environment(), Dir: h.Home,
+				Path: shell, Argv0: platform.LoginArgv0(shell), Env: h.environment(),
+				Dir: h.startDirectory(),
 			},
 		}, nil
 	}
@@ -206,6 +209,13 @@ func (h TerminalHandlers) resolveShell() (string, error) {
 		return "", platform.ErrNoLoginShell
 	}
 	return h.Shell()
+}
+
+func (h TerminalHandlers) startDirectory() string {
+	if h.StartDirectory == nil {
+		return ""
+	}
+	return h.StartDirectory()
 }
 
 func (h TerminalHandlers) environment() []string {

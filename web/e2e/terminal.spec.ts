@@ -113,6 +113,27 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   await expect(panel).toContainText("limit of 2 open consoles");
 });
 
+// 開始位置は設定が決める。
+//
+// **`pwd` がその証拠である。** 設定画面が metadata を書けたことではなく、
+// 次に開いたシェルがそこに立っていることを見る——間に居るのはエンジンで
+// あり、そこを通らないと「保存できた」だけで終わる。
+test("starts local shells where the setting says", async ({ page, installation }) => {
+  await installation.write("../workspace/marker", "");
+  await openApplication(page, installation);
+
+  await openSection(page, "Settings");
+  const region = page.getByRole("region", { name: "Where local shells start" });
+  await region.getByLabel("Starting directory").fill("~/workspace");
+  await region.getByRole("button", { name: "Save" }).click();
+  await expect(region.getByText(/Saved/)).toBeVisible();
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = await typeIntoConsole(page, "pwd");
+  await expect(screen).toContainText("/workspace", { timeout: 20_000 });
+});
+
 // 選んだ範囲がクリップボードへ入る。
 //
 // **xterm の選択はブラウザの選択ではない。** 選んだ範囲を知っているのは
