@@ -15,6 +15,7 @@ import (
 	"sshc/internal/handoff"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 func connectEngine(t *testing.T, handlers ConnectHandlers) *echo.Echo {
@@ -387,5 +388,19 @@ func TestStatusRefusesWithoutTheSecret(t *testing.T) {
 	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
 	if recorder := send(t, engine, http.MethodGet, StatusPath, "", nil); recorder.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", recorder.Code)
+	}
+}
+
+// liveSessions が実際に「生きている」を数えていることを、registry を組み立てずに見る。
+// 終了済み（Exited が非 nil）を混ぜても、数に入るのは生きているものだけである。
+func TestLiveSessionsCountsOnlyTheOnesStillRunning(t *testing.T) {
+	views := []terminal.View{
+		{ID: "running-1"},
+		{ID: "finished", Exited: &terminal.ExitInfo{Code: 0}},
+		{ID: "running-2"},
+		{ID: "running-3"},
+	}
+	if got := liveSessions(views); got != 3 {
+		t.Fatalf("liveSessions = %d, want 3", got)
 	}
 }

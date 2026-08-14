@@ -262,13 +262,7 @@ func New(options Options) (*Server, error) {
 			if options.Terminals == nil {
 				return 0
 			}
-			live := 0
-			for _, view := range options.Terminals.Sessions() {
-				if view.Exited == nil {
-					live++
-				}
-			}
-			return live
+			return liveSessions(options.Terminals.Sessions())
 		},
 	})
 	if options.Sync != nil {
