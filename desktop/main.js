@@ -199,3 +199,19 @@ app.on("before-quit", (event) => {
     .catch(() => {})
     .finally(() => app.quit());
 });
+
+// Ctrl-C でも「終わる」を通す。
+//
+// **端末から起こした外殻は SIGINT を受けてその場で死に、before-quit は走らない。**
+// エンジンは親を持たないデーモンなので、そのまま生き残る——しかも次に起きた
+// エンジンが handoff を上書きした瞬間、それは誰からも見えなくなる。止める術も、
+// 次の起動で見つける術も無い 1 台が、開発の一巡ごとに増えていた。
+//
+// 二度目の合図は待たない。一度目の後始末が返らないなら、待っているものは
+// もう答えないものである。
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    if (quitting) process.exit(1);
+    app.quit();
+  });
+}

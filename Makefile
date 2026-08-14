@@ -103,9 +103,15 @@ icons:
 # アプリを開けない理由にはならない。ビルドの失敗はここに含めない（それは
 # 下の build が先に落ちる）。
 desktop-run: build desktop
+	@# **止めるのは入れ替えるより先である。** あとに置くと、install が
+	@# launchd に起こさせたばかりの 1 台を殺すことになる。KeepAlive が
+	@# 起こし直すまでの数秒、handoff は死んだポートを指しており、その間に
+	@# 外殻の `engine start` は「誰も居ない」と読んで自前でもう 1 台起こす。
+	@# **そうして生まれた 2 台目は、handoff が別の 1 台を指した瞬間に
+	@# 誰からも見えなくなる**——止める術も、次の起動で見つける術も無い。
+	-@bin/sshc engine stop
 	-@$(MAKE) --no-print-directory install-binary \
 		INSTALL_SOURCE="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
-	-@bin/sshc engine stop
 	npm start --prefix desktop
 
 # desktop-dist は配布物を作る。**1 台の macOS から macOS と Linux の両方を
