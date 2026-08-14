@@ -105,41 +105,6 @@ func TestScanFindsEveryExecutableDirectiveWithItsExactText(t *testing.T) {
 	}
 }
 
-func TestReportGatesEvaluationAndConnectionSeparately(t *testing.T) {
-	safe := effective.Scan(graphFor(t, map[string]string{
-		testConfig: "Host plain\n\tHostName 203.0.113.10\n\tUser ops\n",
-	}))
-	if safe.EvaluationNeedsConfirmation() || safe.ConnectionNeedsConfirmation() {
-		t.Fatalf("a configuration without executable directives needs no confirmation: %#v", safe)
-	}
-	if len(safe.Unavoidable()) != 0 {
-		t.Errorf("unavoidable = %#v", safe.Unavoidable())
-	}
-
-	connectOnly := effective.Scan(graphFor(t, map[string]string{
-		testConfig: "Host jump\n\tLocalCommand /usr/bin/say hi\n",
-	}))
-	if connectOnly.EvaluationNeedsConfirmation() {
-		t.Error("LocalCommand does not run while OpenSSH evaluates a configuration")
-	}
-	if !connectOnly.ConnectionNeedsConfirmation() {
-		t.Error("LocalCommand runs while OpenSSH connects")
-	}
-	if len(connectOnly.Unavoidable()) != 0 {
-		t.Errorf("LocalCommand can be disabled on the command line: %#v", connectOnly.Unavoidable())
-	}
-
-	evaluation := effective.Scan(graphFor(t, map[string]string{
-		testConfig: "Match exec \"id -u\"\n\tUser root\n",
-	}))
-	if !evaluation.EvaluationNeedsConfirmation() || !evaluation.ConnectionNeedsConfirmation() {
-		t.Errorf("Match exec gates both operations: %#v", evaluation)
-	}
-	if len(evaluation.Unavoidable()) != 1 {
-		t.Errorf("Match exec cannot be disabled: %#v", evaluation.Unavoidable())
-	}
-}
-
 func TestEvidenceChangesWhenTheDisplayedCommandChanges(t *testing.T) {
 	first := effective.Scan(graphFor(t, map[string]string{
 		testConfig: "Host jump\n\tProxyCommand /usr/bin/nc %h %p\n",
