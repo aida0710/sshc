@@ -8,7 +8,7 @@ import type { FileTarget } from "./explorer/ConfigExplorer";
 import { LockScreen } from "./secrets/LockScreen";
 import { UpdateBadge } from "./shell/UpdateBadge";
 import { OverviewPanel } from "./overview/OverviewPanel";
-import { useLanguage } from "./i18n/context";
+import { useLanguage, useTranslate } from "./i18n/context";
 import { locales, type Locale } from "./i18n/locale";
 import { autoControl, secondaryAction } from "./ui/form";
 import { Icon, IconSprite, type IconName } from "./ui/icons";
@@ -28,6 +28,15 @@ import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./ke
 import { ConsoleList } from "./terminal/ConsoleList";
 import { useTerminalSessions, type TerminalSessionsState } from "./terminal/sessions";
 
+// xterm.js は 400 kB を超える。どの画面の chunk に入れても、端末を開かない人が
+// その重さを払うことになる。だから端末だけを別の chunk に切り、コンソールを
+// 選んだときに初めて読む。
+//
+// これは体感の話にとどまらない。接続画面は URL の正規化をマウント後に行うので、
+// chunk が重くなるとそのリダイレクトも遅れる。end-to-end はそれを捉えた。
+const TerminalView = lazy(() =>
+  import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
+);
 const ConnectionsPage = lazy(() =>
   import("./connections/ConnectionsPage").then(({ ConnectionsPage }) => ({ default: ConnectionsPage })),
 );
@@ -77,6 +86,7 @@ type AppProps = {
 const sectionLabels: Record<Section, MessageKey> = {
   Home: "section.home",
   Connections: "section.connections",
+  Terminal: "section.terminal",
   Config: "section.config",
   Groups: "section.groups",
   Keys: "section.keys",
@@ -97,6 +107,7 @@ const localeLabels: Record<Locale, MessageKey> = {
 const sectionIcons: Record<Section, IconName> = {
   Home: "home",
   Connections: "connections",
+  Terminal: "terminal",
   Config: "config",
   Groups: "groups",
   Keys: "keys",
@@ -115,11 +126,11 @@ const sectionIcons: Record<Section, IconName> = {
 // span である——意図的に見出しにはしていない。Playwright はアクセシブル
 // ネームを部分一致で照合するため、見出しを "Keys and hosts" にすると、end-to-end
 // スイートの "Keys" へのページレベルクエリが二重に一致し、strict モードで失敗する。
-// 先頭のグループはトグルより上に固定される。Home と Connections がそこに
-// あるのは、端末が描かれるのが Connections だからである。ターミナルの面から
-// 行を選ぶとそこへ連れて行かれるので、戻る道も同じ高さに無いと釣り合わない。
+// 先頭のグループはトグルより上に固定される。Home と Connections と Terminal が
+// そこにあるのは、ターミナルの面から行を選ぶとその画面へ連れて行かれるからで、
+// 戻る道も、行った先も、同じ高さに無いと釣り合わない。
 const navGroups: { label: MessageKey; sections: Section[] }[] = [
-  { label: "shell.navStart", sections: ["Home", "Connections"] },
+  { label: "shell.navStart", sections: ["Home", "Connections", "Terminal"] },
   { label: "shell.navConnections", sections: ["Config", "Groups"] },
   { label: "shell.navKeysHosts", sections: ["Keys", "Known Hosts", "Remote Keys"] },
   { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Settings", "Sync", "History"] },
@@ -192,12 +203,12 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     if (!consoles.sessions.some((session) => session.id === activeConsole)) setActiveConsole(null);
   }, [consoles.sessions, activeConsole]);
 
-  // 端末が描かれるのは Connections である。ナビゲーションはどの画面からでも
+  // 端末が描かれるのは Terminal である。ナビゲーションはどの画面からでも
   // 押せるので、選んだらそこへ連れて行く。
   const showConsole = useCallback(
     (id: string) => {
       setActiveConsole(id);
-      navigate("Connections");
+      navigate("Terminal");
       // Home から開かれたセッションは、この写しにまだ載っていない。
       void consoles.refresh();
     },
@@ -676,6 +687,12 @@ type SectionViewProps = {
 };
 
 function SectionView(props: SectionViewProps) {
+  // **端末は一画面である。** 接続の一覧と同じ画面に置くと、詳細を見る場所を
+  // 端末が奪う——実際そうなっていた。ここは接続とは別の面であり、
+  // 一覧の隣ではなく、一覧の代わりに出る。
+  if (props.section === "Terminal") {
+    return <TerminalScreen consoles={props.consoles} activeConsole={props.activeConsole} />;
+  }
   // Connections は自前のペインをウィンドウの端まで配置する。それ以外の
   // セクションはすべて文書であり、文書には余白とスクロールバーが要る。
   if (props.section === "Connections") {
@@ -692,12 +709,48 @@ function SectionView(props: SectionViewProps) {
         preferredKey={props.preferredConnectionKey}
         onPreferredKeyApplied={props.onPreferredConnectionKeyApplied}
         consoles={props.consoles}
-        activeConsole={props.activeConsole}
         onShowConsole={props.onShowConsole}
       />
     );
   }
   return <div className="h-full overflow-y-auto p-6">{<PaddedSection {...props} />}</div>;
+}
+
+// TerminalScreen は、開いているコンソールひとつを画面いっぱいに出す。
+//
+// **余白もスクロールも端末が自分で持つ**ので、この画面は素の箱でよい。
+// 選ばれているものが無い、あるいは選ばれたものがもう無いときは、
+// どこから開くのかを言う——空の黒い箱を見せない。
+function TerminalScreen({
+  consoles,
+  activeConsole,
+}: {
+  consoles: TerminalSessionsState;
+  activeConsole: string | null;
+}) {
+  const t = useTranslate();
+  const session = consoles.sessions.find((entry) => entry.id === activeConsole);
+  if (session === undefined) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <section className="max-w-sm text-center" role="status">
+          <h2 className="text-lg font-semibold text-ink">{t("terminal.emptyHeading")}</h2>
+          <p className="mt-1 text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p>
+        </section>
+      </div>
+    );
+  }
+  return (
+    <div className="flex min-h-0 flex-col">
+      <Suspense fallback={null}>
+        <TerminalView
+          key={session.id}
+          session={session}
+          onExit={() => consoles.markExited(session.id)}
+        />
+      </Suspense>
+    </div>
+  );
 }
 
 function PaddedSection({

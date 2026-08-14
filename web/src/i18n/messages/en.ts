@@ -45,6 +45,8 @@ export const en = {
   "terminal.running": "connected",
   "terminal.exitedWith": "exited {code}",
   "terminal.localhost": "localhost",
+  "terminal.emptyHeading": "No console is open",
+  "terminal.emptyHint": "Open one from the list on the left, or press Connect on a host.",
   "terminal.forwardLocal": "forwarding {listen} → {to}",
   "terminal.forwardDynamic": "SOCKS5 proxy on {listen}",
   "terminal.forwardAgent": "lending this agent to the remote",
@@ -87,6 +89,7 @@ export const en = {
 
   "section.home": "Home",
   "section.connections": "Connections",
+  "section.terminal": "Terminal",
   "section.config": "Config",
   "section.groups": "Groups",
   "section.keys": "Keys",
