@@ -73,12 +73,16 @@ test("scrolls the primary navigation on its own when the viewport is short", asy
   await openApplication(page, installation);
   await openSection(page, "Connections");
 
+  // **スクロールするのはナビゲーションの下半分である。** Start と面のトグルは
+  // 固定されているので、溢れるのはセクションの一覧の側であり、ドキュメント
+  // 全体ではない。
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  const overflow = await navigation.evaluate((element) => element.scrollHeight - element.clientHeight);
-  expect(overflow, "the navigation is not taller than the short viewport").toBeGreaterThan(0);
+  const sections = navigation.locator("div.overflow-y-auto");
+  const overflow = await sections.evaluate((element) => element.scrollHeight - element.clientHeight);
+  expect(overflow, "the section list is not taller than the short viewport").toBeGreaterThan(0);
 
-  await navigation.evaluate((element) => element.scrollTo(0, element.scrollHeight));
-  expect(await navigation.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await sections.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+  expect(await sections.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
   // この高さでも最後のセクションに到達できなければならない。
   // シェルが自身のスクロールを持つ前は、そこへ到達するには

@@ -113,6 +113,42 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   await expect(panel).toContainText("limit of 2 open consoles");
 });
 
+// ナビゲーションの上半分は動かない。
+//
+// **出口の位置が行の数で変わってはいけない。** コンソールが増えると一覧は
+// 溢れるが、溢れるのは一覧だけであり、Start と面のトグルはその場に残る。
+// ここが見ているのは、一覧をスクロールさせても「接続」が同じ位置に居ること
+// である——ナビゲーション全体がスクロールしていたら、これは動く。
+test("keeps the top of the navigation still while the console list scrolls", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  const anchor = panel.getByRole("link", { name: "Connections", exact: true });
+  const before = await anchor.boundingBox();
+
+  // 一覧が確実に溢れる高さにしてから、行を積む。
+  await page.setViewportSize({ width: 1280, height: 400 });
+  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  for (let opened = 1; opened <= 6; opened += 1) {
+    await panel.getByRole("button", { name: "Local shell" }).click();
+    await expect(rows).toHaveCount(opened);
+  }
+
+  const scroller = page.locator("nav[aria-label='Primary'] div.overflow-y-auto");
+  await expect(async () => {
+    expect(await scroller.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeGreaterThan(0);
+  }).toPass();
+  await scroller.evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+
+  const after = await anchor.boundingBox();
+  expect(after?.y).toBe(before?.y);
+});
+
 // 繋ぎっぱなしをまとめて片付ける。
 //
 // **設定画面から押すと、サーバー側のセッションが本当に終わる。** 一覧が空に

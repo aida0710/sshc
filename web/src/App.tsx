@@ -503,11 +503,17 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
             : "grid-cols-[15rem_minmax(0,1fr)]"
         }`}
       >
+        {/*
+          ナビゲーション自身はスクロールしない。**上半分——Start と面のトグル
+          ——は常に同じ位置に居る。** ここが動くと、行が増えたときに出口の
+          位置が変わり、探し直すことになる。溢れるのは下半分だけであり、
+          そこだけが自分でスクロールする。
+        */}
         <nav
           aria-label={t("shell.primaryNavigation")}
-          className="relative flex flex-col overflow-y-auto border-r border-line bg-sidebar p-2"
+          className="relative flex min-h-0 flex-col overflow-hidden border-r border-line bg-sidebar p-2"
         >
-          <div className="grow">
+          <div className="shrink-0">
           {/*
             Start はトグルより上に固定する。ターミナルの面を見ているときでも
             出口がひとつも無い状態を作らないためである。
@@ -524,10 +530,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
               </ul>
             </div>
           ))}
+          </div>
           <div
             role="tablist"
             aria-label={t("shell.navFaces")}
-            className="my-2 grid grid-flow-col rounded-lg border border-control-line bg-control p-0.5"
+            className="my-2 grid shrink-0 grid-flow-col rounded-lg border border-control-line bg-control p-0.5"
           >
             {(["settings", "terminal"] as NavFace[]).map((face) => (
               <button
@@ -544,6 +551,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
               </button>
             ))}
           </div>
+          {/* 溢れるのはここだけである。開いているコンソールは何本にもなる。 */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
           {currentFace === "terminal" ? (
             <ConsoleList
               sessions={orderedConsoles}
@@ -576,8 +585,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           {/*
             バージョンはナビゲーションの最下部に置く。めったに見ない
             ものが置かれる場所であり、それを変える唯一のコントロールと共に。
+            **これも動かない。** 溢れるのは上の一覧だけである。
           */}
-          <UpdateBadge />
+          <div className="shrink-0">
+            <UpdateBadge />
+          </div>
         </nav>
         {/*
           ここに padding は無い。ウィンドウの端から端まで埋めたいセクション
