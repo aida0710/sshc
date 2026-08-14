@@ -24,7 +24,10 @@
       "main.js",
       "preload.js",
       "link.js",
-      "entrance.js"
+      "entrance.js",
+      "tray.js",
+      "build/trayTemplate.png",
+      "build/trayTemplate@2x.png"
     ],
     "extraResources": [
       {
