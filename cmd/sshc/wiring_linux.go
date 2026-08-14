@@ -9,7 +9,7 @@ import (
 	"sshc/internal/platform/linux"
 )
 
-func newPlatformParts(home string) platformParts {
+func newPlatformParts() platformParts {
 	return platformParts{
 		Toolchain: linux.NewToolchain(),
 		KeyAgent:  keys.NewAgent(os.LookupEnv),
