@@ -85,6 +85,7 @@ func usage(out io.Writer) {
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
   sshc open            print a new way into the UI
+  sshc status          print the engine's status as JSON, for the shell
   sshc service refresh rebind an enabled login service to this binary
   sshc service disable stop and remove the login service
   sshc engine start    make sure the background engine is answering
@@ -153,6 +154,19 @@ func main() {
 			os.Exit(1)
 		}
 		os.Exit(runList(home, os.Stdout, os.Stderr))
+	}
+	// **外殻が読む口である。** handoff の秘密を持つのは Go 側だけなので、
+	// メニューバーは自分では叩けず、この語を経由する。
+	if len(os.Args) == 2 && os.Args[1] == StatusSubcommand {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(runStatus(
+			context.Background(), app.HandoffDir(home),
+			&http.Client{Timeout: connectTimeout}, os.Stdout, os.Stderr,
+		))
 	}
 	if query, ok := tuiInvocation(os.Args); ok {
 		if len(os.Args) > 3 {
