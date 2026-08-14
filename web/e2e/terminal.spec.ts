@@ -113,6 +113,62 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   await expect(panel).toContainText("limit of 2 open consoles");
 });
 
+// 選んだ範囲がクリップボードへ入る。
+//
+// **xterm の選択はブラウザの選択ではない。** 選んだ範囲を知っているのは
+// xterm だけなので、Cmd+C をそのまま渡すとブラウザは空の選択を写して何も
+// 起きない——実際そうなっていた。ここが見ているのは、写る中身そのものである。
+test("copies what was selected in the console", async ({ page, context, installation }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = await typeIntoConsole(page, "echo selectable-canary");
+  await expect(screen).toContainText("selectable-canary", { timeout: 20_000 });
+
+  // 端末いっぱいを引きずる。行の高さも桁の幅も環境で違うので、座標では
+  // なく端から端まで動かす。
+  const rows = page.locator(".xterm-rows");
+  const box = await rows.boundingBox();
+  expect(box).not.toBeNull();
+  if (box === null) return;
+  await page.mouse.move(box.x + 2, box.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height - 2, { steps: 12 });
+  await page.mouse.up();
+  await expect(page.locator(".xterm-selection div").first()).toBeAttached();
+
+  await page.keyboard.press("ControlOrMeta+c");
+  await expect
+    .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
+    .toContain("selectable-canary");
+});
+
+// 端末は枠に収まる。
+//
+// **高さの指定が無い flex の列は内容の高さまで伸びる。** 端末が親を突き抜けると
+// はみ出した分は切られて見えなくなり、そこは選ぶことも読むこともできない
+// ——1561px の端末が 666px の枠に入っていた。向こうのシェルはその行数を
+// 信じるので、全画面を使うプログラムは画面外へ描く。
+test("fits the terminal inside the space it was given", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+
+  const measured = await page.locator(".xterm-rows").evaluate((node) => {
+    const frame = (node as HTMLElement).closest("main");
+    return {
+      rows: Math.round((node as HTMLElement).getBoundingClientRect().height),
+      frame: Math.round(frame?.getBoundingClientRect().height ?? 0),
+    };
+  });
+  expect(measured.frame).toBeGreaterThan(0);
+  expect(measured.rows).toBeLessThanOrEqual(measured.frame);
+});
+
 // ナビゲーションの上半分は動かない。
 //
 // **出口の位置が行の数で変わってはいけない。** コンソールが増えると一覧は

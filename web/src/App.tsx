@@ -752,8 +752,12 @@ function TerminalScreen({
       </div>
     );
   }
+  // **h-full が要る。** 高さの指定が無い flex の列は内容の高さまで伸びるので、
+  // 端末は親を突き抜け、はみ出した分は overflow-hidden に切られて見えなく
+  // なる——実際 1561px の端末が 666px の枠に入っていた。見えないだけでなく、
+  // 向こうのシェルはその行数を信じるので、全画面を使うプログラムが画面外へ描く。
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <Suspense fallback={null}>
         <TerminalView
           key={session.id}
