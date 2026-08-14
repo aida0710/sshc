@@ -69,6 +69,9 @@ type Options struct {
 	// セッションのルートと WebSocket を未登録のままにする。これは、それを
 	// 配線しないテストが当てにしていることである。
 	Terminals *terminal.Registry
+	// Home は、ローカルシェルが始まる場所である。空ならこのプロセスの
+	// 作業ディレクトリを継ぐ——**それは誰も選んでいない場所である。**
+	Home string
 	// LoginShell は、PTY の中で起こすローカルシェルを解決する。
 	// PATH を見ず、絶対パスかエラーを返す。
 	LoginShell func() (string, error)
@@ -262,6 +265,7 @@ func New(options Options) (*Server, error) {
 			Connect:     options.Connect,
 			Shell:       options.LoginShell,
 			Environment: options.TerminalEnvironment,
+			Home:        options.Home,
 			// askpass はここに無い。**この経路はもう外部の ssh を起こさない。**
 			// パスフレーズは vault から直接読むか、端末で尋ねる。ヘルパーが
 			// 残っているのは、CLI と診断がまだ OpenSSH を起こすからである。
