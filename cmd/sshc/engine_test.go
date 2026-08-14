@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,18 +46,21 @@ func newEngineFixture(t *testing.T, healthy bool) *engineFixture {
 	fixture.healthy.Store(healthy)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// **秘密を持たない者には答えない。** 本物がそうなので、偽物もそうする
+		// ——偽物が本物より寛容だと、この検査は製品が壊れていても緑のままになる。
+		// 一度そうなった。
+		if r.Header.Get(handoff.HeaderName) != fixture.secret {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
 		switch {
-		case r.URL.Path == "/api/v1/health":
+		case r.URL.Path == httpserver.HealthPath:
 			if !fixture.healthy.Load() {
 				w.WriteHeader(http.StatusServiceUnavailable)
 				return
 			}
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusNoContent)
 		case r.URL.Path == httpserver.StopPath:
-			if r.Header.Get(handoff.HeaderName) != fixture.secret {
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
 			fixture.stops.Add(1)
 			w.WriteHeader(http.StatusAccepted)
 		default:
@@ -253,5 +258,35 @@ func TestEngineQuitHonoursTheKeepRunningSetting(t *testing.T) {
 					fixture.stops.Load(), test.wantStop)
 			}
 		})
+	}
+}
+
+// **二つのアプリが同時に起動しても、エンジンはひとつでなければならない。**
+//
+// 二つ動くと、あとから handoff を書いた方が勝ち、先に繋いだ画面は誰も見て
+// いないエンジンを見続ける。
+func TestConcurrentStartsProduceOneEngine(t *testing.T) {
+	fixture := newEngineFixture(t, false)
+	var spawns atomic.Int64
+
+	var wait sync.WaitGroup
+	for attempt := 0; attempt < 6; attempt++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			runEngineCommand(
+				context.Background(), []string{"start"}, t.TempDir(), fixture.stateDir,
+				&http.Client{Timeout: 5 * time.Second},
+				func() error {
+					spawns.Add(1)
+					fixture.engineStarts(t)
+					return nil
+				}, io.Discard, io.Discard)
+		}()
+	}
+	wait.Wait()
+
+	if spawns.Load() != 1 {
+		t.Fatalf("six simultaneous starts produced %d engines, want one", spawns.Load())
 	}
 }
