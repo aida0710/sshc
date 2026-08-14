@@ -110,6 +110,27 @@ func runOpen(
 	return 0
 }
 
+// waitForHandoff は、ロックを取った方が handoff を書き終えるのを短く待つ。
+//
+// **待つのはロックに負けた経路だけである。** そこには「1 台目が確かに居る」と
+// いう根拠がある——ロックがそう言った。`sshc open` を打った人には根拠が無いので、
+// 居なければ待たずに 1 で終わる方がよい。
+//
+// 上限を持つのは、1 台目が listener を上げる前に殺された日でも、ここで永久に
+// 待たないためである。
+func waitForHandoff(ctx context.Context, stateDir string) {
+	for attempt := 0; attempt < 40; attempt++ {
+		if _, err := handoff.Read(stateDir); err == nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
 // sshFinder は ssh プログラムを解決する。このアプリケーションの他のすべての部分が
 // 使うのと同じ継ぎ目なので、「どの ssh か」への答えはひとつしかない。
 type sshFinder interface{ SSH() (string, error) }

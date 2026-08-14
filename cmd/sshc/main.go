@@ -37,6 +37,27 @@ var version = "dev"
 var openBrowser = flag.Bool("open", true,
 	"print the way into the UI on standard output; -open=false prints nothing")
 
+// ownEngine は、「自分が起こしたエンジンでなければ意味が無い」と言う。
+//
+// **これを渡すのはデスクトップの外殻だけである。** 外殻はエンジンの寿命そのもの
+// であり、終了すればエンジンも終わると約束している。他人のエンジンの入口を
+// 受け取ってしまうと、その約束を果たす手（子を kill する）が空を切る——窓は
+// 開くのに、Cmd+Q でエンジンが残る。だから握れなかったら入口を出さず、
+// engineBusyExit で終わって外殻に理由を出させる。
+//
+// 端末で打つ人には要らない。裸の `sshc` は今までどおり、走っている方の入口を
+// 1 行出して 0 で終わる。
+var ownEngine = flag.Bool("own-engine", false,
+	"exit 3 instead of printing the way into an engine this process did not start")
+
+// engineBusyExit は、-own-engine を渡されたのにロックを取れなかったときの終了
+// コードである。**desktop/main.js の engineBusy と対である。**
+//
+// 0 でも 1 でもない番号を使うのは、外殻が「自分が起こしたエンジンが死んだ」と
+// 「別の持ち主が既に居た」を区別できなければならないからである。前者はアプリを
+// 終える理由だが、後者は理由を出す理由である。
+const engineBusyExit = 3
+
 // HelpSubcommand は使い方を出す語。
 //
 // これを予約するのは `open` と同じ理由である。裸の語は alias なので、これがないと
@@ -217,6 +238,13 @@ func main() {
 	// handoff を上書きする 2 台目はどこにも生まれない。
 	release, err := lockEngineStart(app.HandoffDir(home))
 	switch {
+	case errors.Is(err, errEngineRunning) && *ownEngine:
+		// **入口を出さない。** 出せば、それを読んだ外殻は「自分のエンジンが
+		// 上がった」と思って窓を開き、直後にこの子の exit を見てアプリごと
+		// 終わる。何も書かずに専用の番号で終わることが、あちらの分岐の材料に
+		// なる。
+		logger.Error("take the engine lock", "error", err)
+		os.Exit(engineBusyExit)
 	case errors.Is(err, errEngineRunning) && !*openBrowser:
 		// **-open=false は「何も書かない」という意味である。** 入口の 1 行は
 		// 有効な bootstrap トークンを運ぶので、それを求めていない相手の
@@ -224,6 +252,10 @@ func main() {
 		// （エンジンが 1 台居る）は既に成立しているので、黙って終わる。
 		os.Exit(0)
 	case errors.Is(err, errEngineRunning):
+		// **勝った方が handoff を書き終えるまで待つ。** ロックは listener より
+		// 先に取れるので、ほぼ同時に打たれた 2 つのうち負けた方がその隙に
+		// 読むと `sshc: not running` で 1 になる——理由の無い失敗に見える。
+		waitForHandoff(ctx, app.HandoffDir(home))
 		os.Exit(runOpen(
 			ctx, app.HandoffDir(home),
 			&http.Client{Timeout: connectTimeout}, os.Stdout, os.Stderr,

@@ -161,8 +161,13 @@ func (s *Service) path() string {
 
 // Exists は vault ファイルが存在するかを報告する。これは、それがロック解除されて
 // いるかという問いとは別のものである。
+//
+// **中身は読まない。** 有るか無いかを尋ねているだけであり、答えはファイルの
+// 存在そのものにある。ここが `ReadFile` だったころは、メニューバーを開くたびに
+// vault 全体（暗号文とはいえ、保存された答えの全部）が読み込まれてプロセスの
+// メモリを通っていた。
 func (s *Service) Exists() (bool, error) {
-	_, err := s.workspace.FileSystem().ReadFile(s.path())
+	_, err := s.workspace.FileSystem().Lstat(s.path())
 	if err == nil {
 		return true, nil
 	}
