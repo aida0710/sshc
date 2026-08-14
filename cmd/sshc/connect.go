@@ -25,8 +25,11 @@ type connectAnswer struct {
 	// KeyPath は、その接続に使う鍵のワークスペース相対パス。
 	KeyPath string `json:"keyPath"`
 	// Passphrase は、その鍵について保存されている答え。無ければ空である。
-	Passphrase string   `json:"passphrase"`
-	Warnings   []string `json:"warnings"`
+	Passphrase string `json:"passphrase"`
+	// Passwords は、この接続に現れる alias ごとの保存済みアカウントパスワード。
+	// 行き先だけでなく ProxyJump の手前も含む。**Passphrase とは別の名前空間である。**
+	Passwords map[string]string `json:"passwords"`
+	Warnings  []string          `json:"warnings"`
 }
 
 // connectInvocation は、このプロセスが接続のために起動されたかを報告する。
@@ -126,6 +129,7 @@ func runConnect(
 	}
 
 	var saved func(string) (string, bool)
+	var password func(string) (string, bool)
 	answer, err := askApplication(ctx, alias, stateDir, client)
 	switch {
 	case err != nil:
@@ -142,9 +146,18 @@ func runConnect(
 				return answer.Passphrase, true
 			}
 		}
+		// **本体が連鎖を解決して、そこに現れる alias のぶんだけを返している。**
+		// 手前に立つホストも別の alias としてここに入る。表に無いものは
+		// 保存が無いということであり、そのときは端末で尋ねる。
+		if len(answer.Passwords) > 0 {
+			password = func(candidate string) (string, bool) {
+				stored, found := answer.Passwords[candidate]
+				return stored, found && stored != ""
+			}
+		}
 	}
 
-	connection, err := app.NewCLIConnection(home, saved)
+	connection, err := app.NewCLIConnection(home, saved, password)
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1

@@ -24,7 +24,11 @@ func connectEngine(t *testing.T, handlers ConnectHandlers) *echo.Echo {
 	return engine
 }
 
-func TestConnectDoesNotAnswerWithAStoredAccountPasswordForADirectKey(t *testing.T) {
+// アカウントのパスワードが、鍵のパスフレーズとして返ることは無い。
+//
+// **名前空間が別だからである。** 混ぜれば、ローカルの鍵を開くための秘密が
+// リモートへログインパスワードとして送られる。
+func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -54,11 +58,17 @@ func TestConnectDoesNotAnswerWithAStoredAccountPasswordForADirectKey(t *testing.
 		t.Fatal(err)
 	}
 	if answer.Passphrase != "" {
-		t.Fatal("direct-key connection received an askpass token")
+		t.Fatalf("an account password came back as a key passphrase: %+v", answer)
+	}
+	// 自分の欄には載る。**保存してあるのに使わないなら、保存させる意味が無い。**
+	if answer.Passwords["bastion"] != "legacy-password" {
+		t.Fatalf("the stored account password did not reach the command line: %+v", answer)
 	}
 }
 
-func TestConnectNeverAnswersWithAStoredAccountPassword(t *testing.T) {
+// 保存済みアカウントパスワードだけを持つ alias は、鍵についての答えを持たない。
+// 返るのはパスワードひとつであり、鍵の欄は空のままである。
+func TestAnAliasWithOnlyAnAccountPasswordCarriesNoKey(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -88,7 +98,58 @@ func TestConnectNeverAnswersWithAStoredAccountPassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	if answer.Passphrase != "" || answer.KeyPath != "" {
-		t.Fatalf("stored account password armed askpass: %+v", answer)
+		t.Fatalf("a stored account password produced a key answer: %+v", answer)
+	}
+	if answer.Passwords["password-only"] != "stored-account-password" {
+		t.Fatalf("the stored account password did not reach the command line: %+v", answer)
+	}
+}
+
+// 連鎖ぶんを返す。**ProxyJump の手前に立つホストも、それ自身が alias である。**
+//
+// 同時に、返すのはこの接続に現れるものだけである——保管庫の一覧にはしない。
+func TestConnectCarriesThePasswordsOfTheWholeJumpChain(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	for alias, password := range map[string]string{
+		"far": "the destination", "edge": "the way in", "elsewhere": "nothing to do with this",
+	} {
+		if err := vault.Set(alias, password); err != nil {
+			t.Fatal(err)
+		}
+	}
+	engine := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault,
+		Aliases: func(alias string) []string { return []string{"edge", alias} },
+	})
+
+	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"far"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("connect = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer connectResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+
+	if answer.Passwords["far"] != "the destination" || answer.Passwords["edge"] != "the way in" {
+		t.Fatalf("the chain did not arrive whole: %+v", answer.Passwords)
+	}
+	// **尋ねられた接続に現れないものは返さない。**
+	if _, listed := answer.Passwords["elsewhere"]; listed {
+		t.Fatalf("the answer listed the vault: %+v", answer.Passwords)
 	}
 }
 
