@@ -131,6 +131,50 @@ func TestAJumpListOverridesTheHopOwnUserAndPort(t *testing.T) {
 	}
 }
 
+// ProxyJump のトークンは、繋ぐ側が展開する。
+//
+// **`ssh -G` は生のまま報告する。** OpenSSH がこれを展開するのは繋ぐ瞬間だから
+// であり、解決器もそれに倣っている。だから展開はここでしか起きない。展開しないと
+// `%r@gateway` は「%r という名前の利用者」への認証になり、publickey は通らず、
+// 残る方式も無いまま握手が終わる——実際そうなっていた。
+//
+// %r が指すのは最終的な行き先の利用者であって、手前のホップのそれではない。
+func TestProxyJumpTokensAreExpandedAgainstTheFinalDestination(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"far": {
+			"hostname":  {"qes02"},
+			"user":      {"someone"},
+			"port":      {"2022"},
+			"proxyjump": {"%r@gateway.example"},
+		},
+		"gateway.example": {"hostname": {"gateway.example"}, "user": {"nobody"}},
+	})
+
+	target, _, err := sshclient.NewTarget("far", resolve, "/home/aida")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(target.Jump) != 1 {
+		t.Fatalf("jump = %#v", target.Jump)
+	}
+	if target.Jump[0].User != "someone" {
+		t.Errorf("hop user = %q, want the final destination's user", target.Jump[0].User)
+	}
+}
+
+// ProxyJump が受け取るのは %%、%h、%n、%p、%r の 5 つだけである。
+//
+// 展開できないものを黙って残さない。その文字列はユーザー名やホスト名として
+// そのまま使われる。
+func TestProxyJumpRefusesATokenOpenSSHDoesNotAllowThere(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"far": {"hostname": {"10.0.0.9"}, "proxyjump": {"%u@gateway.example"}},
+	})
+	if _, _, err := sshclient.NewTarget("far", resolve, "/home/aida"); err == nil {
+		t.Fatal("NewTarget accepted a token ProxyJump does not take")
+	}
+}
+
 func TestAProxyJumpCycleStopsAtTheDepthLimit(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"a": {"hostname": {"10.0.0.1"}, "proxyjump": {"b"}},
@@ -343,5 +387,79 @@ func TestAnUnreadableForwardIsSkippedRatherThanFatal(t *testing.T) {
 	}
 	if len(notices) != 1 {
 		t.Fatalf("notices = %#v", notices)
+	}
+}
+
+// HostKeyAlgorithms は、交渉で名乗る順を人が決める指定である。
+//
+// **書かれていればそれが順序である。** OpenSSH はこの指定があるとき
+// known_hosts による並べ替えを行わない。先頭の一文字（+ - ^）も OpenSSH が
+// 決めている形であり、それぞれ既定へ足す・既定から外す・既定の先頭へ移す。
+// 書かれていなければ空である。**ここが埋まっていると known_hosts が黙らされる。**
+// `ssh -G` は指定が無くても既定の一覧を出力するが、この解決器が既定を入れるのは
+// hostname と user と port の三つだけであり、それに頼っている。
+func TestHostKeyAlgorithmsStaysEmptyWhenNothingWasWritten(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{"host": {"hostname": {"10.0.0.9"}}})
+	target, _, err := sshclient.NewTarget("host", resolve, "/home/aida")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(target.HostKeyAlgorithms) != 0 {
+		t.Errorf("algorithms = %#v, want known_hosts to decide", target.HostKeyAlgorithms)
+	}
+}
+
+func TestHostKeyAlgorithmsFollowsWhatWasWritten(t *testing.T) {
+	algorithmsFor := func(t *testing.T, written string) []string {
+		t.Helper()
+		resolve := resolverFor(map[string]map[string][]string{
+			"host": {"hostname": {"10.0.0.9"}, "hostkeyalgorithms": {written}},
+		})
+		target, _, err := sshclient.NewTarget("host", resolve, "/home/aida")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return target.HostKeyAlgorithms
+	}
+
+	// 素の並びは既定を置き換える。
+	if got := algorithmsFor(t, "ssh-ed25519,rsa-sha2-512"); len(got) != 2 ||
+		got[0] != "ssh-ed25519" || got[1] != "rsa-sha2-512" {
+		t.Errorf("plain list = %#v", got)
+	}
+
+	// + は既定の後ろへ足す。
+	appended := algorithmsFor(t, "+ssh-dss")
+	if len(appended) < 2 || appended[len(appended)-1] != "ssh-dss" {
+		t.Errorf("+ssh-dss = %#v", appended)
+	}
+	if appended[0] != "ssh-ed25519" {
+		t.Errorf("+ssh-dss changed the head of the default: %#v", appended)
+	}
+
+	// - は既定から外す。**外す側だけがパターンを受け取る。**
+	kept := algorithmsFor(t, "-ecdsa-sha2-*")
+	if len(kept) == 0 {
+		t.Fatal("-ecdsa-sha2-* removed everything")
+	}
+	for _, algorithm := range kept {
+		if strings.HasPrefix(algorithm, "ecdsa") {
+			t.Errorf("-ecdsa-sha2-* left %q behind: %#v", algorithm, kept)
+		}
+	}
+
+	// ^ は既定の先頭へ移す。二度は現れない。
+	moved := algorithmsFor(t, "^rsa-sha2-256")
+	if len(moved) == 0 || moved[0] != "rsa-sha2-256" {
+		t.Fatalf("^rsa-sha2-256 = %#v", moved)
+	}
+	seen := 0
+	for _, algorithm := range moved {
+		if algorithm == "rsa-sha2-256" {
+			seen++
+		}
+	}
+	if seen != 1 {
+		t.Errorf("^rsa-sha2-256 appears %d times: %#v", seen, moved)
 	}
 }

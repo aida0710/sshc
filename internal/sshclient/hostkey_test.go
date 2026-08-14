@@ -1,10 +1,13 @@
 package sshclient_test
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/base64"
 	"errors"
+	"io"
 	"net"
 	"strings"
 	"testing"
@@ -13,6 +16,7 @@ import (
 
 	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
+	"sshc/internal/terminal"
 )
 
 func newHostKey(t *testing.T) ssh.Signer {
@@ -217,5 +221,98 @@ func TestWithoutAWayToAskAnUnknownHostIsRefused(t *testing.T) {
 
 	if err := verify(keys, target, host.PublicKey(), nil); !errors.Is(err, sshclient.ErrHostKeyUnknown) {
 		t.Fatalf("verify = %v, want ErrHostKeyUnknown", err)
+	}
+}
+
+// ホスト鍵の種類は、こちらがすでに持っているものを先に名乗る。
+//
+// **これが無いと、正しいホストの正しい鍵が「一致しない鍵」になる。** 普通の
+// Ubuntu は ed25519 と ECDSA と RSA を持っており、x/crypto の既定表は ECDSA を
+// ed25519 より前に置く。known_hosts にあるのが ed25519 の 1 行だけなら、返って
+// くるのは known_hosts に無い種類の鍵であり、突き合わせは当然そこで終わる
+// ——変わったのは相手ではなく、こちらの選び方である。
+func TestTheKnownKeyTypeIsPreferredWhenTheHostOffersSeveral(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public}, ExitCode: 42, ECDSAHostKey: true,
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	// dialerFor が書く known_hosts は、このサーバーの ed25519 鍵 1 行だけである。
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+	// **失敗したときも Wait が返るように、出力は読み続ける。** 繋げなかった理由は
+	// 端末へ書かれるので、誰も読まないとその書き込みで止まる。
+	go func() { _, _ = io.Copy(io.Discard, process) }()
+
+	// **繋がったことは、向こうのシェルが終了コードを返したことで分かる。**
+	// 握手がホスト鍵で終わっていれば、ここに来るのは別の数字である。
+	if info := process.Wait(); info.Code != 42 {
+		t.Fatalf("exit = %+v, want the shell on the other side to have run at all", info)
+	}
+}
+
+// 知らないホストでは既定の順を返す。
+//
+// **何も渡さないと x/crypto の順になり、それは `ssh` の順ではない。** 初めて
+// 繋ぐホストについて覚える鍵の種類が二つのクライアントで食い違うのは、同じ
+// known_hosts を両方が書く以上、避けられるなら避けたい。
+func TestAnUnknownHostGetsTheSameOrderOpenSSHWouldUse(t *testing.T) {
+	recorder := hostKeysFor(knownHostsLine("203.0.113.10", newHostKey(t).PublicKey()))
+
+	algorithms := recorder.Algorithms(sshclient.Target{HostName: "198.51.100.7", Port: "22"})
+	if len(algorithms) == 0 || algorithms[0] != ssh.KeyAlgoED25519 {
+		t.Errorf("algorithms = %#v, want ed25519 first", algorithms)
+	}
+	// 証明書は読まないので、名乗りもしない。受け取っても突き合わせられない。
+	for _, algorithm := range algorithms {
+		if strings.Contains(algorithm, "cert") {
+			t.Errorf("a certificate algorithm was offered: %q", algorithm)
+		}
+	}
+}
+
+// 設定に書かれていれば、それが順序である。known_hosts が別の種類を持っていても
+// 並べ替えない——人が決めた順を、こちらの都合で作り変えない。
+func TestWhatTheConfigurationWroteWinsOverKnownHosts(t *testing.T) {
+	recorder := hostKeysFor(knownHostsLine("203.0.113.10", newHostKey(t).PublicKey()))
+	target := sshclient.Target{
+		HostName: "203.0.113.10", Port: "22",
+		HostKeyAlgorithms: []string{ssh.KeyAlgoRSASHA512},
+	}
+
+	algorithms := recorder.Algorithms(target)
+	if len(algorithms) != 1 || algorithms[0] != ssh.KeyAlgoRSASHA512 {
+		t.Errorf("algorithms = %#v, want exactly what the configuration wrote", algorithms)
+	}
+}
+
+// RSA だけは、鍵の種類と署名アルゴリズムが一対一ではない。ssh-rsa としか
+// 書かれていない 1 行から、同じ鍵で名乗れる三つを出す——SHA-1 だけを名乗ると、
+// それを断るサーバーには繋がらない。
+func TestAnRSAEntryOffersTheSHA2SignaturesToo(t *testing.T) {
+	private, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := ssh.NewPublicKey(&private.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := hostKeysFor(knownHostsLine("203.0.113.10", public))
+
+	algorithms := recorder.Algorithms(sshclient.Target{HostName: "203.0.113.10", Port: "22"})
+	want := []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA}
+	if len(algorithms) != len(want) {
+		t.Fatalf("algorithms = %#v, want %#v", algorithms, want)
+	}
+	for index, algorithm := range want {
+		if algorithms[index] != algorithm {
+			t.Fatalf("algorithms = %#v, want %#v", algorithms, want)
+		}
 	}
 }

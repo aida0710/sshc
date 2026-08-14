@@ -48,6 +48,93 @@ func (h HostKeys) Callback(target Target, prompt Prompter) ssh.HostKeyCallback {
 	}
 }
 
+// defaultHostKeyAlgorithms は、他に手がかりが無いときに名乗る順である。
+//
+// **順番は OpenSSH の既定に合わせてある。** x/crypto の既定表は ECDSA と RSA を
+// Ed25519 より前に置くが、それに従うと、初めて繋ぐホストについて覚える鍵の種類が
+// `ssh` の覚えるものと変わる。同じ known_hosts を二つのクライアントが書くのだから、
+// 順番は揃っている方がよい。
+//
+// 証明書のアルゴリズムは入れない。**このクライアントは証明書を読まない**ので、
+// 名乗れば、受け取っても突き合わせられないものを相手に選ばせることになる。
+//
+// 末尾の ssh-rsa は SHA-1 の署名であり、OpenSSH の既定からはもう外れている。
+// ここに残すのは、それしか持たない古いサーバーへ今日繋がっているからで、
+// 最後にあるので他に選べるものがあれば選ばれない。
+var defaultHostKeyAlgorithms = []string{
+	ssh.KeyAlgoED25519,
+	ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521,
+	ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256,
+	ssh.KeyAlgoRSA,
+}
+
+// Algorithms は、この接続で名乗るホスト鍵アルゴリズムを優先順に返す。
+//
+// **known_hosts に持っている種類を先に置く。** これが無いと順番を決めるのは
+// x/crypto の既定表になり、そこでは RSA と ECDSA が Ed25519 より前にある。
+// 三種類の鍵を持つ普通の Ubuntu が相手だと RSA が選ばれ、known_hosts にある
+// のが ed25519 の 1 行だけなら、正しいホストの正しい鍵が「一致しない鍵」として
+// 現れる——実際そうなっていた。**変わったのは相手ではなく、こちらの選び方で
+// ある。** OpenSSH が同じ場面で ed25519 を選ぶのは、すでに持っている種類を
+// 先に置いているからで、ここがしているのはそれと同じことである。
+//
+// **設定に HostKeyAlgorithms が書かれていれば、それが順序である。** OpenSSH は
+// その指定があるとき known_hosts による並べ替えを行わない——人が決めた順を、
+// こちらの都合で作り変えない。
+//
+// 知らないホストでは既定の順を返す。持っていない鍵について主張することは無いが、
+// 何も渡さなければ x/crypto の順になり、それは `ssh` の順ではない。
+func (h HostKeys) Algorithms(target Target) []string {
+	if len(target.HostKeyAlgorithms) > 0 {
+		return target.HostKeyAlgorithms
+	}
+	if h.Read == nil {
+		return defaultHostKeyAlgorithms
+	}
+	contents, err := h.Read()
+	if err != nil {
+		// 読めないことをここで報告する必要はない。同じ読み取りは検証でもう一度
+		// 起き、そこが接続を止める。
+		return defaultHostKeyAlgorithms
+	}
+	field := hostField(target.HostName, target.Port)
+	var algorithms []string
+	seen := map[string]bool{}
+	for _, line := range knownhosts.ParseFile(contents).Lines {
+		entry := line.Entry
+		// 印の付いた行は、この接続で受け入れる鍵ではない。@revoked は拒む鍵で
+		// あり、@cert-authority は鍵ではなく署名者である。
+		if entry == nil || entry.Marker != "" || !entry.MatchesHost(field) {
+			continue
+		}
+		for _, algorithm := range signatureAlgorithms(entry.KeyType) {
+			if seen[algorithm] {
+				continue
+			}
+			seen[algorithm] = true
+			algorithms = append(algorithms, algorithm)
+		}
+	}
+	if len(algorithms) == 0 {
+		return defaultHostKeyAlgorithms
+	}
+	return algorithms
+}
+
+// signatureAlgorithms は、known_hosts が書く鍵の種類を、交渉で名乗る署名
+// アルゴリズムへ広げる。
+//
+// **RSA だけは、鍵の種類と署名アルゴリズムが一対一ではない。** known_hosts は
+// ssh-rsa としか書かないが、それをそのまま名乗ると SHA-1 の署名だけを求める
+// ことになり、SHA-1 を断る今どきのサーバーとは繋がらない。同じ鍵で名乗れる
+// 三つを OpenSSH と同じ順で返す。
+func signatureAlgorithms(keyType string) []string {
+	if keyType == ssh.KeyAlgoRSA {
+		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA}
+	}
+	return []string{keyType}
+}
+
 func (h HostKeys) verify(target Target, key ssh.PublicKey, prompt Prompter) error {
 	field := hostField(target.HostName, target.Port)
 	offered := base64.StdEncoding.EncodeToString(key.Marshal())

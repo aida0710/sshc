@@ -45,6 +45,34 @@ type Chain struct {
 	Hops     []Hop
 }
 
+// jumpTokens は、OpenSSH が ProxyJump に許すトークンである。
+//
+// ssh_config(5) の TOKENS が「ProxyCommand and ProxyJump accept the tokens
+// %%, %h, %n, %p, and %r」と言っている。いずれも最終的な行き先の値を指す
+// ——手前のホップではない。
+const jumpTokens = "hnpr"
+
+// ExpandChainTokens は、ProxyJump の値のトークンを展開する。
+//
+// **解決器はここを生のまま返す。** `ssh -G` がそうするからであり、この製品が
+// 設定について報告する値は ssh の報告と一致していなければならない。OpenSSH が
+// これを展開するのは繋ぐ瞬間なので、展開するのも繋ぐ側である。
+//
+// 展開しないと、`ProxyJump %r@gateway` は「%r という名前の利用者」として
+// ゲートウェイに認証を試みることになる。publickey は当然通らず、残る方式も
+// 無いので、握手はそこで終わる——実際そうなっていた。
+//
+// 許した 5 つ以外は拒む。展開できないまま残せば、その文字列がユーザー名や
+// ホスト名としてそのまま使われる。
+func ExpandChainTokens(raw string, target TokenTarget) (string, error) {
+	if !usesOnlyTokens(raw, jumpTokens) {
+		return "", ErrUnknownToken
+	}
+	// ProxyJump はローカルの事実（%u、%d、%i、%l）を受け取らない。空の
+	// LocalFacts を渡すのは、上の検査がそれらを既に拒しているからである。
+	return ExpandTokens(raw, LocalFacts{}, target)
+}
+
 // ParseChain は、単一またはカンマ区切りの ProxyJump 値を読む。
 func ParseChain(raw string) (Chain, error) {
 	chain := Chain{Raw: raw}

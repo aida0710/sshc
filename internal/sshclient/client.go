@@ -146,7 +146,11 @@ func (d Dialer) connectOne(
 		User:            target.User,
 		Auth:            d.Auth.Methods(target, prompt),
 		HostKeyCallback: d.HostKeys.Callback(target, prompt),
-		Timeout:         timeout,
+		// **すでに持っている鍵の種類を先に名乗る。** 既定の順序に任せると、
+		// 三種類の鍵を持つホストが known_hosts にある 1 行とは違う種類を出し、
+		// 正しい鍵が「一致しない鍵」として現れる。
+		HostKeyAlgorithms: d.HostKeys.Algorithms(target),
+		Timeout:           timeout,
 	}
 	// 握手そのものにも締め切りを掛ける。応答を返さないまま繋いだままの相手が、
 	// この goroutine を保持し続けないようにするためである。
