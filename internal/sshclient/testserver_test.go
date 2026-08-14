@@ -1,7 +1,9 @@
 package sshclient_test
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
@@ -72,6 +74,10 @@ type serverOptions struct {
 	OnAgentChannel func(conn net.Conn)
 	// Banner は、認証の前にサーバーが送る文言である。
 	Banner string
+	// ECDSAHostKey は、ed25519 に加えて ECDSA のホスト鍵も持たせる。普通の
+	// Ubuntu が三種類持っているのと同じ状況であり、**どれを名乗るかを決めるのは
+	// クライアントの優先順である。**
+	ECDSAHostKey bool
 }
 
 func newTestServer(t *testing.T, options serverOptions) *testServer {
@@ -99,6 +105,17 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 	}
 	config := &ssh.ServerConfig{}
 	config.AddHostKey(signer)
+	if options.ECDSAHostKey {
+		private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		other, err := ssh.NewSignerFromKey(private)
+		if err != nil {
+			t.Fatal(err)
+		}
+		config.AddHostKey(other)
+	}
 	if len(options.AcceptKeys) > 0 {
 		config.PublicKeyCallback = func(_ ssh.ConnMetadata, offered ssh.PublicKey) (*ssh.Permissions, error) {
 			server.noteAttempt()

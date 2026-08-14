@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -124,6 +125,10 @@ type Target struct {
 	// AgentForward は、こちらの agent をリモートへ貸すかである。
 	AgentForward bool
 
+	// HostKeyAlgorithms は、交渉で名乗るホスト鍵アルゴリズムの順である。
+	// 空なら、すでに known_hosts に持っている鍵の種類が順を決める。
+	HostKeyAlgorithms []string
+
 	SetEnv        []EnvVar
 	KeepAlive     time.Duration
 	KeepAliveMax  int
@@ -176,6 +181,8 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 		Timeout:        seconds(values.First("connecttimeout")),
 		Strict:         strings.ToLower(values.First("stricthostkeychecking")),
 		Methods:        methodsFrom(values),
+
+		HostKeyAlgorithms: hostKeyAlgorithmsFrom(values),
 	}
 	if target.HostName == "" {
 		return Target{}, nil, ErrNoHostName
@@ -186,7 +193,16 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 	target.AgentForward = yes(values.First("forwardagent"))
 
 	notices := append(noticesFor(values), forwardNotices...)
-	chain, err := effective.ParseChain(values.First("proxyjump"))
+	// **トークンを展開するのはここである。** 解決器は ProxyJump を生のまま返す
+	// ——`ssh -G` がそうするからだ。%r が指すのは、いま組み立てているこの行き先の
+	// 利用者であり、手前のホップのそれではない。
+	jump, err := effective.ExpandChainTokens(values.First("proxyjump"), effective.TokenTarget{
+		Alias: alias, HostName: target.HostName, Port: target.Port, RemoteUser: target.User,
+	})
+	if err != nil {
+		return Target{}, nil, err
+	}
+	chain, err := effective.ParseChain(jump)
 	if err != nil {
 		return Target{}, nil, err
 	}
@@ -271,6 +287,69 @@ func noticesFor(values effective.Values) []Notice {
 		notices = append(notices, Notice{Keyword: keyword, Detail: detail})
 	}
 	return notices
+}
+
+// hostKeyAlgorithmsFrom は HostKeyAlgorithms の指定を読む。
+//
+// **先頭の一文字は OpenSSH が決めている形である。** + は既定へ足し、- は既定から
+// 外し、^ は既定の先頭へ移す。それ以外は既定を置き換える。外す側だけがパターンを
+// 受け取る——`-ecdsa-sha2-*` のような書き方は、足す側には意味が無い。
+//
+// 何も書かれていなければ nil を返す。そのとき順を決めるのは known_hosts である。
+func hostKeyAlgorithmsFrom(values effective.Values) []string {
+	raw := strings.TrimSpace(values.First("hostkeyalgorithms"))
+	if raw == "" {
+		return nil
+	}
+	switch raw[0] {
+	case '+':
+		return dedupe(append(slices.Clone(defaultHostKeyAlgorithms), splitList(raw[1:])...))
+	case '^':
+		return dedupe(append(splitList(raw[1:]), defaultHostKeyAlgorithms...))
+	case '-':
+		removed := splitList(raw[1:])
+		kept := make([]string, 0, len(defaultHostKeyAlgorithms))
+		for _, algorithm := range defaultHostKeyAlgorithms {
+			if !matchesAny(removed, algorithm) {
+				kept = append(kept, algorithm)
+			}
+		}
+		return kept
+	}
+	return dedupe(splitList(raw))
+}
+
+func matchesAny(patterns []string, value string) bool {
+	for _, pattern := range patterns {
+		if effective.MatchPattern(pattern, value) {
+			return true
+		}
+	}
+	return false
+}
+
+// splitList は、カンマ区切りの並びを読む。空の要素は落とす。
+func splitList(raw string) []string {
+	var listed []string
+	for _, element := range strings.Split(raw, ",") {
+		if element = strings.TrimSpace(element); element != "" {
+			listed = append(listed, element)
+		}
+	}
+	return listed
+}
+
+func dedupe(listed []string) []string {
+	kept := make([]string, 0, len(listed))
+	seen := map[string]bool{}
+	for _, element := range listed {
+		if seen[element] {
+			continue
+		}
+		seen[element] = true
+		kept = append(kept, element)
+	}
+	return kept
 }
 
 func methodsFrom(values effective.Values) Methods {
