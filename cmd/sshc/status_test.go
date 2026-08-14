@@ -22,7 +22,7 @@ func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"unlocked": true, "sessions": 3})
+		_ = json.NewEncoder(w).Encode(map[string]any{"vault": true, "unlocked": true, "sessions": 3})
 	}))
 	defer server.Close()
 
@@ -35,8 +35,41 @@ func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("engineStatus: %v", err)
 	}
-	if !answer.Unlocked || answer.Sessions != 3 {
-		t.Fatalf("answer = %+v, want unlocked with 3 sessions", answer)
+	if !answer.Vault || !answer.Unlocked || answer.Sessions != 3 {
+		t.Fatalf("answer = %+v, want an unlocked vault with 3 sessions", answer)
+	}
+}
+
+// **無い錠の鍵は尋ねない。** 保管庫を作っていないエンジンは「解錠されていない」
+// と答えるが、それは施錠されているという意味ではない。ここを取り違えると、
+// 新規インストール直後の利用者が接続のたびにマスターパスワードを訊かれる。
+func TestLockedOnlyWhenThereIsAVaultToOpen(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		answer map[string]any
+		want   bool
+	}{
+		{name: "no vault at all", answer: map[string]any{"vault": false, "unlocked": false}, want: false},
+		{name: "a vault, still locked", answer: map[string]any{"vault": true, "unlocked": false}, want: true},
+		{name: "a vault, already open", answer: map[string]any{"vault": true, "unlocked": true}, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(test.answer)
+			}))
+			defer server.Close()
+
+			stateDir := t.TempDir()
+			if _, err := handoff.Write(stateDir, server.URL, "the secret"); err != nil {
+				t.Fatal(err)
+			}
+
+			got := locked(context.Background(), stateDir, &http.Client{Timeout: 5 * time.Second})
+			if got != test.want {
+				t.Fatalf("locked = %v, want %v", got, test.want)
+			}
+		})
 	}
 }
 

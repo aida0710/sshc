@@ -95,27 +95,47 @@ function entrance() {
     // アプリが開けない理由にはならない。
     relink(binary()).catch(() => {});
 
-    const child = spawn(binary(), [], { stdio: ["ignore", "pipe", "pipe"] });
+    // **stderr は捨てる。** エンジンのログを読む者がここには居らず、読まれない
+    // パイプは 64 KiB で埋まる。埋まった先で止まるのは write を呼んだエンジン
+    // 自身であり、症状は「アプリが黙って固まる」になる。
+    const child = spawn(binary(), [], { stdio: ["ignore", "pipe", "ignore"] });
     engine = child;
 
     let buffered = "";
+    // **決着したかどうかの印。** Promise は一度しか決着しないので、resolve の
+    // あとの reject は何も起こさない——エンジンが落ちても外殻が気づかないのは
+    // それが理由だった。ここを見て、決着後は別の道（アプリを終える）へ行く。
+    let settled = false;
     const timer = setTimeout(
-      () => reject(new Error("the engine printed no entrance within 20s")),
+      () => settle(new Error("the engine printed no entrance within 20s")),
       20_000,
     );
     const settle = (error, url) => {
+      settled = true;
       clearTimeout(timer);
       if (error) reject(error);
       else resolve(url);
     };
 
     child.stdout.on("data", (chunk) => {
+      // **入口の 1 行を読んだあとは溜めない。** 溜め続ければ、エンジンが
+      // 標準出力へ書くだけ buffered が伸びる。listener は残すので、パイプは
+      // 読まれ続けて埋まらない。
+      if (settled) return;
       buffered += String(chunk);
       const url = parseEntrance(buffered);
       if (url !== null) settle(null, url);
     });
     child.on("error", (error) => settle(error));
-    child.on("exit", (code) => settle(new Error(`the engine exited with ${code}`)));
+    child.on("exit", (code) => {
+      // **アプリはエンジンの寿命そのものである。** 上がったあとに落ちたなら、
+      // 窓もメニューバーの項目も、もう何も配れない——残しておく意味がない。
+      if (settled) {
+        app.quit();
+        return;
+      }
+      settle(new Error(`the engine exited with ${code}`));
+    });
   });
 }
 
@@ -246,18 +266,33 @@ app.whenReady().then(async () => {
     }
   };
 
-  tray = installTray({
-    onOpen: reopen,
-    onQuit: () => app.quit(),
-    status,
-  });
+  // **置けないことがある。** appindicator の無い Linux では `new Tray` が
+  // 投げる。ここで投げさせると、この先の `activate` の登録まで巻き添えで
+  // 止まる——窓もメニューバーの項目も無く、kill でしか終われないプロセスが
+  // 残る。**この枝が消しに来たものそのものである。**
+  try {
+    tray = installTray({
+      onOpen: reopen,
+      onQuit: () => app.quit(),
+      status,
+    });
+  } catch {
+    tray = null;
+  }
 
   app.on("activate", reopen);
 });
 
 // **窓を閉じてもアプリは残る。** メニューバーの項目がその意味である
 // ——ウィンドウが無いのに動き続ける外殻に意味を与えたのは、あの項目である。
+//
+// **項目を置けなかったなら、その意味も無い。** 見えないものを残さないために、
+// そのときだけは最後の窓と一緒に終わる。
 app.on("window-all-closed", () => {
+  if (tray === null) {
+    app.quit();
+    return;
+  }
   if (app.dock !== undefined) app.dock.hide();
 });
 
