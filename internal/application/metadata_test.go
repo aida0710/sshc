@@ -92,8 +92,9 @@ func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
 // 書き込み側は範囲の外を拒否する。読み取りが既定へ戻すのとは対称ではない
 // ——書き込みはこのアプリケーション自身の操作だからである。
 func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
+	// 「少なすぎるセッション数」は無い。下限は 1 で、その下は 0 ——0 は
+	// 「書かれていない」であって範囲の外ではない。
 	for name, settings := range map[string]EmbeddedTerminal{
-		"too few sessions":     {MaxSessions: 0, ScrollbackBytes: terminal.DefaultScrollback},
 		"too many sessions":    {MaxSessions: terminal.MaxMaxSessions + 1, ScrollbackBytes: terminal.DefaultScrollback},
 		"scrollback too small": {MaxSessions: 1, ScrollbackBytes: terminal.MinScrollback - 1},
 		"scrollback too large": {MaxSessions: 1, ScrollbackBytes: terminal.MaxScrollback + 1},
@@ -103,6 +104,22 @@ func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
 		if _, err := EncodeMetadata(broken); !errors.Is(err, ErrMetadataTerminal) {
 			t.Errorf("%s = %v, want ErrMetadataTerminal", name, err)
 		}
+	}
+
+	// **0 は「書かれていない」であり、範囲の外ではない。** この節には上限以外の
+	// ものも入るので、上限に触れずに開始位置だけを書く文書が成立する。
+	onlyTheDirectory := NewMetadata()
+	onlyTheDirectory.EmbeddedTerminal = &EmbeddedTerminal{StartDirectory: "~/work"}
+	written, err := EncodeMetadata(onlyTheDirectory)
+	if err != nil {
+		t.Fatalf("a document that carries only the start directory = %v", err)
+	}
+	restored, err := DecodeMetadata(written)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.TerminalStartDirectory() != "~/work" {
+		t.Fatalf("the start directory did not survive the round trip: %q", restored.TerminalStartDirectory())
 	}
 
 	kept := NewMetadata()

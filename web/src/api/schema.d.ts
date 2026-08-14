@@ -906,6 +906,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metadata/terminal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setTerminalSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/history": {
         parameters: {
             query?: never;
@@ -1751,6 +1767,10 @@ export interface components {
         EmbeddedTerminal: {
             maxSessions?: number;
             scrollbackBytes?: number;
+            startDirectory?: string;
+        };
+        TerminalSettings: {
+            startDirectory?: string;
         };
         Desktop: {
             keepRunning?: boolean;
@@ -3632,6 +3652,33 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["Desktop"];
+            };
+        };
+        responses: {
+            /** @description The choice was written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setTerminalSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalSettings"];
             };
         };
         responses: {

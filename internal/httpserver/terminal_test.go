@@ -168,10 +168,10 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
 
 	engine := echo.New()
 	registerTerminalRoutes(engine, TerminalHandlers{
-		Registry: registry,
-		Tickets:  &terminal.Tickets{},
-		Shell:    func() (string, error) { return "/bin/zsh", nil },
-		Home:     "/home/tester",
+		Registry:       registry,
+		Tickets:        &terminal.Tickets{},
+		Shell:          func() (string, error) { return "/bin/zsh", nil },
+		StartDirectory: func() string { return "/home/tester" },
 		// SSH はプロセス内で話す。この検査は PTY の継ぎ目を見ているので、
 		// 開いたことだけを記録する接続で足りる。
 		Connect: func(_ context.Context, alias string, _ terminal.Size) (terminal.Process, error) {
@@ -274,7 +274,7 @@ func TestOpeningASessionReturnsATicketAndListsIt(t *testing.T) {
 		t.Fatalf("command = %#v", opened)
 	}
 
-	// **始まる場所は home である。** 継ぐと、エンジンを起こしたものが
+	// **始まる場所は設定が決める。** 継ぐと、エンジンを起こしたものが
 	// たまたま居た場所でシェルが始まる——デスクトップの外殻から起こせば
 	// `desktop/`、launchd から起こせば `/`。利用者はそのどれも選んでいない。
 	if opened[0].Dir != "/home/tester" {

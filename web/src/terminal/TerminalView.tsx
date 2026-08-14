@@ -56,6 +56,20 @@ export function TerminalView({ session, api = integrationsApi, onExit }: Termina
     let live = true;
     const decoder = new TextDecoder();
 
+    // 変わっていない大きさは送らない。
+    //
+    // 窓を掴んで動かしているあいだ ResizeObserver は何度でも鳴るが、桁と行が
+    // 変わるのはその何分の一かでしかない。同じ大きさを送り続けると、向こうの
+    // シェルは鳴るたびに SIGWINCH を受けてプロンプトを描き直す——それが、
+    // 掴んでいるあいだ画面が暴れる理由である。
+    let sent = "";
+    const syncSize = () => {
+      const size = `${view.cols}x${view.rows}`;
+      if (stream === null || size === sent) return;
+      sent = size;
+      stream.resize(view.cols, view.rows);
+    };
+
     // コピーと貼り付けは自分で持つ。
     //
     // **xterm の選択はブラウザの選択ではない。** 選んだ範囲を知っているのは
@@ -104,7 +118,9 @@ export function TerminalView({ session, api = integrationsApi, onExit }: Termina
         if (session.exited === undefined) view.focus();
         // 打鍵はそのまま PTY へ。ここで解釈するものは何もない。
         view.onData((data) => stream?.send(data));
-        stream.resize(view.cols, view.rows);
+        // 繋いだ直後のこれが、いまの大きさを PTY へ伝える唯一の機会である。
+        // 次の機会は、人が窓の大きさを変えたときまで来ない。
+        syncSize();
       })
       .catch(() => {
         if (live) setProblem(t("terminal.attachFailed"));
@@ -118,7 +134,7 @@ export function TerminalView({ session, api = integrationsApi, onExit }: Termina
       } catch {
         return;
       }
-      stream?.resize(view.cols, view.rows);
+      syncSize();
     });
     observer.observe(container);
 

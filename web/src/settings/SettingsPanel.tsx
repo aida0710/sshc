@@ -3,7 +3,7 @@ import { failureCode } from "../api/client";
 import { integrationsApi, type IntegrationsApi, type LoginItem } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
-import { CheckboxField, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
+import { CheckboxField, Field, control, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
 import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import type { TerminalSessionsState } from "../terminal/sessions";
@@ -29,6 +29,10 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
   const [changed, setChanged] = useState("");
   const [keepRunning, setKeepRunning] = useState(false);
   const [desktopBusy, setDesktopBusy] = useState(false);
+  const [startDirectory, setStartDirectory] = useState("");
+  const [startDirectoryBusy, setStartDirectoryBusy] = useState(false);
+  const [startDirectoryError, setStartDirectoryError] = useState("");
+  const [startDirectorySaved, setStartDirectorySaved] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -44,6 +48,43 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
       active = false;
     };
   }, [api]);
+
+  useEffect(() => {
+    let active = true;
+    void api.terminalStartDirectory()
+      .then((directory) => {
+        if (active) setStartDirectory(directory);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [api]);
+
+  // 断られた理由はサーバーが名指しする。**「保存できません」で終わらせない**
+  // ——直すのは人であり、直すには何が悪いのかが要る。
+  async function saveStartDirectory() {
+    setStartDirectoryBusy(true);
+    setStartDirectoryError("");
+    setStartDirectorySaved(false);
+    try {
+      await api.setTerminalStartDirectory(startDirectory.trim());
+      setStartDirectorySaved(true);
+    } catch (error) {
+      const code = failureCode(error);
+      setStartDirectoryError(t(
+        code === "start_directory_missing"
+          ? "terminal.startMissing"
+          : code === "start_directory_not_a_directory"
+            ? "terminal.startNotADirectory"
+            : code === "start_directory_unusable"
+              ? "terminal.startUnusable"
+              : "terminal.startSaveFailed",
+      ));
+    } finally {
+      setStartDirectoryBusy(false);
+    }
+  }
 
   async function updateKeepRunning(next: boolean) {
     setDesktopBusy(true);
@@ -156,6 +197,41 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
         {loginItem?.enabled === true ? (
           <p className={hintText}>{t("desktop.loginItemWins")}</p>
         ) : null}
+      </section>
+
+      {/*
+        ローカルシェルが始まる場所。**ここに書いた綴りのまま保存する**ので、
+        `~/work` は別の機械でも同じ意味を持つ。空は home である。
+      */}
+      <section aria-label={t("terminal.startHeading")} className={sectionCard}>
+        <h3 className={sectionHeading}>{t("terminal.startHeading")}</h3>
+        <p className={hintText}>{t("terminal.startNote")}</p>
+        {startDirectoryError === "" ? null : <Notice tone="danger">{startDirectoryError}</Notice>}
+        {!startDirectorySaved ? null : (
+          <p role="status" className="text-sm text-live">{t("terminal.startSaved")}</p>
+        )}
+        <Field label={t("terminal.startLabel")} hint={t("terminal.startHint")}>
+          <input
+            type="text"
+            className={control}
+            value={startDirectory}
+            spellCheck={false}
+            placeholder="~/"
+            disabled={startDirectoryBusy}
+            onChange={(event) => {
+              setStartDirectory(event.target.value);
+              setStartDirectorySaved(false);
+            }}
+          />
+        </Field>
+        <Button
+          kind="primary"
+          className="self-start"
+          disabled={startDirectoryBusy}
+          onClick={() => void saveStartDirectory()}
+        >
+          {t("terminal.startSave")}
+        </Button>
       </section>
 
       {/*

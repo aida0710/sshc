@@ -1149,6 +1149,23 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/metadata/terminal:
+    put:
+      operationId: setTerminalSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalSettings" }
+      responses:
+        "200":
+          description: The choice was written
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/history:
     get:
       operationId: getHistory
@@ -2475,6 +2492,15 @@ components:
       properties:
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
+        # ローカルシェルが始まる場所。`~` の綴りのまま持つ——home の綴りを
+        # 焼き付けない。空なら home。
+        startDirectory: { type: string, maxLength: 4096 }
+    # 埋め込みターミナルのうち、画面から変えられるもの。
+    TerminalSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        startDirectory: { type: string, maxLength: 4096 }
     # デスクトップの外殻の設定。
     Desktop:
       type: object

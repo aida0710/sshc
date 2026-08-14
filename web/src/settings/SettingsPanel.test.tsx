@@ -9,6 +9,8 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
     loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: true }),
     desktopSettings: vi.fn().mockResolvedValue({ keepRunning: false }),
+    terminalStartDirectory: vi.fn().mockResolvedValue(""),
+    setTerminalStartDirectory: vi.fn().mockResolvedValue(undefined),
     setDesktopSettings: vi.fn().mockResolvedValue(undefined),
     setLoginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
     changeMasterPassword: vi.fn().mockResolvedValue({
@@ -194,6 +196,40 @@ describe("SettingsPanel", () => {
 
     await screen.findByLabelText("Keep running after the window closes");
     expect(screen.queryByText(/Start at login is on/)).toBeNull();
+  });
+
+  // 開始位置は書いた綴りのまま送る。**home の綴りに展開して送らない**——
+  // 展開するのはサーバーであり、保存されるのは書いた形である。
+  it("saves the starting directory as it was written", async () => {
+    const user = userEvent.setup();
+    const setTerminalStartDirectory = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setTerminalStartDirectory })} />);
+
+    const region = await screen.findByRole("region", { name: "Where local shells start" });
+    await user.type(within(region).getByLabelText("Starting directory"), "~/work");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setTerminalStartDirectory).toHaveBeenCalledWith("~/work");
+    expect(await within(region).findByText(/Saved/)).toBeVisible();
+  });
+
+  // 断られた理由をそのまま出す。**「保存できません」で終わらせない**——
+  // 直すのは人であり、直すには何が悪いのかが要る。
+  it("says which way the directory was refused", async () => {
+    const user = userEvent.setup();
+    const setTerminalStartDirectory = vi.fn().mockRejectedValue(
+      new ApiError("start_directory_missing", 400, {
+        code: "start_directory_missing",
+        message: "no",
+      }),
+    );
+    render(<SettingsPanel api={buildApi({ setTerminalStartDirectory })} />);
+
+    const region = await screen.findByRole("region", { name: "Where local shells start" });
+    await user.type(within(region).getByLabelText("Starting directory"), "~/nowhere");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(await within(region).findByText("That directory does not exist.")).toBeVisible();
   });
 
   // 繋ぎっぱなしをまとめて片付ける入口。**エンジンは止めない。**
