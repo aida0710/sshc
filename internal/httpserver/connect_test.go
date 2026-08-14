@@ -404,3 +404,58 @@ func TestLiveSessionsCountsOnlyTheOnesStillRunning(t *testing.T) {
 		t.Fatalf("liveSessions = %d, want 3", got)
 	}
 }
+
+// **端末でも解錠できる。** ブラウザを開かずに答えられることが、この口の理由で
+// ある。解錠はエンジンの中に残るので、あとで窓を開けば解錠済みである。
+func TestUnlockOpensTheVaultFromTheCommandLine(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	vault.Lock()
+	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
+
+	body := `{"passphrase":"` + testPassphrase + `"}`
+	recorder := send(t, engine, http.MethodPost, UnlockPath, body,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("unlock = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if !vault.Unlocked() {
+		t.Fatal("the vault stayed locked")
+	}
+}
+
+// 間違いは拒む。どう間違っていたかは言わない。
+func TestUnlockRefusesTheWrongPassphrase(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	vault.Lock()
+	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
+
+	recorder := send(t, engine, http.MethodPost, UnlockPath, `{"passphrase":"wrong"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusForbidden || vault.Unlocked() {
+		t.Fatalf("unlock = %d, unlocked = %v", recorder.Code, vault.Unlocked())
+	}
+}
