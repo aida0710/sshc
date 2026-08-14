@@ -206,6 +206,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// **アプリが消えたらエンジンも消える。** 親を見張るのは、通常の終了
+	// 経路（親が kill する）が働かなかったときのためである。
+	go watchParent(ctx, os.Getppid, parentTick, stop)
+
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	assets, err := ui.FS()
 	if err != nil {
