@@ -151,6 +151,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const { theme, setTheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker } = useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
+  const terminalFace = section === "Terminal";
   // "locked" はアプリケーション全体を指し、その中の一画面ではない。あらゆる
   // 書き込みはマスターパスワードで封じたバックアップを残すため、vault が
   // 閉じたまま使える状態というものは存在しない。
@@ -610,6 +611,22 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           ) : null}
           {state === "ready" ? (
             <div className="relative min-h-0 flex-1 overflow-hidden">
+              {/*
+                **端末は面を離れても mount したままにする。** 外すと xterm ごと
+                捨てることになり、戻ったときに読めるのはサーバー側のリング
+                バッファの再生だけになる。あれは途中から始まるバイト列なので、
+                alt-screen を使っているもの（vim、top）は崩れた姿で戻ってくる。
+                隠すだけなら、画面も、選択も、スクロール位置も、そのまま残る。
+
+                選ばれているコンソールが一本も無いうちは描かない。xterm は
+                この束の中でいちばん重い塊であり、端末を開かない起動にそれを
+                読み込ませる理由はない。
+              */}
+              {terminalFace || activeConsole !== null ? (
+                <div className={terminalFace ? "h-full" : "hidden"}>
+                  <TerminalScreen consoles={consoles} activeConsole={activeConsole} />
+                </div>
+              ) : null}
               {route.kind === "section" ? (
                 <Suspense fallback={null}>
                   <SectionView
@@ -634,7 +651,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     onPreferredConnectionKeyApplied={consumePreferredConnectionKey}
                     onPreferredPublicKeyHandled={consumePreferredPublicKey}
                     consoles={consoles}
-                    activeConsole={activeConsole}
                     onShowConsole={showConsole}
                   />
                 </Suspense>
@@ -691,7 +707,6 @@ type SectionViewProps = {
   onConnectionDraftChange: (draft: CreateConnectionDraft | null) => void;
   onNavigateForCreation: (section: CreationPrerequisite) => void;
   consoles: TerminalSessionsState;
-  activeConsole: string | null;
   onShowConsole: (id: string) => void;
   // セクションは右側ペインの中身を提供するか、調べるものが無ければ
   // null を返す。現時点でそれを埋めているのは Connections だけだ。
@@ -702,8 +717,11 @@ function SectionView(props: SectionViewProps) {
   // **端末は一画面である。** 接続の一覧と同じ画面に置くと、詳細を見る場所を
   // 端末が奪う——実際そうなっていた。ここは接続とは別の面であり、
   // 一覧の隣ではなく、一覧の代わりに出る。
+  //
+  // その面を描くのはここではない。**端末はこの木の外に住んでいる**——面を
+  // 離れるたびに外されないためであり、ここに置けば、外すのはこの分岐になる。
   if (props.section === "Terminal") {
-    return <TerminalScreen consoles={props.consoles} activeConsole={props.activeConsole} />;
+    return null;
   }
   // Connections は自前のペインをウィンドウの端まで配置する。それ以外の
   // セクションはすべて文書であり、文書には余白とスクロールバーが要る。

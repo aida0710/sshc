@@ -290,7 +290,7 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 			if dependencies.Environ == nil {
 				return nil
 			}
-			return dependencies.Environ()
+			return platform.LoginEnvironment(dependencies.Environ())
 		},
 	})
 	if err != nil {

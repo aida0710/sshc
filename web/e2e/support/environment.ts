@@ -65,8 +65,12 @@ function startBinary(home: string): Promise<{ child: ChildProcess; url: string }
     // 見つけるためだけだ。このスイートのどの spec も、それを起動するルートを引き起こさない。
     // 既定で入口を書き出す。**ブラウザはもう開かない**ので、フラグは要らない
     // ——`-open=false` は「何も言わない」を意味するようになった。
+    // npm_config_prefix は、この常駐プロセスが npm run から起こされた状況で
+    // ある。開発中は普通にそうなり、npm は自分の設定を環境に詰めて渡す。
+    // 開いた端末がそれを継がないことを terminal.spec が見るので、その状況を
+    // ここで作っておく。
     const child = spawn(binaryPath, [], {
-      env: { HOME: home, PATH: process.env.PATH ?? "" },
+      env: { HOME: home, PATH: process.env.PATH ?? "", npm_config_prefix: "/somewhere/desktop" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let buffered = "";
