@@ -65,7 +65,7 @@ func TestTheHandoffLetsTheCommandLineAskForOneConnection(t *testing.T) {
 	}
 }
 
-// **窓を閉じることと、常駐を終わらせることは別の意思である。**
+// **ウィンドウを閉じることと、常駐を終わらせることは別の意思である。**
 //
 // 終了を頼めるのは handoff の秘密を持つ者——つまりこのバイナリ自身——だけで
 // ある。画面から常駐を止める道は用意していない。

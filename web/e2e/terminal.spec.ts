@@ -113,6 +113,34 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   await expect(panel).toContainText("limit of 2 open consoles");
 });
 
+// 繋ぎっぱなしをまとめて片付ける。
+//
+// **設定画面から押すと、サーバー側のセッションが本当に終わる。** 一覧が空に
+// なることを見るのはそのためであり、画面の状態だけを見ているのではない——
+// 一覧はサーバーが返したものである。
+test("closes every open connection from the settings screen", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  await expect(rows).toHaveCount(1);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  await expect(rows).toHaveCount(2);
+
+  // ナビゲーションの下半分はいまターミナルの面である。セクションの一覧は
+  // もう片方の面にあるので、戻してから行く。
+  await panel.getByRole("tab", { name: "Settings" }).click();
+  await openSection(page, "Settings");
+  const region = page.getByRole("region", { name: "Open connections" });
+  await expect(region.getByText("2 open")).toBeVisible();
+  await region.getByRole("button", { name: "Close every connection" }).click();
+
+  await expect(region.getByText("0 open")).toBeVisible();
+  await openConsolePanel(page);
+  await expect(rows).toHaveCount(0);
+});
+
 // 端末は一画面である。接続の一覧の隣ではない。
 //
 // **かつては右のカラムを端末が奪っていた。** そのため接続を開いているあいだ、

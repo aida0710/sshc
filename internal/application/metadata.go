@@ -120,7 +120,7 @@ type EmbeddedTerminal struct {
 type Desktop struct {
 	// KeepRunning は、アプリを閉じたあともエンジンを動かし続けるかである。
 	//
-	// 真なら、開いているコンソールは残る。tmux に繋いだまま窓を閉じたい人と、
+	// 真なら、開いているコンソールは残る。tmux に繋いだままウィンドウを閉じたい人と、
 	// 閉じたら全部終わってほしい人の両方がいる。**永久ではない**——vault には
 	// 既にアイドルの施錠があるので、放置されたエンジンはそこで鍵を手放す。
 	KeepRunning bool `json:"keepRunning,omitempty"`

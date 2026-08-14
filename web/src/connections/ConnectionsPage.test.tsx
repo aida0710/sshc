@@ -77,15 +77,15 @@ function inspectorText(inspector: ReturnType<typeof vi.fn>): string {
   return "";
 }
 
-// 開いているセッションはシェルが持つ。この画面は選ばれた一本を描くだけなので、
-// どのテストも空の一覧を渡せば足りる。
+// 開いているセッションはシェルが持つ。この画面は開くだけで、描くのは
+// Terminal 画面なので、どのテストも空の一覧を渡せば足りる。
 const consoleProps = {
   consoles: {
     sessions: [], maxSessions: 50, busy: false, problem: "", loaded: true,
     rename: vi.fn(async () => true), open: vi.fn(async () => null), close: vi.fn(async () => undefined),
+    closeAll: vi.fn(async () => undefined),
     refresh: vi.fn(async () => undefined), markExited: vi.fn(),
   },
-  activeConsole: null,
   onShowConsole: vi.fn(),
 };
 
@@ -561,7 +561,7 @@ describe("ConnectionsPage", () => {
     // effect が詳細を二度目に取得し、その答えが返るとプレビューを
     // 消していた。差分が見えていたのはちょうど一回のリクエストに
     // かかった時間だけだった。エンドツーエンドスイートはたまたまその
-    // 窓の中を覗いていたため見えていたが、そうでなければ CI で失敗していた。
+    // ウィンドウの中を覗いていたため見えていたが、そうでなければ CI で失敗していた。
     const user = userEvent.setup();
     vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1",
