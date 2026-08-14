@@ -36,6 +36,9 @@ type Options struct {
 	// ConnectWarnings は OpenSSH がそのホストに対して実行するディレクティブを
 	// 名指しする。これにより command line は接続中ではなく接続前にそれらを言える。
 	ConnectWarnings func(alias string) []string
+	// ConnectAliases は、その接続に現れる alias を ProxyJump の手前も含めて
+	// 返す。保存済みパスワードを渡す相手をそこに限るために使う。
+	ConnectAliases func(alias string) []string
 	// LoginItem は「ログイン時に起動」の on/off を切り替える。nil の場合、
 	// launchd のないプラットフォームがそうであるように、非対応と報告する。
 	LoginItem LoginItemController
@@ -251,6 +254,7 @@ func New(options Options) (*Server, error) {
 			return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
 		},
 		Warnings: options.ConnectWarnings,
+		Aliases:  options.ConnectAliases,
 		Sessions: options.Sessions,
 		BaseURL:  "http://" + host,
 		Shutdown: requestStop,

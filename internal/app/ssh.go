@@ -44,6 +44,7 @@ func newSSHParts(
 			Auth: sshclient.Auth{
 				AgentSocket: os.Getenv("SSH_AUTH_SOCK"),
 				Stored:      storedPassphrase(passwords, root),
+				Password:    storedPassword(passwords),
 			},
 			HostKeys: sshclient.HostKeys{
 				Read: readKnownHosts(hosts),
@@ -67,6 +68,29 @@ func (p sshParts) target(alias string) (sshclient.Target, error) {
 }
 
 // connector は、埋め込みターミナルが開く対話セッションである。
+// aliases は、この接続に現れる alias を、手前から順に返す。
+//
+// **ProxyJump の手前に立つホストは、それ自身が alias である。** そこに保存された
+// パスワードを知らないまま繋ぎに行けば、連鎖の途中で手入力を求めることになる。
+// 解決できない設定では行き先だけを返す——その失敗を報告するのは接続の側である。
+func (p sshParts) aliases(alias string) []string {
+	target, err := p.target(alias)
+	if err != nil {
+		return []string{alias}
+	}
+	return appendAliases(nil, target)
+}
+
+func appendAliases(listed []string, target sshclient.Target) []string {
+	for _, hop := range target.Jump {
+		listed = appendAliases(listed, hop)
+	}
+	if target.Alias == "" {
+		return listed
+	}
+	return append(listed, target.Alias)
+}
+
 func (p sshParts) connector() httpserver.Connector {
 	return func(ctx context.Context, alias string, size terminal.Size) (terminal.Process, error) {
 		target, err := p.target(alias)
@@ -109,6 +133,22 @@ func storedPassphrase(passwords *secret.Service, root string) func(string) (stri
 			return "", false
 		}
 		return passwords.KeyPassphraseFor(filepath.ToSlash(relative))
+	}
+}
+
+// storedPassword は、alias について保存されたアカウントパスワードを返す。
+//
+// **鍵のパスフレーズとは別の名前空間である。** vault が閉じていれば
+// PasswordFor は空を返し、そのときは保存されていないのと同じに扱う——施錠中の
+// 保管庫は「知らない」のであって、「無い」のではないが、接続の側から見れば
+// どちらも尋ねるしかない。
+func storedPassword(passwords *secret.Service) func(string) (string, bool) {
+	if passwords == nil {
+		return nil
+	}
+	return func(alias string) (string, bool) {
+		password := passwords.PasswordFor(alias)
+		return password, password != ""
 	}
 }
 
@@ -160,11 +200,13 @@ type CLIConnection struct {
 
 // NewCLIConnection は、ホームディレクトリひとつからコマンドライン用の接続を組む。
 //
-// passphrase は、鍵のワークスペース相対パスに対する保存済みの答えを返す。nil
-// なら端末で尋ねる。
+// passphrase は、鍵のワークスペース相対パスに対する保存済みの答えを返す。
+// password は、alias に対する保存済みのアカウントパスワードを返す。**この二つは
+// 別の名前空間である。** どちらも nil でよく、そのときは端末で尋ねる。
 func NewCLIConnection(
 	home string,
 	passphrase func(relativePath string) (string, bool),
+	password func(alias string) (string, bool),
 ) (CLIConnection, error) {
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {
@@ -187,7 +229,11 @@ func NewCLIConnection(
 
 	return CLIConnection{
 		dialer: sshclient.Dialer{
-			Auth: sshclient.Auth{AgentSocket: os.Getenv("SSH_AUTH_SOCK"), Stored: stored},
+			Auth: sshclient.Auth{
+				AgentSocket: os.Getenv("SSH_AUTH_SOCK"),
+				Stored:      stored,
+				Password:    password,
+			},
 			HostKeys: sshclient.HostKeys{
 				Read: readKnownHosts(hosts),
 				Add:  addKnownHost(hosts),
