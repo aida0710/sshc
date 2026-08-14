@@ -1199,7 +1199,9 @@ type TerminalSessionList struct {
 
 // TerminalSettings defines model for TerminalSettings.
 type TerminalSettings struct {
-	StartDirectory *string `json:"startDirectory,omitempty"`
+	MaxSessions     *int    `json:"maxSessions,omitempty"`
+	ScrollbackBytes *int    `json:"scrollbackBytes,omitempty"`
+	StartDirectory  *string `json:"startDirectory,omitempty"`
 }
 
 // TerminalStreamTicket defines model for TerminalStreamTicket.

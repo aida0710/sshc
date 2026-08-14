@@ -9,8 +9,8 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
     loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: true }),
     desktopSettings: vi.fn().mockResolvedValue({ keepRunning: false }),
-    terminalStartDirectory: vi.fn().mockResolvedValue(""),
-    setTerminalStartDirectory: vi.fn().mockResolvedValue(undefined),
+    terminalSettings: vi.fn().mockResolvedValue({}),
+    setTerminalSettings: vi.fn().mockResolvedValue(undefined),
     setDesktopSettings: vi.fn().mockResolvedValue(undefined),
     setLoginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
     changeMasterPassword: vi.fn().mockResolvedValue({
@@ -202,30 +202,58 @@ describe("SettingsPanel", () => {
   // 展開するのはサーバーであり、保存されるのは書いた形である。
   it("saves the starting directory as it was written", async () => {
     const user = userEvent.setup();
-    const setTerminalStartDirectory = vi.fn().mockResolvedValue(undefined);
-    render(<SettingsPanel api={buildApi({ setTerminalStartDirectory })} />);
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
-    const region = await screen.findByRole("region", { name: "Where local shells start" });
+    const region = await screen.findByRole("region", { name: "Terminal" });
     await user.type(within(region).getByLabelText("Starting directory"), "~/work");
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
-    expect(setTerminalStartDirectory).toHaveBeenCalledWith("~/work");
+    expect(setTerminalSettings).toHaveBeenCalledWith({ startDirectory: "~/work" });
     expect(await within(region).findByText(/Saved/)).toBeVisible();
+  });
+
+  // **空欄は「設定されていない」であり、既定と同じ値ではない。** 空欄を
+  // 既定の数字で埋めて送ると、それが metadata に焼き付き、既定を変えた日に
+  // その人だけが黙って取り残される。
+  it("sends nothing for the fields left empty", async () => {
+    const user = userEvent.setup();
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    await user.type(within(region).getByLabelText("Consoles open at once"), "4");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setTerminalSettings).toHaveBeenCalledWith({ maxSessions: 4 });
+  });
+
+  // 保存されている値は編集できる形で出す。**既定へ丸めて見せない**——
+  // 丸めた値を人がそのまま保存すると、選んでいない設定が書き込まれる。
+  it("shows the stored numbers and leaves the unset ones blank", async () => {
+    render(<SettingsPanel api={buildApi({
+      terminalSettings: vi.fn().mockResolvedValue({ maxSessions: 4 }),
+    })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    expect(await within(region).findByLabelText("Consoles open at once")).toHaveValue(4);
+    expect(within(region).getByLabelText("Scrollback per console (bytes)")).toHaveValue(null);
+    expect(within(region).getByLabelText("Starting directory")).toHaveValue("");
   });
 
   // 断られた理由をそのまま出す。**「保存できません」で終わらせない**——
   // 直すのは人であり、直すには何が悪いのかが要る。
   it("says which way the directory was refused", async () => {
     const user = userEvent.setup();
-    const setTerminalStartDirectory = vi.fn().mockRejectedValue(
+    const setTerminalSettings = vi.fn().mockRejectedValue(
       new ApiError("start_directory_missing", 400, {
         code: "start_directory_missing",
         message: "no",
       }),
     );
-    render(<SettingsPanel api={buildApi({ setTerminalStartDirectory })} />);
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
-    const region = await screen.findByRole("region", { name: "Where local shells start" });
+    const region = await screen.findByRole("region", { name: "Terminal" });
     await user.type(within(region).getByLabelText("Starting directory"), "~/nowhere");
     await user.click(within(region).getByRole("button", { name: "Save" }));
 

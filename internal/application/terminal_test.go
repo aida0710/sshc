@@ -42,7 +42,7 @@ func TestTheStartDirectoryKeepsTheTildeAndResolvesItWhenRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := service.SetTerminalStartDirectory("~/work"); err != nil {
+	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~/work"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -80,7 +80,7 @@ func TestTheStartDirectoryIsRefusedWhenItCannotBeUsed(t *testing.T) {
 		{name: "a file", given: file, want: ErrStartDirectoryNotADirectory},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := service.SetTerminalStartDirectory(test.given); !errors.Is(err, test.want) {
+			if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: test.given}); !errors.Is(err, test.want) {
 				t.Fatalf("error = %v, want %v", err, test.want)
 			}
 			if got := service.TerminalStartDirectory(); got != workspace.Home() {
@@ -100,7 +100,7 @@ func TestSavingDoesNotWriteSettingsNobodyChose(t *testing.T) {
 
 	// 二度保存する。一度目は節が無い状態から、二度目は自分が作った節の上から。
 	for round := 0; round < 2; round++ {
-		if _, err := service.SetTerminalStartDirectory("~"); err != nil {
+		if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -116,6 +116,62 @@ func TestSavingDoesNotWriteSettingsNobodyChose(t *testing.T) {
 	}
 }
 
+// 上限は往復し、消せる。
+//
+// **設定は片道であってはならない。** 一度指定した人が既定へ戻れなければ、
+// 戻る手段は metadata を手で書くことだけになる——画面から変えられるように
+// した意味が半分無くなる。
+func TestTheLimitsRoundTripAndCanBeCleared(t *testing.T) {
+	service, _ := newTerminalService(t)
+
+	if _, err := service.SetTerminalSettings(TerminalSettings{
+		MaxSessions: 4, ScrollbackBytes: 32768,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.TerminalSettings(); got.MaxSessions != 4 || got.ScrollbackBytes != 32768 {
+		t.Fatalf("settings = %#v", got)
+	}
+	stored, _, err := service.metadata.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limits := stored.TerminalLimits(); limits.MaxSessions != 4 || limits.Scrollback != 32768 {
+		t.Fatalf("limits = %#v, want the stored numbers to reach the terminal", limits)
+	}
+
+	if _, err := service.SetTerminalSettings(TerminalSettings{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.TerminalSettings(); got != (TerminalSettings{}) {
+		t.Fatalf("settings after clearing = %#v", got)
+	}
+}
+
+// 範囲の外は書き込みで断る。
+//
+// 読み取りが既定へ戻すのとは対称ではない。**これはこのアプリケーション自身の
+// 操作であり、断れば人が直せる。** 手で書かれた古いファイルとは違う。
+func TestTheLimitsAreRefusedOutsideTheirRange(t *testing.T) {
+	service, _ := newTerminalService(t)
+
+	for name, settings := range map[string]TerminalSettings{
+		"too many sessions":    {MaxSessions: 9999},
+		"negative sessions":    {MaxSessions: -1},
+		"scrollback too small": {ScrollbackBytes: 1},
+		"scrollback too large": {ScrollbackBytes: 99 << 20},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := service.SetTerminalSettings(settings); !errors.Is(err, ErrMetadataTerminal) {
+				t.Fatalf("error = %v, want ErrMetadataTerminal", err)
+			}
+			if got := service.TerminalSettings(); got != (TerminalSettings{}) {
+				t.Fatalf("the refusal wrote %#v", got)
+			}
+		})
+	}
+}
+
 // 保存したあとに消えた場所は home へ倒す。
 //
 // **端末が開けなくなる方が悪い。** 開始位置は、開けることより弱い要求である。
@@ -125,7 +181,7 @@ func TestAStartDirectoryThatDisappearedFallsBackToTheHome(t *testing.T) {
 	if err := os.Mkdir(work, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.SetTerminalStartDirectory("~/work"); err != nil {
+	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~/work"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(work); err != nil {
@@ -141,11 +197,11 @@ func TestAStartDirectoryThatDisappearedFallsBackToTheHome(t *testing.T) {
 // 二度と既定へ戻れない。
 func TestClearingTheStartDirectoryReturnsToTheHome(t *testing.T) {
 	service, workspace := newTerminalService(t)
-	if _, err := service.SetTerminalStartDirectory("~"); err != nil {
+	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~"}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := service.SetTerminalStartDirectory(""); err != nil {
+	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: ""}); err != nil {
 		t.Fatal(err)
 	}
 

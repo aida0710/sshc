@@ -2496,11 +2496,17 @@ components:
         # 焼き付けない。空なら home。
         startDirectory: { type: string, maxLength: 4096 }
     # 埋め込みターミナルのうち、画面から変えられるもの。
+    #
+    # **これは節まるごとの置き換えである。** 書かれていない項目は「設定されて
+    # いない」を意味し、そう保存される——既定と同じ値を書き戻さないためである。
+    # 既定を metadata へ焼き付けると、既定を変えた日にその人だけが取り残される。
     TerminalSettings:
       type: object
       additionalProperties: false
       properties:
         startDirectory: { type: string, maxLength: 4096 }
+        maxSessions: { type: integer, minimum: 1, maximum: 200 }
+        scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
     # デスクトップの外殻の設定。
     Desktop:
       type: object

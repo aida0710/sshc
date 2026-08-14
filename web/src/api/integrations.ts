@@ -6,6 +6,7 @@ export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
 export type ReachabilityResponse = components["schemas"]["ReachabilityResponse"];
 export type AuthenticationResponse = components["schemas"]["AuthenticationResponse"];
 export type Desktop = components["schemas"]["Desktop"];
+export type TerminalSettings = components["schemas"]["TerminalSettings"];
 export type TerminalForward = components["schemas"]["TerminalForward"];
 export type TerminalSession = components["schemas"]["TerminalSession"];
 export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
@@ -87,8 +88,12 @@ export type IntegrationsApi = {
   desktopSettings(): Promise<Desktop>;
   // 開始位置は書かれた綴りのまま往復する。`~/work` は `~/work` のままで
   // あり、home の綴りに展開されたものが画面へ戻ることはない。
-  terminalStartDirectory(): Promise<string>;
-  setTerminalStartDirectory(directory: string): Promise<void>;
+  //
+  // **0 と空は「設定されていない」である。** 「既定と同じ値」ではない——
+  // 既定を書き戻すと metadata に焼き付き、既定を変えた日にその人だけが
+  // 取り残される。
+  terminalSettings(): Promise<TerminalSettings>;
+  setTerminalSettings(settings: TerminalSettings): Promise<void>;
   setDesktopSettings(keepRunning: boolean): Promise<void>;
   passwordEligibility(alias: string): Promise<PasswordEligibility>;
   // Credential は名前を持つ秘密である。ホストはアカウントパスワードを参照し、
@@ -565,17 +570,27 @@ export const integrationsApi: IntegrationsApi = {
     const desktop = asRecord(metadata.desktop);
     return { keepRunning: desktop.keepRunning === true };
   },
-  async terminalStartDirectory() {
+  async terminalSettings() {
     const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
-    if (metadata.embeddedTerminal === undefined) return "";
+    if (metadata.embeddedTerminal === undefined) return {};
     const terminal = asRecord(metadata.embeddedTerminal);
-    return typeof terminal.startDirectory === "string" ? terminal.startDirectory : "";
+    return {
+      ...(typeof terminal.startDirectory === "string" && terminal.startDirectory !== ""
+        ? { startDirectory: terminal.startDirectory }
+        : {}),
+      ...(typeof terminal.maxSessions === "number" ? { maxSessions: terminal.maxSessions } : {}),
+      ...(typeof terminal.scrollbackBytes === "number"
+        ? { scrollbackBytes: terminal.scrollbackBytes }
+        : {}),
+    };
   },
-  async setTerminalStartDirectory(directory) {
+  // **節まるごとの置き換えである。** 送らなかった項目は、書かれていない状態へ
+  // 戻る——そうでないと、一度指定した人が既定へ戻れない。
+  async setTerminalSettings(settings) {
     await apiClient.mutate("/api/v1/metadata/terminal", {
       method: "PUT",
       headers: jsonHeaders,
-      body: JSON.stringify({ startDirectory: directory }),
+      body: JSON.stringify(settings),
     });
   },
   async setDesktopSettings(keepRunning) {
