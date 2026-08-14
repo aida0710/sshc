@@ -96,7 +96,15 @@ icons:
 # そのうえで、まだ生きている古いエンジンを止める。**止めるのはこの開発用の
 # 入口だけである**——製品側の attach は変えない。あちらでは、繋がっている
 # 端末を勝手に落とさないことの方が大事である。
-desktop-run: install desktop
+#
+# install が失敗しても止まらない。**ここで要るのは実体が新しいことだけ**で
+# あり、それはバイナリを置いた時点で済んでいる——ログインサービスの張り直し
+# は、それとは別の、外の世界に効く操作である。あれが転んだからといって、
+# アプリを開けない理由にはならない。ビルドの失敗はここに含めない（それは
+# 下の build が先に落ちる）。
+desktop-run: build desktop
+	-@$(MAKE) --no-print-directory install-binary \
+		INSTALL_SOURCE="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
 	-@bin/sshc engine stop
 	npm start --prefix desktop
 
