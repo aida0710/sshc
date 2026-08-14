@@ -67,6 +67,7 @@ export const en = {
   "terminal.closeFailed": "The console could not be closed.",
   "terminal.attachFailed": "This console could not be attached to.",
   "terminal.disconnected": "The connection to this console dropped. Select it again to reattach.",
+  "terminal.clipboardRefused": "the clipboard could not be read",
   "terminal.screenLabel": "Console for {title}",
   "terminal.exitedWithCode": "The program exited with status {code}. The output above is kept until you close this console.",
   "terminal.exitedWithSignal": "The program was ended by {signal}. The output above is kept until you close this console.",

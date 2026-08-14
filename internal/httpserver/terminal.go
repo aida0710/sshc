@@ -37,6 +37,14 @@ type TerminalHandlers struct {
 	// Environment は、セッションが継ぐ環境である。これは利用者が自分で行った
 	// であろう接続なので、検査が使う最小環境ではなく本人の環境を継ぐ。
 	Environment func() []string
+	// Home は、ローカルシェルが始まる場所である。
+	//
+	// **継がない。** エンジンの作業ディレクトリは、それを起こしたものが
+	// たまたま居た場所である——デスクトップの外殻から起こせば `desktop/`、
+	// launchd から起こせば `/` になる。**利用者はそのどれも選んでいない。**
+	// 端末を開いた人が期待するのは自分の home であり、それは端末を開くという
+	// 操作の意味が「シェルを 1 つ始める」であることから来ている。
+	Home string
 	// ExpectedOrigin は、アップグレードで完全一致を求める値である。
 	ExpectedOrigin string
 }
@@ -155,7 +163,7 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 		return terminal.Spec{
 			Kind: terminal.KindShell, Title: shellTitle(shell), Size: size,
 			Command: terminal.Command{
-				Path: shell, Argv0: platform.LoginArgv0(shell), Env: h.environment(),
+				Path: shell, Argv0: platform.LoginArgv0(shell), Env: h.environment(), Dir: h.Home,
 			},
 		}, nil
 	}

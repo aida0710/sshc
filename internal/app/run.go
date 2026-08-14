@@ -284,6 +284,7 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		Terminals:   terminals,
 		// SSH のプログラムはもう要らない。**接続はこのプロセスの中で話す。**
 		// PTY を確保するのはローカルシェルだけである。
+		Home:       dependencies.Home,
 		LoginShell: func() (string, error) { return platform.LoginShell(dependencies.Lookup) },
 		TerminalEnvironment: func() []string {
 			if dependencies.Environ == nil {

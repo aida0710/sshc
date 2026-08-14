@@ -51,6 +51,7 @@ export const ja = {
   "terminal.closeFailed": "コンソールを閉じられませんでした。",
   "terminal.attachFailed": "このコンソールに接続できませんでした。",
   "terminal.disconnected": "このコンソールとの通信が切れました。もう一度選ぶと繋ぎ直します。",
+  "terminal.clipboardRefused": "クリップボードを読めませんでした",
   "terminal.screenLabel": "{title} のコンソール",
   "terminal.exitedWithCode": "プログラムは終了ステータス {code} で終わりました。上の出力は、このコンソールを閉じるまで残ります。",
   "terminal.exitedWithSignal": "プログラムは {signal} で終わりました。上の出力は、このコンソールを閉じるまで残ります。",

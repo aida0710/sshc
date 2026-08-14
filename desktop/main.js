@@ -1,10 +1,22 @@
 "use strict";
 
-const { app, BrowserWindow, shell, dialog } = require("electron");
+const { app, BrowserWindow, Menu, shell, dialog } = require("electron");
 const { execFile } = require("node:child_process");
 const { join } = require("node:path");
 const { existsSync } = require("node:fs");
 const { relink } = require("./link");
+
+// 名乗る名前をここで決める。
+//
+// **packaged された束は package.json の productName を使うが、開発中は違う。**
+// `npm start` が起こしているのは Electron.app そのものなので、放っておくと
+// 通知も userData も「Electron」の名前で作られる。ready より前に呼ぶ必要が
+// あるのは、userData の場所がその時点で決まるからである。
+//
+// **macOS のメニューバーの一番左だけは、これでは変わらない。** あれは走って
+// いる束の Info.plist から来るので、開発中は Electron のままである。
+// `make desktop-dist` で作った束は sshc と名乗る。
+app.setName("sshc");
 
 // engineTimeout は、sshc 側のコマンドひとつに掛ける上限である。
 //
@@ -109,7 +121,31 @@ function showFailure(error) {
   dialog.showErrorBox("sshc could not start", String(error.message ?? error));
 }
 
+/**
+ * installMenu は、この外殻のメニューを置く。
+ *
+ * **役割（role）だけで組む。** コピーも貼り付けも、OS が既に知っている操作で
+ * あり、こちらが実装するものは何も無い——役割で書くと、割り当てられている
+ * キーも各国語の名前も OS が付ける。
+ *
+ * 端末の中のコピーは別である。**xterm の選択はブラウザの選択ではない**ので、
+ * あちらは画面側が自分で写す。ここに置くのは、それ以外のすべての場所——
+ * 入力欄、鍵の指紋、エラーの文言——のための道である。
+ */
+function installMenu() {
+  const application = process.platform === "darwin"
+    ? [{ role: "appMenu" }]
+    : [];
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...application,
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+  ]));
+}
+
 app.whenReady().then(async () => {
+  installMenu();
   try {
     openWindow(await entrance());
   } catch (error) {

@@ -56,6 +56,36 @@ export function TerminalView({ session, api = integrationsApi, onExit }: Termina
     let live = true;
     const decoder = new TextDecoder();
 
+    // コピーと貼り付けは自分で持つ。
+    //
+    // **xterm の選択はブラウザの選択ではない。** 選んだ範囲を知っているのは
+    // xterm だけなので、Cmd+C をそのまま渡すと、ブラウザは空の選択を写して
+    // 何も起きない——実際そうなっていた。写すのはここである。
+    //
+    // 割り当ては macOS が Cmd、それ以外が Ctrl+Shift である。**素の Ctrl+C は
+    // 通す。** あれは SIGINT であり、端末が端末である理由のひとつである。
+    view.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown") return true;
+      if (!event.metaKey && !(event.ctrlKey && event.shiftKey)) return true;
+      const key = event.key.toLowerCase();
+      if (key === "c" && view.hasSelection()) {
+        void navigator.clipboard.writeText(view.getSelection());
+        return false;
+      }
+      if (key === "v") {
+        void navigator.clipboard
+          .readText()
+          .then((text) => {
+            // 貼り付けはそのまま PTY へ流す。**ここで改行を解釈しない**——
+            // 括弧付き貼り付けを求めるプログラムには、その旨が向こうで伝わる。
+            if (text !== "") stream?.send(text);
+          })
+          .catch(() => setProblem(t("terminal.clipboardRefused")));
+        return false;
+      }
+      return true;
+    });
+
     void api
       .terminalStreamTicket(session.id)
       .then((issued) => {
