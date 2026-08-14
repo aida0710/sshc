@@ -113,6 +113,29 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   await expect(panel).toContainText("limit of 2 open consoles");
 });
 
+// リロードのあとも、開いているものが画面に出る。
+//
+// **どれを見ていたかはこのプロセスの記憶であり、読み込み直せば消える。**
+// セッションの方は常駐プロセス側で生きているので、一覧には並んだままになる。
+// 選択が空のままだと、Terminal の画面は「開いているコンソールがありません」と
+// 言う——**一覧に何本も並んでいる隣で。** 選ばれていないなら、どれかを選ぶ。
+test("shows an open console again after a reload instead of claiming there are none", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "sshc" })).toBeVisible();
+
+  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByText("No console is open")).toBeHidden();
+});
+
 // 開始位置は設定が決める。
 //
 // **`pwd` がその証拠である。** 設定画面が metadata を書けたことではなく、

@@ -210,16 +210,13 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile
 	}
-	// 範囲の外の上限は既定へ戻す。ここは読み取りであり、これは数字ひとつである。
-	// 書き込み側は依然として厳格で、ValidateMetadata が範囲の外を拒否する。
+	// **読んだものを書き換えない。** 範囲の外を既定へ戻すのは TerminalLimits()
+	// の仕事であり、あちらは読むたびに戻す——ここでも戻すと、戻した値が
+	// 構造体に残り、次に何かを保存したときにファイルへ焼き付く。
 	//
-	// **戻すのは数字だけである。** この節にはもう数字以外のもの（開始位置）が
-	// 入っているので、丸ごと作り直すとそれが落ちる——実際落とした。
-	if metadata.EmbeddedTerminal != nil {
-		limits := metadata.TerminalLimits()
-		metadata.EmbeddedTerminal.MaxSessions = limits.MaxSessions
-		metadata.EmbeddedTerminal.ScrollbackBytes = limits.Scrollback
-	}
+	// 実際そうなっていた。開始位置を二度保存すると、利用者が一度も選んで
+	// いない maxSessions と scrollbackBytes が metadata に現れる。**既定を
+	// 設定ファイルへ書くと、既定を変えた日にその人だけ取り残される。**
 	return metadata, nil
 }
 
