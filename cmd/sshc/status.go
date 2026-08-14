@@ -70,15 +70,21 @@ func engineStatus(ctx context.Context, stateDir string, client *http.Client) (st
 
 // statusAnswer は、エンジンが答える「いまどうなっているか」である。
 type statusAnswer struct {
+	// Vault は、開けるべき錠がそもそも有るか。
+	Vault    bool `json:"vault"`
 	Unlocked bool `json:"unlocked"`
 	Sessions int  `json:"sessions"`
 }
 
-// locked は、いま施錠されたままかを尋ねる。尋ねられなければ、施錠されて
-// いないものとして扱う——聞けないなら聞かずに繋ぐ経路へ任せる。
+// locked は、いま開けるべき錠が掛かったままかを尋ねる。尋ねられなければ、
+// 施錠されていないものとして扱う——聞けないなら聞かずに繋ぐ経路へ任せる。
+//
+// **保管庫が無いなら施錠もされていない。** 無い錠の鍵を尋ねると、保管庫を一度も
+// 作っていない利用者は接続のたびにマスターパスワードを訊かれる——答えようの
+// ない問いであり、新規インストール直後の利用者は全員そこに居る。
 func locked(ctx context.Context, stateDir string, client *http.Client) bool {
 	status, err := engineStatus(ctx, stateDir, client)
-	return err == nil && !status.Unlocked
+	return err == nil && status.Vault && !status.Unlocked
 }
 
 // unlock は、答えられたマスターパスワードをエンジンへ渡す。

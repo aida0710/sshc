@@ -132,7 +132,7 @@ func runConnect(
 	var saved func(string) (string, bool)
 	var password func(string) (string, bool)
 	answer, err := askApplication(ctx, alias, stateDir, client)
-	if err != nil && launchApp() {
+	if err != nil && launchApp(ctx) {
 		// **上がるまで待つ。** 待ち方を知っているのはここだけで、
 		// 上限は外殻が入口を書き出すのに掛ける時間と同じにしてある。
 		for attempt := 0; attempt < 40 && err != nil; attempt++ {
@@ -143,7 +143,10 @@ func runConnect(
 
 	// **ブラウザを開かずに答えられる。** 解錠はエンジンの中に残るので、
 	// あとで窓を開けば解錠済みである。
-	if err == nil && locked(ctx, stateDir, client) {
+	//
+	// **端末でなければ尋ねない。** パイプの向こうに問いを出しても答えは返って
+	// こない——答えられない問いを書き置いて、そのまま先へ進むだけである。
+	if err == nil && term.IsTerminal(int(stdin.Fd())) && locked(ctx, stateDir, client) {
 		fmt.Fprint(stderr, "sshc: master password (leave empty to skip): ")
 		typed, readErr := term.ReadPassword(int(stdin.Fd()))
 		fmt.Fprintln(stderr)

@@ -23,7 +23,10 @@ function installTray({ onOpen, onQuit, status }) {
     let line = "sshc";
     try {
       const answer = await status();
-      line = `${answer.unlocked ? "解錠中" : "施錠中"} · コンソール ${answer.sessions}`;
+      // **「施錠中」と「保管庫が無い」は別である。** 保管庫を作っていない
+      // 利用者にとって unlocked は常に false であり、それだけを見ると、
+      // 開ける錠がひとつも無いのに永久に「施錠中」と出し続ける。
+      line = `${answer.vault ? (answer.unlocked ? "解錠中" : "施錠中") : "保管庫なし"} · コンソール ${answer.sessions}`;
     } catch {
       line = "エンジンに繋がりません";
     }

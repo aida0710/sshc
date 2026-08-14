@@ -171,6 +171,13 @@ type openResponse struct {
 const StatusPath = "/cli/status"
 
 type statusResponse struct {
+	// Vault は、開けるべき錠がそもそも有るか。
+	//
+	// **「施錠されている」と「保管庫が無い」は別の状態である。** Unlocked は
+	// どちらでも false になるので、これが無いと、保管庫を一度も作っていない
+	// 利用者に対して、存在しない錠の鍵を毎回尋ねることになる。新規インストール
+	// 直後の利用者は全員そこに居る。
+	Vault bool `json:"vault"`
 	// Unlocked は vault が開いているか。
 	Unlocked bool `json:"unlocked"`
 	// Sessions は生きているコンソールの本数。終了済みは数えない——
@@ -216,6 +223,10 @@ func (h ConnectHandlers) Status(c *echo.Context) error {
 	}
 	answer := statusResponse{}
 	if h.Passwords != nil {
+		// 読めなければ「無い」と答える。**尋ねる相手は端末の人間であり**、
+		// 見つからない保管庫のためにマスターパスワードを求めるより、保存済み
+		// 無しで繋ぐ方が正しい——それはこの経路が元から持っている退き方である。
+		answer.Vault, _ = h.Passwords.Exists()
 		answer.Unlocked = h.Passwords.Unlocked()
 	}
 	if h.Sessions != nil {

@@ -333,8 +333,12 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	// プロセスが残していったコピーは、何も待ち受けていないポートを、誰も受け付け
 	// ない秘密とともに指しているだけなので、この削除は何かの拠り所となる保証では
 	// なく後片付けである。
+	//
+	// **消すのは、そこに残っているのが自分の 1 行であるときだけである。**
+	// エンジンは 1 台に絞ってあるが、名簿が 1 行しか無いという壊れ方は、起きた
+	// 瞬間から次の起動まで持続する——そういうものは二重に塞ぐ。
 	defer func() {
-		if err := handoff.Remove(HandoffDir(dependencies.Home)); err != nil {
+		if err := handoff.Remove(HandoffDir(dependencies.Home), server.URL()); err != nil {
 			dependencies.Logger.Warn("remove the command-line handoff", "error", err)
 		}
 	}()

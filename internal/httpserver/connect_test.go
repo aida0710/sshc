@@ -331,8 +331,39 @@ func TestStatusAnswersWithTheLockAndTheLiveCount(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if !answer.Unlocked || answer.Sessions != 3 {
+	if !answer.Vault || !answer.Unlocked || answer.Sessions != 3 {
 		t.Fatalf("answer = %+v", answer)
+	}
+}
+
+// **無い錠の鍵は尋ねない。** 保管庫を一度も作っていない利用者にとって
+// Unlocked は常に false であり、それだけを見ると `sshc <接続先>` は接続の
+// たびにマスターパスワードを訊く。訊く相手の手元には、答えになるものが無い。
+func TestStatusSaysThereIsNoVaultToUnlock(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Initialise を呼ばない。**新規インストール直後の姿である。**
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
+
+	recorder := send(t, engine, http.MethodGet, StatusPath, "",
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer statusResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Vault {
+		t.Fatalf("answer = %+v, want no vault", answer)
 	}
 }
 
