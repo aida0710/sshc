@@ -274,6 +274,11 @@ func (h ConnectHandlers) Status(c *echo.Context) error {
 }
 
 // Unlock は、マスターパスワードで保管庫を開く。
+//
+// **失敗の理由を言わない。** 施錠されていたのか、パスワードが違ったのか、
+// 答えは「開いた（204）」か「開かない（403）」の二つだけ。これにより、秘密を
+// 持つ者は一度のリクエストで複数回試す意思がなく、持たない者は判断の手がかりが
+// 何も増えない。
 func (h ConnectHandlers) Unlock(c *echo.Context) error {
 	if !h.authorised(c.Request()) {
 		return c.NoContent(http.StatusForbidden)
@@ -283,6 +288,10 @@ func (h ConnectHandlers) Unlock(c *echo.Context) error {
 	}
 	var decoded unlockRequest
 	if err := json.NewDecoder(io.LimitReader(c.Request().Body, maxConnectBody)).Decode(&decoded); err != nil {
+		// **JSON が壊れているのは、判断に到達していない。** 二値（開いた／開かない）なのは
+		// 解錠の答えであって、構文エラーではない。400 に畳むと、正直な呼び出し側は自分の
+		// バグと答えの間違いを区別できなくなるが、handoff の秘密を既に持っている相手に
+		// 対して隠せるものは何も増えない。兄弟の Connect も同じ層で 400 を返す。
 		return c.NoContent(http.StatusBadRequest)
 	}
 	// **どう間違っていたかは言わない。** 施錠されているかどうかも含めて、

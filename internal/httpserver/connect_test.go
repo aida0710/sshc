@@ -459,3 +459,11 @@ func TestUnlockRefusesTheWrongPassphrase(t *testing.T) {
 		t.Fatalf("unlock = %d, unlocked = %v", recorder.Code, vault.Unlocked())
 	}
 }
+
+// handoff の秘密を持たないものには答えない。
+func TestUnlockRefusesWithoutTheSecret(t *testing.T) {
+	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
+	if recorder := send(t, engine, http.MethodPost, UnlockPath, `{"passphrase":"anything"}`, nil); recorder.Code != http.StatusForbidden {
+		t.Fatalf("unlock = %d, want 403", recorder.Code)
+	}
+}
