@@ -1,4 +1,4 @@
-.PHONY: generate test build desktop desktop-run desktop-dist release-binaries fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test build desktop icons desktop-run desktop-dist release-binaries fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
 # なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
@@ -72,6 +72,15 @@ DESKTOP_BUNDLES = mac-arm64:darwin:arm64:1 mac-x64:darwin:amd64:1 \
 # 使うので、束ごとのバイナリはここでは作らない。
 desktop:
 	npm install --prefix desktop
+
+# icons は SVG からアプリの図を焼き直す。
+#
+# **正本は desktop/build/icon.svg である。** PNG は焼いたものだが、束を作るのに
+# 要るのでコミットしてある——`internal/ui/dist` と同じ扱いである。図を直したら
+# これを走らせる。焼くのに使うのは web が持っている Chromium なので、
+# 変換のためだけの依存は無い。
+icons:
+	npm run icons --prefix desktop
 
 # desktop-run は、束を作らずにその場で外殻を開く。開発中の入口である。
 #

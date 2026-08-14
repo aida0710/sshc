@@ -8,7 +8,8 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --mac --linux",
-    "test": "node --test link.test.js"
+    "test": "node --test link.test.js",
+    "icons": "node icon.mjs"
   },
   "devDependencies": {
     "electron": "^43.0.0",
@@ -16,6 +17,9 @@
   },
   "build": {
     "appId": "com.github.aida0710.sshc",
+    "directories": {
+      "buildResources": "build"
+    },
     "files": [
       "main.js",
       "preload.js",
@@ -37,7 +41,8 @@
           ]
         }
       ],
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png"
     },
     "linux": {
       "target": [
@@ -55,7 +60,8 @@
           "Name": "sshc",
           "Comment": "Manage OpenSSH configuration and connect from one window"
         }
-      }
+      },
+      "icon": "build/icon.png"
     }
   }
 }
