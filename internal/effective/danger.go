@@ -110,21 +110,6 @@ func Scan(graph *config.Graph) Report {
 	return report
 }
 
-// EvaluationNeedsConfirmation は、`ssh -G` がコマンドを実行しうるかを報告する。
-func (r Report) EvaluationNeedsConfirmation() bool {
-	for _, directive := range r.Directives {
-		if directive.OnEvaluate {
-			return true
-		}
-	}
-	return false
-}
-
-// ConnectionNeedsConfirmation は、接続がコマンドを実行しうるかを報告する。
-func (r Report) ConnectionNeedsConfirmation() bool {
-	return len(r.Directives) > 0
-}
-
 // Unavoidable は、どのコマンドラインオプションでも無効にできないディレクティブを
 // 返す。そのいずれかを実行することになる接続は、ユーザーが正確なコマンドテキストを
 // 確認したあとでのみ開始される。

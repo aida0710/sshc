@@ -122,23 +122,6 @@ func passwordAuthenticationDisabled(projection effective.Projection) (effective.
 	return source, ok && strings.EqualFold(strings.TrimSpace(source.Value), "no")
 }
 
-// StoredPasswordAllowed は、保存済みのリモートアカウントパスワードをこの
-// alias に割り当て、接続時に自動入力してよいかを現在の具体的な Host ブロックから答える。
-func (s *Service) StoredPasswordAllowed(alias string) (bool, error) {
-	if err := ValidateAlias(alias); err != nil {
-		return false, err
-	}
-	graph, err := s.resolve()
-	if err != nil {
-		return false, err
-	}
-	if credentialEnvironmentUnsafe(graph, alias) {
-		return false, nil
-	}
-	_, configured := directIdentityFileForAlias(graph, alias)
-	return !configured, nil
-}
-
 // credentialEnvironmentUnsafe reports configuration that can execute or
 // spawn another process while SSHC_ASKPASS_TOKEN is present. Environment
 // variables are inherited by every child, so such configurations must use

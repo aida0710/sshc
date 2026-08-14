@@ -196,27 +196,6 @@ func (s *Service) Destination(alias string) (string, string, error) {
 	return hostname, port, nil
 }
 
-// ProjectedValue は、alias に対するキーワードひとつについてエンジン自身の読みを返す。
-//
-// Destination と同様にプロセスを起動しないので、実行を伴うディレクティブで評価が
-// 阻まれているあいだも、呼び出し側は接続先を記述できる。この値は OpenSSH の答え
-// ではなくエンジンの射影であり、それを表示する呼び出し側は、その旨を述べなければ
-// ならない。
-func (s *Service) ProjectedValue(alias, keyword string) (string, bool) {
-	if err := platform.ValidateAlias(alias); err != nil {
-		return "", false
-	}
-	graph, err := s.graph()
-	if err != nil {
-		return "", false
-	}
-	source, ok := effective.Project(graph, alias).Value(keyword)
-	if !ok {
-		return "", false
-	}
-	return source.Value, true
-}
-
 // Reach は接続先へ直接ダイヤルし、ProxyJump を無視する。
 func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, error) {
 	hostname, port, err := s.Destination(alias)
