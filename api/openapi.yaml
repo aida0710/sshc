@@ -445,32 +445,6 @@ paths:
               schema: { $ref: "#/components/schemas/UpdateStatus" }
         "401": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
-  /api/v1/login-item:
-    get:
-      operationId: getLoginItem
-      responses:
-        "200":
-          description: Whether this application starts at login
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/LoginItem" }
-        "401": { $ref: "#/components/responses/Problem" }
-    put:
-      operationId: setLoginItem
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/LoginItem" }
-      responses:
-        "200":
-          description: The setting after the change
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/LoginItem" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/passwords/change:
     post:
       operationId: changeMasterPassword
@@ -1356,17 +1330,6 @@ components:
         # 何が変わったかを人が読み、どうするかを決める場所。このアプリケーションは
         # 何も取得せず、何も置き換えない。
         pageUrl: { type: string }
-    LoginItem:
-      type: object
-      additionalProperties: false
-      required: [enabled, supported]
-      properties:
-        # ユーザーが求めない限りオフ。保存済みのあらゆる秘密の鍵を握る
-        # バックグラウンドプロセスは、他人に代わって勝手に用意してよいものではない。
-        enabled: { type: boolean }
-        # このビルドが自分自身のパスを解決できないとき false になる。launchd の
-        # エージェントが名指ししなければならないのが、そのパスである。
-        supported: { type: boolean }
     ChangeMasterPasswordRequest:
       type: object
       additionalProperties: false

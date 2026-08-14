@@ -22,7 +22,6 @@ func TestWhatCountsAsAConnectInvocation(t *testing.T) {
 		{[]string{"sshc", "open"}, "", false},
 		{[]string{"sshc", "list"}, "", false},
 		{[]string{"sshc", "connect"}, "", false},
-		{[]string{"sshc", "service"}, "", false},
 		// 常駐そのものを起こしたり止めたりする語。
 		{[]string{"sshc", "engine"}, "", false},
 		// 外殻がエンジンの様子を尋ねる語。

@@ -86,8 +86,6 @@ func usage(out io.Writer) {
   sshc list            print every concrete Host alias, one per line
   sshc open            print a new way into the UI
   sshc status          print the engine's status as JSON, for the shell
-  sshc service refresh rebind an enabled login service to this binary
-  sshc service disable stop and remove the login service
   sshc engine start    make sure the background engine is answering
   sshc engine stop     ask the background engine to finish
   sshc engine quit     finish it unless the setting says to keep it
@@ -103,13 +101,6 @@ still reachable with ssh itself, but not through this command.
 }
 
 func main() {
-	if serviceInvocation(os.Args) {
-		os.Exit(runServiceCommand(
-			context.Background(), os.Args[2:], os.UserHomeDir, newServiceLoginItem,
-			os.Executable, os.Stdout, os.Stderr,
-		))
-	}
-
 	if arguments, ok := engineInvocation(os.Args); ok {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -250,9 +241,6 @@ func main() {
 	dependencies := app.Dependencies{
 		Random:   rand.Reader,
 		Announce: announce,
-		// ユーザーがインターフェースから有効にしない限りオフ。ここでは何も登録しない。
-		// スイッチに手が届くようにするだけである。
-		LoginItem: parts.LoginItem,
 		// このアプリケーションが自分自身以外のホストに接触する唯一の場所であり、
 		// 誰かが求めたときにだけ行う。何も取得せず、何も置き換えない。
 		// 新しいバージョンが公開されているかを報告するだけである。

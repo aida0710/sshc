@@ -18,16 +18,13 @@ const startsAProcess = "RunOutput(ctx"
 // 名前を出すだけで、走らせるのは利用者である——`HardwareCommand` が返すのは
 // 画面に表示する引数の並びである。
 //
+// ログイン時起動は OS に任せた。launchd や systemd の unit を書いていたのは
+// このアプリケーション自身だったが、その仕組みごと消えたので、もうどこも
+// プログラムを起こさない。
+//
 // **一覧を持つ形にしてあるのは、増えたときに気づくためである。** 「OpenSSH が
 // 無いこと」を検査すると、OpenSSH でない何かが増えても緑のままになる。
-var allowedToStartPrograms = []string{
-	// ログイン時起動を登録する。**これだけである。**
-	//
-	// 既定ブラウザを開く経路は消えた。画面を出すのはデスクトップの外殻で
-	// あり、このプロセスが誰かのブラウザを起こす理由はもう無い。
-	"internal/platform/macos/loginitem.go",
-	"internal/platform/linux/loginitem.go",
-}
+var allowedToStartPrograms = []string{}
 
 // TestOnlyTheNamedSubsystemsStartAProgram は、プロセスを起こす場所を固定する。
 //
