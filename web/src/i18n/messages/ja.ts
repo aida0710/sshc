@@ -29,6 +29,8 @@ export const ja = {
   "terminal.running": "接続中",
   "terminal.exitedWith": "終了 {code}",
   "terminal.localhost": "localhost",
+  "terminal.emptyHeading": "開いているコンソールがありません",
+  "terminal.emptyHint": "左の一覧から開くか、ホストの「接続」を押してください。",
   "terminal.forwardLocal": "{listen} → {to} を転送中",
   "terminal.forwardDynamic": "{listen} で SOCKS5 プロキシ",
   "terminal.forwardAgent": "この agent をリモートへ貸しています",
@@ -71,6 +73,7 @@ export const ja = {
 
   "section.home": "ホーム",
   "section.connections": "接続",
+  "section.terminal": "ターミナル",
   "section.config": "設定ファイル",
   "section.groups": "グループ",
   "section.keys": "鍵",

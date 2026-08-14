@@ -1,6 +1,7 @@
 export const sections = [
   "Home",
   "Connections",
+  "Terminal",
   "Config",
   "Groups",
   "Keys",
@@ -18,6 +19,7 @@ export type Section = (typeof sections)[number];
 const paths: Record<Section, string> = {
   Home: "/",
   Connections: "/connections",
+  Terminal: "/terminal",
   Config: "/config",
   Groups: "/groups",
   Keys: "/keys",

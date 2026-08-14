@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type Problem } from "../api/client";
 import {
   configApi,
@@ -48,16 +48,6 @@ import { ConnectionSummary } from "./ConnectionSummary";
 import { loadConnectionSavedState, type ConnectionSavedState } from "./connectionSavedState";
 import { ManageConnection } from "./ManageConnection";
 
-// xterm.js は 400 kB を超える。それを接続画面の chunk に入れると、一覧を開く
-// たびにその重さを払うことになる——端末を開かない人も含めて。だから端末だけを
-// 別の chunk に切り、コンソールを選んだときに初めて読む。
-//
-// これは体感の話にとどまらない。接続画面は URL の正規化をマウント後に行うので、
-// chunk が重くなるとそのリダイレクトも遅れる。end-to-end はそれを捉えた。
-const TerminalView = lazy(() =>
-  import("../terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
-);
-
 // Groups 画面が報告し、この画面は報告しないもの。
 //
 // `group_empty` がここに無いのは、もはやどこでも notice として報告
@@ -105,10 +95,9 @@ type ConnectionsPageProps = {
   onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
-  // 開いているセッションはシェルが持つ。一覧は一番左のナビゲーションにあり、
-  // この画面はそのうち選ばれた一本を描くだけである。
+  // 開いているセッションはシェルが持つ。**描くのは Terminal 画面である**
+  // ——ここは開くだけで、開けたら向こうへ渡す。
   consoles: TerminalSessionsState;
-  activeConsole: string | null;
   onShowConsole: (id: string) => void;
 };
 
@@ -128,7 +117,6 @@ export function ConnectionsPage({
   preferredKey = null,
   onPreferredKeyApplied,
   consoles,
-  activeConsole,
   onShowConsole,
 }: ConnectionsPageProps) {
   const t = useTranslate();
@@ -835,8 +823,6 @@ export function ConnectionsPage({
     clearTarget({ replace: true });
   }
 
-  const activeConsoleSession = consoles.sessions.find((session) => session.id === activeConsole);
-
   if (overview === null) {
     return <p role="status" className="text-sm text-ink-muted">{t("conn.loading")}</p>;
   }
@@ -889,19 +875,6 @@ export function ConnectionsPage({
           )}
         </div>
       </div>
-      {activeConsoleSession !== undefined ? (
-        // コンソールを選んでいるあいだ、右のカラムは端末そのものである。
-        // 余白もスクロールも端末が自分で持つので、この列は素の箱でよい。
-        <div className="flex min-h-0 flex-col">
-          <Suspense fallback={null}>
-            <TerminalView
-              key={activeConsoleSession.id}
-              session={activeConsoleSession}
-              onExit={() => consoles.markExited(activeConsoleSession.id)}
-            />
-          </Suspense>
-        </div>
-      ) : (
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6">
         {/*
           グループ単位の notice は Groups 画面のものであり、README にもそう
@@ -1008,7 +981,6 @@ export function ConnectionsPage({
           </>
         )}
       </div>
-      )}
     </div>
     {creating ? (
       <CreateConnectionModal

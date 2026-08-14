@@ -113,6 +113,37 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   await expect(panel).toContainText("limit of 2 open consoles");
 });
 
+// 端末は一画面である。接続の一覧の隣ではない。
+//
+// **かつては右のカラムを端末が奪っていた。** そのため接続を開いているあいだ、
+// 接続先の詳細を読む場所が無くなっていた。ここが見ているのはその回帰であり、
+// 「端末が見える」だけでは足りない——**接続画面へ戻ったときに詳細が居ること**
+// までを見る。
+test("moves to its own screen and leaves the connection detail alone", async ({ page, installation }) => {
+  await installation.write("conf.d/20-detail.conf", ["Host detail-host", "\tHostName 127.0.0.1", ""].join("\n"));
+  await openApplication(page, installation);
+
+  await openSection(page, "Connections");
+  const tree = page.getByRole("navigation", { name: "Connections" });
+  await tree.getByRole("button", { name: "detail-host" }).click();
+  const detail = page.getByRole("heading", { name: "detail-host" });
+  await expect(detail).toBeVisible();
+
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+
+  // 端末は自分の画面へ連れて行く。接続の一覧はもうそこに無い。
+  await expect(page).toHaveURL(/\/terminal$/);
+  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(tree).toBeHidden();
+
+  // 戻れば詳細は元のまま居る——**端末はもうそこを覆っていない。**
+  // 戻り方が履歴なのは、選ばれているホストが URL に載っているからである。
+  // ナビゲーションのリンクは常に一覧の入口を指すので、そちらは選択を持たない。
+  await page.goBack();
+  await expect(detail).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Console for / })).toBeHidden();
+});
+
 // 接続できなかった理由は端末に残る。
 //
 // **このスイートは OpenSSH を一度も起動しない。** それでもこの検査が成り立つ

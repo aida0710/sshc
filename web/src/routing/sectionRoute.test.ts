@@ -4,6 +4,7 @@ import { parseSectionPath, sectionPath, sections } from "./sectionRoute";
 const routes = [
   ["Home", "/"],
   ["Connections", "/connections"],
+  ["Terminal", "/terminal"],
   ["Config", "/config"],
   ["Groups", "/groups"],
   ["Keys", "/keys"],
