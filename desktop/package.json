@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --mac --linux",
-    "test": "node --test link.test.js",
+    "test": "node --test link.test.js entrance.test.js",
     "icons": "node icon.mjs"
   },
   "devDependencies": {
@@ -23,7 +23,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "link.js"
+      "link.js",
+      "entrance.js"
     ],
     "extraResources": [
       {

@@ -1,10 +1,11 @@
 "use strict";
 
 const { app, BrowserWindow, Menu, nativeImage, shell, dialog } = require("electron");
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const { join } = require("node:path");
 const { existsSync } = require("node:fs");
 const { relink } = require("./link");
+const { parseEntrance } = require("./entrance");
 
 // 名乗る名前をここで決める。
 //
@@ -17,6 +18,10 @@ const { relink } = require("./link");
 // いる束の Info.plist から来るので、開発中は Electron のままである。
 // `make desktop-dist` で作った束は sshc と名乗る。
 app.setName("sshc");
+
+// **エンジンが 2 台になる道を、ここで塞ぐ。** 起こし手がひとつなら、
+// 名簿もロックファイルも要らない。
+if (!app.requestSingleInstanceLock()) app.exit(0);
 
 // engineTimeout は、sshc 側のコマンドひとつに掛ける上限である。
 //
@@ -55,25 +60,43 @@ function run(args) {
   });
 }
 
-/**
- * entrance は、エンジンが答えている状態にしてから、入口の URL を返す。
- *
- * 二つの呼び出しで済むのは、**どちらの知識も Go 側にあるから**である。
- * 起きているかを確かめ、居なければ起こし、handoff が書かれるまで待つのは
- * `engine start` であり、bootstrap を発行するのは `open` である。
- */
-async function entrance() {
-  // **実体を 1 つにする。** 二つのコピーがあると、コマンドラインと画面が
-  // 別の版を走らせることになる。失敗しても続ける——リンクが張れないことは、
-  // アプリが開けない理由にはならない。
-  await relink(binary());
+// engine は、このアプリが起こしたエンジンひとつである。
+//
+// **detach しない。** 親と一緒に死ぬことが、このアプリケーションが
+// 「終了すれば全部止まる」と言えることの実装そのものである。
+let engine = null;
 
-  await run(["engine", "start"]);
-  const url = await run(["open"]);
-  if (!url.startsWith("http://127.0.0.1:")) {
-    throw new Error(`the engine answered with an address this shell will not open: ${url}`);
-  }
-  return url;
+/**
+ * entrance は、エンジンを起こし、入口の URL を返す。
+ */
+function entrance() {
+  return new Promise((resolve, reject) => {
+    // **実体を 1 つにする。** 失敗しても続ける——リンクが張れないことは、
+    // アプリが開けない理由にはならない。
+    relink(binary()).catch(() => {});
+
+    const child = spawn(binary(), [], { stdio: ["ignore", "pipe", "pipe"] });
+    engine = child;
+
+    let buffered = "";
+    const timer = setTimeout(
+      () => reject(new Error("the engine printed no entrance within 20s")),
+      20_000,
+    );
+    const settle = (error, url) => {
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolve(url);
+    };
+
+    child.stdout.on("data", (chunk) => {
+      buffered += String(chunk);
+      const url = parseEntrance(buffered);
+      if (url !== null) settle(null, url);
+    });
+    child.on("error", (error) => settle(error));
+    child.on("exit", (code) => settle(new Error(`the engine exited with ${code}`)));
+  });
 }
 
 /**
@@ -184,34 +207,21 @@ app.whenReady().then(async () => {
 
 // macOS でもウィンドウを閉じたら終わる。
 //
-// **ウィンドウが無いのに動き続ける外殻には意味が無い。** エンジンを残すかどうかは
-// 別の話であり、それは設定が決める——下の before-quit がそれを Go 側へ尋ねる。
+// **ウィンドウが無いのに動き続ける外殻には意味が無い。** エンジンを残すという
+// 選択肢はもう無い——下の before-quit が、子であるエンジンを必ず畳む。
 app.on("window-all-closed", () => app.quit());
 
-let quitting = false;
-app.on("before-quit", (event) => {
-  if (quitting) return;
-  event.preventDefault();
-  quitting = true;
-  // **止めるかどうかを決めるのは設定である。** ここではそれを読まない——
-  // metadata の形を知る場所を二つにしないため、判断は Go 側が持つ。
-  run(["engine", "quit"])
-    .catch(() => {})
-    .finally(() => app.quit());
+app.on("before-quit", () => {
+  // **持ち主はこのプロセスである。** 設定を読んで決めるものは、もう無い。
+  if (engine !== null) engine.kill();
 });
 
 // Ctrl-C でも「終わる」を通す。
 //
-// **端末から起こした外殻は SIGINT を受けてその場で死に、before-quit は走らない。**
-// エンジンは親を持たないデーモンなので、そのまま生き残る——しかも次に起きた
-// エンジンが handoff を上書きした瞬間、それは誰からも見えなくなる。止める術も、
-// 次の起動で見つける術も無い 1 台が、開発の一巡ごとに増えていた。
-//
-// 二度目の合図は待たない。一度目の後始末が返らないなら、待っているものは
-// もう答えないものである。
+// **既定では SIGINT を受けてその場で死に、before-quit は走らない。** それでも
+// ここを通すのは、エンジンを確実に畳んでからアプリを終えるためである
+// （エンジンは detach していない子なので、素通りしても道連れにはなるが、
+// ウィンドウを畳む機会は失う）。
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    if (quitting) process.exit(1);
-    app.quit();
-  });
+  process.on(signal, () => app.quit());
 }
