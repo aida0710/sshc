@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,6 +87,32 @@ func TestTheStartDirectoryIsRefusedWhenItCannotBeUsed(t *testing.T) {
 				t.Fatalf("the refusal changed the start directory to %q", got)
 			}
 		})
+	}
+}
+
+// 保存は、利用者が選んでいないものを書かない。
+//
+// **既定を設定ファイルへ焼き付けない。** 焼き付けると、既定を変えた日に
+// その人だけが取り残される——しかも黙って。読み取りが範囲外を既定へ戻すのは
+// 読むたびの話であり、その結果を構造体に残してはならない。
+func TestSavingDoesNotWriteSettingsNobodyChose(t *testing.T) {
+	service, workspace := newTerminalService(t)
+
+	// 二度保存する。一度目は節が無い状態から、二度目は自分が作った節の上から。
+	for round := 0; round < 2; round++ {
+		if _, err := service.SetTerminalStartDirectory("~"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	contents, err := os.ReadFile(filepath.Join(workspace.Root(), "sshc", MetadataFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, unwanted := range []string{"maxSessions", "scrollbackBytes"} {
+		if strings.Contains(string(contents), unwanted) {
+			t.Fatalf("saving the start directory wrote %q into metadata:\n%s", unwanted, contents)
+		}
 	}
 }
 

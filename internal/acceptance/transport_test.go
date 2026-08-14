@@ -116,6 +116,50 @@ func TestEveryAPIRouteExceptBootstrapRequiresASession(t *testing.T) {
 	}
 }
 
+// CSRF ヘッダーも、route ごとに書き並べるのではなく列挙して確かめる。
+//
+// **セッションと同じ扱いにする。** 守りはどれも「増えたときに気づく」形で
+// 持たなければ、増えた日に誰も気づかない——手で並べた一覧は、新しい
+// エンドポイントが足された瞬間に静かに古くなる。実際、この suite に来る前の
+// 単体の一覧は metadata の 2 つを載せていなかった。
+//
+// cookie がポートに紐づかないことがこのヘッダーの理由である。127.0.0.1 は
+// それ自体が site なので、同じアドレスの別のポートで動くサーバーがこの
+// cookie を受け取る。**受け取っても、token は受け取らない。**
+func TestEveryAPIRouteThatChangesSomethingRequiresTheCSRFHeader(t *testing.T) {
+	// 除外は 2 つだけで、どちらもトークンをまだ持てない要求である。
+	//
+	// **一覧にして持つのは、3 つ目が足された日に気づくためである。** 除外を
+	// middleware の条件式の中だけに置くと、増えたことは誰にも見えない。
+	exempt := map[string]string{
+		"/api/v1/session/bootstrap": "セッションを作る要求である。作る前にトークンは無い",
+		"/api/v1/session/renew":     "トークンを失ったページがそれを得る手段である。reload には cookie しか無い",
+	}
+	f := newFixture(t)
+	for _, route := range f.apiRoutes() {
+		if route.Method == http.MethodGet || route.Method == http.MethodHead {
+			continue
+		}
+		if _, skipped := exempt[route.Path]; skipped {
+			continue
+		}
+		path := f.concretePath(route.Path)
+		t.Run(route.Method+" "+route.Path, func(t *testing.T) {
+			response := f.do(route.Method, path, emptyBodyFor(route.Method), func(request *http.Request) {
+				request.Header.Del(httpserver.CSRFHeader)
+			})
+			status := response.StatusCode
+			body := readBody(t, response)
+			if status != http.StatusForbidden {
+				t.Fatalf("status = %d, want %d", status, http.StatusForbidden)
+			}
+			if !strings.Contains(body, "csrf") {
+				t.Fatalf("body = %q", body)
+			}
+		})
+	}
+}
+
 func TestEveryAPIResponseIsNoStoreAndCarriesTheExactPolicy(t *testing.T) {
 	f := newFixture(t)
 	for _, route := range f.apiRoutes() {
