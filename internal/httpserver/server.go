@@ -253,11 +253,23 @@ func New(options Options) (*Server, error) {
 			target, ok, err := options.Config.DirectKeyPassphraseTarget(alias, options.Keys.Inventory)
 			return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
 		},
-		Warnings: options.ConnectWarnings,
-		Aliases:  options.ConnectAliases,
-		Sessions: options.Sessions,
-		BaseURL:  "http://" + host,
-		Shutdown: requestStop,
+		Warnings:  options.ConnectWarnings,
+		Aliases:   options.ConnectAliases,
+		Bootstrap: options.Sessions,
+		BaseURL:   "http://" + host,
+		Shutdown:  requestStop,
+		Sessions: func() int {
+			if options.Terminals == nil {
+				return 0
+			}
+			live := 0
+			for _, view := range options.Terminals.Sessions() {
+				if view.Exited == nil {
+					live++
+				}
+			}
+			return live
+		},
 	})
 	if options.Sync != nil {
 		registerSyncRoutes(e, SyncHandlers{Service: options.Sync, Secrets: options.Passwords})
