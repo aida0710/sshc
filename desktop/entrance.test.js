@@ -19,3 +19,7 @@ test("refuses an address that is not loopback", () => {
 test("answers null until the line has arrived", () => {
   assert.strictEqual(parseEntrance("sshc: starting\n"), null);
 });
+
+test("waits for the line to be complete", () => {
+  assert.strictEqual(parseEntrance("http://127.0.0.1:52683/?to"), null);
+});
