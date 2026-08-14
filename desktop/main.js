@@ -6,6 +6,7 @@ const { join } = require("node:path");
 const { existsSync } = require("node:fs");
 const { relink } = require("./link");
 const { parseEntrance } = require("./entrance");
+const { installTray } = require("./tray");
 
 // 名乗る名前をここで決める。
 //
@@ -66,6 +67,9 @@ function run(args) {
 // 「終了すれば全部止まる」と言えることの実装そのものである。
 let engine = null;
 
+// tray は、メニューバーに置いた項目ひとつである。
+let tray = null;
+
 /**
  * entrance は、エンジンを起こし、入口の URL を返す。
  */
@@ -103,6 +107,11 @@ function entrance() {
  * openWindow はウィンドウをひとつ開き、その URL を読み込む。
  */
 function openWindow(url) {
+  // **窓を開くたびに Dock へ戻す。** 窓が無いあいだは隠している
+  // （window-all-closed）——ここで戻さないと、開き直しても Dock に
+  // 出てこない。
+  if (app.dock !== undefined) app.dock.show();
+
   const window = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -188,6 +197,10 @@ app.whenReady().then(async () => {
   const image = icon();
   if (image !== null && app.dock !== undefined) app.dock.setIcon(image);
   try {
+    // **entrance() を通るのは、この 1 回だけである。** エンジンを spawn
+    // するのはここだけでよい——以降の開き直しは、走っているエンジンに
+    // 新しい入口を出させる run(["open"]) を使う。ここで entrance() を
+    // 使い回すと、窓を閉じて開くたびにエンジンがもう 1 台増える。
     openWindow(await entrance());
   } catch (error) {
     showFailure(error);
@@ -195,25 +208,71 @@ app.whenReady().then(async () => {
     return;
   }
 
-  app.on("activate", async () => {
-    if (BrowserWindow.getAllWindows().length > 0) return;
+  /**
+   * reopen は、既にある窓を出すか、無ければ run(["open"]) で新しい窓を開く。
+   * activate と Tray の「ウィンドウを開く」の両方がここを通る。
+   */
+  const reopen = async () => {
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length > 0) {
+      windows[0].show();
+      return;
+    }
     try {
-      openWindow(await entrance());
+      openWindow(await run(["open"]));
     } catch (error) {
       showFailure(error);
     }
+  };
+
+  tray = installTray({
+    onOpen: reopen,
+    onQuit: () => app.quit(),
+    // Task 6 で `sshc status` を足してから本物に差し替える。**handoff の
+    // 秘密を持つのは Go 側だけ**なので、外殻は自分では叩けない。
+    status: async () => ({ unlocked: false, sessions: 0 }),
   });
+
+  app.on("activate", reopen);
 });
 
-// macOS でもウィンドウを閉じたら終わる。
-//
-// **ウィンドウが無いのに動き続ける外殻には意味が無い。** エンジンを残すという
-// 選択肢はもう無い——下の before-quit が、子であるエンジンを必ず畳む。
-app.on("window-all-closed", () => app.quit());
+// **窓を閉じてもアプリは残る。** メニューバーの項目がその意味である
+// ——ウィンドウが無いのに動き続ける外殻に意味を与えたのは、あの項目である。
+app.on("window-all-closed", () => {
+  if (app.dock !== undefined) app.dock.hide();
+});
 
-app.on("before-quit", () => {
-  // **持ち主はこのプロセスである。** 設定を読んで決めるものは、もう無い。
+/**
+ * liveSessions は、生きているコンソールの本数を返す。
+ *
+ * **いまは仮の実装である。** handoff の秘密を持つのは Go 側だけなので、
+ * 外殻はまだ `sshc status` を叩けない——Task 6 でそこを足してから、
+ * 本当の本数に差し替える。
+ */
+async function liveSessions() {
+  return 0;
+}
+
+let quitting = false;
+app.on("before-quit", async (event) => {
+  if (quitting) return;
+  event.preventDefault();
+  // **SSH のセッションは閉じたら戻らない。** 本数を出して一度だけ問う。
+  // Task 6 で `sshc status` を足すまでは 0 を返す。
+  const open = await liveSessions();
+  if (open > 0) {
+    const answer = await dialog.showMessageBox({
+      type: "question",
+      buttons: ["終了", "やめる"],
+      defaultId: 1,
+      cancelId: 1,
+      message: `開いているコンソールが ${open} 本あります。終了しますか。`,
+    });
+    if (answer.response !== 0) return;
+  }
+  quitting = true;
   if (engine !== null) engine.kill();
+  app.quit();
 });
 
 // Ctrl-C でも「終わる」を通す。
