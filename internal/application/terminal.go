@@ -18,13 +18,46 @@ var (
 	ErrStartDirectoryNotADirectory = errors.New("that path is not a directory")
 )
 
-// SetTerminalStartDirectory は、ローカルシェルが始まる場所を書き戻す。
+// TerminalSettings は、埋め込みターミナルのうち画面から変えられるものである。
 //
-// **綴りはそのまま持つ。** `~/work` と書いたら `~/work` のまま保存する——
+// **0 と空は「設定されていない」である。** 「既定と同じ値」ではない——
+// 区別が要るのは、既定と同じ値を書き戻すと、それが metadata に焼き付くから
+// である。焼き付けば、既定を変えた日にその人だけが黙って取り残される。
+type TerminalSettings struct {
+	// StartDirectory は書かれた綴りのまま。`~/work` は `~/work` である。
+	StartDirectory string
+	// MaxSessions と ScrollbackBytes は、範囲の外なら書き込みで拒否される。
+	// 読み取り側（TerminalLimits）は範囲の外を既定へ戻す。
+	MaxSessions     int
+	ScrollbackBytes int
+}
+
+// TerminalSettings は、保存されている値をそのまま返す。
+//
+// **正規化しない。** 画面はこれを編集するので、既定へ戻した値を見せると、
+// 人が何も触っていないのに「既定を明示的に選んだ」状態が保存されてしまう。
+func (s *Service) TerminalSettings() TerminalSettings {
+	stored, _, err := s.metadata.Load()
+	if err != nil || stored.EmbeddedTerminal == nil {
+		return TerminalSettings{}
+	}
+	return TerminalSettings{
+		StartDirectory:  stored.EmbeddedTerminal.StartDirectory,
+		MaxSessions:     stored.EmbeddedTerminal.MaxSessions,
+		ScrollbackBytes: stored.EmbeddedTerminal.ScrollbackBytes,
+	}
+}
+
+// SetTerminalSettings は、節をまるごと置き換える。
+//
+// **置き換えなのは、消せる必要があるからである。** 一度指定した人が既定へ
+// 戻れなければ、設定は片道になる。空で送られた項目は、書かれていない状態へ戻る。
+//
+// 綴りはそのまま保存する。`~/work` は `~/work` のまま metadata に入る——
 // home の綴りを焼き付けると、その設定は書いた機械でしか意味を持たない。
 // 確かめるのは展開したあとの実体である。
-func (s *Service) SetTerminalStartDirectory(directory string) (SaveResult, error) {
-	resolved, err := platform.ResolveUnderHome(directory, s.workspace.Home())
+func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, error) {
+	resolved, err := platform.ResolveUnderHome(settings.StartDirectory, s.workspace.Home())
 	if err != nil {
 		return SaveResult{}, err
 	}
@@ -38,10 +71,17 @@ func (s *Service) SetTerminalStartDirectory(directory string) (SaveResult, error
 	if err != nil {
 		return SaveResult{}, err
 	}
-	if stored.EmbeddedTerminal == nil {
-		stored.EmbeddedTerminal = &EmbeddedTerminal{}
+	if settings == (TerminalSettings{}) {
+		// 何も設定されていないなら節ごと消す。**空の節を残さない**——
+		// 残せば、次に読む者は「何か書かれている」と思う。
+		stored.EmbeddedTerminal = nil
+	} else {
+		stored.EmbeddedTerminal = &EmbeddedTerminal{
+			MaxSessions:     settings.MaxSessions,
+			ScrollbackBytes: settings.ScrollbackBytes,
+			StartDirectory:  settings.StartDirectory,
+		}
 	}
-	stored.EmbeddedTerminal.StartDirectory = directory
 
 	if err := s.metadata.EnsureDirectory(); err != nil {
 		return SaveResult{}, err
@@ -51,7 +91,7 @@ func (s *Service) SetTerminalStartDirectory(directory string) (SaveResult, error
 		return SaveResult{}, err
 	}
 	result, err := s.manager.Commit(storage.Request{
-		Operation: "terminal.startDirectory",
+		Operation: "terminal.settings",
 		Changes:   []storage.Change{change},
 	})
 	if err != nil {
@@ -89,11 +129,7 @@ func (s *Service) directoryExists(path string) error {
 // 返す。**端末が開けなくなる方が悪い**——開始位置は、開けることより弱い要求である。
 func (s *Service) TerminalStartDirectory() string {
 	home := s.workspace.Home()
-	stored, _, err := s.metadata.Load()
-	if err != nil {
-		return home
-	}
-	resolved, err := platform.ResolveUnderHome(stored.TerminalStartDirectory(), home)
+	resolved, err := platform.ResolveUnderHome(s.TerminalSettings().StartDirectory, home)
 	if err != nil || resolved == "" {
 		return home
 	}

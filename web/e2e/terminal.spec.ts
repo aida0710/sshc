@@ -136,6 +136,29 @@ test("shows an open console again after a reload instead of claiming there are n
   await expect(page.getByText("No console is open")).toBeHidden();
 });
 
+// 上限も画面から変えられる。
+//
+// **metadata が書けたことではなく、その数字が端末に効くことを見る。** 間に
+// 居るのはエンジンであり、そこを通らないと「保存できた」だけで終わる。
+test("applies the session limit set from the settings screen", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  await openSection(page, "Settings");
+  const region = page.getByRole("region", { name: "Terminal" });
+  await region.getByLabel("Consoles open at once").fill("1");
+  await region.getByRole("button", { name: "Save" }).click();
+  await expect(region.getByText(/Saved/)).toBeVisible();
+
+  const panel = await openConsolePanel(page);
+  const openShell = panel.getByRole("button", { name: "Local shell" });
+  await openShell.click();
+  await expect(panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem")).toHaveCount(1);
+
+  // 1 本で上限である。入口が閉じ、その理由が書かれる。
+  await expect(openShell).toBeDisabled();
+  await expect(panel).toContainText("limit of 1 open consoles");
+});
+
 // 開始位置は設定が決める。
 //
 // **`pwd` がその証拠である。** 設定画面が metadata を書けたことではなく、
@@ -146,7 +169,7 @@ test("starts local shells where the setting says", async ({ page, installation }
   await openApplication(page, installation);
 
   await openSection(page, "Settings");
-  const region = page.getByRole("region", { name: "Where local shells start" });
+  const region = page.getByRole("region", { name: "Terminal" });
   await region.getByLabel("Starting directory").fill("~/workspace");
   await region.getByRole("button", { name: "Save" }).click();
   await expect(region.getByText(/Saved/)).toBeVisible();

@@ -1771,6 +1771,8 @@ export interface components {
         };
         TerminalSettings: {
             startDirectory?: string;
+            maxSessions?: number;
+            scrollbackBytes?: number;
         };
         Desktop: {
             keepRunning?: boolean;

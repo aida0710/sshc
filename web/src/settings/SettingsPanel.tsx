@@ -29,10 +29,14 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
   const [changed, setChanged] = useState("");
   const [keepRunning, setKeepRunning] = useState(false);
   const [desktopBusy, setDesktopBusy] = useState(false);
+  // 3 つとも文字列で持つ。**空は「設定されていない」であり、0 ではない。**
+  // 数として持つと、空欄と 0 を区別する場所をもう一つ作ることになる。
   const [startDirectory, setStartDirectory] = useState("");
-  const [startDirectoryBusy, setStartDirectoryBusy] = useState(false);
-  const [startDirectoryError, setStartDirectoryError] = useState("");
-  const [startDirectorySaved, setStartDirectorySaved] = useState(false);
+  const [maxSessions, setMaxSessions] = useState("");
+  const [scrollback, setScrollback] = useState("");
+  const [terminalBusy, setTerminalBusy] = useState(false);
+  const [terminalError, setTerminalError] = useState("");
+  const [terminalSaved, setTerminalSaved] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -51,9 +55,12 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
 
   useEffect(() => {
     let active = true;
-    void api.terminalStartDirectory()
-      .then((directory) => {
-        if (active) setStartDirectory(directory);
+    void api.terminalSettings()
+      .then((settings) => {
+        if (!active) return;
+        setStartDirectory(settings.startDirectory ?? "");
+        setMaxSessions(settings.maxSessions === undefined ? "" : String(settings.maxSessions));
+        setScrollback(settings.scrollbackBytes === undefined ? "" : String(settings.scrollbackBytes));
       })
       .catch(() => undefined);
     return () => {
@@ -63,26 +70,49 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
 
   // 断られた理由はサーバーが名指しする。**「保存できません」で終わらせない**
   // ——直すのは人であり、直すには何が悪いのかが要る。
-  async function saveStartDirectory() {
-    setStartDirectoryBusy(true);
-    setStartDirectoryError("");
-    setStartDirectorySaved(false);
+  async function saveTerminal() {
+    // 数として読めないものは送らない。**空欄と「0 と書かれた」を同じにしない**
+    // ——前者は既定へ戻すという意思であり、後者は範囲の外の指定である。
+    const numberOr = (text: string): number | undefined => {
+      const trimmed = text.trim();
+      if (trimmed === "") return undefined;
+      const value = Number(trimmed);
+      return Number.isSafeInteger(value) ? value : Number.NaN;
+    };
+    const sessions = numberOr(maxSessions);
+    const bytes = numberOr(scrollback);
+    if (Number.isNaN(sessions) || Number.isNaN(bytes)) {
+      setTerminalError(t("terminal.limitsOutOfRange"));
+      setTerminalSaved(false);
+      return;
+    }
+
+    setTerminalBusy(true);
+    setTerminalError("");
+    setTerminalSaved(false);
     try {
-      await api.setTerminalStartDirectory(startDirectory.trim());
-      setStartDirectorySaved(true);
+      const directory = startDirectory.trim();
+      await api.setTerminalSettings({
+        ...(directory === "" ? {} : { startDirectory: directory }),
+        ...(sessions === undefined ? {} : { maxSessions: sessions }),
+        ...(bytes === undefined ? {} : { scrollbackBytes: bytes }),
+      });
+      setTerminalSaved(true);
     } catch (error) {
       const code = failureCode(error);
-      setStartDirectoryError(t(
+      setTerminalError(t(
         code === "start_directory_missing"
           ? "terminal.startMissing"
           : code === "start_directory_not_a_directory"
             ? "terminal.startNotADirectory"
             : code === "start_directory_unusable"
               ? "terminal.startUnusable"
-              : "terminal.startSaveFailed",
+              : code === "terminal_limits_out_of_range" || code === "invalid_request"
+                ? "terminal.limitsOutOfRange"
+                : "terminal.startSaveFailed",
       ));
     } finally {
-      setStartDirectoryBusy(false);
+      setTerminalBusy(false);
     }
   }
 
@@ -200,15 +230,15 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
       </section>
 
       {/*
-        ローカルシェルが始まる場所。**ここに書いた綴りのまま保存する**ので、
-        `~/work` は別の機械でも同じ意味を持つ。空は home である。
+        埋め込みターミナルの設定。**空欄は「設定されていない」であり、既定と
+        同じ値ではない。** 既定を metadata へ書き戻すと、既定を変えた日に
+        その人だけが黙って取り残される。だから空欄は空欄のまま送らない。
       */}
-      <section aria-label={t("terminal.startHeading")} className={sectionCard}>
-        <h3 className={sectionHeading}>{t("terminal.startHeading")}</h3>
-        <p className={hintText}>{t("terminal.startNote")}</p>
-        {startDirectoryError === "" ? null : <Notice tone="danger">{startDirectoryError}</Notice>}
-        {!startDirectorySaved ? null : (
-          <p role="status" className="text-sm text-live">{t("terminal.startSaved")}</p>
+      <section aria-label={t("terminal.settingsHeading")} className={sectionCard}>
+        <h3 className={sectionHeading}>{t("terminal.settingsHeading")}</h3>
+        {terminalError === "" ? null : <Notice tone="danger">{terminalError}</Notice>}
+        {!terminalSaved ? null : (
+          <p role="status" className="text-sm text-live">{t("terminal.settingsSaved")}</p>
         )}
         <Field label={t("terminal.startLabel")} hint={t("terminal.startHint")}>
           <input
@@ -217,18 +247,48 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
             value={startDirectory}
             spellCheck={false}
             placeholder="~/"
-            disabled={startDirectoryBusy}
+            disabled={terminalBusy}
             onChange={(event) => {
               setStartDirectory(event.target.value);
-              setStartDirectorySaved(false);
+              setTerminalSaved(false);
+            }}
+          />
+        </Field>
+        <Field label={t("terminal.maxSessionsLabel")} hint={t("terminal.maxSessionsHint")}>
+          <input
+            type="number"
+            min={1}
+            max={200}
+            className={control}
+            value={maxSessions}
+            placeholder="50"
+            disabled={terminalBusy}
+            onChange={(event) => {
+              setMaxSessions(event.target.value);
+              setTerminalSaved(false);
+            }}
+          />
+        </Field>
+        <Field label={t("terminal.scrollbackLabel")} hint={t("terminal.scrollbackHint")}>
+          <input
+            type="number"
+            min={16384}
+            max={4194304}
+            className={control}
+            value={scrollback}
+            placeholder="262144"
+            disabled={terminalBusy}
+            onChange={(event) => {
+              setScrollback(event.target.value);
+              setTerminalSaved(false);
             }}
           />
         </Field>
         <Button
           kind="primary"
           className="self-start"
-          disabled={startDirectoryBusy}
-          onClick={() => void saveStartDirectory()}
+          disabled={terminalBusy}
+          onClick={() => void saveTerminal()}
         >
           {t("terminal.startSave")}
         </Button>
