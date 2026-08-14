@@ -199,6 +199,18 @@ type statusResponse struct {
 	Sessions int `json:"sessions"`
 }
 
+// UnlockPath は、端末からマスターパスワードを答える場所である。
+//
+// **ブラウザを開かずに答えられることが、この口の理由である。** 解錠はエンジンの
+// 中に残るので、あとで窓を開けば解錠済みである。マスターパスワードは、画面から
+// も同じ loopback を通っている——この経路が増やすのは「解錠を試せる」ことだけ
+// で、それには本人がマスターパスワードを知っている必要がある。
+const UnlockPath = "/cli/unlock"
+
+type unlockRequest struct {
+	Passphrase string `json:"passphrase"`
+}
+
 // liveSessions は、まだ終わっていないものだけを数える。**終了済みは registry に
 // 残っていても数えない**——この数は「閉じてよいか」を問うためのものだからである。
 func liveSessions(views []terminal.View) int {
@@ -217,6 +229,7 @@ func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.POST(StopPath, handlers.Stop)
 	engine.POST(HealthPath, handlers.Health)
 	engine.GET(StatusPath, handlers.Status)
+	engine.POST(UnlockPath, handlers.Unlock)
 }
 
 // Health は、我々のエンジンがここに居ることを答える。
@@ -258,6 +271,26 @@ func (h ConnectHandlers) Status(c *echo.Context) error {
 		answer.Sessions = h.Sessions()
 	}
 	return c.JSON(http.StatusOK, answer)
+}
+
+// Unlock は、マスターパスワードで保管庫を開く。
+func (h ConnectHandlers) Unlock(c *echo.Context) error {
+	if !h.authorised(c.Request()) {
+		return c.NoContent(http.StatusForbidden)
+	}
+	if h.Passwords == nil {
+		return c.NoContent(http.StatusForbidden)
+	}
+	var decoded unlockRequest
+	if err := json.NewDecoder(io.LimitReader(c.Request().Body, maxConnectBody)).Decode(&decoded); err != nil {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	// **どう間違っていたかは言わない。** 施錠されているかどうかも含めて、
+	// 答えは「開いた」か「開かない」の二つである。
+	if err := h.Passwords.Unlock(decoded.Passphrase); err != nil {
+		return c.NoContent(http.StatusForbidden)
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // Open は、セッションを確立する URL で応答する。
