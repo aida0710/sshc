@@ -55,12 +55,6 @@ type ConnectHandlers struct {
 	BaseURL   string
 	// Sessions は、生きているコンソールの本数を返す。nil なら 0。
 	Sessions func() int
-	// Shutdown は、この常駐を終わらせる。nil なら止める手段が無いと答える。
-	//
-	// **これを呼ぶのはデスクトップの外殻であって、画面ではない。** 画面から
-	// 常駐を止める道は用意しない——ウィンドウを閉じることと、常駐を終わらせることは
-	// 別の意思である。
-	Shutdown func()
 }
 
 type connectRequest struct {
@@ -170,21 +164,6 @@ type openResponse struct {
 	URL string `json:"url"`
 }
 
-// HealthPath は、そこに我々のエンジンが居るかを確かめる場所である。
-//
-// **/api/v1/health ではない。** あちらは /api/ の下にあり、すべての /api/
-// 要求は Sec-Fetch-Site: same-origin を要求する——ブラウザでないものは
-// 通れない。ここが /cli/ にあるのはそのためであり、**handoff の秘密で
-// 認証するので「何かが答えた」ではなく「我々のエンジンが答えた」と言える。**
-// ポートが別のものに再利用されていたら、あちらはこの秘密を知らない。
-const HealthPath = "/cli/engine/health"
-
-// StopPath は、走っているエンジンへ終了を頼む場所である。
-//
-// /api/ の外にあるのは、セッションではなく handoff の秘密で認証するからで
-// ある。**これを呼ぶのはデスクトップの外殻であって、画面ではない。**
-const StopPath = "/cli/engine/stop"
-
 // StatusPath は、外殻が「いまどうなっているか」を尋ねる場所である。
 //
 // **これは画面のための口ではない。** 画面は自分の session を持っている。
@@ -226,36 +205,8 @@ func liveSessions(views []terminal.View) int {
 func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
-	engine.POST(StopPath, handlers.Stop)
-	engine.POST(HealthPath, handlers.Health)
 	engine.GET(StatusPath, handlers.Status)
 	engine.POST(UnlockPath, handlers.Unlock)
-}
-
-// Health は、我々のエンジンがここに居ることを答える。
-//
-// 運ぶのは「居る」という事実だけである。版も、設定も、施錠の状態も返さない
-// ——**この経路が答えるのは、繋ぎ直してよい相手かどうかだけ**である。
-func (h ConnectHandlers) Health(c *echo.Context) error {
-	if !h.authorised(c.Request()) {
-		return c.NoContent(http.StatusForbidden)
-	}
-	return c.NoContent(http.StatusNoContent)
-}
-
-// Stop は、この常駐を終わらせる。
-//
-// **答えてから止める。** 止めてから答えると、呼んだ側は成功と切断を区別
-// できない。実際の停止は応答が出ていったあとに起きる。
-func (h ConnectHandlers) Stop(c *echo.Context) error {
-	if !h.authorised(c.Request()) {
-		return c.NoContent(http.StatusForbidden)
-	}
-	if h.Shutdown == nil {
-		return c.NoContent(http.StatusServiceUnavailable)
-	}
-	go h.Shutdown()
-	return c.NoContent(http.StatusAccepted)
 }
 
 // Status は、メニューバーと終了時の確認が読む現在地である。

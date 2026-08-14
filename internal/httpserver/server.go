@@ -12,7 +12,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -86,17 +85,7 @@ type Server struct {
 	engine   *echo.Echo
 	// terminals は、このプロセスが終わるときに畳むべき PTY を持つ。
 	terminals *terminal.Registry
-	// stopped は、デスクトップの外殻が終了を頼んだときに閉じる。
-	stopped  chan struct{}
-	stopOnce sync.Once
 }
-
-// Stopped は、終了を頼まれたときに閉じるチャンネルを返す。
-//
-// **ウィンドウを閉じることと、常駐を終わらせることは別の意思である。** これが閉じるのは
-// 後者を明示的に頼まれたときだけであり、頼めるのは handoff の秘密を持つ者
-// ——つまりこのバイナリ自身——に限られる。
-func (s *Server) Stopped() <-chan struct{} { return s.stopped }
 
 // CloseTerminals は、生きているすべての端末セッションへ SIGHUP を送る。
 //
@@ -229,9 +218,6 @@ func New(options Options) (*Server, error) {
 	// 呼び出し元が state directory から読み出しているはずのものであり、
 	// それがなければこのルートはすべてを拒否する。
 	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})
-	stopped := make(chan struct{})
-	var stopOnce sync.Once
-	requestStop := func() { stopOnce.Do(func() { close(stopped) }) }
 
 	registerConnectRoutes(e, ConnectHandlers{
 		Secret:    options.CLISecret,
@@ -247,7 +233,6 @@ func New(options Options) (*Server, error) {
 		Aliases:   options.ConnectAliases,
 		Bootstrap: options.Sessions,
 		BaseURL:   "http://" + host,
-		Shutdown:  requestStop,
 		Sessions: func() int {
 			if options.Terminals == nil {
 				return 0
@@ -282,7 +267,6 @@ func New(options Options) (*Server, error) {
 	return &Server{
 		listener:  options.Listener,
 		terminals: options.Terminals,
-		stopped:   stopped,
 		http: &http.Server{
 			Handler:           e,
 			ReadHeaderTimeout: 5 * time.Second,
