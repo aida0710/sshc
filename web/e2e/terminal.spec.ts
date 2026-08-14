@@ -307,3 +307,88 @@ test("shows why a connection failed in the console itself", async ({ page, insta
   await expect(screen).toBeVisible();
   await expect(screen).toContainText(/sshc:.*(refused|connect)/i, { timeout: 20_000 });
 });
+
+// 端末の大きさは、繋いだ直後に PTY へ届く。
+//
+// **その機会は一度きりである。** WebSocket は new した直後まだ CONNECTING で
+// あり、そこで送ろうとしたフレームは落ちる。落ちれば PTY は既定の 80×24 の
+// まま残り、次に人が窓の大きさを変えるまで直らない——折り返しも、全画面を使う
+// プログラムも、その幅を信じて描く。ここが見ているのは、xterm が描いている
+// 行数と、向こうの `stty size` が答える行数が同じであることである。
+test("tells the pseudo-terminal how big it is as soon as it attaches", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  // 区切りを "-" にするのは、打った行そのものと、その出力とを見分けるためである。
+  const screen = await typeIntoConsole(page, 'stty size | tr " " "-"');
+  await expect(screen).toContainText(/\d+-\d+/, { timeout: 20_000 });
+
+  const reported = (await screen.innerText()).match(/(\d+)-(\d+)/);
+  expect(reported).not.toBeNull();
+  const drawn = await page.locator(".xterm-rows").evaluate((node) => node.children.length);
+  expect(Number(reported?.[1])).toBe(drawn);
+  // 既定の 80 桁のままではない。この窓はそれより広い。
+  expect(Number(reported?.[2])).toBeGreaterThan(80);
+});
+
+// 端末は、別の画面を見ているあいだも生きている。
+//
+// **外せば xterm ごと捨てることになる。** 戻ったときに読めるのはサーバー側の
+// リングバッファの再生だけであり、あれは途中から始まるバイト列なので、
+// alt-screen を使っているもの（vim、top）は崩れた姿で戻ってくる。ここが見て
+// いるのは、戻ってきた端末が同じ端末であることそのものである。
+test("keeps the same terminal alive while another screen is shown", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = await typeIntoConsole(page, "echo stays-mounted");
+  await expect(screen).toContainText("stays-mounted", { timeout: 20_000 });
+
+  // 作り直されたら消える印を、いまの xterm に付ける。
+  await page.locator(".xterm").first().evaluate((node) => node.setAttribute("data-e2e-mark", "1"));
+  // 隠れているあいだにも出力は届く。受け取るのは同じ端末である。
+  //
+  // **打った行そのものには現れない文字列でなければならない。** 打鍵は
+  // そのまま画面へ写るので、`echo late-canary` と書けば「late-canary」は
+  // 出力を待たずにそこにある——それを待っても何も確かめたことにならない。
+  await typeIntoConsole(page, "(sleep 2; echo late-$((6*7))) &");
+
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("tab", { name: "Settings" }).click();
+  await openSection(page, "Settings");
+  // 隠れてはいるが、居なくなってはいない。
+  await expect(screen).toBeHidden();
+
+  const reopened = await openConsolePanel(page);
+  await reopened
+    .getByRole("list", { name: "Open consoles" })
+    .getByRole("listitem")
+    .first()
+    .getByRole("button")
+    .first()
+    .click();
+
+  await expect(screen).toBeVisible();
+  await expect(page.locator(".xterm[data-e2e-mark='1']")).toBeAttached();
+  await expect(screen).toContainText("stays-mounted");
+  await expect(screen).toContainText("late-42", { timeout: 20_000 });
+});
+
+// 端末は、それを起こしたものの事情を継がない。
+//
+// **常駐プロセスの環境は、それを起こしたものがたまたま持っていたものである。**
+// npm run から起こせば npm の設定がそこに入る——`npm_config_prefix` は npm へ
+// 渡した `--prefix` の写しであり、それを継いだシェルの中で nvm は「知らない
+// prefix だ」と警告する。開始ディレクトリと同じ話であり、利用者はそのどれも
+// 選んでいない。
+test("does not hand npm's own environment to the shell", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  // 打った行そのものには "prefix=[]" は現れない。継いでいれば括弧の中に出る。
+  const screen = await typeIntoConsole(page, 'echo "prefix=[${npm_config_prefix}]"');
+
+  await expect(screen).toContainText("prefix=[]", { timeout: 20_000 });
+});

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // ErrNoLoginShell は、起こせるシェルがこのマシンに見つからないことを報告する。
@@ -48,6 +49,32 @@ func LoginShell(lookup func(string) (string, bool)) (string, error) {
 // 無いと、macOS の Terminal が開くシェルとは別のファイル群が読まれ、利用者の
 // PATH やプロンプトが手元の端末と食い違う。
 func LoginArgv0(shell string) string { return "-" + filepath.Base(shell) }
+
+// LoginEnvironment は、ログインシェルへ渡してよい環境だけを残す。
+//
+// **端末は、それを起こしたものの事情を継がない。** 開始ディレクトリと同じ話で
+// ある——常駐プロセスの環境は、それを起こしたものがたまたま持っていたもので
+// あり、利用者はそのどれも選んでいない。npm run から起こされていれば、npm は
+// 自分の設定を環境に詰めて渡してくる。`npm_config_prefix` は npm に渡した
+// `--prefix` の写しであり、それを継いだシェルの中で nvm は「知らない prefix
+// だ」と警告する。ここで開くのは利用者のシェルであって、ビルドの子ではない。
+//
+// **消すだけで足りる。** 起こすのはログインシェルなので、本人が本当に設定して
+// いるものは、そのシェルが読む rc がもう一度設定する。
+//
+// 落とすのは小文字の `npm_` だけである。npm が輸出するのはそれであり、
+// NPM_TOKEN のような大文字は人が自分で置いたものだからだ。
+func LoginEnvironment(environ []string) []string {
+	kept := make([]string, 0, len(environ))
+	for _, entry := range environ {
+		name, _, found := strings.Cut(entry, "=")
+		if found && (strings.HasPrefix(name, "npm_") || name == "INIT_CWD" || name == "NODE") {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
+}
 
 func executable(path string) bool {
 	info, err := os.Stat(path)
