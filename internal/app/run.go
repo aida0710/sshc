@@ -70,11 +70,6 @@ type Dependencies struct {
 	ScanHostKeys func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
 	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
 	RemoteRun    func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error)
-	// LoginItem は「ログイン時に起動」を切り替える。既定はオフで、ここでそれを変える
-	// ことはない。保存済みのあらゆる秘密の鍵を握るバックグラウンドプロセスは、他人に
-	// 代わって勝手に用意してよいものではないからだ。nil の場合、この設定は未対応だと
-	// 報告する。
-	LoginItem httpserver.LoginItemController
 	// Updates はプロジェクトのリリースを調べる。nil なら何も提示しない。リリースで
 	// ないビルドはそうあるべきである。
 	Updates *selfupdate.Checker
@@ -258,7 +253,6 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	server, err := httpserver.New(httpserver.Options{
 		Listener:  listener,
 		CLISecret: cliSecret,
-		LoginItem: dependencies.LoginItem,
 		Updates:   dependencies.Updates,
 		// alias はコマンドラインでも検査されるが、その拒否が起きるのは ssh を
 		// 起こす直前である。ここで先に一言置くのは、何が理由で止まるのかを

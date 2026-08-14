@@ -284,7 +284,6 @@ integration: build
 # 入っていない場合は、誰も見ない場所へインストールするのではなく、その旨を告げる。
 INSTALL_DIR ?= $(HOME)/.local/bin
 INSTALL_SOURCE ?= bin/sshc
-MAINTENANCE_BINARY ?= bin/sshc
 
 install: build
 	@$(MAKE) --no-print-directory install-binary \
@@ -310,10 +309,6 @@ install-binary:
 		install -m 0755 "$(INSTALL_SOURCE)" "$$temporary"; \
 		mv -f "$$temporary" "$$destination"; \
 		trap - 0 1 2 15; \
-		if ! "$$destination" service refresh; then \
-			echo "sshc: CLI was installed at $$destination, but the login service was not refreshed" >&2; \
-			exit 1; \
-		fi; \
 		echo "installed $$destination"
 
 # ソースからのチェックアウトにおける更新とは、取得し直してインストールし直すこと
@@ -327,14 +322,10 @@ update:
 	git pull --ff-only
 	$(MAKE) install
 
-uninstall: build
-	@$(MAKE) --no-print-directory uninstall-binary \
-		MAINTENANCE_BINARY="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
+uninstall:
+	@$(MAKE) --no-print-directory uninstall-binary INSTALL_DIR="$(INSTALL_DIR)"
 
-# インストール済みの旧版がserviceサブコマンドを持たない場合もあるため、現在のsource
-# からbuildしたバイナリで先に解除する。失敗時はKeepAliveの参照先を消さない。
 uninstall-binary:
-	@"$(MAINTENANCE_BINARY)" service disable
 	@if [ -d "$(INSTALL_DIR)/sshc" ]; then \
 		echo "sshc: uninstall destination is a directory: $(INSTALL_DIR)/sshc" >&2; \
 		exit 1; \
