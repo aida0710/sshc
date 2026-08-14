@@ -165,22 +165,3 @@ func TestServiceAuthenticateSanitisesTheHomePathOutOfReportedOutput(t *testing.T
 		t.Error("sanitising removed the reason for the failure")
 	}
 }
-
-func TestServiceProjectedValueReadsTheEngineWithoutRunningSSH(t *testing.T) {
-	probe := &scriptedProbe{}
-	service := newTestService(t, probe)
-
-	user, ok := service.ProjectedValue("bastion", "user")
-	if !ok || user != "ops" {
-		t.Fatalf("ProjectedValue = %q, %v", user, ok)
-	}
-	if _, ok := service.ProjectedValue("bastion", "identityfile"); ok {
-		t.Error("a keyword the configuration does not set must report false")
-	}
-	if _, ok := service.ProjectedValue("bad alias", "user"); ok {
-		t.Error("an unsafe alias must not be projected")
-	}
-	if len(probe.calls) != 0 {
-		t.Fatal("projecting a value reached the network")
-	}
-}

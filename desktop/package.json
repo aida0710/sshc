@@ -7,7 +7,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --mac --linux"
+    "dist": "electron-builder --mac --linux",
+    "test": "node --test link.test.js"
   },
   "devDependencies": {
     "electron": "^43.0.0",

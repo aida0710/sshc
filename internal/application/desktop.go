@@ -4,18 +4,6 @@ import (
 	"sshc/internal/storage"
 )
 
-// KeepEngineRunning は、アプリを閉じたあともエンジンを残すかを読む。
-//
-// metadata が読めなければ止める側に倒す。**動かし続けるのは明示的な選択で
-// ある**——読めない設定を「続けろ」と解釈しない。
-func (s *Service) KeepEngineRunning() bool {
-	metadata, _, err := s.metadata.Load()
-	if err != nil {
-		return false
-	}
-	return metadata.KeepEngineRunning()
-}
-
 // SetKeepEngineRunning は、その選択を書き戻す。
 //
 // 他の設定と同じトランザクションマネージャを通す。**metadata を書く場所を

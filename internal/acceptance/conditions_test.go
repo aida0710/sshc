@@ -160,9 +160,10 @@ func completionConditions() []completionCondition {
 				{proofGoTest, "TestNoResponseCarriesASecretItIsNotEntitledTo"},
 			},
 			Manual: []proof{{proofManual, "M3. 実 ssh-agent"}},
-			Gap: "agent registration is exercised against a fake. That a real ssh-add " +
-				"accepts the passphrase on standard input, and that the passphrase " +
-				"reaches neither ps nor the environment, is manual test M3.",
+			Gap: "agent registration speaks the real protocol to an in-process keyring, " +
+				"so the wire format is proven here. What is not proven is that the " +
+				"user's own agent behaves the same way, and that no ssh-add process " +
+				"appears while it happens: that is manual test M3.",
 		},
 		{
 			Number:  7,
@@ -213,12 +214,13 @@ func completionConditions() []completionCondition {
 				{proofManual, "M1. 実リモートホストへの接続テスト"},
 				{proofManual, "M2. 実 `authorized_keys` への公開鍵登録"},
 			},
-			Gap: "端末を開くところまでは自動化された。埋め込みターミナルはローカル" +
-				"シェルを本物の PTY で起こすので、end-to-end はキーを打って出力が" +
-				"画面に出るところまでを見る。残っているのはリモートに触れる二つ" +
-				"——接続が成功すること、authorized_keys に行が現れること——で、" +
-				"それらは M1 と M2 である。end-to-end は ssh-keyscan と Register の" +
-				"手前で意図的に止まる。どちらもホストへ接触するからだ。",
+			Gap: "端末を開くところまでは自動化された。SSH はプロセス内で話すので、" +
+				"internal/sshclient は 127.0.0.1 に立てたサーバーと本物の握手を行い、" +
+				"認証・転送・ホスト鍵・リモート実行を端から端まで見る。end-to-end は" +
+				"ローカルシェルを本物の PTY で起こし、キーを打って出力が画面に出る" +
+				"ところまでを見る。残っているのは実リモートに触れる二つ——本物の" +
+				"サーバーが認証を通すこと、その authorized_keys に行が現れること" +
+				"——で、それらは M1 と M2 である。",
 		},
 		{
 			Number:  10,
@@ -248,13 +250,15 @@ func completionConditions() []completionCondition {
 				{proofGoTest, "TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard"},
 			},
 			Manual: []proof{{proofManual, "M1. 実リモートホストへの接続テスト"}},
-			Gap: "what is proven is that this application starts no process to read the " +
-				"configuration, and none to connect without a confirmation bound to the " +
-				"directives it displayed. What is NOT proven automatically is that a real " +
-				"OpenSSH, once started, honours the -o options used to disable LocalCommand " +
-				"and forwarding: every automated proof replaces the process with a recorder. " +
-				"That half is manual test M1. Note also that the alias guard is three layers " +
-				"deep, so removing any one layer alone leaves the route-level test green.",
+			Gap: "**このアプリケーションは接続のために外部プログラムを一つも起こさない。** " +
+				"だから「危険ディレクティブを実行してしまう」経路そのものが無い——" +
+				"ProxyCommand と Match exec は解決の時点で断り、LocalCommand も " +
+				"KnownHostsCommand もこのクライアントに機能として無い。残っているのは " +
+				"RemoteCommand で、あれは設定に書かれたコマンドを**リモートで**走らせる" +
+				"——利用者が書いたとおりのことであり、暗黙ではない。自動化が届かないのは、" +
+				"実リモートがそれをどう扱うかだけで、それが M1 である。alias の関門は" +
+				"三層あるので、どれか一層だけを外しても route の検査は緑のままである点にも" +
+				"注意すること。",
 		},
 		{
 			Number:  12,

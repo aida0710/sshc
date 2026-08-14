@@ -26,6 +26,10 @@ test:
 	go test -race ./...
 	npm test --prefix web
 	npm run typecheck --prefix web
+	@# 外殻の JS も検査する。**relink は利用者の ~/.local/bin に触る**ので、
+	@# 「普通のファイルには触らない」という規則は落とせない。node 標準の
+	@# テストランナーなので、依存は増えない。
+	npm test --prefix desktop
 
 fuzz:
 	@set -e; for target in $(FUZZ_TARGETS); do \
