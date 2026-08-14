@@ -22,8 +22,6 @@ func TestWhatCountsAsAConnectInvocation(t *testing.T) {
 		{[]string{"sshc", "open"}, "", false},
 		{[]string{"sshc", "list"}, "", false},
 		{[]string{"sshc", "connect"}, "", false},
-		// 常駐そのものを起こしたり止めたりする語。
-		{[]string{"sshc", "engine"}, "", false},
 		// 外殻がエンジンの様子を尋ねる語。
 		{[]string{"sshc", "status"}, "", false},
 		// 二語は alias ではない。このコマンドには存在しないものだ。

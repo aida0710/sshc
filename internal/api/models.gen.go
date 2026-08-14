@@ -311,11 +311,6 @@ type DedicatedKeyPassphraseUsage struct {
 	Key   string   `json:"key"`
 }
 
-// Desktop defines model for Desktop.
-type Desktop struct {
-	KeepRunning *bool `json:"keepRunning,omitempty"`
-}
-
 // Diagnostic defines model for Diagnostic.
 type Diagnostic struct {
 	Absolute *string `json:"absolute,omitempty"`
@@ -777,7 +772,6 @@ type KnownHostsScanResponse struct {
 
 // Metadata defines model for Metadata.
 type Metadata struct {
-	Desktop          *Desktop          `json:"desktop,omitempty"`
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
 	Groups           *[]GroupMetadata  `json:"groups,omitempty"`
 	GroupsFile       *string           `json:"groupsFile,omitempty"`
@@ -1400,9 +1394,6 @@ type DeleteKnownHostsJSONRequestBody = KnownHostsDeleteRequest
 
 // ScanKnownHostsJSONRequestBody defines body for ScanKnownHosts for application/json ContentType.
 type ScanKnownHostsJSONRequestBody = KnownHostsScanRequest
-
-// SetDesktopSettingsJSONRequestBody defines body for SetDesktopSettings for application/json ContentType.
-type SetDesktopSettingsJSONRequestBody = Desktop
 
 // SetTerminalSettingsJSONRequestBody defines body for SetTerminalSettings for application/json ContentType.
 type SetTerminalSettingsJSONRequestBody = TerminalSettings

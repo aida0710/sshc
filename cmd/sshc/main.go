@@ -86,9 +86,6 @@ func usage(out io.Writer) {
   sshc list            print every concrete Host alias, one per line
   sshc open            print a new way into the UI
   sshc status          print the engine's status as JSON, for the shell
-  sshc engine start    make sure the background engine is answering
-  sshc engine stop     ask the background engine to finish
-  sshc engine quit     finish it unless the setting says to keep it
   sshc help            print this
 
 flags:
@@ -101,24 +98,6 @@ still reachable with ssh itself, but not through this command.
 }
 
 func main() {
-	if arguments, ok := engineInvocation(os.Args); ok {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
-		}
-		executable, err := os.Executable()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
-		}
-		os.Exit(runEngineCommand(
-			context.Background(), arguments, home, app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, spawnEngine(executable),
-			os.Stdout, os.Stderr,
-		))
-	}
-
 	if arguments, ok := openInvocation(os.Args); ok {
 		home, err := os.UserHomeDir()
 		if err != nil {

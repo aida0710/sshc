@@ -3,7 +3,7 @@ import { failureCode } from "../api/client";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
-import { CheckboxField, Field, control, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
+import { Field, control, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
 import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import type { TerminalSessionsState } from "../terminal/sessions";
@@ -17,15 +17,12 @@ type SettingsPanelProps = {
 
 export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanelProps) {
   const t = useTranslate();
-  const [desktopError, setDesktopError] = useState("");
   const [currentMaster, setCurrentMaster] = useState("");
   const [nextMaster, setNextMaster] = useState("");
   const [confirmMaster, setConfirmMaster] = useState("");
   const [masterBusy, setMasterBusy] = useState(false);
   const [masterError, setMasterError] = useState("");
   const [changed, setChanged] = useState("");
-  const [keepRunning, setKeepRunning] = useState(false);
-  const [desktopBusy, setDesktopBusy] = useState(false);
   // 3 つとも文字列で持つ。**空は「設定されていない」であり、0 ではない。**
   // 数として持つと、空欄と 0 を区別する場所をもう一つ作ることになる。
   const [startDirectory, setStartDirectory] = useState("");
@@ -34,21 +31,6 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
   const [terminalBusy, setTerminalBusy] = useState(false);
   const [terminalError, setTerminalError] = useState("");
   const [terminalSaved, setTerminalSaved] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void api.desktopSettings()
-      .then((settings) => {
-        if (active) setKeepRunning(settings.keepRunning === true);
-      })
-      .catch(() => {
-        // 読めなければ止める側に倒す。**動かし続けるのは明示的な選択である。**
-        if (active) setKeepRunning(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [api]);
 
   useEffect(() => {
     let active = true;
@@ -113,18 +95,6 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
     }
   }
 
-  async function updateKeepRunning(next: boolean) {
-    setDesktopBusy(true);
-    try {
-      await api.setDesktopSettings(next);
-      setKeepRunning(next);
-    } catch {
-      setDesktopError(t("desktop.saveFailed"));
-    } finally {
-      setDesktopBusy(false);
-    }
-  }
-
   function clearMasterFields() {
     setCurrentMaster("");
     setNextMaster("");
@@ -161,19 +131,6 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("settings.heading")} description={t("settings.pageDescription")} />
-
-      {desktopError === "" ? null : <Notice tone="danger">{desktopError}</Notice>}
-
-      <section aria-label={t("desktop.heading")} className={sectionCard}>
-        <h3 className={sectionHeading}>{t("desktop.heading")}</h3>
-        <p className={hintText}>{t("desktop.note")}</p>
-        <CheckboxField
-          label={t("desktop.keepRunning")}
-          checked={keepRunning}
-          disabled={desktopBusy}
-          onChange={(next) => void updateKeepRunning(next)}
-        />
-      </section>
 
       {/*
         埋め込みターミナルの設定。**空欄は「設定されていない」であり、既定と

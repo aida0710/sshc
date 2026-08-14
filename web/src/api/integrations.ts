@@ -5,7 +5,6 @@ export type ConfigCheckResponse = components["schemas"]["ConfigCheckResponse"];
 export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
 export type ReachabilityResponse = components["schemas"]["ReachabilityResponse"];
 export type AuthenticationResponse = components["schemas"]["AuthenticationResponse"];
-export type Desktop = components["schemas"]["Desktop"];
 export type TerminalSettings = components["schemas"]["TerminalSettings"];
 export type TerminalForward = components["schemas"]["TerminalForward"];
 export type TerminalSession = components["schemas"]["TerminalSession"];
@@ -81,8 +80,6 @@ export type IntegrationsApi = {
   lockVault(): Promise<PasswordVaultStatus>;
   changeMasterPassword(current: string, next: string): Promise<ChangeMasterPasswordResult>;
   updateStatus(): Promise<UpdateStatus>;
-  // デスクトップの外殻の設定。アプリを閉じたあともエンジンを残すか。
-  desktopSettings(): Promise<Desktop>;
   // 開始位置は書かれた綴りのまま往復する。`~/work` は `~/work` のままで
   // あり、home の綴りに展開されたものが画面へ戻ることはない。
   //
@@ -91,7 +88,6 @@ export type IntegrationsApi = {
   // 取り残される。
   terminalSettings(): Promise<TerminalSettings>;
   setTerminalSettings(settings: TerminalSettings): Promise<void>;
-  setDesktopSettings(keepRunning: boolean): Promise<void>;
   passwordEligibility(alias: string): Promise<PasswordEligibility>;
   // Credential は名前を持つ秘密である。ホストはアカウントパスワードを参照し、
   // 鍵はパスフレーズを参照する。この二つの名前空間は決して
@@ -541,12 +537,6 @@ export const integrationsApi: IntegrationsApi = {
   async updateStatus() {
     return validateUpdate(await apiClient.read("/api/v1/update"));
   },
-  async desktopSettings() {
-    const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
-    if (metadata.desktop === undefined) return { keepRunning: false };
-    const desktop = asRecord(metadata.desktop);
-    return { keepRunning: desktop.keepRunning === true };
-  },
   async terminalSettings() {
     const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
     if (metadata.embeddedTerminal === undefined) return {};
@@ -568,13 +558,6 @@ export const integrationsApi: IntegrationsApi = {
       method: "PUT",
       headers: jsonHeaders,
       body: JSON.stringify(settings),
-    });
-  },
-  async setDesktopSettings(keepRunning) {
-    await apiClient.mutate("/api/v1/metadata/desktop", {
-      method: "PUT",
-      headers: jsonHeaders,
-      body: JSON.stringify({ keepRunning }),
     });
   },
   async changeMasterPassword(current, next) {
