@@ -221,11 +221,17 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	directory := ""
+	settings := application.TerminalSettings{}
 	if request.StartDirectory != nil {
-		directory = *request.StartDirectory
+		settings.StartDirectory = *request.StartDirectory
 	}
-	result, err := h.Service.SetTerminalStartDirectory(directory)
+	if request.MaxSessions != nil {
+		settings.MaxSessions = *request.MaxSessions
+	}
+	if request.ScrollbackBytes != nil {
+		settings.ScrollbackBytes = *request.ScrollbackBytes
+	}
+	result, err := h.Service.SetTerminalSettings(settings)
 	switch {
 	case errors.Is(err, platform.ErrDirectoryRelative), errors.Is(err, platform.ErrDirectoryUser):
 		return problem(c, http.StatusBadRequest, "start_directory_unusable")
@@ -233,6 +239,10 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "start_directory_missing")
 	case errors.Is(err, application.ErrStartDirectoryNotADirectory):
 		return problem(c, http.StatusBadRequest, "start_directory_not_a_directory")
+	// 範囲の外は書き込みで断る。**読み取りが既定へ戻すのとは対称ではない**
+	// ——これはこのアプリケーション自身の操作であり、断れば人が直せる。
+	case errors.Is(err, application.ErrMetadataTerminal):
+		return problem(c, http.StatusBadRequest, "terminal_limits_out_of_range")
 	case err != nil:
 		return serviceProblem(c, err)
 	}
