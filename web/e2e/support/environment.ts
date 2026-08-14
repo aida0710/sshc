@@ -107,7 +107,11 @@ export const test = base.extend<{ installation: Installation }>({
     await use(installation);
     child.kill("SIGTERM");
     await new Promise((done) => child.on("exit", done));
-    await rm(home, { recursive: true, force: true });
+    // **エンジンが終わっても、その子はまだ書いている。** ローカルシェルは
+    // 終了の途中で履歴を書き出すので、消しに行った瞬間にディレクトリが
+    // 空でないことがある（ENOTEMPTY）。少し待って数回やり直す——
+    // 掃除の競争でテストを落とさない。
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   },
 });
 

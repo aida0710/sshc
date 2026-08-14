@@ -74,7 +74,21 @@ desktop:
 	npm install --prefix desktop
 
 # desktop-run は、束を作らずにその場で外殻を開く。開発中の入口である。
-desktop-run: build desktop
+#
+# **焼き直しただけでは、焼き直したものは走らない。** 外殻は「既に居るなら
+# そこへ繋ぐ」ので、生きているエンジンがあればそれが画面を配り続ける——
+# 直したはずのものが直っていないように見える。実際そう見えた。
+#
+# だから install を通す。**ログイン項目が起こし直すのは `~/.local/bin/sshc` で
+# あって、この checkout の bin/sshc ではない。** そこが古いままだと、いくら
+# 止めても launchd が古い方を連れ戻す——1 秒で戻ってくるのを確かめてある。
+# install はそこを入れ替えたうえでログインサービスを張り直す。
+#
+# そのうえで、まだ生きている古いエンジンを止める。**止めるのはこの開発用の
+# 入口だけである**——製品側の attach は変えない。あちらでは、繋がっている
+# 端末を勝手に落とさないことの方が大事である。
+desktop-run: install desktop
+	-@bin/sshc engine stop
 	npm start --prefix desktop
 
 # desktop-dist は配布物を作る。**1 台の macOS から macOS と Linux の両方を
@@ -223,6 +237,10 @@ integration-down:
 
 # 最初の PUT より前にバケットが存在していなければならない。クライアントに意図的に
 # CreateBucket がないのは、アプリケーションもバケットを作らないからである。
+#
+# sshd の側が確かめるのは、**自分で話す SSH が本物の OpenSSH に通じること**で
+# ある。単体テストの相手は Go で書かれたサーバー——実装のもう半分——なので、
+# 両方が同じ勘違いをしていれば緑になる。ここだけがその輪の外にある。
 integration: build
 	SSHC_TEST_S3_ENDPOINT=http://127.0.0.1:$(S3_PORT) \
 	SSHC_TEST_S3_KEY=$(S3_KEY) \
@@ -235,10 +253,9 @@ integration: build
 	SSHC_TEST_SSH_KEY_PASSPHRASE="$(SSH_KEY_PASSPHRASE)" \
 	go test ./internal/objectstore ./internal/remotesync ./internal/sshintegration -count=1 -v
 
-# バイナリはひとつの安定したパスへ置く。これは通常より重要な意味を持つ。
-# SSH_ASKPASS と Terminal の起動は、どちらも実行時にこのバイナリの絶対パスを
-# その場で埋め込むので、別のチェックアウトでビルドし直したり、リポジトリを移動
-# したりすると、保存済み鍵パスフレーズでの接続が黙って壊れる。
+# バイナリはひとつの安定したパスへ置く。デスクトップの外殻はここへ symlink を
+# 張り、CLI と画面が同じ実体を走らせることを保証する。別の場所でビルドし直すと
+# 版がずれ、どちらが走っているのか分からなくなる。
 #
 # ~/.local/bin は sudo もシステムディレクトリの所有権も必要としない。PATH に
 # 入っていない場合は、誰も見ない場所へインストールするのではなく、その旨を告げる。
