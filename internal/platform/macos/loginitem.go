@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"sshc/internal/platform"
 )
@@ -82,7 +83,40 @@ func (l LoginItem) Enable(ctx context.Context, program string) error {
 	if err := l.bootout(ctx); err != nil {
 		return err
 	}
-	return l.launchctl(ctx, "bootstrap", l.domain(), path)
+	return l.bootstrap(ctx, path)
+}
+
+// bootstrapAttempts は、取り込みを試す回数である。
+//
+// **bootout は非同期である。** 0 で戻ってきても、走っていたプロセスがまだ
+// 片付いていないことがあり、そこへ bootstrap すると launchd は断る——
+// エンジンが動いている状態で `make install` を走らせると、実際にそうなった。
+// 待つ相手はプロセスの終了であり、それは秒未満で済む。
+const bootstrapAttempts = 10
+
+// bootstrapDelay は、試すあいだの間隔である。
+const bootstrapDelay = 200 * time.Millisecond
+
+// bootstrap は、片付くのを待ちながら launchd に取り込ませる。
+//
+// **最後の状態をそのまま報告する。** 諦めた理由が「10 回とも断られた」で
+// あることは、呼び出し側にとって「断られた」と同じである。
+func (l LoginItem) bootstrap(ctx context.Context, path string) error {
+	var last error
+	for attempt := 0; attempt < bootstrapAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(bootstrapDelay):
+			}
+		}
+		last = l.launchctl(ctx, "bootstrap", l.domain(), path)
+		if last == nil {
+			return nil
+		}
+	}
+	return last
 }
 
 // Disable はエージェントを止め、ファイルを取り除く。
