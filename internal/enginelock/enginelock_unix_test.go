@@ -3,6 +3,7 @@
 package enginelock
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -46,5 +47,34 @@ func TestAcquireTightensLooseUnixPrivateState(t *testing.T) {
 		if got := info.Mode().Perm(); got != want {
 			t.Fatalf("%s mode = %v, want %v", filepath.Base(path), got, want)
 		}
+	}
+}
+
+// リンク越しに締め直すと、誰が差し替えたか分からない先の権限を書き換えることに
+// なる。ロックの置き場所がディレクトリそのものでないなら、そこには置かない。
+func TestAcquireRefusesAStateDirectoryThatIsASymlink(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "state")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	release, err := Acquire(filepath.Join(link, "engine.lock"))
+	if !errors.Is(err, ErrUnsafeStateDirectory) {
+		t.Fatalf("Acquire through a symlinked state directory = %v, want ErrUnsafeStateDirectory", err)
+	}
+	if release != nil {
+		t.Fatal("a refused Acquire returned a release function")
+	}
+	info, statErr := os.Lstat(target)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Fatalf("the symlink target was tightened to %v", info.Mode().Perm())
 	}
 }
