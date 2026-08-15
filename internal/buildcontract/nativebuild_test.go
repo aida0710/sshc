@@ -65,6 +65,92 @@ func TestNativeBuildRejectsInvalidExplicitInputs(t *testing.T) {
 	}
 }
 
+func TestNativeEnvironmentValuesUseExactCanonicalSpelling(t *testing.T) {
+	for _, key := range []string{
+		nativeVersionEnvironment,
+		nativeGOOSEnvironment,
+		nativeGOARCHEnvironment,
+		nativeCGOEnvironment,
+		nativeOutputEnvironment,
+		nativeMacBundlesEnvironment,
+		nativeLinuxBundlesEnvironment,
+		nativeWindowsBundlesEnvironment,
+		nativeReleaseTargetsEnvironment,
+		nativeReleaseArchesEnvironment,
+		nativeReleaseDirEnvironment,
+	} {
+		t.Run(key, func(t *testing.T) {
+			environment := []string{
+				strings.ToLower(key) + "=inherited-alias",
+				key + "=canonical-public-value",
+			}
+			if got := environmentValue(environment, key); got != "canonical-public-value" {
+				t.Errorf("environmentValue(%q) = %q, want exact canonical value", key, got)
+			}
+			if got := environmentValue(environment[:1], key); got != "" {
+				t.Errorf("environmentValue(%q) accepted non-canonical alias %q", key, got)
+			}
+		})
+	}
+}
+
+func TestNativeBuildRejectsDuplicateCanonicalEnvironmentBeforeActions(t *testing.T) {
+	executor := &recordingNativeExecutor{}
+	mkdirCalls := 0
+	err := runNativeBuild([]string{"build"}, nativeBuildDeps{
+		hostOS:   "linux",
+		hostArch: "amd64",
+		hostCGO:  "0",
+		environment: []string{
+			nativeVersionEnvironment + "=v1.2.3",
+			nativeGOOSEnvironment + "=linux",
+			nativeGOOSEnvironment + "=windows",
+			nativeGOARCHEnvironment + "=amd64",
+			nativeCGOEnvironment + "=0",
+			nativeOutputEnvironment + "=dist/sshc-linux-amd64",
+		},
+		executor: executor,
+		mkdirAll: func(string, os.FileMode) error {
+			mkdirCalls++
+			return nil
+		},
+	}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "duplicate native build environment") {
+		t.Fatalf("runNativeBuild() error = %v, want duplicate native environment rejection", err)
+	}
+	if len(executor.commands) != 0 || mkdirCalls != 0 {
+		t.Fatalf("duplicate native environment executed commands=%d mkdir=%d", len(executor.commands), mkdirCalls)
+	}
+}
+
+func TestNativeBuildRejectsAliasWithoutCanonicalEnvironmentBeforeActions(t *testing.T) {
+	executor := &recordingNativeExecutor{}
+	mkdirCalls := 0
+	err := runNativeBuild([]string{"build"}, nativeBuildDeps{
+		hostOS:   "linux",
+		hostArch: "amd64",
+		hostCGO:  "0",
+		environment: []string{
+			nativeVersionEnvironment + "=v1.2.3",
+			strings.ToLower(nativeGOOSEnvironment) + "=linux",
+			nativeGOARCHEnvironment + "=amd64",
+			nativeCGOEnvironment + "=0",
+			nativeOutputEnvironment + "=dist/sshc-linux-amd64",
+		},
+		executor: executor,
+		mkdirAll: func(string, os.FileMode) error {
+			mkdirCalls++
+			return nil
+		},
+	}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "non-canonical native build environment") {
+		t.Fatalf("runNativeBuild() error = %v, want non-canonical native environment rejection", err)
+	}
+	if len(executor.commands) != 0 || mkdirCalls != 0 {
+		t.Fatalf("non-canonical native environment executed commands=%d mkdir=%d", len(executor.commands), mkdirCalls)
+	}
+}
+
 func TestNativeBuildPreservesOutputPathWithSpacesInArgv(t *testing.T) {
 	executor := &recordingNativeExecutor{}
 	output := filepath.Join(t.TempDir(), "artifact output", "sshc-windows-amd64.exe")
