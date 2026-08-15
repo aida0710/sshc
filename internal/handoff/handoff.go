@@ -13,8 +13,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-
-	"sshc/internal/platform/windowsacl"
 )
 
 // FileName は、アプリケーションの状態ディレクトリ内のハンドオフファイル。
@@ -48,10 +46,6 @@ var (
 	ErrProtocolVersion = errors.New("unsupported handoff protocol version")
 )
 
-// renameFile は、公開直前の置換だけをテストで失敗させる継ぎ目である。失敗時にも
-// 一時ファイルを残さないことは、実ファイル操作を通して検査する。
-var renameFile = os.Rename
-
 // Handoff は、この実行がどこで待ち受けているか、誰が所有しているか、そして
 // 呼び出し側がファイルを読んだことを何が証明するかを保持する。
 type Handoff struct {
@@ -82,6 +76,19 @@ func Mint(random io.Reader) (string, error) {
 // 見られる。したがって公開直前まで同じディレクトリに隠し、同期してから名前だけを
 // 差し替える。
 func Write(directory string, document Handoff) error {
+	return write(directory, document, defaultWriteOperations())
+}
+
+type writeOperations struct {
+	ensureDirectory func(string) error
+	createTemp      func(string, string) (*os.File, error)
+	replace         func(string, string) error
+	syncDirectory   func(string) error
+}
+
+// write takes an operations value so failure tests can replace one operation
+// without racing other package tests through mutable global state.
+func write(directory string, document Handoff, operations writeOperations) error {
 	if err := validate(document); err != nil {
 		return err
 	}
@@ -89,12 +96,7 @@ func Write(directory string, document Handoff) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return err
-	}
-	// Windows は作成時の継承 ACL をそのまま使うと lock 作成より先に秘密の置き場を
-	// 読ませ得るため、lock file を作る前に state directory を保護する。
-	if err := windowsacl.RestrictDirectory(directory); err != nil {
+	if err := operations.ensureDirectory(directory); err != nil {
 		return err
 	}
 	release, err := lockMutation(directory)
@@ -102,23 +104,12 @@ func Write(directory string, document Handoff) error {
 		return err
 	}
 	defer release()
-	// 既存ディレクトリの umask や古い作成条件を引き継ぐと、秘密を含む文書だけを
-	// 厳しくしても一覧できてしまうため、transaction の中で所有者専用へそろえる。
-	if err := os.Chmod(directory, 0o700); err != nil {
-		return err
-	}
-
-	temporary, err := os.CreateTemp(directory, "."+FileName+".tmp-*")
+	temporary, err := operations.createTemp(directory, "."+FileName+".tmp-")
 	if err != nil {
 		return err
 	}
 	temporaryPath := temporary.Name()
 	defer func() { _ = os.Remove(temporaryPath) }()
-	// Secret を書く前に temp を保護する。ここで失敗した temp は空のまま閉じて消す。
-	if err := windowsacl.RestrictFile(temporaryPath); err != nil {
-		_ = temporary.Close()
-		return err
-	}
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
 		return err
@@ -135,23 +126,10 @@ func Write(directory string, document Handoff) error {
 		return err
 	}
 	finalPath := filepath.Join(directory, FileName)
-	if err := renameFile(temporaryPath, finalPath); err != nil {
+	if err := operations.replace(temporaryPath, finalPath); err != nil {
 		return err
 	}
-	// MoveFileEx は temp の DACL を維持するが、公開後も state の不変条件を明示的に
-	// 確認し直すことで、既存ファイル置換でも同じ契約を保つ。
-	if err := windowsacl.RestrictFile(finalPath); err != nil {
-		return err
-	}
-
-	// Rename だけでは停電直後にディレクトリエントリが永続化されない環境がある。
-	// app が起動済みだと知らせた文書を失わないため、親ディレクトリも同期する。
-	directoryFile, err := os.Open(directory)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = directoryFile.Close() }()
-	return directoryFile.Sync()
+	return operations.syncDirectory(directory)
 }
 
 // Read は、動作中のアプリケーションが残した検証済みの文書を返す。

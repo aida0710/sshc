@@ -3,7 +3,6 @@
 package handoff
 
 import (
-	"os"
 	"path/filepath"
 
 	"golang.org/x/sys/windows"
@@ -14,12 +13,8 @@ import (
 // lockMutation は Windows でも同じファイル範囲を排他的に握る。LockFileEx は
 // blocking で待つため、別 process の Write と Remove の比較・削除にも隙間がない。
 func lockMutation(directory string) (func(), error) {
-	file, err := os.OpenFile(filepath.Join(directory, mutationLockName), os.O_CREATE|os.O_RDWR, 0o600)
+	file, err := windowsacl.OpenOrCreateFile(filepath.Join(directory, mutationLockName))
 	if err != nil {
-		return nil, err
-	}
-	if err := windowsacl.RestrictFile(file.Name()); err != nil {
-		_ = file.Close()
 		return nil, err
 	}
 	if err := file.Chmod(0o600); err != nil {

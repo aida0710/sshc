@@ -4,6 +4,7 @@ package storage
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"syscall"
 )
@@ -16,6 +17,17 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	return file, err
 }
 
+func makePrivateDirectories(path string, permission fs.FileMode) error {
+	if err := os.MkdirAll(path, permission); err != nil {
+		return err
+	}
+	return os.Chmod(path, permission)
+}
+
+func createPrivateTemp(directory, prefix string) (*os.File, error) {
+	return os.CreateTemp(directory, prefix)
+}
+
 func replaceFile(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
 
 func syncDirectory(path string) error {
@@ -25,12 +37,4 @@ func syncDirectory(path string) error {
 	}
 	defer directory.Close()
 	return directory.Sync()
-}
-
-func restrictPrivatePath(path string, directory bool) error {
-	permission := FilePermission
-	if directory {
-		permission = DirectoryPermission
-	}
-	return os.Chmod(path, permission)
 }

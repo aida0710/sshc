@@ -52,34 +52,31 @@ func TestOSFileSystemTightensExistingWindowsPrivateState(t *testing.T) {
 	}
 }
 
-func TestOSFileSystemWriteTempRemovesEmptyFileWhenDACLRestrictionFails(t *testing.T) {
+func TestWriteTempStopsBeforeContentsAndCleansWhenPrivateCreationFails(t *testing.T) {
 	directory := t.TempDir()
-	want := errors.New("DACL restriction failed")
-	original := restrictPrivatePathImpl
-	restrictPrivatePathImpl = func(path string, directory bool) error {
-		if directory {
-			return original(path, directory)
-		}
-		contents, err := os.ReadFile(path)
+	want := errors.New("private creation failed")
+	create := func(directory, prefix string) (*os.File, error) {
+		file, err := os.CreateTemp(directory, prefix)
 		if err != nil {
-			t.Fatalf("read temp before forced DACL failure: %v", err)
+			return nil, err
 		}
-		if len(contents) != 0 {
-			t.Fatalf("temp contained %q before DACL failure", contents)
+		if info, err := file.Stat(); err != nil {
+			t.Fatal(err)
+		} else if info.Size() != 0 {
+			t.Fatalf("candidate size before failure = %d, want 0", info.Size())
 		}
-		return want
+		return file, want
 	}
-	t.Cleanup(func() { restrictPrivatePathImpl = original })
 
-	if _, err := (OSFileSystem{}).WriteTemp(directory, ".sshc-", FilePermission, []byte("secret")); !errors.Is(err, want) {
-		t.Fatalf("WriteTemp error = %v, want %v", err, want)
+	if _, err := writeTemp(directory, ".sshc-", FilePermission, []byte("must not be written"), create); !errors.Is(err, want) {
+		t.Fatalf("writeTemp = %v, want %v", err, want)
 	}
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) != 0 {
-		t.Fatalf("DACL failure left temporary entries: %#v", entries)
+		t.Fatalf("failed private creation left entries: %#v", entries)
 	}
 }
 

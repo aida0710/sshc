@@ -82,30 +82,36 @@ func (OSFileSystem) ReadDir(path string) ([]fs.DirEntry, error) { return os.Read
 func (OSFileSystem) Glob(pattern string) ([]string, error) { return filepath.Glob(pattern) }
 
 func (OSFileSystem) MkdirAll(path string, permission fs.FileMode) error {
-	if err := os.MkdirAll(path, permission); err != nil {
-		return err
-	}
-	return restrictPrivatePath(path, true)
+	return makePrivateDirectories(path, permission)
 }
 
 func (OSFileSystem) WriteTemp(directory, prefix string, permission fs.FileMode, contents []byte) (string, error) {
-	file, err := os.CreateTemp(directory, prefix)
+	return writeTemp(directory, prefix, permission, contents, createPrivateTemp)
+}
+
+type privateTempCreator func(directory, prefix string) (*os.File, error)
+
+func writeTemp(directory, prefix string, permission fs.FileMode, contents []byte, create privateTempCreator) (string, error) {
+	file, err := create(directory, prefix)
 	if err != nil {
+		if file != nil {
+			path := file.Name()
+			_ = file.Close()
+			_ = os.Remove(path)
+		}
 		return "", err
 	}
+	if file == nil {
+		return "", os.ErrInvalid
+	}
 	path := file.Name()
-	if err := restrictPrivatePath(path, false); err != nil {
+	if err := writeAndFlush(file, permission, contents); err != nil {
 		_ = file.Close()
 		_ = os.Remove(path)
 		return "", err
 	}
-	if err := writeAndFlush(file, permission, contents); err != nil {
-		file.Close()
-		os.Remove(path)
-		return "", err
-	}
 	if err := file.Close(); err != nil {
-		os.Remove(path)
+		_ = os.Remove(path)
 		return "", err
 	}
 	return path, nil

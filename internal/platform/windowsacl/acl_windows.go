@@ -1,66 +1,475 @@
 //go:build windows
 
-// Package windowsacl は、秘密を置く state に Windows のアクセス制御を適用する。
+// Package windowsacl applies the Windows ownership and DACL contract for
+// sshc's private state.
 package windowsacl
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-const fullAccess = windows.ACCESS_MASK(0x001f01ff)
+const (
+	fullAccess          = windows.ACCESS_MASK(0x001f01ff)
+	tempRandomByteCount = 16
+	tempCollisionLimit  = 128
+)
 
-// RestrictFile は、親から継承した緩い ACL を秘密ファイルへ残さない。
-func RestrictFile(path string) error { return restrict(path) }
+var (
+	ErrUnexpectedOwner = errors.New("private Windows object has an unexpected owner")
+	ErrUnexpectedType  = errors.New("private Windows object has an unexpected type")
+	ErrReparsePoint    = errors.New("private Windows object is a reparse point")
+	ErrInvalidACL      = errors.New("private Windows object does not have the required ACL")
+)
 
-// RestrictDirectory は、子の作成前に state directory の継承 ACL を止める。
-func RestrictDirectory(path string) error { return restrict(path) }
+// CreateTemp creates a new empty file whose owner and protected DACL are
+// already effective when CreateFile returns. No secret bytes exist before this
+// boundary succeeds.
+func CreateTemp(directory, prefix string) (*os.File, error) {
+	return createTempWith(directory, prefix, rand.Reader, createPrivateFile)
+}
 
-func restrict(path string) error {
+func createTempWith(directory, prefix string, random io.Reader, create func(string) (*os.File, bool, error)) (*os.File, error) {
+	if prefix != filepath.Base(prefix) || strings.ContainsRune(prefix, os.PathSeparator) {
+		return nil, os.ErrInvalid
+	}
+	for attempt := 0; attempt < tempCollisionLimit; attempt++ {
+		randomBytes := make([]byte, tempRandomByteCount)
+		if _, err := io.ReadFull(random, randomBytes); err != nil {
+			return nil, err
+		}
+		path := filepath.Join(directory, prefix+hex.EncodeToString(randomBytes))
+		file, created, err := create(path)
+		for index := range randomBytes {
+			randomBytes[index] = 0
+		}
+		if err == nil {
+			return file, nil
+		}
+		if created {
+			if cleanupErr := discardCreatedFile(file); cleanupErr != nil {
+				return nil, errors.Join(err, fmt.Errorf("remove failed private Windows temp: %w", cleanupErr))
+			}
+		}
+		if errors.Is(err, windows.ERROR_FILE_EXISTS) || errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+			continue
+		}
+		return nil, err
+	}
+	return nil, fmt.Errorf("create private Windows temp: collision limit exceeded")
+}
+
+// OpenOrCreateFile creates a persistent empty private file atomically or opens
+// an existing current-user-owned regular file and tightens it through the same
+// handle returned to the caller.
+func OpenOrCreateFile(path string) (*os.File, error) {
+	file, created, err := createPrivateFile(path)
+	if err == nil {
+		return file, nil
+	}
+	if created {
+		cleanupErr := discardCreatedFile(file)
+		return nil, errors.Join(err, cleanupErr)
+	}
+	if !errors.Is(err, windows.ERROR_FILE_EXISTS) && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+		return nil, err
+	}
+	file, err = openPrivateFileForUse(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := restrictFileHandle(file); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+// EnsureDirectory creates every missing component with the private descriptor.
+// Existing parents are left untouched; the requested final directory is opened
+// once, checked for current-user ownership/type/reparse state, and tightened
+// through that handle.
+func EnsureDirectory(path string) error {
+	if err := validatePrivateDirectoryPath(path); err != nil {
+		return err
+	}
+	cleaned := filepath.Clean(path)
+	if err := ensureParents(cleaned); err != nil {
+		return err
+	}
+	err := createPrivateDirectory(cleaned)
+	if err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) && !errors.Is(err, windows.ERROR_FILE_EXISTS) {
+		return err
+	}
+	return RestrictDirectory(cleaned)
+}
+
+func validatePrivateDirectoryPath(path string) error {
+	if path == "" || !filepath.IsAbs(path) {
+		return os.ErrInvalid
+	}
+	cleaned := filepath.Clean(path)
+	volume := filepath.VolumeName(cleaned)
+	if volume == "" {
+		return os.ErrInvalid
+	}
+	root := volume + string(os.PathSeparator)
+	if strings.EqualFold(cleaned, filepath.Clean(root)) {
+		return os.ErrInvalid
+	}
+	return nil
+}
+
+func ensureParents(path string) error {
+	parent := filepath.Dir(path)
+	if parent == path {
+		return nil
+	}
+	info, err := os.Lstat(parent)
+	switch {
+	case err == nil:
+		if info.Mode()&fs.ModeSymlink != 0 {
+			return ErrReparsePoint
+		}
+		if !info.IsDir() {
+			return ErrUnexpectedType
+		}
+		return nil
+	case !errors.Is(err, fs.ErrNotExist):
+		return err
+	}
+	if err := ensureParents(parent); err != nil {
+		return err
+	}
+	if err := createPrivateDirectory(parent); err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) && !errors.Is(err, windows.ERROR_FILE_EXISTS) {
+		return err
+	}
+	return RestrictDirectory(parent)
+}
+
+// RestrictFile opens the final path without following a final reparse point and
+// applies the policy through that one handle.
+func RestrictFile(path string) error {
+	file, err := openObject(path, true, false)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return restrictFileHandle(file)
+}
+
+// RestrictDirectory is the directory counterpart of RestrictFile.
+func RestrictDirectory(path string) error {
+	if err := validatePrivateDirectoryPath(path); err != nil {
+		return err
+	}
+	file, err := openObject(path, true, true)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return restrictDirectoryHandle(file)
+}
+
+func restrictFileHandle(file *os.File) error {
+	return restrictHandle(file, false)
+}
+
+func restrictDirectoryHandle(file *os.File) error {
+	return restrictHandle(file, true)
+}
+
+func restrictHandle(file *os.File, directory bool) error {
+	if file == nil {
+		return os.ErrInvalid
+	}
+	handle := windows.Handle(file.Fd())
+	if err := validateHandleType(handle, directory); err != nil {
+		return err
+	}
 	userSID, err := currentUserSID()
 	if err != nil {
 		return err
 	}
-	userSIDText := userSID.String()
-	if userSIDText == "" {
-		return windows.ERROR_INVALID_SID
-	}
-	descriptor, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;" + userSIDText + ")(A;;FA;;;SY)(A;;FA;;;BA)")
+	descriptor, err := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		return err
 	}
-	dacl, _, err := descriptor.DACL()
+	if descriptor == nil {
+		return ErrInvalidACL
+	}
+	owner, _, err := descriptor.Owner()
 	if err != nil {
 		return err
 	}
-	if dacl == nil {
-		return windows.ERROR_INVALID_ACL
+	if owner == nil || !owner.Equals(userSID) {
+		return ErrUnexpectedOwner
 	}
-	err = windows.SetNamedSecurityInfo(
-		path,
+
+	privateDescriptor, err := privateSecurityDescriptor(userSID)
+	if err != nil {
+		return err
+	}
+	dacl, _, err := privateDescriptor.DACL()
+	if err != nil || dacl == nil {
+		if err != nil {
+			return err
+		}
+		return ErrInvalidACL
+	}
+	if err := windows.SetSecurityInfo(
+		handle,
 		windows.SE_FILE_OBJECT,
 		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
 		nil,
 		nil,
 		dacl,
 		nil,
-	)
+	); err != nil {
+		return err
+	}
+	runtime.KeepAlive(privateDescriptor)
+
+	restricted, err := isHandleRestricted(handle, directory, userSID)
+	runtime.KeepAlive(file)
 	runtime.KeepAlive(descriptor)
 	runtime.KeepAlive(userSID)
-	return err
+	if err != nil {
+		return err
+	}
+	if !restricted {
+		return ErrInvalidACL
+	}
+	return nil
 }
 
-// IsRestrictedToCurrentUser は、mode や過去の Restrict 呼出しを信頼せず、DACL の
-// 構造そのものから秘密を読む許可が 3 主体だけかを検証する。
+// IsRestrictedToCurrentUser opens and inspects one concrete non-reparse file or
+// directory. It never trusts a prior Restrict call or POSIX mode bits.
 func IsRestrictedToCurrentUser(path string) (bool, error) {
-	descriptor, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	file, err := openObject(path, false, false)
 	if err != nil {
 		return false, err
 	}
-	defer runtime.KeepAlive(descriptor)
+	defer file.Close()
+	handle := windows.Handle(file.Fd())
+	if err := validateHandleTypeAny(handle); err != nil {
+		return false, err
+	}
+	userSID, err := currentUserSID()
+	if err != nil {
+		return false, err
+	}
+	info := windows.ByHandleFileInformation{}
+	if err := windows.GetFileInformationByHandle(handle, &info); err != nil {
+		return false, err
+	}
+	directory := info.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY != 0
+	return isHandleRestricted(handle, directory, userSID)
+}
 
+func createPrivateFile(path string) (*os.File, bool, error) {
+	descriptor, userSID, err := newPrivateSecurityDescriptor()
+	if err != nil {
+		return nil, false, err
+	}
+	pathUTF16, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, false, err
+	}
+	attributes := &windows.SecurityAttributes{
+		Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
+		SecurityDescriptor: descriptor,
+	}
+	handle, err := windows.CreateFile(
+		pathUTF16,
+		windows.GENERIC_READ|windows.GENERIC_WRITE|windows.READ_CONTROL|windows.WRITE_DAC|windows.DELETE|windows.FILE_READ_ATTRIBUTES,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		attributes,
+		windows.CREATE_NEW,
+		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_OPEN_REPARSE_POINT,
+		0,
+	)
+	runtime.KeepAlive(descriptor)
+	runtime.KeepAlive(userSID)
+	if err != nil {
+		return nil, false, err
+	}
+	file := os.NewFile(uintptr(handle), path)
+	if file == nil {
+		cleanupErr := errors.Join(markFileForDeletion(handle), windows.CloseHandle(handle))
+		return nil, false, errors.Join(os.ErrInvalid, cleanupErr)
+	}
+	restricted, err := isHandleRestricted(handle, false, userSID)
+	if err == nil && !restricted {
+		err = ErrInvalidACL
+	}
+	if err != nil {
+		return file, true, err
+	}
+	return file, true, nil
+}
+
+type fileDispositionInfo struct {
+	DeleteFile bool
+}
+
+func markFileForDeletion(handle windows.Handle) error {
+	information := fileDispositionInfo{DeleteFile: true}
+	return windows.SetFileInformationByHandle(
+		handle,
+		windows.FileDispositionInfo,
+		(*byte)(unsafe.Pointer(&information)),
+		uint32(unsafe.Sizeof(information)),
+	)
+}
+
+// discardCreatedFile operates on the handle returned by CREATE_NEW. It never
+// removes a pathname that may have been replaced with an unrelated object.
+func discardCreatedFile(file *os.File) error {
+	if file == nil {
+		return nil
+	}
+	deleteErr := markFileForDeletion(windows.Handle(file.Fd()))
+	closeErr := file.Close()
+	return errors.Join(deleteErr, closeErr)
+}
+
+func createPrivateDirectory(path string) error {
+	descriptor, _, err := newPrivateSecurityDescriptor()
+	if err != nil {
+		return err
+	}
+	pathUTF16, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	attributes := &windows.SecurityAttributes{
+		Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
+		SecurityDescriptor: descriptor,
+	}
+	err = windows.CreateDirectory(pathUTF16, attributes)
+	runtime.KeepAlive(descriptor)
+	return err
+}
+
+func openObject(path string, writable, directory bool) (*os.File, error) {
+	access := uint32(windows.READ_CONTROL | windows.FILE_READ_ATTRIBUTES)
+	if writable {
+		access |= windows.WRITE_DAC
+	}
+	return openObjectWithAccess(path, access, writable, directory)
+}
+
+func openPrivateFileForUse(path string) (*os.File, error) {
+	access := uint32(
+		windows.GENERIC_READ |
+			windows.GENERIC_WRITE |
+			windows.READ_CONTROL |
+			windows.WRITE_DAC |
+			windows.DELETE |
+			windows.FILE_READ_ATTRIBUTES,
+	)
+	return openObjectWithAccess(path, access, true, false)
+}
+
+func openObjectWithAccess(path string, access uint32, writable, directory bool) (*os.File, error) {
+	pathUTF16, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, err
+	}
+	flags := uint32(windows.FILE_FLAG_OPEN_REPARSE_POINT | windows.FILE_FLAG_BACKUP_SEMANTICS)
+	handle, err := windows.CreateFile(
+		pathUTF16,
+		access,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil,
+		windows.OPEN_EXISTING,
+		flags,
+		0,
+	)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(handle), path)
+	if file == nil {
+		_ = windows.CloseHandle(handle)
+		return nil, os.ErrInvalid
+	}
+	if writable {
+		if err := validateHandleType(handle, directory); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+	} else if err := validateHandleTypeAny(handle); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func validateHandleType(handle windows.Handle, directory bool) error {
+	info := windows.ByHandleFileInformation{}
+	if err := windows.GetFileInformationByHandle(handle, &info); err != nil {
+		return err
+	}
+	if info.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+		return ErrReparsePoint
+	}
+	isDirectory := info.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY != 0
+	if isDirectory != directory {
+		return ErrUnexpectedType
+	}
+	return nil
+}
+
+func validateHandleTypeAny(handle windows.Handle) error {
+	info := windows.ByHandleFileInformation{}
+	if err := windows.GetFileInformationByHandle(handle, &info); err != nil {
+		return err
+	}
+	if info.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+		return ErrReparsePoint
+	}
+	return nil
+}
+
+func isHandleRestricted(handle windows.Handle, directory bool, userSID *windows.SID) (bool, error) {
+	if err := validateHandleType(handle, directory); err != nil {
+		return false, err
+	}
+	descriptor, err := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return false, err
+	}
+	if descriptor == nil {
+		return false, nil
+	}
+	defer runtime.KeepAlive(descriptor)
+	return isDescriptorRestricted(descriptor, userSID)
+}
+
+func isDescriptorRestricted(descriptor *windows.SECURITY_DESCRIPTOR, userSID *windows.SID) (bool, error) {
+	if descriptor == nil || userSID == nil {
+		return false, nil
+	}
+	owner, _, err := descriptor.Owner()
+	if err != nil {
+		return false, err
+	}
+	if owner == nil || !owner.Equals(userSID) {
+		return false, nil
+	}
 	control, _, err := descriptor.Control()
 	if err != nil {
 		return false, err
@@ -76,10 +485,6 @@ func IsRestrictedToCurrentUser(path string) (bool, error) {
 		return false, nil
 	}
 
-	userSID, err := currentUserSID()
-	if err != nil {
-		return false, err
-	}
 	systemSID, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
 	if err != nil {
 		return false, err
@@ -90,7 +495,6 @@ func IsRestrictedToCurrentUser(path string) (bool, error) {
 	}
 	expected := []*windows.SID{userSID, systemSID, administratorsSID}
 	seen := make([]bool, len(expected))
-
 	for index := uint32(0); index < uint32(dacl.AceCount); index++ {
 		var ace *windows.ACCESS_ALLOWED_ACE
 		if err := windows.GetAce(dacl, index, &ace); err != nil {
@@ -121,6 +525,26 @@ func IsRestrictedToCurrentUser(path string) (bool, error) {
 	runtime.KeepAlive(systemSID)
 	runtime.KeepAlive(administratorsSID)
 	return true, nil
+}
+
+func newPrivateSecurityDescriptor() (*windows.SECURITY_DESCRIPTOR, *windows.SID, error) {
+	userSID, err := currentUserSID()
+	if err != nil {
+		return nil, nil, err
+	}
+	descriptor, err := privateSecurityDescriptor(userSID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return descriptor, userSID, nil
+}
+
+func privateSecurityDescriptor(userSID *windows.SID) (*windows.SECURITY_DESCRIPTOR, error) {
+	userSIDText := userSID.String()
+	if userSIDText == "" {
+		return nil, windows.ERROR_INVALID_SID
+	}
+	return windows.SecurityDescriptorFromString("O:" + userSIDText + "D:P(A;;FA;;;" + userSIDText + ")(A;;FA;;;SY)(A;;FA;;;BA)")
 }
 
 func currentUserSID() (*windows.SID, error) {
