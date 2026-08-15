@@ -18,6 +18,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/diagnostics"
+	"sshc/internal/handoff"
 	"sshc/internal/knownhosts"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
@@ -46,9 +47,12 @@ type Options struct {
 	Sessions *session.Manager
 	UI       fs.FS
 	Version  string
-	Logger   *slog.Logger
-	Config   *application.Service
-	Keys     KeyService
+	Owner    handoff.Owner
+	// ProtocolVersion は handoff と同じ CLI contract の版である。
+	ProtocolVersion int
+	Logger          *slog.Logger
+	Config          *application.Service
+	Keys            KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
 	Connect     Connector
 	Diagnostics *diagnostics.Service
@@ -183,6 +187,14 @@ func New(options Options) (*Server, error) {
 			Service: options.RemoteKeys, Diagnostics: options.Diagnostics, Actions: actions,
 		})
 	}
+	// browser と CLI の password change は、同じ remote reseal operation を使う。
+	var reseal func(context.Context, string) error
+	if options.Sync != nil {
+		reseal = func(ctx context.Context, passphrase string) error {
+			_, err := options.Sync.Push(ctx, passphrase)
+			return err
+		}
+	}
 	if options.Passwords != nil {
 		// eligibility チェックは設定グラフと known_hosts を読むため、
 		// vault からではなく configuration service から来る。vault は
@@ -196,13 +208,6 @@ func New(options Options) (*Server, error) {
 		// bucket の最新スナップショットもマスターパスワードで封印されている
 		// ため、変更すると再び push する。bucket のないマシンには更新すべき
 		// ものがなく、応答はそう伝える。
-		var reseal func(context.Context, string) error
-		if options.Sync != nil {
-			reseal = func(ctx context.Context, passphrase string) error {
-				_, err := options.Sync.Push(ctx, passphrase)
-				return err
-			}
-		}
 		var keyHosts func([]string) (map[string][]string, error)
 		if options.Config != nil {
 			keyHosts = options.Config.KeyHosts
@@ -220,8 +225,12 @@ func New(options Options) (*Server, error) {
 	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})
 
 	registerConnectRoutes(e, ConnectHandlers{
-		Secret:    options.CLISecret,
-		Passwords: options.Passwords,
+		Secret:          options.CLISecret,
+		Passwords:       options.Passwords,
+		Owner:           options.Owner,
+		Version:         options.Version,
+		ProtocolVersion: options.ProtocolVersion,
+		ResealSnapshot:  reseal,
 		KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
 			if options.Config == nil || options.Keys == nil {
 				return "", "", "", "", false, nil

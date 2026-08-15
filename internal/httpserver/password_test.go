@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/application"
+	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
 )
@@ -622,5 +624,34 @@ func TestChangingTheMasterPasswordReportsWhetherTheBucketFollowed(t *testing.T) 
 	if code := send(t, engine, http.MethodPost, "/api/v1/passwords/unlock",
 		`{"passphrase":"a different master password"}`, nil).Code; code != http.StatusOK {
 		t.Error("the new master password does not unlock")
+	}
+}
+
+func TestChangingTheMasterPasswordKeepsTheBrowserPartialSuccessContract(t *testing.T) {
+	service := newCLIVaultService(t)
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	registerPasswordRoutes(engine, PasswordHandlers{
+		Service: service,
+		ResealSnapshot: func(context.Context, string) error {
+			return remotesync.ErrPushRefused
+		},
+	})
+	response := send(t, engine, http.MethodPost, "/api/v1/passwords/change",
+		`{"current":"`+testPassphrase+`","next":"another valid password"}`, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("browser change = %d, want 200: %s", response.Code, response.Body.String())
+	}
+	var answer api.ChangeMasterPasswordResult
+	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.SnapshotResealed || answer.SnapshotProblem == nil || *answer.SnapshotProblem != "sync_push_refused" {
+		t.Fatalf("partial result = %+v", answer)
+	}
+	if !answer.Vault.Exists || !answer.Vault.Unlocked {
+		t.Fatalf("vault status = %+v", answer.Vault)
 	}
 }

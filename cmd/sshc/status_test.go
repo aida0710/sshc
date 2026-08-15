@@ -72,7 +72,7 @@ func TestLockedOnlyWhenThereIsAVaultToOpen(t *testing.T) {
 	}
 }
 
-// unlock は、開いたかどうかしか返さない。204 は成功、403（間違ったマスター
+// unlock は、開いたかどうかしか返さない。204 は成功、401（間違ったマスター
 // パスワード）は失敗として読める必要がある。
 func TestUnlockReadsSuccessAndFailure(t *testing.T) {
 	for _, test := range []struct {
@@ -81,11 +81,11 @@ func TestUnlockReadsSuccessAndFailure(t *testing.T) {
 		want   bool
 	}{
 		{name: "the engine unlocked", status: http.StatusNoContent, want: true},
-		{name: "the wrong master password", status: http.StatusForbidden, want: false},
+		{name: "the wrong master password", status: http.StatusUnauthorized, want: false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Header.Get(handoff.HeaderName) != "the secret" || r.URL.Path != httpserver.UnlockPath {
+				if r.Header.Get(handoff.HeaderName) != "the secret" || r.URL.Path != httpserver.VaultUnlockPath {
 					w.WriteHeader(http.StatusForbidden)
 					return
 				}
