@@ -1,16 +1,16 @@
-//go:build unix
-
 package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
 // **エンジンが 2 台になる道を、ここで塞いでいる。** 裸の `sshc` はサブコマンドの
-// どれにも当たらないので、これが無ければそのまま 2 台目が上がる。flock は
-// open file description ごとに効くので、同じプロセスから開き直した 2 本目でも
-// 本物どおり弾かれる——別プロセスを起こさずに、この規則そのものを見られる。
+// どれにも当たらないので、これが無ければそのまま 2 台目が上がる。ロックの実体と
+// 実プロセス試験は internal/enginelock にあり、ここが確かめるのは、この
+// コマンドが同じ状態ディレクトリの同じ engine.lock を名指すことである。
 func TestLockEngineStartRefusesASecondEngine(t *testing.T) {
 	stateDir := t.TempDir()
 
@@ -23,12 +23,20 @@ func TestLockEngineStartRefusesASecondEngine(t *testing.T) {
 		t.Fatalf("the second engine got %v, want errEngineRunning", err)
 	}
 
+	if _, statErr := os.Lstat(filepath.Join(stateDir, "engine.lock")); statErr != nil {
+		t.Fatalf("engine.lock is not in the state directory: %v", statErr)
+	}
+
 	// **プロセスが死ねば必ず外れる。** 手放したあとは次の 1 台が上がれる
 	// ——外れないロックは、誰もエンジンを起こせない状態を永久に残す。
-	release()
+	if err := release(); err != nil {
+		t.Fatalf("release = %v", err)
+	}
 	next, err := lockEngineStart(stateDir)
 	if err != nil {
 		t.Fatalf("the lock stayed held after it was released: %v", err)
 	}
-	next()
+	if err := next(); err != nil {
+		t.Fatal(err)
+	}
 }
