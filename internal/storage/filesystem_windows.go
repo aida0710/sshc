@@ -4,6 +4,7 @@ package storage
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,14 @@ import (
 
 	"sshc/internal/platform/windowsacl"
 )
+
+func makePrivateDirectories(path string, permission fs.FileMode) error {
+	return windowsacl.EnsureDirectory(path)
+}
+
+func createPrivateTemp(directory, prefix string) (*os.File, error) {
+	return windowsacl.CreateTemp(directory, prefix)
+}
 
 func openRegularNoFollow(path string) (*os.File, error) {
 	absolutePath, err := cleanAbsoluteDOSPath(path)
@@ -217,18 +226,4 @@ func syncDirectory(path string) error {
 	// WriteTemp の file.Sync と replaceFile の write-through 移動を永続化境界にし、
 	// ここではそれ以上の永続性を装わない。
 	return nil
-}
-
-// temp へ秘密を書いた後の DACL 失敗を見逃さないため、focused test だけが差し替える。
-var restrictPrivatePathImpl = restrictPrivatePathWindows
-
-func restrictPrivatePath(path string, directory bool) error {
-	return restrictPrivatePathImpl(path, directory)
-}
-
-func restrictPrivatePathWindows(path string, directory bool) error {
-	if directory {
-		return windowsacl.RestrictDirectory(path)
-	}
-	return windowsacl.RestrictFile(path)
 }
