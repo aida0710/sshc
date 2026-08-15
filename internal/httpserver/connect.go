@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -35,6 +34,7 @@ type ConnectHandlers struct {
 	// Passwords は保存済みの鍵パスフレーズとアカウントパスワードを持つ。nil で
 	// あれば保存された答えは一切提供されず、それはプロンプトが出る正常な接続である。
 	Passwords *secret.Service
+	vault     *vaultOperations
 	// KeyPassphraseTarget resolves the one direct workspace key whose saved
 	// passphrase may answer this connection. A false result is never guessed.
 	KeyPassphraseTarget func(alias string) (relativePath, promptPath, configSnapshot, evidence string, ok bool, err error)
@@ -60,9 +60,6 @@ type ConnectHandlers struct {
 	Owner           handoff.Owner
 	Version         string
 	ProtocolVersion int
-	// ResealSnapshot はローカル vault の master password 変更後に、remote の
-	// 最新 snapshot も同じ password で封じ直す。
-	ResealSnapshot func(ctx context.Context, passphrase string) error
 }
 
 type connectRequest struct {
@@ -209,6 +206,9 @@ func liveSessions(views []terminal.View) int {
 }
 
 func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
+	if handlers.vault == nil {
+		handlers.vault = newVaultOperations(handlers.Passwords, nil)
+	}
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
 	engine.GET(StatusPath, handlers.Status)
@@ -220,25 +220,26 @@ func (h ConnectHandlers) Status(c *echo.Context) error {
 	if !h.authorised(c.Request()) {
 		return c.NoContent(http.StatusForbidden)
 	}
-	answer := h.cliStatus()
+	answer, err := h.cliStatus()
+	if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
 	return c.JSON(http.StatusOK, answer)
 }
 
-func (h ConnectHandlers) cliStatus() CLIStatus {
+func (h ConnectHandlers) cliStatus() (CLIStatus, error) {
 	answer := CLIStatus{
 		Owner: h.Owner, Version: h.Version, ProtocolVersion: h.ProtocolVersion,
 	}
-	if h.Passwords != nil {
-		// 読めなければ「無い」と答える。**尋ねる相手は端末の人間であり**、
-		// 見つからない保管庫のためにマスターパスワードを求めるより、保存済み
-		// 無しで繋ぐ方が正しい——それはこの経路が元から持っている退き方である。
-		answer.Vault, _ = h.Passwords.Exists()
-		answer.Unlocked = h.Passwords.Unlocked()
+	state, err := h.vault.State()
+	if err != nil {
+		return CLIStatus{}, err
 	}
+	answer.Vault, answer.Unlocked = state.Exists, state.Unlocked
 	if h.Sessions != nil {
 		answer.Sessions = h.Sessions()
 	}
-	return answer
+	return answer, nil
 }
 
 // Open は、セッションを確立する URL で応答する。
