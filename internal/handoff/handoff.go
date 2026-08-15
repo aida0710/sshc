@@ -18,6 +18,11 @@ import (
 // FileName は、アプリケーションの状態ディレクトリ内のハンドオフファイル。
 const FileName = "cli"
 
+// mutationLockName は、公開ファイルと別 inode に固定して保持する。cli 自体を lock
+// すると Rename のたびに lock の対象 inode が替わり、Write と Remove を直列化
+// できなくなる。
+const mutationLockName = ".cli.mutation.lock"
+
 // secretLength は、秘密の元になるランダムバイト数。
 const secretLength = 32
 
@@ -40,6 +45,10 @@ var (
 	// ErrProtocolVersion は、CLI と実行中 app の通信規約が一致しないことを表す。
 	ErrProtocolVersion = errors.New("unsupported handoff protocol version")
 )
+
+// renameFile は、公開直前の置換だけをテストで失敗させる継ぎ目である。失敗時にも
+// 一時ファイルを残さないことは、実ファイル操作を通して検査する。
+var renameFile = os.Rename
 
 // Handoff は、この実行がどこで待ち受けているか、誰が所有しているか、そして
 // 呼び出し側がファイルを読んだことを何が証明するかを保持する。
@@ -81,8 +90,13 @@ func Write(directory string, document Handoff) error {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return err
 	}
+	release, err := lockMutation(directory)
+	if err != nil {
+		return err
+	}
+	defer release()
 	// 既存ディレクトリの umask や古い作成条件を引き継ぐと、秘密を含む文書だけを
-	// 厳しくしても一覧できてしまうため、ここで所有者専用へそろえる。
+	// 厳しくしても一覧できてしまうため、transaction の中で所有者専用へそろえる。
 	if err := os.Chmod(directory, 0o700); err != nil {
 		return err
 	}
@@ -108,7 +122,7 @@ func Write(directory string, document Handoff) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(temporaryPath, filepath.Join(directory, FileName)); err != nil {
+	if err := renameFile(temporaryPath, filepath.Join(directory, FileName)); err != nil {
 		return err
 	}
 
@@ -124,6 +138,13 @@ func Write(directory string, document Handoff) error {
 
 // Read は、動作中のアプリケーションが残した検証済みの文書を返す。
 func Read(directory string) (Handoff, error) {
+	return readValidated(directory)
+}
+
+// readValidated は mutation lock を取らない。Read は Rename により常に完全な旧文書
+// か新文書だけを見る。一方 Remove は lock を保持したままこれを呼び、比較と削除の
+// 間に Write が割り込めないようにする。
+func readValidated(directory string) (Handoff, error) {
 	body, err := os.ReadFile(filepath.Join(directory, FileName))
 	if err != nil {
 		return Handoff{}, err
@@ -143,7 +164,16 @@ func Read(directory string) (Handoff, error) {
 // URL や PID は次の実行で偶然再利用され得るが、実行ごとに発行する秘密は再利用
 // されない。そのため secret だけが、後から来た別 engine を消さない所有権になる。
 func Remove(directory, secret string) error {
-	found, err := Read(directory)
+	release, err := lockMutation(directory)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	found, err := readValidated(directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
