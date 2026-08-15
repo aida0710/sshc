@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"syscall"
 )
 
 const (
@@ -45,15 +44,16 @@ type FileSystem interface {
 	EvalSymlinks(path string) (string, error)
 }
 
-// OSFileSystem は FileSystem の macOS / Linux 実装。
+// nativeFileSystem は OS 固有のファイル操作をまとめるための印である。各操作の
+// 実装は build tag で分離し、共通の読み書き契約を OS の API 差分から切り離す。
+type nativeFileSystem struct{}
+
+// OSFileSystem は FileSystem のネイティブ OS 実装。
 type OSFileSystem struct{}
 
 func (OSFileSystem) ReadFile(path string) ([]byte, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	file, err := openRegularNoFollow(path)
 	if err != nil {
-		if errors.Is(err, syscall.ELOOP) {
-			return nil, ErrSymlinkPath
-		}
 		return nil, err
 	}
 	defer file.Close()
@@ -113,17 +113,10 @@ func writeAndFlush(file *os.File, permission fs.FileMode, contents []byte) error
 	return file.Sync()
 }
 
-func (OSFileSystem) Rename(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
+func (OSFileSystem) Rename(oldPath, newPath string) error { return replaceFile(oldPath, newPath) }
 
 func (OSFileSystem) Remove(path string) error { return os.Remove(path) }
 
-func (OSFileSystem) SyncDir(path string) error {
-	directory, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer directory.Close()
-	return directory.Sync()
-}
+func (OSFileSystem) SyncDir(path string) error { return syncDirectory(path) }
 
 func (OSFileSystem) EvalSymlinks(path string) (string, error) { return filepath.EvalSymlinks(path) }
