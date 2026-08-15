@@ -15,6 +15,8 @@ import (
 	"sshc/internal/platform/windowsacl"
 )
 
+const fileDeleteChild = 0x00000040
+
 func makePrivateDirectories(path string, permission fs.FileMode) error {
 	return windowsacl.EnsureDirectory(path)
 }
@@ -28,7 +30,7 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	parent, err := openNoReparseParent(filepath.Dir(absolutePath))
+	parent, err := openNoReparseDirectory(filepath.Dir(absolutePath))
 	if err != nil {
 		return nil, err
 	}
@@ -57,31 +59,45 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	return file, nil
 }
 
-// openNoReparseParent は parent を handle 相対でたどる。OBJ_DONT_REPARSE を各
-// component の name resolution に渡すため、検査後の置換で別 tree をたどれない。
-func openNoReparseParent(path string) (windows.Handle, error) {
-	volume := filepath.VolumeName(path)
+// openNoReparseDirectory は渡された directory 自体を handle 相対でたどる。
+// OBJ_DONT_REPARSE を各 component の name resolution に渡すため、検査後の置換で
+// 別 tree をたどれない。呼び出し側が file path を渡す関数ではない。
+func openNoReparseDirectory(directory string) (windows.Handle, error) {
+	return openNoReparseDirectoryWithAccess(directory, windows.FILE_TRAVERSE)
+}
+
+func openNoReparseDirectoryWithAccess(directory string, finalAccess uint32) (windows.Handle, error) {
+	volume := filepath.VolumeName(directory)
 	if volume == "" {
 		return 0, os.ErrInvalid
 	}
 	root := volume + string(os.PathSeparator)
-	relativeParent, err := filepath.Rel(root, path)
+	relativeParent, err := filepath.Rel(root, directory)
 	if err != nil || filepath.IsAbs(relativeParent) || relativeParent == ".." || strings.HasPrefix(relativeParent, ".."+string(os.PathSeparator)) {
 		return 0, os.ErrInvalid
 	}
 
-	current, err := openAbsoluteNoReparseDirectory(root)
+	rootAccess := uint32(windows.FILE_TRAVERSE)
+	if relativeParent == "." {
+		rootAccess = finalAccess
+	}
+	current, err := openAbsoluteNoReparseDirectory(root, rootAccess)
 	if err != nil {
 		return 0, err
 	}
 	if relativeParent == "." {
 		return current, nil
 	}
-	for _, component := range strings.Split(relativeParent, string(os.PathSeparator)) {
+	components := strings.Split(relativeParent, string(os.PathSeparator))
+	for index, component := range components {
 		if component == "" || component == "." {
 			continue
 		}
-		next, err := openRelativeNoReparse(current, component, windows.FILE_TRAVERSE, true, false)
+		access := uint32(windows.FILE_TRAVERSE)
+		if index == len(components)-1 {
+			access = finalAccess
+		}
+		next, err := openRelativeNoReparse(current, component, access, true, false)
 		if err != nil {
 			_ = windows.CloseHandle(current)
 			return 0, err
@@ -95,14 +111,14 @@ func openNoReparseParent(path string) (windows.Handle, error) {
 // openAbsoluteNoReparseDirectory は volume/share root を開く。RootDirectory 相対
 // NtCreateFile を始めるため Win32 の directory open が必要だが、root 自体は入力の
 // lexical parent ではないため FILE_TRAVERSE だけを要求する。
-func openAbsoluteNoReparseDirectory(path string) (windows.Handle, error) {
+func openAbsoluteNoReparseDirectory(path string, access uint32) (windows.Handle, error) {
 	pathUTF16, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return 0, err
 	}
 	handle, err := windows.CreateFile(
 		pathUTF16,
-		windows.FILE_TRAVERSE,
+		access,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
 		nil,
 		windows.OPEN_EXISTING,
@@ -119,6 +135,10 @@ func openAbsoluteNoReparseDirectory(path string) (windows.Handle, error) {
 // これにより parent path の名前空間が後から junction 等へ置換されても、開く
 // object は保持中の親 directory に固定される。
 func openRelativeNoReparse(parent windows.Handle, name string, access uint32, directory, synchronous bool) (windows.Handle, error) {
+	return openRelativeNoReparseWithOptions(parent, name, access, directory, synchronous, 0)
+}
+
+func openRelativeNoReparseWithOptions(parent windows.Handle, name string, access uint32, directory, synchronous bool, createOptions uint32) (windows.Handle, error) {
 	objectName, err := windows.NewNTUnicodeString(name)
 	if err != nil {
 		return 0, err
@@ -131,7 +151,7 @@ func openRelativeNoReparse(parent windows.Handle, name string, access uint32, di
 	}
 	var handle windows.Handle
 	var status windows.IO_STATUS_BLOCK
-	options := uint32(0)
+	options := createOptions
 	if directory {
 		options |= windows.FILE_DIRECTORY_FILE
 	}
@@ -168,6 +188,9 @@ func mapReparseError(err error) error {
 }
 
 func cleanAbsoluteDOSPath(path string) (string, error) {
+	if err := windowsacl.ValidatePrivatePath(path); err != nil {
+		return "", err
+	}
 	pathUTF16, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return "", err
@@ -186,21 +209,8 @@ func cleanAbsoluteDOSPath(path string) (string, error) {
 }
 
 func normalizeDOSPath(path string) (string, error) {
-	const (
-		verbatimPrefix    = `\\?\`
-		verbatimUNCPrefix = `\\?\UNC\`
-		ntPrefix          = `\??\`
-		ntUNCPrefix       = `\??\UNC\`
-	)
-	switch {
-	case strings.HasPrefix(path, verbatimUNCPrefix):
-		path = `\\` + path[len(verbatimUNCPrefix):]
-	case strings.HasPrefix(path, ntUNCPrefix):
-		path = `\\` + path[len(ntUNCPrefix):]
-	case strings.HasPrefix(path, verbatimPrefix):
-		path = path[len(verbatimPrefix):]
-	case strings.HasPrefix(path, ntPrefix):
-		path = path[len(ntPrefix):]
+	if err := windowsacl.ValidatePrivatePath(path); err != nil {
+		return "", err
 	}
 	path = filepath.Clean(path)
 	if !filepath.IsAbs(path) || filepath.VolumeName(path) == "" {
@@ -221,9 +231,102 @@ func replaceFile(oldPath, newPath string) error {
 	return windows.MoveFileEx(oldUTF16, newUTF16, windows.MOVEFILE_REPLACE_EXISTING|windows.MOVEFILE_WRITE_THROUGH)
 }
 
+type fileRenameInformation struct {
+	ReplaceIfExists uint32
+	RootDirectory   windows.Handle
+	FileNameLength  uint32
+	FileName        [1]uint16
+}
+
+func movePrivateFile(oldPath, newPath string) error {
+	return movePrivateFileWith(oldPath, newPath, nil)
+}
+
+func movePrivateFileWith(oldPath, newPath string, afterAuthenticate func(*os.File) error) error {
+	oldAbsolute, err := cleanAbsoluteDOSPath(oldPath)
+	if err != nil {
+		return err
+	}
+	newAbsolute, err := cleanAbsoluteDOSPath(newPath)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(filepath.VolumeName(oldAbsolute), filepath.VolumeName(newAbsolute)) {
+		return windows.ERROR_NOT_SAME_DEVICE
+	}
+
+	sourceParent, err := openNoReparseDirectory(filepath.Dir(oldAbsolute))
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(sourceParent)
+	sourceHandle, err := openRelativeNoReparseWithOptions(
+		sourceParent,
+		filepath.Base(oldAbsolute),
+		windows.DELETE|windows.READ_CONTROL|windows.WRITE_DAC|windows.FILE_READ_ATTRIBUTES,
+		false,
+		true,
+		// The rename must retain the write-through durability intent of the
+		// former MoveFileEx adapter without returning to a path-based source.
+		windows.FILE_WRITE_THROUGH,
+	)
+	if err != nil {
+		return err
+	}
+	source := os.NewFile(uintptr(sourceHandle), oldAbsolute)
+	if source == nil {
+		_ = windows.CloseHandle(sourceHandle)
+		return os.ErrInvalid
+	}
+	defer source.Close()
+	if err := windowsacl.RestrictFileHandle(source); err != nil {
+		return err
+	}
+	if afterAuthenticate != nil {
+		if err := afterAuthenticate(source); err != nil {
+			return err
+		}
+	}
+
+	destinationParent, err := openNoReparseDirectoryWithAccess(
+		filepath.Dir(newAbsolute),
+		windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild,
+	)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(destinationParent)
+	return renamePrivateFileHandle(sourceHandle, destinationParent, filepath.Base(newAbsolute))
+}
+
+func renamePrivateFileHandle(source, destinationParent windows.Handle, destinationName string) error {
+	nameUTF16, err := windows.UTF16FromString(destinationName)
+	if err != nil {
+		return err
+	}
+	nameLength := (len(nameUTF16) - 1) * 2
+	var layout fileRenameInformation
+	bufferSize := int(unsafe.Offsetof(layout.FileName)) + nameLength
+	buffer := make([]byte, bufferSize)
+	information := (*fileRenameInformation)(unsafe.Pointer(&buffer[0]))
+	information.ReplaceIfExists = 1
+	information.RootDirectory = destinationParent
+	information.FileNameLength = uint32(nameLength)
+	copy(unsafe.Slice(&information.FileName[0], nameLength/2), nameUTF16[:len(nameUTF16)-1])
+	status := windows.IO_STATUS_BLOCK{}
+	return windows.NtSetInformationFile(
+		source,
+		&status,
+		&buffer[0],
+		uint32(bufferSize),
+		windows.FileRenameInformation,
+	)
+}
+
 func syncDirectory(path string) error {
 	// Windows には Unix の directory fsync に相当する API がない。このため
-	// WriteTemp の file.Sync と replaceFile の write-through 移動を永続化境界にし、
-	// ここではそれ以上の永続性を装わない。
+	// WriteTemp の file.Sync、replaceFile の MOVEFILE_WRITE_THROUGH、および
+	// MovePrivate の write-through source handle を永続化境界にし、ここでは
+	// それ以上の永続性を装わない。
 	return nil
 }
