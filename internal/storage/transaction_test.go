@@ -30,6 +30,19 @@ func newTestManager(t *testing.T) (*Manager, *Workspace) {
 func writeWorkspaceFile(t *testing.T, workspace *Workspace, name, contents string, permission fs.FileMode) string {
 	t.Helper()
 	path := filepath.Join(workspace.Root(), name)
+	if privateStateContains(workspace.StateDir(), path) {
+		if err := workspace.EnsureDirectory(filepath.Dir(path)); err != nil {
+			t.Fatal(err)
+		}
+		temporary, err := workspace.FileSystem().WriteTemp(filepath.Dir(path), temporaryPrefix, permission, []byte(contents))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := workspace.FileSystem().Rename(temporary, path); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}

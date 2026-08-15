@@ -170,6 +170,9 @@ func (e *ConflictError) Error() string {
 // になり、それを忘れて封じられたままのバイト列を誰かの設定の上に書いてしまう
 // 呼び出し側は存在しない。
 func (m *Manager) ReadBackup(path string) ([]byte, error) {
+	if !m.validBackupReadPath(path) {
+		return nil, invalidJournal("backup path is outside the expected tree")
+	}
 	contents, err := m.workspace.FileSystem().ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -178,6 +181,19 @@ func (m *Manager) ReadBackup(path string) ([]byte, error) {
 		return contents, nil
 	}
 	return m.Unseal(contents)
+}
+
+func (m *Manager) validBackupReadPath(path string) bool {
+	if !m.validLoadedWorkspacePath(path) {
+		return false
+	}
+	backupRoot := filepath.Join(m.workspace.StateDir(), backupDirectoryName)
+	relative, err := filepath.Rel(backupRoot, path)
+	if err != nil || filepath.IsAbs(relative) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return false
+	}
+	parts := strings.Split(relative, string(filepath.Separator))
+	return len(parts) >= 2 && validJournalIdentifier(parts[0])
 }
 
 // Digest は、事前条件とジャーナルエントリに使う内容ハッシュ。
