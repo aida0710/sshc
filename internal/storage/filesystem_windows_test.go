@@ -122,7 +122,27 @@ func TestOSFileSystemReadFileTraversesParentWithoutReadAttributes(t *testing.T) 
 	if err := os.WriteFile(child, []byte("Host traverse-test\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	grantTraverseOnlyDACL(t, parent)
+	parentDACL := snapshotDACL(t, parent)
+	childDACL := snapshotDACL(t, child)
+	t.Cleanup(func() {
+		restoreDACL(t, child, childDACL)
+		restoreDACL(t, parent, parentDACL)
+	})
+
+	token, err := windows.OpenCurrentProcessToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer token.Close()
+	user, err := token.GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pinner runtime.Pinner
+	pinner.Pin(user.User.Sid)
+	defer pinner.Unpin()
+	installProtectedDACL(t, child, user.User.Sid, windows.FILE_READ_DATA|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE|windows.DELETE|windows.WRITE_DAC)
+	installProtectedDACL(t, parent, user.User.Sid, windows.FILE_TRAVERSE|windows.DELETE|windows.WRITE_DAC)
 	assertReadAttributesDenied(t, parent)
 
 	contents, err := (OSFileSystem{}).ReadFile(child)
@@ -156,39 +176,60 @@ func windowsShortPath(t *testing.T, path string) string {
 	}
 }
 
-func grantTraverseOnlyDACL(t *testing.T, path string) {
+type daclSnapshot struct {
+	descriptor *windows.SECURITY_DESCRIPTOR
+	dacl       *windows.ACL
+	protected  bool
+}
+
+func snapshotDACL(t *testing.T, path string) daclSnapshot {
 	t.Helper()
-	original, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
-	if err != nil || original == nil {
-		t.Skipf("original DACL is unavailable: %v", err)
+	descriptor, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil || descriptor == nil {
+		t.Fatalf("GetNamedSecurityInfo(%q) = %v", path, err)
 	}
-	originalDACL, _, err := original.DACL()
+	dacl, _, err := descriptor.DACL()
 	if err != nil {
-		t.Skipf("original DACL cannot be read: %v", err)
+		t.Fatalf("DACL(%q) = %v", path, err)
 	}
-	token, err := windows.OpenCurrentProcessToken()
+	control, _, err := descriptor.Control()
 	if err != nil {
-		t.Skipf("current process token is unavailable: %v", err)
+		t.Fatalf("Control(%q) = %v", path, err)
 	}
-	defer token.Close()
-	user, err := token.GetTokenUser()
-	if err != nil {
-		t.Skipf("current process user is unavailable: %v", err)
+	return daclSnapshot{
+		descriptor: descriptor,
+		dacl:       dacl,
+		protected:  control&windows.SE_DACL_PROTECTED != 0,
 	}
-	var pinner runtime.Pinner
-	pinner.Pin(user.User.Sid)
-	defer pinner.Unpin()
+}
+
+func restoreDACL(t *testing.T, path string, snapshot daclSnapshot) {
+	t.Helper()
+	securityInformation := windows.SECURITY_INFORMATION(windows.DACL_SECURITY_INFORMATION)
+	if snapshot.protected {
+		securityInformation |= windows.PROTECTED_DACL_SECURITY_INFORMATION
+	} else {
+		securityInformation |= windows.UNPROTECTED_DACL_SECURITY_INFORMATION
+	}
+	if err := windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, securityInformation, nil, nil, snapshot.dacl, nil); err != nil {
+		t.Errorf("restore DACL for %q: %v", path, err)
+	}
+	runtime.KeepAlive(snapshot.descriptor)
+}
+
+func installProtectedDACL(t *testing.T, path string, sid *windows.SID, permissions windows.ACCESS_MASK) {
+	t.Helper()
 	acl, err := windows.ACLFromEntries([]windows.EXPLICIT_ACCESS{{
-		AccessPermissions: windows.FILE_TRAVERSE | windows.DELETE | windows.WRITE_DAC,
+		AccessPermissions: permissions,
 		AccessMode:        windows.GRANT_ACCESS,
 		Trustee: windows.TRUSTEE{
 			TrusteeForm:  windows.TRUSTEE_IS_SID,
 			TrusteeType:  windows.TRUSTEE_IS_USER,
-			TrusteeValue: windows.TrusteeValueFromSID(user.User.Sid),
+			TrusteeValue: windows.TrusteeValueFromSID(sid),
 		},
 	}}, nil)
 	if err != nil {
-		t.Skipf("traverse-only ACL cannot be built: %v", err)
+		t.Fatal(err)
 	}
 	if err := windows.SetNamedSecurityInfo(
 		path,
@@ -199,13 +240,9 @@ func grantTraverseOnlyDACL(t *testing.T, path string) {
 		acl,
 		nil,
 	); err != nil {
-		t.Skipf("traverse-only ACL cannot be installed: %v", err)
+		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		if err := windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.UNPROTECTED_DACL_SECURITY_INFORMATION, nil, nil, originalDACL, nil); err != nil {
-			t.Errorf("restore DACL: %v", err)
-		}
-	})
+	runtime.KeepAlive(acl)
 }
 
 func assertReadAttributesDenied(t *testing.T, path string) {
@@ -226,5 +263,8 @@ func assertReadAttributesDenied(t *testing.T, path string) {
 	if err == nil {
 		_ = windows.CloseHandle(handle)
 		t.Fatal("fixture unexpectedly grants FILE_READ_ATTRIBUTES on the parent")
+	}
+	if err != windows.ERROR_ACCESS_DENIED {
+		t.Fatalf("CreateFile(FILE_READ_ATTRIBUTES) error = %v, want ERROR_ACCESS_DENIED", err)
 	}
 }
