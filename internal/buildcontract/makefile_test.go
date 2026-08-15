@@ -3,7 +3,6 @@ package buildcontract
 import (
 	"bufio"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,36 +11,88 @@ import (
 type makefileContract struct {
 	variables map[string][]string
 	targets   map[string]string
+	source    string
 }
 
-func TestMakefileProvidesNativeBuildContracts(t *testing.T) {
+func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 	contract := readMakefileContract(t)
+	helper := "go run ./internal/buildcontract/cmd/nativebuild"
+	if !strings.Contains(contract.source, "unexport GOOS GOARCH CGO_ENABLED") {
+		t.Error("Makefile must keep target variables out of the host go run environment")
+	}
 
-	t.Run("generic CLI build has explicit inputs and shared flags", func(t *testing.T) {
+	t.Run("native entries delegate to the argv based helper", func(t *testing.T) {
+		wantRecipes := map[string][]string{
+			"build": {
+				helper + ` host-build --output-dir "bin"`,
+			},
+			"build-cli": {
+				helper + ` build --goos "$(GOOS)" --goarch "$(GOARCH)" --output "$(OUTPUT)" --cgo "$(CGO_ENABLED)"`,
+			},
+			"desktop-version": {
+				helper + ` desktop-version --directory "desktop"`,
+			},
+			"release-binaries": {
+				helper + ` matrix --targets "$(RELEASE_TARGETS)" --output-dir "$(RELEASE_DIR)"`,
+			},
+			"release-cli-current": {
+				helper + ` release-current --arches "$(RELEASE_CURRENT_ARCHES)" --output-dir "$(RELEASE_DIR)"`,
+			},
+		}
+		for target, required := range wantRecipes {
+			recipe := requireTarget(t, contract, target)
+			for _, fragment := range required {
+				if !strings.Contains(recipe, fragment) {
+					t.Errorf("%s recipe does not contain %q\nrecipe:\n%s", target, fragment, recipe)
+				}
+			}
+		}
+	})
+
+	t.Run("native entries contain no POSIX-only recipe syntax", func(t *testing.T) {
+		for _, target := range []string{
+			"build",
+			"build-cli",
+			"desktop-bundle-mac",
+			"desktop-bundle-linux",
+			"desktop-bundle-windows",
+			"desktop-version",
+			"release-cli-current",
+		} {
+			recipe := requireTarget(t, contract, target)
+			for _, forbidden := range []string{
+				"set -",
+				"for ",
+				"case ",
+				"if [",
+				"mkdir -p",
+				`GOOS="`,
+				`GOARCH="`,
+				`CGO_ENABLED="`,
+				"$${VERSION}",
+			} {
+				if strings.Contains(recipe, forbidden) {
+					t.Errorf("%s recipe contains POSIX-only fragment %q\nrecipe:\n%s", target, forbidden, recipe)
+				}
+			}
+		}
+	})
+
+	t.Run("generic CLI build passes every explicit input", func(t *testing.T) {
 		recipe := requireTarget(t, contract, "build-cli")
 		for _, required := range []string{
-			"GOOS is required",
-			"GOARCH is required",
-			"OUTPUT is required",
-			"CGO_ENABLED is required",
-			`GOOS="$(GOOS)"`,
-			`GOARCH="$(GOARCH)"`,
-			`CGO_ENABLED="$(CGO_ENABLED)"`,
-			`-o "$(OUTPUT)"`,
-			"$(GO_BUILD_FLAGS)",
+			`--goos "$(GOOS)"`,
+			`--goarch "$(GOARCH)"`,
+			`--output "$(OUTPUT)"`,
+			`--cgo "$(CGO_ENABLED)"`,
 		} {
 			if !strings.Contains(recipe, required) {
 				t.Errorf("build-cli recipe does not contain %q\nrecipe:\n%s", required, recipe)
 			}
 		}
-
-		buildRecipe := requireTarget(t, contract, "build")
-		if !strings.Contains(buildRecipe, "$(GO_BUILD_FLAGS)") {
-			t.Errorf("build recipe must reuse GO_BUILD_FLAGS\nrecipe:\n%s", buildRecipe)
-		}
 	})
 
-	t.Run("desktop bundles enumerate native resources and scripts", func(t *testing.T) {
+	t.Run("desktop targets bind the correct bundles host guards and scripts", func(t *testing.T) {
 		expectedBundles := map[string][]string{
 			"DESKTOP_MAC_BUNDLES": {
 				"mac-arm64:darwin:arm64:1:sshc",
@@ -52,8 +103,8 @@ func TestMakefileProvidesNativeBuildContracts(t *testing.T) {
 				"linux-x64:linux:amd64:0:sshc",
 			},
 			"DESKTOP_WINDOWS_BUNDLES": {
-				"win-arm64:windows:arm64:0:sshc.exe",
-				"win-x64:windows:amd64:0:sshc.exe",
+				"win32-arm64:windows:arm64:0:sshc.exe",
+				"win32-x64:windows:amd64:0:sshc.exe",
 			},
 		}
 		for variable, want := range expectedBundles {
@@ -67,19 +118,50 @@ func TestMakefileProvidesNativeBuildContracts(t *testing.T) {
 			}
 		}
 
-		for target, script := range map[string]string{
-			"desktop-bundle-mac":     "dist:mac",
-			"desktop-bundle-linux":   "dist:linux",
-			"desktop-bundle-windows": "dist:win",
-		} {
-			recipe := requireTarget(t, contract, target)
+		targets := []struct {
+			name     string
+			variable string
+			host     string
+			script   string
+		}{
+			{name: "desktop-bundle-mac", variable: "DESKTOP_MAC_BUNDLES", host: "darwin", script: "dist:mac"},
+			{name: "desktop-bundle-linux", variable: "DESKTOP_LINUX_BUNDLES", host: "linux", script: "dist:linux"},
+			{name: "desktop-bundle-windows", variable: "DESKTOP_WINDOWS_BUNDLES", host: "windows", script: "dist:win"},
+		}
+		for _, target := range targets {
+			recipe := requireTarget(t, contract, target.name)
 			for _, required := range []string{
-				"desktop/resources/$$name/$$executable",
-				"$(MAKE) --no-print-directory build-cli",
-				"npm run " + script + " --prefix desktop",
+				`guard-host --host ` + target.host,
+				`desktop --host ` + target.host,
+				`--resource-root "desktop/resources"`,
+				`--bundles "$(` + target.variable + `)"`,
+				"$(MAKE) --no-print-directory desktop",
+				"npm run " + target.script + " --prefix desktop",
 			} {
 				if !strings.Contains(recipe, required) {
-					t.Errorf("%s recipe does not contain %q\nrecipe:\n%s", target, required, recipe)
+					t.Errorf("%s recipe does not contain %q\nrecipe:\n%s", target.name, required, recipe)
+				}
+			}
+			guardIndex := strings.Index(recipe, "guard-host --host "+target.host)
+			installIndex := strings.Index(recipe, "$(MAKE) --no-print-directory desktop")
+			webBuildIndex := strings.Index(recipe, "npm run build --prefix web")
+			cliBuildIndex := strings.Index(recipe, "desktop --host "+target.host)
+			if guardIndex < 0 || installIndex < 0 || webBuildIndex < 0 || cliBuildIndex < 0 ||
+				!(guardIndex < installIndex && installIndex < webBuildIndex && webBuildIndex < cliBuildIndex) {
+				t.Errorf("%s must guard host before install, then build web before CLI resources\nrecipe:\n%s", target.name, recipe)
+			}
+			for _, other := range targets {
+				if other.name == target.name {
+					continue
+				}
+				for _, forbidden := range []string{
+					"--host " + other.host,
+					"$(" + other.variable + ")",
+					"npm run " + other.script + " --prefix desktop",
+				} {
+					if strings.Contains(recipe, forbidden) {
+						t.Errorf("%s recipe is swapped with %q\nrecipe:\n%s", target.name, forbidden, recipe)
+					}
 				}
 			}
 		}
@@ -92,62 +174,17 @@ func TestMakefileProvidesNativeBuildContracts(t *testing.T) {
 		}
 	})
 
-	t.Run("current OS release includes both architectures and validates names", func(t *testing.T) {
+	t.Run("current OS release delegates host detection to the helper", func(t *testing.T) {
 		arches := contract.variables["RELEASE_CURRENT_ARCHES"]
 		if strings.Join(arches, " ") != "amd64 arm64" {
 			t.Errorf("RELEASE_CURRENT_ARCHES = %q, want [amd64 arm64]", arches)
 		}
 
 		recipe := requireTarget(t, contract, "release-cli-current")
-		for _, required := range []string{
-			`go env GOOS`,
-			`windows) suffix=".exe"`,
-			`darwin) cgo=1`,
-			`linux) cgo=0`,
-			`sshc-$$goos-$$goarch$$suffix`,
-			"$(MAKE) --no-print-directory build-cli",
-			"verify-artifact-name.sh",
-			"verify-artifact-name.ps1",
-		} {
-			if !strings.Contains(recipe, required) {
-				t.Errorf("release-cli-current recipe does not contain %q\nrecipe:\n%s", required, recipe)
-			}
+		if strings.Contains(recipe, "GOOS") || strings.Contains(recipe, "go env GOOS") {
+			t.Errorf("release-cli-current must not use overrideable target GOOS for host detection\nrecipe:\n%s", recipe)
 		}
 	})
-}
-
-func TestArtifactNameVerifierShell(t *testing.T) {
-	script := filepath.Join("..", "..", "scripts", "verify-artifact-name.sh")
-	tests := []struct {
-		name       string
-		artifact   string
-		goos       string
-		goarch     string
-		wantAccept bool
-	}{
-		{name: "darwin amd64", artifact: "dist/sshc-darwin-amd64", goos: "darwin", goarch: "amd64", wantAccept: true},
-		{name: "linux arm64", artifact: "dist/sshc-linux-arm64", goos: "linux", goarch: "arm64", wantAccept: true},
-		{name: "windows amd64", artifact: `dist/sshc-windows-amd64.exe`, goos: "windows", goarch: "amd64", wantAccept: true},
-		{name: "wrong OS", artifact: "dist/sshc-linux-amd64", goos: "darwin", goarch: "amd64"},
-		{name: "wrong architecture", artifact: "dist/sshc-darwin-arm64", goos: "darwin", goarch: "amd64"},
-		{name: "windows suffix missing", artifact: "dist/sshc-windows-arm64", goos: "windows", goarch: "arm64"},
-		{name: "unix suffix present", artifact: "dist/sshc-linux-amd64.exe", goos: "linux", goarch: "amd64"},
-		{name: "unsupported OS", artifact: "dist/sshc-freebsd-amd64", goos: "freebsd", goarch: "amd64"},
-		{name: "unsupported architecture", artifact: "dist/sshc-linux-386", goos: "linux", goarch: "386"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			command := exec.Command("sh", script, test.artifact, test.goos, test.goarch)
-			output, err := command.CombinedOutput()
-			if test.wantAccept && err != nil {
-				t.Fatalf("valid artifact name was rejected: %v\n%s", err, output)
-			}
-			if !test.wantAccept && err == nil {
-				t.Fatalf("invalid artifact name was accepted: %s", test.artifact)
-			}
-		})
-	}
 }
 
 func readMakefileContract(t *testing.T) makefileContract {
@@ -169,6 +206,7 @@ func readMakefileContract(t *testing.T) makefileContract {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
+		contract.source += line + "\n"
 		if strings.HasPrefix(line, "\t") {
 			if currentTarget != "" {
 				contract.targets[currentTarget] += strings.TrimSpace(line) + "\n"
