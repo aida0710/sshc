@@ -202,6 +202,72 @@ func TestCommitRejectsInvalidRequests(t *testing.T) {
 	}
 }
 
+func TestWritersRejectEmptyOperationBeforeMutation(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		call func(*Manager, string) error
+	}{
+		{
+			name: "Commit",
+			call: func(manager *Manager, target string) error {
+				_, err := manager.Commit(Request{
+					Changes: []Change{{
+						Path:         target,
+						Contents:     []byte("after\n"),
+						Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n"))},
+					}},
+				})
+				return err
+			},
+		},
+		{
+			name: "CommitAtomic",
+			call: func(manager *Manager, target string) error {
+				_, err := manager.CommitAtomic(Request{
+					Changes: []Change{{
+						Path:         target,
+						Contents:     []byte("after\n"),
+						Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n"))},
+					}},
+				})
+				return err
+			},
+		},
+		{
+			name: "Note",
+			call: func(manager *Manager, target string) error {
+				_, err := manager.Note("", []string{target})
+				return err
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			manager, workspace := newTestManager(t)
+			target := writeWorkspaceFile(t, workspace, "config", "before\n", 0o600)
+			if err := test.call(manager, target); !errors.Is(err, ErrInvalidOperation) {
+				t.Fatalf("%s empty operation = %v, want ErrInvalidOperation", test.name, err)
+			}
+			if contents, err := os.ReadFile(target); err != nil || string(contents) != "before\n" {
+				t.Fatalf("target after rejected %s = %q, %v", test.name, contents, err)
+			}
+			if _, err := os.Stat(workspace.StateDir()); !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("%s mutated state before rejecting operation: %v", test.name, err)
+			}
+		})
+	}
+}
+
+func TestNoteRejectsDuplicatePathsBeforeMutation(t *testing.T) {
+	manager, workspace := newTestManager(t)
+	target := writeWorkspaceFile(t, workspace, "config", "before\n", 0o600)
+	if _, err := manager.Note("config.inspect", []string{target, target}); !errors.Is(err, ErrDuplicatePath) {
+		t.Fatalf("Note duplicate paths = %v, want ErrDuplicatePath", err)
+	}
+	if _, err := os.Stat(workspace.StateDir()); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("Note mutated state before rejecting duplicate: %v", err)
+	}
+}
+
 func TestCommitLeavesRecoverableJournalWhenRenameFails(t *testing.T) {
 	workspace := newTestWorkspace(t)
 	first := writeWorkspaceFile(t, workspace, "first.conf", "Host first\n", 0o600)
@@ -462,6 +528,156 @@ func TestCommitAtomicRecoveryReconstructsProgressAfterRollbackAlsoFails(t *testi
 	pending, err := manager.Pending()
 	if err != nil || len(pending) != 0 {
 		t.Fatalf("pending after later rollback = %#v, %v", pending, err)
+	}
+}
+
+func TestAtomicRenameBeforeSyncCrashStateReconcilesAndRollsBackAfterRestart(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	target := writeWorkspaceFile(t, workspace, "config", "Host before\n", 0o600)
+	syncFailed := false
+	targetRenames := 0
+	syncFailure := errors.New("target sync failed after rename")
+	rollbackFailure := errors.New("immediate rollback failed")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "rename" && path == target {
+				targetRenames++
+				if targetRenames == 2 {
+					return rollbackFailure
+				}
+			}
+			if operation == "syncDir" && path == workspace.Root() && !syncFailed {
+				syncFailed = true
+				return syncFailure
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x6b}, 4096)))
+	result, err := manager.CommitAtomic(Request{
+		Operation: "connection.update",
+		Changes: []Change{{
+			Path:         target,
+			Contents:     []byte("Host after\n"),
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host before\n"))},
+		}},
+	})
+	if !errors.Is(err, syncFailure) || !errors.Is(err, rollbackFailure) || result.ID == "" {
+		t.Fatalf("CommitAtomic = %#v, %v; want sync and rollback failures", result, err)
+	}
+	journalPath := filepath.Join(workspace.StateDir(), journalDirectoryName, result.ID+".json")
+	journalBody, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var emitted journalRecord
+	if err := json.Unmarshal(journalBody, &emitted); err != nil {
+		t.Fatal(err)
+	}
+	if emitted.Status != statusStaged || emitted.Committed != 1 || emitted.Entries[0].Temp == "" {
+		t.Fatalf("emitted crash record = %#v, want staged committed write retaining temp", emitted)
+	}
+	if contents, readErr := os.ReadFile(target); readErr != nil || string(contents) != "Host after\n" {
+		t.Fatalf("target after failed immediate rollback = %q, %v", contents, readErr)
+	}
+
+	workspace.fileSystem = OSFileSystem{}
+	restarted := NewManager(workspace, func() time.Time {
+		return time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	}, bytes.NewReader(bytes.Repeat([]byte{0x6c}, 4096)))
+	pending, err := restarted.Pending()
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("Pending after restart = %#v, %v", pending, err)
+	}
+	if pending[0].Committed != 1 || pending[0].CanComplete || !pending[0].CanRollback {
+		t.Fatalf("reconciled pending = %#v", pending[0])
+	}
+	loaded, _, err := restarted.loadPending(result.ID)
+	if err != nil {
+		t.Fatalf("loadPending after reconcile = %v", err)
+	}
+	if loaded.Entries[0].Temp != "" {
+		t.Fatalf("reconciled committed write retained temp %q", loaded.Entries[0].Temp)
+	}
+	if err := restarted.Rollback(result.ID); err != nil {
+		t.Fatalf("Rollback after restart = %v", err)
+	}
+	if contents, readErr := os.ReadFile(target); readErr != nil || string(contents) != "Host before\n" {
+		t.Fatalf("target after recovery rollback = %q, %v", contents, readErr)
+	}
+	history, err := restarted.History()
+	if err != nil || len(history) != 1 || history[0].Status != statusRolledBack {
+		t.Fatalf("History after recovery rollback = %#v, %v", history, err)
+	}
+}
+
+func TestAtomicRollbackRenameBeforeSyncCrashStateReconcilesWithoutStagedTemp(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	target := writeWorkspaceFile(t, workspace, "config", "Host before\n", 0o600)
+	historyFailureInjected := false
+	rollbackSyncFailureInjected := false
+	historyFailure := errors.New("history publication failed")
+	rollbackSyncFailure := errors.New("rollback target sync failed after rename")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "rename" && filepath.Dir(path) == filepath.Join(workspace.StateDir(), historyDirectoryName) && !historyFailureInjected {
+				historyFailureInjected = true
+				return historyFailure
+			}
+			if operation == "syncDir" && path == workspace.Root() && historyFailureInjected && !rollbackSyncFailureInjected {
+				rollbackSyncFailureInjected = true
+				return rollbackSyncFailure
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x6d}, 4096)))
+	result, err := manager.CommitAtomic(Request{
+		Operation: "connection.update",
+		Changes: []Change{{
+			Path:         target,
+			Contents:     []byte("Host after\n"),
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host before\n"))},
+		}},
+	})
+	if !errors.Is(err, historyFailure) || !errors.Is(err, rollbackSyncFailure) || result.ID == "" {
+		t.Fatalf("CommitAtomic = %#v, %v; want history and rollback sync failures", result, err)
+	}
+	if contents, readErr := os.ReadFile(target); readErr != nil || string(contents) != "Host before\n" {
+		t.Fatalf("target after rollback rename = %q, %v", contents, readErr)
+	}
+	journalPath := filepath.Join(workspace.StateDir(), journalDirectoryName, result.ID+".json")
+	journalBody, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var emitted journalRecord
+	if err := json.Unmarshal(journalBody, &emitted); err != nil {
+		t.Fatal(err)
+	}
+	if emitted.Status != statusStaged || emitted.Committed != 1 || emitted.Entries[0].Temp != "" {
+		t.Fatalf("emitted rollback crash record = %#v, want staged committed write without temp", emitted)
+	}
+
+	workspace.fileSystem = OSFileSystem{}
+	restarted := NewManager(workspace, func() time.Time {
+		return time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	}, bytes.NewReader(bytes.Repeat([]byte{0x6e}, 4096)))
+	pending, err := restarted.Pending()
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("Pending after rollback sync crash = %#v, %v", pending, err)
+	}
+	if pending[0].Committed != 0 || pending[0].CanComplete || !pending[0].CanRollback {
+		t.Fatalf("reconciled rollback progress = %#v", pending[0])
+	}
+	if err := restarted.Rollback(result.ID); err != nil {
+		t.Fatalf("Rollback after restart = %v", err)
+	}
+	history, err := restarted.History()
+	if err != nil || len(history) != 1 || history[0].Status != statusRolledBack {
+		t.Fatalf("History after reconciled rollback = %#v, %v", history, err)
 	}
 }
 

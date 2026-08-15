@@ -4,6 +4,7 @@ package storage
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,6 +29,48 @@ func TestWindowsPrivateStateContainmentIsCaseInsensitive(t *testing.T) {
 			}
 			if privateStateContains(state, strings.ToUpper(state)+"-outside") {
 				t.Fatal("case-insensitive prefix without a path boundary was accepted")
+			}
+		})
+	}
+}
+
+func TestWindowsWritersRejectCaseAliasDuplicatesBeforeMutation(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		call func(*Manager, *Workspace) error
+	}{
+		{
+			name: "Commit",
+			call: func(manager *Manager, workspace *Workspace) error {
+				_, err := manager.Commit(Request{
+					Operation: "directory.create",
+					Directories: []DirectoryCreate{
+						{Path: filepath.Join(workspace.Root(), "Keys")},
+						{Path: filepath.Join(strings.ToLower(workspace.Root()), "keys")},
+					},
+				})
+				return err
+			},
+		},
+		{
+			name: "Note",
+			call: func(manager *Manager, workspace *Workspace) error {
+				path := filepath.Join(workspace.Root(), "config")
+				if err := os.WriteFile(path, []byte("Host test\n"), 0o600); err != nil {
+					return err
+				}
+				_, err := manager.Note("config.inspect", []string{path, strings.ToUpper(path)})
+				return err
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			manager, workspace := newTestManager(t)
+			if err := test.call(manager, workspace); !errors.Is(err, ErrDuplicatePath) {
+				t.Fatalf("case-alias %s = %v, want ErrDuplicatePath", test.name, err)
+			}
+			if _, err := os.Stat(workspace.StateDir()); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("case-alias %s mutated state: %v", test.name, err)
 			}
 		})
 	}

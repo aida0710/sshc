@@ -42,8 +42,9 @@ const (
 )
 
 var (
-	ErrNoChanges     = errors.New("transaction has no changes")
-	ErrDuplicatePath = errors.New("transaction contains the same path twice")
+	ErrNoChanges        = errors.New("transaction has no changes")
+	ErrDuplicatePath    = errors.New("transaction contains the same path twice")
+	ErrInvalidOperation = errors.New("transaction operation is required")
 	// ErrDirectoryNotEmpty は、まだ何かを保持しているディレクトリの削除を拒否する。
 	// 再帰的な削除にジャーナルの居場所はない。それを巻き戻すには、このトランザクション
 	// が一度も読んでいない内容を復元しなければならなくなる。
@@ -288,6 +289,9 @@ func (m *Manager) Commit(request Request) (Result, error) {
 // used when two persisted documents represent one logical value, such as an
 // SSH connection and its encrypted password assignment.
 func (m *Manager) CommitAtomic(request Request) (Result, error) {
+	if request.Operation == "" {
+		return Result{}, ErrInvalidOperation
+	}
 	if len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
 		return Result{}, ErrAtomicWriteOnly
 	}
@@ -300,6 +304,9 @@ func (m *Manager) CommitAtomic(request Request) (Result, error) {
 }
 
 func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) {
+	if request.Operation == "" {
+		return Result{}, ErrInvalidOperation
+	}
 	if len(request.Changes)+len(request.Moves)+len(request.Removals)+
 		len(request.Directories)+len(request.RemoveDirectories) == 0 {
 		return Result{}, ErrNoChanges
@@ -312,13 +319,13 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	stagedContents := make([][]byte, 0, capacity)
 	previousContents := make([][]byte, 0, capacity)
 	written := make([]string, 0, capacity)
-	claimed := make(map[string]bool, capacity)
+	claimed := make([]string, 0, capacity*2)
 
 	claim := func(path string) error {
-		if claimed[path] {
+		if journalPathAlreadyClaimed(claimed, path) {
 			return ErrDuplicatePath
 		}
-		claimed[path] = true
+		claimed = append(claimed, path)
 		return nil
 	}
 
@@ -521,7 +528,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 			// claimed は、このリクエストがすでに責任を引き受けたすべてのパスを
 			// 保持する。移動の元、削除、そしてこれより深いところに列挙された
 			// ディレクトリの削除である。
-			if !claimed[filepath.Join(target, entry.Name())] {
+			if !journalPathAlreadyClaimed(claimed, filepath.Join(target, entry.Name())) {
 				return Result{}, ErrDirectoryNotEmpty
 			}
 		}
@@ -571,6 +578,14 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	fail := func(commitErr error) (Result, error) {
 		if !rollbackOnError {
 			return result, commitErr
+		}
+		// finish mutates the in-memory record before publishing history. If that
+		// publication or the following current-journal removal fails, persist a
+		// recoverable current state rather than a terminal status which the
+		// current journal never owns.
+		if record.Status == statusCompleted || record.Status == statusRolledBack {
+			record.Status = statusStaged
+			record.FinishedAt = nil
 		}
 		// Persist the in-process progress before attempting rollback. A target
 		// rename can succeed even when its following SyncDir or journal rewrite
@@ -780,15 +795,23 @@ func (m *Manager) sourceState(path string, precondition Precondition) (string, f
 // 記録にするためである。構造上、ファイルの内容を持ちようがない。保存するのは操作名、
 // 時刻、関係したパスだけである。
 func (m *Manager) Note(operation string, paths []string) (Result, error) {
+	if operation == "" {
+		return Result{}, ErrInvalidOperation
+	}
 	if len(paths) == 0 {
 		return Result{}, ErrNoChanges
 	}
 	entries := make([]journalEntry, 0, len(paths))
+	claimed := make([]string, 0, len(paths))
 	for _, path := range paths {
 		resolved, err := m.workspace.ResolveForWrite(path)
 		if err != nil {
 			return Result{}, err
 		}
+		if journalPathAlreadyClaimed(claimed, resolved) {
+			return Result{}, ErrDuplicatePath
+		}
+		claimed = append(claimed, resolved)
 		entries = append(entries, journalEntry{Action: actionNote, Path: resolved})
 	}
 
