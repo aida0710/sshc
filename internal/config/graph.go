@@ -3,9 +3,10 @@ package config
 import (
 	"errors"
 	"io/fs"
-	"path"
+	"path/filepath"
 	"sort"
-	"strings"
+
+	"sshc/internal/platform/nativepath"
 )
 
 // Severity は、表示のために診断を順位付けする。エンジンが診断を黙った修復に
@@ -67,11 +68,20 @@ type Node struct {
 }
 
 // Graph は、ひとつのエントリファイルから到達できる Include 構造。
+//
+// Nodes の鍵は、そのファイルを最初に見たときのネイティブな綴りである。ひとつの
+// ファイルが二通りに綴られていても節点はひとつになるが、引く側は最初の綴りで
+// 引く必要がある。この層より上は、どれも同じ Root から同じ手順で組み立てた
+// パスで引いている。
 type Graph struct {
 	Root        string
 	Order       []string
 	Nodes       map[string]*Node
 	Diagnostics []Diagnostic
+	// identities は、同じファイルの別の綴りを最初の節点へ結び直す。Windows の
+	// 大小文字違いは同じファイルなので、これが無いと同じ内容が二度読み込まれ、
+	// 循環はいつまでも見つからない。
+	identities map[string]*Node
 }
 
 // Resolve は、エントリファイルとそれが include するすべてのファイルを読む。
@@ -79,10 +89,14 @@ type Graph struct {
 // ファイル、循環、非対応のパターンは診断として報告されるので、UI は失敗する
 // 代わりに実際の構造を表示できる。
 func (r Resolver) Resolve(rootPath string) (*Graph, error) {
-	if !path.IsAbs(rootPath) {
+	if !nativepath.Supported(rootPath) {
 		return nil, ErrPathNotAbsolute
 	}
-	graph := &Graph{Root: path.Clean(rootPath), Nodes: make(map[string]*Node)}
+	graph := &Graph{
+		Root:       filepath.Clean(rootPath),
+		Nodes:      make(map[string]*Node),
+		identities: make(map[string]*Node),
+	}
 	r.walk(graph, graph.Root, nil, 0)
 	return graph, nil
 }
@@ -98,13 +112,13 @@ func (g *Graph) diagnose(severity Severity, code, filePath string, line int, det
 }
 
 func (r Resolver) insideRoot(candidate string) bool {
-	cleaned := path.Clean(candidate)
-	return cleaned == r.Root || strings.HasPrefix(cleaned, r.Root+"/")
+	return nativepath.Contains(r.Root, candidate)
 }
 
 func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int) {
 	node := &Node{Path: filePath, Editable: r.insideRoot(filePath), Loads: 1}
 	graph.Nodes[filePath] = node
+	graph.identities[nativepath.Identity(filePath)] = node
 	graph.Order = append(graph.Order, filePath)
 
 	contents, err := r.Loader.ReadFile(filePath)
@@ -117,7 +131,7 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 
 	currentChain := make([]string, 0, len(chain)+1)
 	currentChain = append(currentChain, chain...)
-	currentChain = append(currentChain, filePath)
+	currentChain = append(currentChain, nativepath.Identity(filePath))
 
 	generatedStart, generatedEnd, generated := r.generatedLines(node.File)
 
@@ -172,11 +186,12 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 				if !r.insideRoot(match) {
 					graph.diagnose(SeverityInfo, DiagnosticIncludeOutsideRoot, filePath, lineNumber, match)
 				}
-				if slicesContains(currentChain, match) {
+				identity := nativepath.Identity(match)
+				if slicesContains(currentChain, identity) {
 					graph.diagnose(SeverityError, DiagnosticIncludeCycle, filePath, lineNumber, match)
 					continue
 				}
-				if existing, seen := graph.Nodes[match]; seen {
+				if existing, seen := graph.identities[identity]; seen {
 					existing.Loads++
 					graph.diagnose(SeverityWarning, DiagnosticIncludeDuplicate, filePath, lineNumber, match)
 					continue

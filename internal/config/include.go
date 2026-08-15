@@ -2,9 +2,10 @@ package config
 
 import (
 	"errors"
-	"path"
 	"path/filepath"
 	"strings"
+
+	"sshc/internal/platform/nativepath"
 )
 
 // DefaultMaxDepth は OpenSSH の MAX_READCONF_DEPTH に対応する。
@@ -77,7 +78,13 @@ func (r Resolver) maxDepth() int {
 	return r.MaxDepth
 }
 
-// expandPattern は、Include の引数ひとつを絶対的なグロブパターンに変換する。
+// expandPattern は、Include の引数ひとつを、このファイルシステムの絶対的な
+// グロブパターンに変換する。
+//
+// **引数は、展開が終わるまで設定の構文である。** OpenSSH の Include は
+// スラッシュで書かれ、'~' と '%' はそこでしか意味を持たない。それらを解いた
+// あとで、ちょうど一度だけネイティブなパスへ移す。二度移せば、Windows の
+// ボリューム区切りが素の文字に変わる。
 func (r Resolver) expandPattern(argument string) (string, error) {
 	if argument == "" {
 		return "", ErrUnsupportedExpansion
@@ -94,12 +101,27 @@ func (r Resolver) expandPattern(argument string) (string, error) {
 	case strings.HasPrefix(expanded, "~"):
 		// '~user/...' は、エンジンが行わない passwd データベースの参照を必要とする。
 		return "", ErrUnsupportedExpansion
-	case !strings.HasPrefix(expanded, "/"):
-		expanded = r.Root + "/" + expanded
 	}
-	cleaned := path.Clean(expanded)
+
+	native := filepath.FromSlash(expanded)
+	switch {
+	case nativepath.Supported(native):
+		// そのまま。ルートの外を指す Include も、表示のためには読む。
+	case filepath.IsAbs(native):
+		// filepath は絶対と認めるが、この層は扱えない綴り。device や拡張名前空間が
+		// これにあたる。
+		return "", ErrUnsupportedExpansion
+	case filepath.VolumeName(native) != "" || strings.HasPrefix(native, string(filepath.Separator)):
+		// `C:config` はどのディレクトリからの相対か、`\config` はどのボリュームかを
+		// 引数自身が言っていない。推測すれば、たまたま別のファイルが読まれる。
+		return "", ErrUnsupportedExpansion
+	default:
+		native = filepath.Join(r.Root, native)
+	}
+
+	cleaned := filepath.Clean(native)
 	if r.Normalise != nil {
-		cleaned = filepath.ToSlash(r.Normalise(filepath.FromSlash(cleaned)))
+		cleaned = r.Normalise(cleaned)
 	}
 	return cleaned, nil
 }
