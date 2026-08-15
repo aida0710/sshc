@@ -356,6 +356,76 @@ func TestRollbackRefusesToUndoAChangeThatKeptNoBackup(t *testing.T) {
 	}
 }
 
+func TestPreparationIncompleteBackedRemovalCannotCompleteAndCanRollback(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	target := writeWorkspaceFile(t, workspace, "config", "Host before\n", 0o600)
+	backupRoot := filepath.Join(workspace.StateDir(), backupDirectoryName)
+	preparationFailure := errors.New("backup preparation failed")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "writeTemp" && privateStateContains(backupRoot, path) {
+				return preparationFailure
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x6a}, 4096)))
+	result, err := manager.Commit(Request{
+		Operation: "config.remove",
+		Removals: []Removal{{
+			Path:         target,
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host before\n"))},
+			Backup:       true,
+		}},
+	})
+	if !errors.Is(err, preparationFailure) || result.ID == "" {
+		t.Fatalf("Commit = %#v, %v; want durable staging record and preparation failure", result, err)
+	}
+	workspace.fileSystem = OSFileSystem{}
+
+	pending, err := manager.Pending()
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("Pending = %#v, %v", pending, err)
+	}
+	if pending[0].Status != statusStaging || pending[0].CanComplete {
+		t.Fatalf("preparation-incomplete pending = %#v, want staging and not completable", pending[0])
+	}
+	artifactUse := errors.New("staging artifact was used")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "remove" && path == target {
+				return artifactUse
+			}
+			return nil
+		},
+	}
+	if err := manager.Complete(result.ID); !errors.Is(err, ErrCannotComplete) {
+		t.Errorf("Complete(staging) = %v, want ErrCannotComplete", err)
+		if _, statErr := os.Stat(target); errors.Is(statErr, fs.ErrNotExist) {
+			return
+		}
+	}
+	workspace.fileSystem = OSFileSystem{}
+	if contents, readErr := os.ReadFile(target); readErr != nil || string(contents) != "Host before\n" {
+		t.Fatalf("target after rejected Complete = %q, %v", contents, readErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(result.BackupDir, "config")); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("backup unexpectedly exists before rollback: %v", statErr)
+	}
+	if err := manager.Rollback(result.ID); err != nil {
+		t.Fatalf("Rollback(staging) = %v", err)
+	}
+	history, err := manager.History()
+	if err != nil || len(history) != 1 || history[0].Status != statusRolledBack {
+		t.Fatalf("History after staging rollback = %#v, %v", history, err)
+	}
+	if contents, readErr := os.ReadFile(target); readErr != nil || string(contents) != "Host before\n" {
+		t.Fatalf("target after rollback = %q, %v", contents, readErr)
+	}
+}
+
 func stagedPathFor(t *testing.T, manager *Manager, identifier string, index int) string {
 	t.Helper()
 	record, _, err := manager.loadPending(identifier)
