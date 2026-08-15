@@ -6,6 +6,7 @@ const { join } = require("node:path");
 const { existsSync } = require("node:fs");
 const { relink } = require("./link");
 const { parseEntrance } = require("./entrance");
+const { spawnEngine } = require("./engine");
 const { installTray } = require("./tray");
 const { installWindowReopener } = require("./reopen");
 
@@ -121,10 +122,10 @@ function entrance() {
     // 上がらなかった理由——ロックが取れない、home が解決できない——を書いて
     // いる logger.Error が、どこからも読めなくなる。
     //
-    // **--own-engine を渡す。** 他人のエンジンの入口を受け取ると、窓は開くのに
+    // **engine を渡す。** 他人のエンジンの入口を受け取ると、窓は開くのに
     // Cmd+Q でそのエンジンが残る——このアプリが「終了すれば全部止まる」と
     // 言えなくなる。あちらは入口を出さずに engineBusy で終わる。
-    const child = spawn(binary(), ["--own-engine"], { stdio: ["ignore", "pipe", "inherit"] });
+    const child = spawnEngine(spawn, binary());
     engine = child;
 
     let buffered = "";
