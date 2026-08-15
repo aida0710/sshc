@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -95,14 +96,14 @@ func TestWriteAtomicallyPublishesOnePrivateValidatedDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Errorf("file mode = %o, want 0600", info.Mode().Perm())
 	}
 	directoryInfo, err := os.Stat(directory)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if directoryInfo.Mode().Perm() != 0o700 {
+	if runtime.GOOS != "windows" && directoryInfo.Mode().Perm() != 0o700 {
 		t.Errorf("directory mode = %o, want 0700", directoryInfo.Mode().Perm())
 	}
 	entries, err := os.ReadDir(directory)

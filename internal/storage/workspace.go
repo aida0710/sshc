@@ -224,6 +224,12 @@ func (w *Workspace) EnsureDirectory(candidate string) error {
 			return ErrSymlinkPath
 		case !info.IsDir():
 			return ErrNotDirectory
+		case current == w.StateDir() || strings.HasPrefix(current, w.StateDir()+string(filepath.Separator)):
+			// 既存 state が親から緩い ACL を継承していた場合も、秘密を次に書く前に
+			// OS adapter で締め直す。ユーザー管理の ~/.ssh 配下は対象外にする。
+			if err := w.fileSystem.MkdirAll(current, DirectoryPermission); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

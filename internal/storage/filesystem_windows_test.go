@@ -12,7 +12,76 @@ import (
 	"testing"
 
 	"golang.org/x/sys/windows"
+
+	"sshc/internal/platform/windowsacl"
 )
+
+func TestOSFileSystemTightensExistingWindowsPrivateState(t *testing.T) {
+	root := t.TempDir()
+	originalRoot := snapshotDACL(t, root)
+	t.Cleanup(func() { restoreDACL(t, root, originalRoot) })
+	installPermissiveInheritedDACL(t, root)
+
+	stateDirectory := filepath.Join(root, "state")
+	if err := os.Mkdir(stateDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fileSystem := OSFileSystem{}
+	if err := fileSystem.MkdirAll(stateDirectory, DirectoryPermission); err != nil {
+		t.Fatalf("MkdirAll(%q) = %v", stateDirectory, err)
+	}
+	assertWindowsPrivatePath(t, stateDirectory)
+
+	temporaryPath, err := fileSystem.WriteTemp(stateDirectory, ".sshc-", FilePermission, []byte("sealed"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertWindowsPrivatePath(t, temporaryPath)
+
+	finalPath := filepath.Join(stateDirectory, "vault")
+	if err := fileSystem.Rename(temporaryPath, finalPath); err != nil {
+		t.Fatal(err)
+	}
+	assertWindowsPrivatePath(t, finalPath)
+	contents, err := os.ReadFile(finalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "sealed" {
+		t.Fatalf("final contents = %q, want %q", contents, "sealed")
+	}
+}
+
+func TestOSFileSystemWriteTempRemovesEmptyFileWhenDACLRestrictionFails(t *testing.T) {
+	directory := t.TempDir()
+	want := errors.New("DACL restriction failed")
+	original := restrictPrivatePathImpl
+	restrictPrivatePathImpl = func(path string, directory bool) error {
+		if directory {
+			return original(path, directory)
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read temp before forced DACL failure: %v", err)
+		}
+		if len(contents) != 0 {
+			t.Fatalf("temp contained %q before DACL failure", contents)
+		}
+		return want
+	}
+	t.Cleanup(func() { restrictPrivatePathImpl = original })
+
+	if _, err := (OSFileSystem{}).WriteTemp(directory, ".sshc-", FilePermission, []byte("secret")); !errors.Is(err, want) {
+		t.Fatalf("WriteTemp error = %v, want %v", err, want)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("DACL failure left temporary entries: %#v", entries)
+	}
+}
 
 func TestOSFileSystemReadFileRefusesWindowsReparsePoints(t *testing.T) {
 	directory := t.TempDir()
@@ -243,6 +312,51 @@ func installProtectedDACL(t *testing.T, path string, sid *windows.SID, permissio
 		t.Fatal(err)
 	}
 	runtime.KeepAlive(acl)
+}
+
+func installPermissiveInheritedDACL(t *testing.T, path string) {
+	t.Helper()
+	token, err := windows.OpenCurrentProcessToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer token.Close()
+	user, err := token.GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := windows.SecurityDescriptorFromString("D:(A;OICI;FA;;;" + user.User.Sid.String() + ")(A;OICI;GRGX;;;BU)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dacl, _, err := descriptor.DACL()
+	if err != nil || dacl == nil {
+		t.Fatalf("permissive DACL = %v", err)
+	}
+	if err := windows.SetNamedSecurityInfo(
+		path,
+		windows.SE_FILE_OBJECT,
+		windows.DACL_SECURITY_INFORMATION|windows.UNPROTECTED_DACL_SECURITY_INFORMATION,
+		nil,
+		nil,
+		dacl,
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	runtime.KeepAlive(descriptor)
+	runtime.KeepAlive(user)
+}
+
+func assertWindowsPrivatePath(t *testing.T, path string) {
+	t.Helper()
+	restricted, err := windowsacl.IsRestrictedToCurrentUser(path)
+	if err != nil {
+		t.Fatalf("IsRestrictedToCurrentUser(%q) = %v", path, err)
+	}
+	if !restricted {
+		t.Fatalf("%q has a permissive or inherited DACL", path)
+	}
 }
 
 func assertReadAttributesDenied(t *testing.T, path string) {
