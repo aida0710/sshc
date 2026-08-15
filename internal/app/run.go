@@ -70,11 +70,6 @@ type Dependencies struct {
 	ScanHostKeys func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
 	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
 	RemoteRun    func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error)
-	// LoginItem は「ログイン時に起動」を切り替える。既定はオフで、ここでそれを変える
-	// ことはない。保存済みのあらゆる秘密の鍵を握るバックグラウンドプロセスは、他人に
-	// 代わって勝手に用意してよいものではないからだ。nil の場合、この設定は未対応だと
-	// 報告する。
-	LoginItem httpserver.LoginItemController
 	// Updates はプロジェクトのリリースを調べる。nil なら何も提示しない。リリースで
 	// ないビルドはそうあるべきである。
 	Updates *selfupdate.Checker
@@ -258,7 +253,6 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	server, err := httpserver.New(httpserver.Options{
 		Listener:  listener,
 		CLISecret: cliSecret,
-		LoginItem: dependencies.LoginItem,
 		Updates:   dependencies.Updates,
 		// alias はコマンドラインでも検査されるが、その拒否が起きるのは ssh を
 		// 起こす直前である。ここで先に一言置くのは、何が理由で止まるのかを
@@ -339,8 +333,12 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	// プロセスが残していったコピーは、何も待ち受けていないポートを、誰も受け付け
 	// ない秘密とともに指しているだけなので、この削除は何かの拠り所となる保証では
 	// なく後片付けである。
+	//
+	// **消すのは、そこに残っているのが自分の 1 行であるときだけである。**
+	// エンジンは 1 台に絞ってあるが、名簿が 1 行しか無いという壊れ方は、起きた
+	// 瞬間から次の起動まで持続する——そういうものは二重に塞ぐ。
 	defer func() {
-		if err := handoff.Remove(HandoffDir(dependencies.Home)); err != nil {
+		if err := handoff.Remove(HandoffDir(dependencies.Home), server.URL()); err != nil {
 			dependencies.Logger.Warn("remove the command-line handoff", "error", err)
 		}
 	}()
@@ -359,11 +357,6 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	select {
 	case err := <-serveErrors:
 		return err
-	case <-server.Stopped():
-		// デスクトップの外殻が終了を頼んだ。**ウィンドウを閉じることとは別の意思で
-		// ある**ので、頼まれたときだけここへ来る。
-		stopServer()
-		return <-serveErrors
 	case <-ctx.Done():
 		stopServer()
 		return <-serveErrors

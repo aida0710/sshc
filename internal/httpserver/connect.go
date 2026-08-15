@@ -12,6 +12,7 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/session"
+	"sshc/internal/terminal"
 )
 
 // ConnectPath は、コマンドラインが接続に必要なものを尋ねる場所である。
@@ -43,17 +44,17 @@ type ConnectHandlers struct {
 	// Aliases は、この接続に現れる alias を、ProxyJump の手前も含めて返す。
 	// nil なら行き先ひとつだけを見る。
 	Aliases func(alias string) []string
-	// Sessions はブラウザへの入口を発行し、BaseURL はその入口が導く先である。
+	// Bootstrap はブラウザへの入口を発行し、BaseURL はその入口が導く先である。
 	// 両方が nil であれば、このアプリケーションはコマンドラインから開けない。
 	// これは session manager を持たないビルドの状態である。
-	Sessions *session.Manager
-	BaseURL  string
-	// Shutdown は、この常駐を終わらせる。nil なら止める手段が無いと答える。
 	//
-	// **これを呼ぶのはデスクトップの外殻であって、画面ではない。** 画面から
-	// 常駐を止める道は用意しない——ウィンドウを閉じることと、常駐を終わらせることは
-	// 別の意思である。
-	Shutdown func()
+	// **かつては Sessions という名だった。** その名は下の、生きているコンソール
+	// の本数を返す field に譲った——メニューバーが尋ねるのは本数であり、
+	// *session.Manager そのものではないので、そちらのほうが呼び出し側に近い名である。
+	Bootstrap *session.Manager
+	BaseURL   string
+	// Sessions は、生きているコンソールの本数を返す。nil なら 0。
+	Sessions func() int
 }
 
 type connectRequest struct {
@@ -163,52 +164,104 @@ type openResponse struct {
 	URL string `json:"url"`
 }
 
-// HealthPath は、そこに我々のエンジンが居るかを確かめる場所である。
+// StatusPath は、外殻が「いまどうなっているか」を尋ねる場所である。
 //
-// **/api/v1/health ではない。** あちらは /api/ の下にあり、すべての /api/
-// 要求は Sec-Fetch-Site: same-origin を要求する——ブラウザでないものは
-// 通れない。ここが /cli/ にあるのはそのためであり、**handoff の秘密で
-// 認証するので「何かが答えた」ではなく「我々のエンジンが答えた」と言える。**
-// ポートが別のものに再利用されていたら、あちらはこの秘密を知らない。
-const HealthPath = "/cli/engine/health"
+// **これは画面のための口ではない。** 画面は自分の session を持っている。
+// ここが答える相手はメニューバーであり、認可は handoff の秘密ひとつである。
+const StatusPath = "/cli/status"
 
-// StopPath は、走っているエンジンへ終了を頼む場所である。
+type statusResponse struct {
+	// Vault は、開けるべき錠がそもそも有るか。
+	//
+	// **「施錠されている」と「保管庫が無い」は別の状態である。** Unlocked は
+	// どちらでも false になるので、これが無いと、保管庫を一度も作っていない
+	// 利用者に対して、存在しない錠の鍵を毎回尋ねることになる。新規インストール
+	// 直後の利用者は全員そこに居る。
+	Vault bool `json:"vault"`
+	// Unlocked は vault が開いているか。
+	Unlocked bool `json:"unlocked"`
+	// Sessions は生きているコンソールの本数。終了済みは数えない——
+	// 「閉じてよいか」を問うための数だからである。
+	Sessions int `json:"sessions"`
+}
+
+// UnlockPath は、端末からマスターパスワードを答える場所である。
 //
-// /api/ の外にあるのは、セッションではなく handoff の秘密で認証するからで
-// ある。**これを呼ぶのはデスクトップの外殻であって、画面ではない。**
-const StopPath = "/cli/engine/stop"
+// **ブラウザを開かずに答えられることが、この口の理由である。** 解錠はエンジンの
+// 中に残るので、あとで窓を開けば解錠済みである。マスターパスワードは、画面から
+// も同じ loopback を通っている——この経路が増やすのは「解錠を試せる」ことだけ
+// で、それには本人がマスターパスワードを知っている必要がある。
+const UnlockPath = "/cli/unlock"
+
+type unlockRequest struct {
+	Passphrase string `json:"passphrase"`
+}
+
+// liveSessions は、まだ終わっていないものだけを数える。**終了済みは registry に
+// 残っていても数えない**——この数は「閉じてよいか」を問うためのものだからである。
+func liveSessions(views []terminal.View) int {
+	live := 0
+	for _, view := range views {
+		if view.Exited == nil {
+			live++
+		}
+	}
+	return live
+}
 
 func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
-	engine.POST(StopPath, handlers.Stop)
-	engine.POST(HealthPath, handlers.Health)
+	engine.GET(StatusPath, handlers.Status)
+	engine.POST(UnlockPath, handlers.Unlock)
 }
 
-// Health は、我々のエンジンがここに居ることを答える。
-//
-// 運ぶのは「居る」という事実だけである。版も、設定も、施錠の状態も返さない
-// ——**この経路が答えるのは、繋ぎ直してよい相手かどうかだけ**である。
-func (h ConnectHandlers) Health(c *echo.Context) error {
+// Status は、メニューバーと終了時の確認が読む現在地である。
+func (h ConnectHandlers) Status(c *echo.Context) error {
 	if !h.authorised(c.Request()) {
+		return c.NoContent(http.StatusForbidden)
+	}
+	answer := statusResponse{}
+	if h.Passwords != nil {
+		// 読めなければ「無い」と答える。**尋ねる相手は端末の人間であり**、
+		// 見つからない保管庫のためにマスターパスワードを求めるより、保存済み
+		// 無しで繋ぐ方が正しい——それはこの経路が元から持っている退き方である。
+		answer.Vault, _ = h.Passwords.Exists()
+		answer.Unlocked = h.Passwords.Unlocked()
+	}
+	if h.Sessions != nil {
+		answer.Sessions = h.Sessions()
+	}
+	return c.JSON(http.StatusOK, answer)
+}
+
+// Unlock は、マスターパスワードで保管庫を開く。
+//
+// **失敗の理由を言わない。** 施錠されていたのか、パスワードが違ったのか、
+// 答えは「開いた（204）」か「開かない（403）」の二つだけ。これにより、秘密を
+// 持つ者は一度のリクエストで複数回試す意思がなく、持たない者は判断の手がかりが
+// 何も増えない。
+func (h ConnectHandlers) Unlock(c *echo.Context) error {
+	if !h.authorised(c.Request()) {
+		return c.NoContent(http.StatusForbidden)
+	}
+	if h.Passwords == nil {
+		return c.NoContent(http.StatusForbidden)
+	}
+	var decoded unlockRequest
+	if err := json.NewDecoder(io.LimitReader(c.Request().Body, maxConnectBody)).Decode(&decoded); err != nil {
+		// **JSON が壊れているのは、判断に到達していない。** 二値（開いた／開かない）なのは
+		// 解錠の答えであって、構文エラーではない。400 に畳むと、正直な呼び出し側は自分の
+		// バグと答えの間違いを区別できなくなるが、handoff の秘密を既に持っている相手に
+		// 対して隠せるものは何も増えない。兄弟の Connect も同じ層で 400 を返す。
+		return c.NoContent(http.StatusBadRequest)
+	}
+	// **どう間違っていたかは言わない。** 施錠されているかどうかも含めて、
+	// 答えは「開いた」か「開かない」の二つである。
+	if err := h.Passwords.Unlock(decoded.Passphrase); err != nil {
 		return c.NoContent(http.StatusForbidden)
 	}
 	return c.NoContent(http.StatusNoContent)
-}
-
-// Stop は、この常駐を終わらせる。
-//
-// **答えてから止める。** 止めてから答えると、呼んだ側は成功と切断を区別
-// できない。実際の停止は応答が出ていったあとに起きる。
-func (h ConnectHandlers) Stop(c *echo.Context) error {
-	if !h.authorised(c.Request()) {
-		return c.NoContent(http.StatusForbidden)
-	}
-	if h.Shutdown == nil {
-		return c.NoContent(http.StatusServiceUnavailable)
-	}
-	go h.Shutdown()
-	return c.NoContent(http.StatusAccepted)
 }
 
 // Open は、セッションを確立する URL で応答する。
@@ -216,10 +269,10 @@ func (h ConnectHandlers) Open(c *echo.Context) error {
 	if !h.authorised(c.Request()) {
 		return c.NoContent(http.StatusForbidden)
 	}
-	if h.Sessions == nil || h.BaseURL == "" {
+	if h.Bootstrap == nil || h.BaseURL == "" {
 		return c.NoContent(http.StatusServiceUnavailable)
 	}
-	bootstrap, err := h.Sessions.Reissue()
+	bootstrap, err := h.Bootstrap.Reissue()
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}

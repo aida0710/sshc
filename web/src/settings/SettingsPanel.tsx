@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
-import { integrationsApi, type IntegrationsApi, type LoginItem } from "../api/integrations";
+import { integrationsApi, type IntegrationsApi, type TerminalSettings } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
 import { CheckboxField, Field, control, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
@@ -10,48 +10,30 @@ import type { TerminalSessionsState } from "../terminal/sessions";
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
+  onTerminalSettingsChange?: (settings: TerminalSettings) => void;
   // 開いているセッションはシェルが持つ。ここはその数を見せ、まとめて
   // 閉じる入口を出すだけである。
   consoles?: Pick<TerminalSessionsState, "sessions" | "busy" | "closeAll">;
 };
 
-export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanelProps) {
+export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSettingsChange }: SettingsPanelProps) {
   const t = useTranslate();
-  const [loginItem, setLoginItem] = useState<LoginItem | null>(null);
-  const [loginLoaded, setLoginLoaded] = useState(false);
-  const [loginBusy, setLoginBusy] = useState(false);
-  const [loginError, setLoginError] = useState("");
   const [currentMaster, setCurrentMaster] = useState("");
   const [nextMaster, setNextMaster] = useState("");
   const [confirmMaster, setConfirmMaster] = useState("");
   const [masterBusy, setMasterBusy] = useState(false);
   const [masterError, setMasterError] = useState("");
   const [changed, setChanged] = useState("");
-  const [keepRunning, setKeepRunning] = useState(false);
-  const [desktopBusy, setDesktopBusy] = useState(false);
   // 3 つとも文字列で持つ。**空は「設定されていない」であり、0 ではない。**
   // 数として持つと、空欄と 0 を区別する場所をもう一つ作ることになる。
   const [startDirectory, setStartDirectory] = useState("");
   const [maxSessions, setMaxSessions] = useState("");
   const [scrollback, setScrollback] = useState("");
+  const [copyOnSelect, setCopyOnSelect] = useState(true);
+  const [rightClickPaste, setRightClickPaste] = useState(true);
   const [terminalBusy, setTerminalBusy] = useState(false);
   const [terminalError, setTerminalError] = useState("");
   const [terminalSaved, setTerminalSaved] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void api.desktopSettings()
-      .then((settings) => {
-        if (active) setKeepRunning(settings.keepRunning === true);
-      })
-      .catch(() => {
-        // 読めなければ止める側に倒す。**動かし続けるのは明示的な選択である。**
-        if (active) setKeepRunning(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [api]);
 
   useEffect(() => {
     let active = true;
@@ -61,6 +43,8 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
         setStartDirectory(settings.startDirectory ?? "");
         setMaxSessions(settings.maxSessions === undefined ? "" : String(settings.maxSessions));
         setScrollback(settings.scrollbackBytes === undefined ? "" : String(settings.scrollbackBytes));
+        setCopyOnSelect(settings.copyOnSelect ?? true);
+        setRightClickPaste(settings.rightClickPaste ?? true);
       })
       .catch(() => undefined);
     return () => {
@@ -92,11 +76,17 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
     setTerminalSaved(false);
     try {
       const directory = startDirectory.trim();
-      await api.setTerminalSettings({
+      const next: TerminalSettings = {
         ...(directory === "" ? {} : { startDirectory: directory }),
         ...(sessions === undefined ? {} : { maxSessions: sessions }),
         ...(bytes === undefined ? {} : { scrollbackBytes: bytes }),
-      });
+        // on は既定なので書かない。off だけを false として明示し、再読み込み
+        // しても消えないようにする。
+        ...(copyOnSelect ? {} : { copyOnSelect: false }),
+        ...(rightClickPaste ? {} : { rightClickPaste: false }),
+      };
+      await api.setTerminalSettings(next);
+      onTerminalSettingsChange?.(next);
       setTerminalSaved(true);
     } catch (error) {
       const code = failureCode(error);
@@ -109,53 +99,10 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
               ? "terminal.startUnusable"
               : code === "terminal_limits_out_of_range" || code === "invalid_request"
                 ? "terminal.limitsOutOfRange"
-                : "terminal.startSaveFailed",
+                : "terminal.settingsSaveFailed",
       ));
     } finally {
       setTerminalBusy(false);
-    }
-  }
-
-  async function updateKeepRunning(next: boolean) {
-    setDesktopBusy(true);
-    try {
-      await api.setDesktopSettings(next);
-      setKeepRunning(next);
-    } catch {
-      setLoginError(t("desktop.saveFailed"));
-    } finally {
-      setDesktopBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    let active = true;
-    void api.loginItem()
-      .then((loaded) => {
-        if (!active) return;
-        setLoginItem(loaded);
-        setLoginLoaded(true);
-      })
-      .catch(() => {
-        if (!active) return;
-        setLoginItem(null);
-        setLoginLoaded(true);
-        setLoginError(t("login.loadFailed"));
-      });
-    return () => {
-      active = false;
-    };
-  }, [api, t]);
-
-  async function updateLoginItem(enabled: boolean) {
-    setLoginBusy(true);
-    setLoginError("");
-    try {
-      setLoginItem(await api.setLoginItem(enabled));
-    } catch {
-      setLoginError(t("login.failed"));
-    } finally {
-      setLoginBusy(false);
     }
   }
 
@@ -195,39 +142,6 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("settings.heading")} description={t("settings.pageDescription")} />
-
-      {loginError === "" ? null : <Notice tone="danger">{loginError}</Notice>}
-      {loginLoaded && loginItem?.supported ? (
-        <section aria-label={t("login.heading")} className={sectionCard}>
-          <h3 className={sectionHeading}>{t("login.heading")}</h3>
-          <p className={hintText}>{t("login.note")}</p>
-          <CheckboxField
-            label={t("login.enable")}
-            checked={loginItem.enabled}
-            disabled={loginBusy}
-            onChange={(next) => void updateLoginItem(next)}
-          />
-        </section>
-      ) : null}
-
-      <section aria-label={t("desktop.heading")} className={sectionCard}>
-        <h3 className={sectionHeading}>{t("desktop.heading")}</h3>
-        <p className={hintText}>{t("desktop.note")}</p>
-        <CheckboxField
-          label={t("desktop.keepRunning")}
-          checked={keepRunning}
-          disabled={desktopBusy}
-          onChange={(next) => void updateKeepRunning(next)}
-        />
-        {/*
-          ログイン時起動が有効なら、この選択は効かない。**二つの仕組みが同じ
-          ものの寿命を決めていて、あちらの方が強い**——止めても launchd や
-          systemd が起こし直す。黙って効かないより、効かないと言う。
-        */}
-        {loginItem?.enabled === true ? (
-          <p className={hintText}>{t("desktop.loginItemWins")}</p>
-        ) : null}
-      </section>
 
       {/*
         埋め込みターミナルの設定。**空欄は「設定されていない」であり、既定と
@@ -284,6 +198,30 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
             }}
           />
         </Field>
+        <div className="flex flex-col gap-1">
+          <CheckboxField
+            label={t("terminal.copyOnSelectLabel")}
+            checked={copyOnSelect}
+            disabled={terminalBusy}
+            onChange={(checked) => {
+              setCopyOnSelect(checked);
+              setTerminalSaved(false);
+            }}
+          />
+          <p className={hintText}>{t("terminal.copyOnSelectHint")}</p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <CheckboxField
+            label={t("terminal.rightClickPasteLabel")}
+            checked={rightClickPaste}
+            disabled={terminalBusy}
+            onChange={(checked) => {
+              setRightClickPaste(checked);
+              setTerminalSaved(false);
+            }}
+          />
+          <p className={hintText}>{t("terminal.rightClickPasteHint")}</p>
+        </div>
         <Button
           kind="primary"
           className="self-start"
@@ -296,9 +234,9 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
 
       {/*
         開いている接続をまとめて閉じる。**エンジンは止めない**——止めると
-        画面ごと落ちるうえ、ログイン項目が有効なら勝手に戻ってくる。ここが
-        引き受けるのは「繋ぎっぱなしを片付けたい」という用であり、それは
-        セッションを閉じれば済む。転送も agent の貸し出しも一緒に終わる。
+        画面ごと落ちる。ここが引き受けるのは「繋ぎっぱなしを片付けたい」
+        という用であり、それはセッションを閉じれば済む。転送も agent の
+        貸し出しも一緒に終わる。
 
         取り消しは開き直すことである。だから確認は挟まない——**問いを挟んで
         いいのは、押し戻せない操作だけである。**

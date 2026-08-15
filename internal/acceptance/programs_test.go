@@ -8,8 +8,12 @@ import (
 	"testing"
 )
 
-// startsAProcess は、外部プログラムを起こす唯一の継ぎ目である。
-const startsAProcess = "RunOutput(ctx"
+// startsAProcess は、プログラムを起こす書き方である。
+//
+// **継ぎ目の名前だけを探していた。** `RunOutput(ctx` だけを見ていたころ、
+// os/exec を直接呼ぶ新しい起動はこの見張りの外を素通りした——実際に 1 つ
+// 増えたのに緑のままだった。継ぎ目を通らない起こし方こそ、気づきたいものである。
+var startsAProcess = []string{"RunOutput(ctx", "exec.Command"}
 
 // allowedToStartPrograms は、そこからプログラムを起こしてよいファイルである。
 //
@@ -18,15 +22,21 @@ const startsAProcess = "RunOutput(ctx"
 // 名前を出すだけで、走らせるのは利用者である——`HardwareCommand` が返すのは
 // 画面に表示する引数の並びである。
 //
+// ログイン時起動は OS に任せた。launchd や systemd の unit を書いていたのは
+// このアプリケーション自身だったが、その仕組みごと消えたので、`RunOutput` の
+// 継ぎ目を通ってプログラムを起こす場所はひとつも残っていない。ここに並ぶ 2 つは
+// どちらもその継ぎ目の外にあり、**外に居てよい理由がそれぞれ違う。**
+//
 // **一覧を持つ形にしてあるのは、増えたときに気づくためである。** 「OpenSSH が
 // 無いこと」を検査すると、OpenSSH でない何かが増えても緑のままになる。
 var allowedToStartPrograms = []string{
-	// ログイン時起動を登録する。**これだけである。**
-	//
-	// 既定ブラウザを開く経路は消えた。画面を出すのはデスクトップの外殻で
-	// あり、このプロセスが誰かのブラウザを起こす理由はもう無い。
-	"internal/platform/macos/loginitem.go",
-	"internal/platform/linux/loginitem.go",
+	// 束を起こすのは LaunchServices への依頼であり、出力を取る実行ではない。
+	// `/usr/bin/open` を絶対パスで指し、`sshc <接続先>` の ctx と上限の下で
+	// 走る——継ぎ目が守っている性質は、ここでも同じ形で守られている。
+	"cmd/sshc/launch_darwin.go",
+	// ローカルシェルには擬似端末が要る。継ぎ目は出力を集めて返すものなので、
+	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
+	"internal/terminal/pty_unix.go",
 }
 
 // TestOnlyTheNamedSubsystemsStartAProgram は、プロセスを起こす場所を固定する。
@@ -56,7 +66,9 @@ func TestOnlyTheNamedSubsystemsStartAProgram(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !strings.Contains(string(contents), startsAProcess) {
+		if !slices.ContainsFunc(startsAProcess, func(way string) bool {
+			return strings.Contains(string(contents), way)
+		}) {
 			return nil
 		}
 		relative, err := filepath.Rel(repository, path)
@@ -73,7 +85,7 @@ func TestOnlyTheNamedSubsystemsStartAProgram(t *testing.T) {
 	// 正のコントロール: 一覧そのものが古くなっていないこと。**一つも見つからない
 	// なら、この検査は探し方を間違えている。**
 	if len(found) == 0 {
-		t.Fatalf("no caller of %q was found at all; this test is looking for the wrong thing", startsAProcess)
+		t.Fatalf("nothing at all was found that starts a program with %v; this test is looking for the wrong thing", startsAProcess)
 	}
 	slices.Sort(found)
 

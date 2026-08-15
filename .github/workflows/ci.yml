@@ -118,6 +118,27 @@ jobs:
       - name: Build
         run: npm run build
 
+  desktop:
+    name: Desktop
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - run: npm ci
+
+      # Electron の描画そのものは手動受け入れに残す。ここでは、外殻が持つ
+      # link・入口URL・二重起動時のウィンドウ復帰を Node 標準テストで検査する。
+      - name: Lifecycle tests
+        run: npm test
+
   generated:
     name: Generated files
     runs-on: ubuntu-latest
@@ -203,8 +224,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            desktop/package-lock.json
       - run: npm ci --prefix web
+      - run: npm ci --prefix desktop
 
       - name: Build the binary
         run: make build
@@ -220,14 +244,16 @@ jobs:
             exit 1
           fi
 
-      # Chromium のみ。このスイートはビルド済みのバイナリを localhost 越しに
-      # 動かし、それが書くバイト列を表明する。特定のエンジンの描画は見ない。
+      # Chromium のスイートはビルド済みのバイナリを localhost 越しに動かす。
+      # Linux では加えて、同じバイナリを子にする実 Electron も一度起動する。
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
         working-directory: web
 
       - name: Playwright
-        run: npm run e2e --prefix web
+        # desktop.spec.ts は実際の Electron ウィンドウを開く。Playwright の
+        # --with-deps が用意する Xvfb の中で、Chromium の残りと一緒に走らせる。
+        run: xvfb-run --auto-servernum npm run e2e --prefix web
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         if: failure()

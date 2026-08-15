@@ -3,6 +3,7 @@ package acceptance_test
 import (
 	"bufio"
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +14,36 @@ import (
 	"testing"
 	"time"
 )
+
+// 旧版の launchd / systemd unit が使った -open=false を受け付けると、unit が
+// 新しいバイナリを起こした時点で engine.lock を先に握り、デスクトップの子が
+// 上がれなくなる。旧版からの移行を持たない以上、黙って常駐するより未定義の
+// フラグとして直ちに拒む。
+func TestLegacyOpenFlagIsRejected(t *testing.T) {
+	repository := filepath.Join("..", "..")
+	binary := filepath.Join(t.TempDir(), "sshc")
+	build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/sshc")
+	build.Dir = repository
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build = %v\n%s", err, output)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	process := exec.CommandContext(ctx, binary, "-open=false")
+	process.Env = []string{"HOME=" + t.TempDir(), "PATH=" + os.Getenv("PATH")}
+	output, err := process.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("-open=false did not exit immediately: %v", ctx.Err())
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 2 {
+		t.Fatalf("-open=false exit = %v; want status 2\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "flag provided but not defined: -open") {
+		t.Fatalf("-open=false output did not explain the rejected flag:\n%s", output)
+	}
+}
 
 // TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM は本物の
 // artefact をビルドして実行する。
@@ -40,9 +71,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	}
 
 	home := t.TempDir()
-	// 既定で入口を書き出す。**ブラウザはもう開かない**ので、-open=false は
-	// 「何も言わない」を意味するようになった——背後で上がるエージェントは
-	// それを渡す。ここは端末から打った人と同じ道を通る。
+	// 入口を書き出す。ブラウザは開かない。ここは端末から打った人と同じ道を通る。
 	process := exec.Command(binary)
 	process.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
 	stdout, err := process.StdoutPipe()

@@ -11,6 +11,8 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/term"
+
 	"sshc/internal/app"
 	"sshc/internal/config"
 	"sshc/internal/handoff"
@@ -44,8 +46,7 @@ func connectInvocation(argv []string) (string, bool) {
 	}
 	word := argv[1]
 	if word == "" || word[0] == '-' || word == OpenSubcommand || word == ListSubcommand ||
-		word == ConnectSubcommand || word == HelpSubcommand || word == ServiceSubcommand ||
-		word == EngineSubcommand {
+		word == ConnectSubcommand || word == HelpSubcommand || word == StatusSubcommand {
 		return "", false
 	}
 	return word, true
@@ -109,6 +110,27 @@ func runOpen(
 	return 0
 }
 
+// waitForHandoff は、ロックを取った方が handoff を書き終えるのを短く待つ。
+//
+// **待つのはロックに負けた経路だけである。** そこには「1 台目が確かに居る」と
+// いう根拠がある——ロックがそう言った。`sshc open` を打った人には根拠が無いので、
+// 居なければ待たずに 1 で終わる方がよい。
+//
+// 上限を持つのは、1 台目が listener を上げる前に殺された日でも、ここで永久に
+// 待たないためである。
+func waitForHandoff(ctx context.Context, stateDir string) {
+	for attempt := 0; attempt < 40; attempt++ {
+		if _, err := handoff.Read(stateDir); err == nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
 // sshFinder は ssh プログラムを解決する。このアプリケーションの他のすべての部分が
 // 使うのと同じ継ぎ目なので、「どの ssh か」への答えはひとつしかない。
 type sshFinder interface{ SSH() (string, error) }
@@ -131,6 +153,32 @@ func runConnect(
 	var saved func(string) (string, bool)
 	var password func(string) (string, bool)
 	answer, err := askApplication(ctx, alias, stateDir, client)
+	if err != nil && launchApp(ctx) {
+		// **上がるまで待つ。** 待ち方を知っているのはここだけで、
+		// 上限は外殻が入口を書き出すのに掛ける時間と同じにしてある。
+		for attempt := 0; attempt < 40 && err != nil; attempt++ {
+			time.Sleep(500 * time.Millisecond)
+			answer, err = askApplication(ctx, alias, stateDir, client)
+		}
+	}
+
+	// **ブラウザを開かずに答えられる。** 解錠はエンジンの中に残るので、
+	// あとで窓を開けば解錠済みである。
+	//
+	// **端末でなければ尋ねない。** パイプの向こうに問いを出しても答えは返って
+	// こない——答えられない問いを書き置いて、そのまま先へ進むだけである。
+	if err == nil && term.IsTerminal(int(stdin.Fd())) && locked(ctx, stateDir, client) {
+		fmt.Fprint(stderr, "sshc: master password (leave empty to skip): ")
+		typed, readErr := term.ReadPassword(int(stdin.Fd()))
+		fmt.Fprintln(stderr)
+		if readErr == nil && len(typed) > 0 {
+			// **間違えても聞き直さない。** 繋げることの方が強い要求であり、
+			// 誤りの遅延を端末で待たせる価値が無い。
+			if unlock(ctx, stateDir, client, string(typed)) {
+				answer, _ = askApplication(ctx, alias, stateDir, client)
+			}
+		}
+	}
 	switch {
 	case err != nil:
 		fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%v)\n", err)

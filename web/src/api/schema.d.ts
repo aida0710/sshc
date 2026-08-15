@@ -404,22 +404,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/login-item": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getLoginItem"];
-        put: operations["setLoginItem"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/passwords/change": {
         parameters: {
             query?: never;
@@ -890,22 +874,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/metadata/desktop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["setDesktopSettings"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/metadata/terminal": {
         parameters: {
             query?: never;
@@ -1063,10 +1031,6 @@ export interface components {
             latest?: string;
             available: boolean;
             pageUrl?: string;
-        };
-        LoginItem: {
-            enabled: boolean;
-            supported: boolean;
         };
         ChangeMasterPasswordRequest: {
             current: string;
@@ -1760,22 +1724,22 @@ export interface components {
             schemaVersion: number;
             groupsFile?: string;
             embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
-            desktop?: components["schemas"]["Desktop"];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
         };
         EmbeddedTerminal: {
             maxSessions?: number;
             scrollbackBytes?: number;
+            copyOnSelect?: boolean;
+            rightClickPaste?: boolean;
             startDirectory?: string;
         };
         TerminalSettings: {
             startDirectory?: string;
             maxSessions?: number;
             scrollbackBytes?: number;
-        };
-        Desktop: {
-            keepRunning?: boolean;
+            copyOnSelect?: boolean;
+            rightClickPaste?: boolean;
         };
         PendingTransaction: {
             id: string;
@@ -2658,54 +2622,6 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
-        };
-    };
-    getLoginItem: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Whether this application starts at login */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoginItem"];
-                };
-            };
-            401: components["responses"]["Problem"];
-        };
-    };
-    setLoginItem: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoginItem"];
-            };
-        };
-        responses: {
-            /** @description The setting after the change */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoginItem"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
         };
     };
     changeMasterPassword: {
@@ -3642,33 +3558,6 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
-        };
-    };
-    setDesktopSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Desktop"];
-            };
-        };
-        responses: {
-            /** @description The choice was written */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SaveResult"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
         };
     };
     setTerminalSettings: {

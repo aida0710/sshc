@@ -22,20 +22,26 @@ import (
 
 var version = "dev"
 
-// announceEntrance はここで宣言される。フラグを解析するのはサブコマンドを見分けた
-// 後だが、usage はどの経路からでもフラグを一覧できなければならないからである。
+// ownEngine は、「自分が起こしたエンジンでなければ意味が無い」と言う。
 //
-// **ブラウザは開かない。** 画面はデスクトップの外殻が出すので、このプロセスが
-// 既定のブラウザを起こす経路は無くなった。書き出す先は、`sshc` を打った人の
-// 端末である。
+// **これを渡すのはデスクトップの外殻だけである。** 外殻はエンジンの寿命そのもの
+// であり、終了すればエンジンも終わると約束している。他人のエンジンの入口を
+// 受け取ってしまうと、その約束を果たす手（子を kill する）が空を切る——窓は
+// 開くのに、Cmd+Q でエンジンが残る。だから握れなかったら入口を出さず、
+// engineBusyExit で終わって外殻に理由を出させる。
 //
-// 既定で書き出すのは、端末から打った人がそこを読むからである。**背後で上がる
-// エージェントは -open=false を渡す**——あの 1 行は有効な bootstrap トークンを
-// 運ぶので、journal やログファイルの置き場所として不適切である。フラグ名を
-// 変えないのは、既に書かれている launchd と systemd の unit を壊さないためで
-// ある。
-var openBrowser = flag.Bool("open", true,
-	"print the way into the UI on standard output; -open=false prints nothing")
+// 端末で打つ人には要らない。裸の `sshc` は今までどおり、走っている方の入口を
+// 1 行出して 0 で終わる。
+var ownEngine = flag.Bool("own-engine", false,
+	"exit 3 instead of printing the way into an engine this process did not start")
+
+// engineBusyExit は、-own-engine を渡されたのにロックを取れなかったときの終了
+// コードである。**desktop/main.js の engineBusy と対である。**
+//
+// 0 でも 1 でもない番号を使うのは、外殻が「自分が起こしたエンジンが死んだ」と
+// 「別の持ち主が既に居た」を区別できなければならないからである。前者はアプリを
+// 終える理由だが、後者は理由を出す理由である。
+const engineBusyExit = 3
 
 // HelpSubcommand は使い方を出す語。
 //
@@ -80,16 +86,12 @@ func helpInvocation(argv []string) bool {
 // どこにも書かれていないことになる。
 func usage(out io.Writer) {
 	fmt.Fprint(out, `usage:
-  sshc                 open the user interface in the default browser
+  sshc                 run the engine here, or print the way into a running one
   sshc <alias>         connect to a host from ~/.ssh/config in this terminal
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
   sshc open            print a new way into the UI
-  sshc service refresh rebind an enabled login service to this binary
-  sshc service disable stop and remove the login service
-  sshc engine start    make sure the background engine is answering
-  sshc engine stop     ask the background engine to finish
-  sshc engine quit     finish it unless the setting says to keep it
+  sshc status          print the engine's status as JSON, for the shell
   sshc help            print this
 
 flags:
@@ -102,31 +104,6 @@ still reachable with ssh itself, but not through this command.
 }
 
 func main() {
-	if serviceInvocation(os.Args) {
-		os.Exit(runServiceCommand(
-			context.Background(), os.Args[2:], os.UserHomeDir, newServiceLoginItem,
-			os.Executable, os.Stdout, os.Stderr,
-		))
-	}
-
-	if arguments, ok := engineInvocation(os.Args); ok {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
-		}
-		executable, err := os.Executable()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
-		}
-		os.Exit(runEngineCommand(
-			context.Background(), arguments, home, app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, spawnEngine(executable),
-			os.Stdout, os.Stderr,
-		))
-	}
-
 	if arguments, ok := openInvocation(os.Args); ok {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -153,6 +130,19 @@ func main() {
 			os.Exit(1)
 		}
 		os.Exit(runList(home, os.Stdout, os.Stderr))
+	}
+	// **外殻が読む口である。** handoff の秘密を持つのは Go 側だけなので、
+	// メニューバーは自分では叩けず、この語を経由する。
+	if len(os.Args) == 2 && os.Args[1] == StatusSubcommand {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(runStatus(
+			context.Background(), app.HandoffDir(home),
+			&http.Client{Timeout: connectTimeout}, os.Stdout, os.Stderr,
+		))
 	}
 	if query, ok := tuiInvocation(os.Args); ok {
 		if len(os.Args) > 3 {
@@ -206,6 +196,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// **アプリが消えたらエンジンも消える。** 親を見張るのは、通常の終了
+	// 経路（親が kill する）が働かなかったときのためである。起こしてくれた
+	// 親をいま控えるのは、孤児の引き取り手が init とは限らないからである。
+	go watchParent(ctx, os.Getppid, os.Getppid(), parentTick, stop)
+
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	assets, err := ui.FS()
 	if err != nil {
@@ -219,22 +214,47 @@ func main() {
 		os.Exit(1)
 	}
 
-	parts := newPlatformParts(home)
+	// **エンジンの寿命ぶんロックを握る。** ここへ来る経路はサブコマンドの
+	// どれにも当たらなかった起動——外殻が spawn した子と、端末で裸の `sshc` を
+	// 打った人——の両方であり、後者を塞ぐものは今まで何も無かった。
+	//
+	// 握れなければ 1 台目が生きている。**そのときは走っている方の入口を出して
+	// 終わる。** 打った人にとっては「入口が出る」という自然な結果であり、
+	// handoff を上書きする 2 台目はどこにも生まれない。
+	release, err := lockEngineStart(app.HandoffDir(home))
+	switch {
+	case errors.Is(err, errEngineRunning) && *ownEngine:
+		// **入口を出さない。** 出せば、それを読んだ外殻は「自分のエンジンが
+		// 上がった」と思って窓を開き、直後にこの子の exit を見てアプリごと
+		// 終わる。何も書かずに専用の番号で終わることが、あちらの分岐の材料に
+		// なる。
+		logger.Error("take the engine lock", "error", err)
+		os.Exit(engineBusyExit)
+	case errors.Is(err, errEngineRunning):
+		// **勝った方が handoff を書き終えるまで待つ。** ロックは listener より
+		// 先に取れるので、ほぼ同時に打たれた 2 つのうち負けた方がその隙に
+		// 読むと `sshc: not running` で 1 になる——理由の無い失敗に見える。
+		waitForHandoff(ctx, app.HandoffDir(home))
+		os.Exit(runOpen(
+			ctx, app.HandoffDir(home),
+			&http.Client{Timeout: connectTimeout}, os.Stdout, os.Stderr,
+		))
+	case err != nil:
+		logger.Error("take the engine lock", "error", err)
+		os.Exit(1)
+	}
+	defer release()
 
-	var announce func(string) error
-	if *openBrowser {
-		announce = func(entrance string) error {
-			_, err := fmt.Fprintln(os.Stdout, entrance)
-			return err
-		}
+	parts := newPlatformParts()
+
+	announce := func(entrance string) error {
+		_, err := fmt.Fprintln(os.Stdout, entrance)
+		return err
 	}
 
 	dependencies := app.Dependencies{
 		Random:   rand.Reader,
 		Announce: announce,
-		// ユーザーがインターフェースから有効にしない限りオフ。ここでは何も登録しない。
-		// スイッチに手が届くようにするだけである。
-		LoginItem: parts.LoginItem,
 		// このアプリケーションが自分自身以外のホストに接触する唯一の場所であり、
 		// 誰かが求めたときにだけ行う。何も取得せず、何も置き換えない。
 		// 新しいバージョンが公開されているかを報告するだけである。

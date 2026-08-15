@@ -84,28 +84,26 @@ icons:
 
 # desktop-run は、束を作らずにその場で外殻を開く。開発中の入口である。
 #
-# **焼き直しただけでは、焼き直したものは走らない。** 外殻は「既に居るなら
-# そこへ繋ぐ」ので、生きているエンジンがあればそれが画面を配り続ける——
-# 直したはずのものが直っていないように見える。実際そう見えた。
+# **走っているアプリがあるなら、先に終わらせる。** 二度目の `npm start` は
+# `requestSingleInstanceLock` に弾かれてすぐ消えるので、焼き直したものは走ら
+# ないまま、先に居るアプリが古いエンジンで画面を配り続ける。メニューバーの
+# 「終了」で畳めば、次の起動が新しい実体を上げる。
 #
-# だから install を通す。**ログイン項目が起こし直すのは `~/.local/bin/sshc` で
-# あって、この checkout の bin/sshc ではない。** そこが古いままだと、いくら
-# 止めても launchd が古い方を連れ戻す——1 秒で戻ってくるのを確かめてある。
-# install はそこを入れ替えたうえでログインサービスを張り直す。
+# **だから install を通す**——理由は端末の側にある。`sshc` と打った人が走らせる
+# のは `~/.local/bin/sshc` であって、この checkout の bin/sshc ではない。外殻は
+# 起動のたびに relink を試すが、`desktop/link.js` はそこに実体（symlink では
+# ないもの）があるなら触らない——`make install` を一度でも通した機械では、
+# 画面だけが新しく、端末は古い版を走らせ続ける。install-binary がそこを
+# 入れ替える。
 #
-# そのうえで、まだ生きている古いエンジンを止める。**止めるのはこの開発用の
-# 入口だけである**——製品側の attach は変えない。あちらでは、繋がっている
-# 端末を勝手に落とさないことの方が大事である。
-#
-# install が失敗しても止まらない。**ここで要るのは実体が新しいことだけ**で
-# あり、それはバイナリを置いた時点で済んでいる——ログインサービスの張り直し
-# は、それとは別の、外の世界に効く操作である。あれが転んだからといって、
-# アプリを開けない理由にはならない。ビルドの失敗はここに含めない（それは
-# 下の build が先に落ちる）。
+# install が失敗しても止まらない。**ここで要るのは外殻が新しいことだけ**で
+# あり、それは bin/sshc を焼いた時点で済んでいる（外殻はそれを直接起こす）
+# ——端末側の実体を入れ替えるのは、それとは別の、外の世界に効く操作である。
+# あれが転んだからといって、アプリを開けない理由にはならない。ビルドの失敗は
+# ここに含めない（それは下の build が先に落ちる）。
 desktop-run: build desktop
 	-@$(MAKE) --no-print-directory install-binary \
 		INSTALL_SOURCE="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
-	-@bin/sshc engine stop
 	npm start --prefix desktop
 
 # desktop-dist は配布物を作る。**1 台の macOS から macOS と Linux の両方を
@@ -278,7 +276,6 @@ integration: build
 # 入っていない場合は、誰も見ない場所へインストールするのではなく、その旨を告げる。
 INSTALL_DIR ?= $(HOME)/.local/bin
 INSTALL_SOURCE ?= bin/sshc
-MAINTENANCE_BINARY ?= bin/sshc
 
 install: build
 	@$(MAKE) --no-print-directory install-binary \
@@ -304,10 +301,6 @@ install-binary:
 		install -m 0755 "$(INSTALL_SOURCE)" "$$temporary"; \
 		mv -f "$$temporary" "$$destination"; \
 		trap - 0 1 2 15; \
-		if ! "$$destination" service refresh; then \
-			echo "sshc: CLI was installed at $$destination, but the login service was not refreshed" >&2; \
-			exit 1; \
-		fi; \
 		echo "installed $$destination"
 
 # ソースからのチェックアウトにおける更新とは、取得し直してインストールし直すこと
@@ -321,14 +314,10 @@ update:
 	git pull --ff-only
 	$(MAKE) install
 
-uninstall: build
-	@$(MAKE) --no-print-directory uninstall-binary \
-		MAINTENANCE_BINARY="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
+uninstall:
+	@$(MAKE) --no-print-directory uninstall-binary INSTALL_DIR="$(INSTALL_DIR)"
 
-# インストール済みの旧版がserviceサブコマンドを持たない場合もあるため、現在のsource
-# からbuildしたバイナリで先に解除する。失敗時はKeepAliveの参照先を消さない。
 uninstall-binary:
-	@"$(MAINTENANCE_BINARY)" service disable
 	@if [ -d "$(INSTALL_DIR)/sshc" ]; then \
 		echo "sshc: uninstall destination is a directory: $(INSTALL_DIR)/sshc" >&2; \
 		exit 1; \
