@@ -29,6 +29,10 @@ import (
 // これになり、他のあらゆる失敗は元のまま返る。
 var ErrRunning = errors.New("an sshc engine is already running")
 
+// ErrUnsafeStateDirectory は、ロックの置き場所がディレクトリではないことを言う。
+// そこに置いたロックは、いつでも別のファイルに差し替えられる。
+var ErrUnsafeStateDirectory = errors.New("engine lock directory is not a directory")
+
 // Acquire は、path のロックを待たずに取る。
 //
 // path は engine.lock の完全なパスである。親ディレクトリは、無ければ作られ、
