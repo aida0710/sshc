@@ -117,6 +117,12 @@ type Service struct {
 	used time.Time
 }
 
+// State は status surface が一度に公開する vault の状態である。
+type State struct {
+	Exists   bool
+	Unlocked bool
+}
+
 // NewService はロックされたサービスを返す。Unlock まで何も読めない。
 func NewService(workspace *storage.Workspace, transactions *storage.Manager, now func() time.Time) *Service {
 	return &Service{
@@ -167,6 +173,13 @@ func (s *Service) path() string {
 // vault 全体（暗号文とはいえ、保存された答えの全部）が読み込まれてプロセスの
 // メモリを通っていた。
 func (s *Service) Exists() (bool, error) {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	return s.exists()
+}
+
+// exists は mutationMu をすでに保持する operation が存在だけを読む。
+func (s *Service) exists() (bool, error) {
 	_, err := s.workspace.FileSystem().Lstat(s.path())
 	if err == nil {
 		return true, nil
@@ -175,6 +188,27 @@ func (s *Service) Exists() (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+// State は disk 上の存在と memory 上の解錠状態を同じ mutation 境界で読む。
+// status polling は秘密を使わないため、idle deadline は更新しない。
+func (s *Service) State() (State, error) {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	exists, err := s.exists()
+	if err != nil {
+		return State{}, err
+	}
+	s.mu.Lock()
+	if !exists {
+		// disk 上の vault を失ったあとも導出済み key だけを使い続けない。
+		s.vault = nil
+		s.baseline = nil
+	}
+	unlocked := s.open() != nil
+	s.mu.Unlock()
+	return State{Exists: exists, Unlocked: unlocked}, nil
 }
 
 // Unlocked は、このセッションでパスフレーズが与えられたかを報告する。
@@ -192,7 +226,7 @@ func (s *Service) Unlocked() bool {
 func (s *Service) Initialise(passphrase string) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
-	exists, err := s.Exists()
+	exists, err := s.exists()
 	if err != nil {
 		return err
 	}
@@ -208,7 +242,16 @@ func (s *Service) Initialise(passphrase string) error {
 	s.vault = vault
 	s.used = s.now()
 	s.mu.Unlock()
-	return s.write()
+	if err := s.write(); err != nil {
+		// disk に公開できなかった vault を memory だけで使える状態にしない。
+		s.mu.Lock()
+		s.vault = nil
+		s.baseline = nil
+		s.used = time.Time{}
+		s.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 // Verify は、passphrase がこのワークスペースのマスターパスワードかを報告する。
@@ -756,7 +799,7 @@ func (s *Service) WithConnectionSecretsTransaction(
 	vault := s.use()
 	if vault == nil {
 		s.mu.Unlock()
-		exists, err := s.Exists()
+		exists, err := s.exists()
 		if err != nil {
 			return storage.Result{}, err
 		}

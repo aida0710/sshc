@@ -195,6 +195,7 @@ func New(options Options) (*Server, error) {
 			return err
 		}
 	}
+	vault := newVaultOperations(options.Passwords, reseal)
 	if options.Passwords != nil {
 		// eligibility チェックは設定グラフと known_hosts を読むため、
 		// vault からではなく configuration service から来る。vault は
@@ -213,10 +214,10 @@ func New(options Options) (*Server, error) {
 			keyHosts = options.Config.KeyHosts
 		}
 		registerPasswordRoutes(e, PasswordHandlers{
-			Service:        options.Passwords,
-			KeyHosts:       keyHosts,
-			Eligibility:    eligibility,
-			ResealSnapshot: reseal,
+			Service:     options.Passwords,
+			vault:       vault,
+			KeyHosts:    keyHosts,
+			Eligibility: eligibility,
 		})
 	}
 	// `sshc <alias>` は、1 つの接続に必要なものをここに求める。secret は
@@ -227,10 +228,10 @@ func New(options Options) (*Server, error) {
 	registerConnectRoutes(e, ConnectHandlers{
 		Secret:          options.CLISecret,
 		Passwords:       options.Passwords,
+		vault:           vault,
 		Owner:           options.Owner,
 		Version:         options.Version,
 		ProtocolVersion: options.ProtocolVersion,
-		ResealSnapshot:  reseal,
 		KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
 			if options.Config == nil || options.Keys == nil {
 				return "", "", "", "", false, nil
