@@ -19,12 +19,16 @@ import (
 )
 
 const (
-	maxVaultResponseBody = 64 << 10
-	vaultCommandTimeout  = 3 * time.Minute
+	maxVaultResponseBody  = 64 << 10
+	maxVaultRequestBody   = 4 << 10
+	maxVaultPasswordBytes = 4 << 10
+	vaultCommandTimeout   = 3 * time.Minute
 )
 
 var (
 	errVaultResponseTooLarge = errors.New("vault response is too large")
+	errVaultRequestTooLarge  = errors.New("vault request is too large")
+	errVaultPasswordTooLong  = errors.New("vault password is too long")
 	errInvalidVaultResponse  = errors.New("invalid vault response")
 	errInvalidPasswordText   = errors.New("password is not valid UTF-8")
 )
@@ -33,15 +37,12 @@ var (
 // no-echo 読み取りができない入力を先に拒むことで、パイプや履歴へ秘密を置かない。
 type passwordTerminal interface {
 	IsTerminal(fd int) bool
-	ReadPassword(fd int) ([]byte, error)
+	ReadPassword(ctx context.Context, input *os.File) ([]byte, error)
 }
 
 type systemPasswordTerminal struct{}
 
 func (systemPasswordTerminal) IsTerminal(fd int) bool { return term.IsTerminal(fd) }
-func (systemPasswordTerminal) ReadPassword(fd int) ([]byte, error) {
-	return term.ReadPassword(fd)
-}
 
 // runVault は、起動済み engine の Vault operation だけを行う。engine を起動しない
 // のは、desktop と headless の owner をこの補助コマンドが勝手に選ばないためである。
@@ -135,7 +136,7 @@ func runVaultCreate(
 	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
 	stdout, stderr io.Writer, terminal passwordTerminal,
 ) int {
-	next, err := promptVaultPassword(stdin, stderr, terminal, "New master password: ")
+	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
 	defer zeroBytes(next)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
@@ -143,7 +144,7 @@ func runVaultCreate(
 	if ctx.Err() != nil {
 		return 130
 	}
-	confirmation, err := promptVaultPassword(stdin, stderr, terminal, "Confirm new master password: ")
+	confirmation, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Confirm new master password: ")
 	defer zeroBytes(confirmation)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
@@ -169,7 +170,7 @@ func runVaultUnlock(
 	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
 	stdout, stderr io.Writer, terminal passwordTerminal,
 ) int {
-	password, err := promptVaultPassword(stdin, stderr, terminal, "Master password: ")
+	password, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Master password: ")
 	defer zeroBytes(password)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
@@ -196,7 +197,7 @@ func runVaultChange(
 	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
 	stdout, stderr io.Writer, terminal passwordTerminal,
 ) int {
-	current, err := promptVaultPassword(stdin, stderr, terminal, "Current master password: ")
+	current, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Current master password: ")
 	defer zeroBytes(current)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
@@ -204,7 +205,7 @@ func runVaultChange(
 	if ctx.Err() != nil {
 		return 130
 	}
-	next, err := promptVaultPassword(stdin, stderr, terminal, "New master password: ")
+	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
 	defer zeroBytes(next)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
@@ -212,7 +213,7 @@ func runVaultChange(
 	if ctx.Err() != nil {
 		return 130
 	}
-	confirmation, err := promptVaultPassword(stdin, stderr, terminal, "Confirm new master password: ")
+	confirmation, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Confirm new master password: ")
 	defer zeroBytes(confirmation)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
@@ -236,12 +237,15 @@ func runVaultChange(
 }
 
 func promptVaultPassword(
-	stdin *os.File, stderr io.Writer, terminal passwordTerminal, prompt string,
+	ctx context.Context, stdin *os.File, stderr io.Writer, terminal passwordTerminal, prompt string,
 ) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if _, err := fmt.Fprint(stderr, prompt); err != nil {
 		return nil, err
 	}
-	typed, err := terminal.ReadPassword(int(stdin.Fd()))
+	typed, err := terminal.ReadPassword(ctx, stdin)
 	_, newlineErr := fmt.Fprintln(stderr)
 	if err != nil {
 		return typed, err
@@ -490,9 +494,18 @@ func decodeVaultResponseJSON(body []byte, target any) error {
 }
 
 func vaultPassphrasePayload(password []byte) ([]byte, error) {
-	payload := make([]byte, 0, len(password)+20)
+	encodedSize, err := vaultJSONStringSize(password)
+	if err != nil {
+		return nil, err
+	}
+	totalSize := len(`{"passphrase":`) + encodedSize + 1
+	if totalSize > maxVaultRequestBody {
+		return nil, errVaultRequestTooLarge
+	}
+	// Exact capacity prevents append from abandoning heap buffers that contain
+	// partial copies of a password requiring JSON escaping.
+	payload := make([]byte, 0, totalSize)
 	payload = append(payload, `{"passphrase":`...)
-	var err error
 	payload, err = appendVaultJSONString(payload, password)
 	if err != nil {
 		zeroBytes(payload)
@@ -503,9 +516,20 @@ func vaultPassphrasePayload(password []byte) ([]byte, error) {
 }
 
 func vaultChangePayload(current, next []byte) ([]byte, error) {
-	payload := make([]byte, 0, len(current)+len(next)+28)
+	currentSize, err := vaultJSONStringSize(current)
+	if err != nil {
+		return nil, err
+	}
+	nextSize, err := vaultJSONStringSize(next)
+	if err != nil {
+		return nil, err
+	}
+	totalSize := len(`{"current":`) + currentSize + len(`,"next":`) + nextSize + 1
+	if totalSize > maxVaultRequestBody {
+		return nil, errVaultRequestTooLarge
+	}
+	payload := make([]byte, 0, totalSize)
 	payload = append(payload, `{"current":`...)
-	var err error
 	payload, err = appendVaultJSONString(payload, current)
 	if err == nil {
 		payload = append(payload, `,"next":`...)
@@ -517,6 +541,38 @@ func vaultChangePayload(current, next []byte) ([]byte, error) {
 	}
 	payload = append(payload, '}')
 	return payload, nil
+}
+
+func vaultJSONStringSize(password []byte) (int, error) {
+	if !utf8.Valid(password) {
+		return 0, errInvalidPasswordText
+	}
+	size := 2 // surrounding quotes
+	for offset := 0; offset < len(password); {
+		value := password[offset]
+		if value >= utf8.RuneSelf {
+			runeValue, runeSize := utf8.DecodeRune(password[offset:])
+			if runeValue == '\u2028' || runeValue == '\u2029' {
+				size += 6
+			} else {
+				size += runeSize
+			}
+			offset += runeSize
+			continue
+		}
+		offset++
+		switch value {
+		case '"', '\\', '\b', '\f', '\n', '\r', '\t':
+			size += 2
+		default:
+			if value < 0x20 {
+				size += 6
+			} else {
+				size++
+			}
+		}
+	}
+	return size, nil
 }
 
 // appendVaultJSONString は password を string に変えず JSON string を作る。
