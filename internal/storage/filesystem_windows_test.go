@@ -80,6 +80,73 @@ func TestWriteTempStopsBeforeContentsAndCleansWhenPrivateCreationFails(t *testin
 	}
 }
 
+func TestMovePrivateRestrictsAndMovesTheBoundSourceHandle(t *testing.T) {
+	directory := t.TempDir()
+	destinationDirectory := filepath.Join(directory, "private")
+	if err := windowsacl.EnsureDirectory(destinationDirectory); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(directory, "source")
+	if err := os.WriteFile(source, []byte("bound source"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	installPermissiveInheritedDACL(t, source)
+	destination := filepath.Join(destinationDirectory, "moved")
+	boundPath := filepath.Join(directory, "bound-source")
+
+	err := movePrivateFileWith(source, destination, func(*os.File) error {
+		if err := os.Rename(source, boundPath); err != nil {
+			return err
+		}
+		if err := os.WriteFile(source, []byte("path decoy"), 0o600); err != nil {
+			return err
+		}
+		installPermissiveInheritedDACL(t, source)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("movePrivateFileWith = %v", err)
+	}
+	contents, err := os.ReadFile(destination)
+	if err != nil || string(contents) != "bound source" {
+		t.Fatalf("destination = %q, %v; want bound source", contents, err)
+	}
+	assertWindowsPrivatePath(t, destination)
+	decoy, err := os.ReadFile(source)
+	if err != nil || string(decoy) != "path decoy" {
+		t.Fatalf("source decoy = %q, %v", decoy, err)
+	}
+	if restricted, err := windowsacl.IsRestrictedToCurrentUser(source); err != nil {
+		t.Fatal(err)
+	} else if restricted {
+		t.Fatal("source path decoy was restricted instead of the bound object")
+	}
+	if _, err := os.Stat(boundPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("bound source was not moved: %v", err)
+	}
+}
+
+func TestMovePrivateAcceptsAnAlreadyRestrictedSource(t *testing.T) {
+	directory := t.TempDir()
+	destinationDirectory := filepath.Join(directory, "private")
+	if err := windowsacl.EnsureDirectory(destinationDirectory); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(directory, "source")
+	if err := os.WriteFile(source, []byte("already restricted"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := windowsacl.RestrictFile(source); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(destinationDirectory, "moved")
+
+	if err := (OSFileSystem{}).MovePrivate(source, destination); err != nil {
+		t.Fatalf("MovePrivate = %v", err)
+	}
+	assertWindowsPrivatePath(t, destination)
+}
+
 func TestOSFileSystemReadFileRefusesWindowsReparsePoints(t *testing.T) {
 	directory := t.TempDir()
 	fileTarget := filepath.Join(directory, "target")

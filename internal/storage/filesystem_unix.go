@@ -30,6 +30,8 @@ func createPrivateTemp(directory, prefix string) (*os.File, error) {
 
 func replaceFile(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
 
+func movePrivateFile(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
+
 func syncDirectory(path string) error {
 	directory, err := os.Open(path)
 	if err != nil {

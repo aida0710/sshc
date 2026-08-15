@@ -37,6 +37,9 @@ var (
 // already effective when CreateFile returns. No secret bytes exist before this
 // boundary succeeds.
 func CreateTemp(directory, prefix string) (*os.File, error) {
+	if err := ValidatePrivatePath(directory); err != nil {
+		return nil, err
+	}
 	return createTempWith(directory, prefix, rand.Reader, createPrivateFile)
 }
 
@@ -74,6 +77,9 @@ func createTempWith(directory, prefix string, random io.Reader, create func(stri
 // an existing current-user-owned regular file and tightens it through the same
 // handle returned to the caller.
 func OpenOrCreateFile(path string) (*os.File, error) {
+	if err := ValidatePrivatePath(path); err != nil {
+		return nil, err
+	}
 	file, created, err := createPrivateFile(path)
 	if err == nil {
 		return file, nil
@@ -116,7 +122,10 @@ func EnsureDirectory(path string) error {
 }
 
 func validatePrivateDirectoryPath(path string) error {
-	if path == "" || !filepath.IsAbs(path) {
+	if err := ValidatePrivatePath(path); err != nil {
+		return err
+	}
+	if !filepath.IsAbs(path) {
 		return os.ErrInvalid
 	}
 	cleaned := filepath.Clean(path)
@@ -161,6 +170,9 @@ func ensureParents(path string) error {
 // RestrictFile opens the final path without following a final reparse point and
 // applies the policy through that one handle.
 func RestrictFile(path string) error {
+	if err := ValidatePrivatePath(path); err != nil {
+		return err
+	}
 	file, err := openObject(path, true, false)
 	if err != nil {
 		return err
@@ -186,6 +198,13 @@ func restrictFileHandle(file *os.File) error {
 	return restrictHandle(file, false)
 }
 
+// RestrictFileHandle validates current-user ownership, regular-file type, and
+// final reparse state, then applies and re-reads the exact private DACL through
+// the supplied handle.
+func RestrictFileHandle(file *os.File) error {
+	return restrictFileHandle(file)
+}
+
 func restrictDirectoryHandle(file *os.File) error {
 	return restrictHandle(file, true)
 }
@@ -209,6 +228,7 @@ func restrictHandle(file *os.File, directory bool) error {
 	if descriptor == nil {
 		return ErrInvalidACL
 	}
+	defer runtime.KeepAlive(descriptor)
 	owner, _, err := descriptor.Owner()
 	if err != nil {
 		return err
@@ -257,6 +277,9 @@ func restrictHandle(file *os.File, directory bool) error {
 // IsRestrictedToCurrentUser opens and inspects one concrete non-reparse file or
 // directory. It never trusts a prior Restrict call or POSIX mode bits.
 func IsRestrictedToCurrentUser(path string) (bool, error) {
+	if err := ValidatePrivatePath(path); err != nil {
+		return false, err
+	}
 	file, err := openObject(path, false, false)
 	if err != nil {
 		return false, err
@@ -276,6 +299,75 @@ func IsRestrictedToCurrentUser(path string) (bool, error) {
 	}
 	directory := info.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY != 0
 	return isHandleRestricted(handle, directory, userSID)
+}
+
+// OpenAuthenticatedFile returns one regular, non-reparse file handle only
+// after owner and exact protected DACL authentication succeeds on that handle.
+// DELETE is requested up front so a caller can remove this exact object later.
+func OpenAuthenticatedFile(path string) (*os.File, error) {
+	if err := ValidatePrivatePath(path); err != nil {
+		return nil, err
+	}
+	access := uint32(
+		windows.GENERIC_READ |
+			windows.READ_CONTROL |
+			windows.DELETE |
+			windows.FILE_READ_ATTRIBUTES,
+	)
+	file, err := openObjectWithAccess(path, access, true, false)
+	if err != nil {
+		return nil, err
+	}
+	userSID, err := currentUserSID()
+	if err == nil {
+		err = authenticateHandle(windows.Handle(file.Fd()), false, userSID)
+	}
+	if err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func authenticateHandle(handle windows.Handle, directory bool, userSID *windows.SID) error {
+	if err := validateHandleType(handle, directory); err != nil {
+		return err
+	}
+	descriptor, err := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return err
+	}
+	if descriptor == nil {
+		return ErrInvalidACL
+	}
+	owner, _, err := descriptor.Owner()
+	if err != nil {
+		return err
+	}
+	if owner == nil || !owner.Equals(userSID) {
+		return ErrUnexpectedOwner
+	}
+	restricted, err := isDescriptorRestricted(descriptor, userSID)
+	if err != nil {
+		return err
+	}
+	if !restricted {
+		return ErrInvalidACL
+	}
+	return nil
+}
+
+// DeleteFileHandle marks the exact open regular file for deletion. The caller
+// must close the file to complete deletion.
+func DeleteFileHandle(file *os.File) error {
+	if file == nil {
+		return os.ErrInvalid
+	}
+	handle := windows.Handle(file.Fd())
+	if err := validateHandleType(handle, false); err != nil {
+		return err
+	}
+	return markFileForDeletion(handle)
 }
 
 func createPrivateFile(path string) (*os.File, bool, error) {

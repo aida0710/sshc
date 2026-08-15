@@ -39,6 +39,9 @@ type FileSystem interface {
 	// 適用し、ディスクへフラッシュして、そのパスを返す。
 	WriteTemp(directory, prefix string, permission fs.FileMode, contents []byte) (string, error)
 	Rename(oldPath, newPath string) error
+	// MovePrivate moves an existing sensitive file while preserving object
+	// identity and applying the private-state security contract.
+	MovePrivate(oldPath, newPath string) error
 	Remove(path string) error
 	SyncDir(path string) error
 	EvalSymlinks(path string) (string, error)
@@ -128,6 +131,10 @@ func writeAndFlush(file *os.File, permission fs.FileMode, contents []byte) error
 }
 
 func (OSFileSystem) Rename(oldPath, newPath string) error { return replaceFile(oldPath, newPath) }
+
+func (OSFileSystem) MovePrivate(oldPath, newPath string) error {
+	return movePrivateFile(oldPath, newPath)
+}
 
 func (OSFileSystem) Remove(path string) error { return os.Remove(path) }
 
