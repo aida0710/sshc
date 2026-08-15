@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"sshc/internal/handoff"
+	"sshc/internal/httpserver"
 	"sshc/internal/platform"
 )
 
@@ -408,6 +409,35 @@ func TestBuildWritesAVersionedOwnedHandoff(t *testing.T) {
 	}
 	if document.URL != server.URL() || document.Owner != handoff.OwnerDesktop || document.PID != 777 || document.Version != "v1.2.3" {
 		t.Errorf("document = %#v", document)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- server.Serve(ctx) }()
+	request, err := http.NewRequest(http.MethodGet, server.URL()+httpserver.StatusPath, nil)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	request.Header.Set(handoff.HeaderName, document.Secret)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	var status httpserver.CLIStatus
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		response.Body.Close()
+		cancel()
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if status.Owner != document.Owner || status.Version != document.Version || status.ProtocolVersion != document.ProtocolVersion {
+		t.Errorf("status identity = %#v, handoff = %#v", status, document)
+	}
+	cancel()
+	if err := <-served; err != nil {
+		t.Fatalf("Serve() = %v", err)
 	}
 }
 
