@@ -4,6 +4,7 @@ package enginelock
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -16,9 +17,7 @@ func acquire(path string) (func() error, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, err
 	}
-	// MkdirAll は umask を通り、既にあるディレクトリの権限を変えない。所有権の
-	// 直列化を他人が書ける場所に置かないため、ここで締め直す。
-	if err := os.Chmod(directory, 0o700); err != nil {
+	if err := ensurePrivateDirectory(directory); err != nil {
 		return nil, err
 	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
@@ -39,4 +38,28 @@ func acquire(path string) (func() error, error) {
 	}
 	descriptor := int(file.Fd())
 	return newRelease(file, func() error { return syscall.Flock(descriptor, syscall.LOCK_UN) }), nil
+}
+
+// ensurePrivateDirectory は、緩いときだけ締め直す。
+//
+// MkdirAll は umask を通り、既にあるディレクトリの権限には触れない。他人が書ける
+// ディレクトリに置かれたロックは、別のファイルに差し替えられる — そうなれば 2 台の
+// エンジンがそれぞれ別の inode を握り、ロックの意味が消える。
+//
+// 既に閉じているなら何もしない。無条件に chmod すると、mode を持たないファイル
+// システムでは、それだけを理由にエンジンが起動できなくなる。
+func ensurePrivateDirectory(directory string) error {
+	info, err := os.Lstat(directory)
+	if err != nil {
+		return err
+	}
+	// シンボリックリンクは Lstat では IsDir にならない。リンク越しの chmod は、
+	// 誰が差し替えたか分からない先の権限を書き換えることになる。
+	if !info.IsDir() {
+		return fmt.Errorf("%w: %s", ErrUnsafeStateDirectory, directory)
+	}
+	if info.Mode().Perm()&0o077 == 0 {
+		return nil
+	}
+	return os.Chmod(directory, 0o700)
 }

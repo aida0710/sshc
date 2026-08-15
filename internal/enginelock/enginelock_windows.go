@@ -27,10 +27,10 @@ func acquire(path string) (func() error, error) {
 	}
 	file, err := windowsacl.OpenOrCreateFile(path)
 	if err != nil {
-		// 共有違反は、他の誰かがこのファイルを排他で開いているという観測である。
-		if errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
-			return nil, ErrRunning
-		}
+		// 共有違反は ErrRunning にしない。エンジンの開き方は常に
+		// FILE_SHARE_READ|WRITE|DELETE なので、エンジン同士がこれを起こすことは
+		// ない。起こすのはウイルス対策やインデクサであり、それを「既にエンジンが
+		// 居る」と言えば、誰も居ないのに誰も起動できなくなる。
 		return nil, err
 	}
 	handle := windows.Handle(file.Fd())
