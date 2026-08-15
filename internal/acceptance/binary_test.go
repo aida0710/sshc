@@ -40,7 +40,7 @@ func TestLegacyOpenFlagIsRejected(t *testing.T) {
 	if !errors.As(err, &exit) || exit.ExitCode() != 2 {
 		t.Fatalf("-open=false exit = %v; want status 2\n%s", err, output)
 	}
-	if !strings.Contains(string(output), "flag provided but not defined: -open") {
+	if !strings.Contains(string(output), `unknown command "-open=false"`) {
 		t.Fatalf("-open=false output did not explain the rejected flag:\n%s", output)
 	}
 }
@@ -71,8 +71,10 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	}
 
 	home := t.TempDir()
-	// 入口を書き出す。ブラウザは開かない。ここは端末から打った人と同じ道を通る。
-	process := exec.Command(binary)
+	// acceptance harness 自身が foreground engine の所有者である。bare `sshc` は
+	// desktop を起動・前面化する公開入口なので、画面のない検査は明示的な headless
+	// owner として起動し、SIGTERM まで自分で寿命を管理する。
+	process := exec.Command(binary, "headless")
 	process.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
 	stdout, err := process.StdoutPipe()
 	if err != nil {
