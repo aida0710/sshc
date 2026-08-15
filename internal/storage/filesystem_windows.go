@@ -24,23 +24,17 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := rejectReparseParents(absolutePath); err != nil {
-		return nil, err
-	}
-
-	pathUTF16, err := windows.UTF16PtrFromString(absolutePath)
+	parent, err := openNoReparseParent(filepath.Dir(absolutePath))
 	if err != nil {
 		return nil, err
 	}
-	handle, err := windows.CreateFile(
-		pathUTF16,
-		windows.FILE_READ_DATA|windows.FILE_READ_ATTRIBUTES,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
-		nil,
-		windows.OPEN_EXISTING,
-		windows.FILE_FLAG_OPEN_REPARSE_POINT|windows.FILE_FLAG_BACKUP_SEMANTICS,
-		0,
-	)
+	defer windows.CloseHandle(parent)
+
+	fileName := filepath.Base(absolutePath)
+	if fileName == "." || fileName == string(os.PathSeparator) {
+		return nil, os.ErrInvalid
+	}
+	handle, err := openRelativeNoReparse(parent, fileName, windows.FILE_READ_DATA|windows.FILE_READ_ATTRIBUTES, false)
 	if err != nil {
 		return nil, err
 	}
@@ -51,22 +45,6 @@ func openRegularNoFollow(path string) (*os.File, error) {
 		}
 	}()
 
-	var attributes fileAttributeTagInfo
-	if err := windows.GetFileInformationByHandleEx(
-		handle,
-		windows.FileAttributeTagInfo,
-		(*byte)(unsafe.Pointer(&attributes)),
-		uint32(unsafe.Sizeof(attributes)),
-	); err != nil {
-		return nil, err
-	}
-	if attributes.fileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 || attributes.reparseTag != 0 {
-		return nil, ErrSymlinkPath
-	}
-	if err := verifyHandlePath(handle, absolutePath); err != nil {
-		return nil, err
-	}
-
 	file := os.NewFile(uintptr(handle), absolutePath)
 	if file == nil {
 		return nil, os.ErrInvalid
@@ -75,45 +53,49 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	return file, nil
 }
 
-func rejectReparseParents(path string) error {
+// openNoReparseParent は parent を handle 相対でたどる。文字列の各 component を
+// 検査してから絶対パスで開き直すと、その間の置換で別 tree をたどれるためである。
+func openNoReparseParent(path string) (windows.Handle, error) {
 	volume := filepath.VolumeName(path)
 	if volume == "" {
-		return os.ErrInvalid
+		return 0, os.ErrInvalid
 	}
 	root := volume + string(os.PathSeparator)
-	parent := filepath.Dir(path)
-	relativeParent, err := filepath.Rel(root, parent)
+	relativeParent, err := filepath.Rel(root, path)
 	if err != nil || filepath.IsAbs(relativeParent) || relativeParent == ".." || strings.HasPrefix(relativeParent, ".."+string(os.PathSeparator)) {
-		return os.ErrInvalid
+		return 0, os.ErrInvalid
 	}
 
-	if err := rejectReparseDirectory(root); err != nil {
-		return err
+	current, err := openAbsoluteNoReparseDirectory(root)
+	if err != nil {
+		return 0, err
 	}
 	if relativeParent == "." {
-		return nil
+		return current, nil
 	}
-	current := root
 	for _, component := range strings.Split(relativeParent, string(os.PathSeparator)) {
 		if component == "" || component == "." {
 			continue
 		}
-		current = filepath.Join(current, component)
-		if err := rejectReparseDirectory(current); err != nil {
-			return err
+		next, err := openRelativeNoReparse(current, component, windows.FILE_READ_ATTRIBUTES, true)
+		if err != nil {
+			_ = windows.CloseHandle(current)
+			return 0, err
 		}
+		_ = windows.CloseHandle(current)
+		current = next
 	}
-	return nil
+	return current, nil
 }
 
-func rejectReparseDirectory(path string) error {
+func openAbsoluteNoReparseDirectory(path string) (windows.Handle, error) {
 	pathUTF16, err := windows.UTF16PtrFromString(path)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	handle, err := windows.CreateFile(
 		pathUTF16,
-		windows.FILE_READ_ATTRIBUTES,
+		windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
 		nil,
 		windows.OPEN_EXISTING,
@@ -121,10 +103,56 @@ func rejectReparseDirectory(path string) error {
 		0,
 	)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	defer windows.CloseHandle(handle)
-	return rejectReparseHandle(handle)
+	if err := rejectReparseHandle(handle); err != nil {
+		_ = windows.CloseHandle(handle)
+		return 0, err
+	}
+	return handle, nil
+}
+
+// openRelativeNoReparse は既に検査済みの parent handle を RootDirectory に渡す。
+// これにより parent path の名前空間が後から junction 等へ置換されても、開く
+// object は保持中の親 directory に固定される。
+func openRelativeNoReparse(parent windows.Handle, name string, access uint32, directory bool) (windows.Handle, error) {
+	objectName, err := windows.NewNTUnicodeString(name)
+	if err != nil {
+		return 0, err
+	}
+	attributes := &windows.OBJECT_ATTRIBUTES{
+		Length:        uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
+		RootDirectory: parent,
+		ObjectName:    objectName,
+		Attributes:    windows.OBJ_CASE_INSENSITIVE,
+	}
+	var handle windows.Handle
+	var status windows.IO_STATUS_BLOCK
+	options := uint32(windows.FILE_OPEN_REPARSE_POINT | windows.FILE_SYNCHRONOUS_IO_NONALERT)
+	if directory {
+		options |= windows.FILE_DIRECTORY_FILE
+	}
+	err = windows.NtCreateFile(
+		&handle,
+		access|windows.SYNCHRONIZE,
+		attributes,
+		&status,
+		nil,
+		0,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		windows.FILE_OPEN,
+		options,
+		0,
+		0,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if err := rejectReparseHandle(handle); err != nil {
+		_ = windows.CloseHandle(handle)
+		return 0, err
+	}
+	return handle, nil
 }
 
 func rejectReparseHandle(handle windows.Handle) error {
@@ -151,31 +179,6 @@ func cleanAbsoluteDOSPath(path string) (string, error) {
 	buffer := make([]uint16, 260)
 	for {
 		n, err := windows.GetFullPathName(pathUTF16, uint32(len(buffer)), &buffer[0], nil)
-		if err != nil {
-			return "", err
-		}
-		if n < uint32(len(buffer)) {
-			return normalizeDOSPath(windows.UTF16ToString(buffer))
-		}
-		buffer = make([]uint16, n+1)
-	}
-}
-
-func verifyHandlePath(handle windows.Handle, expected string) error {
-	actual, err := finalDOSPath(handle)
-	if err != nil {
-		return err
-	}
-	if !strings.EqualFold(actual, expected) {
-		return ErrSymlinkPath
-	}
-	return nil
-}
-
-func finalDOSPath(handle windows.Handle) (string, error) {
-	buffer := make([]uint16, 260)
-	for {
-		n, err := windows.GetFinalPathNameByHandle(handle, &buffer[0], uint32(len(buffer)), 0)
 		if err != nil {
 			return "", err
 		}
