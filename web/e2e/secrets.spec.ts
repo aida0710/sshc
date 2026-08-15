@@ -92,7 +92,6 @@ test("keeps application controls in Settings and changes the master password the
   await openApplication(page, installation);
 
   await openSection(page, "Secrets");
-  await expect(page.getByRole("region", { name: "Start at login" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Master password" })).toHaveCount(0);
 
   await openSection(page, "Settings");

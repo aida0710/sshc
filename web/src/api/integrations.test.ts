@@ -117,6 +117,20 @@ describe("integrationsApi terminal sessions", () => {
   });
 });
 
+describe("integrationsApi terminal settings", () => {
+  it("keeps explicitly disabled clipboard choices and leaves absent defaults unset", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      schemaVersion: 3,
+      embeddedTerminal: { copyOnSelect: false, rightClickPaste: false },
+    })));
+
+    await expect(integrationsApi.terminalSettings()).resolves.toEqual({
+      copyOnSelect: false,
+      rightClickPaste: false,
+    });
+  });
+});
+
 describe("integrationsApi.passwordVault", () => {
   it("accepts dedicated key-passphrase subjects", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({

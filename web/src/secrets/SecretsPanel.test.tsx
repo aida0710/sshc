@@ -32,9 +32,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
       vault: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] },
       snapshotResealed: true,
     }),
-    loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: true }),
     updateStatus: vi.fn().mockResolvedValue({ current: "dev", available: false, restartRequired: false }),
-    setLoginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
     ...overrides,
   } as unknown as IntegrationsApi;
 }
@@ -63,9 +61,7 @@ describe("SecretsPanel", () => {
 
     expect(within(passwords).queryByText("build-key")).not.toBeInTheDocument();
     expect(within(phrases).queryByText("office-vm")).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Start at login" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Master password" })).not.toBeInTheDocument();
-    expect(api.loginItem).not.toHaveBeenCalled();
     expect(api.changeMasterPassword).not.toHaveBeenCalled();
   });
 

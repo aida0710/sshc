@@ -104,13 +104,17 @@ type GroupMetadata struct {
 	Settings []Setting `json:"settings,omitempty"`
 }
 
-// EmbeddedTerminal は、埋め込みターミナルの上限である。
+// EmbeddedTerminal は、埋め込みターミナルの設定である。
 //
 // 0 は「書かれていない」であって「0 本」ではない。読み取り側は範囲の外の値と
 // 同じように既定へ戻す。
 type EmbeddedTerminal struct {
 	MaxSessions     int `json:"maxSessions,omitempty"`
 	ScrollbackBytes int `json:"scrollbackBytes,omitempty"`
+	// nil は既定の on、false は明示的な off である。bool に omitempty を直接
+	// 付けると false が消え、再起動後に on へ戻ってしまう。
+	CopyOnSelect    *bool `json:"copyOnSelect,omitempty"`
+	RightClickPaste *bool `json:"rightClickPaste,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。
 	//
 	// 空は「書かれていない」であり、そのとき始まるのは home である。
@@ -122,28 +126,13 @@ type EmbeddedTerminal struct {
 	StartDirectory string `json:"startDirectory,omitempty"`
 }
 
-// Desktop は、デスクトップの外殻の設定である。
-//
-// **エンジンがこれを持つのは、同じ問いに答えるものを二つ持たないためである。**
-// 外殻はこれを API から読む——metadata の形を知る場所を増やさない。
-type Desktop struct {
-	// KeepRunning は、アプリを閉じたあともエンジンを動かし続けるかである。
-	//
-	// 真なら、開いているコンソールは残る。tmux に繋いだままウィンドウを閉じたい人と、
-	// 閉じたら全部終わってほしい人の両方がいる。**永久ではない**——vault には
-	// 既にアイドルの施錠があるので、放置されたエンジンはそこで鍵を手放す。
-	KeepRunning bool `json:"keepRunning,omitempty"`
-}
-
 // Metadata は~/.ssh/sshc/metadata.json の全体である。
 type Metadata struct {
 	SchemaVersion int    `json:"schemaVersion"`
 	GroupsFile    string `json:"groupsFile,omitempty"`
-	// EmbeddedTerminal と Desktop はポインタである。書かれていない文書と、
-	// 既定と同じ値が明示的に書かれた文書を、書き戻すときに区別できるように
-	// するためだ。
+	// EmbeddedTerminal はポインタである。書かれていない文書と、既定と同じ値が
+	// 明示的に書かれた文書を、書き戻すときに区別できるようにするためだ。
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
-	Desktop          *Desktop          `json:"desktop,omitempty"`
 	Groups           []GroupMetadata   `json:"groups,omitempty"`
 	Hosts            []HostMetadata    `json:"hosts,omitempty"`
 }
@@ -155,13 +144,6 @@ func (metadata Metadata) TerminalStartDirectory() string {
 		return ""
 	}
 	return metadata.EmbeddedTerminal.StartDirectory
-}
-
-// KeepEngineRunning は、アプリを閉じたあともエンジンを残すかを報告する。
-//
-// **書かれていなければ止める側に倒す。** 動かし続けるのは明示的な選択である。
-func (metadata Metadata) KeepEngineRunning() bool {
-	return metadata.Desktop != nil && metadata.Desktop.KeepRunning
 }
 
 // TerminalLimits は、保存された設定を埋め込みターミナルの語彙へ移す。

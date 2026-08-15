@@ -86,8 +86,20 @@ func Read(directory string) (Handoff, error) {
 	return read, nil
 }
 
-// Remove はそれを取り除く。ファイルがないことは、これが求める状態である。
-func Remove(directory string) error {
+// Remove は、そこに残っているのがこの URL を指すものであるときだけ取り除く。
+// ファイルがないことは、これが求める状態である。
+//
+// **持ち主を確かめてから消す。** 消す側が確かめないと、自分のものではない 1 行
+// ——いま生きている別の実行が書いたもの——を消せてしまい、そのエンジンは誰から
+// も見えなくなる。名簿は 1 行しかないので、消えた瞬間に見つける術が無くなる。
+//
+// 誰のものかを URL で見るのは、**待ち受けているポートは同時にひとつの実行しか
+// 持てない**からである。生きている 2 つの実行が同じ URL を名乗ることはない。
+// 読めないものは、壊れているか、そもそも無いかのどちらかなので取り除く。
+func Remove(directory, url string) error {
+	if found, err := Read(directory); err == nil && found.URL != url {
+		return nil
+	}
 	err := os.Remove(filepath.Join(directory, FileName))
 	if err != nil && !os.IsNotExist(err) {
 		return err

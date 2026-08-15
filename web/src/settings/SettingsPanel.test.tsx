@@ -7,12 +7,8 @@ import { SettingsPanel } from "./SettingsPanel";
 
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
-    loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: true }),
-    desktopSettings: vi.fn().mockResolvedValue({ keepRunning: false }),
     terminalSettings: vi.fn().mockResolvedValue({}),
     setTerminalSettings: vi.fn().mockResolvedValue(undefined),
-    setDesktopSettings: vi.fn().mockResolvedValue(undefined),
-    setLoginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
     changeMasterPassword: vi.fn().mockResolvedValue({
       vault: {
         exists: true,
@@ -42,44 +38,6 @@ describe("SettingsPanel", () => {
     await screen.findByRole("region", { name: "Master password" });
     expect(screen.queryByRole("region", { name: "Default connection application" })).toBeNull();
     expect(screen.queryByLabelText("Open connections with")).toBeNull();
-  });
-
-  it("offers start at login off by default and saves an explicit toggle", async () => {
-    const user = userEvent.setup();
-    const api = buildApi();
-    render(<SettingsPanel api={api} />);
-
-    const section = await screen.findByRole("region", { name: "Start at login" });
-    const toggle = within(section).getByRole("checkbox", { name: "Start sshc when I log in" });
-    expect(toggle).not.toBeChecked();
-    await user.click(toggle);
-
-    await waitFor(() => expect(api.setLoginItem).toHaveBeenCalledWith(true));
-    expect(toggle).toBeChecked();
-  });
-
-  it("omits an unsupported login item but reports load and save failures", async () => {
-    const unsupported = render(<SettingsPanel api={buildApi({
-      loginItem: vi.fn().mockResolvedValue({ enabled: false, supported: false }),
-    })} />);
-    await screen.findByRole("region", { name: "Master password" });
-    expect(screen.queryByRole("region", { name: "Start at login" })).not.toBeInTheDocument();
-    unsupported.unmount();
-
-    const failedLoad = render(<SettingsPanel api={buildApi({
-      loginItem: vi.fn().mockRejectedValue(new Error("unavailable")),
-    })} />);
-    expect(await screen.findByText("The start-at-login setting could not be read.")).toBeInTheDocument();
-    failedLoad.unmount();
-
-    const user = userEvent.setup();
-    render(<SettingsPanel api={buildApi({
-      setLoginItem: vi.fn().mockRejectedValue(new Error("refused")),
-    })} />);
-    const toggle = await screen.findByRole("checkbox", { name: "Start sshc when I log in" });
-    await user.click(toggle);
-    expect(await screen.findByText("That could not be changed.")).toBeInTheDocument();
-    expect(toggle).not.toBeChecked();
   });
 
   it("validates, changes the master password, reports the live snapshot, and clears every field", async () => {
@@ -158,46 +116,6 @@ describe("SettingsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Show New master password" }));
     expect(screen.getByLabelText("New master password")).toHaveAttribute("type", "text");
   });
-  // **書かれていなければ止める側に倒す。** 動かし続けるのは明示的な選択である。
-  it("offers keeping the engine running, off unless it was chosen", async () => {
-    const user = userEvent.setup();
-    const setDesktopSettings = vi.fn().mockResolvedValue(undefined);
-    render(<SettingsPanel api={buildApi({ setDesktopSettings })} />);
-
-    const toggle = await screen.findByLabelText("Keep running after the window closes");
-    expect(toggle).not.toBeChecked();
-
-    await user.click(toggle);
-    expect(setDesktopSettings).toHaveBeenCalledWith(true);
-    await waitFor(() => expect(toggle).toBeChecked());
-  });
-
-  // 読めないときも止める側に倒す。**読めない設定を「続けろ」と解釈しない。**
-  it("falls back to stopping when the setting cannot be read", async () => {
-    render(<SettingsPanel api={buildApi({
-      desktopSettings: vi.fn().mockRejectedValue(new Error("offline")),
-    })} />);
-
-    const toggle = await screen.findByLabelText("Keep running after the window closes");
-    expect(toggle).not.toBeChecked();
-  });
-  // **二つの仕組みが同じものの寿命を決めていて、あちらの方が強い。**
-  // 黙って効かないより、効かないと言う。
-  it("says when start at login makes the choice moot", async () => {
-    render(<SettingsPanel api={buildApi({
-      loginItem: vi.fn().mockResolvedValue({ enabled: true, supported: true }),
-    })} />);
-
-    expect(await screen.findByText(/Start at login is on/)).toBeVisible();
-  });
-
-  it("stays quiet when start at login is off", async () => {
-    render(<SettingsPanel api={buildApi()} />);
-
-    await screen.findByLabelText("Keep running after the window closes");
-    expect(screen.queryByText(/Start at login is on/)).toBeNull();
-  });
-
   // 開始位置は書いた綴りのまま送る。**home の綴りに展開して送らない**——
   // 展開するのはサーバーであり、保存されるのは書いた形である。
   it("saves the starting directory as it was written", async () => {
@@ -226,6 +144,36 @@ describe("SettingsPanel", () => {
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
     expect(setTerminalSettings).toHaveBeenCalledWith({ maxSessions: 4 });
+  });
+
+  // 既定は両方 on だが、off は false として明示的に送らなければならない。
+  // false を省略すると保存後の再読み込みで on に戻る。
+  it("shows both clipboard conveniences on by default and saves each disabled choice", async () => {
+    const user = userEvent.setup();
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    const copy = within(region).getByRole("checkbox", { name: "Copy selected text automatically" });
+    const paste = within(region).getByRole("checkbox", { name: "Paste with right click" });
+    expect(copy).toBeChecked();
+    expect(paste).toBeChecked();
+
+    await user.click(copy);
+    await user.click(paste);
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setTerminalSettings).toHaveBeenCalledWith({ copyOnSelect: false, rightClickPaste: false });
+  });
+
+  it("loads explicitly disabled clipboard choices", async () => {
+    render(<SettingsPanel api={buildApi({
+      terminalSettings: vi.fn().mockResolvedValue({ copyOnSelect: false, rightClickPaste: false }),
+    })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    expect(await within(region).findByRole("checkbox", { name: "Copy selected text automatically" })).not.toBeChecked();
+    expect(within(region).getByRole("checkbox", { name: "Paste with right click" })).not.toBeChecked();
   });
 
   // 保存されている値は編集できる形で出す。**既定へ丸めて見せない**——

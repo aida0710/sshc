@@ -1,7 +1,6 @@
 package main
 
 import (
-	"sshc/internal/httpserver"
 	"sshc/internal/platform"
 )
 
@@ -12,8 +11,6 @@ import (
 // 実行時に runtime.GOOS で分岐すれば両方が入る。何が出荷物に入るかは、この
 // アプリケーションが気にしてきたことである。
 type platformParts struct {
-	Runner    platform.OutputRunner
 	Toolchain platform.Toolchain
 	KeyAgent  platform.KeyAgent
-	LoginItem httpserver.LoginItemController
 }
