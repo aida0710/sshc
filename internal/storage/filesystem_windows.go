@@ -10,6 +10,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"sshc/internal/platform/windowsacl"
 )
 
 func openRegularNoFollow(path string) (*os.File, error) {
@@ -217,8 +219,16 @@ func syncDirectory(path string) error {
 	return nil
 }
 
+// temp へ秘密を書いた後の DACL 失敗を見逃さないため、focused test だけが差し替える。
+var restrictPrivatePathImpl = restrictPrivatePathWindows
+
 func restrictPrivatePath(path string, directory bool) error {
-	// DACL によるアクセス制御は Windows 固有の Task 2 で追加する。この段階では
-	// os.Chmod を DACL 保護の代替として扱わない。
-	return nil
+	return restrictPrivatePathImpl(path, directory)
+}
+
+func restrictPrivatePathWindows(path string, directory bool) error {
+	if directory {
+		return windowsacl.RestrictDirectory(path)
+	}
+	return windowsacl.RestrictFile(path)
 }

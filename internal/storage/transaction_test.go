@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -69,7 +70,7 @@ func TestCommitWritesEveryChangeAndRecordsHistory(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Mode().Perm() != FilePermission {
+		if runtime.GOOS != "windows" && info.Mode().Perm() != FilePermission {
 			t.Fatalf("%s permission = %v, want %v", path, info.Mode().Perm(), FilePermission)
 		}
 	}
@@ -121,7 +122,7 @@ func TestCommitPreservesStricterPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o400 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o400 {
 		t.Fatalf("permission = %v, want 0400", info.Mode().Perm())
 	}
 }
@@ -572,7 +573,7 @@ func TestCommitMovesAFileWithoutCopyingItsBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("destination missing: %v", err)
 	}
-	if moved.Mode().Perm() != 0o400 {
+	if runtime.GOOS != "windows" && moved.Mode().Perm() != 0o400 {
 		t.Errorf("destination permission = %04o, want 0400", moved.Mode().Perm())
 	}
 	contents, err := os.ReadFile(destination)
@@ -754,7 +755,7 @@ func TestCommitCreatesADirectoryAndTheFileInsideItInOneTransaction(t *testing.T)
 	if err != nil || !info.IsDir() {
 		t.Fatalf("the directory was not created: %v", err)
 	}
-	if info.Mode().Perm() != 0o700 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
 		t.Errorf("mode = %v, want 0700", info.Mode().Perm())
 	}
 	body, err := os.ReadFile(filepath.Join(nested, "lon.conf"))
@@ -884,7 +885,7 @@ func TestARemovalCanKeepABackupSoHistoryCanRestoreIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Errorf("backup mode = %v, want the mode the file had", info.Mode().Perm())
 	}
 }

@@ -2,8 +2,10 @@ package storage
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -21,6 +23,126 @@ func newTestWorkspace(t *testing.T) *Workspace {
 		t.Fatal(err)
 	}
 	return workspace
+}
+
+func TestEnsureDirectoryTightensOnlyExistingPrivateStateDirectories(t *testing.T) {
+	home := t.TempDir()
+	sshDirectory := filepath.Join(home, ".ssh")
+	journalDirectory := filepath.Join(sshDirectory, "sshc", "journal")
+	backupDirectory := filepath.Join(sshDirectory, "sshc", "backups", "previous")
+	publicDirectory := filepath.Join(sshDirectory, "conf.d")
+	connectionsDirectory := filepath.Join(sshDirectory, "connections")
+	for _, directory := range []string{journalDirectory, backupDirectory, publicDirectory, connectionsDirectory} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fileSystem := &mkdirTrackingFileSystem{FileSystem: OSFileSystem{}}
+	workspace, err := NewWorkspace(fileSystem, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateDirectory := workspace.StateDir()
+	journalDirectory = filepath.Join(stateDirectory, "journal")
+	backupDirectory = filepath.Join(stateDirectory, "backups", "previous")
+	publicDirectory = filepath.Join(workspace.Root(), "conf.d")
+	connectionsDirectory = filepath.Join(workspace.Root(), "connections")
+
+	if err := workspace.EnsureDirectory(stateDirectory); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fileSystem.paths, []string{stateDirectory}; !samePaths(got, want) {
+		t.Fatalf("state root MkdirAll paths = %#v, want %#v", got, want)
+	}
+
+	fileSystem.paths = nil
+	if err := workspace.EnsureDirectory(journalDirectory); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fileSystem.paths, []string{stateDirectory, journalDirectory}; !samePaths(got, want) {
+		t.Fatalf("state MkdirAll paths = %#v, want %#v", got, want)
+	}
+
+	fileSystem.paths = nil
+	if err := workspace.EnsureDirectory(backupDirectory); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fileSystem.paths, []string{stateDirectory, filepath.Join(stateDirectory, "backups"), backupDirectory}; !samePaths(got, want) {
+		t.Fatalf("backup MkdirAll paths = %#v, want %#v", got, want)
+	}
+
+	fileSystem.paths = nil
+	if err := workspace.EnsureDirectory(workspace.Root()); err != nil {
+		t.Fatal(err)
+	}
+	if len(fileSystem.paths) != 0 {
+		t.Fatalf("workspace root unexpectedly tightened through MkdirAll: %#v", fileSystem.paths)
+	}
+
+	fileSystem.paths = nil
+	if err := workspace.EnsureDirectory(publicDirectory); err != nil {
+		t.Fatal(err)
+	}
+	if len(fileSystem.paths) != 0 {
+		t.Fatalf("public directory unexpectedly tightened through MkdirAll: %#v", fileSystem.paths)
+	}
+
+	fileSystem.paths = nil
+	if err := workspace.EnsureDirectory(connectionsDirectory); err != nil {
+		t.Fatal(err)
+	}
+	if len(fileSystem.paths) != 0 {
+		t.Fatalf("connections directory unexpectedly tightened through MkdirAll: %#v", fileSystem.paths)
+	}
+}
+
+func TestEnsureDirectoryRejectsPrivateStateSymlinkBeforeTightening(t *testing.T) {
+	home := t.TempDir()
+	sshDirectory := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(home, "target")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(sshDirectory, "sshc")); err != nil {
+		t.Fatal(err)
+	}
+	fileSystem := &mkdirTrackingFileSystem{FileSystem: OSFileSystem{}}
+	workspace, err := NewWorkspace(fileSystem, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := workspace.EnsureDirectory(workspace.StateDir()); !errors.Is(err, ErrSymlinkPath) {
+		t.Fatalf("EnsureDirectory symlink error = %v, want ErrSymlinkPath", err)
+	}
+	if len(fileSystem.paths) != 0 {
+		t.Fatalf("symlink was tightened before rejection: %#v", fileSystem.paths)
+	}
+}
+
+type mkdirTrackingFileSystem struct {
+	FileSystem
+	paths []string
+}
+
+func (f *mkdirTrackingFileSystem) MkdirAll(path string, permission fs.FileMode) error {
+	f.paths = append(f.paths, path)
+	return f.FileSystem.MkdirAll(path, permission)
+}
+
+func samePaths(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for index := range got {
+		if got[index] != want[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestNewWorkspaceResolvesSymlinkedRootAndRejectsRelativeHome(t *testing.T) {
@@ -114,7 +236,7 @@ func TestEnsureDirectoryCreatesPrivateDirectoriesAndRejectsSymlinks(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != DirectoryPermission {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != DirectoryPermission {
 		t.Fatalf("permission = %v, want %v", info.Mode().Perm(), DirectoryPermission)
 	}
 	if err := workspace.EnsureDirectory(nested); err != nil {

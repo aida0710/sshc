@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+
+	"sshc/internal/platform/windowsacl"
 )
 
 // FileName は、アプリケーションの状態ディレクトリ内のハンドオフファイル。
@@ -90,6 +92,11 @@ func Write(directory string, document Handoff) error {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return err
 	}
+	// Windows は作成時の継承 ACL をそのまま使うと lock 作成より先に秘密の置き場を
+	// 読ませ得るため、lock file を作る前に state directory を保護する。
+	if err := windowsacl.RestrictDirectory(directory); err != nil {
+		return err
+	}
 	release, err := lockMutation(directory)
 	if err != nil {
 		return err
@@ -107,6 +114,11 @@ func Write(directory string, document Handoff) error {
 	}
 	temporaryPath := temporary.Name()
 	defer func() { _ = os.Remove(temporaryPath) }()
+	// Secret を書く前に temp を保護する。ここで失敗した temp は空のまま閉じて消す。
+	if err := windowsacl.RestrictFile(temporaryPath); err != nil {
+		_ = temporary.Close()
+		return err
+	}
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
 		return err
@@ -122,7 +134,13 @@ func Write(directory string, document Handoff) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	if err := renameFile(temporaryPath, filepath.Join(directory, FileName)); err != nil {
+	finalPath := filepath.Join(directory, FileName)
+	if err := renameFile(temporaryPath, finalPath); err != nil {
+		return err
+	}
+	// MoveFileEx は temp の DACL を維持するが、公開後も state の不変条件を明示的に
+	// 確認し直すことで、既存ファイル置換でも同じ契約を保つ。
+	if err := windowsacl.RestrictFile(finalPath); err != nil {
 		return err
 	}
 
