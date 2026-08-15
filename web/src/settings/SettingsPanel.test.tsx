@@ -146,6 +146,36 @@ describe("SettingsPanel", () => {
     expect(setTerminalSettings).toHaveBeenCalledWith({ maxSessions: 4 });
   });
 
+  // 既定は両方 on だが、off は false として明示的に送らなければならない。
+  // false を省略すると保存後の再読み込みで on に戻る。
+  it("shows both clipboard conveniences on by default and saves each disabled choice", async () => {
+    const user = userEvent.setup();
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    const copy = within(region).getByRole("checkbox", { name: "Copy selected text automatically" });
+    const paste = within(region).getByRole("checkbox", { name: "Paste with right click" });
+    expect(copy).toBeChecked();
+    expect(paste).toBeChecked();
+
+    await user.click(copy);
+    await user.click(paste);
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setTerminalSettings).toHaveBeenCalledWith({ copyOnSelect: false, rightClickPaste: false });
+  });
+
+  it("loads explicitly disabled clipboard choices", async () => {
+    render(<SettingsPanel api={buildApi({
+      terminalSettings: vi.fn().mockResolvedValue({ copyOnSelect: false, rightClickPaste: false }),
+    })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    expect(await within(region).findByRole("checkbox", { name: "Copy selected text automatically" })).not.toBeChecked();
+    expect(within(region).getByRole("checkbox", { name: "Paste with right click" })).not.toBeChecked();
+  });
+
   // 保存されている値は編集できる形で出す。**既定へ丸めて見せない**——
   // 丸めた値を人がそのまま保存すると、選んでいない設定が書き込まれる。
   it("shows the stored numbers and leaves the unset ones blank", async () => {
