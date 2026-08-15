@@ -17,8 +17,15 @@ type makefileContract struct {
 func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 	contract := readMakefileContract(t)
 	helper := "go run ./internal/buildcontract/cmd/nativebuild"
-	if !strings.Contains(contract.source, "unexport GOOS GOARCH CGO_ENABLED") {
-		t.Error("Makefile must keep target variables out of the host go run environment")
+	for _, assignment := range []string{
+		"$(NATIVE_GO_RUN_TARGETS): override GOENV = off",
+		"$(NATIVE_GO_RUN_TARGETS): override GOOS =",
+		"$(NATIVE_GO_RUN_TARGETS): override GOARCH =",
+		"$(NATIVE_GO_RUN_TARGETS): override CGO_ENABLED =",
+	} {
+		if !strings.Contains(contract.source, assignment) {
+			t.Errorf("Makefile must neutralize the host go run environment with %q", assignment)
+		}
 	}
 
 	t.Run("native entries delegate to the argv based helper", func(t *testing.T) {

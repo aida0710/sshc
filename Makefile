@@ -162,12 +162,17 @@ export SSHC_NATIVE_VERSION SSHC_NATIVE_GOOS SSHC_NATIVE_GOARCH SSHC_NATIVE_CGO S
 export SSHC_NATIVE_MAC_BUNDLES SSHC_NATIVE_LINUX_BUNDLES SSHC_NATIVE_WINDOWS_BUNDLES
 export SSHC_NATIVE_RELEASE_TARGETS SSHC_NATIVE_RELEASE_ARCHES SSHC_NATIVE_RELEASE_DIR
 
-# Disable persisted GOENV target settings before go run compiles the host helper. Keep the
-# override target-specific so unrelated Make targets retain the developer's Go configuration.
+# Neutralize Go's target-selection inputs before go run compiles the host helper. Export
+# canonical empty values instead of merely unexporting exact names: on Windows the process
+# environment is case-insensitive, so these assignments also replace inherited case aliases.
+# Keep the overrides target-specific so unrelated targets retain the developer's Go settings.
 override NATIVE_GO_RUN_TARGETS := build build-cli desktop-bundle-mac desktop-bundle-linux desktop-bundle-windows desktop-version release-binaries release-cli-current
-export GOENV
+export GOENV GOOS GOARCH CGO_ENABLED
 $(NATIVE_GO_RUN_TARGETS): override GOENV = off
-unexport GOOS GOARCH CGO_ENABLED OUTPUT VERSION RELEASE_DIR RELEASE_TARGETS RELEASE_CURRENT_ARCHES
+$(NATIVE_GO_RUN_TARGETS): override GOOS =
+$(NATIVE_GO_RUN_TARGETS): override GOARCH =
+$(NATIVE_GO_RUN_TARGETS): override CGO_ENABLED =
+unexport OUTPUT VERSION RELEASE_DIR RELEASE_TARGETS RELEASE_CURRENT_ARCHES
 unexport DESKTOP_MAC_BUNDLES DESKTOP_LINUX_BUNDLES DESKTOP_WINDOWS_BUNDLES
 
 release-binaries:
