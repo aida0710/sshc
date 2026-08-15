@@ -20,6 +20,10 @@ func TestOSFileSystemReadFileRefusesWindowsReparsePoints(t *testing.T) {
 	if err := os.Mkdir(directoryTarget, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	insideDirectoryTarget := filepath.Join(directoryTarget, "config")
+	if err := os.WriteFile(insideDirectoryTarget, []byte("Host inside-directory\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Run("file symlink", func(t *testing.T) {
 		link := filepath.Join(directory, "file-symlink")
@@ -34,6 +38,7 @@ func TestOSFileSystemReadFileRefusesWindowsReparsePoints(t *testing.T) {
 			t.Skipf("Windows directory symlink creation is unavailable: %v", err)
 		}
 		assertReadFileRejectsReparsePoint(t, link)
+		assertReadFileRejectsReparsePoint(t, filepath.Join(link, "config"))
 	})
 	t.Run("junction", func(t *testing.T) {
 		link := filepath.Join(directory, "junction")
@@ -41,6 +46,7 @@ func TestOSFileSystemReadFileRefusesWindowsReparsePoints(t *testing.T) {
 			t.Skipf("Windows junction creation is unavailable: %v", err)
 		}
 		assertReadFileRejectsReparsePoint(t, link)
+		assertReadFileRejectsReparsePoint(t, filepath.Join(link, "config"))
 	})
 }
 

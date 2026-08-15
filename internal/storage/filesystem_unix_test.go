@@ -24,3 +24,17 @@ func TestOSFileSystemReadFileRefusesSymlink(t *testing.T) {
 		t.Fatalf("ReadFile(symlink) error = %v, want ErrSymlinkPath", err)
 	}
 }
+
+func TestOSFileSystemWriteTempAppliesPOSIXPermission(t *testing.T) {
+	path, err := (OSFileSystem{}).WriteTemp(t.TempDir(), ".sshc-", FilePermission, []byte("staged"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != FilePermission {
+		t.Fatalf("permission = %v, want %v", info.Mode().Perm(), FilePermission)
+	}
+}
