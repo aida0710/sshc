@@ -24,6 +24,19 @@ func TestLoadedJournalValidationRejectsMalformedRecords(t *testing.T) {
 		{"unsupported version", func(record *journalRecord) { record.Version++ }},
 		{"empty operation", func(record *journalRecord) { record.Operation = "" }},
 		{"unknown status", func(record *journalRecord) { record.Status = "unknown" }},
+		{"completed status in current journal", func(record *journalRecord) {
+			finished := record.StartedAt.Add(time.Second)
+			record.Status = statusCompleted
+			record.FinishedAt = &finished
+			record.Committed = len(record.Entries)
+			record.Entries[0].Temp = ""
+		}},
+		{"rolled-back status in current journal", func(record *journalRecord) {
+			finished := record.StartedAt.Add(time.Second)
+			record.Status = statusRolledBack
+			record.FinishedAt = &finished
+			record.Committed = 0
+		}},
 		{"pending finished time", func(record *journalRecord) { finished := time.Now(); record.FinishedAt = &finished }},
 		{"negative committed", func(record *journalRecord) { record.Committed = -1 }},
 		{"committed beyond entries", func(record *journalRecord) { record.Committed = len(record.Entries) + 1 }},

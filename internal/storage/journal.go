@@ -65,6 +65,9 @@ func (m *Manager) Pending() ([]Pending, error) {
 			return nil, reconcileErr
 		} else if changed {
 			journalPath := filepath.Join(m.journalDirectory(), record.ID+".json")
+			if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
+				return nil, err
+			}
 			if err := m.writeRecord(journalPath, record); err != nil {
 				return nil, err
 			}
@@ -75,7 +78,7 @@ func (m *Manager) Pending() ([]Pending, error) {
 			Status:      record.Status,
 			StartedAt:   record.StartedAt,
 			Committed:   record.Committed,
-			CanComplete: !record.Atomic,
+			CanComplete: record.Status == statusStaged && !record.Atomic,
 			CanRollback: true,
 		}
 		for index, entry := range record.Entries {
@@ -116,7 +119,7 @@ func (m *Manager) Complete(identifier string) error {
 	// opened password vault). Completing only the disk half after the original
 	// callback failed would leave that state stale. Their safe recovery action
 	// is rollback; a fresh request can then publish disk and memory together.
-	if record.Atomic {
+	if record.Atomic || record.Status != statusStaged {
 		return ErrCannotComplete
 	}
 	for index := record.Committed; index < len(record.Entries); index++ {
@@ -281,6 +284,9 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 	if changed, err := m.reconcileAtomicRecord(&record); err != nil {
 		return nil, "", err
 	} else if changed {
+		if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
+			return nil, "", err
+		}
 		if err := m.writeRecord(journalPath, record); err != nil {
 			return nil, "", err
 		}
@@ -352,11 +358,15 @@ func (m *Manager) reconcileAtomicRecord(record *journalRecord) (bool, error) {
 		}
 		committed = index + 1
 	}
-	if record.Committed == committed {
-		return false, nil
-	}
+	changed := record.Committed != committed
 	record.Committed = committed
-	return true, nil
+	for index := 0; index < committed; index++ {
+		if record.Entries[index].action() == actionWrite && record.Entries[index].Temp != "" {
+			record.Entries[index].Temp = ""
+			changed = true
+		}
+	}
+	return changed, nil
 }
 
 // readRecords は、ディレクトリ内のすべてのジャーナル文書を古い順に読み込む。
@@ -440,7 +450,7 @@ func (m *Manager) validateLoadedJournalRecord(record journalRecord, name, direct
 		return invalidJournal("unexpected journal directory")
 	}
 	if pending {
-		if record.Status != statusStaging && record.Status != statusStaged && record.Status != statusCompleted && record.Status != statusRolledBack {
+		if record.Status != statusStaging && record.Status != statusStaged {
 			return invalidJournal("unexpected pending status")
 		}
 	} else {
@@ -526,10 +536,10 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 				return invalidJournal("write temp is not the expected sibling")
 			}
 		}
-		if pending && record.Status == statusStaged && index >= record.Committed && entry.Temp == "" {
+		if pending && record.Status == statusStaged && index >= record.Committed && entry.Temp == "" && !record.Atomic {
 			return invalidJournal("uncommitted write has no staged file")
 		}
-		if pending && record.Status == statusStaged && index < record.Committed && entry.Temp != "" {
+		if pending && record.Status == statusStaged && index < record.Committed && entry.Temp != "" && !record.Atomic {
 			return invalidJournal("committed write retains a staged path")
 		}
 		if record.Status == statusCompleted && entry.Temp != "" {
@@ -590,7 +600,7 @@ func (m *Manager) validateLoadedBackup(record journalRecord, entry journalEntry,
 		return nil
 	}
 	if entry.Backup == "" {
-		if pending && record.Status == statusStaging {
+		if (pending && record.Status == statusStaging) || record.Status == statusRolledBack {
 			return nil
 		}
 		return invalidJournal("required backup path is missing")
