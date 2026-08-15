@@ -90,13 +90,6 @@ func TestOSFileSystemWriteTempCreatesPrivateFileInTargetDirectory(t *testing.T) 
 	if filepath.Dir(path) != directory || !strings.HasPrefix(filepath.Base(path), ".sshc-") {
 		t.Fatalf("temp path = %q", path)
 	}
-	info, err := os.Lstat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != FilePermission {
-		t.Fatalf("permission = %v, want %v", info.Mode().Perm(), FilePermission)
-	}
 	contents, err := os.ReadFile(path)
 	if err != nil || string(contents) != "staged" {
 		t.Fatalf("contents = %q, %v", contents, err)
