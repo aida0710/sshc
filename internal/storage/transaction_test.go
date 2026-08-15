@@ -687,7 +687,7 @@ func TestAtomicRollbackRenameBeforeSyncCrashStateReconcilesWithoutStagedTemp(t *
 // commitWithStaleJournal は、最初のエントリの適用には成功し、それを記録しようと
 // するジャーナル書き込みがすべて失敗するコミットを走らせる。残る永続記録は、
 // ファイルシステムが実際に保持しているより少ない進捗を名乗ることになる。
-func commitWithStaleJournal(t *testing.T, workspace *Workspace, request Request) string {
+func commitWithStaleJournal(t *testing.T, workspace *Workspace, filler byte, request Request) string {
 	t.Helper()
 	journalDirectory := filepath.Join(workspace.StateDir(), journalDirectoryName)
 	journalRenames := 0
@@ -707,7 +707,7 @@ func commitWithStaleJournal(t *testing.T, workspace *Workspace, request Request)
 			return nil
 		},
 	}
-	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x71}, 4096)))
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{filler}, 4096)))
 	result, err := manager.Commit(request)
 	if !errors.Is(err, failure) || result.ID == "" {
 		t.Fatalf("Commit = %#v, %v; want the injected journal failure", result, err)
@@ -770,7 +770,7 @@ func TestRecoveryReconstructsNonAtomicProgressFromAStaleJournal(t *testing.T) {
 		workspace := newTestWorkspace(t)
 		first := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)
 		second := writeWorkspaceFile(t, workspace, "second.conf", "second before\n", 0o600)
-		id := commitWithStaleJournal(t, workspace, Request{
+		id := commitWithStaleJournal(t, workspace, 0x71, Request{
 			Operation: "connection.update",
 			Changes: []Change{
 				{Path: first, Contents: []byte("first after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("first before\n"))}},
@@ -796,7 +796,7 @@ func TestRecoveryReconstructsNonAtomicProgressFromAStaleJournal(t *testing.T) {
 		second := writeWorkspaceFile(t, workspace, "second.conf", "second bytes\n", 0o600)
 		firstTarget := filepath.Join(workspace.Root(), "first.moved.conf")
 		secondTarget := filepath.Join(workspace.Root(), "second.moved.conf")
-		id := commitWithStaleJournal(t, workspace, Request{
+		id := commitWithStaleJournal(t, workspace, 0x75, Request{
 			Operation: "key.relocate",
 			Moves: []Move{
 				{From: first, To: firstTarget, Precondition: Precondition{Exists: true, Digest: Digest([]byte("first bytes\n"))}},
@@ -821,7 +821,7 @@ func TestRecoveryReconstructsNonAtomicProgressFromAStaleJournal(t *testing.T) {
 		workspace := newTestWorkspace(t)
 		first := writeWorkspaceFile(t, workspace, "first.conf", "first bytes\n", 0o600)
 		second := writeWorkspaceFile(t, workspace, "second.conf", "second bytes\n", 0o600)
-		id := commitWithStaleJournal(t, workspace, Request{
+		id := commitWithStaleJournal(t, workspace, 0x76, Request{
 			Operation: "connection.delete",
 			Removals: []Removal{
 				{Path: first, Precondition: Precondition{Exists: true, Digest: Digest([]byte("first bytes\n"))}, Backup: true},
@@ -843,7 +843,7 @@ func TestRecoveryReconstructsNonAtomicProgressFromAStaleJournal(t *testing.T) {
 		workspace := newTestWorkspace(t)
 		first := writeWorkspaceFile(t, workspace, "id_first", "PRIVATE KEY ONE\n", 0o600)
 		second := writeWorkspaceFile(t, workspace, "id_second", "PRIVATE KEY TWO\n", 0o600)
-		id := commitWithStaleJournal(t, workspace, Request{
+		id := commitWithStaleJournal(t, workspace, 0x77, Request{
 			Operation: "key.delete",
 			Removals: []Removal{
 				{Path: first, Precondition: Precondition{Exists: true, Digest: Digest([]byte("PRIVATE KEY ONE\n"))}},
@@ -934,6 +934,206 @@ func TestRollbackRetryResumesFromReconciledProgressAfterAPartialFailure(t *testi
 	if err != nil || len(history) != 1 || history[0].Status != statusRolledBack {
 		t.Fatalf("History after retried rollback = %#v, %v", history, err)
 	}
+}
+
+// 記録の中には、対象を見ても何も分からないエントリがある。書いても内容の変わらない
+// 置き換えと、もとからあったディレクトリの作成である。これを「適用済み」と読むと、
+// ひとつ前が未適用のときに、ありもしない矛盾ができあがる。
+func TestReconcileCountsEvidenceFreeEntriesInsideTheAppliedPrefix(t *testing.T) {
+	manager, workspace := newTestManager(t)
+	unapplied := writeWorkspaceFile(t, workspace, "first.conf", "before\n", 0o600)
+	unappliedEntry := journalEntry{
+		Action:         actionWrite,
+		Path:           unapplied,
+		Temp:           filepath.Join(workspace.Root(), temporaryPrefix+validJournalTestID+"-staged"),
+		HadPrevious:    true,
+		Mode:           0o600,
+		Digest:         Digest([]byte("after\n")),
+		PreviousDigest: Digest([]byte("before\n")),
+	}
+
+	existingDirectory := filepath.Join(workspace.Root(), "conf.d")
+	if err := workspace.EnsureDirectory(existingDirectory); err != nil {
+		t.Fatal(err)
+	}
+	unchanged := writeWorkspaceFile(t, workspace, "meta.json", "{}\n", 0o600)
+
+	for name, evidenceFree := range map[string]journalEntry{
+		"directory that already existed": {
+			Action:      actionMakeDir,
+			Path:        existingDirectory,
+			HadPrevious: true,
+			Mode:        uint32(DirectoryPermission),
+		},
+		"write whose contents do not change": {
+			Action:         actionWrite,
+			Path:           unchanged,
+			HadPrevious:    true,
+			Mode:           0o600,
+			Digest:         Digest([]byte("{}\n")),
+			PreviousDigest: Digest([]byte("{}\n")),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			record := journalRecord{
+				ID:        validJournalTestID,
+				Version:   journalVersion,
+				Operation: "config.move",
+				Status:    statusStaged,
+				StartedAt: time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC),
+				Entries:   []journalEntry{unappliedEntry, evidenceFree},
+			}
+			if _, err := manager.reconcileRecord(&record); err != nil {
+				t.Fatalf("reconcileRecord = %v, want no error", err)
+			}
+			if record.Committed != 0 {
+				t.Fatalf("reconciled progress = %d, want 0", record.Committed)
+			}
+		})
+	}
+}
+
+// application 層は metadata の書き込みを毎回、変わっていなくても最後に足す。
+// つまりこの形は例外ではなく、日常のトランザクションである。
+func TestRecoveryHandlesAnUnchangedTrailingWriteAfterNothingWasApplied(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	changed := writeWorkspaceFile(t, workspace, "config", "Host before\n", 0o600)
+	unchanged := writeWorkspaceFile(t, workspace, "meta.json", "{}\n", 0o600)
+	failure := errors.New("injected first rename failure")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "rename" && path == changed {
+				return failure
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x78}, 4096)))
+	result, err := manager.Commit(Request{
+		Operation: "config.move",
+		Changes: []Change{
+			{Path: changed, Contents: []byte("Host after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host before\n"))}},
+			{Path: unchanged, Contents: []byte("{}\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("{}\n"))}},
+		},
+	})
+	if !errors.Is(err, failure) || result.ID == "" {
+		t.Fatalf("Commit = %#v, %v; want the injected rename failure", result, err)
+	}
+
+	workspace.fileSystem = OSFileSystem{}
+	restarted := restartedManager(t, workspace)
+	item := reconciledPending(t, restarted, result.ID, 0)
+	if !item.CanRollback {
+		t.Fatalf("nothing was applied, yet the transaction was not reversible: %#v", item)
+	}
+	if err := restarted.Rollback(result.ID); err != nil {
+		t.Fatalf("Rollback = %v", err)
+	}
+	assertFileContents(t, changed, "Host before\n")
+	assertFileContents(t, unchanged, "{}\n")
+}
+
+// 証拠を持たない書き込みを適用済み側に数えるときは、記録から一時ファイルの名前を
+// 落とす前に実体も消す。名前だけ落とせば、もう誰も片付けない断片が残る。
+func TestRecoveryRemovesTheStagedFileOfAnEvidenceFreeWriteItCountsAsApplied(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	changed := writeWorkspaceFile(t, workspace, "config", "Host before\n", 0o600)
+	unchanged := writeWorkspaceFile(t, workspace, "meta.json", "{}\n", 0o600)
+	id := commitWithStaleJournal(t, workspace, 0x79, Request{
+		Operation: "config.move",
+		Changes: []Change{
+			{Path: changed, Contents: []byte("Host after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host before\n"))}},
+			{Path: unchanged, Contents: []byte("{}\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("{}\n"))}},
+		},
+	})
+	assertFileContents(t, changed, "Host after\n")
+
+	restarted := restartedManager(t, workspace)
+	reconciledPending(t, restarted, id, 2)
+
+	entries, err := os.ReadDir(workspace.Root())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), temporaryPrefix) {
+			t.Fatalf("reconciliation left the staged file %q behind", entry.Name())
+		}
+	}
+
+	if err := restarted.Rollback(id); err != nil {
+		t.Fatalf("Rollback = %v", err)
+	}
+	assertFileContents(t, changed, "Host before\n")
+	assertFileContents(t, unchanged, "{}\n")
+}
+
+// 判別できない記録がひとつあることは、他の記録も履歴も見えなくなる理由にならない。
+// 呼び出し側はこの一覧で設定画面全体を組み立てている。
+func TestPendingReportsAnUnreadableRecordWithoutFailingTheWholeListing(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	tampered := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)
+	second := writeWorkspaceFile(t, workspace, "second.conf", "second before\n", 0o600)
+	tamperedID := commitWithStaleJournal(t, workspace, 0x7a, Request{
+		Operation: "connection.update",
+		Changes: []Change{
+			{Path: tampered, Contents: []byte("first after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("first before\n"))}},
+			{Path: second, Contents: []byte("second after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("second before\n"))}},
+		},
+	})
+
+	third := writeWorkspaceFile(t, workspace, "third.conf", "third before\n", 0o600)
+	fourth := writeWorkspaceFile(t, workspace, "fourth.conf", "fourth before\n", 0o600)
+	readableID := commitWithStaleJournal(t, workspace, 0x7b, Request{
+		Operation: "connection.update",
+		Changes: []Change{
+			{Path: third, Contents: []byte("third after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("third before\n"))}},
+			{Path: fourth, Contents: []byte("fourth after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("fourth before\n"))}},
+		},
+	})
+
+	// 中断されたトランザクションが触れるはずだったファイルを、外から書き換える。
+	// これで、記録のどちらの状態とも一致しなくなる。
+	if err := os.WriteFile(tampered, []byte("edited by hand\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := restartedManager(t, workspace)
+	pending, err := restarted.Pending()
+	if err != nil {
+		t.Fatalf("Pending = %v, want the listing to survive one unreadable record", err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("Pending = %#v, want both transactions", pending)
+	}
+	for _, item := range pending {
+		switch item.ID {
+		case tamperedID:
+			if item.CanComplete || item.CanRollback {
+				t.Fatalf("an unreadable transaction was offered as actionable: %#v", item)
+			}
+		case readableID:
+			if !item.CanRollback {
+				t.Fatalf("the readable transaction lost its rollback offer: %#v", item)
+			}
+		default:
+			t.Fatalf("unexpected pending transaction %q", item.ID)
+		}
+	}
+
+	if err := restarted.Rollback(tamperedID); !errors.Is(err, ErrRecoveryStateUnknown) {
+		t.Fatalf("Rollback(unreadable) = %v, want ErrRecoveryStateUnknown", err)
+	}
+	if err := restarted.Complete(tamperedID); !errors.Is(err, ErrRecoveryStateUnknown) {
+		t.Fatalf("Complete(unreadable) = %v, want ErrRecoveryStateUnknown", err)
+	}
+	assertFileContents(t, tampered, "edited by hand\n")
+
+	if err := restarted.Rollback(readableID); err != nil {
+		t.Fatalf("Rollback(readable) = %v", err)
+	}
+	assertFileContents(t, third, "third before\n")
 }
 
 func TestAtomicPendingTransactionCanOnlyBeRolledBack(t *testing.T) {
