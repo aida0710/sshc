@@ -8,6 +8,7 @@
   "description": "The desktop shell for sshc",
   "main": "main.js",
   "scripts": {
+    "postinstall": "install-electron",
     "start": "electron .",
     "dist": "electron-builder --mac --linux",
     "test": "node --test link.test.js entrance.test.js reopen.test.js",

@@ -107,7 +107,9 @@ func TestListTrashShowsAgeAndNeverDeletesAnything(t *testing.T) {
 	if err := json.Unmarshal(contents, &manifest); err != nil {
 		t.Fatalf("decode manifest: %v", err)
 	}
-	manifest["deletedAt"] = time.Now().UTC().Add(-40 * 24 * time.Hour).Format(time.RFC3339)
+	// Service と同じ注入済み時計を基準にする。壁時計を使うと、固定した
+	// テスト時刻から実行日が離れた分だけ年齢がずれる。
+	manifest["deletedAt"] = service.now().UTC().Add(-40 * 24 * time.Hour).Format(time.RFC3339)
 	aged, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatalf("encode manifest: %v", err)
