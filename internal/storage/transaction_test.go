@@ -524,6 +524,13 @@ func (f faultyFileSystem) Rename(oldPath, newPath string) error {
 	return f.FileSystem.Rename(oldPath, newPath)
 }
 
+func (f faultyFileSystem) MovePrivate(oldPath, newPath string) error {
+	if err := f.failOn("rename", newPath); err != nil {
+		return err
+	}
+	return f.FileSystem.MovePrivate(oldPath, newPath)
+}
+
 func (f faultyFileSystem) WriteTemp(directory, prefix string, permission fs.FileMode, contents []byte) (string, error) {
 	if err := f.failOn("writeTemp", directory); err != nil {
 		return "", err

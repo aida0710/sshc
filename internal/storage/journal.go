@@ -162,7 +162,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 	for index := record.Committed - 1; index >= 0; index-- {
 		entry := record.Entries[index]
 		if entry.action() == actionMove {
-			if err := fileSystem.Rename(entry.Target, entry.Path); err != nil {
+			if err := m.moveFile(entry.Target, entry.Path); err != nil {
 				return err
 			}
 			if err := fileSystem.SyncDir(filepath.Dir(entry.Target)); err != nil {

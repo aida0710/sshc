@@ -86,6 +86,11 @@ type writeOperations struct {
 	syncDirectory   func(string) error
 }
 
+type handoffFileOperations struct {
+	open   func(string) (*os.File, error)
+	remove func(*os.File, string) error
+}
+
 // write takes an operations value so failure tests can replace one operation
 // without racing other package tests through mutable global state.
 func write(directory string, document Handoff, operations writeOperations) error {
@@ -134,25 +139,47 @@ func write(directory string, document Handoff, operations writeOperations) error
 
 // Read は、動作中のアプリケーションが残した検証済みの文書を返す。
 func Read(directory string) (Handoff, error) {
-	return readValidated(directory)
+	return readValidatedWith(directory, defaultHandoffFileOperations().open)
 }
 
 // readValidated は mutation lock を取らない。Read は Rename により常に完全な旧文書
 // か新文書だけを見る。一方 Remove は lock を保持したままこれを呼び、比較と削除の
 // 間に Write が割り込めないようにする。
 func readValidated(directory string) (Handoff, error) {
-	body, err := os.ReadFile(filepath.Join(directory, FileName))
+	return readValidatedWith(directory, defaultHandoffFileOperations().open)
+}
+
+func readValidatedWith(directory string, open func(string) (*os.File, error)) (Handoff, error) {
+	document, file, err := readValidatedHandle(filepath.Join(directory, FileName), open)
 	if err != nil {
 		return Handoff{}, err
 	}
-	var document Handoff
-	if err := json.Unmarshal(body, &document); err != nil {
-		return Handoff{}, fmt.Errorf("decode handoff document: %w", err)
-	}
-	if err := validate(document); err != nil {
+	if err := file.Close(); err != nil {
 		return Handoff{}, err
 	}
 	return document, nil
+}
+
+func readValidatedHandle(path string, open func(string) (*os.File, error)) (Handoff, *os.File, error) {
+	file, err := open(path)
+	if err != nil {
+		return Handoff{}, nil, err
+	}
+	body, err := io.ReadAll(file)
+	if err != nil {
+		_ = file.Close()
+		return Handoff{}, nil, err
+	}
+	var document Handoff
+	if err := json.Unmarshal(body, &document); err != nil {
+		_ = file.Close()
+		return Handoff{}, nil, fmt.Errorf("decode handoff document: %w", err)
+	}
+	if err := validate(document); err != nil {
+		_ = file.Close()
+		return Handoff{}, nil, err
+	}
+	return document, file, nil
 }
 
 // Remove は、そこに残っているのがこの実行の秘密を持つ文書だけを取り除く。
@@ -160,6 +187,10 @@ func readValidated(directory string) (Handoff, error) {
 // URL や PID は次の実行で偶然再利用され得るが、実行ごとに発行する秘密は再利用
 // されない。そのため secret だけが、後から来た別 engine を消さない所有権になる。
 func Remove(directory, secret string) error {
+	return removeWith(directory, secret, defaultHandoffFileOperations())
+}
+
+func removeWith(directory, secret string, operations handoffFileOperations) error {
 	release, err := lockMutation(directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -169,7 +200,8 @@ func Remove(directory, secret string) error {
 	}
 	defer release()
 
-	found, err := readValidated(directory)
+	path := filepath.Join(directory, FileName)
+	found, file, err := readValidatedHandle(path, operations.open)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -177,9 +209,9 @@ func Remove(directory, secret string) error {
 		return err
 	}
 	if found.Secret != secret {
-		return nil
+		return file.Close()
 	}
-	err = os.Remove(filepath.Join(directory, FileName))
+	err = operations.remove(file, path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}

@@ -3,6 +3,8 @@
 package handoff
 
 import (
+	"os"
+
 	"golang.org/x/sys/windows"
 
 	"sshc/internal/platform/windowsacl"
@@ -14,6 +16,19 @@ func defaultWriteOperations() writeOperations {
 		createTemp:      windowsacl.CreateTemp,
 		replace:         replaceHandoffFile,
 		syncDirectory:   syncHandoffDirectory,
+	}
+}
+
+func defaultHandoffFileOperations() handoffFileOperations {
+	return handoffFileOperations{
+		open: windowsacl.OpenAuthenticatedFile,
+		remove: func(file *os.File, _ string) error {
+			if err := windowsacl.DeleteFileHandle(file); err != nil {
+				_ = file.Close()
+				return err
+			}
+			return file.Close()
+		},
 	}
 }
 

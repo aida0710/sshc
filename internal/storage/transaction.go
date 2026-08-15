@@ -657,7 +657,7 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 		entry := record.Entries[index]
 		switch entry.action() {
 		case actionMove:
-			if err := fileSystem.Rename(entry.Path, entry.Target); err != nil {
+			if err := m.moveFile(entry.Path, entry.Target); err != nil {
 				return err
 			}
 			record.Committed = index + 1
@@ -706,6 +706,26 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 		}
 	}
 	return nil
+}
+
+func (m *Manager) moveFile(oldPath, newPath string) error {
+	fileSystem := m.workspace.FileSystem()
+	if m.isPrivateStatePath(oldPath) || m.isPrivateStatePath(newPath) {
+		return fileSystem.MovePrivate(oldPath, newPath)
+	}
+	return fileSystem.Rename(oldPath, newPath)
+}
+
+func (m *Manager) isPrivateStatePath(path string) bool {
+	return privateStateContains(m.workspace.StateDir(), path)
+}
+
+func privateStateContains(stateDirectory, path string) bool {
+	relative, err := filepath.Rel(filepath.Clean(stateDirectory), filepath.Clean(path))
+	if err != nil || filepath.IsAbs(relative) {
+		return false
+	}
+	return relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 // sourceState は、これから移動または削除されるファイルをハッシュし、呼び出し側の
