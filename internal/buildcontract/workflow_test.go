@@ -111,9 +111,33 @@ func TestNativeGofmtScriptReportsOnlyExactTrackedUnformattedPaths(t *testing.T) 
 	fixture := t.TempDir()
 	runCommand(t, fixture, "git", "init", "--quiet")
 	writeFixture(t, fixture, "formatted.go", "package fixture\n\nfunc Formatted() {}\n")
-	writeFixture(t, fixture, "-unformatted.go", "package fixture\nfunc Unformatted( ) {}\n")
-	writeFixture(t, fixture, "ignored.go", "package fixture\nfunc Ignored( ) {}\n")
-	runCommand(t, fixture, "git", "add", "--", "formatted.go", "-unformatted.go")
+	tracked := []string{"-dash.go", "space name.go", "日本語.go"}
+	if runtime.GOOS != "windows" {
+		// Win32 rejects control characters 1 through 31 in file names, so the
+		// native Windows fixture covers every representable adversarial name and
+		// Unix covers the newline record that proves NUL, rather than lines, is
+		// the transport boundary.
+		tracked = append(tracked, "line\nbreak.go")
+	}
+	for _, name := range tracked {
+		writeFixture(t, fixture, name, "package fixture\nfunc Unformatted( ) {}\n")
+	}
+	writeFixture(t, fixture, "ignored 日本語.go", "package fixture\nfunc Ignored( ) {}\n")
+	addArgs := append([]string{"add", "--", "formatted.go"}, tracked...)
+	runCommand(t, fixture, "git", addArgs...)
+
+	rawPaths := runCommandOutput(t, fixture, "git", "ls-files", "-z", "--", "*.go")
+	// Git sorts the index bytewise; formatted.go precedes line/space. Keep the
+	// hand-derived literal explicit so line-oriented or quoted output fails.
+	var wantRawPaths string
+	if runtime.GOOS != "windows" {
+		wantRawPaths = "-dash.go\x00formatted.go\x00line\nbreak.go\x00space name.go\x00日本語.go\x00"
+	} else {
+		wantRawPaths = "-dash.go\x00formatted.go\x00space name.go\x00日本語.go\x00"
+	}
+	if string(rawPaths) != wantRawPaths {
+		t.Fatalf("git NUL path fixture = %q, want %q", rawPaths, wantRawPaths)
+	}
 
 	var command string
 	var args []string
@@ -131,13 +155,20 @@ func TestNativeGofmtScriptReportsOnlyExactTrackedUnformattedPaths(t *testing.T) 
 	if err == nil {
 		t.Fatalf("formatter script succeeded with an unformatted tracked file; output:\n%s", output)
 	}
-	normalized := strings.ReplaceAll(strings.TrimSpace(string(output)), "\r\n", "\n")
-	want := "These files are not gofmt-formatted. Run: gofmt -w <path>.\n-unformatted.go"
+	normalized := strings.ReplaceAll(string(output), "\r\n", "\n")
+	wantPaths := []string{"-dash.go"}
+	if runtime.GOOS != "windows" {
+		wantPaths = append(wantPaths, "line\nbreak.go")
+	}
+	wantPaths = append(wantPaths, "space name.go", "日本語.go")
+	want := "These files are not gofmt-formatted. Run: gofmt -w <path>.\n" + strings.Join(wantPaths, "\n") + "\n"
 	if normalized != want {
 		t.Fatalf("formatter diagnostics = %q, want exact %q", normalized, want)
 	}
 
-	writeFixture(t, fixture, "-unformatted.go", "package fixture\n\nfunc Unformatted() {}\n")
+	for _, name := range tracked {
+		writeFixture(t, fixture, name, "package fixture\n\nfunc Unformatted() {}\n")
+	}
 	cmd = exec.Command(command, args...)
 	cmd.Dir = fixture
 	output, err = cmd.CombinedOutput()
@@ -146,6 +177,42 @@ func TestNativeGofmtScriptReportsOnlyExactTrackedUnformattedPaths(t *testing.T) 
 	}
 	if len(output) != 0 {
 		t.Fatalf("formatter script emitted output on success: %q", output)
+	}
+}
+
+func TestWindowsGofmtScriptUsesRawNULTerminatedGitOutput(t *testing.T) {
+	path := filepath.Join("..", "..", "scripts", "ci", "check-gofmt.ps1")
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	script := string(source)
+	for _, required := range []string{
+		"[Diagnostics.ProcessStartInfo]::new()",
+		"RedirectStandardOutput = $true",
+		"UseShellExecute = $false",
+		"ArgumentList.Add(\"ls-files\")",
+		"ArgumentList.Add(\"-z\")",
+		"ArgumentList.Add(\"--\")",
+		"ArgumentList.Add(\"*.go\")",
+		"StandardOutput.BaseStream.CopyTo(",
+		"WaitForExit()",
+		"$gitProcess.ExitCode",
+		"[Text.UTF8Encoding]::new($false, $true)",
+		"Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)",
+		"gofmt -l -- @goFiles",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("Windows formatter lacks raw NUL path transport fragment %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"& git ls-files",
+		"StandardOutput.ReadToEnd()",
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("Windows formatter uses lossy string/line transport %q", forbidden)
+		}
 	}
 }
 
@@ -461,4 +528,15 @@ func runCommand(t *testing.T, directory, name string, args ...string) {
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("run %s: %v\n%s", name, err, output)
 	}
+}
+
+func runCommandOutput(t *testing.T, directory, name string, args ...string) []byte {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = directory
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("run %s: %v", name, err)
+	}
+	return output
 }
