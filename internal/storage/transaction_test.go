@@ -575,8 +575,11 @@ func TestAtomicRenameBeforeSyncCrashStateReconcilesAndRollsBackAfterRestart(t *t
 	if err := json.Unmarshal(journalBody, &emitted); err != nil {
 		t.Fatal(err)
 	}
-	if emitted.Status != statusStaged || emitted.Committed != 1 || emitted.Entries[0].Temp == "" {
-		t.Fatalf("emitted crash record = %#v, want staged committed write retaining temp", emitted)
+	// rename がステージ済みファイルを消費した時点で、記録はそれを手放している。
+	// 進捗の数え上げより先にそうすることが、失敗経路の残す記録を、読み手が受理する
+	// 形に保っている。
+	if emitted.Status != statusStaged || emitted.Committed != 1 || emitted.Entries[0].Temp != "" {
+		t.Fatalf("emitted crash record = %#v, want staged committed write without its consumed temp", emitted)
 	}
 	if contents, readErr := os.ReadFile(target); readErr != nil || string(contents) != "Host after\n" {
 		t.Fatalf("target after failed immediate rollback = %q, %v", contents, readErr)
@@ -678,6 +681,258 @@ func TestAtomicRollbackRenameBeforeSyncCrashStateReconcilesWithoutStagedTemp(t *
 	history, err := restarted.History()
 	if err != nil || len(history) != 1 || history[0].Status != statusRolledBack {
 		t.Fatalf("History after reconciled rollback = %#v, %v", history, err)
+	}
+}
+
+// commitWithStaleJournal は、最初のエントリの適用には成功し、それを記録しようと
+// するジャーナル書き込みがすべて失敗するコミットを走らせる。残る永続記録は、
+// ファイルシステムが実際に保持しているより少ない進捗を名乗ることになる。
+func commitWithStaleJournal(t *testing.T, workspace *Workspace, request Request) string {
+	t.Helper()
+	journalDirectory := filepath.Join(workspace.StateDir(), journalDirectoryName)
+	journalRenames := 0
+	failure := errors.New("injected journal progress failure")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			// 3 番目は最初のエントリを適用したあとの進捗更新、4 番目は失敗経路が
+			// その進捗を残そうとする再試行である。両方を落とすことでのみ、復旧は
+			// 対象の状態から数え直すほかなくなる。
+			if operation == "rename" && filepath.Dir(path) == journalDirectory {
+				journalRenames++
+				if journalRenames == 3 || journalRenames == 4 {
+					return failure
+				}
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x71}, 4096)))
+	result, err := manager.Commit(request)
+	if !errors.Is(err, failure) || result.ID == "" {
+		t.Fatalf("Commit = %#v, %v; want the injected journal failure", result, err)
+	}
+	body, readErr := os.ReadFile(filepath.Join(journalDirectory, result.ID+".json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var emitted journalRecord
+	if err := json.Unmarshal(body, &emitted); err != nil {
+		t.Fatal(err)
+	}
+	if emitted.Status != statusStaged || emitted.Committed != 0 {
+		t.Fatalf("durable record = %#v, want staged progress stale at 0", emitted)
+	}
+	workspace.fileSystem = OSFileSystem{}
+	return result.ID
+}
+
+func restartedManager(t *testing.T, workspace *Workspace) *Manager {
+	t.Helper()
+	return NewManager(workspace, func() time.Time {
+		return time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	}, bytes.NewReader(bytes.Repeat([]byte{0x72}, 4096)))
+}
+
+func reconciledPending(t *testing.T, manager *Manager, id string, committed int) Pending {
+	t.Helper()
+	pending, err := manager.Pending()
+	if err != nil || len(pending) != 1 || pending[0].ID != id {
+		t.Fatalf("Pending = %#v, %v", pending, err)
+	}
+	if pending[0].Committed != committed {
+		t.Fatalf("reconciled progress = %d, want %d", pending[0].Committed, committed)
+	}
+	return pending[0]
+}
+
+func assertFileContents(t *testing.T, path, want string) {
+	t.Helper()
+	contents, err := os.ReadFile(path)
+	if err != nil || string(contents) != want {
+		t.Fatalf("%s = %q, %v; want %q", filepath.Base(path), contents, err, want)
+	}
+}
+
+func assertMissing(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("%s still exists: %v", filepath.Base(path), err)
+	}
+}
+
+// TestRecoveryReconstructsNonAtomicProgressFromAStaleJournal は、遅れた進捗数を
+// そのまま信じた復旧が、実際には行っていない巻き戻しを成功として報告することを
+// 防ぐ。バックアップを意図して残さなかった削除では、その偽の成功が、取り返しの
+// つかない消失を覆い隠すことになる。
+func TestRecoveryReconstructsNonAtomicProgressFromAStaleJournal(t *testing.T) {
+	t.Run("write", func(t *testing.T) {
+		workspace := newTestWorkspace(t)
+		first := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)
+		second := writeWorkspaceFile(t, workspace, "second.conf", "second before\n", 0o600)
+		id := commitWithStaleJournal(t, workspace, Request{
+			Operation: "connection.update",
+			Changes: []Change{
+				{Path: first, Contents: []byte("first after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("first before\n"))}},
+				{Path: second, Contents: []byte("second after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("second before\n"))}},
+			},
+		})
+		assertFileContents(t, first, "first after\n")
+
+		manager := restartedManager(t, workspace)
+		if item := reconciledPending(t, manager, id, 1); !item.CanRollback {
+			t.Fatalf("reconciled applied write = %#v, want a rollback offer", item)
+		}
+		if err := manager.Rollback(id); err != nil {
+			t.Fatalf("Rollback = %v", err)
+		}
+		assertFileContents(t, first, "first before\n")
+		assertFileContents(t, second, "second before\n")
+	})
+
+	t.Run("move", func(t *testing.T) {
+		workspace := newTestWorkspace(t)
+		first := writeWorkspaceFile(t, workspace, "first.conf", "first bytes\n", 0o600)
+		second := writeWorkspaceFile(t, workspace, "second.conf", "second bytes\n", 0o600)
+		firstTarget := filepath.Join(workspace.Root(), "first.moved.conf")
+		secondTarget := filepath.Join(workspace.Root(), "second.moved.conf")
+		id := commitWithStaleJournal(t, workspace, Request{
+			Operation: "key.relocate",
+			Moves: []Move{
+				{From: first, To: firstTarget, Precondition: Precondition{Exists: true, Digest: Digest([]byte("first bytes\n"))}},
+				{From: second, To: secondTarget, Precondition: Precondition{Exists: true, Digest: Digest([]byte("second bytes\n"))}},
+			},
+		})
+		assertFileContents(t, firstTarget, "first bytes\n")
+		assertMissing(t, first)
+
+		manager := restartedManager(t, workspace)
+		reconciledPending(t, manager, id, 1)
+		if err := manager.Rollback(id); err != nil {
+			t.Fatalf("Rollback = %v", err)
+		}
+		assertFileContents(t, first, "first bytes\n")
+		assertMissing(t, firstTarget)
+		assertFileContents(t, second, "second bytes\n")
+		assertMissing(t, secondTarget)
+	})
+
+	t.Run("removal with backup", func(t *testing.T) {
+		workspace := newTestWorkspace(t)
+		first := writeWorkspaceFile(t, workspace, "first.conf", "first bytes\n", 0o600)
+		second := writeWorkspaceFile(t, workspace, "second.conf", "second bytes\n", 0o600)
+		id := commitWithStaleJournal(t, workspace, Request{
+			Operation: "connection.delete",
+			Removals: []Removal{
+				{Path: first, Precondition: Precondition{Exists: true, Digest: Digest([]byte("first bytes\n"))}, Backup: true},
+				{Path: second, Precondition: Precondition{Exists: true, Digest: Digest([]byte("second bytes\n"))}, Backup: true},
+			},
+		})
+		assertMissing(t, first)
+
+		manager := restartedManager(t, workspace)
+		reconciledPending(t, manager, id, 1)
+		if err := manager.Rollback(id); err != nil {
+			t.Fatalf("Rollback = %v", err)
+		}
+		assertFileContents(t, first, "first bytes\n")
+		assertFileContents(t, second, "second bytes\n")
+	})
+
+	t.Run("removal without backup", func(t *testing.T) {
+		workspace := newTestWorkspace(t)
+		first := writeWorkspaceFile(t, workspace, "id_first", "PRIVATE KEY ONE\n", 0o600)
+		second := writeWorkspaceFile(t, workspace, "id_second", "PRIVATE KEY TWO\n", 0o600)
+		id := commitWithStaleJournal(t, workspace, Request{
+			Operation: "key.delete",
+			Removals: []Removal{
+				{Path: first, Precondition: Precondition{Exists: true, Digest: Digest([]byte("PRIVATE KEY ONE\n"))}},
+				{Path: second, Precondition: Precondition{Exists: true, Digest: Digest([]byte("PRIVATE KEY TWO\n"))}},
+			},
+		})
+		assertMissing(t, first)
+
+		manager := restartedManager(t, workspace)
+		if item := reconciledPending(t, manager, id, 1); item.CanRollback {
+			t.Fatal("an applied removal that kept no backup was offered as reversible")
+		}
+		if err := manager.Rollback(id); !errors.Is(err, ErrIrreversibleRemoval) {
+			t.Fatalf("Rollback = %v, want ErrIrreversibleRemoval", err)
+		}
+		assertMissing(t, first)
+		assertFileContents(t, second, "PRIVATE KEY TWO\n")
+		history, err := manager.History()
+		if err != nil || len(history) != 0 {
+			t.Fatalf("History after refused rollback = %#v, %v", history, err)
+		}
+	})
+}
+
+// TestRollbackRetryResumesFromReconciledProgressAfterAPartialFailure は、
+// 途中まで戻して失敗した巻き戻しの再試行を扱う。移動の復元は冪等ではないので、
+// 減っていない進捗数から再開すると、すでに戻したエントリで永久に立ち往生する。
+func TestRollbackRetryResumesFromReconciledProgressAfterAPartialFailure(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	names := []string{"one", "two", "three", "four"}
+	sources := make([]string, 0, len(names))
+	targets := make([]string, 0, len(names))
+	moves := make([]Move, 0, len(names))
+	for _, name := range names {
+		contents := "Host " + name + "\n"
+		source := writeWorkspaceFile(t, workspace, name+".conf", contents, 0o600)
+		target := filepath.Join(workspace.Root(), name+".moved.conf")
+		sources = append(sources, source)
+		targets = append(targets, target)
+		moves = append(moves, Move{From: source, To: target, Precondition: Precondition{Exists: true, Digest: Digest([]byte(contents))}})
+	}
+
+	commitFailure := errors.New("injected fourth move failure")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "rename" && path == targets[3] {
+				return commitFailure
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x73}, 4096)))
+	result, err := manager.Commit(Request{Operation: "key.relocate", Moves: moves})
+	if !errors.Is(err, commitFailure) || result.ID == "" {
+		t.Fatalf("Commit = %#v, %v; want the injected move failure", result, err)
+	}
+
+	rollbackFailure := errors.New("injected move restore failure")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "rename" && path == sources[1] {
+				return rollbackFailure
+			}
+			return nil
+		},
+	}
+	if err := manager.Rollback(result.ID); !errors.Is(err, rollbackFailure) {
+		t.Fatalf("Rollback = %v, want the injected restore failure", err)
+	}
+	// 巻き戻しは上から進む。三つ目だけが戻り、その進捗はどこにも記録されていない。
+	assertFileContents(t, sources[2], "Host three\n")
+	assertMissing(t, targets[2])
+	assertFileContents(t, targets[1], "Host two\n")
+
+	workspace.fileSystem = OSFileSystem{}
+	restarted := restartedManager(t, workspace)
+	reconciledPending(t, restarted, result.ID, 2)
+	if err := restarted.Rollback(result.ID); err != nil {
+		t.Fatalf("Rollback retry = %v", err)
+	}
+	for index, source := range sources {
+		assertFileContents(t, source, "Host "+names[index]+"\n")
+		assertMissing(t, targets[index])
+	}
+	history, err := restarted.History()
+	if err != nil || len(history) != 1 || history[0].Status != statusRolledBack {
+		t.Fatalf("History after retried rollback = %#v, %v", history, err)
 	}
 }
 
