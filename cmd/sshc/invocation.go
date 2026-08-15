@@ -124,7 +124,12 @@ func usage(out io.Writer) {
   sshc list            print every concrete Host alias, one per line
   sshc open            print a new way into the UI
   sshc status          print the engine's status as JSON, for the shell
-  sshc vault <action>  manage the running engine's vault
+  sshc vault status    describe the running engine and vault
+  sshc vault create    create and unlock a new vault
+  sshc vault unlock    unlock the vault in the running engine
+  sshc vault lock      lock the vault without closing SSH sessions
+  sshc vault change-password
+                       change the password of an unlocked vault
   sshc help            print this
 
 `)

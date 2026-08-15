@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 	tests := []struct {
@@ -17,7 +20,11 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 		{[]string{"sshc", "list"}, invocationList, nil},
 		{[]string{"sshc", "open"}, invocationOpen, nil},
 		{[]string{"sshc", "status"}, invocationStatus, nil},
+		{[]string{"sshc", "vault", "status"}, invocationVault, []string{"status"}},
+		{[]string{"sshc", "vault", "create"}, invocationVault, []string{"create"}},
 		{[]string{"sshc", "vault", "unlock"}, invocationVault, []string{"unlock"}},
+		{[]string{"sshc", "vault", "lock"}, invocationVault, []string{"lock"}},
+		{[]string{"sshc", "vault", "change-password"}, invocationVault, []string{"change-password"}},
 		{[]string{"sshc", "help"}, invocationHelp, nil},
 		{[]string{"sshc", "-h"}, invocationHelp, nil},
 		{[]string{"sshc", "--help"}, invocationHelp, nil},
@@ -26,6 +33,16 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 		got, err := parseInvocation(test.argv)
 		if err != nil || got.Kind != test.kind || !sameStrings(got.Args, test.args) {
 			t.Fatalf("parseInvocation(%q) = %#v, %v; want kind %v and args %q", test.argv, got, err, test.kind, test.args)
+		}
+	}
+}
+
+func TestUsageNamesEveryVaultAction(t *testing.T) {
+	var output strings.Builder
+	usage(&output)
+	for _, action := range []string{"status", "create", "unlock", "lock", "change-password"} {
+		if !strings.Contains(output.String(), "sshc vault "+action) {
+			t.Errorf("usage does not name vault action %q:\n%s", action, output.String())
 		}
 	}
 }

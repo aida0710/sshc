@@ -64,6 +64,9 @@ func engineStatus(ctx context.Context, stateDir string, client *http.Client) (st
 
 // statusAnswer は、エンジンが答える「いまどうなっているか」である。
 type statusAnswer struct {
+	Owner           handoff.Owner `json:"owner"`
+	Version         string        `json:"version"`
+	ProtocolVersion int           `json:"protocolVersion"`
 	// Vault は、開けるべき錠がそもそも有るか。
 	Vault    bool `json:"vault"`
 	Unlocked bool `json:"unlocked"`

@@ -1,0 +1,574 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"time"
+	"unicode/utf8"
+
+	"golang.org/x/term"
+
+	"sshc/internal/handoff"
+	"sshc/internal/httpserver"
+)
+
+const (
+	maxVaultResponseBody = 64 << 10
+	vaultCommandTimeout  = 3 * time.Minute
+)
+
+var (
+	errVaultResponseTooLarge = errors.New("vault response is too large")
+	errInvalidVaultResponse  = errors.New("invalid vault response")
+	errInvalidPasswordText   = errors.New("password is not valid UTF-8")
+)
+
+// passwordTerminal は、マスターパスワードを通常の stdin pipe から分離する。
+// no-echo 読み取りができない入力を先に拒むことで、パイプや履歴へ秘密を置かない。
+type passwordTerminal interface {
+	IsTerminal(fd int) bool
+	ReadPassword(fd int) ([]byte, error)
+}
+
+type systemPasswordTerminal struct{}
+
+func (systemPasswordTerminal) IsTerminal(fd int) bool { return term.IsTerminal(fd) }
+func (systemPasswordTerminal) ReadPassword(fd int) ([]byte, error) {
+	return term.ReadPassword(fd)
+}
+
+// runVault は、起動済み engine の Vault operation だけを行う。engine を起動しない
+// のは、desktop と headless の owner をこの補助コマンドが勝手に選ばないためである。
+func runVault(
+	ctx context.Context,
+	action string,
+	stateDir string,
+	client *http.Client,
+	stdin *os.File,
+	stdout, stderr io.Writer,
+	terminal passwordTerminal,
+) int {
+	if err := ctx.Err(); err != nil {
+		return 130
+	}
+	if action != "status" && action != "create" && action != "unlock" &&
+		action != "lock" && action != "change-password" {
+		fmt.Fprintln(stderr, "sshc: unknown vault action")
+		return 2
+	}
+
+	needsPassword := action == "create" || action == "unlock" || action == "change-password"
+	if needsPassword && (stdin == nil || terminal == nil || !terminal.IsTerminal(int(stdin.Fd()))) {
+		fmt.Fprintln(stderr, "sshc: vault passwords require an interactive terminal")
+		return 1
+	}
+
+	found, err := readHandoff(stateDir)
+	if err != nil {
+		fmt.Fprintln(stderr, "sshc: no compatible running engine; start the desktop app or run sshc headless")
+		return 1
+	}
+	status, err := fetchVaultStatus(ctx, found, client)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return 130
+		}
+		fmt.Fprintln(stderr, "sshc: the running engine did not return a valid vault status")
+		return 1
+	}
+	if ctx.Err() != nil {
+		return 130
+	}
+	if action == "status" {
+		state := "missing"
+		if status.Vault && status.Unlocked {
+			state = "unlocked"
+		} else if status.Vault {
+			state = "locked"
+		}
+		fmt.Fprintf(stdout, "engine: %s\nversion: %s\nprotocol: %d\nvault: %s\nsessions: %d\n",
+			status.Owner, status.Version, status.ProtocolVersion, state, status.Sessions)
+		return 0
+	}
+
+	switch action {
+	case "create":
+		if status.Vault {
+			fmt.Fprintln(stderr, "sshc: a vault already exists")
+			return 1
+		}
+		return runVaultCreate(ctx, found, client, stdin, stdout, stderr, terminal)
+	case "unlock":
+		if !status.Vault {
+			fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
+			return 1
+		}
+		if status.Unlocked {
+			fmt.Fprintln(stdout, "vault is already unlocked")
+			return 0
+		}
+		return runVaultUnlock(ctx, found, client, stdin, stdout, stderr, terminal)
+	case "lock":
+		return runVaultLock(ctx, found, client, stdout, stderr)
+	case "change-password":
+		if !status.Vault {
+			fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
+			return 1
+		}
+		if !status.Unlocked {
+			fmt.Fprintln(stderr, "sshc: the vault is locked; run sshc vault unlock first")
+			return 1
+		}
+		return runVaultChange(ctx, found, client, stdin, stdout, stderr, terminal)
+	default:
+		return 2
+	}
+}
+
+func runVaultCreate(
+	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
+	stdout, stderr io.Writer, terminal passwordTerminal,
+) int {
+	next, err := promptVaultPassword(stdin, stderr, terminal, "New master password: ")
+	defer zeroBytes(next)
+	if err != nil {
+		return vaultPromptFailure(ctx, err, stderr)
+	}
+	if ctx.Err() != nil {
+		return 130
+	}
+	confirmation, err := promptVaultPassword(stdin, stderr, terminal, "Confirm new master password: ")
+	defer zeroBytes(confirmation)
+	if err != nil {
+		return vaultPromptFailure(ctx, err, stderr)
+	}
+	if ctx.Err() != nil {
+		return 130
+	}
+	if !bytes.Equal(next, confirmation) {
+		fmt.Fprintln(stderr, "sshc: password confirmation did not match")
+		return 1
+	}
+	payload, err := vaultPassphrasePayload(next)
+	if err != nil {
+		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
+		return 1
+	}
+	zeroBytes(next)
+	zeroBytes(confirmation)
+	return finishVaultMutation(ctx, client, found, httpserver.VaultCreatePath, payload, "vault created and unlocked", stderr, stdout)
+}
+
+func runVaultUnlock(
+	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
+	stdout, stderr io.Writer, terminal passwordTerminal,
+) int {
+	password, err := promptVaultPassword(stdin, stderr, terminal, "Master password: ")
+	defer zeroBytes(password)
+	if err != nil {
+		return vaultPromptFailure(ctx, err, stderr)
+	}
+	if ctx.Err() != nil {
+		return 130
+	}
+	payload, err := vaultPassphrasePayload(password)
+	if err != nil {
+		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
+		return 1
+	}
+	zeroBytes(password)
+	return finishVaultMutation(ctx, client, found, httpserver.VaultUnlockPath, payload, "vault unlocked", stderr, stdout)
+}
+
+func runVaultLock(
+	ctx context.Context, found handoff.Handoff, client *http.Client, stdout, stderr io.Writer,
+) int {
+	return finishVaultMutation(ctx, client, found, httpserver.VaultLockPath, []byte("{}"), "vault locked", stderr, stdout)
+}
+
+func runVaultChange(
+	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
+	stdout, stderr io.Writer, terminal passwordTerminal,
+) int {
+	current, err := promptVaultPassword(stdin, stderr, terminal, "Current master password: ")
+	defer zeroBytes(current)
+	if err != nil {
+		return vaultPromptFailure(ctx, err, stderr)
+	}
+	if ctx.Err() != nil {
+		return 130
+	}
+	next, err := promptVaultPassword(stdin, stderr, terminal, "New master password: ")
+	defer zeroBytes(next)
+	if err != nil {
+		return vaultPromptFailure(ctx, err, stderr)
+	}
+	if ctx.Err() != nil {
+		return 130
+	}
+	confirmation, err := promptVaultPassword(stdin, stderr, terminal, "Confirm new master password: ")
+	defer zeroBytes(confirmation)
+	if err != nil {
+		return vaultPromptFailure(ctx, err, stderr)
+	}
+	if ctx.Err() != nil {
+		return 130
+	}
+	if !bytes.Equal(next, confirmation) {
+		fmt.Fprintln(stderr, "sshc: password confirmation did not match")
+		return 1
+	}
+	payload, err := vaultChangePayload(current, next)
+	if err != nil {
+		fmt.Fprintln(stderr, "sshc: a password could not be encoded safely")
+		return 1
+	}
+	zeroBytes(current)
+	zeroBytes(next)
+	zeroBytes(confirmation)
+	return finishVaultMutation(ctx, client, found, httpserver.VaultChangePath, payload, "vault password changed", stderr, stdout)
+}
+
+func promptVaultPassword(
+	stdin *os.File, stderr io.Writer, terminal passwordTerminal, prompt string,
+) ([]byte, error) {
+	if _, err := fmt.Fprint(stderr, prompt); err != nil {
+		return nil, err
+	}
+	typed, err := terminal.ReadPassword(int(stdin.Fd()))
+	_, newlineErr := fmt.Fprintln(stderr)
+	if err != nil {
+		return typed, err
+	}
+	return typed, newlineErr
+}
+
+func vaultPromptFailure(ctx context.Context, err error, stderr io.Writer) int {
+	if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+		return 130
+	}
+	fmt.Fprintln(stderr, "sshc: could not read the vault password")
+	return 1
+}
+
+func finishVaultMutation(
+	ctx context.Context,
+	client *http.Client,
+	found handoff.Handoff,
+	path string,
+	payload []byte,
+	success string,
+	stderr, stdout io.Writer,
+) int {
+	if err := ctx.Err(); err != nil {
+		zeroBytes(payload)
+		return 130
+	}
+	response, err := sendVaultPOST(ctx, client, found, path, payload)
+	if err != nil {
+		writeUncertainVaultResult(path, stderr)
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return 130
+		}
+		return 1
+	}
+	body, err := readAndCloseVaultResponse(response)
+	defer zeroBytes(body)
+	if err != nil {
+		if path == httpserver.VaultChangePath && response.StatusCode == http.StatusMultiStatus {
+			fmt.Fprintln(stderr, "sshc: vault password changed locally, but the remote result was invalid")
+		} else {
+			fmt.Fprintln(stderr, "sshc: the running engine returned an invalid vault response")
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return 130
+		}
+		return 1
+	}
+	if response.StatusCode == http.StatusNoContent {
+		fmt.Fprintln(stdout, success)
+		return 0
+	}
+	if path == httpserver.VaultChangePath && response.StatusCode == http.StatusMultiStatus {
+		// 207 は local transaction が完了したあとの remote failure だけに使う。
+		// remote の本文は秘密を反射する可能性を考え、そのまま表示しない。
+		if validVaultPartialResult(body) {
+			fmt.Fprintln(stderr, "sshc: vault password changed locally, but the remote snapshot reseal failed")
+		} else {
+			fmt.Fprintln(stderr, "sshc: vault password changed locally, but the remote result was invalid")
+		}
+		return 1
+	}
+
+	switch response.StatusCode {
+	case http.StatusUnauthorized:
+		if path == httpserver.VaultUnlockPath || path == httpserver.VaultChangePath {
+			fmt.Fprintln(stderr, "sshc: the vault password or engine authentication was refused")
+		} else {
+			fmt.Fprintln(stderr, "sshc: engine authentication was refused")
+		}
+	case http.StatusConflict:
+		fmt.Fprintln(stderr, "sshc: the vault state changed; run sshc vault status and try again")
+	case http.StatusBadRequest:
+		fmt.Fprintln(stderr, "sshc: the vault password or request was not accepted")
+	case http.StatusRequestEntityTooLarge:
+		fmt.Fprintln(stderr, "sshc: the vault password or request is too large")
+	default:
+		fmt.Fprintln(stderr, "sshc: the vault operation failed")
+	}
+	return 1
+}
+
+func writeUncertainVaultResult(path string, stderr io.Writer) {
+	if path == httpserver.VaultChangePath {
+		fmt.Fprintln(stderr, "sshc: password change outcome is uncertain; the local password may already have changed. Run sshc vault lock (existing SSH sessions stay connected), then run sshc vault unlock with the new password first and the old password second.")
+		return
+	}
+	fmt.Fprintln(stderr, "sshc: vault request outcome is uncertain; run sshc vault status to check the result")
+}
+
+type vaultPartialResult struct {
+	SnapshotResealed bool    `json:"snapshotResealed"`
+	SnapshotProblem  *string `json:"snapshotProblem"`
+}
+
+func validVaultPartialResult(body []byte) bool {
+	var result vaultPartialResult
+	if err := decodeVaultResponseJSON(body, &result); err != nil || result.SnapshotResealed || result.SnapshotProblem == nil {
+		return false
+	}
+	switch *result.SnapshotProblem {
+	case "sync_remote_moved", "sync_push_refused", "sync_failed":
+		return true
+	default:
+		return false
+	}
+}
+
+func fetchVaultStatus(
+	ctx context.Context, found handoff.Handoff, client *http.Client,
+) (statusAnswer, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, found.URL+httpserver.VaultStatusPath, nil)
+	if err != nil {
+		return statusAnswer{}, err
+	}
+	request.Header.Set(handoff.HeaderName, found.Secret)
+	response, err := vaultClient(client).Do(request)
+	if err != nil {
+		if response != nil {
+			discardAndCloseVaultResponse(response)
+		}
+		return statusAnswer{}, err
+	}
+	body, err := readAndCloseVaultResponse(response)
+	defer zeroBytes(body)
+	if err != nil || response.StatusCode != http.StatusOK {
+		return statusAnswer{}, errInvalidVaultResponse
+	}
+
+	type statusWire struct {
+		Owner           handoff.Owner `json:"owner"`
+		Version         string        `json:"version"`
+		ProtocolVersion int           `json:"protocolVersion"`
+		Vault           *bool         `json:"vault"`
+		Unlocked        *bool         `json:"unlocked"`
+		Sessions        *int          `json:"sessions"`
+	}
+	var wire statusWire
+	if err := decodeVaultResponseJSON(body, &wire); err != nil || wire.Vault == nil || wire.Unlocked == nil || wire.Sessions == nil {
+		return statusAnswer{}, errInvalidVaultResponse
+	}
+	if wire.Owner != found.Owner || wire.Version != found.Version || wire.ProtocolVersion != found.ProtocolVersion ||
+		*wire.Sessions < 0 || (!*wire.Vault && *wire.Unlocked) {
+		return statusAnswer{}, errInvalidVaultResponse
+	}
+	return statusAnswer{
+		Owner: wire.Owner, Version: wire.Version, ProtocolVersion: wire.ProtocolVersion,
+		Vault: *wire.Vault, Unlocked: *wire.Unlocked, Sessions: *wire.Sessions,
+	}, nil
+}
+
+// sendVaultPOST は payload の所有権を受け取り、Do が戻るすべての経路で消去する。
+// oneShotVaultPayload は Seek/GetBody を持たず、redirect に秘密を再送できない。
+func sendVaultPOST(
+	ctx context.Context,
+	client *http.Client,
+	found handoff.Handoff,
+	path string,
+	payload []byte,
+) (*http.Response, error) {
+	defer zeroBytes(payload)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, found.URL+path, &oneShotVaultPayload{body: payload})
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(handoff.HeaderName, found.Secret)
+	response, err := vaultClient(client).Do(request)
+	if err != nil && response != nil {
+		discardAndCloseVaultResponse(response)
+	}
+	return response, err
+}
+
+type oneShotVaultPayload struct {
+	body   []byte
+	offset int
+}
+
+func (r *oneShotVaultPayload) Read(destination []byte) (int, error) {
+	if r.offset >= len(r.body) {
+		return 0, io.EOF
+	}
+	written := copy(destination, r.body[r.offset:])
+	r.offset += written
+	return written, nil
+}
+
+func vaultClient(client *http.Client) *http.Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	cloned := *client
+	cloned.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &cloned
+}
+
+// vaultCommandClient separates interactive Vault operations from the short
+// connection probe timeout. Password changes may wait for two one-minute remote
+// snapshot writes, while cancellation still travels through the request context.
+func vaultCommandClient(client *http.Client) *http.Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	cloned := *client
+	cloned.Timeout = vaultCommandTimeout
+	return &cloned
+}
+
+func readAndCloseVaultResponse(response *http.Response) ([]byte, error) {
+	if response == nil || response.Body == nil {
+		return nil, errInvalidVaultResponse
+	}
+	defer func() { _ = response.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxVaultResponseBody+1))
+	if err != nil {
+		zeroBytes(body)
+		return nil, err
+	}
+	if len(body) > maxVaultResponseBody {
+		zeroBytes(body)
+		return nil, errVaultResponseTooLarge
+	}
+	return body, nil
+}
+
+// discardAndCloseVaultResponse は、Do が error と response の両方を返した経路でも
+// server が反射した秘密を heap に残さない。close だけでは読み済みbufferは消えない。
+func discardAndCloseVaultResponse(response *http.Response) {
+	body, _ := readAndCloseVaultResponse(response)
+	zeroBytes(body)
+}
+
+func decodeVaultResponseJSON(body []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return errInvalidVaultResponse
+	}
+	return nil
+}
+
+func vaultPassphrasePayload(password []byte) ([]byte, error) {
+	payload := make([]byte, 0, len(password)+20)
+	payload = append(payload, `{"passphrase":`...)
+	var err error
+	payload, err = appendVaultJSONString(payload, password)
+	if err != nil {
+		zeroBytes(payload)
+		return nil, err
+	}
+	payload = append(payload, '}')
+	return payload, nil
+}
+
+func vaultChangePayload(current, next []byte) ([]byte, error) {
+	payload := make([]byte, 0, len(current)+len(next)+28)
+	payload = append(payload, `{"current":`...)
+	var err error
+	payload, err = appendVaultJSONString(payload, current)
+	if err == nil {
+		payload = append(payload, `,"next":`...)
+		payload, err = appendVaultJSONString(payload, next)
+	}
+	if err != nil {
+		zeroBytes(payload)
+		return nil, err
+	}
+	payload = append(payload, '}')
+	return payload, nil
+}
+
+// appendVaultJSONString は password を string に変えず JSON string を作る。
+// 無効な UTF-8 を replacement rune に変えると入力と送信値が異なるため拒否する。
+func appendVaultJSONString(destination, password []byte) ([]byte, error) {
+	if !utf8.Valid(password) {
+		return destination, errInvalidPasswordText
+	}
+	destination = append(destination, '"')
+	for offset := 0; offset < len(password); {
+		value := password[offset]
+		if value >= utf8.RuneSelf {
+			runeValue, size := utf8.DecodeRune(password[offset:])
+			if runeValue == '\u2028' {
+				destination = append(destination, `\u2028`...)
+			} else if runeValue == '\u2029' {
+				destination = append(destination, `\u2029`...)
+			} else {
+				destination = append(destination, password[offset:offset+size]...)
+			}
+			offset += size
+			continue
+		}
+		offset++
+		switch value {
+		case '"', '\\':
+			destination = append(destination, '\\', value)
+		case '\b':
+			destination = append(destination, '\\', 'b')
+		case '\f':
+			destination = append(destination, '\\', 'f')
+		case '\n':
+			destination = append(destination, '\\', 'n')
+		case '\r':
+			destination = append(destination, '\\', 'r')
+		case '\t':
+			destination = append(destination, '\\', 't')
+		default:
+			if value < 0x20 {
+				const hex = "0123456789abcdef"
+				destination = append(destination, '\\', 'u', '0', '0', hex[value>>4], hex[value&0x0f])
+			} else {
+				destination = append(destination, value)
+			}
+		}
+	}
+	destination = append(destination, '"')
+	return destination, nil
+}
+
+func zeroBytes(value []byte) {
+	for index := range value {
+		value[index] = 0
+	}
+}
