@@ -22,8 +22,21 @@ concurrency:
 
 jobs:
   go:
-    name: Go
-    runs-on: ubuntu-latest
+    name: Go native (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: Linux
+            race: true
+          - os: macos-15
+            name: macOS
+            race: true
+          - os: windows-2025
+            name: Windows
+            race: true
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -33,59 +46,75 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      # このプロジェクトの Go のスタイルは gofmt がすべてである。`gofmt -l` は
-      # それと異なるファイルを表示し、ひとつもなければ何も言わない。したがって
-      # ファイルの一覧が、失敗そのものであり、その説明でもある。
-      - name: gofmt
+      # Windows に Unix shell fragment を解釈させない。formatter も OS ごとの
+      # script を使い、違反時は対象 path だけを報告する。
+      - name: gofmt (Unix)
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: scripts/ci/check-gofmt.sh
+
+      - name: gofmt (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: ./scripts/ci/check-gofmt.ps1
+
+      - name: go vet (Unix)
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: go vet ./...
+
+      - name: go vet (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: go vet ./...
+
+      - name: go build (Unix)
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: go build ./...
+
+      - name: go build (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: go build ./...
+
+      - name: go test (Unix)
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: go test ./...
+
+      - name: go test (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: go test ./...
+
+      # race detector を別のステップにしてあるのは、それが遅い方だからであり、
+      # またデータ競合は、誤った答えとは別種の失敗だからである。
+      - name: go test -race (Unix)
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: go test -race ./...
+
+      # windows-2025 x64 は通常 race 対応である。もし toolchain 自身がこの
+      # platform を unsupported と明言した場合だけ neutral にし、test failure、
+      # compile failure、race report は元の終了 code で失敗させる。
+      - name: go test -race (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
         run: |
-          unformatted="$(gofmt -l .)"
-          if [ -n "$unformatted" ]; then
-            echo "These files are not gofmt-formatted. Run: gofmt -w ." >&2
-            echo "$unformatted" >&2
-            exit 1
-          fi
-
-      - name: go vet
-        run: go vet ./...
-
-      - name: go build
-        run: go build ./...
-
-      - name: go test
-        run: go test ./...
-
-      # race detector を別のステップにしてあるのは、それが遅い方だからであり、
-      # またデータ競合は、誤った答えとは別種の失敗だからである。
-      - name: go test -race
-        run: go test -race ./...
-
-  macos:
-    name: macOS
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-
-      # gofmt はソースのテキストを見るだけでビルドタグを見ないので、ubuntu の
-      # go ジョブがここでも重ねて実行する必要はない。一方 vet・build・test・
-      # race はいずれもコンパイルを要り、darwin のファイルは ubuntu ではどこも
-      # コンパイルされないので、ここで実行しない限りその健全性は誰も見ない。
-      - name: go vet
-        run: go vet ./...
-
-      - name: go build
-        run: go build ./...
-
-      - name: go test
-        run: go test ./...
-
-      # race detector を別のステップにしてあるのは、それが遅い方だからであり、
-      # またデータ競合は、誤った答えとは別種の失敗だからである。
-      - name: go test -race
-        run: go test -race ./...
+          $PSNativeCommandUseErrorActionPreference = $false
+          $raceLines = @(& go test -race ./... 2>&1)
+          $raceExit = $LASTEXITCODE
+          $raceLines | ForEach-Object { Write-Output $_ }
+          if ($raceExit -eq 0) {
+            exit 0
+          }
+          $raceOutput = (($raceLines | ForEach-Object { "$_" }) -join "`n").Trim()
+          if ($raceOutput -ceq '-race is not supported on windows/amd64') {
+            Write-Output 'Race unavailable on this runner/toolchain'
+            exit 0
+          }
+          exit $raceExit
 
   web:
     name: Web
@@ -119,11 +148,18 @@ jobs:
         run: npm run build
 
   desktop:
-    name: Desktop
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: desktop
+    name: Desktop pure Node lifecycle (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: Linux
+          - os: macos-15
+            name: macOS
+          - os: windows-2025
+            name: Windows
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -132,12 +168,27 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - run: npm ci
+      - name: Install desktop dependencies (Unix)
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: npm ci --prefix desktop
+
+      - name: Install desktop dependencies (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: npm ci --prefix desktop
 
       # Electron の描画そのものは手動受け入れに残す。ここでは、外殻が持つ
       # link・入口URL・二重起動時のウィンドウ復帰を Node 標準テストで検査する。
-      - name: Lifecycle tests
-        run: npm test
+      - name: Lifecycle tests (Unix)
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: npm test --prefix desktop
+
+      - name: Lifecycle tests (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: npm test --prefix desktop
 
   generated:
     name: Generated files
