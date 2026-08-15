@@ -1,14 +1,17 @@
 {
   "name": "sshc-desktop",
   "productName": "sshc",
+  "desktopName": "com.github.aida0710.sshc.desktop",
   "version": "0.1.0",
   "private": true,
+  "author": "aida0710",
   "description": "The desktop shell for sshc",
   "main": "main.js",
   "scripts": {
+    "postinstall": "install-electron",
     "start": "electron .",
     "dist": "electron-builder --mac --linux",
-    "test": "node --test link.test.js",
+    "test": "node --test link.test.js entrance.test.js reopen.test.js",
     "icons": "node icon.mjs"
   },
   "devDependencies": {
@@ -23,7 +26,12 @@
     "files": [
       "main.js",
       "preload.js",
-      "link.js"
+      "link.js",
+      "entrance.js",
+      "reopen.js",
+      "tray.js",
+      "build/trayTemplate.png",
+      "build/trayTemplate@2x.png"
     ],
     "extraResources": [
       {
@@ -32,6 +40,7 @@
       }
     ],
     "mac": {
+      "identity": null,
       "target": [
         {
           "target": "dmg",
@@ -45,6 +54,7 @@
       "icon": "build/icon.png"
     },
     "linux": {
+      "syncDesktopName": true,
       "target": [
         {
           "target": "AppImage",

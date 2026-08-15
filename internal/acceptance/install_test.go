@@ -4,24 +4,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
-const maintenanceFixture = `#!/bin/sh
-printf '%s|%s\n' "$0" "$*" >> "$SSHC_TEST_SERVICE_LOG"
-if [ "$*" = "service refresh" ] && [ "${SSHC_TEST_FAIL_REFRESH:-}" = "1" ]; then
-	exit 17
-fi
-if [ "$*" = "service disable" ] && [ "${SSHC_TEST_FAIL_DISABLE:-}" = "1" ]; then
-	exit 18
-fi
-`
+const installFixture = "#!/bin/sh\ntrue\n"
 
-func writeMaintenanceFixture(t *testing.T, directory string) string {
+func writeInstallFixture(t *testing.T, directory string) string {
 	t.Helper()
 	path := filepath.Join(directory, "fixture-sshc")
-	if err := os.WriteFile(path, []byte(maintenanceFixture), 0o755); err != nil {
+	if err := os.WriteFile(path, []byte(installFixture), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return path
@@ -37,12 +28,11 @@ func runInstallMake(t *testing.T, environment []string, target string, assignmen
 	return string(output), err
 }
 
-// install-binaryは、古い宛先を新しい実行可能ファイルへ置き換えてから、その置かれた
-// ファイル自身にrefreshを依頼する。sourceを呼ぶ実装では、登録される絶対パスが
-// リポジトリ側へ戻ってしまうため、このログがそれを区別する。
-func TestInstallBinaryAtomicallyReplacesTheCLIAndRefreshesTheService(t *testing.T) {
+// install-binaryは、古い宛先を新しい実行可能ファイルへ置き換える。ログイン時起動を
+// OSへ任せるようになってからは、置いたファイル自身に何かを依頼することはない。
+func TestInstallBinaryAtomicallyReplacesTheCLI(t *testing.T) {
 	root := t.TempDir()
-	source := writeMaintenanceFixture(t, root)
+	source := writeInstallFixture(t, root)
 	installDirectory := filepath.Join(root, "installed")
 	if err := os.MkdirAll(installDirectory, 0o700); err != nil {
 		t.Fatal(err)
@@ -51,9 +41,8 @@ func TestInstallBinaryAtomicallyReplacesTheCLIAndRefreshesTheService(t *testing.
 	if err := os.WriteFile(destination, []byte("old executable\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	logPath := filepath.Join(root, "service.log")
 
-	output, err := runInstallMake(t, []string{"SSHC_TEST_SERVICE_LOG=" + logPath}, "install-binary",
+	output, err := runInstallMake(t, nil, "install-binary",
 		"INSTALL_SOURCE="+source, "INSTALL_DIR="+installDirectory)
 	if err != nil {
 		t.Fatalf("make install-binary: %v\n%s", err, output)
@@ -63,7 +52,7 @@ func TestInstallBinaryAtomicallyReplacesTheCLIAndRefreshesTheService(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(installed) != maintenanceFixture {
+	if string(installed) != installFixture {
 		t.Fatalf("installed bytes = %q, want fixture bytes", installed)
 	}
 	info, err := os.Stat(destination)
@@ -73,40 +62,9 @@ func TestInstallBinaryAtomicallyReplacesTheCLIAndRefreshesTheService(t *testing.
 	if info.Mode().Perm() != 0o755 {
 		t.Fatalf("installed mode = %o, want 755", info.Mode().Perm())
 	}
-	logged, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(logged) != destination+"|service refresh\n" {
-		t.Fatalf("service log = %q", logged)
-	}
 	matches, err := filepath.Glob(filepath.Join(installDirectory, ".sshc.install.*"))
 	if err != nil || len(matches) != 0 {
 		t.Fatalf("staging residue = %v, %v", matches, err)
-	}
-}
-
-// refreshはrename後にしか実行できない。したがって失敗時は新しいCLIを残すが、全体を
-// 成功とは報告せず、どこまで完了したかを明示する。
-func TestInstallBinaryKeepsTheNewCLIButReportsARefreshFailure(t *testing.T) {
-	root := t.TempDir()
-	source := writeMaintenanceFixture(t, root)
-	installDirectory := filepath.Join(root, "installed")
-	logPath := filepath.Join(root, "service.log")
-
-	output, err := runInstallMake(t, []string{
-		"SSHC_TEST_SERVICE_LOG=" + logPath,
-		"SSHC_TEST_FAIL_REFRESH=1",
-	}, "install-binary", "INSTALL_SOURCE="+source, "INSTALL_DIR="+installDirectory)
-	if err == nil {
-		t.Fatalf("refresh failure was reported as success:\n%s", output)
-	}
-	installed, readErr := os.ReadFile(filepath.Join(installDirectory, "sshc"))
-	if readErr != nil || string(installed) != maintenanceFixture {
-		t.Fatalf("installed after refresh failure = %q, %v", installed, readErr)
-	}
-	if !strings.Contains(output, "CLI was installed") || !strings.Contains(output, "login service") {
-		t.Fatalf("partial success is not explained:\n%s", output)
 	}
 }
 
@@ -138,7 +96,7 @@ func TestInstallBinaryKeepsTheOldCLIWhenStagingFails(t *testing.T) {
 // PID名へ事前配置されたsymlinkを追う実装では、この検査に失敗する。
 func TestInstallBinaryStagesIntoAnExclusivelyCreatedRegularFile(t *testing.T) {
 	root := t.TempDir()
-	source := writeMaintenanceFixture(t, root)
+	source := writeInstallFixture(t, root)
 	installDirectory := filepath.Join(root, "installed")
 	shimDirectory := filepath.Join(root, "shim")
 	if err := os.MkdirAll(shimDirectory, 0o700); err != nil {
@@ -154,22 +112,19 @@ fi
 	if err := os.WriteFile(filepath.Join(shimDirectory, "install"), []byte(installShim), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	logPath := filepath.Join(root, "service.log")
 
 	output, err := runInstallMake(t, []string{
 		"PATH=" + shimDirectory + ":" + os.Getenv("PATH"),
-		"SSHC_TEST_SERVICE_LOG=" + logPath,
 	}, "install-binary", "INSTALL_SOURCE="+source, "INSTALL_DIR="+installDirectory)
 	if err != nil {
 		t.Fatalf("make install-binary: %v\n%s", err, output)
 	}
 }
 
-// disableが失敗したのに実行ファイルだけ消すと、KeepAliveが存在しないパスを起動し
-// 続ける。削除よりdisableが先であることを、失敗側の状態で証明する。
-func TestUninstallBinaryKeepsTheCLIWhenServiceDisableFails(t *testing.T) {
+// uninstall-binaryはインストール済みのCLIを取り除く。ログイン時起動をOSへ任せる
+// ようになってからは、削除の前に何かを止める必要がない。
+func TestUninstallBinaryRemovesTheInstalledCLI(t *testing.T) {
 	root := t.TempDir()
-	maintenance := writeMaintenanceFixture(t, root)
 	installDirectory := filepath.Join(root, "installed")
 	if err := os.MkdirAll(installDirectory, 0o700); err != nil {
 		t.Fatal(err)
@@ -178,42 +133,10 @@ func TestUninstallBinaryKeepsTheCLIWhenServiceDisableFails(t *testing.T) {
 	if err := os.WriteFile(destination, []byte("installed executable\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	logPath := filepath.Join(root, "service.log")
 
-	output, err := runInstallMake(t, []string{
-		"SSHC_TEST_SERVICE_LOG=" + logPath,
-		"SSHC_TEST_FAIL_DISABLE=1",
-	}, "uninstall-binary", "MAINTENANCE_BINARY="+maintenance, "INSTALL_DIR="+installDirectory)
-	if err == nil {
-		t.Fatalf("disable failure was reported as success:\n%s", output)
-	}
-	current, readErr := os.ReadFile(destination)
-	if readErr != nil || string(current) != "installed executable\n" {
-		t.Fatalf("installed CLI was removed or changed: %q, %v", current, readErr)
-	}
-}
-
-func TestUninstallBinaryDisablesTheServiceBeforeRemovingTheCLI(t *testing.T) {
-	root := t.TempDir()
-	maintenance := writeMaintenanceFixture(t, root)
-	installDirectory := filepath.Join(root, "installed")
-	if err := os.MkdirAll(installDirectory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	destination := filepath.Join(installDirectory, "sshc")
-	if err := os.WriteFile(destination, []byte("installed executable\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	logPath := filepath.Join(root, "service.log")
-
-	output, err := runInstallMake(t, []string{"SSHC_TEST_SERVICE_LOG=" + logPath}, "uninstall-binary",
-		"MAINTENANCE_BINARY="+maintenance, "INSTALL_DIR="+installDirectory)
+	output, err := runInstallMake(t, nil, "uninstall-binary", "INSTALL_DIR="+installDirectory)
 	if err != nil {
 		t.Fatalf("make uninstall-binary: %v\n%s", err, output)
-	}
-	logged, err := os.ReadFile(logPath)
-	if err != nil || string(logged) != maintenance+"|service disable\n" {
-		t.Fatalf("service log = %q, %v", logged, err)
 	}
 	if _, err := os.Stat(destination); !os.IsNotExist(err) {
 		t.Fatalf("installed CLI still exists: %v", err)

@@ -445,32 +445,6 @@ paths:
               schema: { $ref: "#/components/schemas/UpdateStatus" }
         "401": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
-  /api/v1/login-item:
-    get:
-      operationId: getLoginItem
-      responses:
-        "200":
-          description: Whether this application starts at login
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/LoginItem" }
-        "401": { $ref: "#/components/responses/Problem" }
-    put:
-      operationId: setLoginItem
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/LoginItem" }
-      responses:
-        "200":
-          description: The setting after the change
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/LoginItem" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/passwords/change:
     post:
       operationId: changeMasterPassword
@@ -1132,23 +1106,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Metadata" }
         "401": { $ref: "#/components/responses/Problem" }
-  /api/v1/metadata/desktop:
-    put:
-      operationId: setDesktopSettings
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/Desktop" }
-      responses:
-        "200":
-          description: The choice was written
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SaveResult" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/metadata/terminal:
     put:
       operationId: setTerminalSettings
@@ -1356,17 +1313,6 @@ components:
         # 何が変わったかを人が読み、どうするかを決める場所。このアプリケーションは
         # 何も取得せず、何も置き換えない。
         pageUrl: { type: string }
-    LoginItem:
-      type: object
-      additionalProperties: false
-      required: [enabled, supported]
-      properties:
-        # ユーザーが求めない限りオフ。保存済みのあらゆる秘密の鍵を握る
-        # バックグラウンドプロセスは、他人に代わって勝手に用意してよいものではない。
-        enabled: { type: boolean }
-        # このビルドが自分自身のパスを解決できないとき false になる。launchd の
-        # エージェントが名指ししなければならないのが、そのパスである。
-        supported: { type: boolean }
     ChangeMasterPasswordRequest:
       type: object
       additionalProperties: false
@@ -2482,16 +2428,18 @@ components:
         schemaVersion: { type: integer }
         groupsFile: { type: string }
         embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
-        desktop: { $ref: "#/components/schemas/Desktop" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
-    # 埋め込みターミナルの上限。範囲の外は読み取りで既定へ戻し、書き込みでは拒否する。
+    # 埋め込みターミナルの設定。数値の範囲外は読み取りで既定へ戻し、書き込みでは拒否する。
     EmbeddedTerminal:
       type: object
       additionalProperties: false
       properties:
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
+        # 無いときは on。false は利用者が明示的に止めた値なので、省略せず運ぶ。
+        copyOnSelect: { type: boolean }
+        rightClickPaste: { type: boolean }
         # ローカルシェルが始まる場所。`~` の綴りのまま持つ——home の綴りを
         # 焼き付けない。空なら home。
         startDirectory: { type: string, maxLength: 4096 }
@@ -2507,13 +2455,8 @@ components:
         startDirectory: { type: string, maxLength: 4096 }
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
-    # デスクトップの外殻の設定。
-    Desktop:
-      type: object
-      additionalProperties: false
-      properties:
-        # アプリを閉じたあともエンジンを動かし続けるか。書かれていなければ止める。
-        keepRunning: { type: boolean }
+        copyOnSelect: { type: boolean }
+        rightClickPaste: { type: boolean }
     PendingTransaction:
       type: object
       additionalProperties: false

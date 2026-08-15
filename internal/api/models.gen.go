@@ -311,11 +311,6 @@ type DedicatedKeyPassphraseUsage struct {
 	Key   string   `json:"key"`
 }
 
-// Desktop defines model for Desktop.
-type Desktop struct {
-	KeepRunning *bool `json:"keepRunning,omitempty"`
-}
-
 // Diagnostic defines model for Diagnostic.
 type Diagnostic struct {
 	Absolute *string `json:"absolute,omitempty"`
@@ -392,7 +387,9 @@ type EffectiveResponse struct {
 
 // EmbeddedTerminal defines model for EmbeddedTerminal.
 type EmbeddedTerminal struct {
+	CopyOnSelect    *bool   `json:"copyOnSelect,omitempty"`
 	MaxSessions     *int    `json:"maxSessions,omitempty"`
+	RightClickPaste *bool   `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes *int    `json:"scrollbackBytes,omitempty"`
 	StartDirectory  *string `json:"startDirectory,omitempty"`
 }
@@ -775,15 +772,8 @@ type KnownHostsScanResponse struct {
 	Notice     string               `json:"notice"`
 }
 
-// LoginItem defines model for LoginItem.
-type LoginItem struct {
-	Enabled   bool `json:"enabled"`
-	Supported bool `json:"supported"`
-}
-
 // Metadata defines model for Metadata.
 type Metadata struct {
-	Desktop          *Desktop          `json:"desktop,omitempty"`
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
 	Groups           *[]GroupMetadata  `json:"groups,omitempty"`
 	GroupsFile       *string           `json:"groupsFile,omitempty"`
@@ -1199,7 +1189,9 @@ type TerminalSessionList struct {
 
 // TerminalSettings defines model for TerminalSettings.
 type TerminalSettings struct {
+	CopyOnSelect    *bool   `json:"copyOnSelect,omitempty"`
 	MaxSessions     *int    `json:"maxSessions,omitempty"`
+	RightClickPaste *bool   `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes *int    `json:"scrollbackBytes,omitempty"`
 	StartDirectory  *string `json:"startDirectory,omitempty"`
 }
@@ -1406,12 +1398,6 @@ type DeleteKnownHostsJSONRequestBody = KnownHostsDeleteRequest
 
 // ScanKnownHostsJSONRequestBody defines body for ScanKnownHosts for application/json ContentType.
 type ScanKnownHostsJSONRequestBody = KnownHostsScanRequest
-
-// SetLoginItemJSONRequestBody defines body for SetLoginItem for application/json ContentType.
-type SetLoginItemJSONRequestBody = LoginItem
-
-// SetDesktopSettingsJSONRequestBody defines body for SetDesktopSettings for application/json ContentType.
-type SetDesktopSettingsJSONRequestBody = Desktop
 
 // SetTerminalSettingsJSONRequestBody defines body for SetTerminalSettings for application/json ContentType.
 type SetTerminalSettingsJSONRequestBody = TerminalSettings

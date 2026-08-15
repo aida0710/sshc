@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"sshc/internal/handoff"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 func connectEngine(t *testing.T, handlers ConnectHandlers) *echo.Echo {
@@ -302,48 +302,152 @@ func TestConnectRefusesAnAliasItWouldNotPutOnACommandLine(t *testing.T) {
 	}
 }
 
-// 止める要求は、答えてから止める。**止めてから答えると、呼んだ側は成功と
-// 切断を区別できない。**
-func TestStopAnswersAndThenClosesTheStopChannel(t *testing.T) {
+// メニューバーと終了時の確認が読む口である。**数えるのは生きている本数だけ**
+// で、終了済みは残っていても数に入らない——閉じてよいかを問うための数だからだ。
+func TestStatusAnswersWithTheLockAndTheLiveCount(t *testing.T) {
 	const cliSecret = "the secret for this run"
-	stopped := make(chan struct{})
-	var once sync.Once
-
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
 	engine := connectEngine(t, ConnectHandlers{
-		Secret:   cliSecret,
-		Shutdown: func() { once.Do(func() { close(stopped) }) },
+		Secret: cliSecret, Passwords: vault, Sessions: func() int { return 3 },
 	})
 
-	refused := send(t, engine, http.MethodPost, StopPath, "{}", nil)
-	if refused.Code != http.StatusForbidden {
-		t.Fatalf("stop without the secret = %d, want 403", refused.Code)
-	}
-	select {
-	case <-stopped:
-		t.Fatal("a refused request still stopped the engine")
-	default:
-	}
-
-	accepted := send(t, engine, http.MethodPost, StopPath, "{}",
+	recorder := send(t, engine, http.MethodGet, StatusPath, "",
 		map[string]string{handoff.HeaderName: cliSecret})
-	if accepted.Code != http.StatusAccepted {
-		t.Fatalf("stop = %d, want 202", accepted.Code)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
 	}
-	select {
-	case <-stopped:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the engine was never asked to stop")
+	var answer statusResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if !answer.Vault || !answer.Unlocked || answer.Sessions != 3 {
+		t.Fatalf("answer = %+v", answer)
 	}
 }
 
-// 止める手段が配線されていなければ、止まったふりをしない。
-func TestStopSaysSoWhenThereIsNoWayToStop(t *testing.T) {
+// **無い錠の鍵は尋ねない。** 保管庫を一度も作っていない利用者にとって
+// Unlocked は常に false であり、それだけを見ると `sshc <接続先>` は接続の
+// たびにマスターパスワードを訊く。訊く相手の手元には、答えになるものが無い。
+func TestStatusSaysThereIsNoVaultToUnlock(t *testing.T) {
 	const cliSecret = "the secret for this run"
-	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret})
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Initialise を呼ばない。**新規インストール直後の姿である。**
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
 
-	response := send(t, engine, http.MethodPost, StopPath, "{}",
+	recorder := send(t, engine, http.MethodGet, StatusPath, "",
 		map[string]string{handoff.HeaderName: cliSecret})
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("stop without a shutdown = %d, want 503", response.Code)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer statusResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Vault {
+		t.Fatalf("answer = %+v, want no vault", answer)
+	}
+}
+
+// handoff の秘密を持たないものには答えない。
+func TestStatusRefusesWithoutTheSecret(t *testing.T) {
+	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
+	if recorder := send(t, engine, http.MethodGet, StatusPath, "", nil); recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", recorder.Code)
+	}
+}
+
+// liveSessions が実際に「生きている」を数えていることを、registry を組み立てずに見る。
+// 終了済み（Exited が非 nil）を混ぜても、数に入るのは生きているものだけである。
+func TestLiveSessionsCountsOnlyTheOnesStillRunning(t *testing.T) {
+	views := []terminal.View{
+		{ID: "running-1"},
+		{ID: "finished", Exited: &terminal.ExitInfo{Code: 0}},
+		{ID: "running-2"},
+		{ID: "running-3"},
+	}
+	if got := liveSessions(views); got != 3 {
+		t.Fatalf("liveSessions = %d, want 3", got)
+	}
+}
+
+// **端末でも解錠できる。** ブラウザを開かずに答えられることが、この口の理由で
+// ある。解錠はエンジンの中に残るので、あとで窓を開けば解錠済みである。
+func TestUnlockOpensTheVaultFromTheCommandLine(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	vault.Lock()
+	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
+
+	body := `{"passphrase":"` + testPassphrase + `"}`
+	recorder := send(t, engine, http.MethodPost, UnlockPath, body,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("unlock = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if !vault.Unlocked() {
+		t.Fatal("the vault stayed locked")
+	}
+}
+
+// 間違いは拒む。どう間違っていたかは言わない。
+func TestUnlockRefusesTheWrongPassphrase(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	vault.Lock()
+	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
+
+	recorder := send(t, engine, http.MethodPost, UnlockPath, `{"passphrase":"wrong"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusForbidden || vault.Unlocked() {
+		t.Fatalf("unlock = %d, unlocked = %v", recorder.Code, vault.Unlocked())
+	}
+}
+
+// handoff の秘密を持たないものには答えない。
+func TestUnlockRefusesWithoutTheSecret(t *testing.T) {
+	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
+	if recorder := send(t, engine, http.MethodPost, UnlockPath, `{"passphrase":"anything"}`, nil); recorder.Code != http.StatusForbidden {
+		t.Fatalf("unlock = %d, want 403", recorder.Code)
 	}
 }

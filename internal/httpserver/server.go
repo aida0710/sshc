@@ -12,7 +12,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -39,9 +38,6 @@ type Options struct {
 	// ConnectAliases は、その接続に現れる alias を ProxyJump の手前も含めて
 	// 返す。保存済みパスワードを渡す相手をそこに限るために使う。
 	ConnectAliases func(alias string) []string
-	// LoginItem は「ログイン時に起動」の on/off を切り替える。nil の場合、
-	// launchd のないプラットフォームがそうであるように、非対応と報告する。
-	LoginItem LoginItemController
 	// Updates はプロジェクトのリリースを調べる。nil の場合、バージョンを
 	// 報告するのみで何も提示しない。比較すべきリリースを持たないビルドが
 	// すべきことはこれである。
@@ -62,9 +58,6 @@ type Options struct {
 	// すべてのパスワード用ルートを未登録のままに
 	// する。これは、それを配線しないテストが当てにしていることである。
 	Passwords *secret.Service
-	// Program はこのバイナリの絶対パスである。ログイン時起動のサービスが
-	// 何を起こすかを書くのに要る。これを知り得るのは cmd/sshc だけだ。
-	Program string
 	// Sync はワークスペースを object store へ運ぶ。nil の service は
 	// すべての sync ルートを未登録のままにする。
 	Sync *remotesync.Service
@@ -92,17 +85,7 @@ type Server struct {
 	engine   *echo.Echo
 	// terminals は、このプロセスが終わるときに畳むべき PTY を持つ。
 	terminals *terminal.Registry
-	// stopped は、デスクトップの外殻が終了を頼んだときに閉じる。
-	stopped  chan struct{}
-	stopOnce sync.Once
 }
-
-// Stopped は、終了を頼まれたときに閉じるチャンネルを返す。
-//
-// **ウィンドウを閉じることと、常駐を終わらせることは別の意思である。** これが閉じるのは
-// 後者を明示的に頼まれたときだけであり、頼めるのは handoff の秘密を持つ者
-// ——つまりこのバイナリ自身——に限られる。
-func (s *Server) Stopped() <-chan struct{} { return s.stopped }
 
 // CloseTerminals は、生きているすべての端末セッションへ SIGHUP を送る。
 //
@@ -235,13 +218,6 @@ func New(options Options) (*Server, error) {
 	// 呼び出し元が state directory から読み出しているはずのものであり、
 	// それがなければこのルートはすべてを拒否する。
 	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})
-	registerLoginItemRoutes(e, LoginItemHandlers{
-		Controller: options.LoginItem,
-		Program:    options.Program,
-	})
-	stopped := make(chan struct{})
-	var stopOnce sync.Once
-	requestStop := func() { stopOnce.Do(func() { close(stopped) }) }
 
 	registerConnectRoutes(e, ConnectHandlers{
 		Secret:    options.CLISecret,
@@ -253,11 +229,16 @@ func New(options Options) (*Server, error) {
 			target, ok, err := options.Config.DirectKeyPassphraseTarget(alias, options.Keys.Inventory)
 			return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
 		},
-		Warnings: options.ConnectWarnings,
-		Aliases:  options.ConnectAliases,
-		Sessions: options.Sessions,
-		BaseURL:  "http://" + host,
-		Shutdown: requestStop,
+		Warnings:  options.ConnectWarnings,
+		Aliases:   options.ConnectAliases,
+		Bootstrap: options.Sessions,
+		BaseURL:   "http://" + host,
+		Sessions: func() int {
+			if options.Terminals == nil {
+				return 0
+			}
+			return liveSessions(options.Terminals.Sessions())
+		},
 	})
 	if options.Sync != nil {
 		registerSyncRoutes(e, SyncHandlers{Service: options.Sync, Secrets: options.Passwords})
@@ -286,7 +267,6 @@ func New(options Options) (*Server, error) {
 	return &Server{
 		listener:  options.Listener,
 		terminals: options.Terminals,
-		stopped:   stopped,
 		http: &http.Server{
 			Handler:           e,
 			ReadHeaderTimeout: 5 * time.Second,
