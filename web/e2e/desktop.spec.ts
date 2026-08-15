@@ -1,7 +1,8 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
 
 type ProcessRow = { pid: number; ppid: number; command: string };
@@ -46,6 +47,12 @@ function waitForExit(child: ChildProcess): Promise<number | null> {
   });
 }
 
+function playwrightElectronLoader(): string {
+  const require = createRequire(import.meta.url);
+  const packagePath = require.resolve("playwright-core/package.json");
+  return join(dirname(packagePath), "lib", "server", "electron", "loader.js");
+}
+
 test("Linux desktop owns one direct engine and reuses its window", async () => {
   test.skip(process.platform !== "linux", "the Linux desktop runtime is checked in Linux CI");
   test.setTimeout(60_000);
@@ -61,7 +68,9 @@ test("Linux desktop owns one direct engine and reuses its window", async () => {
   try {
     desktopApp = await electron.launch({
       executablePath: electronExecutable,
-      args: ["--no-sandbox", desktopDirectory],
+      // Playwright only injects this loader when executablePath is omitted. It
+      // gates app.whenReady() until both inspector connections are established.
+      args: ["-r", playwrightElectronLoader(), "--no-sandbox", desktopDirectory],
       cwd: desktopDirectory,
       env: environment,
       timeout: 30_000,
