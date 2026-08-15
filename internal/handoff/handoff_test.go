@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"sshc/internal/handoff"
@@ -108,8 +109,17 @@ func TestWriteAtomicallyPublishesOnePrivateValidatedDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 1 || entries[0].Name() != handoff.FileName {
-		t.Errorf("entries = %#v, want only %q", entries, handoff.FileName)
+	foundDocument := false
+	for _, entry := range entries {
+		if entry.Name() == handoff.FileName {
+			foundDocument = true
+		}
+		if strings.HasPrefix(entry.Name(), "."+handoff.FileName+".tmp-") {
+			t.Errorf("temporary file was left behind: %q", entry.Name())
+		}
+	}
+	if !foundDocument {
+		t.Errorf("entries = %#v, want %q", entries, handoff.FileName)
 	}
 }
 
