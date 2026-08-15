@@ -22,7 +22,18 @@ const parentTick = time.Second
 // いれば、孤児の ppid はそちらの pid になり、1 にはならない。そこでこの網は
 // 静かに効かなくなる。original から変わったことは、どちらの引き取り手でも
 // 等しく真である。
+//
+// **original 自体が 1 のときも畳む。** `( ./bin/sshc --own-engine & )` の
+// ように親（シェル）が起動直後に消える起こし方をすると、この関数が
+// os.Getppid() を初めて読む前に、既に init へ引き取られている——その場合
+// original には最初から 1 が入り、「変わったか」だけでは二度と真にならない。
+// init は誰かの代わりに持ち主を名乗っているだけで、そもそも持ち主が居ない
+// のと同じなので、original == 1 も畳む理由に数える。
 func watchParent(ctx context.Context, parent func() int, original int, tick time.Duration, stop func()) {
+	if original == 1 {
+		stop()
+		return
+	}
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 	for {
