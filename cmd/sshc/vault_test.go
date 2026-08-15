@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -28,9 +29,29 @@ type fakePasswordTerminal struct {
 	afterRead func(index int)
 }
 
+type orderedVaultPromptWriter struct {
+	events *[]string
+}
+
+func (w orderedVaultPromptWriter) Write(value []byte) (int, error) {
+	*w.events = append(*w.events, "write:"+string(value))
+	return len(value), nil
+}
+
+type orderedVaultPromptTerminal struct {
+	events *[]string
+}
+
+func (orderedVaultPromptTerminal) IsTerminal(int) bool { return true }
+
+func (t orderedVaultPromptTerminal) ReadPassword(context.Context, *os.File) ([]byte, error) {
+	*t.events = append(*t.events, "read-and-restore")
+	return []byte("master"), nil
+}
+
 func (f *fakePasswordTerminal) IsTerminal(int) bool { return f.terminal }
 
-func (f *fakePasswordTerminal) ReadPassword(int) ([]byte, error) {
+func (f *fakePasswordTerminal) ReadPassword(context.Context, *os.File) ([]byte, error) {
 	index := f.reads
 	f.reads++
 	if f.afterRead != nil {
@@ -56,6 +77,20 @@ func vaultTestInput(t *testing.T) *os.File {
 	}
 	t.Cleanup(func() { _ = file.Close() })
 	return file
+}
+
+func TestVaultPromptIsWrittenBeforeTerminalModeChangeAndNewlineAfterRestore(t *testing.T) {
+	events := make([]string, 0, 3)
+	password, err := promptVaultPassword(context.Background(), vaultTestInput(t),
+		orderedVaultPromptWriter{events: &events}, orderedVaultPromptTerminal{events: &events}, "Master password: ")
+	defer zeroBytes(password)
+	if err != nil || !bytes.Equal(password, []byte("master")) {
+		t.Fatalf("password=%q error=%v", password, err)
+	}
+	want := []string{"write:Master password: ", "read-and-restore", "write:\n"}
+	if !slices.Equal(events, want) {
+		t.Fatalf("events=%q, want %q", events, want)
+	}
 }
 
 func writeVaultTestHandoff(t *testing.T, stateDir, target string, owner handoff.Owner) handoff.Handoff {
@@ -564,6 +599,9 @@ func TestVaultChangePayloadEncodesBothByteValuesAndIsErasedAfterDo(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if cap(payload) != len(payload) {
+		t.Fatalf("change payload capacity=%d length=%d; exact allocation is required for zeroing", cap(payload), len(payload))
+	}
 	transport := &requestInspectingTransport{status: http.StatusNoContent}
 	found := testHandoff("http://127.0.0.1:42803")
 	response, err := sendVaultPOST(context.Background(), &http.Client{Transport: transport}, found, httpserver.VaultChangePath, payload)
@@ -584,6 +622,32 @@ func TestVaultChangePayloadEncodesBothByteValuesAndIsErasedAfterDo(t *testing.T)
 	}
 	if !allZero(payload) {
 		t.Fatalf("change JSON payload was not erased: %q", payload)
+	}
+}
+
+func TestVaultPayloadEncoderEnforcesTheServerFourKiBBoundary(t *testing.T) {
+	const passphraseEnvelope = len(`{"passphrase":""}`)
+	exact := bytes.Repeat([]byte{'a'}, (4<<10)-passphraseEnvelope)
+	payload, err := vaultPassphrasePayload(exact)
+	if err != nil || len(payload) != 4<<10 {
+		t.Fatalf("exact payload length=%d error=%v, want 4096 and nil", len(payload), err)
+	}
+	if cap(payload) != len(payload) {
+		t.Fatalf("payload capacity=%d length=%d; exact allocation is required for zeroing", cap(payload), len(payload))
+	}
+	zeroBytes(payload)
+
+	over := append(bytes.Clone(exact), 'a')
+	payload, err = vaultPassphrasePayload(over)
+	if payload != nil || !errors.Is(err, errVaultRequestTooLarge) {
+		t.Fatalf("oversized payload=%v error=%v, want nil and too-large", payload, err)
+	}
+
+	// Escaping can exceed the request boundary even when the entered byte count
+	// does not, so the encoded payload owns the final limit decision.
+	payload, err = vaultPassphrasePayload(bytes.Repeat([]byte{0}, 700))
+	if payload != nil || !errors.Is(err, errVaultRequestTooLarge) {
+		t.Fatalf("escaped oversized payload=%v error=%v", payload, err)
 	}
 }
 
