@@ -34,24 +34,6 @@ type connectAnswer struct {
 	Warnings  []string          `json:"warnings"`
 }
 
-// connectInvocation は、このプロセスが接続のために起動されたかを報告する。
-//
-// フラグでもなく askpass サブコマンドでもない裸の語は alias である。コマンドは
-// それで全部だ。`sshc <alias>`。これが置き換える五つの環境変数は、Terminal の
-// ボタンがすでに自前でやっていたことを手書きにした形にすぎず、そもそも人が打ち込む
-// ためのものではなかった。
-func connectInvocation(argv []string) (string, bool) {
-	if len(argv) != 2 {
-		return "", false
-	}
-	word := argv[1]
-	if word == "" || word[0] == '-' || word == OpenSubcommand || word == ListSubcommand ||
-		word == ConnectSubcommand || word == HelpSubcommand || word == StatusSubcommand {
-		return "", false
-	}
-	return word, true
-}
-
 // OpenSubcommand は、起動中のアプリケーションをブラウザで開く。
 //
 // ブートストラップトークンは初回の使用で消費される。標準出力がどこにも届かないよう
@@ -60,14 +42,6 @@ func connectInvocation(argv []string) (string, bool) {
 // 新しいものを要求する。"open" という名のホストは、この方法では名前で接続できない
 // ホストになる。語はひとつだけで、それがこれである。
 const OpenSubcommand = "open"
-
-// openInvocation は、`sshc open` とその引数を切り出す。
-func openInvocation(argv []string) ([]string, bool) {
-	if len(argv) >= 2 && argv[1] == OpenSubcommand {
-		return argv[2:], true
-	}
-	return nil, false
-}
 
 // runOpen は、起動中のアプリケーションに入口を求め、それを書き出す。
 //

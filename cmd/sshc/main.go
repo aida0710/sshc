@@ -4,9 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -22,176 +20,85 @@ import (
 
 var version = "dev"
 
-// ownEngine は、「自分が起こしたエンジンでなければ意味が無い」と言う。
-//
-// **これを渡すのはデスクトップの外殻だけである。** 外殻はエンジンの寿命そのもの
-// であり、終了すればエンジンも終わると約束している。他人のエンジンの入口を
-// 受け取ってしまうと、その約束を果たす手（子を kill する）が空を切る——窓は
-// 開くのに、Cmd+Q でエンジンが残る。だから握れなかったら入口を出さず、
-// engineBusyExit で終わって外殻に理由を出させる。
-//
-// 端末で打つ人には要らない。裸の `sshc` は今までどおり、走っている方の入口を
-// 1 行出して 0 で終わる。
-var ownEngine = flag.Bool("own-engine", false,
-	"exit 3 instead of printing the way into an engine this process did not start")
-
-// engineBusyExit は、-own-engine を渡されたのにロックを取れなかったときの終了
-// コードである。**desktop/main.js の engineBusy と対である。**
-//
-// 0 でも 1 でもない番号を使うのは、外殻が「自分が起こしたエンジンが死んだ」と
-// 「別の持ち主が既に居た」を区別できなければならないからである。前者はアプリを
-// 終える理由だが、後者は理由を出す理由である。
+// engineBusyExit は、Electron が所有する engine が既存 engine の lock を取れなかった
+// ときの終了コードである。外殻は自分の子を殺せても他人の engine は殺せないため、
+// 入口を渡さずこの番号で ownership の衝突を知らせる。
 const engineBusyExit = 3
 
-// HelpSubcommand は使い方を出す語。
-//
-// これを予約するのは `open` と同じ理由である。裸の語は alias なので、これがないと
-// "help" はホスト名として ssh へ渡り、使い方を求めた人は
-// "Could not resolve hostname help" を受け取る。-h は flag パッケージが拾うが、
-// 打つ言葉として自然なのはこちらだ。
-const HelpSubcommand = "help"
-
-// helpInvocation は、このプロセスが使い方を求めて起動されたかを報告する。
-//
-// 引数を伴う場合は使い方ではない。`sshc help me` は、まだ理解されていない何かで
-// あって、"help" というホストへの接続ではない。
-func helpInvocation(argv []string) bool {
-	if len(argv) != 2 {
-		return false
-	}
-	switch argv[1] {
-	case HelpSubcommand, "-h", "--help":
-		return true
-	}
-	return false
-}
-
-// askpassInvocation は、このプロセスが OpenSSH のプロンプトに答えるために起動された
-// かを報告し、ヘルパーが読むべき引数を返す。
-//
-// サブコマンドの語は手で実行するための手段である。OpenSSH の実行方法ではない。
-// SSH_ASKPASS はプログラムを指定し、OpenSSH はプロンプトだけを引数としてそのプログラム
-// を exec する — シェルがないので、サブコマンドの語が入る場所はどこにもない。これが
-// なかったために、出荷された機能はアプリケーション全体の二つ目のコピーをブラウザごと
-// 起動し、ssh には決して送られてこないパスワードが渡された。見つけたのは、実物の sshd
-// に対する統合テストスイートである。
-//
-// 目印にトークンを使うのは、それがちょうどひとつの接続のために存在し、この
-// アプリケーション以外に設定するものがないからだ。エンドポイントも併せて必須なのは、
-
-// usage は、このバイナリが答える語をすべて並べる。
-//
-// `sshc <alias>` は裸の語であり、ここに並ぶ語だけがそれより先に読まれる。
-// それを書いておかないと、`open` という名前のホストに接続できない理由が
-// どこにも書かれていないことになる。
-func usage(out io.Writer) {
-	fmt.Fprint(out, `usage:
-  sshc                 run the engine here, or print the way into a running one
-  sshc <alias>         connect to a host from ~/.ssh/config in this terminal
-  sshc connect [text]  choose a host in this terminal, then connect
-  sshc list            print every concrete Host alias, one per line
-  sshc open            print a new way into the UI
-  sshc status          print the engine's status as JSON, for the shell
-  sshc help            print this
-
-flags:
-`)
-	flag.PrintDefaults()
-	fmt.Fprint(out, `
-Those words are read before the alias, so a host named after one of them is
-still reachable with ssh itself, but not through this command.
-`)
-}
-
 func main() {
-	if arguments, ok := openInvocation(os.Args); ok {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
-		}
-		if len(arguments) != 0 {
-			fmt.Fprintln(os.Stderr, "sshc: open takes nothing")
-			os.Exit(2)
-		}
-		os.Exit(runOpen(
-			context.Background(), app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, os.Stdout, os.Stderr,
-		))
+	called, err := parseInvocation(os.Args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
+		usage(os.Stderr)
+		os.Exit(2)
 	}
-	if helpInvocation(os.Args) {
+	if called.Kind == invocationHelp {
 		usage(os.Stdout)
 		os.Exit(0)
 	}
-	if len(os.Args) == 2 && os.Args[1] == ListSubcommand {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
-		}
-		os.Exit(runList(home, os.Stdout, os.Stderr))
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
+		os.Exit(1)
 	}
-	// **外殻が読む口である。** handoff の秘密を持つのは Go 側だけなので、
-	// メニューバーは自分では叩けず、この語を経由する。
-	if len(os.Args) == 2 && os.Args[1] == StatusSubcommand {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
+	client := &http.Client{Timeout: connectTimeout}
+	os.Exit(dispatchInvocation(called, home, client))
+}
+
+// dispatchInvocation は、解析済みの呼び出しを、その owner ごとの処理へ渡す。
+// parser が形を保証するため、ここでは argv を読み直さない。将来 engine の ownership
+// transport を入れても、CLI の引数解釈へ戻らずこの境界だけを置き換えられる。
+func dispatchInvocation(called invocation, home string, client *http.Client) int {
+	ctx := context.Background()
+	switch called.Kind {
+	case invocationDesktop:
+		if launchApp(ctx) {
+			return 0
 		}
-		os.Exit(runStatus(
-			context.Background(), app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, os.Stdout, os.Stderr,
-		))
-	}
-	if query, ok := tuiInvocation(os.Args); ok {
-		if len(os.Args) > 3 {
-			fmt.Fprintln(os.Stderr, "usage: sshc connect [search]")
-			os.Exit(2)
-		}
-		// 検索語はフラグではないが、ヘルプを求めた人に接続先を探させはしない。
-		if query == "-h" || query == "--help" {
-			usage(os.Stdout)
-			os.Exit(0)
-		}
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
+		fmt.Fprintln(os.Stderr, "sshc: could not launch the desktop application")
+		return 1
+	case invocationEngine:
+		return runEngine(home, client, true)
+	case invocationHeadless:
+		return runEngine(home, client, false)
+	case invocationConnect:
+		return runConnect(ctx, called.Args[0], home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
+	case invocationChoose:
+		query := ""
+		if len(called.Args) != 0 {
+			query = called.Args[0]
 		}
 		alias, err := chooseTUIHost(home, query, os.Stdin, os.Stdout, os.Stderr)
 		if err != nil {
 			if errors.Is(err, errTUIClosed) {
-				os.Exit(0)
+				return 0
 			}
 			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
-		os.Exit(runConnect(
-			context.Background(), alias, home, app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, os.Stdin, os.Stdout, os.Stderr,
-		))
+		return runConnect(ctx, alias, home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
+	case invocationList:
+		return runList(home, os.Stdout, os.Stderr)
+	case invocationOpen:
+		return runOpen(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr)
+	case invocationStatus:
+		return runStatus(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr)
+	case invocationVault:
+		// Vault の各 action は次の段階でここへ専用 handler を接続する。先に Kind を
+		// 固定しておくのは、未実装の action が alias として SSH へ流れないためである。
+		fmt.Fprintf(os.Stderr, "sshc: vault %s is not available yet\n", called.Args[0])
+		return 1
+	default:
+		fmt.Fprintln(os.Stderr, "sshc: invalid invocation")
+		return 2
 	}
+}
 
-	// `sshc <alias>` は接続する。askpass の分岐のあと、フラグ解析の前で判定する。alias は
-	// 裸の語であり、flag.Parse はそこで止まってしまうため、接続する代わりにアプリケーション
-	// が起動してしまうからだ。
-	if alias, ok := connectInvocation(os.Args); ok {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
-			os.Exit(1)
-		}
-		os.Exit(runConnect(
-			context.Background(), alias, home, app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, os.Stdin, os.Stdout, os.Stderr,
-		))
-	}
-
-	// 既定の usage はフラグしか知らない。サブコマンドは argv の裸の語であり、
-	// flag パッケージから見えないので、ここで一度だけ書く。
-	flag.Usage = func() { usage(flag.CommandLine.Output()) }
-	flag.Parse()
+// runEngine は、当面 `engine` と `headless` が共有する既存の foreground runner である。
+// ownership transport はまだ導入しないが、Electron の子だけは別 engine の入口を成功として
+// 受け取れないため、busy 時の終了コードだけを owner 境界として残す。
+func runEngine(home string, client *http.Client, electronOwns bool) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -208,40 +115,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		logger.Error("resolve home directory", "error", err)
-		os.Exit(1)
-	}
-
-	// **エンジンの寿命ぶんロックを握る。** ここへ来る経路はサブコマンドの
-	// どれにも当たらなかった起動——外殻が spawn した子と、端末で裸の `sshc` を
-	// 打った人——の両方であり、後者を塞ぐものは今まで何も無かった。
+	// **エンジンの寿命ぶんロックを握る。** ここへ来るのは parser が engine
+	// owner と明示した呼び出しだけである。裸の起動を紛れ込ませないことで、誰が
+	// engine の寿命を引き受けるかを dispatch の外へ漏らさない。
 	//
 	// 握れなければ 1 台目が生きている。**そのときは走っている方の入口を出して
 	// 終わる。** 打った人にとっては「入口が出る」という自然な結果であり、
 	// handoff を上書きする 2 台目はどこにも生まれない。
 	release, err := lockEngineStart(app.HandoffDir(home))
 	switch {
-	case errors.Is(err, errEngineRunning) && *ownEngine:
-		// **入口を出さない。** 出せば、それを読んだ外殻は「自分のエンジンが
-		// 上がった」と思って窓を開き、直後にこの子の exit を見てアプリごと
-		// 終わる。何も書かずに専用の番号で終わることが、あちらの分岐の材料に
-		// なる。
-		logger.Error("take the engine lock", "error", err)
-		os.Exit(engineBusyExit)
+	case errors.Is(err, errEngineRunning) && electronOwns:
+		return engineBusyExit
 	case errors.Is(err, errEngineRunning):
 		// **勝った方が handoff を書き終えるまで待つ。** ロックは listener より
 		// 先に取れるので、ほぼ同時に打たれた 2 つのうち負けた方がその隙に
 		// 読むと `sshc: not running` で 1 になる——理由の無い失敗に見える。
 		waitForHandoff(ctx, app.HandoffDir(home))
-		os.Exit(runOpen(
-			ctx, app.HandoffDir(home),
-			&http.Client{Timeout: connectTimeout}, os.Stdout, os.Stderr,
-		))
+		return runOpen(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr)
 	case err != nil:
 		logger.Error("take the engine lock", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	defer release()
 
@@ -273,6 +166,7 @@ func main() {
 	}
 	if err := app.Run(ctx, dependencies, version); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("sshc stopped", "error", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
