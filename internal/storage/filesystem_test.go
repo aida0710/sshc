@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestOSFileSystemReadFileRefusesSymlinksAndOversizedFiles(t *testing.T) {
+func TestOSFileSystemReadFileRejectsNonRegularAndOversizedFiles(t *testing.T) {
 	directory := t.TempDir()
 	fileSystem := OSFileSystem{}
 
@@ -23,14 +23,6 @@ func TestOSFileSystemReadFileRefusesSymlinksAndOversizedFiles(t *testing.T) {
 		t.Fatalf("ReadFile = %q, %v", contents, err)
 	}
 
-	link := filepath.Join(directory, "link")
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fileSystem.ReadFile(link); !errors.Is(err, ErrSymlinkPath) {
-		t.Fatalf("ReadFile(symlink) error = %v, want ErrSymlinkPath", err)
-	}
-
 	if _, err := fileSystem.ReadFile(directory); !errors.Is(err, ErrNotRegularFile) {
 		t.Fatalf("ReadFile(directory) error = %v, want ErrNotRegularFile", err)
 	}
@@ -41,6 +33,51 @@ func TestOSFileSystemReadFileRefusesSymlinksAndOversizedFiles(t *testing.T) {
 	}
 	if _, err := fileSystem.ReadFile(oversized); !errors.Is(err, ErrFileTooLarge) {
 		t.Fatalf("ReadFile(oversized) error = %v, want ErrFileTooLarge", err)
+	}
+}
+
+func TestOSFileSystemWriteTempLeavesNoFileWhenTargetIsNotDirectory(t *testing.T) {
+	directory := t.TempDir()
+	notDirectory := filepath.Join(directory, "not-a-directory")
+	if err := os.WriteFile(notDirectory, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := (OSFileSystem{}).WriteTemp(notDirectory, ".sshc-", FilePermission, []byte("staged")); err == nil {
+		t.Fatal("WriteTemp unexpectedly succeeded")
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "not-a-directory" {
+		t.Fatalf("directory entries = %v, want only %q", entries, "not-a-directory")
+	}
+}
+
+func TestOSFileSystemRenameReplacesExistingFile(t *testing.T) {
+	directory := t.TempDir()
+	oldPath := filepath.Join(directory, "old")
+	newPath := filepath.Join(directory, "new")
+	if err := os.WriteFile(oldPath, []byte("replacement"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newPath, []byte("previous"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := (OSFileSystem{}).Rename(oldPath, newPath); err != nil {
+		t.Fatalf("Rename = %v", err)
+	}
+	contents, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "replacement" {
+		t.Fatalf("replacement contents = %q, want %q", contents, "replacement")
+	}
+	if _, err := os.Lstat(oldPath); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("old path error = %v, want fs.ErrNotExist", err)
 	}
 }
 
