@@ -1,10 +1,13 @@
 package storage
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -14,7 +17,10 @@ var (
 	ErrUnknownTransaction = errors.New("no pending transaction with that identifier")
 	ErrCannotComplete     = errors.New("staged contents are missing or altered")
 	ErrAtomicStateUnknown = errors.New("an atomic transaction target no longer matches its old or staged state")
+	ErrInvalidJournal     = errors.New("invalid transaction journal")
 )
+
+var journalIdentifierPattern = regexp.MustCompile(`^[0-9]{8}T[0-9]{6}\.[0-9]{3}-[0-9a-f]{8}$`)
 
 // PendingEntry は、中断されたトランザクションに含まれるファイルひとつ。
 type PendingEntry struct {
@@ -252,7 +258,7 @@ func (m *Manager) stagedMatches(entry journalEntry) bool {
 }
 
 func (m *Manager) loadPending(identifier string) (*journalRecord, string, error) {
-	if identifier == "" || identifier != filepath.Base(identifier) || strings.Contains(identifier, "..") {
+	if !validJournalIdentifier(identifier) {
 		return nil, "", ErrUnknownTransaction
 	}
 	journalPath := filepath.Join(m.journalDirectory(), identifier+".json")
@@ -265,6 +271,11 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 	}
 	var record journalRecord
 	if err := json.Unmarshal(contents, &record); err != nil {
+		zeroBytes(contents)
+		return nil, "", err
+	}
+	zeroBytes(contents)
+	if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
 		return nil, "", err
 	}
 	if changed, err := m.reconcileAtomicRecord(&record); err != nil {
@@ -361,6 +372,9 @@ func (m *Manager) readRecords(directory string) ([]journalRecord, error) {
 	names := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+			if _, err := journalIdentifierFromName(entry.Name()); err != nil {
+				return nil, err
+			}
 			names = append(names, entry.Name())
 		}
 	}
@@ -374,9 +388,248 @@ func (m *Manager) readRecords(directory string) ([]journalRecord, error) {
 		}
 		var record journalRecord
 		if unmarshalErr := json.Unmarshal(contents, &record); unmarshalErr != nil {
+			zeroBytes(contents)
 			return nil, unmarshalErr
+		}
+		zeroBytes(contents)
+		if validationErr := m.validateLoadedJournalRecord(record, name, directory); validationErr != nil {
+			return nil, validationErr
 		}
 		records = append(records, record)
 	}
 	return records, nil
+}
+
+func validJournalIdentifier(identifier string) bool {
+	return journalIdentifierPattern.MatchString(identifier)
+}
+
+func journalIdentifierFromName(name string) (string, error) {
+	if name != filepath.Base(name) || filepath.Ext(name) != ".json" {
+		return "", invalidJournal("invalid document name")
+	}
+	identifier := strings.TrimSuffix(name, ".json")
+	if !validJournalIdentifier(identifier) {
+		return "", invalidJournal("invalid transaction identifier")
+	}
+	return identifier, nil
+}
+
+func invalidJournal(reason string) error {
+	return fmt.Errorf("%w: %s", ErrInvalidJournal, reason)
+}
+
+func (m *Manager) validateLoadedJournalRecord(record journalRecord, name, directory string) error {
+	identifier, err := journalIdentifierFromName(name)
+	if err != nil {
+		return err
+	}
+	if record.ID != identifier || record.Version != journalVersion {
+		return invalidJournal("identity or version mismatch")
+	}
+	if record.Operation == "" || record.StartedAt.IsZero() || len(record.Entries) == 0 {
+		return invalidJournal("missing required record fields")
+	}
+	if record.Committed < 0 || record.Committed > len(record.Entries) {
+		return invalidJournal("committed count is out of bounds")
+	}
+
+	pending := sameJournalPath(directory, m.journalDirectory())
+	history := sameJournalPath(directory, m.historyDirectory())
+	if !pending && !history {
+		return invalidJournal("unexpected journal directory")
+	}
+	if pending {
+		if record.Status != statusStaging && record.Status != statusStaged && record.Status != statusCompleted && record.Status != statusRolledBack {
+			return invalidJournal("unexpected pending status")
+		}
+	} else {
+		if record.Status != statusCompleted && record.Status != statusRolledBack {
+			return invalidJournal("unexpected history status")
+		}
+	}
+	if record.Status == statusStaging || record.Status == statusStaged {
+		if record.FinishedAt != nil {
+			return invalidJournal("unfinished record has a finish time")
+		}
+		if record.Status == statusStaging && !record.Atomic && record.Committed != 0 {
+			return invalidJournal("non-atomic staging progress is not durable")
+		}
+	} else {
+		if record.FinishedAt == nil || record.FinishedAt.Before(record.StartedAt) {
+			return invalidJournal("invalid finish time")
+		}
+		if record.Status == statusCompleted && record.Committed != len(record.Entries) {
+			return invalidJournal("completed record has incomplete progress")
+		}
+		if record.Status == statusRolledBack && record.Committed != 0 {
+			return invalidJournal("rolled-back record has progress")
+		}
+	}
+
+	noteEntries := 0
+	claimed := make([]string, 0, len(record.Entries)*2)
+	for index, entry := range record.Entries {
+		if err := m.validateLoadedJournalEntry(record, entry, index, pending); err != nil {
+			return err
+		}
+		if journalPathAlreadyClaimed(claimed, entry.Path) {
+			return invalidJournal("duplicate entry path")
+		}
+		claimed = append(claimed, entry.Path)
+		if entry.Target != "" {
+			if journalPathAlreadyClaimed(claimed, entry.Target) {
+				return invalidJournal("duplicate entry target")
+			}
+			claimed = append(claimed, entry.Target)
+		}
+		if entry.Action == actionNote {
+			noteEntries++
+		}
+	}
+	if noteEntries != 0 && (noteEntries != len(record.Entries) || !history || record.Status != statusCompleted || record.Atomic) {
+		return invalidJournal("note entries require completed non-atomic history")
+	}
+	return nil
+}
+
+func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journalEntry, index int, pending bool) error {
+	if entry.Action == "" {
+		return invalidJournal("entry action is required")
+	}
+	if !m.validLoadedWorkspacePath(entry.Path) {
+		return invalidJournal("entry path is outside the workspace")
+	}
+	if entry.Target != "" && !m.validLoadedWorkspacePath(entry.Target) {
+		return invalidJournal("entry target is outside the workspace")
+	}
+	if entry.Temp != "" && !m.validLoadedWorkspacePath(entry.Temp) {
+		return invalidJournal("entry temp is outside the workspace")
+	}
+
+	digestValid := validJournalDigest(entry.Digest)
+	previousDigestValid := validJournalDigest(entry.PreviousDigest)
+	switch entry.Action {
+	case actionWrite:
+		if entry.Target != "" || entry.Mode&^uint32(FilePermission) != 0 || !digestValid {
+			return invalidJournal("invalid write entry")
+		}
+		if record.Atomic && entry.NoBackup {
+			return invalidJournal("atomic write cannot omit its backup")
+		}
+		if entry.HadPrevious != previousDigestValid {
+			return invalidJournal("write previous digest mismatch")
+		}
+		if entry.Temp != "" {
+			prefix := temporaryPrefix + record.ID + "-"
+			if filepath.Dir(entry.Temp) != filepath.Dir(entry.Path) || !strings.HasPrefix(filepath.Base(entry.Temp), prefix) {
+				return invalidJournal("write temp is not the expected sibling")
+			}
+		}
+		if pending && record.Status == statusStaged && index >= record.Committed && entry.Temp == "" {
+			return invalidJournal("uncommitted write has no staged file")
+		}
+		if pending && record.Status == statusStaged && index < record.Committed && entry.Temp != "" {
+			return invalidJournal("committed write retains a staged path")
+		}
+		if record.Status == statusCompleted && entry.Temp != "" {
+			return invalidJournal("completed write retains a staged path")
+		}
+		if err := m.validateLoadedBackup(record, entry, pending); err != nil {
+			return err
+		}
+	case actionMove:
+		if entry.Target == "" || entry.Temp != "" || entry.Backup != "" || entry.NoBackup || !entry.HadPrevious ||
+			entry.Mode&^uint32(FilePermission) != 0 || !digestValid || entry.PreviousDigest != entry.Digest {
+			return invalidJournal("invalid move entry")
+		}
+		if record.Atomic {
+			return invalidJournal("atomic record contains a move")
+		}
+	case actionRemove:
+		if entry.Target != "" || entry.Temp != "" || !entry.HadPrevious || entry.Mode&^uint32(FilePermission) != 0 ||
+			!digestValid || entry.PreviousDigest != entry.Digest {
+			return invalidJournal("invalid remove entry")
+		}
+		if record.Atomic {
+			return invalidJournal("atomic record contains a removal")
+		}
+		if err := m.validateLoadedBackup(record, entry, pending); err != nil {
+			return err
+		}
+	case actionMakeDir:
+		if entry.Target != "" || entry.Temp != "" || entry.Backup != "" || entry.NoBackup ||
+			entry.Digest != "" || entry.PreviousDigest != "" || entry.Mode != uint32(DirectoryPermission) {
+			return invalidJournal("invalid mkdir entry")
+		}
+	case actionRemoveDir:
+		if entry.Target != "" || entry.Temp != "" || entry.Backup != "" || entry.NoBackup || !entry.HadPrevious ||
+			entry.Digest != "" || entry.PreviousDigest != "" || entry.Mode&^uint32(0o777) != 0 {
+			return invalidJournal("invalid rmdir entry")
+		}
+		if record.Atomic {
+			return invalidJournal("atomic record contains rmdir")
+		}
+	case actionNote:
+		if entry.Target != "" || entry.Temp != "" || entry.Backup != "" || entry.NoBackup || entry.HadPrevious ||
+			entry.Digest != "" || entry.PreviousDigest != "" || entry.Mode != 0 {
+			return invalidJournal("invalid note entry")
+		}
+	default:
+		return invalidJournal("unknown entry action")
+	}
+	return nil
+}
+
+func (m *Manager) validateLoadedBackup(record journalRecord, entry journalEntry, pending bool) error {
+	expectsBackup := entry.HadPrevious && !entry.NoBackup
+	if !expectsBackup {
+		if entry.Backup != "" {
+			return invalidJournal("unexpected backup path")
+		}
+		return nil
+	}
+	if entry.Backup == "" {
+		if pending && record.Status == statusStaging {
+			return nil
+		}
+		return invalidJournal("required backup path is missing")
+	}
+	relative, err := filepath.Rel(m.workspace.Root(), entry.Path)
+	if err != nil || relative == "." || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return invalidJournal("backup target is invalid")
+	}
+	expected := filepath.Join(m.workspace.StateDir(), backupDirectoryName, record.ID, relative)
+	if !sameJournalPath(entry.Backup, expected) {
+		return invalidJournal("backup path does not match its entry")
+	}
+	return nil
+}
+
+func (m *Manager) validLoadedWorkspacePath(path string) bool {
+	if path == "" || !filepath.IsAbs(path) || filepath.Clean(path) != path || sameJournalPath(path, m.workspace.Root()) {
+		return false
+	}
+	return privateStateContains(m.workspace.Root(), path)
+}
+
+func validJournalDigest(digest string) bool {
+	if len(digest) != 64 || strings.ToLower(digest) != digest {
+		return false
+	}
+	decoded, err := hex.DecodeString(digest)
+	return err == nil && len(decoded) == 32
+}
+
+func sameJournalPath(first, second string) bool {
+	return privateStateContains(first, second) && privateStateContains(second, first)
+}
+
+func journalPathAlreadyClaimed(claimed []string, candidate string) bool {
+	for _, path := range claimed {
+		if sameJournalPath(path, candidate) {
+			return true
+		}
+	}
+	return false
 }
