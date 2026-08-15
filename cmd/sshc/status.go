@@ -12,13 +12,6 @@ import (
 	"sshc/internal/httpserver"
 )
 
-// StatusSubcommand は、外殻がエンジンの様子を尋ねる語である。
-//
-// **人が打つためのものではない。** 出力は整形も翻訳もしない JSON であり、
-// 読むのはメニューバーだけである。それでも usage に出すのは、「sshc -h に
-// 出ないサブコマンドを作らない」という決めごとのためである。
-const StatusSubcommand = "status"
-
 // runStatus は、エンジンの様子をそのまま JSON で書き出す。
 //
 // **これは人のための表示ではない。** 読むのはメニューバーであり、だから

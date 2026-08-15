@@ -28,16 +28,6 @@ type tuiHost struct {
 	Favourite bool
 }
 
-func tuiInvocation(argv []string) (string, bool) {
-	if len(argv) < 2 || argv[1] != ConnectSubcommand {
-		return "", false
-	}
-	if len(argv) == 3 {
-		return argv[2], true
-	}
-	return "", true
-}
-
 func loadTUIHosts(home string) ([]tuiHost, error) {
 	workspace, graph, err := readConfigGraph(home)
 	if err != nil {
