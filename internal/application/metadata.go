@@ -104,13 +104,17 @@ type GroupMetadata struct {
 	Settings []Setting `json:"settings,omitempty"`
 }
 
-// EmbeddedTerminal は、埋め込みターミナルの上限である。
+// EmbeddedTerminal は、埋め込みターミナルの設定である。
 //
 // 0 は「書かれていない」であって「0 本」ではない。読み取り側は範囲の外の値と
 // 同じように既定へ戻す。
 type EmbeddedTerminal struct {
 	MaxSessions     int `json:"maxSessions,omitempty"`
 	ScrollbackBytes int `json:"scrollbackBytes,omitempty"`
+	// nil は既定の on、false は明示的な off である。bool に omitempty を直接
+	// 付けると false が消え、再起動後に on へ戻ってしまう。
+	CopyOnSelect    *bool `json:"copyOnSelect,omitempty"`
+	RightClickPaste *bool `json:"rightClickPaste,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。
 	//
 	// 空は「書かれていない」であり、そのとき始まるのは home である。

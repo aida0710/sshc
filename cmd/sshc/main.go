@@ -22,21 +22,6 @@ import (
 
 var version = "dev"
 
-// announceEntrance はここで宣言される。フラグを解析するのはサブコマンドを見分けた
-// 後だが、usage はどの経路からでもフラグを一覧できなければならないからである。
-//
-// **ブラウザは開かない。** 画面はデスクトップの外殻が出すので、このプロセスが
-// 既定のブラウザを起こす経路は無くなった。書き出す先は、`sshc` を打った人の
-// 端末である。
-//
-// 既定で書き出すのは、端末から打った人がそこを読むからである。**背後で上がる
-// エージェントは -open=false を渡す**——あの 1 行は有効な bootstrap トークンを
-// 運ぶので、journal やログファイルの置き場所として不適切である。フラグ名を
-// 変えないのは、既に書かれている launchd と systemd の unit を壊さないためで
-// ある。
-var openBrowser = flag.Bool("open", true,
-	"print the way into the UI on standard output; -open=false prints nothing")
-
 // ownEngine は、「自分が起こしたエンジンでなければ意味が無い」と言う。
 //
 // **これを渡すのはデスクトップの外殻だけである。** 外殻はエンジンの寿命そのもの
@@ -245,12 +230,6 @@ func main() {
 		// なる。
 		logger.Error("take the engine lock", "error", err)
 		os.Exit(engineBusyExit)
-	case errors.Is(err, errEngineRunning) && !*openBrowser:
-		// **-open=false は「何も書かない」という意味である。** 入口の 1 行は
-		// 有効な bootstrap トークンを運ぶので、それを求めていない相手の
-		// 標準出力——journal やログファイル——へ落とさない。求めていた状態
-		// （エンジンが 1 台居る）は既に成立しているので、黙って終わる。
-		os.Exit(0)
 	case errors.Is(err, errEngineRunning):
 		// **勝った方が handoff を書き終えるまで待つ。** ロックは listener より
 		// 先に取れるので、ほぼ同時に打たれた 2 つのうち負けた方がその隙に
@@ -268,12 +247,9 @@ func main() {
 
 	parts := newPlatformParts()
 
-	var announce func(string) error
-	if *openBrowser {
-		announce = func(entrance string) error {
-			_, err := fmt.Fprintln(os.Stdout, entrance)
-			return err
-		}
+	announce := func(entrance string) error {
+		_, err := fmt.Fprintln(os.Stdout, entrance)
+		return err
 	}
 
 	dependencies := app.Dependencies{

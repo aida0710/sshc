@@ -387,7 +387,9 @@ type EffectiveResponse struct {
 
 // EmbeddedTerminal defines model for EmbeddedTerminal.
 type EmbeddedTerminal struct {
+	CopyOnSelect    *bool   `json:"copyOnSelect,omitempty"`
 	MaxSessions     *int    `json:"maxSessions,omitempty"`
+	RightClickPaste *bool   `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes *int    `json:"scrollbackBytes,omitempty"`
 	StartDirectory  *string `json:"startDirectory,omitempty"`
 }
@@ -1187,7 +1189,9 @@ type TerminalSessionList struct {
 
 // TerminalSettings defines model for TerminalSettings.
 type TerminalSettings struct {
+	CopyOnSelect    *bool   `json:"copyOnSelect,omitempty"`
 	MaxSessions     *int    `json:"maxSessions,omitempty"`
+	RightClickPaste *bool   `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes *int    `json:"scrollbackBytes,omitempty"`
 	StartDirectory  *string `json:"startDirectory,omitempty"`
 }

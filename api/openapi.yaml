@@ -2430,13 +2430,16 @@ components:
         embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
-    # 埋め込みターミナルの上限。範囲の外は読み取りで既定へ戻し、書き込みでは拒否する。
+    # 埋め込みターミナルの設定。数値の範囲外は読み取りで既定へ戻し、書き込みでは拒否する。
     EmbeddedTerminal:
       type: object
       additionalProperties: false
       properties:
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
+        # 無いときは on。false は利用者が明示的に止めた値なので、省略せず運ぶ。
+        copyOnSelect: { type: boolean }
+        rightClickPaste: { type: boolean }
         # ローカルシェルが始まる場所。`~` の綴りのまま持つ——home の綴りを
         # 焼き付けない。空なら home。
         startDirectory: { type: string, maxLength: 4096 }
@@ -2452,6 +2455,8 @@ components:
         startDirectory: { type: string, maxLength: 4096 }
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
+        copyOnSelect: { type: boolean }
+        rightClickPaste: { type: boolean }
     PendingTransaction:
       type: object
       additionalProperties: false
