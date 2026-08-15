@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,14 +11,6 @@ import (
 
 	"golang.org/x/sys/windows"
 )
-
-// fileAttributeTagInfo は GetFileInformationByHandleEx の
-// FileAttributeTagInfo 応答と同じレイアウトである。x/sys はこの構造体を公開して
-// いないため、OS 呼び出しの境界でだけ定義する。
-type fileAttributeTagInfo struct {
-	fileAttributes uint32
-	reparseTag     uint32
-}
 
 func openRegularNoFollow(path string) (*os.File, error) {
 	absolutePath, err := cleanAbsoluteDOSPath(path)
@@ -34,7 +27,7 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	if fileName == "." || fileName == string(os.PathSeparator) {
 		return nil, os.ErrInvalid
 	}
-	handle, err := openRelativeNoReparse(parent, fileName, windows.FILE_READ_DATA|windows.FILE_READ_ATTRIBUTES, false)
+	handle, err := openRelativeNoReparse(parent, fileName, windows.FILE_READ_DATA, false, true)
 	if err != nil {
 		return nil, err
 	}
@@ -53,8 +46,8 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	return file, nil
 }
 
-// openNoReparseParent は parent を handle 相対でたどる。文字列の各 component を
-// 検査してから絶対パスで開き直すと、その間の置換で別 tree をたどれるためである。
+// openNoReparseParent は parent を handle 相対でたどる。OBJ_DONT_REPARSE を各
+// component の name resolution に渡すため、検査後の置換で別 tree をたどれない。
 func openNoReparseParent(path string) (windows.Handle, error) {
 	volume := filepath.VolumeName(path)
 	if volume == "" {
@@ -77,7 +70,7 @@ func openNoReparseParent(path string) (windows.Handle, error) {
 		if component == "" || component == "." {
 			continue
 		}
-		next, err := openRelativeNoReparse(current, component, windows.FILE_READ_ATTRIBUTES, true)
+		next, err := openRelativeNoReparse(current, component, windows.FILE_TRAVERSE, true, false)
 		if err != nil {
 			_ = windows.CloseHandle(current)
 			return 0, err
@@ -88,6 +81,9 @@ func openNoReparseParent(path string) (windows.Handle, error) {
 	return current, nil
 }
 
+// openAbsoluteNoReparseDirectory は volume/share root を開く。RootDirectory 相対
+// NtCreateFile を始めるため Win32 の directory open が必要だが、root 自体は入力の
+// lexical parent ではないため FILE_TRAVERSE だけを要求する。
 func openAbsoluteNoReparseDirectory(path string) (windows.Handle, error) {
 	pathUTF16, err := windows.UTF16PtrFromString(path)
 	if err != nil {
@@ -95,18 +91,14 @@ func openAbsoluteNoReparseDirectory(path string) (windows.Handle, error) {
 	}
 	handle, err := windows.CreateFile(
 		pathUTF16,
-		windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE,
+		windows.FILE_TRAVERSE,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
 		nil,
 		windows.OPEN_EXISTING,
-		windows.FILE_FLAG_OPEN_REPARSE_POINT|windows.FILE_FLAG_BACKUP_SEMANTICS,
+		windows.FILE_FLAG_BACKUP_SEMANTICS,
 		0,
 	)
 	if err != nil {
-		return 0, err
-	}
-	if err := rejectReparseHandle(handle); err != nil {
-		_ = windows.CloseHandle(handle)
 		return 0, err
 	}
 	return handle, nil
@@ -115,7 +107,7 @@ func openAbsoluteNoReparseDirectory(path string) (windows.Handle, error) {
 // openRelativeNoReparse は既に検査済みの parent handle を RootDirectory に渡す。
 // これにより parent path の名前空間が後から junction 等へ置換されても、開く
 // object は保持中の親 directory に固定される。
-func openRelativeNoReparse(parent windows.Handle, name string, access uint32, directory bool) (windows.Handle, error) {
+func openRelativeNoReparse(parent windows.Handle, name string, access uint32, directory, synchronous bool) (windows.Handle, error) {
 	objectName, err := windows.NewNTUnicodeString(name)
 	if err != nil {
 		return 0, err
@@ -124,17 +116,21 @@ func openRelativeNoReparse(parent windows.Handle, name string, access uint32, di
 		Length:        uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
 		RootDirectory: parent,
 		ObjectName:    objectName,
-		Attributes:    windows.OBJ_CASE_INSENSITIVE,
+		Attributes:    windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
 	}
 	var handle windows.Handle
 	var status windows.IO_STATUS_BLOCK
-	options := uint32(windows.FILE_OPEN_REPARSE_POINT | windows.FILE_SYNCHRONOUS_IO_NONALERT)
+	options := uint32(0)
 	if directory {
 		options |= windows.FILE_DIRECTORY_FILE
 	}
+	if synchronous {
+		access |= windows.SYNCHRONIZE
+		options |= windows.FILE_SYNCHRONOUS_IO_NONALERT
+	}
 	err = windows.NtCreateFile(
 		&handle,
-		access|windows.SYNCHRONIZE,
+		access,
 		attributes,
 		&status,
 		nil,
@@ -146,29 +142,18 @@ func openRelativeNoReparse(parent windows.Handle, name string, access uint32, di
 		0,
 	)
 	if err != nil {
-		return 0, err
-	}
-	if err := rejectReparseHandle(handle); err != nil {
-		_ = windows.CloseHandle(handle)
-		return 0, err
+		return 0, mapReparseError(err)
 	}
 	return handle, nil
 }
 
-func rejectReparseHandle(handle windows.Handle) error {
-	var attributes fileAttributeTagInfo
-	if err := windows.GetFileInformationByHandleEx(
-		handle,
-		windows.FileAttributeTagInfo,
-		(*byte)(unsafe.Pointer(&attributes)),
-		uint32(unsafe.Sizeof(attributes)),
-	); err != nil {
-		return err
-	}
-	if attributes.fileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 || attributes.reparseTag != 0 {
+func mapReparseError(err error) error {
+	if errors.Is(err, windows.STATUS_STOPPED_ON_SYMLINK) ||
+		errors.Is(err, windows.STATUS_REPARSE_POINT_ENCOUNTERED) ||
+		errors.Is(err, windows.ERROR_STOPPED_ON_SYMLINK) {
 		return ErrSymlinkPath
 	}
-	return nil
+	return err
 }
 
 func cleanAbsoluteDOSPath(path string) (string, error) {
