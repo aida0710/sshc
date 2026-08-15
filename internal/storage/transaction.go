@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"sshc/internal/platform/nativepath"
 )
 
 const (
@@ -764,11 +766,7 @@ func (m *Manager) isPrivateStatePath(path string) bool {
 }
 
 func privateStateContains(stateDirectory, path string) bool {
-	relative, err := filepath.Rel(filepath.Clean(stateDirectory), filepath.Clean(path))
-	if err != nil || filepath.IsAbs(relative) {
-		return false
-	}
-	return relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+	return nativepath.Contains(stateDirectory, path)
 }
 
 // sourceState は、これから移動または削除されるファイルをハッシュし、呼び出し側の
