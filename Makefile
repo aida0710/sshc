@@ -48,24 +48,17 @@ e2e: build
 verify-generated: generate
 	git diff --exit-code -- internal/api/models.gen.go web/src/api/schema.d.ts
 
-# VERSION を caller が渡した場合は helper へそのまま渡す。空なら helper が argv で
-# git describe を実行し、exact tag がなければ dev を使う。
-export VERSION
-
-# GNU Make は command line variable を recipe の環境へ自動 export する。GOOS 等を
-# host 上で動く helper 自身の go run に渡すと cross-built helper を実行しようとして
-# 壊れるため、target 値は argv だけで渡す。
-unexport GOOS GOARCH CGO_ENABLED
+# VERSION を caller が渡した場合は専用の build channel へそのまま渡す。空なら
+# helper が argv で git describe を実行し、exact tag がなければ dev を使う。
 
 build:
-	npm run build --prefix web
 	go run ./internal/buildcontract/cmd/nativebuild host-build --output-dir "bin"
 
 # build-cli は native runner と release job が共有する最小の CLI build primitive。
 # target と output は caller の決定であり、暗黙の host 値や探索結果を使わない。
 # CGO_ENABLED も target OS ごとの理由を知る caller が明示する。
 build-cli:
-	go run ./internal/buildcontract/cmd/nativebuild build --goos "$(GOOS)" --goarch "$(GOARCH)" --output "$(OUTPUT)" --cgo "$(CGO_ENABLED)"
+	go run ./internal/buildcontract/cmd/nativebuild build
 
 # デスクトップの外殻。
 #
@@ -119,33 +112,21 @@ desktop-run: build desktop
 # electron-builder が選ぶ resource directory に両 architecture の CLI を置く。
 desktop-bundle-mac:
 	go run ./internal/buildcontract/cmd/nativebuild guard-host --host darwin
-	$(MAKE) --no-print-directory desktop
-	npm run build --prefix web
-	go run ./internal/buildcontract/cmd/nativebuild desktop --host darwin --resource-root "desktop/resources" --bundles "$(DESKTOP_MAC_BUNDLES)"
-	$(MAKE) --no-print-directory desktop-version
-	npm run dist:mac --prefix desktop
+	go run ./internal/buildcontract/cmd/nativebuild desktop --host darwin --resource-root desktop/resources
 
 desktop-bundle-linux:
 	go run ./internal/buildcontract/cmd/nativebuild guard-host --host linux
-	$(MAKE) --no-print-directory desktop
-	npm run build --prefix web
-	go run ./internal/buildcontract/cmd/nativebuild desktop --host linux --resource-root "desktop/resources" --bundles "$(DESKTOP_LINUX_BUNDLES)"
-	$(MAKE) --no-print-directory desktop-version
-	npm run dist:linux --prefix desktop
+	go run ./internal/buildcontract/cmd/nativebuild desktop --host linux --resource-root desktop/resources
 
 desktop-bundle-windows:
 	go run ./internal/buildcontract/cmd/nativebuild guard-host --host windows
-	$(MAKE) --no-print-directory desktop
-	npm run build --prefix web
-	go run ./internal/buildcontract/cmd/nativebuild desktop --host windows --resource-root "desktop/resources" --bundles "$(DESKTOP_WINDOWS_BUNDLES)"
-	$(MAKE) --no-print-directory desktop-version
-	npm run dist:win --prefix desktop
+	go run ./internal/buildcontract/cmd/nativebuild desktop --host windows --resource-root desktop/resources
 
 # **版はひとつである。** 束の中の sshc と、その束自身が別の版を名乗ると、
 # どちらが本当かを言えるものが無くなる。dev のときは package.json の既定の
 # ままにする——npm は "dev" を版として受け付けない。
 desktop-version:
-	go run ./internal/buildcontract/cmd/nativebuild desktop-version --directory "desktop"
+	go run ./internal/buildcontract/cmd/nativebuild desktop-version --directory desktop
 
 # リリースの成果物。UI のバンドルは 1 度だけ作り、Go だけをターゲットごとに
 # ビルドする。バンドルは埋め込まれるだけで、どの OS 向けかを知らないからだ。
@@ -162,15 +143,40 @@ RELEASE_TARGETS = darwin/arm64:1 darwin/amd64:1 linux/amd64:0 linux/arm64:0
 RELEASE_CURRENT_ARCHES = amd64 arm64
 RELEASE_DIR ?= dist
 
+# Command-line Make variables are recursively expanded when referenced normally, and are
+# automatically exported. Capture their raw bytes once with $(value ...), then export only
+# dedicated names which cannot change the host go run target. Native recipes below contain
+# fixed argv only; quotes, dollar signs, backticks and shell metacharacters never enter them.
+override SSHC_NATIVE_VERSION := $(value VERSION)
+override SSHC_NATIVE_GOOS := $(value GOOS)
+override SSHC_NATIVE_GOARCH := $(value GOARCH)
+override SSHC_NATIVE_CGO := $(value CGO_ENABLED)
+override SSHC_NATIVE_OUTPUT := $(value OUTPUT)
+override SSHC_NATIVE_MAC_BUNDLES := $(value DESKTOP_MAC_BUNDLES)
+override SSHC_NATIVE_LINUX_BUNDLES := $(value DESKTOP_LINUX_BUNDLES)
+override SSHC_NATIVE_WINDOWS_BUNDLES := $(value DESKTOP_WINDOWS_BUNDLES)
+override SSHC_NATIVE_RELEASE_TARGETS := $(value RELEASE_TARGETS)
+override SSHC_NATIVE_RELEASE_ARCHES := $(value RELEASE_CURRENT_ARCHES)
+override SSHC_NATIVE_RELEASE_DIR := $(value RELEASE_DIR)
+export SSHC_NATIVE_VERSION SSHC_NATIVE_GOOS SSHC_NATIVE_GOARCH SSHC_NATIVE_CGO SSHC_NATIVE_OUTPUT
+export SSHC_NATIVE_MAC_BUNDLES SSHC_NATIVE_LINUX_BUNDLES SSHC_NATIVE_WINDOWS_BUNDLES
+export SSHC_NATIVE_RELEASE_TARGETS SSHC_NATIVE_RELEASE_ARCHES SSHC_NATIVE_RELEASE_DIR
+
+# Disable persisted GOENV target settings before go run compiles the host helper. Keep the
+# override target-specific so unrelated Make targets retain the developer's Go configuration.
+override NATIVE_GO_RUN_TARGETS := build build-cli desktop-bundle-mac desktop-bundle-linux desktop-bundle-windows desktop-version release-binaries release-cli-current
+export GOENV
+$(NATIVE_GO_RUN_TARGETS): override GOENV = off
+unexport GOOS GOARCH CGO_ENABLED OUTPUT VERSION RELEASE_DIR RELEASE_TARGETS RELEASE_CURRENT_ARCHES
+unexport DESKTOP_MAC_BUNDLES DESKTOP_LINUX_BUNDLES DESKTOP_WINDOWS_BUNDLES
+
 release-binaries:
-	npm run build --prefix web
-	go run ./internal/buildcontract/cmd/nativebuild matrix --targets "$(RELEASE_TARGETS)" --output-dir "$(RELEASE_DIR)"
+	go run ./internal/buildcontract/cmd/nativebuild matrix
 
 # release-cli-current は runner 自身の OS についてだけ standalone artifact を
 # 作る。package job はこの後に同じ OS で smoke し、別 job が publish を集約する。
 release-cli-current:
-	npm run build --prefix web
-	go run ./internal/buildcontract/cmd/nativebuild release-current --arches "$(RELEASE_CURRENT_ARCHES)" --output-dir "$(RELEASE_DIR)"
+	go run ./internal/buildcontract/cmd/nativebuild release-current
 
 # 統合テストのスイートは、コンテナ内の本物の S3 実装と本物の sshd に対して走る。
 # 密閉されたスイートには答えられない二つの問いに答える。本物のオブジェクトストアが

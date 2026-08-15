@@ -8,9 +8,27 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"unicode"
 )
+
+const (
+	nativeVersionEnvironment        = "SSHC_NATIVE_VERSION"
+	nativeGOOSEnvironment           = "SSHC_NATIVE_GOOS"
+	nativeGOARCHEnvironment         = "SSHC_NATIVE_GOARCH"
+	nativeCGOEnvironment            = "SSHC_NATIVE_CGO"
+	nativeOutputEnvironment         = "SSHC_NATIVE_OUTPUT"
+	nativeMacBundlesEnvironment     = "SSHC_NATIVE_MAC_BUNDLES"
+	nativeLinuxBundlesEnvironment   = "SSHC_NATIVE_LINUX_BUNDLES"
+	nativeWindowsBundlesEnvironment = "SSHC_NATIVE_WINDOWS_BUNDLES"
+	nativeReleaseTargetsEnvironment = "SSHC_NATIVE_RELEASE_TARGETS"
+	nativeReleaseArchesEnvironment  = "SSHC_NATIVE_RELEASE_ARCHES"
+	nativeReleaseDirEnvironment     = "SSHC_NATIVE_RELEASE_DIR"
+)
+
+var semverBuildVersion = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
 
 type nativeCommand struct {
 	name        string
@@ -30,6 +48,9 @@ type osNativeExecutor struct {
 }
 
 func (executor osNativeExecutor) Run(command nativeCommand) error {
+	if !allowedNativeProgram(command.name) {
+		return errors.New("native build program is not allowed")
+	}
 	process := exec.Command(command.name, command.args...)
 	process.Env = command.environment
 	process.Dir = command.directory
@@ -39,10 +60,22 @@ func (executor osNativeExecutor) Run(command nativeCommand) error {
 }
 
 func (executor osNativeExecutor) Output(command nativeCommand) ([]byte, error) {
+	if !allowedNativeProgram(command.name) {
+		return nil, errors.New("native build program is not allowed")
+	}
 	process := exec.Command(command.name, command.args...)
 	process.Env = command.environment
 	process.Dir = command.directory
 	return process.Output()
+}
+
+func allowedNativeProgram(name string) bool {
+	switch name {
+	case "go", "git", "npm", "sh", "pwsh":
+		return true
+	default:
+		return false
+	}
 }
 
 type nativeBuildDeps struct {
@@ -120,10 +153,10 @@ func runHostGuard(args []string, deps nativeBuildDeps, stderr io.Writer) error {
 
 func runExplicitBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
 	flags := newNativeFlagSet("build", stderr)
-	goos := flags.String("goos", "", "target operating system")
-	goarch := flags.String("goarch", "", "target architecture")
-	output := flags.String("output", "", "output file")
-	cgo := flags.String("cgo", "", "CGO_ENABLED value")
+	goos := flags.String("goos", environmentValue(deps.environment, nativeGOOSEnvironment), "target operating system")
+	goarch := flags.String("goarch", environmentValue(deps.environment, nativeGOARCHEnvironment), "target architecture")
+	output := flags.String("output", environmentValue(deps.environment, nativeOutputEnvironment), "output file")
+	cgo := flags.String("cgo", environmentValue(deps.environment, nativeCGOEnvironment), "CGO_ENABLED value")
 	if err := parseNativeFlags(flags, args); err != nil {
 		return err
 	}
@@ -131,7 +164,10 @@ func runExplicitBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Wri
 	if err := validateBuildRequest(request); err != nil {
 		return err
 	}
-	version := resolveVersion(deps)
+	version, err := resolveVersion(deps)
+	if err != nil {
+		return err
+	}
 	return buildNativeCLI(request, version, deps, stdout)
 }
 
@@ -150,6 +186,10 @@ func runHostBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer)
 	if !supportedArchitecture(deps.hostArch) {
 		return errors.New("unsupported host architecture")
 	}
+	version, err := resolveVersion(deps)
+	if err != nil {
+		return err
+	}
 	cgo, err := resolveHostCGO(deps)
 	if err != nil {
 		return err
@@ -167,7 +207,10 @@ func runHostBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer)
 	if err := validateBuildRequest(request); err != nil {
 		return err
 	}
-	return buildNativeCLI(request, resolveVersion(deps), deps, stdout)
+	if err := runWebBuild(deps); err != nil {
+		return err
+	}
+	return buildNativeCLI(request, version, deps, stdout)
 }
 
 func runDesktopBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
@@ -187,17 +230,41 @@ func runDesktopBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writ
 	if err := validateDirectoryPath("resource root", *resourceRoot); err != nil {
 		return err
 	}
-	requests, err := parseDesktopBundles(*bundles, *expectedHost, *resourceRoot)
+	bundleValue := *bundles
+	if bundleValue == "" {
+		bundleValue = environmentValue(deps.environment, desktopBundleEnvironment(*expectedHost))
+	}
+	requests, err := parseDesktopBundles(bundleValue, *expectedHost, *resourceRoot)
 	if err != nil {
 		return err
 	}
-	version := resolveVersion(deps)
+	version, err := resolveVersion(deps)
+	if err != nil {
+		return err
+	}
+	if err := deps.executor.Run(nativeCommand{
+		name:        "npm",
+		args:        []string{"install", "--prefix", "desktop"},
+		environment: deps.environment,
+	}); err != nil {
+		return err
+	}
+	if err := runWebBuild(deps); err != nil {
+		return err
+	}
 	for _, request := range requests {
 		if err := buildNativeCLI(request, version, deps, stdout); err != nil {
 			return err
 		}
 	}
-	return nil
+	if err := updateDesktopVersion("desktop", version, deps); err != nil {
+		return err
+	}
+	return deps.executor.Run(nativeCommand{
+		name:        "npm",
+		args:        []string{"run", desktopDistScript(*expectedHost), "--prefix", "desktop"},
+		environment: deps.environment,
+	})
 }
 
 func runDesktopVersion(args []string, deps nativeBuildDeps, stderr io.Writer) error {
@@ -209,7 +276,17 @@ func runDesktopVersion(args []string, deps nativeBuildDeps, stderr io.Writer) er
 	if err := validateDirectoryPath("desktop directory", *directory); err != nil {
 		return err
 	}
-	version := resolveVersion(deps)
+	version, err := resolveVersion(deps)
+	if err != nil {
+		return err
+	}
+	if version == "dev" {
+		return nil
+	}
+	return updateDesktopVersion(*directory, version, deps)
+}
+
+func updateDesktopVersion(directory, version string, deps nativeBuildDeps) error {
 	if version == "dev" {
 		return nil
 	}
@@ -217,9 +294,10 @@ func runDesktopVersion(args []string, deps nativeBuildDeps, stderr io.Writer) er
 		name: "npm",
 		args: []string{
 			"version",
-			"--prefix", *directory,
+			"--prefix", directory,
 			"--allow-same-version",
 			"--no-git-tag-version",
+			"--",
 			strings.TrimPrefix(version, "v"),
 		},
 		environment: deps.environment,
@@ -228,8 +306,8 @@ func runDesktopVersion(args []string, deps nativeBuildDeps, stderr io.Writer) er
 
 func runBuildMatrix(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
 	flags := newNativeFlagSet("matrix", stderr)
-	targets := flags.String("targets", "", "space separated GOOS/GOARCH:CGO records")
-	outputDir := flags.String("output-dir", "", "release output directory")
+	targets := flags.String("targets", environmentValue(deps.environment, nativeReleaseTargetsEnvironment), "space separated GOOS/GOARCH:CGO records")
+	outputDir := flags.String("output-dir", environmentValue(deps.environment, nativeReleaseDirEnvironment), "release output directory")
 	if err := parseNativeFlags(flags, args); err != nil {
 		return err
 	}
@@ -240,9 +318,15 @@ func runBuildMatrix(args []string, deps nativeBuildDeps, stdout, stderr io.Write
 	if err != nil {
 		return err
 	}
-	version := resolveVersion(deps)
+	version, err := resolveVersion(deps)
+	if err != nil {
+		return err
+	}
+	if err := runWebBuild(deps); err != nil {
+		return err
+	}
 	for _, request := range requests {
-		if err := buildNativeCLI(request, version, deps, stdout); err != nil {
+		if err := buildAndVerifyStandalone(request, version, deps, stdout); err != nil {
 			return err
 		}
 	}
@@ -251,8 +335,8 @@ func runBuildMatrix(args []string, deps nativeBuildDeps, stdout, stderr io.Write
 
 func runCurrentRelease(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
 	flags := newNativeFlagSet("release-current", stderr)
-	arches := flags.String("arches", "", "space separated release architectures")
-	outputDir := flags.String("output-dir", "", "release output directory")
+	arches := flags.String("arches", environmentValue(deps.environment, nativeReleaseArchesEnvironment), "space separated release architectures")
+	outputDir := flags.String("output-dir", environmentValue(deps.environment, nativeReleaseDirEnvironment), "release output directory")
 	if err := parseNativeFlags(flags, args); err != nil {
 		return err
 	}
@@ -287,13 +371,56 @@ func runCurrentRelease(args []string, deps nativeBuildDeps, stdout, stderr io.Wr
 		}
 		requests = append(requests, request)
 	}
-	version := resolveVersion(deps)
+	version, err := resolveVersion(deps)
+	if err != nil {
+		return err
+	}
+	if err := runWebBuild(deps); err != nil {
+		return err
+	}
 	for _, request := range requests {
-		if err := buildNativeCLI(request, version, deps, stdout); err != nil {
+		if err := buildAndVerifyStandalone(request, version, deps, stdout); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func runWebBuild(deps nativeBuildDeps) error {
+	return deps.executor.Run(nativeCommand{
+		name:        "npm",
+		args:        []string{"run", "build", "--prefix", "web"},
+		environment: deps.environment,
+	})
+}
+
+func buildAndVerifyStandalone(request nativeBuildRequest, version string, deps nativeBuildDeps, stdout io.Writer) error {
+	if err := buildNativeCLI(request, version, deps, stdout); err != nil {
+		return err
+	}
+	return verifyStandaloneArtifact(request, deps)
+}
+
+func verifyStandaloneArtifact(request nativeBuildRequest, deps nativeBuildDeps) error {
+	command := nativeCommand{environment: deps.environment}
+	if request.goos == "windows" {
+		command.name = "pwsh"
+		command.args = []string{
+			"-NoProfile", "-File", "scripts/verify-artifact-name.ps1",
+			"-Artifact", request.output,
+			"-OS", request.goos,
+			"-Architecture", request.goarch,
+		}
+	} else {
+		command.name = "sh"
+		command.args = []string{
+			"scripts/verify-artifact-name.sh",
+			request.output,
+			request.goos,
+			request.goarch,
+		}
+	}
+	return deps.executor.Run(command)
 }
 
 func buildNativeCLI(request nativeBuildRequest, version string, deps nativeBuildDeps, stdout io.Writer) error {
@@ -350,11 +477,8 @@ func validateBuildRequest(request nativeBuildRequest) error {
 }
 
 func validateOutputPath(output string) error {
-	if strings.ContainsRune(output, '\x00') {
-		return errors.New("OUTPUT contains an invalid character")
-	}
-	if strings.ContainsAny(output, "*?[") {
-		return errors.New("OUTPUT must not contain glob characters")
+	if containsControlCharacter(output) {
+		return errors.New("OUTPUT contains a control character")
 	}
 	clean := filepath.Clean(output)
 	if clean == "." || clean == string(filepath.Separator) || filepath.Base(clean) == "." {
@@ -367,7 +491,7 @@ func validateDirectoryPath(label, directory string) error {
 	if strings.TrimSpace(directory) == "" {
 		return fmt.Errorf("%s is required", label)
 	}
-	if strings.ContainsRune(directory, '\x00') || strings.ContainsAny(directory, "*?[") {
+	if containsControlCharacter(directory) {
 		return fmt.Errorf("%s is invalid", label)
 	}
 	clean := filepath.Clean(directory)
@@ -525,9 +649,12 @@ func resolveHostCGO(deps nativeBuildDeps) (string, error) {
 	return cgo, nil
 }
 
-func resolveVersion(deps nativeBuildDeps) string {
-	if version := strings.TrimSpace(environmentValue(deps.environment, "VERSION")); version != "" {
-		return version
+func resolveVersion(deps nativeBuildDeps) (string, error) {
+	if version := environmentValue(deps.environment, nativeVersionEnvironment); version != "" {
+		if err := validateBuildVersion(version); err != nil {
+			return "", err
+		}
+		return version, nil
 	}
 	output, err := deps.executor.Output(nativeCommand{
 		name:        "git",
@@ -535,9 +662,64 @@ func resolveVersion(deps nativeBuildDeps) string {
 		environment: deps.environment,
 	})
 	if err != nil || strings.TrimSpace(string(output)) == "" {
-		return "dev"
+		return "dev", nil
 	}
-	return strings.TrimSpace(string(output))
+	version := strings.TrimSpace(string(output))
+	if err := validateBuildVersion(version); err != nil {
+		return "", err
+	}
+	return version, nil
+}
+
+// Build versions are either dev or SemVer 2.0 with an optional leading v.
+// This grammar excludes whitespace, quotes, controls, and option-like values,
+// so the same value is one safe Go linker token and one npm positional value.
+func validateBuildVersion(version string) error {
+	if version == "dev" {
+		return nil
+	}
+	if !semverBuildVersion.MatchString(version) {
+		return errors.New("invalid build version")
+	}
+	withoutMetadata, _, _ := strings.Cut(version, "+")
+	if _, prerelease, found := strings.Cut(withoutMetadata, "-"); found {
+		for _, identifier := range strings.Split(prerelease, ".") {
+			if len(identifier) > 1 && identifier[0] == '0' && strings.IndexFunc(identifier, func(r rune) bool { return r < '0' || r > '9' }) == -1 {
+				return errors.New("invalid build version")
+			}
+		}
+	}
+	return nil
+}
+
+func containsControlCharacter(value string) bool {
+	return strings.IndexFunc(value, unicode.IsControl) >= 0
+}
+
+func desktopBundleEnvironment(goos string) string {
+	switch goos {
+	case "darwin":
+		return nativeMacBundlesEnvironment
+	case "linux":
+		return nativeLinuxBundlesEnvironment
+	case "windows":
+		return nativeWindowsBundlesEnvironment
+	default:
+		return ""
+	}
+}
+
+func desktopDistScript(goos string) string {
+	switch goos {
+	case "darwin":
+		return "dist:mac"
+	case "linux":
+		return "dist:linux"
+	case "windows":
+		return "dist:win"
+	default:
+		return ""
+	}
 }
 
 func withTargetEnvironment(environment []string, request nativeBuildRequest) []string {

@@ -27,16 +27,16 @@ func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 				helper + ` host-build --output-dir "bin"`,
 			},
 			"build-cli": {
-				helper + ` build --goos "$(GOOS)" --goarch "$(GOARCH)" --output "$(OUTPUT)" --cgo "$(CGO_ENABLED)"`,
+				helper + ` build`,
 			},
 			"desktop-version": {
-				helper + ` desktop-version --directory "desktop"`,
+				helper + ` desktop-version --directory desktop`,
 			},
 			"release-binaries": {
-				helper + ` matrix --targets "$(RELEASE_TARGETS)" --output-dir "$(RELEASE_DIR)"`,
+				helper + ` matrix`,
 			},
 			"release-cli-current": {
-				helper + ` release-current --arches "$(RELEASE_CURRENT_ARCHES)" --output-dir "$(RELEASE_DIR)"`,
+				helper + ` release-current`,
 			},
 		}
 		for target, required := range wantRecipes {
@@ -78,17 +78,11 @@ func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 		}
 	})
 
-	t.Run("generic CLI build passes every explicit input", func(t *testing.T) {
+	t.Run("generic CLI build has fixed recipe argv", func(t *testing.T) {
 		recipe := requireTarget(t, contract, "build-cli")
-		for _, required := range []string{
-			`--goos "$(GOOS)"`,
-			`--goarch "$(GOARCH)"`,
-			`--output "$(OUTPUT)"`,
-			`--cgo "$(CGO_ENABLED)"`,
-		} {
-			if !strings.Contains(recipe, required) {
-				t.Errorf("build-cli recipe does not contain %q\nrecipe:\n%s", required, recipe)
-			}
+		want := helper + " build\n"
+		if recipe != want {
+			t.Errorf("build-cli recipe = %q, want fixed %q", recipe, want)
 		}
 	})
 
@@ -119,36 +113,28 @@ func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 		}
 
 		targets := []struct {
-			name     string
-			variable string
-			host     string
-			script   string
+			name string
+			host string
 		}{
-			{name: "desktop-bundle-mac", variable: "DESKTOP_MAC_BUNDLES", host: "darwin", script: "dist:mac"},
-			{name: "desktop-bundle-linux", variable: "DESKTOP_LINUX_BUNDLES", host: "linux", script: "dist:linux"},
-			{name: "desktop-bundle-windows", variable: "DESKTOP_WINDOWS_BUNDLES", host: "windows", script: "dist:win"},
+			{name: "desktop-bundle-mac", host: "darwin"},
+			{name: "desktop-bundle-linux", host: "linux"},
+			{name: "desktop-bundle-windows", host: "windows"},
 		}
 		for _, target := range targets {
 			recipe := requireTarget(t, contract, target.name)
 			for _, required := range []string{
 				`guard-host --host ` + target.host,
 				`desktop --host ` + target.host,
-				`--resource-root "desktop/resources"`,
-				`--bundles "$(` + target.variable + `)"`,
-				"$(MAKE) --no-print-directory desktop",
-				"npm run " + target.script + " --prefix desktop",
+				`--resource-root desktop/resources`,
 			} {
 				if !strings.Contains(recipe, required) {
 					t.Errorf("%s recipe does not contain %q\nrecipe:\n%s", target.name, required, recipe)
 				}
 			}
 			guardIndex := strings.Index(recipe, "guard-host --host "+target.host)
-			installIndex := strings.Index(recipe, "$(MAKE) --no-print-directory desktop")
-			webBuildIndex := strings.Index(recipe, "npm run build --prefix web")
 			cliBuildIndex := strings.Index(recipe, "desktop --host "+target.host)
-			if guardIndex < 0 || installIndex < 0 || webBuildIndex < 0 || cliBuildIndex < 0 ||
-				!(guardIndex < installIndex && installIndex < webBuildIndex && webBuildIndex < cliBuildIndex) {
-				t.Errorf("%s must guard host before install, then build web before CLI resources\nrecipe:\n%s", target.name, recipe)
+			if guardIndex < 0 || cliBuildIndex < 0 || guardIndex >= cliBuildIndex {
+				t.Errorf("%s must guard host before the helper performs mutations\nrecipe:\n%s", target.name, recipe)
 			}
 			for _, other := range targets {
 				if other.name == target.name {
@@ -156,8 +142,6 @@ func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 				}
 				for _, forbidden := range []string{
 					"--host " + other.host,
-					"$(" + other.variable + ")",
-					"npm run " + other.script + " --prefix desktop",
 				} {
 					if strings.Contains(recipe, forbidden) {
 						t.Errorf("%s recipe is swapped with %q\nrecipe:\n%s", target.name, forbidden, recipe)

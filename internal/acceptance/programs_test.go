@@ -37,8 +37,9 @@ var allowedToStartPrograms = []string{
 	// ローカルシェルには擬似端末が要る。継ぎ目は出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",
-	// native build helper は配布される sshc runtime ではない。固定された go/git/npm
-	// だけを argv で起動し、shell command line は組み立てない。
+	// native build helper は配布される sshc runtime ではない。固定された go/git/npm と
+	// artifact verifier の sh/pwsh だけを allowlist 済み argv で起動し、caller input を
+	// shell command line として組み立てない。
 	"internal/buildcontract/nativebuild.go",
 }
 
