@@ -402,7 +402,38 @@ func receiveUnixPasswordResult(t *testing.T, result <-chan unixPasswordTestResul
 	}
 }
 
+func TestReadPTYThroughRetriesInterruptedPoll(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+	defer func() { _ = writer.Close() }()
+	if _, err := writer.Write([]byte("ready")); err != nil {
+		t.Fatal(err)
+	}
+
+	interrupted := false
+	readPTYThroughWithPoll(t, reader, []byte("ready"), 2*time.Second,
+		func(descriptors []unix.PollFd, timeout int) (int, error) {
+			if !interrupted {
+				interrupted = true
+				return 0, unix.EINTR
+			}
+			return unix.Poll(descriptors, timeout)
+		})
+}
+
 func readPTYThrough(t *testing.T, terminal *os.File, marker []byte, timeout time.Duration) {
+	t.Helper()
+	readPTYThroughWithPoll(t, terminal, marker, timeout, unix.Poll)
+}
+
+type vaultPTYPoll func([]unix.PollFd, int) (int, error)
+
+func readPTYThroughWithPoll(
+	t *testing.T, terminal *os.File, marker []byte, timeout time.Duration, poll vaultPTYPoll,
+) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	var received []byte
@@ -417,7 +448,10 @@ func readPTYThrough(t *testing.T, terminal *os.File, marker []byte, timeout time
 			milliseconds = 1
 		}
 		ready := []unix.PollFd{{Fd: int32(terminal.Fd()), Events: unix.POLLIN}}
-		count, err := unix.Poll(ready, milliseconds)
+		count, err := poll(ready, milliseconds)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
 		if err != nil {
 			t.Fatalf("poll PTY through %q: %v; received %q", marker, err, received)
 		}
