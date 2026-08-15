@@ -1,7 +1,7 @@
 package httpserver
 
 import (
-	"crypto/subtle"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -55,6 +55,14 @@ type ConnectHandlers struct {
 	BaseURL   string
 	// Sessions は、生きているコンソールの本数を返す。nil なら 0。
 	Sessions func() int
+	// Owner、Version、ProtocolVersion は handoff を読んだ CLI が、応答元を
+	// 自分が見つけた engine と照合するための値である。
+	Owner           handoff.Owner
+	Version         string
+	ProtocolVersion int
+	// ResealSnapshot はローカル vault の master password 変更後に、remote の
+	// 最新 snapshot も同じ password で封じ直す。
+	ResealSnapshot func(ctx context.Context, passphrase string) error
 }
 
 type connectRequest struct {
@@ -170,7 +178,10 @@ type openResponse struct {
 // ここが答える相手はメニューバーであり、認可は handoff の秘密ひとつである。
 const StatusPath = "/cli/status"
 
-type statusResponse struct {
+type CLIStatus struct {
+	Owner           handoff.Owner `json:"owner"`
+	Version         string        `json:"version"`
+	ProtocolVersion int           `json:"protocolVersion"`
 	// Vault は、開けるべき錠がそもそも有るか。
 	//
 	// **「施錠されている」と「保管庫が無い」は別の状態である。** Unlocked は
@@ -183,18 +194,6 @@ type statusResponse struct {
 	// Sessions は生きているコンソールの本数。終了済みは数えない——
 	// 「閉じてよいか」を問うための数だからである。
 	Sessions int `json:"sessions"`
-}
-
-// UnlockPath は、端末からマスターパスワードを答える場所である。
-//
-// **ブラウザを開かずに答えられることが、この口の理由である。** 解錠はエンジンの
-// 中に残るので、あとで窓を開けば解錠済みである。マスターパスワードは、画面から
-// も同じ loopback を通っている——この経路が増やすのは「解錠を試せる」ことだけ
-// で、それには本人がマスターパスワードを知っている必要がある。
-const UnlockPath = "/cli/unlock"
-
-type unlockRequest struct {
-	Passphrase string `json:"passphrase"`
 }
 
 // liveSessions は、まだ終わっていないものだけを数える。**終了済みは registry に
@@ -213,7 +212,7 @@ func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
 	engine.GET(StatusPath, handlers.Status)
-	engine.POST(UnlockPath, handlers.Unlock)
+	registerVaultCLIRoutes(engine, handlers)
 }
 
 // Status は、メニューバーと終了時の確認が読む現在地である。
@@ -221,7 +220,14 @@ func (h ConnectHandlers) Status(c *echo.Context) error {
 	if !h.authorised(c.Request()) {
 		return c.NoContent(http.StatusForbidden)
 	}
-	answer := statusResponse{}
+	answer := h.cliStatus()
+	return c.JSON(http.StatusOK, answer)
+}
+
+func (h ConnectHandlers) cliStatus() CLIStatus {
+	answer := CLIStatus{
+		Owner: h.Owner, Version: h.Version, ProtocolVersion: h.ProtocolVersion,
+	}
 	if h.Passwords != nil {
 		// 読めなければ「無い」と答える。**尋ねる相手は端末の人間であり**、
 		// 見つからない保管庫のためにマスターパスワードを求めるより、保存済み
@@ -232,36 +238,7 @@ func (h ConnectHandlers) Status(c *echo.Context) error {
 	if h.Sessions != nil {
 		answer.Sessions = h.Sessions()
 	}
-	return c.JSON(http.StatusOK, answer)
-}
-
-// Unlock は、マスターパスワードで保管庫を開く。
-//
-// **失敗の理由を言わない。** 施錠されていたのか、パスワードが違ったのか、
-// 答えは「開いた（204）」か「開かない（403）」の二つだけ。これにより、秘密を
-// 持つ者は一度のリクエストで複数回試す意思がなく、持たない者は判断の手がかりが
-// 何も増えない。
-func (h ConnectHandlers) Unlock(c *echo.Context) error {
-	if !h.authorised(c.Request()) {
-		return c.NoContent(http.StatusForbidden)
-	}
-	if h.Passwords == nil {
-		return c.NoContent(http.StatusForbidden)
-	}
-	var decoded unlockRequest
-	if err := json.NewDecoder(io.LimitReader(c.Request().Body, maxConnectBody)).Decode(&decoded); err != nil {
-		// **JSON が壊れているのは、判断に到達していない。** 二値（開いた／開かない）なのは
-		// 解錠の答えであって、構文エラーではない。400 に畳むと、正直な呼び出し側は自分の
-		// バグと答えの間違いを区別できなくなるが、handoff の秘密を既に持っている相手に
-		// 対して隠せるものは何も増えない。兄弟の Connect も同じ層で 400 を返す。
-		return c.NoContent(http.StatusBadRequest)
-	}
-	// **どう間違っていたかは言わない。** 施錠されているかどうかも含めて、
-	// 答えは「開いた」か「開かない」の二つである。
-	if err := h.Passwords.Unlock(decoded.Passphrase); err != nil {
-		return c.NoContent(http.StatusForbidden)
-	}
-	return c.NoContent(http.StatusNoContent)
+	return answer
 }
 
 // Open は、セッションを確立する URL で応答する。
@@ -283,9 +260,7 @@ func (h ConnectHandlers) Open(c *echo.Context) error {
 // あらゆる拒否は外から見て同じ形をしているので、secret を持たない呼び出し側は
 // 何も知ることができない。
 func (h ConnectHandlers) authorised(request *http.Request) bool {
-	presented := request.Header.Get(handoff.HeaderName)
-	return h.Secret != "" && len(presented) == len(h.Secret) &&
-		subtle.ConstantTimeCompare([]byte(presented), []byte(h.Secret)) == 1
+	return cliAuthorised(request, h.Secret)
 }
 
 // Connect は、1 個の接続が必要とするものだけを返し、それより長生きするものは何も返さない。

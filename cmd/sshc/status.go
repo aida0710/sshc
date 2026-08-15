@@ -94,7 +94,7 @@ func unlock(ctx context.Context, stateDir string, client *http.Client, passphras
 		return false
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		found.URL+httpserver.UnlockPath, bytes.NewReader(body))
+		found.URL+httpserver.VaultUnlockPath, bytes.NewReader(body))
 	if err != nil {
 		return false
 	}

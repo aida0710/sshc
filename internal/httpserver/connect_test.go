@@ -3,7 +3,9 @@ package httpserver
 import (
 	"crypto/rand"
 	"encoding/json"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -327,12 +329,52 @@ func TestStatusAnswersWithTheLockAndTheLiveCount(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
 	}
-	var answer statusResponse
+	var answer CLIStatus
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
 	if !answer.Vault || !answer.Unlocked || answer.Sessions != 3 {
 		t.Fatalf("answer = %+v", answer)
+	}
+}
+
+// handoff と status が異なる owner や protocol を名乗ると、CLI は別の engine に
+// 接続したことを検出できない。合成の根が同じ値を route まで渡すことを検査する。
+func TestCLIStatusIncludesOwner(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	service := newCLIVaultService(t)
+	server, err := New(Options{
+		Listener:        fakeListener{address: &net.TCPAddr{IP: net.IP{127, 0, 0, 1}, Port: 43123}},
+		CLISecret:       cliSecret,
+		Passwords:       service,
+		Owner:           handoff.OwnerDesktop,
+		Version:         "v1.2.3-test",
+		ProtocolVersion: handoff.ProtocolVersion,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, StatusPath, nil)
+	request.Host = "127.0.0.1:43123"
+	request.Header.Set(handoff.HeaderName, cliSecret)
+	response := httptest.NewRecorder()
+	server.http.Handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+	var answer CLIStatus
+	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Owner != handoff.OwnerDesktop || answer.Version != "v1.2.3-test" || answer.ProtocolVersion != handoff.ProtocolVersion {
+		t.Fatalf("identity = owner %q, version %q, protocol %d", answer.Owner, answer.Version, answer.ProtocolVersion)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) != 6 {
+		t.Fatalf("status fields = %v, want exact CLIStatus shape", raw)
 	}
 }
 
@@ -358,7 +400,7 @@ func TestStatusSaysThereIsNoVaultToUnlock(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
 	}
-	var answer statusResponse
+	var answer CLIStatus
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +451,7 @@ func TestUnlockOpensTheVaultFromTheCommandLine(t *testing.T) {
 	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
 
 	body := `{"passphrase":"` + testPassphrase + `"}`
-	recorder := send(t, engine, http.MethodPost, UnlockPath, body,
+	recorder := send(t, engine, http.MethodPost, VaultUnlockPath, body,
 		map[string]string{handoff.HeaderName: cliSecret})
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("unlock = %d: %s", recorder.Code, recorder.Body.String())
@@ -437,9 +479,9 @@ func TestUnlockRefusesTheWrongPassphrase(t *testing.T) {
 	vault.Lock()
 	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
 
-	recorder := send(t, engine, http.MethodPost, UnlockPath, `{"passphrase":"wrong"}`,
+	recorder := send(t, engine, http.MethodPost, VaultUnlockPath, `{"passphrase":"wrong"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
-	if recorder.Code != http.StatusForbidden || vault.Unlocked() {
+	if recorder.Code != http.StatusUnauthorized || vault.Unlocked() {
 		t.Fatalf("unlock = %d, unlocked = %v", recorder.Code, vault.Unlocked())
 	}
 }
@@ -447,7 +489,7 @@ func TestUnlockRefusesTheWrongPassphrase(t *testing.T) {
 // handoff の秘密を持たないものには答えない。
 func TestUnlockRefusesWithoutTheSecret(t *testing.T) {
 	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
-	if recorder := send(t, engine, http.MethodPost, UnlockPath, `{"passphrase":"anything"}`, nil); recorder.Code != http.StatusForbidden {
-		t.Fatalf("unlock = %d, want 403", recorder.Code)
+	if recorder := send(t, engine, http.MethodPost, VaultUnlockPath, `{"passphrase":"anything"}`, nil); recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("unlock = %d, want 401", recorder.Code)
 	}
 }

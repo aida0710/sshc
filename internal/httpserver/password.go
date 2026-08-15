@@ -34,6 +34,37 @@ type PasswordHandlers struct {
 	ResealSnapshot func(ctx context.Context, passphrase string) error
 }
 
+type masterPasswordChangeResult struct {
+	SnapshotResealed bool    `json:"snapshotResealed"`
+	SnapshotProblem  *string `json:"snapshotProblem,omitempty"`
+}
+
+// changeMasterPassword は local rekey と remote snapshot の再封印を一つの
+// application operation にする。HTTP の応答規約は browser と CLI で異なるため、
+// ここでは commit 済みかと remote の結果だけを返す。
+func changeMasterPassword(
+	ctx context.Context,
+	service *secret.Service,
+	resealSnapshot func(context.Context, string) error,
+	current string,
+	next string,
+) (masterPasswordChangeResult, error) {
+	if err := service.ChangeMasterPassword(current, next); err != nil {
+		return masterPasswordChangeResult{}, err
+	}
+
+	result := masterPasswordChangeResult{SnapshotResealed: true}
+	if resealSnapshot != nil {
+		if err := resealSnapshot(ctx, next); err != nil {
+			reason := snapshotProblemCode(err)
+			result.SnapshotResealed, result.SnapshotProblem = false, &reason
+		}
+	} else {
+		result.SnapshotResealed = false
+	}
+	return result, nil
+}
+
 // snapshotProblemCode は bucket が更新されなかった理由を、sync 画面が
 // すでに使っている語彙と同じ言葉で名付ける。
 func snapshotProblemCode(err error) string {
@@ -130,18 +161,15 @@ func (h PasswordHandlers) Change(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := h.Service.ChangeMasterPassword(request.Current, request.Next); err != nil {
+	changed, err := changeMasterPassword(
+		c.Request().Context(), h.Service, h.ResealSnapshot, request.Current, request.Next)
+	if err != nil {
 		return passwordProblem(c, err)
 	}
 
-	answer := api.ChangeMasterPasswordResult{SnapshotResealed: true}
-	if h.ResealSnapshot != nil {
-		if err := h.ResealSnapshot(c.Request().Context(), request.Next); err != nil {
-			reason := snapshotProblemCode(err)
-			answer.SnapshotResealed, answer.SnapshotProblem = false, &reason
-		}
-	} else {
-		answer.SnapshotResealed = false
+	answer := api.ChangeMasterPasswordResult{
+		SnapshotResealed: changed.SnapshotResealed,
+		SnapshotProblem:  changed.SnapshotProblem,
 	}
 
 	exists, err := h.Service.Exists()
