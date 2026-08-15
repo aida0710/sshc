@@ -140,7 +140,13 @@ func runEngine(home string, client *http.Client, electronOwns bool) int {
 		logger.Error("take the engine lock", "error", err)
 		return 1
 	}
-	defer release()
+	// 解放の失敗は報せる。これを終了コードへ写すのは engine runner の仕事なので、
+	// ここではまだ結果を変えない。
+	defer func() {
+		if err := release(); err != nil {
+			logger.Error("release the engine lock", "error", err)
+		}
+	}()
 
 	parts := newPlatformParts()
 	owner := handoff.OwnerHeadless
