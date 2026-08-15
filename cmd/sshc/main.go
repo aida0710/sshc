@@ -86,10 +86,13 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 	case invocationStatus:
 		return runStatus(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr)
 	case invocationVault:
-		// Vault の各 action は次の段階でここへ専用 handler を接続する。先に Kind を
-		// 固定しておくのは、未実装の action が alias として SSH へ流れないためである。
-		fmt.Fprintf(os.Stderr, "sshc: vault %s is not available yet\n", called.Args[0])
-		return 1
+		// password 読み取り中と loopback request 中の Ctrl-C を public 130 にする。
+		// engine の ownership signal は runEngine が別に持つため、ここでは利用者が
+		// 起動する短命な Vault command だけを対象にする。
+		vaultCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+		defer cancel()
+		return runVault(vaultCtx, called.Args[0], app.HandoffDir(home), vaultCommandClient(client),
+			os.Stdin, os.Stdout, os.Stderr, systemPasswordTerminal{})
 	default:
 		fmt.Fprintln(os.Stderr, "sshc: invalid invocation")
 		return 2
