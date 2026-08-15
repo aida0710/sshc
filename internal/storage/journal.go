@@ -16,8 +16,10 @@ import (
 var (
 	ErrUnknownTransaction = errors.New("no pending transaction with that identifier")
 	ErrCannotComplete     = errors.New("staged contents are missing or altered")
-	ErrAtomicStateUnknown = errors.New("an atomic transaction target no longer matches its old or staged state")
-	ErrInvalidJournal     = errors.New("invalid transaction journal")
+	// ErrRecoveryStateUnknown は、中断されたトランザクションの対象が、記録された
+	// 変更前でも変更後でもない状態にあることを述べる。復旧はそこから先を推測しない。
+	ErrRecoveryStateUnknown = errors.New("an interrupted transaction target no longer matches its recorded before or after state")
+	ErrInvalidJournal       = errors.New("invalid transaction journal")
 )
 
 var journalIdentifierPattern = regexp.MustCompile(`^[0-9]{8}T[0-9]{6}\.[0-9]{3}-[0-9a-f]{8}$`)
@@ -61,7 +63,7 @@ func (m *Manager) Pending() ([]Pending, error) {
 	}
 	pending := make([]Pending, 0, len(records))
 	for _, record := range records {
-		if changed, reconcileErr := m.reconcileAtomicRecord(&record); reconcileErr != nil {
+		if changed, reconcileErr := m.reconcileRecord(&record); reconcileErr != nil {
 			return nil, reconcileErr
 		} else if changed {
 			journalPath := filepath.Join(m.journalDirectory(), record.ID+".json")
@@ -281,7 +283,7 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 	if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
 		return nil, "", err
 	}
-	if changed, err := m.reconcileAtomicRecord(&record); err != nil {
+	if changed, err := m.reconcileRecord(&record); err != nil {
 		return nil, "", err
 	} else if changed {
 		if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
@@ -294,54 +296,36 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 	return &record, journalPath, nil
 }
 
-// reconcileAtomicRecord derives the applied prefix of a reversible atomic
-// transaction from target digests. This is needed when the target rename made
-// progress but both its journal update and the immediate rollback failed. A
-// later recovery must not trust the stale Committed counter and declare the
-// transaction rolled back while staged bytes remain on disk.
-func (m *Manager) reconcileAtomicRecord(record *journalRecord) (bool, error) {
-	if !record.Atomic || record.Status == statusCompleted || record.Status == statusRolledBack {
+// reconcileRecord derives the applied prefix of an interrupted transaction from
+// what its targets actually look like.
+//
+// Every target mutation happens before the journal rewrite that records it, so
+// the durable Committed counter can sit behind the filesystem; a rollback that
+// failed part way through leaves it ahead. Trusting the counter in either
+// direction makes recovery report work it did not do — a Rollback that returns
+// success while an applied write, move, or removal is still in place, and for a
+// removal that intentionally kept no backup, that false success conceals
+// irreversible data loss. Observation is the only account the writer and the
+// reader both agree on, so it is recomputed before Pending, Complete, or
+// Rollback uses the record.
+//
+// A non-atomic staging record is excluded. It has not reached commitStaged, so
+// no target has been mutated; its only progress is directory creation, which
+// the durable document deliberately never carries.
+func (m *Manager) reconcileRecord(record *journalRecord) (bool, error) {
+	if record.Status == statusCompleted || record.Status == statusRolledBack {
+		return false, nil
+	}
+	if !record.Atomic && record.Status != statusStaged {
 		return false, nil
 	}
 	applied := make([]bool, len(record.Entries))
 	for index, entry := range record.Entries {
-		switch entry.action() {
-		case actionMakeDir:
-			info, err := m.workspace.FileSystem().Lstat(entry.Path)
-			switch {
-			case err == nil && info.IsDir():
-				applied[index] = true
-			case errors.Is(err, fs.ErrNotExist):
-				applied[index] = false
-			case err != nil:
-				return false, err
-			default:
-				return false, ErrAtomicStateUnknown
-			}
-		case actionWrite:
-			contents, err := m.workspace.FileSystem().ReadFile(entry.Path)
-			if errors.Is(err, fs.ErrNotExist) {
-				if entry.HadPrevious {
-					return false, ErrAtomicStateUnknown
-				}
-				applied[index] = false
-				continue
-			}
-			if err != nil {
-				return false, err
-			}
-			digest := Digest(contents)
-			switch {
-			case digest == entry.Digest:
-				applied[index] = true
-			case entry.HadPrevious && digest == entry.PreviousDigest:
-				applied[index] = false
-			default:
-				return false, ErrAtomicStateUnknown
-			}
-		default:
-			return false, ErrAtomicWriteOnly
+		state, err := m.entryApplied(entry)
+		if err != nil {
+			return false, err
 		}
+		applied[index] = state
 	}
 
 	committed := 0
@@ -354,7 +338,7 @@ func (m *Manager) reconcileAtomicRecord(record *journalRecord) (bool, error) {
 		if gap {
 			// commit and rollback both move through the list in opposite order,
 			// so an applied entry after a gap cannot be attributed safely.
-			return false, ErrAtomicStateUnknown
+			return false, ErrRecoveryStateUnknown
 		}
 		committed = index + 1
 	}
@@ -367,6 +351,95 @@ func (m *Manager) reconcileAtomicRecord(record *journalRecord) (bool, error) {
 		}
 	}
 	return changed, nil
+}
+
+// entryApplied reports whether one entry's target mutation has already happened.
+// A state that is neither the recorded before nor the recorded after is refused
+// rather than guessed, because both recovery directions act on the answer.
+func (m *Manager) entryApplied(entry journalEntry) (bool, error) {
+	switch entry.action() {
+	case actionMakeDir:
+		return m.directoryPresent(entry.Path)
+	case actionRemoveDir:
+		present, err := m.directoryPresent(entry.Path)
+		if err != nil {
+			return false, err
+		}
+		return !present, nil
+	case actionWrite:
+		digest, exists, err := m.targetDigest(entry.Path)
+		if err != nil {
+			return false, err
+		}
+		switch {
+		case !exists && !entry.HadPrevious:
+			return false, nil
+		case exists && digest == entry.Digest:
+			return true, nil
+		case exists && entry.HadPrevious && digest == entry.PreviousDigest:
+			return false, nil
+		}
+		return false, ErrRecoveryStateUnknown
+	case actionMove:
+		// 移動はバイト列をひとつしか持たない。したがって、どちらの側にそれがあるかが
+		// 適用済みかどうかそのものである。
+		source, sourceExists, err := m.targetDigest(entry.Path)
+		if err != nil {
+			return false, err
+		}
+		target, targetExists, err := m.targetDigest(entry.Target)
+		if err != nil {
+			return false, err
+		}
+		switch {
+		case !sourceExists && targetExists && target == entry.Digest:
+			return true, nil
+		case sourceExists && !targetExists && source == entry.Digest:
+			return false, nil
+		}
+		return false, ErrRecoveryStateUnknown
+	case actionRemove:
+		digest, exists, err := m.targetDigest(entry.Path)
+		if err != nil {
+			return false, err
+		}
+		switch {
+		case !exists:
+			return true, nil
+		case digest == entry.Digest:
+			return false, nil
+		}
+		return false, ErrRecoveryStateUnknown
+	}
+	return false, invalidJournal("entry action cannot be recovered")
+}
+
+func (m *Manager) directoryPresent(path string) (bool, error) {
+	info, err := m.workspace.FileSystem().Lstat(path)
+	switch {
+	case err == nil && info.IsDir():
+		return true, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return false, ErrRecoveryStateUnknown
+}
+
+// targetDigest はハッシュを取り終えたバイト列をゼロで埋める。復旧が読むのは、
+// 秘密鍵かもしれないファイルそのものだからである。
+func (m *Manager) targetDigest(path string) (string, bool, error) {
+	contents, err := m.workspace.FileSystem().ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	digest := Digest(contents)
+	zeroBytes(contents)
+	return digest, true, nil
 }
 
 // readRecords は、ディレクトリ内のすべてのジャーナル文書を古い順に読み込む。
@@ -536,9 +609,12 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 				return invalidJournal("write temp is not the expected sibling")
 			}
 		}
-		if pending && record.Status == statusStaged && index >= record.Committed && entry.Temp == "" && !record.Atomic {
-			return invalidJournal("uncommitted write has no staged file")
-		}
+		// 未コミットの書き込みがステージ済みファイルを持たないことはありうる。それを
+		// 巻き戻して、その先で失敗した復旧は、対象を以前の内容に戻したまま一時ファイル
+		// を消費し尽くしており、照合はその記録をそのまま書き戻すからだ。この状態の
+		// エントリは何も引き起こさない — Complete は使う直前にステージ済みファイルを
+		// すべて検証して拒否し、Pending は完了不可として報告する — ので、読み手は
+		// 復旧そのものを立ち往生させる代わりにこれを受理する。
 		if pending && record.Status == statusStaged && index < record.Committed && entry.Temp != "" && !record.Atomic {
 			return invalidJournal("committed write retains a staged path")
 		}

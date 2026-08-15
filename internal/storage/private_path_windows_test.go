@@ -39,6 +39,9 @@ func TestWindowsWritersRejectCaseAliasDuplicatesBeforeMutation(t *testing.T) {
 		name string
 		call func(*Manager, *Workspace) error
 	}{
+		// ルートの綴りはそのまま保ち、その下の要素の大文字小文字だけを変える。
+		// Workspace.Contains はどの OS でも大小を区別する文字列比較なので、ルート自体を
+		// 綴り替えると、主張リストの検査に届く前に ErrOutsideWorkspace で止まる。
 		{
 			name: "Commit",
 			call: func(manager *Manager, workspace *Workspace) error {
@@ -46,7 +49,7 @@ func TestWindowsWritersRejectCaseAliasDuplicatesBeforeMutation(t *testing.T) {
 					Operation: "directory.create",
 					Directories: []DirectoryCreate{
 						{Path: filepath.Join(workspace.Root(), "Keys")},
-						{Path: filepath.Join(strings.ToLower(workspace.Root()), "keys")},
+						{Path: filepath.Join(workspace.Root(), "keys")},
 					},
 				})
 				return err
@@ -59,7 +62,7 @@ func TestWindowsWritersRejectCaseAliasDuplicatesBeforeMutation(t *testing.T) {
 				if err := os.WriteFile(path, []byte("Host test\n"), 0o600); err != nil {
 					return err
 				}
-				_, err := manager.Note("config.inspect", []string{path, strings.ToUpper(path)})
+				_, err := manager.Note("config.inspect", []string{path, filepath.Join(workspace.Root(), "CONFIG")})
 				return err
 			},
 		},

@@ -577,6 +577,15 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	result := Result{ID: identifier, BackupDir: backupDirectory, Written: written}
 	fail := func(commitErr error) (Result, error) {
 		if !rollbackOnError {
+			// 対象の変更は、それを記録するジャーナルの書き換えより先に起きる。
+			// したがって永続化された記録はファイルシステムより遅れうる。この
+			// プロセスが知っている進捗をここで残す。この書き込み自体が失敗した
+			// 場合は、復旧が対象の状態から照合し直す。
+			if record.Status == statusStaged {
+				if progressErr := m.writeRecord(journalPath, record); progressErr != nil {
+					commitErr = errors.Join(commitErr, progressErr)
+				}
+			}
 			return result, commitErr
 		}
 		// finish mutates the in-memory record before publishing history. If that
@@ -726,12 +735,15 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 			if err := fileSystem.Rename(entry.Temp, entry.Path); err != nil {
 				return err
 			}
+			// rename がステージ済みファイルを消費する。進捗の数え上げより先にそれを
+			// 消しておくと、記録は途中のどの時点でも読み手の受理する形のままなので、
+			// 失敗経路はそれをそのまま永続化できる。
+			record.Entries[index].Temp = ""
 			record.Committed = index + 1
 			if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
 				return err
 			}
 		}
-		record.Entries[index].Temp = ""
 		if err := m.writeRecord(journalPath, *record); err != nil {
 			return err
 		}
