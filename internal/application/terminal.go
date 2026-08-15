@@ -30,6 +30,9 @@ type TerminalSettings struct {
 	// 読み取り側（TerminalLimits）は範囲の外を既定へ戻す。
 	MaxSessions     int
 	ScrollbackBytes int
+	// nil は既定の on、false は明示的に止めた値である。
+	CopyOnSelect    *bool
+	RightClickPaste *bool
 }
 
 // TerminalSettings は、保存されている値をそのまま返す。
@@ -45,6 +48,8 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		StartDirectory:  stored.EmbeddedTerminal.StartDirectory,
 		MaxSessions:     stored.EmbeddedTerminal.MaxSessions,
 		ScrollbackBytes: stored.EmbeddedTerminal.ScrollbackBytes,
+		CopyOnSelect:    stored.EmbeddedTerminal.CopyOnSelect,
+		RightClickPaste: stored.EmbeddedTerminal.RightClickPaste,
 	}
 }
 
@@ -80,6 +85,8 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 			MaxSessions:     settings.MaxSessions,
 			ScrollbackBytes: settings.ScrollbackBytes,
 			StartDirectory:  settings.StartDirectory,
+			CopyOnSelect:    settings.CopyOnSelect,
+			RightClickPaste: settings.RightClickPaste,
 		}
 	}
 

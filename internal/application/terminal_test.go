@@ -148,6 +148,32 @@ func TestTheLimitsRoundTripAndCanBeCleared(t *testing.T) {
 	}
 }
 
+// クリップボード操作は個別に止められ、false も失われずに往復する。
+//
+// bool に omitempty を直接付けると false が消え、再起動した瞬間に既定の on へ
+// 戻ってしまう。ポインタで「書かれていない」と明示的な false を分ける。
+func TestTheClipboardChoicesRoundTripAndCanBeCleared(t *testing.T) {
+	service, _ := newTerminalService(t)
+	off := false
+
+	if _, err := service.SetTerminalSettings(TerminalSettings{
+		CopyOnSelect: &off, RightClickPaste: &off,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := service.TerminalSettings()
+	if got.CopyOnSelect == nil || *got.CopyOnSelect || got.RightClickPaste == nil || *got.RightClickPaste {
+		t.Fatalf("settings = %#v, want both choices explicitly off", got)
+	}
+
+	if _, err := service.SetTerminalSettings(TerminalSettings{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.TerminalSettings(); got != (TerminalSettings{}) {
+		t.Fatalf("settings after clearing = %#v", got)
+	}
+}
+
 // 範囲の外は書き込みで断る。
 //
 // 読み取りが既定へ戻すのとは対称ではない。**これはこのアプリケーション自身の

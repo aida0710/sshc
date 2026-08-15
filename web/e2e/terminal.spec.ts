@@ -180,12 +180,12 @@ test("starts local shells where the setting says", async ({ page, installation }
   await expect(screen).toContainText("/workspace", { timeout: 20_000 });
 });
 
-// 選んだ範囲がクリップボードへ入る。
+// 選び終えた範囲が、追加のショートカットなしでクリップボードへ入る。
 //
 // **xterm の選択はブラウザの選択ではない。** 選んだ範囲を知っているのは
 // xterm だけなので、Cmd+C をそのまま渡すとブラウザは空の選択を写して何も
 // 起きない——実際そうなっていた。ここが見ているのは、写る中身そのものである。
-test("copies what was selected in the console", async ({ page, context, installation }) => {
+test("copies what was selected in the console as soon as selection finishes", async ({ page, context, installation }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
 
@@ -205,11 +205,64 @@ test("copies what was selected in the console", async ({ page, context, installa
   await page.mouse.move(box.x + box.width - 2, box.y + box.height - 2, { steps: 12 });
   await page.mouse.up();
   await expect(page.locator(".xterm-selection div").first()).toBeAttached();
-
-  await page.keyboard.press("ControlOrMeta+c");
   await expect
     .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
     .toContain("selectable-canary");
+});
+
+// 右クリックはブラウザへ生の文字列を流さず、xterm の貼り付け経路を使う。
+// シェルへ届いて実行できることが、DOM イベントを消しただけではない証拠になる。
+test("pastes the clipboard into the console with right click", async ({ page, context, installation }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = page.getByRole("region", { name: /^Console for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await page.evaluate(() => navigator.clipboard.writeText("echo right-click-paste-canary"));
+
+  await page.locator(".xterm-screen").click({ button: "right", position: { x: 20, y: 20 } });
+  await page.keyboard.press("Enter");
+
+  await expect(screen).toContainText("right-click-paste-canary", { timeout: 20_000 });
+});
+
+// 設定は保存後に、既に開いている端末にも効く。端末を作り直して確認すると
+// 「次回だけ効く」退行を見逃すので、同じセッションを隠して戻す。
+test("can turn automatic selection copy off for an already open console", async ({
+  page,
+  context,
+  installation,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = await typeIntoConsole(page, "echo copy-setting-canary");
+  await expect(screen).toContainText("copy-setting-canary", { timeout: 20_000 });
+
+  await panel.getByRole("tab", { name: "Settings" }).click();
+  await openSection(page, "Settings");
+  const settings = page.getByRole("region", { name: "Terminal" });
+  await settings.getByRole("checkbox", { name: "Copy selected text automatically" }).uncheck();
+  await settings.getByRole("button", { name: "Save" }).click();
+  await expect(settings.getByText(/Saved/)).toBeVisible();
+
+  await openSection(page, "Terminal");
+  await page.evaluate(() => navigator.clipboard.writeText("clipboard-sentinel"));
+  const rows = page.locator(".xterm-rows");
+  const box = await rows.boundingBox();
+  expect(box).not.toBeNull();
+  if (box === null) return;
+  await page.mouse.move(box.x + 2, box.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height - 2, { steps: 12 });
+  await page.mouse.up();
+  await expect(page.locator(".xterm-selection div").first()).toBeAttached();
+
+  await expect.poll(async () => page.evaluate(() => navigator.clipboard.readText())).toBe("clipboard-sentinel");
 });
 
 // 端末は枠に収まる。

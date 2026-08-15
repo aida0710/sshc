@@ -549,6 +549,10 @@ export const integrationsApi: IntegrationsApi = {
       ...(typeof terminal.scrollbackBytes === "number"
         ? { scrollbackBytes: terminal.scrollbackBytes }
         : {}),
+      ...(typeof terminal.copyOnSelect === "boolean" ? { copyOnSelect: terminal.copyOnSelect } : {}),
+      ...(typeof terminal.rightClickPaste === "boolean"
+        ? { rightClickPaste: terminal.rightClickPaste }
+        : {}),
     };
   },
   // **節まるごとの置き換えである。** 送らなかった項目は、書かれていない状態へ

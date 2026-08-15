@@ -18,7 +18,8 @@ func TestWhatCountsAsAConnectInvocation(t *testing.T) {
 	}{
 		{[]string{"sshc", "tv-recoding"}, "tv-recoding", true},
 		{[]string{"sshc", "mdx-aida-serv-1"}, "mdx-aida-serv-1", true},
-		// 接続ではなく、アプリケーション。
+		// 接続ではなく、アプリケーションまたはフラグ。-open は旧版の
+		// フラグなので、現在は flag parser が未定義として拒む。
 		{[]string{"sshc"}, "", false},
 		{[]string{"sshc", "-open=false"}, "", false},
 		{[]string{"sshc", "--open=false"}, "", false},

@@ -212,6 +212,8 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if request.ScrollbackBytes != nil {
 		settings.ScrollbackBytes = *request.ScrollbackBytes
 	}
+	settings.CopyOnSelect = request.CopyOnSelect
+	settings.RightClickPaste = request.RightClickPaste
 	result, err := h.Service.SetTerminalSettings(settings)
 	switch {
 	case errors.Is(err, platform.ErrDirectoryRelative), errors.Is(err, platform.ErrDirectoryUser):

@@ -1730,12 +1730,16 @@ export interface components {
         EmbeddedTerminal: {
             maxSessions?: number;
             scrollbackBytes?: number;
+            copyOnSelect?: boolean;
+            rightClickPaste?: boolean;
             startDirectory?: string;
         };
         TerminalSettings: {
             startDirectory?: string;
             maxSessions?: number;
             scrollbackBytes?: number;
+            copyOnSelect?: boolean;
+            rightClickPaste?: boolean;
         };
         PendingTransaction: {
             id: string;

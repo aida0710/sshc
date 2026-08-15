@@ -8,6 +8,7 @@ import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { openStream, type TerminalStream } from "./stream";
+import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -15,6 +16,8 @@ type TerminalViewProps = {
   // onExit は、子プロセスが終わったことを画面の他の部分へ伝える。一覧は
   // その行を終了済みとして描き直す。
   onExit?: () => void;
+  copyOnSelect?: boolean;
+  rightClickPaste?: boolean;
 };
 
 // Link は、この画面とセッションを繋ぐ通信路の状態である。
@@ -44,11 +47,20 @@ const settled = 10_000;
 //
 // xterm.js を使うのは、VT エミュレータを自前で書くのが論外だからである。zsh の
 // zle は alt-screen、bracketed paste、カーソル位置指定を使う。
-export function TerminalView({ session, api = integrationsApi, onExit }: TerminalViewProps) {
+export function TerminalView({
+  session,
+  api = integrationsApi,
+  onExit,
+  copyOnSelect = true,
+  rightClickPaste = true,
+}: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
   const host = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
+  const clipboardSettings = useRef<TerminalClipboardSettings>({ copyOnSelect, rightClickPaste });
+  // イベント配線は端末の寿命に一度だけ行い、設定値だけを差し替える。
+  clipboardSettings.current = { copyOnSelect, rightClickPaste };
   const [problem, setProblem] = useState("");
   const [link, setLink] = useState<Link>({ phase: "connecting", attempt: 1 });
   // 繋ぎ直しの操作は効果の中に住んでいる。端末を作り直さずに押せるように、
@@ -199,26 +211,12 @@ export function TerminalView({ session, api = integrationsApi, onExit }: Termina
     //
     // 割り当ては macOS が Cmd、それ以外が Ctrl+Shift である。**素の Ctrl+C は
     // 通す。** あれは SIGINT であり、端末が端末である理由のひとつである。
-    view.attachCustomKeyEventHandler((event) => {
-      if (event.type !== "keydown") return true;
-      if (!event.metaKey && !(event.ctrlKey && event.shiftKey)) return true;
-      const key = event.key.toLowerCase();
-      if (key === "c" && view.hasSelection()) {
-        void navigator.clipboard.writeText(view.getSelection());
-        return false;
-      }
-      if (key === "v") {
-        void navigator.clipboard
-          .readText()
-          .then((text) => {
-            // 貼り付けはそのまま PTY へ流す。**ここで改行を解釈しない**——
-            // 括弧付き貼り付けを求めるプログラムには、その旨が向こうで伝わる。
-            if (text !== "") stream?.send(text);
-          })
-          .catch(() => setProblem(t("terminal.clipboardRefused")));
-        return false;
-      }
-      return true;
+    const detachClipboard = attachTerminalClipboard({
+      container,
+      terminal: view,
+      clipboard: navigator.clipboard,
+      settings: () => clipboardSettings.current,
+      refuse: () => setProblem(t("terminal.clipboardRefused")),
     });
 
     // リサイズは TIOCSWINSZ を発行させる。これが無いと、全画面を使う
@@ -230,6 +228,7 @@ export function TerminalView({ session, api = integrationsApi, onExit }: Termina
       live = false;
       clearInterval(timer);
       observer.disconnect();
+      detachClipboard();
       stream?.close();
       view.dispose();
       terminal.current = null;

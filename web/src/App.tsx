@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { apiClient, whenLocked, type HealthResponse } from "./api/client";
-import { integrationsApi, type PasswordVaultStatus } from "./api/integrations";
+import { integrationsApi, type PasswordVaultStatus, type TerminalSettings } from "./api/integrations";
 import { configApi } from "./api/config";
 import type { SessionState } from "./session/bootstrap";
 import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/CreateConnectionModal";
@@ -184,8 +184,24 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // ものが開いているので、一覧はナビゲーションと同じ高さ——シェル——が持つ。
   // URL には載せない。共有可能な URL に載せる価値のある状態ではない。
   const consoles = useTerminalSessions(integrationsApi, t, state === "ready");
+  const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>({});
   const [activeConsole, setActiveConsole] = useState<string | null>(null);
   const [navFace, setNavFace] = useState<NavFace | null>(null);
+
+  // 端末は設定画面を開かなくても設定を使う。読めないときは安全に既定へ倒し、
+  // copy/paste 自体を理由にアプリケーションを開けなくすることはしない。
+  useEffect(() => {
+    if (state !== "ready") return;
+    let active = true;
+    void integrationsApi.terminalSettings()
+      .then((settings) => {
+        if (active) setTerminalSettings(settings);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [state]);
 
   // 既定はターミナル側だが、セッションが 1 本も無ければ設定側から始める。
   //
@@ -637,7 +653,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
               */}
               {terminalFace || activeConsole !== null ? (
                 <div className={terminalFace ? "h-full" : "hidden"}>
-                  <TerminalScreen consoles={consoles} activeConsole={activeConsole} />
+                  <TerminalScreen
+                    consoles={consoles}
+                    activeConsole={activeConsole}
+                    settings={terminalSettings}
+                  />
                 </div>
               ) : null}
               {route.kind === "section" ? (
@@ -665,6 +685,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     onPreferredPublicKeyHandled={consumePreferredPublicKey}
                     consoles={consoles}
                     onShowConsole={showConsole}
+                    onTerminalSettingsChange={setTerminalSettings}
                   />
                 </Suspense>
               ) : (
@@ -721,6 +742,7 @@ type SectionViewProps = {
   onNavigateForCreation: (section: CreationPrerequisite) => void;
   consoles: TerminalSessionsState;
   onShowConsole: (id: string) => void;
+  onTerminalSettingsChange: (settings: TerminalSettings) => void;
   // セクションは右側ペインの中身を提供するか、調べるものが無ければ
   // null を返す。現時点でそれを埋めているのは Connections だけだ。
   onInspector: (content: InspectorContent) => void;
@@ -767,9 +789,11 @@ function SectionView(props: SectionViewProps) {
 function TerminalScreen({
   consoles,
   activeConsole,
+  settings,
 }: {
   consoles: TerminalSessionsState;
   activeConsole: string | null;
+  settings: TerminalSettings;
 }) {
   const t = useTranslate();
   const session = consoles.sessions.find((entry) => entry.id === activeConsole);
@@ -793,6 +817,8 @@ function TerminalScreen({
         <TerminalView
           key={session.id}
           session={session}
+          copyOnSelect={settings.copyOnSelect ?? true}
+          rightClickPaste={settings.rightClickPaste ?? true}
           onExit={() => consoles.markExited(session.id)}
         />
       </Suspense>
@@ -811,6 +837,7 @@ function PaddedSection({
   onNavigateLocation,
   onShowConsole,
   consoles,
+  onTerminalSettingsChange,
   preferredPublicKey,
   onAssignGeneratedKey,
   onInstallGeneratedKey,
@@ -835,7 +862,7 @@ function PaddedSection({
     return <SecretsPanel onLock={onLock} />;
   }
   if (section === "Settings") {
-    return <SettingsPanel consoles={consoles} />;
+    return <SettingsPanel consoles={consoles} onTerminalSettingsChange={onTerminalSettingsChange} />;
   }
   if (section === "Sync") {
     return <SyncPanel />;

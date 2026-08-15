@@ -45,7 +45,7 @@ type FileSystem interface {
 	EvalSymlinks(path string) (string, error)
 }
 
-// OSFileSystem は FileSystem の macOS 実装。
+// OSFileSystem は FileSystem の macOS / Linux 実装。
 type OSFileSystem struct{}
 
 func (OSFileSystem) ReadFile(path string) ([]byte, error) {

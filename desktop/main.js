@@ -7,6 +7,7 @@ const { existsSync } = require("node:fs");
 const { relink } = require("./link");
 const { parseEntrance } = require("./entrance");
 const { installTray } = require("./tray");
+const { installWindowReopener } = require("./reopen");
 
 // 名乗る名前をここで決める。
 //
@@ -20,9 +21,19 @@ const { installTray } = require("./tray");
 // `make desktop-dist` で作った束は sshc と名乗る。
 app.setName("sshc");
 
-// **エンジンが 2 台になる道を、ここで塞ぐ。** 起こし手がひとつなら、
-// 名簿もロックファイルも要らない。
+// **外殻がエンジンを 2 台起こす道を、ここで塞ぐ。** Go 側の flock は、
+// 端末から裸の sshc が同時に起こされる別の道を塞ぐために残す。
 if (!app.requestSingleInstanceLock()) app.exit(0);
+
+// **二度目の起動を、先にいる窓へ渡す。** `second-instance` は ready のあとに
+// 届くが、engine の入口を待っている最中にも届きうるので、whenReady の処理が
+// 終わるまで登録を遅らせない。
+const windowReopener = installWindowReopener({
+  app,
+  getWindows: () => BrowserWindow.getAllWindows(),
+  createWindow: async () => openWindow(await run(["open"])),
+  showFailure,
+});
 
 // engineTimeout は、run() が execFile ひとつに掛ける上限である。
 //
@@ -300,30 +311,13 @@ app.whenReady().then(async () => {
     return;
   }
 
-  /**
-   * reopen は、既にある窓を出すか、無ければ run(["open"]) で新しい窓を開く。
-   * activate と Tray の「ウィンドウを開く」の両方がここを通る。
-   */
-  const reopen = async () => {
-    const windows = BrowserWindow.getAllWindows();
-    if (windows.length > 0) {
-      windows[0].show();
-      return;
-    }
-    try {
-      openWindow(await run(["open"]));
-    } catch (error) {
-      showFailure(error);
-    }
-  };
-
   // **置けないことがある。** appindicator の無い Linux では `new Tray` が
   // 投げる。ここで投げさせると、この先の `activate` の登録まで巻き添えで
   // 止まる——窓もメニューバーの項目も無く、kill でしか終われないプロセスが
   // 残る。**この枝が消しに来たものそのものである。**
   try {
     tray = installTray({
-      onOpen: reopen,
+      onOpen: windowReopener.request,
       onQuit: () => app.quit(),
       status,
     });
@@ -331,7 +325,7 @@ app.whenReady().then(async () => {
     tray = null;
   }
 
-  app.on("activate", reopen);
+  await windowReopener.start();
 });
 
 // **窓を閉じてもアプリは残る。** メニューバーの項目がその意味である

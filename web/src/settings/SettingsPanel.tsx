@@ -1,21 +1,22 @@
 import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
-import { integrationsApi, type IntegrationsApi } from "../api/integrations";
+import { integrationsApi, type IntegrationsApi, type TerminalSettings } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
-import { Field, control, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
+import { CheckboxField, Field, control, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
 import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import type { TerminalSessionsState } from "../terminal/sessions";
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
+  onTerminalSettingsChange?: (settings: TerminalSettings) => void;
   // 開いているセッションはシェルが持つ。ここはその数を見せ、まとめて
   // 閉じる入口を出すだけである。
   consoles?: Pick<TerminalSessionsState, "sessions" | "busy" | "closeAll">;
 };
 
-export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanelProps) {
+export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSettingsChange }: SettingsPanelProps) {
   const t = useTranslate();
   const [currentMaster, setCurrentMaster] = useState("");
   const [nextMaster, setNextMaster] = useState("");
@@ -28,6 +29,8 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
   const [startDirectory, setStartDirectory] = useState("");
   const [maxSessions, setMaxSessions] = useState("");
   const [scrollback, setScrollback] = useState("");
+  const [copyOnSelect, setCopyOnSelect] = useState(true);
+  const [rightClickPaste, setRightClickPaste] = useState(true);
   const [terminalBusy, setTerminalBusy] = useState(false);
   const [terminalError, setTerminalError] = useState("");
   const [terminalSaved, setTerminalSaved] = useState(false);
@@ -40,6 +43,8 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
         setStartDirectory(settings.startDirectory ?? "");
         setMaxSessions(settings.maxSessions === undefined ? "" : String(settings.maxSessions));
         setScrollback(settings.scrollbackBytes === undefined ? "" : String(settings.scrollbackBytes));
+        setCopyOnSelect(settings.copyOnSelect ?? true);
+        setRightClickPaste(settings.rightClickPaste ?? true);
       })
       .catch(() => undefined);
     return () => {
@@ -71,11 +76,17 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
     setTerminalSaved(false);
     try {
       const directory = startDirectory.trim();
-      await api.setTerminalSettings({
+      const next: TerminalSettings = {
         ...(directory === "" ? {} : { startDirectory: directory }),
         ...(sessions === undefined ? {} : { maxSessions: sessions }),
         ...(bytes === undefined ? {} : { scrollbackBytes: bytes }),
-      });
+        // on は既定なので書かない。off だけを false として明示し、再読み込み
+        // しても消えないようにする。
+        ...(copyOnSelect ? {} : { copyOnSelect: false }),
+        ...(rightClickPaste ? {} : { rightClickPaste: false }),
+      };
+      await api.setTerminalSettings(next);
+      onTerminalSettingsChange?.(next);
       setTerminalSaved(true);
     } catch (error) {
       const code = failureCode(error);
@@ -88,7 +99,7 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
               ? "terminal.startUnusable"
               : code === "terminal_limits_out_of_range" || code === "invalid_request"
                 ? "terminal.limitsOutOfRange"
-                : "terminal.startSaveFailed",
+                : "terminal.settingsSaveFailed",
       ));
     } finally {
       setTerminalBusy(false);
@@ -187,6 +198,30 @@ export function SettingsPanel({ api = integrationsApi, consoles }: SettingsPanel
             }}
           />
         </Field>
+        <div className="flex flex-col gap-1">
+          <CheckboxField
+            label={t("terminal.copyOnSelectLabel")}
+            checked={copyOnSelect}
+            disabled={terminalBusy}
+            onChange={(checked) => {
+              setCopyOnSelect(checked);
+              setTerminalSaved(false);
+            }}
+          />
+          <p className={hintText}>{t("terminal.copyOnSelectHint")}</p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <CheckboxField
+            label={t("terminal.rightClickPasteLabel")}
+            checked={rightClickPaste}
+            disabled={terminalBusy}
+            onChange={(checked) => {
+              setRightClickPaste(checked);
+              setTerminalSaved(false);
+            }}
+          />
+          <p className={hintText}>{t("terminal.rightClickPasteHint")}</p>
+        </div>
         <Button
           kind="primary"
           className="self-start"
