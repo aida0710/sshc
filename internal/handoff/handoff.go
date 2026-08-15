@@ -1,25 +1,16 @@
-// Package handoff は、動作中のアプリケーションが、同じバイナリのコマンドライン
-// 起動に対して自分の居場所を伝えるための仕組みである。
-//
-// これがあるおかげで、端末からの接続は五つの環境変数とフラグではなく
-// `sshc <alias>` で済む。それらの変数は、Terminal のボタンがすでに自前でやって
-// いることを手書きにした形にすぎない。そもそも人が打ち込むためのものでは
-// なかった。
-//
-// このファイルは URL と、この実行のために発行された秘密を持つ。これを読める者は
-// すでに vault の暗号文とすべての秘密鍵を読める — 同じディレクトリに同じ権限で
-// 置かれているからだ — ので、境界を動かすことはない。動かすのは古くなったものの
-// 到達範囲である。秘密は、それを発行した実行が終わった瞬間に無価値になる。だから
-// 強制終了されたプロセスが残していったファイルは、何も待ち受けていないポートを、
-// 誰も受け付けない秘密とともに指しているだけに
-// なる。
+// Package handoff は、動作中のアプリケーションが同じバイナリのコマンドライン
+// 起動に自分の居場所を伝えるための仕組みである。
 package handoff
 
 import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -30,24 +21,42 @@ const FileName = "cli"
 // secretLength は、秘密の元になるランダムバイト数。
 const secretLength = 32
 
-// Handoff は、この実行がどこで待ち受けているか、そして呼び出し側が推測ではなく
-// ファイルを読んだことを何が証明するかを保持する。
+// Owner は、engine の生存期間を引き受ける外殻を表す。
+type Owner string
+
+const (
+	OwnerDesktop  Owner = "desktop"
+	OwnerHeadless Owner = "headless"
+
+	SchemaVersion   = 1
+	ProtocolVersion = 1
+)
+
+var (
+	// ErrInvalid は、同じ版であっても接続先として安全でない文書を表す。
+	ErrInvalid = errors.New("invalid handoff document")
+	// ErrSchemaVersion は、文書の構造を CLI が理解できないことを表す。
+	ErrSchemaVersion = errors.New("unsupported handoff schema version")
+	// ErrProtocolVersion は、CLI と実行中 app の通信規約が一致しないことを表す。
+	ErrProtocolVersion = errors.New("unsupported handoff protocol version")
+)
+
+// Handoff は、この実行がどこで待ち受けているか、誰が所有しているか、そして
+// 呼び出し側がファイルを読んだことを何が証明するかを保持する。
 type Handoff struct {
-	URL    string `json:"url"`
-	Secret string `json:"secret"`
+	SchemaVersion   int    `json:"schemaVersion"`
+	URL             string `json:"url"`
+	Secret          string `json:"secret"`
+	Owner           Owner  `json:"owner"`
+	PID             int    `json:"pid"`
+	Version         string `json:"version"`
+	ProtocolVersion int    `json:"protocolVersion"`
 }
 
 // HeaderName は、コマンドラインからのリクエストに秘密を載せる。
-//
-// 独自ヘッダーは、プリフライトなしにはどのウェブページもクロスオリジンで送れない
-// リクエストであり、このサーバーはプリフライトに応答しない。したがってハンドオフ
-// のルートは、ブラウザからどれだけ事情を知っていても到達できない。
 const HeaderName = "X-SSHC-CLI"
 
 // Mint は、一回の実行のための秘密を返す。
-//
-// Write と分けてあるのは、サーバーが待ち受けを始める前に秘密を知らせる必要が
-// あり、一方でファイルは URL が判明するまで書けないからである。
 func Mint(random io.Reader) (string, error) {
 	raw := make([]byte, secretLength)
 	if _, err := io.ReadFull(random, raw); err != nil {
@@ -56,53 +65,141 @@ func Mint(random io.Reader) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
-// Write は、この実行がどこで待ち受けているか、そして呼び出し側がファイルを読んだ
-// ことを何が証明するかを記録し、そこにあるものを置き換える。
-func Write(directory, url, secret string) (Handoff, error) {
-	written := Handoff{URL: url, Secret: secret}
-	body, err := json.Marshal(written)
+// Write は検証済みの文書を同じディレクトリ内で原子的に置き換える。
+//
+// 一時ファイルを別の場所に置くと Rename が copy になり、読み手が途中の JSON を
+// 見られる。したがって公開直前まで同じディレクトリに隠し、同期してから名前だけを
+// 差し替える。
+func Write(directory string, document Handoff) error {
+	if err := validate(document); err != nil {
+		return err
+	}
+	body, err := json.Marshal(document)
 	if err != nil {
-		return Handoff{}, err
+		return err
 	}
 	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return Handoff{}, err
+		return err
 	}
-	if err := os.WriteFile(filepath.Join(directory, FileName), body, 0o600); err != nil {
-		return Handoff{}, err
+	// 既存ディレクトリの umask や古い作成条件を引き継ぐと、秘密を含む文書だけを
+	// 厳しくしても一覧できてしまうため、ここで所有者専用へそろえる。
+	if err := os.Chmod(directory, 0o700); err != nil {
+		return err
 	}
-	return written, nil
+
+	temporary, err := os.CreateTemp(directory, "."+FileName+".tmp-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer func() { _ = os.Remove(temporaryPath) }()
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(body); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryPath, filepath.Join(directory, FileName)); err != nil {
+		return err
+	}
+
+	// Rename だけでは停電直後にディレクトリエントリが永続化されない環境がある。
+	// app が起動済みだと知らせた文書を失わないため、親ディレクトリも同期する。
+	directoryFile, err := os.Open(directory)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = directoryFile.Close() }()
+	return directoryFile.Sync()
 }
 
-// Read は、動作中のアプリケーションが残したものを返す。
+// Read は、動作中のアプリケーションが残した検証済みの文書を返す。
 func Read(directory string) (Handoff, error) {
 	body, err := os.ReadFile(filepath.Join(directory, FileName))
 	if err != nil {
 		return Handoff{}, err
 	}
-	var read Handoff
-	if err := json.Unmarshal(body, &read); err != nil {
+	var document Handoff
+	if err := json.Unmarshal(body, &document); err != nil {
+		return Handoff{}, fmt.Errorf("decode handoff document: %w", err)
+	}
+	if err := validate(document); err != nil {
 		return Handoff{}, err
 	}
-	return read, nil
+	return document, nil
 }
 
-// Remove は、そこに残っているのがこの URL を指すものであるときだけ取り除く。
-// ファイルがないことは、これが求める状態である。
+// Remove は、そこに残っているのがこの実行の秘密を持つ文書だけを取り除く。
 //
-// **持ち主を確かめてから消す。** 消す側が確かめないと、自分のものではない 1 行
-// ——いま生きている別の実行が書いたもの——を消せてしまい、そのエンジンは誰から
-// も見えなくなる。名簿は 1 行しかないので、消えた瞬間に見つける術が無くなる。
-//
-// 誰のものかを URL で見るのは、**待ち受けているポートは同時にひとつの実行しか
-// 持てない**からである。生きている 2 つの実行が同じ URL を名乗ることはない。
-// 読めないものは、壊れているか、そもそも無いかのどちらかなので取り除く。
-func Remove(directory, url string) error {
-	if found, err := Read(directory); err == nil && found.URL != url {
+// URL や PID は次の実行で偶然再利用され得るが、実行ごとに発行する秘密は再利用
+// されない。そのため secret だけが、後から来た別 engine を消さない所有権になる。
+func Remove(directory, secret string) error {
+	found, err := Read(directory)
+	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	err := os.Remove(filepath.Join(directory, FileName))
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil {
 		return err
+	}
+	if found.Secret != secret {
+		return nil
+	}
+	err = os.Remove(filepath.Join(directory, FileName))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+func validate(document Handoff) error {
+	if document.SchemaVersion != SchemaVersion {
+		return fmt.Errorf("%w: got %d, want %d", ErrSchemaVersion, document.SchemaVersion, SchemaVersion)
+	}
+	if document.ProtocolVersion != ProtocolVersion {
+		return fmt.Errorf("%w: got %d, want %d", ErrProtocolVersion, document.ProtocolVersion, ProtocolVersion)
+	}
+	if document.Owner != OwnerDesktop && document.Owner != OwnerHeadless {
+		return fmt.Errorf("%w: unknown owner %q", ErrInvalid, document.Owner)
+	}
+	if document.Secret == "" {
+		return fmt.Errorf("%w: empty secret", ErrInvalid)
+	}
+	if document.PID <= 0 {
+		return fmt.Errorf("%w: pid must be positive", ErrInvalid)
+	}
+	if document.Version == "" {
+		return fmt.Errorf("%w: empty version", ErrInvalid)
+	}
+	if err := validateLoopbackURL(document.URL); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateLoopbackURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%w: parse URL: %v", ErrInvalid, err)
+	}
+	if parsed.Scheme != "http" || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("%w: URL must be a bare HTTP loopback URL", ErrInvalid)
+	}
+	host := parsed.Hostname()
+	if host == "localhost" {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("%w: URL host is not loopback", ErrInvalid)
 	}
 	return nil
 }

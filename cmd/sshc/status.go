@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,7 +36,7 @@ func runStatus(
 
 // engineStatus は、エンジンがいまどうなっているかを尋ねる。
 func engineStatus(ctx context.Context, stateDir string, client *http.Client) (statusAnswer, error) {
-	found, err := handoff.Read(stateDir)
+	found, err := readHandoff(stateDir)
 	if err != nil {
 		return statusAnswer{}, err
 	}
@@ -84,7 +85,7 @@ func locked(ctx context.Context, stateDir string, client *http.Client) bool {
 //
 // **開いたかどうかしか返らない。** どう間違っていたかを、この経路は言わない。
 func unlock(ctx context.Context, stateDir string, client *http.Client, passphrase string) bool {
-	found, err := handoff.Read(stateDir)
+	found, err := readHandoff(stateDir)
 	if err != nil {
 		return false
 	}
@@ -106,4 +107,18 @@ func unlock(ctx context.Context, stateDir string, client *http.Client, passphras
 	}
 	defer func() { _ = response.Body.Close() }()
 	return response.StatusCode == http.StatusNoContent
+}
+
+// readHandoff は CLI の全入口で同じ互換性判定を使う。旧形式を推測して補うと、
+// owner や protocol を知らないまま稼働中の app へ要求を送れてしまうため、版を
+// そろえて再起動するという復旧可能な失敗として返す。
+func readHandoff(stateDir string) (handoff.Handoff, error) {
+	found, err := handoff.Read(stateDir)
+	if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {
+		return handoff.Handoff{}, fmt.Errorf("running app and CLI must use the same version; restart the app: %w", err)
+	}
+	if err != nil {
+		return handoff.Handoff{}, err
+	}
+	return found, nil
 }

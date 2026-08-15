@@ -19,6 +19,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"sshc/internal/handoff"
 	"sshc/internal/platform"
 )
 
@@ -41,6 +42,8 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 		UI:     fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:   t.TempDir(),
+		Owner:  handoff.OwnerHeadless,
+		PID:    4242,
 	}
 
 	done := make(chan error, 1)
@@ -72,6 +75,52 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 	}
 }
 
+// Build 後に別 engine が公開した文書は、URL が偶然同じでもこの実行のものではない。
+// Run が URL を所有権に戻すと後発の入口を消すため、終了時まで残ることを確かめる。
+func TestRunLeavesAReplacementHandoffOwnedByAnotherSecret(t *testing.T) {
+	home := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	replacementSecret := "a later engine's distinct secret"
+	dependencies := Dependencies{
+		Random: bytes.NewReader(bytes.Repeat([]byte{0x82}, 96)),
+		Announce: func(target string) error {
+			base, _, found := strings.Cut(target, "/#")
+			if !found {
+				return errors.New("missing bootstrap target")
+			}
+			err := handoff.Write(HandoffDir(home), handoff.Handoff{
+				SchemaVersion:   handoff.SchemaVersion,
+				URL:             base,
+				Secret:          replacementSecret,
+				Owner:           handoff.OwnerDesktop,
+				PID:             4243,
+				Version:         "another-test",
+				ProtocolVersion: handoff.ProtocolVersion,
+			})
+			cancel()
+			return err
+		},
+		Listen: net.Listen,
+		UI:     fstest.MapFS{"index.html": {Data: []byte("ok")}},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home:   home,
+		Owner:  handoff.OwnerHeadless,
+		PID:    4242,
+	}
+
+	if err := Run(ctx, dependencies, "test"); err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	document, err := handoff.Read(HandoffDir(home))
+	if err != nil {
+		t.Fatalf("Read replacement handoff = %v", err)
+	}
+	if document.Secret != replacementSecret {
+		t.Errorf("remaining secret = %q, want replacement", document.Secret)
+	}
+}
+
 var errAccept = errors.New("accept failed")
 
 type failingListener struct{}
@@ -90,6 +139,8 @@ func TestRunReturnsServerFailureWithoutWaitingForCancellation(t *testing.T) {
 		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:     t.TempDir(),
+		Owner:    handoff.OwnerHeadless,
+		PID:      4242,
 	}
 
 	done := make(chan error, 1)
@@ -115,6 +166,8 @@ func TestRunShutsServerDownWhenTheEntranceCannotBeAnnounced(t *testing.T) {
 		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:     t.TempDir(),
+		Owner:    handoff.OwnerHeadless,
+		PID:      4242,
 	}
 
 	err := Run(context.Background(), dependencies, "test")
@@ -202,6 +255,8 @@ func TestRunExposesTheKeyVaultAndItsTrashThroughTheWiredProcess(t *testing.T) {
 		UI:        fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:      home,
+		Owner:     handoff.OwnerHeadless,
+		PID:       4242,
 		Toolchain: stubToolchain{},
 		KeyAgent:  stubKeyAgent{},
 	}
@@ -304,6 +359,8 @@ func TestBuildReturnsAServerAndAOneTimeBootstrapToken(t *testing.T) {
 		Listen: net.Listen,
 		UI:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Owner:  handoff.OwnerHeadless,
+		PID:    4242,
 	}, "build-test")
 	if err != nil {
 		t.Fatalf("Build() = %v", err)
@@ -324,6 +381,33 @@ func TestBuildReturnsAServerAndAOneTimeBootstrapToken(t *testing.T) {
 	cancel()
 	if err := <-served; err != nil {
 		t.Fatalf("Serve() = %v", err)
+	}
+}
+
+func TestBuildWritesAVersionedOwnedHandoff(t *testing.T) {
+	home := t.TempDir()
+	server, _, err := Build(Dependencies{
+		Home:   home,
+		Random: bytes.NewReader(bytes.Repeat([]byte{0x25}, 512)),
+		Listen: net.Listen,
+		UI:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Owner:  handoff.OwnerDesktop,
+		PID:    777,
+	}, "v1.2.3")
+	if err != nil {
+		t.Fatalf("Build() = %v", err)
+	}
+
+	document, err := handoff.Read(HandoffDir(home))
+	if err != nil {
+		t.Fatalf("Read handoff = %v", err)
+	}
+	if document.SchemaVersion != handoff.SchemaVersion || document.ProtocolVersion != handoff.ProtocolVersion {
+		t.Errorf("versions = schema %d protocol %d", document.SchemaVersion, document.ProtocolVersion)
+	}
+	if document.URL != server.URL() || document.Owner != handoff.OwnerDesktop || document.PID != 777 || document.Version != "v1.2.3" {
+		t.Errorf("document = %#v", document)
 	}
 }
 
