@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -ne 3 ]; then
-	echo "usage: verify-artifact-name.sh ARTIFACT OS ARCHITECTURE" >&2
+	echo "artifact arguments rejected" >&2
 	exit 2
 fi
 
@@ -14,7 +14,7 @@ case "$target_os" in
 	darwin|linux) suffix= ;;
 	windows) suffix=.exe ;;
 	*)
-		echo "unsupported artifact OS: $target_os" >&2
+		echo "artifact OS rejected" >&2
 		exit 2
 		;;
 esac
@@ -22,7 +22,7 @@ esac
 case "$architecture" in
 	amd64|arm64) ;;
 	*)
-		echo "unsupported artifact architecture: $architecture" >&2
+		echo "artifact architecture rejected" >&2
 		exit 2
 		;;
 esac
@@ -30,7 +30,7 @@ esac
 name=${artifact##*/}
 expected="sshc-$target_os-$architecture$suffix"
 if [ "$name" != "$expected" ]; then
-	echo "artifact name mismatch: expected $expected, got $name" >&2
+	echo "artifact name rejected" >&2
 	exit 1
 fi
 

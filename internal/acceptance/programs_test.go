@@ -24,8 +24,8 @@ var startsAProcess = []string{"RunOutput(ctx", "exec.Command"}
 //
 // ログイン時起動は OS に任せた。launchd や systemd の unit を書いていたのは
 // このアプリケーション自身だったが、その仕組みごと消えたので、`RunOutput` の
-// 継ぎ目を通ってプログラムを起こす場所はひとつも残っていない。ここに並ぶ 2 つは
-// どちらもその継ぎ目の外にあり、**外に居てよい理由がそれぞれ違う。**
+// 継ぎ目を通ってプログラムを起こす場所はひとつも残っていない。ここに並ぶ 3 つは
+// いずれもその継ぎ目の外にあり、**外に居てよい理由がそれぞれ違う。**
 //
 // **一覧を持つ形にしてあるのは、増えたときに気づくためである。** 「OpenSSH が
 // 無いこと」を検査すると、OpenSSH でない何かが増えても緑のままになる。
@@ -37,6 +37,9 @@ var allowedToStartPrograms = []string{
 	// ローカルシェルには擬似端末が要る。継ぎ目は出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",
+	// native build helper は配布される sshc runtime ではない。固定された go/git/npm
+	// だけを argv で起動し、shell command line は組み立てない。
+	"internal/buildcontract/nativebuild.go",
 }
 
 // TestOnlyTheNamedSubsystemsStartAProgram は、プロセスを起こす場所を固定する。

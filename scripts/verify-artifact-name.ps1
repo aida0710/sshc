@@ -1,24 +1,45 @@
 param(
     [Parameter(Mandatory = $true)]
+    [AllowEmptyString()]
     [string] $Artifact,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("darwin", "linux", "windows")]
+    [AllowEmptyString()]
     [string] $OS,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("amd64", "arm64")]
+    [AllowEmptyString()]
     [string] $Architecture
 )
 
 $ErrorActionPreference = "Stop"
 
+if ($OS -notin @("darwin", "linux", "windows")) {
+    [Console]::Error.WriteLine("artifact OS rejected")
+    exit 2
+}
+
+if ($Architecture -notin @("amd64", "arm64")) {
+    [Console]::Error.WriteLine("artifact architecture rejected")
+    exit 2
+}
+
 $suffix = if ($OS -eq "windows") { ".exe" } else { "" }
 $expected = "sshc-$OS-$Architecture$suffix"
-$name = Split-Path -Leaf $Artifact
+if ([string]::IsNullOrWhiteSpace($Artifact)) {
+    [Console]::Error.WriteLine("artifact path rejected")
+    exit 2
+}
+
+try {
+    $name = Split-Path -LiteralPath $Artifact -Leaf
+} catch {
+    [Console]::Error.WriteLine("artifact path rejected")
+    exit 2
+}
 
 if ($name -cne $expected) {
-    Write-Error "artifact name mismatch: expected $expected, got $name"
+    [Console]::Error.WriteLine("artifact name rejected")
     exit 1
 }
 
