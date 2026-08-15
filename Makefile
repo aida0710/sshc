@@ -1,4 +1,4 @@
-.PHONY: generate test build desktop icons desktop-run desktop-dist release-binaries fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test build build-cli desktop icons desktop-run desktop-version desktop-bundle-mac desktop-bundle-linux desktop-bundle-windows release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
 # なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
@@ -54,10 +54,26 @@ verify-generated: generate
 VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || echo dev)
 export VERSION
 
+# Go の build metadata は、host build、native package、standalone release の
+# すべてで同じ形にする。target ごとの recipe で flags を複製しない。
+GO_BUILD_FLAGS = -trimpath -ldflags "-X main.version=$${VERSION}"
+
 build:
 	npm run build --prefix web
 	mkdir -p bin
-	go build -trimpath -ldflags "-X main.version=$${VERSION}" -o bin/sshc ./cmd/sshc
+	go build $(GO_BUILD_FLAGS) -o bin/sshc ./cmd/sshc
+
+# build-cli は native runner と release job が共有する最小の CLI build primitive。
+# target と output は caller の決定であり、暗黙の host 値や探索結果を使わない。
+# CGO_ENABLED も target OS ごとの理由を知る caller が明示する。
+build-cli:
+	$(if $(strip $(GOOS)),,$(error GOOS is required))
+	$(if $(strip $(GOARCH)),,$(error GOARCH is required))
+	$(if $(strip $(OUTPUT)),,$(error OUTPUT is required))
+	$(if $(strip $(CGO_ENABLED)),,$(error CGO_ENABLED is required))
+	mkdir -p "$(dir $(OUTPUT))"
+	GOOS="$(GOOS)" GOARCH="$(GOARCH)" CGO_ENABLED="$(CGO_ENABLED)" \
+		go build $(GO_BUILD_FLAGS) -o "$(OUTPUT)" ./cmd/sshc
 
 # デスクトップの外殻。
 #
@@ -65,8 +81,9 @@ build:
 # 一つを使い回すと、Linux の AppImage に macOS のバイナリが入る——ビルドは
 # 通り、配ってから初めて壊れる種類の間違いである。electron-builder の
 # ${os}-${arch} がその選択を行うので、こちらはその名前で置く。
-DESKTOP_BUNDLES = mac-arm64:darwin:arm64:1 mac-x64:darwin:amd64:1 \
-	linux-x64:linux:amd64:0 linux-arm64:linux:arm64:0
+DESKTOP_MAC_BUNDLES = mac-arm64:darwin:arm64:1:sshc mac-x64:darwin:amd64:1:sshc
+DESKTOP_LINUX_BUNDLES = linux-arm64:linux:arm64:0:sshc linux-x64:linux:amd64:0:sshc
+DESKTOP_WINDOWS_BUNDLES = win-arm64:windows:arm64:0:sshc.exe win-x64:windows:amd64:0:sshc.exe
 
 # desktop は、外殻を動かすのに要るものを揃える。開発中はホストの bin/sshc を
 # 使うので、束ごとのバイナリはここでは作らない。
@@ -106,30 +123,62 @@ desktop-run: build desktop
 		INSTALL_SOURCE="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
 	npm start --prefix desktop
 
-# desktop-dist は配布物を作る。**1 台の macOS から macOS と Linux の両方を
-# 作れる**——それが Tauri ではなく Electron を選んだ理由であり、実際に
-# 確かめてある（DMG と AppImage が同じ実行で出る）。
-desktop-dist: desktop
+# desktop package は artifact を実際に動かす OS 上でだけ作る。各 target は
+# electron-builder が選ぶ resource directory に両 architecture の CLI を置く。
+desktop-bundle-mac: desktop
 	npm run build --prefix web
-	@set -eu; for bundle in $(DESKTOP_BUNDLES); do \
+	@set -eu; for bundle in $(DESKTOP_MAC_BUNDLES); do \
 		name="$${bundle%%:*}"; rest="$${bundle#*:}"; \
 		goos="$${rest%%:*}"; rest="$${rest#*:}"; \
-		goarch="$${rest%%:*}"; cgo="$${rest##*:}"; \
-		echo "==> desktop/resources/$$name ($$goos/$$goarch)"; \
-		mkdir -p "desktop/resources/$$name"; \
-		GOOS="$$goos" GOARCH="$$goarch" CGO_ENABLED="$$cgo" \
-			go build -trimpath -ldflags "-X main.version=$${VERSION}" \
-			-o "desktop/resources/$$name/sshc" ./cmd/sshc; \
+		goarch="$${rest%%:*}"; rest="$${rest#*:}"; \
+		cgo="$${rest%%:*}"; executable="$${rest##*:}"; \
+		output="$(CURDIR)/desktop/resources/$$name/$$executable"; \
+		echo "==> desktop/resources/$$name/$$executable ($$goos/$$goarch)"; \
+		$(MAKE) --no-print-directory build-cli GOOS="$$goos" GOARCH="$$goarch" \
+			CGO_ENABLED="$$cgo" OUTPUT="$$output"; \
 	done
-	@# **版はひとつである。** 束の中の sshc と、その束自身が別の版を名乗ると、
-	@# どちらが本当かを言えるものが無くなる。dev のときは package.json の
-	@# 既定のままにする——npm は "dev" を版として受け付けない。
+	@$(MAKE) --no-print-directory desktop-version
+	npm run dist:mac --prefix desktop
+
+desktop-bundle-linux: desktop
+	npm run build --prefix web
+	@set -eu; for bundle in $(DESKTOP_LINUX_BUNDLES); do \
+		name="$${bundle%%:*}"; rest="$${bundle#*:}"; \
+		goos="$${rest%%:*}"; rest="$${rest#*:}"; \
+		goarch="$${rest%%:*}"; rest="$${rest#*:}"; \
+		cgo="$${rest%%:*}"; executable="$${rest##*:}"; \
+		output="$(CURDIR)/desktop/resources/$$name/$$executable"; \
+		echo "==> desktop/resources/$$name/$$executable ($$goos/$$goarch)"; \
+		$(MAKE) --no-print-directory build-cli GOOS="$$goos" GOARCH="$$goarch" \
+			CGO_ENABLED="$$cgo" OUTPUT="$$output"; \
+	done
+	@$(MAKE) --no-print-directory desktop-version
+	npm run dist:linux --prefix desktop
+
+desktop-bundle-windows: desktop
+	npm run build --prefix web
+	@set -eu; for bundle in $(DESKTOP_WINDOWS_BUNDLES); do \
+		name="$${bundle%%:*}"; rest="$${bundle#*:}"; \
+		goos="$${rest%%:*}"; rest="$${rest#*:}"; \
+		goarch="$${rest%%:*}"; rest="$${rest#*:}"; \
+		cgo="$${rest%%:*}"; executable="$${rest##*:}"; \
+		output="$(CURDIR)/desktop/resources/$$name/$$executable"; \
+		echo "==> desktop/resources/$$name/$$executable ($$goos/$$goarch)"; \
+		$(MAKE) --no-print-directory build-cli GOOS="$$goos" GOARCH="$$goarch" \
+			CGO_ENABLED="$$cgo" OUTPUT="$$output"; \
+	done
+	@$(MAKE) --no-print-directory desktop-version
+	npm run dist:win --prefix desktop
+
+# **版はひとつである。** 束の中の sshc と、その束自身が別の版を名乗ると、
+# どちらが本当かを言えるものが無くなる。dev のときは package.json の既定の
+# ままにする——npm は "dev" を版として受け付けない。
+desktop-version:
 	@if [ "$${VERSION}" != "dev" ]; then \
 		npm version --prefix desktop --allow-same-version --no-git-tag-version \
 			"$${VERSION#v}" >/dev/null; \
 		echo "desktop version -> $${VERSION#v}"; \
 	fi
-	npm run dist --prefix desktop
 
 # リリースの成果物。UI のバンドルは 1 度だけ作り、Go だけをターゲットごとに
 # ビルドする。バンドルは埋め込まれるだけで、どの OS 向けかを知らないからだ。
@@ -143,6 +192,8 @@ desktop-dist: desktop
 # darwin/amd64 を arm64 のランナーから作れるのは、macOS の SDK が両方の
 # アーキテクチャを持っているからである。
 RELEASE_TARGETS = darwin/arm64:1 darwin/amd64:1 linux/amd64:0 linux/arm64:0
+RELEASE_CURRENT_ARCHES = amd64 arm64
+RELEASE_DIR ?= dist
 
 release-binaries:
 	npm run build --prefix web
@@ -152,8 +203,32 @@ release-binaries:
 		goos="$${platform%%/*}"; goarch="$${platform##*/}"; \
 		echo "==> $$goos/$$goarch (CGO_ENABLED=$$cgo)"; \
 		GOOS="$$goos" GOARCH="$$goarch" CGO_ENABLED="$$cgo" \
-			go build -trimpath -ldflags "-X main.version=$${VERSION}" \
+			go build $(GO_BUILD_FLAGS) \
 			-o "dist/sshc-$$goos-$$goarch" ./cmd/sshc; \
+	done
+
+# release-cli-current は runner 自身の OS についてだけ standalone artifact を
+# 作る。package job はこの後に同じ OS で smoke し、別 job が publish を集約する。
+release-cli-current:
+	npm run build --prefix web
+	@set -eu; \
+	goos="$$(go env GOOS)"; suffix=""; \
+	case "$$goos" in \
+		darwin) cgo=1 ;; \
+		linux) cgo=0 ;; \
+		windows) suffix=".exe"; cgo=0 ;; \
+		*) echo "unsupported release OS: $$goos" >&2; exit 2 ;; \
+	esac; \
+	for goarch in $(RELEASE_CURRENT_ARCHES); do \
+		output="$(CURDIR)/$(RELEASE_DIR)/sshc-$$goos-$$goarch$$suffix"; \
+		$(MAKE) --no-print-directory build-cli GOOS="$$goos" GOARCH="$$goarch" \
+			CGO_ENABLED="$$cgo" OUTPUT="$$output"; \
+		if [ "$$goos" = windows ]; then \
+			pwsh -NoProfile -File scripts/verify-artifact-name.ps1 \
+				-Artifact "$$output" -OS "$$goos" -Architecture "$$goarch"; \
+		else \
+			./scripts/verify-artifact-name.sh "$$output" "$$goos" "$$goarch"; \
+		fi; \
 	done
 
 # 統合テストのスイートは、コンテナ内の本物の S3 実装と本物の sshd に対して走る。
