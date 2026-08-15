@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+
+	"sshc/internal/platform/nativepath"
 )
 
 var (
@@ -85,9 +87,12 @@ func (w *Workspace) Root() string { return w.root }
 func (w *Workspace) StateDir() string { return filepath.Join(w.root, "sshc") }
 
 // Contains は、candidate がルートであるか、その下にあるかを報告する。
+//
+// 判断は nativepath に任せる。ここで素の文字列前置比較をすると、Windows では
+// 大小文字だけが違う同じディレクトリが層によって内と外に分かれ、UI が編集を
+// 提示したのにストレージが拒む、という食い違いが起きる。
 func (w *Workspace) Contains(candidate string) bool {
-	cleaned := filepath.Clean(candidate)
-	return cleaned == w.root || strings.HasPrefix(cleaned, w.root+string(filepath.Separator))
+	return nativepath.Contains(w.root, candidate)
 }
 
 // Normalise は、与えられたままのホームディレクトリを基準に表現されたパスを、
@@ -112,14 +117,17 @@ func (w *Workspace) Contains(candidate string) bool {
 func (w *Workspace) Normalise(candidate string) string {
 	cleaned := filepath.Clean(candidate)
 	homeRoot := filepath.Join(w.home, ".ssh")
-	if cleaned == homeRoot {
+	if !nativepath.Contains(homeRoot, cleaned) {
+		return cleaned
+	}
+	relative, err := filepath.Rel(homeRoot, cleaned)
+	if err != nil {
+		return cleaned
+	}
+	if relative == "." {
 		return w.root
 	}
-	prefix := homeRoot + string(filepath.Separator)
-	if strings.HasPrefix(cleaned, prefix) {
-		return filepath.Join(w.root, strings.TrimPrefix(cleaned, prefix))
-	}
-	return cleaned
+	return filepath.Join(w.root, relative)
 }
 
 // ResolveForWrite は、candidate がルートより下の絶対パスであり、その親が本物の

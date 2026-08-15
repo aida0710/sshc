@@ -3,7 +3,7 @@ package config
 import (
 	"fmt"
 	"io/fs"
-	"path"
+	"path/filepath"
 	"sort"
 	"testing"
 )
@@ -11,6 +11,9 @@ import (
 type fakeLoader struct {
 	files map[string]string
 	fail  map[string]error
+	// globs は、パターンごとの一致をそのまま与える。filepath.Match は大小文字を
+	// 区別するので、Windows の別綴りが返ってくる場面はこれでしか作れない。
+	globs map[string][]string
 }
 
 func (l fakeLoader) ReadFile(name string) ([]byte, error) {
@@ -25,14 +28,17 @@ func (l fakeLoader) ReadFile(name string) ([]byte, error) {
 }
 
 func (l fakeLoader) Glob(pattern string) ([]string, error) {
+	if matches, ok := l.globs[pattern]; ok {
+		return matches, nil
+	}
 	var matches []string
 	for name := range l.files {
-		if matched, err := path.Match(pattern, name); err == nil && matched {
+		if matched, err := filepath.Match(pattern, name); err == nil && matched {
 			matches = append(matches, name)
 		}
 	}
 	for name := range l.fail {
-		if matched, err := path.Match(pattern, name); err == nil && matched {
+		if matched, err := filepath.Match(pattern, name); err == nil && matched {
 			matches = append(matches, name)
 		}
 	}
