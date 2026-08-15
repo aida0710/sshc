@@ -44,6 +44,25 @@ func TestWatchParentStopsWhenTheParentIsGone(t *testing.T) {
 	}
 }
 
+// **起動した時点で既に孤児だった場合も、この網は張られなければならない。**
+// `( ./bin/sshc --own-engine & )` のように親が起動直後に消える起こし方をすると、
+// os.Getppid() を初めて読む前に init へ引き取られ、original そのものに 1 が
+// 入る。「起動時と変わったか」だけを見ていると、parent() はずっと 1 のままで
+// 一度も original と食い違わず、stop() が永遠に呼ばれない。
+func TestWatchParentStopsWhenAlreadyOrphanedAtStart(t *testing.T) {
+	const original = 1
+	parent := func() int { return 1 }
+
+	stopped := make(chan struct{})
+	go watchParent(context.Background(), parent, original, time.Millisecond, func() { close(stopped) })
+
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the watch never noticed it was already orphaned at start")
+	}
+}
+
 // 見張りは、止めろと言われたら止める。親が居るあいだは何もしない。
 func TestWatchParentLetsGoWhenTheContextEnds(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
