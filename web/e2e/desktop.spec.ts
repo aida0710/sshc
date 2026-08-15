@@ -17,7 +17,7 @@ function processRows(): ProcessRow[] {
 }
 
 function ownedEngines(binary: string): ProcessRow[] {
-  return processRows().filter(({ command }) => command === `${binary} --own-engine`);
+  return processRows().filter(({ command }) => command === `${binary} engine`);
 }
 
 function testEnvironment(home: string): Record<string, string> {
