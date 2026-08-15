@@ -30,6 +30,20 @@ const (
 
 var semverBuildVersion = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
 
+var nativeEnvironmentKeys = []string{
+	nativeVersionEnvironment,
+	nativeGOOSEnvironment,
+	nativeGOARCHEnvironment,
+	nativeCGOEnvironment,
+	nativeOutputEnvironment,
+	nativeMacBundlesEnvironment,
+	nativeLinuxBundlesEnvironment,
+	nativeWindowsBundlesEnvironment,
+	nativeReleaseTargetsEnvironment,
+	nativeReleaseArchesEnvironment,
+	nativeReleaseDirEnvironment,
+}
+
 type nativeCommand struct {
 	name        string
 	args        []string
@@ -98,11 +112,12 @@ type nativeBuildRequest struct {
 // It passes commands as argv and target values through an explicit inherited
 // environment, so paths and versions never need shell interpolation.
 func RunNativeBuild(args []string, stdout, stderr io.Writer) error {
+	environment := os.Environ()
 	return runNativeBuild(args, nativeBuildDeps{
 		hostOS:      runtime.GOOS,
 		hostArch:    runtime.GOARCH,
-		hostCGO:     environmentValue(os.Environ(), "CGO_ENABLED"),
-		environment: os.Environ(),
+		hostCGO:     os.Getenv("CGO_ENABLED"),
+		environment: environment,
 		executor:    osNativeExecutor{stdout: stdout, stderr: stderr},
 		mkdirAll:    os.MkdirAll,
 	}, stdout, stderr)
@@ -115,6 +130,11 @@ func runNativeBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Write
 	if deps.executor == nil || deps.mkdirAll == nil {
 		return errors.New("native build dependencies are incomplete")
 	}
+	environment, err := canonicalizeNativeEnvironment(deps.environment)
+	if err != nil {
+		return err
+	}
+	deps.environment = environment
 
 	switch args[0] {
 	case "build":
@@ -754,11 +774,69 @@ func setEnvironmentValue(environment []string, key, value string) []string {
 func environmentValue(environment []string, key string) string {
 	for _, entry := range environment {
 		name, value, ok := strings.Cut(entry, "=")
-		if ok && strings.EqualFold(name, key) {
+		if ok && name == key {
 			return value
 		}
 	}
 	return ""
+}
+
+// canonicalizeNativeEnvironment makes the exact Make-exported spelling the
+// only spelling commands can observe. An exact canonical value is authoritative
+// over inherited case aliases. Alias-only and duplicate exact entries fail
+// before validation can execute a command or create an output directory.
+func canonicalizeNativeEnvironment(environment []string) ([]string, error) {
+	type nativeEnvironmentEntry struct {
+		canonicalCount int
+		aliasCount     int
+	}
+	entries := make(map[string]nativeEnvironmentEntry, len(nativeEnvironmentKeys))
+	canonicalByFold := make(map[string]string, len(nativeEnvironmentKeys))
+	for _, key := range nativeEnvironmentKeys {
+		canonicalByFold[strings.ToLower(key)] = key
+	}
+
+	for _, entry := range environment {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		canonical, native := canonicalByFold[strings.ToLower(name)]
+		if !native {
+			continue
+		}
+		counts := entries[canonical]
+		if name == canonical {
+			counts.canonicalCount++
+		} else {
+			counts.aliasCount++
+		}
+		entries[canonical] = counts
+	}
+	for _, key := range nativeEnvironmentKeys {
+		counts := entries[key]
+		if counts.canonicalCount > 1 {
+			return nil, fmt.Errorf("duplicate native build environment variable %s", key)
+		}
+		if counts.canonicalCount == 0 && counts.aliasCount != 0 {
+			return nil, fmt.Errorf("non-canonical native build environment variable %s", key)
+		}
+	}
+
+	result := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			result = append(result, entry)
+			continue
+		}
+		canonical, native := canonicalByFold[strings.ToLower(name)]
+		if native && name != canonical {
+			continue
+		}
+		result = append(result, entry)
+	}
+	return result, nil
 }
 
 func supportedOS(value string) bool {
