@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -45,6 +47,168 @@ func newClockedService(t *testing.T, now func() time.Time) (*secret.Service, str
 
 func vaultPath(home string) string {
 	return filepath.Join(home, ".ssh", filepath.FromSlash(secret.WorkspacePath))
+}
+
+type stateFaultFileSystem struct {
+	storage.FileSystem
+	lstatErr  error
+	renameErr error
+}
+
+type blockingStateFileSystem struct {
+	storage.FileSystem
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (f *blockingStateFileSystem) Rename(oldPath, newPath string) error {
+	f.once.Do(func() { close(f.entered) })
+	<-f.release
+	return f.FileSystem.Rename(oldPath, newPath)
+}
+
+func (f *stateFaultFileSystem) Lstat(path string) (fs.FileInfo, error) {
+	if f.lstatErr != nil {
+		return nil, f.lstatErr
+	}
+	return f.FileSystem.Lstat(path)
+}
+
+func (f *stateFaultFileSystem) Rename(oldPath, newPath string) error {
+	if f.renameErr != nil {
+		return f.renameErr
+	}
+	return f.FileSystem.Rename(oldPath, newPath)
+}
+
+func newServiceWithStateFaults(t *testing.T) (*secret.Service, *stateFaultFileSystem) {
+	t.Helper()
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fileSystem := &stateFaultFileSystem{FileSystem: storage.OSFileSystem{}}
+	workspace, err := storage.NewWorkspace(fileSystem, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now), fileSystem
+}
+
+func TestStateReportsExistenceAndUnlockTogether(t *testing.T) {
+	service, _ := newService(t)
+
+	state, err := service.State()
+	if err != nil || state.Exists || state.Unlocked {
+		t.Fatalf("new state = %+v, %v", state, err)
+	}
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	state, err = service.State()
+	if err != nil || !state.Exists || !state.Unlocked {
+		t.Fatalf("initialised state = %+v, %v", state, err)
+	}
+	service.Lock()
+	state, err = service.State()
+	if err != nil || !state.Exists || state.Unlocked {
+		t.Fatalf("locked state = %+v, %v", state, err)
+	}
+}
+
+func TestStateReturnsStorageErrors(t *testing.T) {
+	service, fileSystem := newServiceWithStateFaults(t)
+	want := errors.New("lstat failed without secret details")
+	fileSystem.lstatErr = want
+
+	if _, err := service.State(); !errors.Is(err, want) {
+		t.Fatalf("State error = %v, want storage error", err)
+	}
+}
+
+func TestStateCannotReportUnlockedWhenTheVaultFileIsMissing(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(vaultPath(home)); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := service.State()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Exists || state.Unlocked {
+		t.Fatalf("state after external removal = %+v, want missing and locked", state)
+	}
+	if service.Unlocked() {
+		t.Fatal("missing vault remained unlocked in memory")
+	}
+}
+
+func TestFailedInitialiseCannotLeaveAnUnlockedMissingVault(t *testing.T) {
+	service, fileSystem := newServiceWithStateFaults(t)
+	fileSystem.renameErr = errors.New("commit failed")
+	if err := service.Initialise(passphrase); err == nil {
+		t.Fatal("Initialise succeeded through a failing commit")
+	}
+	fileSystem.renameErr = nil
+
+	state, err := service.State()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Exists || state.Unlocked {
+		t.Fatalf("failed initialise state = %+v, want missing and locked", state)
+	}
+}
+
+func TestStateWaitsForInitialiseToPublishDiskAndMemoryTogether(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fileSystem := &blockingStateFileSystem{
+		FileSystem: storage.OSFileSystem{},
+		entered:    make(chan struct{}),
+		release:    make(chan struct{}),
+	}
+	workspace, err := storage.NewWorkspace(fileSystem, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	initialised := make(chan error, 1)
+	go func() { initialised <- service.Initialise(passphrase) }()
+	<-fileSystem.entered
+
+	stateDone := make(chan struct {
+		state secret.State
+		err   error
+	}, 1)
+	go func() {
+		state, err := service.State()
+		stateDone <- struct {
+			state secret.State
+			err   error
+		}{state: state, err: err}
+	}()
+	select {
+	case got := <-stateDone:
+		t.Fatalf("State observed an in-progress initialise: %+v, %v", got.state, got.err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(fileSystem.release)
+	if err := <-initialised; err != nil {
+		t.Fatal(err)
+	}
+	got := <-stateDone
+	if got.err != nil || !got.state.Exists || !got.state.Unlocked {
+		t.Fatalf("published state = %+v, %v", got.state, got.err)
+	}
 }
 
 func TestNothingIsReadableUntilTheVaultIsUnlocked(t *testing.T) {
@@ -494,6 +658,9 @@ func TestReadingTheStatusDoesNotHoldTheVaultOpen(t *testing.T) {
 
 	for range 4 {
 		clock = clock.Add(secret.IdleTimeout - secret.IdleTimeout/4)
+		if _, err := service.State(); err != nil {
+			t.Fatal(err)
+		}
 		service.Unlocked()
 		service.Aliases()
 		service.Has("bastion")

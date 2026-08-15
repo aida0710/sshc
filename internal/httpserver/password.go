@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"sync"
 
 	"github.com/labstack/echo/v5"
 
@@ -18,6 +19,7 @@ import (
 // PasswordHandlers は vault とヘルパーを提供する。
 type PasswordHandlers struct {
 	Service *secret.Service
+	vault   *vaultOperations
 	// KeyHosts projects saved key subjects through the current SSH configuration.
 	// It returns relationships only; the vault values never cross this boundary.
 	KeyHosts func(relativePaths []string) (map[string][]string, error)
@@ -32,6 +34,84 @@ type PasswordHandlers struct {
 	// これが注入されているのは、スナップショットの行き先が object store に
 	// 属する事柄だからで、nil はこのマシンに更新すべき bucket がないことを意味する。
 	ResealSnapshot func(ctx context.Context, passphrase string) error
+}
+
+var errVaultUnavailable = errors.New("vault service unavailable")
+
+// vaultOperations は browser と CLI が共有する vault operation の順序境界である。
+// local rekey の commit から remote reseal の完了までを一つとして扱うため、
+// 次世代の change や lock が途中へ入らない。
+type vaultOperations struct {
+	mu             sync.Mutex
+	service        *secret.Service
+	resealSnapshot func(context.Context, string) error
+}
+
+func newVaultOperations(
+	service *secret.Service,
+	resealSnapshot func(context.Context, string) error,
+) *vaultOperations {
+	return &vaultOperations{service: service, resealSnapshot: resealSnapshot}
+}
+
+func (v *vaultOperations) State() (secret.State, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.service == nil {
+		return secret.State{}, errVaultUnavailable
+	}
+	return v.service.State()
+}
+
+func (v *vaultOperations) Initialise(passphrase string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.service == nil {
+		return errVaultUnavailable
+	}
+	return v.service.Initialise(passphrase)
+}
+
+func (v *vaultOperations) Unlock(passphrase string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.service == nil {
+		return errVaultUnavailable
+	}
+	return v.service.Unlock(passphrase)
+}
+
+func (v *vaultOperations) Lock() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.service == nil {
+		return errVaultUnavailable
+	}
+	v.service.Lock()
+	return nil
+}
+
+func (v *vaultOperations) Change(
+	ctx context.Context,
+	current string,
+	next string,
+) (masterPasswordChangeResult, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return masterPasswordChangeResult{}, err
+	}
+	if v.service == nil {
+		return masterPasswordChangeResult{}, errVaultUnavailable
+	}
+	state, err := v.service.State()
+	if err != nil {
+		return masterPasswordChangeResult{}, err
+	}
+	if !state.Unlocked {
+		return masterPasswordChangeResult{}, secret.ErrLocked
+	}
+	return changeMasterPassword(ctx, v.service, v.resealSnapshot, current, next)
 }
 
 type masterPasswordChangeResult struct {
@@ -56,6 +136,9 @@ func changeMasterPassword(
 	result := masterPasswordChangeResult{SnapshotResealed: true}
 	if resealSnapshot != nil {
 		if err := resealSnapshot(ctx, next); err != nil {
+			if errors.Is(err, remotesync.ErrNotConfigured) {
+				return masterPasswordChangeResult{SnapshotResealed: false}, nil
+			}
 			reason := snapshotProblemCode(err)
 			result.SnapshotResealed, result.SnapshotProblem = false, &reason
 		}
@@ -69,8 +152,6 @@ func changeMasterPassword(
 // すでに使っている語彙と同じ言葉で名付ける。
 func snapshotProblemCode(err error) string {
 	switch {
-	case errors.Is(err, remotesync.ErrNotConfigured):
-		return "sync_not_configured"
 	case errors.Is(err, remotesync.ErrRemoteMoved):
 		return "sync_remote_moved"
 	case errors.Is(err, remotesync.ErrPushRefused):
@@ -81,6 +162,9 @@ func snapshotProblemCode(err error) string {
 }
 
 func registerPasswordRoutes(engine *echo.Echo, handlers PasswordHandlers) {
+	if handlers.vault == nil {
+		handlers.vault = newVaultOperations(handlers.Service, handlers.ResealSnapshot)
+	}
 	engine.GET("/api/v1/passwords", handlers.Status)
 	engine.POST("/api/v1/passwords/initialise", handlers.Initialise)
 	engine.POST("/api/v1/passwords/unlock", handlers.Unlock)
@@ -99,7 +183,7 @@ func registerPasswordRoutes(engine *echo.Echo, handlers PasswordHandlers) {
 // status はこのファイルの全ルートが返す唯一のレスポンスである。
 // どのホストがパスワードを持つかを運び、パスワードそのものは運ばない。
 func (h PasswordHandlers) status(c *echo.Context) error {
-	exists, err := h.Service.Exists()
+	state, err := h.vault.State()
 	if err != nil {
 		return problem(c, http.StatusInternalServerError, "vault_unreadable")
 	}
@@ -113,8 +197,8 @@ func (h PasswordHandlers) status(c *echo.Context) error {
 		dedicatedKeyPassphrases = []string{}
 	}
 	return c.JSON(http.StatusOK, api.PasswordVaultStatus{
-		Exists:                  exists,
-		Unlocked:                h.Service.Unlocked(),
+		Exists:                  state.Exists,
+		Unlocked:                state.Unlocked,
 		Aliases:                 aliases,
 		DedicatedKeyPassphrases: dedicatedKeyPassphrases,
 		MinPassphraseLength:     &minimum,
@@ -128,7 +212,7 @@ func (h PasswordHandlers) Initialise(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := h.Service.Initialise(request.Passphrase); err != nil {
+	if err := h.vault.Initialise(request.Passphrase); err != nil {
 		return passwordProblem(c, err)
 	}
 	return h.status(c)
@@ -139,7 +223,7 @@ func (h PasswordHandlers) Unlock(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := h.Service.Unlock(request.Passphrase); err != nil {
+	if err := h.vault.Unlock(request.Passphrase); err != nil {
 		return passwordProblem(c, err)
 	}
 	return h.status(c)
@@ -161,8 +245,7 @@ func (h PasswordHandlers) Change(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	changed, err := changeMasterPassword(
-		c.Request().Context(), h.Service, h.ResealSnapshot, request.Current, request.Next)
+	changed, err := h.vault.Change(c.Request().Context(), request.Current, request.Next)
 	if err != nil {
 		return passwordProblem(c, err)
 	}
@@ -172,7 +255,7 @@ func (h PasswordHandlers) Change(c *echo.Context) error {
 		SnapshotProblem:  changed.SnapshotProblem,
 	}
 
-	exists, err := h.Service.Exists()
+	state, err := h.vault.State()
 	if err != nil {
 		return problem(c, http.StatusInternalServerError, "vault_unreadable")
 	}
@@ -186,14 +269,16 @@ func (h PasswordHandlers) Change(c *echo.Context) error {
 		dedicatedKeyPassphrases = []string{}
 	}
 	answer.Vault = api.PasswordVaultStatus{
-		Exists: exists, Unlocked: h.Service.Unlocked(), Aliases: aliases,
+		Exists: state.Exists, Unlocked: state.Unlocked, Aliases: aliases,
 		DedicatedKeyPassphrases: dedicatedKeyPassphrases, MinPassphraseLength: &minimum,
 	}
 	return c.JSON(http.StatusOK, answer)
 }
 
 func (h PasswordHandlers) Lock(c *echo.Context) error {
-	h.Service.Lock()
+	if err := h.vault.Lock(); err != nil {
+		return passwordProblem(c, err)
+	}
 	return h.status(c)
 }
 

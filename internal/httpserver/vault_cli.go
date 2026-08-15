@@ -88,7 +88,11 @@ func (h ConnectHandlers) VaultStatus(c *echo.Context) error {
 	if !h.vaultAuthorised(c) {
 		return c.NoContent(http.StatusUnauthorized)
 	}
-	return c.JSON(http.StatusOK, h.cliStatus())
+	answer, err := h.cliStatus()
+	if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	return c.JSON(http.StatusOK, answer)
 }
 
 func (h ConnectHandlers) VaultCreate(c *echo.Context) error {
@@ -99,10 +103,7 @@ func (h ConnectHandlers) VaultCreate(c *echo.Context) error {
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
 	}
-	if h.Passwords == nil {
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	if err := h.Passwords.Initialise(request.Passphrase); err != nil {
+	if err := h.vault.Initialise(request.Passphrase); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -116,10 +117,7 @@ func (h ConnectHandlers) VaultUnlock(c *echo.Context) error {
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
 	}
-	if h.Passwords == nil {
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	if err := h.Passwords.Unlock(request.Passphrase); err != nil {
+	if err := h.vault.Unlock(request.Passphrase); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -133,11 +131,10 @@ func (h ConnectHandlers) VaultLock(c *echo.Context) error {
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
 	}
-	if h.Passwords == nil {
-		return c.NoContent(http.StatusInternalServerError)
-	}
 	// session と vault は別の寿命を持つ。ここで触るのは導出済みの vault key だけである。
-	h.Passwords.Lock()
+	if err := h.vault.Lock(); err != nil {
+		return vaultCLIProblem(c, err)
+	}
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -149,14 +146,7 @@ func (h ConnectHandlers) VaultChange(c *echo.Context) error {
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
 	}
-	if h.Passwords == nil {
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	if !h.Passwords.Unlocked() {
-		return c.NoContent(http.StatusConflict)
-	}
-	result, err := changeMasterPassword(
-		c.Request().Context(), h.Passwords, h.ResealSnapshot, request.Current, request.Next)
+	result, err := h.vault.Change(c.Request().Context(), request.Current, request.Next)
 	if err != nil {
 		return vaultCLIProblem(c, err)
 	}
