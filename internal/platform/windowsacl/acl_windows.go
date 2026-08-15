@@ -301,20 +301,26 @@ func IsRestrictedToCurrentUser(path string) (bool, error) {
 	return isHandleRestricted(handle, directory, userSID)
 }
 
-// OpenAuthenticatedFile returns one regular, non-reparse file handle only
-// after owner and exact protected DACL authentication succeeds on that handle.
-// DELETE is requested up front so a caller can remove this exact object later.
+// OpenAuthenticatedFile returns one regular file handle only after every path
+// component is opened without following reparses and owner/exact protected
+// DACL authentication succeeds on that same final handle. DELETE is requested
+// up front so a caller can remove this exact object later.
 func OpenAuthenticatedFile(path string) (*os.File, error) {
-	if err := ValidatePrivatePath(path); err != nil {
-		return nil, err
+	return openAuthenticatedFile(path, true)
+}
+
+// OpenAuthenticatedFileForRead is the read-only counterpart. It avoids
+// requiring DELETE where a private-state consumer only needs bounded bytes.
+func OpenAuthenticatedFileForRead(path string) (*os.File, error) {
+	return openAuthenticatedFile(path, false)
+}
+
+func openAuthenticatedFile(path string, removable bool) (*os.File, error) {
+	access := uint32(windows.FILE_READ_DATA | windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL)
+	if removable {
+		access |= windows.DELETE
 	}
-	access := uint32(
-		windows.GENERIC_READ |
-			windows.READ_CONTROL |
-			windows.DELETE |
-			windows.FILE_READ_ATTRIBUTES,
-	)
-	file, err := openObjectWithAccess(path, access, true, false)
+	file, err := openFileNoReparse(path, access)
 	if err != nil {
 		return nil, err
 	}

@@ -60,7 +60,10 @@ func (OSFileSystem) ReadFile(path string) ([]byte, error) {
 		return nil, err
 	}
 	defer file.Close()
+	return readBoundedRegularFile(file)
+}
 
+func readBoundedRegularFile(file *os.File) ([]byte, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err

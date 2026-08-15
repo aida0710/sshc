@@ -27,6 +27,26 @@ type Workspace struct {
 	root       string
 }
 
+// privateFileReader is optional so FileSystem fakes and callers do not acquire
+// a Windows-only method. The native Windows filesystem implements it; Unix and
+// user-provided fakes retain their existing ReadFile policy unless they opt in.
+type privateFileReader interface {
+	ReadPrivateFile(path string) ([]byte, error)
+}
+
+type workspaceFileSystem struct {
+	FileSystem
+	stateDirectory string
+	privateReader  privateFileReader
+}
+
+func (fileSystem workspaceFileSystem) ReadFile(path string) ([]byte, error) {
+	if privateStateContains(fileSystem.stateDirectory, path) {
+		return fileSystem.privateReader.ReadPrivateFile(path)
+	}
+	return fileSystem.FileSystem.ReadFile(path)
+}
+
 // NewWorkspace は home/.ssh を解決する。ディレクトリがないことはエラーではない。
 // 最初の書き込み時に作られる。
 func NewWorkspace(fileSystem FileSystem, home string) (*Workspace, error) {
@@ -44,7 +64,15 @@ func NewWorkspace(fileSystem FileSystem, home string) (*Workspace, error) {
 	default:
 		return nil, err
 	}
-	return &Workspace{fileSystem: fileSystem, home: cleanedHome, root: root}, nil
+	workspace := &Workspace{fileSystem: fileSystem, home: cleanedHome, root: root}
+	if privateReader, ok := fileSystem.(privateFileReader); ok {
+		workspace.fileSystem = workspaceFileSystem{
+			FileSystem:     fileSystem,
+			stateDirectory: filepath.Join(root, "sshc"),
+			privateReader:  privateReader,
+		}
+	}
+	return workspace, nil
 }
 
 func (w *Workspace) FileSystem() FileSystem { return w.fileSystem }

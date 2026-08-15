@@ -59,6 +59,24 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	return file, nil
 }
 
+// ReadPrivateFile authenticates the same final handle that supplies private
+// state bytes. User-managed SSH files continue through ReadFile instead.
+func (OSFileSystem) ReadPrivateFile(path string) ([]byte, error) {
+	file, err := windowsacl.OpenAuthenticatedFileForRead(path)
+	if err != nil {
+		return nil, mapPrivateOpenError(err)
+	}
+	defer file.Close()
+	return readBoundedRegularFile(file)
+}
+
+func mapPrivateOpenError(err error) error {
+	if errors.Is(err, windowsacl.ErrReparsePoint) {
+		return ErrSymlinkPath
+	}
+	return err
+}
+
 // openNoReparseDirectory は渡された directory 自体を handle 相対でたどる。
 // OBJ_DONT_REPARSE を各 component の name resolution に渡すため、検査後の置換で
 // 別 tree をたどれない。呼び出し側が file path を渡す関数ではない。

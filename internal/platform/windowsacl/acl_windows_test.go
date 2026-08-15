@@ -132,6 +132,41 @@ func TestPrivateObjectsAreRestrictedWhenCreationReturns(t *testing.T) {
 	}
 }
 
+func TestOpenAuthenticatedFileRejectsAParentJunction(t *testing.T) {
+	root := t.TempDir()
+	targetDirectory := filepath.Join(root, "target")
+	if err := EnsureDirectory(targetDirectory); err != nil {
+		t.Fatal(err)
+	}
+	file, err := CreateTemp(targetDirectory, ".document-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetPath := filepath.Join(targetDirectory, "document")
+	if _, err := file.Write([]byte("authenticated")); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(file.Name(), targetPath); err != nil {
+		t.Fatal(err)
+	}
+
+	junction := filepath.Join(root, "junction")
+	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, targetDirectory).CombinedOutput(); err != nil {
+		t.Fatalf("create privilege-free junction fixture: %v: %s", err, output)
+	}
+	opened, err := OpenAuthenticatedFile(filepath.Join(junction, "document"))
+	if opened != nil {
+		_ = opened.Close()
+	}
+	if !errors.Is(err, ErrReparsePoint) {
+		t.Fatalf("OpenAuthenticatedFile through parent junction = %v, want ErrReparsePoint", err)
+	}
+}
+
 func TestCreateTempCleansAnEmptyCandidateWhenPrivateCreationFails(t *testing.T) {
 	directory := t.TempDir()
 	want := errors.New("post-create validation failed")

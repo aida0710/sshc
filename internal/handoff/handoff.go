@@ -26,6 +26,12 @@ const mutationLockName = ".cli.mutation.lock"
 // secretLength は、秘密の元になるランダムバイト数。
 const secretLength = 32
 
+// handoffDocumentMaxSize is intentionally separate from the general storage
+// limit. A handoff contains only one loopback endpoint and one short bearer
+// secret, so accepting megabytes would only create a same-user allocation
+// hazard. 4 KiB leaves ample room for future schema fields.
+const handoffDocumentMaxSize = 4 << 10
+
 // Owner は、engine の生存期間を引き受ける外殻を表す。
 type Owner string
 
@@ -44,6 +50,8 @@ var (
 	ErrSchemaVersion = errors.New("unsupported handoff schema version")
 	// ErrProtocolVersion は、CLI と実行中 app の通信規約が一致しないことを表す。
 	ErrProtocolVersion = errors.New("unsupported handoff protocol version")
+	// ErrDocumentTooLarge は、ハンドオフ専用の小さい入力上限を超えた文書を表す。
+	ErrDocumentTooLarge = errors.New("handoff document is too large")
 )
 
 // Handoff は、この実行がどこで待ち受けているか、誰が所有しているか、そして
@@ -63,11 +71,16 @@ const HeaderName = "X-SSHC-CLI"
 
 // Mint は、一回の実行のための秘密を返す。
 func Mint(random io.Reader) (string, error) {
+	return mint(random, base64.RawURLEncoding.EncodeToString)
+}
+
+func mint(random io.Reader, encode func([]byte) string) (string, error) {
 	raw := make([]byte, secretLength)
+	defer zeroBytes(raw)
 	if _, err := io.ReadFull(random, raw); err != nil {
 		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(raw), nil
+	return encode(raw), nil
 }
 
 // Write は検証済みの文書を同じディレクトリ内で原子的に置き換える。
@@ -80,6 +93,7 @@ func Write(directory string, document Handoff) error {
 }
 
 type writeOperations struct {
+	marshal         func(any) ([]byte, error)
 	ensureDirectory func(string) error
 	createTemp      func(string, string) (*os.File, error)
 	replace         func(string, string) error
@@ -88,6 +102,7 @@ type writeOperations struct {
 
 type handoffFileOperations struct {
 	open   func(string) (*os.File, error)
+	read   func(io.Reader) ([]byte, error)
 	remove func(*os.File, string) error
 }
 
@@ -97,9 +112,17 @@ func write(directory string, document Handoff, operations writeOperations) error
 	if err := validate(document); err != nil {
 		return err
 	}
-	body, err := json.Marshal(document)
+	marshal := operations.marshal
+	if marshal == nil {
+		marshal = json.Marshal
+	}
+	body, err := marshal(document)
+	defer zeroBytes(body)
 	if err != nil {
 		return err
+	}
+	if len(body) > handoffDocumentMaxSize {
+		return ErrDocumentTooLarge
 	}
 	if err := operations.ensureDirectory(directory); err != nil {
 		return err
@@ -161,11 +184,22 @@ func readValidatedWith(directory string, open func(string) (*os.File, error)) (H
 }
 
 func readValidatedHandle(path string, open func(string) (*os.File, error)) (Handoff, *os.File, error) {
-	file, err := open(path)
+	operations := defaultHandoffFileOperations()
+	operations.open = open
+	return readValidatedHandleWith(path, operations)
+}
+
+func readValidatedHandleWith(path string, operations handoffFileOperations) (Handoff, *os.File, error) {
+	file, err := operations.open(path)
 	if err != nil {
 		return Handoff{}, nil, err
 	}
-	body, err := io.ReadAll(file)
+	read := operations.read
+	if read == nil {
+		read = readHandoffBody
+	}
+	body, err := read(file)
+	defer zeroBytes(body)
 	if err != nil {
 		_ = file.Close()
 		return Handoff{}, nil, err
@@ -173,13 +207,30 @@ func readValidatedHandle(path string, open func(string) (*os.File, error)) (Hand
 	var document Handoff
 	if err := json.Unmarshal(body, &document); err != nil {
 		_ = file.Close()
-		return Handoff{}, nil, fmt.Errorf("decode handoff document: %w", err)
+		return Handoff{}, nil, fmt.Errorf("%w: cannot decode document", ErrInvalid)
 	}
 	if err := validate(document); err != nil {
 		_ = file.Close()
 		return Handoff{}, nil, err
 	}
 	return document, file, nil
+}
+
+func readHandoffBody(reader io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, handoffDocumentMaxSize+1))
+	if err != nil {
+		return body, err
+	}
+	if len(body) > handoffDocumentMaxSize {
+		return body, ErrDocumentTooLarge
+	}
+	return body, nil
+}
+
+func zeroBytes(contents []byte) {
+	for index := range contents {
+		contents[index] = 0
+	}
 }
 
 // Remove は、そこに残っているのがこの実行の秘密を持つ文書だけを取り除く。
@@ -201,7 +252,7 @@ func removeWith(directory, secret string, operations handoffFileOperations) erro
 	defer release()
 
 	path := filepath.Join(directory, FileName)
-	found, file, err := readValidatedHandle(path, operations.open)
+	found, file, err := readValidatedHandleWith(path, operations)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -226,7 +277,7 @@ func validate(document Handoff) error {
 		return fmt.Errorf("%w: got %d, want %d", ErrProtocolVersion, document.ProtocolVersion, ProtocolVersion)
 	}
 	if document.Owner != OwnerDesktop && document.Owner != OwnerHeadless {
-		return fmt.Errorf("%w: unknown owner %q", ErrInvalid, document.Owner)
+		return fmt.Errorf("%w: unknown owner", ErrInvalid)
 	}
 	if document.Secret == "" {
 		return fmt.Errorf("%w: empty secret", ErrInvalid)
@@ -246,7 +297,7 @@ func validate(document Handoff) error {
 func validateLoopbackURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("%w: parse URL: %v", ErrInvalid, err)
+		return fmt.Errorf("%w: cannot parse URL", ErrInvalid)
 	}
 	if parsed.Scheme != "http" || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return fmt.Errorf("%w: URL must be a bare HTTP loopback URL", ErrInvalid)

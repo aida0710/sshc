@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"errors"
 	"io/fs"
 	"os"
@@ -8,6 +9,49 @@ import (
 	"runtime"
 	"testing"
 )
+
+func TestWorkspaceRoutesOnlyPrivateStateReadsThroughOptionalAuthenticatedReader(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fileSystem := &privateReadTrackingFileSystem{FileSystem: OSFileSystem{}}
+	workspace, err := NewWorkspace(fileSystem, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	statePath := filepath.Join(workspace.StateDir(), "vault")
+	managedSSHPath := filepath.Join(workspace.Root(), "config")
+	statePrefixSibling := workspace.StateDir() + "-outside"
+	for _, path := range []string{statePath, managedSSHPath, statePrefixSibling} {
+		if _, err := workspace.FileSystem().ReadFile(path); err != nil {
+			t.Fatalf("ReadFile(%q) = %v", path, err)
+		}
+	}
+	if got, want := fileSystem.privateReads, []string{statePath}; !samePaths(got, want) {
+		t.Fatalf("private reads = %#v, want %#v", got, want)
+	}
+	if got, want := fileSystem.regularReads, []string{managedSSHPath, statePrefixSibling}; !samePaths(got, want) {
+		t.Fatalf("regular reads = %#v, want %#v", got, want)
+	}
+}
+
+type privateReadTrackingFileSystem struct {
+	FileSystem
+	privateReads []string
+	regularReads []string
+}
+
+func (fileSystem *privateReadTrackingFileSystem) ReadFile(path string) ([]byte, error) {
+	fileSystem.regularReads = append(fileSystem.regularReads, path)
+	return bytes.Clone([]byte("regular")), nil
+}
+
+func (fileSystem *privateReadTrackingFileSystem) ReadPrivateFile(path string) ([]byte, error) {
+	fileSystem.privateReads = append(fileSystem.privateReads, path)
+	return bytes.Clone([]byte("private")), nil
+}
 
 // newTestWorkspace は隔離されたホームディレクトリを組み立てる。macOS の一時
 // ディレクトリ自体がシンボリックリンク経由で到達されるので、テストは自分が
