@@ -36,6 +36,11 @@ type PendingEntry struct {
 
 // Pending は、起動時に見つかった中断済みトランザクション。部分的な状態はそのまま
 // 報告される。健全な結果として提示されることは決してない。
+//
+// CanComplete と CanRollback が両方 false になるのは、巻き戻せない変更を含む
+// ときと、対象が記録のどちらの状態とも一致せず何が起きたか判別できないときで
+// ある。後者は、中断されたトランザクションが触れるはずだったファイルを、外から
+// 書き換えたときに起きる。
 type Pending struct {
 	ID          string
 	Operation   string
@@ -63,9 +68,18 @@ func (m *Manager) Pending() ([]Pending, error) {
 	}
 	pending := make([]Pending, 0, len(records))
 	for _, record := range records {
-		if changed, reconcileErr := m.reconcileRecord(&record); reconcileErr != nil {
+		changed, reconcileErr := m.reconcileRecord(&record)
+		// 判別できないのは、その記録ひとつである。一覧そのものを失敗させると、
+		// 無関係な記録も、履歴も、そしてこの記録を片付ける手段までもが同時に
+		// 見えなくなる — 呼び出し側はこの一覧で設定画面全体を組み立てている。
+		// 判別できない記録は、どちらの操作も提示しないまま並べる。Complete と
+		// Rollback は、その記録に対しては引き続き同じ理由で拒否する。
+		unresolved := errors.Is(reconcileErr, ErrRecoveryStateUnknown)
+		switch {
+		case unresolved:
+		case reconcileErr != nil:
 			return nil, reconcileErr
-		} else if changed {
+		case changed:
 			journalPath := filepath.Join(m.journalDirectory(), record.ID+".json")
 			if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
 				return nil, err
@@ -80,8 +94,8 @@ func (m *Manager) Pending() ([]Pending, error) {
 			Status:      record.Status,
 			StartedAt:   record.StartedAt,
 			Committed:   record.Committed,
-			CanComplete: record.Status == statusStaged && !record.Atomic,
-			CanRollback: true,
+			CanComplete: !unresolved && record.Status == statusStaged && !record.Atomic,
+			CanRollback: !unresolved,
 		}
 		for index, entry := range record.Entries {
 			pendingEntry := PendingEntry{
@@ -227,8 +241,11 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 			if readErr != nil {
 				return readErr
 			}
-			if err := m.writeFile(entry.Path, contents, fs.FileMode(entry.Mode)); err != nil {
-				return err
+			writeErr := m.writeFile(entry.Path, contents, fs.FileMode(entry.Mode))
+			// 復元したのは秘密鍵かもしれない。書き終えた控えは残さない。
+			zeroBytes(contents)
+			if writeErr != nil {
+				return writeErr
 			}
 			continue
 		}
@@ -259,7 +276,9 @@ func (m *Manager) stagedMatches(entry journalEntry) bool {
 	if err != nil {
 		return false
 	}
-	return Digest(contents) == entry.Digest
+	digest := Digest(contents)
+	zeroBytes(contents)
+	return digest == entry.Digest
 }
 
 func (m *Manager) loadPending(identifier string) (*journalRecord, string, error) {
@@ -319,99 +338,152 @@ func (m *Manager) reconcileRecord(record *journalRecord) (bool, error) {
 	if !record.Atomic && record.Status != statusStaged {
 		return false, nil
 	}
-	applied := make([]bool, len(record.Entries))
+	// 証拠を持つエントリだけが、本当の境界を両側から挟み込む。commitStaged は
+	// 先頭から順に適用するので、適用済みの証拠は境界がその先にあることを言い、
+	// 未適用の証拠は境界がその手前にあることを言う。
+	lowest := 0
+	highest := len(record.Entries)
 	for index, entry := range record.Entries {
-		state, err := m.entryApplied(entry)
+		evidence, err := m.entryEvidence(entry)
 		if err != nil {
 			return false, err
 		}
-		applied[index] = state
+		switch evidence {
+		case evidenceApplied:
+			if index+1 > lowest {
+				lowest = index + 1
+			}
+		case evidenceUnapplied:
+			if index < highest {
+				highest = index
+			}
+		}
 	}
+	if lowest > highest {
+		// 適用済みの証拠が未適用の証拠より後ろにある。順に進む書き手も、逆順に
+		// 戻す巻き戻しも、この形は作らない。
+		return false, ErrRecoveryStateUnknown
+	}
+	// 証拠を持たないエントリは境界の内側に数える。対象の姿はどちらに数えても
+	// 変わらないが、外側に置くと、実際には適用済みで一時ファイルを使い切った
+	// 書き込みが「未コミットなのにステージが無い」形になり、完了させられなくなる。
+	committed := highest
 
-	committed := 0
-	gap := false
-	for index, isApplied := range applied {
-		if !isApplied {
-			gap = true
-			continue
-		}
-		if gap {
-			// commit and rollback both move through the list in opposite order,
-			// so an applied entry after a gap cannot be attributed safely.
-			return false, ErrRecoveryStateUnknown
-		}
-		committed = index + 1
-	}
 	changed := record.Committed != committed
 	record.Committed = committed
 	for index := 0; index < committed; index++ {
-		if record.Entries[index].action() == actionWrite && record.Entries[index].Temp != "" {
-			record.Entries[index].Temp = ""
-			changed = true
+		entry := &record.Entries[index]
+		if entry.action() != actionWrite || entry.Temp == "" {
+			continue
 		}
+		// 適用済みと数えたエントリの一時ファイルは、rename が使い切っているはず
+		// である。証拠を持たない書き込みを内側に数えたときだけ実体が残るので、
+		// 記録から名前を落とす前に消す。名前だけ落とせば、もう誰も片付けない
+		// 断片が ~/.ssh に残る。
+		if err := m.workspace.FileSystem().Remove(entry.Temp); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return false, err
+		}
+		entry.Temp = ""
+		changed = true
 	}
 	return changed, nil
 }
 
+// entryEvidence は、ひとつのエントリについて対象から読み取れる証拠。
+type entryEvidence uint8
+
+const (
+	// evidenceUnapplied と evidenceApplied は、対象が記録された変更前・変更後の
+	// どちらであるかを実際に見分けられた場合である。
+	evidenceUnapplied entryEvidence = iota
+	evidenceApplied
+	// evidenceNone は、変更前と変更後が同じ姿をしていて、対象が何も語らない場合。
+	// 内容の変わらない書き込みと、既にあったディレクトリの作成がこれにあたる。
+	// **ここを「適用済み」と読んではならない。** 直前が未適用のとき、ありもしない
+	// 矛盾を作り出し、その記録は Pending も Complete も Rollback も永久に
+	// 受け付けなくなる。
+	evidenceNone
+)
+
 // entryApplied reports whether one entry's target mutation has already happened.
 // A state that is neither the recorded before nor the recorded after is refused
 // rather than guessed, because both recovery directions act on the answer.
-func (m *Manager) entryApplied(entry journalEntry) (bool, error) {
+func (m *Manager) entryEvidence(entry journalEntry) (entryEvidence, error) {
 	switch entry.action() {
 	case actionMakeDir:
-		return m.directoryPresent(entry.Path)
+		if entry.HadPrevious {
+			// もとからあったディレクトリは、作る前も作った後も同じように在る。
+			return evidenceNone, nil
+		}
+		present, err := m.directoryPresent(entry.Path)
+		if err != nil {
+			return evidenceNone, err
+		}
+		return appliedWhen(present), nil
 	case actionRemoveDir:
 		present, err := m.directoryPresent(entry.Path)
 		if err != nil {
-			return false, err
+			return evidenceNone, err
 		}
-		return !present, nil
+		return appliedWhen(!present), nil
 	case actionWrite:
+		if entry.HadPrevious && entry.Digest == entry.PreviousDigest {
+			// 書いても中身が変わらない置き換え。application 層は metadata を
+			// この形で毎回付けるので、これは例外ではなく日常の記録である。
+			return evidenceNone, nil
+		}
 		digest, exists, err := m.targetDigest(entry.Path)
 		if err != nil {
-			return false, err
+			return evidenceNone, err
 		}
 		switch {
 		case !exists && !entry.HadPrevious:
-			return false, nil
+			return evidenceUnapplied, nil
 		case exists && digest == entry.Digest:
-			return true, nil
+			return evidenceApplied, nil
 		case exists && entry.HadPrevious && digest == entry.PreviousDigest:
-			return false, nil
+			return evidenceUnapplied, nil
 		}
-		return false, ErrRecoveryStateUnknown
+		return evidenceNone, ErrRecoveryStateUnknown
 	case actionMove:
 		// 移動はバイト列をひとつしか持たない。したがって、どちらの側にそれがあるかが
 		// 適用済みかどうかそのものである。
 		source, sourceExists, err := m.targetDigest(entry.Path)
 		if err != nil {
-			return false, err
+			return evidenceNone, err
 		}
 		target, targetExists, err := m.targetDigest(entry.Target)
 		if err != nil {
-			return false, err
+			return evidenceNone, err
 		}
 		switch {
 		case !sourceExists && targetExists && target == entry.Digest:
-			return true, nil
+			return evidenceApplied, nil
 		case sourceExists && !targetExists && source == entry.Digest:
-			return false, nil
+			return evidenceUnapplied, nil
 		}
-		return false, ErrRecoveryStateUnknown
+		return evidenceNone, ErrRecoveryStateUnknown
 	case actionRemove:
 		digest, exists, err := m.targetDigest(entry.Path)
 		if err != nil {
-			return false, err
+			return evidenceNone, err
 		}
 		switch {
 		case !exists:
-			return true, nil
+			return evidenceApplied, nil
 		case digest == entry.Digest:
-			return false, nil
+			return evidenceUnapplied, nil
 		}
-		return false, ErrRecoveryStateUnknown
+		return evidenceNone, ErrRecoveryStateUnknown
 	}
-	return false, invalidJournal("entry action cannot be recovered")
+	return evidenceNone, invalidJournal("entry action cannot be recovered")
+}
+
+func appliedWhen(applied bool) entryEvidence {
+	if applied {
+		return evidenceApplied
+	}
+	return evidenceUnapplied
 }
 
 func (m *Manager) directoryPresent(path string) (bool, error) {
