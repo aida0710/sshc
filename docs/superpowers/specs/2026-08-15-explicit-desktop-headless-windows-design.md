@@ -312,6 +312,13 @@ owner-specific path:
    wait on an invisible UI.
 6. No engine and no graphical desktop: fail and instruct `sshc headless`.
 
+A missing vault is not treated as an unlocked vault.  With a desktop owner,
+the CLI focuses the application, explains that the vault must be created, and
+waits until creation leaves that same engine unlocked; creation may also be
+performed from another terminal with `sshc vault create`.  With a headless
+owner, the CLI fails promptly and instructs `sshc vault create`.  It never
+uses the absence of a vault as permission for a secretless sshc connection.
+
 The desktop wait has no arbitrary time limit.  It ends on unlock, Ctrl-C, owner
 change, protocol change, or engine exit.  Unlock can occur in the Electron UI
 or from another terminal with `sshc vault unlock`; both alter the same engine.
