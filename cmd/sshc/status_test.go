@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -27,9 +30,7 @@ func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
 	defer server.Close()
 
 	stateDir := t.TempDir()
-	if _, err := handoff.Write(stateDir, server.URL, "the secret"); err != nil {
-		t.Fatal(err)
-	}
+	writeTestHandoff(t, stateDir, server.URL)
 
 	answer, err := engineStatus(context.Background(), stateDir, &http.Client{Timeout: 5 * time.Second})
 	if err != nil {
@@ -61,9 +62,7 @@ func TestLockedOnlyWhenThereIsAVaultToOpen(t *testing.T) {
 			defer server.Close()
 
 			stateDir := t.TempDir()
-			if _, err := handoff.Write(stateDir, server.URL, "the secret"); err != nil {
-				t.Fatal(err)
-			}
+			writeTestHandoff(t, stateDir, server.URL)
 
 			got := locked(context.Background(), stateDir, &http.Client{Timeout: 5 * time.Second})
 			if got != test.want {
@@ -95,15 +94,55 @@ func TestUnlockReadsSuccessAndFailure(t *testing.T) {
 			defer server.Close()
 
 			stateDir := t.TempDir()
-			if _, err := handoff.Write(stateDir, server.URL, "the secret"); err != nil {
-				t.Fatal(err)
-			}
+			writeTestHandoff(t, stateDir, server.URL)
 
 			got := unlock(context.Background(), stateDir, &http.Client{Timeout: 5 * time.Second}, "typed")
 			if got != test.want {
 				t.Fatalf("unlock = %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+// 版の異なる CLI が古い規約で API を叩くと、拒否の原因が見えず利用者だけが
+// 取り残される。読み口を一つにすることで、すべての CLI command が同じ復旧策を出す。
+func TestReadHandoffExplainsHowToRecoverFromAProtocolMismatch(t *testing.T) {
+	stateDir := t.TempDir()
+	document := testHandoff("http://127.0.0.1:52865")
+	document.ProtocolVersion++
+	body, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, handoff.FileName), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = readHandoff(stateDir)
+	if !errors.Is(err, handoff.ErrProtocolVersion) {
+		t.Fatalf("readHandoff = %v, want protocol-version error", err)
+	}
+	if !strings.Contains(err.Error(), "same version") || !strings.Contains(err.Error(), "restart the app") {
+		t.Errorf("readHandoff advice = %q", err)
+	}
+}
+
+func writeTestHandoff(t *testing.T, directory, target string) {
+	t.Helper()
+	if err := handoff.Write(directory, testHandoff(target)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testHandoff(target string) handoff.Handoff {
+	return handoff.Handoff{
+		SchemaVersion:   handoff.SchemaVersion,
+		URL:             target,
+		Secret:          "the secret",
+		Owner:           handoff.OwnerHeadless,
+		PID:             4242,
+		Version:         "test",
+		ProtocolVersion: handoff.ProtocolVersion,
 	}
 }
 

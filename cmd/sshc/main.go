@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"sshc/internal/app"
+	"sshc/internal/handoff"
 	"sshc/internal/selfupdate"
 	"sshc/internal/ui"
 )
@@ -139,6 +140,12 @@ func runEngine(home string, client *http.Client, electronOwns bool) int {
 	defer release()
 
 	parts := newPlatformParts()
+	owner := handoff.OwnerHeadless
+	if electronOwns {
+		// Electron が子を終了させる desktop と、端末・supervisor が寿命を持つ
+		// headless を文書でも分ける。bool をここから先へ漏らさないためである。
+		owner = handoff.OwnerDesktop
+	}
 
 	announce := func(entrance string) error {
 		_, err := fmt.Fprintln(os.Stdout, entrance)
@@ -159,6 +166,8 @@ func runEngine(home string, client *http.Client, electronOwns bool) int {
 		UI:        assets,
 		Logger:    logger,
 		Home:      home,
+		Owner:     owner,
+		PID:       os.Getpid(),
 		Toolchain: parts.Toolchain,
 		KeyAgent:  parts.KeyAgent,
 		Lookup:    os.LookupEnv,

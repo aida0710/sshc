@@ -16,7 +16,7 @@ func TestWaitForHandoffWaitsForTheWinnerToWrite(t *testing.T) {
 	stateDir := t.TempDir()
 	go func() {
 		time.Sleep(150 * time.Millisecond)
-		_, _ = handoff.Write(stateDir, "http://127.0.0.1:1", "the secret")
+		_ = handoff.Write(stateDir, testHandoff("http://127.0.0.1:1"))
 	}()
 
 	waitForHandoff(context.Background(), stateDir)

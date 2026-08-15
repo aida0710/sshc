@@ -51,8 +51,12 @@ const OpenSubcommand = "open"
 func runOpen(
 	ctx context.Context, stateDir string, client *http.Client, stdout, stderr io.Writer,
 ) int {
-	found, err := handoff.Read(stateDir)
+	found, err := readHandoff(stateDir)
 	if err != nil {
+		if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {
+			fmt.Fprintf(stderr, "sshc: %v\n", err)
+			return 1
+		}
 		fmt.Fprintln(stderr, "sshc: not running")
 		return 1
 	}
@@ -94,7 +98,7 @@ func runOpen(
 // 待たないためである。
 func waitForHandoff(ctx context.Context, stateDir string) {
 	for attempt := 0; attempt < 40; attempt++ {
-		if _, err := handoff.Read(stateDir); err == nil {
+		if _, err := readHandoff(stateDir); err == nil {
 			return
 		}
 		select {
@@ -207,8 +211,11 @@ func connectAdvice(err error) error {
 
 // askApplication はハンドオフを読み、接続一回分を要求する。
 func askApplication(ctx context.Context, alias, stateDir string, client *http.Client) (connectAnswer, error) {
-	found, err := handoff.Read(stateDir)
+	found, err := readHandoff(stateDir)
 	if err != nil {
+		if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {
+			return connectAnswer{}, err
+		}
 		return connectAnswer{}, fmt.Errorf("sshc is not running")
 	}
 	body, err := json.Marshal(map[string]string{"alias": alias})

@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"sshc/internal/app"
+	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/keys"
 	"sshc/internal/platform"
@@ -252,6 +253,8 @@ func newFixture(t testing.TB) *fixture {
 
 	server, bootstrap, err := app.Build(app.Dependencies{
 		Home:            home,
+		Owner:           handoff.OwnerHeadless,
+		PID:             4242,
 		Random:          rand.Reader,
 		Listen:          net.Listen,
 		UI:              fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>fixture</title><div id=\"root\"></div>")}},

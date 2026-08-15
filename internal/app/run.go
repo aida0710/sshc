@@ -54,6 +54,11 @@ type Dependencies struct {
 	// Home はユーザーのホームディレクトリ。オペレーティングシステムから読んでよいのは
 	// cmd/sshc だけで、テストはいずれも一時ディレクトリを注入する。
 	Home string
+	// Owner と PID は handoff を発行した engine を特定する。ここで OS を読むと、
+	// テストや将来の埋め込み実行が意図しないプロセスを名乗るため、呼び出し元が
+	// 正しい実行主体を明示する。
+	Owner handoff.Owner
+	PID   int
 	// Toolchain と KeyAgent は、鍵 vault とオペレーティングシステムとの境界。
 	//
 	// **このアプリケーションは OpenSSH のプログラムを一つも実行しない。**
@@ -130,15 +135,22 @@ func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, co
 // ミドルウェア・同じハンドラ構築に対して走る。ずれていきかねない手作りの部分
 // 集合に対してではない。
 func Build(dependencies Dependencies, version string) (*httpserver.Server, string, error) {
+	server, bootstrap, _, err := build(dependencies, version)
+	return server, bootstrap, err
+}
+
+// build は Run が後片付けに使う秘密も返す。ファイルを読み直すと、その間に別の
+// 実行が公開した秘密を自分のものと誤認して消せるためである。
+func build(dependencies Dependencies, version string) (*httpserver.Server, string, handoff.Handoff, error) {
 	listener, err := dependencies.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
-		return nil, "", fmt.Errorf("listen: %w", err)
+		return nil, "", handoff.Handoff{}, fmt.Errorf("listen: %w", err)
 	}
 
 	sessions, bootstrap, err := session.NewManager(dependencies.Random)
 	if err != nil {
 		listener.Close()
-		return nil, "", fmt.Errorf("session: %w", err)
+		return nil, "", handoff.Handoff{}, fmt.Errorf("session: %w", err)
 	}
 	if dependencies.SessionNow != nil {
 		sessions.Now = dependencies.SessionNow
@@ -147,7 +159,7 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, dependencies.Home)
 	if err != nil {
 		listener.Close()
-		return nil, "", fmt.Errorf("workspace: %w", err)
+		return nil, "", handoff.Handoff{}, fmt.Errorf("workspace: %w", err)
 	}
 	// Random は並行利用に耐えなければならない。セッションマネージャと二つの
 	// トランザクションマネージャが読むからだ。本番では crypto/rand を渡す。
@@ -247,7 +259,7 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	cliSecret, err := handoff.Mint(dependencies.Random)
 	if err != nil {
 		listener.Close()
-		return nil, "", err
+		return nil, "", handoff.Handoff{}, err
 	}
 
 	server, err := httpserver.New(httpserver.Options{
@@ -292,7 +304,7 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	})
 	if err != nil {
 		listener.Close()
-		return nil, "", err
+		return nil, "", handoff.Handoff{}, err
 	}
 
 	// プロセスがサーブを始める場所ではなくここで書くのは、ここで URL が判明するから
@@ -300,12 +312,21 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	// 強制終了されたプロセスが残していったコピーは、何も待ち受けていないポートを、
 	// 誰も受け付けない秘密とともに指しているだけなので、これを取り除くのは保証では
 	// なく後片付けである。
-	if _, err := handoff.Write(HandoffDir(dependencies.Home), server.URL(), cliSecret); err != nil {
+	document := handoff.Handoff{
+		SchemaVersion:   handoff.SchemaVersion,
+		URL:             server.URL(),
+		Secret:          cliSecret,
+		Owner:           dependencies.Owner,
+		PID:             dependencies.PID,
+		Version:         version,
+		ProtocolVersion: handoff.ProtocolVersion,
+	}
+	if err := handoff.Write(HandoffDir(dependencies.Home), document); err != nil {
 		dependencies.Logger.Warn(
 			"write the command-line handoff; sshc <alias> will connect without a saved key passphrase",
 			"error", err)
 	}
-	return server, bootstrap, nil
+	return server, bootstrap, document, nil
 }
 
 // HandoffDir は、動作中のアプリケーションが `sshc <alias>` の読むファイルを置く
@@ -316,7 +337,7 @@ func HandoffDir(home string) string {
 }
 
 func Run(ctx context.Context, dependencies Dependencies, version string) error {
-	server, bootstrap, err := Build(dependencies, version)
+	server, bootstrap, document, err := build(dependencies, version)
 	if err != nil {
 		return err
 	}
@@ -338,7 +359,7 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	// エンジンは 1 台に絞ってあるが、名簿が 1 行しか無いという壊れ方は、起きた
 	// 瞬間から次の起動まで持続する——そういうものは二重に塞ぐ。
 	defer func() {
-		if err := handoff.Remove(HandoffDir(dependencies.Home), server.URL()); err != nil {
+		if err := handoff.Remove(HandoffDir(dependencies.Home), document.Secret); err != nil {
 			dependencies.Logger.Warn("remove the command-line handoff", "error", err)
 		}
 	}()
