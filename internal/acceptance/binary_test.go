@@ -11,6 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"sshc/internal/handoff"
+	"sshc/internal/httpserver"
 	"testing"
 	"time"
 )
@@ -115,16 +118,38 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	select {
 	case announced = <-lines:
 	case <-time.After(15 * time.Second):
-		t.Fatalf("the binary printed no URL within 15s; stderr:\n%s", stderr.String())
+		t.Fatalf("the binary announced nothing within 15s; stderr:\n%s", stderr.String())
 	}
-	if !strings.HasPrefix(announced, "http://127.0.0.1:") || !strings.Contains(announced, "/#bootstrap=") {
-		t.Fatalf("announced URL = %q", announced)
+	// **headless は入口を出さない。** 出せば、ワンタイムの資格情報が端末にも
+	// ログにも残る。言うのは、次に何を打てばよいかだけである。
+	if announced != "sshc: create the password vault with `sshc vault create`" {
+		t.Fatalf("headless announcement = %q", announced)
 	}
-	base, fragment, _ := strings.Cut(announced, "/#bootstrap=")
+	for _, canary := range []string{"http://", "bootstrap", "127.0.0.1"} {
+		if strings.Contains(announced, canary) || strings.Contains(stderr.String(), canary) {
+			t.Fatalf("headless leaked %q; stdout %q stderr:\n%s", canary, announced, stderr.String())
+		}
+	}
+
+	// 入口は名簿から読む。それが `sshc <alias>` の通る道であり、headless が
+	// 実際に受け付けていることの公開された証拠である。
+	var document handoff.Handoff
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		document, err = handoff.Read(filepath.Join(home, ".ssh", "sshc"))
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no handoff was published within 15s: %v; stderr:\n%s", err, stderr.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	base := document.URL
+	if !strings.HasPrefix(base, "http://127.0.0.1:") {
+		t.Fatalf("handoff URL = %q", base)
+	}
 	host := strings.TrimPrefix(base, "http://")
-	if len(fragment) != 43 {
-		t.Fatalf("bootstrap fragment length = %d, want 43", len(fragment))
-	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+"/", nil)
@@ -150,22 +175,38 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	// 経路可能なアドレス上の同じポートへの接続は受け付けてはならない。
 	assertBoundToLoopbackOnly(t, host)
 
-	bootstrap, err := http.NewRequestWithContext(context.Background(), http.MethodPost, base+"/api/v1/session/bootstrap", nil)
+	// **headless にブートストラップは無い。** 資格情報は名簿にあり、それを
+	// 持つのは `sshc <alias>` である。ここではその公開された経路を通す。
+	status, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+httpserver.StatusPath, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bootstrap.Host = host
-	bootstrap.Header.Set("Origin", base)
-	bootstrap.Header.Set("Sec-Fetch-Site", "same-origin")
-	bootstrap.Header.Set("X-SSHC-Bootstrap", fragment)
-	exchanged, err := client.Do(bootstrap)
+	status.Host = host
+	status.Header.Set(handoff.HeaderName, document.Secret)
+	answered, err := client.Do(status)
 	if err != nil {
-		t.Fatalf("bootstrap = %v", err)
+		t.Fatalf("cli status = %v", err)
 	}
-	exchangedStatus := exchanged.StatusCode
-	readBody(t, exchanged)
-	if exchangedStatus != http.StatusOK {
-		t.Fatalf("bootstrap = %d", exchangedStatus)
+	answeredStatus := answered.StatusCode
+	readBody(t, answered)
+	if answeredStatus != http.StatusOK {
+		t.Fatalf("cli status = %d", answeredStatus)
+	}
+
+	// 資格情報なしでは、同じ経路が答えてはならない。
+	unauthenticated, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+httpserver.StatusPath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unauthenticated.Host = host
+	refused, err := client.Do(unauthenticated)
+	if err != nil {
+		t.Fatalf("unauthenticated cli status = %v", err)
+	}
+	refusedStatus := refused.StatusCode
+	readBody(t, refused)
+	if refusedStatus == http.StatusOK {
+		t.Fatal("the command-line status answered without the handoff secret")
 	}
 
 	if _, err := os.Stat(filepath.Join(home, ".ssh")); err != nil && !os.IsNotExist(err) {
@@ -189,11 +230,9 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	// プロセスより長生きした listener はポートを保持し続け、開いた API を漏洩させる。
 	assertPortIsFree(t, host)
 
-	if combined := stderr.String(); strings.Contains(combined, fragment) {
-		t.Fatal("the binary logged the bootstrap token on standard error")
-	}
-	if strings.Count(announced, fragment) != 1 {
-		t.Fatal("the bootstrap token appeared more than once in the announced URL")
+	// 名簿の秘密は、どこにも書き出されてはならない。
+	if strings.Contains(stderr.String(), document.Secret) || strings.Contains(announced, document.Secret) {
+		t.Fatal("the binary wrote the handoff secret to its own output")
 	}
 }
 

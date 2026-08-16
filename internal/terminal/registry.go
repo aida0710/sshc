@@ -1,8 +1,10 @@
 package terminal
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"io"
 	"sync"
 	"time"
@@ -22,7 +24,9 @@ type Spec struct {
 	// ——向こうにプロセスが無いので、確保する PTY も無い。このパッケージが
 	// SSH を知らないままでいられるのは、知る必要のあるものが全部この関数の
 	// 内側にあるからである。
-	Open func(Size) (Process, error)
+	//
+	// context は確保だけを支配する。返った Process にそれを持たせてはならない。
+	Open func(ctx context.Context, size Size) (Process, error)
 	// Cleanup は子プロセスが終わったあとに一度だけ呼ばれる。凍結した ssh 設定の
 	// ような、その接続のためだけに作られたものを片付けるためにある。
 	Cleanup func()
@@ -44,7 +48,35 @@ type Registry struct {
 	Random io.Reader
 
 	mutex    sync.Mutex
+	waiters  *sync.Cond
 	sessions []*Session
+
+	// closing と forced は、停止の二段階である。closing は新しいセッションを
+	// 断り、forced は強制停止をもう始めたことを言う。どちらも戻らない。
+	closing bool
+	forced  bool
+
+	// pending は、まだ Process を返していない Open の予約である。鍵は札で、
+	// 値はその確保を取り消す関数である。**レジストリの錠を握ったまま外部の
+	// 確保を呼ばない**ので、停止処理はこれを通してしか届かない。
+	pending    map[uint64]context.CancelFunc
+	nextTicket uint64
+	// outstanding は、送り出したまま戻っていない graceful/force の呼び出し数。
+	outstanding int
+	joined      []error
+
+	waiting bool
+	waited  bool
+	waitErr error
+}
+
+// condition は、この錠に結び付いた合図を返す。停止まで誰も待たないので、
+// 最初に必要になったときに作る。
+func (r *Registry) condition() *sync.Cond {
+	if r.waiters == nil {
+		r.waiters = sync.NewCond(&r.mutex)
+	}
+	return r.waiters
 }
 
 func (r *Registry) now() time.Time {
@@ -70,46 +102,81 @@ func (r *Registry) random() io.Reader {
 
 // Open は PTY をひとつ確保し、その中でプログラムを起こす。
 //
+// ctx は**確保だけ**を支配する。成功して返った Process はそこから切り離された
+// 寿命を持つ——さもなければ、開いた HTTP ハンドラが返った瞬間にセッションが死ぬ。
+//
 // 生存上限に達していれば拒否する。黙って古いセッションを閉じることはしない。
 // PTY を確保できなければセッションを作らずに理由を返す——作ってしまえば、
 // 何も起きていないセッションが一覧に並ぶことになる。
-func (r *Registry) Open(spec Spec) (*Session, error) {
+//
+// **確保はレジストリの錠の外で走る。** 応答しないリモートへの接続がここで
+// 止まっても、停止処理は錠を取れる。止まっている確保には、予約した取り消しを
+// 通して届く。
+func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 	limits := r.limits()
 
 	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
+	if r.closing {
+		r.mutex.Unlock()
+		return nil, ErrShuttingDown
+	}
 	if r.Start == nil && spec.Open == nil {
+		r.mutex.Unlock()
 		return nil, ErrNoStarter
 	}
-	live := 0
+	live := len(r.pending)
 	for _, session := range r.sessions {
 		if session.Live() {
 			live++
 		}
 	}
 	if live >= limits.MaxSessions {
+		r.mutex.Unlock()
 		return nil, ErrSessionLimit
 	}
-
 	id, err := r.mintID()
 	if err != nil {
+		r.mutex.Unlock()
 		return nil, err
 	}
+	creation, cancel := context.WithCancel(ctx)
+	ticket := r.reserve(cancel)
+	r.mutex.Unlock()
+
 	size := spec.Size
 	if !size.Valid() {
 		size = Size{Cols: 80, Rows: 24}
 	}
-	start := func() (Process, error) { return r.Start.Start(spec.Command, size) }
-	if spec.Open != nil {
-		start = func() (Process, error) { return spec.Open(size) }
+	open := spec.Open
+	if open == nil {
+		open = func(ctx context.Context, size Size) (Process, error) {
+			return r.Start.Start(ctx, spec.Command, size)
+		}
 	}
-	process, err := start()
+	process, err := open(creation, size)
+
+	r.mutex.Lock()
+	delete(r.pending, ticket)
+	// 予約を手放したことは、停止処理が待っている事実である。
+	r.condition().Broadcast()
+	lost := r.closing || creation.Err() != nil
+	r.mutex.Unlock()
+	cancel()
+
 	if err != nil {
 		if spec.Cleanup != nil {
 			spec.Cleanup()
 		}
+		if lost && err == nil {
+			return nil, ErrShuttingDown
+		}
 		return nil, err
+	}
+	if lost {
+		// 遅れて返ってきた Process は、公開せずにここで畳む。一覧に載せてから
+		// 閉じると、停止処理が数え終えた後に現れたことになる。
+		r.discard(process, spec.Cleanup)
+		return nil, ErrShuttingDown
 	}
 
 	session := &Session{
@@ -121,10 +188,55 @@ func (r *Registry) Open(spec Spec) (*Session, error) {
 		cleanup: spec.Cleanup,
 		done:    make(chan struct{}),
 	}
+	r.mutex.Lock()
 	r.sessions = append(r.sessions, session)
 	r.prune()
+	r.mutex.Unlock()
 	go session.pump(r.now)
 	return session, nil
+}
+
+// reserve は札を配る。呼び出し側が錠を握っている。
+func (r *Registry) reserve(cancel context.CancelFunc) uint64 {
+	if r.pending == nil {
+		r.pending = map[uint64]context.CancelFunc{}
+	}
+	r.nextTicket++
+	ticket := r.nextTicket
+	r.pending[ticket] = cancel
+	return ticket
+}
+
+// discard は、公開しないと決めた Process を強制停止して回収する。
+func (r *Registry) discard(process Process, cleanup func()) {
+	if forcer, ok := process.(forceCloser); ok {
+		_ = forcer.ForceClose()
+	}
+	_ = process.Close()
+	process.Wait()
+	if cleanup != nil {
+		cleanup()
+	}
+}
+
+// dispatch は、外部の呼び出しひとつを送り出し、戻るまでを数える。
+//
+// **錠を握ったまま外部を呼ばない。** 返らない Hangup ひとつが、他のすべての
+// 停止と締切そのものを止めてしまう。
+func (r *Registry) dispatch(call func() error) {
+	r.mutex.Lock()
+	r.outstanding++
+	r.mutex.Unlock()
+	go func() {
+		err := call()
+		r.mutex.Lock()
+		if err != nil {
+			r.joined = append(r.joined, err)
+		}
+		r.outstanding--
+		r.condition().Broadcast()
+		r.mutex.Unlock()
+	}()
 }
 
 // mintID は、この一覧の中で衝突しない識別子を作る。
@@ -231,15 +343,106 @@ func (r *Registry) Close(id string) error {
 	return nil
 }
 
-// Shutdown は、生きているすべてのセッションへ SIGHUP を送る。
+// BeginShutdown は、停止を頼むだけである。**何も待たない。**
 //
-// アプリケーションが終了するときの後始末である。待たないのは、応答しない
-// リモートに向いた ssh のために終了が引き延ばされてはならないからだ。
-func (r *Registry) Shutdown() {
+// 新しいセッションを断り、アタッチを外し、確保中のものを取り消し、生きている
+// セッションへ SIGHUP を送り出す。送り出したものが返るのを待たないのは、
+// 応答しないリモートに向いた ssh ひとつが、他のすべての停止と締切そのものを
+// 止めてしまうからである。待つのは Wait だけである。
+func (r *Registry) BeginShutdown() {
 	r.mutex.Lock()
-	sessions := append([]*Session(nil), r.sessions...)
-	r.mutex.Unlock()
-	for _, session := range sessions {
-		_ = session.Hangup()
+	if r.closing {
+		r.mutex.Unlock()
+		return
 	}
+	r.closing = true
+	sessions := append([]*Session(nil), r.sessions...)
+	cancels := make([]context.CancelFunc, 0, len(r.pending))
+	for _, cancel := range r.pending {
+		cancels = append(cancels, cancel)
+	}
+	r.mutex.Unlock()
+
+	for _, cancel := range cancels {
+		cancel()
+	}
+	for _, session := range sessions {
+		session.closeStreams()
+	}
+	for _, session := range sessions {
+		r.dispatch(session.Hangup)
+	}
+}
+
+// ForceClose は、締切に達した合図である。**これも何も待たない。**
+//
+// graceful が返らないことこそが、これが呼ばれる理由である。ひとつの強制停止を
+// 待ってから次を始めれば、返らない一本のために残り全部が止まる——それは
+// 直したはずの欠陥そのものである。
+func (r *Registry) ForceClose() {
+	r.mutex.Lock()
+	if r.forced {
+		r.mutex.Unlock()
+		return
+	}
+	r.forced = true
+	r.closing = true
+	sessions := append([]*Session(nil), r.sessions...)
+	cancels := make([]context.CancelFunc, 0, len(r.pending))
+	for _, cancel := range r.pending {
+		cancels = append(cancels, cancel)
+	}
+	r.mutex.Unlock()
+
+	for _, cancel := range cancels {
+		cancel()
+	}
+	for _, session := range sessions {
+		r.dispatch(session.forceClose)
+	}
+}
+
+// Wait は、唯一の合流点である。
+//
+// 確保中のもの、送り出した graceful/force、そして登録済みのすべてのセッションの
+// 終了を待つ。**ForceClose が Wait の後から仕事を足す**ので、数え上げは
+// 「一度ゼロになったら終わり」ではいけない。締切とちょうど同時に最後の
+// セッションが終わると、それだけでロックを手放して、まだ走っている強制停止と
+// 状態変更が重なってしまう。
+//
+// 強制停止のあとも待ち続けるのは、壊れたアダプタのために早く戻って 2 台目の
+// エンジンを許すより、ロックを握ったままの方が安全だからである。
+func (r *Registry) Wait() error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	if r.waited {
+		return r.waitErr
+	}
+	if r.waiting {
+		for !r.waited {
+			r.condition().Wait()
+		}
+		return r.waitErr
+	}
+	r.waiting = true
+
+	for {
+		for r.outstanding > 0 || len(r.pending) > 0 {
+			r.condition().Wait()
+		}
+		sessions := append([]*Session(nil), r.sessions...)
+		r.mutex.Unlock()
+		for _, session := range sessions {
+			<-session.done
+		}
+		r.mutex.Lock()
+		if r.outstanding == 0 && len(r.pending) == 0 && len(r.sessions) == len(sessions) {
+			break
+		}
+	}
+
+	r.waitErr = errors.Join(r.joined...)
+	r.waited = true
+	r.condition().Broadcast()
+	return r.waitErr
 }

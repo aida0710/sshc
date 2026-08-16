@@ -80,7 +80,7 @@ type recordingTerminal struct {
 	ptys     []*idlePTY
 }
 
-func (t *recordingTerminal) Start(command terminal.Command, _ terminal.Size) (terminal.Process, error) {
+func (t *recordingTerminal) Start(_ context.Context, command terminal.Command, _ terminal.Size) (terminal.Process, error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	t.commands = append(t.commands, command)
@@ -273,11 +273,12 @@ func newFixture(t testing.TB) *fixture {
 		t.Fatalf("app.Build() = %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
-	go func() { served <- server.Serve(ctx) }()
+	go func() { served <- server.Serve() }()
 	t.Cleanup(func() {
-		cancel()
+		server.BeginStopping()
+		server.BeginShutdown()
+		_ = server.Wait()
 		if err := <-served; err != nil {
 			t.Errorf("Serve() = %v", err)
 		}

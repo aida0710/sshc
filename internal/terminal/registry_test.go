@@ -2,6 +2,7 @@ package terminal_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"strings"
@@ -134,7 +135,7 @@ type fakeStarter struct {
 	err       error
 }
 
-func (s *fakeStarter) Start(command terminal.Command, size terminal.Size) (terminal.Process, error) {
+func (s *fakeStarter) Start(_ context.Context, command terminal.Command, size terminal.Size) (terminal.Process, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if s.err != nil {
@@ -172,7 +173,7 @@ func newRegistry(limits terminal.Limits) (*terminal.Registry, *fakeStarter) {
 
 func openShell(t testing.TB, registry *terminal.Registry) *terminal.Session {
 	t.Helper()
-	session, err := registry.Open(terminal.Spec{
+	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindShell, Title: "zsh", Size: terminal.Size{Cols: 80, Rows: 24},
 		Command: terminal.Command{Path: "/bin/zsh"},
 	})
@@ -201,7 +202,7 @@ func TestOpenRefusesOnceTheLiveLimitIsReached(t *testing.T) {
 	first := openShell(t, registry)
 	openShell(t, registry)
 
-	if _, err := registry.Open(terminal.Spec{
+	if _, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindShell, Command: terminal.Command{Path: "/bin/zsh"},
 	}); !errors.Is(err, terminal.ErrSessionLimit) {
 		t.Fatalf("the third Open() = %v, want ErrSessionLimit", err)
@@ -216,7 +217,7 @@ func TestOpenRefusesOnceTheLiveLimitIsReached(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, exited(registry, first.ID()))
-	if _, err := registry.Open(terminal.Spec{
+	if _, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindShell, Command: terminal.Command{Path: "/bin/zsh"},
 	}); err != nil {
 		t.Fatalf("Open() after one exited = %v", err)
@@ -260,7 +261,7 @@ func TestEverySessionGetsItsOwnIdentifier(t *testing.T) {
 	seen := map[string]bool{}
 	for index := 0; index < 20; index++ {
 		// 同じ alias に何本でも開ける。ID は alias ではない。
-		session, err := registry.Open(terminal.Spec{
+		session, err := registry.Open(context.Background(), terminal.Spec{
 			Kind: terminal.KindSSH, Alias: "bastion", Title: "bastion",
 			Command: terminal.Command{Path: "/usr/bin/ssh"},
 		})
@@ -414,7 +415,7 @@ func TestAFailedStartCreatesNoSessionAndRunsTheCleanup(t *testing.T) {
 	registry := &terminal.Registry{Start: starter, Limits: terminal.DefaultLimits}
 
 	cleaned := false
-	_, err := registry.Open(terminal.Spec{
+	_, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindShell, Command: terminal.Command{Path: "/bin/zsh"},
 		Cleanup: func() { cleaned = true },
 	})
@@ -464,7 +465,7 @@ func TestTheSpecCommandReachesTheStarterUnchanged(t *testing.T) {
 		Arguments: []string{"--", "bastion"},
 		Env:       []string{"HOME=/tmp"},
 	}
-	if _, err := registry.Open(terminal.Spec{
+	if _, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "bastion", Title: "bastion",
 		Command: command, Size: terminal.Size{Cols: 100, Rows: 40},
 	}); err != nil {
@@ -563,10 +564,10 @@ func TestRegistryUsesTheSpecOwnOpenerWhenItHasOne(t *testing.T) {
 	process := newFakeProcess()
 
 	var asked terminal.Size
-	session, err := registry.Open(terminal.Spec{
+	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "bastion", Title: "bastion",
 		Size: terminal.Size{Cols: 120, Rows: 40},
-		Open: func(size terminal.Size) (terminal.Process, error) {
+		Open: func(_ context.Context, size terminal.Size) (terminal.Process, error) {
 			asked = size
 			return process, nil
 		},
@@ -591,9 +592,11 @@ func TestAFailedOpenerCreatesNoSessionAndRunsTheCleanup(t *testing.T) {
 	registry := &terminal.Registry{Limits: terminal.DefaultLimits}
 
 	cleaned := false
-	_, err := registry.Open(terminal.Spec{
+	_, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "bastion",
-		Open:    func(terminal.Size) (terminal.Process, error) { return nil, errors.New("no route to host") },
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) {
+			return nil, errors.New("no route to host")
+		},
 		Cleanup: func() { cleaned = true },
 	})
 	if err == nil {
@@ -610,7 +613,7 @@ func TestAFailedOpenerCreatesNoSessionAndRunsTheCleanup(t *testing.T) {
 // 手段がひとつも無いレジストリは、開いたふりをしない。
 func TestARegistryWithNeitherAStarterNorAnOpenerRefuses(t *testing.T) {
 	registry := &terminal.Registry{Limits: terminal.DefaultLimits}
-	if _, err := registry.Open(terminal.Spec{Kind: terminal.KindShell}); !errors.Is(err, terminal.ErrNoStarter) {
+	if _, err := registry.Open(context.Background(), terminal.Spec{Kind: terminal.KindShell}); !errors.Is(err, terminal.ErrNoStarter) {
 		t.Fatalf("Open() = %v, want ErrNoStarter", err)
 	}
 }
