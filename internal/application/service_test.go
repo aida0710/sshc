@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -1170,6 +1171,42 @@ func TestOverviewDoesNotCallAReachedGroupFileUnreached(t *testing.T) {
 	for _, notice := range overview.Notices {
 		if notice.Code == NoticeGroupFileUnreached {
 			t.Errorf("a file a group Include reaches was called unreached: %#v", notice)
+		}
+	}
+}
+
+// **契約で必須の配列は、通信上で決して null にならない。** Go の nil スライスは
+// JSON で [] ではなく null になり、それを受け取った画面は length を読んで落ちる。
+//
+// この表明を reflection で書くのは、正規化の一覧に 1 行足し忘れることが実際に
+// 起きたからである。Files・Hosts・Diagnostics・Notices は守られていて Groups
+// だけが漏れており、~/.ssh/config を持たないワークスペース——初めて起動した
+// Android 端末——がそれを最初に踏んだ。フィールドを増やした人がこの一覧を
+// 思い出すことに頼らず、増えたものを自動的に見る。
+func TestOverviewNeverSendsANullListForARequiredArray(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	manager := storage.NewManager(workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x5a}, 4096)))
+	service := NewService(workspace, manager)
+
+	// **エントリファイルを 1 つも書かない。** これが新品の端末の状態である。
+	overview, err := service.Overview()
+	if err != nil {
+		t.Fatalf("Overview() = %v", err)
+	}
+
+	value := reflect.ValueOf(overview)
+	for index := 0; index < value.NumField(); index++ {
+		field := value.Type().Field(index)
+		if field.Type.Kind() != reflect.Slice {
+			continue
+		}
+		// omitempty の付いた配列は契約上も省略されてよい。読む側は
+		// 「無い」を扱う用意があり、null で落ちるのは必須のものだけである。
+		if strings.Contains(field.Tag.Get("json"), ",omitempty") {
+			continue
+		}
+		if value.Field(index).IsNil() {
+			t.Errorf("%s is nil, so it reaches the browser as null instead of []", field.Name)
 		}
 	}
 }
