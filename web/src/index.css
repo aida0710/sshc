@@ -157,15 +157,23 @@
 }
 
 /*
-  触れる画面の端末は、指で縦に流せなければ過去が読めない。xterm は選択の
-  ために画面側でポインタを取るので、**縦の掃きだけを素通りさせる**——
-  pan-y はそれを言うためのものである。
-*/
-.xterm .xterm-viewport {
-  touch-action: pan-y;
-  -webkit-overflow-scrolling: touch;
-}
+  触れる画面では、範囲選択を OS にやらせる。
 
-.xterm .xterm-screen {
-  touch-action: pan-y;
+  **xterm の選択はマウスのためのものである。** 押して、引いて、離す——指には
+  その 3 つが無い。代わりに Android と iOS は、長押しから始まる選択と、掴める
+  ハンドルと、コピーの吹き出しを既に持っている。それが「普通に選択できる」の
+  中身であり、こちらで作り直せるものではない。
+
+  user-select を text へ戻すのは、xterm が .xterm 全体で none にしているから
+  である。none のままでは、OS は掴む文字を見つけられない。
+
+  **粗いポインタに限る。** マウスのある画面では xterm 自身の選択が正しく、
+  そちらを二重にしない。
+*/
+@media (pointer: coarse) {
+  .xterm,
+  .xterm .xterm-rows {
+    user-select: text;
+    -webkit-user-select: text;
+  }
 }

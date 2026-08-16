@@ -129,6 +129,32 @@ describe("integrationsApi terminal settings", () => {
       rightClickPaste: false,
     });
   });
+
+  // **保存した値が戻ってこなければ、設定は保存されていないのと同じである。**
+  // この写像は項目を 1 つずつ名指すので、足し忘れると画面は空欄を見せ、人は
+  // 何も設定していないと信じる。実際に fontSize でそうなった。
+  it("brings every stored field back", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      schemaVersion: 3,
+      embeddedTerminal: {
+        startDirectory: "~/work",
+        maxSessions: 4,
+        scrollbackBytes: 65536,
+        fontSize: 18,
+        copyOnSelect: false,
+        rightClickPaste: false,
+      },
+    })));
+
+    await expect(integrationsApi.terminalSettings()).resolves.toEqual({
+      startDirectory: "~/work",
+      maxSessions: 4,
+      scrollbackBytes: 65536,
+      fontSize: 18,
+      copyOnSelect: false,
+      rightClickPaste: false,
+    });
+  });
 });
 
 describe("integrationsApi.passwordVault", () => {

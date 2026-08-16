@@ -68,11 +68,6 @@ public final class EngineService extends Service {
         // その後でよい。
         startForeground(NOTIFICATION_ID, notification());
 
-        // 測定: この端末で名前が引けるか、開けるシェルがあるか。
-        // どちらも Android 固有の前提であり、logcat に答えを残す。
-        Log.i(TAG, "probe dns: " + Mobile.probeDNS("github.com"));
-        Log.i(TAG, "probe shell: " + Mobile.probeShell());
-
         try {
             entrance = Mobile.start(getFilesDir().getAbsolutePath(), getCacheDir().getAbsolutePath());
             started = true;
