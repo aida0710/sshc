@@ -11,7 +11,7 @@
     "postinstall": "install-electron",
     "start": "electron .",
     "dist": "electron-builder --mac --linux",
-    "test": "node --test link.test.js entrance.test.js reopen.test.js engine.test.js",
+    "test": "node --test link.test.js entrance.test.js reopen.test.js lifecycle.test.js",
     "icons": "node icon.mjs"
   },
   "devDependencies": {
@@ -25,7 +25,7 @@
     },
     "files": [
       "main.js",
-      "engine.js",
+      "lifecycle.js",
       "preload.js",
       "link.js",
       "entrance.js",
