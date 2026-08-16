@@ -46,10 +46,12 @@ APK の外殻は WebView 1 枚で、engine を `.so` として同一プロセス
 ```sh
 go install golang.org/x/mobile/cmd/gobind@latest   # 一度だけ。gomobile が PATH から探します
 make android-bind                                   # AAR を android/app/libs/ へ
-cd android && ./gradlew assembleDebug               # app/build/outputs/apk/debug/
+cd android && ./gradlew clean assembleDebug          # app/build/outputs/apk/debug/
 ```
 
 `gomobile` は `go.mod` の tool として固定してあります。NDK の場所は `ANDROID_NDK_HOME` で変えられます。
+
+**`clean` を省かないでください。** AAR を焼き直した後に `assembleDebug` だけを走らせると、前のビルドの `.so` が APK の中に残ります——中身は正しいのに、ファイルだけが 14MB 太ります。
 
 デスクトップと違うところが 5 つあります。
 
