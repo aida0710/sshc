@@ -257,6 +257,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const showConsole = useCallback(
     (id: string) => {
       setActiveConsole(id);
+      // **ドロワーも畳む。** コンソールの一覧はナビゲーションの中に居るので、
+      // 狭い画面でそこから開くと、開いた端末をドロワー自身が覆う。セクション
+      // のリンクと同じ理由であり、広い画面ではドロワーが無いので何も起きない。
+      setNavigationOpen(false);
       navigate("Terminal");
       // Home から開かれたセッションは、この写しにまだ載っていない。
       void consoles.refresh();
@@ -357,9 +361,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           setNavigationOpen(false);
           followSectionLink(event, name);
         }}
-        // px-3 py-2.5 に md: を付けない。24px のクリック標的はデスクトップでも
-        // 狭く、触れる画面でだけ広げる理由がない。
-        className={`flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm ${
+        // 触れる画面でだけ広げる。**md 以上では元の密度に戻す** —— この一覧は
+        // 1280x720 でスクロールせずに収まることを e2e が保証しており、全幅で
+        // 高くすると末尾の History がビューポートから落ちる。指のための 44px は
+        // 指のある画面のものである。
+        className={`flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm md:px-2 md:py-1.5 ${
           section === name ? "bg-select-fill text-ink" : "text-ink hover:bg-select-fill"
         }`}
       >
@@ -495,7 +501,9 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       <header className="relative z-20 flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2.5 md:gap-3 md:px-6">
         <button
           type="button"
-          aria-label={t("shell.primaryNavigation")}
+          // ランドマークと同じ名前にしない。**開いているかどうかは名前では
+          // なく aria-expanded が運ぶ** —— Inspector のトグルと同じ作法である。
+          aria-label={t("shell.navigationToggle")}
           aria-expanded={navigationOpen}
           aria-controls={navigationId}
           onClick={() => setNavigationOpen((open) => !open)}
@@ -516,9 +524,16 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         <p className="shrink-0 whitespace-nowrap text-sm font-semibold">
           {route.kind === "section" ? t(sectionLabels[route.section]) : t("shell.pageNotFound")}
         </p>
-        <p role="status" className="hidden min-w-0 items-center gap-1.5 truncate text-xs text-ink-muted sm:flex">
-          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-live" />
-          {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
+        {/*
+          狭い画面で落とすのは**文字だけ**である。要素ごと hidden にすると
+          アクセシビリティツリーからも消え、状態を目で読めない人には稼働の
+          有無が伝わらなくなる。残るドットが、見る人のための同じ報せである。
+        */}
+        <p role="status" className="flex min-w-0 items-center gap-1.5 truncate text-xs text-ink-muted">
+          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-live" />
+          <span className="sr-only sm:not-sr-only sm:truncate">
+            {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
+          </span>
         </p>
         {inspector === null ? (
           <span className="ml-auto" />

@@ -10,6 +10,7 @@ export const ja = {
   "shell.pageNotFoundDescription": "このURLに対応するsshcのセクションはありません。",
   "shell.goHome": "ホームへ移動",
   "shell.primaryNavigation": "メインナビゲーション",
+  "shell.navigationToggle": "ナビゲーション",
   "shell.navFaces": "ナビゲーションの面",
   "shell.navFaceSettings": "設定",
   "shell.navFaceTerminal": "ターミナル",
