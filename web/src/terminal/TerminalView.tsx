@@ -7,6 +7,7 @@ import { integrationsApi, type IntegrationsApi, type TerminalSession } from "../
 import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
+import { KeyBar } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
 
@@ -304,6 +305,12 @@ export function TerminalView({
         端末なのかが分からなくなる。
       */}
       <div ref={host} className="min-h-0 flex-1 bg-term-bg p-2" />
+      {/*
+        送り先は xterm 自身である。**stream へ直接送らない** —— input() は
+        onData を発火するので、打鍵の経路は物理キーボードと同じ 1 本のままに
+        なる。二本目を引けば、繋ぎ直しの配線をもう一度気にすることになる。
+      */}
+      <KeyBar onSend={(data) => terminal.current?.input(data)} />
     </section>
   );
 }
