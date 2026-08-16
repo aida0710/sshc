@@ -19,6 +19,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.widget.FrameLayout;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.TextView;
@@ -55,6 +56,12 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // **これを言わないと、挿入量は子に届かない。** decor が自分で
+        // fitsSystemWindows を処理して消費してしまうので、こちらの listener
+        // には全部ゼロが渡る——余白が付かないのはそれが理由だった。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+        }
         Intent intent = new Intent(this, EngineService.class);
         startForegroundService(intent);
         bound = bindService(intent, connection, Context.BIND_AUTO_CREATE);
@@ -86,8 +93,6 @@ public final class MainActivity extends Activity {
         // ステータスバーの高さも、ジェスチャーバーの有無も、ノッチや
         // パンチホールの張り出しも。WindowInsets はそれを実測値で答えるので、
         // 尋ねればよい。
-        avoidSystemBars(webView);
-        webView.setBackgroundColor(chromeColour());
 
         // 何も外へ出さない。この画面が話す相手は loopback の engine だけである。
         webView.setWebViewClient(new WebViewClient() {
@@ -113,7 +118,25 @@ public final class MainActivity extends Activity {
         });
 
         webView.loadUrl(entrance);
-        setContentView(webView);
+        setContentView(frame(webView));
+    }
+
+    /**
+     * 挿入量を受け止める器。
+     *
+     * <p>WebView に直接 padding を置かず、1 枚挟む。padding の外側に見えるのは
+     * この器の背景であり、WebView 自身の背景ではページの読み込み前に白く光る。
+     */
+    private FrameLayout frame(View content) {
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(chromeColour());
+        root.addView(content, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        avoidSystemBars(root);
+        // 一度きりの配布を自分から要求する。attach のタイミング次第では、
+        // listener を付けた後の dispatch が既に済んでいることがある。
+        root.requestApplyInsets();
+        return root;
     }
 
     /**
@@ -138,8 +161,7 @@ public final class MainActivity extends Activity {
         TextView view = new TextView(this);
         view.setText(message);
         view.setPadding(48, 48, 48, 48);
-        avoidSystemBars(view);
-        setContentView(view);
+        setContentView(frame(view));
     }
 
     /**
@@ -167,7 +189,10 @@ public final class MainActivity extends Activity {
                 bottom = insets.getSystemWindowInsetBottom();
             }
             target.setPadding(left, top, right, bottom);
-            return insets;
+            // 受け止めたので、この先へは渡さない。
+            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                    ? WindowInsets.CONSUMED
+                    : insets.consumeSystemWindowInsets();
         });
     }
 
@@ -191,7 +216,10 @@ public final class MainActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration);
-        if (webView != null) webView.setBackgroundColor(chromeColour());
+        View root = findViewById(android.R.id.content);
+        if (root instanceof ViewGroup && ((ViewGroup) root).getChildCount() > 0) {
+            ((ViewGroup) root).getChildAt(0).setBackgroundColor(chromeColour());
+        }
     }
 
     /**
