@@ -183,7 +183,10 @@ func (m *Manager) ReadBackup(path string) ([]byte, error) {
 	if m.Unseal == nil {
 		return contents, nil
 	}
-	return m.Unseal(contents)
+	plaintext, err := m.Unseal(contents)
+	// 封じられた側も同じ秘密の写しである。開いたあとまで抱えない。
+	zeroBytes(contents)
+	return plaintext, err
 }
 
 func (m *Manager) validBackupReadPath(path string) bool {
@@ -225,6 +228,15 @@ func (e journalEntry) action() string {
 		return actionWrite
 	}
 	return e.Action
+}
+
+// noOpWrite は、書いても中身が変わらない置き換えを言う。
+//
+// application 層は metadata の書き込みを毎回、変わっていなくても最後に足すので、
+// これは例外ではなく日常の記録である。**巻き戻せない変更ではない。** 戻したあとの
+// 対象は同じバイト列であり、控えを残さなかったとしても失うものが無い。
+func (e journalEntry) noOpWrite() bool {
+	return e.action() == actionWrite && e.HadPrevious && e.Digest == e.PreviousDigest
 }
 
 // zeroBytes は、鍵素材を保持しているかもしれないバッファを上書きする。keys.Wipe と
@@ -852,6 +864,20 @@ func (m *Manager) Note(operation string, paths []string) (Result, error) {
 
 func (m *Manager) finish(record *journalRecord, journalPath, status string) error {
 	fileSystem := m.workspace.FileSystem()
+	// **ステージ済みファイルを手放すのはここだけである。** 完了なら rename が
+	// 使い切っており、巻き戻しなら捨てる。どちらでも、記録が履歴になる前に名前と
+	// 実体の両方が消える。復旧がこれを読むだけの経路でやると、走っている最中の
+	// トランザクションの一時ファイルを消せてしまう。
+	for index := range record.Entries {
+		temp := record.Entries[index].Temp
+		if temp == "" {
+			continue
+		}
+		if err := fileSystem.Remove(temp); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		record.Entries[index].Temp = ""
+	}
 	finished := m.now().UTC()
 	record.FinishedAt = &finished
 	record.Status = status
