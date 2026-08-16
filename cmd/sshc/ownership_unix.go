@@ -129,7 +129,13 @@ func (o *unixOwnership) classify(revents int16) error {
 		return fmt.Errorf("%w: the ownership channel reported an error", errOwnershipRead)
 	case revents&unix.POLLIN != 0:
 		if !o.socket {
-			// FIFO は、書き手が閉じれば POLLHUP を返す。POLLIN は中身である。
+			// **実測**: 書き手を閉じたパイプは POLLIN と POLLHUP を同時に返す。
+			// POLLIN だけを見て中身だと決めると、持ち主が正しく手を離したことが
+			// 規約違反として報告される——Linux の Node が子へ渡すのは socket では
+			// なく本物のパイプなので、そこでは通常の終了が毎回そうなる。
+			if revents&unix.POLLHUP != 0 {
+				return errOwnershipEnded
+			}
 			return errOwnershipProtocol
 		}
 		// ソケットは、相手が閉じても中身が来ても POLLIN を返す。**消費せずに**
