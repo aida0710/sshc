@@ -179,3 +179,14 @@
   user-select: text;
   -webkit-user-select: text;
 }
+
+/*
+  **行をヒットテストの対象に戻す。** xterm は .xterm-rows に pointer-events:
+  none を掛けており、そのままだと長押しの当たり先は .xterm-screen になる。
+  あそこに文字は無いので、選択は始まるのに掴むものが無く、空のまま終わる
+  ——実機の WebView を DevTools で覗いて、そう測れた。
+*/
+.sshc-native-selection .xterm .xterm-rows,
+.sshc-native-selection .xterm .xterm-rows * {
+  pointer-events: auto;
+}
