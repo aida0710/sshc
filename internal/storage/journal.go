@@ -405,9 +405,8 @@ func (m *Manager) entryEvidence(entry journalEntry) (entryEvidence, error) {
 		}
 		return appliedWhen(!present), nil
 	case actionWrite:
-		if entry.HadPrevious && entry.Digest == entry.PreviousDigest {
-			// 書いても中身が変わらない置き換え。application 層は metadata を
-			// この形で毎回付けるので、これは例外ではなく日常の記録である。
+		if entry.noOpWrite() {
+			// 対象は書く前も書いた後も同じ姿である。何も語らない。
 			return evidenceNone, nil
 		}
 		digest, exists, err := m.targetDigest(entry.Path)
