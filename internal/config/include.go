@@ -123,6 +123,12 @@ func (r Resolver) expandPattern(argument string) (string, error) {
 	if r.Normalise != nil {
 		cleaned = r.Normalise(cleaned)
 	}
+	// 組み立てた結果も、受け取った綴りと同じ条件を満たさなければならない。
+	// 引数の中身は設定ファイルの任意のバイト列なので、NUL を挟むだけで、
+	// どのファイルも指しようのないパスができあがる。
+	if !nativepath.Supported(cleaned) {
+		return "", ErrUnsupportedExpansion
+	}
 	return cleaned, nil
 }
 

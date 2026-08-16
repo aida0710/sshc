@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sshc/internal/platform/nativepath"
 )
 
 func FuzzParseRendersOriginalBytes(f *testing.F) {
@@ -78,11 +79,14 @@ func FuzzExpandIncludePattern(f *testing.F) {
 	f.Add("%d")
 	f.Add("~%%d")
 	f.Add("%%~")
+	// NUL を挟むだけで、どのファイルも指しようのないパスができる。展開が
+	// 「絶対パスになった」ことだけを見ていた頃は、これがそのまま Loader へ渡った。
+	f.Add("a\x00b")
 
 	resolver := Resolver{
-		Home:   "/Users/tester",
-		Root:   "/Users/tester/.ssh",
-		Tokens: map[byte]string{'d': "/Users/tester"},
+		Home:   testHome,
+		Root:   filepath.Join(testHome, ".ssh"),
+		Tokens: map[byte]string{'d': testHome},
 	}
 
 	// '~user' の形式は、このエンジンが行わない passwd データベースの参照を必要と
@@ -90,7 +94,7 @@ func FuzzExpandIncludePattern(f *testing.F) {
 	// 表明する。そこで表現すると、トークンとチルダが展開される順序を言い直すことに
 	// なり、実装を言い直すテストは何ひとつ検査していないことに
 	// なるからだ。
-	for _, guessed := range []string{"~root/config", "~nobody", "~a/b"} {
+	for _, guessed := range []string{"~root/config", "~nobody", "~a/b", "a\x00b"} {
 		if _, err := resolver.expandPattern(guessed); !errors.Is(err, ErrUnsupportedExpansion) {
 			f.Fatalf("expandPattern(%q) = %v, want ErrUnsupportedExpansion", guessed, err)
 		}
@@ -104,10 +108,10 @@ func FuzzExpandIncludePattern(f *testing.F) {
 			}
 			return
 		}
-		if !path.IsAbs(expanded) {
-			t.Fatalf("expandPattern(%q) = %q, which is not absolute", argument, expanded)
+		if !nativepath.Supported(expanded) {
+			t.Fatalf("expandPattern(%q) = %q, which is not a supported absolute path", argument, expanded)
 		}
-		if cleaned := path.Clean(expanded); cleaned != expanded {
+		if cleaned := filepath.Clean(expanded); cleaned != expanded {
 			t.Fatalf("expandPattern(%q) = %q, which is not cleaned (%q)", argument, expanded, cleaned)
 		}
 		// リゾルバがグロブするパスへ、未展開のパーセントトークンが生き残ってはならない。
