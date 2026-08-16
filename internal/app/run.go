@@ -397,13 +397,23 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	serveErrors := make(chan error, 1)
 	go func() { serveErrors <- built.server.Serve() }()
 
+	// **どの経路でも、serving が本当に止まるまで返らない。**
+	//
+	// listener を閉じるのは Serve が戻るときである。ここを待たずに返ると、
+	// 呼び出し側は engine lock を手放しにかかり、その一瞬まだポートが握られて
+	// いる。次の 1 台がそこで bind に失敗する。
+	stop := func(reason error) error {
+		unwound := built.unwind(dependencies)
+		return errors.Join(reason, unwound, <-serveErrors)
+	}
+
 	// listener が bind されていることが受付開始の境界である。Serve を起こしてから
 	// announce するまでに待つものは無い。
 	if dependencies.Announce != nil {
 		exists := false
 		if built.passwords != nil {
 			if exists, err = built.passwords.Exists(); err != nil {
-				return errors.Join(fmt.Errorf("read the vault state: %w", err), built.unwind(dependencies))
+				return stop(fmt.Errorf("read the vault state: %w", err))
 			}
 		}
 		readiness := Readiness{Owner: dependencies.Owner, VaultExists: exists}
@@ -411,21 +421,18 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 			readiness.DesktopURL = built.server.URL() + "/#bootstrap=" + built.bootstrap
 		}
 		if err := dependencies.Announce(readiness); err != nil {
-			return errors.Join(fmt.Errorf("announce the entrance: %w", err), built.unwind(dependencies))
+			return stop(fmt.Errorf("announce the entrance: %w", err))
 		}
 	}
 
 	select {
 	case err := <-serveErrors:
+		// Serve が自分から戻った。後始末はそれでも全部通る。
 		return errors.Join(err, built.unwind(dependencies))
 	case <-ctx.Done():
-		unwound := built.unwind(dependencies)
-		// Serve は listener が閉じたときに戻る。unwind がそれを起こしている。
-		return errors.Join(unwound, serveResult(<-serveErrors))
+		return stop(nil)
 	}
 }
-
-func serveResult(err error) error { return err }
 
 // unwind は、engine lock を握ったまま通る唯一の後始末である。
 //
