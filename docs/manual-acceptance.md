@@ -111,3 +111,51 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | — | M4 | — | — | 未実施 | 本番 `~/.ssh` の退避が必要 |
 | — | M5 | — | — | 未実施 | 本番 `~/.ssh` のコピーが必要 |
 | — | M6 | — | — | 未実施 | Android 実機と adb が必要 |
+
+## Android をエミュレータで動かして、中を覗く
+
+**実機が無くても、実機と同じ Chromium の中身が読める。** WebView を Chrome
+DevTools に開けば、押した場所にどの要素があるか、どのイベントが発火して何が
+打ち消されたか、計算後のスタイルがどうなっているかを、すべて測れる。
+`pointer-events` も `contextmenu` も、ここから測って初めて分かった。
+
+```sh
+A=~/Library/Android/sdk
+$A/emulator/emulator -avd Medium_Phone_API_36.1 -no-snapshot-load &
+$A/platform-tools/adb wait-for-device
+
+make android-bind
+cd android && ./gradlew clean assembleDebug && cd ..
+$A/platform-tools/adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+$A/platform-tools/adb shell am start -n com.github.aida0710.sshc/.MainActivity
+```
+
+画面を見るのは `adb exec-out screencap -p > shot.png`、触るのは
+`adb shell input tap X Y` と `adb shell input swipe X1 Y1 X2 Y2 <ミリ秒>`。
+**同じ座標で 900ms の swipe が長押しである。**
+
+中を覗くには、debuggable なビルドが開けている devtools のソケットへ繋ぐ。
+
+```sh
+PID=$($A/platform-tools/adb shell cat /proc/net/unix | grep -o "webview_devtools_remote_[0-9]*" | head -1)
+$A/platform-tools/adb forward tcp:9222 localabstract:$PID
+curl -s http://127.0.0.1:9222/json      # page の webSocketDebuggerUrl が出る
+```
+
+あとは CDP の `Runtime.evaluate` を投げるだけで、ページの中で任意の JS が走る。
+Node 22 には WebSocket が入っているので、依存は要らない。**Playwright の
+connectOverCDP は使えない** ——Android の WebView は browser context 管理を
+持たないので、接続の時点で断られる。
+
+デバイスの座標と CSS の座標は次で対応が取れる。倍率は端末ごとに違うので、
+決め打ちにせず毎回測ること。
+
+```js
+document.addEventListener("touchstart", (e) => {
+  console.log(e.touches[0].clientX, e.touches[0].clientY);
+}, true);
+```
+
+**release ビルドでは devtools は開かない。** `MainActivity` が
+`FLAG_DEBUGGABLE` を見てから有効にする——開けば、画面の中身も session cookie も
+同じ機械から読める。
