@@ -155,3 +155,17 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+  触れる画面の端末は、指で縦に流せなければ過去が読めない。xterm は選択の
+  ために画面側でポインタを取るので、**縦の掃きだけを素通りさせる**——
+  pan-y はそれを言うためのものである。
+*/
+.xterm .xterm-viewport {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.xterm .xterm-screen {
+  touch-action: pan-y;
+}

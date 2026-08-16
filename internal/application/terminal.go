@@ -30,6 +30,8 @@ type TerminalSettings struct {
 	// 読み取り側（TerminalLimits）は範囲の外を既定へ戻す。
 	MaxSessions     int
 	ScrollbackBytes int
+	// FontSize は画面が字を描く大きさ。この engine は読むだけで、使わない。
+	FontSize int
 	// nil は既定の on、false は明示的に止めた値である。
 	CopyOnSelect    *bool
 	RightClickPaste *bool
@@ -48,6 +50,7 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		StartDirectory:  stored.EmbeddedTerminal.StartDirectory,
 		MaxSessions:     stored.EmbeddedTerminal.MaxSessions,
 		ScrollbackBytes: stored.EmbeddedTerminal.ScrollbackBytes,
+		FontSize:        stored.EmbeddedTerminal.FontSize,
 		CopyOnSelect:    stored.EmbeddedTerminal.CopyOnSelect,
 		RightClickPaste: stored.EmbeddedTerminal.RightClickPaste,
 	}
@@ -84,6 +87,7 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 		stored.EmbeddedTerminal = &EmbeddedTerminal{
 			MaxSessions:     settings.MaxSessions,
 			ScrollbackBytes: settings.ScrollbackBytes,
+			FontSize:        settings.FontSize,
 			StartDirectory:  settings.StartDirectory,
 			CopyOnSelect:    settings.CopyOnSelect,
 			RightClickPaste: settings.RightClickPaste,

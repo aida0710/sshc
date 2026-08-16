@@ -3,15 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <!--
-      interactive-widget=resizes-content は、仮想キーボードが出たときに
-      レイアウトビューポートを縮める。埋め込みターミナルが要る唯一の
-      キーボード対応がこれで、既に入っている addon-fit がそのまま追従する。
+      **interactive-widget は指定しない。** 仮想キーボードを避けるのは外殻の
+      仕事であり、ここでも避けると同じ隙間が二重に空く——実機で、キーボードと
+      画面上のキー列の間にキーボード 1 枚分の黒帯が出ていた。同じ問題を
+      2 か所で直したことが、そのままもう 1 つの不具合になっていた。
     -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>sshc</title>
-    <script type="module" crossorigin src="/assets/index-Co5Eqwfd.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/context-Bb3y_2go.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-C3uDA8nK.css">
+    <script type="module" crossorigin src="/assets/index-CKWF200X.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/context-BruXLUAx.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-D5FmvtFe.css">
   </head>
   <body>
     <div id="root"></div>

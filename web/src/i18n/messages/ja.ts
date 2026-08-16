@@ -66,6 +66,9 @@ export const ja = {
   "terminal.maxSessionsHint": "1〜200。空にすると既定の 50 本です。上限に達した状態で開こうとすると拒否します — 古いコンソールを黙って閉じることはありません。",
   "terminal.scrollbackLabel": "1 本あたりのスクロールバック（バイト）",
   "terminal.scrollbackHint": "16384〜4194304。空にすると既定の 262144（256 KiB）です。スクロールバックはメモリのみで、ディスクへ書きません。",
+  "terminal.fontSizeLabel": "文字の大きさ",
+  "terminal.fontSizeHint":
+    "ピクセル。空欄なら画面に合わせます——狭い画面では 15、それ以外では 13。",
   "terminal.copyOnSelectLabel": "選択した文字列を自動的にコピーする",
   "terminal.copyOnSelectHint": "選択を終えたときに一度だけコピーします。選択によってシステムのクリップボードを置き換えたくない場合はオフにします。",
   "terminal.rightClickPasteLabel": "右クリックで貼り付ける",
