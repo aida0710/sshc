@@ -146,6 +146,9 @@ const themeLabels: Record<Theme, MessageKey> = {
   dark: "shell.themeDark",
 };
 
+// ハンバーガーが指す先。aria-controls は id を要求する。
+const navigationId = "primary-navigation";
+
 export function App({ bootstrap, health, vault = integrationsApi.passwordVault }: AppProps) {
   const { t, locale, setLocale } = useLanguage();
   const { theme, setTheme } = useTheme();
@@ -178,8 +181,24 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // Connections で開いたものは Keys でも開いたままになる——セクションを
   // 切り替えるたびに自分で閉じるペインでは、頻繁に開き直す羽目になる。
   // これはホストについての好みではなく、ウィンドウについての好みだからだ。
+  // ナビゲーションのドロワーは狭い画面にだけ存在する。**これは媒体クエリ
+  // ではない** —— md 以上では Tailwind 側がこの state を無視する形にして
+  // あるので、幅が変わったときに畳み直す処理も要らない。
+  const [navigationOpen, setNavigationOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
+
+  // Esc でドロワーを閉じる。**nav の onKeyDown ではなく document に付ける** ——
+  // 開いた直後にフォーカスがドロワーの中にあるとは限らず、そのときに閉じられ
+  // なければ、行き止まりを作ったことになる。
+  useEffect(() => {
+    if (!navigationOpen) return;
+    function close(event: KeyboardEvent) {
+      if (event.key === "Escape") setNavigationOpen(false);
+    }
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [navigationOpen]);
   // 開いているセッションはセクションに属さない。どの画面を見ていても同じ
   // ものが開いているので、一覧はナビゲーションと同じ高さ——シェル——が持つ。
   // URL には載せない。共有可能な URL に載せる価値のある状態ではない。
@@ -332,8 +351,15 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       <a
         href={sectionPath(name)}
         aria-current={section === name ? "page" : undefined}
-        onClick={(event) => followSectionLink(event, name)}
-        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
+        onClick={(event) => {
+          // **遷移したらドロワーを畳む。** 開いたままだと、選んだ先が
+          // 自分の後ろに隠れる。広い画面ではドロワーが無いので何も起きない。
+          setNavigationOpen(false);
+          followSectionLink(event, name);
+        }}
+        // px-3 py-2.5 に md: を付けない。24px のクリック標的はデスクトップでも
+        // 狭く、触れる画面でだけ広げる理由がない。
+        className={`flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm ${
           section === name ? "bg-select-fill text-ink" : "text-ink hover:bg-select-fill"
         }`}
       >
@@ -461,7 +487,22 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   return (
     <div className="flex h-screen flex-col bg-canvas text-ink">
       <IconSprite />
-      <header className="flex shrink-0 items-center gap-3 border-b border-line bg-toolbar px-6 py-2.5">
+      {/*
+        z-20 は inspector のシート (z-10) より上、ナビのドロワー (z-30) より下で
+        ある。狭い画面で inspector が面を覆っても、それを閉じるトグルは必ず
+        この帯の上に残る。
+      */}
+      <header className="relative z-20 flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2.5 md:gap-3 md:px-6">
+        <button
+          type="button"
+          aria-label={t("shell.primaryNavigation")}
+          aria-expanded={navigationOpen}
+          aria-controls={navigationId}
+          onClick={() => setNavigationOpen((open) => !open)}
+          className="shrink-0 rounded-md border border-control-line bg-card p-2 md:hidden"
+        >
+          <Icon name="menu" className="h-4 w-4" />
+        </button>
         {/*
           アプリケーション名は引き続き h1 であり、開いているセクションは
           見出しにせずその横に表示する。セクションを見出しにしてしまうと
@@ -470,12 +511,12 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           ネームを部分一致で照合するため、スイートのページレベルクエリは
           それらの見出しを二つ見つけてしまい、失敗する。
         */}
-        <h1 className="shrink-0 whitespace-nowrap text-xs font-medium text-ink-muted">{t("shell.title")}</h1>
-        <span aria-hidden="true" className="text-xs text-ink-faint">/</span>
+        <h1 className="hidden shrink-0 whitespace-nowrap text-xs font-medium text-ink-muted md:block">{t("shell.title")}</h1>
+        <span aria-hidden="true" className="hidden text-xs text-ink-faint md:inline">/</span>
         <p className="shrink-0 whitespace-nowrap text-sm font-semibold">
           {route.kind === "section" ? t(sectionLabels[route.section]) : t("shell.pageNotFound")}
         </p>
-        <p role="status" className="flex min-w-0 items-center gap-1.5 truncate text-xs text-ink-muted">
+        <p role="status" className="hidden min-w-0 items-center gap-1.5 truncate text-xs text-ink-muted sm:flex">
           <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-live" />
           {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
         </p>
@@ -491,7 +532,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
             />
           </span>
         )}
-        <label htmlFor="appearance" className="shrink-0 whitespace-nowrap text-sm text-ink-muted">
+        <label htmlFor="appearance" className="hidden shrink-0 whitespace-nowrap text-sm text-ink-muted md:inline">
           {t("shell.theme")}
         </label>
         <select
@@ -506,7 +547,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
             </option>
           ))}
         </select>
-        <label htmlFor="language" className="shrink-0 whitespace-nowrap text-sm text-ink-muted">
+        <label htmlFor="language" className="hidden shrink-0 whitespace-nowrap text-sm text-ink-muted md:inline">
           {t("shell.language")}
         </label>
         <select
@@ -523,14 +564,16 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         </select>
       </header>
       <div
-        className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] ${
+        className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[15rem_minmax(0,1fr)] ${
           // minmax(0,…) on the middle track for the same reason min-h-0 is on
           // the row: a bare 1fr is minmax(auto,1fr), so the column refuses to
           // shrink below its content and the panel runs out under the
           // inspector instead of narrowing to make room for it.
-          inspector !== null && inspectorOpen
-            ? "grid-cols-[15rem_minmax(0,1fr)_17rem]"
-            : "grid-cols-[15rem_minmax(0,1fr)]"
+          //
+          // **grid-cols-1 が既定である。** 狭い画面に置ける面は 1 つで、ナビは
+          // ドロワーとしてこの格子の外へ出て、inspector はシートになる。列が
+          // 増えるのは幅が増えたときだけだ。
+          inspector !== null && inspectorOpen ? "lg:grid-cols-[15rem_minmax(0,1fr)_17rem]" : ""
         }`}
       >
         {/*
@@ -539,9 +582,21 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           位置が変わり、探し直すことになる。溢れるのは下半分だけであり、
           そこだけが自分でスクロールする。
         */}
+        {navigationOpen ? (
+          <div
+            aria-hidden="true"
+            onClick={() => setNavigationOpen(false)}
+            className="fixed inset-0 z-20 bg-canvas/70 md:hidden"
+          />
+        ) : null}
         <nav
+          id={navigationId}
           aria-label={t("shell.primaryNavigation")}
-          className="relative flex min-h-0 flex-col overflow-hidden border-r border-line bg-sidebar p-2"
+          // 狭い画面ではこの格子の外に出て、面の上に重なる。md 以上では列へ
+          // 戻り、translate も z も打ち消されるので、開閉の state は無視される。
+          className={`fixed inset-y-0 left-0 z-30 flex w-72 min-h-0 flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform md:static md:z-auto md:w-auto md:translate-x-0 ${
+            navigationOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
         >
           <div className="shrink-0">
           {/*
