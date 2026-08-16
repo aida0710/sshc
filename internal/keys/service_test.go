@@ -1256,3 +1256,20 @@ func unsealForTest(sealed []byte) ([]byte, error) {
 }
 
 var testSealMarker = []byte("sealed:")
+
+// **道具が無いことは、機能が無いことである。** Android には ssh-agent が
+// 居ないので agent は nil になる。そのとき一覧が「エージェントは居る」と
+// 言えば、画面は押しても何も起きないボタンを出す。
+//
+// nil を渡すことに意味がある——available を false にした fake は「居るが
+// 応答しない」であって、「そもそも居ない」ではない。Android は後者である。
+func TestAgentIdentitiesSayNoAgentWhenNoneIsWired(t *testing.T) {
+	service, _ := newServiceWithAgent(t, newQueryRunner(), nil)
+	identities, available := service.AgentIdentities(context.Background())
+	if available {
+		t.Error("a service with no agent claims one is reachable")
+	}
+	if identities != nil {
+		t.Errorf("identities = %v, want none", identities)
+	}
+}

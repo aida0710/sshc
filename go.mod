@@ -43,10 +43,14 @@ require (
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	github.com/woodsbury/decimal128 v1.4.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/mod v0.37.0 // indirect
+	golang.org/x/mobile v0.0.0-20260813181013-1960c775504c // indirect
+	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	golang.org/x/tools v0.47.0 // indirect
+	golang.org/x/tools v0.49.0 // indirect
 )
 
-tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+tool (
+	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+	golang.org/x/mobile/cmd/gomobile
+)

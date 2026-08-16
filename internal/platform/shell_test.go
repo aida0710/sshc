@@ -28,3 +28,24 @@ func TestLoginEnvironmentDropsWhatNpmInjected(t *testing.T) {
 		t.Errorf("kept = %q, want %q", kept, want)
 	}
 }
+
+// Android には /bin/bash も /bin/zsh も居ない。**/bin/sh すら居ない** ——
+// Android の sh は /system/bin/sh (mksh) である。ここを間違えると、埋め込み
+// ターミナルは「開けるシェルが無い」としか言えなくなる。
+func TestShellFallbacksOnAndroidNameTheOnlyShellThatExists(t *testing.T) {
+	want := []string{"/system/bin/sh"}
+	if got := shellFallbacks("android"); !slices.Equal(got, want) {
+		t.Errorf("shellFallbacks(android) = %q, want %q", got, want)
+	}
+}
+
+// macOS の既定は zsh、それ以外の unix は bash である。**android を足したことで
+// この 2 つが変わっていないこと**を、同じ場所で言う。
+func TestShellFallbacksKeepTheirExistingOrder(t *testing.T) {
+	if got, want := shellFallbacks("darwin"), []string{"/bin/zsh", "/bin/bash", "/bin/sh"}; !slices.Equal(got, want) {
+		t.Errorf("shellFallbacks(darwin) = %q, want %q", got, want)
+	}
+	if got, want := shellFallbacks("linux"), []string{"/bin/bash", "/bin/zsh", "/bin/sh"}; !slices.Equal(got, want) {
+		t.Errorf("shellFallbacks(linux) = %q, want %q", got, want)
+	}
+}
