@@ -1,16 +1,19 @@
 //go:build windows
 
-// Package acltest builds the Windows security fixtures that the private-state
-// tests need and that no ordinary API call can produce.
+// Package acltest builds the private-state fixtures that the tests need and
+// that an ordinary write cannot produce.
 package acltest
 
 import (
 	"errors"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"sshc/internal/platform/windowsacl"
 )
 
 // InstallForeignOwner は、path の所有者を、この token のものではない SID にする。
@@ -117,4 +120,27 @@ func adjustRestorePrivilege(token windows.Token, attributes uint32) (windows.Tok
 		return windows.Tokenprivileges{}, last
 	}
 	return previous, nil
+}
+
+// WritePrivateFile places a file that the private-state readers will accept.
+//
+// **中身を試すには、まず入れ物が正しくなければならない。** private state の
+// 読み口は所有者と保護 DACL を先に確かめ、そこで断ったものは解析しない。素の
+// os.WriteFile ではそこへ届かないので、本番と同じ経路で作る。
+func WritePrivateFile(t *testing.T, path string, body []byte) {
+	t.Helper()
+	if err := windowsacl.EnsureDirectory(filepath.Dir(path)); err != nil {
+		t.Fatal(err)
+	}
+	file, err := windowsacl.OpenOrCreateFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write(body); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

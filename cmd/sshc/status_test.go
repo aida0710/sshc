@@ -13,6 +13,7 @@ import (
 
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
+	"sshc/internal/platform/windowsacl/acltest"
 )
 
 // **秘密を持たない者には答えない。** 本物がそうなので、偽物もそうする
@@ -113,7 +114,7 @@ func TestReadHandoffExplainsHowToRecoverFromAProtocolMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	stateDir := filepath.Join(t.TempDir(), "state")
-	writePrivateStateFile(t, stateDir, handoff.FileName, body)
+	acltest.WritePrivateFile(t, filepath.Join(stateDir, handoff.FileName), body)
 
 	_, err = readHandoff(stateDir)
 	if !errors.Is(err, handoff.ErrProtocolVersion) {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 )
@@ -102,9 +103,7 @@ func TestServiceTerminalLimitsFallBackToTheDefaults(t *testing.T) {
 	}
 
 	// 読めない metadata でも端末は開ける。
-	if err := os.WriteFile(service.metadata.Path(), []byte("{not json"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, service.metadata.Path(), []byte("{not json"))
 	if limits := service.TerminalLimits(); limits != terminal.DefaultLimits() {
 		t.Fatalf("limits with unreadable metadata = %#v", limits)
 	}

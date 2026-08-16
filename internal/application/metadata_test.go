@@ -2,11 +2,11 @@ package application
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 )
@@ -260,9 +260,7 @@ func TestMetadataStoreRoundTripsThroughOneTransaction(t *testing.T) {
 	if err := store.EnsureDirectory(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(change.Path, change.Contents, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, change.Path, change.Contents)
 
 	reloaded, reloadedPrecondition, err := store.Load()
 	if err != nil {
