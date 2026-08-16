@@ -53,8 +53,10 @@ export class CrashBoundary extends Component<{ children: ReactNode }, State> {
   }
 }
 
-// スタイルはインラインである。**壊れたのがスタイルシートの読み込みだった場合、
-// クラス名は何も塗らない。** この画面だけは、他の何にも依存せずに出る。
+// スタイルはインラインで、色は生の 16 進数である。**壊れたのがスタイルシート
+// そのものだった場合、トークンもクラス名も何も塗らない。** この画面だけは、
+// 他のどれにも依存せずに出なければならない。だから palette-exempt を付ける
+// ——ここは配色の一部ではなく、配色が届かなかったときに出るものである。
 const crashPage: CSSProperties = {
   padding: "24px",
   paddingTop: "48px",
@@ -63,8 +65,8 @@ const crashPage: CSSProperties = {
   gap: "12px",
   alignItems: "flex-start",
   fontFamily: "system-ui, sans-serif",
-  color: "#111",
-  background: "#fff",
+  color: "#111111", // palette-exempt
+  background: "#ffffff", // palette-exempt
   minHeight: "100vh",
 };
 const heading: CSSProperties = { fontSize: "16px", fontWeight: 600, margin: 0 };
@@ -73,8 +75,8 @@ const block: CSSProperties = {
   fontSize: "12px",
   whiteSpace: "pre-wrap",
   wordBreak: "break-word",
-  background: "#f3f3f3",
-  border: "1px solid #ddd",
+  background: "#f3f3f3", // palette-exempt
+  border: "1px solid #dddddd", // palette-exempt
   borderRadius: "6px",
   padding: "8px",
   margin: 0,
@@ -84,6 +86,6 @@ const action: CSSProperties = {
   fontSize: "14px",
   padding: "10px 16px",
   borderRadius: "6px",
-  border: "1px solid #888",
-  background: "#fff",
+  border: "1px solid #888888", // palette-exempt
+  background: "#ffffff", // palette-exempt
 };
