@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"path/filepath"
+	"path"
 
 	"sshc/internal/app"
 	"sshc/internal/handoff"
@@ -64,7 +64,11 @@ func androidEnvironment(home, cache string) func() []string {
 		"HOME=" + home,
 		"PATH=/system/bin:/system/xbin",
 		"TERM=xterm-256color",
-		"TMPDIR=" + filepath.Clean(cache),
+		// **path であって path/filepath ではない。** ここで組み立てているのは
+		// Android の中の道であり、区切りは常に "/" である。filepath は
+		// これをコンパイルしたホストの区切りを使うので、Windows から見ると
+		// TMPDIR が \data\user\0\app\cache になる。
+		"TMPDIR=" + path.Clean(cache),
 	}
 	return func() []string { return append([]string(nil), environ...) }
 }
