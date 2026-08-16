@@ -366,6 +366,13 @@ func (s *Service) Overview() (Overview, error) {
 	if overview.Hosts == nil {
 		overview.Hosts = []HostEntry{}
 	}
+	// **エントリファイルが無いワークスペースは、ここを nil のまま通る。**
+	// 初めて起動した Android 端末には ~/.ssh/config が無く、Home 画面は
+	// groups.length を読んで落ちた。この一覧に 1 行足し忘れることが、
+	// そのまま画面の消える不具合になる。
+	if overview.Groups == nil {
+		overview.Groups = []GroupView{}
+	}
 	if overview.Diagnostics == nil {
 		overview.Diagnostics = []DiagnosticView{}
 	}
