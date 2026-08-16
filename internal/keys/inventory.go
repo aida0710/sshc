@@ -272,7 +272,7 @@ func (scanner *Scanner) classifyFile(inventory *Inventory, absolute, relative st
 	}
 	item.ContentDigest = storage.Digest(contents)
 	classify(&item, contents)
-	if item.Kind == KindPrivateKey && info.Mode().Perm()&0o077 != 0 {
+	if item.Kind == KindPrivateKey && exposedToOthers(info) {
 		item.PermissionRisk = true
 	}
 	return item
