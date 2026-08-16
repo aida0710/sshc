@@ -11,9 +11,8 @@ import (
 )
 
 type makeBoundaryCapture struct {
-	Arguments          []string          `json:"arguments"`
-	Environment        map[string]string `json:"environment"`
-	EnvironmentEntries []string          `json:"environmentEntries"`
+	Arguments   []string          `json:"arguments"`
+	Environment map[string]string `json:"environment"`
 }
 
 func TestMakeBuildCLITransfersRawInputsWithoutRecipeShellExpansion(t *testing.T) {
@@ -65,8 +64,7 @@ func main() {
 	if err := json.NewEncoder(file).Encode(struct {
 		Arguments []string ` + "`json:\"arguments\"`" + `
 		Environment map[string]string ` + "`json:\"environment\"`" + `
-		EnvironmentEntries []string ` + "`json:\"environmentEntries\"`" + `
-	}{os.Args[1:], environment, os.Environ()}); err != nil { panic(err) }
+	}{os.Args[1:], environment}); err != nil { panic(err) }
 }
 `
 	if err := os.WriteFile(fakeGoSource, []byte(source), 0o600); err != nil {
@@ -113,26 +111,38 @@ func main() {
 		"RELEASE_DIR="+releaseDirectory,
 	)
 	command.Dir = repository
+	// 継承環境から Make の輸出を上書きさせない、という約束を確かめる。名前の綴りは
+	// ホストの環境の意味論に合わせる。Windows のプロセス環境は大文字小文字を区別
+	// しないので、そこに「別綴り」というものは存在せず、綴りを変えて渡すことは
+	// GNU Make の Windows 移植の変数表を突くだけになる。別綴りそのものの扱いは
+	// canonicalizeNativeEnvironment の単体テストが両ホストで見ている。
+	hostileNames := []string{
+		"gOeNv", "gOoS", "GoArCh", "cGo_EnAbLeD",
+		"sshc_native_version", "Sshc_Native_Goos", "sshc_native_goarch", "Sshc_Native_Cgo",
+		"sshc_native_output", "sshc_native_mac_bundles", "Sshc_Native_Linux_Bundles",
+		"sshc_native_windows_bundles", "Sshc_Native_Release_Targets",
+		"sshc_native_release_arches", "Sshc_Native_Release_Dir",
+	}
+	if runtime.GOOS == "windows" {
+		for index, name := range hostileNames {
+			hostileNames[index] = strings.ToUpper(name)
+		}
+	}
+	hostileValues := []string{
+		filepath.Join(temporary, "mixed-hostile-goenv"), "windows", "386", "1",
+		"inherited-version-alias", "windows", "386", "1",
+		"must-not-override-public-output", "inherited-mac-alias", "inherited-linux-alias",
+		"inherited-windows-alias", "inherited-target-alias",
+		"inherited-arches-alias", "inherited-dir-alias",
+	}
 	command.Env = append(os.Environ(),
 		"PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"SSHC_TEST_CAPTURE="+capturePath,
 		"SSHC_TEST_MAKE_SENTINEL="+makeExpansionSentinel,
-		"gOeNv="+filepath.Join(temporary, "mixed-hostile-goenv"),
-		"gOoS=windows",
-		"GoArCh=386",
-		"cGo_EnAbLeD=1",
-		"sshc_native_version=inherited-version-alias",
-		"Sshc_Native_Goos=windows",
-		"sshc_native_goarch=386",
-		"Sshc_Native_Cgo=1",
-		"sshc_native_output=must-not-override-public-output",
-		"sshc_native_mac_bundles=inherited-mac-alias",
-		"Sshc_Native_Linux_Bundles=inherited-linux-alias",
-		"sshc_native_windows_bundles=inherited-windows-alias",
-		"Sshc_Native_Release_Targets=inherited-target-alias",
-		"sshc_native_release_arches=inherited-arches-alias",
-		"Sshc_Native_Release_Dir=inherited-dir-alias",
 	)
+	for index, name := range hostileNames {
+		command.Env = append(command.Env, name+"="+hostileValues[index])
+	}
 	combined, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("make build-cli: %v\n%s", err, combined)
@@ -177,42 +187,9 @@ func main() {
 			t.Errorf("%s = %q, want %q", key, got, want)
 		}
 	}
-	effectiveHostEnvironment := capture.EnvironmentEntries
-	if runtime.GOOS != "windows" {
-		// A Unix process can contain differently-cased names at once, while a
-		// Windows process environment cannot. Apply the canonical values GNU
-		// Make actually exported to a case-insensitive mock of the hostile
-		// inherited environment. Native Windows CI exercises the branch above.
-		effectiveHostEnvironment = []string{
-			"gOeNv=" + filepath.Join(temporary, "mixed-hostile-goenv"),
-			"gOoS=windows",
-			"GoArCh=386",
-			"cGo_EnAbLeD=1",
-		}
-		for _, key := range []string{"GOENV", "GOOS", "GOARCH", "CGO_ENABLED"} {
-			effectiveHostEnvironment = setEnvironmentValue(effectiveHostEnvironment, key, capture.Environment[key])
-		}
-		t.Log("Windows-native Make execution unavailable; verified case-insensitive process environment with captured canonical Make exports")
-	}
-	for key, want := range map[string]string{"GOENV": "off", "GOOS": "", "GOARCH": "", "CGO_ENABLED": ""} {
-		if got, present := windowsEnvironmentValue(effectiveHostEnvironment, key); !present || got != want {
-			t.Errorf("mock Windows host go run effective %s = %q, present=%v, want %q", key, got, present, want)
-		}
-	}
-}
-
-// Go's Windows process launcher deduplicates environment names
-// case-insensitively and keeps the last entry. Native Windows uses the captured
-// process environment; other hosts use the canonical captured Make exports
-// applied to a hostile case-insensitive mock above.
-func windowsEnvironmentValue(environment []string, key string) (string, bool) {
-	for index := len(environment) - 1; index >= 0; index-- {
-		name, value, ok := strings.Cut(environment[index], "=")
-		if ok && strings.EqualFold(name, key) {
-			return value, true
-		}
-	}
-	return "", false
+	// wantEnvironment は fake go が os.LookupEnv で引いた値を見ている。この引き方は
+	// ホスト自身の規則そのもの — Unix では完全一致、Windows では大文字小文字を無視
+	// した照合 — なので、go run が実際に受け取る値をどちらのホストでも表している。
 }
 
 func TestNativeMakeRecipesContainOnlyFixedInputs(t *testing.T) {
