@@ -7,6 +7,7 @@
 package terminal
 
 import (
+	"context"
 	"errors"
 	"io"
 	"strings"
@@ -121,8 +122,23 @@ type Process interface {
 }
 
 // Starter は PTY を確保して子プロセスを起こす。
+//
+// context は**確保そのものだけ**を支配する。返った Process はそこから切り離された
+// 寿命を持つ——さもなければ、開いた HTTP ハンドラが返った瞬間にセッションが死ぬ。
 type Starter interface {
-	Start(command Command, size Size) (Process, error)
+	Start(ctx context.Context, command Command, size Size) (Process, error)
+}
+
+// forceCloser は、graceful な Hangup が返らなくても下の輸送を断てる Process が
+// 満たす、任意の追加契約である。
+//
+// **Process そのものは広げない。** これを実装するのは、切るべき OS の資源を
+// 持っているもの——Unix の PTY のプロセスグループと、プロセス内 SSH のホップ——
+// だけであり、持たない実装に空のメソッドを配って回る理由が無い。
+//
+// メソッドが公開なのは、実装が別のパッケージに居るからである。型は公開しない。
+type forceCloser interface {
+	ForceClose() error
 }
 
 var (
@@ -139,6 +155,10 @@ var (
 	ErrInvalidSize = errors.New("the terminal size is out of range")
 	// ErrInvalidTitle は、一覧に出せない名前を拒否する。
 	ErrInvalidTitle = errors.New("that is not a usable session name")
+	// ErrShuttingDown は、停止を始めたレジストリが新しいセッションを断ることを
+	// 報告する。**停止中に開けてはならない。** 開けば、停止処理が数え終えた後に
+	// 生きたセッションが残る。
+	ErrShuttingDown = errors.New("the terminal registry is shutting down")
 )
 
 // MaxTitle は、一覧に出す名前の長さの上限である。

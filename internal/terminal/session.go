@@ -207,6 +207,41 @@ func (s *Session) Hangup() error {
 	return process.Hangup()
 }
 
+// closeStreams は、アタッチしているものをすべて外す。
+//
+// 停止のときに呼ぶ。プロセスが応答しなくても、画面側は待たされずに済む。
+// セッションそのものは終わらない——終わったことを言うのは pump だけである。
+func (s *Session) closeStreams() {
+	s.mutex.Lock()
+	streams := make([]*Stream, 0, len(s.streams))
+	for stream := range s.streams {
+		streams = append(streams, stream)
+	}
+	s.streams = map[*Stream]bool{}
+	s.mutex.Unlock()
+	for _, stream := range streams {
+		stream.close()
+	}
+}
+
+// forceClose は、Process が持っていればその強制停止を呼ぶ。
+//
+// 持っていなければ何もしない。**待たない。** 呼び出し側は締切に間に合わせる
+// ためにこれを呼んでおり、graceful な Hangup が返らないことこそが理由である。
+func (s *Session) forceClose() error {
+	s.mutex.Lock()
+	process, exited := s.process, s.exited
+	s.mutex.Unlock()
+	if exited != nil || process == nil {
+		return nil
+	}
+	forcer, ok := process.(forceCloser)
+	if !ok {
+		return nil
+	}
+	return forcer.ForceClose()
+}
+
 // pump は PTY を読み、バッファへ書き、アタッチしているものへ配る。
 func (s *Session) pump(now func() time.Time) {
 	defer close(s.done)

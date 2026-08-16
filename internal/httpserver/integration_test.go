@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -51,11 +50,12 @@ func TestIntegratedBootstrapFlow(t *testing.T) {
 		serverHandler.ServeHTTP(response, request)
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
 	serveDone := make(chan error, 1)
-	go func() { serveDone <- server.Serve(ctx) }()
+	go func() { serveDone <- server.Serve() }()
 	t.Cleanup(func() {
-		cancel()
+		server.BeginStopping()
+		server.BeginShutdown()
+		_ = server.Wait()
 		if err := <-serveDone; err != nil {
 			t.Errorf("Serve error = %v", err)
 		}

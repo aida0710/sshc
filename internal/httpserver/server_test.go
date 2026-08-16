@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -72,10 +71,8 @@ func TestServerServesStaticFilesAndShutsDownAfterCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	serveDone := make(chan error, 1)
-	go func() { serveDone <- server.Serve(ctx) }()
+	go func() { serveDone <- server.Serve() }()
 
 	response, err := http.Get(server.URL() + "/asset.txt")
 	if err != nil {
@@ -93,7 +90,8 @@ func TestServerServesStaticFilesAndShutsDownAfterCancellation(t *testing.T) {
 		t.Fatalf("static body = %q", got)
 	}
 
-	cancel()
+	server.BeginStopping()
+	server.BeginShutdown()
 	select {
 	case err := <-serveDone:
 		if err != nil {

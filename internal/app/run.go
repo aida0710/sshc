@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -41,13 +42,16 @@ const unsafeAliasWarning = "This alias contains characters that could change the
 
 type Dependencies struct {
 	Random io.Reader
-	// Announce は、この常駐への入口を人へ伝える。
+	// Announce は、この常駐が受け付けられる状態になったことを伝える。
 	//
 	// **ブラウザは開かない。** 画面はデスクトップの外殻が出すので、この
-	// プロセスが既定のブラウザを起こす理由はもう無い。書き出す先は、
-	// `sshc` を打った人の端末である。nil なら何も言わない——ログへ
-	// トークンを落とさないための、自動化からの明示的な選択である。
-	Announce func(entrance string) error
+	// プロセスが既定のブラウザを起こす理由はもう無い。nil なら何も言わない
+	// ——ログへトークンを落とさないための、自動化からの明示的な選択である。
+	//
+	// 入口の URL を運ぶのは desktop の owner のときだけである。headless に
+	// 渡す Readiness は URL を持たない——**持たせれば、それを出さない約束は
+	// 呼び出し側の注意深さに委ねられる。**
+	Announce func(Readiness) error
 	Listen   ListenFunc
 	UI       fs.FS
 	Logger   *slog.Logger
@@ -94,6 +98,27 @@ type Dependencies struct {
 	// 本番では nil で、time.Now が使われる。ハードニングのスイートはこれを設定し、
 	// sleep せずにトークンを老化させる。
 	SessionNow func() time.Time
+	// ShutdownTimeout は、graceful な後始末に与える猶予である。0 なら
+	// defaultShutdownTimeout。
+	//
+	// **外側の強制終了より確実に短くなければならない。** desktop の外殻は
+	// stdin を閉じた時点から 5 秒で数え始めるので、Go 側のタイマーは必ずその
+	// 後に始まる。等しい値を置けば、内側の強制停止に到達する前に外から殺される。
+	// テストは秒を待たずに済むよう、ここへ短い値を注入する。
+	ShutdownTimeout time.Duration
+}
+
+// defaultShutdownTimeout は、承認済みの内側の締切である。
+const defaultShutdownTimeout = 4 * time.Second
+
+// Readiness は、受け付けを始めた常駐がどんな状態かを述べる。
+type Readiness struct {
+	Owner handoff.Owner
+	// DesktopURL は OwnerDesktop のときだけ空でない。
+	DesktopURL string
+	// VaultExists は、まだ作られていない vault と、作られていて施錠されている
+	// vault を分ける。headless の案内はこれだけで決まる。
+	VaultExists bool
 }
 
 // buildKeyService は、設定エンジンが使うのと同じワークスペース上に鍵 vault を
@@ -135,22 +160,31 @@ func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, co
 // ミドルウェア・同じハンドラ構築に対して走る。ずれていきかねない手作りの部分
 // 集合に対してではない。
 func Build(dependencies Dependencies, version string) (*httpserver.Server, string, error) {
-	server, bootstrap, _, err := build(dependencies, version)
-	return server, bootstrap, err
+	built, err := build(dependencies, version)
+	return built.server, built.bootstrap, err
+}
+
+// runtime は、build が組み立てたもののうち、寿命の管理に要るものである。
+type runtime struct {
+	server    *httpserver.Server
+	bootstrap string
+	document  handoff.Handoff
+	terminals *terminal.Registry
+	passwords *secret.Service
 }
 
 // build は Run が後片付けに使う秘密も返す。ファイルを読み直すと、その間に別の
 // 実行が公開した秘密を自分のものと誤認して消せるためである。
-func build(dependencies Dependencies, version string) (*httpserver.Server, string, handoff.Handoff, error) {
+func build(dependencies Dependencies, version string) (runtime, error) {
 	listener, err := dependencies.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
-		return nil, "", handoff.Handoff{}, fmt.Errorf("listen: %w", err)
+		return runtime{}, fmt.Errorf("listen: %w", err)
 	}
 
 	sessions, bootstrap, err := session.NewManager(dependencies.Random)
 	if err != nil {
 		listener.Close()
-		return nil, "", handoff.Handoff{}, fmt.Errorf("session: %w", err)
+		return runtime{}, fmt.Errorf("session: %w", err)
 	}
 	if dependencies.SessionNow != nil {
 		sessions.Now = dependencies.SessionNow
@@ -159,7 +193,7 @@ func build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, dependencies.Home)
 	if err != nil {
 		listener.Close()
-		return nil, "", handoff.Handoff{}, fmt.Errorf("workspace: %w", err)
+		return runtime{}, fmt.Errorf("workspace: %w", err)
 	}
 	// Random は並行利用に耐えなければならない。セッションマネージャと二つの
 	// トランザクションマネージャが読むからだ。本番では crypto/rand を渡す。
@@ -259,7 +293,7 @@ func build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	cliSecret, err := handoff.Mint(dependencies.Random)
 	if err != nil {
 		listener.Close()
-		return nil, "", handoff.Handoff{}, err
+		return runtime{}, err
 	}
 
 	server, err := httpserver.New(httpserver.Options{
@@ -306,7 +340,7 @@ func build(dependencies Dependencies, version string) (*httpserver.Server, strin
 	})
 	if err != nil {
 		listener.Close()
-		return nil, "", handoff.Handoff{}, err
+		return runtime{}, err
 	}
 
 	// プロセスがサーブを始める場所ではなくここで書くのは、ここで URL が判明するから
@@ -323,12 +357,28 @@ func build(dependencies Dependencies, version string) (*httpserver.Server, strin
 		Version:         version,
 		ProtocolVersion: handoff.ProtocolVersion,
 	}
+	// **handoff を書けないことは致命である。** 書けなかった常駐は、`sshc <alias>`
+	// から見えないまま生きていることになり、その状態を警告ひとつで通り過ぎると、
+	// 2 台目が同じ名簿を書きに来る。
+	//
+	// そして書き込みの結果は不定でありうる——原子的な置き換えが成功したあとで
+	// ディレクトリの同期に失敗しうる。だから**どの失敗のあとでも**、自分の秘密で
+	// 認証する削除を試みる。置き換えが起きていなければ、あるいは別の秘密の名簿が
+	// 置かれていれば、その削除は何も消さない。
 	if err := handoff.Write(HandoffDir(dependencies.Home), document); err != nil {
-		dependencies.Logger.Warn(
-			"write the command-line handoff; sshc <alias> will connect without a saved key passphrase",
-			"error", err)
+		if removeErr := handoff.Remove(HandoffDir(dependencies.Home), document.Secret); removeErr != nil {
+			err = errors.Join(err, fmt.Errorf("remove the possibly published handoff: %w", removeErr))
+		}
+		listener.Close()
+		return runtime{}, fmt.Errorf("publish the command-line handoff: %w", err)
 	}
-	return server, bootstrap, document, nil
+	return runtime{
+		server:    server,
+		bootstrap: bootstrap,
+		document:  document,
+		terminals: terminals,
+		passwords: passwordService,
+	}, nil
 }
 
 // HandoffDir は、動作中のアプリケーションが `sshc <alias>` の読むファイルを置く
@@ -339,51 +389,95 @@ func HandoffDir(home string) string {
 }
 
 func Run(ctx context.Context, dependencies Dependencies, version string) error {
-	server, bootstrap, document, err := build(dependencies, version)
+	built, err := build(dependencies, version)
 	if err != nil {
 		return err
 	}
-	// 埋め込みターミナルのセッションは、このプロセスが終わるときに終わる。
-	// 待たないのは、応答しないリモートに向いた ssh のために終了が引き延ばされて
-	// はならないからである。
-	defer server.CloseTerminals()
-
-	target := server.URL() + "/#bootstrap=" + bootstrap
-	serverCtx, stopServer := context.WithCancel(ctx)
-	defer stopServer()
-
-	// ハンドオフは URL が判明した時点で書かれ、終了時に取り除かれる。強制終了された
-	// プロセスが残していったコピーは、何も待ち受けていないポートを、誰も受け付け
-	// ない秘密とともに指しているだけなので、この削除は何かの拠り所となる保証では
-	// なく後片付けである。
-	//
-	// **消すのは、そこに残っているのが自分の 1 行であるときだけである。**
-	// エンジンは 1 台に絞ってあるが、名簿が 1 行しか無いという壊れ方は、起きた
-	// 瞬間から次の起動まで持続する——そういうものは二重に塞ぐ。
-	defer func() {
-		if err := handoff.Remove(HandoffDir(dependencies.Home), document.Secret); err != nil {
-			dependencies.Logger.Warn("remove the command-line handoff", "error", err)
-		}
-	}()
 
 	serveErrors := make(chan error, 1)
-	go func() { serveErrors <- server.Serve(serverCtx) }()
+	go func() { serveErrors <- built.server.Serve() }()
 
+	// listener が bind されていることが受付開始の境界である。Serve を起こしてから
+	// announce するまでに待つものは無い。
 	if dependencies.Announce != nil {
-		if err := dependencies.Announce(target); err != nil {
-			stopServer()
-			<-serveErrors
-			return fmt.Errorf("announce the entrance: %w", err)
+		exists := false
+		if built.passwords != nil {
+			if exists, err = built.passwords.Exists(); err != nil {
+				return errors.Join(fmt.Errorf("read the vault state: %w", err), built.unwind(dependencies))
+			}
+		}
+		readiness := Readiness{Owner: dependencies.Owner, VaultExists: exists}
+		if dependencies.Owner == handoff.OwnerDesktop {
+			readiness.DesktopURL = built.server.URL() + "/#bootstrap=" + built.bootstrap
+		}
+		if err := dependencies.Announce(readiness); err != nil {
+			return errors.Join(fmt.Errorf("announce the entrance: %w", err), built.unwind(dependencies))
 		}
 	}
 
 	select {
 	case err := <-serveErrors:
-		return err
+		return errors.Join(err, built.unwind(dependencies))
 	case <-ctx.Done():
-		stopServer()
-		return <-serveErrors
+		unwound := built.unwind(dependencies)
+		// Serve は listener が閉じたときに戻る。unwind がそれを起こしている。
+		return errors.Join(unwound, serveResult(<-serveErrors))
 	}
+}
+
+func serveResult(err error) error { return err }
+
+// unwind は、engine lock を握ったまま通る唯一の後始末である。
+//
+// 順序は承認済みのものであり、**どの段が失敗しても後ろの段は走る。**
+//
+//  1. 内側の締切を、後始末の進み具合とは無関係に張る。
+//  2. 新しい変更と Upgrade を断り、配ったリクエスト用 context を取り消す。
+//  3. 自分の秘密で認証して handoff を消す。
+//  4. terminal と HTTP の両方へ graceful を頼む。どちらも送り出して即座に返る。
+//  5. 二つの合流を同時に始める。締切より前に揃えば強制停止は起きない。
+//  6. 締切に達したら、terminal と HTTP の強制停止を別々の goroutine で始める。
+//     **どちらかを待ってからもう一方、ではない。**
+//  7. 強制のあとも、全部が合流するまで待つ。部分的な合流で錠を手放さない。
+//  8. vault を施錠する。両方の壁を越えた後だけである。
+func (r runtime) unwind(dependencies Dependencies) error {
+	timeout := dependencies.ShutdownTimeout
+	if timeout <= 0 {
+		timeout = defaultShutdownTimeout
+	}
+	// **締切は後始末の goroutine から独立している。** 手前の段が予想外に
+	// 詰まっても、強制停止の一斉開始はそれでも起きる。
+	forced := make(chan struct{})
+	deadline := time.AfterFunc(timeout, func() {
+		go r.terminals.ForceClose()
+		go r.server.ForceClose()
+		close(forced)
+	})
+	defer deadline.Stop()
+
+	r.server.BeginStopping()
+
+	var joined []error
+	if err := handoff.Remove(HandoffDir(dependencies.Home), r.document.Secret); err != nil {
+		joined = append(joined, fmt.Errorf("remove the command-line handoff: %w", err))
+	}
+
+	r.terminals.BeginShutdown()
+	r.server.BeginShutdown()
+
+	barriers := make(chan error, 2)
+	go func() { barriers <- r.terminals.Wait() }()
+	go func() { barriers <- r.server.Wait() }()
+	for range 2 {
+		if err := <-barriers; err != nil {
+			joined = append(joined, err)
+		}
+	}
+
+	if r.passwords != nil {
+		r.passwords.Lock()
+	}
+	return errors.Join(joined...)
 }
 
 // newOrigin は、このインストールの不透明な識別子を発行する。

@@ -139,7 +139,7 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 	if err != nil {
 		return h.startProblem(c, err)
 	}
-	session, err := h.Registry.Open(spec)
+	session, err := h.Registry.Open(c.Request().Context(), spec)
 	if err != nil {
 		return h.startProblem(c, err)
 	}
@@ -187,10 +187,50 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 	target := *alias
 	return terminal.Spec{
 		Kind: terminal.KindSSH, Alias: target, Title: target, Size: size,
-		Open: func(size terminal.Size) (terminal.Process, error) {
-			return h.Connect(context.Background(), target, size)
+		Open: func(ctx context.Context, size terminal.Size) (terminal.Process, error) {
+			// 確保が取り消されたなら、繋ぎに行かない。
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			// **成功したセッションの寿命は、要求から切り離す。** Dialer.Open は
+			// すぐ返り、渡された context を非同期の接続のあいだ持ち続けるので、
+			// 要求の context をそのまま渡すと、開いた HTTP ハンドラが返った瞬間に
+			// SSH セッションが死ぬ。取り消す権利は Process.Close が持つ。
+			sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+			process, err := h.Connect(sessionCtx, target, size)
+			if err != nil {
+				cancel()
+				return nil, err
+			}
+			return &sessionLifetime{Process: process, cancel: cancel}, nil
 		},
 	}, nil
+}
+
+// sessionLifetime は、セッションが生きているあいだだけ続く context を Process に
+// 結び付ける。
+type sessionLifetime struct {
+	terminal.Process
+	cancel context.CancelFunc
+}
+
+func (s *sessionLifetime) Close() error {
+	err := s.Process.Close()
+	s.cancel()
+	return err
+}
+
+// ForceClose は、包んだ Process の強制停止を素通しする。
+//
+// **ここで落としてはならない。** 落とせば、レジストリからは強制停止を持たない
+// Process に見え、締切に達しても輸送が切れなくなる。
+func (s *sessionLifetime) ForceClose() error {
+	var err error
+	if forcer, ok := s.Process.(interface{ ForceClose() error }); ok {
+		err = forcer.ForceClose()
+	}
+	s.cancel()
+	return err
 }
 
 var errMissingAlias = errors.New("an ssh session needs an alias")

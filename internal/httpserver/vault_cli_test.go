@@ -313,9 +313,9 @@ func TestCLIVaultLockDoesNotCloseLiveSessions(t *testing.T) {
 	}
 	process := &vaultLockSentinelPTY{scriptedPTY: newScriptedPTY()}
 	registry := &terminal.Registry{}
-	if _, err := registry.Open(terminal.Spec{
+	if _, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindShell,
-		Open: func(terminal.Size) (terminal.Process, error) { return process, nil },
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) { return process, nil },
 	}); err != nil {
 		t.Fatal(err)
 	}

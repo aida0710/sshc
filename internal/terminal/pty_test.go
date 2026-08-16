@@ -3,6 +3,7 @@
 package terminal_test
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -24,7 +25,7 @@ func TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus(t *testing.T) {
 		Start:  terminal.NewStarter(),
 		Limits: func() terminal.Limits { return terminal.Limits{MaxSessions: 2, Scrollback: 16 << 10} },
 	}
-	session, err := registry.Open(terminal.Spec{
+	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindShell, Title: "echo",
 		Size:    terminal.Size{Cols: 80, Rows: 24},
 		Command: terminal.Command{Path: echo, Arguments: []string{"embedded-terminal-canary"}},
@@ -59,7 +60,7 @@ func TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus(t *testing.T) {
 // PTY を確保したうえで、そこに置いたプログラムが無ければ開けない。
 func TestOpeningAMissingProgramFails(t *testing.T) {
 	registry := &terminal.Registry{Start: terminal.NewStarter(), Limits: terminal.DefaultLimits}
-	if _, err := registry.Open(terminal.Spec{
+	if _, err := registry.Open(context.Background(), terminal.Spec{
 		Kind:    terminal.KindShell,
 		Command: terminal.Command{Path: "/nonexistent/embedded-terminal"},
 	}); err == nil {

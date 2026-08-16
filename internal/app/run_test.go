@@ -32,8 +32,8 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 	var gotNetwork, gotAddress string
 	dependencies := Dependencies{
 		Random: bytes.NewReader(bytes.Repeat([]byte{0x81}, 96)),
-		Announce: func(target string) error {
-			opened <- target
+		Announce: func(readiness Readiness) error {
+			opened <- readiness.DesktopURL
 			return nil
 		},
 		Listen: func(network, address string) (net.Listener, error) {
@@ -43,7 +43,7 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 		UI:     fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:   t.TempDir(),
-		Owner:  handoff.OwnerHeadless,
+		Owner:  handoff.OwnerDesktop,
 		PID:    4242,
 	}
 
@@ -85,8 +85,8 @@ func TestRunLeavesAReplacementHandoffOwnedByAnotherSecret(t *testing.T) {
 	replacementSecret := "a later engine's distinct secret"
 	dependencies := Dependencies{
 		Random: bytes.NewReader(bytes.Repeat([]byte{0x82}, 96)),
-		Announce: func(target string) error {
-			base, _, found := strings.Cut(target, "/#")
+		Announce: func(readiness Readiness) error {
+			base, _, found := strings.Cut(readiness.DesktopURL, "/#")
 			if !found {
 				return errors.New("missing bootstrap target")
 			}
@@ -106,7 +106,7 @@ func TestRunLeavesAReplacementHandoffOwnedByAnotherSecret(t *testing.T) {
 		UI:     fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:   home,
-		Owner:  handoff.OwnerHeadless,
+		Owner:  handoff.OwnerDesktop,
 		PID:    4242,
 	}
 
@@ -135,7 +135,7 @@ func (failingListener) Addr() net.Addr {
 func TestRunReturnsServerFailureWithoutWaitingForCancellation(t *testing.T) {
 	dependencies := Dependencies{
 		Random:   bytes.NewReader(bytes.Repeat([]byte{0x91}, 96)),
-		Announce: func(string) error { return nil },
+		Announce: func(Readiness) error { return nil },
 		Listen:   func(string, string) (net.Listener, error) { return failingListener{}, nil },
 		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -162,7 +162,7 @@ func TestRunShutsServerDownWhenTheEntranceCannotBeAnnounced(t *testing.T) {
 	listener := &trackingListener{Listener: mustListen(t)}
 	dependencies := Dependencies{
 		Random:   bytes.NewReader(bytes.Repeat([]byte{0x72}, 96)),
-		Announce: func(string) error { return announceErr },
+		Announce: func(Readiness) error { return announceErr },
 		Listen:   func(string, string) (net.Listener, error) { return listener, nil },
 		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -248,15 +248,15 @@ func TestRunExposesTheKeyVaultAndItsTrashThroughTheWiredProcess(t *testing.T) {
 	opened := make(chan string, 1)
 	dependencies := Dependencies{
 		Random: rand.Reader,
-		Announce: func(target string) error {
-			opened <- target
+		Announce: func(readiness Readiness) error {
+			opened <- readiness.DesktopURL
 			return nil
 		},
 		Listen:    net.Listen,
 		UI:        fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:      home,
-		Owner:     handoff.OwnerHeadless,
+		Owner:     handoff.OwnerDesktop,
 		PID:       4242,
 		Toolchain: stubToolchain{},
 		KeyAgent:  stubKeyAgent{},
@@ -376,12 +376,15 @@ func TestBuildReturnsAServerAndAOneTimeBootstrapToken(t *testing.T) {
 		t.Fatal("Build() produced a server with no routes")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
-	go func() { served <- server.Serve(ctx) }()
-	cancel()
+	go func() { served <- server.Serve() }()
+	server.BeginStopping()
+	server.BeginShutdown()
 	if err := <-served; err != nil {
 		t.Fatalf("Serve() = %v", err)
+	}
+	if err := server.Wait(); err != nil {
+		t.Fatalf("Wait() = %v", err)
 	}
 }
 
@@ -411,31 +414,34 @@ func TestBuildWritesAVersionedOwnedHandoff(t *testing.T) {
 		t.Errorf("document = %#v", document)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
-	go func() { served <- server.Serve(ctx) }()
+	go func() { served <- server.Serve() }()
+	stop := func() {
+		server.BeginStopping()
+		server.BeginShutdown()
+	}
 	request, err := http.NewRequest(http.MethodGet, server.URL()+httpserver.StatusPath, nil)
 	if err != nil {
-		cancel()
+		stop()
 		t.Fatal(err)
 	}
 	request.Header.Set(handoff.HeaderName, document.Secret)
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		cancel()
+		stop()
 		t.Fatal(err)
 	}
 	var status httpserver.CLIStatus
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		response.Body.Close()
-		cancel()
+		stop()
 		t.Fatal(err)
 	}
 	response.Body.Close()
 	if status.Owner != document.Owner || status.Version != document.Version || status.ProtocolVersion != document.ProtocolVersion {
 		t.Errorf("status identity = %#v, handoff = %#v", status, document)
 	}
-	cancel()
+	stop()
 	if err := <-served; err != nil {
 		t.Fatalf("Serve() = %v", err)
 	}
