@@ -102,8 +102,10 @@ func TestReadValidatedClearsBodyAndClosesFileOnEveryPath(t *testing.T) {
 				} else if !errors.Is(err, test.wantErr) {
 					t.Fatalf("readValidatedHandleWith = %v, want %v", err, test.wantErr)
 				}
-				if _, statErr := opened.Stat(); !errors.Is(statErr, os.ErrClosed) {
-					t.Fatalf("failed read left file open: %v", statErr)
+				// 閉じ済みかどうかは二度目の Close で訊く。閉じた handle への
+				// Stat が何を返すかは OS ごとに違うが、Close は必ず ErrClosed である。
+				if closeErr := opened.Close(); !errors.Is(closeErr, os.ErrClosed) {
+					t.Fatalf("failed read left file open: %v", closeErr)
 				}
 			}
 			for index, value := range bodyAlias {

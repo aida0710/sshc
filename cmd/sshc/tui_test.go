@@ -160,9 +160,11 @@ func TestTUIReportsAConfigItCannotRead(t *testing.T) {
 	if err := os.MkdirAll(ssh, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(ssh, "config"), []byte("Host alpha\n"), 0o000); err != nil {
+	configPath := filepath.Join(ssh, "config")
+	if err := os.WriteFile(configPath, []byte("Host alpha\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	denyConfigRead(t, configPath)
 	if _, err := loadTUIHosts(home); err == nil || !strings.Contains(err.Error(), "cannot read") {
 		t.Fatalf("loadTUIHosts = %v, want the unreadable config to be reported", err)
 	}

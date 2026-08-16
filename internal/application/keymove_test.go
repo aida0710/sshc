@@ -271,9 +271,7 @@ func TestRelocateKeyIsOneTransactionThatCopiesNoKeyMaterial(t *testing.T) {
 	service, workspace := newTestService(t)
 	declareGroup(t, service, "work")
 	writeKeyPair(t, workspace, "id_work")
-	if err := os.Chmod(filepath.Join(workspace.Root(), "id_work"), 0o400); err != nil {
-		t.Fatal(err)
-	}
+	markKeyMode(t, filepath.Join(workspace.Root(), "id_work"))
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "conf.d", "30-keys.conf"),
 		[]byte("Host build\n\tIdentityFile ~/.ssh/id_work\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -292,13 +290,11 @@ func TestRelocateKeyIsOneTransactionThatCopiesNoKeyMaterial(t *testing.T) {
 
 	// 移動は rename(2) である: バイト列がこのプロセスを通って運ばれることは
 	// 決してないので、mode は生き残り、コピーが世代バックアップディレクトリに届くこともない。
-	info, err := os.Lstat(filepath.Join(workspace.Root(), "keys", "work", "id_work"))
-	if err != nil {
+	relocated := filepath.Join(workspace.Root(), "keys", "work", "id_work")
+	if _, err := os.Lstat(relocated); err != nil {
 		t.Fatalf("relocated key missing: %v", err)
 	}
-	if info.Mode().Perm() != 0o400 {
-		t.Errorf("permission = %04o, want the original 0400", info.Mode().Perm())
-	}
+	assertKeyModeSurvived(t, relocated)
 	backups := filepath.Join(workspace.StateDir(), "backups")
 	err = filepath.WalkDir(backups, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil || entry.IsDir() {

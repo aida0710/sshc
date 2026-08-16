@@ -8,7 +8,7 @@ import (
 )
 
 func testFacts() effective.LocalFacts {
-	return effective.LocalFacts{User: "aida", Home: "/home/aida", Hostname: "mac.local", UID: "501"}
+	return effective.LocalFacts{User: "aida", Home: testHome, Hostname: "mac.local", UID: "501"}
 }
 
 func testTarget() effective.TokenTarget {
@@ -22,7 +22,9 @@ func TestExpandTokensReplacesWhatOpenSSHReplaces(t *testing.T) {
 		{"~/.ssh/%h.key", "~/.ssh/203.0.113.10.key"},
 		{"%n", "bastion"},
 		{"%r@%h:%p", "ops@203.0.113.10:2222"},
-		{"%d/.ssh/id", "/home/aida/.ssh/id"},
+		// 展開は差し込みだけで、パスを組み立て直さない。OpenSSH もそうする——残りは
+		// 設定の構文のままであり、それをネイティブなパスに移すのは値を使う側である。
+		{"%d/.ssh/id", testHome + "/.ssh/id"},
 		{"%u/%i", "aida/501"},
 		{"%l", "mac.local"},
 		// %L は最初のドットまで。

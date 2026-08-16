@@ -1,6 +1,7 @@
 package application
 
 import (
+	"path/filepath"
 	"testing"
 
 	"sshc/internal/effective"
@@ -123,26 +124,31 @@ func TestDiffEffectiveReportsAddedChangedAndRemovedValues(t *testing.T) {
 // すべての値を押し下げるが、単に移動しただけの不変の値は
 // ユーザーが編集したものではない。別のファイルや別のブロックへ移動した値はそうである。
 func TestDiffEffectiveIgnoresALineShiftButNotARealMove(t *testing.T) {
+	// Source.Path は UI が持ち回るスラッシュ区切りの識別子、Source.Absolute は
+	// リゾルバが返したこのファイルシステムのパスである。
+	configPath := filepath.Join(testRoot, "config")
+	groupsPath := filepath.Join(testRoot, "groups.sshc.conf")
+
 	before := Effective{Alias: "nas", Entries: []EffectiveEntry{
-		{Keyword: "ServerAliveInterval", Values: []string{"30"}, Source: Source{Path: "config", Absolute: "/root/config", Line: 10, Condition: "Host *"}},
+		{Keyword: "ServerAliveInterval", Values: []string{"30"}, Source: Source{Path: "config", Absolute: configPath, Line: 10, Condition: "Host *"}},
 	}}
 
 	shifted := Effective{Alias: "nas", Entries: []EffectiveEntry{
-		{Keyword: "ServerAliveInterval", Values: []string{"30"}, Source: Source{Path: "config", Absolute: "/root/config", Line: 11, Condition: "Host *"}},
+		{Keyword: "ServerAliveInterval", Values: []string{"30"}, Source: Source{Path: "config", Absolute: configPath, Line: 11, Condition: "Host *"}},
 	}}
 	if diff := DiffEffective(before, shifted); len(diff.Changes) != 0 {
 		t.Fatalf("a pure line shift was reported as a change: %#v", diff.Changes)
 	}
 
 	movedFile := Effective{Alias: "nas", Entries: []EffectiveEntry{
-		{Keyword: "ServerAliveInterval", Values: []string{"30"}, Source: Source{Path: "groups.sshc.conf", Absolute: "/root/groups.sshc.conf", Line: 7, Condition: "Host nas"}},
+		{Keyword: "ServerAliveInterval", Values: []string{"30"}, Source: Source{Path: "groups.sshc.conf", Absolute: groupsPath, Line: 7, Condition: "Host nas"}},
 	}}
 	if diff := DiffEffective(before, movedFile); len(diff.Changes) != 1 {
 		t.Fatalf("a move to another file was not reported: %#v", diff.Changes)
 	}
 
 	movedBlock := Effective{Alias: "nas", Entries: []EffectiveEntry{
-		{Keyword: "ServerAliveInterval", Values: []string{"30"}, Source: Source{Path: "config", Absolute: "/root/config", Line: 10, Condition: "Host nas"}},
+		{Keyword: "ServerAliveInterval", Values: []string{"30"}, Source: Source{Path: "config", Absolute: configPath, Line: 10, Condition: "Host nas"}},
 	}}
 	if diff := DiffEffective(before, movedBlock); len(diff.Changes) != 1 {
 		t.Fatalf("a move to another block was not reported: %#v", diff.Changes)

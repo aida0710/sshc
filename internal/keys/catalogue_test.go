@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"path/filepath"
 	"testing"
 )
 
@@ -83,11 +84,11 @@ func TestHardwareVariantsAppearOnlyWhenKeygenIsAvailable(t *testing.T) {
 }
 
 func TestHardwareCommandProducesAnUnambiguousArgumentList(t *testing.T) {
-	command, err := HardwareCommand(AlgorithmEd25519SK, "id_yubikey", "aida@laptop", "/Users/example/.ssh")
+	command, err := HardwareCommand(AlgorithmEd25519SK, "id_yubikey", "aida@laptop", testSSHDirectory)
 	if err != nil {
 		t.Fatalf("HardwareCommand error = %v", err)
 	}
-	want := []string{"ssh-keygen", "-t", "ed25519-sk", "-C", "aida@laptop", "-f", "/Users/example/.ssh/id_yubikey"}
+	want := []string{"ssh-keygen", "-t", "ed25519-sk", "-C", "aida@laptop", "-f", filepath.Join(testSSHDirectory, "id_yubikey")}
 	if len(command) != len(want) {
 		t.Fatalf("command = %#v, want %#v", command, want)
 	}
@@ -111,7 +112,7 @@ func TestHardwareCommandProducesAnUnambiguousArgumentList(t *testing.T) {
 	}
 	for _, test := range rejections {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := HardwareCommand(test.algorithm, test.fileName, test.comment, "/Users/example/.ssh"); !errors.Is(err, test.wantError) {
+			if _, err := HardwareCommand(test.algorithm, test.fileName, test.comment, testSSHDirectory); !errors.Is(err, test.wantError) {
 				t.Fatalf("error = %v, want %v", err, test.wantError)
 			}
 		})
