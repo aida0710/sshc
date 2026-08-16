@@ -13,7 +13,11 @@ const { join } = require("node:path");
 const { existsSync } = require("node:fs");
 const { relink } = require("./link");
 const { parseEntrance } = require("./entrance");
-const { spawnEngine, releaseEngine } = require("./engine");
+const {
+  spawnEngine,
+  stopOwnedEngine,
+  shouldQuitAfterLastWindow,
+} = require("./lifecycle");
 const { installTray } = require("./tray");
 const { installWindowReopener } = require("./reopen");
 
@@ -131,13 +135,6 @@ function entrance() {
     // アプリが開けない理由にはならない。
     relink(binary()).catch(() => {});
 
-    // **stderr はこちらの stderr へそのまま流す。** パイプを作らないので
-    // 64 KiB で埋まることが無く（埋まった先で止まるのは write を呼んだエンジン
-    // 自身で、症状は「アプリが黙って固まる」になる）、それでいて
-    // `make desktop-run` の端末にはエンジンの理由が出る。捨ててしまうと、
-    // 上がらなかった理由——ロックが取れない、home が解決できない——を書いて
-    // いる logger.Error が、どこからも読めなくなる。
-    //
     // **engine を渡す。** 他人のエンジンの入口を受け取ると、窓は開くのに
     // Cmd+Q でそのエンジンが残る——このアプリが「終了すれば全部止まる」と
     // 言えなくなる。あちらは入口を出さずに engineBusy で終わる。
@@ -183,6 +180,12 @@ function entrance() {
       // **アプリはエンジンの寿命そのものである。** 上がったあとに落ちたなら、
       // 窓もメニューバーの項目も、もう何も配れない——残しておく意味がない。
       if (settled) {
+        showFailure(
+          new Error(
+            `the engine exited with ${code}; sshc cannot serve anything without it`,
+          ),
+        );
+        quitting = true;
         app.quit();
         return;
       }
@@ -325,7 +328,7 @@ app.whenReady().then(async () => {
     // 生きているのに入口が来ない）では、これを飛ばすと子が engine.lock を
     // 握ったまま孤児になり、見張りが畳むまで残る——その窓に開き直すと
     // 「端末で動いている sshc がエンジンです」という誤った理由が出る。
-    if (engine !== null) releaseEngine(engine);
+    void stopOwnedEngine(engine);
     quitting = true;
     app.quit();
     return;
@@ -348,13 +351,11 @@ app.whenReady().then(async () => {
   await windowReopener.start();
 });
 
-// **窓を閉じてもアプリは残る。** メニューバーの項目がその意味である
-// ——ウィンドウが無いのに動き続ける外殻に意味を与えたのは、あの項目である。
-//
-// **項目を置けなかったなら、その意味も無い。** 見えないものを残さないために、
-// そのときだけは最後の窓と一緒に終わる。
+// **窓を閉じてもアプリは残る。** この外殻はエンジンの寿命そのものであり、
+// 窓の寿命はそれより短い。判断は lifecycle が持つ——メニューバーの項目を
+// 置けたかどうかでも、どの OS かでも変わらない。
 app.on("window-all-closed", () => {
-  if (tray === null) {
+  if (shouldQuitAfterLastWindow()) {
     app.quit();
     return;
   }
@@ -420,15 +421,19 @@ app.on("before-quit", async (event) => {
     }
   }
   quitting = true;
-  if (engine !== null) releaseEngine(engine);
+  // **子が畳み終わるまで待つ。** 待たずに終えれば親と一緒に道連れになるが、
+  // それは畳む機会を奪う殺し方であり、開いていた SSH は何も片付けられない
+  // まま切れる。応答しないときのために stopOwnedEngine が期限を持つ。
+  await stopOwnedEngine(engine);
   app.quit();
 });
 
 // **解放を確認の経路だけに預けない。** before-quit は preventDefault で
 // 止まり、ダイアログや遅い問い合わせを待つ。実際に終わる経路でももう一度
-// 手放す——releaseEngine は二度呼んでよい。
+// 手放す——stopOwnedEngine は二度呼んでよい。ここでは待てないので、閉じる
+// ところまでを行う。
 app.on("will-quit", () => {
-  if (engine !== null) releaseEngine(engine);
+  void stopOwnedEngine(engine);
 });
 
 // Ctrl-C でも「終わる」を通す。
