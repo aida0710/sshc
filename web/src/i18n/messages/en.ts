@@ -18,6 +18,7 @@ export const en = {
   "shell.active": "Local session active · {version}",
   "shell.bootstrapFailed":
     "Secure local session could not be started. Restart sshc and use the newly opened tab.",
+  "shell.bootstrapRetry": "Try again",
   "shell.pageNotFound": "Page not found",
   "shell.pageNotFoundDescription": "No sshc section exists at this URL.",
   "shell.goHome": "Go to Home",
