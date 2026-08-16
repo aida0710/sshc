@@ -7,6 +7,11 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.util.Log;
+import android.webkit.ConsoleMessage;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.view.KeyEvent;
 import android.view.ViewGroup;
 import android.webkit.WebView;
@@ -18,6 +23,8 @@ import android.widget.TextView;
  * のは「入口を受け取って WebView へ渡す」ことだけ。
  */
 public final class MainActivity extends Activity {
+    private static final String TAG = "sshc";
+
     private WebView webView;
     private boolean bound;
 
@@ -65,8 +72,35 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
+
+        // **targetSdk 35 以降、edge-to-edge は強制である。** 何もしなければ
+        // WebView はステータスバーとナビゲーションバーの下にも描かれ、画面の
+        // 上端と下端が読めなくなる。挿入量を padding にして避ける。
+        webView.setFitsSystemWindows(true);
+
         // 何も外へ出さない。この画面が話す相手は loopback の engine だけである。
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                // **URL を出さない。** 入口の fragment を含み得る。落ちたのが
+                // 主文書かどうかと、その理由だけを残す。
+                Log.e(TAG, "web resource failed: mainFrame=" + request.isForMainFrame()
+                        + " code=" + error.getErrorCode());
+            }
+        });
+
+        // **画面が白いままのとき、答えはここにしかない。** WebView の console は
+        // どこにも出ないので、logcat へ渡す。これが無いと、engine が起きたのに
+        // 画面が出ないという状態を、外から見分ける手段が無い。
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage message) {
+                Log.i(TAG, "web console [" + message.messageLevel() + "] "
+                        + message.message() + " (" + message.lineNumber() + ")");
+                return true;
+            }
+        });
+
         webView.loadUrl(entrance);
         setContentView(webView);
     }
@@ -92,7 +126,8 @@ public final class MainActivity extends Activity {
         }
         TextView view = new TextView(this);
         view.setText(message);
-        view.setPadding(48, 48, 48, 48);
+        view.setPadding(48, 200, 48, 48);
+        view.setFitsSystemWindows(true);
         setContentView(view);
     }
 
