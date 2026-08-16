@@ -9,9 +9,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"time"
-
-	"golang.org/x/term"
 
 	"sshc/internal/app"
 	"sshc/internal/config"
@@ -113,73 +112,65 @@ func waitForHandoff(ctx context.Context, stateDir string) {
 // 使うのと同じ継ぎ目なので、「どの ssh か」への答えはひとつしかない。
 type sshFinder interface{ SSH() (string, error) }
 
-// runConnect は、この接続に必要なものを起動中のアプリケーションに尋ね、
-// **このプロセスの中で** SSH を話す。
+// runConnect は、生きているエンジンに接続材料を求め、**このプロセスの中で**
+// SSH を話す。
 //
-// アプリケーションが動いていないことはエラーではない。保存済みパスフレーズが
-// 手に入らないだけで、その鍵のパスフレーズは端末で尋ねられる——尋ねられる端末が
-// ここにはある。stderr にその旨を書けば、邪魔にならずに違いが見える。
+// **エンジンに届かないことは、保存済み無しで繋いでよいという許可ではない。**
+// かつてはそこで黙って退き、鍵のパスフレーズを端末で訊いていた。訊かれた人には
+// それがエンジンの不在によるものだと分からず、毎回訊かれることの方を普通だと
+// 思ってしまう。保存済みを使わない接続がほしいなら `ssh <接続先>` があり、
+// このアプリケーションは ~/.ssh/config に触れないので、それは常に動く。
 func runConnect(
 	ctx context.Context, alias, home, stateDir string, client *http.Client,
-	stdin *os.File, stdout, stderr io.Writer,
+	launcher desktopLauncher, stdin *os.File, stdout, stderr io.Writer,
 ) int {
 	if err := platform.ValidateAlias(alias); err != nil {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
 		return 2
 	}
 
-	var saved func(string) (string, bool)
-	var password func(string) (string, bool)
-	answer, err := askApplication(ctx, alias, stateDir, client)
-	if err != nil && launchApp(ctx) {
-		// **上がるまで待つ。** 待ち方を知っているのはここだけで、
-		// 上限は外殻が入口を書き出すのに掛ける時間と同じにしてある。
-		for attempt := 0; attempt < 40 && err != nil; attempt++ {
-			time.Sleep(500 * time.Millisecond)
-			answer, err = askApplication(ctx, alias, stateDir, client)
+	// 待つあいだの Ctrl-C だけをここで拾う。SSH が始まったあとの端末は raw で、
+	// Ctrl-C は信号ではなく一バイトとして相手へ渡る——そちらを横取りしない。
+	waitCtx, stopWaiting := signal.NotifyContext(ctx, os.Interrupt)
+	session, err := reachUnlockedEngine(waitCtx, stateDir, client, launcher, func(found handoff.Handoff) engineProbe {
+		return httpProbe{found: found, client: client}
+	}, stderr)
+	stopWaiting()
+	if err != nil {
+		if errors.Is(err, errInterrupted) {
+			return 130
 		}
+		fmt.Fprintf(stderr, "sshc: %v\n", err)
+		return 1
 	}
 
-	// **ブラウザを開かずに答えられる。** 解錠はエンジンの中に残るので、
-	// あとで窓を開けば解錠済みである。
-	//
-	// **端末でなければ尋ねない。** パイプの向こうに問いを出しても答えは返って
-	// こない——答えられない問いを書き置いて、そのまま先へ進むだけである。
-	if err == nil && term.IsTerminal(int(stdin.Fd())) && locked(ctx, stateDir, client) {
-		fmt.Fprint(stderr, "sshc: master password (leave empty to skip): ")
-		typed, readErr := term.ReadPassword(int(stdin.Fd()))
-		fmt.Fprintln(stderr)
-		if readErr == nil && len(typed) > 0 {
-			// **間違えても聞き直さない。** 繋げることの方が強い要求であり、
-			// 誤りの遅延を端末で待たせる価値が無い。
-			if unlock(ctx, stateDir, client, string(typed)) {
-				answer, _ = askApplication(ctx, alias, stateDir, client)
+	// 解錠済みと確かめたあとで、元の接続先を一度だけ要求する。打ち直させない。
+	answer, err := session.Connection(ctx, alias)
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: %v\n", err)
+		return 1
+	}
+
+	var saved func(string) (string, bool)
+	var password func(string) (string, bool)
+	for _, warning := range answer.Warnings {
+		fmt.Fprintf(stderr, "sshc: %s\n", warning)
+	}
+	if answer.KeyPath != "" && answer.Passphrase != "" {
+		saved = func(relativePath string) (string, bool) {
+			if relativePath != answer.KeyPath {
+				return "", false
 			}
+			return answer.Passphrase, true
 		}
 	}
-	switch {
-	case err != nil:
-		fmt.Fprintf(stderr, "sshc: connecting without a saved key passphrase (%v)\n", err)
-	default:
-		for _, warning := range answer.Warnings {
-			fmt.Fprintf(stderr, "sshc: %s\n", warning)
-		}
-		if answer.KeyPath != "" && answer.Passphrase != "" {
-			saved = func(relativePath string) (string, bool) {
-				if relativePath != answer.KeyPath {
-					return "", false
-				}
-				return answer.Passphrase, true
-			}
-		}
-		// **本体が連鎖を解決して、そこに現れる alias のぶんだけを返している。**
-		// 手前に立つホストも別の alias としてここに入る。表に無いものは
-		// 保存が無いということであり、そのときは端末で尋ねる。
-		if len(answer.Passwords) > 0 {
-			password = func(candidate string) (string, bool) {
-				stored, found := answer.Passwords[candidate]
-				return stored, found && stored != ""
-			}
+	// **本体が連鎖を解決して、そこに現れる alias のぶんだけを返している。**
+	// 手前に立つホストも別の alias としてここに入る。表に無いものは
+	// 保存が無いということであり、そのときは端末で尋ねる。
+	if len(answer.Passwords) > 0 {
+		password = func(candidate string) (string, bool) {
+			stored, found := answer.Passwords[candidate]
+			return stored, found && stored != ""
 		}
 	}
 
@@ -209,15 +200,8 @@ func connectAdvice(err error) error {
 	return err
 }
 
-// askApplication はハンドオフを読み、接続一回分を要求する。
-func askApplication(ctx context.Context, alias, stateDir string, client *http.Client) (connectAnswer, error) {
-	found, err := readHandoff(stateDir)
-	if err != nil {
-		if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {
-			return connectAnswer{}, err
-		}
-		return connectAnswer{}, fmt.Errorf("sshc is not running")
-	}
+// requestConnection は、確かめ済みの一台に接続一回分を要求する。
+func requestConnection(ctx context.Context, found handoff.Handoff, alias string, client *http.Client) (connectAnswer, error) {
 	body, err := json.Marshal(map[string]string{"alias": alias})
 	if err != nil {
 		return connectAnswer{}, err

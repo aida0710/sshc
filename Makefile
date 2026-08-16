@@ -181,9 +181,15 @@ export SSHC_NATIVE_MAC_BUNDLES SSHC_NATIVE_LINUX_BUNDLES SSHC_NATIVE_WINDOWS_BUN
 export SSHC_NATIVE_RELEASE_TARGETS SSHC_NATIVE_RELEASE_ARCHES SSHC_NATIVE_RELEASE_DIR
 
 # Neutralize Go's target-selection inputs before go run compiles the host helper. Export
-# canonical empty values instead of merely unexporting exact names: on Windows the process
-# environment is case-insensitive, so these assignments also replace inherited case aliases.
-# Keep the overrides target-specific so unrelated targets retain the developer's Go settings.
+# canonical empty values instead of merely unexporting exact names, and keep the overrides
+# target-specific so unrelated targets retain the developer's Go settings.
+#
+# This reaches only as far as Make's own variable table, which is keyed by exact spelling.
+# The Windows port therefore keeps an inherited gOoS alongside our GOOS and exports both,
+# and the case-insensitive process environment resolves that collision in the caller's
+# favour. Windows CI showed this directly. What the child go build sees is settled one
+# layer down instead, by withTargetEnvironment in nativebuild.go; a SSHC_NATIVE_* name that
+# survives under the wrong spelling makes canonicalizeNativeEnvironment refuse to build.
 override NATIVE_GO_RUN_TARGETS := build build-cli desktop-bundle-mac desktop-bundle-linux desktop-bundle-windows desktop-version release-binaries release-cli-current
 export GOENV GOOS GOARCH CGO_ENABLED
 $(NATIVE_GO_RUN_TARGETS): override GOENV = off
