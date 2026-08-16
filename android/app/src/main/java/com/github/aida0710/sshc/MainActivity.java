@@ -5,6 +5,9 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.res.Configuration;
+import android.graphics.Insets;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
@@ -13,7 +16,9 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.TextView;
@@ -75,8 +80,14 @@ public final class MainActivity extends Activity {
 
         // **targetSdk 35 以降、edge-to-edge は強制である。** 何もしなければ
         // WebView はステータスバーとナビゲーションバーの下にも描かれ、画面の
-        // 上端と下端が読めなくなる。挿入量を padding にして避ける。
-        webView.setFitsSystemWindows(true);
+        // 上端と下端が読めなくなる。
+        //
+        // **決め打ちの数値を置かない。** 必要な余白は端末ごとに違う——
+        // ステータスバーの高さも、ジェスチャーバーの有無も、ノッチや
+        // パンチホールの張り出しも。WindowInsets はそれを実測値で答えるので、
+        // 尋ねればよい。
+        avoidSystemBars(webView);
+        webView.setBackgroundColor(chromeColour());
 
         // 何も外へ出さない。この画面が話す相手は loopback の engine だけである。
         webView.setWebViewClient(new WebViewClient() {
@@ -126,9 +137,61 @@ public final class MainActivity extends Activity {
         }
         TextView view = new TextView(this);
         view.setText(message);
-        view.setPadding(48, 200, 48, 48);
-        view.setFitsSystemWindows(true);
+        view.setPadding(48, 48, 48, 48);
+        avoidSystemBars(view);
         setContentView(view);
+    }
+
+    /**
+     * システムバーの下に潜らないよう、挿入量をそのまま padding にする。
+     *
+     * <p>setFitsSystemWindows では届かなかった。自分で聞けば、返ってくるのは
+     * この端末の実測値である。
+     */
+    private void avoidSystemBars(View view) {
+        view.setOnApplyWindowInsetsListener((target, insets) -> {
+            int left, top, right, bottom;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // 表示の切り欠きも一緒に見る。横向きにすると、ノッチは
+                // ステータスバーではなく左右の縁に来る。
+                Insets bars = insets.getInsets(
+                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                left = bars.left;
+                top = bars.top;
+                right = bars.right;
+                bottom = bars.bottom;
+            } else {
+                left = insets.getSystemWindowInsetLeft();
+                top = insets.getSystemWindowInsetTop();
+                right = insets.getSystemWindowInsetRight();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            target.setPadding(left, top, right, bottom);
+            return insets;
+        });
+    }
+
+    /**
+     * 余白の帯を塗る色。
+     *
+     * <p>padding の外側に見えるのは WebView 自身の背景なので、ページと違う色だと
+     * 上端に別の板が乗っているように見える。値は web/src/index.css の
+     * --ui-toolbar と同じもので、**そちらを変えたらここも変える**。2 か所に
+     * 書くのは、ネイティブの外殻がページのトークンを読む手段を持たないためである。
+     */
+    private int chromeColour() {
+        int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        return night == Configuration.UI_MODE_NIGHT_YES ? 0xFF2A2A2C : 0xFFFBFBFD;
+    }
+
+    /**
+     * uiMode を configChanges で受けているので、テーマが変わっても Activity は
+     * 作り直されない。**帯の色だけが取り残される**ので、ここで塗り直す。
+     */
+    @Override
+    public void onConfigurationChanged(Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        if (webView != null) webView.setBackgroundColor(chromeColour());
     }
 
     /**
