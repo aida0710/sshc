@@ -17,6 +17,8 @@ type TerminalClipboardOptions = {
   container: HTMLElement;
   terminal: ClipboardTerminal;
   clipboard: ClipboardAccess;
+  // coarsePointer は、指で触る画面かどうかを答える。既定は「マウスがある」。
+  coarsePointer?: () => boolean;
   settings: () => TerminalClipboardSettings;
   refuse: () => void;
 };
@@ -28,6 +30,7 @@ export function attachTerminalClipboard({
   container,
   terminal,
   clipboard,
+  coarsePointer = () => false,
   settings,
   refuse,
 }: TerminalClipboardOptions): () => void {
@@ -72,6 +75,11 @@ export function attachTerminalClipboard({
     copySelection();
   });
   const onContextMenu = (event: MouseEvent) => {
+    // **長押しは右クリックではない。** 触れる画面に右のボタンは無く、Android は
+    // 長押しで contextmenu を出す。ここで既定を止めると、OS がまさに始めようと
+    // していた範囲選択ごと消える——実機ではそれが起きていた。ついでに、読み取れ
+    // ないクリップボードを読みに行って「アクセスできませんでした」を出していた。
+    if (coarsePointer()) return;
     if (!settings().rightClickPaste) return;
     event.preventDefault();
     paste();
