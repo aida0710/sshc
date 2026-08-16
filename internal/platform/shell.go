@@ -17,11 +17,21 @@ var ErrNoLoginShell = errors.New("no login shell was found")
 // SHELL が設定されていないことがあり、そこが唯一の権威になってしまうが、
 // コンテナや合成 passwd の中でその一行は当てにならない。ここに並んでいるのは
 // 実際に存在を確かめる絶対パスだけである。
-func shellFallbacks() []string {
-	if runtime.GOOS == "darwin" {
+//
+// **Android には /bin が無い。** sh は /system/bin/sh (mksh) にあり、bash も
+// zsh も居ない。ここに /bin/sh を残しても永久に見つからない。
+//
+// goos を引数で受けるのは、この一覧がテストできるようにするためである。
+// runtime.GOOS をここで読むと、走っているマシンでしか通らない表明になる。
+func shellFallbacks(goos string) []string {
+	switch goos {
+	case "darwin":
 		return []string{"/bin/zsh", "/bin/bash", "/bin/sh"}
+	case "android":
+		return []string{"/system/bin/sh"}
+	default:
+		return []string{"/bin/bash", "/bin/zsh", "/bin/sh"}
 	}
-	return []string{"/bin/bash", "/bin/zsh", "/bin/sh"}
 }
 
 // LoginShell は、埋め込みターミナルが開くシェルの絶対パスを返す。
@@ -35,7 +45,7 @@ func LoginShell(lookup func(string) (string, bool)) (string, error) {
 			return value, nil
 		}
 	}
-	for _, candidate := range shellFallbacks() {
+	for _, candidate := range shellFallbacks(runtime.GOOS) {
 		if executable(candidate) {
 			return candidate, nil
 		}

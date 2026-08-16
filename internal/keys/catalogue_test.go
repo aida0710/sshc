@@ -118,3 +118,20 @@ func TestHardwareCommandProducesAnUnambiguousArgumentList(t *testing.T) {
 		})
 	}
 }
+
+// ハードウェア鍵は ssh-keygen を利用者自身が走らせるものである。Android には
+// ssh-keygen が居ない。**打てないコマンドを一覧に出さない。**
+//
+// Toolchain は interface なので、道具が無いことは nil で表される。Android は
+// この分岐が本番で使われる最初の場所であり、寄りかかる前にここで固定する。
+func TestCatalogueOffersNoHardwareKeyWithoutAToolchain(t *testing.T) {
+	catalogue := CatalogueReader{Toolchain: nil}.Read(context.Background())
+	if len(catalogue.Variants) == 0 {
+		t.Fatal("a machine without ssh-keygen can still generate keys in process")
+	}
+	for _, variant := range catalogue.Variants {
+		if !variant.InProcess {
+			t.Errorf("variant %q needs a toolchain this machine does not have", variant.Label)
+		}
+	}
+}
