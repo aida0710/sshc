@@ -12,6 +12,30 @@
 
 **Worktree:** `.worktrees/android-engine`（ブランチ `android-engine`）
 
+## 実施状況（2026-08-16）
+
+計画から変えたところと、まだ残っているところ。
+
+| Task | 状態 |
+|---|---|
+| 1 gomobile が bind できるか | **完了。倒れなかった。** Go 1.26.6 で AAR が出る。gomobile は `go.mod` の tool として固定、gobind は `go install` が要る |
+| 2 `app.Dependencies` の Android 版 | 完了 |
+| 3 `Start` / `Stop` | 完了。ただし失敗の伝え方を変えた（下） |
+| 4 実機で残る未知数を測る | **APK まで完了。測定は利用者の実機待ち。** probe はまだ入っている |
+| 5 `/system/bin/sh` | 完了 |
+| 6 道具が無いときの表明 | 完了。予想どおり実装は不要で、表明だけを足した |
+| 7 foreground service とエラーの畳み込み | 完了 |
+| 8 CI ゲートと手順書 | 完了 |
+
+計画から変えた判断が 3 つある。
+
+- **Kotlin ではなく Java。** glue が 150 行なので、Kotlin プラグインのバージョン整合を持ち込む価値がない。gomobile が生成する API も Java である。
+- **`StartFailureKind(err)` ではなく `LastStartFailureKind()`。** gomobile は Go の error を Java の Exception へ写すとき**メッセージ文字列しか運ばない**ので、戻ってきた値に `errors.Is` は効かない。理由は Go 側で確定させ、Kotlin は番号だけを取りに来る。
+- **`platform.Toolchain` は interface だった。** 空の struct ではなく nil が正解で、`keys.CatalogueReader` は既にそれを機能の不在として扱っていた。
+- **CI の step は Linux 限定ではなく Unix 側に置いた。** workflow の契約が Unix か Windows かの明示を求めるので、第三の分岐を作らない。
+
+未知数 4（WebView から `ws://127.0.0.1` が CSP `connect-src 'self'` を通るか）は、spec を書いた後に根拠が見つかった。Electron は Chromium であり、埋め込みターミナルはそこで既に動いている。Android WebView も Chromium なので、新しい未知数ではなく M6 のスモーク項目である。
+
 ## Global Constraints
 
 - Go 1.26.6（`go.mod` の toolchain で固定）。バージョンを上げない。

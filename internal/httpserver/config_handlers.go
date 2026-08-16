@@ -212,6 +212,9 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if request.ScrollbackBytes != nil {
 		settings.ScrollbackBytes = *request.ScrollbackBytes
 	}
+	if request.FontSize != nil {
+		settings.FontSize = *request.FontSize
+	}
 	settings.CopyOnSelect = request.CopyOnSelect
 	settings.RightClickPaste = request.RightClickPaste
 	result, err := h.Service.SetTerminalSettings(settings)

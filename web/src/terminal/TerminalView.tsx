@@ -8,6 +8,7 @@ import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { clipboard } from "../ui/clipboard";
+import { measuredCellHeight, newTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
@@ -19,6 +20,7 @@ type TerminalViewProps = {
   // その行を終了済みとして描き直す。
   onExit?: () => void;
   copyOnSelect?: boolean;
+  fontSize?: number;
   rightClickPaste?: boolean;
 };
 
@@ -54,6 +56,7 @@ export function TerminalView({
   api = integrationsApi,
   onExit,
   copyOnSelect = true,
+  fontSize,
   rightClickPaste = true,
 }: TerminalViewProps) {
   const t = useTranslate();
@@ -97,10 +100,11 @@ export function TerminalView({
       // 解決しないことがある**ので、その端末が実際に持っている等幅を並べる。
       fontFamily:
         'ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", monospace',
-      // **ここだけは媒体クエリを JS で読む。** xterm の字は canvas と DOM の
-      // 寸法計算に入る値であって CSS で塗り替えられるものではないので、
-      // breakpoint では届かない。13px は指で持つ画面には小さすぎる。
-      fontSize: window.matchMedia("(max-width: 767px)").matches ? 15 : 13,
+      // 設定された値があればそれが答えである。無いときだけ画面の幅で決める
+      // ——**ここだけは媒体クエリを JS で読む。** xterm の字は寸法計算に入る
+      // 値であって CSS で塗り替えられるものではないので、breakpoint では
+      // 届かない。13px は指で持つ画面には小さすぎる。
+      fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
       theme: terminalTheme(),
       // スクロールバックはサーバー側のリングバッファが正本である。ここでの値は
       // 再生されたバイト列を画面に保つための余地にすぎない。
@@ -148,6 +152,25 @@ export function TerminalView({
       syncSize();
     };
     measure();
+
+    // 指で流す。**xterm はこれを持っていない**——スクロールする層は絶対配置で
+    // 下に敷かれ、上に画面の層が乗っているので、指が触れるのは常に上である。
+    //
+    // preventDefault しない。止めれば長押しからの範囲選択も一緒に殺す。
+    const scroll = newTouchScroll(view, () => measuredCellHeight(container, view.rows));
+    // 指は 1 本のときだけ見る。2 本目は拡大か、この画面の外の操作である。
+    const single = (event: TouchEvent): Touch | null =>
+      event.touches.length === 1 ? (event.touches[0] ?? null) : null;
+    const touchStart = (event: TouchEvent) => {
+      const finger = single(event);
+      if (finger !== null) scroll.start(finger.clientY);
+    };
+    const touchMove = (event: TouchEvent) => {
+      const finger = single(event);
+      if (finger !== null) scroll.move(finger.clientY);
+    };
+    container.addEventListener("touchstart", touchStart, { passive: true });
+    container.addEventListener("touchmove", touchMove, { passive: true });
 
     // 打鍵の配線はここで一度だけ行う。繋ぎ直すたびに足すと、1 回の打鍵が
     // 繋ぎ直した回数だけ PTY へ届く。
@@ -266,6 +289,8 @@ export function TerminalView({
       live = false;
       clearInterval(timer);
       observer.disconnect();
+      container.removeEventListener("touchstart", touchStart);
+      container.removeEventListener("touchmove", touchMove);
       detachClipboard();
       stream?.close();
       view.dispose();
