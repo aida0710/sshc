@@ -19,12 +19,15 @@ func assertScannedPermission(t *testing.T, item *Item, _ string) {
 	}
 }
 
-func assertPrivateKeyPermissionRisk(t *testing.T, _, _ *Item) {
+func assertPrivateKeyPermissionRisk(t *testing.T, exposed, safe *Item) {
 	t.Helper()
-	// PermissionRisk は Perm()&0o077 から決まる。Windows では 0666 も 0444 もこの
-	// 判定に掛かるので、DACL がどうであろうと秘密鍵は必ず危険と報告される。露出
-	// した鍵と保護された鍵をここで見分けることはできない。見分けられるようにする
-	// のは inventory の側であって、fixture の側ではない。
+	// **この体系では、どちらの鍵にも印を付けない。** mode ビットには誰が読めるかが
+	// 入っておらず、Unix と同じ式で見れば必ず両方が「危険」になる。常に真の警告は
+	// 何も伝えないので、判断しなかったことをそのまま表す。ここで本当に答えるべき
+	// 問いは DACL の側にあり、それはまだ書かれていない。
+	if exposed.PermissionRisk || safe.PermissionRisk {
+		t.Errorf("a key was flagged from mode bits that carry no access information")
+	}
 }
 
 func assertGeneratedKeyIsPrivate(t *testing.T, path string) {
