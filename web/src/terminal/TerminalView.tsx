@@ -7,7 +7,7 @@ import { integrationsApi, type IntegrationsApi, type TerminalSession } from "../
 import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
-import { KeyBar } from "./KeyBar";
+import { KeyBar, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
 
@@ -67,6 +67,18 @@ export function TerminalView({
   // 繋ぎ直しの操作は効果の中に住んでいる。端末を作り直さずに押せるように、
   // 押せる形だけをここへ出す。
   const control = useRef<{ now: () => void; stop: () => void }>({ now: () => {}, stop: () => {} });
+
+  // 画面上のキーで立てた修飾は、**打鍵の経路と同じ場所に住む。** バーの上に
+  // 英字キーは無いので、Ctrl の次に来るのは常にシステムのキーボードからの
+  // 一文字である——KeyBar の中に閉じ込めると、それに乗せられない。
+  //
+  // ref と state を並べて持つのは、onData の配線が端末の寿命に一度だけ行われる
+  // からである。state だけだと、その配線は最初の値を握ったままになる。
+  const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
+  const armed = useRef<Modifiers>(modifiers);
+  armed.current = modifiers;
+  // send は、打たれたものひとつを修飾ごと通す唯一の口である。
+  const send = useRef<(label: string) => void>(() => {});
 
   // セッションが変わったら端末ごと作り直す。同じ DOM に別のスクロールバックを
   // 流し込むと、前のセッションの続きに見えてしまう。
@@ -132,7 +144,17 @@ export function TerminalView({
 
     // 打鍵の配線はここで一度だけ行う。繋ぎ直すたびに足すと、1 回の打鍵が
     // 繋ぎ直した回数だけ PTY へ届く。
-    view.onData((data) => stream?.send(data));
+    //
+    // **画面上のキーもここを通る。** 修飾が立っていれば、それが乗るのは次の
+    // 一打鍵だけであり、乗った時点で降りる。押しっぱなしになる修飾は、次に
+    // 打った一文字が何になるか分からない端末を作る。
+    const deliver = (label: string) => {
+      const { ctrl, alt } = armed.current;
+      stream?.send(ctrl || alt ? encodeKey(label, ctrl, alt) : label);
+      if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
+    };
+    send.current = deliver;
+    view.onData(deliver);
 
     const attach = () => {
       clearInterval(timer);
@@ -305,12 +327,11 @@ export function TerminalView({
         端末なのかが分からなくなる。
       */}
       <div ref={host} className="min-h-0 flex-1 bg-term-bg p-2" />
-      {/*
-        送り先は xterm 自身である。**stream へ直接送らない** —— input() は
-        onData を発火するので、打鍵の経路は物理キーボードと同じ 1 本のままに
-        なる。二本目を引けば、繋ぎ直しの配線をもう一度気にすることになる。
-      */}
-      <KeyBar onSend={(data) => terminal.current?.input(data)} />
+      <KeyBar
+        modifiers={modifiers}
+        onToggle={(name) => setModifiers((current) => ({ ...current, [name]: !current[name] }))}
+        onKey={(label) => send.current(label)}
+      />
     </section>
   );
 }
