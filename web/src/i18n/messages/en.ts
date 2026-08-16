@@ -745,6 +745,7 @@ export const en = {
   "conn.heading": "Connections",
   "conn.count": "{count} available",
   "conn.new": "New connection",
+  "conn.allConnections": "All connections",
   "conn.createAnother": "Create another connection",
   "conn.cancelCreate": "Cancel",
   "conn.create": "Create connection",

@@ -61,7 +61,12 @@ export function InspectorPane({ label, children }: { label: string; children: Re
     <aside
       id={inspectorId}
       aria-label={label}
-      className="relative overflow-y-auto border-l border-line bg-sidebar p-3"
+      // **狭い画面では面を奪う。** 17rem の柱を 360px の脇に立てると残るのは
+      // 5rem である。どちらも読めない 2 つより、読める 1 つを出す。
+      //
+      // z-10 は header (z-20) より下である。面を覆っても、それを閉じるトグルは
+      // 必ず帯の上に残る。
+      className="fixed inset-0 z-10 overflow-y-auto bg-sidebar p-3 lg:relative lg:z-auto lg:border-l lg:border-line"
     >
       {children}
     </aside>
