@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sshc/internal/sshclient"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -175,7 +176,7 @@ func TestRunShutsServerDownWhenTheEntranceCannotBeAnnounced(t *testing.T) {
 	if !errors.Is(err, announceErr) {
 		t.Fatalf("Run error = %v", err)
 	}
-	if !listener.closed {
+	if !listener.closed.Load() {
 		t.Fatal("listener was not closed after browser failure")
 	}
 }
@@ -456,13 +457,17 @@ func mustListen(t *testing.T) net.Listener {
 	return listener
 }
 
+// trackingListener は、listener が閉じられたかを覚える。
+//
+// **閉じるのは http.Server の goroutine である。** 読むのはテスト本体なので、
+// 素の bool では検査そのものが競合になる。
 type trackingListener struct {
 	net.Listener
-	closed bool
+	closed atomic.Bool
 }
 
 func (listener *trackingListener) Close() error {
-	listener.closed = true
+	listener.closed.Store(true)
 	return listener.Listener.Close()
 }
 
