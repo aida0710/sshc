@@ -67,3 +67,30 @@ func TestNoTestOnlyPackageReachesTheShippedBinary(t *testing.T) {
 		t.Fatal("go list reported no dependency at all; this check is not looking at the binary")
 	}
 }
+
+// TestNoTestOnlyPackageReachesTheAndroidLibrary は、AAR についても同じことを言う。
+// 出荷物が 2 つになったので、規則も 2 つに対して立てる。
+func TestNoTestOnlyPackageReachesTheAndroidLibrary(t *testing.T) {
+	list := exec.Command("go", "list", "-deps", "./mobile")
+	list.Dir = filepath.Join("..", "..")
+	output, err := list.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list = %v\n%s", err, output)
+	}
+	seen := 0
+	for _, line := range strings.Split(string(output), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			seen++
+		}
+		switch trimmed {
+		case "sshc/internal/acceptance":
+			t.Error("the hardening suite is linked into the Android library")
+		case "testing", "net/http/httptest":
+			t.Errorf("%s is linked into the Android library", trimmed)
+		}
+	}
+	if seen == 0 {
+		t.Fatal("go list reported no dependency at all; this check is not looking at the library")
+	}
+}
