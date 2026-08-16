@@ -147,11 +147,14 @@ func (w *Workspace) ResolveForWrite(candidate string) (string, error) {
 // ある。
 func (w *Workspace) ResolveForWriteUnder(candidate string, planned map[string]bool) (string, error) {
 	cleaned := filepath.Clean(candidate)
-	if !filepath.IsAbs(cleaned) || !w.Contains(cleaned) || cleaned == w.root {
+	if !filepath.IsAbs(cleaned) || !w.Contains(cleaned) {
 		return "", ErrOutsideWorkspace
 	}
 	relative, err := filepath.Rel(w.root, cleaned)
-	if err != nil {
+	// ルートそのものは書き込み先ではない。**素の文字列比較で弾かない。**
+	// まわりの包含判断は大小文字を畳むので、Windows ではルートの別綴りだけが
+	// そこをすり抜け、ワークスペースのルート自身が書き込み先になってしまう。
+	if err != nil || relative == "." {
 		return "", ErrOutsideWorkspace
 	}
 
@@ -198,11 +201,14 @@ func (w *Workspace) ResolveForWriteUnder(candidate string, planned map[string]bo
 // される時点でディスク上に親を持たないからだ。
 func (w *Workspace) ResolveDirectory(candidate string) (string, error) {
 	cleaned := filepath.Clean(candidate)
-	if !filepath.IsAbs(cleaned) || !w.Contains(cleaned) || cleaned == w.root {
+	if !filepath.IsAbs(cleaned) || !w.Contains(cleaned) {
 		return "", ErrOutsideWorkspace
 	}
 	relative, err := filepath.Rel(w.root, cleaned)
-	if err != nil {
+	// ルートそのものは書き込み先ではない。**素の文字列比較で弾かない。**
+	// まわりの包含判断は大小文字を畳むので、Windows ではルートの別綴りだけが
+	// そこをすり抜け、ワークスペースのルート自身が書き込み先になってしまう。
+	if err != nil || relative == "." {
 		return "", ErrOutsideWorkspace
 	}
 
