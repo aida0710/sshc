@@ -46,11 +46,7 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 	ctx := context.Background()
 	switch called.Kind {
 	case invocationDesktop:
-		if launchApp(ctx) {
-			return 0
-		}
-		fmt.Fprintln(os.Stderr, "sshc: could not launch the desktop application")
-		return 1
+		return runDesktop(ctx, app.HandoffDir(home), client, newDesktopLauncher(), os.Stderr)
 	case invocationEngine:
 		return runEngine(ctx, engineDesktop, home, os.Stdin, os.Stdout, os.Stderr)
 	case invocationHeadless:

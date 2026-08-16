@@ -131,7 +131,7 @@ func runConnect(
 	var saved func(string) (string, bool)
 	var password func(string) (string, bool)
 	answer, err := askApplication(ctx, alias, stateDir, client)
-	if err != nil && launchApp(ctx) {
+	if err != nil && launchBackground(ctx) {
 		// **上がるまで待つ。** 待ち方を知っているのはここだけで、
 		// 上限は外殻が入口を書き出すのに掛ける時間と同じにしてある。
 		for attempt := 0; attempt < 40 && err != nil; attempt++ {
