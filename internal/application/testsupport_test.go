@@ -2,18 +2,20 @@ package application
 
 import (
 	"io/fs"
-	"path"
+	"path/filepath"
 	"sort"
 	"testing"
 
 	"sshc/internal/config"
 )
 
-const testRoot = "/home/tester/.ssh"
-const testHome = "/home/tester"
+// testRoot は、リゾルバが受け取るワークスペースのルートである。リゾルバは
+// このファイルシステムの文法でパスを見るので、ここも組み立てて作る。
+var testRoot = filepath.Join(testHome, ".ssh")
 
 // fakeLoader は、射影テストが決してディスクに触れないように、
-// メモリから設定ファイルを提供する。key は絶対のスラッシュ区切り path である。
+// メモリから設定ファイルを提供する。key は、本物の Loader が受け取るのと
+// 同じ、このファイルシステムの絶対 path である。
 type fakeLoader struct{ files map[string]string }
 
 func (loader fakeLoader) ReadFile(name string) ([]byte, error) {
@@ -27,7 +29,7 @@ func (loader fakeLoader) ReadFile(name string) ([]byte, error) {
 func (loader fakeLoader) Glob(pattern string) ([]string, error) {
 	var matches []string
 	for name := range loader.files {
-		matched, err := path.Match(pattern, name)
+		matched, err := filepath.Match(pattern, name)
 		if err != nil {
 			return nil, err
 		}
@@ -40,12 +42,12 @@ func (loader fakeLoader) Glob(pattern string) ([]string, error) {
 }
 
 // newTestGraph は、メモリ内の設定 tree を解決する。key は testRoot
-// からの相対である。
+// からの相対で、スラッシュ区切りで書く——設定に書かれる綴りだからである。
 func newTestGraph(t *testing.T, files map[string]string) *config.Graph {
 	t.Helper()
 	absolute := make(map[string]string, len(files))
 	for name, contents := range files {
-		absolute[path.Join(testRoot, name)] = contents
+		absolute[filepath.Join(testRoot, filepath.FromSlash(name))] = contents
 	}
 	resolver := config.Resolver{
 		Loader: fakeLoader{files: absolute},
@@ -53,7 +55,7 @@ func newTestGraph(t *testing.T, files map[string]string) *config.Graph {
 		Root:   testRoot,
 		Tokens: map[byte]string{'d': testHome},
 	}
-	graph, err := resolver.Resolve(path.Join(testRoot, "config"))
+	graph, err := resolver.Resolve(filepath.Join(testRoot, "config"))
 	if err != nil {
 		t.Fatal(err)
 	}

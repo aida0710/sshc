@@ -1,3 +1,9 @@
+//go:build unix
+
+// このファイルの fixture は /bin/echo、/bin/sleep、/usr/bin/false、/usr/bin/yes
+// といった Unix のシステムプログラムそのものである。Windows には同じ argv を持つ
+// 対応物が無く、そこで何を信頼して実行するかは Windows Task 4 の trusted toolchain
+// が決める。ここで cmd.exe を代用すると、その決定を先取りしたことになる。
 package process_test
 
 import (

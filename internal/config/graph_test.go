@@ -73,17 +73,17 @@ func requireDiagnostic(t *testing.T, graph *Graph, code string) Diagnostic {
 
 func TestResolveLoadsIncludedFilesInLexicalGlobOrder(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config":           "Include conf.d/*.conf\nHost direct\n",
-		"/Users/tester/.ssh/conf.d/20-b.conf": "Host bravo\n",
-		"/Users/tester/.ssh/conf.d/10-a.conf": "Host alpha\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig: "Include conf.d/*.conf\nHost direct\n",
+		filepath.Join(testRoot, "conf.d", "20-b.conf"): "Host bravo\n",
+		filepath.Join(testRoot, "conf.d", "10-a.conf"): "Host alpha\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
-		"/Users/tester/.ssh/config",
-		"/Users/tester/.ssh/conf.d/10-a.conf",
-		"/Users/tester/.ssh/conf.d/20-b.conf",
+		testConfig,
+		filepath.Join(testRoot, "conf.d", "10-a.conf"),
+		filepath.Join(testRoot, "conf.d", "20-b.conf"),
 	}
 	if len(graph.Order) != len(want) {
 		t.Fatalf("order = %#v", graph.Order)
@@ -93,7 +93,7 @@ func TestResolveLoadsIncludedFilesInLexicalGlobOrder(t *testing.T) {
 			t.Fatalf("order[%d] = %q, want %q", index, graph.Order[index], want[index])
 		}
 	}
-	root := graph.Nodes["/Users/tester/.ssh/config"]
+	root := graph.Nodes[testConfig]
 	if !root.Editable || root.Missing || root.File == nil {
 		t.Fatalf("root node = %#v", root)
 	}
@@ -107,15 +107,15 @@ func TestResolveLoadsIncludedFilesInLexicalGlobOrder(t *testing.T) {
 
 func TestResolveStopsAtIncludeCycle(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config": "Include a.conf\n",
-		"/Users/tester/.ssh/a.conf": "Include b.conf\n",
-		"/Users/tester/.ssh/b.conf": "Include config\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig:                        "Include a.conf\n",
+		filepath.Join(testRoot, "a.conf"): "Include b.conf\n",
+		filepath.Join(testRoot, "b.conf"): "Include config\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cycle := requireDiagnostic(t, graph, DiagnosticIncludeCycle)
-	if cycle.Path != "/Users/tester/.ssh/b.conf" || cycle.Severity != SeverityError {
+	if cycle.Path != filepath.Join(testRoot, "b.conf") || cycle.Severity != SeverityError {
 		t.Fatalf("cycle diagnostic = %#v", cycle)
 	}
 	if len(graph.Nodes) != 3 {
@@ -125,14 +125,14 @@ func TestResolveStopsAtIncludeCycle(t *testing.T) {
 
 func TestResolveCountsDuplicateIncludesWithoutWalkingTwice(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config":      "Include shared.conf\nInclude shared.conf\n",
-		"/Users/tester/.ssh/shared.conf": "Host shared\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig:                             "Include shared.conf\nInclude shared.conf\n",
+		filepath.Join(testRoot, "shared.conf"): "Host shared\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	requireDiagnostic(t, graph, DiagnosticIncludeDuplicate)
-	if loads := graph.Nodes["/Users/tester/.ssh/shared.conf"].Loads; loads != 2 {
+	if loads := graph.Nodes[filepath.Join(testRoot, "shared.conf")].Loads; loads != 2 {
 		t.Fatalf("loads = %d, want 2", loads)
 	}
 	if len(graph.Order) != 2 {
@@ -142,9 +142,9 @@ func TestResolveCountsDuplicateIncludesWithoutWalkingTwice(t *testing.T) {
 
 func TestResolveFlagsConditionalIncludes(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config":    "Host work\n\tInclude work.conf\n",
-		"/Users/tester/.ssh/work.conf": "User ops\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig:                           "Host work\n\tInclude work.conf\n",
+		filepath.Join(testRoot, "work.conf"): "User ops\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,22 +152,23 @@ func TestResolveFlagsConditionalIncludes(t *testing.T) {
 	if conditional.Line != 2 {
 		t.Fatalf("conditional diagnostic = %#v", conditional)
 	}
-	edge := graph.Nodes["/Users/tester/.ssh/config"].Includes[0]
+	edge := graph.Nodes[testConfig].Includes[0]
 	if edge.Condition != "Host work" {
 		t.Fatalf("edge condition = %q", edge.Condition)
 	}
 }
 
 func TestResolveMarksFilesOutsideTheRootAsNotEditable(t *testing.T) {
+	shared := filepath.Join(testOutside, "shared.conf")
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config": "Include /etc/ssh/shared.conf\n",
-		"/etc/ssh/shared.conf":      "Host shared\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig: "Include " + filepath.ToSlash(shared) + "\n",
+		shared:     "Host shared\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	requireDiagnostic(t, graph, DiagnosticIncludeOutsideRoot)
-	outside := graph.Nodes["/etc/ssh/shared.conf"]
+	outside := graph.Nodes[shared]
 	if outside == nil || outside.Editable || outside.File == nil {
 		t.Fatalf("outside node = %#v", outside)
 	}
@@ -175,8 +176,8 @@ func TestResolveMarksFilesOutsideTheRootAsNotEditable(t *testing.T) {
 
 func TestResolveReportsPatternsItRefusesToExpand(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config": "Include %h/config\nInclude missing/*.conf\nInclude\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig: "Include %h/config\nInclude missing/*.conf\nInclude\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,19 +187,20 @@ func TestResolveReportsPatternsItRefusesToExpand(t *testing.T) {
 	}
 	requireDiagnostic(t, graph, DiagnosticIncludeNoMatch)
 	requireDiagnostic(t, graph, DiagnosticIncludeEmpty)
-	edges := graph.Nodes["/Users/tester/.ssh/config"].Includes
+	edges := graph.Nodes[testConfig].Includes
 	if len(edges) != 2 || edges[0].Expanded != "" || len(edges[0].Matches) != 0 {
 		t.Fatalf("edges = %#v", edges)
 	}
 }
 
 func TestResolveReportsUnreadableAndMissingRoot(t *testing.T) {
+	broken := filepath.Join(testRoot, "broken.conf")
 	resolver := newTestResolver()
 	resolver.Loader = fakeLoader{
-		files: map[string]string{"/Users/tester/.ssh/config": "Include broken.conf\n"},
-		fail:  map[string]error{"/Users/tester/.ssh/broken.conf": fs.ErrPermission},
+		files: map[string]string{testConfig: "Include broken.conf\n"},
+		fail:  map[string]error{broken: fs.ErrPermission},
 	}
-	graph, err := resolver.Resolve("/Users/tester/.ssh/config")
+	graph, err := resolver.Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,27 +208,27 @@ func TestResolveReportsUnreadableAndMissingRoot(t *testing.T) {
 	if unreadable.Severity != SeverityError {
 		t.Fatalf("unreadable diagnostic = %#v", unreadable)
 	}
-	if node := graph.Nodes["/Users/tester/.ssh/broken.conf"]; node == nil || node.File != nil {
-		t.Fatalf("broken node = %#v", graph.Nodes["/Users/tester/.ssh/broken.conf"])
+	if node := graph.Nodes[broken]; node == nil || node.File != nil {
+		t.Fatalf("broken node = %#v", graph.Nodes[broken])
 	}
 
 	empty := resolverFor(map[string]string{})
-	missing, err := empty.Resolve("/Users/tester/.ssh/config")
+	missing, err := empty.Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !missing.Nodes["/Users/tester/.ssh/config"].Missing {
+	if !missing.Nodes[testConfig].Missing {
 		t.Fatal("missing root file was not reported as missing")
 	}
 }
 
 func TestResolveStopsAtMaxDepth(t *testing.T) {
-	files := map[string]string{"/Users/tester/.ssh/config": "Include chain-0.conf\n"}
+	files := map[string]string{testConfig: "Include chain-0.conf\n"}
 	for index := 0; index < 20; index++ {
-		files[fmt.Sprintf("/Users/tester/.ssh/chain-%d.conf", index)] =
+		files[filepath.Join(testRoot, fmt.Sprintf("chain-%d.conf", index))] =
 			fmt.Sprintf("Include chain-%d.conf\n", index+1)
 	}
-	graph, err := resolverFor(files).Resolve("/Users/tester/.ssh/config")
+	graph, err := resolverFor(files).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,13 +2,14 @@ package platform_test
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"sshc/internal/platform"
 )
 
 func TestResolveUnderHome(t *testing.T) {
-	const home = "/home/tester"
+	const home = testHome
 	for _, test := range []struct {
 		name  string
 		given string
@@ -18,9 +19,9 @@ func TestResolveUnderHome(t *testing.T) {
 		{name: "empty stays empty", given: "", want: ""},
 		{name: "blank stays empty", given: "   ", want: ""},
 		{name: "bare tilde is the home", given: "~", want: home},
-		{name: "under the home", given: "~/work", want: "/home/tester/work"},
-		{name: "absolute is kept", given: "/srv/deploy", want: "/srv/deploy"},
-		{name: "absolute is cleaned", given: "/srv//deploy/../deploy/", want: "/srv/deploy"},
+		{name: "under the home", given: "~/work", want: filepath.Join(home, "work")},
+		{name: "absolute is kept", given: testAbsolute, want: testAbsolute},
+		{name: "absolute is cleaned", given: testAbsoluteUncleaned, want: testAbsolute},
 		{name: "another user's home", given: "~someone/x", err: platform.ErrDirectoryUser},
 		{name: "relative is refused", given: "work", err: platform.ErrDirectoryRelative},
 		{name: "dot is refused", given: ".", err: platform.ErrDirectoryRelative},

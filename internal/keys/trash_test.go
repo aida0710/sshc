@@ -26,9 +26,7 @@ func newTrashService(t *testing.T) (*Service, string) {
 
 func TestTrashMovesTheWholeKeyPairAndKeepsItsPermissions(t *testing.T) {
 	service, root := newTrashService(t)
-	if err := os.Chmod(filepath.Join(root, "id_work"), 0o400); err != nil {
-		t.Fatalf("tighten permissions: %v", err)
-	}
+	tightenTrashSourceKey(t, filepath.Join(root, "id_work"))
 
 	result, err := service.Trash(ItemID("id_work"))
 	if err != nil {
@@ -44,20 +42,7 @@ func TestTrashMovesTheWholeKeyPairAndKeepsItsPermissions(t *testing.T) {
 	}
 
 	entryDirectory := filepath.Join(root, StateDirectoryName, "trash", result.EntryID)
-	directoryInfo, err := os.Lstat(entryDirectory)
-	if err != nil {
-		t.Fatalf("trash entry missing: %v", err)
-	}
-	if directoryInfo.Mode().Perm() != 0o700 {
-		t.Errorf("trash directory permission = %04o, want 0700", directoryInfo.Mode().Perm())
-	}
-	keyInfo, err := os.Lstat(filepath.Join(entryDirectory, "id_work"))
-	if err != nil {
-		t.Fatalf("trashed key missing: %v", err)
-	}
-	if keyInfo.Mode().Perm() != 0o400 {
-		t.Errorf("trashed key permission = %04o, want the original 0400", keyInfo.Mode().Perm())
-	}
+	assertTrashEntryIsPrivate(t, entryDirectory, filepath.Join(entryDirectory, "id_work"))
 
 	backups := filepath.Join(root, StateDirectoryName, "backups")
 	if err := filepath.WalkDir(backups, func(path string, entry os.DirEntry, walkErr error) error {

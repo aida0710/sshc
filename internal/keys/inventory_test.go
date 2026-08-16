@@ -122,21 +122,14 @@ func TestScanClassifiesByContentNotByFileName(t *testing.T) {
 			if item.Encrypted != test.wantEncrypted {
 				t.Errorf("Encrypted = %v, want %v", item.Encrypted, test.wantEncrypted)
 			}
-			if item.Permission != test.wantPermission {
-				t.Errorf("Permission = %q, want %q", item.Permission, test.wantPermission)
-			}
+			assertScannedPermission(t, item, test.wantPermission)
 			if item.ID != ItemID(test.relativePath) {
 				t.Errorf("ID = %q, want %q", item.ID, ItemID(test.relativePath))
 			}
 		})
 	}
 
-	if !byPath["exposed"].PermissionRisk {
-		t.Errorf("a world-readable private key was not flagged")
-	}
-	if byPath["notes.txt"].PermissionRisk {
-		t.Errorf("a 0600 private key was flagged as risky")
-	}
+	assertPrivateKeyPermissionRisk(t, byPath["exposed"], byPath["notes.txt"])
 	if byPath["notes.txt"].Fingerprint != fingerprint {
 		t.Errorf("Fingerprint = %q, want %q", byPath["notes.txt"].Fingerprint, fingerprint)
 	}

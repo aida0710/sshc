@@ -1,6 +1,7 @@
 package effective_test
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,12 +17,13 @@ func codesOf(complexities []effective.Complexity) map[string]effective.Complexit
 }
 
 func TestProjectAttributesTheFirstValueOfEachKeyword(t *testing.T) {
+	defaults := filepath.Join(testRoot, "conf.d", "10-defaults.conf")
 	graph := graphFor(t, map[string]string{
 		testConfig: "Include conf.d/*.conf\n" +
 			"Host bastion\n" +
 			"\tHostName 203.0.113.10\n" +
 			"\tPort 2222\n",
-		"/Users/tester/.ssh/conf.d/10-defaults.conf": "Host bastion\n" +
+		defaults: "Host bastion\n" +
 			"\tPort 9999\n" +
 			"\tUser ops\n",
 	})
@@ -41,11 +43,11 @@ func TestProjectAttributesTheFirstValueOfEachKeyword(t *testing.T) {
 	// 勝者である — ファイル順は読み込み順ではなく、この表明は以前これと逆のことを
 	// 言っていた。
 	port, _ := projection.Value("port")
-	if port.Value != "9999" || port.Path != "/Users/tester/.ssh/conf.d/10-defaults.conf" {
+	if port.Value != "9999" || port.Path != defaults {
 		t.Errorf("OpenSSH keeps the first value it read: %#v", port)
 	}
 	user, ok := projection.Value("user")
-	if !ok || user.Value != "ops" || user.Path != "/Users/tester/.ssh/conf.d/10-defaults.conf" {
+	if !ok || user.Value != "ops" || user.Path != defaults {
 		t.Errorf("user source = %#v", user)
 	}
 

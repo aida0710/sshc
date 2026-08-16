@@ -3,7 +3,6 @@ package acceptance_test
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -21,10 +20,7 @@ func TestTheHandoffLetsTheCommandLineAskForOneConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the running application left no handoff: %v", err)
 	}
-	info, err := os.Stat(filepath.Join(stateDir, handoff.FileName))
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("handoff mode = %v, %v", info, err)
-	}
+	assertHandoffIsPrivate(t, filepath.Join(stateDir, handoff.FileName))
 	if found.URL != f.baseURL {
 		t.Errorf("the handoff names %q, the server is at %q", found.URL, f.baseURL)
 	}

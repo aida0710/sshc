@@ -2,6 +2,7 @@ package sshclient_test
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -36,15 +37,16 @@ func resolverFor(table map[string]map[string][]string) sshclient.Resolver {
 func TestNewTargetTakesTheValuesTheResolverDecided(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"bastion": {
-			"hostname":     {"203.0.113.10"},
-			"port":         {"2222"},
-			"user":         {"ops"},
-			"identityfile": {"~/.ssh/first", "/etc/keys/second"},
+			"hostname": {"203.0.113.10"},
+			"port":     {"2222"},
+			"user":     {"ops"},
+			// 設定に書かれる綴りはスラッシュ区切りである。解くのはこの下。
+			"identityfile": {"~/.ssh/first", testOutsideKey},
 			"setenv":       {"ONE=1 TWO=2"},
 		},
 	})
 
-	target, notices, err := sshclient.NewTarget("bastion", resolve, "/home/aida")
+	target, notices, err := sshclient.NewTarget("bastion", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +57,8 @@ func TestNewTargetTakesTheValuesTheResolverDecided(t *testing.T) {
 		t.Errorf("target = %+v", target)
 	}
 	// ~ はここで解く。ssh -G は ~ を残すので、解決器の答えには残っている。
-	want := []string{"/home/aida/.ssh/first", "/etc/keys/second"}
+	// **ホームの外にある二つ目は、継ぎ足されず絶対のまま残らなければならない。**
+	want := []string{filepath.Join(testHome, ".ssh", "first"), testOutsideKey}
 	if len(target.Identities) != 2 || target.Identities[0] != want[0] || target.Identities[1] != want[1] {
 		t.Errorf("identities = %#v, want %#v", target.Identities, want)
 	}
@@ -68,7 +71,7 @@ func TestNewTargetTakesTheValuesTheResolverDecided(t *testing.T) {
 // ここに来る時点で hostname も port も user も決まっている。
 func TestNewTargetRefusesWhenNoHostNameWasDecided(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{"bare": {}})
-	if _, _, err := sshclient.NewTarget("bare", resolve, "/home/aida"); !errors.Is(err, sshclient.ErrNoHostName) {
+	if _, _, err := sshclient.NewTarget("bare", resolve, testHome); !errors.Is(err, sshclient.ErrNoHostName) {
 		t.Fatalf("NewTarget = %v, want ErrNoHostName", err)
 	}
 }
@@ -79,7 +82,7 @@ func TestNewTargetRefusesProxyCommand(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"jump": {"hostname": {"198.51.100.9"}, "proxycommand": {"/usr/bin/nc %h %p"}},
 	})
-	if _, _, err := sshclient.NewTarget("jump", resolve, "/home/aida"); !errors.Is(err, sshclient.ErrProxyCommand) {
+	if _, _, err := sshclient.NewTarget("jump", resolve, testHome); !errors.Is(err, sshclient.ErrProxyCommand) {
 		t.Fatalf("NewTarget = %v, want ErrProxyCommand", err)
 	}
 }
@@ -89,7 +92,7 @@ func TestNewTargetAcceptsProxyCommandTurnedOff(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"direct": {"hostname": {"198.51.100.9"}, "proxycommand": {"none"}},
 	})
-	if _, _, err := sshclient.NewTarget("direct", resolve, "/home/aida"); err != nil {
+	if _, _, err := sshclient.NewTarget("direct", resolve, testHome); err != nil {
 		t.Fatalf("NewTarget = %v", err)
 	}
 }
@@ -101,7 +104,7 @@ func TestNewTargetExpandsTheProxyJumpChainInOrder(t *testing.T) {
 		"final": {"hostname": {"10.0.0.9"}, "proxyjump": {"inner"}},
 	})
 
-	target, _, err := sshclient.NewTarget("final", resolve, "/home/aida")
+	target, _, err := sshclient.NewTarget("final", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +124,7 @@ func TestAJumpListOverridesTheHopOwnUserAndPort(t *testing.T) {
 		"edge":   {"hostname": {"198.51.100.1"}, "user": {"gate"}, "port": {"2200"}},
 	})
 
-	target, _, err := sshclient.NewTarget("target", resolve, "/home/aida")
+	target, _, err := sshclient.NewTarget("target", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +153,7 @@ func TestProxyJumpTokensAreExpandedAgainstTheFinalDestination(t *testing.T) {
 		"gateway.example": {"hostname": {"gateway.example"}, "user": {"nobody"}},
 	})
 
-	target, _, err := sshclient.NewTarget("far", resolve, "/home/aida")
+	target, _, err := sshclient.NewTarget("far", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +173,7 @@ func TestProxyJumpRefusesATokenOpenSSHDoesNotAllowThere(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"far": {"hostname": {"10.0.0.9"}, "proxyjump": {"%u@gateway.example"}},
 	})
-	if _, _, err := sshclient.NewTarget("far", resolve, "/home/aida"); err == nil {
+	if _, _, err := sshclient.NewTarget("far", resolve, testHome); err == nil {
 		t.Fatal("NewTarget accepted a token ProxyJump does not take")
 	}
 }
@@ -180,7 +183,7 @@ func TestAProxyJumpCycleStopsAtTheDepthLimit(t *testing.T) {
 		"a": {"hostname": {"10.0.0.1"}, "proxyjump": {"b"}},
 		"b": {"hostname": {"10.0.0.2"}, "proxyjump": {"a"}},
 	})
-	if _, _, err := sshclient.NewTarget("a", resolve, "/home/aida"); !errors.Is(err, sshclient.ErrJumpDepth) {
+	if _, _, err := sshclient.NewTarget("a", resolve, testHome); !errors.Is(err, sshclient.ErrJumpDepth) {
 		t.Fatalf("NewTarget = %v, want ErrJumpDepth", err)
 	}
 }
@@ -190,7 +193,7 @@ func TestProxyJumpNoneLeavesNoChain(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"plain": {"hostname": {"10.0.0.9"}, "proxyjump": {"none"}},
 	})
-	target, _, err := sshclient.NewTarget("plain", resolve, "/home/aida")
+	target, _, err := sshclient.NewTarget("plain", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +214,7 @@ func TestUnhonouredKeywordsBecomeNoticesRatherThanRefusals(t *testing.T) {
 		},
 	})
 
-	target, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	target, notices, err := sshclient.NewTarget("work", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +242,7 @@ func TestMethodOrderFollowsPreferredAuthentications(t *testing.T) {
 			"kbdinteractiveauthentication": {"no"},
 		},
 	})
-	target, _, err := sshclient.NewTarget("host", resolve, "/home/aida")
+	target, _, err := sshclient.NewTarget("host", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +276,7 @@ func TestNumericValuesBecomeDurations(t *testing.T) {
 			"connecttimeout":      {"nonsense"},
 		},
 	})
-	target, _, err := sshclient.NewTarget("host", resolve, "/home/aida")
+	target, _, err := sshclient.NewTarget("host", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +303,7 @@ func TestDroppedKeywordsSayWhyRatherThanPromisingThemLater(t *testing.T) {
 	}
 	resolve := resolverFor(map[string]map[string][]string{"work": entries})
 
-	_, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	_, notices, err := sshclient.NewTarget("work", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +333,7 @@ func TestForwardsAreCarriedRatherThanNoticed(t *testing.T) {
 			"forwardagent":   {"yes"},
 		},
 	})
-	target, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	target, notices, err := sshclient.NewTarget("work", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +361,7 @@ func TestANonLoopbackBindIsFoldedOntoLoopback(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"work": {"hostname": {"10.0.0.9"}, "localforward": {"0.0.0.0:8080 10.0.0.5:80"}},
 	})
-	target, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	target, notices, err := sshclient.NewTarget("work", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +381,7 @@ func TestAnUnreadableForwardIsSkippedRatherThanFatal(t *testing.T) {
 			"localforward": {"nonsense", "8080 10.0.0.5:80"},
 		},
 	})
-	target, notices, err := sshclient.NewTarget("work", resolve, "/home/aida")
+	target, notices, err := sshclient.NewTarget("work", resolve, testHome)
 	if err != nil {
 		t.Fatalf("an unreadable forward refused the connection: %v", err)
 	}
@@ -400,7 +403,7 @@ func TestAnUnreadableForwardIsSkippedRatherThanFatal(t *testing.T) {
 // hostname と user と port の三つだけであり、それに頼っている。
 func TestHostKeyAlgorithmsStaysEmptyWhenNothingWasWritten(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{"host": {"hostname": {"10.0.0.9"}}})
-	target, _, err := sshclient.NewTarget("host", resolve, "/home/aida")
+	target, _, err := sshclient.NewTarget("host", resolve, testHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +418,7 @@ func TestHostKeyAlgorithmsFollowsWhatWasWritten(t *testing.T) {
 		resolve := resolverFor(map[string]map[string][]string{
 			"host": {"hostname": {"10.0.0.9"}, "hostkeyalgorithms": {written}},
 		})
-		target, _, err := sshclient.NewTarget("host", resolve, "/home/aida")
+		target, _, err := sshclient.NewTarget("host", resolve, testHome)
 		if err != nil {
 			t.Fatal(err)
 		}

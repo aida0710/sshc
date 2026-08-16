@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -236,9 +237,9 @@ func TestNewDiagnosticViewKeepsExternalPathsVisible(t *testing.T) {
 	inside := NewDiagnosticView(testRoot, config.Diagnostic{
 		Severity: config.SeverityWarning,
 		Code:     config.DiagnosticIncludeNoMatch,
-		Path:     testRoot + "/config",
+		Path:     filepath.Join(testRoot, "config"),
 		Line:     3,
-		Detail:   testRoot + "/conf.d/*.conf",
+		Detail:   filepath.Join(testRoot, "conf.d", "*.conf"),
 	})
 	if inside.Severity != "warning" || inside.Path != "config" || inside.External {
 		t.Fatalf("inside view = %#v", inside)
@@ -246,9 +247,9 @@ func TestNewDiagnosticViewKeepsExternalPathsVisible(t *testing.T) {
 	outside := NewDiagnosticView(testRoot, config.Diagnostic{
 		Severity: config.SeverityInfo,
 		Code:     config.DiagnosticIncludeOutsideRoot,
-		Path:     "/etc/ssh/ssh_config",
+		Path:     testOutside,
 	})
-	if !outside.External || outside.Path != "" || outside.Absolute != "/etc/ssh/ssh_config" {
+	if !outside.External || outside.Path != "" || outside.Absolute != testOutside {
 		t.Fatalf("outside view = %#v", outside)
 	}
 }

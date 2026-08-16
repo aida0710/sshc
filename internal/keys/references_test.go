@@ -27,7 +27,7 @@ func TestBuildReferenceIndexFindsHostsThatNameAKey(t *testing.T) {
 		"  IdentityFile ~/.ssh/%h.key\n"+
 		"\n"+
 		"Host external\n"+
-		"  IdentityFile /etc/ssh/shared\n"), 0o600)
+		"  IdentityFile "+filepath.ToSlash(testOutsideKey)+"\n"), 0o600)
 
 	graph, err := storage.NewResolver(workspace).Resolve(filepath.Join(workspace.Root(), "config"))
 	if err != nil {
@@ -67,8 +67,8 @@ func TestBuildReferenceIndexFindsHostsThatNameAKey(t *testing.T) {
 	if reasons["~/.ssh/%h.key"] != ReasonUnsupportedToken {
 		t.Errorf("token reason = %q, want %q", reasons["~/.ssh/%h.key"], ReasonUnsupportedToken)
 	}
-	if reasons["/etc/ssh/shared"] != ReasonOutsideWorkspace {
-		t.Errorf("external reason = %q, want %q", reasons["/etc/ssh/shared"], ReasonOutsideWorkspace)
+	if reasons[filepath.ToSlash(testOutsideKey)] != ReasonOutsideWorkspace {
+		t.Errorf("external reason = %q, want %q", reasons[filepath.ToSlash(testOutsideKey)], ReasonOutsideWorkspace)
 	}
 }
 

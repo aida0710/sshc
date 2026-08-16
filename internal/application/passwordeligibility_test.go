@@ -12,9 +12,16 @@ import (
 	"sshc/internal/storage"
 )
 
+// newShortHomeService は、**短い**ホームの上にサービスを作る。
+//
+// 長さがこの検査の一部である。OpenSSH は鍵の prompt path を `%.100s` で表示し、
+// 切り詰められたパスは鍵の同一性を名乗れないので、directKeyPassphraseTarget は
+// 100 バイトを超える path をそこで諦める。t.TempDir() の名前は試験名を含むぶん
+// 長く、この境界を越える——越えれば、ここにある検査はどれも「対象なし」を
+// 正解として通過してしまう。
 func newShortHomeService(t *testing.T) (*Service, *storage.Workspace) {
 	t.Helper()
-	home, err := os.MkdirTemp("/tmp", "sshc-pe-")
+	home, err := os.MkdirTemp(shortTempBase(), "sshc-")
 	if err != nil {
 		t.Fatal(err)
 	}

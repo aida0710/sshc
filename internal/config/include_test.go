@@ -2,32 +2,43 @@ package config
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
+// testRoot はワークスペース、testConfig はその入口ファイル。testHome と同じく、
+// この OS の綴りでなければ Resolver は受け取らない。
+var (
+	testRoot   = filepath.Join(testHome, ".ssh")
+	testConfig = filepath.Join(testRoot, "config")
+)
+
 func newTestResolver() Resolver {
 	return Resolver{
-		Home:   "/Users/tester",
-		Root:   "/Users/tester/.ssh",
-		Tokens: map[byte]string{'d': "/Users/tester", 'u': "tester", 'i': "501"},
+		Home:   testHome,
+		Root:   testRoot,
+		Tokens: map[byte]string{'d': testHome, 'u': "tester", 'i': "501"},
 	}
 }
 
 func TestExpandPatternFollowsOpenSSHRules(t *testing.T) {
 	resolver := newTestResolver()
+	// **argument は設定の構文、want はこのファイルシステムのパスである。** OpenSSH の
+	// Include はどの OS でもスラッシュで書かれ、綴りが分かれるのは行き先だけである。
+	outside := filepath.Join(testOutside, "ssh_config")
 	tests := []struct {
 		name     string
 		argument string
 		want     string
 	}{
-		{"relative resolves under the ssh directory", "conf.d/*.conf", "/Users/tester/.ssh/conf.d/*.conf"},
-		{"absolute stays absolute", "/etc/ssh/ssh_config", "/etc/ssh/ssh_config"},
-		{"tilde uses the home directory", "~/work/config", "/Users/tester/work/config"},
-		{"bare tilde is the home directory", "~", "/Users/tester"},
-		{"percent d is the home directory", "%d/.ssh/extra", "/Users/tester/.ssh/extra"},
-		{"double percent is a literal percent", "weird%%name", "/Users/tester/.ssh/weird%name"},
-		{"parent segments are cleaned", "conf.d/../other.conf", "/Users/tester/.ssh/other.conf"},
+		{"relative resolves under the ssh directory", "conf.d/*.conf", filepath.Join(testRoot, "conf.d", "*.conf")},
+		{"absolute stays absolute", filepath.ToSlash(outside), outside},
+		{"tilde uses the home directory", "~/work/config", filepath.Join(testHome, "work", "config")},
+		{"bare tilde is the home directory", "~", testHome},
+		{"percent d is the home directory", "%d/.ssh/extra", filepath.Join(testHome, ".ssh", "extra")},
+		{"double percent is a literal percent", "weird%%name", filepath.Join(testRoot, "weird%name")},
+		{"parent segments are cleaned", "conf.d/../other.conf", filepath.Join(testRoot, "other.conf")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -84,11 +95,10 @@ func TestNoMatchIsNotReportedInsideTheGeneratedRegion(t *testing.T) {
 	const start = "# >>> generated"
 	const end = "# <<< generated"
 	source := start + "\nInclude declared/*.conf\n" + end + "\nInclude by-hand/*.conf\n"
-	entry := "/home/u/.ssh/config"
 	resolver := Resolver{
-		Loader: fakeLoader{files: map[string]string{entry: source}},
-		Home:   "/home/u",
-		Root:   "/home/u/.ssh",
+		Loader: fakeLoader{files: map[string]string{testConfig: source}},
+		Home:   testHome,
+		Root:   testRoot,
 		GeneratedRegion: func(file *File) (int, int, bool) {
 			first, last := -1, -1
 			for index, line := range file.Lines {
@@ -103,7 +113,7 @@ func TestNoMatchIsNotReportedInsideTheGeneratedRegion(t *testing.T) {
 		},
 	}
 
-	graph, err := resolver.Resolve(entry)
+	graph, err := resolver.Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

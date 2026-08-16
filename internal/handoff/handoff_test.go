@@ -27,10 +27,7 @@ func validDocument() handoff.Handoff {
 
 // 旧形式を受け入れると、所有者と互換性を確かめられないまま別版のエンジンへ接続する。
 func TestReadRejectsTheLegacyURLAndSecretDocument(t *testing.T) {
-	directory := t.TempDir()
-	if err := os.WriteFile(filepath.Join(directory, handoff.FileName), []byte(`{"url":"http://127.0.0.1:52865","secret":"old"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	directory := writeHandoffFixture(t, []byte(`{"url":"http://127.0.0.1:52865","secret":"old"}`))
 
 	_, err := handoff.Read(directory)
 	if !errors.Is(err, handoff.ErrSchemaVersion) {
@@ -55,16 +52,13 @@ func TestReadRejectsInvalidHandoffFields(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			directory := t.TempDir()
 			document := validDocument()
 			test.change(&document)
 			body, err := json.Marshal(document)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(directory, handoff.FileName), body, 0o600); err != nil {
-				t.Fatal(err)
-			}
+			directory := writeHandoffFixture(t, body)
 
 			_, err = handoff.Read(directory)
 			if !errors.Is(err, test.want) {
@@ -96,6 +90,10 @@ func TestWriteAtomicallyPublishesOnePrivateValidatedDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Windows の Chmod は所有者の書き込みビットしか写さないので、この二つの mode
+	// は向こうでは何の約束も運ばない。同じ「本人以外は触れない」を Windows で
+	// 確かめているのは permissions_windows_test.go の
+	// TestWriteRestrictsWindowsHandoffState であり、そちらは DACL を見ている。
 	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Errorf("file mode = %o, want 0600", info.Mode().Perm())
 	}

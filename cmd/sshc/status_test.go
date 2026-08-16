@@ -6,8 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -107,16 +105,13 @@ func TestUnlockReadsSuccessAndFailure(t *testing.T) {
 // 版の異なる CLI が古い規約で API を叩くと、拒否の原因が見えず利用者だけが
 // 取り残される。読み口を一つにすることで、すべての CLI command が同じ復旧策を出す。
 func TestReadHandoffExplainsHowToRecoverFromAProtocolMismatch(t *testing.T) {
-	stateDir := t.TempDir()
 	document := testHandoff("http://127.0.0.1:52865")
 	document.ProtocolVersion++
 	body, err := json.Marshal(document)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(stateDir, handoff.FileName), body, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	stateDir := writeRawHandoff(t, body)
 
 	_, err = readHandoff(stateDir)
 	if !errors.Is(err, handoff.ErrProtocolVersion) {

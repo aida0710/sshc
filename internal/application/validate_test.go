@@ -66,32 +66,37 @@ func TestOverlayForDescribesWhatArrivesAndWhatLeaves(t *testing.T) {
 }
 
 func TestOverlayLoaderHidesAMovedSourceFromReadsAndGlobs(t *testing.T) {
+	// overlay の鍵はトランザクションが持つ path そのもの、つまりこの
+	// ファイルシステムの綴りである。
+	moved := filepath.Join(testRoot, "conf.d", "10-old.conf")
+	kept := filepath.Join(testRoot, "conf.d", "keep.conf")
+	destination := filepath.Join(testRoot, "connections", "work", "10-old.conf")
 	base := mapLoader{
-		"/home/tester/.ssh/conf.d/10-old.conf":           []byte("Host nas\n"),
-		"/home/tester/.ssh/conf.d/keep.conf":             []byte("Host keep\n"),
-		"/home/tester/.ssh/connections/work/10-old.conf": []byte("Host nas\n"),
+		moved:       []byte("Host nas\n"),
+		kept:        []byte("Host keep\n"),
+		destination: []byte("Host nas\n"),
 	}
 	loader := overlayLoader{
 		base:    base,
-		pending: map[string][]byte{"/home/tester/.ssh/connections/work/10-old.conf": []byte("Host nas\n")},
-		gone:    map[string]bool{"/home/tester/.ssh/conf.d/10-old.conf": true},
+		pending: map[string][]byte{destination: []byte("Host nas\n")},
+		gone:    map[string]bool{moved: true},
 	}
 
-	if _, err := loader.ReadFile("/home/tester/.ssh/conf.d/10-old.conf"); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := loader.ReadFile(moved); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("reading a moved source error = %v, want fs.ErrNotExist", err)
 	}
-	if _, err := loader.ReadFile("/home/tester/.ssh/conf.d/keep.conf"); err != nil {
+	if _, err := loader.ReadFile(kept); err != nil {
 		t.Fatalf("reading an untouched file error = %v", err)
 	}
 
-	matches, err := loader.Glob("/home/tester/.ssh/conf.d/*.conf")
+	matches, err := loader.Glob(filepath.Join(testRoot, "conf.d", "*.conf"))
 	if err != nil {
 		t.Fatalf("Glob error = %v", err)
 	}
 	// gone が無ければ、移動したファイルはここでも依然として match
 	// してしまい、Include glob はそのブロックを 2 回見て、transaction
 	// が commit されれば存在しなくなるはずの重複 alias を報告してしまう。
-	if len(matches) != 1 || matches[0] != "/home/tester/.ssh/conf.d/keep.conf" {
+	if len(matches) != 1 || matches[0] != kept {
 		t.Fatalf("Glob = %v, want only the untouched file", matches)
 	}
 }
@@ -99,13 +104,14 @@ func TestOverlayLoaderHidesAMovedSourceFromReadsAndGlobs(t *testing.T) {
 // transaction は、あるファイルを書き込みながら同じ path を削除する
 // ことがあり、これは既存の destination への move がそう見えるものである。内容の方が勝つ。
 func TestOverlayLoaderPrefersPendingContentsOverARemoval(t *testing.T) {
+	entry := filepath.Join(testRoot, "config")
 	loader := overlayLoader{
 		base:    mapLoader{},
-		pending: map[string][]byte{"/home/tester/.ssh/config": []byte("Host rewritten\n")},
-		gone:    map[string]bool{"/home/tester/.ssh/config": true},
+		pending: map[string][]byte{entry: []byte("Host rewritten\n")},
+		gone:    map[string]bool{entry: true},
 	}
 
-	contents, err := loader.ReadFile("/home/tester/.ssh/config")
+	contents, err := loader.ReadFile(entry)
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
