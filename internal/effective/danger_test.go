@@ -2,7 +2,7 @@ package effective_test
 
 import (
 	"io/fs"
-	"path"
+	"path/filepath"
 	"sort"
 	"testing"
 
@@ -21,10 +21,13 @@ func (l fakeLoader) ReadFile(name string) ([]byte, error) {
 	return []byte(contents), nil
 }
 
+// リゾルバが渡してくるパターンはこのファイルシステムの綴りなので、突き合わせも
+// filepath で行う。path.Match は Windows の区切りをエスケープとして読み、どの
+// Include も一致しなくなる。
 func (l fakeLoader) Glob(pattern string) ([]string, error) {
 	var matches []string
 	for name := range l.files {
-		if matched, err := path.Match(pattern, name); err == nil && matched {
+		if matched, err := filepath.Match(pattern, name); err == nil && matched {
 			matches = append(matches, name)
 		}
 	}
@@ -32,9 +35,12 @@ func (l fakeLoader) Glob(pattern string) ([]string, error) {
 	return matches, nil
 }
 
-const testHome = "/Users/tester"
-const testRoot = "/Users/tester/.ssh"
-const testConfig = "/Users/tester/.ssh/config"
+// testRoot はワークスペース、testConfig はその入口ファイル。testHome と同じく、
+// この OS の綴りでなければ config.Resolver は受け取らない。
+var (
+	testRoot   = filepath.Join(testHome, ".ssh")
+	testConfig = filepath.Join(testRoot, "config")
+)
 
 func graphFor(t *testing.T, files map[string]string) *config.Graph {
 	t.Helper()
@@ -52,6 +58,7 @@ func graphFor(t *testing.T, files map[string]string) *config.Graph {
 }
 
 func TestScanFindsEveryExecutableDirectiveWithItsExactText(t *testing.T) {
+	extra := filepath.Join(testRoot, "conf.d", "10-extra.conf")
 	graph := graphFor(t, map[string]string{
 		testConfig: "Include conf.d/*.conf\n" +
 			"Host jump\n" +
@@ -60,7 +67,7 @@ func TestScanFindsEveryExecutableDirectiveWithItsExactText(t *testing.T) {
 			"\tPermitLocalCommand yes\n" +
 			"Match exec \"test -f /tmp/at-work\"\n" +
 			"\tUser office\n",
-		"/Users/tester/.ssh/conf.d/10-extra.conf": "Host shell\n" +
+		extra: "Host shell\n" +
 			"\tRemoteCommand tmux attach\n" +
 			"\tKnownHostsCommand /usr/local/bin/hosts %H\n",
 	})
@@ -97,7 +104,7 @@ func TestScanFindsEveryExecutableDirectiveWithItsExactText(t *testing.T) {
 	if local := byKeyword["LocalCommand"]; !local.Overridable || !local.OnConnect {
 		t.Errorf("LocalCommand = %#v", local)
 	}
-	if remote := byKeyword["RemoteCommand"]; !remote.Overridable || remote.Path != "/Users/tester/.ssh/conf.d/10-extra.conf" {
+	if remote := byKeyword["RemoteCommand"]; !remote.Overridable || remote.Path != extra {
 		t.Errorf("RemoteCommand = %#v", remote)
 	}
 	if known := byKeyword["KnownHostsCommand"]; known.Overridable || !known.OnConnect {

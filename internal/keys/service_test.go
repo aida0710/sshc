@@ -143,13 +143,7 @@ func TestGenerateWritesAnEncryptedPairThroughATransaction(t *testing.T) {
 	}
 
 	for _, name := range []string{"id_work", "id_work.pub"} {
-		info, statErr := os.Lstat(filepath.Join(workspace.Root(), name))
-		if statErr != nil {
-			t.Fatalf("stat %s: %v", name, statErr)
-		}
-		if info.Mode().Perm() != 0o600 {
-			t.Errorf("%s permission = %04o, want 0600", name, info.Mode().Perm())
-		}
+		assertGeneratedKeyIsPrivate(t, filepath.Join(workspace.Root(), name))
 	}
 	assertNoKeyMaterialInBackups(t, workspace)
 
@@ -859,13 +853,7 @@ func TestGenerateWritesIntoTheGroupDirectory(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 	for _, name := range []string{"keys/work/id_work", "keys/work/id_work.pub"} {
-		info, statErr := os.Lstat(filepath.Join(workspace.Root(), filepath.FromSlash(name)))
-		if statErr != nil {
-			t.Fatalf("%s missing: %v", name, statErr)
-		}
-		if info.Mode().Perm() != 0o600 {
-			t.Errorf("%s permission = %04o, want 0600", name, info.Mode().Perm())
-		}
+		assertGeneratedKeyIsPrivate(t, filepath.Join(workspace.Root(), filepath.FromSlash(name)))
 	}
 	// 識別子はパスに従うので、グループ内の鍵も、ルートにあるものと同じやり方で
 	// 指定できる。

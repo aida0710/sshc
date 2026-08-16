@@ -3,20 +3,21 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestDigestChangesWithAnyResolvedConfigurationBytes(t *testing.T) {
 	first, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config": "Host bastion\n\tHostName first.example\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig: "Host bastion\n\tHostName first.example\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	second, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config": "Host bastion\n\tHostName second.example\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig: "Host bastion\n\tHostName second.example\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,13 +36,13 @@ func TestDigestChangesWithAnyResolvedConfigurationBytes(t *testing.T) {
 
 func TestSnapshotRefusesAnInlinedGraphLargerThanTheCLIResponseLimit(t *testing.T) {
 	files := map[string]string{
-		"/Users/tester/.ssh/config": "Include conf.d/*.conf\n",
+		testConfig: "Include conf.d/*.conf\n",
 	}
 	chunk := strings.Repeat("# padding\n", (1<<20)/len("# padding\n")-1)
 	for index := range 5 {
-		files[fmt.Sprintf("/Users/tester/.ssh/conf.d/%d.conf", index)] = chunk
+		files[filepath.Join(testRoot, "conf.d", fmt.Sprintf("%d.conf", index))] = chunk
 	}
-	graph, err := resolverFor(files).Resolve("/Users/tester/.ssh/config")
+	graph, err := resolverFor(files).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,11 +53,11 @@ func TestSnapshotRefusesAnInlinedGraphLargerThanTheCLIResponseLimit(t *testing.T
 
 func TestSnapshotInlinesEveryResolvedIncludeInOpenSSHOrder(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config":                  "Include conf.d/*.conf\nHost direct\n",
-		"/Users/tester/.ssh/conf.d/20-b.conf":        "Host bravo\n\tUser b\n",
-		"/Users/tester/.ssh/conf.d/10-a.conf":        "Include conf.d/nested/user.conf\n",
-		"/Users/tester/.ssh/conf.d/nested/user.conf": "Host alpha\n\tUser a\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig: "Include conf.d/*.conf\nHost direct\n",
+		filepath.Join(testRoot, "conf.d", "20-b.conf"):           "Host bravo\n\tUser b\n",
+		filepath.Join(testRoot, "conf.d", "10-a.conf"):           "Include conf.d/nested/user.conf\n",
+		filepath.Join(testRoot, "conf.d", "nested", "user.conf"): "Host alpha\n\tUser a\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,8 +74,8 @@ func TestSnapshotInlinesEveryResolvedIncludeInOpenSSHOrder(t *testing.T) {
 
 func TestSnapshotRefusesAnIncludeTheEngineCouldNotResolve(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config": "Include %h/config\nHost direct\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig: "Include %h/config\nHost direct\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,9 +87,9 @@ func TestSnapshotRefusesAnIncludeTheEngineCouldNotResolve(t *testing.T) {
 
 func TestSnapshotKeepsFileBoundariesWhenAnIncludedFileHasNoFinalNewline(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config":     "Include child.conf\nHost after\n",
-		"/Users/tester/.ssh/child.conf": "Host child",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig:                            "Include child.conf\nHost after\n",
+		filepath.Join(testRoot, "child.conf"): "Host child",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,9 +105,9 @@ func TestSnapshotKeepsFileBoundariesWhenAnIncludedFileHasNoFinalNewline(t *testi
 
 func TestSnapshotRefusesAConditionalIncludeInsteadOfChangingItsMeaning(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config":     "Host ignored\n\tInclude child.conf\nHost bastion\n\tHostName good.example\n",
-		"/Users/tester/.ssh/child.conf": "Host bastion\n\tHostName wrong.example\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig:                            "Host ignored\n\tInclude child.conf\nHost bastion\n\tHostName good.example\n",
+		filepath.Join(testRoot, "child.conf"): "Host bastion\n\tHostName wrong.example\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,8 +119,8 @@ func TestSnapshotRefusesAConditionalIncludeInsteadOfChangingItsMeaning(t *testin
 
 func TestSnapshotRefusesAnEnvironmentExpandedIncludeInsteadOfDroppingIt(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
-		"/Users/tester/.ssh/config": "Include ${HOME}/.ssh/hosts.conf\nHost bastion\n",
-	}).Resolve("/Users/tester/.ssh/config")
+		testConfig: "Include ${HOME}/.ssh/hosts.conf\nHost bastion\n",
+	}).Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

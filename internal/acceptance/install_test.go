@@ -1,3 +1,11 @@
+//go:build unix
+
+// ここが検査するのは `make install` が置く `~/.local/bin/sshc` である。
+//
+// **Windows の導入は同じ製品ではない。** そちらは NSIS の per-user インストーラ、
+// HKCU、ユーザー PATH、`sshc.exe` であり、その実証は Windows Task 8/9 の
+// package smoke が持っている。Windows に GNU Make を用意してこの recipe を
+// 走らせても、確かめられるのは向こうで出荷しないものである。
 package acceptance_test
 
 import (
