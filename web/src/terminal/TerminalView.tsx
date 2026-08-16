@@ -7,7 +7,8 @@ import { integrationsApi, type IntegrationsApi, type TerminalSession } from "../
 import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
-import { KeyBar, encodeKey, type Modifiers } from "./KeyBar";
+import { clipboard } from "../ui/clipboard";
+import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
 
@@ -92,8 +93,14 @@ export function TerminalView({
       rows: 24,
       convertEol: false,
       cursorBlink: session.exited === undefined,
-      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
-      fontSize: 13,
+      // Android には SF Mono も Menlo も無い。**ui-monospace はそこで何にも
+      // 解決しないことがある**ので、その端末が実際に持っている等幅を並べる。
+      fontFamily:
+        'ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", monospace',
+      // **ここだけは媒体クエリを JS で読む。** xterm の字は canvas と DOM の
+      // 寸法計算に入る値であって CSS で塗り替えられるものではないので、
+      // breakpoint では届かない。13px は指で持つ画面には小さすぎる。
+      fontSize: window.matchMedia("(max-width: 767px)").matches ? 15 : 13,
       theme: terminalTheme(),
       // スクロールバックはサーバー側のリングバッファが正本である。ここでの値は
       // 再生されたバイト列を画面に保つための余地にすぎない。
@@ -148,13 +155,21 @@ export function TerminalView({
     // **画面上のキーもここを通る。** 修飾が立っていれば、それが乗るのは次の
     // 一打鍵だけであり、乗った時点で降りる。押しっぱなしになる修飾は、次に
     // 打った一文字が何になるか分からない端末を作る。
-    const deliver = (label: string) => {
+    // **打たれた文字と、押されたキーは別のものである。** 前者はラベルの表を
+    // 引いてはならない——"Esc" と打った人に ESC を送ることになる。後者は必ず
+    // 引かなければならない——引かなければ、Esc のボタンが "Esc" という 3 文字を
+    // 送る。1 つの入口で兼ねようとしたことが、まさにそれを起こした。
+    const typed = (data: string) => {
       const { ctrl, alt } = armed.current;
-      stream?.send(ctrl || alt ? encodeKey(label, ctrl, alt) : label);
+      stream?.send(applyModifiers(data, ctrl, alt));
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
-    send.current = deliver;
-    view.onData(deliver);
+    send.current = (label: string) => {
+      const { ctrl, alt } = armed.current;
+      stream?.send(encodeKey(label, ctrl, alt));
+      if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
+    };
+    view.onData(typed);
 
     const attach = () => {
       clearInterval(timer);
@@ -237,7 +252,7 @@ export function TerminalView({
     const detachClipboard = attachTerminalClipboard({
       container,
       terminal: view,
-      clipboard: navigator.clipboard,
+      clipboard,
       settings: () => clipboardSettings.current,
       refuse: () => setProblem(t("terminal.clipboardRefused")),
     });

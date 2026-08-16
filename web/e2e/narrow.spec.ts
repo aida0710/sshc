@@ -121,4 +121,31 @@ test("sends a real control character from the on-screen keys", async ({ page, in
   await page.keyboard.type('echo the-shell-"came"-back');
   await page.keyboard.press("Enter");
   await expect(screen).toContainText("the-shell-came-back", { timeout: 20_000 });
+
+  // **修飾を伴わないキーも、ラベルではなく制御列を送る。** この spec は
+  // Ctrl+c しか試しておらず、そちらは打たれた文字の道を通るので、バーのキーが
+  // ラベルの文字列をそのまま送っていた不具合を素通りさせた。実機では Esc を
+  // 押すと端末に "Esc" と出ていた。
+  //
+  // **「ラベルが出ていないこと」では表明にならない。** 否定は、エコーが届く
+  // 前に評価されればその場で通る——不具合を入れ直しても素通りした。だから
+  // 「キーが効いたときにしか起きないこと」を待つ。
+  //
+  // ↑ は履歴を 1 つ戻す。同じ印が 2 度目に現れたなら、送られたのはラベルの
+  // 文字列ではなく制御列である。見るのは端末の行だけ——section はキーバーを
+  // 含むので、そこを見るとボタンのラベルに一致してしまう。
+  const rows = page.locator(".xterm-rows");
+  await page.locator(".xterm-helper-textarea").focus();
+  // 印は 1 行に収まる長さでなければならない。**この幅の端末は 20 桁ほどしか
+  // 無く**、跨いだ文字列は行の継ぎ目で切れて、どんな部分一致にも当たらない。
+  await page.keyboard.type(": zzq");
+  await page.keyboard.press("Enter");
+  await expect(rows).toContainText("zzq", { timeout: 20_000 });
+
+  await keys.getByRole("button", { name: "↑", exact: true }).click();
+  await expect
+    .poll(async () => (await rows.innerText()).split("zzq").length - 1, {
+      timeout: 20_000,
+    })
+    .toBeGreaterThanOrEqual(2);
 });

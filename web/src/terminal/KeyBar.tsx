@@ -11,33 +11,43 @@ const sequences: Record<string, string> = {
 };
 
 /**
- * encodeKey は、押されたものと立っている修飾から、端末へ送るバイト列を作る。
+ * applyModifiers は、**打たれた文字**に、立っている修飾を乗せる。
  *
- * **入口は 1 つである。** キーバーのボタンも、ソフトキーボードから打たれた
- * 一文字も、ここを通る。バーの上に英字キーは無いので、Ctrl を押した次に来る
- * のは常にシステムのキーボードからの一文字である——そこに乗らない修飾は、
- * 何も修飾しない。
+ * <p>これはキーボードから届いたバイト列の道である。ラベルの表を引かない——
+ * "Esc" と打った人に ESC を送ってはならない。
  *
  * **Ctrl が効かない文字はそのまま送る。** 制御文字を持たない文字に Ctrl を
  * 乗せて何も送らないより、押した文字が出る方がよい。触れる画面では、何も
  * 起きないことと修飾が外れていないことが見分けられない。
  */
-export function encodeKey(label: string, ctrl: boolean, alt: boolean): string {
-  const sequence = sequences[label];
-  if (sequence !== undefined) return alt ? "\x1b" + sequence : sequence;
-
+export function applyModifiers(data: string, ctrl: boolean, alt: boolean): string {
   // 1 文字でないものは、貼り付けか、キーボードが既に組み立てた制御列である。
   // **修飾を乗せない** —— 乗せれば、貼り付けた最初の一文字だけが制御文字に化ける。
-  if (label.length !== 1) return label;
+  if (data.length !== 1) return data;
 
-  let body = label;
+  let body = data;
   if (ctrl) {
-    const code = label.toLowerCase().charCodeAt(0);
+    const code = data.toLowerCase().charCodeAt(0);
     // 制御文字を持つのは a–z だけを見る。@ から _ までの記号も本来は範囲に
     // 入るが、それを打つ人は Ctrl を押していない。
     if (code >= 97 && code <= 122) body = String.fromCharCode(code - 96);
   }
   return alt ? "\x1b" + body : body;
+}
+
+/**
+ * encodeKey は、**バーで押されたキー**を端末へ送るバイト列にする。
+ *
+ * <p>こちらはラベルの表を引く道である。Esc を押した人には ESC が要る。
+ *
+ * <p>この 2 つを 1 つの関数で兼ねていたことが、バーのキーがラベルの文字列を
+ * そのまま送っていた原因だった——`Esc` を押すと端末に "Esc" と出ていた。
+ * 打たれた文字と押されたキーは別のもので、同じ入口を通せない。
+ */
+export function encodeKey(label: string, ctrl: boolean, alt: boolean): string {
+  const sequence = sequences[label];
+  if (sequence !== undefined) return alt ? "\x1b" + sequence : sequence;
+  return applyModifiers(label, ctrl, alt);
 }
 
 // 触れる画面のソフトキーボードから遠いものだけを並べる。英数字は元から出て

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import { clipboard } from "./clipboard";
 
 type CopyButtonProps = {
   // クリップボードに載る、そのままの文字列。ユーザーが見るものと
@@ -41,7 +42,7 @@ export function CopyButton({ value, label, className }: CopyButtonProps) {
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(value);
+      await clipboard.writeText(value);
       setState("copied");
     } catch {
       setState("failed");

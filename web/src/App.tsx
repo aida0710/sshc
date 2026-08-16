@@ -580,11 +580,17 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         <label htmlFor="appearance" className="hidden shrink-0 whitespace-nowrap text-sm text-ink-muted md:inline">
           {t("shell.theme")}
         </label>
+        {/*
+          狭い画面では細くする。**360px にこの 2 つを丸ごと並べる幅は無く**、
+          言語の select が画面の外へはみ出していた。中の文字は詰められるが、
+          開けば選択肢は全部読める——2 か所に置いて名前を曖昧にするより、
+          1 か所を狭めるほうが安い。
+        */}
         <select
           id="appearance"
           value={theme}
           onChange={(event) => setTheme(event.target.value as Theme)}
-          className={autoControl}
+          className={`${autoControl} max-w-24 md:max-w-none`}
         >
           {themes.map((candidate) => (
             <option key={candidate} value={candidate}>
@@ -599,7 +605,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           id="language"
           value={locale}
           onChange={(event) => setLocale(event.target.value as Locale)}
-          className={autoControl}
+          className={`${autoControl} max-w-24 md:max-w-none`}
         >
           {locales.map((candidate) => (
             <option key={candidate} value={candidate}>
