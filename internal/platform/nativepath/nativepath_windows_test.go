@@ -2,7 +2,10 @@
 
 package nativepath
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestWindowsAcceptsDriveAndOrdinaryUNCRoots(t *testing.T) {
 	for _, path := range []string{
@@ -59,5 +62,38 @@ func TestWindowsUNCCaseAliasesAreTheSameShare(t *testing.T) {
 	root := `\\server\share\A\.ssh`
 	if !Contains(root, `\\SERVER\SHARE\a\.ssh\config`) {
 		t.Fatal("a UNC case alias was reported outside the root")
+	}
+}
+
+// Identity と Contains は同じ問いに答える。**答えが割れてはならない。**
+//
+// 割れる向き次第では、別のファイルが同じ鍵に畳まれ、二つ目の Include が
+// 一度も読まれないまま消える。
+func TestWindowsIdentityAgreesWithContainmentFolding(t *testing.T) {
+	root := `C:\Users\A\.ssh`
+	for _, pair := range [][2]string{
+		{"config", "CONFIG"},
+		{"Config", "conFIG"},
+		// simple fold の軌道が三つ以上ある組。ToLower はここで包含判断とずれる。
+		{"si", "sİ"},
+		{"stra\u00dfe", "STRA\u00dfE"},
+		{"\u017foo", "Soo"},
+		{"\u212aelvin", "kelvin"},
+	} {
+		first := root + `\` + pair[0]
+		second := root + `\` + pair[1]
+		sameIdentity := Identity(first) == Identity(second)
+		sameFold := strings.EqualFold(first, second)
+		if sameIdentity != sameFold {
+			t.Errorf("Identity(%q)==Identity(%q) is %v, EqualFold is %v", first, second, sameIdentity, sameFold)
+		}
+	}
+}
+
+// 別のファイルが同じ鍵に畳まれないことを、はっきり表明する。
+func TestWindowsIdentitySeparatesDistinctFiles(t *testing.T) {
+	root := `C:\Users\A\.ssh`
+	if Identity(root+`\alpha`) == Identity(root+`\beta`) {
+		t.Fatal("distinct names share an identity")
 	}
 }

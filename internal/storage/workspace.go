@@ -155,6 +155,9 @@ func (w *Workspace) ResolveForWriteUnder(candidate string, planned map[string]bo
 		return "", ErrOutsideWorkspace
 	}
 
+	// **確かめた綴りを返す。** 呼び出し側の綴りをそのまま返すと、検査したのは
+	// ルートから組み立てた鎖なのに、書き込むのは別の綴りということになる。
+	validated := filepath.Join(w.root, relative)
 	segments := strings.Split(relative, string(filepath.Separator))
 	current := w.root
 	for index, segment := range segments {
@@ -164,7 +167,7 @@ func (w *Workspace) ResolveForWriteUnder(candidate string, planned map[string]bo
 		switch {
 		case errors.Is(statErr, fs.ErrNotExist):
 			if last {
-				return cleaned, nil
+				return validated, nil
 			}
 			if planned[current] {
 				// このトランザクションがそれを作るので、残りのセグメントもすべて
@@ -182,7 +185,7 @@ func (w *Workspace) ResolveForWriteUnder(candidate string, planned map[string]bo
 			return "", ErrNotDirectory
 		}
 	}
-	return cleaned, nil
+	return validated, nil
 }
 
 // ResolveDirectory は、candidate がルートより下の絶対パスであり、存在しないか
@@ -203,6 +206,7 @@ func (w *Workspace) ResolveDirectory(candidate string) (string, error) {
 		return "", ErrOutsideWorkspace
 	}
 
+	validated := filepath.Join(w.root, relative)
 	current := w.root
 	for _, segment := range strings.Split(relative, string(filepath.Separator)) {
 		current = filepath.Join(current, segment)
@@ -211,7 +215,7 @@ func (w *Workspace) ResolveDirectory(candidate string) (string, error) {
 		case errors.Is(statErr, fs.ErrNotExist):
 			// ここから下はまだ存在しない。作成の場合はそれが普通の
 			// ケースである。
-			return cleaned, nil
+			return validated, nil
 		case statErr != nil:
 			return "", statErr
 		case info.Mode()&fs.ModeSymlink != 0:
@@ -220,7 +224,7 @@ func (w *Workspace) ResolveDirectory(candidate string) (string, error) {
 			return "", ErrNotDirectory
 		}
 	}
-	return cleaned, nil
+	return validated, nil
 }
 
 // EnsureDirectory は、candidate と、ルートより下で欠けている親を

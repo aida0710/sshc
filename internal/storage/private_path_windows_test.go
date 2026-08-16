@@ -103,3 +103,22 @@ func TestWindowsLoadedJournalRejectsCaseAliasPathAndTarget(t *testing.T) {
 		t.Fatalf("case-alias Path/Target journal = %v, want ErrInvalidJournal", err)
 	}
 }
+
+// 書き込み先の解決は、**確かめた綴り**を返さなければならない。呼び出し側の
+// 綴りをそのまま返すと、検査したのはルートから組み立てた鎖なのに、書くのは
+// 別の綴りということになる。
+func TestWindowsResolveReturnsTheValidatedRootSpelling(t *testing.T) {
+	_, workspace := newTestManager(t)
+	if err := workspace.EnsureDirectory(filepath.Join(workspace.Root(), "conf.d")); err != nil {
+		t.Fatal(err)
+	}
+	shouted := filepath.Join(strings.ToUpper(workspace.Root()), "CONF.D", "work.conf")
+
+	resolved, err := workspace.ResolveForWrite(shouted)
+	if err != nil {
+		t.Fatalf("ResolveForWrite(%q) = %v", shouted, err)
+	}
+	if !strings.HasPrefix(resolved, workspace.Root()+string(filepath.Separator)) {
+		t.Fatalf("resolved = %q, want it under the root spelling %q", resolved, workspace.Root())
+	}
+}
