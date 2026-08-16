@@ -46,11 +46,7 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 	ctx := context.Background()
 	switch called.Kind {
 	case invocationDesktop:
-		if launchApp(ctx) {
-			return 0
-		}
-		fmt.Fprintln(os.Stderr, "sshc: could not launch the desktop application")
-		return 1
+		return runDesktop(ctx, app.HandoffDir(home), client, newDesktopLauncher(), os.Stderr)
 	case invocationEngine:
 		return runEngine(ctx, engineDesktop, home, os.Stdin, os.Stdout, os.Stderr)
 	case invocationHeadless:
@@ -58,7 +54,7 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		// 読み始めれば、打った人の入力を吸い込む。
 		return runEngine(ctx, engineHeadless, home, nil, os.Stdout, os.Stderr)
 	case invocationConnect:
-		return runConnect(ctx, called.Args[0], home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
+		return runConnect(ctx, called.Args[0], home, app.HandoffDir(home), client, newDesktopLauncher(), os.Stdin, os.Stdout, os.Stderr)
 	case invocationChoose:
 		query := ""
 		if len(called.Args) != 0 {
@@ -72,7 +68,7 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
 			return 1
 		}
-		return runConnect(ctx, alias, home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
+		return runConnect(ctx, alias, home, app.HandoffDir(home), client, newDesktopLauncher(), os.Stdin, os.Stdout, os.Stderr)
 	case invocationList:
 		return runList(home, os.Stdout, os.Stderr)
 	case invocationOpen:
