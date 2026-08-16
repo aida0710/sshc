@@ -34,6 +34,11 @@ var allowedToStartPrograms = []string{
 	// `/usr/bin/open` を絶対パスで指し、`sshc <接続先>` の ctx と上限の下で
 	// 走る——継ぎ目が守っている性質は、ここでも同じ形で守られている。
 	"cmd/sshc/launch_darwin.go",
+	// Linux には束を名前で起こす仕組みが無いので、外殻が上がるたびに書き残した
+	// 絶対パスひとつを直接起こす。**PATH も shell も引かない。** 引けば、誰の
+	// PATH に何が置かれているかで起こすものが変わる——絶対パスに固定してある点で
+	// `/usr/bin/open` と同じ性質を守っている。
+	"cmd/sshc/launch_linux.go",
 	// ローカルシェルには擬似端末が要る。継ぎ目は出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",
