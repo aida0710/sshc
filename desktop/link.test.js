@@ -1,8 +1,30 @@
 "use strict";
 
 const test = require("node:test");
+
+// これらが述べているのは POSIX の symlink の規則である。Windows では
+// homedir() が HOME を読まないので使い捨ての HOME にも隔離されず、本物の
+// プロファイルに触れてしまう。**その OS では、この仕組み自体が違う。**
+const unixTest = (name, run) =>
+  test(
+    name,
+    {
+      skip:
+        process.platform === "win32"
+          ? "the command line is put on PATH by the installer on Windows"
+          : false,
+    },
+    run,
+  );
 const assert = require("node:assert/strict");
-const { mkdtemp, writeFile, symlink, readlink, mkdir, rm } = require("node:fs/promises");
+const {
+  mkdtemp,
+  writeFile,
+  symlink,
+  readlink,
+  mkdir,
+  rm,
+} = require("node:fs/promises");
 const { join } = require("node:path");
 const { tmpdir } = require("node:os");
 
@@ -23,7 +45,7 @@ async function withHome(run) {
   }
 }
 
-test("points the link at the bundled binary", async () => {
+unixTest("points the link at the bundled binary", async () => {
   await withHome(async (link, home) => {
     const target = join(home, "bundle", "sshc");
     await mkdir(join(home, "bundle"), { recursive: true });
@@ -35,7 +57,7 @@ test("points the link at the bundled binary", async () => {
   });
 });
 
-test("replaces a link that points somewhere else", async () => {
+unixTest("replaces a link that points somewhere else", async () => {
   await withHome(async (link, home) => {
     const path = join(home, ".local", "bin", "sshc");
     await mkdir(join(home, ".local", "bin"), { recursive: true });
@@ -48,7 +70,7 @@ test("replaces a link that points somewhere else", async () => {
   });
 });
 
-test("does nothing when it already points here", async () => {
+unixTest("does nothing when it already points here", async () => {
   await withHome(async (link, home) => {
     const target = join(home, "sshc");
     await writeFile(target, "#!/bin/sh\n");
@@ -60,7 +82,7 @@ test("does nothing when it already points here", async () => {
 
 // **`make install` で入れた実体を、断りなく symlink へ変えない。**
 // その判断は人のものである。
-test("leaves a real file alone", async () => {
+unixTest("leaves a real file alone", async () => {
   await withHome(async (link, home) => {
     const path = join(home, ".local", "bin", "sshc");
     await mkdir(join(home, ".local", "bin"), { recursive: true });
@@ -77,7 +99,7 @@ test("leaves a real file alone", async () => {
 });
 
 // **リンクが張れないことは、アプリが開けない理由にはならない。**
-test("reports a failure instead of throwing", async () => {
+unixTest("reports a failure instead of throwing", async () => {
   await withHome(async (link, home) => {
     // ~/.local を普通のファイルにして、ディレクトリを作れなくする。
     await writeFile(join(home, ".local"), "not a directory");
@@ -86,3 +108,14 @@ test("reports a failure instead of throwing", async () => {
     assert.notEqual(result.reason, "");
   });
 });
+
+test(
+  "does not try to make a link on Windows",
+  { skip: process.platform !== "win32" },
+  async () => {
+    const { relink } = require("./link");
+    const answer = await relink("C:\\Program Files\\sshc\\sshc.exe");
+    assert.strictEqual(answer.changed, false);
+    assert.match(answer.reason, /installer/);
+  },
+);
