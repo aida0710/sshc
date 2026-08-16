@@ -96,6 +96,9 @@ export function TerminalView({
     const container = host.current;
     if (container === null) return;
 
+    // 指で触る画面か。
+    const coarse = prefersNativeSelection((query) => window.matchMedia(query));
+
     const view = new Terminal({
       // 幅と高さは fit アドオンが決めるので、ここでは初期値だけを置く。
       cols: 80,
@@ -178,9 +181,7 @@ export function TerminalView({
     container.addEventListener("touchstart", touchStart, { passive: true });
     container.addEventListener("touchmove", touchMove, { passive: true });
 
-    // 指で触る画面では、範囲選択を OS に返す。**印を付けるだけである** ——
-    // 何を戻すかは index.css が持っている。xterm の挙動には触らない。
-    const coarse = prefersNativeSelection((query) => window.matchMedia(query));
+    // 印を付ける。何を戻すかは index.css が持っている。
     if (coarse) container.classList.add(nativeSelectionClass);
 
     // 打鍵の配線はここで一度だけ行う。繋ぎ直すたびに足すと、1 回の打鍵が
