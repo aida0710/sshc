@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"sshc/internal/platform/windowsacl"
+	"sshc/internal/platform/windowsacl/acltest"
 )
 
 func TestReadRejectsAWindowsHandoffWithAnExtraAllowACE(t *testing.T) {
@@ -36,7 +37,7 @@ func TestReadRejectsAWindowsHandoffOwnedByAnotherTokenSID(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(directory, FileName)
-	installForeignOwnerExactDACL(t, path)
+	acltest.InstallForeignOwner(t, path)
 
 	if _, err := Read(directory); !errors.Is(err, windowsacl.ErrUnexpectedOwner) {
 		t.Fatalf("Read = %v, want windowsacl.ErrUnexpectedOwner", err)
@@ -163,66 +164,6 @@ func installExtraAllowACE(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	runtime.KeepAlive(descriptor)
-}
-
-func installForeignOwnerExactDACL(t *testing.T, path string) {
-	t.Helper()
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer token.Close()
-	user, err := token.GetTokenUser()
-	if err != nil {
-		t.Fatal(err)
-	}
-	groups, err := token.GetTokenGroups()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var foreignOwner *windows.SID
-	for _, group := range groups.AllGroups() {
-		if group.Attributes&windows.SE_GROUP_OWNER == 0 || group.Sid == nil || group.Sid.Equals(user.User.Sid) {
-			continue
-		}
-		foreignOwner, err = group.Sid.Copy()
-		if err != nil {
-			t.Fatal(err)
-		}
-		break
-	}
-	if foreignOwner == nil {
-		t.Fatal("Windows token has no distinct SE_GROUP_OWNER SID for the foreign-owner fixture")
-	}
-	userSID := user.User.Sid.String()
-	descriptor, err := windows.SecurityDescriptorFromString(
-		"O:" + foreignOwner.String() + "D:P(A;;FA;;;" + userSID + ")(A;;FA;;;SY)(A;;FA;;;BA)",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	owner, _, err := descriptor.Owner()
-	if err != nil || owner == nil {
-		t.Fatalf("foreign owner descriptor = %v", err)
-	}
-	dacl, _, err := descriptor.DACL()
-	if err != nil || dacl == nil {
-		t.Fatalf("foreign owner DACL = %v", err)
-	}
-	if err := windows.SetNamedSecurityInfo(
-		path,
-		windows.SE_FILE_OBJECT,
-		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
-		owner,
-		nil,
-		dacl,
-		nil,
-	); err != nil {
-		t.Fatalf("install foreign-owner fixture: %v", err)
-	}
-	runtime.KeepAlive(descriptor)
-	runtime.KeepAlive(groups)
-	runtime.KeepAlive(user)
 }
 
 func TestWindowsHandoffReplacementAndDirectoryDurabilityAdapter(t *testing.T) {

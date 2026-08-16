@@ -58,7 +58,13 @@ var commentPattern = regexp.MustCompile(`^[^\x00\r\n]{0,127}$`)
 
 // safeArgumentPattern は、このアプリケーションが表示するコマンドラインの各要素に
 // 最後に適用される検査。
-var safeArgumentPattern = regexp.MustCompile(`^[A-Za-z0-9@%_+=:,./-]+$`)
+//
+// **区切り文字はこの OS のものである。** Windows の絶対パスは `\` を含み、それを
+// 落とすと `-f` に渡す鍵のパスが常に弾かれ、ハードウェア鍵のコマンドラインは
+// あの OS で一度も組み立てられない。逆に Unix で `\` を許せば、表示した行が
+// 貼り付け先の sh でエスケープとして読まれる。だから許すのは、その OS が実際に
+// パスの区切りに使う文字だけである。
+var safeArgumentPattern = regexp.MustCompile(`^[A-Za-z0-9@%_+=:,./` + regexp.QuoteMeta(string(filepath.Separator)) + `-]+$`)
 
 // ValidateFileName は、安全な単一パスセグメントでないものをすべて拒否する。
 func ValidateFileName(name string) error {
