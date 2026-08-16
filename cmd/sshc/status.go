@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -34,12 +33,21 @@ func runStatus(
 	return 0
 }
 
-// engineStatus は、エンジンがいまどうなっているかを尋ねる。
+// engineStatus は、handoff を読んだうえで、そのエンジンに尋ねる。
 func engineStatus(ctx context.Context, stateDir string, client *http.Client) (statusAnswer, error) {
 	found, err := readHandoff(stateDir)
 	if err != nil {
 		return statusAnswer{}, err
 	}
+	return requestStatus(ctx, found, client)
+}
+
+// requestStatus は、渡された一台にだけ尋ねる。
+//
+// **handoff を読み直さない。** 待っているあいだに書き換わったものへ黙って
+// 乗り換えれば、利用者が起こしたのではないエンジンが接続材料を渡しうる。
+// 入れ替わりは、この一台が答えなくなることとして現れる。
+func requestStatus(ctx context.Context, found handoff.Handoff, client *http.Client) (statusAnswer, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		found.URL+httpserver.StatusPath, nil)
 	if err != nil {
@@ -71,45 +79,6 @@ type statusAnswer struct {
 	Vault    bool `json:"vault"`
 	Unlocked bool `json:"unlocked"`
 	Sessions int  `json:"sessions"`
-}
-
-// locked は、いま開けるべき錠が掛かったままかを尋ねる。尋ねられなければ、
-// 施錠されていないものとして扱う——聞けないなら聞かずに繋ぐ経路へ任せる。
-//
-// **保管庫が無いなら施錠もされていない。** 無い錠の鍵を尋ねると、保管庫を一度も
-// 作っていない利用者は接続のたびにマスターパスワードを訊かれる——答えようの
-// ない問いであり、新規インストール直後の利用者は全員そこに居る。
-func locked(ctx context.Context, stateDir string, client *http.Client) bool {
-	status, err := engineStatus(ctx, stateDir, client)
-	return err == nil && status.Vault && !status.Unlocked
-}
-
-// unlock は、答えられたマスターパスワードをエンジンへ渡す。
-//
-// **開いたかどうかしか返らない。** どう間違っていたかを、この経路は言わない。
-func unlock(ctx context.Context, stateDir string, client *http.Client, passphrase string) bool {
-	found, err := readHandoff(stateDir)
-	if err != nil {
-		return false
-	}
-	body, err := json.Marshal(map[string]string{"passphrase": passphrase})
-	if err != nil {
-		return false
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		found.URL+httpserver.VaultUnlockPath, bytes.NewReader(body))
-	if err != nil {
-		return false
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(handoff.HeaderName, found.Secret)
-
-	response, err := client.Do(request)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = response.Body.Close() }()
-	return response.StatusCode == http.StatusNoContent
 }
 
 // readHandoff は CLI の全入口で同じ互換性判定を使う。旧形式を推測して補うと、

@@ -744,6 +744,12 @@ func desktopDistScript(goos string) string {
 
 func withTargetEnvironment(environment []string, request nativeBuildRequest) []string {
 	result := append([]string(nil), environment...)
+	// GOENV をここでも畳み込む。Makefile も override GOENV = off を輸出している
+	// が、GNU Make の Windows 移植は変数名を大文字小文字で区別するので、呼び出し元
+	// が持っていた別綴りが同じ環境に生き残り、大文字小文字を区別しない Windows の
+	// プロセス環境ではそちらが勝つ。setEnvironmentValue は綴り違いをまとめて畳む
+	// ので、子の go build が見る GOENV はどの綴りでも off ひとつになる。
+	result = setEnvironmentValue(result, "GOENV", "off")
 	result = setEnvironmentValue(result, "GOOS", request.goos)
 	result = setEnvironmentValue(result, "GOARCH", request.goarch)
 	result = setEnvironmentValue(result, "CGO_ENABLED", request.cgo)
