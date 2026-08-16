@@ -8,12 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
-	"unsafe"
 
 	"golang.org/x/sys/windows"
 
@@ -28,6 +28,7 @@ import (
 const (
 	sizeHelperEnvironment       = "SSHC_TERMINAL_SIZE_HELPER"
 	descendantHelperEnvironment = "SSHC_TERMINAL_DESCENDANT_HELPER"
+	idleHelperEnvironment       = "SSHC_TERMINAL_IDLE_HELPER"
 )
 
 func TestMain(m *testing.M) {
@@ -36,6 +37,9 @@ func TestMain(m *testing.M) {
 	}
 	if os.Getenv(descendantHelperEnvironment) != "" {
 		os.Exit(runDescendantHelper())
+	}
+	if os.Getenv(idleHelperEnvironment) != "" {
+		os.Exit(runIdleHelper())
 	}
 	os.Exit(m.Run())
 }
@@ -64,6 +68,11 @@ func runSizeHelper() int {
 }
 
 // runDescendantHelper は、孫をひとつ起こしてその pid を出し、そのまま待つ。
+//
+// **`select {}` で待たない。** それは待機ではなくデッドロック検出器で、他に
+// 走る goroutine が無ければランタイムがその場でプロセスを落とす。そうなると
+// 孫は親より先に消え、ジョブの検査は**ジョブを一つも作らない実装に対しても
+// 通ってしまう。**
 func runDescendantHelper() int {
 	executable, err := os.Executable()
 	if err != nil {
@@ -72,23 +81,26 @@ func runDescendantHelper() int {
 	}
 	// 孫は自分のコンソールを持つ。**擬似コンソールを閉じても死なない**——
 	// これを取り除けるのはジョブだけである。
-	command := fmt.Sprintf(`"%s" -test.run=TestNeverRuns`, executable)
-	commandLine, err := windows.UTF16PtrFromString(command)
-	if err != nil {
-		return 1
-	}
-	var startup windows.StartupInfo
-	startup.Cb = uint32(unsafe.Sizeof(startup))
-	var information windows.ProcessInformation
-	if err := windows.CreateProcess(nil, commandLine, nil, nil, false,
-		windows.CREATE_NEW_CONSOLE, nil, nil, &startup, &information); err != nil {
+	//
+	// 環境は明示して渡す。継がせると孫もこの枝へ入り、その孫がまた孫を起こす
+	// ——**際限なく増える連鎖になる。**
+	grandchild := exec.Command(executable, "-test.run=TestNeverRuns")
+	grandchild.Env = []string{idleHelperEnvironment + "=1", "SystemRoot=" + os.Getenv("SystemRoot")}
+	grandchild.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+	if err := grandchild.Start(); err != nil {
 		fmt.Printf("error %v\n", err)
 		return 1
 	}
-	windows.CloseHandle(information.Thread)
-	windows.CloseHandle(information.Process)
-	fmt.Printf("descendant %d\n", information.ProcessId)
-	select {}
+	fmt.Printf("descendant %d\n", grandchild.Process.Pid)
+	// 眠って待つ。タイマーが生きているので、検出器は動かない。
+	time.Sleep(10 * time.Minute)
+	return 0
+}
+
+// runIdleHelper は、ただ生きているだけの孫である。
+func runIdleHelper() int {
+	time.Sleep(10 * time.Minute)
+	return 0
 }
 
 func powershell(t *testing.T) string {
@@ -117,25 +129,46 @@ func selfCommand(t *testing.T, environment string) terminal.Command {
 	}
 }
 
+// readUntil は、期限そのものを別の goroutine で見張る。
+//
+// **止まった Read は期限を見ない。** ループの周りで時刻を測っても、返らない
+// 一回の読み取りの中では誰も測っていない——検査は失敗せず、テストのバイナリ
+// ごと時間切れになる。探していたものは、そこには書かれない。
 func readUntil(t *testing.T, process terminal.Process, want string, limit time.Duration) string {
 	t.Helper()
-	deadline := time.Now().Add(limit)
-	var collected strings.Builder
-	buffer := make([]byte, 4096)
-	for time.Now().Before(deadline) {
-		read, err := process.Read(buffer)
-		if read > 0 {
-			collected.Write(buffer[:read])
-			if strings.Contains(collected.String(), want) {
-				return collected.String()
+	type outcome struct {
+		text  string
+		found bool
+	}
+	answers := make(chan outcome, 1)
+	go func() {
+		var collected strings.Builder
+		buffer := make([]byte, 4096)
+		for {
+			read, err := process.Read(buffer)
+			if read > 0 {
+				collected.Write(buffer[:read])
+				if strings.Contains(collected.String(), want) {
+					answers <- outcome{collected.String(), true}
+					return
+				}
+			}
+			if err != nil {
+				answers <- outcome{collected.String(), false}
+				return
 			}
 		}
-		if err != nil {
-			break
+	}()
+	select {
+	case answer := <-answers:
+		if !answer.found {
+			t.Fatalf("the console ended before %q appeared; output was:\n%s", want, answer.text)
 		}
+		return answer.text
+	case <-time.After(limit):
+		t.Fatalf("never saw %q within %v", want, limit)
+		return ""
 	}
-	t.Fatalf("never saw %q; console output was:\n%s", want, collected.String())
-	return ""
 }
 
 // **子が自分で終われば、読み取りは EOF に届かなければならない。**
@@ -342,4 +375,47 @@ func TestWindowsStartRefusesAnUnusableEnvironmentEntry(t *testing.T) {
 			}
 		})
 	}
+}
+
+// **手放したハンドルは使わない。** コンソールとジョブは os.File と違って
+// 参照が数えられず、Windows はハンドルの値を使い回す。畳んだあとの Resize が
+// そのまま通れば、いまその番号を持っている無関係なものへ届く。
+//
+// 守りが無い実装は、解放済みのハンドルに対して ResizePseudoConsole を呼び、
+// 無効なハンドルとして失敗を返す。守りがあれば、伝える相手が居ないだけなので
+// 何事も無く nil である。
+func TestWindowsResizeAfterTheConsoleIsGoneDoesNotTouchIt(t *testing.T) {
+	shell := powershell(t)
+	process, err := terminal.NewStarter().Start(context.Background(), terminal.Command{
+		Path:      shell,
+		Arguments: []string{"-NoProfile", "-Command", "Start-Sleep -Seconds 60"},
+	}, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatalf("Start = %v", err)
+	}
+
+	if err := process.Hangup(); err != nil {
+		t.Fatalf("Hangup = %v", err)
+	}
+	// Hangup はコンソールを別の goroutine で閉じる。所有権はその場で移るので、
+	// この時点でもう誰も使ってはならない。
+	if err := process.Resize(terminal.Size{Cols: 100, Rows: 40}); err != nil {
+		t.Fatalf("Resize after Hangup = %v, want it to be a quiet no-op", err)
+	}
+
+	if err := process.Close(); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+	if err := process.Resize(terminal.Size{Cols: 120, Rows: 50}); err != nil {
+		t.Fatalf("Resize after Close = %v, want it to be a quiet no-op", err)
+	}
+	forcer, ok := process.(interface{ ForceClose() error })
+	if !ok {
+		t.Fatal("the console process has no force hook")
+	}
+	// ジョブはもう閉じている。**そこへ TerminateJobObject を投げない。**
+	if err := forcer.ForceClose(); err != nil {
+		t.Fatalf("ForceClose after Close = %v, want it to be a quiet no-op", err)
+	}
+	process.Wait()
 }
