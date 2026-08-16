@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeKey } from "./KeyBar";
+import { applyModifiers, encodeKey } from "./KeyBar";
 
 describe("encodeKey", () => {
   // 修飾なしの特殊キーは、そのままの制御列である。
@@ -57,5 +57,27 @@ describe("encodeKey and things that are not one keystroke", () => {
   // 物理キーボードの矢印は、xterm が既に組み立てた制御列として届く。
   it("leaves an assembled control sequence alone", () => {
     expect(encodeKey("\x1b[A", true, false)).toBe("\x1b[A");
+  });
+});
+
+describe("the two doors are not the same door", () => {
+  // **バーのキーはラベルの表を引く。** 引かなければ、Esc のボタンが "Esc" と
+  // いう 3 文字を送る。実機でまさにそうなっていた。
+  it("turns a pressed key into its sequence even with no modifier", () => {
+    expect(encodeKey("Esc", false, false)).toBe("\x1b");
+    expect(encodeKey("Tab", false, false)).toBe("\t");
+    expect(encodeKey("↑", false, false)).toBe("\x1b[A");
+  });
+
+  // **打たれた文字は引いてはならない。** "Esc" と打った人に ESC を送ることに
+  // なる。貼り付けなら、その 3 文字がまるごと消える。
+  it("leaves typed text alone even when it spells a key name", () => {
+    expect(applyModifiers("Esc", false, false)).toBe("Esc");
+    expect(applyModifiers("Tab", true, false)).toBe("Tab");
+  });
+
+  it("still folds ctrl into a single typed character", () => {
+    expect(applyModifiers("c", true, false)).toBe("\x03");
+    expect(applyModifiers("a", false, false)).toBe("a");
   });
 });
