@@ -63,6 +63,8 @@ func TestArtifactNameVerifierPowerShell(t *testing.T) {
 		{name: "literal wildcard path", artifact: `private/[literal]/sshc-windows-amd64.exe`, goos: "windows", goarch: "amd64", wantAccept: true},
 		{name: "wrong suffix", artifact: `private/[literal]/sshc-windows-amd64`, goos: "windows", goarch: "amd64", wantMessage: "artifact name rejected"},
 		{name: "empty path", artifact: "", goos: "windows", goarch: "amd64", wantMessage: "artifact path rejected"},
+		{name: "path ending in a separator", artifact: `private/[literal]/`, goos: "windows", goarch: "amd64", wantMessage: "artifact path rejected"},
+		{name: "backslash separated path", artifact: `private\[literal]\sshc-windows-amd64.exe`, goos: "windows", goarch: "amd64", wantAccept: true},
 		{name: "unsupported OS", artifact: `private/[literal]/sshc-secret-os-amd64`, goos: "secret-os", goarch: "amd64", wantMessage: "artifact OS rejected"},
 		{name: "unsupported architecture", artifact: `private/[literal]/sshc-linux-secret-arch`, goos: "linux", goarch: "secret-arch", wantMessage: "artifact architecture rejected"},
 	}

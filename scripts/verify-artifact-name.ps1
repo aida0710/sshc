@@ -31,9 +31,15 @@ if ([string]::IsNullOrWhiteSpace($Artifact)) {
     exit 2
 }
 
-try {
-    $name = Split-Path -LiteralPath $Artifact -Leaf
-} catch {
+# 末尾の要素は、文字列として取り出す。
+#
+# **Split-Path は通さない。** あれはファイルシステムのプロバイダを通るので、
+# `[` を含むパスに対する振る舞いがプラットフォームごとに違い、Linux の pwsh では
+# 実在しない相対パスで例外になる。ここで確かめたいのは名前そのものであって、
+# ディスク上の何かではない。
+$separator = $Artifact.LastIndexOfAny([char[]]@([char]'/', [char]'\'))
+$name = if ($separator -ge 0) { $Artifact.Substring($separator + 1) } else { $Artifact }
+if ([string]::IsNullOrEmpty($name)) {
     [Console]::Error.WriteLine("artifact path rejected")
     exit 2
 }
