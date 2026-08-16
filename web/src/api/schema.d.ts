@@ -1730,6 +1730,7 @@ export interface components {
         EmbeddedTerminal: {
             maxSessions?: number;
             scrollbackBytes?: number;
+            fontSize?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
             startDirectory?: string;
@@ -1738,6 +1739,7 @@ export interface components {
             startDirectory?: string;
             maxSessions?: number;
             scrollbackBytes?: number;
+            fontSize?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
         };

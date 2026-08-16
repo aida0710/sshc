@@ -19,6 +19,7 @@ type TerminalViewProps = {
   // その行を終了済みとして描き直す。
   onExit?: () => void;
   copyOnSelect?: boolean;
+  fontSize?: number;
   rightClickPaste?: boolean;
 };
 
@@ -54,6 +55,7 @@ export function TerminalView({
   api = integrationsApi,
   onExit,
   copyOnSelect = true,
+  fontSize,
   rightClickPaste = true,
 }: TerminalViewProps) {
   const t = useTranslate();
@@ -97,10 +99,11 @@ export function TerminalView({
       // 解決しないことがある**ので、その端末が実際に持っている等幅を並べる。
       fontFamily:
         'ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", monospace',
-      // **ここだけは媒体クエリを JS で読む。** xterm の字は canvas と DOM の
-      // 寸法計算に入る値であって CSS で塗り替えられるものではないので、
-      // breakpoint では届かない。13px は指で持つ画面には小さすぎる。
-      fontSize: window.matchMedia("(max-width: 767px)").matches ? 15 : 13,
+      // 設定された値があればそれが答えである。無いときだけ画面の幅で決める
+      // ——**ここだけは媒体クエリを JS で読む。** xterm の字は寸法計算に入る
+      // 値であって CSS で塗り替えられるものではないので、breakpoint では
+      // 届かない。13px は指で持つ画面には小さすぎる。
+      fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
       theme: terminalTheme(),
       // スクロールバックはサーバー側のリングバッファが正本である。ここでの値は
       // 再生されたバイト列を画面に保つための余地にすぎない。
