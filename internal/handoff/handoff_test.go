@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"sshc/internal/handoff"
+	"sshc/internal/platform/windowsacl/acltest"
 )
 
 func validDocument() handoff.Handoff {
@@ -27,7 +28,8 @@ func validDocument() handoff.Handoff {
 
 // 旧形式を受け入れると、所有者と互換性を確かめられないまま別版のエンジンへ接続する。
 func TestReadRejectsTheLegacyURLAndSecretDocument(t *testing.T) {
-	directory := writeHandoffFixture(t, []byte(`{"url":"http://127.0.0.1:52865","secret":"old"}`))
+	directory := filepath.Join(t.TempDir(), "state")
+	acltest.WritePrivateFile(t, filepath.Join(directory, handoff.FileName), []byte(`{"url":"http://127.0.0.1:52865","secret":"old"}`))
 
 	_, err := handoff.Read(directory)
 	if !errors.Is(err, handoff.ErrSchemaVersion) {
@@ -58,7 +60,8 @@ func TestReadRejectsInvalidHandoffFields(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			directory := writeHandoffFixture(t, body)
+			directory := filepath.Join(t.TempDir(), "state")
+			acltest.WritePrivateFile(t, filepath.Join(directory, handoff.FileName), body)
 
 			_, err = handoff.Read(directory)
 			if !errors.Is(err, test.want) {

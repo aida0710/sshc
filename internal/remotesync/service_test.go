@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"sshc/internal/objectstore"
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
@@ -159,6 +160,12 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 	}
 	for name, contents := range files {
 		absolute := filepath.Join(root, filepath.FromSlash(name))
+		// sshc/ の下は private state であり、読み口が所有者と権限を先に確かめる。
+		// 素の書き込みで置いたものは、中身を見られる前に断られる。
+		if strings.HasPrefix(name, "sshc/") {
+			acltest.WritePrivateFile(t, absolute, []byte(contents))
+			continue
+		}
 		if err := os.MkdirAll(filepath.Dir(absolute), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -515,9 +522,7 @@ func TestLegacyStateWithoutLastOperationRemainsReadable(t *testing.T) {
 	if err := machine.workspace.EnsureDirectory(machine.workspace.StateDir()); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(machine.workspace.Root(), filepath.FromSlash(remotesync.StatePath)), []byte(legacy), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, filepath.Join(machine.workspace.Root(), filepath.FromSlash(remotesync.StatePath)), []byte(legacy))
 
 	view := machine.service.SyncState()
 	if !view.Synced || view.At != "2026-07-01T00:00:00Z" || view.Files != 0 || view.LastOperation != nil {
