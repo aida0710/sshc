@@ -6,7 +6,7 @@ const { join } = require("node:path");
 const { existsSync } = require("node:fs");
 const { relink } = require("./link");
 const { parseEntrance } = require("./entrance");
-const { spawnEngine } = require("./engine");
+const { spawnEngine, releaseEngine } = require("./engine");
 const { installTray } = require("./tray");
 const { installWindowReopener } = require("./reopen");
 
@@ -306,7 +306,7 @@ app.whenReady().then(async () => {
     // 生きているのに入口が来ない）では、これを飛ばすと子が engine.lock を
     // 握ったまま孤児になり、見張りが畳むまで残る——その窓に開き直すと
     // 「端末で動いている sshc がエンジンです」という誤った理由が出る。
-    if (engine !== null) engine.kill();
+    if (engine !== null) releaseEngine(engine);
     quitting = true;
     app.quit();
     return;
@@ -384,7 +384,7 @@ app.on("before-quit", async (event) => {
     }
   }
   quitting = true;
-  if (engine !== null) engine.kill();
+  if (engine !== null) releaseEngine(engine);
   app.quit();
 });
 
