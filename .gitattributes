@@ -1,0 +1,11 @@
+# チェックアウトの行末はどのプラットフォームでも LF である。
+#
+# **これが無いと、Windows の checkout が CRLF を配る。** gofmt は LF で書き直す
+# ものなので、CI の gofmt 検査はリポジトリの全 Go ファイルを「整形されていない」
+# と報告し、そこで止まる——Windows の検査が何ひとつ走らないまま赤くなる。
+# Go の toolchain も PowerShell の script も、この木では LF を前提にしている。
+* text=auto eol=lf
+
+# 画像は行末を持たない。text=auto の判定に任せず、はっきり除く。
+*.png binary
+*.svg text eol=lf
