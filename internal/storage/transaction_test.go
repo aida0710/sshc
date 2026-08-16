@@ -754,6 +754,21 @@ func assertFileContents(t *testing.T, path, want string) {
 	}
 }
 
+func stagedFileNames(t *testing.T, workspace *Workspace) []string {
+	t.Helper()
+	entries, err := os.ReadDir(workspace.Root())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var staged []string
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), temporaryPrefix) {
+			staged = append(staged, entry.Name())
+		}
+	}
+	return staged
+}
+
 func assertMissing(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
@@ -1034,9 +1049,10 @@ func TestRecoveryHandlesAnUnchangedTrailingWriteAfterNothingWasApplied(t *testin
 	assertFileContents(t, unchanged, "{}\n")
 }
 
-// 証拠を持たない書き込みを適用済み側に数えるときは、記録から一時ファイルの名前を
-// 落とす前に実体も消す。名前だけ落とせば、もう誰も片付けない断片が残る。
-func TestRecoveryRemovesTheStagedFileOfAnEvidenceFreeWriteItCountsAsApplied(t *testing.T) {
+// 一覧は何も書き換えない。走っている最中のトランザクションの記録も同じ経路で
+// 読まれるので、ここで一時ファイルを消すと、進行中の保存が消えたファイルを
+// rename しようとして失敗する。片付けるのは、終わらせるときだけである。
+func TestRecoveryReleasesAnEvidenceFreeStagedFileOnlyWhenTheTransactionEnds(t *testing.T) {
 	workspace := newTestWorkspace(t)
 	changed := writeWorkspaceFile(t, workspace, "config", "Host before\n", 0o600)
 	unchanged := writeWorkspaceFile(t, workspace, "meta.json", "{}\n", 0o600)
@@ -1049,21 +1065,23 @@ func TestRecoveryRemovesTheStagedFileOfAnEvidenceFreeWriteItCountsAsApplied(t *t
 	})
 	assertFileContents(t, changed, "Host after\n")
 
+	staged := stagedFileNames(t, workspace)
+	if len(staged) == 0 {
+		t.Fatal("the fixture produced no staged file to observe")
+	}
+
 	restarted := restartedManager(t, workspace)
 	reconciledPending(t, restarted, id, 2)
 
-	entries, err := os.ReadDir(workspace.Root())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), temporaryPrefix) {
-			t.Fatalf("reconciliation left the staged file %q behind", entry.Name())
-		}
+	if after := stagedFileNames(t, workspace); len(after) != len(staged) {
+		t.Fatalf("listing the pending transactions changed the staged files: %v then %v", staged, after)
 	}
 
 	if err := restarted.Rollback(id); err != nil {
 		t.Fatalf("Rollback = %v", err)
+	}
+	if after := stagedFileNames(t, workspace); len(after) != 0 {
+		t.Fatalf("finishing the transaction left the staged files %v behind", after)
 	}
 	assertFileContents(t, changed, "Host before\n")
 	assertFileContents(t, unchanged, "{}\n")
@@ -1134,6 +1152,110 @@ func TestPendingReportsAnUnreadableRecordWithoutFailingTheWholeListing(t *testin
 		t.Fatalf("Rollback(readable) = %v", err)
 	}
 	assertFileContents(t, third, "third before\n")
+}
+
+// 一覧は、走っている最中のトランザクションの記録も同じ経路で読む。そこで
+// ファイルに触れれば、保存の途中で足元のステージ済みファイルが消える。
+func TestListingPendingTransactionsDoesNotDisturbACommitInFlight(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	changed := writeWorkspaceFile(t, workspace, "config", "Host before\n", 0o600)
+	unchanged := writeWorkspaceFile(t, workspace, "meta.json", "{}\n", 0o600)
+
+	var observer *Manager
+	listings := 0
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			// 最初の対象を書き換えたあと、進捗を記録し直す前。一覧が走っている
+			// 記録を読むのは、ちょうどこの隙間である。
+			if operation == "syncDir" && path == workspace.Root() && listings == 0 {
+				listings++
+				if _, err := observer.Pending(); err != nil {
+					t.Errorf("Pending during a commit = %v", err)
+				}
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x7c}, 4096)))
+	observer = NewManager(workspace, func() time.Time {
+		return time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	}, bytes.NewReader(bytes.Repeat([]byte{0x7d}, 4096)))
+
+	if _, err := manager.Commit(Request{
+		Operation: "config.move",
+		Changes: []Change{
+			{Path: changed, Contents: []byte("Host after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host before\n"))}},
+			{Path: unchanged, Contents: []byte("{}\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("{}\n"))}},
+		},
+	}); err != nil {
+		t.Fatalf("Commit with a concurrent listing = %v", err)
+	}
+	if listings != 1 {
+		t.Fatalf("the listing did not run inside the commit (%d)", listings)
+	}
+	assertFileContents(t, changed, "Host after\n")
+	assertFileContents(t, unchanged, "{}\n")
+	if staged := stagedFileNames(t, workspace); len(staged) != 0 {
+		t.Fatalf("staged files left behind: %v", staged)
+	}
+	pending, err := observer.Pending()
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("Pending after the commit = %#v, %v", pending, err)
+	}
+}
+
+// 書いても中身が変わらない置き換えは、控えを残さなかったとしても巻き戻せる。
+// 戻したあとの対象は同じバイト列であり、失うものが無いからである。
+func TestAnUnchangedWriteThatKeptNoBackupStaysReversible(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	key := writeWorkspaceFile(t, workspace, "id_work", "PRIVATE KEY BYTES\n", 0o600)
+	config := writeWorkspaceFile(t, workspace, "config", "Host before\n", 0o600)
+	failure := errors.New("injected second rename failure")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "rename" && path == config {
+				return failure
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x7e}, 4096)))
+	result, err := manager.Commit(Request{
+		Operation: "key.reseal",
+		Changes: []Change{
+			{
+				Path:         key,
+				Contents:     []byte("PRIVATE KEY BYTES\n"),
+				Precondition: Precondition{Exists: true, Digest: Digest([]byte("PRIVATE KEY BYTES\n"))},
+				SkipBackup:   true,
+			},
+			{Path: config, Contents: []byte("Host after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host before\n"))}},
+		},
+	})
+	if !errors.Is(err, failure) || result.ID == "" {
+		t.Fatalf("Commit = %#v, %v; want the injected rename failure", result, err)
+	}
+
+	workspace.fileSystem = OSFileSystem{}
+	restarted := restartedManager(t, workspace)
+	item := reconciledPending(t, restarted, result.ID, 1)
+	if !item.CanRollback {
+		t.Fatalf("a write that changed nothing was reported irreversible: %#v", item)
+	}
+	if err := restarted.Rollback(result.ID); err != nil {
+		t.Fatalf("Rollback = %v", err)
+	}
+	assertFileContents(t, key, "PRIVATE KEY BYTES\n")
+	assertFileContents(t, config, "Host before\n")
+	if staged := stagedFileNames(t, workspace); len(staged) != 0 {
+		t.Fatalf("staged files left behind: %v", staged)
+	}
+	history, err := restarted.History()
+	if err != nil || len(history) != 1 || history[0].Status != statusRolledBack {
+		t.Fatalf("History = %#v, %v", history, err)
+	}
 }
 
 func TestAtomicPendingTransactionCanOnlyBeRolledBack(t *testing.T) {

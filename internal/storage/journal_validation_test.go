@@ -67,9 +67,6 @@ func TestLoadedJournalValidationRejectsMalformedRecords(t *testing.T) {
 			record.Atomic = true
 			record.Entries[0].NoBackup = true
 		}},
-		{"committed write retaining temp", func(record *journalRecord) {
-			record.Committed = 1
-		}},
 	}
 
 	for _, test := range tests {
