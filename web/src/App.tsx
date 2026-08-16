@@ -397,7 +397,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         }
         setState("ready");
       })
-      .catch(() => {
+      .catch((reason: unknown) => {
+        // **理由を残す。** この画面は「開始できませんでした」としか言えず、
+        // それを読んだ人にできることは何も無い。console に出しておけば、
+        // 少なくとも devtools と、それを logcat へ流す外殻からは読める。
+        console.error("sshc could not start its session", reason);
         if (active) setState("error");
       });
 
