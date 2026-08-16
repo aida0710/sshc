@@ -830,9 +830,17 @@ export function ConnectionsPage({
   return (
     <>
     {/* ウィンドウの端まで届く二つのペイン。detail の minmax(0,…) は、
-        inspector が開いたときにも内容幅を保たず縮められるようにする。 */}
-    <div className="grid h-full grid-cols-[19rem_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
-      <div className="flex min-h-0 flex-col border-r border-line bg-tree">
+        inspector が開いたときにも内容幅を保たず縮められるようにする。
+
+        **狭い画面では二つではなく一つである。** どちらを出すかは幅ではなく
+        「何かが選ばれているか」で決まり、それは既にルートが持っている
+        ——だから matchMedia は要らない。選択が変われば、クラスが変わる。 */}
+    <div className="grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[19rem_minmax(0,1fr)]">
+      <div
+        className={`min-h-0 flex-col border-r border-line bg-tree md:flex ${
+          selection === null ? "flex" : "hidden"
+        }`}
+      >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-3 py-3">
           <div className="min-w-0">
             <h2 className="font-semibold">{t("conn.heading")}</h2>
@@ -875,7 +883,18 @@ export function ConnectionsPage({
           )}
         </div>
       </div>
-      <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6">
+      <div
+        className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 md:flex md:p-6 ${
+          selection === null ? "hidden" : "flex"
+        }`}
+      >
+        {/*
+          狭い画面で一覧へ戻る唯一の道である。md 以上では出さない——隣に
+          一覧が見えているので、戻る先を指す必要がない。
+        */}
+        <Button className="w-fit md:hidden" onClick={() => clearTarget()}>
+          {t("conn.allConnections")}
+        </Button>
         {/*
           グループ単位の notice は Groups 画面のものであり、README にもそう
           書いてある——それらは宣言とディスクが互いについて何を語っているか

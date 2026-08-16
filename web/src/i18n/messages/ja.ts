@@ -721,6 +721,7 @@ export const ja = {
   "conn.heading": "接続",
   "conn.count": "{count} 件利用可能",
   "conn.new": "新しい接続",
+  "conn.allConnections": "接続一覧",
   "conn.createAnother": "接続を追加",
   "conn.cancelCreate": "キャンセル",
   "conn.create": "接続を作成",
