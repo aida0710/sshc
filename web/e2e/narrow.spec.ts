@@ -149,3 +149,38 @@ test("sends a real control character from the on-screen keys", async ({ page, in
     })
     .toBeGreaterThanOrEqual(2);
 });
+
+test("opens the terminal contents somewhere the platform can select them", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, installation);
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await nav.getByRole("tab", { name: "Terminals" }).click();
+  await nav.getByRole("button", { name: "Local shell" }).click();
+
+  const screen = page.getByRole("region", { name: /^Console for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await page.locator(".xterm-helper-textarea").focus();
+  await page.keyboard.type("echo zzq");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".xterm-rows")).toContainText("zzq", { timeout: 20_000 });
+
+  // **xterm の上では選べない。** 選択は xterm の外に置いた面が引き受ける。
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  const sheet = page.getByRole("region", { name: "Terminal contents" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText("zzq");
+
+  // **user-select が none のままなら、この面を出した意味が無い。** OS は
+  // 掴む文字を見つけられず、長押ししても何も起きない。
+  const selectable = await sheet.locator("pre").evaluate(
+    (element) => getComputedStyle(element).userSelect || getComputedStyle(element).webkitUserSelect,
+  );
+  expect(selectable).toBe("text");
+
+  await sheet.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(sheet).toBeHidden();
+});

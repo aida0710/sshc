@@ -81,10 +81,12 @@ export function KeyBar({
   modifiers,
   onToggle,
   onKey,
+  onSelect,
 }: {
   modifiers: Modifiers;
   onToggle: (name: keyof Modifiers) => void;
   onKey: (label: string) => void;
+  onSelect: () => void;
 }) {
   const t = useTranslate();
   return (
@@ -92,6 +94,20 @@ export function KeyBar({
       aria-label={t("terminal.keyBar")}
       className="flex shrink-0 gap-1 overflow-x-auto border-t border-line bg-toolbar p-1 md:hidden"
     >
+      {/*
+        **選択だけはキーではない。** 端末の上では範囲を選べないので、選べる面を
+        出すための入口がここに要る。並びの先頭に置くのは、キーを打っている最中に
+        誤って押す位置ではないからである。
+      */}
+      <button
+        type="button"
+        onPointerDown={keepFocus}
+        onMouseDown={keepFocus}
+        onClick={onSelect}
+        className={`${keyShape} bg-card`}
+      >
+        {t("terminal.selectOpen")}
+      </button>
       <button
         type="button"
         aria-pressed={modifiers.ctrl}
