@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -111,7 +112,8 @@ func TestReadHandoffExplainsHowToRecoverFromAProtocolMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stateDir := writeRawHandoff(t, body)
+	stateDir := filepath.Join(t.TempDir(), "state")
+	writePrivateStateFile(t, stateDir, handoff.FileName, body)
 
 	_, err = readHandoff(stateDir)
 	if !errors.Is(err, handoff.ErrProtocolVersion) {

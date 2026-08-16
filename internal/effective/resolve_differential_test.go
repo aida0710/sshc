@@ -2,6 +2,7 @@ package effective_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"os/user"
@@ -12,6 +13,7 @@ import (
 
 	"sshc/internal/config"
 	"sshc/internal/effective"
+	"sshc/internal/platform"
 	"sshc/internal/storage"
 )
 
@@ -103,7 +105,7 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 		},
 		{
 			name:     "match localuser",
-			contents: "Host db\n\tUser ops\nMatch localuser " + current.Username + "\n\tPort 7777\n",
+			contents: "Host db\n\tUser ops\nMatch localuser " + platform.LocalAccountName(current.Username) + "\n\tPort 7777\n",
 			alias:    "db",
 			keywords: []string{"port"},
 		},
@@ -178,7 +180,7 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 			// Include が本物の ~/.ssh へ到達する。
 			wanted := runSSHG(t, sshPath, home, configPath, test.alias)
 
-			facts := effective.LocalFacts{User: current.Username, Home: home}
+			facts := effective.LocalFacts{User: platform.LocalAccountName(current.Username), Home: home}
 			resolution := effective.Resolve(graph, test.alias, facts)
 			values, refusals := resolution.Values, resolution.Refusals
 			if len(refusals) != 0 {
@@ -211,9 +213,13 @@ func runSSHG(t *testing.T, sshPath, home, configPath, alias string) effective.Va
 	defer cancel()
 
 	command := exec.CommandContext(ctx, sshPath, "-G", "-F", configPath, "--", alias)
-	command.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
+	command.Env = sshEnvironment(home)
 	stdout, err := command.Output()
 	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			t.Fatalf("ssh -G = %v\n%s", err, exit.Stderr)
+		}
 		t.Fatalf("ssh -G = %v", err)
 	}
 	return effective.ParseValues(stdout)

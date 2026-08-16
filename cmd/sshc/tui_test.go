@@ -124,7 +124,7 @@ func TestTUIBackspaceRemovesAWholeCharacter(t *testing.T) {
 func TestTUILoadsConcreteHostsAndPutsFavouritesFirst(t *testing.T) {
 	home := t.TempDir()
 	ssh := filepath.Join(home, ".ssh")
-	if err := os.MkdirAll(filepath.Join(ssh, "sshc"), 0o700); err != nil {
+	if err := os.MkdirAll(ssh, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(ssh, "config"), []byte(
@@ -134,9 +134,7 @@ func TestTUILoadsConcreteHostsAndPutsFavouritesFirst(t *testing.T) {
 	}
 	metadata := `{"schemaVersion":2,"terminal":"terminal","hosts":[` +
 		`{"identity":{"path":"config","alias":"bastion"},"favourite":true,"tags":["eu"]}]}`
-	if err := os.WriteFile(filepath.Join(ssh, "sshc", "metadata.json"), []byte(metadata), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writePrivateStateFile(t, filepath.Join(ssh, "sshc"), "metadata.json", []byte(metadata))
 	hosts, err := loadTUIHosts(home)
 	if err != nil {
 		t.Fatal(err)

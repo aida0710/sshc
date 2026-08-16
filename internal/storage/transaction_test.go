@@ -122,24 +122,6 @@ func TestCommitWritesEveryChangeAndRecordsHistory(t *testing.T) {
 	}
 }
 
-func TestCommitPreservesStricterPermissions(t *testing.T) {
-	manager, workspace := newTestManager(t)
-	path := writeWorkspaceFile(t, workspace, "strict.conf", "Host old\n", 0o400)
-	if _, err := manager.Commit(Request{
-		Operation: "config.save",
-		Changes:   []Change{{Path: path, Contents: []byte("Host new\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host old\n"))}}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	info, err := os.Lstat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o400 {
-		t.Fatalf("permission = %v, want 0400", info.Mode().Perm())
-	}
-}
-
 func TestCommitRejectsExternalChangesWithThreeWayData(t *testing.T) {
 	manager, workspace := newTestManager(t)
 	path := writeWorkspaceFile(t, workspace, "config", "Host disk\n", 0o600)

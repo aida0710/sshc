@@ -8,6 +8,7 @@ import (
 
 	"sshc/internal/config"
 	"sshc/internal/effective"
+	"sshc/internal/platform"
 )
 
 // Source は値がどこから来たかを表す。
@@ -110,7 +111,7 @@ func ComputeEffective(graph *config.Graph, root, alias string, facts effective.L
 func LocalFactsFor(home string) effective.LocalFacts {
 	facts := effective.LocalFacts{Home: home}
 	if current, err := user.Current(); err == nil {
-		facts.User = current.Username
+		facts.User = platform.LocalAccountName(current.Username)
 		facts.UID = current.Uid
 	}
 	if hostname, err := os.Hostname(); err == nil {

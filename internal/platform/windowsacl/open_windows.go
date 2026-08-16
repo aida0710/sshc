@@ -120,12 +120,22 @@ func openRelativeNoReparse(parent windows.Handle, name string, access, createOpt
 	return handle, nil
 }
 
+// mapNoReparseError は、NtCreateFile が返す NTSTATUS を、この木の他の層が
+// 知っている形に直す。
+//
+// **NTSTATUS は fs.ErrNotExist に一致しない。** 「まだ無い」と「読めなかった」を
+// errors.Is で分ける呼び出し側が上に何十とあり、生の NTSTATUS を返せば、まだ
+// 置かれていないだけの private state が読み取り失敗として扱われる。
 func mapNoReparseError(err error) error {
 	if errors.Is(err, windows.STATUS_STOPPED_ON_SYMLINK) ||
 		errors.Is(err, windows.STATUS_REPARSE_POINT_ENCOUNTERED) ||
 		errors.Is(err, windows.STATUS_IO_REPARSE_TAG_NOT_HANDLED) ||
 		errors.Is(err, windows.ERROR_STOPPED_ON_SYMLINK) {
 		return ErrReparsePoint
+	}
+	var status windows.NTStatus
+	if errors.As(err, &status) {
+		return status.Errno()
 	}
 	return err
 }

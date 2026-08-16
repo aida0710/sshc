@@ -4,10 +4,10 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"sshc/internal/config"
+	"sshc/internal/platform"
 )
 
 // OpenSSH は %u をローカルのユーザー名に、%i をその uid に展開する。どちらも接続先が
@@ -29,8 +29,9 @@ func TestResolverExpandsTheLocalUserAndUid(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	userName := platform.LocalAccountName(current.Username)
 	write("config", "Include conf.d/%u.conf\nInclude conf.d/%i.conf\n")
-	write("conf.d/"+current.Username+".conf", "Host by-name\n")
+	write("conf.d/"+userName+".conf", "Host by-name\n")
 	write("conf.d/"+current.Uid+".conf", "Host by-uid\n")
 
 	workspace, err := NewWorkspace(OSFileSystem{}, home)
@@ -47,15 +48,13 @@ func TestResolverExpandsTheLocalUserAndUid(t *testing.T) {
 			t.Errorf("%%u か %%i が未対応の展開として報告された: %#v", diagnostic)
 		}
 	}
-	for _, name := range []string{current.Username, current.Uid} {
+	for _, name := range []string{userName, current.Uid} {
 		absolute := filepath.Join(workspace.Root(), "conf.d", name+".conf")
 		if graph.Nodes[absolute] == nil {
 			t.Errorf("conf.d/%s.conf に到達しなかった", name)
 		}
 	}
-	if _, err := strconv.Atoi(current.Uid); err != nil {
-		t.Fatalf("uid %q は数値ではない", current.Uid)
-	}
+	assertLocalUID(t, current.Uid)
 }
 
 // "~/.ssh/…" と書かれた Include は Home に対して展開されるが、それに関する判断は

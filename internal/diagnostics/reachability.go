@@ -9,7 +9,6 @@ import (
 	"errors"
 	"net"
 	"os"
-	"syscall"
 	"time"
 )
 
@@ -78,7 +77,7 @@ func (r Reachability) Check(ctx context.Context, hostname, port string) Reachabi
 	switch {
 	case errors.As(err, &dnsError):
 		result.Outcome = ReachabilityDNSFailure
-	case errors.Is(err, syscall.ECONNREFUSED):
+	case isConnectionRefused(err):
 		result.Outcome = ReachabilityRefused
 	case errors.Is(err, os.ErrDeadlineExceeded), errors.Is(err, context.DeadlineExceeded):
 		result.Outcome = ReachabilityTimeout
@@ -86,4 +85,13 @@ func (r Reachability) Check(ctx context.Context, hostname, port string) Reachabi
 		result.Outcome = ReachabilityFailed
 	}
 	return result
+}
+
+func isConnectionRefused(err error) bool {
+	for _, refused := range connectionRefused {
+		if errors.Is(err, refused) {
+			return true
+		}
+	}
+	return false
 }

@@ -51,16 +51,16 @@ func TestOverlayForDescribesWhatArrivesAndWhatLeaves(t *testing.T) {
 		Removals: []storage.Removal{{Path: "conf.d/30-dead.conf"}},
 	})
 
-	if string(pending["conf.d/20-new.conf"]) != "Host new\n" {
+	if string(pending[filepath.FromSlash("conf.d/20-new.conf")]) != "Host new\n" {
 		t.Fatalf("pending = %#v, want the written contents", pending)
 	}
-	if !gone["conf.d/10-old.conf"] {
+	if !gone[filepath.FromSlash("conf.d/10-old.conf")] {
 		t.Errorf("a move's source is not marked gone")
 	}
-	if !gone["conf.d/30-dead.conf"] {
+	if !gone[filepath.FromSlash("conf.d/30-dead.conf")] {
 		t.Errorf("a removal is not marked gone")
 	}
-	if gone["connections/work/10-old.conf"] {
+	if gone[filepath.FromSlash("connections/work/10-old.conf")] {
 		t.Errorf("a move's destination must not be marked gone")
 	}
 }

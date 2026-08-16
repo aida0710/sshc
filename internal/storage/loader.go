@@ -4,6 +4,7 @@ import (
 	"os/user"
 
 	"sshc/internal/config"
+	"sshc/internal/platform"
 )
 
 // ConfigLoader は、Include グラフにディスクへの読み取り専用アクセスを与える。
@@ -40,7 +41,7 @@ func NewResolver(workspace *Workspace) config.Resolver {
 	// テストが本物のホームディレクトリに届くことはない。読めない環境では、その
 	// トークンを供給しないことで、以前と同じく非対応として報告される。
 	if current, err := user.Current(); err == nil {
-		tokens['u'] = current.Username
+		tokens['u'] = platform.LocalAccountName(current.Username)
 		tokens['i'] = current.Uid
 	}
 	return config.Resolver{
