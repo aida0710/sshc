@@ -50,7 +50,15 @@ test("the public name points at the managed copy, never into the bundle", async 
   );
 });
 
-test("the managed copy and its directory are private and executable", async () => {
+test("the managed copy and its directory are private and executable", async (t) => {
+  // **Windows に写す mode ビットは無い。** 誰が読めるかを決めているのは DACL で
+  // あり、Go 側の internal/platform/windowsacl がそちらを持つ。ここで同じ式を
+  // 走らせると、落ちるだけでなく「ここにアクセス制御がある」という嘘が残る。
+  // installManagedCLI は win32 では何もしないので、production の経路でもない。
+  if (process.platform === "win32") {
+    t.skip("Windows expresses this through the DACL, not through mode bits");
+    return;
+  }
   const paths = await workspace();
 
   await installManagedCLI({ ...paths, ...linux });
