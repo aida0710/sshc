@@ -90,11 +90,11 @@ func startPseudoConsole(command Command, size Size, environment *uint16) (_ Proc
 		windows.Coord{X: int16(size.Cols), Y: int16(size.Rows)},
 		inputRead, outputWrite, 0, &console,
 	)
-	// **擬似コンソール側の端は、ここで手放す。**
+	// **擬似コンソール側の端は、ここで手放す。** Microsoft がそう要求している。
 	//
-	// 残したままにすると出力パイプに書き手が居続け、子が終わっても Read は
-	// EOF に届かない。そうなると pump は done を閉じず、Registry.Wait は
-	// 返らず、engine lock はそのマシンが再起動するまで握られたままになる。
+	// ただしこれだけでは読み取りは終わらない。出力パイプの書き手は擬似コンソール
+	// そのものでもあり、EOF が来るのはそれを閉じたときである——それを行うのは
+	// watch である。ここで手放すのは、こちらが余計な書き手を残さないためである。
 	windows.CloseHandle(inputRead)
 	windows.CloseHandle(outputWrite)
 	if consoleErr != nil {
@@ -184,13 +184,16 @@ func startPseudoConsole(command Command, size Size, environment *uint16) (_ Proc
 	}
 	windows.CloseHandle(information.Thread)
 
-	return &windowsProcess{
+	started := &windowsProcess{
 		input:   os.NewFile(uintptr(inputWrite), "conpty-input"),
 		output:  os.NewFile(uintptr(outputRead), "conpty-output"),
 		console: console,
 		job:     job,
 		process: information.Process,
-	}, nil
+		exited:  make(chan struct{}),
+	}
+	go started.watch()
+	return started, nil
 }
 
 // assignToJob は、木ごと畳めるようにするジョブを作って子を入れる。
@@ -280,8 +283,9 @@ type windowsProcess struct {
 	process windows.Handle
 	forced  bool
 
-	waitOnce sync.Once
-	exit     ExitInfo
+	// exited は、見張りが終了理由を書き終えたことを示す。
+	exited chan struct{}
+	exit   ExitInfo
 }
 
 func (p *windowsProcess) wasForced() bool {
@@ -373,33 +377,44 @@ func (p *windowsProcess) Close() error {
 //
 // プロセスのハンドルを閉じるのはここだけであり、終了コードを読み終えたあとである。
 func (p *windowsProcess) Wait() ExitInfo {
-	p.waitOnce.Do(func() {
-		info := ExitInfo{At: time.Now()}
-		if _, err := windows.WaitForSingleObject(p.process, windows.INFINITE); err != nil {
-			info.Code = -1
-			if p.wasForced() {
-				info.Signal = "killed"
-			}
-			p.exit = info
-			windows.CloseHandle(p.process)
-			return
-		}
+	<-p.exited
+	return p.exit
+}
+
+// watch は、木が終わるのを待ち、終了理由を記録して擬似コンソールを手放す。
+//
+// **子が終わっただけでは、読み取りは終わらない。** 出力パイプの書き手は子では
+// なく擬似コンソールそのものであり、それが開いている限り EOF は来ない。ここで
+// 閉じなければ、利用者が exit と打っただけのセッションは永久に「生きている」
+// ままになり、pump は done を閉じず、engine lock も手放されない。
+//
+// **Unix には無い段である。** 向こうは子が死ねば PTY の従側が閉じ、読み取りが
+// そこで終わる。ConPTY はそうならない。
+//
+// プロセスのハンドルを閉じるのもここだけである。所有者を一つにしておかないと、
+// Wait と見張りが同じハンドルを取り合う。
+func (p *windowsProcess) watch() {
+	defer close(p.exited)
+	info := ExitInfo{At: time.Now()}
+	if _, err := windows.WaitForSingleObject(p.process, windows.INFINITE); err != nil {
+		info.Code = -1
+	} else {
 		var code uint32
 		if err := windows.GetExitCodeProcess(p.process, &code); err != nil {
 			info.Code = -1
 		} else {
 			info.Code = int(code)
 		}
-		if p.wasForced() {
-			// **終了コードでは見分けられない。** TerminateJobObject は与えた値を
-			// 木のすべてに刻むので、子が同じ値を返した場合と区別がつかない。
-			// 見分けるのは、この実装が強制したという事実である。Unix が
-			// 合図で終わった子を報告するのと同じ形にする。
-			info.Code = -1
-			info.Signal = "killed"
-		}
-		p.exit = info
-		windows.CloseHandle(p.process)
-	})
-	return p.exit
+	}
+	if p.wasForced() {
+		// **終了コードでは見分けられない。** TerminateJobObject は与えた値を
+		// 木のすべてに刻むので、子が同じ値を返した場合と区別がつかない。
+		// 見分けるのは、この実装が強制したという事実である。Unix が合図で
+		// 終わった子を報告するのと同じ形にする。
+		info.Code = -1
+		info.Signal = "killed"
+	}
+	p.exit = info
+	windows.CloseHandle(p.process)
+	p.releaseConsole()
 }
