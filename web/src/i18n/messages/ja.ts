@@ -6,6 +6,7 @@ export const ja = {
   "shell.active": "ローカルセッション有効 · {version}",
   "shell.bootstrapFailed":
     "ローカルセッションを開始できませんでした。sshc を再起動し、新しく開いたタブを使ってください。",
+  "shell.bootstrapRetry": "もう一度試す",
   "shell.pageNotFound": "ページが見つかりません",
   "shell.pageNotFoundDescription": "このURLに対応するsshcのセクションはありません。",
   "shell.goHome": "ホームへ移動",

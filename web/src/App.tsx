@@ -10,7 +10,7 @@ import { UpdateBadge } from "./shell/UpdateBadge";
 import { OverviewPanel } from "./overview/OverviewPanel";
 import { useLanguage, useTranslate } from "./i18n/context";
 import { locales, type Locale } from "./i18n/locale";
-import { autoControl, secondaryAction } from "./ui/form";
+import { autoControl, primaryAction, secondaryAction } from "./ui/form";
 import { Icon, IconSprite, type IconName } from "./ui/icons";
 import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
@@ -159,6 +159,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // 書き込みはマスターパスワードで封じたバックアップを残すため、vault が
   // 閉じたまま使える状態というものは存在しない。
   const [state, setState] = useState<"starting" | "locked" | "ready" | "error">("starting");
+  // 失敗の名前。**画面に出す。** 「開始できませんでした」だけを読んだ人に
+  // できることは何も無く、devtools を開けない機械では他に知る手段が無い。
+  // ここに入るのは bootstrap.ts が投げる固定の識別子か、fetch の型名だけで、
+  // 入口の fragment はそのどちらにも現れない。
+  const [failure, setFailure] = useState("");
   const [vaultExists, setVaultExists] = useState(false);
   const [version, setVersion] = useState("");
   const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
@@ -398,11 +403,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         setState("ready");
       })
       .catch((reason: unknown) => {
-        // **理由を残す。** この画面は「開始できませんでした」としか言えず、
-        // それを読んだ人にできることは何も無い。console に出しておけば、
-        // 少なくとも devtools と、それを logcat へ流す外殻からは読める。
         console.error("sshc could not start its session", reason);
-        if (active) setState("error");
+        if (!active) return;
+        setFailure(reason instanceof Error ? reason.message : String(reason));
+        setState("error");
       });
 
     return () => {
@@ -461,9 +465,31 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
 
   if (state === "error") {
     return (
-      <main className="p-6">
+      <main className="flex flex-col items-start gap-3 p-6">
         <h1 className="text-base font-semibold">{t("shell.title")}</h1>
-        <p role="alert" className="mt-2 text-sm text-danger">{t("shell.bootstrapFailed")}</p>
+        <p role="alert" className="text-sm text-danger">{t("shell.bootstrapFailed")}</p>
+        {/*
+          失敗の名前をそのまま出す。**翻訳しない** ——これは人に読ませる文では
+          なく、報告に写して貼るための識別子である。訳せば、受け取った側は
+          それがどの分岐かを言い当てられなくなる。
+        */}
+        {failure === "" ? null : (
+          <code className="max-w-full overflow-x-auto rounded-md border border-line bg-card px-2 py-1 text-xs">
+            {failure}
+          </code>
+        )}
+        {/*
+          もう一度だけ、入口の fragment 抜きで開き直す。**それがこの画面から
+          出る唯一の道である** ——使い切られた fragment を持ったまま読み直せば
+          何度でもここへ戻ってくるが、クッキーだけで届けば renew が答える。
+        */}
+        <button
+          type="button"
+          className={primaryAction}
+          onClick={() => window.location.replace(window.location.pathname + window.location.search)}
+        >
+          {t("shell.bootstrapRetry")}
+        </button>
       </main>
     );
   }
