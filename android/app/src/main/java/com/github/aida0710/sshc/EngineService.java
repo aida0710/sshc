@@ -25,6 +25,7 @@ public final class EngineService extends Service {
 
     private final LocalBinder binder = new LocalBinder();
     private String entrance;
+    private boolean started;
     private int failure;
 
     public final class LocalBinder extends Binder {
@@ -33,9 +34,25 @@ public final class EngineService extends Service {
         }
     }
 
-    /** 入口の URL。engine が起きていなければ null。 */
+    /**
+     * 入口の URL。engine が起きていなければ null。
+     *
+     * <p><b>入口は一度しか使えない。</b> URL の fragment は最初の 1 回で使い
+     * 切られるので、同じものを読み直すと 2 回目の bootstrap が拒否され、画面は
+     * 「開始できませんでした」に落ちる。Activity は設定が変わるたびに作り直され
+     * 得る——ダークモードの切り替え、フォントサイズ、分割画面、メモリ逼迫。
+     * そのどれでも同じ URL をもう一度渡せば、二度と開かないアプリになる。
+     *
+     * <p>2 回目からは fragment を落として渡す。ページはクッキーだけで届いた
+     * ときに session を更新する道を既に持っており、クッキーは同じプロセスの
+     * WebView が持ち続けている。
+     */
     String entrance() {
-        return entrance;
+        if (entrance == null) return null;
+        String url = entrance;
+        int fragment = entrance.indexOf('#');
+        if (fragment >= 0) entrance = entrance.substring(0, fragment);
+        return url;
     }
 
     /** 直前の起動が失敗した理由。成功していれば 0。 */
@@ -58,6 +75,7 @@ public final class EngineService extends Service {
 
         try {
             entrance = Mobile.start(getFilesDir().getAbsolutePath(), getCacheDir().getAbsolutePath());
+            started = true;
         } catch (Exception error) {
             // **error のメッセージを保持しない。** 入口の URL を含み得る。
             failure = (int) Mobile.lastStartFailureKind();
@@ -67,12 +85,13 @@ public final class EngineService extends Service {
 
     @Override
     public void onDestroy() {
-        if (entrance != null) {
+        if (started) {
             try {
                 Mobile.stop();
             } catch (Exception error) {
                 Log.e(TAG, "the engine did not stop cleanly");
             }
+            started = false;
             entrance = null;
         }
         super.onDestroy();
