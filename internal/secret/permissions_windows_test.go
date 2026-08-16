@@ -40,7 +40,7 @@ func TestWindowsPrivateVaultJournalBackupAndSyncStateUsesProtectedDACL(t *testin
 	}
 	backupVaultPath := ""
 	for _, entry := range backupIDs {
-		candidate := filepath.Join(backupRoot, entry.Name(), "secrets")
+		candidate := filepath.Join(backupRoot, entry.Name(), filepath.FromSlash(secret.WorkspacePath))
 		if _, err := os.Stat(candidate); err == nil {
 			backupVaultPath = candidate
 			break

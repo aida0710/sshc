@@ -78,9 +78,7 @@ func writeServiceMetadata(t *testing.T, service *Service, workspace *storage.Wor
 	if err := workspace.EnsureDirectory(workspace.StateDir()); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(service.metadata.Path(), contents, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, service.metadata.Path(), contents)
 	return contents
 }
 

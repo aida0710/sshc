@@ -139,7 +139,12 @@ func (index *ReferenceIndex) record(
 		})
 		return
 	}
-	index.byRelativePath[relative] = append(index.byRelativePath[relative], reference)
+	// **鍵はワークスペース相対の識別子で引かれる。** その綴りはスラッシュ区切りで
+	// あり、Inventory が付ける RelativePath と同じものでなければならない。ここだけ
+	// このファイルシステムの区切り文字にすると、Windows では For がひとつも当たらず、
+	// 鍵を名指す IdentityFile は「誰にも名指されていない」ことになる。
+	key := filepath.ToSlash(relative)
+	index.byRelativePath[key] = append(index.byRelativePath[key], reference)
 }
 
 // expandKeyPath は、IdentityFile 形式の引数を絶対パスへ解決する。
