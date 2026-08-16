@@ -175,3 +175,44 @@ func hasDiagnostic(graph *Graph, code string) bool {
 	}
 	return false
 }
+
+// 大小文字だけが違う綴りで include されたルート下のファイルは、ルート自身の
+// 綴りで引ける節点にならなければならない。
+//
+// **そうでないと、一覧に出て編集可能と言われたホストが、開いた瞬間に
+// 見つからないと言われる。** 上の層はルートから組み立てた綴りで引いている。
+func TestWindowsResolveKeysInRootNodesByTheRootSpelling(t *testing.T) {
+	const root = `C:\Users\Tester\.ssh`
+	const entry = root + `\config`
+	const shouted = `C:\USERS\TESTER\.ssh\conf.d\work.conf`
+	resolver := Resolver{
+		Loader: fakeLoader{
+			// 本物のファイルシステムはどちらの綴りにも答える。偽物には両方
+			// 登録しておく——確かめたいのは節点の鍵であって、偽物の索き方ではない。
+			files: map[string]string{
+				entry:                      "Include conf.d/*.conf\n",
+				shouted:                    "Host work\n",
+				root + `\conf.d\work.conf`: "Host work\n",
+			},
+			globs: map[string][]string{root + `\conf.d\*.conf`: {shouted}},
+		},
+		Home: `C:\Users\Tester`,
+		Root: root,
+	}
+
+	graph, err := resolver.Resolve(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := root + `\conf.d\work.conf`
+	node := graph.Nodes[expected]
+	if node == nil {
+		t.Fatalf("nodes = %#v, want a node at %q", graph.Nodes, expected)
+	}
+	if !node.Editable {
+		t.Fatal("a file under the workspace root was not editable")
+	}
+	if node.File == nil {
+		t.Fatal("the canonical node was never read")
+	}
+}
