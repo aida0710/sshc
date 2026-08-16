@@ -10,6 +10,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -64,13 +65,32 @@ func (o *windowsOwnership) Start(ctx context.Context) (<-chan error, error) {
 	return o.events, nil
 }
 
+// peekNamedPipe は、パイプの中身を消費せずに、読める量だけを尋ねる。
+//
+// x/sys はこれを公開していない。**手で解決した proc を呼ぶのはここだけ**で
+// あり、他の Windows 呼び出しはすべて x/sys の公開 API を通る。
+var procPeekNamedPipe = windows.NewLazySystemDLL("kernel32.dll").NewProc("PeekNamedPipe")
+
+func peekNamedPipe(handle windows.Handle) (uint32, error) {
+	var available uint32
+	ret, _, err := procPeekNamedPipe.Call(
+		uintptr(handle),
+		0, 0, 0,
+		uintptr(unsafe.Pointer(&available)),
+		0,
+	)
+	if ret == 0 {
+		return 0, err
+	}
+	return available, nil
+}
+
 // inspect は、いまパイプがどうなっているかを一度だけ見る。
 //
 // 読める中身があることは常に規約違反である。これは寿命だけを運ぶチャンネルで
 // あって、命令の通り道ではない。
 func (o *windowsOwnership) inspect() error {
-	var available uint32
-	err := windows.PeekNamedPipe(o.handle, nil, 0, nil, &available, nil)
+	available, err := peekNamedPipe(o.handle)
 	switch {
 	case errors.Is(err, windows.ERROR_BROKEN_PIPE), errors.Is(err, windows.ERROR_NO_DATA):
 		return errOwnershipEnded
