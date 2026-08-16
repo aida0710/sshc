@@ -22,6 +22,7 @@ export const en = {
   "shell.pageNotFoundDescription": "No sshc section exists at this URL.",
   "shell.goHome": "Go to Home",
   "shell.primaryNavigation": "Primary",
+  "shell.navigationToggle": "Navigation",
   "shell.navFaces": "Navigation face",
   "shell.navFaceSettings": "Settings",
   "shell.navFaceTerminal": "Terminals",
