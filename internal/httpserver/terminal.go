@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -165,7 +166,10 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 		return terminal.Spec{
 			Kind: terminal.KindShell, Title: shellTitle(shell), Size: size,
 			Command: terminal.Command{
-				Path: shell, Argv0: platform.LoginArgv0(shell), Env: h.environment(),
+				// ログインシェルとしての起こし方は OS ごとに違う。Unix は
+				// argv[0]、Windows は引数で伝える。ここはその区別を持たない。
+				Path: shell, Argv0: platform.LoginArgv0(shell),
+				Arguments: platform.LoginArguments(shell), Env: h.environment(),
 				Dir: h.startDirectory(),
 			},
 		}, nil
@@ -235,14 +239,13 @@ func (s *sessionLifetime) ForceClose() error {
 
 var errMissingAlias = errors.New("an ssh session needs an alias")
 
-func shellTitle(shell string) string {
-	for index := len(shell) - 1; index >= 0; index-- {
-		if shell[index] == '/' {
-			return shell[index+1:]
-		}
-	}
-	return shell
-}
+// shellTitle は、タブに出す名前である。
+//
+// filepath でよい。ここに来るのは、このマシンで解決されたローカルシェルの
+// 絶対パスだけなので、区切り文字はこの OS のものである。自前で `/` だけを
+// 数えると、Windows のタブには `C:\Windows\System32\...\powershell.exe` が
+// まるごと並ぶ。
+func shellTitle(shell string) string { return filepath.Base(shell) }
 
 func (h TerminalHandlers) resolveShell() (string, error) {
 	if h.Shell == nil {
