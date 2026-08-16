@@ -178,10 +178,14 @@ public final class MainActivity extends Activity {
                 // ステータスバーではなく左右の縁に来る。
                 Insets bars = insets.getInsets(
                         WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                // **キーボードもバーである。** decorFitsSystemWindows(false) を
+                // 言った時点で adjustResize は効かなくなるので、IME の高さを
+                // 自分で避けないと、画面上のキー列がソフトキーボードの下に潜る。
+                Insets keyboard = insets.getInsets(WindowInsets.Type.ime());
                 left = bars.left;
                 top = bars.top;
                 right = bars.right;
-                bottom = bars.bottom;
+                bottom = Math.max(bars.bottom, keyboard.bottom);
             } else {
                 left = insets.getSystemWindowInsetLeft();
                 top = insets.getSystemWindowInsetTop();
