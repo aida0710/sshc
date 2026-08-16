@@ -1,6 +1,13 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, nativeImage, shell, dialog } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  nativeImage,
+  shell,
+  dialog,
+} = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const { join } = require("node:path");
 const { existsSync } = require("node:fs");
@@ -76,13 +83,22 @@ function binary() {
  */
 function run(args) {
   return new Promise((resolve, reject) => {
-    execFile(binary(), args, { timeout: engineTimeout }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(`${args.join(" ")}: ${String(stderr || error.message).trim()}`));
-        return;
-      }
-      resolve(String(stdout).trim());
-    });
+    execFile(
+      binary(),
+      args,
+      { timeout: engineTimeout },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(
+            new Error(
+              `${args.join(" ")}: ${String(stderr || error.message).trim()}`,
+            ),
+          );
+          return;
+        }
+        resolve(String(stdout).trim());
+      },
+    );
   });
 }
 
@@ -178,10 +194,12 @@ function entrance() {
       // 開くが、Cmd+Q でエンジンだけが残る。**持ち主はアプリひとつ**という
       // 決めごとを、窓を開くために曲げる方が高くつく。
       if (code === engineBusy) {
-        settle(new Error(
-          "端末で動いている sshc がエンジンです。" +
-            "その端末で Ctrl-C を押して終わらせてから、もう一度開いてください。",
-        ));
+        settle(
+          new Error(
+            "端末で動いている sshc がエンジンです。" +
+              "その端末で Ctrl-C を押して終わらせてから、もう一度開いてください。",
+          ),
+        );
         return;
       }
       settle(new Error(`the engine exited with ${code}`));
@@ -267,15 +285,16 @@ function icon() {
  * 入力欄、鍵の指紋、エラーの文言——のための道である。
  */
 function installMenu() {
-  const application = process.platform === "darwin"
-    ? [{ role: "appMenu" }]
-    : [];
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    ...application,
-    { role: "editMenu" },
-    { role: "viewMenu" },
-    { role: "windowMenu" },
-  ]));
+  const application =
+    process.platform === "darwin" ? [{ role: "appMenu" }] : [];
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      ...application,
+      { role: "editMenu" },
+      { role: "viewMenu" },
+      { role: "windowMenu" },
+    ]),
+  );
 }
 
 app.whenReady().then(async () => {
@@ -342,17 +361,34 @@ app.on("window-all-closed", () => {
   if (app.dock !== undefined) app.dock.hide();
 });
 
+// sessionCountTimeout は、終了の確認のために本数を尋ねる上限である。
+//
+// **これが無いと、答えないエンジンが終了そのものを人質に取る。** 尋ねるのは
+// execFile で起こす別プロセスであり、その既定の上限は 30 秒ある。before-quit は
+// その間 preventDefault したままなので、窓も閉じず、エンジンも解放されない。
+const sessionCountTimeout = 2000;
+
 /**
  * liveSessions は、生きているコンソールの本数を返す。エンジンに尋ねられ
  * なければ 0 を返す——**終了を止める理由にはできない**。本数が分からない
  * ことは、開いているコンソールが無いことの証明にはならないが、それを理由に
- * 終了できなくしてよいわけでもない。
+ * 終了できなくしてよいわけでもない。答えが遅すぎることも同じである。
  */
-async function liveSessions() {
+async function liveSessions(timeoutMilliseconds = sessionCountTimeout) {
+  let timer = null;
+  const overdue = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(0), timeoutMilliseconds);
+    timer.unref?.();
+  });
   try {
-    return (await status()).sessions;
+    return await Promise.race([
+      status().then((answer) => answer.sessions),
+      overdue,
+    ]);
   } catch {
     return 0;
+  } finally {
+    if (timer !== null) clearTimeout(timer);
   }
 }
 
@@ -386,6 +422,13 @@ app.on("before-quit", async (event) => {
   quitting = true;
   if (engine !== null) releaseEngine(engine);
   app.quit();
+});
+
+// **解放を確認の経路だけに預けない。** before-quit は preventDefault で
+// 止まり、ダイアログや遅い問い合わせを待つ。実際に終わる経路でももう一度
+// 手放す——releaseEngine は二度呼んでよい。
+app.on("will-quit", () => {
+  if (engine !== null) releaseEngine(engine);
 });
 
 // Ctrl-C でも「終わる」を通す。
