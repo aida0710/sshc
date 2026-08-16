@@ -31,7 +31,13 @@ test("the descriptor records the AppImage the user actually has", async () => {
   });
 });
 
-test("the descriptor is private to the user", async () => {
+test("the descriptor is private to the user", async (t) => {
+  // Linux 向けの文書であり、Windows では recordLinuxLauncher が何も書かない。
+  // mode ビットは Windows で誰が読めるかを何も言わないので、確かめない。
+  if (process.platform === "win32") {
+    t.skip("Windows expresses this through the DACL, not through mode bits");
+    return;
+  }
   const { descriptor } = await descriptorIn();
 
   await recordLinuxLauncher({ ...linux, appImage: "/opt/sshc", descriptor });
