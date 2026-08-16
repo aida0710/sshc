@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  127.0.0.1 にだけ cleartext を許す。usesCleartextTraffic="true" は使わない
+  ——それは全ホストを開く。engine が居るのは loopback だけである。
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

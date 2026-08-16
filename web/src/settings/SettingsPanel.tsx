@@ -29,6 +29,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [startDirectory, setStartDirectory] = useState("");
   const [maxSessions, setMaxSessions] = useState("");
   const [scrollback, setScrollback] = useState("");
+  const [fontSize, setFontSize] = useState("");
   const [copyOnSelect, setCopyOnSelect] = useState(true);
   const [rightClickPaste, setRightClickPaste] = useState(true);
   const [terminalBusy, setTerminalBusy] = useState(false);
@@ -43,6 +44,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setStartDirectory(settings.startDirectory ?? "");
         setMaxSessions(settings.maxSessions === undefined ? "" : String(settings.maxSessions));
         setScrollback(settings.scrollbackBytes === undefined ? "" : String(settings.scrollbackBytes));
+        setFontSize(settings.fontSize === undefined ? "" : String(settings.fontSize));
         setCopyOnSelect(settings.copyOnSelect ?? true);
         setRightClickPaste(settings.rightClickPaste ?? true);
       })
@@ -65,7 +67,8 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
     };
     const sessions = numberOr(maxSessions);
     const bytes = numberOr(scrollback);
-    if (Number.isNaN(sessions) || Number.isNaN(bytes)) {
+    const size = numberOr(fontSize);
+    if (Number.isNaN(sessions) || Number.isNaN(bytes) || Number.isNaN(size)) {
       setTerminalError(t("terminal.limitsOutOfRange"));
       setTerminalSaved(false);
       return;
@@ -80,6 +83,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         ...(directory === "" ? {} : { startDirectory: directory }),
         ...(sessions === undefined ? {} : { maxSessions: sessions }),
         ...(bytes === undefined ? {} : { scrollbackBytes: bytes }),
+        ...(size === undefined ? {} : { fontSize: size }),
         // on は既定なので書かない。off だけを false として明示し、再読み込み
         // しても消えないようにする。
         ...(copyOnSelect ? {} : { copyOnSelect: false }),
@@ -194,6 +198,26 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
             disabled={terminalBusy}
             onChange={(event) => {
               setScrollback(event.target.value);
+              setTerminalSaved(false);
+            }}
+          />
+        </Field>
+        {/*
+          既定は画面の幅で決まる。**空欄は「決めていない」であって「既定と同じ
+          数字」ではない**ので、置くのは placeholder だけである。書けば、その
+          日から既定を変えてもこの人だけが取り残される。
+        */}
+        <Field label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint")}>
+          <input
+            type="number"
+            min={8}
+            max={32}
+            className={control}
+            value={fontSize}
+            placeholder="15 / 13"
+            disabled={terminalBusy}
+            onChange={(event) => {
+              setFontSize(event.target.value);
               setTerminalSaved(false);
             }}
           />

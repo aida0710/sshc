@@ -82,6 +82,9 @@ export const en = {
   "terminal.maxSessionsHint": "1 to 200. Leave it empty for the default of 50. Opening past the limit is refused — no console is ever closed for you.",
   "terminal.scrollbackLabel": "Scrollback per console (bytes)",
   "terminal.scrollbackHint": "16384 to 4194304. Leave it empty for the default of 262144 (256 KiB). Scrollback lives in memory and never reaches the disk.",
+  "terminal.fontSizeLabel": "Font size",
+  "terminal.fontSizeHint":
+    "Pixels. Empty follows the screen — 15 on a narrow one, 13 otherwise.",
   "terminal.copyOnSelectLabel": "Copy selected text automatically",
   "terminal.copyOnSelectHint": "Copies once when you finish selecting. Turn this off if selections should not replace the system clipboard.",
   "terminal.rightClickPasteLabel": "Paste with right click",

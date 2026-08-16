@@ -1,4 +1,4 @@
-.PHONY: generate test build build-cli desktop icons desktop-run desktop-version desktop-bundle-mac desktop-bundle-linux desktop-bundle-windows release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test build build-cli android-bind desktop icons desktop-run desktop-version desktop-bundle-mac desktop-bundle-linux desktop-bundle-windows release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
 # なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
@@ -24,6 +24,10 @@ generate:
 test:
 	go test ./...
 	go test -race ./...
+	@# Android 向けにビルドタグが食い違っていないことを見る。**CGO_ENABLED=0 で
+	@# 通ることは Android で動くことを意味しない** が、gomobile も NDK も持たない
+	@# 環境で言えるのはここまでであり、ここが赤くなる理由は常にタグの食い違いである。
+	GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
 	npm test --prefix web
 	npm run typecheck --prefix web
 	@# 外殻の JS も検査する。**relink は利用者の ~/.local/bin に触る**ので、
@@ -53,6 +57,20 @@ verify-generated: generate
 
 build:
 	go run ./internal/buildcontract/cmd/nativebuild host-build --output-dir "bin"
+
+# Android の AAR。**CGO_ENABLED=1 でなければならない** ——Android には
+# /etc/resolv.conf が無く、pure-Go リゾルバは名前を引けない。名前解決は netd を
+# 通るので、bionic の getaddrinfo すなわち cgo リゾルバが要る。gomobile が NDK を
+# 通じて cgo を有効にするので、ここが要求するのは NDK の場所だけである。
+#
+# gomobile は go.mod の tool として固定してある。gobind は gomobile が PATH から
+# 探すので、`go install golang.org/x/mobile/cmd/gobind@latest` を先に一度。
+ANDROID_NDK_HOME ?= $(HOME)/Library/Android/sdk/ndk/28.2.13676358
+
+android-bind:
+	ANDROID_NDK_HOME="$(ANDROID_NDK_HOME)" PATH="$(HOME)/go/bin:$$PATH" \
+		go tool gomobile bind -target=android/arm64,android/amd64 -androidapi 26 \
+		-o android/app/libs/sshc.aar ./mobile
 
 # build-cli は native runner と release job が共有する最小の CLI build primitive。
 # target と output は caller の決定であり、暗黙の host 値や探索結果を使わない。

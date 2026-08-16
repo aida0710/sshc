@@ -2437,6 +2437,7 @@ components:
       properties:
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
+        fontSize: { type: integer, minimum: 8, maximum: 32 }
         # 無いときは on。false は利用者が明示的に止めた値なので、省略せず運ぶ。
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
@@ -2455,6 +2456,10 @@ components:
         startDirectory: { type: string, maxLength: 4096 }
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
+        # 字の大きさは画面のものであって engine のものではない。PTY は px を
+        # 知らない。ここに置くのは、端末ごとに読みやすい大きさが違うからで、
+        # 指で持つ画面と机の上の画面では同じ数字が別の意味になる。
+        fontSize: { type: integer, minimum: 8, maximum: 32 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
     PendingTransaction:

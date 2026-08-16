@@ -1,11 +1,11 @@
 # sshc
 
-`sshc` は macOS と Linux 上で動く、OpenSSH クライアント管理 UI の基盤です。現在の foundation は、React UI を埋め込んだ単一の Go バイナリ、localhost セッション、CSRF 防御、厳格な Host/Origin 検査までを提供します。
+`sshc` は macOS、Linux、Windows、Android の上で動く、OpenSSH クライアント管理 UI の基盤です。現在の foundation は、React UI を埋め込んだ単一の Go バイナリ、localhost セッション、CSRF 防御、厳格な Host/Origin 検査までを提供します。
 
 ## 前提環境と固定バージョン
 
-- macOS arm64 / amd64、Linux amd64 / arm64
-- Windows と Android は対応対象外です。デスクトップ配布物、起動方法、単一エンジン保証を提供しません。
+- macOS arm64 / amd64、Linux amd64 / arm64、Windows arm64 / amd64
+- Android arm64 / amd64（minSdk 26）。engine は AAR として APK に同梱され、アプリと同一プロセスで動きます。**CLI は入りません。**
 - Go 1.26.6（`go.mod` の toolchain で固定）
 - Node.js 22.19.0
 - npm 11.7.0
@@ -38,6 +38,30 @@ make e2e              # バイナリをビルドし Playwright で主要フロ�
 make build            # UI を生成し bin/sshc へ単一バイナリを作成
 npm run check:i18n --prefix web # 英語を正本として各言語の不足・余分なキーを表示
 ```
+
+## Android
+
+APK の外殻は WebView 1 枚で、engine を `.so` として同一プロセスに抱えます。Electron の外殻と役割は同じですが、**engine は子プロセスではありません** — Android のプロセスは 1 つで、子を持てば low memory killer が黙って殺します。
+
+```sh
+go install golang.org/x/mobile/cmd/gobind@latest   # 一度だけ。gomobile が PATH から探します
+make android-bind                                   # AAR を android/app/libs/ へ
+cd android && ./gradlew clean assembleDebug          # app/build/outputs/apk/debug/
+```
+
+`gomobile` は `go.mod` の tool として固定してあります。NDK の場所は `ANDROID_NDK_HOME` で変えられます。
+
+**`clean` を省かないでください。** AAR を焼き直した後に `assembleDebug` だけを走らせると、前のビルドの `.so` が APK の中に残ります——中身は正しいのに、ファイルだけが 14MB 太ります。
+
+デスクトップと違うところが 5 つあります。
+
+- **CLI がありません。** `sshc connect` も `sshc vault` も APK に入りません。`cmd/sshc` は Android 向けにコンパイルは通りますが（`GOOS=android` は `linux` タグも満たすため）、成果物には入りません。
+- **設定はこのアプリだけのものです。** Android に OpenSSH は無く、`HOME` はアプリの `filesDir` になるので、設定は `<filesDir>/.ssh/config` に置かれます。母艦の設定を持ち込む経路は Sync（S3）です。
+- **ssh-keygen も ssh-agent もありません。** `Toolchain` と `KeyAgent` が nil になるので、ハードウェア鍵の項目とエージェント登録は画面に出ません。道具が無いことは、機能が無いことです。
+- **ローカルシェルは `/system/bin/sh` です。** mksh + toybox の箱庭で、見えるのはアプリの私有ディレクトリだけです。Termux のように自前の userland を展開する道は、Android 10 以降の W^X が塞いでいます（Termux は targetSdkVersion 28 に固定して避けています）。
+- **自己更新はありません。** バイナリを置き換える経路が Android に無いので、更新確認そのものを配線していません。
+
+**`CGO_ENABLED=1` が必須です。** Android には `/etc/resolv.conf` が無く、名前解決は netd を通ります。pure-Go リゾルバは名前を引けないので、bionic の `getaddrinfo`、すなわち cgo リゾルバが要ります。`make test` の `GOOS=android ... CGO_ENABLED=0 go build` はビルドタグの食い違いだけを見ており、**それが通ることは Android で動くことを何一つ意味しません。**
 
 `./bin/sshc` を起動すると、一度限りの bootstrap fragment を持つ URL を標準出力へ 1 行だけ出します。**ブラウザは開きません** — 画面を出すのはデスクトップの外殻です（`make desktop-run`）。デスクトップの外殻は `--own-engine` を付けた子の標準出力からこの 1 行を受け取ります。Ctrl-C または SIGTERM で停止します。
 
@@ -215,7 +239,7 @@ ESLint は導入していません。TypeScript の型検査（`tsc -b` と e2e 
 - **このアプリが自分以外のホストへ通信するのは、更新確認のここだけです。** `https://api.github.com/repos/aida0710/sshc/releases/latest` へ 1 回 GET します。要求はサーバー側から出すので、ページの `connect-src` は `'self'` のままで、「他のオリジンへ一切リクエストを出さない」という e2e も成立し続けます。自動では走らず、画面を開いたときだけです。
 - **このアプリは自分自身を置き換えません。** 左下は「新しいバージョンがあります」とリリースページへのリンクを出すだけで、ダウンロードも書き換えもしません。判断も操作も人がやります。
 - 自己更新は一度入れて、外しました。ネットワークから取ったバイトで自分を置き換える以上、署名で守る必要がありますが、**その鍵はリリース workflow が読める場所に置く必要があり、それはリポジトリを支配できる相手が読める場所**です。守る側と攻める側が同じ鍵を使うことになり、リポジトリ奪取という現実的な脅威に対しては何も足していませんでした。**複雑さと失敗モード（鍵の交換順を誤ると全インストールが静かに更新不能になる）だけが残る**ので、機能ごと落としました。
-- **リリースは 4 つのバイナリを出します**（`sshc-darwin-arm64`、`sshc-darwin-amd64`、`sshc-linux-amd64`、`sshc-linux-arm64`）。このプロジェクトは cgo を 1 行も使っていないので、1 台の macOS ランナーから全部作れます。ただし **darwin だけは `CGO_ENABLED=1` のままにします** — 設定エンジンは `%u` と `%i` を展開するために `os/user.Current()` を読み、cgo 無しの Go は代わりに `/etc/passwd` を読むので、macOS の通常のアカウントでは実行時にそのトークンだけが黙って非対応になるためです。Linux は `/etc/passwd` が本物なので `0` で構いません。Windows と Android のバイナリ・アプリは提供しません。
+- **リリースは 4 つのバイナリを出します**（`sshc-darwin-arm64`、`sshc-darwin-amd64`、`sshc-linux-amd64`、`sshc-linux-arm64`）。このプロジェクトは cgo を 1 行も使っていないので、1 台の macOS ランナーから全部作れます。ただし **darwin だけは `CGO_ENABLED=1` のままにします** — 設定エンジンは `%u` と `%i` を展開するために `os/user.Current()` を読み、cgo 無しの Go は代わりに `/etc/passwd` を読むので、macOS の通常のアカウントでは実行時にそのトークンだけが黙って非対応になるためです。Linux は `/etc/passwd` が本物なので `0` で構いません。**Windows と Android はコードとしては対応していますが、リリース成果物にはまだ載せません** — 署名と配布がこれからだからです。Windows は `make desktop-bundle-windows`、Android は `make android-bind` と `android/gradlew assembleDebug` で手元から作れます。
 - リリースには `checksums.txt` を併置します。これは**手でダウンロードした人が転送の破損を確認するため**のもので、バイナリと同じ場所から来るので、その場所が正直かどうかについては何も言いません。**このアプリが取ってくるものは何もないので、検証すべきバイトもありません。**
 - ソースから使っている場合の更新は `make update`（`git pull --ff-only` + `make install`）です。
 

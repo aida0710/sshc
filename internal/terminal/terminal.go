@@ -213,6 +213,12 @@ const (
 	MinScrollback     = 16 << 10
 	MaxScrollback     = 4 << 20
 
+	// 字の大きさは、このプロセスが何かに使う値ではない——PTY は px を知らない。
+	// **それでもここに範囲を置く。** 保存されるのは metadata であり、metadata の
+	// 妥当な範囲を決める場所はここ 1 つだけだからである。
+	MinFontSize = 8
+	MaxFontSize = 32
+
 	// RetainedExited は、終了済みセッションを一覧に残す本数の上限である。
 	// 最後の出力を読めるように残すのであって、生存上限には数えない。
 	RetainedExited = 20

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">sshc</string>
+    <string name="engine_running">sshc is running</string>
+    <!--
+      engine が起きなかった理由。**Go の error 文は出さない** ——入口の URL を
+      含み得るので、番号に対応するこちらの文だけを出す。
+    -->
+    <string name="failure_already_started">Another sshc engine is already running on this device.</string>
+    <string name="failure_listen">sshc could not take a local port on this device.</string>
+    <string name="failure_stopped_early">The sshc engine stopped before it could open.</string>
+    <string name="failure_unknown">sshc could not start.</string>
+</resources>

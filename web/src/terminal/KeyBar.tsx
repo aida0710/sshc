@@ -57,6 +57,15 @@ const keys = ["Esc", "Tab", "↑", "↓", "←", "→", "|", "-", "~", "/"];
 const keyShape =
   "min-h-11 min-w-11 shrink-0 rounded-md border border-control-line px-3 text-sm text-ink";
 
+// **押しても焦点を奪わない。** 触れる画面では、焦点が端末の入力欄から外れた
+// 瞬間にソフトキーボードが閉じる。Ctrl を押すたびにキーボードが畳まれれば、
+// 次の一文字を打つ場所が無い——このバーが存在する意味そのものが消える。
+//
+// pointerdown を止めるのが焦点の移動を止める唯一の場所である。click では遅い。
+function keepFocus(event: { preventDefault(): void }) {
+  event.preventDefault();
+}
+
 export type Modifiers = { ctrl: boolean; alt: boolean };
 
 /**
@@ -86,6 +95,8 @@ export function KeyBar({
       <button
         type="button"
         aria-pressed={modifiers.ctrl}
+        onPointerDown={keepFocus}
+        onMouseDown={keepFocus}
         onClick={() => onToggle("ctrl")}
         className={`${keyShape} ${modifiers.ctrl ? "bg-select-fill" : "bg-card"}`}
       >
@@ -94,6 +105,8 @@ export function KeyBar({
       <button
         type="button"
         aria-pressed={modifiers.alt}
+        onPointerDown={keepFocus}
+        onMouseDown={keepFocus}
         onClick={() => onToggle("alt")}
         className={`${keyShape} ${modifiers.alt ? "bg-select-fill" : "bg-card"}`}
       >
@@ -103,6 +116,8 @@ export function KeyBar({
         <button
           key={label}
           type="button"
+          onPointerDown={keepFocus}
+          onMouseDown={keepFocus}
           onClick={() => onKey(label)}
           className={`${keyShape} bg-card`}
         >

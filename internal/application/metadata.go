@@ -111,6 +111,10 @@ type GroupMetadata struct {
 type EmbeddedTerminal struct {
 	MaxSessions     int `json:"maxSessions,omitempty"`
 	ScrollbackBytes int `json:"scrollbackBytes,omitempty"`
+	// FontSize は画面が字を描く大きさである。**この engine は使わない**——
+	// PTY は px を知らない。持っているのは、端末ごとに読みやすい大きさが
+	// 違うからで、指で持つ画面と机の上の画面では同じ数字が別の意味になる。
+	FontSize int `json:"fontSize,omitempty"`
 	// nil は既定の on、false は明示的な off である。bool に omitempty を直接
 	// 付けると false が消え、再起動後に on へ戻ってしまう。
 	CopyOnSelect    *bool `json:"copyOnSelect,omitempty"`
@@ -247,6 +251,10 @@ func ValidateMetadata(metadata Metadata) error {
 		if settings.ScrollbackBytes != 0 &&
 			(settings.ScrollbackBytes < terminal.MinScrollback || settings.ScrollbackBytes > terminal.MaxScrollback) {
 			return fmt.Errorf("%w: scrollbackBytes %d", ErrMetadataTerminal, settings.ScrollbackBytes)
+		}
+		if settings.FontSize != 0 &&
+			(settings.FontSize < terminal.MinFontSize || settings.FontSize > terminal.MaxFontSize) {
+			return fmt.Errorf("%w: fontSize %d", ErrMetadataTerminal, settings.FontSize)
 		}
 	}
 	if _, err := checkRelative(metadata.GroupsPath()); err != nil {
