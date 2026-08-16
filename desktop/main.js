@@ -11,7 +11,8 @@ const {
 const { execFile, spawn } = require("node:child_process");
 const { join } = require("node:path");
 const { existsSync } = require("node:fs");
-const { relink } = require("./link");
+const { installManagedCLI } = require("./install-cli");
+const { recordLinuxLauncher } = require("./launcher");
 const { parseEntrance } = require("./entrance");
 const {
   spawnEngine,
@@ -131,10 +132,6 @@ let tray = null;
  */
 function entrance() {
   return new Promise((resolve, reject) => {
-    // **実体を 1 つにする。** 失敗しても続ける——リンクが張れないことは、
-    // アプリが開けない理由にはならない。
-    relink(binary()).catch(() => {});
-
     // **engine を渡す。** 他人のエンジンの入口を受け取ると、窓は開くのに
     // Cmd+Q でそのエンジンが残る——このアプリが「終了すれば全部止まる」と
     // 言えなくなる。あちらは入口を出さずに engineBusy で終わる。
@@ -300,6 +297,33 @@ function installMenu() {
   );
 }
 
+/**
+ * settleInstallation は、外殻が上がるたびに端末側の入口を揃える。
+ *
+ * **アプリが開ける理由にも、開けない理由にもしない。** 失敗しても窓は出す
+ * ——`sshc` と打てないことと、画面が見られないことは別の話である。ただし
+ * 黙りもしない: 公開の名前を他人が持っていたなら、その事実を出す。
+ */
+async function settleInstallation() {
+  try {
+    const { warning } = await installManagedCLI({ source: binary() });
+    if (warning !== null) {
+      dialog.showMessageBox({
+        type: "warning",
+        message: "sshc could not install the command line",
+        detail: warning,
+      });
+    }
+  } catch {
+    // 写せないことは、アプリが開けない理由にはならない。
+  }
+  try {
+    await recordLinuxLauncher({ packaged: app.isPackaged });
+  } catch {
+    // 場所を書き残せないだけである。窓もエンジンも動く。
+  }
+}
+
 app.whenReady().then(async () => {
   installMenu();
   const image = icon();
@@ -349,6 +373,8 @@ app.whenReady().then(async () => {
   }
 
   await windowReopener.start();
+  // 窓を先に出す。**端末側の入口を揃えるのは、画面を待たせてよい仕事ではない。**
+  await settleInstallation();
 });
 
 // **窓を閉じてもアプリは残る。** この外殻はエンジンの寿命そのものであり、
