@@ -135,6 +135,15 @@ func startPseudoConsole(command Command, size Size, environment *uint16) (_ Proc
 	// 大きさを渡すと、CreateProcess は属性リストを無視し、子はコンソールを
 	// 一つも受け取らない。
 	startup.Cb = uint32(unsafe.Sizeof(startup))
+	// **STARTF_USESTDHANDLES を、ハンドルを NULL のまま立てる。**
+	//
+	// これが無いと、Windows は「標準ハンドルを子へ複製する」という旧来のハックを
+	// 行う。継承を切っていても効くもので、擬似コンソールが与えるはずのハンドルを
+	// 親のもので上書きしてしまう。**このプロセスの stdout は必ずリダイレクトされて
+	// いる**——desktop では Electron へのパイプ、テストでは go test のパイプで
+	// ある。結果として、端末に書かれるはずのものが engine 自身の stdout へ流れる。
+	// 立てておくと複製が抑止され、子はコンソールから受け取る。
+	startup.Flags |= windows.STARTF_USESTDHANDLES
 
 	applicationName, err := windows.UTF16PtrFromString(command.Path)
 	if err != nil {

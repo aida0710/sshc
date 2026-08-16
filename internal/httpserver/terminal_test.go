@@ -268,12 +268,13 @@ func TestOpeningASessionReturnsATicketAndListsIt(t *testing.T) {
 		t.Fatalf("maxSessions = %d", listed.MaxSessions)
 	}
 
-	// ローカルシェルはログインシェルとして起こす。先頭のハイフンがそれを伝える
-	// 唯一の手段である。
+	// ローカルシェルはログインシェルとして起こす。そう伝える手段は OS ごとに
+	// 違うので、表明も分けてある。
 	opened := fixture.starter.opened()
-	if len(opened) != 1 || opened[0].Argv0 == "" || opened[0].Argv0[0] != '-' {
+	if len(opened) != 1 {
 		t.Fatalf("command = %#v", opened)
 	}
+	assertOpenedAsALoginShell(t, opened[0])
 
 	// **始まる場所は設定が決める。** 継ぐと、エンジンを起こしたものが
 	// たまたま居た場所でシェルが始まる——デスクトップの外殻から起こせば
