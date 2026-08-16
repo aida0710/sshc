@@ -27,5 +27,19 @@ export default defineConfig({
     video: "off",
     screenshot: "off",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: /narrow\.spec\.ts/ },
+    // 360x800 は、いま売られている最も狭い Android である。**ここで回すのは
+    // narrow.spec.ts だけ** —— 既存の 17 本を狭い幅でもう一周させるには、
+    // すべてをドロワー越しの操作へ書き換えることになり、守るものより書き
+    // 換える量の方が多い。狭い幅でしか壊れないものだけを、そこで見る。
+    //
+    // hasTouch を立てるのは、hover に依存した導線がこの幅に残っていないことを
+    // 同時に見るためである。
+    {
+      name: "narrow",
+      testMatch: /narrow\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 360, height: 800 }, hasTouch: true },
+    },
+  ],
 });
