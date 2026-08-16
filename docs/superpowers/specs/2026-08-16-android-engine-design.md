@@ -105,7 +105,10 @@ TERM=xterm-256color
 TMPDIR=<cacheDir>
 ```
 
-**`Toolchain` は空、`KeyAgent` は nil。** `app.Dependencies` のコメントが既に
+**`Toolchain` も `KeyAgent` も nil。** どちらも interface である。
+`keys.CatalogueReader.Read` は `Toolchain == nil` でハードウェア鍵の項目を足さずに
+返し、`keys.Service.AgentIdentities` は `agent == nil` で「到達できるエージェントが
+無い」を返す。`app.Dependencies` のコメントが既に
 「`KeyAgent` が nil の場合、エージェント登録は到達できるエージェントがないと報告
 する」「`Toolchain` は、見つかるかどうかで、ハードウェア鍵の項目を一覧に出して
 よいかを決める」と約束している。Android は、その約束が初めて本番で使われる場所に
@@ -163,7 +166,7 @@ UI と logcat に漏れる経路になる。畳んだ 3 つの区別だけを Ko
 切り出し、ホスト（darwin）上で表明する。
 
 - `Updates` が nil であること
-- `Toolchain` が空であること
+- `Toolchain` が nil であること
 - `KeyAgent` が nil であること
 - `Environ` が固定の 4 本を返し、`os.Environ` を含まないこと
 - `Start` の二重呼び出しが 2 台目を起こさないこと
@@ -172,7 +175,7 @@ UI と logcat に漏れる経路になる。畳んだ 3 つの区別だけを Ko
 `shellFallbacks("android")` が `/system/bin/sh` を返すことを `shell_test.go` に
 足す。
 
-`Toolchain` が空・`KeyAgent` が nil のとき、ハードウェア鍵とエージェント登録の
+`Toolchain` と `KeyAgent` が nil のとき、ハードウェア鍵とエージェント登録の
 経路が閉じることを `internal/httpserver` の既存スイートで表明する。
 
 CI ゲートは `GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC=<NDK clang> go build ./...`。
