@@ -122,3 +122,24 @@ func TestWindowsResolveReturnsTheValidatedRootSpelling(t *testing.T) {
 		t.Fatalf("resolved = %q, want it under the root spelling %q", resolved, workspace.Root())
 	}
 }
+
+// ワークスペースのルートそのものは、書き込み先でも作成先でもない。
+//
+// **素の文字列比較で弾いてはならない。** まわりの包含判断は大小文字を畳むので、
+// ルートの別綴りだけがそこをすり抜ける。
+func TestWindowsResolveRefusesACaseVariantOfTheRootItself(t *testing.T) {
+	_, workspace := newTestManager(t)
+	for name, candidate := range map[string]string{
+		"exact":        workspace.Root(),
+		"case variant": strings.ToUpper(workspace.Root()),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := workspace.ResolveForWrite(candidate); !errors.Is(err, ErrOutsideWorkspace) {
+				t.Errorf("ResolveForWrite(%q) = %v, want ErrOutsideWorkspace", candidate, err)
+			}
+			if _, err := workspace.ResolveDirectory(candidate); !errors.Is(err, ErrOutsideWorkspace) {
+				t.Errorf("ResolveDirectory(%q) = %v, want ErrOutsideWorkspace", candidate, err)
+			}
+		})
+	}
+}
