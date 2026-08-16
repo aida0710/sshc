@@ -8,6 +8,7 @@ import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { clipboard } from "../ui/clipboard";
+import { measuredCellHeight, newTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
@@ -152,6 +153,25 @@ export function TerminalView({
     };
     measure();
 
+    // 指で流す。**xterm はこれを持っていない**——スクロールする層は絶対配置で
+    // 下に敷かれ、上に画面の層が乗っているので、指が触れるのは常に上である。
+    //
+    // preventDefault しない。止めれば長押しからの範囲選択も一緒に殺す。
+    const scroll = newTouchScroll(view, () => measuredCellHeight(container, view.rows));
+    // 指は 1 本のときだけ見る。2 本目は拡大か、この画面の外の操作である。
+    const single = (event: TouchEvent): Touch | null =>
+      event.touches.length === 1 ? (event.touches[0] ?? null) : null;
+    const touchStart = (event: TouchEvent) => {
+      const finger = single(event);
+      if (finger !== null) scroll.start(finger.clientY);
+    };
+    const touchMove = (event: TouchEvent) => {
+      const finger = single(event);
+      if (finger !== null) scroll.move(finger.clientY);
+    };
+    container.addEventListener("touchstart", touchStart, { passive: true });
+    container.addEventListener("touchmove", touchMove, { passive: true });
+
     // 打鍵の配線はここで一度だけ行う。繋ぎ直すたびに足すと、1 回の打鍵が
     // 繋ぎ直した回数だけ PTY へ届く。
     //
@@ -269,6 +289,8 @@ export function TerminalView({
       live = false;
       clearInterval(timer);
       observer.disconnect();
+      container.removeEventListener("touchstart", touchStart);
+      container.removeEventListener("touchmove", touchMove);
       detachClipboard();
       stream?.close();
       view.dispose();
