@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sshc/internal/platform/windowsacl/acltest"
 )
 
 func TestTUIFiltersAcrossAliasUserAndHostname(t *testing.T) {
@@ -134,7 +136,7 @@ func TestTUILoadsConcreteHostsAndPutsFavouritesFirst(t *testing.T) {
 	}
 	metadata := `{"schemaVersion":2,"terminal":"terminal","hosts":[` +
 		`{"identity":{"path":"config","alias":"bastion"},"favourite":true,"tags":["eu"]}]}`
-	writePrivateStateFile(t, filepath.Join(ssh, "sshc"), "metadata.json", []byte(metadata))
+	acltest.WritePrivateFile(t, filepath.Join(ssh, "sshc", "metadata.json"), []byte(metadata))
 	hosts, err := loadTUIHosts(home)
 	if err != nil {
 		t.Fatal(err)
