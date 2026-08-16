@@ -3,12 +3,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +30,10 @@ func TestWindowsCtrlBreakEndsWithTheInterruptCode(t *testing.T) {
 		// 版はまさにそれで、実 Windows がそう教えてくれた。
 		ctx, stop := notifySignals(context.Background())
 		defer stop()
+		// **登録し終えたことを先に告げる。** 親がそれを待たずに送ると、まだ
+		// 登録の前に届いた合図は既定の動作で処理され、終了コードは 130 では
+		// なく NT の状態値になる。
+		fmt.Println("ready")
 		<-ctx.Done()
 		os.Exit(exitForCause(context.Cause(ctx), slog.New(slog.NewTextHandler(io.Discard, nil))))
 	}
@@ -37,10 +44,28 @@ func TestWindowsCtrlBreakEndsWithTheInterruptCode(t *testing.T) {
 	helper := exec.Command(executable, "-test.run=TestWindowsCtrlBreakEndsWithTheInterruptCode")
 	helper.Env = append(os.Environ(), signalHelperEnvironment+"=1")
 	helper.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
+	output, err := helper.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := helper.Start(); err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = helper.Process.Kill() }()
+
+	ready := make(chan string, 1)
+	go func() {
+		line, _ := bufio.NewReader(output).ReadString('\n')
+		ready <- strings.TrimSpace(line)
+	}()
+	select {
+	case line := <-ready:
+		if line != "ready" {
+			t.Fatalf("the helper announced %q, want ready", line)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the helper never finished registering for signals")
+	}
 
 	// プロセスグループへ Ctrl-Break を送る。**Ctrl-C はグループを指定できない。**
 	deadline := time.Now().Add(10 * time.Second)
