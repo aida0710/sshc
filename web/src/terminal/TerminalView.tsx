@@ -9,6 +9,7 @@ import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { clipboard } from "../ui/clipboard";
 import { bufferText } from "./buffer";
+import { attachImeKeys } from "./imeKeys";
 import { SelectSheet } from "./SelectSheet";
 import { nativeSelectionClass, prefersNativeSelection } from "./nativeSelection";
 import { measuredCellHeight, newTouchScroll } from "./touchScroll";
@@ -184,6 +185,14 @@ export function TerminalView({
     // 印を付ける。何を戻すかは index.css が持っている。
     if (coarse) container.classList.add(nativeSelectionClass);
 
+    // 指で触る画面では、IME の keydown を xterm に見せない。**あれを見た
+    // xterm は、消していない textarea の前後を setTimeout(0) で比べる** ——
+    // 次の打鍵がそれより先に来ると、打った文字が接尾辞ごと重複して届く。
+    // マウスのある画面では起きないので、そちらは触らない。
+    const releaseImeKeys = coarse
+      ? attachImeKeys({ container, textarea: view.textarea ?? container })
+      : () => {};
+
     // 打鍵の配線はここで一度だけ行う。繋ぎ直すたびに足すと、1 回の打鍵が
     // 繋ぎ直した回数だけ PTY へ届く。
     //
@@ -305,6 +314,7 @@ export function TerminalView({
       container.removeEventListener("touchstart", touchStart);
       container.removeEventListener("touchmove", touchMove);
       container.classList.remove(nativeSelectionClass);
+      releaseImeKeys();
       detachClipboard();
       stream?.close();
       view.dispose();
