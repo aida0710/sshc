@@ -3,6 +3,7 @@
 package terminal
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -21,9 +22,14 @@ type UnixStarter struct{}
 
 func NewStarter() Starter { return UnixStarter{} }
 
-func (UnixStarter) Start(command Command, size Size) (Process, error) {
+func (UnixStarter) Start(ctx context.Context, command Command, size Size) (Process, error) {
 	if command.Path == "" {
 		return nil, errors.New("terminal: the program path is empty")
+	}
+	// 確保が取り消されたなら、起こさない。ここで起こしてしまえば、誰も
+	// 引き取らない子プロセスが残る。
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	child := exec.Command(command.Path, command.Arguments...)
 	if command.Argv0 != "" {
@@ -69,6 +75,24 @@ func (p *unixProcess) Hangup() error {
 		return err
 	}
 	return nil
+}
+
+// ForceClose は、子のプロセスグループへ SIGKILL を送り、PTY を手放す。
+//
+// SIGHUP と SIGTERM を無視する子が居る。**無視できない合図がひとつ要る。**
+// PTY も閉じるのは、それが pump の読み取りを終わらせ、セッションの done を
+// 閉じさせる唯一の手だからである。
+func (p *unixProcess) ForceClose() error {
+	var killErr error
+	if p.child.Process != nil {
+		if err := syscall.Kill(-p.child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			killErr = err
+		}
+	}
+	if err := p.file.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+		return errors.Join(killErr, err)
+	}
+	return killErr
 }
 
 func (p *unixProcess) Wait() ExitInfo {

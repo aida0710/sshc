@@ -12,6 +12,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -87,19 +88,144 @@ type Server struct {
 	http     *http.Server
 	url      string
 	engine   *echo.Echo
-	// terminals は、このプロセスが終わるときに畳むべき PTY を持つ。
-	terminals *terminal.Registry
+
+	// baseCancel は、http.Server.BaseContext が配ったリクエスト用 context を
+	// 一斉に取り消す。停止を始めた合図が、ハンドラと WebSocket の内側まで届く
+	// 唯一の道である。
+	baseCancel context.CancelFunc
+
+	// 停止の状態はひとつの錠と合図にまとめてある。要求ごとの入場と退場も同じ
+	// 錠を通る——**入場の可否と数え上げが別々に動くと、数えられないまま通った
+	// 変更が生まれる。** これは loopback の単一利用者向けなので、その通り道の
+	// 競合は問題にならない。
+	mutex    sync.Mutex
+	waiters  *sync.Cond
+	stopping bool
+	inFlight int
+
+	begun       bool
+	forced      bool
+	outstanding int
+	joined      []error
+	waiting     bool
+	waited      bool
+	waitErr     error
 }
 
-// CloseTerminals は、生きているすべての端末セッションへ SIGHUP を送る。
-//
-// PTY はこの常駐プロセスの中で存続するので、終わらせるのはここである。
-// 待たない——応答しないリモートに向いた ssh のために終了が引き延ばされては
-// ならない。
-func (s *Server) CloseTerminals() {
-	if s.terminals != nil {
-		s.terminals.Shutdown()
+func (s *Server) condition() *sync.Cond {
+	if s.waiters == nil {
+		s.waiters = sync.NewCond(&s.mutex)
 	}
+	return s.waiters
+}
+
+// BeginStopping は、新しい変更と Upgrade を断り始め、配ったリクエスト用
+// context を取り消す。**冪等である。**
+//
+// 読み取りは断らない。停止の途中でも状態は見られるべきであり、止まるのは
+// 状態を変えるものだけである。
+func (s *Server) BeginStopping() {
+	s.mutex.Lock()
+	if s.stopping {
+		s.mutex.Unlock()
+		return
+	}
+	s.stopping = true
+	s.condition().Broadcast()
+	cancel := s.baseCancel
+	s.mutex.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// BeginShutdown は graceful な停止を頼み、送り出したところで返る。
+// **待たない。** 待つのは Wait だけである。
+func (s *Server) BeginShutdown() {
+	s.mutex.Lock()
+	if s.begun {
+		s.mutex.Unlock()
+		return
+	}
+	s.begun = true
+	s.outstanding++
+	s.mutex.Unlock()
+	go s.record(func() error { return s.http.Shutdown(context.Background()) })
+}
+
+// ForceClose は listener と生きている接続を断つ。**これも待たない。**
+//
+// graceful が返らないことこそが、これが呼ばれる理由である。まだ blocking して
+// いる Shutdown の後ろに並べば、締切は何も起こさないのと同じになる。
+func (s *Server) ForceClose() {
+	s.mutex.Lock()
+	if s.forced {
+		s.mutex.Unlock()
+		return
+	}
+	s.forced = true
+	s.outstanding++
+	s.mutex.Unlock()
+	go s.record(s.http.Close)
+}
+
+func (s *Server) record(call func() error) {
+	err := call()
+	s.mutex.Lock()
+	if err != nil {
+		s.joined = append(s.joined, err)
+	}
+	s.outstanding--
+	s.condition().Broadcast()
+	s.mutex.Unlock()
+}
+
+// Wait は、唯一の合流点である。
+//
+// 送り出した graceful/force と、停止より前に入場した変更・Upgrade の退場を
+// 待つ。**強制的に接続を閉じたあとも待つ。** これは二度目の猶予ではなく、
+// engine lock を手放すことが状態変更と重ならないための壁である。取り消しを
+// 無視するハンドラは、2 台目のエンジンを許すよりロックを握らせておく。
+func (s *Server) Wait() error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.waited {
+		return s.waitErr
+	}
+	if s.waiting {
+		for !s.waited {
+			s.condition().Wait()
+		}
+		return s.waitErr
+	}
+	s.waiting = true
+	// ForceClose は Wait の後から仕事を足す。一度ゼロを見たら終わり、では
+	// 締切とちょうど同時に最後の要求が退場したときに壁が消える。
+	for s.outstanding > 0 || s.inFlight > 0 {
+		s.condition().Wait()
+	}
+	s.waitErr = errors.Join(s.joined...)
+	s.waited = true
+	s.condition().Broadcast()
+	return s.waitErr
+}
+
+// admit は、状態を変える要求ひとつを数えるか、断るかを原子的に決める。
+func (s *Server) admit() bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.stopping {
+		return false
+	}
+	s.inFlight++
+	return true
+}
+
+func (s *Server) release() {
+	s.mutex.Lock()
+	s.inFlight--
+	s.condition().Broadcast()
+	s.mutex.Unlock()
 }
 
 // Route はこの server が登録したルートの 1 つである。
@@ -145,6 +271,16 @@ func New(options Options) (*Server, error) {
 		// したがって施錠されたままであり、これは配線し忘れにとって安全な方向である。
 		Unlocked: func() bool { return options.Passwords != nil && options.Passwords.Unlocked() },
 	}).Middleware)
+
+	server := &Server{listener: options.Listener, engine: e}
+	// **入場の門は Security の後、ルートハンドラの前に置く。**
+	//
+	// 無効な Host や、`/api/` の fetch/origin/session/CSRF に反する要求は、
+	// 停止中かどうかに関わらず今までどおり弾かれ、数にも入らない。逆に、
+	// ルート側で見ている非 API の資格情報より門の方が先なので、停止が始まった
+	// あとは資格情報を確かめる前に 503 が返る。この順序は意図であり、テストで
+	// 固定する。
+	e.Use(server.stoppingGate)
 
 	handlers := Handlers{Sessions: options.Sessions, Version: options.Version}
 	e.POST("/api/v1/session/bootstrap", handlers.Bootstrap)
@@ -274,16 +410,50 @@ func New(options Options) (*Server, error) {
 	e.GET("/*", static)
 	e.HEAD("/*", static)
 
-	return &Server{
-		listener:  options.Listener,
-		terminals: options.Terminals,
-		http: &http.Server{
-			Handler:           e,
-			ReadHeaderTimeout: 5 * time.Second,
-		},
-		url:    "http://" + host,
-		engine: e,
-	}, nil
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	server.baseCancel = baseCancel
+	server.url = "http://" + host
+	server.http = &http.Server{
+		Handler:           e,
+		ReadHeaderTimeout: 5 * time.Second,
+		// 配ったリクエスト用 context は BeginStopping が一斉に取り消す。
+		// これが無いと、停止の合図はハンドラの内側にも WebSocket にも届かない。
+		BaseContext: func(net.Listener) context.Context { return baseCtx },
+	}
+	return server, nil
+}
+
+// stoppingGate は、状態を変える要求と Upgrade を、原子的に入場させるか断る。
+//
+// **ルートの一覧は持たない。** GET と HEAD 以外のすべてと、実際の Upgrade を
+// 対象にする。今日の WebSocket は /terminal/stream だが、明日足されるものも
+// 誰も何も覚えていなくてもこの規則を継ぐ。
+func (s *Server) stoppingGate(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		request := c.Request()
+		if request.Method == http.MethodGet && !isUpgrade(request) {
+			return next(c)
+		}
+		if request.Method == http.MethodHead {
+			return next(c)
+		}
+		if !s.admit() {
+			return problem(c, http.StatusServiceUnavailable, "server_stopping")
+		}
+		defer s.release()
+		return next(c)
+	}
+}
+
+func isUpgrade(request *http.Request) bool {
+	for _, value := range request.Header.Values("Connection") {
+		for _, token := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(token), "upgrade") {
+				return request.Header.Get("Upgrade") != ""
+			}
+		}
+	}
+	return false
 }
 
 func spaHandler(assets fs.FS) http.Handler {
@@ -352,23 +522,13 @@ func (s *Server) URL() string {
 	return s.url
 }
 
-func (s *Server) Serve(ctx context.Context) error {
-	serveDone := make(chan error, 1)
-	go func() {
-		serveDone <- s.http.Serve(s.listener)
-	}()
-
-	select {
-	case err := <-serveDone:
-		return serveResult(err)
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := s.http.Shutdown(shutdownCtx); err != nil {
-			return err
-		}
-		return serveResult(<-serveDone)
-	}
+// Serve は listener が止まるまで返らない。
+//
+// **呼び出し側の context を見ない。** 停止を始めてよいのはアプリケーションの
+// ライフサイクルだけであり、server が自分で判断すると、承認された順序
+// ——入場停止、handoff 削除、二つの graceful 要求——を内側から追い越せてしまう。
+func (s *Server) Serve() error {
+	return serveResult(s.http.Serve(s.listener))
 }
 
 func serveResult(err error) error {

@@ -103,7 +103,7 @@ type scriptedStarter struct {
 	commands  []terminal.Command
 }
 
-func (s *scriptedStarter) Start(command terminal.Command, _ terminal.Size) (terminal.Process, error) {
+func (s *scriptedStarter) Start(_ context.Context, command terminal.Command, _ terminal.Size) (terminal.Process, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	process := newScriptedPTY()
@@ -184,7 +184,8 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
 	fixture.server = server
 	t.Cleanup(func() {
 		fixture.server.Close()
-		registry.Shutdown()
+		registry.BeginShutdown()
+		_ = registry.Wait()
 	})
 	return fixture
 }
