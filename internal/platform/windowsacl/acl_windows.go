@@ -233,7 +233,9 @@ func restrictHandle(file *os.File, directory bool) error {
 	if err != nil {
 		return err
 	}
-	if owner == nil || !owner.Equals(userSID) {
+	if mine, err := ownedByThisToken(owner); err != nil {
+		return err
+	} else if !mine {
 		return ErrUnexpectedOwner
 	}
 
@@ -350,7 +352,9 @@ func authenticateHandle(handle windows.Handle, directory bool, userSID *windows.
 	if err != nil {
 		return err
 	}
-	if owner == nil || !owner.Equals(userSID) {
+	if mine, err := ownedByThisToken(owner); err != nil {
+		return err
+	} else if !mine {
 		return ErrUnexpectedOwner
 	}
 	restricted, err := isDescriptorRestricted(descriptor, userSID)
@@ -565,7 +569,9 @@ func isDescriptorRestricted(descriptor *windows.SECURITY_DESCRIPTOR, userSID *wi
 	if err != nil {
 		return false, err
 	}
-	if owner == nil || !owner.Equals(userSID) {
+	if mine, err := ownedByThisToken(owner); err != nil {
+		return false, err
+	} else if !mine {
 		return false, nil
 	}
 	control, _, err := descriptor.Control()
@@ -645,17 +651,81 @@ func privateSecurityDescriptor(userSID *windows.SID) (*windows.SECURITY_DESCRIPT
 	return windows.SecurityDescriptorFromString("O:" + userSIDText + "D:P(A;;FA;;;" + userSIDText + ")(A;;FA;;;SY)(A;;FA;;;BA)")
 }
 
+// currentUserSID は、この token の**所有者**を返す。
+//
+// **利用者の SID とは限らない。** 昇格した token では、そこから作られた
+// オブジェクトの所有者は既定で Administrators になる。GetTokenOwner が返すのは
+// まさに Windows がこの token の作ったものへ刻む SID であり、それこそが
+// 「自分のもの」の定義である。
+//
+// ここを GetTokenUser で見ていた頃は、管理者として使っている人の ~/.ssh も、
+// このアプリケーション自身が作ったディレクトリも、すべて他人のものとして
+// 拒まれていた——実 Windows でしか出ない失敗である。
 func currentUserSID() (*windows.SID, error) {
 	token, err := windows.OpenCurrentProcessToken()
 	if err != nil {
 		return nil, err
 	}
 	defer token.Close()
-	user, err := token.GetTokenUser()
-	if err != nil {
+	return tokenOwnerSID(token)
+}
+
+// tokenOwnerInformation は TOKEN_OWNER である。SID へのポインタ一本しか無い。
+type tokenOwnerInformation struct {
+	Owner *windows.SID
+}
+
+// tokenOwnerSID は、TOKEN_OWNER を読む。
+//
+// x/sys はこの class の getter を公開していないので、GetTokenInformation を
+// 直接使う。返る構造体は SID への一本のポインタである。
+func tokenOwnerSID(token windows.Token) (*windows.SID, error) {
+	var size uint32
+	err := windows.GetTokenInformation(token, windows.TokenOwner, nil, 0, &size)
+	if err != nil && !errors.Is(err, windows.ERROR_INSUFFICIENT_BUFFER) {
 		return nil, err
 	}
-	sid, err := user.User.Sid.Copy()
-	runtime.KeepAlive(user)
+	if size == 0 {
+		return nil, windows.ERROR_INVALID_SID
+	}
+	buffer := make([]byte, size)
+	if err := windows.GetTokenInformation(token, windows.TokenOwner, &buffer[0], size, &size); err != nil {
+		return nil, err
+	}
+	owner := (*tokenOwnerInformation)(unsafe.Pointer(&buffer[0])).Owner
+	if owner == nil {
+		return nil, windows.ERROR_INVALID_SID
+	}
+	sid, err := owner.Copy()
+	runtime.KeepAlive(buffer)
 	return sid, err
+}
+
+// ownedByThisToken は、その所有者が「自分のもの」と言えるかを判断する。
+//
+// この token の所有者そのものか、その利用者本人であればよい。昇格していない
+// ときに自分で作ったものと、昇格して作ったものは、どちらも同じ人のものである。
+func ownedByThisToken(owner *windows.SID) (bool, error) {
+	if owner == nil {
+		return false, nil
+	}
+	token, err := windows.OpenCurrentProcessToken()
+	if err != nil {
+		return false, err
+	}
+	defer token.Close()
+	tokenOwner, err := tokenOwnerSID(token)
+	if err != nil {
+		return false, err
+	}
+	if owner.Equals(tokenOwner) {
+		return true, nil
+	}
+	user, err := token.GetTokenUser()
+	if err != nil {
+		return false, err
+	}
+	matched := owner.Equals(user.User.Sid)
+	runtime.KeepAlive(user)
+	return matched, nil
 }

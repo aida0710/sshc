@@ -5,6 +5,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"testing"
@@ -20,7 +22,13 @@ const signalHelperEnvironment = "SSHC_SIGNAL_HELPER"
 // ——`syscall.SIGBREAK` を書こうとした版は、そもそもコンパイルが通らなかった。
 func TestWindowsCtrlBreakEndsWithTheInterruptCode(t *testing.T) {
 	if os.Getenv(signalHelperEnvironment) != "" {
-		return
+		// **子は本物の登録をしてから待つ。** 登録しないまま待てば既定の動作で
+		// 殺され、終了コードは 130 ではなく NT の状態値になる——最初に書いた
+		// 版はまさにそれで、実 Windows がそう教えてくれた。
+		ctx, stop := notifySignals(context.Background())
+		defer stop()
+		<-ctx.Done()
+		os.Exit(exitForCause(context.Cause(ctx), slog.New(slog.NewTextHandler(io.Discard, nil))))
 	}
 	executable, err := os.Executable()
 	if err != nil {
