@@ -24,6 +24,11 @@ type terminalProcess struct {
 	terminal *os.File
 	output   *lockedBuffer
 	exited   chan error
+	// drained は、端末から読み切ったことを表す。**command.Wait() は待ってくれ
+	// ない。** あちらが待つのは子だけで、こちらが端末から写している goroutine は
+	// 別に走っている。子が終わった瞬間に output を読むと、速く終わった子ほど
+	// 空に見える——落ちるのは、正しく動いているものの方である。
+	drained chan struct{}
 }
 
 func startOnTerminal(t *testing.T, home string, args ...string) *terminalProcess {
@@ -45,8 +50,10 @@ func startOnTerminal(t *testing.T, home string, args ...string) *terminalProcess
 		terminal: terminal,
 		output:   &lockedBuffer{},
 		exited:   make(chan error, 1),
+		drained:  make(chan struct{}),
 	}
 	go func() {
+		defer close(process.drained)
 		// 端末が閉じると Read は EIO で終わる。読み続けるのは、書いた側が
 		// 埋まって止まらないためでもある。
 		_, _ = io.Copy(process.output, terminal)
@@ -85,6 +92,7 @@ func (process *terminalProcess) wait(t *testing.T, within time.Duration) int {
 	t.Helper()
 	select {
 	case err := <-process.exited:
+		process.waitForOutput()
 		if err == nil {
 			return 0
 		}
@@ -96,6 +104,15 @@ func (process *terminalProcess) wait(t *testing.T, within time.Duration) int {
 	case <-time.After(within):
 		t.Fatalf("still running after %s; saw:\n%s", within, process.output.String())
 		return -1
+	}
+}
+
+// waitForOutput は、端末から読み切るのを短く待つ。読み切れなくても進む
+// ——そこで落とすと、確かめたいものではなく後片付けを検査することになる。
+func (process *terminalProcess) waitForOutput() {
+	select {
+	case <-process.drained:
+	case <-time.After(2 * time.Second):
 	}
 }
 
