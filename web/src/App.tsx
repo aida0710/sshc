@@ -920,9 +920,14 @@ function TerminalScreen({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <Suspense fallback={null}>
+        {/*
+          exactOptionalPropertyTypes の下では、undefined を渡すことと渡さない
+          ことは別である。設定されていないなら渡さない——受け側の既定に任せる。
+        */}
         <TerminalView
           key={session.id}
           session={session}
+          {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })}
           copyOnSelect={settings.copyOnSelect ?? true}
           rightClickPaste={settings.rightClickPaste ?? true}
           onExit={() => consoles.markExited(session.id)}
