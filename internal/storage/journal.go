@@ -68,26 +68,20 @@ func (m *Manager) Pending() ([]Pending, error) {
 	}
 	pending := make([]Pending, 0, len(records))
 	for _, record := range records {
-		changed, reconcileErr := m.reconcileRecord(&record)
+		_, reconcileErr := m.reconcileRecord(&record)
 		// 判別できないのは、その記録ひとつである。一覧そのものを失敗させると、
 		// 無関係な記録も、履歴も、そしてこの記録を片付ける手段までもが同時に
 		// 見えなくなる — 呼び出し側はこの一覧で設定画面全体を組み立てている。
 		// 判別できない記録は、どちらの操作も提示しないまま並べる。Complete と
 		// Rollback は、その記録に対しては引き続き同じ理由で拒否する。
 		unresolved := errors.Is(reconcileErr, ErrRecoveryStateUnknown)
-		switch {
-		case unresolved:
-		case reconcileErr != nil:
+		if reconcileErr != nil && !unresolved {
 			return nil, reconcileErr
-		case changed:
-			journalPath := filepath.Join(m.journalDirectory(), record.ID+".json")
-			if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
-				return nil, err
-			}
-			if err := m.writeRecord(journalPath, record); err != nil {
-				return nil, err
-			}
 		}
+		// **一覧は何も書き換えない。** ここは呼び出し側が変更用の錠を持たずに
+		// 呼ぶ経路であり、走っている最中のトランザクションの記録もそのまま読む。
+		// 数え直した結果は報告に使うだけで、永続化するのは Complete と Rollback が
+		// 通る loadPending だけである。
 		item := Pending{
 			ID:          record.ID,
 			Operation:   record.Operation,
@@ -108,7 +102,7 @@ func (m *Manager) Pending() ([]Pending, error) {
 			switch {
 			case pendingEntry.Committed && pendingEntry.Action == actionRemove && entry.NoBackup:
 				item.CanRollback = false
-			case pendingEntry.Committed && pendingEntry.Action == actionWrite && entry.HadPrevious && entry.NoBackup:
+			case pendingEntry.Committed && pendingEntry.Action == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.noOpWrite():
 				item.CanRollback = false
 			case !pendingEntry.Committed && pendingEntry.Action == actionWrite:
 				pendingEntry.HasStaged = m.stagedMatches(entry)
@@ -178,7 +172,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 		if entry.action() == actionRemove && entry.NoBackup {
 			return ErrIrreversibleRemoval
 		}
-		if entry.action() == actionWrite && entry.HadPrevious && entry.NoBackup {
+		if entry.action() == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.noOpWrite() {
 			return ErrIrreversibleChange
 		}
 	}
@@ -237,6 +231,10 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 			continue
 		}
 		if entry.HadPrevious {
+			if entry.noOpWrite() && entry.Backup == "" {
+				// 変わっていないものを、作られなかった控えから戻す必要はない。
+				continue
+			}
 			contents, readErr := m.ReadBackup(entry.Backup)
 			if readErr != nil {
 				return readErr
@@ -253,14 +251,6 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 			return err
 		}
 		if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
-			return err
-		}
-	}
-	for _, entry := range record.Entries {
-		if entry.Temp == "" {
-			continue
-		}
-		if err := fileSystem.Remove(entry.Temp); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 	}
@@ -369,23 +359,11 @@ func (m *Manager) reconcileRecord(record *journalRecord) (bool, error) {
 	// 書き込みが「未コミットなのにステージが無い」形になり、完了させられなくなる。
 	committed := highest
 
+	// 数え直すのは進捗だけである。ステージ済みファイルを手放すのは finish の
+	// 仕事にしてある。ここで消すと、変更用の錠を持たない一覧の呼び出しが、
+	// 走っている最中のトランザクションの一時ファイルを消せてしまう。
 	changed := record.Committed != committed
 	record.Committed = committed
-	for index := 0; index < committed; index++ {
-		entry := &record.Entries[index]
-		if entry.action() != actionWrite || entry.Temp == "" {
-			continue
-		}
-		// 適用済みと数えたエントリの一時ファイルは、rename が使い切っているはず
-		// である。証拠を持たない書き込みを内側に数えたときだけ実体が残るので、
-		// 記録から名前を落とす前に消す。名前だけ落とせば、もう誰も片付けない
-		// 断片が ~/.ssh に残る。
-		if err := m.workspace.FileSystem().Remove(entry.Temp); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return false, err
-		}
-		entry.Temp = ""
-		changed = true
-	}
 	return changed, nil
 }
 
@@ -687,9 +665,11 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 		// エントリは何も引き起こさない — Complete は使う直前にステージ済みファイルを
 		// すべて検証して拒否し、Pending は完了不可として報告する — ので、読み手は
 		// 復旧そのものを立ち往生させる代わりにこれを受理する。
-		if pending && record.Status == statusStaged && index < record.Committed && entry.Temp != "" && !record.Atomic {
-			return invalidJournal("committed write retains a staged path")
-		}
+		// コミット済みの書き込みがステージ済みファイルの名前を残していることも
+		// ありうる。rename が使い切ったのに進捗の書き換えが失敗した記録も、
+		// 内容の変わらない書き込みを適用済み側に数えた記録も、この形になる。
+		// これも何も引き起こさない — Complete はその添字より先からしか進まず、
+		// finish が記録を履歴にする前に名前も実体も手放す。
 		if record.Status == statusCompleted && entry.Temp != "" {
 			return invalidJournal("completed write retains a staged path")
 		}
