@@ -651,23 +651,25 @@ func privateSecurityDescriptor(userSID *windows.SID) (*windows.SECURITY_DESCRIPT
 	return windows.SecurityDescriptorFromString("O:" + userSIDText + "D:P(A;;FA;;;" + userSIDText + ")(A;;FA;;;SY)(A;;FA;;;BA)")
 }
 
-// currentUserSID は、この token の**所有者**を返す。
+// currentUserSID は、この利用者本人の SID を返す。
 //
-// **利用者の SID とは限らない。** 昇格した token では、そこから作られた
-// オブジェクトの所有者は既定で Administrators になる。GetTokenOwner が返すのは
-// まさに Windows がこの token の作ったものへ刻む SID であり、それこそが
-// 「自分のもの」の定義である。
-//
-// ここを GetTokenUser で見ていた頃は、管理者として使っている人の ~/.ssh も、
-// このアプリケーション自身が作ったディレクトリも、すべて他人のものとして
-// 拒まれていた——実 Windows でしか出ない失敗である。
+// **DACL が名指すのはこの人である。** 所有者が誰であるかとは別の問いであり、
+// そちらは ownedByThisToken が答える。ここを所有者に変えると、昇格した環境では
+// DACL が Administrators を二度名指す形になり、期待する DACL と実際の DACL が
+// 一致しなくなる。
 func currentUserSID() (*windows.SID, error) {
 	token, err := windows.OpenCurrentProcessToken()
 	if err != nil {
 		return nil, err
 	}
 	defer token.Close()
-	return tokenOwnerSID(token)
+	user, err := token.GetTokenUser()
+	if err != nil {
+		return nil, err
+	}
+	sid, err := user.User.Sid.Copy()
+	runtime.KeepAlive(user)
+	return sid, err
 }
 
 // tokenOwnerInformation は TOKEN_OWNER である。SID へのポインタ一本しか無い。
