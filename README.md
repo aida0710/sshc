@@ -1,12 +1,11 @@
 # sshc
 
-`sshc` は macOS と Linux 上で動く、OpenSSH クライアント管理 UI の基盤です。現在の foundation は、React UI を埋め込んだ単一の Go バイナリ、localhost セッション、CSRF 防御、厳格な Host/Origin 検査までを提供します。
+`sshc` は macOS、Linux、Windows、Android の上で動く、OpenSSH クライアント管理 UI の基盤です。現在の foundation は、React UI を埋め込んだ単一の Go バイナリ、localhost セッション、CSRF 防御、厳格な Host/Origin 検査までを提供します。
 
 ## 前提環境と固定バージョン
 
-- macOS arm64 / amd64、Linux amd64 / arm64
+- macOS arm64 / amd64、Linux amd64 / arm64、Windows arm64 / amd64
 - Android arm64 / amd64（minSdk 26）。engine は AAR として APK に同梱され、アプリと同一プロセスで動きます。**CLI は入りません。**
-- Windows は対応対象外です。デスクトップ配布物、起動方法、単一エンジン保証を提供しません。
 - Go 1.26.6（`go.mod` の toolchain で固定）
 - Node.js 22.19.0
 - npm 11.7.0
@@ -238,7 +237,7 @@ ESLint は導入していません。TypeScript の型検査（`tsc -b` と e2e 
 - **このアプリが自分以外のホストへ通信するのは、更新確認のここだけです。** `https://api.github.com/repos/aida0710/sshc/releases/latest` へ 1 回 GET します。要求はサーバー側から出すので、ページの `connect-src` は `'self'` のままで、「他のオリジンへ一切リクエストを出さない」という e2e も成立し続けます。自動では走らず、画面を開いたときだけです。
 - **このアプリは自分自身を置き換えません。** 左下は「新しいバージョンがあります」とリリースページへのリンクを出すだけで、ダウンロードも書き換えもしません。判断も操作も人がやります。
 - 自己更新は一度入れて、外しました。ネットワークから取ったバイトで自分を置き換える以上、署名で守る必要がありますが、**その鍵はリリース workflow が読める場所に置く必要があり、それはリポジトリを支配できる相手が読める場所**です。守る側と攻める側が同じ鍵を使うことになり、リポジトリ奪取という現実的な脅威に対しては何も足していませんでした。**複雑さと失敗モード（鍵の交換順を誤ると全インストールが静かに更新不能になる）だけが残る**ので、機能ごと落としました。
-- **リリースは 4 つのバイナリを出します**（`sshc-darwin-arm64`、`sshc-darwin-amd64`、`sshc-linux-amd64`、`sshc-linux-arm64`）。このプロジェクトは cgo を 1 行も使っていないので、1 台の macOS ランナーから全部作れます。ただし **darwin だけは `CGO_ENABLED=1` のままにします** — 設定エンジンは `%u` と `%i` を展開するために `os/user.Current()` を読み、cgo 無しの Go は代わりに `/etc/passwd` を読むので、macOS の通常のアカウントでは実行時にそのトークンだけが黙って非対応になるためです。Linux は `/etc/passwd` が本物なので `0` で構いません。Windows のバイナリ・アプリは提供しません。**Android の APK もまだリリースに載せません** — 署名と配布はこれからです。`make android-bind` と `android/gradlew assembleDebug` で手元から作れます。
+- **リリースは 4 つのバイナリを出します**（`sshc-darwin-arm64`、`sshc-darwin-amd64`、`sshc-linux-amd64`、`sshc-linux-arm64`）。このプロジェクトは cgo を 1 行も使っていないので、1 台の macOS ランナーから全部作れます。ただし **darwin だけは `CGO_ENABLED=1` のままにします** — 設定エンジンは `%u` と `%i` を展開するために `os/user.Current()` を読み、cgo 無しの Go は代わりに `/etc/passwd` を読むので、macOS の通常のアカウントでは実行時にそのトークンだけが黙って非対応になるためです。Linux は `/etc/passwd` が本物なので `0` で構いません。**Windows と Android はコードとしては対応していますが、リリース成果物にはまだ載せません** — 署名と配布がこれからだからです。Windows は `make desktop-bundle-windows`、Android は `make android-bind` と `android/gradlew assembleDebug` で手元から作れます。
 - リリースには `checksums.txt` を併置します。これは**手でダウンロードした人が転送の破損を確認するため**のもので、バイナリと同じ場所から来るので、その場所が正直かどうかについては何も言いません。**このアプリが取ってくるものは何もないので、検証すべきバイトもありません。**
 - ソースから使っている場合の更新は `make update`（`git pull --ff-only` + `make install`）です。
 
