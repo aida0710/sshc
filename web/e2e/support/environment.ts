@@ -48,30 +48,43 @@ export type Installation = {
 async function buildHome(): Promise<string> {
   const home = await mkdtemp(join(tmpdir(), "sshc-e2e-"));
   if (!home.startsWith(tmpdir())) {
-    throw new Error("the end-to-end home is not inside the temporary directory");
+    throw new Error(
+      "the end-to-end home is not inside the temporary directory",
+    );
   }
   const root = join(home, ".ssh");
   await mkdir(join(root, "conf.d"), { recursive: true, mode: 0o700 });
   await writeFile(join(root, "config"), entryConfig, { mode: 0o600 });
-  await writeFile(join(root, "conf.d", "10-home.conf"), includedConfig, { mode: 0o600 });
+  await writeFile(join(root, "conf.d", "10-home.conf"), includedConfig, {
+    mode: 0o600,
+  });
   await writeFile(join(root, "known_hosts"), knownHosts, { mode: 0o600 });
   return home;
 }
 
-function startBinary(home: string): Promise<{ child: ChildProcess; url: string }> {
+function startBinary(
+  home: string,
+): Promise<{ child: ChildProcess; url: string }> {
   return new Promise((resolvePromise, rejectPromise) => {
     // HOME は使い捨てのディレクトリであり、PATH が継承される
     // のは子プロセスが報告対象になりうる OpenSSH のプログラムを
     // 見つけるためだけだ。このスイートのどの spec も、それを起動するルートを引き起こさない。
-    // 既定で入口を書き出す。**ブラウザはもう開かない**ので、フラグは要らない
-    // ——`-open=false` は「何も言わない」を意味するようになった。
+    // **このスイートは Electron の役をする。** 裸の `sshc` はデスクトップを
+    // 起こす公開の入口なので、画面の無いランナーでは起動できない。入口の URL を
+    // 受け取れるのは engine owner だけであり、その資格は stdin に開いたままの
+    // 寿命チャンネルである——閉じればエンジンは自分で終わる。
+    //
     // npm_config_prefix は、この常駐プロセスが npm run から起こされた状況で
     // ある。開発中は普通にそうなり、npm は自分の設定を環境に詰めて渡す。
     // 開いた端末がそれを継がないことを terminal.spec が見るので、その状況を
     // ここで作っておく。
-    const child = spawn(binaryPath, [], {
-      env: { HOME: home, PATH: process.env.PATH ?? "", npm_config_prefix: "/somewhere/desktop" },
-      stdio: ["ignore", "pipe", "pipe"],
+    const child = spawn(binaryPath, ["engine"], {
+      env: {
+        HOME: home,
+        PATH: process.env.PATH ?? "",
+        npm_config_prefix: "/somewhere/desktop",
+      },
+      stdio: ["pipe", "pipe", "pipe"],
     });
     let buffered = "";
     const timer = setTimeout(
@@ -87,7 +100,9 @@ function startBinary(home: string): Promise<{ child: ChildProcess; url: string }
     });
     child.on("exit", (code) => {
       clearTimeout(timer);
-      rejectPromise(new Error(`sshc exited with ${String(code)} before printing a URL`));
+      rejectPromise(
+        new Error(`sshc exited with ${String(code)} before printing a URL`),
+      );
     });
   });
 }
@@ -109,13 +124,24 @@ export const test = base.extend<{ installation: Installation }>({
       },
     };
     await use(installation);
-    child.kill("SIGTERM");
-    await new Promise((done) => child.on("exit", done));
+    // **持ち主が手を離すのが、終わり方である。** stdin を閉じるとエンジンは
+    // 自分で片付けて終わる。応答しないときのために期限を置くが、そこへ落ちる
+    // ことは通常経路ではない。
+    const exited = new Promise((done) => child.on("exit", done));
+    child.stdin?.end();
+    const overdue = setTimeout(() => child.kill("SIGKILL"), 10_000);
+    await exited;
+    clearTimeout(overdue);
     // **エンジンが終わっても、その子はまだ書いている。** ローカルシェルは
     // 終了の途中で履歴を書き出すので、消しに行った瞬間にディレクトリが
     // 空でないことがある（ENOTEMPTY）。少し待って数回やり直す——
     // 掃除の競争でテストを落とさない。
-    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await rm(home, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   },
 });
 
@@ -130,11 +156,20 @@ export const masterPassword = "an end to end master password";
 // 求め、以後の起動はそれの入力を求める。spec がバイナリを
 // 再起動しない限り 2 番目の画面には出会わないため、これは
 // 最初のケースを扱いつつ、どちらにも対応できるよう書かれている。
-export async function openApplication(page: Page, installation: { url: string }) {
+export async function openApplication(
+  page: Page,
+  installation: { url: string },
+) {
   const response = await page.goto(installation.url);
-  const confirmation = page.getByLabel("Confirm master password", { exact: true });
-  await expect(page.getByLabel("Master password", { exact: true })).toBeVisible();
-  await page.getByLabel("Master password", { exact: true }).fill(masterPassword);
+  const confirmation = page.getByLabel("Confirm master password", {
+    exact: true,
+  });
+  await expect(
+    page.getByLabel("Master password", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Master password", { exact: true })
+    .fill(masterPassword);
   if (await confirmation.isVisible()) {
     await confirmation.fill(masterPassword);
     await page.getByRole("button", { name: "Create the vault" }).click();
@@ -184,7 +219,8 @@ export async function clickAndAwait(
   const [response] = await Promise.all([
     page.waitForResponse(
       (candidate) =>
-        candidate.url().includes(pathFragment) && candidate.request().method() === method,
+        candidate.url().includes(pathFragment) &&
+        candidate.request().method() === method,
     ),
     page.getByRole("button", { name: buttonName, exact: true }).click(),
   ]);
