@@ -216,3 +216,42 @@ func TestWindowsResolveKeysInRootNodesByTheRootSpelling(t *testing.T) {
 		t.Fatal("the canonical node was never read")
 	}
 }
+
+// 辺に載る一致も、節点の鍵と同じ綴りでなければならない。
+//
+// **片方だけ揃えると、同じファイルが二つの名前で現れる。** 辺をたどる側は
+// その節点を見つけられず、include されたファイルは丸ごと無かったことになる。
+func TestWindowsResolveCanonicalisesTheMatchesItReports(t *testing.T) {
+	const root = `C:\Users\Tester\.ssh`
+	const entry = root + `\config`
+	const shouted = `C:\USERS\TESTER\.ssh\conf.d\work.conf`
+	const canonical = root + `\conf.d\work.conf`
+	resolver := Resolver{
+		Loader: fakeLoader{
+			files: map[string]string{
+				entry:     "Include conf.d/*.conf\n",
+				shouted:   "Host work\n",
+				canonical: "Host work\n",
+			},
+			globs: map[string][]string{root + `\conf.d\*.conf`: {shouted}},
+		},
+		Home: `C:\Users\Tester`,
+		Root: root,
+	}
+
+	graph, err := resolver.Resolve(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entryNode := graph.Nodes[entry]
+	if entryNode == nil || len(entryNode.Includes) != 1 {
+		t.Fatalf("entry node = %#v", entryNode)
+	}
+	matches := entryNode.Includes[0].Matches
+	if len(matches) != 1 || matches[0] != canonical {
+		t.Fatalf("edge matches = %#v, want %q", matches, canonical)
+	}
+	if graph.Nodes[matches[0]] == nil {
+		t.Fatalf("the edge names %q, which is not a node", matches[0])
+	}
+}

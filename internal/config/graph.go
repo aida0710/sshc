@@ -132,7 +132,7 @@ func (r Resolver) canonical(candidate string) string {
 		return cleaned
 	}
 	if relative == "." {
-		return r.Root
+		return filepath.Clean(r.Root)
 	}
 	return filepath.Join(r.Root, relative)
 }
@@ -193,6 +193,13 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 				node.Includes = append(node.Includes, edge)
 				continue
 			}
+			// **綴りを揃えるのは、辺に載せる前である。** 節点の鍵だけを揃えて辺に
+			// 生の綴りを残すと、同じファイルが二つの名前で現れ、辺をたどる側——
+			// ディレクティブの走査、実効設定、スナップショット、Include 行の
+			// 書き換え——がその節点を見つけられなくなる。
+			for index, match := range matches {
+				matches[index] = r.canonical(match)
+			}
 			sort.Strings(matches)
 			// 生成領域の内側は黙る。その行を書いたのはこのアプリケーション自身で、
 			// 宣言されたグループがまだ空であることは正常な状態である。外側は人が
@@ -204,8 +211,7 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 			edge.Matches = matches
 			node.Includes = append(node.Includes, edge)
 
-			for _, candidate := range matches {
-				match := r.canonical(candidate)
+			for _, match := range matches {
 				if !r.insideRoot(match) {
 					graph.diagnose(SeverityInfo, DiagnosticIncludeOutsideRoot, filePath, lineNumber, match)
 				}
