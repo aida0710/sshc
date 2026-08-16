@@ -69,10 +69,9 @@ type Node struct {
 
 // Graph は、ひとつのエントリファイルから到達できる Include 構造。
 //
-// Nodes の鍵は、そのファイルを最初に見たときのネイティブな綴りである。ひとつの
-// ファイルが二通りに綴られていても節点はひとつになるが、引く側は最初の綴りで
-// 引く必要がある。この層より上は、どれも同じ Root から同じ手順で組み立てた
-// パスで引いている。
+// ルートより下の節点は、Root 自身の綴りで鍵付けされる。同じファイルを二通りに
+// 綴った Include は、ひとつの節点に落ち着く。ルートの外の節点は、Include が
+// 名指したままの綴りを保つ——よそのファイルの綴りをこちらで決める理由が無い。
 type Graph struct {
 	Root        string
 	Order       []string
@@ -113,6 +112,29 @@ func (g *Graph) diagnose(severity Severity, code, filePath string, line int, det
 
 func (r Resolver) insideRoot(candidate string) bool {
 	return nativepath.Contains(r.Root, candidate)
+}
+
+// canonical は、ルートより下のパスをルート自身の綴りに揃える。
+//
+// **これが無いと、層によって同じファイルが別の名前になる。** Windows で
+// `C:/USERS/A/.ssh/conf.d/x.conf` を include すると、その節点の鍵は打たれた
+// 綴りのまま残る。application 層はルートから組み立てた綴りで引くので、一覧に
+// 出て編集可能と表示されたホストが、開こうとした瞬間に見つからないと言われる。
+//
+// ルートの外はそのまま返す。よそのファイルの綴りをこちらで決める理由が無い。
+func (r Resolver) canonical(candidate string) string {
+	cleaned := filepath.Clean(candidate)
+	if !nativepath.Contains(r.Root, cleaned) {
+		return cleaned
+	}
+	relative, err := filepath.Rel(r.Root, cleaned)
+	if err != nil {
+		return cleaned
+	}
+	if relative == "." {
+		return r.Root
+	}
+	return filepath.Join(r.Root, relative)
 }
 
 func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int) {
@@ -182,7 +204,8 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 			edge.Matches = matches
 			node.Includes = append(node.Includes, edge)
 
-			for _, match := range matches {
+			for _, candidate := range matches {
+				match := r.canonical(candidate)
 				if !r.insideRoot(match) {
 					graph.diagnose(SeverityInfo, DiagnosticIncludeOutsideRoot, filePath, lineNumber, match)
 				}
