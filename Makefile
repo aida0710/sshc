@@ -30,8 +30,8 @@ test:
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
 	npm test --prefix web
 	npm run typecheck --prefix web
-	@# 外殻の JS も検査する。**relink は利用者の ~/.local/bin に触る**ので、
-	@# 「普通のファイルには触らない」という規則は落とせない。node 標準の
+	@# 外殻の JS も検査する。**install-cli は利用者の ~/.local/bin に触る**ので、
+	@# 「自分が張ったリンクでなければ触らない」という規則は落とせない。node 標準の
 	@# テストランナーなので、依存は増えない。
 	npm test --prefix desktop
 
@@ -111,10 +111,10 @@ icons:
 #
 # **だから install を通す**——理由は端末の側にある。`sshc` と打った人が走らせる
 # のは `~/.local/bin/sshc` であって、この checkout の bin/sshc ではない。外殻は
-# 起動のたびに relink を試すが、`desktop/link.js` はそこに実体（symlink では
-# ないもの）があるなら触らない——`make install` を一度でも通した機械では、
-# 画面だけが新しく、端末は古い版を走らせ続ける。install-binary がそこを
-# 入れ替える。
+# 起動のたびに install-cli を試すが、`desktop/install-cli.js` はそこに自分が
+# 張ったリンク以外のもの（`make install` が置いた実体など）があるなら触らない
+# ——一度でも `make install` を通した機械では、画面だけが新しく、端末は古い版を
+# 走らせ続ける。install-binary がそこを入れ替える。
 #
 # install が失敗しても止まらない。**ここで要るのは外殻が新しいことだけ**で
 # あり、それは bin/sshc を焼いた時点で済んでいる（外殻はそれを直接起こす）

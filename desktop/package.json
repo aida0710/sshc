@@ -11,7 +11,7 @@
     "postinstall": "install-electron",
     "start": "electron .",
     "dist": "electron-builder --mac --linux",
-    "test": "node --test link.test.js entrance.test.js reopen.test.js lifecycle.test.js",
+    "test": "node --test entrance.test.js reopen.test.js lifecycle.test.js install-cli.test.js launcher.test.js",
     "icons": "node icon.mjs"
   },
   "devDependencies": {
@@ -27,7 +27,8 @@
       "main.js",
       "lifecycle.js",
       "preload.js",
-      "link.js",
+      "install-cli.js",
+      "launcher.js",
       "entrance.js",
       "reopen.js",
       "tray.js",
