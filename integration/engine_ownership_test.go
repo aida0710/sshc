@@ -52,6 +52,11 @@ func TestHeadlessRunsInTheForegroundWithoutPublishingABootstrapToken(t *testing.
 	if !process.running() {
 		t.Fatalf("headless returned instead of holding the terminal\n%s", process.Stderr.String())
 	}
+	// **handoff が出たことは、標準出力が書かれたことではない。** どちらが先かは
+	// 約束されていないので、announcement そのものを待つ。
+	waitFor(t, 20*time.Second, "the headless announcement", func() bool {
+		return strings.Contains(process.Stdout.String(), "sshc vault")
+	})
 	announced := process.Stdout.String()
 	if strings.Contains(announced, "#bootstrap=") {
 		t.Errorf("the headless announcement carries a bootstrap token: %q", announced)
