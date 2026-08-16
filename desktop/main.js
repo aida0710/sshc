@@ -177,12 +177,19 @@ function entrance() {
       // **アプリはエンジンの寿命そのものである。** 上がったあとに落ちたなら、
       // 窓もメニューバーの項目も、もう何も配れない——残しておく意味がない。
       if (settled) {
-        showFailure(
-          new Error(
-            `the engine exited with ${code}; sshc cannot serve anything without it`,
-          ),
-        );
-        quitting = true;
+        // **こちらが頼んだ終了なら、何も言わない。** 終了の経路は engine が
+        // 畳み終えるのを待つので、その exit は必ずここへ来る。区別せずに
+        // 理由を出すと、**普通に終了するたびにエラーダイアログが出る**——
+        // しかも showErrorBox は同期で塞ぐので、窓の無い機械ではそこで
+        // プロセスごと止まる。
+        if (!quitting) {
+          showFailure(
+            new Error(
+              `the engine exited with ${code}; sshc cannot serve anything without it`,
+            ),
+          );
+          quitting = true;
+        }
         app.quit();
         return;
       }
@@ -256,6 +263,10 @@ function openWindow(url) {
  * showFailure は、ウィンドウの代わりに理由を出す。**白い画面を見せない。**
  */
 function showFailure(error) {
+  // **先に書く。** showErrorBox は同期で塞ぐ modal なので、窓を出せない機械
+  // （CI、画面の無いセッション）ではここから先が動かない。理由が stderr に
+  // 残っていれば、塞がってもなぜ塞がったかは読める。
+  process.stderr.write(`sshc: ${String(error.message ?? error)}\n`);
   dialog.showErrorBox("sshc could not start", String(error.message ?? error));
 }
 
@@ -346,14 +357,15 @@ app.whenReady().then(async () => {
     // 端末で動いている別のエンジンの本数を数えて「終了しますか」と訊き、
     // 「やめる」と答えた人には窓もエンジンも無い外殻だけが残る。
     //
-    // **quitting を立てる前に engine.kill() を呼ぶ。** before-quit は
-    // quitting が真なら早期 return するので、先に立ててしまうと自分の
-    // engine.kill() まで一緒に飛ぶ。20 秒 timeout で決着する経路（子は
-    // 生きているのに入口が来ない）では、これを飛ばすと子が engine.lock を
-    // 握ったまま孤児になり、見張りが畳むまで残る——その窓に開き直すと
-    // 「端末で動いている sshc がエンジンです」という誤った理由が出る。
-    void stopOwnedEngine(engine);
+    // **quitting を先に立てる。** 立てないと、この直後に engine が終わった
+    // ことを上の exit handler が「予期しない死」と読み、二枚目のダイアログを
+    // 出す。手放すのはここで自分で行うので、before-quit の早期 return に
+    // 巻き込まれる心配はない。20 秒 timeout で決着する経路（子は生きている
+    // のに入口が来ない）でこれを飛ばすと、子が engine.lock を握ったまま孤児に
+    // なり、見張りが畳むまで残る——その窓に開き直すと「端末で動いている sshc が
+    // エンジンです」という誤った理由が出る。
     quitting = true;
+    void stopOwnedEngine(engine);
     app.quit();
     return;
   }

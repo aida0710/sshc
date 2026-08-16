@@ -19,6 +19,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"sshc/internal/handoff"
 )
 
 // binaryPath は、このパッケージが起こす sshc の実体である。TestMain が一度だけ
@@ -193,13 +195,19 @@ func (process *testProcess) kill() {
 	}
 }
 
-// handoffPath は、この家の handoff 文書の場所である。
+// stateDir は、この家の engine が状態を置く場所である。
+func stateDir(home string) string {
+	return filepath.Join(home, ".ssh", "sshc")
+}
+
+// handoffPath は、この家の handoff 文書の場所である。名前は handoff.FileName が
+// 決めるので、ここで綴り直さない。
 func handoffPath(home string) string {
-	return filepath.Join(home, ".ssh", "sshc", "handoff.json")
+	return filepath.Join(stateDir(home), handoff.FileName)
 }
 
 func lockPath(home string) string {
-	return filepath.Join(home, ".ssh", "sshc", "engine.lock")
+	return filepath.Join(stateDir(home), "engine.lock")
 }
 
 // waitForFile は、engine が何かを置くまで待つ。

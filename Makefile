@@ -307,6 +307,10 @@ integration-down:
 # sshd の側が確かめるのは、**自分で話す SSH が本物の OpenSSH に通じること**で
 # ある。単体テストの相手は Go で書かれたサーバー——実装のもう半分——なので、
 # 両方が同じ勘違いをしていれば緑になる。ここだけがその輪の外にある。
+# **`integration/` パッケージとは別物である。** あちらは本物の sshc プロセスを
+# 起こして所有権と vault CLI を確かめるだけで、外の何も要らないので `go test ./...`
+# ——すなわち `make test` と CI——がそのまま回す。こちらが要求するのは
+# `integration-up` が立てる S3 と sshd であり、だから別の target になっている。
 integration: build
 	SSHC_TEST_S3_ENDPOINT=http://127.0.0.1:$(S3_PORT) \
 	SSHC_TEST_S3_KEY=$(S3_KEY) \
