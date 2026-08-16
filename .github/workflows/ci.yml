@@ -73,6 +73,20 @@ jobs:
         shell: bash
         run: go build ./...
 
+      # Android 向けにビルドタグが食い違っていないことだけを見る。**CGO_ENABLED=0
+      # で通ることは、Android で動くことを何一つ意味しない** ——Android には
+      # /etc/resolv.conf が無いので、本物の AAR は cgo リゾルバを要る。ここは
+      # NDK も gomobile も持たないランナーで言えることの上限であり、AAR と APK は
+      # 別のジョブの仕事である。
+      #
+      # Unix 側だけに置く。Android は unix なので、これは Unix の shell fragment で
+      # ある。答えはホストに依らないので Linux と macOS で二度走るが、pwsh 版を
+      # 並べれば同じ検査の三つ目の写しになるだけである。
+      - name: Android build (Unix)
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
+
       - name: go build (Windows)
         if: ${{ runner.os == 'Windows' }}
         shell: pwsh
