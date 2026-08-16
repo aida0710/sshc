@@ -173,9 +173,12 @@ func readUntil(t *testing.T, process terminal.Process, want string, limit time.D
 
 // **子が自分で終われば、読み取りは EOF に届かなければならない。**
 //
-// 擬似コンソール側のパイプ端を手放し忘れると、出力パイプに書き手が残り続け、
-// Read は永久に返らない。そうなると pump は done を閉じず、Registry.Wait は
-// 戻らず、engine lock はそのマシンが再起動するまで握られたままになる。
+// これは Unix には無い段である。向こうは子が死ねば PTY の従側が閉じ、読み取りが
+// そこで終わる。ConPTY では出力パイプの書き手が擬似コンソールそのものなので、
+// 誰かがそれを閉じるまで EOF は来ない。閉じなければ、利用者が exit と打った
+// だけのセッションが永久に「生きている」ことになり、pump は done を閉じず、
+// engine lock も手放されない——**このテストは実機で 10 分ハングして、それを
+// 教えてくれた。**
 func TestWindowsConsoleReachesEOFWhenTheChildExitsOnItsOwn(t *testing.T) {
 	shell := powershell(t)
 	process, err := terminal.NewStarter().Start(context.Background(), terminal.Command{
