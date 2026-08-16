@@ -25,10 +25,22 @@ function linkPath() {
  * ならない。**
  */
 async function relink(target) {
+  // **Windows では、コマンドラインを通すのはインストーラである。**
+  //
+  // ここで symlink を作ろうとしても、開発者モードか管理者権限が無ければ
+  // 失敗するだけであり、仮に作れたとしても `~/.local/bin` は PATH に載って
+  // いない。載せるのは NSIS が書く user PATH であって、この外殻ではない。
+  if (process.platform === "win32") {
+    return {
+      changed: false,
+      reason: "the installer puts sshc on the path here",
+    };
+  }
   const path = linkPath();
   try {
     const existing = await readlink(path);
-    if (existing === target) return { changed: false, reason: "already pointing here" };
+    if (existing === target)
+      return { changed: false, reason: "already pointing here" };
   } catch (error) {
     if (error.code === "EINVAL") {
       // symlink ではない。誰かが実体を置いている。
