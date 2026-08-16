@@ -23,7 +23,7 @@ func TestDescriptorRequiresCurrentUserAsOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	restricted, err := isDescriptorRestricted(descriptor, userSID)
+	restricted, err := isDescriptorRestricted(descriptor, userSID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,6 +344,11 @@ func TestIsRestrictedRejectsAnExtraAllowACE(t *testing.T) {
 
 func assertExactlyRestricted(t *testing.T, path string) {
 	t.Helper()
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := info.IsDir()
 	descriptor, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
 	if err != nil || descriptor == nil {
 		t.Fatalf("GetNamedSecurityInfo(%q) = %v", path, err)
@@ -353,8 +358,12 @@ func assertExactlyRestricted(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !owner.Equals(testCurrentUserSID(t)) {
-		t.Fatalf("%q owner is not the current user", path)
+	// 所有者は、この token の所有者か、その利用者本人のどちらかであればよい。
+	// 昇格した token が作ったものには Windows が Administrators を刻むので、
+	// 利用者本人だけを要求すると、管理者として動く環境では自分で作ったものが
+	// すべて他人のものになる。production の契約は ownedByThisToken にある。
+	if !owner.Equals(testCurrentUserSID(t)) && !owner.Equals(testTokenOwnerSID(t)) {
+		t.Fatalf("%q owner %s is neither this token's user nor its owner", path, owner)
 	}
 
 	control, _, err := descriptor.Control()
@@ -377,14 +386,20 @@ func assertExactlyRestricted(t *testing.T, path string) {
 		wellKnownSID(t, windows.WinLocalSystemSid),
 		wellKnownSID(t, windows.WinBuiltinAdministratorsSid),
 	}
+	// ディレクトリの ACE だけは継承させる。締めた瞬間に配下が親から受け継いで
+	// いた ACE を失い、まだ刻んでいないものが誰にも開けなくなるためである。
+	wantFlags := uint8(0)
+	if directory {
+		wantFlags = windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE
+	}
 	matched := make([]bool, len(expected))
 	for index := uint32(0); index < uint32(dacl.AceCount); index++ {
 		var ace *windows.ACCESS_ALLOWED_ACE
 		if err := windows.GetAce(dacl, index, &ace); err != nil {
 			t.Fatal(err)
 		}
-		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags != 0 || ace.Mask != windows.ACCESS_MASK(0x001f01ff) {
-			t.Fatalf("DACL(%q) ACE %d = type %d flags %#x mask %#x, want direct full-access allow", path, index, ace.Header.AceType, ace.Header.AceFlags, ace.Mask)
+		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags != wantFlags || ace.Mask != windows.ACCESS_MASK(0x001f01ff) {
+			t.Fatalf("DACL(%q) ACE %d = type %d flags %#x mask %#x, want flags %#x full-access allow", path, index, ace.Header.AceType, ace.Header.AceFlags, ace.Mask, wantFlags)
 		}
 		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
 		found := -1
@@ -488,6 +503,20 @@ func testCurrentUserSID(t *testing.T) *windows.SID {
 		t.Fatal(err)
 	}
 	sid, err := user.User.Sid.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sid
+}
+
+func testTokenOwnerSID(t *testing.T) *windows.SID {
+	t.Helper()
+	token, err := windows.OpenCurrentProcessToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer token.Close()
+	sid, err := tokenOwnerSID(token)
 	if err != nil {
 		t.Fatal(err)
 	}

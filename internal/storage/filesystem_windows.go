@@ -40,7 +40,11 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	if fileName == "." || fileName == string(os.PathSeparator) {
 		return nil, os.ErrInvalid
 	}
-	handle, err := openRelativeNoReparse(parent, fileName, windows.FILE_READ_DATA, false, true)
+	// 読むだけでも FILE_READ_ATTRIBUTES を要る。readBoundedRegularFile は
+	// **通常ファイルであることを handle から確かめてから**中身を読むためだ。
+	// FILE_READ_DATA だけで開くと、その確認が Access is denied で落ち、
+	// ユーザーの ~/.ssh/config がひとつも読めない。
+	handle, err := openRelativeNoReparse(parent, fileName, windows.FILE_READ_DATA|windows.FILE_READ_ATTRIBUTES, false, true)
 	if err != nil {
 		return nil, err
 	}
@@ -191,16 +195,26 @@ func openRelativeNoReparseWithOptions(parent windows.Handle, name string, access
 		0,
 	)
 	if err != nil {
-		return 0, mapReparseError(err)
+		return 0, mapNtError(err)
 	}
 	return handle, nil
 }
 
-func mapReparseError(err error) error {
+// mapNtError は、Nt* が返す NTSTATUS を、この木の他の層が知っている形に直す。
+//
+// **NTSTATUS は fs.ErrNotExist に一致しない。** 「まだ無い」と「読めなかった」を
+// errors.Is で分ける呼び出し側が上に何十とあり、生の NTSTATUS を返すと、存在
+// しないだけの ~/.ssh/config が読み取り失敗として扱われる。Unix 側は
+// os.OpenFile の errno を返しているので、こちらも Win32 の errno へ揃える。
+func mapNtError(err error) error {
 	if errors.Is(err, windows.STATUS_STOPPED_ON_SYMLINK) ||
 		errors.Is(err, windows.STATUS_REPARSE_POINT_ENCOUNTERED) ||
 		errors.Is(err, windows.ERROR_STOPPED_ON_SYMLINK) {
 		return ErrSymlinkPath
+	}
+	var status windows.NTStatus
+	if errors.As(err, &status) {
+		return status.Errno()
 	}
 	return err
 }
@@ -332,13 +346,13 @@ func renamePrivateFileHandle(source, destinationParent windows.Handle, destinati
 	information.FileNameLength = uint32(nameLength)
 	copy(unsafe.Slice(&information.FileName[0], nameLength/2), nameUTF16[:len(nameUTF16)-1])
 	status := windows.IO_STATUS_BLOCK{}
-	return windows.NtSetInformationFile(
+	return mapNtError(windows.NtSetInformationFile(
 		source,
 		&status,
 		&buffer[0],
 		uint32(bufferSize),
 		windows.FileRenameInformation,
-	)
+	))
 }
 
 func syncDirectory(path string) error {
