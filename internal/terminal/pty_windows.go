@@ -103,11 +103,16 @@ func startPseudoConsole(command Command, size Size, environment *uint16) (_ Proc
 		return nil, fmt.Errorf("terminal: create the pseudoconsole: %w", consoleErr)
 	}
 	defer func() {
-		if err != nil {
-			windows.ClosePseudoConsole(console)
-			windows.CloseHandle(inputWrite)
-			windows.CloseHandle(outputRead)
+		if err == nil {
+			return
 		}
+		// **こちら側の端を先に手放し、コンソールは別の goroutine で閉じる。**
+		// ClosePseudoConsole は 24H2 より前では際限なく待つことがあり、この
+		// 巻き戻しは HTTP のハンドラの上で走っている——実行できないプログラムを
+		// 断るだけで、ハンドラが返らなくなる。
+		windows.CloseHandle(inputWrite)
+		windows.CloseHandle(outputRead)
+		go windows.ClosePseudoConsole(console)
 	}()
 
 	attributes, err := windows.NewProcThreadAttributeList(1)
@@ -246,7 +251,12 @@ func environmentBlock(environment []string) (*uint16, error) {
 		}
 		builder = append(builder, encoded...)
 	}
-	// 二重の NUL で終える。空の環境も同じ形になる。
+	// 各項目は UTF16FromString が NUL で終えている。最後にもう一つ足して
+	// 二重の NUL にする。**空の環境も同じ形でなければならない**ので、項目が
+	// 一つも無いときは二つ足す——一つだけでは終端になっていない。
+	if len(builder) == 0 {
+		builder = append(builder, 0)
+	}
 	builder = append(builder, 0)
 	return &builder[0], nil
 }
@@ -272,6 +282,12 @@ type windowsProcess struct {
 
 	waitOnce sync.Once
 	exit     ExitInfo
+}
+
+func (p *windowsProcess) wasForced() bool {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return p.forced
 }
 
 func (p *windowsProcess) Read(b []byte) (int, error)  { return p.output.Read(b) }
@@ -361,6 +377,9 @@ func (p *windowsProcess) Wait() ExitInfo {
 		info := ExitInfo{At: time.Now()}
 		if _, err := windows.WaitForSingleObject(p.process, windows.INFINITE); err != nil {
 			info.Code = -1
+			if p.wasForced() {
+				info.Signal = "killed"
+			}
 			p.exit = info
 			windows.CloseHandle(p.process)
 			return
@@ -371,10 +390,7 @@ func (p *windowsProcess) Wait() ExitInfo {
 		} else {
 			info.Code = int(code)
 		}
-		p.mutex.RLock()
-		forced := p.forced
-		p.mutex.RUnlock()
-		if forced {
+		if p.wasForced() {
 			// **終了コードでは見分けられない。** TerminateJobObject は与えた値を
 			// 木のすべてに刻むので、子が同じ値を返した場合と区別がつかない。
 			// 見分けるのは、この実装が強制したという事実である。Unix が
