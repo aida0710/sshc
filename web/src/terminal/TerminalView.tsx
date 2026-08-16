@@ -10,6 +10,11 @@ import { terminalTheme } from "./theme";
 import { clipboard } from "../ui/clipboard";
 import { bufferText } from "./buffer";
 import { SelectSheet } from "./SelectSheet";
+import {
+  attachNativeSelection,
+  hasSelection,
+  prefersNativeSelection,
+} from "./nativeSelection";
 import { measuredCellHeight, newTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
@@ -171,11 +176,26 @@ export function TerminalView({
       if (finger !== null) scroll.start(finger.clientY);
     };
     const touchMove = (event: TouchEvent) => {
+      // **範囲が選ばれている間は流さない。** 選択のハンドルを引く指と、
+      // 画面を流す指は同じ動きをする。流してしまえば、掴んだ範囲は
+      // 掴んだそばから足元ごと動く。
+      if (hasSelection(container.ownerDocument.getSelection())) return;
       const finger = single(event);
       if (finger !== null) scroll.move(finger.clientY);
     };
     container.addEventListener("touchstart", touchStart, { passive: true });
     container.addEventListener("touchmove", touchMove, { passive: true });
+
+    // 指で触る画面では、範囲選択を OS に返す。**xterm は自分の mousedown で
+    // 無条件に preventDefault を呼ぶので、見せなければ選択が始まる。** 止めた
+    // 以上、焦点を配るのはこちらの仕事になる。
+    const releaseSelection = prefersNativeSelection((query) => window.matchMedia(query))
+      ? attachNativeSelection({
+          container,
+          focus: () => view.focus(),
+          now: () => performance.now(),
+        })
+      : () => {};
 
     // 打鍵の配線はここで一度だけ行う。繋ぎ直すたびに足すと、1 回の打鍵が
     // 繋ぎ直した回数だけ PTY へ届く。
@@ -296,6 +316,7 @@ export function TerminalView({
       observer.disconnect();
       container.removeEventListener("touchstart", touchStart);
       container.removeEventListener("touchmove", touchMove);
+      releaseSelection();
       detachClipboard();
       stream?.close();
       view.dispose();
