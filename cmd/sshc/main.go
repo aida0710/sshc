@@ -55,6 +55,10 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		return runEngine(ctx, engineHeadless, home, nil, os.Stdout, os.Stderr)
 	case invocationConnect:
 		return runConnect(ctx, called.Args[0], home, app.HandoffDir(home), client, newDesktopLauncher(), os.Stdin, os.Stdout, os.Stderr)
+	case invocationRun:
+		return runRemote(ctx, called.Args[0], remoteCommand(called.Args[1:]), home,
+			app.HandoffDir(home), client, newDesktopLauncher(),
+			os.Stdin, os.Stdout, os.Stderr)
 	case invocationChoose:
 		query := ""
 		if len(called.Args) != 0 {

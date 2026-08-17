@@ -86,8 +86,16 @@ func reach(
 	t *testing.T, stateDir string, launcher desktopLauncher, probe engineProbe, stderr *bytes.Buffer,
 ) (engineProbe, error) {
 	t.Helper()
+	return reachWaiting(t, stateDir, launcher, probe, stderr, true)
+}
+
+func reachWaiting(
+	t *testing.T, stateDir string, launcher desktopLauncher, probe engineProbe,
+	stderr *bytes.Buffer, wait bool,
+) (engineProbe, error) {
+	t.Helper()
 	return reachUnlockedEngine(context.Background(), stateDir, &http.Client{}, launcher,
-		func(handoff.Handoff) engineProbe { return probe }, stderr)
+		func(handoff.Handoff) engineProbe { return probe }, stderr, wait)
 }
 
 // 設計 8.2 の六つの経路。**保管庫の不在は解錠ではない**ので、そこも同じ表で見る。

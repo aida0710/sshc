@@ -95,9 +95,15 @@ func (probe httpProbe) Connection(ctx context.Context, alias string) (connectAns
 // このアプリケーションが ~/.ssh/config に一切触れないから常に動く。黙って
 // 退けば、鍵のパスフレーズを毎回訊かれるのが engine の不在のせいだと分から
 // ないまま、利用者がそれを普通だと思ってしまう。
+// wait は、施錠された desktop を待ってよいかを言う。
+//
+// **待てるのは、人が座っている場面だけである。** `sshc <接続先>` は窓を前へ
+// 出して解錠を待つが、書かれた手順の中で走る `sshc run` が同じことをすると、
+// 答える人の居ない待ちで止まったままになる。
 func reachUnlockedEngine(
 	ctx context.Context, stateDir string, client *http.Client,
 	launcher desktopLauncher, newProbe func(handoff.Handoff) engineProbe, stderr io.Writer,
+	wait bool,
 ) (engineProbe, error) {
 	found, status, err := liveEngineStatus(ctx, stateDir, client, newProbe)
 	if err != nil {
@@ -128,11 +134,12 @@ func reachUnlockedEngine(
 	// **保管庫が無いことを、解錠されていることとして扱わない。** 無ければ
 	// 保存された答えは一つも無く、それは engine が黙って渡せる状態ではない。
 	missing := !status.Vault
-	if status.Owner != handoff.OwnerDesktop {
+	if status.Owner != handoff.OwnerDesktop || !wait {
 		if missing {
 			return nil, errors.New("this installation has no vault; run sshc vault create")
 		}
-		// 見えない窓の前で待たせない。headless を動かしている人は端末に居る。
+		// 見えない窓の前で待たせない。headless を動かしている人は端末に居るし、
+		// 待てない入口から呼ばれたなら、待つ相手が居ない。
 		return nil, errors.New("the sshc vault is locked; run sshc vault unlock")
 	}
 

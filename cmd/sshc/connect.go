@@ -134,7 +134,7 @@ func runConnect(
 	waitCtx, stopWaiting := signal.NotifyContext(ctx, os.Interrupt)
 	session, err := reachUnlockedEngine(waitCtx, stateDir, client, launcher, func(found handoff.Handoff) engineProbe {
 		return httpProbe{found: found, client: client}
-	}, stderr)
+	}, stderr, true)
 	stopWaiting()
 	if err != nil {
 		if errors.Is(err, errInterrupted) {
@@ -151,30 +151,15 @@ func runConnect(
 		return 1
 	}
 
-	var saved func(string) (string, bool)
-	var password func(string) (string, bool)
 	for _, warning := range answer.Warnings {
 		fmt.Fprintf(stderr, "sshc: %s\n", warning)
 	}
-	if answer.KeyPath != "" && answer.Passphrase != "" {
-		saved = func(relativePath string) (string, bool) {
-			if relativePath != answer.KeyPath {
-				return "", false
-			}
-			return answer.Passphrase, true
-		}
-	}
 	// **本体が連鎖を解決して、そこに現れる alias のぶんだけを返している。**
-	// 手前に立つホストも別の alias としてここに入る。表に無いものは
-	// 保存が無いということであり、そのときは端末で尋ねる。
-	if len(answer.Passwords) > 0 {
-		password = func(candidate string) (string, bool) {
-			stored, found := answer.Passwords[candidate]
-			return stored, found && stored != ""
-		}
-	}
-
-	connection, err := app.NewCLIConnection(home, saved, password)
+	// 手前に立つホストも別の alias としてここに入る。表に無いものは保存が無い
+	// ということであり、そのときは端末で尋ねる。組み立ては run.go と共有する
+	// ——同じ答えを二通りに読み替える場所を作らない。
+	connection, err := app.NewCLIConnection(home,
+		savedPassphraseFor(answer), savedPasswordFor(answer))
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1
