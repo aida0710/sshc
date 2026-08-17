@@ -81,11 +81,14 @@ export function ConsoleList({
 
   useEffect(() => {
     if (menuFor === null) return;
-    function dismiss(event: MouseEvent) {
+    // **pointerdown である。** mousedown は指では鳴るとは限らず、鳴らなければ
+    // このメニューは触れる画面で閉じる手立てを失う。pointerdown はマウスも指も
+    // ペンも同じ 1 つで拾う。
+    function dismiss(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) setMenuFor(null);
     }
-    document.addEventListener("mousedown", dismiss);
-    return () => document.removeEventListener("mousedown", dismiss);
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
   }, [menuFor]);
 
   function move(id: string, delta: number) {
