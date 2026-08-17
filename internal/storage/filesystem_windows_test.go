@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 
@@ -423,6 +424,58 @@ func assertWindowsPrivatePath(t *testing.T, path string) {
 	}
 }
 
+// holdsBackupPrivilege は、このトークンが DACL を迂回できるかを答える。
+//
+// **SeBackupPrivilege と SeRestorePrivilege は DACL の上に立つ。** 有効な
+// トークンで開けば、拒否されているはずのものが開ける。管理者として SSH で
+// 入ったセッションはこれを有効に持っていることがあり、そこでは「読めない
+// 親ディレクトリ」という状況そのものを作れない。
+func holdsBackupPrivilege(t *testing.T) bool {
+	t.Helper()
+	token, err := windows.OpenCurrentProcessToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer token.Close()
+
+	var size uint32
+	err = windows.GetTokenInformation(token, windows.TokenPrivileges, nil, 0, &size)
+	if err != nil && err != windows.ERROR_INSUFFICIENT_BUFFER {
+		t.Fatal(err)
+	}
+	buffer := make([]byte, size)
+	if err := windows.GetTokenInformation(token, windows.TokenPrivileges,
+		&buffer[0], size, &size); err != nil {
+		t.Fatal(err)
+	}
+	// **名前ではなく LUID で照合する。** 特権の表示名は環境で翻訳されうるが、
+	// LUID はこの機械の中で一意である。名前から LUID を引いて、持っている
+	// ものと突き合わせる。
+	bypassing := make(map[windows.LUID]bool, 2)
+	for _, name := range []string{"SeBackupPrivilege", "SeRestorePrivilege"} {
+		wide, err := windows.UTF16PtrFromString(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var luid windows.LUID
+		if err := windows.LookupPrivilegeValue(nil, wide, &luid); err != nil {
+			continue
+		}
+		bypassing[luid] = true
+	}
+
+	privileges := (*windows.Tokenprivileges)(unsafe.Pointer(&buffer[0]))
+	for _, privilege := range privileges.AllPrivileges() {
+		if privilege.Attributes&windows.SE_PRIVILEGE_ENABLED == 0 {
+			continue
+		}
+		if bypassing[privilege.Luid] {
+			return true
+		}
+	}
+	return false
+}
+
 func assertReadAttributesDenied(t *testing.T, path string) {
 	t.Helper()
 	pathUTF16, err := windows.UTF16PtrFromString(path)
@@ -440,6 +493,12 @@ func assertReadAttributesDenied(t *testing.T, path string) {
 	)
 	if err == nil {
 		_ = windows.CloseHandle(handle)
+		// **確かめられない環境と、壊れている実装を区別する。** 迂回できる
+		// トークンなら、拒否が効かないのは当たり前であり、そこで落とすのは
+		// 実装が壊れていると言うことになる。理由を名指しして降りる。
+		if holdsBackupPrivilege(t) {
+			t.Skip("this token holds SeBackupPrivilege, which bypasses the DACL; an unreadable parent cannot be arranged here")
+		}
 		t.Fatal("fixture unexpectedly grants FILE_READ_ATTRIBUTES on the parent")
 	}
 	if err != windows.ERROR_ACCESS_DENIED {
