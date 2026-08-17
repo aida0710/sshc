@@ -13,6 +13,7 @@ const { join } = require("node:path");
 const { existsSync } = require("node:fs");
 const { installManagedCLI } = require("./install-cli");
 const { recordLinuxLauncher } = require("./launcher");
+const { engineBinary, managesItsOwnCLI } = require("./installer");
 const { parseEntrance } = require("./entrance");
 const {
   spawnEngine,
@@ -75,7 +76,10 @@ const hidden = process.argv.includes("--hidden");
  * あると、どちらが走っているのか分からなくなる。
  */
 function binary() {
-  const bundled = join(process.resourcesPath ?? "", "sshc");
+  const bundled = engineBinary({
+    platform: process.platform,
+    resourcesPath: process.resourcesPath,
+  });
   if (existsSync(bundled)) return bundled;
   return join(__dirname, "..", "bin", "sshc");
 }
@@ -316,6 +320,19 @@ function installMenu() {
  * 黙りもしない: 公開の名前を他人が持っていたなら、その事実を出す。
  */
 async function settleInstallation() {
+  // Windows で端末側の入口を用意するのはインストーラである。**外殻が重ねて
+  // 張ろうとしない。** 安定した場所も PATH も、あちらが持っている。
+  if (managesItsOwnCLI(process.platform)) {
+    await settleManagedCLI();
+  }
+  try {
+    await recordLinuxLauncher({ packaged: app.isPackaged });
+  } catch {
+    // 場所を書き残せないだけである。窓もエンジンも動く。
+  }
+}
+
+async function settleManagedCLI() {
   try {
     const { warning } = await installManagedCLI({ source: binary() });
     if (warning !== null) {
@@ -327,11 +344,6 @@ async function settleInstallation() {
     }
   } catch {
     // 写せないことは、アプリが開けない理由にはならない。
-  }
-  try {
-    await recordLinuxLauncher({ packaged: app.isPackaged });
-  } catch {
-    // 場所を書き残せないだけである。窓もエンジンも動く。
   }
 }
 
