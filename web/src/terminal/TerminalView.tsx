@@ -8,10 +8,8 @@ import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { clipboard } from "../ui/clipboard";
-import { bufferText } from "./buffer";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
-import { SelectSheet } from "./SelectSheet";
 import { nativeSelectionClass, prefersNativeSelection } from "./nativeSelection";
 import { measuredCellHeight, newTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
@@ -84,9 +82,6 @@ export function TerminalView({
   // ref と state を並べて持つのは、onData の配線が端末の寿命に一度だけ行われる
   // からである。state だけだと、その配線は最初の値を握ったままになる。
   const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
-  // 選べる面に出している文字。null は閉じている。**開いた時点の写しである** ——
-  // 開いている間も端末は動き続けるが、選んでいる最中に足元が動くのは困る。
-  const [selecting, setSelecting] = useState<string | null>(null);
   const armed = useRef<Modifiers>(modifiers);
   armed.current = modifiers;
   // send は、打たれたものひとつを修飾ごと通す唯一の口である。
@@ -405,17 +400,10 @@ export function TerminalView({
         ぶら下がる——.xterm の中では長押しからの選択がどうやっても始まらない。
       */}
       <div ref={host} className="relative min-h-0 flex-1 bg-term-bg p-2" />
-      {selecting === null ? null : (
-        <SelectSheet text={selecting} onClose={() => setSelecting(null)} />
-      )}
       <KeyBar
         modifiers={modifiers}
         onToggle={(name) => setModifiers((current) => ({ ...current, [name]: !current[name] }))}
         onKey={(label) => send.current(label)}
-        onSelect={() => {
-          const view = terminal.current;
-          setSelecting(view === null ? "" : bufferText(view.buffer.active));
-        }}
       />
     </section>
   );

@@ -62,8 +62,10 @@ export function OverviewPanel({
     setProblem("");
     try {
       const opened = await launch(alias);
+      // **開いた端末を見せる。** onConsoleOpened がターミナルの面へ連れて行く
+      // ので、そのあとに別の面を指すと、繋いだ本人が接続一覧へ放り出される
+      // ——押した理由がそこには無い。
       onConsoleOpened?.(opened.session.id);
-      onNavigate("Connections");
     } catch (error) {
       setProblem(
         failureCode(error) === "terminal_session_limit"
