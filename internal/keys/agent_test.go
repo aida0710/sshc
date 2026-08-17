@@ -77,13 +77,20 @@ func writeAgentKey(t *testing.T, directory string, passphrase []byte) (string, s
 	return path, publicPath
 }
 
+// agentFor は、この試験用の agent へ話す adapter を組み立てる。
+//
+// **NewAgent を通さない。** あれが決めるのは「この OS の agent はどこに居るか」
+// であり、それは OS ごとに違う——Windows では固定の named pipe を指し、
+// SSH_AUTH_SOCK を読まない。ここで確かめたいのは宛先の決め方ではなく、
+// 繋がったあとのプロトコルの話し方なので、宛先はテストが直接与える。
+// unix ソケットは Windows 10 以降も使えるので、この管はどのホストでも通る。
 func agentFor(socket string) platform.KeyAgent {
-	return keys.NewAgent(func(name string) (string, bool) {
-		if name != "SSH_AUTH_SOCK" {
-			return "", false
-		}
-		return socket, true
-	})
+	return keys.Agent{
+		Socket: func() string { return socket },
+		Dial: func(ctx context.Context, address string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", address)
+		},
+	}
 }
 
 func TestAgentAddsListsAndRemovesThroughTheRealProtocol(t *testing.T) {
@@ -163,7 +170,7 @@ func TestAgentReportsAnUnreachableSocketAsUnavailable(t *testing.T) {
 }
 
 func TestAgentWithoutASocketIsUnavailable(t *testing.T) {
-	adapter := keys.NewAgent(func(string) (string, bool) { return "", false })
+	adapter := agentFor("")
 
 	if adapter.Available(context.Background()) {
 		t.Fatal("an agent with no socket reported itself available")
