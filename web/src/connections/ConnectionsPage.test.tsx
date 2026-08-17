@@ -254,8 +254,13 @@ describe("ConnectionsPage", () => {
     );
 
     await screen.findByRole("heading", { name: "bastion" });
-    await user.clear(screen.getByLabelText("Port"));
-    await user.type(screen.getByLabelText("Port"), "2222");
+    // **見出しが出たことは、欄が埋まったことではない。** 埋まる前に clear
+    // すると何も消えず、そのあと届いた 22 の後ろへ 2222 が足されて 222222 に
+    // なる。速い機械では先に埋まるので通り、CI でだけ落ちていた。
+    const port = await screen.findByLabelText("Port");
+    await waitFor(() => expect(port).toHaveValue(22));
+    await user.clear(port);
+    await user.type(port, "2222");
     expect(configApi.host).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "Files" }));

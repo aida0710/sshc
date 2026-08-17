@@ -585,12 +585,20 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           言語の select が画面の外へはみ出していた。中の文字は詰められるが、
           開けば選択肢は全部読める——2 か所に置いて名前を曖昧にするより、
           1 か所を狭めるほうが安い。
+
+          **min-w-0 が要る。** max-w は「これ以上広げない」であって「これ以下に
+          縮めてよい」ではない。flex 項目の既定の min-width:auto は select を
+          その min-content——いちばん長い選択肢の幅——より細くさせないので、
+          文字が広く出るフォントの機械では、上限を付けていても行が溢れる。
+          実際 CI がそうで、言語の select の右端だけが 3px 外に出ていた。
+          どれだけ溢れるかはフォント次第なので、その幅を削るのではなく、
+          **縮んでよいと言う。**
         */}
         <select
           id="appearance"
           value={theme}
           onChange={(event) => setTheme(event.target.value as Theme)}
-          className={`${autoControl} max-w-24 md:max-w-none`}
+          className={`${autoControl} min-w-0 max-w-24 md:max-w-none`}
         >
           {themes.map((candidate) => (
             <option key={candidate} value={candidate}>
@@ -605,7 +613,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           id="language"
           value={locale}
           onChange={(event) => setLocale(event.target.value as Locale)}
-          className={`${autoControl} max-w-24 md:max-w-none`}
+          className={`${autoControl} min-w-0 max-w-24 md:max-w-none`}
         >
           {locales.map((candidate) => (
             <option key={candidate} value={candidate}>
