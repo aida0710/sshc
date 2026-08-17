@@ -77,7 +77,7 @@ cd android && ./gradlew clean assembleDebug          # app/build/outputs/apk/deb
 
 施錠されているときの振る舞いは、持ち主で分かれます。**desktop なら窓を一度だけ前へ出して、時間の上限を置かずに待ちます** — 解錠は窓でも別の端末の `sshc vault unlock` でもよく、どちらも同じエンジンを変えるので、待っていた `sshc <接続先>` はそのまま接続へ進みます。打ち直させません。Ctrl-C で降りれば 130 です。**headless なら待ちません** — 見えない窓の前で待たせても、そこには誰も居ません。
 
-窓を起こす方法は OS ごとに違います。**macOS は束の id を LaunchServices に渡します**（場所を覚えません）。**Linux は外殻が起動のたびに `~/.ssh/sshc/desktop.json` へ書いた絶対パスを直接実行します** — PATH も shell も引きません。AppImage を動かしたなら、新しい場所で一度開いてくださいという指示が出ます。**古い AppImage を探し回って一番それらしいものを起こすことはしません。** 画面が無い機械（`DISPLAY` も `WAYLAND_DISPLAY` も無い）では、窓の話をせずに `sshc headless` を案内します。**Windows の起動登録は実装中です。**
+窓を起こす方法は OS ごとに違います。**macOS は束の id を LaunchServices に渡します**（場所を覚えません）。**Linux は外殻が起動のたびに `~/.ssh/sshc/desktop.json` へ書いた絶対パスを直接実行します** — PATH も shell も引きません。AppImage を動かしたなら、新しい場所で一度開いてくださいという指示が出ます。**古い AppImage を探し回って一番それらしいものを起こすことはしません。** 画面が無い機械（`DISPLAY` も `WAYLAND_DISPLAY` も無い）では、窓の話をせずに `sshc headless` を案内します。**Windows は HKCU の `Software\sshc\Desktop` に記録された絶対パスを直接実行します** — `cmd.exe` も PowerShell も PATH も間に入りません。記録が無い、消えている、`sshc.exe` という名前でない、といった値は起こさずに断ります。**その記録を書く per-user インストーラ（NSIS）はまだありません** — CLI 側は読めますが、書く手はこれからです。
 
 外殻は起動のたびに、束の中の CLI を `~/.local/share/sshc/bin/sshc` へ写し、`~/.local/bin/sshc` をそこへ向けます。**束の中を指しません** — AppImage の中身は一時マウントで、閉じれば消えるからです。`~/.local/bin/sshc` に自分が張ったリンク以外のもの（`make install` が置いた実体など）があれば**触らず、その場所を名指しした警告を出します**。
 

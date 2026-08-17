@@ -34,6 +34,7 @@ function harness(lines: string[]) {
       },
     },
     focus: vi.fn(),
+    blur: vi.fn(),
     onRender: (handler: () => void) => {
       repaint = handler;
       return { dispose: vi.fn() };
@@ -42,7 +43,7 @@ function harness(lines: string[]) {
 
   const detach = attachSelectionOverlay(container, view);
   const overlay = container.querySelector(`.${overlayClass}`) as HTMLElement;
-  return { container, overlay, view, detach, repaint: () => repaint() };
+  return { container, overlay, view, screen, detach, repaint: () => repaint() };
 }
 
 describe("attachSelectionOverlay", () => {
@@ -82,6 +83,29 @@ describe("attachSelectionOverlay", () => {
     // 手を離せば、次の描き直しで追いつく。
     selection?.removeAllRanges();
     repaint();
+    expect(overlay.textContent).toBe("after");
+    detach();
+  });
+
+  // **形が変わったら、掴んでいたものはもう合わない。** キーボードが閉じれば
+  // 窓の高さが変わり、xterm は全部を描き直す。字だけ止めておくと、帯は動いた
+  // 字の上に残る——選んだつもりの範囲と、見えている範囲が食い違う。
+  it("lets go of the selection when the terminal is laid out again", () => {
+    const lines = ["before"];
+    const { overlay, detach, repaint, screen } = harness(lines);
+    const range = document.createRange();
+    range.selectNodeContents(overlay);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    expect(selectionHeldIn(overlay)).toBe(true);
+
+    lines[0] = "after";
+    screen.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 200, height: 100 }) as DOMRect;
+    repaint();
+
+    expect(selectionHeldIn(overlay)).toBe(false);
     expect(overlay.textContent).toBe("after");
     detach();
   });
