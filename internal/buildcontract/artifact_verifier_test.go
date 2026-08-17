@@ -8,6 +8,14 @@ import (
 )
 
 func TestArtifactNameVerifierShell(t *testing.T) {
+	// **無いものを「壊れている」と報告しない。** この検査が確かめるのは POSIX
+	// シェルのスクリプトであり、それを走らせる sh が無い機械では、確かめられる
+	// ものが何も無い。同じパッケージの Make 境界検査が make について同じことを
+	// している——Windows の実機には Git 同梱の sh が PATH に載っていないことが
+	// あり、そこで落とすと、通らない理由がスクリプトにあるように見える。
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no POSIX shell on this host; the artifact name verifier must run in a step that has one")
+	}
 	script := filepath.Join("..", "..", "scripts", "verify-artifact-name.sh")
 	tests := []struct {
 		name        string
