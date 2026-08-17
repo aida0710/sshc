@@ -1647,3 +1647,81 @@ func TestDedicatedKeyPassphraseRelocationPersists(t *testing.T) {
 		t.Fatalf("reopened relocated passphrase = %q, %v", got, ok)
 	}
 }
+
+// **bucket を編集しただけで、リモートのスナップショットが誰にも開けなくなっては
+// ならない。** 設定の form は鍵の欄を持たない——鍵を見せるのは作った一度だけで、
+// 以後は伏せ字である——ので、空で来た鍵は「消せ」ではなく「触るな」である。
+func TestSettingsWithoutAKeyKeepTheKeyThatIsAlreadyStored(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetSyncSettings(secret.SyncSettings{
+		Endpoint: "https://s3.example", Bucket: "b", Region: "auto",
+		AccessKeyID: "AKIAEXAMPLE", SecretAccessKey: "s3cret-key", Direction: "both",
+	}); err != nil {
+		t.Fatalf("SetSyncSettings = %v", err)
+	}
+	if err := service.SetSyncKey("AB12-CD34-EF56-GH78-JK90-MN12"); err != nil {
+		t.Fatalf("SetSyncKey = %v", err)
+	}
+
+	// bucket だけを編集した form が戻ってくる。
+	if err := service.SetSyncSettings(secret.SyncSettings{
+		Endpoint: "https://s3.example", Bucket: "other", Region: "auto",
+		AccessKeyID: "AKIAEXAMPLE", SecretAccessKey: "s3cret-key", Direction: "both",
+	}); err != nil {
+		t.Fatalf("SetSyncSettings = %v", err)
+	}
+
+	read, err := service.SyncSettings()
+	if err != nil {
+		t.Fatalf("SyncSettings = %v", err)
+	}
+	if read.Key != "AB12-CD34-EF56-GH78-JK90-MN12" {
+		t.Fatalf("the stored key is %q, want the one that was set", read.Key)
+	}
+	if read.Bucket != "other" {
+		t.Fatalf("the bucket is %q, want the edited one", read.Bucket)
+	}
+}
+
+// 鍵だけを置き換える道が、他の設定を巻き添えにしない。
+func TestSettingTheKeyLeavesEveryOtherSettingAlone(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	settings := secret.SyncSettings{
+		Endpoint: "https://s3.example", Bucket: "b", Path: "p", Region: "auto",
+		AccessKeyID: "AKIAEXAMPLE", SecretAccessKey: "s3cret-key", Direction: "push",
+	}
+	if err := service.SetSyncSettings(settings); err != nil {
+		t.Fatalf("SetSyncSettings = %v", err)
+	}
+	if err := service.SetSyncKey("AB12-CD34-EF56-GH78-JK90-MN12"); err != nil {
+		t.Fatalf("SetSyncKey = %v", err)
+	}
+
+	read, err := service.SyncSettings()
+	if err != nil {
+		t.Fatalf("SyncSettings = %v", err)
+	}
+	settings.Key = "AB12-CD34-EF56-GH78-JK90-MN12"
+	if read != settings {
+		t.Fatalf("settings are %+v, want %+v", read, settings)
+	}
+}
+
+// 保管庫が閉じているなら、鍵は書けない。書ける設計は、閉じていることの意味を
+// 失わせる。
+func TestSettingTheKeyNeedsAnOpenVault(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	service.Lock()
+	if err := service.SetSyncKey("AB12-CD34-EF56-GH78-JK90-MN12"); !errors.Is(err, secret.ErrLocked) {
+		t.Fatalf("SetSyncKey on a locked vault = %v, want ErrLocked", err)
+	}
+}

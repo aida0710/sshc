@@ -11,6 +11,7 @@ afterEach(() => {
 
 const unconfigured: SyncStatus = {
   configured: false,
+  keyConfigured: false,
   locked: false,
   endpoint: "",
   bucket: "",
@@ -19,6 +20,7 @@ const unconfigured: SyncStatus = {
 };
 const configured: SyncStatus = {
   configured: true,
+  keyConfigured: true,
   locked: false,
   endpoint: "https://acc.r2.cloudflarestorage.com",
   bucket: "sshc",
@@ -81,7 +83,7 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
-    await userEvent.click(screen.getByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
 
     await waitFor(() =>
       expect(api.configureSync).toHaveBeenCalledWith({
@@ -104,7 +106,7 @@ describe("SyncPanel", () => {
 
     expect(await screen.findByText("https://acc.r2.cloudflarestorage.com/sshc")).toBeInTheDocument();
     expect(screen.queryByLabelText("Secret access key")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Edit bucket settings" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Edit bucket settings" }));
     expect(screen.getByLabelText("Endpoint")).toHaveValue("https://acc.r2.cloudflarestorage.com");
     expect(screen.getByLabelText("Bucket name")).toHaveValue("sshc");
     expect(screen.getByLabelText("Secret access key")).toHaveValue("");
@@ -122,7 +124,7 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Region"), "eu-west-2");
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
-    await userEvent.click(screen.getByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
 
     await waitFor(() =>
       expect(api.configureSync).toHaveBeenCalledWith(
@@ -150,15 +152,14 @@ describe("SyncPanel", () => {
     });
     render(<SyncPanel api={api} />);
 
-    await userEvent.type(await screen.findByLabelText("Master password"), "correct horse battery staple");
-    await userEvent.click(screen.getByRole("button", { name: "Check for changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
 
-    await waitFor(() => expect(api.pullSnapshot).toHaveBeenCalledWith("correct horse battery staple", false));
+    await waitFor(() => expect(api.pullSnapshot).toHaveBeenCalledWith(false));
     expect(await screen.findByText("connections/work/lon.conf")).toBeInTheDocument();
     expect(screen.getByText("connections/old.conf")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Apply the snapshot" }));
-    await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith("correct horse battery staple", true));
+    await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
+    await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith(true));
   });
 
   it("shows a conflict and refuses to apply it", async () => {
@@ -173,8 +174,7 @@ describe("SyncPanel", () => {
     });
     render(<SyncPanel api={api} />);
 
-    await userEvent.type(await screen.findByLabelText("Master password"), "a passphrase");
-    await userEvent.click(screen.getByRole("button", { name: "Check for changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
 
     expect(await screen.findByText(/changed here and on the other machine/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply the snapshot" })).toBeDisabled();
@@ -184,8 +184,7 @@ describe("SyncPanel", () => {
     const api = buildApi(configured, nothingToDo);
     render(<SyncPanel api={api} />);
 
-    await userEvent.type(await screen.findByLabelText("Master password"), "a passphrase");
-    await userEvent.click(screen.getByRole("button", { name: "Check for changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
 
     expect(await screen.findByText(/already matches the snapshot/)).toBeInTheDocument();
   });
@@ -194,8 +193,7 @@ describe("SyncPanel", () => {
     const api = buildApi(configured, nothingToDo);
     render(<SyncPanel api={api} />);
 
-    await userEvent.type(await screen.findByLabelText("Master password"), "a passphrase");
-    await userEvent.click(screen.getByRole("button", { name: "Push this workspace" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Push this workspace" }));
 
     expect(await screen.findByRole("heading", { name: "This push" })).toBeInTheDocument();
     expect(screen.getByText("7 files · 1.2 kB")).toBeInTheDocument();
@@ -210,12 +208,11 @@ describe("SyncPanel", () => {
     });
     render(<SyncPanel api={api} />);
 
-    await userEvent.type(await screen.findByLabelText("Master password"), "a passphrase");
-    await userEvent.click(screen.getByRole("button", { name: "Check for changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
     expect(await screen.findByRole("heading", { name: "Pull preview" })).toBeInTheDocument();
     expect(screen.getByText("Downloaded 900 B · 1.2 kB after opening")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Apply the snapshot" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
     expect(await screen.findByRole("heading", { name: "Apply result" })).toBeInTheDocument();
     expect(screen.getByText("Downloaded again for apply: 900 B")).toBeInTheDocument();
   });
@@ -248,8 +245,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     expect(await screen.findByRole("heading", { name: "Previous success" })).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText("Master password"), "a passphrase");
-    await userEvent.click(screen.getByRole("button", { name: "Push this workspace" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Push this workspace" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/live snapshot was not updated/i);
     expect(screen.getByRole("alert")).toHaveTextContent(/dated history copy.*may remain/i);
@@ -265,7 +261,7 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
     await userEvent.selectOptions(screen.getByLabelText("Direction"), "pull");
-    await userEvent.click(screen.getByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
 
     await waitFor(() =>
       expect(api.configureSync).toHaveBeenCalledWith(
@@ -278,8 +274,7 @@ describe("SyncPanel", () => {
     const api = buildApi({ ...configured, direction: "pull" }, nothingToDo);
     render(<SyncPanel api={api} />);
 
-    await userEvent.type(await screen.findByLabelText("Master password"), "a passphrase");
-    expect(screen.getByRole("button", { name: "Push this workspace" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Push this workspace" })).toBeDisabled();
     // 理由はコントロールの隣に立つ。無効化されたボタンの隣に何もなければ、
     // それは設定ではなく不具合に見えてしまう。
     expect(screen.getByText(/Set to receive only/)).toBeInTheDocument();
@@ -295,8 +290,7 @@ describe("SyncPanel", () => {
     });
     render(<SyncPanel api={api} />);
 
-    await userEvent.type(await screen.findByLabelText("Master password"), "a passphrase");
-    await userEvent.click(screen.getByRole("button", { name: "Check for changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
 
     // 見ることは動かすことではない。適用してはならないマシンでも、
     // 自分がどれだけ遅れているかを知ることは許される。
@@ -311,8 +305,7 @@ describe("SyncPanel", () => {
     });
     render(<SyncPanel api={api} />);
 
-    await userEvent.type(await screen.findByLabelText("Master password"), "a passphrase");
-    await userEvent.click(screen.getByRole("button", { name: "Push this workspace" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Push this workspace" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/pull first|could not be pushed/i);
   });
@@ -342,24 +335,66 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     await userEvent.type(await screen.findByLabelText("Master password"), "the master password");
-    await userEvent.click(screen.getByRole("button", { name: "Unlock" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Unlock" }));
 
     await waitFor(() => expect(api.unlockVault).toHaveBeenCalledWith("the master password"));
     expect(await screen.findByText("https://acc.r2.cloudflarestorage.com/sshc")).toBeInTheDocument();
   });
-  // スナップショットは今やマスターパスワードで封印されているので、
-  // 打ち間違いはこのマシンが検知できる。以前は誰も開けないアーカイブを
-  // 生み、それを何か月も後に別のマシン上で告げていた。
-  it("says the master password was wrong rather than blaming the bucket", async () => {
+  // 封をしているのはマスターパスワードではなく、保管庫の中の鍵である。開かない
+  // ときに言うべきことは「パスワードが違う」ではなく、「このバケットは、この
+  // マシンが鍵を持つ前に書かれたものかもしれない」である。
+  it("points at the key, not the master password, when the snapshot does not open", async () => {
     const api = buildApi(configured, nothingToDo, {
-      pushSnapshot: vi.fn().mockRejectedValue(new ApiError("wrong_master_password", 403, null)),
+      pushSnapshot: vi.fn().mockRejectedValue(new ApiError("wrong_passphrase", 403, null)),
     });
     render(<SyncPanel api={api} />);
 
-    await userEvent.type(await screen.findByLabelText("Master password"), "not the master password");
-    await userEvent.click(screen.getByRole("button", { name: "Push this workspace" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Push this workspace" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/not this machine's master password/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/stored key does not open/i);
+  });
+
+  // **鍵は一度しか見せない。** リモートを開ける値を、画面を開き直すたびに配る
+  // 画面にしてはならない。
+  it("shows a generated key once and never asks for it again", async () => {
+    const setSyncKey = vi.fn().mockResolvedValue({ key: "AB12-CD34-EF56-GH78-JK90-MN12" });
+    const syncStatus = vi
+      .fn()
+      .mockResolvedValueOnce({ ...configured, keyConfigured: false })
+      .mockResolvedValue(configured);
+    const api = buildApi(configured, nothingToDo, { setSyncKey, syncStatus });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Create a key" }));
+
+    await waitFor(() => expect(setSyncKey).toHaveBeenCalledWith(undefined));
+    expect(await screen.findByText("AB12-CD34-EF56-GH78-JK90-MN12")).toBeInTheDocument();
+    // そして押す前に、押した人が打つ欄はどこにも無い。
+    expect(screen.queryByLabelText("Key")).not.toBeInTheDocument();
+  });
+
+  // 自分で決める道も残っている。決めたものは表示しない——打った人はすでに知って
+  // いる。
+  it("takes a key the person chose without echoing it back", async () => {
+    const setSyncKey = vi.fn().mockResolvedValue({ key: "a key chosen by hand" });
+    const api = buildApi({ ...configured, keyConfigured: false }, nothingToDo, { setSyncKey });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByLabelText("Choose the key myself"));
+    await userEvent.type(screen.getByLabelText("Key"), "a key chosen by hand");
+    await userEvent.click(await screen.findByRole("button", { name: "Create a key" }));
+
+    await waitFor(() => expect(setSyncKey).toHaveBeenCalledWith("a key chosen by hand"));
+    expect(screen.queryByText("a key chosen by hand")).not.toBeInTheDocument();
+  });
+
+  // 鍵が無ければ押せない。押せてしまえば、リモートには誰も開けない書庫が残る。
+  it("offers no push or pull until a key exists", async () => {
+    const api = buildApi({ ...configured, keyConfigured: false }, nothingToDo);
+    render(<SyncPanel api={api} />);
+
+    expect(await screen.findByRole("button", { name: "Push this workspace" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Check for changes" })).toBeDisabled();
   });
 
   // 設定は保持される前に試されるので、画面は何も保存されなかったと
@@ -374,7 +409,7 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
-    await userEvent.click(screen.getByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Nothing was saved/i);
   });
@@ -389,7 +424,7 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
-    await userEvent.click(screen.getByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/no bucket name and no path/i);
   });

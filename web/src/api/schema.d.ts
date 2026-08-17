@@ -324,6 +324,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setSyncKey"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/rekey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rekeySnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/pull": {
         parameters: {
             query?: never;
@@ -1336,6 +1368,7 @@ export interface components {
         SyncDirection: "both" | "push" | "pull";
         SyncStatus: {
             configured: boolean;
+            keyConfigured: boolean;
             locked: boolean;
             endpoint: string;
             bucket: string;
@@ -1390,8 +1423,13 @@ export interface components {
             secretAccessKey: string;
             direction?: components["schemas"]["SyncDirection"];
         };
+        SyncKeyRequest: {
+            key?: string;
+        };
+        SyncKeyResponse: {
+            key: string;
+        };
         PullRequest: {
-            passphrase: string;
             apply?: boolean;
         };
         SyncConflict: {
@@ -2476,11 +2514,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PassphraseRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Snapshot written */
             200: {
@@ -2494,6 +2528,63 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setSyncKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description The key this machine will seal snapshots with */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncKeyResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    rekeySnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PassphraseRequest"];
+            };
+        };
+        responses: {
+            /** @description The remote snapshot now opens with the stored key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncStatus"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
         };
     };

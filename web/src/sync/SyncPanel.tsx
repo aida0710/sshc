@@ -29,6 +29,9 @@ type SyncPanelProps = { api?: IntegrationsApi };
 // バケットの問題ではなく、パスを含むエンドポイントは資格情報の問題ではない。
 const refusals: Record<string, MessageKey> = {
   wrong_master_password: "sync.wrongMaster",
+  wrong_passphrase: "sync.wrongKey",
+  sync_key_missing: "sync.keyMissing",
+  passphrase_too_short: "sync.keyTooShort",
   bucket_refused: "sync.unreachable",
   sync_failed: "sync.unreachable",
   endpoint_must_have_no_path: "sync.endpointPath",
@@ -51,7 +54,13 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [secretAccessKey, setSecretAccessKey] = useState("");
   const [direction, setDirection] = useState<SyncDirection>("both");
   const [master, setMaster] = useState("");
-  const [passphrase, setPassphrase] = useState("");
+  // 作ったばかりの鍵。**一度だけ見せる。** リモートを開ける値を、画面を
+  // 開き直すたびに配ってはならない。
+  const [revealed, setRevealed] = useState("");
+  const [ownKey, setOwnKey] = useState("");
+  const [chooseOwn, setChooseOwn] = useState(false);
+  // 移行のために一度だけ尋ねる、古い鍵（かつてのマスターパスワード）。
+  const [oldKey, setOldKey] = useState("");
   const [preview, setPreview] = useState<PullResponse | null>(null);
   const [resultView, setResultView] = useState<SyncResultView | null>(null);
   const [notice, setNotice] = useState("");
@@ -308,13 +317,91 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             : t("sync.neverSynced")}
         </p>
         <Card>
-          <Row label={t("sync.passphrase")} hint={t("sync.passphraseLost")}>
-          <input
-            type="password"
-            value={passphrase}
-            onChange={(event) => setPassphrase(event.target.value)}
-            className={control}
-          />
+          <Row label={t("sync.key")} hint={t("sync.keyHint")}>
+            <div className="flex flex-col gap-2">
+              {revealed === "" ? (
+                <p className="text-sm text-ink-muted">
+                  {status.keyConfigured ? t("sync.keySet") : t("sync.keyMissing")}
+                </p>
+              ) : (
+                <>
+                  {/* 一度だけ見せる。ここを離れれば二度と出ない。 */}
+                  <output className="select-all break-all rounded border border-line bg-surface px-3 py-2 font-mono text-sm text-ink">
+                    {revealed}
+                  </output>
+                  <p className="text-sm text-notice-ink">{t("sync.keyShownOnce")}</p>
+                </>
+              )}
+              <label className="flex items-center gap-2 text-sm text-ink-muted">
+                <input
+                  type="checkbox"
+                  checked={chooseOwn}
+                  onChange={(event) => setChooseOwn(event.target.checked)}
+                />
+                {t("sync.keyChooseOwn")}
+              </label>
+              {chooseOwn ? (
+                <input
+                  type="password"
+                  aria-label={t("sync.keyOwnValue")}
+                  value={ownKey}
+                  onChange={(event) => setOwnKey(event.target.value)}
+                  className={control}
+                />
+              ) : null}
+              <button
+                type="button"
+                disabled={busy || (chooseOwn && ownKey === "")}
+                onClick={() =>
+                  void run(
+                    () => api.setSyncKey(chooseOwn ? ownKey : undefined),
+                    (next) => {
+                      setRevealed(chooseOwn ? "" : next.key);
+                      setOwnKey("");
+                      setNotice(t("sync.keySaved"));
+                      void reload();
+                    },
+                    t("sync.keyFailed"),
+                  )
+                }
+                className={`self-start ${primaryAction}`}
+              >
+                {status.keyConfigured ? t("sync.keyReplace") : t("sync.keyCreate")}
+              </button>
+            </div>
+          </Row>
+          {/*
+            移行。かつてスナップショットを封じていたのはマスターパスワード
+            そのものだった。すでにバケットにあるものは、新しい鍵では開かない。
+          */}
+          <Row label={t("sync.rekey")} hint={t("sync.rekeyHint")}>
+            <div className="flex flex-col gap-2">
+              <input
+                type="password"
+                aria-label={t("sync.rekeyOldKey")}
+                value={oldKey}
+                onChange={(event) => setOldKey(event.target.value)}
+                className={control}
+              />
+              <button
+                type="button"
+                disabled={busy || !status.configured || !status.keyConfigured || oldKey === ""}
+                onClick={() =>
+                  void run(
+                    () => api.rekeySnapshot(oldKey),
+                    (next) => {
+                      setStatus(next);
+                      setOldKey("");
+                      setNotice(t("sync.rekeyed"));
+                    },
+                    t("sync.rekeyFailed"),
+                  )
+                }
+                className="self-start rounded border border-line px-3 py-1.5 text-sm text-ink"
+              >
+                {t("sync.rekey")}
+              </button>
+            </div>
           </Row>
         </Card>
         {status.direction === "both" ? null : (
@@ -328,10 +415,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={busy || !status.configured || passphrase === "" || status.direction === "pull"}
+            disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull"}
             onClick={() =>
               void run(
-                () => api.pushSnapshot(passphrase),
+                () => api.pushSnapshot(),
                 (next) => {
                   setStatus(next.status);
                   setPreview(null);
@@ -347,10 +434,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           </button>
           <button
             type="button"
-            disabled={busy || !status.configured || passphrase === ""}
+            disabled={busy || !status.configured || !status.keyConfigured}
             onClick={() =>
               void run(
-                () => api.pullSnapshot(passphrase, false),
+                () => api.pullSnapshot(false),
                 (next) => {
                   setPreview(next);
                   setResultView({ kind: "preview", result: next });
@@ -424,7 +511,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             }
             onClick={() =>
               void run(
-                () => api.pullSnapshot(passphrase, true),
+                () => api.pullSnapshot(true),
                 (next) => {
                   setPreview(next);
                   setResultView({ kind: "apply", result: next });
