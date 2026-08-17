@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  desktop/build/icon.svg と同じ図形である。あちらの 512 の座標系をそのまま
+  viewport にしてあるので、path の数字は一文字も変えずに写せる。
+
+  **中身を 0.82 に縮めてある。** adaptive icon は 108 の面のうち中央の 72 しか
+  見えることを保証しない——ランチャーが円で抜けば、等倍のままでは右下の角が
+  欠ける。数えると中心から 35.5、円の半径は 33 である。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.82"
+        android:scaleY="0.82">
+        <path
+            android:pathData="M136,166H244L288,210H376V346H268L224,302H136Z"
+            android:strokeWidth="28"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="0"
+                    android:startY="0"
+                    android:endX="512"
+                    android:endY="512">
+                    <item android:offset="0" android:color="#38BDF8" />
+                    <item android:offset="0.58" android:color="#667EEA" />
+                    <item android:offset="1" android:color="#8B5CF6" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:pathData="M304,248h24v52h-24z"
+            android:fillColor="#EAF2FF" />
+    </group>
+</vector>

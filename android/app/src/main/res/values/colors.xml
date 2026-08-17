@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- desktop/build/icon.svg の下地。あちらの角丸は adaptive icon の型が持つ。 -->
+    <color name="launcher_background">#09111F</color>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  **密度ごとの png を置かない。** minSdk は 26 で、adaptive icon はそこから
+  在る——どの端末もこの一枚を解決する。ベクタなので、どの画面でも輪郭が立つ。
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <!-- テーマ付きアイコンでは、系がこれを一色に塗る。図形はそのまま影になる。 -->
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
