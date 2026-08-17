@@ -1,5 +1,5 @@
 {
-  "name": "sshc-desktop",
+  "name": "sshc",
   "productName": "sshc",
   "desktopName": "com.github.aida0710.sshc.desktop",
   "version": "0.1.0",
@@ -93,7 +93,7 @@
       "signAndEditExecutable": false,
       "extraResources": [
         {
-          "from": "resources/${os}-${arch}/sshc.exe",
+          "from": "resources/win32-${arch}/sshc.exe",
           "to": "cli/sshc.exe"
         }
       ]

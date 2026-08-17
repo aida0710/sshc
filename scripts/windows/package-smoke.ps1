@@ -33,7 +33,10 @@ $launcherKey = 'HKCU:\Software\sshc\Desktop'
 $stateDirectory = Join-Path $env:USERPROFILE '.ssh\sshc'
 
 function Assert([bool]$Condition, [string]$Because) {
-  if (-not $Condition) { throw "package-smoke: $Because" }
+  # **落ちたときの文言が、事実の記述に読めてはならない。** "the shell is at X"
+  # は成功したときの言い方であり、それを失敗の理由として投げると、読んだ人は
+  # 何が起きたのか分からない。期待していたことだと分かる形で言う。
+  if (-not $Condition) { throw "package-smoke: expected $Because" }
   Write-Output "ok: $Because"
 }
 
@@ -54,6 +57,7 @@ New-Item -ItemType Directory -Force -Path $WorkRoot | Out-Null
 # **入れる前の PATH を覚えておく。** アンインストールが元へ戻したかどうかは、
 # ここと比べる以外に言いようがない。
 $pathBefore = UserPathEntries
+$restoredPath = $false
 # 近い名前の項目を先に置く。**アンインストーラがこれを巻き添えにしないこと**
 # が、前方一致で消していないことの証拠になる。
 $neighbour = Join-Path $WorkRoot 'sshc-tools'
@@ -62,36 +66,39 @@ $decoy = "$cliDirectory-tools"
 Set-ItemProperty -Path 'HKCU:\Environment' -Name Path `
   -Value (@($pathBefore + $decoy) -join ';')
 
+# **置いたものは、どう終わっても片づける。** 途中で落ちた検査が利用者の PATH に
+# 囮を残していくのは、確かめに来ただけのものが環境を壊すということである。
+# 最初にこれを走らせた実機で、実際にそれをやってしまった。
 try {
   Write-Output "installing $Installer"
   $install = Start-Process -FilePath $Installer -ArgumentList '/S' -Wait -PassThru
-  Assert ($install.ExitCode -eq 0) "the installer exited with 0 (got $($install.ExitCode))"
+  Assert ($install.ExitCode -eq 0) "the installer to exit with 0 (got $($install.ExitCode))"
 
   # ---- layout ----
-  Assert (Test-Path -LiteralPath $shell) "the shell is at $shell"
-  Assert (Test-Path -LiteralPath $cli) "the CLI is at $cli"
+  Assert (Test-Path -LiteralPath $shell) "the shell at $shell"
+  Assert (Test-Path -LiteralPath $cli) "the CLI at $cli"
 
   # ---- user PATH ----
   $entries = UserPathEntries
   $mine = @($entries | Where-Object { $_ -eq $cliDirectory })
-  Assert ($mine.Count -eq 1) "the CLI directory is on the user PATH exactly once"
-  Assert ($entries -contains $decoy) "the neighbouring entry survived the install"
+  Assert ($mine.Count -eq 1) "the CLI directory on the user PATH exactly once"
+  Assert ($entries -contains $decoy) "the neighbouring entry to survive the install"
 
   # **入れ直しても増えない。** 同じ項目が二つ並ぶ PATH は、何度か入れ直した
   # 利用者の環境で起きる壊れ方である。
   $again = Start-Process -FilePath $Installer -ArgumentList '/S' -Wait -PassThru
-  Assert ($again.ExitCode -eq 0) "the second install exited with 0"
+  Assert ($again.ExitCode -eq 0) "the second install to exit with 0"
   $mine = @(UserPathEntries | Where-Object { $_ -eq $cliDirectory })
-  Assert ($mine.Count -eq 1) "reinstalling did not add the entry a second time"
+  Assert ($mine.Count -eq 1) "reinstalling not to add the entry a second time"
 
   # ---- launcher registration ----
   $registered = (Get-ItemProperty -Path $launcherKey -Name Executable).Executable
-  Assert ($registered -eq $shell) "the launcher key names the shell"
+  Assert ($registered -eq $shell) "the launcher key to name the shell"
 
   # ---- the CLI answers ----
   $version = & $cli --help 2>&1
-  Assert ($LASTEXITCODE -eq 0) "the installed CLI runs"
-  Assert (($version -join "`n") -match 'headless') "its help names the headless owner"
+  Assert ($LASTEXITCODE -eq 0) "the installed CLI to run"
+  Assert (($version -join "`n") -match 'headless') "its help to name the headless owner"
 
   # ---- a headless engine comes up and its state is private ----
   $engine = Start-Process -FilePath $cli -ArgumentList 'headless' -PassThru `
@@ -103,7 +110,7 @@ try {
     while (-not (Test-Path -LiteralPath $handoff) -and (Get-Date) -lt $deadline) {
       Start-Sleep -Milliseconds 200
     }
-    Assert (Test-Path -LiteralPath $handoff) "the engine published a handoff"
+    Assert (Test-Path -LiteralPath $handoff) "the engine to publish a handoff"
 
     # **中身は読まない。** ここにはワンタイムの資格情報が入っている。
     foreach ($private in @($stateDirectory, $handoff)) {
@@ -111,47 +118,61 @@ try {
     }
 
     $status = & $cli vault status 2>&1
-    Assert ($LASTEXITCODE -eq 0) "vault status answered"
-    Assert (($status -join "`n") -match 'engine:\s*headless') "the owner is headless"
+    Assert ($LASTEXITCODE -eq 0) "vault status to answer"
+    Assert (($status -join "`n") -match 'engine:\s*headless') "the owner to be headless"
 
     # **端末が持っているあいだ、外殻は engine を横取りしない。**
     $bare = Start-Process -FilePath $cli -ArgumentList @() -Wait -PassThru `
       -RedirectStandardError (Join-Path $WorkRoot 'bare.err')
-    Assert ($bare.ExitCode -ne 0) "bare sshc refused to displace the headless owner"
+    Assert ($bare.ExitCode -ne 0) "bare sshc to refuse to displace the headless owner"
     $refusal = Get-Content -Raw (Join-Path $WorkRoot 'bare.err')
-    Assert ($refusal -match 'headless') "the refusal names the headless owner"
+    Assert ($refusal -match 'headless') "the refusal to name the headless owner"
   } finally {
     if (-not $engine.HasExited) { Stop-Process -Id $engine.Id -Force }
   }
 
   # ---- ConPTY descendants do not outlive the engine ----
   $survivors = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($engine.Id)")
-  Assert ($survivors.Count -eq 0) "no console outlived the engine"
-} finally {
+  Assert ($survivors.Count -eq 0) "no console to outlive the engine"
+  # ---- uninstall ----
+  # **アンインストールも検査の一部である。** 後片付けの finally に置くと、
+  # その終了コードを誰も見ない。
   Write-Output 'uninstalling'
   $uninstaller = Join-Path $installDirectory 'Uninstall sshc.exe'
-  if (Test-Path -LiteralPath $uninstaller) {
-    $remove = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
-    Assert ($remove.ExitCode -eq 0) "the uninstaller exited with 0"
+  Assert (Test-Path -LiteralPath $uninstaller) "an uninstaller at $uninstaller"
+  $remove = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
+  Assert ($remove.ExitCode -eq 0) "the uninstaller to exit with 0 (got $($remove.ExitCode))"
+
+  # ---- what is left ----
+  Assert (-not (Test-Path -LiteralPath $shell)) "the shell to be gone"
+  Assert (-not (Test-Path -LiteralPath $cli)) "the CLI to be gone"
+
+  $entries = UserPathEntries
+  Assert (-not ($entries -contains $cliDirectory)) "the CLI directory to leave the user PATH"
+  # **近い名前は残る。** 前方一致で消していたら、これも消えている。
+  Assert ($entries -contains $decoy) "the neighbouring entry to survive the uninstall"
+  foreach ($entry in $pathBefore) {
+    Assert ($entries -contains $entry) "the pre-existing entry $entry to survive"
+  }
+
+  $stillRegistered = Get-ItemProperty -Path $launcherKey -Name Executable -ErrorAction SilentlyContinue
+  Assert ($null -eq $stillRegistered) "the launcher registration to be gone"
+} finally {
+  # **どう終わっても、来たときの PATH へ戻す。** 途中で落ちた検査が囮を残して
+  # いくのは、確かめに来ただけのものが利用者の環境を壊すということである。
+  Set-ItemProperty -Path 'HKCU:\Environment' -Name Path -Value ($pathBefore -join ';')
+  $restoredPath = $true
+
+  # 入ったままなら、消してから帰る。ここでの失敗は報告するだけで、検査の
+  # 結果を上書きしない——本当の理由は既に投げられている。
+  $leftover = Join-Path $installDirectory 'Uninstall sshc.exe'
+  if (Test-Path -LiteralPath $leftover) {
+    $sweep = Start-Process -FilePath $leftover -ArgumentList '/S' -Wait -PassThru
+    if ($sweep.ExitCode -ne 0) {
+      Write-Output "package-smoke: could not remove the leftover install ($($sweep.ExitCode))"
+    }
   }
 }
 
-# ---- what is left ----
-Assert (-not (Test-Path -LiteralPath $shell)) "the shell is gone"
-Assert (-not (Test-Path -LiteralPath $cli)) "the CLI is gone"
-
-$entries = UserPathEntries
-Assert (-not ($entries -contains $cliDirectory)) "the CLI directory left the user PATH"
-# **近い名前は残る。** 前方一致で消していたら、これも消えている。
-Assert ($entries -contains $decoy) "the neighbouring entry survived the uninstall"
-foreach ($entry in $pathBefore) {
-  Assert ($entries -contains $entry) "the pre-existing entry $entry survived"
-}
-
-$stillRegistered = Get-ItemProperty -Path $launcherKey -Name Executable -ErrorAction SilentlyContinue
-Assert ($null -eq $stillRegistered) "the launcher registration is gone"
-
-# 置いた囮を片づける。**利用者の PATH を、来たときの姿へ戻す。**
-Set-ItemProperty -Path 'HKCU:\Environment' -Name Path -Value ($pathBefore -join ';')
-
+Assert $restoredPath "the user PATH to be restored"
 Write-Output "package-smoke: $Architecture passed"
