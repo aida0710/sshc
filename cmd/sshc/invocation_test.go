@@ -5,6 +5,39 @@ import (
 	"testing"
 )
 
+// **接続先とコマンドは別の引数である。** ひとつの語に兼ねさせると、どこまでが
+// 接続先でどこからがコマンドかを推測することになる。
+func TestRunTakesAnAliasAndACommand(t *testing.T) {
+	for _, argv := range [][]string{
+		{"sshc", "run"},
+		{"sshc", "run", "win"},
+	} {
+		if _, err := parseInvocation(argv); err == nil {
+			t.Errorf("%v was accepted; run needs an alias and a command", argv)
+		}
+	}
+
+	called, err := parseInvocation([]string{"sshc", "run", "win", "go", "test", "./..."})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if called.Kind != invocationRun {
+		t.Fatalf("kind = %v, want invocationRun", called.Kind)
+	}
+	if got := strings.Join(called.Args, "|"); got != "win|go|test|./..." {
+		t.Errorf("args = %q", got)
+	}
+}
+
+// **語は空白ひとつで繋ぐ。** OpenSSH の `ssh host cmd args` と同じで、引用の
+// 規則は相手のシェルのものである。こちらで包み直せば、どちらかのシェルで壊れる。
+func TestTheRemoteCommandIsJoinedWithoutRequoting(t *testing.T) {
+	got := remoteCommand([]string{"go", "test", "./...", "-run", "'Test[A-Z]'"})
+	if want := `go test ./... -run 'Test[A-Z]'`; got != want {
+		t.Errorf("remoteCommand = %q, want %q", got, want)
+	}
+}
+
 func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 	tests := []struct {
 		argv []string

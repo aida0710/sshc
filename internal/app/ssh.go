@@ -252,3 +252,22 @@ func (c CLIConnection) Open(ctx context.Context, alias string, size terminal.Siz
 	}
 	return c.dialer.Open(ctx, target, size)
 }
+
+// Run は、この alias の相手でコマンドをひとつ走らせ、その終了状態を返す。
+//
+// **打たれたコマンドが設定より強い。** 設定の `RemoteCommand` は「この接続先へ
+// 繋いだら常にこれを走らせる」という指示だが、ここで渡されたものは、いま一度
+// これを走らせろという指示である。後者を無視して前者を走らせるのは、頼まれて
+// いないことを実行することになるので、Stream は渡された方だけを見る。
+//
+// **端末も要求しない。** 設定の `RequestTTY` がどうであれ、この入口が返すのは
+// 集めて読める出力であり、画面制御の混ざったものではない。
+func (c CLIConnection) Run(
+	ctx context.Context, alias, command string, streams sshclient.Streams,
+) (int, error) {
+	target, _, err := sshclient.NewTarget(alias, c.resolve, c.home)
+	if err != nil {
+		return sshclient.RemoteFailureExit, err
+	}
+	return c.dialer.Stream(ctx, target, command, streams)
+}
