@@ -22,7 +22,12 @@ func TestWindowsPasswordReaderCancellationWakesWaitAndRestoresExactMode(t *testi
 		password, err := readWindowsPassword(ctx, windows.Handle(41), fake.operations())
 		result <- windowsPasswordTestResult{password: password, err: err}
 	}()
-	<-fake.modeChanged
+	// **待ちへ入ってから取り消す。** ここで確かめたいのは「待っている reader を
+	// 取り消しが起こす」ことである。mode が変わった時点で取り消すと、reader は
+	// まだ待ちに入っておらず、ループの頭の ctx 検査で降りる——それも正しい
+	// 振る舞いだが、起こされたことにはならないので、合図は一度も要らない。
+	// 速い機械では reader が先に待ちへ入るので通り、混んだ CI で落ちていた。
+	<-fake.waiting
 	cancel()
 	answer := receiveWindowsPasswordResult(t, result)
 	if answer.password != nil || !errors.Is(answer.err, context.Canceled) {
@@ -196,12 +201,17 @@ func TestWindowsPasswordReaderReadCancelRaceReturnsAndRestoresMode(t *testing.T)
 }
 
 type fakeWindowsPasswordOperations struct {
-	mu               sync.Mutex
-	oldMode          uint32
-	modeChanged      chan struct{}
-	modeChangedOnce  sync.Once
-	cancelEvent      chan struct{}
-	cancelEventOnce  sync.Once
+	mu              sync.Mutex
+	oldMode         uint32
+	modeChanged     chan struct{}
+	modeChangedOnce sync.Once
+	cancelEvent     chan struct{}
+	cancelEventOnce sync.Once
+	// waiting は、reader が実際に待ちへ入ったことを表す。**mode が変わったこと
+	// では代わりにならない** —— あれは待ちに入るより前に起きるので、そこで
+	// 取り消すと reader は待たずにループの頭の ctx 検査で降りる。
+	waiting          chan struct{}
+	waitingOnce      sync.Once
 	inputReady       chan struct{}
 	events           []windowsKeyInput
 	getModeCalls     int
@@ -227,6 +237,7 @@ func newFakeWindowsPasswordOperations() *fakeWindowsPasswordOperations {
 		modeChanged: make(chan struct{}),
 		cancelEvent: make(chan struct{}),
 		inputReady:  make(chan struct{}),
+		waiting:     make(chan struct{}),
 	}
 }
 
@@ -270,6 +281,7 @@ func (f *fakeWindowsPasswordOperations) operations() windowsPasswordOperations {
 			if f.waitError != nil {
 				return windows.WAIT_FAILED, f.waitError
 			}
+			f.waitingOnce.Do(func() { close(f.waiting) })
 			select {
 			case <-f.cancelEvent:
 				return windows.WAIT_OBJECT_0, nil
