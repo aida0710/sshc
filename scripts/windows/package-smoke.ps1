@@ -131,7 +131,10 @@ try {
     Assert (($status -join "`n") -match 'engine:\s*headless') "the owner to be headless"
 
     # **端末が持っているあいだ、外殻は engine を横取りしない。**
-    $bare = Start-Process -FilePath $cli -ArgumentList @() -Wait -PassThru `
+    # **引数無しは -ArgumentList を書かない。** 空の配列は拒まれる
+    # （"The argument is null, empty, ..."）——渡すものが無いことを、
+    # 空のものを渡すことで表せない。
+    $bare = Start-Process -FilePath $cli -Wait -PassThru `
       -RedirectStandardError (Join-Path $WorkRoot 'bare.err')
     Assert ($bare.ExitCode -ne 0) "bare sshc to refuse to displace the headless owner"
     $refusal = Get-Content -Raw (Join-Path $WorkRoot 'bare.err')
