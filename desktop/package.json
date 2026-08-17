@@ -10,9 +10,11 @@
   "scripts": {
     "postinstall": "install-electron",
     "start": "electron .",
-    "dist": "electron-builder --mac --linux",
-    "test": "node --test entrance.test.js reopen.test.js lifecycle.test.js install-cli.test.js launcher.test.js",
-    "icons": "node icon.mjs"
+    "test": "node --test entrance.test.js reopen.test.js lifecycle.test.js install-cli.test.js launcher.test.js installer.test.js",
+    "icons": "node icon.mjs",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win"
   },
   "devDependencies": {
     "electron": "^43.0.0",
@@ -29,6 +31,7 @@
       "preload.js",
       "install-cli.js",
       "launcher.js",
+      "installer.js",
       "entrance.js",
       "reopen.js",
       "tray.js",
@@ -74,6 +77,35 @@
         }
       },
       "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-${os}-${arch}-setup.${ext}",
+      "signAndEditExecutable": false,
+      "extraResources": [
+        {
+          "from": "resources/${os}-${arch}/sshc.exe",
+          "to": "cli/sshc.exe"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "runAfterFinish": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "include": "build/installer.nsh"
     }
   }
 }
