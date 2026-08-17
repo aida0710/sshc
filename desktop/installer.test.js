@@ -83,14 +83,34 @@ test("the installer script writes nothing outside this user", () => {
   }
 });
 
+// **Function を定義しない。** electron-builder は installer と uninstaller を
+// 別々にコンパイルし、makensis を警告=エラーで走らせる。`un.` 付きの関数を
+// include の時点で置くと、WriteUninstaller を持たない側で 6020 になり、
+// **束が一切作れなくなる**——手元で -WX 無しにコンパイルしても気づけない。
+test("the installer include defines no functions for either compilation pass", () => {
+  const functions = installerScript.match(/^\s*Function\s+\S+/gm) ?? [];
+  assert.deepEqual(
+    functions,
+    [],
+    `installer.nsh defines ${functions.join(", ")}; inline the logic instead`,
+  );
+  assert.ok(
+    !installerScript.includes("un."),
+    "installer.nsh names an un. symbol, which only exists in the uninstaller pass",
+  );
+});
+
 // **PATH の項目は、区切りで割って一件ずつ突き合わせる。** 部分文字列で見ると
 // `C:\a\sshc` を消すつもりで `C:\a\sshc-tools` の頭を削り、利用者の PATH を
 // 壊す。ここでは、その割り方をしていることを構造として見る。
 test("the installer matches PATH entries whole, not as substrings", () => {
-  assert.match(installerScript, /\$\{WordFind\} "\$R2" ";"/);
-  // 一件ずつの比較は LogicLib の等値であって、前方一致ではない。
-  assert.match(installerScript, /\$\{If\} \$R5 == \$R1/);
-  assert.match(installerScript, /\$\{If\} \$R5 != \$R1/);
+  // **どのレジスタを使うかは固定しない。** 番号を書き込むと、中身を書き
+  // 直しただけで落ち、確かめたい性質とは関係のないところで手が止まる。
+  assert.match(installerScript, /\$\{WordFind\} "\$R\d" ";"/);
+  // 一件ずつの比較は LogicLib の等値であって、前方一致ではない。取り出した
+  // 項目と、足す（消す）項目を、丸ごと突き合わせている。
+  assert.match(installerScript, /\$\{If\} \$R\d == \$R\d/);
+  assert.match(installerScript, /\$\{If\} \$R\d == \$R\d/);
 });
 
 // **自分が書いた登録だけを消す。** 二つの版が入っている機械では、別の場所を
@@ -98,11 +118,11 @@ test("the installer matches PATH entries whole, not as substrings", () => {
 test("uninstall removes the launcher value only when it points at this install", () => {
   assert.match(
     installerScript,
-    /ReadRegStr \$R8 HKCU "\$\{SSHC_LAUNCHER_KEY\}" "\$\{SSHC_LAUNCHER_VALUE\}"/,
+    /ReadRegStr \$R\d HKCU "\$\{SSHC_LAUNCHER_KEY\}" "\$\{SSHC_LAUNCHER_VALUE\}"/,
   );
   assert.match(
     installerScript,
-    /\$\{If\} \$R8 == "\$INSTDIR\\\$\{PRODUCT_FILENAME\}\.exe"/,
+    /\$\{If\} \$R\d == "\$INSTDIR\\\$\{PRODUCT_FILENAME\}\.exe"/,
   );
 });
 
