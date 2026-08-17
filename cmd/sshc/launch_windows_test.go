@@ -141,13 +141,21 @@ func TestAnUnregisteredDesktopIsReportedRatherThanGuessed(t *testing.T) {
 	}
 }
 
+// waitForActivations は、起こされた回数がちょうど want になるのを待つ。
+//
+// **確かめているのは回数であって、速さではない。** 期限を短く取ると、他の
+// パッケージと並んで走る実機で、正しく一度だけ起こしているものが落ちる——
+// 新しく焼いた署名の無い実行ファイルは、初回の起動が数秒かかることがある。
+// 一度も起こさない実装は何秒待っても 0 のままなので、余裕を取ってもこの主張は
+// 立つ。
 func waitForActivations(t *testing.T, ledger string, want int) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		if activations(t, ledger) >= want {
-			// 数え過ぎていないことも見る。少し待ってから確かめる。
-			time.Sleep(200 * time.Millisecond)
+			// 数え過ぎていないことも見る。**二度目は一度目より遅れて来る**ので、
+			// 落ち着くだけの間を置いてから確かめる。
+			time.Sleep(time.Second)
 			if got := activations(t, ledger); got != want {
 				t.Fatalf("the desktop was started %d times, want %d", got, want)
 			}
