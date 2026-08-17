@@ -40,10 +40,18 @@ test("the bundled engine sits where each platform expects it", () => {
 });
 
 test("the Windows package copies the CLI into the directory the installer adds to PATH", () => {
+  // **${os} を使わない。** electron-builder はこれを "win" に展開するが、
+  // Makefile と nativebuild が置くディレクトリは "win32-x64" である。食い違って
+  // も electron-builder は黙って飛ばすので、束の中に CLI が入らないまま
+  // インストーラが出来上がる——実機に入れて初めて分かった。
   const resources = configuration.build.win.extraResources;
   assert.deepEqual(resources, [
-    { from: "resources/${os}-${arch}/sshc.exe", to: "cli/sshc.exe" },
+    { from: "resources/win32-${arch}/sshc.exe", to: "cli/sshc.exe" },
   ]);
+  assert.ok(
+    !JSON.stringify(resources).includes("${os}"),
+    "the Windows resource path uses ${os}, which does not expand to win32",
+  );
   // installer.nsh が足すのは resources\cli である。上の "to" と同じ場所を
   // 指していることを、綴りの上で確かめる。
   assert.match(installerScript, /!define SSHC_CLI_SUBDIR "resources\\cli"/);
@@ -156,6 +164,15 @@ test("only the platforms without an installer manage their own CLI", () => {
   assert.strictEqual(managesItsOwnCLI("win32"), false);
   assert.strictEqual(managesItsOwnCLI("darwin"), true);
   assert.strictEqual(managesItsOwnCLI("linux"), true);
+});
+
+// **インストール先の名前は productName ではなく name から来る。** 設計は
+// %LOCALAPPDATA%\\Programs\\sshc を約束しており、npm の package 名がそこに
+// 現れる。ここが "sshc-desktop" に戻ると、利用者の PATH に入る道も、
+// package-smoke が確かめる場所も、README の記載も、まとめてずれる。
+test("the install directory is named for the product, not for the npm package", () => {
+  assert.strictEqual(configuration.name, "sshc");
+  assert.strictEqual(configuration.productName, "sshc");
 });
 
 // 束に入るファイルの一覧から漏れると、実行時に require が失敗する。
