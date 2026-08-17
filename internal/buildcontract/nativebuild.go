@@ -99,6 +99,12 @@ type nativeBuildDeps struct {
 	environment []string
 	executor    nativeCommandExecutor
 	mkdirAll    func(string, os.FileMode) error
+	// verifyBinary は、焼けた実体が本当にその行き先のものかを見る。
+	//
+	// **継ぎ目にしてあるのは、検査が実体を読むからである。** 記録するだけの
+	// executor で組み立てた検査は、ファイルを一つも作らない。ここを直に
+	// 呼ぶと、そのすべてが「読めなかった」で落ちる。
+	verifyBinary func(path, goos, goarch string) error
 }
 
 type nativeBuildRequest struct {
@@ -114,12 +120,13 @@ type nativeBuildRequest struct {
 func RunNativeBuild(args []string, stdout, stderr io.Writer) error {
 	environment := os.Environ()
 	return runNativeBuild(args, nativeBuildDeps{
-		hostOS:      runtime.GOOS,
-		hostArch:    runtime.GOARCH,
-		hostCGO:     os.Getenv("CGO_ENABLED"),
-		environment: environment,
-		executor:    osNativeExecutor{stdout: stdout, stderr: stderr},
-		mkdirAll:    os.MkdirAll,
+		hostOS:       runtime.GOOS,
+		hostArch:     runtime.GOARCH,
+		hostCGO:      os.Getenv("CGO_ENABLED"),
+		environment:  environment,
+		executor:     osNativeExecutor{stdout: stdout, stderr: stderr},
+		mkdirAll:     os.MkdirAll,
+		verifyBinary: VerifyBinaryArchitecture,
 	}, stdout, stderr)
 }
 
@@ -449,6 +456,19 @@ func buildNativeCLI(request nativeBuildRequest, version string, deps nativeBuild
 		return fmt.Errorf("create output directory: %w", err)
 	}
 	fmt.Fprintf(stdout, "==> %s/%s (CGO_ENABLED=%s)\n", request.goos, request.goarch, request.cgo)
+	if err := buildOne(request, version, deps); err != nil {
+		return err
+	}
+	// **名前ではなく中身を見る。** 束ごとに正しい実体を入れているかは、
+	// 焼いた直後にしか安く確かめられない——配ってからでは、動かない機械の
+	// 上でしか分からない。
+	if deps.verifyBinary == nil {
+		return nil
+	}
+	return deps.verifyBinary(request.output, request.goos, request.goarch)
+}
+
+func buildOne(request nativeBuildRequest, version string, deps nativeBuildDeps) error {
 	return deps.executor.Run(nativeCommand{
 		name: "go",
 		args: []string{
