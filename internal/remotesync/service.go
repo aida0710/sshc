@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -33,6 +34,16 @@ const archiveSuffix = "tar.gz.enc"
 // し、誰も知らない拡張子は、それをダウンロードした誰かに「このファイルは壊れて
 // いる」と結論させかねない。
 const ObjectName = "workspace." + archiveSuffix
+
+// VaultPath は、保管庫がディスク上で置かれている場所。
+const VaultPath = "sshc/secrets"
+
+// TravelPath は、保管庫がスナップショットの中で名乗る名前。
+//
+// **別の名前であることに意味がある。** 中に入っているのは封ではなく中身なので、
+// 受け取った側がそのままディスクへ置いてはならない。名前が違えば、置く前に必ず
+// この経路を通る。
+const TravelPath = "sshc/secrets.json"
 
 // SnapshotPrefix は、ライブのオブジェクトの隣に、push ごとの日付付きコピーを保持する。
 //
@@ -232,6 +243,20 @@ type Service struct {
 	now          func() string
 	newOrigin    func() (string, error)
 
+	// OpenVault と SealVault は、保管庫を旅に出し、旅から受け取る両替所である。
+	//
+	// **このパッケージは secret を import しない。** 依存の向きは、storage の
+	// Seal と Unseal がそうしているのと同じ理由でこの形に保つ——同期は、保管庫が
+	// 何でできているかを知らないまま運べる。
+	//
+	// どちらも nil なら、保管庫は封のまま運ばれる。それは版 1 の挙動であり、
+	// マスターパスワードが端末をまたいで共有されていた頃の挙動である。
+	OpenVault func() ([]byte, error)
+	SealVault func(document []byte) ([]byte, error)
+	// VaultAdopted は、保管庫の中身を置き換えたあとに鳴る。走っている実行が
+	// 古い秘密を配り続けないための合図であって、同期はそれが誰に届くかを知らない。
+	VaultAdopted func() error
+
 	mu      sync.Mutex
 	binding remoteBinding
 }
@@ -349,7 +374,13 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 		return Manifest{}, nil, err
 	}
 	relatives = append(relatives, keys...)
-	relatives = append(relatives, "sshc/metadata.json", "sshc/secrets")
+	relatives = append(relatives, "sshc/metadata.json")
+	// **保管庫は、両替所があるならファイルとしては載せない。** 載せれば、
+	// この端末のマスターパスワードで封じられたものが旅に出ることになり、
+	// 受け取った端末はそれ以降、送り主のパスワードでしか開けなくなる。
+	if s.OpenVault == nil {
+		relatives = append(relatives, VaultPath)
+	}
 
 	seen := map[string]bool{}
 	contents := map[string][]byte{}
@@ -382,6 +413,20 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 			// pull にそれを SkipBackup 付きで適用させる。
 			Secret: strings.HasPrefix(relative, "keys/") && !strings.HasSuffix(relative, ".pub"),
 		})
+	}
+	// 保管庫は中身として載る。ディスク上のどのファイルとも対応しないので、
+	// ここだけは読むのではなく尋ねる。
+	if s.OpenVault != nil {
+		document, err := s.OpenVault()
+		if err != nil {
+			return Manifest{}, nil, err
+		}
+		if document != nil {
+			contents[TravelPath] = document
+			entries = append(entries, Entry{
+				Path: TravelPath, SHA256: Digest(document), Mode: "0600",
+			})
+		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 
@@ -606,6 +651,9 @@ func (s *Service) Pull(ctx context.Context, passphrase string) (PullResult, erro
 	}
 
 	request, conflicts, err := Plan(s.workspace.Root(), current.Base, local, manifest, contents)
+	if exchangeErr := s.exchangeVault(&request); exchangeErr != nil {
+		return PullResult{}, exchangeErr
+	}
 	if err != nil && !errors.Is(err, ErrNothingToApply) {
 		return PullResult{}, err
 	}
@@ -640,6 +688,14 @@ func (s *Service) Apply(result PullResult) error {
 			changeDirectories(s.workspace.Root(), result.Request.Changes)...)
 		if _, err := s.transactions.Commit(result.Request); err != nil {
 			return err
+		}
+		// 保管庫を置き換えたなら、それを配っている側に読み直させる。読み直さな
+		// ければ、運ばれてきたパスワードは次に解錠するまで存在しないのと同じで
+		// ある。
+		if s.VaultAdopted != nil && replacesVault(s.workspace.Root(), result.Request) {
+			if err := s.VaultAdopted(); err != nil {
+				return err
+			}
 		}
 	}
 	current, err := s.readState()
@@ -698,6 +754,19 @@ func (s *Service) localDigests(remote Manifest, base *Manifest) (map[string]stri
 
 	digests := map[string]string{}
 	for path := range paths {
+		// **旅の名前に対応するファイルは、ディスクに無い。** ここでディスクを
+		// 読めば必ず「こちらには無い」となり、保管庫は毎回そのまま上書きされる
+		// ——両側で同じ中身でも、である。突き合わせる相手は中身である。
+		if path == TravelPath && s.OpenVault != nil {
+			document, err := s.OpenVault()
+			if err != nil {
+				return nil, err
+			}
+			if document != nil {
+				digests[path] = Digest(document)
+			}
+			continue
+		}
 		body, err := s.workspace.FileSystem().ReadFile(filepath.Join(s.workspace.Root(), filepath.FromSlash(path)))
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -796,4 +865,116 @@ func (s *Service) DisplayPath(absolute string) string {
 		return filepath.Base(absolute)
 	}
 	return filepath.ToSlash(relative)
+}
+
+// RekeyResult は、封じ直したオブジェクトについて画面が言えることである。
+type RekeyResult struct {
+	// Bytes は、書き戻した暗号文の大きさ。
+	Bytes int64
+	// CompletedAt は、封じ直しが済んだ時刻。
+	CompletedAt string
+}
+
+// Rekey は、リモートのライブオブジェクトを古い鍵で開き、新しい鍵で封じ直す。
+//
+// **これは移行のためだけにある。** かつてスナップショットを封じていたのは、この
+// ワークスペースのマスターパスワードそのものだった。鍵をそこから外した以上、
+// すでにバケットにあるものは、新しい鍵では開かない。人にできるのは「古い方を一度
+// だけ思い出す」ことであり、この関数はそれを受け取って封だけを替える。
+//
+// **ワークスペースには 1 バイトも触れない。** 中身は開いたものをそのまま封じ直す
+// のであって、作り直すのではない。したがって失敗しても、ローカルにもリモートにも
+// 何も起きていない——古い鍵が違えば、開く前に止まる。
+//
+// 書き戻しは、いま読んだ ETag を条件にする。その間に他の端末が push していたなら
+// ErrRemoteMoved であり、もう一度やればよい。**条件を外して上書きすれば、
+// 封じ直しが他人の作業を消す操作になる。**
+func (s *Service) Rekey(ctx context.Context, from, to string) (RekeyResult, error) {
+	binding, err := s.configuredBinding()
+	if err != nil {
+		return RekeyResult{}, err
+	}
+	objectKey := ObjectKeyFor(binding.config)
+	object, err := binding.client.Get(ctx, objectKey)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			return RekeyResult{}, ErrNoSnapshot
+		}
+		return RekeyResult{}, err
+	}
+	archive, _, err := envelope.OpenWithin(object.Body, from, envelope.AcceptedFromRemote)
+	if err != nil {
+		return RekeyResult{}, err
+	}
+	key, err := envelope.Derive(to)
+	if err != nil {
+		return RekeyResult{}, err
+	}
+	sealed, err := key.Seal(archive)
+	if err != nil {
+		return RekeyResult{}, err
+	}
+	// 読んだ版だけを置き換える。push と同じ組み合わせである——ETag を返さない
+	// バケットでは「まだ無いときだけ作る」に落ちるので、いま読んだものが在る以上
+	// 必ず条件で弾かれる。**無条件の書き込みへは決して落ちない。**
+	ifMatch, ifNoneMatch := object.ETag, ""
+	if ifMatch == "" {
+		ifNoneMatch = "*"
+	}
+	if _, err := binding.client.Put(ctx, objectKey, sealed, ifMatch, ifNoneMatch); err != nil {
+		if errors.Is(err, objectstore.ErrPreconditionFailed) {
+			return RekeyResult{}, ErrRemoteMoved
+		}
+		return RekeyResult{}, err
+	}
+	// **state は触らない。** 中身は変わっていないので、このマシンが最後に同期した
+	// ものも変わっていない。ETag だけは新しくなるが、次の push が条件を外したときに
+	// 分かることであり、そこは既存の道が扱う。
+	return RekeyResult{Bytes: int64(len(sealed)), CompletedAt: s.now()}, nil
+}
+
+// exchangeVault は、旅の名前で届いた中身を、この端末の封に包み直して置き換える。
+//
+// **届くのは中身であって、ディスク上のファイルではない。** だから前提も組み直す
+// ——Plan が組んだのは旅の名前についてのものだからである。そして送り主に保管庫が
+// 無かったことを、こちらのものを消す理由にはしない。
+func (s *Service) exchangeVault(request *storage.Request) error {
+	if s.SealVault == nil {
+		return nil
+	}
+	travelled := filepath.Join(s.workspace.Root(), filepath.FromSlash(TravelPath))
+	local := filepath.Join(s.workspace.Root(), filepath.FromSlash(VaultPath))
+	for index := range request.Changes {
+		if request.Changes[index].Path != travelled {
+			continue
+		}
+		sealed, err := s.SealVault(request.Changes[index].Contents)
+		if err != nil {
+			return err
+		}
+		precondition := storage.Precondition{}
+		if body, err := s.workspace.FileSystem().ReadFile(local); err == nil {
+			precondition = storage.Precondition{Exists: true, Digest: storage.Digest(body)}
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		request.Changes[index] = storage.Change{
+			Path: local, Contents: sealed, Precondition: precondition,
+		}
+	}
+	request.Removals = slices.DeleteFunc(request.Removals, func(removal storage.Removal) bool {
+		return removal.Path == travelled
+	})
+	return nil
+}
+
+// replacesVault は、このリクエストが保管庫のファイルを書き換えるかを答える。
+func replacesVault(root string, request storage.Request) bool {
+	vault := filepath.Join(root, filepath.FromSlash(VaultPath))
+	for _, change := range request.Changes {
+		if change.Path == vault {
+			return true
+		}
+	}
+	return false
 }

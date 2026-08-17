@@ -445,9 +445,28 @@ export const en = {
   "sync.snapshotHeading": "Snapshot",
   "sync.neverSynced": "This machine has not synced yet.",
   "sync.lastSynced": "Last synced {at}, {count} files.",
-  "sync.passphrase": "Master password",
-  "sync.passphraseLost":
-    "The snapshot is sealed with your master password, so there is only one to remember and this machine can tell you straight away if you mistype it. Lose it and the snapshot cannot be recovered by anyone, including this application. Every machine sharing this bucket uses the same one.",
+  "sync.key": "Encryption key",
+  "sync.keyHint":
+    "The snapshot is sealed with this key, not with your master password. Every machine sharing this bucket enters the same key, and each one keeps its own master password. Lose it and the snapshot cannot be recovered by anyone, including this application.",
+  "sync.keyMissing": "No key yet. Create one here, then enter the same key on your other machines.",
+  "sync.keySet": "A key is set. It is not shown again.",
+  "sync.keyShownOnce":
+    "Copy this now and enter it on your other machines. Leave this screen and it will not be shown again.",
+  "sync.keyChooseOwn": "Choose the key myself",
+  "sync.keyOwnValue": "Key",
+  "sync.keyCreate": "Create a key",
+  "sync.keyReplace": "Replace the key",
+  "sync.keySaved": "Saved.",
+  "sync.keyFailed": "The key could not be saved.",
+  "sync.keyTooShort": "A key you choose yourself must be at least 12 characters.",
+  "sync.wrongKey":
+    "The stored key does not open the snapshot in this bucket. If it was written before this machine had its own key, seal it again below with the master password it was written with.",
+  "sync.rekey": "Seal the snapshot with this key",
+  "sync.rekeyHint":
+    "Only for a bucket written before the key existed, when the snapshot was sealed with a master password. Enter that password: the snapshot is opened and sealed again with the key above. Nothing in this workspace is touched.",
+  "sync.rekeyOldKey": "The password the snapshot was sealed with",
+  "sync.rekeyed": "The snapshot now opens with this machine's key.",
+  "sync.rekeyFailed": "The snapshot could not be sealed again.",
   "sync.wrongMaster": "That is not this machine's master password.",
   "sync.unreachable":
     "That bucket did not answer. Nothing was saved: check the endpoint, the bucket name and the keys.",

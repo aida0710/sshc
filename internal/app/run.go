@@ -270,6 +270,14 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
 		newOrigin(dependencies.Random),
 	)
+	// **保管庫は、封ではなく中身として旅をする。** ファイルのまま運べば、それは
+	// この端末のマスターパスワードで封じられたものであり、受け取った端末はそれ
+	// 以降、送り主のパスワードでしか開けなくなる——マスターパスワードを端末ごとに
+	// 変えられない、という詰みの本体はそこだった。両替はここで繋ぐ。同期は
+	// secret を import しない。
+	syncService.OpenVault = passwordService.TravelDocument
+	syncService.SealVault = passwordService.AdoptTravelDocument
+	syncService.VaultAdopted = passwordService.Reload
 
 	// 埋め込みターミナルの PTY は、この常駐プロセスの中で存続する。ブラウザの
 	// タブを閉じてもリロードしてもセッションは生きており、終わるのは子プロセスが

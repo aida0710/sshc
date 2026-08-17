@@ -14,6 +14,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   let refusePush = false;
   const status = () => ({
     configured: true,
+    keyConfigured: true,
     locked: false,
     endpoint: "https://s3.example.invalid",
     bucket: "sshc",
@@ -81,8 +82,6 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
 
   await openApplication(page, installation);
   await openSection(page, "Sync");
-  await page.getByLabel("Master password", { exact: true }).fill("an end to end master password");
-
   await page.getByRole("button", { name: "Push this workspace" }).click();
   await expect(page.getByRole("heading", { name: "This push" })).toBeVisible();
   await expect(page.getByText("S3 transfer 3.8 MB (2 objects, history + live)")).toBeVisible();
@@ -96,7 +95,6 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Previous success" })).toBeVisible();
-  await page.getByLabel("Master password", { exact: true }).fill("an end to end master password");
   refusePush = true;
   await page.getByRole("button", { name: "Push this workspace" }).click();
   await expect(page.getByRole("alert")).toContainText("live snapshot was not updated");

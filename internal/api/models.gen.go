@@ -877,8 +877,7 @@ type PublicKeyResponse struct {
 
 // PullRequest defines model for PullRequest.
 type PullRequest struct {
-	Apply      *bool  `json:"apply,omitempty"`
-	Passphrase string `json:"passphrase"`
+	Apply *bool `json:"apply,omitempty"`
 }
 
 // PullResponse defines model for PullResponse.
@@ -1111,6 +1110,16 @@ type SyncConflict struct {
 // SyncDirection defines model for SyncDirection.
 type SyncDirection string
 
+// SyncKeyRequest defines model for SyncKeyRequest.
+type SyncKeyRequest struct {
+	Key *string `json:"key,omitempty"`
+}
+
+// SyncKeyResponse defines model for SyncKeyResponse.
+type SyncKeyResponse struct {
+	Key string `json:"key"`
+}
+
 // SyncOperation defines model for SyncOperation.
 type SyncOperation struct {
 	CompletedAt     string            `json:"completedAt"`
@@ -1144,6 +1153,7 @@ type SyncStatus struct {
 	Direction     SyncDirection  `json:"direction"`
 	Endpoint      string         `json:"endpoint"`
 	FileCount     *int           `json:"fileCount,omitempty"`
+	KeyConfigured bool           `json:"keyConfigured"`
 	LastOperation *SyncOperation `json:"lastOperation,omitempty"`
 	LastSyncedAt  *string        `json:"lastSyncedAt,omitempty"`
 	Locked        bool           `json:"locked"`
@@ -1422,11 +1432,14 @@ type PlanRemoteKeyRegistrationJSONRequestBody = RemoteKeyPlanRequest
 // RegisterRemoteKeyJSONRequestBody defines body for RegisterRemoteKey for application/json ContentType.
 type RegisterRemoteKeyJSONRequestBody = RemoteKeyRegisterRequest
 
+// SetSyncKeyJSONRequestBody defines body for SetSyncKey for application/json ContentType.
+type SetSyncKeyJSONRequestBody = SyncKeyRequest
+
 // PullSnapshotJSONRequestBody defines body for PullSnapshot for application/json ContentType.
 type PullSnapshotJSONRequestBody = PullRequest
 
-// PushSnapshotJSONRequestBody defines body for PushSnapshot for application/json ContentType.
-type PushSnapshotJSONRequestBody = PassphraseRequest
+// RekeySnapshotJSONRequestBody defines body for RekeySnapshot for application/json ContentType.
+type RekeySnapshotJSONRequestBody = PassphraseRequest
 
 // ConfigureSyncJSONRequestBody defines body for ConfigureSync for application/json ContentType.
 type ConfigureSyncJSONRequestBody = SyncSettingsRequest

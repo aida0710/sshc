@@ -75,6 +75,8 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     syncStatus: vi.fn().mockResolvedValue({ configured: false, endpoint: "", bucket: "", synced: false }),
     configureSync: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: false }),
     pushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
+    setSyncKey: vi.fn().mockResolvedValue({ key: "AB12-CD34-EF56-GH78-JK90-MN12" }),
+    rekeySnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
     pullSnapshot: vi.fn().mockResolvedValue({ applied: false, conflicts: [], written: [], removed: [] }),
     ...overrides,
   };
