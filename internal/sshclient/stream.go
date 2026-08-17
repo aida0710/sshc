@@ -83,6 +83,14 @@ func (d Dialer) Stream(
 	// まで返らず、Ctrl-C を押した人が待たされ続ける。
 	finished := make(chan struct{})
 	defer close(finished)
+
+	// **設定された ServerAliveInterval を落とさない。** 対話セッションはこれを
+	// 尊重していて、こちらだけ無視していた——長く黙って走るコマンドこそ、
+	// 途中の機器に接続を捨てられて困る側である。既定を作りはしない（OpenSSH も
+	// 既定では送らない）。設定した人の指示を通すだけである。
+	if keepAlive := keepAliveLoop(client, strict.KeepAlive, strict.KeepAliveMax, finished); keepAlive != nil {
+		go keepAlive()
+	}
 	go func() {
 		select {
 		case <-ctx.Done():
