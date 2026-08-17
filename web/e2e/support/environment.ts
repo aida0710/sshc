@@ -102,6 +102,37 @@ async function buildHome(): Promise<string> {
   return home;
 }
 
+// restrictToThisUser は、その道を利用者と SYSTEM と Administrators だけに
+// 閉じる。**エンジンが要求するのはちょうどこの三つである**
+// （internal/platform/windowsacl の isDescriptorRestricted）。
+//
+// SID で指すのは、SYSTEM と Administrators の表示名が環境で翻訳されるから
+// である。名前で書くと、日本語の Windows で無言で外れる。
+async function restrictToThisUser(target: string): Promise<void> {
+  if (process.platform !== "win32") return;
+  const user = process.env.USERNAME ?? "";
+  await new Promise<void>((done, fail) => {
+    const child = spawn(
+      "icacls",
+      [
+        target,
+        "/inheritance:r",
+        "/grant",
+        "*S-1-5-18:(F)",
+        "/grant",
+        "*S-1-5-32-544:(F)",
+        "/grant",
+        `${user}:(F)`,
+      ],
+      { stdio: "ignore" },
+    );
+    child.on("error", fail);
+    child.on("exit", (code) =>
+      code === 0 ? done() : fail(new Error(`icacls ${target} exited ${String(code)}`)),
+    );
+  });
+}
+
 function startBinary(
   home: string,
 ): Promise<{ child: ChildProcess; url: string }> {
@@ -139,6 +170,25 @@ function startBinary(
   });
 }
 
+// **相手のシェルは OS で違う。** 端末が動いていることを確かめたいのに、
+// POSIX の書き方を送れば、PowerShell では構文エラーが返る——確かめたい性質
+// ではなく、こちらの方言を検査していることになる。
+export const windowsShell = process.platform === "win32";
+
+// shellSays は、同じことを、その OS のシェルの言い方で返す。
+export const shellSays = {
+  // 端末が自分の大きさを知っているか。POSIX は stty、PowerShell は RawUI。
+  size: windowsShell
+    ? '"$($Host.UI.RawUI.WindowSize.Height)-$($Host.UI.RawUI.WindowSize.Width)"'
+    : 'stty size | tr " " "-"',
+  // 少し待ってから書く、を背後で行う。**端末が別の画面の裏でも生きている**
+  // ことを、あとから届く一行で言う。
+  lateEcho: (text: string) =>
+    windowsShell
+      ? `Start-Job { Start-Sleep 2; "${text}" } | Out-Null; Start-Sleep 3; Receive-Job * | Out-String`
+      : `(sleep 2; echo ${text}) &`,
+};
+
 export const test = base.extend<{ installation: Installation }>({
   installation: async ({}, use) => {
     const home = await buildHome();
@@ -153,6 +203,14 @@ export const test = base.extend<{ installation: Installation }>({
         const target = join(home, ".ssh", relative);
         await mkdir(dirname(target), { recursive: true, mode: 0o700 });
         await writeFile(target, contents, { mode: 0o600 });
+        // **エンジンの私的な状態は、閉じていなければ読まれない。** Windows で
+        // それを言うのは mode ビットではなく DACL であり、Node が書いたものは
+        // 親から継承した ACL を持つ。エンジンは正しくそれを拒む——fixture が
+        // 本物と同じ形を作らなければ、確かめているのは「読めない状態」になる。
+        if (relative.startsWith("sshc/")) {
+          await restrictToThisUser(dirname(target));
+          await restrictToThisUser(target);
+        }
       },
     };
     await use(installation);
