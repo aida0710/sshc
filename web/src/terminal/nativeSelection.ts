@@ -1,23 +1,14 @@
-// 触れる画面では、範囲選択を OS に返す。
+// 触れる画面かどうかを答える、それだけの場所。
 //
-// **xterm はタッチを持っていない。** これは私たちの配線の穴ではなくライブラリの
-// 穴である——xtermjs/xterm.js#3727 (2022) と #5377 (2025) がどちらも開いたままで、
-// CoreBrowserTerminal はマウスとキーボードしか見ていない。上流の #5961 が
-// 「粗いポインタでは OS の DOM 選択に任せる」を実装しているが、iOS 向けで
-// 未マージであり、maintainer が求めている Android 分はまだ誰も書いていない。
+// **かつてここには「何を戻せば選択が始まるか」が書いてあった。** 全部間違って
+// いた——user-select も pointer-events も touch-action も aria-hidden も焦点も
+// mousedown の遮断も contextmenu の遮断も、実機で 1 つずつ測って全部空振り
+// だった。`.xterm` の中では、指の長押しから選択が始まらない。同じ普通の div を
+// 中に置くと選べず、外に置くと選べる。原因は xterm がその部分木に対して行って
+// いる何かで、外からは外せない。
 //
-// **止めるものは 2 つだけだった。** 実機の WebView を DevTools で覗いて分かった
-// ことである。
-//
-//  1. xterm は .xterm-rows に pointer-events: none を掛けている。だから長押しの
-//     当たり先は .xterm-screen になり、そこに文字は無い——選択は始まるのに
-//     掴むものが無く、空のまま終わる。
-//  2. 右クリック貼り付けが contextmenu を preventDefault していた。Android の
-//     長押しは contextmenu を発火するので、そこで既定を止めると選択ジェスチャ
-//     ごと消える。ついでに読み取れないクリップボードを読みに行き、「アクセス
-//     できませんでした」を出していた。
-//
-// **mousedown は関係なかった。** 長押しでは 1 度も発火しない——計測した。
+// 答えは selectionOverlay.ts にある——字を `.xterm` の外へ出す。ここに残って
+// いるのは、それをどの画面で行うかを決める 1 行だけである。
 
 /** 指で触る画面か。hover が無く、ポインタが粗いことがその定義である。 */
 export function prefersNativeSelection(match: (query: string) => { matches: boolean }): boolean {
