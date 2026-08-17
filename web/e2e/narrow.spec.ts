@@ -23,10 +23,45 @@ async function openSectionThroughDrawer(page: import("@playwright/test").Page, n
 // 横スクロールは、狭い画面の壊れ方そのものである。**どれか一つの面が溢れれば
 // ドキュメント全体が溢れる**ので、面を渡り歩きながら同じことを一度ずつ問う。
 async function expectNoHorizontalOverflow(page: import("@playwright/test").Page, where: string) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow, `${where} scrolls sideways at 360px`).toBeLessThanOrEqual(0);
+  const { overflow, culprits } = await page.evaluate(() => {
+    const root = document.documentElement;
+    const overflow = root.scrollWidth - root.clientWidth;
+    if (overflow <= 0) return { overflow, culprits: [] as string[] };
+
+    // **溢れた量だけでは直せない。** この検査が落ちるのは、たいてい再現の
+    // 難しい環境（別のフォント、別のスクロールバー）であり、そこで見えている
+    // ものを持ち帰れなければ、直す側は当てずっぽうを繰り返すことになる。
+    // 面の外へはみ出した要素を、その場で名指しして持ち帰る。
+    const limit = root.clientWidth;
+    const describe = (element: Element) => {
+      const rectangle = element.getBoundingClientRect();
+      const identity = [
+        element.tagName.toLowerCase(),
+        element.id === "" ? "" : `#${element.id}`,
+        typeof element.className === "string" && element.className !== ""
+          ? `.${element.className.trim().split(/\s+/).join(".")}`
+          : "",
+      ].join("");
+      return `${identity} [${Math.round(rectangle.left)}..${Math.round(rectangle.right)}]`;
+    };
+    // 溢れているのは親も子も同じなので、**いちばん深いものだけを名指す**。
+    // 祖先まで並べると、本当に幅を決めているものが行の海に沈む。
+    const culprits = [...root.querySelectorAll("*")]
+      .filter((element) => {
+        const rectangle = element.getBoundingClientRect();
+        if (rectangle.width === 0 || rectangle.right <= limit + 0.5) return false;
+        return ![...element.children].some(
+          (child) => child.getBoundingClientRect().right > limit + 0.5,
+        );
+      })
+      .slice(0, 5)
+      .map(describe);
+    return { overflow, culprits };
+  });
+  expect(
+    overflow,
+    `${where} scrolls sideways at 360px; past the right edge: ${culprits.join(", ") || "nothing measurable"}`,
+  ).toBeLessThanOrEqual(0);
 }
 
 test("keeps every section inside 360 pixels", async ({ page, installation }) => {
