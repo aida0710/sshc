@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Installs the per-user NSIS package, checks what it did, and uninstalls it.
 

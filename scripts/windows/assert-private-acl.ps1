@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Fails unless the given path can be read only by its owner, SYSTEM and Administrators.
 
