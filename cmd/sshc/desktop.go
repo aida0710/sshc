@@ -47,17 +47,26 @@ func runDesktop(
 	// 作らず既存の窓を前へ出す。
 	available, err := launcher.Available()
 	if err != nil {
-		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
+		return noWindow(stderr, err.Error())
 	}
 	if !available {
-		fmt.Fprintln(stderr, "sshc: no graphical desktop is available here")
-		fmt.Fprintln(stderr, "sshc: run sshc headless to keep an engine in this terminal")
-		return 1
+		return noWindow(stderr, "no graphical desktop is available here")
 	}
 	if err := launcher.Launch(ctx); err != nil {
-		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
+		return noWindow(stderr, err.Error())
 	}
 	return 0
+}
+
+// noWindow は、窓を開けなかった理由と、窓なしで engine を持つ方法を出す。
+//
+// **理由がどれであっても headless を添える。** 直し方を持つ理由——記録が無い、
+// 実体が動いた——を出すだけだと、そのアプリケーションを入れる気の無い人に
+// 「入れろ」としか言っていないことになる。CLI だけを置いた機械や、SSH で
+// 入った先には、窓を開ける以外の答えがあり、それはこの端末で engine を持つ
+// ことである。**両方渡して、選ぶのは打った人に任せる。**
+func noWindow(stderr io.Writer, reason string) int {
+	fmt.Fprintf(stderr, "sshc: %s\n", reason)
+	fmt.Fprintln(stderr, "sshc: run sshc headless to keep an engine in this terminal instead")
+	return 1
 }
