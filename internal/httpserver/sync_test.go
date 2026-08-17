@@ -39,10 +39,25 @@ func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 		func() (string, error) { return "origin-test", nil },
 	)
 
+	secrets := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := secrets.Initialise(syncTestPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	// 封をする鍵は保管庫から来る。押した人が打つものではない。
+	if err := secrets.SetSyncKey(measuredSyncKey); err != nil {
+		t.Fatal(err)
+	}
+	// 保管庫は封ではなく中身として旅をする。app と同じ形で繋ぐ。
+	service.OpenVault = secrets.TravelDocument
+	service.SealVault = secrets.AdoptTravelDocument
+	service.VaultAdopted = secrets.Reload
 	engine := echo.New()
-	registerSyncRoutes(engine, SyncHandlers{Service: service, Reach: reachable})
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable})
 	return engine, service
 }
+
+// measuredSyncKey は、この一群のテストがリモートを封じる鍵である。
+const measuredSyncKey = "AB12-CD34-EF56-GH78-JK90-MN12"
 
 const syncTestPassphrase = "a master password for sync"
 
@@ -197,16 +212,39 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 	service.Configure(config, credentials, &objectstore.Client{
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
 	})
+	secrets := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := secrets.Initialise(syncTestPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := secrets.SetSyncKey(measuredSyncKey); err != nil {
+		t.Fatal(err)
+	}
+	// 保管庫は封ではなく中身として旅をする。app と同じ形で繋ぐ。
+	service.OpenVault = secrets.TravelDocument
+	service.SealVault = secrets.AdoptTravelDocument
+	service.VaultAdopted = secrets.Reload
 	engine := echo.New()
-	registerSyncRoutes(engine, SyncHandlers{Service: service, Reach: reachable})
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable})
 	return engine, service
 }
 
 func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *testing.T) {
 	bucket := &measuredSyncBucket{}
-	engine, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
+	engine, service := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
 
-	response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", `{"passphrase":"correct horse battery staple"}`)
+	// **数を直接書かない。** 保管庫のファイル自身もスナップショットに載る
+	// （Collect が sshc/secrets を名指ししている）ので、書いた数は「この
+	// テストが用意したファイルの数」ではない。集めたものと突き合わせる。
+	collected, contents, err := service.Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSource := int64(0)
+	for _, body := range contents {
+		wantSource += int64(len(body))
+	}
+
+	response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", "")
 	if response.Code != http.StatusOK {
 		t.Fatalf("push = %d: %s", response.Code, response.Body.String())
 	}
@@ -220,8 +258,9 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 		t.Fatal(err)
 	}
 	putCount, uploadedBytes := bucket.uploadedBytes()
-	if body.Result.Summary.FileCount != 1 || body.Result.Summary.SourceBytes != int64(len("Host edge\n")) {
-		t.Errorf("source summary = %+v", body.Result.Summary)
+	if body.Result.Summary.FileCount != len(collected.Files) || body.Result.Summary.SourceBytes != wantSource {
+		t.Errorf("source summary = %+v, collected %d files / %d bytes",
+			body.Result.Summary, len(collected.Files), wantSource)
 	}
 	if body.Result.Summary.SnapshotBytes != int64(bucket.liveBytes()) {
 		t.Errorf("snapshot bytes = %d, live object = %d", body.Result.Summary.SnapshotBytes, bucket.liveBytes())
@@ -251,12 +290,14 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	_, producer := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
-	if _, err := producer.Push(context.Background(), "correct horse battery staple"); err != nil {
+	// producer も consumer も、同じ鍵で封をして開く——それが「端末をまたいで
+	// 共有される鍵」の意味である。
+	if _, err := producer.Push(context.Background(), measuredSyncKey); err != nil {
 		t.Fatal(err)
 	}
 	engine, _ := measuredSyncEngine(t, bucket, map[string]string{})
 
-	preview := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"passphrase":"correct horse battery staple","apply":false}`)
+	preview := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"apply":false}`)
 	if preview.Code != http.StatusOK {
 		t.Fatalf("preview = %d: %s", preview.Code, preview.Body.String())
 	}
@@ -277,7 +318,7 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 		t.Errorf("preview written = %v", previewBody.Written)
 	}
 
-	applied := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"passphrase":"correct horse battery staple","apply":true}`)
+	applied := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"apply":true}`)
 	if applied.Code != http.StatusOK {
 		t.Fatalf("apply = %d: %s", applied.Code, applied.Body.String())
 	}
@@ -565,13 +606,11 @@ func TestSettingsThatCannotReachTheBucketAreNotStored(t *testing.T) {
 	}
 }
 
-// スナップショットは第 2 のパスワードではなくマスターパスワードで封印される。
-//
-// 2 つのパスワードは覚えるべきものが 2 つあることを意味し、2 つ目は
-// それをチェックできないフィールドに打ち込まれていた。typo は誰も
-// 二度と開けないアーカイブを作り、それが分かるのは何ヶ月も後の別の
-// マシンでのことだった。これが欠けていたチェックである。
-func TestPushRefusesAPasswordThatIsNotTheMasterOne(t *testing.T) {
+// **押した人が打つものは、もう無い。** 封をする鍵は保管庫の中にあり、
+// 保管庫が開いていることが同期してよいことの唯一の条件である。鍵をまだ
+// 決めていないなら、押しても何も起きてはならない——リモートには、誰も
+// 開けられない書庫が残るからだ。
+func TestPushWithoutAKeyRefusesAndRunsNothing(t *testing.T) {
 	engine, _, secrets := syncEngineWithVault(t)
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
@@ -580,17 +619,15 @@ func TestPushRefusesAPasswordThatIsNotTheMasterOne(t *testing.T) {
 		t.Fatalf("configure = %d", code)
 	}
 
-	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", `{"passphrase":"not the master password"}`)
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("push with the wrong password = %d, want 403: %s", recorder.Code, recorder.Body.String())
+	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", "")
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("push without a key = %d, want 409: %s", recorder.Code, recorder.Body.String())
 	}
-	if !strings.Contains(recorder.Body.String(), "wrong_master_password") {
+	if !strings.Contains(recorder.Body.String(), "sync_key_missing") {
 		t.Errorf("code = %s", recorder.Body.String())
 	}
 	// そしてそこで止まった。拒否を書き込んでからそれでも実行してしまう
-	// ハンドラは、body に両方の答えを残してしまう。recorder が報告する
-	// のは最初の status だけなので、この拒否は、その後に起きなかった
-	// ことによって確かめられている。
+	// ハンドラは、body に両方の答えを残してしまう。
 	if strings.Contains(recorder.Body.String(), "sync_failed") {
 		t.Errorf("the push ran after being refused: %s", recorder.Body.String())
 	}

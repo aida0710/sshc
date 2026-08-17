@@ -2,6 +2,7 @@ package secret
 
 import (
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -672,7 +673,31 @@ func (s *Service) SyncSettings() (SyncSettings, error) {
 }
 
 // SetSyncSettings は、オブジェクトストアの設定を置き換える。
+//
+// **同期の鍵だけは、空で渡されても消さない。** 設定の form はその欄を持たない
+// ——鍵を見せるのは作った一度だけで、以後は伏せ字である——ので、素直に置き換えれば、
+// bucket を編集しただけでリモートのスナップショットが誰にも開けなくなる。
 func (s *Service) SetSyncSettings(settings SyncSettings) error {
+	return s.writeSyncSettings(func(stored SyncSettings) SyncSettings {
+		if settings.Key == "" {
+			settings.Key = stored.Key
+		}
+		return settings
+	})
+}
+
+// SetSyncKey は、同期の鍵だけを置き換える。他の設定はそのまま残る。
+func (s *Service) SetSyncKey(key string) error {
+	return s.writeSyncSettings(func(stored SyncSettings) SyncSettings {
+		stored.Key = key
+		return stored
+	})
+}
+
+// writeSyncSettings は、いま保存されているものを読み、mutate に渡し、返ってきた
+// ものを封じて書く。読みと書きは同じ mutationMu の下で起きるので、二つの呼び出しが
+// 互いの結果を踏まない。
+func (s *Service) writeSyncSettings(mutate func(SyncSettings) SyncSettings) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 	s.mu.Lock()
@@ -681,7 +706,21 @@ func (s *Service) SetSyncSettings(settings SyncSettings) error {
 		s.mu.Unlock()
 		return ErrLocked
 	}
-	sealed, err := vault.SealSettings(settings)
+	stored := SyncSettings{}
+	existing, readErr := s.workspace.FileSystem().ReadFile(s.settingsPath())
+	switch {
+	case readErr == nil:
+		opened, err := vault.OpenSettings(existing)
+		if err != nil {
+			s.mu.Unlock()
+			return err
+		}
+		stored = opened
+	case !errors.Is(readErr, fs.ErrNotExist):
+		s.mu.Unlock()
+		return readErr
+	}
+	sealed, err := vault.SealSettings(mutate(stored))
 	s.mu.Unlock()
 	if err != nil {
 		return err
@@ -1073,4 +1112,78 @@ func (s *Service) reSealed(vault *Vault, previous envelope.Key) ([]storage.Chang
 		return nil, walkErr
 	}
 	return changes, nil
+}
+
+// TravelDocument は、保管庫の中身を、封を外した形で返す。
+//
+// **運ぶのは中身であって、封ではない。** 保管庫のファイルはこの端末のマスター
+// パスワードで封じられているので、そのまま同期に載せると、受け取った端末は
+// 送り主のマスターパスワードでしか開けなくなる——マスターパスワードを端末ごとに
+// 変えられない、という詰みの本体はここである。
+func (s *Service) TravelDocument() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.use()
+	if vault == nil {
+		return nil, ErrLocked
+	}
+	// 空の保管庫は運ばない。運ぶものが無いだけでなく、運べば 2 台目の最初の
+	// pull が必ず衝突する——空であることは編集ではない。
+	if vault.Empty() {
+		return nil, nil
+	}
+	return vault.Document()
+}
+
+// AdoptTravelDocument は、運ばれてきた中身を、この端末の封で包んだバイト列にする。
+//
+// **書きはしない。** 書くのは同期であり、そうすることで、他のすべての書き込みと
+// 同じジャーナルと世代バックアップを通る。
+func (s *Service) AdoptTravelDocument(plain []byte) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.use()
+	if vault == nil {
+		return nil, ErrLocked
+	}
+	// 読めないものを封じない。封じてしまえば、次に開いたときに壊れているのは
+	// 保管庫であり、原因はもうどこにも残っていない。
+	var incoming document
+	if err := json.Unmarshal(plain, &incoming); err != nil {
+		return nil, ErrNotAVault
+	}
+	if incoming.SchemaVersion > SchemaVersion {
+		return nil, ErrUnsupportedVersion
+	}
+	if incoming.SchemaVersion < 2 {
+		return nil, ErrOldVault
+	}
+	// **受け取ったバイト列をそのまま封じる。** 組み直せば、こちらがまだ知らない
+	// 項目を落とすことになる。
+	return vault.SealBytes(plain)
+}
+
+// Reload は、ディスク上の保管庫を読み直す。
+//
+// 同期が中身を差し替えたあと、走っているこの実行は古い秘密を配り続けてはならない。
+// マスターパスワードはもう持っていないので、いま手にしている鍵で開く。
+func (s *Service) Reload() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.open()
+	if vault == nil {
+		// 閉じているなら、次の解錠がディスクから読む。何もしないのが正しい。
+		return nil
+	}
+	sealed, err := s.workspace.FileSystem().ReadFile(s.path())
+	if err != nil {
+		return err
+	}
+	opened, err := OpenWith(sealed, vault.key)
+	if err != nil {
+		return err
+	}
+	s.vault = opened
+	s.baseline = slices.Clone(sealed)
+	return nil
 }

@@ -353,11 +353,7 @@ paths:
   /api/v1/sync/push:
     post:
       operationId: pushSnapshot
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/PassphraseRequest" }
+      # 本文は無い。封をする鍵は保管庫の中にあり、押した人が打つものではない。
       responses:
         "200":
           description: Snapshot written
@@ -367,6 +363,45 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/key:
+    put:
+      operationId: setSyncKey
+      # 本文が空なら作る。key があればそれを採る。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SyncKeyRequest" }
+      responses:
+        "200":
+          description: The key this machine will seal snapshots with
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncKeyResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/rekey:
+    post:
+      operationId: rekeySnapshot
+      # 古い鍵で開き、いまの鍵で封じ直す。移行のためだけにある。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PassphraseRequest" }
+      responses:
+        "200":
+          description: The remote snapshot now opens with the stored key
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncStatus" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/pull:
     post:
@@ -1810,9 +1845,13 @@ components:
     SyncStatus:
       type: object
       additionalProperties: false
-      required: [configured, locked, endpoint, bucket, synced, direction]
+      required: [configured, locked, endpoint, bucket, synced, direction, keyConfigured]
       properties:
         configured: { type: boolean }
+        # 同期の鍵が設定されているか。**値そのものは決して返さない。** リモートを
+        # 開ける値を、状態を読むたびに配る API にしてはならない。平文で出るのは、
+        # 作った応答の中の一度だけである。
+        keyConfigured: { type: boolean }
         # フォームが空のとき、その理由。設定はマスターパスワードで封じられており、
         # それが与えられるまで読めない。アクセスキーや秘密が入ることは決してない —
         # それらは一方通行で、封をされたファイルへ向かうだけである。
@@ -1893,15 +1932,28 @@ components:
         accessKeyId: { type: string, minLength: 1, maxLength: 512 }
         secretAccessKey: { type: string, minLength: 1, maxLength: 512 }
         direction: { $ref: "#/components/schemas/SyncDirection" }
+    SyncKeyRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        # 省略すれば作る。**既定が生成であることに理由がある** — この値は端末を
+        # またいで共有されるので、どこかに書き留められる。書き留めるなら、
+        # 覚えられる必要はない。
+        key: { type: string, minLength: 1, maxLength: 1024 }
+    SyncKeyResponse:
+      type: object
+      additionalProperties: false
+      required: [key]
+      properties:
+        # 平文でこれが出る唯一の場所である。画面はこれを一度だけ見せる。
+        key: { type: string }
     PullRequest:
       type: object
       additionalProperties: false
-      required: [passphrase]
       properties:
-        passphrase: { type: string, minLength: 1, maxLength: 1024 }
-        # pull は既定でプレビューする。適用は、同じパスフレーズを伴う二度目の
-        # 意図的な呼び出しである。これにより、このアプリケーションが他のあらゆる
-        # 書き込みの前に見せるファイル単位のプレビューを、ユーザーはここでも見る。
+        # pull は既定でプレビューする。適用は二度目の意図的な呼び出しである。
+        # これにより、このアプリケーションが他のあらゆる書き込みの前に見せる
+        # ファイル単位のプレビューを、ユーザーはここでも見る。
         apply: { type: boolean }
     SyncConflict:
       type: object

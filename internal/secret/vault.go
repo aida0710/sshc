@@ -116,6 +116,13 @@ type SyncSettings struct {
 	AccessKeyID     string `json:"accessKeyId,omitempty"`
 	SecretAccessKey string `json:"secretAccessKey,omitempty"`
 	Direction       string `json:"direction,omitempty"`
+	// Key は、リモートのスナップショットを封じる値である。
+	//
+	// **マスターパスワードではない。** それを使っていたので、マスターパスワードが
+	// 端末をまたいだ共有秘密になっていた——1 台で変えれば他の全端末が締め出され、
+	// 打つ人が居ないところでは封を開けられなかった。ここに置くことで、
+	// マスターパスワードは端末ごとのローカルな秘密に戻る。
+	Key string `json:"key,omitempty"`
 }
 
 // document は平文であり、この形でこのパッケージの外へ出ることは決してない。
@@ -172,6 +179,24 @@ func Open(sealed []byte, passphrase string) (*Vault, error) {
 	if err != nil {
 		return nil, err
 	}
+	return openDocument(plaintext, key)
+}
+
+// OpenWith は、すでに導出してある鍵で開く。
+//
+// **パスフレーズを覚えていない場所のためにある。** 同期が保管庫の中身を差し替えた
+// あと、走っている実行はそれを読み直さなければならない——読み直さなければ、
+// 運ばれてきたパスワードは次に解錠するまで存在しないのと同じである。そして
+// マスターパスワードは、解錠のあと保持されていない。鍵だけが残っている。
+func OpenWith(sealed []byte, key envelope.Key) (*Vault, error) {
+	plaintext, err := key.Open(sealed)
+	if err != nil {
+		return nil, err
+	}
+	return openDocument(plaintext, key)
+}
+
+func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
 	var parsed document
 	if err := json.Unmarshal(plaintext, &parsed); err != nil {
 		return nil, ErrWrongPassphrase
@@ -273,8 +298,37 @@ func (v *Vault) OpenBytes(sealed []byte) ([]byte, error) {
 	return v.key.Open(sealed)
 }
 
-func (v *Vault) Seal() ([]byte, error) {
-	plaintext, err := json.Marshal(document{
+// Empty は、この保管庫が何も保持していないことを報告する。
+//
+// **空の保管庫には、失うものが無い。** 作ったばかりの端末が最初の pull をすると
+// き、こちらの中身とあちらの中身は当然違う——そこで衝突を報告すれば、2 台目は
+// 一度も同期を終えられない。空であることは「まだ何も入れていない」であって、
+// 「あちらと競合する編集をした」ではない。
+func (v *Vault) Empty() bool {
+	for _, secrets := range v.secrets {
+		if len(secrets) != 0 {
+			return false
+		}
+	}
+	for _, subjects := range v.subjects {
+		if len(subjects) != 0 {
+			return false
+		}
+	}
+	return len(v.dedicatedPasswords) == 0 && len(v.dedicatedKeyPassphrases) == 0
+}
+
+// Document は、封を外した中身そのものを返す。
+//
+// **旅に出るのはこれである。** 保管庫のファイルは、この端末のマスターパスワードで
+// 封じられている——そのまま運べば、受け取った端末は送り主のマスターパスワードで
+// しか開けなくなる。運ぶのは中身であって、封ではない。
+//
+// これが平文で出ることを許すのは、行き先が同期のアーカイブの中だからである。
+// あのアーカイブは同期の鍵で封じられており、秘密鍵も config も、すでに同じ扱いで
+// その中を旅している。
+func (v *Vault) Document() ([]byte, error) {
+	return json.Marshal(document{
 		SchemaVersion:           SchemaVersion,
 		Passwords:               v.secrets[KindPassword],
 		DedicatedPasswords:      v.dedicatedPasswords,
@@ -283,6 +337,10 @@ func (v *Vault) Seal() ([]byte, error) {
 		Hosts:                   v.subjects[KindPassword],
 		Keys:                    v.subjects[KindKeyPassphrase],
 	})
+}
+
+func (v *Vault) Seal() ([]byte, error) {
+	plaintext, err := v.Document()
 	if err != nil {
 		return nil, err
 	}

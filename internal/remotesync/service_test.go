@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/envelope"
 	"sshc/internal/objectstore"
 	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/remotesync"
@@ -898,5 +899,190 @@ func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 	}
 	if got := bucket.object("laptops/" + remotesync.ObjectName); got == nil {
 		t.Errorf("nothing was written to the new key: %v", bucket.keys())
+	}
+}
+
+// **移行の全体がこの 1 本である。** 古い鍵で封じられたものを、新しい鍵で開ける
+// ようにする。中身は 1 バイトも変わらない。
+func TestRekeyReplacesTheSealAndNotTheContents(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	before := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
+
+	const fresh = "AB12-CD34-EF56-GH78-JK90-MN12"
+	result, err := machine.service.Rekey(context.Background(), syncPassphrase, fresh)
+	if err != nil {
+		t.Fatalf("Rekey = %v", err)
+	}
+	after := bucket.object(remotesync.ObjectName)
+	if result.Bytes != int64(len(after)) || result.CompletedAt == "" {
+		t.Fatalf("rekey result = %#v, object is %d bytes", result, len(after))
+	}
+	if bytes.Equal(before, after) {
+		t.Fatal("the object was written back under the same seal")
+	}
+
+	// 新しい鍵で開き、古い鍵では開かない。
+	sealed, _, err := envelope.OpenWithin(after, fresh, envelope.AcceptedFromRemote)
+	if err != nil {
+		t.Fatalf("the rekeyed object does not open with the new key: %v", err)
+	}
+	manifest, contents, err := remotesync.Read(sealed)
+	if err != nil {
+		t.Fatalf("Read = %v", err)
+	}
+	if len(manifest.Files) != 1 || string(contents["config"]) != "Host bastion\n" {
+		t.Fatalf("the contents changed: %#v %q", manifest.Files, contents["config"])
+	}
+	if _, _, err := envelope.OpenWithin(after, syncPassphrase, envelope.AcceptedFromRemote); err == nil {
+		t.Fatal("the old key still opens the object")
+	}
+}
+
+// 古い鍵を間違えたなら、リモートは元のままでなければならない。封じ直しに
+// 「途中まで」があってはならない。
+func TestRekeyLeavesTheRemoteAloneWhenTheOldKeyIsWrong(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	before := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
+
+	if _, err := machine.service.Rekey(context.Background(), "not the old key at all", "AB12-CD34-EF56-GH78-JK90-MN12"); err == nil {
+		t.Fatal("Rekey accepted the wrong old key")
+	}
+	if !bytes.Equal(before, bucket.object(remotesync.ObjectName)) {
+		t.Fatal("the object changed even though the old key was wrong")
+	}
+}
+
+// **封じ直しは、決して無条件には書かない。** 条件付き書き込みを一切受けない
+// バケットを相手にしたとき、通ってしまうなら、それは条件を付けていない証拠で
+// ある——そしてそのとき封じ直しは、他人の作業を消せる操作になっている。
+func TestRekeyNeverFallsBackToAnUnconditionalWrite(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	before := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
+	bucket.refuseConditional = true
+
+	if _, err := machine.service.Rekey(context.Background(), syncPassphrase, "AB12-CD34-EF56-GH78-JK90-MN12"); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("Rekey = %v, want ErrRemoteMoved", err)
+	}
+	if !bytes.Equal(before, bucket.object(remotesync.ObjectName)) {
+		t.Fatal("the object changed even though every conditional write was refused")
+	}
+}
+
+// スナップショットがまだ無いバケットには、封じ直すものが無い。
+func TestRekeyOnAnEmptyBucketSaysThereIsNoSnapshot(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := machine.service.Rekey(context.Background(), syncPassphrase, "AB12-CD34-EF56-GH78-JK90-MN12"); !errors.Is(err, remotesync.ErrNoSnapshot) {
+		t.Fatalf("Rekey = %v, want ErrNoSnapshot", err)
+	}
+}
+
+// withVault は、この設置に本物の保管庫を与え、同期へ両替所を繋ぐ。
+func withVault(t *testing.T, machine installation, master string) *secret.Service {
+	t.Helper()
+	secrets := secret.NewService(machine.workspace, machine.manager, time.Now)
+	if err := secrets.Initialise(master); err != nil {
+		t.Fatalf("Initialise: %v", err)
+	}
+	machine.service.OpenVault = secrets.TravelDocument
+	machine.service.SealVault = secrets.AdoptTravelDocument
+	machine.service.VaultAdopted = secrets.Reload
+	return secrets
+}
+
+// **これがこの設計そのものである。** 保存したパスワードは端末をまたいで運ばれ、
+// マスターパスワードは端末ごとに別のままである。運ぶのは中身であって封ではない、
+// というのはそういう意味である。
+func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
+	bucket := &fakeBucket{}
+	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	sender := withVault(t, first, "the first machine's master")
+	if err := sender.Set("bastion", "the password for bastion"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatalf("Push = %v", err)
+	}
+
+	// 送り出したものの中に、封じられた保管庫は入っていない。
+	sealed := bucket.object(remotesync.ObjectName)
+	archive, _, err := envelope.OpenWithin(sealed, syncPassphrase, envelope.AcceptedFromRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, contents, err := remotesync.Read(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present := contents[remotesync.VaultPath]; present {
+		t.Fatal("the sealed vault travelled; the other machine would need this machine's master password")
+	}
+	if _, present := contents[remotesync.TravelPath]; !present {
+		t.Fatalf("the vault contents did not travel: %+v", manifest.Files)
+	}
+
+	// 2 台目は、自分のマスターパスワードで自分の保管庫を作る。
+	second := newInstallation(t, bucket, map[string]string{})
+	receiver := withVault(t, second, "the second machine's own master")
+	result, err := second.service.Pull(context.Background(), syncPassphrase)
+	if err != nil {
+		t.Fatalf("Pull = %v", err)
+	}
+	if len(result.Conflicts) != 0 {
+		t.Fatalf("a machine that has saved nothing conflicted: %+v", result.Conflicts)
+	}
+	if err := second.service.Apply(result); err != nil {
+		t.Fatalf("Apply = %v", err)
+	}
+
+	// 運ばれてきた。そして読み直されている——次の解錠まで待たされない。
+	if got := receiver.PasswordFor("bastion"); got != "the password for bastion" {
+		t.Fatalf("the password did not travel: %q", got)
+	}
+	// そして 2 台目は、いまも自分のマスターパスワードで開く。
+	receiver.Lock()
+	if err := receiver.Unlock("the second machine's own master"); err != nil {
+		t.Fatalf("the second machine can no longer open its own vault: %v", err)
+	}
+	if got := receiver.PasswordFor("bastion"); got != "the password for bastion" {
+		t.Fatalf("after unlocking with its own master password: %q", got)
+	}
+}
+
+// 何も保存していない保管庫は、運ぶものを持たない。運べば、2 台目の最初の pull は
+// 必ず衝突する——空であることは編集ではない。
+func TestAnEmptyVaultDoesNotTravel(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	withVault(t, machine, "a master password")
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+
+	archive, _, err := envelope.OpenWithin(bucket.object(remotesync.ObjectName), syncPassphrase, envelope.AcceptedFromRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, contents, err := remotesync.Read(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present := contents[remotesync.TravelPath]; present {
+		t.Fatal("an empty vault travelled")
+	}
+	if _, present := contents[remotesync.VaultPath]; present {
+		t.Fatal("the vault file travelled")
 	}
 }

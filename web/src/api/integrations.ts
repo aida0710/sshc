@@ -28,6 +28,7 @@ export type CredentialList = components["schemas"]["CredentialList"];
 // 三つ目を作ったり、二つを入れ替えたりできないようにするためである。
 export type CredentialKind = "password" | "key_passphrase";
 export type SyncStatus = components["schemas"]["SyncStatus"];
+export type SyncKeyResponse = components["schemas"]["SyncKeyResponse"];
 export type SyncSettingsRequest = components["schemas"]["SyncSettingsRequest"];
 export type SyncDirection = components["schemas"]["SyncDirection"];
 export type SnapshotSummary = components["schemas"]["SnapshotSummary"];
@@ -105,8 +106,13 @@ export type IntegrationsApi = {
   // ステータスはエンドポイントとバケットを運び、pull はパスを運ぶ。
   syncStatus(): Promise<SyncStatus>;
   configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
-  pushSnapshot(passphrase: string): Promise<PushResponse>;
-  pullSnapshot(passphrase: string, apply: boolean): Promise<PullResponse>;
+  pushSnapshot(): Promise<PushResponse>;
+  pullSnapshot(apply: boolean): Promise<PullResponse>;
+  // 鍵を決める。key を渡さなければ作る。返るのは採られた鍵そのもので、
+  // **平文でそれが出る唯一の場所**である。画面はこれを一度だけ見せる。
+  setSyncKey(key?: string): Promise<SyncKeyResponse>;
+  // 古い鍵で封じられたリモートを、いまの鍵で開くようにする。移行のためだけにある。
+  rekeySnapshot(passphrase: string): Promise<SyncStatus>;
 };
 
 // 生成された型は契約を記述するに過ぎない。これらの防護は
@@ -401,6 +407,7 @@ function validateSyncStatus(value: unknown): SyncStatus {
   const record = asRecord(value);
   asBoolean(record.configured);
   asBoolean(record.locked);
+  asBoolean(record.keyConfigured);
   asString(record.endpoint);
   asString(record.bucket);
   asBoolean(record.synced);
@@ -444,6 +451,12 @@ function validateSyncOperation(value: unknown): SyncOperation {
     throw new Error("invalid_response");
   }
   return record as unknown as SyncOperation;
+}
+
+function validateSyncKey(value: unknown): SyncKeyResponse {
+  const record = asRecord(value);
+  asString(record.key);
+  return record as unknown as SyncKeyResponse;
 }
 
 function validatePushResponse(value: unknown): PushResponse {
@@ -640,11 +653,23 @@ export const integrationsApi: IntegrationsApi = {
       }),
     );
   },
-  async pushSnapshot(passphrase) {
-    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/push", { passphrase }));
+  async pushSnapshot() {
+    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/push", {}));
   },
-  async pullSnapshot(passphrase, apply) {
-    return validatePullResponse(await postJSON<unknown>("/api/v1/sync/pull", { passphrase, apply }));
+  async pullSnapshot(apply) {
+    return validatePullResponse(await postJSON<unknown>("/api/v1/sync/pull", { apply }));
+  },
+  async setSyncKey(key) {
+    return validateSyncKey(
+      await apiClient.mutate<unknown>("/api/v1/sync/key", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(key === undefined ? {} : { key }),
+      }),
+    );
+  },
+  async rekeySnapshot(passphrase) {
+    return validateSyncStatus(await postJSON<unknown>("/api/v1/sync/rekey", { passphrase }));
   },
   async knownHosts(query) {
     return validateKnownHosts(await apiClient.read(`/api/v1/known-hosts?query=${encodeURIComponent(query)}`));

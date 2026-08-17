@@ -43,6 +43,8 @@ func (h SyncHandlers) reach(ctx context.Context, client *objectstore.Client, key
 func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.GET("/api/v1/sync", handlers.Status)
 	engine.PUT("/api/v1/sync/settings", handlers.Configure)
+	engine.PUT("/api/v1/sync/key", handlers.SetKey)
+	engine.POST("/api/v1/sync/rekey", handlers.Rekey)
 	engine.POST("/api/v1/sync/push", handlers.Push)
 	engine.POST("/api/v1/sync/pull", handlers.Pull)
 }
@@ -115,7 +117,8 @@ func (h SyncHandlers) statusResponse() api.SyncStatus {
 		Direction:  api.SyncDirection(h.Service.Direction()),
 		// form が空である理由を、空であるときに伝える。access key や
 		// secret は決して含まない。それらは封印されたファイルへ一方通行である。
-		Locked: h.Secrets != nil && !h.Secrets.Unlocked(),
+		Locked:        h.Secrets != nil && !h.Secrets.Unlocked(),
+		KeyConfigured: h.keyConfigured(),
 	}
 	if state.Synced {
 		response.LastSyncedAt = &state.At
@@ -220,46 +223,105 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	return h.status(c)
 }
 
-// masterPassword は、このワークスペースのマスターパスワードでないパスワードを拒否する。
+// sealingKey は、リモートのスナップショットを封じている値を保管庫から取り出す。
 //
-// スナップショットは第 2 のパスワードではなくマスターパスワードで
-// 封印されているため、それを受け取るフィールドはチェックできる。
-// これがなければ、typo は誰も二度と開けないアーカイブを封印して
-// しまい、それが分かるのは何ヶ月も後の別のマシンでのことになる。
-// masterPassword はリクエストが先へ進んでよいかを報告する。進めない
-// 場合はすでに拒否を書き込んでおり、返すエラーは呼び出し元がそのまま
-// 返すべきものである——nil である。レスポンスを書くことがこの
-// application の拒否の仕方だからだ。そのエラーだけを返せば、呼び出し
-// 元は今拒否したはずのことを、自分の答えの上から続けてしまいかねない。
-func (h SyncHandlers) masterPassword(c *echo.Context, passphrase string) (bool, error) {
+// **かつてここはマスターパスワードを検査していた。** 打ち間違いが誰にも開けない
+// 書庫を作るのを防ぐためであり、その目的には正しく働いていた。しかし副作用として、
+// マスターパスワードが端末をまたいだ共有秘密になっていた——1 台で変えれば他の
+// 全端末が締め出され、打つ人が居ないところでは封を開けられなかった。
+//
+// 鍵は保管庫の中にある。**保管庫が開いていることが、同期してよいことの唯一の条件
+// である**——開けられるのはマスターパスワードを知っている人だけなのだから、
+// 権限としてはこれで足りている。
+//
+// 先へ進めない場合はすでに拒否を書き込んでおり、返すエラーは呼び出し元がそのまま
+// 返すべきものである——nil である。レスポンスを書くことがこの application の
+// 拒否の仕方だからだ。そのエラーだけを返せば、呼び出し元は今拒否したはずのことを、
+// 自分の答えの上から続けてしまいかねない。
+func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
 	if h.Secrets == nil {
-		return true, nil
+		return "", false, problem(c, http.StatusConflict, "sync_key_missing")
 	}
-	ok, err := h.Secrets.Verify(passphrase)
+	settings, err := h.Secrets.SyncSettings()
 	switch {
-	case errors.Is(err, secret.ErrNoVault):
-		// vault を一度も作ったことのないマシンは、初めての pull を行う
-		// マシンである。打ち込まれたものはアーカイブへの鍵であり、ここでは
-		// それを確認できない——確認できるのはアーカイブ自身だけだ。
-		return true, nil
+	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoVault):
+		return "", false, problem(c, http.StatusConflict, "vault_locked")
 	case err != nil:
-		return false, problem(c, http.StatusInternalServerError, "vault_unreadable")
-	case !ok:
-		return false, problem(c, http.StatusForbidden, "wrong_master_password")
+		return "", false, problem(c, http.StatusInternalServerError, "vault_unreadable")
+	case settings.Key == "":
+		return "", false, problem(c, http.StatusConflict, "sync_key_missing")
 	}
-	return true, nil
+	return settings.Key, true, nil
 }
 
-func (h SyncHandlers) Push(c *echo.Context) error {
+// SetKey は、このワークスペースが同期に使う鍵を決める。
+//
+// 本文が空なら作る。**既定が生成であることに理由がある** — この値は端末をまたいで
+// 共有されるので、どこかに書き留められる。書き留めるなら、覚えられる必要はない。
+//
+// 応答は、採った鍵そのものである。平文でこれが出る唯一の場所であり、画面はこれを
+// 一度だけ見せる。
+func (h SyncHandlers) SetKey(c *echo.Context) error {
+	var request api.SyncKeyRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if h.Secrets == nil {
+		return problem(c, http.StatusConflict, "vault_locked")
+	}
+	key := ""
+	if request.Key != nil {
+		key = strings.TrimSpace(*request.Key)
+	}
+	if key == "" {
+		generated, err := remotesync.NewKey()
+		if err != nil {
+			return problem(c, http.StatusInternalServerError, "key_generation_failed")
+		}
+		key = generated
+	}
+	// 弱い鍵は、封をする段になって初めて分かるのでは遅い。ここで断る。
+	if _, err := envelope.Derive(key); err != nil {
+		if errors.Is(err, envelope.ErrWeakPassphrase) {
+			return problem(c, http.StatusBadRequest, "passphrase_too_short")
+		}
+		return problem(c, http.StatusInternalServerError, "vault_unreadable")
+	}
+	if err := h.Secrets.SetSyncKey(key); err != nil {
+		if errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault) {
+			return problem(c, http.StatusConflict, "vault_locked")
+		}
+		return problem(c, http.StatusInternalServerError, "vault_failed")
+	}
+	return c.JSON(http.StatusOK, api.SyncKeyResponse{Key: key})
+}
+
+// Rekey は、古い鍵で封じられたリモートを、いまの鍵で開くようにする。
+//
+// これは移行のためだけにある。ワークスペースには 1 バイトも触れない。
+func (h SyncHandlers) Rekey(c *echo.Context) error {
 	h.restore()
 	var request api.PassphraseRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if allowed, err := h.masterPassword(c, request.Passphrase); !allowed {
+	key, ok, err := h.sealingKey(c)
+	if !ok {
 		return err
 	}
-	result, err := h.Service.Push(c.Request().Context(), request.Passphrase)
+	if _, err := h.Service.Rekey(c.Request().Context(), request.Passphrase, key); err != nil {
+		return syncProblem(c, err)
+	}
+	return h.status(c)
+}
+
+func (h SyncHandlers) Push(c *echo.Context) error {
+	h.restore()
+	key, ok, err := h.sealingKey(c)
+	if !ok {
+		return err
+	}
+	result, err := h.Service.Push(c.Request().Context(), key)
 	if err != nil {
 		return syncProblem(c, err)
 	}
@@ -283,10 +345,11 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if allowed, err := h.masterPassword(c, request.Passphrase); !allowed {
+	key, ok, err := h.sealingKey(c)
+	if !ok {
 		return err
 	}
-	result, err := h.Service.Pull(c.Request().Context(), request.Passphrase)
+	result, err := h.Service.Pull(c.Request().Context(), key)
 	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
 		return syncProblem(c, err)
 	}
@@ -400,4 +463,18 @@ func syncProblem(c *echo.Context, err error) error {
 	default:
 		return problem(c, http.StatusBadGateway, "sync_failed")
 	}
+}
+
+// keyConfigured は、同期の鍵が保管庫に在るかを答える。
+//
+// **値そのものは返さない。** リモートを開ける値を、状態を読むたびに配る API に
+// してはならない。施錠中は「無い」と答える——読めないものについて、在るとも
+// 無いとも言えないが、画面がまず言うべきことは施錠されていることであり、それは
+// 別のフィールドが言っている。
+func (h SyncHandlers) keyConfigured() bool {
+	if h.Secrets == nil {
+		return false
+	}
+	settings, err := h.Secrets.SyncSettings()
+	return err == nil && settings.Key != ""
 }

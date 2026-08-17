@@ -225,6 +225,7 @@ describe("integrationsApi remote sync measurements", () => {
   };
   const status = {
     configured: true,
+    keyConfigured: true,
     locked: false,
     endpoint: "https://s3.example.invalid",
     bucket: "sshc",
@@ -252,10 +253,11 @@ describe("integrationsApi remote sync measurements", () => {
     const fetcher = vi.fn().mockResolvedValue(jsonResponse(response));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.pushSnapshot("correct horse battery staple")).resolves.toEqual(response);
+    await expect(integrationsApi.pushSnapshot()).resolves.toEqual(response);
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/sync/push");
-    expect(JSON.parse(String(init.body))).toEqual({ passphrase: "correct horse battery staple" });
+    // 押した人が打つものはもう無い。封をする鍵は保管庫の中にある。
+    expect(JSON.parse(String(init.body))).toEqual({});
   });
 
   it("accepts the measured result of an apply download", async () => {
@@ -270,7 +272,7 @@ describe("integrationsApi remote sync measurements", () => {
     };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(response)));
 
-    await expect(integrationsApi.pullSnapshot("correct horse battery staple", true)).resolves.toEqual(response);
+    await expect(integrationsApi.pullSnapshot(true)).resolves.toEqual(response);
   });
 
   it.each([
@@ -280,7 +282,7 @@ describe("integrationsApi remote sync measurements", () => {
   ])("rejects malformed push measurements %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
-    await expect(integrationsApi.pushSnapshot("correct horse battery staple")).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.pushSnapshot()).rejects.toThrow("invalid_response");
   });
 
   it.each([
@@ -290,6 +292,6 @@ describe("integrationsApi remote sync measurements", () => {
   ])("rejects malformed pull measurements %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
-    await expect(integrationsApi.pullSnapshot("correct horse battery staple", false)).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.pullSnapshot(false)).rejects.toThrow("invalid_response");
   });
 });
