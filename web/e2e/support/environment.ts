@@ -7,7 +7,47 @@ import { dirname, join, resolve } from "node:path";
 // binaryPath は試験対象の成果物である。`make e2e` が
 // 先にそれをビルドする。バイナリがなければ、dev サーバーへ
 // 静かに後退するのではなく大声で失敗する。このスイートの主眼は出荷される成果物だからだ。
-const binaryPath = resolve(process.cwd(), "..", "bin", "sshc");
+const binaryPath = resolve(
+  process.cwd(),
+  "..",
+  "bin",
+  process.platform === "win32" ? "sshc.exe" : "sshc",
+);
+
+// **Windows は HOME を見ない。** Go の os.UserHomeDir はあちらで USERPROFILE を
+// 読むので、HOME だけを渡した子は本物の家を開く——使い捨ての家を用意した意味が
+// 消える。加えて、SystemRoot の無い Windows プロセスは DLL の読み込みから
+// おかしくなる。internal/acceptance の binary_environment_windows_test.go が
+// 同じ問題を同じ形で解いている。
+function isolatedEnvironment(home: string): NodeJS.ProcessEnv {
+  const shared = {
+    PATH: process.env.PATH ?? "",
+    // npm_config_prefix は、この常駐プロセスが npm run から起こされた状況で
+    // ある。開発中は普通にそうなり、npm は自分の設定を環境に詰めて渡す。
+    // 開いた端末がそれを継がないことを terminal.spec が見るので、その状況を
+    // ここで作っておく。
+    npm_config_prefix: "/somewhere/desktop",
+  };
+  if (process.platform !== "win32") {
+    return { ...shared, HOME: home };
+  }
+  const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
+  return {
+    ...shared,
+    HOME: home,
+    USERPROFILE: home,
+    HOMEDRIVE: home.slice(0, 2),
+    HOMEPATH: home.slice(2),
+    LOCALAPPDATA: join(home, "AppData", "Local"),
+    APPDATA: join(home, "AppData", "Roaming"),
+    TEMP: join(home, "Temp"),
+    TMP: join(home, "Temp"),
+    SystemRoot: systemRoot,
+    windir: systemRoot,
+    ComSpec: process.env.ComSpec ?? join(systemRoot, "system32", "cmd.exe"),
+    PATHEXT: process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD",
+  };
+}
 
 // フィクスチャの home を書くのはこのファイルだけであり、他の何ものでもない。異
 // なる初期状態を必要とする各 spec は `installation.write` を通じてそれを書く。
@@ -74,16 +114,8 @@ function startBinary(
     // 受け取れるのは engine owner だけであり、その資格は stdin に開いたままの
     // 寿命チャンネルである——閉じればエンジンは自分で終わる。
     //
-    // npm_config_prefix は、この常駐プロセスが npm run から起こされた状況で
-    // ある。開発中は普通にそうなり、npm は自分の設定を環境に詰めて渡す。
-    // 開いた端末がそれを継がないことを terminal.spec が見るので、その状況を
-    // ここで作っておく。
     const child = spawn(binaryPath, ["engine"], {
-      env: {
-        HOME: home,
-        PATH: process.env.PATH ?? "",
-        npm_config_prefix: "/somewhere/desktop",
-      },
+      env: isolatedEnvironment(home),
       stdio: ["pipe", "pipe", "pipe"],
     });
     let buffered = "";
