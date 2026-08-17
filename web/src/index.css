@@ -171,13 +171,3 @@
   color: transparent;
 }
 
-/*
-  **カーソルの下の隠し入力欄は、指の当たり先にしない。** xterm は IME の位置を
-  合わせるために .xterm-helper-textarea をカーソルへ動かす。20px 四方の透明な
-  板だが、そこを長押しすると空の入力欄が掴まれ、端末の文字には届かない
-  ——実機で、カーソル付近だけ選択が始まらない理由がこれだった。
-  焦点はポインタではなく xterm が与えるので、打鍵には影響しない。
-*/
-.sshc-native-selection .xterm .xterm-helper-textarea {
-  pointer-events: none;
-}

@@ -7,8 +7,7 @@
 // 1 つずつ潰して全部空振りだった。
 //
 // 残る道は、xterm の外に同じ文字を置いて、そちらを OS に選ばせることである。
-// bufferText はスクロールバックごと別の面へ写すため、viewportText は端末に
-// 重ねる板のためのものである。
+// ここにあるのは、その板に載せる字を取り出す一つの関数だけである。
 
 export type BufferLine = {
   translateToString(trimRight?: boolean, startColumn?: number, endColumn?: number): string;
