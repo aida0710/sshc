@@ -77,9 +77,37 @@ cd android && ./gradlew clean assembleDebug          # app/build/outputs/apk/deb
 
 施錠されているときの振る舞いは、持ち主で分かれます。**desktop なら窓を一度だけ前へ出して、時間の上限を置かずに待ちます** — 解錠は窓でも別の端末の `sshc vault unlock` でもよく、どちらも同じエンジンを変えるので、待っていた `sshc <接続先>` はそのまま接続へ進みます。打ち直させません。Ctrl-C で降りれば 130 です。**headless なら待ちません** — 見えない窓の前で待たせても、そこには誰も居ません。
 
-窓を起こす方法は OS ごとに違います。**macOS は束の id を LaunchServices に渡します**（場所を覚えません）。**Linux は外殻が起動のたびに `~/.ssh/sshc/desktop.json` へ書いた絶対パスを直接実行します** — PATH も shell も引きません。AppImage を動かしたなら、新しい場所で一度開いてくださいという指示が出ます。**古い AppImage を探し回って一番それらしいものを起こすことはしません。** 画面が無い機械（`DISPLAY` も `WAYLAND_DISPLAY` も無い）では、窓の話をせずに `sshc headless` を案内します。**Windows は HKCU の `Software\sshc\Desktop` に記録された絶対パスを直接実行します** — `cmd.exe` も PowerShell も PATH も間に入りません。記録が無い、消えている、`sshc.exe` という名前でない、といった値は起こさずに断ります。**その記録を書く per-user インストーラ（NSIS）はまだありません** — CLI 側は読めますが、書く手はこれからです。
+窓を起こす方法は OS ごとに違います。**macOS は束の id を LaunchServices に渡します**（場所を覚えません）。**Linux は外殻が起動のたびに `~/.ssh/sshc/desktop.json` へ書いた絶対パスを直接実行します** — PATH も shell も引きません。AppImage を動かしたなら、新しい場所で一度開いてくださいという指示が出ます。**古い AppImage を探し回って一番それらしいものを起こすことはしません。** 画面が無い機械（`DISPLAY` も `WAYLAND_DISPLAY` も無い）では、窓の話をせずに `sshc headless` を案内します。**Windows は HKCU の `Software\sshc\Desktop` に記録された絶対パスを直接実行します** — `cmd.exe` も PowerShell も PATH も間に入りません。記録が無い、消えている、`sshc.exe` という名前でない、といった値は起こさずに断ります。その記録を書くのは per-user の NSIS インストーラです（下の「Windows」を参照）。
 
 外殻は起動のたびに、束の中の CLI を `~/.local/share/sshc/bin/sshc` へ写し、`~/.local/bin/sshc` をそこへ向けます。**束の中を指しません** — AppImage の中身は一時マウントで、閉じれば消えるからです。`~/.local/bin/sshc` に自分が張ったリンク以外のもの（`make install` が置いた実体など）があれば**触らず、その場所を名指しした警告を出します**。
+
+## Windows
+
+**署名していません。** SmartScreen が「WindowsによってPCが保護されました」と出すので、「詳細情報」→「実行」で進めてください。**これを署名済みのように書くつもりはありません** — 署名も公証も、まだ何も行っていません。
+
+インストーラは per-user です。**管理者権限を求めません。** 置き場は固定で、選ばせません:
+
+```text
+%LOCALAPPDATA%\Programs\sshc\
+├── sshc.exe                  ← Electron の外殻
+└── resources\cli\sshc.exe    ← 端末から呼ばれる CLI と engine
+```
+
+利用者の PATH へ足すのは `resources\cli` の 1 件だけです。`HKEY_LOCAL_MACHINE` にも machine の PATH にも触れません。アンインストールでは、**自分が足した項目と、自分が書いた起動登録だけ**が消えます。
+
+端末で engine を持つなら PowerShell から:
+
+```powershell
+sshc headless        # この端末が engine を持つ。Ctrl-C で終わる
+sshc vault unlock    # 別の端末から。同じ engine を開ける
+sshc <接続先>         # 解錠済みの engine に接続材料を求めて繋ぐ
+```
+
+**ローカルシェルには ConPTY が要ります。** Windows 10 1809 以降であれば入っています。無ければ端末の項目は「開けない」と答えます——推測して別の方法で開くことはしません。
+
+ログイン時起動は OS に任せています。**sshc は自分でサービスやスケジュールタスクを作りません。** 常駐させたいなら、Windows の「スタートアップ アプリ」に外殻を登録してください。
+
+**検証状態を正直に書きます。** Go の全スイートと `go test -race` は Windows CI（x64）で走っています。**インストーラそのものは、まだ一度も組まれていません** — `scripts/windows/package-smoke.ps1` が入れて確かめて消すところまでを書いてありますが、走らせるには Windows の実機か Windows ランナーが要ります。arm64 は**未検証**であり、対応表に載せていません。
 
 ## CI
 
