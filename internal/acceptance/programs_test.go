@@ -24,7 +24,7 @@ var startsAProcess = []string{"RunOutput(ctx", "exec.Command"}
 //
 // ログイン時起動は OS に任せた。launchd や systemd の unit を書いていたのは
 // このアプリケーション自身だったが、その仕組みごと消えたので、`RunOutput` の
-// 継ぎ目を通ってプログラムを起こす場所はひとつも残っていない。ここに並ぶ 3 つは
+// 継ぎ目を通ってプログラムを起こす場所はひとつも残っていない。ここに並ぶものは
 // いずれもその継ぎ目の外にあり、**外に居てよい理由がそれぞれ違う。**
 //
 // **一覧を持つ形にしてあるのは、増えたときに気づくためである。** 「OpenSSH が
@@ -39,6 +39,10 @@ var allowedToStartPrograms = []string{
 	// PATH に何が置かれているかで起こすものが変わる——絶対パスに固定してある点で
 	// `/usr/bin/open` と同じ性質を守っている。
 	"cmd/sshc/launch_linux.go",
+	// Windows も同じ形である。起こすのはインストーラが HKCU に記録した絶対パス
+	// ひとつだけで、**cmd.exe も PowerShell も PATH も間に入らない**。shell を
+	// 通せば、その瞬間にパスが引用と展開の対象になる。
+	"cmd/sshc/launch_windows.go",
 	// ローカルシェルには擬似端末が要る。継ぎ目は出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",
