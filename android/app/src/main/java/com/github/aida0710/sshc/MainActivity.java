@@ -202,10 +202,18 @@ public final class MainActivity extends Activity {
                 bottom = insets.getSystemWindowInsetBottom();
             }
             target.setPadding(left, top, right, bottom);
-            // 受け止めたので、この先へは渡さない。
-            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                    ? WindowInsets.CONSUMED
-                    : insets.consumeSystemWindowInsets();
+            // **受け止めても、消さない。**
+            //
+            // ここで WindowInsets.CONSUMED を返していた。避けたのだから先へ
+            // 渡す必要は無い、という理屈である。**その 1 行がソフトキーボードを
+            // 閉じていた。** 叩いて開き、挿入量がここへ届き、消して返した
+            // 116ms 後に、このプロセス自身が HIDE_SOFT_INPUT を出す——
+            // ImeTracker のログに毎回そう出る。IME の挿入量を木の途中で
+            // 消すと、入力接続を持っている WebView にそれが届かない。
+            //
+            // 余白は既に付けたので、そのまま渡しても二重にはならない。WebView は
+            // fitsSystemWindows を持たないため、受け取っても何もしない。
+            return insets;
         });
     }
 

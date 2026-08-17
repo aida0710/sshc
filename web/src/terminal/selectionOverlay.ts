@@ -76,12 +76,20 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
     // 描き直す。板の字だけを止めておくと、帯は動いた字の上に残る——選んだ
     // つもりの範囲と、見えている範囲が食い違う。実機でそうなった。
     // 合わなくなった選択は、持っていても嘘なので手放す。
-    if (relaidOut) overlay.ownerDocument.getSelection()?.removeAllRanges();
+    //
+    // **掴んでいるものが無いなら、手放してもいけない。** removeAllRanges は
+    // 文書の選択を空にする。Chromium はそこから「いま編集されている場所は
+    // 無い」と読み、ソフトキーボードを閉じる——叩いた指で開いたばかりの
+    // ものを、である。叩く → 開く → 窓が縮む → ここが呼ばれる → 閉じる、と
+    // いう輪を自分で作っていた。実機で測った並びがこれである:
+    //   focusin(textarea) > resize(866→554) > 116ms > HIDE_SOFT_INPUT
+    const held = selectionHeldIn(overlay);
+    if (relaidOut && held) overlay.ownerDocument.getSelection()?.removeAllRanges();
 
     // **選んでいる最中は写さない。** textContent を差し替えれば選択は消え、
     // ハンドルもコピーの吹き出しも一緒に消える。裏で流れ続ける出力より、
     // いま指が掴んでいるものの方が新しい。
-    if (relaidOut || !selectionHeldIn(overlay)) {
+    if (relaidOut || !held) {
       overlay.textContent = viewportText(view.buffer.active, view.rows, view.cols);
     }
 
@@ -134,8 +142,9 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
     touchedAt = 0;
     if (!tapped) return;
     // 選んだものは、次に触れた時点で用済みである。残したままだと、次の描き直しが
-    // 止まったままになる。
-    overlay.ownerDocument.getSelection()?.removeAllRanges();
+    // 止まったままになる。**選んでいなければ触らない** ——空の選択を空にする
+    // 呼び出しにも、キーボードを閉じる力がある。
+    if (selectionHeldIn(overlay)) overlay.ownerDocument.getSelection()?.removeAllRanges();
     // **一度外してから当てる。** 焦点が既にそこにあると、Android はキーボードを
     // 出し直さない——選択のあいだに閉じたものが、叩いても二度と開かなくなる。
     view.blur();
@@ -156,10 +165,14 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
   // 選択が始まった指には互換 mouse イベントがそもそも来ない——入れたまま
   // 長押しして "com" が選べることを実機で確かめた。
   const swallowCompatMouse = (event: MouseEvent) => event.preventDefault();
-  overlay.addEventListener("touchstart", began, { passive: true });
-  overlay.addEventListener("touchmove", moved, { passive: true });
-  overlay.addEventListener("touchend", ended, { passive: true });
-  overlay.addEventListener("mousedown", swallowCompatMouse);
+  // **指を見るのは板ではなく箱である。** 選択を掴んでいるあいだ端末は大きさを
+  // 止めるので、板はキーボードが開いていた頃の高さのまま残る。畳まれた分だけ
+  // 下に空きができ、そこを叩いた指は板に当たらない——選択を解いたつもりの
+  // 一叩きが、どこにも届かなくなる。箱なら端末の面いっぱいを覆っている。
+  container.addEventListener("touchstart", began, { passive: true });
+  container.addEventListener("touchmove", moved, { passive: true });
+  container.addEventListener("touchend", ended, { passive: true });
+  container.addEventListener("mousedown", swallowCompatMouse);
 
   // **onRender だけで足りる。** 書き込みも、流したことも、大きさが変わったことも、
   // 画面に出るときは必ずここを通る。点滅だけの描き直しでは鳴らず、1 フレームに
@@ -169,6 +182,12 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
 
   return () => {
     render.dispose();
+    // **箱は板より長生きする。** 板は消せば listener ごと消えるが、こちらは
+    // 外さなければ次の端末の分と重なって残る。
+    container.removeEventListener("touchstart", began);
+    container.removeEventListener("touchmove", moved);
+    container.removeEventListener("touchend", ended);
+    container.removeEventListener("mousedown", swallowCompatMouse);
     overlay.remove();
   };
 }

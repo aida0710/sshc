@@ -110,6 +110,29 @@ describe("attachSelectionOverlay", () => {
     detach();
   });
 
+  // **持っていない選択を手放さない。** removeAllRanges は文書の選択を空にし、
+  // Chromium はそこから「編集されている場所は無い」と読んでソフトキーボードを
+  // 閉じる。叩く → 開く → 窓が縮む → ここが呼ばれる → 閉じる、の輪になる。
+  it("leaves a selection it does not hold alone when the terminal is laid out again", () => {
+    const { detach, repaint, screen } = harness(["before"]);
+    const elsewhere = document.createElement("div");
+    elsewhere.textContent = "someone else's text";
+    document.body.appendChild(elsewhere);
+    const range = document.createRange();
+    range.selectNodeContents(elsewhere);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    screen.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100 }) as DOMRect;
+    repaint();
+
+    expect(document.getSelection()?.toString()).toBe("someone else's text");
+    selection?.removeAllRanges();
+    elsewhere.remove();
+    detach();
+  });
+
   // **これが無いと、叩いてもキーボードが出ない。** Chromium は touchend の
   // あとに mousedown を投げ、その既定動作は焦点を板の外——body——へ移す。
   // touchend で当てたばかりの textarea が、そこで外れる。

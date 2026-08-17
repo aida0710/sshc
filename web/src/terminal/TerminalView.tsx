@@ -150,6 +150,14 @@ export function TerminalView({
     // その大きさを信じる。
     const measure = () => {
       if (container.clientWidth === 0 || container.clientHeight === 0) return;
+      // **掴まれている選択があるあいだは、測り直さない。**
+      //
+      // 長押しで選び始めた時点で OS はキーボードを畳む。畳めば窓が伸び、ここが
+      // 鳴り、桁と行を測り直して端末は全部を描き直す——選んだ範囲の下から字が
+      // 動いていく。帯は板の字に付いているので動かず、選んだつもりの場所と
+      // 見えている場所が食い違う。**掴んでいるあいだ端末の大きさを止めれば、
+      // 下の字は動かない。** 手が離れれば次の測り直しが追いつく。
+      if (selectionHeldIn(container)) return;
       try {
         fit.fit();
       } catch {
