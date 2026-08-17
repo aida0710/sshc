@@ -193,6 +193,23 @@ export function TerminalView({
       ? attachImeKeys({ container, textarea: view.textarea ?? container })
       : () => {};
 
+    // **長押しに、期待どおりの結果を返す。**
+    //
+    // xterm の中では、指での範囲選択がどうやっても始まらない。CSS でも
+    // contenteditable でも touch-action でもない——**同じ普通のテキストを
+    // .xterm の中に置くと選べず、body の下に置くと選べる**ことを実機で確かめた。
+    // 原因は xterm がその要素に対して行っている何かで、外からは外せない。
+    //
+    // だから長押しは、選べる面を開くことにする。指がやりたかったのは範囲を
+    // 選ぶことであって、xterm の中で選ぶことではない。開いた先では OS の
+    // ハンドルもコピーの吹き出しもそのまま使える。
+    const openOnLongPress = (event: Event) => {
+      event.preventDefault();
+      const live = terminal.current;
+      if (live !== null) setSelecting(bufferText(live.buffer.active));
+    };
+    if (coarse) container.addEventListener("contextmenu", openOnLongPress);
+
     // 打鍵の配線はここで一度だけ行う。繋ぎ直すたびに足すと、1 回の打鍵が
     // 繋ぎ直した回数だけ PTY へ届く。
     //
@@ -315,6 +332,7 @@ export function TerminalView({
       container.removeEventListener("touchmove", touchMove);
       container.classList.remove(nativeSelectionClass);
       releaseImeKeys();
+      container.removeEventListener("contextmenu", openOnLongPress);
       detachClipboard();
       stream?.close();
       view.dispose();
