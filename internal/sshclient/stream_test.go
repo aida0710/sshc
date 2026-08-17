@@ -202,3 +202,49 @@ func TestStreamForwardsStandardInputToTheCommand(t *testing.T) {
 		t.Fatal("the command never received the input")
 	}
 }
+
+// **設定した ServerAliveInterval は、この入口でも効く。** 対話セッションだけが
+// 尊重していて、長く黙って走るコマンドの側が無視していた——途中の機器に接続を
+// 捨てられて困るのは、むしろこちらである。
+func TestStreamSendsTheKeepAlivesTheConfigurationAsksFor(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	server, dialer, target := streamSetup(t, serverOptions{
+		OnShell: func(ssh.Channel) { <-release },
+	})
+	target.KeepAlive = 50 * time.Millisecond
+	target.KeepAliveMax = 100
+	ctx, cancel := context.WithCancel(context.Background())
+
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		_, _ = dialer.Stream(ctx, target, "sleep forever",
+			sshclient.Streams{Out: io.Discard, Err: io.Discard})
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) && server.KeepAlives() < 3 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-finished
+
+	if got := server.KeepAlives(); got < 3 {
+		t.Errorf("the server saw %d keepalives, want the configured interval to keep sending them", got)
+	}
+}
+
+// 設定していないなら送らない。**既定を作らない** —— OpenSSH も既定では送らず、
+// ここで勝手に送り始めると、設定を読んだ人の予想と食い違う。
+func TestStreamSendsNoKeepAlivesWithoutAnInterval(t *testing.T) {
+	server, dialer, target := streamSetup(t, serverOptions{})
+
+	if _, err := dialer.Stream(context.Background(), target, "hostname",
+		sshclient.Streams{Out: io.Discard, Err: io.Discard}); err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+
+	if got := server.KeepAlives(); got != 0 {
+		t.Errorf("the server saw %d keepalives without ServerAliveInterval", got)
+	}
+}

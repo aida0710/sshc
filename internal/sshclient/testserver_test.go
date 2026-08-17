@@ -53,6 +53,8 @@ type testServer struct {
 	// attempts は、認証がこのサーバーへ届いた回数である。鍵を集めるだけの
 	// 操作が資格情報を差し出していないことを、これで言う。
 	attempts int
+	// keepAlives は、接続そのものへ届いた keepalive の回数である。
+	keepAlives int
 }
 
 type serverOptions struct {
@@ -233,7 +235,18 @@ func (s *testServer) serve(conn net.Conn) {
 	s.connected++
 	s.mutex.Unlock()
 	defer func() { _ = connection.Close() }()
-	go ssh.DiscardRequests(requests)
+	go func() {
+		for request := range requests {
+			if request.Type == "keepalive@openssh.com" {
+				s.mutex.Lock()
+				s.keepAlives++
+				s.mutex.Unlock()
+			}
+			if request.WantReply {
+				_ = request.Reply(false, nil)
+			}
+		}
+	}()
 
 	for newChannel := range channels {
 		switch newChannel.ChannelType() {
@@ -414,6 +427,12 @@ func (s *testServer) noteAttempt() {
 }
 
 // Attempts は、認証がこのサーバーへ届いた回数である。
+func (s *testServer) KeepAlives() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.keepAlives
+}
+
 func (s *testServer) Attempts() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
