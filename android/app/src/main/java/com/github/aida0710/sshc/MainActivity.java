@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.graphics.Insets;
 import android.os.Build;
@@ -84,6 +85,14 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
+
+        // **debuggable なビルドでだけ開ける。** これを開けると、同じ機械の
+        // Chrome DevTools からこのページの中身が読め、任意の JS が走る。
+        // release では決して有効にしない——画面の中身も session cookie も
+        // そこから見える。
+        if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
 
         // **targetSdk 35 以降、edge-to-edge は強制である。** 何もしなければ
         // WebView はステータスバーとナビゲーションバーの下にも描かれ、画面の
