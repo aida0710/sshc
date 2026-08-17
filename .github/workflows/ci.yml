@@ -130,6 +130,57 @@ jobs:
           }
           exit $raceExit
 
+  # 実際に配るもの——APK——が組み上がることを見る。
+  #
+  # `go` ジョブの Android の段は、engine が android/arm64 へ**コンパイルできる**
+  # ことしか言わない。それが通っても、gomobile の bind が落ちる、AAR が gradle の
+  # 期待する形で置かれない、manifest が AGP に弾かれる——のどれでも APK は出ない。
+  # 出るところまでやって初めて分かる。
+  #
+  # NDK を自分では入れない。runner の image が持っているものを使う。gradle は
+  # native を一切コンパイルしない（.so は AAR に入って来る）ので、NDK を要るのは
+  # gomobile だけであり、そこに特定の版を求める理由は無い。
+  android:
+    name: Android APK
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          # AGP 9 の下限は 17 である。21 は Gradle 9.7 が長期に支える LTS。
+          java-version: 21
+          cache: gradle
+
+      # **バージョンを書かない。** そうすると go.mod の x/mobile がそのまま使われる。
+      # gomobile は go.mod の tool から来るので、書けば二か所が別々にずれていく。
+      - name: Install gobind
+        run: go install golang.org/x/mobile/cmd/gobind
+
+      - name: gomobile bind
+        run: |
+          test -n "$ANDROID_NDK_LATEST_HOME" || {
+            echo "runner image did not provide an NDK" >&2
+            exit 1
+          }
+          make android-bind ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+
+      - name: assembleDebug
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      # 実機に入れられるものを置いていく。debug 署名なので配布物ではないが、
+      # 「main の今の APK」を取りに行ける場所がここ以外に無い。
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: sshc-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
   web:
     name: Web
     runs-on: ubuntu-latest
