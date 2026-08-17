@@ -54,6 +54,15 @@ if ($Architecture -notin @('x64', 'arm64')) {
 }
 New-Item -ItemType Directory -Force -Path $WorkRoot | Out-Null
 
+# **入っていない機械で確かめる。** NSIS は前回の InstallLocation を覚えていて、
+# 入れ直しはそこへ戻る——名前を変えても既存のインストールは動かない。既に
+# 入っているところで走らせると、この検査が報告するのは「新しい利用者が受け取る
+# もの」ではなく「更新した結果」になる。実機でまさにそれが起き、置き場が
+# 変わったことに気づくのが一手遅れた。
+if (Test-Path -LiteralPath $installDirectory) {
+  throw "package-smoke: sshc is already installed at $installDirectory; uninstall it first, or this measures an upgrade"
+}
+
 # **入れる前の PATH を覚えておく。** アンインストールが元へ戻したかどうかは、
 # ここと比べる以外に言いようがない。
 $pathBefore = UserPathEntries
