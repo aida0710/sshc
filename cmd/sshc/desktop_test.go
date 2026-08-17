@@ -142,6 +142,12 @@ func TestRunDesktopReportsOnlyTheRecordedRepair(t *testing.T) {
 	if strings.Contains(message, "PATH") {
 		t.Errorf("stderr = %q, must not send the user to a PATH search", message)
 	}
+	// **直し方を出したら終わり、ではない。** そのアプリケーションを入れる気の
+	// 無い人に「入れろ」としか言わないことになる。窓を開けないと分かった時点で、
+	// 窓なしで engine を持つ方法も渡す。
+	if !strings.Contains(message, "sshc headless") {
+		t.Errorf("stderr = %q, want the headless path offered alongside the repair", message)
+	}
 }
 
 type refusingTransport struct{}
