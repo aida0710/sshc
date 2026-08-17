@@ -13,6 +13,7 @@ const (
 	invocationEngine
 	invocationHeadless
 	invocationConnect
+	invocationRun
 	invocationChoose
 	invocationList
 	invocationOpen
@@ -30,6 +31,7 @@ const (
 	engineSubcommand   = "engine"
 	headlessSubcommand = "headless"
 	vaultSubcommand    = "vault"
+	runSubcommand      = "run"
 	helpSubcommand     = "help"
 	StatusSubcommand   = "status"
 )
@@ -62,6 +64,13 @@ func parseInvocation(argv []string) (invocation, error) {
 			return invocation{Kind: invocationHelp}, nil
 		}
 		return invocation{Kind: invocationChoose, Args: copyInvocationArgs(args)}, nil
+	case runSubcommand:
+		// **接続先とコマンドを、ひとつの語で兼ねさせない。** 先頭が接続先で、
+		// 残りがすべてコマンドである。境目を推測する余地を作らない。
+		if len(args) < 2 {
+			return invalidInvocation("run requires an alias and a command")
+		}
+		return invocation{Kind: invocationRun, Args: copyInvocationArgs(args)}, nil
 	case ListSubcommand:
 		return noArguments(invocationList, word, args)
 	case OpenSubcommand:
@@ -120,6 +129,7 @@ func usage(out io.Writer) {
   sshc engine          internal: run the engine owned by Electron
   sshc headless        run a foreground engine for terminals and supervisors
   sshc <alias>         connect to a host from ~/.ssh/config in this terminal
+  sshc run <alias> ... run one command on a host and print what it wrote
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
   sshc open            print a new way into the UI
