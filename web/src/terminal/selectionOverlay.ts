@@ -29,6 +29,7 @@ type OverlayTerminal = {
   readonly cols: number;
   readonly buffer: { readonly active: ViewportBuffer };
   focus(): void;
+  blur(): void;
   onRender(handler: () => void): { dispose(): void };
 };
 
@@ -56,27 +57,35 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
   const paint = () => {
     if (view.rows <= 0 || view.cols <= 0) return;
 
-    // **字が先である。** 寸法は測れない場面がある（隠れている面、まだ描かれて
-    // いない最初の一瞬）が、字はいつでも写せる。
-    //
-    // **選んでいる最中は写さない。** textContent を差し替えれば選択は消え、
-    // ハンドルもコピーの吹き出しも一緒に消える。裏で流れ続ける出力より、
-    // いま指が掴んでいるものの方が新しい——SelectSheet と同じ約束である。
-    if (!selectionHeldIn(overlay)) {
-      overlay.textContent = viewportText(view.buffer.active, view.rows, view.cols);
-    }
-
     const screen = view.element?.querySelector<HTMLElement>(".xterm-screen") ?? null;
     const rows = view.element?.querySelector<HTMLElement>(".xterm-rows") ?? null;
-    if (screen === null || rows === null) return;
-    const box = screen.getBoundingClientRect();
-    if (box.width === 0 || box.height === 0) return;
+    const box = screen?.getBoundingClientRect() ?? null;
     const base = container.getBoundingClientRect();
+    const measurable = screen !== null && rows !== null && box !== null && box.width > 0 && box.height > 0;
 
     // **書くのは変わったときだけである。** 毎フレーム style を触れば、その
     // たびにレイアウトをやり直させることになる。
-    const shape = `${box.left - base.left} ${box.top - base.top} ${box.width} ${box.height}`;
-    if (shape === laidOut) return;
+    const shape = measurable
+      ? `${box.left - base.left} ${box.top - base.top} ${box.width} ${box.height}`
+      : laidOut;
+    const relaidOut = shape !== laidOut;
+
+    // **形が変わったなら、掴んでいたものはもう合わない。**
+    //
+    // キーボードが閉じれば窓の高さが変わり、xterm は桁と行を測り直して全部を
+    // 描き直す。板の字だけを止めておくと、帯は動いた字の上に残る——選んだ
+    // つもりの範囲と、見えている範囲が食い違う。実機でそうなった。
+    // 合わなくなった選択は、持っていても嘘なので手放す。
+    if (relaidOut) overlay.ownerDocument.getSelection()?.removeAllRanges();
+
+    // **選んでいる最中は写さない。** textContent を差し替えれば選択は消え、
+    // ハンドルもコピーの吹き出しも一緒に消える。裏で流れ続ける出力より、
+    // いま指が掴んでいるものの方が新しい。
+    if (relaidOut || !selectionHeldIn(overlay)) {
+      overlay.textContent = viewportText(view.buffer.active, view.rows, view.cols);
+    }
+
+    if (!measurable || !relaidOut) return;
     laidOut = shape;
 
     overlay.style.left = `${box.left - base.left}px`;
@@ -121,8 +130,16 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
     if (finger !== undefined && Math.abs(finger.clientY - touchedY) > tapSlopPixels) dragged = true;
   };
   const ended = () => {
-    if (!dragged && touchedAt !== 0 && Date.now() - touchedAt < tapHoldMillis) view.focus();
+    const tapped = !dragged && touchedAt !== 0 && Date.now() - touchedAt < tapHoldMillis;
     touchedAt = 0;
+    if (!tapped) return;
+    // 選んだものは、次に触れた時点で用済みである。残したままだと、次の描き直しが
+    // 止まったままになる。
+    overlay.ownerDocument.getSelection()?.removeAllRanges();
+    // **一度外してから当てる。** 焦点が既にそこにあると、Android はキーボードを
+    // 出し直さない——選択のあいだに閉じたものが、叩いても二度と開かなくなる。
+    view.blur();
+    view.focus();
   };
   overlay.addEventListener("touchstart", began, { passive: true });
   overlay.addEventListener("touchmove", moved, { passive: true });
