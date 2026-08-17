@@ -141,9 +141,25 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
     view.blur();
     view.focus();
   };
+  // **触った指の後から来る mousedown を、既定のまま通さない。**
+  //
+  // Chromium は touchend のあとに mousedown / mouseup / click を投げる。その
+  // mousedown の既定動作は、焦点を「押された要素の、焦点を取れる祖先」へ移す
+  // ことである——板は取れないので、行き先は body になる。touchend で当てた
+  // ばかりの textarea はそこで外れ、キーボードは上がらない。
+  //
+  // 実機に DevTools を繋いで測った並びがこれである:
+  //   touchstart > touchend > focusin(textarea) > mousedown > focusout(textarea)
+  // preventDefault を入れると focusout が消え、mInputShown が true になった。
+  //
+  // 長押しからの選択は壊れない。あちらは touch のジェスチャとして解決され、
+  // 選択が始まった指には互換 mouse イベントがそもそも来ない——入れたまま
+  // 長押しして "com" が選べることを実機で確かめた。
+  const swallowCompatMouse = (event: MouseEvent) => event.preventDefault();
   overlay.addEventListener("touchstart", began, { passive: true });
   overlay.addEventListener("touchmove", moved, { passive: true });
   overlay.addEventListener("touchend", ended, { passive: true });
+  overlay.addEventListener("mousedown", swallowCompatMouse);
 
   // **onRender だけで足りる。** 書き込みも、流したことも、大きさが変わったことも、
   // 画面に出るときは必ずここを通る。点滅だけの描き直しでは鳴らず、1 フレームに
