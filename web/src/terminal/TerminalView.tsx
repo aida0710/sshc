@@ -10,7 +10,7 @@ import { terminalTheme } from "./theme";
 import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
-import { nativeSelectionClass, prefersNativeSelection } from "./nativeSelection";
+import { prefersNativeSelection } from "./nativeSelection";
 import { measuredCellHeight, newTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
@@ -163,7 +163,11 @@ export function TerminalView({
     // 下に敷かれ、上に画面の層が乗っているので、指が触れるのは常に上である。
     //
     // preventDefault しない。止めれば長押しからの範囲選択も一緒に殺す。
-    const scroll = newTouchScroll(view, () => measuredCellHeight(container, view.rows));
+    const scroll = newTouchScroll(view, () => {
+      // 端末の面が建つ前は箱で代用する。指が触れる頃には必ず建っている。
+      const screen = view.element?.querySelector<HTMLElement>(".xterm-screen") ?? container;
+      return measuredCellHeight(screen, view.rows);
+    });
     // 指は 1 本のときだけ見る。2 本目は拡大か、この画面の外の操作である。
     const single = (event: TouchEvent): Touch | null =>
       event.touches.length === 1 ? (event.touches[0] ?? null) : null;
@@ -181,8 +185,6 @@ export function TerminalView({
     container.addEventListener("touchstart", touchStart, { passive: true });
     container.addEventListener("touchmove", touchMove, { passive: true });
 
-    // 印を付ける。何を戻すかは index.css が持っている。
-    if (coarse) container.classList.add(nativeSelectionClass);
 
     // 指で触る画面では、IME の keydown を xterm に見せない。**あれを見た
     // xterm は、消していない textarea の前後を setTimeout(0) で比べる** ——
@@ -317,7 +319,6 @@ export function TerminalView({
       observer.disconnect();
       container.removeEventListener("touchstart", touchStart);
       container.removeEventListener("touchmove", touchMove);
-      container.classList.remove(nativeSelectionClass);
       releaseImeKeys();
       detachOverlay();
       detachClipboard();
