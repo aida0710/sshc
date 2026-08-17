@@ -184,3 +184,76 @@ test("opens the terminal contents somewhere the platform can select them", async
   await sheet.getByRole("button", { name: "Close", exact: true }).click();
   await expect(sheet).toBeHidden();
 });
+
+test("lays a selectable layer over the terminal, outside the element that blocks it", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, installation);
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await nav.getByRole("tab", { name: "Terminals" }).click();
+  await nav.getByRole("button", { name: "Local shell" }).click();
+
+  const rows = page.locator(".xterm-rows");
+  await expect(rows).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await page.locator(".xterm-helper-textarea").focus();
+  await page.keyboard.type("echo zzq");
+  await page.keyboard.press("Enter");
+  await expect(rows).toContainText("zzq", { timeout: 20_000 });
+
+  const overlay = page.locator(".sshc-select-overlay");
+  await expect(overlay).toHaveCount(1);
+
+  // **これがこの設計そのものである。** .xterm の中では長押しからの選択が
+  // 始まらないので、字は必ずその外に無ければならない。
+  expect(await overlay.evaluate((node) => node.closest(".xterm") === null)).toBe(true);
+  await expect.poll(async () => (await overlay.textContent()) ?? "").toContain("zzq");
+
+  // 重ならなければ、帯は別の字の上に出る。
+  const shape = await page.evaluate(() => {
+    const layer = document.querySelector(".sshc-select-overlay")!.getBoundingClientRect();
+    const screen = document.querySelector(".xterm-screen")!.getBoundingClientRect();
+    return {
+      dx: Math.abs(layer.x - screen.x),
+      dy: Math.abs(layer.y - screen.y),
+      dw: Math.abs(layer.width - screen.width),
+      dh: Math.abs(layer.height - screen.height),
+    };
+  });
+  expect(shape.dx).toBeLessThanOrEqual(1);
+  expect(shape.dy).toBeLessThanOrEqual(1);
+  expect(shape.dw).toBeLessThanOrEqual(1);
+  expect(shape.dh).toBeLessThanOrEqual(1);
+
+  // **字送りを決めているのは font ではなく letter-spacing である。** xterm が
+  // 較正したその値を写しているので、桁がずれない。名前が変われば、ここが落ちる。
+  const metrics = await page.evaluate(() => {
+    const layer = getComputedStyle(document.querySelector(".sshc-select-overlay")!);
+    const source = getComputedStyle(document.querySelector(".xterm-rows")!);
+    return {
+      sameFamily: layer.fontFamily === source.fontFamily,
+      sameSize: layer.fontSize === source.fontSize,
+      sameSpacing: layer.letterSpacing === source.letterSpacing,
+      colour: layer.color,
+    };
+  });
+  expect(metrics.sameFamily).toBe(true);
+  expect(metrics.sameSize).toBe(true);
+  expect(metrics.sameSpacing).toBe(true);
+  // 見えてはならない。見えているのは下の xterm の字である。
+  expect(metrics.colour).toBe("rgba(0, 0, 0, 0)");
+
+  // 板の字は本物である——選べば、端末に出ているものが返る。
+  const selected = await page.evaluate(() => {
+    const layer = document.querySelector(".sshc-select-overlay")!;
+    const range = document.createRange();
+    range.selectNodeContents(layer);
+    const selection = getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return selection.toString();
+  });
+  expect(selected).toContain("zzq");
+});
