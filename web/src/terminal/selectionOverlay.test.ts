@@ -110,6 +110,30 @@ describe("attachSelectionOverlay", () => {
     detach();
   });
 
+  // **これが無いと、叩いてもキーボードが出ない。** Chromium は touchend の
+  // あとに mousedown を投げ、その既定動作は焦点を板の外——body——へ移す。
+  // touchend で当てたばかりの textarea が、そこで外れる。
+  it("swallows the mouse event Chromium sends after a finger", () => {
+    const { overlay, detach } = harness(["one"]);
+    const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    overlay.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    detach();
+  });
+
+  // 触ったあと、打つつもりの指には焦点を渡す。渡さなければ、板が上に乗って
+  // いる以上どこにも渡らない。
+  it("hands the terminal the focus after a tap", () => {
+    const { overlay, view, detach } = harness(["one"]);
+    // jsdom は TouchEvent を持たない。読まれるのは touches[0].clientY だけである。
+    const touch = new Event("touchstart", { bubbles: true });
+    Object.defineProperty(touch, "touches", { value: [{ clientY: 10 }] });
+    overlay.dispatchEvent(touch);
+    overlay.dispatchEvent(new Event("touchend", { bubbles: true }));
+    expect(view.focus).toHaveBeenCalled();
+    detach();
+  });
+
   it("takes the node away again", () => {
     const { container, detach } = harness(["one"]);
     detach();
