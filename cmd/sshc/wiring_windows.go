@@ -2,13 +2,23 @@
 
 package main
 
-// newPlatformParts は、まだ何も配線されていないことを述べる。
+import (
+	"os"
+
+	"sshc/internal/keys"
+)
+
+// newPlatformParts は、この OS の部品を組み立てる。
 //
 // **ダミーを置かない。** Toolchain も KeyAgent も interface であり、nil は
-// このアプリケーションが既に扱いを決めている状態である——nil の KeyAgent は
-// 「届くエージェントが無い」と報告し、nil の Toolchain は鍵の一覧が
-// ssh-keygen の有無を尋ねない、というだけである。どちらも致命ではない。
+// このアプリケーションが既に扱いを決めている状態である——nil の Toolchain は
+// 鍵の一覧が ssh-keygen の有無を尋ねない、というだけで、致命ではない。本物の
+// Windows toolchain はその task が入れる。**それまでのあいだ、偽物を置いて
+// 動いているふりをしない。**
 //
-// 本物の Windows toolchain と named-pipe key agent は、それぞれの task が
-// 入れる。**それまでのあいだ、偽物を置いて動いているふりをしない。**
-func newPlatformParts() platformParts { return platformParts{} }
+// KeyAgent は繋がった。Windows の OpenSSH エージェントは固定の named pipe を
+// 待っており、そこへ話すのは keys.NewAgent である。lookup を渡すのは、Unix と
+// 同じ signature を保つためだけで、**あちらはそれを読まない。**
+func newPlatformParts() platformParts {
+	return platformParts{KeyAgent: keys.NewAgent(os.LookupEnv)}
+}

@@ -10,6 +10,7 @@ import { terminalTheme } from "./theme";
 import { clipboard } from "../ui/clipboard";
 import { bufferText } from "./buffer";
 import { attachImeKeys } from "./imeKeys";
+import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
 import { SelectSheet } from "./SelectSheet";
 import { nativeSelectionClass, prefersNativeSelection } from "./nativeSelection";
 import { measuredCellHeight, newTouchScroll } from "./touchScroll";
@@ -171,13 +172,16 @@ export function TerminalView({
     // 指は 1 本のときだけ見る。2 本目は拡大か、この画面の外の操作である。
     const single = (event: TouchEvent): Touch | null =>
       event.touches.length === 1 ? (event.touches[0] ?? null) : null;
+    // 選択のハンドルを引いているあいだは流さない。指は同じ動きをするが、
+    // 掴んでいるのは端末ではなくハンドルである。流せば、掴んだ範囲は掴んだ
+    // そばから足元ごと動く。
     const touchStart = (event: TouchEvent) => {
       const finger = single(event);
-      if (finger !== null) scroll.start(finger.clientY);
+      if (finger !== null && !selectionHeldIn(container)) scroll.start(finger.clientY);
     };
     const touchMove = (event: TouchEvent) => {
       const finger = single(event);
-      if (finger !== null) scroll.move(finger.clientY);
+      if (finger !== null && !selectionHeldIn(container)) scroll.move(finger.clientY);
     };
     container.addEventListener("touchstart", touchStart, { passive: true });
     container.addEventListener("touchmove", touchMove, { passive: true });
@@ -193,22 +197,10 @@ export function TerminalView({
       ? attachImeKeys({ container, textarea: view.textarea ?? container })
       : () => {};
 
-    // **長押しに、期待どおりの結果を返す。**
-    //
-    // xterm の中では、指での範囲選択がどうやっても始まらない。CSS でも
-    // contenteditable でも touch-action でもない——**同じ普通のテキストを
-    // .xterm の中に置くと選べず、body の下に置くと選べる**ことを実機で確かめた。
-    // 原因は xterm がその要素に対して行っている何かで、外からは外せない。
-    //
-    // だから長押しは、選べる面を開くことにする。指がやりたかったのは範囲を
-    // 選ぶことであって、xterm の中で選ぶことではない。開いた先では OS の
-    // ハンドルもコピーの吹き出しもそのまま使える。
-    const openOnLongPress = (event: Event) => {
-      event.preventDefault();
-      const live = terminal.current;
-      if (live !== null) setSelecting(bufferText(live.buffer.active));
-    };
-    if (coarse) container.addEventListener("contextmenu", openOnLongPress);
+    // 触れる画面にだけ、選べる板を重ねる。**長押しには何もしない** ——
+    // contextmenu で preventDefault を呼べば、OS がまさに始めようとしていた
+    // 選択ジェスチャごと消える。板の上でそれが起きるように、道を空けておく。
+    const detachOverlay = coarse ? attachSelectionOverlay(container, view) : () => {};
 
     // 打鍵の配線はここで一度だけ行う。繋ぎ直すたびに足すと、1 回の打鍵が
     // 繋ぎ直した回数だけ PTY へ届く。
@@ -332,7 +324,7 @@ export function TerminalView({
       container.removeEventListener("touchmove", touchMove);
       container.classList.remove(nativeSelectionClass);
       releaseImeKeys();
-      container.removeEventListener("contextmenu", openOnLongPress);
+      detachOverlay();
       detachClipboard();
       stream?.close();
       view.dispose();
@@ -408,7 +400,11 @@ export function TerminalView({
         端末の背景はトークンから来る。周りの面と同じ色にすると、どこまでが
         端末なのかが分からなくなる。
       */}
-      <div ref={host} className="min-h-0 flex-1 bg-term-bg p-2" />
+      {/*
+        relative は、重ねる板の座標系である。板は .xterm の**兄弟**としてここに
+        ぶら下がる——.xterm の中では長押しからの選択がどうやっても始まらない。
+      */}
+      <div ref={host} className="relative min-h-0 flex-1 bg-term-bg p-2" />
       {selecting === null ? null : (
         <SelectSheet text={selecting} onClose={() => setSelecting(null)} />
       )}
