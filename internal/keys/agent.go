@@ -36,14 +36,12 @@ type Agent struct {
 }
 
 // NewAgent は、この環境の ssh-agent に話しかけるアダプタを返す。
+//
+// **どこへ繋ぐかは OS ごとに違う。** Unix は SSH_AUTH_SOCK の指す unix ソケット
+// で、Windows は固定の named pipe である。その差は agent_unix.go と
+// agent_windows.go が持ち、ここから先のプロトコルは同じひとつである。
 func NewAgent(lookup func(string) (string, bool)) platform.KeyAgent {
-	return Agent{Socket: func() string {
-		if lookup == nil {
-			return ""
-		}
-		socket, _ := lookup("SSH_AUTH_SOCK")
-		return socket
-	}}
+	return newPlatformAgent(lookup)
 }
 
 // Available は、このプロセスが agent に到達できるかを報告する。
@@ -158,9 +156,10 @@ func (a Agent) open(ctx context.Context) (net.Conn, error) {
 
 	dial := a.Dial
 	if dial == nil {
-		dial = func(ctx context.Context, address string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", address)
-		}
+		// **既定を持たない。** ここで unix ソケットへ落とすと、Windows で
+		// Dial を配線し忘れた日に「unix ソケットが開けない」という、その OS に
+		// 存在しない理由が返る。宛先を知っているのは組み立てた側だけである。
+		return nil, platform.ErrAgentUnavailable
 	}
 	conn, err := dial(ctx, socket)
 	if err != nil {
