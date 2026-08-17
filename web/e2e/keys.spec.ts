@@ -71,7 +71,11 @@ test("lists generated keys and reveals one only after an explicit confirmation",
 
   const row = page.getByRole("row", { name: /id_e2e\b/ }).first();
   await expect(row).toBeVisible();
-  await expect(row).toContainText("0600");
+  // **Windows の mode ビットは、誰が読めるかを何も言わない。** Go の Chmod が
+  // 写すのは読み取り専用ビットひとつで、Perm() は 0666 か 0444 にしかならない。
+  // 向こうで守っているのは DACL であり、internal/keys の
+  // filemode_windows_test.go がそちらを見ている。
+  await expect(row).toContainText(process.platform === "win32" ? "0666" : "0600");
   expect(await installation.read("id_e2e.pub")).toContain("ssh-ed25519 ");
 
   // インベントリ画面は、誰かが求める前には鍵の実体を何も表示しない。

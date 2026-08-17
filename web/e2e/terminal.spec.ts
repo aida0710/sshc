@@ -1,4 +1,10 @@
-import { expect, openApplication, openSection, test } from "./support/environment";
+import {
+  expect,
+  openApplication,
+  openSection,
+  shellSays,
+  test,
+} from "./support/environment";
 
 // 埋め込みターミナルの end-to-end。
 //
@@ -177,7 +183,11 @@ test("starts local shells where the setting says", async ({ page, installation }
   const panel = await openConsolePanel(page);
   await panel.getByRole("button", { name: "Local shell" }).click();
   const screen = await typeIntoConsole(page, "pwd");
-  await expect(screen).toContainText("/workspace", { timeout: 20_000 });
+  // 区切りは OS のものである。**同じ場所を、その OS の綴りで確かめる。**
+  await expect(screen).toContainText(
+    process.platform === "win32" ? "\\workspace" : "/workspace",
+    { timeout: 20_000 },
+  );
 });
 
 // 選び終えた範囲が、追加のショートカットなしでクリップボードへ入る。
@@ -420,7 +430,7 @@ test("tells the pseudo-terminal how big it is as soon as it attaches", async ({ 
   const panel = await openConsolePanel(page);
   await panel.getByRole("button", { name: "Local shell" }).click();
   // 区切りを "-" にするのは、打った行そのものと、その出力とを見分けるためである。
-  const screen = await typeIntoConsole(page, 'stty size | tr " " "-"');
+  const screen = await typeIntoConsole(page, shellSays.size);
   await expect(screen).toContainText(/\d+-\d+/, { timeout: 20_000 });
 
   const reported = (await screen.innerText()).match(/(\d+)-(\d+)/);
@@ -452,7 +462,7 @@ test("keeps the same terminal alive while another screen is shown", async ({ pag
   // **打った行そのものには現れない文字列でなければならない。** 打鍵は
   // そのまま画面へ写るので、`echo late-canary` と書けば「late-canary」は
   // 出力を待たずにそこにある——それを待っても何も確かめたことにならない。
-  await typeIntoConsole(page, "(sleep 2; echo late-$((6*7))) &");
+  await typeIntoConsole(page, shellSays.lateEcho("late-42"));
 
   await page.getByRole("navigation", { name: "Primary" }).getByRole("tab", { name: "Settings" }).click();
   await openSection(page, "Settings");
