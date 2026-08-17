@@ -68,6 +68,9 @@ build:
 ANDROID_NDK_HOME ?= $(HOME)/Library/Android/sdk/ndk/28.2.13676358
 
 android-bind:
+	@# 置き場を作る。**追跡していないので、クローンしたばかりの環境には無い。**
+	@# gomobile は出力先のディレクトリを作らず、無ければそこで失敗する。
+	mkdir -p android/app/libs
 	ANDROID_NDK_HOME="$(ANDROID_NDK_HOME)" PATH="$(HOME)/go/bin:$$PATH" \
 		go tool gomobile bind -target=android/arm64,android/amd64 -androidapi 26 \
 		-o android/app/libs/sshc.aar ./mobile
