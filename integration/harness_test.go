@@ -90,6 +90,12 @@ func isolatedHome(t *testing.T) string {
 	return home
 }
 
+// osPath と osSystemRoot は、隔離した環境でも渡さざるを得ないものである。
+// 前者は engine が報告対象のプログラムを見つけるため、後者は Windows の
+// プロセスが DLL を読むために要る。
+func osPath() string       { return os.Getenv("PATH") }
+func osSystemRoot() string { return os.Getenv("SystemRoot") }
+
 // start は、隔離された家の中で sshc をひとつ起こす。
 func start(t *testing.T, home string, args ...string) *testProcess {
 	t.Helper()
@@ -98,11 +104,18 @@ func start(t *testing.T, home string, args ...string) *testProcess {
 	// だけを与える。ここに残った HOME や USERPROFILE がひとつでも通れば、
 	// engine は開発者の ~/.ssh を開く。
 	command.Env = []string{
-		"PATH=" + os.Getenv("PATH"),
+		"PATH=" + osPath(),
 		"HOME=" + home,
 		"USERPROFILE=" + home,
 		"TMPDIR=" + home,
+		"SystemRoot=" + osSystemRoot(),
 	}
+	return startPrepared(t, command)
+}
+
+// startPrepared は、組み立て済みの command を起こし、出力と終了を見張る。
+func startPrepared(t *testing.T, command *exec.Cmd) *testProcess {
+	t.Helper()
 	process := &testProcess{
 		Command: command,
 		Stdout:  &lockedBuffer{},
@@ -129,10 +142,11 @@ func startOwned(t *testing.T, home string) *testProcess {
 	}
 	command := exec.Command(binaryPath, "engine")
 	command.Env = []string{
-		"PATH=" + os.Getenv("PATH"),
+		"PATH=" + osPath(),
 		"HOME=" + home,
 		"USERPROFILE=" + home,
 		"TMPDIR=" + home,
+		"SystemRoot=" + osSystemRoot(),
 	}
 	command.Stdin = reader
 	process := &testProcess{
