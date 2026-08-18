@@ -57,6 +57,67 @@ func TestCIWorkflowProvidesNativeGoAndDesktopLifecycleMatrices(t *testing.T) {
 	}
 }
 
+// **ブラウザから見た製品は、Windows でも同じでなければならない。** そして
+// それを確かめる経路はひとつしかない——e2e である。ConPTY を実際に踏むのも、
+// 鍵の一覧が Windows で何を表示するかを見るのも、ここだけである。
+//
+// **ジョブが消えたら落ちる。** 初めて実機で走らせたとき 8 件が落ち、その全部が
+// テスト側の Unix 前提だった。このジョブが無ければ、次に誰かが同じことを
+// 書いた瞬間から、誰も気づかないまま壊れている。
+func TestCIWorkflowRunsTheEndToEndSuiteOnWindows(t *testing.T) {
+	document := readWorkflowDocument(t)
+
+	job, present := document.Jobs["e2e-windows"]
+	if !present {
+		t.Fatal("the workflow has no e2e-windows job; the browser-facing suite would only ever run on Linux")
+	}
+	if job.RunsOn != "windows-2025" {
+		t.Errorf("e2e-windows runs on %q, want windows-2025", job.RunsOn)
+	}
+
+	source, err := os.ReadFile(workflowPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	windows := withoutYAMLComments(jobSection(string(source), "e2e-windows:", "security:"))
+	if !strings.Contains(windows, "npm run e2e --prefix web") {
+		t.Error("the Windows e2e job does not run the suite")
+	}
+	// **xvfb を持ち込まない。** あれは Linux の Electron を窓なしで動かすための
+	// もので、Windows には無い。書けばジョブごと落ちる。
+	if strings.Contains(windows, "xvfb") {
+		t.Error("the Windows e2e job invokes xvfb, which does not exist there")
+	}
+}
+
+// withoutYAMLComments は、注釈の行を落とす。
+//
+// **説明ではなく、書いてあることを見る。** 注釈の中の語で落ちる検査は、いずれ
+// 注釈を消すことで直される——残すべきものの方が先に消える。
+func withoutYAMLComments(text string) string {
+	kept := make([]string, 0, 32)
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}
+
+// jobSection は、ジョブの見出しから次の見出しまでを返す。
+func jobSection(text, from, to string) string {
+	start := strings.Index(text, from)
+	if start < 0 {
+		return ""
+	}
+	rest := text[start:]
+	if end := strings.Index(rest, to); end >= 0 {
+		return rest[:end]
+	}
+	return rest
+}
+
 func TestCIWorkflowKeepsWindowsRaceExceptionExact(t *testing.T) {
 	path := workflowPath()
 	source, err := os.ReadFile(path)
