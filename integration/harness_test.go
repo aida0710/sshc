@@ -241,6 +241,41 @@ func waitForFile(t *testing.T, path string, within time.Duration, process *testP
 	t.Fatalf("%s never appeared", path)
 }
 
+// takeOverAsHeadless は、席が空くのを待って、次の owner を立てる。
+//
+// **一度目で立てられることを前提にしない。** 殺されたプロセスのロックが
+// OS から外れるのは、その終了を親が回収した瞬間とは限らない——Windows の
+// LockFileEx はプロセスオブジェクトの破棄に伴って外れるので、混んだ機械では
+// 少し遅れる。製品はその間、正しく「既に走っている」と断る。確かめたいのは
+// 「席は必ず空く」ことであって、「一度目で空いている」ことではない。
+func takeOverAsHeadless(t *testing.T, home string) *testProcess {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	var last *testProcess
+	for time.Now().Before(deadline) {
+		next := start(t, home, "headless")
+		settled := time.Now().Add(10 * time.Second)
+		for time.Now().Before(settled) {
+			if !next.running() {
+				break
+			}
+			if fileExists(handoffPath(home)) {
+				return next
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		last = next
+		next.kill()
+		time.Sleep(100 * time.Millisecond)
+	}
+	reason := ""
+	if last != nil {
+		reason = last.Stderr.String()
+	}
+	t.Fatalf("no later owner could take the seat within 30s\n%s", reason)
+	return nil
+}
+
 // waitFor は、条件が満たされるまで待つ。
 func waitFor(t *testing.T, within time.Duration, describe string, condition func() bool) {
 	t.Helper()
