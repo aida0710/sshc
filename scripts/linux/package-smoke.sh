@@ -9,6 +9,11 @@
 # コンテナや素の CI ランナーには無い。展開なら FUSE を必要とせず、しかも
 # 見るものは同じ——利用者が実行したときに開かれるのと同じ木である。
 #
+# **ただし展開も runtime を「実行」する。** だから走らせられないアーキの束は
+# --appimage-extract では開けない。そこは squashfs を直接読む——AppImage は
+# ELF の後ろに squashfs を繋いだものなので、ELF の終端が中身の開始位置になる。
+# x64 の CI から arm64 の束の中身を見られるのは、この道だけである。
+#
 # **秘密は出さない。** handoff にはワンタイムの資格情報が入っている。ここが
 # 報告するのは、在るかどうかと、誰が読めるかだけである。
 set -eu
@@ -41,6 +46,34 @@ mkdir -p "$work_root"
 image="$(cd "$(dirname "$appimage")" && pwd)/$(basename "$appimage")"
 chmod +x "$image"
 
+# **走らせられるかどうかを、開ける前に決める。** ここを展開の後ろに置いていた
+# ときは、foreign-arch の束が "Exec format error" で落ち、「実行しなかった」と
+# 言う分岐には決して到達しなかった。**書いたのに一度も走らない道だった。**
+host="$(uname -m)"
+native="no"
+{ [ "$host" = "x86_64" ] && [ "$architecture" = "x64" ]; } && native="yes"
+{ [ "$host" = "aarch64" ] && [ "$architecture" = "arm64" ]; } && native="yes"
+
+if [ "$native" = "no" ]; then
+	# 実行せずに中身へ届く道。無ければ、確かめられなかったとだけ言う。
+	if ! command -v unsquashfs >/dev/null 2>&1; then
+		echo "note: this host is $host and cannot execute a $architecture runtime"
+		echo "package-smoke: $architecture not inspected on $host; install squashfs-tools to read it here"
+		exit 0
+	fi
+	# squashfs の開始位置 = ELF の終端 = 節表の位置 + 節の大きさ × 個数。
+	offset="$(readelf -h "$image" 2>/dev/null | awk '
+		/Start of section headers/ {start=$5}
+		/Size of section headers/  {size=$5}
+		/Number of section headers/{count=$5}
+		END{ if (start != "" && size != "" && count != "") print start + size * count }')"
+	[ -n "$offset" ] || fail "to read the ELF headers of the AppImage (is readelf present?)"
+	root="$work_root/squashfs-root"
+	unsquashfs -o "$offset" -d "$root" -q "$image" >"$work_root/extract.err" 2>&1 ||
+		{ cat "$work_root/extract.err" >&2; fail "the squashfs inside the AppImage to be readable"; }
+	ok "the AppImage was read without executing it"
+else
+
 # 展開はカレントに squashfs-root を作るので、作業場所の中で行う。
 if ! (cd "$work_root" && "$image" --appimage-extract >/dev/null 2>"$work_root/extract.err"); then
 	# **理由を名指しする。** ここで一番起きるのは、runtime が要求する共有
@@ -59,6 +92,7 @@ fi
 root="$work_root/squashfs-root"
 [ -d "$root" ] || fail "the AppImage to extract"
 ok "the AppImage extracted"
+fi
 
 shell="$root/sshc"
 [ -x "$shell" ] || fail "an executable shell at the root of the bundle"
@@ -81,13 +115,9 @@ case "$have" in
 *) fail "the CLI to be $want, found ${have:-unreadable}" ;;
 esac
 
-host="$(uname -m)"
-native="no"
-{ [ "$host" = "x86_64" ] && [ "$architecture" = "x64" ]; } && native="yes"
-{ [ "$host" = "aarch64" ] && [ "$architecture" = "arm64" ]; } && native="yes"
 if [ "$native" = "no" ]; then
-	echo "note: this host is $host; a $architecture binary cannot run here"
-	echo "package-smoke: $architecture layout checked on $host; nothing was executed"
+	# **確かめた範囲を、通過と同じ言葉で言わない。**
+	echo "package-smoke: $architecture contents checked on $host; nothing was executed"
 	exit 0
 fi
 
