@@ -1,71 +1,312 @@
+# リリースの成果物を作り、公開する。
+#
+# **タグだけが引き金である。** ブランチへの push では何も走らない。リリースは
+# 意図的な行為であり、バイナリが報告する版は、それがビルドされた元のタグ
+# そのものだからだ。
+#
+# **束は、それが動く OS の上で作る。** 以前はこれを macOS 一台でやっていた。
+# そのため Windows のインストーラは存在せず（NSIS は Windows でしか組めない）、
+# Android も無く、しかも desktop の束を作る手順そのものが壊れていた——呼んで
+# いた make の的が Makefile に無かった。いまは OS ごとに job があり、それぞれが
+# 自分の CLI と自分の束を作り、**自分で開いて確かめてから**渡す。
+#
+# **CI はタグでは走らない**（push は main だけ、あとは pull request）。だから
+# 各 job の Verify が、このタグに対する唯一の検証である。
 name: Release
 
-# トリガーはタグだけである。ここにあるものはブランチへの push では走らない。
-# リリースは意図的な行為であり、バイナリが報告するバージョンは、それがビルド
-# された元のタグそのものだからだ。
 on:
   push:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  macos:
+    name: macOS
     runs-on: macos-14
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.sum
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
 
-      - name: Install web dependencies
-        run: npm ci --prefix web
-
-      # 他のあらゆる push と同じゲートである。これを通れないタグは、誰にも
-      # インストールできてはならないタグだ。
       - name: Verify
         run: make test
 
-      # 4 つの成果物を 1 台のランナーで作る。このプロジェクトは cgo を 1 行も
-      # 使っていないので、Linux はクロスコンパイルで足りる。darwin だけは cgo を
-      # 有効にしたままにする理由が Makefile に書いてある。
-      - name: Build
+      - name: Build the CLI for this OS
         env:
           VERSION: ${{ github.ref_name }}
-        run: make release-binaries
+        run: make release-cli-current
 
-      # デスクトップの外殻を 4 つ作る。**1 台の macOS から macOS と Linux の
-      # 両方が出る**——それが Tauri ではなく Electron を選んだ理由であり、
-      # 手元で確かめてある。束ごとに入る sshc は、その束のプラットフォームの
-      # ものである（Makefile がそう並べる）。
-      #
-      # 署名はまだ無い。macOS では初回に右クリック→開くが要る。
-      - name: Build the desktop shell
+      # 署名はしていない。macOS では初回に右クリック→開くが要る。
+      # docs/manual-test-matrix.md がその状態を書いている。
+      - name: Build the desktop bundles
         env:
           VERSION: ${{ github.ref_name }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: make desktop-dist
+        run: |
+          make desktop-version
+          make desktop-bundle-mac
+          npm ci --prefix desktop
+          npm run dist:mac --prefix desktop
 
-      - name: Collect the desktop bundles
-        run: cp desktop/dist/*.dmg desktop/dist/*.AppImage dist/
+      # **開いていない束を配らない。** 中身が違っていてもビルドは通る——
+      # Windows では実際に、空の resources\cli が利用者の PATH に載った。
+      - name: Open the bundles
+        run: |
+          set -eu
+          arm64=$(ls desktop/dist/*-arm64.dmg)
+          x64=$(ls desktop/dist/*.dmg | grep -v -- '-arm64')
+          sh scripts/macos/package-smoke.sh --dmg "$arm64" --architecture arm64 --work-root "$RUNNER_TEMP/smoke-arm64"
+          sh scripts/macos/package-smoke.sh --dmg "$x64" --architecture x64 --work-root "$RUNNER_TEMP/smoke-x64"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: release-macos
+          path: |
+            dist/sshc-darwin-*
+            desktop/dist/*.dmg
+          if-no-files-found: error
+          retention-days: 1
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+
+      - name: Verify
+        run: make test
+
+      - name: Build the CLI for this OS
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: make release-cli-current
+
+      # **Linux は形が二つある。** x64 は AppImage、arm64 は tar.gz である。
+      # electron-builder が arm64 向けに積む AppImage の runtime は、版の付か
+      # ない libz.so を要求する——zlib1g-dev が入れるもので、普通の機械には
+      # 無い。あの束は展開すらできず、利用者は起動できない。x64 の runtime は
+      # libz.so.1 を見ており無事なので、そちらは AppImage のままにしてある。
+      - name: Build the desktop bundles
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          make desktop-version
+          make desktop-bundle-linux
+          npm ci --prefix desktop
+          npm run dist:linux --prefix desktop
+
+      # x64 はこのランナーの上で本当に動く。arm64 は動かせないので、
+      # 中身だけを見る——スクリプトがどちらをしたかを結果に書く。
+      - name: Open the bundles
+        run: |
+          set -eu
+          appimage=$(ls desktop/dist/*.AppImage)
+          archive=$(ls desktop/dist/*-arm64.tar.gz)
+          sh scripts/linux/package-smoke.sh --package "$appimage" --architecture x64 --work-root "$RUNNER_TEMP/smoke-x64"
+          sh scripts/linux/package-smoke.sh --package "$archive" --architecture arm64 --work-root "$RUNNER_TEMP/smoke-arm64"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: release-linux
+          path: |
+            dist/sshc-linux-*
+            desktop/dist/*.AppImage
+            desktop/dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  windows:
+    name: Windows
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+
+      # **make は使わない。** CI もここでは使っていない——recipe が POSIX の
+      # シェルを前提にしているからである。Makefile が呼んでいるのと同じ
+      # nativebuild を直接呼び、Makefile が環境で渡している値を flag で渡す。
+      # 束の一覧が二か所になるので、内部の契約テストが両者の一致を見ている。
+      #
+      # -race はここでは走らせない。Windows のランナーに C の道具が無く、
+      # race detector はそれを要る。CI 側も同じ扱いである。
+      - name: Verify
+        run: |
+          go build ./...
+          go test ./...
+
+      - name: Build the CLI for this OS
+        env:
+          SSHC_NATIVE_VERSION: ${{ github.ref_name }}
+        run: go run ./internal/buildcontract/cmd/nativebuild release-current --arches "amd64 arm64" --output-dir dist
+
+      - name: Build the desktop bundles
+        env:
+          SSHC_NATIVE_VERSION: ${{ github.ref_name }}
+        run: |
+          go run ./internal/buildcontract/cmd/nativebuild desktop-version --directory desktop
+          go run ./internal/buildcontract/cmd/nativebuild desktop --host windows --resource-root desktop/resources --bundles "win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe"
+          npm ci --prefix desktop
+          npm run dist:win --prefix desktop
+
+      # x64 だけを開く。arm64 のインストーラはこのランナーでは動かせず、
+      # smoke は実際に入れて PATH と DACL と所有権を見るものだからである。
+      - name: Open the bundle
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem desktop/dist/*-win-x64-setup.exe | Select-Object -First 1).FullName
+          ./scripts/windows/package-smoke.ps1 -Installer $installer -Architecture x64 -WorkRoot "$env:RUNNER_TEMP\smoke-x64"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: release-windows
+          path: |
+            dist/sshc-windows-*
+            desktop/dist/*-setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  android:
+    name: Android
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      # **鍵が無ければ、ここで止める。** 署名されていない APK はインストール
+      # すらできないので、配っても誰の役にも立たない。黙って debug の鍵で
+      # 署名するのはもっと悪い——あれは公開されている鍵であり、誰でも
+      # 「同じアプリの更新」を作れてしまう。
+      - name: Require a signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || {
+            echo "This release has no Android signing key." >&2
+            echo "Create these repository secrets, then re-run:" >&2
+            echo "  ANDROID_KEYSTORE_BASE64   base64 of a JKS/PKCS12 keystore" >&2
+            echo "  ANDROID_KEYSTORE_PASSWORD" >&2
+            echo "  ANDROID_KEY_ALIAS" >&2
+            echo "  ANDROID_KEY_PASSWORD" >&2
+            echo "Keep the same key forever: Android refuses an update signed by another." >&2
+            exit 1
+          }
+
+      - name: Install gobind
+        run: go install golang.org/x/mobile/cmd/gobind
+
+      - name: gomobile bind
+        run: |
+          test -n "$ANDROID_NDK_LATEST_HOME" || {
+            echo "runner image did not provide an NDK" >&2
+            exit 1
+          }
+          make android-bind ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+
+      # 鍵はここでだけ実体になる。作業ディレクトリの外に置くのは、
+      # うっかり成果物に入らないようにするためである。
+      - name: assembleRelease
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          keystore="$RUNNER_TEMP/release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$keystore"
+          ANDROID_KEYSTORE_PATH="$keystore" \
+            ./gradlew --no-daemon assembleRelease \
+              -PsshcVersionName="${GITHUB_REF_NAME#v}"
+          rm -f "$keystore"
+
+      # **署名されたことを、gradle の成功で判断しない。** 設定が外れていても
+      # assembleRelease は通り、未署名の APK を残す。出来上がったものに
+      # 直接聞く。
+      - name: The APK is signed
+        run: |
+          set -eu
+          apk=$(ls android/app/build/outputs/apk/release/*.apk)
+          signer=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          "$signer" verify --print-certs "$apk"
+          cp "$apk" "sshc-android-${GITHUB_REF_NAME}.apk"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: release-android
+          path: sshc-android-*.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish
+    needs: [macos, linux, windows, android]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          path: incoming
+
+      # 各 job が置いた木を一枚にする。名前はすべて sshc- で始まるので、
+      # 公開するものと、そうでないものが取り違えられない。
+      - name: Collect
+        run: |
+          set -eu
+          mkdir -p dist
+          find incoming -type f -name 'sshc-*' -exec cp {} dist/ \;
+          ls -la dist
 
       # チェックサムは、手でダウンロードしたものを検証する人のためにある。
       # それが記述する対象の隣に公開されるので、転送の途中切断は捕まえられるが、
       # このリリースが正直かどうかについては何も言わない — README がどちらで
       # あるかを述べており、そうでないかのようにほのめかしてはいない。
       - name: Package
-        run: cd dist && shasum -a 256 sshc-* > checksums.txt
+        run: cd dist && sha256sum sshc-* > checksums.txt
 
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release create "$RELEASE_TAG" \
             --title "$RELEASE_TAG" \
