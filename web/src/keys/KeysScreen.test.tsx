@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KeysScreen } from "./KeysScreen";
@@ -990,5 +990,132 @@ describe("taking a key back out of the agent", () => {
     expect(screen.getByText(/Leave empty to use the stored passphrase/)).toBeInTheDocument();
     expect(screen.getByLabelText("Key passphrase")).toHaveValue("");
     expect(document.body).not.toHaveTextContent("a dedicated secret value");
+  });
+});
+
+// **フォルダで分けて、まとめて動かす。**
+//
+// 移す仕組み（relocate）は前からあった。無かったのは、どこに何が入って
+// いるかを見て、選んで、一度に動かす入口である。一本ずつ「…」の中の項目を
+// 開いていたものが、ここでまとまる。
+describe("organising keys into folders", () => {
+  function grouped(): KeyInventoryResponse {
+    const inventory = buildInventory();
+    inventory.items[0]!.relativePath = "keys/work/id_work";
+    inventory.items[1]!.relativePath = "id_loose";
+    return inventory;
+  }
+
+  it("shows only the keys inside the folder that is open", async () => {
+    const user = userEvent.setup();
+    render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(grouped()) })} groups={["work"]} />);
+
+    expect(await screen.findByRole("row", { name: /id_work/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /id_loose/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "work, 1" }));
+
+    expect(screen.getByRole("row", { name: /id_work/ })).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /id_loose/ })).not.toBeInTheDocument();
+  });
+
+  it("moves every key that was chosen in one action", async () => {
+    const user = userEvent.setup();
+    const relocate = vi.fn().mockResolvedValue({
+      id: "",
+      relativePath: "",
+      group: "work",
+      files: [],
+      references: [],
+      skipped: [],
+      notes: [],
+      blockers: [],
+      transactionId: "tx",
+    });
+    render(
+      <KeysScreen
+        api={buildApi({ inventory: vi.fn().mockResolvedValue(grouped()), relocate })}
+        groups={["work"]}
+      />,
+    );
+
+    await user.click(await screen.findByRole("checkbox", { name: "Choose id_loose" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Move into" }), "work");
+    await user.click(screen.getByRole("button", { name: "Move" }));
+
+    expect(relocate).toHaveBeenCalledWith("key-two", { group: "work" });
+    expect(await screen.findByText("Moved 1.")).toBeInTheDocument();
+  });
+
+  // **断られた一本のせいで、残りを止めない。** サーバーは鍵ごとに拒否する
+  // ので、動いたものは動いたと言い、動かなかったものは理由と一緒に名指しする。
+  it("names the key that was refused and still moves the rest", async () => {
+    const user = userEvent.setup();
+    const bothInWork = (): KeyInventoryResponse => {
+      const inventory = buildInventory();
+      inventory.items[0]!.relativePath = "keys/work/id_work";
+      inventory.items[1]!.relativePath = "keys/work/legacy";
+      return inventory;
+    };
+    const relocate = vi.fn(async (keyId: string) => ({
+      id: keyId,
+      relativePath: "",
+      group: "",
+      files: [],
+      references: [],
+      skipped: [],
+      notes: [],
+      blockers: keyId === "key-two" ? ["an Include glob would read the destination as configuration"] : [],
+      transactionId: "tx",
+    }));
+    render(
+      <KeysScreen
+        api={buildApi({ inventory: vi.fn().mockResolvedValue(bothInWork()), relocate })}
+        groups={["work"]}
+      />,
+    );
+
+    // 二本とも work の中にある。既定の移す先は「グループなし」なので、
+    // どちらも実際に動こうとする——**既にそこにある鍵は触らない**ので、
+    // 行き先を取り違えると片方は最初から動かず、この検査は意味を失う。
+    await user.click(await screen.findByRole("checkbox", { name: "Choose keys/work/id_work" }));
+    await user.click(screen.getByRole("checkbox", { name: "Choose keys/work/legacy" }));
+    await user.click(screen.getByRole("button", { name: "Move" }));
+
+    expect(await screen.findByText("Moved 1.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/keys\/work\/legacy was refused: an Include glob would read the destination as configuration/),
+    ).toBeInTheDocument();
+  });
+});
+
+// **つかんで放る方の配線。**
+//
+// ここが見ているのは、掴んだものが選ばれ、放った先へ moveInto が呼ばれる
+// という繋がりだけである。**ブラウザが本当にドラッグを始めるかどうかは
+// ここでは分からない** —— jsdom は HTML5 のドラッグを持たず、Playwright の
+// 擬似操作はドラッグ状態を掴んだまま返らなかった。実ブラウザでの操作は
+// 自動検査の外にある。
+describe("dragging a key onto a folder", () => {
+  it("chooses what was grabbed and moves it where it was dropped", async () => {
+    const relocate = vi.fn().mockResolvedValue({
+      id: "",
+      relativePath: "",
+      group: "archive",
+      files: [],
+      references: [],
+      skipped: [],
+      notes: [],
+      blockers: [],
+      transactionId: "tx",
+    });
+    render(<KeysScreen api={buildApi({ relocate })} groups={["archive"]} />);
+
+    fireEvent.dragStart(await screen.findByLabelText("Drag id_work"), {
+      dataTransfer: { setData: vi.fn(), effectAllowed: "" },
+    });
+    fireEvent.drop(screen.getByRole("button", { name: "archive, 0" }));
+
+    await waitFor(() => expect(relocate).toHaveBeenCalledWith("key-one", { group: "archive" }));
   });
 });

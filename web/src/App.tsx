@@ -225,7 +225,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     return () => {
       active = false;
     };
-  }, [state]);
+  }, [state, section]);
 
   // 既定はターミナル側だが、セッションが 1 本も無ければ設定側から始める。
   //
@@ -427,8 +427,13 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     return () => whenLocked(null);
   }, []);
 
-  // 宣言済みグループはアプリケーションが開いている間に一度だけ読み込ま
-  // れる。閉じている間は読まない——応答できるはずのルートも、それまでは拒否する。
+  // 宣言済みグループは、面が変わるたびに読み直す。閉じている間は読まない
+  // ——応答できるはずのルートも、それまでは拒否する。
+  //
+  // **一度きりでは足りなかった。** グループを作った直後に鍵の画面へ行くと、
+  // 作ったばかりのフォルダがそこに無い——移動先の一覧はこの値から組まれて
+  // いるので、再読込するまで新しいフォルダへは移せなかった。読み直すのは
+  // 一度の GET であり、面を変えたときにしか起きない。
   useEffect(() => {
     if (state !== "ready") return;
     let active = true;
@@ -445,7 +450,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     return () => {
       active = false;
     };
-  }, [state]);
+  }, [state, section]);
 
   if (state === "locked") {
     return (

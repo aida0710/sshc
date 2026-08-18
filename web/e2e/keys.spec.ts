@@ -246,3 +246,65 @@ test("refuses a rename whose destination is taken, and writes nothing", async ({
   expect(await installation.read("id_first")).toBe(before);
   expect(await installation.read("id_second.pub")).toContain("ssh-ed25519 ");
 });
+
+// **フォルダに分けて、まとめて動かす。**
+//
+// 検証はディスク上のバイト列を読む。「移した」という画面の表示は ~/.ssh に
+// ついて何も証明しないからだ。ここが見ているのは、選んだ二本が両方とも
+// 実際にグループの下へ移り、それらを名指ししていた設定行も追従したこと。
+test("moves several chosen keys into a folder at once", async ({ page, installation }) => {
+  await installation.write("conf.d/30-bulk.conf", "Host bulk\n\tIdentityFile ~/.ssh/id_bulk_a\n");
+  await openApplication(page, installation);
+
+  // 先にグループを宣言する。ディレクトリがグループなのは config の行が
+  // そう言っているからで、鍵が置かれているからではない。
+  await openSection(page, "Groups");
+  await page.getByLabel("New group name").fill("archive");
+  await page.getByRole("button", { name: "Add group" }).click();
+  expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
+
+  await openSection(page, "Keys");
+  for (const name of ["id_bulk_a", "id_bulk_b"]) {
+    await page.getByLabel("File name").fill(name);
+    await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
+    expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+  }
+
+  await page.getByRole("checkbox", { name: "Choose id_bulk_a" }).check();
+  await page.getByRole("checkbox", { name: "Choose id_bulk_b" }).check();
+  await page.getByRole("combobox", { name: "Move into" }).selectOption("archive");
+  expect(await clickAndAwait(page, "Move", "/api/v1/keys/")).toBe(200);
+
+  await expect(page.getByText("Moved 2.")).toBeVisible();
+  expect(await installation.read("keys/archive/id_bulk_a.pub")).toContain("ssh-ed25519 ");
+  expect(await installation.read("keys/archive/id_bulk_b.pub")).toContain("ssh-ed25519 ");
+  expect(await installation.read("conf.d/30-bulk.conf")).toBe(
+    "Host bulk\n\tIdentityFile ~/.ssh/keys/archive/id_bulk_a\n",
+  );
+});
+
+// フォルダを開くと、その中のものだけが並ぶ。
+test("shows one folder at a time", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Groups");
+  await page.getByLabel("New group name").fill("archive");
+  await page.getByRole("button", { name: "Add group" }).click();
+  expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
+
+  await openSection(page, "Keys");
+  for (const name of ["id_kept", "id_filed"]) {
+    await page.getByLabel("File name").fill(name);
+    await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
+    expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+  }
+  await page.getByRole("checkbox", { name: "Choose id_filed" }).check();
+  await page.getByRole("combobox", { name: "Move into" }).selectOption("archive");
+  expect(await clickAndAwait(page, "Move", "/api/v1/keys/")).toBe(200);
+
+  await page.getByRole("button", { name: /^archive,/ }).click();
+
+  // 秘密鍵とその .pub は一緒に動くので、どちらの行も archive の下にある。
+  await expect(page.getByRole("row", { name: /id_filed/ }).first()).toBeVisible();
+  await expect(page.getByRole("row", { name: /id_kept/ })).toHaveCount(0);
+});
+
