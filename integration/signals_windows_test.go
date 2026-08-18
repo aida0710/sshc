@@ -38,8 +38,7 @@ func TestCtrlBreakStopsTheEngineWithTheInterruptedStatus(t *testing.T) {
 	// 片付けが最後まで走った証拠である。LockFileEx がプロセスと一緒に
 	// 消えただけなら、ここは通っても畳んだことにはならない——handoff を
 	// 置き換えられることまで見る。
-	next := start(t, home, "headless")
-	waitForFile(t, handoffPath(home), 30*time.Second, next)
+	takeOverAsHeadless(t, home)
 }
 
 // startInOwnGroup は、自分のプロセスグループを持つ engine を起こす。

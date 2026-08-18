@@ -38,8 +38,7 @@ func TestHowTheEngineIsStoppedDecidesHowItEnds(t *testing.T) {
 			}
 			// **畳んでから終わる。** 次の owner のために席が空いていることが、
 			// 片付けが最後まで走った証拠である。
-			next := start(t, home, "headless")
-			waitForFile(t, handoffPath(home), 30*time.Second, next)
+			takeOverAsHeadless(t, home)
 		})
 	}
 }

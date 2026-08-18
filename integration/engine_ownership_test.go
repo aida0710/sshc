@@ -112,8 +112,7 @@ func TestClosingTheOwnershipChannelStopsTheEngine(t *testing.T) {
 			code, engine.Stderr.String())
 	}
 	// 畳み終えたなら、次の owner のために場所は空いている。
-	next := start(t, home, "headless")
-	waitForFile(t, handoffPath(home), 30*time.Second, next)
+	takeOverAsHeadless(t, home)
 	if readHandoff(t, home).Owner != handoff.OwnerHeadless {
 		t.Error("the replacement engine did not take the seat the desktop engine left")
 	}
@@ -198,11 +197,8 @@ func TestAKilledEngineReleasesItsLockAndItsHandoffIsReplaced(t *testing.T) {
 		t.Fatal("the killed engine's handoff is gone; this test no longer proves anything")
 	}
 
-	second := start(t, home, "headless")
+	takeOverAsHeadless(t, home)
 	waitFor(t, 30*time.Second, "the next owner to replace the stale handoff", func() bool {
-		if !second.running() {
-			t.Fatalf("the next owner could not start\n%s", second.Stderr.String())
-		}
 		document, err := handoff.Read(stateDir(home))
 		return err == nil && document.PID != before.PID
 	})
