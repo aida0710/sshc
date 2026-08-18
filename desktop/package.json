@@ -35,6 +35,7 @@
       "entrance.js",
       "reopen.js",
       "tray.js",
+      "build/icon.png",
       "build/trayTemplate.png",
       "build/trayTemplate@2x.png"
     ],
@@ -96,7 +97,7 @@
       ],
       "icon": "build/icon.png",
       "artifactName": "${productName}-${version}-${os}-${arch}-setup.${ext}",
-      "signAndEditExecutable": false,
+      "signAndEditExecutable": true,
       "extraResources": [
         {
           "from": "resources/win32-${arch}/sshc.exe",
@@ -105,13 +106,14 @@
       ]
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
       "allowElevation": false,
       "runAfterFinish": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "include": "build/installer.nsh"
+      "include": "build/installer.nsh",
+      "allowToChangeInstallationDirectory": false
     },
     "afterPack": "./adhoc.js"
   }

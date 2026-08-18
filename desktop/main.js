@@ -277,9 +277,10 @@ function showFailure(error) {
 /**
  * icon は、束に入っている図を返す。無ければ null。
  *
- * **packaged された束では要らない。** あちらのアイコンは OS が束から読む。
- * ここが効くのは開発中だけであり、そこでは走っているのが Electron.app
- * そのものなので、放っておくと Electron の図が出る。
+ * **束にも入れてある。** macOS は束から読むので無視されるが、Windows は
+ * 実行ファイルに焼かれた図を、Linux はウィンドウ自身が運ぶ図を見る。ここが
+ * 空だと、そのどちらでも Electron の図が出る——実際にそうなっていた。
+ * 開発中はさらに効く。走っているのが Electron.app そのものだからである。
  */
 function icon() {
   const path = join(__dirname, "build", "icon.png");
