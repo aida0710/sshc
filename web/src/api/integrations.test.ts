@@ -227,6 +227,7 @@ describe("integrationsApi remote sync measurements", () => {
     configured: true,
     keyConfigured: true,
     locked: false,
+    auto: { enabled: false, phase: "idle" as const },
     endpoint: "https://s3.example.invalid",
     bucket: "sshc",
     synced: true,

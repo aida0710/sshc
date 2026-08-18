@@ -116,6 +116,12 @@ type SyncSettings struct {
 	AccessKeyID     string `json:"accessKeyId,omitempty"`
 	SecretAccessKey string `json:"secretAccessKey,omitempty"`
 	Direction       string `json:"direction,omitempty"`
+	// Auto は、この設置で自動同期を入れてあるか。
+	//
+	// **他の同期の設定と同じ場所に住む。** 巡回に必要なものは、鍵も資格情報も
+	// この入切も、すべて保管庫が開いてから読める——閉じている間は何も読めず、
+	// 何も起きない。それがこの機能の唯一の条件である。
+	Auto bool `json:"auto,omitempty"`
 	// Key は、リモートのスナップショットを封じる値である。
 	//
 	// **マスターパスワードではない。** それを使っていたので、マスターパスワードが

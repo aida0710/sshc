@@ -472,6 +472,20 @@ export const en = {
     "That bucket did not answer. Nothing was saved: check the endpoint, the bucket name and the keys.",
   "sync.endpointPath":
     "The endpoint is the account address only — no bucket name and no path. Put the bucket name in the field below.",
+  "sync.auto": "Automatic sync",
+  "sync.autoHint":
+    "Checks about once a minute while the vault is open: takes what another machine pushed, and pushes what changed here. It never resolves a conflict and never applies anything that removes a file — it stops and says so instead.",
+  "sync.autoEnable": "Keep this machine in sync automatically",
+  "sync.autoIdle": "Not running.",
+  "sync.autoLastRan": "Last checked {at}.",
+  "sync.autoBlockedConflicts":
+    "Waiting for you: the same files changed here and on another machine. Check for changes below and reconcile them.",
+  "sync.autoBlockedRemovals":
+    "Waiting for you: applying the snapshot would remove files from this machine. Check for changes below to see which.",
+  "sync.autoFailedLast": "The last check did not reach the bucket. It will try again.",
+  "sync.autoFailed": "The setting could not be saved.",
+  "sync.autoNow": "Sync now",
+  "sync.autoNowFailed": "That check could not be run.",
   "sync.push": "Push this workspace",
   "sync.pushed": "Pushed.",
   "sync.pushFailed": "The snapshot could not be pushed. If another machine has pushed since this one last synced, pull first.",

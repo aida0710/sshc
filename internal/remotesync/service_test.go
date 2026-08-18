@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -186,15 +187,31 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 	// sshc/ を落としていたので、除外のテストは、それらのファイルへ到達する唯一の
 	// 経路、すなわちそれを名指しする Include 行を、見ることが
 	// できなかった。
+	// **いま在るものを答える。** 与えられた map を返していたころは、pull が
+	// 置いたファイルをこのソースが知らないままだった——巡回はそれを「こちらには
+	// 無いもの」と数え、受け取った直後に空のスナップショットを押し返していた。
+	// 本物のソースは Include グラフであり、あちらも到達したものをその都度答える。
 	source := func() ([]string, error) {
 		var paths []string
-		for name := range files {
-			if strings.HasPrefix(name, "keys/") {
-				continue
+		err := filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
-			paths = append(paths, name)
-		}
-		return paths, nil
+			if entry.IsDir() {
+				return nil
+			}
+			relative, err := filepath.Rel(root, name)
+			if err != nil {
+				return err
+			}
+			relative = filepath.ToSlash(relative)
+			if strings.HasPrefix(relative, "keys/") {
+				return nil
+			}
+			paths = append(paths, relative)
+			return nil
+		})
+		return paths, err
 	}
 
 	counter := 0
@@ -214,6 +231,25 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 	return installation{
 		service: service, workspace: workspace, manager: manager, home: home,
 		config: config, creds: credentials, client: client,
+	}
+}
+
+// uploads は、これまでに置かれたオブジェクトの数を数える。
+func (b *fakeBucket) uploads() (int, int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	total := 0
+	for _, stored := range b.objects {
+		total += len(stored.body)
+	}
+	return len(b.objects), total
+}
+
+// remove は、このマシンでファイルを 1 つ消す。
+func (i installation) remove(t *testing.T, name string) {
+	t.Helper()
+	if err := os.Remove(filepath.Join(i.home, ".ssh", filepath.FromSlash(name))); err != nil {
+		t.Fatalf("remove %s: %v", name, err)
 	}
 }
 
