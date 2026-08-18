@@ -677,9 +677,35 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	for _, entry := range manifest.Files {
 		packed[entry.Path] = true
 	}
+	// 両替所が繋がっていない設置では、保管庫はファイルのまま旅をする。それは
+	// 版 1 の形であり、マスターパスワードが端末をまたいで共有されていた頃の形で
+	// ある。
 	if !packed["sshc/secrets"] {
 		t.Errorf("the vault does not travel: %v", packed)
 	}
+
+	// **繋がっているなら、ファイルは決して載らない。** ここで見ているのは、
+	// エントリファイルがそれを Include で名指ししている場合である——ファイル
+	// ソースはグラフなので、名指しされたものは入ってくる。
+	installation.service.OpenVault = func() ([]byte, error) { return []byte(`{"schemaVersion":2}`), nil }
+	exchanged, contents, err := installation.service.Collect()
+	if err != nil {
+		t.Fatalf("Collect = %v", err)
+	}
+	packed = map[string]bool{}
+	for _, entry := range exchanged.Files {
+		packed[entry.Path] = true
+	}
+	if packed["sshc/secrets"] {
+		t.Error("the sealed vault travelled even though its contents do")
+	}
+	if !packed[remotesync.TravelPath] {
+		t.Errorf("the vault contents did not travel: %v", packed)
+	}
+	if string(contents[remotesync.TravelPath]) != `{"schemaVersion":2}` {
+		t.Errorf("what travelled was not the contents: %q", contents[remotesync.TravelPath])
+	}
+	installation.service.OpenVault = nil
 	for _, excluded := range []string{secret.SettingsPath, "sshc/cli"} {
 		if packed[excluded] {
 			t.Errorf("the snapshot carries %s: %v", excluded, packed)
