@@ -102,6 +102,31 @@ func TestATrusteeWhoCannotReadIsNotExposure(t *testing.T) {
 	}
 }
 
+// **鍵を持っている本人を「他人」に分類しない。**
+//
+// 昇格したトークンが作ったファイルの所有者は、その利用者ではなく
+// Administrators になる。記述子の所有者だけを安全とみなすと、**普通に閉じて
+// いる鍵が全部危険と報告される** —— 常に真の警告は、警告を無視することを
+// 教える。実機で一度そうなった。
+func TestTheCurrentUserIsNeverAnotherPerson(t *testing.T) {
+	// 昇格の有無に依らず、ここで作るファイルの DACL は利用者に読みを与える。
+	// 所有者がその利用者でなくても、危険にはならない。
+	path := filepath.Join(t.TempDir(), "id_ordinary")
+	if err := os.WriteFile(path, []byte("-----BEGIN OPENSSH PRIVATE KEY-----\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	exposed, err := windowsacl.ReadableByOthers(path)
+
+	if err != nil {
+		t.Fatalf("ReadableByOthers: %v", err)
+	}
+	if exposed {
+		t.Error("a key an ordinary write produced was reported as exposed; " +
+			"the owner of the descriptor is not the only trustee that is not a stranger")
+	}
+}
+
 // **確かめられなかったことを、安全と言わない。** 開けない道について
 // 「閉じている」と答えるのが、この判断で最もしてはならないことである。
 func TestAPathThatCannotBeOpenedIsAnError(t *testing.T) {

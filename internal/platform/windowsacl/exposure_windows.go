@@ -73,6 +73,17 @@ func ReadableByOthers(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	// **記述子の所有者だけでは足りない。** 昇格したトークンが作ったファイルの
+	// 所有者は、その利用者ではなく Administrators になる。そこで所有者だけを
+	// 見ると、**鍵を実際に持っている本人が「他人」に分類される** ——
+	// 普通に閉じている鍵が、全部危険と報告されることになる。
+	//
+	// 実機で確かめた: 昇格した SSH セッションが書いたファイルの所有者は
+	// S-1-5-32-544 で、DACL が読みを与えている相手はその利用者の SID だった。
+	me, err := currentUserSID()
+	if err != nil {
+		return false, err
+	}
 
 	for index := uint32(0); index < uint32(dacl.AceCount); index++ {
 		var header *windows.ACCESS_ALLOWED_ACE
@@ -88,7 +99,8 @@ func ReadableByOthers(path string) (bool, error) {
 				continue
 			}
 			trustee := (*windows.SID)(unsafe.Pointer(&header.SidStart))
-			if trustee.Equals(owner) || trustee.Equals(system) || trustee.Equals(administrators) {
+			if trustee.Equals(owner) || trustee.Equals(me) ||
+				trustee.Equals(system) || trustee.Equals(administrators) {
 				continue
 			}
 			return true, nil
