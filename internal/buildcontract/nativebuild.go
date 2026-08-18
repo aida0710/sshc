@@ -271,7 +271,8 @@ func runDesktopBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writ
 	}
 	if err := deps.executor.Run(nativeCommand{
 		name:        "npm",
-		args:        []string{"install", "--prefix", "desktop"},
+		args:        []string{"install"},
+		directory:   "desktop",
 		environment: deps.environment,
 	}); err != nil {
 		return err
@@ -289,7 +290,8 @@ func runDesktopBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writ
 	}
 	return deps.executor.Run(nativeCommand{
 		name:        "npm",
-		args:        []string{"run", desktopDistScript(*expectedHost), "--prefix", "desktop"},
+		args:        []string{"run", desktopDistScript(*expectedHost)},
+		directory:   "desktop",
 		environment: deps.environment,
 	})
 }
@@ -318,10 +320,10 @@ func updateDesktopVersion(directory, version string, deps nativeBuildDeps) error
 		return nil
 	}
 	return deps.executor.Run(nativeCommand{
-		name: "npm",
+		name:      "npm",
+		directory: directory,
 		args: []string{
 			"version",
-			"--prefix", directory,
 			"--allow-same-version",
 			"--no-git-tag-version",
 			"--",
@@ -413,10 +415,19 @@ func runCurrentRelease(args []string, deps nativeBuildDeps, stdout, stderr io.Wr
 	return nil
 }
 
+// **npm はその package のディレクトリで走らせる。--prefix に頼らない。**
+//
+// あの旗の意味は下位命令ごとに揃っていない。`npm ci --prefix desktop` は
+// desktop/package.json を読むが、`npm install --prefix desktop` は Windows では
+// カレントの package.json を読みに行き、この repository の root にはそれが無い
+// ので ENOENT で落ちる——Linux と macOS では同じ呼び出しが通るので、
+// **Windows でだけ、束に CLI が入らないまま electron-builder が警告一つで
+// 進み、空の resources\cli を配ることになっていた。**
 func runWebBuild(deps nativeBuildDeps) error {
 	return deps.executor.Run(nativeCommand{
 		name:        "npm",
-		args:        []string{"run", "build", "--prefix", "web"},
+		args:        []string{"run", "build"},
+		directory:   "web",
 		environment: deps.environment,
 	})
 }
