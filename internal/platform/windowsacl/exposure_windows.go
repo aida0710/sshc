@@ -9,17 +9,18 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// readRights は、「その鍵を読める」に当たる権利をまとめたものである。
+// readRights は、「その鍵の中身を読める」に当たるビットだけである。
 //
-// `FILE_READ_DATA` だけでは足りない。`GENERIC_READ` と `GENERIC_ALL` は
-// ファイルへ写像される前の形でそのまま ACE に載ることがあり、`FILE_ALL_ACCESS`
-// は当然読みを含む。**どれか一つでも立っていれば、その相手は中身を読める。**
+// **FILE_ALL_ACCESS を混ぜてはならない。** あれはファイル固有の全ビット
+// （0x1ff）を含むので、OR で足すと書き込みも追記も属性の読みも「読める」に
+// なる——実際、書き込みだけを与えた相手が露出として報告された。
+//
+// 足す必要も無い。FILE_ALL_ACCESS を持つ相手は FILE_READ_DATA も持っている
+// ので、下の一つ目で捕まる。GENERIC_READ と GENERIC_ALL は、ファイル固有の
+// ビットへ写像される前の形のまま ACE に載ることがあるので、別に見る。
 const readRights = windows.FILE_READ_DATA |
 	windows.GENERIC_READ |
-	windows.GENERIC_ALL |
-	// FILE_ALL_ACCESS は x/sys が名前を持たないので、その定義をそのまま書く。
-	// 標準権利すべてと同期、そしてファイル固有の全ビットである。
-	(windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0x1ff)
+	windows.GENERIC_ALL
 
 // ReadableByOthers は、その道の中身を、所有者・SYSTEM・Administrators 以外の
 // 誰かが読めるかを答える。
