@@ -46,8 +46,10 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: make release-cli-current
 
-      # 署名はしていない。macOS では初回に右クリック→開くが要る。
-      # docs/manual-test-matrix.md がその状態を書いている。
+      # 配布署名はしていない。**それでも束は自分自身と辻褄が合っていなければ
+      # ならない** ので、desktop/adhoc.js が ad-hoc 署名を付け、下の smoke が
+      # それを検査する。利用者が初回に通る手順は docs/release-install.md にあり、
+      # リリースの本文はそこから作られる。
       # **一行で足りる。** この的が npm install も web のビルドも、束ごとの CLI も
       # 版付けも electron-builder も順に走らせる。以前ここで electron-builder を
       # もう一度呼んでいたが、余分なだけでなく、**前の段が落ちたことを隠した。**
@@ -285,6 +287,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # 本文のために checkout する。**入れ方は成果物と一緒に配られなければ
+      # ならない** ——署名していない配布物は、初回に何が起きるかを先に言わない
+      # 限り、壊れているようにしか見えない。
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           path: incoming
@@ -313,5 +319,6 @@ jobs:
         run: |
           gh release create "$RELEASE_TAG" \
             --title "$RELEASE_TAG" \
+            --notes-file docs/release-install.md \
             --generate-notes \
             dist/sshc-* dist/checksums.txt

@@ -51,6 +51,15 @@ app="$mounted/sshc.app"
 [ -d "$app" ] || fail "an application bundle at sshc.app"
 ok "the bundle is named sshc.app"
 
+# **封と中身が食い違っていないこと。** electron-builder は Electron の実行体を
+# 貰ってきて Info.plist も icon も resources も差し替えるので、前の署名を残した
+# ままだとここで落ちる。v0.1.0 の arm64 が実際にそうで、「開発元を確認できません」
+# を越えたあとに「壊れているため開けません」になる状態のまま配られた。
+# **これは配布署名の検査ではない**（それは spctl の仕事で、署名を買うまで通らない）。
+# 束が自分自身と辻褄が合っているか、だけを見る。
+codesign --verify --strict "$app" 2>/dev/null || fail "a bundle whose signature matches its contents"
+ok "the bundle signature matches its contents"
+
 cli="$app/Contents/Resources/sshc"
 [ -f "$cli" ] || fail "the bundled CLI at Contents/Resources/sshc"
 ok "the CLI is inside the bundle"

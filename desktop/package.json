@@ -56,7 +56,8 @@
         }
       ],
       "category": "public.app-category.developer-tools",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },
     "linux": {
       "syncDesktopName": true,
@@ -111,6 +112,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "include": "build/installer.nsh"
-    }
+    },
+    "afterPack": "./adhoc.js"
   }
 }
