@@ -249,3 +249,25 @@ func TestPlanNeedsNothingStorageDoesNotAlreadyHave(t *testing.T) {
 		t.Errorf("a pull produced moves, which it has no way to justify: %#v", request.Moves)
 	}
 }
+
+// **別のマシンで消えたという理由で消えるファイルは、取り戻せなければならない。**
+// 押した人は、その中身を見たことすら無いかもしれない。
+func TestARemovalCarriedByAPullKeepsACopy(t *testing.T) {
+	base := remotesync.Manifest{Files: []remotesync.Entry{
+		{Path: "config", SHA256: "aaa"},
+		{Path: "connections/old.conf", SHA256: "bbb"},
+	}}
+	remote := remotesync.Manifest{Files: []remotesync.Entry{{Path: "config", SHA256: "aaa"}}}
+	local := map[string]string{"config": "aaa", "connections/old.conf": "bbb"}
+
+	request, conflicts, err := remotesync.Plan("/root", &base, local, remote, map[string][]byte{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Removals) != 1 {
+		t.Fatalf("plan = %+v, conflicts %+v", request, conflicts)
+	}
+	if !request.Removals[0].Backup {
+		t.Fatal("the removal keeps no copy; History would have nothing to restore")
+	}
+}

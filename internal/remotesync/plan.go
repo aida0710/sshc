@@ -121,6 +121,13 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 		request.Removals = append(request.Removals, storage.Removal{
 			Path:         filepath.Join(root, filepath.FromSlash(path)),
 			Precondition: storage.Precondition{Exists: true, Digest: localDigest},
+			// **消したものの控えを残す。** 既定でそうしないのは、最初の呼び出し側が
+			// 「二度確かめた恒久削除」だったからである——あれは控えが残ること自体が
+			// 意図を台無しにする。こちらは違う。別のマシンで消えたという理由で、
+			// このディスクのファイルが消える。押した人がその中身を見たことすら
+			// 無いかもしれない。控えはマスターパスワードで封じられるので、鍵の
+			// 平文の写しにもならない。
+			Backup: true,
 		})
 	}
 

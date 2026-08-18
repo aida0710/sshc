@@ -61,6 +61,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [chooseOwn, setChooseOwn] = useState(false);
   // 移行のために一度だけ尋ねる、古い鍵（かつてのマスターパスワード）。
   const [oldKey, setOldKey] = useState("");
+  // 消すことに対する、はっきりした一度の同意。
+  const [acceptedRemovals, setAcceptedRemovals] = useState(false);
   const [preview, setPreview] = useState<PullResponse | null>(null);
   const [resultView, setResultView] = useState<SyncResultView | null>(null);
   const [notice, setNotice] = useState("");
@@ -440,6 +442,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 () => api.pullSnapshot(false),
                 (next) => {
                   setPreview(next);
+                  // 同意は、いま見せたこの一覧に対するものである。次の
+                  // プレビューへ持ち越さない。
+                  setAcceptedRemovals(false);
                   setResultView({ kind: "preview", result: next });
                   setNotice(
                     next.written.length + next.removed.length + next.conflicts.length === 0
@@ -501,12 +506,27 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               </ul>
             </>
           )}
+          {preview.removed.length === 0 ? null : (
+            // **消すときだけ、もう一段いる。** 置き換えは控えが残り History から
+            // 戻せるが、消えたファイルは画面から消える——押した人が、その中身を
+            // 一度も見ていないこともある。
+            <label className="flex items-start gap-2 rounded border border-notice-line bg-notice p-3 text-sm text-notice-ink">
+              <input
+                type="checkbox"
+                checked={acceptedRemovals}
+                onChange={(event) => setAcceptedRemovals(event.target.checked)}
+                className="mt-0.5"
+              />
+              <span>{t("sync.confirmOverwrite")}</span>
+            </label>
+          )}
           <button
             type="button"
             disabled={
               busy ||
               conflicted ||
               status.direction === "push" ||
+              (preview.removed.length > 0 && !acceptedRemovals) ||
               preview.written.length + preview.removed.length === 0
             }
             onClick={() =>

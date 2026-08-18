@@ -485,6 +485,8 @@ export const en = {
     "These files changed here and on the other machine. Two configurations that both changed the same block have no correct merge, so nothing is applied until you decide. Open them in the Config screen and reconcile them by hand, or push from the machine you want to win.",
   "sync.wouldWrite": "{count} files would be written:",
   "sync.wouldRemove": "{count} files would be removed:",
+  "sync.confirmOverwrite":
+    "This overwrites files in ~/.ssh, and the files listed above are removed from this machine. Everything it replaces or removes is copied first to ~/.ssh/sshc/backups/ and can be put back from History. Go ahead.",
   "sync.apply": "Apply the snapshot",
   "sync.applied": "Applied. The change is in History and can be rolled back.",
   "sync.applyFailed": "The snapshot could not be applied.",

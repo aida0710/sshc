@@ -158,6 +158,8 @@ describe("SyncPanel", () => {
     expect(await screen.findByText("connections/work/lon.conf")).toBeInTheDocument();
     expect(screen.getByText("connections/old.conf")).toBeInTheDocument();
 
+    // 消すものがあるので、適用の前に一度そう言わせる。
+    await userEvent.click(screen.getByRole("checkbox", { name: /overwrites files in ~\/.ssh/i }));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
     await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith(true));
   });
@@ -427,5 +429,45 @@ describe("SyncPanel", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/no bucket name and no path/i);
+  });
+  // **消すときだけ、もう一段いる。** 置き換えは History から戻せるが、消えた
+  // ファイルは画面から消える——押した人が中身を一度も見ていないこともある。
+  it("will not apply a pull that removes files until it is told to go ahead", async () => {
+    const removing = {
+      applied: false,
+      summary: { createdAt: "2026-08-12T01:30:00Z", fileCount: 2, sourceBytes: 10, snapshotBytes: 20 },
+      downloadedBytes: 20,
+      completedAt: "2026-08-12T01:31:00Z",
+      conflicts: [],
+      written: [],
+      removed: ["~/.ssh/connections/old.conf"],
+    };
+    const api = buildApi(configured, removing);
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
+    const apply = await screen.findByRole("button", { name: "Apply the snapshot" });
+    expect(apply).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /overwrites files in ~\/.ssh/i }));
+    expect(apply).toBeEnabled();
+  });
+
+  // 消さない pull を、余計な同意で止めない。
+  it("applies a pull that only writes without asking again", async () => {
+    const api = buildApi(configured, {
+      applied: false,
+      summary: { createdAt: "2026-08-12T01:30:00Z", fileCount: 2, sourceBytes: 10, snapshotBytes: 20 },
+      downloadedBytes: 20,
+      completedAt: "2026-08-12T01:31:00Z",
+      conflicts: [],
+      written: ["~/.ssh/config"],
+      removed: [],
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
+    expect(await screen.findByRole("button", { name: "Apply the snapshot" })).toBeEnabled();
+    expect(screen.queryByRole("checkbox", { name: /overwrites files/i })).not.toBeInTheDocument();
   });
 });
