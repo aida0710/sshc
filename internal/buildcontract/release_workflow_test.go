@@ -166,3 +166,37 @@ func TestReleaseRefusesAnUnsignedAndroidPackage(t *testing.T) {
 		t.Error("the android job never asks the APK whether it is signed; gradle succeeding is not that answer")
 	}
 }
+
+// **PowerShell は native command の非ゼロ終了で止まらない。**
+//
+// GitHub は step の最後の一つの終了値しか見ないので、前の行が落ちても step は
+// 緑になる。実際にそれで、CLI の入っていないインストーラが「ビルド成功」の
+// まま次の段へ渡った——捕まえたのは smoke であって、ビルドではない。
+//
+// 二つ以上の命令を並べる Windows の step は、必ず自分で止まるようにする。
+func TestReleaseWindowsStepsStopAtTheFirstFailure(t *testing.T) {
+	document, _ := readReleaseWorkflow(t)
+
+	windows, present := document.Jobs["windows"]
+	if !present {
+		t.Fatal("the release has no windows job")
+	}
+	for _, step := range windows.Steps {
+		commands := 0
+		for _, line := range strings.Split(step.Run, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$") {
+				continue
+			}
+			commands++
+		}
+		if commands < 2 {
+			continue
+		}
+		if !strings.Contains(step.Run, "PSNativeCommandUseErrorActionPreference") {
+			t.Errorf("the Windows step %q runs %d commands without stopping at the first failure; "+
+				"only the last exit code is read, so an earlier failure would pass as green",
+				step.Name, commands)
+		}
+	}
+}
