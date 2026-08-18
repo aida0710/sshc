@@ -7,6 +7,30 @@ import (
 	"encoding/json"
 )
 
+// Defines values for AutoSyncPhase.
+const (
+	Blocked AutoSyncPhase = "blocked"
+	Failed  AutoSyncPhase = "failed"
+	Idle    AutoSyncPhase = "idle"
+	Running AutoSyncPhase = "running"
+)
+
+// Valid indicates whether the value is a known member of the AutoSyncPhase enum.
+func (e AutoSyncPhase) Valid() bool {
+	switch e {
+	case Blocked:
+		return true
+	case Failed:
+		return true
+	case Idle:
+		return true
+	case Running:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OpenTerminalSessionRequestKind.
 const (
 	OpenTerminalSessionRequestKindShell OpenTerminalSessionRequestKind = "shell"
@@ -122,6 +146,22 @@ type AuthenticationResponse struct {
 	Method        string `json:"method"`
 	Outcome       string `json:"outcome"`
 	Truncated     bool   `json:"truncated"`
+}
+
+// AutoSync defines model for AutoSync.
+type AutoSync struct {
+	At      *string       `json:"at,omitempty"`
+	Detail  *string       `json:"detail,omitempty"`
+	Enabled bool          `json:"enabled"`
+	Phase   AutoSyncPhase `json:"phase"`
+}
+
+// AutoSyncPhase defines model for AutoSync.Phase.
+type AutoSyncPhase string
+
+// AutoSyncRequest defines model for AutoSyncRequest.
+type AutoSyncRequest struct {
+	Enabled bool `json:"enabled"`
 }
 
 // BootstrapResponse defines model for BootstrapResponse.
@@ -1148,6 +1188,7 @@ type SyncSettingsRequest struct {
 
 // SyncStatus defines model for SyncStatus.
 type SyncStatus struct {
+	Auto          AutoSync       `json:"auto"`
 	Bucket        string         `json:"bucket"`
 	Configured    bool           `json:"configured"`
 	Direction     SyncDirection  `json:"direction"`
@@ -1431,6 +1472,9 @@ type PlanRemoteKeyRegistrationJSONRequestBody = RemoteKeyPlanRequest
 
 // RegisterRemoteKeyJSONRequestBody defines body for RegisterRemoteKey for application/json ContentType.
 type RegisterRemoteKeyJSONRequestBody = RemoteKeyRegisterRequest
+
+// SetAutoSyncJSONRequestBody defines body for SetAutoSync for application/json ContentType.
+type SetAutoSyncJSONRequestBody = AutoSyncRequest
 
 // SetSyncKeyJSONRequestBody defines body for SetSyncKey for application/json ContentType.
 type SetSyncKeyJSONRequestBody = SyncKeyRequest

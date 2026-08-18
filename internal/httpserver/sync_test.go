@@ -680,3 +680,65 @@ func TestTheObjectPathIsStoredAndRefusedWhenItCouldEscape(t *testing.T) {
 		t.Errorf("path = %q after refusals, want laptops", path)
 	}
 }
+
+// **切ったことは保管庫の中に残る。** この実行のあいだだけ止まる切り方は、次に
+// 起こしたときに黙って再開することであり、止めた人はそれを止めたと思っている。
+func TestTheAutoSyncSwitchIsRememberedAndReported(t *testing.T) {
+	engine, _, secrets := syncEngineWithVault(t)
+	if err := secrets.Initialise(syncTestPassphrase); err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := sendSync(t, engine, http.MethodPut, "/api/v1/sync/auto", `{"enabled":true}`)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("PUT /auto = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	settings, err := secrets.SyncSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !settings.Auto {
+		t.Fatal("the switch was not written to the vault")
+	}
+
+	// そして status がそれを言う。
+	var body struct {
+		Auto struct {
+			Enabled bool   `json:"enabled"`
+			Phase   string `json:"phase"`
+		} `json:"auto"`
+	}
+	status := sendSync(t, engine, http.MethodGet, "/api/v1/sync", "")
+	if err := json.Unmarshal(status.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	// この engine には巡回が繋がっていないので、入っていても走る場所が無い。
+	// 画面が読むのは phase であり、そこは常に埋まっていなければならない。
+	if body.Auto.Phase == "" {
+		t.Fatalf("status carried no phase: %s", status.Body.String())
+	}
+
+	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/auto", `{"enabled":false}`).Code; code != http.StatusOK {
+		t.Fatalf("PUT /auto off = %d", code)
+	}
+	settings, err = secrets.SyncSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Auto {
+		t.Fatal("the switch stayed on after being turned off")
+	}
+}
+
+// 巡回の無い設置で「今すぐ」を押しても、何も起きない。押せてしまえば、
+// 画面は起きていないことを起きたと言うことになる。
+func TestSyncNowWithoutALoopIsRefused(t *testing.T) {
+	engine, _, secrets := syncEngineWithVault(t)
+	if err := secrets.Initialise(syncTestPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/now", "")
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("POST /now = %d, want 409: %s", recorder.Code, recorder.Body.String())
+	}
+}

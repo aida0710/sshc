@@ -406,6 +406,50 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             </div>
           </Row>
         </Card>
+        {/*
+          自動同期。**押さなくても進むことと、黙って壊すことは違う。** 衝突と、
+          何かが消える適用は巡回が踏み越えないので、待っていることをここが言う。
+        */}
+        <Card>
+          <Row label={t("sync.auto")} hint={t("sync.autoHint")}>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={status.auto.enabled}
+                  disabled={busy || !status.configured || !status.keyConfigured}
+                  onChange={(event) =>
+                    void run(
+                      () => api.setAutoSync(event.target.checked),
+                      (next) => setStatus(next),
+                      t("sync.autoFailed"),
+                    )
+                  }
+                />
+                {t("sync.autoEnable")}
+              </label>
+              <p role="status" className={hintText}>
+                {status.auto.phase === "blocked"
+                  ? t(status.auto.detail === "conflicts" ? "sync.autoBlockedConflicts" : "sync.autoBlockedRemovals")
+                  : status.auto.phase === "failed"
+                    ? t("sync.autoFailedLast")
+                    : status.auto.at === undefined || !status.auto.enabled
+                      ? t("sync.autoIdle")
+                      : t("sync.autoLastRan", { at: status.auto.at })}
+              </p>
+              <button
+                type="button"
+                disabled={busy || !status.auto.enabled}
+                onClick={() =>
+                  void run(() => api.syncNow(), (next) => setStatus(next), t("sync.autoNowFailed"))
+                }
+                className="self-start rounded border border-line px-3 py-1.5 text-sm text-ink"
+              >
+                {t("sync.autoNow")}
+              </button>
+            </div>
+          </Row>
+        </Card>
         {status.direction === "both" ? null : (
           // 拒否はボタンが押されたときだけでなく、ボタンがある場所に
           // 述べられる: 隣に理由のない無効化されたコントロールは、設定ではなく

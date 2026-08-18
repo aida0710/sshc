@@ -111,6 +111,10 @@ export type IntegrationsApi = {
   // 鍵を決める。key を渡さなければ作る。返るのは採られた鍵そのもので、
   // **平文でそれが出る唯一の場所**である。画面はこれを一度だけ見せる。
   setSyncKey(key?: string): Promise<SyncKeyResponse>;
+  // 巡回の入切。切ったことも保管庫に残る。
+  setAutoSync(enabled: boolean): Promise<SyncStatus>;
+  // 一巡を、押した人を待たせたまま行う。
+  syncNow(): Promise<SyncStatus>;
   // 古い鍵で封じられたリモートを、いまの鍵で開くようにする。移行のためだけにある。
   rekeySnapshot(passphrase: string): Promise<SyncStatus>;
 };
@@ -408,6 +412,14 @@ function validateSyncStatus(value: unknown): SyncStatus {
   asBoolean(record.configured);
   asBoolean(record.locked);
   asBoolean(record.keyConfigured);
+  const auto = asRecord(record.auto);
+  asBoolean(auto.enabled);
+  // phase は画面がどの文を出すかを決める。四つ以外は、未知の状態として
+  // 表示するのではなく拒否する。
+  const phase = asString(auto.phase);
+  if (phase !== "idle" && phase !== "running" && phase !== "blocked" && phase !== "failed") {
+    throw new Error(`unexpected auto sync phase: ${phase}`);
+  }
   asString(record.endpoint);
   asString(record.bucket);
   asBoolean(record.synced);
@@ -667,6 +679,18 @@ export const integrationsApi: IntegrationsApi = {
         body: JSON.stringify(key === undefined ? {} : { key }),
       }),
     );
+  },
+  async setAutoSync(enabled) {
+    return validateSyncStatus(
+      await apiClient.mutate<unknown>("/api/v1/sync/auto", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      }),
+    );
+  },
+  async syncNow() {
+    return validateSyncStatus(await postJSON<unknown>("/api/v1/sync/now", {}));
   },
   async rekeySnapshot(passphrase) {
     return validateSyncStatus(await postJSON<unknown>("/api/v1/sync/rekey", { passphrase }));

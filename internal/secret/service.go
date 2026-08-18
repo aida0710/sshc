@@ -682,7 +682,18 @@ func (s *Service) SetSyncSettings(settings SyncSettings) error {
 		if settings.Key == "" {
 			settings.Key = stored.Key
 		}
+		// 自動同期の入切も form の欄ではない。bucket を編集しただけで、
+		// 巡回が黙って止まってはならない。
+		settings.Auto = stored.Auto
 		return settings
+	})
+}
+
+// SetSyncAuto は、自動同期の入切だけを置き換える。
+func (s *Service) SetSyncAuto(enabled bool) error {
+	return s.writeSyncSettings(func(stored SyncSettings) SyncSettings {
+		stored.Auto = enabled
+		return stored
 	})
 }
 

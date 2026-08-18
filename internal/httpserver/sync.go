@@ -31,6 +31,9 @@ type SyncHandlers struct {
 	// どのテストもネットワークに触れてはならないからだ。nil の場合は
 	// 実際のチェックを意味する。配線し忘れが黙って「問題なし」になってはならない。
 	Reach func(ctx context.Context, client *objectstore.Client, key string) error
+	// Auto は、押さなくても進む巡回である。nil のときは、この設置に巡回が無い
+	// ——status は「入っていない」と答え、押しても一巡しない。
+	Auto *remotesync.Auto
 }
 
 func (h SyncHandlers) reach(ctx context.Context, client *objectstore.Client, key string) error {
@@ -44,6 +47,8 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.GET("/api/v1/sync", handlers.Status)
 	engine.PUT("/api/v1/sync/settings", handlers.Configure)
 	engine.PUT("/api/v1/sync/key", handlers.SetKey)
+	engine.PUT("/api/v1/sync/auto", handlers.SetAuto)
+	engine.POST("/api/v1/sync/now", handlers.Now)
 	engine.POST("/api/v1/sync/rekey", handlers.Rekey)
 	engine.POST("/api/v1/sync/push", handlers.Push)
 	engine.POST("/api/v1/sync/pull", handlers.Pull)
@@ -119,6 +124,7 @@ func (h SyncHandlers) statusResponse() api.SyncStatus {
 		// secret は決して含まない。それらは封印されたファイルへ一方通行である。
 		Locked:        h.Secrets != nil && !h.Secrets.Unlocked(),
 		KeyConfigured: h.keyConfigured(),
+		Auto:          h.autoResponse(),
 	}
 	if state.Synced {
 		response.LastSyncedAt = &state.At
@@ -477,4 +483,56 @@ func (h SyncHandlers) keyConfigured() bool {
 	}
 	settings, err := h.Secrets.SyncSettings()
 	return err == nil && settings.Key != ""
+}
+
+// autoResponse は、巡回の現在地を画面の形にする。
+func (h SyncHandlers) autoResponse() api.AutoSync {
+	if h.Auto == nil {
+		return api.AutoSync{Enabled: false, Phase: api.AutoSyncPhase(remotesync.AutoIdle)}
+	}
+	view := h.Auto.View()
+	response := api.AutoSync{Enabled: view.Enabled, Phase: api.AutoSyncPhase(view.Phase)}
+	if view.Detail != "" {
+		detail := view.Detail
+		response.Detail = &detail
+	}
+	if view.At != "" {
+		at := view.At
+		response.At = &at
+	}
+	return response
+}
+
+// SetAuto は、巡回の入切を決める。
+//
+// **切ったことも保管庫の中に残る。** この実行のあいだだけ止まる切り方は、次に
+// 起こしたときに黙って再開することであり、止めた人はそれを止めたと思っている。
+func (h SyncHandlers) SetAuto(c *echo.Context) error {
+	var request api.AutoSyncRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if h.Secrets == nil {
+		return problem(c, http.StatusConflict, "vault_locked")
+	}
+	if err := h.Secrets.SetSyncAuto(request.Enabled); err != nil {
+		if errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault) {
+			return problem(c, http.StatusConflict, "vault_locked")
+		}
+		return problem(c, http.StatusInternalServerError, "vault_failed")
+	}
+	return h.status(c)
+}
+
+// Now は、一巡を押した人を待たせたまま行う。
+//
+// 巡回が入っていなければ何も起きない——「今すぐ」は自動同期の一部であって、
+// 手動の push と pull はそれぞれのボタンが持っている。
+func (h SyncHandlers) Now(c *echo.Context) error {
+	h.restore()
+	if h.Auto == nil {
+		return problem(c, http.StatusConflict, "auto_sync_off")
+	}
+	h.Auto.Once(c.Request().Context())
+	return h.status(c)
 }
