@@ -197,11 +197,17 @@ func TestAKilledEngineReleasesItsLockAndItsHandoffIsReplaced(t *testing.T) {
 		t.Fatal("the killed engine's handoff is gone; this test no longer proves anything")
 	}
 
-	takeOverAsHeadless(t, home)
-	waitFor(t, 30*time.Second, "the next owner to replace the stale handoff", func() bool {
-		document, err := handoff.Read(stateDir(home))
-		return err == nil && document.PID != before.PID
-	})
+	// **takeOverAsHeadless が返った時点で、handoff は次の owner のものである。**
+	// 念のため、それが殺した方のものでないことを言っておく。
+	next := takeOverAsHeadless(t, home)
+	document := readHandoff(t, home)
+	if document.PID == before.PID {
+		t.Error("the stale handoff still names the engine that was killed")
+	}
+	if document.PID != next.Command.Process.Pid {
+		t.Errorf("the handoff names pid %d, want the new owner %d",
+			document.PID, next.Command.Process.Pid)
+	}
 }
 
 func readHandoff(t *testing.T, home string) handoff.Handoff {

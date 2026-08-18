@@ -241,25 +241,32 @@ func waitForFile(t *testing.T, path string, within time.Duration, process *testP
 	t.Fatalf("%s never appeared", path)
 }
 
-// takeOverAsHeadless は、席が空くのを待って、次の owner を立てる。
+// takeOverAsHeadless は、次の owner が席に着いて **自分の名前で handoff を
+// 書き直す**まで待つ。
 //
-// **一度目で立てられることを前提にしない。** 殺されたプロセスのロックが
-// OS から外れるのは、その終了を親が回収した瞬間とは限らない——Windows の
+// **handoff が在ることを、席を取れた証拠にしない。** 殺された engine の
+// handoff はそのまま残っているので、それを見ると、ロックに弾かれて今まさに
+// 終わろうとしているプロセスを成功として返す。名乗っている pid が起こした
+// ものと一致することだけが証拠になる。
+//
+// **一度目で立てられることも前提にしない。** 殺されたプロセスのロックが OS
+// から外れるのは、その終了を親が回収した瞬間とは限らない——Windows の
 // LockFileEx はプロセスオブジェクトの破棄に伴って外れるので、混んだ機械では
 // 少し遅れる。製品はその間、正しく「既に走っている」と断る。確かめたいのは
 // 「席は必ず空く」ことであって、「一度目で空いている」ことではない。
 func takeOverAsHeadless(t *testing.T, home string) *testProcess {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	var last *testProcess
 	for time.Now().Before(deadline) {
 		next := start(t, home, "headless")
-		settled := time.Now().Add(10 * time.Second)
+		settled := time.Now().Add(15 * time.Second)
 		for time.Now().Before(settled) {
 			if !next.running() {
 				break
 			}
-			if fileExists(handoffPath(home)) {
+			if document, err := handoff.Read(stateDir(home)); err == nil &&
+				document.PID == next.Command.Process.Pid {
 				return next
 			}
 			time.Sleep(20 * time.Millisecond)
@@ -272,7 +279,7 @@ func takeOverAsHeadless(t *testing.T, home string) *testProcess {
 	if last != nil {
 		reason = last.Stderr.String()
 	}
-	t.Fatalf("no later owner could take the seat within 30s\n%s", reason)
+	t.Fatalf("no later owner named itself in the handoff within 60s\n%s", reason)
 	return nil
 }
 
