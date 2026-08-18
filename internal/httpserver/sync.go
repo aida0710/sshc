@@ -355,7 +355,18 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 	if !ok {
 		return err
 	}
-	result, err := h.Service.Pull(c.Request().Context(), key)
+	resolve := remotesync.ResolveNone
+	if request.Resolve != nil {
+		switch *request.Resolve {
+		case api.Local:
+			resolve = remotesync.ResolveLocal
+		case api.Remote:
+			resolve = remotesync.ResolveRemote
+		default:
+			return problem(c, http.StatusBadRequest, "invalid_request")
+		}
+	}
+	result, err := h.Service.Pull(c.Request().Context(), key, resolve)
 	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
 		return syncProblem(c, err)
 	}

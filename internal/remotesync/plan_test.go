@@ -34,7 +34,7 @@ func TestPlanProducesOneTransaction(t *testing.T) {
 	base := manifestOf(file("config", "old config", false))
 	local := map[string]string{"config": digestOf("old config")}
 
-	request, conflicts, err := remotesync.Plan(root, &base, local, remote, contents)
+	request, conflicts, err := remotesync.Plan(root, &base, local, remote, contents, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatalf("Plan = %v", err)
 	}
@@ -59,7 +59,7 @@ func TestEveryChangeCarriesAPrecondition(t *testing.T) {
 	base := manifestOf(file("config", "old", false))
 	local := map[string]string{"config": digestOf("old")}
 
-	request, _, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("new")})
+	request, _, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("new")}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestANewFileGetsAPreconditionThatItDoesNotExist(t *testing.T) {
 	base := manifestOf()
 
 	request, _, err := remotesync.Plan(root, &base, map[string]string{}, remote,
-		map[string][]byte{"connections/new.conf": []byte("x")})
+		map[string][]byte{"connections/new.conf": []byte("x")}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestPlanKeepsTheKeyAPullOverwrites(t *testing.T) {
 	request, _, err := remotesync.Plan(root, &base, map[string]string{}, remote, map[string][]byte{
 		"config":               []byte("c"),
 		"keys/work/id_ed25519": []byte("private"),
-	})
+	}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestPlanDistinguishesDeletedThereFromCreatedHere(t *testing.T) {
 	}
 	remote := manifestOf(file("config", "c", false))
 
-	request, conflicts, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("c")})
+	request, conflicts, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("c")}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestPlanReportsAConflictInsteadOfChoosing(t *testing.T) {
 	local := map[string]string{"config": digestOf("mine")}
 	remote := manifestOf(file("config", "theirs", false))
 
-	request, conflicts, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("theirs")})
+	request, conflicts, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("theirs")}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestAConflictCarriesNoContents(t *testing.T) {
 	remote := manifestOf(file("keys/id_ed25519", "remote key material", true))
 
 	_, conflicts, err := remotesync.Plan(root, &base, local, remote,
-		map[string][]byte{"keys/id_ed25519": []byte("remote key material")})
+		map[string][]byte{"keys/id_ed25519": []byte("remote key material")}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestDeletedThereButEditedHereIsAConflict(t *testing.T) {
 	local := map[string]string{"config": digestOf("edited here")}
 	remote := manifestOf()
 
-	request, conflicts, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{})
+	request, conflicts, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestAFirstSyncDeletesNothing(t *testing.T) {
 	local := map[string]string{"connections/local-only.conf": digestOf("mine")}
 	remote := manifestOf(file("config", "c", false))
 
-	request, conflicts, err := remotesync.Plan(root, nil, local, remote, map[string][]byte{"config": []byte("c")})
+	request, conflicts, err := remotesync.Plan(root, nil, local, remote, map[string][]byte{"config": []byte("c")}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestAnIdenticalSnapshotIsNothingToApply(t *testing.T) {
 	local := map[string]string{"config": digestOf("same")}
 	remote := manifestOf(file("config", "same", false))
 
-	_, _, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("same")})
+	_, _, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("same")}, remotesync.ResolveNone)
 	if !errors.Is(err, remotesync.ErrNothingToApply) {
 		t.Fatalf("Plan = %v, want ErrNothingToApply", err)
 	}
@@ -240,7 +240,7 @@ func TestPlanNeedsNothingStorageDoesNotAlreadyHave(t *testing.T) {
 	local := map[string]string{"config": digestOf("old"), "gone.conf": digestOf("g")}
 	remote := manifestOf(file("config", "new", false))
 
-	request, _, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("new")})
+	request, _, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("new")}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestARemovalCarriedByAPullKeepsACopy(t *testing.T) {
 	remote := remotesync.Manifest{Files: []remotesync.Entry{{Path: "config", SHA256: "aaa"}}}
 	local := map[string]string{"config": "aaa", "connections/old.conf": "bbb"}
 
-	request, conflicts, err := remotesync.Plan("/root", &base, local, remote, map[string][]byte{})
+	request, conflicts, err := remotesync.Plan("/root", &base, local, remote, map[string][]byte{}, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,5 +269,58 @@ func TestARemovalCarriedByAPullKeepsACopy(t *testing.T) {
 	}
 	if !request.Removals[0].Backup {
 		t.Fatal("the removal keeps no copy; History would have nothing to restore")
+	}
+}
+
+// **寄せ先を選んだなら、その通りにする。** 2 台目が自分の設定を持ったまま
+// 最初の pull をすると、いまは必ず衝突する——選ぶ道が無ければ、その 2 台目は
+// 一度も同期を終えられない。
+func TestChoosingTheRemoteSideWritesTheContestedFile(t *testing.T) {
+	base := manifestOf(file("config", "base", false))
+	remote := manifestOf(file("config", "theirs", false))
+	local := map[string]string{"config": digestOf("mine")}
+
+	request, conflicts, err := remotesync.Plan(root, &base, local, remote,
+		map[string][]byte{"config": []byte("theirs")}, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 {
+		t.Fatalf("conflicts = %+v, want none once a side was chosen", conflicts)
+	}
+	if len(request.Changes) != 1 || string(request.Changes[0].Contents) != "theirs" {
+		t.Fatalf("changes = %+v", request.Changes)
+	}
+}
+
+// こちらを残すなら、**書かないだけである**。次の push が、こちらを向こうへ運ぶ。
+func TestChoosingThisMachineWritesNothingForTheContestedFile(t *testing.T) {
+	base := manifestOf(file("config", "base", false))
+	remote := manifestOf(file("config", "theirs", false))
+	local := map[string]string{"config": digestOf("mine")}
+
+	request, conflicts, err := remotesync.Plan(root, &base, local, remote,
+		map[string][]byte{"config": []byte("theirs")}, remotesync.ResolveLocal)
+	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Changes) != 0 {
+		t.Fatalf("changes = %+v, conflicts = %+v", request.Changes, conflicts)
+	}
+}
+
+// あちらで消え、こちらで編集された。こちらを残すなら消さない。
+func TestChoosingThisMachineKeepsAFileTheOtherSideRemoved(t *testing.T) {
+	base := manifestOf(file("config", "base", false), file("connections/x.conf", "base", false))
+	remote := manifestOf(file("config", "base", false))
+	local := map[string]string{"config": digestOf("base"), "connections/x.conf": digestOf("mine")}
+
+	request, conflicts, err := remotesync.Plan(root, &base, local, remote,
+		map[string][]byte{}, remotesync.ResolveLocal)
+	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Removals) != 0 {
+		t.Fatalf("removals = %+v, conflicts = %+v", request.Removals, conflicts)
 	}
 }
