@@ -383,6 +383,38 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/auto:
+    put:
+      operationId: setAutoSync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AutoSyncRequest" }
+      responses:
+        "200":
+          description: Whether the loop is on, and where it stands
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncStatus" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/now:
+    post:
+      operationId: syncNow
+      # 一巡を、押した人を待たせたまま行う。次の巡回を待ってから状態を読み直す
+      # 画面は、押したことが効いたのかを言えない。
+      responses:
+        "200":
+          description: What that one cycle did
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/rekey:
     post:
       operationId: rekeySnapshot
@@ -1845,13 +1877,16 @@ components:
     SyncStatus:
       type: object
       additionalProperties: false
-      required: [configured, locked, endpoint, bucket, synced, direction, keyConfigured]
+      required: [configured, locked, endpoint, bucket, synced, direction, keyConfigured, auto]
       properties:
         configured: { type: boolean }
         # 同期の鍵が設定されているか。**値そのものは決して返さない。** リモートを
         # 開ける値を、状態を読むたびに配る API にしてはならない。平文で出るのは、
         # 作った応答の中の一度だけである。
         keyConfigured: { type: boolean }
+        # 自動同期。押さなくても進むが、黙って壊しはしない——衝突と、何かが
+        # 消える適用は phase=blocked として人を待つ。
+        auto: { $ref: "#/components/schemas/AutoSync" }
         # フォームが空のとき、その理由。設定はマスターパスワードで封じられており、
         # それが与えられるまで読めない。アクセスキーや秘密が入ることは決してない —
         # それらは一方通行で、封をされたファイルへ向かうだけである。
@@ -1932,6 +1967,24 @@ components:
         accessKeyId: { type: string, minLength: 1, maxLength: 512 }
         secretAccessKey: { type: string, minLength: 1, maxLength: 512 }
         direction: { $ref: "#/components/schemas/SyncDirection" }
+    AutoSync:
+      type: object
+      additionalProperties: false
+      required: [enabled, phase]
+      properties:
+        enabled: { type: boolean }
+        phase: { type: string, enum: [idle, running, blocked, failed] }
+        # blocked と failed の理由。人へ見せる文ではなく、画面が自分の言葉に
+        # 訳すための符牒である。**エラー文そのものは決して出さない** — 入口の
+        # URL や bucket の名前が混ざりうる。
+        detail: { type: string }
+        at: { type: string }
+    AutoSyncRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
     SyncKeyRequest:
       type: object
       additionalProperties: false

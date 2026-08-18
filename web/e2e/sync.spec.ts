@@ -16,6 +16,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
     configured: true,
     keyConfigured: true,
     locked: false,
+    auto: { enabled: false, phase: "idle" },
     endpoint: "https://s3.example.invalid",
     bucket: "sshc",
     path: "",

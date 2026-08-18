@@ -340,6 +340,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/auto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setAutoSync"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["syncNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/rekey": {
         parameters: {
             query?: never;
@@ -1369,6 +1401,7 @@ export interface components {
         SyncStatus: {
             configured: boolean;
             keyConfigured: boolean;
+            auto: components["schemas"]["AutoSync"];
             locked: boolean;
             endpoint: string;
             bucket: string;
@@ -1422,6 +1455,16 @@ export interface components {
             accessKeyId: string;
             secretAccessKey: string;
             direction?: components["schemas"]["SyncDirection"];
+        };
+        AutoSync: {
+            enabled: boolean;
+            /** @enum {string} */
+            phase: "idle" | "running" | "blocked" | "failed";
+            detail?: string;
+            at?: string;
+        };
+        AutoSyncRequest: {
+            enabled: boolean;
         };
         SyncKeyRequest: {
             key?: string;
@@ -2554,6 +2597,57 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setAutoSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Whether the loop is on, and where it stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncStatus"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    syncNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What that one cycle did */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncStatus"];
+                };
+            };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];

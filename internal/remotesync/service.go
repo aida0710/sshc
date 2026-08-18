@@ -390,6 +390,13 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 		if seen[relative] || checkPath(relative) != nil || excluded(relative) {
 			continue
 		}
+		// **保管庫のファイルは、両替所があるなら決して載せない。** ファイル
+		// ソースは Include グラフであり、これを名指しする行があれば入って
+		// しまう——入れば、この端末のマスターパスワードで封じられたものが
+		// 旅に出ることになる。
+		if relative == VaultPath && s.OpenVault != nil {
+			continue
+		}
 		seen[relative] = true
 
 		absolute := filepath.Join(s.workspace.Root(), filepath.FromSlash(relative))
@@ -977,4 +984,66 @@ func replacesVault(root string, request storage.Request) bool {
 		}
 	}
 	return false
+}
+
+// Diverged は、このディスクが最後に同期したものと違うかを答える。
+//
+// 巡回が「押し出すものがあるか」を知るための問いである。**中身を数えるのは
+// ここだけで、送るかどうかの判断に HTTP は 1 本も要らない。**
+func (s *Service) Diverged() (bool, error) {
+	manifest, _, err := s.Collect()
+	if err != nil {
+		return false, err
+	}
+	current, err := s.readState()
+	if err != nil {
+		return false, err
+	}
+	if current.Base == nil {
+		// 一度も同期していない。載せるものがあるなら、それは違いである。
+		return len(manifest.Files) > 0, nil
+	}
+	if len(manifest.Files) != len(current.Base.Files) {
+		return true, nil
+	}
+	base := make(map[string]string, len(current.Base.Files))
+	for _, item := range current.Base.Files {
+		base[item.Path] = item.SHA256
+	}
+	for _, item := range manifest.Files {
+		if base[item.Path] != item.SHA256 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// RemoteMoved は、ライブのオブジェクトが、このマシンが最後に見たものと違うかを
+// 答える。
+//
+// **毎回まるごと取ってこないための一手である。** HEAD は ETag だけを返すので、
+// 何も変わっていない分には、巡回はほとんど何も運ばない。
+func (s *Service) RemoteMoved(ctx context.Context) (bool, error) {
+	binding, err := s.configuredBinding()
+	if err != nil {
+		return false, err
+	}
+	objectKey := ObjectKeyFor(binding.config)
+	etag, err := binding.client.Head(ctx, objectKey)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			// まだ誰も置いていない。受け取るものは無い。
+			return false, nil
+		}
+		return false, err
+	}
+	current, err := s.readState()
+	if err != nil {
+		return false, err
+	}
+	// 別のオブジェクトの世代は、このオブジェクトについて何も語らない。
+	if current.Key != objectKey {
+		return true, nil
+	}
+	return etag != current.ETag, nil
 }

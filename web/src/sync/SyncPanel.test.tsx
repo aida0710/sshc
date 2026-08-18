@@ -13,6 +13,7 @@ const unconfigured: SyncStatus = {
   configured: false,
   keyConfigured: false,
   locked: false,
+  auto: { enabled: false, phase: "idle" },
   endpoint: "",
   bucket: "",
   synced: false,
@@ -22,6 +23,7 @@ const configured: SyncStatus = {
   configured: true,
   keyConfigured: true,
   locked: false,
+  auto: { enabled: false, phase: "idle" },
   endpoint: "https://acc.r2.cloudflarestorage.com",
   bucket: "sshc",
   synced: true,
@@ -469,5 +471,41 @@ describe("SyncPanel", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
     expect(await screen.findByRole("button", { name: "Apply the snapshot" })).toBeEnabled();
     expect(screen.queryByRole("checkbox", { name: /overwrites files/i })).not.toBeInTheDocument();
+  });
+
+  // **押さなくても進むが、黙って壊しはしない。** 巡回が止まったとき、画面は
+  // 何を待っているのかを言う——「同期に失敗しました」では、どこを見ればよいか
+  // 分からない。
+  it("says what the loop is waiting for instead of only that it stopped", async () => {
+    const api = buildApi(
+      { ...configured, auto: { enabled: true, phase: "blocked", detail: "removals", at: "2026-08-18T00:00:00Z" } },
+      nothingToDo,
+    );
+    render(<SyncPanel api={api} />);
+
+    expect(await screen.findByText(/would remove files from this machine/i)).toBeInTheDocument();
+  });
+
+  // 切ったことは保管庫に残るので、押した結果は status で返ってくる。
+  it("turns the loop on and keeps what the server answered", async () => {
+    const setAutoSync = vi
+      .fn()
+      .mockResolvedValue({ ...configured, auto: { enabled: true, phase: "idle" } });
+    const api = buildApi(configured, nothingToDo, { setAutoSync });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByRole("checkbox", { name: /Keep this machine in sync/i }));
+
+    await waitFor(() => expect(setAutoSync).toHaveBeenCalledWith(true));
+    expect(await screen.findByRole("checkbox", { name: /Keep this machine in sync/i })).toBeChecked();
+  });
+
+  // 巡回が入っていなければ「今すぐ」は押せない。押せてしまえば、起きていない
+  // ことを起きたと言うことになる。
+  it("offers no manual cycle while the loop is off", async () => {
+    const api = buildApi(configured, nothingToDo);
+    render(<SyncPanel api={api} />);
+
+    expect(await screen.findByRole("button", { name: "Sync now" })).toBeDisabled();
   });
 });

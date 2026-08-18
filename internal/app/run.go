@@ -171,6 +171,7 @@ type runtime struct {
 	document  handoff.Handoff
 	terminals *terminal.Registry
 	passwords *secret.Service
+	autoSync  *remotesync.Auto
 }
 
 // build は Run が後片付けに使う秘密も返す。ファイルを読み直すと、その間に別の
@@ -279,6 +280,22 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	syncService.SealVault = passwordService.AdoptTravelDocument
 	syncService.VaultAdopted = passwordService.Reload
 
+	// 押さなくても進む巡回。**必要なものはすべて保管庫の中にある**ので、
+	// 閉じている間は何も読めず、何も起きない。それがこの機能の唯一の条件である。
+	autoSync := remotesync.NewAuto(syncService, remotesync.AutoInterval,
+		func() string { return time.Now().UTC().Format(time.RFC3339) })
+	autoSync.Enabled = func() bool {
+		settings, err := passwordService.SyncSettings()
+		return err == nil && settings.Auto
+	}
+	autoSync.Key = func() (string, bool) {
+		settings, err := passwordService.SyncSettings()
+		if err != nil || settings.Key == "" {
+			return "", false
+		}
+		return settings.Key, true
+	}
+
 	// 埋め込みターミナルの PTY は、この常駐プロセスの中で存続する。ブラウザの
 	// タブを閉じてもリロードしてもセッションは生きており、終わるのは子プロセスが
 	// 終了したとき、人が閉じたとき、このプロセスが終了したときだけである。
@@ -334,6 +351,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Passwords:       passwordService,
 		Connect:         ssh.connector(),
 		Sync:            syncService,
+		AutoSync:        autoSync,
 		Terminals:       terminals,
 		// SSH のプログラムはもう要らない。**接続はこのプロセスの中で話す。**
 		// PTY を確保するのはローカルシェルだけである。
@@ -386,6 +404,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		document:  document,
 		terminals: terminals,
 		passwords: passwordService,
+		autoSync:  autoSync,
 	}, nil
 }
 
@@ -404,6 +423,13 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 
 	serveErrors := make(chan error, 1)
 	go func() { serveErrors <- built.server.Serve() }()
+
+	// 巡回は、この実行と同じ寿命を持つ。**止めるのは ctx である**——後始末の
+	// 段に足すと、そこへ辿り着くまでのあいだ、畳んでいる最中のワークスペースへ
+	// 別のマシンのスナップショットを置きにいくことがありうる。
+	loop, stopLoop := context.WithCancel(ctx)
+	defer stopLoop()
+	go built.autoSync.Run(loop)
 
 	// **どの経路でも、serving が本当に止まるまで返らない。**
 	//

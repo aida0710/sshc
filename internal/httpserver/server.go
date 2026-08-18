@@ -66,6 +66,9 @@ type Options struct {
 	// Sync はワークスペースを object store へ運ぶ。nil の service は
 	// すべての sync ルートを未登録のままにする。
 	Sync *remotesync.Service
+	// AutoSync は、押さなくても進む巡回である。nil でも sync のルートは立つ
+	// ——自動同期が無いだけで、手で押す道は残る。
+	AutoSync *remotesync.Auto
 	// Terminals は埋め込みターミナルのセッションを持つ。nil の registry は
 	// セッションのルートと WebSocket を未登録のままにする。これは、それを
 	// 配線しないテストが当てにしていることである。
@@ -387,7 +390,9 @@ func New(options Options) (*Server, error) {
 		},
 	})
 	if options.Sync != nil {
-		registerSyncRoutes(e, SyncHandlers{Service: options.Sync, Secrets: options.Passwords})
+		registerSyncRoutes(e, SyncHandlers{
+			Service: options.Sync, Secrets: options.Passwords, Auto: options.AutoSync,
+		})
 	}
 	if options.Terminals != nil {
 		registerTerminalRoutes(e, TerminalHandlers{
