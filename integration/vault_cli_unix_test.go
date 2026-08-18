@@ -3,6 +3,8 @@
 package integration
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +14,19 @@ import (
 
 // canary は、このテストが探して回るための、ほかに現れようのない語である。
 const canary = "correct-horse-battery-staple-9f2c1"
+
+// **見つけたものを書き出さない。** 秘密を探す検査が、見つけた秘密を失敗の
+// 文言に載せてしまえば、それを CI のログへ配ることになる。どこで見つけたかは
+// 場所と経路だけで足りる。照合は指紋で行う。
+func canaryDigest() string {
+	sum := sha256.Sum256([]byte(canary))
+	return hex.EncodeToString(sum[:])
+}
+
+// carriesCanary は、その断片に canary が含まれるかを、書き出さずに答える。
+func carriesCanary(text string) bool {
+	return strings.Contains(text, canary)
+}
 
 // liveHeadless は、隔離された家に headless の engine を一台立てる。
 func liveHeadless(t *testing.T) (string, *testProcess) {
@@ -110,7 +125,7 @@ func TestTheTypedPasswordIsNowhereOnDisk(t *testing.T) {
 		if err != nil {
 			return nil
 		}
-		if strings.Contains(string(contents), canary) {
+		if carriesCanary(string(contents)) {
 			found = append(found, strings.TrimPrefix(path, home))
 		}
 		return nil
@@ -119,7 +134,38 @@ func TestTheTypedPasswordIsNowhereOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(found) != 0 {
-		t.Errorf("the typed password is readable in %v", found)
+		// **場所だけを言う。** 中身を載せれば、この検査そのものが漏らす経路になる。
+		t.Errorf("the typed password (sha256 %s…) is readable in %v",
+			canaryDigest()[:12], found)
+	}
+}
+
+// **打たれたパスワードは、走っているプロセスからも見えない。** argv は
+// `ps` を打てる誰にでも読め、環境変数は子へ丸ごと継がれる。ディスクに
+// 残さないことと、そこに出さないことは別の約束である。
+func TestTheTypedPasswordIsNotVisibleOnAnyRunningProcess(t *testing.T) {
+	home, engine := liveHeadless(t)
+
+	create := startOnTerminal(t, home, "vault", "create")
+	create.expect(t, "New master password: ", 20*time.Second)
+	create.typeLine(t, canary)
+	create.expect(t, "Confirm new master password: ", 20*time.Second)
+	create.typeLine(t, canary)
+	if code := create.wait(t, 30*time.Second); code != 0 {
+		t.Fatalf("vault create exit = %d", code)
+	}
+
+	for channel, text := range map[string]string{
+		"the engine's command line": processCommandLine(t, engine.Command.Process.Pid),
+		"the engine's environment":  processEnvironment(t, engine.Command.Process.Pid),
+		"what the terminal echoed":  create.output.String(),
+		"the engine's stdout":       engine.Stdout.String(),
+		"the engine's stderr":       engine.Stderr.String(),
+	} {
+		if carriesCanary(text) {
+			t.Errorf("the typed password (sha256 %s…) is visible in %s",
+				canaryDigest()[:12], channel)
+		}
 	}
 }
 
