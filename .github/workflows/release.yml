@@ -48,15 +48,14 @@ jobs:
 
       # 署名はしていない。macOS では初回に右クリック→開くが要る。
       # docs/manual-test-matrix.md がその状態を書いている。
+      # **一行で足りる。** この的が npm install も web のビルドも、束ごとの CLI も
+      # 版付けも electron-builder も順に走らせる。以前ここで electron-builder を
+      # もう一度呼んでいたが、余分なだけでなく、**前の段が落ちたことを隠した。**
       - name: Build the desktop bundles
         env:
           VERSION: ${{ github.ref_name }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: |
-          make desktop-version
-          make desktop-bundle-mac
-          npm ci --prefix desktop
-          npm run dist:mac --prefix desktop
+        run: make desktop-bundle-mac
 
       # **開いていない束を配らない。** 中身が違っていてもビルドは通る——
       # Windows では実際に、空の resources\cli が利用者の PATH に載った。
@@ -109,11 +108,7 @@ jobs:
       - name: Build the desktop bundles
         env:
           VERSION: ${{ github.ref_name }}
-        run: |
-          make desktop-version
-          make desktop-bundle-linux
-          npm ci --prefix desktop
-          npm run dist:linux --prefix desktop
+        run: make desktop-bundle-linux
 
       # x64 はこのランナーの上で本当に動く。arm64 は動かせないので、
       # 中身だけを見る——スクリプトがどちらをしたかを結果に書く。
@@ -158,8 +153,13 @@ jobs:
       #
       # -race はここでは走らせない。Windows のランナーに C の道具が無く、
       # race detector はそれを要る。CI 側も同じ扱いである。
+      # **PowerShell は native command の非ゼロ終了で止まらない。** GitHub は
+      # 最後の一つの終了値しか見ないので、前の行が落ちても step は緑になる——
+      # 実際それで、CLI の入っていないインストーラがそのまま次の段へ渡った。
       - name: Verify
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           go build ./...
           go test ./...
 
@@ -168,29 +168,32 @@ jobs:
           SSHC_NATIVE_VERSION: ${{ github.ref_name }}
         run: go run ./internal/buildcontract/cmd/nativebuild release-current --arches "amd64 arm64" --output-dir dist
 
+      # 版付けも electron-builder も、この的が中でやる。
       - name: Build the desktop bundles
         env:
           SSHC_NATIVE_VERSION: ${{ github.ref_name }}
-        run: |
-          go run ./internal/buildcontract/cmd/nativebuild desktop-version --directory desktop
-          go run ./internal/buildcontract/cmd/nativebuild desktop --host windows --resource-root desktop/resources --bundles "win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe"
-          npm ci --prefix desktop
-          npm run dist:win --prefix desktop
+        run: go run ./internal/buildcontract/cmd/nativebuild desktop --host windows --resource-root desktop/resources --bundles "win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe"
 
       # x64 だけを開く。arm64 のインストーラはこのランナーでは動かせず、
       # smoke は実際に入れて PATH と DACL と所有権を見るものだからである。
       - name: Open the bundle
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $installer = (Get-ChildItem desktop/dist/*-win-x64-setup.exe | Select-Object -First 1).FullName
           ./scripts/windows/package-smoke.ps1 -Installer $installer -Architecture x64 -WorkRoot "$env:RUNNER_TEMP\smoke-x64"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: release-windows
+          # **アーキごとの二つだけを渡す。** electron-builder は両対応の
+          # `-win-setup.exe` も一緒に作るが、あれは誰も開いていない三つ目で
+          # あり、利用者にはどれを取ればよいかが増えるだけである。
           path: |
             dist/sshc-windows-*
-            desktop/dist/*-setup.exe
+            desktop/dist/*-win-x64-setup.exe
+            desktop/dist/*-win-arm64-setup.exe
           if-no-files-found: error
           retention-days: 1
 
