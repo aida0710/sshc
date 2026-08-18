@@ -10,8 +10,8 @@
 
 | OS | アーキ | CLI / headless | デスクトップ束 | ネイティブ smoke | 備考 |
 | --- | --- | --- | --- | --- | --- |
-| macOS | arm64 | 確認済 | 確認済 | 未実施 | CI と開発機 |
-| macOS | amd64 | 確認済 | ビルドのみ | 未実施 | 実機なし。CI は arm64 ランナー |
+| macOS | arm64 | 確認済 | 確認済 | **通過** | CI と開発機 |
+| macOS | amd64 | 確認済 | 確認済 | 翻訳越し | 実機なし。arm64 の Mac で Rosetta 2 経由 |
 | Linux | amd64 | 確認済 | ビルドのみ | 未実施 | CI |
 | Linux | arm64 | 確認済 | ビルドのみ | 未実施 | 実機なし。コンテナで確認 |
 | Windows | amd64 | 確認済 | 確認済 | **通過** | 実機（下記） |
@@ -32,6 +32,23 @@
 
 `integration` パッケージは `go test ./...` に含まれるので、**所有権と Vault の
 プロセス検査は三 OS すべてで走っている。**
+
+### macOS（開発機 arm64、2026-08-18）
+
+`scripts/macos/package-smoke.sh` を両方の .dmg に対して実行した。
+
+| 確かめたもの | arm64 | x64 |
+| --- | --- | --- |
+| 束の名前と配置 | 通過 | 通過 |
+| 同梱 CLI のアーキ（`lipo -archs`） | `arm64` | `x86_64` |
+| CLI が走り、headless を案内する | 通過 | 通過（Rosetta 2） |
+| engine が上がり handoff を出す | 通過 | 通過 |
+| handoff 0600 / state 0700 | 通過 | 通過 |
+| 裸の `sshc` が headless を横取りしない | 通過 | 通過 |
+
+**x64 は翻訳越しである。** arm64 の Mac は Rosetta 2 で x86_64 を走らせるので、
+動いたことは本当だが、**x64 の Mac で動く証明にはならない**。スクリプト自身が
+結果にそう書く。
 
 ### Windows amd64（実機）
 
