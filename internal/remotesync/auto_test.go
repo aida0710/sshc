@@ -134,3 +134,33 @@ func TestAutoStopsOnAConflict(t *testing.T) {
 		t.Fatalf("the local file was overwritten: %q", got)
 	}
 }
+
+// 巡回は、渡された枠の中で走る。**枠がその外へ漏れれば、保管庫は開けっぱなしに
+// なる**ので、包んでいることそのものを見る。
+func TestEveryCycleRunsInsideTheUnattendedFrame(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	auto := autoFor(t, machine, true)
+
+	inside := false
+	sawKey := false
+	auto.Unattended = func(run func()) {
+		inside = true
+		run()
+		inside = false
+	}
+	auto.Key = func() (string, bool) {
+		// 鍵を読むのは巡回の一部である。ここが枠の外に出ていれば、1 分ごとの
+		// 読み取りがアイドルの時計を戻し続ける。
+		sawKey = inside
+		return syncPassphrase, true
+	}
+
+	auto.Once(context.Background())
+	if !sawKey {
+		t.Fatal("the cycle read the key outside the unattended frame")
+	}
+	if inside {
+		t.Fatal("the frame was never closed")
+	}
+}
