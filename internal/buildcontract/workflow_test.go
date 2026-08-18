@@ -21,6 +21,7 @@ type workflowDocument struct {
 type workflowJob struct {
 	Name     string            `yaml:"name"`
 	RunsOn   string            `yaml:"runs-on"`
+	Needs    []string          `yaml:"needs"`
 	Strategy *workflowStrategy `yaml:"strategy"`
 	Steps    []workflowStep    `yaml:"steps"`
 }

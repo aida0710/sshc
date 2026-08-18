@@ -171,6 +171,36 @@ ESLint は導入していません。TypeScript の型検査（`tsc -b` と e2e 
 
 `internal/ui/dist` はコミット済みのバンドルをバイナリへ埋め込むため、`web/src` を変えて `make build` を忘れるとクリーンチェックアウトからのビルドが古い UI を配布します。End to end ジョブはビルド後に `git diff --exit-code -- internal/ui/dist` を実行してそれを検出します。
 
+## リリース
+
+`.github/workflows/release.yml` は **`v` で始まるタグを押したときにだけ**走ります。ブランチへの push では何も公開されません。版はタグそのもので、CLI も外殻も APK もその値を名乗ります。
+
+**束は、それが動く OS の上で作ります。** 以前は macOS 一台で全部作っており、そのため Windows のインストーラは存在しませんでした（NSIS は Windows でしか組めません）。いまは OS ごとに job があり、それぞれが自分の CLI と自分の束を作り、**自分で開いて確かめてから**渡します。
+
+| platform | 配るもの |
+| --- | --- |
+| macOS | `sshc-darwin-{arm64,amd64}`、`.dmg` 二つ |
+| Linux | `sshc-linux-{arm64,amd64}`、x64 の `.AppImage`、arm64 の `.tar.gz` |
+| Windows | `sshc-windows-{amd64,arm64}.exe`、`-setup.exe` 二つ（per-user の NSIS） |
+| Android | 署名済みの `.apk` |
+
+**Linux だけ形が二つあります。** electron-builder が arm64 向けに積む AppImage の runtime は、版の付かない `libz.so` を要求します — `zlib1g-dev` が入れるもので、普通の機械にはありません。あの束は展開すらできず、利用者は起動できません。x64 の runtime は `libz.so.1` を見ており無事なので、そちらは AppImage のままです。
+
+**Android には署名鍵が要ります。** 未署名の APK はインストールすらできず、debug の鍵で署名するのはもっと悪い（公開されている鍵なので、誰でも「同じアプリの更新」を作れます）。次の四つを repository secret に置いてください。無ければリリースはそこで止まり、何も公開されません。
+
+| secret | 中身 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | JKS か PKCS12 の keystore を base64 にしたもの |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore のパスワード |
+| `ANDROID_KEY_ALIAS` | 鍵の別名 |
+| `ANDROID_KEY_PASSWORD` | 鍵のパスワード |
+
+**この鍵は永久に同じものを使い続けてください。** Android は、別の鍵で署名された更新を受け付けません。鍵を失うと、そのアプリはもう更新できなくなります。
+
+`versionCode` はタグから導きます（`1.2.3` → `1002003`）。手で書いた数を置くと、タグを打つたびに同じ番号の APK が出て、Android は更新を黙って拒みます。
+
+**署名は macOS と Windows にはありません。** macOS では初回に右クリック→開くが要ります。Windows では Smart App Control が有効な機械が**警告ではなく拒否**します。`docs/manual-test-matrix.md` がその状態と、署名しても単純には解決しない理由を書いています。
+
 ## セキュリティ境界
 
 - HTTP サーバーは IPv4 の `127.0.0.1` だけに bind します。LAN、Tailnet、コンテナ外部など、ネットワークへ公開して安全な設計ではありません。

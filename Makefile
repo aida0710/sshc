@@ -160,7 +160,12 @@ desktop-version:
 #
 # darwin/amd64 を arm64 のランナーから作れるのは、macOS の SDK が両方の
 # アーキテクチャを持っているからである。
-RELEASE_TARGETS = darwin/arm64:1 darwin/amd64:1 linux/amd64:0 linux/arm64:0
+#
+# **リリースが配る CLI と同じ並びである。** ここが足りないと、手元で
+# `make release-binaries` を回した人は、実際のリリースより狭い束を見て
+# それが全部だと思う。windows は cgo を要らない——設定エンジンが cgo を
+# 要る理由は macOS の os/user.Current() だけである。
+RELEASE_TARGETS = darwin/arm64:1 darwin/amd64:1 linux/amd64:0 linux/arm64:0 windows/amd64:0 windows/arm64:0
 RELEASE_CURRENT_ARCHES = amd64 arm64
 RELEASE_DIR ?= dist
 
