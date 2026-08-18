@@ -63,8 +63,13 @@ test("the installer is per-user and never asks to be elevated", () => {
   const nsis = configuration.build.nsis;
   assert.strictEqual(nsis.perMachine, false);
   assert.strictEqual(nsis.allowElevation, false);
-  // oneClick は既定値に任せない。どちらであれ、選んだことを書き残す。
-  assert.strictEqual(typeof nsis.oneClick, "boolean");
+  // **黙って入れない。** oneClick の installer は、起動した瞬間に書き込みを
+  // 始めて終わる——利用者は、何がどこへ入るのかを見る機会を一度も持たない。
+  // 管理者権限を求めないことと、断りなく進めてよいことは別である。
+  assert.strictEqual(nsis.oneClick, false);
+  // 行き先は動かさない。CLI の場所は installer.nsh と PATH の項目に綴られて
+  // おり、選べるようにすると、そのどちらとも食い違いうる。
+  assert.strictEqual(nsis.allowToChangeInstallationDirectory, false);
   assert.strictEqual(nsis.include, "build/installer.nsh");
 });
 
