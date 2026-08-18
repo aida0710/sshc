@@ -64,7 +64,12 @@
         {
           "target": "AppImage",
           "arch": [
-            "x64",
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
             "arm64"
           ]
         }

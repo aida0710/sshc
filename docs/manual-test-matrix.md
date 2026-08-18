@@ -12,11 +12,11 @@
 | --- | --- | --- | --- | --- | --- |
 | macOS | arm64 | 確認済 | 確認済 | **通過** | CI と開発機 |
 | macOS | amd64 | 確認済 | 確認済 | 翻訳越し | 実機なし。arm64 の Mac で Rosetta 2 経由 |
-| Linux | amd64 | 確認済 | ビルドのみ | 未実施 | CI。arm64 の機械では実行できない |
-| Linux | arm64 | 確認済 | **起動しない** | 通過（要 zlib1g-dev） | 下記の runtime の問題 |
+| Linux | amd64 | 確認済 | AppImage | リリースで実行 | 下記 |
+| Linux | arm64 | 確認済 | **tar.gz** | **通過** | AppImage は起動しない。下記 |
 | Windows | amd64 | 確認済 | 確認済 | **通過** | 実機（下記） |
 | Windows | arm64 | 未検証 | ビルドのみ | 未実施 | **実機なし。対応表に載せない** |
-| Android | arm64 / amd64 | — | — | — | CLI を積まない。APK のビルドのみ |
+| Android | arm64 / amd64 | — | 署名済 APK | — | CLI を積まない |
 
 「ビルドのみ」は、**束は出来るが、入れて動かしていない**という意味である。
 
@@ -52,28 +52,32 @@
 
 ### Linux（コンテナ、aarch64、2026-08-18）
 
-`scripts/linux/package-smoke.sh` を、その場でビルドした arm64 の AppImage に
-対して実行した。配置、同梱 CLI のアーキ、CLI の実行、engine の起動、
-handoff 0600 / state 0700、裸の `sshc` の拒否——すべて通過。
-
-**ただし、そのままでは起動しない。**
+**arm64 の AppImage は起動しない。決着済み——形を変えた。**
 
 electron-builder が arm64 向けに同梱する AppImage の runtime は、**版の付か
-ない `libz.so`** を要求する。これは `zlib1g-dev` が提供する開発用のリンクで、
-普通の機械には入っていない。素の Debian では:
+ない `libz.so`** を要求する。`zlib1g-dev` が提供する開発用のリンクで、普通の
+機械には入っていない。素の Debian では展開すらできない:
 
 ```
 error while loading shared libraries: libz.so: cannot open shared object file
 ```
 
-**利用者はこの AppImage を起動できない。** 上のスモークは `zlib1g-dev` を
-入れた環境で通したものである。
+この runtime は electron-builder が配る `appimage-12.0.1` に入っており、
+**26.15.3（現時点の最新）でも pin が変わっていない。** `runtimeFile` の
+設定口も無い。x64 の runtime は `libz.so.1` を見ており無事である。
 
-x64 の runtime は `libz.so.1`（誰の機械にもある方）を参照しており、この問題を
-持たない。**arm64 固有である。** Linux のデスクトップ束を配るときに、
-runtime を差し替えるか arm64 を外すかを決める必要がある。
+そこで **arm64 だけ `tar.gz` にした。** 中に runtime を持たない形なので、
+この問題は構造的に起こらない。その場でビルドした tar.gz に対して
+`scripts/linux/package-smoke.sh` を実行し、配置、同梱 CLI のアーキ、
+CLI の実行、engine の起動、handoff 0600 / state 0700、裸の `sshc` の拒否——
+**すべて通過**（aarch64 の実行環境で）。
 
-x64 の実行は arm64 のこの機械では確かめられない（翻訳の手段が無い）。
+`ldd` は 25 個の未解決を報告するが、すべて X11/GTK/NSS/音声——コンテナに
+デスクトップが無いだけで、`libz` は含まれない。AppImage も同じものを要求する。
+
+x64 の AppImage はこの機械では実行できない（翻訳の手段が無い）。中身だけを
+squashfs から直接読んで確かめてある。**実行はリリースの Linux ジョブが
+x64 のランナー上で行う。**
 
 ### Windows amd64（実機）
 
