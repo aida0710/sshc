@@ -1474,6 +1474,8 @@ export interface components {
         };
         PullRequest: {
             apply?: boolean;
+            /** @enum {string} */
+            resolve?: "local" | "remote";
         };
         SyncConflict: {
             path: string;

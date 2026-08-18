@@ -49,6 +49,24 @@ func (e OpenTerminalSessionRequestKind) Valid() bool {
 	}
 }
 
+// Defines values for PullRequestResolve.
+const (
+	Local  PullRequestResolve = "local"
+	Remote PullRequestResolve = "remote"
+)
+
+// Valid indicates whether the value is a known member of the PullRequestResolve enum.
+func (e PullRequestResolve) Valid() bool {
+	switch e {
+	case Local:
+		return true
+	case Remote:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SyncDirection.
 const (
 	SyncDirectionBoth SyncDirection = "both"
@@ -917,8 +935,12 @@ type PublicKeyResponse struct {
 
 // PullRequest defines model for PullRequest.
 type PullRequest struct {
-	Apply *bool `json:"apply,omitempty"`
+	Apply   *bool               `json:"apply,omitempty"`
+	Resolve *PullRequestResolve `json:"resolve,omitempty"`
 }
+
+// PullRequestResolve defines model for PullRequest.Resolve.
+type PullRequestResolve string
 
 // PullResponse defines model for PullResponse.
 type PullResponse struct {

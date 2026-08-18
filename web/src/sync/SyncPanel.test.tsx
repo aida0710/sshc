@@ -156,14 +156,14 @@ describe("SyncPanel", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
 
-    await waitFor(() => expect(api.pullSnapshot).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(api.pullSnapshot).toHaveBeenCalledWith(false, undefined));
     expect(await screen.findByText("connections/work/lon.conf")).toBeInTheDocument();
     expect(screen.getByText("connections/old.conf")).toBeInTheDocument();
 
     // 消すものがあるので、適用の前に一度そう言わせる。
     await userEvent.click(screen.getByRole("checkbox", { name: /overwrites files in ~\/.ssh/i }));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
-    await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith(true));
+    await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith(true, undefined));
   });
 
   it("shows a conflict and refuses to apply it", async () => {
@@ -507,5 +507,35 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     expect(await screen.findByRole("button", { name: "Sync now" })).toBeDisabled();
+  });
+
+  // **選ぶ道が無ければ、自分の設定を持ったまま繋いだ 2 台目は一度も同期を
+  // 終えられない。** 選んでも書く前に同じプレビューが出る——寄せ先は適用では
+  // なく計画を変える。
+  it("offers both sides of a conflict and previews the choice before applying it", async () => {
+    const conflicted = {
+      applied: false,
+      summary: { createdAt: "2026-08-12T01:30:00Z", fileCount: 1, sourceBytes: 10, snapshotBytes: 20 },
+      downloadedBytes: 20,
+      completedAt: "2026-08-12T01:31:00Z",
+      conflicts: [{ path: "config", changedHere: true, changedThere: true }],
+      written: [],
+      removed: [],
+    };
+    const resolved = { ...conflicted, conflicts: [], written: ["config"] };
+    const pullSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce(conflicted)
+      .mockResolvedValue(resolved);
+    const api = buildApi(configured, conflicted, { pullSnapshot });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Take the other machine's version" }));
+
+    // 取り直したプレビューは、寄せ先を伴っている。まだ何も書いていない。
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, "remote"));
+    await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "remote"));
   });
 });

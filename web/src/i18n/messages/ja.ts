@@ -475,6 +475,8 @@ export const ja = {
   "sync.previewHeading": "取得した場合の変更",
   "sync.conflictExplain":
     "これらのファイルはこちらでも相手側でも変更されています。同じブロックを両方が変更した設定ファイルに正しいマージは存在しないので、あなたが決めるまで何も適用しません。設定ファイル画面で開いて手で調整するか、勝たせたいマシンから push してください。",
+  "sync.keepMine": "このマシンの内容を残す",
+  "sync.takeTheirs": "他のマシンの内容を取る",
   "sync.wouldWrite": "{count} 個のファイルが書き込まれます:",
   "sync.wouldRemove": "{count} 個のファイルが削除されます:",
   "sync.confirmOverwrite":

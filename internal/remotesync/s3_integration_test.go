@@ -115,7 +115,7 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	// ワークスペースがすでに一致している場合、Pull は完全な結果とともに
 	// ErrNothingToApply を答える — それは API の形であって失敗ではなく、その結果を
 	// apply することが ETag を記録する。
-	result, err := first.service.Pull(context.Background(), syncPassphrase)
+	result, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	switch {
 	case err == nil, errors.Is(err, remotesync.ErrNothingToApply):
 		if err := first.service.Apply(result); err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
@@ -134,7 +134,7 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	}
 
 	second := realInstallation(t, map[string]string{})
-	result, err = second.service.Pull(context.Background(), syncPassphrase)
+	result, err = second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatalf("Pull = %v", err)
 	}
@@ -200,7 +200,7 @@ func TestAgainstARealBucketTheWrongPassphraseCannotRead(t *testing.T) {
 	}
 
 	other := realInstallation(t, map[string]string{})
-	if _, err := other.service.Pull(context.Background(), "a completely different passphrase"); err == nil {
+	if _, err := other.service.Pull(context.Background(), "a completely different passphrase", remotesync.ResolveNone); err == nil {
 		t.Fatal("the snapshot opened with the wrong passphrase")
 	}
 }

@@ -149,7 +149,8 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 	if !moved {
 		return AutoIdle, "", false
 	}
-	result, err := a.service.Pull(ctx, key)
+	// **巡回は寄せ先を選ばない。** どちらを残すかは人が決める分岐である。
+	result, err := a.service.Pull(ctx, key, ResolveNone)
 	switch {
 	case errors.Is(err, ErrNothingToApply), errors.Is(err, ErrNoSnapshot):
 		return AutoIdle, "", false

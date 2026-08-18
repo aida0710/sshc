@@ -107,7 +107,9 @@ export type IntegrationsApi = {
   syncStatus(): Promise<SyncStatus>;
   configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
   pushSnapshot(): Promise<PushResponse>;
-  pullSnapshot(apply: boolean): Promise<PullResponse>;
+  // resolve は、両側で変わったファイルをどちらに寄せるか。省略すれば決めない
+  // ——衝突を報告して止まる。
+  pullSnapshot(apply: boolean, resolve?: "local" | "remote"): Promise<PullResponse>;
   // 鍵を決める。key を渡さなければ作る。返るのは採られた鍵そのもので、
   // **平文でそれが出る唯一の場所**である。画面はこれを一度だけ見せる。
   setSyncKey(key?: string): Promise<SyncKeyResponse>;
@@ -668,8 +670,10 @@ export const integrationsApi: IntegrationsApi = {
   async pushSnapshot() {
     return validatePushResponse(await postJSON<unknown>("/api/v1/sync/push", {}));
   },
-  async pullSnapshot(apply) {
-    return validatePullResponse(await postJSON<unknown>("/api/v1/sync/pull", { apply }));
+  async pullSnapshot(apply, resolve) {
+    return validatePullResponse(
+      await postJSON<unknown>("/api/v1/sync/pull", resolve === undefined ? { apply } : { apply, resolve }),
+    );
   },
   async setSyncKey(key) {
     return validateSyncKey(

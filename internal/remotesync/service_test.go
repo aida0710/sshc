@@ -274,7 +274,7 @@ func TestASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	}
 
 	second := newInstallation(t, bucket, map[string]string{})
-	result, err := second.service.Pull(context.Background(), syncPassphrase)
+	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatalf("Pull = %v", err)
 	}
@@ -346,7 +346,7 @@ func TestPullRefusesTheWrongPassphraseAndWritesNothing(t *testing.T) {
 	}
 
 	second := newInstallation(t, bucket, map[string]string{})
-	if _, err := second.service.Pull(context.Background(), "a different passphrase entirely"); err == nil {
+	if _, err := second.service.Pull(context.Background(), "a different passphrase entirely", remotesync.ResolveNone); err == nil {
 		t.Fatal("Pull succeeded with the wrong passphrase")
 	}
 	if _, err := os.Stat(filepath.Join(second.home, ".ssh", "config")); !errors.Is(err, os.ErrNotExist) {
@@ -356,7 +356,7 @@ func TestPullRefusesTheWrongPassphraseAndWritesNothing(t *testing.T) {
 
 func TestPullOnAnEmptyBucketSaysSo(t *testing.T) {
 	machine := newInstallation(t, &fakeBucket{}, map[string]string{})
-	if _, err := machine.service.Pull(context.Background(), syncPassphrase); !errors.Is(err, remotesync.ErrNoSnapshot) {
+	if _, err := machine.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone); !errors.Is(err, remotesync.ErrNoSnapshot) {
 		t.Fatalf("Pull = %v, want ErrNoSnapshot", err)
 	}
 }
@@ -380,7 +380,7 @@ func TestARefusedPullLeavesNoDirectoryBehind(t *testing.T) {
 	second := newInstallation(t, bucket, map[string]string{})
 	second.manager.Validate = func(storage.Request) error { return errors.New("refused") }
 
-	result, err := second.service.Pull(context.Background(), syncPassphrase)
+	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +401,7 @@ func TestApplyRefusesWhileAnythingIsInConflict(t *testing.T) {
 	}
 
 	second := newInstallation(t, bucket, map[string]string{"config": "mine\n"})
-	result, err := second.service.Pull(context.Background(), syncPassphrase)
+	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +435,7 @@ func TestAnUnconfiguredServiceRefusesRatherThanPanicking(t *testing.T) {
 	if _, err := service.Push(context.Background(), syncPassphrase); !errors.Is(err, remotesync.ErrNotConfigured) {
 		t.Errorf("Push = %v, want ErrNotConfigured", err)
 	}
-	if _, err := service.Pull(context.Background(), syncPassphrase); !errors.Is(err, remotesync.ErrNotConfigured) {
+	if _, err := service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone); !errors.Is(err, remotesync.ErrNotConfigured) {
 		t.Errorf("Pull = %v, want ErrNotConfigured", err)
 	}
 }
@@ -498,7 +498,7 @@ func TestPullReportsDownloadedAndExpandedBytesWithoutPersistingPreview(t *testin
 	}
 
 	consumer := newInstallation(t, bucket, map[string]string{})
-	result, err := consumer.service.Pull(context.Background(), syncPassphrase)
+	result, err := consumer.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,7 +581,7 @@ func TestASecondPushFromTheSameMachineSucceeds(t *testing.T) {
 	}
 
 	other := newInstallation(t, bucket, map[string]string{})
-	result, err := other.service.Pull(context.Background(), syncPassphrase)
+	result, err := other.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -620,7 +620,7 @@ func TestASendOnlyMachineWillNotApply(t *testing.T) {
 	// プレビューは引き続き動く。適用してはいけないマシンでも、どれだけ遅れているかを
 	// 知ることは許される。見ることまで拒めば、この設定は防護ではなく目隠しに
 	// なってしまう。
-	result, err := second.service.Pull(context.Background(), syncPassphrase)
+	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatalf("Pull = %v, want a preview", err)
 	}
@@ -856,7 +856,7 @@ func TestApplyKeepsTheObjectKeyUsedByPull(t *testing.T) {
 	}
 
 	consumer := newInstallation(t, bucket, map[string]string{})
-	result, err := consumer.service.Pull(context.Background(), syncPassphrase)
+	result, err := consumer.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatalf("consumer Pull = %v", err)
 	}
@@ -1072,7 +1072,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	// 2 台目は、自分のマスターパスワードで自分の保管庫を作る。
 	second := newInstallation(t, bucket, map[string]string{})
 	receiver := withVault(t, second, "the second machine's own master")
-	result, err := second.service.Pull(context.Background(), syncPassphrase)
+	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatalf("Pull = %v", err)
 	}

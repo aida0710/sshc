@@ -63,6 +63,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [oldKey, setOldKey] = useState("");
   // 消すことに対する、はっきりした一度の同意。
   const [acceptedRemovals, setAcceptedRemovals] = useState(false);
+  // 衝突をどちらに寄せると決めたか。決めていなければ undefined。
+  const [resolve, setResolve] = useState<"local" | "remote" | undefined>(undefined);
   const [preview, setPreview] = useState<PullResponse | null>(null);
   const [resultView, setResultView] = useState<SyncResultView | null>(null);
   const [notice, setNotice] = useState("");
@@ -113,6 +115,26 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     } finally {
       setBusy(false);
     }
+  }
+
+  // previewWith は、寄せ先を決めて（あるいは決めずに）プレビューを取り直す。
+  // **適用はここではしない。** 書く前に見せるものが、この画面の唯一の形である。
+  async function previewWith(choice?: "local" | "remote") {
+    setResolve(choice);
+    await run(
+      () => api.pullSnapshot(false, choice),
+      (next) => {
+        setPreview(next);
+        setAcceptedRemovals(false);
+        setResultView({ kind: "preview", result: next });
+        setNotice(
+          next.written.length + next.removed.length + next.conflicts.length === 0
+            ? t("sync.alreadyMatches")
+            : "",
+        );
+      },
+      t("sync.pullFailed"),
+    );
   }
 
   if (status === null) {
@@ -481,24 +503,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           <button
             type="button"
             disabled={busy || !status.configured || !status.keyConfigured}
-            onClick={() =>
-              void run(
-                () => api.pullSnapshot(false),
-                (next) => {
-                  setPreview(next);
-                  // 同意は、いま見せたこの一覧に対するものである。次の
-                  // プレビューへ持ち越さない。
-                  setAcceptedRemovals(false);
-                  setResultView({ kind: "preview", result: next });
-                  setNotice(
-                    next.written.length + next.removed.length + next.conflicts.length === 0
-                      ? t("sync.alreadyMatches")
-                      : "",
-                  );
-                },
-                t("sync.pullFailed"),
-              )
-            }
+            onClick={() => void previewWith(undefined)}
             className={secondaryAction}
           >
             {t("sync.preview")}
@@ -528,6 +533,29 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   <li key={conflict.path}>{conflict.path}</li>
                 ))}
               </ul>
+              {/*
+                **選べる道を出す。** 出さなければ、自分の設定を持ったまま
+                2 台目を繋いだ人は、一度も同期を終えられない。選んでも書く前に
+                同じプレビューが出る——寄せ先は、適用ではなく計画を変える。
+              */}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void previewWith("local")}
+                  className="rounded border border-line px-3 py-1.5 text-sm text-ink"
+                >
+                  {t("sync.keepMine")}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void previewWith("remote")}
+                  className="rounded border border-line px-3 py-1.5 text-sm text-ink"
+                >
+                  {t("sync.takeTheirs")}
+                </button>
+              </div>
             </>
           ) : null}
           {preview.written.length === 0 ? null : (
@@ -575,7 +603,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             }
             onClick={() =>
               void run(
-                () => api.pullSnapshot(true),
+                () => api.pullSnapshot(true, resolve),
                 (next) => {
                   setPreview(next);
                   setResultView({ kind: "apply", result: next });

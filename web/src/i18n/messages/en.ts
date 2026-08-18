@@ -497,6 +497,8 @@ export const en = {
   "sync.previewHeading": "What a pull would change",
   "sync.conflictExplain":
     "These files changed here and on the other machine. Two configurations that both changed the same block have no correct merge, so nothing is applied until you decide. Open them in the Config screen and reconcile them by hand, or push from the machine you want to win.",
+  "sync.keepMine": "Keep this machine's version",
+  "sync.takeTheirs": "Take the other machine's version",
   "sync.wouldWrite": "{count} files would be written:",
   "sync.wouldRemove": "{count} files would be removed:",
   "sync.confirmOverwrite":

@@ -12,6 +12,25 @@ import (
 // いることを報告する。これは失敗ではなく答えである。
 var ErrNothingToApply = errors.New("this workspace already matches the snapshot")
 
+// Resolution は、両側で変わったファイルをどちらに寄せるかである。
+//
+// **既定は「決めない」である。** 同じ Host ブロックを双方が変えた二つの
+// ssh_config に、正しいマージは存在しない。どちらかを推測すれば、パーサが守る
+// ために存在するバイト保存の約束が破れる。だから既定では止まり、人が寄せ先を
+// 選んだときだけ、その通りにする。
+type Resolution string
+
+const (
+	// ResolveNone は、衝突を報告して止まる。
+	ResolveNone Resolution = ""
+	// ResolveLocal は、このマシンの中身を残す。**書かないだけである**——
+	// 次の push が、こちらを向こうへ運ぶ。
+	ResolveLocal Resolution = "local"
+	// ResolveRemote は、スナップショットの中身で置き換える。置き換えたものは
+	// 控えが残り、History から戻せる。
+	ResolveRemote Resolution = "remote"
+)
+
 // Conflict は、前回の同期以降に両側で変わったファイルひとつ。
 //
 // ダイジェストを運び、内容は決して運ばない。三方向のビューは、呼び出し側が自分で
@@ -42,7 +61,7 @@ type Conflict struct {
 //     ファイルはひとつも取り除かれない。
 //   - local は、ワークスペース相対のパスを、いまこのディスク上のダイジェストへ対応付ける。
 //   - remote は、いま取得したマニフェストで、contents はそのファイル群。
-func Plan(root string, base *Manifest, local map[string]string, remote Manifest, contents map[string][]byte) (storage.Request, []Conflict, error) {
+func Plan(root string, base *Manifest, local map[string]string, remote Manifest, contents map[string][]byte, resolve Resolution) (storage.Request, []Conflict, error) {
 	baseDigests := map[string]string{}
 	if base != nil {
 		for _, item := range base.Files {
@@ -63,23 +82,23 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 			continue
 		}
 		baseDigest, hadBase := baseDigests[item.Path]
-		if present && hadBase && localDigest != baseDigest {
+		contested := present && (!hadBase || localDigest != baseDigest)
+		if contested && resolve == ResolveNone {
 			// ここでも変わり、あちらでも変わった。自動的な正解は存在しない — 同じ
 			// Host ブロックを双方が変えた二つの ssh_config をマージすることは、
 			// パーサが守るために存在するバイト保存の約束に反する — ので、これは
-			// 推測せずに報告する。
-			conflicts = append(conflicts, Conflict{
-				Path: item.Path, BaseDigest: baseDigest,
-				LocalDigest: localDigest, RemoteDigest: item.SHA256,
-			})
+			// 推測せずに報告する。base が無いときも同じである: 両側に在って内容が
+			// 違い、どちらが新しいかを知るものがここには無い。
+			conflict := Conflict{Path: item.Path, LocalDigest: localDigest, RemoteDigest: item.SHA256}
+			if hadBase {
+				conflict.BaseDigest = baseDigest
+			}
+			conflicts = append(conflicts, conflict)
 			continue
 		}
-		if present && !hadBase {
-			// 両側に存在し、内容が異なり、このマシンは一度も同期していない。
-			// ここにはどちらが新しいかを知るものがない。
-			conflicts = append(conflicts, Conflict{
-				Path: item.Path, LocalDigest: localDigest, RemoteDigest: item.SHA256,
-			})
+		if contested && resolve == ResolveLocal {
+			// このマシンを残す。**書かないだけである**——次の push が、こちらを
+			// 向こうへ運ぶ。
 			continue
 		}
 		precondition := storage.Precondition{}
@@ -113,10 +132,18 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 		}
 		if localDigest != baseDigest {
 			// あちらで削除され、こちらで編集された。
-			conflicts = append(conflicts, Conflict{
-				Path: path, BaseDigest: baseDigest, LocalDigest: localDigest,
-			})
-			continue
+			switch resolve {
+			case ResolveLocal:
+				// 残す。消さない。
+				continue
+			case ResolveRemote:
+				// あちらに合わせる。控えは残るので History から戻せる。
+			default:
+				conflicts = append(conflicts, Conflict{
+					Path: path, BaseDigest: baseDigest, LocalDigest: localDigest,
+				})
+				continue
+			}
 		}
 		request.Removals = append(request.Removals, storage.Removal{
 			Path:         filepath.Join(root, filepath.FromSlash(path)),
