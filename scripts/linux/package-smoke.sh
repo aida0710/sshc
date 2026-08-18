@@ -1,5 +1,10 @@
 #!/bin/sh
-# AppImage を開いて、中身と振る舞いを確かめる。
+# デスクトップの束を開いて、中身と振る舞いを確かめる。
+#
+# **Linux は形が二つある。** x64 は AppImage、arm64 は tar.gz である。
+# electron-builder が arm64 向けに積む AppImage の runtime は版の付かない
+# libz.so を要求し、普通の機械では起動しない——だから arm64 だけ形を変えた。
+# 詳細は docs/manual-test-matrix.md にある。
 #
 # **macOS と Windows の package-smoke と対になる。** Linux にインストーラは
 # 無く、利用者が AppImage をどこかへ置いて実行するだけなので、確かめるのは
@@ -19,23 +24,23 @@
 set -eu
 
 usage() {
-	echo "usage: $0 --appimage <path> --architecture <x64|arm64> --work-root <dir>" >&2
+	echo "usage: $0 --package <path> --architecture <x64|arm64> --work-root <dir>" >&2
 	exit 2
 }
 
-appimage=""
+package=""
 architecture=""
 work_root=""
 while [ $# -gt 0 ]; do
 	case "$1" in
-	--appimage) appimage="${2:-}"; shift 2 ;;
+	--package) package="${2:-}"; shift 2 ;;
 	--architecture) architecture="${2:-}"; shift 2 ;;
 	--work-root) work_root="${2:-}"; shift 2 ;;
 	*) usage ;;
 	esac
 done
-[ -n "$appimage" ] && [ -n "$architecture" ] && [ -n "$work_root" ] || usage
-[ -f "$appimage" ] || { echo "package-smoke: no AppImage at $appimage" >&2; exit 1; }
+[ -n "$package" ] && [ -n "$architecture" ] && [ -n "$work_root" ] || usage
+[ -f "$package" ] || { echo "package-smoke: no package at $package" >&2; exit 1; }
 case "$architecture" in x64 | arm64) ;; *) echo "package-smoke: unsupported architecture $architecture" >&2; exit 1 ;; esac
 
 ok() { echo "ok: $1"; }
@@ -43,8 +48,7 @@ fail() { echo "package-smoke: expected $1" >&2; exit 1; }
 
 rm -rf "$work_root"
 mkdir -p "$work_root"
-image="$(cd "$(dirname "$appimage")" && pwd)/$(basename "$appimage")"
-chmod +x "$image"
+image="$(cd "$(dirname "$package")" && pwd)/$(basename "$package")"
 
 # **走らせられるかどうかを、開ける前に決める。** ここを展開の後ろに置いていた
 # ときは、foreign-arch の束が "Exec format error" で落ち、「実行しなかった」と
@@ -54,45 +58,65 @@ native="no"
 { [ "$host" = "x86_64" ] && [ "$architecture" = "x64" ]; } && native="yes"
 { [ "$host" = "aarch64" ] && [ "$architecture" = "arm64" ]; } && native="yes"
 
-if [ "$native" = "no" ]; then
-	# 実行せずに中身へ届く道。無ければ、確かめられなかったとだけ言う。
-	if ! command -v unsquashfs >/dev/null 2>&1; then
-		echo "note: this host is $host and cannot execute a $architecture runtime"
-		echo "package-smoke: $architecture not inspected on $host; install squashfs-tools to read it here"
-		exit 0
+# 束を開いて、中身の根を $root に置く。**形ごとに開け方が違う。**
+case "$image" in
+*.tar.gz)
+	# **runtime を持たない形。** 開けるのに実行が要らないので、どの機械からでも
+	# 同じように読める。arm64 の Linux をこの形で配っているのは、
+	# electron-builder が arm64 向けに積む AppImage の runtime が、版の付かない
+	# libz.so を要求して普通の機械では起動しないからである（x64 の runtime は
+	# libz.so.1 を見ており無事）。
+	tar xzf "$image" -C "$work_root" || fail "the archive to extract"
+	root="$(find "$work_root" -mindepth 1 -maxdepth 1 -type d | head -1)"
+	[ -n "$root" ] || fail "one directory at the root of the archive"
+	ok "the archive extracted"
+	;;
+*.AppImage)
+	if [ "$native" = "yes" ]; then
+		# 利用者と同じ開け方をする。展開はカレントに squashfs-root を作るので、
+		# 作業場所の中で行う。
+		chmod +x "$image"
+		if ! (cd "$work_root" && "$image" --appimage-extract >/dev/null 2>"$work_root/extract.err"); then
+			# **理由を名指しする。** ここで一番起きるのは、runtime が要求する
+			# 共有ライブラリが素の機械に無いことである。素のローダーの
+			# メッセージだけを出すと、読んだ人は AppImage が壊れているのか
+			# 環境が足りないのかを判別できない。
+			if grep -q "libz.so:" "$work_root/extract.err" 2>/dev/null; then
+				echo "package-smoke: this AppImage's runtime needs the unversioned libz.so," >&2
+				echo "  which comes from zlib1g-dev and is absent from an ordinary system." >&2
+				echo "  A user would not be able to start it." >&2
+			fi
+			cat "$work_root/extract.err" >&2
+			fail "the AppImage to extract"
+		fi
+		root="$work_root/squashfs-root"
+		[ -d "$root" ] || fail "the AppImage to extract"
+		ok "the AppImage extracted"
+	else
+		# 実行せずに中身へ届く道。無ければ、確かめられなかったとだけ言う。
+		if ! command -v unsquashfs >/dev/null 2>&1; then
+			echo "note: this host is $host and cannot execute a $architecture runtime"
+			echo "package-smoke: $architecture not inspected on $host; install squashfs-tools to read it here"
+			exit 0
+		fi
+		# squashfs の開始位置 = ELF の終端 = 節表の位置 + 節の大きさ × 個数。
+		offset="$(readelf -h "$image" 2>/dev/null | awk '
+			/Start of section headers/ {start=$5}
+			/Size of section headers/  {size=$5}
+			/Number of section headers/{count=$5}
+			END{ if (start != "" && size != "" && count != "") print start + size * count }')"
+		[ -n "$offset" ] || fail "to read the ELF headers of the AppImage (is readelf present?)"
+		root="$work_root/squashfs-root"
+		unsquashfs -o "$offset" -d "$root" -q "$image" >"$work_root/extract.err" 2>&1 ||
+			{ cat "$work_root/extract.err" >&2; fail "the squashfs inside the AppImage to be readable"; }
+		ok "the AppImage was read without executing it"
 	fi
-	# squashfs の開始位置 = ELF の終端 = 節表の位置 + 節の大きさ × 個数。
-	offset="$(readelf -h "$image" 2>/dev/null | awk '
-		/Start of section headers/ {start=$5}
-		/Size of section headers/  {size=$5}
-		/Number of section headers/{count=$5}
-		END{ if (start != "" && size != "" && count != "") print start + size * count }')"
-	[ -n "$offset" ] || fail "to read the ELF headers of the AppImage (is readelf present?)"
-	root="$work_root/squashfs-root"
-	unsquashfs -o "$offset" -d "$root" -q "$image" >"$work_root/extract.err" 2>&1 ||
-		{ cat "$work_root/extract.err" >&2; fail "the squashfs inside the AppImage to be readable"; }
-	ok "the AppImage was read without executing it"
-else
-
-# 展開はカレントに squashfs-root を作るので、作業場所の中で行う。
-if ! (cd "$work_root" && "$image" --appimage-extract >/dev/null 2>"$work_root/extract.err"); then
-	# **理由を名指しする。** ここで一番起きるのは、runtime が要求する共有
-	# ライブラリが素の機械に無いことである。素のローダーのメッセージだけを
-	# 出すと、読んだ人は AppImage が壊れているのか環境が足りないのかを
-	# 判別できない。
-	if grep -q "libz.so:" "$work_root/extract.err" 2>/dev/null; then
-		echo "package-smoke: this AppImage's runtime needs the unversioned libz.so," >&2
-		echo "  which comes from zlib1g-dev and is absent from an ordinary system." >&2
-		echo "  A user would not be able to start it. electron-builder ships this" >&2
-		echo "  runtime for arm64; the x64 one links libz.so.1 and is unaffected." >&2
-	fi
-	cat "$work_root/extract.err" >&2
-	fail "the AppImage to extract"
-fi
-root="$work_root/squashfs-root"
-[ -d "$root" ] || fail "the AppImage to extract"
-ok "the AppImage extracted"
-fi
+	;;
+*)
+	echo "package-smoke: $image is neither an AppImage nor a tar.gz" >&2
+	exit 1
+	;;
+esac
 
 shell="$root/sshc"
 [ -x "$shell" ] || fail "an executable shell at the root of the bundle"
