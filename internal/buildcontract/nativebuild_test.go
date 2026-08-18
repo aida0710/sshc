@@ -260,8 +260,8 @@ func TestHostBuildRunsWebBuildOnlyAfterValidation(t *testing.T) {
 	if len(executor.commands) != 2 {
 		t.Fatalf("commands = %#v, want npm then go build", executor.commands)
 	}
-	if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, []string{"run", "build", "--prefix", "web"}) {
-		t.Fatalf("first command = %s %q, want npm web build", command.name, command.args)
+	if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, []string{"run", "build"}) || command.directory != "web" {
+		t.Fatalf("first command = %s %q in %q, want npm web build in web", command.name, command.args, command.directory)
 	}
 	if executor.commands[1].name != "go" {
 		t.Fatalf("second command = %s, want go", executor.commands[1].name)
@@ -387,18 +387,22 @@ func TestNativeDesktopBuildsExactWindowsResourceLayout(t *testing.T) {
 	if len(executor.commands) != 5 {
 		t.Fatalf("commands = %#v, want install, web, two CLI builds, and dist", executor.commands)
 	}
+	// **npm はその package のディレクトリで走る。** --prefix には頼らない——
+	// あの旗は下位命令ごとに意味が揃っておらず、`npm install --prefix desktop`
+	// は Windows で root の package.json を読みに行って落ちた。
 	wantPrefix := []nativeCommand{
-		{name: "npm", args: []string{"install", "--prefix", "desktop"}},
-		{name: "npm", args: []string{"run", "build", "--prefix", "web"}},
+		{name: "npm", args: []string{"install"}, directory: "desktop"},
+		{name: "npm", args: []string{"run", "build"}, directory: "web"},
 	}
 	for index, want := range wantPrefix {
 		got := executor.commands[index]
-		if got.name != want.name || !reflect.DeepEqual(got.args, want.args) {
-			t.Errorf("command %d = %s %q, want %s %q", index, got.name, got.args, want.name, want.args)
+		if got.name != want.name || !reflect.DeepEqual(got.args, want.args) || got.directory != want.directory {
+			t.Errorf("command %d = %s %q in %q, want %s %q in %q",
+				index, got.name, got.args, got.directory, want.name, want.args, want.directory)
 		}
 	}
-	if dist := executor.commands[4]; dist.name != "npm" || !reflect.DeepEqual(dist.args, []string{"run", "dist:win", "--prefix", "desktop"}) {
-		t.Errorf("dist command = %s %q", dist.name, dist.args)
+	if dist := executor.commands[4]; dist.name != "npm" || !reflect.DeepEqual(dist.args, []string{"run", "dist:win"}) || dist.directory != "desktop" {
+		t.Errorf("dist command = %s %q in %q", dist.name, dist.args, dist.directory)
 	}
 	for _, command := range executor.commands {
 		if command.name != "go" {
@@ -440,9 +444,9 @@ func TestNativeDesktopUsesHostSpecificBundleChannelAndDistScript(t *testing.T) {
 				t.Fatalf("runNativeBuild() error: %v", err)
 			}
 			dist := executor.commands[len(executor.commands)-1]
-			want := []string{"run", test.dist, "--prefix", "desktop"}
-			if dist.name != "npm" || !reflect.DeepEqual(dist.args, want) {
-				t.Errorf("dist command = %s %q, want npm %q", dist.name, dist.args, want)
+			want := []string{"run", test.dist}
+			if dist.name != "npm" || !reflect.DeepEqual(dist.args, want) || dist.directory != "desktop" {
+				t.Errorf("dist command = %s %q in %q, want npm %q in desktop", dist.name, dist.args, dist.directory, want)
 			}
 		})
 	}
@@ -527,8 +531,8 @@ func TestReleaseCurrentUsesActualHostForBothArchitectures(t *testing.T) {
 			if len(executor.commands) != 5 {
 				t.Fatalf("commands = %d, want web build plus two build/verifier pairs: %#v", len(executor.commands), executor.commands)
 			}
-			if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, []string{"run", "build", "--prefix", "web"}) {
-				t.Fatalf("first command = %s %q, want npm web build", command.name, command.args)
+			if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, []string{"run", "build"}) || command.directory != "web" {
+				t.Fatalf("first command = %s %q in %q, want npm web build in web", command.name, command.args, command.directory)
 			}
 			for index, command := range executor.commands {
 				if index == 0 || index%2 == 0 {
@@ -577,9 +581,9 @@ func TestDesktopVersionUsesNPMArgvWithoutShellInterpolation(t *testing.T) {
 	if len(executor.commands) != 1 {
 		t.Fatalf("commands = %d, want 1", len(executor.commands))
 	}
-	wantArgs := []string{"version", "--prefix", directory, "--allow-same-version", "--no-git-tag-version", "--", "3.4.5"}
-	if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, wantArgs) {
-		t.Fatalf("command = %s %q, want npm %q", command.name, command.args, wantArgs)
+	wantArgs := []string{"version", "--allow-same-version", "--no-git-tag-version", "--", "3.4.5"}
+	if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, wantArgs) || command.directory != directory {
+		t.Fatalf("command = %s %q in %q, want npm %q in %q", command.name, command.args, command.directory, wantArgs, directory)
 	}
 }
 
