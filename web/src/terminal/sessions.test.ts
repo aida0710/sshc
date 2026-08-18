@@ -152,6 +152,33 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("");
   });
 
+  // **死ぬまでに時間がかかる相手を待つ。**
+  //
+  // 上の偽物は 1 回目の close で即座に死ぬ。現実はそうではない——Windows の
+  // ConPTY は畳むのに時間がかかり、実際 CI の Windows でここが落ちた。呼ばれた
+  // 回数で死ぬ偽物では、**間を置かない実装も通ってしまう**ので、ここでは
+  // 経過時間で死ぬ相手を置く。巡るあいだに間を置く実装だけが空にできる。
+  it("keeps trying while a session takes real time to die", async () => {
+    const startedAt = Date.now();
+    const server = [{ id: "a" }];
+    const listing = () => ({ sessions: [...server] as never, maxSessions: 50 });
+    const closeTerminalSession = vi.fn(async () => {
+      // 250 ミリ秒経つまでは、閉じても死んだことにならない。
+      if (Date.now() - startedAt >= 250) server.length = 0;
+      return listing();
+    });
+    const client = api({ terminalSessions: vi.fn(async () => listing()), closeTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(1));
+
+    await act(async () => {
+      await result.current.closeAll();
+    });
+
+    expect(result.current.sessions).toEqual([]);
+    expect(result.current.problem).toBe("");
+  });
+
   // 閉じられなかったものを黙って消えたことにしない。
   it("says so when one of them refuses to close", async () => {
     const one = [{ id: "a" }] as never;
