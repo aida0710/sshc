@@ -40,6 +40,12 @@ export type TerminalSessionsState = {
 // アプリケーションはマスターパスワードの向こう側にあるので、施錠中の /api/v1 は
 // すべて vault_locked で拒否される。解錠より前に一覧を取りに行くと、その失敗が
 // 「セッションは 0 本だった」として確定し、解錠後も誰も取り直さない。
+// closeAll が待つ上限は closeAllRounds × closeAllPause である。**上限であって
+// 期待値ではない** —— 普通は 1〜2 巡で終わる。ここが効くのは畳むのが遅い側で、
+// 遅いという理由だけで「閉じられなかった」と言わないためにある。
+const closeAllRounds = 10;
+const closeAllPause = 100;
+
 export function useTerminalSessions(
   api: TerminalSessionsApi,
   translate: Translate,
@@ -118,6 +124,13 @@ export function useTerminalSessions(
   // （registry がそう決めており、終わった理由を読めるようにするためである）。
   // だから一覧が空になるまで巡り直す。
   //
+  // **巡るあいだに間を置く。** ここが要点である。閉じてから死ぬまでには時間が
+  // かかり、その時間はプラットフォームで違う——Windows の ConPTY は畳むのに
+  // Unix の SIGHUP より長くかかる。間を置かずに巡ると、4 巡はミリ秒の間に
+  // 信号を 4 回送るだけになり、**死を待つ時間がどこにも無い。** そのまま
+  // 抜けると一覧は「1 open」で固まる。ここには定期的な取り直しが無いので、
+  // 誰も直しに来ない。
+  //
   // 巡る回数には上限を置く。応答しないリモートに繋がったセッションは
   // SIGHUP を送っても即座には死なないので、上限が無いとここが終わらない。
   // 残ったものは一覧に残る——**黙って消えたことにしない。**
@@ -126,7 +139,8 @@ export function useTerminalSessions(
     let failed = false;
     try {
       let remaining = sessions;
-      for (let round = 0; round < 4 && remaining.length > 0; round += 1) {
+      for (let round = 0; round < closeAllRounds && remaining.length > 0; round += 1) {
+        if (round > 0) await new Promise((resume) => setTimeout(resume, closeAllPause));
         for (const session of remaining) {
           try {
             const listed = await api.closeTerminalSession(session.id);
