@@ -378,6 +378,49 @@ jobs:
           path: web/playwright-report
           retention-days: 7
 
+  # **Windows でも同じスイートを走らせる。** ここが無いと、次に誰かが Unix の
+  # 前提を書いた瞬間に静かに壊れる——実際、初めて実機で走らせたとき 8 件が
+  # 落ち、その全部がテスト側の Unix 前提だった（POSIX のシェル構文、mode
+  # ビット、fixture が DACL を満たしていないこと）。
+  #
+  # **Linux のジョブとは要るものが違うので、別に置く。** あちらは xvfb の中で
+  # 実 Electron も起こし、コミット済みバンドルの鮮度も見る。こちらが確かめる
+  # のは、**ブラウザから見た製品が Windows でも同じように振る舞うか**である
+  # ——ConPTY を実際に踏む唯一の経路がここにある。
+  e2e-windows:
+    name: End to end (Windows)
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+
+      - name: Build the binary
+        run: go run ./internal/buildcontract/cmd/nativebuild host-build --output-dir bin
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: web
+
+      # xvfb は要らない。desktop.spec.ts は Linux 以外では自分で skip する。
+      - name: Playwright
+        run: npm run e2e --prefix web
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        if: failure()
+        with:
+          name: playwright-report-windows
+          path: web/playwright-report
+          retention-days: 7
+
   security:
     name: Dependency security
     runs-on: ubuntu-latest
