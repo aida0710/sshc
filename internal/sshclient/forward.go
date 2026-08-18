@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -189,6 +190,21 @@ func accept(listener net.Listener, client *ssh.Client, spec ForwardSpec) {
 	}
 }
 
+// lingeringClose は、最後に書いたものが相手に届く見込みを作ってから閉じる。
+//
+// 順番が要点である: 先に FIN を送って「もう書かない」と伝え、それから残りを
+// 読み捨てる。未読を空にしてから閉じるので RST にならない。
+//
+// **際限なく読まない。** 相手が流し続けるなら、こちらが断った事実は既に
+// 書き終えている。上限と締切の両方を置く。
+func lingeringClose(conn net.Conn) {
+	if half, ok := conn.(interface{ CloseWrite() error }); ok {
+		_ = half.CloseWrite()
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	_, _ = io.Copy(io.Discard, io.LimitReader(conn, 4096))
+}
+
 func serve(local net.Conn, client *ssh.Client, spec ForwardSpec) {
 	defer func() { _ = local.Close() }()
 
@@ -196,6 +212,15 @@ func serve(local net.Conn, client *ssh.Client, spec ForwardSpec) {
 	if spec.Kind == terminal.ForwardDynamic {
 		asked, err := readSOCKS5(local)
 		if err != nil {
+			// **断りを届けてから閉じる。** readSOCKS5 は要求を最後まで
+			// 読まずに断るので、受信バッファに未読が残る。そのまま閉じると
+			// TCP は FIN ではなく RST を送り、**RST を受けた側は受信済みの
+			// データを捨てる** ——直前に書いた断りが、相手に届かずに消える。
+			//
+			// Linux と macOS では、たいてい相手が先に読み終えているので
+			// 表に出なかった。Windows で出た。**プロトコルの側が正しく、
+			// 運が良かっただけである。**
+			lingeringClose(local)
 			return
 		}
 		destination = asked
