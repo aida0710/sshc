@@ -1,0 +1,137 @@
+#!/bin/sh
+# AppImage を開いて、中身と振る舞いを確かめる。
+#
+# **macOS と Windows の package-smoke と対になる。** Linux にインストーラは
+# 無く、利用者が AppImage をどこかへ置いて実行するだけなので、確かめるのは
+# 「その束が何を持っているか」と「持っているものが動くか」になる。
+#
+# **`--appimage-extract` を使う。** 実行して中を見るには FUSE が要り、
+# コンテナや素の CI ランナーには無い。展開なら FUSE を必要とせず、しかも
+# 見るものは同じ——利用者が実行したときに開かれるのと同じ木である。
+#
+# **秘密は出さない。** handoff にはワンタイムの資格情報が入っている。ここが
+# 報告するのは、在るかどうかと、誰が読めるかだけである。
+set -eu
+
+usage() {
+	echo "usage: $0 --appimage <path> --architecture <x64|arm64> --work-root <dir>" >&2
+	exit 2
+}
+
+appimage=""
+architecture=""
+work_root=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--appimage) appimage="${2:-}"; shift 2 ;;
+	--architecture) architecture="${2:-}"; shift 2 ;;
+	--work-root) work_root="${2:-}"; shift 2 ;;
+	*) usage ;;
+	esac
+done
+[ -n "$appimage" ] && [ -n "$architecture" ] && [ -n "$work_root" ] || usage
+[ -f "$appimage" ] || { echo "package-smoke: no AppImage at $appimage" >&2; exit 1; }
+case "$architecture" in x64 | arm64) ;; *) echo "package-smoke: unsupported architecture $architecture" >&2; exit 1 ;; esac
+
+ok() { echo "ok: $1"; }
+fail() { echo "package-smoke: expected $1" >&2; exit 1; }
+
+rm -rf "$work_root"
+mkdir -p "$work_root"
+image="$(cd "$(dirname "$appimage")" && pwd)/$(basename "$appimage")"
+chmod +x "$image"
+
+# 展開はカレントに squashfs-root を作るので、作業場所の中で行う。
+if ! (cd "$work_root" && "$image" --appimage-extract >/dev/null 2>"$work_root/extract.err"); then
+	# **理由を名指しする。** ここで一番起きるのは、runtime が要求する共有
+	# ライブラリが素の機械に無いことである。素のローダーのメッセージだけを
+	# 出すと、読んだ人は AppImage が壊れているのか環境が足りないのかを
+	# 判別できない。
+	if grep -q "libz.so:" "$work_root/extract.err" 2>/dev/null; then
+		echo "package-smoke: this AppImage's runtime needs the unversioned libz.so," >&2
+		echo "  which comes from zlib1g-dev and is absent from an ordinary system." >&2
+		echo "  A user would not be able to start it. electron-builder ships this" >&2
+		echo "  runtime for arm64; the x64 one links libz.so.1 and is unaffected." >&2
+	fi
+	cat "$work_root/extract.err" >&2
+	fail "the AppImage to extract"
+fi
+root="$work_root/squashfs-root"
+[ -d "$root" ] || fail "the AppImage to extract"
+ok "the AppImage extracted"
+
+shell="$root/sshc"
+[ -x "$shell" ] || fail "an executable shell at the root of the bundle"
+ok "the shell is executable"
+
+cli="$root/resources/sshc"
+[ -f "$cli" ] || fail "the bundled CLI at resources/sshc"
+chmod +x "$cli"
+ok "the CLI is inside the bundle"
+
+# **束ごとに、その束のアーキテクチャの実体が入っていること。** 一つを使い回すと
+# ここが食い違い、ビルドは通って配ってから壊れる。
+want="x86-64"
+[ "$architecture" = "arm64" ] && want="aarch64"
+# readelf は "AArch64" と綴る。**綴り方を当てにしない** —— 大文字小文字を
+# 揃えてから照合する。
+have="$(readelf -h "$cli" 2>/dev/null | sed -n 's/^ *Machine: *//p' | tr 'A-Z' 'a-z')"
+case "$have" in
+*"$want"*) ok "the CLI is built for $want (found: $have)" ;;
+*) fail "the CLI to be $want, found ${have:-unreadable}" ;;
+esac
+
+host="$(uname -m)"
+native="no"
+{ [ "$host" = "x86_64" ] && [ "$architecture" = "x64" ]; } && native="yes"
+{ [ "$host" = "aarch64" ] && [ "$architecture" = "arm64" ]; } && native="yes"
+if [ "$native" = "no" ]; then
+	echo "note: this host is $host; a $architecture binary cannot run here"
+	echo "package-smoke: $architecture layout checked on $host; nothing was executed"
+	exit 0
+fi
+
+home="$work_root/home"
+mkdir -p "$home"
+
+"$cli" --help >"$work_root/help.txt" 2>&1 || fail "the bundled CLI to run"
+grep -q "headless" "$work_root/help.txt" || fail "its help to name the headless owner"
+ok "the bundled CLI runs and names the headless owner"
+
+HOME="$home" "$cli" headless >"$work_root/engine.out" 2>"$work_root/engine.err" &
+engine=$!
+kill_engine() {
+	kill "$engine" 2>/dev/null || true
+	wait "$engine" 2>/dev/null || true
+}
+trap kill_engine EXIT INT TERM
+
+handoff="$home/.ssh/sshc/cli"
+deadline=$(( $(date +%s) + 60 ))
+while [ ! -f "$handoff" ] && [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.2; done
+[ -f "$handoff" ] || fail "the engine to publish a handoff"
+ok "the engine published a handoff"
+
+# **中身は読まない。** 誰が読めるかだけを見る。
+mode=$(stat -c "%a" "$handoff")
+[ "$mode" = "600" ] || fail "the handoff to be 0600, found $mode"
+ok "the handoff is readable only by its owner"
+mode=$(stat -c "%a" "$home/.ssh/sshc")
+[ "$mode" = "700" ] || fail "the state directory to be 0700, found $mode"
+ok "the state directory is closed to everyone else"
+
+HOME="$home" "$cli" vault status >"$work_root/status.txt" 2>&1 || fail "vault status to answer"
+grep -q "engine:[[:space:]]*headless" "$work_root/status.txt" || fail "the owner to be headless"
+ok "the owner is headless"
+
+# **端末が持っているあいだ、外殻はそれを横取りしない。** 画面の無い機械では、
+# 裸の `sshc` は窓の話をせずに headless を案内する。
+if HOME="$home" DISPLAY= WAYLAND_DISPLAY= "$cli" >"$work_root/bare.out" 2>"$work_root/bare.err"; then
+	fail "bare sshc to refuse while a headless owner holds the engine"
+fi
+grep -q "headless" "$work_root/bare.err" || fail "the refusal to name the headless owner"
+ok "bare sshc refused to displace the headless owner"
+
+kill_engine
+trap - EXIT INT TERM
+echo "package-smoke: $architecture passed natively on $host"
