@@ -1725,3 +1725,61 @@ func TestSettingTheKeyNeedsAnOpenVault(t *testing.T) {
 		t.Fatalf("SetSyncKey on a locked vault = %v, want ErrLocked", err)
 	}
 }
+
+// **巡回が保管庫を開けっぱなしにしてはならない。** 1 分ごとに設定を読む読み手が
+// アイドルの時計を戻し続ければ、8 時間の自動施錠は永久に来ない——誰も居ない机の
+// 上で、鍵がプロセスの記憶に残り続けることになる。
+func TestAnUnattendedReaderDoesNotKeepTheVaultOpen(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
+	now := func() time.Time { return clock }
+	service := secret.NewService(workspace, storage.NewManager(workspace, now, rand.Reader), now)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+
+	// 巡回が 9 時間ぶん、毎分読み続ける。
+	for minute := 0; minute < 9*60; minute++ {
+		clock = clock.Add(time.Minute)
+		service.Unattended(func() { _, _ = service.SyncSettings() })
+	}
+	if service.Unlocked() {
+		t.Fatal("the vault stayed open because the loop kept reading it")
+	}
+}
+
+// 逆に、人が読んだのなら時計は戻る。止めているのは呼び出し側の性質であって、
+// 読んだという事実ではない。
+func TestAReaderThatIsNotTheLoopKeepsTheVaultOpen(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
+	now := func() time.Time { return clock }
+	service := secret.NewService(workspace, storage.NewManager(workspace, now, rand.Reader), now)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+
+	for minute := 0; minute < 9*60; minute++ {
+		clock = clock.Add(time.Minute)
+		if _, err := service.SyncSettings(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !service.Unlocked() {
+		t.Fatal("the vault closed even though it was being used")
+	}
+}

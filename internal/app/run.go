@@ -288,6 +288,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		settings, err := passwordService.SyncSettings()
 		return err == nil && settings.Auto
 	}
+	autoSync.Unattended = passwordService.Unattended
 	autoSync.Key = func() (string, bool) {
 		settings, err := passwordService.SyncSettings()
 		if err != nil || settings.Key == "" {

@@ -116,6 +116,9 @@ type Service struct {
 	// 忘れられたタブがひとつあるだけで、マシンの電源が入っているあいだじゅう vault が
 	// 開いたままになってはならない。
 	used time.Time
+	// unattended は、いま走っている「誰も見ていない」呼び出しの数。0 でない
+	// あいだ、use はアイドルの時計に触れない。
+	unattended int
 }
 
 // State は status surface が一度に公開する vault の状態である。
@@ -156,10 +159,32 @@ func (s *Service) open() *Vault {
 // ある。
 func (s *Service) use() *Vault {
 	vault := s.open()
-	if vault != nil {
+	if vault != nil && s.unattended == 0 {
 		s.used = s.now()
 	}
 	return vault
+}
+
+// Unattended は、誰も見ていない呼び出しのあいだ、アイドルの時計を止める。
+//
+// **巡回が保管庫を開けっぱなしにしてはならない。** 自動同期は 1 分ごとに設定を
+// 読み、変わったものを数える。その読み手が時計を戻し続ければ、8 時間の自動施錠は
+// 永久に来ない——誰も居ない机の上で、鍵がプロセスの記憶に残り続けることになる。
+// status polling を「使用」に数えないのと同じ理屈であり、違うのは「誰が尋ねたか」
+// だけである。
+//
+// **止めるのは時計であって、鍵ではない。** 期限が来ていれば open がその場で
+// 閉じるので、巡回はそこで何も読めなくなり、次に人が解錠するまで止まる。
+func (s *Service) Unattended(run func()) {
+	s.mu.Lock()
+	s.unattended++
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.unattended--
+		s.mu.Unlock()
+	}()
+	run()
 }
 
 func (s *Service) path() string {

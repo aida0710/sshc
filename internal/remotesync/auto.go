@@ -55,6 +55,12 @@ type Auto struct {
 	// Enabled は、この設置で自動同期が入っているかを答える。設定は保管庫の中に
 	// あるので、閉じていれば false が返る——それで正しい。
 	Enabled func() bool
+	// Unattended は、一巡のあいだ保管庫のアイドルの時計を止める。
+	//
+	// **巡回が保管庫を開けっぱなしにしてはならない。** 1 分ごとに設定を読み、
+	// 変わったものを数える読み手が時計を戻し続ければ、自動施錠は永久に来ない。
+	// nil なら何も包まない——時計を持たない設置である。
+	Unattended func(run func())
 
 	interval time.Duration
 	now      func() string
@@ -109,6 +115,15 @@ func (a *Auto) Run(ctx context.Context) {
 func (a *Auto) Once(ctx context.Context) AutoView {
 	a.cycleMu.Lock()
 	defer a.cycleMu.Unlock()
+	if a.Unattended != nil {
+		var view AutoView
+		a.Unattended(func() { view = a.run(ctx) })
+		return view
+	}
+	return a.run(ctx)
+}
+
+func (a *Auto) run(ctx context.Context) AutoView {
 	if !a.enabled() {
 		return a.View()
 	}
