@@ -12,8 +12,8 @@
 | --- | --- | --- | --- | --- | --- |
 | macOS | arm64 | 確認済 | 確認済 | **通過** | CI と開発機 |
 | macOS | amd64 | 確認済 | 確認済 | 翻訳越し | 実機なし。arm64 の Mac で Rosetta 2 経由 |
-| Linux | amd64 | 確認済 | ビルドのみ | 未実施 | CI |
-| Linux | arm64 | 確認済 | ビルドのみ | 未実施 | 実機なし。コンテナで確認 |
+| Linux | amd64 | 確認済 | ビルドのみ | 未実施 | CI。arm64 の機械では実行できない |
+| Linux | arm64 | 確認済 | **起動しない** | 通過（要 zlib1g-dev） | 下記の runtime の問題 |
 | Windows | amd64 | 確認済 | 確認済 | **通過** | 実機（下記） |
 | Windows | arm64 | 未検証 | ビルドのみ | 未実施 | **実機なし。対応表に載せない** |
 | Android | arm64 / amd64 | — | — | — | CLI を積まない。APK のビルドのみ |
@@ -49,6 +49,31 @@
 **x64 は翻訳越しである。** arm64 の Mac は Rosetta 2 で x86_64 を走らせるので、
 動いたことは本当だが、**x64 の Mac で動く証明にはならない**。スクリプト自身が
 結果にそう書く。
+
+### Linux（コンテナ、aarch64、2026-08-18）
+
+`scripts/linux/package-smoke.sh` を、その場でビルドした arm64 の AppImage に
+対して実行した。配置、同梱 CLI のアーキ、CLI の実行、engine の起動、
+handoff 0600 / state 0700、裸の `sshc` の拒否——すべて通過。
+
+**ただし、そのままでは起動しない。**
+
+electron-builder が arm64 向けに同梱する AppImage の runtime は、**版の付か
+ない `libz.so`** を要求する。これは `zlib1g-dev` が提供する開発用のリンクで、
+普通の機械には入っていない。素の Debian では:
+
+```
+error while loading shared libraries: libz.so: cannot open shared object file
+```
+
+**利用者はこの AppImage を起動できない。** 上のスモークは `zlib1g-dev` を
+入れた環境で通したものである。
+
+x64 の runtime は `libz.so.1`（誰の機械にもある方）を参照しており、この問題を
+持たない。**arm64 固有である。** Linux のデスクトップ束を配るときに、
+runtime を差し替えるか arm64 を外すかを決める必要がある。
+
+x64 の実行は arm64 のこの機械では確かめられない（翻訳の手段が無い）。
 
 ### Windows amd64（実機）
 
