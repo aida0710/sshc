@@ -622,7 +622,7 @@ type PullResult struct {
 //
 // 何も書かない。Apply を別の呼び出しにしてあるのは、書き込みの前に必ず見せる
 // プレビューを、このアプリケーションの他の部分と同じくユーザーに見せるためである。
-func (s *Service) Pull(ctx context.Context, passphrase string) (PullResult, error) {
+func (s *Service) Pull(ctx context.Context, passphrase string, resolve Resolution) (PullResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
 		return PullResult{}, err
@@ -657,7 +657,7 @@ func (s *Service) Pull(ctx context.Context, passphrase string) (PullResult, erro
 		return PullResult{}, err
 	}
 
-	request, conflicts, err := Plan(s.workspace.Root(), current.Base, local, manifest, contents)
+	request, conflicts, err := Plan(s.workspace.Root(), current.Base, local, manifest, contents, resolve)
 	if exchangeErr := s.exchangeVault(&request); exchangeErr != nil {
 		return PullResult{}, exchangeErr
 	}

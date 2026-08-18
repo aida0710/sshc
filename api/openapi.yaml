@@ -2008,6 +2008,10 @@ components:
         # これにより、このアプリケーションが他のあらゆる書き込みの前に見せる
         # ファイル単位のプレビューを、ユーザーはここでも見る。
         apply: { type: boolean }
+        # 両側で変わったファイルをどちらに寄せるか。**省略すれば決めない**
+        # ——衝突を報告して止まる。寄せ先を選んだときも、書く前のプレビューは
+        # 同じように出る。
+        resolve: { type: string, enum: [local, remote] }
     SyncConflict:
       type: object
       additionalProperties: false
