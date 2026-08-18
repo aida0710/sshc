@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type DragEvent } from "react";
 import { RevealDialog } from "./RevealDialog";
 import { CopyButton } from "../ui/CopyButton";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -29,6 +29,16 @@ import {
   type TrashListResponse,
 } from "./api";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./workflow";
+import { FolderPane } from "./FolderPane";
+import {
+  folderRows,
+  groupOfKeyPath,
+  itemsInFolder,
+  moveInto,
+  type Folder,
+  type MoveOutcome,
+  type MoveTarget,
+} from "./organizer";
 
 // groups は宣言済みのグループ名で、シェルが overview から渡す。
 // Keys 画面はそれらを推測しない: ディレクトリがグループなのは
@@ -153,14 +163,6 @@ function renameable(item: KeyItem, items: KeyItem[]): boolean {
   return !items.some((candidate) => candidate.kind === "private_key" && candidate.fingerprint === fingerprint);
 }
 
-// groupOfKeyPath は、鍵が置かれている場所からそのグループを読み取り、
-// サーバーの規則を映す: keys/<group>/<file> であり、それ以外はグループに属さない。
-export function groupOfKeyPath(relativePath: string): string {
-  const segments = relativePath.split("/");
-  if (segments.length < 3 || segments[0] !== "keys") return "";
-  return segments.slice(1, -1).join("/");
-}
-
 // relocateStem は、ユーザーが置き換えるよう求められている名前の部分だ。
 // サーバーの規則を映しているので、フィールドはサーバーが拒否するであろう
 // 名前ではなく、実際に relocation が変える名前から始まる。
@@ -224,6 +226,13 @@ export function KeysScreen({
   const [failure, setFailure] = useState("");
   const [keyQuery, setKeyQuery] = useState("");
   const [moreActionsFor, setMoreActionsFor] = useState("");
+  // 整理の状態。folder は左で開いているもの、chosen は動かす対象、
+  // dragging は掴んでいるかどうか（置き場を光らせてよいのはその間だけ）。
+  const [folder, setFolder] = useState<Folder>({ kind: "all" });
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  const [dragging, setDragging] = useState(false);
+  const [moveOutcome, setMoveOutcome] = useState<MoveOutcome | null>(null);
+  const [moveTarget, setMoveTarget] = useState("");
   const [generated, setGenerated] = useState<{
     private: GeneratedPrivateKeyHandoff;
     public: GeneratedPublicKeyHandoff;
@@ -450,6 +459,35 @@ export function KeysScreen({
     }
   }
 
+  // moveChosen は選ばれた鍵をひとつの置き場へまとめて移す。
+  //
+  // **一本が断られても止めない。** relocate は鍵ごとの取引なので、動かせた
+  // ものは動かし、動かせなかったものは理由と一緒に名前を出す（moveInto が
+  // その仕分けを持つ）。まとめて拒否すると、10 本のうち 1 本のせいで 9 本が
+  // 動かないことになる。
+  async function moveChosen(target: MoveTarget) {
+    if (inventory === null) return;
+    const items = inventory.items.filter((item) => chosen.has(item.id));
+    if (items.length === 0) return;
+    setFailure("");
+    const outcome = await moveInto((keyId, change) => api.relocate(keyId, change), items, target);
+    setMoveOutcome(outcome);
+    setChosen(new Set());
+    await refresh();
+  }
+
+  // つかんだものが選ばれていなければ、それだけを選ぶ。**掴んだものと動くものを
+  // 食い違わせない** —— 選択の外にある行をつかんだのに選択の方が動いたら、
+  // 利用者は自分が何を動かしたのかを見ていない。
+  function beginDrag(event: DragEvent<HTMLSpanElement>, item: KeyItem) {
+    // **何か載せないと、ドラッグが始まらないブラウザがある。** 運ぶのは
+    // この文字列ではなく画面の状態の方だが、載せること自体に意味がある。
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", item.relativePath);
+    setDragging(true);
+    if (!chosen.has(item.id)) setChosen(new Set([item.id]));
+  }
+
   function closeRelocateForm() {
     setNewName("");
     setNewGroup("");
@@ -533,7 +571,8 @@ export function KeysScreen({
   }
 
   const query = keyQuery.trim().toLowerCase();
-  const visibleItems = inventory.items.filter((item) =>
+  const rows = folderRows(inventory.items, groups);
+  const visibleItems = itemsInFolder(inventory.items, folder).filter((item) =>
     query === "" ||
     item.relativePath.toLowerCase().includes(query) ||
     item.kind.toLowerCase().includes(query) ||
@@ -583,11 +622,69 @@ export function KeysScreen({
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-line bg-card">
+      {chosen.size === 0 ? null : (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-control-line bg-card p-3">
+          <p className="grow text-sm text-ink">{t("keys.chosenCount", { count: chosen.size })}</p>
+          <select
+            aria-label={t("keys.moveTargetLabel")}
+            className={control}
+            value={moveTarget}
+            onChange={(event) => setMoveTarget(event.target.value)}
+          >
+            <option value="">{t("keys.folderUngrouped")}</option>
+            {groups.map((group) => (
+              <option key={group} value={group}>
+                {group}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className={primaryAction}
+            onClick={() => void moveChosen(moveTarget === "" ? { kind: "ungrouped" } : { kind: "group", name: moveTarget })}
+          >
+            {t("keys.moveChosen")}
+          </button>
+          <button type="button" className={secondaryAction} onClick={() => setChosen(new Set())}>
+            {t("keys.clearChosen")}
+          </button>
+        </div>
+      )}
+      {moveOutcome === null ? null : (
+        <div role="status" className="rounded-lg border border-line bg-card p-3 text-sm">
+          <p className="text-ink">{t("keys.moveMoved", { count: moveOutcome.moved.length })}</p>
+          {moveOutcome.blocked.map((entry) => (
+            <p key={entry.path} className="text-danger">
+              {t("keys.moveBlocked", { path: entry.path, reason: entry.blockers.join(" / ") })}
+            </p>
+          ))}
+          {moveOutcome.failed.map((path) => (
+            <p key={path} className="text-danger">
+              {t("keys.moveFailed", { path })}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4 md:flex-row">
+      <FolderPane
+        rows={rows}
+        selected={folder}
+        dragging={dragging}
+        onSelect={(next) => {
+          setFolder(next);
+          setMoveOutcome(null);
+        }}
+        onDropInto={(target) => void moveChosen(target)}
+      />
+      <div className="min-w-0 grow overflow-x-auto rounded-xl border border-line bg-card">
       <table className="w-full min-w-[56rem] text-left text-sm">
         <caption className="sr-only">{t("keys.tableCaption")}</caption>
         <thead>
           <tr className={tableHeadRow}>
+            <th scope="col" className={`${tableHeadCell} w-8`}>
+              <span className="sr-only">{t("keys.colChoose")}</span>
+            </th>
             <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFile")}</th>
             <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colKind")}</th>
             <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colAlgorithm")}</th>
@@ -599,8 +696,43 @@ export function KeysScreen({
         </thead>
         <tbody>
           {visibleItems.map((item) => (
-            <tr key={item.id} className="border-b border-line align-top transition-colors last:border-b-0 hover:bg-select-fill">
-              <td className="py-3 pl-3 pr-3 font-mono text-xs">{item.relativePath}</td>
+            <tr
+              key={item.id}
+              className="border-b border-line align-top transition-colors last:border-b-0 hover:bg-select-fill"
+            >
+              <td className="py-3 pl-3">
+                {/* **一緒に動くものは、別々に選ばせない。** 秘密鍵を動かせば
+                    その公開鍵と証明書も付いていく（relocate がそうする）ので、
+                    ここで選べるのは relocate が名前を変えられるものだけである。 */}
+                {renameable(item, inventory.items) ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      aria-label={t("keys.chooseKey", { path: item.relativePath })}
+                      checked={chosen.has(item.id)}
+                      onChange={(event) => {
+                        const next = new Set(chosen);
+                        if (event.target.checked) next.add(item.id);
+                        else next.delete(item.id);
+                        setChosen(next);
+                      }}
+                    />
+                    {/* **掴む場所を決める。** 行ごと掴めるようにすると、文字を
+                        選ぼうとした指がそのまま鍵を運んでしまう。持てる場所が
+                        目に見えている方が、掴んでよいと分かる。 */}
+                    <span
+                      draggable
+                      aria-label={t("keys.dragKey", { path: item.relativePath })}
+                      onDragStart={(event) => beginDrag(event, item)}
+                      onDragEnd={() => setDragging(false)}
+                      className="cursor-grab select-none px-1 text-ink-faint"
+                    >
+                      ⠿
+                    </span>
+                  </div>
+                ) : null}
+              </td>
+              <td className="py-3 pr-3 font-mono text-xs">{item.relativePath}</td>
               <td className="py-2 pr-3">
                 {item.kind}
                 {item.certificate === undefined ? null : (
@@ -767,13 +899,14 @@ export function KeysScreen({
           ))}
           {visibleItems.length === 0 && (
             <tr>
-              <td colSpan={7} className="p-5 text-sm text-ink-muted">
+              <td colSpan={8} className="p-5 text-sm text-ink-muted">
                 {inventory.items.length === 0 ? t("keys.inventoryEmpty") : t("keys.noMatches")}
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      </div>
       </div>
 
       {managingPassphrase !== null && (
