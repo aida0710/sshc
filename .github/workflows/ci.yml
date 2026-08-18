@@ -371,12 +371,18 @@ jobs:
         # --with-deps が用意する Xvfb の中で、Chromium の残りと一緒に走らせる。
         run: xvfb-run --auto-servernum npm run e2e --prefix web
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
-        if: failure()
-        with:
-          name: playwright-report
-          path: web/playwright-report
-          retention-days: 7
+      # **成果物は上げない。上げられるものが無い。**
+      #
+      # reporter は list だけなので playwright-report は作られず、この step は
+      # 今まで何も上げていなかった——失敗したとき何かが残ると思わせるだけの
+      # 設定だった。
+      #
+      # **代わりに test-results を上げてはならない。** あそこには
+      # error-context.md が入り、それはページの写しである。この製品の e2e は
+      # 設計上ひとつの流れで秘密鍵を画面に出すので、成果物置き場はまさに
+      # それが忘れられる場所になる（playwright.config.ts が trace も video も
+      # screenshot も切っているのは同じ理由である）。診断は表明の文と
+      # サーバー自身の出力から行う。
 
   # **Windows でも同じスイートを走らせる。** ここが無いと、次に誰かが Unix の
   # 前提を書いた瞬間に静かに壊れる——実際、初めて実機で走らせたとき 8 件が
@@ -414,12 +420,18 @@ jobs:
       - name: Playwright
         run: npm run e2e --prefix web
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
-        if: failure()
-        with:
-          name: playwright-report-windows
-          path: web/playwright-report
-          retention-days: 7
+      # **成果物は上げない。上げられるものが無い。**
+      #
+      # reporter は list だけなので playwright-report は作られず、この step は
+      # 今まで何も上げていなかった——失敗したとき何かが残ると思わせるだけの
+      # 設定だった。
+      #
+      # **代わりに test-results を上げてはならない。** あそこには
+      # error-context.md が入り、それはページの写しである。この製品の e2e は
+      # 設計上ひとつの流れで秘密鍵を画面に出すので、成果物置き場はまさに
+      # それが忘れられる場所になる（playwright.config.ts が trace も video も
+      # screenshot も切っているのは同じ理由である）。診断は表明の文と
+      # サーバー自身の出力から行う。
 
   security:
     name: Dependency security
