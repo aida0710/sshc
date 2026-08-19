@@ -139,8 +139,8 @@ func TestEveryConfigMutationRequiresCSRFAndEveryResponseIsUncacheable(t *testing
 	}{
 		{"/api/v1/config/preview", application.EditRequest{Kind: application.EditFileRaw, Path: "config", Base: handlerConfig, Raw: handlerConfig}},
 		{"/api/v1/config/save", application.EditRequest{Kind: application.EditFileRaw, Path: "config", Base: handlerConfig, Raw: handlerConfig}},
-		{"/api/v1/history/restore", restoreRequest{TransactionID: "x", Path: "config"}},
-		{"/api/v1/history/recover", recoverRequest{TransactionID: "x", Action: "rollback"}},
+		{"/api/v1/history/restore", api.RestoreRequest{TransactionId: "x", Path: "config"}},
+		{"/api/v1/history/recover", api.RecoverRequest{TransactionId: "x", Action: "rollback"}},
 	}
 	for _, mutation := range mutations {
 		response := harness.call(t, http.MethodPost, mutation.target, mutation.body, true, false)
@@ -258,8 +258,8 @@ func TestErrorBodiesCarryLocationsNeverConfigurationText(t *testing.T) {
 		// 未知の host。
 		harness.call(t, http.MethodGet, "/api/v1/config/host?path=config&alias=absent", nil, true, true),
 		// 未知の transaction。
-		harness.call(t, http.MethodPost, "/api/v1/history/restore", restoreRequest{
-			TransactionID: "20260101T000000.000-aabbccdd", Path: "config",
+		harness.call(t, http.MethodPost, "/api/v1/history/restore", api.RestoreRequest{
+			TransactionId: "20260101T000000.000-aabbccdd", Path: "config",
 		}, true, true),
 	}
 	for index, response := range responses {
