@@ -108,10 +108,6 @@ func waitForHandoff(ctx context.Context, stateDir string) {
 	}
 }
 
-// sshFinder は ssh プログラムを解決する。このアプリケーションの他のすべての部分が
-// 使うのと同じ継ぎ目なので、「どの ssh か」への答えはひとつしかない。
-type sshFinder interface{ SSH() (string, error) }
-
 // runConnect は、生きているエンジンに接続材料を求め、**このプロセスの中で**
 // SSH を話す。
 //

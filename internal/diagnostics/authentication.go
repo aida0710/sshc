@@ -18,8 +18,6 @@ const (
 	MaxReportedOutput = 8 << 10
 	// DefaultAuthenticationTimeout は、認証テスト一回に上限を設ける。
 	DefaultAuthenticationTimeout = 20 * time.Second
-	// DefaultConnectTimeout は、接続そのものに掛ける上限である。
-	DefaultConnectTimeout = 8 * time.Second
 )
 
 // 認証テストの結果。

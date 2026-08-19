@@ -47,10 +47,6 @@ type FileSystem interface {
 	EvalSymlinks(path string) (string, error)
 }
 
-// nativeFileSystem は OS 固有のファイル操作をまとめるための印である。各操作の
-// 実装は build tag で分離し、共通の読み書き契約を OS の API 差分から切り離す。
-type nativeFileSystem struct{}
-
 // OSFileSystem は FileSystem のネイティブ OS 実装。
 type OSFileSystem struct{}
 

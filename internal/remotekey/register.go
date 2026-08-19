@@ -34,9 +34,6 @@ const (
 	// 登録の結果。
 	RegistrationAdded    = "added"
 	RegistrationExisting = "already_present"
-
-	// DefaultTimeout は、リモート操作一回に上限を設ける。
-	DefaultTimeout = 30 * time.Second
 )
 
 // Routine はリモートで走るプログラムの全体。呼び出し側の入力を一切含まない。
