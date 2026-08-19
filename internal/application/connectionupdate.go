@@ -403,7 +403,8 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 			baseline: diagnosticBaseline(graph), preview: SavePreview{Operation: "connection.update", Diffs: []FileDiff{}},
 		}
 		_, prepared.explicitIdentityFile = directIdentityFile(file, block)
-		_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(effective.Project(graph, request.Identity.Alias))
+		_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(
+			effective.Resolve(graph, request.Identity.Alias, s.localFacts()))
 		return prepared, false, s.verifyConnectionUpdateBase(absolute, request.Identity.Path, base, base)
 	}
 	if err := ApplyFieldEdits(file, block, edits); err != nil {
@@ -439,7 +440,8 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 		return planned{}, false, ErrHostNotFound
 	}
 	_, prepared.explicitIdentityFile = directIdentityFile(file, updatedBlock)
-	_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(effective.Project(after, request.Identity.Alias))
+	_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(
+		effective.Resolve(after, request.Identity.Alias, s.localFacts()))
 	return prepared, true, nil
 }
 

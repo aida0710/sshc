@@ -315,3 +315,77 @@ func TestAnOrdinaryVerifiedHostHasNothingToSay(t *testing.T) {
 		t.Errorf("hostName = %q", report.HostName)
 	}
 }
+
+// **Match の下に書かれた設定も、この報告に載らなければならない。**
+//
+// ここは長いあいだ effective.Project を使っていた。あの射影は Match ブロックの値を
+// 決して採らず、「接続中にしか分からない条件がある」という印を complexity として
+// 脇に置くだけである。ところがこの報告は complexity を一度も読まなかったので、
+// 下の設定に対して「保存してよい」と答えていた——そして保存されたパスワードは、
+// PasswordAuthentication no のせいで一度も提示されない。
+//
+// Match host は接続中の状態を要さない。Resolve はこれを評価するので、答えが出る。
+func TestPasswordAuthenticationOffInsideAMatchBlockStillBlocks(t *testing.T) {
+	service, workspace := newTestService(t)
+	entry := "Host guarded\n" +
+		"\tHostName 198.51.100.30\n" +
+		"\n" +
+		"Match host guarded\n" +
+		"\tPasswordAuthentication no\n"
+	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(entry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := service.PasswordEligibility("guarded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Storable {
+		t.Error("a host whose Match block refuses password authentication accepted one")
+	}
+	if !codesOf(report.Blockers)[BlockerPasswordAuthenticationOff] {
+		t.Errorf("blockers = %#v", report.Blockers)
+	}
+}
+
+// Match の下の HostName も同じように効く。**known_hosts を引く相手が変わる。**
+func TestHostNameInsideAMatchBlockReachesTheReport(t *testing.T) {
+	service, workspace := newTestService(t)
+	entry := "Host shifting\n" +
+		"\tPort 22\n" +
+		"\n" +
+		"Match host shifting\n" +
+		"\tHostName 198.51.100.31\n"
+	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(entry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := service.PasswordEligibility("shifting")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.HostName != "198.51.100.31" {
+		t.Errorf("HostName = %q, want the value the Match block sets", report.HostName)
+	}
+}
+
+// **誰も書いていない Port を、書かれた値として報告しない。**
+//
+// 解決器は hostname・user・port の 3 つに既定値を持つ。値の側（Resolution.Values）
+// から Port を読むと、設定に一行も無いのに 22 が載る——そして known_hosts は
+// `[host]:22` ではなく `host` の綴りで書かれるので、引く相手が変わる。
+func TestAnUnwrittenPortIsNotReported(t *testing.T) {
+	service, workspace := newTestService(t)
+	entry := "Host plain\n\tHostName 198.51.100.32\n"
+	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(entry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := service.PasswordEligibility("plain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Port != "" {
+		t.Errorf("Port = %q, want empty because the configuration does not set one", report.Port)
+	}
+}
