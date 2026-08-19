@@ -97,6 +97,49 @@ README の実装と食い違う記述のうち4件を直した。「Go 側でプ
 - **利用者の判断が要るもの**: §6 の9件（Android のビルドタグ、`internal/api` の契約の所有者、Electron 外殻、Windows の登録の担い手、`SSHC_ASKPASS_*` 防御の扱い、`internal/application` の位置づけ、`Run`/`Stream` の差、`ui/form` と `surface` の統合、テスト専用パッケージの命名）
 - **構造の大きな変更**: C13・C15・C17・C19・C24〜C28。いずれも L 規模で、S2 以降の段階に属する。C12（Capabilities）は実害6の範囲でテストによる強制に留めた
 
+## 0.8 第二段: 判断 9 件と構造の変更
+
+`docs/2026-08-19-design-decisions.md` に 9 件の判断を記録し、7 件を実装した。あわせて
+S2〜S5 の構造変更を進めた。**全 32 コミット、102 ファイル、+4035 / -2689 行。**
+
+### 構造の変更
+
+| id | 内容 | 結果 |
+|---|---|---|
+| C13 | 合成の根を `internal/app` に閉じる。`sshParts` と `CLIConnection` が同じ形の `Dialer` を別々に組んでいたのを畳み、`cmd/sshc` の一覧と TUI を `app.ReadConnections` 経由に寄せた | **TUI の表示と実接続が同じ解決器を通るようになった**（それまで TUI は `Project` 経由で Match を見落としていた） |
+| C15 | commit + ConflictError 変換の 4 実装を 1 つに | 4 つのうち 3 つは、衝突したパスが自分の計画した設定でないときも nil の base で報告を組み立てていた |
+| C17 | 検証規則を `internal/platform` から `internal/validate` へ。`application` の手書きの双子も統合 | `internal/platform` を import する本番ファイルが 29 → 15 |
+| C19 | HTTP 層と永続化層の間にサービス層を挟む | `internal/httpserver` から `storage`・`envelope`・`objectstore` の import が **0 に** |
+| C20 | 生成型を契約の正本に。ずれを検出する検査を追加 | 初回実行で 1 件検出（`TerminalSettings` の json タグ欠落。入力専用と判明） |
+| C24 | `storage.Manager.commit` を分割 | **387 行 → 184 行。** 3 つの並行スライスの添字対応を `journalPlan` として型に |
+| C25 | `EditKind` の 3 重 dispatch を表に。`service.go` を分割 | 1450 行 → 1010 行 + `plan.go` 454 行 |
+| C26 | `App.tsx` の 23 prop を 4 つの関心に | 葉のコンポーネントの API は不変（テストの巻き添えを避けた） |
+| C27 | `ConnectionsPage` の状態を 3 つの hook に | 画面直下の `useState` が 19 → 6 |
+| C28 | `KeysScreen` の状態をワークフローごとの hook に | 42 → 13。**`closeAgentForm` と `closeStoredPassphraseForm` が同じ 3 つを消していた**のを、共有物として明示 |
+
+### 機械検査として固定したもの（C30）
+
+- `sshclient.Dialer` を組み立てる本番ファイルはひとつ
+- `~/.ssh` を開くのも、トランザクションマネージャを作るのも `internal/app` だけ
+- engine の合成の根は必ず封をする
+- HTTP 層は永続化層を import しない
+- 生成型と実際に返している型の JSON フィールド名が一致する（32 対）
+- `app.Dependencies` の全項目について Android 側が選択を宣言している
+
+### 残したもの
+
+- **`ui/form` と `ui/surface` の統合**（判断 8）— 110 箇所の機械置換にあたって、`<a>` や `<label>` にクラスを当てている箇所の洗い出しが済んでいない
+- **`ProxyJump` のパスフレーズ開示**（判断 5 の未決部分）— 連鎖はプロセス内で辿るようになり、アカウントパスワードは連鎖ぶん渡している。パスフレーズだけを断る理由は無くなっているが、挙動を変える判断である
+- **`KeysScreen` の JSX 分割** — 1600 行の大半はそちら。状態は整理したが、ワークフローごとのコンポーネントには割っていない
+- **`internal/buildcontract` と `internal/acceptance` の住み分け**（判断 9 の未決部分）
+
+### 検証
+
+各段階で `go test ./...` を通し、最後に全スイートを再実行した。`gofmt` / `go vet` /
+`go test`（34 pkg）/ `-race` / クロスビルド 5 種 / web 677 テスト / `tsc` / desktop 41 /
+`make verify-generated` / `check:i18n` すべて通過。**32 コミットはいずれも単独でビルドが
+通る**（bisect 可能）。
+
 ## 1. 先に直すべき実害
 
 設計論より優先する。いずれも「テストは緑だが本番の挙動が違う」型。
