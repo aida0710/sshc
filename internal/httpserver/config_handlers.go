@@ -23,35 +23,15 @@ type ConfigHandlers struct {
 	Keys KeyService
 }
 
-type groupRenameRequest struct {
-	From string `json:"from"`
-	To   string `json:"to"`
-}
-
-type groupDeleteRequest struct {
-	Name string `json:"name"`
-	// Destination は接続の移動先となる group である。空にすると接続は
-	// connections ディレクトリ自体に移動し、ユーザーがどこかに配置するまで誰にも
-	// 読まれない。設定ファイルが削除されることは決してない。
-	Destination string `json:"destination"`
-}
-
+// historyList は、履歴の応答である。
+//
+// **生成型を使えない唯一の理由がここにある。** api.HistoryList が抱えるのは
+// api.HistoryEntry で、application.HistoryEntry とは JSON としては同じ形だが
+// Go の型としては別物である。詰め替えの関数を置くより、application の値をその
+// まま載せる方が、この 1 エンドポイントについては素直である。ずれていないことは
+// TestGeneratedContractMatchesTheTypesWeSerialise が見ている。
 type historyList struct {
 	Entries []application.HistoryEntry `json:"entries"`
-}
-
-type restoreRequest struct {
-	TransactionID string `json:"transactionId"`
-	Path          string `json:"path"`
-}
-
-type recoverRequest struct {
-	TransactionID string `json:"transactionId"`
-	Action        string `json:"action"`
-}
-
-type recoverResponse struct {
-	Status string `json:"status"`
 }
 
 // registerConfigRoutes は、各エンドポイントを Echo インスタンスに配線する。
@@ -132,7 +112,7 @@ func (h ConfigHandlers) Save(c *echo.Context) error {
 
 // RenameGroup は、group ディレクトリと、それを指すすべてのものをリネームする。
 func (h ConfigHandlers) RenameGroup(c *echo.Context) error {
-	var request groupRenameRequest
+	var request api.GroupRenameRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return serviceProblem(c, err)
 	}
@@ -154,7 +134,7 @@ func (h ConfigHandlers) RenameGroup(c *echo.Context) error {
 
 // DeleteGroup は、group を削除し、その接続を移動する。
 func (h ConfigHandlers) DeleteGroup(c *echo.Context) error {
-	var request groupDeleteRequest
+	var request api.GroupDeleteRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return serviceProblem(c, err)
 	}
@@ -162,7 +142,14 @@ func (h ConfigHandlers) DeleteGroup(c *echo.Context) error {
 	if err != nil {
 		return problem(c, http.StatusInternalServerError, "inventory_failed")
 	}
-	result, err := h.Service.DeleteGroup(inventory, request.Name, request.Destination)
+	// **Destination の空と未指定を分けない。** 契約では省略可能だが、どちらも
+	// 「connections ディレクトリ自体へ移す」という同じ意味である。設定ファイルが
+	// 削除されることは決してない。
+	destination := ""
+	if request.Destination != nil {
+		destination = *request.Destination
+	}
+	result, err := h.Service.DeleteGroup(inventory, request.Name, destination)
 	if err != nil {
 		return serviceProblem(c, err)
 	}
@@ -247,17 +234,17 @@ func (h ConfigHandlers) History(c *echo.Context) error {
 }
 
 func (h ConfigHandlers) Restore(c *echo.Context) error {
-	var request restoreRequest
+	var request api.RestoreRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return serviceProblem(c, err)
 	}
-	if err := validateIdentifier(request.TransactionID); err != nil {
+	if err := validateIdentifier(request.TransactionId); err != nil {
 		return serviceProblem(c, err)
 	}
 	if err := validatePathParameter(request.Path); err != nil {
 		return serviceProblem(c, err)
 	}
-	result, err := h.Service.Restore(request.TransactionID, request.Path)
+	result, err := h.Service.Restore(request.TransactionId, request.Path)
 	if err != nil {
 		return serviceProblem(c, err)
 	}
@@ -265,18 +252,18 @@ func (h ConfigHandlers) Restore(c *echo.Context) error {
 }
 
 func (h ConfigHandlers) Recover(c *echo.Context) error {
-	var request recoverRequest
+	var request api.RecoverRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return serviceProblem(c, err)
 	}
-	if err := validateIdentifier(request.TransactionID); err != nil {
+	if err := validateIdentifier(request.TransactionId); err != nil {
 		return serviceProblem(c, err)
 	}
 	if request.Action != "complete" && request.Action != "rollback" {
 		return serviceProblem(c, errInvalidEdit)
 	}
-	if err := h.Service.Recover(request.TransactionID, request.Action); err != nil {
+	if err := h.Service.Recover(request.TransactionId, request.Action); err != nil {
 		return serviceProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, recoverResponse{Status: "ok"})
+	return c.JSON(http.StatusOK, api.RecoverResponse{Status: "ok"})
 }
