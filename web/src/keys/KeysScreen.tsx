@@ -1,4 +1,13 @@
 import { useCallback, useEffect, useState, type DragEvent } from "react";
+import {
+  useAgentForm,
+  useGenerationForm,
+  useOrganiser,
+  usePassphraseForm,
+  useRelocateForm,
+  useStoredPassphraseForm,
+  useStoredPhrases,
+} from "./forms";
 import { RevealDialog } from "./RevealDialog";
 import { CopyButton } from "../ui/CopyButton";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -36,9 +45,7 @@ import {
   itemsInFolder,
   moveInto,
   shownItems,
-  type Folder,
   type ListFilter,
-  type MoveOutcome,
   type MoveTarget,
 } from "./organizer";
 
@@ -197,45 +204,65 @@ export function KeysScreen({
   const [inventory, setInventory] = useState<KeyInventoryResponse | null>(null);
   const [trash, setTrash] = useState<TrashListResponse | null>(null);
   const [variants, setVariants] = useState<KeyVariant[]>([]);
-  const [algorithm, setAlgorithm] = useState("ed25519");
-  const [fileName, setFileName] = useState("");
-  const [comment, setComment] = useState("");
-  const [passphrase, setPassphrase] = useState("");
-  const [unencrypted, setUnencrypted] = useState(false);
+  const {
+    algorithm, setAlgorithm,
+    fileName, setFileName,
+    comment, setComment,
+    passphrase, setPassphrase,
+    unencrypted, setUnencrypted,
+  } = useGenerationForm();
   const [terminalCommand, setTerminalCommand] = useState<string[] | null>(null);
   const [revealing, setRevealing] = useState<KeyItem | null>(null);
-  const [changingPassphrase, setChangingPassphrase] = useState<KeyItem | null>(null);
-  const [currentPassphrase, setCurrentPassphrase] = useState("");
-  const [newPassphrase, setNewPassphrase] = useState("");
-  const [removePassphrase, setRemovePassphrase] = useState(false);
-  const [registering, setRegistering] = useState<KeyItem | null>(null);
-  const [managingPassphrase, setManagingPassphrase] = useState<KeyItem | null>(null);
-  const [phrases, setPhrases] = useState<Credential[]>([]);
-  const [dedicatedPhrasePaths, setDedicatedPhrasePaths] = useState<string[]>([]);
-  const [chosenPhrase, setChosenPhrase] = useState("");
-  const [storedPhraseName, setStoredPhraseName] = useState("");
-  const [storedPhraseSecret, setStoredPhraseSecret] = useState("");
-  const [agentPassphrase, setAgentPassphrase] = useState("");
-  const [agentLifetime, setAgentLifetime] = useState(0);
+  // 保管庫のフレーズ一覧は、エージェント登録と割り当ての 2 つのフォームが共有する。
+  const storedPhrases = useStoredPhrases();
+  const {
+    phrases, setPhrases,
+    dedicatedPhrasePaths, setDedicatedPhrasePaths,
+    chosenPhrase, setChosenPhrase,
+  } = storedPhrases;
+  const {
+    changingPassphrase, setChangingPassphrase,
+    currentPassphrase, setCurrentPassphrase,
+    newPassphrase, setNewPassphrase,
+    removePassphrase, setRemovePassphrase,
+    close: closePassphraseForm,
+  } = usePassphraseForm();
+  const {
+    registering, setRegistering,
+    agentPassphrase, setAgentPassphrase,
+    agentLifetime, setAgentLifetime,
+    close: closeAgentForm,
+  } = useAgentForm(storedPhrases);
+  const {
+    managingPassphrase, setManagingPassphrase,
+    storedPhraseName, setStoredPhraseName,
+    storedPhraseSecret, setStoredPhraseSecret,
+    close: closeStoredPassphraseForm,
+  } = useStoredPassphraseForm(storedPhrases);
   const [publicKeyView, setPublicKeyView] = useState<{ relativePath: string; text: string } | null>(null);
-  const [relocating, setRelocating] = useState<KeyItem | null>(null);
-  const [newName, setNewName] = useState("");
-  const [newGroup, setNewGroup] = useState("");
   const [relocated, setRelocated] = useState<RelocateKeyResponse | null>(null);
-  const [createGroup, setCreateGroup] = useState("");
+  const {
+    relocating, setRelocating,
+    newName, setNewName,
+    newGroup, setNewGroup,
+    createGroup, setCreateGroup,
+    close: closeRelocateForm,
+  } = useRelocateForm();
   const [pendingPurge, setPendingPurge] = useState("");
   const [pendingTrash, setPendingTrash] = useState<KeyItem | null>(null);
   const [failure, setFailure] = useState("");
-  const [keyQuery, setKeyQuery] = useState("");
-  const [moreActionsFor, setMoreActionsFor] = useState("");
   // 整理の状態。folder は左で開いているもの、chosen は動かす対象、
   // dragging は掴んでいるかどうか（置き場を光らせてよいのはその間だけ）。
-  const [folder, setFolder] = useState<Folder>({ kind: "all" });
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
-  const [dragging, setDragging] = useState(false);
-  const [moveOutcome, setMoveOutcome] = useState<MoveOutcome | null>(null);
-  const [moveTarget, setMoveTarget] = useState("");
-  const [listFilter, setListFilter] = useState<ListFilter>("keys");
+  const {
+    folder, setFolder,
+    chosen, setChosen,
+    dragging, setDragging,
+    moveOutcome, setMoveOutcome,
+    moveTarget, setMoveTarget,
+    listFilter, setListFilter,
+    keyQuery, setKeyQuery,
+    moreActionsFor, setMoreActionsFor,
+  } = useOrganiser();
   const [generated, setGenerated] = useState<{
     private: GeneratedPrivateKeyHandoff;
     public: GeneratedPublicKeyHandoff;
@@ -302,12 +329,6 @@ export function KeysScreen({
     }
   }
 
-  function closePassphraseForm() {
-    setCurrentPassphrase("");
-    setNewPassphrase("");
-    setRemovePassphrase(false);
-    setChangingPassphrase(null);
-  }
 
   // パスフレーズは 1 回の送信の間だけコンポーネント状態にとどまり、
   // 成功時にも失敗時にもクリアされる。他のどこにも保存されることはない。
@@ -340,14 +361,6 @@ export function KeysScreen({
     }
   }
 
-  function closeAgentForm() {
-    setAgentPassphrase("");
-    setAgentLifetime(0);
-    setChosenPhrase("");
-    setPhrases([]);
-    setDedicatedPhrasePaths([]);
-    setRegistering(null);
-  }
 
   // 名前はフォームが開いたときに読み込まれ、それより前ではない。起動時には
   // 何も尋ねられず、一度も鍵を登録しない画面は vault に一切触れない。
@@ -380,14 +393,6 @@ export function KeysScreen({
     }
   }
 
-  function closeStoredPassphraseForm() {
-    setStoredPhraseName("");
-    setStoredPhraseSecret("");
-    setChosenPhrase("");
-    setPhrases([]);
-    setDedicatedPhrasePaths([]);
-    setManagingPassphrase(null);
-  }
 
   async function storeAndAssignPhrase(item: KeyItem) {
     if (storedPhraseName === "" || storedPhraseSecret === "") return;
@@ -491,11 +496,6 @@ export function KeysScreen({
     if (!chosen.has(item.id)) setChosen(new Set([item.id]));
   }
 
-  function closeRelocateForm() {
-    setNewName("");
-    setNewGroup("");
-    setRelocating(null);
-  }
 
   // ブロックされた relocation は、報告して忘れるべき失敗ではない:
   // サーバーは何も書き込まず理由を伝えたので、その理由は画面に残り、
