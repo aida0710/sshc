@@ -1301,6 +1301,13 @@ components:
         column: { type: integer }
         diagnostics: { type: array, items: { $ref: "#/components/schemas/Diagnostic" } }
         conflict: { $ref: "#/components/schemas/ConflictReport" }
+        blockers: { type: array, items: { type: string } }
+        # blockers は、断った理由を安定した code で並べる。
+        #
+        # **これは前から返っていた。** ただしここに書いていなかったので、
+        # additionalProperties: false に照らすと契約違反の本文であり、しかも
+        # 生成された型に入らないので **どのクライアントからも読めなかった**
+        # ——「なぜ断られたか」を出しているつもりで、誰にも届いていなかった。
     KeyReference:
       type: object
       additionalProperties: false
