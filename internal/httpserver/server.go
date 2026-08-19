@@ -371,12 +371,12 @@ func New(options Options) (*Server, error) {
 		Owner:           options.Owner,
 		Version:         options.Version,
 		ProtocolVersion: options.ProtocolVersion,
-		KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
+		KeyPassphraseTarget: func(alias string) (string, bool, error) {
 			if options.Config == nil || options.Keys == nil {
-				return "", "", "", "", false, nil
+				return "", false, nil
 			}
 			target, ok, err := options.Config.DirectKeyPassphraseTarget(alias, options.Keys.Inventory)
-			return target.RelativePath, target.PromptPath, target.ConfigSnapshot, target.Evidence, ok, err
+			return target.RelativePath, ok, err
 		},
 		Warnings:  options.ConnectWarnings,
 		Aliases:   options.ConnectAliases,

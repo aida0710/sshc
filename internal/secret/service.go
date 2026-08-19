@@ -23,9 +23,6 @@ var (
 	ErrAlreadyExists = errors.New("this workspace already has a password vault")
 	// ErrNoVault は、まだ何も作られていないことを報告する。
 	ErrNoVault = errors.New("this workspace has no password vault yet")
-	// ErrUnknownToken は、発行されていない、すでに使われた、期限が切れた、あるいは
-	// 別の alias に対して発行された askpass トークンを報告する。
-	ErrUnknownToken = errors.New("that askpass token is not valid for this request")
 	// ErrNoPassword は、その alias に何も保存されていないことを報告する。
 	ErrNoPassword = errors.New("no password is stored for that host")
 	// ErrNoPasswordMutation は、要求が vault の意味上の状態を変えないことを報告する。
@@ -71,13 +68,6 @@ type ConnectionSecretsMutation struct {
 	Password      *PasswordMutation
 	KeyPassphrase *KeyPassphraseMutation
 }
-
-// TokenTTL は、askpass トークンが使える時間。
-//
-// セッションのアクショントークンと同じ 2 分であり、理由も同じである。これは
-// ユーザーがボタンを押してから OpenSSH がパスワードのプロンプトに到達するまでの
-// 間隔であって、誰かが計画を立てられるようなウィンドウではない。
-const TokenTTL = 2 * time.Minute
 
 // IdleTimeout は、開いた vault が使われないまま生き続ける時間。
 //
