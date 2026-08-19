@@ -24,7 +24,7 @@ func TestAGroupNameCannotStartWithADash(t *testing.T) {
 // 予約語は、OpenSSH とこのアプリケーションが ~/.ssh の中で既に意味を与えている
 // 名前である。**画面にはこのうち 6 つしか無かった。**
 func TestEveryReservedNameIsRefused(t *testing.T) {
-	for _, name := range validate.ReservedGroupNames {
+	for _, name := range validate.ReservedNames {
 		if validate.GroupName(name) == nil {
 			t.Errorf("the reserved name %q was accepted", name)
 		}
@@ -47,6 +47,19 @@ func TestThePatternsStayInTheSharedSubset(t *testing.T) {
 			if strings.Contains(pattern, forbidden) {
 				t.Errorf("%s pattern uses %q, which Go and JavaScript do not read alike", name, forbidden)
 			}
+		}
+	}
+}
+
+// **鍵のファイル名にも同じ一覧が効く。**
+//
+// どちらも ~/.ssh の直下にその綴りを作る操作である。`keys` という名前の鍵は、あとで
+// グループを作るときに要る `keys/` と同じ場所を取り合う——一覧が 2 つあった間、
+// 鍵の側にはその 2 つが無かった。
+func TestTheReservedListCoversTheDirectoriesThisApplicationOwns(t *testing.T) {
+	for _, name := range []string{"keys", "connections"} {
+		if !validate.Reserved(name) {
+			t.Errorf("%q is a directory this application creates under ~/.ssh, but it is not reserved", name)
 		}
 	}
 }

@@ -6,7 +6,7 @@ import {
   maxGroupSegmentBytes,
   maxGroupSegments,
   maxHostnameLength,
-  reservedGroupNames,
+  reservedNames,
 } from "./generated";
 
 // ここにあるのは、サーバーと同じ答えを出したい判断である。
@@ -32,7 +32,9 @@ function byteLength(value: string): number {
 export function isValidGroupSegment(segment: string): boolean {
   if (byteLength(segment) > maxGroupSegmentBytes) return false;
   if (!groupSegmentPattern.test(segment)) return false;
-  return !reservedGroupNames.has(segment.toLowerCase());
+  // **鍵のファイル名にも同じ一覧が効く。** どちらも ~/.ssh の直下にその綴りを
+  // 作る操作である。
+  return !reservedNames.has(segment.toLowerCase());
 }
 
 export function isValidGroupName(name: string): boolean {
