@@ -70,6 +70,24 @@ async function sameContents(fs, source, destination) {
   return Buffer.compare(a, b) === 0;
 }
 
+// pathNote は、置いた場所が PATH に載っていないなら、そう言う文を返す。
+//
+// **リンクを張っただけでは `sshc` と打てるようにならない。** macOS の既定の PATH に
+// `~/.local/bin` は無く、Debian 系の `~/.profile` がそれを足すのは**ログインの時点で
+// そのディレクトリが在ったときだけ**である——初回はこの外殻がいま作ったのだから、
+// 在らなかった。`make install` は同じことを note として言っており、こちらだけが
+// 黙っていた。
+//
+// **PATH を自分で確かめない。** GUI から起きたアプリが持つ PATH は launchd や
+// デスクトップ環境が渡したものであって、利用者がシェルで見るものではない。
+// 確かめられないことを確かめたふりをするより、置いた場所を名指しする。
+function pathNote(publicTarget) {
+  return (
+    `The sshc command was installed at ${publicTarget}. ` +
+    `Make sure ${dirname(publicTarget)} is on your PATH, then open a new terminal to run "sshc".`
+  );
+}
+
 /**
  * installManagedCLI は、束の中の CLI を安定した場所へ写し、公開の名前をそこへ
  * 向ける。
@@ -78,6 +96,9 @@ async function sameContents(fs, source, destination) {
  * 何を置くかは利用者の決めたことである——`make install` で入れた実体かも
  * しれないし、別の管理下にあるものかもしれない。断りなく置き換えるのではなく、
  * 何がどこにあるかを名指しして返す。
+ *
+ * note は、公開の名前を**今回作ったとき**にだけ返る。毎回の起動で出すものでは
+ * ない——既に PATH を整えた人に、同じ案内を繰り返さない。
  */
 async function installManagedCLI({
   source,
@@ -95,6 +116,7 @@ async function installManagedCLI({
       copied: false,
       linked: false,
       warning: null,
+      note: null,
     };
   }
 
@@ -106,7 +128,13 @@ async function installManagedCLI({
   }
 
   const linked = await pointPublicName(fs, publicTarget, managed);
-  return { managed, copied, linked: linked.linked, warning: linked.warning };
+  return {
+    managed,
+    copied,
+    linked: linked.linked,
+    warning: linked.warning,
+    note: linked.linked ? pathNote(publicTarget) : null,
+  };
 }
 
 // pointPublicName は、公開の名前を管理下の実体へ向ける。既に他人のものが
@@ -150,6 +178,7 @@ async function pointPublicName(fs, path, managed) {
 
 module.exports = {
   installManagedCLI,
+  pathNote,
   managedPath,
   publicPath,
   atomicReplace,
