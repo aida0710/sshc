@@ -18,14 +18,32 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const here = dirname(fileURLToPath(import.meta.url));
+// **一つ上が外殻の根である。** TypeScript の出力は out/ に入るので、走って
+// いるのは out/icon.mjs である。図の正本 (build/*.svg) はその一つ上にある。
+const here = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Playwright の型は持たない（依存を入れていないので当然である）。**使う分だけを
+// 書く。** ここに並んでいるものが、この道具が Playwright に頼っている全部である。
+type BakerPage = {
+  setContent(html: string): Promise<void>;
+  screenshot(options: { omitBackground: boolean }): Promise<Uint8Array>;
+  close(): Promise<void>;
+};
+
+type Baker = {
+  newPage(options: {
+    viewport: { width: number; height: number };
+    deviceScaleFactor: number;
+  }): Promise<BakerPage>;
+  close(): Promise<void>;
+};
 
 // Playwright は web の依存である。**外殻に同じものを入れ直さない**——
 // 焼くのは開発のときだけであり、束には入らない。
 const require = createRequire(import.meta.url);
 const { chromium } = require(
   require.resolve("playwright", { paths: [join(here, "..", "web", "node_modules")] }),
-);
+) as { chromium: { launch(): Promise<Baker> } };
 
 /**
  * bake は 1 枚の SVG を、指定した正方形の寸法の PNG として書く。
@@ -33,7 +51,12 @@ const { chromium } = require(
  * **browser は呼び出し元と共有する。** 起動そのものが重く、焼くたびに
  * 起こし直す理由が無い。
  */
-async function bake(browser, source, target, size) {
+async function bake(
+  browser: Baker,
+  source: string,
+  target: string,
+  size: number,
+): Promise<void> {
   const svg = await readFile(source, "utf8");
   const page = await browser.newPage({
     viewport: { width: size, height: size },

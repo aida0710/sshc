@@ -1,8 +1,6 @@
-"use strict";
-
-const { test } = require("node:test");
-const assert = require("node:assert");
-const { parseEntrance } = require("./entrance");
+import { test } from "node:test";
+import assert from "node:assert";
+import { parseEntrance } from "./entrance.js";
 
 // **エンジンは入口を 1 行で書き出す。** 起こした本人だけがそのパイプを持つ。
 test("takes the entrance out of what the engine printed", () => {

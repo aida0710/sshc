@@ -19,6 +19,8 @@
 # デスクトップの外殻。束は作るたびに変わるので追跡しない。
 desktop/node_modules/
 desktop/dist/
+# tsc の出力。electron-builder の dist/ とは別物である。
+desktop/out/
 desktop/resources/
 /android/app/libs/
 /android/.gradle/

@@ -1,7 +1,6 @@
-"use strict";
-
-const { Menu, Tray, nativeImage } = require("electron");
-const { join } = require("node:path");
+import { Menu, Tray, nativeImage } from "electron";
+import { resource } from "./paths.js";
+import type { EngineStatus } from "./lifecycle.js";
 
 /**
  * installTray は、メニューバーに項目をひとつ置く。
@@ -11,8 +10,16 @@ const { join } = require("node:path");
  * 見えないまま開かない」と言っている以上、エンジン自身がその規則の外に居ては
  * ならない。
  */
-function installTray({ onOpen, onQuit, status }) {
-  const image = nativeImage.createFromPath(join(__dirname, "build", "trayTemplate.png"));
+export function installTray({
+  onOpen,
+  onQuit,
+  status,
+}: {
+  onOpen: () => unknown;
+  onQuit: () => unknown;
+  status: () => Promise<EngineStatus>;
+}): Tray {
+  const image = nativeImage.createFromPath(resource("build", "trayTemplate.png"));
   image.setTemplateImage(true);
   const tray = new Tray(image);
   tray.setToolTip("sshc");
@@ -42,5 +49,3 @@ function installTray({ onOpen, onQuit, status }) {
   tray.on("right-click", show);
   return tray;
 }
-
-module.exports = { installTray };

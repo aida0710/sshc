@@ -1,16 +1,14 @@
-"use strict";
-
-const promises = require("node:fs/promises");
-const { join, dirname, isAbsolute } = require("node:path");
-const { homedir } = require("node:os");
-const { atomicReplace } = require("./install-cli");
+import * as promises from "node:fs/promises";
+import { join, dirname, isAbsolute } from "node:path";
+import { homedir } from "node:os";
+import { atomicReplace, type FileSystem } from "./install-cli.js";
 
 // descriptorPath は、外殻が自分の居場所を書き残す先である。
 //
 // **Go 側の cmd/sshc/launch_linux.go が読む唯一の場所である。** 名前も形も
 // あちらと対であり、片方だけを変えると、端末で `sshc` と打った人は起こし方を
 // 失う。
-function descriptorPath() {
+export function descriptorPath(): string {
   return join(homedir(), ".ssh", "sshc", "desktop.json");
 }
 
@@ -24,13 +22,19 @@ function descriptorPath() {
  * **相対パスは書かない。** 書けば、読んだ側にとって意味が作業ディレクトリで
  * 変わる——起こすものが、どこで打ったかで変わってはならない。
  */
-async function recordLinuxLauncher({
-  appImage = process.env.APPIMAGE,
+export async function recordLinuxLauncher({
+  appImage = process.env["APPIMAGE"],
   descriptor = descriptorPath(),
   fs = promises,
   platform = process.platform,
   packaged = true,
-}) {
+}: {
+  appImage?: string | undefined;
+  descriptor?: string;
+  fs?: FileSystem;
+  platform?: NodeJS.Platform | string;
+  packaged?: boolean;
+}): Promise<{ recorded: boolean; reason: string }> {
   if (platform !== "linux") {
     return { recorded: false, reason: "only Linux is launched from a path" };
   }
@@ -57,5 +61,3 @@ async function recordLinuxLauncher({
   );
   return { recorded: true, reason: "" };
 }
-
-module.exports = { recordLinuxLauncher, descriptorPath };

@@ -120,7 +120,7 @@ icons:
 #
 # **だから install を通す**——理由は端末の側にある。`sshc` と打った人が走らせる
 # のは `~/.local/bin/sshc` であって、この checkout の bin/sshc ではない。外殻は
-# 起動のたびに install-cli を試すが、`desktop/install-cli.js` はそこに自分が
+# 起動のたびに install-cli を試すが、`desktop/install-cli.ts` はそこに自分が
 # 張ったリンク以外のもの（`make install` が置いた実体など）があるなら触らない
 # ——一度でも `make install` を通した機械では、画面だけが新しく、端末は古い版を
 # 走らせ続ける。install-binary がそこを入れ替える。

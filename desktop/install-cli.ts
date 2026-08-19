@@ -1,20 +1,41 @@
-"use strict";
+import * as promises from "node:fs/promises";
+import { join, dirname } from "node:path";
+import { homedir } from "node:os";
 
-const promises = require("node:fs/promises");
-const { join, dirname } = require("node:path");
-const { homedir } = require("node:os");
+// FileSystem は、この module が要る分の fs である。
+//
+// **偽物を受け取るための型ではない。** 今日この引数へ渡されるのは常に本物の
+// node:fs/promises であり、テストも一時ディレクトリを作って本物を使う——
+// 実体を置き換える・リンクを張る・fsync するという仕事は、偽の fs で確かめても
+// 何も確かめたことにならないからである。引数として開いているのは、置き場所を
+// テストが差し替えられるようにするためである。
+export type FileSystem = typeof promises;
+
+// InstallResult は、端末側の入口を揃えた結果である。
+//
+// **出すかどうかを決めるのは呼び出し側だが、決められるだけの材料をここが渡す。**
+export type InstallResult = {
+  managed: string | null;
+  copied: boolean;
+  linked: boolean;
+  warning: string | null;
+  note: string | null;
+  repeated: boolean;
+};
+
+type LinkResult = { linked: boolean; warning: string | null };
 
 // managedPath は、外殻が面倒を見る実体の置き場である。
 //
 // **束の中を指してはならない。** AppImage の中身は一時マウントで、アプリを
 // 閉じれば消える——そこへ張ったリンクは、次に `sshc` と打った人には壊れた
 // リンクとしてしか見えない。だから束から出して、ここへ写す。
-function managedPath() {
+export function managedPath(): string {
   return join(homedir(), ".local", "share", "sshc", "bin", "sshc");
 }
 
 // publicPath は、`sshc` と打ったときに走ってほしいものの場所である。
-function publicPath() {
+export function publicPath(): string {
   return join(homedir(), ".local", "bin", "sshc");
 }
 
@@ -23,7 +44,12 @@ function publicPath() {
 // **半分書けたものがその名前を持つ瞬間を作らない。** 実行される実体であれば、
 // その瞬間に起動した人は壊れたファイルを実行する。同じディレクトリへ書いて
 // から rename するので、rename は境界を跨がない。
-async function atomicReplace(fs, path, contents, mode) {
+export async function atomicReplace(
+  fs: FileSystem,
+  path: string,
+  contents: string | Uint8Array,
+  mode: number,
+): Promise<void> {
   const temporary = `${path}.${process.pid}.tmp`;
   const handle = await fs.open(temporary, "w", mode);
   try {
@@ -39,7 +65,7 @@ async function atomicReplace(fs, path, contents, mode) {
 }
 
 // syncDirectory は、rename そのものをディスクへ届ける。できない OS では黙る。
-async function syncDirectory(fs, path) {
+async function syncDirectory(fs: FileSystem, path: string): Promise<void> {
   try {
     const handle = await fs.open(path, "r");
     try {
@@ -57,7 +83,11 @@ async function syncDirectory(fs, path) {
 //
 // **毎回書き直さない。** 起動のたびに実体を置き換えれば、そのとき走っている
 // `sshc` の inode が毎回入れ替わる。大きさが違えば読むまでもない。
-async function sameContents(fs, source, destination) {
+async function sameContents(
+  fs: FileSystem,
+  source: string,
+  destination: string,
+): Promise<boolean> {
   const [left, right] = await Promise.all([
     fs.stat(source),
     fs.stat(destination).catch(() => null),
@@ -74,7 +104,7 @@ async function sameContents(fs, source, destination) {
 //
 // **管理下の実体の隣に置く。** そこはこのアプリが持っているディレクトリで、公開の
 // 名前と違って利用者の持ち物ではない。
-function noticePath(managed) {
+function noticePath(managed: string): string {
   return join(dirname(managed), ".last-notice");
 }
 
@@ -84,7 +114,11 @@ function noticePath(managed) {
 // のは、利用者がそう決めた結果であって、直るのを待つ障害ではない——それを毎回
 // モーダルで出すのは、閉じ方を覚えさせるだけである。状況が変われば文も変わるので、
 // 文そのものを覚えておけば足りる。
-async function alreadyTold(fs, managed, message) {
+async function alreadyTold(
+  fs: FileSystem,
+  managed: string,
+  message: string,
+): Promise<boolean> {
   const path = noticePath(managed);
   const previous = await fs.readFile(path, "utf8").catch(() => null);
   if (previous === message) return true;
@@ -104,7 +138,7 @@ async function alreadyTold(fs, managed, message) {
 // **PATH を自分で確かめない。** GUI から起きたアプリが持つ PATH は launchd や
 // デスクトップ環境が渡したものであって、利用者がシェルで見るものではない。
 // 確かめられないことを確かめたふりをするより、置いた場所を名指しする。
-function pathNote(publicTarget) {
+export function pathNote(publicTarget: string): string {
   return (
     `The sshc command was installed at ${publicTarget}. ` +
     `Make sure ${dirname(publicTarget)} is on your PATH, then open a new terminal to run "sshc".`
@@ -123,13 +157,19 @@ function pathNote(publicTarget) {
  * note は、公開の名前を**今回作ったとき**にだけ返る。毎回の起動で出すものでは
  * ない——既に PATH を整えた人に、同じ案内を繰り返さない。
  */
-async function installManagedCLI({
+export async function installManagedCLI({
   source,
   managed = managedPath(),
   public: publicTarget = publicPath(),
   fs = promises,
   platform = process.platform,
-}) {
+}: {
+  source: string;
+  managed?: string;
+  public?: string;
+  fs?: FileSystem;
+  platform?: NodeJS.Platform | string;
+}): Promise<InstallResult> {
   // **Windows では、コマンドラインを通すのはインストーラである。**
   // symlink は開発者モードか管理者権限が要り、`~/.local/bin` は PATH に
   // 載っていない。載せるのは NSIS が書く user PATH であって、この外殻ではない。
@@ -170,9 +210,15 @@ async function installManagedCLI({
 
 // pointPublicName は、公開の名前を管理下の実体へ向ける。既に他人のものが
 // そこに居るなら、向けずにその事実を返す。
-async function pointPublicName(fs, path, managed) {
-  const occupant = await fs.lstat(path).catch((error) => {
-    if (error.code === "ENOENT") return null;
+async function pointPublicName(
+  fs: FileSystem,
+  path: string,
+  managed: string,
+): Promise<LinkResult> {
+  const occupant = await fs.lstat(path).catch((error: unknown) => {
+    // **ENOENT だけを飲む。** 権限で読めないのは「居ない」ではない——
+    // それを居ないと読むと、読めない相手の上に symlink を張りに行く。
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   });
 
@@ -200,17 +246,12 @@ async function pointPublicName(fs, path, managed) {
     await fs.symlink(managed, path);
     return { linked: true, warning: null };
   } catch (error) {
+    // **Error とは限らない。** throw されるものに制約は無く、文字列が飛んで
+    // くれば code も message も無い——そのまま綴ると理由が「undefined」になる。
+    const failure = error as NodeJS.ErrnoException;
     return {
       linked: false,
-      warning: `${path} could not be created (${String(error.code ?? error.message)}).`,
+      warning: `${path} could not be created (${failure.code ?? failure.message ?? String(error)}).`,
     };
   }
 }
-
-module.exports = {
-  installManagedCLI,
-  pathNote,
-  managedPath,
-  publicPath,
-  atomicReplace,
-};

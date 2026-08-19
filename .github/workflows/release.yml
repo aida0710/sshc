@@ -47,7 +47,7 @@ jobs:
         run: make release-cli-current
 
       # 配布署名はしていない。**それでも束は自分自身と辻褄が合っていなければ
-      # ならない** ので、desktop/adhoc.js が ad-hoc 署名を付け、下の smoke が
+      # ならない** ので、desktop/adhoc.ts が ad-hoc 署名を付け、下の smoke が
       # それを検査する。利用者が初回に通る手順は docs/release-install.md にあり、
       # リリースの本文はそこから作られる。
       # **一行で足りる。** この的が npm install も web のビルドも、束ごとの CLI も

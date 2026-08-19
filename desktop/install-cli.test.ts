@@ -1,8 +1,6 @@
-"use strict";
-
-const assert = require("node:assert/strict");
-const { test } = require("node:test");
-const {
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import {
   mkdtemp,
   mkdir,
   writeFile,
@@ -12,10 +10,10 @@ const {
   lstat,
   readlink,
   stat,
-} = require("node:fs/promises");
-const { join } = require("node:path");
-const { tmpdir } = require("node:os");
-const { installManagedCLI } = require("./install-cli");
+} from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { installManagedCLI } from "./install-cli.js";
 
 /** workspace は、束・管理下・公開の三つの場所を持つ一時の家を作る。 */
 async function workspace() {
@@ -101,7 +99,7 @@ test("a changed CLI replaces the managed copy", async () => {
 // **そこに何を置くかは利用者の決めたことである。** `make install` で入れた
 // 実体を、断りなく symlink へ変えない。
 test("an occupied public name is left alone and named in a warning", async () => {
-  for (const [name, place] of [
+  const occupants: [string, (path: string) => Promise<void>][] = [
     [
       "a real file",
       async (path) => {
@@ -120,7 +118,8 @@ test("an occupied public name is left alone and named in a warning", async () =>
         await symlink("/opt/gone/sshc", path);
       },
     ],
-  ]) {
+  ];
+  for (const [name, place] of occupants) {
     const paths = await workspace();
     await mkdir(join(paths.home, ".local", "bin"), { recursive: true });
     await place(paths.public);
@@ -182,6 +181,7 @@ test("the warning carries nothing but paths and an instruction", async () => {
 
   const { warning } = await installManagedCLI({ ...paths, ...linux });
 
+  if (warning === null) assert.fail("an occupied public name produced no warning");
   for (const secret of ["http://127.0.0.1", "token", "vault", "unlock"]) {
     assert.ok(
       !warning.toLowerCase().includes(secret),

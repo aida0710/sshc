@@ -1,0 +1,26 @@
+{
+  // 出力は out/ である。**dist/ は electron-builder のものなので、そこへは書かない。**
+  // 束を作る前に tsc が走るので、同じ名前を使うと片方がもう片方を消す。
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "node16",
+    "moduleResolution": "node16",
+    "rootDir": ".",
+    "outDir": "out",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+    // 束から出た stderr の 1 行が .ts の行を指すようにする。**利用者の機械で
+    // installer が転んだときに読むのはその 1 行だけである。**
+    "sourceMap": true,
+    "declaration": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": false,
+    // Electron 自身が electron.d.ts を同梱している。型のために依存は要らない。
+    "types": ["node"]
+  },
+  "include": ["*.ts", "*.mts"]
+}

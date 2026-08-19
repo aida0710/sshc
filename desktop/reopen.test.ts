@@ -1,12 +1,10 @@
-"use strict";
+import { EventEmitter } from "node:events";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { installWindowReopener } from "./reopen.js";
 
-const { EventEmitter } = require("node:events");
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const { installWindowReopener } = require("./reopen");
-
-function windowRecorder({ minimized = false } = {}) {
-  const calls = [];
+function windowRecorder({ minimized = false }: { minimized?: boolean } = {}) {
+  const calls: string[] = [];
   return {
     calls,
     window: {
@@ -25,7 +23,7 @@ test("a second launch during startup restores and focuses the first window once 
     app,
     getWindows: () => [existing.window],
     createWindow: async () => assert.fail("must reuse the existing window"),
-    showFailure: assert.fail,
+    showFailure: (error: unknown) => assert.fail(String(error)),
   });
 
   app.emit("second-instance");
@@ -42,7 +40,7 @@ test("activation shows and focuses an existing window without restoring a normal
     app,
     getWindows: () => [existing.window],
     createWindow: async () => assert.fail("must reuse the existing window"),
-    showFailure: assert.fail,
+    showFailure: (error: unknown) => assert.fail(String(error)),
   });
   await reopener.start();
 
@@ -54,8 +52,10 @@ test("activation shows and focuses an existing window without restoring a normal
 
 test("concurrent reopen requests create at most one window", async () => {
   const app = new EventEmitter();
-  let release;
-  const opened = new Promise((resolve) => { release = resolve; });
+  let release: (() => void) | undefined;
+  const opened = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   let creations = 0;
   const reopener = installWindowReopener({
     app,
@@ -64,7 +64,7 @@ test("concurrent reopen requests create at most one window", async () => {
       creations += 1;
       await opened;
     },
-    showFailure: assert.fail,
+    showFailure: (error: unknown) => assert.fail(String(error)),
   });
   await reopener.start();
 
@@ -73,7 +73,7 @@ test("concurrent reopen requests create at most one window", async () => {
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(creations, 1);
 
-  release();
+  release?.();
   await Promise.all([first, second]);
   assert.equal(creations, 1);
 });
@@ -81,12 +81,12 @@ test("concurrent reopen requests create at most one window", async () => {
 test("a failure to open another window is reported without rejecting the event handler", async () => {
   const app = new EventEmitter();
   const failure = new Error("no entrance");
-  const reported = [];
+  const reported: unknown[] = [];
   const reopener = installWindowReopener({
     app,
     getWindows: () => [],
     createWindow: async () => { throw failure; },
-    showFailure: (error) => reported.push(error),
+    showFailure: (error: unknown) => reported.push(error),
   });
   await reopener.start();
 

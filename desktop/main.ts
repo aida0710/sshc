@@ -1,27 +1,31 @@
-"use strict";
-
-const {
+import {
   app,
   BrowserWindow,
   Menu,
   nativeImage,
   shell,
   dialog,
-} = require("electron");
-const { execFile, spawn } = require("node:child_process");
-const { join } = require("node:path");
-const { existsSync } = require("node:fs");
-const { installManagedCLI } = require("./install-cli");
-const { recordLinuxLauncher } = require("./launcher");
-const { engineBinary, managesItsOwnCLI } = require("./installer");
-const { parseEntrance } = require("./entrance");
-const {
+  type MenuItemConstructorOptions,
+  type NativeImage,
+  type Tray,
+} from "electron";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { installManagedCLI } from "./install-cli.js";
+import { recordLinuxLauncher } from "./launcher.js";
+import { engineBinary, managesItsOwnCLI } from "./installer.js";
+import { parseEntrance } from "./entrance.js";
+import {
   spawnEngine,
   stopOwnedEngine,
   shouldQuitAfterLastWindow,
-} = require("./lifecycle");
-const { installTray } = require("./tray");
-const { installWindowReopener } = require("./reopen");
+  parseEngineStatus,
+  type EngineStatus,
+} from "./lifecycle.js";
+import { repositoryBinary, resource } from "./paths.js";
+import { installTray } from "./tray.js";
+import { installWindowReopener } from "./reopen.js";
 
 // 名乗る名前をここで決める。
 //
@@ -68,13 +72,13 @@ const engineBusy = 3;
  * **実体は 1 つである。** 開発中はリポジトリの bin/ を使う——二つのコピーが
  * あると、どちらが走っているのか分からなくなる。
  */
-function binary() {
+function binary(): string {
   const bundled = engineBinary({
     platform: process.platform,
     resourcesPath: process.resourcesPath,
   });
   if (existsSync(bundled)) return bundled;
-  return join(__dirname, "..", "bin", "sshc");
+  return repositoryBinary();
 }
 
 /**
@@ -83,8 +87,8 @@ function binary() {
  * **argv を直接渡す。** シェルは間に一度も入らない——このアプリケーションが
  * Go 側でずっと守ってきた規則であり、外殻でそれを崩さない。
  */
-function run(args) {
-  return new Promise((resolve, reject) => {
+function run(args: readonly string[]): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     execFile(
       binary(),
       args,
@@ -111,24 +115,24 @@ function run(args) {
  * 叩いて尋ねる。自分では handoff を読まない。メニューバーと
  * before-quit の本数、両方がここを通る。
  */
-function status() {
-  return run(["status"]).then((line) => JSON.parse(line));
+function status(): Promise<EngineStatus> {
+  return run(["status"]).then(parseEngineStatus);
 }
 
 // engine は、このアプリが起こしたエンジンひとつである。
 //
 // **detach しない。** 親と一緒に死ぬことが、このアプリケーションが
 // 「終了すれば全部止まる」と言えることの実装そのものである。
-let engine = null;
+let engine: ChildProcess | null = null;
 
 // tray は、メニューバーに置いた項目ひとつである。
-let tray = null;
+let tray: Tray | null = null;
 
 /**
  * entrance は、エンジンを起こし、入口の URL を返す。
  */
-function entrance() {
-  return new Promise((resolve, reject) => {
+function entrance(): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     // **engine を渡す。** 他人のエンジンの入口を受け取ると、窓は開くのに
     // Cmd+Q でそのエンジンが残る——このアプリが「終了すれば全部止まる」と
     // 言えなくなる。あちらは入口を出さずに engineBusy で終わる。
@@ -144,14 +148,21 @@ function entrance() {
       () => settle(new Error("the engine printed no entrance within 20s")),
       20_000,
     );
-    const settle = (error, url) => {
+    const settle = (error: Error | null, url?: string) => {
       settled = true;
       clearTimeout(timer);
-      if (error) reject(error);
-      else resolve(url);
+      if (error !== null) reject(error);
+      else resolve(url as string);
     };
 
-    child.stdout.on("data", (chunk) => {
+    // **stdout が無いことは、入口が来ないことである。** engineSpawnOptions は
+    // 必ずパイプを渡すので今日ここは通らないが、渡し忘れれば窓は永久に開かず、
+    // 20 秒の期限だけが理由を出す——そのときに何が起きたか名指しできる方がよい。
+    if (child.stdout === null) {
+      settle(new Error("the engine was started without a readable stdout"));
+      return;
+    }
+    child.stdout.on("data", (chunk: Buffer | string) => {
       // **入口の 1 行を読んだあとは溜めない。** 溜め続ければ、エンジンが
       // 標準出力へ書くだけ buffered が伸びる。listener は残すので、パイプは
       // 読まれ続けて埋まらない。
@@ -160,8 +171,8 @@ function entrance() {
       const url = parseEntrance(buffered);
       if (url !== null) settle(null, url);
     });
-    child.on("error", (error) => settle(error));
-    child.on("exit", (code) => {
+    child.on("error", (error: Error) => settle(error));
+    child.on("exit", (code: number | null) => {
       // **settled を先に見る。** 今日、engineBusy（3）を出す場所はツリー全体で
       // 1 箇所だけで、それは入口を印字するより前にあるので、settled が真の
       // ときに code === engineBusy になることは今日は起きない——判定の
@@ -214,11 +225,16 @@ function entrance() {
 /**
  * openWindow はウィンドウをひとつ開き、その URL を読み込む。
  */
-function openWindow(url) {
+function openWindow(url: string): BrowserWindow {
   // **窓を開くたびに Dock へ戻す。** 窓が無いあいだは隠している
   // （window-all-closed）——ここで戻さないと、開き直しても Dock に
   // 出てこない。
   if (app.dock !== undefined) app.dock.show();
+
+  // **一度だけ読む。** かつてここは icon() を二度呼んでいた——判定に一度、
+  // 値に一度である。ディスクから同じ PNG を二度読んで nativeImage を二つ作る
+  // だけで、二つ目を使う理由は無かった。
+  const windowIcon = icon();
 
   const window = new BrowserWindow({
     width: 1200,
@@ -228,7 +244,7 @@ function openWindow(url) {
     title: "sshc",
     backgroundColor: "#111111",
     // Linux はウィンドウ自身が図を運ぶ。macOS は束から読むので無視される。
-    ...(icon() === null ? {} : { icon: icon() }),
+    ...(windowIcon === null ? {} : { icon: windowIcon }),
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -259,12 +275,14 @@ function openWindow(url) {
 /**
  * showFailure は、ウィンドウの代わりに理由を出す。**白い画面を見せない。**
  */
-function showFailure(error) {
+function showFailure(error: unknown): void {
   // **先に書く。** showErrorBox は同期で塞ぐ modal なので、窓を出せない機械
   // （CI、画面の無いセッション）ではここから先が動かない。理由が stderr に
   // 残っていれば、塞がってもなぜ塞がったかは読める。
-  process.stderr.write(`sshc: ${String(error.message ?? error)}\n`);
-  dialog.showErrorBox("sshc could not start", String(error.message ?? error));
+  // **Error とは限らない。** throw されるものに制約は無い。
+  const reason = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`sshc: ${reason}\n`);
+  dialog.showErrorBox("sshc could not start", reason);
 }
 
 /**
@@ -275,8 +293,8 @@ function showFailure(error) {
  * 空だと、そのどちらでも Electron の図が出る——実際にそうなっていた。
  * 開発中はさらに効く。走っているのが Electron.app そのものだからである。
  */
-function icon() {
-  const path = join(__dirname, "build", "icon.png");
+function icon(): NativeImage | null {
+  const path = resource("build", "icon.png");
   if (!existsSync(path)) return null;
   const image = nativeImage.createFromPath(path);
   return image.isEmpty() ? null : image;
@@ -293,8 +311,8 @@ function icon() {
  * あちらは画面側が自分で写す。ここに置くのは、それ以外のすべての場所——
  * 入力欄、鍵の指紋、エラーの文言——のための道である。
  */
-function installMenu() {
-  const application =
+function installMenu(): void {
+  const application: MenuItemConstructorOptions[] =
     process.platform === "darwin" ? [{ role: "appMenu" }] : [];
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
@@ -313,7 +331,7 @@ function installMenu() {
  * ——`sshc` と打てないことと、画面が見られないことは別の話である。ただし
  * 黙りもしない: 公開の名前を他人が持っていたなら、その事実を出す。
  */
-async function settleInstallation() {
+async function settleInstallation(): Promise<void> {
   // Windows で端末側の入口を用意するのはインストーラである。**外殻が重ねて
   // 張ろうとしない。** 安定した場所も PATH も、あちらが持っている。
   if (managesItsOwnCLI(process.platform)) {
@@ -326,7 +344,7 @@ async function settleInstallation() {
   }
 }
 
-async function settleManagedCLI() {
+async function settleManagedCLI(): Promise<void> {
   try {
     const { warning, note, repeated } = await installManagedCLI({ source: binary() });
     // **同じことを毎回は言わない。** 公開の名前を他人が持っているというのは、
@@ -437,11 +455,13 @@ const sessionCountTimeout = 2000;
  * ことは、開いているコンソールが無いことの証明にはならないが、それを理由に
  * 終了できなくしてよいわけでもない。答えが遅すぎることも同じである。
  */
-async function liveSessions(timeoutMilliseconds = sessionCountTimeout) {
-  let timer = null;
-  const overdue = new Promise((resolve) => {
+async function liveSessions(
+  timeoutMilliseconds = sessionCountTimeout,
+): Promise<number> {
+  let timer: NodeJS.Timeout | null = null;
+  const overdue = new Promise<number>((resolve) => {
     timer = setTimeout(() => resolve(0), timeoutMilliseconds);
-    timer.unref?.();
+    timer.unref();
   });
   try {
     return await Promise.race([
@@ -504,6 +524,6 @@ app.on("will-quit", () => {
 // ここを通すのは、エンジンを確実に畳んでからアプリを終えるためである
 // （エンジンは detach していない子なので、素通りしても道連れにはなるが、
 // ウィンドウを畳む機会は失う）。
-for (const signal of ["SIGINT", "SIGTERM"]) {
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => app.quit());
 }
