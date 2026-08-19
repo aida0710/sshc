@@ -16,13 +16,10 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/application"
-	"sshc/internal/diagnostics"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/keys"
-	"sshc/internal/knownhosts"
 	"sshc/internal/platform"
-	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
@@ -199,139 +196,21 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		sessions.Now = dependencies.SessionNow
 	}
 
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, dependencies.Home)
+	services, err := newEngineServices(dependencies)
 	if err != nil {
 		listener.Close()
-		return runtime{}, fmt.Errorf("workspace: %w", err)
+		return runtime{}, err
 	}
-	// Random は並行利用に耐えなければならない。セッションマネージャと二つの
-	// トランザクションマネージャが読むからだ。本番では crypto/rand を渡す。
-	transactions := storage.NewManager(workspace, time.Now, dependencies.Random)
-	configService := application.NewService(workspace, transactions)
-	keyService, keyTransactions := buildKeyService(workspace, dependencies, configService)
-	configService.SetKeyPassphraseVerifier(keyService)
-	diagnosticsService := diagnostics.NewService(workspace, nil)
-	// 生成領域の書式を知っているのは設定エンジンであり、それを尋ねられるのは
-	// diagnostics ではなくここである。あちらは internal/application を import
-	// しない。これがないと、宣言済みで空のグループのために書かれた Include が
-	// include_no_match として報告され、application 層が group_empty を注意として
-	// 出さないと決めた判断が、別の名前で破られる。
-	diagnosticsService.Resolver.GeneratedRegion = application.GeneratedRegion
-	// ユーザーに見せるコマンドはこのバイナリと alias なので、このバイナリがどこに
-	// あるかを知る必要がある。アプリケーションの内側でそれを割り出せるものはない。
-	// エントリポイントが一度だけ解決して渡す。
-	// known_hosts は設定のトランザクションマネージャを共有する。どちらも ~/.ssh 配下の
-	// 通常の管理対象ファイルを書くので、ジャーナルはひとつで足りる。
-	// 鍵を集めるのはこのプロセスである。ssh-keyscan は起こさない。
-	collectHostKeys := dependencies.ScanHostKeys
-	if collectHostKeys == nil {
-		collectHostKeys = func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error) {
-			return sshclient.ScanHostKeys(ctx, nil, address, timeout)
-		}
-	}
-	knownHostsService := knownhosts.NewService(workspace, transactions,
-		knownhosts.Scanner{Collect: collectHostKeys})
-
-	// パスワード保管用の vault も設定のトランザクションマネージャを共有する。~/.ssh
-	// 配下のもうひとつの通常の管理対象ファイルにすぎず、ジャーナルはひとつで足り、
-	// ワークスペースが持つ他のすべてと一緒に移動する。
-	passwordService := secret.NewService(workspace, transactions, time.Now)
-
-	// プロセス内で SSH を話すのに要るものは、ここで一度だけ組み立てる。
-	// 対話セッションも認証テストも、同じ鍵・同じ known_hosts・同じ解決器を使う。
-	ssh := newSSHParts(configService, knownHostsService, workspace.Home(),
-		storedPassphrase(passwordService, workspace.Root()), storedPassword(passwordService))
-	probe := dependencies.Probe
-	if probe == nil {
-		probe = ssh.probe()
-	}
-	diagnosticsService.Authentication.Dial = probe
-
-	// 公開鍵のリモート登録も同じ接続を通る。**外部の ssh は起こさない。**
-	remoteRun := dependencies.RemoteRun
-	if remoteRun == nil {
-		remoteRun = ssh.run()
-	}
-	remoteKeyService := &remotekey.Service{Resolve: ssh.target, Run: remoteRun}
-
-	// パスフレーズが保存されている鍵は、二段階ではなく一度の操作でエージェントに
-	// 追加される。この参照関数を internal/keys に import させず、ここで取り付けるのは、
-	// 同パッケージが「グループとは何か」を設定エンジンに尋ねないのと同じく、「秘密が
-	// どこにあるか」を secret パッケージに尋ねてはならないからだ。
-	keyService.SetStoredPassphrase(passwordService.KeyPassphraseFor)
-
-	// 世代バックアップはすべて暗号文である。このアプリケーションが置き換えるファイル
-	// の以前の内容は秘密鍵かもしれない。だからこそ、それを生みうる書き込みは以前は
-	// バックアップをまったく取らないよう要求しており、その結果、取り消すことが決して
-	// できなかった。封をすることで取り消しを取り戻す。マネージャに渡すのは vault では
-	// なく二つの関数なので、ストレージ層は秘密について何も知らないままでいられる。
-	// そして、アプリケーションがマスターパスワードの後ろにあることが、その二つの関数を
-	// 常に利用可能にしている。
-	//
-	// **このワークスペースの上で書くマネージャは、ひとつ残らず封をされる。** 鍵 vault
-	// のマネージャは設定のそれとは別物で、しかも置き換える対象は秘密鍵そのものである。
-	// 封が片方にしか付いていなかった間、パスフレーズの変更は以前の平文の鍵を世代
-	// バックアップに残していた。
-	for _, manager := range []*storage.Manager{transactions, keyTransactions} {
-		manager.Seal = passwordService.SealBackup
-		manager.Unseal = passwordService.OpenBackup
-	}
-	// **錠前は差すだけである。** 保管庫は、預かりが在るかどうかを自分で見る。
-	if dependencies.Biometric != nil {
-		passwordService.SetGuardian(dependencies.Biometric)
-	}
-
-	// スナップショットは、どのファイルが設定なのかを知る必要がある。それは Include
-	// グラフが答える問いである。答えを渡す形にすれば、依存の向きは正しいまま保たれる
-	// ── internal/remotesync は、設定サービスのものを何ひとつ import して
-	// いない。
-	syncService := remotesync.NewService(workspace, transactions,
-		func() ([]string, error) { return configService.WorkspaceFiles() },
-		func() string { return time.Now().UTC().Format(time.RFC3339) },
-		newOrigin(dependencies.Random),
-	)
-	// **保管庫は、封ではなく中身として旅をする。** ファイルのまま運べば、それは
-	// この端末のマスターパスワードで封じられたものであり、受け取った端末はそれ
-	// 以降、送り主のパスワードでしか開けなくなる——マスターパスワードを端末ごとに
-	// 変えられない、という詰みの本体はそこだった。両替はここで繋ぐ。同期は
-	// secret を import しない。
-	syncService.OpenVault = passwordService.TravelDocument
-	syncService.SealVault = passwordService.AdoptTravelDocument
-	syncService.VaultAdopted = passwordService.Reload
-
-	// 押さなくても進む巡回。**必要なものはすべて保管庫の中にある**ので、
-	// 閉じている間は何も読めず、何も起きない。それがこの機能の唯一の条件である。
-	autoSync := remotesync.NewAuto(syncService, remotesync.AutoInterval,
-		func() string { return time.Now().UTC().Format(time.RFC3339) })
-	autoSync.Enabled = func() bool {
-		settings, err := passwordService.SyncSettings()
-		return err == nil && settings.Auto
-	}
-	autoSync.Unattended = passwordService.Unattended
-	autoSync.Key = func() (string, bool) {
-		settings, err := passwordService.SyncSettings()
-		if err != nil || settings.Key == "" {
-			return "", false
-		}
-		return settings.Key, true
-	}
-
-	// 埋め込みターミナルの PTY は、この常駐プロセスの中で存続する。ブラウザの
-	// タブを閉じてもリロードしてもセッションは生きており、終わるのは子プロセスが
-	// 終了したとき、人が閉じたとき、このプロセスが終了したときだけである。
-	//
-	// 上限を読むのは開くときだけなので、metadata を書き換えても、すでに開いて
-	// いるセッションが閉じられることはない。
-	starter := dependencies.TerminalStarter
-	if starter == nil {
-		starter = terminal.NewStarter()
-	}
-	terminals := &terminal.Registry{
-		Start:  starter,
-		Limits: configService.TerminalLimits,
-		Random: dependencies.Random,
-	}
-
+	configService := services.config
+	keyService := services.keys
+	diagnosticsService := services.diagnostics
+	knownHostsService := services.knownHosts
+	passwordService := services.passwords
+	remoteKeyService := services.remoteKeys
+	syncService := services.sync
+	autoSync := services.autoSync
+	terminals := services.terminals
+	ssh := services.ssh
 	// `sshc <alias>` は、動作中のアプリケーションを見つけるためにこれを読む。秘密は
 	// ここで実行ごとに発行され、リスナーが立ち上がったあとに書かれる。そのため、
 	// 書かれた URL は実際に応答する URL になる。

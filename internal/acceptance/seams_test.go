@@ -112,7 +112,15 @@ func TestEveryManagerInTheEngineIsSealed(t *testing.T) {
 			t.Errorf("internal/app の外がトランザクションマネージャを作っている: %s", path)
 		}
 	}
-	if !slices.Contains(seals, "internal/app/run.go") {
+	// **どのファイルかは縛らない。** 縛りたいのは「engine の合成の根が封をする」で
+	// あって、それがどの綴りのファイルに書かれているかではない。
+	sealedInsideApp := false
+	for _, path := range seals {
+		if strings.HasPrefix(path, "internal/app/") {
+			sealedInsideApp = true
+		}
+	}
+	if !sealedInsideApp {
 		t.Errorf("engine の合成の根が封をしていない: %v", seals)
 	}
 }
