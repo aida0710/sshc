@@ -16,8 +16,8 @@ import (
 	"sshc/internal/config"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
-	"sshc/internal/platform"
 	"sshc/internal/sshclient"
+	"sshc/internal/validate"
 )
 
 // connectAnswer は、起動中のアプリケーションが返す内容。
@@ -120,7 +120,7 @@ func runConnect(
 	ctx context.Context, alias, home, stateDir string, client *http.Client,
 	launcher desktopLauncher, stdin *os.File, stdout, stderr io.Writer,
 ) int {
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
 		return 2
 	}

@@ -11,9 +11,9 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/application"
-	"sshc/internal/platform"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
+	"sshc/internal/validate"
 )
 
 // PasswordHandlers は vault とヘルパーを提供する。
@@ -290,7 +290,7 @@ func (h PasswordHandlers) Lock(c *echo.Context) error {
 // Eligible は alias と保存されたパスワードの間に何があるかを報告する。
 func (h PasswordHandlers) Eligible(c *echo.Context) error {
 	alias := c.Param("alias")
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 	if h.Eligibility == nil {
@@ -520,7 +520,7 @@ func (h PasswordHandlers) UnassignCredential(c *echo.Context) error {
 
 func (h PasswordHandlers) Store(c *echo.Context) error {
 	alias := c.Param("alias")
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 	var request api.StorePasswordRequest
@@ -560,7 +560,7 @@ func (h PasswordHandlers) ensurePasswordStorable(c *echo.Context, alias string) 
 
 func (h PasswordHandlers) Forget(c *echo.Context) error {
 	alias := c.Param("alias")
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 	if err := h.Service.Remove(alias); err != nil {

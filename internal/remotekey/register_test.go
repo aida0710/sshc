@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"sshc/internal/effective"
-	"sshc/internal/platform"
 	"sshc/internal/remotekey"
 	"sshc/internal/sshclient"
+	"sshc/internal/validate"
 )
 
 const (
@@ -179,7 +179,7 @@ func TestRegisterRefusesUntilExecutableDirectivesAreAcknowledged(t *testing.T) {
 		t.Fatal("a refused registration reached the remote")
 	}
 
-	if _, err := newService(runner).Register(context.Background(), effective.Report{}, configSnapshot, "bad alias", key, false); !errors.Is(err, platform.ErrUnsafeAlias) {
+	if _, err := newService(runner).Register(context.Background(), effective.Report{}, configSnapshot, "bad alias", key, false); !errors.Is(err, validate.ErrUnsafeAlias) {
 		t.Fatalf("Register = %v, want ErrUnsafeAlias", err)
 	}
 	if len(runner.calls) != 0 {

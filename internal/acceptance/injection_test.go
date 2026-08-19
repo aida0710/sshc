@@ -12,11 +12,11 @@ import (
 
 	"sshc/internal/config"
 	"sshc/internal/effective"
-	"sshc/internal/platform"
 	"sshc/internal/remotekey"
 	"sshc/internal/session"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 // hostileArguments は、OpenSSH 自身が Host 行の中で受け入れるであろう値、あるいは
@@ -96,7 +96,7 @@ func TestNoRouteEverLetsAHostileAliasReachAnExternalEffect(t *testing.T) {
 		t.Fatal("a safe alias never reached the remote seam; every refusal below would prove nothing")
 	}
 
-	// 敵対的な側。あらゆる敵対的な値は platform.ValidateAlias に
+	// 敵対的な側。あらゆる敵対的な値は validate.Alias に
 	// 落ちるため、ここで主張する性質は決定的なもの: 外部効果が一切起きないことである。
 	//
 	// 代わりに敵対的な値が「argv のどこかに無害な形で届く」ことを
@@ -206,7 +206,7 @@ func TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 
 	for _, hostile := range hostileArguments {
 		t.Run(quoteForName(hostile), func(t *testing.T) {
-			if err := platform.ValidateAlias(hostile); err == nil {
+			if err := validate.Alias(hostile); err == nil {
 				t.Fatalf("ValidateAlias(%q) = nil", hostile)
 			}
 
@@ -513,7 +513,7 @@ func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testin
 		"-leading-hyphen",
 	} {
 		t.Run(quoteForName(alias), func(t *testing.T) {
-			if err := platform.ValidateAlias(alias); err == nil {
+			if err := validate.Alias(alias); err == nil {
 				t.Fatalf("ValidateAlias(%q) = nil", alias)
 			}
 			f.terminal.reset()

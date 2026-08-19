@@ -18,8 +18,8 @@ import (
 
 	"sshc/internal/effective"
 	"sshc/internal/knownhosts"
-	"sshc/internal/platform"
 	"sshc/internal/sshclient"
+	"sshc/internal/validate"
 )
 
 const (
@@ -182,7 +182,7 @@ func (s Service) Plan(alias string, key PublicKey, fingerprint, user, hostname, 
 
 // Register はリモートのシェルを調べ、そのうえで鍵をインストールする。
 func (s Service) Register(ctx context.Context, report effective.Report, configSnapshot []byte, alias string, key PublicKey, acknowledged bool) (Result, error) {
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return Result{}, err
 	}
 	if _, _, err := ParsePublicKey(key.Line); err != nil {

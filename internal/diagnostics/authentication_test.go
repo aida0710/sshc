@@ -11,8 +11,8 @@ import (
 	"sshc/internal/config"
 	"sshc/internal/diagnostics"
 	"sshc/internal/effective"
-	"sshc/internal/platform"
 	"sshc/internal/sshclient"
+	"sshc/internal/validate"
 )
 
 // scriptedProbe は、認証テストの継ぎ目を差し替える。
@@ -140,7 +140,7 @@ func TestAuthenticationTestRejectsUnsafeAliasesAndCapsReportedOutput(t *testing.
 
 	if _, err := authentication.Test(
 		context.Background(), effective.Report{}, "-oProxyCommand=id", false,
-	); !errors.Is(err, platform.ErrUnsafeAlias) {
+	); !errors.Is(err, validate.ErrUnsafeAlias) {
 		t.Fatalf("unsafe alias = %v, want ErrUnsafeAlias", err)
 	}
 	if len(probe.calls) != 0 {

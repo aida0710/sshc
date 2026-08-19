@@ -12,6 +12,7 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/remotekey"
 	"sshc/internal/session"
+	"sshc/internal/validate"
 )
 
 type preparedRemoteKeyPlan struct {
@@ -35,7 +36,7 @@ type RemoteKeyHandlers struct {
 // prepare は確認時と実行時に同じ計画を組み立てる。ここで得た全項目の
 // ダイジェストが一致しなければ、リモート接続は開始されない。
 func (h RemoteKeyHandlers) prepare(alias, keyPath, publicKey string) (preparedRemoteKeyPlan, error) {
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return preparedRemoteKeyPlan{}, err
 	}
 	key, fingerprint, err := remotekey.ParsePublicKey(publicKey)
@@ -56,7 +57,7 @@ func (h RemoteKeyHandlers) prepare(alias, keyPath, publicKey string) (preparedRe
 }
 
 func remoteKeyPlanProblem(c *echo.Context, err error) error {
-	if errors.Is(err, remotekey.ErrInvalidPublicKey) || errors.Is(err, platform.ErrUnsafeAlias) {
+	if errors.Is(err, remotekey.ErrInvalidPublicKey) || errors.Is(err, validate.ErrUnsafeAlias) {
 		return remoteKeyProblem(c, err)
 	}
 	return problem(c, http.StatusInternalServerError, "config_unreadable")
@@ -75,7 +76,7 @@ func remoteKeyProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "executable_directive_not_acknowledged")
 	case errors.Is(err, remotekey.ErrUnsupportedRemote):
 		return problem(c, http.StatusUnprocessableEntity, "unsupported_remote")
-	case errors.Is(err, platform.ErrUnsafeAlias):
+	case errors.Is(err, validate.ErrUnsafeAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 	return problem(c, http.StatusInternalServerError, "registration_failed")

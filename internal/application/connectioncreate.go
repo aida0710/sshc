@@ -11,9 +11,9 @@ import (
 
 	"sshc/internal/config"
 	"sshc/internal/keys"
-	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 var (
@@ -156,7 +156,7 @@ func validateCreateConnectionRequest(request CreateConnectionRequest) error {
 	if err := ValidateAlias(request.Alias); err != nil {
 		return err
 	}
-	if err := platform.ValidateHostname(request.HostName); err != nil {
+	if err := validate.Hostname(request.HostName); err != nil {
 		return err
 	}
 	if err := validateConnectionUser(request.User); err != nil {
@@ -166,7 +166,7 @@ func validateCreateConnectionRequest(request CreateConnectionRequest) error {
 	if request.Port != nil {
 		port = *request.Port
 	}
-	if err := platform.ValidatePort(port); err != nil {
+	if err := validate.Port(port); err != nil {
 		return err
 	}
 	switch request.Authentication.Kind {

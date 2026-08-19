@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"sshc/internal/effective"
-	"sshc/internal/platform"
 	"sshc/internal/sshclient"
+	"sshc/internal/validate"
 )
 
 const (
@@ -81,7 +81,7 @@ var ErrNoAuthenticator = errors.New("no authentication probe is available")
 func (a Authentication) Test(
 	ctx context.Context, report effective.Report, alias string, acknowledged bool,
 ) (AuthenticationResult, error) {
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return AuthenticationResult{}, err
 	}
 	if blocking := report.Unavoidable(); len(blocking) > 0 && !acknowledged {

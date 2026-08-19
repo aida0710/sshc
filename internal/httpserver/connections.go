@@ -12,9 +12,9 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/keys"
-	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 // ConnectionHandlers owns the creation boundary. It deliberately receives the
@@ -315,7 +315,7 @@ func decodeUpdateConnectionKeyPassphrase(value api.UpdateConnectionKeyPassphrase
 
 func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.CreateConnectionRequest, error) {
 	if len(wire.Alias) == 0 || len(wire.Alias) > 64 ||
-		len(wire.HostName) == 0 || len(wire.HostName) > platform.MaxHostnameLength ||
+		len(wire.HostName) == 0 || len(wire.HostName) > validate.MaxHostnameLength ||
 		wire.Group != nil && len(*wire.Group) > 400 ||
 		wire.User != nil && len(*wire.User) > 255 {
 		return application.CreateConnectionRequest{}, errInvalidEdit
@@ -409,11 +409,11 @@ func connectionProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrUnknownUpdateKeyPhrase),
 		errors.Is(err, application.ErrUnquotableValue):
 		return problem(c, http.StatusBadRequest, "invalid_request")
-	case errors.Is(err, platform.ErrUnsafeHostname):
+	case errors.Is(err, validate.ErrUnsafeHostname):
 		return problem(c, http.StatusBadRequest, "connection_hostname_invalid")
 	case errors.Is(err, application.ErrInvalidConnectionUser):
 		return problem(c, http.StatusBadRequest, "connection_user_invalid")
-	case errors.Is(err, platform.ErrUnsafePort):
+	case errors.Is(err, validate.ErrUnsafePort):
 		return problem(c, http.StatusBadRequest, "connection_port_invalid")
 	case errors.Is(err, application.ErrNoConnectionUpdate):
 		return problem(c, http.StatusBadRequest, "connection_no_change")

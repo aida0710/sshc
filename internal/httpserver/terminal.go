@@ -12,6 +12,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/platform"
 	"sshc/internal/terminal"
+	"sshc/internal/validate"
 )
 
 // StreamPath は、ブラウザが端末の生 I/O を運ぶ場所である。
@@ -178,7 +179,7 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 	if alias == nil {
 		return terminal.Spec{}, errMissingAlias
 	}
-	if err := platform.ValidateAlias(*alias); err != nil {
+	if err := validate.Alias(*alias); err != nil {
 		return terminal.Spec{}, err
 	}
 	if h.Connect == nil {
@@ -274,7 +275,7 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 	case errors.Is(err, terminal.ErrSessionLimit):
 		// 黙って古いセッションを閉じることはしない。
 		return problem(c, http.StatusConflict, "terminal_session_limit")
-	case errors.Is(err, platform.ErrUnsafeAlias), errors.Is(err, errMissingAlias):
+	case errors.Is(err, validate.ErrUnsafeAlias), errors.Is(err, errMissingAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 	// 設定そのものが接続を許さない場合は、その理由を名指しする。

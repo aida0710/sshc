@@ -11,9 +11,9 @@ import (
 	"sshc/internal/config"
 	"sshc/internal/effective"
 	"sshc/internal/keys"
-	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 var (
@@ -353,7 +353,7 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 	}
 	if request.HostName != nil {
 		if request.HostName.Action == ConnectionChangeSet {
-			if err := platform.ValidateHostname(request.HostName.Value); err != nil {
+			if err := validate.Hostname(request.HostName.Value); err != nil {
 				return planned{}, false, err
 			}
 		}
@@ -376,7 +376,7 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 	}
 	if request.Port != nil {
 		if request.Port.Action == ConnectionChangeSet {
-			if err := platform.ValidatePort(request.Port.Value); err != nil {
+			if err := validate.Port(request.Port.Value); err != nil {
 				return planned{}, false, err
 			}
 		}

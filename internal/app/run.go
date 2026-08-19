@@ -30,6 +30,7 @@ import (
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	"sshc/internal/validate"
 )
 
 type ListenFunc func(network, address string) (net.Listener, error)
@@ -348,7 +349,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		// 起こす直前である。ここで先に一言置くのは、何が理由で止まるのかを
 		// 打った本人に伝えるためだ。
 		ConnectWarnings: func(alias string) []string {
-			if err := platform.ValidateAlias(alias); err != nil {
+			if err := validate.Alias(alias); err != nil {
 				return []string{unsafeAliasWarning}
 			}
 			return nil
