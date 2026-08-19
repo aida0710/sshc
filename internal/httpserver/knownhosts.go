@@ -8,9 +8,9 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/knownhosts"
-	"sshc/internal/platform"
 	"sshc/internal/session"
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 // maxDeleteTargets は一度の削除リクエストの上限を定める。
@@ -42,7 +42,7 @@ func addKnownHostsActions(registry actionRegistry, service *knownhosts.Service) 
 	}
 	registry[session.ActionKnownHostsScan] = actionKind{
 		evidence: func(target string) (string, error) {
-			if err := platform.ValidateHostname(target); err != nil {
+			if err := validate.Hostname(target); err != nil {
 				return "", err
 			}
 			return storage.Digest([]byte(target)), nil
@@ -63,9 +63,9 @@ func knownHostsProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "unsupported_key_type")
 	case errors.Is(err, knownhosts.ErrInvalidKey):
 		return problem(c, http.StatusBadRequest, "invalid_key")
-	case errors.Is(err, platform.ErrUnsafeHostname):
+	case errors.Is(err, validate.ErrUnsafeHostname):
 		return problem(c, http.StatusBadRequest, "unsafe_hostname")
-	case errors.Is(err, platform.ErrUnsafePort):
+	case errors.Is(err, validate.ErrUnsafePort):
 		return problem(c, http.StatusBadRequest, "unsafe_port")
 	}
 	var conflict *storage.ConflictError
@@ -136,10 +136,10 @@ func (h KnownHostsHandlers) Scan(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := platform.ValidateHostname(request.Host); err != nil {
+	if err := validate.Hostname(request.Host); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_hostname")
 	}
-	if err := platform.ValidatePort(request.Port); err != nil {
+	if err := validate.Port(request.Port); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_port")
 	}
 	if allowed, response := h.Actions.consume(c, session.ActionKnownHostsScan, request.Host); !allowed {
@@ -174,10 +174,10 @@ func (h KnownHostsHandlers) Add(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := platform.ValidateHostname(request.Host); err != nil {
+	if err := validate.Hostname(request.Host); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_hostname")
 	}
-	if err := platform.ValidatePort(request.Port); err != nil {
+	if err := validate.Port(request.Port); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_port")
 	}
 	if allowed, response := h.Actions.consume(c, session.ActionKnownHostsAdd, request.Host); !allowed {

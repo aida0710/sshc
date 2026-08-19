@@ -5,12 +5,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"net"
+	"sshc/internal/validate"
 	"strconv"
 	"time"
 
 	"golang.org/x/crypto/ssh"
-
-	"sshc/internal/platform"
 )
 
 // UnverifiedNotice は、すべてのスキャン結果に付随する。
@@ -52,10 +51,10 @@ var ErrNoScanner = errors.New("no host key scanner is available")
 // 結果に Verified が付くことはない。アドレスに到達できたことが証明するのは、そこで
 // 何かが応答したという事実だけであり、鍵を信頼する判断はユーザーのもとに残る。
 func (s Scanner) Scan(ctx context.Context, host string, port int) ([]Candidate, error) {
-	if err := platform.ValidateHostname(host); err != nil {
+	if err := validate.Hostname(host); err != nil {
 		return nil, err
 	}
-	if err := platform.ValidatePort(port); err != nil {
+	if err := validate.Port(port); err != nil {
 		return nil, err
 	}
 	timeout := s.Timeout

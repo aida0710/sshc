@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"sshc/internal/envelope"
-	"sshc/internal/platform"
+	"sshc/internal/validate"
 )
 
 // WorkspacePath は、封をされたファイルの置き場所。ワークスペースルートからの
@@ -377,7 +377,7 @@ func (v *Vault) Secret(kind Kind, name string) (string, bool) {
 // It is structurally separate from named credentials, so it cannot appear in a
 // reusable-credential list or be assigned to another host.
 func (v *Vault) SetDedicatedPassword(alias, value string) error {
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return ErrUnsafeName
 	}
 	if value == "" {
@@ -489,7 +489,7 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 		return ErrUnknownKind
 	}
 	if kind == KindPassword {
-		if err := platform.ValidateAlias(subject); err != nil {
+		if err := validate.Alias(subject); err != nil {
 			return ErrUnsafeName
 		}
 	} else if subject == "" || strings.ContainsAny(subject, "\x00") {
@@ -560,7 +560,7 @@ func (v *Vault) SecretFor(kind Kind, subject string) (string, bool) {
 func (v *Vault) Rename(kind Kind, from, to string) error {
 	if kind == KindPassword {
 		if value, ok := v.dedicatedPasswords[from]; ok {
-			if err := platform.ValidateAlias(to); err != nil {
+			if err := validate.Alias(to); err != nil {
 				return ErrUnsafeName
 			}
 			delete(v.dedicatedPasswords, from)
@@ -585,7 +585,7 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 		return nil
 	}
 	if kind == KindPassword {
-		if err := platform.ValidateAlias(to); err != nil {
+		if err := validate.Alias(to); err != nil {
 			return ErrUnsafeName
 		}
 	}
@@ -613,7 +613,7 @@ func (v *Vault) RelocateSubjects(kind Kind, relocations map[string]string) (bool
 			continue
 		}
 		if kind == KindPassword {
-			if err := platform.ValidateAlias(to); err != nil {
+			if err := validate.Alias(to); err != nil {
 				return false, ErrUnsafeName
 			}
 		} else if to == "" || strings.ContainsRune(to, '\x00') {

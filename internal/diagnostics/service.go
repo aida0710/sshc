@@ -10,6 +10,7 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 // ConfigFile は Include グラフのファイルひとつを、表示用に要約したもの。
@@ -99,7 +100,7 @@ func (s *Service) Safety() (effective.Report, error) {
 // ConnectionSnapshot は宛先、ユーザー、安全性、実行用設定を同じ Graph から
 // 導出する。呼び出し中に設定が変わっても、互いに異なる世代を混ぜない。
 func (s *Service) ConnectionSnapshot(alias string) (ConnectionSnapshot, error) {
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return ConnectionSnapshot{}, err
 	}
 	graph, err := s.graph()
@@ -158,7 +159,7 @@ func (s *Service) ConfigCheck() (ConfigReport, error) {
 // 自身の射影と、先に確認しなければならないコマンドそのものが引き続き表示
 // される。
 func (s *Service) Inspect(alias string) (Inspection, error) {
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return Inspection{}, err
 	}
 	graph, err := s.graph()
@@ -177,7 +178,7 @@ func (s *Service) Inspect(alias string) (Inspection, error) {
 // ssh を実行しないので、実行を伴うディレクティブによって評価が阻まれている
 // あいだも到達性のチェックは機能する。
 func (s *Service) Destination(alias string) (string, string, error) {
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		return "", "", err
 	}
 	graph, err := s.graph()
@@ -202,7 +203,7 @@ func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, 
 	if err != nil {
 		return ReachabilityResult{}, err
 	}
-	if err := platform.ValidateHostname(hostname); err != nil {
+	if err := validate.Hostname(hostname); err != nil {
 		return ReachabilityResult{}, err
 	}
 	return s.Reachability.Check(ctx, hostname, port), nil

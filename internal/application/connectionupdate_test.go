@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"sshc/internal/keys"
-	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 const connectionUpdatePassphrase = "connection update test passphrase"
@@ -160,13 +160,13 @@ func TestUpdateConnectionRejectsInvalidOrEmptyChanges(t *testing.T) {
 		{"nothing changed", func(_ *testing.T, _ connectionUpdateHarness, _ *UpdateConnectionRequest) {}, ErrNoConnectionUpdate},
 		{"unsafe host", func(_ *testing.T, _ connectionUpdateHarness, r *UpdateConnectionRequest) {
 			r.HostName = &ConnectionStringChange{Action: ConnectionChangeSet, Value: "bad host"}
-		}, platform.ErrUnsafeHostname},
+		}, validate.ErrUnsafeHostname},
 		{"unsafe user", func(_ *testing.T, _ connectionUpdateHarness, r *UpdateConnectionRequest) {
 			r.User = &ConnectionStringChange{Action: ConnectionChangeSet, Value: "bad user"}
 		}, ErrInvalidConnectionUser},
 		{"unsafe port", func(_ *testing.T, _ connectionUpdateHarness, r *UpdateConnectionRequest) {
 			r.Port = &ConnectionPortChange{Action: ConnectionChangeSet, Value: 0}
-		}, platform.ErrUnsafePort},
+		}, validate.ErrUnsafePort},
 		{"unknown key", func(_ *testing.T, _ connectionUpdateHarness, r *UpdateConnectionRequest) {
 			r.IdentityFile = &ConnectionIdentityFileChange{Action: ConnectionChangeSet, KeyID: strings.Repeat("f", 32)}
 		}, ErrInvalidIdentityFile},

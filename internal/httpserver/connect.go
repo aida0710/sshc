@@ -8,10 +8,10 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/handoff"
-	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/session"
 	"sshc/internal/terminal"
+	"sshc/internal/validate"
 )
 
 // ConnectPath は、コマンドラインが接続に必要なものを尋ねる場所である。
@@ -282,7 +282,7 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 	if err := json.NewDecoder(io.LimitReader(request.Body, maxConnectBody)).Decode(&decoded); err != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	if err := platform.ValidateAlias(decoded.Alias); err != nil {
+	if err := validate.Alias(decoded.Alias); err != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
 

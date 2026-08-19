@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"sshc/internal/keys"
-	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 const connectionCreateConfig = `# >>> sshc groups (generated). Child groups first: OpenSSH keeps the first value it reads.
@@ -280,9 +280,9 @@ func TestCreateConnectionRejectsInvalidOrConflictingInputsWithoutWriting(t *test
 		{"missing alias", func(_ *testing.T, _ connectionCreateHarness, r *CreateConnectionRequest) { r.Alias = "" }, ErrInvalidAlias},
 		{"invalid alias", func(_ *testing.T, _ connectionCreateHarness, r *CreateConnectionRequest) { r.Alias = "bad alias" }, ErrInvalidAlias},
 		{"duplicate alias", func(_ *testing.T, _ connectionCreateHarness, r *CreateConnectionRequest) { r.Alias = "existing" }, ErrAliasAlreadyDeclared},
-		{"missing host name", func(_ *testing.T, _ connectionCreateHarness, r *CreateConnectionRequest) { r.HostName = "" }, platform.ErrUnsafeHostname},
+		{"missing host name", func(_ *testing.T, _ connectionCreateHarness, r *CreateConnectionRequest) { r.HostName = "" }, validate.ErrUnsafeHostname},
 		{"unsafe user", func(_ *testing.T, _ connectionCreateHarness, r *CreateConnectionRequest) { r.User = "bad user" }, ErrInvalidConnectionUser},
-		{"zero port", func(_ *testing.T, _ connectionCreateHarness, r *CreateConnectionRequest) { r.Port = pointerTo(0) }, platform.ErrUnsafePort},
+		{"zero port", func(_ *testing.T, _ connectionCreateHarness, r *CreateConnectionRequest) { r.Port = pointerTo(0) }, validate.ErrUnsafePort},
 		{"unknown group", func(_ *testing.T, _ connectionCreateHarness, r *CreateConnectionRequest) {
 			r.Group = "home-lab/missing"
 		}, ErrGroupNotDeclared},
