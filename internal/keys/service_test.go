@@ -1247,3 +1247,19 @@ func TestAgentIdentitiesSayNoAgentWhenNoneIsWired(t *testing.T) {
 		t.Errorf("identities = %v, want none", identities)
 	}
 }
+
+// **このアプリケーションが作るディレクトリの名前を、鍵に付けさせない。**
+//
+// `keys` という名前の鍵を空のワークスペースに生成すると、あとでグループを作るときに
+// 要る `keys/` と同じ場所を取り合う。予約語の一覧が internal/keys と
+// internal/application に分かれていた間、鍵の側にはこの 2 つが無かった。
+func TestAKeyCannotTakeTheNameOfADirectoryWeCreate(t *testing.T) {
+	for _, name := range []string{"keys", "connections", "config", "known_hosts2", "rc"} {
+		if err := ValidateFileName(name); err == nil {
+			t.Errorf("ValidateFileName(%q) = nil, want a refusal", name)
+		}
+	}
+	if err := ValidateFileName("id_ed25519"); err != nil {
+		t.Errorf("ValidateFileName(id_ed25519) = %v", err)
+	}
+}

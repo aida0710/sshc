@@ -15,9 +15,12 @@ export const maxGroupSegmentBytes = 64;
 export const maxAliasLength = 64;
 export const maxHostnameLength = 255;
 
+// ~/.ssh の中で既に意味を持つ名前。**グループ名にも鍵のファイル名にも効く。**
+// どちらも ~/.ssh の直下にその綴りを作る操作だからである。
+//
 // **大小文字を区別しない。** 既定の macOS ボリュームは "Config" と
 // "config" を同じディレクトリエントリとして扱う。
-export const reservedGroupNames: ReadonlySet<string> = new Set([
+export const reservedNames: ReadonlySet<string> = new Set([
   "authorized_keys",
   "authorized_keys2",
   "config",

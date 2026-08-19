@@ -15,6 +15,7 @@ import (
 	"sshc/internal/config"
 	"sshc/internal/platform"
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 var (
@@ -74,32 +75,10 @@ func ValidateFileName(name string) error {
 	if strings.HasSuffix(name, ".pub") || name == StateDirectoryName {
 		return ErrInvalidFileName
 	}
-	if reservedFileNames[strings.ToLower(name)] {
+	if validate.Reserved(name) {
 		return ErrInvalidFileName
 	}
 	return nil
-}
-
-// reservedFileNames は、OpenSSH とこのアプリケーションが ~/.ssh の中ですでに
-// 意味を与えている名前。
-//
-// そこへ鍵を書くのは、単に紛らわしいというだけでは済まない。空のワークスペースに
-// "config" という名前の鍵を生成すれば、エントリ設定ファイルが作られ、その中身が
-// 秘密鍵になる。既存のファイルはトランザクションの事前条件で守られるので、危険に
-// さらされるのは新しいワークスペースだけだが、名前のポリシーは、すでに何かが
-// 占めていることに頼るのではなく、アプリケーション自身が依存する名前を拒否すべき
-// である。比較は大文字小文字を区別しない。macOS のファイルシステムは既定で大文字
-// 小文字を区別せず、"Config" と "config" は同じファイルだから
-// である。
-var reservedFileNames = map[string]bool{
-	"config":           true,
-	"known_hosts":      true,
-	"known_hosts2":     true,
-	"authorized_keys":  true,
-	"authorized_keys2": true,
-	"environment":      true,
-	"rc":               true,
-	"sshc":             true,
 }
 
 // ValidateComment は、鍵ファイルや、それが書かれる行を壊すコメントを拒否する。
