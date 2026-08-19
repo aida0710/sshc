@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, type Problem } from "../api/client";
+import { toProblem } from "../api/guards";
 import {
   configApi,
   type EditRequest,
@@ -75,11 +75,6 @@ const selectionNoticeCodes = new Set([
   "explained_values_only",
 ]);
 
-function toProblem(error: unknown): Problem {
-  if (error instanceof ApiError && error.problem !== null) return error.problem;
-  if (error instanceof ApiError) return { code: error.code, message: "request rejected" };
-  return { code: "request_failed", message: "request rejected" };
-}
 
 type ConnectionsPageProps = {
   // alias を持たない Host パターンには connection identity がないため、

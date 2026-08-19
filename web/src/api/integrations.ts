@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { asRecord, asArray, asString, asNumber, asBoolean, jsonHeaders, issueAction } from "./guards";
 import type { components } from "./schema";
 
 export type ConfigCheckResponse = components["schemas"]["ConfigCheckResponse"];
@@ -140,27 +141,9 @@ function validateUpdate(value: unknown): UpdateStatus {
   };
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("invalid_response");
-  }
-  return value as Record<string, unknown>;
-}
 
-function asArray(value: unknown): unknown[] {
-  if (!Array.isArray(value)) throw new Error("invalid_response");
-  return value;
-}
 
-function asString(value: unknown): string {
-  if (typeof value !== "string") throw new Error("invalid_response");
-  return value;
-}
 
-function asNumber(value: unknown): number {
-  if (typeof value !== "number") throw new Error("invalid_response");
-  return value;
-}
 
 function asNonnegativeInteger(value: unknown): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
@@ -169,10 +152,6 @@ function asNonnegativeInteger(value: unknown): number {
   return value;
 }
 
-function asBoolean(value: unknown): boolean {
-  if (typeof value !== "boolean") throw new Error("invalid_response");
-  return value;
-}
 
 function validateConfigCheck(value: unknown): ConfigCheckResponse {
   const record = asRecord(value);
@@ -349,20 +328,7 @@ function validateScan(value: unknown): KnownHostsScanResponse {
   return record as unknown as KnownHostsScanResponse;
 }
 
-const jsonHeaders = { "Content-Type": "application/json" } as const;
 
-// issueAction はサーバーに確認の発行を求める。リクエストが
-// 名指すのは操作と target だけであり、トークンが紐付く evidence は
-// サーバー側で導出される。したがってこのクライアントは、ユーザーに一度も
-// 見せていない状態にトークンを紐付けることができない。
-async function issueAction(kind: string, target: string): Promise<string> {
-  const response = await apiClient.mutate<IssueActionResponse>("/api/v1/actions", {
-    method: "POST",
-    headers: jsonHeaders,
-    body: JSON.stringify({ kind, target }),
-  });
-  return asString(asRecord(response).token);
-}
 
 async function postJSON<T>(path: string, body: unknown, actionToken?: string): Promise<T> {
   const headers: Record<string, string> = { ...jsonHeaders };

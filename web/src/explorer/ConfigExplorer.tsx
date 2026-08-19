@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toProblem } from "../api/guards";
 import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
-import { ApiError, type Problem } from "../api/client";
+import type { Problem } from "../api/client";
 import { configApi, type FileContents, type Overview, type SavePreview } from "../api/config";
 import { SavePreviewPanel } from "../connections/SavePreview";
 import {
@@ -21,11 +22,6 @@ type ConfigExplorerProps = {
   target?: FileTarget | null;
 };
 
-function toProblem(error: unknown): Problem {
-  if (error instanceof ApiError && error.problem !== null) return error.problem;
-  if (error instanceof ApiError) return { code: error.code, message: "request rejected" };
-  return { code: "request_failed", message: "request rejected" };
-}
 
 // lineRange はファイルテキスト内の 1 始まりの行の offset 範囲である。
 // 末尾を越えた行は最後の行に丸められるため、古びた target でも

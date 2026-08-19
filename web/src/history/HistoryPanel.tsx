@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { toProblem } from "../api/guards";
 import { useTranslate } from "../i18n/context";
-import { ApiError, type Problem } from "../api/client";
+import type { Problem } from "../api/client";
 import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
 import { Button, Notice } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 
-function toProblem(error: unknown): Problem {
-  if (error instanceof ApiError && error.problem !== null) return error.problem;
-  if (error instanceof ApiError) return { code: error.code, message: "request rejected" };
-  return { code: "request_failed", message: "request rejected" };
-}
 
 export function HistoryPanel() {
   const t = useTranslate();
