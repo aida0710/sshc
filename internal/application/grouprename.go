@@ -72,24 +72,7 @@ func (s *Service) commitGroupPlan(plan func(*config.Graph) (planned, error)) (Sa
 	if err := s.metadata.EnsureDirectory(); err != nil {
 		return SaveResult{}, err
 	}
-	s.pendingBase = prepared.base
-	s.pendingBaseline = prepared.baseline
-	defer func() { s.pendingBase, s.pendingBaseline = nil, nil }()
-
-	result, err := s.manager.Commit(s.requestFor(prepared))
-	var conflict *storage.ConflictError
-	if errors.As(err, &conflict) {
-		cleaned := filepath.Clean(conflict.Path)
-		var edited []byte
-		for _, change := range prepared.changes {
-			if filepath.Clean(change.Path) == cleaned {
-				edited = change.Contents
-			}
-		}
-		return SaveResult{}, &ConflictError{Report: BuildConflictReport(
-			s.displayPath(cleaned), prepared.base[cleaned], conflict.Current, edited,
-		)}
-	}
+	result, err := s.commitPlannedRequest(prepared, s.requestFor(prepared))
 	if err != nil {
 		return SaveResult{}, err
 	}
