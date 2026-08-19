@@ -492,7 +492,14 @@ func (m *Manager) targetDigest(path string) (string, bool, error) {
 }
 
 // readRecords は、ディレクトリ内のすべてのジャーナル文書を古い順に読み込む。
-// 識別子は UTC のタイムスタンプで始まるので、辞書順は時系列順である。
+//
+// 識別子はミリ秒までの UTC タイムスタンプで始まり、そのあとに乱数が続く。**同じ
+// ミリ秒に落ちた 2 件の間では、辞書順は時系列順ではない** —— 接頭辞が一致するので、
+// 順序を決めるのは乱数になる。そこで並べ替えは記録が保持しているナノ秒精度の
+// StartedAt で行い、識別子は同時刻の決定的なタイブレークにだけ使う。
+//
+// 読み込み自体は名前順で行う。ここが時系列である必要はないが、壊れた文書に当たった
+// ときに返るエラーが実行ごとに変わらないほうが調べやすい。
 func (m *Manager) readRecords(directory string) ([]journalRecord, error) {
 	entries, err := m.workspace.FileSystem().ReadDir(directory)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -529,6 +536,12 @@ func (m *Manager) readRecords(directory string) ([]journalRecord, error) {
 		}
 		records = append(records, record)
 	}
+	sort.SliceStable(records, func(i, j int) bool {
+		if !records[i].StartedAt.Equal(records[j].StartedAt) {
+			return records[i].StartedAt.Before(records[j].StartedAt)
+		}
+		return records[i].ID < records[j].ID
+	})
 	return records, nil
 }
 
