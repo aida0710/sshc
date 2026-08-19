@@ -393,12 +393,17 @@ jobs:
           mkdir -p tap/Formula
           cp sshc.rb tap/Formula/sshc.rb
           cd tap
-          if git diff --quiet -- Formula/sshc.rb; then
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # **先に add してから比べる。** `git diff` は追跡されていないファイルを
+          # 見ないので、**formula がまだ無い一度目は「変化なし」と読まれる**
+          # ——実際 v0.2.0 でそれが起き、job は 6 秒で緑になって何も押さなかった。
+          # 索引に入れてから比べれば、新規も変更も同じ 1 つの問いになる。
+          git add Formula/sshc.rb
+          if git diff --cached --quiet; then
             echo "the tap already describes $RELEASE_TAG."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/sshc.rb
           git commit -m "sshc $version"
           git push
