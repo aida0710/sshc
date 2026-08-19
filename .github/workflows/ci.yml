@@ -247,15 +247,19 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Install desktop dependencies (Unix)
-        if: ${{ runner.os != 'Windows' }}
-        shell: bash
-        run: npm ci --prefix desktop
-
-      - name: Install desktop dependencies (Windows)
-        if: ${{ runner.os == 'Windows' }}
-        shell: pwsh
-        run: npm ci --prefix desktop
+      # **npm はその package のディレクトリで走らせる。--prefix に頼らない。**
+      #
+      # `npm run --prefix desktop` は script を desktop/package.json から読むが、
+      # **PATH に足すのは現在地の node_modules/.bin である。** Windows ではそこに
+      # tsc が無く、`'tsc' is not recognized` で落ちる。素の JS だったころは
+      # script が `node` しか呼ばなかったので、この穴は誰にも当たらなかった。
+      # internal/nativebuild が同じ理由で --prefix を避けているのと同じ話である。
+      #
+      # working-directory なら OS ごとに段を分ける必要も無い。既定の shell は
+      # Unix で bash、Windows で pwsh になり、ここに shell 断片は一つも無い。
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
 
       # 外殻も TypeScript である。**ここは lint の代わりではなく、lint より
       # 強い。** 素の JS だったころ、この package を静的に見るものは何も無く、
@@ -263,27 +267,15 @@ jobs:
       #
       # npm test も内側で tsc を通すが、段を分けておくと**型で落ちたのか
       # テストで落ちたのかが、名前だけで分かる。**
-      - name: Typecheck (Unix)
-        if: ${{ runner.os != 'Windows' }}
-        shell: bash
-        run: npm run typecheck --prefix desktop
-
-      - name: Typecheck (Windows)
-        if: ${{ runner.os == 'Windows' }}
-        shell: pwsh
-        run: npm run typecheck --prefix desktop
+      - name: Typecheck
+        working-directory: desktop
+        run: npm run typecheck
 
       # Electron の描画そのものは手動受け入れに残す。ここでは、外殻が持つ
       # link・入口URL・二重起動時のウィンドウ復帰を Node 標準テストで検査する。
-      - name: Lifecycle tests (Unix)
-        if: ${{ runner.os != 'Windows' }}
-        shell: bash
-        run: npm test --prefix desktop
-
-      - name: Lifecycle tests (Windows)
-        if: ${{ runner.os == 'Windows' }}
-        shell: pwsh
-        run: npm test --prefix desktop
+      - name: Lifecycle tests
+        working-directory: desktop
+        run: npm test
 
   generated:
     name: Generated files
@@ -327,6 +319,18 @@ jobs:
       # いなければならない。
       - name: Build the binary
         run: make build
+
+      # **Playwright は npm の script を通らずに Electron を直接起こす。**
+      # だから package.json の `start` や `test` が内側で持っているコンパイルは、
+      # ここには効かない——焼かずに来ると desktop.spec.ts が
+      # `Cannot find module .../desktop/out/main.js` で落ちる。
+      #
+      # 外殻が素の JS だったころは main.js がそのままコミットされていたので、
+      # この段は要らなかった。**出荷されるものが生成物になった以上、それを
+      # 起こす経路はすべて、先に生成する責任を持つ。**
+      - name: Compile the desktop shell
+        working-directory: desktop
+        run: npm run build
 
       # このスイートが有用な形では偽装できないサーバーが二つある。本物の S3 実装 —
       # 同期の設計全体が、本物のそれが条件付き PUT に何をするかの上に立っている
