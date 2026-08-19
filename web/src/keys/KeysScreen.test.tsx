@@ -18,6 +18,7 @@ function buildSecrets(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi
     passwordVault: vi.fn().mockResolvedValue({
       exists: true,
       unlocked: true,
+      biometric: { available: false, enabled: false },
       aliases: [],
       dedicatedKeyPassphrases: [],
       minPassphraseLength: 12,
@@ -819,6 +820,7 @@ describe("KeysScreen", () => {
       passwordVault: vi.fn().mockResolvedValue({
         exists: true,
         unlocked: true,
+        biometric: { available: false, enabled: false },
         aliases: [],
         dedicatedKeyPassphrases: ["id_work"],
         minPassphraseLength: 12,
@@ -839,6 +841,7 @@ describe("KeysScreen", () => {
       passwordVault: vi.fn().mockResolvedValue({
         exists: true,
         unlocked: true,
+        biometric: { available: false, enabled: false },
         aliases: [],
         dedicatedKeyPassphrases: ["id_work"],
         minPassphraseLength: 12,
@@ -861,6 +864,7 @@ describe("KeysScreen", () => {
       passwordVault: vi.fn().mockResolvedValue({
         exists: true,
         unlocked: true,
+        biometric: { available: false, enabled: false },
         aliases: [],
         dedicatedKeyPassphrases: ["id_work"],
         minPassphraseLength: 12,
@@ -976,6 +980,7 @@ describe("taking a key back out of the agent", () => {
       passwordVault: vi.fn().mockResolvedValue({
         exists: true,
         unlocked: true,
+        biometric: { available: false, enabled: false },
         aliases: [],
         dedicatedKeyPassphrases: ["id_work"],
         minPassphraseLength: 12,

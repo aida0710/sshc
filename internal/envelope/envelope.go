@@ -23,6 +23,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"slices"
 
@@ -308,4 +309,72 @@ func readHeader(sealed []byte) (header []byte, params Params, rest []byte, err e
 	}
 	params.Salt = slices.Clone(sealed[fixed : fixed+saltLen])
 	return slices.Clone(sealed[:fixed+saltLen]), params, sealed[fixed+saltLen:], nil
+}
+
+// wrappedKey は、鍵ひとつを別の鍵の下へ運ぶときの形である。
+//
+// **material をこの package の外へ出すためのものではない。** 出るのは封じられた
+// バイト列だけで、開ける相手は Unwrap しかない。
+type wrappedKey struct {
+	Material []byte `json:"material"`
+	Time     uint32 `json:"time"`
+	Memory   uint32 `json:"memory"`
+	Threads  uint8  `json:"threads"`
+	Salt     []byte `json:"salt"`
+}
+
+// Wrap は、この鍵そのものを別の鍵の下に封じる。
+//
+// **同じ中身に二つの入口を与えるための道具である。** 保管庫はマスターパスワード
+// から導いた鍵で封じられているが、その鍵をもう一つの秘密の下に置いておけば、
+// 二つ目の秘密を持っている者もそこへ入れる——生体認証が使うのはこれである。
+// 増えるのは入口であって、中身の複製ではない。
+func (k Key) Wrap(under Key) ([]byte, error) {
+	if len(k.material) != derivedKeyLength {
+		return nil, ErrNotAnEnvelope
+	}
+	body, err := json.Marshal(wrappedKey{
+		Material: k.material,
+		Time:     k.params.Time,
+		Memory:   k.params.Memory,
+		Threads:  k.params.Threads,
+		Salt:     k.params.Salt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return under.Seal(body)
+}
+
+// Unwrap は Wrap の鏡像である。
+//
+// **鍵ではなくパスフレーズを取る。** Derive は呼ばれるたびに新しい salt を作るので、
+// 同じ秘密から作り直した鍵は同じ鍵ではない。開くのに要る salt は封の中に書いて
+// あり、それを読んで導出し直すのがこの package の既定の道である。
+//
+// **開いた中身も、鍵として妥当かを確かめる。** 封の中から出てきたというだけでは、
+// それが鍵であることにはならない。長さもコストも、外から来た envelope に対して
+// 行うのと同じ検査を通す。
+func Unwrap(sealed []byte, passphrase string) (Key, error) {
+	body, _, err := Open(sealed, passphrase)
+	if err != nil {
+		return Key{}, err
+	}
+	var wrapped wrappedKey
+	if err := json.Unmarshal(body, &wrapped); err != nil {
+		return Key{}, ErrNotAnEnvelope
+	}
+	if len(wrapped.Material) != derivedKeyLength || len(wrapped.Salt) == 0 || len(wrapped.Salt) > maxSaltLength {
+		return Key{}, ErrNotAnEnvelope
+	}
+	if wrapped.Time > Accepted.Time || wrapped.Memory > Accepted.MemoryKiB || wrapped.Threads > Accepted.Threads {
+		return Key{}, ErrCostRefused
+	}
+	return Key{
+		material: wrapped.Material,
+		params: Params{
+			Time: wrapped.Time, Memory: wrapped.Memory,
+			Threads: wrapped.Threads, Salt: wrapped.Salt,
+		},
+	}, nil
 }

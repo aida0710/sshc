@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // アプリケーションはマスターパスワードの向こうにあるため、シェルを期待する
 // テストにはすべて開いた vault を与える必要がある。ロック画面には専用のテストがある。
 const openVault = () =>
-  Promise.resolve({ exists: true, unlocked: true, aliases: [] as string[], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
+  Promise.resolve({ exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [] as string[], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
 import { App } from "./App";
 import type { InspectorContent } from "./ui/Inspector";
 import { LanguageProvider } from "./i18n/context";
@@ -464,7 +464,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 })}
+        vault={vi.fn().mockResolvedValue({ exists: true, unlocked: false, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 })}
       />,
     );
 
@@ -483,6 +483,7 @@ describe("App", () => {
         vault={vi.fn().mockResolvedValue({
           exists: false,
           unlocked: false,
+          biometric: { available: false, enabled: false },
           aliases: [],
           dedicatedKeyPassphrases: [],
           minPassphraseLength: 12,

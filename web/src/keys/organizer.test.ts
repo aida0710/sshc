@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { KeyItem, RelocateKeyResponse } from "./api";
-import { folderRows, itemsInFolder, moveInto, sameFolder, type Folder } from "./organizer";
+import { folderRows, itemsInFolder, moveInto, sameFolder, shownItems, type Folder } from "./organizer";
 
 function item(relativePath: string, id = relativePath): KeyItem {
   return {
@@ -176,5 +176,47 @@ describe("moveInto", () => {
     await moveInto(relocate, [item("keys/work/id_a")], { kind: "ungrouped" });
 
     expect(relocate).toHaveBeenCalledWith("keys/work/id_a", { group: "" });
+  });
+});
+
+describe("shownItems", () => {
+  function kinded(relativePath: string, kind: string, permissionRisk = false): KeyItem {
+    return { ...item(relativePath), kind, permissionRisk } as unknown as KeyItem;
+  }
+
+  const everything = [
+    kinded("id_a", "private_key"),
+    kinded("id_a.pub", "public_key"),
+    kinded("id_a-cert.pub", "certificate"),
+    kinded("config", "config"),
+    kinded("known_hosts", "known_hosts"),
+    kinded(".DS_Store", "other"),
+    kinded("connections/work/box.conf", "config"),
+  ];
+
+  // **画面の名前と中身を合わせる。** 「鍵」と書いてある画面に .DS_Store と
+  // 設定ファイルが並ぶのは、この画面が本当は ~/.ssh のファイル一覧だった
+  // からである。設定ファイルにも known_hosts にも専用の画面が既にある。
+  it("shows key material and nothing else", () => {
+    const shown = shownItems(everything, "keys");
+
+    expect(shown.map((found) => found.relativePath)).toEqual(["id_a", "id_a.pub", "id_a-cert.pub"]);
+  });
+
+  // **危ういものは、鍵でなくても隠さない。**
+  //
+  // 全部を並べていたのには理由がある——変な名前の秘密鍵や、誰でも読める
+  // ファイルを見落とさないためで、分類はファイル名ではなく中身と権限で
+  // 行われている。絞り込みでそれごと消すと、その目が潰れる。
+  it("keeps a file that needs attention even when it is not a key", () => {
+    const risky = [...everything, kinded("secret.txt", "other", true)];
+
+    const shown = shownItems(risky, "keys");
+
+    expect(shown.map((found) => found.relativePath)).toContain("secret.txt");
+  });
+
+  it("shows everything when asked to", () => {
+    expect(shownItems(everything, "all")).toHaveLength(everything.length);
   });
 });
