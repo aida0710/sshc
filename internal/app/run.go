@@ -138,7 +138,11 @@ type Readiness struct {
 // インターフェースではなく具体型を返すのは、vault ができたあとに配線側が保存済み
 // パスフレーズの参照関数を取り付けるためである。それでも、必要な場所では
 // httpserver.KeyService を満たす。
-func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, configuration *application.Service) *keys.Service {
+// 返すのはサービスと、それが書くマネージャの両方である。**呼び出し側は封をしなければ
+// ならない。** このマネージャが置き換えるのは秘密鍵そのものなので、封が無ければ、
+// パスフレーズの変更が以前の平文の鍵を世代バックアップに残す。マネージャを内側に
+// 隠していたことが、その配線漏れを見えなくしていた。
+func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, configuration *application.Service) (*keys.Service, *storage.Manager) {
 	transactions := storage.NewManager(workspace, time.Now, dependencies.Random)
 	return keys.NewService(keys.ServiceOptions{
 		Workspace:    workspace,
@@ -152,7 +156,7 @@ func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, co
 		// 読まれる。鍵 vault は自分で決めずに尋ねる。そのため鍵は、存在するグループへ
 		// しか生成できない。
 		ValidateGroup: configuration.ValidateDeclaredGroup,
-	})
+	}), transactions
 }
 
 // Build はすべての依存を HTTP サーバーへ配線するが、サーブはしない。UI が提示
@@ -203,7 +207,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	// トランザクションマネージャが読むからだ。本番では crypto/rand を渡す。
 	transactions := storage.NewManager(workspace, time.Now, dependencies.Random)
 	configService := application.NewService(workspace, transactions)
-	keyService := buildKeyService(workspace, dependencies, configService)
+	keyService, keyTransactions := buildKeyService(workspace, dependencies, configService)
 	configService.SetKeyPassphraseVerifier(keyService)
 	diagnosticsService := diagnostics.NewService(workspace, nil)
 	// 生成領域の書式を知っているのは設定エンジンであり、それを尋ねられるのは
@@ -262,8 +266,15 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	// なく二つの関数なので、ストレージ層は秘密について何も知らないままでいられる。
 	// そして、アプリケーションがマスターパスワードの後ろにあることが、その二つの関数を
 	// 常に利用可能にしている。
-	transactions.Seal = passwordService.SealBackup
-	transactions.Unseal = passwordService.OpenBackup
+	//
+	// **このワークスペースの上で書くマネージャは、ひとつ残らず封をされる。** 鍵 vault
+	// のマネージャは設定のそれとは別物で、しかも置き換える対象は秘密鍵そのものである。
+	// 封が片方にしか付いていなかった間、パスフレーズの変更は以前の平文の鍵を世代
+	// バックアップに残していた。
+	for _, manager := range []*storage.Manager{transactions, keyTransactions} {
+		manager.Seal = passwordService.SealBackup
+		manager.Unseal = passwordService.OpenBackup
+	}
 	// **錠前は差すだけである。** 保管庫は、預かりが在るかどうかを自分で見る。
 	if dependencies.Biometric != nil {
 		passwordService.SetGuardian(dependencies.Biometric)
