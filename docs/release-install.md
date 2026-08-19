@@ -1,5 +1,17 @@
 ## 入れる
 
+### Homebrew（macOS / Linux）
+
+```sh
+brew install aida0710/sshc/sshc
+```
+
+**ソースからビルドします。** brew が Go を用意して `go build` を回すので、
+入るのはあなたの機械で作られた実体です。置かれるのは brew の prefix
+（`/opt/homebrew/bin` など）で、**そこは最初から PATH に載っています。**
+
+`brew upgrade` で新しくなり、`brew uninstall` で消えます。
+
 ### 端末から使うだけなら（Linux / macOS）
 
 ```sh
