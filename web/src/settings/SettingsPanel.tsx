@@ -7,6 +7,7 @@ import { CheckboxField, Field, control, hintText, sectionCard, sectionHeading } 
 import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import type { TerminalSessionsState } from "../terminal/sessions";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
@@ -18,6 +19,9 @@ type SettingsPanelProps = {
 
 export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSettingsChange }: SettingsPanelProps) {
   const t = useTranslate();
+  // **走っている本数だけを数える。** 既に終わった行を片付ける回に問いは要らない。
+  const liveConsoles = (consoles?.sessions ?? []).filter((session) => session.exited === undefined).length;
+  const [confirmingCloseAll, setConfirmingCloseAll] = useState(false);
   const [currentMaster, setCurrentMaster] = useState("");
   const [nextMaster, setNextMaster] = useState("");
   const [confirmMaster, setConfirmMaster] = useState("");
@@ -262,8 +266,16 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         という用であり、それはセッションを閉じれば済む。転送も agent の
         貸し出しも一緒に終わる。
 
-        取り消しは開き直すことである。だから確認は挟まない——**問いを挟んで
-        いいのは、押し戻せない操作だけである。**
+        **規則は「問いを挟んでいいのは押し戻せない操作だけ」である。** ここは
+        長らくその「押し戻せる」側に置かれていた——開き直せば済む、と。
+
+        **開き直しは取り消しではない。** 得られるのは同じ相手への*新しい*
+        セッションであり、動いていたもの——編集中のファイル、走っているビルド、
+        追っているログ——は戻らない。ここが終わらせるのは、それを一度に全部で
+        ある。だから訊く。
+
+        **走っているものが 1 本も無ければ訊かない。** 終わった行を片付けるだけ
+        の回に問いを出せば、次の問いも読まずに押す習慣を作る。
       */}
       {consoles === undefined ? null : (
         <section aria-label={t("desktop.closeAllHeading")} className={sectionCard}>
@@ -275,10 +287,26 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
           <Button
             className="self-start"
             disabled={consoles.busy || consoles.sessions.length === 0}
-            onClick={() => void consoles.closeAll()}
+            onClick={() =>
+              liveConsoles === 0 ? void consoles.closeAll() : setConfirmingCloseAll(true)
+            }
           >
             {t("desktop.closeAll")}
           </Button>
+          {confirmingCloseAll ? (
+            <ConfirmDialog
+              id="close-all-consoles-heading"
+              heading={t("desktop.closeAllHeading2", { count: String(liveConsoles) })}
+              body={<p className="text-sm text-ink-muted">{t("desktop.closeAllBody")}</p>}
+              confirmLabel={t("desktop.closeAllConfirm")}
+              cancelLabel={t("desktop.closeAllCancel")}
+              onCancel={() => setConfirmingCloseAll(false)}
+              onConfirm={() => {
+                setConfirmingCloseAll(false);
+                void consoles.closeAll();
+              }}
+            />
+          ) : null}
         </section>
       )}
 

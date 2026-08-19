@@ -230,8 +230,57 @@ describe("SettingsPanel", () => {
     const region = await screen.findByRole("region", { name: "Open connections" });
     expect(within(region).getByText("2 open")).toBeVisible();
     await user.click(within(region).getByRole("button", { name: "Close every connection" }));
+    await user.click(screen.getByRole("button", { name: "Close them all" }));
 
     expect(closeAll).toHaveBeenCalledTimes(1);
+  });
+
+  // **開き直しは取り消しではない。** ここが終わらせるのは走っている接続の
+  // 全部であり、動いていたものは戻らない。だから一度訊く。
+  it("does not end every connection on the first press", async () => {
+    const user = userEvent.setup();
+    const closeAll = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SettingsPanel
+        api={buildApi()}
+        consoles={{
+          sessions: [{ id: "a", title: "one", kind: "shell", forwards: [] }] as never,
+          busy: false,
+          closeAll,
+        }}
+      />,
+    );
+
+    const region = await screen.findByRole("region", { name: "Open connections" });
+    await user.click(within(region).getByRole("button", { name: "Close every connection" }));
+
+    expect(closeAll).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  // **走っているものが 1 本も無ければ訊かない。** 終わった行を片付けるだけの回に
+  // 問いを出せば、次の問いも読まずに押す習慣を作る。
+  it("clears finished rows without asking", async () => {
+    const user = userEvent.setup();
+    const closeAll = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SettingsPanel
+        api={buildApi()}
+        consoles={{
+          sessions: [
+            { id: "a", title: "one", kind: "shell", forwards: [], exited: { code: 0, signal: "", at: "x" } },
+          ] as never,
+          busy: false,
+          closeAll,
+        }}
+      />,
+    );
+
+    const region = await screen.findByRole("region", { name: "Open connections" });
+    await user.click(within(region).getByRole("button", { name: "Close every connection" }));
+
+    expect(closeAll).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   // 閉じるものが無いときに押せると、押した人は何かが起きたと思う。
