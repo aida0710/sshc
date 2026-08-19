@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/validate"
 )
 
 // EditAction は host ブロックのディレクティブに対する変更の種類を表す。
@@ -158,19 +159,14 @@ func validateKeyword(keyword string) error {
 // ValidateAlias は UI から作成される alias を保守的な集合に
 // 制限し、新しい Host 行がパターン、否定、空白を持つことを決してないようにする。
 // ファイル中に既にある alias は書かれたとおりに表示され、書き換えられることはない。
+//
+// **規則は internal/validate が持つ。** ここには同じ文字集合を手で書き下した写しが
+// あり、受理する集合は同じでありながら返すエラーだけが違っていた——同じ規則が
+// 二箇所にある状態は、片方だけが直る日を待っているのと同じである。この層が持つのは、
+// API の語彙へ翻訳することだけである。
 func ValidateAlias(alias string) error {
-	if len(alias) == 0 || len(alias) > 64 {
+	if validate.Alias(alias) != nil {
 		return ErrInvalidAlias
-	}
-	for index := 0; index < len(alias); index++ {
-		character := alias[index]
-		switch {
-		case character >= 'a' && character <= 'z', character >= 'A' && character <= 'Z',
-			character >= '0' && character <= '9':
-		case index > 0 && (character == '.' || character == '-' || character == '_'):
-		default:
-			return ErrInvalidAlias
-		}
 	}
 	return nil
 }

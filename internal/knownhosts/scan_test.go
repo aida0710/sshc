@@ -11,7 +11,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/knownhosts"
-	"sshc/internal/platform"
+	"sshc/internal/validate"
 )
 
 // recordingCollector は、鍵を集める継ぎ目を差し替える。
@@ -78,10 +78,10 @@ func TestScanRejectsUnsafeTargetsBeforeReachingTheNetwork(t *testing.T) {
 	collector := &recordingCollector{}
 	scanner := knownhosts.Scanner{Collect: collector.collect}
 
-	if _, err := scanner.Scan(context.Background(), "-p2222", 22); !errors.Is(err, platform.ErrUnsafeHostname) {
+	if _, err := scanner.Scan(context.Background(), "-p2222", 22); !errors.Is(err, validate.ErrUnsafeHostname) {
 		t.Fatalf("unsafe host = %v, want ErrUnsafeHostname", err)
 	}
-	if _, err := scanner.Scan(context.Background(), "example.com", 0); !errors.Is(err, platform.ErrUnsafePort) {
+	if _, err := scanner.Scan(context.Background(), "example.com", 0); !errors.Is(err, validate.ErrUnsafePort) {
 		t.Fatalf("invalid port = %v, want ErrUnsafePort", err)
 	}
 	if len(collector.addresses) != 0 {

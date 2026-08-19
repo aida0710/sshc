@@ -10,8 +10,8 @@ import (
 
 	"sshc/internal/app"
 	"sshc/internal/handoff"
-	"sshc/internal/platform"
 	"sshc/internal/sshclient"
+	"sshc/internal/validate"
 )
 
 // runRemote は、接続先でコマンドをひとつ走らせ、その終了状態をそのまま返す。
@@ -25,7 +25,7 @@ func runRemote(
 	ctx context.Context, alias, command, home, stateDir string, client *http.Client,
 	launcher desktopLauncher, stdin io.Reader, stdout, stderr io.Writer,
 ) int {
-	if err := platform.ValidateAlias(alias); err != nil {
+	if err := validate.Alias(alias); err != nil {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
 		return 2
 	}

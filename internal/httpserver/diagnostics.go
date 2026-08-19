@@ -10,8 +10,8 @@ import (
 	"sshc/internal/config"
 	"sshc/internal/diagnostics"
 	"sshc/internal/effective"
-	"sshc/internal/platform"
 	"sshc/internal/session"
+	"sshc/internal/validate"
 )
 
 // DiagnosticsHandlers は、個別に起動されるチェック群を公開する。
@@ -35,7 +35,7 @@ func registerDiagnosticsRoutes(engine *echo.Echo, handlers DiagnosticsHandlers) 
 // トークンが無効になる。
 func addDiagnosticsActions(registry actionRegistry, service *diagnostics.Service) {
 	evidence := func(target string) (string, error) {
-		if err := platform.ValidateAlias(target); err != nil {
+		if err := validate.Alias(target); err != nil {
 			return "", err
 		}
 		report, err := service.Safety()
@@ -54,7 +54,7 @@ func addDiagnosticsActions(registry actionRegistry, service *diagnostics.Service
 
 // diagnosticsProblem は、evidence 導出の失敗を通信形式に対応付ける。
 func diagnosticsProblem(c *echo.Context, err error) error {
-	if errors.Is(err, platform.ErrUnsafeAlias) {
+	if errors.Is(err, validate.ErrUnsafeAlias) {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 	return problem(c, http.StatusInternalServerError, "config_unreadable")
@@ -100,7 +100,7 @@ func (h DiagnosticsHandlers) Effective(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := platform.ValidateAlias(request.Alias); err != nil {
+	if err := validate.Alias(request.Alias); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 
@@ -144,7 +144,7 @@ func (h DiagnosticsHandlers) Reachability(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := platform.ValidateAlias(request.Alias); err != nil {
+	if err := validate.Alias(request.Alias); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 	if allowed, response := h.Actions.consume(c, session.ActionReachability, request.Alias); !allowed {
@@ -170,7 +170,7 @@ func (h DiagnosticsHandlers) Authentication(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := platform.ValidateAlias(request.Alias); err != nil {
+	if err := validate.Alias(request.Alias); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 	if allowed, response := h.Actions.consume(c, session.ActionAuthentication, request.Alias); !allowed {
