@@ -1,41 +1,13 @@
 package application
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
-	"time"
 
 	"sshc/internal/keys"
-	"sshc/internal/storage"
 )
-
-// newShortHomeService は、**短い**ホームの上にサービスを作る。
-//
-// 長さがこの検査の一部である。OpenSSH は鍵の prompt path を `%.100s` で表示し、
-// 切り詰められたパスは鍵の同一性を名乗れないので、directKeyPassphraseTarget は
-// 100 バイトを超える path をそこで諦める。t.TempDir() の名前は試験名を含むぶん
-// 長く、この境界を越える——越えれば、ここにある検査はどれも「対象なし」を
-// 正解として通過してしまう。
-func newShortHomeService(t *testing.T) (*Service, *storage.Workspace) {
-	t.Helper()
-	home, err := os.MkdirTemp(shortTempBase(), "sshc-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := workspace.EnsureDirectory(workspace.Root()); err != nil {
-		t.Fatal(err)
-	}
-	manager := storage.NewManager(workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x5a}, 4096)))
-	return NewService(workspace, manager), workspace
-}
 
 // newEligibilityService は、これらの規則が扱う 4 個の状況を宣言するエントリファイル
 // と、そのうち 1 個を知っている known_hosts を持つワークスペースを書き出す。
@@ -125,7 +97,7 @@ func TestIdentityFileNoneDoesNotBlockAStoredPassword(t *testing.T) {
 // なので、2 行書けば 2 本とも接続に使われうる——1 本に絞れないことは、答えられない
 // ことではない。
 func TestWorkspaceKeysNamesEveryKeyTheConnectionCanUse(t *testing.T) {
-	service, workspace := newShortHomeService(t)
+	service, workspace := newTestService(t)
 	entry := "Host keyed\n" +
 		"\tIdentityFile ~/.ssh/id_ed25519_server\n" +
 		"Host complex\n" +
@@ -211,7 +183,7 @@ func TestWorkspaceKeysStaysSilentWhenTheConfigurationCannotBeResolved(t *testing
 // 保管庫には、もう暗号化されていない鍵や、別のものに置き換わった綴りについて古い
 // 項目が残っていることがある。持ち出しても開くものが無い。
 func TestUnlockableWorkspaceKeysRequiresACurrentEncryptedPrivateKey(t *testing.T) {
-	service, workspace := newShortHomeService(t)
+	service, workspace := newTestService(t)
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"),
 		[]byte("Host keyed\n\tIdentityFile ~/.ssh/id_ed25519_server\n"), 0o600); err != nil {
 		t.Fatal(err)
