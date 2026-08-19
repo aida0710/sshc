@@ -3,7 +3,7 @@ import type { HostEntry, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
-import { duplicateAliasesOf } from "./connectionBrowser";
+import { duplicateAliasesOf, identityKey } from "./connectionBrowser";
 import { canDrop, dragMimeType, type DragPayload } from "./dragdrop";
 
 export type HostSelection = { path: string; alias: string };
@@ -38,8 +38,6 @@ type ConnectionTreeProps = {
 };
 
 type Grouping = "groups" | "files";
-
-const identityKey = (host: HostEntry) => `${host.identity.path}\u0000${host.identity.alias}`;
 
 function labelFor(host: HostEntry): string {
   return host.identity.alias === "" ? `Host ${host.patterns.join(" ")}` : host.identity.alias;
@@ -82,15 +80,12 @@ export function ConnectionTree({
   const groupNames = useMemo(() => overview.groups.map((group) => group.name), [overview.groups]);
   const decorated = useMemo<DecoratedHost[]>(() => {
     const metadata = new Map(
-      (overview.metadata.hosts ?? []).map((entry) => [
-        `${entry.identity.path}\u0000${entry.identity.alias}`,
-        entry,
-      ]),
+      (overview.metadata.hosts ?? []).map((entry) => [identityKey(entry.identity), entry]),
     );
     const duplicates = duplicateAliasesOf(overview.hosts);
     return overview.hosts
       .map((host, sourceOrder) => {
-        const display = metadata.get(identityKey(host));
+        const display = metadata.get(identityKey(host.identity));
         return {
           host,
           group: host.group ?? "",

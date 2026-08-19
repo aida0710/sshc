@@ -1,4 +1,4 @@
-import type { HostEntry, Overview } from "../api/config";
+import type { HostEntry, HostIdentity, Overview } from "../api/config";
 
 export type ConnectionBrowserLocation =
   | { view: "servers" }
@@ -49,8 +49,21 @@ export type BrowserProjection =
   | { kind: "search-results"; scope: string | null; servers: BrowserServer[] }
   | { kind: "missing-group"; group: string };
 
-const identityKey = (identity: HostEntry["identity"]) =>
-  `${identity.path}\u0000${identity.alias}`;
+// identityKey は、ホストの識別子を Map の鍵にできる文字列へ落とす。
+//
+// **Go にこれに当たるものは無い。** あちらは map[HostIdentity] と書けば構造の等値が
+// そのまま鍵になる。JavaScript の Map はオブジェクトを参照でしか比べないので、
+// こちらだけが文字列に落とす必要がある。
+//
+// **区切りが NUL なのは、path も alias も NUL を含めないからである。** 普通の区切り
+// （"/" や ":"）なら、path と alias の境目を跨いで同じ綴りを作れてしまう。
+//
+// 定義はここひとつ。以前は ConnectionTree にも同じ式があり、**別々の Map を作って
+// それぞれ引いていた**ので食い違っても気付けなかった——identity に項目が増えた日、
+// 片方だけが鍵に入れ忘れれば、別のホストがメモや色や並び順を共有する。
+export function identityKey(identity: HostIdentity): string {
+  return `${identity.path}\u0000${identity.alias}`;
+}
 
 function nearestDeclaredParent(name: string, declared: ReadonlySet<string>): string {
   let candidate = name;

@@ -25,6 +25,7 @@ import { formatValues, isValidHostName } from "../rules/rules";
 
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import type { ConnectionSavedState } from "./connectionSavedState";
+import { identityKey } from "./connectionBrowser";
 
 type PasswordAction = UpdateConnectionPassword["kind"];
 
@@ -85,7 +86,7 @@ export function ConnectionBasicForm({
 }: ConnectionBasicFormProps) {
   const t = useTranslate();
   const identity = detail.form.entry.identity;
-  const resetKey = `${identity.path}\u0000${identity.alias}\u0000${detail.file.contents}`;
+  const resetKey = `${identityKey(identity)}\u0000${detail.file.contents}`;
   const initial = useMemo(() => ({
     hostName: initialDraft(detail, "HostName"),
     user: initialDraft(detail, "User"),

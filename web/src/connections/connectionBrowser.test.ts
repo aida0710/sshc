@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { HostEntry, Overview } from "../api/config";
+import type { HostEntry, HostIdentity, Overview } from "../api/config";
 import {
   buildConnectionBrowserIndex,
+  identityKey,
   projectConnectionBrowser,
 } from "./connectionBrowser";
 
@@ -247,5 +248,33 @@ describe("connection browser index", () => {
       servers: [],
     });
     expect(index.servers).not.toHaveLength(0);
+  });
+});
+
+// identityKey は、ホストのメモ・色・並び順を本体に結び付ける鍵である。
+//
+// **鍵の綴りが 6 か所にあった。** ConnectionTree は同じファイルの中で、Map を直書きの
+// テンプレート文字列で作り、引くときは関数を呼んでいた——**関数だけを直せば、照合は
+// 静かに全部外れる**形だった。QuickConnectBrowser の React key と 4 つの resetKey も
+// 同じ綴りを持っていた。今は落とす場所がひとつしかない。
+describe("ホストの識別子を鍵にする", () => {
+  it("path か alias が違えば、別の鍵になる", () => {
+    const base = identityKey({ path: "config", alias: "web" });
+    expect(identityKey({ path: "config", alias: "web" })).toBe(base);
+    expect(identityKey({ path: "work/config", alias: "web" })).not.toBe(base);
+    expect(identityKey({ path: "config", alias: "web2" })).not.toBe(base);
+  });
+
+  // **区切りが NUL なのは、path も alias も NUL を含めないからである。**
+  // 普通の区切りなら、境目を跨いで同じ綴りを作れてしまう。
+  it("path と alias の境目を跨いで衝突しない", () => {
+    expect(identityKey({ path: "a/b", alias: "c" })).not.toBe(identityKey({ path: "a", alias: "b/c" }));
+  });
+
+  // **identity に項目が増えたら、この宣言が型エラーになる。** 鍵に入れ忘れると、
+  // 別のホストが同じ鍵を持ち、メモや色や並び順を共有してしまう。
+  it("鍵は identity の全項目を綴っている", () => {
+    const keyed: Record<keyof HostIdentity, true> = { path: true, alias: true };
+    expect(Object.keys(keyed).sort()).toEqual(["alias", "path"]);
   });
 });

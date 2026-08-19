@@ -1,12 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Overview } from "../api/config";
-import {
-  buildConnectionBrowserIndex,
-  projectConnectionBrowser,
-  type BrowserGroup,
-  type BrowserServer,
-  type ConnectionBrowserLocation,
-} from "../connections/connectionBrowser";
+import { buildConnectionBrowserIndex, identityKey, projectConnectionBrowser, type BrowserGroup, type BrowserServer, type ConnectionBrowserLocation } from "../connections/connectionBrowser";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
@@ -45,7 +39,7 @@ export function QuickConnectBrowser({
       <ul aria-label={t("home.connectionList")} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {servers.map((server) => (
           <li
-            key={`${server.identity.path}\u0000${server.identity.alias}`}
+            key={identityKey(server.identity)}
             className="flex min-w-0 flex-col gap-3 rounded-xl border border-line bg-card p-4"
           >
             <div className="flex min-w-0 items-start gap-2">
