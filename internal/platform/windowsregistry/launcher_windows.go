@@ -89,14 +89,6 @@ func validateDesktopExecutable(path string) error {
 	return nil
 }
 
-// RegisterDesktopExecutable は、この利用者のためにデスクトップの居場所を記録する。
-//
-// **書く前にも確かめる。** 起こせないものを記録しておいて、起こす瞬間に初めて
-// 断るより、書けなかったと言う方が早い。
-func RegisterDesktopExecutable(path string) error {
-	return registerDesktopExecutable(LauncherKey, path)
-}
-
 func registerDesktopExecutable(key, path string) error {
 	if err := validateDesktopExecutable(path); err != nil {
 		return err
@@ -107,15 +99,6 @@ func registerDesktopExecutable(key, path string) error {
 	}
 	defer func() { _ = handle.Close() }()
 	return handle.SetStringValue(LauncherValue, path)
-}
-
-// RemoveDesktopExecutable は、記録が expected と同じときだけ消す。
-//
-// **他人の記録を消さない。** アンインストーラが呼ぶものなので、二つの版が
-// 入っている機械では、いま消そうとしている版のものだけを消す必要がある。
-// 別の場所を指しているなら、それは残っている方のインストールのものである。
-func RemoveDesktopExecutable(expected string) error {
-	return removeDesktopExecutable(LauncherKey, expected)
 }
 
 func removeDesktopExecutable(key, expected string) error {
