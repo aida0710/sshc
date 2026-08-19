@@ -397,6 +397,11 @@ test("moves to its own screen and leaves the connection detail alone", async ({ 
   // 戻り方が履歴なのは、選ばれているホストが URL に載っているからである。
   // ナビゲーションのリンクは常に一覧の入口を指すので、そちらは選択を持たない。
   await page.goBack();
+  // **先に、どこに居るかを訊く。** この 3 行が守っているのは「戻れば端末は
+  // 退く」ことだが、退かなかったときに出る症状は「コンソールがまだ見える」で
+  // あり、それは**戻れていない**のか**戻ったのに退いていない**のかを言わない。
+  // 実際 Windows の CI で一度それが起き、どちらだったのか分からなかった。
+  await expect(page).not.toHaveURL(/\/terminal$/);
   await expect(detail).toBeVisible();
   await expect(page.getByRole("region", { name: /^Console for / })).toBeHidden();
 });
