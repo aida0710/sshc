@@ -173,11 +173,17 @@ func TestEveryConfigMutationRequiresCSRFAndEveryResponseIsUncacheable(t *testing
 	}
 }
 
-func TestOverviewAndHostResponsesMatchTheGeneratedContract(t *testing.T) {
+// **実際に返る本文に、こちらが知らない項目が無いことを見る。**
+//
+// 相手は生成された双子ではなく、実際に c.JSON へ渡している型そのものである——
+// あの形の Go の定義は 1 つしかない（api/oapi-codegen.yaml の exclude-schemas）。
+// その型が openapi.yaml と一致することは internal/acceptance が見ているので、
+// 2 つ合わせて「返る本文 = 契約」になる。
+func TestOverviewAndHostResponsesMatchTheServedTypes(t *testing.T) {
 	harness := newConfigHarness(t)
 
 	overview := harness.call(t, http.MethodGet, "/api/v1/config/overview", nil, true, true)
-	var generatedOverview api.Overview
+	var generatedOverview application.Overview
 	decoder := json.NewDecoder(bytes.NewReader(overview.Body.Bytes()))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&generatedOverview); err != nil {
@@ -191,7 +197,7 @@ func TestOverviewAndHostResponsesMatchTheGeneratedContract(t *testing.T) {
 	if host.Code != http.StatusOK {
 		t.Fatalf("host = %d, body %s", host.Code, host.Body.String())
 	}
-	var generatedHost api.HostDetail
+	var generatedHost application.HostDetail
 	hostDecoder := json.NewDecoder(bytes.NewReader(host.Body.Bytes()))
 	hostDecoder.DisallowUnknownFields()
 	if err := hostDecoder.Decode(&generatedHost); err != nil {
@@ -352,7 +358,7 @@ func TestPreviewAndSaveRoundTripThroughTheContract(t *testing.T) {
 	if preview.Code != http.StatusOK {
 		t.Fatalf("preview = %d, body %s", preview.Code, preview.Body.String())
 	}
-	var generatedPreview api.SavePreview
+	var generatedPreview application.SavePreview
 	previewDecoder := json.NewDecoder(bytes.NewReader(preview.Body.Bytes()))
 	previewDecoder.DisallowUnknownFields()
 	if err := previewDecoder.Decode(&generatedPreview); err != nil {
