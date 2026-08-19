@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -104,4 +105,50 @@ func sameStrings(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+// **版を訊く道は、打たれる形すべてで通らなければならない。**
+//
+// `sshc version` が正式だが、`--version` は誰もが最初に打つ形である。受けないと
+// usage と終了コード 2 になり、入れた直後の一行目が失敗する——実際
+// docs/release-install.md は `./sshc --version` を案内していた。
+func TestEveryWayOfAskingForTheVersionIsAccepted(t *testing.T) {
+	for _, word := range []string{"version", "--version", "-v"} {
+		called, err := parseInvocation([]string{"sshc", word})
+		if err != nil {
+			t.Fatalf("%s: %v", word, err)
+		}
+		if called.Kind != invocationVersion {
+			t.Errorf("%s: kind = %v, want invocationVersion", word, called.Kind)
+		}
+	}
+}
+
+// 版は引数を取らない。取ると alias と見分けが付かなくなる。
+func TestAskingForTheVersionTakesNoArguments(t *testing.T) {
+	if _, err := parseInvocation([]string{"sshc", "version", "extra"}); err == nil {
+		t.Fatal("version accepted an argument")
+	}
+}
+
+// **入っているものを言うときは、どの機械のものかも言う。** 入れ方が増えたので、
+// 「入ったが動かない」の相談で最初に要るのは版よりもそちらである。
+func TestTheVersionLineNamesTheBuildTarget(t *testing.T) {
+	var out strings.Builder
+	printVersion(&out)
+	line := out.String()
+	for _, want := range []string{"sshc ", version, runtime.GOOS, runtime.GOARCH} {
+		if !strings.Contains(line, want) {
+			t.Errorf("version line %q does not mention %q", line, want)
+		}
+	}
+}
+
+// usage は、打てるものを全部並べる約束である。
+func TestUsageNamesTheVersionCommand(t *testing.T) {
+	var out strings.Builder
+	usage(&out)
+	if !strings.Contains(out.String(), "sshc version") {
+		t.Error("usage does not mention the version command")
+	}
 }
