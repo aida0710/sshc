@@ -10,10 +10,10 @@ import {
   type HostMetadata,
   type Metadata,
   type Overview,
-  type SavePreview,
   type UpdateConnectionRequest,
 } from "../api/config";
 import { ConnectionTree, type HostSelection } from "./ConnectionTree";
+import { useOverlays, useSaveFeedback, useSelectionState } from "./pageState";
 import type { DragPayload } from "./dragdrop";
 import { HostDetailPanel } from "./HostDetail";
 import {
@@ -127,26 +127,30 @@ export function ConnectionsPage({
   // つけるのではなく、サーバーがエントリファイルを報告する。"config" は
   // 最初の overview が届くまでの、あくまで暫定のフォールバックである。
   const entryPath = overview?.entry.path ?? "config";
-  const [selection, setSelection] = useState<HostSelection | null>(
-    initialTarget === null ? null : { path: initialTarget.path, alias: initialTarget.alias },
-  );
+  const {
+    selection, setSelection,
+    invalidLocation, setInvalidLocation,
+    activePanel, setActivePanel,
+    activeAdvanced, setActiveAdvanced,
+    missingSelection, setMissingSelection,
+  } = useSelectionState(initialTarget, initialRoute.kind === "invalid");
   const selectionRef = useRef<HostSelection | null>(selection);
-  const [invalidLocation, setInvalidLocation] = useState(initialRoute.kind === "invalid");
-  const [activePanel, setActivePanel] = useState<ConnectionPanel>(initialTarget?.panel ?? "Basic");
-  const [activeAdvanced, setActiveAdvanced] = useState<AdvancedArea>(initialTarget?.advanced ?? "Jump");
   const [detail, setDetail] = useState<HostDetail | null>(null);
   const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
-  const [editorDirty, setEditorDirty] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
   const [savedRevision, setSavedRevision] = useState(0);
   const basicDiscardRef = useRef<(() => void) | null>(null);
-  const [preview, setPreview] = useState<SavePreview | null>(null);
-  const [problem, setProblem] = useState<Problem | null>(null);
-  const [localError, setLocalError] = useState("");
-  const [creating, setCreating] = useState(creationDraft !== null);
-  const [launching, setLaunching] = useState(false);
-  const [managing, setManaging] = useState(false);
-  const [missingSelection, setMissingSelection] = useState(false);
+  const {
+    editorDirty, setEditorDirty,
+    preview, setPreview,
+    problem, setProblem,
+    localError, setLocalError,
+  } = useSaveFeedback();
+  const {
+    creatingConnection: creating, setCreatingConnection: setCreating,
+    launching, setLaunching,
+    managing, setManaging,
+  } = useOverlays(creationDraft !== null);
 
   useEffect(() => {
     selectionRef.current = selection;
