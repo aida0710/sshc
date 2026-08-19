@@ -1,8 +1,8 @@
 package application
 
 import (
-	"errors"
 	"sort"
+	"sshc/internal/validate"
 	"strings"
 )
 
@@ -15,86 +15,20 @@ const (
 	// 反映する。オンデマンドで作られ、先回りして作られることはない。
 	KeysDirectory = "keys"
 
-	// MaxGroupSegments は、グループがネストできる深さを制限する。
-	//
-	// この制限はここではなく鍵スキャナー由来である。~/.ssh から
-	// 最大 8 階層のディレクトリを歩き、"keys" 自体がそのうち 1 つを
-	// 消費するので、7 段目のグループセグメントの中にある鍵は
-	// depth_exceeded として報告され、一覧に載る代わりにインベントリから消える。
-	// その名前を拒否する方が、受け入れた上でそこに置かれた
-	// ファイルを取りこぼすより良い。
-	MaxGroupSegments = 6
-
-	// maxGroupSegmentBytes は鍵 vault のファイル名ポリシーに合わせてあり、グループ
-	// ディレクトリがワークスペースの他の部分が拒否するような名前にはならないようにする。
-	maxGroupSegmentBytes = 64
+	// MaxGroupSegments は、グループがネストできる深さの上限である。規則の正本は
+	// internal/validate にある。
+	MaxGroupSegments = validate.MaxGroupSegments
 )
 
-// ErrInvalidGroupName は、connections ディレクトリ配下の
-// 安全な相対ディレクトリパスになっていないグループ名を報告する。
-var ErrInvalidGroupName = errors.New("group name is not a safe relative directory path")
-
-// reservedGroupNames は、OpenSSH とこのアプリケーションが ~/.ssh の中で
-// 既に意味を与えている名前である。比較は大小文字を区別しない。既定の
-// macOS ボリュームは "Config" と "config" を同じディレクトリエントリとして扱うからだ。
-var reservedGroupNames = map[string]bool{
-	"sshc":             true,
-	"config":           true,
-	"known_hosts":      true,
-	"known_hosts2":     true,
-	"authorized_keys":  true,
-	"authorized_keys2": true,
-	"environment":      true,
-	"rc":               true,
-	"connections":      true,
-	"keys":             true,
-}
-
-// ValidateGroupName は、すべてのセグメントが安全な単一の
-// パス構成要素であるスラッシュ区切りの相対ディレクトリパスを受け入れる。
+// ErrInvalidGroupName は、connections ディレクトリ配下の安全な相対ディレクトリ
+// パスになっていないグループ名を報告する。
 //
-// このチェックは、クリーンな文字列ではなく生の文字列に対して
-// セグメントごとに行う。クリーンにすると "work/../home" は "home"
-// になってしまい、クリーンな形を検証すると traverse する名前を黙って受け入れてしまう。
-func ValidateGroupName(name string) error {
-	if name == "" || strings.ContainsRune(name, '\x00') {
-		return ErrInvalidGroupName
-	}
-	segments := strings.Split(name, "/")
-	if len(segments) > MaxGroupSegments {
-		return ErrInvalidGroupName
-	}
-	for _, segment := range segments {
-		if err := validateGroupSegment(segment); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+// **規則そのものは internal/validate が持つ。** ブラウザにも同じ答えを出して
+// ほしいものなので、予約語も文字集合も上限も、あちらから生成して配る。
+var ErrInvalidGroupName = validate.ErrInvalidGroupName
 
-func validateGroupSegment(segment string) error {
-	if segment == "" || len(segment) > maxGroupSegmentBytes {
-		return ErrInvalidGroupName
-	}
-	if segment == "." || segment == ".." || strings.HasPrefix(segment, ".") {
-		return ErrInvalidGroupName
-	}
-	if reservedGroupNames[strings.ToLower(segment)] {
-		return ErrInvalidGroupName
-	}
-	for index := 0; index < len(segment); index++ {
-		character := segment[index]
-		switch {
-		case character >= 'A' && character <= 'Z':
-		case character >= 'a' && character <= 'z':
-		case character >= '0' && character <= '9':
-		case character == '.' || character == '-' || character == '_':
-		default:
-			return ErrInvalidGroupName
-		}
-	}
-	return nil
-}
+// ValidateGroupName は、この綴りをグループとして受け付けてよいかを報告する。
+func ValidateGroupName(name string) error { return validate.GroupName(name) }
 
 // GroupDirectory は、グループの connection ファイルを保持する
 // ワークスペース相対のディレクトリである。

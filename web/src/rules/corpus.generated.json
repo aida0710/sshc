@@ -1,0 +1,350 @@
+{
+  "groupName": [
+    {
+      "input": "work",
+      "valid": true,
+      "why": "ふつうの名前"
+    },
+    {
+      "input": "work/eu",
+      "valid": true,
+      "why": "入れ子"
+    },
+    {
+      "input": "rc",
+      "valid": false,
+      "why": "予約語。画面が緑を出してサーバーが断っていた 4 つのひとつ"
+    },
+    {
+      "input": "environment",
+      "valid": false,
+      "why": "同上"
+    },
+    {
+      "input": "known_hosts2",
+      "valid": false,
+      "why": "同上"
+    },
+    {
+      "input": "authorized_keys2",
+      "valid": false,
+      "why": "同上"
+    },
+    {
+      "input": "config",
+      "valid": false,
+      "why": "予約語。両方が断っていた"
+    },
+    {
+      "input": "CONFIG",
+      "valid": false,
+      "why": "予約語の大小違い。macOS は同じディレクトリエントリとして扱う"
+    },
+    {
+      "input": "-foo",
+      "valid": false,
+      "why": "先頭の `-`。画面だけが断っていた——いまは両方が断る"
+    },
+    {
+      "input": ".hidden",
+      "valid": false,
+      "why": "先頭の `.`"
+    },
+    {
+      "input": "a/b/c/d/e/f",
+      "valid": true,
+      "why": "深さちょうど"
+    },
+    {
+      "input": "a/b/c/d/e/f/g",
+      "valid": false,
+      "why": "深さ超過"
+    },
+    {
+      "input": "",
+      "valid": false,
+      "why": "空"
+    },
+    {
+      "input": "with space",
+      "valid": false,
+      "why": "空白"
+    },
+    {
+      "input": "日本語",
+      "valid": false,
+      "why": "ASCII の外"
+    },
+    {
+      "input": "a..b",
+      "valid": true,
+      "why": "連続する点。ディレクトリ名としては通る"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": true,
+      "why": "長さちょうど"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": false,
+      "why": "長さ超過"
+    }
+  ],
+  "hostName": [
+    {
+      "input": "example.com",
+      "valid": true,
+      "why": "DNS 名"
+    },
+    {
+      "input": "203.0.113.10",
+      "valid": true,
+      "why": "IPv4"
+    },
+    {
+      "input": "::1",
+      "valid": true,
+      "why": "圧縮 IPv6。先頭が ':' なので文字集合では判定できない"
+    },
+    {
+      "input": "2001:db8::1",
+      "valid": true,
+      "why": "圧縮 IPv6"
+    },
+    {
+      "input": "fe80::1%eth0",
+      "valid": false,
+      "why": "zone 識別子。Go は断る"
+    },
+    {
+      "input": "[2001:db8::1]",
+      "valid": false,
+      "why": "角括弧付き。Go は断る"
+    },
+    {
+      "input": "::ffff:01.2.3.4",
+      "valid": false,
+      "why": "IPv4 射影の先頭ゼロ。net.ParseIP は断る"
+    },
+    {
+      "input": "::ffff:1.2.3.4",
+      "valid": true,
+      "why": "IPv4 射影"
+    },
+    {
+      "input": "-lead.example",
+      "valid": false,
+      "why": "先頭の `-`"
+    },
+    {
+      "input": "trail-.example",
+      "valid": true,
+      "why": "末尾の `-`"
+    },
+    {
+      "input": "",
+      "valid": false,
+      "why": "空"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": false,
+      "why": "長さ超過"
+    }
+  ],
+  "alias": [
+    {
+      "input": "bastion",
+      "valid": true,
+      "why": "ふつう"
+    },
+    {
+      "input": "build-01",
+      "valid": true,
+      "why": "ハイフン"
+    },
+    {
+      "input": "-oProxyCommand=id",
+      "valid": false,
+      "why": "先頭の `-`。option に化ける綴り"
+    },
+    {
+      "input": "has space",
+      "valid": false,
+      "why": "空白"
+    },
+    {
+      "input": "quote\"inside",
+      "valid": false,
+      "why": "二重引用符"
+    },
+    {
+      "input": "*",
+      "valid": false,
+      "why": "パターン。alias ではない"
+    },
+    {
+      "input": "",
+      "valid": false,
+      "why": "空"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": false,
+      "why": "長さ超過"
+    }
+  ],
+  "port": [
+    {
+      "input": 22,
+      "valid": true,
+      "why": "既定"
+    },
+    {
+      "input": 1,
+      "valid": true,
+      "why": "下限"
+    },
+    {
+      "input": 65535,
+      "valid": true,
+      "why": "上限"
+    },
+    {
+      "input": 0,
+      "valid": false,
+      "why": "範囲外"
+    },
+    {
+      "input": 65536,
+      "valid": false,
+      "why": "範囲外"
+    },
+    {
+      "input": -1,
+      "valid": false,
+      "why": "負"
+    }
+  ],
+  "render": [
+    {
+      "input": [
+        "simple"
+      ],
+      "output": "simple",
+      "refused": false,
+      "why": "そのまま"
+    },
+    {
+      "input": [
+        "has space"
+      ],
+      "output": "\"has space\"",
+      "refused": false,
+      "why": "空白があるので引用する"
+    },
+    {
+      "input": [
+        ""
+      ],
+      "output": "\"\"",
+      "refused": false,
+      "why": "空の値も引用で表す"
+    },
+    {
+      "input": [
+        "#comment"
+      ],
+      "output": "\"#comment\"",
+      "refused": false,
+      "why": "`#` 始まりは引用しないとコメントになる"
+    },
+    {
+      "input": [
+        "quote\"inside"
+      ],
+      "output": "",
+      "refused": true,
+      "why": "二重引用符。OpenSSH に綴りが無いので Go は断る"
+    },
+    {
+      "input": [
+        "line\nbreak"
+      ],
+      "output": "",
+      "refused": true,
+      "why": "改行。同上"
+    },
+    {
+      "input": [
+        "a",
+        "b c"
+      ],
+      "output": "a \"b c\"",
+      "refused": false,
+      "why": "複数の値"
+    },
+    {
+      "input": [
+        "tab\there"
+      ],
+      "output": "\"tab\there\"",
+      "refused": false,
+      "why": "タブがあるので引用する"
+    }
+  ],
+  "parse": [
+    {
+      "input": "a b",
+      "values": [
+        "a",
+        "b"
+      ],
+      "refused": false,
+      "why": "ふつう"
+    },
+    {
+      "input": "a \"b c\"",
+      "values": [
+        "a",
+        "b c"
+      ],
+      "refused": false,
+      "why": "引用された値"
+    },
+    {
+      "input": "\"unbalanced",
+      "values": null,
+      "refused": true,
+      "why": "閉じない引用。Go は非構造化として扱う"
+    },
+    {
+      "input": "a\"b",
+      "values": null,
+      "refused": true,
+      "why": "語の途中の引用符"
+    },
+    {
+      "input": "\"a\"b",
+      "values": null,
+      "refused": true,
+      "why": "引用の直後に文字が続く"
+    },
+    {
+      "input": "  spaced  out  ",
+      "values": [
+        "spaced",
+        "out"
+      ],
+      "refused": false,
+      "why": "前後と間の空白"
+    },
+    {
+      "input": "",
+      "values": [],
+      "refused": false,
+      "why": "空"
+    }
+  ]
+}
