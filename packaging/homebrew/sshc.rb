@@ -1,4 +1,9 @@
-# これは tap `aida0710/homebrew-sshc` に置く formula の正本である。
+# これは tap `aida0710/homebrew-tap` に置く formula の正本である。
+#
+# **tap の名前は project 名ではない。** ひとつの tap に formula は何個でも入り、
+# GUI 用の Casks/ も同居できる。HashiCorp も GoReleaser も Charm も `homebrew-tap`
+# ひとつに全部置いており、利用者から見えるのは `brew install aida0710/tap/sshc`
+# である——**次に何かを配るときに、また tap を作らずに済む。**
 #
 # **ここが原本で、tap にあるのは写しである。** リリースのたびに
 # .github/workflows/release.yml が version と sha256 を差し替えて向こうへ押す。

@@ -3,7 +3,7 @@
 ### Homebrew（macOS / Linux）
 
 ```sh
-brew install aida0710/sshc/sshc
+brew install aida0710/tap/sshc
 ```
 
 **ソースからビルドします。** brew が Go を用意して `go build` を回すので、
