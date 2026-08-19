@@ -322,13 +322,6 @@ type CreateConnectionRequest struct {
 	User           *string                        `json:"user,omitempty"`
 }
 
-// CreateConnectionResponse defines model for CreateConnectionResponse.
-type CreateConnectionResponse struct {
-	Identity      HostIdentity `json:"identity"`
-	Preview       SavePreview  `json:"preview"`
-	TransactionId string       `json:"transactionId"`
-}
-
 // CreateDedicatedPasswordAuthentication defines model for CreateDedicatedPasswordAuthentication.
 type CreateDedicatedPasswordAuthentication struct {
 	Kind     string `json:"kind"`
@@ -410,35 +403,6 @@ type EditRequest struct {
 	Raw              *string      `json:"raw,omitempty"`
 }
 
-// Effective defines model for Effective.
-type Effective struct {
-	Alias   string           `json:"alias"`
-	Entries []EffectiveEntry `json:"entries"`
-	Notices *[]Notice        `json:"notices,omitempty"`
-}
-
-// EffectiveChange defines model for EffectiveChange.
-type EffectiveChange struct {
-	After         []string  `json:"after"`
-	AfterSources  *[]Source `json:"afterSources,omitempty"`
-	Before        []string  `json:"before"`
-	BeforeSources *[]Source `json:"beforeSources,omitempty"`
-	Keyword       string    `json:"keyword"`
-}
-
-// EffectiveDiff defines model for EffectiveDiff.
-type EffectiveDiff struct {
-	Alias   string            `json:"alias"`
-	Changes []EffectiveChange `json:"changes"`
-}
-
-// EffectiveEntry defines model for EffectiveEntry.
-type EffectiveEntry struct {
-	Keyword string   `json:"keyword"`
-	Source  Source   `json:"source"`
-	Values  []string `json:"values"`
-}
-
 // EffectiveResponse defines model for EffectiveResponse.
 type EffectiveResponse struct {
 	Alias                string                `json:"alias"`
@@ -477,53 +441,6 @@ type FieldEdit struct {
 	Keyword *string   `json:"keyword,omitempty"`
 	Line    *int      `json:"line,omitempty"`
 	Values  *[]string `json:"values,omitempty"`
-}
-
-// FileContents defines model for FileContents.
-type FileContents struct {
-	Contents string  `json:"contents"`
-	Digest   string  `json:"digest"`
-	Editable bool    `json:"editable"`
-	Exists   bool    `json:"exists"`
-	File     FileRef `json:"file"`
-}
-
-// FileDiff defines model for FileDiff.
-type FileDiff struct {
-	Created   *bool      `json:"created,omitempty"`
-	Lines     []DiffLine `json:"lines"`
-	NewDigest *string    `json:"newDigest,omitempty"`
-	OldDigest *string    `json:"oldDigest,omitempty"`
-	Path      string     `json:"path"`
-	Removed   *bool      `json:"removed,omitempty"`
-	Truncated *bool      `json:"truncated,omitempty"`
-}
-
-// FileNode defines model for FileNode.
-type FileNode struct {
-	Editable bool                `json:"editable"`
-	File     FileRef             `json:"file"`
-	Includes *[]IncludeReference `json:"includes,omitempty"`
-	Loads    int                 `json:"loads"`
-	Missing  *bool               `json:"missing,omitempty"`
-}
-
-// FileRef defines model for FileRef.
-type FileRef struct {
-	Absolute string  `json:"absolute"`
-	External *bool   `json:"external,omitempty"`
-	Path     *string `json:"path,omitempty"`
-}
-
-// FormField defines model for FormField.
-type FormField struct {
-	Category  string   `json:"category"`
-	Dangerous *bool    `json:"dangerous,omitempty"`
-	Duplicate *bool    `json:"duplicate,omitempty"`
-	Editable  bool     `json:"editable"`
-	Keyword   string   `json:"keyword"`
-	Line      int      `json:"line"`
-	Values    []string `json:"values"`
 }
 
 // GenerateKeyRequest defines model for GenerateKeyRequest.
@@ -571,20 +488,6 @@ type GroupRenameRequest struct {
 	To   string `json:"to"`
 }
 
-// GroupView defines model for GroupView.
-type GroupView struct {
-	Colour           *string    `json:"colour,omitempty"`
-	Directory        string     `json:"directory"`
-	DirectoryPresent bool       `json:"directoryPresent"`
-	KeyDirectory     string     `json:"keyDirectory"`
-	MemberCount      int        `json:"memberCount"`
-	Name             string     `json:"name"`
-	Note             *string    `json:"note,omitempty"`
-	Order            *int       `json:"order,omitempty"`
-	Parent           *string    `json:"parent,omitempty"`
-	Settings         *[]Setting `json:"settings,omitempty"`
-}
-
 // HardwareCommandRequest defines model for HardwareCommandRequest.
 type HardwareCommandRequest struct {
 	Algorithm string  `json:"algorithm"`
@@ -622,40 +525,6 @@ type HistoryList struct {
 	Entries []HistoryEntry `json:"entries"`
 }
 
-// HostDetail defines model for HostDetail.
-type HostDetail struct {
-	Effective Effective    `json:"effective"`
-	File      FileContents `json:"file"`
-	Form      HostForm     `json:"form"`
-	Metadata  HostMetadata `json:"metadata"`
-}
-
-// HostEntry defines model for HostEntry.
-type HostEntry struct {
-	Duplicate *bool        `json:"duplicate,omitempty"`
-	Editable  bool         `json:"editable"`
-	File      FileRef      `json:"file"`
-	Group     *string      `json:"group,omitempty"`
-	Identity  HostIdentity `json:"identity"`
-	Line      int          `json:"line"`
-	Negated   *bool        `json:"negated,omitempty"`
-	Patterns  []string     `json:"patterns"`
-	Wildcard  *bool        `json:"wildcard,omitempty"`
-}
-
-// HostForm defines model for HostForm.
-type HostForm struct {
-	// Comment The comment lines attached above the Host line, with the '#' markers stripped. Empty when the block has none. ssh_config has no trailing comment syntax, so only whole lines are ever attached.
-	Comment string `json:"comment"`
-
-	// CommentLines How many physical lines the attached comment occupies. A client rewriting the whole file needs the count to include those lines; it cannot be derived from comment, whose markers and indentation were stripped.
-	CommentLines int         `json:"commentLines"`
-	Entry        HostEntry   `json:"entry"`
-	Fields       []FormField `json:"fields"`
-	Notices      *[]Notice   `json:"notices,omitempty"`
-	Raw          string      `json:"raw"`
-}
-
 // HostIdentity defines model for HostIdentity.
 type HostIdentity struct {
 	Alias string `json:"alias"`
@@ -671,14 +540,6 @@ type HostMetadata struct {
 	Order     *int         `json:"order,omitempty"`
 	Orphan    *bool        `json:"orphan,omitempty"`
 	Tags      *[]string    `json:"tags,omitempty"`
-}
-
-// IncludeReference defines model for IncludeReference.
-type IncludeReference struct {
-	Condition *string    `json:"condition,omitempty"`
-	Line      int        `json:"line"`
-	Matches   *[]FileRef `json:"matches,omitempty"`
-	Pattern   string     `json:"pattern"`
 }
 
 // IssueActionRequest defines model for IssueActionRequest.
@@ -871,18 +732,6 @@ type OpenTerminalSessionResponse struct {
 	StreamTicket string          `json:"streamTicket"`
 }
 
-// Overview defines model for Overview.
-type Overview struct {
-	Diagnostics []Diagnostic          `json:"diagnostics"`
-	Entry       FileRef               `json:"entry"`
-	Files       []FileNode            `json:"files"`
-	Groups      []GroupView           `json:"groups"`
-	Hosts       []HostEntry           `json:"hosts"`
-	Metadata    Metadata              `json:"metadata"`
-	Notices     []Notice              `json:"notices"`
-	Pending     *[]PendingTransaction `json:"pending,omitempty"`
-}
-
 // PassphraseRequest defines model for PassphraseRequest.
 type PassphraseRequest struct {
 	Passphrase string `json:"passphrase"`
@@ -906,17 +755,6 @@ type PasswordVaultStatus struct {
 	Exists                  bool           `json:"exists"`
 	MinPassphraseLength     *int           `json:"minPassphraseLength,omitempty"`
 	Unlocked                bool           `json:"unlocked"`
-}
-
-// PendingTransaction defines model for PendingTransaction.
-type PendingTransaction struct {
-	CanComplete bool     `json:"canComplete"`
-	Committed   int      `json:"committed"`
-	Id          string   `json:"id"`
-	Operation   string   `json:"operation"`
-	Paths       []string `json:"paths"`
-	StartedAt   string   `json:"startedAt"`
-	Status      string   `json:"status"`
 }
 
 // Problem defines model for Problem.
@@ -1122,21 +960,6 @@ type RewrittenKeyReference struct {
 	To         string `json:"to"`
 }
 
-// SavePreview defines model for SavePreview.
-type SavePreview struct {
-	Diffs     []FileDiff       `json:"diffs"`
-	Effective *[]EffectiveDiff `json:"effective,omitempty"`
-	Notices   *[]Notice        `json:"notices,omitempty"`
-	Operation string           `json:"operation"`
-}
-
-// SaveResult defines model for SaveResult.
-type SaveResult struct {
-	Preview       SavePreview `json:"preview"`
-	TransactionId string      `json:"transactionId"`
-	Written       []string    `json:"written"`
-}
-
 // Setting defines model for Setting.
 type Setting struct {
 	Keyword string   `json:"keyword"`
@@ -1149,14 +972,6 @@ type SnapshotSummary struct {
 	FileCount     int    `json:"fileCount"`
 	SnapshotBytes int64  `json:"snapshotBytes"`
 	SourceBytes   int64  `json:"sourceBytes"`
-}
-
-// Source defines model for Source.
-type Source struct {
-	Absolute  *string `json:"absolute,omitempty"`
-	Condition *string `json:"condition,omitempty"`
-	Line      *int    `json:"line,omitempty"`
-	Path      *string `json:"path,omitempty"`
 }
 
 // StoreCredentialRequest defines model for StoreCredentialRequest.

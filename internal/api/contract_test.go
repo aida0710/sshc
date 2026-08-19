@@ -16,20 +16,6 @@ func TestGeneratedFoundationModels(t *testing.T) {
 	}
 }
 
-func TestGeneratedConnectionCreationModels(t *testing.T) {
-	request := CreateConnectionRequest{
-		Alias: "edge", HostName: "edge.example",
-		Authentication: json.RawMessage(`{"kind":"identity_file","keyId":"0123456789abcdef0123456789abcdef"}`),
-	}
-	response := CreateConnectionResponse{
-		TransactionId: "transaction", Identity: HostIdentity{Path: "config", Alias: "edge"},
-		Preview: SavePreview{Operation: "connection.create", Diffs: []FileDiff{}},
-	}
-	if request.Alias != response.Identity.Alias || response.TransactionId == "" {
-		t.Fatalf("unexpected connection creation contract: %#v %#v", request, response)
-	}
-}
-
 func TestGeneratedConnectionUpdateModels(t *testing.T) {
 	hostName := json.RawMessage(`{"action":"set","value":"edge.example"}`)
 	request := UpdateConnectionRequest{

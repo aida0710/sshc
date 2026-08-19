@@ -12,7 +12,6 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/keys"
 	"sshc/internal/secret"
@@ -115,13 +114,13 @@ func TestCreateConnectionEndpointCommitsAndReturnsOnlySafeData(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create = %d, body %s", response.Code, response.Body.String())
 	}
-	var result api.CreateConnectionResponse
+	var result application.CreateConnectionResult
 	decoder := json.NewDecoder(bytes.NewReader(response.Body.Bytes()))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&result); err != nil {
 		t.Fatalf("response contract = %v", err)
 	}
-	if result.TransactionId == "" || result.Identity != (api.HostIdentity{
+	if result.TransactionID == "" || result.Identity != (application.HostIdentity{
 		Path: "connections/home-lab/others/new-node.conf", Alias: "new-node",
 	}) {
 		t.Fatalf("result = %#v", result)
@@ -247,13 +246,13 @@ func TestUpdateConnectionEndpointCommitsAndReturnsOnlySafeData(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("update = %d, body %s", response.Code, response.Body.String())
 	}
-	var result api.SaveResult
+	var result application.SaveResult
 	decoder := json.NewDecoder(bytes.NewReader(response.Body.Bytes()))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&result); err != nil {
 		t.Fatalf("response contract = %v", err)
 	}
-	if result.TransactionId == "" || len(result.Written) != 1 || result.Written[0] != "config" {
+	if result.TransactionID == "" || len(result.Written) != 1 || result.Written[0] != "config" {
 		t.Fatalf("result = %#v", result)
 	}
 	if got := harness.passwords.PasswordFor("existing"); got != password {
