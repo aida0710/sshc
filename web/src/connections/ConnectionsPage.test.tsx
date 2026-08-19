@@ -925,7 +925,7 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "More connection actions" }));
     await user.click(await screen.findByRole("button", { name: "Delete connection" }));
-    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete it" }));
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
       kind: "file_raw",
@@ -951,7 +951,7 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "More connection actions" }));
     await user.click(await screen.findByRole("button", { name: "Delete connection" }));
-    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete it" }));
 
     await screen.findByRole("alert");
     expect(screen.getByRole("heading", { name: "bastion" })).toBeInTheDocument();
