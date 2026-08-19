@@ -21,8 +21,8 @@ import { control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Card, Notice, Row } from "../ui/surface";
 import { deriveBasicField, type BasicFieldState, type BasicKeyword } from "./basicFields";
-import { formatValues } from "./values";
-import { validHostNameInput } from "./hostValidation";
+import { formatValues, isValidHostName } from "../rules/rules";
+
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import type { ConnectionSavedState } from "./connectionSavedState";
 
@@ -189,7 +189,8 @@ export function ConnectionBasicForm({
         setSelectedKey("");
         setInitialKey("");
       } else if (direct.length === 1) {
-        const configured = formatValues(direct[0]!.values);
+        // 綴りの無い値はサーバーが書かないので、?? "" が効くことは実際には無い。
+        const configured = formatValues(direct[0]!.values) ?? "";
         const matched = identities.find((candidate) => keyConfigValue(candidate) === configured);
         if (!available || matched === undefined) {
           setKeyState("custom");
@@ -317,7 +318,7 @@ export function ConnectionBasicForm({
     ? ""
     : hostName.value === ""
       ? t("conn.createHostRequired")
-      : validHostNameInput(hostName.value)
+      : isValidHostName(hostName.value)
         ? ""
         : t("conn.createHostInvalid");
   const userError = user.value !== "" && /[\s\p{Cc}]/u.test(user.value) ? t("conn.createUserInvalid") : "";

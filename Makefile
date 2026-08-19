@@ -20,6 +20,11 @@ FUZZ_TARGETS = \
 generate:
 	go generate ./internal/api
 	npm run generate:api --prefix web
+	@# ブラウザにも同じ答えを出してほしい規則を web へ配る。表（予約語・パターン・
+	@# 上限）と、判定を突き合わせる適合コーパスの 2 つである。**正本は Go にある**
+	@# ——書き写した表を持っていた間、予約語は Go に 10・画面に 6 あり、`rc` という
+	@# グループ名は画面が緑を出してサーバーが断っていた。
+	go run ./internal/validate/cmd/rulegen .
 
 test:
 	go test ./...
@@ -50,7 +55,8 @@ e2e: build
 # api/openapi.yaml が、Go のモデルと TypeScript の型の両方にとって依然として唯一の
 # 源であることの証明である。
 verify-generated: generate
-	git diff --exit-code -- internal/api/models.gen.go web/src/api/schema.d.ts
+	git diff --exit-code -- internal/api/models.gen.go web/src/api/schema.d.ts \
+		web/src/rules/generated.ts web/src/rules/corpus.generated.json
 
 # VERSION を caller が渡した場合は専用の build channel へそのまま渡す。空なら
 # helper が argv で git describe を実行し、exact tag がなければ dev を使う。

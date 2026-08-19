@@ -1,5 +1,5 @@
 import type { HostDetail } from "../api/config";
-import { formatValues } from "./values";
+import { formatValues } from "../rules/rules";
 
 export type BasicKeyword = "HostName" | "User" | "Port";
 
@@ -37,7 +37,7 @@ export function deriveBasicField(detail: HostDetail, keyword: BasicKeyword): Bas
     const field = direct[0]!;
     return {
       keyword,
-      value: formatValues(field.values),
+      value: formatValues(field.values) ?? "",
       origin: "direct",
       source: detail.form.entry.file.path === undefined
         ? { absolute: detail.form.entry.file.absolute, line: field.line }
@@ -49,7 +49,7 @@ export function deriveBasicField(detail: HostDetail, keyword: BasicKeyword): Bas
   if (inherited !== undefined) {
     return {
       keyword,
-      value: formatValues(inherited.values),
+      value: formatValues(inherited.values) ?? "",
       origin: "inherited",
       source: inherited.source,
       editable: detail.form.entry.editable,

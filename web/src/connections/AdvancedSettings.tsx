@@ -4,7 +4,7 @@ import { useTranslate } from "../i18n/context";
 import type { AdvancedArea } from "../routing/connectionRoute";
 import { control, hintText, narrowControl } from "../ui/form";
 import { Button, Card, Notice, Row } from "../ui/surface";
-import { formatValues, parseValues } from "./values";
+import { formatValues, parseValues } from "../rules/rules";
 
 type AdvancedSettingsProps = {
   detail: HostDetail;
@@ -81,7 +81,8 @@ export function AdvancedSettings({
   }, [detail.form.raw]);
 
   function draftFor(field: FormField): string {
-    return drafts[fieldKey(field)] ?? formatValues(field.values);
+    // 綴りの無い値はサーバーが書かないので、?? "" が効くことは実際には無い。
+    return drafts[fieldKey(field)] ?? formatValues(field.values) ?? "";
   }
 
   function submitFieldEdits() {

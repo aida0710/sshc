@@ -17,7 +17,7 @@ import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { control, Field, fieldLabel, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
-import { validHostNameInput } from "./hostValidation";
+import { isValidHostName } from "../rules/rules";
 import { Button, Notice } from "../ui/surface";
 
 type AuthenticationKind = CreateConnectionAuthentication["kind"];
@@ -155,7 +155,7 @@ export function CreateConnectionModal({
       : t("conn.createAliasInvalid");
   const hostError = hostName === ""
     ? t("conn.createHostRequired")
-    : validHostNameInput(hostName)
+    : isValidHostName(hostName)
       ? ""
       : t("conn.createHostInvalid");
   const userError = user !== "" && /[\s\p{Cc}]/u.test(user) ? t("conn.createUserInvalid") : "";
