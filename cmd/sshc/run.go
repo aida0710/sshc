@@ -94,14 +94,12 @@ func remoteCommand(words []string) string {
 // savedPassphraseFor と savedPasswordFor は、engine が返した答えを
 // sshclient が引ける形にする。`runConnect` と同じ組み立てである。
 func savedPassphraseFor(answer connectAnswer) func(string) (string, bool) {
-	if answer.KeyPath == "" || answer.Passphrase == "" {
+	if len(answer.Passphrases) == 0 {
 		return nil
 	}
 	return func(relativePath string) (string, bool) {
-		if relativePath != answer.KeyPath {
-			return "", false
-		}
-		return answer.Passphrase, true
+		stored, found := answer.Passphrases[relativePath]
+		return stored, found && stored != ""
 	}
 }
 

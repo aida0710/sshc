@@ -35,9 +35,9 @@ type ConnectHandlers struct {
 	// あれば保存された答えは一切提供されず、それはプロンプトが出る正常な接続である。
 	Passwords *secret.Service
 	vault     *vaultOperations
-	// KeyPassphraseTarget resolves the one direct workspace key whose saved
-	// passphrase may answer this connection. A false result is never guessed.
-	KeyPassphraseTarget func(alias string) (relativePath string, ok bool, err error)
+	// WorkspaceKeys は、その alias が使うワークスペース内の秘密鍵を返す。
+	// 解決できない設定では空を返す——**推測しない。**
+	WorkspaceKeys func(alias string) (relativePaths []string, err error)
 	// Warnings は、OpenSSH がこの host に対して実行するディレクティブを報告する。
 	// 接続の最中に気付くのではなく、事前に伝えられる。
 	Warnings func(alias string) []string
@@ -75,10 +75,14 @@ type connectRequest struct {
 // 通っており、間に立つプログラムがひとつ消えただけである。
 type connectResponse struct {
 	Alias string `json:"alias"`
-	// KeyPath は、その接続に使う鍵のワークスペース相対パス。
-	KeyPath string `json:"keyPath,omitempty"`
-	// Passphrase は、その鍵について保存されている答え。無ければ空である。
-	Passphrase string `json:"passphrase,omitempty"`
+	// Passphrases は、この接続に現れる鍵ごとの保存済みパスフレーズである。
+	// キーはワークスペース相対の綴りで、保管庫が知っているのがその形である。
+	//
+	// **行き先ひとつではなく連鎖ぶんである。** ProxyJump の手前に立つホストも
+	// それ自身が alias であり、そこにも別の鍵が指定されうる。行き先のぶんだけを
+	// 渡すと、手前で止まる接続がそのたびに手入力を求める——アカウントパスワードの
+	// 側は最初からそうしており、パスフレーズだけが行き先 1 件だった。
+	Passphrases map[string]string `json:"passphrases,omitempty"`
 	// Passwords は、この接続に現れる alias ごとの保存済みアカウントパスワード。
 	//
 	// **行き先ひとつではなく連鎖ぶんである。** ProxyJump の手前に立つホストは
@@ -133,27 +137,41 @@ func (h ConnectHandlers) connectionAliases(alias string) []string {
 	return []string{alias}
 }
 
-// savedPassphrase は、その alias が使う鍵と、保存されているパスフレーズを返す。
+// savedPassphrases は、この接続に現れる鍵ごとの保存済みパスフレーズを返す。
 //
 // アカウントのパスワードはここに現れない。名前空間が別だからであり、混ぜれば、
 // ローカルの鍵を開くための秘密がリモートへログインパスワードとして送られる。
-func savedPassphrase(
+//
+// **連鎖ぶんを見る。** 手前に立つホストが別の鍵を指定していれば、その鍵の答えも
+// 要る——そうでないと、行き先には届く接続が手前で止まって手入力を求める。
+// savedPasswords がしていることと同じである。
+func savedPassphrases(
 	passwords *secret.Service,
-	alias string,
-	target func(alias string) (relativePath string, ok bool, err error),
-) (string, string) {
-	if passwords == nil || target == nil {
-		return "", ""
+	aliases []string,
+	workspaceKeys func(alias string) ([]string, error),
+) map[string]string {
+	if passwords == nil || workspaceKeys == nil {
+		return nil
 	}
-	relativePath, ok, err := target(alias)
-	if err != nil || !ok {
-		return "", ""
+	found := map[string]string{}
+	for _, alias := range aliases {
+		paths, err := workspaceKeys(alias)
+		if err != nil {
+			continue
+		}
+		for _, path := range paths {
+			if _, seen := found[path]; seen {
+				continue
+			}
+			if passphrase, ok := passwords.KeyPassphraseFor(path); ok && passphrase != "" {
+				found[path] = passphrase
+			}
+		}
 	}
-	passphrase, found := passwords.KeyPassphraseFor(relativePath)
-	if !found {
-		return "", ""
+	if len(found) == 0 {
+		return nil
 	}
-	return relativePath, passphrase
+	return found
 }
 
 // OpenPath は、コマンドラインがブラウザへの入口を求める場所である。
@@ -293,10 +311,12 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 		}
 	}
 	// 答えが返るのは、保存されているものがある場合だけである。それ以外
-	// ——施錠された vault、保存が無い、鍵が一つに定まらない——では、
-	// コマンドラインが自分で尋ねる接続になる。それは正常な接続である。
-	answer.KeyPath, answer.Passphrase = savedPassphrase(
-		h.Passwords, decoded.Alias, h.KeyPassphraseTarget)
-	answer.Passwords = savedPasswords(h.Passwords, h.connectionAliases(decoded.Alias))
+	// ——施錠された vault、保存が無い、設定が解決できない——では、コマンドラインが
+	// 自分で尋ねる接続になる。それは正常な接続である。
+	//
+	// **鍵もパスワードも、同じ連鎖を見る。**
+	aliases := h.connectionAliases(decoded.Alias)
+	answer.Passphrases = savedPassphrases(h.Passwords, aliases, h.WorkspaceKeys)
+	answer.Passwords = savedPasswords(h.Passwords, aliases)
 	return c.JSON(http.StatusOK, answer)
 }

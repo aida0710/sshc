@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -152,161 +153,86 @@ func passwordAuthenticationDisabled(resolution effective.Resolution) (effective.
 	return entry, ok && strings.EqualFold(strings.TrimSpace(firstValue(entry)), "no")
 }
 
-// credentialUnstaticConfiguration は、この解析器が鍵の集合を静的に決められない
-// 設定を報告する。
+// WorkspaceKeys は、この alias が使う、ワークスペースの中にある秘密鍵を返す。
 //
-// **名前は credentialEnvironmentUnsafe だった。** 環境変数で bearer capability を
-// 渡していた頃のもので、「子プロセスへ環境が継がれるから、別のプログラムを起こし
-// うる設定は普通の ssh を使え」という規則だった。渡す環境変数はもう無い。
+// 返すのはワークスペース相対の綴りである。保管庫が知っているのがその形だからで、
+// ~/.ssh の外にある鍵はここに現れない——**あちらの答えは保管庫に無い。**
 //
-// それでも残しているのは、理由が置き換わったからである——ここが見ているのは
-// 「この alias が使う IdentityFile を、実行も DNS も伴わずに一意に決められるか」
-// であって、決められないなら保存済みパスフレーズを差し出さない。Match、条件付き
-// Include、CanonicalizeHostname、実行を伴うディレクティブは、いずれも鍵の集合を
-// 接続時にしか確定しない。
+// **決めるのは effective.Resolve である。** かつてここは自前で設定を歩き、Match・
+// 条件付き Include・CanonicalizeHostname・実行を伴うディレクティブ、そして
+// ProxyJump を見つけたら「静的に決められない」として何も返さなかった。あの規則は、
+// 答えを受け取るのが OpenSSH の起こす別のプログラムだった頃のものである——環境変数で
+// 渡した capability が、設定の書ける任意の子プロセスへ継がれることを恐れていた。
 //
-// **ProxyJump がこの一覧に残っているのは、いま見ると一貫していない。** 連鎖は
-// internal/sshclient がプロセス内で辿るようになっており、アカウントパスワードの
-// 側は連鎖に現れる alias のぶんを渡している。パスフレーズだけを断る理由は、
-// 外部プログラムが消えた時点で無くなっている。挙動を変える判断なので、ここでは
-// 名前と理由の書き換えに留める。
-func credentialUnstaticConfiguration(graph *config.Graph, alias string) bool {
-	for _, diagnostic := range graph.Diagnostics {
-		if diagnostic.Code == config.DiagnosticIncludeConditional {
-			return true
-		}
-	}
-	unsafe := false
-	WalkDirectives(graph, func(visit Visit) bool {
-		if visit.Block.Kind == config.BlockMatch {
-			unsafe = true
-			return false
-		}
-		if visit.Block.Kind == config.BlockHost && !MatchHostLine(visit.Block.Patterns, alias) {
-			return true
-		}
-		if config.EqualKeyword(visit.Line.Keyword, "CanonicalizeHostname") {
-			for _, value := range visit.Line.Values() {
-				// Canonicalisation makes OpenSSH parse the configuration again
-				// against a different host name. A Host block that does not match
-				// alias here could then add another key or executable directive.
-				// This static policy deliberately does not predict DNS results.
-				if value != "" && !strings.EqualFold(value, "no") {
-					unsafe = true
-					return false
-				}
-			}
-		}
-		if executableCredentialDirective(visit.Line) {
-			unsafe = true
-			return false
-		}
-		return true
-	})
-	return unsafe
-}
-
-// DirectKeyPassphraseTarget is the one concrete, workspace-owned private-key
-// path selected directly by a host block. RelativePath is the vault subject.
+// いまは要求を出した sshc 自身が答えを受け取り、自分でプロトコルを話す。ProxyCommand
+// も KnownHostsCommand も LocalCommand も、あのクライアントは実行しない——**起こさない
+// プログラムへ秘密が漏れることはない。** ProxyJump に至っては、連鎖をプロセス内で
+// 辿るようになっており、アカウントパスワードの側は連鎖に現れる alias のぶんを渡して
+// いる。パスフレーズだけを断る理由はもう無い。
 //
-// **かつてはここに 3 つの項目が並んでいた。** PromptPath（OpenSSH が復号を尋ねる
-// ときの綴り）、ConfigSnapshot（Include を展開し、対象の IdentityFile を抜いた
-// 設定の写し）、Evidence（その写しと鍵のバイト列に capability を縛る digest）で
-// ある。どれも、答えを受け取るのが OpenSSH の起こす別のプログラムだった頃の道具
-// だった——綴りを合わせるのは prompt 文字列を照合するため、写しを渡すのは `-i` で
-// 起こす ssh に別の鍵を選ばせないため、digest を持つのは渡した capability を後から
-// 縛るためである。
-//
-// **いまは要求を出した sshc 自身が答えを受け取り、自分でプロトコルを話す。**
-// 3 つとも計算されたあと savedPassphrase に捨てられていたので、消した。
-type DirectKeyPassphraseTarget struct {
-	RelativePath string
-}
-
-// directKeyPassphraseTarget accepts only a configuration whose complete,
-// statically evaluable IdentityFile set contains one workspace key. Match,
-// conditional Include, executable directives, and ProxyJump are deliberately
-// refused: all can make a bearer-token environment reach another process or
-// make the effective key set depend on facts this parser does not execute.
-func (s *Service) directKeyPassphraseTarget(alias string) (DirectKeyPassphraseTarget, bool, error) {
+// 答えが出ないのは Resolve が拒むときだけである（Match exec のように、このプロセスが
+// 実行しないと決めたものが混ざっているとき）。そのとき Accepted は空なので、鍵は
+// 一本も返らない——**知らないことを知っているふりをしない。**
+func (s *Service) WorkspaceKeys(alias string) ([]string, error) {
 	if err := ValidateAlias(alias); err != nil {
-		return DirectKeyPassphraseTarget{}, false, err
+		return nil, err
 	}
 	graph, err := s.resolve()
 	if err != nil {
-		return DirectKeyPassphraseTarget{}, false, err
+		return nil, err
 	}
-	if credentialUnstaticConfiguration(graph, alias) {
-		return DirectKeyPassphraseTarget{}, false, nil
-	}
-	values := make([]string, 0, 2)
-	sawNone := false
-	WalkDirectives(graph, func(visit Visit) bool {
-		if visit.Block.Kind == config.BlockHost && !MatchHostLine(visit.Block.Patterns, alias) {
-			return true
+	resolution := effective.Resolve(graph, alias, s.localFacts())
+	found := make([]string, 0, 2)
+	for _, entry := range resolution.Accepted {
+		if !config.EqualKeyword(entry.Keyword, "IdentityFile") {
+			continue
 		}
-		if !config.EqualKeyword(visit.Line.Keyword, "IdentityFile") {
-			return true
-		}
-		for _, value := range visit.Line.Values() {
+		for _, value := range entry.Values {
 			value = strings.TrimSpace(value)
-			if strings.EqualFold(value, "none") {
-				sawNone = true
-			} else if value != "" {
-				values = append(values, value)
+			// `IdentityFile none` は「鍵を使わない」であって、none という名の鍵では
+			// ない。ここで拾うと、存在しない綴りを保管庫へ問い合わせることになる。
+			if value == "" || strings.EqualFold(value, "none") {
+				continue
 			}
-		}
-		return true
-	})
-	if sawNone || len(values) != 1 {
-		return DirectKeyPassphraseTarget{}, false, nil
-	}
-	relative, _, ok := keys.ResolveWorkspaceKeyPath(s.workspace, values[0])
-	if !ok {
-		return DirectKeyPassphraseTarget{}, false, nil
-	}
-	return DirectKeyPassphraseTarget{RelativePath: relative}, true, nil
-}
-
-// executableCredentialDirective は、実行や別プロセスの起動を伴う指令を報告する。
-func executableCredentialDirective(line config.Line) bool {
-	switch strings.ToLower(line.Keyword) {
-	case "proxycommand", "proxyjump", "knownhostscommand", "localcommand", "remotecommand",
-		"pkcs11provider", "securitykeyprovider", "xauthlocation":
-		for _, value := range line.Values() {
-			if value != "" && !strings.EqualFold(value, "none") {
-				return true
+			if relative, _, ok := keys.ResolveWorkspaceKeyPath(s.workspace, value); ok &&
+				!slices.Contains(found, relative) {
+				found = append(found, relative)
 			}
 		}
 	}
-	return false
+	return found, nil
 }
 
-// DirectKeyPassphraseTarget additionally requires the resolved path to remain
-// a current encrypted private key. **入れ替えられた鍵や、もう暗号化されていない
-// 鍵について、保管庫に古い項目が残っていることがある。** それを持ち出しても開く
-// ものが無いので、渡さない。
-func (s *Service) DirectKeyPassphraseTarget(
+// UnlockableWorkspaceKeys は、WorkspaceKeys のうち、いま実際に暗号化された秘密鍵
+// であるものだけを返す。
+//
+// **入れ替えられた鍵や、もう暗号化されていない鍵について、保管庫に古い項目が残って
+// いることがある。** それを持ち出しても開くものが無いので、渡さない。
+func (s *Service) UnlockableWorkspaceKeys(
 	alias string,
 	inventory func() (*keys.Inventory, error),
-) (DirectKeyPassphraseTarget, bool, error) {
-	target, ok, err := s.directKeyPassphraseTarget(alias)
-	if err != nil || !ok || inventory == nil {
-		return DirectKeyPassphraseTarget{}, false, err
+) ([]string, error) {
+	candidates, err := s.WorkspaceKeys(alias)
+	if err != nil || len(candidates) == 0 || inventory == nil {
+		return nil, err
 	}
 	current, err := inventory()
 	if err != nil {
-		return DirectKeyPassphraseTarget{}, false, err
+		return nil, err
 	}
-	for _, item := range current.Items {
-		if filepath.Clean(item.RelativePath) == filepath.Clean(filepath.FromSlash(target.RelativePath)) {
-			if item.Kind != keys.KindPrivateKey || !item.Encrypted || item.ContentDigest == "" {
-				return DirectKeyPassphraseTarget{}, false, nil
+	usable := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		for _, item := range current.Items {
+			if filepath.Clean(item.RelativePath) != filepath.Clean(filepath.FromSlash(candidate)) {
+				continue
 			}
-			return target, true, nil
+			if item.Kind == keys.KindPrivateKey && item.Encrypted && item.ContentDigest != "" {
+				usable = append(usable, candidate)
+			}
+			break
 		}
 	}
-	return DirectKeyPassphraseTarget{}, false, nil
+	return usable, nil
 }
 
 // hostKeyIsKnown は、known_hosts が既にこのホストの鍵を保持しているかを報告する。
