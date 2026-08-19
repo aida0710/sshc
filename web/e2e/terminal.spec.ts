@@ -158,7 +158,14 @@ test("applies the session limit set from the settings screen", async ({ page, in
   const panel = await openConsolePanel(page);
   const openShell = panel.getByRole("button", { name: "Local shell" });
   await openShell.click();
-  await expect(panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem")).toHaveCount(1);
+  const consoles = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  await expect(consoles).toHaveCount(1);
+
+  // **行が 1 つ在ることと、枠が 1 つ埋まっていることは別である。** 数えている
+  // のは生きているセッションなので、開いた直後に終了していれば、行は残ったまま
+  // 枠は空く。ここを飛ばすと、そのときの失敗は「ボタンが有効のまま」としか
+  // 言わない——本当の理由は、この行が「exited」と書いていることの方である。
+  await expect(consoles.first()).toContainText("connected");
 
   // 1 本で上限である。入口が閉じ、その理由が書かれる。
   await expect(openShell).toBeDisabled();
