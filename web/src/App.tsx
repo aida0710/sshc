@@ -284,6 +284,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       .map((entry) => entry.session);
   }, [consoles.sessions, consoleOrder]);
 
+  // **この 2 つを渡す先は void を期待している。** 渡すときは `void` を綴る
+  // （下の AppNavigation を見よ）。どちらも中で consoles.open を呼び、あれは
+  // 自分で catch して null を返すので、ここへ落ちてくる失敗は無い。それでも
+  // 黙って渡さないのは、後で open が投げるようになった日に、**理由がどこにも
+  // 出ないまま画面だけが動かなくなる**からである。
   const openLocalShell = useCallback(async () => {
     const opened = await consoles.open({ kind: "shell" });
     if (opened !== null) showConsole(opened.id);
@@ -569,9 +574,9 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           orderedConsoles={orderedConsoles}
           activeConsole={activeConsole}
           onShowConsole={showConsole}
-          onDuplicateConsole={duplicateConsole}
+          onDuplicateConsole={(id) => void duplicateConsole(id)}
           onReorderConsoles={setConsoleOrder}
-          onOpenShell={openLocalShell}
+          onOpenShell={() => void openLocalShell()}
         />
         {/*
           ここに padding は無い。ウィンドウの端から端まで埋めたいセクション

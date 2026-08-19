@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient, ApiError } from "./client";
 import { configApi, type CreateConnectionRequest, type UpdateConnectionRequest } from "./config";
+import { sentJson } from "../testing/requests";
 
 const overviewPayload = {
   entry: { path: "config", absolute: "/home/tester/.ssh/config" },
@@ -142,7 +143,7 @@ describe("configApi", () => {
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/connections");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual(request);
+    expect(sentJson(init)).toEqual(request);
   });
 
   it("propagates a connection creation problem", async () => {
@@ -178,7 +179,7 @@ describe("configApi", () => {
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/connections");
     expect(init.method).toBe("PATCH");
-    expect(JSON.parse(String(init.body))).toEqual(request);
+    expect(sentJson(init)).toEqual(request);
   });
 
   it("rejects a malformed connection update response", async () => {

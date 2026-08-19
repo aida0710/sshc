@@ -62,7 +62,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
     return () => {
       active = false;
     };
-  }, [api, embedded]);
+  }, [api, embedded, t]);
 
   // このパネルのすべての結果は一つのホストについてのものである。別の
   // ホストを開けばそれらを消さなければならない。さもなければ前の
