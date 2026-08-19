@@ -413,3 +413,7 @@ ESLint は導入していません。TypeScript の型検査（`tsc -b` と e2e 
 - 設計 §12 の完成条件は `go test ./internal/acceptance -run TestDesignCompletionConditions -v` で一覧できます。各条件について、それを証明するテスト名とコマンド名、そして自動化が届かない範囲を出力します。13 行のうち 7 行が自動テストのみで成立し、5 行は自動化が越えてはならない境界で止まり、1 行は OpenSSH が入っている場合にのみ証明されます。
 - `internal/acceptance` はテストファイルのみで構成され、配布バイナリには含まれません。`TestNoTestOnlyPackageReachesTheShippedBinary` がそれを検査します。
 - ログへの秘密混入検査は `app.Build` へ渡した logger だけを見ています。グローバルの `slog` 既定 logger へ書くと検査を素通りするため、新しいログは必ず注入された logger を使ってください。
+
+## ライセンス
+
+Apache License 2.0 です（[LICENSE](LICENSE)）。
