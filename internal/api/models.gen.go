@@ -759,6 +759,7 @@ type PasswordVaultStatus struct {
 
 // Problem defines model for Problem.
 type Problem struct {
+	Blockers    *[]string       `json:"blockers,omitempty"`
 	Code        string          `json:"code"`
 	Column      *int            `json:"column,omitempty"`
 	Conflict    *ConflictReport `json:"conflict,omitempty"`
