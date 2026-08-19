@@ -12,13 +12,12 @@ import {
   CheckboxField,
   Field,
   control,
-  secondaryAction,
   sectionCard,
   sectionHeading,
   tableHeadCell,
   tableHeadRow,
 } from "../ui/form";
-import { Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 
 type KnownHostsPanelProps = { api?: IntegrationsApi };
@@ -189,9 +188,9 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
               className={control}
             />
           </Field>
-          <button type="button" onClick={() => void scan()} className={secondaryAction}>
+          <Button onClick={() => void scan()}>
             {t("kh.scan")}
-          </button>
+          </Button>
         </div>
 
         {notice ? <p className="text-sm text-notice-ink">{notice}</p> : null}
@@ -219,13 +218,11 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
                         主張を繰り返すことは決してない。 */}
                     <td className="py-2 pr-3 text-notice-ink">{t("kh.unverified")}</td>
                     <td className="py-2">
-                      <button
-                        type="button"
+                      <Button
                         onClick={() => openAdd(candidate)}
-                        className={secondaryAction}
                       >
                         {t("kh.add")}
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -262,9 +259,9 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
               >
                 {t("kh.addToKnownHosts")}
               </button>
-              <button type="button" onClick={closeAdd} className={secondaryAction}>
+              <Button onClick={closeAdd}>
                 {t("kh.cancel")}
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}
@@ -304,13 +301,11 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
                     <td className="py-2 pr-3 text-ink-muted">{item.keyType}</td>
                     <td className="py-2 pr-3 font-mono text-xs text-ink-muted">{item.fingerprint}</td>
                     <td className="py-2">
-                      <button
-                        type="button"
+                      <Button
                         onClick={() => setPending(item)}
-                        className={secondaryAction}
                       >
                         {t("kh.delete")}
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -325,20 +320,16 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
               {t("kh.confirmRemove", { line: pending.line, fingerprint: pending.fingerprint })}
             </p>
             <div className="mt-2 flex gap-2">
-              <button
-                type="button"
+              <Button
                 onClick={() => void confirmDelete()}
-                className={secondaryAction}
               >
                 {t("kh.confirmDelete")}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
                 onClick={() => setPending(null)}
-                className={secondaryAction}
               >
                 {t("kh.cancel")}
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}

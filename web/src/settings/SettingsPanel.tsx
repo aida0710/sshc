@@ -3,7 +3,7 @@ import { failureCode } from "../api/client";
 import { integrationsApi, type IntegrationsApi, type TerminalSettings } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
-import { CheckboxField, Field, control, hintText, primaryAction, sectionCard, sectionHeading } from "../ui/form";
+import { CheckboxField, Field, control, hintText, sectionCard, sectionHeading } from "../ui/form";
 import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import type { TerminalSessionsState } from "../terminal/sessions";
@@ -305,14 +305,12 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
           onChange={setConfirmMaster}
           disabled={masterBusy}
         />
-        <button
-          type="button"
-          className={`self-start ${primaryAction}`}
+        <Button kind="primary" className="self-start"
           disabled={!canChangeMaster}
           onClick={() => void changeMaster()}
         >
           {t("secrets.change")}
-        </button>
+        </Button>
       </section>
     </div>
   );
