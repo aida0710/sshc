@@ -86,10 +86,19 @@ test("scrolls the primary navigation on its own when the viewport is short", asy
   // 一覧が伸びれば——数字や印は届いてから描かれる——その位置はもう底では
   // なく、History は畳の下へ戻る。実際、その形で CI が落ちた。
   const history = page.getByRole("link", { name: "History", exact: true });
-  await history.scrollIntoViewIfNeeded();
 
-  // この高さでも最後のセクションに到達できなければならない。
-  await expect(history).toBeInViewport();
+  // **送るのも一度きりにしない。** scrollIntoViewIfNeeded は呼んだ瞬間の
+  // 高さで位置を決めるので、そのあとに一覧が伸びれば History はまた畳の下へ
+  // 戻る——待つだけでは戻ってこない。**利用者はもう一度送る。** ここも同じ
+  // ことをする: 送って、届いたかを見て、届いていなければまた送る。
+  //
+  // 一度きりの形は Windows の CI で再発した（同じ「viewport ratio 0」を 24 回
+  // 見て 10 秒で諦める形）。待ち時間を伸ばしても直らない——**伸びるのは
+  // 待っているあいだではなく、送ったあとだからである。**
+  await expect(async () => {
+    await history.scrollIntoViewIfNeeded();
+    await expect(history).toBeInViewport();
+  }).toPass();
   // **そして動いたのはナビゲーションの下半分だけである。** ドキュメント全体が
   // 動いたのなら、ヘッダーはここで消えている。
   await expect(page.getByRole("banner")).toBeInViewport();
