@@ -2,10 +2,7 @@ package config
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"strconv"
 	"strings"
 )
 
@@ -104,39 +101,4 @@ func Snapshot(graph *Graph) ([]byte, error) {
 		return nil, err
 	}
 	return output.Bytes(), nil
-}
-
-// Digest commits a short-lived capability to the entire resolved graph,
-// including conditions that Snapshot intentionally refuses to flatten. Paths
-// and file boundaries are included so moving identical text is still a
-// configuration change. This function never evaluates Match or executes SSH.
-func Digest(graph *Graph) (string, error) {
-	if graph == nil || graph.Root == "" {
-		return "", ErrSnapshotIncomplete
-	}
-	var material bytes.Buffer
-	for _, diagnostic := range graph.Diagnostics {
-		material.WriteString(diagnostic.Code)
-		material.WriteByte(0)
-		material.WriteString(diagnostic.Path)
-		material.WriteByte(0)
-		material.WriteString(strconv.Itoa(diagnostic.Line))
-		material.WriteByte(0)
-		material.WriteString(diagnostic.Detail)
-		material.WriteByte(0)
-	}
-	for _, path := range graph.Order {
-		node := graph.Nodes[path]
-		if node == nil || node.File == nil {
-			return "", ErrSnapshotIncomplete
-		}
-		material.WriteString(path)
-		material.WriteByte(0)
-		for _, line := range node.File.Lines {
-			material.WriteString(line.Render())
-		}
-		material.WriteByte(0)
-	}
-	sum := sha256.Sum256(material.Bytes())
-	return hex.EncodeToString(sum[:]), nil
 }

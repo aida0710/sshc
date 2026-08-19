@@ -8,32 +8,6 @@ import (
 	"testing"
 )
 
-func TestDigestChangesWithAnyResolvedConfigurationBytes(t *testing.T) {
-	first, err := resolverFor(map[string]string{
-		testConfig: "Host bastion\n\tHostName first.example\n",
-	}).Resolve(testConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := resolverFor(map[string]string{
-		testConfig: "Host bastion\n\tHostName second.example\n",
-	}).Resolve(testConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	firstDigest, err := Digest(first)
-	if err != nil {
-		t.Fatal(err)
-	}
-	secondDigest, err := Digest(second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if firstDigest == "" || firstDigest == secondDigest {
-		t.Fatalf("digests = %q / %q", firstDigest, secondDigest)
-	}
-}
-
 func TestSnapshotRefusesAnInlinedGraphLargerThanTheCLIResponseLimit(t *testing.T) {
 	files := map[string]string{
 		testConfig: "Include conf.d/*.conf\n",
