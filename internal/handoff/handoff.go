@@ -3,7 +3,6 @@
 package handoff
 
 import (
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -161,14 +160,12 @@ func write(directory string, document Handoff, operations writeOperations) error
 }
 
 // Read は、動作中のアプリケーションが残した検証済みの文書を返す。
+//
+// mutation lock は取らない。Rename により、見えるのは常に完全な旧文書か新文書
+// だけである。**Remove の側は違う** —— あちらは lock を保持したまま
+// readValidatedHandleWith を呼び、比較と削除の間に Write が割り込めないように
+// する。
 func Read(directory string) (Handoff, error) {
-	return readValidatedWith(directory, defaultHandoffFileOperations().open)
-}
-
-// readValidated は mutation lock を取らない。Read は Rename により常に完全な旧文書
-// か新文書だけを見る。一方 Remove は lock を保持したままこれを呼び、比較と削除の
-// 間に Write が割り込めないようにする。
-func readValidated(directory string) (Handoff, error) {
 	return readValidatedWith(directory, defaultHandoffFileOperations().open)
 }
 
@@ -312,6 +309,3 @@ func validateLoopbackURL(raw string) error {
 	}
 	return nil
 }
-
-// Random は、呼び出し側に指定がないときに Write が引く乱数源。
-var Random io.Reader = rand.Reader
