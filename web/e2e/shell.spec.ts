@@ -81,12 +81,17 @@ test("scrolls the primary navigation on its own when the viewport is short", asy
   const overflow = await sections.evaluate((element) => element.scrollHeight - element.clientHeight);
   expect(overflow, "the section list is not taller than the short viewport").toBeGreaterThan(0);
 
-  await sections.evaluate((element) => element.scrollTo(0, element.scrollHeight));
-  expect(await sections.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  // **最後まで送るのは、送りたい相手に頼む。** 以前はここで一度
+  // scrollHeight まで飛ばし、そのあとで到達を確かめていた。飛ばした後に
+  // 一覧が伸びれば——数字や印は届いてから描かれる——その位置はもう底では
+  // なく、History は畳の下へ戻る。実際、その形で CI が落ちた。
+  const history = page.getByRole("link", { name: "History", exact: true });
+  await history.scrollIntoViewIfNeeded();
 
   // この高さでも最後のセクションに到達できなければならない。
-  // シェルが自身のスクロールを持つ前は、そこへ到達するには
-  // ドキュメント全体をスクロールし、途中でヘッダーを失う必要があった。
-  await expect(page.getByRole("link", { name: "History", exact: true })).toBeInViewport();
+  await expect(history).toBeInViewport();
+  // **そして動いたのはナビゲーションの下半分だけである。** ドキュメント全体が
+  // 動いたのなら、ヘッダーはここで消えている。
   await expect(page.getByRole("banner")).toBeInViewport();
+  expect(await sections.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
