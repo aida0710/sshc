@@ -328,7 +328,12 @@ async function settleInstallation() {
 
 async function settleManagedCLI() {
   try {
-    const { warning, note } = await installManagedCLI({ source: binary() });
+    const { warning, note, repeated } = await installManagedCLI({ source: binary() });
+    // **同じことを毎回は言わない。** 公開の名前を他人が持っているというのは、
+    // 利用者がそう決めた結果であって、直るのを待つ障害ではない——起動のたびに
+    // モーダルで出せば、閉じ方を覚えさせるだけである。状況が変われば文が変わり、
+    // そのときにまた出る。
+    if (repeated) return;
     if (warning !== null) {
       dialog.showMessageBox({
         type: "warning",
