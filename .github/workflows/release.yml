@@ -37,6 +37,11 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
+      # **`make test` は外殻のテストも回す。** かつてあれは node 標準の
+      # テストランナーだけで走り、依存を増やさなかった——外殻が TypeScript に
+      # なってからは tsc を通すので、ここで入れておかないと `make test` が
+      # 「型検査ができない」で止まる。**web だけ入れれば足りた時代は終わった。**
+      - run: npm ci --prefix desktop
 
       - name: Verify
         run: make test
@@ -93,6 +98,11 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
+      # **`make test` は外殻のテストも回す。** かつてあれは node 標準の
+      # テストランナーだけで走り、依存を増やさなかった——外殻が TypeScript に
+      # なってからは tsc を通すので、ここで入れておかないと `make test` が
+      # 「型検査ができない」で止まる。**web だけ入れれば足りた時代は終わった。**
+      - run: npm ci --prefix desktop
 
       - name: Verify
         run: make test

@@ -35,9 +35,13 @@ test:
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
 	npm test --prefix web
 	npm run typecheck --prefix web
-	@# 外殻の JS も検査する。**install-cli は利用者の ~/.local/bin に触る**ので、
-	@# 「自分が張ったリンクでなければ触らない」という規則は落とせない。node 標準の
-	@# テストランナーなので、依存は増えない。
+	@# 外殻も検査する。**install-cli は利用者の ~/.local/bin に触る**ので、
+	@# 「自分が張ったリンクでなければ触らない」という規則は落とせない。
+	@#
+	@# **ここは desktop の node_modules を要る。** かつて外殻は素の JS で、node 標準の
+	@# テストランナーだけで走ったので依存を増やさなかった——TypeScript になってからは
+	@# tsc を通す。この的を回す CI の段は、先に `npm ci --prefix desktop` を通すこと
+	@# （release.yml の macos と linux がそれである）。
 	npm test --prefix desktop
 
 fuzz:
