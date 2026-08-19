@@ -20,6 +20,7 @@ const (
 	invocationStatus
 	invocationVault
 	invocationHelp
+	invocationVersion
 )
 
 type invocation struct {
@@ -33,6 +34,7 @@ const (
 	vaultSubcommand    = "vault"
 	runSubcommand      = "run"
 	helpSubcommand     = "help"
+	versionSubcommand  = "version"
 	StatusSubcommand   = "status"
 )
 
@@ -89,6 +91,11 @@ func parseInvocation(argv []string) (invocation, error) {
 		}
 	case helpSubcommand, "-h", "--help":
 		return noArguments(invocationHelp, word, args)
+	// **旗も語も、同じところへ着く。** `sshc version` が正式だが、`--version` は
+	// 誰もが最初に打つ形である——受けないと、入れた直後の一行目が usage と
+	// 終了コード 2 になる。実際 docs/release-install.md はそれを案内していた。
+	case versionSubcommand, "-v", "--version":
+		return noArguments(invocationVersion, word, args)
 	}
 
 	if word == "" || word[0] == '-' {
@@ -140,6 +147,7 @@ func usage(out io.Writer) {
   sshc vault lock      lock the vault without closing SSH sessions
   sshc vault change-password
                        change the password of an unlocked vault
+  sshc version         print the version, and what it was built for
   sshc help            print this
 
 `)

@@ -4,14 +4,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 
 	"sshc/internal/app"
 )
 
 var version = "dev"
+
+// printVersion は、この実体が何であるかを 1 行で言う。
+//
+// **OS と アーキテクチャを一緒に出す。** 入れ方が増えた——brew、install.sh、
+// 束の中、`make install` ——ので、「入ったが動かない」の相談で最初に要るのは
+// 版よりも「どれをどの機械に入れたのか」である。Rosetta の下で走る amd64 の
+// 実体は、それを言われるまで見分けがつかない。
+func printVersion(out io.Writer) {
+	fmt.Fprintf(out, "sshc %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
+}
 
 // engineBusyExit は、Electron が所有する engine が既存 engine の lock を取れなかった
 // ときの終了コードである。外殻は自分の子を殺せても他人の engine は殺せないため、
@@ -27,6 +39,10 @@ func main() {
 	}
 	if called.Kind == invocationHelp {
 		usage(os.Stdout)
+		os.Exit(0)
+	}
+	if called.Kind == invocationVersion {
+		printVersion(os.Stdout)
 		os.Exit(0)
 	}
 
