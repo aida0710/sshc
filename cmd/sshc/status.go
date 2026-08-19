@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 
+	"io/fs"
+
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 )
@@ -102,11 +104,31 @@ func readHandoff(stateDir string) (handoff.Handoff, error) {
 			"the running app and this sshc (%s) are not the same version; update whichever is older: %w",
 			runningExecutable(), err)
 	}
+	// **無いことは、壊れていることではない。** engine を一度も起こしていない
+	// 機械では handoff そのものが無く、そのまま返すと利用者が読むのは
+	// `open /home/a/.ssh/sshc/cli: no such file or directory` になる。**入れた
+	// 直後の人が最初に打つのがこれである** ——道の綴りではなく、何が起きていて
+	// 次に何をすればよいかを言う。
+	if errors.Is(err, fs.ErrNotExist) {
+		return handoff.Handoff{}, engineNotRunning{cause: err}
+	}
 	if err != nil {
 		return handoff.Handoff{}, err
 	}
 	return found, nil
 }
+
+// engineNotRunning は、engine が居ないことを利用者の言葉で言う。
+//
+// **元の err を包んだまま持つ。** 呼び出し側には `errors.Is(err, fs.ErrNotExist)`
+// で判定しているところがあり、文言を変えるためにその判定を壊さない。
+type engineNotRunning struct{ cause error }
+
+func (e engineNotRunning) Error() string {
+	return "sshc is not running; open the app, or run sshc headless in another terminal"
+}
+
+func (e engineNotRunning) Unwrap() error { return e.cause }
 
 // runningExecutable は、いま走っているこの実体の綴りを返す。
 //

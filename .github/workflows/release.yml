@@ -322,3 +322,62 @@ jobs:
             --notes-file docs/release-install.md \
             --generate-notes \
             dist/sshc-* dist/checksums.txt
+
+  # tap の formula を、いま出した版へ合わせる。
+  #
+  # **正本は packaging/homebrew/sshc.rb である。** ここがやるのは version と
+  # sha256 を差し替えて向こうへ押すことだけで、中身の判断はしない。tap の側を
+  # 手で直すと、次のリリースで上書きされる。
+  #
+  # **設定されていなければ、何もせずに緑で終わる。** tap は別のリポジトリなので
+  # 押すには専用の token が要る。無いうちにここが赤くなると、**formula とは何の
+  # 関係も無いリリースが失敗したように見える。**
+  homebrew:
+    name: Homebrew tap
+    needs: [publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Update the tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_REPO: ${{ github.repository }}
+          TAP_REPO: aida0710/homebrew-sshc
+        run: |
+          set -eu
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "HOMEBREW_TAP_TOKEN is not set; leaving the tap alone." >&2
+            exit 0
+          fi
+
+          # **formula が指すのは、リリースの成果物ではなく tag の tarball である。**
+          # ソースからビルドさせるので、押さえるべき sha256 も tarball のものになる。
+          tarball="https://github.com/$SOURCE_REPO/archive/refs/tags/$RELEASE_TAG.tar.gz"
+          curl -fsSL "$tarball" -o source.tar.gz
+          sum=$(sha256sum source.tar.gz | cut -d' ' -f1)
+          version=${RELEASE_TAG#v}
+
+          sed -e "s#^  url .*#  url \"$tarball\"#" \
+              -e "s#^  sha256 .*#  sha256 \"$sum\"#" \
+              packaging/homebrew/sshc.rb > sshc.rb
+
+          # 差し替えが効いたことを見る。**sed が空振りしても 0 で終わる**ので、
+          # ここで見ないと 0.0.0 のままの formula を押してしまう。
+          grep -q "$sum" sshc.rb || { echo "the checksum was not written into the formula" >&2; exit 1; }
+          grep -q "$RELEASE_TAG" sshc.rb || { echo "the tag was not written into the formula" >&2; exit 1; }
+
+          git clone --depth 1 "https://x-access-token:$TAP_TOKEN@github.com/$TAP_REPO.git" tap
+          mkdir -p tap/Formula
+          cp sshc.rb tap/Formula/sshc.rb
+          cd tap
+          if git diff --quiet -- Formula/sshc.rb; then
+            echo "the tap already describes $RELEASE_TAG."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/sshc.rb
+          git commit -m "sshc $version"
+          git push
