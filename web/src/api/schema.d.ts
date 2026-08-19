@@ -1055,6 +1055,7 @@ export interface components {
             column?: number;
             diagnostics?: components["schemas"]["Diagnostic"][];
             conflict?: components["schemas"]["ConflictReport"];
+            blockers?: string[];
         };
         KeyReference: {
             directive: string;
