@@ -4,6 +4,7 @@ import type { components } from "./schema";
 
 export type Overview = components["schemas"]["Overview"];
 export type HostEntry = components["schemas"]["HostEntry"];
+export type HostIdentity = components["schemas"]["HostIdentity"];
 export type HostDetail = components["schemas"]["HostDetail"];
 export type HostForm = components["schemas"]["HostForm"];
 export type FormField = components["schemas"]["FormField"];
