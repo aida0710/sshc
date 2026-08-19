@@ -238,8 +238,8 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 
 	// プロセス内で SSH を話すのに要るものは、ここで一度だけ組み立てる。
 	// 対話セッションも認証テストも、同じ鍵・同じ known_hosts・同じ解決器を使う。
-	ssh := newSSHParts(configService, passwordService, knownHostsService,
-		workspace.Home(), workspace.Root())
+	ssh := newSSHParts(configService, knownHostsService, workspace.Home(),
+		storedPassphrase(passwordService, workspace.Root()), storedPassword(passwordService))
 	probe := dependencies.Probe
 	if probe == nil {
 		probe = ssh.probe()

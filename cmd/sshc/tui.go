@@ -6,13 +6,11 @@ import (
 	"io"
 	"os"
 	"sort"
+	"sshc/internal/app"
 	"strings"
 	"unicode/utf8"
 
 	"golang.org/x/term"
-
-	"sshc/internal/application"
-	"sshc/internal/effective"
 )
 
 const ConnectSubcommand = "connect"
@@ -29,14 +27,14 @@ type tuiHost struct {
 }
 
 func loadTUIHosts(home string) ([]tuiHost, error) {
-	workspace, graph, err := readConfigGraph(home)
+	connections, err := app.ReadConnections(home)
 	if err != nil {
 		return nil, err
 	}
 	favourites := map[string]bool{}
 	tags := map[string][]string{}
-	metadata, _, metadataErr := application.NewMetadataStore(workspace).Load()
-	if metadataErr == nil {
+	// 印が読めなくても一覧は出す。お気に入りが付かないだけである。
+	if metadata, metadataErr := app.ReadWorkspaceMetadata(home); metadataErr == nil {
 		for _, host := range metadata.Hosts {
 			if host.Favourite {
 				favourites[host.Identity.Alias] = true
@@ -46,25 +44,16 @@ func loadTUIHosts(home string) ([]tuiHost, error) {
 			}
 		}
 	}
-	hosts := make([]tuiHost, 0)
-	for _, alias := range concreteAliases(graph) {
-		projection := effective.Project(graph, alias)
-		host := tuiHost{
-			Alias:     alias,
-			Hostname:  alias,
-			Tags:      tags[alias],
-			Favourite: favourites[alias],
-		}
-		if value, ok := projection.Value("hostname"); ok {
-			host.Hostname = value.Value
-		}
-		if value, ok := projection.Value("user"); ok {
-			host.User = value.Value
-		}
-		if value, ok := projection.Value("port"); ok && value.Value != "22" {
-			host.Port = value.Value
-		}
-		hosts = append(hosts, host)
+	hosts := make([]tuiHost, 0, len(connections))
+	for _, connection := range connections {
+		hosts = append(hosts, tuiHost{
+			Alias:     connection.Alias,
+			Hostname:  connection.HostName,
+			User:      connection.User,
+			Port:      connection.Port,
+			Tags:      tags[connection.Alias],
+			Favourite: favourites[connection.Alias],
+		})
 	}
 	sort.SliceStable(hosts, func(i, j int) bool {
 		if hosts[i].Favourite != hosts[j].Favourite {

@@ -33,18 +33,27 @@ type sshParts struct {
 	home    string
 }
 
+// newSSHParts は、プロセス内 SSH の部品一式を組む。
+//
+// **保存済みの答えがどこから来るかは、ここでは決めない。** engine は vault に
+// 訊き、`sshc <接続先>` は engine に訊いた結果を持って来る——出どころは違うが、
+// 組み上がるものは同じでなければならない。渡された 2 つの関数を Auth に差すこと
+// で、この形の宣言は 1 箇所に留まる。
+//
+// nil の関数は「保存済みを持たない」であり、そのときは端末で尋ねる形になる。
 func newSSHParts(
 	config *application.Service,
-	passwords *secret.Service,
 	hosts *knownhosts.Service,
-	home, root string,
+	home string,
+	passphrase func(absolute string) (string, bool),
+	password func(alias string) (string, bool),
 ) sshParts {
 	return sshParts{
 		dialer: sshclient.Dialer{
 			Auth: sshclient.Auth{
 				AgentSocket: os.Getenv("SSH_AUTH_SOCK"),
-				Stored:      storedPassphrase(passwords, root),
-				Password:    storedPassword(passwords),
+				Stored:      passphrase,
+				Password:    password,
 			},
 			HostKeys: sshclient.HostKeys{
 				Read: readKnownHosts(hosts),
@@ -192,11 +201,7 @@ func addKnownHost(hosts *knownhosts.Service) func(knownhosts.Candidate) error {
 // あれの鍵は向こうのメモリにしかない。保存済みパスフレーズは向こうへ尋ね、
 // 届かなければ端末で尋ねる。**尋ねられる端末がここにはある**ので、届かない
 // ことは失敗ではない。問いは開いたセッションの出力を通って端末へ出る。
-type CLIConnection struct {
-	dialer  sshclient.Dialer
-	resolve sshclient.Resolver
-	home    string
-}
+type CLIConnection struct{ parts sshParts }
 
 // NewCLIConnection は、ホームディレクトリひとつからコマンドライン用の接続を組む。
 //
@@ -227,30 +232,16 @@ func NewCLIConnection(
 		return passphrase(filepath.ToSlash(relative))
 	}
 
-	return CLIConnection{
-		dialer: sshclient.Dialer{
-			Auth: sshclient.Auth{
-				AgentSocket: os.Getenv("SSH_AUTH_SOCK"),
-				Stored:      stored,
-				Password:    password,
-			},
-			HostKeys: sshclient.HostKeys{
-				Read: readKnownHosts(hosts),
-				Add:  addKnownHost(hosts),
-			},
-		},
-		resolve: config.ResolveConnection,
-		home:    workspace.Home(),
-	}, nil
+	return CLIConnection{parts: newSSHParts(config, hosts, workspace.Home(), stored, password)}, nil
 }
 
 // Open は、この alias のセッションをひとつ開く。
 func (c CLIConnection) Open(ctx context.Context, alias string, size terminal.Size) (terminal.Process, error) {
-	target, _, err := sshclient.NewTarget(alias, c.resolve, c.home)
+	target, err := c.parts.target(alias)
 	if err != nil {
 		return nil, err
 	}
-	return c.dialer.Open(ctx, target, size)
+	return c.parts.dialer.Open(ctx, target, size)
 }
 
 // Run は、この alias の相手でコマンドをひとつ走らせ、その終了状態を返す。
@@ -265,9 +256,9 @@ func (c CLIConnection) Open(ctx context.Context, alias string, size terminal.Siz
 func (c CLIConnection) Run(
 	ctx context.Context, alias, command string, streams sshclient.Streams,
 ) (int, error) {
-	target, _, err := sshclient.NewTarget(alias, c.resolve, c.home)
+	target, err := c.parts.target(alias)
 	if err != nil {
 		return sshclient.RemoteFailureExit, err
 	}
-	return c.dialer.Stream(ctx, target, command, streams)
+	return c.parts.dialer.Stream(ctx, target, command, streams)
 }
