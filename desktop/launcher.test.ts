@@ -1,11 +1,9 @@
-"use strict";
-
-const assert = require("node:assert/strict");
-const { test } = require("node:test");
-const { mkdtemp, readFile, stat, access } = require("node:fs/promises");
-const { join } = require("node:path");
-const { tmpdir } = require("node:os");
-const { recordLinuxLauncher } = require("./launcher");
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { mkdtemp, readFile, stat, access } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { recordLinuxLauncher } from "./launcher.js";
 
 async function descriptorIn() {
   const home = await mkdtemp(join(tmpdir(), "sshc-launcher-"));

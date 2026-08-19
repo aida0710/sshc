@@ -1,13 +1,11 @@
-"use strict";
-
-const { join } = require("node:path");
+import { join } from "node:path";
 
 // windowsCLISubdirectory は、束の中で Go の CLI が置かれる場所である。
 //
 // **NSIS の installer.nsh と対である。** あちらは同じ相対パスを利用者の PATH
 // へ足す。片方だけを変えると、インストールは成功したのに `sshc` と打っても
 // 何も無い、という壊れ方をする。
-const windowsCLISubdirectory = ["cli", "sshc.exe"];
+export const windowsCLISubdirectory = ["cli", "sshc.exe"];
 
 /**
  * engineBinary は、束に同梱された sshc の場所を返す。
@@ -16,7 +14,13 @@ const windowsCLISubdirectory = ["cli", "sshc.exe"];
  * Windows は `resources\cli\sshc.exe` に置く——そのディレクトリごと利用者の
  * PATH へ足すので、そこに Electron の資材が混ざっていてはならない。
  */
-function engineBinary({ platform, resourcesPath }) {
+export function engineBinary({
+  platform,
+  resourcesPath,
+}: {
+  platform: NodeJS.Platform | string;
+  resourcesPath?: string | undefined;
+}): string {
   const root = resourcesPath ?? "";
   return platform === "win32"
     ? join(root, ...windowsCLISubdirectory)
@@ -31,8 +35,6 @@ function engineBinary({ platform, resourcesPath }) {
  * とすれば、開発者モードか管理者権限が要るうえ、`~/.local/bin` は PATH に
  * 載っていない——できないことを試みて、できなかったと報告するだけになる。
  */
-function managesItsOwnCLI(platform) {
+export function managesItsOwnCLI(platform: NodeJS.Platform | string): boolean {
   return platform !== "win32";
 }
-
-module.exports = { engineBinary, managesItsOwnCLI, windowsCLISubdirectory };

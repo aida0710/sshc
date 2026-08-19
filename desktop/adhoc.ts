@@ -15,10 +15,11 @@
 // になる。**arm64 では署名の無い実行体はそもそも起動できない**ので、ここは
 // 省略できる装飾ではない。x86_64 が動いていたのは、あちらに同じ規則が無いから
 // にすぎない。
-const { execFileSync } = require("node:child_process");
-const { join } = require("node:path");
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+import type { AfterPackContext } from "electron-builder";
 
-exports.default = async function signAdHoc(context) {
+export default async function signAdHoc(context: AfterPackContext): Promise<void> {
 	if (context.electronPlatformName !== "darwin") {
 		return;
 	}
