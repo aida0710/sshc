@@ -266,6 +266,10 @@ openQuestions の回答を受けて、通信契約の所有者と Connections �
 
 以下は監査では決められない。方針そのものの選択なので、作者の判断が要る。
 
+> **答えは `docs/2026-08-19-design-decisions.md` にある。** 9 件のうち 7 件を決めて
+> 実装し、2 件（`ui/form` の統合、`ProxyJump` のパスフレーズ開示）は挙動を変える
+> 判断なので手を付けていない。
+
 ### 6.1
 **Android を linux build tag に相乗りさせ続けるか。** 現状 `rg 'go:build.*android'` は 0 件で、Android 固有の分岐は mobile/dependencies.go の struct literal 1 箇所と internal/platform/shell_unix.go:45 の runtime.GOOS だけ。GOOS=android は linux タグを満たすので Makefile:30 の `GOOS=android go build ./...` は cmd/sshc も通し、wiring_linux.go:14 の linux.NewToolchain()（/usr/bin など）を掴む。現在 APK に cmd/sshc は入らないので実害は無いが、「Android では Toolchain が nil」という不変条件を守っているのは 1 ファイルだけ。選択肢は (a) 現状維持 + C12 の Capabilities で不変条件を 1 箇所に表明する、(b) android build tag を導入して cmd/sshc を Android 対象から外す。(a) を前提に提案を組んだが、判断が要る。
 
