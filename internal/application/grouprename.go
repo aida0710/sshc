@@ -200,198 +200,279 @@ func (s *Service) planGroupLayout(
 	next []string,
 	discardPresentation bool,
 ) (planned, error) {
-	root := s.workspace.Root()
-	prepared := planned{
-		operation: operation,
-		base:      map[string][]byte{},
-		baseline:  diagnosticBaseline(graph),
-		preview:   SavePreview{Operation: operation},
+	layout := &groupLayout{
+		service: s, graph: graph, inventory: inventory,
+		root: s.workspace.Root(), renamed: renamed, next: next,
+		discardPresentation: discardPresentation,
+		prepared: planned{
+			operation: operation,
+			base:      map[string][]byte{},
+			baseline:  diagnosticBaseline(graph),
+			preview:   SavePreview{Operation: operation},
+		},
 	}
+	if err := layout.stage(); err != nil {
+		return planned{}, err
+	}
+	return layout.prepared, nil
+}
 
-	connectionMoves, err := s.groupFileMoves(renamed, ConnectionsDirectory, GroupDirectory)
-	if err != nil {
-		return planned{}, err
+// groupLayout は、グループの名前変更や削除を 1 つのトランザクションへ落とす途中の
+// 状態である。
+//
+// **局面をまたいで持ち回るものを、名前のある値にまとめてある。** 以前これらは
+// planGroupLayout の 218 行の中に生の変数として並んでおり、どの局面が何を触るのかは
+// 全体を頭に入れないと分からなかった。局面は順に依存する——ファイルの移動が決まって
+// 初めて鍵の参照を書き換えられ、それが済んで初めて領域と settings を組み直せる。
+type groupLayout struct {
+	service   *Service
+	graph     *config.Graph
+	inventory *keys.Inventory
+	root      string
+	// renamed は、影響を受ける各グループ名を、そのファイルの移動先グループへ対応
+	// 付ける。空の destination はワークスペースのルートを意味する。
+	renamed map[string]string
+	// next は、region がその後に宣言すべきグループ集合である。
+	next                []string
+	discardPresentation bool
+
+	prepared             planned
+	updated              Metadata
+	metadataPrecondition storage.Precondition
+	connectionMoves      []groupRelocation
+	keyMoves             []groupRelocation
+	// entryFile と entryUpdated は、生成領域を書き直したあとのエントリファイルで
+	// ある。**settings の再生成がこれを読む** —— 領域が宣言し直したグループの上で
+	// layout を組むので、書き直す前の姿では答えが変わる。
+	entryFile    *config.File
+	entryUpdated []byte
+}
+
+// stage は、全局面を順に通す。**並びに意味がある。**
+func (g *groupLayout) stage() error {
+	for _, phase := range []func() error{
+		g.stageMoves, g.rewriteMovedKeyReferences, g.stageEntryRegion,
+		g.stageGroupSettings, g.stageMetadata, g.noteLeftovers,
+	} {
+		if err := phase(); err != nil {
+			return err
+		}
 	}
-	keyMoves, err := s.groupFileMoves(renamed, KeysDirectory, GroupKeyDirectory)
+	return nil
+}
+
+// stageMoves は、移動するファイルを決め、metadata の identity を追従させる。
+func (g *groupLayout) stageMoves() error {
+	connectionMoves, err := g.service.groupFileMoves(g.renamed, ConnectionsDirectory, GroupDirectory)
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	for _, relocation := range keyMoves {
-		prepared.keyRelocations = append(prepared.keyRelocations, RelocatedKeyFile{
+	g.connectionMoves = connectionMoves
+	keyMoves, err := g.service.groupFileMoves(g.renamed, KeysDirectory, GroupKeyDirectory)
+	if err != nil {
+		return err
+	}
+	g.keyMoves = keyMoves
+	for _, relocation := range g.keyMoves {
+		g.prepared.keyRelocations = append(g.prepared.keyRelocations, RelocatedKeyFile{
 			From: relocation.from,
 			To:   relocation.to,
 		})
 	}
 
-	stored, metadataPrecondition, err := s.metadata.Load()
+	stored, metadataPrecondition, err := g.service.metadata.Load()
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	updated := stored
-	for _, relocation := range append(append([]groupRelocation{}, connectionMoves...), keyMoves...) {
-		absoluteFrom := filepath.Join(root, filepath.FromSlash(relocation.from))
-		absoluteTo := filepath.Join(root, filepath.FromSlash(relocation.to))
-		if _, statErr := s.workspace.FileSystem().Lstat(absoluteTo); statErr == nil {
-			return planned{}, ErrGroupExists
+	g.metadataPrecondition = metadataPrecondition
+	g.updated = stored
+	for _, relocation := range append(append([]groupRelocation{}, g.connectionMoves...), g.keyMoves...) {
+		absoluteFrom := filepath.Join(g.root, filepath.FromSlash(relocation.from))
+		absoluteTo := filepath.Join(g.root, filepath.FromSlash(relocation.to))
+		if _, statErr := g.service.workspace.FileSystem().Lstat(absoluteTo); statErr == nil {
+			return ErrGroupExists
 		} else if !errors.Is(statErr, fs.ErrNotExist) {
-			return planned{}, statErr
+			return statErr
 		}
-		contents, readErr := s.workspace.FileSystem().ReadFile(absoluteFrom)
+		contents, readErr := g.service.workspace.FileSystem().ReadFile(absoluteFrom)
 		if readErr != nil {
-			return planned{}, readErr
+			return readErr
 		}
 		digest := storage.Digest(contents)
 		keys.Wipe(contents)
-		prepared.moves = append(prepared.moves, storage.Move{
+		g.prepared.moves = append(g.prepared.moves, storage.Move{
 			From:         absoluteFrom,
 			To:           absoluteTo,
 			Precondition: storage.Precondition{Exists: true, Digest: digest},
 		})
-		directory, dirErr := AbsolutePath(root, path.Dir(relocation.to))
+		directory, dirErr := AbsolutePath(g.root, path.Dir(relocation.to))
 		if dirErr != nil {
-			return planned{}, dirErr
+			return dirErr
 		}
-		prepared.directories = append(prepared.directories, directory)
+		g.prepared.directories = append(g.prepared.directories, directory)
 	}
-	for _, relocation := range connectionMoves {
+	for _, relocation := range g.connectionMoves {
 		// ファイルで宣言されたすべての alias はパスが変わるので、
 		// その metadata エントリも identity が変わる。これを同じトランザクションで
 		// 行うことが、エントリがユーザーの手作業での再関連付けを要する孤児になるのを防ぐ。
-		updated = RelocateHostIdentities(updated, relocation.from, relocation.to)
+		g.updated = RelocateHostIdentities(g.updated, relocation.from, relocation.to)
 	}
-	updated.Groups = renameGroupMetadata(updated.Groups, renamed, discardPresentation)
+	g.updated.Groups = renameGroupMetadata(g.updated.Groups, g.renamed, g.discardPresentation)
+	return nil
+}
 
+// rewriteMovedKeyReferences は、移動する鍵を指す IdentityFile 行を書き換える。
+//
+// **半端にしか適用できない名前変更は丸ごと拒否する** —— 鍵の relocation が適用
+// するのと同じ規則である。同じ書き換えだからだ。
+func (g *groupLayout) rewriteMovedKeyReferences() error {
 	// 移動する鍵は、IdentityFile 行が追従しなければならない鍵で
 	// あり、それは鍵の relocation が行うのと同じ書き換えである。
-	keyRelocations := make([]keyRelocation, 0, len(keyMoves))
-	members := make([]keys.Item, 0, len(keyMoves))
-	for _, relocation := range keyMoves {
-		item, found := inventory.Find(keys.ItemID(relocation.from))
+	keyRelocations := make([]keyRelocation, 0, len(g.keyMoves))
+	members := make([]keys.Item, 0, len(g.keyMoves))
+	for _, relocation := range g.keyMoves {
+		item, found := g.inventory.Find(keys.ItemID(relocation.from))
 		if !found {
 			continue
 		}
 		members = append(members, *item)
 		keyRelocations = append(keyRelocations, keyRelocation{from: relocation.from, to: relocation.to})
 	}
-	if blockers := s.keyRelocationBlockers(graph, inventory, members, keyRelocations, "", false); len(blockers) > 0 {
+	if blockers := g.service.keyRelocationBlockers(g.graph, g.inventory, members, keyRelocations, "", false); len(blockers) > 0 {
 		// 半端にしか適用できない名前変更は丸ごと拒否される: 鍵の
 		// relocation が適用するのと同じ規則である。同じ書き換えだからだ。
-		return planned{}, &GroupBlockedError{Blockers: blockers}
+		return &GroupBlockedError{Blockers: blockers}
 	}
-	changes, _, err := s.rewriteKeyReferences(members, keyRelocations)
+	changes, _, err := g.service.rewriteKeyReferences(members, keyRelocations)
 	if err != nil {
-		return planned{}, err
+		return err
 	}
 	for _, change := range changes {
-		previous, _, readErr := s.readFile(change.Path)
+		previous, _, readErr := g.service.readFile(change.Path)
 		if readErr != nil {
-			return planned{}, readErr
+			return readErr
 		}
-		prepared.changes = append(prepared.changes, change)
-		prepared.base[filepath.Clean(change.Path)] = previous
-		prepared.preview.Diffs = append(prepared.preview.Diffs,
-			BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
+		g.prepared.changes = append(g.prepared.changes, change)
+		g.prepared.base[filepath.Clean(change.Path)] = previous
+		g.prepared.preview.Diffs = append(g.prepared.preview.Diffs,
+			BuildFileDiff(g.service.displayPath(change.Path), previous, change.Contents))
 	}
+	return nil
+}
 
-	entryContents, entryExists, err := s.readFile(s.entryPath)
+// stageEntryRegion は、エントリファイルの生成領域を、これから宣言されるグループで書き直す。
+func (g *groupLayout) stageEntryRegion() error {
+	entryContents, entryExists, err := g.service.readFile(g.service.entryPath)
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	entryFile := config.Parse(entryContents)
-	regionPlan, err := PlanRegion(entryFile, GroupNameOrder(next, groupOrder(updated)), updated.GroupsPath())
+	g.entryFile = config.Parse(entryContents)
+	regionPlan, err := PlanRegion(g.entryFile, GroupNameOrder(g.next, groupOrder(g.updated)), g.updated.GroupsPath())
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	if err := ApplyRegion(entryFile, regionPlan); err != nil {
-		return planned{}, err
+	if err := ApplyRegion(g.entryFile, regionPlan); err != nil {
+		return err
 	}
-	entryUpdated := entryFile.Render()
+	g.entryUpdated = g.entryFile.Render()
 	entryPrecondition := storage.Precondition{}
 	if entryExists {
 		entryPrecondition = storage.Precondition{Exists: true, Digest: storage.Digest(entryContents)}
 	}
-	prepared.changes = append(prepared.changes, storage.Change{
-		Path: s.entryPath, Contents: entryUpdated, Precondition: entryPrecondition,
+	g.prepared.changes = append(g.prepared.changes, storage.Change{
+		Path: g.service.entryPath, Contents: g.entryUpdated, Precondition: entryPrecondition,
 	})
-	prepared.base[filepath.Clean(s.entryPath)] = entryContents
-	prepared.preview.Diffs = append(prepared.preview.Diffs,
-		BuildFileDiff(entryFileName, diskOrNil(entryContents, entryExists), entryUpdated))
+	g.prepared.base[filepath.Clean(g.service.entryPath)] = entryContents
+	g.prepared.preview.Diffs = append(g.prepared.preview.Diffs,
+		BuildFileDiff(entryFileName, diskOrNil(entryContents, entryExists), g.entryUpdated))
+	return nil
+}
 
+// stageGroupSettings は、groups.sshc.conf を、このトランザクションが生む layout から再生成する。
+func (g *groupLayout) stageGroupSettings() error {
 	// settings ファイルはコメントでグループを名指しし、メンバーを
 	// 列挙するので、このトランザクションが生む layout から再生成される。
-	pending := map[string][]byte{filepath.Clean(s.entryPath): entryUpdated}
+	pending := map[string][]byte{filepath.Clean(g.service.entryPath): g.entryUpdated}
 	gone := map[string]bool{}
-	for _, move := range prepared.moves {
+	for _, move := range g.prepared.moves {
 		pending[filepath.Clean(move.To)] = nil
 		gone[filepath.Clean(move.From)] = true
 	}
-	for _, move := range prepared.moves {
-		contents, readErr := s.workspace.FileSystem().ReadFile(move.From)
+	for _, move := range g.prepared.moves {
+		contents, readErr := g.service.workspace.FileSystem().ReadFile(move.From)
 		if readErr != nil {
-			return planned{}, readErr
+			return readErr
 		}
 		pending[filepath.Clean(move.To)] = contents
 	}
-	after, err := s.resolveOverlay(pending, gone)
+	after, err := g.service.resolveOverlay(pending, gone)
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	hosts, _ := ProjectHosts(after, root)
-	groupsRelative := updated.GroupsPath()
-	groupsAbsolute, err := AbsolutePath(root, groupsRelative)
+	hosts, _ := ProjectHosts(after, g.root)
+	groupsRelative := g.updated.GroupsPath()
+	groupsAbsolute, err := AbsolutePath(g.root, groupsRelative)
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	previousGroups, groupsExist, err := s.readFile(groupsAbsolute)
+	previousGroups, groupsExist, err := g.service.readFile(groupsAbsolute)
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	groupContents, groupNotices := CompileGroups(next, updated, hosts, dominantEnding(entryFile))
-	prepared.preview.Notices = append(prepared.preview.Notices, groupNotices...)
+	groupContents, groupNotices := CompileGroups(g.next, g.updated, hosts, dominantEnding(g.entryFile))
+	g.prepared.preview.Notices = append(g.prepared.preview.Notices, groupNotices...)
 	groupsPrecondition := storage.Precondition{}
 	if groupsExist {
 		groupsPrecondition = storage.Precondition{Exists: true, Digest: storage.Digest(previousGroups)}
 	}
-	prepared.changes = append(prepared.changes, storage.Change{
+	g.prepared.changes = append(g.prepared.changes, storage.Change{
 		Path: groupsAbsolute, Contents: groupContents, Precondition: groupsPrecondition,
 	})
-	prepared.base[filepath.Clean(groupsAbsolute)] = previousGroups
-	prepared.preview.Diffs = append(prepared.preview.Diffs,
+	g.prepared.base[filepath.Clean(groupsAbsolute)] = previousGroups
+	g.prepared.preview.Diffs = append(g.prepared.preview.Diffs,
 		BuildFileDiff(groupsRelative, diskOrNil(previousGroups, groupsExist), groupContents))
+	return nil
+}
 
-	metadataChange, err := s.metadata.Change(updated, metadataPrecondition)
+// stageMetadata は、metadata の変更をトランザクションへ載せる。
+func (g *groupLayout) stageMetadata() error {
+	metadataChange, err := g.service.metadata.Change(g.updated, g.metadataPrecondition)
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	previousMetadata, _, err := s.readFile(metadataChange.Path)
+	previousMetadata, _, err := g.service.readFile(metadataChange.Path)
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	prepared.changes = append(prepared.changes, metadataChange)
-	prepared.base[filepath.Clean(metadataChange.Path)] = previousMetadata
-	prepared.preview.Diffs = append(prepared.preview.Diffs,
-		BuildFileDiff(s.displayPath(metadataChange.Path), previousMetadata, metadataChange.Contents))
+	g.prepared.changes = append(g.prepared.changes, metadataChange)
+	g.prepared.base[filepath.Clean(metadataChange.Path)] = previousMetadata
+	g.prepared.preview.Diffs = append(g.prepared.preview.Diffs,
+		BuildFileDiff(g.service.displayPath(metadataChange.Path), previousMetadata, metadataChange.Contents))
+	return nil
+}
 
+// noteLeftovers は、空になるディレクトリを削除に載せ、残るものと届かなくなる接続を言う。
+func (g *groupLayout) noteLeftovers() error {
 	// この操作が空にするディレクトリは、深い方から順に同じトランザクションで一緒に削除される。
 	// 何かを保持したままのディレクトリはそのまま残され、明言される:
 	// グループのファイルはグループと共に移動するが、何にも宣言されていない
 	// ディレクトリは移動しない。どこへ行くべきか誰も知らないからだ。
-	sources := make([]string, 0, len(renamed)*2)
-	for name := range renamed {
+	sources := make([]string, 0, len(g.renamed)*2)
+	for name := range g.renamed {
 		sources = append(sources, GroupDirectory(name), GroupKeyDirectory(name))
 	}
 	moving := map[string]bool{}
-	for _, relocation := range append(append([]groupRelocation{}, connectionMoves...), keyMoves...) {
+	for _, relocation := range append(append([]groupRelocation{}, g.connectionMoves...), g.keyMoves...) {
 		moving[relocation.from] = true
 	}
-	emptied, left, err := s.emptiedDirectories(sources, moving)
+	emptied, left, err := g.service.emptiedDirectories(sources, moving)
 	if err != nil {
-		return planned{}, err
+		return err
 	}
-	prepared.removeDirectories = append(prepared.removeDirectories, emptied...)
+	g.prepared.removeDirectories = append(g.prepared.removeDirectories, emptied...)
 	for _, directory := range left {
 		name := strings.TrimPrefix(strings.TrimPrefix(directory, ConnectionsDirectory+"/"), KeysDirectory+"/")
-		prepared.preview.Notices = appendNotice(prepared.preview.Notices, Notice{
+		g.prepared.preview.Notices = appendNotice(g.prepared.preview.Notices, Notice{
 			Code: NoticeGroupDirectoryLeftover, Detail: name, Path: directory,
 		})
 	}
@@ -400,15 +481,15 @@ func (s *Service) planGroupLayout(
 	// 動作しているということであり、同時に connection が設定から
 	// 外れるということでもある。だからそれは保存の前、ここで
 	// 述べられる。何かが解決しなくなってからユーザーが気づくのに任せるのではなく。
-	for _, relocation := range connectionMoves {
+	for _, relocation := range g.connectionMoves {
 		if _, inGroup := GroupOfPath(relocation.to); inGroup {
 			continue
 		}
-		prepared.preview.Notices = appendNotice(prepared.preview.Notices, Notice{
+		g.prepared.preview.Notices = appendNotice(g.prepared.preview.Notices, Notice{
 			Code: NoticeGroupFileUnreached, Path: relocation.to, Detail: relocation.from,
 		})
 	}
-	return prepared, nil
+	return nil
 }
 
 // GroupBlockedError は、グループ操作が拒否した理由を報告する。
