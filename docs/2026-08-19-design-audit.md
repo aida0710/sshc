@@ -180,6 +180,68 @@ S2〜S5 の構造変更を進めた。**全 32 コミット、102 ファイル�
 移した結果、`TestOnlyTheNamedSubsystemsStartAProgram` と Makefile の契約検査が古い
 パスを指して赤くなった。**それがあの検査の仕事である。**
 
+## 0.10 第四段: 契約と型と、走らない規則
+
+§5 の残りと、監査が数え落としていたものである。**計画どおりに終わらなかったものが 2 件あるので、そこを先に書く。**
+
+### C20 は、提案した A でも B でもない道になった
+
+§6 は (A)「生成型を通信の正本にする」か (B)「models.gen.go を捨てる」かを問い、C20 は (A) を推す形で書かれていた。**実測したら、どちらも採れなかった。**
+
+同名 36 対のうち **27 対は Go の型が違い、違いは系統的だった**: 生成側は OpenAPI の省略可能を `*T` で表し、`application` 側は値と `omitempty` で表す。さらに `application` は `DiffOp` / `EditAction` のような名前付きの型を持ち、生成側はそれを `string` にする。**(A) を採るとドメインの側が弱くなる。**
+
+採ったのは「寄せずに、生成しない」である（`exclude-schemas` に 20 スキーマ）。対は 36→18、`models.gen.go` は 1524→1339 行、到達不能な生成型は 84→57 になった。残る 18 は、使われている request/response の中に入れ子で現れるので生成が要る——**そこが今の構成での底である。**
+
+副産物として、適合検査の相手が変わった。生成された双子と比べていたのを **`openapi.yaml` そのものと比べる**形にした（`internal/acceptance/contract_drift_test.go`）。`httpserver` 側の `DisallowUnknownFields` 検査は、生成型ではなく実際に `c.JSON` へ渡している型へ向けた。2 つ合わせて「返る本文 ⊆ application の型 = 契約」になる。
+
+### identityKey は 5 実装ではなく 6 箇所だった
+
+§4 の C29 は「5 実装」と書いた。実際には 6 箇所あり、**監査が数え落としていた 1 箇所が一番危なかった。**
+
+`ConnectionTree.tsx` は同じ関数の中で、Map の構築を**直書きのテンプレート文字列**で行い、参照は名前付きの関数で行っていた。名前が付いていないので `identityKey` を grep しても出てこない。**関数だけを直せば、照合は例外も型エラーも出さずに全部外れる**——症状は全ホストがメモ・色・並び順を失うことである。
+
+残りは `connectionBrowser` の定義、`QuickConnectBrowser` の React key、`resetKey` 4 箇所（identity の綴りに内容を足したもの）。落とす場所を 1 つにし、`Record<keyof HostIdentity, true>` で項目の取りこぼしを型で塞いだ。**この検査は省略可能な項目で効くことを確かめてある**——必要な項目なら fixture が軒並み赤くなって埋もれるが、省略可能なら fixture は通り、赤くなるのはこの検査だけだった。
+
+### 外殻に静的検査が無かった（監査の範囲外だった）
+
+`desktop/` の 1,163 行は素の JS で、**静的には誰にも見られていなかった。** Go は gofmt と vet を、web は tsc を通すのに、エンジンを spawn し所有権のパイプを握り symlink を張る package だけが、走らせるまで何も分からない。TypeScript にした。
+
+移動で静かに壊れるものが 1 つあった。出力が `out/` に入ると `join(__dirname, "build", "icon.png")` は**例外を出さずに無い道を指す**——`createFromPath` は空の画像を返すだけなので、症状は「図が Electron の既定に戻る」であり、ビルドもテストも緑のまま出荷される。場所を知るのを `paths.ts` に集約し、実在を検査する。**electron-builder に実際に束を作らせて中を確認した**（`/out/*.js` の一つ上に `/build/` と `/package.json`、テストと `adhoc.js` は非同梱）。
+
+`build.files` の検査は 4 つを名指しで並べており、その後に増えた 3 つは誰にも数えられていなかった。`main.ts` から import を辿って求める形にした。
+
+型が実際に見つけたもの: `catch (error)` が Error を前提に `error.code` を触っていた／`JSON.parse(status)` の `any` が `sessions` へ素通りしていた（読めない行が来ると**例外も出さずに**メニューバーが undefined を綴る）／`BrowserWindow` が `icon()` を二度呼んでいた／メニューの role が `string` だった。
+
+### 「lint の役目は型検査が担う」は、半分だけ正しかった
+
+CI にそう書いてあり、大筋では正しい。だが tsc が見ないものが二種類ある: **待ち忘れた Promise** と **React の規則**である。しかも `react-hooks/exhaustive-deps` を名指しで抑止するコメントが既に 9 箇所あった——**規則の側は一度も走っていなかった。** 抑止だけがあって規則が無い状態は、規則が無いより悪い。読む人には「検討済み」に見えるからである。
+
+**入れなかったものの方が多い。** `recommendedTypeChecked` は 265 件出すが、174 件は `unbound-method` で**うち 173 件はテストの `expect(obj.method)`**、`set-state-in-effect` の 23 件は注釈で理由が書かれた意図的な形だった。信号より雑音が多い lint はいずれ丸ごと切られるので、25 件に絞って**全部直した**（抑止で消したものは無い）。
+
+## 0.11 実行による検証（第二回）
+
+§0.5 が「未検証」に挙げた 4 つのうち、**e2e はこの段で走らせた。**
+
+| 検査 | 結果 |
+|---|---|
+| `go build` / `go vet` / `go test ./...` | 通過（35 パッケージ） |
+| `go test -race ./...` | 通過 |
+| web: vitest | 697 通過 / 73 ファイル |
+| web: `tsc -b` + e2e の tsconfig | 通過 |
+| web: eslint（src + e2e + 各 config） | **0 件** |
+| desktop: `tsc --noEmit` | 通過（strict、`noUncheckedIndexedAccess` 込み） |
+| desktop: `node --test` | 51 通過 |
+| `make verify-generated` | 通過 |
+| クロスビルド（windows / android） | 通過 |
+| **e2e: chromium (90) + narrow (5)** | **95 通過 / 1 失敗** |
+| electron-builder による束の作成（linux dir） | 通過。asar の中身を目視で確認 |
+
+e2e の 1 失敗は `desktop.spec.ts`（実際に Electron を起こす 1 本）で、理由は **X server が無いこと**である（`Missing X server or $DISPLAY`）。CI は `xvfb-run` 経由で走らせている。この環境では xvfb の導入に root が要るため走らせられなかった——**コードの問題ではないが、確かめられてもいない。**
+
+**なお未検証のまま**: 実機での挙動（macOS / Windows / Android 実機、dmg / AppImage / NSIS が実際に起動するか）、S3 同期、PTY を伴う対話。TypeScript 化は束の**配置**までは実測したが、**起動**は確かめていない。
+
+---
+
 ## 1. 先に直すべき実害
 
 設計論より優先する。いずれも「テストは緑だが本番の挙動が違う」型。
@@ -1469,4 +1531,5 @@ grep で確認した結果、**きれいに畳まれた系列**（系列2 サー
 - 横断 5 本: dead code / 過剰な抽象化 / 抽象化の不足と重複 / 層構造と依存方向 / 4 OS の分岐設計。各観点は調査結果を鵜呑みにせず自分で裏を取る指示を与えている。
 - 各指摘には confidence（confirmed / likely / speculative）が付いている。本文に採ったのは主に confirmed。
 - 調査後に Go 1.26.6 / Node 22.19.0 / npm 11.7.0 を `~/.local/toolchains/` へ導入し、ビルド・テスト・`deadcode`・`staticcheck` で主要な主張を検証した（§0.5）。
-- **なお未検証**: 実機での挙動確認（macOS / Windows / Android 実機、S3 同期、PTY を伴う対話、Playwright の e2e）。§0.5 に挙がっていない指摘は静的追跡のみの根拠である。
+- **なお未検証**: 実機での挙動確認（macOS / Windows / Android 実機、S3 同期、PTY を伴う対話）。§0.5 に挙がっていない指摘は静的追跡のみの根拠である。
+- ここに挙げた e2e は、その後 §0.11 で走らせた（95 通過 / 1 失敗、失敗は表示装置が無いためである）。**この節は監査を書いた時点の記録であり、後から書き換えていない**——何を確かめずに書いたかは、確かめたことと同じくらい読む価値がある。
