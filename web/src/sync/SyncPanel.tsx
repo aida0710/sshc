@@ -13,11 +13,9 @@ import {
   Field,
   control,
   hintText,
-  primaryAction,
-  secondaryAction,
   sectionHeading,
 } from "../ui/form";
-import { Card, Notice, Row } from "../ui/surface";
+import { Button, Card, Notice, Row } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { SyncResultCard, type SyncResultView } from "./SyncResultCard";
 
@@ -161,8 +159,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               className={control}
             />
           </Field>
-          <button
-            type="button"
+          <Button
+            kind="primary"
             disabled={busy || master === ""}
             onClick={() =>
               void run(
@@ -177,11 +175,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 t("sync.unlockFailed"),
                 (code) => (code === "vault_missing" ? t("sync.noVault") : ""),
               )
-            }
-            className={`self-start ${primaryAction}`}
+            } className="self-start"
           >
             {t("secrets.unlock")}
-          </button>
+          </Button>
         </section>
       </div>
     );
@@ -224,9 +221,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               {status.region !== undefined && status.region !== "" ? ` (${status.region})` : ""}
             </p>
             {!editingSettings ? (
-              <button type="button" className={secondaryAction} onClick={() => editSettings(status)}>
+              <Button onClick={() => editSettings(status)}>
                 {t("sync.editSettings")}
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : (
@@ -306,8 +303,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             </select>
           </Row>
         </Card>
-        <button
-          type="button"
+        <Button
+          kind="primary"
           disabled={busy || endpoint === "" || bucket === "" || accessKeyId === "" || secretAccessKey === ""}
           onClick={() =>
             void run(
@@ -320,15 +317,14 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               },
               t("sync.configureFailed"),
             )
-          }
-          className={`self-start ${primaryAction}`}
+          } className="self-start"
         >
           {t("sync.configure")}
-        </button>
+        </Button>
         {status.configured ? (
-          <button type="button" disabled={busy} onClick={() => setEditingSettings(false)} className={secondaryAction}>
+          <Button disabled={busy} onClick={() => setEditingSettings(false)}>
             {t("sync.cancelSettings")}
-          </button>
+          </Button>
         ) : null}
         </> : null}
       </section>
@@ -373,8 +369,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   className={control}
                 />
               ) : null}
-              <button
-                type="button"
+              <Button
+                kind="primary"
                 disabled={busy || (chooseOwn && ownKey === "")}
                 onClick={() =>
                   void run(
@@ -387,11 +383,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                     },
                     t("sync.keyFailed"),
                   )
-                }
-                className={`self-start ${primaryAction}`}
+                } className="self-start"
               >
                 {status.keyConfigured ? t("sync.keyReplace") : t("sync.keyCreate")}
-              </button>
+              </Button>
             </div>
           </Row>
           {/*
@@ -481,8 +476,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           </p>
         )}
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
+          <Button
+            kind="primary"
             disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull"}
             onClick={() =>
               void run(
@@ -496,18 +491,15 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 t("sync.pushFailed"),
               )
             }
-            className={primaryAction}
           >
             {t("sync.push")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             disabled={busy || !status.configured || !status.keyConfigured}
             onClick={() => void previewWith(undefined)}
-            className={secondaryAction}
           >
             {t("sync.preview")}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -592,8 +584,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               <span>{t("sync.confirmOverwrite")}</span>
             </label>
           )}
-          <button
-            type="button"
+          <Button
+            kind="primary"
             disabled={
               busy ||
               conflicted ||
@@ -612,11 +604,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 },
                 t("sync.applyFailed"),
               )
-            }
-            className={`self-start ${primaryAction}`}
+            } className="self-start"
           >
             {t("sync.apply")}
-          </button>
+          </Button>
         </section>
       )}
     </div>

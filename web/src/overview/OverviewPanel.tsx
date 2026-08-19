@@ -3,8 +3,8 @@ import { failureCode } from "../api/client";
 import { configApi, type Overview } from "../api/config";
 import { integrationsApi, type SyncStatus } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
-import { hintText, secondaryAction } from "../ui/form";
-import { Notice } from "../ui/surface";
+import { hintText } from "../ui/form";
+import { Button, Notice } from "../ui/surface";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
 
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
@@ -92,9 +92,9 @@ export function OverviewPanel({
           <h2 id="home-heading" className="text-xl font-semibold">{t("home.heading")}</h2>
           <p className="mt-1 text-sm text-ink-muted">{t("home.intro")}</p>
         </div>
-        <button type="button" className={secondaryAction} onClick={() => onNavigate("Connections")}>
+        <Button onClick={() => onNavigate("Connections")}>
           {t("home.manageConnections")}
-        </button>
+        </Button>
       </div>
 
       {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
@@ -135,10 +135,10 @@ export function OverviewPanel({
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {configurationAttention === 0 ? null : (
-              <button type="button" className={secondaryAction} onClick={() => onNavigate("Config")}>{t("home.openConfig")}</button>
+              <Button onClick={() => onNavigate("Config")}>{t("home.openConfig")}</Button>
             )}
             {recoveryAttention === 0 ? null : (
-              <button type="button" className={secondaryAction} onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</button>
+              <Button onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>
             )}
           </div>
         </section>
@@ -153,7 +153,7 @@ export function OverviewPanel({
                   ? t("home.syncLast", { at: sync.lastSyncedAt ?? "—", count: sync.fileCount ?? 0 })
                   : t("home.syncNever")}
           </p>
-          <button type="button" className={`${secondaryAction} mt-3`} onClick={() => onNavigate("Sync")}>{t("home.openSync")}</button>
+          <Button className="mt-3" onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
         </section>
       </div>
     </section>

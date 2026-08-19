@@ -11,14 +11,13 @@ import {
   Field,
   control,
   hintText,
-  secondaryAction,
   sectionCard,
   sectionHeading,
   tableHeadCell,
   tableHeadRow,
 } from "../ui/form";
 import { useTranslate } from "../i18n/context";
-import { Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 
 type DiagnosticsPanelProps = {
@@ -148,15 +147,13 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
           </div>
         )}
         {checks.map((check) => (
-          <button
+          <Button
             key={check.label}
-            type="button"
             onClick={check.start}
             disabled={blocked}
-            className={secondaryAction}
           >
             {check.label}
-          </button>
+          </Button>
         ))}
       </div>
 

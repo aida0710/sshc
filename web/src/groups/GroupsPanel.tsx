@@ -6,17 +6,14 @@ import { formatValues, parseValues } from "../connections/values";
 import {
   Field,
   control,
-  dangerAction,
   fieldLabel,
   hintText,
   narrowControl,
-  primaryAction,
-  secondaryAction,
   sectionCard,
   sectionHeading,
 } from "../ui/form";
 import { useTranslate } from "../i18n/context";
-import { Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import type { InspectorContent } from "../ui/Inspector";
 import { GroupInspector } from "./GroupInspector";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
@@ -380,9 +377,9 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
             className={control}
           />
         </Field>
-        <button type="button" onClick={addGroup} disabled={newName === ""} className={`self-start ${secondaryAction}`}>
+        <Button onClick={addGroup} disabled={newName === ""} className="self-start">
           {t("groups.add")}
-        </button>
+        </Button>
       </section>
 
       {groups.length === 0 ? (
@@ -496,14 +493,12 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                     onChange={(event) => setRenaming({ ...renaming, [group.name]: event.target.value })}
                     className={narrowControl}
                   />
-                  <button
-                    type="button"
+                  <Button
                     onClick={() => void renameGroup(group.name)}
                     disabled={!savedGroups.has(group.name) || unsaved}
-                    className={secondaryAction}
                   >
                     {t("groups.rename", { name: group.name })}
-                  </button>
+                  </Button>
                 </span>
               </label>
               {/*
@@ -520,14 +515,12 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                 られる瞬間に問われる。
               */}
               {confirmingRemove[group.name] !== true ? (
-                <button
-                  type="button"
+                <Button
                   onClick={() => setConfirmingRemove({ ...confirmingRemove, [group.name]: true })}
                   disabled={!savedGroups.has(group.name) || unsaved}
-                  className={secondaryAction}
                 >
                   {t("groups.remove", { name: group.name })}
-                </button>
+                </Button>
               ) : null}
               {/*
                 ネストは以前、ページ下部のテキストボックスの下にある
@@ -535,16 +528,14 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                 これはそれをグループがある場所に置き、ユーザーが子の
                 名前だけを入力すればよいようパスを事前に入力する。
               */}
-              <button
-                type="button"
+              <Button
                 onClick={() => {
                   setNewName(`${group.name}/`);
                   newNameInput.current?.focus();
                 }}
-                className={secondaryAction}
               >
                 {t("groups.addChild", { name: group.name })}
-              </button>
+              </Button>
             </div>
             )}
             {savedGroups.has(group.name) ? null : (
@@ -593,21 +584,18 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                 */}
                 <p className={hintText}>{t("groups.removeKeepsFiles")}</p>
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    kind="danger"
                     onClick={() => void removeGroup(group.name)}
                     disabled={unsaved}
-                    className={dangerAction}
                   >
                     {t("groups.removeConfirm", { name: group.name })}
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
                     onClick={() => setConfirmingRemove({ ...confirmingRemove, [group.name]: false })}
-                    className={secondaryAction}
                   >
                     {t("groups.removeCancel")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -644,9 +632,9 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
             />
           </Field>
         </div>
-        <button type="button" onClick={addSetting} className={`self-start ${secondaryAction}`}>
+        <Button onClick={addSetting} className="self-start">
           {t("groups.addSetting")}
-        </button>
+        </Button>
       </section>
       )}
 
@@ -661,15 +649,15 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
           className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-notice-line bg-notice p-3 shadow-lg"
         >
           <p className="min-w-0 grow text-sm text-notice-ink">{t("groups.unsavedBarNote")}</p>
-          <button type="button" onClick={() => void run("preview")} className={secondaryAction}>
+          <Button onClick={() => void run("preview")}>
             {t("groups.previewChanges")}
-          </button>
-          <button type="button" onClick={discardDraft} className={secondaryAction}>
+          </Button>
+          <Button onClick={discardDraft}>
             {t("groups.discard")}
-          </button>
-          <button type="button" onClick={() => void run("save")} className={primaryAction}>
+          </Button>
+          <Button kind="primary" onClick={() => void run("save")}>
             {t("groups.save")}
-          </button>
+          </Button>
         </section>
       ) : (
         <p className="text-xs text-ink-muted">{t("groups.savedNote")}</p>

@@ -6,12 +6,10 @@ import {
   Field,
   control,
   hintText,
-  primaryAction,
-  secondaryAction,
   sectionCard,
   sectionHeading,
 } from "../ui/form";
-import { Card, Row } from "../ui/surface";
+import { Button, Card, Row } from "../ui/surface";
 import type {
   useAgentForm,
   usePassphraseForm,
@@ -86,12 +84,12 @@ export function RelocateForm({
         </Row>
       </Card>
       <div className="flex gap-2">
-        <button type="submit" className={primaryAction}>
+        <Button kind="primary" type="submit">
           {t("keys.relocateSubmit")}
-        </button>
-        <button type="button" className={secondaryAction} onClick={form.close}>
+        </Button>
+        <Button onClick={form.close}>
           {t("keys.cancel")}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -151,12 +149,12 @@ export function PassphraseForm({
         }}
       />
       <div className="flex gap-2">
-        <button type="submit" className={primaryAction}>
+        <Button kind="primary" type="submit">
           {t("keys.savePassphrase")}
-        </button>
-        <button type="button" className={secondaryAction} onClick={form.close}>
+        </Button>
+        <Button onClick={form.close}>
           {t("keys.cancel")}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -243,23 +241,21 @@ export function AgentForm({
               ))}
             </select>
           </Row>
-          <button
-            type="button"
-            className={secondaryAction}
+          <Button
             disabled={chosenPhrase === ""}
             onClick={() => onAssignPhrase(item)}
           >
             {t("keys.useThisPassphrase")}
-          </button>
+          </Button>
         </div>
       )}
       <div className="flex gap-2">
-        <button type="submit" className={primaryAction}>
+        <Button kind="primary" type="submit">
           {t("keys.registerSubmit")}
-        </button>
-        <button type="button" className={secondaryAction} onClick={form.close}>
+        </Button>
+        <Button onClick={form.close}>
           {t("keys.cancel")}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -296,9 +292,9 @@ export function StoredPassphrasePanel({
               ? t("keys.usesDedicatedPassphrase")
               : t("keys.usesStoredPassphrase", { name: namedStoredFor(phrases, item)!.name })}
           </p>
-          <button type="button" className={secondaryAction} onClick={() => onUnassign(item)}>
+          <Button onClick={() => onUnassign(item)}>
             {t("keys.unassignPassphrase")}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -312,14 +308,12 @@ export function StoredPassphrasePanel({
               ))}
             </select>
           </Field>
-          <button
-            type="button"
-            className={secondaryAction}
+          <Button
             disabled={chosenPhrase === ""}
             onClick={() => onAssign(item)}
           >
             {t("keys.useThisPassphrase")}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -341,17 +335,16 @@ export function StoredPassphrasePanel({
         </Field>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
+          kind="primary"
           disabled={form.storedPhraseName === "" || form.storedPhraseSecret === ""}
-          className={primaryAction}
           onClick={() => onStoreAndAssign(item)}
         >
           {t("keys.storeAndUsePassphrase")}
-        </button>
-        <button type="button" className={secondaryAction} onClick={form.close}>
+        </Button>
+        <Button onClick={form.close}>
           {t("keys.cancel")}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -407,9 +400,9 @@ export function TrashConfirmation({
         <button type="button" className={rowDanger} onClick={() => onConfirm(item.id)}>
           {t("keys.trashConfirm")}
         </button>
-        <button type="button" className={secondaryAction} onClick={onCancel}>
+        <Button onClick={onCancel}>
           {t("keys.trashCancel")}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -479,9 +472,9 @@ export function RelocateResult({
         </p>
       ))}
       <div>
-        <button type="button" className={secondaryAction} onClick={onClose}>
+        <Button onClick={onClose}>
           {t("keys.close")}
-        </button>
+        </Button>
       </div>
     </section>
   );

@@ -10,7 +10,7 @@ import { UpdateBadge } from "./shell/UpdateBadge";
 import { OverviewPanel } from "./overview/OverviewPanel";
 import { useLanguage, useTranslate } from "./i18n/context";
 import { locales, type Locale } from "./i18n/locale";
-import { autoControl, primaryAction, secondaryAction } from "./ui/form";
+import { autoControl, secondaryAction } from "./ui/form";
 import { Icon, IconSprite, type IconName } from "./ui/icons";
 import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
@@ -491,13 +491,12 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           出る唯一の道である** ——使い切られた fragment を持ったまま読み直せば
           何度でもここへ戻ってくるが、クッキーだけで届けば renew が答える。
         */}
-        <button
-          type="button"
-          className={primaryAction}
+        <Button
+          kind="primary"
           onClick={() => window.location.replace(window.location.pathname + window.location.search)}
         >
           {t("shell.bootstrapRetry")}
-        </button>
+        </Button>
       </main>
     );
   }

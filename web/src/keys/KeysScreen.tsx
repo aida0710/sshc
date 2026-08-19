@@ -24,14 +24,13 @@ import {
   CheckboxField,
   control,
   hintText,
-  primaryAction,
   secondaryAction,
   sectionCard,
   sectionHeading,
   tableHeadCell,
   tableHeadRow,
 } from "../ui/form";
-import { Card, Row } from "../ui/surface";
+import { Button, Card, Row } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import {
@@ -624,16 +623,15 @@ export function KeysScreen({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            className={primaryAction}
+          <Button
+            kind="primary"
             onClick={() => void moveChosen(moveTarget === "" ? { kind: "ungrouped" } : { kind: "group", name: moveTarget })}
           >
             {t("keys.moveChosen")}
-          </button>
-          <button type="button" className={secondaryAction} onClick={() => setChosen(new Set())}>
+          </Button>
+          <Button onClick={() => setChosen(new Set())}>
             {t("keys.clearChosen")}
-          </button>
+          </Button>
         </div>
       )}
       {moveOutcome === null ? null : (
@@ -923,9 +921,9 @@ export function KeysScreen({
           </pre>
           <div className="flex gap-2">
             <CopyButton value={publicKeyView.text} label="copy.publicKey" />
-            <button type="button" className={secondaryAction} onClick={() => setPublicKeyView(null)}>
+            <Button onClick={() => setPublicKeyView(null)}>
               {t("keys.close")}
-            </button>
+            </Button>
           </div>
         </section>
       )}
@@ -1119,9 +1117,9 @@ export function KeysScreen({
             }}
           />
         )}
-        <button type="submit" className={`self-start ${primaryAction}`}>
+        <Button kind="primary" type="submit" className="self-start">
           {inProcess ? t("keys.createSubmit") : t("keys.showTerminalCommand")}
-        </button>
+        </Button>
       </form>
 
       {generated === null ? null : (
@@ -1131,20 +1129,17 @@ export function KeysScreen({
             {t("keys.generatedNext", { path: generated.private.privateRelativePath })}
           </p>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={primaryAction}
+            <Button
+              kind="primary"
               onClick={() => onAssignGeneratedKey?.(generated.private)}
             >
               {t("keys.assignGenerated")}
-            </button>
-            <button
-              type="button"
-              className={secondaryAction}
+            </Button>
+            <Button
               onClick={() => onInstallGeneratedKey?.(generated.public)}
             >
               {t("keys.installGenerated")}
-            </button>
+            </Button>
           </div>
         </section>
       )}

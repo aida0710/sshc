@@ -124,9 +124,14 @@ export function Segmented<T extends string>({
 
 type ButtonProps = { kind?: "primary" | "secondary" | "danger" } & ButtonHTMLAttributes<HTMLButtonElement>;
 
-// type="button" が既定なのは、このアプリケーションのすべてのボタンが
-// そうだからだ: フォーム送信はどこにもなく、<form> の中で既定の
-// 「submit」になるボタンがあれば、ページをリロードしてセッションを失ってしまう。
+// **type="button" が既定である。** <form> の中の <button> は、書かなければ submit に
+// なる——押した瞬間にページがリロードされ、セッションが失われる。
+//
+// かつてここには「フォーム送信はどこにもなく」と書いてあった。書いた時点では本当
+// だったのだろうが、いまは <form onSubmit> が 6 箇所ある。**その間、form の中の生の
+// <button> が submit にならずに済んでいたのは、書く人が毎回 type="button" を付けて
+// いたからである。** 既定を持つ入口を通れば、忘れても壊れない——送信したいときだけ
+// type="submit" と書く。
 export function Button({ kind = "secondary", className = "", type = "button", ...rest }: ButtonProps) {
   const base = kind === "primary" ? primaryAction : kind === "danger" ? dangerAction : secondaryAction;
   return <button type={type} className={`${base} ${className}`} {...rest} />;

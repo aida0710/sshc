@@ -13,14 +13,11 @@ import { PasswordField } from "../ui/PasswordField";
 import {
   Field,
   control,
-  dangerAction,
   hintText,
-  primaryAction,
-  secondaryAction,
   sectionCard,
   sectionHeading,
 } from "../ui/form";
-import { Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 
 type SecretsPanelProps = {
@@ -165,9 +162,8 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
           {error === "" ? null : <Notice tone="danger">{error}</Notice>}
           <PasswordField label={t("secrets.master")} value={master} onChange={setMaster} />
           <div>
-            <button
-              type="button"
-              className={primaryAction}
+            <Button
+              kind="primary"
               onClick={() =>
                 void run(
                   () => (creating ? api.initialiseVault(master) : api.unlockVault(master)),
@@ -176,7 +172,7 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
               }
             >
               {creating ? t("secrets.create") : t("secrets.unlock")}
-            </button>
+            </Button>
           </div>
         </section>
       </div>
@@ -211,13 +207,11 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {keyHostUsageComplete ? null : <Notice>{t("secrets.keyHostUsageIncomplete")}</Notice>}
       <div>
-        <button
-          type="button"
-          className={secondaryAction}
+        <Button
           onClick={() => void api.lockVault().then(() => onLock?.())}
         >
           {t("secrets.lock")}
-        </button>
+        </Button>
       </div>
 
       {/*
@@ -267,9 +261,8 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <h4 className="font-semibold text-ink">{credential.name}</h4>
-                        <button
-                          type="button"
-                          className={dangerAction}
+                        <Button
+                          kind="danger"
                           onClick={() =>
                             void run(
                               () => api.deleteCredential(group.kind, credential.name),
@@ -278,7 +271,7 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                           }
                         >
                           {t("secrets.delete", { name: credential.name })}
-                        </button>
+                        </Button>
                       </div>
                       {credential.kind === "key_passphrase" ? (
                         <UsageList
@@ -317,9 +310,8 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                           </h4>
                           <p className={hintText}>{t("secrets.dedicated")}</p>
                         </div>
-                        <button
-                          type="button"
-                          className={dangerAction}
+                        <Button
+                          kind="danger"
                           onClick={() =>
                             void run(
                               () => api.unassignCredential("key_passphrase", credential.key),
@@ -328,7 +320,7 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                           }
                         >
                           {t("secrets.removeDedicated", { key: credential.key })}
-                        </button>
+                        </Button>
                       </div>
                       <UsageList
                         label={t("secrets.keys")}
@@ -371,9 +363,8 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                   className={control}
                 />
               </Field>
-              <button
-                type="button"
-                className={primaryAction}
+              <Button
+                kind="primary"
                 disabled={draft.name === "" || draft.secret === ""}
                 onClick={() =>
                   void run(
@@ -383,7 +374,7 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                 }
               >
                 {t(group.store)}
-              </button>
+              </Button>
             </div>
           </section>
         );
