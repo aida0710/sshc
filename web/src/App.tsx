@@ -294,7 +294,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     if (opened !== null) showConsole(opened.id);
   }, [consoles, showConsole]);
 
-  // 複製は「同じ相手にもう 1 本」である。設定ファイルには触れない——接続
+  // 複製は、同じ相手へもう一本つなぐことである。設定ファイルには触れない——接続
   // そのものの複製は Connections 画面にある別の操作である。
   const duplicateConsole = useCallback(
     async (id: string) => {
