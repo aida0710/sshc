@@ -10,6 +10,7 @@
     "test": "vitest run",
     "check:i18n": "vitest run src/i18n/catalogue.test.ts --reporter=verbose",
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.e2e.json --pretty false",
+    "lint": "eslint src e2e playwright.config.ts vite.config.ts vitest.setup.ts",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -29,10 +30,13 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.4",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.1.0",
     "jsdom": "29.1.1",
     "openapi-typescript": "7.13.0",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
+    "typescript-eslint": "^8.46.4",
     "vite": "8.1.5",
     "vitest": "4.1.1"
   },

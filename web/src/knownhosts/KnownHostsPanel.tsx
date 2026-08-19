@@ -56,7 +56,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
     return () => {
       active = false;
     };
-  }, [api]);
+  }, [api, t]);
 
   async function search(next: string) {
     setError("");

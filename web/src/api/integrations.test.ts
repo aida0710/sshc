@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, apiClient } from "./client";
 import { integrationsApi, KNOWN_HOSTS_ADD_ACTION_KIND } from "./integrations";
+import { sentJson } from "../testing/requests";
 
 const csrfToken = "c".repeat(43);
 const actionToken = "a".repeat(43);
@@ -49,7 +50,7 @@ describe("integrationsApi.addKnownHost", () => {
     expect(actionPath).toBe("/api/v1/actions");
     // 含まれるのは操作と target だけである。トークンが紐付く証跡は
     // 発行時と消費時にサーバー側で導出される。
-    expect(JSON.parse(String(actionInit.body))).toEqual({
+    expect(sentJson(actionInit)).toEqual({
       kind: "known_hosts.add",
       target: "new.example.com",
     });
@@ -59,7 +60,7 @@ describe("integrationsApi.addKnownHost", () => {
     const headers = new Headers(addInit.headers);
     expect(headers.get("X-SSHC-Action")).toBe(actionToken);
     expect(headers.get("X-SSHC-CSRF")).toBe(csrfToken);
-    expect(JSON.parse(String(addInit.body))).toEqual({
+    expect(sentJson(addInit)).toEqual({
       ...candidate,
       expectedFingerprint: "SHA256:proof",
       acknowledged: false,
@@ -259,7 +260,7 @@ describe("integrationsApi remote sync measurements", () => {
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/sync/push");
     // 押した人が打つものはもう無い。封をする鍵は保管庫の中にある。
-    expect(JSON.parse(String(init.body))).toEqual({});
+    expect(sentJson(init)).toEqual({});
   });
 
   it("accepts the measured result of an apply download", async () => {

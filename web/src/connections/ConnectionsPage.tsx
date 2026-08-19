@@ -228,7 +228,7 @@ export function ConnectionsPage({
       setProblem(toProblem(error));
       return null;
     }
-  }, []);
+  }, [setProblem]);
 
   useEffect(() => {
     void reload();
@@ -400,7 +400,7 @@ export function ConnectionsPage({
     return () => {
       active = false;
     };
-  }, [selectedPath, selectedAlias]);
+  }, [selectedPath, selectedAlias, setDetail, setSavedState, setProblem, setMissingSelection]);
 
   // 編集で開いているホストが削除された場合、reselect は false になる
   // ——消したばかりのブロックをサーバーへすぐに問い合わせずに済ませるためだ。

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { keysApi, type KeyItem, type KeysApi } from "../keys/api";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -74,11 +74,15 @@ export function RemoteKeyPanel({
   const planGeneration = useRef(0);
   const preferredHandled = useRef(false);
 
-  function handlePreferredPublicKey() {
+  // **useCallback なのは効果の依存に載せるためである。** 素の関数宣言だと
+  // 描画のたびに別物になり、依存に足せば効果が毎回走り直す（そして中で
+  // setState を呼ぶので止まらない）。閉じ込めている 2 つは、下の効果が既に
+  // 依存しているものと同じなので、固定してもこの効果の走る回数は変わらない。
+  const handlePreferredPublicKey = useCallback(() => {
     if (preferredPublicKeyPath === null || preferredHandled.current) return;
     preferredHandled.current = true;
     onPreferredPublicKeyHandled?.();
-  }
+  }, [preferredPublicKeyPath, onPreferredPublicKeyHandled]);
 
   // インベントリの読み取りに失敗すると、ピッカーは空のまま、下の
   // 2 つのフィールドは使える状態で残る。これが存在する前は手で鍵を
@@ -109,7 +113,7 @@ export function RemoteKeyPanel({
     return () => {
       active = false;
     };
-  }, [keys, onPreferredPublicKeyHandled, preferredPublicKeyPath]);
+  }, [keys, onPreferredPublicKeyHandled, preferredPublicKeyPath, handlePreferredPublicKey]);
 
   // withdraw は、それまでの plan が正当化していたすべてを捨てる。
   // 編集のたびに実行されるので、確認画面が変わった値のまま残ることはない。

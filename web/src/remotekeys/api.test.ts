@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, apiClient } from "../api/client";
 import { remoteKeysApi } from "./api";
+import { sentJson } from "../testing/requests";
 
 const csrfToken = "c".repeat(43);
 const actionToken = "a".repeat(43);
@@ -62,7 +63,7 @@ describe("remoteKeysApi", () => {
     const headers = new Headers(init.headers);
     expect(headers.get("X-SSHC-Action")).toBeNull();
     expect(headers.get("X-SSHC-CSRF")).toBe(csrfToken);
-    expect(JSON.parse(String(init.body))).toEqual({
+    expect(sentJson(init)).toEqual({
       alias: "bastion",
       keyPath: "~/.ssh/id_ed25519.pub",
       publicKey,
@@ -88,7 +89,7 @@ describe("remoteKeysApi", () => {
     const [registerPath, registerInit] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(registerPath).toBe("/api/v1/remote-keys/register");
     expect(new Headers(registerInit.headers).get("X-SSHC-Action")).toBe(actionToken);
-    expect(JSON.parse(String(registerInit.body))).toEqual({
+    expect(sentJson(registerInit)).toEqual({
       alias: "bastion",
       keyPath: "~/.ssh/id_ed25519.pub",
       publicKey,

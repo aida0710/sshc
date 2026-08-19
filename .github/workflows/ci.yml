@@ -201,10 +201,24 @@ jobs:
       # べきである。
       - run: npm ci
 
-      # ここに ESLint はない。lint の役目は型検査が担う。アプリケーションと、
-      # 自前の tsconfig を持つエンドツーエンドのスイートの両方に対して走る。
+      # 型検査は、アプリケーションと、自前の tsconfig を持つエンドツーエンドの
+      # スイートの両方に対して走る。
       - name: Typecheck
         run: npm run typecheck
+
+      # **ここにあるのは、型検査に原理的にできないことだけである。**
+      #
+      # 長いあいだこの段は無く、「lint の役目は型検査が担う」と決めてあった。
+      # それは大筋で正しい——名前の間違いも形の食い違いも tsc が捕まえる。
+      # だが tsc が見ないものが二種類ある: **待ち忘れた Promise** と、**React の
+      # 規則**である。どちらも型としては正しく、走らせて初めて壊れる。
+      #
+      # 実際、規則を入れる前から `react-hooks/exhaustive-deps` を名指しで抑止する
+      # コメントが 9 箇所あった。**規則の側は一度も走っていなかった。**
+      #
+      # 何を入れなかったかは web/eslint.config.mjs に書いてある。
+      - name: Lint
+        run: npm run lint
 
       - name: Unit tests
         run: npm test

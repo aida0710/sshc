@@ -19,7 +19,9 @@ describe("useSectionRoute", () => {
       search: "?path=config&host=bastion&panel=basic",
     });
 
-    act(() => result.current.navigate("Keys"));
+    act(() => {
+      result.current.navigate("Keys");
+    });
 
     expect(pushed).toHaveBeenCalledWith(null, "", "/keys");
     expect(window.location.pathname).toBe("/keys");
@@ -31,16 +33,20 @@ describe("useSectionRoute", () => {
     const replaced = vi.spyOn(window.history, "replaceState");
     const { result } = renderHook(() => useSectionRoute());
 
-    act(() => result.current.navigateLocation("/connections/servers?path=config&host=bastion&panel=basic"));
+    act(() => {
+      result.current.navigateLocation("/connections/servers?path=config&host=bastion&panel=basic");
+    });
 
     expect(pushed).toHaveBeenCalledWith(null, "", "/connections/servers?path=config&host=bastion&panel=basic");
     expect(result.current.location.search).toBe("?path=config&host=bastion&panel=basic");
     expect(result.current.route).toMatchObject({ kind: "section", section: "Connections" });
 
-    act(() => result.current.navigateLocation(
-      "/connections/servers?path=config&host=bastion&panel=advanced&advanced=raw",
-      { replace: true },
-    ));
+    act(() => {
+      result.current.navigateLocation(
+        "/connections/servers?path=config&host=bastion&panel=advanced&advanced=raw",
+        { replace: true },
+      );
+    });
 
     expect(replaced).toHaveBeenCalledWith(null, "", "/connections/servers?path=config&host=bastion&panel=advanced&advanced=raw");
     expect(result.current.location.search).toBe("?path=config&host=bastion&panel=advanced&advanced=raw");
@@ -110,8 +116,12 @@ describe("useSectionRoute", () => {
     const replaced = vi.spyOn(window.history, "replaceState");
     const { result } = renderHook(() => useSectionRoute());
 
-    act(() => result.current.setNavigationBlocker(() => false));
-    act(() => result.current.navigate("Keys"));
+    act(() => {
+      result.current.setNavigationBlocker(() => false);
+    });
+    act(() => {
+      result.current.navigate("Keys");
+    });
 
     expect(window.location.href).toBe(
       `${window.location.origin}/connections/servers?path=config&host=bastion&panel=basic`,
@@ -136,9 +146,15 @@ describe("useSectionRoute", () => {
 
   it("allows navigation after the blocker is cleared", () => {
     const { result } = renderHook(() => useSectionRoute());
-    act(() => result.current.setNavigationBlocker(() => false));
-    act(() => result.current.setNavigationBlocker(null));
-    act(() => result.current.navigate("Keys"));
+    act(() => {
+      result.current.setNavigationBlocker(() => false);
+    });
+    act(() => {
+      result.current.setNavigationBlocker(null);
+    });
+    act(() => {
+      result.current.navigate("Keys");
+    });
 
     expect(window.location.pathname).toBe("/keys");
     expect(result.current.route).toMatchObject({ kind: "section", section: "Keys" });
@@ -150,7 +166,9 @@ describe("useSectionRoute", () => {
     const replaced = vi.spyOn(window.history, "replaceState");
     const { result } = renderHook(() => useSectionRoute());
 
-    act(() => result.current.navigate("Keys"));
+    act(() => {
+      result.current.navigate("Keys");
+    });
 
     expect(pushed).not.toHaveBeenCalled();
     expect(replaced).toHaveBeenCalledWith(null, "", "/keys");

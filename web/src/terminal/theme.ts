@@ -4,14 +4,15 @@ import type { ITheme } from "@xterm/xterm";
 // 定義されている。xterm.js は色を JS のオプションとして受け取るので、ここで
 // 読んで渡す。生の hex をコンポーネントに書かないので、palette.test.ts に
 // 例外（palette-exempt）を足さずに済む。
-const tokens = [
-  "bg", "fg", "cursor", "selection",
-  "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-  "bright-black", "bright-red", "bright-green", "bright-yellow",
-  "bright-blue", "bright-magenta", "bright-cyan", "bright-white",
-] as const;
-
-type Token = (typeof tokens)[number];
+// **配列ではなく型である。** かつてここは `as const` の配列で、そこから
+// `(typeof tokens)[number]` を作っていた。だが配列そのものは一度も読まれない
+// ——束に入るだけで、誰も回さない 20 個の文字列だった。
+type Token =
+  | "bg" | "fg" | "cursor" | "selection"
+  | "black" | "red" | "green" | "yellow"
+  | "blue" | "magenta" | "cyan" | "white"
+  | "bright-black" | "bright-red" | "bright-green" | "bright-yellow"
+  | "bright-blue" | "bright-magenta" | "bright-cyan" | "bright-white";
 
 function read(styles: CSSStyleDeclaration, token: Token): string {
   return styles.getPropertyValue(`--ui-term-${token}`).trim();
