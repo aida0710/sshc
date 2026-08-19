@@ -166,6 +166,8 @@ test("Windows installs nothing, because the installer owns the path there", asyn
     copied: false,
     linked: false,
     warning: null,
+    // **案内も出さない。** PATH を通すのはインストーラであって、ここではない。
+    note: null,
   });
   await assert.rejects(() => lstat(paths.managed));
 });
@@ -185,3 +187,33 @@ test("the warning carries nothing but paths and an instruction", async () => {
     );
   }
 });
+
+// **リンクを張っただけでは `sshc` と打てるようにならない。**
+//
+// macOS の既定の PATH に `~/.local/bin` は無く、Debian 系の `~/.profile` が
+// それを足すのはログインの時点でそのディレクトリが在ったときだけである——初回は
+// この外殻がいま作ったのだから、在らなかった。`make install` は同じことを note と
+// して言っており、こちらだけが黙っていた。
+test("a newly created public name says where it went and to check PATH", async () => {
+  const paths = await workspace();
+
+  const result = await installManagedCLI({ ...paths, ...linux });
+
+  assert.ok(result.linked, "the public name was not created");
+  assert.ok(result.note !== null, "the installation said nothing about PATH");
+  assert.ok(result.note.includes(paths.public), "the note did not name the command");
+  assert.ok(result.note.includes("PATH"), "the note did not mention PATH");
+});
+
+// **既に整えた人に、同じ案内を繰り返さない。** 二度目の起動でリンクは既にあり、
+// 張り直しは起きない。そこで案内を出せば、起動のたびにダイアログが出る。
+test("an existing link repeats no advice", async () => {
+  const paths = await workspace();
+  await installManagedCLI({ ...paths, ...linux });
+
+  const second = await installManagedCLI({ ...paths, ...linux });
+
+  assert.ok(!second.linked, "the link was recreated");
+  assert.strictEqual(second.note, null, "the advice was repeated on a later launch");
+});
+

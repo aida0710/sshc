@@ -328,12 +328,25 @@ async function settleInstallation() {
 
 async function settleManagedCLI() {
   try {
-    const { warning } = await installManagedCLI({ source: binary() });
+    const { warning, note } = await installManagedCLI({ source: binary() });
     if (warning !== null) {
       dialog.showMessageBox({
         type: "warning",
         message: "sshc could not install the command line",
         detail: warning,
+      });
+      return;
+    }
+    // **置いた場所を、置いた回だけ言う。** リンクを張っただけでは `sshc` と
+    // 打てるようにならない——その名前が PATH に載っているかは、このアプリが
+    // 確かめられることではない（GUI から起きたプロセスの PATH は、利用者が
+    // シェルで見るものではない）。毎回の起動で出さないのは、既に整えた人に
+    // 同じ案内を繰り返さないためである。
+    if (note !== null) {
+      dialog.showMessageBox({
+        type: "info",
+        message: "sshc installed the command line",
+        detail: note,
       });
     }
   } catch {
