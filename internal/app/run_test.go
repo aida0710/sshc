@@ -181,12 +181,6 @@ func TestRunShutsServerDownWhenTheEntranceCannotBeAnnounced(t *testing.T) {
 	}
 }
 
-type stubRunner struct{}
-
-func (stubRunner) RunOutput(context.Context, platform.Command) (platform.Output, error) {
-	return platform.Output{Stdout: []byte("ssh-ed25519\n")}, nil
-}
-
 type stubToolchain struct{}
 
 func (stubToolchain) KeyGen() (string, error) { return "/usr/bin/ssh-keygen", nil }
