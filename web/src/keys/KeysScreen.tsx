@@ -9,11 +9,19 @@ import {
   useStoredPhrases,
 } from "./forms";
 import { RevealDialog } from "./RevealDialog";
+import {
+  AgentForm,
+  PassphraseForm,
+  RelocateForm,
+  RelocateResult,
+  StoredPassphrasePanel,
+  TrashConfirmation,
+} from "./KeyForms";
+import { noteLabels, rowAction, rowDanger } from "./labels";
 import { CopyButton } from "../ui/CopyButton";
 import { useTranslate, type Translate } from "../i18n/context";
 import {
   CheckboxField,
-  Field,
   control,
   hintText,
   primaryAction,
@@ -25,8 +33,7 @@ import {
 } from "../ui/form";
 import { Card, Row } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
-import type { MessageKey } from "../i18n/messages";
-import { integrationsApi, type Credential, type IntegrationsApi } from "../api/integrations";
+import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import {
   keysApi,
   type KeyCertificate,
@@ -70,17 +77,8 @@ type ScreenState = "loading" | "ready" | "error";
 // namedStoredFor と dedicatedStoredFor は、この鍵が既に指している保存値の
 // 種類だけを返す。vault は名前・用途・鍵専用 subject には答えるが、値には
 // 決して答えない。それでもフィールドを空欄のままにしてよいとは判断できる。
-function namedStoredFor(phrases: Credential[], item: KeyItem): Credential | undefined {
-  return phrases.find((credential) => credential.uses.includes(item.relativePath));
-}
 
-function dedicatedStoredFor(paths: string[], item: KeyItem): boolean {
-  return paths.includes(item.relativePath);
-}
 
-function hasStoredFor(phrases: Credential[], dedicatedPaths: string[], item: KeyItem): boolean {
-  return namedStoredFor(phrases, item) !== undefined || dedicatedStoredFor(dedicatedPaths, item);
-}
 
 // certificateLines は OpenSSH の証明書を、使えるかどうかを決める
 // 観点で記述する: 誰を名指すか、誰のためのものか、期限が切れているか
@@ -122,37 +120,6 @@ function certificateLines(
 
 // 行のアクションはルールのないテーブルの中のただのボタンだったので、
 // テキストとして連なり、コントロールではなく文章として読めてしまっていた。
-// ボーダーとこれらのクラスが、鍵同士を隔てるものだ。
-const rowAction = "rounded border border-control-line px-2 py-1 text-xs hover:bg-select-fill disabled:text-ink-faint";
-const rowDanger = "rounded border border-control-line px-2 py-1 text-xs text-danger hover:bg-select-fill";
-
-const noteLabels: Record<string, MessageKey> = {
-  fingerprint_unavailable: "keys.noteFingerprintUnavailable",
-  symbolic_link: "keys.noteSymbolicLink",
-  empty_file: "keys.noteEmptyFile",
-  not_regular_file: "keys.noteNotRegularFile",
-  comment_not_preserved: "keys.noteCommentNotPreserved",
-};
-
-// ブロッカーは安定したコード、':'、それが指す詳細から成る。コードが
-// 文を決め、詳細がそれを埋める。サーバーが後で追加する理由も、
-// 捨てられることなく、それが指すパスをそのまま表示する。
-const blockerLabels: Record<string, MessageKey> = {
-  key_destination_occupied: "keys.blockerTargetOccupied",
-  key_reference_unresolved: "keys.blockerUnresolved",
-  key_reference_outside_workspace: "keys.blockerReferenceExternal",
-  key_group_not_declared: "keys.blockerGroupNotDeclared",
-  key_destination_is_config: "keys.blockerDestinationIsConfig",
-  key_in_state_directory: "keys.blockerStateDirectory",
-};
-
-function describeBlocker(blocker: string, t: Translate): string {
-  const separator = blocker.indexOf(":");
-  const code = separator < 0 ? blocker : blocker.slice(0, separator);
-  const detail = separator < 0 ? blocker : blocker.slice(separator + 1);
-  return t(blockerLabels[code] ?? "keys.blockerOther", { detail });
-}
-
 // renameable は、ユーザーが伝えていないことを決めずに、このアプリケーションが
 // ファイルをリネームできるかどうかを報告する。
 //
@@ -217,37 +184,41 @@ export function KeysScreen({
   const storedPhrases = useStoredPhrases();
   const {
     phrases, setPhrases,
-    dedicatedPhrasePaths, setDedicatedPhrasePaths,
+    setDedicatedPhrasePaths,
     chosenPhrase, setChosenPhrase,
   } = storedPhrases;
+  const passphraseForm = usePassphraseForm();
   const {
-    changingPassphrase, setChangingPassphrase,
+    setChangingPassphrase,
     currentPassphrase, setCurrentPassphrase,
     newPassphrase, setNewPassphrase,
-    removePassphrase, setRemovePassphrase,
+    removePassphrase,
     close: closePassphraseForm,
-  } = usePassphraseForm();
+  } = passphraseForm;
+  const agentForm = useAgentForm(storedPhrases);
   const {
-    registering, setRegistering,
+    setRegistering,
     agentPassphrase, setAgentPassphrase,
-    agentLifetime, setAgentLifetime,
+    agentLifetime,
     close: closeAgentForm,
-  } = useAgentForm(storedPhrases);
+  } = agentForm;
+  const storedPassphraseForm = useStoredPassphraseForm(storedPhrases);
   const {
-    managingPassphrase, setManagingPassphrase,
+    setManagingPassphrase,
     storedPhraseName, setStoredPhraseName,
     storedPhraseSecret, setStoredPhraseSecret,
     close: closeStoredPassphraseForm,
-  } = useStoredPassphraseForm(storedPhrases);
+  } = storedPassphraseForm;
   const [publicKeyView, setPublicKeyView] = useState<{ relativePath: string; text: string } | null>(null);
   const [relocated, setRelocated] = useState<RelocateKeyResponse | null>(null);
+  const relocateForm = useRelocateForm();
   const {
-    relocating, setRelocating,
+    setRelocating,
     newName, setNewName,
     newGroup, setNewGroup,
     createGroup, setCreateGroup,
     close: closeRelocateForm,
-  } = useRelocateForm();
+  } = relocateForm;
   const [pendingPurge, setPendingPurge] = useState("");
   const [pendingTrash, setPendingTrash] = useState<KeyItem | null>(null);
   const [failure, setFailure] = useState("");
@@ -927,131 +898,20 @@ export function KeysScreen({
       </div>
       </div>
 
-      {managingPassphrase !== null && (
-        <section aria-labelledby="stored-passphrase-heading" className={sectionCard}>
-          <h3 id="stored-passphrase-heading" className={sectionHeading}>
-            {t("keys.storedPassphraseHeading", { path: managingPassphrase.relativePath })}
-          </h3>
-          <p className={hintText}>{t("keys.storedPassphraseNote")}</p>
-          {!hasStoredFor(phrases, dedicatedPhrasePaths, managingPassphrase) ? null : (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-card p-3">
-              <p className="grow text-sm text-ink">
-                {dedicatedStoredFor(dedicatedPhrasePaths, managingPassphrase)
-                  ? t("keys.usesDedicatedPassphrase")
-                  : t("keys.usesStoredPassphrase", { name: namedStoredFor(phrases, managingPassphrase)!.name })}
-              </p>
-              <button type="button" className={secondaryAction} onClick={() => void unassignPhrase(managingPassphrase)}>
-                {t("keys.unassignPassphrase")}
-              </button>
-            </div>
-          )}
+      <StoredPassphrasePanel
+        form={storedPassphraseForm}
+        storedPhrases={storedPhrases}
+        onAssign={(item) => void assignPhrase(item)}
+        onUnassign={(item) => void unassignPhrase(item)}
+        onStoreAndAssign={(item) => void storeAndAssignPhrase(item)}
+      />
 
-          {phrases.length === 0 ? null : (
-            <div className="flex flex-wrap items-end gap-3">
-              <Field label={t("keys.useStoredPassphrase")}>
-                <select
-                  className={control}
-                  value={chosenPhrase}
-                  onChange={(event) => setChosenPhrase(event.target.value)}
-                >
-                  <option value="">{t("keys.choosePassphraseName")}</option>
-                  {phrases.map((credential) => (
-                    <option key={credential.name} value={credential.name}>{credential.name}</option>
-                  ))}
-                </select>
-              </Field>
-              <button
-                type="button"
-                className={secondaryAction}
-                disabled={chosenPhrase === ""}
-                onClick={() => void assignPhrase(managingPassphrase)}
-              >
-                {t("keys.useThisPassphrase")}
-              </button>
-            </div>
-          )}
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={t("keys.newStoredPassphraseName")}>
-              <input
-                value={storedPhraseName}
-                onChange={(event) => setStoredPhraseName(event.target.value)}
-                className={control}
-              />
-            </Field>
-            <Field label={t("keys.newStoredPassphraseValue")}>
-              <input
-                type="password"
-                value={storedPhraseSecret}
-                onChange={(event) => setStoredPhraseSecret(event.target.value)}
-                className={control}
-              />
-            </Field>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={storedPhraseName === "" || storedPhraseSecret === ""}
-              className={primaryAction}
-              onClick={() => void storeAndAssignPhrase(managingPassphrase)}
-            >
-              {t("keys.storeAndUsePassphrase")}
-            </button>
-            <button type="button" className={secondaryAction} onClick={closeStoredPassphraseForm}>
-              {t("keys.cancel")}
-            </button>
-          </div>
-        </section>
-      )}
-
-      {pendingTrash !== null && (
-        <section aria-labelledby="trash-confirm-heading" className={sectionCard}>
-          <h3 id="trash-confirm-heading" className={sectionHeading}>
-            {t("keys.trashConfirmHeading", { path: pendingTrash.relativePath })}
-          </h3>
-          {/*
-            公開鍵が秘密鍵の隣から消えても驚かないよう、どのファイルが
-            消えるかを示す。両者は 1 つの鍵だからこそ一緒に移動する。
-          */}
-          <p className="text-sm text-ink">{t("keys.trashExplain")}</p>
-          <ul className="flex flex-col gap-0.5 font-mono text-xs text-ink-muted">
-            {trashGroup(pendingTrash).map((member) => (
-              <li key={member.id}>{member.relativePath}</li>
-            ))}
-          </ul>
-          {/*
-            行は既にこの鍵を名指すホストを列挙していた。ここでそれを言うのは、
-            決定と次回接続時の驚きとの違いだ:
-            存在しないファイルを指す IdentityFile は、
-            ssh が報告した上でそのまま続行してしまうものだ。
-          */}
-          {pendingTrash.references.length === 0 ? (
-            <p className={hintText}>{t("keys.trashNoReferences")}</p>
-          ) : (
-            <>
-              <p className="text-sm text-notice-ink">
-                {t("keys.trashReferences", { count: pendingTrash.references.length })}
-              </p>
-              <ul className="flex flex-col gap-0.5 font-mono text-xs text-notice-ink">
-                {pendingTrash.references.map((reference, index) => (
-                  <li key={`${reference.configPath}-${reference.line}-${index}`}>
-                    {`${reference.hostPatterns.join(" ")} — ${reference.configPath}:${reference.line}`}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          <p className={hintText}>{t("keys.trashIsRecoverable")}</p>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={rowDanger} onClick={() => void moveToTrash(pendingTrash.id)}>
-              {t("keys.trashConfirm")}
-            </button>
-            <button type="button" className={secondaryAction} onClick={() => setPendingTrash(null)}>
-              {t("keys.trashCancel")}
-            </button>
-          </div>
-        </section>
-      )}
+      <TrashConfirmation
+        item={pendingTrash}
+        members={pendingTrash === null ? [] : trashGroup(pendingTrash)}
+        onConfirm={(id) => void moveToTrash(id)}
+        onCancel={() => setPendingTrash(null)}
+      />
 
       {publicKeyView !== null && (
         <section aria-labelledby="public-key-heading" className={sectionCard}>
@@ -1172,137 +1032,14 @@ export function KeysScreen({
         )}
       </section>
 
-      {registering !== null && (
-        <form
-          aria-labelledby="agent-register-heading"
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitRegistration(registering);
-          }}
-        >
-          <h3 id="agent-register-heading" className={sectionHeading}>
-            {t("keys.registerHeading", { path: registering.relativePath })}
-          </h3>
-          <p className="text-sm text-ink-muted">{t("keys.registerNote")}</p>
-          <Card>
-            {registering.encrypted && (
-              // 「Passphrase」ではなく「Key passphrase」: 下にある生成フォームには
-              // それ自身のフィールドがあり、同じ名前の 2 つのコントロールでは
-              // ユーザーが見分けられない。
-              <Row
-                label={t("keys.keyPassphrase")}
-                {...(!hasStoredFor(phrases, dedicatedPhrasePaths, registering) ? {} : { hint: t("keys.typedWins") })}
-              >
-                <input
-                  className={control}
-                  type="password"
-                  value={agentPassphrase}
-                  onChange={(event) => setAgentPassphrase(event.target.value)}
-                />
-              </Row>
-            )}
-            <Row label={t("keys.lifetime")}>
-              <select
-                className={control}
-                value={String(agentLifetime)}
-                onChange={(event) => setAgentLifetime(Number(event.target.value))}
-              >
-                <option value="0">{t("keys.lifetimeForever")}</option>
-                <option value="3600">{t("keys.lifetimeHour")}</option>
-                <option value="14400">{t("keys.lifetimeFourHours")}</option>
-                <option value="43200">{t("keys.lifetimeTwelveHours")}</option>
-              </select>
-            </Row>
-          </Card>
-          {/*
-            保存されたパスフレーズは、鍵の追加を 2 アクションではなく 1 アクションに
-            変える。ここに現れるのは鍵のパスフレーズだけだ: このピッカーで
-            アカウントパスワードを提供すれば、リモートホストのログイン資格情報を
-            ローカルの鍵に渡すことになる。だからこそ vault は 2 つの名前空間を分けている。
-          */}
-          {registering.encrypted && hasStoredFor(phrases, dedicatedPhrasePaths, registering) && (
-            <p className={hintText}>
-              {dedicatedStoredFor(dedicatedPhrasePaths, registering)
-                ? t("keys.usesDedicatedPassphrase")
-                : t("keys.usesStoredPassphrase", { name: namedStoredFor(phrases, registering)!.name })}
-            </p>
-          )}
-          {registering.encrypted && phrases.length > 0 && (
-            <div className="flex flex-wrap items-end gap-3">
-              <Row label={t("keys.useStoredPassphrase")}>
-                <select
-                  className={control}
-                  value={chosenPhrase}
-                  onChange={(event) => setChosenPhrase(event.target.value)}
-                >
-                  <option value="">{t("keys.choosePassphraseName")}</option>
-                  {phrases.map((credential) => (
-                    <option key={credential.name} value={credential.name}>
-                      {credential.name}
-                    </option>
-                  ))}
-                </select>
-              </Row>
-              <button
-                type="button"
-                className={secondaryAction}
-                disabled={chosenPhrase === ""}
-                onClick={() => void assignPhrase(registering)}
-              >
-                {t("keys.useThisPassphrase")}
-              </button>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <button type="submit" className={primaryAction}>
-              {t("keys.registerSubmit")}
-            </button>
-            <button type="button" className={secondaryAction} onClick={closeAgentForm}>
-              {t("keys.cancel")}
-            </button>
-          </div>
-        </form>
-      )}
+      <AgentForm
+        form={agentForm}
+        storedPhrases={storedPhrases}
+        onSubmit={(item) => void submitRegistration(item)}
+        onAssignPhrase={(item) => void assignPhrase(item)}
+      />
 
-      {relocating !== null && (
-        <form
-          aria-labelledby="relocate-heading"
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitRelocation(relocating);
-          }}
-        >
-          <h3 id="relocate-heading" className={sectionHeading}>
-            {t("keys.relocateHeading", { path: relocating.relativePath })}
-          </h3>
-          <p className="text-sm text-ink-muted">{t("keys.relocateNote")}</p>
-          <Card>
-            <Row label={t("keys.relocateNewName")}>
-              <input className={control} value={newName} onChange={(event) => setNewName(event.target.value)} />
-            </Row>
-            <Row label={t("keys.relocateGroup")}>
-              <select className={control} value={newGroup} onChange={(event) => setNewGroup(event.target.value)}>
-                <option value="">{t("keys.groupNone")}</option>
-                {groups.map((group) => (
-                  <option key={group} value={group}>
-                    {group}
-                  </option>
-                ))}
-              </select>
-            </Row>
-          </Card>
-          <div className="flex gap-2">
-            <button type="submit" className={primaryAction}>
-              {t("keys.relocateSubmit")}
-            </button>
-            <button type="button" className={secondaryAction} onClick={closeRelocateForm}>
-              {t("keys.cancel")}
-            </button>
-          </div>
-        </form>
-      )}
+      <RelocateForm form={relocateForm} groups={groups} onSubmit={(item) => void submitRelocation(item)} />
 
       {/*
         リネームが何をしたか、あるいは何がそれを止めたか。どちらも同じ種類の事実の
@@ -1310,66 +1047,7 @@ export function KeysScreen({
         このアプリケーションが意図的に触れなかったものは何か。「完了」とだけ言う
         リネームは、ユーザー自身では確認できない部分を隠してしまう。
       */}
-      {relocated !== null && (
-        <section
-          aria-labelledby="relocate-result-heading"
-          className="flex flex-col gap-2 text-sm"
-        >
-          <h3 id="relocate-result-heading" className={sectionHeading}>
-            {relocated.blockers.length > 0
-              ? t("keys.relocateRefused")
-              : t("keys.relocateDone", { path: relocated.relativePath })}
-          </h3>
-          {relocated.blockers.length > 0 && (
-            <ul role="alert" className="text-notice-ink">
-              {relocated.blockers.map((blocker) => (
-                <li key={blocker}>{describeBlocker(blocker, t)}</li>
-              ))}
-            </ul>
-          )}
-          {relocated.files.length > 0 && (
-            <>
-              <h4 className="text-xs uppercase tracking-wide text-ink-muted">{t("keys.relocateMoved")}</h4>
-              <ul className="font-mono text-xs text-ink-muted">
-                {relocated.files.map((file) => (
-                  <li key={file.from}>{t("keys.relocateFilePair", { from: file.from, to: file.to })}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {relocated.references.length > 0 && (
-            <>
-              <h4 className="text-xs uppercase tracking-wide text-ink-muted">{t("keys.relocateRewritten")}</h4>
-              <ul className="text-xs text-ink-muted">
-                {relocated.references.map((reference) => (
-                  <li key={`${reference.configPath}:${reference.line}:${reference.from}`}>
-                    {t("keys.relocateReference", {
-                      directive: reference.directive,
-                      from: reference.from,
-                      to: reference.to,
-                      path: reference.configPath,
-                      line: reference.line,
-                    })}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {relocated.skipped.length > 0 && (
-            <p className="text-ink-muted">{t("keys.relocateSkipped", { paths: relocated.skipped.join(", ") })}</p>
-          )}
-          {relocated.notes.map((note) => (
-            <p key={note} className="text-notice-ink">
-              {note in noteLabels ? t(noteLabels[note]!) : note}
-            </p>
-          ))}
-          <div>
-            <button type="button" className={secondaryAction} onClick={() => setRelocated(null)}>
-              {t("keys.close")}
-            </button>
-          </div>
-        </section>
-      )}
+      <RelocateResult result={relocated} onClose={() => setRelocated(null)} />
 
       {revealing !== null && (
         <RevealDialog
@@ -1380,56 +1058,7 @@ export function KeysScreen({
         />
       )}
 
-      {changingPassphrase !== null && (
-        <form
-          aria-labelledby="passphrase-heading"
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitPassphrase(changingPassphrase);
-          }}
-        >
-          <h3 id="passphrase-heading" className={sectionHeading}>
-            {t("keys.passphraseHeading", { path: changingPassphrase.relativePath })}
-          </h3>
-          <p className="text-sm text-ink-muted">{t("keys.passphraseNote")}</p>
-          <Card>
-            <Row label={t("keys.currentPassphrase")}>
-              <input
-                className={control}
-                type="password"
-                value={currentPassphrase}
-                onChange={(event) => setCurrentPassphrase(event.target.value)}
-              />
-            </Row>
-            <Row label={t("keys.newPassphrase")}>
-              <input
-                className={control}
-                type="password"
-                value={newPassphrase}
-                onChange={(event) => setNewPassphrase(event.target.value)}
-                disabled={removePassphrase}
-              />
-            </Row>
-          </Card>
-          <CheckboxField
-            label={t("keys.removePassphrase")}
-            checked={removePassphrase}
-            onChange={(checked) => {
-              setRemovePassphrase(checked);
-              setNewPassphrase("");
-            }}
-          />
-          <div className="flex gap-2">
-            <button type="submit" className={primaryAction}>
-              {t("keys.savePassphrase")}
-            </button>
-            <button type="button" className={secondaryAction} onClick={closePassphraseForm}>
-              {t("keys.cancel")}
-            </button>
-          </div>
-        </form>
-      )}
+      <PassphraseForm form={passphraseForm} onSubmit={(item) => void submitPassphrase(item)} />
 
       <form
         aria-labelledby="create-key-heading"
