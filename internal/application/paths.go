@@ -1,7 +1,3 @@
-// Package application は、lossless な設定 engine と filesystem transaction
-// manager との間に位置する use case を保持する。syscall を直接行うことは
-// 決してない。すべての読み書きは、与えられた storage workspace を
-// 経由する。
 package application
 
 import (
