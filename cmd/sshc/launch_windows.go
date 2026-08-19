@@ -48,13 +48,3 @@ func (launcher windowsDesktop) Launch(ctx context.Context) error {
 	// 上がりきるより先に端末を返してよいからである。
 	return exec.CommandContext(ctx, path).Start()
 }
-
-// launchBackground は、接続経路が engine を必要としたときに外殻を起こす。
-// 起こせたかどうかしか返らない——接続そのものは、起きなくても続く。
-func launchBackground(ctx context.Context) bool {
-	launcher := newDesktopLauncher()
-	if available, err := launcher.Available(); err != nil || !available {
-		return false
-	}
-	return launcher.Launch(ctx) == nil
-}

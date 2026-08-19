@@ -14,8 +14,8 @@ const bundleID = "com.github.aida0710.sshc"
 // openPath は、束を起こす唯一のプログラムである。
 //
 // **絶対パスで指す。** 相対名は PATH を引く——起こすものが誰の PATH に何が
-// 置かれているかで変わる。このアプリケーションが継ぎ目（`RunOutput`）で
-// 相対パスを明示的に拒んでいるのと同じ理由である。
+// 置かれているかで変わる。プログラムを起こす場所がどれも絶対パスに固定されて
+// いるのと同じ理由である。
 const openPath = "/usr/bin/open"
 
 // launchTimeout は、束を起こす一回に上限を設ける。
@@ -44,14 +44,6 @@ func (macDesktop) Available() (bool, error) { return true, nil }
 // ものなので、そちらは activateDesktop が前面に出す方を使う。
 func (macDesktop) Launch(ctx context.Context) error {
 	return runOpenBundle(ctx, "-b", bundleID)
-}
-
-// launchBackground は、接続経路が engine を必要としたときに束を窓なしで起こす。
-//
-// --hidden は窓を作らないという外殻への指示であり、メニューバーの項目は出るので、
-// 上がったことは見える。
-func launchBackground(ctx context.Context) bool {
-	return runOpenBundle(ctx, "-g", "-b", bundleID, "--args", "--hidden") == nil
 }
 
 func runOpenBundle(ctx context.Context, args ...string) error {

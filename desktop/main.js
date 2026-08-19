@@ -62,13 +62,6 @@ const engineTimeout = 30_000;
 // 理由だが、後者は理由を出す理由である。
 const engineBusy = 3;
 
-// hidden は、窓を作らずに上がるべきかを言う。
-//
-// **端末から起こされたときの姿である。** `launchApp()`（Go 側）が
-// `open -g -b <bundleID> --args --hidden` で起こすので、メニューバーの
-// 項目だけが出て、画面を奪わない。
-const hidden = process.argv.includes("--hidden");
-
 /**
  * binary は、束に同梱した sshc の絶対パスを返す。
  *
@@ -358,11 +351,11 @@ app.whenReady().then(async () => {
     // 新しい入口を出させる run(["open"]) を使う。ここで entrance() を
     // 使い回すと、窓を閉じて開くたびにエンジンがもう 1 台増える。
     //
-    // **--hidden のときは窓を作らない。** エンジンは起こす——メニューバーの
-    // 項目が「動いている」ことの証拠であり、端末はここが上げたエンジンに
-    // 繋ぎに行く。
+    // **窓は必ず作る。** かつては `--hidden` を受けて窓を作らない姿があり、
+    // 端末から `open -g -b <bundleID> --args --hidden` で起こされるのがそれ
+    // だった。その起こし方は Go 側から消えたので、この引数を渡す者はもう居ない。
     const url = await entrance();
-    if (!hidden) openWindow(url);
+    openWindow(url);
   } catch (error) {
     showFailure(error);
     // **ここで確認は出さない。** 上がらなかったのだから、このアプリが抱えて
