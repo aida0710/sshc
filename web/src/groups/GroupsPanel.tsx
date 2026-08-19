@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, type Problem } from "../api/client";
+import { toProblem } from "../api/guards";
+import type { Problem } from "../api/client";
 import { configApi, type GroupMetadata, type Metadata, type Overview, type SavePreview } from "../api/config";
 import { NoticeList, SavePreviewPanel } from "../connections/SavePreview";
 import { formatValues, parseValues } from "../rules/rules";
@@ -18,11 +19,6 @@ import type { InspectorContent } from "../ui/Inspector";
 import { GroupInspector } from "./GroupInspector";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 
-function toProblem(error: unknown): Problem {
-  if (error instanceof ApiError && error.problem !== null) return error.problem;
-  if (error instanceof ApiError) return { code: error.code, message: "request rejected" };
-  return { code: "request_failed", message: "request rejected" };
-}
 
 // depthOf はグループ名の中のディレクトリの数を数える。名前が階層を
 // 運ぶため、ツリーを描くのに他の何かを参照する必要はなく、

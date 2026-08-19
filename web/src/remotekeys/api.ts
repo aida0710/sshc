@@ -1,4 +1,5 @@
 import { apiClient } from "../api/client";
+import { asRecord, asArray, asString, asNumber, asBoolean, jsonHeaders } from "../api/guards";
 import type { components } from "../api/schema";
 
 export type RemoteKeyPlan = components["schemas"]["RemoteKeyPlan"];
@@ -21,34 +22,10 @@ export type RemoteKeysApi = {
   register(input: RemoteKeyRegisterInput): Promise<RemoteKeyRegisterResponse>;
 };
 
-// 生成された型は契約を記述するだけであり、これらのガードは UI が
-// 実際に受け取ったペイロードを検査する。型アサーションは実行時には何も証明しない。
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("invalid_response");
-  }
-  return value as Record<string, unknown>;
-}
 
-function asArray(value: unknown): unknown[] {
-  if (!Array.isArray(value)) throw new Error("invalid_response");
-  return value;
-}
 
-function asString(value: unknown): string {
-  if (typeof value !== "string") throw new Error("invalid_response");
-  return value;
-}
 
-function asNumber(value: unknown): number {
-  if (typeof value !== "number") throw new Error("invalid_response");
-  return value;
-}
 
-function asBoolean(value: unknown): boolean {
-  if (typeof value !== "boolean") throw new Error("invalid_response");
-  return value;
-}
 
 function validatePlan(value: unknown): RemoteKeyPlan {
   const record = asRecord(value);
@@ -86,7 +63,6 @@ function validateRegistration(value: unknown): RemoteKeyRegisterResponse {
   return record as unknown as RemoteKeyRegisterResponse;
 }
 
-const jsonHeaders = { "Content-Type": "application/json" } as const;
 
 export const remoteKeysApi: RemoteKeysApi = {
   // plan は設定を読むだけで何にも接続しないので、確認を消費しない。
