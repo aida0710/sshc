@@ -2,7 +2,9 @@ package mobile
 
 import (
 	"log/slog"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"sshc/internal/app"
@@ -69,5 +71,69 @@ func TestAndroidResolvesTheShellFromFallbacksAlone(t *testing.T) {
 func TestAndroidAnnouncesAsTheDesktopOwner(t *testing.T) {
 	if got := build(t).Owner; got != handoff.OwnerDesktop {
 		t.Errorf("Owner = %q, want %q", got, handoff.OwnerDesktop)
+	}
+}
+
+// androidFieldIntent は、app.Dependencies のすべての項目について、Android の
+// engine がそれを配線するのかしないのかと、その理由を並べたものである。
+//
+// **これは書き写しではなく、決定の一覧である。** Android の依存は struct literal
+// で組まれるので、app.Dependencies に項目が増えても Go は何も言わず、新しい項目は
+// 黙って零値になる。零値が正しい答えであることも、配線を忘れただけであることも
+// あり、型はその二つを区別しない。実際に Biometric はそうやって落ち、コメントは
+// 落としたものを 4 つと書いたまま 6 つになっていた。
+//
+// 下の表に無い項目が現れたら、このテストは失敗する。**そのとき求められているのは
+// 表に一行足すことではなく、Android でその項目をどうするかを決めることである。**
+var androidFieldIntent = map[string]string{
+	// 配線する。
+	"Random":   "wired: crypto/rand",
+	"Announce": "wired: 入口の URL を Java 側へ渡す",
+	"Listen":   "wired: net.Listen",
+	"UI":       "wired: 埋め込んだ SPA",
+	"Logger":   "wired: 呼び出し元が渡す",
+	"Home":     "wired: アプリの filesDir",
+	"Owner":    "wired: handoff.OwnerDesktop",
+	"PID":      "wired: このプロセス",
+	"Lookup":   "wired: 常に見つからないと答える。SHELL を偶然の権威にしない",
+	"Environ":  "wired: 固定の環境。Android アプリの環境に有用な PATH が無い",
+
+	// 意図して空にする。
+	"Toolchain": "absent: ssh-keygen が Android に居ない",
+	"KeyAgent":  "absent: ssh-agent が Android に居ない",
+	"Updates":   "absent: バイナリを置き換える経路が無い",
+	"Biometric": "absent: BiometricPrompt を secret.Guardian として渡す実装がまだ無い",
+
+	// 空で既定に落ちるのが正しいもの。
+	"ScanHostKeys":    "default: internal/sshclient がこのプロセスの中で話す",
+	"Probe":           "default: 同上",
+	"RemoteRun":       "default: 同上",
+	"TerminalStarter": "default: 本物の PTY を確保する。Android では /system/bin/sh",
+	"SessionNow":      "default: time.Now",
+	"ShutdownTimeout": "default: app が決める既定値",
+}
+
+func TestEveryDependencyOfTheAndroidEngineIsADecision(t *testing.T) {
+	structure := reflect.TypeOf(app.Dependencies{})
+	values := reflect.ValueOf(build(t))
+
+	for index := range structure.NumField() {
+		name := structure.Field(index).Name
+		intent, known := androidFieldIntent[name]
+		if !known {
+			t.Errorf("app.Dependencies.%s について Android の engine が何をするか決まっていない。"+
+				"配線するのか、意図して空にするのか、既定に落とすのかを決めて androidFieldIntent に書くこと", name)
+			continue
+		}
+		// 表が実態からずれていないことも見る。ずれた表は、無い表よりも悪い。
+		if wired := !values.Field(index).IsZero(); wired != strings.HasPrefix(intent, "wired:") {
+			t.Errorf("app.Dependencies.%s: 表は %q と言うが、実際は wired=%v", name, intent, wired)
+		}
+	}
+
+	for name := range androidFieldIntent {
+		if _, ok := structure.FieldByName(name); !ok {
+			t.Errorf("androidFieldIntent に app.Dependencies から消えた項目 %s が残っている", name)
+		}
 	}
 }
