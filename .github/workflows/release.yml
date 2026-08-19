@@ -344,7 +344,7 @@ jobs:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
           SOURCE_REPO: ${{ github.repository }}
-          TAP_REPO: aida0710/homebrew-sshc
+          TAP_REPO: aida0710/homebrew-tap
         run: |
           set -eu
           if [ -z "${TAP_TOKEN:-}" ]; then
