@@ -1,4 +1,4 @@
-package buildcontract
+package nativebuild
 
 import (
 	"io"

@@ -161,7 +161,7 @@ func main() {
 	if err := json.Unmarshal(contents, &capture); err != nil {
 		t.Fatalf("decode fake go capture: %v\n%s", err, contents)
 	}
-	wantArguments := []string{"run", "./internal/buildcontract/cmd/nativebuild", "build"}
+	wantArguments := []string{"run", "./internal/nativebuild/cmd/nativebuild", "build"}
 	if strings.Join(capture.Arguments, "\x00") != strings.Join(wantArguments, "\x00") {
 		t.Fatalf("go arguments = %q, want fixed %q", capture.Arguments, wantArguments)
 	}
@@ -270,10 +270,29 @@ func main() {
 	}
 }
 
+// sanitizedGoTestEnvironment は、make のレシピを走らせる前に、この検査を起こした
+// 側の行き先指定を消す。
+//
+// **GOOS を継いだまま make を呼ぶと、レシピが何を組み立てるかが呼び出し側で変わる。**
+// GOENV を off にするのは、開発機の go env の設定を持ち込まないためである。
+//
+// 綴りの畳み込みは、internal/nativebuild が本番でやっているものと同じ形だが、
+// 写しである。**あちらの非公開の道具を、この検査のために公開したくない。**
 func sanitizedGoTestEnvironment(environment []string) []string {
 	result := append([]string(nil), environment...)
-	for _, key := range []string{"GOOS", "GOARCH", "CGO_ENABLED"} {
-		result = setEnvironmentValue(result, key, "")
+	for _, pair := range [][2]string{{"GOOS", ""}, {"GOARCH", ""}, {"CGO_ENABLED", ""}, {"GOENV", "off"}} {
+		result = replaceEnvironmentValue(result, pair[0], pair[1])
 	}
-	return setEnvironmentValue(result, "GOENV", "off")
+	return result
+}
+
+func replaceEnvironmentValue(environment []string, key, value string) []string {
+	prefix := key + "="
+	kept := environment[:0]
+	for _, entry := range environment {
+		if !strings.HasPrefix(entry, prefix) {
+			kept = append(kept, entry)
+		}
+	}
+	return append(kept, prefix+value)
 }

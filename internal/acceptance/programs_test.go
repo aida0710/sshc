@@ -52,7 +52,7 @@ var allowedToStartPrograms = []string{
 	// native build helper は配布される sshc runtime ではない。固定された go/git/npm と
 	// artifact verifier の sh/pwsh だけを allowlist 済み argv で起動し、caller input を
 	// shell command line として組み立てない。
-	"internal/buildcontract/nativebuild.go",
+	"internal/nativebuild/nativebuild.go",
 }
 
 // TestOnlyTheNamedSubsystemsStartAProgram は、プロセスを起こす場所を固定する。
