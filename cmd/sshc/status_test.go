@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -105,5 +106,31 @@ func TestRunStatusFailsWhenTheEngineIsNotThere(t *testing.T) {
 	}
 	if out.String() != "" {
 		t.Errorf("stdout = %q, want nothing", out.String())
+	}
+}
+
+// **入れた直後の機械では、handoff がまだ無い。**
+//
+// そのまま返すと利用者が読むのは `open /home/a/.ssh/sshc/cli: no such file or
+// directory` である。入れて最初に打つのが `sshc status` なので、そこが道の綴りを
+// 返すのは、案内として一番効く場所を捨てている。
+func TestAskingAMachineThatHasNeverRunAnEngineGetsAnAnswerItCanAct(t *testing.T) {
+	_, err := readHandoff(t.TempDir())
+	if err == nil {
+		t.Fatal("a machine with no handoff answered as if an engine were running")
+	}
+	message := err.Error()
+	for _, want := range []string{"not running", "headless"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("%q does not tell the reader %q", message, want)
+		}
+	}
+	if strings.Contains(message, "no such file") {
+		t.Errorf("%q spells a path instead of saying what happened", message)
+	}
+	// **判定は壊さない。** 文言のために sentinel を失うと、これを
+	// errors.Is で見ている呼び出し側が黙って別の枝へ行く。
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Error("the friendly message dropped fs.ErrNotExist")
 	}
 }
