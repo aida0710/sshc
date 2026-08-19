@@ -78,6 +78,10 @@ export type IntegrationsApi = {
   passwordVault(): Promise<PasswordVaultStatus>;
   initialiseVault(passphrase: string): Promise<PasswordVaultStatus>;
   unlockVault(passphrase: string): Promise<PasswordVaultStatus>;
+  // 本文を取らない。差し出すものは無く、証明するのは OS の錠前である。
+  unlockWithBiometric(): Promise<PasswordVaultStatus>;
+  enableBiometric(): Promise<PasswordVaultStatus>;
+  disableBiometric(): Promise<PasswordVaultStatus>;
   lockVault(): Promise<PasswordVaultStatus>;
   changeMasterPassword(current: string, next: string): Promise<ChangeMasterPasswordResult>;
   updateStatus(): Promise<UpdateStatus>;
@@ -372,6 +376,9 @@ function validateVaultStatus(value: unknown): PasswordVaultStatus {
   asBoolean(record.unlocked);
   for (const alias of asArray(record.aliases)) asString(alias);
   for (const relativePath of asArray(record.dedicatedKeyPassphrases)) asString(relativePath);
+  const biometric = asRecord(record.biometric);
+  asBoolean(biometric.available);
+  asBoolean(biometric.enabled);
   return record as unknown as PasswordVaultStatus;
 }
 
@@ -554,6 +561,17 @@ export const integrationsApi: IntegrationsApi = {
   },
   async initialiseVault(passphrase) {
     return validateVaultStatus(await postJSON<unknown>("/api/v1/passwords/initialise", { passphrase }));
+  },
+  async unlockWithBiometric() {
+    return validateVaultStatus(await postJSON<unknown>("/api/v1/passwords/unlock-biometric", {}));
+  },
+  async enableBiometric() {
+    return validateVaultStatus(await postJSON<unknown>("/api/v1/passwords/biometric", {}));
+  },
+  async disableBiometric() {
+    return validateVaultStatus(
+      await apiClient.mutate<unknown>("/api/v1/passwords/biometric", { method: "DELETE" }),
+    );
   },
   async unlockVault(passphrase) {
     return validateVaultStatus(await postJSON<unknown>("/api/v1/passwords/unlock", { passphrase }));

@@ -70,6 +70,10 @@ func gateExempt(method, path string) bool {
 		return method == http.MethodGet
 	case "/api/v1/passwords/initialise", "/api/v1/passwords/unlock":
 		return method == http.MethodPost
+	// **解錠の扉がもう一つ増える。** 本文を取らず、証明を求める相手は OS の
+	// 錠前である。ここに載せる判断そのものが、この機能の設計の一部である。
+	case "/api/v1/passwords/unlock-biometric":
+		return method == http.MethodPost
 	}
 	return false
 }

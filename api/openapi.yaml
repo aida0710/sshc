@@ -483,6 +483,43 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/passwords/biometric:
+    post:
+      operationId: enableBiometricUnlock
+      # 保管庫が開いていること。閉じたまま作れる入口は、パスワードを知らなくても
+      # 作れる入口である。
+      responses:
+        "200":
+          description: This machine can now be opened by its owner's fingerprint
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: disableBiometricUnlock
+      responses:
+        "200":
+          description: The machine no longer keeps anything
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /api/v1/passwords/unlock-biometric:
+    post:
+      operationId: unlockWithBiometric
+      # **本文を取らない。** 差し出すものは無く、証明するのは OS の錠前である。
+      responses:
+        "200":
+          description: The vault is open
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/passwords/unlock:
     post:
       operationId: unlockPasswordVault
@@ -2043,13 +2080,23 @@ components:
           type: array
           items: { type: string }
         origin: { type: string }
+    BiometricState:
+      type: object
+      additionalProperties: false
+      required: [available, enabled]
+      properties:
+        available: { type: boolean }
+        enabled: { type: boolean }
     PasswordVaultStatus:
       type: object
       additionalProperties: false
-      required: [exists, unlocked, aliases, dedicatedKeyPassphrases]
+      required: [exists, unlocked, aliases, dedicatedKeyPassphrases, biometric]
       properties:
         exists: { type: boolean }
         unlocked: { type: boolean }
+        # この端末に生体認証の錠前があるか、そこへ預けてあるか。**預けたものは
+        # 何も返さない。** 画面がトグルとプロンプトを出すかどうかだけを決める。
+        biometric: { $ref: "#/components/schemas/BiometricState" }
         # パスワードが保存されているホスト。名前の集合は秘密ではない。秘密なのは
         # 値の方であり、どの操作もそれを返さない。
         aliases:

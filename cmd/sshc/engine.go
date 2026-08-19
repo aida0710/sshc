@@ -186,6 +186,7 @@ func runEngineApp(
 		PID:             os.Getpid(),
 		Toolchain:       parts.Toolchain,
 		KeyAgent:        parts.KeyAgent,
+		Biometric:       parts.Biometric,
 		Lookup:          os.LookupEnv,
 		Environ:         os.Environ,
 		ShutdownTimeout: dependencies.shutdownTimeout,

@@ -7,8 +7,8 @@ import type { IntegrationsApi } from "../api/integrations";
 
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
-    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
+    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] }),
+    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] }),
     ...overrides,
   } as unknown as IntegrationsApi;
 }
@@ -73,5 +73,41 @@ describe("LockScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/not the master password/i);
     // そしてシェルは閉じたままになる。
     expect(onOpen).not.toHaveBeenCalled();
+  });
+  // **預けてあるなら、開いた瞬間に自分から尋ねる。** 押させるための機能ではない。
+  it("asks the operating system as soon as it opens, when this machine keeps something", async () => {
+    const unlockWithBiometric = vi.fn().mockResolvedValue({ exists: true, unlocked: true, biometric: { available: true, enabled: true }, aliases: [], dedicatedKeyPassphrases: [] });
+    const onOpen = vi.fn();
+    render(
+      <LockScreen exists biometric onOpen={onOpen} api={buildApi({ unlockWithBiometric })} />,
+    );
+
+    await waitFor(() => expect(unlockWithBiometric).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onOpen).toHaveBeenCalled());
+  });
+
+  // **断られたことは失敗ではない。** パスワードの欄はそこに在るので、赤い帯を
+  // 出さずに黙って戻る。
+  it("says nothing when the person refuses, and leaves the password where it was", async () => {
+    const unlockWithBiometric = vi.fn().mockRejectedValue(new ApiError("biometric_refused", 403, null));
+    render(
+      <LockScreen exists biometric onOpen={vi.fn()} api={buildApi({ unlockWithBiometric })} />,
+    );
+
+    await waitFor(() => expect(unlockWithBiometric).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Master password")).toBeInTheDocument();
+  });
+
+  // 預けていない端末では、こちらから尋ねない。
+  it("does not ask on a machine that keeps nothing", async () => {
+    const unlockWithBiometric = vi.fn();
+    render(
+      <LockScreen exists onOpen={vi.fn()} api={buildApi({ unlockWithBiometric })} />,
+    );
+
+    await screen.findByLabelText("Master password");
+    expect(unlockWithBiometric).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Use Touch ID" })).not.toBeInTheDocument();
   });
 });
