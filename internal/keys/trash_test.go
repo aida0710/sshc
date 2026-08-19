@@ -12,7 +12,7 @@ import (
 
 func newTrashService(t *testing.T) (*Service, string) {
 	t.Helper()
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm:  AlgorithmEd25519,
 		FileName:   "id_work",

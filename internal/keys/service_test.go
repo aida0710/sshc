@@ -26,29 +26,15 @@ func steppingClock(start time.Time) func() time.Time {
 	}
 }
 
-// newQueryRunner は、外部プログラムの継ぎ目を差し替える記録係である。
-//
-// **カタログはもうプログラムを起こさない。** それでも Service には他の用途で
-// ランナーが渡るので、この名前は「実プロセスを起こさない」という約束のまま残す。
-func newQueryRunner() *recordingRunner { return &recordingRunner{} }
-
-// recordingRunner は、呼ばれたことを記録して空の出力を返す。
-type recordingRunner struct{ commands []platform.Command }
-
-func (r *recordingRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
-	r.commands = append(r.commands, command)
-	return platform.Output{}, nil
-}
-
-func newTestService(t *testing.T, runner platform.OutputRunner) (*Service, *storage.Workspace) {
+func newTestService(t *testing.T) (*Service, *storage.Workspace) {
 	t.Helper()
-	return newServiceWithAgent(t, runner, nil)
+	return newServiceWithAgent(t, nil)
 }
 
 // newServiceWithAgent は、アプリケーションと同じやり方で、ServiceOptions を通して
 // サービスを組み立てる。これにより、エージェントの継ぎ目が、テストが非公開フィールド
 // へ代入したものではなく、実際に Service へ届いていることが示される。
-func newServiceWithAgent(t *testing.T, runner platform.OutputRunner, agent platform.KeyAgent) (*Service, *storage.Workspace) {
+func newServiceWithAgent(t *testing.T, agent platform.KeyAgent) (*Service, *storage.Workspace) {
 	t.Helper()
 	workspace := newTestWorkspace(t)
 	clock := steppingClock(time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC))
@@ -99,8 +85,7 @@ func assertNoKeyMaterialInBackups(t *testing.T, workspace *storage.Workspace) {
 }
 
 func TestGenerateWritesAnEncryptedPairThroughATransaction(t *testing.T) {
-	runner := newQueryRunner()
-	service, workspace := newTestService(t, runner)
+	service, workspace := newTestService(t)
 
 	result, err := service.Generate(GenerateRequest{
 		Algorithm:  AlgorithmEd25519,
@@ -119,9 +104,6 @@ func TestGenerateWritesAnEncryptedPairThroughATransaction(t *testing.T) {
 	}
 	if result.TransactionID == "" {
 		t.Errorf("TransactionID is empty; the write was not journalled")
-	}
-	if len(runner.commands) != 0 {
-		t.Fatalf("generation started a child process: %#v", runner.commands)
 	}
 
 	privateContents, err := os.ReadFile(filepath.Join(workspace.Root(), "id_work"))
@@ -157,7 +139,7 @@ func TestGenerateWritesAnEncryptedPairThroughATransaction(t *testing.T) {
 }
 
 func TestGenerateRefusesUnsafeAndAmbiguousRequests(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "taken"), []byte("existing\n"), 0o600); err != nil {
 		t.Fatalf("write existing file: %v", err)
 	}
@@ -217,7 +199,7 @@ func TestGenerateRefusesUnsafeAndAmbiguousRequests(t *testing.T) {
 }
 
 func TestGenerateAcceptsAnExplicitlyUnencryptedKey(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 
 	result, err := service.Generate(GenerateRequest{
 		Algorithm:   AlgorithmEd25519,
@@ -241,8 +223,7 @@ func TestGenerateAcceptsAnExplicitlyUnencryptedKey(t *testing.T) {
 }
 
 func TestChangePassphraseRewritesTheKeyAndKeepsItsComment(t *testing.T) {
-	runner := newQueryRunner()
-	service, workspace := newTestService(t, runner)
+	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm:  AlgorithmEd25519,
 		FileName:   "id_work",
@@ -270,9 +251,6 @@ func TestChangePassphraseRewritesTheKeyAndKeepsItsComment(t *testing.T) {
 	}
 	if !result.Encrypted {
 		t.Errorf("Encrypted = false, want true")
-	}
-	if len(runner.commands) != 0 {
-		t.Fatalf("a passphrase change started a child process: %#v", runner.commands)
 	}
 
 	contents, err := os.ReadFile(filepath.Join(workspace.Root(), "id_work"))
@@ -309,7 +287,7 @@ func TestChangePassphraseRewritesTheKeyAndKeepsItsComment(t *testing.T) {
 // 秘密鍵の二つ目のコピーになり、設計はそれを禁じている。鍵素材が複製される場所は
 // ごみ箱だけである。
 func TestChangePassphraseKeepsKeyMaterialOutOfTheBackupDirectory(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm:  AlgorithmEd25519,
 		FileName:   "id_work",
@@ -329,7 +307,7 @@ func TestChangePassphraseKeepsKeyMaterialOutOfTheBackupDirectory(t *testing.T) {
 }
 
 func TestRevealReturnsTheKeyAndRecordsAnAuditFact(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm:  AlgorithmEd25519,
 		FileName:   "id_work",
@@ -393,15 +371,11 @@ func TestRevealReturnsTheKeyAndRecordsAnAuditFact(t *testing.T) {
 // **カタログはプログラムを一つも起こさない。** 並べているのはここで生成できる
 // 鍵であり、それを知っているのはこのプロセス自身である。
 func TestAlgorithmsStartNoProcess(t *testing.T) {
-	runner := newQueryRunner()
-	service, _ := newTestService(t, runner)
+	service, _ := newTestService(t)
 
 	catalogue := service.Algorithms(context.Background())
 	if len(catalogue.Variants) == 0 {
 		t.Fatal("the catalogue is empty")
-	}
-	if len(runner.commands) != 0 {
-		t.Fatalf("reading the catalogue started %#v", runner.commands)
 	}
 }
 
@@ -409,7 +383,7 @@ func TestAlgorithmsStartNoProcess(t *testing.T) {
 // 変われば、そのダイジェストも変わらなければならない。さもなければ、ある鍵を確認
 // したユーザーが、それを置き換えた何かを承認したことになってしまう。
 func TestConfirmationEvidenceTracksWhatTheUserWasShown(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 	generateWorkKey(t, service)
 
 	first, err := service.ConfirmationEvidence(ConfirmRevealKey, ItemID("id_work"))
@@ -469,7 +443,7 @@ func TestConfirmationEvidenceTracksWhatTheUserWasShown(t *testing.T) {
 }
 
 func TestConfirmationEvidenceForATrashEntryTracksItsListing(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 	generateWorkKey(t, service)
 	trashed, err := service.Trash(ItemID("id_work"))
 	if err != nil {
@@ -557,7 +531,7 @@ func TestRegisterSendsTheKeyPathAndPassphraseToTheAgentOnly(t *testing.T) {
 		available:  true,
 		identities: []platform.AgentIdentity{{Bits: 256, Fingerprint: "SHA256:abcdef", Comment: "aida@laptop", Algorithm: "ED25519"}},
 	}
-	service, workspace := newServiceWithAgent(t, newQueryRunner(), agent)
+	service, workspace := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
 
 	passphrase := []byte("correct horse")
@@ -625,7 +599,7 @@ func TestRegisterSendsTheKeyPathAndPassphraseToTheAgentOnly(t *testing.T) {
 
 func TestRegisterRefusesTrashedAndUnknownKeys(t *testing.T) {
 	agent := &fakeAgent{available: true}
-	service, _ := newServiceWithAgent(t, newQueryRunner(), agent)
+	service, _ := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
 	if _, err := service.Trash(ItemID("id_work")); err != nil {
 		t.Fatalf("Trash error = %v", err)
@@ -643,7 +617,7 @@ func TestRegisterRefusesTrashedAndUnknownKeys(t *testing.T) {
 }
 
 func TestRegisterAndIdentitiesReportAnUnreachableAgentHonestly(t *testing.T) {
-	withoutAgent, _ := newTestService(t, newQueryRunner())
+	withoutAgent, _ := newTestService(t)
 	generateWorkKey(t, withoutAgent)
 	if _, err := withoutAgent.Register(context.Background(), RegisterRequest{KeyID: ItemID("id_work")}); !errors.Is(err, platform.ErrAgentUnavailable) {
 		t.Fatalf("Register without an agent = %v, want ErrAgentUnavailable", err)
@@ -653,7 +627,7 @@ func TestRegisterAndIdentitiesReportAnUnreachableAgentHonestly(t *testing.T) {
 	}
 
 	stopped := &fakeAgent{available: false}
-	withStoppedAgent, _ := newServiceWithAgent(t, newQueryRunner(), stopped)
+	withStoppedAgent, _ := newServiceWithAgent(t, stopped)
 	generateWorkKey(t, withStoppedAgent)
 	if _, err := withStoppedAgent.Register(context.Background(), RegisterRequest{KeyID: ItemID("id_work")}); !errors.Is(err, platform.ErrAgentUnavailable) {
 		t.Fatalf("Register with a stopped agent = %v, want ErrAgentUnavailable", err)
@@ -666,7 +640,7 @@ func TestRegisterAndIdentitiesReportAnUnreachableAgentHonestly(t *testing.T) {
 		available:  true,
 		identities: []platform.AgentIdentity{{Bits: 256, Fingerprint: "SHA256:abcdef", Algorithm: "ED25519"}},
 	}
-	withRunningAgent, _ := newServiceWithAgent(t, newQueryRunner(), running)
+	withRunningAgent, _ := newServiceWithAgent(t, running)
 	identities, reachable := withRunningAgent.AgentIdentities(context.Background())
 	if !reachable || len(identities) != 1 {
 		t.Fatalf("AgentIdentities = %#v, %v, want the one loaded identity", identities, reachable)
@@ -676,7 +650,7 @@ func TestRegisterAndIdentitiesReportAnUnreachableAgentHonestly(t *testing.T) {
 // エージェントが拒否した登録が、起きた登録として記録されてはならない。
 func TestRegisterRecordsNothingWhenTheAgentRefuses(t *testing.T) {
 	agent := &fakeAgent{available: true, addError: platform.ErrAgentRejected}
-	service, workspace := newServiceWithAgent(t, newQueryRunner(), agent)
+	service, workspace := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
 
 	if _, err := service.Register(context.Background(), RegisterRequest{
@@ -719,7 +693,7 @@ func TestValidateFileNameRefusesNamesTheApplicationDependsOn(t *testing.T) {
 // ここのテストは、その検査を、ファイル名ではなく分類器の判断に対して
 // 縛る。
 func TestPublicKeyReadsThePublicHalfAndRefusesThePrivateOne(t *testing.T) {
-	service, _ := newTestService(t, newQueryRunner())
+	service, _ := newTestService(t)
 
 	generated, err := service.Generate(GenerateRequest{
 		Algorithm:  AlgorithmEd25519,
@@ -764,7 +738,7 @@ func TestPublicKeyReadsThePublicHalfAndRefusesThePrivateOne(t *testing.T) {
 }
 
 func TestPublicKeyRefusesAPrivateKeyWearingAPublicName(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 
 	// 分類は内容と権限によるもので、接尾辞によることは決してない。id_decoy.pub として
 	// 保存された秘密鍵も、ここでは拒否されなければならない。
@@ -953,7 +927,7 @@ func TestHardwareCommentKeepsTheShellSafeRule(t *testing.T) {
 // こと以外にできることがなかった。
 func TestDeregisterTakesTheKeyBackOutOfTheAgent(t *testing.T) {
 	agent := &fakeAgent{available: true}
-	service, _ := newServiceWithAgent(t, newQueryRunner(), agent)
+	service, _ := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
 
 	inventory, err := service.Inventory()
@@ -975,7 +949,7 @@ func TestDeregisterTakesTheKeyBackOutOfTheAgent(t *testing.T) {
 
 func TestDeregisterRefusesAKeyThatIsNotThere(t *testing.T) {
 	agent := &fakeAgent{available: true}
-	service, _ := newServiceWithAgent(t, newQueryRunner(), agent)
+	service, _ := newServiceWithAgent(t, agent)
 
 	if err := service.Deregister(context.Background(), ItemID("nope")); !errors.Is(err, ErrUnknownKey) {
 		t.Errorf("Deregister error = %v, want ErrUnknownKey", err)
@@ -984,7 +958,7 @@ func TestDeregisterRefusesAKeyThatIsNotThere(t *testing.T) {
 
 func TestDeregisterSaysSoWhenThereIsNoAgent(t *testing.T) {
 	agent := &fakeAgent{available: false}
-	service, _ := newServiceWithAgent(t, newQueryRunner(), agent)
+	service, _ := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
 
 	inventory, _ := service.Inventory()
@@ -1000,7 +974,7 @@ func TestDeregisterSaysSoWhenThereIsNoAgent(t *testing.T) {
 // してはならない。
 func TestRegisterUsesAStoredPassphraseWhenNoneIsTyped(t *testing.T) {
 	agent := &fakeAgent{available: true}
-	service, workspace := newServiceWithAgent(t, newQueryRunner(), agent)
+	service, workspace := newServiceWithAgent(t, agent)
 	_ = workspace
 	generateWorkKey(t, service)
 	stored := map[string]string{"id_work": "correct horse"}
@@ -1021,7 +995,7 @@ func TestRegisterUsesAStoredPassphraseWhenNoneIsTyped(t *testing.T) {
 // 新しいからだ。
 func TestATypedPassphraseBeatsTheStoredOne(t *testing.T) {
 	agent := &fakeAgent{available: true}
-	service, _ := newServiceWithAgent(t, newQueryRunner(), agent)
+	service, _ := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
 	service.SetStoredPassphrase(func(string) (string, bool) { return "the stale one", true })
 
@@ -1038,7 +1012,7 @@ func TestATypedPassphraseBeatsTheStoredOne(t *testing.T) {
 // 何も保存されていない状態の振る舞いは、何も保存できなかった頃と同じで、いまもそうだ。
 func TestRegisterWithoutAStoredPassphraseSendsWhatItWasGiven(t *testing.T) {
 	agent := &fakeAgent{available: true}
-	service, _ := newServiceWithAgent(t, newQueryRunner(), agent)
+	service, _ := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
 
 	if _, err := service.Register(context.Background(), RegisterRequest{
@@ -1052,7 +1026,7 @@ func TestRegisterWithoutAStoredPassphraseSendsWhatItWasGiven(t *testing.T) {
 }
 
 func TestVerifyPassphraseAcceptsOnlyTheCurrentEncryptedPrivateKeyAndWipesInput(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm: AlgorithmEd25519, FileName: "id_verify", Comment: "verify",
 		Passphrase: []byte("correct key phrase"),
@@ -1083,7 +1057,7 @@ func TestVerifyPassphraseAcceptsOnlyTheCurrentEncryptedPrivateKeyAndWipesInput(t
 }
 
 func TestVerifyPassphraseRejectsWrongValueAndWipesInput(t *testing.T) {
-	service, _ := newTestService(t, newQueryRunner())
+	service, _ := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm: AlgorithmEd25519, FileName: "id_verify", Comment: "verify",
 		Passphrase: []byte("correct key phrase"),
@@ -1101,7 +1075,7 @@ func TestVerifyPassphraseRejectsWrongValueAndWipesInput(t *testing.T) {
 }
 
 func TestVerifyPassphraseRejectsUnencryptedMissingAndNonPrivateFiles(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm: AlgorithmEd25519, FileName: "id_plain", Comment: "plain", Unencrypted: true,
 	}); err != nil {
@@ -1135,7 +1109,7 @@ func TestVerifyPassphraseRejectsUnencryptedMissingAndNonPrivateFiles(t *testing.
 }
 
 func TestVerifyPassphraseRevalidationRejectsChangedOrMissingKeyBytes(t *testing.T) {
-	service, workspace := newTestService(t, newQueryRunner())
+	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm: AlgorithmEd25519, FileName: "id_verify", Comment: "verify",
 		Passphrase: []byte("correct key phrase"),
@@ -1264,7 +1238,7 @@ var testSealMarker = []byte("sealed:")
 // nil を渡すことに意味がある——available を false にした fake は「居るが
 // 応答しない」であって、「そもそも居ない」ではない。Android は後者である。
 func TestAgentIdentitiesSayNoAgentWhenNoneIsWired(t *testing.T) {
-	service, _ := newServiceWithAgent(t, newQueryRunner(), nil)
+	service, _ := newServiceWithAgent(t, nil)
 	identities, available := service.AgentIdentities(context.Background())
 	if available {
 		t.Error("a service with no agent claims one is reachable")

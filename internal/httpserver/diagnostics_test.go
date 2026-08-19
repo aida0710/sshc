@@ -16,23 +16,10 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/diagnostics"
-	"sshc/internal/platform"
 	"sshc/internal/session"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 )
-
-// stubRunner はプロセスを起動せずに応答し、実行を頼まれたすべての argv を
-// 記録する。これにより、テストは何も実行されなかったことを証明できる。
-type stubRunner struct {
-	commands []platform.Command
-	output   platform.Output
-}
-
-func (runner *stubRunner) RunOutput(_ context.Context, command platform.Command) (platform.Output, error) {
-	runner.commands = append(runner.commands, command)
-	return runner.output, nil
-}
 
 type stubToolchain struct{}
 
