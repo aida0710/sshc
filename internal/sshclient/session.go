@@ -139,6 +139,30 @@ func (s *Session) Close() error {
 	return nil
 }
 
+// ForceClose は、graceful な終わり方を待たずに輸送そのものを断つ。
+//
+// **殺すプロセスは無い。** Unix の PTY で SIGKILL と PTY のクローズが果たす役割
+// ——pump の読み取りを終わらせ、セッションの done を閉じさせること——を、ここでは
+// 手前のホップを閉じることが果たす。
+//
+// Close と違い、リモートのチャンネルより**先に**輸送を閉じる。順序がこのメソッドの
+// 全部である。応答を返さない相手に対しては、チャンネルを閉じる書き込みそのものが
+// 返らないことがあり、そうなると締切に間に合わせるために呼ばれたものが締切を越える。
+// 輸送が先に死んでいれば、そのあとの Close は何にも待たされない。
+func (s *Session) ForceClose() error {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.mutex.Lock()
+	closers := s.closers
+	s.mutex.Unlock()
+	// 奥から順に閉じる。Close と同じ向きである。
+	for index := len(closers) - 1; index >= 0; index-- {
+		_ = closers[index].Close()
+	}
+	return s.Close()
+}
+
 // finish は、終了の理由を一度だけ記録する。
 func (s *Session) finish(info terminal.ExitInfo) {
 	s.doneOnce.Do(func() {
