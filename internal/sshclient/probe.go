@@ -107,8 +107,13 @@ func (d Dialer) probeChain(
 		User:            target.User,
 		Auth:            auth,
 		HostKeyCallback: d.HostKeys.Callback(target, nil),
-		BannerCallback:  recorder.noteBanner,
-		Timeout:         timeout,
+		// **認証テストは、実接続と同じ鍵の種類を名乗る。** ここだけ既定の順序に
+		// 任せていたので、三種類の鍵を持つホストが known_hosts にある 1 行とは
+		// 違う種類を出し、実際には繋がるホストを認証テストが host_key_changed と
+		// 報告しうた。**検査が本番と違う条件で繋ぐなら、それは検査ではない。**
+		HostKeyAlgorithms: d.HostKeys.Algorithms(target),
+		BannerCallback:    recorder.noteBanner,
+		Timeout:           timeout,
 	})
 	if err != nil {
 		_ = conn.Close()
