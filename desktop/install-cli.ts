@@ -13,14 +13,17 @@ export type FileSystem = typeof promises;
 
 // InstallResult は、端末側の入口を揃えた結果である。
 //
-// **出すかどうかを決めるのは呼び出し側だが、決められるだけの材料をここが渡す。**
+// **同じことを二度言わないための仕組みは、ここには無い。** かつてこの module は
+// 「前回と同じ報せか」を `.last-notice` というファイルに覚えていた。**それが
+// 要ったのは、外殻が起動のたびに黙ってこれを呼んでいたから**である——毎回
+// モーダルを出せば、閉じ方を覚えさせるだけだった。いまは利用者がメニューから
+// 頼んだときにだけ走るので、二度頼まれたら二度答えるのが正しい。
 export type InstallResult = {
   managed: string | null;
   copied: boolean;
   linked: boolean;
   warning: string | null;
   note: string | null;
-  repeated: boolean;
 };
 
 type LinkResult = { linked: boolean; warning: string | null };
@@ -100,33 +103,6 @@ async function sameContents(
   return Buffer.compare(a, b) === 0;
 }
 
-// noticePath は、利用者へ最後に伝えたことを覚えておく先である。
-//
-// **管理下の実体の隣に置く。** そこはこのアプリが持っているディレクトリで、公開の
-// 名前と違って利用者の持ち物ではない。
-function noticePath(managed: string): string {
-  return join(dirname(managed), ".last-notice");
-}
-
-// alreadyTold は、同じことを前回も伝えたかを答える。
-//
-// **恒久的な状態を、起動のたびに報せない。** 公開の名前を他人が持っているという
-// のは、利用者がそう決めた結果であって、直るのを待つ障害ではない——それを毎回
-// モーダルで出すのは、閉じ方を覚えさせるだけである。状況が変われば文も変わるので、
-// 文そのものを覚えておけば足りる。
-async function alreadyTold(
-  fs: FileSystem,
-  managed: string,
-  message: string,
-): Promise<boolean> {
-  const path = noticePath(managed);
-  const previous = await fs.readFile(path, "utf8").catch(() => null);
-  if (previous === message) return true;
-  // 書けなくても伝えることは伝える。次回また出るだけである。
-  await atomicReplace(fs, path, message, 0o600).catch(() => {});
-  return false;
-}
-
 // pathNote は、置いた場所が PATH に載っていないなら、そう言う文を返す。
 //
 // **リンクを張っただけでは `sshc` と打てるようにならない。** macOS の既定の PATH に
@@ -174,14 +150,7 @@ export async function installManagedCLI({
   // symlink は開発者モードか管理者権限が要り、`~/.local/bin` は PATH に
   // 載っていない。載せるのは NSIS が書く user PATH であって、この外殻ではない。
   if (platform === "win32") {
-    return {
-      managed: null,
-      copied: false,
-      linked: false,
-      warning: null,
-      note: null,
-      repeated: false,
-    };
+    return { managed: null, copied: false, linked: false, warning: null, note: null };
   }
 
   await fs.mkdir(dirname(managed), { recursive: true, mode: 0o700 });
@@ -192,19 +161,12 @@ export async function installManagedCLI({
   }
 
   const linked = await pointPublicName(fs, publicTarget, managed);
-  const note = linked.linked ? pathNote(publicTarget) : null;
-  const message = linked.warning ?? note;
-  // 伝えることが無い起動では、覚えていることも変えない。
-  const repeated = message === null ? false : await alreadyTold(fs, managed, message);
   return {
     managed,
     copied,
     linked: linked.linked,
     warning: linked.warning,
-    note,
-    // repeated が真なら、これは前回と同じ報せである。**出すかどうかを決めるのは
-    // 呼び出し側だが、決められるだけの材料はここが渡す。**
-    repeated,
+    note: linked.linked ? pathNote(publicTarget) : null,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   unlink,
   lstat,
   readlink,
+  readdir,
   stat,
 } from "node:fs/promises";
 import { join } from "node:path";
@@ -168,7 +169,6 @@ test("Windows installs nothing, because the installer owns the path there", asyn
     warning: null,
     // **案内も出さない。** PATH を通すのはインストーラであって、ここではない。
     note: null,
-    repeated: false,
   });
   await assert.rejects(() => lstat(paths.managed));
 });
@@ -220,12 +220,12 @@ test("an existing link repeats no advice", async () => {
 });
 
 
-// **恒久的な状態を、起動のたびに報せない。**
-//
-// 公開の名前を他人が持っているというのは、利用者が `make install` でそう決めた
-// 結果であって、直るのを待つ障害ではない。起動のたびにモーダルで出せば、閉じ方を
-// 覚えさせるだけである。
-test("a standing warning is reported once, not on every launch", async () => {
+// **同じ状況なら、同じ答えを返す。** かつてこの module は「前回と同じ報せか」を
+// `.last-notice` に覚えており、二度目を黙らせていた。**それが要ったのは外殻が
+// 起動のたびに黙ってこれを呼んでいたから**である。いまは利用者がメニューから
+// 頼んだときにだけ走るので、二度頼まれたら二度答える——黙るのは「効いたのか
+// 分からない」という一番悪い答えになる。
+test("asking twice answers twice", async () => {
   const paths = await workspace();
   await mkdir(join(paths.home, ".local", "bin"), { recursive: true });
   await writeFile(paths.public, "someone else's sshc");
@@ -234,35 +234,17 @@ test("a standing warning is reported once, not on every launch", async () => {
   const second = await installManagedCLI({ ...paths, ...linux });
 
   assert.ok(first.warning !== null, "the occupied name was not reported");
-  assert.ok(!first.repeated, "the first report was treated as a repeat");
-  assert.strictEqual(second.warning, first.warning, "the situation changed on its own");
-  assert.ok(second.repeated, "the same warning came back on the next launch");
+  assert.strictEqual(second.warning, first.warning, "the second answer went silent");
 });
 
-// **状況が変われば、また言う。** 別のものがそこへ来たなら、それは別の報せである。
-test("a different occupant is reported again", async () => {
+// **覚え書きを利用者の家に置かない。** 二度目を黙らせるために書いていた
+// `.last-notice` は、その必要ごと消えた。
+test("installing leaves nothing behind but the command itself", async () => {
   const paths = await workspace();
-  await mkdir(join(paths.home, ".local", "bin"), { recursive: true });
-  await writeFile(paths.public, "someone else's sshc");
+
   await installManagedCLI({ ...paths, ...linux });
 
-  await unlink(paths.public);
-  await symlink(join(paths.home, "elsewhere"), paths.public);
-  const later = await installManagedCLI({ ...paths, ...linux });
-
-  assert.ok(later.warning !== null, "the new occupant was not reported");
-  assert.ok(!later.repeated, "a different situation was silenced");
-});
-
-// 案内も一度きりである。**PATH を整えた人に、同じ案内を繰り返さない。**
-test("the installation note is not repeated either", async () => {
-  const paths = await workspace();
-
-  const first = await installManagedCLI({ ...paths, ...linux });
-  const second = await installManagedCLI({ ...paths, ...linux });
-
-  assert.ok(first.note !== null, "the first installation said nothing");
-  assert.ok(!first.repeated);
-  assert.strictEqual(second.note, null, "a settled link produced a note");
-  assert.ok(!second.repeated, "nothing to say was treated as a repeat");
+  const managedDir = join(paths.home, ".local", "share", "sshc", "bin");
+  const left = await readdir(managedDir);
+  assert.deepEqual(left.sort(), ["sshc"], `unexpected files in ${managedDir}`);
 });
