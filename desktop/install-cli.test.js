@@ -8,6 +8,7 @@ const {
   writeFile,
   readFile,
   symlink,
+  unlink,
   lstat,
   readlink,
   stat,
@@ -168,6 +169,7 @@ test("Windows installs nothing, because the installer owns the path there", asyn
     warning: null,
     // **案内も出さない。** PATH を通すのはインストーラであって、ここではない。
     note: null,
+    repeated: false,
   });
   await assert.rejects(() => lstat(paths.managed));
 });
@@ -217,3 +219,50 @@ test("an existing link repeats no advice", async () => {
   assert.strictEqual(second.note, null, "the advice was repeated on a later launch");
 });
 
+
+// **恒久的な状態を、起動のたびに報せない。**
+//
+// 公開の名前を他人が持っているというのは、利用者が `make install` でそう決めた
+// 結果であって、直るのを待つ障害ではない。起動のたびにモーダルで出せば、閉じ方を
+// 覚えさせるだけである。
+test("a standing warning is reported once, not on every launch", async () => {
+  const paths = await workspace();
+  await mkdir(join(paths.home, ".local", "bin"), { recursive: true });
+  await writeFile(paths.public, "someone else's sshc");
+
+  const first = await installManagedCLI({ ...paths, ...linux });
+  const second = await installManagedCLI({ ...paths, ...linux });
+
+  assert.ok(first.warning !== null, "the occupied name was not reported");
+  assert.ok(!first.repeated, "the first report was treated as a repeat");
+  assert.strictEqual(second.warning, first.warning, "the situation changed on its own");
+  assert.ok(second.repeated, "the same warning came back on the next launch");
+});
+
+// **状況が変われば、また言う。** 別のものがそこへ来たなら、それは別の報せである。
+test("a different occupant is reported again", async () => {
+  const paths = await workspace();
+  await mkdir(join(paths.home, ".local", "bin"), { recursive: true });
+  await writeFile(paths.public, "someone else's sshc");
+  await installManagedCLI({ ...paths, ...linux });
+
+  await unlink(paths.public);
+  await symlink(join(paths.home, "elsewhere"), paths.public);
+  const later = await installManagedCLI({ ...paths, ...linux });
+
+  assert.ok(later.warning !== null, "the new occupant was not reported");
+  assert.ok(!later.repeated, "a different situation was silenced");
+});
+
+// 案内も一度きりである。**PATH を整えた人に、同じ案内を繰り返さない。**
+test("the installation note is not repeated either", async () => {
+  const paths = await workspace();
+
+  const first = await installManagedCLI({ ...paths, ...linux });
+  const second = await installManagedCLI({ ...paths, ...linux });
+
+  assert.ok(first.note !== null, "the first installation said nothing");
+  assert.ok(!first.repeated);
+  assert.strictEqual(second.note, null, "a settled link produced a note");
+  assert.ok(!second.repeated, "nothing to say was treated as a repeat");
+});
