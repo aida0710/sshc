@@ -1,4 +1,4 @@
-package buildcontract_test
+package nativebuild_test
 
 import (
 	"os"
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"sshc/internal/buildcontract"
+	"sshc/internal/nativebuild"
 )
 
 // buildFor は、その行き先へ向けた小さな実体をひとつ焼く。
@@ -51,7 +51,7 @@ func TestTheArchitectureOfEachTargetIsRead(t *testing.T) {
 		name := target.goos + "/" + target.goarch
 		t.Run(name, func(t *testing.T) {
 			path := buildFor(t, target.goos, target.goarch)
-			if err := buildcontract.VerifyBinaryArchitecture(path, target.goos, target.goarch); err != nil {
+			if err := nativebuild.VerifyBinaryArchitecture(path, target.goos, target.goarch); err != nil {
 				t.Fatalf("a real %s binary was refused: %v", name, err)
 			}
 		})
@@ -70,7 +70,7 @@ func TestABinaryForTheWrongArchitectureIsRefused(t *testing.T) {
 		name := target.goos + " " + target.built + " as " + target.claimed
 		t.Run(name, func(t *testing.T) {
 			path := buildFor(t, target.goos, target.built)
-			err := buildcontract.VerifyBinaryArchitecture(path, target.goos, target.claimed)
+			err := nativebuild.VerifyBinaryArchitecture(path, target.goos, target.claimed)
 			if err == nil {
 				t.Fatalf("a %s binary passed as %s", target.built, target.claimed)
 			}
@@ -91,7 +91,7 @@ func TestABinaryForTheWrongOperatingSystemIsRefused(t *testing.T) {
 	} {
 		t.Run(target.built+" as "+target.claimed, func(t *testing.T) {
 			path := buildFor(t, target.built, runtime.GOARCH)
-			if err := buildcontract.VerifyBinaryArchitecture(path, target.claimed, runtime.GOARCH); err == nil {
+			if err := nativebuild.VerifyBinaryArchitecture(path, target.claimed, runtime.GOARCH); err == nil {
 				t.Fatalf("a %s binary passed as %s", target.built, target.claimed)
 			}
 		})
@@ -105,7 +105,7 @@ func TestSomethingThatIsNotABinaryIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := buildcontract.VerifyBinaryArchitecture(path, "windows", "amd64"); err == nil {
+	if err := nativebuild.VerifyBinaryArchitecture(path, "windows", "amd64"); err == nil {
 		t.Fatal("an empty file passed as a Windows binary")
 	}
 }

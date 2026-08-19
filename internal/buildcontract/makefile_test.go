@@ -16,7 +16,7 @@ type makefileContract struct {
 
 func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 	contract := readMakefileContract(t)
-	helper := "go run ./internal/buildcontract/cmd/nativebuild"
+	helper := "go run ./internal/nativebuild/cmd/nativebuild"
 	for _, assignment := range []string{
 		"$(NATIVE_GO_RUN_TARGETS): override GOENV = off",
 		"$(NATIVE_GO_RUN_TARGETS): override GOOS =",

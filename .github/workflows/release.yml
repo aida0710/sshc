@@ -168,13 +168,13 @@ jobs:
       - name: Build the CLI for this OS
         env:
           SSHC_NATIVE_VERSION: ${{ github.ref_name }}
-        run: go run ./internal/buildcontract/cmd/nativebuild release-current --arches "amd64 arm64" --output-dir dist
+        run: go run ./internal/nativebuild/cmd/nativebuild release-current --arches "amd64 arm64" --output-dir dist
 
       # 版付けも electron-builder も、この的が中でやる。
       - name: Build the desktop bundles
         env:
           SSHC_NATIVE_VERSION: ${{ github.ref_name }}
-        run: go run ./internal/buildcontract/cmd/nativebuild desktop --host windows --resource-root desktop/resources --bundles "win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe"
+        run: go run ./internal/nativebuild/cmd/nativebuild desktop --host windows --resource-root desktop/resources --bundles "win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe"
 
       # x64 だけを開く。arm64 のインストーラはこのランナーでは動かせず、
       # smoke は実際に入れて PATH と DACL と所有権を見るものだからである。

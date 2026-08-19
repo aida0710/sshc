@@ -56,7 +56,7 @@ verify-generated: generate
 # helper が argv で git describe を実行し、exact tag がなければ dev を使う。
 
 build:
-	go run ./internal/buildcontract/cmd/nativebuild host-build --output-dir "bin"
+	go run ./internal/nativebuild/cmd/nativebuild host-build --output-dir "bin"
 
 # Android の AAR。**CGO_ENABLED=1 でなければならない** ——Android には
 # /etc/resolv.conf が無く、pure-Go リゾルバは名前を引けない。名前解決は netd を
@@ -79,7 +79,7 @@ android-bind:
 # target と output は caller の決定であり、暗黙の host 値や探索結果を使わない。
 # CGO_ENABLED も target OS ごとの理由を知る caller が明示する。
 build-cli:
-	go run ./internal/buildcontract/cmd/nativebuild build
+	go run ./internal/nativebuild/cmd/nativebuild build
 
 # デスクトップの外殻。
 #
@@ -132,22 +132,22 @@ desktop-run: build desktop
 # desktop package は artifact を実際に動かす OS 上でだけ作る。各 target は
 # electron-builder が選ぶ resource directory に両 architecture の CLI を置く。
 desktop-bundle-mac:
-	go run ./internal/buildcontract/cmd/nativebuild guard-host --host darwin
-	go run ./internal/buildcontract/cmd/nativebuild desktop --host darwin --resource-root desktop/resources
+	go run ./internal/nativebuild/cmd/nativebuild guard-host --host darwin
+	go run ./internal/nativebuild/cmd/nativebuild desktop --host darwin --resource-root desktop/resources
 
 desktop-bundle-linux:
-	go run ./internal/buildcontract/cmd/nativebuild guard-host --host linux
-	go run ./internal/buildcontract/cmd/nativebuild desktop --host linux --resource-root desktop/resources
+	go run ./internal/nativebuild/cmd/nativebuild guard-host --host linux
+	go run ./internal/nativebuild/cmd/nativebuild desktop --host linux --resource-root desktop/resources
 
 desktop-bundle-windows:
-	go run ./internal/buildcontract/cmd/nativebuild guard-host --host windows
-	go run ./internal/buildcontract/cmd/nativebuild desktop --host windows --resource-root desktop/resources
+	go run ./internal/nativebuild/cmd/nativebuild guard-host --host windows
+	go run ./internal/nativebuild/cmd/nativebuild desktop --host windows --resource-root desktop/resources
 
 # **版はひとつである。** 束の中の sshc と、その束自身が別の版を名乗ると、
 # どちらが本当かを言えるものが無くなる。dev のときは package.json の既定の
 # ままにする——npm は "dev" を版として受け付けない。
 desktop-version:
-	go run ./internal/buildcontract/cmd/nativebuild desktop-version --directory desktop
+	go run ./internal/nativebuild/cmd/nativebuild desktop-version --directory desktop
 
 # リリースの成果物。UI のバンドルは 1 度だけ作り、Go だけをターゲットごとに
 # ビルドする。バンドルは埋め込まれるだけで、どの OS 向けかを知らないからだ。
@@ -208,12 +208,12 @@ unexport OUTPUT VERSION RELEASE_DIR RELEASE_TARGETS RELEASE_CURRENT_ARCHES
 unexport DESKTOP_MAC_BUNDLES DESKTOP_LINUX_BUNDLES DESKTOP_WINDOWS_BUNDLES
 
 release-binaries:
-	go run ./internal/buildcontract/cmd/nativebuild matrix
+	go run ./internal/nativebuild/cmd/nativebuild matrix
 
 # release-cli-current は runner 自身の OS についてだけ standalone artifact を
 # 作る。package job はこの後に同じ OS で smoke し、別 job が publish を集約する。
 release-cli-current:
-	go run ./internal/buildcontract/cmd/nativebuild release-current
+	go run ./internal/nativebuild/cmd/nativebuild release-current
 
 # 統合テストのスイートは、コンテナ内の本物の S3 実装と本物の sshd に対して走る。
 # 密閉されたスイートには答えられない二つの問いに答える。本物のオブジェクトストアが
