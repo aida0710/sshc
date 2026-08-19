@@ -1123,4 +1123,33 @@ describe("dragging a key onto a folder", () => {
 
     await waitFor(() => expect(relocate).toHaveBeenCalledWith("key-one", { group: "archive" }));
   });
+
+  // **行から始まる行動は、開いていた入力欄を畳んでから始まる。**
+  //
+  // 畳まないと、画面には二つの「この鍵について」が同時に出る——どちらのボタンが
+  // どちらに効くのかは、見ている人には分からない。以前この 3 行は行動ごとに書き
+  // 下されており、1 箇所だけ揃っていなかった。
+  it("opening one form from a row closes the one that was open", async () => {
+    const secrets = buildSecrets({
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true,
+        unlocked: true,
+        biometric: { available: false, enabled: false },
+        aliases: [],
+        dedicatedKeyPassphrases: [],
+        minPassphraseLength: 12,
+      }),
+    });
+    render(<KeysScreen api={buildApi()} secrets={secrets} />);
+
+    const row = await screen.findByRole("row", { name: /id_work/ });
+    await userEvent.click(within(row).getByRole("button", { name: "Save passphrase" }));
+    expect(await screen.findByRole("heading", { name: /Saved passphrase/ })).toBeInTheDocument();
+
+    await userEvent.click(within(row).getByRole("button", { name: "More actions" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Change passphrase" }));
+
+    expect(await screen.findByLabelText("Current passphrase")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Saved passphrase/ })).toBeNull();
+  });
 });
