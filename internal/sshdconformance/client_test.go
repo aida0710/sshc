@@ -1,4 +1,4 @@
-// Package sshintegration は、このアプリケーションの SSH クライアントを、
+// Package sshdconformance は、このアプリケーションの SSH クライアントを、
 // 本物の OpenSSH の sshd に対して走らせる。
 //
 // **単体テストは、このクライアントを Go で書かれたサーバーと比べているだけ
@@ -8,7 +8,7 @@
 //
 // アドレスが設定されていなければ丸ごとスキップするので、`go test ./...` は
 // 密閉されたままである。`make integration` がコンテナで sshd を起動する。
-package sshintegration_test
+package sshdconformance_test
 
 import (
 	"errors"

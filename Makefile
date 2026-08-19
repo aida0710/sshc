@@ -315,10 +315,9 @@ integration-down:
 # sshd の側が確かめるのは、**自分で話す SSH が本物の OpenSSH に通じること**で
 # ある。単体テストの相手は Go で書かれたサーバー——実装のもう半分——なので、
 # 両方が同じ勘違いをしていれば緑になる。ここだけがその輪の外にある。
-# **`integration/` パッケージとは別物である。** あちらは本物の sshc プロセスを
-# 起こして所有権と vault CLI を確かめるだけで、外の何も要らないので `go test ./...`
-# ——すなわち `make test` と CI——がそのまま回す。こちらが要求するのは
-# `integration-up` が立てる S3 と sshd であり、だから別の target になっている。
+# 要求するのは `integration-up` が立てる S3 と sshd なので、`go test ./...` からは
+# 外れる——そちらが回すのは、外の何も要らない `integration/`（本物の sshc プロセスを
+# 起こして所有権と vault CLI を確かめる）の方である。
 integration: build
 	SSHC_TEST_S3_ENDPOINT=http://127.0.0.1:$(S3_PORT) \
 	SSHC_TEST_S3_KEY=$(S3_KEY) \
@@ -329,7 +328,7 @@ integration: build
 	SSHC_TEST_SSH_PASSWORD=$(SSH_PASS) \
 	SSHC_TEST_SSH_KEY="$(CURDIR)/.integration-key/id_integration" \
 	SSHC_TEST_SSH_KEY_PASSPHRASE="$(SSH_KEY_PASSPHRASE)" \
-	go test ./internal/objectstore ./internal/remotesync ./internal/sshintegration -count=1 -v
+	go test ./internal/objectstore ./internal/remotesync ./internal/sshdconformance -count=1 -v
 
 # バイナリはひとつの安定したパスへ置く。デスクトップの外殻はここへ symlink を
 # 張り、CLI と画面が同じ実体を走らせることを保証する。別の場所でビルドし直すと
