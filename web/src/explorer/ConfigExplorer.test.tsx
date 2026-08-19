@@ -164,7 +164,7 @@ describe("ConfigExplorer", () => {
   it("opens a target file and selects the targeted line", async () => {
     render(<ConfigExplorer target={{ path: "conf.d/10-home.conf", line: 2 }} />);
 
-    const editor = (await screen.findByLabelText(/File text/)) as HTMLTextAreaElement;
+    const editor = await screen.findByLabelText<HTMLTextAreaElement>(/File text/);
 
     expect(configApi.file).toHaveBeenCalledWith("conf.d/10-home.conf");
     await waitFor(() => expect(editor.selectionStart).toBe("Host nas\n".length));

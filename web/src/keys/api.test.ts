@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../api/client";
 import { keysApi, PURGE_ACTION_KIND, REVEAL_ACTION_KIND, selectablePrivateKeys, type KeyItem } from "./api";
+import { sentJson } from "../testing/requests";
 
 const csrfToken = "c".repeat(43);
 const actionToken = "a".repeat(43);
@@ -62,7 +63,7 @@ describe("keysApi", () => {
 
     const [actionPath, actionInit] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(actionPath).toBe("/api/v1/actions");
-    expect(JSON.parse(String(actionInit.body))).toEqual({ kind: "private_key.reveal", target: "key-one" });
+    expect(sentJson(actionInit)).toEqual({ kind: "private_key.reveal", target: "key-one" });
 
     const [revealPath, revealInit] = fetcher.mock.calls[1] as [string, RequestInit];
     expect(revealPath).toBe("/api/v1/keys/key-one/reveal");
@@ -80,7 +81,7 @@ describe("keysApi", () => {
     await keysApi.purge("entry-1");
 
     const [, actionInit] = fetcher.mock.calls[0] as [string, RequestInit];
-    expect(JSON.parse(String(actionInit.body))).toEqual({ kind: "trash.purge", target: "entry-1" });
+    expect(sentJson(actionInit)).toEqual({ kind: "trash.purge", target: "entry-1" });
     const [purgePath, purgeInit] = fetcher.mock.calls[1] as [string, RequestInit];
     expect(purgePath).toBe("/api/v1/trash/entry-1");
     expect(purgeInit.method).toBe("DELETE");

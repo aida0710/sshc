@@ -91,7 +91,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
     editor.focus();
     editor.setSelectionRange(range.start, range.end);
     setJump(t("explorer.opened", { path: target.path, line: target.line }));
-  }, [file, target]);
+  }, [file, target, t]);
 
   async function open(path: string) {
     const request = ++openRequest.current;

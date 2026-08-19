@@ -55,7 +55,7 @@ test("selecting a key removes the stored password assignment and returning to ag
   const keyID = await keyChoice.getByRole("option", { name: /id_exclusive_auth/ }).getAttribute("value");
   expect(keyID).not.toBeNull();
 
-  await keyChoice.selectOption(keyID!);
+  await keyChoice.selectOption(keyID);
   await expect(panel.getByLabel("Stored password action")).toHaveCount(0);
   await expect(panel.getByText(/will remove this connection's assignment/)).toBeVisible();
   const connectionURL = page.url();
