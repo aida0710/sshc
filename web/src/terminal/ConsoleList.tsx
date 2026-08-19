@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { TerminalForward, TerminalSession } from "../api/integrations";
 import { useTranslate, type Translate } from "../i18n/context";
-import { dangerAction, secondaryAction } from "../ui/form";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Icon } from "../ui/icons";
 
 type ConsoleListProps = {
@@ -346,11 +346,6 @@ export function ConsoleList({
 /**
  * CloseConfirmation は、生きているコンソールを閉じてよいか訊く。
  *
- * **「開き直せば済む」は、ここでは成り立たない。** 開き直して得られるのは
- * 同じ相手への*新しい*セッションであり、動いていたもの——編集中のファイル、
- * 走っているビルド、追っているログ——は戻らない。作業ディレクトリも、
- * スクロールバックも、転送も一緒に消える。
- *
  * **既に終わっている行では出さない。** あれを閉じるのは、残っている出力を
  * 片付けるだけであり、失うものが無い場面で問いを出せば、次の問いも読まずに
  * 押す習慣を作る。
@@ -365,55 +360,25 @@ function CloseConfirmation({
   onConfirm: () => void;
 }) {
   const t = useTranslate();
-  const cancelRef = useRef<HTMLButtonElement>(null);
   const forwards = (session.forwards ?? []).length;
-
-  useEffect(() => {
-    // **開いた先で待っているのは「閉じない」側である。** 誤って開いた人が
-    // 何も読まずに Enter を叩いても、失うものが無い方へ落ちる。
-    cancelRef.current?.focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCancel();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onCancel]);
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="close-console-heading"
-        className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-control-line bg-card p-4"
-      >
-        <h2 id="close-console-heading" className="text-sm font-medium text-ink">
-          {t("terminal.closeHeading", { title: session.title })}
-        </h2>
-        <p className="text-sm text-ink-muted">{t("terminal.closeBody")}</p>
-        {forwards === 0 ? null : (
-          <p className="text-sm text-ink-muted">
-            {t("terminal.closeForwards", { count: String(forwards) })}
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <button
-            ref={cancelRef}
-            type="button"
-            onClick={onCancel}
-            className={secondaryAction}
-          >
-            {t("terminal.closeCancel")}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className={dangerAction}
-          >
-            {t("terminal.closeConfirm")}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      id="close-console-heading"
+      heading={t("terminal.closeHeading", { title: session.title })}
+      body={
+        <>
+          <p className="text-sm text-ink-muted">{t("terminal.closeBody")}</p>
+          {forwards === 0 ? null : (
+            <p className="text-sm text-ink-muted">
+              {t("terminal.closeForwards", { count: String(forwards) })}
+            </p>
+          )}
+        </>
+      }
+      confirmLabel={t("terminal.closeConfirm")}
+      cancelLabel={t("terminal.closeCancel")}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }
