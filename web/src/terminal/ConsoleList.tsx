@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { TerminalForward, TerminalSession } from "../api/integrations";
 import { useTranslate, type Translate } from "../i18n/context";
+import { dangerAction, secondaryAction } from "../ui/form";
 import { Icon } from "../ui/icons";
 
 type ConsoleListProps = {
@@ -61,6 +62,8 @@ export function ConsoleList({
 }: ConsoleListProps) {
   const t = useTranslate();
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  // closing は、閉じてよいか訊いている相手である。
+  const [closing, setClosing] = useState<TerminalSession | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [dragging, setDragging] = useState<string | null>(null);
@@ -238,7 +241,18 @@ export function ConsoleList({
                   <button
                     type="button"
                     aria-label={t("terminal.closeSession", { title: session.title })}
-                    onClick={() => onClose(session.id)}
+                    // **生きているセッションは、訊いてから閉じる。**
+                    //
+                    // この×は 24px で、隣の「操作」の×と肩を並べている。触る
+                    // 画面ではその二つを撃ち分けられないことがあり、外れた側が
+                    // 取り返しのつかない方だった。
+                    //
+                    // 既に終わっている行は訊かずに閉じる。**そこで訊くのは、
+                    // 何も失われない場面で問いを出すことであり、次の問いを
+                    // 読まずに押す習慣を作るだけである。**
+                    onClick={() =>
+                      session.exited === undefined ? setClosing(session) : onClose(session.id)
+                    }
                     className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill"
                   >
                     <Icon name="close" className="size-3.5" />
@@ -315,6 +329,91 @@ export function ConsoleList({
         {t("terminal.openShell")}
       </button>
       {full ? <p className="px-2 text-xs text-ink-muted">{t("terminal.limitReached", { max: maxSessions })}</p> : null}
+      {closing === null ? null : (
+        <CloseConfirmation
+          session={closing}
+          onCancel={() => setClosing(null)}
+          onConfirm={() => {
+            onClose(closing.id);
+            setClosing(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * CloseConfirmation は、生きているコンソールを閉じてよいか訊く。
+ *
+ * **「開き直せば済む」は、ここでは成り立たない。** 開き直して得られるのは
+ * 同じ相手への*新しい*セッションであり、動いていたもの——編集中のファイル、
+ * 走っているビルド、追っているログ——は戻らない。作業ディレクトリも、
+ * スクロールバックも、転送も一緒に消える。
+ *
+ * **既に終わっている行では出さない。** あれを閉じるのは、残っている出力を
+ * 片付けるだけであり、失うものが無い場面で問いを出せば、次の問いも読まずに
+ * 押す習慣を作る。
+ */
+function CloseConfirmation({
+  session,
+  onCancel,
+  onConfirm,
+}: {
+  session: TerminalSession;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const t = useTranslate();
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const forwards = (session.forwards ?? []).length;
+
+  useEffect(() => {
+    // **開いた先で待っているのは「閉じない」側である。** 誤って開いた人が
+    // 何も読まずに Enter を叩いても、失うものが無い方へ落ちる。
+    cancelRef.current?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onCancel();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onCancel]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="close-console-heading"
+        className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-control-line bg-card p-4"
+      >
+        <h2 id="close-console-heading" className="text-sm font-medium text-ink">
+          {t("terminal.closeHeading", { title: session.title })}
+        </h2>
+        <p className="text-sm text-ink-muted">{t("terminal.closeBody")}</p>
+        {forwards === 0 ? null : (
+          <p className="text-sm text-ink-muted">
+            {t("terminal.closeForwards", { count: String(forwards) })}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button
+            ref={cancelRef}
+            type="button"
+            onClick={onCancel}
+            className={secondaryAction}
+          >
+            {t("terminal.closeCancel")}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={dangerAction}
+          >
+            {t("terminal.closeConfirm")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

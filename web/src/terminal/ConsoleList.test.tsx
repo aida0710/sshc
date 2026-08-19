@@ -118,7 +118,86 @@ describe("ConsoleList", () => {
     expect(props.onSelect).toHaveBeenCalledWith("a");
 
     await user.click(screen.getByRole("button", { name: "Close bastion" }));
+    await user.click(screen.getByRole("button", { name: "Close the console" }));
     expect(props.onClose).toHaveBeenCalledWith("a");
+  });
+
+  // **生きている接続は、訊いてから閉じる。**
+  //
+  // この×は 24px で、隣の「操作」の×と肩を並べている。触る画面ではその二つを
+  // 撃ち分けられないことがあり、外れた側が取り返しのつかない方だった。
+  it("does not end a live connection on the first tap", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    await user.click(screen.getByRole("button", { name: "Close bastion" }));
+
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  // **「開き直せば済む」は、ここでは成り立たない。** 開き直して得られるのは
+  // 同じ相手への新しいセッションであり、動いていたものは戻らない。問いは、
+  // 何が終わるのかを言う。
+  it("says what ending the connection costs", async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(screen.getByRole("button", { name: "Close bastion" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(/Anything running in it stops/);
+    expect(dialog).toHaveTextContent(/bastion/);
+  });
+
+  // **二度続けて同じ場所を叩いても、閉じない。**
+  //
+  // かつての形（押すと同じ場所が「確認」に変わる）では、素早い二度押しが
+  // そのまま通った。問いは別の場所に出て、既定の focus は「閉じない」側に居る。
+  it("survives a double tap on the same spot", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    const close = screen.getByRole("button", { name: "Close bastion" });
+    await user.dblClick(close);
+
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  // 何も読まずに Enter を叩いた人は、失うものが無い方へ落ちる。
+  it("puts the keyboard on the side that loses nothing", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    await user.click(screen.getByRole("button", { name: "Close bastion" }));
+    await user.keyboard("{Enter}");
+
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  // 迷ったら閉じない側へ落ちる。
+  it("keeps the console when the question is dismissed", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    await user.click(screen.getByRole("button", { name: "Close bastion" }));
+    await user.click(screen.getByRole("button", { name: "Keep it open" }));
+
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  // **既に終わった行では訊かない。** あれを閉じるのは残っている出力を片付ける
+  // だけであり、失うものが無い場面で問いを出せば、次の問いも読まずに押す習慣を
+  // 作るだけである。
+  it("closes an console that already ended without asking", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    await user.click(screen.getByRole("button", { name: "Close db-primary" }));
+
+    expect(props.onClose).toHaveBeenCalledWith("c");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   // ローカルシェルの入口はここだけである。localhost はローカルシェルであって
