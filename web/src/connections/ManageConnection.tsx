@@ -3,6 +3,7 @@ import type { FileNode, GroupMetadata, HostDetail } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { Button, Card, Row } from "../ui/surface";
+import { identityKey } from "./connectionBrowser";
 
 type ManageConnectionProps = {
   detail: HostDetail;
@@ -33,7 +34,7 @@ export function ManageConnection({
   const identity = detail.form.entry.identity;
   const currentGroup = detail.form.entry.group ?? "";
   const initialComment = detail.form.comment || detail.metadata.note || "";
-  const resetKey = `${identity.path}\u0000${identity.alias}\u0000${detail.file.contents}`;
+  const resetKey = `${identityKey(identity)}\u0000${detail.file.contents}`;
   const [renameTo, setRenameTo] = useState(identity.alias);
   const [group, setGroup] = useState(currentGroup);
   const [comment, setComment] = useState(initialComment);

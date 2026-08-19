@@ -5,6 +5,7 @@ import type { AdvancedArea } from "../routing/connectionRoute";
 import { control, hintText, narrowControl } from "../ui/form";
 import { Button, Card, Notice, Row } from "../ui/surface";
 import { formatValues, parseValues } from "../rules/rules";
+import { identityKey } from "./connectionBrowser";
 
 type AdvancedSettingsProps = {
   detail: HostDetail;
@@ -38,7 +39,7 @@ export function AdvancedSettings({
   const [blockRaw, setBlockRaw] = useState(detail.form.raw);
   const [localError, setLocalError] = useState("");
 
-  const resetKey = `${detail.form.entry.identity.path}\u0000${detail.form.entry.identity.alias}\u0000${detail.file.contents}`;
+  const resetKey = `${identityKey(detail.form.entry.identity)}\u0000${detail.file.contents}`;
   useEffect(() => {
     setDrafts({});
     setRemoved([]);

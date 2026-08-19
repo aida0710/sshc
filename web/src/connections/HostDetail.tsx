@@ -14,6 +14,7 @@ import { ConnectionBasicForm } from "./ConnectionBasicForm";
 import { ConnectionChecks } from "./ConnectionChecks";
 import type { ConnectionSavedState } from "./connectionSavedState";
 import { NoticeList, SavePreviewPanel } from "./SavePreview";
+import { identityKey } from "./connectionBrowser";
 
 type HostDetailPanelProps = {
   detail: HostDetail;
@@ -71,7 +72,7 @@ export function HostDetailPanel({
   const advancedArea = panel === "Advanced" ? (controlledAdvanced ?? lastAdvanced) : lastAdvanced;
   const dirty = basicDirty || advancedDirty;
   const identity = detail.form.entry.identity;
-  const resetKey = `${identity.path}\u0000${identity.alias}\u0000${detail.file.contents}\u0000${savedRevision}`;
+  const resetKey = `${identityKey(identity)}\u0000${detail.file.contents}\u0000${savedRevision}`;
 
   useEffect(() => {
     if (panel === "Advanced") setLastAdvanced(advancedArea);
