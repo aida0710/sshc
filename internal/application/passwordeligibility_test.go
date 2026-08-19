@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -120,7 +121,10 @@ func TestIdentityFileNoneDoesNotBlockAStoredPassword(t *testing.T) {
 	}
 }
 
-func TestDirectKeyPassphraseTargetNamesTheOneWorkspaceKeyOpenSSHWillPromptFor(t *testing.T) {
+// **鍵は、OpenSSH が使うぶんだけ返る。** IdentityFile は積み上がるディレクティブ
+// なので、2 行書けば 2 本とも接続に使われうる——1 本に絞れないことは、答えられない
+// ことではない。
+func TestWorkspaceKeysNamesEveryKeyTheConnectionCanUse(t *testing.T) {
 	service, workspace := newShortHomeService(t)
 	entry := "Host keyed\n" +
 		"\tIdentityFile ~/.ssh/id_ed25519_server\n" +
@@ -129,80 +133,108 @@ func TestDirectKeyPassphraseTargetNamesTheOneWorkspaceKeyOpenSSHWillPromptFor(t 
 		"\tIdentityFile ~/.ssh/id_second\n" +
 		"Host inherited\n" +
 		"\tHostName inherited.example\n" +
-		"Host duplicate\n" +
-		"\tIdentityFile ~/.ssh/id_duplicate\n" +
-		"Host duplicate\n" +
-		"\tIdentityFile ~/.ssh/id_duplicate_second\n" +
-		"Host *\n" +
-		"\tServerAliveInterval 30\n"
+		"Host outside\n" +
+		"\tIdentityFile /etc/ssh/elsewhere\n"
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(entry), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	target, ok, err := service.directKeyPassphraseTarget("keyed")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("the direct workspace key was not resolved")
-	}
-	if target.RelativePath != "id_ed25519_server" {
-		t.Fatalf("relative path = %q", target.RelativePath)
-	}
-
-	for _, alias := range []string{"complex", "inherited", "duplicate"} {
-		if _, ok, err := service.directKeyPassphraseTarget(alias); err != nil || ok {
-			t.Errorf("DirectKeyPassphraseTarget(%q) = ok %v, err %v; want no target", alias, ok, err)
+	for alias, want := range map[string][]string{
+		"keyed":     {"id_ed25519_server"},
+		"complex":   {"id_first", "id_second"},
+		"inherited": {},
+		// ~/.ssh の外にある鍵は保管庫に現れないので、返しても訊く相手が居ない。
+		"outside": {},
+	} {
+		got, err := service.WorkspaceKeys(alias)
+		if err != nil {
+			t.Fatalf("WorkspaceKeys(%q) = %v", alias, err)
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("WorkspaceKeys(%q) = %#v, want %#v", alias, got, want)
 		}
 	}
 }
 
-func TestDirectKeyPassphraseTargetRefusesInheritedKeysAndExecutableConfiguration(t *testing.T) {
+// **実行を伴う設定だからといって鍵を隠さない。**
+//
+// かつてここは ProxyCommand・ProxyJump・Match・XAuthLocation を見つけると何も
+// 返さなかった。環境変数で capability を渡し、それが設定の書ける任意の子プロセスへ
+// 継がれることを恐れていた頃の規則である。いまのクライアントはそのどれも実行せず、
+// ProxyJump は自分でプロセス内を辿る——**起こさないプログラムへ秘密は漏れない。**
+func TestWorkspaceKeysNoLongerHidesBehindDirectivesTheClientNeverRuns(t *testing.T) {
 	for name, entry := range map[string]string{
 		"inherited second key": "Host keyed\n\tIdentityFile ~/.ssh/id_direct\nHost *\n\tIdentityFile ~/.ssh/id_global\n",
 		"proxy command":        "Host keyed\n\tIdentityFile ~/.ssh/id_direct\n\tProxyCommand helper %h %p\n",
 		"proxy jump":           "Host keyed\n\tIdentityFile ~/.ssh/id_direct\n\tProxyJump bastion\n",
 		"match block":          "Host keyed\n\tIdentityFile ~/.ssh/id_direct\nMatch all\n\tUser ops\n",
 		"xauth helper":         "Host keyed\n\tIdentityFile ~/.ssh/id_direct\n\tForwardX11 yes\n\tXAuthLocation ~/.ssh/read-token\n",
-		"canonical second pass": "Host keyed\n\tCanonicalizeHostname yes\n\tCanonicalDomains example.test\n\tIdentityFile ~/.ssh/id_direct\n" +
-			"Host keyed.example.test\n\tIdentityFile ~/.ssh/id_after_canonicalisation\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			service, workspace := newTestService(t)
 			if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(entry), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if _, ok, err := service.directKeyPassphraseTarget("keyed"); err != nil || ok {
-				t.Fatalf("target = ok %v, err %v; want conservative refusal", ok, err)
+			got, err := service.WorkspaceKeys("keyed")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Contains(got, "id_direct") {
+				t.Errorf("WorkspaceKeys = %#v, want it to contain id_direct", got)
 			}
 		})
 	}
 }
 
-func TestDirectKeyPassphraseTargetRequiresACurrentEncryptedPrivateKey(t *testing.T) {
+// **解決できない設定では、何も答えない。**
+//
+// CanonicalizeHostname は、OpenSSH に別のホスト名で設定を読み直させる。どの鍵が
+// 選ばれるかは DNS の答え次第であり、この解決器は名前を引かない。
+func TestWorkspaceKeysStaysSilentWhenTheConfigurationCannotBeResolved(t *testing.T) {
+	service, workspace := newTestService(t)
+	entry := "Host keyed\n\tCanonicalizeHostname yes\n\tCanonicalDomains example.test\n" +
+		"\tIdentityFile ~/.ssh/id_direct\n"
+	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(entry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.WorkspaceKeys("keyed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("WorkspaceKeys = %#v, want nothing while the answer depends on DNS", got)
+	}
+}
+
+// **入れ替えられた鍵の答えを持ち出さない。**
+//
+// 保管庫には、もう暗号化されていない鍵や、別のものに置き換わった綴りについて古い
+// 項目が残っていることがある。持ち出しても開くものが無い。
+func TestUnlockableWorkspaceKeysRequiresACurrentEncryptedPrivateKey(t *testing.T) {
 	service, workspace := newShortHomeService(t)
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"),
 		[]byte("Host keyed\n\tIdentityFile ~/.ssh/id_ed25519_server\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	target := DirectKeyPassphraseTarget{RelativePath: "id_ed25519_server"}
+	const relative = "id_ed25519_server"
 	for _, item := range []keys.Item{
-		{RelativePath: target.RelativePath, Kind: keys.KindPrivateKey, Encrypted: false},
-		{RelativePath: target.RelativePath, Kind: keys.KindOther, Encrypted: true},
+		{RelativePath: relative, Kind: keys.KindPrivateKey, Encrypted: false},
+		{RelativePath: relative, Kind: keys.KindOther, Encrypted: true},
 	} {
 		inventory := func() (*keys.Inventory, error) { return &keys.Inventory{Items: []keys.Item{item}}, nil }
-		if _, ok, err := service.DirectKeyPassphraseTarget("keyed", inventory); err != nil || ok {
-			t.Errorf("item %+v = ok %v, err %v; want no target", item, ok, err)
+		got, err := service.UnlockableWorkspaceKeys("keyed", inventory)
+		if err != nil || len(got) != 0 {
+			t.Errorf("item %+v = %#v, err %v; want nothing", item, got, err)
 		}
 	}
 	encrypted := func() (*keys.Inventory, error) {
 		return &keys.Inventory{Items: []keys.Item{{
-			RelativePath: target.RelativePath, Kind: keys.KindPrivateKey, Encrypted: true, ContentDigest: "key-digest",
+			RelativePath: relative, Kind: keys.KindPrivateKey, Encrypted: true, ContentDigest: "key-digest",
 		}}}, nil
 	}
-	if got, ok, err := service.DirectKeyPassphraseTarget("keyed", encrypted); err != nil || !ok ||
-		got.RelativePath != target.RelativePath {
-		t.Fatalf("encrypted key = %+v, ok %v, err %v", got, ok, err)
+	got, err := service.UnlockableWorkspaceKeys("keyed", encrypted)
+	if err != nil || !slices.Equal(got, []string{relative}) {
+		t.Fatalf("encrypted key = %#v, err %v", got, err)
 	}
 }
 
