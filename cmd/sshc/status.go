@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
@@ -83,14 +84,38 @@ type statusAnswer struct {
 
 // readHandoff は CLI の全入口で同じ互換性判定を使う。旧形式を推測して補うと、
 // owner や protocol を知らないまま稼働中の app へ要求を送れてしまうため、版を
-// そろえて再起動するという復旧可能な失敗として返す。
+// そろえるという復旧可能な失敗として返す。
+//
+// **「アプリを再起動してください」とは言わない。** 食い違っているのがどちら側かを、
+// このプロセスは知らない——アプリが新しいのかもしれないし、いま走っているこの
+// 実体が古いのかもしれない。そして**古いのがこちらである状況は、この設計が自分で
+// 作っている**: 外殻は `~/.local/bin/sshc` に自分が張ったリンク以外のものがあれば
+// 触らないので、`make install` で入れた実体はアプリを入れ替えても古いまま残る。
+// 再起動を勧めても、その人の `sshc` は変わらない。
+//
+// 代わりに、いま話しているのがどの実体かを名指しする。**どちらを直すかを決める
+// のに要るのは、それである。**
 func readHandoff(stateDir string) (handoff.Handoff, error) {
 	found, err := handoff.Read(stateDir)
 	if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {
-		return handoff.Handoff{}, fmt.Errorf("running app and CLI must use the same version; restart the app: %w", err)
+		return handoff.Handoff{}, fmt.Errorf(
+			"the running app and this sshc (%s) are not the same version; update whichever is older: %w",
+			runningExecutable(), err)
 	}
 	if err != nil {
 		return handoff.Handoff{}, err
 	}
 	return found, nil
+}
+
+// runningExecutable は、いま走っているこの実体の綴りを返す。
+//
+// 読めない環境では名前だけを返す。**綴りが分からないことは、版が合わないことを
+// 伝えない理由にはならない。**
+func runningExecutable() string {
+	path, err := os.Executable()
+	if err != nil || path == "" {
+		return "sshc"
+	}
+	return path
 }

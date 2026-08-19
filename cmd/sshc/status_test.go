@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -43,6 +44,12 @@ func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
 
 // 版の異なる CLI が古い規約で API を叩くと、拒否の原因が見えず利用者だけが
 // 取り残される。読み口を一つにすることで、すべての CLI command が同じ復旧策を出す。
+//
+// **「アプリを再起動してください」とは言わない。** 食い違っているのがどちら側かを
+// このプロセスは知らず、**古いのがこちらである状況は設計が自分で作っている**——
+// 外殻は `~/.local/bin/sshc` に自分が張ったリンク以外のものを触らないので、
+// `make install` で入れた実体はアプリを入れ替えても古いまま残る。だから、いま
+// 話しているのがどの実体かを名指しする。
 func TestReadHandoffExplainsHowToRecoverFromAProtocolMismatch(t *testing.T) {
 	document := testHandoff("http://127.0.0.1:52865")
 	document.ProtocolVersion++
@@ -57,7 +64,13 @@ func TestReadHandoffExplainsHowToRecoverFromAProtocolMismatch(t *testing.T) {
 	if !errors.Is(err, handoff.ErrProtocolVersion) {
 		t.Fatalf("readHandoff = %v, want protocol-version error", err)
 	}
-	if !strings.Contains(err.Error(), "same version") || !strings.Contains(err.Error(), "restart the app") {
+	executable, executableErr := os.Executable()
+	if executableErr != nil {
+		t.Fatal(executableErr)
+	}
+	if !strings.Contains(err.Error(), "not the same version") ||
+		!strings.Contains(err.Error(), "update whichever is older") ||
+		!strings.Contains(err.Error(), executable) {
 		t.Errorf("readHandoff advice = %q", err)
 	}
 }
