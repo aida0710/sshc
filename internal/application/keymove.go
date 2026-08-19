@@ -135,28 +135,11 @@ func (s *Service) RelocateKey(inventory *keys.Inventory, request KeyRelocateRequ
 		}
 	}
 
-	s.pendingBase = prepared.base
-	s.pendingBaseline = prepared.baseline
-	defer func() { s.pendingBase, s.pendingBaseline = nil, nil }()
-
-	committed, err := s.manager.Commit(storage.Request{
+	committed, err := s.commitPlannedRequest(prepared, storage.Request{
 		Operation: prepared.operation,
 		Changes:   prepared.changes,
 		Moves:     prepared.moves,
 	})
-	var conflict *storage.ConflictError
-	if errors.As(err, &conflict) {
-		cleaned := filepath.Clean(conflict.Path)
-		var edited []byte
-		for _, change := range prepared.changes {
-			if filepath.Clean(change.Path) == cleaned {
-				edited = change.Contents
-			}
-		}
-		return KeyRelocateResult{}, &ConflictError{Report: BuildConflictReport(
-			s.displayPath(cleaned), prepared.base[cleaned], conflict.Current, edited,
-		)}
-	}
 	if err != nil {
 		return KeyRelocateResult{}, err
 	}
