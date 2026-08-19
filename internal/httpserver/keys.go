@@ -18,7 +18,6 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/secret"
 	"sshc/internal/session"
-	"sshc/internal/storage"
 )
 
 // ActionHeader は、reveal と permanent delete がセッション cookie と
@@ -491,13 +490,12 @@ func keyProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadGateway, "agent_unavailable")
 	case errors.Is(err, platform.ErrAgentRejected):
 		return problemDetail(c, http.StatusBadGateway, "agent_rejected", err.Error())
-	case errors.Is(err, storage.ErrMoveTargetExists), errors.Is(err, keys.ErrTrashNameConflict):
+	case errors.Is(err, keys.ErrMoveTargetExists), errors.Is(err, keys.ErrTrashNameConflict):
 		return problem(c, http.StatusConflict, "name_conflict")
-	case errors.Is(err, storage.ErrOutsideWorkspace), errors.Is(err, storage.ErrSymlinkPath):
+	case errors.Is(err, keys.ErrOutsideWorkspace), errors.Is(err, keys.ErrSymlinkPath):
 		return problem(c, http.StatusForbidden, "path_not_editable")
 	}
-	var conflict *storage.ConflictError
-	if errors.As(err, &conflict) {
+	if keys.IsExternalChange(err) {
 		return problem(c, http.StatusConflict, "external_change")
 	}
 	return problem(c, http.StatusInternalServerError, "operation_failed")

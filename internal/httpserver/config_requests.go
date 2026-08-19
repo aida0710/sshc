@@ -10,7 +10,6 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/application"
-	"sshc/internal/storage"
 )
 
 // HTTP 境界におけるランタイム上限。生成された型は形を記述するが、
@@ -305,7 +304,7 @@ func serviceProblem(c *echo.Context, err error) error {
 		return problemWith(c, http.StatusConflict, problemPayload{
 			Code: "group_is_declared", Detail: declaredGroup(err),
 		})
-	case errors.Is(err, application.ErrHostNotFound), errors.Is(err, storage.ErrUnknownTransaction),
+	case errors.Is(err, application.ErrHostNotFound), errors.Is(err, application.ErrUnknownTransaction),
 		errors.Is(err, application.ErrFileNotFound):
 		return problemWith(c, http.StatusNotFound, problemPayload{Code: "not_found"})
 	case errors.Is(err, application.ErrCannotTouchEntryFile):
@@ -322,16 +321,16 @@ func serviceProblem(c *echo.Context, err error) error {
 		return problemWith(c, http.StatusConflict, problemPayload{Code: "region_damaged"})
 	case errors.Is(err, application.ErrGroupExists):
 		return problemWith(c, http.StatusConflict, problemPayload{Code: "group_exists"})
-	case errors.Is(err, storage.ErrDirectoryNotEmpty):
+	case errors.Is(err, application.ErrDirectoryNotEmpty):
 		return problemWith(c, http.StatusConflict, problemPayload{Code: "directory_not_empty"})
 	case errors.Is(err, application.ErrNotADirectory):
 		return problemWith(c, http.StatusBadRequest, problemPayload{Code: "not_a_directory"})
-	case errors.Is(err, application.ErrExternalPath), errors.Is(err, storage.ErrOutsideWorkspace),
-		errors.Is(err, storage.ErrSymlinkPath), errors.Is(err, storage.ErrNotRegularFile),
+	case errors.Is(err, application.ErrExternalPath), errors.Is(err, application.ErrOutsideWorkspace),
+		errors.Is(err, application.ErrSymlinkPath), errors.Is(err, application.ErrNotRegularFile),
 		// 存在しないディレクトリを指す path や、ディレクトリでない要素を含む path は、
 		// リクエストについての事実であり、内部の欠陥ではない。
 		// この 2 つがなければ、呼び出し側が渡す "~/x/y" のような path は 500 を返していた。
-		errors.Is(err, storage.ErrMissingDirectory), errors.Is(err, storage.ErrNotDirectory),
+		errors.Is(err, application.ErrMissingDirectory), errors.Is(err, application.ErrNotDirectory),
 		errors.Is(err, application.ErrNotEditable):
 		return problemWith(c, http.StatusForbidden, problemPayload{Code: "path_not_editable"})
 	case errors.Is(err, application.ErrUnknownEditKind), errors.Is(err, application.ErrUnknownRecoveryAction),

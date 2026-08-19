@@ -11,8 +11,6 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
-	"sshc/internal/envelope"
-	"sshc/internal/objectstore"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 )
@@ -30,13 +28,13 @@ type SyncHandlers struct {
 	// bucket に到達することはそうではないからで、またこのパッケージの
 	// どのテストもネットワークに触れてはならないからだ。nil の場合は
 	// 実際のチェックを意味する。配線し忘れが黙って「問題なし」になってはならない。
-	Reach func(ctx context.Context, client *objectstore.Client, key string) error
+	Reach func(ctx context.Context, client *remotesync.Client, key string) error
 	// Auto は、押さなくても進む巡回である。nil のときは、この設置に巡回が無い
 	// ——status は「入っていない」と答え、押しても一巡しない。
 	Auto *remotesync.Auto
 }
 
-func (h SyncHandlers) reach(ctx context.Context, client *objectstore.Client, key string) error {
+func (h SyncHandlers) reach(ctx context.Context, client *remotesync.Client, key string) error {
 	if h.Reach == nil {
 		return remotesync.Check(ctx, client, key)
 	}
@@ -72,16 +70,14 @@ func (h SyncHandlers) restore() {
 	if !ok {
 		direction = remotesync.DirectionBoth
 	}
-	credentials := objectstore.Credentials{
+	credentials := remotesync.Credentials{
 		AccessKeyID: settings.AccessKeyID, SecretAccessKey: settings.SecretAccessKey,
 	}
 	config := remotesync.Config{
 		Endpoint: settings.Endpoint, Bucket: settings.Bucket, Path: settings.Path,
 		Region: settings.Region, Direction: direction,
 	}
-	h.Service.Configure(config, credentials, &objectstore.Client{
-		Endpoint: config.Endpoint, Bucket: config.Bucket, Region: config.Region, Creds: credentials,
-	})
+	h.Service.Configure(config, credentials, remotesync.NewClient(config, credentials))
 }
 
 func snapshotSummaryResponse(summary remotesync.SnapshotSummary) api.SnapshotSummary {
@@ -187,7 +183,7 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 		direction = parsed
 	}
 
-	credentials := objectstore.Credentials{
+	credentials := remotesync.Credentials{
 		AccessKeyID:     request.AccessKeyId,
 		SecretAccessKey: request.SecretAccessKey,
 	}
@@ -204,9 +200,7 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	// 保存する前に試す。一度も試されなかった設定は、typo が最初の
 	// push で何時間も後に別の場所で表面化する設定になってしまう。
 	// ここは、ユーザーが自分の打ったものをまだ見られる唯一の画面である。
-	client := &objectstore.Client{
-		Endpoint: config.Endpoint, Bucket: config.Bucket, Region: config.Region, Creds: credentials,
-	}
+	client := remotesync.NewClient(config, credentials)
 	if err := h.reach(c.Request().Context(), client, remotesync.ObjectKeyFor(config)); err != nil {
 		return syncProblem(c, err)
 	}
@@ -287,8 +281,8 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 		key = generated
 	}
 	// 弱い鍵は、封をする段になって初めて分かるのでは遅い。ここで断る。
-	if _, err := envelope.Derive(key); err != nil {
-		if errors.Is(err, envelope.ErrWeakPassphrase) {
+	if err := remotesync.ValidateKey(key); err != nil {
+		if errors.Is(err, remotesync.ErrWeakPassphrase) {
 			return problem(c, http.StatusBadRequest, "passphrase_too_short")
 		}
 		return problem(c, http.StatusInternalServerError, "vault_unreadable")
@@ -464,18 +458,18 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "sync_push_refused")
 	case errors.Is(err, remotesync.ErrApplyRefused):
 		return problem(c, http.StatusConflict, "sync_apply_refused")
-	case errors.Is(err, envelope.ErrWrongPassphrase):
+	case errors.Is(err, remotesync.ErrWrongPassphrase):
 		return problem(c, http.StatusForbidden, "wrong_passphrase")
-	case errors.Is(err, envelope.ErrWeakPassphrase):
+	case errors.Is(err, remotesync.ErrWeakPassphrase):
 		return problem(c, http.StatusBadRequest, "passphrase_too_short")
-	case errors.Is(err, envelope.ErrCostRefused):
+	case errors.Is(err, remotesync.ErrCostRefused):
 		return problem(c, http.StatusConflict, "snapshot_cost_refused")
-	case errors.Is(err, envelope.ErrUnsupportedVersion), errors.Is(err, remotesync.ErrUnsupportedVersion):
+	case errors.Is(err, remotesync.ErrUnsupportedEnvelopeVersion), errors.Is(err, remotesync.ErrUnsupportedVersion):
 		return problem(c, http.StatusConflict, "snapshot_too_new")
 	case errors.Is(err, remotesync.ErrUnsafePath), errors.Is(err, remotesync.ErrUnsafeMode),
 		errors.Is(err, remotesync.ErrManifestMismatch), errors.Is(err, remotesync.ErrNotASnapshot):
 		return problem(c, http.StatusConflict, "snapshot_rejected")
-	case errors.Is(err, objectstore.ErrRefused), errors.Is(err, objectstore.ErrInsecureEndpoint):
+	case errors.Is(err, remotesync.ErrRefused), errors.Is(err, remotesync.ErrInsecureEndpoint):
 		return problem(c, http.StatusBadGateway, "bucket_refused")
 	default:
 		return problem(c, http.StatusBadGateway, "sync_failed")

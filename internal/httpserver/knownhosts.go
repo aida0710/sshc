@@ -9,7 +9,6 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/knownhosts"
 	"sshc/internal/session"
-	"sshc/internal/storage"
 	"sshc/internal/validate"
 )
 
@@ -45,7 +44,7 @@ func addKnownHostsActions(registry actionRegistry, service *knownhosts.Service) 
 			if err := validate.Hostname(target); err != nil {
 				return "", err
 			}
-			return storage.Digest([]byte(target)), nil
+			return knownhosts.ContentDigest([]byte(target)), nil
 		},
 		fail: knownHostsProblem,
 	}
@@ -68,8 +67,7 @@ func knownHostsProblem(c *echo.Context, err error) error {
 	case errors.Is(err, validate.ErrUnsafePort):
 		return problem(c, http.StatusBadRequest, "unsafe_port")
 	}
-	var conflict *storage.ConflictError
-	if errors.As(err, &conflict) {
+	if knownhosts.IsExternalChange(err) {
 		return problem(c, http.StatusConflict, "external_change")
 	}
 	return problem(c, http.StatusInternalServerError, "known_hosts_failed")
@@ -94,7 +92,7 @@ func (h KnownHostsHandlers) List(c *echo.Context) error {
 	for _, line := range listing.Lines {
 		response.Entries = append(response.Entries, api.KnownHostEntry{
 			Line:        line.Number,
-			Digest:      storage.Digest([]byte(line.Raw)),
+			Digest:      knownhosts.ContentDigest([]byte(line.Raw)),
 			Marker:      line.Entry.Marker,
 			Hosts:       line.Entry.Hosts,
 			Hashed:      line.Entry.Hashed,
