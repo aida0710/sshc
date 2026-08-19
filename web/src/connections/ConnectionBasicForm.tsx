@@ -15,7 +15,7 @@ import {
 } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
-import { eligibilityText } from "../diagnostics/PasswordPanel";
+import { eligibilityText } from "./eligibilityText";
 import { directIdentityFields, isConcreteIdentityValue } from "./authenticationPolicy";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
