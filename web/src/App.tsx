@@ -18,11 +18,9 @@ import { themes, type Theme } from "./theme/theme";
 import type { MessageKey } from "./i18n/messages";
 import { Button } from "./ui/surface";
 import { sectionPath, type Section } from "./routing/sectionRoute";
+import type { Declared, Handoff, Navigation, Shell } from "./shell/sectionProps";
 import {
   useSectionRoute,
-  type BrowserLocation,
-  type NavigationBlocker,
-  type NavigateLocationOptions,
 } from "./routing/useSectionRoute";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
 import { ConsoleList } from "./terminal/ConsoleList";
@@ -788,28 +786,33 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                 <Suspense fallback={null}>
                   <SectionView
                     section={route.section}
-                    fileTarget={fileTarget}
-                    groups={groups}
-                    knownAliases={knownAliases}
-                    connectionDraft={connectionDraft}
-                    onConnectionDraftChange={setConnectionDraft}
-                    onNavigateForCreation={(target: CreationPrerequisite) => navigate(target)}
-                    onOpenFile={openFile}
-                    onLock={() => setState("locked")}
-                    onInspector={setInspector}
-                    onNavigate={navigate}
-                    location={location}
-                    onNavigateLocation={navigateLocation}
-                    onNavigationBlockerChange={setNavigationBlocker}
-                    preferredConnectionKey={preferredConnectionKey}
-                    preferredPublicKey={preferredPublicKey}
-                    onAssignGeneratedKey={assignGeneratedKey}
-                    onInstallGeneratedKey={installGeneratedKey}
-                    onPreferredConnectionKeyApplied={consumePreferredConnectionKey}
-                    onPreferredPublicKeyHandled={consumePreferredPublicKey}
-                    consoles={consoles}
-                    onShowConsole={showConsole}
-                    onTerminalSettingsChange={setTerminalSettings}
+                    navigation={{
+                      location,
+                      fileTarget,
+                      onNavigate: navigate,
+                      onNavigateLocation: navigateLocation,
+                      onNavigateForCreation: (target: CreationPrerequisite) => navigate(target),
+                      onOpenFile: openFile,
+                      onNavigationBlockerChange: setNavigationBlocker,
+                    }}
+                    handoff={{
+                      connectionKey: preferredConnectionKey,
+                      publicKey: preferredPublicKey,
+                      connectionDraft,
+                      onAssignGeneratedKey: assignGeneratedKey,
+                      onInstallGeneratedKey: installGeneratedKey,
+                      onConnectionKeyApplied: consumePreferredConnectionKey,
+                      onPublicKeyHandled: consumePreferredPublicKey,
+                      onConnectionDraftChange: setConnectionDraft,
+                    }}
+                    shell={{
+                      onLock: () => setState("locked"),
+                      onInspector: setInspector,
+                      consoles,
+                      onShowConsole: showConsole,
+                      onTerminalSettingsChange: setTerminalSettings,
+                    }}
+                    declared={{ groups, knownAliases }}
                   />
                 </Suspense>
               ) : (
@@ -842,34 +845,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
 }
 
 type SectionViewProps = {
-  // groups は宣言済みのグループ名である。Keys 画面はこれを移動先とし
-  // て提示する必要があるが、推測してはならない——ディレクトリがグルー
-  // プなのは ~/.ssh/config の一行が宣言するからで、読むのは configuration API だけだ。
-  groups: string[];
-  knownAliases: string[];
-  connectionDraft: CreateConnectionDraft | null;
   section: Section;
-  fileTarget: FileTarget | null;
-  onOpenFile: (path: string, line: number) => void;
-  onLock: () => void;
-  onNavigate: (section: Section) => void;
-  location: BrowserLocation;
-  onNavigateLocation: (url: string, options?: NavigateLocationOptions) => void;
-  onNavigationBlockerChange: (blocker: NavigationBlocker | null) => void;
-  preferredConnectionKey: GeneratedPrivateKeyHandoff | null;
-  preferredPublicKey: GeneratedPublicKeyHandoff | null;
-  onAssignGeneratedKey: (key: GeneratedPrivateKeyHandoff) => void;
-  onInstallGeneratedKey: (key: GeneratedPublicKeyHandoff) => void;
-  onPreferredConnectionKeyApplied: () => void;
-  onPreferredPublicKeyHandled: () => void;
-  onConnectionDraftChange: (draft: CreateConnectionDraft | null) => void;
-  onNavigateForCreation: (section: CreationPrerequisite) => void;
-  consoles: TerminalSessionsState;
-  onShowConsole: (id: string) => void;
-  onTerminalSettingsChange: (settings: TerminalSettings) => void;
-  // セクションは右側ペインの中身を提供するか、調べるものが無ければ
-  // null を返す。現時点でそれを埋めているのは Connections だけだ。
-  onInspector: (content: InspectorContent) => void;
+  navigation: Navigation;
+  handoff: Handoff;
+  shell: Shell;
+  declared: Declared;
 };
 
 function SectionView(props: SectionViewProps) {
@@ -887,18 +867,18 @@ function SectionView(props: SectionViewProps) {
   if (props.section === "Connections") {
     return (
       <ConnectionsPage
-        onOpenFile={props.onOpenFile}
-        onInspector={props.onInspector}
-        creationDraft={props.connectionDraft}
-        onCreationDraftChange={props.onConnectionDraftChange}
-        onNavigateForCreation={props.onNavigateForCreation}
-        location={props.location}
-        onNavigateLocation={props.onNavigateLocation}
-        onNavigationBlockerChange={props.onNavigationBlockerChange}
-        preferredKey={props.preferredConnectionKey}
-        onPreferredKeyApplied={props.onPreferredConnectionKeyApplied}
-        consoles={props.consoles}
-        onShowConsole={props.onShowConsole}
+        onOpenFile={props.navigation.onOpenFile}
+        onInspector={props.shell.onInspector}
+        creationDraft={props.handoff.connectionDraft}
+        onCreationDraftChange={props.handoff.onConnectionDraftChange}
+        onNavigateForCreation={props.navigation.onNavigateForCreation}
+        location={props.navigation.location}
+        onNavigateLocation={props.navigation.onNavigateLocation}
+        onNavigationBlockerChange={props.navigation.onNavigationBlockerChange}
+        preferredKey={props.handoff.connectionKey}
+        onPreferredKeyApplied={props.handoff.onConnectionKeyApplied}
+        consoles={props.shell.consoles}
+        onShowConsole={props.shell.onShowConsole}
       />
     );
   }
@@ -955,23 +935,9 @@ function TerminalScreen({
   );
 }
 
-function PaddedSection({
-  section,
-  fileTarget,
-  groups,
-  knownAliases,
-  onLock,
-  onInspector,
-  onNavigate,
-  onNavigateLocation,
-  onShowConsole,
-  consoles,
-  onTerminalSettingsChange,
-  preferredPublicKey,
-  onAssignGeneratedKey,
-  onInstallGeneratedKey,
-  onPreferredPublicKeyHandled,
-}: SectionViewProps) {
+function PaddedSection({ section, navigation, handoff, shell, declared }: SectionViewProps) {
+  const { fileTarget, onNavigate, onNavigateLocation } = navigation;
+  const { onLock, onInspector, consoles, onShowConsole, onTerminalSettingsChange } = shell;
   if (section === "Home") {
     return (
       <OverviewPanel
@@ -1002,9 +968,9 @@ function PaddedSection({
   if (section === "Keys") {
     return (
       <KeysScreen
-        groups={groups}
-        onAssignGeneratedKey={onAssignGeneratedKey}
-        onInstallGeneratedKey={onInstallGeneratedKey}
+        groups={declared.groups}
+        onAssignGeneratedKey={handoff.onAssignGeneratedKey}
+        onInstallGeneratedKey={handoff.onInstallGeneratedKey}
       />
     );
   }
@@ -1014,13 +980,13 @@ function PaddedSection({
   if (section === "Remote Keys") {
     return (
       <RemoteKeyPanel
-        preferredPublicKeyPath={preferredPublicKey?.publicRelativePath ?? null}
-        onPreferredPublicKeyHandled={onPreferredPublicKeyHandled}
+        preferredPublicKeyPath={handoff.publicKey?.publicRelativePath ?? null}
+        onPreferredPublicKeyHandled={handoff.onPublicKeyHandled}
       />
     );
   }
   if (section === "Diagnostics") {
-    return <DiagnosticsPanel hosts={knownAliases} />;
+    return <DiagnosticsPanel hosts={declared.knownAliases} />;
   }
   return (
     <section aria-labelledby="section-heading" className="flex flex-col gap-4">
