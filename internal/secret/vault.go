@@ -249,6 +249,14 @@ func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
 	}, nil
 }
 
+// Wrap は、この保管庫の鍵そのものを別の鍵の下に封じる。
+//
+// **二つ目の入口を作るためだけにある。** 出るのは封じられた形であり、鍵の中身が
+// この package の外へ出ることは、これでも起きない。
+func (v *Vault) Wrap(under envelope.Key) ([]byte, error) {
+	return v.key.Wrap(under)
+}
+
 // SealSettings は、オブジェクトストアの設定を vault 自身の鍵で暗号化する。隣に置く
 // ファイルのためである。同じマスターパスワードで、違うファイル。こちらは移動
 // しない。

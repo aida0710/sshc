@@ -76,14 +76,18 @@ OS の錠前          S                                      ← 生体で守ら
 `envelope` に足すのは 2 つだけである。
 
 ```go
-// FromSecret は、すでに鍵の強さを持つ 32 バイトを鍵にする。**KDF を通さない。**
-// 人が決めた文字列を渡してはならない——乱数として作られた秘密のためだけにある。
-func FromSecret(secret []byte) (Key, error)
-
-// Wrap は、この鍵そのものを別の鍵の下に封じる。Unwrap はその鏡像である。
+// Wrap は、この鍵そのものを別の鍵の下に封じる。
 func (k Key) Wrap(under Key) ([]byte, error)
-func Unwrap(sealed []byte, under Key) (Key, error)
+
+// Unwrap は Wrap の鏡像である。**鍵ではなくパスフレーズを取る** ——Derive は
+// 呼ばれるたびに新しい salt を作るので、同じ秘密から作り直した鍵は同じ鍵では
+// ない。開くのに要る salt は封の中に書いてある。
+func Unwrap(sealed []byte, passphrase string) (Key, error)
 ```
+
+預ける S は、そのまま `Derive` に渡せる形——base32 の 32 文字——にする。実装の
+途中で `FromSecret`（KDF を通さない鍵）を考えたが、要らなかった。封の中の salt を
+読んで導出し直すのがこの package の既定の道であり、そこから外れる理由が無い。
 
 `material` は今まで通り外へ出さない。出るのは封じられた形だけである。
 
@@ -151,6 +155,29 @@ allowlist に載せるものが 1 つ増えることは、それ自体が判断�
 `docs/manual-acceptance.md` に足す。Touch ID のプロンプトが出ること、断ると
 パスワードへ戻ること、指紋を足すと預かりが無効になること。**自動化しない**——
 生体のプロンプトは、人が居ることを確かめる仕掛けである。
+
+## 実測 — macOS は、署名を買うまで**この道が使えない**（2026-08-19）
+
+書いたものを実機で動かして分かったことを、そのまま残す。
+
+| 試したこと | 結果 |
+|---|---|
+| 署名の無い実行体から `SecItemAdd`（生体 ACL 付き） | **-34018 `errSecMissingEntitlement`** |
+| ad-hoc 署名で `keychain-access-groups` を主張して再実行 | **プロセスごと SIGKILL**（AMFI が偽の entitlement を拒む） |
+| `LAContext canEvaluatePolicy` | true（機械には Touch ID がある） |
+
+生体で守られる Keychain の項目は data protection keychain のものであり、そこは
+`keychain-access-groups` を持つ**署名された**実行体にしか開かない。**機械の能力の
+問題ではなく、この束がどう署名されているかの問題である。**
+
+だから `Available()` は、能力を仮定せずに**実際に預けてみて**答える。署名の無い
+いまは false を返し、画面はトグルを出さない。配布用の署名を手に入れた日、ここは
+何も変えずに true になる。
+
+**下げた形で出さない。** ここで「Touch ID のプロンプトは出すが、秘密はただの
+ファイルにある」形にすることはできる。しかしそれは、指紋が鍵を守っているように
+見えて、実際にはアカウントを取った者が素通りできる、という画面である。**守れない
+ものを守れるふりをしない**、というこの文書の第一行がそれを禁じている。
 
 ## スコープ外（次のサブプロジェクト）
 

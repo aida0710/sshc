@@ -220,6 +220,34 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
         </button>
       </div>
 
+      {/*
+        **押せないものを見せない。** 錠前の無い端末——Linux、読み取り機の付いて
+        いない機械——では、この節そのものが出ない。
+      */}
+      {status.biometric.available ? (
+        <section aria-label={t("secrets.biometricHeading")} className={sectionCard}>
+          <h3 className={sectionHeading}>{t("secrets.biometricHeading")}</h3>
+          {/*
+            何が起きるかを、有効にする前に言う。**秘密がこの端末の OS の錠前にも
+            依存するようになる**ことは、押したあとに気づくことではない。
+          */}
+          <p className={hintText}>{t("secrets.biometricExplain")}</p>
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={status.biometric.enabled}
+              onChange={(event) =>
+                void run(
+                  () => (event.target.checked ? api.enableBiometric() : api.disableBiometric()),
+                  t("secrets.biometricFailed"),
+                )
+              }
+            />
+            {t("secrets.biometricEnable")}
+          </label>
+        </section>
+      ) : null}
+
       {kinds.map((group) => {
         const draft = draftFor(group.kind);
         const mine = credentials.filter((credential) => credential.kind === group.kind);

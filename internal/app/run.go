@@ -73,6 +73,9 @@ type Dependencies struct {
 	// 提供し続ける。
 	Toolchain platform.Toolchain
 	KeyAgent  platform.KeyAgent
+	// Biometric は、この OS の錠前である。nil なら、この端末に生体認証の道は
+	// 無い——画面はトグルを出さず、解錠は今まで通りパスワードだけになる。
+	Biometric secret.Guardian
 	// ScanHostKeys と Probe は、ネットワークへ出る 2 つの継ぎ目である。nil なら
 	// internal/sshclient がこのプロセスの中で話す。Runner と同じ性質のものであり、
 	// **検査がネットワークへ出ないようにするためにここにある。**
@@ -261,6 +264,10 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	// 常に利用可能にしている。
 	transactions.Seal = passwordService.SealBackup
 	transactions.Unseal = passwordService.OpenBackup
+	// **錠前は差すだけである。** 保管庫は、預かりが在るかどうかを自分で見る。
+	if dependencies.Biometric != nil {
+		passwordService.SetGuardian(dependencies.Biometric)
+	}
 
 	// スナップショットは、どのファイルが設定なのかを知る必要がある。それは Include
 	// グラフが答える問いである。答えを渡す形にすれば、依存の向きは正しいまま保たれる

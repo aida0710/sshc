@@ -368,6 +368,7 @@ describe("ConnectionBasicForm", () => {
         value: {
           exists: true,
           unlocked: true,
+          biometric: { available: false, enabled: false },
           aliases: [],
           dedicatedKeyPassphrases: [],
           minPassphraseLength: 12,

@@ -45,7 +45,7 @@ function savedState(): ConnectionSavedState {
     keys: { status: "ready", value: [] },
     vault: {
       status: "ready",
-      value: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 },
+      value: { exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 },
     },
     credentials: { status: "ready", value: [] },
     eligibility: { status: "ready", value: { alias: "bastion", storable: true, blockers: [], warnings: [] } },

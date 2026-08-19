@@ -61,6 +61,24 @@ export function folderRows(items: KeyItem[], groups: string[]): FolderRow[] {
   return rows;
 }
 
+// **この画面は「鍵」であって「~/.ssh のファイル一覧」ではない。**
+//
+// 分類は全ファイルに対して行われる——名前ではなく中身と権限で見るので、
+// 変な名前の秘密鍵も、誰でも読めるファイルも取りこぼさない。だが分類した
+// 結果を全部並べると、鍵の画面に .DS_Store と設定ファイルと known_hosts が
+// 並ぶ。設定ファイルにも known_hosts にも、それぞれ専用の画面が既にある。
+//
+// **危ういものだけは、鍵でなくても残す。** 全部を並べていた理由がそこに
+// あったので、絞り込みでその目まで潰さない。
+const keyKinds = new Set(["private_key", "public_key", "certificate"]);
+
+export type ListFilter = "keys" | "all";
+
+export function shownItems(items: KeyItem[], filter: ListFilter): KeyItem[] {
+  if (filter === "all") return items;
+  return items.filter((item) => keyKinds.has(item.kind) || item.permissionRisk);
+}
+
 export type MoveOutcome = {
   moved: string[];
   unchanged: string[];

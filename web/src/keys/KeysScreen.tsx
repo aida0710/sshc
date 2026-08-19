@@ -35,7 +35,9 @@ import {
   groupOfKeyPath,
   itemsInFolder,
   moveInto,
+  shownItems,
   type Folder,
+  type ListFilter,
   type MoveOutcome,
   type MoveTarget,
 } from "./organizer";
@@ -233,6 +235,7 @@ export function KeysScreen({
   const [dragging, setDragging] = useState(false);
   const [moveOutcome, setMoveOutcome] = useState<MoveOutcome | null>(null);
   const [moveTarget, setMoveTarget] = useState("");
+  const [listFilter, setListFilter] = useState<ListFilter>("keys");
   const [generated, setGenerated] = useState<{
     private: GeneratedPrivateKeyHandoff;
     public: GeneratedPublicKeyHandoff;
@@ -571,8 +574,9 @@ export function KeysScreen({
   }
 
   const query = keyQuery.trim().toLowerCase();
-  const rows = folderRows(inventory.items, groups);
-  const visibleItems = itemsInFolder(inventory.items, folder).filter((item) =>
+  const shown = shownItems(inventory.items, listFilter);
+  const rows = folderRows(shown, groups);
+  const visibleItems = itemsInFolder(shown, folder).filter((item) =>
     query === "" ||
     item.relativePath.toLowerCase().includes(query) ||
     item.kind.toLowerCase().includes(query) ||
@@ -595,6 +599,17 @@ export function KeysScreen({
         actions={
           <>
             <a href="#create-key-heading" className={secondaryAction}>{t("keys.createHeading")}</a>
+            <label>
+              <span className="sr-only">{t("keys.listFilter")}</span>
+              <select
+                className={control}
+                value={listFilter}
+                onChange={(event) => setListFilter(event.target.value as ListFilter)}
+              >
+                <option value="keys">{t("keys.listFilterKeys")}</option>
+                <option value="all">{t("keys.listFilterAll")}</option>
+              </select>
+            </label>
             <label className="w-72 max-w-full">
               <span className="sr-only">{t("keys.search")}</span>
               <input
@@ -720,12 +735,15 @@ export function KeysScreen({
                     {/* **掴む場所を決める。** 行ごと掴めるようにすると、文字を
                         選ぼうとした指がそのまま鍵を運んでしまう。持てる場所が
                         目に見えている方が、掴んでよいと分かる。 */}
+                    {/* **掴む場所は大きくする。** 一文字ぶんの幅しかないと、
+                        狙いを定めるだけで手が止まる。行の高さいっぱいを持てる
+                        ようにして、掴んでよい場所が目で分かるようにする。 */}
                     <span
                       draggable
                       aria-label={t("keys.dragKey", { path: item.relativePath })}
                       onDragStart={(event) => beginDrag(event, item)}
                       onDragEnd={() => setDragging(false)}
-                      className="cursor-grab select-none px-1 text-ink-faint"
+                      className="flex cursor-grab select-none items-center rounded px-2 py-2 text-base leading-none text-ink-faint hover:bg-select-fill active:cursor-grabbing"
                     >
                       ⠿
                     </span>

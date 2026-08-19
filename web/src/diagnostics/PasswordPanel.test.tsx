@@ -33,10 +33,10 @@ function buildApi(status: PasswordVaultStatus, overrides: Partial<IntegrationsAp
   } as unknown as IntegrationsApi;
 }
 
-const locked: PasswordVaultStatus = { exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
-const empty: PasswordVaultStatus = { exists: false, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
-const unlocked: PasswordVaultStatus = { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
-const withPassword: PasswordVaultStatus = { exists: true, unlocked: true, aliases: ["bastion"], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
+const locked: PasswordVaultStatus = { exists: true, unlocked: false, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
+const empty: PasswordVaultStatus = { exists: false, unlocked: false, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
+const unlocked: PasswordVaultStatus = { exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
+const withPassword: PasswordVaultStatus = { exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: ["bastion"], dedicatedKeyPassphrases: [], minPassphraseLength: 12 };
 
 describe("PasswordPanel", () => {
   it("says what storing a password means before offering the field", async () => {

@@ -116,6 +116,8 @@ type Service struct {
 	// 忘れられたタブがひとつあるだけで、マシンの電源が入っているあいだじゅう vault が
 	// 開いたままになってはならない。
 	used time.Time
+	// guardian は、この端末の OS の錠前。nil は錠前が無いことである。
+	guardian Guardian
 	// unattended は、いま走っている「誰も見ていない」呼び出しの数。0 でない
 	// あいだ、use はアイドルの時計に触れない。
 	unattended int
@@ -1080,7 +1082,17 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 	}
 	s.mu.Lock()
 	s.baseline = slices.Clone(sealed)
+	guardian := s.guardian
 	s.mu.Unlock()
+
+	// **生体認証の預かりは、ここで無効になる。** 二つ目の入口は古い鍵を封じた
+	// ものであり、その鍵はもう保管庫を開けない。黙って残せば、次の起動で理由の
+	// 分からない失敗になる——捨てて、画面に「もう一度有効にしてください」と
+	// 言わせる方が正直である。
+	if guardian != nil {
+		_ = s.removeBiometric()
+		_ = guardian.Forget()
+	}
 	return nil
 }
 

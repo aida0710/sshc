@@ -60,6 +60,7 @@ const state: ConnectionSavedState = {
     value: {
       exists: true,
       unlocked: true,
+      biometric: { available: false, enabled: false },
       aliases: ["bastion"],
       dedicatedKeyPassphrases: ["id_work"],
       minPassphraseLength: 12,
