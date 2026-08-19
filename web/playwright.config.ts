@@ -11,7 +11,18 @@ export default defineConfig({
   // 一つずつ動かすので、local は 4 に抑えて操作中の machine を塞がない。
   fullyParallel: true,
   workers: process.env.CI ? 2 : 4,
-  retries: 0,
+  // **CI でだけ、落ちたものをもう一度だけ走らせる。**
+  //
+  // 隠すためではない。**いま起きているのは、人が黙って再実行することである**
+  // ——Windows の runner で 2 回続けて別々の test が落ち、どちらも変更なしの
+  // 再実行で通った。その直し方だと、**不安定だったという事実がどこにも残らない。**
+  // retries を入れると Playwright は "flaky" として数え、要約に出す——落ちた
+  // ことも、二度目で通ったことも、両方見える。
+  //
+  // **1 回だけである。** 2 回 3 回と重ねると、本当に壊れているものが通って
+  // しまう余地がそれだけ増える。手元では 0 のまま——直している最中に
+  // 勝手に通られては困る。
+  retries: process.env.CI ? 1 : 0,
   forbidOnly: true,
   timeout: 30_000,
   expect: { timeout: 10_000 },
