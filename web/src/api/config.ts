@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { asRecord, asArray, asString } from "./guards";
 import type { components } from "./schema";
 
 export type Overview = components["schemas"]["Overview"];
@@ -30,24 +31,8 @@ export type UpdateConnectionRequest = components["schemas"]["UpdateConnectionReq
 export type UpdateConnectionPassword = components["schemas"]["UpdateConnectionPassword"];
 export type UpdateConnectionKeyPassphrase = components["schemas"]["UpdateConnectionKeyPassphrase"];
 
-// 生成された型は契約を記述するに過ぎない。これらの防護は UI が
-// 実際に受け取ったペイロードを検査する。型アサーションは実行時には何も証明しない。
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("invalid_response");
-  }
-  return value as Record<string, unknown>;
-}
 
-function asArray(value: unknown): unknown[] {
-  if (!Array.isArray(value)) throw new Error("invalid_response");
-  return value;
-}
 
-function asString(value: unknown): string {
-  if (typeof value !== "string") throw new Error("invalid_response");
-  return value;
-}
 
 function validateOverview(value: unknown): Overview {
   const record = asRecord(value);

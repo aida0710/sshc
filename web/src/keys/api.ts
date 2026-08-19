@@ -1,4 +1,5 @@
 import { apiClient } from "../api/client";
+import { asRecord, asArray, asString, asNumber, asBoolean, jsonHeaders, issueAction } from "../api/guards";
 import type { components } from "../api/schema";
 
 export type KeyItem = components["schemas"]["KeyItem"];
@@ -94,34 +95,10 @@ export type KeysApi = {
   purge(entryId: string): Promise<PurgeTrashResponse>;
 };
 
-// 生成された型は契約を記述するだけであり、これらのガードは UI が
-// 実際に受け取ったペイロードを検査する。型アサーションは実行時には何も証明しない。
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("invalid_response");
-  }
-  return value as Record<string, unknown>;
-}
 
-function asArray(value: unknown): unknown[] {
-  if (!Array.isArray(value)) throw new Error("invalid_response");
-  return value;
-}
 
-function asString(value: unknown): string {
-  if (typeof value !== "string") throw new Error("invalid_response");
-  return value;
-}
 
-function asNumber(value: unknown): number {
-  if (typeof value !== "number") throw new Error("invalid_response");
-  return value;
-}
 
-function asBoolean(value: unknown): boolean {
-  if (typeof value !== "boolean") throw new Error("invalid_response");
-  return value;
-}
 
 function validateInventory(value: unknown): KeyInventoryResponse {
   const record = asRecord(value);
@@ -262,20 +239,7 @@ function validateRestore(value: unknown): RestoreTrashResponse {
   return record as unknown as RestoreTrashResponse;
 }
 
-const jsonHeaders = { "Content-Type": "application/json" } as const;
 
-// issueAction は、開示と完全削除にサーバーが要求するワンタイムトークンを
-// 鋳造する。呼び出し側は操作とその対象を名指すだけで、トークンが
-// 何に紐付くかは、サーバーがこれから作用する状態から
-// 導出する。トークンは即座に使われ、二度と保存されない。
-async function issueAction(kind: string, target: string): Promise<string> {
-  const response = await apiClient.mutate<IssueActionResponse>("/api/v1/actions", {
-    method: "POST",
-    headers: jsonHeaders,
-    body: JSON.stringify({ kind, target }),
-  });
-  return asString(asRecord(response).token);
-}
 
 export const keysApi: KeysApi = {
   async inventory() {
