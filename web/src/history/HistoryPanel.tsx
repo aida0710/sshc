@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { ApiError, type Problem } from "../api/client";
 import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
-import { secondaryAction } from "../ui/form";
-import { Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 
 function toProblem(error: unknown): Problem {
@@ -94,21 +93,17 @@ export function HistoryPanel() {
               </p>
               <p className="text-xs text-ink-muted">{item.paths.join(", ")}</p>
               <div className="flex gap-2">
-                <button
-                  type="button"
+                <Button
                   disabled={!item.canComplete}
                   onClick={() => void recover(item.id, "complete")}
-                  className={secondaryAction}
                 >
                   {t("history.complete")}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
                   onClick={() => void recover(item.id, "rollback")}
-                  className={secondaryAction}
                 >
                   {t("history.rollBack")}
-                </button>
+                </Button>
               </div>
             </div>
           ))}
@@ -127,14 +122,12 @@ export function HistoryPanel() {
                 <p className="text-xs text-ink-muted">{`${entry.startedAt} · ${entry.status} · ${entry.paths.join(", ")}`}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {(entry.restorable ?? []).map((path) => (
-                    <button
+                    <Button
                       key={path}
-                      type="button"
                       onClick={() => void restore(entry.id, path)}
-                      className={secondaryAction}
                     >
                       {t("history.restorePath", { path })}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </li>

@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
-import { hintText, primaryAction } from "../ui/form";
+import { hintText } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
-import { Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 
 type LockScreenProps = {
   // exists は、この画面が行う 2 つのことを区別する。両者は同じに
@@ -117,13 +117,13 @@ export function LockScreen({ exists, biometric = false, onOpen, api = integratio
           <PasswordField label={t("lock.confirm")} value={confirmation} onChange={setConfirmation} />
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <Button
+            kind="primary"
             type="submit"
             disabled={busy || tooShort || mismatched}
-            className={primaryAction}
           >
             {exists ? t("lock.open") : t("lock.create")}
-          </button>
+          </Button>
           {/* 断られたあとでも、押せば何度でも試せる。 */}
           {exists && biometric ? (
             <button

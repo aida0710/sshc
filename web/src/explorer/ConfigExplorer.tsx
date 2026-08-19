@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { ApiError, type Problem } from "../api/client";
 import { configApi, type FileContents, type Overview, type SavePreview } from "../api/config";
 import { SavePreviewPanel } from "../connections/SavePreview";
 import {
-  dangerAction,
   control,
   fieldLabel,
   hintText,
-  primaryAction,
-  secondaryAction,
   sectionCard,
   sectionHeading,
 } from "../ui/form";
@@ -335,30 +333,25 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
             いたはずの no-op だった。
           */}
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
+            <Button
               onClick={() => void createFile()}
               disabled={newPath === ""}
-              className={secondaryAction}
             >
               {t("explorer.createFile")}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               onClick={() => void createDirectory()}
               disabled={newPath === ""}
-              className={secondaryAction}
             >
               {t("explorer.createDirectory")}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              kind="danger"
               onClick={() => void deleteDirectory()}
               disabled={newPath === ""}
-              className={dangerAction}
             >
               {t("explorer.deleteDirectory")}
-            </button>
+            </Button>
           </div>
           <p className={hintText}>{t("explorer.newFileNote")}</p>
           <details className="text-xs text-ink-muted">
@@ -415,17 +408,16 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
               className="w-full resize-y rounded border border-control-line bg-canvas p-3 font-mono text-xs text-ink focus:border-accent focus:outline-none disabled:border-line disabled:text-ink-faint"
             />
             <div className="flex gap-2">
-              <button type="button" onClick={() => void run("preview")} className={secondaryAction}>
+              <Button onClick={() => void run("preview")}>
                 {t("explorer.preview")}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                kind="primary"
                 onClick={() => void run("save")}
                 disabled={!file.editable}
-                className={primaryAction}
               >
                 {t("explorer.saveFile")}
-              </button>
+              </Button>
             </div>
 
             {file.file.path === undefined || !file.editable ? null : (
@@ -447,40 +439,33 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
                   className={control}
                 />
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
+                  <Button
                     onClick={() => void renameFile()}
                     disabled={renameTo === "" || renameTo === file.file.path || modified}
-                    className={secondaryAction}
                   >
                     {t("explorer.renameFile")}
-                  </button>
+                  </Button>
                   {confirmingDelete ? (
                     <>
-                      <button
-                        type="button"
+                      <Button
+                        kind="danger"
                         onClick={() => void deleteFile()}
-                        className={dangerAction}
                       >
                         {t("explorer.confirmDelete")}
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
                         onClick={() => setConfirmingDelete(false)}
-                        className={secondaryAction}
                       >
                         {t("explorer.cancelDelete")}
-                      </button>
+                      </Button>
                     </>
                   ) : (
-                    <button
-                      type="button"
+                    <Button
                       onClick={() => setConfirmingDelete(true)}
                       disabled={modified}
-                      className={secondaryAction}
                     >
                       {t("explorer.deleteFile")}
-                    </button>
+                    </Button>
                   )}
                 </div>
                 {/*
