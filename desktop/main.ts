@@ -312,8 +312,40 @@ function icon(): NativeImage | null {
  * 入力欄、鍵の指紋、エラーの文言——のための道である。
  */
 function installMenu(): void {
+  // **端末側の入口は、ここから頼む。** 役割だけで組む方針の唯一の例外で、
+  // これは OS が知っている操作ではない。
+  const command: MenuItemConstructorOptions = {
+    label: "Install the sshc command…",
+    click: () => {
+      void installCommandLine();
+    },
+  };
+  // **macOS のアプリメニューは、自分で組むと標準の項目が落ちる。** role:
+  // "appMenu" ひとつなら OS が about / services / hide / quit を入れてくれるが、
+  // そこへ項目を足す道は無いので、足すなら全部を並べ直すことになる。**並べ直す
+  // なら、落とさずに並べる** ——Services も Hide Others も、あって当たり前の
+  // ものであり、無いと「作りかけのアプリ」に見える。
   const application: MenuItemConstructorOptions[] =
-    process.platform === "darwin" ? [{ role: "appMenu" }] : [];
+    process.platform === "darwin"
+      ? [
+          {
+            role: "appMenu",
+            submenu: [
+              { role: "about" },
+              { type: "separator" },
+              command,
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          },
+        ]
+      : [{ label: "sshc", submenu: [command, { type: "separator" }, { role: "quit" }] }];
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       ...application,
@@ -325,18 +357,20 @@ function installMenu(): void {
 }
 
 /**
- * settleInstallation は、外殻が上がるたびに端末側の入口を揃える。
+ * settleInstallation は、外殻が上がったときに、自分の居場所を書き残す。
  *
- * **アプリが開ける理由にも、開けない理由にもしない。** 失敗しても窓は出す
- * ——`sshc` と打てないことと、画面が見られないことは別の話である。ただし
- * 黙りもしない: 公開の名前を他人が持っていたなら、その事実を出す。
+ * **端末側の入口は、もうここでは作らない。**
+ *
+ * かつてここは起動のたびに `~/.local/bin/sshc` を張っていた。**頼まれていない
+ * 仕事であり、しかも macOS ではその仕事が何も達成していなかった** ——あちらの
+ * 既定の PATH に `~/.local/bin` は無いので、張っても `sshc` とは打てない。
+ * `rustup` が `~/.zshrc` を書き換えても許されるのは利用者が自分でそれを打った
+ * からで、**アプリが起動のたびに黙ってやってよい理由にはならない。**
+ *
+ * 端末から使いたい人には、頼める道が 3 つある——`brew install`、install.sh、
+ * そして下のメニュー項目である。**どれも、その人が始める。**
  */
 async function settleInstallation(): Promise<void> {
-  // Windows で端末側の入口を用意するのはインストーラである。**外殻が重ねて
-  // 張ろうとしない。** 安定した場所も PATH も、あちらが持っている。
-  if (managesItsOwnCLI(process.platform)) {
-    await settleManagedCLI();
-  }
   try {
     await recordLinuxLauncher({ packaged: app.isPackaged });
   } catch {
@@ -344,36 +378,50 @@ async function settleInstallation(): Promise<void> {
   }
 }
 
-async function settleManagedCLI(): Promise<void> {
+/**
+ * installCommandLine は、頼まれてはじめて端末側の入口を作る。
+ *
+ * **終わったことを必ず言う。** 利用者がメニューから選んだ操作なので、黙って
+ * 終わるのは「効いたのか分からない」という一番悪い答えになる。置けたなら
+ * 置いた場所を、置けなかったならその理由を出す。
+ */
+async function installCommandLine(): Promise<void> {
+  // Windows で端末側の入口を用意するのはインストーラである。**外殻が重ねて
+  // 張ろうとしない。** 安定した場所も PATH も、あちらが持っている。
+  if (!managesItsOwnCLI(process.platform)) {
+    await dialog.showMessageBox({
+      type: "info",
+      message: "sshc already installs the command line on Windows",
+      detail: "The installer put sshc on your PATH. Open a new terminal and run sshc.",
+    });
+    return;
+  }
   try {
-    const { warning, note, repeated } = await installManagedCLI({ source: binary() });
-    // **同じことを毎回は言わない。** 公開の名前を他人が持っているというのは、
-    // 利用者がそう決めた結果であって、直るのを待つ障害ではない——起動のたびに
-    // モーダルで出せば、閉じ方を覚えさせるだけである。状況が変われば文が変わり、
-    // そのときにまた出る。
-    if (repeated) return;
+    const { warning, note } = await installManagedCLI({ source: binary() });
     if (warning !== null) {
-      dialog.showMessageBox({
+      await dialog.showMessageBox({
         type: "warning",
         message: "sshc could not install the command line",
         detail: warning,
       });
       return;
     }
-    // **置いた場所を、置いた回だけ言う。** リンクを張っただけでは `sshc` と
-    // 打てるようにならない——その名前が PATH に載っているかは、このアプリが
-    // 確かめられることではない（GUI から起きたプロセスの PATH は、利用者が
-    // シェルで見るものではない）。毎回の起動で出さないのは、既に整えた人に
-    // 同じ案内を繰り返さないためである。
-    if (note !== null) {
-      dialog.showMessageBox({
-        type: "info",
-        message: "sshc installed the command line",
-        detail: note,
-      });
-    }
-  } catch {
-    // 写せないことは、アプリが開けない理由にはならない。
+    // **置いた場所を言う。** リンクを張っただけでは `sshc` と打てるように
+    // ならない——その名前が PATH に載っているかは、このアプリが確かめられる
+    // ことではない（GUI から起きたプロセスの PATH は、利用者がシェルで見る
+    // ものではない）。確かめられないことを確かめたふりをするより、置いた場所を
+    // 名指しする。
+    await dialog.showMessageBox({
+      type: "info",
+      message: "sshc installed the command line",
+      detail: note ?? "The sshc command was already pointing here.",
+    });
+  } catch (error) {
+    await dialog.showMessageBox({
+      type: "warning",
+      message: "sshc could not install the command line",
+      detail: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
