@@ -79,9 +79,13 @@ func (s *Service) PasswordEligibility(alias string) (PasswordEligibility, error)
 	if err != nil {
 		return PasswordEligibility{}, err
 	}
-	projection := effective.Project(graph, alias)
+	// **Resolve に訊く。** ここは以前 effective.Project を使っていた。あちらは
+	// Match ブロックの値を決して採らず、complexity として脇に記録するだけで、
+	// この判定はその complexity を一度も読まなかった——`Match host db` の下に
+	// 書かれた設定は、まるごとこの報告から消えていた。
+	resolution := effective.Resolve(graph, alias, s.localFacts())
 
-	if source, off := passwordAuthenticationDisabled(projection); off {
+	if source, off := passwordAuthenticationDisabled(resolution); off {
 		report.Blockers = append(report.Blockers, Notice{
 			Code: BlockerPasswordAuthenticationOff,
 			Path: s.displayPath(source.Path), Line: source.Line,
@@ -93,15 +97,15 @@ func (s *Service) PasswordEligibility(alias string) (PasswordEligibility, error)
 	}
 
 	host := alias
-	if source, ok := projection.Value("HostName"); ok && strings.TrimSpace(source.Value) != "" {
-		host = strings.TrimSpace(source.Value)
+	if source, ok := acceptedDirective(resolution, "HostName"); ok && strings.TrimSpace(firstValue(source)) != "" {
+		host = strings.TrimSpace(firstValue(source))
 	} else {
 		report.Warnings = append(report.Warnings, Notice{Code: WarnHostNameUnresolved, Detail: alias})
 	}
 	report.HostName = host
-	if source, ok := projection.Value("Port"); ok {
-		if _, err := strconv.Atoi(strings.TrimSpace(source.Value)); err == nil {
-			report.Port = strings.TrimSpace(source.Value)
+	if source, ok := acceptedDirective(resolution, "Port"); ok {
+		if _, err := strconv.Atoi(strings.TrimSpace(firstValue(source))); err == nil {
+			report.Port = strings.TrimSpace(firstValue(source))
 		}
 	}
 
@@ -117,9 +121,37 @@ func (s *Service) PasswordEligibility(alias string) (PasswordEligibility, error)
 	return report, nil
 }
 
-func passwordAuthenticationDisabled(projection effective.Projection) (effective.Source, bool) {
-	source, ok := projection.Value("PasswordAuthentication")
-	return source, ok && strings.EqualFold(strings.TrimSpace(source.Value), "no")
+// acceptedDirective は、解決が採用した keyword の指令を返す。
+//
+// 見るのは Accepted であって Values ではない。**既定値を採らないためである** ——
+// Values の側は hostname・user・port の 3 つを書かれていなくても埋めるので、
+// そこから Port を読むと、誰も書いていない 22 が「設定された値」として報告に載る。
+// Accepted に居るのは、実際に設定へ書かれた行だけである。
+//
+// 解決が拒んだとき（Match exec のように、このプロセスが実行しないと決めたものが
+// 混ざっているとき）Accepted は空なので、この関数は何も見つけない。**知らないことを
+// 知っているふりをしない。** 拒否の理由そのものは ComputeEffective が notice として
+// 別に報告する。
+func acceptedDirective(resolution effective.Resolution, keyword string) (effective.Accepted, bool) {
+	for _, entry := range resolution.Accepted {
+		if config.EqualKeyword(entry.Keyword, keyword) {
+			return entry, true
+		}
+	}
+	return effective.Accepted{}, false
+}
+
+func firstValue(entry effective.Accepted) string {
+	if len(entry.Values) == 0 {
+		return ""
+	}
+	return entry.Values[0]
+}
+
+// passwordAuthenticationDisabled は、この alias で password 方式が閉じているかを答える。
+func passwordAuthenticationDisabled(resolution effective.Resolution) (effective.Accepted, bool) {
+	entry, ok := acceptedDirective(resolution, "PasswordAuthentication")
+	return entry, ok && strings.EqualFold(strings.TrimSpace(firstValue(entry)), "no")
 }
 
 // credentialEnvironmentUnsafe reports configuration that can execute or
