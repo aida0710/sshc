@@ -200,3 +200,31 @@ func TestReleaseWindowsStepsStopAtTheFirstFailure(t *testing.T) {
 		}
 	}
 }
+
+// **`make test` を回す job は、外殻の依存も入れておかなければならない。**
+//
+// かつて外殻は素の JS で、`npm test --prefix desktop` は node 標準のテスト
+// ランナーだけで走った——依存が要らないので、web を入れるだけで足りた。
+// TypeScript になってからは tsc を通すので、入れずに回すと **`make test` が
+// 「型検査ができない」で止まる。** 実際 v0.2.0 の最初のリリースがそれで落ちた。
+//
+// **CI では起きない。** あちらの desktop の job は自分で入れており、`make test` を
+// 回すのはリリースの側だけだからである。
+func TestEveryReleaseJobThatRunsMakeTestInstallsTheShell(t *testing.T) {
+	document, _ := readReleaseWorkflow(t)
+	for name, job := range document.Jobs {
+		runsMakeTest := false
+		installsShell := false
+		for _, step := range job.Steps {
+			if strings.Contains(step.Run, "make test") {
+				runsMakeTest = true
+			}
+			if strings.Contains(step.Run, "npm ci --prefix desktop") {
+				installsShell = true
+			}
+		}
+		if runsMakeTest && !installsShell {
+			t.Errorf("jobs.%s runs make test without installing the desktop dependencies it needs", name)
+		}
+	}
+}
