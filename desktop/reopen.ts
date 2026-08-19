@@ -1,4 +1,20 @@
-"use strict";
+// ここで要求するのも、**実際に使う分だけ**の姿である。Electron の App と
+// BrowserWindow をそのまま要求すると、テストは窓を開かないと書けなくなる。
+export type ReopenApp = {
+  on(event: "second-instance" | "activate", listener: () => unknown): unknown;
+};
+
+export type ReopenWindow = {
+  isMinimized(): boolean;
+  restore(): unknown;
+  show(): unknown;
+  focus(): unknown;
+};
+
+export type WindowReopener = {
+  request: () => Promise<void>;
+  start: () => Promise<void>;
+};
 
 /**
  * installWindowReopener は、既存インスタンスへ届く「もう一度開く」を一つの窓へ
@@ -8,20 +24,30 @@
  * しかし engine の入口を待っているあいだも ready 後なので、main の初期化が
  * 終わる前に届きうる。その要求は捨てず、start() まで一つだけ保留する。
  */
-function installWindowReopener({ app, getWindows, createWindow, showFailure }) {
+export function installWindowReopener({
+  app,
+  getWindows,
+  createWindow,
+  showFailure,
+}: {
+  app: ReopenApp;
+  getWindows: () => readonly ReopenWindow[];
+  createWindow: () => Promise<unknown>;
+  showFailure: (error: unknown) => unknown;
+}): WindowReopener {
   let started = false;
   let pending = false;
-  let opening = null;
+  let opening: Promise<void> | null = null;
 
   const reopen = () => {
     // 窓の作成中に二度目が来ても、同じ処理を待たせる。どちらも窓が無いと
     // 読んで別々の入口を取り、二枚作る隙を残さない。
     if (opening !== null) return opening;
-    const attempt = Promise.resolve()
+    const attempt: Promise<void> = Promise.resolve()
       .then(async () => {
         const windows = getWindows();
-        if (windows.length > 0) {
-          const window = windows[0];
+        const window = windows[0];
+        if (window !== undefined) {
           if (window.isMinimized()) window.restore();
           window.show();
           window.focus();
@@ -29,7 +55,9 @@ function installWindowReopener({ app, getWindows, createWindow, showFailure }) {
         }
         await createWindow();
       })
-      .catch((error) => showFailure(error))
+      .catch((error: unknown) => {
+        showFailure(error);
+      })
       .finally(() => {
         if (opening === attempt) opening = null;
       });
@@ -61,5 +89,3 @@ function installWindowReopener({ app, getWindows, createWindow, showFailure }) {
     },
   };
 }
-
-module.exports = { installWindowReopener };

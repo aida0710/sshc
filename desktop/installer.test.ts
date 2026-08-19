@@ -1,18 +1,27 @@
-"use strict";
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { engineBinary, managesItsOwnCLI } from "./installer.js";
+import { resource } from "./paths.js";
 
-const assert = require("node:assert/strict");
-const { test } = require("node:test");
-const { readFileSync } = require("node:fs");
-const { join } = require("node:path");
-const { engineBinary, managesItsOwnCLI } = require("./installer");
-
+// **resource() を通す。** 走っているのは out/ の中なので、__dirname から
+// 直に package.json を指すと存在しない道になる。
 const configuration = JSON.parse(
-  readFileSync(join(__dirname, "package.json"), "utf8"),
-);
-const installerSource = readFileSync(
-  join(__dirname, "build", "installer.nsh"),
-  "utf8",
-);
+  readFileSync(resource("package.json"), "utf8"),
+) as {
+  name: string;
+  productName: string;
+  main: string;
+  scripts: Record<string, string>;
+  build: {
+    files: string[];
+    afterPack: string;
+    nsis: Record<string, unknown>;
+    win: { extraResources: { from: string; to: string }[] };
+  };
+};
+const installerSource = readFileSync(resource("build", "installer.nsh"), "utf8");
 
 // **説明ではなく、書いてあることを見る。** 注釈の中の語で落ちる検査は、
 // いずれ注釈を消すことで直される——残すべきものの方が先に消える。
@@ -159,8 +168,24 @@ test("each platform has its own dist script and none of them build the others", 
       .sort(),
     ["dist:linux", "dist:mac", "dist:win"],
   );
-  assert.strictEqual(scripts["dist:win"], "electron-builder --win");
+  // **他の OS の旗を持たないこと。** 綴りの完全一致では、前に付けた
+  // `npm run build &&` のような無関係な変更でも赤くなる——見たいのは
+  // 「この script が win 以外を作らない」ことだけである。
+  const win = scripts["dist:win"] ?? "";
+  assert.ok(win.includes("electron-builder --win"), `dist:win does not build win: ${win}`);
+  assert.ok(!win.includes("--mac") && !win.includes("--linux"), `dist:win builds another platform: ${win}`);
   assert.ok(!("dist" in scripts), "the combined dist script is still there");
+
+  // **束を作る前に、必ず焼き直す。** TypeScript の出力が out/ に入る以上、
+  // 焼かずに electron-builder を呼ぶと、束に入るのは前回の JS である——
+  // 直したはずの外殻が入っていない束が、黙って出来上がる。
+  for (const platform of ["dist:mac", "dist:linux", "dist:win"]) {
+    assert.match(
+      scripts[platform] ?? "",
+      /^npm run build &&/,
+      `${platform} packages without compiling first`,
+    );
+  }
 });
 
 // **Windows では外殻が端末側の入口を作らない。** 安定した場所も PATH も
@@ -180,17 +205,67 @@ test("the install directory is named for the product, not for the npm package", 
   assert.strictEqual(configuration.productName, "sshc");
 });
 
+// ships は、electron-builder の files の綴りで、その道が束に入るかを答える。
+//
+// 使っているのは `*`（`/` を跨がない任意）と、先頭の `!`（打ち消し）だけである。
+// **files に書いてよい綴りをこの二つに限っているから、ここで判定できる。**
+function ships(path: string): boolean {
+  const matches = (pattern: string): boolean =>
+    new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*")}$`).test(path);
+  const positive = configuration.build.files.filter((p) => !p.startsWith("!"));
+  const negative = configuration.build.files.filter((p) => p.startsWith("!"));
+  return positive.some(matches) && !negative.some((p) => matches(p.slice(1)));
+}
+
+// requiredModules は、main.ts から辿れる自前の module をすべて返す。
+//
+// **一覧を手で並べない。** かつてここは 4 つを名指しで並べており、その後に
+// 増えた entrance・tray・reopen・paths は誰にも数えられていなかった。束から
+// 漏れた module は、**起動して初めて** `Cannot find module` で分かる——CI では
+// 一度も起こらない失敗である。辿って求めれば、次に増えるものも自動で入る。
+function requiredModules(): string[] {
+  const found = new Set<string>();
+  const walk = (name: string): void => {
+    if (found.has(name)) return;
+    found.add(name);
+    const source = readFileSync(resource(`${name}.ts`), "utf8");
+    for (const reference of source.matchAll(/from "\.\/([\w-]+)\.js"/g)) {
+      walk(reference[1] as string);
+    }
+  };
+  walk("main");
+  // preload は誰も import しない。**main が実行時に道として渡すだけ**なので、
+  // 辿っては見つからない——ここだけは名指しで足す。
+  found.add("preload");
+  return [...found];
+}
+
 // 束に入るファイルの一覧から漏れると、実行時に require が失敗する。
-test("the packaged files include every module main.js requires", () => {
-  for (const module of [
-    "installer.js",
-    "launcher.js",
-    "install-cli.js",
-    "lifecycle.js",
-  ]) {
-    assert.ok(
-      configuration.build.files.includes(module),
-      `${module} is not packaged`,
-    );
+test("the packaged files include every module the shell loads", () => {
+  const modules = requiredModules();
+  assert.ok(modules.length >= 9, `only ${modules.length} modules were traced`);
+  for (const module of modules) {
+    assert.ok(ships(`out/${module}.js`), `out/${module}.js is not packaged`);
   }
+});
+
+// **束の入口は、束に入るものでなければならない。**
+test("the entry point named by package.json is itself packaged", () => {
+  assert.strictEqual(configuration.main, "out/main.js");
+  assert.ok(ships(configuration.main), "the main entry point is not packaged");
+});
+
+// **テストは出荷しない。** out/ をまとめて入れる綴りにした以上、打ち消しが
+// 効いていることを確かめないと、一時ディレクトリを作る道具が束の中へ入る。
+test("the tests and the build-time hook stay out of the bundle", () => {
+  for (const excluded of [
+    "out/installer.test.js",
+    "out/install-cli.test.js",
+    "out/paths.test.js",
+    "out/adhoc.js",
+  ]) {
+    assert.ok(!ships(excluded), `${excluded} is packaged`);
+  }
+  // afterPack の hook は束の外から読まれる。**在ることは要るが、入ることは要らない。**
+  assert.strictEqual(configuration.build.afterPack, "./out/adhoc.js");
 });

@@ -1,18 +1,30 @@
-"use strict";
-
-const assert = require("node:assert/strict");
-const { test } = require("node:test");
-const {
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { SpawnOptions } from "node:child_process";
+import {
   engineSpawnOptions,
   spawnEngine,
   stopOwnedEngine,
   shouldQuitAfterLastWindow,
-} = require("./lifecycle");
+} from "./lifecycle.js";
 
 /** stubChild は、spawn が返す子の最小の姿を作る。 */
-function stubChild() {
-  const listeners = {};
-  const child = {
+type StubChild = {
+  exitCode: number | null;
+  signalCode: string | null;
+  ended: boolean;
+  killed: string | null;
+  stdout: Record<string, never>;
+  stderr: { on(name: string, handler: (chunk: Buffer | string) => unknown): unknown };
+  stdin: { end(): void };
+  kill(signal: "SIGKILL"): void;
+  once(name: string, listener: () => unknown): void;
+  emit(name: string): void;
+};
+
+function stubChild(): StubChild {
+  const listeners: Record<string, (() => unknown) | undefined> = {};
+  const child: StubChild = {
     exitCode: null,
     signalCode: null,
     ended: false,
@@ -25,7 +37,7 @@ function stubChild() {
       },
     },
     kill(signal) {
-      this.killed = signal;
+      child.killed = signal;
     },
     once(name, listener) {
       listeners[name] = listener;
@@ -45,7 +57,11 @@ test("Electron starts its child through the explicit engine invocation", () => {
     "/Applications/sshc.app/Contents/Resources/sshc",
     "C:\\Users\\a\\AppData\\Local\\Programs\\sshc\\resources\\cli\\sshc.exe",
   ]) {
-    const calls = [];
+    const calls: {
+      binary: string;
+      args: readonly string[];
+      options: SpawnOptions;
+    }[] = [];
     const child = stubChild();
     const spawned = spawnEngine((calledBinary, args, options) => {
       calls.push({ binary: calledBinary, args, options });
@@ -63,7 +79,7 @@ test("Electron starts its child through the explicit engine invocation", () => {
         },
       },
     ]);
-    assert.ok(!calls[0].args.includes("--own-engine"));
+    assert.ok(!calls[0]?.args.includes("--own-engine"));
   }
 });
 
@@ -72,29 +88,34 @@ test("Electron starts its child through the explicit engine invocation", () => {
 test("the spawn options expose no channel beyond the three standard streams", () => {
   const options = engineSpawnOptions();
   assert.deepEqual(Object.keys(options).sort(), ["stdio", "windowsHide"]);
-  assert.strictEqual(options.stdio.length, 3);
-  assert.strictEqual(options.stdio[0], "pipe");
+  const stdio = options.stdio as readonly string[];
+  assert.strictEqual(stdio.length, 3);
+  assert.strictEqual(stdio[0], "pipe");
 });
 
 // **stderr はパイプだが読み続けなければならない。** 読まずに置くと 64 KiB で
 // 埋まり、その先で止まるのは write を呼んだ engine 自身になる——症状は
 // 「アプリが黙って固まる」であって、原因が engine に見える壊れ方をする。
 test("the engine's stderr is drained instead of being left to fill", () => {
-  const written = [];
+  const written: string[] = [];
   const child = stubChild();
-  let listener = null;
+  let listener: ((chunk: Buffer | string) => unknown) | null = null;
   child.stderr = {
-    on: (name, handler) => {
+    on: (name: string, handler: (chunk: Buffer | string) => unknown) => {
       if (name === "data") listener = handler;
     },
   };
 
   spawnEngine(() => child, "/bin/sshc", {
-    write: (chunk) => written.push(String(chunk)),
+    write: (chunk: Buffer | string) => written.push(String(chunk)),
   });
 
-  assert.ok(listener !== null, "nothing is reading the engine's stderr");
-  listener("could not take the engine lock\n");
+  // **`as` はここでは飾りではない。** listener に入るのは spawnEngine が
+  // 呼ぶ callback の中でだけなので、TS はこの行の時点で「まだ null しか
+  // 入っていない」と読む——そのままだと次の行の絞り込みが never になる。
+  const reader = listener as ((chunk: Buffer | string) => unknown) | null;
+  assert.ok(reader !== null, "nothing is reading the engine's stderr");
+  reader("could not take the engine lock\n");
   assert.deepEqual(written, ["could not take the engine lock\n"]);
 });
 

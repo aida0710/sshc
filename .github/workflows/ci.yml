@@ -243,6 +243,22 @@ jobs:
         shell: pwsh
         run: npm ci --prefix desktop
 
+      # 外殻も TypeScript である。**ここは lint の代わりではなく、lint より
+      # 強い。** 素の JS だったころ、この package を静的に見るものは何も無く、
+      # 綴り違いも undefined も、走らせて初めて分かった。
+      #
+      # npm test も内側で tsc を通すが、段を分けておくと**型で落ちたのか
+      # テストで落ちたのかが、名前だけで分かる。**
+      - name: Typecheck (Unix)
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: npm run typecheck --prefix desktop
+
+      - name: Typecheck (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: npm run typecheck --prefix desktop
+
       # Electron の描画そのものは手動受け入れに残す。ここでは、外殻が持つ
       # link・入口URL・二重起動時のウィンドウ復帰を Node 標準テストで検査する。
       - name: Lifecycle tests (Unix)

@@ -6,15 +6,17 @@
   "private": true,
   "author": "aida0710",
   "description": "The desktop shell for sshc",
-  "main": "main.js",
+  "main": "out/main.js",
   "scripts": {
     "postinstall": "install-electron",
-    "start": "electron .",
-    "test": "node --test entrance.test.js reopen.test.js lifecycle.test.js install-cli.test.js launcher.test.js installer.test.js",
-    "icons": "node icon.mjs",
-    "dist:mac": "electron-builder --mac",
-    "dist:linux": "electron-builder --linux",
-    "dist:win": "electron-builder --win"
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "npm run build && electron .",
+    "test": "npm run build && node --test --enable-source-maps out/entrance.test.js out/reopen.test.js out/lifecycle.test.js out/install-cli.test.js out/launcher.test.js out/installer.test.js out/paths.test.js",
+    "icons": "npm run build && node out/icon.mjs",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:win": "npm run build && electron-builder --win"
   },
   "devDependencies": {
     "electron": "^43.0.0",
@@ -26,15 +28,12 @@
       "buildResources": "build"
     },
     "files": [
-      "main.js",
-      "lifecycle.js",
-      "preload.js",
-      "install-cli.js",
-      "launcher.js",
-      "installer.js",
-      "entrance.js",
-      "reopen.js",
-      "tray.js",
+      "out/*.js",
+      "out/*.js.map",
+      "!out/*.test.js",
+      "!out/*.test.js.map",
+      "!out/adhoc.js",
+      "!out/adhoc.js.map",
       "build/icon.png",
       "build/trayTemplate.png",
       "build/trayTemplate@2x.png"
@@ -115,6 +114,6 @@
       "include": "build/installer.nsh",
       "allowToChangeInstallationDirectory": false
     },
-    "afterPack": "./adhoc.js"
+    "afterPack": "./out/adhoc.js"
   }
 }
