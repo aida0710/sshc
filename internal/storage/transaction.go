@@ -317,6 +317,38 @@ func (m *Manager) CommitAtomic(request Request) (Result, error) {
 	return m.commit(request, true)
 }
 
+// journalPlan は、これから記録するエントリと、それに紐づく内容をひとつの値にする。
+//
+// **3 つのスライスは添字で対応する。** かつては commit の中に並んで宣言されており、
+// 対応を保っているのは書く人の注意だけだった——片方にだけ append した日、ジャーナルは
+// 別のファイルの以前の内容を指すことになる。ここを通れば、3 つが揃わない状態を
+// 書きようがない。
+//
+// staged は、これから書く内容（ファイルの置き換えだけが持つ）。previous は、置き換え
+// られる前の内容（バックアップを取る操作だけが持つ）。どちらも無い操作では nil である。
+type journalPlan struct {
+	entries  []journalEntry
+	staged   [][]byte
+	previous [][]byte
+}
+
+func newJournalPlan(capacity int) *journalPlan {
+	return &journalPlan{
+		entries:  make([]journalEntry, 0, capacity),
+		staged:   make([][]byte, 0, capacity),
+		previous: make([][]byte, 0, capacity),
+	}
+}
+
+// add は、エントリひとつと、それに紐づく内容を同時に足す。
+func (p *journalPlan) add(entry journalEntry, staged, previous []byte) {
+	p.entries = append(p.entries, entry)
+	p.staged = append(p.staged, staged)
+	p.previous = append(p.previous, previous)
+}
+
+func (p *journalPlan) len() int { return len(p.entries) }
+
 func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) {
 	if request.Operation == "" {
 		return Result{}, ErrInvalidOperation
@@ -329,232 +361,28 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 
 	capacity := len(request.Changes) + len(request.Moves) + len(request.Removals) +
 		len(request.Directories) + len(request.RemoveDirectories)
-	entries := make([]journalEntry, 0, capacity)
-	stagedContents := make([][]byte, 0, capacity)
-	previousContents := make([][]byte, 0, capacity)
-	written := make([]string, 0, capacity)
-	claimed := make([]string, 0, capacity*2)
-
-	claim := func(path string) error {
-		if journalPathAlreadyClaimed(claimed, path) {
-			return ErrDuplicatePath
-		}
-		claimed = append(claimed, path)
-		return nil
+	// 計画を組むのは commitBuilder である。**ここから下はもう組み立てない** ——
+	// 記録し、ステージし、置き換えるだけである。
+	builder := &commitBuilder{
+		manager: m, request: request,
+		plan:    newJournalPlan(capacity),
+		written: make([]string, 0, capacity),
+		claimed: make([]string, 0, capacity*2),
+		planned: map[string]bool{},
 	}
-
-	// planned は、このリクエストが作るすべてのディレクトリと、ルートより下にある
-	// そのそれぞれの祖先である。これにより、そのいずれかに書き込まれる変更は、まだ
-	// ディスク上に何もなくても解決できる。
-	planned := map[string]bool{}
 	for _, create := range request.Directories {
 		cleaned, err := m.workspace.ResolveDirectory(create.Path)
 		if err != nil {
 			return Result{}, err
 		}
 		for current := cleaned; m.workspace.Contains(current) && current != m.workspace.Root(); current = filepath.Dir(current) {
-			planned[current] = true
+			builder.planned[current] = true
 		}
 	}
-
-	// ディレクトリが先。変更には置き場所が要り、移動には存在する
-	// 行き先が要る。
-	for _, create := range request.Directories {
-		target, err := m.workspace.ResolveDirectory(create.Path)
-		if err != nil {
-			return Result{}, err
-		}
-		if err := claim(target); err != nil {
-			return Result{}, err
-		}
-		// すでにそこにあるかどうかが、巻き戻しの内容を決める。このトランザクションが
-		// 作っていないディレクトリを取り除けば、誰も触れてくれと頼んでいないものを
-		// 削除することになる。
-		existed := false
-		if _, statErr := fileSystem.Lstat(target); statErr == nil {
-			existed = true
-		} else if !errors.Is(statErr, fs.ErrNotExist) {
-			return Result{}, statErr
-		}
-		entries = append(entries, journalEntry{
-			Action:      actionMakeDir,
-			Path:        target,
-			HadPrevious: existed,
-			Mode:        uint32(DirectoryPermission),
-		})
-		stagedContents = append(stagedContents, nil)
-		previousContents = append(previousContents, nil)
+	if err := builder.stage(); err != nil {
+		return Result{}, err
 	}
-
-	for _, change := range request.Changes {
-		target, err := m.workspace.ResolveForWriteUnder(change.Path, planned)
-		if err != nil {
-			return Result{}, err
-		}
-		if err := claim(target); err != nil {
-			return Result{}, err
-		}
-
-		previous, mode, exists, err := m.currentState(target)
-		if err != nil {
-			return Result{}, err
-		}
-		actual := ""
-		expected := ""
-		if exists {
-			actual = Digest(previous)
-		}
-		if change.Precondition.Exists {
-			expected = change.Precondition.Digest
-		}
-		if actual != expected {
-			return Result{}, &ConflictError{Path: target, Expected: expected, Actual: actual, Current: previous}
-		}
-
-		entry := journalEntry{
-			Action:      actionWrite,
-			Path:        target,
-			NoBackup:    change.SkipBackup,
-			HadPrevious: exists,
-			Mode:        uint32(mode),
-			Digest:      Digest(change.Contents),
-		}
-		if exists {
-			entry.PreviousDigest = actual
-		}
-		entries = append(entries, entry)
-		stagedContents = append(stagedContents, change.Contents)
-		previousContents = append(previousContents, previous)
-		written = append(written, target)
-	}
-
-	for _, move := range request.Moves {
-		source, err := m.workspace.ResolveForWrite(move.From)
-		if err != nil {
-			return Result{}, err
-		}
-		target, err := m.workspace.ResolveForWriteUnder(move.To, planned)
-		if err != nil {
-			return Result{}, err
-		}
-		if err := claim(source); err != nil {
-			return Result{}, err
-		}
-		if err := claim(target); err != nil {
-			return Result{}, err
-		}
-		if _, statErr := fileSystem.Lstat(target); statErr == nil {
-			return Result{}, ErrMoveTargetExists
-		} else if !errors.Is(statErr, fs.ErrNotExist) {
-			return Result{}, statErr
-		}
-
-		digest, mode, err := m.sourceState(source, move.Precondition)
-		if err != nil {
-			return Result{}, err
-		}
-		entries = append(entries, journalEntry{
-			Action:         actionMove,
-			Path:           source,
-			Target:         target,
-			HadPrevious:    true,
-			Mode:           uint32(mode),
-			Digest:         digest,
-			PreviousDigest: digest,
-		})
-		stagedContents = append(stagedContents, nil)
-		previousContents = append(previousContents, nil)
-		written = append(written, target)
-	}
-
-	for _, removal := range request.Removals {
-		target, err := m.workspace.ResolveForWrite(removal.Path)
-		if err != nil {
-			return Result{}, err
-		}
-		if err := claim(target); err != nil {
-			return Result{}, err
-		}
-		digest, mode, err := m.sourceState(target, removal.Precondition)
-		if err != nil {
-			return Result{}, err
-		}
-		var previous []byte
-		if removal.Backup {
-			if previous, err = m.workspace.FileSystem().ReadFile(target); err != nil {
-				return Result{}, err
-			}
-		}
-		entries = append(entries, journalEntry{
-			Action:         actionRemove,
-			Path:           target,
-			NoBackup:       !removal.Backup,
-			HadPrevious:    true,
-			Mode:           uint32(mode),
-			Digest:         digest,
-			PreviousDigest: digest,
-		})
-		stagedContents = append(stagedContents, nil)
-		previousContents = append(previousContents, previous)
-		written = append(written, target)
-	}
-
-	// ディレクトリの削除は最後で、実行される時点でそれぞれ空でなければならない。
-	// 検査は、このリクエストが残すことになるディスクの状態に対して行う。この同じ
-	// リクエストが移動させ、削除し、あるいはディレクトリとして取り除くエントリは、
-	// その親を生かし続けない。以前は現状のディスクに対して検査していたため、呼び出し
-	// 側は一方のトランザクションで木を空にし、次のトランザクションで取り除かねばなら
-	// なかった — つまり操作が自分で始めたことを終えられず、二つのあいだでクラッシュ
-	// すれば空の抜け殻が残った。
-	//
-	// 深いものから順が唯一成立する順序であり、ここで整列しておくことが、呼び出し側に
-	// それを知らせずに済ませている。
-	ordered := append([]DirectoryRemoval(nil), request.RemoveDirectories...)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		return strings.Count(ordered[i].Path, string(filepath.Separator)) >
-			strings.Count(ordered[j].Path, string(filepath.Separator))
-	})
-	for _, removal := range ordered {
-		target, err := m.workspace.ResolveDirectory(removal.Path)
-		if err != nil {
-			return Result{}, err
-		}
-		if err := claim(target); err != nil {
-			return Result{}, err
-		}
-		info, statErr := fileSystem.Lstat(target)
-		if errors.Is(statErr, fs.ErrNotExist) {
-			// 何もすることがない。エラーでもない。すでに消えているディレクトリを
-			// 取り除くことは、呼び出し側が求めた状態である。
-			continue
-		}
-		if statErr != nil {
-			return Result{}, statErr
-		}
-		if !info.IsDir() {
-			return Result{}, ErrNotDirectory
-		}
-		contents, err := fileSystem.ReadDir(target)
-		if err != nil {
-			return Result{}, err
-		}
-		for _, entry := range contents {
-			// claimed は、このリクエストがすでに責任を引き受けたすべてのパスを
-			// 保持する。移動の元、削除、そしてこれより深いところに列挙された
-			// ディレクトリの削除である。
-			if !journalPathAlreadyClaimed(claimed, filepath.Join(target, entry.Name())) {
-				return Result{}, ErrDirectoryNotEmpty
-			}
-		}
-		entries = append(entries, journalEntry{
-			Action:      actionRemoveDir,
-			Path:        target,
-			HadPrevious: true,
-			Mode:        uint32(info.Mode().Perm()),
-		})
-		stagedContents = append(stagedContents, nil)
-		previousContents = append(previousContents, nil)
-	}
+	plan, written := builder.plan, builder.written
 
 	if m.Validate != nil {
 		if err := m.Validate(request); err != nil {
@@ -581,7 +409,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 		Operation: request.Operation,
 		Status:    statusStaging,
 		StartedAt: m.now().UTC(),
-		Entries:   entries,
+		Entries:   plan.entries,
 		Atomic:    rollbackOnError,
 	}
 	journalPath := filepath.Join(journalDirectory, identifier+".json")
@@ -641,9 +469,10 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 
 	// 何かが置き換えられたり unlink されたりする前に、以前の内容をコピーする。移動に
 	// コピーは不要だ。ファイルの唯一のコピーをそのまま保つからである。置き換えには
-	// 常に必要で、削除には呼び出し側が求めたときにちょうど必要になる。entries と、
-	// staged および previous のスライスは、Commit の全体を通じて添字が対応したまま
-	// である。
+	// 常に必要で、削除には呼び出し側が求めたときにちょうど必要になる。
+	//
+	// **record.Entries の添字は journalPlan の添字である。** ジャーナルへ書いたのは
+	// plan.entries そのものなので、以前の内容もステージする内容も、同じ添字で引ける。
 	for index := range record.Entries {
 		entry := &record.Entries[index]
 		if entry.action() != actionWrite && entry.action() != actionRemove {
@@ -660,7 +489,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 		if err := m.workspace.EnsureDirectory(filepath.Dir(backupPath)); err != nil {
 			return fail(err)
 		}
-		contents := previousContents[index]
+		contents := plan.previous[index]
 		if m.Seal != nil {
 			sealed, err := m.Seal(contents)
 			if err != nil {
@@ -684,7 +513,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 			filepath.Dir(entry.Path),
 			temporaryPrefix+identifier+"-",
 			fs.FileMode(entry.Mode),
-			stagedContents[index],
+			plan.staged[index],
 		)
 		if err != nil {
 			return fail(err)
@@ -935,4 +764,259 @@ func (m *Manager) newIdentifier() (string, error) {
 		return "", err
 	}
 	return m.now().UTC().Format("20060102T150405.000") + "-" + hex.EncodeToString(suffix), nil
+}
+
+// commitBuilder は、ひとつのコミットを組み立てる途中の状態である。
+//
+// **フェーズをまたいで持ち回るものを、名前のある値にまとめてある。** 以前これらは
+// commit の 380 行の中に生の変数として並んでおり、どのフェーズが何を触るのかは、
+// 全体を頭に入れないと分からなかった。
+type commitBuilder struct {
+	manager *Manager
+	request Request
+	plan    *journalPlan
+	// written は、このコミットが触ったと呼び出し側へ報告する綴りである。
+	written []string
+	// claimed は、すでに扱った綴りである。**同じ綴りを二度含むリクエストは、
+	// 順序で結果が変わるので受け付けない。**
+	claimed []string
+	// planned は、このリクエストが作るディレクトリと、ルートより下にあるその祖先で
+	// ある。まだディスクに無い場所への書き込みを解決できるのは、これがあるからである。
+	planned map[string]bool
+}
+
+// claim は、この綴りを扱うのが初めてであることを確かめて台帳に載せる。
+func (b *commitBuilder) claim(path string) error {
+	if journalPathAlreadyClaimed(b.claimed, path) {
+		return ErrDuplicatePath
+	}
+	b.claimed = append(b.claimed, path)
+	return nil
+}
+
+// stage は、リクエストの全体を計画へ落とす。**並びに意味がある。**
+func (b *commitBuilder) stage() error {
+	for _, phase := range []func() error{
+		b.stageDirectories, b.stageChanges, b.stageMoves,
+		b.stageRemovals, b.stageDirectoryRemovals,
+	} {
+		if err := phase(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// stageDirectories は、ディレクトリを作る計画を立てる。
+//
+// **これが先である。** 変更には置き場所が要り、移動には存在する行き先が要る。
+func (b *commitBuilder) stageDirectories() error {
+	// ディレクトリが先。変更には置き場所が要り、移動には存在する
+	// 行き先が要る。
+	for _, create := range b.request.Directories {
+		target, err := b.manager.workspace.ResolveDirectory(create.Path)
+		if err != nil {
+			return err
+		}
+		if err := b.claim(target); err != nil {
+			return err
+		}
+		// すでにそこにあるかどうかが、巻き戻しの内容を決める。このトランザクションが
+		// 作っていないディレクトリを取り除けば、誰も触れてくれと頼んでいないものを
+		// 削除することになる。
+		existed := false
+		if _, statErr := b.manager.workspace.FileSystem().Lstat(target); statErr == nil {
+			existed = true
+		} else if !errors.Is(statErr, fs.ErrNotExist) {
+			return statErr
+		}
+		b.plan.add(journalEntry{
+			Action:      actionMakeDir,
+			Path:        target,
+			HadPrevious: existed,
+			Mode:        uint32(DirectoryPermission),
+		}, nil, nil)
+	}
+	return nil
+}
+
+// stageChanges は、ファイルの置き換えを計画する。前提条件が合わなければ、ここで衝突を返す。
+func (b *commitBuilder) stageChanges() error {
+	for _, change := range b.request.Changes {
+		target, err := b.manager.workspace.ResolveForWriteUnder(change.Path, b.planned)
+		if err != nil {
+			return err
+		}
+		if err := b.claim(target); err != nil {
+			return err
+		}
+
+		previous, mode, exists, err := b.manager.currentState(target)
+		if err != nil {
+			return err
+		}
+		actual := ""
+		expected := ""
+		if exists {
+			actual = Digest(previous)
+		}
+		if change.Precondition.Exists {
+			expected = change.Precondition.Digest
+		}
+		if actual != expected {
+			return &ConflictError{Path: target, Expected: expected, Actual: actual, Current: previous}
+		}
+
+		entry := journalEntry{
+			Action:      actionWrite,
+			Path:        target,
+			NoBackup:    change.SkipBackup,
+			HadPrevious: exists,
+			Mode:        uint32(mode),
+			Digest:      Digest(change.Contents),
+		}
+		if exists {
+			entry.PreviousDigest = actual
+		}
+		b.plan.add(entry, change.Contents, previous)
+		b.written = append(b.written, target)
+	}
+	return nil
+}
+
+// stageMoves は、ファイルの移動を計画する。行き先に何かあれば断る。
+func (b *commitBuilder) stageMoves() error {
+	for _, move := range b.request.Moves {
+		source, err := b.manager.workspace.ResolveForWrite(move.From)
+		if err != nil {
+			return err
+		}
+		target, err := b.manager.workspace.ResolveForWriteUnder(move.To, b.planned)
+		if err != nil {
+			return err
+		}
+		if err := b.claim(source); err != nil {
+			return err
+		}
+		if err := b.claim(target); err != nil {
+			return err
+		}
+		if _, statErr := b.manager.workspace.FileSystem().Lstat(target); statErr == nil {
+			return ErrMoveTargetExists
+		} else if !errors.Is(statErr, fs.ErrNotExist) {
+			return statErr
+		}
+
+		digest, mode, err := b.manager.sourceState(source, move.Precondition)
+		if err != nil {
+			return err
+		}
+		b.plan.add(journalEntry{
+			Action:         actionMove,
+			Path:           source,
+			Target:         target,
+			HadPrevious:    true,
+			Mode:           uint32(mode),
+			Digest:         digest,
+			PreviousDigest: digest,
+		}, nil, nil)
+		b.written = append(b.written, target)
+	}
+	return nil
+}
+
+// stageRemovals は、ファイルの削除を計画する。バックアップを取るかは呼び出し側が決める。
+func (b *commitBuilder) stageRemovals() error {
+	for _, removal := range b.request.Removals {
+		target, err := b.manager.workspace.ResolveForWrite(removal.Path)
+		if err != nil {
+			return err
+		}
+		if err := b.claim(target); err != nil {
+			return err
+		}
+		digest, mode, err := b.manager.sourceState(target, removal.Precondition)
+		if err != nil {
+			return err
+		}
+		var previous []byte
+		if removal.Backup {
+			if previous, err = b.manager.workspace.FileSystem().ReadFile(target); err != nil {
+				return err
+			}
+		}
+		b.plan.add(journalEntry{
+			Action:         actionRemove,
+			Path:           target,
+			NoBackup:       !removal.Backup,
+			HadPrevious:    true,
+			Mode:           uint32(mode),
+			Digest:         digest,
+			PreviousDigest: digest,
+		}, nil, previous)
+		b.written = append(b.written, target)
+	}
+	return nil
+}
+
+// stageDirectoryRemovals は、ディレクトリの削除を計画する。
+//
+// **最後である。** 実行される時点でそれぞれ空でなければならず、その検査は
+// 「このリクエストが残すディスクの状態」に対して行う。
+func (b *commitBuilder) stageDirectoryRemovals() error {
+	// ディレクトリの削除は最後で、実行される時点でそれぞれ空でなければならない。
+	// 検査は、このリクエストが残すことになるディスクの状態に対して行う。この同じ
+	// リクエストが移動させ、削除し、あるいはディレクトリとして取り除くエントリは、
+	// その親を生かし続けない。以前は現状のディスクに対して検査していたため、呼び出し
+	// 側は一方のトランザクションで木を空にし、次のトランザクションで取り除かねばなら
+	// なかった — つまり操作が自分で始めたことを終えられず、二つのあいだでクラッシュ
+	// すれば空の抜け殻が残った。
+	//
+	// 深いものから順が唯一成立する順序であり、ここで整列しておくことが、呼び出し側に
+	// それを知らせずに済ませている。
+	ordered := append([]DirectoryRemoval(nil), b.request.RemoveDirectories...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return strings.Count(ordered[i].Path, string(filepath.Separator)) >
+			strings.Count(ordered[j].Path, string(filepath.Separator))
+	})
+	for _, removal := range ordered {
+		target, err := b.manager.workspace.ResolveDirectory(removal.Path)
+		if err != nil {
+			return err
+		}
+		if err := b.claim(target); err != nil {
+			return err
+		}
+		info, statErr := b.manager.workspace.FileSystem().Lstat(target)
+		if errors.Is(statErr, fs.ErrNotExist) {
+			// 何もすることがない。エラーでもない。すでに消えているディレクトリを
+			// 取り除くことは、呼び出し側が求めた状態である。
+			continue
+		}
+		if statErr != nil {
+			return statErr
+		}
+		if !info.IsDir() {
+			return ErrNotDirectory
+		}
+		contents, err := b.manager.workspace.FileSystem().ReadDir(target)
+		if err != nil {
+			return err
+		}
+		for _, entry := range contents {
+			// claimed は、このリクエストがすでに責任を引き受けたすべてのパスを
+			// 保持する。移動の元、削除、そしてこれより深いところに列挙された
+			// ディレクトリの削除である。
+			if !journalPathAlreadyClaimed(b.claimed, filepath.Join(target, entry.Name())) {
+				return ErrDirectoryNotEmpty
+			}
+		}
+		b.plan.add(journalEntry{
+			Action:      actionRemoveDir,
+			Path:        target,
+			HadPrevious: true,
+			Mode:        uint32(info.Mode().Perm()),
+		}, nil, nil)
+	}
+	return nil
 }
