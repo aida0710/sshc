@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type Problem } from "../api/client";
 import { configApi, type GroupMetadata, type Metadata, type Overview, type SavePreview } from "../api/config";
 import { NoticeList, SavePreviewPanel } from "../connections/SavePreview";
-import { formatValues, parseValues } from "../connections/values";
+import { formatValues, parseValues } from "../rules/rules";
 import {
   Field,
   control,
@@ -71,18 +71,13 @@ export function treeOrder(groups: GroupMetadata[]): GroupMetadata[] {
 
 // グループ名は相対的なディレクトリパスであるため、パネルはサーバーも
 // 拒否するものをローカルに拒否する。ここでも行うのは重複のための
-// 重複ではない。"invalid_request"としか言わない往復通信の前に、
-// パネルがどの文字が間違っているかを言えるようにするためである。
-const segmentPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-
-export function isValidGroupName(name: string): boolean {
-  const segments = name.split("/");
-  if (segments.length === 0 || segments.length > 6) return false;
-  const reserved = new Set(["sshc", "config", "known_hosts", "authorized_keys", "connections", "keys"]);
-  return segments.every(
-    (segment) => segmentPattern.test(segment) && !reserved.has(segment.toLowerCase()),
-  );
-}
+// isValidGroupName は、規則の正本（internal/validate）から生成された表の上で判断する。
+//
+// **画面がこれを持つのは、往復の前に「どの文字が間違っているか」を言うためである。**
+// ここが持っていたのは書き写した表で、予約語は Go に 10・こちらに 6 あった——`rc` や
+// `environment` は緑を出してサーバーが invalid_request だけを返していた。
+export { isValidGroupName } from "../rules/rules";
+import { isValidGroupName } from "../rules/rules";
 
 type GroupsPanelProps = {
   // インスペクターの中身を、シェルへ差し出す——接続画面が使うのと

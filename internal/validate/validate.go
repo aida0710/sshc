@@ -29,6 +29,9 @@ var (
 	ErrUnsafeAlias    = errors.New("alias contains characters this application refuses to accept")
 	ErrUnsafeHostname = errors.New("hostname contains characters this application refuses to accept")
 	ErrUnsafePort     = errors.New("port is outside the TCP range")
+	// ErrInvalidGroupName は、connections ディレクトリ配下の安全な相対ディレクトリ
+	// パスになっていないグループ名を報告する。
+	ErrInvalidGroupName = errors.New("group name is not a safe relative directory path")
 )
 
 // safeAliasPattern は、OpenSSH が受け付ける範囲より意図的に狭くしてある。
@@ -38,11 +41,11 @@ var (
 // されたコマンドラインの意味を変えうるし、端末自動化のペイロード内で文字列から
 // 抜け出しうる。この集合の外にある alias が起動されたり評価されたりすることは
 // 決してない。UI は代わりに、コピー可能なテキストとしてそのコマンドを提示する。
-var safeAliasPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+var safeAliasPattern = regexp.MustCompile(AliasPattern)
 
 // safeHostnamePattern は DNS 名と IPv4 リテラルに使う。IPv6 は圧縮表記の先頭や
 // 末尾が ':' になりうるため、文字集合の正規表現ではなく net.ParseIP へ渡す。
-var safeHostnamePattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$`)
+var safeHostnamePattern = regexp.MustCompile(HostnamePattern)
 
 // Alias は、この alias を受け付けてよいかを報告する。
 func Alias(alias string) error {

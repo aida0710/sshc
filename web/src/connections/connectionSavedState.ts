@@ -8,7 +8,7 @@ import type {
 import { selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { deriveBasicField } from "./basicFields";
 import { directIdentityFields, isConcreteIdentityValue } from "./authenticationPolicy";
-import { formatValues } from "./values";
+import { formatValues } from "../rules/rules";
 
 export type Loadable<T> =
   | { status: "loading" }
@@ -96,7 +96,9 @@ function directIdentityValues(detail: HostDetail): string[] {
   return directIdentityFields(detail)
     .map((field) => field.values.filter(isConcreteIdentityValue))
     .filter((values) => values.length > 0)
-    .map(formatValues);
+    // 綴りの無い値はサーバーが書かないので、この絞り込みは実際には何も落とさない。
+    .map(formatValues)
+    .filter((line): line is string => line !== null);
 }
 
 function configuredKey(
