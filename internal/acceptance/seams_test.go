@@ -116,3 +116,39 @@ func TestEveryManagerInTheEngineIsSealed(t *testing.T) {
 		t.Errorf("engine の合成の根が封をしていない: %v", seals)
 	}
 }
+
+// persistenceLayer は、ディスクとネットワークの原始操作を持つパッケージである。
+//
+// トランザクション・ジャーナル・世代バックアップ・封・条件付き PUT。**外向きの
+// 応答がここの語彙で組まれてはならない。** 永続化の都合で付けた名前を変えるだけで
+// HTTP の契約が動いてしまう。実際、storage の sentinel error は 5 つのハンドラから
+// 直接 errors.Is され、そのままレスポンスの code に対応していた。
+var persistenceLayer = []string{
+	`"sshc/internal/storage"`,
+	`"sshc/internal/envelope"`,
+	`"sshc/internal/objectstore"`,
+}
+
+// TestTheTransportDoesNotReachIntoPersistence は、HTTP 層と永続化層の間に
+// サービス層を挟んだままにする。
+//
+// 語彙が要るなら、それを出しているサービスが別名で公開する——internal/keys の
+// IsExternalChange や internal/remotesync の Client がそれである。**別名であって
+// 包み直しではない**ので errors.Is はどちらの綴りでも通り、翻訳の層は増えない。
+func TestTheTransportDoesNotReachIntoPersistence(t *testing.T) {
+	var found []string
+	productionGoFiles(t, func(relative, contents string) {
+		if !strings.HasPrefix(relative, "internal/httpserver/") {
+			return
+		}
+		for _, dependency := range persistenceLayer {
+			if strings.Contains(contents, dependency) {
+				found = append(found, relative+" -> "+dependency)
+			}
+		}
+	})
+	slices.Sort(found)
+	if len(found) != 0 {
+		t.Errorf("HTTP 層が永続化層を直接 import している:\n  %s", strings.Join(found, "\n  "))
+	}
+}

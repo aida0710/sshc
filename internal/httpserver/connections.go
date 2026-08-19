@@ -13,7 +13,6 @@ import (
 	"sshc/internal/application"
 	"sshc/internal/keys"
 	"sshc/internal/secret"
-	"sshc/internal/storage"
 	"sshc/internal/validate"
 )
 
@@ -399,7 +398,6 @@ func decodeConnectionAuthentication(value api.CreateConnectionAuthentication, ta
 }
 
 func connectionProblem(c *echo.Context, err error) error {
-	var storageConflict *storage.ConflictError
 	switch {
 	case errors.Is(err, errInvalidBody), errors.Is(err, errInvalidEdit),
 		errors.Is(err, application.ErrInvalidAlias),
@@ -440,7 +438,7 @@ func connectionProblem(c *echo.Context, err error) error {
 	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoVault),
 		errors.Is(err, secret.ErrEmptySecret), errors.Is(err, secret.ErrUnsafeName):
 		return passwordProblem(c, err)
-	case errors.As(err, &storageConflict):
+	case application.IsExternalChange(err):
 		return problem(c, http.StatusConflict, "vault_conflict")
 	default:
 		return serviceProblem(c, err)
