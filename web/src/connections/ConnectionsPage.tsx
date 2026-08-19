@@ -12,7 +12,9 @@ import {
   type Overview,
   type UpdateConnectionRequest,
 } from "../api/config";
-import { ConnectionTree, type HostSelection } from "./ConnectionTree";
+import { type HostSelection } from "./ConnectionTree";
+import { ConnectionListPane } from "./ConnectionListPane";
+import { MissingConnection, NoConnectionSelected } from "./DetailPlaceholders";
 import { useOverlays, useSaveFeedback, useSelectionState } from "./pageState";
 import type { DragPayload } from "./dragdrop";
 import { HostDetailPanel } from "./HostDetail";
@@ -30,7 +32,6 @@ import { Button, Notice } from "../ui/surface";
 import { duplicateHostBlock, removeHostBlock } from "./blocks";
 import { integrationsApi } from "../api/integrations";
 import type { TerminalSessionsState } from "../terminal/sessions";
-import { Icon } from "../ui/icons";
 import type {
   BrowserLocation,
   NavigationBlocker,
@@ -840,53 +841,21 @@ export function ConnectionsPage({
         「何かが選ばれているか」で決まり、それは既にルートが持っている
         ——だから matchMedia は要らない。選択が変われば、クラスが変わる。 */}
     <div className="grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[19rem_minmax(0,1fr)]">
-      <div
-        className={`min-h-0 flex-col border-r border-line bg-tree md:flex ${
-          selection === null ? "flex" : "hidden"
-        }`}
-      >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-3 py-3">
-          <div className="min-w-0">
-            <h2 className="font-semibold">{t("conn.heading")}</h2>
-            <p className="text-xs text-ink-muted">
-              {t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
-            </p>
-          </div>
-          <Button
-            kind="primary"
-            className="shrink-0 px-2.5 py-1.5 text-xs"
-            onClick={beginCreation}
-          >
-            {t("conn.new")}
-          </Button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {invalidLocation ? (
-            <section className="flex flex-col gap-2 rounded-lg border border-line bg-card p-3 text-sm" role="status">
-              <p className="font-medium">{t("browser.invalidUrl")}</p>
-              <Button
-                className="self-start"
-                onClick={() => {
-                  if (emitLocation(connectionLocation(null), { replace: true })) {
-                    setInvalidLocation(false);
-                  }
-                }}
-              >
-                {t("browser.backToServers")}
-              </Button>
-            </section>
-          ) : (
-            <ConnectionTree
-              overview={overview}
-              selected={selection}
-              onSelect={onSelect}
-              onOpenPatternRule={onOpenFile}
-              onDrop={(payload, target) => void onTreeDrop(payload, target)}
-              movesDisabled={editorDirty || refreshState !== "idle"}
-            />
-          )}
-        </div>
-      </div>
+      <ConnectionListPane
+        overview={overview}
+        selection={selection}
+        invalidLocation={invalidLocation}
+        onDismissInvalidLocation={() => {
+          if (emitLocation(connectionLocation(null), { replace: true })) {
+            setInvalidLocation(false);
+          }
+        }}
+        onBeginCreation={beginCreation}
+        onSelect={onSelect}
+        onOpenPatternRule={onOpenFile}
+        onDrop={(payload, target) => void onTreeDrop(payload, target)}
+        movesDisabled={editorDirty || refreshState !== "idle"}
+      />
       <div
         className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 md:flex md:p-6 ${
           selection === null ? "hidden" : "flex"
@@ -918,35 +887,9 @@ export function ConnectionsPage({
         />
         {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
         {detail === null && missingSelection && selection !== null ? (
-          <section className="m-auto flex max-w-sm flex-col items-center text-center" role="status">
-            <h2 className="text-lg font-semibold text-ink">{t("conn.missingHeading")}</h2>
-            <p className="mt-1 text-sm leading-6 text-ink-muted">{t("conn.missingHint")}</p>
-            <Button
-              kind="primary"
-              className="mt-4"
-              onClick={() => clearTarget({ replace: true })}
-            >
-              {t("conn.backToList")}
-            </Button>
-          </section>
+          <MissingConnection onBackToList={() => clearTarget({ replace: true })} />
         ) : detail === null || savedState === null ? (
-          <section className="m-auto flex max-w-sm flex-col items-center text-center" role="status">
-            <span
-              aria-hidden="true"
-              className="mb-4 flex size-14 items-center justify-center rounded-2xl border border-line bg-card text-ink-muted shadow-sm"
-            >
-              <Icon name="connections" className="size-7" />
-            </span>
-            <h2 className="text-lg font-semibold text-ink">
-              {t(preferredKey === null ? "conn.emptyHeading" : "conn.assignKeyHeading")}
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-ink-muted">
-              {preferredKey === null
-                ? t("conn.emptyHint")
-                : t("conn.assignKeyHint", { path: preferredKey.privateRelativePath })}
-            </p>
-            <Button kind="primary" className="mt-4" onClick={beginCreation}>{t("conn.createAnother")}</Button>
-          </section>
+          <NoConnectionSelected preferredKey={preferredKey} onBeginCreation={beginCreation} />
         ) : (
           <>
             <ConnectionSummary

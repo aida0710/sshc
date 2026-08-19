@@ -6,24 +6,24 @@ import type { SessionState } from "./session/bootstrap";
 import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/CreateConnectionModal";
 import type { FileTarget } from "./explorer/ConfigExplorer";
 import { LockScreen } from "./secrets/LockScreen";
-import { UpdateBadge } from "./shell/UpdateBadge";
 import { OverviewPanel } from "./overview/OverviewPanel";
 import { useLanguage, useTranslate } from "./i18n/context";
-import { locales, type Locale } from "./i18n/locale";
-import { autoControl, secondaryAction } from "./ui/form";
-import { Icon, IconSprite, type IconName } from "./ui/icons";
-import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
+import type { Locale } from "./i18n/locale";
+import { secondaryAction } from "./ui/form";
+import { IconSprite, type IconName } from "./ui/icons";
+import { InspectorPane, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
-import { themes, type Theme } from "./theme/theme";
+import type { Theme } from "./theme/theme";
 import type { MessageKey } from "./i18n/messages";
 import { Button } from "./ui/surface";
 import { sectionPath, type Section } from "./routing/sectionRoute";
+import { AppHeader } from "./shell/AppHeader";
+import { AppNavigation, type NavFace } from "./shell/AppNavigation";
 import type { Declared, Handoff, Navigation, Shell } from "./shell/sectionProps";
 import {
   useSectionRoute,
 } from "./routing/useSectionRoute";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
-import { ConsoleList } from "./terminal/ConsoleList";
 import { useTerminalSessions, type TerminalSessionsState } from "./terminal/sessions";
 
 // xterm.js は 400 kB を超える。どの画面の chunk に入れても、端末を開かない人が
@@ -134,9 +134,6 @@ const navGroups: { label: MessageKey; sections: Section[] }[] = [
   { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Settings", "Sync", "History"] },
 ];
 
-// ナビゲーションの下半分が見せる 2 つの面。Start は上に固定されるので、
-// どちらの面でも出口はある。
-type NavFace = "settings" | "terminal";
 
 const themeLabels: Record<Theme, MessageKey> = {
   system: "shell.themeSystem",
@@ -148,7 +145,7 @@ const themeLabels: Record<Theme, MessageKey> = {
 const navigationId = "primary-navigation";
 
 export function App({ bootstrap, health, vault = integrationsApi.passwordVault }: AppProps) {
-  const { t, locale, setLocale } = useLanguage();
+  const { t } = useLanguage();
   const { theme, setTheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker } = useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
@@ -356,30 +353,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // ターミナル面を一瞬見せてから入れ替えるより、静かである。
   const currentFace: NavFace = navFace ?? "settings";
 
-  function navigationLink(name: Section) {
-    return (
-      <a
-        href={sectionPath(name)}
-        aria-current={section === name ? "page" : undefined}
-        onClick={(event) => {
-          // **遷移したらドロワーを畳む。** 開いたままだと、選んだ先が
-          // 自分の後ろに隠れる。広い画面ではドロワーが無いので何も起きない。
-          setNavigationOpen(false);
-          followSectionLink(event, name);
-        }}
-        // 触れる画面でだけ広げる。**md 以上では元の密度に戻す** —— この一覧は
-        // 1280x720 でスクロールせずに収まることを e2e が保証しており、全幅で
-        // 高くすると末尾の History がビューポートから落ちる。指のための 44px は
-        // 指のある画面のものである。
-        className={`flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm md:px-2 md:py-1.5 ${
-          section === name ? "bg-select-fill text-ink" : "text-ink hover:bg-select-fill"
-        }`}
-      >
-        <Icon name={sectionIcons[name]} className="h-4 w-4 text-ink-muted" />
-        {t(sectionLabels[name])}
-      </a>
-    );
-  }
 
   useEffect(() => {
     let active = true;
@@ -535,100 +508,22 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         ある。狭い画面で inspector が面を覆っても、それを閉じるトグルは必ず
         この帯の上に残る。
       */}
-      <header className="relative z-20 flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2.5 md:gap-3 md:px-6">
-        <button
-          type="button"
-          // ランドマークと同じ名前にしない。**開いているかどうかは名前では
-          // なく aria-expanded が運ぶ** —— Inspector のトグルと同じ作法である。
-          aria-label={t("shell.navigationToggle")}
-          aria-expanded={navigationOpen}
-          aria-controls={navigationId}
-          onClick={() => setNavigationOpen((open) => !open)}
-          className="shrink-0 rounded-md border border-control-line bg-card p-2 md:hidden"
-        >
-          <Icon name="menu" className="h-4 w-4" />
-        </button>
-        {/*
-          アプリケーション名は引き続き h1 であり、開いているセクションは
-          見出しにせずその横に表示する。セクションを見出しにしてしまうと
-          "Known Hosts" と "Remote Keys" が見出し名前空間に二重に入る——
-          ここで一回、パネルでもう一回——Playwright はアクセシブル
-          ネームを部分一致で照合するため、スイートのページレベルクエリは
-          それらの見出しを二つ見つけてしまい、失敗する。
-        */}
-        <h1 className="hidden shrink-0 whitespace-nowrap text-xs font-medium text-ink-muted md:block">{t("shell.title")}</h1>
-        <span aria-hidden="true" className="hidden text-xs text-ink-faint md:inline">/</span>
-        <p className="shrink-0 whitespace-nowrap text-sm font-semibold">
-          {route.kind === "section" ? t(sectionLabels[route.section]) : t("shell.pageNotFound")}
-        </p>
-        {/*
-          狭い画面で落とすのは**文字だけ**である。要素ごと hidden にすると
-          アクセシビリティツリーからも消え、状態を目で読めない人には稼働の
-          有無が伝わらなくなる。残るドットが、見る人のための同じ報せである。
-        */}
-        <p role="status" className="flex min-w-0 items-center gap-1.5 truncate text-xs text-ink-muted">
-          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-live" />
-          <span className="sr-only sm:not-sr-only sm:truncate">
-            {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
-          </span>
-        </p>
-        {inspector === null ? (
-          <span className="ml-auto" />
-        ) : (
-          <span className="ml-auto">
-            <InspectorToggle
-              label={inspector.label}
-              open={inspectorOpen}
-              attention={inspector.attention}
-              onToggle={() => setInspectorOpen((open) => !open)}
-            />
-          </span>
-        )}
-        <label htmlFor="appearance" className="hidden shrink-0 whitespace-nowrap text-sm text-ink-muted md:inline">
-          {t("shell.theme")}
-        </label>
-        {/*
-          狭い画面では細くする。**360px にこの 2 つを丸ごと並べる幅は無く**、
-          言語の select が画面の外へはみ出していた。中の文字は詰められるが、
-          開けば選択肢は全部読める——2 か所に置いて名前を曖昧にするより、
-          1 か所を狭めるほうが安い。
-
-          **min-w-0 が要る。** max-w は「これ以上広げない」であって「これ以下に
-          縮めてよい」ではない。flex 項目の既定の min-width:auto は select を
-          その min-content——いちばん長い選択肢の幅——より細くさせないので、
-          文字が広く出るフォントの機械では、上限を付けていても行が溢れる。
-          実際 CI がそうで、言語の select の右端だけが 3px 外に出ていた。
-          どれだけ溢れるかはフォント次第なので、その幅を削るのではなく、
-          **縮んでよいと言う。**
-        */}
-        <select
-          id="appearance"
-          value={theme}
-          onChange={(event) => setTheme(event.target.value as Theme)}
-          className={`${autoControl} min-w-0 max-w-24 md:max-w-none`}
-        >
-          {themes.map((candidate) => (
-            <option key={candidate} value={candidate}>
-              {t(themeLabels[candidate])}
-            </option>
-          ))}
-        </select>
-        <label htmlFor="language" className="hidden shrink-0 whitespace-nowrap text-sm text-ink-muted md:inline">
-          {t("shell.language")}
-        </label>
-        <select
-          id="language"
-          value={locale}
-          onChange={(event) => setLocale(event.target.value as Locale)}
-          className={`${autoControl} min-w-0 max-w-24 md:max-w-none`}
-        >
-          {locales.map((candidate) => (
-            <option key={candidate} value={candidate}>
-              {t(localeLabels[candidate])}
-            </option>
-          ))}
-        </select>
-      </header>
+      <AppHeader
+        route={route}
+        version={version}
+        state={state}
+        navigationOpen={navigationOpen}
+        navigationId={navigationId}
+        onToggleNavigation={() => setNavigationOpen((open) => !open)}
+        inspector={inspector}
+        inspectorOpen={inspectorOpen}
+        onToggleInspector={() => setInspectorOpen((open) => !open)}
+        sectionLabels={sectionLabels}
+        themeLabels={themeLabels}
+        localeLabels={localeLabels}
+        theme={theme}
+        onThemeChange={setTheme}
+      />
       <div
         className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[15rem_minmax(0,1fr)] ${
           // minmax(0,…) on the middle track for the same reason min-h-0 is on
@@ -655,93 +550,29 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
             className="fixed inset-0 z-20 bg-canvas/70 md:hidden"
           />
         ) : null}
-        <nav
-          id={navigationId}
-          aria-label={t("shell.primaryNavigation")}
-          // 狭い画面ではこの格子の外に出て、面の上に重なる。md 以上では列へ
-          // 戻り、translate も z も打ち消されるので、開閉の state は無視される。
-          className={`fixed inset-y-0 left-0 z-30 flex w-72 min-h-0 flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform md:static md:z-auto md:w-auto md:translate-x-0 ${
-            navigationOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <div className="shrink-0">
-          {/*
-            Start はトグルより上に固定する。ターミナルの面を見ているときでも
-            出口がひとつも無い状態を作らないためである。
-          */}
-          {navGroups.slice(0, 1).map((group) => (
-            <div key={group.label} className="mb-2">
-              <span aria-hidden="true" className="block px-2 pt-2 pb-1 text-xs font-semibold text-ink-muted">
-                {t(group.label)}
-              </span>
-              <ul aria-label={t(group.label)}>
-                {group.sections.map((name) => (
-                  <li key={name}>{navigationLink(name)}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
-          </div>
-          <div
-            role="tablist"
-            aria-label={t("shell.navFaces")}
-            className="my-2 grid shrink-0 grid-flow-col rounded-lg border border-control-line bg-control p-0.5"
-          >
-            {(["settings", "terminal"] as NavFace[]).map((face) => (
-              <button
-                key={face}
-                type="button"
-                role="tab"
-                aria-selected={face === currentFace}
-                onClick={() => setNavFace(face)}
-                className={`rounded-md px-2 py-1 text-xs ${
-                  face === currentFace ? "bg-card text-ink shadow-sm" : "text-ink-muted"
-                }`}
-              >
-                {t(face === "settings" ? "shell.navFaceSettings" : "shell.navFaceTerminal")}
-              </button>
-            ))}
-          </div>
-          {/* 溢れるのはここだけである。開いているコンソールは何本にもなる。 */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-          {currentFace === "terminal" ? (
-            <ConsoleList
-              sessions={orderedConsoles}
-              selected={activeConsole}
-              maxSessions={consoles.maxSessions}
-              busy={consoles.busy}
-              problem={consoles.problem}
-              onSelect={showConsole}
-              onClose={(id) => void consoles.close(id)}
-              onRename={(id, title) => consoles.rename(id, title)}
-              onDuplicate={duplicateConsole}
-              onReorder={setConsoleOrder}
-              onOpenShell={openLocalShell}
-            />
-          ) : (
-            navGroups.slice(1).map((group) => (
-              <div key={group.label} className="mb-2">
-                <span aria-hidden="true" className="block px-2 pt-2 pb-1 text-xs font-semibold text-ink-muted">
-                  {t(group.label)}
-                </span>
-                <ul aria-label={t(group.label)}>
-                  {group.sections.map((name) => (
-                    <li key={name}>{navigationLink(name)}</li>
-                  ))}
-                </ul>
-              </div>
-            ))
-          )}
-          </div>
-          {/*
-            バージョンはナビゲーションの最下部に置く。めったに見ない
-            ものが置かれる場所であり、それを変える唯一のコントロールと共に。
-            **これも動かない。** 溢れるのは上の一覧だけである。
-          */}
-          <div className="shrink-0">
-            <UpdateBadge />
-          </div>
-        </nav>
+        <AppNavigation
+          navigationId={navigationId}
+          navigationOpen={navigationOpen}
+          navGroups={navGroups}
+          section={section}
+          sectionIcons={sectionIcons}
+          sectionLabels={sectionLabels}
+          onNavigate={(event, name) => {
+            // **遷移したらドロワーを畳む。** 開いたままだと、選んだ先が
+            // 自分の後ろに隠れる。広い画面ではドロワーが無いので何も起きない。
+            setNavigationOpen(false);
+            followSectionLink(event, name);
+          }}
+          currentFace={currentFace}
+          onFaceChange={setNavFace}
+          consoles={consoles}
+          orderedConsoles={orderedConsoles}
+          activeConsole={activeConsole}
+          onShowConsole={showConsole}
+          onDuplicateConsole={duplicateConsole}
+          onReorderConsoles={setConsoleOrder}
+          onOpenShell={openLocalShell}
+        />
         {/*
           ここに padding は無い。ウィンドウの端から端まで埋めたいセクション
           ——それ自身が一つの面である Connections のリスト——は、padding

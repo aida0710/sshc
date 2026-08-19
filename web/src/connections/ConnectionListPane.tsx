@@ -1,0 +1,80 @@
+import { Button } from "../ui/surface";
+import { useTranslate } from "../i18n/context";
+import type { HostEntry, Overview } from "../api/config";
+import { ConnectionTree, type HostSelection } from "./ConnectionTree";
+import type { DragPayload } from "./dragdrop";
+
+
+// ConnectionListPane は、左の柱である。宣言されている接続の木と、新しく作る入口。
+//
+// **狭い画面では、これと詳細のどちらかしか出ない。** どちらを出すかは幅ではなく
+// 「何かが選ばれているか」で決まり、それは既にルートが持っている——だから
+// matchMedia は要らない。選択が変われば、クラスが変わる。
+export function ConnectionListPane({
+  overview,
+  selection,
+  invalidLocation,
+  onDismissInvalidLocation,
+  onBeginCreation,
+  onSelect,
+  onOpenPatternRule,
+  onDrop,
+  movesDisabled,
+}: {
+  overview: Overview;
+  selection: HostSelection | null;
+  invalidLocation: boolean;
+  onDismissInvalidLocation: () => void;
+  onBeginCreation: () => void;
+  onSelect: (host: HostEntry) => void;
+  onOpenPatternRule: (path: string, line: number) => void;
+  onDrop: (payload: DragPayload, target: string) => void;
+  movesDisabled: boolean;
+}) {
+  const t = useTranslate();
+  return (
+  <div
+    className={`min-h-0 flex-col border-r border-line bg-tree md:flex ${
+      selection === null ? "flex" : "hidden"
+    }`}
+  >
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-3 py-3">
+      <div className="min-w-0">
+        <h2 className="font-semibold">{t("conn.heading")}</h2>
+        <p className="text-xs text-ink-muted">
+          {t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
+        </p>
+      </div>
+      <Button
+        kind="primary"
+        className="shrink-0 px-2.5 py-1.5 text-xs"
+        onClick={onBeginCreation}
+      >
+        {t("conn.new")}
+      </Button>
+    </div>
+    <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      {invalidLocation ? (
+        <section className="flex flex-col gap-2 rounded-lg border border-line bg-card p-3 text-sm" role="status">
+          <p className="font-medium">{t("browser.invalidUrl")}</p>
+          <Button
+            className="self-start"
+            onClick={onDismissInvalidLocation}
+          >
+            {t("browser.backToServers")}
+          </Button>
+        </section>
+      ) : (
+        <ConnectionTree
+          overview={overview}
+          selected={selection}
+          onSelect={onSelect}
+          onOpenPatternRule={onOpenPatternRule}
+          onDrop={onDrop}
+          movesDisabled={movesDisabled}
+        />
+      )}
+    </div>
+  </div>
+  );
+}
