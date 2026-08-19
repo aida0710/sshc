@@ -23,10 +23,9 @@ import (
 // connectAnswer は、起動中のアプリケーションが返す内容。
 type connectAnswer struct {
 	Alias string `json:"alias"`
-	// KeyPath は、その接続に使う鍵のワークスペース相対パス。
-	KeyPath string `json:"keyPath"`
-	// Passphrase は、その鍵について保存されている答え。無ければ空である。
-	Passphrase string `json:"passphrase"`
+	// Passphrases は、この接続に現れる鍵ごとの保存済みパスフレーズ。キーは
+	// ワークスペース相対の綴りで、行き先だけでなく ProxyJump の手前も含む。
+	Passphrases map[string]string `json:"passphrases"`
 	// Passwords は、この接続に現れる alias ごとの保存済みアカウントパスワード。
 	// 行き先だけでなく ProxyJump の手前も含む。**Passphrase とは別の名前空間である。**
 	Passwords map[string]string `json:"passwords"`

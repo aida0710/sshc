@@ -59,7 +59,7 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.Passphrase != "" {
+	if len(answer.Passphrases) != 0 {
 		t.Fatalf("an account password came back as a key passphrase: %+v", answer)
 	}
 	// 自分の欄には載る。**保存してあるのに使わないなら、保存させる意味が無い。**
@@ -99,7 +99,7 @@ func TestAnAliasWithOnlyAnAccountPasswordCarriesNoKey(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.Passphrase != "" || answer.KeyPath != "" {
+	if len(answer.Passphrases) != 0 {
 		t.Fatalf("a stored account password produced a key answer: %+v", answer)
 	}
 	if answer.Passwords["password-only"] != "stored-account-password" {
@@ -178,8 +178,11 @@ func TestConnectAnswersWithTheKeyPassphraseForTheDirectStoredKey(t *testing.T) {
 
 	engine := connectEngine(t, ConnectHandlers{
 		Secret: cliSecret, Passwords: vault,
-		KeyPassphraseTarget: func(alias string) (string, bool, error) {
-			return "id_ed25519_server", alias == "bastion", nil
+		WorkspaceKeys: func(alias string) ([]string, error) {
+			if alias != "bastion" {
+				return nil, nil
+			}
+			return []string{"id_ed25519_server"}, nil
 		},
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
@@ -194,11 +197,8 @@ func TestConnectAnswersWithTheKeyPassphraseForTheDirectStoredKey(t *testing.T) {
 	// **答えそのものが返る。** 単回トークンにしていたのは、引き換える相手が
 	// 別のプログラムだったからである。要求を出した本人が受け取るなら、
 	// 発行と引き換えを分ける理由が無い。
-	if answer.KeyPath != "id_ed25519_server" {
-		t.Fatalf("connect answer = %+v, want the workspace-relative key path", answer)
-	}
-	if answer.Passphrase == "" {
-		t.Fatalf("connect answer = %+v, want the stored passphrase", answer)
+	if answer.Passphrases["id_ed25519_server"] == "" {
+		t.Fatalf("connect answer = %+v, want the stored passphrase under its key path", answer)
 	}
 }
 
@@ -221,8 +221,8 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 	}
 	engine := connectEngine(t, ConnectHandlers{
 		Secret: cliSecret, Passwords: vault,
-		KeyPassphraseTarget: func(string) (string, bool, error) {
-			return "", false, os.ErrPermission
+		WorkspaceKeys: func(string) ([]string, error) {
+			return nil, os.ErrPermission
 		},
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
@@ -231,7 +231,7 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.Passphrase != "" {
+	if len(answer.Passphrases) != 0 {
 		t.Fatal("an unreadable key policy fell back to the account-password namespace")
 	}
 }
@@ -282,7 +282,7 @@ func TestConnectAnswersWithNothingWhenNothingIsStored(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.Passphrase != "" {
+	if len(answer.Passphrases) != 0 {
 		t.Errorf("a token was minted with no vault: %+v", answer)
 	}
 	if len(answer.Warnings) != 1 {
@@ -489,5 +489,57 @@ func TestUnlockRefusesWithoutTheSecret(t *testing.T) {
 	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
 	if recorder := send(t, engine, http.MethodPost, VaultUnlockPath, `{"passphrase":"anything"}`, nil); recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("unlock = %d, want 401", recorder.Code)
+	}
+}
+
+// **鍵のパスフレーズも、連鎖ぶん返る。**
+//
+// ProxyJump の手前に立つホストは、それ自身が alias であり、そこにも別の鍵が
+// 指定されうる。行き先のぶんだけを渡していた間、手前で止まる接続はそのたびに
+// 手入力を求めていた——アカウントパスワードの側は最初から連鎖ぶんを渡している。
+func TestKeyPassphrasesTravelForEveryHopOfTheConnection(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	for path, phrase := range map[string]string{"id_edge": "edge-phrase", "id_target": "target-phrase"} {
+		if err := vault.SetCredential(secret.KindKeyPassphrase, path+"-name", phrase); err != nil {
+			t.Fatal(err)
+		}
+		if err := vault.AssignCredential(secret.KindKeyPassphrase, path, path+"-name"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	engine := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault,
+		Aliases: func(alias string) []string { return []string{"edge", alias} },
+		WorkspaceKeys: func(alias string) ([]string, error) {
+			return map[string][]string{"edge": {"id_edge"}, "target": {"id_target"}}[alias], nil
+		},
+	})
+	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"target"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("connect = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer connectResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Passphrases["id_edge"] != "edge-phrase" {
+		t.Errorf("the jump host's key passphrase did not travel: %+v", answer)
+	}
+	if answer.Passphrases["id_target"] != "target-phrase" {
+		t.Errorf("the destination's key passphrase did not travel: %+v", answer)
 	}
 }
