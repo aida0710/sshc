@@ -204,7 +204,7 @@ export function KeysScreen({
   const storedPassphraseForm = useStoredPassphraseForm(storedPhrases);
   const {
     setManagingPassphrase,
-    storedPhraseName, setStoredPhraseName,
+    storedPhraseName,
     storedPhraseSecret, setStoredPhraseSecret,
     close: closeStoredPassphraseForm,
   } = storedPassphraseForm;
@@ -263,6 +263,23 @@ export function KeysScreen({
   // 描画時に読み取るので、この画面が開いている間に期限が切れた証明書は、
   // 次に何かがそれを更新した時点で「有効」と説明されなくなる。
   const now = Date.now();
+
+  // closeAllForms は、開いている入力欄をすべて畳む。
+  //
+  // **どの行動もここから始まる。** 別のフォームを開いたまま次を開くと、画面には
+  // 二つの「この鍵について」が同時に出る。以前はこの 3 行が行動ごとに書き下されて
+  // おり、**1 箇所だけ揃っていなかった** —— 保管庫のパネルを開くところだけが、
+  // 自分のフィールドを手で空にして、保管庫の一覧はそのまま持ち越していた。
+  //
+  // 持ち越しても嘘にはならない（あの一覧は鍵ごとではなく全体のもので、判定は
+  // 鍵の綴りで引く）。それでも畳むことにしたのは、**これから取り直すものを根拠に
+  // 何かを言わない**方が説明しやすいからである——読み込みが返るまでは何も言わず、
+  // 返ってから言う。
+  function closeAllForms() {
+    closePassphraseForm();
+    closeAgentForm();
+    closeStoredPassphraseForm();
+  }
 
   async function submitGeneration() {
     setFailure("");
@@ -765,11 +782,9 @@ export function KeysScreen({
                         type="button"
                         className={rowAction}
                         onClick={() => {
-                          closePassphraseForm();
-                          closeAgentForm();
-                          setStoredPhraseName("");
-                          setStoredPhraseSecret("");
-                          setChosenPhrase("");
+                          // 他の行動と同じ入口を通る。**これから取り直す一覧を
+                          // 根拠に、開いた瞬間に何かを言わない。**
+                          closeAllForms();
                           setManagingPassphrase(item);
                           void loadPhrases();
                         }}
@@ -782,9 +797,7 @@ export function KeysScreen({
                       className={rowAction}
                       disabled={!inventory.agentAvailable}
                       onClick={() => {
-                        closePassphraseForm();
-                        closeAgentForm();
-                        closeStoredPassphraseForm();
+                        closeAllForms();
                         setRegistering(item);
                         if (item.encrypted) void loadPhrases();
                       }}
@@ -796,9 +809,7 @@ export function KeysScreen({
                         type="button"
                         className={rowAction}
                         onClick={() => {
-                          closePassphraseForm();
-                          closeAgentForm();
-                          closeStoredPassphraseForm();
+                          closeAllForms();
                           void removeFromAgent(item.id);
                         }}
                       >
@@ -820,9 +831,7 @@ export function KeysScreen({
                           className={rowAction}
                           onClick={() => {
                             setMoreActionsFor("");
-                            closePassphraseForm();
-                            closeAgentForm();
-                            closeStoredPassphraseForm();
+                            closeAllForms();
                             setChangingPassphrase(item);
                           }}
                         >
@@ -834,9 +843,7 @@ export function KeysScreen({
                             className={rowAction}
                             onClick={() => {
                               setMoreActionsFor("");
-                              closePassphraseForm();
-                              closeAgentForm();
-                              closeStoredPassphraseForm();
+                              closeAllForms();
                               setRelocated(null);
                               setNewName(relocateStem(item));
                               setNewGroup(groupOfKeyPath(item.relativePath));
@@ -851,9 +858,7 @@ export function KeysScreen({
                           className={rowDanger}
                           onClick={() => {
                             setMoreActionsFor("");
-                            closePassphraseForm();
-                            closeAgentForm();
-                            closeStoredPassphraseForm();
+                            closeAllForms();
                             setPendingTrash(item);
                           }}
                         >
@@ -868,9 +873,7 @@ export function KeysScreen({
                     type="button"
                     className={rowAction}
                     onClick={() => {
-                      closePassphraseForm();
-                      closeAgentForm();
-                      closeStoredPassphraseForm();
+                      closeAllForms();
                       setRelocated(null);
                       setNewName(relocateStem(item));
                       setNewGroup(groupOfKeyPath(item.relativePath));
