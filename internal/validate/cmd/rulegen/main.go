@@ -109,10 +109,13 @@ func constants() string {
 	fmt.Fprintf(&out, "export const maxGroupSegmentBytes = %d;\n", validate.MaxGroupSegmentBytes)
 	fmt.Fprintf(&out, "export const maxAliasLength = %d;\n", validate.MaxAliasLength)
 	fmt.Fprintf(&out, "export const maxHostnameLength = %d;\n\n", validate.MaxHostnameLength)
+	out.WriteString("// ~/.ssh の中で既に意味を持つ名前。**グループ名にも鍵のファイル名にも効く。**\n")
+	out.WriteString("// どちらも ~/.ssh の直下にその綴りを作る操作だからである。\n")
+	out.WriteString("//\n")
 	out.WriteString("// **大小文字を区別しない。** 既定の macOS ボリュームは \"Config\" と\n")
 	out.WriteString("// \"config\" を同じディレクトリエントリとして扱う。\n")
-	out.WriteString("export const reservedGroupNames: ReadonlySet<string> = new Set([\n")
-	for _, name := range validate.ReservedGroupNames {
+	out.WriteString("export const reservedNames: ReadonlySet<string> = new Set([\n")
+	for _, name := range validate.ReservedNames {
 		fmt.Fprintf(&out, "  %q,\n", name)
 	}
 	out.WriteString("]);\n")

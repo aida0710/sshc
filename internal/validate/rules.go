@@ -41,15 +41,23 @@ const (
 	MaxGroupSegmentBytes = 64
 )
 
-// ReservedGroupNames は、OpenSSH とこのアプリケーションが ~/.ssh の中で既に意味を
+// ReservedNames は、OpenSSH とこのアプリケーションが ~/.ssh の中で既に意味を
 // 与えている名前である。
+//
+// **グループ名にも鍵のファイル名にも、同じ一覧が効く。** どちらも ~/.ssh の直下に
+// その綴りを作る操作だからである——`config` という名前の鍵を空のワークスペースに
+// 生成すれば、エントリ設定ファイルが作られてその中身が秘密鍵になり、`keys` という
+// 名前の鍵は、あとでグループを作るときに要る `keys/` と同じ場所を取り合う。
+//
+// 以前この一覧は internal/application と internal/keys に別々にあり、doc の文まで
+// 同じでありながら**後者には `connections` と `keys` が無かった。**
 //
 // **比較は大小文字を区別しない。** 既定の macOS ボリュームは "Config" と "config" を
 // 同じディレクトリエントリとして扱う。
 //
 // 並びは決めてある——生成物が呼び出しごとに変わると、verify-generated が意味の無い
 // 差分を出す。
-var ReservedGroupNames = []string{
+var ReservedNames = []string{
 	"authorized_keys",
 	"authorized_keys2",
 	"config",
@@ -63,10 +71,10 @@ var ReservedGroupNames = []string{
 }
 
 var (
-	groupSegment  = regexp.MustCompile(GroupSegmentPattern)
-	reservedGroup = func() map[string]bool {
-		set := make(map[string]bool, len(ReservedGroupNames))
-		for _, name := range ReservedGroupNames {
+	groupSegment = regexp.MustCompile(GroupSegmentPattern)
+	reserved     = func() map[string]bool {
+		set := make(map[string]bool, len(ReservedNames))
+		for _, name := range ReservedNames {
 			set[name] = true
 		}
 		return set
@@ -91,6 +99,12 @@ func GroupName(name string) error {
 	return nil
 }
 
+// Reserved は、この綴りが ~/.ssh の中で既に意味を持つかを報告する。
+//
+// **比較は大小文字を区別しない。** 既定の macOS ボリュームは "Config" と "config" を
+// 同じディレクトリエントリとして扱う。
+func Reserved(name string) bool { return reserved[strings.ToLower(name)] }
+
 // GroupSegment は、区切りひとつを見る。
 //
 // 長さはバイトで数える。パターンの {0,63} は Go では**バイト**、JavaScript では
@@ -101,7 +115,7 @@ func GroupSegment(segment string) error {
 	if len(segment) > MaxGroupSegmentBytes || !groupSegment.MatchString(segment) {
 		return ErrInvalidGroupName
 	}
-	if reservedGroup[strings.ToLower(segment)] {
+	if Reserved(segment) {
 		return ErrInvalidGroupName
 	}
 	return nil
