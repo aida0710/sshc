@@ -1,8 +1,6 @@
 package application
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -154,11 +152,25 @@ func passwordAuthenticationDisabled(resolution effective.Resolution) (effective.
 	return entry, ok && strings.EqualFold(strings.TrimSpace(firstValue(entry)), "no")
 }
 
-// credentialEnvironmentUnsafe reports configuration that can execute or
-// spawn another process while SSHC_ASKPASS_TOKEN is present. Environment
-// variables are inherited by every child, so such configurations must use
-// ordinary interactive OpenSSH rather than receive a bearer capability.
-func credentialEnvironmentUnsafe(graph *config.Graph, alias string) bool {
+// credentialUnstaticConfiguration は、この解析器が鍵の集合を静的に決められない
+// 設定を報告する。
+//
+// **名前は credentialEnvironmentUnsafe だった。** 環境変数で bearer capability を
+// 渡していた頃のもので、「子プロセスへ環境が継がれるから、別のプログラムを起こし
+// うる設定は普通の ssh を使え」という規則だった。渡す環境変数はもう無い。
+//
+// それでも残しているのは、理由が置き換わったからである——ここが見ているのは
+// 「この alias が使う IdentityFile を、実行も DNS も伴わずに一意に決められるか」
+// であって、決められないなら保存済みパスフレーズを差し出さない。Match、条件付き
+// Include、CanonicalizeHostname、実行を伴うディレクティブは、いずれも鍵の集合を
+// 接続時にしか確定しない。
+//
+// **ProxyJump がこの一覧に残っているのは、いま見ると一貫していない。** 連鎖は
+// internal/sshclient がプロセス内で辿るようになっており、アカウントパスワードの
+// 側は連鎖に現れる alias のぶんを渡している。パスフレーズだけを断る理由は、
+// 外部プログラムが消えた時点で無くなっている。挙動を変える判断なので、ここでは
+// 名前と理由の書き換えに留める。
+func credentialUnstaticConfiguration(graph *config.Graph, alias string) bool {
 	for _, diagnostic := range graph.Diagnostics {
 		if diagnostic.Code == config.DiagnosticIncludeConditional {
 			return true
@@ -195,20 +207,20 @@ func credentialEnvironmentUnsafe(graph *config.Graph, alias string) bool {
 }
 
 // DirectKeyPassphraseTarget is the one concrete, workspace-owned private-key
-// path selected directly by a host block. RelativePath is the vault subject;
-// PromptPath is the spelling OpenSSH uses when asking to decrypt that key.
+// path selected directly by a host block. RelativePath is the vault subject.
+//
+// **かつてはここに 3 つの項目が並んでいた。** PromptPath（OpenSSH が復号を尋ねる
+// ときの綴り）、ConfigSnapshot（Include を展開し、対象の IdentityFile を抜いた
+// 設定の写し）、Evidence（その写しと鍵のバイト列に capability を縛る digest）で
+// ある。どれも、答えを受け取るのが OpenSSH の起こす別のプログラムだった頃の道具
+// だった——綴りを合わせるのは prompt 文字列を照合するため、写しを渡すのは `-i` で
+// 起こす ssh に別の鍵を選ばせないため、digest を持つのは渡した capability を後から
+// 縛るためである。
+//
+// **いまは要求を出した sshc 自身が答えを受け取り、自分でプロトコルを話す。**
+// 3 つとも計算されたあと savedPassphrase に捨てられていたので、消した。
 type DirectKeyPassphraseTarget struct {
 	RelativePath string
-	PromptPath   string
-	// ConfigSnapshot is the resolved user configuration with Includes inlined
-	// and the one eligible IdentityFile removed. The CLI supplies PromptPath
-	// with -i instead. Running ssh with this file disables the unchecked system
-	// configuration and prevents a later ~/.ssh symlink change from selecting
-	// another private key.
-	ConfigSnapshot string
-	// Evidence commits the capability to the exact configuration snapshot and
-	// private-key bytes observed when the connection was requested.
-	Evidence string
 }
 
 // directKeyPassphraseTarget accepts only a configuration whose complete,
@@ -224,7 +236,7 @@ func (s *Service) directKeyPassphraseTarget(alias string) (DirectKeyPassphraseTa
 	if err != nil {
 		return DirectKeyPassphraseTarget{}, false, err
 	}
-	if credentialEnvironmentUnsafe(graph, alias) {
+	if credentialUnstaticConfiguration(graph, alias) {
 		return DirectKeyPassphraseTarget{}, false, nil
 	}
 	values := make([]string, 0, 2)
@@ -249,66 +261,14 @@ func (s *Service) directKeyPassphraseTarget(alias string) (DirectKeyPassphraseTa
 	if sawNone || len(values) != 1 {
 		return DirectKeyPassphraseTarget{}, false, nil
 	}
-	relative, promptPath, ok := keys.ResolveWorkspaceKeyPath(s.workspace, values[0])
+	relative, _, ok := keys.ResolveWorkspaceKeyPath(s.workspace, values[0])
 	if !ok {
 		return DirectKeyPassphraseTarget{}, false, nil
 	}
-	// OpenSSH prints this field through %.100s. A truncated path is not a
-	// unique key identity, so it is never eligible for automatic disclosure.
-	if len([]byte(promptPath)) > 100 {
-		return DirectKeyPassphraseTarget{}, false, nil
-	}
-	configurationDigest, err := config.Digest(graph)
-	if err != nil {
-		return DirectKeyPassphraseTarget{}, false, nil
-	}
-	snapshot, err := config.Snapshot(graph)
-	if err != nil {
-		return DirectKeyPassphraseTarget{}, false, nil
-	}
-	frozen, ok := freezeIdentityFile(snapshot, alias)
-	if !ok {
-		return DirectKeyPassphraseTarget{}, false, nil
-	}
-	return DirectKeyPassphraseTarget{
-		RelativePath:   relative,
-		PromptPath:     promptPath,
-		ConfigSnapshot: string(frozen),
-		Evidence:       configurationDigest,
-	}, true, nil
+	return DirectKeyPassphraseTarget{RelativePath: relative}, true, nil
 }
 
-// freezeIdentityFile removes the sole effective IdentityFile from the already
-// inlined snapshot; the CLI supplies its resolved path through -i. The
-// eligibility pass above has proved there is exactly one. Rechecking keeps this
-// helper fail-closed if parsing and policy ever drift apart.
-func freezeIdentityFile(snapshot []byte, alias string) ([]byte, bool) {
-	file := config.Parse(snapshot)
-	rewritten := 0
-	for index, line := range file.Lines {
-		if line.Kind != config.LineDirective || !config.EqualKeyword(line.Keyword, "IdentityFile") {
-			continue
-		}
-		block := file.BlockAt(index)
-		if block.Kind == config.BlockHost && !MatchHostLine(block.Patterns, alias) {
-			continue
-		}
-		values := line.Values()
-		if len(values) != 1 || strings.EqualFold(strings.TrimSpace(values[0]), "none") {
-			return nil, false
-		}
-		// The CLI supplies this one key with -i. Removing the source directive
-		// avoids offering the same encrypted file twice while preserving the
-		// original block and every other connection option in the snapshot.
-		file.Lines[index] = config.Line{Kind: config.LineBlank, Ending: line.Ending}
-		rewritten++
-	}
-	if rewritten != 1 {
-		return nil, false
-	}
-	return file.Render(), true
-}
-
+// executableCredentialDirective は、実行や別プロセスの起動を伴う指令を報告する。
 func executableCredentialDirective(line config.Line) bool {
 	switch strings.ToLower(line.Keyword) {
 	case "proxycommand", "proxyjump", "knownhostscommand", "localcommand", "remotecommand",
@@ -318,38 +278,14 @@ func executableCredentialDirective(line config.Line) bool {
 				return true
 			}
 		}
-	case "sendenv":
-		// SendEnv patterns select variables from ssh's own environment and can
-		// therefore transmit the bearer capability to a cooperating server.
-		for _, pattern := range line.Values() {
-			pattern = strings.TrimSpace(pattern)
-			if strings.HasPrefix(pattern, "-") {
-				continue
-			}
-			for _, name := range []string{
-				"SSHC_ASKPASS_TOKEN", "SSHC_ASKPASS_URL", "SSHC_ASKPASS_ALIAS",
-				"SSHC_ASKPASS_KIND", "SSHC_ASKPASS_KEY_PATH",
-			} {
-				if matched, err := filepath.Match(pattern, name); err == nil && matched {
-					return true
-				}
-			}
-		}
 	}
 	return false
 }
 
-func digestKeyTarget(configurationDigest, keyDigest string) string {
-	digest := sha256.New()
-	digest.Write([]byte(configurationDigest))
-	digest.Write([]byte{0})
-	digest.Write([]byte(keyDigest))
-	return hex.EncodeToString(digest.Sum(nil))
-}
-
 // DirectKeyPassphraseTarget additionally requires the resolved path to remain
-// a current encrypted private key. A stale vault entry for a replaced or plain
-// file must never arm askpass.
+// a current encrypted private key. **入れ替えられた鍵や、もう暗号化されていない
+// 鍵について、保管庫に古い項目が残っていることがある。** それを持ち出しても開く
+// ものが無いので、渡さない。
 func (s *Service) DirectKeyPassphraseTarget(
 	alias string,
 	inventory func() (*keys.Inventory, error),
@@ -367,7 +303,6 @@ func (s *Service) DirectKeyPassphraseTarget(
 			if item.Kind != keys.KindPrivateKey || !item.Encrypted || item.ContentDigest == "" {
 				return DirectKeyPassphraseTarget{}, false, nil
 			}
-			target.Evidence = digestKeyTarget(target.Evidence, item.ContentDigest)
 			return target, true, nil
 		}
 	}

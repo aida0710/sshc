@@ -37,7 +37,7 @@ type ConnectHandlers struct {
 	vault     *vaultOperations
 	// KeyPassphraseTarget resolves the one direct workspace key whose saved
 	// passphrase may answer this connection. A false result is never guessed.
-	KeyPassphraseTarget func(alias string) (relativePath, promptPath, configSnapshot, evidence string, ok bool, err error)
+	KeyPassphraseTarget func(alias string) (relativePath string, ok bool, err error)
 	// Warnings は、OpenSSH がこの host に対して実行するディレクティブを報告する。
 	// 接続の最中に気付くのではなく、事前に伝えられる。
 	Warnings func(alias string) []string
@@ -140,12 +140,12 @@ func (h ConnectHandlers) connectionAliases(alias string) []string {
 func savedPassphrase(
 	passwords *secret.Service,
 	alias string,
-	target func(string) (relativePath, promptPath, configSnapshot, evidence string, ok bool, err error),
+	target func(alias string) (relativePath string, ok bool, err error),
 ) (string, string) {
 	if passwords == nil || target == nil {
 		return "", ""
 	}
-	relativePath, _, _, _, ok, err := target(alias)
+	relativePath, ok, err := target(alias)
 	if err != nil || !ok {
 		return "", ""
 	}

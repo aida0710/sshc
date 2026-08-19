@@ -178,10 +178,8 @@ func TestConnectAnswersWithTheKeyPassphraseForTheDirectStoredKey(t *testing.T) {
 
 	engine := connectEngine(t, ConnectHandlers{
 		Secret: cliSecret, Passwords: vault,
-		KeyPassphraseTarget: func(alias string) (string, string, string, string, bool, error) {
-			return "id_ed25519_server", filepath.Join(home, ".ssh", "id_ed25519_server"),
-				"Host bastion\n\tIdentityFile " + filepath.Join(home, ".ssh", "id_ed25519_server") + "\n",
-				"evidence", alias == "bastion", nil
+		KeyPassphraseTarget: func(alias string) (string, bool, error) {
+			return "id_ed25519_server", alias == "bastion", nil
 		},
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
@@ -223,8 +221,8 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 	}
 	engine := connectEngine(t, ConnectHandlers{
 		Secret: cliSecret, Passwords: vault,
-		KeyPassphraseTarget: func(string) (string, string, string, string, bool, error) {
-			return "", "", "", "", false, os.ErrPermission
+		KeyPassphraseTarget: func(string) (string, bool, error) {
+			return "", false, os.ErrPermission
 		},
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,

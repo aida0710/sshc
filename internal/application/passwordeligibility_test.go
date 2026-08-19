@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -150,13 +149,6 @@ func TestDirectKeyPassphraseTargetNamesTheOneWorkspaceKeyOpenSSHWillPromptFor(t 
 	if target.RelativePath != "id_ed25519_server" {
 		t.Fatalf("relative path = %q", target.RelativePath)
 	}
-	wantPromptPath := filepath.Join(workspace.Root(), "id_ed25519_server")
-	if target.PromptPath != wantPromptPath {
-		t.Fatalf("prompt path = %q, want %q", target.PromptPath, wantPromptPath)
-	}
-	if strings.Contains(target.ConfigSnapshot, "~/.ssh/id_ed25519_server") {
-		t.Fatalf("frozen target block still offers the key a second time: %q", target.ConfigSnapshot)
-	}
 
 	for _, alias := range []string{"complex", "inherited", "duplicate"} {
 		if _, ok, err := service.directKeyPassphraseTarget(alias); err != nil || ok {
@@ -193,10 +185,7 @@ func TestDirectKeyPassphraseTargetRequiresACurrentEncryptedPrivateKey(t *testing
 		[]byte("Host keyed\n\tIdentityFile ~/.ssh/id_ed25519_server\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	target := DirectKeyPassphraseTarget{
-		RelativePath: "id_ed25519_server",
-		PromptPath:   filepath.Join(workspace.Root(), "id_ed25519_server"),
-	}
+	target := DirectKeyPassphraseTarget{RelativePath: "id_ed25519_server"}
 	for _, item := range []keys.Item{
 		{RelativePath: target.RelativePath, Kind: keys.KindPrivateKey, Encrypted: false},
 		{RelativePath: target.RelativePath, Kind: keys.KindOther, Encrypted: true},
@@ -212,40 +201,8 @@ func TestDirectKeyPassphraseTargetRequiresACurrentEncryptedPrivateKey(t *testing
 		}}}, nil
 	}
 	if got, ok, err := service.DirectKeyPassphraseTarget("keyed", encrypted); err != nil || !ok ||
-		got.RelativePath != target.RelativePath || got.PromptPath != target.PromptPath || got.Evidence == "" {
+		got.RelativePath != target.RelativePath {
 		t.Fatalf("encrypted key = %+v, ok %v, err %v", got, ok, err)
-	}
-}
-
-func TestDirectKeyEvidenceChangesWhenConnectionOrPrivateKeyChanges(t *testing.T) {
-	service, workspace := newShortHomeService(t)
-	configPath := filepath.Join(workspace.Root(), "config")
-	if err := os.WriteFile(configPath,
-		[]byte("Host keyed\n\tHostName first.example\n\tIdentityFile ~/.ssh/id_server\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	digest := "key-digest-v1"
-	inventory := func() (*keys.Inventory, error) {
-		return &keys.Inventory{Items: []keys.Item{{
-			RelativePath: "id_server", Kind: keys.KindPrivateKey, Encrypted: true, ContentDigest: digest,
-		}}}, nil
-	}
-	first, ok, err := service.DirectKeyPassphraseTarget("keyed", inventory)
-	if err != nil || !ok {
-		t.Fatalf("first target = %+v, ok %v, err %v", first, ok, err)
-	}
-	if err := os.WriteFile(configPath,
-		[]byte("Host keyed\n\tHostName second.example\n\tIdentityFile ~/.ssh/id_server\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	second, ok, err := service.DirectKeyPassphraseTarget("keyed", inventory)
-	if err != nil || !ok || first.Evidence == second.Evidence {
-		t.Fatalf("config evidence = %q / %q, ok %v, err %v", first.Evidence, second.Evidence, ok, err)
-	}
-	digest = "key-digest-v2"
-	third, ok, err := service.DirectKeyPassphraseTarget("keyed", inventory)
-	if err != nil || !ok || second.Evidence == third.Evidence {
-		t.Fatalf("key evidence = %q / %q, ok %v, err %v", second.Evidence, third.Evidence, ok, err)
 	}
 }
 
