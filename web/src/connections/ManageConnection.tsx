@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FileNode, GroupMetadata, HostDetail } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control, hintText, sectionHeading } from "../ui/form";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Button, Card, Row } from "../ui/surface";
 import { identityKey } from "./connectionBrowser";
 
@@ -138,11 +139,31 @@ export function ManageConnection({
         </div>
 
         <div className="border-t border-danger/30 pt-4">
+          {/*
+            **同じ場所を二度叩いても消えない。** かつてここは、押すと同じ位置の
+            ボタンが「削除を確定」に変わる形だった——触る画面では素早い二度押しが
+            そのまま通る。問いは別の場所に出て、開いた時点の focus は「やめる」側に
+            居る。
+
+            **戻せることは、問わない理由にはならない。** 履歴から戻せるのは
+            確かだが、それは消えたことに気付いた人にしか使えない。誤って
+            消したことに気付かなければ、戻す機会も来ない。
+          */}
+          <Button kind="danger" onClick={() => setConfirmingDelete(true)}>{t("conn.delete")}</Button>
           {confirmingDelete ? (
-            <Button kind="danger" onClick={onDelete}>{t("conn.confirmDelete")}</Button>
-          ) : (
-            <Button kind="danger" onClick={() => setConfirmingDelete(true)}>{t("conn.delete")}</Button>
-          )}
+            <ConfirmDialog
+              id="delete-connection-heading"
+              heading={t("conn.deleteHeading", { alias: identity.alias })}
+              body={<p className="text-sm text-ink-muted">{t("conn.deleteBody")}</p>}
+              confirmLabel={t("conn.confirmDelete")}
+              cancelLabel={t("conn.deleteCancel")}
+              onCancel={() => setConfirmingDelete(false)}
+              onConfirm={() => {
+                setConfirmingDelete(false);
+                onDelete();
+              }}
+            />
+          ) : null}
         </div>
       </fieldset>
     </section>

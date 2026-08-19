@@ -83,7 +83,7 @@ describe("ConsoleList", () => {
     const props = renderList();
 
     await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
-    await user.click(screen.getByRole("menuitem", { name: "Open another to the same place" }));
+    await user.click(screen.getByRole("menuitem", { name: "Duplicate this connection" }));
 
     expect(props.onDuplicate).toHaveBeenCalledWith("a");
   });
