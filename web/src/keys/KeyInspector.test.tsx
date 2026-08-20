@@ -17,7 +17,16 @@ const item: KeyItem = {
   permission: "0600",
   permissionRisk: false,
   sizeBytes: 400,
-  references: [{ path: "config", line: 3, hostPatterns: ["build-*"], directive: "IdentityFile" }],
+  references: [
+    {
+      directive: "IdentityFile",
+      configPath: "config",
+      line: 3,
+      condition: "",
+      hostPatterns: ["build-*"],
+      value: "~/.ssh/id_work",
+    },
+  ],
   notes: [],
 };
 

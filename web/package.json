@@ -10,7 +10,7 @@
     "generate:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts",
     "test": "vitest run",
     "check:i18n": "vitest run src/i18n/catalogue.test.ts --reporter=verbose",
-    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.e2e.json --pretty false",
+    "typecheck": "tsc -b --force --pretty false && tsc -p tsconfig.e2e.json --pretty false",
     "lint": "eslint src e2e playwright.config.ts vite.config.ts vitest.setup.ts",
     "e2e": "playwright test"
   },
