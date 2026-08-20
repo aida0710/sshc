@@ -228,3 +228,32 @@ func TestEveryReleaseJobThatRunsMakeTestInstallsTheShell(t *testing.T) {
 		}
 	}
 }
+
+// **証明書が無いあいだも、リリースは今までどおり出なければならない。**
+//
+// 署名と公証は secret が揃ったときだけ起きる。揃う前に必須にすると、**買う前の
+// リリースが全部止まる** ——tap の deploy key で同じ判断をしたのと同じ理由である。
+//
+// ここが数えるのは、その切り替えが環境変数だけで起きること。証明書を入れた日に
+// workflow を書き換える必要があるなら、それは書き換え忘れる日でもある。
+func TestSigningTurnsItselfOnWithoutEditingTheWorkflow(t *testing.T) {
+	_, source := readReleaseWorkflow(t)
+
+	// 証明書が無いときは auto-discovery を切る。切らないと electron-builder が
+	// runner の keychain を探し、見つからないと落ちる。
+	if !strings.Contains(source, "CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.APPLE_CERTIFICATE_P12 == '' && 'false' || 'true' }}") {
+		t.Error("証明書の有無で auto-discovery を切り替えていない: " +
+			"無いときに切らないと、買う前のリリースが落ちる")
+	}
+
+	// 公証は App Store Connect の API key で行う。**Apple ID と app-specific
+	// password より、漏れたときの被害が小さい。**
+	for _, variable := range []string{"APPLE_API_KEY_ID", "APPLE_API_ISSUER", "APPLE_TEAM_ID"} {
+		if !strings.Contains(source, variable) {
+			t.Errorf("公証に要る %s が渡されていない", variable)
+		}
+	}
+	if strings.Contains(source, "APPLE_APP_SPECIFIC_PASSWORD") {
+		t.Error("Apple ID の password を渡している: API key の方が漏れたときの被害が小さい")
+	}
+}

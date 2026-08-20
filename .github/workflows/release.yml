@@ -51,18 +51,43 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: make release-cli-current
 
-      # 配布署名はしていない。**それでも束は自分自身と辻褄が合っていなければ
-      # ならない** ので、desktop/adhoc.ts が ad-hoc 署名を付け、下の smoke が
-      # それを検査する。利用者が初回に通る手順は docs/release-install.md にあり、
-      # リリースの本文はそこから作られる。
+      # **証明書があれば署名して公証し、無ければ ad-hoc で済ませる。**
+      #
+      # 公証を通した束は、利用者の初回に Gatekeeper を通さない。証明書が無い
+      # あいだは desktop/adhoc.ts が ad-hoc 署名を付ける——**配布署名の代わりでは
+      # ないが、封と中身の辻褄は合う**（arm64 では署名の無い実行体はそもそも
+      # 起動しない）。利用者が初回に通る手順は docs/release-install.md にある。
+      #
+      # 切り替えは環境変数だけで起きる。CSC_LINK が空なら auto-discovery を
+      # 切り、adhoc.ts がそれを見て自分の出番だと判断する。**secret を入れる前と
+      # 後で、この workflow を書き換える必要は無い。**
+      #
+      # 公証は APPLE_API_* が揃ったときだけ走る（electron-builder が判定する）。
+      # App Store Connect の API key を使うのは、Apple ID と app-specific password
+      # より漏れたときの被害が小さいからである。
+      #
       # **一行で足りる。** この的が npm install も web のビルドも、束ごとの CLI も
       # 版付けも electron-builder も順に走らせる。以前ここで electron-builder を
       # もう一度呼んでいたが、余分なだけでなく、**前の段が落ちたことを隠した。**
       - name: Build the desktop bundles
         env:
           VERSION: ${{ github.ref_name }}
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: make desktop-bundle-mac
+          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.APPLE_CERTIFICATE_P12 == '' && 'false' || 'true' }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -eu
+          # **鍵はファイルにしか置けない。** electron-builder が @electron/notarize
+          # へ渡すのは道であって中身ではない。runner の中の一時ファイルで、
+          # job が終われば消える。
+          if [ -n "${{ secrets.APPLE_API_KEY }}" ]; then
+            printf '%s' '${{ secrets.APPLE_API_KEY }}' > "$RUNNER_TEMP/AuthKey.p8"
+            export APPLE_API_KEY="$RUNNER_TEMP/AuthKey.p8"
+          fi
+          make desktop-bundle-mac
 
       # **開いていない束を配らない。** 中身が違っていてもビルドは通る——
       # Windows では実際に、空の resources\cli が利用者の PATH に載った。
