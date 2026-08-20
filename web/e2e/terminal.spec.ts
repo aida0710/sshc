@@ -364,6 +364,8 @@ test("closes every open connection from the settings screen", async ({ page, ins
   const region = page.getByRole("region", { name: "Open connections" });
   await expect(region.getByText("2 open")).toBeVisible();
   await region.getByRole("button", { name: "Close every connection" }).click();
+  // 走っている接続を終わらせるので、一度訊く。開き直しは取り消しではない。
+  await page.getByRole("button", { name: "Close them all" }).click();
 
   await expect(region.getByText("0 open")).toBeVisible();
   await openConsolePanel(page);

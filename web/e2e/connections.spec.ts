@@ -585,7 +585,7 @@ test("takes a comment with the connection when the block is deleted", async ({
 
   await page.getByRole("button", { name: "More connection actions" }).click();
   await page.getByRole("button", { name: "Delete connection" }).click();
-  expect(await clickAndAwait(page, "Confirm delete", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Delete it", "/api/v1/config/save")).toBe(200);
 
   const after = await installation.read("conf.d/10-home.conf");
   // 置き去りにされていたら、"# the file server" は printer の
