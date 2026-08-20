@@ -1118,6 +1118,7 @@ export const en = {
   "keys.hardwareNote":
     "Hardware-backed keys need your security key, so sshc does not create them. Run this command in Terminal yourself:",
   "keys.trashHeading": "Trash",
+  "keys.trashSummary": "Trash ({count})",
   "keys.trashNote": "Deleted keys stay here until you remove them. Nothing is ever deleted automatically.",
   "keys.trashCaption": "Soft-deleted keys",
   "keys.trashEmpty": "Nothing has been deleted.",
