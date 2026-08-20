@@ -605,7 +605,7 @@ export function KeysScreen({
                 <option value="all">{t("keys.listFilterAll")}</option>
               </select>
             </label>
-            <label className="w-72 max-w-full">
+            <label className="w-full sm:w-72">
               <span className="sr-only">{t("keys.search")}</span>
               <input
                 type="search"
