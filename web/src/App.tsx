@@ -803,6 +803,7 @@ function PaddedSection({ section, navigation, handoff, shell, declared }: Sectio
   if (section === "Keys") {
     return (
       <KeysScreen
+        onInspector={onInspector}
         groups={declared.groups}
         onAssignGeneratedKey={handoff.onAssignGeneratedKey}
         onInstallGeneratedKey={handoff.onInstallGeneratedKey}

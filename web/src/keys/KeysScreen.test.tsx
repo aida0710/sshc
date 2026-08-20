@@ -249,18 +249,42 @@ describe("KeysScreen", () => {
     expect(onInstallGeneratedKey).toHaveBeenCalledWith({ publicRelativePath: "id_new.pub" });
   });
 
-  it("lists classified files with fingerprint, permissions and referencing Hosts", async () => {
+  // 表は走査のための列だけを持つ。指紋も権限も、探すときには読まない。
+  it("lists classified files with the marks that stop a scan", async () => {
     render(<KeysScreen api={buildApi()} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    expect(within(workRow).getByText("SHA256:abcdef")).toBeInTheDocument();
-    expect(within(workRow).getByText("ed25519 · 256")).toBeInTheDocument();
-    expect(within(workRow).getByText("0600")).toBeInTheDocument();
-    expect(within(workRow).getByText("build-*")).toBeInTheDocument();
+    expect(within(workRow).getByText("used by 1")).toBeInTheDocument();
+    expect(within(workRow).queryByText("SHA256:abcdef")).not.toBeInTheDocument();
 
     const legacyRow = screen.getByRole("row", { name: /legacy/ });
     expect(within(legacyRow).getByText("Permissions too open")).toBeInTheDocument();
     expect(within(legacyRow).getByText("Fingerprint unavailable")).toBeInTheDocument();
+  });
+
+  // 名前を押すと、その鍵の詳細が右のペインへ渡る。もう一度押すと閉じる。
+  it("hands the chosen key to the inspector, and takes it back", async () => {
+    const user = userEvent.setup();
+    const onInspector = vi.fn();
+    render(<KeysScreen api={buildApi()} onInspector={onInspector} />);
+
+    await user.click(await screen.findByRole("button", { name: "id_work" }));
+    expect(onInspector).toHaveBeenLastCalledWith(
+      expect.objectContaining({ label: "Key details", attention: false }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "id_work" }));
+    expect(onInspector).toHaveBeenLastCalledWith(null);
+  });
+
+  // 権限が緩い鍵は、ペインを開く前に注意を出す。
+  it("marks the inspector when the chosen key has open permissions", async () => {
+    const user = userEvent.setup();
+    const onInspector = vi.fn();
+    render(<KeysScreen api={buildApi()} onInspector={onInspector} />);
+
+    await user.click(await screen.findByRole("button", { name: "legacy" }));
+    expect(onInspector).toHaveBeenLastCalledWith(expect.objectContaining({ attention: true }));
   });
 
   it("summarises the inventory and searches file, host and fingerprint", async () => {
@@ -767,7 +791,7 @@ describe("KeysScreen", () => {
     const api = buildApi();
     render(<KeysScreen api={api} />);
 
-    const privateRow = (await screen.findByText("id_work", { selector: "td" })).closest("tr")!;
+    const privateRow = (await screen.findByRole("button", { name: "id_work" })).closest("tr")!;
     await user.click(within(privateRow).getByRole("button", { name: "More actions" }));
     await user.click(within(privateRow).getByRole("button", { name: "Move to trash" }));
 
