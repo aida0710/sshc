@@ -28,10 +28,14 @@ class Sshc < Formula
   depends_on "go" => :build
 
   def install
-    # **版を焼き込む。** cmd/sshc の main.version が既定の "dev" のままだと、
-    # 走っているアプリと端末側の版が食い違ったときに、engine が出す理由が
-    # 「dev と 0.1.0 は同じ版ではない」になる。
-    system "go", "build", *std_go_args(ldflags: "-s -w -X main.version=#{version}")
+    # **main は ./cmd/sshc に居る。** 省くと root を建てようとして
+    # "no Go files in ..." で止まる——v0.3.1 の brew install がそれで落ちた。
+    #
+    # 版を焼き込む。main.version が既定の "dev" のままだと、走っているアプリと
+    # 端末側の版が食い違ったときに engine が出す理由が「dev と 0.3.1 は同じ版では
+    # ない」になる。**-s -w は書かない** ——std_go_args が既に足すので、重ねると
+    # `-ldflags=-s -w -s -w -X ...` になる。
+    system "go", "build", *std_go_args(ldflags: "-X main.version=#{version}"), "./cmd/sshc"
   end
 
   test do
