@@ -1,6 +1,8 @@
 package terminal
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,6 +50,20 @@ type Session struct {
 	process Process
 	exited  *ExitInfo
 	cleanup func()
+
+	// reopen は、輸送が落ちたときに同じ相手へ繋ぎ直す術である。nil なら
+	// 繋ぎ直さない——ローカルのシェルには落ちる輸送が無い。
+	//
+	// **同じセッションのまま繋ぎ直す。** 新しい id を配ると、見ていた人の
+	// 画面は「消えて、別のものが現れた」ことになる。scrollback も、名前も、
+	// 並び順も、その id に付いている。
+	reopen  func(ctx context.Context, size Size) (Process, error)
+	size    Size
+	retries int
+	// stopping は、繋ぎ直しを待っている最中に閉じられたことを伝える。
+	// **待っているあいだに閉じた人を、次の接続で驚かせない。**
+	stopping chan struct{}
+	delay    func(attempt int) time.Duration
 
 	// done は pump が終わったことを示す。テストと停止処理だけが待つ。
 	done chan struct{}
@@ -174,8 +190,19 @@ func (s *Session) Detach(stream *Stream) {
 // Write は打鍵を PTY へ渡す。
 func (s *Session) Write(p []byte) (int, error) {
 	s.mutex.Lock()
-	process, exited := s.process, s.exited
+	process, exited, reopening := s.process, s.exited, s.reopen != nil
 	s.mutex.Unlock()
+	if exited == nil && process == nil && reopening {
+		// **繋ぎ直しのあいだの打鍵は捨てる。溜めない。**
+		//
+		// 溜めれば、半分打ったコマンドが**新しいシェル**へ届く。打った人は
+		// 前の続きのつもりで、届く先は別のシェルである——`rm -rf` の途中で
+		// 切れた行が、繋がった瞬間に実行されうる。
+		//
+		// 捨てたことは黙っていてよい。画面には「繋ぎ直しています」と出ており、
+		// 打っても何も起きないことは、そこから読める。
+		return len(p), nil
+	}
 	if exited != nil || process == nil {
 		return 0, ErrExited
 	}
@@ -198,6 +225,7 @@ func (s *Session) Resize(size Size) error {
 
 // Hangup は子プロセスへ SIGHUP を送る。終了そのものは pump が観測する。
 func (s *Session) Hangup() error {
+	s.stopReconnecting()
 	s.mutex.Lock()
 	process, exited := s.process, s.exited
 	s.mutex.Unlock()
@@ -229,6 +257,7 @@ func (s *Session) closeStreams() {
 // 持っていなければ何もしない。**待たない。** 呼び出し側は締切に間に合わせる
 // ためにこれを呼んでおり、graceful な Hangup が返らないことこそが理由である。
 func (s *Session) forceClose() error {
+	s.stopReconnecting()
 	s.mutex.Lock()
 	process, exited := s.process, s.exited
 	s.mutex.Unlock()
@@ -243,24 +272,111 @@ func (s *Session) forceClose() error {
 }
 
 // pump は PTY を読み、バッファへ書き、アタッチしているものへ配る。
+// MaxReconnects は、輸送が落ちたときに繋ぎ直しを試みる回数である。
+//
+// **上限があるのは、落ち続ける相手を諦めるためである。** 相手が消えたのなら、
+// 永遠に試み続けるより、そう言って終わる方がよい。
+const MaxReconnects = 5
+
+// reconnectBackoff は、試みのあいだに置く間隔である。
+var reconnectBackoff = []time.Duration{time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second}
+
 func (s *Session) pump(now func() time.Time) {
 	defer close(s.done)
-	buffer := make([]byte, readChunk)
 	for {
-		read, err := s.process.Read(buffer)
-		if read > 0 {
-			s.publish(buffer[:read])
+		buffer := make([]byte, readChunk)
+		for {
+			read, err := s.process.Read(buffer)
+			if read > 0 {
+				s.publish(buffer[:read])
+			}
+			if err != nil {
+				break
+			}
 		}
-		if err != nil {
-			break
+		info := s.process.Wait()
+		if info.At.IsZero() {
+			info.At = now()
+		}
+		_ = s.process.Close()
+
+		if !s.reconnect(info) {
+			s.finish(info)
+			return
 		}
 	}
-	info := s.process.Wait()
-	if info.At.IsZero() {
-		info.At = now()
+}
+
+// reconnect は、落ちた輸送を繋ぎ直せたなら真を返す。
+//
+// **シェルが終わったのなら繋ぎ直さない。** 人が `exit` と打ったなら、開き直すのは
+// 頼まれていないことをすることである。区別できるのは sshclient が輸送の断絶を
+// TransportLost として残しているからで、終了コードと混ぜていない。
+//
+// **何が起きたかは画面に書く。** 黙って繋ぎ直すと、戻ってきたシェルが前のものだと
+// 思ったまま打ち続けることになる——**それは新しいシェルであり、動いていたものは
+// もう無い。** 打つ前にそれが分かっていなければならない。
+// stopReconnecting は、待っている繋ぎ直しを起こして諦めさせる。二度呼んでよい。
+func (s *Session) stopReconnecting() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	select {
+	case <-s.stopping:
+	default:
+		close(s.stopping)
 	}
-	_ = s.process.Close()
-	s.finish(info)
+}
+
+func (s *Session) reconnect(info ExitInfo) bool {
+	s.mutex.Lock()
+	reopen, size, attempt := s.reopen, s.size, s.retries
+	stopping := s.exited != nil
+	s.mutex.Unlock()
+
+	if reopen == nil || !info.Lost() || stopping || attempt >= MaxReconnects {
+		if reopen != nil && info.Lost() && attempt >= MaxReconnects {
+			s.publish([]byte("\r\n[sshc] 繋ぎ直しを諦めました。\r\n"))
+		}
+		return false
+	}
+
+	wait := reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
+	if s.delay != nil {
+		wait = s.delay(attempt)
+	}
+	s.publish([]byte(fmt.Sprintf(
+		"\r\n[sshc] 接続が切れました。%d 秒後に繋ぎ直します（%d/%d）。\r\n",
+		int(wait.Seconds()), attempt+1, MaxReconnects)))
+
+	// **待っているあいだ、打つ先は無い。** 閉じた相手へ書きに行かせない。
+	s.mutex.Lock()
+	s.process = nil
+	s.mutex.Unlock()
+
+	select {
+	case <-time.After(wait):
+	case <-s.stopping:
+		return false
+	}
+
+	// **開き直しは要求から切り離す。** ここに居るのは pump であって、最初に
+	// 開いた HTTP ハンドラはとうに返っている。
+	process, err := reopen(context.Background(), size)
+	if err != nil {
+		s.mutex.Lock()
+		s.retries++
+		s.mutex.Unlock()
+		s.publish([]byte("\r\n[sshc] " + err.Error() + "\r\n"))
+		return s.reconnect(info)
+	}
+
+	s.mutex.Lock()
+	s.process = process
+	s.retries++
+	s.mutex.Unlock()
+	// **これは新しいシェルである。** 前のものが残っていると思わせない。
+	s.publish([]byte("\r\n[sshc] 繋ぎ直しました。**新しいシェルです** ——前の画面より上は、切れる前の記録です。\r\n"))
+	return true
 }
 
 func (s *Session) publish(chunk []byte) {
