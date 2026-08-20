@@ -269,3 +269,27 @@ test("the tests and the build-time hook stay out of the bundle", () => {
   // afterPack の hook は束の外から読まれる。**在ることは要るが、入ることは要らない。**
   assert.strictEqual(configuration.build.afterPack, "./out/adhoc.js");
 });
+
+// **証明書があるなら、ad-hoc を被せない。**
+//
+// かつてこの判定は `identity: null`（= ad-hoc せよ、という設定）を見ていた。
+// Developer ID を使うようになってその設定自体を外したので、見る先を環境変数へ
+// 移した——**買った日に adhoc が黙るかどうかが、ここに掛かっている。**
+test("the ad-hoc signature steps aside once a certificate is present", () => {
+  const decides = (environment: Record<string, string>) => {
+    const certificate = environment["CSC_LINK"] ?? environment["CSC_NAME"] ?? "";
+    const discovery = environment["CSC_IDENTITY_AUTO_DISCOVERY"] ?? "";
+    return certificate !== "" || discovery.toLowerCase() !== "false";
+  };
+
+  // 証明書が無いあいだは、ad-hoc が要る。arm64 では署名の無い実行体は起動しない。
+  assert.strictEqual(decides({ CSC_LINK: "", CSC_IDENTITY_AUTO_DISCOVERY: "false" }), false);
+
+  // 証明書があるなら electron-builder の仕事である。
+  assert.strictEqual(decides({ CSC_LINK: "BASE64", CSC_IDENTITY_AUTO_DISCOVERY: "true" }), true);
+  assert.strictEqual(decides({ CSC_NAME: "Developer ID Application: ..." }), true);
+
+  // **何も指定が無いときは、触らない。** 手元で `npm run dist:mac` を打った人の
+  // keychain に本物が入っていることがある。
+  assert.strictEqual(decides({}), true);
+});

@@ -24,8 +24,16 @@ export default async function signAdHoc(context: AfterPackContext): Promise<void
 		return;
 	}
 	// **本物の証明書があるなら、何もしない。** electron-builder はこの後の段で
-	// 署名する。ここで先に ad-hoc を被せる必要も、被せてよい理由も無い。
-	if (context.packager.platformSpecificBuildOptions.identity !== null) {
+	// 署名し、環境変数が揃っていれば公証まで通す。ここで先に ad-hoc を被せる
+	// 必要も、被せてよい理由も無い。
+	//
+	// **見るのは identity ではなく、証明書があるかどうかである。** かつては
+	// `identity: null`（= ad-hoc せよ）という設定を見ていたが、Developer ID を
+	// 使うようになってその設定自体を外した。CSC_LINK があるか、あるいは
+	// auto-discovery を切っていないなら、署名は向こうの仕事である。
+	const certificate = process.env["CSC_LINK"] ?? process.env["CSC_NAME"] ?? "";
+	const discovery = process.env["CSC_IDENTITY_AUTO_DISCOVERY"] ?? "";
+	if (certificate !== "" || discovery.toLowerCase() !== "false") {
 		return;
 	}
 	const bundle = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
