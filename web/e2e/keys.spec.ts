@@ -71,11 +71,17 @@ test("lists generated keys and reveals one only after an explicit confirmation",
 
   const row = page.getByRole("row", { name: /id_e2e\b/ }).first();
   await expect(row).toBeVisible();
+
+  // 権限は表ではなくペインにある。走査するときには読まないものなので、
+  // 表には走査を止める印だけが残っている。
+  await row.getByRole("button", { name: "id_e2e", exact: true }).click();
+  await page.getByRole("button", { name: "Show Key details" }).click();
+  const details = page.getByRole("complementary", { name: "Key details" });
   // **Windows の mode ビットは、誰が読めるかを何も言わない。** Go の Chmod が
   // 写すのは読み取り専用ビットひとつで、Perm() は 0666 か 0444 にしかならない。
   // 向こうで守っているのは DACL であり、internal/keys の
   // filemode_windows_test.go がそちらを見ている。
-  await expect(row).toContainText(process.platform === "win32" ? "0666" : "0600");
+  await expect(details).toContainText(process.platform === "win32" ? "0666" : "0600");
   expect(await installation.read("id_e2e.pub")).toContain("ssh-ed25519 ");
 
   // インベントリ画面は、誰かが求める前には鍵の実体を何も表示しない。
