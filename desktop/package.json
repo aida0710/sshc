@@ -48,7 +48,6 @@
       }
     ],
     "mac": {
-      "identity": null,
       "target": [
         {
           "target": "dmg",
@@ -59,6 +58,7 @@
         }
       ],
       "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
       "icon": "build/icon.png",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },
