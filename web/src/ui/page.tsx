@@ -15,7 +15,15 @@ export function PageHeader({
         <h2 className="text-xl font-semibold text-ink">{title}</h2>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-ink-muted">{description}</p>
       </div>
-      {actions === undefined ? null : <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
+      {/* **縮めない箱に、縮まないものを入れない。** shrink-0 の中では子の
+          max-w-full が効かない——親が max-content 幅を取るからである。狭い画面
+          では箱ごと畳めるようにする。 */}
+      {/* **縮めない箱に、縮まないものを入れない。** shrink-0 の中では子の
+          max-w-full が効かない——親が max-content 幅を取るからである。狭い面では
+          箱ごと畳んで、広い面では今までどおり右端に寄せる。 */}
+      {actions === undefined ? null : (
+        <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:shrink-0">{actions}</div>
+      )}
     </header>
   );
 }
