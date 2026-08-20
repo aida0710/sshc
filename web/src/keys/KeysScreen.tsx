@@ -675,6 +675,78 @@ export function KeysScreen({
         actions={rowActions}
       />
       </div>
+      {/*
+        **ゴミ箱は別の用である。** ここでするのは「戻す」か「完全に消す」で
+        あって、いま持っている鍵を整えることではない。畳んであるのは、1000 行
+        の一番下に開いたまま置いても誰も辿り着かないからで、**件数だけは畳んだ
+        ままでも見える** ——空でないことは、開く前に分かってよい。
+      */}
+      <details className="rounded-xl border border-line bg-card p-4">
+        <summary className="cursor-pointer text-sm font-medium text-ink">
+          {t("keys.trashSummary", { count: trash.entries.length })}
+        </summary>
+        <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+        <h3 className={sectionHeading}>{t("keys.trashHeading")}</h3>
+        <p className="text-sm text-ink-muted">{t("keys.trashNote")}</p>
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[40rem] text-left text-sm">
+          <caption className="sr-only">{t("keys.trashCaption")}</caption>
+          <thead>
+            <tr className={tableHeadRow}>
+              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFiles")}</th>
+              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colAge")}</th>
+              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colStatus")}</th>
+              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colActions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trash.entries.map((entry) => (
+              <tr key={entry.id} className="border-b border-line align-top">
+                <td className="py-2 pr-3 font-mono text-xs">
+                  {entry.files.map((file) => file.originalRelativePath).join(", ")}
+                </td>
+                <td className="py-2 pr-3">
+                  {entry.stale
+                    ? t("keys.ageStale", { days: entry.ageDays, retention: trash.retentionDays })
+                    : t("keys.age", { days: entry.ageDays })}
+                </td>
+                <td className="py-2 pr-3">{entry.restorable ? t("keys.restorable") : entry.blockers.join(", ")}</td>
+                <td className="py-2">
+                  <div className="flex flex-wrap items-center gap-1">
+                  <button type="button" className={rowAction} onClick={() => void restore(entry.id)}>
+                    {t("keys.restore")}
+                  </button>
+                  {pendingPurge === entry.id ? (
+                    <>
+                      <span>{t("keys.purgeWarning")}</span>
+                      <button type="button" className={rowDanger} onClick={() => void purge(entry.id)}>
+                        {t("keys.confirmPurge")}
+                      </button>
+                      <button type="button" className={rowAction} onClick={() => setPendingPurge("")}>
+                        {t("keys.cancel")}
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" className={rowDanger} onClick={() => setPendingPurge(entry.id)}>
+                      {t("keys.purge")}
+                    </button>
+                  )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {trash.entries.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-3 text-sm text-ink-muted">
+                  {t("keys.trashEmpty")}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        </div>
+        </div>
+      </details>
       </div>
 
       <StoredPassphrasePanel
@@ -939,67 +1011,6 @@ export function KeysScreen({
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        <h3 className={sectionHeading}>{t("keys.trashHeading")}</h3>
-        <p className="text-sm text-ink-muted">{t("keys.trashNote")}</p>
-        <div className="overflow-x-auto">
-        <table className="w-full min-w-[40rem] text-left text-sm">
-          <caption className="sr-only">{t("keys.trashCaption")}</caption>
-          <thead>
-            <tr className={tableHeadRow}>
-              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFiles")}</th>
-              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colAge")}</th>
-              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colStatus")}</th>
-              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colActions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trash.entries.map((entry) => (
-              <tr key={entry.id} className="border-b border-line align-top">
-                <td className="py-2 pr-3 font-mono text-xs">
-                  {entry.files.map((file) => file.originalRelativePath).join(", ")}
-                </td>
-                <td className="py-2 pr-3">
-                  {entry.stale
-                    ? t("keys.ageStale", { days: entry.ageDays, retention: trash.retentionDays })
-                    : t("keys.age", { days: entry.ageDays })}
-                </td>
-                <td className="py-2 pr-3">{entry.restorable ? t("keys.restorable") : entry.blockers.join(", ")}</td>
-                <td className="py-2">
-                  <div className="flex flex-wrap items-center gap-1">
-                  <button type="button" className={rowAction} onClick={() => void restore(entry.id)}>
-                    {t("keys.restore")}
-                  </button>
-                  {pendingPurge === entry.id ? (
-                    <>
-                      <span>{t("keys.purgeWarning")}</span>
-                      <button type="button" className={rowDanger} onClick={() => void purge(entry.id)}>
-                        {t("keys.confirmPurge")}
-                      </button>
-                      <button type="button" className={rowAction} onClick={() => setPendingPurge("")}>
-                        {t("keys.cancel")}
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className={rowDanger} onClick={() => setPendingPurge(entry.id)}>
-                      {t("keys.purge")}
-                    </button>
-                  )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {trash.entries.length === 0 && (
-              <tr>
-                <td colSpan={4} className="py-3 text-sm text-ink-muted">
-                  {t("keys.trashEmpty")}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        </div>
-      </div>
     </section>
   );
 }

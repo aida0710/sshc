@@ -1094,6 +1094,7 @@ export const ja = {
   "keys.hardwareNote":
     "ハードウェアに紐づく鍵はセキュリティキーの操作が必要なため、sshc では作成しません。次のコマンドを Terminal で実行してください:",
   "keys.trashHeading": "ゴミ箱",
+  "keys.trashSummary": "ゴミ箱（{count}）",
   "keys.trashNote": "削除した鍵は、あなたが取り除くまでここに残ります。自動で削除されることはありません。",
   "keys.trashCaption": "ソフト削除した鍵",
   "keys.trashEmpty": "削除されたものはありません。",
