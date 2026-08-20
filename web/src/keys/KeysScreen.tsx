@@ -45,6 +45,8 @@ import {
 } from "./api";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./workflow";
 import { FolderPane } from "./FolderPane";
+import type { InspectorContent } from "../ui/Inspector";
+import { KeyInspector } from "./KeyInspector";
 import {
   folderRows,
   groupOfKeyPath,
@@ -65,6 +67,7 @@ import {
 // シークレットサービスの間で保つのと同じ分離だ。
 type KeysScreenProps = {
   api?: KeysApi;
+  onInspector?: (content: InspectorContent) => void;
   groups?: string[];
   secrets?: IntegrationsApi;
   onAssignGeneratedKey?: (key: GeneratedPrivateKeyHandoff) => void;
@@ -95,6 +98,7 @@ function relocateStem(item: KeyItem): string {
 
 
 export function KeysScreen({
+  onInspector,
   api = keysApi,
   groups = [],
   secrets = integrationsApi,
@@ -168,6 +172,7 @@ export function KeysScreen({
     listFilter, setListFilter,
     keyQuery, setKeyQuery,
     moreActionsFor, setMoreActionsFor,
+    selectedKey, setSelectedKey,
   } = useOrganiser();
   const [generated, setGenerated] = useState<{
     private: GeneratedPrivateKeyHandoff;
@@ -223,6 +228,7 @@ export function KeysScreen({
   // 入力欄を畳み、開いたあとに一覧を取り直すところまでを含む——その順序はこの画面の
   // 持ち物であって、行が知っていてよいことではない。
   const rowActions: KeyRowActions = {
+    onSelect: (item) => setSelectedKey((current) => (current === item.id ? null : item.id)),
     onToggleChosen: (item, picked) => {
       const next = new Set(chosen);
       if (picked) next.add(item.id);
@@ -267,6 +273,21 @@ export function KeysScreen({
       setPendingTrash(item);
     },
   };
+
+  // 選ばれた鍵の詳細は右のペインが持つ。消えた鍵のペインは閉じる。
+  useEffect(() => {
+    if (onInspector === undefined) return;
+    const item = inventory?.items.find((candidate) => candidate.id === selectedKey);
+    if (item === undefined) {
+      onInspector(null);
+      return;
+    }
+    onInspector({
+      label: t("keys.inspectorLabel"),
+      attention: item.permissionRisk,
+      body: <KeyInspector item={item} now={now} />,
+    });
+  }, [selectedKey, inventory, onInspector, t, now]);
 
   async function submitGeneration() {
     setFailure("");
@@ -670,6 +691,7 @@ export function KeysScreen({
         items={visibleItems}
         inventory={inventory}
         chosen={chosen}
+        selected={selectedKey}
         moreActionsFor={moreActionsFor}
         now={now}
         actions={rowActions}

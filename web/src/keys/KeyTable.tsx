@@ -10,6 +10,7 @@ import { noteLabels, rowAction, rowDanger } from "./labels";
 // 畳み、開いたあとに一覧を取り直すところまでを含む——その順序は画面の持ち物であって、
 // 行が知っていてよいことではない。行が知っているのは、押されたということだけである。
 export type KeyRowActions = {
+  onSelect: (item: KeyItem) => void;
   onToggleChosen: (item: KeyItem, chosen: boolean) => void;
   onBeginDrag: (event: DragEvent<HTMLSpanElement>, item: KeyItem) => void;
   onEndDrag: () => void;
@@ -33,6 +34,7 @@ export function KeyTable({
   items,
   inventory,
   chosen,
+  selected,
   moreActionsFor,
   now,
   actions,
@@ -40,13 +42,14 @@ export function KeyTable({
   items: KeyItem[];
   inventory: KeyInventoryResponse;
   chosen: ReadonlySet<string>;
+  selected: string | null;
   moreActionsFor: string;
   now: number;
   actions: KeyRowActions;
 }) {
   const t = useTranslate();
   return (
-  <table className="w-full min-w-[56rem] text-left text-sm">
+  <table className="w-full text-left text-sm">
     <caption className="sr-only">{t("keys.tableCaption")}</caption>
     <thead>
       <tr className={tableHeadRow}>
@@ -55,10 +58,7 @@ export function KeyTable({
         </th>
         <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFile")}</th>
         <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colKind")}</th>
-        <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colAlgorithm")}</th>
-        <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFingerprint")}</th>
-        <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colPermissions")}</th>
-        <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colUsedBy")}</th>
+        <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colState")}</th>
         <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colActions")}</th>
       </tr>
     </thead>
@@ -98,7 +98,16 @@ export function KeyTable({
               </div>
             ) : null}
           </td>
-          <td className="py-3 pr-3 font-mono text-xs">{item.relativePath}</td>
+          <td className="py-3 pr-3">
+            <button
+              type="button"
+              aria-pressed={selected === item.id}
+              onClick={() => actions.onSelect(item)}
+              className="text-left font-mono text-xs text-ink underline-offset-2 hover:underline"
+            >
+              {item.relativePath}
+            </button>
+          </td>
           <td className="py-2 pr-3">
             {item.kind}
             {item.certificate === undefined ? null : (
@@ -111,21 +120,20 @@ export function KeyTable({
               </ul>
             )}
           </td>
-          <td className="py-2 pr-3">{item.bits > 0 ? `${item.algorithm} · ${item.bits}` : item.algorithm}</td>
-          <td className="py-2 pr-3 font-mono text-xs break-all">
-            {item.fingerprint !== "" ? item.fingerprint : null}
-            {item.notes.map((note) => (
-              <span key={note} className="ml-2 text-notice-ink">
-                {note in noteLabels ? t(noteLabels[note]!) : note}
-              </span>
-            ))}
-          </td>
-          <td className="py-2 pr-3">
-            {item.permission}
-            {item.permissionRisk && <span className="ml-2 text-notice-ink">{t("keys.permissionRisk")}</span>}
-          </td>
-          <td className="py-2 pr-3">
-            {item.references.map((reference) => reference.hostPatterns.join(" ")).join(", ")}
+          {/* 印だけで足りる。指紋も権限も使用箇所も、右のペインが持つ。 */}
+          <td className="py-2 pr-3 text-xs">
+            <span className="flex flex-wrap gap-2">
+              {item.permissionRisk && <span className="text-notice-ink">{t("keys.permissionRisk")}</span>}
+              {agentHolds(inventory, item) && <span className="text-live">{t("keys.stateInAgent")}</span>}
+              {item.references.length > 0 && (
+                <span className="text-ink-muted">{t("keys.stateUsedBy", { count: item.references.length })}</span>
+              )}
+              {item.notes.map((note) => (
+                <span key={note} className="text-notice-ink">
+                  {note in noteLabels ? t(noteLabels[note]!) : note}
+                </span>
+              ))}
+            </span>
           </td>
           <td className="py-2">
             <div className="flex flex-wrap gap-1">
@@ -217,7 +225,7 @@ export function KeyTable({
       ))}
       {items.length === 0 && (
         <tr>
-          <td colSpan={8} className="p-5 text-sm text-ink-muted">
+          <td colSpan={5} className="p-5 text-sm text-ink-muted">
             {inventory.items.length === 0 ? t("keys.inventoryEmpty") : t("keys.noMatches")}
           </td>
         </tr>
@@ -231,7 +239,7 @@ export function KeyTable({
 // 観点で記述する: 誰を名指すか、誰のためのものか、期限が切れているか
 // どうかだ。「certificate」とだけ言う期限切れの証明書は動作するものと
 // 見分けがつかない。これが design §6.3 がそれらを分類する理由のすべてだ。
-function certificateLines(
+export function certificateLines(
   certificate: KeyCertificate,
   now: number,
   t: Translate,
@@ -275,7 +283,7 @@ function certificateLines(
 // どの秘密鍵もそれに属していない場合のみだ: ペアの片方だけをリネームすると、
 // OpenSSH がいまだに名前で対応付けている 2 つのファイルを、読み手が
 // 対応付けられなくなるので、サーバーはそれを拒否し、ボタンも提供されない。
-function renameable(item: KeyItem, items: KeyItem[]): boolean {
+export function renameable(item: KeyItem, items: KeyItem[]): boolean {
   if (item.kind === "private_key") return true;
   if (item.kind !== "public_key" && item.kind !== "certificate") return false;
   const fingerprint =
@@ -289,7 +297,7 @@ function renameable(item: KeyItem, items: KeyItem[]): boolean {
 // agentHolds は、エージェントが現在この鍵を保持しているかどうかを、
 // フィンガープリントで照合して報告する。エージェントの identity とインベントリ
 // 項目に共通するのはそれだけだ——エージェントはファイルパスを何も知らない。
-function agentHolds(inventory: KeyInventoryResponse, item: KeyItem): boolean {
+export function agentHolds(inventory: KeyInventoryResponse, item: KeyItem): boolean {
   if (!inventory.agentAvailable || item.fingerprint === "") return false;
   return inventory.agentIdentities.some((identity) => identity.fingerprint === item.fingerprint);
 }
