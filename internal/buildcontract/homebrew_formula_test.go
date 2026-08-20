@@ -1,6 +1,7 @@
 package buildcontract
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,5 +53,58 @@ func TestTheFormulaBuildsSomethingThatExists(t *testing.T) {
 	// std_go_args は -s -w を自分で足す。重ねて書くと二重になる。
 	if strings.Contains(build, `-s -w`) {
 		t.Error("formula の ldflags が -s -w を重ねている: std_go_args が既に足す")
+	}
+}
+
+// cask が指す dmg の名前は、リリースが実際に作る名前でなければならない。
+//
+// **formula が建てられないまま出ていったのと同じ穴である。** cask の側は
+// 建てるものが無いぶん確かめる先が少なく、名前がずれれば 404 になる——
+// リリースは緑で終わり、気付くのは利用者が打ったときになる。
+func TestTheCaskNamesTheDiskImageTheReleaseBuilds(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "homebrew", "sshc-cask.rb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cask := string(body)
+
+	// electron-builder の artifactName がその名前を決めている。
+	manifest, err := os.ReadFile(filepath.Join("..", "..", "desktop", "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var desktop struct {
+		ProductName string `json:"productName"`
+		Build       struct {
+			Mac struct {
+				ArtifactName string `json:"artifactName"`
+			} `json:"mac"`
+		} `json:"build"`
+	}
+	if err := json.Unmarshal(manifest, &desktop); err != nil {
+		t.Fatal(err)
+	}
+
+	// ${productName}-${version}-${os}-${arch}.${ext} を cask の綴りへ写す。
+	expected := desktop.Build.Mac.ArtifactName
+	expected = strings.ReplaceAll(expected, "${productName}", desktop.ProductName)
+	expected = strings.ReplaceAll(expected, "${version}", "#{version}")
+	expected = strings.ReplaceAll(expected, "${os}", "mac")
+	expected = strings.ReplaceAll(expected, "${arch}", "#{arch}")
+	expected = strings.ReplaceAll(expected, "${ext}", "dmg")
+	if !strings.Contains(cask, expected) {
+		t.Errorf("cask が指す名前と、リリースが作る名前が違う\n  リリース: %s\n  cask   : %s",
+			expected, regexp.MustCompile(`url "[^"]+"`).FindString(cask))
+	}
+
+	// **入れるのは .app ひとつである。** productName が変われば束の中の名前も変わる。
+	if !strings.Contains(cask, `app "`+desktop.ProductName+`.app"`) {
+		t.Errorf("cask が入れようとしている .app の名前が productName（%s）と違う", desktop.ProductName)
+	}
+
+	// **CLI は formula の担当である。** cask が同じ名前を PATH へ張ると、
+	// brew が同じ綴りを二度管理することになる。
+	if strings.Contains(cask, "binary ") {
+		t.Error("cask が binary を張っている: 端末側の入口は formula が持つ")
 	}
 }

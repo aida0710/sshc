@@ -376,6 +376,20 @@ jobs:
               -e "s#^  sha256 .*#  sha256 \"$sum\"#" \
               packaging/homebrew/sshc.rb > sshc.rb
 
+          # **cask は dmg を指す。** formula がソースを建てるのに対し、こちらは
+          # 出来上がった束を配る——押さえる sha256 も、リリースが公開した
+          # checksums.txt のものである。
+          curl -fsSL "https://github.com/$SOURCE_REPO/releases/download/$RELEASE_TAG/checksums.txt" -o checksums.txt
+          armSum=$(grep " sshc-$version-mac-arm64.dmg\$" checksums.txt | cut -d' ' -f1)
+          intelSum=$(grep " sshc-$version-mac-x64.dmg\$" checksums.txt | cut -d' ' -f1)
+          [ -n "$armSum" ] && [ -n "$intelSum" ] || { echo "checksums.txt に dmg が無い" >&2; exit 1; }
+          sed -e "s#^  version .*#  version \"$version\"#" \
+              -e "s#^  sha256 arm: .*#  sha256 arm: \"$armSum\",#" \
+              -e "s#^         intel: .*#         intel: \"$intelSum\"#" \
+              packaging/homebrew/sshc-cask.rb > sshc-cask.rb
+          grep -q "$armSum" sshc-cask.rb || { echo "cask に arm の checksum が入らなかった" >&2; exit 1; }
+          grep -q "$intelSum" sshc-cask.rb || { echo "cask に intel の checksum が入らなかった" >&2; exit 1; }
+
           # 差し替えが効いたことを見る。**sed が空振りしても 0 で終わる**ので、
           # ここで見ないと 0.0.0 のままの formula を押してしまう。
           grep -q "$sum" sshc.rb || { echo "the checksum was not written into the formula" >&2; exit 1; }
@@ -390,17 +404,18 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap -o IdentitiesOnly=yes"
 
           git clone --depth 1 "git@github.com:$TAP_REPO.git" tap
-          mkdir -p tap/Formula
+          mkdir -p tap/Formula tap/Casks
           cp sshc.rb tap/Formula/sshc.rb
+          cp sshc-cask.rb tap/Casks/sshc.rb
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # **先に add してから比べる。** `git diff` は追跡されていないファイルを
-          # 見ないので、**formula がまだ無い一度目は「変化なし」と読まれる**
-          # ——実際 v0.2.0 でそれが起き、job は 6 秒で緑になって何も押さなかった。
+          # 見ないので、**まだ無い一度目は「変化なし」と読まれる** ——実際
+          # v0.2.0 でそれが起き、job は 6 秒で緑になって何も押さなかった。
           # 索引に入れてから比べれば、新規も変更も同じ 1 つの問いになる。
-          git add Formula/sshc.rb
+          git add Formula/sshc.rb Casks/sshc.rb
           if git diff --cached --quiet; then
             echo "the tap already describes $RELEASE_TAG."
             exit 0
