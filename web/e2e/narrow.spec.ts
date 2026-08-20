@@ -18,6 +18,10 @@ async function openSectionThroughDrawer(page: import("@playwright/test").Page, n
     .getByRole("navigation", { name: "Primary" })
     .getByRole("link", { name, exact: true })
     .click();
+  // **描かれてから測る。** セクションは遅延読み込みなので、押した直後の面には
+  // まだ何も無い——待たずに測れば、どの検査も空の面について緑を返す。実際
+  // Keys の検索欄は面から 253px はみ出していたのに、ここが緑だった。
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
 }
 
 // 横スクロールは、狭い画面の壊れ方そのものである。**どれか一つの面が溢れれば
@@ -74,8 +78,44 @@ test("keeps every section inside 360 pixels", async ({ page, installation }) => 
   for (const section of ["Connections", "Keys", "Known Hosts", "Ad hoc checks", "Settings"]) {
     await openSectionThroughDrawer(page, section);
     await expectNoHorizontalOverflow(page, section);
+    await expectNothingCutOff(page, section);
   }
 });
+
+// **操作は面の中に居なければならない。**
+//
+// 上の検査が見るのは document の横スクロールだが、セクションは自分の器の中で
+// 送られるので、溢れても document は動かない。実際 Keys の検索欄は 288px 固定で、
+// 360px の面から 253px 出ていたのに、あの検査は緑だった。
+//
+// **表は別である。** あれは overflow-x-auto に入れてあり、面より広いのは承知の
+// うえで、指で送れば読める。
+async function expectNothingCutOff(page: import("@playwright/test").Page, where: string) {
+  const escaped = await page.evaluate(() => {
+    const limit = document.documentElement.clientWidth;
+    const drawer = document.querySelector("nav");
+    const out: string[] = [];
+    for (const element of Array.from(
+      document.querySelectorAll("input, select, button, a[href], textarea"),
+    )) {
+      // 閉じているドロワーは面の外に駐まっている。位置は別の検査が見ている。
+      if (drawer?.contains(element) === true) continue;
+      if (element.closest("table") !== null) continue;
+      const box = element.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) continue;
+      if (box.right <= limit + 1) continue;
+      const name =
+        element.getAttribute("aria-label") ??
+        element.textContent?.trim().slice(0, 24) ??
+        element.tagName.toLowerCase();
+      out.push(
+        `${element.tagName.toLowerCase()} "${name}" → ${box.left.toFixed(0)}..${box.right.toFixed(0)} (面は 0..${limit})`,
+      );
+    }
+    return out;
+  });
+  expect(escaped, `${where}: 面からはみ出した操作がある`).toEqual([]);
+}
 
 test("navigates through the drawer and closes it behind itself", async ({ page, installation }) => {
   await openApplication(page, installation);
