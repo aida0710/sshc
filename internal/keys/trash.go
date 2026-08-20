@@ -248,7 +248,13 @@ func (service *Service) ListTrash() ([]TrashEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	inventory, err := service.Inventory()
+	// **走査だけでよい。** ここが inventory に訊くのは Kind と Fingerprint だけで
+	// （restoreBlockers を見よ）、Inventory() が続けて行う ssh_config の解決と参照の
+	// 紐付けは一度も読まれない。Include を辿る解決はこの package で一番重い仕事である。
+	//
+	// 壊れた ssh_config の影響も受けなくなる。復元できるかどうかは、設定が読める
+	// かどうかとは関係がない。
+	inventory, err := NewScanner(service.workspace).Scan()
 	if err != nil {
 		return nil, err
 	}
