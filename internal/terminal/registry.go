@@ -43,6 +43,8 @@ type Registry struct {
 	// Limits は metadata が運ぶ上限を読む。読むのは開くときだけなので、設定を
 	// 変えても、すでに開いているセッションが閉じられることはない。nil なら既定。
 	Limits func() Limits
+	// ReconnectDelay は、輸送が落ちたあと繋ぎ直すまでの間隔である。nil なら既定。
+	ReconnectDelay func(attempt int) time.Duration
 	// Now と Random は、テストが時計と ID を固定するためにここにある。
 	Now    func() time.Time
 	Random io.Reader
@@ -77,6 +79,17 @@ func (r *Registry) condition() *sync.Cond {
 		r.waiters = sync.NewCond(&r.mutex)
 	}
 	return r.waiters
+}
+
+// reconnectDelay は、繋ぎ直しを待つ間隔である。
+//
+// **試験のために開いている。** 5 回の再試行に 33 秒かかる既定のままでは、
+// 諦めるところを確かめる試験が現実の時間を待つことになる。
+func (r *Registry) reconnectDelay(attempt int) time.Duration {
+	if r.ReconnectDelay != nil {
+		return r.ReconnectDelay(attempt)
+	}
+	return reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
 }
 
 func (r *Registry) now() time.Time {
@@ -187,6 +200,12 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		process: process,
 		cleanup: spec.Cleanup,
 		done:    make(chan struct{}),
+		// **繋ぎ直せるのは、開き方を知っているセッションだけである。**
+		// ローカルのシェルには落ちる輸送が無いので、Spec.Open を持たない。
+		reopen:   spec.Open,
+		size:     size,
+		stopping: make(chan struct{}),
+		delay:    r.reconnectDelay,
 	}
 	r.mutex.Lock()
 	r.sessions = append(r.sessions, session)

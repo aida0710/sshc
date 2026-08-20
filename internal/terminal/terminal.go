@@ -86,6 +86,19 @@ type ExitInfo struct {
 	At     time.Time
 }
 
+// TransportLost は、シェルが終わったのではなく輸送が落ちたことを表す終了コード。
+//
+// **この二つを混ぜてはならない。** 人が `exit` と打ったなら、繋ぎ直すのは
+// 頼まれていないことをすることである。回線が切り替わって落ちたのなら、
+// 繋ぎ直さないのは「打ち直せ」と言っているのと同じである。
+//
+// sshclient がこの値を入れる。PTY を持つセッション（ローカルのシェル）は、
+// 落ちる輸送を持たないのでここへ来ない。
+const TransportLost = -1
+
+// Lost は、この終わり方が輸送の断絶かどうかを答える。
+func (info ExitInfo) Lost() bool { return info.Code == TransportLost }
+
 // Command は、PTY の中で起こすプログラムひとつである。
 //
 // コマンドラインのためのフィールドはない。このパッケージはコマンドラインを
