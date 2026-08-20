@@ -108,3 +108,42 @@ func TestTheCaskNamesTheDiskImageTheReleaseBuilds(t *testing.T) {
 		t.Error("cask が binary を張っている: 端末側の入口は formula が持つ")
 	}
 }
+
+// **利用者に打たせる行は、打てば通る行でなければならない。**
+//
+// docs は一度 `brew install --cask --no-quarantine ...` を案内していた。
+// あの旗は Homebrew 5.0 で非推奨、5.1 で削除されており、**打った人が受け取るのは
+// 使い方の全文と `Error: invalid option`** である。確かめずに書いた。
+//
+// ここが数えるのは、案内の中の brew の行が、消えた旗を含まないことである。
+func TestTheInstructionsUseNoRetiredBrewFlags(t *testing.T) {
+	// 消えたもの。増えたらここへ足す。
+	retired := map[string]string{
+		"--no-quarantine": "Homebrew 5.1 で削除された（Gatekeeper の迂回を提供しない方針。代替なし）",
+		"--quarantine":    "同上",
+	}
+	for _, name := range []string{
+		filepath.Join("..", "..", "docs", "release-install.md"),
+		filepath.Join("..", "..", "README.md"),
+	} {
+		body, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for index, line := range strings.Split(string(body), "\n") {
+			if !strings.Contains(line, "brew ") {
+				continue
+			}
+			// 「もう無い」と説明している行は案内ではない。
+			if strings.Contains(line, "削除") || strings.Contains(line, "非推奨") {
+				continue
+			}
+			for flag, why := range retired {
+				if strings.Contains(line, flag) {
+					t.Errorf("%s:%d が %s を打たせている: %s\n  %s",
+						filepath.Base(name), index+1, flag, why, strings.TrimSpace(line))
+				}
+			}
+		}
+	}
+}
