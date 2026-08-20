@@ -346,6 +346,17 @@ describe("KeysScreen", () => {
     expect(window.sessionStorage.length).toBe(0);
   });
 
+  // **ゴミ箱は畳んである。** ここでするのは「戻す」か「完全に消す」であって、
+  // いま持っている鍵を整えることではない——1000 行の一番下に開いたまま置いても
+  // 誰も辿り着かない。**件数だけは畳んだままでも見える** ——空でないことは、
+  // 開く前に分かってよい。
+  it("keeps the trash folded but says how much is in it", async () => {
+    render(<KeysScreen api={buildApi()} />);
+
+    const summary = await screen.findByText("Trash (1)");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+  });
+
   it("requires a second confirmation before a permanent delete", async () => {
     const api = buildApi();
     render(<KeysScreen api={api} />);
