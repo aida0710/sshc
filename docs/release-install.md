@@ -3,8 +3,22 @@
 ### Homebrew（macOS / Linux）
 
 ```sh
-brew install aida0710/tap/sshc
+brew install aida0710/tap/sshc          # 端末から使う CLI
+brew install --cask aida0710/tap/sshc   # アプリ（macOS）
 ```
+
+**同じ名前で別のものが入ります。** `--cask` を付けるとアプリ、付けないと CLI です。
+両方要るなら両方入れてください。
+
+アプリは**署名も公証もしていない**ので、Homebrew が付ける隔離の印のせいで初回に
+「開発元を確認できません」を通ることになります。それを避けたいなら:
+
+```sh
+brew install --cask --no-quarantine aida0710/tap/sshc
+```
+
+**cask 側でそれを既定にはできません** — Gatekeeper を黙って迂回する cask を
+作れないよう、Homebrew がその手段を取り上げています。妥当な判断です。
 
 **ソースからビルドします。** brew が Go を用意して `go build` を回すので、
 入るのはあなたの機械で作られた実体です。置かれるのは brew の prefix
