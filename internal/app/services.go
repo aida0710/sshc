@@ -9,6 +9,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/diagnostics"
+	"sshc/internal/handoff"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
 	"sshc/internal/remotekey"
@@ -81,6 +82,18 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	// 配下のもうひとつの通常の管理対象ファイルにすぎず、ジャーナルはひとつで足り、
 	// ワークスペースが持つ他のすべてと一緒に移動する。
 	passwordService := secret.NewService(workspace, transactions, time.Now)
+	if dependencies.Owner == handoff.OwnerDesktop {
+		passwordService.SetIdleTimeout(secret.StayOpen)
+	}
+	// **時計で閉じるのは、OS の境界が無いところだけである。**
+	//
+	// デスクトップの engine はアプリの子で、アプリを終えれば道連れに死ぬ——vault は
+	// メモリの中だけなので、そこで消える。蓋を閉じたノートは、開ければ OS が
+	// ログインパスワードを訊く。そこへ 8 時間の時計を重ねても、増える安全は
+	// わずかで、確実に増えるのは再入力の回数である。
+	//
+	// 画面の無い機械は違う。`sshc headless` は systemd の下で何週間も走り、
+	// 蓋も画面ロックも無い。**そこでは、これが唯一の歯止めである。**
 
 	// プロセス内で SSH を話すのに要るものは、ここで一度だけ組み立てる。
 	// 対話セッションも認証テストも、同じ鍵・同じ known_hosts・同じ解決器を使う。
