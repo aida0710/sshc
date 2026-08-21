@@ -1783,3 +1783,52 @@ func TestAReaderThatIsNotTheLoopKeepsTheVaultOpen(t *testing.T) {
 		t.Fatal("the vault closed even though it was being used")
 	}
 }
+
+// **画面のある機械では、時計で閉じない。**
+//
+// engine はアプリの子であり、アプリを終えれば道連れに死ぬ——vault はメモリの
+// 中だけなので、そこで消える。蓋を閉じたノートは、開ければ OS がログイン
+// パスワードを訊く。**そこへ時計を重ねても、増える安全はわずかで、確実に
+// 増えるのは再入力の回数である。**
+func TestAVaultOnADesktopStaysOpenUntilItIsLocked(t *testing.T) {
+	clock := time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
+	service, _ := newClockedService(t, func() time.Time { return clock })
+	service.SetIdleTimeout(secret.StayOpen)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Set("bastion", "hunter2"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 一週間放っておいても開いている。
+	clock = clock.Add(7 * 24 * time.Hour)
+	if !service.Unlocked() {
+		t.Error("時計で閉じた: 画面のある機械では、閉じるのは人と engine の終わりだけである")
+	}
+
+	// **閉じる手段が消えたわけではない。** 頼まれれば閉じる。
+	service.Lock()
+	if service.Unlocked() {
+		t.Error("頼まれても閉じなかった")
+	}
+}
+
+// **画面の無い機械では、時計が唯一の歯止めである。**
+//
+// `sshc headless` は systemd の下で何週間も走り、蓋も画面ロックも無い。
+func TestAVaultOnAHeadlessEngineStillShutsItself(t *testing.T) {
+	clock := time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
+	service, _ := newClockedService(t, func() time.Time { return clock })
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Set("bastion", "hunter2"); err != nil {
+		t.Fatal(err)
+	}
+
+	clock = clock.Add(secret.IdleTimeout + time.Minute)
+	if service.Unlocked() {
+		t.Error("既定のまま開き続けた: headless には OS の境界が無い")
+	}
+}
