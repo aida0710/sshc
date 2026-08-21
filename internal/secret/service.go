@@ -69,13 +69,26 @@ type ConnectionSecretsMutation struct {
 	KeyPassphrase *KeyPassphraseMutation
 }
 
-// IdleTimeout は、開いた vault が使われないまま生き続ける時間。
+// IdleTimeout は、開いた vault が使われないまま生き続ける時間である。
 //
-// プロセスの寿命のあいだずっと開いたままの vault は、ノートパソコンが鞄の中に
-// あるあいだも開いている。しかもそれは、すべてのパスワードとすべての鍵の
-// パスフレーズを保持している。8 時間は 1 日の勤務時間だ。朝に使った人は午後に
-// 再度尋ねられず、夜に手を止めた人は尋ねられる。
+// **これが効くのは、OS の境界が無いところだけである。**
+//
+// デスクトップの engine はアプリの子であり、アプリを終えれば道連れに死ぬ——
+// vault はメモリの中だけなので、そこで消える。鞄の中のノートは蓋が閉じていて、
+// 開ければ OS がログインパスワードを訊く。**そこへ時計を重ねても、増える安全は
+// わずかで、確実に増えるのは再入力の回数である。**
+//
+// 画面の無い機械は違う。`sshc headless` は systemd の下で何週間も走り、蓋も
+// 画面ロックも無い。**そこでは、これが唯一の歯止めである。**
+//
+// 8 時間は 1 日の勤務時間だ。朝に使った人は午後に再度尋ねられず、夜に手を止めた
+// 人は尋ねられる。
 const IdleTimeout = 8 * time.Hour
+
+// StayOpen は、時計では閉じないことを表す。
+//
+// 閉じるのは、人が施錠したときと、engine が終わったときだけになる。
+const StayOpen time.Duration = 0
 
 // Service は、プロセスの寿命のあいだ、開いた vault を所有する。
 //
@@ -106,6 +119,10 @@ type Service struct {
 	// 忘れられたタブがひとつあるだけで、マシンの電源が入っているあいだじゅう vault が
 	// 開いたままになってはならない。
 	used time.Time
+	// idle は、触れられないまま閉じるまでの時間である。StayOpen なら閉じない。
+	// **決めるのは engine を起こした側である** ——ここは、自分が画面のある機械に
+	// 居るのかサーバに居るのかを知らない。
+	idle time.Duration
 	// guardian は、この端末の OS の錠前。nil は錠前が無いことである。
 	guardian Guardian
 	// unattended は、いま走っている「誰も見ていない」呼び出しの数。0 でない
@@ -125,7 +142,26 @@ func NewService(workspace *storage.Workspace, transactions *storage.Manager, now
 		workspace:    workspace,
 		transactions: transactions,
 		now:          now,
+		idle:         IdleTimeout,
 	}
+}
+
+// IdleTimeout は、いま設定されている時計を返す。**配線が効いていることを、
+// 呼び出し側の外から確かめられるようにするためにある。**
+func (s *Service) IdleTimeout() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.idle
+}
+
+// SetIdleTimeout は、時計で閉じるまでの時間を決める。StayOpen なら閉じない。
+//
+// **決めるのは engine を起こした側である。** この package は、自分が画面の
+// ある機械に居るのかサーバに居るのかを知らない。
+func (s *Service) SetIdleTimeout(idle time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.idle = idle
 }
 
 // open は vault を返す。IdleTimeout より長く触れられていなければ、先にそれを
@@ -138,7 +174,7 @@ func (s *Service) open() *Vault {
 	if s.vault == nil {
 		return nil
 	}
-	if s.now().Sub(s.used) >= IdleTimeout {
+	if s.idle != StayOpen && s.now().Sub(s.used) >= s.idle {
 		s.vault = nil
 		s.baseline = nil
 		return nil
