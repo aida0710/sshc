@@ -41,15 +41,3 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number) {
     },
   };
 }
-
-/**
- * measuredCellHeight は、描かれている行の高さを実測する。
- *
- * <p>**測るのは端末の面であって、それを載せている箱ではない。** 箱には余白も、
- * 最後の行の下の余りも入っている。そこを行数で割ると 1 行がわずかに高く出て、
- * 指を引いた距離より少なく流れる。
- */
-export function measuredCellHeight(screen: HTMLElement, rows: number): number {
-  if (rows <= 0) return 0;
-  return screen.clientHeight / rows;
-}
