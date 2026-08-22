@@ -7,6 +7,7 @@ import { integrationsApi, type IntegrationsApi, type TerminalSession } from "../
 import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
+import { fontStack } from "./fonts";
 import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
@@ -33,6 +34,11 @@ type TerminalViewProps = {
   // 接続ごとの選択と全体の選択のどちらが勝つかは、ここでは決めない。
   // 渡ってくるのは決着したあとの 1 つである。
   palette?: string;
+  // font は、選ばれた字体の名前である。空なら端末の等幅に任せる。
+  //
+  // **字体を変えると 1 マスの大きさが変わる。** 桁と行を測り直し、向こうの
+  // シェルにも新しい大きさを伝えないと、全画面を使うプログラムが画面外へ描く。
+  font?: string;
 };
 
 // Link は、この画面とセッションを繋ぐ通信路の状態である。
@@ -70,10 +76,13 @@ export function TerminalView({
   fontSize,
   rightClickPaste = true,
   palette,
+  font,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
   const host = useRef<HTMLDivElement>(null);
+  // 測り直しは端末を建てた effect の中にしかない。外から鳴らせるようにここへ置く。
+  const refit = useRef<(() => void) | null>(null);
   const terminal = useRef<Terminal | null>(null);
   const clipboardSettings = useRef<TerminalClipboardSettings>({ copyOnSelect, rightClickPaste });
   // イベント配線は端末の寿命に一度だけ行い、設定値だけを差し替える。
@@ -113,8 +122,8 @@ export function TerminalView({
       cursorBlink: session.exited === undefined,
       // Android には SF Mono も Menlo も無い。**ui-monospace はそこで何にも
       // 解決しないことがある**ので、その端末が実際に持っている等幅を並べる。
-      fontFamily:
-        'ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", monospace',
+      // 選ばれていなければ既定の並びが返る。**どちらの場合も同じ呼び出しである。**
+      fontFamily: fontStack(font ?? ""),
       // 設定された値があればそれが答えである。無いときだけ画面の幅で決める
       // ——**ここだけは媒体クエリを JS で読む。** xterm の字は寸法計算に入る
       // 値であって CSS で塗り替えられるものではないので、breakpoint では
@@ -177,6 +186,9 @@ export function TerminalView({
       syncSize();
     };
     measure();
+    // **字体が変わったときにも、同じ測り直しが要る。** 桁の幅が変われば
+    // 行数も桁数も変わる——外から呼べる形で置いておく。
+    refit.current = measure;
 
     // 指で流す。**xterm はこれを持っていない**——スクロールする層は絶対配置で
     // 下に敷かれ、上に画面の層が乗っているので、指が触れるのは常に上である。
@@ -357,6 +369,14 @@ export function TerminalView({
     terminal.current.options.theme = terminalTheme(host.current);
   }, [resolved, palette]);
 
+  // 字体の選び直しも端末を作り直さない。**ただし測り直しは要る** ——1 マスの
+  // 幅が変われば、桁数も行数も、向こうのシェルへ伝える大きさも変わる。
+  useEffect(() => {
+    if (terminal.current === null) return;
+    terminal.current.options.fontFamily = fontStack(font ?? "");
+    refit.current?.();
+  }, [font]);
+
   return (
     <section aria-label={t("terminal.screenLabel", { title: session.title })} className="relative flex min-h-0 flex-1 flex-col">
       {problem === "" ? null : (
@@ -425,6 +445,7 @@ export function TerminalView({
         // 選ばれていないときは属性を置かない。**空文字を置くと、どの配色にも
         // 一致しない選択が「選ばれた」ことになる。**
         {...(palette === undefined || palette === "" ? {} : { "data-term-palette": palette })}
+        {...(font === undefined || font === "" ? {} : { "data-term-font": font })}
         className="relative min-h-0 flex-1 bg-term-bg p-2"
       />
       <KeyBar

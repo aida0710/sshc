@@ -563,3 +563,39 @@ test("paints the console in the colour scheme that was chosen", async ({ page, i
   expect(beforeSurface).not.toBe("#282a36");
   expect(beforeRed).not.toBe("rgb(255, 85, 85)");
 });
+
+// 同梱した字体は、端末まで届く。
+//
+// **選べることと、入っていることは別である。** 名前だけ渡っても、woff2 が
+// 配信されていなければブラウザは黙って代替へ落ちる——見た目は少し変わるが、
+// 選んだ字体ではない。だから「読み込めたか」を直接聞く。
+//
+// CSP は緩めていない。font は default-src 'self' で通る——**それをここで
+// 確かめている。** 通らなければ document.fonts.check が false を返す。
+test("loads the font it ships and hands it to the console", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+
+  // **字体を持っているのは .xterm-rows である。** そこは xterm が桁を較正する
+  // 場所でもあり、metrics.ts が読んでいるのと同じ場所である。
+  const family = () =>
+    page.locator(".xterm-rows").evaluate((node) => getComputedStyle(node as HTMLElement).fontFamily);
+  expect(await family()).not.toContain("JetBrains Mono");
+
+  await panel.getByRole("tab", { name: "Settings" }).click();
+  await openSection(page, "Settings");
+  const settings = page.getByRole("region", { name: "Terminal" });
+  await settings.getByLabel("Font family").selectOption("jetbrains-mono");
+  await settings.getByRole("button", { name: "Save" }).click();
+  await expect(settings.getByText(/Saved/)).toBeVisible();
+
+  await openSection(page, "Terminal");
+  await expect.poll(family).toContain("JetBrains Mono");
+  // **本当に読み込めたのか。** 名前が付いているだけでは、代替で描かれていても通る。
+  await expect
+    .poll(async () => page.evaluate(() => document.fonts.check('13px "JetBrains Mono"')))
+    .toBe(true);
+});

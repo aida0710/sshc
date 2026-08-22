@@ -1,6 +1,7 @@
 import type { components } from "../api/schema";
 
 export type TerminalAppearance = components["schemas"]["TerminalAppearance"];
+type HostMetadata = components["schemas"]["HostMetadata"];
 
 /** Resolved は、決着したあとの見た目である。空は「選ばれていない」。 */
 export type Resolved = { readonly palette: string; readonly font: string };
@@ -25,4 +26,25 @@ export function resolveAppearance(
       ? forConnection[key]
       : (overall?.[key] ?? "");
   return { palette: pick("palette"), font: pick("font") };
+}
+
+/**
+ * chooseAppearance は、接続の見た目を 1 項目だけ書き換えて返す。
+ *
+ * <p>**他の項目に触らない。** 配色を選んだ操作が字体を消してはならない。
+ *
+ * <p>**何も選ばれていない節は残さない。** 空を残すと、次に読む者は何か選ばれて
+ * いると思う——そして「既定へ戻した」接続の metadata に、何も言っていない節が
+ * 積もり続ける。
+ */
+export function chooseAppearance(
+  metadata: HostMetadata,
+  change: Partial<TerminalAppearance>,
+): HostMetadata {
+  const merged: TerminalAppearance = { ...metadata.appearance, ...change };
+  const kept = Object.fromEntries(
+    Object.entries(merged).filter(([, value]) => value !== undefined && value !== ""),
+  ) as TerminalAppearance;
+  const { appearance: _dropped, ...rest } = metadata;
+  return Object.keys(kept).length === 0 ? rest : { ...rest, appearance: kept };
 }

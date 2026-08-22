@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAppearance } from "./appearance";
+import { chooseAppearance, resolveAppearance } from "./appearance";
 
 describe("resolveAppearance", () => {
   it("lets the connection win over the overall choice", () => {
@@ -26,5 +26,39 @@ describe("resolveAppearance", () => {
 
   it("chooses nothing when nobody chose", () => {
     expect(resolveAppearance(undefined, undefined)).toEqual({ palette: "", font: "" });
+  });
+});
+
+const identity = { path: "config", alias: "prod" };
+
+describe("chooseAppearance", () => {
+  // **配色を選んだ操作が字体を消してはならない。**
+  it("changes one choice and leaves the other alone", () => {
+    const next = chooseAppearance({ identity, appearance: { font: "jetbrains-mono" } }, { palette: "nord" });
+    expect(next.appearance).toEqual({ font: "jetbrains-mono", palette: "nord" });
+  });
+
+  it("adds the section when there was none", () => {
+    expect(chooseAppearance({ identity }, { palette: "nord" }).appearance).toEqual({ palette: "nord" });
+  });
+
+  // **空の節を残さない。** 残せば、次に読む者は何か選ばれていると思う。
+  it("drops the section once nothing is chosen any more", () => {
+    const next = chooseAppearance({ identity, appearance: { palette: "nord" } }, { palette: "" });
+    expect("appearance" in next).toBe(false);
+  });
+
+  it("keeps the section while something else is still chosen", () => {
+    const next = chooseAppearance(
+      { identity, appearance: { palette: "nord", font: "jetbrains-mono" } },
+      { palette: "" },
+    );
+    expect(next.appearance).toEqual({ font: "jetbrains-mono" });
+  });
+
+  // 見た目以外のものを道連れにしない。
+  it("carries every other field of the metadata untouched", () => {
+    const next = chooseAppearance({ identity, colour: "#123456", tags: ["a"] }, { palette: "nord" });
+    expect(next).toEqual({ identity, colour: "#123456", tags: ["a"], appearance: { palette: "nord" } });
   });
 });

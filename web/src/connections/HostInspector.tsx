@@ -3,7 +3,10 @@ import { CheckboxField, Field, control, fieldLabel, hintText } from "../ui/form"
 import { Button, Card } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { NoticeList } from "./SavePreview";
-import { PalettePicker } from "../terminal/PalettePicker";
+import { AppearancePicker } from "../terminal/AppearancePicker";
+import { chooseAppearance } from "../terminal/appearance";
+import { fonts } from "../terminal/fonts";
+import { palettes } from "../terminal/palettes";
 
 // ペインに開く価値のある中身があるかどうか。
 //
@@ -80,15 +83,20 @@ export function HostInspector({
         </div>
 
         <Field label={t("connection.paletteLabel")} hint={t("connection.paletteHint")}>
-          <PalettePicker
+          <AppearancePicker
+            choices={palettes}
             value={detail.metadata.appearance?.palette ?? ""}
-            // **選ばなかったときは節ごと落とす。** 空の appearance を残すと、
-            // 何も言っていない節が metadata に残り続ける。
-            onChange={(chosen) => {
-              const { appearance: _dropped, ...rest } = detail.metadata;
-              onMetadata(chosen === "" ? rest : { ...rest, appearance: { palette: chosen } });
-            }}
+            onChange={(chosen) => onMetadata(chooseAppearance(detail.metadata, { palette: chosen }))}
             unchosen={t("terminal.paletteFollowsOverall")}
+          />
+        </Field>
+
+        <Field label={t("connection.fontLabel")} hint={t("connection.fontHint")}>
+          <AppearancePicker
+            choices={fonts}
+            value={detail.metadata.appearance?.font ?? ""}
+            onChange={(chosen) => onMetadata(chooseAppearance(detail.metadata, { font: chosen }))}
+            unchosen={t("terminal.fontFollowsOverall")}
           />
         </Field>
 
