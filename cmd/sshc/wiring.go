@@ -2,7 +2,6 @@ package main
 
 import (
 	"sshc/internal/platform"
-	"sshc/internal/secret"
 )
 
 // platformParts は、このプラットフォームの部品一式である。
@@ -14,8 +13,4 @@ import (
 type platformParts struct {
 	Toolchain platform.Toolchain
 	KeyAgent  platform.KeyAgent
-	// Biometric は、この OS の錠前である。**持たない OS では nil のままにする。**
-	// 画面はそれを「この端末では使えない」として出す——守れないものを守れる
-	// ふりをしない、がこの機能の設計の第一行である。
-	Biometric secret.Guardian
 }

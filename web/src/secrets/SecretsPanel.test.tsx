@@ -7,10 +7,10 @@ import type { IntegrationsApi } from "../api/integrations";
 
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
-    passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] }),
-    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] }),
-    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] }),
-    lockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] }),
+    passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
+    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
+    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
+    lockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),
     credentials: vi.fn().mockResolvedValue({
       credentials: [
         { kind: "password", name: "office-vm", uses: ["web-1", "web-2"], hosts: ["web-1", "web-2"] },
@@ -29,7 +29,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     assignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     unassignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     changeMasterPassword: vi.fn().mockResolvedValue({
-      vault: { exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] },
+      vault: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] },
       snapshotResealed: true,
     }),
     updateStatus: vi.fn().mockResolvedValue({ current: "dev", available: false, restartRequired: false }),
@@ -168,7 +168,7 @@ describe("SecretsPanel", () => {
   // 申し出る。「シークレットが消えた」と読める空リストを見せるのではなく。
   it("offers to unlock rather than showing an empty list", async () => {
     const api = buildApi({
-      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] }),
+      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),
       credentials: vi.fn(),
     });
     render(<SecretsPanel api={api} />);

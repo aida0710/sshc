@@ -436,38 +436,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/passwords/biometric": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["enableBiometricUnlock"];
-        delete: operations["disableBiometricUnlock"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/passwords/unlock-biometric": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["unlockWithBiometric"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/passwords/unlock": {
         parameters: {
             query?: never;
@@ -1560,14 +1528,9 @@ export interface components {
             removed: string[];
             origin?: string;
         };
-        BiometricState: {
-            available: boolean;
-            enabled: boolean;
-        };
         PasswordVaultStatus: {
             exists: boolean;
             unlocked: boolean;
-            biometric: components["schemas"]["BiometricState"];
             aliases: string[];
             dedicatedKeyPassphrases: string[];
             minPassphraseLength?: number;
@@ -2848,74 +2811,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-        };
-    };
-    enableBiometricUnlock: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description This machine can now be opened by its owner's fingerprint */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PasswordVaultStatus"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-        };
-    };
-    disableBiometricUnlock: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The machine no longer keeps anything */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PasswordVaultStatus"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-        };
-    };
-    unlockWithBiometric: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The vault is open */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PasswordVaultStatus"];
-                };
-            };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];

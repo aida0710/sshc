@@ -80,7 +80,7 @@ func TestAndroidAnnouncesAsTheDesktopOwner(t *testing.T) {
 // **これは書き写しではなく、決定の一覧である。** Android の依存は struct literal
 // で組まれるので、app.Dependencies に項目が増えても Go は何も言わず、新しい項目は
 // 黙って零値になる。零値が正しい答えであることも、配線を忘れただけであることも
-// あり、型はその二つを区別しない。実際に Biometric はそうやって落ち、コメントは
+// あり、型はその二つを区別しない。実際にそうやって落ちた項目があり、コメントは
 // 落としたものを 4 つと書いたまま 6 つになっていた。
 //
 // 下の表に無い項目が現れたら、このテストは失敗する。**そのとき求められているのは
@@ -102,7 +102,6 @@ var androidFieldIntent = map[string]string{
 	"Toolchain": "absent: ssh-keygen が Android に居ない",
 	"KeyAgent":  "absent: ssh-agent が Android に居ない",
 	"Updates":   "absent: バイナリを置き換える経路が無い",
-	"Biometric": "absent: BiometricPrompt を secret.Guardian として渡す実装がまだ無い",
 
 	// 空で既定に落ちるのが正しいもの。
 	"ScanHostKeys":    "default: internal/sshclient がこのプロセスの中で話す",

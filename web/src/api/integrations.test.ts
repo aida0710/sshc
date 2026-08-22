@@ -163,7 +163,6 @@ describe("integrationsApi.passwordVault", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
       exists: true,
       unlocked: true,
-      biometric: { available: false, enabled: false },
       aliases: ["edge"],
       dedicatedKeyPassphrases: ["keys/id_edge"],
       minPassphraseLength: 12,
@@ -175,9 +174,9 @@ describe("integrationsApi.passwordVault", () => {
   });
 
   it.each([
-    { exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [] },
-    { exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: "keys/id_edge" },
-    { exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [false] },
+    { exists: true, unlocked: true, aliases: [] },
+    { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: "keys/id_edge" },
+    { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [false] },
   ])("rejects a malformed dedicated key-passphrase status", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 

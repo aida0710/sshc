@@ -126,9 +126,6 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		manager.Unseal = passwordService.OpenBackup
 	}
 	// **錠前は差すだけである。** 保管庫は、預かりが在るかどうかを自分で見る。
-	if dependencies.Biometric != nil {
-		passwordService.SetGuardian(dependencies.Biometric)
-	}
 
 	services := &engineServices{
 		workspace: workspace, transactions: transactions,
