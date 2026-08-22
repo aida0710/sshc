@@ -205,7 +205,11 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 				return err
 			}
 			relative = filepath.ToSlash(relative)
-			if strings.HasPrefix(relative, "keys/") {
+			// **Include グラフが到達しないものは、ここでも返さない。** 鍵も
+			// 背景も、名指しする Include 行を持たない——それぞれ Collect が
+			// 自分で歩いて集める。ここで返してしまうと、その巡回が消えても
+			// テストは緑のままになる。実際に一度そうなった。
+			if strings.HasPrefix(relative, "keys/") || strings.HasPrefix(relative, "sshc/backgrounds/") {
 				return nil
 			}
 			paths = append(paths, relative)
@@ -1146,5 +1150,34 @@ func TestAnEmptyVaultDoesNotTravel(t *testing.T) {
 	}
 	if _, present := contents[remotesync.VaultPath]; present {
 		t.Fatal("the vault file travelled")
+	}
+}
+
+// 背景の画像も旅に出る。
+//
+// **metadata が運ぶのは綴りだけである。** 画像を置いていかれた端末は、
+// 「選ばれているのに何も出ない」状態になる。そして Android はサンドボックスの
+// 外を見られないので、**あの端末へ画像を持ち込む道はこれしかない。**
+func TestASnapshotCarriesTheBackgroundImagesTheMetadataNames(t *testing.T) {
+	installation := newInstallation(t, &fakeBucket{}, map[string]string{
+		"config": "Host bastion\n",
+		"sshc/metadata.json": `{"schemaVersion":2,"hosts":[{"identity":{"path":"config","alias":"bastion"},` +
+			`"appearance":{"background":"office.png"}}]}`,
+		"sshc/backgrounds/office.png": "\x89PNG\r\n\x1a\nbytes",
+	})
+
+	manifest, contents, err := installation.service.Collect()
+	if err != nil {
+		t.Fatalf("Collect = %v", err)
+	}
+	packed := map[string]bool{}
+	for _, entry := range manifest.Files {
+		packed[entry.Path] = true
+	}
+	if !packed["sshc/backgrounds/office.png"] {
+		t.Fatalf("the background does not travel: %v", packed)
+	}
+	if string(contents["sshc/backgrounds/office.png"]) != "\x89PNG\r\n\x1a\nbytes" {
+		t.Fatalf("the background travelled with the wrong bytes")
 	}
 }

@@ -1227,6 +1227,61 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/backgrounds:
+    get:
+      operationId: listTerminalBackgrounds
+      responses:
+        "200":
+          description: The images this workspace holds
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalBackgroundList" }
+        "401": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: addTerminalBackground
+      # **名前を決めるのはサーバーである。** 送るのは希望と中身だけで、
+      # 実際の綴りと型は応答が答える。
+      parameters:
+        - in: query
+          name: name
+          required: false
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "201":
+          description: The image was stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalBackground" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/backgrounds/{name}:
+    parameters:
+      - in: path
+        name: name
+        required: true
+        schema: { type: string, maxLength: 128 }
+    get:
+      operationId: getTerminalBackground
+      responses:
+        "200":
+          description: The image itself
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteTerminalBackground
+      responses:
+        "204": { description: The image is gone }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /api/v1/history:
     get:
       operationId: getHistory
@@ -2585,6 +2640,13 @@ components:
       properties:
         palette: { type: string, maxLength: 64 }
         font: { type: string, maxLength: 64 }
+        # 置いてある画像の名前。空は「選んでいない」。
+        background: { type: string, maxLength: 128 }
+        # 画像の上にかぶせる濃さ。0 は素のまま、100 は配色の背景色で覆い尽くす。
+        #
+        # **0 は有効な選択なので、書かれていないことと区別する。** 省略は
+        # 「選んでいない」であり、そのときは上の段の選択、最後は既定が効く。
+        backgroundTint: { type: integer, minimum: 0, maximum: 100 }
     GroupMetadata:
       type: object
       additionalProperties: false
@@ -2643,6 +2705,22 @@ components:
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
+    TerminalBackground:
+      type: object
+      additionalProperties: false
+      required: [name, bytes, type]
+      properties:
+        name: { type: string }
+        bytes: { type: integer }
+        type: { type: string }
+    TerminalBackgroundList:
+      type: object
+      additionalProperties: false
+      required: [backgrounds, remainingBytes]
+      properties:
+        backgrounds: { type: array, items: { $ref: "#/components/schemas/TerminalBackground" } }
+        # あと何バイト置けるか。**画面が上限を書き写さないためである。**
+        remainingBytes: { type: integer }
     PendingTransaction:
       type: object
       additionalProperties: false

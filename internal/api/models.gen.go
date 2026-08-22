@@ -1053,8 +1053,23 @@ type SyncStatus struct {
 
 // TerminalAppearance defines model for TerminalAppearance.
 type TerminalAppearance struct {
-	Font    *string `json:"font,omitempty"`
-	Palette *string `json:"palette,omitempty"`
+	Background     *string `json:"background,omitempty"`
+	BackgroundTint *int    `json:"backgroundTint,omitempty"`
+	Font           *string `json:"font,omitempty"`
+	Palette        *string `json:"palette,omitempty"`
+}
+
+// TerminalBackground defines model for TerminalBackground.
+type TerminalBackground struct {
+	Bytes int    `json:"bytes"`
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+}
+
+// TerminalBackgroundList defines model for TerminalBackgroundList.
+type TerminalBackgroundList struct {
+	Backgrounds    []TerminalBackground `json:"backgrounds"`
+	RemainingBytes int                  `json:"remainingBytes"`
 }
 
 // TerminalExit defines model for TerminalExit.
@@ -1233,6 +1248,11 @@ type RegisterRemoteKeyParams struct {
 // BootstrapSessionParams defines parameters for BootstrapSession.
 type BootstrapSessionParams struct {
 	XSSHCBootstrap string `json:"X-SSHC-Bootstrap"`
+}
+
+// AddTerminalBackgroundParams defines parameters for AddTerminalBackground.
+type AddTerminalBackgroundParams struct {
+	Name *string `form:"name,omitempty" json:"name,omitempty"`
 }
 
 // PurgeTrashEntryParams defines parameters for PurgeTrashEntry.
