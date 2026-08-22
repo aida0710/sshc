@@ -22,10 +22,12 @@ function read(styles: CSSStyleDeclaration, token: Token): string {
 //
 // 引数の element は、トークンが解決されるスコープである。ルートに `data-theme`
 // が立つので既定はそこだが、テストが差し替えられるように引数にしてある。
-export function terminalTheme(element: Element = document.documentElement): ITheme {
+export function terminalTheme(element: Element = document.documentElement, seeThrough = false): ITheme {
   const styles = getComputedStyle(element);
   return {
-    background: read(styles, "bg"),
+    // **画像を敷いたら、端末は面を塗らない。** 塗れば画像はその下に隠れる。
+    // かぶせる濃さは箱の側が持つので、ここは何も置かないだけでよい。
+    background: seeThrough ? "#00000000" : read(styles, "bg"),
     foreground: read(styles, "fg"),
     cursor: read(styles, "cursor"),
     cursorAccent: read(styles, "bg"),

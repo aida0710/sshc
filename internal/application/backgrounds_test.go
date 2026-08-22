@@ -25,9 +25,9 @@ func TestTheServerNamesTheFileItWrites(t *testing.T) {
 
 	for _, probe := range []struct{ suggested, want string }{
 		{"../../../etc/passwd", "etc-passwd.png"},
-		{"/absolute/path.png", "absolute-path-png.png"},
+		{"/absolute/path.png", "absolute-path.png"},
 		{".hidden", "hidden.png"},
-		{"Office Wall.JPG", "office-wall-jpg.png"},
+		{"Office Wall.JPG", "office-wall.png"},
 		{"..", ""},
 		{"", ""},
 	} {
@@ -66,7 +66,7 @@ func TestOnlyBytesThatLookLikeAnImageAreStored(t *testing.T) {
 		t.Fatal(err)
 	}
 	// **名乗った拡張子ではなく、中身の型が名前を決める。**
-	if !strings.HasSuffix(background.Name, ".png") || background.Type != "image/png" {
+	if background.Name != "photo.png" || background.Type != "image/png" {
 		t.Fatalf("background = %#v, want the extension to come from the bytes", background)
 	}
 }

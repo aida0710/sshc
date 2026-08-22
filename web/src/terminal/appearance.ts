@@ -4,7 +4,21 @@ export type TerminalAppearance = components["schemas"]["TerminalAppearance"];
 type HostMetadata = components["schemas"]["HostMetadata"];
 
 /** Resolved は、決着したあとの見た目である。空は「選ばれていない」。 */
-export type Resolved = { readonly palette: string; readonly font: string };
+export type Resolved = {
+  readonly palette: string;
+  readonly font: string;
+  readonly background: string;
+  /**
+   * 画像の上にかぶせる濃さ（0〜100）。
+   *
+   * <p>**undefined は「選んでいない」であって 0 ではない。** 0 は「かぶせない」
+   * という選択であり、既定へ落とすべきではない。
+   */
+  readonly tint: number | undefined;
+};
+
+/** defaultTint は、画像を選んだのに濃さを選ばなかった人に効く値である。 */
+export const defaultTint = 55;
 
 /**
  * resolveAppearance は、接続の選択と全体の選択を重ねる。
@@ -21,11 +35,14 @@ export function resolveAppearance(
   forConnection: TerminalAppearance | undefined,
   overall: TerminalAppearance | undefined,
 ): Resolved {
-  const pick = (key: "palette" | "font"): string =>
+  const pick = (key: "palette" | "font" | "background"): string =>
     forConnection?.[key] !== undefined && forConnection[key] !== ""
       ? forConnection[key]
       : (overall?.[key] ?? "");
-  return { palette: pick("palette"), font: pick("font") };
+  // **濃さは 0 が有効なので、空文字と同じ扱いにできない。** undefined だけが
+  // 「選んでいない」である。
+  const tint = forConnection?.backgroundTint ?? overall?.backgroundTint;
+  return { palette: pick("palette"), font: pick("font"), background: pick("background"), tint };
 }
 
 /**
@@ -37,14 +54,43 @@ export function resolveAppearance(
  * いると思う——そして「既定へ戻した」接続の metadata に、何も言っていない節が
  * 積もり続ける。
  */
-export function chooseAppearance(
-  metadata: HostMetadata,
-  change: Partial<TerminalAppearance>,
-): HostMetadata {
-  const merged: TerminalAppearance = { ...metadata.appearance, ...change };
+/**
+ * AppearanceChange は、1 項目の書き換えである。
+ *
+ * <p>**undefined を明示的に渡せる形でなければならない。** exactOptionalPropertyTypes
+ * の下では、省略と「undefined と書く」は別のことである——濃さを「選んでいない」へ
+ * 戻す操作は、後者でしか表せない。
+ */
+export type AppearanceChange = { [Key in keyof TerminalAppearance]?: TerminalAppearance[Key] | undefined };
+
+export function chooseAppearance(metadata: HostMetadata, change: AppearanceChange): HostMetadata {
+  const merged: AppearanceChange = { ...metadata.appearance, ...change };
   const kept = Object.fromEntries(
     Object.entries(merged).filter(([, value]) => value !== undefined && value !== ""),
   ) as TerminalAppearance;
   const { appearance: _dropped, ...rest } = metadata;
   return Object.keys(kept).length === 0 ? rest : { ...rest, appearance: kept };
+}
+
+/**
+ * appearanceOf は、画面が持っている 4 つの値を、送れる形へ畳む。
+ *
+ * <p>**何も選ばれていなければ節ごと送らない。** 空の節を送ると、metadata に
+ * 何も言っていない節が残る。
+ *
+ * <p>濃さは画像を選んでいるときだけ運ぶ。**画像の無い濃さは意味を持たない。**
+ */
+export function appearanceOf(chosen: {
+  palette: string;
+  font: string;
+  background: string;
+  tint: number | undefined;
+}): { appearance?: TerminalAppearance } {
+  const appearance: TerminalAppearance = {
+    ...(chosen.palette === "" ? {} : { palette: chosen.palette }),
+    ...(chosen.font === "" ? {} : { font: chosen.font }),
+    ...(chosen.background === "" ? {} : { background: chosen.background }),
+    ...(chosen.background === "" || chosen.tint === undefined ? {} : { backgroundTint: chosen.tint }),
+  };
+  return Object.keys(appearance).length === 0 ? {} : { appearance };
 }

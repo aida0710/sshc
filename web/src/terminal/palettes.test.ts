@@ -27,15 +27,22 @@ function definedPalettes(): Map<string, Set<string>> {
 }
 
 /**
- * themeTokens は、テーマが与えている端末トークンの全部である。
+ * themeTokens は、テーマが与えている端末の**色**の全部である。
  *
  * <p>**数え上げない。** 20 個をここに並べると、21 個目を足した日に、この検査は
  * 何も言わないまま古い数を守り続ける。
+ *
+ * <p>ただし `[data-term-…]` の下で定義されるものは数えない。あそこにあるのは
+ * 配色ではなく、選ばれた画像や濃さから作られる値である——**配色に「画像」を
+ * 定義せよと要求しても意味がない。**
  */
 function themeTokens(): Set<string> {
   const tokens = new Set<string>();
-  for (const [, token] of css.matchAll(/(--ui-term-[a-z-]+)\s*:/g)) {
-    if (token !== undefined) tokens.add(token);
+  for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    if ((selector ?? "").includes("[data-term-")) continue;
+    for (const [, token] of (body ?? "").matchAll(/(--ui-term-[a-z-]+)\s*:/g)) {
+      if (token !== undefined) tokens.add(token);
+    }
   }
   return tokens;
 }

@@ -9,6 +9,8 @@ import { Button, Notice } from "../ui/surface";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { AppearancePicker } from "../terminal/AppearancePicker";
+import { BackgroundPicker } from "../terminal/BackgroundPicker";
+import { appearanceOf } from "../terminal/appearance";
 import { fonts } from "../terminal/fonts";
 import { palettes } from "../terminal/palettes";
 
@@ -40,6 +42,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   // 空は「選んでいない」であり、テーマに従うという意味である。
   const [palette, setPalette] = useState("");
   const [font, setFont] = useState("");
+  const [background, setBackground] = useState("");
+  // undefined は「選んでいない」。0 は「かぶせない」という選択である。
+  const [tint, setTint] = useState<number | undefined>(undefined);
   const [copyOnSelect, setCopyOnSelect] = useState(true);
   const [rightClickPaste, setRightClickPaste] = useState(true);
   const [terminalBusy, setTerminalBusy] = useState(false);
@@ -57,6 +62,8 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setFontSize(settings.fontSize === undefined ? "" : String(settings.fontSize));
         setPalette(settings.appearance?.palette ?? "");
         setFont(settings.appearance?.font ?? "");
+        setBackground(settings.appearance?.background ?? "");
+        setTint(settings.appearance?.backgroundTint);
         setCopyOnSelect(settings.copyOnSelect ?? true);
         setRightClickPaste(settings.rightClickPaste ?? true);
       })
@@ -102,9 +109,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         ...(rightClickPaste ? {} : { rightClickPaste: false }),
         // **選んでいないなら節ごと送らない。** 空の appearance を送ると、
         // metadata に何も言っていない節が残る。
-        ...(palette === "" && font === ""
-          ? {}
-          : { appearance: { ...(palette === "" ? {} : { palette }), ...(font === "" ? {} : { font }) } }),
+        ...(appearanceOf({ palette, font, background, tint })),
       };
       await api.setTerminalSettings(next);
       onTerminalSettingsChange?.(next);
@@ -238,6 +243,15 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
             value={font}
             onChange={setFont}
             unchosen={t("terminal.fontFollowsSystem")}
+          />
+        </Field>
+        <Field label={t("terminal.backgroundLabel")} hint={t("terminal.backgroundHint")}>
+          <BackgroundPicker
+            value={background}
+            onChange={setBackground}
+            tint={tint}
+            onTintChange={setTint}
+            unchosen={t("terminal.backgroundNone")}
           />
         </Field>
         <Field label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint")}>
