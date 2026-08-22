@@ -11,7 +11,8 @@ import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
 import { prefersNativeSelection } from "./nativeSelection";
-import { measuredCellHeight, newTouchScroll } from "./touchScroll";
+import { cellHeight } from "./metrics";
+import { newTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
@@ -171,11 +172,8 @@ export function TerminalView({
     // 下に敷かれ、上に画面の層が乗っているので、指が触れるのは常に上である。
     //
     // preventDefault しない。止めれば長押しからの範囲選択も一緒に殺す。
-    const scroll = newTouchScroll(view, () => {
-      // 端末の面が建つ前は箱で代用する。指が触れる頃には必ず建っている。
-      const screen = view.element?.querySelector<HTMLElement>(".xterm-screen") ?? container;
-      return measuredCellHeight(screen, view.rows);
-    });
+    // 端末の面が建つ前は箱で代用する。指が触れる頃には必ず建っている。
+    const scroll = newTouchScroll(view, () => cellHeight(view, container));
     // 指は 1 本のときだけ見る。2 本目は拡大か、この画面の外の操作である。
     const single = (event: TouchEvent): Touch | null =>
       event.touches.length === 1 ? (event.touches[0] ?? null) : null;

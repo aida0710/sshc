@@ -1,4 +1,5 @@
 import { viewportText, type ViewportBuffer } from "./buffer";
+import { measureCells } from "./metrics";
 
 // 端末の上に、選べる文字を重ねる。
 //
@@ -57,17 +58,17 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
   const paint = () => {
     if (view.rows <= 0 || view.cols <= 0) return;
 
-    const screen = view.element?.querySelector<HTMLElement>(".xterm-screen") ?? null;
-    const rows = view.element?.querySelector<HTMLElement>(".xterm-rows") ?? null;
-    const box = screen?.getBoundingClientRect() ?? null;
+    // **寸法を知っているのは metrics だけである。** ここは受け取って置くだけで、
+    // 何を掻けば分かるかを知らない。
+    const cells = measureCells(view);
     const base = container.getBoundingClientRect();
-    const measurable = screen !== null && rows !== null && box !== null && box.width > 0 && box.height > 0;
 
     // **書くのは変わったときだけである。** 毎フレーム style を触れば、その
     // たびにレイアウトをやり直させることになる。
-    const shape = measurable
-      ? `${box.left - base.left} ${box.top - base.top} ${box.width} ${box.height}`
-      : laidOut;
+    const shape =
+      cells === null
+        ? laidOut
+        : `${cells.rect.left - base.left} ${cells.rect.top - base.top} ${cells.rect.width} ${cells.rect.height}`;
     const relaidOut = shape !== laidOut;
 
     // **形が変わったなら、掴んでいたものはもう合わない。**
@@ -93,26 +94,19 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
       overlay.textContent = viewportText(view.buffer.active, view.rows, view.cols);
     }
 
-    if (!measurable || !relaidOut) return;
+    if (cells === null || !relaidOut) return;
     laidOut = shape;
 
-    overlay.style.left = `${box.left - base.left}px`;
-    overlay.style.top = `${box.top - base.top}px`;
-    overlay.style.width = `${box.width}px`;
-    overlay.style.height = `${box.height}px`;
-    // **寸法は xterm から写すのであって、計算し直すのではない。**
-    // `.xterm-screen` の幅は xterm が css.canvas.width として自分で書いた値で、
-    // 1 マスの幅はそれを桁数で割ったものである。ここで割れば同じ数が出る。
-    overlay.style.lineHeight = `${box.height / view.rows}px`;
-    // **字の送りを決めているのは font ではなく letter-spacing である。**
-    // xterm は「1 マスの幅 − 実測した W の幅」をそこへ入れ、端末が実際に解決した
-    // 等幅がどれであっても桁が揃うようにしている。読めば、その較正ごと写せる。
-    // 自分で測り直せば必ずずれる。
-    const style = getComputedStyle(rows);
-    overlay.style.fontFamily = style.fontFamily;
-    overlay.style.fontSize = style.fontSize;
-    overlay.style.fontWeight = style.fontWeight;
-    overlay.style.letterSpacing = style.letterSpacing;
+    overlay.style.left = `${cells.rect.left - base.left}px`;
+    overlay.style.top = `${cells.rect.top - base.top}px`;
+    overlay.style.width = `${cells.rect.width}px`;
+    overlay.style.height = `${cells.rect.height}px`;
+    overlay.style.lineHeight = `${cells.cellHeight}px`;
+    // **字体は写すのであって、測り直さない。** 自分で測れば必ずずれる。
+    overlay.style.fontFamily = cells.font.family;
+    overlay.style.fontSize = cells.font.size;
+    overlay.style.fontWeight = cells.font.weight;
+    overlay.style.letterSpacing = cells.font.letterSpacing;
     overlay.style.fontKerning = "none";
   };
 
