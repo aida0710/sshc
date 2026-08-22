@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { dangerAction, secondaryAction } from "./form";
 
 // **問いを挟んでよいのは、押し戻せない操作だけである。**
@@ -19,6 +20,14 @@ import { dangerAction, secondaryAction } from "./form";
  *
  * **開いた時点で focus は「やめる」側に居る。** 何も読まずに Enter を叩いた人
  * が落ちる先は、失うものが無い方でなければならない。Escape も同じ側へ落ちる。
+ *
+ * **body へ出す。** `fixed` は窓を基準にする——**ただし祖先が transform を
+ * 持っていないときだけである。** ナビゲーションの板は開閉のために常に
+ * translate を持ち、さらに overflow-hidden で切る。あの中に置かれた確認は
+ * 幅 288px の板に閉じ込められ、文も釦も見切れていた。
+ *
+ * 出し先を親に決めさせない。**問いは、それを出した場所の都合とは無関係に
+ * 読めなければならない。**
  */
 export function ConfirmDialog({
   id,
@@ -48,7 +57,7 @@ export function ConfirmDialog({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onCancel]);
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4">
       <div
         role="dialog"
@@ -69,6 +78,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
