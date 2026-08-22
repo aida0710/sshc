@@ -103,6 +103,14 @@ type HostMetadata struct {
 type TerminalAppearance struct {
 	Palette string `json:"palette,omitempty"`
 	Font    string `json:"font,omitempty"`
+	// Background は、置いてある画像の名前である。**中身は運ばない。**
+	Background string `json:"background,omitempty"`
+	// BackgroundTint は、画像の上にかぶせる濃さ（0〜100）である。
+	//
+	// **ポインタなのは、0 が有効な選択だからである。** 「かぶせない」と
+	// 「選んでいない」は違う——値で持つと、素のまま見たい人の選択が、
+	// 上の段の設定に毎回上書きされる。
+	BackgroundTint *int `json:"backgroundTint,omitempty"`
 }
 
 // Empty は、何も選ばれていないことを答える。

@@ -374,6 +374,15 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 		return Manifest{}, nil, err
 	}
 	relatives = append(relatives, keys...)
+	backgrounds, err := s.walkUnder("sshc/backgrounds")
+	if err != nil {
+		return Manifest{}, nil, err
+	}
+	// **背景の画像も旅に出る。** metadata が名指しするのは綴りだけなので、
+	// 画像を置いていかれた端末は「選ばれているのに何も出ない」状態になる。
+	// Android は自分でファイルを選べない（サンドボックスの外を見られない）ので、
+	// **あの端末へ画像を持ち込む道はこれしかない。**
+	relatives = append(relatives, backgrounds...)
 	relatives = append(relatives, "sshc/metadata.json")
 	// **保管庫は、両替所があるならファイルとしては載せない。** 載せれば、
 	// この端末のマスターパスワードで封じられたものが旅に出ることになり、
@@ -450,7 +459,13 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 }
 
 func (s *Service) walkKeys() ([]string, error) {
-	root := filepath.Join(s.workspace.Root(), "keys")
+	return s.walkUnder("keys")
+}
+
+// walkUnder は、ワークスペース相対のディレクトリ 1 つの下にある通常ファイルを
+// 集める。無ければ何も返さない——**同期を拒む理由ではない。**
+func (s *Service) walkUnder(directory string) ([]string, error) {
+	root := filepath.Join(s.workspace.Root(), filepath.FromSlash(directory))
 	var found []string
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {

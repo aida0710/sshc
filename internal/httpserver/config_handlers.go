@@ -45,6 +45,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.POST("/api/v1/config/groups/delete", handlers.DeleteGroup)
 	engine.GET("/api/v1/metadata", handlers.Metadata)
 	engine.PUT("/api/v1/metadata/terminal", handlers.SetTerminal)
+	registerBackgroundRoutes(engine, handlers)
 	engine.GET("/api/v1/history", handlers.History)
 	engine.POST("/api/v1/history/restore", handlers.Restore)
 	engine.POST("/api/v1/history/recover", handlers.Recover)
@@ -213,6 +214,12 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 		if request.Appearance.Font != nil {
 			settings.Appearance.Font = *request.Appearance.Font
 		}
+		if request.Appearance.Background != nil {
+			settings.Appearance.Background = *request.Appearance.Background
+		}
+		// **0 は「かぶせない」であって「選んでいない」ではない。** 書かれて
+		// いないときだけ、上の段の選択と既定に譲る。
+		settings.Appearance.BackgroundTint = request.Appearance.BackgroundTint
 	}
 	result, err := h.Service.SetTerminalSettings(settings)
 	switch {
