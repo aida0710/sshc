@@ -786,6 +786,7 @@ function TerminalScreen({
           session={session}
           {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })}
           {...(appearance.palette === "" ? {} : { palette: appearance.palette })}
+          {...(appearance.font === "" ? {} : { font: appearance.font })}
           copyOnSelect={settings.copyOnSelect ?? true}
           rightClickPaste={settings.rightClickPaste ?? true}
           onExit={() => consoles.markExited(session.id)}

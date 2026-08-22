@@ -8,7 +8,9 @@ import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { PalettePicker } from "../terminal/PalettePicker";
+import { AppearancePicker } from "../terminal/AppearancePicker";
+import { fonts } from "../terminal/fonts";
+import { palettes } from "../terminal/palettes";
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
@@ -37,6 +39,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [fontSize, setFontSize] = useState("");
   // 空は「選んでいない」であり、テーマに従うという意味である。
   const [palette, setPalette] = useState("");
+  const [font, setFont] = useState("");
   const [copyOnSelect, setCopyOnSelect] = useState(true);
   const [rightClickPaste, setRightClickPaste] = useState(true);
   const [terminalBusy, setTerminalBusy] = useState(false);
@@ -53,6 +56,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setScrollback(settings.scrollbackBytes === undefined ? "" : String(settings.scrollbackBytes));
         setFontSize(settings.fontSize === undefined ? "" : String(settings.fontSize));
         setPalette(settings.appearance?.palette ?? "");
+        setFont(settings.appearance?.font ?? "");
         setCopyOnSelect(settings.copyOnSelect ?? true);
         setRightClickPaste(settings.rightClickPaste ?? true);
       })
@@ -98,7 +102,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         ...(rightClickPaste ? {} : { rightClickPaste: false }),
         // **選んでいないなら節ごと送らない。** 空の appearance を送ると、
         // metadata に何も言っていない節が残る。
-        ...(palette === "" ? {} : { appearance: { palette } }),
+        ...(palette === "" && font === ""
+          ? {}
+          : { appearance: { ...(palette === "" ? {} : { palette }), ...(font === "" ? {} : { font }) } }),
       };
       await api.setTerminalSettings(next);
       onTerminalSettingsChange?.(next);
@@ -219,7 +225,20 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
           日から既定を変えてもこの人だけが取り残される。
         */}
         <Field label={t("terminal.paletteLabel")} hint={t("terminal.paletteHint")}>
-          <PalettePicker value={palette} onChange={setPalette} unchosen={t("terminal.paletteFollowsTheme")} />
+          <AppearancePicker
+            choices={palettes}
+            value={palette}
+            onChange={setPalette}
+            unchosen={t("terminal.paletteFollowsTheme")}
+          />
+        </Field>
+        <Field label={t("terminal.fontLabel")} hint={t("terminal.fontHint")}>
+          <AppearancePicker
+            choices={fonts}
+            value={font}
+            onChange={setFont}
+            unchosen={t("terminal.fontFollowsSystem")}
+          />
         </Field>
         <Field label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint")}>
           <input

@@ -321,3 +321,54 @@
   --ui-term-bright-cyan: #66c9d4;
   --ui-term-bright-white: #ffffff;
 }
+
+/* 端末の字体。
+ *
+ * **同梱するのは、Android に選ぶものが無いからである。** 手元の等幅を並べても、
+ * 端末が持っていない名前は何にも解決しない——実機で `fc-list :lang=ja` が 0 だった
+ * ように、あちらには選択肢そのものが無い。
+ *
+ * 4 面とも積む。太字と斜体は端末が実際に使う——プロンプトも ls の色も vim の
+ * コメントもそこを通る。ブラウザに合成させると、太字だけ桁がずれる。
+ *
+ * JetBrains Mono は SIL Open Font License 1.1。全文を fonts/OFL.txt に置いてある。
+ *
+ * font-display: block にする。**swap にすると、端末が二度測る。** 代替の字で
+ * 1 マスの幅を測ってから本物に差し替わると、桁が全部ずれたまま次の描き直しを待つ。
+ */
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-BoldItalic.woff2") format("woff2");
+  font-weight: 700;
+  font-style: italic;
+  font-display: block;
+}
+
+/* **合字を切る。** JetBrains Mono は `->` や `!=` を 1 つの絵にする。端末では
+ * 1 マス 1 文字が前提なので、2 文字が 1 つの絵になると桁がずれる。 */
+[data-term-font] .xterm,
+[data-term-font] .sshc-select-overlay {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
