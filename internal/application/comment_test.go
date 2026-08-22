@@ -107,6 +107,48 @@ func TestClearHostNoteDropsAnEntryThatHeldNothingElse(t *testing.T) {
 	}
 }
 
+// **note を消しても、他に語られたことは残る。**
+//
+// ここはかつて残す条件を項目で並べていた（tags・colour・favourite・order）。
+// 並べると、新しく足した項目をここへ書き足し忘れた日に、note を消しただけで
+// その設定ごと消える。見た目を足したときがまさにその状況だった——この検査は、
+// **並べていたら落ちる**ように書いてある。
+func TestClearHostNoteKeepsAnEntryThatOnlyChoseHowItLooks(t *testing.T) {
+	target := HostIdentity{Path: "config", Alias: "prod"}
+	cleared := ClearHostNote(Metadata{
+		SchemaVersion: MetadataSchemaVersion,
+		Hosts: []HostMetadata{{
+			Identity:   target,
+			Note:       "only this",
+			Appearance: &TerminalAppearance{Palette: "ember"},
+		}},
+	}, target)
+
+	if len(cleared.Hosts) != 1 {
+		t.Fatalf("hosts = %#v, want the appearance to survive clearing the note", cleared.Hosts)
+	}
+	if cleared.Hosts[0].Note != "" {
+		t.Fatalf("note = %q, want it cleared", cleared.Hosts[0].Note)
+	}
+	if cleared.Hosts[0].Appearance == nil || cleared.Hosts[0].Appearance.Palette != "ember" {
+		t.Fatalf("appearance = %#v, want it untouched", cleared.Hosts[0].Appearance)
+	}
+}
+
+// orphan は「向こうが消えた」という観測であって、人が語ったことではない。
+// それだけが残った entry は、以前と同じく捨てる。
+func TestClearHostNoteDropsAnEntryThatOnlyRecordsItsHostIsGone(t *testing.T) {
+	target := HostIdentity{Path: "config", Alias: "bastion"}
+	cleared := ClearHostNote(Metadata{
+		SchemaVersion: MetadataSchemaVersion,
+		Hosts:         []HostMetadata{{Identity: target, Note: "only this", Orphan: true}},
+	}, target)
+
+	if len(cleared.Hosts) != 0 {
+		t.Fatalf("hosts = %#v, want the empty entry dropped", cleared.Hosts)
+	}
+}
+
 // ヘッダーの上のコメントに意味を持たせたことで、移動が
 // 運ぶべきものが変わった。置き去りにすると、去った
 // ブロックの説明が、ソースファイル中で次に続くブロックの説明になる。

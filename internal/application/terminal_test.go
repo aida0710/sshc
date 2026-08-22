@@ -242,3 +242,47 @@ func TestClearingTheStartDirectoryReturnsToTheHome(t *testing.T) {
 		t.Fatalf("start directory = %q, want the home", got)
 	}
 }
+
+// 見た目は往復し、消せる。
+//
+// **設定は片道であってはならない。** 一度配色を選んだ人が既定へ戻れなければ、
+// 戻る手段は metadata を手で書くことだけになる。
+func TestTheAppearanceRoundTripsAndCanBeCleared(t *testing.T) {
+	service, _ := newTerminalService(t)
+
+	if _, err := service.SetTerminalSettings(TerminalSettings{
+		Appearance: TerminalAppearance{Palette: "dracula"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.TerminalSettings().Appearance.Palette; got != "dracula" {
+		t.Fatalf("palette = %q, want it read back", got)
+	}
+
+	if _, err := service.SetTerminalSettings(TerminalSettings{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.TerminalSettings().Appearance; !got.Empty() {
+		t.Fatalf("appearance = %#v, want it cleared", got)
+	}
+}
+
+// 選ばれていない見た目は、空の節として書かれない。
+//
+// **残せば、次に読む者は何か選ばれていると思う。** そして encoding/json の
+// omitempty は構造体には効かないので、値で持つと必ず `"appearance":{}` が並ぶ
+// ——ポインタで持っているのはそのためである。
+func TestSavingDoesNotWriteAnAppearanceNobodyChose(t *testing.T) {
+	service, workspace := newTerminalService(t)
+
+	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~"}); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(filepath.Join(workspace.Root(), "sshc", MetadataFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(contents), "appearance") {
+		t.Fatalf("saving the start directory wrote an appearance into metadata:\n%s", contents)
+	}
+}

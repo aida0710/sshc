@@ -2569,6 +2569,22 @@ components:
         favourite: { type: boolean }
         order: { type: integer }
         orphan: { type: boolean }
+        appearance: { $ref: "#/components/schemas/TerminalAppearance" }
+    # 端末の見た目。**接続ごとにも、全体にも置ける。**
+    #
+    # 解決は**項目ごと**である——接続に配色だけを置いても、全体で選んだ字体は
+    # 残る。どちらにも無ければ端末はアプリのテーマに従う（従来どおり）。
+    #
+    # **名前で持ち、色そのものは持たない。** 配色と字体の中身は画面が一度だけ
+    # 定義する。engine はこれを読まない——PTY は色を知らない。知らない名前が
+    # 書かれていたら既定へ戻す。手で書かれた綴りひとつが、タグもお気に入りも
+    # 道連れに読めなくしてよい理由はない。
+    TerminalAppearance:
+      type: object
+      additionalProperties: false
+      properties:
+        palette: { type: string, maxLength: 64 }
+        font: { type: string, maxLength: 64 }
     GroupMetadata:
       type: object
       additionalProperties: false
@@ -2607,6 +2623,7 @@ components:
         # ローカルシェルが始まる場所。`~` の綴りのまま持つ——home の綴りを
         # 焼き付けない。空なら home。
         startDirectory: { type: string, maxLength: 4096 }
+        appearance: { $ref: "#/components/schemas/TerminalAppearance" }
     # 埋め込みターミナルのうち、画面から変えられるもの。
     #
     # **これは節まるごとの置き換えである。** 書かれていない項目は「設定されて
@@ -2625,6 +2642,7 @@ components:
         fontSize: { type: integer, minimum: 8, maximum: 32 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
+        appearance: { $ref: "#/components/schemas/TerminalAppearance" }
     PendingTransaction:
       type: object
       additionalProperties: false

@@ -65,6 +65,7 @@ var servedTypes = []struct {
 	{"SaveResult", application.SaveResult{}},
 	{"Setting", application.Setting{}},
 	{"Source", application.Source{}},
+	{"TerminalAppearance", application.TerminalAppearance{}},
 }
 
 // jsonFieldNames は、その型が JSON へ出す名前を集める。

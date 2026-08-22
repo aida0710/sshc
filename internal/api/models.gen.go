@@ -415,12 +415,13 @@ type EffectiveResponse struct {
 
 // EmbeddedTerminal defines model for EmbeddedTerminal.
 type EmbeddedTerminal struct {
-	CopyOnSelect    *bool   `json:"copyOnSelect,omitempty"`
-	FontSize        *int    `json:"fontSize,omitempty"`
-	MaxSessions     *int    `json:"maxSessions,omitempty"`
-	RightClickPaste *bool   `json:"rightClickPaste,omitempty"`
-	ScrollbackBytes *int    `json:"scrollbackBytes,omitempty"`
-	StartDirectory  *string `json:"startDirectory,omitempty"`
+	Appearance      *TerminalAppearance `json:"appearance,omitempty"`
+	CopyOnSelect    *bool               `json:"copyOnSelect,omitempty"`
+	FontSize        *int                `json:"fontSize,omitempty"`
+	MaxSessions     *int                `json:"maxSessions,omitempty"`
+	RightClickPaste *bool               `json:"rightClickPaste,omitempty"`
+	ScrollbackBytes *int                `json:"scrollbackBytes,omitempty"`
+	StartDirectory  *string             `json:"startDirectory,omitempty"`
 }
 
 // ExecutableDirective defines model for ExecutableDirective.
@@ -533,13 +534,14 @@ type HostIdentity struct {
 
 // HostMetadata defines model for HostMetadata.
 type HostMetadata struct {
-	Colour    *string      `json:"colour,omitempty"`
-	Favourite *bool        `json:"favourite,omitempty"`
-	Identity  HostIdentity `json:"identity"`
-	Note      *string      `json:"note,omitempty"`
-	Order     *int         `json:"order,omitempty"`
-	Orphan    *bool        `json:"orphan,omitempty"`
-	Tags      *[]string    `json:"tags,omitempty"`
+	Appearance *TerminalAppearance `json:"appearance,omitempty"`
+	Colour     *string             `json:"colour,omitempty"`
+	Favourite  *bool               `json:"favourite,omitempty"`
+	Identity   HostIdentity        `json:"identity"`
+	Note       *string             `json:"note,omitempty"`
+	Order      *int                `json:"order,omitempty"`
+	Orphan     *bool               `json:"orphan,omitempty"`
+	Tags       *[]string           `json:"tags,omitempty"`
 }
 
 // IssueActionRequest defines model for IssueActionRequest.
@@ -1049,6 +1051,12 @@ type SyncStatus struct {
 	Synced        bool           `json:"synced"`
 }
 
+// TerminalAppearance defines model for TerminalAppearance.
+type TerminalAppearance struct {
+	Font    *string `json:"font,omitempty"`
+	Palette *string `json:"palette,omitempty"`
+}
+
 // TerminalExit defines model for TerminalExit.
 type TerminalExit struct {
 	At     string `json:"at"`
@@ -1086,12 +1094,13 @@ type TerminalSessionList struct {
 
 // TerminalSettings defines model for TerminalSettings.
 type TerminalSettings struct {
-	CopyOnSelect    *bool   `json:"copyOnSelect,omitempty"`
-	FontSize        *int    `json:"fontSize,omitempty"`
-	MaxSessions     *int    `json:"maxSessions,omitempty"`
-	RightClickPaste *bool   `json:"rightClickPaste,omitempty"`
-	ScrollbackBytes *int    `json:"scrollbackBytes,omitempty"`
-	StartDirectory  *string `json:"startDirectory,omitempty"`
+	Appearance      *TerminalAppearance `json:"appearance,omitempty"`
+	CopyOnSelect    *bool               `json:"copyOnSelect,omitempty"`
+	FontSize        *int                `json:"fontSize,omitempty"`
+	MaxSessions     *int                `json:"maxSessions,omitempty"`
+	RightClickPaste *bool               `json:"rightClickPaste,omitempty"`
+	ScrollbackBytes *int                `json:"scrollbackBytes,omitempty"`
+	StartDirectory  *string             `json:"startDirectory,omitempty"`
 }
 
 // TerminalStreamTicket defines model for TerminalStreamTicket.

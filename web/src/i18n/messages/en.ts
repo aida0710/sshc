@@ -92,6 +92,12 @@ export const en = {
   "terminal.scrollbackLabel": "Scrollback per console (bytes)",
   "terminal.scrollbackHint": "16384 to 4194304. Leave it empty for the default of 262144 (256 KiB). Scrollback lives in memory and never reaches the disk.",
   "terminal.fontSizeLabel": "Font size",
+  "terminal.paletteLabel": "Colour scheme",
+  "terminal.paletteHint": "Applies to consoles that have not chosen their own.",
+  "terminal.paletteFollowsTheme": "Follow the application theme",
+  "terminal.paletteFollowsOverall": "Use the overall setting",
+  "connection.paletteLabel": "Console colour scheme",
+  "connection.paletteHint": "Only this connection's consoles use it.",
   "terminal.fontSizeHint":
     "Pixels. Empty follows the screen — 15 on a narrow one, 13 otherwise.",
   "terminal.copyOnSelectLabel": "Copy selected text automatically",
