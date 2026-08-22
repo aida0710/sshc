@@ -986,6 +986,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminal/backgrounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTerminalBackgrounds"];
+        put?: never;
+        post: operations["addTerminalBackground"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/backgrounds/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getTerminalBackground"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteTerminalBackground"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/history": {
         parameters: {
             query?: never;
@@ -1837,6 +1871,8 @@ export interface components {
         TerminalAppearance: {
             palette?: string;
             font?: string;
+            background?: string;
+            backgroundTint?: number;
         };
         GroupMetadata: {
             name: string;
@@ -1870,6 +1906,15 @@ export interface components {
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
             appearance?: components["schemas"]["TerminalAppearance"];
+        };
+        TerminalBackground: {
+            name: string;
+            bytes: number;
+            type: string;
+        };
+        TerminalBackgroundList: {
+            backgrounds: components["schemas"]["TerminalBackground"][];
+            remainingBytes: number;
         };
         PendingTransaction: {
             id: string;
@@ -3887,6 +3932,102 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    listTerminalBackgrounds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The images this workspace holds */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalBackgroundList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+        };
+    };
+    addTerminalBackground: {
+        parameters: {
+            query?: {
+                name?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description The image was stored */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalBackground"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+        };
+    };
+    getTerminalBackground: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image itself */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    deleteTerminalBackground: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image is gone */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
         };
     };
     getHistory: {
