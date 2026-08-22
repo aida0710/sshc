@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { ApiError, apiClient } from "./client";
 import { asRecord, asArray, asString, asNumber, asBoolean, jsonHeaders, issueAction } from "./guards";
 import type { components } from "./schema";
 
@@ -10,6 +10,8 @@ export type TerminalSettings = components["schemas"]["TerminalSettings"];
 export type TerminalForward = components["schemas"]["TerminalForward"];
 export type TerminalSession = components["schemas"]["TerminalSession"];
 export type TerminalAppearance = components["schemas"]["TerminalAppearance"];
+export type TerminalBackground = components["schemas"]["TerminalBackground"];
+export type TerminalBackgroundList = components["schemas"]["TerminalBackgroundList"];
 export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
 export type OpenTerminalSessionRequest = components["schemas"]["OpenTerminalSessionRequest"];
 export type OpenTerminalSessionResponse = components["schemas"]["OpenTerminalSessionResponse"];
@@ -94,6 +96,9 @@ export type IntegrationsApi = {
   // 既定を書き戻すと metadata に焼き付き、既定を変えた日にその人だけが
   // 取り残される。
   terminalSettings(): Promise<TerminalSettings>;
+  terminalBackgrounds(): Promise<TerminalBackgroundList>;
+  addTerminalBackground(suggested: string, image: Blob): Promise<TerminalBackground>;
+  deleteTerminalBackground(name: string): Promise<void>;
   setTerminalSettings(settings: TerminalSettings): Promise<void>;
   passwordEligibility(alias: string): Promise<PasswordEligibility>;
   // Credential は名前を持つ秘密である。ホストはアカウントパスワードを参照し、
@@ -485,7 +490,16 @@ function readAppearance(value: unknown): TerminalAppearance {
   return {
     ...(typeof record.palette === "string" ? { palette: record.palette } : {}),
     ...(typeof record.font === "string" ? { font: record.font } : {}),
+    ...(typeof record.background === "string" ? { background: record.background } : {}),
+    // **0 を落とさない。** 「かぶせない」という選択である。
+    ...(typeof record.backgroundTint === "number" ? { backgroundTint: record.backgroundTint } : {}),
   };
+}
+
+// validateBackground は、1 枚ぶんの応答を確かめる。
+function validateBackground(value: unknown): TerminalBackground {
+  const record = asRecord(value);
+  return { name: asString(record.name), bytes: asNumber(record.bytes), type: asString(record.type) };
 }
 
 export const integrationsApi: IntegrationsApi = {
@@ -581,6 +595,30 @@ export const integrationsApi: IntegrationsApi = {
         : {}),
       ...(terminal.appearance === undefined ? {} : { appearance: readAppearance(terminal.appearance) }),
     };
+  },
+  async terminalBackgrounds() {
+    const record = asRecord(await apiClient.read("/api/v1/terminal/backgrounds"));
+    return {
+      backgrounds: asArray(record.backgrounds).map(validateBackground),
+      remainingBytes: asNumber(record.remainingBytes),
+    };
+  },
+  // **名前を決めるのはサーバーである。** ここが渡すのは希望であって、
+  // 実際の綴りと型は応答が答える。
+  async addTerminalBackground(suggested, image) {
+    return validateBackground(
+      await apiClient.mutate<unknown>(`/api/v1/terminal/backgrounds?name=${encodeURIComponent(suggested)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: image,
+      }),
+    );
+  },
+  async deleteTerminalBackground(name) {
+    const response = await apiClient.send(`/api/v1/terminal/backgrounds/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new ApiError("background_not_removed", response.status, null);
   },
   // **節まるごとの置き換えである。** 送らなかった項目は、書かれていない状態へ
   // 戻る——そうでないと、一度指定した人が既定へ戻れない。

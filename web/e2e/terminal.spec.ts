@@ -599,3 +599,60 @@ test("loads the font it ships and hands it to the console", async ({ page, insta
     .poll(async () => page.evaluate(() => document.fonts.check('13px "JetBrains Mono"')))
     .toBe(true);
 });
+
+// 背景の画像は、持ち込んで、選んで、端末の後ろに出る。
+//
+// **見えるかどうかは 3 つが揃って初めて決まる。** 箱が画像を持つこと、
+// xterm が面を塗らないこと、そして .xterm-viewport の不透明な黒が外れて
+// いること——最後のひとつが本当の障害物だった。画素で確かめたのは別の場所で、
+// ここが見るのは「アプリがその形に配線されているか」である。
+test("wears the image that was brought in, and gets out of its way", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+
+  // 画像はブラウザに作らせる。**本物の PNG でなければサーバーが断る。**
+  const encoded = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 4;
+    canvas.height = 4;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "rgb(0, 200, 0)";
+    context.fillRect(0, 0, 4, 4);
+    return canvas.toDataURL("image/png");
+  });
+
+  await panel.getByRole("tab", { name: "Settings" }).click();
+  await openSection(page, "Settings");
+  const settings = page.getByRole("region", { name: "Terminal" });
+  await settings.locator('input[type="file"]').setInputFiles({
+    name: "Canary Wall.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(encoded.split(",")[1] ?? "", "base64"),
+  });
+  // **名前を決めるのはサーバーである。** 送った綴りではなく、返ってきた綴りが選ばれる。
+  const thumbnail = settings.getByRole("img", { name: "canary-wall.png" });
+  await expect(thumbnail).toBeVisible();
+  // **見えていることと、読めていることは違う。** 壊れた画像にも箱はある——
+  // 一度、画像の要求が 403 で返っていたのに、この行が無いせいで緑だった。
+  await expect.poll(async () => thumbnail.evaluate((node) => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  await settings.getByRole("button", { name: "Save" }).click();
+  await expect(settings.getByText(/Saved/)).toBeVisible();
+
+  await openSection(page, "Terminal");
+  const wiring = await page.locator(".xterm").evaluate((node) => {
+    const box = (node as HTMLElement).parentElement!;
+    return {
+      image: getComputedStyle(box).backgroundImage,
+      viewport: getComputedStyle(document.querySelector(".xterm-viewport")!).backgroundColor,
+    };
+  });
+  // **綴りは data: である。** url() には CSRF ヘッダーを付けられないので、
+  // 画像は JS が取りに行っている。
+  expect(wiring.image).toContain("data:image/png");
+  expect(wiring.image).toMatch(/^linear-gradient\(/);
+  // **これが外れていなければ、画像は決して見えない。**
+  expect(wiring.viewport).toBe("rgba(0, 0, 0, 0)");
+});

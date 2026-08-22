@@ -372,3 +372,31 @@
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
 }
+
+/* 端末の背景画像。
+ *
+ * **画像は箱が持ち、端末は面を塗らない。** xterm 側の背景を透明にしたうえで、
+ * ここが画像とその上の帳を重ねる。測って分かったのは、`allowTransparency` は
+ * DOM 描画では何も変えず、**本当の障害物は .xterm-viewport に敷かれた不透明な
+ * 黒だった**ということである。だからそこを外す。
+ *
+ * 帳の濃さは color-mix で作る。**色を JS で解析しない** ——配色の背景色は
+ * #rrggbb のことも rgb(...) のこともあり、解析を書けばその両方を追い続ける
+ * ことになる。
+ */
+[data-term-background] {
+  --ui-term-veil: color-mix(in srgb, var(--ui-term-bg) calc(var(--ui-term-tint) * 1%), transparent);
+  background-image: linear-gradient(var(--ui-term-veil), var(--ui-term-veil)), var(--ui-term-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* **これを外さないと、画像は決して見えない。** xterm はここへ不透明な黒を
+ * 敷いており、端末の面の透明度はすべてその黒と合成される。
+ *
+ * `!important` が要る。**あれは inline の style として書かれる**ので、
+ * どれだけ詳しいセレクタを書いても届かない。 */
+[data-term-background] .xterm-viewport {
+  background-color: transparent !important;
+}

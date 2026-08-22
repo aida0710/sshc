@@ -4,6 +4,7 @@ import { Button, Card } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { NoticeList } from "./SavePreview";
 import { AppearancePicker } from "../terminal/AppearancePicker";
+import { BackgroundPicker } from "../terminal/BackgroundPicker";
 import { chooseAppearance } from "../terminal/appearance";
 import { fonts } from "../terminal/fonts";
 import { palettes } from "../terminal/palettes";
@@ -97,6 +98,16 @@ export function HostInspector({
             value={detail.metadata.appearance?.font ?? ""}
             onChange={(chosen) => onMetadata(chooseAppearance(detail.metadata, { font: chosen }))}
             unchosen={t("terminal.fontFollowsOverall")}
+          />
+        </Field>
+
+        <Field label={t("connection.backgroundLabel")} hint={t("connection.backgroundHint")}>
+          <BackgroundPicker
+            value={detail.metadata.appearance?.background ?? ""}
+            onChange={(chosen) => onMetadata(chooseAppearance(detail.metadata, { background: chosen }))}
+            tint={detail.metadata.appearance?.backgroundTint}
+            onTintChange={(chosen) => onMetadata(chooseAppearance(detail.metadata, { backgroundTint: chosen }))}
+            unchosen={t("terminal.backgroundFollowsOverall")}
           />
         </Field>
 

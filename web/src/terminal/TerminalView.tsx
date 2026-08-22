@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -8,6 +8,8 @@ import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { fontStack } from "./fonts";
+import { defaultTint } from "./appearance";
+import { useBackgroundImage } from "./backgroundImage";
 import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
@@ -34,6 +36,11 @@ type TerminalViewProps = {
   // 接続ごとの選択と全体の選択のどちらが勝つかは、ここでは決めない。
   // 渡ってくるのは決着したあとの 1 つである。
   palette?: string;
+  // background は、選ばれた画像の名前である。空なら画像を敷かない。
+  background?: string;
+  // tint は、画像の上にかぶせる濃さ（0〜100）である。**0 は「かぶせない」で
+  // あって「選んでいない」ではない**ので、undefined と区別する。
+  tint?: number;
   // font は、選ばれた字体の名前である。空なら端末の等幅に任せる。
   //
   // **字体を変えると 1 マスの大きさが変わる。** 桁と行を測り直し、向こうの
@@ -77,10 +84,16 @@ export function TerminalView({
   rightClickPaste = true,
   palette,
   font,
+  background,
+  tint,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
   const host = useRef<HTMLDivElement>(null);
+  // 画像を敷いているあいだ、端末は面を塗らない。塗れば画像はその下に隠れる。
+  // **綴りは JS が取りに行く。** CSS の url() には CSRF ヘッダーを付けられない。
+  const backgroundURL = useBackgroundImage(background ?? "");
+  const hasBackground = backgroundURL !== "";
   // 測り直しは端末を建てた effect の中にしかない。外から鳴らせるようにここへ置く。
   const refit = useRef<(() => void) | null>(null);
   const terminal = useRef<Terminal | null>(null);
@@ -131,7 +144,7 @@ export function TerminalView({
       fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
       // **箱から読む。** data-term-palette がそこに載っており、CSS 変数は
       // 継承するので、選ばれていなければ同じ呼び出しがテーマの色を返す。
-      theme: terminalTheme(container),
+      theme: terminalTheme(container, hasBackground),
       // スクロールバックはサーバー側のリングバッファが正本である。ここでの値は
       // 再生されたバイト列を画面に保つための余地にすぎない。
       scrollback: 5000,
@@ -366,8 +379,8 @@ export function TerminalView({
   // effect が走る時点では既にそこにある。
   useEffect(() => {
     if (terminal.current === null || host.current === null) return;
-    terminal.current.options.theme = terminalTheme(host.current);
-  }, [resolved, palette]);
+    terminal.current.options.theme = terminalTheme(host.current, hasBackground);
+  }, [resolved, palette, hasBackground]);
 
   // 字体の選び直しも端末を作り直さない。**ただし測り直しは要る** ——1 マスの
   // 幅が変われば、桁数も行数も、向こうのシェルへ伝える大きさも変わる。
@@ -446,6 +459,15 @@ export function TerminalView({
         // 一致しない選択が「選ばれた」ことになる。**
         {...(palette === undefined || palette === "" ? {} : { "data-term-palette": palette })}
         {...(font === undefined || font === "" ? {} : { "data-term-font": font })}
+        {...(hasBackground ? { "data-term-background": background ?? "" } : {})}
+        style={
+          hasBackground
+            ? {
+                "--ui-term-image": `url("${backgroundURL}")`,
+                "--ui-term-tint": String(tint ?? defaultTint),
+              } as CSSProperties
+            : undefined
+        }
         className="relative min-h-0 flex-1 bg-term-bg p-2"
       />
       <KeyBar
