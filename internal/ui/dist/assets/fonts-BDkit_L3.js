@@ -1,0 +1,1 @@
+var e=[{name:`jetbrains-mono`,label:`JetBrains Mono`,stack:`"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", monospace`}];function t(t){return e.find(e=>e.name===t)??null}function n(e){return t(e)?.stack??`ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", monospace`}export{e as n,n as t};
