@@ -177,11 +177,6 @@ export const en = {
   "secrets.master": "Master password",
   "secrets.create": "Create the vault",
   "secrets.unlock": "Unlock",
-  "secrets.biometricHeading": "Touch ID",
-  "secrets.biometricExplain":
-    "Opens this vault with your fingerprint instead of the master password, on this machine only. What the machine keeps is not your password: it is a secret that opens nothing anywhere else, held where only your fingerprint reaches it. Turning this on means this vault also depends on that lock. Changing the master password, or adding a fingerprint, ends it — the password always works.",
-  "secrets.biometricEnable": "Open this machine with a fingerprint",
-  "secrets.biometricFailed": "That could not be changed.",
   "secrets.lock": "Lock sshc",
   "secrets.createFailed": "The vault could not be created. A master password must be at least 12 characters.",
   "secrets.unlockFailed": "That is not the master password.",
@@ -236,10 +231,6 @@ export const en = {
   "lock.confirm": "Confirm master password",
   "lock.create": "Create the vault",
   "lock.open": "Open",
-  "lock.biometric": "Use Touch ID",
-  "lock.biometricFailed": "Touch ID could not open the vault. Your master password still does.",
-  "lock.biometricGone":
-    "This machine no longer keeps anything for Touch ID — the master password changed, or a fingerprint was added. Open with your password, then turn it on again.",
   "lock.wrong": "That is not the master password.",
   "lock.tooShort": "A master password must be at least {count} characters.",
   "lock.failed": "The vault could not be opened.",

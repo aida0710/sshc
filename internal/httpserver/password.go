@@ -168,9 +168,6 @@ func registerPasswordRoutes(engine *echo.Echo, handlers PasswordHandlers) {
 	engine.GET("/api/v1/passwords", handlers.Status)
 	engine.POST("/api/v1/passwords/initialise", handlers.Initialise)
 	engine.POST("/api/v1/passwords/unlock", handlers.Unlock)
-	engine.POST("/api/v1/passwords/unlock-biometric", handlers.UnlockWithBiometric)
-	engine.POST("/api/v1/passwords/biometric", handlers.EnableBiometric)
-	engine.DELETE("/api/v1/passwords/biometric", handlers.DisableBiometric)
 	engine.POST("/api/v1/passwords/change", handlers.Change)
 	engine.POST("/api/v1/passwords/lock", handlers.Lock)
 	engine.GET("/api/v1/passwords/:alias/eligibility", handlers.Eligible)
@@ -199,11 +196,9 @@ func (h PasswordHandlers) status(c *echo.Context) error {
 	if dedicatedKeyPassphrases == nil {
 		dedicatedKeyPassphrases = []string{}
 	}
-	biometric := h.Service.Biometric()
 	return c.JSON(http.StatusOK, api.PasswordVaultStatus{
 		Exists:                  state.Exists,
 		Unlocked:                state.Unlocked,
-		Biometric:               api.BiometricState{Available: biometric.Available, Enabled: biometric.Enabled},
 		Aliases:                 aliases,
 		DedicatedKeyPassphrases: dedicatedKeyPassphrases,
 		MinPassphraseLength:     &minimum,
@@ -585,13 +580,6 @@ func passwordProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "vault_cost_refused")
 	case errors.Is(err, secret.ErrWeakPassphrase):
 		return problem(c, http.StatusBadRequest, "passphrase_too_short")
-	// **生体認証の失敗は三つに畳む。** どの指が違ったかも、錠前の中身も外へ出さない。
-	case errors.Is(err, secret.ErrRefused):
-		return problem(c, http.StatusForbidden, "biometric_refused")
-	case errors.Is(err, secret.ErrNoGuardian):
-		return problem(c, http.StatusConflict, "biometric_unavailable")
-	case errors.Is(err, secret.ErrNoBiometric):
-		return problem(c, http.StatusConflict, "biometric_not_enabled")
 	case errors.Is(err, secret.ErrEmptySecret):
 		return problem(c, http.StatusBadRequest, "password_empty")
 	case errors.Is(err, secret.ErrUnsafeName):
@@ -599,32 +587,4 @@ func passwordProblem(c *echo.Context, err error) error {
 	default:
 		return problem(c, http.StatusInternalServerError, "vault_write_failed")
 	}
-}
-
-// UnlockWithBiometric は、OS の錠前に本人を確かめさせてから保管庫を開ける。
-//
-// **本文を取らない。** 差し出すものは無い——証明するのは錠前であって、この
-// リクエストではない。だからこそ、この扉は解錠より前に通れる数少ないものの
-// ひとつとして allowlist に載っている。
-func (h PasswordHandlers) UnlockWithBiometric(c *echo.Context) error {
-	if err := h.Service.UnlockWithBiometric(); err != nil {
-		return passwordProblem(c, err)
-	}
-	return h.status(c)
-}
-
-// EnableBiometric は、この端末の錠前に二つ目の入口を預ける。
-func (h PasswordHandlers) EnableBiometric(c *echo.Context) error {
-	if err := h.Service.EnableBiometric(); err != nil {
-		return passwordProblem(c, err)
-	}
-	return h.status(c)
-}
-
-// DisableBiometric は預かりを解く。
-func (h PasswordHandlers) DisableBiometric(c *echo.Context) error {
-	if err := h.Service.ForgetBiometric(); err != nil {
-		return passwordProblem(c, err)
-	}
-	return h.status(c)
 }

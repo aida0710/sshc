@@ -71,9 +71,6 @@ type Dependencies struct {
 	// 提供し続ける。
 	Toolchain platform.Toolchain
 	KeyAgent  platform.KeyAgent
-	// Biometric は、この OS の錠前である。nil なら、この端末に生体認証の道は
-	// 無い——画面はトグルを出さず、解錠は今まで通りパスワードだけになる。
-	Biometric secret.Guardian
 	// ScanHostKeys と Probe は、ネットワークへ出る 2 つの継ぎ目である。nil なら
 	// internal/sshclient がこのプロセスの中で話す。Runner と同じ性質のものであり、
 	// **検査がネットワークへ出ないようにするためにここにある。**

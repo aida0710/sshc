@@ -13,7 +13,6 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
       vault: {
         exists: true,
         unlocked: true,
-        biometric: { available: false, enabled: false },
         aliases: [],
         dedicatedKeyPassphrases: [],
         minPassphraseLength: 12,
@@ -66,7 +65,7 @@ describe("SettingsPanel", () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi({
       changeMasterPassword: vi.fn().mockResolvedValue({
-        vault: { exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] },
+        vault: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] },
         snapshotResealed: false,
         snapshotProblem: "sync_failed",
       }),

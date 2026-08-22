@@ -334,7 +334,7 @@ describe("SyncPanel", () => {
       .mockResolvedValue(configured);
     const api = buildApi(unconfigured, nothingToDo, {
       syncStatus,
-      unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, biometric: { available: false, enabled: false }, aliases: [], dedicatedKeyPassphrases: [] }),
+      unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
     });
     render(<SyncPanel api={api} />);
 

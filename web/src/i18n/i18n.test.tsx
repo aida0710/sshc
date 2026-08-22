@@ -39,9 +39,6 @@ describe("the catalogue", () => {
     // 既に同じ文字列になっている語だ。
     expect(untranslated.sort()).toEqual(
       [
-        // Touch ID は Apple の名前である。訳すと、画面が指しているものが
-        // 何なのか分からなくなる。
-        "secrets.biometricHeading",
         "diag.hostAlias",
         "explorer.fileState",
         "groups.directories",
