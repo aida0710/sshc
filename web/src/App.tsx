@@ -163,7 +163,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const [vaultExists, setVaultExists] = useState(false);
   // 預けてあるかどうかは、解錠の画面が開いた瞬間に要る——**自分からプロンプトを
   // 出すため**であり、押されてから調べるのでは間に合わない。
-  const [vaultBiometric, setVaultBiometric] = useState(false);
   const [version, setVersion] = useState("");
   const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
   // 宣言済みのグループ名は、セッションが立ち上がった時点で一度だけ読む。
@@ -378,7 +377,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       .then((status) => {
         if (!active || status === null) return;
         setVaultExists(status.exists);
-        setVaultBiometric(status.biometric.enabled);
         if (!status.unlocked) {
           setState("locked");
           return;
@@ -451,7 +449,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     return (
       <LockScreen
         exists={vaultExists}
-        biometric={vaultBiometric}
         onOpen={() => {
           // A successful initialise or unlock means the vault exists now. Keep
           // that fact when this same process locks again; otherwise a freshly

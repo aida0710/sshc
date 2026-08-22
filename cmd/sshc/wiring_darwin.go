@@ -13,6 +13,5 @@ func newPlatformParts() platformParts {
 	return platformParts{
 		Toolchain: macos.NewToolchain(),
 		KeyAgent:  keys.NewAgent(os.LookupEnv),
-		Biometric: macos.Biometric{},
 	}
 }

@@ -182,12 +182,6 @@ type AutoSyncRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
-// BiometricState defines model for BiometricState.
-type BiometricState struct {
-	Available bool `json:"available"`
-	Enabled   bool `json:"enabled"`
-}
-
 // BootstrapResponse defines model for BootstrapResponse.
 type BootstrapResponse struct {
 	CsrfToken string `json:"csrfToken"`
@@ -751,12 +745,11 @@ type PasswordEligibility struct {
 
 // PasswordVaultStatus defines model for PasswordVaultStatus.
 type PasswordVaultStatus struct {
-	Aliases                 []string       `json:"aliases"`
-	Biometric               BiometricState `json:"biometric"`
-	DedicatedKeyPassphrases []string       `json:"dedicatedKeyPassphrases"`
-	Exists                  bool           `json:"exists"`
-	MinPassphraseLength     *int           `json:"minPassphraseLength,omitempty"`
-	Unlocked                bool           `json:"unlocked"`
+	Aliases                 []string `json:"aliases"`
+	DedicatedKeyPassphrases []string `json:"dedicatedKeyPassphrases"`
+	Exists                  bool     `json:"exists"`
+	MinPassphraseLength     *int     `json:"minPassphraseLength,omitempty"`
+	Unlocked                bool     `json:"unlocked"`
 }
 
 // Problem defines model for Problem.

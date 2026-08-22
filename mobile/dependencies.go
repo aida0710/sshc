@@ -20,8 +20,7 @@ import (
 // （返すのは error である）。
 //
 // app.Dependencies の側で意図的に空のままにするのは、自己更新（バイナリを置き
-// 換える経路が無い）、ssh-keygen と ssh-agent（Android に居ない）、そして生体
-// 認証の錠前（Android の BiometricPrompt へ渡す実装をまだ持たない）である。
+// 換える経路が無い）と、ssh-keygen・ssh-agent（Android に居ない）である。
 //
 // **数を数えた文章をここに書かない。** 以前は「落としているものが 4 つある」と
 // 書いてあり、実際には 6 つだった。どの項目が空でよいのかは dependencies_test.go
@@ -51,10 +50,6 @@ func newDependencies(
 		// 一覧に足さず、keys.Service は到達できるエージェントが無いと答える。
 		Toolchain: nil,
 		KeyAgent:  nil,
-		// **持てない錠前を差さない。** Android の生体認証は BiometricPrompt が
-		// 引き受けるが、それを secret.Guardian として渡す実装はまだ無い。nil は
-		// 「この端末に生体認証の道は無い」であり、画面はトグルを出さない。
-		Biometric: nil,
 		// SHELL を読まない。Android でそれを設定した人は居ないので、
 		// 読めば偶然の値が権威になる。
 		Lookup:  func(string) (string, bool) { return "", false },

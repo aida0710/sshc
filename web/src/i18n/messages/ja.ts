@@ -161,11 +161,6 @@ export const ja = {
   "secrets.master": "マスターパスワード",
   "secrets.create": "vault を作成",
   "secrets.unlock": "開く",
-  "secrets.biometricHeading": "Touch ID",
-  "secrets.biometricExplain":
-    "この端末に限り、マスターパスワードの代わりに指紋で保管庫を開きます。端末が預かるのはパスワードではありません——他のどこでも何も開けない秘密であり、指紋でしか届かない場所に置かれます。有効にすると、この保管庫はその錠前にも依存するようになります。マスターパスワードを変えたときと、指紋を追加したときは預かりが終わります。パスワードはいつでも使えます。",
-  "secrets.biometricEnable": "この端末を指紋で開く",
-  "secrets.biometricFailed": "変更できませんでした。",
   "secrets.lock": "sshc を閉じる",
   "secrets.createFailed": "vault を作成できませんでした。マスターパスワードは 12 文字以上必要です。",
   "secrets.unlockFailed": "マスターパスワードが違います。",
@@ -220,10 +215,6 @@ export const ja = {
   "lock.confirm": "マスターパスワード（確認）",
   "lock.create": "vault を作成",
   "lock.open": "開く",
-  "lock.biometric": "Touch ID で開く",
-  "lock.biometricFailed": "Touch ID では開けませんでした。マスターパスワードでは開けます。",
-  "lock.biometricGone":
-    "この端末の預かりはもうありません（マスターパスワードを変えたか、指紋が追加されました）。パスワードで開いてから、もう一度有効にしてください。",
   "lock.wrong": "マスターパスワードが違います。",
   "lock.tooShort": "マスターパスワードは {count} 文字以上必要です。",
   "lock.failed": "vault を開けませんでした。",
