@@ -3,6 +3,7 @@ import { CheckboxField, Field, control, fieldLabel, hintText } from "../ui/form"
 import { Button, Card } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { NoticeList } from "./SavePreview";
+import { PalettePicker } from "../terminal/PalettePicker";
 
 // ペインに開く価値のある中身があるかどうか。
 //
@@ -77,6 +78,19 @@ export function HostInspector({
             </Button>
           )}
         </div>
+
+        <Field label={t("connection.paletteLabel")} hint={t("connection.paletteHint")}>
+          <PalettePicker
+            value={detail.metadata.appearance?.palette ?? ""}
+            // **選ばなかったときは節ごと落とす。** 空の appearance を残すと、
+            // 何も言っていない節が metadata に残り続ける。
+            onChange={(chosen) => {
+              const { appearance: _dropped, ...rest } = detail.metadata;
+              onMetadata(chosen === "" ? rest : { ...rest, appearance: { palette: chosen } });
+            }}
+            unchosen={t("terminal.paletteFollowsOverall")}
+          />
+        </Field>
 
         <Field label={t("host.tags")}>
           <input

@@ -35,6 +35,12 @@ type TerminalSettings struct {
 	// nil は既定の on、false は明示的に止めた値である。
 	CopyOnSelect    *bool
 	RightClickPaste *bool
+	// Appearance は、どの接続にも選ばれていないときの見た目である。
+	//
+	// **値で持つ。** この構造体は `== (TerminalSettings{})` で「何も設定されて
+	// いない」を判定している。ポインタにすると、空を指すポインタがその判定を
+	// すり抜け、空の節が metadata に残る。
+	Appearance TerminalAppearance
 }
 
 // TerminalSettings は、保存されている値をそのまま返す。
@@ -53,7 +59,16 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		FontSize:        stored.EmbeddedTerminal.FontSize,
 		CopyOnSelect:    stored.EmbeddedTerminal.CopyOnSelect,
 		RightClickPaste: stored.EmbeddedTerminal.RightClickPaste,
+		Appearance:      appearanceOf(stored.EmbeddedTerminal.Appearance),
 	}
+}
+
+// appearanceOf は、書かれていない節を空として読む。
+func appearanceOf(stored *TerminalAppearance) TerminalAppearance {
+	if stored == nil {
+		return TerminalAppearance{}
+	}
+	return *stored
 }
 
 // SetTerminalSettings は、節をまるごと置き換える。
@@ -91,6 +106,8 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 			StartDirectory:  settings.StartDirectory,
 			CopyOnSelect:    settings.CopyOnSelect,
 			RightClickPaste: settings.RightClickPaste,
+			// **空の節は書かない。** 残せば、次に読む者は何か選ばれていると思う。
+			Appearance: storedAppearance(settings.Appearance),
 		}
 	}
 
@@ -148,4 +165,12 @@ func (s *Service) TerminalStartDirectory() string {
 		return home
 	}
 	return resolved
+}
+
+// storedAppearance は、何も選ばれていない見た目を「書かれていない」に潰す。
+func storedAppearance(chosen TerminalAppearance) *TerminalAppearance {
+	if chosen.Empty() {
+		return nil
+	}
+	return &chosen
 }

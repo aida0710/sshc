@@ -76,6 +76,12 @@ export const ja = {
   "terminal.scrollbackLabel": "1 本あたりのスクロールバック（バイト）",
   "terminal.scrollbackHint": "16384〜4194304。空にすると既定の 262144（256 KiB）です。スクロールバックはメモリのみで、ディスクへ書きません。",
   "terminal.fontSizeLabel": "文字の大きさ",
+  "terminal.paletteLabel": "配色",
+  "terminal.paletteHint": "自分で選んでいないコンソールに適用されます。",
+  "terminal.paletteFollowsTheme": "アプリのテーマに従う",
+  "terminal.paletteFollowsOverall": "全体の設定に従う",
+  "connection.paletteLabel": "コンソールの配色",
+  "connection.paletteHint": "この接続のコンソールにだけ適用されます。",
   "terminal.fontSizeHint":
     "ピクセル。空欄なら画面に合わせます——狭い画面では 15、それ以外では 13。",
   "terminal.copyOnSelectLabel": "選択した文字列を自動的にコピーする",

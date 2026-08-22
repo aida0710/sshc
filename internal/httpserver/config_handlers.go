@@ -204,6 +204,16 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	}
 	settings.CopyOnSelect = request.CopyOnSelect
 	settings.RightClickPaste = request.RightClickPaste
+	if request.Appearance != nil {
+		// **綴りを検めない。** 知らない名前は画面が既定へ戻す——ここで断ると、
+		// 配色を 1 つ改名した日に、その名前を選んでいた人は設定画面ごと使えなくなる。
+		if request.Appearance.Palette != nil {
+			settings.Appearance.Palette = *request.Appearance.Palette
+		}
+		if request.Appearance.Font != nil {
+			settings.Appearance.Font = *request.Appearance.Font
+		}
+	}
 	result, err := h.Service.SetTerminalSettings(settings)
 	switch {
 	case errors.Is(err, platform.ErrDirectoryRelative), errors.Is(err, platform.ErrDirectoryUser):

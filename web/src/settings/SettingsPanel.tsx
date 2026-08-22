@@ -8,6 +8,7 @@ import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { PalettePicker } from "../terminal/PalettePicker";
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
@@ -34,6 +35,8 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [maxSessions, setMaxSessions] = useState("");
   const [scrollback, setScrollback] = useState("");
   const [fontSize, setFontSize] = useState("");
+  // 空は「選んでいない」であり、テーマに従うという意味である。
+  const [palette, setPalette] = useState("");
   const [copyOnSelect, setCopyOnSelect] = useState(true);
   const [rightClickPaste, setRightClickPaste] = useState(true);
   const [terminalBusy, setTerminalBusy] = useState(false);
@@ -49,6 +52,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setMaxSessions(settings.maxSessions === undefined ? "" : String(settings.maxSessions));
         setScrollback(settings.scrollbackBytes === undefined ? "" : String(settings.scrollbackBytes));
         setFontSize(settings.fontSize === undefined ? "" : String(settings.fontSize));
+        setPalette(settings.appearance?.palette ?? "");
         setCopyOnSelect(settings.copyOnSelect ?? true);
         setRightClickPaste(settings.rightClickPaste ?? true);
       })
@@ -92,6 +96,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         // しても消えないようにする。
         ...(copyOnSelect ? {} : { copyOnSelect: false }),
         ...(rightClickPaste ? {} : { rightClickPaste: false }),
+        // **選んでいないなら節ごと送らない。** 空の appearance を送ると、
+        // metadata に何も言っていない節が残る。
+        ...(palette === "" ? {} : { appearance: { palette } }),
       };
       await api.setTerminalSettings(next);
       onTerminalSettingsChange?.(next);
@@ -211,6 +218,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
           数字」ではない**ので、置くのは placeholder だけである。書けば、その
           日から既定を変えてもこの人だけが取り残される。
         */}
+        <Field label={t("terminal.paletteLabel")} hint={t("terminal.paletteHint")}>
+          <PalettePicker value={palette} onChange={setPalette} unchosen={t("terminal.paletteFollowsTheme")} />
+        </Field>
         <Field label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint")}>
           <input
             type="number"

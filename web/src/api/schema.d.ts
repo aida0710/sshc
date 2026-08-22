@@ -1832,6 +1832,11 @@ export interface components {
             favourite?: boolean;
             order?: number;
             orphan?: boolean;
+            appearance?: components["schemas"]["TerminalAppearance"];
+        };
+        TerminalAppearance: {
+            palette?: string;
+            font?: string;
         };
         GroupMetadata: {
             name: string;
@@ -1855,6 +1860,7 @@ export interface components {
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
             startDirectory?: string;
+            appearance?: components["schemas"]["TerminalAppearance"];
         };
         TerminalSettings: {
             startDirectory?: string;
@@ -1863,6 +1869,7 @@ export interface components {
             fontSize?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
+            appearance?: components["schemas"]["TerminalAppearance"];
         };
         PendingTransaction: {
             id: string;

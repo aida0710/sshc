@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { apiClient, whenLocked, type HealthResponse } from "./api/client";
-import { integrationsApi, type PasswordVaultStatus, type TerminalSettings } from "./api/integrations";
+import { integrationsApi, type PasswordVaultStatus, type TerminalAppearance, type TerminalSettings } from "./api/integrations";
+import { resolveAppearance } from "./terminal/appearance";
 import { configApi } from "./api/config";
 import type { SessionState } from "./session/bootstrap";
 import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/CreateConnectionModal";
@@ -169,6 +170,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   // Keys 画面は移動先としてそれらを提示するだけで、ディレクトリからグルー
   // プを推測しない。ディレクトリがグループになるのはエントリファイルが宣言する場合だけだ。
   const [groups, setGroups] = useState<string[]>([]);
+  // 接続ごとに選ばれた見た目。別名で引く。
+  const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
   // Only non-secret connection fields may outlive the creation modal. This
   // draft lets a person create a group or key and return without starting the
@@ -422,6 +425,18 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       .then((overview) => {
         if (!active) return;
         setGroups((overview.metadata.groups ?? []).map((group) => group.name));
+        // 接続ごとに選ばれた見た目。**別名で引く。** 端末のセッションが名乗る
+        // のは別名だけで、どのファイルの Host かは持っていない——OpenSSH 自身も
+        // 先に見つけた方を使うので、ここも最初の一致を採る。
+        setHostAppearance(
+          new Map(
+            (overview.metadata.hosts ?? []).flatMap((host) =>
+              host.appearance === undefined || host.identity.alias === ""
+                ? []
+                : [[host.identity.alias, host.appearance] as const],
+            ),
+          ),
+        );
         setKnownAliases([...new Set(overview.hosts.map((host) => host.identity.alias).filter((alias) => alias !== ""))]);
       })
       // グループを列挙できないシェルでも動作は成立する——移動先リストが
@@ -614,6 +629,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     consoles={consoles}
                     activeConsole={activeConsole}
                     settings={terminalSettings}
+                    hostAppearance={hostAppearance}
                   />
                 </div>
               ) : null}
@@ -729,13 +745,21 @@ function TerminalScreen({
   consoles,
   activeConsole,
   settings,
+  hostAppearance,
 }: {
   consoles: TerminalSessionsState;
   activeConsole: string | null;
   settings: TerminalSettings;
+  hostAppearance: Map<string, TerminalAppearance>;
 }) {
   const t = useTranslate();
   const session = consoles.sessions.find((entry) => entry.id === activeConsole);
+  // **接続が勝ち、全体はその下に敷く。** ローカルシェルは別名を持たないので、
+  // そこでは常に全体の選択になる。
+  const appearance = resolveAppearance(
+    session?.alias === undefined ? undefined : hostAppearance.get(session.alias),
+    settings.appearance,
+  );
   if (session === undefined) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -761,6 +785,7 @@ function TerminalScreen({
           key={session.id}
           session={session}
           {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })}
+          {...(appearance.palette === "" ? {} : { palette: appearance.palette })}
           copyOnSelect={settings.copyOnSelect ?? true}
           rightClickPaste={settings.rightClickPaste ?? true}
           onExit={() => consoles.markExited(session.id)}

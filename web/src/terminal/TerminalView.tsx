@@ -26,6 +26,13 @@ type TerminalViewProps = {
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
+  // palette は、選ばれた配色の名前である。**色そのものは運ばない**——
+  // 名前は箱に data 属性として載り、色は CSS が与える。空なら、端末は
+  // アプリのテーマに従う。
+  //
+  // 接続ごとの選択と全体の選択のどちらが勝つかは、ここでは決めない。
+  // 渡ってくるのは決着したあとの 1 つである。
+  palette?: string;
 };
 
 // Link は、この画面とセッションを繋ぐ通信路の状態である。
@@ -62,6 +69,7 @@ export function TerminalView({
   copyOnSelect = true,
   fontSize,
   rightClickPaste = true,
+  palette,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
@@ -112,7 +120,9 @@ export function TerminalView({
       // 値であって CSS で塗り替えられるものではないので、breakpoint では
       // 届かない。13px は指で持つ画面には小さすぎる。
       fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
-      theme: terminalTheme(),
+      // **箱から読む。** data-term-palette がそこに載っており、CSS 変数は
+      // 継承するので、選ばれていなければ同じ呼び出しがテーマの色を返す。
+      theme: terminalTheme(container),
       // スクロールバックはサーバー側のリングバッファが正本である。ここでの値は
       // 再生されたバイト列を画面に保つための余地にすぎない。
       scrollback: 5000,
@@ -337,11 +347,15 @@ export function TerminalView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, api]);
 
-  // テーマの切り替えは端末を作り直さない。色だけを読み直して差し替える。
+  // テーマの切り替えも配色の選び直しも、端末を作り直さない。色だけを読み直して
+  // 差し替える。
+  //
+  // **属性が載ったあとに読む。** data-term-palette は同じ描画で箱に付くので、
+  // effect が走る時点では既にそこにある。
   useEffect(() => {
-    if (terminal.current === null) return;
-    terminal.current.options.theme = terminalTheme();
-  }, [resolved]);
+    if (terminal.current === null || host.current === null) return;
+    terminal.current.options.theme = terminalTheme(host.current);
+  }, [resolved, palette]);
 
   return (
     <section aria-label={t("terminal.screenLabel", { title: session.title })} className="relative flex min-h-0 flex-1 flex-col">
@@ -406,7 +420,13 @@ export function TerminalView({
         relative は、重ねる板の座標系である。板は .xterm の**兄弟**としてここに
         ぶら下がる——.xterm の中では長押しからの選択がどうやっても始まらない。
       */}
-      <div ref={host} className="relative min-h-0 flex-1 bg-term-bg p-2" />
+      <div
+        ref={host}
+        // 選ばれていないときは属性を置かない。**空文字を置くと、どの配色にも
+        // 一致しない選択が「選ばれた」ことになる。**
+        {...(palette === undefined || palette === "" ? {} : { "data-term-palette": palette })}
+        className="relative min-h-0 flex-1 bg-term-bg p-2"
+      />
       <KeyBar
         modifiers={modifiers}
         onToggle={(name) => setModifiers((current) => ({ ...current, [name]: !current[name] }))}
