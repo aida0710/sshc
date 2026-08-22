@@ -8,45 +8,39 @@ import (
 	"sshc/internal/secret"
 )
 
-// **時計で閉じるかどうかは、engine を起こした側が決める。**
+// **時計は、engine を誰が起こしたかで変わらない。**
 //
-// デスクトップの engine はアプリの子であり、アプリを終えれば道連れに死ぬ——
-// vault はメモリの中だけなので、そこで消える。蓋を閉じたノートは、開ければ
-// OS がログインパスワードを訊く。そこへ 8 時間の時計を重ねても、増える安全は
-// わずかで、確実に増えるのは再入力の回数である。
-//
-// 画面の無い機械は違う。`sshc headless` は systemd の下で何週間も走り、蓋も
-// 画面ロックも無い。**そこでは、これが唯一の歯止めである。**
+// 以前はデスクトップだけ外していた。根拠は「engine はアプリの子であり、アプリを
+// 終えれば道連れに死ぬ」だったが、**その親が居なくなった。** コマンドが engine を
+// 起こしてブラウザを開く形では、窓を閉じても engine は生き続ける——忘れられた
+// 端末の中で何日も開いたままになりうるなら、それは画面の無い機械と同じ状況で
+// あり、そこでは時計が唯一の歯止めである。
 //
 // ここが確かめるのは、その判断が実際に届いていることである——秘密を持つ側で
 // 正しく振る舞っても、渡し忘れていれば意味が無い。
-func TestTheVaultClosesOnAClockOnlyWhereThereIsNoScreen(t *testing.T) {
-	for _, expected := range []struct {
-		owner handoff.Owner
-		idle  string
-	}{
-		{handoff.OwnerDesktop, "開いたまま"},
-		{handoff.OwnerHeadless, "8 時間で閉じる"},
-	} {
-		t.Run(string(expected.owner), func(t *testing.T) {
+func TestTheVaultClosesOnTheSameClockWhoeverStartedTheEngine(t *testing.T) {
+	for _, owner := range []handoff.Owner{handoff.OwnerDesktop, handoff.OwnerHeadless} {
+		t.Run(string(owner), func(t *testing.T) {
 			services, err := newEngineServices(Dependencies{
 				Home:   t.TempDir(),
-				Owner:  expected.owner,
+				Owner:  owner,
 				Random: rand.Reader,
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			idle := services.passwords.IdleTimeout()
-			want := secret.IdleTimeout
-			if expected.owner == handoff.OwnerDesktop {
-				want = secret.StayOpen
-			}
-			if idle != want {
-				t.Errorf("%s の engine は %s であるべきだが、idle=%v だった",
-					expected.owner, expected.idle, idle)
+			if idle := services.passwords.IdleTimeout(); idle != secret.IdleTimeout {
+				t.Errorf("%s の engine は %v で閉じるべきだが、idle=%v だった",
+					owner, secret.IdleTimeout, idle)
 			}
 		})
+	}
+}
+
+// **12 時間である。** 朝に開いた人は夜まで訊かれず、翌朝には訊かれる。
+func TestTheClockIsTwelveHours(t *testing.T) {
+	if hours := secret.IdleTimeout.Hours(); hours != 12 {
+		t.Fatalf("IdleTimeout = %v 時間, want 12", hours)
 	}
 }

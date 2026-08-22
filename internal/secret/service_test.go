@@ -1727,8 +1727,8 @@ func TestSettingTheKeyNeedsAnOpenVault(t *testing.T) {
 }
 
 // **巡回が保管庫を開けっぱなしにしてはならない。** 1 分ごとに設定を読む読み手が
-// アイドルの時計を戻し続ければ、8 時間の自動施錠は永久に来ない——誰も居ない机の
-// 上で、鍵がプロセスの記憶に残り続けることになる。
+// アイドルの時計を戻し続ければ、自動施錠は永久に来ない——誰も居ない机の上で、
+// 鍵がプロセスの記憶に残り続けることになる。
 func TestAnUnattendedReaderDoesNotKeepTheVaultOpen(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -1745,8 +1745,10 @@ func TestAnUnattendedReaderDoesNotKeepTheVaultOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 巡回が 9 時間ぶん、毎分読み続ける。
-	for minute := 0; minute < 9*60; minute++ {
+	// **時計を数字で書き写さない。** 書き写せば、時計を延ばした日にこの検査は
+	// 何も言わないまま緑になる——実際、8 時間から延ばしたときにそうなった。
+	minutes := int((secret.IdleTimeout + time.Hour).Minutes())
+	for minute := 0; minute < minutes; minute++ {
 		clock = clock.Add(time.Minute)
 		service.Unattended(func() { _, _ = service.SyncSettings() })
 	}
@@ -1784,40 +1786,33 @@ func TestAReaderThatIsNotTheLoopKeepsTheVaultOpen(t *testing.T) {
 	}
 }
 
-// **画面のある機械では、時計で閉じない。**
+// **頼まれれば、時計を待たずに閉じる。**
 //
-// engine はアプリの子であり、アプリを終えれば道連れに死ぬ——vault はメモリの
-// 中だけなので、そこで消える。蓋を閉じたノートは、開ければ OS がログイン
-// パスワードを訊く。**そこへ時計を重ねても、増える安全はわずかで、確実に
-// 増えるのは再入力の回数である。**
-func TestAVaultOnADesktopStaysOpenUntilItIsLocked(t *testing.T) {
+// 時計はどこでも同じになったが、施錠そのものが消えたわけではない。
+func TestAVaultClosesTheMomentItIsAskedTo(t *testing.T) {
 	clock := time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
 	service, _ := newClockedService(t, func() time.Time { return clock })
-	service.SetIdleTimeout(secret.StayOpen)
 	if err := service.Initialise(passphrase); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.Set("bastion", "hunter2"); err != nil {
 		t.Fatal(err)
 	}
-
-	// 一週間放っておいても開いている。
-	clock = clock.Add(7 * 24 * time.Hour)
 	if !service.Unlocked() {
-		t.Error("時計で閉じた: 画面のある機械では、閉じるのは人と engine の終わりだけである")
+		t.Fatal("開いていない")
 	}
 
-	// **閉じる手段が消えたわけではない。** 頼まれれば閉じる。
 	service.Lock()
 	if service.Unlocked() {
 		t.Error("頼まれても閉じなかった")
 	}
 }
 
-// **画面の無い機械では、時計が唯一の歯止めである。**
+// **触れられないまま置かれた金庫は、時計で閉じる。**
 //
-// `sshc headless` は systemd の下で何週間も走り、蓋も画面ロックも無い。
-func TestAVaultOnAHeadlessEngineStillShutsItself(t *testing.T) {
+// どこで走っていても同じである。`sshc headless` は systemd の下で何週間も走り、
+// 蓋も画面ロックも無い——そして窓を閉じても生き続ける engine も、同じ状況である。
+func TestAVaultLeftAloneShutsItself(t *testing.T) {
 	clock := time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
 	service, _ := newClockedService(t, func() time.Time { return clock })
 	if err := service.Initialise(passphrase); err != nil {
