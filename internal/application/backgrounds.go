@@ -84,9 +84,16 @@ func imageType(contents []byte) (mediaType string, extension string) {
 // **通す文字を並べる。** 点も斜線も通さないので、`..` も隠しファイルも作れない。
 // 何も残らなければ、中身から作る——名前が無いことを理由に断るほどのことではない。
 func safeStem(suggested string, contents []byte) string {
+	// **元の拡張子は落とす。** 通す文字に点が無いので、残すと `photo.jpg` が
+	// `photo-jpg.png` になる——古い型の名残が、新しい型の名前の中に単語として
+	// 居座ることになる。
+	trimmed := strings.TrimSpace(suggested)
+	if dot := strings.LastIndex(trimmed, "."); dot > 0 && len(trimmed)-dot <= 6 {
+		trimmed = trimmed[:dot]
+	}
 	var builder strings.Builder
 	previousDash := false
-	for _, letter := range strings.ToLower(strings.TrimSpace(suggested)) {
+	for _, letter := range strings.ToLower(trimmed) {
 		switch {
 		case letter >= 'a' && letter <= 'z', letter >= '0' && letter <= '9':
 			builder.WriteRune(letter)

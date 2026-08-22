@@ -15,7 +15,7 @@ describe("resolveAppearance", () => {
   // 戻ってはならない。
   it("keeps the overall font when the connection only chose a palette", () => {
     const resolved = resolveAppearance({ palette: "nord" }, { palette: "dracula", font: "jetbrains-mono" });
-    expect(resolved).toEqual({ palette: "nord", font: "jetbrains-mono" });
+    expect(resolved).toEqual({ palette: "nord", font: "jetbrains-mono", background: "", tint: undefined });
   });
 
   // **空は選択ではない。** 接続で「既定へ戻す」を選んだ人は、全体の選択へ
@@ -25,7 +25,25 @@ describe("resolveAppearance", () => {
   });
 
   it("chooses nothing when nobody chose", () => {
-    expect(resolveAppearance(undefined, undefined)).toEqual({ palette: "", font: "" });
+    expect(resolveAppearance(undefined, undefined)).toEqual({
+      palette: "",
+      font: "",
+      background: "",
+      tint: undefined,
+    });
+  });
+});
+
+// **濃さは 0 が有効な選択である。** 空文字と同じ扱いにすると、素のまま画像を
+// 見たい人の選択が、上の段の設定に毎回上書きされる。
+describe("かぶせる濃さ", () => {
+  it("keeps a zero the connection actually chose", () => {
+    expect(resolveAppearance({ backgroundTint: 0 }, { backgroundTint: 80 }).tint).toBe(0);
+  });
+
+  it("falls back only when the connection chose nothing", () => {
+    expect(resolveAppearance({}, { backgroundTint: 80 }).tint).toBe(80);
+    expect(resolveAppearance(undefined, undefined).tint).toBeUndefined();
   });
 });
 
