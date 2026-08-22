@@ -1,10 +1,13 @@
 package acceptance_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sshc/internal/secret"
 )
 
 // **説明は、実装と同じだけ古くなる。** そして古くなった説明は、間違った
@@ -69,11 +72,17 @@ func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
 }
 
 // 保管庫の約束は、数字を伴って書かれていなければ意味が無い。
+//
+// **数字を書き写さない。** ここに "8 時間" と直に書いていたせいで、時計を 12 時間へ
+// 延ばしても検査は緑のままで、README だけが古い約束を語り続けた。定数から綴りを
+// 組み立てれば、次に延ばした人は README を直すまで赤を見る。
 func TestTheReadmeStatesTheVaultRules(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 
-	if !strings.Contains(readme, "8 時間") {
-		t.Error("README does not state the idle timeout; internal/secret.IdleTimeout is 8h")
+	stated := fmt.Sprintf("%d 時間", int(secret.IdleTimeout.Hours()))
+	if !strings.Contains(readme, stated) {
+		t.Errorf("README does not state the idle timeout %q; internal/secret.IdleTimeout is %v",
+			stated, secret.IdleTimeout)
 	}
 	if !strings.Contains(readme, "端末からしか受け取りません") {
 		t.Error("README does not say vault passwords are typed only on a terminal")
