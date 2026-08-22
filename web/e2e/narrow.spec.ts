@@ -310,3 +310,51 @@ test("lays a selectable layer over the terminal, outside the element that blocks
   });
   expect(selected).toContain("zzq");
 });
+
+// 問いは、それを出した場所の都合とは無関係に読めなければならない。
+//
+// **`fixed` が窓を基準にするのは、祖先が transform を持っていないときだけ
+// である。** ナビゲーションの板は開閉のために常に translate を持ち、さらに
+// overflow-hidden で切る——中に置かれた確認は幅 288px の板に閉じ込められ、
+// 文も釦も見切れていた。狭い画面がいちばん先に壊れるので、ここで測る。
+test("asks before closing a live console, in the middle of the screen and not inside the drawer", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, installation);
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await nav.getByRole("tab", { name: "Terminals" }).click();
+  await nav.getByRole("button", { name: "Local shell" }).click();
+  await expect(page.locator(".xterm-rows")).toContainText(/[$#%>]/, { timeout: 20_000 });
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await nav.getByRole("button", { name: /^Close / }).first().click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  const measured = await dialog.evaluate((node) => {
+    const box = (node as HTMLElement).getBoundingClientRect();
+    return {
+      insideDrawer: (node as HTMLElement).closest("nav") !== null,
+      left: box.left,
+      right: box.right,
+      width: box.width,
+      viewport: document.documentElement.clientWidth,
+    };
+  });
+
+  // **板の中に居てはならない。** 居れば、板が切る。
+  expect(measured.insideDrawer).toBe(false);
+  // 窓の中に収まっている。左右どちらにも溢れていない。
+  expect(measured.left).toBeGreaterThanOrEqual(0);
+  expect(measured.right).toBeLessThanOrEqual(measured.viewport);
+  // **板の幅（288px）に閉じ込められていない。** 360px の面で、そこが症状だった。
+  expect(measured.width).toBeGreaterThan(288);
+
+  // どちらの釦も押せる場所に在る。
+  await expect(dialog.getByRole("button", { name: /Keep|open/i })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Close/i })).toBeVisible();
+});
