@@ -515,3 +515,51 @@ test("does not hand npm's own environment to the shell", async ({ page, installa
 
   await expect(screen).toContainText("prefix=[]", { timeout: 20_000 });
 });
+
+// 配色は端末まで届く。
+//
+// **単体テストでは言えない。** 色は CSS 変数として端末の箱に載り、そこから
+// getComputedStyle で読まれて xterm へ渡る——jsdom は要素に色を解決しないので、
+// この道筋が繋がっていることは実ブラウザでしか確かめられない。
+//
+// 見るのは面の色**と**、ANSI の赤で描かれた字の色である。面だけを見ると、
+// 私たち自身の箱に色が付いただけでも通ってしまう——**xterm が新しいテーマを
+// 受け取ったことは、xterm が描いた字でしか分からない。**
+test("paints the console in the colour scheme that was chosen", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = await typeIntoConsole(page, "printf '\\033[31mzzred\\033[0m\\n'");
+  await expect(screen).toContainText("zzred", { timeout: 20_000 });
+
+  const surface = () =>
+    page.locator(".xterm").evaluate((node) => {
+      const box = (node as HTMLElement).parentElement!;
+      return getComputedStyle(box).getPropertyValue("--ui-term-bg").trim();
+    });
+  // xterm が描いた「赤」そのもの。テーマを受け取っていなければ、ここは既定の赤のままである。
+  const drawnRed = () =>
+    page
+      .locator(".xterm-rows span", { hasText: "zzred" })
+      .last()
+      .evaluate((node) => getComputedStyle(node as HTMLElement).color);
+
+  const beforeSurface = await surface();
+  const beforeRed = await drawnRed();
+
+  await panel.getByRole("tab", { name: "Settings" }).click();
+  await openSection(page, "Settings");
+  const settings = page.getByRole("region", { name: "Terminal" });
+  await settings.getByLabel("Colour scheme").selectOption("dracula");
+  await settings.getByRole("button", { name: "Save" }).click();
+  await expect(settings.getByText(/Saved/)).toBeVisible();
+
+  await openSection(page, "Terminal");
+  // Dracula の面と、Dracula の赤。**この 2 つが、契約から CSS を通って
+  // xterm まで繋がっていることの証拠である。**
+  await expect.poll(surface).toBe("#282a36");
+  await expect.poll(drawnRed).toBe("rgb(255, 85, 85)");
+  expect(beforeSurface).not.toBe("#282a36");
+  expect(beforeRed).not.toBe("rgb(255, 85, 85)");
+});

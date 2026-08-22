@@ -9,6 +9,7 @@ export type AuthenticationResponse = components["schemas"]["AuthenticationRespon
 export type TerminalSettings = components["schemas"]["TerminalSettings"];
 export type TerminalForward = components["schemas"]["TerminalForward"];
 export type TerminalSession = components["schemas"]["TerminalSession"];
+export type TerminalAppearance = components["schemas"]["TerminalAppearance"];
 export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
 export type OpenTerminalSessionRequest = components["schemas"]["OpenTerminalSessionRequest"];
 export type OpenTerminalSessionResponse = components["schemas"]["OpenTerminalSessionResponse"];
@@ -474,6 +475,19 @@ function validatePullResponse(value: unknown): PullResponse {
   return record as unknown as PullResponse;
 }
 
+// readAppearance は、見た目の選択を綴りだけ取り出す。
+//
+// **知らない綴りをここで断らない。** 名乗られた配色が無ければ端末はテーマへ
+// 戻る——配色を 1 つ改名した日に、それを選んでいた人の設定画面が開かなくなる
+// 方が、はるかに悪い。
+function readAppearance(value: unknown): TerminalAppearance {
+  const record = asRecord(value);
+  return {
+    ...(typeof record.palette === "string" ? { palette: record.palette } : {}),
+    ...(typeof record.font === "string" ? { font: record.font } : {}),
+  };
+}
+
 export const integrationsApi: IntegrationsApi = {
   async configCheck() {
     return validateConfigCheck(await postJSON<unknown>("/api/v1/diagnostics/config", {}));
@@ -565,6 +579,7 @@ export const integrationsApi: IntegrationsApi = {
       ...(typeof terminal.rightClickPaste === "boolean"
         ? { rightClickPaste: terminal.rightClickPaste }
         : {}),
+      ...(terminal.appearance === undefined ? {} : { appearance: readAppearance(terminal.appearance) }),
     };
   },
   // **節まるごとの置き換えである。** 送らなかった項目は、書かれていない状態へ

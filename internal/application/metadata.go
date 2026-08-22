@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -83,7 +84,29 @@ type HostMetadata struct {
 	Favourite bool         `json:"favourite,omitempty"`
 	Order     int          `json:"order,omitempty"`
 	Orphan    bool         `json:"orphan,omitempty"`
+	// Appearance は、この接続を開いたときの端末の見た目である。
+	//
+	// **ポインタなのは、空の節を書かないためである。** encoding/json の
+	// omitempty は構造体には効かない——値で持つと、何も選んでいない接続にも
+	// `"appearance":{}` が並ぶ。
+	Appearance *TerminalAppearance `json:"appearance,omitempty"`
 }
+
+// TerminalAppearance は、端末の見た目の選択である。
+//
+// **名前で持ち、色そのものは持たない。** 配色と字体の中身は画面が一度だけ
+// 定義する。engine はこれを読まない——PTY は色を知らない。
+//
+// **知らない名前は既定へ戻す。** 手で書かれた綴りひとつが、タグもお気に入りも
+// 道連れに読めなくしてよい理由はない。TerminalLimits が範囲外の数字にしている
+// のと同じ扱いである。
+type TerminalAppearance struct {
+	Palette string `json:"palette,omitempty"`
+	Font    string `json:"font,omitempty"`
+}
+
+// Empty は、何も選ばれていないことを答える。
+func (appearance TerminalAppearance) Empty() bool { return appearance == TerminalAppearance{} }
 
 func (host HostMetadata) Alias() string { return host.Identity.Alias }
 
@@ -128,6 +151,9 @@ type EmbeddedTerminal struct {
 	// `~` の綴りのまま持つ。**home の綴りを設定に焼き付けない**ので、
 	// 別の機械へ持って行っても同じ意味になる。
 	StartDirectory string `json:"startDirectory,omitempty"`
+	// Appearance は、どの接続にも選ばれていないときの見た目である。
+	// **接続ごとの選択の方が強い。**
+	Appearance *TerminalAppearance `json:"appearance,omitempty"`
 }
 
 // Metadata は~/.ssh/sshc/metadata.json の全体である。
@@ -397,6 +423,22 @@ func ReconcileMetadata(metadata Metadata, present []HostIdentity) (Metadata, []N
 // そのホストの note は同じ transaction で退役する。ユーザーが編集するたびに
 // ホストごとにこれを行うことで、すべてのファイルを一度に書き換える
 // migration を介さずに収束する。identity しか残っていない entry は
+// saysNothing は、その entry に残しておく価値が無いことを答える。
+//
+// **数え上げない。** ここはかつて `len(Tags) == 0 && Colour == "" && !Favourite
+// && Order == 0` と項目を並べていた。並べると、増やした項目をここへ足し忘れた
+// 日に、**note を消しただけでその設定ごと消える。** 見た目を足したときが
+// まさにそれだった。
+//
+// identity は entry の宛名なので数に入れない。orphan は「向こうが消えた」と
+// いう観測であって、人が語ったことではない——それだけが残った entry は、
+// 以前と同じく捨てる。
+func saysNothing(host HostMetadata) bool {
+	host.Identity = HostIdentity{}
+	host.Orphan = false
+	return reflect.DeepEqual(host, HostMetadata{})
+}
+
 // 捨てられる。何も語らない entry は残しておく価値が無いからだ。
 func ClearHostNote(metadata Metadata, identity HostIdentity) Metadata {
 	cleared := metadata
@@ -407,7 +449,7 @@ func ClearHostNote(metadata Metadata, identity HostIdentity) Metadata {
 			continue
 		}
 		host.Note = ""
-		if len(host.Tags) == 0 && host.Colour == "" && !host.Favourite && host.Order == 0 {
+		if saysNothing(host) {
 			continue
 		}
 		cleared.Hosts = append(cleared.Hosts, host)
