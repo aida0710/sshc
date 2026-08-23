@@ -55,8 +55,6 @@ describe("remoteKeysApi", () => {
     expect(described.remotePath).toBe("~/.ssh/authorized_keys");
     expect(described.actionToken).toBe(actionToken);
 
-    // plan は何にも接続せず何も変更しないのでトークンを消費しない。
-    // それでも、この API のすべての mutation が運ぶ CSRF ヘッダーは運ぶ。
     expect(fetcher).toHaveBeenCalledTimes(1);
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/remote-keys/plan");

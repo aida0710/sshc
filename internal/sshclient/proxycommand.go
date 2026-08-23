@@ -12,58 +12,28 @@ import (
 	"time"
 )
 
-// ProxyCommand は、接続そのものを外部のプログラムに任せる設定である。
-//
-// **かつてここは断っていた。** 「このアプリケーションは接続のために何も実行
-// しない」という判断で、~/.ssh/config は正本のまま残るのだから端末から ssh で
-// 繋げばよい、という逃げ道が根拠だった。
-//
-// **その逃げ道は、この道具を使う理由そのものを削っていた。** ProxyCommand を
-// 書いている接続先は珍しくない——`cloudflared access ssh`、`aws ssm`、
-// 会社の bastion helper。それらが一覧に並んでいるのに押すと断られるなら、
-// その人にとってこのアプリケーションは「半分の接続先しか扱えないもの」である。
-//
-// **いま実行する。ただし黙って実行しない。**
-//
-//   - 起こす綴りは、接続のたびに notice として出る（`sshc <alias>` は端末へ、
-//     画面は接続の警告欄へ）。何が走るかを知らないまま走ることはない
-//   - `-v` 以上では、起こす前にその綴りが端末に出る
-//   - 走らせるのは利用者自身の ~/.ssh/config に書かれたものだけである。
-//     ssh が読むのと同じ 1 行を、ssh と同じように解釈する
-//
-// **プログラムを起こす場所は数えられている。** internal/acceptance の
-// TestOnlyTheNamedSubsystemsStartAProgram が一覧を持っており、ここはそこへ
-// 理由と一緒に足した 4 つ目である。
+// ProxyCommand は、ssh_config に記載された外部コマンドの標準入出力を SSH 接続に使う。
+// 実行前にコマンドを利用者へ表示する。
 
 // ErrProxyCommandThroughJump は、踏み台の向こうのホップが ProxyCommand を
 // 持っている設定を断る。
 //
-// **そのプログラムはこの機械で走る。** 手前のホップの中ではない。つまり
-// 「踏み台の向こうから見た接続先」へは届かず、走るのはこちらのネットワークに
-// 居るプログラムである。**それは設定が言っていることと違う。**
+// コマンドはローカルで実行されるため、踏み台から到達する後続ホップには適用できない。
 var ErrProxyCommandThroughJump = errors.New(
 	"a jump host reached through another connection cannot use ProxyCommand; the command would run on this machine")
 
 // ErrProxyCommandWithJump は、ProxyJump と ProxyCommand を同時に書いた設定を断る。
 //
-// **OpenSSH も断る**（"inconsistent options: ProxyCommand+ProxyJump"）。
-// どちらも「どうやってそこへ届くか」を決めるものなので、両方を書いた人は
-// 二つの違う答えを書いている。
+// 両方とも接続経路を指定するため、sshc は曖昧な設定を拒否する。
 var ErrProxyCommandWithJump = errors.New("ProxyCommand and ProxyJump cannot both decide how to reach one host")
 
-// proxyCommandGrace は、接続が終わったあとプログラムが自分で畳むのを待つ長さ。
-//
-// **待ってから殺す。** パイプを閉じれば普通のプログラムは終わる。終わらない
-// ものだけが強制される。
+// proxyCommandGrace は、パイプを閉じてからプロセスを強制終了するまでの猶予時間。
 const proxyCommandGrace = 2 * time.Second
 
-// proxyCommandStderrLimit は、プログラムの stderr を覚えておく量である。
-//
-// **全部は覚えない。** 何時間も喋り続けるプログラムがあれば、それはこの
-// プロセスのメモリになる。要るのは「なぜ繋がらなかったか」の最後の数行だけである。
+// proxyCommandStderrLimit は、診断用に保持する stderr の最大サイズ。
 const proxyCommandStderrLimit = 8 << 10
 
-// startProxyCommand は、その綴りを起こし、その標準入出力を接続として返す。
+// startProxyCommand は、その表記を起動し、その標準入出力を接続として返す。
 func startProxyCommand(command string) (net.Conn, error) {
 	name, arguments, err := interpreter(command)
 	if err != nil {
@@ -93,9 +63,7 @@ func startProxyCommand(command string) (net.Conn, error) {
 		}
 		return nil, fmt.Errorf("ProxyCommand did not start: %w", err)
 	}
-	// **子に渡した端は、親が閉じなければならない。** 開いたままだと、子は
-	// stdin の EOF を見ず、こちらは stdout の EOF を見ない——どちらも
-	// 相手が終わるのを待ち続ける。
+	// 親側で不要なパイプ端を閉じ、EOF が伝播するようにする。
 	_ = childStdin.Close()
 	_ = childStdout.Close()
 
@@ -108,7 +76,7 @@ func startProxyCommand(command string) (net.Conn, error) {
 	}, nil
 }
 
-// commandConn は、起こしたプログラムの標準入出力をひとつの接続として見せる。
+// commandConn は、起動したプログラムの標準入出力をひとつの接続として見せる。
 type commandConn struct {
 	command    string
 	process    *exec.Cmd
@@ -139,8 +107,7 @@ func (c *commandConn) Write(b []byte) (int, error) {
 // translate は、締め切りで畳んだことを「閉じた」ではなく「間に合わなかった」
 // として返す。
 //
-// **区別が要る。** 相手が黙っているのと、こちらが畳んだのは違う出来事であり、
-// 読む人が次にすることも違う。
+// 相手側の終了とローカルの締め切りを区別し、後者は deadline error として返す。
 func (c *commandConn) translate(err error, reading bool) error {
 	if err == nil {
 		return nil
@@ -183,11 +150,7 @@ func (c *commandConn) Close() error {
 	return c.closeErr
 }
 
-// Complaints は、プログラムが標準エラーへ書いたものを返す。
-//
-// **繋がらなかった理由は、たいていここにしかない。** `ssh -W` は
-// "Connection refused" をここへ書く。握手の失敗としてだけ見せると、読む人は
-// 何が起きたのか分からない。
+// Complaints は、接続失敗の診断に使う ProxyCommand の標準エラーを返す。
 func (c *commandConn) Complaints() string { return c.complaints.String() }
 
 func (c *commandConn) LocalAddr() net.Addr  { return proxyAddr{command: c.command} }
@@ -200,11 +163,8 @@ func (c *commandConn) SetDeadline(t time.Time) error {
 	return c.SetWriteDeadline(t)
 }
 
-// SetReadDeadline は、締め切りが来たら接続を畳む。
-//
-// **os.File の締め切りに任せない。** Windows の匿名パイプはそれを支えないので、
-// あちらでだけ締め切りが効かない接続ができる。**効かない締め切りは、無い
-// 締め切りより悪い** ——呼び出し側は掛けたつもりで待ち続ける。
+// SetReadDeadline は、OS 間で同じ動作にするため、期限到達時に接続を閉じる。
+// Windows の匿名パイプは os.File の deadline をサポートしない。
 func (c *commandConn) SetReadDeadline(t time.Time) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -242,8 +202,8 @@ func (c *commandConn) rearm(timer *time.Timer, t time.Time, fire func()) *time.T
 
 // proxyAddr は、この接続の相手を名指す。
 //
-// **IP もポートも無い。** 相手はプログラムであり、どこへ繋がるかを知っているのは
-// そのプログラムだけである。綴りをそのまま見せるのが、一番正確な答えである。
+// IP もポートも無い。相手はプログラムであり、どこへ繋がるかを知っているのは
+// そのプログラムだけである。表記をそのまま見せるのが、一番正確な結果である。
 type proxyAddr struct{ command string }
 
 func (proxyAddr) Network() string  { return "proxycommand" }
@@ -266,7 +226,7 @@ func (b *boundedBuffer) Write(chunk []byte) (int, error) {
 			b.kept = append(b.kept, chunk...)
 		}
 	}
-	// **捨てた分も書けたと答える。** 書けなかったと答えると os/exec は
+	// 捨てた分も書けたと返す。書けなかったと返すと os/exec は
 	// そこで写しを止め、プログラム側の書き込みが詰まる。
 	return len(chunk), nil
 }

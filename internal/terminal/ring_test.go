@@ -40,8 +40,6 @@ func TestRingKeepsTheNewestBytesWhenItWraps(t *testing.T) {
 	}
 }
 
-// スナップショットは複製でなければならない。再アタッチのたびに WebSocket へ
-// 渡されるあいだも、PTY は同じバッファへ書き続けている。
 func TestRingSnapshotDoesNotAliasTheBuffer(t *testing.T) {
 	ring := terminal.NewRing(4)
 	if _, err := ring.Write([]byte("abcd")); err != nil {

@@ -18,24 +18,8 @@ type ConsoleListProps = {
   onOpenShell: () => void;
 };
 
-// dragMimeType は、このページの外で始まったドラッグをこの一覧のものと
-// 誤認しないための private な型である。connections の drag and drop が同じ
-// 作法を使っている。判定に読むのは types だけで、中身はドロップまで読めない。
 const dragMimeType = "application/x-sshc-console";
 
-// ConsoleList は、開いているセッションと終了して残っているセッションの一覧である。
-//
-// 状態でグループ分けしない。一続きの平らな並びなので、並べ替えがまたぐ見出しも
-// 存在しない。行は 2 行で、1 行目が名前、2 行目が「状態 · 行き先」である。
-// 種類（ssh / shell）は書かない——行き先が localhost かどうかがそれを言っている。
-//
-// ローカルシェルの入口はここだけである。localhost はローカルシェルであって ssh
-// 接続ではないので、Home の接続一覧には出さない。あの一覧は ~/.ssh/config の
-// 投影であり、localhost はそこに存在しない。
-// describeForward は、開いている転送ひとつを 1 行にする。
-//
-// 短く書くのは、これが一覧の行の下にぶら下がるからである。詳しい形は
-// 端末の一行目に出ている。
 function describeForward(t: Translate, forward: TerminalForward): string {
   switch (forward.kind) {
     case "agent":
@@ -62,7 +46,6 @@ export function ConsoleList({
 }: ConsoleListProps) {
   const t = useTranslate();
   const [menuFor, setMenuFor] = useState<string | null>(null);
-  // closing は、閉じてよいか訊いている相手である。
   const [closing, setClosing] = useState<TerminalSession | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -71,12 +54,8 @@ export function ConsoleList({
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const live = sessions.filter((session) => session.exited === undefined).length;
-  // 上限をまだ知らないうちは、上限に達したことにしない。最初の一覧が届く前の
-  // maxSessions は 0 であり、そのまま比べると開く入口が最初から無効になる。
-  // サーバーが 0 を返すことはない（下限は 1 である）ので、0 は「未取得」である。
   const full = maxSessions > 0 && live >= maxSessions;
 
-  // 消えた行に開いたままのメニューを残さない。閉じたセッションはもう無い。
   useEffect(() => {
     if (menuFor !== null && !sessions.some((session) => session.id === menuFor)) setMenuFor(null);
     if (renaming !== null && !sessions.some((session) => session.id === renaming)) setRenaming(null);
@@ -84,9 +63,6 @@ export function ConsoleList({
 
   useEffect(() => {
     if (menuFor === null) return;
-    // **pointerdown である。** mousedown は指では鳴るとは限らず、鳴らなければ
-    // このメニューは触れる画面で閉じる手立てを失う。pointerdown はマウスも指も
-    // ペンも同じ 1 つで拾う。
     function dismiss(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) setMenuFor(null);
     }
@@ -179,11 +155,7 @@ export function ConsoleList({
                     session.id === selected ? "bg-select-fill" : "hover:bg-select-fill"
                   }`}
                 >
-                  {/*
-                    色は状態にだけ使う、という既存の規則の範囲に収まっている。
-                    緑は生きているセッション、灰は終了済みである。点だけでは
-                    伝わらないので、2 行目がそれを言葉でも言う。
-                  */}
+
                   <span
                     aria-hidden="true"
                     className={`mt-1.5 size-1.5 shrink-0 rounded-full ${running ? "bg-live" : "bg-ink-faint"}`}
@@ -215,11 +187,7 @@ export function ConsoleList({
                     <p className="truncate text-xs text-ink-faint">
                       {t("terminal.rowDetail", { status, destination })}
                     </p>
-                    {/*
-                      転送はこのマシンにポートを開く。**開いていることが
-                      見えないまま開かない。** 開けなかったものは、開いた
-                      ものと同じ場所で理由まで言う。
-                    */}
+
                     {(session.forwards ?? []).map((forward) => (
                       <p
                         key={`${forward.kind}:${forward.listen}:${forward.to}`}
@@ -241,15 +209,6 @@ export function ConsoleList({
                   <button
                     type="button"
                     aria-label={t("terminal.closeSession", { title: session.title })}
-                    // **生きているセッションは、訊いてから閉じる。**
-                    //
-                    // この×は 24px で、隣の「操作」の×と肩を並べている。触る
-                    // 画面ではその二つを撃ち分けられないことがあり、外れた側が
-                    // 取り返しのつかない方だった。
-                    //
-                    // 既に終わっている行は訊かずに閉じる。**そこで訊くのは、
-                    // 何も失われない場面で問いを出すことであり、次の問いを
-                    // 読まずに押す習慣を作るだけである。**
                     onClick={() =>
                       session.exited === undefined ? setClosing(session) : onClose(session.id)
                     }
@@ -289,11 +248,7 @@ export function ConsoleList({
                     >
                       {t("terminal.duplicate")}
                     </button>
-                    {/*
-                      上下移動はドラッグと同じ操作である。メニューにも置くのは、
-                      既存の drag and drop が矢印キーの経路を持たないためで、
-                      並べ替えをドラッグ専用にすると同じ穴を新設することになる。
-                    */}
+
                     <button
                       type="button"
                       role="menuitem"
@@ -342,14 +297,6 @@ export function ConsoleList({
     </div>
   );
 }
-
-/**
- * CloseConfirmation は、生きているコンソールを閉じてよいか訊く。
- *
- * **既に終わっている行では出さない。** あれを閉じるのは、残っている出力を
- * 片付けるだけであり、失うものが無い場面で問いを出せば、次の問いも読まずに
- * 押す習慣を作る。
- */
 function CloseConfirmation({
   session,
   onCancel,

@@ -18,8 +18,6 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
     }),
   );
 
-  // 開いているコンソールの一覧はナビゲーションが持つので、どの画面でも読む。
-  // 読むこと自体は何にも接触しない——数えるのは、端末を起こす要求だけである。
   const terminalRequests: string[] = [];
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
@@ -65,8 +63,6 @@ test("opens the action menu without connecting, then keeps settings and connect 
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
   expect(opened).toEqual([]);
 
-  // 接続はこのアプリケーションの中で開く。Home で押すと、そのコンソールを
-  // 抱えたまま接続画面へ移る。
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home" }).click();
   await page.getByRole("button", { name: "Actions for bastion" }).click();
   await page.getByRole("menuitem", { name: "Connect", exact: true }).click();

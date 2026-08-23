@@ -33,12 +33,8 @@ var (
 )
 
 // structuralKeywords はファイルのブロック構造を変更する。
-// フィールド編集はそれを導入も書き換えもしてはならない。ディレクティブを
-// ブロック間で黙って移動させたり、読むファイルの集合を広げたりしてしまうからだ。
 var structuralKeywords = map[string]bool{"host": true, "match": true, "include": true}
 
-// FieldEdit は 1 件の変更要求である。Line は 1 始まりで、
-// set と remove で必須、Keyword は add で必須、set では任意である。
 type FieldEdit struct {
 	Action  EditAction `json:"action"`
 	Line    int        `json:"line,omitempty"`
@@ -47,9 +43,6 @@ type FieldEdit struct {
 }
 
 // ApplyFieldEdits はユーザーが変更した行だけを書き換える。
-// それ以外の行のコメント、空行、インデント、区切り、行末
-// コメント、改行コードはすべて厳密に保持される。いずれかの編集が
-// 拒否された場合、ファイルは変更されないままとなり、部分適用がディスクに届くことはない。
 func ApplyFieldEdits(file *config.File, block config.Block, edits []FieldEdit) error {
 	if err := validateFieldEdits(file, block, edits); err != nil {
 		return err
@@ -156,14 +149,6 @@ func validateKeyword(keyword string) error {
 	return nil
 }
 
-// ValidateAlias は UI から作成される alias を保守的な集合に
-// 制限し、新しい Host 行がパターン、否定、空白を持つことを決してないようにする。
-// ファイル中に既にある alias は書かれたとおりに表示され、書き換えられることはない。
-//
-// **規則は internal/validate が持つ。** ここには同じ文字集合を手で書き下した写しが
-// あり、受理する集合は同じでありながら返すエラーだけが違っていた——同じ規則が
-// 二箇所にある状態は、片方だけが直る日を待っているのと同じである。この層が持つのは、
-// API の語彙へ翻訳することだけである。
 func ValidateAlias(alias string) error {
 	if validate.Alias(alias) != nil {
 		return ErrInvalidAlias
@@ -171,8 +156,6 @@ func ValidateAlias(alias string) error {
 	return nil
 }
 
-// splitCommentArguments はディレクティブの値引数を行末
-// コメントから分離し、値の書き換えがコメントを保つようにする。
 func splitCommentArguments(arguments []config.Argument) (values, comment []config.Argument) {
 	for index, argument := range arguments {
 		if strings.HasPrefix(argument.Raw, "#") {
@@ -189,9 +172,6 @@ func rebuildDirective(line config.Line, keyword string, values []string) (config
 	return rebuildLine(line, keyword, values)
 }
 
-// rebuildLine はディレクティブ行の値引数を置き換えつつ、
-// インデント、区切り、行末コメント、改行コードを保つ。
-// keyword のポリシーチェックは行わないので、Host ヘッダーの書き換えにも使える。
 func rebuildLine(line config.Line, keyword string, values []string) (config.Line, error) {
 	existing, comment := splitCommentArguments(line.Arguments)
 	rebuilt := line
@@ -226,9 +206,6 @@ func rebuildLine(line config.Line, keyword string, values []string) (config.Line
 	return rebuilt, nil
 }
 
-// renderArgument は OpenSSH の引用規則に従って 1 つの値を
-// 書き出す。その規則は ssh_config の構文なので、それを読むパーサーのそばに置く。
-// このラッパーは HTTP problem マッピング用に、パッケージ独自のエラー識別子を保つ。
 func renderArgument(lead, value string) (config.Argument, error) {
 	argument, err := config.RenderArgument(lead, value)
 	if err != nil {
@@ -267,9 +244,6 @@ func buildLine(indent, keyword string, values []string, ending string) (config.L
 	return line, nil
 }
 
-// appendPosition は新しいディレクティブが属すべき位置、
-// すなわちブロックの最後のディレクティブの直後を返す。
-// 行末コメントや空行はそのままの場所にとどまる。
 func appendPosition(file *config.File, block config.Block) int {
 	position := block.Start
 	for index := block.Start; index < block.End && index < len(file.Lines); index++ {
@@ -298,8 +272,6 @@ func blockEnding(file *config.File, block config.Block) string {
 	return dominantEnding(file)
 }
 
-// dominantEnding はファイルが既に使っている改行コードを
-// 報告し、CRLF ファイルへの編集が単独の改行を持ち込まないようにする。
 func dominantEnding(file *config.File) string {
 	for _, line := range file.Lines {
 		if line.Ending != "" {
@@ -309,8 +281,6 @@ func dominantEnding(file *config.File) string {
 	return "\n"
 }
 
-// insertLine は position の位置に 1 行を挿入し、ファイルが
-// それまで改行なしで終わっていた場合は先行行に改行を与える。
 func insertLine(file *config.File, position int, line config.Line) {
 	if position > 0 && file.Lines[position-1].Ending == "" {
 		file.Lines[position-1].Ending = line.Ending
@@ -320,9 +290,6 @@ func insertLine(file *config.File, position int, line config.Line) {
 	file.Lines[position] = line
 }
 
-// ReplaceBlock は 1 つの Host または Match ブロックの全文を
-// 入れ替える。周囲のファイル構造を保つため、raw text は
-// ちょうど 1 ブロックを表す必要があり、ブロックの前後は 1 バイトも変わらず保たれる。
 func ReplaceBlock(file *config.File, block config.Block, raw string) error {
 	if block.Header < 0 || block.Header >= len(file.Lines) {
 		return ErrRawBlockHeader
@@ -367,8 +334,6 @@ func ReplaceBlock(file *config.File, block config.Block, raw string) error {
 	return nil
 }
 
-// RenameHostAlias は Host ヘッダー行の 1 つの alias を置き換え、
-// 他のパターン、行末コメント、改行コードには一切手を触れない。
 func RenameHostAlias(file *config.File, block config.Block, oldAlias, newAlias string) error {
 	if err := ValidateAlias(newAlias); err != nil {
 		return err
@@ -399,14 +364,6 @@ func RenameHostAlias(file *config.File, block config.Block, oldAlias, newAlias s
 }
 
 // SetHostComment は host ブロックに付いたコメントを置き換える。
-//
-// 付随するコメントとは、config.File.CommentRun が定義する、
-// Host 行の直前に連続するコメント行のことである。その連続の
-// 外側は一切変更されない。これにより、空行で区切られた
-// ファイルバナーが、先頭ブロックへの編集の影響を受けずに済む。
-//
-// 書き換えられる行は Host 行自身のインデントを引き継ぐので、
-// Match の中でインデントされたブロックも、コメントの位置がそろったままになる。
 func SetHostComment(file *config.File, block config.Block, text string) error {
 	if block.Kind != config.BlockHost || block.Header < 0 || block.Header >= len(file.Lines) {
 		return ErrHostNotFound

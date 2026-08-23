@@ -71,14 +71,14 @@ func (m *Manager) Pending() ([]Pending, error) {
 		_, reconcileErr := m.reconcileRecord(&record)
 		// 判別できないのは、その記録ひとつである。一覧そのものを失敗させると、
 		// 無関係な記録も、履歴も、そしてこの記録を片付ける手段までもが同時に
-		// 見えなくなる — 呼び出し側はこの一覧で設定画面全体を組み立てている。
+		// 見えなくなる。呼び出し側はこの一覧で設定画面全体を組み立てている。
 		// 判別できない記録は、どちらの操作も提示しないまま並べる。Complete と
 		// Rollback は、その記録に対しては引き続き同じ理由で拒否する。
 		unresolved := errors.Is(reconcileErr, ErrRecoveryStateUnknown)
 		if reconcileErr != nil && !unresolved {
 			return nil, reconcileErr
 		}
-		// **一覧は何も書き換えない。** ここは呼び出し側が変更用の錠を持たずに
+		// 一覧は何も書き換えない。ここは呼び出し側が変更用の錠を持たずに
 		// 呼ぶ経路であり、走っている最中のトランザクションの記録もそのまま読む。
 		// 数え直した結果は報告に使うだけで、永続化するのは Complete と Rollback が
 		// 通る loadPending だけである。
@@ -125,10 +125,9 @@ func (m *Manager) Complete(identifier string) error {
 	if err != nil {
 		return err
 	}
-	// Atomic records pair persisted documents with process-local state (the
-	// opened password vault). Completing only the disk half after the original
-	// callback failed would leave that state stale. Their safe recovery action
-	// is rollback; a fresh request can then publish disk and memory together.
+	// Atomic 記録は永続化文書とプロセス内状態（開いたパスワード Vault）を対応付ける。
+	// callback 失敗後にディスク側だけを完了するとプロセス内状態が古くなるため、
+	// 復旧時はロールバックする。新しい要求でディスクとメモリをまとめて更新できる。
 	if record.Atomic || record.Status != statusStaged {
 		return ErrCannotComplete
 	}
@@ -159,10 +158,9 @@ func (m *Manager) Rollback(identifier string) error {
 	return m.rollbackRecord(record, journalPath)
 }
 
-// rollbackRecord is also used by CommitAtomic. In that path the in-memory
-// record can be ahead of the last durable journal update (for example when a
-// target rename succeeded but SyncDir or the journal rewrite failed), so it is
-// the only complete account of what this still-running process applied.
+// rollbackRecord は CommitAtomic でも使用する。この経路では、対象の rename 後に
+// SyncDir または journal の再書き込みが失敗し、メモリ上の記録が最新の永続記録より
+// 先へ進む場合がある。そのため実行中プロセスが適用した操作はこの記録を基準にする。
 func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) error {
 	for index := 0; index < record.Committed; index++ {
 		entry := record.Entries[index]
@@ -195,7 +193,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 		if entry.action() == actionMakeDir {
 			// もとからあったディレクトリは、このトランザクションが取り除いてよいもの
 			// ではない。取り消すのはこれが作ったものだけであり、しかもまだ空である
-			// 場合に限る — その後に何かが書き込まれているかもしれず、それを巻き戻しと
+			// 場合に限る。その後に何かが書き込まれているかもしれず、それを巻き戻しと
 			// 一緒に持っていけば、誰も触れてくれと頼んでいないものを削除することに
 			// なる。
 			if entry.HadPrevious {
@@ -305,22 +303,15 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 	return &record, journalPath, nil
 }
 
-// reconcileRecord derives the applied prefix of an interrupted transaction from
-// what its targets actually look like.
+// reconcileRecord は各対象の現在状態から、中断されたトランザクションの適用済み範囲を求める。
 //
-// Every target mutation happens before the journal rewrite that records it, so
-// the durable Committed counter can sit behind the filesystem; a rollback that
-// failed part way through leaves it ahead. Trusting the counter in either
-// direction makes recovery report work it did not do — a Rollback that returns
-// success while an applied write, move, or removal is still in place, and for a
-// removal that intentionally kept no backup, that false success conceals
-// irreversible data loss. Observation is the only account the writer and the
-// reader both agree on, so it is recomputed before Pending, Complete, or
-// Rollback uses the record.
+// 対象の変更は、それを記録する journal の再書き込みより先に行われる。そのため永続化した
+// Committed はファイルシステムより遅れることがあり、途中で失敗したロールバックでは逆に
+// 先へ進むことがある。カウンターだけを信頼すると未処理の操作を処理済みと誤認するため、
+// Pending、Complete、Rollback で記録を使う前に対象を観測して再計算する。
 //
-// A non-atomic staging record is excluded. It has not reached commitStaged, so
-// no target has been mutated; its only progress is directory creation, which
-// the durable document deliberately never carries.
+// 非 atomic の staging 記録は対象外とする。commitStaged に達しておらず、対象は未変更である。
+// 進捗はディレクトリ作成だけで、これは永続文書に記録しない。
 func (m *Manager) reconcileRecord(record *journalRecord) (bool, error) {
 	if record.Status == statusCompleted || record.Status == statusRolledBack {
 		return false, nil
@@ -377,15 +368,14 @@ const (
 	evidenceApplied
 	// evidenceNone は、変更前と変更後が同じ姿をしていて、対象が何も語らない場合。
 	// 内容の変わらない書き込みと、既にあったディレクトリの作成がこれにあたる。
-	// **ここを「適用済み」と読んではならない。** 直前が未適用のとき、ありもしない
+	// ここを「適用済み」と読んではならない。直前が未適用のとき、ありもしない
 	// 矛盾を作り出し、その記録は Pending も Complete も Rollback も永久に
 	// 受け付けなくなる。
 	evidenceNone
 )
 
-// entryApplied reports whether one entry's target mutation has already happened.
-// A state that is neither the recorded before nor the recorded after is refused
-// rather than guessed, because both recovery directions act on the answer.
+// entryApplied はエントリの対象変更が適用済みかを返す。記録された変更前・変更後の
+// どちらでもない状態は推測せず拒否する。復旧の両方向がこの判定に依存するためである。
 func (m *Manager) entryEvidence(entry journalEntry) (entryEvidence, error) {
 	switch entry.action() {
 	case actionMakeDir:
@@ -493,8 +483,8 @@ func (m *Manager) targetDigest(path string) (string, bool, error) {
 
 // readRecords は、ディレクトリ内のすべてのジャーナル文書を古い順に読み込む。
 //
-// 識別子はミリ秒までの UTC タイムスタンプで始まり、そのあとに乱数が続く。**同じ
-// ミリ秒に落ちた 2 件の間では、辞書順は時系列順ではない** —— 接頭辞が一致するので、
+// 識別子はミリ秒までの UTC タイムスタンプで始まり、そのあとに乱数が続く。同じ
+// ミリ秒に落ちた 2 件の間では、辞書順は時系列順ではない。接頭辞が一致するので、
 // 順序を決めるのは乱数になる。そこで並べ替えは記録が保持しているナノ秒精度の
 // StartedAt で行い、識別子は同時刻の決定的なタイブレークにだけ使う。
 //
@@ -674,14 +664,14 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 		// 未コミットの書き込みがステージ済みファイルを持たないことはありうる。それを
 		// 巻き戻して、その先で失敗した復旧は、対象を以前の内容に戻したまま一時ファイル
 		// を消費し尽くしており、照合はその記録をそのまま書き戻すからだ。この状態の
-		// エントリは何も引き起こさない — Complete は使う直前にステージ済みファイルを
-		// すべて検証して拒否し、Pending は完了不可として報告する — ので、読み手は
+		// エントリは何も引き起動しない。Complete は使う直前にステージ済みファイルを
+		// すべて検証して拒否し、Pending は完了不可として報告するので、読み手は
 		// 復旧そのものを立ち往生させる代わりにこれを受理する。
 		// コミット済みの書き込みがステージ済みファイルの名前を残していることも
 		// ありうる。rename が使い切ったのに進捗の書き換えが失敗した記録も、
 		// 内容の変わらない書き込みを適用済み側に数えた記録も、この形になる。
-		// これも何も引き起こさない — Complete はその添字より先からしか進まず、
-		// finish が記録を履歴にする前に名前も実体も手放す。
+		// これも何も引き起動しない。Complete はその添字より先からしか進まず、
+		// finish が記録を履歴にする前に名前も対象も手放す。
 		if record.Status == statusCompleted && entry.Temp != "" {
 			return invalidJournal("completed write retains a staged path")
 		}

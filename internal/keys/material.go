@@ -16,7 +16,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Algorithm は、HTTP API が使う綴りで鍵アルゴリズムの系統を表す。
+// Algorithm は、HTTP API が使う表記で鍵アルゴリズムの系統を表す。
 type Algorithm string
 
 const (

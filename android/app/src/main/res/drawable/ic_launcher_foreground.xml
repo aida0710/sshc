@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  desktop/build/icon.svg と同じ図形である。あちらの 512 の座標系をそのまま
-  viewport にしてあるので、path の数字は一文字も変えずに写せる。
-
-  **中身を 0.82 に縮めてある。** adaptive icon は 108 の面のうち中央の 72 しか
-  見えることを保証しない——ランチャーが円で抜けば、等倍のままでは右下の角が
-  欠ける。数えると中心から 35.5、円の半径は 33 である。
+  desktop/build/icon.svg と同じ 512 座標系を使用する。adaptive icon の安全領域に
+  収めるため、図形を 0.82 倍に縮小する。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"

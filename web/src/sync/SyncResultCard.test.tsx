@@ -53,7 +53,7 @@ describe("SyncResultCard", () => {
   it("separates source, one encrypted object, and both uploaded objects", () => {
     renderJapanese({ kind: "push", result: push });
 
-    expect(screen.getByRole("heading", { name: "今回の push" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "今回の送信" })).toBeInTheDocument();
     expect(screen.getByText("12ファイル・4.8 MB")).toBeInTheDocument();
     expect(screen.getByText("暗号化スナップショット 1.9 MB")).toBeInTheDocument();
     expect(screen.getByText("S3転送 3.8 MB（2オブジェクト、履歴＋ライブ）")).toBeInTheDocument();

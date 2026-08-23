@@ -15,7 +15,7 @@ import (
 )
 
 // ロックファイルと state ディレクトリは、作成した時点で現在のユーザー所有かつ
-// 保護 DACL でなければならない。あとから締めるのでは、その隙間に他人が開ける。
+// 保護 DACL でなければならない。あとから締めるのでは、その隙間に別のユーザーが開ける。
 func TestWindowsEngineLockStateIsPrivateAndNotAReparsePoint(t *testing.T) {
 	path := lockPath(t)
 	release, err := Acquire(path)
@@ -46,8 +46,8 @@ func TestWindowsEngineLockStateIsPrivateAndNotAReparsePoint(t *testing.T) {
 	}
 }
 
-// 他人が所有するロックファイルは、ロックを取る前に拒否しなければならない。
-// 受け入れてしまえば、所有権の直列化を他人の書ける状態に委ねることになる。
+// 別のユーザーが所有するロックファイルは、ロックを取る前に拒否しなければならない。
+// 受け入れてしまえば、所有権の直列化を別のユーザーの書ける状態に委ねることになる。
 func TestWindowsEngineLockRefusesAForeignOwnerFile(t *testing.T) {
 	path := lockPath(t)
 	release, err := Acquire(path)

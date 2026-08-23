@@ -47,7 +47,7 @@ const (
 	// verdictAutomated: automation が condition を端から端まで証明する。
 	verdictAutomated verdict = iota
 	// verdictPartial: automation は越えてはならない境界まで
-	// 証明し、残りは Manual が名指しする。Gap には欠落が要る。
+	// 証明し、残りは Manual が指定する。Gap には欠落が要る。
 	verdictPartial
 	// verdictConditional: automation は任意の capability が
 	// あるときのみ証明し、なければ unproven として記録する。
@@ -59,9 +59,9 @@ func (v verdict) String() string {
 	case verdictAutomated:
 		return "HOLDS by automation"
 	case verdictPartial:
-		return "PARTIAL — automation stops at a boundary it must not cross"
+		return "PARTIAL: automation stops at a boundary it must not cross"
 	case verdictConditional:
-		return "CONDITIONAL — proven only when the capability is present"
+		return "CONDITIONAL: proven only when the capability is present"
 	default:
 		return "?"
 	}
@@ -71,9 +71,9 @@ type completionCondition struct {
 	Number int
 	// Text は design §12 の逐語そのもの、行 13 のみ §10.1 の逐語である。
 	Text string
-	// Automated は、機械が検査するものすべてを名指しする。
+	// Automated は、機械が検査するものすべてを指定する。
 	Automated []proof
-	// Manual は、automation が行ってはならない部分を名指しする。
+	// Manual は、automation が行ってはならない部分を指定する。
 	Manual []proof
 	// Verdict は、上の 2 つのリストを正直に読んだ結論である。
 	Verdict verdict
@@ -177,7 +177,7 @@ func completionConditions() []completionCondition {
 		},
 		{
 			Number:  8,
-			Text:    "外部変更と部分失敗で既存設定を黙って破壊しない",
+			Text:    "外部変更または部分失敗時に既存設定を暗黙に変更しない",
 			Verdict: verdictPartial,
 			Automated: []proof{
 				// 外部変更、端から端まで、かつトランザクション境界において。
@@ -214,13 +214,13 @@ func completionConditions() []completionCondition {
 				{proofManual, "M1. 実リモートホストへの接続テスト"},
 				{proofManual, "M2. 実 `authorized_keys` への公開鍵登録"},
 			},
-			Gap: "端末を開くところまでは自動化された。SSH はプロセス内で話すので、" +
+			Gap: "端末を開くところまでは自動化された。SSH はプロセス内で通信するので、" +
 				"internal/sshclient は 127.0.0.1 に立てたサーバーと本物の握手を行い、" +
 				"認証・転送・ホスト鍵・リモート実行を端から端まで見る。end-to-end は" +
-				"ローカルシェルを本物の PTY で起こし、キーを打って出力が画面に出る" +
-				"ところまでを見る。残っているのは実リモートに触れる二つ——本物の" +
-				"サーバーが認証を通すこと、その authorized_keys に行が現れること" +
-				"——で、それらは M1 と M2 である。",
+				"ローカルシェルを本物の PTY で起動し、キーを打って出力が画面に出る" +
+				"ところまでを見る。残っているのは実リモートに触れる二つである。" +
+				"本物のサーバーが認証を通すこと、その authorized_keys に行が現れることで、" +
+				"それぞれ M1 と M2 に対応する。",
 		},
 		{
 			Number:  10,
@@ -244,19 +244,19 @@ func completionConditions() []completionCondition {
 			Automated: []proof{
 				// 設定を読むことは、もう何も起動しない。Match exec は評価せず拒む。
 				{proofGoTest, "TestResolveRefusesWhatItWillNotEvaluate"},
-				// connection gate。
+				// 接続前の検証。
 				{proofGoTest, "TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken"},
 				{proofGoTest, "TestNoRouteEverLetsAHostileAliasReachAnExternalEffect"},
 				{proofGoTest, "TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard"},
 			},
 			Manual: []proof{{proofManual, "M1. 実リモートホストへの接続テスト"}},
-			Gap: "**このアプリケーションが自分の判断で起こすプログラムは無い。** " +
+			Gap: "アプリケーションの判断だけで外部プログラムを起動しない。" +
 				"Match exec は解決の時点で断り、LocalCommand も KnownHostsCommand も " +
-				"このクライアントに機能として無い。**ProxyCommand は起こす** ——" +
-				"利用者が「これで繋げ」と書いた綴りであり、断ることは「その接続先は " +
-				"扱えない」と言うことだった。黙っては起こさない: 綴りは接続のたびに " +
-				"端末へ 1 行出る。RemoteCommand は設定に書かれたコマンドを**リモートで**" +
-				"走らせる——どちらも利用者が書いたとおりのことであり、暗黙ではない。" +
+				"このクライアントに機能として無い。ProxyCommand は明示された設定に従って起動する。" +
+				"利用者が指定したコマンドを拒否すると、その接続先を扱えなくなる。" +
+				"暗黙には起動せず、コマンドは接続のたびに " +
+				"端末へ 1 行出る。RemoteCommand は設定に書かれたコマンドをリモートで" +
+				"走らせる。どちらも利用者が書いたとおりのことであり、暗黙ではない。" +
 				"自動化が届かないのは、実リモートがそれをどう扱うかだけで、それが M1 " +
 				"である。alias の関門は三層あるので、どれか一層だけを外しても route の" +
 				"検査は緑のままである点にも注意すること。",
@@ -309,7 +309,7 @@ func TestDesignCompletionConditions(t *testing.T) {
 				}
 			}
 			// automation が完了できない condition はそう述べねばならず、
-			// 完了したと主張する condition は手動の手順を一切名指ししてはならない。
+			// 完了したと主張する condition は手動の手順を一切指定してはならない。
 			if condition.Verdict != verdictAutomated && condition.Gap == "" {
 				t.Errorf("condition %d is not fully automated but states no gap", condition.Number)
 			}

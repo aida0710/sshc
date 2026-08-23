@@ -5,8 +5,6 @@ import { KeysScreen } from "./KeysScreen";
 import type { KeyInventoryResponse, KeysApi } from "./api";
 import type { IntegrationsApi } from "../api/integrations";
 
-// 鍵画面から見た vault: 両種類の名前を持つのは、テストの
-// 要点が一方の種類だけがピッカーに届くことにあるからだ。
 function buildSecrets(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   const listed = {
     credentials: [
@@ -34,8 +32,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// 呼び出しごとに新しいインベントリを用意し、あるテストが 1 つの
-// フィールドを変えても、共有オブジェクト経由でその変更を次のテストに漏らさないようにする。
 function buildInventory(): KeyInventoryResponse {
   return {
     items: [
@@ -91,14 +87,10 @@ function buildInventory(): KeyInventoryResponse {
   };
 }
 
-// 既定のフィクスチャにエージェントがいないのは、end-to-end 環境にも
-// いないからだ。このスイートは開発者自身のエージェントに一切触れてはならない。
 function inventoryWithAgent(): KeyInventoryResponse {
   return { ...buildInventory(), agentAvailable: true };
 }
 
-// エージェントは最初の鍵を保持している。これは取り出すことを
-// ユーザーが望みうる状態だ。
 function inventoryWithLoadedKey(): KeyInventoryResponse {
   return {
     ...buildInventory(),
@@ -248,12 +240,11 @@ describe("KeysScreen", () => {
     expect(onInstallGeneratedKey).toHaveBeenCalledWith({ publicRelativePath: "id_new.pub" });
   });
 
-  // 表は走査のための列だけを持つ。指紋も権限も、探すときには読まない。
   it("lists classified files with the marks that stop a scan", async () => {
     render(<KeysScreen api={buildApi()} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    expect(within(workRow).getByText("used by 1")).toBeInTheDocument();
+    expect(within(workRow).getByText("referenced by 1")).toBeInTheDocument();
     expect(within(workRow).queryByText("SHA256:abcdef")).not.toBeInTheDocument();
 
     const legacyRow = screen.getByRole("row", { name: /legacy/ });
@@ -261,7 +252,6 @@ describe("KeysScreen", () => {
     expect(within(legacyRow).getByText("Fingerprint unavailable")).toBeInTheDocument();
   });
 
-  // 名前を押すと、その鍵の詳細が右のペインへ渡る。もう一度押すと閉じる。
   it("hands the chosen key to the inspector, and takes it back", async () => {
     const user = userEvent.setup();
     const onInspector = vi.fn();
@@ -276,7 +266,6 @@ describe("KeysScreen", () => {
     expect(onInspector).toHaveBeenLastCalledWith(null);
   });
 
-  // 権限が緩い鍵は、ペインを開く前に注意を出す。
   it("marks the inspector when the chosen key has open permissions", async () => {
     const user = userEvent.setup();
     const onInspector = vi.fn();
@@ -354,8 +343,6 @@ describe("KeysScreen", () => {
     expect(screen.getByLabelText("New passphrase")).toHaveValue("");
   });
 
-  // フォームに入力したパスフレーズはストレージに残ってはならず、
-  // 入力した操作より長く生き残ってはならない。
   it("keeps a typed passphrase out of browser storage", async () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     render(<KeysScreen api={buildApi()} />);
@@ -369,10 +356,6 @@ describe("KeysScreen", () => {
     expect(window.sessionStorage.length).toBe(0);
   });
 
-  // **ゴミ箱は畳んである。** ここでするのは「戻す」か「完全に消す」であって、
-  // いま持っている鍵を整えることではない——1000 行の一番下に開いたまま置いても
-  // 誰も辿り着かない。**件数だけは畳んだままでも見える** ——空でないことは、
-  // 開く前に分かってよい。
   it("keeps the trash folded but says how much is in it", async () => {
     render(<KeysScreen api={buildApi()} />);
 
@@ -393,7 +376,6 @@ describe("KeysScreen", () => {
     await waitFor(() => expect(api.purge).toHaveBeenCalledWith("20260805T090000.000-aabbccdd"));
   });
 
-  // 確認から後戻りした場合、そのエントリには手を触れないままにする。
   it("leaves the trash entry intact when the second confirmation is cancelled", async () => {
     const api = buildApi();
     render(<KeysScreen api={api} />);
@@ -482,8 +464,6 @@ describe("KeysScreen", () => {
         certificate: {
           keyId: "aida@dubguild",
           principals: ["deploy", "ops"],
-          // 2020-01-01T00:00:00Z は、このスイートのどの実行にとっても
-          // 十分に過去なので、「期限切れ」はフィクスチャの性質であって今日の日付の性質ではない。
           validBefore: 1577836800,
           neverExpires: false,
           signedKeyType: "ssh-ed25519",
@@ -530,8 +510,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    expect(within(workRow).getByRole("button", { name: "Add to agent" })).toBeDisabled();
-    expect(screen.getByText(/No agent is reachable from this process/)).toBeInTheDocument();
+    expect(within(workRow).getByRole("button", { name: "Add to ssh-agent" })).toBeDisabled();
+    expect(screen.getByText(/This process cannot connect to ssh-agent/)).toBeInTheDocument();
     expect(api.registerWithAgent).not.toHaveBeenCalled();
   });
 
@@ -540,11 +520,11 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    await userEvent.click(within(workRow).getByRole("button", { name: "Add to agent" }));
+    await userEvent.click(within(workRow).getByRole("button", { name: "Add to ssh-agent" }));
 
     await userEvent.type(screen.getByLabelText("Key passphrase"), "correct horse");
     await userEvent.selectOptions(screen.getByLabelText("Lifetime"), "3600");
-    await userEvent.click(screen.getByRole("button", { name: "Register with the agent" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add key to ssh-agent" }));
 
     await waitFor(() =>
       expect(api.registerWithAgent).toHaveBeenCalledWith("key-one", {
@@ -552,8 +532,6 @@ describe("KeysScreen", () => {
         lifetimeSeconds: 3600,
       }),
     );
-    // フォームは閉じ、パスフレーズを道連れにする。コンポーネント状態に
-    // 残しておけば、この画面の以後のすべての描画で生き残ってしまう。
     await waitFor(() => expect(screen.queryByLabelText("Key passphrase")).not.toBeInTheDocument());
     expect(document.body).not.toHaveTextContent("correct horse");
   });
@@ -566,12 +544,11 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    await userEvent.click(within(workRow).getByRole("button", { name: "Add to agent" }));
+    await userEvent.click(within(workRow).getByRole("button", { name: "Add to ssh-agent" }));
     await userEvent.type(screen.getByLabelText("Key passphrase"), "wrong passphrase");
-    await userEvent.click(screen.getByRole("button", { name: "Register with the agent" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add key to ssh-agent" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("could not be added to the agent");
-    // フォームは開いたままにしてやり直せるようにするが、フィールドは空にする。
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not be added to ssh-agent");
     expect(screen.getByLabelText("Key passphrase")).toHaveValue("");
     expect(document.body).not.toHaveTextContent("wrong passphrase");
   });
@@ -583,10 +560,10 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    await userEvent.click(within(workRow).getByRole("button", { name: "Add to agent" }));
+    await userEvent.click(within(workRow).getByRole("button", { name: "Add to ssh-agent" }));
 
     expect(screen.queryByLabelText("Key passphrase")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Register with the agent" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add key to ssh-agent" }));
 
     await waitFor(() =>
       expect(api.registerWithAgent).toHaveBeenCalledWith("key-one", {
@@ -627,8 +604,6 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const row = await screen.findByRole("row", { name: /id_work\.pub/ });
-    // 公開鍵は秘密ではないので、この行は開示も確認も提供しない
-    // ——鍵そのものだけだ。
     expect(within(row).queryByRole("button", { name: "Show private key" })).not.toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "Show public key" }));
 
@@ -636,7 +611,6 @@ describe("KeysScreen", () => {
     expect(shown).toHaveTextContent("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmU aida@laptop");
     await user.click(screen.getByRole("button", { name: "Copy public key" }));
 
-    // 末尾の改行も込みで: クリップボードにはパネルが表示した通りのものが入る。
     expect(await navigator.clipboard.readText()).toBe(
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmU aida@laptop",
     );
@@ -676,8 +650,6 @@ describe("KeysScreen", () => {
     await user.click(within(row).getByRole("button", { name: "More actions" }));
     await user.click(within(row).getByRole("button", { name: "Rename or move" }));
 
-    // フィールドはリネームが変える名前から始まる。ユーザーが打ち直すのではなく
-    // 名前を編集できるようにするためだ。
     const field = screen.getByLabelText("Name");
     expect(field).toHaveValue("id_work");
     await user.clear(field);
@@ -685,8 +657,6 @@ describe("KeysScreen", () => {
     await user.click(screen.getByRole("button", { name: "Rename or move the key" }));
 
     await waitFor(() => expect(api.relocate).toHaveBeenCalledWith("key-one", { newName: "id_build" }));
-    // 書き換えられた IdentityFile は、ユーザー自身では確認できない
-    // 部分なので、「完了」に要約せず画面に出さなければならない。
     expect(await screen.findByText(/IdentityFile ~\/\.ssh\/id_work → ~\/\.ssh\/id_build/)).toBeInTheDocument();
     expect(screen.getByText("id_work.pub → id_build.pub")).toBeInTheDocument();
   });
@@ -718,16 +688,12 @@ describe("KeysScreen", () => {
     const reasons = await screen.findByRole("alert");
     expect(reasons).toHaveTextContent("cannot resolve");
     expect(reasons).toHaveTextContent("id_build already exists");
-    // 何も書き込まれていないのだから、書き込まれたかのようにインベントリを
-    // 再読み込みしてはならず、フォームは入力内容を残したまま開いたままにする。
     expect(api.inventory).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Name")).toHaveValue("id_build");
   });
 
   it("offers no relocation for half of a key pair", async () => {
     const inventory = buildInventory();
-    // key-one の公開鍵の半分: これだけをリネームすると、OpenSSH が
-    // いまだに名前で対応付けている 2 つのファイルを、読み手が対応付けられなくなる。
     inventory.items = [
       inventory.items[0]!,
       { ...inventory.items[0]!, id: "key-three", relativePath: "id_work.pub", kind: "public_key" },
@@ -736,7 +702,6 @@ describe("KeysScreen", () => {
 
     const publicRow = await screen.findByRole("row", { name: /id_work\.pub/ });
     expect(within(publicRow).queryByRole("button", { name: "Rename or move" })).not.toBeInTheDocument();
-    // リネームの本来の場所は秘密鍵側であり、そこに提供される。
     const privateRow = screen.getByRole("row", { name: /id_work\s/ });
     await userEvent.click(within(privateRow).getByRole("button", { name: "More actions" }));
     expect(within(privateRow).getByRole("button", { name: "Rename or move" })).toBeInTheDocument();
@@ -759,15 +724,9 @@ describe("KeysScreen", () => {
     const row = await screen.findByRole("row", { name: /colleague\.pub/ });
     await user.click(within(row).getByRole("button", { name: "Rename or move" }));
 
-    // サフィックスはファイルの種別を表しサーバーが管理するので、フィールドは
-    // サーバーが拒否するであろう名前ではなく、幹の部分を提示する。
     expect(screen.getByLabelText("Name")).toHaveValue("colleague");
   });
 
-  // このテストが捉えるバグは微妙なものではなく、しかも見逃されていた:
-  // 暗い背景のページでは、飾りのない <input> にはボーダーも背景もないので、
-  // 鍵作成フォームがファイル名・コメント・パスフレーズを求める
-  // 3 つのフィールドがまったく見えなかった。どんなスタイルでも通ってしまい、無だけが通らない。
   it("gives every form control a visible style", async () => {
     const { container } = render(<KeysScreen api={buildApi()} groups={["work"]} />);
     await screen.findByRole("row", { name: /id_work/ });
@@ -775,17 +734,11 @@ describe("KeysScreen", () => {
     const controls = container.querySelectorAll("input, select, textarea");
     expect(controls.length).toBeGreaterThan(0);
     for (const element of controls) {
-      // チェックボックスと色見本はブラウザ自身が描画し、ボーダーなしでも
-      // 見えるが、テキストフィールドはそうではない。
       if (element instanceof HTMLInputElement && ["checkbox", "color"].includes(element.type)) continue;
       expect(element.className, `${element.tagName} ${element.getAttribute("value") ?? ""} has no style`).not.toBe("");
     }
   });
   it("says what a trash move takes with it, and which hosts still name the key", async () => {
-    // かつては 1 回の押下で、鍵とその公開鍵の半分だけが移動し、それ以外は
-    // 何も語らなかった。行は既にその鍵を名指すホストを列挙していたのに、
-    // ボタンは一度もそれらに触れず、移動後は IdentityFile の行が
-    // 存在しないファイルを指す——ssh はそれを報告した上でそのまま続行する。
     const user = userEvent.setup();
     const api = buildApi();
     render(<KeysScreen api={api} />);
@@ -929,22 +882,19 @@ describe("KeysScreen", () => {
 
     expect(secrets.storeCredential).not.toHaveBeenCalled();
     expect(secrets.assignCredential).not.toHaveBeenCalled();
-    expect(screen.getByText(/That name already exists/)).toBeInTheDocument();
+    expect(screen.getByText(/passphrase with this name already exists/)).toBeInTheDocument();
     expect(screen.getByLabelText("Passphrase value")).toHaveValue("");
   });
 
 });
 
 describe("taking a key back out of the agent", () => {
-  // 鍵はエージェントに渡されたまま取り戻されないことがあり得たので、
-  // パージするとエージェントはユーザーが今しがた破棄した実体を
-  // 保持したままになり、この画面はそれを一覧するしかできなかった。
   it("removes the identity the agent is holding for this key", async () => {
     const api = buildApi({ inventory: vi.fn().mockResolvedValue(inventoryWithLoadedKey()) });
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    await userEvent.click(within(workRow).getByRole("button", { name: "Remove from agent" }));
+    await userEvent.click(within(workRow).getByRole("button", { name: "Remove from ssh-agent" }));
 
     await waitFor(() => expect(api.deregisterFromAgent).toHaveBeenCalledWith("key-one"));
   });
@@ -954,18 +904,15 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    expect(within(workRow).queryByRole("button", { name: "Remove from agent" })).not.toBeInTheDocument();
+    expect(within(workRow).queryByRole("button", { name: "Remove from ssh-agent" })).not.toBeInTheDocument();
   });
 
-  // この側で可視化された分離。ここでアカウントパスワードを提供すれば
-  // リモートホストのログインパスワードをローカルの鍵に渡すことになり、
-  // フォーマットは、まさにどの画面もそうせずに済むよう 2 つを分けている。
   it("offers a stored passphrase for the key, and never an account password", async () => {
     const api = buildApi({ inventory: vi.fn().mockResolvedValue(inventoryWithAgent()) });
     render(<KeysScreen api={api} secrets={buildSecrets()} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    await userEvent.click(within(workRow).getByRole("button", { name: "Add to agent" }));
+    await userEvent.click(within(workRow).getByRole("button", { name: "Add to ssh-agent" }));
 
     const picker = await screen.findByLabelText("Use a stored passphrase");
     expect(picker).toHaveTextContent("build-key");
@@ -978,7 +925,7 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} secrets={secrets} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    await userEvent.click(within(workRow).getByRole("button", { name: "Add to agent" }));
+    await userEvent.click(within(workRow).getByRole("button", { name: "Add to ssh-agent" }));
     await userEvent.selectOptions(await screen.findByLabelText("Use a stored passphrase"), "build-key");
     await userEvent.click(screen.getByRole("button", { name: "Use this passphrase" }));
 
@@ -997,11 +944,9 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} secrets={secrets} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    await userEvent.click(within(workRow).getByRole("button", { name: "Add to agent" }));
+    await userEvent.click(within(workRow).getByRole("button", { name: "Add to ssh-agent" }));
 
     expect(await screen.findByText(/uses the stored passphrase named build-key/)).toBeInTheDocument();
-    // 入力した内容が常に勝つので、フィールドは残す: キーボードの前にいる人は
-    // ファイルより現在に近い。
     expect(screen.getByLabelText("Key passphrase")).toBeEnabled();
   });
 
@@ -1019,20 +964,15 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} secrets={secrets} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    await userEvent.click(within(workRow).getByRole("button", { name: "Add to agent" }));
+    await userEvent.click(within(workRow).getByRole("button", { name: "Add to ssh-agent" }));
 
     expect(await screen.findByText("A passphrase is saved only for this key.")).toBeInTheDocument();
-    expect(screen.getByText(/Leave empty to use the stored passphrase/)).toBeInTheDocument();
+    expect(screen.getByText(/Leave this empty to use the saved passphrase/)).toBeInTheDocument();
     expect(screen.getByLabelText("Key passphrase")).toHaveValue("");
     expect(document.body).not.toHaveTextContent("a dedicated secret value");
   });
 });
 
-// **フォルダで分けて、まとめて動かす。**
-//
-// 移す仕組み（relocate）は前からあった。無かったのは、どこに何が入って
-// いるかを見て、選んで、一度に動かす入口である。一本ずつ「…」の中の項目を
-// 開いていたものが、ここでまとまる。
 describe("organising keys into folders", () => {
   function grouped(): KeyInventoryResponse {
     const inventory = buildInventory();
@@ -1082,8 +1022,6 @@ describe("organising keys into folders", () => {
     expect(await screen.findByText("Moved 1.")).toBeInTheDocument();
   });
 
-  // **断られた一本のせいで、残りを止めない。** サーバーは鍵ごとに拒否する
-  // ので、動いたものは動いたと言い、動かなかったものは理由と一緒に名指しする。
   it("names the key that was refused and still moves the rest", async () => {
     const user = userEvent.setup();
     const bothInWork = (): KeyInventoryResponse => {
@@ -1110,27 +1048,17 @@ describe("organising keys into folders", () => {
       />,
     );
 
-    // 二本とも work の中にある。既定の移す先は「グループなし」なので、
-    // どちらも実際に動こうとする——**既にそこにある鍵は触らない**ので、
-    // 行き先を取り違えると片方は最初から動かず、この検査は意味を失う。
     await user.click(await screen.findByRole("checkbox", { name: "Choose keys/work/id_work" }));
     await user.click(screen.getByRole("checkbox", { name: "Choose keys/work/legacy" }));
     await user.click(screen.getByRole("button", { name: "Move" }));
 
     expect(await screen.findByText("Moved 1.")).toBeInTheDocument();
     expect(
-      screen.getByText(/keys\/work\/legacy was refused: an Include glob would read the destination as configuration/),
+      screen.getByText(/keys\/work\/legacy cannot be moved: an Include glob would read the destination as configuration/),
     ).toBeInTheDocument();
   });
 });
 
-// **つかんで放る方の配線。**
-//
-// ここが見ているのは、掴んだものが選ばれ、放った先へ moveInto が呼ばれる
-// という繋がりだけである。**ブラウザが本当にドラッグを始めるかどうかは
-// ここでは分からない** —— jsdom は HTML5 のドラッグを持たず、Playwright の
-// 擬似操作はドラッグ状態を掴んだまま返らなかった。実ブラウザでの操作は
-// 自動検査の外にある。
 describe("dragging a key onto a folder", () => {
   it("chooses what was grabbed and moves it where it was dropped", async () => {
     const relocate = vi.fn().mockResolvedValue({
@@ -1154,11 +1082,6 @@ describe("dragging a key onto a folder", () => {
     await waitFor(() => expect(relocate).toHaveBeenCalledWith("key-one", { group: "archive" }));
   });
 
-  // **行から始まる行動は、開いていた入力欄を畳んでから始まる。**
-  //
-  // 畳まないと、画面には二つの「この鍵について」が同時に出る——どちらのボタンが
-  // どちらに効くのかは、見ている人には分からない。以前この 3 行は行動ごとに書き
-  // 下されており、1 箇所だけ揃っていなかった。
   it("opening one form from a row closes the one that was open", async () => {
     const secrets = buildSecrets({
       passwordVault: vi.fn().mockResolvedValue({

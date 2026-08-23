@@ -31,12 +31,8 @@ if ([string]::IsNullOrWhiteSpace($Artifact)) {
     exit 2
 }
 
-# 末尾の要素は、文字列として取り出す。
-#
-# **Split-Path は通さない。** あれはファイルシステムのプロバイダを通るので、
-# `[` を含むパスに対する振る舞いがプラットフォームごとに違い、Linux の pwsh では
-# 実在しない相対パスで例外になる。ここで確かめたいのは名前そのものであって、
-# ディスク上の何かではない。
+# 存在しないパスや `[` を含む名前も検証できるよう、ファイルシステムへアクセスせず
+# 文字列から末尾の要素を取り出す。
 $separator = $Artifact.LastIndexOfAny([char[]]@([char]'/', [char]'\'))
 $name = if ($separator -ge 0) { $Artifact.Substring($separator + 1) } else { $Artifact }
 if ([string]::IsNullOrEmpty($name)) {

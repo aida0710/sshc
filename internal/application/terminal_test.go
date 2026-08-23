@@ -20,10 +20,6 @@ func newTerminalService(t *testing.T) (*Service, *storage.Workspace) {
 	return NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader)), workspace
 }
 
-// 何も書かれていなければ home である。
-//
-// **エンジンの作業ディレクトリは継がない。** あれはエンジンを起こしたものが
-// たまたま居た場所であり、利用者はそれを選んでいない。
 func TestTheStartDirectoryDefaultsToTheHome(t *testing.T) {
 	service, workspace := newTerminalService(t)
 
@@ -32,10 +28,6 @@ func TestTheStartDirectoryDefaultsToTheHome(t *testing.T) {
 	}
 }
 
-// 書いた綴りのまま保存し、読むときに展開する。
-//
-// **home の綴りを設定に焼き付けない。** 焼き付けると、その設定は書いた機械で
-// しか意味を持たない。
 func TestTheStartDirectoryKeepsTheTildeAndResolvesItWhenRead(t *testing.T) {
 	service, workspace := newTerminalService(t)
 	work := filepath.Join(workspace.Home(), "work")
@@ -59,10 +51,6 @@ func TestTheStartDirectoryKeepsTheTildeAndResolvesItWhenRead(t *testing.T) {
 	}
 }
 
-// 通らない指定は保存のときに断る。
-//
-// 受け取っておいて次に端末を開いたときに失敗させると、設定画面と、失敗が
-// 現れる場所が離れる。
 func TestTheStartDirectoryIsRefusedWhenItCannotBeUsed(t *testing.T) {
 	service, workspace := newTerminalService(t)
 	file := filepath.Join(workspace.Home(), "notes.txt")
@@ -91,15 +79,9 @@ func TestTheStartDirectoryIsRefusedWhenItCannotBeUsed(t *testing.T) {
 	}
 }
 
-// 保存は、利用者が選んでいないものを書かない。
-//
-// **既定を設定ファイルへ焼き付けない。** 焼き付けると、既定を変えた日に
-// その人だけが取り残される——しかも黙って。読み取りが範囲外を既定へ戻すのは
-// 読むたびの話であり、その結果を構造体に残してはならない。
 func TestSavingDoesNotWriteSettingsNobodyChose(t *testing.T) {
 	service, workspace := newTerminalService(t)
 
-	// 二度保存する。一度目は節が無い状態から、二度目は自分が作った節の上から。
 	for round := 0; round < 2; round++ {
 		if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~"}); err != nil {
 			t.Fatal(err)
@@ -117,11 +99,6 @@ func TestSavingDoesNotWriteSettingsNobodyChose(t *testing.T) {
 	}
 }
 
-// 上限は往復し、消せる。
-//
-// **設定は片道であってはならない。** 一度指定した人が既定へ戻れなければ、
-// 戻る手段は metadata を手で書くことだけになる——画面から変えられるように
-// した意味が半分無くなる。
 func TestTheLimitsRoundTripAndCanBeCleared(t *testing.T) {
 	service, _ := newTerminalService(t)
 
@@ -149,10 +126,6 @@ func TestTheLimitsRoundTripAndCanBeCleared(t *testing.T) {
 	}
 }
 
-// クリップボード操作は個別に止められ、false も失われずに往復する。
-//
-// bool に omitempty を直接付けると false が消え、再起動した瞬間に既定の on へ
-// 戻ってしまう。ポインタで「書かれていない」と明示的な false を分ける。
 func TestTheClipboardChoicesRoundTripAndCanBeCleared(t *testing.T) {
 	service, _ := newTerminalService(t)
 	off := false
@@ -175,10 +148,6 @@ func TestTheClipboardChoicesRoundTripAndCanBeCleared(t *testing.T) {
 	}
 }
 
-// 範囲の外は書き込みで断る。
-//
-// 読み取りが既定へ戻すのとは対称ではない。**これはこのアプリケーション自身の
-// 操作であり、断れば人が直せる。** 手で書かれた古いファイルとは違う。
 func TestTheLimitsAreRefusedOutsideTheirRange(t *testing.T) {
 	service, _ := newTerminalService(t)
 
@@ -199,9 +168,6 @@ func TestTheLimitsAreRefusedOutsideTheirRange(t *testing.T) {
 	}
 }
 
-// 保存したあとに消えた場所は home へ倒す。
-//
-// **端末が開けなくなる方が悪い。** 開始位置は、開けることより弱い要求である。
 func TestAStartDirectoryThatDisappearedFallsBackToTheHome(t *testing.T) {
 	service, workspace := newTerminalService(t)
 	work := filepath.Join(workspace.Home(), "work")
@@ -220,8 +186,6 @@ func TestAStartDirectoryThatDisappearedFallsBackToTheHome(t *testing.T) {
 	}
 }
 
-// 空文字は「書かれていない」に戻す。設定を消せなければ、一度指定した人は
-// 二度と既定へ戻れない。
 func TestClearingTheStartDirectoryReturnsToTheHome(t *testing.T) {
 	service, workspace := newTerminalService(t)
 	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~"}); err != nil {
@@ -244,10 +208,6 @@ func TestClearingTheStartDirectoryReturnsToTheHome(t *testing.T) {
 	}
 }
 
-// 見た目は往復し、消せる。
-//
-// **設定は片道であってはならない。** 一度配色を選んだ人が既定へ戻れなければ、
-// 戻る手段は metadata を手で書くことだけになる。
 func TestTheAppearanceRoundTripsAndCanBeCleared(t *testing.T) {
 	service, _ := newTerminalService(t)
 
@@ -268,11 +228,6 @@ func TestTheAppearanceRoundTripsAndCanBeCleared(t *testing.T) {
 	}
 }
 
-// 選ばれていない見た目は、空の節として書かれない。
-//
-// **残せば、次に読む者は何か選ばれていると思う。** そして encoding/json の
-// omitempty は構造体には効かないので、値で持つと必ず `"appearance":{}` が並ぶ
-// ——ポインタで持っているのはそのためである。
 func TestSavingDoesNotWriteAnAppearanceNobodyChose(t *testing.T) {
 	service, workspace := newTerminalService(t)
 
@@ -288,10 +243,6 @@ func TestSavingDoesNotWriteAnAppearanceNobodyChose(t *testing.T) {
 	}
 }
 
-// **「繋ぎ直さない」は保存できなければならない。**
-//
-// 0 は有効な選択であって、「書かれていない」ではない。値で持つと、切ったつもりの
-// 人は次に読んだときに既定へ戻されている——**しかも黙って戻される。**
 func TestChoosingNoReconnectSurvivesTheRoundTrip(t *testing.T) {
 	service, _ := newTerminalService(t)
 	never := 0
@@ -307,20 +258,17 @@ func TestChoosingNoReconnectSurvivesTheRoundTrip(t *testing.T) {
 	if *settings.Reconnect != 0 {
 		t.Fatalf("Reconnect = %d, want 0", *settings.Reconnect)
 	}
-	// engine が読む形も 0 である。
 	if attempts := service.TerminalReconnects(); attempts != 0 {
 		t.Fatalf("TerminalReconnects = %d, want 0", attempts)
 	}
 }
 
-// 書かれていなければ既定である。**0 と混ぜない。**
 func TestAnUnsetReconnectFallsBackToTheDefault(t *testing.T) {
 	service, _ := newTerminalService(t)
 	if attempts := service.TerminalReconnects(); attempts != terminal.MaxReconnects {
 		t.Fatalf("TerminalReconnects = %d, want %d", attempts, terminal.MaxReconnects)
 	}
 
-	// 範囲の外は既定へ戻す。拒否ではなく差し戻しなのは、読み取り側だからである。
 	tooMany := 99
 	if _, err := service.SetTerminalSettings(TerminalSettings{Reconnect: &tooMany}); err != nil {
 		t.Fatal(err)

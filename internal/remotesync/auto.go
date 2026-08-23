@@ -7,26 +7,20 @@ import (
 	"time"
 )
 
-// AutoInterval は、巡回の間隔。
-//
-// **短くしても、速くはならない。** 一巡でやるのは、ローカルを数えることと
-// HEAD を 1 本投げることだけであり、それより細かく見ても、人が押した瞬間より
-// 早く気づけるわけではない。1 台につき 1 日 1440 回の HEAD は、この用途の
-// バケットではまず無視できる。
+// AutoInterval は自動同期の確認間隔。
 const AutoInterval = time.Minute
 
-// AutoPhase は、巡回がいまどこに居るかである。
+// AutoPhase は自動同期の現在状態。
 type AutoPhase string
 
 const (
-	// AutoIdle は、直近の巡回が何事もなく終わったことである。
+	// AutoIdle は直近の巡回が完了した状態。
 	AutoIdle AutoPhase = "idle"
-	// AutoRunning は、いま巡回していることである。
+	// AutoRunning は巡回中の状態。
 	AutoRunning AutoPhase = "running"
-	// AutoBlocked は、**人の判断を待っている**ことである。衝突があったか、
-	// 適用すれば何かが消えるかのどちらかで、どちらも自動では踏み越えない。
+	// AutoBlocked は競合または削除についてユーザーの判断を待つ状態。
 	AutoBlocked AutoPhase = "blocked"
-	// AutoFailed は、巡回が届かなかったことである。次の巡回でまた試す。
+	// AutoFailed は巡回が失敗し、次回に再試行する状態。
 	AutoFailed AutoPhase = "failed"
 )
 
@@ -35,37 +29,28 @@ type AutoView struct {
 	// Enabled は、この設置で自動同期が入っているか。
 	Enabled bool      `json:"enabled"`
 	Phase   AutoPhase `json:"phase"`
-	// Detail は、blocked と failed のときの理由である。人へ見せる文ではなく、
+	// Detail は、blocked と failed のときの理由である。ユーザーへ見せる文ではなく、
 	// 画面が自分の言葉に訳すための符牒である。
 	Detail string `json:"detail,omitempty"`
 	// At は、直近の巡回が終わった時刻。
 	At string `json:"at,omitempty"`
 }
 
-// Auto は、人が押さなくても同期を進める巡回である。
-//
-// **押さなくても進むことと、黙って壊すことは違う。** 衝突と、何かが消える適用は
-// 自動では行わない——そこは人が見るべき分岐であり、待っていることを画面が言う。
+// Auto は定期的に同期する。競合と削除は自動適用せず AutoBlocked として報告する。
 type Auto struct {
 	service *Service
-	// Key は、封をする鍵を取り出す。取れないなら（保管庫が閉じている、鍵がまだ
-	// 無い）、この巡回は何もしない。**保管庫が開いていることが、同期してよいこと
-	// の唯一の条件である。**
+	// Key は同期鍵を返す。vault がロック中または未設定なら false を返す。
 	Key func() (string, bool)
-	// Enabled は、この設置で自動同期が入っているかを答える。設定は保管庫の中に
-	// あるので、閉じていれば false が返る——それで正しい。
+	// Enabled は、この設置で自動同期が入っているかを返す。設定は保管庫の中に
+	// あるので、閉じていれば false が返る。それで正しい。
 	Enabled func() bool
-	// Unattended は、一巡のあいだ保管庫のアイドルの時計を止める。
-	//
-	// **巡回が保管庫を開けっぱなしにしてはならない。** 1 分ごとに設定を読み、
-	// 変わったものを数える読み手が時計を戻し続ければ、自動施錠は永久に来ない。
-	// nil なら何も包まない——時計を持たない設置である。
+	// Unattended は、自動処理による参照を vault の利用時刻に数えないようにする。
 	Unattended func(run func())
 
 	interval time.Duration
 	now      func() string
 
-	// cycleMu は、一巡が重ならないようにする。時計が来たときと、人が「今すぐ」を
+	// cycleMu は、一巡が重ならないようにする。時計が来たときと、ユーザーが「今すぐ」を
 	// 押したときが同時に起きうる。
 	cycleMu sync.Mutex
 
@@ -106,12 +91,7 @@ func (a *Auto) Run(ctx context.Context) {
 	}
 }
 
-// Once は一巡し、その結果を返す。時計が来たときも、人が「今すぐ」を押したときも
-// 通るのはここである。**押した人には、その一巡で何が起きたかが返る**——次の
-// 巡回まで待ってから状態を読み直す画面は、押したことが効いたのかを言えない。
-//
-// **先に受け取り、それから送る。** 逆にすると、向こうが進んでいた場合の push は
-// 必ず条件で弾かれ、毎回 1 往復を捨てることになる。
+// Once は同期を一巡し、その結果を返す。リモート更新の取込後にローカル変更を送信する。
 func (a *Auto) Once(ctx context.Context) AutoView {
 	a.cycleMu.Lock()
 	defer a.cycleMu.Unlock()
@@ -150,8 +130,7 @@ func (a *Auto) keyFor() (string, bool) {
 	return key, ok && key != ""
 }
 
-// receive は、向こうが進んでいれば取り込む。done が true なら、そこで一巡を
-// 終える——人の判断を待つ状態で push を続けても、押し込むものが増えるだけである。
+// receive はリモート更新を取り込む。done はこの巡回を終了すべきことを示す。
 func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool) {
 	if a.service.Direction() == DirectionPush {
 		return AutoIdle, "", false
@@ -164,7 +143,7 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 	if !moved {
 		return AutoIdle, "", false
 	}
-	// **巡回は寄せ先を選ばない。** どちらを残すかは人が決める分岐である。
+	// 自動同期では競合の解決先を選ばない。
 	result, err := a.service.Pull(ctx, key, ResolveNone)
 	switch {
 	case errors.Is(err, ErrNothingToApply), errors.Is(err, ErrNoSnapshot):
@@ -175,8 +154,7 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 	if len(result.Conflicts) > 0 {
 		return AutoBlocked, "conflicts", true
 	}
-	// **消すものがあるなら、自動では適用しない。** 置き換えは控えが残り History
-	// から戻せるが、消えたファイルは画面から消える。ここは人が見る分岐である。
+	// 削除はユーザーの確認が必要なため自動適用しない。
 	if len(result.Request.Removals) > 0 {
 		return AutoBlocked, "removals", true
 	}
@@ -192,7 +170,7 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 	return AutoIdle, "", false
 }
 
-// send は、こちらが進んでいれば押し出す。
+// send はローカルに変更があれば push する。
 func (a *Auto) send(ctx context.Context, key string) (AutoPhase, string) {
 	if a.service.Direction() == DirectionPull {
 		return AutoIdle, ""
@@ -227,8 +205,7 @@ func (a *Auto) enter(phase AutoPhase, detail string) {
 	}
 }
 
-// failureDetail は、画面が訳せる符牒だけを残す。**エラー文そのものを残さない**
-// ——入口の URL や bucket の名前が混ざりうる。
+// failureDetail は、機密情報を含みうるエラー文を返さず、画面用の安定した code に変換する。
 func failureDetail(err error) string {
 	switch {
 	case errors.Is(err, ErrNotConfigured):

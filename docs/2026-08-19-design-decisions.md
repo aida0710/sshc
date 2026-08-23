@@ -1,164 +1,148 @@
-# 設計上の決定 — 2026-08-19
+# 2026-08-19 の設計判断
 
-`docs/2026-08-19-design-audit.md` の §6 が「作者の判断が要る」として挙げた 9 件に答える。
-決めたことと、**決めなかったこと**の両方を書く。
+`docs/2026-08-19-design-audit.md` §6 に挙げた 9 件について、当時の判断と保留事項を記録します。
 
 ---
 
-## 1. Android は linux build tag に相乗りさせ続ける
+## 1. Android では linux build tag を継続して使用する
 
-**決定: 現状維持。`android` build tag は導入しない。**
+決定: 現状を維持し、`android` build tag は導入しません。
 
 `GOOS=android` は `linux` タグを満たすので、`internal/platform/linux` も `cmd/sshc` も
-Android 向けのコンパイルを通る。APK に CLI は入らないので実害は無い。
+Android 向けにコンパイルできます。APK に CLI は含まれないため、製品動作への影響はありません。
 
-android タグを入れれば「Android では別のものが選ばれる」を型で言えるようになるが、
+android タグを導入すると Android 固有の実装をビルド時に区別できますが、
 同時に `make test` の `GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...` が
-見ているもの——**タグの食い違い**——の範囲が狭くなる。いま全パッケージが Android
-向けに通ることを確かめられているのは、相乗りしているからである。
+検出できる build tag の不整合範囲が狭くなります。現在は linux タグを共有することで、
+全パッケージが Android 向けにビルドできることを確認しています。
 
-代わりに、不変条件はテストで言う。`mobile/dependencies_test.go` の
+代わりに、不変条件はテストで検査します。`mobile/dependencies_test.go` の
 `TestEveryDependencyOfTheAndroidEngineIsADecision` が `app.Dependencies` の全項目に
-「配線する／意図して空にする／既定に落とす」の分類を要求し、項目が増えれば赤くなる。
-**Biometric が黙って落ちたのは、それが無かったからである。**
+「設定する／意図的に未設定にする／既定値を使う」の分類を要求し、項目追加時に未分類であれば失敗します。
+この検査を追加する前は、Biometric の未設定を検出できませんでした。
 
-## 2. `internal/api` の生成モデルを通信の正本にする
+## 2. `internal/api` の生成モデルを API 契約の基準にする
 
-**決定: (A)。生成型を契約の正本とし、手書きの双子は消していく。**
+当初の決定: (A)。生成型を API 契約の基準とし、重複する手書き型を削減します。
 
-group の rename / delete と履歴の restore / recover は生成型を直に受ける形にした。
-契約から外れれば、そこはコンパイルが止まる。
+group の rename / delete と履歴の restore / recover は生成型を直接受け取ります。
+契約と不一致になった場合はコンパイルエラーになります。
 
-残りは、ドメインの値をそのまま `c.JSON` へ渡すエンドポイントである。詰め替えの関数を
-32 型分置く価値は無いと判断した——代わりに
+残りは、ドメイン値をそのまま `c.JSON` に渡すエンドポイントです。32 型分の変換関数は追加せず、
 `internal/acceptance/contract_drift_test.go` が、生成型と実際に返している型の JSON
-フィールド名を突き合わせる。`make verify-generated` が見るのは「生成物が仕様と一致
-するか」だけで、**実際に返る JSON は誰も見ていなかった。**
+フィールド名を照合します。`make verify-generated` が検査するのは「生成物が仕様と一致
+するか」だけであり、実際の応答 JSON との一致は検査していませんでした。
 
-`models.gen.go` を捨てる案 (B) は採らない。捨てれば `openapi.yaml` を変えたときに
-Go が壊れるという唯一の契約保証を失う。
+`models.gen.go` を削除する案 (B) は採用しません。`openapi.yaml` を変更したときに
+Go コードとの不一致をコンパイル時に検出する仕組みを失うためです。
 
-### 追記 — (A) を実行しようとして、採れないと分かった
+### 追記: 実測後の変更
 
-**この決定は書き換えない。書いた時点で持っていた情報では正しい。** 実行に移して
-測った結果、(A) も (B) も採れないことが分かったので、そこを追記する。
+上記は当初の判断として残します。実装前の調査により、(A) と (B) のどちらも適切でないことが分かりました。
 
-同名 36 対のうち **27 対は Go の型が違い、違いは系統的だった。** 生成側は OpenAPI の
-省略可能を `*T` で表し、`application` 側は値と `omitempty` で表す。さらに
+同名 36 対のうち 27 対は Go の型が異なり、その差には一定の規則がありました。生成側は OpenAPI の
+省略可能を `*T` で表し、`application` 側は値と `omitempty` で表します。さらに
 `application` は `DiffOp` や `EditAction` のような名前付きの型を持ち、生成側はそれを
-`string` にする。**(A) は「契約の正本にする」つもりだったが、実際にやれば
-ドメインの型がポインタと string に置き換わる**——契約が強くなるのではなく、
-ドメインが弱くなる。
+`string` にします。(A) を適用するとドメイン型がポインタと `string` に置き換わり、
+ドメイン側の型制約が弱くなります。
 
-採ったのは第三の道である: **寄せずに、生成しない。** `oapi-codegen` の
-`exclude-schemas` に 20 スキーマを挙げ、二重定義そのものを消した。対は 36→18、
-`models.gen.go` は 1524→1339 行になった。残る 18 は、使われている
-request/response の中に入れ子で現れるので生成が要る。
+最終的に、型を統合せず、不要な型を生成対象から除外しました。`oapi-codegen` の
+`exclude-schemas` に 20 スキーマを指定して重複定義を削除しました。組は 36 から 18 に減り、
+`models.gen.go` は 1524 行から 1339 行になりました。残る 18 組は、使用中の
+request/response に入れ子で含まれるため生成が必要です。
 
-**契約保証は失っていない。** 上で「(B) を採ると失う」と書いたものは、生成物との
-突き合わせではなく `openapi.yaml` そのものとの突き合わせに置き換わった
-（`contract_drift_test.go` が `yaml.v3` で仕様を読み、`application` の型と比べる）。
-**写しと比べるより、契約と比べる方が本来正しい。** 加えて `httpserver` 側の
+API 契約の検査は維持しています。生成物との比較は `openapi.yaml` 自体との比較に変更しました。
+`contract_drift_test.go` が `yaml.v3` で仕様を読み、`application` の型と比較します。加えて `httpserver` 側の
 「返る本文に知らない項目が無い」検査を、生成型ではなく実際に `c.JSON` へ渡している型へ
-向けた。2 つ合わせて「返る本文 ⊆ application の型 = 契約」になる。
+向けました。2 つの検査により「応答本文 ⊆ application の型 = API 契約」を確認します。
 
-## 3. Electron 外殻は維持する
+## 3. Electron ラッパーを維持する
 
-**決定: 維持。ただし外殻 2 つの共通化はしない。**
+当時の決定: 維持します。ただし Electron と Android の実装は共通化しません。
 
-Electron（デスクトップ）と Android の WebView は、同じ役割——エンジンを起こし、
-所有し、入口 URL を渡す——を別々に解いている。共通化の候補は 3 点あったが、いずれも
-言語をまたぐ（JavaScript と Java）ので、共通化の実体は「仕様を文書で揃える」以上に
-ならない。**実装が 2 つあること自体は、走る場所が 2 つある以上避けられない。**
+Electron（デスクトップ）と Android WebView は、エンジンの起動と所有、アクセス URL の受け渡しを
+それぞれ実装していました。共通化候補はいずれも JavaScript と Java をまたぐため、コード共有ではなく
+仕様の共通化にとどまります。実行環境が異なるため、実装は 2 つ必要です。
 
-到達不能になっていた `--hidden` 起動モードは削除した（Go 側の呼び出し元が消えていた）。
+到達不能になっていた `--hidden` 起動モードは、Go 側の呼び出し元が削除済みだったため削除しました。
 
-**残る不揃い（未着手）**: 文言のポリシーが 3 つある。Electron は日本語直書き、Android は
+当時の保留事項: 文言の管理方法が 3 種類あります。Electron は日本語直書き、Android は
 英語の `strings.xml` のみ、Web は en/ja の 1065 キー。揃えるなら Electron の文言を
-`web/src/i18n` から生成することになるが、外殻が起きる時点で engine はまだ無く、
-どの言語を選ぶかを誰も知らない——**先に「外殻は誰の言語で話すか」を決める必要がある。**
+`web/src/i18n` から生成する案がありますが、デスクトップラッパーの起動時点では engine がまだなく、
+どの言語を選択するか決められません。共通化の前に、ラッパーの言語選択規則を決める必要があります。
 
-## 4. Windows のデスクトップ実体登録は NSIS が持つ
+## 4. Windows のデスクトップ実行ファイル登録は NSIS が担当する
 
-**決定: NSIS。Go 側の登録 API は公開しない。**
+決定: NSIS が担当し、Go 側の登録 API は公開しません。
 
-実際にレジストリへ書いているのは `desktop/build/installer.nsh` である。Go 側の
+実際にレジストリへ書き込むのは `desktop/build/installer.nsh` です。Go 側の
 `RegisterDesktopExecutable` / `RemoveDesktopExecutable` は呼び出し元が一人も現れな
-かったので削除した。**小文字版とその検査は残してある** ——方針を反転させるなら、
-再公開は一行で済む。
+かったため削除しました。非公開版とその検査は残してあり、方針変更時には 1 行で再公開できます。
 
-Go 側が読む（`ReadDesktopExecutable`）のは維持する。書き手と読み手が別なのは
-Linux の `desktop.json`（書き手 Electron / 読み手 Go）と同じ形であり、**3 OS で
-3 つの記録方式になっているのはそれぞれの OS がそう決めているからである。**
+Go 側の読み取り処理（`ReadDesktopExecutable`）は維持します。書き込みと読み取りを別の実装が担当する点は、
+Linux の `desktop.json`（書き込みは Electron、読み取りは Go）と同じ構成です。OS ごとの標準方式に従うため、3 OS で記録方式が異なります。
 
 ## 5. `SSHC_ASKPASS_*` の防御は消す。規則の残りは名前と理由を書き換える
 
-**決定: 消す。**
+決定: 削除します。
 
 `SendEnv` が `SSHC_ASKPASS_*` を拾わないか見ていた照合は、その 5 変数を設定する場所が
-リポジトリに存在しないので発火しない。`internal/secret` の `ErrUnknownToken` と
-`TokenTTL` も参照 0 だった。
+リポジトリに存在しないため機能していませんでした。`internal/secret` の `ErrUnknownToken` と
+`TokenTTL` も参照数は 0 でした。
 
 規則の残り（Match、条件付き Include、CanonicalizeHostname、実行を伴うディレクティブ）は
-残した。ただし理由は置き換わっている——環境変数で capability を渡していたからではなく、
-**この alias が使う鍵を実行も DNS も伴わずに一意に決められるか**である。名前も
-`credentialEnvironmentUnsafe` から `credentialUnstaticConfiguration` へ改めた。
+残しました。ただし目的は、環境変数による capability の受け渡しではなく、
+対象 alias が使用する鍵を外部コマンド実行や DNS なしで一意に決定できるかの確認です。名前も
+`credentialEnvironmentUnsafe` から `credentialUnstaticConfiguration` へ変更しました。
 
-**未決**: `ProxyJump` がその一覧に残っているのは、いまは一貫していない。連鎖は
+当時の保留事項: `ProxyJump` がその一覧に残っている点は一貫していません。接続チェーンは
 `internal/sshclient` がプロセス内で辿るようになり、アカウントパスワードの側は連鎖に
-現れる alias のぶんを渡している。パスフレーズだけを断る理由は、外部プログラムが
-消えた時点で無くなっている。**挙動を変える判断なので手を付けていない。**
+含まれる alias の資格情報を渡しています。パスフレーズだけを拒否する理由は、外部プログラムが
+消えた時点でなくなっています。動作変更を伴うため、この時点では変更していません。
 
 ## 6. `internal/application` は「設定のユースケース」と明記する
 
-**決定: (a)。改名はしない。パッケージ doc で範囲を宣言する。**
+決定: (a)。改名せず、package documentation に対象範囲を記載します。
 
-保管庫と同期にまたがるユースケース——マスターパスワードの変更が local rekey と
-remote reseal を 1 つの順序として扱うところ——は `internal/httpserver` の
-`vaultOperations` にある。監査は「CLI から同じ順序を再現する保証が無い」と書いたが、
-**実際には本番の配線が同じ 1 つを両方の transport へ渡している**（`server.go` で組んだ
-`vault` が HTTP のハンドラにも CLI のルートにも入る）。`nil` はテスト用の既定である。
+保管庫と同期にまたがるユースケース、すなわちマスターパスワード変更時に local rekey と
+remote reseal を一連の処理として扱う箇所は、`internal/httpserver` の
+`vaultOperations` にあります。監査では「CLI から同じ順序を再現する保証がない」と記載しましたが、
+実装では同じ `vault` を両方の transport に渡しています（`server.go` で構築した
+`vault` を HTTP handler と CLI route の両方に渡します）。`nil` はテスト用の既定値です。
 
-分担は意図的なので、揃えるのではなく `doc.go` に書いた。
+この分担は意図した設計であるため、統合せず `doc.go` に記載しました。
 
 ## 7. `Run` と `Stream` の差は意図である
 
-**決定: 揃えない。理由を doc に書く。**
+決定: 統一せず、理由を package documentation に記載します。
 
-`Run`（無人実行）は keepalive を張らず、設定の `SetEnv` を送らない。どちらも根拠が
-ある——前者は上限時間の中で終わる短い操作なので相手の生存確認が要らず、後者は
-**出力を読むから**である。定型のプログラムを走らせて標準出力を答えとして解析するので、
+`Run`（無人実行）は keepalive を設定せず、設定の `SetEnv` も送信しません。短時間かつ上限時間内に
+終了する処理では keepalive が不要です。また、定型プログラムの標準出力を機械的に解析するため、
 利用者の設定が `LANG` を変えれば読む相手の言葉が変わる。
 
-`Stream`（`sshc run`）は出力を人が読むので、利用者の設定がそのまま効くのが正しい。
+`Stream`（`sshc run`）は利用者が出力を読むため、利用者の環境設定を適用します。
 
-## 8. `ui/form` のクラス文字列は `ui/surface` の `Button` へ寄せる
+## 8. `ui/form` のクラス文字列を `ui/surface` の `Button` に統一する
 
-**決定: 寄せた。**
+決定: `ui/surface` の `Button` に統一しました。
 
-実測すると、対象は 110 箇所ではなく **生の `<button>` 69 箇所**だった（残りは import 行）。
-`<a>` にクラスを当てている 2 箇所はボタンではないので、そのまま残した。
+調査対象は 110 箇所ではなく、生の `<button>` 69 箇所でした（残りは import 行）。
+`<a>` にクラスを指定する 2 箇所はボタンではないため、そのまま残しました。
 
-寄せた理由は見た目の統一ではない。`surface.tsx` の `Button` が `type="button"` を
-既定にする理由を「フォーム送信はどこにもなく」と書いていたが、**それは偽である**
-——`<form onSubmit>` が 6 箇所ある。form の中の `<button>` は、書かなければ submit に
-なり、押した瞬間にページがリロードされてセッションが失われる。**その間それが
-起きずに済んでいたのは、書く人が毎回 `type="button"` を付けていたからである。**
+統一の目的は見た目ではなく、`type="button"` の既定値を一元化することです。
+`<form onSubmit>` は 6 箇所あり、form 内の `<button>` は type を省略すると submit になります。
+それまでは各箇所で `type="button"` を指定してページ再読み込みとセッション消失を防いでいました。
 
 ## 9. テスト専用パッケージの命名
 
-**決定: `internal/sshintegration` を `internal/sshdconformance` へ改めた。**
+決定: `internal/sshintegration` を `internal/sshdconformance` に改名しました。
 
-`integration/`（本物の sshc プロセスを起こす。外の何も要らないので `go test ./...` が
-回す）と名前が近すぎ、Makefile が 4 行かけて別物だと説明していた。相手を名指しすれば
-説明は要らない。
+`integration/`（実際の sshc プロセスを起動し、外部依存なしで `go test ./...` が実行する）と
+名前が近く、Makefile に 4 行の区別説明が必要でした。`sshdconformance` は検査対象を明示します。
 
-`internal/buildcontract` も割った。あそこは 2 つのものを抱えていた——ネイティブ
-ビルドの CLI と機種を見る道具（本番のコード）と、Makefile・`.github`・`scripts` を
-読んで取り決めを表明するメタテスト約 830 行である。**名前が合っているのは後者**
-なので、道具を `internal/nativebuild` へ出した。`buildcontract` に残るのは検査だけで、
-本番のコードはひとつも無い。
+`internal/buildcontract` も分割しました。ここには、ネイティブビルド用 CLI とアーキテクチャ検査を行う製品コード、
+および Makefile・`.github`・`scripts` の契約を検査する約 830 行のメタテストが含まれていました。
+前者を `internal/nativebuild` に移し、`buildcontract` にはテストだけを残しました。
 
-`internal/acceptance` へは寄せなかった。あちらが検査するのは**走っているアプリ**の
-HTTP 面とハードニングで、こちらが検査するのは**リポジトリのビルドファイル**である。
-主題が違う。
+`internal/acceptance` には統合していません。`acceptance` は実行中アプリケーションの HTTP API と
+セキュリティ設定を検査し、`buildcontract` はリポジトリのビルドファイルを検査するためです。

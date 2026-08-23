@@ -23,7 +23,7 @@ import (
 
 // pipeServer は、テストのために名前つきパイプを一本だけ提供する。
 //
-// **本物のエージェントを当てにしない。** CI の Windows に OpenSSH エージェント
+// 本物のエージェントを当てにしない。CI の Windows に OpenSSH エージェント
 // が走っている保証は無く、走っていたとしても、そこへ鍵を登録するテストを書く
 // わけにはいかない。確かめたいのは運ぶ管の方である。
 type pipeServer struct {
@@ -57,7 +57,7 @@ func newPipeServer(t *testing.T) *pipeServer {
 
 // accept は、client が繋いでくるのを待って、その側の net.Conn を返す。
 //
-// **t.Fatal を使わない。** これは別の goroutine から呼ばれるもので、そこでの
+// t.Fatal を使わない。これは別の goroutine から呼ばれるもので、そこでの
 // Fatal は呼んだ goroutine を終わらせるだけであり、テストは止まらない。
 // 理由は値として返し、テストの goroutine が受け取ってから落とす。
 func (server *pipeServer) accept() (net.Conn, error) {
@@ -84,7 +84,7 @@ func (server *pipeServer) accept() (net.Conn, error) {
 		return nil, err
 	}
 
-	// server 側も同じ conn 型で包む。**両側で同じものを使う**ので、テストが
+	// server 側も同じ conn 型で包む。両側で同じものを使うので、テストが
 	// 通ったことは、この型が読み書きの両方向で動いたということになる。
 	side, err := newConn(server.listener, server.name)
 	if err != nil {
@@ -109,7 +109,7 @@ type acceptResult struct {
 	err  error
 }
 
-// serverSide は、繋がってきた側を受け取る。**テストの goroutine で落とす。**
+// serverSide は、繋がってきた側を受け取る。テストの goroutine で落とす。
 func serverSide(t *testing.T, results <-chan acceptResult) net.Conn {
 	t.Helper()
 	select {
@@ -146,7 +146,7 @@ func dial(t *testing.T, server *pipeServer) net.Conn {
 	return client
 }
 
-// **運ぶのは、渡したものそのままである。** 途中で切れても混ざってもいけない。
+// 運ぶのは、渡したものそのままである。途中で切れても混ざってもいけない。
 func TestThePipeCarriesBytesInBothDirections(t *testing.T) {
 	server := newPipeServer(t)
 	accepting := server.accepting()
@@ -178,7 +178,7 @@ func TestThePipeCarriesBytesInBothDirections(t *testing.T) {
 	}
 }
 
-// **答えない相手は、締切で手を離す。** 解除する手段が無ければ、エージェントが
+// 応答しない相手は、締切で手を離す。解除する手段が無ければ、エージェントが
 // 固まった日にこのアプリケーション全体がそこで止まる。
 func TestAReadPastItsDeadlineIsReleased(t *testing.T) {
 	server := newPipeServer(t)
@@ -211,14 +211,14 @@ func TestAReadPastItsDeadlineIsReleased(t *testing.T) {
 	}
 }
 
-// **閉じることは、待っている読みを解くことでもある。** 解かずに handle を
+// 閉じることは、待っている読みを解くことでもある。解かずに handle を
 // 閉じれば、kernel が触っている最中のものを無効にすることになる。
 func TestClosingReleasesAPendingRead(t *testing.T) {
 	server := newPipeServer(t)
 	accepting := server.accepting()
 	client := dial(t, server)
-	// 繋がってきた側は、書き込まないまま持っておく。**そのおかげで client の
-	// 読みは待ち続ける**——確かめたいのは、その待ちを閉鎖が解くことである。
+	// 繋がってきた側は、書き込まないまま持っておく。そのおかげで client の
+	// 読みは待ち続ける。確かめたいのは、その待ちを閉鎖が解くことである。
 	serverSide(t, accepting)
 
 	failed := make(chan error, 1)
@@ -243,7 +243,7 @@ func TestClosingReleasesAPendingRead(t *testing.T) {
 	}
 }
 
-// **繋げない相手は、繋げないと言う。** 存在しない名前をいつまでも待つと、
+// 繋げない相手は、繋げないと言う。存在しない名前をいつまでも待つと、
 // エージェントが居ない機械で鍵の一覧が固まる。
 func TestDialingAPipeThatIsNotThereFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -257,7 +257,7 @@ func TestDialingAPipeThatIsNotThereFails(t *testing.T) {
 	}
 }
 
-// 宛先の表示に資格情報は現れない。**エラーもログもこれを含む。**
+// 宛先の表示に資格情報は現れない。エラーもログもこれを含む。
 func TestTheAddressIsTheFixedPipeNameAndNothingElse(t *testing.T) {
 	server := newPipeServer(t)
 	accepting := server.accepting()
@@ -274,7 +274,7 @@ func TestTheAddressIsTheFixedPipeNameAndNothingElse(t *testing.T) {
 	}
 }
 
-// **運べればよい、では足りない。** この管の上を通るのは agent のプロトコルで
+// 運べればよい、では足りない。この管の上を通るのは agent のプロトコルで
 // あり、その要求と応答の枠が保たれることまで確かめて初めて、鍵の一覧が
 // Windows で読めると言える。
 func TestTheAgentProtocolSurvivesThisTransport(t *testing.T) {

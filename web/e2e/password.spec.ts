@@ -1,9 +1,5 @@
 import { clickAndAwait, expect, openApplication, openSection, test } from "./support/environment";
 
-// この end-to-end スイートは使い捨ての HOME に対してビルド済みバイナリ
-// を動かすため、実ディスク上の本物の vault ファイルを検証する。terminal
-// も ssh も決して起動しない。askpass ヘルパー自体の振る舞いは
-// cmd/sshc のテストが、償還規則は internal/secret のテストがカバーする。
 test("stores a password for a host and never shows it again", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Connections");
@@ -24,7 +20,6 @@ test("stores a password for a host and never shows it again", async ({ page, ins
   await expect(panel.getByText(/connection-only password is assigned/)).toBeVisible();
   await expect(page.locator("body")).not.toContainText("hunter2");
 
-  // そしてディスク上のファイルは暗号文であり、パスワードも alias も含まない。
   const sealed = await installation.read("sshc/secrets");
   expect(sealed).not.toContain("hunter2");
   expect(sealed).not.toContain("bastion");
@@ -74,8 +69,6 @@ test("selecting a key removes the stored password assignment and returning to ag
   await expect(page.locator("body")).not.toContainText("replacement e2e password");
 });
 
-// vault をロックするとアプリケーション全体がロックされる。かつては 1 つのパネルだ
-// けがロックされ、ユーザーは次の要求が拒否されるシェルの中に取り残されていた。
 test("locking the vault returns the application to its front door", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Secrets");

@@ -18,7 +18,7 @@ import (
 	"sshc/internal/sshclient"
 )
 
-// scriptedPrompter は、決められた答えを順に返す。何を尋ねられたかを記録する。
+// scriptedPrompter は、決められた結果を順に返す。何を尋ねられたかを記録する。
 type scriptedPrompter struct {
 	answers  []string
 	confirm  bool
@@ -72,7 +72,7 @@ func writeKey(t *testing.T, directory, name string, passphrase []byte) (string, 
 
 // connect は、この認証だけを使ってテストサーバーへ繋ぐ。
 //
-// **本物のハンドシェイクである。** 通ったかどうかを決めるのはサーバーであり、
+// 本物のハンドシェイクである。通ったかどうかを決めるのはサーバーであり、
 // このテストが「通したことにする」余地はない。
 func connect(t *testing.T, server *testServer, target sshclient.Target, auth sshclient.Auth, prompt sshclient.Prompter) error {
 	t.Helper()
@@ -116,7 +116,7 @@ func TestAKeyWithoutAPassphraseAuthenticates(t *testing.T) {
 	}
 }
 
-// 保存されているパスフレーズを先に試す。答えを既に持っているなら尋ねない。
+// 保存されているパスフレーズを先に試す。結果を既に持っているなら尋ねない。
 func TestAStoredPassphraseIsUsedWithoutAsking(t *testing.T) {
 	home := t.TempDir()
 	path, signer := writeKey(t, home, "id_ed25519", []byte("correct horse"))
@@ -137,7 +137,7 @@ func TestAStoredPassphraseIsUsedWithoutAsking(t *testing.T) {
 	}
 }
 
-// 保存されていなければ端末で尋ねる。**尋ねるのは Secret でなければならない。**
+// 保存されていなければ端末で尋ねる。尋ねるのは Secret でなければならない。
 func TestAnUnstoredPassphraseIsAskedWithoutEchoing(t *testing.T) {
 	home := t.TempDir()
 	path, signer := writeKey(t, home, "id_ed25519", []byte("correct horse"))
@@ -238,7 +238,7 @@ func TestWithoutAnyKeyPublicKeyAuthenticationIsNotOffered(t *testing.T) {
 	}
 }
 
-// 尋ねる手段が無ければ、尋ねる方式は提示しない。UI の無い経路で人を待つと、
+// 尋ねる手段が無ければ、尋ねる方式は提示しない。UI の無い経路でユーザーを待つと、
 // その接続は永久に終わらない。
 func TestWithoutAPrompterOnlyPublicKeyIsOffered(t *testing.T) {
 	home := t.TempDir()
@@ -290,7 +290,7 @@ func runTestAgent(t *testing.T, _ string) (string, ssh.Signer) {
 		t.Fatal(err)
 	}
 
-	// **t.TempDir() は使わない。** unix ソケットのパスには 100 バイト程度の
+	// t.TempDir() は使わない。unix ソケットのパスには 100 バイト程度の
 	// 上限があり、テスト名を含むあの長いパスは macOS でそれを超える。超えると
 	// bind が失敗し、この検査は skip として静かに消える。
 	socketDirectory, err := os.MkdirTemp("", "sshc-agent")
@@ -317,10 +317,10 @@ func runTestAgent(t *testing.T, _ string) (string, ssh.Signer) {
 	return socket, signer
 }
 
-// **保管庫に置いてあるのに毎回尋ねるなら、置く意味が無い。**
+// 保管庫に置いてあるのに毎回尋ねるなら、置く意味が無い。
 func TestAStoredPasswordAnswersWithoutAskingTheUser(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "hunter2"})
-	// 答えを持たない。尋ねられた時点でこの接続は失敗する。
+	// 結果を持たない。尋ねられた時点でこの接続は失敗する。
 	prompt := &scriptedPrompter{}
 	auth := sshclient.Auth{Password: func(alias string) (string, bool) {
 		return "hunter2", alias == "bastion"
@@ -334,8 +334,8 @@ func TestAStoredPasswordAnswersWithoutAskingTheUser(t *testing.T) {
 	}
 }
 
-// 普通の Linux はパスワードを keyboard-interactive で聞いてくる。**問いがひとつで
-// 画面に出さないなら、それはパスワードを聞かれている形である。**
+// 普通の Linux はパスワードを keyboard-interactive で聞いてくる。問いがひとつで
+// 画面に出さないなら、それはパスワードを聞かれている形である。
 func TestAStoredPasswordAnswersASingleHiddenQuestion(t *testing.T) {
 	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Password: ": "hunter2"}})
 	prompt := &scriptedPrompter{}
@@ -349,8 +349,8 @@ func TestAStoredPasswordAnswersASingleHiddenQuestion(t *testing.T) {
 	}
 }
 
-// 問いが複数あるものに、保存されたパスワードを差し出す意味は無い。**2FA の
-// 二つ目の問いに対して、それは間違った答えである。**
+// 問いが複数あるものに、保存されたパスワードを差し出す意味は無い。2FA の
+// 二つ目の問いに対して、それは間違った結果である。
 func TestAStoredPasswordDoesNotAnswerATwoQuestionChallenge(t *testing.T) {
 	server := newTestServer(t, serverOptions{Keyboard: map[string]string{
 		"Password: ": "hunter2", "Verification code: ": "123456",
@@ -365,7 +365,7 @@ func TestAStoredPasswordDoesNotAnswerATwoQuestionChallenge(t *testing.T) {
 	}
 }
 
-// **保存された答えは古いことがある。** 断られたら人に尋ね直す——一度で諦めると、
+// 保存された結果は古いことがある。断られたらユーザーに尋ね直す。一度で諦めると、
 // その alias は保管庫を直すまで開けなくなる。
 func TestAStaleStoredPasswordStillLetsTheUserAnswer(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "hunter2"})

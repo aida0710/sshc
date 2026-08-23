@@ -17,18 +17,18 @@ const (
 
 	// style-src だけが 'unsafe-inline' を持つ。
 	//
-	// **実測の結果である。** xterm.js は文字の実寸を測ってから、その寸法を
+	// 実測の結果である。xterm.js は文字の実寸を測ってから、その寸法を
 	// 持つ規則を <style> 要素として差し込み、DOM レンダラーは各セルへ
 	// setAttribute("style", …) を書く。nonce を渡す口は無い。したがって
 	// 埋め込みターミナルを持つには、インラインのスタイルを許すしかない。
 	//
-	// **緩めたのはここだけである。** script-src は 'self' のままで、
+	// 緩めたのはここだけである。script-src は 'self' のままで、
 	// require-trusted-types-for 'script' もそのままである。xterm.js の配布物には
 	// innerHTML も document.write も new Function も eval も無いので（5.5.0 と
 	// 6.0.0 の両方で 0 件）、スクリプト側は一文字も緩めずに済んでいる。
 	//
 	// 失ったもの: HTML を注入できる者は CSS も注入できる。得たもの: 端末が
-	// 描画できる。前者に必要な注入点をこのアプリケーションは持たない——React が
+	// 描画できる。前者に必要な注入点をこのアプリケーションは持たない。React が
 	// エスケープし、dangerouslySetInnerHTML はどこにも無く、スクリプトは
 	// 依然として止まる。README の「SSH 実行の境界」に同じことが書いてある。
 	contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; require-trusted-types-for 'script'"
@@ -47,19 +47,11 @@ type Security struct {
 	ExpectedHost   string
 	ExpectedOrigin string
 	Sessions       *session.Manager
-	// Unlocked はマスターパスワードが与えられたかどうかを報告する。
-	// vault そのものではなく関数にしてあるのは、このファイルが secret
-	// について何も知らないままでいるためであり、nil は施錠を意味する。
-	// 配線し忘れが、施錠された application と開いた application の違いになってはならない。
+	// Unlocked は vault のロック解除状態を返す。nil は安全側としてロック中と扱う。
 	Unlocked func() bool
 }
 
-// gateExempt は vault が施錠中でも応答するルートを名指しする。
-//
-// それらはゲート自身と、そもそも解錠すべき何かが生じる前に動く
-// 必要のある 2 つのものである。それ以外はすべてマスターパスワードの
-// 向こう側にあり、それが「application が施錠されている」の意味だ
-// ——「各画面が必要なときに尋ねる」ではない。以前はそうだった。
+// gateExempt は、vault がロック中でも利用できる初期化・認証ルートを指定する。
 func gateExempt(method, path string) bool {
 	switch path {
 	case "/api/v1/health":
@@ -98,9 +90,9 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		// この上限はリクエストへの制限であり、ハンドラがたまたま読む量への
 		// 制限にとどまらない。上限を超えると宣言された長さは、ハンドラが
-		// 実行される前に拒否される。だから body を無視するルート——現状の
+		// 実行される前に拒否される。だから body を無視するルート。現状の
 		// /diagnostics/config と /keys/:keyId/trash、そしてパスだけから
-		// 入力を得る後日追加されるどんなルートも——無制限の body を渡されずに済む。
+		// 入力を得る後日追加されるどんなルートも。無制限の body を渡されずに済む。
 		if request.ContentLength > MaxRequestBodyCeiling {
 			return problem(c, http.StatusRequestEntityTooLarge, "request_body_too_large")
 		}
@@ -136,7 +128,7 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		// トークンは書き込みだけでなく読み取りにも必要である。cookie は
 		// ポートに紐づかず site もそうなので、127.0.0.1 上の別のサーバーが
-		// これを受け取ってしまう——SameSite は scheme と registrable domain
+		// これを受け取ってしまう。SameSite は scheme と registrable domain
 		// を比較し、IP はそれ自体が site のすべてだからだ。トークンは
 		// ページのメモリに存在してそこへは決して渡らないため、それを要求
 		// することで漏洩した cookie 単体を無価値にしている。
@@ -154,13 +146,7 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return problem(c, http.StatusForbidden, "invalid_csrf")
 		}
 
-		// どの API ルートも主張しないパスは、ゲートではなく router が応答
-		// する。「そんなルートはない」と「vault が施錠中である」は別の
-		// 事実であり、両方に後者で答えれば、URL の typo が、ユーザーが
-		// 解錠すれば抜け出せる状態であるかのように見えてしまう。Middleware
-		// はルート検索の後に走るため、空のパターンは何もマッチしなかった
-		// ことを意味し、SPA の catch-all は API 内で何もマッチしなかった
-		// ことを意味する——/api/ 配下のすべてに自ら 404 を返すのだ。
+		// 未登録パスは router に 404 を返させ、vault_locked と区別する。
 		if claimed && !gateExempt(request.Method, request.URL.Path) && (s.Unlocked == nil || !s.Unlocked()) {
 			return problem(c, http.StatusConflict, "vault_locked")
 		}

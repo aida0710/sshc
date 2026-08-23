@@ -6,7 +6,7 @@ import (
 )
 
 // device と拡張名前空間の判定は、どの OS で走らせても同じでなければならない。
-// Windows で書かれた設定を Unix 側の道具が読んだときにも、同じ理由で同じように
+// Windows で書かれた設定を Unix 側のツールが読んだときにも、同じ理由で同じように
 // 拒む必要があるからだ。
 func TestSupportedRefusesWin32DeviceAndExtendedNamespacesOnEveryHost(t *testing.T) {
 	for _, path := range []string{

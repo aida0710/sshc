@@ -26,10 +26,7 @@ type remoteCall struct {
 	stdin   []byte
 }
 
-// scriptedRunner は、リモート実行の継ぎ目を差し替える。
-//
-// 本物の握手を見るのは internal/sshclient の側である。ここが確かめるのは、
-// **何がコマンドとして渡り、何が標準入力を通るか**である。
+// scriptedRunner は、コマンドと標準入力の内容を検証するリモート実行スタブ。
 type scriptedRunner struct {
 	calls    []remoteCall
 	outputs  []sshclient.Output
@@ -116,7 +113,7 @@ func TestRegisterProbesThenSendsTheKeyOnStandardInput(t *testing.T) {
 	if register.command != remotekey.Routine {
 		t.Errorf("registration command = %q", register.command)
 	}
-	// **公開鍵は標準入力を通る。コマンドには決して乗らない。**
+	// 公開鍵は標準入力だけで渡す。
 	if string(register.stdin) != keyLine+"\n" {
 		t.Errorf("stdin = %q, want the key line", register.stdin)
 	}
@@ -126,8 +123,7 @@ func TestRegisterProbesThenSendsTheKeyOnStandardInput(t *testing.T) {
 	if strings.Contains(remotekey.Routine, "fixture@example") {
 		t.Error("the remote routine must never contain caller input")
 	}
-	// **行き先は一度だけ決める。** 二度解決すると、その間に設定を書き換えた者が
-	// 二本目の行き先を変えられる。
+	// probe と登録処理の間で接続先を再解決しない。
 	if runner.resolved != 1 {
 		t.Errorf("the destination was resolved %d times, want once", runner.resolved)
 	}

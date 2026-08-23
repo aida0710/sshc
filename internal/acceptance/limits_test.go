@@ -92,7 +92,7 @@ func TestNoAPIRouteReadsAnUnboundedBody(t *testing.T) {
 func TestReportedCommandOutputStaysWithinItsPublishedCeiling(t *testing.T) {
 	f := newFixture(t)
 
-	// 相手が延々と喋る。**取り込む量にも、返す量にも上限がある。**
+	// 相手が延々と喋る。取り込む量にも、返す量にも上限がある。
 	f.scanner.answers(func() (sshclient.Probe, error) {
 		return sshclient.Probe{Banner: strings.Repeat("noisy banner line\n", 64<<10)},
 			errors.New("ssh: unable to authenticate")

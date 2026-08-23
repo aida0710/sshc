@@ -9,8 +9,8 @@ import (
 )
 
 // Seal は鍵だけで動き、開く操作はその鏡像である。すでに鍵を保持している
-// 呼び出し側 — 鍵を保持し、パスフレーズは意図的に保持しない vault — は、自分の
-// ファイルの隣にもうひとつ封をし、ユーザーに再度尋ねることなく読み戻すことが
+// 呼び出し側（鍵を保持し、パスフレーズは意図的に保持しない vault）は、自分の
+// ファイルの隣にもうひとつ暗号化し、ユーザーに再度尋ねることなく読み戻すことが
 // できる。
 func TestAKeyOpensWhatItSealed(t *testing.T) {
 	key, err := envelope.Derive("correct horse battery staple")
@@ -71,8 +71,8 @@ func TestAKeyRefusesTamperedBytes(t *testing.T) {
 //
 // アンロックも push も pull も導出を行い、三つとも普通のリクエストである。放って
 // おけば、タブがいくつか開いたページやスクリプトが、64 MiB ずつのものを何十個も
-// 要求しうる。これが加える待ち時間は無に等しく — 一人が操作するローカルの
-// インターフェースだ — 確保せずに済むメモリはギガバイト単位である。
+// 要求しうる。単一ユーザーが操作するローカルインターフェースでは、この制限による
+// 待ち時間はごく短い。一方、回避できるメモリ確保はギガバイト単位になる。
 func TestDerivationsDoNotAllRunAtOnce(t *testing.T) {
 	const attempts = 8
 	var running, peak int64
@@ -112,7 +112,7 @@ func TestDerivationsDoNotAllRunAtOnce(t *testing.T) {
 // 上限を課す。その中のパラメータを選んだのはそれを書いた誰かであり、コストを
 // 払うのは開くときだからである。
 func TestARemoteEnvelopeMayNotAskForWhatALocalOneMay(t *testing.T) {
-	// このインストールがローカルで受け入れるパラメータで封をしたもの。
+	// このインストールがローカルで受け入れるパラメータで暗号化したもの。
 	key, err := envelope.Derive("a passphrase long enough")
 	if err != nil {
 		t.Fatal(err)

@@ -20,26 +20,12 @@ import { GroupInspector } from "./GroupInspector";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 
 
-// depthOf はグループ名の中のディレクトリの数を数える。名前が階層を
-// 運ぶため、ツリーを描くのに他の何かを参照する必要はなく、
-// 親フィールドがファイルの実際の位置と食い違うことは決してない。
 export function depthOf(name: string): number {
   return name.split("/").length;
 }
 
-// treeOrder は親をその子の前に置き、兄弟を display order で並べる。
-// ツリーとはそう読めるべきものである。
-//
-// これは意図的に Include 行の順序とは違う。OpenSSH は最初に読んだ
-// 値を保つため、ディスク上では最も深いグループが先に来なければ、親の
-// 設定が自分の子のものに勝ってしまう。このパネルは以前その
-// 順序を画面でも使っており、すべての子が親の上に浮かび親が
-// 最後に来ていた——結果はネストがまるで機能していないかのように読めていた。
 export function treeOrder(groups: GroupMetadata[]): GroupMetadata[] {
   const orderOf = new Map(groups.map((group) => [group.name, group.order ?? 0]));
-  // key は各祖先の display order を自分自身のセグメントと交互に並べる。
-  // これにより二つの兄弟は、先頭の文字ではなく、パスが実際に分岐する
-  // 階層で order と名前によって比較される。
   const keyOf = (name: string): (number | string)[] => {
     const key: (number | string)[] = [];
     let prefix = "";
@@ -60,25 +46,14 @@ export function treeOrder(groups: GroupMetadata[]): GroupMetadata[] {
         ? first - second
         : String(first).localeCompare(String(second));
     }
-    // 一方の名前がもう一方の接頭辞であれば、それは祖先であり先に来る。
     return leftKey.length - rightKey.length;
   });
 }
 
-// グループ名は相対的なディレクトリパスであるため、パネルはサーバーも
-// 拒否するものをローカルに拒否する。ここでも行うのは重複のための
-// isValidGroupName は、規則の正本（internal/validate）から生成された表の上で判断する。
-//
-// **画面がこれを持つのは、往復の前に「どの文字が間違っているか」を言うためである。**
-// ここが持っていたのは書き写した表で、予約語は Go に 10・こちらに 6 あった——`rc` や
-// `environment` は緑を出してサーバーが invalid_request だけを返していた。
 export { isValidGroupName } from "../rules/rules";
 import { isValidGroupName } from "../rules/rules";
 
 type GroupsPanelProps = {
-  // インスペクターの中身を、シェルへ差し出す——接続画面が使うのと
-  // 同じ配置である。テストで単独でレンダリングされるパネルは何も渡さず、
-  // 単にペインを持たないだけである。
   onInspector?: (content: InspectorContent) => void;
 };
 
@@ -95,8 +70,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   const [removing, setRemoving] = useState<Record<string, string>>({});
   const [confirmingRemove, setConfirmingRemove] = useState<Record<string, boolean>>({});
   const [localError, setLocalError] = useState("");
-  // インスペクターがどのグループを記述しているか。行が選ばれるまで何も
-  // 選択されていないため、開いたばかりの画面ではペインは提示されない。
   const [selected, setSelected] = useState("");
   const newNameInput = useRef<HTMLInputElement>(null);
 
@@ -114,10 +87,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
     void reload();
   }, [reload]);
 
-  // ペインは選択されたグループに追従する。これが early return より上に
-  // あるのは hook がそうしなければならないからである。draft と
-  // 射影はここで防御的に読まれ、下の定数からではない。
-  // 定数は表示するものがあって初めて存在するからである。
   useEffect(() => {
     if (onInspector === undefined) return;
     const group = (metadata?.groups ?? []).find((candidate) => candidate.name === selected);
@@ -127,9 +96,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
     }
     onInspector({
       label: t("inspector.groupLabel"),
-      // ディレクトリのない宣言、あるいは何も宣言しないディレクトリはドットに
-      // 値する。空のグループはそうではない——それは作られた直後の
-      // すべてのグループが置かれる状態である。
       attention: (overview?.notices ?? []).some(
         (notice) =>
           notice.detail === group.name &&
@@ -145,9 +111,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
         />
       ),
     });
-    // updateGroup は draft を閉じ込め、それはメタデータと共に変わる。
-    // 本体はメモ化されるのではなくそれと共に再構築されるため、ペインが
-    // 古びたドキュメントを編集することは決してない。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, metadata, overview, onInspector]);
 
@@ -155,40 +118,17 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
     return <p role="status" className="text-sm text-ink-muted">{t("groups.loading")}</p>;
   }
 
-  // ホイストされた関数宣言は上の絞り込みを引き継がないため、
-  // 読み込まれたドキュメントはクロージャが使える non-null な const として一度だけ捕捉する。
   const loaded: Metadata = metadata;
   const savedMetadata: Metadata = overview.metadata;
   const hosts = overview.hosts;
   const groups = treeOrder(loaded.groups ?? []);
 
-  // このパネルには二種類のコントロールがあり、以前はその違いを何も
-  // 示していなかった。Colour、display order、新しいグループ、新しい
-  // 設定は Save して初めてディスクに届く draft への編集であり、名前変更
-  // と削除は押した瞬間にファイルを書き込む。そのためグループは追加され、
-  // 色を付けられ、設定を与えられた末に、離れることで失われ得た
-  // ——その隣の Remove ボタンは、その間ずっとディスクへコミットし続けていたにもかかわらず。
-  //
-  // draft はサーバーが最後に返したものと比較される。それが「まだ
-  // 書き込まれていない」ことについての唯一の正直な由来である。
-  // `group_empty`は意図的にその中に含まれていない。
-  //
-  // 何も入っていない宣言済みグループは不具合ではない。それは作られた
-  // 直後、そして最後の接続が出て行ったときに、すべてのグループが
-  // 置かれる状態である。OpenSSH は一致するファイルのない Include があっても
-  // 困らない。それを、ディレクトリのない宣言と何も宣言しないディレクトリ
-  // という二つの本物の不具合の隣にアンバーで報告することは、何かが
-  // 起きたことを意味するはずの colour を、何も起きていないことに
-  // 費やしてしまう。この空虚さは、落とすことでも隠されてはいなかった。各グループの行は既に
-  // "Members: none"と読めており、通知はそれをアンバーでもう一度言っていただけだった。
   const groupNotices = (overview.notices ?? []).filter((notice) =>
     ["group_not_declared", "group_directory_missing"].includes(notice.code),
   );
   const savedGroups = new Set((overview.metadata.groups ?? []).map((group) => group.name));
   const unsaved = JSON.stringify(loaded) !== JSON.stringify(overview.metadata);
 
-  // 所属はファイルが置かれている場所であり、射影は既にそれを
-  // パスから読み取っている。ここでメタデータフィールドを数えるものは何もない。
   function membersOf(name: string): string[] {
     return hosts.filter((host) => host.group === name).map((host) => host.identity.alias);
   }
@@ -208,8 +148,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
     setLocalError("");
   }
 
-  // グループは選択されたものである。以前はこれが、既にすべてのグループを
-  // 列挙しているページ上の三つ目のピッカーだった。
   function addSetting() {
     if (selected === "" || settingKeyword === "") {
       setLocalError(t("groups.chooseGroupAndKeyword"));
@@ -242,10 +180,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
     });
   }
 
-  // グループはディレクトリであるため、名前変更は N 個のファイル移動に加え
-  // Include 領域、さらにその鍵を名指すすべての IdentityFile に及ぶ
-  // ——クライアントには組み立てられない一つのトランザクションである。これは
-  // サーバー操作であり即座に適用される。このパネルが保持するドキュメントへの編集ではない。
   async function renameGroup(from: string) {
     if (unsaved) {
       setLocalError(t("groups.saveDraftFirst"));
@@ -261,8 +195,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       return;
     }
     if (groups.some((group) => group.name === target)) {
-      // 既存のグループへ名前変更することは二組の設定をマージすることに
-      // なるが、ここには誰もどちらが勝つべきか知らない。サーバーもそれを拒否する。
       setLocalError(t("groups.renameCollides", { name: target }));
       return;
     }
@@ -348,12 +280,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
         </div>
       </details>
       {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
-      {/*
-        宣言とディスクが互いについて何を語るか。connections/下にあり、
-        どの Include も名指さないディレクトリは、何よりもここで示す
-        価値があるものである。グループのように見えるが、その中身は
-        一度も読まれない。
-      */}
+
       <NoticeList notices={groupNotices} />
 
       <section className={sectionCard}>
@@ -380,8 +307,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
         {groups.map((group) => (
           <li
             key={group.name}
-            // グループを選択することがインスペクターを満たす。そのため行は、
-            // 接続ツリーと同じ方法でどれが開いているかを示す。
             onFocus={() => setSelected(group.name)}
             onClick={() => setSelected(group.name)}
             className={`rounded-xl border bg-card p-4 transition-colors ${
@@ -389,18 +314,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
             }`}
             style={{ marginInlineStart: `${(depthOf(group.name) - 1) * 1.5}rem` }}
           >
-            {/*
-              グループが*何であるか*——その名前、色、ファイルがどこにあり
-              誰がいるか——がヘッダーである。それを変えるものはすべて
-              罫線の下にある。この二つは以前、グループ一つにつき六つの
-              ラベル付きの箱を無差別に積んだ一つのスタックであり、四つの
-              グループに対しては事実がコントロールに埋もれたページになっていた。
 
-              見出しは依然として完全なパスであり、スクリーンリーダーと
-              その横の名前変更ボタンにとって、グループの唯一の名前であり
-              続ける。祖先の部分だけが薄く表示され、それが二つ目の
-              識別子を作ることなくツリーを読みやすくしている。
-            */}
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h3 className="flex items-baseline gap-2 text-sm font-medium">
                 <span
@@ -413,12 +327,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                 )}
                 <span>{group.name.slice(group.name.lastIndexOf("/") + 1)}</span>
               </h3>
-              {/*
-                見出しの外側に。内側に置くとバッジが見出しの
-                アクセシブルネームと区切りなしに結合してしまう——
-                "labNot saved"——隣接する要素は連結されるからである。
-                見出しはグループの名前であり、それ以外の何ものでもない。
-              */}
+
               {savedGroups.has(group.name) ? null : (
                 <span className="rounded border border-notice-line px-1.5 py-0.5 text-[10px] font-normal text-notice-ink">
                   {t("groups.unsaved")}
@@ -430,23 +339,13 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                   keys: `keys/${group.name}`,
                 })}
               </p>
-              {/*
-                Colour、display order、hiding は、このアプリケー
-                ションにとってグループがどう見えるかであり、それ以外
-                の何ものでもない——これらはどの設定ファイル
-                にもなく metadata.json にある——そのためインスペクターに
-                ある。接続の colour と tags が行った先と同じ場所
-                である。行に残るのは、グループが*何であるか*である。
-              */}
+
             </div>
             <p className="mt-1 text-xs text-ink-muted">
               {t("groups.members")}{" "}
               <span>{membersOf(group.name).length === 0 ? t("groups.noMembers") : membersOf(group.name).join(", ")}</span>
             </p>
-            {/*
-              空の設定一覧でも<ul>はレンダリングされていたため、
-              すべてのグループが誰も求めていない空の行を運んでいた。
-            */}
+
             {(group.settings ?? []).length === 0 ? null : (
               <ul className="mt-2 flex flex-col gap-0.5 font-mono text-xs text-ink-muted">
                 {(group.settings ?? []).map((setting, index) => (
@@ -455,24 +354,11 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
               </ul>
             )}
 
-            {/*
-              選択したグループに対してのみ。これら三つはファイルを書き
-              換える操作であり、すべてのグループがそれぞれ自分自身の
-              コピーを持てば、コントロールが事実を四対一で上回るページに
-              なる——それがこの画面を壁のように読ませていた原因である。
-            */}
+
             {selected !== group.name ? null : (
             <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-3 border-t border-line pt-3">
               <p className={`w-full ${hintText}`}>{t("groups.immediateActions")}</p>
-              {/*
-                目に見えるキャプションは短く、グループの名前は代わりに
-                アクセシブルネームに宿る。画面に全て書き出せば、四つの
-                グループが"Rename <name> to"と"Move the connections of
-                <name> into"を合わせて八回繰り返すことになり、それが
-                このパネルを言葉の壁にしていたことの大半である。目に
-                見えるテキストは依然としてアクセシブルネームの部分文字列で
-                あるため、両者が食い違うことは決してない。
-              */}
+
               <label htmlFor={`group-rename-${group.name}`} className="flex flex-col gap-1">
                 <span className={fieldLabel}>{t("groups.renameShort")}</span>
                 <span className="flex items-end gap-2">
@@ -492,19 +378,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                   </Button>
                 </span>
               </label>
-              {/*
-                以前、宛先は名前変更ボタンと削除ボタンの間に単独で
-                座るプルダウンであり、"Move connections to"とだけ
-                ラベルされていた。画面上の何もそれを削除に結び付けて
-                おらず、静かに何もしない三つ目の独立したアクションの
-                ように読め、ユーザーはもっともなことに、それが何のため
-                のものか尋ねた。
 
-                今ではそれは削除の中、削除が実際に何をするかを
-                述べる一文の後に置かれている——宣言が消え、接続
-                が移動し、ファイルは削除されない。その問いは、それが答え
-                られる瞬間に問われる。
-              */}
               {confirmingRemove[group.name] !== true ? (
                 <Button
                   onClick={() => setConfirmingRemove({ ...confirmingRemove, [group.name]: true })}
@@ -513,12 +387,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                   {t("groups.remove", { name: group.name })}
                 </Button>
               ) : null}
-              {/*
-                ネストは以前、ページ下部のテキストボックスの下にある
-                スラッシュについての一文を通してしか発見できなかった。
-                これはそれをグループがある場所に置き、ユーザーが子の
-                名前だけを入力すればよいようパスを事前に入力する。
-              */}
+
               <Button
                 onClick={() => {
                   setNewName(`${group.name}/`);
@@ -568,11 +437,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
                     </select>
                   </label>
                 )}
-                {/*
-                  失われないものは、失われるものと同じくらい重要
-                  である。ここでそれを述べることが、決断と無謀な
-                  賭けの違いになる。
-                */}
+
                 <p className={hintText}>{t("groups.removeKeepsFiles")}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -594,12 +459,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
         ))}
       </ul>
 
-      {/*
-        選択したグループに絞られているため、以前ここにあったピッカー
-        ——既にすべてを表示しているページ上の三つ目の"Choose a group"
-        ——はなくなった。既に一つが開いている画面でどのグループかを
-        尋ねることは、画面が既に答えていた問いを尋ねることだった。
-      */}
+
       {selected === "" ? null : (
       <section className={sectionCard}>
         <h3 className={sectionHeading}>{t("groups.settingHeadingFor", { name: selected })}</h3>
@@ -629,11 +489,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       </section>
       )}
 
-      {/*
-        このページ上のどのコントロールがいつ書き込むかは、どこにも述べ
-        られていなかった。それはここで一度だけ、書き込みを行う
-        ボタンの横で述べられる。
-      */}
+
       {unsaved ? (
         <section
           aria-label={t("groups.unsavedBarLabel")}

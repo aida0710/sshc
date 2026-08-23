@@ -455,9 +455,8 @@ func TestCommitAtomicRecoveryReconstructsProgressAfterRollbackAlsoFails(t *testi
 			}
 			if filepath.Dir(path) == filepath.Join(workspace.Root(), "sshc", journalDirectoryName) {
 				journalRenames++
-				// The third journal replacement records the first applied target.
-				// The fourth is CommitAtomic's attempt to durably record progress
-				// before rolling back.
+				// 3 回目の journal 置換は最初に適用した対象を記録し、4 回目は
+				// CommitAtomic がロールバック前に進捗を永続化する処理である。
 				if journalRenames == 3 || journalRenames == 4 {
 					return failure
 				}
@@ -1780,7 +1779,7 @@ var testSealMarker = []byte("sealed:")
 //
 // 以前は現状のディスクに対して検査していたので、呼び出し側は一方のトランザクション
 // でファイルを外へ移し、次のトランザクションでディレクトリを取り除かねばならな
-// かった — つまりグループ名の変更が自分で始めたことを終えられず、二つのあいだで
+// かった。つまりグループ名の変更が自分で始めたことを終えられず、二つのあいだで
 // クラッシュすれば空の抜け殻が残った。いまは、このリクエストが残すことになる
 // ディスクの状態に対して検査する。
 func TestADirectoryEmptiedByTheSameRequestIsRemoved(t *testing.T) {

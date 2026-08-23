@@ -10,12 +10,7 @@ import (
 	"sshc/internal/secret"
 )
 
-// **説明は、実装と同じだけ古くなる。** そして古くなった説明は、間違った
-// コードより長く生き残る——誰も走らせないからである。ここで固定するのは
-// 「読んだ人が実際にできること」であり、その一つひとつが今日の入口に対応する。
-//
-// 語そのものを検査するのは乱暴だが、代わりが無い。文章の意味を機械が読むより、
-// **決めごとを表す語が消えたら落ちる**方が、はるかに安く同じ効果を持つ。
+// README の操作説明が現在の CLI と一致することを検証する。
 
 func repositoryFile(t *testing.T, parts ...string) string {
 	t.Helper()
@@ -27,8 +22,7 @@ func repositoryFile(t *testing.T, parts ...string) string {
 	return string(contents)
 }
 
-// 旧版の語は、消えたのではなく置き換わった。**残っていれば、読んだ人は
-// 存在しない入口を打つ。**
+// 削除済みのコマンドを現行手順として案内していないことを検証する。
 func TestNoDocumentationTeachesTheRemovedEntryPoints(t *testing.T) {
 	// docs/superpowers は設計と計画の記録であり、そこには「何を消したか」が
 	// 書かれている。歴史を書いた文書から歴史の語を消させない。
@@ -48,8 +42,7 @@ func TestNoDocumentationTeachesTheRemovedEntryPoints(t *testing.T) {
 	}
 }
 
-// 読んだ人が最初に知る必要があるのは、**誰が engine を持つか**である。
-// ここが曖昧なままだと、裸の `sshc` を supervisor に登録する人が出る。
+// engine の起動方法と CLI の役割が明記されていることを検証する。
 func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 
@@ -63,18 +56,12 @@ func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
 		}
 	}
 
-	// **裸の `sshc` は engine を起こさない。** これを書いていないと、
-	// 「起動すればエンジンが上がる」という以前の理解が残る。
-	if !strings.Contains(readme, "エンジンは起こしません") {
+	if !strings.Contains(readme, "引数なしの `sshc` はエンジンを起動しません") {
 		t.Error("README does not say that bare sshc starts no engine")
 	}
 }
 
-// 保管庫の約束は、数字を伴って書かれていなければ意味が無い。
-//
-// **数字を書き写さない。** ここに "8 時間" と直に書いていたせいで、時計を 12 時間へ
-// 延ばしても検査は緑のままで、README だけが古い約束を語り続けた。定数から綴りを
-// 組み立てれば、次に延ばした人は README を直すまで赤を見る。
+// Vault のタイムアウトと入力経路が実装と一致することを検証する。
 func TestTheReadmeStatesTheVaultRules(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 
@@ -83,21 +70,25 @@ func TestTheReadmeStatesTheVaultRules(t *testing.T) {
 		t.Errorf("README does not state the idle timeout %q; internal/secret.IdleTimeout is %v",
 			stated, secret.IdleTimeout)
 	}
-	if !strings.Contains(readme, "端末からしか受け取りません") {
-		t.Error("README does not say vault passwords are typed only on a terminal")
+	for _, rule := range []struct {
+		text string
+		why  string
+	}{
+		{"Web UI または `sshc vault`", "the supported master-password entry points"},
+		{"CLI は対話端末からのみ", "the CLI TTY requirement"},
+		{"引数や環境変数", "the inputs rejected by the CLI"},
+	} {
+		if !strings.Contains(readme, rule.text) {
+			t.Errorf("README does not state %s (%q is missing)", rule.why, rule.text)
+		}
 	}
 }
 
-// **ログイン時起動は OS のものである。** sshc は unit も service も
-// スケジュールタスクも作らない。**エンジンを生かしておく道を一つも書かなければ、
-// 読んだ人は裸の `sshc` を supervisor に登録する。** あれはエンジンを起こさない。
-//
-// 登録するアプリはもう無いので、案内するのは OS のログイン項目ではなく、前面の
-// プロセスを持ち続ける作法である——tmux、systemd、launchd。
+// engine はフォアグラウンドで動作するため、プロセス管理方法を明記する。
 func TestTheReadmeSaysHowToKeepTheEngineAlive(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 
-	if !strings.Contains(readme, "ログイン時起動は OS") {
+	if !strings.Contains(readme, "自動起動は OS のプロセス管理機能で設定します") {
 		t.Error("README does not say autostart belongs to the operating system")
 	}
 	for _, how := range []string{"tmux", "systemd", "launchd"} {
@@ -105,8 +96,7 @@ func TestTheReadmeSaysHowToKeepTheEngineAlive(t *testing.T) {
 			t.Errorf("README does not say how to keep the engine alive: %q missing", how)
 		}
 	}
-	// **前面で走ることを言う。** detach しないことが、止め方が一つである理由である。
-	if !strings.Contains(readme, "detach しません") {
+	if !strings.Contains(readme, "デーモン化しません") {
 		t.Error("README does not say the engine never detaches")
 	}
 }

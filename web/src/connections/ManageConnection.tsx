@@ -48,7 +48,6 @@ export function ManageConnection({
     setComment(initialComment);
     setFile("");
     setConfirmingDelete(false);
-    // resetKey is the committed snapshot these independent controls describe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
@@ -139,16 +138,7 @@ export function ManageConnection({
         </div>
 
         <div className="border-t border-danger/30 pt-4">
-          {/*
-            **同じ場所を二度叩いても消えない。** かつてここは、押すと同じ位置の
-            ボタンが「削除を確定」に変わる形だった——触る画面では素早い二度押しが
-            そのまま通る。問いは別の場所に出て、開いた時点の focus は「やめる」側に
-            居る。
 
-            **戻せることは、問わない理由にはならない。** 履歴から戻せるのは
-            確かだが、それは消えたことに気付いた人にしか使えない。誤って
-            消したことに気付かなければ、戻す機会も来ない。
-          */}
           <Button kind="danger" onClick={() => setConfirmingDelete(true)}>{t("conn.delete")}</Button>
           {confirmingDelete ? (
             <ConfirmDialog

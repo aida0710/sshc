@@ -8,8 +8,7 @@ import (
 
 // TestOpeningAnSSHSessionStartsNoProcess は、B2 の中心的な主張である。
 //
-// 対話セッションはこのプロセスの中で SSH を話す。外部の ssh も、PTY を確保する
-// 継ぎ目も通らない。**ここが緑でなくなったら、権威が外に戻っている。**
+// 対話セッションが外部の ssh プロセスや PTY 中継を使用しないことを検証する。
 func TestOpeningAnSSHSessionStartsNoProcess(t *testing.T) {
 	f := newFixture(t)
 	f.terminal.reset()
@@ -41,14 +40,14 @@ func TestOpeningAnSSHSessionStartsNoProcess(t *testing.T) {
 // 設定が解決できない alias では、セッションそのものを作らない。
 //
 // 設定の問題は接続画面が既に表示できる。端末に理由を書く必要が無いばかりか、
-// 書けば「接続を試みた」という嘘になる。
+// 書けば「接続を試みた」という誤りになる。
 //
-// **例は ProxyCommand + ProxyJump である。** どちらも「どうやって届くか」を
-// 決めるものなので、両方書いた人は二つの違う答えを書いている。ssh も同じ設定を
+// 例は ProxyCommand + ProxyJump である。どちらも「どうやって届くか」を
+// 決めるものなので、両方書いたユーザーは二つの違う結果を書いている。ssh も同じ設定を
 // 断る（"inconsistent options: ProxyCommand+ProxyJump"）。
 //
-// かつてここは ProxyCommand ひとつを例にしていた。**あれは解決できないのでは
-// なく、このアプリケーションが断っていただけである** ——いまは起こすので、
+// かつてここは ProxyCommand ひとつを例にしていた。あれは解決できないのでは
+// なく、このアプリケーションが断っていただけである。いまは起動するので、
 // 例として成り立たない。
 func TestAnUnresolvableAliasOpensNoSession(t *testing.T) {
 	f := newFixture(t)

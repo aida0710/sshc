@@ -71,13 +71,11 @@ describe("SyncPanel", () => {
   it("says what travels before the form asks for anything", async () => {
     render(<SyncPanel api={buildApi(unconfigured, nothingToDo)} />);
 
-    expect(await screen.findByText(/including your private keys/)).toBeInTheDocument();
-    expect(screen.getByText(/attack that passphrase offline/)).toBeInTheDocument();
+    expect(await screen.findByText(/including private keys/)).toBeInTheDocument();
+    expect(screen.getByText(/guess the encryption key offline/)).toBeInTheDocument();
   });
 
   it("configures a bucket and clears the credentials from the form", async () => {
-    // 送信後もフィールドに残されたシークレットは、理由もなく DOM に
-    // 座り続けるシークレットだ。
     const api = buildApi(unconfigured, nothingToDo);
     render(<SyncPanel api={api} />);
 
@@ -114,9 +112,6 @@ describe("SyncPanel", () => {
     expect(screen.getByLabelText("Secret access key")).toHaveValue("");
   });
 
-  // リージョンは署名スコープに入る。R2 の "auto" と本物の AWS のバケットの
-  // リージョンでは違うので、空欄のままサーバーの既定に任せるのではなく、打ち込んだ
-  // ものがそのまま届かなければならない。
   it("sends the region it was given", async () => {
     const api = buildApi(unconfigured, nothingToDo);
     render(<SyncPanel api={api} />);
@@ -143,8 +138,6 @@ describe("SyncPanel", () => {
   });
 
   it("previews before it applies", async () => {
-    // 最初の押下で書き込んでしまう pull は、このアプリケーションで
-    // プレビューを飛ばす唯一の書き込みになってしまう。
     const api = buildApi(configured, {
       ...nothingToDo,
       applied: false,
@@ -160,15 +153,12 @@ describe("SyncPanel", () => {
     expect(await screen.findByText("connections/work/lon.conf")).toBeInTheDocument();
     expect(screen.getByText("connections/old.conf")).toBeInTheDocument();
 
-    // 消すものがあるので、適用の前に一度そう言わせる。
-    await userEvent.click(screen.getByRole("checkbox", { name: /overwrites files in ~\/.ssh/i }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /overwrite files in ~\/.ssh/i }));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
     await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith(true, undefined));
   });
 
   it("shows a conflict and refuses to apply it", async () => {
-    // 同じブロックを両方が変更した 2 つの設定に正しいマージはないので、
-    // これはファイルを名指して止まる。
     const api = buildApi(configured, {
       ...nothingToDo,
       applied: false,
@@ -180,7 +170,7 @@ describe("SyncPanel", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
 
-    expect(await screen.findByText(/changed here and on the other machine/)).toBeInTheDocument();
+    expect(await screen.findByText(/changed on this machine and another machine/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply the snapshot" })).toBeDisabled();
   });
 
@@ -251,7 +241,7 @@ describe("SyncPanel", () => {
     expect(await screen.findByRole("heading", { name: "Previous success" })).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "Push this workspace" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/live snapshot was not updated/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/current snapshot.*update was cancelled/i);
     expect(screen.getByRole("alert")).toHaveTextContent(/dated history copy.*may remain/i);
     expect(screen.getByRole("heading", { name: "Previous success" })).toBeInTheDocument();
   });
@@ -279,8 +269,6 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     expect(await screen.findByRole("button", { name: "Push this workspace" })).toBeDisabled();
-    // 理由はコントロールの隣に立つ。無効化されたボタンの隣に何もなければ、
-    // それは設定ではなく不具合に見えてしまう。
     expect(screen.getByText(/Set to receive only/)).toBeInTheDocument();
   });
 
@@ -296,8 +284,6 @@ describe("SyncPanel", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
 
-    // 見ることは動かすことではない。適用してはならないマシンでも、
-    // 自分がどれだけ遅れているかを知ることは許される。
     expect(await screen.findByText("config")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply the snapshot" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Push this workspace" })).toBeEnabled();
@@ -311,23 +297,18 @@ describe("SyncPanel", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Push this workspace" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/pull first|could not be pushed/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not be uploaded|download those changes first/i);
   });
-  // 設定は今やマスターパスワードで封印されているので、閉じた vault は
-  // このフォームを埋められない。それでも空のフォームを見せれば、
-  // 「バケットが消えた」と読め、ユーザーにアクセスキーの再入力を促してしまう。
   it("asks for the master password rather than showing an empty bucket form", async () => {
     const api = buildApi({ ...unconfigured, locked: true }, nothingToDo);
     render(<SyncPanel api={api} />);
 
     expect(await screen.findByLabelText("Master password")).toBeInTheDocument();
     expect(screen.queryByLabelText("Access key ID")).not.toBeInTheDocument();
-    expect(screen.getByText(/sealed with the master password/i)).toBeInTheDocument();
+    expect(screen.getByText(/encrypted with the master password/i)).toBeInTheDocument();
   });
 
   it("opens the vault in place and reads the settings back", async () => {
-    // 起動時には何も尋ねられない: これは画面が答えを必要とする瞬間に
-    // 自分自身のために尋ねているのだ。
     const syncStatus = vi
       .fn()
       .mockResolvedValueOnce({ ...unconfigured, locked: true })
@@ -344,9 +325,6 @@ describe("SyncPanel", () => {
     await waitFor(() => expect(api.unlockVault).toHaveBeenCalledWith("the master password"));
     expect(await screen.findByText("https://acc.r2.cloudflarestorage.com/sshc")).toBeInTheDocument();
   });
-  // 封をしているのはマスターパスワードではなく、保管庫の中の鍵である。開かない
-  // ときに言うべきことは「パスワードが違う」ではなく、「このバケットは、この
-  // マシンが鍵を持つ前に書かれたものかもしれない」である。
   it("points at the key, not the master password, when the snapshot does not open", async () => {
     const api = buildApi(configured, nothingToDo, {
       pushSnapshot: vi.fn().mockRejectedValue(new ApiError("wrong_passphrase", 403, null)),
@@ -355,11 +333,9 @@ describe("SyncPanel", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Push this workspace" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/stored key does not open/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/saved key cannot decrypt/i);
   });
 
-  // **鍵は一度しか見せない。** リモートを開ける値を、画面を開き直すたびに配る
-  // 画面にしてはならない。
   it("shows a generated key once and never asks for it again", async () => {
     const setSyncKey = vi.fn().mockResolvedValue({ key: "AB12-CD34-EF56-GH78-JK90-MN12" });
     const syncStatus = vi
@@ -373,12 +349,9 @@ describe("SyncPanel", () => {
 
     await waitFor(() => expect(setSyncKey).toHaveBeenCalledWith(undefined));
     expect(await screen.findByText("AB12-CD34-EF56-GH78-JK90-MN12")).toBeInTheDocument();
-    // そして押す前に、押した人が打つ欄はどこにも無い。
     expect(screen.queryByLabelText("Key")).not.toBeInTheDocument();
   });
 
-  // 自分で決める道も残っている。決めたものは表示しない——打った人はすでに知って
-  // いる。
   it("takes a key the person chose without echoing it back", async () => {
     const setSyncKey = vi.fn().mockResolvedValue({ key: "a key chosen by hand" });
     const api = buildApi({ ...configured, keyConfigured: false }, nothingToDo, { setSyncKey });
@@ -392,7 +365,6 @@ describe("SyncPanel", () => {
     expect(screen.queryByText("a key chosen by hand")).not.toBeInTheDocument();
   });
 
-  // 鍵が無ければ押せない。押せてしまえば、リモートには誰も開けない書庫が残る。
   it("offers no push or pull until a key exists", async () => {
     const api = buildApi({ ...configured, keyConfigured: false }, nothingToDo);
     render(<SyncPanel api={api} />);
@@ -401,8 +373,6 @@ describe("SyncPanel", () => {
     expect(screen.getByRole("button", { name: "Check for changes" })).toBeDisabled();
   });
 
-  // 設定は保持される前に試されるので、画面は何も保存されなかったと
-  // 言わなければならない——さもないと、ユーザーは保存されたと信じたまま去ってしまう。
   it("says nothing was saved when the bucket did not answer", async () => {
     const api = buildApi(unconfigured, nothingToDo, {
       configureSync: vi.fn().mockRejectedValue(new ApiError("bucket_refused", 502, null)),
@@ -432,8 +402,6 @@ describe("SyncPanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/no bucket name and no path/i);
   });
-  // **消すときだけ、もう一段いる。** 置き換えは History から戻せるが、消えた
-  // ファイルは画面から消える——押した人が中身を一度も見ていないこともある。
   it("will not apply a pull that removes files until it is told to go ahead", async () => {
     const removing = {
       applied: false,
@@ -451,11 +419,10 @@ describe("SyncPanel", () => {
     const apply = await screen.findByRole("button", { name: "Apply the snapshot" });
     expect(apply).toBeDisabled();
 
-    await userEvent.click(screen.getByRole("checkbox", { name: /overwrites files in ~\/.ssh/i }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /overwrite files in ~\/.ssh/i }));
     expect(apply).toBeEnabled();
   });
 
-  // 消さない pull を、余計な同意で止めない。
   it("applies a pull that only writes without asking again", async () => {
     const api = buildApi(configured, {
       applied: false,
@@ -473,9 +440,6 @@ describe("SyncPanel", () => {
     expect(screen.queryByRole("checkbox", { name: /overwrites files/i })).not.toBeInTheDocument();
   });
 
-  // **押さなくても進むが、黙って壊しはしない。** 巡回が止まったとき、画面は
-  // 何を待っているのかを言う——「同期に失敗しました」では、どこを見ればよいか
-  // 分からない。
   it("says what the loop is waiting for instead of only that it stopped", async () => {
     const api = buildApi(
       { ...configured, auto: { enabled: true, phase: "blocked", detail: "removals", at: "2026-08-18T00:00:00Z" } },
@@ -486,7 +450,6 @@ describe("SyncPanel", () => {
     expect(await screen.findByText(/would remove files from this machine/i)).toBeInTheDocument();
   });
 
-  // 切ったことは保管庫に残るので、押した結果は status で返ってくる。
   it("turns the loop on and keeps what the server answered", async () => {
     const setAutoSync = vi
       .fn()
@@ -500,8 +463,6 @@ describe("SyncPanel", () => {
     expect(await screen.findByRole("checkbox", { name: /Keep this machine in sync/i })).toBeChecked();
   });
 
-  // 巡回が入っていなければ「今すぐ」は押せない。押せてしまえば、起きていない
-  // ことを起きたと言うことになる。
   it("offers no manual cycle while the loop is off", async () => {
     const api = buildApi(configured, nothingToDo);
     render(<SyncPanel api={api} />);
@@ -509,9 +470,6 @@ describe("SyncPanel", () => {
     expect(await screen.findByRole("button", { name: "Sync now" })).toBeDisabled();
   });
 
-  // **選ぶ道が無ければ、自分の設定を持ったまま繋いだ 2 台目は一度も同期を
-  // 終えられない。** 選んでも書く前に同じプレビューが出る——寄せ先は適用では
-  // なく計画を変える。
   it("offers both sides of a conflict and previews the choice before applying it", async () => {
     const conflicted = {
       applied: false,
@@ -531,9 +489,8 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Take the other machine's version" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Use the other machine's version" }));
 
-    // 取り直したプレビューは、寄せ先を伴っている。まだ何も書いていない。
     await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, "remote"));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
     await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "remote"));

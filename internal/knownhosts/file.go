@@ -139,7 +139,7 @@ func Fingerprint(encodedKey string) (string, error) {
 //
 // ハッシュ化されたエントリは読み戻せないが、検査はできる。OpenSSH は
 // |1|base64(salt)|base64(HMAC-SHA1(salt, host)) を保存するので、同じ計算をすれば
-// 何も明かさずに問いに答えられる。
+// 何も明かさずに問いに判定できる。
 func (e *Entry) MatchesHost(host string) bool {
 	for _, pattern := range e.Hosts {
 		if e.Hashed {

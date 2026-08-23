@@ -25,19 +25,14 @@ const mutationLockName = ".cli.mutation.lock"
 // secretLength は、秘密の元になるランダムバイト数。
 const secretLength = 32
 
-// handoffDocumentMaxSize is intentionally separate from the general storage
-// limit. A handoff contains only one loopback endpoint and one short bearer
-// secret, so accepting megabytes would only create a same-user allocation
-// hazard. 4 KiB leaves ample room for future schema fields.
+// handoffDocumentMaxSize は一般のストレージ上限と分ける。handoff は loopback endpoint
+// 1 件と短い bearer secret だけを含むため、4 KiB で将来の schema field にも対応できる。
 const handoffDocumentMaxSize = 4 << 10
 
 // Owner は、engine の生存期間を引き受ける相手を表す。
 //
-// **いまは 1 つしかない。** かつては desktop（Electron の外殻が engine を子として
-// 抱える）と headless（端末や supervisor が持つ）に分かれていた。外殻が無くなり、
-// engine を生かしておくのは常に人（tmux でも systemd でも）になったので、区別も
-// 消えた。**値そのものは残す** ——handoff は engine の身元でもあり、別の engine を
-// 掴んでいないことをここで確かめている。
+// 現在の所有者は engine のみである。値は handoff 先の engine を識別し、別の engine
+// へ接続していないことを検証するために保持する。
 type Owner string
 
 const (
@@ -110,8 +105,8 @@ type handoffFileOperations struct {
 	remove func(*os.File, string) error
 }
 
-// write takes an operations value so failure tests can replace one operation
-// without racing other package tests through mutable global state.
+// write は operations を値で受け取り、失敗テストが変更可能なグローバル状態を介さずに
+// 1 つの操作だけを差し替えられるようにする。
 func write(directory string, document Handoff, operations writeOperations) error {
 	if err := validate(document); err != nil {
 		return err
@@ -167,7 +162,7 @@ func write(directory string, document Handoff, operations writeOperations) error
 // Read は、動作中のアプリケーションが残した検証済みの文書を返す。
 //
 // mutation lock は取らない。Rename により、見えるのは常に完全な旧文書か新文書
-// だけである。**Remove の側は違う** —— あちらは lock を保持したまま
+// だけである。Remove の側は違う。あちらは lock を保持したまま
 // readValidatedHandleWith を呼び、比較と削除の間に Write が割り込めないように
 // する。
 func Read(directory string) (Handoff, error) {

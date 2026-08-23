@@ -134,15 +134,15 @@ func TestExpandRouteStopsAtACycleAndReportsInvalidValues(t *testing.T) {
 	}
 }
 
-// **踏み台の値も Match の下から来る。**
+// 踏み台の値も Match の下から来る。
 //
 // 経路の展開は Project を使っていた。あれは Match ブロックを一切適用しない
-// ——条件が接続中の状態に依るからで、出所を並べる用途ではそれで正しい。
-// だが**ここが答えているのは出所ではなく、踏み台へ実際に繋ぐ宛先**である。
+// 条件が接続中の状態に依るからで、出所を並べる用途ではそれで正しい。
+// だがここが応答しているのは出所ではなく、踏み台へ実際に繋ぐ宛先である。
 //
 // 症状は静かではない。Project は Match の存在を complexity として記録し、
-// この段は Complex を立てる。**それでも HostName と User と Port そのものは
-// 間違ったまま画面に出る。** 「単純ではない」と言いながら、嘘の番号を見せる。
+// この段は Complex を立てる。それでも HostName と User と Port そのものは
+// 間違ったまま画面に出る。「単純ではない」と言いながら、誤りの番号を見せる。
 func TestExpandRouteReadsHopValuesThroughMatchBlocks(t *testing.T) {
 	graph := graphFor(t, map[string]string{
 		testConfig: "Host target\n" +
@@ -171,7 +171,7 @@ func TestExpandRouteReadsHopValuesThroughMatchBlocks(t *testing.T) {
 
 // ProxyJump そのものが Match の下に書かれていれば、経路は存在する。
 //
-// Project から読んでいる間、この設定の経路は**空**だった——画面は
+// Project から読んでいる間、この設定の経路は空だった。画面は
 // 「踏み台を通らない」と言い、実際には通る。
 func TestExpandRouteFindsAProxyJumpWrittenUnderMatch(t *testing.T) {
 	graph := graphFor(t, map[string]string{

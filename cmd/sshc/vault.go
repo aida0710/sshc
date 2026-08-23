@@ -87,7 +87,7 @@ func runVault(
 		return 130
 	}
 	if action == "status" {
-		// **`sshc status` と同じ表を出す。** 同じ内容を二通りに書いていた間、
+		// `sshc status` と同じ表を出す。同じ内容を二通りに書いていた間、
 		// 片方に項目を足しても、もう片方は古いままになった。
 		writeStatus(stdout, found, status)
 		return 0
@@ -439,9 +439,9 @@ func vaultClient(client *http.Client) *http.Client {
 	return &cloned
 }
 
-// vaultCommandClient separates interactive Vault operations from the short
-// connection probe timeout. Password changes may wait for two one-minute remote
-// snapshot writes, while cancellation still travels through the request context.
+// vaultCommandClient は対話的な Vault 操作を短い接続確認タイムアウトから分離する。
+// パスワード変更では最長 1 分のリモートスナップショット書き込みを 2 回待つ可能性が
+// あるが、キャンセルは引き続きリクエストコンテキストで伝播する。
 func vaultCommandClient(client *http.Client) *http.Client {
 	if client == nil {
 		client = http.DefaultClient
@@ -497,8 +497,8 @@ func vaultPassphrasePayload(password []byte) ([]byte, error) {
 	if totalSize > maxVaultRequestBody {
 		return nil, errVaultRequestTooLarge
 	}
-	// Exact capacity prevents append from abandoning heap buffers that contain
-	// partial copies of a password requiring JSON escaping.
+	// 容量を固定し、JSON エスケープ中の append がパスワードの断片を含むヒープバッファを
+	// 放棄しないようにする。
 	payload := make([]byte, 0, totalSize)
 	payload = append(payload, `{"passphrase":`...)
 	payload, err = appendVaultJSONString(payload, password)

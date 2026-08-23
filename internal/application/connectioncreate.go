@@ -24,8 +24,6 @@ var (
 )
 
 // CreateAuthenticationKind identifies the one source of authentication a new
-// connection uses. Passwords are written only to the encrypted vault; private
-// keys are represented in ssh_config by an IdentityFile directive.
 type CreateAuthenticationKind string
 
 const (
@@ -58,7 +56,6 @@ type CreateConnectionResult struct {
 }
 
 // CreateConnection creates a complete Host block and, for password modes, the
-// matching vault assignment in the same journalled storage transaction.
 func (s *Service) CreateConnection(
 	secrets *secret.Service,
 	inventory *keys.Inventory,

@@ -10,9 +10,6 @@ describe("icons", () => {
     }
   });
 
-  // 語の隣にあるアイコンは装飾であり、accessible name は語の方だ。
-  // 自分自身を読み上げてしまうアイコンがあれば、あらゆるナビゲーション
-  // ボタンがラベルを二重に読み上げてしまう。
   it("hides itself from the accessibility tree", () => {
     const { container } = render(<Icon name="keys" />);
     expect(container.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");

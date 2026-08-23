@@ -1,107 +1,114 @@
 # sshc
 
-`~/.ssh/config` を壊さずに読み書きする、SSH の設定と接続のための道具です。
+sshc は、OpenSSH の設定を管理し、SSH 接続を実行するためのアプリケーションです。`~/.ssh/config` を独自形式へ変換せず、コメント、記述順、空白を保ったまま編集します。
 
-**エンジンひとつと、ブラウザで開く画面ひとつ。** `sshc engine` が前面で走って
-HTTP で画面を配り、`sshc` がその入口を刷ります。設定ファイルは OpenSSH のもの
-そのままで、このアプリケーションが独自の形式へ移すことはありません。
+バックエンドは `sshc engine` で起動し、Web UI と API を提供します。`sshc` を実行すると、起動中のエンジンの URL を表示し、利用可能な環境ではブラウザを開きます。
 
-## 入れる
+## インストール
+
+macOS と Linux では Homebrew を利用できます。
 
 ```sh
 brew install aida0710/tap/sshc
 ```
 
-または[リリース](https://github.com/aida0710/sshc/releases)から自分の OS の
-実体を落として、PATH の通った場所へ置きます。
+または、インストールスクリプトを実行します。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
 ```
 
-**配るのは CLI ひとつです。** 署名も公証もインストーラも要りません。詳しくは
-[docs/release-install.md](docs/release-install.md)。
+Windows を含む各 OS 向けのバイナリと Android APK は、[GitHub Releases](https://github.com/aida0710/sshc/releases) からダウンロードできます。デスクトップアプリ、インストーラ、macOS の app bundle は配布していません。
 
-**0.3.x から上げる人は、旧アプリを外してください** ——残っていると Homebrew は
-新しい実体を張らず、古い方が走り続けます（[上げ方](docs/release-install.md#03x-から上げる)）。
+0.3.x 以前のデスクトップアプリから移行する場合は、古い cask と実行ファイルを削除してください。手順は[インストールガイド](docs/release-install.md#03x-からの移行)にあります。
 
-Android は[リリース](https://github.com/aida0710/sshc/releases)の APK です。
+## 基本的な使い方
 
-## 使う
+最初にエンジンを起動し、別のターミナルから UI を開きます。
 
 ```sh
-sshc engine      # エンジンを前面で起こす。この端末は開けたままにする
-sshc             # 別の端末から。入口を刷り、画面があればブラウザで開く
+sshc engine      # フォアグラウンドでエンジンを起動
+sshc             # URL を表示し、可能であればブラウザで開く
 ```
 
-**エンジンを生かしておくのは人です。** このアプリケーションは detach しません。
+`sshc engine` はデーモン化しません。常駐させる場合は tmux、systemd、launchd などのプロセス管理機能を使用してください。
+
+sshc はログイン時の自動起動を設定せず、systemd unit やスケジュールタスクも作成しません。自動起動は OS のプロセス管理機能で設定します。`sshc engine` をフォアグラウンドプロセスとして登録してください。
 
 ```sh
 tmux new -d -s sshc 'sshc engine'
 ```
 
-初回は保管庫がありません。エンジンがそう言うので作ります。
+初回起動時は、資格情報を保存する vault を作成します。
 
 ```sh
-sshc vault create    # マスターパスワードは端末からしか受け取りません
+sshc vault create
 sshc vault unlock
 ```
 
-端末から直接使うこともできます。
+マスターパスワードは Web UI または `sshc vault` から入力できます。CLI は対話端末からのみパスワードを読み取り、引数や環境変数からは受け取りません。
+
+SSH 接続は CLI から直接開始することもできます。
 
 ```sh
-sshc <接続先>              # 保存済みの答えを使って繋ぐ
-sshc run <接続先> <コマンド>  # 一度だけ走らせて、出力をそのまま返す
-sshc connect              # 一覧から選んで繋ぐ
-sshc list                 # Host の別名を並べる
-sshc status               # エンジンの状態を表で（--json で機械向け）
+sshc <接続先>                 # 保存済みの設定を使用して接続
+sshc run <接続先> <コマンド> # リモートコマンドを実行
+sshc connect                  # 一覧から接続先を選択
+sshc list                     # Host alias の一覧を表示
+sshc status                   # エンジンの状態を表示（--json に対応）
 ```
 
-**裸の `sshc` は、走っているものへの入口を刷るだけで、エンジンは起こしません。**
-`sshc engine --replace` で、走っているエンジンを止めて入れ替えられます。
+引数なしの `sshc` はエンジンを起動しません。実行中のエンジンを置き換えるには `sshc engine --replace` を使用します。
 
-ログイン時起動は OS に任せています。unit もスケジュールタスクも作りません
-——`tmux`、`systemd`（ユーザー単位）、`launchd` のどれでも、前面のプロセスとして
-扱えます。
+## 主な機能
 
-## できること
+- OpenSSH 互換の設定管理: コメント、記述順、空白を保ったまま編集し、外部変更との競合を検出します。
+- ブラウザ内ターミナル: ポート転送、エージェント転送、未知のホスト鍵の確認、切断時の再接続、`ProxyJump`、`ProxyCommand` に対応します。
+- 接続ログ: `ssh -v` 相当の情報を、4 段階の詳細度でターミナルに表示します。
+- 表示設定: 6 種類のカラーパレット、同梱の JetBrains Mono、背景画像を全体または接続ごとに設定できます。
+- SSH 鍵管理: 鍵の生成、パスフレーズ変更、ssh-agent への登録、リモートの `authorized_keys` への公開鍵追加に対応します。
+- 資格情報 vault: パスワードと鍵パスフレーズをマスターパスワードで暗号化します。12 時間操作がない場合は自動的にロックされます。ブラウザ向け API は保存値を返しません。CLI で接続するときは、その接続経路に必要な資格情報だけを、ローカルの handoff secret で認証した経路から CLI へ渡します。
+- S3 互換バックアップ: 暗号化したスナップショットを保存し、別の端末で復元できます。
 
-- **設定は OpenSSH のまま。** 無損失のパーサで読み書きするので、コメントも並び順も
-  空白も保たれます。編集は 3 者マージで、外から変えられていれば衝突として見せます
-- **埋め込みターミナル。** ブラウザの中で SSH を話します（ポート転送・agent 転送・
-  未知ホストの確認つき）。回線が切れたら繋ぎ直しに行きます（回数は設定で、0 なら
-  繋ぎ直しません）。`ProxyJump` と `ProxyCommand` のどちらも通ります
-- **接続のログ。** `ssh -v` と同じものを、コンソールそのものへ書きます。深さは 4 段
-- **見た目。** 配色 6 種・同梱の JetBrains Mono・背景画像を、接続ごとにも全体にも
-- **鍵の管理。** 生成・パスフレーズの変更・agent への登録・リモートの `authorized_keys` へ登録
-- **パスワードの保管庫。** マスターパスワードで封じ、**12 時間**触れられなければ
-  自分で閉じます。値はどの API も返しません
-- **S3 互換のバックアップ。** 封じたスナップショットを置き、別の端末へ引き取れます
-
-なぜそうしたか、何を引き受けないかは [docs/design.md](docs/design.md) にあります。
+設計上の判断と対象外の機能については、[設計概要](docs/design.md)を参照してください。
 
 ## 開発
 
-必要なもの: Go 1.26 / Node 22。
+Go 1.26 と Node.js 22 が必要です。
 
 ```sh
-make build       # web を焼き、bin/sshc を作る
-make test        # Go と web の全スイート
-make e2e         # 実バイナリに対する Playwright
-make integration # 実 sshd を相手にした統合（Docker）
-make generate    # api/openapi.yaml から Go と TypeScript を作り直す
+make build       # Web UI をビルドし、bin/sshc を生成
+make test        # Go と Web UI のテストを実行
+make e2e         # 実バイナリに対する Playwright テストを実行
+make generate    # OpenAPI から Go と TypeScript のコードを再生成
 ```
 
-**`internal/ui/dist` はコミットしてあります。** バイナリがそれを焼き込むので、
-web を直したら `make build` を通してからコミットしてください。CI が食い違いを
-落とします。
+S3 互換ストレージと OpenSSH に対する統合テストでは、先に Docker コンテナを起動します。
 
-Android の AAR は `make android-bind`（NDK が要ります）。
+```sh
+make integration-up
+make integration
+make integration-down
+```
 
-- [docs/design.md](docs/design.md) — なぜそうしたか
-- [docs/manual-acceptance.md](docs/manual-acceptance.md) — 機械で確かめられないもの
-- [docs/headless-examples.md](docs/headless-examples.md) — サーバーで走らせる
+`internal/ui/dist` はリポジトリに含まれ、Go バイナリへ埋め込まれます。`web` 以下を変更した場合は `make build` を実行し、生成物もコミットしてください。CI でソースとの不一致を検出します。
+
+Android AAR の生成には NDK が必要です。
+
+```sh
+go install golang.org/x/mobile/cmd/gobind
+make android-bind
+```
+
+関連資料:
+
+- [設計概要](docs/design.md)
+- [手動受け入れ試験](docs/manual-acceptance.md)
+- [エンジンの常駐例](docs/headless-examples.md)
+- [インストールとアップグレード](docs/release-install.md)
+- [リリース履歴](docs/releases/README.md)
+- [文章と用語のガイド](docs/writing-style.md)
 
 ## ライセンス
 
-MIT
+[Apache License 2.0](LICENSE)

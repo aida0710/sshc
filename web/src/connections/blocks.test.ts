@@ -22,9 +22,6 @@ describe("removeHostBlock", () => {
   });
 });
 
-// comment に意味を持たせたことで、ファイルを壊す新しい方法が生まれた。
-// 削除されたブロックに取り残された comment は、後に続くどのブロックにも
-// 付着し、黙ってその接続の説明になってしまう。
 describe("a block's attached comment", () => {
   const contents =
     "# the production bastion\n" +
@@ -52,12 +49,10 @@ describe("a block's attached comment", () => {
     const after = duplicateHostBlock(contents, "Host bastion\n\tPort 2222\n", "bastion", "bastion-copy", 3, 2);
 
     expect(after).toContain("# the production bastion\n# ask infra first\nHost bastion-copy\n\tPort 2222\n");
-    // 元は自分自身の comment を保つ。
     expect(after.match(/the production bastion/g)).toHaveLength(2);
   });
 
   it("removes a block that starts the file together with its comment", () => {
-    // lastIndexOf はファイルの先頭を越えて進んではならない。
     const after = removeHostBlock("# only\nHost nas\n", 2, "Host nas\n", 1);
     expect(after).toBe("");
   });

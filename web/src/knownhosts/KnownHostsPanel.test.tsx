@@ -89,8 +89,6 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   };
 }
 
-// openAddForm はスキャンを行い、スキャンが返した単一の候補について
-// 確認を開く。
 async function openAddForm(api: IntegrationsApi) {
   render(<KnownHostsPanel api={api} />);
   await userEvent.type(await screen.findByLabelText("Host to scan"), "new.example.com");
@@ -99,7 +97,7 @@ async function openAddForm(api: IntegrationsApi) {
   await userEvent.click(within(row).getByRole("button", { name: "Add" }));
 }
 
-const fingerprintField = /Fingerprint you obtained through another channel/;
+const fingerprintField = /Fingerprint verified through another channel/;
 const acknowledgement = /accept the risk/;
 
 describe("KnownHostsPanel", () => {
@@ -116,7 +114,6 @@ describe("KnownHostsPanel", () => {
 
     const row = await screen.findByRole("row", { name: /bastion\.example\.com/ });
     await userEvent.click(within(row).getByRole("button", { name: "Delete" }));
-    // 最初のクリックは尋ねるだけで、まだ何も削除されない。
     expect(api.deleteKnownHosts).not.toHaveBeenCalled();
 
     await userEvent.click(await screen.findByRole("button", { name: "Confirm delete" }));
@@ -139,8 +136,6 @@ describe("KnownHostsPanel", () => {
   });
 
   it("never labels a scanned key verified, even when the response claims it is", async () => {
-    // スキャンでは identity を確立できないので、ラベルは応答が運んだ
-    // フラグの性質ではなく、鍵をどう取得したかの性質だ。
     const api = buildApi({
       scanKnownHosts: vi.fn().mockResolvedValue(scanResult({ ...candidate, verified: true })),
     });
@@ -218,7 +213,6 @@ describe("KnownHostsPanel", () => {
         true,
       ),
     );
-    // 了承はリクエストと共に使い切られる。再度開けば再び尋ねられる。
     const row = await screen.findByRole("row", { name: /new\.example\.com/ });
     await userEvent.click(within(row).getByRole("button", { name: "Add" }));
     expect(screen.getByLabelText(acknowledgement)).not.toBeChecked();
@@ -247,8 +241,6 @@ describe("KnownHostsPanel", () => {
   });
 
   it("surfaces the refusal code from the add endpoint and stores nothing", async () => {
-    // React のテスト環境は window に自前のフラグを 1 つだけ設置する。
-    // それ以外の新しいグローバルがあれば、それはパネル由来のはずだ。
     const frameworkGlobals = ["IS_REACT_ACT_ENVIRONMENT"];
     const globalsBefore = Object.keys(window);
     const api = buildApi({
@@ -288,9 +280,6 @@ describe("KnownHostsPanel", () => {
 });
 
 describe("where the scan control sits", () => {
-  // スキャンはユーザーがこのパネルに来て行うことであり、ファイルを読むのは
-  // 結果を確認するために行うことだ。コントロールは一覧全体の下にあったので、
-  // そこに到達するには既知のホストすべてを越えてスクロールする必要があった。
   it("puts the host to scan above the search box and the listing", async () => {
     render(<KnownHostsPanel api={buildApi()} />);
     await screen.findByRole("row", { name: /bastion\.example\.com/ });
@@ -303,9 +292,6 @@ describe("where the scan control sits", () => {
     expect(scan.compareDocumentPosition(listing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  // 結果は、それを生み出したコントロールに続かなければならない。元の位置に
-  // 残していたら、候補リストは、ユーザーが追加しようとスキャンしている
-  // ファイルより下に置かれてしまっていた。
   it("keeps the scanned candidates with the control that asked for them", async () => {
     const user = userEvent.setup();
     render(<KnownHostsPanel api={buildApi()} />);

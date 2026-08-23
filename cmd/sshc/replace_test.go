@@ -8,7 +8,7 @@ import (
 	"sshc/internal/handoff"
 )
 
-// **旗は保存された設定より強い。** その場で決めた人が居るのに書いてある方を
+// 旗は保存された設定より強い。その場で決めたユーザーが居るのに書いてある方を
 // 使えば、打った番号がどこにも効かない。
 func TestEngineFlagsAreReadIntoTheInvocation(t *testing.T) {
 	for _, probe := range []struct {
@@ -21,7 +21,7 @@ func TestEngineFlagsAreReadIntoTheInvocation(t *testing.T) {
 		{args: []string{"--port", "34567"}, port: 34567},
 		{args: []string{"--replace"}, replace: true},
 		{args: []string{"--replace", "--port", "1024"}, port: 1024, replace: true},
-		// **範囲もここで断る。** 通すと、断るのは bind の失敗になり、打った人には
+		// 範囲もここで断る。通すと、断るのは bind の失敗になり、打ったユーザーには
 		// 「使えない番号」と「埋まっている番号」が同じに見える。
 		{args: []string{"--port", "80"}, invalid: true},
 		{args: []string{"--port", "65536"}, invalid: true},
@@ -47,13 +47,12 @@ func TestEngineFlagsAreReadIntoTheInvocation(t *testing.T) {
 	}
 }
 
-// **訊けない場面では訊かない。** 手順の中や supervisor の下で問いを出せば、
-// 答える人の居ない待ちで止まったままになる。
+// 対話入力できない環境では置換確認を行わない。
 func TestReplacingIsNotOfferedWhereNobodyCanAnswer(t *testing.T) {
 	found := handoff.Handoff{PID: 4242, URL: "http://127.0.0.1:34567"}
 	var out bytes.Buffer
 
-	// 端末ではない stdin。答えは No で、問いも出ない。
+	// 端末ではない stdin。結果は No で、問いも出ない。
 	if askToReplace(found, 0, false, strings.NewReader("y\n"), &out) {
 		t.Error("it asked a reader that is not a terminal")
 	}
@@ -62,7 +61,7 @@ func TestReplacingIsNotOfferedWhereNobodyCanAnswer(t *testing.T) {
 	}
 }
 
-// 旗を書いた人には従う。**端末かどうかは関係ない** ——先に答えを決めてある。
+// 旗を書いたユーザーには従う。端末かどうかは関係ない。先に結果を決めてある。
 func TestReplacingObeysTheFlagWithoutAsking(t *testing.T) {
 	var out bytes.Buffer
 	if !askToReplace(handoff.Handoff{PID: 1}, 3, true, strings.NewReader(""), &out) {

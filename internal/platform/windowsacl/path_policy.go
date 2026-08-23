@@ -5,9 +5,8 @@ import (
 	"strings"
 )
 
-// ValidatePrivatePath accepts only an absolute DOS drive descendant or an
-// ordinary UNC share descendant. sshc does not accept Windows device namespace
-// spellings for private state.
+// ValidatePrivatePath は DOS drive の絶対パス配下または通常の UNC share 配下だけを
+// 受け付ける。非公開状態のパスに Windows device namespace 表記は許可しない。
 func ValidatePrivatePath(path string) error {
 	return validateWindowsPrivateDirectoryPath(path)
 }

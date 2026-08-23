@@ -1,11 +1,11 @@
 // Package integration は、本物の sshc プロセスに対して契約を確かめる。
 //
-// **helper process ではなく、ビルドした実体を起こす。** ここで確かめるのは
+// helper process ではなく、ビルド済みバイナリを起動する。ここで確かめるのは
 // 所有権であり、それはプロセスと OS のロックとパイプの上にしかない。同じ
 // プロセスの中で関数を呼び合っても、二台目が一台目のロックに弾かれることも、
 // パイプが閉じて子が畳まれることも起きない。
 //
-// **HOME はテストごとに隔離する。** ここが起こすのは engine であり、engine は
+// HOME はテストごとに隔離する。ここが起動するのは engine であり、engine は
 // 利用者の ~/.ssh に触る。本物の HOME を見せれば、テストが開発者の handoff を
 // 書き換え、走っているアプリのロックを奪う。
 package integration
@@ -23,7 +23,7 @@ import (
 	"sshc/internal/handoff"
 )
 
-// binaryPath は、このパッケージが起こす sshc の実体である。TestMain が一度だけ
+// binaryPath は、このパッケージが起動する sshc バイナリである。TestMain が一度だけ
 // ビルドする。
 var binaryPath string
 
@@ -67,7 +67,7 @@ func (buffer *lockedBuffer) String() string {
 	return buffer.content.String()
 }
 
-// testProcess は、起こした sshc ひとつである。
+// testProcess は、起動した sshc ひとつである。
 type testProcess struct {
 	Command *exec.Cmd
 	Stdout  *lockedBuffer
@@ -79,7 +79,7 @@ type testProcess struct {
 func isolatedHome(t *testing.T) string {
 	t.Helper()
 	// macOS の TempDir は /var 経由の symlink を含みうる。engine は state
-	// ディレクトリを実体として扱うので、先に解いておく。
+	// symlink の解決結果がディレクトリになるため、先に実パスへ変換する。
 	home, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -93,11 +93,11 @@ func isolatedHome(t *testing.T) string {
 func osPath() string       { return os.Getenv("PATH") }
 func osSystemRoot() string { return os.Getenv("SystemRoot") }
 
-// start は、隔離された家の中で sshc をひとつ起こす。
+// start は、隔離された家の中で sshc をひとつ起動する。
 func start(t *testing.T, home string, args ...string) *testProcess {
 	t.Helper()
 	command := exec.Command(binaryPath, args...)
-	// **本物の環境をそのまま渡さない。** PATH と、Go が家を探すのに使う名前
+	// 本物の環境をそのまま渡さない。PATH と、Go が家を探すのに使う名前
 	// だけを与える。ここに残った HOME や USERPROFILE がひとつでも通れば、
 	// engine は開発者の ~/.ssh を開く。
 	command.Env = []string{
@@ -110,7 +110,7 @@ func start(t *testing.T, home string, args ...string) *testProcess {
 	return startPrepared(t, command)
 }
 
-// startPrepared は、組み立て済みの command を起こし、出力と終了を見張る。
+// startPrepared は、組み立て済みの command を起動し、出力と終了を監視する。
 func startPrepared(t *testing.T, command *exec.Cmd) *testProcess {
 	t.Helper()
 	process := &testProcess{
@@ -129,10 +129,10 @@ func startPrepared(t *testing.T, command *exec.Cmd) *testProcess {
 	return process
 }
 
-// startOwned は、engine を前面のプロセスとして起こす。
+// startOwned は、engine を前面のプロセスとして起動する。
 //
-// **所有権のチャンネルはもう無い。** かつては書ける側のパイプを閉じることが
-// engine への「終わってよい」だったが、外殻が消えたので、終わらせるのは信号か
+// 所有権のチャンネルはもう無い。かつては書ける側のパイプを閉じることが
+// engine への「終わってよい」だったが、ネイティブ層が消えたので、終わらせるのは信号か
 // この関数が返す handle だけである。
 func startOwned(t *testing.T, home string) *testProcess {
 	t.Helper()
@@ -180,7 +180,7 @@ func (process *testProcess) wait(t *testing.T, within time.Duration) int {
 	}
 }
 
-// running は、いまも走っているかを答える。
+// running は、いまも走っているかを返す。
 func (process *testProcess) running() bool {
 	select {
 	case err := <-process.exited:
@@ -202,8 +202,8 @@ func stateDir(home string) string {
 	return filepath.Join(home, ".ssh", "sshc")
 }
 
-// handoffPath は、この家の handoff 文書の場所である。名前は handoff.FileName が
-// 決めるので、ここで綴り直さない。
+// handoffPath は、テスト用ホームディレクトリ内の handoff ファイルを返す。
+// ファイル名には handoff.FileName を使用する。
 func handoffPath(home string) string {
 	return filepath.Join(stateDir(home), handoff.FileName)
 }
@@ -229,16 +229,16 @@ func waitForFile(t *testing.T, path string, within time.Duration, process *testP
 	t.Fatalf("%s never appeared", path)
 }
 
-// takeOverAsHeadless は、次の owner が席に着いて **自分の名前で handoff を
-// 書き直す**まで待つ。
+// takeOverAsHeadless は、次の owner が席に着いて 自分の名前で handoff を
+// 書き直すまで待つ。
 //
-// **handoff が在ることを、席を取れた証拠にしない。** 殺された engine の
+// handoff が在ることを、席を取れた証拠にしない。殺された engine の
 // handoff はそのまま残っているので、それを見ると、ロックに弾かれて今まさに
-// 終わろうとしているプロセスを成功として返す。名乗っている pid が起こした
+// 終わろうとしているプロセスを成功として返す。名乗っている pid が起動した
 // ものと一致することだけが証拠になる。
 //
-// **一度目で立てられることも前提にしない。** 殺されたプロセスのロックが OS
-// から外れるのは、その終了を親が回収した瞬間とは限らない——Windows の
+// 一度目で立てられることも前提にしない。殺されたプロセスのロックが OS
+// から外れるのは、その終了を親が回収した瞬間とは限らない。Windows の
 // LockFileEx はプロセスオブジェクトの破棄に伴って外れるので、混んだ機械では
 // 少し遅れる。製品はその間、正しく「既に走っている」と断る。確かめたいのは
 // 「席は必ず空く」ことであって、「一度目で空いている」ことではない。

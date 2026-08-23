@@ -94,7 +94,7 @@ func TestWriteAtomicallyPublishesOnePrivateValidatedDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Windows の Chmod は所有者の書き込みビットしか写さないので、この二つの mode
-	// は向こうでは何の約束も運ばない。同じ「本人以外は触れない」を Windows で
+	// は向こうでは何の約束も運ばない。同じ「ユーザー本人以外は触れない」を Windows で
 	// 確かめているのは permissions_windows_test.go の
 	// TestWriteRestrictsWindowsHandoffState であり、そちらは DACL を見ている。
 	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {

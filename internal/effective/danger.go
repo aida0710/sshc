@@ -25,7 +25,7 @@ const TokenEscapeWarning = "OpenSSH does not shell-escape the tokens it expands.
 
 // Executable は、OpenSSH にプログラムを実行させうるディレクティブひとつ。
 type Executable struct {
-	// Keyword は正規の綴り。Match の criterion の場合は "Match exec"。
+	// Keyword は正規の表記。Match の criterion の場合は "Match exec"。
 	Keyword string
 	// Command は、ファイルに現れるとおりの引数テキスト。
 	Command string
@@ -126,7 +126,7 @@ func (r Report) Unavoidable() []Executable {
 // Evidence は、確認ダイアログが表示しなければならない内容の安定したダイジェスト。
 //
 // アクショントークンはこの値に結び付けられるので、確認と実行のあいだに編集された
-// 設定は、黙って別のコマンドを実行するのではなく、その確認を無効に
+// 設定は、暗黙に別のコマンドを実行するのではなく、その確認を無効に
 // する。
 func (r Report) Evidence() string {
 	entries := make([]string, 0, len(r.Directives))

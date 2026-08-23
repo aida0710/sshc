@@ -113,16 +113,6 @@ func TestProjectHostFormKeepsEveryDirectiveIncludingUnknownOnes(t *testing.T) {
 	}
 }
 
-// Raw editor はこのテキストを書き戻し、delete はブロックを取り除いた
-// 上でのその書き込みである。したがって、生成領域を connection
-// の一部として示してしまうと、その connection に次に起きる編集が何であれ、
-// グループ宣言をその編集に委ねてしまう。書き換えれば失われ、削除すれば一緒に持ち去られる。
-// OpenSSH は、1 個のファイルの中だけでなく Include graph 全体を通じて
-// 最初に読んだ値を保持する。2 個のファイルが 1 個の alias を主張するのは、
-// まさにこの規則が存在する理由となるケースであり、どちらのファイルを
-// 見ても読者には見えないケースである。敗者は自分が置かれている場所
-// では完全に正しく見える。以前のようにチェックの key をファイルに
-// していたのでは、読者が既に並べて見比べられる 2 個のブロックしか捉えられなかった。
 func TestProjectHostsFlagsAnAliasDeclaredInAnotherFile(t *testing.T) {
 	graph := newTestGraph(t, map[string]string{
 		"config":              "Include conf.d/*.conf\n\nHost nas\n\tUser aida\n",
@@ -139,8 +129,6 @@ func TestProjectHostsFlagsAnAliasDeclaredInAnotherFile(t *testing.T) {
 	if len(claiming) != 2 {
 		t.Fatalf("hosts claiming nas = %d, want 2", len(claiming))
 	}
-	// Include はその行が置かれている場所で読まれるので、include された
-	// ファイルが勝ち、エントリファイル自身のブロックの方が負ける。
 	if claiming[0].Duplicate {
 		t.Errorf("the first block read must not be flagged: %#v", claiming[0])
 	}
@@ -255,9 +243,6 @@ func TestNewDiagnosticViewKeepsExternalPathsVisible(t *testing.T) {
 }
 
 func TestHostEntryGroupComesFromTheDirectoryNotFromMetadata(t *testing.T) {
-	// ディレクトリが membership である。それに反する metadata entry は、
-	// もはや反する相手を持たない。version 2 でそのフィールドは廃止され、
-	// connections/work から射影されたホストは、他の何が言おうと"work"を報告する。
 	graph := newTestGraph(t, map[string]string{
 		"config":                    "Include connections/work/*.conf\nInclude connections/*.conf\n",
 		"connections/work/web.conf": "Host web-1\n\tHostName 203.0.113.10\n",
@@ -272,8 +257,6 @@ func TestHostEntryGroupComesFromTheDirectoryNotFromMetadata(t *testing.T) {
 	if got := byAlias["web-1"].Group; got != "work" {
 		t.Errorf("web-1 group = %q, want work", got)
 	}
-	// connections/の直下にあるファイルはどのグループにも属さない。何もそれを
-	// 宣言せず何もそれを読まないので、それにグループを主張することは作り話になってしまう。
 	if got := byAlias["loose"].Group; got != "" {
 		t.Errorf("loose group = %q, want none", got)
 	}

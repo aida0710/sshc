@@ -27,9 +27,6 @@ describe("bootstrapSession", () => {
     expect(state.csrfToken).toBe(csrfToken);
   });
 
-  // フラグメントがないことはもはや失敗ではない——それはリロードであり、
-  // 以下で扱う。存在していて壊れているフラグメントは依然として失敗だ:
-  // 何かがそれを置いたのであり、それは私たちのものではない。
   it.each([
     ["short", "#bootstrap=short", "invalid_bootstrap_fragment"],
     ["overlong", `#bootstrap=${"b".repeat(64)}`, "invalid_bootstrap_fragment"],
@@ -75,9 +72,6 @@ describe("bootstrapSession", () => {
 });
 
 describe("a reload", () => {
-  // フラグメントは初回使用時に使い切られ、history.replaceState がそれを
-  // 取り除くので、リロードはクッキーだけを伴って届く。そこで例外を投げることが、
-  // バイナリを再起動するまであらゆるリロードでアプリケーションを殺していた原因だ。
   it("renews the token for the session the cookie already names", async () => {
     const replaceState = vi.fn();
     const csrfToken = "d".repeat(43);
@@ -93,14 +87,9 @@ describe("a reload", () => {
       credentials: "same-origin",
     }));
     expect(state.csrfToken).toBe(csrfToken);
-    // アドレスバーから取り除くものはない: そもそもフラグメントがなかったからだ。
     expect(replaceState).not.toHaveBeenCalled();
   });
 
-  // もはやセッションを名指さないクッキーは、ここでは回復できない:
-  // ブートストラップフラグメントは起動中のプロセスだけが出力する。エラーは
-  // 2 つの状況のどちらであるかを伝える。「sshc を再起動する」が答えになるのは
-  // 一方だけであり、もう一方には答えにならないからだ。
   it("says the session is gone when the cookie no longer names one", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response("", { status: 401 }));
 

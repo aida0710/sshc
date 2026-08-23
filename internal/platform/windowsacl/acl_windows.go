@@ -1,7 +1,6 @@
 //go:build windows
 
-// Package windowsacl applies the Windows ownership and DACL contract for
-// sshc's private state.
+// Package windowsacl は sshc の非公開状態に Windows の所有権と DACL の規則を適用する。
 package windowsacl
 
 import (
@@ -33,9 +32,8 @@ var (
 	ErrInvalidACL      = errors.New("private Windows object does not have the required ACL")
 )
 
-// CreateTemp creates a new empty file whose owner and protected DACL are
-// already effective when CreateFile returns. No secret bytes exist before this
-// boundary succeeds.
+// CreateTemp は、CreateFile が返る時点で所有者と保護 DACL が有効な空ファイルを作る。
+// この処理が成功する前に秘密のバイト列は書き込まれない。
 func CreateTemp(directory, prefix string) (*os.File, error) {
 	if err := ValidatePrivatePath(directory); err != nil {
 		return nil, err
@@ -73,9 +71,8 @@ func createTempWith(directory, prefix string, random io.Reader, create func(stri
 	return nil, fmt.Errorf("create private Windows temp: collision limit exceeded")
 }
 
-// OpenOrCreateFile creates a persistent empty private file atomically or opens
-// an existing current-user-owned regular file and tightens it through the same
-// handle returned to the caller.
+// OpenOrCreateFile は非公開の空ファイルをアトミックに作成する。既存の場合は、現在の
+// ユーザーが所有する通常ファイルを開き、呼び出し側へ返す同じハンドルで権限を制限する。
 func OpenOrCreateFile(path string) (*os.File, error) {
 	if err := ValidatePrivatePath(path); err != nil {
 		return nil, err
@@ -102,10 +99,9 @@ func OpenOrCreateFile(path string) (*os.File, error) {
 	return file, nil
 }
 
-// EnsureDirectory creates every missing component with the private descriptor.
-// Existing parents are left untouched; the requested final directory is opened
-// once, checked for current-user ownership/type/reparse state, and tightened
-// through that handle.
+// EnsureDirectory は不足している各要素を非公開 descriptor で作る。既存の親は変更せず、
+// 最終ディレクトリを一度だけ開いて現在ユーザーの所有権、種類、reparse 状態を検査し、
+// そのハンドルで権限を制限する。
 func EnsureDirectory(path string) error {
 	if err := validatePrivateDirectoryPath(path); err != nil {
 		return err
@@ -167,8 +163,8 @@ func ensureParents(path string) error {
 	return RestrictDirectory(parent)
 }
 
-// RestrictFile opens the final path without following a final reparse point and
-// applies the policy through that one handle.
+// RestrictFile は末尾の reparse point を追わずに最終パスを開き、そのハンドルで
+// ポリシーを適用する。
 func RestrictFile(path string) error {
 	if err := ValidatePrivatePath(path); err != nil {
 		return err
@@ -181,7 +177,7 @@ func RestrictFile(path string) error {
 	return restrictFileHandle(file)
 }
 
-// RestrictDirectory is the directory counterpart of RestrictFile.
+// RestrictDirectory は RestrictFile のディレクトリ版である。
 func RestrictDirectory(path string) error {
 	if err := validatePrivateDirectoryPath(path); err != nil {
 		return err
@@ -198,9 +194,8 @@ func restrictFileHandle(file *os.File) error {
 	return restrictHandle(file, false)
 }
 
-// RestrictFileHandle validates current-user ownership, regular-file type, and
-// final reparse state, then applies and re-reads the exact private DACL through
-// the supplied handle.
+// RestrictFileHandle は現在ユーザーの所有権、通常ファイルであること、末尾の reparse
+// 状態を検査し、渡されたハンドルで非公開 DACL を適用して再読込する。
 func RestrictFileHandle(file *os.File) error {
 	return restrictFileHandle(file)
 }
@@ -276,8 +271,8 @@ func restrictHandle(file *os.File, directory bool) error {
 	return nil
 }
 
-// IsRestrictedToCurrentUser opens and inspects one concrete non-reparse file or
-// directory. It never trusts a prior Restrict call or POSIX mode bits.
+// IsRestrictedToCurrentUser は reparse でないファイルまたはディレクトリを開いて検査する。
+// 以前の Restrict 呼び出しや POSIX mode bit は根拠にしない。
 func IsRestrictedToCurrentUser(path string) (bool, error) {
 	if err := ValidatePrivatePath(path); err != nil {
 		return false, err
@@ -303,16 +298,15 @@ func IsRestrictedToCurrentUser(path string) (bool, error) {
 	return isHandleRestricted(handle, directory, userSID)
 }
 
-// OpenAuthenticatedFile returns one regular file handle only after every path
-// component is opened without following reparses and owner/exact protected
-// DACL authentication succeeds on that same final handle. DELETE is requested
-// up front so a caller can remove this exact object later.
+// OpenAuthenticatedFile は各パス要素を reparse を追わずに開き、最終ハンドルで所有者と
+// 保護 DACL の検証に成功した後、その通常ファイルのハンドルを返す。後で同じオブジェクトを
+// 削除できるよう、DELETE 権限は最初に要求する。
 func OpenAuthenticatedFile(path string) (*os.File, error) {
 	return openAuthenticatedFile(path, true)
 }
 
-// OpenAuthenticatedFileForRead is the read-only counterpart. It avoids
-// requiring DELETE where a private-state consumer only needs bounded bytes.
+// OpenAuthenticatedFileForRead は読み取り専用版である。非公開状態を一定量読むだけの
+// 呼び出しでは DELETE 権限を要求しない。
 func OpenAuthenticatedFileForRead(path string) (*os.File, error) {
 	return openAuthenticatedFile(path, false)
 }
@@ -367,8 +361,8 @@ func authenticateHandle(handle windows.Handle, directory bool, userSID *windows.
 	return nil
 }
 
-// DeleteFileHandle marks the exact open regular file for deletion. The caller
-// must close the file to complete deletion.
+// DeleteFileHandle は開いている通常ファイルを削除対象にする。削除を完了するには
+// 呼び出し側がファイルを閉じる必要がある。
 func DeleteFileHandle(file *os.File) error {
 	if file == nil {
 		return os.ErrInvalid
@@ -436,8 +430,8 @@ func markFileForDeletion(handle windows.Handle) error {
 	)
 }
 
-// discardCreatedFile operates on the handle returned by CREATE_NEW. It never
-// removes a pathname that may have been replaced with an unrelated object.
+// discardCreatedFile は CREATE_NEW が返したハンドルだけを操作する。別のオブジェクトへ
+// 置換された可能性があるパス名は削除しない。
 func discardCreatedFile(file *os.File) error {
 	if file == nil {
 		return nil
@@ -646,10 +640,10 @@ func newPrivateSecurityDescriptor(directory bool) (*windows.SECURITY_DESCRIPTOR,
 
 // privateSecurityDescriptor は、この三者だけが触れる保護された記述子を作る。
 //
-// **ディレクトリの ACE は継承させる。** Windows で保護された DACL を付けると、
+// ディレクトリの ACE は継承させる。Windows で保護された DACL を付けると、
 // その配下で既に存在していたものが親から受け継いでいた ACE は、その場で剥がされる。
-// 継承しない ACE で締めると、締めた瞬間に中身が空の DACL になり、作った本人も
-// 開けなくなる——既存の state を締め直す道が、そこで途切れる。継承する ACE なら
+// 継承しない ACE で締めると、締めた瞬間に中身が空の DACL になり、作ったユーザー本人も
+// 開けなくなる。既存の state を締め直す道が、そこで途切れる。継承する ACE なら
 // 剥がされた分がこの三者に置き換わるので、まだ刻んでいない配下も同じ範囲に収まる。
 // 自分で作るものは常に P 付きの明示 ACE を持つので、継承がそれを緩めることはない。
 func privateSecurityDescriptor(userSID *windows.SID, directory bool) (*windows.SECURITY_DESCRIPTOR, error) {
@@ -676,12 +670,10 @@ func privateAceFlags(directory bool) uint8 {
 	return 0
 }
 
-// currentUserSID は、この利用者本人の SID を返す。
+// currentUserSID は、このユーザー本人の SID を返す。
 //
-// **DACL が名指すのはこの人である。** 所有者が誰であるかとは別の問いであり、
-// そちらは ownedByThisToken が答える。ここを所有者に変えると、昇格した環境では
-// DACL が Administrators を二度名指す形になり、期待する DACL と実際の DACL が
-// 一致しなくなる。
+// DACL には現在のユーザー SID を使用する。所有者は ownedByThisToken で別に判定する。
+// 所有者 SID を使用すると、昇格した環境で Administrators の ACE が重複する。
 func currentUserSID() (*windows.SID, error) {
 	token, err := windows.OpenCurrentProcessToken()
 	if err != nil {
@@ -730,8 +722,8 @@ func tokenOwnerSID(token windows.Token) (*windows.SID, error) {
 
 // ownedByThisToken は、その所有者が「自分のもの」と言えるかを判断する。
 //
-// この token の所有者そのものか、その利用者本人であればよい。昇格していない
-// ときに自分で作ったものと、昇格して作ったものは、どちらも同じ人のものである。
+// この token の所有者そのものか、そのユーザー本人であればよい。昇格していない
+// ときに自分で作ったものと、昇格して作ったものは、どちらも同じユーザーのものである。
 func ownedByThisToken(owner *windows.SID) (bool, error) {
 	if owner == nil {
 		return false, nil

@@ -12,10 +12,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// openFileNoReparse resolves every descendant relative to an already-opened
-// parent with OBJ_DONT_REPARSE. The final handle is therefore bound to the same
-// parent chain that was checked; a junction swap cannot redirect a later
-// path-based CreateFile call.
+// openFileNoReparse は開いた親を基準に、OBJ_DONT_REPARSE を指定して各子要素を解決する。
+// 最終ハンドルは検査した親の連鎖へ固定されるため、junction を置換して後続の CreateFile
+// を別のパスへ誘導することはできない。
 func openFileNoReparse(path string, access uint32) (*os.File, error) {
 	if err := ValidatePrivatePath(path); err != nil {
 		return nil, err
@@ -69,10 +68,9 @@ func openNoReparseRoot(path string) (windows.Handle, error) {
 	if err != nil {
 		return 0, err
 	}
-	// A drive/ordinary-UNC share root is the namespace anchor rather than an
-	// attacker-selected descendant. Avoid OPEN_REPARSE_POINT here because SMB
-	// servers need not implement it; every component below this handle still
-	// uses OBJ_DONT_REPARSE.
+	// drive または通常の UNC share root を名前空間の基点とする。SMB サーバーには
+	// OPEN_REPARSE_POINT の実装義務がないため、ここでは使用しない。このハンドルより下の
+	// 各要素には引き続き OBJ_DONT_REPARSE を使用する。
 	handle, err := windows.CreateFile(
 		pathUTF16,
 		windows.FILE_TRAVERSE,
@@ -123,7 +121,7 @@ func openRelativeNoReparse(parent windows.Handle, name string, access, createOpt
 // mapNoReparseError は、NtCreateFile が返す NTSTATUS を、この木の他の層が
 // 知っている形に直す。
 //
-// **NTSTATUS は fs.ErrNotExist に一致しない。** 「まだ無い」と「読めなかった」を
+// NTSTATUS は fs.ErrNotExist に一致しない。「まだ無い」と「読めなかった」を
 // errors.Is で分ける呼び出し側が上に何十とあり、生の NTSTATUS を返せば、まだ
 // 置かれていないだけの private state が読み取り失敗として扱われる。
 func mapNoReparseError(err error) error {

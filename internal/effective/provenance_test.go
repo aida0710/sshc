@@ -40,7 +40,7 @@ func TestProjectAttributesTheFirstValueOfEachKeyword(t *testing.T) {
 
 	// Include が 1 行目にあり、Host ブロックはその下にあるので、OpenSSH は Port 2222 に
 	// たどり着く前に conf.d/10-defaults.conf の全体を読む。最初の値が勝つので 9999 が
-	// 勝者である — ファイル順は読み込み順ではなく、この表明は以前これと逆のことを
+	// 勝者である。ファイル順は読み込み順ではなく、この表明は以前これと逆のことを
 	// 言っていた。
 	port, _ := projection.Value("port")
 	if port.Value != "9999" || port.Path != defaults {
@@ -152,10 +152,9 @@ func TestMatchPatternFollowsOpenSSHSemantics(t *testing.T) {
 }
 
 // OpenSSH は IdentityFile を積み上げる。最初の 1 つだけを勝たせると、2 行目を
-// 書いた人には「この行は効いていない」と表示されることになる。
+// 書いたユーザーには「この行は効いていない」と表示されることになる。
 //
-// 積み上がるキーワードの表は internal/application にだけあり、この射影は一律の
-// 先勝ちしか持っていなかった。同じ問いに答えるものが 2 つあれば、片方だけずれる。
+// 累積キーワードの射影が解決処理と同じ規則を使用することを検証する。
 func TestProjectKeepsEveryValueOfACumulativeKeyword(t *testing.T) {
 	graph := graphFor(t, map[string]string{
 		testConfig: "Host bastion\n" +
@@ -189,7 +188,7 @@ func TestCumulativeNamesOnlyTheKeywordsOpenSSHAccumulates(t *testing.T) {
 		}
 	}
 	// SetEnv はここにある。実機の ssh -G は、二行書くと最初の行しか出力しない
-	// ——複数の変数は `SetEnv ONE=1 TWO=2` と一行に並べる。
+	//複数の変数は `SetEnv ONE=1 TWO=2` と一行に並べる。
 	for _, keyword := range []string{"User", "Port", "HostName", "ProxyJump", "SetEnv"} {
 		if effective.Cumulative(keyword) {
 			t.Errorf("Cumulative(%q) = true", keyword)

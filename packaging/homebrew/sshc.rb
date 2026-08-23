@@ -1,22 +1,7 @@
-# これは tap `aida0710/homebrew-tap` に置く formula の正本である。
-#
-# **tap の名前は project 名ではない。** ひとつの tap に formula は何個でも入り、
-# GUI 用の Casks/ も同居できる。HashiCorp も GoReleaser も Charm も `homebrew-tap`
-# ひとつに全部置いており、利用者から見えるのは `brew install aida0710/tap/sshc`
-# である——**次に何かを配るときに、また tap を作らずに済む。**
-#
-# **ここが原本で、tap にあるのは写しである。** リリースのたびに
-# .github/workflows/release.yml が version と sha256 を差し替えて向こうへ押す。
-# tap の側を手で直すと、次のリリースで上書きされる。
-#
-# **ソースからビルドする。** ビルド済みバイナリを落とすだけの formula でも
-# 動きはするが、それができるのは `internal/ui/dist`（画面の束）がコミットされて
-# いるからで、**npm も Node も要らずに `go build` が通る。** できるならその方が、
-# 「brew が入れている」という利用者の期待と実際が一致する。
-#
-# macOS は CGO を切らない。**os/user.Current() があちらでは cgo を要る** ——
-# Makefile の RELEASE_TARGETS が darwin を :1 にしているのと同じ理由である。
-# std_go_args は CGO_ENABLED を触らないので、C コンパイラのある機械では既定で有効になる。
+# aida0710/homebrew-tap へ同期する Formula の正本。
+# release workflow がタグと SHA-256 を更新して tap へ反映する。
+# コミット済みの internal/ui/dist を含むソースから、Node.js なしでビルドする。
+# macOS の os/user.Current() に必要なため CGO は無効化しない。
 class Sshc < Formula
   desc "Manage OpenSSH configuration and connect from one window"
   homepage "https://github.com/aida0710/sshc"
@@ -28,24 +13,16 @@ class Sshc < Formula
   depends_on "go" => :build
 
   def install
-    # **main は ./cmd/sshc に居る。** 省くと root を建てようとして
-    # "no Go files in ..." で止まる——v0.3.1 の brew install がそれで落ちた。
-    #
-    # 版を焼き込む。main.version が既定の "dev" のままだと、走っているアプリと
-    # 端末側の版が食い違ったときに engine が出す理由が「dev と 0.3.1 は同じ版では
-    # ない」になる。**-s -w は書かない** ——std_go_args が既に足すので、重ねると
-    # `-ldflags=-s -w -s -w -X ...` になる。
+    # ./cmd/sshc をビルドし、実際のリリースバージョンを埋め込む。
+    # -s -w は std_go_args が追加するため重ねて指定しない。
     system "go", "build", *std_go_args(ldflags: "-X main.version=#{version}"), "./cmd/sshc"
   end
 
   test do
-    # **版を訊く道が、入ったものの上で通ることを見る。** ここが落ちるのは
-    # ldflags を間違えたときと、コマンドを消したときである。
+    # インストール済みバイナリのバージョンを検証する。
     assert_match "sshc #{version}", shell_output("#{bin}/sshc version")
 
-    # **engine の居ない機械でも、答えは人が読めるものである。** brew の test は
-    # 空の HOME で走るので、ここは必ず「engine が居ない」側を通る。黙って 0 を
-    # 返さないことと、道の綴りを投げ返さないことの両方を見る。
+    # engine が動作していない場合の終了コードとメッセージを検証する。
     output = shell_output("#{bin}/sshc status 2>&1", 1)
     assert_match "not running", output
     refute_match "no such file", output

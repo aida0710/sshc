@@ -7,17 +7,17 @@ import (
 	"time"
 )
 
-// **接続が終われば、プログラムも終わる。**
+// 接続が終われば、プログラムも終わる。
 //
-// 終わらなければ、繋いだ回数だけプロセスが増える——engine は何週間も走るので、
+// 終わらなければ、繋いだ回数だけプロセスが増える。engine は何週間も走るので、
 // それは静かに積み上がる。
 //
-// 内部から見るのは、**外から「終わった」ことを確かめる portable な手が無い**
+// 内部から見るのは、外から「終わった」ことを確かめる portable な手が無い
 // からである。プロセス表の読み方は OS ごとに違う。ここなら os/exec が
 // 保持している ProcessState をそのまま読める。
 func TestClosingTheTransportReapsTheCommand(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("綴りが違う。Windows は commandInterpreter の検査で見る")
+		t.Skip("Windows 固有の表記は commandInterpreter のテストで検証する")
 	}
 	conn, err := startProxyCommand("sleep 60")
 	if err != nil {
@@ -34,7 +34,7 @@ func TestClosingTheTransportReapsTheCommand(t *testing.T) {
 	if err := conn.Close(); err != nil {
 		t.Fatalf("Close = %v", err)
 	}
-	// **Close は待ってから返る。** 返った時点で ProcessState が埋まっていなければ、
+	// Close は待ってから返る。返った時点で ProcessState が埋まっていなければ、
 	// 待たずに手を離したということである。
 	if command.process.ProcessState == nil {
 		t.Fatal("Close returned before the command was reaped")
@@ -45,14 +45,14 @@ func TestClosingTheTransportReapsTheCommand(t *testing.T) {
 	}
 }
 
-// **締め切りは、どの OS でも効かなければならない。**
+// 締め切りは、どの OS でも効かなければならない。
 //
 // os.File の締め切りに任せると、Windows の匿名パイプはそれを支えないので、
 // あちらでだけ効かない締め切りができる。効かない締め切りは、無い締め切りより
-// 悪い——呼び出し側は掛けたつもりで待ち続ける。
+// 悪い。呼び出し側は掛けたつもりで待ち続ける。
 func TestAReadDeadlineEndsTheWaitEvenOnAPipe(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("綴りが違う。Windows は commandInterpreter の検査で見る")
+		t.Skip("Windows 固有の表記は commandInterpreter のテストで検証する")
 	}
 	conn, err := startProxyCommand("sleep 60")
 	if err != nil {
@@ -69,8 +69,7 @@ func TestAReadDeadlineEndsTheWaitEvenOnAPipe(t *testing.T) {
 	if err == nil {
 		t.Fatal("a command that says nothing returned bytes")
 	}
-	// **「閉じた」ではなく「間に合わなかった」と言う。** 相手が黙っているのと、
-	// こちらが畳んだのは違う出来事である。
+	// ローカルの締め切りによる終了は deadline error として返す。
 	if err != os.ErrDeadlineExceeded {
 		t.Errorf("Read = %v, want os.ErrDeadlineExceeded", err)
 	}
@@ -79,7 +78,7 @@ func TestAReadDeadlineEndsTheWaitEvenOnAPipe(t *testing.T) {
 	}
 }
 
-// **stderr は覚えるが、覚えすぎない。**
+// stderr は覚えるが、覚えすぎない。
 //
 // 何時間も喋り続けるプログラムがあれば、それはこのプロセスのメモリになる。
 func TestTheComplaintsBufferStopsAtItsLimit(t *testing.T) {
@@ -88,7 +87,7 @@ func TestTheComplaintsBufferStopsAtItsLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// **捨てた分も書けたと答える。** そうしないと os/exec は写しを止め、
+	// 捨てた分も書けたと返す。そうしないと os/exec は写しを止め、
 	// プログラム側の書き込みが詰まる。
 	if written != 16 {
 		t.Errorf("Write = %d, want 16", written)

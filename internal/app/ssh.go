@@ -22,11 +22,7 @@ import (
 // errNoConfiguration は、設定を読む手段が配線されていないことを報告する。
 var errNoConfiguration = errors.New("no configuration service is available")
 
-// sshParts は、プロセス内で SSH を話すのに要るものの全体である。
-//
-// **組み立てる場所はここひとつである。** 対話セッションも、認証テストも、
-// 公開鍵のリモート登録も、同じ鍵・同じ known_hosts・同じ解決器を使う。二箇所で
-// 組み立てると、片方だけが vault を見る日が来る。
+// sshParts は、プロセス内 SSH クライアントに必要な依存関係を保持する。
 type sshParts struct {
 	dialer  sshclient.Dialer
 	resolve sshclient.Resolver
@@ -34,13 +30,6 @@ type sshParts struct {
 }
 
 // newSSHParts は、プロセス内 SSH の部品一式を組む。
-//
-// **保存済みの答えがどこから来るかは、ここでは決めない。** engine は vault に
-// 訊き、`sshc <接続先>` は engine に訊いた結果を持って来る——出どころは違うが、
-// 組み上がるものは同じでなければならない。渡された 2 つの関数を Auth に差すこと
-// で、この形の宣言は 1 箇所に留まる。
-//
-// nil の関数は「保存済みを持たない」であり、そのときは端末で尋ねる形になる。
 func newSSHParts(
 	config *application.Service,
 	hosts *knownhosts.Service,
@@ -50,7 +39,7 @@ func newSSHParts(
 ) sshParts {
 	return sshParts{
 		dialer: sshclient.Dialer{
-			// **接続のたびに読む。** 設定は走っているあいだに変えられる。
+			// 接続のたびに読む。 設定は走っているあいだに変えられる。
 			Verbosity: func() sshclient.Verbosity {
 				return sshclient.Verbosity(config.TerminalSettings().Verbosity)
 			},
@@ -75,21 +64,11 @@ func newSSHParts(
 }
 
 // target は、alias ひとつ分の接続を組み立てる。
-//
-// **通知は Target が持っている。** 以前ここは第 2 の戻り値として受け取って
-// `_` で捨てており、「読むが従わない」と書いた 7 つのキーワード
-// （RemoteForward、ForwardX11、SendEnv……）は誰にも届いていなかった。
-// いまは接続を開くときに端末へ出る。
 func (p sshParts) target(alias string) (sshclient.Target, error) {
 	return sshclient.NewTarget(alias, p.resolve, p.home)
 }
 
 // connector は、埋め込みターミナルが開く対話セッションである。
-// aliases は、この接続に現れる alias を、手前から順に返す。
-//
-// **ProxyJump の手前に立つホストは、それ自身が alias である。** そこに保存された
-// パスワードを知らないまま繋ぎに行けば、連鎖の途中で手入力を求めることになる。
-// 解決できない設定では行き先だけを返す——その失敗を報告するのは接続の側である。
 func (p sshParts) aliases(alias string) []string {
 	target, err := p.target(alias)
 	if err != nil {
@@ -118,7 +97,7 @@ func (p sshParts) connector() httpserver.Connector {
 	}
 }
 
-// probe は、認証テストである。**何も尋ねない。**
+// probe は、認証テストである。何も尋ねない。
 func (p sshParts) probe() func(ctx context.Context, alias string) (sshclient.Probe, error) {
 	return func(ctx context.Context, alias string) (sshclient.Probe, error) {
 		target, err := p.target(alias)
@@ -129,7 +108,7 @@ func (p sshParts) probe() func(ctx context.Context, alias string) (sshclient.Pro
 	}
 }
 
-// run は、決まった接続でコマンドを 1 本走らせる。**何も尋ねない。**
+// run は、決まった接続でコマンドを 1 本走らせる。何も尋ねない。
 func (p sshParts) run() func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error) {
 	return func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error) {
 		return p.dialer.Run(ctx, target, command, stdin)
@@ -137,9 +116,6 @@ func (p sshParts) run() func(ctx context.Context, target sshclient.Target, comma
 }
 
 // storedPassphrase は、鍵の絶対パスを vault の保存値へ対応づける。
-//
-// vault が知っているのはワークスペース相対のパスである。~/.ssh の外にある鍵は
-// そこに現れないので、答えは「持っていない」——そのときは端末で尋ねる。
 func storedPassphrase(passwords *secret.Service, root string) func(string) (string, bool) {
 	if passwords == nil || root == "" {
 		return nil
@@ -154,11 +130,6 @@ func storedPassphrase(passwords *secret.Service, root string) func(string) (stri
 }
 
 // storedPassword は、alias について保存されたアカウントパスワードを返す。
-//
-// **鍵のパスフレーズとは別の名前空間である。** vault が閉じていれば
-// PasswordFor は空を返し、そのときは保存されていないのと同じに扱う——施錠中の
-// 保管庫は「知らない」のであって、「無い」のではないが、接続の側から見れば
-// どちらも尋ねるしかない。
 func storedPassword(passwords *secret.Service) func(string) (string, bool) {
 	if passwords == nil {
 		return nil
@@ -188,34 +159,21 @@ func readKnownHosts(hosts *knownhosts.Service) func() ([]byte, error) {
 }
 
 // addKnownHost は、受け入れた鍵を known_hosts へ書く。
-//
-// 通るのは Service であって、こちらがファイルを開くのではない。**書く場所が
-// 二つある状態を作らない**——あの画面と同じトランザクションを通す。
 func addKnownHost(hosts *knownhosts.Service) func(knownhosts.Candidate) error {
 	if hosts == nil {
 		return nil
 	}
 	return func(candidate knownhosts.Candidate) error {
 		// フィンガープリントは、いま握手した鍵そのものから計算されている。
-		// 人が端末でそれを見て受け入れたので、確認済みとして書ける。
 		_, err := hosts.Add(candidate, candidate.Fingerprint, false)
 		return err
 	}
 }
 
 // CLIConnection は、`sshc <接続先>` が使うプロセス内 SSH である。
-//
-// 常駐しているアプリケーションとは別のプロセスなので、vault は開けない——
-// あれの鍵は向こうのメモリにしかない。保存済みパスフレーズは向こうへ尋ね、
-// 届かなければ端末で尋ねる。**尋ねられる端末がここにはある**ので、届かない
-// ことは失敗ではない。問いは開いたセッションの出力を通って端末へ出る。
 type CLIConnection struct{ parts sshParts }
 
 // NewCLIConnection は、ホームディレクトリひとつからコマンドライン用の接続を組む。
-//
-// passphrase は、鍵のワークスペース相対パスに対する保存済みの答えを返す。
-// password は、alias に対する保存済みのアカウントパスワードを返す。**この二つは
-// 別の名前空間である。** どちらも nil でよく、そのときは端末で尋ねる。
 func NewCLIConnection(
 	home string,
 	passphrase func(relativePath string) (string, bool),
@@ -253,14 +211,6 @@ func (c CLIConnection) Open(ctx context.Context, alias string, size terminal.Siz
 }
 
 // Run は、この alias の相手でコマンドをひとつ走らせ、その終了状態を返す。
-//
-// **打たれたコマンドが設定より強い。** 設定の `RemoteCommand` は「この接続先へ
-// 繋いだら常にこれを走らせる」という指示だが、ここで渡されたものは、いま一度
-// これを走らせろという指示である。後者を無視して前者を走らせるのは、頼まれて
-// いないことを実行することになるので、Stream は渡された方だけを見る。
-//
-// **端末も要求しない。** 設定の `RequestTTY` がどうであれ、この入口が返すのは
-// 集めて読める出力であり、画面制御の混ざったものではない。
 func (c CLIConnection) Run(
 	ctx context.Context, alias, command string, streams sshclient.Streams,
 ) (int, error) {

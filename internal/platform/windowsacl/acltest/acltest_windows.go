@@ -1,7 +1,6 @@
 //go:build windows
 
-// Package acltest builds the private-state fixtures that the tests need and
-// that an ordinary write cannot produce.
+// Package acltest は通常の書き込みでは作れない非公開状態のテスト fixture を作る。
 package acltest
 
 import (
@@ -19,12 +18,12 @@ import (
 // InstallForeignOwner は、path の所有者を、この token のものではない SID にする。
 // DACL はこちらに全権を残すので、テストは後始末できる。
 //
-// **この token が所有者に指定できる SID は、どれも「自分のもの」である。**
-// TokenOwner と利用者本人、そして SE_GROUP_OWNER の付いたグループがそれで、
-// 昇格した環境ではその集合が {利用者, Administrators} に一致してしまう——
+// この token が所有者に指定できる SID は、どれも「自分のもの」である。
+// TokenOwner とユーザー本人、そして SE_GROUP_OWNER の付いたグループがそれで、
+// 昇格した環境ではその集合が {利用者, Administrators} に一致してしまう。
 // 所有者検査が受け入れるのと同じ集合である。その外側の SID を刻むには
 // SeRestorePrivilege が要る。持てない環境ではこの fixture は作れないので、
-// 黙って通すのではなく、作れなかったことを述べて skip する。
+// 暗黙に通すのではなく、作れなかったことを述べて skip する。
 func InstallForeignOwner(t *testing.T, path string) {
 	t.Helper()
 	var token windows.Token
@@ -122,9 +121,9 @@ func adjustRestorePrivilege(token windows.Token, attributes uint32) (windows.Tok
 	return previous, nil
 }
 
-// WritePrivateFile places a file that the private-state readers will accept.
+// WritePrivateFile は非公開状態の reader が受け付けるファイルを配置する。
 //
-// **中身を試すには、まず入れ物が正しくなければならない。** private state の
+// 中身を試すには、まず入れ物が正しくなければならない。private state の
 // 読み口は所有者と保護 DACL を先に確かめ、そこで断ったものは解析しない。素の
 // os.WriteFile ではそこへ届かないので、本番と同じ経路で作る。
 func WritePrivateFile(t *testing.T, path string, body []byte) {

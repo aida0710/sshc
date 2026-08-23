@@ -32,7 +32,7 @@ func TestRunSendsStdinAndReadsTheOutput(t *testing.T) {
 	if !strings.Contains(string(output.Stdout), "ssh-ed25519 AAAA fixture") {
 		t.Fatalf("stdout = %q", output.Stdout)
 	}
-	// **公開鍵が argv に乗ることは決してない。**
+	// 公開鍵が argv に乗ることは決してない。
 	if strings.Contains(server.Command(), "ssh-ed25519") {
 		t.Fatalf("the key reached the command line: %q", server.Command())
 	}
@@ -44,7 +44,7 @@ func TestRunSendsStdinAndReadsTheOutput(t *testing.T) {
 	}
 }
 
-// 端末は要求しない。無人の操作に端末は要らない。
+// 非対話処理なので端末を要求しない。
 func TestRunRequestsNoTerminal(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
@@ -60,7 +60,7 @@ func TestRunRequestsNoTerminal(t *testing.T) {
 	}
 }
 
-// 終了コードは結果であって失敗ではない。リモートが答えたのだから、その答えを返す。
+// 終了コードは結果であって失敗ではない。リモートが応答したのだから、その結果を返す。
 func TestRunReportsANonZeroExitAsAResult(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}, ExitCode: 3})
@@ -101,7 +101,7 @@ func TestRunCapsWhatItTakesIn(t *testing.T) {
 	}
 }
 
-// **何も尋ねない。** 無人で走る操作が人を待つことはない。
+// 非対話処理なのでユーザー入力を待たない。
 func TestRunNeverAsksTheUser(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "hunter2"})
 	// パスワード認証しか受け付けないサーバーに、尋ねる手段の無い接続で挑む。

@@ -14,18 +14,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// **この package が自分で綴る通信の型を、名前で並べない。**
+// この package が自分で綴る通信の型を、名前で並べない。
 //
 // internal/acceptance の drift 検査は application の型を openapi.yaml と
-// 突き合わせ、transport の検査は経路の一覧を突き合わせる。**その二つの網の
-// あいだに、httpserver が自分で持っている型がある** ——application のものでは
+// 突き合わせ、transport の検査は経路の一覧を突き合わせる。その二つの網の
+// あいだに、httpserver が自分で持っている型がある 。application のものでは
 // ないので前者に入らず、経路そのものではないので後者にも入らない。
 //
 // 実際そこで、problemPayload の blockers が長いあいだ契約に無いまま返り続けた。
 // Problem は additionalProperties: false なので契約違反の本文であり、しかも
-// 生成された型に入らないので**どのクライアントからも読めなかった。**
+// 生成された型に入らないのでどのクライアントからも読めなかった。
 //
-// **一覧を手で持つと、次に増えたものが同じ隙間に落ちる。** ソースから型を
+// 一覧を手で持つと、次に増えたものが同じ隙間に落ちる。ソースから型を
 // 拾い、契約に同じ名前のスキーマがあるものだけを突き合わせる。CLI と
 // WebSocket の型（connectRequest、resizeMessage…）は /api/v1 の外に住んで
 // いるので、対応するスキーマが無く、ここでは何も言わない。
@@ -43,7 +43,7 @@ func TestEveryWireTypeThisPackageSpellsMatchesTheContract(t *testing.T) {
 			t.Errorf("%s: openapi.yaml が約束している形と、実際に返している形が違う\n  契約: %v\n  応答: %v",
 				name, promised, fields)
 		}
-		// **additionalProperties が false であることまで見る。** 緩めば契約は
+		// additionalProperties が false であることまで見る。緩めば契約は
 		// 「知らない項目を返してよい」と言い出し、上の比較の意味が消える。
 		if allowed, _ := schema["additionalProperties"].(bool); allowed {
 			t.Errorf("%s allows unknown members, so comparing it means nothing", name)
@@ -51,8 +51,8 @@ func TestEveryWireTypeThisPackageSpellsMatchesTheContract(t *testing.T) {
 		checked++
 	}
 
-	// **ゼロ件で緑にならない。** 型の拾い方を壊したら、この検査は何も言わずに
-	// 通る——それは、隙間をもう一度作ることである。
+	// ゼロ件で緑にならない。型の拾い方を壊したら、この検査は何も言わずに
+	// 通る。それは、隙間をもう一度作ることである。
 	if checked < 2 {
 		t.Errorf("only %d wire types were compared; the way they are collected is broken", checked)
 	}
@@ -91,7 +91,7 @@ func propertyNames(schema map[string]any) []string {
 
 // schemaNameFor は、Go の型名に対応するスキーマの名前を探す。
 //
-// **payload・request・response の接尾辞は Go 側の都合である。** 契約の側は
+// payload・request・response の接尾辞は Go 側の都合である。契約の側は
 // Problem であって problemPayload ではない。
 func schemaNameFor(gotype string, schemas map[string]map[string]any) string {
 	lowered := strings.ToLower(gotype)

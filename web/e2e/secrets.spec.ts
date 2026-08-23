@@ -7,9 +7,6 @@ import {
   test,
 } from "./support/environment";
 
-// この機能全体が存在する理由となる構成を、使い捨ての HOME に対して
-// ビルド済みバイナリで動かす。1 つの名前の下にある 1 つの secret、それを
-// 指す 2 つのホスト、そしてどちらの名前も含まないディスク上のファイル。
 test("gives one named secret to two hosts and writes neither name into the file", async ({
   page,
   installation,
@@ -24,11 +21,8 @@ test("gives one named secret to two hosts and writes neither name into the file"
   await passwords.getByRole("button", { name: "Store account password" }).click();
 
   await expect(passwords.getByRole("button", { name: "Delete office-vm" })).toBeVisible();
-  // 一覧が示すのは名前とそれを使うものであり、値は決して示さない。
   await expect(page.locator("body")).not.toContainText("hunter2");
 
-  // 2 つのホスト、1 つの名前。それぞれが自分自身の画面から
-  // それを選び、そこがホストのパスワードを選ぶ唯一の場所だ。
   for (const alias of ["bastion", "nas"]) {
     await openSection(page, "Connections");
     await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: alias }).click();
@@ -52,17 +46,12 @@ test("gives one named secret to two hosts and writes neither name into the file"
   const assignedHosts = office.getByRole("list", { name: "Assigned hosts" });
   await expect(assignedHosts.getByRole("listitem")).toHaveText(["bastion", "nas"]);
 
-  // そして封印されたファイルはそのどれも含まない。secret も、
-  // 名前も、それを指すホストも含まない。
   const sealed = await installation.read("sshc/secrets");
   for (const absent of ["hunter2", "office-vm", "bastion", "nas"]) {
     expect(sealed).not.toContain(absent);
   }
 });
 
-// このピッカーに鍵のパスフレーズが入っていれば、次の接続でログインパス
-// ワードとしてリモートホストへ送られてしまう。2 つの名前空間が 2 つに分かれ
-// ているのは、どの画面もそれについて気を配らずに済むようにするためだ。
 test("never offers a key passphrase where a host password is chosen", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Secrets");
@@ -78,8 +67,6 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
 
   const panel = page.getByRole("region", { name: "Authentication" });
   await panel.getByLabel("Stored password action").selectOption("saved_password");
-  // アカウントパスワードはそもそも存在しないため、ピッカーは
-  // 誤った種類のものを提供する場として存在しない。
   await expect(panel.getByLabel("Saved password").locator("option")).toHaveCount(1);
   await expect(panel.getByRole("option", { name: "build-key" })).toHaveCount(0);
 });

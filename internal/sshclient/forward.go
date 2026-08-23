@@ -19,8 +19,8 @@ import (
 // LoopbackHost は、転送が bind する唯一のアドレスである。
 //
 // OpenSSH は `LocalForward 0.0.0.0:8080` や `GatewayPorts yes` で他の機械へ
-// 開けるが、**このアプリケーションは開かない。** 常駐するプロセスが同じ機械の
-// 他の面——HTTP サーバーも vault も——をループバックに閉じているのと同じ判断で
+// 開けるが、このアプリケーションは開かない。常駐するプロセスが同じ機械の
+// 他の面。HTTP サーバーも vault も。をループバックに閉じているのと同じ判断で
 // ある。
 const LoopbackHost = "127.0.0.1"
 
@@ -137,7 +137,7 @@ func (f *forwards) list() []terminal.Forward {
 
 // close は、開いた listener をすべて閉じる。
 //
-// **閉じ忘れたポートは、そのプロセスが死ぬまで埋まる。**
+// 閉じ忘れたポートは、そのプロセスが終了するまで埋まる。
 func (f *forwards) close() {
 	f.mutex.Lock()
 	listeners := f.listeners
@@ -150,7 +150,7 @@ func (f *forwards) close() {
 
 // open は、この接続の上に設定が求めた転送を開く。
 //
-// **開けなかった転送があっても接続は続ける。** ポートが埋まっているのは普通の
+// 開けなかった転送があっても接続は続ける。ポートが埋まっているのは普通の
 // 出来事であり、それを理由にセッションごと失う方が困る。理由はその転送の
 // Problem に残り、端末にも 1 行出る。
 func (f *forwards) open(client *ssh.Client, specs []ForwardSpec, report io.Writer) {
@@ -195,7 +195,7 @@ func accept(listener net.Listener, client *ssh.Client, spec ForwardSpec) {
 // 順番が要点である: 先に FIN を送って「もう書かない」と伝え、それから残りを
 // 読み捨てる。未読を空にしてから閉じるので RST にならない。
 //
-// **際限なく読まない。** 相手が流し続けるなら、こちらが断った事実は既に
+// 際限なく読まない。相手が流し続けるなら、こちらが断った事実は既に
 // 書き終えている。上限と締切の両方を置く。
 func lingeringClose(conn net.Conn) {
 	if half, ok := conn.(interface{ CloseWrite() error }); ok {
@@ -212,14 +212,14 @@ func serve(local net.Conn, client *ssh.Client, spec ForwardSpec) {
 	if spec.Kind == terminal.ForwardDynamic {
 		asked, err := readSOCKS5(local)
 		if err != nil {
-			// **断りを届けてから閉じる。** readSOCKS5 は要求を最後まで
+			// 断りを届けてから閉じる。readSOCKS5 は要求を最後まで
 			// 読まずに断るので、受信バッファに未読が残る。そのまま閉じると
-			// TCP は FIN ではなく RST を送り、**RST を受けた側は受信済みの
-			// データを捨てる** ——直前に書いた断りが、相手に届かずに消える。
+			// TCP は FIN ではなく RST を送り、RST を受けた側は受信済みの
+			// データを捨てる 。直前に書いた断りが、相手に届かずに消える。
 			//
 			// Linux と macOS では、たいてい相手が先に読み終えているので
-			// 表に出なかった。Windows で出た。**プロトコルの側が正しく、
-			// 運が良かっただけである。**
+			// 表に出なかった。Windows で出た。プロトコルの側が正しく、
+			// 運が良かっただけである。
 			lingeringClose(local)
 			return
 		}
@@ -228,7 +228,7 @@ func serve(local net.Conn, client *ssh.Client, spec ForwardSpec) {
 
 	remote, err := client.Dial("tcp", destination)
 	if err != nil {
-		// **この 1 本だけを閉じる。** listener は生きている。
+		// この 1 本だけを閉じる。listener は実行中。
 		return
 	}
 	defer func() { _ = remote.Close() }()
@@ -241,7 +241,7 @@ func serve(local net.Conn, client *ssh.Client, spec ForwardSpec) {
 
 // forwardAgent は、こちらの agent をリモートへ貸す。
 //
-// **鍵そのものは渡らない。渡るのは鍵を使う権利である。** リモートのプロセスが
+// 鍵そのものは渡らない。渡るのは鍵を使う権利である。リモートのプロセスが
 // 署名を求めると、その要求はこのチャンネルを通ってこちらの agent へ届く。
 func forwardAgent(client *ssh.Client, session *ssh.Session, socket string, report io.Writer) terminal.Forward {
 	entry := terminal.Forward{Kind: terminal.ForwardAgent}

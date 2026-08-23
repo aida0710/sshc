@@ -11,7 +11,7 @@ import (
 // このファイルは、Unix のシェル探索でしか言えないことを持つ。/bin/sh はどの
 // Unix にもあり、Windows には無い。実行ビットも向こうには無く、ハイフン付きの
 // argv[0] を読むシェルも居ない。同じ検査を両方で走らせると、落ちるだけでなく
-// 「ここに同じ規則がある」という嘘が残る。対になる shell_windows_test.go が
+// 「ここに同じ規則がある」という誤りが残る。対になる shell_windows_test.go が
 // 向こうの規則を確かめる。
 
 func TestTheLoginShellIsTheOneTheUserChose(t *testing.T) {
@@ -26,7 +26,7 @@ func TestTheLoginShellIsTheOneTheUserChose(t *testing.T) {
 	}
 }
 
-// **PATH 経由で解決される綴りは受け取らない。** 受け取れば、端末に渡るのは
+// PATH 経由で解決される表記は受け取らない。受け取れば、端末に渡るのは
 // このアプリケーションが選んだのではないプログラムになる。ディレクトリと、
 // 実行できないファイルも同じく候補ではない。
 func TestTheLoginShellFallsBackWhenTheChoiceIsNotAShell(t *testing.T) {
@@ -70,7 +70,7 @@ func TestTheLoginArgv0CarriesTheHyphen(t *testing.T) {
 	}
 }
 
-// Android には /bin/bash も /bin/zsh も居ない。**/bin/sh すら居ない** ——
+// Android には /bin/bash も /bin/zsh も居ない。/bin/sh すら居ない。
 // Android の sh は /system/bin/sh (mksh) である。ここを間違えると、埋め込み
 // ターミナルは「開けるシェルが無い」としか言えなくなる。
 func TestShellFallbacksOnAndroidNameTheOnlyShellThatExists(t *testing.T) {
@@ -80,11 +80,11 @@ func TestShellFallbacksOnAndroidNameTheOnlyShellThatExists(t *testing.T) {
 	}
 }
 
-// **iOS では、どのシェルも開けない。** サンドボックスが fork も exec も禁じている
+// iOS では、どのシェルも開けない。サンドボックスが fork も exec も禁じている
 // ので、置いてあるかどうか以前の話である。
 //
 // 候補を並べると、埋め込みターミナルは存在しない道を毎回探し、開けなかった理由を
-// 「見つからない」と言う——本当の理由は「この OS では開けない」であり、それは
+// 「見つからない」と言う。本当の理由は「この OS では開けない」であり、それは
 // 探して分かることではない。
 func TestShellFallbacksOnIOSNameNothingAtAll(t *testing.T) {
 	if got := shellFallbacks("ios"); len(got) != 0 {
@@ -92,8 +92,8 @@ func TestShellFallbacksOnIOSNameNothingAtAll(t *testing.T) {
 	}
 }
 
-// macOS の既定は zsh、それ以外の unix は bash である。**android を足したことで
-// この 2 つが変わっていないこと**を、同じ場所で言う。
+// macOS の既定は zsh、それ以外の unix は bash である。android を足したことで
+// この 2 つが変わっていないことを、同じ場所で言う。
 func TestShellFallbacksKeepTheirExistingOrder(t *testing.T) {
 	if got, want := shellFallbacks("darwin"), []string{"/bin/zsh", "/bin/bash", "/bin/sh"}; !slices.Equal(got, want) {
 		t.Errorf("shellFallbacks(darwin) = %q, want %q", got, want)

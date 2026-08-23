@@ -10,9 +10,9 @@ import (
 	"sshc/internal/handoff"
 )
 
-// **裸の `sshc` は engine を起こさない。** 誰が engine の寿命を持つかは人が
+// 裸の `sshc` は engine を起動しない。誰が engine の寿命を持つかはユーザーが
 // 決めることで、端末で打たれた一語がそれを横取りしてはならない。この性質は
-// プロセスの外からしか確かめられない——ロックはこのプロセスの中には無い。
+// プロセスの外からしか確かめられない。ロックはこのプロセスの中には無い。
 func TestBareInvocationTakesNoEngineLock(t *testing.T) {
 	home := isolatedHome(t)
 
@@ -33,7 +33,7 @@ func TestBareInvocationTakesNoEngineLock(t *testing.T) {
 	}
 }
 
-// **engine は入口を出さない。** 出せば、端末にもログにもワンタイムの資格情報
+// engine はアクセス URLを出さない。出せば、端末にもログにもワンタイムの資格情報
 // が残る。読み手はスクロールバックであり、それは誰にでも見せられる場所ではない。
 func TestHeadlessRunsInTheForegroundWithoutPublishingABootstrapToken(t *testing.T) {
 	home := isolatedHome(t)
@@ -44,7 +44,7 @@ func TestHeadlessRunsInTheForegroundWithoutPublishingABootstrapToken(t *testing.
 	if !process.running() {
 		t.Fatalf("headless returned instead of holding the terminal\n%s", process.Stderr.String())
 	}
-	// **handoff が出たことは、標準出力が書かれたことではない。** どちらが先かは
+	// handoff が出たことは、標準出力が書かれたことではない。どちらが先かは
 	// 約束されていないので、announcement そのものを待つ。
 	waitFor(t, 20*time.Second, "the headless announcement", func() bool {
 		return strings.Contains(process.Stdout.String(), "sshc vault")
@@ -66,7 +66,7 @@ func TestHeadlessRunsInTheForegroundWithoutPublishingABootstrapToken(t *testing.
 	}
 }
 
-// 二台目に席は無い。**engine はひとつである**という決めごとは、OS のロックが
+// 二台目に席は無い。engine はひとつであるという決めごとは、OS のロックが
 // 守っている。
 func TestASecondHeadlessRefusesToStart(t *testing.T) {
 	home := isolatedHome(t)
@@ -87,7 +87,7 @@ func TestASecondHeadlessRefusesToStart(t *testing.T) {
 	}
 }
 
-// **勝つのは一台だけである。** desktop と headless が同時に上がろうとしても、
+// 勝つのは一台だけである。desktop と headless が同時に上がろうとしても、
 // 席はひとつしかない。
 func TestOnlyOneOwnerWinsAStartRace(t *testing.T) {
 	home := isolatedHome(t)
@@ -129,11 +129,11 @@ func TestOnlyOneOwnerWinsAStartRace(t *testing.T) {
 			alive++
 			continue
 		}
-		// **負けた側は、負けたと言って終わる。** 何かに躓いて落ちただけなら、
+		// 負けた側は、負けたと言って終わる。何かに躓いて落ちただけなら、
 		// この検査は「一台しか残らなかった」を偶然で満たしてしまう。理由を端末に
 		// 書いて 1 で終わるのが、ロックに弾かれたときの唯一の出方である。
 		//
-		// **以前はここが 3 も通していた。** Electron の外殻へ ownership の衝突を
+		// 以前はここが 3 も通していた。Electron のネイティブ層へ ownership の衝突を
 		// 別番号で知らせていた頃の名残で、その読み手が消えた今は 1 しか出ない。
 		code := process.wait(t, 5*time.Second)
 		if code != 1 {
@@ -150,7 +150,7 @@ func TestOnlyOneOwnerWinsAStartRace(t *testing.T) {
 	}
 }
 
-// **殺された engine は席を空ける。** 畳む機会は失われるが、OS のロックはその
+// 殺された engine は席を空ける。畳む機会は失われるが、OS のロックはその
 // プロセスと一緒に消える。残った handoff は、次の owner が置き換える。
 func TestAKilledEngineReleasesItsLockAndItsHandoffIsReplaced(t *testing.T) {
 	home := isolatedHome(t)
@@ -168,7 +168,7 @@ func TestAKilledEngineReleasesItsLockAndItsHandoffIsReplaced(t *testing.T) {
 		t.Fatal("the killed engine's handoff is gone; this test no longer proves anything")
 	}
 
-	// **takeOverAsHeadless が返った時点で、handoff は次の owner のものである。**
+	// takeOverAsHeadless が返った時点で、handoff は次の owner のものである。
 	// 念のため、それが殺した方のものでないことを言っておく。
 	next := takeOverAsHeadless(t, home)
 	document := readHandoff(t, home)

@@ -143,7 +143,7 @@ func (h RemoteKeyHandlers) Register(c *echo.Context) error {
 	return c.JSON(http.StatusOK, api.RemoteKeyRegisterResponse{
 		Outcome:  result.Outcome,
 		ExitCode: result.ExitCode,
-		// ssh は読み込んだファイルを絶対パスで名指しするため、アカウント名は
+		// ssh は読み込んだファイルを絶対パスで指定するため、アカウント名は
 		// 出力がこのプロセスを出る前に取り除かれる。
 		Stderr:    platform.SanitiseHomePaths(result.Stderr, h.Diagnostics.Home()),
 		Truncated: result.Truncated,

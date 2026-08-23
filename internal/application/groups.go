@@ -8,21 +8,13 @@ import (
 
 // グループの notice コード。
 const (
-	// NoticeGroupNotDeclared は、どの Include 行も名指ししない connections/
-	// 配下のディレクトリに印を付ける。それはグループではない: 何にも読まれないからだ。
-	NoticeGroupNotDeclared = "group_not_declared"
-	// NoticeGroupDirectoryMissing は、ディレクトリがまだ存在しない
-	// 宣言済みグループに印を付ける。
+	NoticeGroupNotDeclared      = "group_not_declared"
 	NoticeGroupDirectoryMissing = "group_directory_missing"
 	// NoticeGroupEmpty は、connections が 1 つもない宣言済みグループに印を付ける。
-	NoticeGroupEmpty = "group_empty"
-	// NoticeGroupFileUnreached は、connections/ の直下にあり、
-	// どのグループにも属さず、何にも include されない .conf ファイルに印を付ける。
+	NoticeGroupEmpty         = "group_empty"
 	NoticeGroupFileUnreached = "group_file_unreached"
 )
 
-// GroupView は、UI から見た 1 つのグループである: どこにあるか、
-// 宣言されているか、その名前に付いたプレゼンテーション metadata である。
 type GroupView struct {
 	Name             string    `json:"name"`
 	Parent           string    `json:"parent,omitempty"`
@@ -36,13 +28,6 @@ type GroupView struct {
 	DirectoryPresent bool      `json:"directoryPresent"`
 }
 
-// DeclaredGroups は、エントリファイルの生成領域が名指しする
-// グループ名を、Include 行が現れる順序で返す。
-//
-// ファイルシステムは参照されない。ディレクトリがグループなのは
-// ~/.ssh/config の中の行がそれを読めと言っているからであり、
-// 存在するからではない。たまたまそこにあるディレクトリから
-// メンバーシップを推測すれば、誰かが別の目的で作った layout を黙って採用してしまう。
 func DeclaredGroups(file *config.File) []string {
 	start, end, found, err := FindRegion(file)
 	if err != nil || !found {
@@ -73,11 +58,6 @@ func DeclaredGroups(file *config.File) []string {
 }
 
 // BuildGroupsView は、Groups 画面が表示するものを組み立てる:
-// プレゼンテーション metadata とメンバー数を伴う宣言済み
-// グループに加え、宣言とディスクが食い違うあらゆる形についての notice である。
-//
-// present は、呼び出し元が見つけたとおりの、connections/ 配下に
-// 実在するディレクトリの集合であり、ワークスペース相対でスラッシュ区切りである。
 func BuildGroupsView(entry *config.File, hosts []HostEntry, metadata Metadata, present []string) ([]GroupView, []Notice) {
 	declared := DeclaredGroups(entry)
 	declaredSet := make(map[string]bool, len(declared))
@@ -123,8 +103,6 @@ func BuildGroupsView(entry *config.File, hosts []HostEntry, metadata Metadata, p
 			notices = appendNotice(notices, Notice{Code: NoticeGroupDirectoryMissing, Detail: name, Path: view.Directory})
 		} else if view.MemberCount == 0 {
 			// これが生む include_no_match 診断は、それでも報告される。
-			// このアプリケーションが原因となった行を生成したからといって
-			// 本物の診断を抑制するのは、間違った種類の「整頓」だろう。
 			notices = appendNotice(notices, Notice{Code: NoticeGroupEmpty, Detail: name, Path: view.Directory})
 		}
 		views = append(views, view)
@@ -141,12 +119,6 @@ func BuildGroupsView(entry *config.File, hosts []HostEntry, metadata Metadata, p
 }
 
 // CompileGroups は、グループ設定を普通の Host ブロックとしてレンダリングする。
-//
-// 親ブロックは自身のメンバーと子孫のすべてのメンバーを列挙する
-// ので、子は両方のブロックに名指しされることで継承しつつ、
-// 自身のブロックが先に読まれる。declared は region が宣言する
-// 順序のグループ集合である。階層は名前から来る。親を含む名前は、
-// parent フィールドと食い違いようがないからだ。
 func CompileGroups(declared []string, metadata Metadata, hosts []HostEntry, ending string) ([]byte, []Notice) {
 	if ending == "" {
 		ending = "\n"
@@ -223,8 +195,6 @@ func CompileGroups(declared []string, metadata Metadata, hosts []HostEntry, endi
 	return []byte(builder.String()), notices
 }
 
-// groupMembers は、グループ自身のメンバーとその内部にネストした
-// すべてのグループのメンバーを、host が射影された順序で集める。
 func groupMembers(direct map[string][]string, aliasOrder []string, name string) []string {
 	collected := make(map[string]bool)
 	for candidate, aliases := range direct {
@@ -245,11 +215,6 @@ func groupMembers(direct map[string][]string, aliasOrder []string, name string) 
 }
 
 // declaredGroupSet は、保存が宣言するグループ集合である。
-//
-// グループが region に届くのは、既にそこで宣言されているか、
-// ユーザーが metadata でプレゼンテーションや settings を与えて
-// 1 つ作ったからである。ファイルシステムは意図的にソースではない:
-// 誰かが connections/ 配下に作ったディレクトリは報告されるだけで、決して採用されない。
 func declaredGroupSet(entry *config.File, metadata Metadata) []string {
 	seen := make(map[string]bool)
 	names := make([]string, 0)
@@ -274,8 +239,4 @@ func declaredGroupSet(entry *config.File, metadata Metadata) []string {
 }
 
 // NoticeGroupDirectoryCreated は、この保存が作るグループディレクトリに印を付ける。
-//
-// ディレクトリの作成はジャーナルの外で起こる — Commit は実在のディレクトリに
-// 対して書き込みパスを解決するので、ディレクトリが先に存在していなければ
-// ならない — だからこそ見えない効果として残すのではなく、はっきり言う価値がある。
 const NoticeGroupDirectoryCreated = "group_directory_created"

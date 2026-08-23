@@ -42,7 +42,7 @@ func TestTUIRenderKeepsSelectionVisible(t *testing.T) {
 	if !strings.Contains(output.String(), "\x1b[7m  host-09") {
 		t.Fatalf("selected host was not visible:\n%s", output.String())
 	}
-	// 画面に収まらなかった分を黙って落とすと、見えている分がすべてに見える。
+	// 画面に収まらなかった分を暗黙に落とすと、見えている分がすべてに見える。
 	if !strings.Contains(output.String(), "7 more") {
 		t.Errorf("the hosts that did not fit were not counted:\n%s", output.String())
 	}

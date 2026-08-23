@@ -22,19 +22,9 @@ import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 
 type SecretsPanelProps = {
   api?: IntegrationsApi;
-  // onLock はシェル自身の玄関を閉じさせる。vault をロックすることは
-  // アプリケーションをロックすることなので、自分自身を再読み込みするだけの
-  // パネルでは、次のリクエストが拒否されるシェルの中にユーザーを取り残してしまう。
   onLock?: () => void;
 };
 
-// 2 つの名前空間を、引き離して描く。
-//
-// フォーマットでも API でも型でも分かれているのは、1 つの名前空間だと
-// ホストのピッカーが鍵のパスフレーズを提供してしまい、それを選ぶと
-// そのパスフレーズがログインパスワードとしてリモートホストに送られて
-// しまうからだ。ここで 1 つのリストとして描けば、フォーマットが取り除いた
-// はずの選択をユーザーの前に戻してしまう。だから互いのエントリを
 const kinds: {
   kind: CredentialKind;
   heading: MessageKey;
@@ -112,8 +102,6 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
     try {
       const vault = await api.passwordVault();
       setStatus(vault);
-      // 決して保持しない 2 つのリストになっている。
-      // 閉じた vault にはその中身を尋ねない。起動時にも何も尋ねない:
       if (!vault.unlocked) {
         setCredentialList(emptyCredentialList());
         return;
@@ -134,8 +122,6 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
       setError("");
       await reload();
     } catch (caught) {
-      // この画面は必要になったときに自分自身のために尋ねる。
-      // サーバーが説明する拒否は、そのままの姿で表示する。「使用中」が
       setError(failureCode(caught) === "credential_in_use" ? t("secrets.inUse") : fallback);
     }
   }
@@ -148,9 +134,6 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
     return <p className={hintText}>{t("secrets.loading")}</p>;
   }
 
-  // 人が出会うものであり、それこそが対処できるものだ。
-  // 存在することと開いていることは、この画面にとって同じ意味ではない:
-  // 表示するものは何もなく、それを変えるのがマスターパスワードだ。異なるのは
   if (!status.unlocked) {
     const creating = !status.exists;
     return (

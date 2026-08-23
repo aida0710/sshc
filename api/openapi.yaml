@@ -26,7 +26,7 @@ paths:
     post:
       # リロードすると、ページの中にあった CSRF トークンは失われる。そして次の
       # ひとつを生むはずのブートストラップのフラグメントは、初回の使用で消費されて
-      # いる。これは、Cookie がすでに名指ししているセッションのためにトークンを
+      # いる。これは、Cookie がすでに指定しているセッションのためにトークンを
       # 発行する。CSRF トークンを提示しないのは、リロード直後にはそれがないからだ。
       # 守っているのはセッション、Origin、そして Fetch Metadata である。
       operationId: renewSession
@@ -353,7 +353,7 @@ paths:
   /api/v1/sync/push:
     post:
       operationId: pushSnapshot
-      # 本文は無い。封をする鍵は保管庫の中にあり、押した人が打つものではない。
+      # 本文は無い。暗号化する鍵は保管庫の中にあり、押したユーザーが打つものではない。
       responses:
         "200":
           description: Snapshot written
@@ -404,7 +404,7 @@ paths:
   /api/v1/sync/now:
     post:
       operationId: syncNow
-      # 一巡を、押した人を待たせたまま行う。次の巡回を待ってから状態を読み直す
+      # 一巡を、押したユーザーを待たせたまま行う。次の巡回を待ってから状態を読み直す
       # 画面は、押したことが効いたのかを言えない。
       responses:
         "200":
@@ -418,7 +418,7 @@ paths:
   /api/v1/sync/rekey:
     post:
       operationId: rekeySnapshot
-      # 古い鍵で開き、いまの鍵で封じ直す。移行のためだけにある。
+      # 古い鍵で開き、いまの鍵で暗号化し直す。移行のためだけにある。
       requestBody:
         required: true
         content:
@@ -545,7 +545,7 @@ paths:
     get:
       operationId: getPasswordEligibility
       # 読み取り専用であり、それは意図的である。ここが報告する内容はすべて、この
-      # アプリケーションがすでに解析しているファイルから答えられる。パスワードを
+      # アプリケーションがすでに解析しているファイルから判定できる。パスワードを
       # 保存してよいかを判断するために接続を開く検査は、ユーザーが求めていない
       # 接続になってしまう。
       parameters:
@@ -872,10 +872,10 @@ paths:
     post:
       operationId: renameGroup
       description: >-
-        Renames a group directory and everything that names it — every
+        Renames a group directory and every reference to it: every
         connection file under connections/<old>, every key under keys/<old>,
         every IdentityFile pointing into it, the generated Include region, the
-        compiled settings file and metadata.json — in one journalled
+        compiled settings file and metadata.json. The changes use one journalled
         transaction. Nested groups travel with their parent. The emptied source
         directory is reported and is not removed: storage moves files, not
         directories.
@@ -1193,8 +1193,7 @@ paths:
   /api/v1/metadata/engine:
     put:
       operationId: setEngineSettings
-      # **節まるごとの置き換えである。** 送らなかった項目は書かれていない状態へ
-      # 戻る——そうでないと、一度指定した人が既定へ戻れない。
+      # セクション全体を置き換える。省略した項目は未設定へ戻す。
       requestBody:
         required: true
         content:
@@ -1221,8 +1220,7 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
     post:
       operationId: addTerminalBackground
-      # **名前を決めるのはサーバーである。** 送るのは希望と中身だけで、
-      # 実際の綴りと型は応答が答える。
+      # クライアントは希望名と内容を送り、サーバーが保存名と型を決定する。
       parameters:
         - in: query
           name: name
@@ -1339,12 +1337,7 @@ components:
         diagnostics: { type: array, items: { $ref: "#/components/schemas/Diagnostic" } }
         conflict: { $ref: "#/components/schemas/ConflictReport" }
         blockers: { type: array, items: { type: string } }
-        # blockers は、断った理由を安定した code で並べる。
-        #
-        # **これは前から返っていた。** ただしここに書いていなかったので、
-        # additionalProperties: false に照らすと契約違反の本文であり、しかも
-        # 生成された型に入らないので **どのクライアントからも読めなかった**
-        # ——「なぜ断られたか」を出しているつもりで、誰にも届いていなかった。
+        # blockers は拒否理由を安定したコードで返す。
     KeyReference:
       type: object
       additionalProperties: false
@@ -1458,7 +1451,7 @@ components:
         # 何かが公開されるまで、あるいは確認が走るまでは空。
         latest: { type: string }
         available: { type: boolean }
-        # 何が変わったかを人が読み、どうするかを決める場所。このアプリケーションは
+        # 何が変わったかをユーザーが読み、どうするかを決める場所。このアプリケーションは
         # 何も取得せず、何も置き換えない。
         pageUrl: { type: string }
     ChangeMasterPasswordRequest:
@@ -1474,7 +1467,7 @@ components:
       required: [vault, snapshotResealed]
       properties:
         vault: { $ref: "#/components/schemas/PasswordVaultStatus" }
-        # バケットのライブのスナップショットが新しいパスワードで封じ直されたか。
+        # バケットのライブのスナップショットが新しいパスワードで暗号化し直されたか。
         # 理由付きの false は、ローカルの変更は済んでいるが、バケットにはまだ古い
         # パスワードでしか開かないものが残っている、という意味である。
         snapshotResealed: { type: boolean }
@@ -1728,9 +1721,9 @@ components:
     AuthenticationResponse:
       type: object
       additionalProperties: false
-      # exitCode と stderr は無い。外部の ssh を起こさないので、終了コードも
+      # exitCode と stderr は無い。外部の ssh を起動しないので、終了コードも
       # 診断出力も存在しない。代わりに method（通った認証方式）と detail
-      # （人へ向けた説明）を返す。
+      # （ユーザーへ向けた説明）を返す。
       required: [outcome, authenticated, method, detail, truncated, elapsedMs]
       properties:
         outcome: { type: string }
@@ -1897,7 +1890,7 @@ components:
         title: { type: string }
         startedAt: { type: string }
         exited: { $ref: "#/components/schemas/TerminalExit" }
-        # 開いている転送。**開いていることが見えないまま開かない。**
+        # 現在開いている転送。
         forwards: { type: array, items: { $ref: "#/components/schemas/TerminalForward" } }
     TerminalExit:
       type: object
@@ -1961,16 +1954,12 @@ components:
       required: [configured, locked, endpoint, bucket, synced, direction, keyConfigured, auto]
       properties:
         configured: { type: boolean }
-        # 同期の鍵が設定されているか。**値そのものは決して返さない。** リモートを
-        # 開ける値を、状態を読むたびに配る API にしてはならない。平文で出るのは、
-        # 作った応答の中の一度だけである。
+        # 同期鍵の設定有無。鍵の値は返さない。
         keyConfigured: { type: boolean }
-        # 自動同期。押さなくても進むが、黙って壊しはしない——衝突と、何かが
-        # 消える適用は phase=blocked として人を待つ。
+        # 自動同期。衝突や削除を伴う適用は phase=blocked で停止する。
         auto: { $ref: "#/components/schemas/AutoSync" }
-        # フォームが空のとき、その理由。設定はマスターパスワードで封じられており、
-        # それが与えられるまで読めない。アクセスキーや秘密が入ることは決してない —
-        # それらは一方通行で、封をされたファイルへ向かうだけである。
+        # フォームが空のとき、その理由。設定はマスターパスワードで暗号化されており、
+        # それが与えられるまで読めない。アクセスキーや secret は含めない。
         locked: { type: boolean }
         # エンドポイント・バケット・リージョンは、これが何を指しているかをユーザーが
         # 見られるよう返す。アクセスキーと秘密が返ることは決してない。
@@ -2055,9 +2044,7 @@ components:
       properties:
         enabled: { type: boolean }
         phase: { type: string, enum: [idle, running, blocked, failed] }
-        # blocked と failed の理由。人へ見せる文ではなく、画面が自分の言葉に
-        # 訳すための符牒である。**エラー文そのものは決して出さない** — 入口の
-        # URL や bucket の名前が混ざりうる。
+        # blocked と failed の理由を表す安定コード。エラー文や URL は含めない。
         detail: { type: string }
         at: { type: string }
     AutoSyncRequest:
@@ -2070,9 +2057,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        # 省略すれば作る。**既定が生成であることに理由がある** — この値は端末を
-        # またいで共有されるので、どこかに書き留められる。書き留めるなら、
-        # 覚えられる必要はない。
+        # 省略時は安全な値を生成する。端末間で共有するため、利用者が保管する。
         key: { type: string, minLength: 1, maxLength: 1024 }
     SyncKeyResponse:
       type: object
@@ -2089,9 +2074,7 @@ components:
         # これにより、このアプリケーションが他のあらゆる書き込みの前に見せる
         # ファイル単位のプレビューを、ユーザーはここでも見る。
         apply: { type: boolean }
-        # 両側で変わったファイルをどちらに寄せるか。**省略すれば決めない**
-        # ——衝突を報告して止まる。寄せ先を選んだときも、書く前のプレビューは
-        # 同じように出る。
+        # 両側で変更されたファイルの採用元。省略時は衝突を報告して停止する。
         resolve: { type: string, enum: [local, remote] }
     SyncConflict:
       type: object
@@ -2143,9 +2126,7 @@ components:
           items: { type: string }
         minPassphraseLength: { type: integer }
     # blocker は保存済みパスワードを使用不能にするので、保存自体を拒否する。
-    # warning は、ユーザーの方がよく知っているかもしれない事実である — 設定済みの
-    # 鍵が向こう側で認可されていないのはよくあることだ — ので、事実として述べる
-    # にとどめ、判断は本来それが属する場所に委ねる。
+    # warning は利用者が確認すべき状態を示すが、保存を禁止しない。
     PasswordEligibility:
       type: object
       additionalProperties: false
@@ -2597,15 +2578,8 @@ components:
         order: { type: integer }
         orphan: { type: boolean }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
-    # 端末の見た目。**接続ごとにも、全体にも置ける。**
-    #
-    # 解決は**項目ごと**である——接続に配色だけを置いても、全体で選んだ字体は
-    # 残る。どちらにも無ければ端末はアプリのテーマに従う（従来どおり）。
-    #
-    # **名前で持ち、色そのものは持たない。** 配色と字体の中身は画面が一度だけ
-    # 定義する。engine はこれを読まない——PTY は色を知らない。知らない名前が
-    # 書かれていたら既定へ戻す。手で書かれた綴りひとつが、タグもお気に入りも
-    # 道連れに読めなくしてよい理由はない。
+    # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
+    # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:
       type: object
       additionalProperties: false
@@ -2616,8 +2590,7 @@ components:
         background: { type: string, maxLength: 128 }
         # 画像の上にかぶせる濃さ。0 は素のまま、100 は配色の背景色で覆い尽くす。
         #
-        # **0 は有効な選択なので、書かれていないことと区別する。** 省略は
-        # 「選んでいない」であり、そのときは上の段の選択、最後は既定が効く。
+        # 0 は有効な値。省略時は上位設定または既定値を使う。
         backgroundTint: { type: integer, minimum: 0, maximum: 100 }
     GroupMetadata:
       type: object
@@ -2655,27 +2628,24 @@ components:
         # 無いときは on。false は利用者が明示的に止めた値なので、省略せず運ぶ。
         # 接続の途中経過をどこまで端末へ書くか。0 は無言、3 は `ssh -vvv` 相当。
         #
-        # **行き先はログではなく画面である。** 繋がらなかった人・切れた人が
+        # 接続失敗または切断の理由を UI に表示するためのイベント。
         # その場で読めなければ意味が無い。
         verbosity: { type: integer, minimum: 0, maximum: 3 }
-        # 輸送が落ちたときに繋ぎ直しを試みる回数。**0 は「繋ぎ直さない」という
-        # 選択であって、「書かれていない」ではない。**
+        # 通信切断後の再接続試行回数。0 は再接続しない設定。
         #
         # 閉じたコンソールがしばらく残って見えるのは、ここが粘っているあいだで
-        # ある。切りたい人は 0 を置く。間隔は 1・2・5・10・15 秒なので、
+        # ある。切りたいユーザーは 0 を置く。間隔は 1・2・5・10・15 秒なので、
         # 5 回なら諦めるまで 33 秒。
         reconnect: { type: integer, minimum: 0, maximum: 5 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
-        # ローカルシェルが始まる場所。`~` の綴りのまま持つ——home の綴りを
-        # 焼き付けない。空なら home。
+        # ローカルシェルの開始ディレクトリ。`~` を維持し、空なら home を使う。
         startDirectory: { type: string, maxLength: 4096 }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
     # 埋め込みターミナルのうち、画面から変えられるもの。
     #
-    # **これは節まるごとの置き換えである。** 書かれていない項目は「設定されて
-    # いない」を意味し、そう保存される——既定と同じ値を書き戻さないためである。
-    # 既定を metadata へ焼き付けると、既定を変えた日にその人だけが取り残される。
+    # セクション全体を置き換える。省略項目は未設定として保存する。
+    # 既定値は metadata に保存せず、将来の既定値変更を反映できるようにする。
     TerminalSettings:
       type: object
       additionalProperties: false
@@ -2689,30 +2659,27 @@ components:
         fontSize: { type: integer, minimum: 8, maximum: 32 }
         # 接続の途中経過をどこまで端末へ書くか。0 は無言、3 は `ssh -vvv` 相当。
         #
-        # **行き先はログではなく画面である。** 繋がらなかった人・切れた人が
+        # 接続失敗または切断の理由を UI に表示するためのイベント。
         # その場で読めなければ意味が無い。
         verbosity: { type: integer, minimum: 0, maximum: 3 }
-        # 輸送が落ちたときに繋ぎ直しを試みる回数。**0 は「繋ぎ直さない」という
-        # 選択であって、「書かれていない」ではない。**
+        # 通信切断後の再接続試行回数。0 は再接続しない設定。
         #
         # 閉じたコンソールがしばらく残って見えるのは、ここが粘っているあいだで
-        # ある。切りたい人は 0 を置く。間隔は 1・2・5・10・15 秒なので、
+        # ある。切りたいユーザーは 0 を置く。間隔は 1・2・5・10・15 秒なので、
         # 5 回なら諦めるまで 33 秒。
         reconnect: { type: integer, minimum: 0, maximum: 5 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
-    # engine そのものの設定。**端末のものではない。**
+    # engine の設定。
     #
-    # 受け口の番号は engine が起動時に読むので、変えても次に起こすまで効かない。
+    # 受け口の番号は engine が起動時に読むので、変えても次に起動するまで効かない。
     # 画面はそう言う。
     EngineSettings:
       type: object
       additionalProperties: false
       properties:
-        # 0 と省略はどちらも「決めていない」であり、そのとき engine は
-        # 30000〜60000 から無作為に引く。**番号は秘密ではない** ——走査すれば
-        # 見つかるし handoff にも書いてある。固定できることは安全の取引ではない。
+        # 0 または省略時は 30000〜60000 からランダムに選ぶ。ポート番号は秘密情報ではない。
         port: { type: integer, minimum: 1024, maximum: 65535 }
     TerminalBackground:
       type: object
@@ -2728,7 +2695,7 @@ components:
       required: [backgrounds, remainingBytes]
       properties:
         backgrounds: { type: array, items: { $ref: "#/components/schemas/TerminalBackground" } }
-        # あと何バイト置けるか。**画面が上限を書き写さないためである。**
+        # 追加保存できる残りバイト数。
         remainingBytes: { type: integer }
     PendingTransaction:
       type: object
@@ -2752,7 +2719,7 @@ components:
         hosts: { type: array, items: { $ref: "#/components/schemas/HostEntry" } }
         # 宣言済みのグループと、それぞれが何を保持しているか、そしてその
         # ディレクトリが存在するか。connections/ 配下にあっても、どの Include も
-        # 名指ししていないディレクトリはこれに含まれず、group_not_declared の
+        # 指定していないディレクトリはこれに含まれず、group_not_declared の
         # 注意として届く。
         groups: { type: array, items: { $ref: "#/components/schemas/GroupView" } }
         metadata: { $ref: "#/components/schemas/Metadata" }

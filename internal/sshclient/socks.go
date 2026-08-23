@@ -30,11 +30,11 @@ const maxSOCKSName = 255
 
 // readSOCKS5 は、SOCKS5 のやり取りを受けて宛先を返す。
 //
-// **CONNECT だけを受ける。** BIND も UDP ASSOCIATE も、このクライアントが
-// 持たない機能である。持たないものを受け付けて黙って失敗するより、その場で断る。
+// CONNECT だけを受ける。BIND も UDP ASSOCIATE も、このクライアントが
+// 持たない機能である。持たないものを受け付けて暗黙に失敗するより、その場で断る。
 //
-// 認証は「認証なし」だけを受ける。**ループバックにしか開かないので、そこへ
-// 到達できる者は既にこのユーザーとして動いている。**
+// 認証は「認証なし」だけを受ける。ループバックにしか開かないので、そこへ
+// 到達できる者は既にこのユーザーとして動いている。
 func readSOCKS5(conn net.Conn) (string, error) {
 	header := make([]byte, 2)
 	if _, err := io.ReadFull(conn, header); err != nil {
@@ -83,7 +83,7 @@ func readSOCKS5(conn net.Conn) (string, error) {
 	}
 	port := binary.BigEndian.Uint16(portBytes)
 
-	// **成功を先に返す。** SOCKS5 は、こちらが繋いだあとに返すことも許すが、
+	// 成功を先に返す。SOCKS5 は、こちらが繋いだあとに返すことも許すが、
 	// 返してから繋ぐ実装が広く使われており、繋がらなかった場合は接続を閉じる
 	// ことで伝わる。
 	if _, err := conn.Write(socksReply(socksSucceeded)); err != nil {

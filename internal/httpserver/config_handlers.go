@@ -25,7 +25,7 @@ type ConfigHandlers struct {
 
 // historyList は、履歴の応答である。
 //
-// **生成型を使えない唯一の理由がここにある。** api.HistoryList が抱えるのは
+// 生成型を使えない唯一の理由がここにある。api.HistoryList が抱えるのは
 // api.HistoryEntry で、application.HistoryEntry とは JSON としては同じ形だが
 // Go の型としては別物である。詰め替えの関数を置くより、application の値をその
 // まま載せる方が、この 1 エンドポイントについては素直である。ずれていないことは
@@ -144,7 +144,7 @@ func (h ConfigHandlers) DeleteGroup(c *echo.Context) error {
 	if err != nil {
 		return problem(c, http.StatusInternalServerError, "inventory_failed")
 	}
-	// **Destination の空と未指定を分けない。** 契約では省略可能だが、どちらも
+	// Destination の空と未指定を分けない。契約では省略可能だが、どちらも
 	// 「connections ディレクトリ自体へ移す」という同じ意味である。設定ファイルが
 	// 削除されることは決してない。
 	destination := ""
@@ -184,7 +184,7 @@ func (h ConfigHandlers) Metadata(c *echo.Context) error {
 
 // SetTerminal は、ローカルシェルの開始位置を書き戻す。
 //
-// **通らない指定はここで断る。** 保存を受け入れておいて、次に端末を開いた
+// 通らない指定はここで断る。保存を受け入れておいて、次に端末を開いた
 // ときに初めて失敗させると、設定画面と失敗の現れる場所が離れる。
 func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	var request api.TerminalSettings
@@ -207,14 +207,14 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if request.Verbosity != nil {
 		settings.Verbosity = *request.Verbosity
 	}
-	// **0 は「繋ぎ直さない」であって「書かれていない」ではない。** 値で受けると、
-	// 切ったつもりの人が既定へ戻される。
+	// 0 は「繋ぎ直さない」であって「書かれていない」ではない。値で受けると、
+	// 切ったつもりのユーザーが既定へ戻される。
 	settings.Reconnect = request.Reconnect
 	settings.CopyOnSelect = request.CopyOnSelect
 	settings.RightClickPaste = request.RightClickPaste
 	if request.Appearance != nil {
-		// **綴りを検めない。** 知らない名前は画面が既定へ戻す——ここで断ると、
-		// 配色を 1 つ改名した日に、その名前を選んでいた人は設定画面ごと使えなくなる。
+		// 未知の配色名は保存できるようにする。UI 側は未知の名前を既定値として扱うため、
+		// 配色名を変更しても設定画面を利用できる。
 		if request.Appearance.Palette != nil {
 			settings.Appearance.Palette = *request.Appearance.Palette
 		}
@@ -224,7 +224,7 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 		if request.Appearance.Background != nil {
 			settings.Appearance.Background = *request.Appearance.Background
 		}
-		// **0 は「かぶせない」であって「選んでいない」ではない。** 書かれて
+		// 0 は「かぶせない」であって「選んでいない」ではない。書かれて
 		// いないときだけ、上の段の選択と既定に譲る。
 		settings.Appearance.BackgroundTint = request.Appearance.BackgroundTint
 	}
@@ -236,8 +236,8 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "start_directory_missing")
 	case errors.Is(err, application.ErrStartDirectoryNotADirectory):
 		return problem(c, http.StatusBadRequest, "start_directory_not_a_directory")
-	// 範囲の外は書き込みで断る。**読み取りが既定へ戻すのとは対称ではない**
-	// ——これはこのアプリケーション自身の操作であり、断れば人が直せる。
+	// 範囲の外は書き込みで断る。読み取りが既定へ戻すのとは対称ではない
+	// これはこのアプリケーション自身の操作であり、断ればユーザーが直せる。
 	case errors.Is(err, application.ErrMetadataTerminal):
 		return problem(c, http.StatusBadRequest, "terminal_limits_out_of_range")
 	case err != nil:
@@ -294,8 +294,8 @@ func (h ConfigHandlers) Recover(c *echo.Context) error {
 
 // SetEngine は、engine そのものの設定を書き戻す。
 //
-// **受け口の番号は起動時にしか読まれない。** 変えても、次に engine を起こすまで
-// 効かない——画面はそう言う。
+// 受け口の番号は起動時にしか読まれない。変えても、次に engine を起動するまで
+// 効かない。画面はそう言う。
 func (h ConfigHandlers) SetEngine(c *echo.Context) error {
 	var request api.EngineSettings
 	if err := decodeJSON(c, &request); err != nil {
@@ -303,7 +303,7 @@ func (h ConfigHandlers) SetEngine(c *echo.Context) error {
 	}
 	settings := application.EngineSettings{}
 	if request.Port != nil {
-		// **範囲はここで断る。** 通せば、断るのは次の起動の bind であり、
+		// 範囲はここで断る。通せば、断るのは次の起動の bind であり、
 		// そのとき画面はもう閉じている。
 		if *request.Port < 1024 || *request.Port > 65535 {
 			return problem(c, http.StatusBadRequest, "port_out_of_range")

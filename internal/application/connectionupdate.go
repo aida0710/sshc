@@ -31,7 +31,6 @@ type KeyPassphraseVerifier interface {
 }
 
 // SetKeyPassphraseVerifier installs the key-vault boundary used by connection
-// saves. Application wiring calls this once before the server begins serving.
 func (s *Service) SetKeyPassphraseVerifier(verifier KeyPassphraseVerifier) {
 	s.keyPassphrases = verifier
 }
@@ -99,9 +98,6 @@ type UpdateConnectionRequest struct {
 }
 
 // UpdateConnection changes the small, stable connection form. The browser
-// names semantic fields; line numbers are derived against the exact base file
-// here so a sparse block can add a value and a direct value can return to
-// inheritance without letting the client target another line.
 func (s *Service) UpdateConnection(
 	secrets *secret.Service,
 	inventory *keys.Inventory,
@@ -114,7 +110,6 @@ func (s *Service) UpdateConnection(
 	}
 
 	// Plan before inspecting policy so a stale base remains a conflict rather
-	// than being masked by the authentication state of newer disk contents.
 	s.saveMutex.Lock()
 	prepared, changed, err := s.planConnectionUpdate(inventory, request)
 	s.saveMutex.Unlock()

@@ -12,7 +12,7 @@ import (
 // Windows の Chmod が写すのは所有者の書き込みビットひとつだけで、Perm() は 0666
 // か 0444 のどちらかにしかならない。向こうで誰が読めるかを決めているのは DACL
 // であり、対になる filemode_windows_test.go がそちらを確かめる。同じ検査を両方で
-// 走らせると、落ちるだけでなく「ここにアクセス制御がある」という嘘が残る。
+// 走らせると、落ちるだけでなく「ここにアクセス制御がある」という誤りが残る。
 
 func assertScannedPermission(t *testing.T, item *Item, want string) {
 	t.Helper()

@@ -11,11 +11,11 @@ import (
 
 // agent_windows_test.go の対になる側。
 //
-// **Unix では SSH_AUTH_SOCK が唯一の手掛かりである。** 端末ごとに別の agent が
-// 立つ環境があり、どれに話すかを決めているのはその変数だけなので、ここでは
+// Unix では SSH_AUTH_SOCK が唯一の手掛かりである。端末ごとに別の agent が
+// 立つ環境があり、どれに通信するかを決めているのはその変数だけなので、ここでは
 // 読まなければ何にも届かない。Windows にその約束は無く、あちらは固定の名前を
-// 使う——同じ検査を両方で走らせると、落ちるだけでなく「環境が宛先を決める」
-// という嘘がどちらかに残る。
+// 使う。同じ検査を両方で走らせると、落ちるだけでなく「環境が宛先を決める」
+// という誤りがどちらかに残る。
 func TestTheUnixAgentFindsItsSocketThroughTheEnvironment(t *testing.T) {
 	socket, _ := runAgent(t)
 	consulted := make([]string, 0, 2)
@@ -42,8 +42,8 @@ func TestTheUnixAgentFindsItsSocketThroughTheEnvironment(t *testing.T) {
 	}
 }
 
-// 変数が無いことと、その先に誰かが居ないことは同じ扱いでよい。**死んだ端末が
-// 残した SSH_AUTH_SOCK はいつまでも残る**ので、どちらも開いてみて答える。
+// 変数が無いことと、その先に誰かが居ないことは同じ扱いでよい。死んだ端末が
+// 残した SSH_AUTH_SOCK はいつまでも残るので、どちらも開いてみて返す。
 func TestTheUnixAgentWithoutTheVariableIsUnavailable(t *testing.T) {
 	adapter := keys.NewAgent(func(string) (string, bool) { return "", false })
 

@@ -23,58 +23,26 @@ import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipb
 type TerminalViewProps = {
   session: TerminalSession;
   api?: Pick<IntegrationsApi, "terminalStreamTicket">;
-  // onExit は、子プロセスが終わったことを画面の他の部分へ伝える。一覧は
-  // その行を終了済みとして描き直す。
   onExit?: () => void;
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
-  // palette は、選ばれた配色の名前である。**色そのものは運ばない**——
-  // 名前は箱に data 属性として載り、色は CSS が与える。空なら、端末は
-  // アプリのテーマに従う。
-  //
-  // 接続ごとの選択と全体の選択のどちらが勝つかは、ここでは決めない。
-  // 渡ってくるのは決着したあとの 1 つである。
   palette?: string;
-  // background は、選ばれた画像の名前である。空なら画像を敷かない。
   background?: string;
-  // tint は、画像の上にかぶせる濃さ（0〜100）である。**0 は「かぶせない」で
-  // あって「選んでいない」ではない**ので、undefined と区別する。
   tint?: number;
-  // font は、選ばれた字体の名前である。空なら端末の等幅に任せる。
-  //
-  // **字体を変えると 1 マスの大きさが変わる。** 桁と行を測り直し、向こうの
-  // シェルにも新しい大きさを伝えないと、全画面を使うプログラムが画面外へ描く。
   font?: string;
 };
 
-// Link は、この画面とセッションを繋ぐ通信路の状態である。
-//
-// **通信路が切れることは、セッションが死ぬことではない。** PTY は常駐プロセス
-// 側で生きているので、新しいチケットを取れば同じセッションへ繋ぎ直せる。だから
-// 切れたら黙って諦めず、繋ぎ直す。そして繋ぎ直していることを画面が言う——
-// 何が起きているか分からないまま待たされる時間は、壊れているのと区別が付かない。
 type Link =
   | { phase: "live" }
   | { phase: "connecting"; attempt: number }
   | { phase: "waiting"; attempt: number; seconds: number }
-  // gone は「もう無いセッション」である。待っても戻ってこないので繋ぎ直さない。
   | { phase: "stopped"; gone: boolean };
 
-// backoff は、繋ぎ直すまでに待つ秒数である。失敗した回数で選ぶ。
-//
-// 上限を置くのは、相手が同じ機械の中に居るからである。落ちているのは常駐
-// プロセスか通信路のどちらかで、どちらも 15 秒より長く待って良くなるものではない。
 const backoff = [1, 2, 4, 8, 15];
 
-// settled は、「繋がっていた」と数える長さである。これより長く繋がっていた
-// あとの切断は、前の切断の続きではなく新しい切断なので、待ち時間を数え直す。
 const settled = 10_000;
 
-// TerminalView は、セッションひとつを主画面に描く。
-//
-// xterm.js を使うのは、VT エミュレータを自前で書くのが論外だからである。zsh の
-// zle は alt-screen、bracketed paste、カーソル位置指定を使う。
 export function TerminalView({
   session,
   api = integrationsApi,
@@ -90,63 +58,35 @@ export function TerminalView({
   const t = useTranslate();
   const { resolved } = useTheme();
   const host = useRef<HTMLDivElement>(null);
-  // 画像を敷いているあいだ、端末は面を塗らない。塗れば画像はその下に隠れる。
-  // **綴りは JS が取りに行く。** CSS の url() には CSRF ヘッダーを付けられない。
   const backgroundURL = useBackgroundImage(background ?? "");
   const hasBackground = backgroundURL !== "";
-  // 測り直しは端末を建てた effect の中にしかない。外から鳴らせるようにここへ置く。
   const refit = useRef<(() => void) | null>(null);
   const terminal = useRef<Terminal | null>(null);
   const clipboardSettings = useRef<TerminalClipboardSettings>({ copyOnSelect, rightClickPaste });
-  // イベント配線は端末の寿命に一度だけ行い、設定値だけを差し替える。
   clipboardSettings.current = { copyOnSelect, rightClickPaste };
   const [problem, setProblem] = useState("");
   const [link, setLink] = useState<Link>({ phase: "connecting", attempt: 1 });
-  // 繋ぎ直しの操作は効果の中に住んでいる。端末を作り直さずに押せるように、
-  // 押せる形だけをここへ出す。
   const control = useRef<{ now: () => void; stop: () => void }>({ now: () => {}, stop: () => {} });
 
-  // 画面上のキーで立てた修飾は、**打鍵の経路と同じ場所に住む。** バーの上に
-  // 英字キーは無いので、Ctrl の次に来るのは常にシステムのキーボードからの
-  // 一文字である——KeyBar の中に閉じ込めると、それに乗せられない。
-  //
-  // ref と state を並べて持つのは、onData の配線が端末の寿命に一度だけ行われる
-  // からである。state だけだと、その配線は最初の値を握ったままになる。
   const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
   const armed = useRef<Modifiers>(modifiers);
   armed.current = modifiers;
-  // send は、打たれたものひとつを修飾ごと通す唯一の口である。
   const send = useRef<(label: string) => void>(() => {});
 
-  // セッションが変わったら端末ごと作り直す。同じ DOM に別のスクロールバックを
-  // 流し込むと、前のセッションの続きに見えてしまう。
   useEffect(() => {
     const container = host.current;
     if (container === null) return;
 
-    // 指で触る画面か。
     const coarse = prefersNativeSelection((query) => window.matchMedia(query));
 
     const view = new Terminal({
-      // 幅と高さは fit アドオンが決めるので、ここでは初期値だけを置く。
       cols: 80,
       rows: 24,
       convertEol: false,
       cursorBlink: session.exited === undefined,
-      // Android には SF Mono も Menlo も無い。**ui-monospace はそこで何にも
-      // 解決しないことがある**ので、その端末が実際に持っている等幅を並べる。
-      // 選ばれていなければ既定の並びが返る。**どちらの場合も同じ呼び出しである。**
       fontFamily: fontStack(font ?? ""),
-      // 設定された値があればそれが答えである。無いときだけ画面の幅で決める
-      // ——**ここだけは媒体クエリを JS で読む。** xterm の字は寸法計算に入る
-      // 値であって CSS で塗り替えられるものではないので、breakpoint では
-      // 届かない。13px は指で持つ画面には小さすぎる。
       fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
-      // **箱から読む。** data-term-palette がそこに載っており、CSS 変数は
-      // 継承するので、選ばれていなければ同じ呼び出しがテーマの色を返す。
       theme: terminalTheme(container, hasBackground),
-      // スクロールバックはサーバー側のリングバッファが正本である。ここでの値は
-      // 再生されたバイト列を画面に保つための余地にすぎない。
       scrollback: 5000,
     });
     const fit = new FitAddon();
@@ -156,20 +96,12 @@ export function TerminalView({
 
     let stream: TerminalStream | null = null;
     let live = true;
-    // stopped は人が再試行を止めたことである。飛んでいる要求が遅れて返って
-    // きても、止めたあとに繋がってはならない。
     let stopped = false;
     let attempts = 0;
     let linkedAt = 0;
     let timer: ReturnType<typeof setInterval> | undefined;
     const decoder = new TextDecoder();
 
-    // 変わっていない大きさは送らない。
-    //
-    // 窓を掴んで動かしているあいだ ResizeObserver は何度でも鳴るが、桁と行が
-    // 変わるのはその何分の一かでしかない。同じ大きさを送り続けると、向こうの
-    // シェルは鳴るたびに SIGWINCH を受けてプロンプトを描き直す——それが、
-    // 掴んでいるあいだ画面が暴れる理由である。
     let sent = "";
     const syncSize = () => {
       const size = `${view.cols}x${view.rows}`;
@@ -178,27 +110,9 @@ export function TerminalView({
       stream.resize(view.cols, view.rows);
     };
 
-    // 隠れているあいだは測らない。**面を離れても端末は mount したままにする**
-    // ので、幅も高さも 0 になる瞬間がある。0 を測って送れば、向こうのシェルは
-    // その大きさを信じる。
     const measure = () => {
       if (container.clientWidth === 0 || container.clientHeight === 0) return;
-      // **掴まれている選択があるあいだは、測り直さない。**
-      //
-      // 長押しで選び始めた時点で OS はキーボードを畳む。畳めば窓が伸び、ここが
-      // 鳴り、桁と行を測り直して端末は全部を描き直す——選んだ範囲の下から字が
-      // 動いていく。帯は板の字に付いているので動かず、選んだつもりの場所と
-      // 見えている場所が食い違う。**掴んでいるあいだ端末の大きさを止めれば、
-      // 下の字は動かない。** 手が離れれば次の測り直しが追いつく。
       if (selectionHeldIn(container)) return;
-      // **面がまだ建っていなければ、測れない。**
-      //
-      // FitAddon は端末が DOM に付いていないとき、面の大きさが 0 のとき、
-      // そして桁が算出できないときに投げる。**どれも「いま測れない」であって
-      // 壊れているわけではない** ——次に鳴ったときに測り直せばよい。
-      //
-      // 投げたときは行数も桁数も変わっていないので、**そのまま syncSize へ
-      // 進まない。** 進めば、変わっていない大きさを PTY へ送り直すだけになる。
       try {
         fit.fit();
       } catch {
@@ -207,22 +121,11 @@ export function TerminalView({
       syncSize();
     };
     measure();
-    // **字体が変わったときにも、同じ測り直しが要る。** 桁の幅が変われば
-    // 行数も桁数も変わる——外から呼べる形で置いておく。
     refit.current = measure;
 
-    // 指で流す。**xterm はこれを持っていない**——スクロールする層は絶対配置で
-    // 下に敷かれ、上に画面の層が乗っているので、指が触れるのは常に上である。
-    //
-    // preventDefault しない。止めれば長押しからの範囲選択も一緒に殺す。
-    // 端末の面が建つ前は箱で代用する。指が触れる頃には必ず建っている。
     const scroll = newTouchScroll(view, () => cellHeight(view, container));
-    // 指は 1 本のときだけ見る。2 本目は拡大か、この画面の外の操作である。
     const single = (event: TouchEvent): Touch | null =>
       event.touches.length === 1 ? (event.touches[0] ?? null) : null;
-    // 選択のハンドルを引いているあいだは流さない。指は同じ動きをするが、
-    // 掴んでいるのは端末ではなくハンドルである。流せば、掴んだ範囲は掴んだ
-    // そばから足元ごと動く。
     const touchStart = (event: TouchEvent) => {
       const finger = single(event);
       if (finger !== null && !selectionHeldIn(container)) scroll.start(finger.clientY);
@@ -235,29 +138,12 @@ export function TerminalView({
     container.addEventListener("touchmove", touchMove, { passive: true });
 
 
-    // 指で触る画面では、IME の keydown を xterm に見せない。**あれを見た
-    // xterm は、消していない textarea の前後を setTimeout(0) で比べる** ——
-    // 次の打鍵がそれより先に来ると、打った文字が接尾辞ごと重複して届く。
-    // マウスのある画面では起きないので、そちらは触らない。
     const releaseImeKeys = coarse
       ? attachImeKeys({ container, textarea: view.textarea ?? container })
       : () => {};
 
-    // 触れる画面にだけ、選べる板を重ねる。**長押しには何もしない** ——
-    // contextmenu で preventDefault を呼べば、OS がまさに始めようとしていた
-    // 選択ジェスチャごと消える。板の上でそれが起きるように、道を空けておく。
     const detachOverlay = coarse ? attachSelectionOverlay(container, view) : () => {};
 
-    // 打鍵の配線はここで一度だけ行う。繋ぎ直すたびに足すと、1 回の打鍵が
-    // 繋ぎ直した回数だけ PTY へ届く。
-    //
-    // **画面上のキーもここを通る。** 修飾が立っていれば、それが乗るのは次の
-    // 一打鍵だけであり、乗った時点で降りる。押しっぱなしになる修飾は、次に
-    // 打った一文字が何になるか分からない端末を作る。
-    // **打たれた文字と、押されたキーは別のものである。** 前者はラベルの表を
-    // 引いてはならない——"Esc" と打った人に ESC を送ることになる。後者は必ず
-    // 引かなければならない——引かなければ、Esc のボタンが "Esc" という 3 文字を
-    // 送る。1 つの入口で兼ねようとしたことが、まさにそれを起こした。
     const typed = (data: string) => {
       const { ctrl, alt } = armed.current;
       stream?.send(applyModifiers(data, ctrl, alt));
@@ -279,14 +165,12 @@ export function TerminalView({
         .terminalStreamTicket(session.id)
         .then((issued) => {
           if (!live || stopped) return;
-          // 新しい通信路は、こちらの大きさを知らない。
           sent = "";
           linkedAt = Date.now();
           stream = openStream(issued.streamTicket, {
             onOutput: (chunk) => view.write(decoder.decode(chunk, { stream: true })),
             onExit: () => {
               view.options.cursorBlink = false;
-              // 終わったセッションへは繋ぎ直さない。終わったことは切断ではない。
               stopped = true;
               setLink({ phase: "live" });
               onExit?.();
@@ -302,8 +186,6 @@ export function TerminalView({
         })
         .catch((error: unknown) => {
           if (!live || stopped) return;
-          // もう無いセッションへは繋ぎ直さない。閉じられたか、常駐プロセスが
-          // 入れ替わったかで、どちらも待って戻ってくるものではない。
           if (failureCode(error) === "terminal_session_not_found") {
             setLink({ phase: "stopped", gone: true });
             return;
@@ -314,8 +196,6 @@ export function TerminalView({
 
     const retry = () => {
       if (!live || stopped) return;
-      // しばらく繋がっていたなら、これは前の切断の続きではない。待ち時間を
-      // 引きずると、一度荒れただけの通信路がその後ずっと 15 秒待ちになる。
       if (linkedAt !== 0 && Date.now() - linkedAt > settled) attempts = 1;
       let left = backoff[Math.min(attempts - 1, backoff.length - 1)] ?? 1;
       const next = attempts + 1;
@@ -340,14 +220,6 @@ export function TerminalView({
     };
     attach();
 
-    // コピーと貼り付けは自分で持つ。
-    //
-    // **xterm の選択はブラウザの選択ではない。** 選んだ範囲を知っているのは
-    // xterm だけなので、Cmd+C をそのまま渡すと、ブラウザは空の選択を写して
-    // 何も起きない——実際そうなっていた。写すのはここである。
-    //
-    // 割り当ては macOS が Cmd、それ以外が Ctrl+Shift である。**素の Ctrl+C は
-    // 通す。** あれは SIGINT であり、端末が端末である理由のひとつである。
     const detachClipboard = attachTerminalClipboard({
       container,
       terminal: view,
@@ -357,8 +229,6 @@ export function TerminalView({
       refuse: () => setProblem(t("terminal.clipboardRefused")),
     });
 
-    // リサイズは TIOCSWINSZ を発行させる。これが無いと、全画面を使う
-    // プログラム（vim、top、less）が壊れた幅で描画する。
     const observer = new ResizeObserver(measure);
     observer.observe(container);
 
@@ -375,23 +245,14 @@ export function TerminalView({
       view.dispose();
       terminal.current = null;
     };
-    // onExit と t はレンダーごとに新しくなりうる。ここが依存するのはセッション
-    // だけであり、他が変わるたびに端末を作り直してはならない。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, api]);
 
-  // テーマの切り替えも配色の選び直しも、端末を作り直さない。色だけを読み直して
-  // 差し替える。
-  //
-  // **属性が載ったあとに読む。** data-term-palette は同じ描画で箱に付くので、
-  // effect が走る時点では既にそこにある。
   useEffect(() => {
     if (terminal.current === null || host.current === null) return;
     terminal.current.options.theme = terminalTheme(host.current, hasBackground);
   }, [resolved, palette, hasBackground]);
 
-  // 字体の選び直しも端末を作り直さない。**ただし測り直しは要る** ——1 マスの
-  // 幅が変われば、桁数も行数も、向こうのシェルへ伝える大きさも変わる。
   useEffect(() => {
     if (terminal.current === null) return;
     terminal.current.options.fontFamily = fontStack(font ?? "");
@@ -405,10 +266,7 @@ export function TerminalView({
           {problem}
         </p>
       )}
-      {/*
-        繋がっているときは何も言わない。それ以外のときは、いま何をしているか、
-        次に何が起きるか、そしてそれを変える手段を同じ行に置く。
-      */}
+
       {link.phase === "live" ? null : (
         <div
           role="status"
@@ -453,18 +311,10 @@ export function TerminalView({
             : t("terminal.exitedWithSignal", { signal: session.exited.signal })}
         </p>
       )}
-      {/*
-        端末の背景はトークンから来る。周りの面と同じ色にすると、どこまでが
-        端末なのかが分からなくなる。
-      */}
-      {/*
-        relative は、重ねる板の座標系である。板は .xterm の**兄弟**としてここに
-        ぶら下がる——.xterm の中では長押しからの選択がどうやっても始まらない。
-      */}
+
+
       <div
         ref={host}
-        // 選ばれていないときは属性を置かない。**空文字を置くと、どの配色にも
-        // 一致しない選択が「選ばれた」ことになる。**
         {...(palette === undefined || palette === "" ? {} : { "data-term-palette": palette })}
         {...(font === undefined || font === "" ? {} : { "data-term-font": font })}
         {...(hasBackground ? { "data-term-background": background ?? "" } : {})}

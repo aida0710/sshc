@@ -27,8 +27,8 @@ func createLockedVault(t *testing.T, home string) {
 	}
 }
 
-// **施錠されていたら待たない。** かつては窓を前へ出して解錠を待っていたが、
-// 前へ出す窓が無くなった。engine を動かしている人は端末に居るのだから、打つべき
+// 施錠されていたら待たない。かつては窓を前へ出して解錠を待っていたが、
+// 前へ出す窓が無くなった。engine を動かしているユーザーは端末に居るのだから、打つべき
 // 語を渡して終わる方が短い。
 func TestALockedVaultRefusesPromptlyWithTheVaultCommand(t *testing.T) {
 	home, _ := liveHeadless(t)
@@ -45,8 +45,8 @@ func TestALockedVaultRefusesPromptlyWithTheVaultCommand(t *testing.T) {
 	}
 }
 
-// **engine が居なければ、起こし方と回り道を言う。** 起こすのはこのコマンドの
-// 仕事ではない——生かしておくのは人である。
+// engine が動作していない場合は、起動方法と代替手段を案内する。
+// connect コマンド自身は engine を起動しない。
 func TestConnectingWithoutAnEngineSaysHowToStartOne(t *testing.T) {
 	home := t.TempDir()
 	writeAliasConfig(t, home, "waiting-host")
@@ -66,7 +66,7 @@ func TestConnectingWithoutAnEngineSaysHowToStartOne(t *testing.T) {
 
 // writeAliasConfig は、繋ぎ先の名前をひとつだけ持つ設定を置く。
 //
-// 行き先は 127.0.0.1 の閉じたポートである。**接続が成功してはいけない**——
+// 行き先は 127.0.0.1 の閉じたポートである。接続が成功してはいけない。
 // ここで確かめるのは接続そのものではなく、接続へ至るまでの経路だからである。
 func writeAliasConfig(t *testing.T, home, alias string) {
 	t.Helper()

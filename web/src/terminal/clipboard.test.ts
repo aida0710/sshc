@@ -113,10 +113,6 @@ describe("the long press is not a right click", () => {
     };
   }
 
-  // **触れる画面に右のボタンは無い。** Android は長押しで contextmenu を出す
-  // ので、そこで既定を止めると OS がまさに始めようとしていた範囲選択ごと消える。
-  // 実機ではそれが起きていて、ついでに読み取れないクリップボードを読みに行き、
-  // 「アクセスできませんでした」を出していた。
   it("leaves the context menu alone where the pointer is coarse", () => {
     const container = document.createElement("div");
     const readText = vi.fn(async () => "pasted text");

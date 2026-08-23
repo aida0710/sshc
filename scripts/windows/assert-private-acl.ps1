@@ -26,9 +26,7 @@ if (-not (Test-Path -LiteralPath $Path)) {
 $acl = Get-Acl -LiteralPath $Path
 $owner = $acl.Owner
 
-# SID で照合する。**表示名で照合しない** — 表示名は言語ごとに変わり、
-# 日本語の Windows では "Administrators" は "Administrators" のままだが、
-# "SYSTEM" は "SYSTEM" でも、どちらも保証されているものではない。
+# ローカライズされる表示名ではなく SID で照合する。
 $allowedSids = @(
   'S-1-5-18' # SYSTEM
   'S-1-5-32-544' # Administrators
@@ -39,7 +37,7 @@ $ownerSid = (New-Object System.Security.Principal.NTAccount($owner)).Translate(
 $offenders = @()
 foreach ($rule in $acl.Access) {
   if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
-    # 拒否はここでは無視する。読みを広げるのは許可だけである。
+    # 読み取り範囲を広げる Allow 規則だけを検査する。
     continue
   }
   $readMask = [System.Security.AccessControl.FileSystemRights]::Read `
@@ -61,9 +59,7 @@ if ($offenders.Count -gt 0) {
   throw "assert-private-acl: $Path grants read to $($offenders -join ', ')"
 }
 
-# **継承を許したままにしない。** 親のほうを緩めた誰かが、あとからここを
-# 広げられる。書いた側は継承を切っているはずで、切れていないなら、その
-# 経路を通っていない。
+# 親ディレクトリの ACL 変更で権限が広がらないよう、継承を禁止する。
 if (-not $acl.AreAccessRulesProtected) {
   throw "assert-private-acl: $Path still inherits its access rules"
 }

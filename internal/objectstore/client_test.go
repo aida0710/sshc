@@ -85,7 +85,7 @@ func TestPutRefusesBothConditionsAtOnceWithoutSendingAnything(t *testing.T) {
 }
 
 func TestAFailedConditionIsItsOwnError(t *testing.T) {
-	// 「誰かが先に到達した」は失敗ではなく答えであり、呼び出し側はそれを失敗と
+	// 「誰かが先に到達した」は失敗ではなく結果であり、呼び出し側はそれを失敗と
 	// 見分けられなければならない。
 	for _, status := range []int{http.StatusPreconditionFailed, http.StatusConflict} {
 		client, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -185,7 +185,7 @@ func TestAnOversizedObjectIsRefusedBeforeItIsSent(t *testing.T) {
 }
 
 func TestAnyOtherRejectionCarriesNoResponseBody(t *testing.T) {
-	// S3 のエラードキュメントはバケット名とリクエスト ID を名指しする。どちらも
+	// S3 のエラードキュメントにはバケット名とリクエスト ID が含まれる。どちらも
 	// このアプリケーションが表示するメッセージに入れてよいものではない。
 	client, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
@@ -250,7 +250,7 @@ func TestARequestThatStopsRespondingTimesOut(t *testing.T) {
 
 	// 表明するのは「タイムアウトで終わったこと」であって、それが何ミリ秒で
 	// 起きたかではない。以前は経過時間が 1 秒未満であることを求めており、
-	// それは製品ではなく走っているマシンを測っていた——負荷の高いランナーでは
+	// それは製品ではなく走っているマシンを測っていた。負荷の高いランナーでは
 	// スケジューリングだけで 1 秒を超え、CI が理由もなく赤くなる。
 	started := time.Now()
 	_, err := client.Get(context.Background(), "k")

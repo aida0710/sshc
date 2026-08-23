@@ -9,15 +9,15 @@ import (
 	"testing"
 )
 
-// **書いてある手順は、打てなければならない。**
+// 書いてある手順は、打てなければならない。
 //
 // iOS をやめて `ios-bind` を消したとき、README と docs/design.md は
-// `make ios-bind` を案内したまま残った。**読んだ人が最初に打つのがそれである。**
+// `make ios-bind` を案内したまま残った。読んだユーザーが最初に打つのがそれである。
 //
-// この repo は同種のずれを軒並み検査で縛っている——生成物、API の契約、
-// workflow の形、保管庫の寿命の綴り。ここだけ穴だった。
+// この repo は同種のずれを軒並み検査で縛っている。生成物、API の契約、
+// workflow の形、保管庫の寿命の表記。ここだけ穴だった。
 //
-// **記録は見ない。** 日付の付いた設計文書と superpowers の計画は、その日に
+// 記録は見ない。日付の付いた設計文書と superpowers の計画は、その日に
 // 何を打ったかの記録であり、いま打てる必要はない。
 
 // currentDocuments は、いま読まれて実行される文書である。
@@ -51,8 +51,8 @@ func makefileTargets(t *testing.T) map[string]bool {
 
 func TestEveryDocumentedMakeTargetExists(t *testing.T) {
 	targets := makefileTargets(t)
-	// **`make <的>` と書かれた形だけを見る。** 散文で的の名前に触れるのは構わない
-	// ——「かつて ios-bind という的があった」は打てなくてよい。
+	// `make <的>` と書かれた形だけを見る。散文で的の名前に触れるのは構わない
+	//「かつて ios-bind という的があった」は打てなくてよい。
 	named := regexp.MustCompile(`make ([a-z][a-z0-9-]*)`)
 
 	var missing []string

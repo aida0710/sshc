@@ -27,16 +27,11 @@ function Probe() {
 
 describe("the catalogue", () => {
   it("translates every English message", () => {
-    // TypeScript は既に欠落したキーを拒否する。ここで検証するのは型
-    // システムには検証できないこと——日本語のエントリが誤って
-    // 英語のものそのままのコピーになっていないか、である。
     const untranslated = Object.keys(en).filter((key) => {
       const source = en[key as keyof typeof en];
       const target = ja[key as keyof typeof en];
       return source === target;
     });
-    // これらは正当に同一なもの——固有名詞と、両言語で
-    // 既に同じ文字列になっている語だ。
     expect(untranslated.sort()).toEqual(
       [
         "diag.hostAlias",
@@ -45,7 +40,6 @@ describe("the catalogue", () => {
         "host.tabRaw",
         "keys.agentHeading",
         "keys.certKeyId",
-        "keys.colFingerprint",
         "keys.reference",
         "keys.blockerOther",
         "keys.relocateFilePair",
@@ -53,7 +47,6 @@ describe("the catalogue", () => {
         "keys.unreadableEntry",
         "kh.heading",
         "rk.alias",
-        "rk.fingerprint",
         "rk.hostAlias",
         "section.knownHosts",
         "shell.languageEnglish",
@@ -72,8 +65,6 @@ describe("the catalogue", () => {
       </LanguageProvider>,
     );
 
-    // 引数が欠けている場合、"undefined" という語ではなく
-    // 波括弧をそのまま表示する。文中の "undefined" は内容に見えてしまうからだ。
     expect(screen.getByText("Local session active · 0.1.0")).toBeInTheDocument();
   });
 });
@@ -103,8 +94,6 @@ describe("the language switch", () => {
       </LanguageProvider>,
     );
 
-    // 検出するだけで書き込んではならない。切り替えに一度も触れない
-    // ユーザーは、永続ストレージを空のままにしておく。
     expect(window.localStorage.length).toBe(0);
 
     await user.click(screen.getByRole("button", { name: "to japanese" }));
@@ -151,7 +140,6 @@ describe("locale detection", () => {
     });
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["ja"]);
 
-    // 失われるのは好みの設定であって、シェルではない。
     expect(detectLocale()).toBe("ja");
   });
 });

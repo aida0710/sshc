@@ -12,12 +12,12 @@ import (
 
 // 端末の背景画像。
 //
-// **名前を決めるのはサーバーである。** 送られてくるのは希望と中身だけで、
-// 実際の綴りと型は応答が答える。送られた綴りをそのままファイル名にすれば、
+// 名前を決めるのはサーバーである。送られてくるのは希望と中身だけで、
+// 実際の表記と型は応答が返す。送られた表記をそのままファイル名にすれば、
 // `../` も隠しファイルも拡張子の詐称もそこから入る。
 //
-// 画像は封の中を旅する（remotesync.Collect）。**Android はサンドボックスの外を
-// 見られない**ので、あの端末へ画像を持ち込む道はこれしかない。
+// 画像本体は暗号化スナップショットに含める（remotesync.Collect）。Android は
+// サンドボックス外を参照できないため、同期で画像を受け取る。
 
 func registerBackgroundRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.GET("/api/v1/terminal/backgrounds", handlers.Backgrounds)
@@ -28,7 +28,7 @@ func registerBackgroundRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 
 // backgroundList は、置いてある画像と、あと何バイト置けるかを返す。
 //
-// **残りを数えるのはこちらである。** 画面が上限を書き写すと、上限を変えた日に
+// 残りを数えるのはこちらである。画面が上限を書き写すと、上限を変えた日に
 // 画面だけが古い数を信じる。
 func (h ConfigHandlers) Backgrounds(c *echo.Context) error {
 	backgrounds, err := h.Service.Backgrounds()
@@ -54,7 +54,7 @@ func (h ConfigHandlers) AddBackground(c *echo.Context) error {
 	if body == nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	// **1 バイト余分に読む。** ちょうど上限で切ると、超えていることと
+	// 1 バイト余分に読む。ちょうど上限で切ると、超えていることと
 	// ちょうど収まっていることが見分けられない。
 	contents, err := io.ReadAll(io.LimitReader(body, application.MaxBackgroundBytes+1))
 	if err != nil {
@@ -76,8 +76,8 @@ func (h ConfigHandlers) AddBackground(c *echo.Context) error {
 
 // Background は、画像そのものを返す。
 //
-// **型は中身から決まったものを名乗る。** 送られてきたときに名乗られた型では
-// ない——それはこのバイト列について何も保証しない。X-Content-Type-Options は
+// 型は中身から決まったものを名乗る。送られてきたときに名乗られた型では
+// ない。それはこのバイト列について何も保証しない。X-Content-Type-Options は
 // Security.Middleware が全応答に付けているので、ここで名乗った型より先へ
 // ブラウザが推測することはない。
 func (h ConfigHandlers) Background(c *echo.Context) error {

@@ -1,15 +1,6 @@
-// Package secret は、このアプリケーションが OpenSSH へ渡しうるパスワードを保持する。
-//
-// それらはワークスペース内のひとつの暗号化ファイル ~/.ssh/sshc/secrets の中に
-// あり、macOS のキーチェーンにはない。これは意図的な選択で、理由はひとつ。
-// キーチェーンの項目はマシンに属するが、これらは移動しなければならないからだ。
-// 同期されるのはワークスペースなので、二台目のマシンに届かねばならないものは、
-// その中のファイルでなければならない。
-//
-// その結果、このファイルは、同じユーザーで動くどのプロセスからも読める場所に
-// ディスク上で静止することになる。だから書かれる前に暗号化される。鍵は、この
-// アプリケーションが決して保存しないパスフレーズから導出される。ここにあるものは、
-// そのパスフレーズが与えられない限り、何も復号できない。
+// Package secret は、OpenSSH 接続で使用する資格情報を暗号化して保存する。
+// 保存先はワークスペース内の ~/.ssh/sshc/secrets で、暗号鍵は保存しない
+// マスターパスワードから導出する。
 package secret
 
 import (
@@ -23,20 +14,13 @@ import (
 	"sshc/internal/validate"
 )
 
-// WorkspacePath は、封をされたファイルの置き場所。ワークスペースルートからの
+// WorkspacePath は、暗号化されたファイルの置き場所。ワークスペースルートからの
 // 相対である。エディタに開いてくれと誘うような拡張子を持たず、読めそうに見える
 // 名前も持たない。
 const WorkspacePath = "sshc/secrets"
 
-// SettingsPath は、オブジェクトストアの設定。同じマスターパスワードで封じられ、
-// vault の中ではなく隣に置かれる。
-//
-// vault は移動する。remotesync.Collect は sshc/secrets を明示的に名指しする。
-// アクセスキーをその中に入れれば、バケットへの鍵をバケットの中に入れることになり、
-// 何らかの手段でスナップショットをひとつ入手し、そのパスフレーズも得た者は、すでに
-// 手にしている一つ分ではなく、生きたバケットとその後のすべてのスナップショットを
-// 手に入れてしまう。Collect は何を取るかを列挙するので、このファイルは、誰かが
-// 覚えておくべきルールによってではなく、構造上除外される。
+// SettingsPath は、マスターパスワードで暗号化したオブジェクトストア設定の保存先。
+// 同期先への資格情報がスナップショットに含まれないよう、vault とは別に保存する。
 const SettingsPath = "sshc/sync-settings"
 
 // SchemaVersion は、暗号化の内側にある平文文書のバージョン。ヘッダーは envelope
@@ -44,7 +28,7 @@ const SettingsPath = "sshc/sync-settings"
 const SchemaVersion = 3
 
 // envelope のエラーは再エクスポートしてある。vault を扱う呼び出し側が、どの
-// パッケージがそれを封じたかを知らずに済むようにするためだ。
+// パッケージがそれを暗号化したかを知らずに済むようにするためだ。
 var (
 	ErrWrongPassphrase    = envelope.ErrWrongPassphrase
 	ErrNotAVault          = envelope.ErrNotAnEnvelope
@@ -65,7 +49,7 @@ var (
 	ErrOldVault = errors.New("this vault predates named credentials and cannot be read")
 	// ErrUnknownKind は、どちらでもない名前空間を拒否する。
 	ErrUnknownKind = errors.New("that is not a credential kind")
-	// ErrUnknownCredential は、その名前空間に存在しない名前への参照を拒否する —
+	// ErrUnknownCredential は、その名前空間に存在しない名前への参照を拒否する。
 	// これは、ホストが鍵のパスフレーズを参照するのを止めている仕組みでも
 	// ある。
 	ErrUnknownCredential = errors.New("no credential of that kind has that name")
@@ -83,9 +67,7 @@ const MinPassphraseLength = envelope.MinPassphraseLength
 // 選べばそのパスフレーズがログインパスワードとしてリモートホストへ送られる。二つに
 // 分ければ、それは起こりにくいどころか、表現すること自体が不可能になる。
 //
-// 守るものも異なる。アカウントのパスワードはひとつのアカウントへの入場を許すが、
-// 鍵のパスフレーズは、多くのマシンへの入場を許しうる鍵を解錠する。共有は、それぞれ
-// の中では普通のことであり、両者をまたぐと意味をなさない。
+// アカウントパスワードと秘密鍵パスフレーズを別の名前空間に分け、誤送信を防ぐ。
 type Kind string
 
 const (
@@ -101,12 +83,7 @@ func ValidKind(kind Kind) bool {
 
 // SyncSettings は、オブジェクトストアが必要とするもの。
 //
-// vault と同じマスターパスワードで封じられ、専用のファイルに置かれる。vault は
-// 移動するからだ。Collect は sshc/secrets を明示的に名指しするので、アクセスキーを
-// vault の中に入れれば、バケットへの鍵をバケットの中に入れることになる。何らかの
-// 手段でスナップショットをひとつと、そのパスフレーズを入手した者は、すでに手にして
-// いる一つ分ではなく、生きたバケットと今後のすべてのスナップショットを手に入れて
-// しまう。
+// vault と同じマスターパスワードで暗号化し、同期対象外の専用ファイルに保存する。
 type SyncSettings struct {
 	Endpoint string `json:"endpoint,omitempty"`
 	Bucket   string `json:"bucket,omitempty"`
@@ -118,15 +95,15 @@ type SyncSettings struct {
 	Direction       string `json:"direction,omitempty"`
 	// Auto は、この設置で自動同期を入れてあるか。
 	//
-	// **他の同期の設定と同じ場所に住む。** 巡回に必要なものは、鍵も資格情報も
-	// この入切も、すべて保管庫が開いてから読める——閉じている間は何も読めず、
+	// 他の同期の設定と同じ場所に住む。巡回に必要なものは、鍵も資格情報も
+	// この入切も、すべて保管庫が開いてから読める。閉じている間は何も読めず、
 	// 何も起きない。それがこの機能の唯一の条件である。
 	Auto bool `json:"auto,omitempty"`
-	// Key は、リモートのスナップショットを封じる値である。
+	// Key は、リモートのスナップショットを暗号化する値である。
 	//
-	// **マスターパスワードではない。** それを使っていたので、マスターパスワードが
-	// 端末をまたいだ共有秘密になっていた——1 台で変えれば他の全端末が締め出され、
-	// 打つ人が居ないところでは封を開けられなかった。ここに置くことで、
+	// マスターパスワードではない。それを使っていたので、マスターパスワードが
+	// 端末をまたいだ共有秘密になっていた。1 台で変えれば他の全端末が締め出され、
+	// 打つユーザーが居ないところでは復号できなかった。ここに置くことで、
 	// マスターパスワードは端末ごとのローカルな秘密に戻る。
 	Key string `json:"key,omitempty"`
 }
@@ -135,7 +112,7 @@ type SyncSettings struct {
 //
 // 資格情報のマップが二つ、そして種別ごとに参照のマップがひとつ。ホストは alias で、
 // 鍵はワークスペース相対のパスでキー付けされる。名前の付いた秘密は、いくつの
-// subject が指していても一度だけ保存される。この形の理由はまさにそこにある —
+// subject が指していても一度だけ保存される。この形により、
 // 20 台のマシンが共有するパスワードを、一か所でローテーションできる。
 type document struct {
 	SchemaVersion           int               `json:"schemaVersion"`
@@ -149,7 +126,7 @@ type document struct {
 
 // Vault は、開かれた secrets ファイル。
 //
-// パスフレーズではなく導出された鍵を保持するので、再度尋ねることなく変更を封じ
+// パスフレーズではなく導出された鍵を保持するので、再度尋ねることなく変更を暗号化
 // 直せる。そしてパスフレーズは、Open が返ったあとどこにも保持されて
 // いない。
 type Vault struct {
@@ -165,7 +142,7 @@ func newMaps() (map[Kind]map[string]string, map[Kind]map[string]string) {
 		map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}}
 }
 
-// Create は、passphrase で封じられた空の vault を返す。
+// Create は、passphrase で暗号化された空の vault を返す。
 func Create(passphrase string) (*Vault, error) {
 	key, err := envelope.Derive(passphrase)
 	if err != nil {
@@ -188,12 +165,8 @@ func Open(sealed []byte, passphrase string) (*Vault, error) {
 	return openDocument(plaintext, key)
 }
 
-// OpenWith は、すでに導出してある鍵で開く。
-//
-// **パスフレーズを覚えていない場所のためにある。** 同期が保管庫の中身を差し替えた
-// あと、走っている実行はそれを読み直さなければならない——読み直さなければ、
-// 運ばれてきたパスワードは次に解錠するまで存在しないのと同じである。そして
-// マスターパスワードは、解錠のあと保持されていない。鍵だけが残っている。
+// OpenWith は、すでに導出してある鍵で vault を開く。
+// 同期後の再読込ではマスターパスワードを保持していないため、この関数を使う。
 func OpenWith(sealed []byte, key envelope.Key) (*Vault, error) {
 	plaintext, err := key.Open(sealed)
 	if err != nil {
@@ -212,7 +185,7 @@ func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
 	}
 	// バージョン 1 の文書は、alias ごとにパスワードを持ち、名前をまったく持たな
 	// かった。世界に多くともひとつしか存在せず、そのための移行は移行する対象より
-	// 大きくなるので、黙って作り変えるのではなく、画面が「もう一度設定してください」
+	// 大きくなるので、暗黙に作り変えるのではなく、画面が「もう一度設定してください」
 	// に変えられるエラーで拒否する。
 	if parsed.SchemaVersion < 2 {
 		return nil, ErrOldVault
@@ -276,8 +249,8 @@ func (v *Vault) OpenSettings(sealed []byte) (SyncSettings, error) {
 // Seal は、書き込みのために vault を暗号化する。
 // Rekey は passphrase から新しい鍵を導出し、それを採用する。
 //
-// 中身には手を触れない。変わるのは、それを開くものの方だ。古い鍵が封じたものは
-// すべて、同じ流れの中で呼び出し側が封じ直さなければならない。これが新しい vault
+// 中身には手を触れない。変わるのは、それを開くものの方だ。古い鍵が暗号化したものは
+// すべて、同じ流れの中で呼び出し側が暗号化し直さなければならない。これが新しい vault
 // ではなく vault のメソッドである理由はそこにある。呼び出し側は、二つの鍵を同時に
 // 必要とするからだ。
 func (v *Vault) Rekey(passphrase string) (envelope.Key, error) {
@@ -290,10 +263,10 @@ func (v *Vault) Rekey(passphrase string) (envelope.Key, error) {
 	return previous, nil
 }
 
-// SealBytes は、任意のバイト列をこの vault の鍵で封じる。
+// SealBytes は、任意のバイト列をこの vault の鍵で暗号化する。
 //
-// これが、世代バックアップのディレクトリを、以前のファイル内容の山 — バックアップ
-// をまったく拒んでいた書き込みについては、以前の秘密鍵そのもの — から、暗号文の
+// これが、世代バックアップのディレクトリを、以前のファイル内容の山、バックアップ
+// をまったく拒んでいた書き込みについては、以前の秘密鍵そのもの、から、暗号文の
 // 山へと変える。
 func (v *Vault) SealBytes(plaintext []byte) ([]byte, error) {
 	return v.key.Seal(plaintext)
@@ -304,12 +277,8 @@ func (v *Vault) OpenBytes(sealed []byte) ([]byte, error) {
 	return v.key.Open(sealed)
 }
 
-// Empty は、この保管庫が何も保持していないことを報告する。
-//
-// **空の保管庫には、失うものが無い。** 作ったばかりの端末が最初の pull をすると
-// き、こちらの中身とあちらの中身は当然違う——そこで衝突を報告すれば、2 台目は
-// 一度も同期を終えられない。空であることは「まだ何も入れていない」であって、
-// 「あちらと競合する編集をした」ではない。
+// Empty は、この vault が資格情報も参照も保持していないことを報告する。
+// 初回 pull では空のローカル vault を競合する編集として扱わない。
 func (v *Vault) Empty() bool {
 	for _, secrets := range v.secrets {
 		if len(secrets) != 0 {
@@ -324,15 +293,8 @@ func (v *Vault) Empty() bool {
 	return len(v.dedicatedPasswords) == 0 && len(v.dedicatedKeyPassphrases) == 0
 }
 
-// Document は、封を外した中身そのものを返す。
-//
-// **旅に出るのはこれである。** 保管庫のファイルは、この端末のマスターパスワードで
-// 封じられている——そのまま運べば、受け取った端末は送り主のマスターパスワードで
-// しか開けなくなる。運ぶのは中身であって、封ではない。
-//
-// これが平文で出ることを許すのは、行き先が同期のアーカイブの中だからである。
-// あのアーカイブは同期の鍵で封じられており、秘密鍵も config も、すでに同じ扱いで
-// その中を旅している。
+// Document は、同期用に復号済みの vault 文書を返す。
+// 呼び出し側は、この文書を同期鍵で暗号化したアーカイブにだけ格納する。
 func (v *Vault) Document() ([]byte, error) {
 	return json.Marshal(document{
 		SchemaVersion:           SchemaVersion,
@@ -474,7 +436,7 @@ func (v *Vault) Uses(kind Kind, name string) []string {
 //
 // 種別こそが防護のすべてである。ホストは alias を名前とし、アカウントのパスワード
 // だけを参照できる。鍵はワークスペース相対のパスを名前とし、鍵のパスフレーズだけを
-// 参照できる。両者をまたぐことは、忘れうる検査によって拒否されるのではない —
+// 参照できる。両者をまたぐ参照は、実行時の検査ではなく、
 // 他方の種別の名前が現れるマップが、そもそも存在しないのである。
 func (v *Vault) Assign(kind Kind, subject, name string) error {
 	if !ValidKind(kind) {
@@ -547,7 +509,7 @@ func (v *Vault) SecretFor(kind Kind, subject string) (string, bool) {
 }
 
 // Rename は、subject の参照を新しい名前へ引き継ぐ。ホストの名前変更はこれを
-// しなければならず、さもなければ参照は、誰も尋ねない名前の下に黙って孤児に
+// しなければならず、さもなければ参照は、誰も尋ねない名前の下に暗黙に孤児に
 // なる。
 func (v *Vault) Rename(kind Kind, from, to string) error {
 	if kind == KindPassword {
@@ -643,7 +605,7 @@ func (v *Vault) RelocateSubjects(kind Kind, relocations map[string]string) (bool
 	return true, nil
 }
 
-// validCredentialName は、人が打ち込み、画面が表示できる名前を受け付ける。これは
+// validCredentialName は、ユーザーが打ち込み、画面が表示できる名前を受け付ける。これは
 // alias ではない。資格情報は、それが何のためのものかにちなんで名付けられ、それは
 // ホスト名ではなく「オフィスの VM 群」かもしれないからだ。
 func validCredentialName(name string) bool {

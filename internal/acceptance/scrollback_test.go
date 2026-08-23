@@ -21,7 +21,7 @@ const scrollbackCanary = "scrollback-canary-8d31f7"
 // 出ていかないことを表明する。
 //
 // 既存の漏洩検査は注入した logger だけを見ているので、これは別に書いてある。
-// 見るのはファイルシステムそのものである——世代バックアップ、journal、history、
+// 見るのはファイルシステムそのものである。世代バックアップ、journal、history、
 // metadata、vault、handoff、そして状態ディレクトリ配下の何もかも。
 func TestTheScrollbackNeverReachesTheStateDirectory(t *testing.T) {
 	f := newFixture(t)

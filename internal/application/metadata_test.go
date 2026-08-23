@@ -43,9 +43,6 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsAFutureSchema(t *testing.T) 
 	if _, err := DecodeMetadata([]byte(`{"schemaVersion":1,`)); err == nil {
 		t.Fatal("truncated metadata was accepted")
 	}
-	// バージョン 2 の文書は端末の選択を文字列として持っている。**同じキーを
-	// オブジェクトへ変えると json.Unmarshal は文書全体で失敗する**ので、埋め込み
-	// ターミナルの設定は別のキーに置いてある。この検査がその判断を留めている。
 	previous, err := DecodeMetadata([]byte(`{"schemaVersion":2,"terminal":"iterm2",` +
 		`"customTerminal":{"application":"/Applications/Term.app","arguments":["-e"]},` +
 		`"hosts":[{"identity":{"path":"config","alias":"bastion"},"favourite":true}]}`))
@@ -60,8 +57,6 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsAFutureSchema(t *testing.T) 
 	}
 }
 
-// 範囲の外の上限は既定へ戻る。ここは読み取りであり、数字ひとつが色もタグも
-// お気に入りも道連れに読めなくしてよい理由はない。
 func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
 	for name, document := range map[string]string{
 		"zero":        `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":0}}`,
@@ -78,7 +73,6 @@ func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
 		}
 	}
 
-	// 範囲の中の値はそのまま通る。
 	kept, err := DecodeMetadata([]byte(`{"schemaVersion":3,"embeddedTerminal":{"maxSessions":8,"scrollbackBytes":32768}}`))
 	if err != nil {
 		t.Fatal(err)
@@ -88,11 +82,7 @@ func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
 	}
 }
 
-// 書き込み側は範囲の外を拒否する。読み取りが既定へ戻すのとは対称ではない
-// ——書き込みはこのアプリケーション自身の操作だからである。
 func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
-	// 「少なすぎるセッション数」は無い。下限は 1 で、その下は 0 ——0 は
-	// 「書かれていない」であって範囲の外ではない。
 	for name, settings := range map[string]EmbeddedTerminal{
 		"too many sessions":    {MaxSessions: terminal.MaxMaxSessions + 1, ScrollbackBytes: terminal.DefaultScrollback},
 		"scrollback too small": {MaxSessions: 1, ScrollbackBytes: terminal.MinScrollback - 1},
@@ -105,8 +95,6 @@ func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
 		}
 	}
 
-	// **0 は「書かれていない」であり、範囲の外ではない。** この節には上限以外の
-	// ものも入るので、上限に触れずに開始位置だけを書く文書が成立する。
 	onlyTheDirectory := NewMetadata()
 	onlyTheDirectory.EmbeddedTerminal = &EmbeddedTerminal{StartDirectory: "~/work"}
 	written, err := EncodeMetadata(onlyTheDirectory)
@@ -161,8 +149,6 @@ func TestValidateMetadataRefusesKeyMaterialAndUnknownPaths(t *testing.T) {
 		t.Fatalf("path error = %v, want ErrMetadataPath", err)
 	}
 
-	// グループ名はディレクトリパスなので、このアプリケーションが作成を
-	// 拒否するような名前を挙げる文書もまた、信用してはならない。
 	for _, name := range []string{"../escape", "", "sshc", "work/"} {
 		withBadGroup := NewMetadata()
 		withBadGroup.Groups = []GroupMetadata{{Name: name}}
@@ -171,8 +157,6 @@ func TestValidateMetadataRefusesKeyMaterialAndUnknownPaths(t *testing.T) {
 		}
 	}
 
-	// 大文字小文字だけが異なる 2 つのグループは、デフォルトの macOS ボリューム
-	// では 1 個のディレクトリになるので、両方を宣言する文書は拒否される。
 	withCaseClash := NewMetadata()
 	withCaseClash.Groups = []GroupMetadata{{Name: "work"}, {Name: "Work"}}
 	if err := ValidateMetadata(withCaseClash); !errors.Is(err, ErrMetadataGroup) {
@@ -193,9 +177,6 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeMetadata error = %v", err)
 	}
-	// membership はディレクトリであり、note はコメントなので、ここにはどちら
-	// のキーも無い。端末の選択もこのアプリケーションが持たなくなったので無い。
-	// バイト列そのものを assert することが、こっそり戻るのを防ぐ。
 	for _, absent := range []string{`"group"`, `"parent"`, `"terminal"`, `"customTerminal"`} {
 		if strings.Contains(string(encoded), absent) {
 			t.Errorf("encoded metadata still carries %s:\n%s", absent, encoded)
@@ -207,9 +188,6 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 }
 
 func TestDecodeMetadataDropsGroupMembershipFromAnOlderDocument(t *testing.T) {
-	// バージョン 1 の文書はデコードされ、もはや意味を持たない 2 個のフィールドを
-	// 単に失う。今やディレクトリが正であり、v1 文書のグループが名指す
-	// レイアウトはディスク上にはまだ存在しない。
 	const document = `{"schemaVersion":1,"groups":[{"name":"work","parent":"company"}],` +
 		`"hosts":[{"identity":{"path":"config","alias":"bastion"},"group":"work","colour":"#f97316"}]}`
 
@@ -327,11 +305,6 @@ func TestRenameHostIdentityMovesExactlyOneEntry(t *testing.T) {
 	}
 }
 
-// Hidden は Colour や Order と同様に見た目であり、このエンジンはそれを運ぶ
-// だけで決して作用しない。他のグループを保持することが目的のグループは、
-// connections ツリーにそれ自体として示すものが何もなく、これはその見出し
-// をそこから取り除く——一方で Include 行、ディレクトリ、ssh が返す
-// あらゆる答えはそのままにする。
 func TestGroupMetadataCarriesTheHiddenFlagThroughARoundTrip(t *testing.T) {
 	metadata := NewMetadata()
 	metadata.Groups = []GroupMetadata{{Name: "dubguild", Hidden: true}, {Name: "dubguild/mdx"}}
@@ -353,8 +326,6 @@ func TestGroupMetadataCarriesTheHiddenFlagThroughARoundTrip(t *testing.T) {
 	}
 }
 
-// hidden でないグループはキーを一切書き込まないので、これが出荷された瞬間に、
-// 手つかずのワークスペースの metadata がすべてのグループ分のフィールドを増やすことはない。
 func TestAGroupThatIsNotHiddenWritesNoHiddenKey(t *testing.T) {
 	metadata := NewMetadata()
 	metadata.Groups = []GroupMetadata{{Name: "work"}}

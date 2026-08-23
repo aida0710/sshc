@@ -19,11 +19,11 @@ import (
 
 // testServer は、このプロセスの中で回る本物の SSH サーバーである。
 //
-// **偽物に置き換えない。** このパッケージの検査対象はプロトコルそのものなので、
+// 偽物に置き換えない。このパッケージの検査対象はプロトコルそのものなので、
 // ハンドシェイクを模したものと突き合わせても何も確かめられない。
 //
-// 待ち受けるのは 127.0.0.1 の任意ポートである。**net.Pipe では動かない。**
-// あれは同期的で、書き込みが対応する読み取りまで返らない——SSH の版文字列の
+// 待ち受けるのは 127.0.0.1 の任意ポートである。net.Pipe では動かない。
+// あれは同期的で、書き込みが対応する読み取りまで返らない。SSH の版文字列の
 // 交換は両側が先に書くので、その場で相互に固まる。x/crypto/ssh 自身の検査が
 // ループバックのソケットを使っているのは同じ理由である。リモートにも外部
 // バイナリにも触れないという約束は、これで守られている。
@@ -77,8 +77,8 @@ type serverOptions struct {
 	// Banner は、認証の前にサーバーが送る文言である。
 	Banner string
 	// ECDSAHostKey は、ed25519 に加えて ECDSA のホスト鍵も持たせる。普通の
-	// Ubuntu が三種類持っているのと同じ状況であり、**どれを名乗るかを決めるのは
-	// クライアントの優先順である。**
+	// Ubuntu が三種類持っているのと同じ状況であり、どれを名乗るかを決めるのは
+	// クライアントの優先順である。
 	ECDSAHostKey bool
 }
 
@@ -339,7 +339,7 @@ func (s *testServer) session(connection ssh.Conn, channel ssh.Channel, requests 
 			s.reply(request, true)
 		case "auth-agent-req@openssh.com":
 			s.reply(request, true)
-			// **agent のチャンネルはサーバーが開く。** 借りた側から
+			// agent のチャンネルはサーバーが開く。借りた側から
 			// 話しかけるものなので、向きはこちらからである。
 			if s.options.OnAgentChannel != nil {
 				go s.openAgent(connection)

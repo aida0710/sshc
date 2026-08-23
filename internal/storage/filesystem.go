@@ -39,8 +39,8 @@ type FileSystem interface {
 	// 適用し、ディスクへフラッシュして、そのパスを返す。
 	WriteTemp(directory, prefix string, permission fs.FileMode, contents []byte) (string, error)
 	Rename(oldPath, newPath string) error
-	// MovePrivate moves an existing sensitive file while preserving object
-	// identity and applying the private-state security contract.
+	// MovePrivate はオブジェクトの同一性と非公開状態のセキュリティ規則を維持したまま、
+	// 既存の機密ファイルを移動する。
 	MovePrivate(oldPath, newPath string) error
 	Remove(path string) error
 	SyncDir(path string) error

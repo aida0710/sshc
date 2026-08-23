@@ -1,8 +1,5 @@
-// Package mobile は、この engine を Android アプリの中から起こすための境界である。
-//
-// **ここに置くものは gomobile が bind できる形でなければならない。** 渡せるのは
-// 文字列と数値と error だけなので、構造体も interface も公開しない。それは制約
-// ではなく、この境界に必要なものがそれだけだという事実の反映である。
+// Package mobile は、gomobile で Android アプリから engine を操作するための境界。
+// 公開 API は gomobile が扱える文字列、数値、error に限定する。
 package mobile
 
 import (
@@ -35,27 +32,18 @@ var (
 	errEngineStoppedEarly = errors.New("the engine stopped before it announced an entrance")
 )
 
-// running は、このプロセスの唯一の engine である。
-//
-// **構造体を bind して Java にインスタンスを持たせない。** 1 プロセスに
-// engine は 1 台という制約は Android では設計判断ではなく事実であり、複数
-// 持てる形を見せれば、持てないものを持てるように見せることになる。
+// running は、このプロセスで唯一の engine の状態を保持する。
 var running struct {
 	sync.Mutex
 	cancel  context.CancelFunc
 	done    chan struct{}
 	release func() error
-	// lastKind は、直前の Start が失敗した理由である。
-	//
-	// **なぜ error ではなく番号を別に持つのか。** gomobile は Go の error を
-	// Java の Exception へ写すとき、メッセージ文字列しか運ばない。Java が
-	// 受け取った Exception を Go へ返しても、それは元の error ではなく同じ
-	// 文面を持つ別物になるので、errors.Is はこの境界を越えられない。理由の
-	// 区別は Go 側で確定させ、Java は番号だけを取りに来る。
+	// lastKind は、gomobile の error 変換で型情報が失われないよう、直前の
+	// Start の失敗理由を数値で保持する。
 	lastKind int
 }
 
-// Start は engine を起こし、入口の URL を返す。
+// Start は engine を起動し、入口の URL を返す。
 //
 // 返るのは listener が bind され Announce が呼ばれた後である。呼び出し側は
 // この URL を即座に WebView へ渡すので、早く返せば空のページが出る。
@@ -66,8 +54,7 @@ func Start(home, cache string) (string, error) {
 		return "", fail(KindAlreadyStarted, ErrAlreadyStarted)
 	}
 
-	// **ロックは engine より先である。** 2 台目が app.Run へ入ってから落ちると、
-	// その一瞬だけ同じ状態ディレクトリを 2 つが握る。
+	// app.Run の前にロックを取得し、同じ状態ディレクトリの同時利用を防ぐ。
 	release, err := enginelock.Acquire(filepath.Join(app.HandoffDir(home), "engine.lock"))
 	if err != nil {
 		return "", fail(KindAlreadyStarted, err)
@@ -111,10 +98,7 @@ func Start(home, cache string) (string, error) {
 	}
 }
 
-// Stop は engine を止め、ロックを手放す。
-//
-// **app.Run が戻るまで待つ。** 待たずにロックを手放すと、次の Start が
-// まだ握られているポートに bind しに行く。
+// Stop は app.Run の終了を待ってから engine lock を解放する。
 func Stop() error {
 	running.Lock()
 	defer running.Unlock()
@@ -128,13 +112,7 @@ func Stop() error {
 	return err
 }
 
-// Start が失敗した理由。**Java はこの番号だけを見る。**
-//
-// **export しているのは、番号を境界の向こうへ渡すためである。** gomobile は
-// export された定数を Java 側にも生やすので、あちらは `Mobile.KindListenFailed`
-// と書ける。以前は Java が `case 3:` と直に書いており、**この iota の途中に
-// 一つ挿すだけで、Android が黙って別の文言を出す状態**だった——番号が 2 か所に
-// あって、突き合わせる者が居なかった。
+// Start の失敗理由。gomobile が同じ定数を Java 側へ公開する。
 const (
 	KindNone = iota
 	KindUnknown
@@ -143,23 +121,14 @@ const (
 	KindStoppedEarly
 )
 
-// fail は、失敗の理由を記録してからその error を返す。
-//
-// **running の mutex を握ったまま呼ぶこと。** Start と LastStartFailureKind が
-// 同じ錠の下に居るので、Java が catch してから番号を取りに来るまでの間に
-// 別の Start が理由を上書きすることはない。
+// fail は running の mutex を保持した状態で失敗理由を記録する。
 func fail(kind int, err error) error {
 	running.lastKind = kind
 	return err
 }
 
-// LastStartFailureKind は、直前の Start が失敗した理由を番号ひとつで返す。
-//
-// **error そのものを Java へ渡して番号に畳ませない。** gomobile は Go の
-// error を Java の Exception へ写すときメッセージ文字列しか運ばないので、
-// 戻ってきた値に errors.Is は効かない。それに、engine の error は入口の URL を
-// 含み得る——文面を境界の向こうへ出せば logcat とエラー画面に bootstrap
-// fragment が残る。文面は Android 側が持ち、こちらは区別だけを渡す。
+// LastStartFailureKind は直前の Start の失敗理由を返す。エラー文に含まれ得る
+// bootstrap fragment を Java や logcat へ渡さない。
 func LastStartFailureKind() int {
 	running.Lock()
 	defer running.Unlock()

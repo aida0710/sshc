@@ -36,9 +36,9 @@ func (systemPasswordTerminal) ReadPassword(ctx context.Context, input *os.File) 
 	return readUnixPassword(ctx, input, systemUnixPasswordOperations())
 }
 
-// readUnixPassword uses a cancellation pipe in the same blocking poll as the
-// terminal. The only helper goroutine writes one byte and is joined before the
-// saved terminal mode is restored; it never owns or closes the caller's stdin.
+// readUnixPassword は端末とキャンセルパイプを同じ poll で待つ。補助 goroutine は
+// 1 バイトを書くだけで、保存済み端末モードを復元する前に終了を待つ。呼び出し側の
+// stdin を所有せず、閉じることもない。
 func readUnixPassword(
 	ctx context.Context, input *os.File, operations unixPasswordOperations,
 ) (password []byte, resultErr error) {
@@ -95,8 +95,8 @@ func readUnixPassword(
 func readUnixPasswordBytes(
 	ctx context.Context, terminalFD, wakeFD int, operations unixPasswordOperations,
 ) ([]byte, error) {
-	// A fixed-capacity buffer avoids leaving password copies in abandoned heap
-	// allocations when append grows the slice.
+	// 固定容量のバッファを使い、append によるスライス拡張で古いヒープ領域へ
+	// パスワードのコピーを残さないようにする。
 	password := make([]byte, 0, maxVaultPasswordBytes)
 	for {
 		if err := ctx.Err(); err != nil {

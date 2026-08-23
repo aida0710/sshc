@@ -3,15 +3,7 @@ import { Icon } from "../ui/icons";
 import { useTranslate } from "../i18n/context";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 
-// 詳細のペインが、開く相手を持たないときに出すものである。
-//
-// **どちらも空白ではない。** URL が名指した接続が設定から消えていることと、
-// まだ何も選ばれていないことは別の出来事で、次にすべきことも違う。
 
-// MissingConnection は、URL が名指したホストが設定に無いことを言う。
-//
-// **空の詳細を出さない。** 名前が消えたのか、まだ読み込んでいないのかは、
-// 見る人にとって別のことである。
 export function MissingConnection({ onBackToList }: { onBackToList: () => void }) {
   const t = useTranslate();
   return (
@@ -25,10 +17,6 @@ export function MissingConnection({ onBackToList }: { onBackToList: () => void }
   );
 }
 
-// NoConnectionSelected は、まだ何も選ばれていないときの面である。
-//
-// **鍵を持って来た人には、違うことを言う。** 鍵を作った直後にここへ来たなら、
-// 次にすることは「眺める」ではなく「その鍵を使う接続を作る」である。
 export function NoConnectionSelected({
   preferredKey,
   onBeginCreation,

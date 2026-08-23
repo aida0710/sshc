@@ -15,10 +15,7 @@ const sessionPromise = bootstrapSession(window.location, window.history, window.
 
 createRoot(root).render(
   <StrictMode>
-    {/*
-      **境界は provider の外側である。** theme も i18n も、その中で起きた例外の
-      巻き添えで落ち得る。中に置けば、壊れた context をこの画面自身が引きに行く。
-    */}
+
     <CrashBoundary>
     <ThemeProvider>
       <LanguageProvider>

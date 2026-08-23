@@ -4,11 +4,6 @@ import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
 import { noteLabels, rowAction, rowDanger } from "./labels";
 
-// KeyRowActions は、行から始められることの全部である。
-//
-// **setter ではなく、意図を渡す。** 「保管庫のパネルを開く」は、開く前に他の入力欄を
-// 畳み、開いたあとに一覧を取り直すところまでを含む——その順序は画面の持ち物であって、
-// 行が知っていてよいことではない。行が知っているのは、押されたということだけである。
 export type KeyRowActions = {
   onSelect: (item: KeyItem) => void;
   onToggleChosen: (item: KeyItem, chosen: boolean) => void;
@@ -25,11 +20,6 @@ export type KeyRowActions = {
   onMoveToTrash: (item: KeyItem) => void;
 };
 
-// KeyTable は、いま見えている鍵の一覧である。
-//
-// **並べ方も絞り込みも、ここでは決めない。** どれを見せるかは画面が決めて渡す。
-// 以前この表は KeysScreen の render の中に 217 行として置かれており、行が何を触るのか
-// は閉じ括弧を数えないと分からなかった。
 export function KeyTable({
   items,
   inventory,
@@ -69,9 +59,7 @@ export function KeyTable({
           className="border-b border-line align-top transition-colors last:border-b-0 hover:bg-select-fill"
         >
           <td className="py-3 pl-3">
-            {/* **一緒に動くものは、別々に選ばせない。** 秘密鍵を動かせば
-                その公開鍵と証明書も付いていく（relocate がそうする）ので、
-                ここで選べるのは relocate が名前を変えられるものだけである。 */}
+
             {renameable(item, inventory.items) ? (
               <div className="flex items-center gap-1">
                 <input
@@ -80,12 +68,8 @@ export function KeyTable({
                   checked={chosen.has(item.id)}
                   onChange={(event) => actions.onToggleChosen(item, event.target.checked)}
                 />
-                {/* **掴む場所を決める。** 行ごと掴めるようにすると、文字を
-                    選ぼうとした指がそのまま鍵を運んでしまう。持てる場所が
-                    目に見えている方が、掴んでよいと分かる。 */}
-                {/* **掴む場所は大きくする。** 一文字ぶんの幅しかないと、
-                    狙いを定めるだけで手が止まる。行の高さいっぱいを持てる
-                    ようにして、掴んでよい場所が目で分かるようにする。 */}
+
+
                 <span
                   draggable
                   aria-label={t("keys.dragKey", { path: item.relativePath })}
@@ -120,7 +104,7 @@ export function KeyTable({
               </ul>
             )}
           </td>
-          {/* 印だけで足りる。指紋も権限も使用箇所も、右のペインが持つ。 */}
+
           <td className="py-2 pr-3 text-xs">
             <span className="flex flex-wrap gap-2">
               {item.permissionRisk && <span className="text-notice-ink">{t("keys.permissionRisk")}</span>}
@@ -235,10 +219,6 @@ export function KeyTable({
   );
 }
 
-// certificateLines は OpenSSH の証明書を、使えるかどうかを決める
-// 観点で記述する: 誰を名指すか、誰のためのものか、期限が切れているか
-// どうかだ。「certificate」とだけ言う期限切れの証明書は動作するものと
-// 見分けがつかない。これが design §6.3 がそれらを分類する理由のすべてだ。
 export function certificateLines(
   certificate: KeyCertificate,
   now: number,
@@ -249,8 +229,6 @@ export function certificateLines(
   if (certificate.principals.length > 0) {
     lines.push({ text: t("keys.certFor", { principals: certificate.principals.join(", ") }), expired: false });
   } else {
-    // principal のない証明書は、その CA を信頼するホスト上の全ユーザーに
-    // 対して有効だ。これはフィールドの欠落ではなく、その及ぶ範囲についての事実だ。
     lines.push({ text: t("keys.certAnyPrincipal"), expired: false });
   }
   if (certificate.neverExpires) {
@@ -273,16 +251,6 @@ export function certificateLines(
   return lines;
 }
 
-// 行のアクションはルールのないテーブルの中のただのボタンだったので、
-// テキストとして連なり、コントロールではなく文章として読めてしまっていた。
-// renameable は、ユーザーが伝えていないことを決めずに、このアプリケーションが
-// ファイルをリネームできるかどうかを報告する。
-//
-// 秘密鍵は自分の公開鍵と証明書を道連れにするので、常にリネーム
-// 可能だ。公開鍵や証明書がリネーム可能なのは、インベントリ内の
-// どの秘密鍵もそれに属していない場合のみだ: ペアの片方だけをリネームすると、
-// OpenSSH がいまだに名前で対応付けている 2 つのファイルを、読み手が
-// 対応付けられなくなるので、サーバーはそれを拒否し、ボタンも提供されない。
 export function renameable(item: KeyItem, items: KeyItem[]): boolean {
   if (item.kind === "private_key") return true;
   if (item.kind !== "public_key" && item.kind !== "certificate") return false;
@@ -294,9 +262,6 @@ export function renameable(item: KeyItem, items: KeyItem[]): boolean {
   return !items.some((candidate) => candidate.kind === "private_key" && candidate.fingerprint === fingerprint);
 }
 
-// agentHolds は、エージェントが現在この鍵を保持しているかどうかを、
-// フィンガープリントで照合して報告する。エージェントの identity とインベントリ
-// 項目に共通するのはそれだけだ——エージェントはファイルパスを何も知らない。
 export function agentHolds(inventory: KeyInventoryResponse, item: KeyItem): boolean {
   if (!inventory.agentAvailable || item.fingerprint === "") return false;
   return inventory.agentIdentities.some((identity) => identity.fingerprint === item.fingerprint);

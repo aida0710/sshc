@@ -1,11 +1,7 @@
-# 出荷するその実体を、起こして確かめる。cli-smoke.sh の Windows の対。
+# リリース対象の Windows バイナリを実行して検証する。
 #
-# **make は使わない。** recipe が POSIX のシェルを前提にしている。Windows の
-# release job も同じ理由で nativebuild を直接呼んでいる。
-#
-# **PowerShell は native command の非ゼロ終了で止まらない。** 明示しないと、
-# 落ちた行の後も進んで step は緑になる——実際それで、CLI の入っていない
-# インストーラがそのまま次の段へ渡ったことがある。
+# Makefile の recipe は POSIX シェルを前提とするため、Windows では使わない。
+# native command の失敗を検出するよう PowerShell を設定する。
 param(
     [Parameter(Mandatory = $true)][string]$DistDir,
     [Parameter(Mandatory = $true)][string]$ExpectedVersion
@@ -24,7 +20,7 @@ if (-not (Test-Path $binary)) {
 }
 Write-Host "cli-smoke: $binary"
 
-# ① 自分が何であるかを言えること。
+# ① バージョン、OS、アーキテクチャを確認する。
 $versionLine = (& $binary version)
 Write-Host "  $versionLine"
 $want = "sshc $ExpectedVersion $goos/$goarch"
@@ -32,7 +28,7 @@ if ($versionLine -ne $want) {
     throw "version line is $versionLine, want `"$want`""
 }
 
-# ② engine が居ないときに、次に何をすればよいかを言えること。
+# ② engine が停止中の場合に復旧手順が表示されることを確認する。
 $PSNativeCommandUseErrorActionPreference = $false
 $absent = (& $binary status 2>&1 | Out-String)
 $absentCode = $LASTEXITCODE
@@ -43,9 +39,9 @@ if ($absent -notlike "*sshc engine*") {
 }
 Write-Host "  no engine: $($absent.Trim())"
 
-# ③ 起こして、答えて、畳めること。
+# ③ 起動、応答、正常終了を確認する。
 #
-# **HOME を差し替える。** os.UserHomeDir は Windows で USERPROFILE を読む。
+# 実環境を変更しないよう、USERPROFILE を一時ディレクトリへ切り替える。
 $home_ = Join-Path ([System.IO.Path]::GetTempPath()) ("sshc-smoke-" + [System.Guid]::NewGuid())
 New-Item -ItemType Directory -Path (Join-Path $home_ ".ssh") -Force | Out-Null
 $env:USERPROFILE = $home_
@@ -72,7 +68,7 @@ try {
         throw "status did not report a running engine: $status"
     }
 
-    # ④ **画面が入っていること。** go:embed の中身が空でもビルドは通る。
+    # ④ 埋め込み UI を HTTP 経由で取得できることを確認する。
     $entrance = (& $binary open).Trim()
     $page = (Invoke-WebRequest -Uri $entrance -TimeoutSec 10 -UseBasicParsing).Content
     if ($page -notlike '*<div id="root">*') {

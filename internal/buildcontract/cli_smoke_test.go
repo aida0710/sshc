@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// **綴りは中身を保証しない。**
+// 表記は中身を保証しない。
 //
 // `verify-artifact-name` が見るのはファイル名だけであり、nativebuild/machine.go
 // 自身が「`sshc-linux-arm64` という名前の amd64 バイナリはその検査を通る」と
 // 書いている。束の smoke を消したあと、リリースは `make test` → build → upload
-// だけになり、**上げるバイナリを一度も起動しなかった。**
+// だけになり、上げるバイナリを一度も起動しなかった。
 //
 // smoke が確かめるのは、開発機の go test では出ない類の壊れ方である:
 // 版が入っていない（-X が外れる）、画面が入っていない（go:embed が空でも
@@ -33,21 +33,21 @@ func TestEveryReleaseJobSmokesWhatItBuilt(t *testing.T) {
 			continue
 		}
 		if !strings.Contains(section, job.invocation) {
-			t.Errorf("%s は作ったバイナリを起こしていない（%s が無い）",
+			t.Errorf("%s は作ったバイナリを起動していない（%s が無い）",
 				strings.TrimSpace(job.id), job.invocation)
 		}
-		// **版を渡していなければ、-X が外れても気づけない。**
+		// 版を渡していなければ、-X が外れても気づけない。
 		if !strings.Contains(section, "GITHUB_REF_NAME") && !strings.Contains(section, "github.ref_name") {
 			t.Errorf("%s は smoke にタグの版を渡していない", strings.TrimSpace(job.id))
 		}
 	}
 }
 
-// **2 本の smoke は、同じものを見ていなければならない。**
+// 2 本の smoke は、同じものを見ていなければならない。
 //
 // POSIX のシェルと PowerShell で別々に書いてあるので、片方にだけ検査を足すと、
-// その OS でだけ通る壊れ方ができる。**別々に書くことは、違うものを見てよい理由に
-// ならない。** ここが数えるのは、両方が持っている必要のある 4 つの問いである。
+// その OS でだけ通る壊れ方ができる。別々に書くことは、違うものを見てよい理由に
+// ならない。ここが数えるのは、両方が持っている必要のある 4 つの問いである。
 func TestBothSmokeScriptsAskTheSameQuestions(t *testing.T) {
 	read := func(name string) string {
 		path := filepath.Join("..", "..", "scripts", "ci", name)
@@ -66,9 +66,9 @@ func TestBothSmokeScriptsAskTheSameQuestions(t *testing.T) {
 	}{
 		{"版を名乗れること", `"sshc $expected $goos/$goarch"`, `"sshc $ExpectedVersion $goos/$goarch"`},
 		{"engine が居ないときに次の一手を言えること", `"sshc engine"`, `"*sshc engine*"`},
-		{"起こすと handoff を出すこと", `.ssh/sshc/cli`, `.ssh\sshc\cli`},
+		{"起動時に handoff を作成すること", `.ssh/sshc/cli`, `.ssh\sshc\cli`},
 		{"status が走っている engine を報告すること", `"running (pid"`, `"*running (pid*"`},
-		{"入口が画面を返すこと", `<div id="root">`, `<div id="root">`},
+		{"アクセス URLが画面を返すこと", `<div id="root">`, `<div id="root">`},
 	} {
 		if !strings.Contains(shell, question.unix) {
 			t.Errorf("cli-smoke.sh が「%s」を見ていない", question.what)
@@ -78,7 +78,7 @@ func TestBothSmokeScriptsAskTheSameQuestions(t *testing.T) {
 		}
 	}
 
-	// **PowerShell は native command の非ゼロ終了で止まらない。** 明示しないと、
+	// PowerShell は native command の非ゼロ終了で止まらない。明示しないと、
 	// 落ちた行の後も進んで step は緑になる。
 	for _, required := range []string{"$ErrorActionPreference = 'Stop'", "$PSNativeCommandUseErrorActionPreference = $true"} {
 		if !strings.Contains(powershell, required) {

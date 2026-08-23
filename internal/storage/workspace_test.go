@@ -301,7 +301,7 @@ func TestEnsureDirectoryCreatesPrivateDirectoriesAndRejectsSymlinks(t *testing.T
 // Root は EvalSymlinks を通して解決され、Home は意図的にそうしない。Home は、この
 // プロセスとその子が HOME に持つ値であり、それが ssh の表示するものであり、
 // SanitiseHomePaths が一致させなければならないものである。したがって ~/.ssh が
-// リンク経由で到達される場合、両者は同じディレクトリを異なるやり方で名指しし、
+// リンク経由で到達される場合、両者は同じディレクトリを異なるやり方で指定し、
 // "~" や "%d" を展開してから Root と比較する呼び出し側は、ワークスペースそのもの
 // であるパスについて、それはワークスペースの外だと告げられる。
 func TestNormaliseMapsAHomePathOntoTheResolvedRoot(t *testing.T) {
@@ -322,7 +322,7 @@ func TestNormaliseMapsAHomePathOntoTheResolvedRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 前提。これらはひとつのディレクトリの二通りの綴りである。
+	// 前提。これらはひとつのディレクトリの二通りの表記である。
 	if workspace.Root() == filepath.Join(home, ".ssh") {
 		t.Skip("this filesystem did not produce two spellings of the root")
 	}

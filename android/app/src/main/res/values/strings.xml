@@ -2,11 +2,11 @@
 <resources>
     <string name="app_name">sshc</string>
     <string name="engine_running">sshc is running</string>
-    <!-- 通知から engine を畳む。**これが無かった間、止める道は一本も無かった。** -->
+    <!-- 通知から engine を停止する操作。 -->
     <string name="engine_stop">Stop</string>
     <!--
-      engine が起きなかった理由。**Go の error 文は出さない** ——入口の URL を
-      含み得るので、番号に対応するこちらの文だけを出す。
+      Go の error 文には入口 URL が含まれ得るため、失敗理由の番号に対応する
+      固定文だけを表示する。
     -->
     <string name="failure_already_started">Another sshc engine is already running on this device.</string>
     <string name="failure_listen">sshc could not take a local port on this device.</string>

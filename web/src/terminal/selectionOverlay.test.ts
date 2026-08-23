@@ -5,8 +5,6 @@ function harness(lines: string[]) {
   const container = document.createElement("div");
   document.body.appendChild(container);
 
-  // xterm が建てる形だけを真似る。中身は要らない——見たいのは、板がこの
-  // 部分木の**外**にぶら下がることである。
   const element = document.createElement("div");
   element.className = "xterm";
   const screen = document.createElement("div");
@@ -47,8 +45,6 @@ function harness(lines: string[]) {
 }
 
 describe("attachSelectionOverlay", () => {
-  // **これがこの設計そのものである。** .xterm の中では長押しからの選択が
-  // 始まらないので、板は必ずその外にぶら下がらなければならない。
   it("hangs the text outside the element that cannot be selected", () => {
     const { container, overlay, detach } = harness(["one", "two"]);
     expect(overlay).not.toBeNull();
@@ -63,8 +59,6 @@ describe("attachSelectionOverlay", () => {
     detach();
   });
 
-  // **選んでいる最中に写し替えない。** textContent を差し替えれば選択は消え、
-  // ハンドルもコピーの吹き出しも一緒に消える。
   it("freezes while a selection is held in it", () => {
     const lines = ["before"];
     const { overlay, detach, repaint } = harness(lines);
@@ -75,21 +69,16 @@ describe("attachSelectionOverlay", () => {
     selection?.addRange(range);
     expect(selectionHeldIn(overlay)).toBe(true);
 
-    // 裏で端末が動いたことにして描き直させる。掴んでいる間は写し替えない。
     lines[0] = "after";
     repaint();
     expect(overlay.textContent).toBe("before");
 
-    // 手を離せば、次の描き直しで追いつく。
     selection?.removeAllRanges();
     repaint();
     expect(overlay.textContent).toBe("after");
     detach();
   });
 
-  // **形が変わったら、掴んでいたものはもう合わない。** キーボードが閉じれば
-  // 窓の高さが変わり、xterm は全部を描き直す。字だけ止めておくと、帯は動いた
-  // 字の上に残る——選んだつもりの範囲と、見えている範囲が食い違う。
   it("lets go of the selection when the terminal is laid out again", () => {
     const lines = ["before"];
     const { overlay, detach, repaint, screen } = harness(lines);
@@ -110,9 +99,6 @@ describe("attachSelectionOverlay", () => {
     detach();
   });
 
-  // **持っていない選択を手放さない。** removeAllRanges は文書の選択を空にし、
-  // Chromium はそこから「編集されている場所は無い」と読んでソフトキーボードを
-  // 閉じる。叩く → 開く → 窓が縮む → ここが呼ばれる → 閉じる、の輪になる。
   it("leaves a selection it does not hold alone when the terminal is laid out again", () => {
     const { detach, repaint, screen } = harness(["before"]);
     const elsewhere = document.createElement("div");
@@ -133,9 +119,6 @@ describe("attachSelectionOverlay", () => {
     detach();
   });
 
-  // **これが無いと、叩いてもキーボードが出ない。** Chromium は touchend の
-  // あとに mousedown を投げ、その既定動作は焦点を板の外——body——へ移す。
-  // touchend で当てたばかりの textarea が、そこで外れる。
   it("swallows the mouse event Chromium sends after a finger", () => {
     const { overlay, detach } = harness(["one"]);
     const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
@@ -144,11 +127,8 @@ describe("attachSelectionOverlay", () => {
     detach();
   });
 
-  // 触ったあと、打つつもりの指には焦点を渡す。渡さなければ、板が上に乗って
-  // いる以上どこにも渡らない。
   it("hands the terminal the focus after a tap", () => {
     const { overlay, view, detach } = harness(["one"]);
-    // jsdom は TouchEvent を持たない。読まれるのは touches[0].clientY だけである。
     const touch = new Event("touchstart", { bubbles: true });
     Object.defineProperty(touch, "touches", { value: [{ clientY: 10 }] });
     overlay.dispatchEvent(touch);
@@ -180,7 +160,6 @@ describe("selectionHeldIn", () => {
     node.remove();
   });
 
-  // よそで選ばれているものは、こちらの都合ではない。
   it("is false when the selection lives elsewhere", () => {
     const mine = document.createElement("div");
     const theirs = document.createElement("div");

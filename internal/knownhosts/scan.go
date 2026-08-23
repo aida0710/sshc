@@ -31,14 +31,13 @@ type Candidate struct {
 
 // Scanner はホスト鍵の候補を取得する。
 //
-// **外部プログラムは起こさない。** 種別ごとに握手を始め、鍵を受け取ったところで
-// 断る——ssh-keyscan がしているのと同じことを、このプロセスの中で行う。
+// 外部プログラムは起動しない。種別ごとに握手を始め、鍵を受け取ったところで
+// 断る。ssh-keyscan がしているのと同じことを、このプロセスの中で行う。
 type Scanner struct {
 	// Collect は、そのアドレスが提示するホスト鍵を集める。
 	//
-	// 関数で受け取るのは、SSH を話すパッケージがこのパッケージのパーサーを
-	// 使っているからである。逆向きにも依存すると輪になる——読む場所を一つに
-	// するという判断は、依存の向きを一つにするという判断でもある。
+	// SSH クライアントがこのパッケージのパーサーに依存するため、循環依存を避けて
+	// 収集処理を関数として受け取る。
 	Collect func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
 	Timeout time.Duration
 }

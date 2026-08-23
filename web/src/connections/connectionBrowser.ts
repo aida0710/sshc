@@ -49,18 +49,6 @@ export type BrowserProjection =
   | { kind: "search-results"; scope: string | null; servers: BrowserServer[] }
   | { kind: "missing-group"; group: string };
 
-// identityKey は、ホストの識別子を Map の鍵にできる文字列へ落とす。
-//
-// **Go にこれに当たるものは無い。** あちらは map[HostIdentity] と書けば構造の等値が
-// そのまま鍵になる。JavaScript の Map はオブジェクトを参照でしか比べないので、
-// こちらだけが文字列に落とす必要がある。
-//
-// **区切りが NUL なのは、path も alias も NUL を含めないからである。** 普通の区切り
-// （"/" や ":"）なら、path と alias の境目を跨いで同じ綴りを作れてしまう。
-//
-// 定義はここひとつ。以前は ConnectionTree にも同じ式があり、**別々の Map を作って
-// それぞれ引いていた**ので食い違っても気付けなかった——identity に項目が増えた日、
-// 片方だけが鍵に入れ忘れれば、別のホストがメモや色や並び順を共有する。
 export function identityKey(identity: HostIdentity): string {
   return `${identity.path}\u0000${identity.alias}`;
 }
@@ -90,14 +78,6 @@ function matches(server: BrowserServer, query: string): boolean {
   return server.tags.some((tag) => tag.toLocaleLowerCase().includes(needle));
 }
 
-// duplicateAliasesOf は、2 個以上のブロックが名乗っている alias を報告する。
-//
-// 組の全員に印を付けるのであって、負けた方だけではない。読み取り順で勝つのが
-// どちらかは、行を見ている人には分からないからだ。エンジンはこれとは別に、
-// 隠された側の行を duplicate_alias の notice で名指しする。ここが答えるのは
-// 「この名前は一意か」であって「この行は効くか」ではない。
-//
-// 2 つの画面がこの印を出す。規則が 2 か所にあると、片方だけが直る。
 export function duplicateAliasesOf(hosts: readonly HostEntry[]): ReadonlySet<string> {
   const counts = new Map<string, number>();
   for (const host of hosts) {

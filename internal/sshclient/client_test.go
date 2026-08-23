@@ -50,7 +50,7 @@ func keyPair(t *testing.T) (path string, contents []byte, public ssh.PublicKey) 
 
 // drain は、この Process を読み続ける goroutine を置く。
 //
-// **本番では terminal.Registry の pump がこれをしている。** 出力の道は
+// 本番では terminal.Registry の pump がこれをしている。出力の道は
 // io.Pipe なので、誰も読まない Process は書き込みで止まる。読み手を置かない
 // 検査は、その事実を「動かない」と誤って報告する。
 func drain(process terminal.Process) {
@@ -143,8 +143,8 @@ func TestWhatIsTypedReachesTheRemoteStdin(t *testing.T) {
 	}
 	defer func() { _ = process.Close() }()
 
-	// シェルが始まってから書く。始まる前に書いたぶんは、まだ問いの答えとして
-	// 読まれうる——それは握手の間だけ成り立つ約束である。
+	// シェルが始まってから書く。始まる前に書いたぶんは、まだ問いの結果として
+	// 読まれうる。それは握手の間だけ成り立つ約束である。
 	time.Sleep(200 * time.Millisecond)
 	if _, err := process.Write([]byte("echo hello\r")); err != nil {
 		t.Fatal(err)
@@ -249,7 +249,7 @@ func TestARemoteCommandRunsInsteadOfAShell(t *testing.T) {
 	}
 }
 
-// **プログラムは一つも起こさない。** 各ホップの SSH チャンネルの上に、次の
+// プログラムは一つも起動しない。各ホップの SSH チャンネルの上に、次の
 // ホップへの TCP を載せるだけである。
 func TestProxyJumpReachesTheFinalHostThroughTheFirst(t *testing.T) {
 	path, contents, public := keyPair(t)
@@ -288,7 +288,7 @@ func TestProxyJumpReachesTheFinalHostThroughTheFirst(t *testing.T) {
 	}
 }
 
-// 接続できなかった理由は端末に残る。**セッションは残す**——理由が読めるのは
+// 接続できなかった理由は端末に残る。セッションは残す。理由が読めるのは
 // そこだけである。
 func TestAFailedHandshakeWritesItsReasonToTheTerminal(t *testing.T) {
 	path, contents, _ := keyPair(t)
@@ -334,7 +334,7 @@ func TestAChangedHostKeyStopsTheConnectionBeforeAuthentication(t *testing.T) {
 	}
 }
 
-// 未知のホストの問いは端末に出て、答えがそこから戻る。
+// 未知のホストの問いは端末に出て、結果がそこから戻る。
 func TestAnUnknownHostIsAskedThroughTheTerminal(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{
@@ -437,10 +437,7 @@ func TestHangupEndsTheSession(t *testing.T) {
 	_ = process.Close()
 }
 
-// **繋がるまでのあいだ、何が起きているかを端末そのものへ書く。**
-//
-// 行き先はログではなく画面である——繋がらなかった人・切れた人がその場で読めなければ
-// 意味が無い。`ssh -v` が stderr へ書くのと同じ理由で、同じ場所へ書く。
+// 接続中の診断が `ssh -v` と同様に端末の stderr へ出力されることを検証する。
 func TestTheConnectionLogReachesTheTerminalWhenItIsAsked(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{
@@ -463,7 +460,7 @@ func TestTheConnectionLogReachesTheTerminalWhenItIsAsked(t *testing.T) {
 	readUntil(t, process, "ready")
 }
 
-// **既定は無言である。** 毎回この量が流れると、シェルの最初の一画面が押し流される。
+// 既定は無言である。毎回この量が流れると、シェルの最初の一画面が押し流される。
 func TestNothingIsWrittenWhenTheLogWasNotAskedFor(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{
@@ -478,7 +475,7 @@ func TestNothingIsWrittenWhenTheLogWasNotAskedFor(t *testing.T) {
 	}
 	defer func() { _ = process.Close() }()
 
-	// **最初に届くのがシェルの出力である。** 途中経過が混ざっていれば、
+	// 最初に届くのがシェルの出力である。途中経過が混ざっていれば、
 	// この読み取りはそれを先に見る。
 	seen := readUntil(t, process, "ready")
 	if strings.Contains(seen, "[sshc]") {

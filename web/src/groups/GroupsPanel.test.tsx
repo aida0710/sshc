@@ -18,9 +18,6 @@ vi.mock("../api/config", async () => {
   };
 });
 
-// build01 は connections/company 内にあるため、"company" グループに
-// 属する。射影がそれをエントリ上で報告し、ここではメタデータ
-// フィールドを何も読まない。読むべきものがもう存在しないからである。
 const overview = {
   entry: { path: "config", absolute: "/home/tester/.ssh/config" },
   files: [],
@@ -45,8 +42,6 @@ const overview = {
 };
 
 beforeEach(() => {
-  // モックされたクライアントはモジュールレベルであるため、そうしなければ記録された呼び出しが
-  // テストをまたいで蓄積し、「呼ばれなかった」が誤ったテストについての主張になってしまう。
   vi.clearAllMocks();
   vi.mocked(configApi.overview).mockResolvedValue(overview as never);
   vi.mocked(configApi.preview).mockResolvedValue({
@@ -56,15 +51,9 @@ beforeEach(() => {
   } as never);
 });
 
-// 名前変更、削除、ネストはファイルを書き換える操作であり、すべての
-// グループに対して一度にではなく、選択したグループに対して提示される。
-// 選択とは行をクリックすることであり、パネルがユーザーに求めることもそれである。
 async function select(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(
     await screen.findByRole("heading", {
-      // string の名前は testing-library では文字列全体の一致である——
-      // Playwright では部分一致だが、これは異なる——ため、"company"は
-      // "company/eu"も一緒に見つけることはない。
       name,
     }),
   );
@@ -77,8 +66,6 @@ describe("GroupsPanel", () => {
     expect(await screen.findByRole("heading", { name: "company" })).toBeInTheDocument();
     expect(screen.getByText("ServerAliveInterval 30")).toBeInTheDocument();
     expect(screen.getByText("build01")).toBeInTheDocument();
-    // ディレクトリがグループであるため、パネルはユーザーに推測させるのではなく、
-    // それがどこにあるかを述べる。
     expect(screen.getByText("connections/company/ · keys/company/")).toBeInTheDocument();
   });
 
@@ -91,7 +78,7 @@ describe("GroupsPanel", () => {
     expect(addHeading.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(screen.queryByRole("region", { name: "Unsaved group changes" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save groups" })).toBeNull();
-    expect(screen.getByText(/holds no unwritten changes/)).toBeInTheDocument();
+    expect(screen.getByText(/There are no unsaved changes/)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("New group name"), "lab");
     await user.click(screen.getByRole("button", { name: "Add group" }));
@@ -122,7 +109,7 @@ describe("GroupsPanel", () => {
 
     expect(screen.queryByRole("heading", { name: "lab" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Unsaved group changes" })).toBeNull();
-    expect(screen.getByText(/holds no unwritten changes/)).toBeInTheDocument();
+    expect(screen.getByText(/There are no unsaved changes/)).toBeInTheDocument();
     expect(screen.getByLabelText("Rename company to")).toBeEnabled();
     expect(screen.getByRole("button", { name: "Remove company" })).toBeEnabled();
   });
@@ -135,8 +122,6 @@ describe("GroupsPanel", () => {
     expect(screen.queryByRole("button", { name: "Preview group changes" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save groups" })).toBeNull();
 
-    // スラッシュがネスト構文のすべてである。名前が階層を運ぶため、
-    // それと食い違い得る親フィールドは存在しない。
     await user.type(await screen.findByLabelText("New group name"), "company/work");
     await user.click(screen.getByRole("button", { name: "Add group" }));
     expect(screen.getByRole("button", { name: "Preview group changes" })).toBeEnabled();
@@ -190,9 +175,6 @@ describe("GroupsPanel", () => {
     await user.type(screen.getByLabelText("Rename company to"), "corp");
     await user.click(screen.getByRole("button", { name: "Rename company" }));
 
-    // グループはディレクトリであるため、名前変更は N 個のファイル移動に加え
-    // Include 領域、さらにその鍵を名指すすべての IdentityFile に及ぶ。
-    // クライアントには組み立てられない一つのトランザクションであり、サーバーにそれを求める。
     await waitFor(() => expect(configApi.renameGroup).toHaveBeenCalledWith("company", "corp"));
     expect(configApi.save).not.toHaveBeenCalled();
   });
@@ -210,7 +192,6 @@ describe("GroupsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Rename company" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("lab already exists");
-    // サーバーには何も求められていないため、マージは偶然には起こらない。
     expect(configApi.renameGroup).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "company" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "lab" })).toBeInTheDocument();
@@ -223,7 +204,7 @@ describe("GroupsPanel", () => {
     await select(user, "company");
     await user.click(screen.getByRole("button", { name: "Rename company" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("needs a name of its own");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter a new name for the group");
   });
 
   it("removes a group by naming where its connections go", async () => {
@@ -241,10 +222,6 @@ describe("GroupsPanel", () => {
 
     await select(user, "company");
 
-    // グループの削除はその接続を再配置するだけで、何も削除
-    // しない。宛先は、削除が何をするかを述べる一文の後、削除の
-    // 中で尋ねる。削除に一度も触れないラベルを持つプルダウンが単独で
-    // 置かれているのではない。
     await user.click(await screen.findByRole("button", { name: "Remove company" }));
     expect(screen.getByText(/takes away its Include line/)).toBeInTheDocument();
     expect(screen.getByText(/No configuration file is deleted/)).toBeInTheDocument();
@@ -254,10 +231,6 @@ describe("GroupsPanel", () => {
     await waitFor(() => expect(configApi.deleteGroup).toHaveBeenCalledWith("company", "archive"));
   });
   it("marks a group that is only in the draft, and will not write files for it", async () => {
-    // パネルには二種類のコントロールがあり、以前は違いを何も示していなかった。
-    // ここで追加されたグループは Save するまで画面上にしか存在しないが、
-    // ディレクトリを持つグループとまったく同じに見え、Rename と Remove を
-    // 提示していた——ファイルを書き込む操作を、ファイルを持たないグループに対して。
     const user = userEvent.setup();
     render(<GroupsPanel />);
 
@@ -268,15 +241,10 @@ describe("GroupsPanel", () => {
     await select(user, "lab");
     expect(screen.getByRole("button", { name: "Remove lab" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Rename lab" })).toBeDisabled();
-    expect(screen.getByText(/no directory yet/)).toBeInTheDocument();
-    // そしてページは、どちらの半分がそもそも Save を必要とするかを述べる。
+    expect(screen.getByText(/does not have a directory yet/)).toBeInTheDocument();
     expect(screen.getByText(/not saved yet/)).toBeInTheDocument();
   });
 
-  // バグ。パネルは Include 順を決める規則——最も深いグループを先に——で
-  // 並べ、それをツリーであるかのようにインデントしていた。すべての
-  // 子が親の上に浮かび、親が最後に来るため、ネストがまるで
-  // 機能していないかのように読めていた。
   it("lists a parent before its children", async () => {
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
@@ -303,8 +271,6 @@ describe("GroupsPanel", () => {
       { name: "office/osaka", order: -1 },
     ]).map((group) => group.name);
 
-    // hpc は office より、osaka は tokyo より、それぞれ自分自身の order で先に来る。
-    // そしてどちらの子もファイルの order がするように先頭へ逃げ出すことはない。
     expect(ordered).toEqual(["hpc", "office", "office/osaka", "office/tokyo"]);
   });
 
@@ -315,24 +281,14 @@ describe("GroupsPanel", () => {
     await select(user, "company");
     await user.click(screen.getByRole("button", { name: "Add a group inside company" }));
 
-    // パスは事前に入力されているため、ユーザーは子の名前だけを
-    // 入力すればよい——以前ネストはページ下部のスラッシュについての一文
-    // からしか発見できなかった。
     expect(screen.getByLabelText("New group name")).toHaveValue("company/");
     expect(screen.getByLabelText("New group name")).toHaveFocus();
   });
 });
 
 describe("hiding a group from the connections tree", () => {
-  // "company"は build01 を直接保持する。"company/eu"は何も保持
-  // しない。これが他のグループを含むために作られたグループの姿である。
 
-  // Hiding は metadata.json にのみ存在する三つの設定の一つで
-  // あるため、colour や display order と共にインスペクターへ移った。
-  // 以前ここで検証されていたものは GroupInspector.test.tsx にある。
 
-  // connections/下にあり、どの Include も名指さないディレクトリはグループのように
-  // 見えるが、何にも読まれない。エンジンは常に知っていたが、何もそれを示していなかった。
   it("shows a directory that looks like a group but is declared by nothing", async () => {
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
@@ -343,12 +299,8 @@ describe("hiding a group from the connections tree", () => {
     } as never);
     render(<GroupsPanel />);
 
-    expect(await screen.findByText(/no Include line names it/)).toBeInTheDocument();
+    expect(await screen.findByText(/no Include line references it/)).toBeInTheDocument();
 
-    // 空のグループはそのうちの一つではない。それは作られた直後の
-    // すべてのグループが置かれる状態であり、下の行は既に"Members: none"
-    // と読める——それをアンバーで再度報告することは、何かが起きたことを
-    // 意味するはずの colour を、何も起きていないことに費やしてしまう。
     expect(screen.queryByText(/declared and holds nothing/)).toBeNull();
   });
 });

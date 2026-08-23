@@ -9,9 +9,6 @@ import (
 	"sshc/internal/config"
 )
 
-// groupFixture は、parent フィールド版が記述していたのと同じ階層を、
-// ファイルシステムの言い方で述べる: "work" が "company" の中にネストしているのは
-// そのディレクトリがそうだからであり、各 host はそのファイルが置かれたグループに属す。
 func groupFixture() ([]string, Metadata, []HostEntry) {
 	metadata := NewMetadata()
 	metadata.Groups = []GroupMetadata{
@@ -48,8 +45,6 @@ Host build01 web01
 	if got := string(contents); got != want {
 		t.Fatalf("contents =\n%q\nwant\n%q", got, want)
 	}
-	// 射影に無いメンバーはもはや notice ではない: ディスク上の
-	// ファイルと食い違いうる 2 つ目のメンバー一覧は存在しないからだ。
 	if len(notices) != 0 {
 		t.Fatalf("notices = %#v", notices)
 	}
@@ -69,9 +64,6 @@ func TestCompileGroupsRendersParsableLosslessConfiguration(t *testing.T) {
 	}
 }
 
-// グループ名はディレクトリパスなので、階層は循環を含み得ない:
-// 循環が排除されていることを証明していたテストは、循環が
-// そもそも表現不能であることを証明するテストに置き換えられた。
 func TestAGroupCanNeverBeItsOwnAncestor(t *testing.T) {
 	for _, name := range []string{"a/b/c", "work", "a/b/a"} {
 		seen := map[string]bool{}
@@ -110,9 +102,6 @@ func TestDeclaredGroupsReadsTheRegionAndNothingElse(t *testing.T) {
 		}
 	}
 
-	// マーカーの外にユーザー自身が書いた Include は何も宣言しない:
-	// 宣言なのは region であって、たまたまディレクトリを名指しする
-	// すべての行ではない。
 	handWritten := config.Parse([]byte("Include connections/marketing/*.conf\n"))
 	if got := DeclaredGroups(handWritten); len(got) != 0 {
 		t.Errorf("DeclaredGroups outside the region = %#v, want none", got)
@@ -120,9 +109,6 @@ func TestDeclaredGroupsReadsTheRegionAndNothingElse(t *testing.T) {
 }
 
 func TestBuildGroupsViewReportsADirectoryThatWasNeverDeclared(t *testing.T) {
-	// ~/.ssh/connections/marketing は存在するが、どの行もそれを
-	// 名指ししない。それを採用するとしたら、このアプリケーションが
-	// 他人のディレクトリを自分のグループの 1 つだと決めつけることになる。
 	views, notices := BuildGroupsView(regionFile(t, "work"), nil, NewMetadata(), []string{"work", "marketing"})
 
 	if len(views) != 1 || views[0].Name != "work" {
@@ -184,22 +170,13 @@ func hasNotice(notices []Notice, code, detail string) bool {
 	return false
 }
 
-// 3 つのグループ診断は、グループを表示する画面に届く。
-//
-// それらは計算され、テストされていたが、何にも提供されていなかった: どの
-// Include も名指ししない connections/ 配下のディレクトリ、ディレクトリが消えた
-// 宣言済みグループ、中身のない宣言済みグループは、すべて見えなかった。それぞれは
-// 誰かが対処すべき状態であり、最初のものは黙って何もしないという状態である。
 func TestTheOverviewCarriesTheGroupDiagnostics(t *testing.T) {
 	service, workspace := newTestService(t)
 	declareGroup(t, service, "work", "archive")
 	writeGroupFile(t, workspace, "work", "web.conf", "Host web-1\n\tHostName 203.0.113.10\n")
-	// archive は宣言されており、そのディレクトリは何も保持していない。
-	// scratch は何にも宣言されていないディレクトリである。
 	if err := os.MkdirAll(filepath.Join(workspace.Root(), "connections", "scratch"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// gone は宣言されているが、そのディレクトリは存在しない。
 	declareGroup(t, service, "work", "archive", "gone")
 	if err := os.RemoveAll(filepath.Join(workspace.Root(), "connections", "gone")); err != nil {
 		t.Fatal(err)
@@ -218,7 +195,6 @@ func TestTheOverviewCarriesTheGroupDiagnostics(t *testing.T) {
 			t.Errorf("notices = %#v, want %s for %s", overview.Notices, want.code, want.detail)
 		}
 	}
-	// そしてグループ自体も、それぞれが保持するものと共に運ばれる。
 	byName := map[string]GroupView{}
 	for _, group := range overview.Groups {
 		byName[group.Name] = group
@@ -231,19 +207,11 @@ func TestTheOverviewCarriesTheGroupDiagnostics(t *testing.T) {
 	}
 }
 
-// マーカーが 1 つしかない region は壊れた region であり、
-// 4 つのディレクトリが「宣言されていない」と言うのは実際に起きたこととは違う。
-//
-// Include 行は存在し、OpenSSH はそれを読む。欠けているのは
-// 終端マーカーであり、このアプリケーションは自分が生成した行が
-// どこで終わるか分からなくなる — そのためすべてのグループが未宣言に
-// 見えてしまった。4 つの誤解を招く notice が、1 つの真実の notice に置き換えられた。
 func TestADamagedRegionIsReportedAsItselfRatherThanAsUndeclaredGroups(t *testing.T) {
 	service, workspace := newTestService(t)
 	declareGroup(t, service, "work")
 	writeGroupFile(t, workspace, "work", "web.conf", "Host web-1\n")
 
-	// 終端マーカーを取り除く。それは手動編集が残す状態である。
 	entry := readFile(t, workspace, "config")
 	damaged := strings.ReplaceAll(entry, RegionEndMarker+"\n", "")
 	if damaged == entry {

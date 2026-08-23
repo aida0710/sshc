@@ -1,9 +1,6 @@
-# 受け入れのゲート。すべての push とすべての pull request で走る。
-#
-# ジョブは README.md がすでに記載している四つのコマンドであり、赤いチェックが
-# 「ビルド」ではなく壊れたものを名指しできるよう分けてある。ここには、ローカルの
-# `make test`、`make verify-generated`、`make e2e` より厳しいものは何もない。CI は
-# それらが確かに実行されたことを保証する場所であって、二つ目の基準ではない。
+# すべての push と pull request に対する検証ワークフロー。
+# ジョブは失敗した検査を識別できる単位に分割する。検査内容はローカルの
+# `make test`、`make verify-generated`、`make e2e` と一致させる。
 name: CI
 
 on:
@@ -14,8 +11,8 @@ on:
 permissions:
   contents: read
 
-# 同じブランチへの二度目の push は一度目を置き換える。ランナーを使う価値があるのは
-# 先端だけである。`main` を除外してあるのは、その履歴に完全な記録を残すためだ。
+# 同じブランチへの新しい push では実行中の古いジョブを取り消す。
+# `main` は全コミットの検証結果を保持するため対象外とする。
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -73,15 +70,8 @@ jobs:
         shell: bash
         run: go build ./...
 
-      # Android 向けにビルドタグが食い違っていないことだけを見る。**CGO_ENABLED=0
-      # で通ることは、Android で動くことを何一つ意味しない** ——Android には
-      # /etc/resolv.conf が無いので、本物の AAR は cgo リゾルバを要る。ここは
-      # NDK も gomobile も持たないランナーで言えることの上限であり、AAR と APK は
-      # 別のジョブの仕事である。
-      #
-      # Unix 側だけに置く。Android は unix なので、これは Unix の shell fragment で
-      # ある。答えはホストに依らないので Linux と macOS で二度走るが、pwsh 版を
-      # 並べれば同じ検査の三つ目の写しになるだけである。
+      # Android 用 build tag の整合性だけを検査する。CGO_ENABLED=0 では Android の
+      # 名前解決を検証できないため、AAR と APK は android ジョブで別途ビルドする。
       - name: Android build (Unix)
         if: ${{ runner.os != 'Windows' }}
         shell: bash
@@ -102,8 +92,7 @@ jobs:
         shell: pwsh
         run: go test ./...
 
-      # race detector を別のステップにしてあるのは、それが遅い方だからであり、
-      # またデータ競合は、誤った答えとは別種の失敗だからである。
+      # 実行時間と失敗種別を区別するため race detector を別ステップにする。
       - name: go test -race (Unix)
         if: ${{ runner.os != 'Windows' }}
         shell: bash
@@ -130,16 +119,8 @@ jobs:
           }
           exit $raceExit
 
-  # 実際に配るもの——APK——が組み上がることを見る。
-  #
-  # `go` ジョブの Android の段は、engine が android/arm64 へ**コンパイルできる**
-  # ことしか言わない。それが通っても、gomobile の bind が落ちる、AAR が gradle の
-  # 期待する形で置かれない、manifest が AGP に弾かれる——のどれでも APK は出ない。
-  # 出るところまでやって初めて分かる。
-  #
-  # NDK を自分では入れない。runner の image が持っているものを使う。gradle は
-  # native を一切コンパイルしない（.so は AAR に入って来る）ので、NDK を要るのは
-  # gomobile だけであり、そこに特定の版を求める理由は無い。
+  # gomobile、Gradle、manifest を含む配布経路で APK を検証する。
+  # NDK は runner image の既存バージョンを使用する。
   android:
     name: Android APK
     runs-on: ubuntu-24.04
@@ -156,8 +137,7 @@ jobs:
           java-version: 21
           cache: gradle
 
-      # **バージョンを書かない。** そうすると go.mod の x/mobile がそのまま使われる。
-      # gomobile は go.mod の tool から来るので、書けば二か所が別々にずれていく。
+      # gomobile のバージョンは go.mod の tool directive に固定する。
       - name: Install gobind
         run: go install golang.org/x/mobile/cmd/gobind
 
@@ -169,9 +149,7 @@ jobs:
           }
           make android-bind ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
 
-      # **コンパイルが通ることは、動くことではない。** ここが assembleDebug しか
-      # 無かった間、外殻の Java は一度も実行されないまま配られていた。端末を
-      # 要さない判断は src/test に出してあるので、JVM だけで走る。
+      # Android SDK を必要としないホスト側ロジックを JVM テストで検証する。
       - name: Unit tests
         working-directory: android
         run: ./gradlew --no-daemon test
@@ -213,17 +191,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # **ここにあるのは、型検査に原理的にできないことだけである。**
-      #
-      # 長いあいだこの段は無く、「lint の役目は型検査が担う」と決めてあった。
-      # それは大筋で正しい——名前の間違いも形の食い違いも tsc が捕まえる。
-      # だが tsc が見ないものが二種類ある: **待ち忘れた Promise** と、**React の
-      # 規則**である。どちらも型としては正しく、走らせて初めて壊れる。
-      #
-      # 実際、規則を入れる前から `react-hooks/exhaustive-deps` を名指しで抑止する
-      # コメントが 9 箇所あった。**規則の側は一度も走っていなかった。**
-      #
-      # 何を入れなかったかは web/eslint.config.mjs に書いてある。
+      # TypeScript が検出しない未処理 Promise と React Hooks の規則を検査する。
+      # ルールの選定理由は web/eslint.config.mjs を参照。
       - name: Lint
         run: npm run lint
 
@@ -233,13 +202,8 @@ jobs:
       - name: Build
         run: npm run build
 
-  # **参照ゼロを見つける仕組みが無かった。** Electron と生体認証を消したとき、
-  # windowsregistry package（130 行）と Vault.Wrap は書き手が消えたまま残った。
-  # どちらもコンパイルは通り続けるので、見張らなければ誰も気づかない。
-  #
-  # **go のジョブに置かない。** あちらは OS ごとに走るが、この検査は 1 回の中で
-  # 3 つの OS すべてを見る——`_windows.go` からしか呼ばれないものは Linux から
-  # 見れば死んで見えるので、積を取らなければ嘘をつく。
+  # 3 OS の到達可能性をまとめて解析する。OS 固有シンボルを誤検出しないよう、
+  # OS ごとの go ジョブとは分離する。
   deadcode:
     name: Dead code
     runs-on: ubuntu-latest
@@ -289,21 +253,17 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
 
-      # このバイナリが askpass ヘルパーそのものなので、ssh が走る前に存在して
-      # いなければならない。
+      # askpass ヘルパーを含むバイナリを統合テスト前にビルドする。
       - name: Build the binary
         run: make build
 
-      # このスイートが有用な形では偽装できないサーバーが二つある。本物の S3 実装 —
-      # 同期の設計全体が、本物のそれが条件付き PUT に何をするかの上に立っている
-      # ため — と、本物の sshd である。askpass ヘルパーが渡したものを OpenSSH が
-      # 受け取るかどうかは、スタブに答えられる問いではない。
+      # 条件付き PUT と OpenSSH askpass を実装レベルで検証するため、
+      # S3 互換サーバーと OpenSSH sshd を起動する。
       - name: Start SeaweedFS and sshd
         run: make integration-up
 
       - name: Create the bucket
-        # クライアントには意図的に CreateBucket がない。アプリケーションが
-        # バケットを作らないので、クライアントを広げる代わりにハーネスが行う。
+        # アプリケーションはバケットを作成しないため、テスト側で用意する。
         run: |
           docker exec sshc-s3 sh -c '
             mkdir -p /data/buckets/sshc-test' || true
@@ -342,10 +302,7 @@ jobs:
       - name: Build the binary
         run: make build
 
-      # UI はコミット済みのバンドルからバイナリへ埋め込まれる。したがって、
-      # ビルドし直されないままの web/src の変更は、クリーンなチェックアウトから
-      # ビルドした人へ古いインターフェースを配ることになる。上の `make build` が
-      # いま再生成したので、ここに差分があればコミットがそれを忘れたということだ。
+      # web/src とコミット済みの埋め込みバンドルが一致することを確認する。
       - name: The committed bundle matches the sources
         run: |
           if ! git diff --exit-code -- internal/ui/dist; then
@@ -353,7 +310,7 @@ jobs:
             exit 1
           fi
 
-      # Chromium のスイートはビルド済みのバイナリを localhost 越しに動かす。
+      # ビルド済みバイナリを localhost で起動し、Chromium から検証する。
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
         working-directory: web
@@ -361,28 +318,11 @@ jobs:
       - name: Playwright
         run: npm run e2e --prefix web
 
-      # **成果物は上げない。上げられるものが無い。**
-      #
-      # reporter は list だけなので playwright-report は作られず、この step は
-      # 今まで何も上げていなかった——失敗したとき何かが残ると思わせるだけの
-      # 設定だった。
-      #
-      # **代わりに test-results を上げてはならない。** あそこには
-      # error-context.md が入り、それはページの写しである。この製品の e2e は
-      # 設計上ひとつの流れで秘密鍵を画面に出すので、成果物置き場はまさに
-      # それが忘れられる場所になる（playwright.config.ts が trace も video も
-      # screenshot も切っているのは同じ理由である）。診断は表明の文と
-      # サーバー自身の出力から行う。
+      # E2E の出力には秘密情報が含まれる可能性があるため、レポート、trace、
+      # video、screenshot、test-results はアップロードしない。
 
-  # **Windows でも同じスイートを走らせる。** ここが無いと、次に誰かが Unix の
-  # 前提を書いた瞬間に静かに壊れる——実際、初めて実機で走らせたとき 8 件が
-  # 落ち、その全部がテスト側の Unix 前提だった（POSIX のシェル構文、mode
-  # ビット、fixture が DACL を満たしていないこと）。
-  #
-  # **Linux のジョブとは要るものが違うので、別に置く。** あちらはコミット済み
-  # バンドルの鮮度も見て、Go の側の検査も抱えている。こちらが確かめる
-  # のは、**ブラウザから見た製品が Windows でも同じように振る舞うか**である
-  # ——ConPTY を実際に踏む唯一の経路がここにある。
+  # Windows 固有のプロセス、ACL、ConPTY を含むブラウザ操作を検証する。
+  # Linux ジョブとは依存関係が異なるため、別ジョブとして実行する。
   e2e-windows:
     name: End to end (Windows)
     runs-on: windows-2025
@@ -409,18 +349,8 @@ jobs:
       - name: Playwright
         run: npm run e2e --prefix web
 
-      # **成果物は上げない。上げられるものが無い。**
-      #
-      # reporter は list だけなので playwright-report は作られず、この step は
-      # 今まで何も上げていなかった——失敗したとき何かが残ると思わせるだけの
-      # 設定だった。
-      #
-      # **代わりに test-results を上げてはならない。** あそこには
-      # error-context.md が入り、それはページの写しである。この製品の e2e は
-      # 設計上ひとつの流れで秘密鍵を画面に出すので、成果物置き場はまさに
-      # それが忘れられる場所になる（playwright.config.ts が trace も video も
-      # screenshot も切っているのは同じ理由である）。診断は表明の文と
-      # サーバー自身の出力から行う。
+      # E2E の出力には秘密情報が含まれる可能性があるため、レポート、trace、
+      # video、screenshot、test-results はアップロードしない。
 
   security:
     name: Dependency security

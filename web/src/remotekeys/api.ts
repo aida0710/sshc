@@ -65,9 +65,6 @@ function validateRegistration(value: unknown): RemoteKeyRegisterResponse {
 
 
 export const remoteKeysApi: RemoteKeysApi = {
-  // plan は設定を読むだけで何にも接続しないので、確認を消費しない。
-  // これが存在するのは、実行を求められるようになる前に、ユーザーが
-  // 変更内容を見られるようにするためだ。
   async plan(input) {
     return validatePlan(
       await apiClient.mutate<unknown>("/api/v1/remote-keys/plan", {

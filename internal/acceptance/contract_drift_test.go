@@ -16,18 +16,18 @@ import (
 // servedTypes は、その形のまま c.JSON へ渡される Go の型と、それが名乗っている
 // openapi.yaml のスキーマの対である。
 //
-// **これらの Go の形は 1 つしかない。** 以前は同じワイヤの形に対して
-// internal/api にも生成された双子があり、**しかも中身は揃っていなかった** ——
+// これらの Go の形は 1 つしかない。以前は同じワイヤの形に対して
+// internal/api にも生成された双子があり、しかも中身は揃っていなかった。
 // 生成側は OpenAPI の省略可能を *T で表し、こちらは値と omitempty で表す。さらに
 // こちらは DiffOp や EditAction のような名前付きの型を持ち、生成側はそれを string に
-// する。寄せればドメインの側が弱くなるので、寄せずに**生成しない**ことにした
+// する。寄せればドメインの側が弱くなるので、寄せずに生成しないことにした
 // （api/oapi-codegen.yaml の exclude-schemas）。
 //
-// 双子が消えたぶん、突き合わせる相手は openapi.yaml そのものになった。**契約の
-// 写しではなく契約と比べる**ので、こちらの方が本来正しい。
+// 双子が消えたぶん、突き合わせる相手は openapi.yaml そのものになった。契約の
+// 写しではなく契約と比べるので、こちらの方が本来正しい。
 //
-// `make verify-generated` は「生成物が仕様と一致するか」しか見ない。**実際に返る
-// JSON が仕様と一致するかを見るのは、ここだけである。**
+// `make verify-generated` は「生成物が仕様と一致するか」しか見ない。実際に返る
+// JSON が仕様と一致するかを見るのは、ここだけである。
 var servedTypes = []struct {
 	schema string
 	value  any
@@ -70,7 +70,7 @@ var servedTypes = []struct {
 
 // jsonFieldNames は、その型が JSON へ出す名前を集める。
 //
-// `-` は出ないので数えない。omitempty は名前を変えないので落とす——見たいのは
+// `-` は出ないので数えない。omitempty は名前を変えないので落とす。見たいのは
 // 「どの名前が出るか」であって、空のときに省かれるかどうかではない。
 func jsonFieldNames(value any) []string {
 	structure := reflect.TypeOf(value)

@@ -15,9 +15,9 @@ import (
 
 // フレームの形。
 //
-//   - **バイナリフレーム** — PTY の生バイト列。サーバー→クライアントは出力、
+//   - バイナリフレーム、PTY の生バイト列。サーバー→クライアントは出力、
 //     クライアント→サーバーは打鍵。base64 を挟まない。
-//   - **テキストフレーム** — JSON の制御メッセージ。
+//   - テキストフレーム、JSON の制御メッセージ。
 type resizeMessage struct {
 	Resize *struct {
 		Cols int `json:"cols"`
@@ -34,7 +34,7 @@ type exitMessage struct {
 
 const (
 	// maxKeystrokeFrame は、一度の打鍵として受け取る上限である。貼り付けは
-	// これより大きくなりうるので、人が打つ 1 文字ではなく 1 画面分を基準にする。
+	// これより大きくなりうるので、ユーザーが打つ 1 文字ではなく 1 画面分を基準にする。
 	maxKeystrokeFrame = 1 << 20
 	// writeTimeout は、1 フレームを書き出すのに許す時間である。これを超える
 	// クライアントは読んでいない。落とすが、PTY は止めない。
@@ -45,7 +45,7 @@ const (
 //
 // 認可はチケットひとつである。使い捨てで、ひとつのセッション ID に束縛され、
 // 10 秒で失効する。無効・期限切れ・使用済みのいずれも、アップグレードせずに
-// 403 を返す——101 を返してから閉じると、拒否の理由がブラウザ側で
+// 403 を返す。101 を返してから閉じると、拒否の理由がブラウザ側で
 // 「繋がったのに切れた」と区別できなくなる。
 func (h TerminalHandlers) Stream(c *echo.Context) error {
 	request := c.Request()
@@ -134,7 +134,7 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 		}
 		switch kind {
 		case websocket.MessageBinary:
-			// 打鍵はそのまま PTY へ。終了済みへの書き込みは黙って捨てる。
+			// 打鍵はそのまま PTY へ。終了済みへの書き込みは暗黙に捨てる。
 			// 相手はもう居らず、それは切断ではないからだ。
 			if _, err := session.Write(payload); err != nil && !errors.Is(err, terminal.ErrExited) {
 				stop()

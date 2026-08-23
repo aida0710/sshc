@@ -68,9 +68,6 @@ describe("HostInspector", () => {
     await user.click(screen.getByLabelText("Favourite"));
 
     expect(onMetadata).toHaveBeenCalledWith(expect.objectContaining({ favourite: true }));
-    // キャプションはパネルが既に使っていたものとバイト単位で同一であるため、
-    // エンドツーエンドスイートの`getByLabel(/Display order/)`は移動後も
-    // 同じコントロールを指し続ける。
     expect(screen.getByLabelText(/^Tags/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Display order/)).toBeInTheDocument();
     expect(screen.getByLabelText("Colour")).toBeInTheDocument();
@@ -81,8 +78,6 @@ describe("HostInspector", () => {
     const user = userEvent.setup();
     render(<HostInspector detail={build()} onMetadata={onMetadata} />);
 
-    // 一文字ずつ。この入力欄はモックされた親が決して書き戻さない
-    // メタデータに制御されているため、各キー入力は同じ値から始まる。
     await user.type(screen.getByLabelText(/^Display order/), "7");
 
     expect(onMetadata).toHaveBeenLastCalledWith(expect.objectContaining({ order: 7 }));
@@ -95,9 +90,6 @@ describe("HostInspector", () => {
     detail.metadata = { ...detail.metadata, colour: "#f97316" };
     render(<HostInspector detail={detail} onMetadata={onMetadata} />);
 
-    // colour 入力欄には空の状態がないため、未設定の colour は中立の
-    // 見本を示す。クリア操作はそれ自体独立した行為でなければ、
-    // 「colour がない」ことと「たまたまグレーである colour」が区別できなくなる。
     await user.click(screen.getByRole("button", { name: "Clear colour" }));
 
     expect(onMetadata).toHaveBeenLastCalledWith(expect.objectContaining({ colour: "" }));
@@ -109,8 +101,6 @@ describe("HostInspector", () => {
     expect(screen.queryByRole("button", { name: "Clear colour" })).not.toBeInTheDocument();
   });
 
-  // ファイルへ書き込む三つはメインペインに残る。ペインは設定
-  // ファイルの中身と自分たち自身の note とを分けるものだからである。
   it("does not offer the group, the comment or the rename", () => {
     render(<HostInspector detail={build()} onMetadata={vi.fn()} />);
 
@@ -127,7 +117,6 @@ describe("HostInspector", () => {
     expect(screen.getByText(/config:41/)).toBeInTheDocument();
   });
 
-  // "Inherited"とは、値の由来がこのブロック以外のファイルであることを意味する。
   it("lists only the values that came from elsewhere", () => {
     const detail = build();
     detail.effective.entries = [

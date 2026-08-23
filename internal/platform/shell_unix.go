@@ -15,7 +15,7 @@ import (
 // コンテナや合成 passwd の中でその一行は当てにならない。ここに並んでいるのは
 // 実際に存在を確かめる絶対パスだけである。
 //
-// **Android には /bin が無い。** sh は /system/bin/sh (mksh) にあり、bash も
+// Android には /bin が無い。sh は /system/bin/sh (mksh) にあり、bash も
 // zsh も居ない。ここに /bin/sh を残しても永久に見つからない。
 //
 // goos を引数で受けるのは、この一覧がテストできるようにするためである。
@@ -27,12 +27,12 @@ func shellFallbacks(goos string) []string {
 	case "android":
 		return []string{"/system/bin/sh"}
 	case "ios":
-		// **iOS はプロセスを起こせない。** サンドボックスが fork も exec も
+		// iOS はプロセスを起動できない。サンドボックスが fork も exec も
 		// 禁じているので、置いてあるかどうか以前に、どのシェルも開けない。
 		//
-		// **空を返すことに意味がある。** 候補を並べれば、埋め込みターミナルは
+		// 空を返すことに意味がある。候補を並べれば、埋め込みターミナルは
 		// 存在しない道を毎回探し、開けなかった理由を「見つからない」と言う
-		// ——本当の理由は「この OS では開けない」であり、それは探して分かる
+		//本当の理由は「この OS では開けない」であり、それは探して分かる
 		// ことではない。SSH の接続は純粋な Go の通信なので、そちらは動く。
 		return nil
 	default:
@@ -43,7 +43,7 @@ func shellFallbacks(goos string) []string {
 // LoginShell は、埋め込みターミナルが開くシェルの絶対パスを返す。
 //
 // SHELL を先に見るのは、それが利用者自身の選択だからである。ただし相対パスと、
-// 存在しないパスは受け取らない。PATH 経由で解決されるシェルを起こせば、
+// 存在しないパスは受け取らない。PATH 経由で解決されるシェルを起動すれば、
 // このアプリケーションが選んだのではないプログラムに端末を渡すことになる。
 func LoginShell(lookup func(string) (string, bool)) (string, error) {
 	if lookup != nil {
@@ -59,7 +59,7 @@ func LoginShell(lookup func(string) (string, bool)) (string, error) {
 	return "", ErrNoLoginShell
 }
 
-// LoginArgv0 は、ログインシェルとして起こすための argv[0] である。
+// LoginArgv0 は、ログインシェルとして起動するための argv[0] である。
 //
 // 先頭のハイフンが、そのシェルにログインシェルとしての起動を伝える。これが
 // 無いと、macOS の Terminal が開くシェルとは別のファイル群が読まれ、利用者の

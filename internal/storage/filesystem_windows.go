@@ -41,7 +41,7 @@ func openRegularNoFollow(path string) (*os.File, error) {
 		return nil, os.ErrInvalid
 	}
 	// 読むだけでも FILE_READ_ATTRIBUTES を要る。readBoundedRegularFile は
-	// **通常ファイルであることを handle から確かめてから**中身を読むためだ。
+	// 通常ファイルであることを handle から確かめてから中身を読むためだ。
 	// FILE_READ_DATA だけで開くと、その確認が Access is denied で落ち、
 	// ユーザーの ~/.ssh/config がひとつも読めない。
 	handle, err := openRelativeNoReparse(parent, fileName, windows.FILE_READ_DATA|windows.FILE_READ_ATTRIBUTES, false, true)
@@ -63,8 +63,8 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	return file, nil
 }
 
-// ReadPrivateFile authenticates the same final handle that supplies private
-// state bytes. User-managed SSH files continue through ReadFile instead.
+// ReadPrivateFile は非公開状態を読み出す最終ハンドル自体を検証する。ユーザー管理の
+// SSH ファイルは引き続き ReadFile で読む。
 func (OSFileSystem) ReadPrivateFile(path string) ([]byte, error) {
 	file, err := windowsacl.OpenAuthenticatedFileForRead(path)
 	if err != nil {
@@ -202,7 +202,7 @@ func openRelativeNoReparseWithOptions(parent windows.Handle, name string, access
 
 // mapNtError は、Nt* が返す NTSTATUS を、この木の他の層が知っている形に直す。
 //
-// **NTSTATUS は fs.ErrNotExist に一致しない。** 「まだ無い」と「読めなかった」を
+// NTSTATUS は fs.ErrNotExist に一致しない。「まだ無い」と「読めなかった」を
 // errors.Is で分ける呼び出し側が上に何十とあり、生の NTSTATUS を返すと、存在
 // しないだけの ~/.ssh/config が読み取り失敗として扱われる。Unix 側は
 // os.OpenFile の errno を返しているので、こちらも Win32 の errno へ揃える。
@@ -298,8 +298,7 @@ func movePrivateFileWith(oldPath, newPath string, afterAuthenticate func(*os.Fil
 		windows.DELETE|windows.READ_CONTROL|windows.WRITE_DAC|windows.FILE_READ_ATTRIBUTES,
 		false,
 		true,
-		// The rename must retain the write-through durability intent of the
-		// former MoveFileEx adapter without returning to a path-based source.
+		// パス指定の移動へ戻さず、MoveFileEx と同じ write-through の永続性を維持する。
 		windows.FILE_WRITE_THROUGH,
 	)
 	if err != nil {

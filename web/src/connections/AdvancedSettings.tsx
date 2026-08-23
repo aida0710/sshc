@@ -48,7 +48,6 @@ export function AdvancedSettings({
     setNewValue("");
     setBlockRaw(detail.form.raw);
     setLocalError("");
-    // resetKey is the complete server snapshot these line-number drafts belong to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
@@ -82,7 +81,6 @@ export function AdvancedSettings({
   }, [detail.form.raw]);
 
   function draftFor(field: FormField): string {
-    // 綴りの無い値はサーバーが書かないので、?? "" が効くことは実際には無い。
     return drafts[fieldKey(field)] ?? formatValues(field.values) ?? "";
   }
 

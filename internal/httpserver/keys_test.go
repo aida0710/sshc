@@ -96,7 +96,7 @@ func (stub *stubKeyService) Reveal(keyID string) (keys.RevealResult, error) {
 
 // PublicKey は公開の半分だけに応答する。この stub は、本物のサービスと
 // 同じ方法で秘密鍵の identifier を拒否する。したがって、秘密鍵をこの
-// ルートに通してしまうハンドラのテストは、黙って通るのではなくここで失敗する。
+// ルートに通してしまうハンドラのテストは、暗黙に通るのではなくここで失敗する。
 func (stub *stubKeyService) PublicKey(keyID string) (keys.PublicKeyResult, error) {
 	if keyID != "key-two" {
 		return keys.PublicKeyResult{}, keys.ErrUnknownKey
@@ -538,7 +538,7 @@ func TestInventoryAndTrashListingsMatchTheGeneratedContract(t *testing.T) {
 
 // public key のルートは reveal の対極にある: 何も開示しない唯一の鍵の
 // エンドポイントであり、だからこそ確認も不要な唯一のエンドポイントでもある。
-// これらのテストはその両面を固定する——トークンなしで動作すること、そして
+// これらのテストはその両面を固定する。トークンなしで動作すること、そして
 // 公開鍵でないものはすべて拒否することの両方である。
 func TestPublicKeyIsServedWithoutAConfirmation(t *testing.T) {
 	service := newRevealService()

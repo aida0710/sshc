@@ -20,11 +20,6 @@ import (
 	"sshc/internal/terminal"
 )
 
-// このテストのいくつかは、自分自身を子として起こす。
-//
-// **PowerShell の REPL を相手にしない。** 大きさを確かめるには resize のあとに
-// もう一度問い直す子が要る。それを PSReadLine の VT 混じりのエコーから読み取る
-// のは、この表明を最も壊れやすい形で書くことになる。
 const (
 	sizeHelperEnvironment       = "SSHC_TERMINAL_SIZE_HELPER"
 	descendantHelperEnvironment = "SSHC_TERMINAL_DESCENDANT_HELPER"
@@ -44,7 +39,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// runSizeHelper は、stdin の 1 行ごとに、いまのコンソールの大きさを出す。
 func runSizeHelper() int {
 	report := func() {
 		var info windows.ConsoleScreenBufferInfo
@@ -67,23 +61,12 @@ func runSizeHelper() int {
 	return 0
 }
 
-// runDescendantHelper は、孫をひとつ起こしてその pid を出し、そのまま待つ。
-//
-// **`select {}` で待たない。** それは待機ではなくデッドロック検出器で、他に
-// 走る goroutine が無ければランタイムがその場でプロセスを落とす。そうなると
-// 孫は親より先に消え、ジョブの検査は**ジョブを一つも作らない実装に対しても
-// 通ってしまう。**
 func runDescendantHelper() int {
 	executable, err := os.Executable()
 	if err != nil {
 		fmt.Printf("error %v\n", err)
 		return 1
 	}
-	// 孫は自分のコンソールを持つ。**擬似コンソールを閉じても死なない**——
-	// これを取り除けるのはジョブだけである。
-	//
-	// 環境は明示して渡す。継がせると孫もこの枝へ入り、その孫がまた孫を起こす
-	// ——**際限なく増える連鎖になる。**
 	grandchild := exec.Command(executable, "-test.run=TestNeverRuns")
 	grandchild.Env = []string{idleHelperEnvironment + "=1", "SystemRoot=" + os.Getenv("SystemRoot")}
 	grandchild.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
@@ -92,12 +75,10 @@ func runDescendantHelper() int {
 		return 1
 	}
 	fmt.Printf("descendant %d\n", grandchild.Process.Pid)
-	// 眠って待つ。タイマーが生きているので、検出器は動かない。
 	time.Sleep(10 * time.Minute)
 	return 0
 }
 
-// runIdleHelper は、ただ生きているだけの孫である。
 func runIdleHelper() int {
 	time.Sleep(10 * time.Minute)
 	return 0
@@ -129,11 +110,6 @@ func selfCommand(t *testing.T, environment string) terminal.Command {
 	}
 }
 
-// readUntil は、期限そのものを別の goroutine で見張る。
-//
-// **止まった Read は期限を見ない。** ループの周りで時刻を測っても、返らない
-// 一回の読み取りの中では誰も測っていない——検査は失敗せず、テストのバイナリ
-// ごと時間切れになる。探していたものは、そこには書かれない。
 func readUntil(t *testing.T, process terminal.Process, want string, limit time.Duration) string {
 	t.Helper()
 	type outcome struct {
@@ -171,14 +147,6 @@ func readUntil(t *testing.T, process terminal.Process, want string, limit time.D
 	}
 }
 
-// **子が自分で終われば、読み取りは EOF に届かなければならない。**
-//
-// これは Unix には無い段である。向こうは子が死ねば PTY の従側が閉じ、読み取りが
-// そこで終わる。ConPTY では出力パイプの書き手が擬似コンソールそのものなので、
-// 誰かがそれを閉じるまで EOF は来ない。閉じなければ、利用者が exit と打った
-// だけのセッションが永久に「生きている」ことになり、pump は done を閉じず、
-// engine lock も手放されない——**このテストは実機で 10 分ハングして、それを
-// 教えてくれた。**
 func TestWindowsConsoleReachesEOFWhenTheChildExitsOnItsOwn(t *testing.T) {
 	shell := powershell(t)
 	process, err := terminal.NewStarter().Start(context.Background(), terminal.Command{
@@ -238,8 +206,6 @@ func TestWindowsConsoleReportsItsSizeAndTheSizeAfterAResize(t *testing.T) {
 	readUntil(t, process, "size 132x50", 30*time.Second)
 }
 
-// 孫は自分のコンソールを持つので、擬似コンソールを閉じても生き残る。
-// **取り除けるのはジョブだけである。**
 func TestWindowsClosingRemovesADescendantWithItsOwnConsole(t *testing.T) {
 	assertDescendantIsRemoved(t, func(process terminal.Process) {
 		if err := process.Hangup(); err != nil {
@@ -283,8 +249,6 @@ func assertDescendantIsRemoved(t *testing.T, teardown func(terminal.Process)) {
 		t.Fatalf("descendant pid = %q: %v", fields[1], err)
 	}
 
-	// **まだ生きているうちにハンドルを取る。** そうすることで pid の使い回しに
-	// 引っかからない。
 	handle, err := windows.OpenProcess(
 		windows.SYNCHRONIZE|windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
@@ -303,8 +267,6 @@ func assertDescendantIsRemoved(t *testing.T, teardown func(terminal.Process)) {
 	}
 }
 
-// Registry.discard はこの順で呼ぶ。**それでも強制した事実が報告されなければ
-// ならない。**
 func TestWindowsForceThenCloseThenWaitStillReportsTheForcedExit(t *testing.T) {
 	process, err := terminal.NewStarter().Start(context.Background(),
 		selfCommand(t, sizeHelperEnvironment), terminal.Size{Cols: 80, Rows: 24})
@@ -327,7 +289,6 @@ func TestWindowsForceThenCloseThenWaitStillReportsTheForcedExit(t *testing.T) {
 	}
 }
 
-// 大きさの正規化は Registry の仕事なので、**起動そのものは自分で拒む**。
 func TestWindowsStartRefusesWhatItCannotRun(t *testing.T) {
 	starter := terminal.NewStarter()
 	shell := powershell(t)
@@ -350,7 +311,6 @@ func TestWindowsStartRefusesWhatItCannotRun(t *testing.T) {
 	}
 }
 
-// 取り消された確保は、何も残さない。
 func TestWindowsStartRefusesACancelledCreation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -361,8 +321,6 @@ func TestWindowsStartRefusesACancelledCreation(t *testing.T) {
 	}
 }
 
-// **環境ブロックを途中で終わらせられる項目は受け取らない。** 一項目で子の
-// 環境全体を差し替えられてしまう。
 func TestWindowsStartRefusesAnUnusableEnvironmentEntry(t *testing.T) {
 	shell := powershell(t)
 	for name, environment := range map[string][]string{
@@ -380,13 +338,6 @@ func TestWindowsStartRefusesAnUnusableEnvironmentEntry(t *testing.T) {
 	}
 }
 
-// **手放したハンドルは使わない。** コンソールとジョブは os.File と違って
-// 参照が数えられず、Windows はハンドルの値を使い回す。畳んだあとの Resize が
-// そのまま通れば、いまその番号を持っている無関係なものへ届く。
-//
-// 守りが無い実装は、解放済みのハンドルに対して ResizePseudoConsole を呼び、
-// 無効なハンドルとして失敗を返す。守りがあれば、伝える相手が居ないだけなので
-// 何事も無く nil である。
 func TestWindowsResizeAfterTheConsoleIsGoneDoesNotTouchIt(t *testing.T) {
 	shell := powershell(t)
 	process, err := terminal.NewStarter().Start(context.Background(), terminal.Command{
@@ -400,8 +351,6 @@ func TestWindowsResizeAfterTheConsoleIsGoneDoesNotTouchIt(t *testing.T) {
 	if err := process.Hangup(); err != nil {
 		t.Fatalf("Hangup = %v", err)
 	}
-	// Hangup はコンソールを別の goroutine で閉じる。所有権はその場で移るので、
-	// この時点でもう誰も使ってはならない。
 	if err := process.Resize(terminal.Size{Cols: 100, Rows: 40}); err != nil {
 		t.Fatalf("Resize after Hangup = %v, want it to be a quiet no-op", err)
 	}
@@ -416,7 +365,6 @@ func TestWindowsResizeAfterTheConsoleIsGoneDoesNotTouchIt(t *testing.T) {
 	if !ok {
 		t.Fatal("the console process has no force hook")
 	}
-	// ジョブはもう閉じている。**そこへ TerminateJobObject を投げない。**
 	if err := forcer.ForceClose(); err != nil {
 		t.Fatalf("ForceClose after Close = %v, want it to be a quiet no-op", err)
 	}

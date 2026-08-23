@@ -1,6 +1,3 @@
-// これらのヘルパーはファイル全体のそのままの編集の正確なテキストを組み立てる。
-// 自分が追加していないものを決して再整形しないため、ホストの
-// 複製・削除においてもサーバーのバイト単位の保証は保たれる。
 
 function offsetOfLine(contents: string, line: number): number {
   let offset = 0;
@@ -28,8 +25,6 @@ export function duplicateHostBlock(
   if (aliasIndex < 0) throw new Error("block_moved");
   tokens[aliasIndex] = newAlias;
   const copied = `${tokens.join(" ")}${rest}`;
-  // コピーは、それが何のコピーであるかの説明を運ぶ。それがなければ、
-  // 複製は説明された元の隣に、説明のないまま現れてしまう。
   let comment = "";
   if (commentLines > 0 && line > 0) {
     const offset = offsetOfLine(contents, line);
@@ -39,12 +34,6 @@ export function duplicateHostBlock(
   return `${terminated}\n${comment}${copied.endsWith("\n") ? copied : `${copied}\n`}`;
 }
 
-// commentOffset はブロック自身の offset から commentLines 分の物理行を
-// 遡る。そこが付属する comment の始まる位置である。
-//
-// この数は comment のテキストからではなくパーサーから得る。テキストはマーカーと
-// インデントが取り除かれているため、ファイルに対して測ることが
-// できないからである。
 function commentOffset(contents: string, offset: number, commentLines: number): number {
   let start = offset;
   for (let remaining = commentLines; remaining > 0; remaining--) {
@@ -62,8 +51,6 @@ export function removeHostBlock(
 ): string {
   const offset = offsetOfLine(contents, line);
   if (!contents.startsWith(raw, offset)) throw new Error("block_moved");
-  // comment はブロックと共に移動する。取り残されれば、後に続くどの
-  // ブロックにも付着し、黙ってその接続の説明になってしまう。
   const start = commentOffset(contents, offset, commentLines);
   return contents.slice(0, start) + contents.slice(offset + raw.length);
 }

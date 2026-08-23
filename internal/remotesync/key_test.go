@@ -31,7 +31,7 @@ func TestNewKeyIsReadableAndStrongEnoughToSealWith(t *testing.T) {
 		t.Fatalf("key %q is not upper case", key)
 	}
 
-	// 生成した鍵をそのまま封に使えなければ、生成する意味がない。
+	// 生成した鍵をそのまま暗号化に使用できることを確認する。
 	if _, err := envelope.Derive(key); err != nil {
 		t.Fatalf("the generated key cannot seal an envelope: %v", err)
 	}

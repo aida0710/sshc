@@ -13,10 +13,6 @@ import (
 	"sshc/internal/terminal"
 )
 
-// fakeProcess は、実プロセスなしにレジストリの上を検査するための PTY である。
-//
-// 読み側は feed が押し込んだものを返し、exit が呼ばれるまで塞がる。これにより、
-// 「終わっていない PTY」と「終わった PTY」をテストが正確に選べる。
 type fakeProcess struct {
 	onHangup func(*fakeProcess)
 	mutex    sync.Mutex
@@ -46,7 +42,6 @@ func (p *fakeProcess) feed(chunk string) {
 	}
 }
 
-// exit は子プロセスの終了を演じる。Read は EOF を返し、Wait が info を返す。
 func (p *fakeProcess) exit(info terminal.ExitInfo) {
 	p.mutex.Lock()
 	if p.closed {
@@ -98,10 +93,6 @@ func (p *fakeProcess) Hangup() error {
 	p.hangups++
 	onHangup := p.onHangup
 	p.mutex.Unlock()
-	// **終わり方を差し替えられるようにする。** PTY を持つ相手は signal で
-	// 終わるが、SSH のセッションは輸送ごと断たれて Code -1 で終わる
-	// （sshclient.Session.Close）——そこを再現できないと、閉じたときの
-	// 繋ぎ直しの判断が検査できない。
 	if onHangup != nil {
 		onHangup(p)
 		return nil
@@ -137,7 +128,6 @@ func (p *fakeProcess) resizes() []terminal.Size {
 	return append([]terminal.Size(nil), p.sizes...)
 }
 
-// fakeStarter は、開かれた PTY をすべて手元に残す。
 type fakeStarter struct {
 	mutex     sync.Mutex
 	processes []*fakeProcess
@@ -193,7 +183,6 @@ func openShell(t testing.TB, registry *terminal.Registry) *terminal.Session {
 	return session
 }
 
-// waitFor は、pump が非同期に動くこの設計で「まだ届いていない」を待つ。
 func waitFor(t testing.TB, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -217,12 +206,10 @@ func TestOpenRefusesOnceTheLiveLimitIsReached(t *testing.T) {
 	}); !errors.Is(err, terminal.ErrSessionLimit) {
 		t.Fatalf("the third Open() = %v, want ErrSessionLimit", err)
 	}
-	// 拒否は本当に拒否であって、開いてから閉じるのではない。
 	if starter.count() != 2 {
 		t.Fatalf("the refused request still started %d process(es)", starter.count()-2)
 	}
 
-	// 終了済みは生存上限に数えない。閉じた分だけ、また開けるようになる。
 	if err := registry.Close(first.ID()); err != nil {
 		t.Fatal(err)
 	}
@@ -234,16 +221,9 @@ func TestOpenRefusesOnceTheLiveLimitIsReached(t *testing.T) {
 	}
 }
 
-// **残す枠は「読まれていない終わり方」のためにある。**
-//
-// かつてここは registry.Close で閉じていたが、それは人が自分で閉じる操作であり、
-// いまはその場で捨てられる——閉じた人はもう読んでいる。残るのは、自分から
-// 終わったものだけである。
 func TestExitedSessionsAreRetainedUpToTheCap(t *testing.T) {
 	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
 
-	// 上限より多く開いて、**それぞれが自分から終わる。** 残るのは新しい方から
-	// RetainedExited 本である。
 	var opened []string
 	for index := 0; index < terminal.RetainedExited+3; index++ {
 		session := openShell(t, registry)
@@ -257,7 +237,6 @@ func TestExitedSessionsAreRetainedUpToTheCap(t *testing.T) {
 	if len(sessions) != terminal.RetainedExited {
 		t.Fatalf("retained %d sessions, want %d", len(sessions), terminal.RetainedExited)
 	}
-	// 捨てられたのは古い方である。
 	oldest := opened[len(opened)-terminal.RetainedExited]
 	if sessions[0].ID != oldest {
 		t.Fatalf("the oldest retained session is %q, want %q", sessions[0].ID, oldest)
@@ -274,7 +253,6 @@ func TestEverySessionGetsItsOwnIdentifier(t *testing.T) {
 
 	seen := map[string]bool{}
 	for index := 0; index < 20; index++ {
-		// 同じ alias に何本でも開ける。ID は alias ではない。
 		session, err := registry.Open(context.Background(), terminal.Spec{
 			Kind: terminal.KindSSH, Alias: "bastion", Title: "bastion",
 			Command: terminal.Command{Path: "/usr/bin/ssh"},
@@ -312,7 +290,6 @@ func TestAttachReplaysTheBufferAndThenFollowsTheLiveOutput(t *testing.T) {
 		t.Fatal("the live output never arrived")
 	}
 
-	// 二度目のアタッチは、両方を再生する。
 	again, _ := session.Attach()
 	if string(again) != "before-attach\nafter-attach\n" {
 		t.Fatalf("second replay = %q", again)
@@ -325,20 +302,17 @@ func TestAnAttachmentThatDoesNotReadIsDroppedAndThePTYKeepsRunning(t *testing.T)
 	process := starter.last()
 
 	_, stalled := session.Attach()
-	// 読まないまま、チャンネルの深さを超えて押し込む。
 	for index := 0; index < 2000; index++ {
 		process.feed("x")
 	}
 	waitFor(t, func() bool { return stalled.Dropped() })
 
-	// 落とされたのはアタッチだけである。PTY は止まらず、バッファは進み続ける。
 	if session.Exit() != nil {
 		t.Fatal("the session died with its slow attachment")
 	}
 	process.feed("still-alive")
 	waitFor(t, func() bool { return strings.Contains(string(session.Snapshot()), "still-alive") })
 
-	// 繋ぎ直せる。同じセッションであり、落ちたのは通信路だけだった。
 	_, fresh := session.Attach()
 	process.feed("!")
 	select {
@@ -354,7 +328,6 @@ func TestExitLeavesTheSessionReadableAndClosesEveryAttachment(t *testing.T) {
 	process := starter.last()
 
 	_, stream := session.Attach()
-	// ssh が即座に失敗したときに読める唯一の場所がここである。
 	process.feed("ssh: Could not resolve hostname\n")
 	process.exit(terminal.ExitInfo{Code: 255})
 
@@ -372,7 +345,6 @@ func TestExitLeavesTheSessionReadableAndClosesEveryAttachment(t *testing.T) {
 	if stream.Dropped() {
 		t.Fatal("a stream closed by the exit must not be reported as dropped")
 	}
-	// 終了済みでも出力は読める。理由が読める状態を保つのがこの保持の目的である。
 	replay, closed := session.Attach()
 	if !strings.Contains(string(replay), "Could not resolve hostname") {
 		t.Fatalf("replay after exit = %q", replay)
@@ -414,7 +386,6 @@ func TestWriteAndResizeReachThePTY(t *testing.T) {
 		t.Fatalf("last size = %+v", last)
 	}
 
-	// 範囲の外は TIOCSWINSZ へ渡さない。
 	for _, refused := range []terminal.Size{{Cols: 0, Rows: 24}, {Cols: 80, Rows: 0}, {Cols: 5000, Rows: 24}} {
 		if err := session.Resize(refused); !errors.Is(err, terminal.ErrInvalidSize) {
 			t.Fatalf("Resize(%+v) = %v, want ErrInvalidSize", refused, err)
@@ -422,8 +393,6 @@ func TestWriteAndResizeReachThePTY(t *testing.T) {
 	}
 }
 
-// PTY を確保できない場合、セッションを作らずに理由を返す。何も起きていない
-// セッションが一覧に並ぶより、開かなかったと言う方が正確である。
 func TestAFailedStartCreatesNoSessionAndRunsTheCleanup(t *testing.T) {
 	starter := &fakeStarter{err: errors.New("no pty available")}
 	registry := &terminal.Registry{Start: starter, Limits: terminal.DefaultLimits}
@@ -456,11 +425,9 @@ func TestCloseHangsUpTheLiveSessionAndForgetsTheExitedOne(t *testing.T) {
 	if process.hangupCount() != 1 {
 		t.Fatalf("hangups = %d, want 1", process.hangupCount())
 	}
-	// 一度目は SIGHUP。まだ一覧にいる。
 	if _, ok := registry.Lookup(session.ID()); !ok {
 		t.Fatal("the exited session left the list on the first close")
 	}
-	// 二度目が一覧から消す。
 	if err := registry.Close(session.ID()); err != nil {
 		t.Fatal(err)
 	}
@@ -504,9 +471,6 @@ func exited(registry *terminal.Registry, id string) func() bool {
 	}
 }
 
-// 名前は表示だけのものである。走っているプロセスにも、ssh の相手にも、
-// 識別子にも触れないことをここで固定する。触れば、同じ相手へ複数本開いた
-// ときに行を見分けるという用途を超えてしまう。
 func TestRenameChangesOnlyTheDisplayedName(t *testing.T) {
 	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
 	session := openShell(t, registry)
@@ -529,8 +493,6 @@ func TestRenameChangesOnlyTheDisplayedName(t *testing.T) {
 	}
 }
 
-// 終了した行も改名できる。読むために残してある行なので、印を付ける価値は
-// そこにもある。
 func TestRenameWorksOnAnExitedSession(t *testing.T) {
 	registry, _ := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
 	session := openShell(t, registry)
@@ -568,11 +530,6 @@ func TestRenameRefusesNamesTheListCannotShow(t *testing.T) {
 	}
 }
 
-// Spec.Open は、レジストリが PTY を知らないまま別のものを持てる継ぎ目である。
-//
-// プロセス内で話す SSH がここを通る。向こうにプロセスが無いので確保する PTY も
-// 無く、Starter を通す理由がひとつも無い。この検査が Start を nil にしているのは、
-// その経路が本当に Starter を必要としないことを言うためである。
 func TestRegistryUsesTheSpecOwnOpenerWhenItHasOne(t *testing.T) {
 	registry := &terminal.Registry{Limits: terminal.DefaultLimits}
 	process := newFakeProcess()
@@ -600,8 +557,6 @@ func TestRegistryUsesTheSpecOwnOpenerWhenItHasOne(t *testing.T) {
 	}
 }
 
-// 開けなかったときの扱いは Starter と同じでなければならない。片方だけが
-// セッションを残すと、一覧に何も起きていない行が並ぶ。
 func TestAFailedOpenerCreatesNoSessionAndRunsTheCleanup(t *testing.T) {
 	registry := &terminal.Registry{Limits: terminal.DefaultLimits}
 
@@ -624,7 +579,6 @@ func TestAFailedOpenerCreatesNoSessionAndRunsTheCleanup(t *testing.T) {
 	}
 }
 
-// 手段がひとつも無いレジストリは、開いたふりをしない。
 func TestARegistryWithNeitherAStarterNorAnOpenerRefuses(t *testing.T) {
 	registry := &terminal.Registry{Limits: terminal.DefaultLimits}
 	if _, err := registry.Open(context.Background(), terminal.Spec{Kind: terminal.KindShell}); !errors.Is(err, terminal.ErrNoStarter) {

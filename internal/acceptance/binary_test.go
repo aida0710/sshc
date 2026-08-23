@@ -11,8 +11,8 @@ import (
 )
 
 // 旧版の launchd / systemd unit が使った -open=false を受け付けると、unit が
-// 新しいバイナリを起こした時点で engine.lock を先に握り、デスクトップの子が
-// 上がれなくなる。旧版からの移行を持たない以上、黙って常駐するより未定義の
+// 新しいバイナリを起動した時点で engine.lock を先に握り、デスクトップの子が
+// 上がれなくなる。旧版からの移行を持たない以上、暗黙に常駐するより未定義の
 // フラグとして直ちに拒む。
 func TestLegacyOpenFlagIsRejected(t *testing.T) {
 	repository := filepath.Join("..", "..")
@@ -23,10 +23,10 @@ func TestLegacyOpenFlagIsRejected(t *testing.T) {
 		t.Fatalf("go build = %v\n%s", err, output)
 	}
 
-	// **確かめているのは「常駐しない」ことである。** 秒数ではない。常駐する
+	// 確かめているのは「常駐しない」ことである。秒数ではない。常駐する
 	// engine は何秒待っても終わらないので、余裕のある期限でもこの主張は立つ。
 	// 3 秒だと、並列に走る他のパッケージで込み合った実機で、正しく終了して
-	// いるものが落ちる——Windows の実機がそうだった（単独なら 2.1 秒で通る）。
+	// いるものが落ちる。Windows の実機がそうだった（単独なら 2.1 秒で通る）。
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	process := exec.CommandContext(ctx, binary, "-open=false")
@@ -46,7 +46,7 @@ func TestLegacyOpenFlagIsRejected(t *testing.T) {
 
 // TestNoTestOnlyPackageReachesTheShippedBinary は、hardening
 // suite を artefact の外に保つ。internal/acceptance は構造上
-// test-only だが、将来ヘルパーが非テストファイルへ移されれば、それは黙って崩れる。
+// test-only だが、将来ヘルパーが非テストファイルへ移されれば、それは暗黙に崩れる。
 func TestNoTestOnlyPackageReachesTheShippedBinary(t *testing.T) {
 	list := exec.Command("go", "list", "-deps", "./cmd/sshc")
 	list.Dir = filepath.Join("..", "..")

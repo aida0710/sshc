@@ -11,10 +11,10 @@ import (
 
 // formula が建てようとするものが、実際に建つことを確かめる。
 //
-// **v0.3.1 の `brew install` は "no Go files in ..." で落ちた。** formula は
+// v0.3.1 の `brew install` は "no Go files in ..." で落ちた。formula は
 // `go build` に package を渡しておらず、tarball の root を建てようとしていた
-// ——main は ./cmd/sshc に居る。リリースは緑のまま出ており、**気付いたのは
-// 利用者が打ったときだった。**
+// main は ./cmd/sshc に居る。リリースは緑のまま出ており、気付いたのは
+// 利用者が打ったときだった。
 //
 // ここは brew を持たない機械でも走る。読むのは formula に書いてある文字列で
 // あり、それを同じ引数で実行してみるだけである。
@@ -36,9 +36,9 @@ func TestTheFormulaBuildsSomethingThatExists(t *testing.T) {
 			"渡さないと tarball の root を建てようとして \"no Go files\" で止まる", build)
 	}
 
-	// **その package が本当に main であることまで見る。** 綴りだけ合っていて
+	// その package が本当に main であることまで見る。表記だけ合っていて
 	// 中身が library なら、brew は同じ形で落ちる。
-	// **リポジトリの根で訊く。** formula の綴りはあそこを基点にしている。
+	// リポジトリの根で訊く。formula の表記はあそこを基点にしている。
 	list := exec.Command("go", "list", "-f", "{{.Name}}", packages[1])
 	list.Dir = filepath.Join("..", "..")
 	output, err := list.CombinedOutput()
@@ -55,11 +55,11 @@ func TestTheFormulaBuildsSomethingThatExists(t *testing.T) {
 	}
 }
 
-// **利用者に打たせる行は、打てば通る行でなければならない。**
+// 利用者に打たせる行は、打てば通る行でなければならない。
 //
 // docs は一度 `brew install --cask --no-quarantine ...` を案内していた。
-// あの旗は Homebrew 5.0 で非推奨、5.1 で削除されており、**打った人が受け取るのは
-// 使い方の全文と `Error: invalid option`** である。確かめずに書いた。
+// あの旗は Homebrew 5.0 で非推奨、5.1 で削除されており、打ったユーザーが受け取るのは
+// 使い方の全文と `Error: invalid option` である。確かめずに書いた。
 //
 // ここが数えるのは、案内の中の brew の行が、消えた旗を含まないことである。
 func TestTheInstructionsUseNoRetiredBrewFlags(t *testing.T) {

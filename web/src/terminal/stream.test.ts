@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { openStream, streamURL } from "./stream";
 
-// 通信路は /api/ の外にある。ブラウザが WebSocket のハンドシェイクに
-// カスタムヘッダを付けられないので、CSRF ヘッダを要求する面には置けない。
 describe("streamURL", () => {
   it("stays on the same origin and carries only the ticket", () => {
     const url = streamURL("one-time", { protocol: "http:", host: "127.0.0.1:51234" } as Location);
@@ -21,9 +19,6 @@ type Listener = (event: unknown) => void;
 
 class FakeSocket {
   static last: FakeSocket | null = null;
-  // **繋がる前から始まる。** 本物の WebSocket は new した直後 CONNECTING で
-  // あり、そこを OPEN として検査すると、開く前に送られたフレームが落ちること
-  // に気づけない。
   readyState = 0;
   binaryType = "";
   sent: unknown[] = [];
@@ -63,7 +58,6 @@ function withFakeSocket(): typeof FakeSocket {
 }
 
 describe("openStream", () => {
-  // バイナリフレームが PTY の生バイト列である。base64 を挟まない。
   it("delivers binary frames as output and text frames as control", () => {
     withFakeSocket();
     const onOutput = vi.fn();
@@ -98,8 +92,6 @@ describe("openStream", () => {
     expect(JSON.parse(String(socket.sent[1]))).toEqual({ resize: { cols: 120, rows: 34 } });
   });
 
-  // 端末を開いた直後の最初のサイズは、まだ CONNECTING のこの通信路を通る。
-  // ここで落とすと PTY は 80×24 のまま残り、窓の大きさが変わるまで直らない。
   it("holds frames sent before the socket opens and delivers them in order", () => {
     withFakeSocket();
     const stream = openStream("one-time", { onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
@@ -127,8 +119,6 @@ describe("openStream", () => {
     expect(socket.sent).toHaveLength(0);
   });
 
-  // 通信路が切れることと、子プロセスが終わることは別の事実である。前者では
-  // 同じセッションへ繋ぎ直せるし、後者では終了の理由が読める。
   it("separates a dropped connection from an exit", () => {
     withFakeSocket();
     const onExit = vi.fn();
@@ -155,7 +145,6 @@ describe("openStream", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  // 読めない制御フレームひとつが、生きているセッションを閉じてよい理由はない。
   it("survives a control frame it cannot read", () => {
     withFakeSocket();
     const onClose = vi.fn();

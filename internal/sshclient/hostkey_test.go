@@ -49,7 +49,7 @@ func hostKeysFor(contents string) *recordingHostKeys {
 	return recorder
 }
 
-// Confirm は、この記録係自身が Prompter として答える。
+// Confirm は、この記録係自身が Prompter として返す。
 func (r *recordingHostKeys) Confirm(prompt string) (bool, error) {
 	r.asked = append(r.asked, prompt)
 	return r.answer, nil
@@ -85,12 +85,12 @@ func TestAKnownHostWithTheSameKeyConnects(t *testing.T) {
 	}
 }
 
-// **ここだけは人に判断させない。** known_hosts にあって鍵が違うのは中間者攻撃の
+// ここだけはユーザーに判断させない。known_hosts にあって鍵が違うのは中間者攻撃の
 // 形そのものであり、尋ねること自体が攻撃の成立条件になる。
 func TestAChangedHostKeyIsRefusedWithoutAsking(t *testing.T) {
 	known, offered := newHostKey(t), newHostKey(t)
 	recorder := hostKeysFor(knownHostsLine("203.0.113.10", known.PublicKey()))
-	recorder.answer = true // 尋ねられたら「はい」と答える用意がある。尋ねてはならない。
+	recorder.answer = true // yes を返せる状態にするが、このテストでは問い合わせ自体を禁止する。
 	target := sshclient.Target{Alias: "bastion", HostName: "203.0.113.10", Port: "22"}
 
 	err := verify(recorder.HostKeys, target, offered.PublicKey(), recorder)
@@ -213,7 +213,7 @@ func TestARevokedKeyIsRefused(t *testing.T) {
 	}
 }
 
-// 尋ねる手段がなければ、未知のホストは断る。黙って受け入れることはしない。
+// 尋ねる手段がなければ、未知のホストは断る。暗黙に受け入れることはしない。
 func TestWithoutAWayToAskAnUnknownHostIsRefused(t *testing.T) {
 	host := newHostKey(t)
 	keys := sshclient.HostKeys{Read: func() ([]byte, error) { return nil, nil }}
@@ -226,11 +226,11 @@ func TestWithoutAWayToAskAnUnknownHostIsRefused(t *testing.T) {
 
 // ホスト鍵の種類は、こちらがすでに持っているものを先に名乗る。
 //
-// **これが無いと、正しいホストの正しい鍵が「一致しない鍵」になる。** 普通の
+// これが無いと、正しいホストの正しい鍵が「一致しない鍵」になる。普通の
 // Ubuntu は ed25519 と ECDSA と RSA を持っており、x/crypto の既定表は ECDSA を
 // ed25519 より前に置く。known_hosts にあるのが ed25519 の 1 行だけなら、返って
 // くるのは known_hosts に無い種類の鍵であり、突き合わせは当然そこで終わる
-// ——変わったのは相手ではなく、こちらの選び方である。
+// 変わったのは相手ではなく、こちらの選び方である。
 func TestTheKnownKeyTypeIsPreferredWhenTheHostOffersSeveral(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{
@@ -245,11 +245,11 @@ func TestTheKnownKeyTypeIsPreferredWhenTheHostOffersSeveral(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = process.Close() }()
-	// **失敗したときも Wait が返るように、出力は読み続ける。** 繋げなかった理由は
+	// 失敗したときも Wait が返るように、出力は読み続ける。繋げなかった理由は
 	// 端末へ書かれるので、誰も読まないとその書き込みで止まる。
 	go func() { _, _ = io.Copy(io.Discard, process) }()
 
-	// **繋がったことは、向こうのシェルが終了コードを返したことで分かる。**
+	// 繋がったことは、向こうのシェルが終了コードを返したことで分かる。
 	// 握手がホスト鍵で終わっていれば、ここに来るのは別の数字である。
 	if info := process.Wait(); info.Code != 42 {
 		t.Fatalf("exit = %+v, want the shell on the other side to have run at all", info)
@@ -258,7 +258,7 @@ func TestTheKnownKeyTypeIsPreferredWhenTheHostOffersSeveral(t *testing.T) {
 
 // 知らないホストでは既定の順を返す。
 //
-// **何も渡さないと x/crypto の順になり、それは `ssh` の順ではない。** 初めて
+// 何も渡さないと x/crypto の順になり、それは `ssh` の順ではない。初めて
 // 繋ぐホストについて覚える鍵の種類が二つのクライアントで食い違うのは、同じ
 // known_hosts を両方が書く以上、避けられるなら避けたい。
 func TestAnUnknownHostGetsTheSameOrderOpenSSHWouldUse(t *testing.T) {
@@ -277,7 +277,7 @@ func TestAnUnknownHostGetsTheSameOrderOpenSSHWouldUse(t *testing.T) {
 }
 
 // 設定に書かれていれば、それが順序である。known_hosts が別の種類を持っていても
-// 並べ替えない——人が決めた順を、こちらの都合で作り変えない。
+// 並べ替えない。ユーザーが決めた順を、こちらの都合で作り変えない。
 func TestWhatTheConfigurationWroteWinsOverKnownHosts(t *testing.T) {
 	recorder := hostKeysFor(knownHostsLine("203.0.113.10", newHostKey(t).PublicKey()))
 	target := sshclient.Target{
@@ -292,7 +292,7 @@ func TestWhatTheConfigurationWroteWinsOverKnownHosts(t *testing.T) {
 }
 
 // RSA だけは、鍵の種類と署名アルゴリズムが一対一ではない。ssh-rsa としか
-// 書かれていない 1 行から、同じ鍵で名乗れる三つを出す——SHA-1 だけを名乗ると、
+// 書かれていない 1 行から、同じ鍵で名乗れる三つを出す。SHA-1 だけを名乗ると、
 // それを断るサーバーには繋がらない。
 func TestAnRSAEntryOffersTheSHA2SignaturesToo(t *testing.T) {
 	private, err := rsa.GenerateKey(rand.Reader, 2048)

@@ -74,7 +74,7 @@ func problemWith(c *echo.Context, status int, payload problemPayload) error {
 }
 
 // decodeJSON は、上限付きで厳密な JSON ボディを読む。未知のフィールドは
-// 拒否されるので、タイプミスが黙って既定値になることはない。
+// 拒否されるので、タイプミスが暗黙に既定値になることはない。
 func decodeJSON(c *echo.Context, target any) error {
 	body := c.Request().Body
 	if body == nil {

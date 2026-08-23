@@ -20,35 +20,22 @@ import (
 	"sshc/internal/validate"
 )
 
-// connectAnswer は、起動中のアプリケーションが返す内容。
+// connectAnswer は engine が返す接続情報である。
 type connectAnswer struct {
 	Alias string `json:"alias"`
-	// Passphrases は、この接続に現れる鍵ごとの保存済みパスフレーズ。キーは
-	// ワークスペース相対の綴りで、行き先だけでなく ProxyJump の手前も含む。
+	// Passphrases は接続経路で使用する鍵パスフレーズ。キーはワークスペース相対パス。
 	Passphrases map[string]string `json:"passphrases"`
 	// Passwords は、この接続に現れる alias ごとの保存済みアカウントパスワード。
-	// 行き先だけでなく ProxyJump の手前も含む。**Passphrase とは別の名前空間である。**
+	// 行き先だけでなく ProxyJump の手前も含む。Passphrase とは別の名前空間である。
 	Passwords map[string]string `json:"passwords"`
 	Warnings  []string          `json:"warnings"`
 }
 
-// OpenSubcommand は、起動中のアプリケーションをブラウザで開く。
-//
-// ブートストラップトークンは初回の使用で消費される。標準出力がどこにも届かないよう
-// 意図して作られたバックグラウンドエージェント — その URL は有効なトークンを運ぶ
-// からだ — には、これを配る手段がない。そこで、ユーザーが何かを見たいときには
-// 新しいものを要求する。"open" という名のホストは、この方法では名前で接続できない
-// ホストになる。語はひとつだけで、それがこれである。
+// OpenSubcommand は起動中の engine から UI URL を取得する予約語である。
 const OpenSubcommand = "open"
 
-// runOpen は、走っている engine に入口をひとつ発行させ、その綴りを出す。
-//
-// **入口は毎回新しい。** 一度出したものを覚えて配り直すと、その綴りは端末の
-// スクロールバックの中で生き続ける——engine が走っているあいだずっと使える鍵が、
-// 誰でも読める場所に残ることになる。
-//
-// open は、それをブラウザへ渡すかどうかである。裸の `sshc` は渡し、`sshc open` は
-// 渡さない——後者は書かれた手順の中から呼ばれるもので、そこに開く相手は居ない。
+// runOpen は engine から一度限りの UI URL を取得して出力する。
+// open が true の場合だけ URL をブラウザへ渡す。
 func runOpen(
 	ctx context.Context, stateDir string, client *http.Client, stdout, stderr io.Writer, open bool,
 ) int {
@@ -58,8 +45,6 @@ func runOpen(
 			fmt.Fprintf(stderr, "sshc: %v\n", err)
 			return 1
 		}
-		// **起こし方まで言う。** 「動いていない」だけでは、次に何を打てばよいかが
-		// 分からない——engine を生かしておくのは人であり、この道具ではない。
 		fmt.Fprintln(stderr, "sshc: not running")
 		fmt.Fprintln(stderr, "sshc: start one with `sshc engine`, and keep that terminal open")
 		return 1
@@ -73,7 +58,7 @@ func runOpen(
 	request.Header.Set(handoff.HeaderName, found.Secret)
 	response, err := client.Do(request)
 	if err != nil {
-		fmt.Fprintln(stderr, "sshc: not answering")
+		fmt.Fprintln(stderr, "sshc: the running engine did not respond")
 		return 1
 	}
 	defer func() { _ = response.Body.Close() }()
@@ -85,26 +70,19 @@ func runOpen(
 		URL string `json:"url"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&answer); err != nil || answer.URL == "" {
-		fmt.Fprintln(stderr, "sshc: the answer carried no way in")
+		fmt.Fprintln(stderr, "sshc: the engine response did not include a UI URL")
 		return 1
 	}
 	fmt.Fprintln(stdout, answer.URL)
 	if open {
-		// **開けなくても失敗ではない。** 綴りは既に出してあるので、貼れるものは
-		// 人の手元に残っている。
+		// URL は既に出力済みなので、ブラウザ起動の失敗は終了コードに反映しない。
 		openInBrowser(ctx, answer.URL)
 	}
 	return 0
 }
 
-// runConnect は、生きているエンジンに接続材料を求め、**このプロセスの中で**
-// SSH を話す。
-//
-// **エンジンに届かないことは、保存済み無しで繋いでよいという許可ではない。**
-// かつてはそこで黙って退き、鍵のパスフレーズを端末で訊いていた。訊かれた人には
-// それがエンジンの不在によるものだと分からず、毎回訊かれることの方を普通だと
-// 思ってしまう。保存済みを使わない接続がほしいなら `ssh <接続先>` があり、
-// このアプリケーションは ~/.ssh/config に触れないので、それは常に動く。
+// runConnect は engine から保存済み認証情報を取得し、プロセス内で SSH 接続する。
+// engine に接続できない場合は認証情報なしの接続へフォールバックしない。
 func runConnect(
 	ctx context.Context, alias, home, stateDir string, client *http.Client, stdin *os.File, stdout, stderr io.Writer,
 ) int {
@@ -113,8 +91,7 @@ func runConnect(
 		return 2
 	}
 
-	// 待つあいだの Ctrl-C だけをここで拾う。SSH が始まったあとの端末は raw で、
-	// Ctrl-C は信号ではなく一バイトとして相手へ渡る——そちらを横取りしない。
+	// 接続待機中だけ Ctrl-C を処理する。SSH 開始後は raw 端末へそのまま渡す。
 	waitCtx, stopWaiting := signal.NotifyContext(ctx, os.Interrupt)
 	session, err := reachUnlockedEngine(waitCtx, stateDir, client, func(found handoff.Handoff) engineProbe {
 		return httpProbe{found: found, client: client}
@@ -128,7 +105,7 @@ func runConnect(
 		return 1
 	}
 
-	// 解錠済みと確かめたあとで、元の接続先を一度だけ要求する。打ち直させない。
+	// 解錠確認後、指定された alias の接続情報を一度だけ要求する。
 	answer, err := session.Connection(ctx, alias)
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
@@ -138,10 +115,7 @@ func runConnect(
 	for _, warning := range answer.Warnings {
 		fmt.Fprintf(stderr, "sshc: %s\n", warning)
 	}
-	// **本体が連鎖を解決して、そこに現れる alias のぶんだけを返している。**
-	// 手前に立つホストも別の alias としてここに入る。表に無いものは保存が無い
-	// ということであり、そのときは端末で尋ねる。組み立ては run.go と共有する
-	// ——同じ答えを二通りに読み替える場所を作らない。
+	// engine は ProxyJump を含む接続経路を解決済み。保存値が無い場合は端末で入力する。
 	connection, err := app.NewCLIConnection(home,
 		savedPassphraseFor(answer), savedPasswordFor(answer))
 	if err != nil {
@@ -161,10 +135,7 @@ func runConnect(
 	return code
 }
 
-// connectAdvice は、断った理由に「では何をすればよいか」を添える。
-//
-// **かつてここは「ssh なら繋げる」と言っていた。** ProxyCommand を断っていた
-// 頃の逃げ道である。いまは起こすので、その一文は消えた。
+// connectAdvice は設定競合の解消方法をエラーに追加する。
 func connectAdvice(err error) error {
 	if errors.Is(err, sshclient.ErrProxyCommandWithJump) {
 		return fmt.Errorf("%w; keep whichever one you meant", err)

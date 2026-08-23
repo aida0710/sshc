@@ -27,27 +27,19 @@ type Output struct {
 
 // Run は、リモートで 1 つのコマンドを走らせる。
 //
-// **端末は要求しない。** 引数も無い——コマンドはリモートのシェルが 1 本の
+// 端末は要求しない。引数も無い。コマンドはリモートのシェルが 1 本の
 // 文字列として受け取る。これは OpenSSH の `ssh host 'command'` と同じであり、
 // 呼び出し側が組み立てるのは自分が書いた定数だけである。
 //
-// **何も尋ねない。** Prompter を渡さないので、保存済みの資格情報で通らない
-// 接続はそこで失敗する。無人で走る操作が人を待つことはない。
+// 何も尋ねない。Prompter を渡さないので、保存済みの資格情報で通らない
+// 接続はそこで失敗する。非対話処理ではユーザー入力を待たない。
 //
-// **Stream と違うところが 2 つあり、どちらも意図である。**
-//
-// keepalive を張らない。ここが走らせるのは上限時間の中で終わる短い操作なので、
-// 「相手が黙ったまま生きているか」を確かめる必要が無い。Stream の方は人が開いた
-// セッションで、いつまで続くか分からないから要る。
-//
-// 設定の `SetEnv` を送らない。**ここは出力を読むからである** ——このアプリケーション
-// が書いた定型のプログラムを走らせ、その標準出力を答えとして解析する。利用者が
-// 設定に書いた環境変数が LANG や LC_ALL を変えれば、読む相手の言葉が変わりうる。
-// Stream の方は出力を人が読むので、利用者の設定がそのまま効くのが正しい。
+// 制限時間内で終わる管理操作を対象とするため keepalive は送らない。結果の解析が
+// ロケールに依存しないよう、ssh_config の SetEnv も送らない。
 func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []byte) (Output, error) {
 	started := time.Now()
 
-	// 未知のホストを黙って受け入れない。無人の操作が信頼を増やしてはならない。
+	// 非対話処理では未知のホストを信頼済みに変更しない。
 	strict := target
 	strict.Strict = "yes"
 
@@ -90,8 +82,8 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 	switch {
 	case runErr == nil:
 	case errors.As(runErr, &exit):
-		// 終了コードは結果であって失敗ではない。リモートが答えたのだから、
-		// その答えを返す。
+		// 終了コードは結果であって失敗ではない。リモートが応答したのだから、
+		// その結果を返す。
 		output.ExitCode = exit.ExitStatus()
 	default:
 		return output, runErr
@@ -101,7 +93,7 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 
 // cappedBuffer は、上限まで書き込みを受け、それ以降は捨てる。
 //
-// **書き手にエラーを返さない。** 返せば、上限に達したことがコマンドの失敗として
+// 書き手にエラーを返さない。返せば、上限に達したことがコマンドの失敗として
 // 伝わってしまう。切り詰めたという事実は truncated が運ぶ。
 type cappedBuffer struct {
 	buffer    bytes.Buffer

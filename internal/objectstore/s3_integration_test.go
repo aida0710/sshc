@@ -13,7 +13,7 @@ import (
 
 // 統合テストのスイートは、本物の S3 実装に対して走る。
 //
-// これがあるのは、単体テストには答えられない問いがひとつあるからだ。すなわち、
+// これがあるのは、単体テストには判定できない問いがひとつあるからだ。すなわち、
 // 本物のサーバーは条件付き PUT に何をするのか、である。同期の設計全体は
 // If-None-Match と If-Match が尊重されることの上に立っており、仕様どおりに
 // 振る舞う偽物は、その偽物が仕様から書かれたということを証明するだけで
@@ -21,7 +21,7 @@ import (
 //
 // エンドポイントが設定されていなければスキップするので、`go test ./...` は密閉
 // されたままである。`make integration` はコンテナで SeaweedFS を起動して設定し、
-// CI も同じことをする。S3 互換のサーバーなら何でもよい — SeaweedFS、MinIO、
+// CI も同じことをする。S3 互換のサーバーなら何でもよい。SeaweedFS、MinIO、
 // あるいは本物の資格情報を使った R2 そのものでも。
 const (
 	endpointVariable = "SSHC_TEST_S3_ENDPOINT"
@@ -130,7 +130,7 @@ func TestAgainstARealServerIfMatchRefusesAStaleWrite(t *testing.T) {
 		t.Error("the ETag did not change, so it cannot act as a generation counter")
 	}
 
-	// `first` はいまや古い。これはまさに、誰か他人の push を取り逃したマシンの
+	// `first` はいまや古い。これはまさに、誰か別のユーザーの push を取り逃したマシンの
 	// 状態である。
 	_, err = client.Put(context.Background(), key, []byte("three"), first, "")
 	if !errors.Is(err, objectstore.ErrPreconditionFailed) {

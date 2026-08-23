@@ -16,11 +16,11 @@ const (
 // cumulativeKeywords は、最初の値だけを残すのではなく OpenSSH が積み上げる
 // ディレクティブである。他のキーワードはすべて先勝ちに従う。
 //
-// この表がここにあるのは、同じ問いに答えるものを 2 つ持たないためである。
+// この表を解決処理と共有し、累積キーワードの判定を一箇所に保つ。
 // 以前は internal/application にだけあり、この射影は一律の先勝ちだった。その結果、
 // IdentityFile を 2 行書いた設定では 2 行目が「採用されない」と画面に出ていた。
-// SetEnv はここに無い。**実機の ssh -G で確かめた結果である。** 二行書くと
-// 最初の行しか出力されない——複数の変数を渡すには `SetEnv ONE=1 TWO=2` と
+// SetEnv はここに無い。実機の ssh -G で確かめた結果である。二行書くと
+// 最初の行しか出力されない。複数の変数を渡すには `SetEnv ONE=1 TWO=2` と
 // 一行に並べる。SendEnv は ssh_config(5) が「複数の SendEnv に分けてよい」と
 // 明記しているので残す。
 var cumulativeKeywords = map[string]bool{
@@ -43,8 +43,8 @@ const (
 	ComplexityJumpDepth         = "jump_depth_exceeded"
 	// ComplexityJumpUnresolved は、経路を辿る前に解決そのものを諦めたことを言う。
 	//
-	// **空の経路と区別する。** 黙って空を返せば、画面は「踏み台を通らない」と
-	// 言う——Match exec を含む設定では、通るかどうかがまさに分からない。
+	// 空の経路と区別する。暗黙に空を返せば、画面は「踏み台を通らない」と
+	// 言う。Match exec を含む設定では、通るかどうかがまさに分からない。
 	ComplexityJumpUnresolved = "jump_unresolved"
 )
 
@@ -96,14 +96,13 @@ func (p Projection) Value(keyword string) (Source, bool) {
 // Project は設定を読み込み順に走査し、各キーワードを、それを最初に設定した
 // ブロックへ帰属させる。これは OpenSSH がしていることである。
 //
-// **値を決めるのは Resolve であって、これではない。** ここが答えるのは「どの行が
+// 値を決めるのは Resolve であって、これではない。ここが返すのは「どの行が
 // この値を書いたのか」と「なぜ言い切れないのか」であり、残っている利用者は
-// internal/diagnostics ——出所を画面に並べる側——だけである。接続に使う値や、
-// 秘密を出してよいかの判定がここを通っていた頃、Match ブロックの下に書かれた
-// ものは答えから丸ごと落ちていた。**同じ問いに答えるものを二つ持たない。**
+// この射影は internal/diagnostics の表示にのみ使用する。接続値や資格情報の判定には、
+// Match ブロックを含む解決結果を直接使用する。
 //
 // 読み込み順はファイル順ではない。OpenSSH は Include をその行のある位置で読むので、
-// Include より下に書かれたブロックは、include されたファイル全体のあとで読まれる —
+// Include より下に書かれたブロックは、include されたファイル全体のあとで読まれる。
 // そして最初の値が勝つので、include されたファイルの方が勝つ。ファイル単位でグラフ
 // を走査すると、エントリファイルのすべてのブロックが include された側のすべてより
 // 前に来てしまい、生成されたグループのリージョンが依存しているまさにその場合を
@@ -186,7 +185,7 @@ func Project(graph *config.Graph, alias string) Projection {
 			Condition: condition,
 			Kind:      kind,
 			// 積み上がるキーワードは、二行目以降も採用される。OpenSSH が
-			// そうするので、一律の先勝ちで印を付けると嘘になる。
+			// そうするので、一律の先勝ちで印を付けると誤りになる。
 			Winner: !claimed[keyword] || cumulativeKeywords[keyword],
 		})
 		claimed[keyword] = true
@@ -284,7 +283,7 @@ func blockApplies(block config.Block, alias string) (kind string, applies bool) 
 // ちょうど 1 文字に一致し、他のメタ文字に特別な意味はない。
 //
 // 比較は大文字小文字を区別する。以前は区別しておらず、Host BASTION のブロックが
-// alias bastion に適用されると答えていた。実物はそうしない — Host BASTION だけを
+// alias bastion に適用されると応答していた。実物はそうしない。Host BASTION だけを
 // 持つ設定に `ssh -G bastion` を投げると、そのブロックではなく Host * の値が返る。
 // 区別しない実装は、OpenSSH が適用しないブロックへ値の出所を帰属させることになり、
 // それは「実際に使われる設定を説明する」というこのパッケージの仕事を外す。

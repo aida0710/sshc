@@ -15,7 +15,7 @@ func promptOver(input string) (*strings.Builder, sshclient.StreamPrompter) {
 	return output, sshclient.StreamPrompter{Out: output, In: strings.NewReader(input)}
 }
 
-// ブラウザの端末は Enter を CR で送る。LF しか見ないと、答えが永久に終わらない。
+// ブラウザの端末は Enter を CR で送る。LF しか見ないと、結果が永久に終わらない。
 func TestALineEndsAtEitherCarriageReturnOrNewline(t *testing.T) {
 	for _, ending := range []string{"\r", "\n", "\r\n"} {
 		_, prompter := promptOver("ops" + ending)
@@ -39,7 +39,7 @@ func TestAVisibleAnswerIsEchoedSoTheUserSeesWhatTheyType(t *testing.T) {
 	}
 }
 
-// **答えを端末へ書き戻さない。** 書けば画面にもスクロールバックにも残る。
+// 結果を端末へ書き戻さない。書けば画面にもスクロールバックにも残る。
 func TestASecretAnswerIsNeverWrittenBackToTheTerminal(t *testing.T) {
 	output, prompter := promptOver("hunter2\r")
 	answer, err := prompter.Secret("passphrase: ")
@@ -65,7 +65,7 @@ func TestBackspaceRemovesTheLastCharacter(t *testing.T) {
 	}
 }
 
-// 空の答えに対する backspace は、その前に打たれた文字を消しに行かない。
+// 空の結果に対する backspace は、その前に打たれた文字を消しに行かない。
 func TestBackspaceOnAnEmptyAnswerDoesNothing(t *testing.T) {
 	_, prompter := promptOver("\x7f\x7fops\r")
 	answer, err := prompter.Line("login: ")
@@ -81,7 +81,7 @@ func TestControlCAbortsTheAnswer(t *testing.T) {
 	}
 }
 
-// 入力が閉じられたのは、答えが空だったのではなく、答えられなくなったのである。
+// 入力のクローズは空入力ではなく、応答不能として扱う。
 func TestAClosedInputAbortsRatherThanAnsweringEmpty(t *testing.T) {
 	_, prompter := promptOver("")
 	if _, err := prompter.Secret("passphrase: "); !errors.Is(err, sshclient.ErrPromptAborted) {
@@ -89,7 +89,7 @@ func TestAClosedInputAbortsRatherThanAnsweringEmpty(t *testing.T) {
 	}
 }
 
-// yes と no だけを受ける。OpenSSH と同じで、y も Enter も答えにならない——
+// yes と no だけを受ける。OpenSSH と同じで、y も Enter も結果にならない。
 // ホスト鍵を受け入れるかどうかは、打ち間違いで通ってよい問いではない。
 func TestConfirmAcceptsOnlyTheWholeWords(t *testing.T) {
 	for _, test := range []struct {
@@ -116,7 +116,7 @@ func TestConfirmAcceptsOnlyTheWholeWords(t *testing.T) {
 	}
 }
 
-// **書き込みが読み取りを待ってはならない。** io.Pipe なら、問いが出ていない
+// 書き込みが読み取りを待ってはならない。io.Pipe なら、問いが出ていない
 // 間に打たれた文字ひとつで WebSocket の読み手が止まり、その接続全体が固まる。
 func TestTheInputBufferNeverBlocksItsWriter(t *testing.T) {
 	buffer := sshclient.NewInputBuffer()

@@ -13,20 +13,14 @@ import (
 )
 
 var (
-	// ErrKeyRelocateNotSupported は、鍵ではないエントリと、鍵ペアの
-	// 片方だけを拒否する。
 	ErrKeyRelocateNotSupported = errors.New("only a private key, or a public key with no private key beside it, can be relocated")
 	// ErrKeyRelocateUnchanged は、何も移動しないリクエストを拒否する。
 	ErrKeyRelocateUnchanged = errors.New("the key already has that name in that group")
-	// ErrKeyRelocateBlocked は、このアプリケーションが書き換え
-	// られない参照を残してしまう relocation を拒否する。
-	ErrKeyRelocateBlocked = errors.New("relocating this key would leave a reference behind")
-	// ErrKeyReferenceMoved は、relocation の準備中に変更された
-	// 設定ファイルを報告する。
-	ErrKeyReferenceMoved = errors.New("a configuration file changed while the relocation was being prepared")
+	ErrKeyRelocateBlocked   = errors.New("relocating this key would leave a reference behind")
+	ErrKeyReferenceMoved    = errors.New("a configuration file changed while the relocation was being prepared")
 )
 
-// Blocker コードは、安定した識別子、':'、それが名指しする詳細である。
+// Blocker コードは、安定した識別子、':'、詳細の順で構成する。
 const (
 	BlockerKeyTargetOccupied    = "key_destination_occupied"
 	BlockerKeyUnresolved        = "key_reference_unresolved"
@@ -37,11 +31,6 @@ const (
 )
 
 // KeyRelocateRequest は、鍵の名前、グループ、あるいはその両方を変更する。
-//
-// nil フィールドは「これはそのままにする」を意味し、これに
-// よって 1 つの操作が名前変更、グループ間の移動、両方同時のいずれ
-// にも対応できる。Group が string ではなく pointer なのは、
-// "" が実在の destination — ungrouped な鍵が住む ~/.ssh のルート — だからだ。
 type KeyRelocateRequest struct {
 	KeyID   string
 	NewName *string
@@ -77,13 +66,6 @@ type KeyRelocateResult struct {
 	Preview       SavePreview             `json:"preview"`
 }
 
-// ValidateDeclaredGroup は、あるグループが名前として解析でき、
-// かつエントリファイルの生成領域によって宣言されているかを報告する。
-//
-// これは、別のパッケージがこのパッケージのユースケース層全体を
-// import せずに、また自分で決めることもなく、グループとは
-// 何かを尋ねられるように存在する: 鍵 vault は、~/.ssh/config の行が
-// そのディレクトリはグループだと言っている場合にのみ、グループディレクトリの中に生成する。
 func (s *Service) ValidateDeclaredGroup(name string) error {
 	if err := ValidateGroupName(name); err != nil {
 		return err
@@ -106,21 +88,6 @@ type keyRelocation struct {
 	to   string
 }
 
-// RelocateKey は鍵を移動し、それを名指しするすべての設定
-// ディレクティブを、設定マネージャを通してコミットされる
-// 1 つのジャーナル済みトランザクションで書き換える。
-//
-// このマネージャが重要だ。鍵 vault は独自のものを持ち、意図的に設定
-// バリデータを持たない。秘密鍵と JSON マニフェストを書き込むが、それらは
-// 構文エラーとして拒否されてしまうからだ。relocation は逆のケースである:
-// その危険な半分は設定の書き換えであり、1 バイトが着地する前に再パース・
-// 再解決されなければならない。鍵ファイルは storage.Move として運ばれ、
-// バリデータはそれを一切パースしないので、両方の半分が必要な扱いを受ける。
-//
-// 推測するのではなく拒否する。パスを解決できないディレクティブは
-// この鍵かもしれない。~/.ssh の外の設定ファイルはそもそも
-// 書き換えられない。Include glob が読むことになる destination は
-// 秘密鍵を設定に変えてしまう。これらはそれぞれトランザクション全体を止め、報告される。
 func (s *Service) RelocateKey(inventory *keys.Inventory, request KeyRelocateRequest) (KeyRelocateResult, error) {
 	s.saveMutex.Lock()
 	defer s.saveMutex.Unlock()
@@ -265,15 +232,6 @@ func (s *Service) planKeyRelocation(inventory *keys.Inventory, request KeyReloca
 }
 
 // keyRelocationMembers は 1 件の relocation が移動するファイルを対象アイテムから順に返す。
-//
-// 秘密鍵は、その fingerprint を持ち、同じ名前の下でそばに
-// 置かれている公開鍵と証明書ファイルを一緒に連れていく。
-// fingerprint を共有する他のものはそのまま残され、名指しされる。ユーザー
-// が無関係な名前を付けたファイルは、ユーザーが意図的にそう名付けたファイルだからだ。
-//
-// 公開鍵や証明書は単独でしか relocate できず、インベントリ
-// 中にそれを所有する秘密鍵がない場合に限られる: OpenSSH は
-// それでも 2 つのファイルを名前で対にするので、片方だけ移動するとペアを黙って壊してしまう。
 func keyRelocationMembers(inventory *keys.Inventory, item *keys.Item) (members []keys.Item, skipped []string, err error) {
 	switch item.Kind {
 	case keys.KindPrivateKey:
@@ -303,8 +261,6 @@ func keyRelocationMembers(inventory *keys.Inventory, item *keys.Item) (members [
 	}
 }
 
-// privateKeyFor は、インベントリ中の秘密鍵がこの公開鍵や
-// 証明書を所有しているかどうかを報告する。
 func privateKeyFor(inventory *keys.Inventory, item *keys.Item) bool {
 	fingerprint := item.Fingerprint
 	if item.Kind == keys.KindCertificate && item.Certificate != nil {
@@ -323,12 +279,6 @@ func privateKeyFor(inventory *keys.Inventory, item *keys.Item) bool {
 }
 
 // keyStem は、移動するすべてのファイルが共有するベース名の部分である。
-//
-// 秘密鍵にとってそれは名前全体である: OpenSSH は '.pub' を
-// 付加して公開鍵の名前を導出し、ValidateFileName は既にその
-// 綴りの秘密鍵の作成を拒否する。単独で relocate される公開鍵や
-// 証明書にとっては、拡張子がそのファイルが何であるかを示すので
-// それは保たれ、stem だけが変わる: 'old.pub' を 'new' に名前変更すると 'new.pub' になる。
 func keyStem(item *keys.Item) string {
 	base := path.Base(filepath.ToSlash(item.RelativePath))
 	if item.Kind == keys.KindPrivateKey {
@@ -342,8 +292,6 @@ func keyStem(item *keys.Item) string {
 	return base
 }
 
-// keyRelocationBlockers は、この relocation が推測を要する
-// すべての理由を報告する。各 blocker はトランザクション全体を拒否し、何も書き込まれない。
 func (s *Service) keyRelocationBlockers(
 	graph *config.Graph,
 	inventory *keys.Inventory,
@@ -364,8 +312,6 @@ func (s *Service) keyRelocationBlockers(
 			}
 		}
 		if !declared {
-			// 鍵グループは connection グループを反映する。誰も宣言していない
-			// グループのために keys/marketing を作るのは、この設計が避ける推測である。
 			blockers = append(blockers, BlockerKeyGroupNotDeclared+":"+group)
 		}
 	}
@@ -378,12 +324,9 @@ func (s *Service) keyRelocationBlockers(
 		if strings.HasPrefix(relocation.to+"/", keys.StateDirectoryName+"/") ||
 			strings.HasPrefix(relocation.from+"/", keys.StateDirectoryName+"/") {
 			// ごみ箱、バックアップ、ジャーナルはエンジンの状態である。
-			// インベントリは既にそれらを除外しており、これは同じ扉の 2 番目の鍵である。
 			blockers = append(blockers, BlockerKeyStateDirectory+":"+relocation.to)
 		}
 		if reachedByInclude(graph, absolute) {
-			// 秘密鍵が ssh_config として読まれるのはあり得る中で最悪の結果
-			// であり、Include glob が届く destination は端から拒否される。
 			blockers = append(blockers, BlockerKeyDestinationRead+":"+relocation.to)
 		}
 	}
@@ -391,8 +334,6 @@ func (s *Service) keyRelocationBlockers(
 	for _, member := range members {
 		for _, reference := range member.References {
 			if !s.workspace.Contains(reference.ConfigPath) {
-				// 設計 §5.3 は ~/.ssh の外への書き込みを禁じる。それでも鍵を
-				// 移動すれば、そのファイルが消えたパスを名指ししたままになる。
 				blockers = append(blockers, BlockerKeyReferenceExternal+":"+s.displayPath(reference.ConfigPath))
 			}
 		}
@@ -409,9 +350,6 @@ func (s *Service) keyRelocationBlockers(
 	return blockers
 }
 
-// reachedByInclude は、グラフ中の Include glob がこのパスを
-// 読むことになるかどうかを報告する。グラフが既に届いている
-// destination は、鍵ファイルが設定としてパースされてしまう destination である。
 func reachedByInclude(graph *config.Graph, absolute string) bool {
 	cleaned := filepath.Clean(absolute)
 	for _, node := range graph.Nodes {
@@ -428,14 +366,6 @@ func reachedByInclude(graph *config.Graph, absolute string) bool {
 	return false
 }
 
-// unresolvedKeyRisk は、エンジンが解決できなかったディレクティブがこの
-// relocation が移動するファイルのいずれかを名指ししている可能性があるかどうかを報告する。
-//
-// ワークスペースの外に解決された確定的な場所は、これらの
-// ファイルのどれでもないので影響を受け得ない。相対パスは
-// ディレクトリが不明だがベース名は分かっているので、その
-// ベース名が移動対象の 1 つである場合にのみ問題になる。この
-// エンジンが実装していない展開を含むパスは何にでもなり得るので、常に問題になる。
 func unresolvedKeyRisk(unresolved keys.UnresolvedReference, members []keys.Item) string {
 	if unresolved.Directive == "IdentityAgent" {
 		return ""
@@ -456,14 +386,6 @@ func unresolvedKeyRisk(unresolved keys.UnresolvedReference, members []keys.Item)
 	}
 }
 
-// rewriteKeyReferences は、移動したファイルを名指しする
-// すべてのディレクティブを書き換え、設定ファイルごとに 1 つの変更を生む。
-//
-// ユーザーが書いた形 — '~/.ssh/…'、'%d/…'、あるいは絶対パス —
-// は OpenSSH が解決し、ユーザーが認識するものなので、prefix は
-// 生き残り、ワークスペースのルートより下の部分だけが置き換え
-// られる。この関数が分解できない形で綴られた値は、代わりに
-// 常に解決できる絶対パスとして書き換えられる。
 func (s *Service) rewriteKeyReferences(members []keys.Item, relocations []keyRelocation) ([]storage.Change, []RewrittenKeyReference, error) {
 	root := s.workspace.Root()
 	destinations := make(map[string]string, len(relocations))
@@ -500,8 +422,6 @@ func (s *Service) rewriteKeyReferences(members []keys.Item, relocations []keyRel
 			line := &parsed.Lines[index]
 			for argumentIndex := range line.Arguments {
 				argument := &line.Arguments[argumentIndex]
-				// OpenSSH の引数リストは、引用されていない '#' で終わるので、
-				// それに続くものはコメントであり、書かれたとおりに残される。
 				if strings.HasPrefix(argument.Raw, "#") {
 					break
 				}
@@ -537,7 +457,7 @@ func (s *Service) rewriteKeyReferences(members []keys.Item, relocations []keyRel
 	return changes, rewritten, nil
 }
 
-// relocationFor は、ディレクティブの引数がどの移動先ファイルを名指ししているかを報告する。
+// relocationFor は、ディレクティブの引数がどの移動先ファイルを指定しているかを報告する。
 func relocationFor(destinations map[string]string, root string, workspace *storage.Workspace, value string) (string, bool) {
 	for from := range destinations {
 		if keys.ExpandsTo(workspace, value, filepath.Join(root, filepath.FromSlash(from))) {
@@ -547,8 +467,6 @@ func relocationFor(destinations map[string]string, root string, workspace *stora
 	return "", false
 }
 
-// rewriteKeyValue は、ディレクティブの引数をファイルの新しいパスに合わせて
-// 再表現し、ユーザーがワークスペースを名指しするのに使った prefix をそのまま保つ。
 func rewriteKeyValue(value, from, to, root string) string {
 	if prefix, ok := strings.CutSuffix(filepath.ToSlash(value), from); ok {
 		return prefix + to

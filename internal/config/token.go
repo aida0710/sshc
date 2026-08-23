@@ -16,7 +16,7 @@ type Argument struct {
 
 // ErrUnquotableValue は、ssh_config で表現できない値を報告する。OpenSSH は引用符で
 // 囲まれた引数の中にバックスラッシュエスケープを持たないので、二重引用符・改行・
-// NUL を含む値には綴りがなく、壊すのではなく拒否する。
+// NUL を含む値には表記がなく、壊すのではなく拒否する。
 var ErrUnquotableValue = errors.New("value cannot be quoted for an OpenSSH configuration")
 
 // RenderArgument は、OpenSSH の引用規則に従って値をひとつ書き出す。

@@ -47,7 +47,7 @@ const (
 
 // PasswordMutation は接続 alias に一つのパスワード源を割り当てる要求である。
 // Password はこのパッケージの外へ返らず、commit callback に渡す storage.Change にも
-// 封じられた bytes としてしか現れない。
+// 暗号化された bytes としてしか現れない。
 type PasswordMutation struct {
 	Kind       PasswordMutationKind
 	Alias      string
@@ -69,17 +69,8 @@ type ConnectionSecretsMutation struct {
 	KeyPassphrase *KeyPassphraseMutation
 }
 
-// IdleTimeout は、開いた vault が使われないまま生き続ける時間である。
-//
-// **どこで走っていても効く。**
-//
-// 以前はデスクトップだけ時計を外していた。根拠は「engine はアプリの子であり、
-// アプリを終えれば道連れに死ぬ」だった——**その親が居なくなった。** コマンドが
-// engine を起こしてブラウザを開く形では、窓を閉じても engine は生き続ける。
-// 忘れられた端末の中で何日も開いたままになりうるなら、それは画面の無い機械と
-// 同じ状況であって、そこでは時計が唯一の歯止めである。
-//
-// 12 時間は、朝に開いた人が夜まで訊かれず、翌朝には訊かれる長さである。
+// IdleTimeout は、最後に資格情報を使用してから vault を自動ロックするまでの時間。
+// engine の起動形態にかかわらず適用する。
 const IdleTimeout = 12 * time.Hour
 
 // Service は、プロセスの寿命のあいだ、開いた vault を所有する。
@@ -97,14 +88,14 @@ type Service struct {
 	sleep func(time.Duration)
 
 	// mutationMu は vault の disk と memory の版をまたぐ変更を直列化する。storage
-	// commit はバックアップを封じるために下の mu を再取得するので、commit 中に保持
+	// commit はバックアップを暗号化するために下の mu を再取得するので、commit 中に保持
 	// するのはこちらだけである。
 	mutationMu sync.Mutex
 	mu         sync.Mutex
 	vault      *Vault
 	baseline   []byte
 	// refusals は、連続して誤ったマスターパスワードの回数を数える。これが、拒否のたび
-	// に前回より遅く答えさせている。
+	// に前回より遅く応答させている。
 	refusals int
 	// used は、秘密が最後に読み書きされた時刻。ステータスの読み取りは意図的に「使用」
 	// に含めない。開いたブラウザタブは画面がマウントされるたびにそれを尋ねるので、
@@ -112,7 +103,7 @@ type Service struct {
 	// 開いたままになってはならない。
 	used time.Time
 	// idle は、触れられないまま閉じるまでの時間である。
-	// **決めるのは engine を起こした側である** ——ここは、自分が画面のある機械に
+	// 決めるのは engine を起動した側である。ここは、自分が画面のある機械に
 	// 居るのかサーバに居るのかを知らない。
 	idle time.Duration
 	// unattended は、いま走っている「誰も見ていない」呼び出しの数。0 でない
@@ -136,8 +127,8 @@ func NewService(workspace *storage.Workspace, transactions *storage.Manager, now
 	}
 }
 
-// IdleTimeout は、いま設定されている時計を返す。**配線が効いていることを、
-// 呼び出し側の外から確かめられるようにするためにある。**
+// IdleTimeout は、いま設定されている時計を返す。配線が効いていることを、
+// 呼び出し側の外から確かめられるようにするためにある。
 func (s *Service) IdleTimeout() time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -173,16 +164,8 @@ func (s *Service) use() *Vault {
 	return vault
 }
 
-// Unattended は、誰も見ていない呼び出しのあいだ、アイドルの時計を止める。
-//
-// **巡回が保管庫を開けっぱなしにしてはならない。** 自動同期は 1 分ごとに設定を
-// 読み、変わったものを数える。その読み手が時計を戻し続ければ、自動施錠は
-// 永久に来ない——誰も居ない机の上で、鍵がプロセスの記憶に残り続けることになる。
-// status polling を「使用」に数えないのと同じ理屈であり、違うのは「誰が尋ねたか」
-// だけである。
-//
-// **止めるのは時計であって、鍵ではない。** 期限が来ていれば open がその場で
-// 閉じるので、巡回はそこで何も読めなくなり、次に人が解錠するまで止まる。
+// Unattended は、自動処理による参照を vault の利用時刻に数えないようにする。
+// 期限を過ぎている場合は open が通常どおりロックする。
 func (s *Service) Unattended(run func()) {
 	s.mu.Lock()
 	s.unattended++
@@ -202,9 +185,9 @@ func (s *Service) path() string {
 // Exists は vault ファイルが存在するかを報告する。これは、それがロック解除されて
 // いるかという問いとは別のものである。
 //
-// **中身は読まない。** 有るか無いかを尋ねているだけであり、答えはファイルの
+// 中身は読まない。有るか無いかを尋ねているだけであり、結果はファイルの
 // 存在そのものにある。ここが `ReadFile` だったころは、メニューバーを開くたびに
-// vault 全体（暗号文とはいえ、保存された答えの全部）が読み込まれてプロセスの
+// vault 全体（暗号文とはいえ、保存された結果の全部）が読み込まれてプロセスの
 // メモリを通っていた。
 func (s *Service) Exists() (bool, error) {
 	s.mutationMu.Lock()
@@ -224,7 +207,7 @@ func (s *Service) exists() (bool, error) {
 	return false, err
 }
 
-// State は disk 上の存在と memory 上の解錠状態を同じ mutation 境界で読む。
+// State は disk 上の存在と memory 上のロック解除状態を同じ mutation 境界で読む。
 // status polling は秘密を使わないため、idle deadline は更新しない。
 func (s *Service) State() (State, error) {
 	s.mutationMu.Lock()
@@ -290,13 +273,13 @@ func (s *Service) Initialise(passphrase string) error {
 
 // Verify は、passphrase がこのワークスペースのマスターパスワードかを報告する。
 //
-// ファイルから答え、何も変えない。したがって閉じた vault にも尋ねられるし、画面は、
+// ファイルから判定し、何も変えない。したがって閉じた vault にも尋ねられるし、画面は、
 // ユーザーが打ち込んだものをマスターパスワードとして使う前に、それがマスター
 // パスワードかどうかを知ることができる。スナップショットを二つ目のパスワードでは
-// なくマスターパスワードで封じられるのはこれのおかげだ。打ち間違いは、誰にも開け
+// なくマスターパスワードで暗号化されるのはこれのおかげだ。打ち間違いは、誰にも開け
 // ないアーカイブではなく、ここでの拒否になる。
 //
-// コストは導出 1 回分で、ロック解除と同じである。しかもここに到達するのは、人が
+// コストは導出 1 回分で、ロック解除と同じである。しかもここに到達するのは、ユーザーが
 // 求めた操作からだけだ。
 func (s *Service) Verify(passphrase string) (bool, error) {
 	sealed, err := s.workspace.FileSystem().ReadFile(s.path())
@@ -318,8 +301,8 @@ func (s *Service) Verify(passphrase string) (bool, error) {
 // MaxUnlockDelay は、拒否が待つ最長時間。
 //
 // vault ファイルはコピーしてオフラインで攻撃できるので、これは攻撃者とその中身の
-// あいだに立つものではない — それは Argon2id である。これが止めるのは安価な場合だ。
-// すなわち、動作中のアプリケーションに対して、答えられる限りの速さでパスワードを
+// あいだに立つものではない、それは Argon2id である。これが止めるのは安価な場合だ。
+// すなわち、動作中のアプリケーションに対して、判定できる限りの速さでパスワードを
 // 試すローカルのプロセスである。
 const MaxUnlockDelay = 4 * time.Second
 
@@ -376,8 +359,7 @@ func (s *Service) Unlock(passphrase string) error {
 
 // Lock は、導出された鍵と未使用のトークンをすべて忘れる。
 //
-// トークンも一緒に消えるのは、ロックより長生きするトークンがあれば、ロック前に
-// 始まった接続がロック後もパスワードを取得できてしまうからである。
+// ロック前に発行したトークンで資格情報を取得できないよう、トークンも削除する。
 func (s *Service) Lock() {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -388,7 +370,7 @@ func (s *Service) Lock() {
 }
 
 // Has は、alias にパスワードが保存されているかを報告する。ロック中はエラーでは
-// なく false を答える。「見えない」と「存在しない」は外からは同じに見えるし、
+// なく false を返す。「見えない」と「存在しない」は外からは同じに見えるし、
 // インターフェースは、どちらの状態にあるかを別途示している
 // からである。
 func (s *Service) Has(alias string) bool {
@@ -562,7 +544,7 @@ func (s *Service) UnassignCredential(kind Kind, subject string) error {
 }
 
 // PasswordFor は、alias を、それに与えるべき値へ解決する。存在しないとき、および
-// vault が閉じているときは "" を返す。重要な呼び出し側 — askpass の応答 — は、
+// vault が閉じているときは "" を返す。重要な呼び出し側、askpass の応答、は、
 // Redeem のエラーで両者を区別する。
 func (s *Service) PasswordFor(alias string) string {
 	s.mu.Lock()
@@ -638,13 +620,13 @@ func (s *Service) RelocateKeyPassphrases(relocations map[string]string) error {
 	return nil
 }
 
-// SealBackup は世代バックアップをひとつ封じ、OpenBackup はそれを開く。
+// SealBackup は世代バックアップをひとつ暗号化、OpenBackup はそれを開く。
 //
 // これらはストレージ層に import されるのではなく、そこへ渡される。秘密がどこに
 // あるかはこのパッケージの領分であり、トランザクションマネージャがそれを知らねば
-// ならない道理はない。閉じた vault は何も封じず、何も開かない — アプリケーションは
+// ならない道理はない。閉じた vault は何も暗号化せず、何も開かない、アプリケーションは
 // マスターパスワードの後ろにあるので、何かが書かれている最中にそれが起きることは
-// ないし、万一起きたなら、ここで失敗するのが正しい答えである。もう一方の選択肢は、
+// ないし、万一起きたなら、ここで失敗するのが正しい結果である。もう一方の選択肢は、
 // 秘密鍵の平文コピーだからだ。
 func (s *Service) SealBackup(plaintext []byte) ([]byte, error) {
 	s.mu.Lock()
@@ -666,7 +648,7 @@ func (s *Service) OpenBackup(sealed []byte) ([]byte, error) {
 	return vault.OpenBytes(sealed)
 }
 
-// settingsPath は、vault の隣にある、封をされたオブジェクトストアの設定。
+// settingsPath は、vault の隣にある、暗号化されたオブジェクトストアの設定。
 func (s *Service) settingsPath() string {
 	return filepath.Join(s.workspace.Root(), filepath.FromSlash(SettingsPath))
 }
@@ -674,7 +656,7 @@ func (s *Service) settingsPath() string {
 // SyncSettings は、秘密も含めてオブジェクトストアの設定を返す。
 //
 // これを求めるのはクライアントを組み立てる呼び出し側だけである。画面には、秘密で
-// ないフィールドから答える。これらを一度も与えられていないマシンはゼロ値を返し、
+// ないフィールドから返す。これらを一度も与えられていないマシンはゼロ値を返し、
 // エラーにはしない。「まだ設定されていない」は状態であって、失敗では
 // ないからだ。
 func (s *Service) SyncSettings() (SyncSettings, error) {
@@ -696,8 +678,8 @@ func (s *Service) SyncSettings() (SyncSettings, error) {
 
 // SetSyncSettings は、オブジェクトストアの設定を置き換える。
 //
-// **同期の鍵だけは、空で渡されても消さない。** 設定の form はその欄を持たない
-// ——鍵を見せるのは作った一度だけで、以後は伏せ字である——ので、素直に置き換えれば、
+// 同期の鍵だけは、空で渡されても消さない。設定の form はその欄を持たない
+// 鍵を見せるのは作った一度だけで、以後は伏せ字である。ので、素直に置き換えれば、
 // bucket を編集しただけでリモートのスナップショットが誰にも開けなくなる。
 func (s *Service) SetSyncSettings(settings SyncSettings) error {
 	return s.writeSyncSettings(func(stored SyncSettings) SyncSettings {
@@ -705,7 +687,7 @@ func (s *Service) SetSyncSettings(settings SyncSettings) error {
 			settings.Key = stored.Key
 		}
 		// 自動同期の入切も form の欄ではない。bucket を編集しただけで、
-		// 巡回が黙って止まってはならない。
+		// 巡回が暗黙に止まってはならない。
 		settings.Auto = stored.Auto
 		return settings
 	})
@@ -728,7 +710,7 @@ func (s *Service) SetSyncKey(key string) error {
 }
 
 // writeSyncSettings は、いま保存されているものを読み、mutate に渡し、返ってきた
-// ものを封じて書く。読みと書きは同じ mutationMu の下で起きるので、二つの呼び出しが
+// ものを暗号化して書く。読みと書きは同じ mutationMu の下で起きるので、二つの呼び出しが
 // 互いの結果を踏まない。
 func (s *Service) writeSyncSettings(mutate func(SyncSettings) SyncSettings) error {
 	s.mutationMu.Lock()
@@ -775,13 +757,10 @@ func (s *Service) writeSyncSettings(mutate func(SyncSettings) SyncSettings) erro
 	return err
 }
 
-// write は vault を封じ、トランザクションマネージャを通してコミットする。これに
-// より、書きかけの秘密ファイルは、このアプリケーションが到達しうる状態ではなくなる。
+// write は vault を暗号化し、トランザクションマネージャを通してコミットする。
 //
 // 他のすべての書き込みと同じく、世代は保持される。バックアップ自体もこの vault の
-// 鍵で封じられているので、vault の古い世代は、生きたファイルのコピーが明かす以上の
-// ものを明かさない — そしてここでの事故は、他の手段では取り消せない数少ないものの
-// ひとつである。
+// 世代バックアップも同じ vault 鍵で暗号化する。
 func (s *Service) write() error {
 	s.mu.Lock()
 	vault := s.use()
@@ -1006,21 +985,21 @@ func (s *Service) Aliases() []string {
 	return vault.Subjects(KindPassword)
 }
 
-// ChangeMasterPassword は、鍵を導出し直し、その鍵が保持していたすべてを封じ直す。
+// ChangeMasterPassword は、鍵を導出し直し、その鍵が保持していたすべてを暗号化し直す。
 //
-// vault も、封をされたオブジェクトストアの設定も、すべての世代バックアップも、
-// マスターパスワードから導出された鍵で封じられている。vault だけを置き換える変更は、
+// vault も、暗号化されたオブジェクトストアの設定も、すべての世代バックアップも、
+// マスターパスワードから導出された鍵で暗号化されている。vault だけを置き換える変更は、
 // 残りを、もう誰も使わないパスワードで開ける状態のまま残す。それは失うのと同じ
 // ことだ。バックアップは、そこから復元するために存在するのであり、誰にも開けない
 // バックアップはバックアップではない。
 //
 // トランザクションはひとつ。置き換えるものの世代コピーは保持しない。そしてそこが、
-// SkipBackup がいまも正しい唯一の場所である。古い鍵で封じられた古い vault のコピー
+// SkipBackup がいまも正しい唯一の場所である。古い鍵で暗号化された古い vault のコピー
 // は、これが終わった瞬間に開けなくなるからだ。すべてはジャーナルにステージされる
 // ので、中断されても完了させられる。できないのは巻き戻しであり、Rollback はそれを
 // できるふりをせずに述べる。
 //
-// リモートのスナップショットを封じ直すのはこの関数の仕事ではない。それはオブジェクト
+// リモートのスナップショットを暗号化し直すのはこの関数の仕事ではない。それはオブジェクト
 // ストアのものであり、このパッケージはそれを import しない。push は呼び出し側が行う。
 func (s *Service) ChangeMasterPassword(current, next string) error {
 	s.mutationMu.Lock()
@@ -1042,8 +1021,8 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 		s.mu.Unlock()
 		return err
 	}
-	// ここから先、vault は新しい鍵を保持する。したがって、これが封じるものは
-	// 新しい鍵で封じられ、これ以前に封じられたものは古い鍵で開かれる。
+	// ここから先、vault は新しい鍵を保持する。したがって、これが暗号化するものは
+	// 新しい鍵で暗号化され、これ以前に暗号化されたものは古い鍵で開かれる。
 	changes, buildErr := s.reSealed(vault, previous)
 	if buildErr != nil {
 		// 古い鍵を戻す。何も書かれていないので、メモリ上の vault はディスク上の
@@ -1081,11 +1060,10 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 	return nil
 }
 
-// reSealed は、古い鍵が封じたすべてのファイルを読み、新しい鍵で封じ直す。
+// reSealed は、古い鍵が暗号化したすべてのファイルを読み、新しい鍵で暗号化し直す。
 //
-// バックアップはマネージャ経由ではなく直接読む。マネージャは、サービスがいま
-// 保持している鍵で開くからだ — そしてこれが走る時点では、それは新しい鍵で
-// ある。
+// バックアップはマネージャ経由ではなく直接読む。マネージャは現在の新しい鍵を
+// 使用するため、古い鍵で暗号化されたバックアップを開けない。
 func (s *Service) reSealed(vault *Vault, previous envelope.Key) ([]storage.Change, error) {
 	changes := make([]storage.Change, 0, 8)
 
@@ -1126,7 +1104,7 @@ func (s *Service) reSealed(vault *Vault, previous envelope.Key) ([]storage.Chang
 		}
 		plaintext, openErr := previous.Open(body)
 		if openErr != nil {
-			// バックアップがそもそも封じられるようになる前に書かれたものは、この
+			// バックアップがそもそも暗号化されるようになる前に書かれたものは、この
 			// 関数が変換すべきものではない。そのひとつのために変更全体を拒むのは、
 			// そのまま残すより悪い。
 			return nil
@@ -1147,12 +1125,9 @@ func (s *Service) reSealed(vault *Vault, previous envelope.Key) ([]storage.Chang
 	return changes, nil
 }
 
-// TravelDocument は、保管庫の中身を、封を外した形で返す。
-//
-// **運ぶのは中身であって、封ではない。** 保管庫のファイルはこの端末のマスター
-// パスワードで封じられているので、そのまま同期に載せると、受け取った端末は
-// 送り主のマスターパスワードでしか開けなくなる——マスターパスワードを端末ごとに
-// 変えられない、という詰みの本体はここである。
+// TravelDocument は、同期用に復号した vault 文書を返す。
+// ディスク上の vault は端末固有のマスターパスワードで暗号化されているため、
+// その暗号文自体は同期しない。
 func (s *Service) TravelDocument() ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1161,17 +1136,15 @@ func (s *Service) TravelDocument() ([]byte, error) {
 		return nil, ErrLocked
 	}
 	// 空の保管庫は運ばない。運ぶものが無いだけでなく、運べば 2 台目の最初の
-	// pull が必ず衝突する——空であることは編集ではない。
+	// pull が必ず衝突する。空であることは編集ではない。
 	if vault.Empty() {
 		return nil, nil
 	}
 	return vault.Document()
 }
 
-// AdoptTravelDocument は、運ばれてきた中身を、この端末の封で包んだバイト列にする。
-//
-// **書きはしない。** 書くのは同期であり、そうすることで、他のすべての書き込みと
-// 同じジャーナルと世代バックアップを通る。
+// AdoptTravelDocument は、受信した vault 文書をこの端末の鍵で暗号化する。
+// 書き込みは呼び出し側がトランザクションとして行う。
 func (s *Service) AdoptTravelDocument(plain []byte) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1179,7 +1152,7 @@ func (s *Service) AdoptTravelDocument(plain []byte) ([]byte, error) {
 	if vault == nil {
 		return nil, ErrLocked
 	}
-	// 読めないものを封じない。封じてしまえば、次に開いたときに壊れているのは
+	// 読めないものを暗号化しない。暗号化してしまえば、次に開いたときに壊れているのは
 	// 保管庫であり、原因はもうどこにも残っていない。
 	var incoming document
 	if err := json.Unmarshal(plain, &incoming); err != nil {
@@ -1191,7 +1164,7 @@ func (s *Service) AdoptTravelDocument(plain []byte) ([]byte, error) {
 	if incoming.SchemaVersion < 2 {
 		return nil, ErrOldVault
 	}
-	// **受け取ったバイト列をそのまま封じる。** 組み直せば、こちらがまだ知らない
+	// 受け取ったバイト列をそのまま暗号化する。組み直せば、こちらがまだ知らない
 	// 項目を落とすことになる。
 	return vault.SealBytes(plain)
 }
@@ -1205,7 +1178,7 @@ func (s *Service) Reload() error {
 	defer s.mu.Unlock()
 	vault := s.open()
 	if vault == nil {
-		// 閉じているなら、次の解錠がディスクから読む。何もしないのが正しい。
+		// 閉じているなら、次のロック解除がディスクから読む。何もしないのが正しい。
 		return nil
 	}
 	sealed, err := s.workspace.FileSystem().ReadFile(s.path())

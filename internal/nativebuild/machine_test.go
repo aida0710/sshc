@@ -11,9 +11,9 @@ import (
 	"sshc/internal/nativebuild"
 )
 
-// buildFor は、その行き先へ向けた小さな実体をひとつ焼く。
+// buildFor は指定ターゲット用の最小バイナリをビルドする。
 //
-// **本物のコンパイラに焼かせる。** 手で組み立てたヘッダを読ませても、
+// 本物のコンパイラに焼かせる。手で組み立てたヘッダを読ませても、
 // 確かめられるのは自分の書いた偽物であって、Go が出すものではない。
 func buildFor(t *testing.T, goos, goarch string) string {
 	t.Helper()
@@ -36,9 +36,7 @@ func buildFor(t *testing.T, goos, goarch string) string {
 	return output
 }
 
-// **名前は中身を保証しない。** `sshc-linux-arm64` という名前の amd64 バイナリは
-// 名前の検査を通り抜ける。束ごとに一つの実体を使い回した日に壊れるのはここで
-// あり、壊れ方は「配ってから、その機械の上でだけ」である。
+// ファイル名だけの検査では、異なるアーキテクチャのバイナリを検出できない。
 func TestTheArchitectureOfEachTargetIsRead(t *testing.T) {
 	for _, target := range []struct{ goos, goarch string }{
 		{"windows", "amd64"},
@@ -58,8 +56,7 @@ func TestTheArchitectureOfEachTargetIsRead(t *testing.T) {
 	}
 }
 
-// **入れ違いを見つけられなければ、この検査に意味は無い。** arm64 の束に
-// amd64 の実体が入るのが、防ぎたい間違いそのものである。
+// arm64 の成果物に amd64 バイナリが入る誤りを検出する。
 func TestABinaryForTheWrongArchitectureIsRefused(t *testing.T) {
 	for _, target := range []struct{ goos, built, claimed string }{
 		{"windows", "amd64", "arm64"},
@@ -81,8 +78,8 @@ func TestABinaryForTheWrongArchitectureIsRefused(t *testing.T) {
 	}
 }
 
-// **別の OS の実体も見分ける。** 束ごとに使い回した一つを入れると、Linux の
-// AppImage に macOS のバイナリが入る——ビルドは通り、配ってから壊れる。
+// 別 OS のバイナリも検出する。同じバイナリを再利用すると Linux の
+// AppImage に macOS のバイナリが入る。ビルドは通り、配ってから壊れる。
 func TestABinaryForTheWrongOperatingSystemIsRefused(t *testing.T) {
 	for _, target := range []struct{ built, claimed string }{
 		{"darwin", "linux"},
@@ -98,7 +95,7 @@ func TestABinaryForTheWrongOperatingSystemIsRefused(t *testing.T) {
 	}
 }
 
-// 読めないものを通さない。**空のファイルは実行ファイルではない。**
+// 読めないものを通さない。空のファイルは実行ファイルではない。
 func TestSomethingThatIsNotABinaryIsRefused(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "empty.exe")
 	if err := os.WriteFile(path, nil, 0o600); err != nil {

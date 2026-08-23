@@ -3,7 +3,7 @@
 // 出どころは internal/validate で、配っているのは cmd/rulegen である。
 // 変えるならあちらを変えて make generate を走らせること。
 //
-// **パターンは Go の RE2 と JavaScript が同じ意味で読む書き方に限ってある。**
+// パターンは Go の RE2 と JavaScript が同じ意味で読む書き方に限ってある。
 // 文字クラス・アンカー・回数指定だけで、後方参照も先読みも無い。
 
 export const groupSegmentPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -15,10 +15,10 @@ export const maxGroupSegmentBytes = 64;
 export const maxAliasLength = 64;
 export const maxHostnameLength = 255;
 
-// ~/.ssh の中で既に意味を持つ名前。**グループ名にも鍵のファイル名にも効く。**
+// ~/.ssh の中で既に意味を持つ名前。グループ名にも鍵のファイル名にも効く。
 // どちらも ~/.ssh の直下にその綴りを作る操作だからである。
 //
-// **大小文字を区別しない。** 既定の macOS ボリュームは "Config" と
+// 大小文字を区別しない。既定の macOS ボリュームは "Config" と
 // "config" を同じディレクトリエントリとして扱う。
 export const reservedNames: ReadonlySet<string> = new Set([
   "authorized_keys",

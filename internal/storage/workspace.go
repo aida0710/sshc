@@ -29,9 +29,9 @@ type Workspace struct {
 	root       string
 }
 
-// privateFileReader is optional so FileSystem fakes and callers do not acquire
-// a Windows-only method. The native Windows filesystem implements it; Unix and
-// user-provided fakes retain their existing ReadFile policy unless they opt in.
+// privateFileReader は任意実装とし、FileSystem の fake と呼び出し側へ Windows 固有の
+// メソッドを要求しない。Windows の実装だけが提供し、Unix とユーザー提供の fake は
+// 明示的に実装しない限り既存の ReadFile 方針を維持する。
 type privateFileReader interface {
 	ReadPrivateFile(path string) ([]byte, error)
 }
@@ -102,14 +102,14 @@ func (w *Workspace) Contains(candidate string) bool {
 // このプロセスとその子が HOME に持つ値であり、それが ssh の表示するものであり、
 // したがって SanitiseHomePaths が一致させなければならないものだからだ。そのため、
 // ~/.ssh がリンク経由で到達される場合は常に、両者は同じディレクトリを二通りに
-// 名指しすることになる — dotfiles のチェックアウトや、/var が private/var への
+// 指定することになる。dotfiles のチェックアウトや、/var が private/var への
 // リンクである macOS のあらゆる一時ディレクトリで、そうなる。
 //
-// "~" や "%d" を展開する呼び出し側は、ホームの綴りに着地する。それを Root と
+// "~" や "%d" を展開する呼び出し側は、ホームの表記に着地する。それを Root と
 // 比べると、ワークスペースそのものであるパスがワークスペースの外にあると言われて
-// しまい、それを尋ねる二か所 — 鍵の参照インデックスと、IdentityFile 行を書き換える
-// 再配置 — の両方が「いいえ」と答えていた。目に見える結果は、ファイルは移動する
-// のにそれらを名指しするディレクティブを何ひとつ書き換えない鍵の名前変更が、黙って
+// しまい、それを尋ねる二か所（鍵の参照インデックスと、IdentityFile 行を書き換える
+// 再配置）の両方が「いいえ」と応答していた。目に見える結果は、ファイルは移動する
+// のにそれらを指定するディレクティブを何ひとつ書き換えない鍵の名前変更が、暗黙に
 // 起きることであり、そして Keys 画面が設定全体を解決不能として報告することで
 // あった。
 //
@@ -142,7 +142,7 @@ func (w *Workspace) ResolveForWrite(candidate string) (string, error) {
 //
 // これがないと、connections/work/ を作り、同じコミットで connections/work/lon.conf
 // を書くリクエストは拒否される。リクエストが検査される時点で、まだ親が存在しない
-// からだ。代案 — トランザクションの前にディレクトリを作る — は、まさにこれが
+// からだ。代案（トランザクションの前にディレクトリを作る）は、まさにこれが
 // 取り除くために存在する、ジャーナル外の mkdir そのもので
 // ある。
 func (w *Workspace) ResolveForWriteUnder(candidate string, planned map[string]bool) (string, error) {
@@ -151,15 +151,15 @@ func (w *Workspace) ResolveForWriteUnder(candidate string, planned map[string]bo
 		return "", ErrOutsideWorkspace
 	}
 	relative, err := filepath.Rel(w.root, cleaned)
-	// ルートそのものは書き込み先ではない。**素の文字列比較で弾かない。**
-	// まわりの包含判断は大小文字を畳むので、Windows ではルートの別綴りだけが
+	// ルートそのものは書き込み先ではない。素の文字列比較で弾かない。
+	// まわりの包含判断は大小文字を畳むので、Windows ではルートの別表記だけが
 	// そこをすり抜け、ワークスペースのルート自身が書き込み先になってしまう。
 	if err != nil || relative == "." {
 		return "", ErrOutsideWorkspace
 	}
 
-	// **確かめた綴りを返す。** 呼び出し側の綴りをそのまま返すと、検査したのは
-	// ルートから組み立てた鎖なのに、書き込むのは別の綴りということになる。
+	// 確かめた表記を返す。呼び出し側の表記をそのまま返すと、検査したのは
+	// ルートから組み立てた鎖なのに、書き込むのは別の表記ということになる。
 	validated := filepath.Join(w.root, relative)
 	segments := strings.Split(relative, string(filepath.Separator))
 	current := w.root
@@ -205,8 +205,8 @@ func (w *Workspace) ResolveDirectory(candidate string) (string, error) {
 		return "", ErrOutsideWorkspace
 	}
 	relative, err := filepath.Rel(w.root, cleaned)
-	// ルートそのものは書き込み先ではない。**素の文字列比較で弾かない。**
-	// まわりの包含判断は大小文字を畳むので、Windows ではルートの別綴りだけが
+	// ルートそのものは書き込み先ではない。素の文字列比較で弾かない。
+	// まわりの包含判断は大小文字を畳むので、Windows ではルートの別表記だけが
 	// そこをすり抜け、ワークスペースのルート自身が書き込み先になってしまう。
 	if err != nil || relative == "." {
 		return "", ErrOutsideWorkspace

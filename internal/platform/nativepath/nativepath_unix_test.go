@@ -14,7 +14,7 @@ func TestUnixTreatsDifferentCaseAsDifferentFiles(t *testing.T) {
 	}
 }
 
-// Unix では Windows の綴りは絶対パスではない。ここで受け入れると、ワークスペース
+// Unix では Windows の表記は絶対パスではない。ここで受け入れると、ワークスペース
 // の外を指すパスが「絶対だから」という理由だけで通ってしまう。
 func TestUnixRefusesWindowsSpellingsAsAbsolute(t *testing.T) {
 	for _, path := range []string{`C:\Users\A\.ssh\config`, `C:/Users/A/.ssh/config`, `\\server\share\A\config`} {

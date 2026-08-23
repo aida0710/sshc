@@ -16,14 +16,7 @@ import (
 	"sshc/internal/httpserver"
 )
 
-// runStatus は、走っている engine の様子を書き出す。
-//
-// **既定は人が読む形である。** かつてここは JSON だけを出しており、それは
-// メニューバーが読むためだった——その読み手はもう居ない。打つのは人であり、
-// 人が最初に見たいのは「動いているか、金庫は開いているか、端末は何本か」である。
-//
-// **JSON は残す。** 手順の中から読んでいる人が居る道を、黙って塞がない。
-// エンジンが居なければ 1 で終わる。
+// runStatus は engine の状態を表形式または JSON で出力する。
 func runStatus(
 	ctx context.Context, stateDir string, client *http.Client, asJSON bool, stdout, stderr io.Writer,
 ) int {
@@ -50,12 +43,7 @@ func runStatus(
 	return 0
 }
 
-// writeStatus は、engine の様子を人が読む形で書く。
-//
-// **描くのはここだけである。** 同じ内容が `sshc status` と `sshc vault status` に
-// 別々の書式で書かれていた——片方に項目を足しても、もう片方は古いままになる。
-//
-// **列で揃える。** 打った人が探すのは値であって、ラベルの綴りではない。
+// writeStatus は status と vault status で共有する表形式を出力する。
 func writeStatus(out io.Writer, found handoff.Handoff, answer statusAnswer) {
 	rows := [][2]string{
 		{"engine", fmt.Sprintf("running (pid %d)", found.PID)},
@@ -76,10 +64,7 @@ func writeStatus(out io.Writer, found handoff.Handoff, answer statusAnswer) {
 	}
 }
 
-// vaultState は、金庫の 3 つの状態をひとつの語にする。
-//
-// **「無い」と「施錠」を混ぜない。** 前者に要るのは `sshc vault create` で、
-// 後者に要るのは `sshc vault unlock` である——読む人が次に打つものが違う。
+// vaultState は Vault の状態を CLI 表示用の値に変換する。
 func vaultState(answer statusAnswer) string {
 	switch {
 	case answer.Vault && answer.Unlocked:
@@ -91,11 +76,8 @@ func vaultState(answer statusAnswer) string {
 	}
 }
 
-// requestStatus は、渡された一台にだけ尋ねる。
-//
-// **handoff を読み直さない。** 待っているあいだに書き換わったものへ黙って
-// 乗り換えれば、利用者が起こしたのではないエンジンが接続材料を渡しうる。
-// 入れ替わりは、この一台が答えなくなることとして現れる。
+// requestStatus は取得済みの handoff が示す engine に状態を要求する。
+// 要求中の接続先変更を防ぐため handoff は読み直さない。
 func requestStatus(ctx context.Context, found handoff.Handoff, client *http.Client) (statusAnswer, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		found.URL+httpserver.StatusPath, nil)
@@ -119,7 +101,7 @@ func requestStatus(ctx context.Context, found handoff.Handoff, client *http.Clie
 	return answer, nil
 }
 
-// statusAnswer は、エンジンが答える「いまどうなっているか」である。
+// statusAnswer は engine の状態応答である。
 type statusAnswer struct {
 	Owner           handoff.Owner `json:"owner"`
 	Version         string        `json:"version"`
@@ -130,19 +112,12 @@ type statusAnswer struct {
 	Sessions int  `json:"sessions"`
 }
 
-// readHandoff は CLI の全入口で同じ互換性判定を使う。旧形式を推測して補うと、
+// readHandoff は CLI の全サブコマンドで同じ互換性判定を使う。旧形式を補完すると、
 // owner や protocol を知らないまま稼働中の app へ要求を送れてしまうため、版を
 // そろえるという復旧可能な失敗として返す。
 //
-// **「アプリを再起動してください」とは言わない。** 食い違っているのがどちら側かを、
-// このプロセスは知らない——アプリが新しいのかもしれないし、いま走っているこの
-// 実体が古いのかもしれない。そして**古いのがこちらである状況は、この設計が自分で
-// 作っている**: 外殻は `~/.local/bin/sshc` に自分が張ったリンク以外のものがあれば
-// 触らないので、`make install` で入れた実体はアプリを入れ替えても古いまま残る。
-// 再起動を勧めても、その人の `sshc` は変わらない。
-//
-// 代わりに、いま話しているのがどの実体かを名指しする。**どちらを直すかを決める
-// のに要るのは、それである。**
+// 互換性エラーには現在の実行ファイルを含める。engine と CLI のどちらが古いかは
+// 判定できないため、特定の側の再起動は案内しない。
 func readHandoff(stateDir string) (handoff.Handoff, error) {
 	found, err := handoff.Read(stateDir)
 	if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {
@@ -150,11 +125,7 @@ func readHandoff(stateDir string) (handoff.Handoff, error) {
 			"the running app and this sshc (%s) are not the same version; update whichever is older: %w",
 			runningExecutable(), err)
 	}
-	// **無いことは、壊れていることではない。** engine を一度も起こしていない
-	// 機械では handoff そのものが無く、そのまま返すと利用者が読むのは
-	// `open /home/a/.ssh/sshc/cli: no such file or directory` になる。**入れた
-	// 直後の人が最初に打つのがこれである** ——道の綴りではなく、何が起きていて
-	// 次に何をすればよいかを言う。
+	// handoff が無い場合は内部パスではなく engine の起動方法を案内する。
 	if errors.Is(err, fs.ErrNotExist) {
 		return handoff.Handoff{}, engineNotRunning{cause: err}
 	}
@@ -164,10 +135,7 @@ func readHandoff(stateDir string) (handoff.Handoff, error) {
 	return found, nil
 }
 
-// engineNotRunning は、engine が居ないことを利用者の言葉で言う。
-//
-// **元の err を包んだまま持つ。** 呼び出し側には `errors.Is(err, fs.ErrNotExist)`
-// で判定しているところがあり、文言を変えるためにその判定を壊さない。
+// engineNotRunning は engine の停止状態と元の fs.ErrNotExist を保持する。
 type engineNotRunning struct{ cause error }
 
 func (e engineNotRunning) Error() string {
@@ -176,10 +144,7 @@ func (e engineNotRunning) Error() string {
 
 func (e engineNotRunning) Unwrap() error { return e.cause }
 
-// runningExecutable は、いま走っているこの実体の綴りを返す。
-//
-// 読めない環境では名前だけを返す。**綴りが分からないことは、版が合わないことを
-// 伝えない理由にはならない。**
+// runningExecutable は現在の実行ファイルパスを返し、取得できない場合は名前を返す。
 func runningExecutable() string {
 	path, err := os.Executable()
 	if err != nil || path == "" {

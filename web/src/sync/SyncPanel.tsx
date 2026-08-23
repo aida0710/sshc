@@ -21,10 +21,6 @@ import { SyncResultCard, type SyncResultView } from "./SyncResultCard";
 
 type SyncPanelProps = { api?: IntegrationsApi };
 
-// この画面が出会いうる拒否に、名前を付けたもの。サーバーがわざわざ
-// 区別したコードは、ユーザーが対処できるコードであり、「それはできなかった」
-// では見当違いの場所を探させてしまう: 打ち間違えたマスターパスワードは
-// バケットの問題ではなく、パスを含むエンドポイントは資格情報の問題ではない。
 const refusals: Record<string, MessageKey> = {
   wrong_master_password: "sync.wrongMaster",
   wrong_passphrase: "sync.wrongKey",
@@ -36,11 +32,6 @@ const refusals: Record<string, MessageKey> = {
   sync_remote_moved: "sync.remoteMoved",
 };
 
-// リモートのスナップショット。
-//
-// この画面のすべては意図的な行為だ。pull はまずプレビューし、
-// 2 回目の押下でのみ適用する。これはこのアプリケーションの他のあらゆる
-// 書き込みが取る形と同じであり、衝突は解決されるのではなく表示される。
 export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const t = useTranslate();
   const [status, setStatus] = useState<SyncStatus | null>(null);
@@ -52,16 +43,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [secretAccessKey, setSecretAccessKey] = useState("");
   const [direction, setDirection] = useState<SyncDirection>("both");
   const [master, setMaster] = useState("");
-  // 作ったばかりの鍵。**一度だけ見せる。** リモートを開ける値を、画面を
-  // 開き直すたびに配ってはならない。
   const [revealed, setRevealed] = useState("");
   const [ownKey, setOwnKey] = useState("");
   const [chooseOwn, setChooseOwn] = useState(false);
-  // 移行のために一度だけ尋ねる、古い鍵（かつてのマスターパスワード）。
   const [oldKey, setOldKey] = useState("");
-  // 消すことに対する、はっきりした一度の同意。
   const [acceptedRemovals, setAcceptedRemovals] = useState(false);
-  // 衝突をどちらに寄せると決めたか。決めていなければ undefined。
   const [resolve, setResolve] = useState<"local" | "remote" | undefined>(undefined);
   const [preview, setPreview] = useState<PullResponse | null>(null);
   const [resultView, setResultView] = useState<SyncResultView | null>(null);
@@ -93,8 +79,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     void reload();
   }, [reload]);
 
-  // explain は、サーバーが名指した拒否をそのための文へと変える。
-  // これにより、失敗の仕方が複数ある呼び出し側が、どれが起きたかを言える。
   async function run<T>(
     operation: () => Promise<T>,
     apply: (value: T) => void,
@@ -115,8 +99,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     }
   }
 
-  // previewWith は、寄せ先を決めて（あるいは決めずに）プレビューを取り直す。
-  // **適用はここではしない。** 書く前に見せるものが、この画面の唯一の形である。
   async function previewWith(choice?: "local" | "remote") {
     setResolve(choice);
     await run(
@@ -139,10 +121,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     return <p role="status" className={hintText}>{t("sync.loading")}</p>;
   }
 
-  // 閉じた vault はこのフォームを埋められず、push も pull もそれが
-  // 保持する設定なしには実行できない。それでもフォームを見せれば
-  // 「バケットが消えた」と読め、アクセスキーの再入力をユーザーに促してしまう。
-  // それはまさに、保存することが防ぐはずだったことだ。
   if (status.locked) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
@@ -169,9 +147,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   setMaster("");
                   void reload();
                 },
-                // 一度も vault を作ったことのないマシンは、マスターパスワードが
-                // 間違っていたマシンではない。そう言ってしまえば、誰かに存在しない
-                // パスワードを探し回らせてしまう。
                 t("sync.unlockFailed"),
                 (code) => (code === "vault_missing" ? t("sync.noVault") : ""),
               )
@@ -201,11 +176,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           detail={status.synced ? status.lastSyncedAt ?? "" : t("sync.neverSynced")}
         />
       </MetricGrid>
-      {/*
-        フォームの後ではなく前に伝える。~/.ssh の中身はすべて、秘密鍵を
-        含めて移動する。バケットとそれらの間にあるのは
-        パスフレーズだけだ。
-      */}
+
       <p className={hintText}>{t("sync.warning")}</p>
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {notice === "" ? null : <p role="status" className="text-sm text-ink-muted">{notice}</p>}
@@ -216,8 +187,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="font-mono text-xs text-ink-muted">
               {[status.endpoint, status.bucket, status.path].filter((part) => part !== "" && part !== undefined).join("/")}
-              {/* リージョンはパスの一部ではないので、"/" では繋がない。署名スコープに
-                  入る別の事実であり、それが何かを利用者が確かめられる必要がある。 */}
+
               {status.region !== undefined && status.region !== "" ? ` (${status.region})` : ""}
             </p>
             {!editingSettings ? (
@@ -229,11 +199,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         ) : (
           <p className="text-sm text-ink-muted">{t("sync.notConfigured")}</p>
         )}
-        {/*
-          積み重なったフィールドの 2 列グリッドではなく、行を持つ 1 枚のカードだ。
-          ここのヒントは完全な文であり、コントロールの脇に置けば
-          半分の列に押し込まれてしまうが、行の下ならその幅がある。
-        */}
+
         {!status.configured || editingSettings ? <>
         <Card>
           <Row label={t("sync.endpoint")} hint={t("sync.endpointHint")}>
@@ -247,19 +213,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           <Row label={t("sync.bucket")}>
             <input value={bucket} onChange={(event) => setBucket(event.target.value)} className={control} />
           </Row>
-          {/*
-            空欄はバケットのルートを意味し、これがよくある場合だ: バケットは
-            通常このアプリケーション用に既に名前が付けられており、その中で
-            名前を繰り返すフォルダは何もない階層をもう 1 つ重ねるだけだ。
-          */}
+
           <Row label={t("sync.path")} hint={t("sync.pathHint")}>
             <input value={path} onChange={(event) => setPath(event.target.value)} className={control} />
           </Row>
-          {/*
-            自由入力にしてある。正しい値は相手のストアごとに違い、選択肢を並べれば
-            そこに無いものが設定できなくなる。空欄はサーバー側で "auto" になり、
-            それが R2 の答えである。
-          */}
+
           <Row label={t("sync.region")} hint={t("sync.regionHint")}>
             <input value={region} onChange={(event) => setRegion(event.target.value)} className={control} />
           </Row>
@@ -270,12 +228,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               className={control}
             />
           </Row>
-          {/*
-            資格情報はマスターパスワードで封印され、vault の中ではなくその隣に
-            保管される。vault は持ち運ばれるが、バケットへの鍵はそうであっては
-            ならない。さもないと、1 つのスナップショットを入手した誰もが、
-            以降のすべてを取得できてしまう。
-          */}
+
           <Row label={t("sync.secretAccessKey")} hint={t("sync.credentialsNote")}>
             <input
               type="password"
@@ -284,13 +237,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               className={control}
             />
           </Row>
-          {/*
-            このマシンがデータをどちらの向きに動かしてよいか。これは 2 つの
-            書き込みを統べる: 送信に設定されたマシンは決して他のマシンのバイト列を
-            適用されず、受信に設定されたマシンは決してバケットに書き込まない。
-            プレビューはどちらにせよ使えるので、適用できないマシンでも
-            自分がどれだけ遅れているかを知ることはできる。
-          */}
+
           <Row label={t("sync.direction")} hint={t(`sync.direction.${direction}.hint`)}>
             <select
               value={direction}
@@ -345,7 +292,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 </p>
               ) : (
                 <>
-                  {/* 一度だけ見せる。ここを離れれば二度と出ない。 */}
+
                   <output className="select-all break-all rounded border border-line bg-surface px-3 py-2 font-mono text-sm text-ink">
                     {revealed}
                   </output>
@@ -389,10 +336,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               </Button>
             </div>
           </Row>
-          {/*
-            移行。かつてスナップショットを封じていたのはマスターパスワード
-            そのものだった。すでにバケットにあるものは、新しい鍵では開かない。
-          */}
+
           <Row label={t("sync.rekey")} hint={t("sync.rekeyHint")}>
             <div className="flex flex-col gap-2">
               <input
@@ -423,10 +367,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             </div>
           </Row>
         </Card>
-        {/*
-          自動同期。**押さなくても進むことと、黙って壊すことは違う。** 衝突と、
-          何かが消える適用は巡回が踏み越えないので、待っていることをここが言う。
-        */}
+
         <Card>
           <Row label={t("sync.auto")} hint={t("sync.autoHint")}>
             <div className="flex flex-col gap-2">
@@ -468,9 +409,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           </Row>
         </Card>
         {status.direction === "both" ? null : (
-          // 拒否はボタンが押されたときだけでなく、ボタンがある場所に
-          // 述べられる: 隣に理由のない無効化されたコントロールは、設定ではなく
-          // アプリケーションの不具合に見えてしまう。
           <p role="status" className="text-sm text-notice-ink">
             {t(`sync.direction.${status.direction}.active`)}
           </p>
@@ -514,22 +452,14 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           <h3 className={sectionHeading}>{t("sync.previewHeading")}</h3>
           {conflicted ? (
             <>
-              {/*
-                両方が変更した 2 つのファイルに、正しいマージはない。どちらかを
-                推測すれば、パーサーが守るために存在するバイト保存の約束を
-                破ることになるので、これはどのファイルかを述べて止まる。
-              */}
+
               <p className="text-sm text-notice-ink">{t("sync.conflictExplain")}</p>
               <ul className="flex flex-col gap-1 font-mono text-xs text-notice-ink">
                 {preview.conflicts.map((conflict) => (
                   <li key={conflict.path}>{conflict.path}</li>
                 ))}
               </ul>
-              {/*
-                **選べる道を出す。** 出さなければ、自分の設定を持ったまま
-                2 台目を繋いだ人は、一度も同期を終えられない。選んでも書く前に
-                同じプレビューが出る——寄せ先は、適用ではなく計画を変える。
-              */}
+
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -571,9 +501,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             </>
           )}
           {preview.removed.length === 0 ? null : (
-            // **消すときだけ、もう一段いる。** 置き換えは控えが残り History から
-            // 戻せるが、消えたファイルは画面から消える——押した人が、その中身を
-            // 一度も見ていないこともある。
             <label className="flex items-start gap-2 rounded border border-notice-line bg-notice p-3 text-sm text-notice-ink">
               <input
                 type="checkbox"

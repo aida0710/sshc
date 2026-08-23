@@ -96,7 +96,6 @@ function directIdentityValues(detail: HostDetail): string[] {
   return directIdentityFields(detail)
     .map((field) => field.values.filter(isConcreteIdentityValue))
     .filter((values) => values.length > 0)
-    // 綴りの無い値はサーバーが書かないので、この絞り込みは実際には何も落とさない。
     .map(formatValues)
     .filter((line): line is string => line !== null);
 }

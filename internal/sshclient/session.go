@@ -19,13 +19,13 @@ const TermName = "xterm-256color"
 
 // Session は、開かれている SSH のセッションひとつである。
 //
-// terminal.Process を満たすが、**プロセスを持たない。** PTY も確保しない——
+// terminal.Process を満たすが、プロセスを持たない。PTY も確保しない。
 // SSH のチャンネルがそのまま端末である。
 type Session struct {
 	// input は、端末から打たれたバイト列である。
 	//
-	// 握手のあいだは問いの答えとして読まれ、シェルが始まったあとは
-	// リモートの stdin へ流れる。切り替えは要らない——順番に起きるからである。
+	// 握手のあいだは問いの結果として読まれ、シェルが始まったあとは
+	// リモートの stdin へ流れる。切り替えは要らない。順番に起きるからである。
 	input *InputBuffer
 	// reader と writer は、端末へ出ていくバイト列である。握手のあいだの
 	// 問いも、シェルの出力も、同じ道を通る。
@@ -34,8 +34,8 @@ type Session struct {
 
 	// cancel は、まだ握手の途中なら、それごと止める。
 	//
-	// **閉じたセッションが繋ぎ続けてはならない。** 届かないアドレスへの接続は
-	// タイムアウトまで生き、その間ずっと goroutine とソケットを保持する。
+	// 閉じたセッションが繋ぎ続けてはならない。届かないアドレスへの接続は
+	// タイムアウトまで goroutine とソケットを保持する。
 	cancel context.CancelFunc
 
 	mutex   sync.Mutex
@@ -43,8 +43,7 @@ type Session struct {
 	size    terminal.Size
 	closers []io.Closer
 
-	// forwarded は、この接続の上に開いた転送である。セッションの寿命に縛る
-	// ——**閉じ忘れるものを増やさない。**
+	// forwarded は、この接続上の転送。セッション終了時にまとめて閉じる。
 	forwarded forwards
 
 	exit      terminal.ExitInfo
@@ -73,8 +72,8 @@ func (s *Session) Read(b []byte) (int, error) { return s.reader.Read(b) }
 
 // Write は、打たれたバイト列を受け取る。
 //
-// 握手のあいだは問いの答えになり、シェルが始まったあとはリモートへ流れる。
-// **決して待たない**——問いが出ていない間に打たれた文字で WebSocket の
+// 握手のあいだは問いの結果になり、シェルが始まったあとはリモートへ流れる。
+// 決して待たない。問いが出ていない間に打たれた文字で WebSocket の
 // 読み手が止まると、その接続全体が固まる。
 func (s *Session) Write(b []byte) (int, error) { return s.input.Write(b) }
 
@@ -91,10 +90,7 @@ func (s *Session) Resize(size terminal.Size) error {
 	return remote.WindowChange(int(size.Rows), int(size.Cols))
 }
 
-// Hangup は、向こうに終わってほしいという意思である。
-//
-// SIGHUP は無い。**プロセスが無いからである。** 同じ意図をチャンネルを
-// 閉じることで表す。
+// Hangup はリモートへ SIGHUP を送り、SSH チャンネルを閉じる。
 func (s *Session) Hangup() error {
 	s.mutex.Lock()
 	remote := s.remote
@@ -139,16 +135,8 @@ func (s *Session) Close() error {
 	return nil
 }
 
-// ForceClose は、graceful な終わり方を待たずに輸送そのものを断つ。
-//
-// **殺すプロセスは無い。** Unix の PTY で SIGKILL と PTY のクローズが果たす役割
-// ——pump の読み取りを終わらせ、セッションの done を閉じさせること——を、ここでは
-// 手前のホップを閉じることが果たす。
-//
-// Close と違い、リモートのチャンネルより**先に**輸送を閉じる。順序がこのメソッドの
-// 全部である。応答を返さない相手に対しては、チャンネルを閉じる書き込みそのものが
-// 返らないことがあり、そうなると締切に間に合わせるために呼ばれたものが締切を越える。
-// 輸送が先に死んでいれば、そのあとの Close は何にも待たされない。
+// ForceClose は、リモートの応答を待たずに輸送を先に閉じる。
+// チャンネルの Close 自体がブロックする場合にも停止期限を守れるようにする。
 func (s *Session) ForceClose() error {
 	if s.cancel != nil {
 		s.cancel()
@@ -175,7 +163,7 @@ func (s *Session) finish(info terminal.ExitInfo) {
 
 // fail は、接続できなかった理由を端末へ書いて終わらせる。
 //
-// **セッションは残す。** 接続できなかった理由が読めるのはそこだけである。
+// セッションは残す。接続できなかった理由が読めるのはそこだけである。
 func (s *Session) fail(reason string) {
 	_, _ = io.WriteString(s.writer, "\r\n"+reason+"\r\n")
 	s.finish(terminal.ExitInfo{Code: 255, At: time.Now()})
@@ -229,10 +217,7 @@ func (s *Session) run(remote *ssh.Session, keepAlive func()) {
 	}
 }
 
-// keepAliveLoop は、生きているかをリモートへ尋ね続ける。
-//
-// 応答しないまま count 回過ぎた接続は落ちたものとして閉じる。これが無いと、
-// 経路が黙って死んだ接続が、TCP のタイムアウトまで生きているふりをする。
+// keepAliveLoop はリモートへ定期的に要求を送り、count 回連続で応答がなければ閉じる。
 func keepAliveLoop(client *ssh.Client, interval time.Duration, count int, done <-chan struct{}) func() {
 	if interval <= 0 {
 		return nil

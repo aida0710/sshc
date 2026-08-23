@@ -60,12 +60,12 @@ func TestRunVaultPromptCtrlCReturns130WithoutEnterAndRestoresEcho(t *testing.T) 
 	if _, err := terminal.Write([]byte{3}); err != nil {
 		t.Fatal(err)
 	}
-	// This marker is printed only after runVault has returned 130. Observing it
-	// before any Enter byte proves Ctrl-C released the password prompt itself.
+	// このマーカーは runVault が 130 を返した後にだけ出力される。Enter を送る前に
+	// 観測できれば、Ctrl-C がパスワードプロンプト自体を解除したと分かる。
 	readPTYThrough(t, terminal, []byte("vault-helper-returned-130"), 2*time.Second)
 
-	// The helper is now reading a normal canonical line. Input must be echoed
-	// immediately, before its terminating Enter, if the exact prior mode returned.
+	// 補助プロセスは通常の canonical line を読んでいる。元のモードが正確に復元されて
+	// いれば、終端の Enter より前に入力が直ちにエコーされる。
 	const echoProbe = "vault-echo-restored-probe"
 	if _, err := terminal.Write([]byte(echoProbe)); err != nil {
 		t.Fatal(err)

@@ -22,13 +22,6 @@ import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 
 type KnownHostsPanelProps = { api?: IntegrationsApi };
 
-// ホスト鍵の削除は破壊的で、スキャンはホストに接続するので、
-// どちらも意図的に始める: 削除は送信前にもう一度尋ね、
-// スキャンした鍵は事実としてではなく候補として提示する。
-//
-// スキャンした鍵が信頼される唯一の方法は候補を追加することであり、
-// それにはユーザーが他所で入手したフィンガープリント、または誰も
-// 検証していない鍵を信頼するという明示的な了承のどちらかが要る。
 export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps) {
   const t = useTranslate();
   const [query, setQuery] = useState("");
@@ -95,9 +88,6 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
     }
   }
 
-  // 確認は証拠や了承を決して引き継がない。どちらも閉じるときと
-  // 開くときの両方で捨てられるので、ある鍵のために与えたものが
-  // 別の鍵に使われることは決してない。
   function resetAdd() {
     setExpectedFingerprint("");
     setAcknowledged(false);
@@ -116,9 +106,6 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
   async function confirmAdd() {
     if (!adding) return;
     const typed = expectedFingerprint.trim();
-    // 入力されたフィンガープリントは、この鍵についての主張だ。もし
-    // スキャンされた鍵と食い違えば、ユーザーは説明された鍵とは別の鍵を
-    // 見ていることになる。それはサーバーに送るのではなく画面に表示する。
     if (typed !== "" && typed !== adding.fingerprint) {
       setError(t("kh.fingerprintMismatch", { typed, scanned: adding.fingerprint }));
       return;
@@ -169,13 +156,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
         <Notice tone="danger">{error}</Notice>
       ) : null}
 
-      {/*
-        スキャンはユーザーがここに来て行うことであり、ファイルを読むのは
-        結果を確認する方法だ。コントロールは一覧全体の下にあったので、
-        そこに到達するには既知のホストすべてを越えてスクロールする必要があった。
-        結果はそれと共に移動する: 元の位置に残していたら、候補リストは
-        ユーザーが追加しようとスキャンしているファイルより下に置かれてしまっていた。
-      */}
+
       <section className={sectionCard} aria-labelledby="known-hosts-scan-heading">
         <h3 id="known-hosts-scan-heading" className={sectionHeading}>
           {t("kh.scanHeading")}
@@ -213,9 +194,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
                     <td className="py-2 pr-3">{candidate.host}</td>
                     <td className="py-2 pr-3 text-ink-muted">{candidate.keyType}</td>
                     <td className="py-2 pr-3 font-mono text-xs text-ink-muted">{candidate.fingerprint}</td>
-                    {/* スキャンでは identity を確立できないので、ラベルは鍵をどう
-                        取得したかを説明し、応答の
-                        主張を繰り返すことは決してない。 */}
+
                     <td className="py-2 pr-3 text-notice-ink">{t("kh.unverified")}</td>
                     <td className="py-2">
                       <Button

@@ -1,8 +1,8 @@
 //go:build unix
 
-// 本物の artefact を起こし、止まるところまでを見届けるのは Unix 側だけである。
+// 本物の artefact を起動し、止まるところまでを見届けるのは Unix 側だけである。
 //
-// **Windows には SIGTERM が無い。** os.Process.Signal はそこで EWINDOWS を返し、
+// Windows には SIGTERM が無い。os.Process.Signal はそこで EWINDOWS を返し、
 // 行儀のよい停止を求めるにはプライベートなコンソール制御イベントと、その受け手の
 // 登録が要る。engine 側のその契約は Windows Task 6 が、パッケージとしての起動・
 // 停止の実証は Windows Task 9 の package smoke が持っている。ここで Kill に
@@ -53,9 +53,8 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	}
 
 	home := t.TempDir()
-	// acceptance harness 自身が foreground engine の所有者である。bare `sshc` は
-	// 裸の `sshc` は入口を刷るだけで engine を起こさないので、ここは明示的に engine
-	// owner として起動し、SIGTERM まで自分で寿命を管理する。
+	// bare `sshc` は接続 URL を出力するだけなので、harness が engine を明示的に起動し、
+	// SIGTERM までプロセスを管理する。
 	process := exec.Command(binary, "engine")
 	process.Env = isolatedEnvironment(home)
 	stdout, err := process.StdoutPipe()
@@ -99,7 +98,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatalf("the binary announced nothing within 15s; stderr:\n%s", stderr.String())
 	}
-	// **engine は入口を出さない。** 出せば、ワンタイムの資格情報が端末にも
+	// engine はアクセス URLを出さない。出せば、ワンタイムの資格情報が端末にも
 	// ログにも残る。言うのは、次に何を打てばよいかだけである。
 	if announced != "sshc: create the password vault with `sshc vault create`" {
 		t.Fatalf("engine announcement = %q", announced)
@@ -110,7 +109,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 		}
 	}
 
-	// 入口は名簿から読む。それが `sshc <alias>` の通る道であり、engine が
+	// アクセス URLは名簿から読む。それが `sshc <alias>` の通る道であり、engine が
 	// 実際に受け付けていることの公開された証拠である。
 	var document handoff.Handoff
 	deadline := time.Now().Add(15 * time.Second)
@@ -154,7 +153,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	// 経路可能なアドレス上の同じポートへの接続は受け付けてはならない。
 	assertBoundToLoopbackOnly(t, host)
 
-	// **engine はブートストラップを刷らない。** 資格情報は名簿にあり、それを
+	// engine はブートストラップを出力しない。資格情報は名簿にあり、それを
 	// 持つのは `sshc <alias>` である。ここではその公開された経路を通す。
 	status, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+httpserver.StatusPath, nil)
 	if err != nil {
@@ -172,7 +171,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 		t.Fatalf("cli status = %d", answeredStatus)
 	}
 
-	// 資格情報なしでは、同じ経路が答えてはならない。
+	// 資格情報なしでは、同じ経路が応答してはならない。
 	unauthenticated, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+httpserver.StatusPath, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -220,7 +219,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 //
 // このマシンの経路可能なアドレスは、存在する場合にのみ
 // 調べる。ループバック以外の IPv4 アドレスを持たない
-// マシンでは証明すべきものがなく、検査は成功と報告せず黙ってスキップされる。
+// マシンでは証明すべきものがなく、検査は成功と報告せず暗黙にスキップされる。
 func assertBoundToLoopbackOnly(t testing.TB, hostPort string) {
 	t.Helper()
 	_, port, err := net.SplitHostPort(hostPort)

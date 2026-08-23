@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// fakeListen は、掴めた番号を記録し、塞がっている番号を断る。
 func fakeListen(taken map[int]bool, asked *[]int) ListenFunc {
 	return func(network, address string) (net.Listener, error) {
 		_, port, err := net.SplitHostPort(address)
@@ -33,9 +32,6 @@ type fakeListener struct{ net.Listener }
 func (*fakeListener) Close() error   { return nil }
 func (*fakeListener) Addr() net.Addr { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
 
-// **選ばれた番号を、選んだ人に黙って変えない。**
-//
-// 番号を決めた人はそれをブラウザに打つ。別の番号へ逃げれば、その綴りは外れる。
 func TestAChosenPortIsTheOnlyOneTried(t *testing.T) {
 	var asked []int
 	if _, err := listenLoopback(fakeListen(map[int]bool{34567: true}, &asked), 34567, randomBelow); err == nil {
@@ -56,7 +52,6 @@ func TestAChosenPortIsUsedWhenItIsFree(t *testing.T) {
 	}
 }
 
-// **1024 未満は特権が要り、その上も名前の付いたサービスで混み合っている。**
 func TestARandomPortStaysInTheRangeWeChose(t *testing.T) {
 	for round := 0; round < 200; round++ {
 		var asked []int
@@ -72,8 +67,6 @@ func TestARandomPortStaysInTheRangeWeChose(t *testing.T) {
 	}
 }
 
-// 埋まっていたら引き直す。**選んだ番号のときと違い、ここは逃げてよい** ——
-// 誰も特定の番号を待っていない。
 func TestARandomPortIsDrawnAgainWhenItIsTaken(t *testing.T) {
 	taken := map[int]bool{}
 	for port := LowestPort; port <= LowestPort+4; port++ {
@@ -96,7 +89,6 @@ func TestARandomPortIsDrawnAgainWhenItIsTaken(t *testing.T) {
 	}
 }
 
-// **無限に引き直さない。** 3 万通りで続けて外れるなら、外れているのは前提である。
 func TestDrawingGivesUpInsteadOfSpinning(t *testing.T) {
 	taken := map[int]bool{}
 	for port := LowestPort; port <= HighestPort; port++ {
@@ -112,7 +104,6 @@ func TestDrawingGivesUpInsteadOfSpinning(t *testing.T) {
 	}
 }
 
-// 断りの綴りは、選ばれた番号を名指しする。
 func TestRefusingAChosenPortNamesIt(t *testing.T) {
 	var asked []int
 	_, err := listenLoopback(fakeListen(map[int]bool{34567: true}, &asked), 34567, randomBelow)

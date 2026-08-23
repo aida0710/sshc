@@ -12,13 +12,6 @@ type RevealDialogProps = {
 
 type DialogState = "confirm" | "loading" | "shown" | "error";
 
-// RevealDialog は秘密鍵の実体を 1 つのコンポーネント状態値にのみ保持し、
-// それ以外のどこにも保持しない。ストレージにもグローバルオブジェクトにも
-// ロガーにも分析シンクにも書き込まず、ダイアログが閉じると参照を捨てるので、
-// 鍵を再表示するには新たな確認が必要になる。
-//
-// ブラウザ拡張やクリップボード履歴ツールから鍵を守るとは、意図的に
-// うたっていない。守れないからだ。
 export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialogProps) {
   const t = useTranslate();
   const [state, setState] = useState<DialogState>("confirm");
@@ -65,8 +58,6 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
         </>
       )}
       {state === "loading" && (
-        // role="status" ではなく aria-live: シェルが唯一のステータス
-        // 領域を所有しており、2 つ目があるとそれと競合してしまう。
         <p aria-live="polite" className="mt-2 text-sm text-ink-muted">
           {t("reveal.requesting")}
         </p>
@@ -76,13 +67,7 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
           <pre aria-label={t("reveal.privateKeyLabel")} className="mt-4 overflow-x-auto rounded-md bg-canvas p-4 text-xs">
             {material}
           </pre>
-          {/*
-            コピーを提供するのは design §6.3 がそれを求めているのと、代わりに
-            手動選択をしても結局同じようにクリップボードに載ってしまうからだ。
-            上の警告は既に、いったんそこに置かれた鍵をこのアプリケーションが
-            守れないと述べている。ボタンがあってもそれが
-            より真実になったりより真実でなくなったりはしない。
-          */}
+
           <div className="mt-2">
             <CopyButton value={material} label="copy.privateKey" />
           </div>

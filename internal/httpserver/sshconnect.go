@@ -11,8 +11,8 @@ import (
 
 // Connector は、alias ひとつ分の対話セッションを開く。
 //
-// **外部の ssh は起こさない。** 組み立てるのは合成の根（internal/app）であり、
-// 鍵も vault も known_hosts もそこで一度だけ配線される——二箇所で組み立てると、
+// 外部の ssh は起こさない。組み立てるのは合成の根（internal/app）であり、
+// 鍵も vault も known_hosts もそこで一度だけ配線される。二箇所で組み立てると、
 // 片方だけが vault を見る日が来る。
 type Connector func(ctx context.Context, alias string, size terminal.Size) (terminal.Process, error)
 

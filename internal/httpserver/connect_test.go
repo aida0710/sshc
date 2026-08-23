@@ -28,7 +28,7 @@ func connectEngine(t *testing.T, handlers ConnectHandlers) *echo.Echo {
 
 // アカウントのパスワードが、鍵のパスフレーズとして返ることは無い。
 //
-// **名前空間が別だからである。** 混ぜれば、ローカルの鍵を開くための秘密が
+// 名前空間が別だからである。混ぜれば、ローカルの鍵を開くための秘密が
 // リモートへログインパスワードとして送られる。
 func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	const cliSecret = "the secret for this run"
@@ -62,13 +62,13 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	if len(answer.Passphrases) != 0 {
 		t.Fatalf("an account password came back as a key passphrase: %+v", answer)
 	}
-	// 自分の欄には載る。**保存してあるのに使わないなら、保存させる意味が無い。**
+	// 自分の欄には載る。保存してあるのに使わないなら、保存させる意味が無い。
 	if answer.Passwords["bastion"] != "legacy-password" {
 		t.Fatalf("the stored account password did not reach the command line: %+v", answer)
 	}
 }
 
-// 保存済みアカウントパスワードだけを持つ alias は、鍵についての答えを持たない。
+// 保存済みアカウントパスワードだけを持つ alias は、鍵についての結果を持たない。
 // 返るのはパスワードひとつであり、鍵の欄は空のままである。
 func TestAnAliasWithOnlyAnAccountPasswordCarriesNoKey(t *testing.T) {
 	const cliSecret = "the secret for this run"
@@ -107,9 +107,9 @@ func TestAnAliasWithOnlyAnAccountPasswordCarriesNoKey(t *testing.T) {
 	}
 }
 
-// 連鎖ぶんを返す。**ProxyJump の手前に立つホストも、それ自身が alias である。**
+// 連鎖ぶんを返す。ProxyJump の手前に立つホストも、それ自身が alias である。
 //
-// 同時に、返すのはこの接続に現れるものだけである——保管庫の一覧にはしない。
+// 同時に、返すのはこの接続に現れるものだけである。保管庫の一覧にはしない。
 func TestConnectCarriesThePasswordsOfTheWholeJumpChain(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
@@ -149,7 +149,7 @@ func TestConnectCarriesThePasswordsOfTheWholeJumpChain(t *testing.T) {
 	if answer.Passwords["far"] != "the destination" || answer.Passwords["edge"] != "the way in" {
 		t.Fatalf("the chain did not arrive whole: %+v", answer.Passwords)
 	}
-	// **尋ねられた接続に現れないものは返さない。**
+	// 尋ねられた接続に現れないものは返さない。
 	if _, listed := answer.Passwords["elsewhere"]; listed {
 		t.Fatalf("the answer listed the vault: %+v", answer.Passwords)
 	}
@@ -194,8 +194,8 @@ func TestConnectAnswersWithTheKeyPassphraseForTheDirectStoredKey(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	// **答えそのものが返る。** 単回トークンにしていたのは、引き換える相手が
-	// 別のプログラムだったからである。要求を出した本人が受け取るなら、
+	// 結果そのものが返る。単回トークンにしていたのは、引き換える相手が
+	// 別のプログラムだったからである。要求を出したユーザー本人が受け取るなら、
 	// 発行と引き換えを分ける理由が無い。
 	if answer.Passphrases["id_ed25519_server"] == "" {
 		t.Fatalf("connect answer = %+v, want the stored passphrase under its key path", answer)
@@ -236,7 +236,7 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 	}
 }
 
-// secret がなければ、このエンドポイントは何も語らない——alias が
+// secret がなければ、このエンドポイントは何も語らない。alias が
 // 未知であることも、パスワードが保存されていることも、いないことも。
 func TestConnectRefusesWithoutTheSecretAndSaysNothingElse(t *testing.T) {
 	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
@@ -264,7 +264,7 @@ func TestConnectWithNoSecretConfiguredRefusesEveryone(t *testing.T) {
 	}
 }
 
-// vault がない場合の答えはトークンなしの接続であり、それは正常な接続である。
+// vault がない場合の結果はトークンなしの接続であり、それは正常な接続である。
 // OpenSSH 自身がパスワードを尋ねる。
 func TestConnectAnswersWithNothingWhenNothingIsStored(t *testing.T) {
 	const secret = "the secret for this run"
@@ -302,8 +302,8 @@ func TestConnectRefusesAnAliasItWouldNotPutOnACommandLine(t *testing.T) {
 	}
 }
 
-// メニューバーと終了時の確認が読む口である。**数えるのは生きている本数だけ**
-// で、終了済みは残っていても数に入らない——閉じてよいかを問うための数だからだ。
+// メニューバーと終了確認が使う API であり、実行中の本数だけを数える。
+// で、終了済みは残っていても数に入らない。閉じてよいかを問うための数だからだ。
 func TestStatusAnswersWithTheLockAndTheLiveCount(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
@@ -376,9 +376,7 @@ func TestCLIStatusIncludesOwner(t *testing.T) {
 	}
 }
 
-// **無い錠の鍵は尋ねない。** 保管庫を一度も作っていない利用者にとって
-// Unlocked は常に false であり、それだけを見ると `sshc <接続先>` は接続の
-// たびにマスターパスワードを訊く。訊く相手の手元には、答えになるものが無い。
+// vault が未作成ならパスワードを尋ねない。
 func TestStatusSaysThereIsNoVaultToUnlock(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
@@ -389,7 +387,7 @@ func TestStatusSaysThereIsNoVaultToUnlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Initialise を呼ばない。**新規インストール直後の姿である。**
+	// Initialise を呼ばない。新規インストール直後の姿である。
 	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
 	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
 
@@ -407,7 +405,7 @@ func TestStatusSaysThereIsNoVaultToUnlock(t *testing.T) {
 	}
 }
 
-// handoff の秘密を持たないものには答えない。
+// handoff の秘密を持たないものには応答しない。
 func TestStatusRefusesWithoutTheSecret(t *testing.T) {
 	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
 	if recorder := send(t, engine, http.MethodGet, StatusPath, "", nil); recorder.Code != http.StatusForbidden {
@@ -415,8 +413,8 @@ func TestStatusRefusesWithoutTheSecret(t *testing.T) {
 	}
 }
 
-// liveSessions が実際に「生きている」を数えていることを、registry を組み立てずに見る。
-// 終了済み（Exited が非 nil）を混ぜても、数に入るのは生きているものだけである。
+// liveSessions が実際に「実行中」を数えていることを、registry を組み立てずに見る。
+// 終了済み（Exited が非 nil）を混ぜても、数に入るのは実行中ものだけである。
 func TestLiveSessionsCountsOnlyTheOnesStillRunning(t *testing.T) {
 	views := []terminal.View{
 		{ID: "running-1"},
@@ -429,8 +427,7 @@ func TestLiveSessionsCountsOnlyTheOnesStillRunning(t *testing.T) {
 	}
 }
 
-// **端末でも解錠できる。** ブラウザを開かずに答えられることが、この口の理由で
-// ある。解錠はエンジンの中に残るので、あとで窓を開けば解錠済みである。
+// CLI からロック解除した状態は engine に保持され、Web UI でも共有される。
 func TestUnlockOpensTheVaultFromTheCommandLine(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
@@ -484,7 +481,7 @@ func TestUnlockRefusesTheWrongPassphrase(t *testing.T) {
 	}
 }
 
-// handoff の秘密を持たないものには答えない。
+// handoff の秘密を持たないものには応答しない。
 func TestUnlockRefusesWithoutTheSecret(t *testing.T) {
 	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
 	if recorder := send(t, engine, http.MethodPost, VaultUnlockPath, `{"passphrase":"anything"}`, nil); recorder.Code != http.StatusUnauthorized {
@@ -492,11 +489,11 @@ func TestUnlockRefusesWithoutTheSecret(t *testing.T) {
 	}
 }
 
-// **鍵のパスフレーズも、連鎖ぶん返る。**
+// 鍵のパスフレーズも、連鎖ぶん返る。
 //
 // ProxyJump の手前に立つホストは、それ自身が alias であり、そこにも別の鍵が
 // 指定されうる。行き先のぶんだけを渡していた間、手前で止まる接続はそのたびに
-// 手入力を求めていた——アカウントパスワードの側は最初から連鎖ぶんを渡している。
+// 手入力を求めていた。アカウントパスワードの側は最初から連鎖ぶんを渡している。
 func TestKeyPassphrasesTravelForEveryHopOfTheConnection(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()

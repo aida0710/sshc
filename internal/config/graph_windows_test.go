@@ -57,7 +57,7 @@ func TestWindowsResolveRefusesUnsupportedEntrySpellings(t *testing.T) {
 	}
 }
 
-// 大小文字だけが違う綴りは同じファイルである。別々に読み込めば同じ内容が二重に
+// 大小文字だけが違う表記は同じファイルである。別々に読み込めば同じ内容が二重に
 // 現れ、循環はいつまでも見つからない。
 func TestWindowsResolveTreatsCaseAliasesAsOneFile(t *testing.T) {
 	const root = `C:\Users\Tester\.ssh`
@@ -127,7 +127,7 @@ func TestWindowsResolveDetectsACaseAliasCycleOnce(t *testing.T) {
 	}
 }
 
-// 別のボリュームや別の共有は、綴りが似ていてもワークスペースの外である。
+// 別のボリュームや別の共有は、表記が似ていてもワークスペースの外である。
 // 読むことはできるが、書き換えてよい場所ではない。
 func TestWindowsResolveKeepsOtherVolumesAndSiblingsOutsideTheRoot(t *testing.T) {
 	const root = `C:\Users\Tester\.ssh`
@@ -176,19 +176,19 @@ func hasDiagnostic(graph *Graph, code string) bool {
 	return false
 }
 
-// 大小文字だけが違う綴りで include されたルート下のファイルは、ルート自身の
-// 綴りで引ける節点にならなければならない。
+// 大小文字だけが違う表記で include されたルート下のファイルは、ルート自身の
+// 表記で引ける節点にならなければならない。
 //
-// **そうでないと、一覧に出て編集可能と言われたホストが、開いた瞬間に
-// 見つからないと言われる。** 上の層はルートから組み立てた綴りで引いている。
+// そうでないと、一覧に出て編集可能と言われたホストが、開いた瞬間に
+// 見つからないと言われる。上の層はルートから組み立てた表記で引いている。
 func TestWindowsResolveKeysInRootNodesByTheRootSpelling(t *testing.T) {
 	const root = `C:\Users\Tester\.ssh`
 	const entry = root + `\config`
 	const shouted = `C:\USERS\TESTER\.ssh\conf.d\work.conf`
 	resolver := Resolver{
 		Loader: fakeLoader{
-			// 本物のファイルシステムはどちらの綴りにも答える。偽物には両方
-			// 登録しておく——確かめたいのは節点の鍵であって、偽物の索き方ではない。
+			// 本物のファイルシステムはどちらの表記にも返す。偽物には両方
+			// 登録しておく。確かめたいのは節点の鍵であって、偽物の索き方ではない。
 			files: map[string]string{
 				entry:                      "Include conf.d/*.conf\n",
 				shouted:                    "Host work\n",
@@ -217,9 +217,9 @@ func TestWindowsResolveKeysInRootNodesByTheRootSpelling(t *testing.T) {
 	}
 }
 
-// 辺に載る一致も、節点の鍵と同じ綴りでなければならない。
+// 辺に載る一致も、節点の鍵と同じ表記でなければならない。
 //
-// **片方だけ揃えると、同じファイルが二つの名前で現れる。** 辺をたどる側は
+// 片方だけ揃えると、同じファイルが二つの名前で現れる。辺をたどる側は
 // その節点を見つけられず、include されたファイルは丸ごと無かったことになる。
 func TestWindowsResolveCanonicalisesTheMatchesItReports(t *testing.T) {
 	const root = `C:\Users\Tester\.ssh`

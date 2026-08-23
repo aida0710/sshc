@@ -11,51 +11,32 @@ import (
 // 開始位置を断る理由。
 var (
 	// ErrStartDirectoryMissing は、そこに無いディレクトリを断る。
-	//
-	// **保存のときに断る。** 通らないものを黙って受け取ると、次に端末を開いた
-	// ときに初めて分かる——設定画面と、失敗が現れる場所が離れる。
 	ErrStartDirectoryMissing = errors.New("that directory does not exist")
 	// ErrStartDirectoryNotADirectory は、ファイルを指した指定を断る。
 	ErrStartDirectoryNotADirectory = errors.New("that path is not a directory")
 )
 
 // TerminalSettings は、埋め込みターミナルのうち画面から変えられるものである。
-//
-// **0 と空は「設定されていない」である。** 「既定と同じ値」ではない——
-// 区別が要るのは、既定と同じ値を書き戻すと、それが metadata に焼き付くから
-// である。焼き付けば、既定を変えた日にその人だけが黙って取り残される。
 type TerminalSettings struct {
-	// StartDirectory は書かれた綴りのまま。`~/work` は `~/work` である。
+	// StartDirectory は書かれた表記のまま。`~/work` は `~/work` である。
 	StartDirectory string
 	// MaxSessions と ScrollbackBytes は、範囲の外なら書き込みで拒否される。
-	// 読み取り側（TerminalLimits）は範囲の外を既定へ戻す。
 	MaxSessions     int
 	ScrollbackBytes int
 	// FontSize は画面が字を描く大きさ。この engine は読むだけで、使わない。
 	FontSize int
 	// Verbosity は、接続の途中経過をどこまで端末へ書くかである。0 は無言。
-	// **この engine はこれを使う** ——FontSize と違い、読む相手はここに居る。
 	Verbosity int
 	// Reconnect は、輸送が落ちたときに繋ぎ直しを試みる回数である。
-	//
-	// **ポインタなのは、0 が有効な選択だからである。** 切ったのか選んでいないのか、
-	// 値では区別できない。nil なら terminal.MaxReconnects。
 	Reconnect *int
 	// nil は既定の on、false は明示的に止めた値である。
 	CopyOnSelect    *bool
 	RightClickPaste *bool
 	// Appearance は、どの接続にも選ばれていないときの見た目である。
-	//
-	// **値で持つ。** この構造体は `== (TerminalSettings{})` で「何も設定されて
-	// いない」を判定している。ポインタにすると、空を指すポインタがその判定を
-	// すり抜け、空の節が metadata に残る。
 	Appearance TerminalAppearance
 }
 
 // TerminalSettings は、保存されている値をそのまま返す。
-//
-// **正規化しない。** 画面はこれを編集するので、既定へ戻した値を見せると、
-// 人が何も触っていないのに「既定を明示的に選んだ」状態が保存されてしまう。
 func (s *Service) TerminalSettings() TerminalSettings {
 	stored, _, err := s.metadata.Load()
 	if err != nil || stored.EmbeddedTerminal == nil {
@@ -83,13 +64,6 @@ func appearanceOf(stored *TerminalAppearance) TerminalAppearance {
 }
 
 // SetTerminalSettings は、節をまるごと置き換える。
-//
-// **置き換えなのは、消せる必要があるからである。** 一度指定した人が既定へ
-// 戻れなければ、設定は片道になる。空で送られた項目は、書かれていない状態へ戻る。
-//
-// 綴りはそのまま保存する。`~/work` は `~/work` のまま metadata に入る——
-// home の綴りを焼き付けると、その設定は書いた機械でしか意味を持たない。
-// 確かめるのは展開したあとの実体である。
 func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, error) {
 	resolved, err := platform.ResolveUnderHome(settings.StartDirectory, s.workspace.Home())
 	if err != nil {
@@ -106,8 +80,7 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 		return SaveResult{}, err
 	}
 	if settings == (TerminalSettings{}) {
-		// 何も設定されていないなら節ごと消す。**空の節を残さない**——
-		// 残せば、次に読む者は「何か書かれている」と思う。
+		// 何も設定されていないなら節ごと消す。空の節を残さない。
 		stored.EmbeddedTerminal = nil
 	} else {
 		stored.EmbeddedTerminal = &EmbeddedTerminal{
@@ -119,7 +92,7 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 			StartDirectory:  settings.StartDirectory,
 			CopyOnSelect:    settings.CopyOnSelect,
 			RightClickPaste: settings.RightClickPaste,
-			// **空の節は書かない。** 残せば、次に読む者は何か選ばれていると思う。
+			// 空の節は書かない。 残せば、次に読む者は何か選ばれていると思う。
 			Appearance: storedAppearance(settings.Appearance),
 		}
 	}
@@ -142,9 +115,6 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 }
 
 // directoryExists は、そこに入れるディレクトリがあることを確かめる。
-//
-// シンボリックリンクは先を見る。**人がそう書くのは普通のこと**であり、
-// リンクだからという理由で断ると、断られた理由が分からない。
 func (s *Service) directoryExists(path string) error {
 	fileSystem := s.workspace.FileSystem()
 	target, err := fileSystem.EvalSymlinks(path)
@@ -162,12 +132,6 @@ func (s *Service) directoryExists(path string) error {
 }
 
 // TerminalStartDirectory は、ローカルシェルを始める絶対パスを返す。
-//
-// **読むたびに metadata を見る。** 設定は動いている最中に変わりうるので、
-// 起動時に一度だけ読むと、変えた人は次に端末を開いても前の場所に立つ。
-//
-// 読めない、書かれていない、あるいはもう無い場所を指しているときは home を
-// 返す。**端末が開けなくなる方が悪い**——開始位置は、開けることより弱い要求である。
 func (s *Service) TerminalStartDirectory() string {
 	home := s.workspace.Home()
 	resolved, err := platform.ResolveUnderHome(s.TerminalSettings().StartDirectory, home)
@@ -189,9 +153,6 @@ func storedAppearance(chosen TerminalAppearance) *TerminalAppearance {
 }
 
 // EngineSettings は、保存されている engine の設定をそのまま返す。
-//
-// **正規化しない。** 画面はこれを編集するので、既定へ戻した値を見せると、人が
-// 何も触っていないのに「既定を明示的に選んだ」状態が保存されてしまう。
 func (s *Service) EngineSettings() EngineSettings {
 	stored, _, err := s.metadata.Load()
 	if err != nil || stored.Engine == nil {
@@ -201,16 +162,13 @@ func (s *Service) EngineSettings() EngineSettings {
 }
 
 // SetEngineSettings は、節をまるごと置き換える。
-//
-// **置き換えなのは、消せる必要があるからである。** 一度番号を決めた人が無作為へ
-// 戻れなければ、戻る手段は metadata を手で書くことだけになる。
 func (s *Service) SetEngineSettings(settings EngineSettings) (SaveResult, error) {
 	stored, precondition, err := s.metadata.Load()
 	if err != nil {
 		return SaveResult{}, err
 	}
 	if settings == (EngineSettings{}) {
-		// 何も設定されていないなら節ごと消す。**空の節を残さない。**
+		// 何も設定されていないなら節ごと消す。空の節を残さない。
 		stored.Engine = nil
 	} else {
 		stored.Engine = &settings
@@ -233,9 +191,6 @@ func (s *Service) SetEngineSettings(settings EngineSettings) (SaveResult, error)
 }
 
 // TerminalReconnects は、繋ぎ直しを何回まで試みるかを返す。
-//
-// **書かれていなければ既定である。** 0 は「繋ぎ直さない」という選択であって、
-// 「書かれていない」ではない——だから保存されている形はポインタである。
 func (s *Service) TerminalReconnects() int {
 	settings := s.TerminalSettings()
 	if settings.Reconnect == nil {

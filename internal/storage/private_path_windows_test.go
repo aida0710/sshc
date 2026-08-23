@@ -39,9 +39,9 @@ func TestWindowsWritersRejectCaseAliasDuplicatesBeforeMutation(t *testing.T) {
 		name string
 		call func(*Manager, *Workspace) error
 	}{
-		// ルートの綴りはそのまま保ち、その下の要素の大文字小文字だけを変える。
+		// ルートの表記はそのまま保ち、その下の要素の大文字小文字だけを変える。
 		// Workspace.Contains はどの OS でも大小を区別する文字列比較なので、ルート自体を
-		// 綴り替えると、主張リストの検査に届く前に ErrOutsideWorkspace で止まる。
+		// 表記替えると、主張リストの検査に届く前に ErrOutsideWorkspace で止まる。
 		{
 			name: "Commit",
 			call: func(manager *Manager, workspace *Workspace) error {
@@ -104,9 +104,9 @@ func TestWindowsLoadedJournalRejectsCaseAliasPathAndTarget(t *testing.T) {
 	}
 }
 
-// 書き込み先の解決は、**確かめた綴り**を返さなければならない。呼び出し側の
-// 綴りをそのまま返すと、検査したのはルートから組み立てた鎖なのに、書くのは
-// 別の綴りということになる。
+// 書き込み先の解決は、確かめた表記を返さなければならない。呼び出し側の
+// 表記をそのまま返すと、検査したのはルートから組み立てた鎖なのに、書くのは
+// 別の表記ということになる。
 func TestWindowsResolveReturnsTheValidatedRootSpelling(t *testing.T) {
 	_, workspace := newTestManager(t)
 	if err := workspace.EnsureDirectory(filepath.Join(workspace.Root(), "conf.d")); err != nil {
@@ -125,8 +125,8 @@ func TestWindowsResolveReturnsTheValidatedRootSpelling(t *testing.T) {
 
 // ワークスペースのルートそのものは、書き込み先でも作成先でもない。
 //
-// **素の文字列比較で弾いてはならない。** まわりの包含判断は大小文字を畳むので、
-// ルートの別綴りだけがそこをすり抜ける。
+// 素の文字列比較で弾いてはならない。まわりの包含判断は大小文字を畳むので、
+// ルートの別表記だけがそこをすり抜ける。
 func TestWindowsResolveRefusesACaseVariantOfTheRootItself(t *testing.T) {
 	_, workspace := newTestManager(t)
 	for name, candidate := range map[string]string{

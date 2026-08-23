@@ -18,13 +18,13 @@ import (
 
 // runAgent は、プロセス内の ssh-agent を unix ソケットで待ち受けさせる。
 //
-// **本物のプロトコルである。** 検査対象は agent との話し方そのものなので、
+// 本物のプロトコルである。検査対象は agent との通信方式そのものなので、
 // 模したものと突き合わせても何も確かめられない。
 func runAgent(t *testing.T) (string, agent.Agent) {
 	t.Helper()
 	keyring := agent.NewKeyring()
 
-	// **t.TempDir() は使わない。** unix ソケットのパスには 100 バイト程度の
+	// t.TempDir() は使わない。unix ソケットのパスには 100 バイト程度の
 	// 上限があり、テスト名を含むあの長いパスは macOS でそれを超える。超えると
 	// bind が失敗し、この検査は skip として静かに消える。
 	directory, err := os.MkdirTemp("", "sshc-agent")
@@ -77,12 +77,12 @@ func writeAgentKey(t *testing.T, directory string, passphrase []byte) (string, s
 	return path, publicPath
 }
 
-// agentFor は、この試験用の agent へ話す adapter を組み立てる。
+// agentFor は、このテスト用 agent へ接続する adapter を組み立てる。
 //
-// **NewAgent を通さない。** あれが決めるのは「この OS の agent はどこに居るか」
-// であり、それは OS ごとに違う——Windows では固定の named pipe を指し、
+// NewAgent を通さない。あれが決めるのは「この OS の agent はどこに居るか」
+// であり、それは OS ごとに違う。Windows では固定の named pipe を指し、
 // SSH_AUTH_SOCK を読まない。ここで確かめたいのは宛先の決め方ではなく、
-// 繋がったあとのプロトコルの話し方なので、宛先はテストが直接与える。
+// 繋がったあとのプロトコルの通信方式なので、宛先はテストが直接与える。
 // unix ソケットは Windows 10 以降も使えるので、この管はどのホストでも通る。
 func agentFor(socket string) platform.KeyAgent {
 	return keys.Agent{
@@ -130,7 +130,7 @@ func TestAgentAddsListsAndRemovesThroughTheRealProtocol(t *testing.T) {
 	}
 }
 
-// **鍵の復号はこのプロセスで行う。** パスフレーズが agent へ渡ることはない。
+// 鍵の復号はこのプロセスで行う。パスフレーズが agent へ渡ることはない。
 func TestAgentDecryptsTheKeyBeforeHandingItOver(t *testing.T) {
 	socket, keyring := runAgent(t)
 	directory := t.TempDir()

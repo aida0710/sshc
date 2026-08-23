@@ -12,11 +12,11 @@ import (
 	"sshc/internal/platform/windowsacl"
 )
 
-// **engine が置くものは、この利用者しか読めない。** handoff にはワンタイムの
+// engine が置くものは、この利用者しか読めない。handoff にはワンタイムの
 // 資格情報が入っており、engine.lock と保管庫は同じディレクトリに居る。Windows
 // でそれを言うのは mode ビットではなく DACL であり、単体テストが確かめている
-// のは windowsacl の書き方である——ここで見るのは、**本物の engine が本当に
-// その道を通ったか**である。
+// のは windowsacl の書き方である。ここで見るのは、本物の engine が本当に
+// その道を通ったかである。
 func TestWhatALiveEngineWritesIsReadableOnlyByThisUser(t *testing.T) {
 	home := isolatedHome(t)
 	engine := start(t, home, "engine")
@@ -38,9 +38,9 @@ func TestWhatALiveEngineWritesIsReadableOnlyByThisUser(t *testing.T) {
 	}
 }
 
-// **異常終了でもロックは解ける。** LockFileEx はプロセスに紐づくので、
+// 異常終了でもロックは解ける。LockFileEx はプロセスに紐づくので、
 // 畳む機会を失っても OS がそれを外す。外れなければ、次の owner は永久に
-// 上がれない——これは Windows でしか確かめられない。
+// 上がれない。これは Windows でしか確かめられない。
 func TestTheLockSurvivesNoOneAfterAnAbnormalDeath(t *testing.T) {
 	home := isolatedHome(t)
 	first := start(t, home, "engine")
@@ -61,10 +61,10 @@ func TestTheLockSurvivesNoOneAfterAnAbnormalDeath(t *testing.T) {
 	}
 }
 
-// processAlive は、その pid のプロセスがまだ居るかを答える。
+// processAlive は、その pid のプロセスがまだ居るかを返す。
 //
-// **終了コードで見る。** OpenProcess が成功しても、終了済みのプロセスの
-// ハンドルは開けてしまう——Windows では、誰かがハンドルを持っているあいだ
+// 終了コードで見る。OpenProcess が成功しても、終了済みのプロセスの
+// ハンドルは開けてしまう。Windows では、誰かがハンドルを持っているあいだ
 // プロセスの器が残る。
 func processAlive(t *testing.T, pid int) bool {
 	t.Helper()
@@ -80,7 +80,7 @@ func processAlive(t *testing.T, pid int) bool {
 	return code == 259 // STILL_ACTIVE
 }
 
-// **ConPTY の子孫が engine より長生きしないこと**は、ここでは確かめない。
-// コンソールを開けるのは画面の側であり、そこへ届くには入口が要る——engine は
-// それを刷らないので、この検査からは届かない。実機で確かめる項目として
+// ConPTY の子孫が engine より長生きしないことは、ここでは確かめない。
+// コンソールを開けるのは画面の側であり、そこへ届くにはアクセス URLが要る。engine は
+// それを出力しないので、この検査からは届かない。実機で確かめる項目として
 // docs/manual-test-matrix.md が持つ。

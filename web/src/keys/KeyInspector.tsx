@@ -4,8 +4,6 @@ import { noteLabels } from "./labels";
 import { certificateLines } from "./KeyTable";
 import type { KeyItem } from "./api";
 
-// 表は探すためのもの、ここは見るためのもの。
-// 指紋も権限も、一覧を走査するときには読まない。
 
 export function KeyInspector({ item, now }: { item: KeyItem; now: number }) {
   const t = useTranslate();
@@ -39,7 +37,7 @@ export function KeyInspector({ item, now }: { item: KeyItem; now: number }) {
             </>
           }
         />
-        {/* 消してよいかを決める人が要るのは、数ではなく名前である。 */}
+
         <Fact
           label={t("keys.colUsedBy")}
           value={references.length === 0 ? t("keys.usedByNothing") : references.join(", ")}

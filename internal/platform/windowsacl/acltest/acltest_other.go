@@ -1,7 +1,6 @@
 //go:build !windows
 
-// Package acltest builds the private-state fixtures that the tests need and
-// that an ordinary write cannot produce.
+// Package acltest は通常の書き込みでは作れない非公開状態のテスト fixture を作る。
 package acltest
 
 import (
@@ -10,9 +9,9 @@ import (
 	"testing"
 )
 
-// WritePrivateFile places a file that the private-state readers will accept.
+// WritePrivateFile は非公開状態の reader が受け付けるファイルを配置する。
 //
-// **中身を試すには、まず入れ物が正しくなければならない。** private state の
+// 中身を試すには、まず入れ物が正しくなければならない。private state の
 // 読み口は所有者と権限を先に確かめ、そこで断ったものは解析しない。
 func WritePrivateFile(t *testing.T, path string, body []byte) {
 	t.Helper()

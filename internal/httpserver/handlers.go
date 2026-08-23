@@ -22,8 +22,8 @@ type Handlers struct {
 // なければ、バイナリを再起動するまで reload 後のアプリケーションは死んでいた。
 //
 // これは CSRF トークンを提示しない。reload にはトークンがないからで、
-// bootstrap と同じ免除であり、同じもの——Host、Origin、Fetch Metadata、
-// そして bootstrap とは異なりすでに存在するセッション——によって守られている。
+// bootstrap と同じ免除であり、同じもの。Host、Origin、Fetch Metadata、
+// そして bootstrap とは異なりすでに存在するセッション。によって守られている。
 // クロスサイトのページはそのいずれも作り出せない。SameSite=Strict が
 // cookie を差し止め、Sec-Fetch-Site は偽造できないからである。
 func (h Handlers) Renew(c *echo.Context) error {

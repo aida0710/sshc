@@ -49,8 +49,8 @@ func replaceHandoffFile(oldPath, newPath string) error {
 }
 
 func syncHandoffDirectory(string) error {
-	// MoveFileEx with MOVEFILE_WRITE_THROUGH is the Windows durability
-	// boundary. A read-only directory handle cannot be passed to
-	// FlushFileBuffers, so there is intentionally no second directory Sync.
+	// Windows の永続化には MOVEFILE_WRITE_THROUGH を指定した MoveFileEx を使用する。
+	// 読み取り専用ディレクトリハンドルは FlushFileBuffers へ渡せないため、追加の
+	// directory Sync は行わない。
 	return nil
 }

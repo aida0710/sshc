@@ -20,7 +20,7 @@ func TestWindowsAcceptsDriveAndOrdinaryUNCRoots(t *testing.T) {
 }
 
 // `C:config` はどのディレクトリからの相対か、`\config` はどのボリュームかを
-// 綴りが言っていない。絶対として扱えば、たまたま別のファイルが読まれる。
+// 表記が言っていない。絶対として扱えば、たまたま別のファイルが読まれる。
 func TestWindowsRefusesDriveRelativeAndRootRelativeSpellings(t *testing.T) {
 	for _, path := range []string{`C:config`, `\config`, `config`, `..\config`} {
 		if Supported(path) {
@@ -65,7 +65,7 @@ func TestWindowsUNCCaseAliasesAreTheSameShare(t *testing.T) {
 	}
 }
 
-// Identity と Contains は同じ問いに答える。**答えが割れてはならない。**
+// Identity と Contains は同じ正規化規則を使用する必要がある。
 //
 // 割れる向き次第では、別のファイルが同じ鍵に畳まれ、二つ目の Include が
 // 一度も読まれないまま消える。

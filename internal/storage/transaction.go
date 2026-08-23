@@ -22,8 +22,8 @@ const (
 	backupDirectoryName  = "backups"
 	// BackupDirectoryName は同じ名前を公開する。このパッケージの外で、ディレクトリを
 	// 自分で読まなければならない唯一の呼び出し側のためである。マスターパスワードが
-	// 変わったときにすべてのバックアップを封じ直す処理は ReadBackup を通せない。
-	// ReadBackup は、封をしたときの鍵ではなく、サービスがいま持っている鍵で開く
+	// 変わったときにすべてのバックアップを暗号化し直す処理は ReadBackup を通せない。
+	// ReadBackup は、暗号化したときの鍵ではなく、サービスがいま持っている鍵で開く
 	// からだ。
 	BackupDirectoryName = backupDirectoryName
 	temporaryPrefix     = ".sshc-"
@@ -99,8 +99,8 @@ type Move struct {
 // ない。そして Rollback は、できるふりをせずにその旨を
 // 述べる。
 //
-// Backup は世代コピーを明示的に選ぶ。鍵素材ではないもの — ユーザーがエクスプ
-// ローラから取り除いた設定ファイルなど — を削除する呼び出し側のためである。その
+// Backup は世代コピーを明示的に選ぶ。エクスプローラから取り除いた設定ファイルなど、
+// 鍵素材ではないものを削除する呼び出し側のためである。その
 // 削除は、このアプリケーションが行う他のすべての変更と同じ振る舞いになる。History
 // に載り、取り消せる。
 type Removal struct {
@@ -132,8 +132,7 @@ type DirectoryRemoval struct {
 //
 // この順序だけが成立しうる。変更には置き場所が要るのでディレクトリを最初に作り、
 // 次に変更・移動・削除を行う。ディレクトリの削除を最後にするのは、それらを空に
-// したのがほかならぬこの同じリクエストだから
-// である。
+// したのがこのリクエストだからである。
 type Request struct {
 	Operation   string
 	Directories []DirectoryCreate
@@ -168,9 +167,9 @@ func (e *ConflictError) Error() string {
 
 // ReadBackup は世代バックアップをひとつ読み、それを開く。
 //
-// 読み手はすべてここを通る — 下の巻き戻しと、ファイルひとつの復元を提案する履歴
+// 読み手はすべてここを通る。下の巻き戻しと、ファイルひとつの復元を提案する履歴
 // 画面である。したがって「バックアップは暗号文である」ことを知る場所はひとつだけ
-// になり、それを忘れて封じられたままのバイト列を誰かの設定の上に書いてしまう
+// になり、それを忘れて暗号化されたままのバイト列を誰かの設定の上に書いてしまう
 // 呼び出し側は存在しない。
 func (m *Manager) ReadBackup(path string) ([]byte, error) {
 	if !m.validBackupReadPath(path) {
@@ -184,7 +183,7 @@ func (m *Manager) ReadBackup(path string) ([]byte, error) {
 		return contents, nil
 	}
 	plaintext, err := m.Unseal(contents)
-	// 封じられた側も同じ秘密の写しである。開いたあとまで抱えない。
+	// 暗号化された側も同じ秘密の写しである。開いたあとまで抱えない。
 	zeroBytes(contents)
 	return plaintext, err
 }
@@ -233,7 +232,7 @@ func (e journalEntry) action() string {
 // noOpWrite は、書いても中身が変わらない置き換えを言う。
 //
 // application 層は metadata の書き込みを毎回、変わっていなくても最後に足すので、
-// これは例外ではなく日常の記録である。**巻き戻せない変更ではない。** 戻したあとの
+// これは例外ではなく日常の記録である。巻き戻せない変更ではない。戻したあとの
 // 対象は同じバイト列であり、控えを残さなかったとしても失うものが無い。
 func (e journalEntry) noOpWrite() bool {
 	return e.action() == actionWrite && e.HadPrevious && e.Digest == e.PreviousDigest
@@ -274,9 +273,9 @@ type Manager struct {
 	// Seal と Unseal は、世代バックアップを暗号文にし、また戻す。
 	//
 	// これらを注入するのは、秘密がどこにあるかは secret パッケージの領分であり、
-	// このパッケージはそれを尋ねるために import してはならないからだ — 鍵 vault が
+	// このパッケージはそれを尋ねるために import してはならないからだ。鍵 vault が
 	// パスフレーズを探すために import しないのと同じ理屈である。Seal を持たない
-	// マネージャは平文でバックアップを書く。マスターパスワードで封じられるように
+	// マネージャは平文でバックアップを書く。マスターパスワードで暗号化されるように
 	// なる前は、これがそうしていたことだ。マスターパスワードを持つ配線は、いずれも
 	// 両方を設定する。
 	Seal   func(plaintext []byte) ([]byte, error)
@@ -297,11 +296,10 @@ func (m *Manager) Commit(request Request) (Result, error) {
 	return m.commit(request, false)
 }
 
-// CommitAtomic applies a write transaction with a narrower failure contract
-// than Commit: if any staged filesystem action fails, every action already
-// applied in this process is rolled back before the error is returned. It is
-// used when two persisted documents represent one logical value, such as an
-// SSH connection and its encrypted password assignment.
+// CommitAtomic は Commit より厳しい失敗時規則で書き込みトランザクションを適用する。
+// ステージ済みのファイル操作が失敗した場合、このプロセスで適用した操作をすべて
+// ロールバックしてからエラーを返す。SSH 接続と暗号化されたパスワード割り当てのように、
+// 2 つの永続化文書が 1 つの論理値を表す場合に使用する。
 func (m *Manager) CommitAtomic(request Request) (Result, error) {
 	if request.Operation == "" {
 		return Result{}, ErrInvalidOperation
@@ -319,10 +317,8 @@ func (m *Manager) CommitAtomic(request Request) (Result, error) {
 
 // journalPlan は、これから記録するエントリと、それに紐づく内容をひとつの値にする。
 //
-// **3 つのスライスは添字で対応する。** かつては commit の中に並んで宣言されており、
-// 対応を保っているのは書く人の注意だけだった——片方にだけ append した日、ジャーナルは
-// 別のファイルの以前の内容を指すことになる。ここを通れば、3 つが揃わない状態を
-// 書きようがない。
+// 3 つのスライスは添字で対応する。journalPlan に追加処理を集約し、異なる添字の
+// エントリ、ステージ済みデータ、以前の内容を関連付けないようにする。
 //
 // staged は、これから書く内容（ファイルの置き換えだけが持つ）。previous は、置き換え
 // られる前の内容（バックアップを取る操作だけが持つ）。どちらも無い操作では nil である。
@@ -359,7 +355,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 
 	capacity := len(request.Changes) + len(request.Moves) + len(request.Removals) +
 		len(request.Directories) + len(request.RemoveDirectories)
-	// 計画を組むのは commitBuilder である。**ここから下はもう組み立てない** ——
+	// 計画を組むのは commitBuilder である。ここから下はもう組み立てない。
 	// 記録し、ステージし、置き換えるだけである。
 	builder := &commitBuilder{
 		manager: m, request: request,
@@ -428,18 +424,15 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 			}
 			return result, commitErr
 		}
-		// finish mutates the in-memory record before publishing history. If that
-		// publication or the following current-journal removal fails, persist a
-		// recoverable current state rather than a terminal status which the
-		// current journal never owns.
+		// finish は履歴の公開前にメモリ上の記録を変更する。履歴の公開または current
+		// journal の削除に失敗した場合は、終端状態ではなく復旧可能な current 状態を保存する。
 		if record.Status == statusCompleted || record.Status == statusRolledBack {
 			record.Status = statusStaged
 			record.FinishedAt = nil
 		}
-		// Persist the in-process progress before attempting rollback. A target
-		// rename can succeed even when its following SyncDir or journal rewrite
-		// fails; without this retry, a failed rollback could leave the durable
-		// record behind the filesystem state.
+		// ロールバックを試す前にプロセス内の進捗を保存する。対象の rename 後に SyncDir
+		// または journal の再書き込みが失敗する場合があるため、再保存しないと
+		// ロールバック失敗後の永続記録がファイルシステムより遅れた状態になる。
 		if progressErr := m.writeRecord(journalPath, record); progressErr != nil {
 			commitErr = errors.Join(commitErr, progressErr)
 		}
@@ -452,7 +445,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	// ディレクトリはここで作る。バリデータがリクエストを受理したあとなので、拒否
 	// されたリクエストは何も作らない。そして一時ファイルがステージされる前なので、
 	// ステージされるファイルには親が存在する。これらはジャーナルのエントリなので、
-	// 中断されたコミットは巻き戻せる — これがトランザクションの外の EnsureDirectory で
+	// 中断されたコミットは巻き戻せる。これがトランザクションの外の EnsureDirectory で
 	// ない理由のすべてである。
 	for index := range record.Entries {
 		entry := record.Entries[index]
@@ -469,7 +462,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	// コピーは不要だ。ファイルの唯一のコピーをそのまま保つからである。置き換えには
 	// 常に必要で、削除には呼び出し側が求めたときにちょうど必要になる。
 	//
-	// **record.Entries の添字は journalPlan の添字である。** ジャーナルへ書いたのは
+	// record.Entries の添字は journalPlan の添字である。ジャーナルへ書いたのは
 	// plan.entries そのものなので、以前の内容もステージする内容も、同じ添字で引ける。
 	for index := range record.Entries {
 		entry := &record.Entries[index]
@@ -691,9 +684,9 @@ func (m *Manager) Note(operation string, paths []string) (Result, error) {
 
 func (m *Manager) finish(record *journalRecord, journalPath, status string) error {
 	fileSystem := m.workspace.FileSystem()
-	// **ステージ済みファイルを手放すのはここだけである。** 完了なら rename が
+	// ステージ済みファイルを手放すのはここだけである。完了なら rename が
 	// 使い切っており、巻き戻しなら捨てる。どちらでも、記録が履歴になる前に名前と
-	// 実体の両方が消える。復旧がこれを読むだけの経路でやると、走っている最中の
+	// 対象の両方が消える。復旧がこれを読むだけの経路でやると、走っている最中の
 	// トランザクションの一時ファイルを消せてしまう。
 	for index := range record.Entries {
 		temp := record.Entries[index].Temp
@@ -766,24 +759,24 @@ func (m *Manager) newIdentifier() (string, error) {
 
 // commitBuilder は、ひとつのコミットを組み立てる途中の状態である。
 //
-// **フェーズをまたいで持ち回るものを、名前のある値にまとめてある。** 以前これらは
+// フェーズをまたいで持ち回るものを、名前のある値にまとめてある。以前これらは
 // commit の 380 行の中に生の変数として並んでおり、どのフェーズが何を触るのかは、
 // 全体を頭に入れないと分からなかった。
 type commitBuilder struct {
 	manager *Manager
 	request Request
 	plan    *journalPlan
-	// written は、このコミットが触ったと呼び出し側へ報告する綴りである。
+	// written は、このコミットが触ったと呼び出し側へ報告する表記である。
 	written []string
-	// claimed は、すでに扱った綴りである。**同じ綴りを二度含むリクエストは、
-	// 順序で結果が変わるので受け付けない。**
+	// claimed は、すでに扱った表記である。同じ表記を二度含むリクエストは、
+	// 順序で結果が変わるので受け付けない。
 	claimed []string
 	// planned は、このリクエストが作るディレクトリと、ルートより下にあるその祖先で
 	// ある。まだディスクに無い場所への書き込みを解決できるのは、これがあるからである。
 	planned map[string]bool
 }
 
-// claim は、この綴りを扱うのが初めてであることを確かめて台帳に載せる。
+// claim は、この表記を扱うのが初めてであることを確かめて台帳に載せる。
 func (b *commitBuilder) claim(path string) error {
 	if journalPathAlreadyClaimed(b.claimed, path) {
 		return ErrDuplicatePath
@@ -792,7 +785,7 @@ func (b *commitBuilder) claim(path string) error {
 	return nil
 }
 
-// stage は、リクエストの全体を計画へ落とす。**並びに意味がある。**
+// stage は、リクエストの全体を計画へ落とす。並びに意味がある。
 func (b *commitBuilder) stage() error {
 	for _, phase := range []func() error{
 		b.stageDirectories, b.stageChanges, b.stageMoves,
@@ -807,7 +800,7 @@ func (b *commitBuilder) stage() error {
 
 // stageDirectories は、ディレクトリを作る計画を立てる。
 //
-// **これが先である。** 変更には置き場所が要り、移動には存在する行き先が要る。
+// これが先である。変更には置き場所が要り、移動には存在する行き先が要る。
 func (b *commitBuilder) stageDirectories() error {
 	// ディレクトリが先。変更には置き場所が要り、移動には存在する
 	// 行き先が要る。
@@ -959,7 +952,7 @@ func (b *commitBuilder) stageRemovals() error {
 
 // stageDirectoryRemovals は、ディレクトリの削除を計画する。
 //
-// **最後である。** 実行される時点でそれぞれ空でなければならず、その検査は
+// 最後である。実行される時点でそれぞれ空でなければならず、その検査は
 // 「このリクエストが残すディスクの状態」に対して行う。
 func (b *commitBuilder) stageDirectoryRemovals() error {
 	// ディレクトリの削除は最後で、実行される時点でそれぞれ空でなければならない。
@@ -967,7 +960,7 @@ func (b *commitBuilder) stageDirectoryRemovals() error {
 	// リクエストが移動させ、削除し、あるいはディレクトリとして取り除くエントリは、
 	// その親を生かし続けない。以前は現状のディスクに対して検査していたため、呼び出し
 	// 側は一方のトランザクションで木を空にし、次のトランザクションで取り除かねばなら
-	// なかった — つまり操作が自分で始めたことを終えられず、二つのあいだでクラッシュ
+	// なかった。つまり操作が自分で始めたことを終えられず、二つのあいだでクラッシュ
 	// すれば空の抜け殻が残った。
 	//
 	// 深いものから順が唯一成立する順序であり、ここで整列しておくことが、呼び出し側に

@@ -21,14 +21,14 @@ func assertScannedPermission(t *testing.T, item *Item, _ string) {
 
 func assertPrivateKeyPermissionRisk(t *testing.T, exposed, safe *Item) {
 	t.Helper()
-	// **fixture が書き分けた 0600 と 0644 の差は、ここには現れない。** mode
+	// fixture が書き分けた 0600 と 0644 の差は、ここには現れない。mode
 	// ビットには誰が読めるかが入っていないので、その二つは Windows では同じ
 	// ものである。判定しているのは DACL であり、fixture はどちらも私的な道で
-	// 書いているので、**どちらも閉じている。**
+	// 書いているので、どちらも閉じている。
 	//
 	// 露出を実際に作って判定させるのは windowsacl の側である
-	// （exposure_windows_test.go が icacls で他人に読みを与えて確かめる）。
-	// ここが確かめるのは、**mode ビットからは何も flag しない**ことである。
+	// （exposure_windows_test.go が icacls で別のユーザーに読みを与えて確かめる）。
+	// ここが確かめるのは、mode ビットからは何も flag しないことである。
 	if exposed.PermissionRisk || safe.PermissionRisk {
 		t.Errorf("a key written through the private path was flagged as exposed")
 	}

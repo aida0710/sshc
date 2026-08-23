@@ -1,15 +1,15 @@
 // Command rulegen は、ブラウザにも同じ答えを出してほしい規則を web 側へ配る。
 //
-// **配るのは 2 つである。** ひとつは表——予約語・パターン・上限——で、これは
+// 配るのは 2 つである。ひとつは表。予約語・パターン・上限。で、これは
 // TypeScript の定数として出す。もうひとつは適合コーパスで、入力の一覧と、それらに
 // 対する Go の判定を持つ。
 //
-// **守る契約は「ブラウザはサーバーより厳しくしない」である。** コーパスがあれば、
-// それを検査として書ける——Go が通す入力を web が断ったら赤くなる。逆向き（web の
+// 守る契約は「ブラウザはサーバーより厳しくしない」である。コーパスがあれば、
+// それを検査として書ける。Go が通す入力を web が断ったら赤くなる。逆向き（web の
 // 方が緩い）は赤くしない: サーバーが正しく断り、利用者は理由を受け取るからである。
 //
-// 整形（OpenSSH の引用）だけは別で、緩い厳しいの軸が無い。**同じ入力から同じ文字列
-// が出る**ことを見る——出なければ、画面が見せているものと保存されるものが違う。
+// 整形（OpenSSH の引用）だけは別で、緩い厳しいの軸が無い。同じ入力から同じ文字列
+// が出ることを見る。出なければ、画面が見せているものと保存されるものが違う。
 package main
 
 import (
@@ -25,7 +25,7 @@ import (
 
 // corpus は、両方の側へ突き合わせてほしい入力の全体である。
 //
-// **並びは決めてある。** 生成物が呼び出しごとに変われば、verify-generated が意味の
+// 並びは決めてある。生成物が呼び出しごとに変われば、verify-generated が意味の
 // 無い差分を出す。
 type corpus struct {
 	GroupName []verdict     `json:"groupName"`
@@ -39,7 +39,7 @@ type corpus struct {
 type verdict struct {
 	Input string `json:"input"`
 	Valid bool   `json:"valid"`
-	// Why は、この入力を一覧に入れた理由である。**赤くなった人が読むのはここである。**
+	// Why は、この入力を一覧に入れた理由である。赤くなった人が読むのはここである。
 	Why string `json:"why"`
 }
 
@@ -98,7 +98,7 @@ func constants() string {
 // 出どころは internal/validate で、配っているのは cmd/rulegen である。
 // 変えるならあちらを変えて make generate を走らせること。
 //
-// **パターンは Go の RE2 と JavaScript が同じ意味で読む書き方に限ってある。**
+// パターンは Go の RE2 と JavaScript が同じ意味で読む書き方に限ってある。
 // 文字クラス・アンカー・回数指定だけで、後方参照も先読みも無い。
 
 `)
@@ -109,10 +109,10 @@ func constants() string {
 	fmt.Fprintf(&out, "export const maxGroupSegmentBytes = %d;\n", validate.MaxGroupSegmentBytes)
 	fmt.Fprintf(&out, "export const maxAliasLength = %d;\n", validate.MaxAliasLength)
 	fmt.Fprintf(&out, "export const maxHostnameLength = %d;\n\n", validate.MaxHostnameLength)
-	out.WriteString("// ~/.ssh の中で既に意味を持つ名前。**グループ名にも鍵のファイル名にも効く。**\n")
+	out.WriteString("// ~/.ssh の中で既に意味を持つ名前。グループ名にも鍵のファイル名にも効く。\n")
 	out.WriteString("// どちらも ~/.ssh の直下にその綴りを作る操作だからである。\n")
 	out.WriteString("//\n")
-	out.WriteString("// **大小文字を区別しない。** 既定の macOS ボリュームは \"Config\" と\n")
+	out.WriteString("// 大小文字を区別しない。既定の macOS ボリュームは \"Config\" と\n")
 	out.WriteString("// \"config\" を同じディレクトリエントリとして扱う。\n")
 	out.WriteString("export const reservedNames: ReadonlySet<string> = new Set([\n")
 	for _, name := range validate.ReservedNames {
@@ -124,7 +124,7 @@ func constants() string {
 
 // groupNames は、グループ名について両方の側へ突き合わせてほしい入力である。
 //
-// **食い違いが実際に出ていたものを先に置く。** 予約語の 4 つは、画面が緑を出して
+// 食い違いが実際に出ていたものを先に置く。予約語の 4 つは、画面が緑を出して
 // サーバーが断っていた組で、先頭の `-` は逆に画面だけが断っていた組である。
 var groupNames = []struct{ input, why string }{
 	{"work", "ふつうの名前"},
@@ -135,7 +135,7 @@ var groupNames = []struct{ input, why string }{
 	{"authorized_keys2", "同上"},
 	{"config", "予約語。両方が断っていた"},
 	{"CONFIG", "予約語の大小違い。macOS は同じディレクトリエントリとして扱う"},
-	{"-foo", "先頭の `-`。画面だけが断っていた——いまは両方が断る"},
+	{"-foo", "先頭の `-`。画面だけが断っていた。いまは両方が断る"},
 	{".hidden", "先頭の `.`"},
 	{"a/b/c/d/e/f", "深さちょうど"},
 	{"a/b/c/d/e/f/g", "深さ超過"},
@@ -269,7 +269,7 @@ func refuses(values []string) bool {
 
 // parseLine は、引数部分ひとつを Go に読ませる。
 //
-// **公開の入口を通す。** 行を組み立てて config.Parse に渡し、読み取れた値を見る。
+// 公開のアクセス URLを通す。行を組み立てて config.Parse に渡し、読み取れた値を見る。
 // 非構造化として扱われた行は Values を持たないので、それが断りである。
 func parseLine(input string) ([]string, bool) {
 	file := config.Parse([]byte("Host " + input + "\n"))

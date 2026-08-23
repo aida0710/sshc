@@ -57,14 +57,6 @@ import {
   type MoveTarget,
 } from "./organizer";
 
-// groups は宣言済みのグループ名で、シェルが overview から渡す。
-// Keys 画面はそれらを推測しない: ディレクトリがグループなのは
-// ~/.ssh/config の行がそう言っているからで、その行を読むのは設定エンジンだけだ。
-//
-// secrets は vault であり、最初の面にメソッドを数個足したものではなく
-// 第二の面である: 鍵とは何かはこのパッケージに属し、パスフレーズが
-// どこにあるかは vault に属する。これはサーバーが鍵サービスと
-// シークレットサービスの間で保つのと同じ分離だ。
 type KeysScreenProps = {
   api?: KeysApi;
   onInspector?: (content: InspectorContent) => void;
@@ -76,17 +68,11 @@ type KeysScreenProps = {
 
 type ScreenState = "loading" | "ready" | "error";
 
-// namedStoredFor と dedicatedStoredFor は、この鍵が既に指している保存値の
-// 種類だけを返す。vault は名前・用途・鍵専用 subject には答えるが、値には
-// 決して答えない。それでもフィールドを空欄のままにしてよいとは判断できる。
 
 
 
 
 
-// relocateStem は、ユーザーが置き換えるよう求められている名前の部分だ。
-// サーバーの規則を映しているので、フィールドはサーバーが拒否するであろう
-// 名前ではなく、実際に relocation が変える名前から始まる。
 function relocateStem(item: KeyItem): string {
   const base = item.relativePath.split("/").pop() ?? item.relativePath;
   if (item.kind === "private_key") return base;
@@ -119,7 +105,6 @@ export function KeysScreen({
   } = useGenerationForm();
   const [terminalCommand, setTerminalCommand] = useState<string[] | null>(null);
   const [revealing, setRevealing] = useState<KeyItem | null>(null);
-  // 保管庫のフレーズ一覧は、エージェント登録と割り当ての 2 つのフォームが共有する。
   const storedPhrases = useStoredPhrases();
   const {
     phrases, setPhrases,
@@ -161,8 +146,6 @@ export function KeysScreen({
   const [pendingPurge, setPendingPurge] = useState("");
   const [pendingTrash, setPendingTrash] = useState<KeyItem | null>(null);
   const [failure, setFailure] = useState("");
-  // 整理の状態。folder は左で開いているもの、chosen は動かす対象、
-  // dragging は掴んでいるかどうか（置き場を光らせてよいのはその間だけ）。
   const {
     folder, setFolder,
     chosen, setChosen,
@@ -201,32 +184,14 @@ export function KeysScreen({
 
   const selected = variants.find((variant) => variant.algorithm === algorithm);
   const inProcess = selected === undefined || selected.inProcess;
-  // 描画時に読み取るので、この画面が開いている間に期限が切れた証明書は、
-  // 次に何かがそれを更新した時点で「有効」と説明されなくなる。
   const now = Date.now();
 
-  // closeAllForms は、開いている入力欄をすべて畳む。
-  //
-  // **どの行動もここから始まる。** 別のフォームを開いたまま次を開くと、画面には
-  // 二つの「この鍵について」が同時に出る。以前はこの 3 行が行動ごとに書き下されて
-  // おり、**1 箇所だけ揃っていなかった** —— 保管庫のパネルを開くところだけが、
-  // 自分のフィールドを手で空にして、保管庫の一覧はそのまま持ち越していた。
-  //
-  // 持ち越しても嘘にはならない（あの一覧は鍵ごとではなく全体のもので、判定は
-  // 鍵の綴りで引く）。それでも畳むことにしたのは、**これから取り直すものを根拠に
-  // 何かを言わない**方が説明しやすいからである——読み込みが返るまでは何も言わず、
-  // 返ってから言う。
   function closeAllForms() {
     closePassphraseForm();
     closeAgentForm();
     closeStoredPassphraseForm();
   }
 
-  // rowActions は、鍵の行から始められることの全部である。
-  //
-  // **行には setter ではなく意図を渡す。** 「保管庫のパネルを開く」は、開く前に他の
-  // 入力欄を畳み、開いたあとに一覧を取り直すところまでを含む——その順序はこの画面の
-  // 持ち物であって、行が知っていてよいことではない。
   const rowActions: KeyRowActions = {
     onSelect: (item) => setSelectedKey((current) => (current === item.id ? null : item.id)),
     onToggleChosen: (item, picked) => {
@@ -274,7 +239,6 @@ export function KeysScreen({
     },
   };
 
-  // 選ばれた鍵の詳細は右のペインが持つ。消えた鍵のペインは閉じる。
   useEffect(() => {
     if (onInspector === undefined) return;
     const item = inventory?.items.find((candidate) => candidate.id === selectedKey);
@@ -325,8 +289,6 @@ export function KeysScreen({
   }
 
 
-  // パスフレーズは 1 回の送信の間だけコンポーネント状態にとどまり、
-  // 成功時にも失敗時にもクリアされる。他のどこにも保存されることはない。
   async function submitPassphrase(item: KeyItem) {
     setFailure("");
     try {
@@ -344,9 +306,6 @@ export function KeysScreen({
     }
   }
 
-  // エージェントに鍵を返すよう頼む。何も破棄されないので確認は不要だ:
-  // 最悪の結果はもう一度パスフレーズを求められることだけだ。応答は
-  // その後エージェントが保持しているものを伝え、画面はそれを再読み込みする。
   async function removeFromAgent(keyId: string) {
     try {
       await api.deregisterFromAgent(keyId);
@@ -357,10 +316,6 @@ export function KeysScreen({
   }
 
 
-  // 名前はフォームが開いたときに読み込まれ、それより前ではない。起動時には
-  // 何も尋ねられず、一度も鍵を登録しない画面は vault に一切触れない。
-  // 閉じた vault は何も答えず、それはエラーではなくピッカーなしとして
-  // 表示される: このフォームは vault がなくても動作するし、以前からそうだった。
   async function loadPhrases() {
     try {
       const status = await secrets.passwordVault();
@@ -392,10 +347,6 @@ export function KeysScreen({
   async function storeAndAssignPhrase(item: KeyItem) {
     if (storedPhraseName === "" || storedPhraseSecret === "") return;
     setFailure("");
-    // SetCredential は同名の値を置き換える（共有資格情報の rotation）操作でもある。
-    // 鍵一覧の「新規保存」でそれを行うと、この名前を使う別の鍵まで黙って変わる。
-    // 既存名は上の picker から割り当てさせ、値の更新は用途を一覧できる Secrets
-    // 画面だけに限定する。
     if (phrases.some((credential) => credential.name === storedPhraseName)) {
       setStoredPhraseSecret("");
       setFailure(t("keys.storedPassphraseExists"));
@@ -408,8 +359,6 @@ export function KeysScreen({
       setDedicatedPhrasePaths((current) => current.filter((path) => path !== item.relativePath));
       closeStoredPassphraseForm();
     } catch {
-      // 値は成功時にも失敗時にもDOMから消す。名前は、入力を直せるよう
-      // 残してよいが、秘密そのものには同じ扱いをしない。
       setStoredPhraseSecret("");
       setFailure(t("keys.storePassphraseFailed"));
     }
@@ -427,11 +376,6 @@ export function KeysScreen({
     }
   }
 
-  // 登録操作は、パスフレーズ変更フォームとまったく同じ長さだけパスフレーズを
-  // 保持する: 1 回の送信の間だけで、成功時にも失敗時にもクリアされる。
-  // 応答はわざと捨てる——リフレッシュがインベントリを再読み込みするので、
-  // その後画面が示すのは、エージェントが報告する保持内容であって、
-  // このリクエストが主張した内容ではない。
   async function submitRegistration(item: KeyItem) {
     setFailure("");
     try {
@@ -447,10 +391,6 @@ export function KeysScreen({
     }
   }
 
-  // 公開鍵は秘密ではないので、これは確認も監査記録もない普通の
-  // 読み取りだ。コピーされる前に表示されるのは、この画面の他のすべての
-  // 値と同じ理由による: クリップボードに載るのは、ユーザーが
-  // 見ているものであるべきだ。
   async function showPublicKey(item: KeyItem) {
     setFailure("");
     try {
@@ -462,12 +402,6 @@ export function KeysScreen({
     }
   }
 
-  // moveChosen は選ばれた鍵をひとつの置き場へまとめて移す。
-  //
-  // **一本が断られても止めない。** relocate は鍵ごとの取引なので、動かせた
-  // ものは動かし、動かせなかったものは理由と一緒に名前を出す（moveInto が
-  // その仕分けを持つ）。まとめて拒否すると、10 本のうち 1 本のせいで 9 本が
-  // 動かないことになる。
   async function moveChosen(target: MoveTarget) {
     if (inventory === null) return;
     const items = inventory.items.filter((item) => chosen.has(item.id));
@@ -479,12 +413,7 @@ export function KeysScreen({
     await refresh();
   }
 
-  // つかんだものが選ばれていなければ、それだけを選ぶ。**掴んだものと動くものを
-  // 食い違わせない** —— 選択の外にある行をつかんだのに選択の方が動いたら、
-  // 利用者は自分が何を動かしたのかを見ていない。
   function beginDrag(event: DragEvent<HTMLSpanElement>, item: KeyItem) {
-    // **何か載せないと、ドラッグが始まらないブラウザがある。** 運ぶのは
-    // この文字列ではなく画面の状態の方だが、載せること自体に意味がある。
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", item.relativePath);
     setDragging(true);
@@ -492,9 +421,6 @@ export function KeysScreen({
   }
 
 
-  // ブロックされた relocation は、報告して忘れるべき失敗ではない:
-  // サーバーは何も書き込まず理由を伝えたので、その理由は画面に残り、
-  // フォームはユーザーが入力した内容を残したまま開いたままになる。
   async function submitRelocation(item: KeyItem) {
     setFailure("");
     setRelocated(null);
@@ -524,10 +450,6 @@ export function KeysScreen({
     }
   }
 
-  // 鍵はフィンガープリントグループ全体——秘密鍵とその隣の公開鍵——ごと
-  // ごみ箱に送られ、それを名指すすべての IdentityFile は
-  // 何も指さないまま取り残される。行は既にそれがどのホストかを示していたのに、
-  // ボタンは一度もそれに触れず、1 回の押下で全体が実行された。
   function trashGroup(item: KeyItem): KeyItem[] {
     const fingerprint = item.fingerprint;
     if (fingerprint === "") return [item];
@@ -697,12 +619,7 @@ export function KeysScreen({
         actions={rowActions}
       />
       </div>
-      {/*
-        **ゴミ箱は別の用である。** ここでするのは「戻す」か「完全に消す」で
-        あって、いま持っている鍵を整えることではない。畳んであるのは、1000 行
-        の一番下に開いたまま置いても誰も辿り着かないからで、**件数だけは畳んだ
-        ままでも見える** ——空でないことは、開く前に分かってよい。
-      */}
+
       <details className="rounded-xl border border-line bg-card p-4">
         <summary className="cursor-pointer text-sm font-medium text-ink">
           {t("keys.trashSummary", { count: trash.entries.length })}
@@ -803,13 +720,7 @@ export function KeysScreen({
         </section>
       )}
 
-      {/*
-        スキャナが解釈を拒んだファイルは、以前は単にテーブルから欠落していただけで、
-        それは不完全なインベントリを完全なものに見せていた。
-        design §6.3 は ~/.ssh 配下のすべてを分類する。これらはそれが
-        分類できなかった項目であり、そう言うことが「ここには何もない」と
-        「ここには読めなかった何かがある」の違いになる。
-      */}
+
       {inventory.unreadable.length > 0 && (
         <section aria-labelledby="unreadable-heading" className="flex flex-col gap-2">
           <h3 id="unreadable-heading" className="text-sm font-medium text-notice-ink">
@@ -876,9 +787,6 @@ export function KeysScreen({
             </table>
           )
         ) : (
-          // ssh-add は SSH_AUTH_SOCK が指すものと話す。「エージェントが動いていない」
-          // と言うのは推測になる: このプロセスに単にソケットが渡されて
-          // いないだけかもしれない。メッセージは何が足りないかを言い、理由は言わない。
           <p className="text-sm text-notice-ink">
             {t("keys.agentUnavailable")}
           </p>
@@ -914,12 +822,7 @@ export function KeysScreen({
 
       <RelocateForm form={relocateForm} groups={groups} onSubmit={(item) => void submitRelocation(item)} />
 
-      {/*
-        リネームが何をしたか、あるいは何がそれを止めたか。どちらも同じ種類の事実の
-        リストだ: どのファイルが移動したか、どの設定行が書き換えられたか、そして
-        このアプリケーションが意図的に触れなかったものは何か。「完了」とだけ言う
-        リネームは、ユーザー自身では確認できない部分を隠してしまう。
-      */}
+
       <RelocateResult result={relocated} onClose={() => setRelocated(null)} />
 
       {revealing !== null && (

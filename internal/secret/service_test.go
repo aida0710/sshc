@@ -367,7 +367,7 @@ func TestRenameCarriesThePasswordThroughAWrite(t *testing.T) {
 // 以前はひとつも保持していなかった。パスワードストアの古いコピーが残されるのは
 // 誰も望まないだろう、という理屈である。その代償が取り消しだった。事故で壊れた
 // vault には、戻る先が何もなかったのである。いまバックアップはこの vault 自身の
-// 鍵で封じられているので、古い世代が明かすものは、生きたファイルのコピーが明かす
+// 鍵で暗号化されているので、古い世代が明かすものは、現行ファイルのコピーが明かす
 // もの以上ではない。
 func TestTheVaultKeepsGenerationsAndNoneOfThemIsReadable(t *testing.T) {
 	service, home := newService(t)
@@ -408,7 +408,7 @@ func TestTheVaultKeepsGenerationsAndNoneOfThemIsReadable(t *testing.T) {
 }
 
 // サービスの資格情報まわりの面。すべての画面とすべてのルートが通る場所である。
-// ロックされた vault は空リストではなく ErrLocked を答える。「見えない」と
+// ロックされた vault は空リストではなく ErrLocked を返す。「見えない」と
 // 「存在しない」は別の事実だからだ。
 func TestCredentialsThroughTheService(t *testing.T) {
 	service, _ := newService(t)
@@ -501,9 +501,9 @@ func TestKeyPassphraseRelocationPersists(t *testing.T) {
 	}
 }
 
-// オブジェクトストアの設定は同じマスターパスワードで封じられ、vault の中ではなく
-// 隣に置かれる。vault は移動する — remotesync.Collect は sshc/secrets を明示的に
-// 名指しする — のであり、バケットへの鍵がバケットの中にあってはならない。
+// オブジェクトストアの設定は同じマスターパスワードで暗号化され、vault の中ではなく
+// 隣に置かれる。vault は移動する、remotesync.Collect は sshc/secrets を明示的に
+// 指定する。バケットへの鍵をバケット内に保存してはならない。
 func TestSyncSettingsAreSealedBesideTheVaultAndNotInIt(t *testing.T) {
 	service, home := newService(t)
 	if err := service.Initialise(passphrase); err != nil {
@@ -546,7 +546,7 @@ func TestSyncSettingsAreSealedBesideTheVaultAndNotInIt(t *testing.T) {
 }
 
 // 一度も設定されていないことは失敗ではなく状態である。設定を与えられていない
-// マシンはゼロ値を答えるので、画面はエラーではなく空のフォームを表示
+// マシンはゼロ値を返すので、画面はエラーではなく空のフォームを表示
 // できる。
 func TestSyncSettingsAnswerEmptyBeforeTheyAreEverSet(t *testing.T) {
 	service, _ := newService(t)
@@ -658,7 +658,7 @@ func TestReadingTheStatusDoesNotHoldTheVaultOpen(t *testing.T) {
 	}
 }
 
-// Verify は「これはマスターパスワードか」に、何も変えずに答える。
+// Verify は「これはマスターパスワードか」に、何も変えずに返す。
 //
 // スナップショットが二つ目のパスワードではなくマスターパスワードを使えるのは、
 // これのおかげだ。打ち込まれたパスワードは、鍵として使う前に検査できる。だから
@@ -681,7 +681,7 @@ func TestVerifyAnswersWhetherThatIsTheMasterPassword(t *testing.T) {
 		t.Errorf("Verify with the wrong password = %v, %v, want false and no error", ok, err)
 	}
 
-	// そしてファイルから答えるので、閉じた vault にも尋ねられる。尋ねる画面は、
+	// そしてファイルから返すので、閉じた vault にも尋ねられる。尋ねる画面は、
 	// vault が閉じていると告げられたばかりの画面である。
 	service.Lock()
 	if ok, err := service.Verify(passphrase); err != nil || !ok {
@@ -693,7 +693,7 @@ func TestVerifyAnswersWhetherThatIsTheMasterPassword(t *testing.T) {
 //
 // 秘密鍵のバックアップは、以前はその鍵のコピーが ~/.ssh/sshc/backups/ に置かれる
 // ことを意味していた。だからこそ、それを生みうる書き込みはバックアップをまったく
-// 求めず、その結果、決して取り消せなかった。封をすることが、その取り消しを買い
+// 求めず、その結果、決して取り消せなかった。暗号化することが、その取り消しを買い
 // 戻している。
 func TestBackupsAreSealedWithTheMasterPasswordAndOpenedWithIt(t *testing.T) {
 	service, _ := newService(t)
@@ -718,7 +718,7 @@ func TestBackupsAreSealedWithTheMasterPasswordAndOpenedWithIt(t *testing.T) {
 		t.Errorf("OpenBackup returned %q", opened)
 	}
 
-	// 閉じた vault は何も封じず、何も開かない。アプリケーションがマスターパスワードの
+	// 閉じた vault は何も暗号化せず、何も開かない。アプリケーションがマスターパスワードの
 	// 後ろにあるのは、まさに何かが書かれている最中にこれが起きないようにするためで
 	// あり、平文で書く代わりに大きな音を立てて失敗する。
 	service.Lock()
@@ -730,11 +730,11 @@ func TestBackupsAreSealedWithTheMasterPasswordAndOpenedWithIt(t *testing.T) {
 	}
 }
 
-// マスターパスワードの変更は、古いパスワードが保持していたすべてを封じ直す。
+// マスターパスワードの変更は、古いパスワードが保持していたすべてを暗号化し直す。
 //
-// vault も、封をされた同期設定も、すべての世代バックアップも、そこから導出された
-// 鍵で封じられている。したがって vault だけを置き換える変更は、残りを、もう誰も
-// 使わないパスワードで開ける状態のまま残す — それは失うのと同じ
+// vault も、暗号化された同期設定も、すべての世代バックアップも、そこから導出された
+// 鍵で暗号化されている。したがって vault だけを置き換える変更は、残りを、もう誰も
+// 使わないパスワードで開ける状態のまま残す、それは失うのと同じ
 // ことだ。
 func TestChangingTheMasterPasswordReSealsTheVaultTheSettingsAndTheBackups(t *testing.T) {
 	service, home := newService(t)
@@ -747,7 +747,7 @@ func TestChangingTheMasterPasswordReSealsTheVaultTheSettingsAndTheBackups(t *tes
 	if err := service.SetSyncSettings(secret.SyncSettings{Bucket: "b", AccessKeyID: "AKID"}); err != nil {
 		t.Fatal(err)
 	}
-	// 二度目の書き込み。これにより、封じ直すべき vault の世代バックアップが存在する。
+	// 二度目の書き込み。これにより、暗号化し直すべき vault の世代バックアップが存在する。
 	if err := service.SetCredential(secret.KindPassword, "office-vm", "hunter3"); err != nil {
 		t.Fatal(err)
 	}
@@ -818,8 +818,8 @@ func TestChangingTheMasterPasswordRefusesTheWrongCurrentOne(t *testing.T) {
 // 誤った推測は、だんだん遅くなる。
 //
 // vault ファイルはコピーしてオフラインで攻撃できるので、これは攻撃者と中身の
-// あいだに立つものではない — それは Argon2id である。これが止めるのは安価な場合、
-// すなわち、動作中のアプリケーションに対して、答えられる限りの速さでパスワードを
+// あいだに立つものではない、それは Argon2id である。これが止めるのは安価な場合、
+// すなわち、動作中のアプリケーションに対して、判定できる限りの速さでパスワードを
 // 試すローカルのプロセスである。
 func TestWrongMasterPasswordsAreAnsweredMoreSlowly(t *testing.T) {
 	clock := time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
@@ -848,7 +848,7 @@ func TestWrongMasterPasswordsAreAnsweredMoreSlowly(t *testing.T) {
 		t.Errorf("the wait grew past its ceiling: %v", waited[len(waited)-1])
 	}
 
-	// 正しいものは即座に答えられ、誤ったものが積み上げたものを消し去る。
+	// 正しいパスワードは即座に受理され、誤入力による遅延をリセットする。
 	waited = nil
 	if err := service.Unlock(passphrase); err != nil {
 		t.Fatalf("Unlock with the right password = %v", err)
@@ -1636,9 +1636,9 @@ func TestDedicatedKeyPassphraseRelocationPersists(t *testing.T) {
 	}
 }
 
-// **bucket を編集しただけで、リモートのスナップショットが誰にも開けなくなっては
-// ならない。** 設定の form は鍵の欄を持たない——鍵を見せるのは作った一度だけで、
-// 以後は伏せ字である——ので、空で来た鍵は「消せ」ではなく「触るな」である。
+// bucket を編集しただけで、リモートのスナップショットが誰にも開けなくなっては
+// ならない。設定の form は鍵の欄を持たない。鍵を見せるのは作った一度だけで、
+// 以後は伏せ字である。ので、空で来た鍵は「消せ」ではなく「触るな」である。
 func TestSettingsWithoutAKeyKeepTheKeyThatIsAlreadyStored(t *testing.T) {
 	service, _ := newService(t)
 	if err := service.Initialise(passphrase); err != nil {
@@ -1714,8 +1714,8 @@ func TestSettingTheKeyNeedsAnOpenVault(t *testing.T) {
 	}
 }
 
-// **巡回が保管庫を開けっぱなしにしてはならない。** 1 分ごとに設定を読む読み手が
-// アイドルの時計を戻し続ければ、自動施錠は永久に来ない——誰も居ない机の上で、
+// 巡回が保管庫を開けっぱなしにしてはならない。1 分ごとに設定を読む読み手が
+// アイドルの時計を戻し続ければ、自動ロックは永久に来ない。誰も居ない机の上で、
 // 鍵がプロセスの記憶に残り続けることになる。
 func TestAnUnattendedReaderDoesNotKeepTheVaultOpen(t *testing.T) {
 	home := t.TempDir()
@@ -1733,8 +1733,8 @@ func TestAnUnattendedReaderDoesNotKeepTheVaultOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// **時計を数字で書き写さない。** 書き写せば、時計を延ばした日にこの検査は
-	// 何も言わないまま緑になる——実際、8 時間から延ばしたときにそうなった。
+	// 時計を数字で書き写さない。書き写せば、時計を延ばした日にこの検査は
+	// 何も言わないまま緑になる。実際、8 時間から延ばしたときにそうなった。
 	minutes := int((secret.IdleTimeout + time.Hour).Minutes())
 	for minute := 0; minute < minutes; minute++ {
 		clock = clock.Add(time.Minute)
@@ -1745,7 +1745,7 @@ func TestAnUnattendedReaderDoesNotKeepTheVaultOpen(t *testing.T) {
 	}
 }
 
-// 逆に、人が読んだのなら時計は戻る。止めているのは呼び出し側の性質であって、
+// 逆に、ユーザーが読んだのなら時計は戻る。止めているのは呼び出し側の性質であって、
 // 読んだという事実ではない。
 func TestAReaderThatIsNotTheLoopKeepsTheVaultOpen(t *testing.T) {
 	home := t.TempDir()
@@ -1774,9 +1774,9 @@ func TestAReaderThatIsNotTheLoopKeepsTheVaultOpen(t *testing.T) {
 	}
 }
 
-// **頼まれれば、時計を待たずに閉じる。**
+// 頼まれれば、時計を待たずに閉じる。
 //
-// 時計はどこでも同じになったが、施錠そのものが消えたわけではない。
+// 時計はどこでも同じになったが、ロックそのものが消えたわけではない。
 func TestAVaultClosesTheMomentItIsAskedTo(t *testing.T) {
 	clock := time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
 	service, _ := newClockedService(t, func() time.Time { return clock })
@@ -1796,10 +1796,10 @@ func TestAVaultClosesTheMomentItIsAskedTo(t *testing.T) {
 	}
 }
 
-// **触れられないまま置かれた金庫は、時計で閉じる。**
+// 使用されない vault はタイムアウトでロックする。
 //
 // どこで走っていても同じである。`sshc engine` は systemd の下で何週間も走り、
-// 蓋も画面ロックも無い——そして窓を閉じても生き続ける engine も、同じ状況である。
+// 蓋も画面ロックも無い。そして窓を閉じても実行を続ける engine も、同じ状況である。
 func TestAVaultLeftAloneShutsItself(t *testing.T) {
 	clock := time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
 	service, _ := newClockedService(t, func() time.Time { return clock })

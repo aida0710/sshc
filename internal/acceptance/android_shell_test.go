@@ -8,17 +8,16 @@ import (
 	"testing"
 )
 
-// ここにあるのは、**ネイティブの外殻とページの間に在って、機械が見ていなかった
-// 契約**である。
+// Android のネイティブ層と Web UI の間で共有する設定値を検証する。
 //
-// 外殻は Java で、ページは CSS で、engine は Go である。gomobile は Go の定数を
+// ネイティブ層は Java で、ページは CSS で、engine は Go である。gomobile は Go の定数を
 // Java へ運んでくれるので、失敗理由の番号は Go に 1 つだけ在ればよくなった
-// （mobile.KindListenFailed を Java がそのまま読む）。**色にはその道が無い。**
+// （mobile.KindListenFailed を Java がそのまま読む）。色にはその道が無い。
 // WebView の中の CSS 変数を、外側の FrameLayout が読む手段は無い。
 //
 // だから色だけは 2 か所に在り、揃っていることを誰かが見なければならない。
-// 揃っていないと、ページの上端に別の板が乗っているように見える——落ちないし、
-// 例外も出ないので、**見た人が違和感を言うまで誰も気づかない。**
+// 揃っていないと、ページの上端に別の板が乗っているように見える。落ちないし、
+// 例外も出ないので、見たユーザーが違和感を言うまで誰も気づかない。
 
 func readRepoFile(t *testing.T, parts ...string) string {
 	t.Helper()
@@ -60,15 +59,13 @@ func androidChromeColours(t *testing.T, java string) (dark, light string) {
 	return found[1], found[2]
 }
 
-// **ページの帯と、その外側の余白は同じ色である。**
+// ページの帯と、その外側の余白は同じ色である。
 //
 // padding の外側に見えるのは FrameLayout の背景であり、WebView 自身の背景では
 // ない。ページのツールバーと違う色を置くと、画面の上端に別の板が乗っているよう
 // に見える。
 //
-// 以前ここは、MainActivity のコメントが「2 か所に書くのは、ネイティブの外殻が
-// ページのトークンを読む手段を持たないためである」と**認めたまま**放置されて
-// いた。手段が無いことは、揃っているかを見なくてよい理由にはならない。
+// MainActivity は Web UI の CSS 変数を直接参照できないため、両方の値を検証する。
 func TestTheAndroidChromeMatchesThePageToolbar(t *testing.T) {
 	css := readRepoFile(t, "web", "src", "index.css")
 	java := readRepoFile(t, "android", "app", "src", "main", "java",
@@ -95,13 +92,13 @@ func TestTheAndroidChromeMatchesThePageToolbar(t *testing.T) {
 	}
 }
 
-// **番号は Java に書かれていない。**
+// 番号は Java に書かれていない。
 //
 // gomobile は export された定数を Java 側にも生やすので、失敗理由は
 // mobile/sshc.go の iota だけが持てばよい。以前ここは `case 2:` と直に書かれて
-// おり、**iota の途中に一つ挿すだけで Android が黙って別の文言を出す**状態だった。
+// おり、iota の途中に一つ挿すだけで Android が暗黙に別の文言を出す状態だった。
 //
-// 綴りが戻らないことを、ここで見張る。
+// Java 側に独自の失敗種別が再導入されないことを検証する。
 func TestTheAndroidShellReadsTheFailureKindsFromGo(t *testing.T) {
 	java := readRepoFile(t, "android", "app", "src", "main", "java",
 		"com", "github", "aida0710", "sshc", "MainActivity.java")

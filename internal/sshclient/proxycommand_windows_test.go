@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// **PATH では探さない。** 探せば、`cmd.exe` という名前の別のものを起こしうる。
+// PATH では探さない。探せば、`cmd.exe` という名前の別のものを起動しうる。
 // Windows 自身が置いた場所だけを見る。
 func TestTheCommandInterpreterComesFromWindowsItself(t *testing.T) {
 	root := t.TempDir()
@@ -20,7 +20,7 @@ func TestTheCommandInterpreterComesFromWindowsItself(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// ComSpec が指しているなら、それが答えである。
+	// ComSpec が指しているなら、それが結果である。
 	found, err := commandInterpreter(func(name string) (string, bool) {
 		if name == "ComSpec" {
 			return shell, true
@@ -42,8 +42,8 @@ func TestTheCommandInterpreterComesFromWindowsItself(t *testing.T) {
 		t.Errorf("without ComSpec = %q, %v; want %q", found, err, shell)
 	}
 
-	// **相対パスの ComSpec は受け取らない。** そこを差し替えられれば、
-	// 起こすのは Windows が置いたものではなくなる。
+	// 相対パスの ComSpec は受け取らない。そこを差し替えられれば、
+	// 起動するのは Windows が置いたものではなくなる。
 	if _, err := commandInterpreter(func(name string) (string, bool) {
 		if name == "ComSpec" {
 			return "cmd.exe", true
@@ -53,7 +53,7 @@ func TestTheCommandInterpreterComesFromWindowsItself(t *testing.T) {
 		t.Errorf("a relative ComSpec = %v, want ErrNoInterpreter", err)
 	}
 
-	// 何も無ければ、起こす相手が居ないと言う。
+	// 何も無ければ、起動する相手が居ないと言う。
 	if _, err := commandInterpreter(func(string) (string, bool) { return "", false }); !errors.Is(err, ErrNoInterpreter) {
 		t.Errorf("with nothing to go on = %v, want ErrNoInterpreter", err)
 	}

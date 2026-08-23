@@ -7,21 +7,11 @@ import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 
 type LockScreenProps = {
-  // exists は、この画面が行う 2 つのことを区別する。両者は同じに
-  // 見えて違う: 一方は復元できない vault を作り、もう一方は
-  // 既にすべてを保持しているものを開く。
   exists: boolean;
   onOpen: () => void;
   api?: IntegrationsApi;
 };
 
-// 入り口。
-//
-// マスターパスワードはもはや画面ごとのアンロックではない。他の
-// 何に到達するよりも前に尋ねられる。すべての世代バックアップが
-// それで封印されているからだ: vault が閉じている間に起きた書き込みは、
-// 平文でコピーを残すか、コピーを一切残さないかのどちらかになり、
-// どちらになるかは、ファイルを編集している間誰も意識していない状態次第だった。
 export function LockScreen({ exists, onOpen, api = integrationsApi }: LockScreenProps) {
   const t = useTranslate();
   const [password, setPassword] = useState("");
@@ -62,11 +52,7 @@ export function LockScreen({ exists, onOpen, api = integrationsApi }: LockScreen
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-4 p-6">
       <h1 className="text-lg font-medium">{t("shell.title")}</h1>
       <p className={hintText}>{exists ? t("lock.explainOpen") : t("lock.explainNew")}</p>
-      {/*
-        パスワードを選ぶその場で伝え、後からは伝えない。誰も持っていない
-        パスワードから導出された鍵に、復元の経路はなく、それを初めて
-        入力する人こそが、それについて行動できる唯一の人物だ。
-      */}
+
       {exists ? null : <p className="text-sm text-notice-ink">{t("lock.noRecovery")}</p>}
       {error === "" ? null : (
         <Notice tone="danger">{error}</Notice>

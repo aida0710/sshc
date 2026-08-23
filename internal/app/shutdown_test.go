@@ -18,8 +18,6 @@ import (
 	"sshc/internal/terminal"
 )
 
-// stuckProcess は、Hangup の中で返らない相手である。応答しないリモートに向いた
-// ssh が、まさにこの形になる。
 type stuckProcess struct {
 	release chan struct{}
 	forced  atomic.Bool
@@ -35,7 +33,6 @@ func (p *stuckProcess) Read([]byte) (int, error) {
 func (p *stuckProcess) Write(b []byte) (int, error) { return len(b), nil }
 func (p *stuckProcess) Resize(terminal.Size) error  { return nil }
 
-// Hangup は返らない。**これが停止処理の本当の相手である。**
 func (p *stuckProcess) Hangup() error { <-p.release; return nil }
 
 func (p *stuckProcess) Wait() terminal.ExitInfo { <-p.release; return terminal.ExitInfo{Code: -1} }
@@ -50,23 +47,17 @@ func (p *stuckProcess) ForceClose() error {
 func testDependencies(t *testing.T) Dependencies {
 	t.Helper()
 	return Dependencies{
-		Home:   t.TempDir(),
-		Random: bytes.NewReader(bytes.Repeat([]byte{0x31}, 512)),
-		Listen: net.Listen,
-		UI:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Owner:  handoff.OwnerEngine,
-		PID:    4242,
-		// 秒を待たない。締切そのものが検査対象であって、その長さではない。
+		Home:            t.TempDir(),
+		Random:          bytes.NewReader(bytes.Repeat([]byte{0x31}, 512)),
+		Listen:          net.Listen,
+		UI:              fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
+		Logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Owner:           handoff.OwnerEngine,
+		PID:             4242,
 		ShutdownTimeout: 40 * time.Millisecond,
 	}
 }
 
-// **締切は、後始末がどこまで進んだかと無関係に張られる。**
-//
-// 返らない Hangup を抱えたセッションが一本あっても、その締切に達したら強制停止は
-// 始まる。そして合流は、それが本当に終わるまで返らない——engine lock を手放すのは
-// この後だからである。
 func TestUnwindForcesABlockedTerminalAtTheDeadline(t *testing.T) {
 	dependencies := testDependencies(t)
 	built, err := build(dependencies, "test")
@@ -107,8 +98,6 @@ func TestUnwindForcesABlockedTerminalAtTheDeadline(t *testing.T) {
 	}
 }
 
-// 後始末は、どの段が失敗しても後ろの段を走らせる。ここでは名簿がもう無い状態から
-// 始めて、それでも合流と施錠と listener の停止が起きることを見る。
 func TestUnwindContinuesAfterAFailedHandoffRemoval(t *testing.T) {
 	dependencies := testDependencies(t)
 	built, err := build(dependencies, "test")
@@ -118,7 +107,6 @@ func TestUnwindContinuesAfterAFailedHandoffRemoval(t *testing.T) {
 	served := make(chan error, 1)
 	go func() { served <- built.server.Serve() }()
 
-	// 誰かが先に消した名簿。削除は失敗するが、止まってはならない。
 	if err := handoff.Remove(HandoffDir(dependencies.Home), built.document.Secret); err != nil {
 		t.Fatal(err)
 	}
@@ -131,11 +119,6 @@ func TestUnwindContinuesAfterAFailedHandoffRemoval(t *testing.T) {
 	}
 }
 
-// 停止を始めた server は、状態を変える要求を断る。
-//
-// **ただし門は Security の後ろにある。** 無効な Host や origin の要求は、停止中
-// かどうかに関わらず今までどおり弾かれ、入場の数にも入らない。この順序は意図で
-// あり、ミドルウェアの並べ替えで静かに変わってはならない。
 func TestStoppingRefusesValidMutationsAfterSecurityHasAcceptedThem(t *testing.T) {
 	dependencies := testDependencies(t)
 	built, err := build(dependencies, "test")
@@ -170,8 +153,6 @@ func TestStoppingRefusesValidMutationsAfterSecurityHasAcceptedThem(t *testing.T)
 		return response.StatusCode
 	}
 
-	// 停止前は、門を通って本来のハンドラへ届く。ブートストラップの資格情報が
-	// 無いので受理はされないが、503 ではない。
 	if status := post(t, true); status == http.StatusServiceUnavailable {
 		t.Fatal("a mutation was refused as stopping before stopping began")
 	}
@@ -185,7 +166,6 @@ func TestStoppingRefusesValidMutationsAfterSecurityHasAcceptedThem(t *testing.T)
 		t.Fatalf("invalid-origin mutation during stopping = %d, want %d", status, http.StatusForbidden)
 	}
 
-	// 読み取りは、停止中でも門で断られない。
 	health, err := http.NewRequest(http.MethodGet, base+"/api/v1/health", nil)
 	if err != nil {
 		t.Fatal(err)

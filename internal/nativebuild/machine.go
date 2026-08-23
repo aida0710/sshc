@@ -7,17 +7,8 @@ import (
 	"fmt"
 )
 
-// VerifyBinaryArchitecture は、焼けた実行ファイルが本当にその行き先のものかを
-// 見る。
-//
-// **名前は中身を保証しない。** `verify-artifact-name` が確かめているのは綴り
-// だけであり、`sshc-linux-arm64` という名前の amd64 バイナリは、その検査を
-// 通り抜ける。束に一つの実体を使い回せば、Linux の AppImage に macOS の
-// バイナリが入る——**ビルドは通り、配ってから初めて壊れる。**
-//
-// この検査は、どのホストでも走る。arm64 の Windows を持っていなくても、
-// arm64 の束に arm64 の CLI が入っていることは、ここで言える。走ることまでは
-// 言えないが、間違ったものが入っていないことは言える。
+// VerifyBinaryArchitecture はバイナリヘッダーの OS と architecture を検証する。
+// 実行検証ではないため、クロスコンパイルした成果物にも使用できる。
 func VerifyBinaryArchitecture(path, goos, goarch string) error {
 	switch goos {
 	case "windows":

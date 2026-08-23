@@ -26,21 +26,11 @@ const (
 type invocation struct {
 	Kind invocationKind
 	Args []string
-	// Port は `sshc engine --port N` で選ばれた受け口である。0 は「選んでいない」。
-	//
-	// **旗は保存された設定より強い。** その場で決めた人が居るのに、書いてある方を
-	// 使えば、打った番号がどこにも効かない。
+	// Port は `sshc engine --port N` の待受ポートで、0 は未指定を表す。
 	Port int
-	// Replace は、走っている engine を止めてから起こしてよいという合図である。
-	//
-	// **端末で訊く道とは別に、これが要る。** 手順の中や supervisor の下では
-	// 訊く相手が居ない——そこでは、書いた人が先に答えを決めておくしかない。
+	// Replace は既存の engine を確認なしで停止して置き換える。
 	Replace bool
-	// JSON は `sshc status --json` で選ばれる、機械が読む形である。
-	//
-	// **既定が人向けになったので、旗が要る。** 以前ここは JSON しか出さず、
-	// それはメニューバーが読むためだった。読み手が人に変わっても、**手順の中から
-	// 読んでいる道を黙って塞がない。**
+	// JSON は `sshc status --json` の機械可読出力を選択する。
 	JSON bool
 }
 
@@ -80,8 +70,7 @@ func parseInvocation(argv []string) (invocation, error) {
 		}
 		return invocation{Kind: invocationChoose, Args: copyInvocationArgs(args)}, nil
 	case runSubcommand:
-		// **接続先とコマンドを、ひとつの語で兼ねさせない。** 先頭が接続先で、
-		// 残りがすべてコマンドである。境目を推測する余地を作らない。
+		// 先頭引数を接続先、残りをリモートコマンドとして扱う。
 		if len(args) < 2 {
 			return invalidInvocation("run requires an alias and a command")
 		}
@@ -107,8 +96,8 @@ func parseInvocation(argv []string) (invocation, error) {
 		}
 	case helpSubcommand, "-h", "--help":
 		return noArguments(invocationHelp, word, args)
-	// **旗も語も、同じところへ着く。** `sshc version` が正式だが、`--version` は
-	// 誰もが最初に打つ形である——受けないと、入れた直後の一行目が usage と
+	// 旗も語も、同じところへ着く。`sshc version` が正式だが、`--version` は
+	// 誰もが最初に打つ形である。受けないと、入れた直後の一行目が usage と
 	// 終了コード 2 になる。実際 docs/release-install.md はそれを案内していた。
 	case versionSubcommand, "-v", "--version":
 		return noArguments(invocationVersion, word, args)
@@ -123,10 +112,7 @@ func parseInvocation(argv []string) (invocation, error) {
 	return invocation{Kind: invocationConnect, Args: []string{word}}, nil
 }
 
-// parseEngineFlags は `sshc engine` の旗を読む。
-//
-// **旗は 2 つだけである。** 増やすたびに、engine を起こす方法が増える——起こし方が
-// 一つであることは、この道具の形そのものである。
+// parseEngineFlags は `sshc engine` のオプションを解析する。
 func parseEngineFlags(args []string) (invocation, error) {
 	called := invocation{Kind: invocationEngine}
 	for index := 0; index < len(args); index++ {
@@ -139,8 +125,7 @@ func parseEngineFlags(args []string) (invocation, error) {
 				return invalidInvocation("--port takes a number")
 			}
 			port, err := strconv.Atoi(args[index])
-			// **範囲もここで断る。** 通してしまうと、断るのは bind の失敗になり、
-			// 打った人には「使えない番号」と「埋まっている番号」が同じに見える。
+			// 無効な範囲と bind エラーを区別するため、ここで範囲を検証する。
 			if err != nil || port < 1024 || port > 65535 {
 				return invalidInvocation("--port takes a number between 1024 and 65535")
 			}
@@ -170,22 +155,18 @@ func invalidInvocation(reason string) (invocation, error) {
 	return invocation{Kind: invocationInvalid}, fmt.Errorf("usage: %s", reason)
 }
 
-// usage は、alias より先に読む予約語を全て示す。
-//
-// **`sshc engine` は前面で走り続ける。** 生かしておくのは人であり、この道具では
-// ない——tmux でも systemd でも、その計算機でプロセスを持つ作法に任せる。裸の
-// `sshc` はそれを起こさず、走っているものへの入口を刷るだけである。
+// usage は予約済みサブコマンドと引数を出力する。
 func usage(out io.Writer) {
 	fmt.Fprint(out, `usage:
-  sshc                 print a way into the running engine, and open it
-  sshc engine          run the engine in the foreground; keep it alive yourself
+  sshc                 open the UI for the running engine
+  sshc engine          start the engine in the foreground
                        --port <n>  listen there instead of a random port
                        --replace   stop the running engine first, without asking
   sshc <alias>         connect to a host from ~/.ssh/config in this terminal
-  sshc run <alias> ... run one command on a host and print what it wrote
+  sshc run <alias> ... run a non-interactive command on a host
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
-  sshc open            print a new way into the UI
+  sshc open            print a one-time UI URL
   sshc status          print what the running engine is doing
                        --json      print it as JSON, for the shell
   sshc vault status    describe the running engine and vault

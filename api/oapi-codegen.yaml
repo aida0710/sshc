@@ -4,16 +4,9 @@ generate:
   models: true
 output-options:
   skip-prune: false
-  # 生成しないスキーマ。
-  #
-  # **これらの Go の形は internal/application が持っている。** 両方を生成すると、
-  # 同じワイヤの形に Go の型が 2 つできる——しかも中身は揃わない。生成側は
-  # OpenAPI の省略可能を *T で表し、application 側は値と omitempty で表す。さらに
-  # application は DiffOp や EditAction のような名前付きの型を持っており、生成側は
-  # それを string にする。**寄せれば、ドメインの側が弱くなる。**
-  #
-  # 契約からずれていないことは、生成された双子ではなく openapi.yaml そのものと
-  # 突き合わせて確かめる（internal/acceptance/contract_drift_test.go）。
+  # 次の型は internal/application で定義する。重複生成すると optional の表現や
+  # 名前付き型の制約が失われるため、生成対象から除外する。OpenAPI との整合性は
+  # internal/acceptance/contract_drift_test.go で検証する。
   exclude-schemas:
     - CreateConnectionResponse
     - Effective

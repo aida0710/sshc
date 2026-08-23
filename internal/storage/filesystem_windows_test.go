@@ -424,9 +424,9 @@ func assertWindowsPrivatePath(t *testing.T, path string) {
 	}
 }
 
-// holdsBackupPrivilege は、このトークンが DACL を迂回できるかを答える。
+// holdsBackupPrivilege は、このトークンが DACL を迂回できるかを返す。
 //
-// **SeBackupPrivilege と SeRestorePrivilege は DACL の上に立つ。** 有効な
+// SeBackupPrivilege と SeRestorePrivilege は DACL の上に立つ。有効な
 // トークンで開けば、拒否されているはずのものが開ける。管理者として SSH で
 // 入ったセッションはこれを有効に持っていることがあり、そこでは「読めない
 // 親ディレクトリ」という状況そのものを作れない。
@@ -448,7 +448,7 @@ func holdsBackupPrivilege(t *testing.T) bool {
 		&buffer[0], size, &size); err != nil {
 		t.Fatal(err)
 	}
-	// **名前ではなく LUID で照合する。** 特権の表示名は環境で翻訳されうるが、
+	// 名前ではなく LUID で照合する。特権の表示名は環境で翻訳されうるが、
 	// LUID はこの機械の中で一意である。名前から LUID を引いて、持っている
 	// ものと突き合わせる。
 	bypassing := make(map[windows.LUID]bool, 2)
@@ -493,9 +493,9 @@ func assertReadAttributesDenied(t *testing.T, path string) {
 	)
 	if err == nil {
 		_ = windows.CloseHandle(handle)
-		// **確かめられない環境と、壊れている実装を区別する。** 迂回できる
+		// 確かめられない環境と、壊れている実装を区別する。迂回できる
 		// トークンなら、拒否が効かないのは当たり前であり、そこで落とすのは
-		// 実装が壊れていると言うことになる。理由を名指しして降りる。
+		// 実装が壊れていると言うことになる。理由を指定して降りる。
 		if holdsBackupPrivilege(t) {
 			t.Skip("this token holds SeBackupPrivilege, which bypasses the DACL; an unreadable parent cannot be arranged here")
 		}

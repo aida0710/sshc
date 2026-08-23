@@ -133,7 +133,7 @@ func TestResolveRefusesWhatItWillNotEvaluate(t *testing.T) {
 			t.Errorf("%s: refusals = %#v, want %s", test.name, refusals, test.want)
 			continue
 		}
-		// 部分的な答えを黙って返さない。
+		// 部分的な結果を暗黙に返さない。
 		if len(values.Entries) != 0 {
 			t.Errorf("%s: a refused configuration carried values: %#v", test.name, values.Entries)
 		}
@@ -174,7 +174,7 @@ func TestResolveExpandsTokensAfterTheValuesAreKnown(t *testing.T) {
 	if values.First("hostname") != "bastion.example.com" {
 		t.Errorf("hostname = %q", values.First("hostname"))
 	}
-	// **IdentityFile のトークンは展開しない。** ssh -G もそうする——OpenSSH が
+	// IdentityFile のトークンは展開しない。ssh -G もそうする。OpenSSH が
 	// それを展開するのは接続する瞬間であって、設定を読み終えた時点ではない。
 	// ここで展開すると、設定について報告する値が ssh の報告とずれる。
 	if values.First("identityfile") != "%d/.ssh/%r@%h:%p" {
@@ -182,7 +182,7 @@ func TestResolveExpandsTokensAfterTheValuesAreKnown(t *testing.T) {
 	}
 }
 
-// 展開するキーワードの中に展開できないトークンがあれば、黙って残さない。その
+// 展開するキーワードの中に展開できないトークンがあれば、暗黙に残さない。その
 // 文字列はホスト名としてそのまま使われてしまう。
 func TestResolveRefusesATokenItCannotExpand(t *testing.T) {
 	graph := graphFor(t, map[string]string{
@@ -219,9 +219,9 @@ func TestResolveLeavesPercentAloneWhereOpenSSHDoes(t *testing.T) {
 //
 // `ssh -G` の出力パーサをファズしていたのは、こちらが制御しないプログラムから
 // バイト列が届いていたからである。権威が移ったいま、こちらが制御しない入力は
-// 利用者が書いた `~/.ssh/config` そのものである。不変条件は 2 つ——panic しない
-// こと、そして**部分的な答えを返さない**こと。拒んだなら値は空でなければならず、
-// 答えたなら接続に要る 3 つが揃っていなければならない。
+// 利用者が書いた `~/.ssh/config` そのものである。不変条件は 2 つ。panic しない
+// こと、そして部分的な結果を返さないこと。拒んだなら値は空でなければならず、
+// 応答したなら接続に要る 3 つが揃っていなければならない。
 func FuzzResolve(f *testing.F) {
 	for _, seed := range []string{
 		"",

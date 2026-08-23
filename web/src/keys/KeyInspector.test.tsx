@@ -31,7 +31,6 @@ const item: KeyItem = {
 };
 
 describe("KeyInspector", () => {
-  // 表から降ろしたものは、ここに揃っていなければならない。
   it("shows what the table no longer carries", () => {
     render(<KeyInspector item={item} now={0} />);
 
@@ -41,11 +40,10 @@ describe("KeyInspector", () => {
     expect(screen.getByText("build-*")).toBeInTheDocument();
   });
 
-  // 使っている接続が無いことは、空欄ではなく文で言う。
   it("says so when nothing names the key", () => {
     render(<KeyInspector item={{ ...item, references: [] }} now={0} />);
 
-    expect(screen.getByText("No connection names this key")).toBeInTheDocument();
+    expect(screen.getByText("No connection references this key")).toBeInTheDocument();
   });
 
   it("marks permissions that are too open", () => {

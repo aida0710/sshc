@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { prefersNativeSelection } from "./nativeSelection";
 
 describe("prefersNativeSelection", () => {
-  // hover が無く、ポインタが粗い——それが「指で触る画面」の定義である。
   it("asks for the screens that have no hover and a coarse pointer", () => {
     const match = vi.fn().mockReturnValue({ matches: true });
     expect(prefersNativeSelection(match)).toBe(true);

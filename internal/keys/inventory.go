@@ -47,7 +47,7 @@ const (
 
 const (
 	// StateDirectoryName は、ワークスペース内にあるエンジン自身のディレクトリ。
-	// その下にあるもの — バックアップ、ごみ箱、ジャーナル、履歴 — はすべてエンジンの
+	// その下にあるもの（バックアップ、ごみ箱、ジャーナル、履歴）はすべてエンジンの
 	// 状態なので、インベントリに現れることはなく、エージェントに登録されることもなく、
 	// IdentityFile として提案されることもない。
 	StateDirectoryName = "sshc"
@@ -81,8 +81,8 @@ type Item struct {
 	Permission     string
 	PermissionRisk bool
 	SizeBytes      int64
-	// ContentDigest binds short-lived local capabilities to the exact private
-	// key bytes without exposing those bytes through HTTP responses.
+	// ContentDigest は秘密鍵を HTTP 応答へ露出せず、短期のローカル capability を
+	// 秘密鍵の正確な内容へ関連付ける。
 	ContentDigest string `json:"-"`
 	Certificate   *CertificateInfo
 	References    []Reference
@@ -152,7 +152,7 @@ func ItemID(relativePath string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-// Scanner は、ストレージのファイルシステムの継ぎ目を通してワークスペースを走査する。
+// Scanner は、ストレージのファイルシステムのインターフェースを通してワークスペースを走査する。
 type Scanner struct {
 	workspace *storage.Workspace
 }
@@ -239,8 +239,8 @@ func (scanner *Scanner) walk(inventory *Inventory, directory string, depth int, 
 
 // relativePath は、ワークスペース相対の識別子を返す。
 //
-// **これはパスではなく識別子である。** ItemID はこの文字列のハッシュであり、
-// vault の鍵も参照インデックスの鍵も filepath.ToSlash された同じ綴りである
+// これはパスではなく識別子である。ItemID はこの文字列のハッシュであり、
+// vault の鍵も参照インデックスの鍵も filepath.ToSlash された同じ表記である
 // (`internal/app/ssh.go` の storedPassphrase、`references.go` の relativeKey)。
 // ここだけがこのファイルシステムの区切り文字を返すと、Windows では `keys/work/id`
 // と `keys\work\id` という別々の鍵ができ、保存したパスフレーズも、その鍵を名指す

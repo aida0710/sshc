@@ -8,9 +8,7 @@ import (
 	"testing"
 )
 
-// install.sh は `curl | sh` で流し込まれる。**渡された側からは、それが何を
-// するのか実行するまで見えない。** だからここで、見えないまま任せてよい性質だけを
-// 持っていることを確かめる。
+// readInstallScript は install.sh の契約テストで使用する内容を返す。
 func readInstallScript(t *testing.T) string {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join("..", "..", "install.sh"))
@@ -20,12 +18,7 @@ func readInstallScript(t *testing.T) string {
 	return string(body)
 }
 
-// **script が知っている機械と、リリースが作る機械は同じでなければならない。**
-//
-// Makefile の RELEASE_TARGETS が正本である。増やしたのに script が知らなければ、
-// その機械の利用者は「作られているのに落とせない」に当たる。減らしたのに script が
-// 案内し続ければ、存在しない URL を叩いて 404 で終わる——どちらも、リリースの
-// 側を直した人には見えない壊れ方である。
+// install.sh の対応ターゲットが Makefile の RELEASE_TARGETS と一致することを検証する。
 func TestTheInstallScriptKnowsEveryMachineTheReleaseBuilds(t *testing.T) {
 	contract := readMakefileContract(t)
 	targets := contract.variables["RELEASE_TARGETS"]
@@ -41,10 +34,15 @@ func TestTheInstallScriptKnowsEveryMachineTheReleaseBuilds(t *testing.T) {
 			t.Fatalf("RELEASE_TARGETS entry %q is not goos/goarch", target)
 		}
 		if goos == "windows" {
-			// **Windows はこの script の担当ではない。** あちらはインストーラが
-			// PATH まで通す。名指しでそう言っているかだけを見る。
-			if !strings.Contains(script, "Windows has an installer") {
-				t.Error("install.sh must send Windows users to the installer instead of failing silently")
+			// Windows では standalone binary のファイル名と配置方法を案内する。
+			artifact := fmt.Sprintf("sshc-windows-%s.exe", goarch)
+			for _, required := range []string{artifact, "rename it to sshc.exe", "place it on PATH"} {
+				if !strings.Contains(script, required) {
+					t.Errorf("install.sh Windows instructions are missing %q", required)
+				}
+			}
+			if strings.Contains(script, "Windows has an installer") {
+				t.Error("install.sh advertises a Windows installer that is not released")
 			}
 			continue
 		}
@@ -57,9 +55,7 @@ func TestTheInstallScriptKnowsEveryMachineTheReleaseBuilds(t *testing.T) {
 	}
 }
 
-// **確かめずに置かない。** 流し込む入れ方は途中ですり替えられても受け取った側に
-// 見えないので、公開された checksum と照らすことが、この script が持てる唯一の
-// 保証である。落とせなければ**入れずに止まる**ことまでを含めて確かめる。
+// ダウンロードしたバイナリを、公開された checksum でインストール前に検証する。
 func TestTheInstallScriptRefusesAnythingItCannotVerify(t *testing.T) {
 	script := readInstallScript(t)
 	for _, required := range []string{
@@ -73,21 +69,15 @@ func TestTheInstallScriptRefusesAnythingItCannotVerify(t *testing.T) {
 			t.Errorf("install.sh must verify what it downloads; %q is missing", required)
 		}
 	}
-	// 検査より前に置いてしまっては意味がない。
+	// checksum の検証前にバイナリを配置してはならない。
 	if strings.Index(script, "published checksum") > strings.Index(script, `mv "$work/sshc" "$target"`) {
 		t.Error("install.sh installs before it verifies the checksum")
 	}
 }
 
-// **利用者のものには触らない。**
-//
-// シェルの設定も、root の要る場所も、この script の持ち物ではない。PATH が
-// 通っていないなら足す 1 行を綴るが、打つかどうかは向こうが決める——rustup が
-// 訊いてから書くのは許されるが、**訊けない経路（パイプの向こう）では訊けない。**
+// install.sh がシェル設定や権限を変更せず、必要な操作だけを案内することを検証する。
 func TestTheInstallScriptTouchesNothingItWasNotGiven(t *testing.T) {
-	// **言うことと、やることを分ける。** 「sudo で入れ直してください」と綴るのは
-	// 助言であり、`sudo` を実行するのとは違う——素朴に文字列を探すと、その二つが
-	// 区別できない。注釈と、印字だけを行う helper の行を落としてから見る。
+	// コメントとメッセージから sudo などの文字列を除外し、実行文だけを検査する。
 	var executable []string
 	for _, line := range strings.Split(readInstallScript(t), "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -107,7 +97,7 @@ func TestTheInstallScriptTouchesNothingItWasNotGiven(t *testing.T) {
 			t.Errorf("install.sh must not run %q itself", forbidden)
 		}
 	}
-	// 助言そのものは残っていなければならない。**黙って諦めるのは、やるのと同じくらい悪い。**
+	// PATH が未設定の場合の案内は必要である。
 	script := readInstallScript(t)
 	if !strings.Contains(script, "is not on your PATH") {
 		t.Error("install.sh must say so when the place it installed into is not on PATH")
@@ -117,12 +107,26 @@ func TestTheInstallScriptTouchesNothingItWasNotGiven(t *testing.T) {
 	}
 }
 
-// **落とす道具は二つある。** curl しか無い機械も wget しか無い機械もある。
+// curl または wget の一方だけがある環境をサポートする。
 func TestTheInstallScriptWorksWithEitherDownloader(t *testing.T) {
 	script := readInstallScript(t)
 	for _, tool := range []string{"curl", "wget"} {
 		if !strings.Contains(script, "command -v "+tool) {
 			t.Errorf("install.sh does not look for %s", tool)
 		}
+	}
+}
+
+// 稼働中の engine のバージョンは、機械可読な status 出力から取得する。
+func TestTheInstallScriptReadsTheRunningEngineVersionFromJSON(t *testing.T) {
+	script := readInstallScript(t)
+	if !strings.Contains(script, "sshc status --json") {
+		t.Error("install.sh must request JSON when reading the running engine version")
+	}
+	if strings.Contains(script, "sshc status 2>/dev/null") {
+		t.Error("install.sh reads the human-readable status table as JSON")
+	}
+	if !strings.Contains(script, `'s/.*"version"`) {
+		t.Error("install.sh does not extract the version field from status JSON")
 	}
 }

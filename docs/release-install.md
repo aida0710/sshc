@@ -1,90 +1,96 @@
-## 入れる
+# インストールとアップグレード
 
-**配るのは CLI ひとつです。** アプリの束（.app / .dmg / AppImage / インストーラ）は
-もうありません。署名も公証も要らないので、**Gatekeeper の警告を通る一手間もありません**
-——隔離の印を付けるのはブラウザ経由のダウンロードであり、`curl` で落とした実行体は
-何も言われずに動きます。
+sshc は、macOS、Linux、Windows 向けの CLI バイナリと Android APK を配布しています。デスクトップアプリ、macOS の app bundle、AppImage、Windows インストーラは配布していません。
 
-画面付きのアプリは Android だけです。あちらは配布の口がストアしかありません。
-
-### Homebrew（macOS / Linux）
+## Homebrew（macOS / Linux）
 
 ```sh
 brew install aida0710/tap/sshc
 ```
 
-**formula はソースから建てます。** Go の toolchain は Homebrew が用意します。
+Homebrew formula はソースからビルドするため、Go toolchain も Homebrew によってインストールされます。
 
-### そのほか（Linux / macOS）
+## インストールスクリプト（macOS / Linux）
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
 ```
 
-この script は置く前に確かめ、**見たものを全部印字します**——機械に合う実体があるか、
-落としたものが公開された checksum と一致するか、置き先が PATH に載っているか、
-そこに既に居るものが自分の置いたものか、PATH の手前に別の `sshc` が居ないか、
-走っている engine と版が食い違わないか。**一致しないものは置かずに止まります。**
+スクリプトは次の項目を確認してからバイナリを配置します。
 
-`~/.local/bin` へ入れます（root で走らせたなら `/usr/local/bin`）。**PATH を勝手に
-書き換えることはしません** ——載っていなければ、足す 1 行をそのまま綴ります。
-置き先は `SSHC_INSTALL_DIR`、版は `SSHC_VERSION` で変えられます。
+- OS と CPU アーキテクチャに対応するバイナリが公開されていること
+- ダウンロードしたファイルの SHA-256 が `checksums.txt` と一致すること
+- インストール先のディレクトリへ書き込めること
+- 既存のインストール先がシンボリックリンクではないこと
 
-### Windows
+ダウンロード、チェックサム、書き込み権限の確認に失敗した場合、既存の実行ファイルを変更せず終了します。通常は `~/.local/bin` にインストールし、root で実行した場合は `/usr/local/bin` を使用します。
 
-リリースから `sshc-windows-<アーキ>.exe` を落とし、`sshc.exe` に改名して PATH の
-通った場所へ置きます。**インストーラはありません。** レジストリにも machine の PATH にも
-触れません。
+インストール後、配置先が `PATH` に含まれていない場合や、別の `sshc` が先に解決される場合は警告と設定例を表示します。`PATH` は自動変更しません。実行中のエンジンと新しい CLI のバージョンが異なる場合も、置き換え前に警告します。
 
-## 0.3.x から上げる
+インストール先は `SSHC_INSTALL_DIR`、バージョンは `SSHC_VERSION` で変更できます。
 
-**0.4.0 でアプリ（.app / .dmg / AppImage / インストーラ）は無くなりました。** 端末に
-古い実体が残っていると、新しい CLI を入れてもそちらが走り続けます。**入っている
-のに古い、という形で現れる**ので、上げたあと一度だけ片付けてください。
+## Windows
+
+[GitHub Releases](https://github.com/aida0710/sshc/releases) から、x64 では `sshc-windows-amd64.exe`、Arm64 では `sshc-windows-arm64.exe` をダウンロードしてください。ファイル名を `sshc.exe` に変更し、`PATH` に含まれるディレクトリへ配置します。
+
+sshc は Windows インストーラを提供せず、レジストリやシステムの `PATH` を変更しません。
+
+## Android
+
+[GitHub Releases](https://github.com/aida0710/sshc/releases) から `sshc-android-v<version>.apk` をダウンロードしてください。APK はリリース用の鍵で署名されています。
+
+## 0.3.x からの移行
+
+0.4.0 でデスクトップアプリの配布を終了しました。旧アプリが残っていると Homebrew formula がリンクされない場合や、`PATH` 上で古い `sshc` が優先される場合があります。
+
+macOS で旧 cask を使用していた場合は、次の手順で削除します。
 
 ```sh
-sshc version                      # 0.4.0 でなければ、下を順に
-brew uninstall --cask sshc        # 旧アプリ。**これが残っていると brew は formula を張りません**
-ls -l ~/.local/bin/sshc           # 旧アプリが置いた実体（あれば）
-rm ~/.local/bin/sshc
-rm -rf ~/.local/share/sshc        # その実体の本体
+sshc version
+brew uninstall --cask sshc
+old="$HOME/.local/share/sshc/bin/sshc"
+if [ "$(readlink "$HOME/.local/bin/sshc" 2>/dev/null)" = "$old" ]; then
+  rm "$HOME/.local/bin/sshc"
+fi
+rm -f "$old"
+rmdir "$HOME/.local/share/sshc/bin" "$HOME/.local/share/sshc" 2>/dev/null || true
 brew link --overwrite sshc
 ```
 
-**二つの理由が重なります。** `brew install` は、cask が入っていると
-`sshc cask is installed, skipping link.` と言って**張らずに終わります**。加えて
-`~/.local/bin` は Homebrew より前に PATH へ載っていることが多いので、張れていても
-古い方が走ります。どちらも `brew install` の出力に書かれますが、**新しく入った
-という行の下**にあるので見落としやすいところです。
+この手順は、`~/.local/bin/sshc` が旧デスクトップアプリの管理下にあるバイナリを指す場合だけ、そのリンクを削除します。`~/.local/share/sshc` に別のファイルがある場合はディレクトリを削除しません。
 
-古い版が走っていると、こう見えます——`sshc headless` が usage に居る、
-`sshc` が「open it once from Applications」と言う、`sshc engine` が
-「ownership channel」と言う。どれも 0.4.0 には無い綴りです。
-
-## 使う
+移行後も古いバージョンが起動する場合は、次のコマンドで実行ファイルの場所を確認します。
 
 ```sh
-sshc engine      # エンジンを前面で起こす。この端末は開けたままにする
-sshc             # 別の端末から。入口を刷り、画面があればブラウザで開く
+command -v sshc        # macOS / Linux
+where.exe sshc         # Windows
+sshc version
 ```
 
-**エンジンを生かしておくのは人です。** tmux でも screen でも systemd でも構いません
-——このアプリケーションは detach しないので、supervisor 側で扱いを変える必要が
-ありません。
+## 起動
+
+```sh
+sshc engine      # フォアグラウンドでエンジンを起動
+sshc             # URL を表示し、可能であればブラウザで開く
+```
+
+`sshc engine` はデーモン化しません。常駐させる場合は tmux、screen、systemd、launchd などを使用してください。
 
 ```sh
 tmux new -d -s sshc 'sshc engine'
 ```
 
-初回は保管庫がありません。エンジンがそう言うので、`sshc vault create` で作ります。
+初回起動時は vault を作成してロックを解除します。
 
 ```sh
-sshc vault create    # 端末からしか受け取りません
-sshc vault unlock    # 12 時間触れられなければ自分で閉じます
+sshc vault create
+sshc vault unlock
 ```
 
-## 版が食い違ったとき
+同じ操作は Web UI からも実行できます。CLI は対話端末からのみマスターパスワードを読み取り、コマンドライン引数や環境変数からは受け取りません。
 
-`sshc` と、走っているエンジンの版が違うと、繋がる前に断ります。**いま走っているのが
-どの実体かを綴りで名指しします** ——古いのがどちらかは、このプロセスには分からない
-ためです。エンジンを止めて、新しい方で起こし直してください。
+vault は 12 時間操作がない場合に自動的にロックされます。
+
+## バージョン不一致
+
+CLI と実行中のエンジンのバージョンが異なる場合、sshc は接続せず、現在使用している実行ファイルのパスを表示します。エンジンを停止し、更新後の `sshc engine` で起動し直してください。

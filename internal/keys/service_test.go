@@ -32,14 +32,14 @@ func newTestService(t *testing.T) (*Service, *storage.Workspace) {
 }
 
 // newServiceWithAgent は、アプリケーションと同じやり方で、ServiceOptions を通して
-// サービスを組み立てる。これにより、エージェントの継ぎ目が、テストが非公開フィールド
+// サービスを組み立てる。これにより、エージェントのインターフェースが、テストが非公開フィールド
 // へ代入したものではなく、実際に Service へ届いていることが示される。
 func newServiceWithAgent(t *testing.T, agent platform.KeyAgent) (*Service, *storage.Workspace) {
 	t.Helper()
 	workspace := newTestWorkspace(t)
 	clock := steppingClock(time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC))
 	manager := storage.NewManager(workspace, clock, rand.Reader)
-	// アプリケーションはすべての世代バックアップをマスターパスワードで封じるので、
+	// アプリケーションはすべての世代バックアップをマスターパスワードで暗号化するので、
 	// これらのテストもそうする。そうしないと、アプリケーションがもう書かない形の
 	// バックアップについて何かを示すだけになってしまう。
 	manager.Seal = sealForTest
@@ -60,9 +60,9 @@ func newServiceWithAgent(t *testing.T, agent platform.KeyAgent) (*Service, *stor
 // 平文の秘密鍵を持つファイルがあれば失敗させる。
 //
 // 以前はディレクトリがコピーをまったく持たないことを意味していた。だからこそ
-// パスフレーズの変更を取り消せなかったのである。いまは封をしたコピーを持ち、それを
+// パスフレーズの変更を取り消せなかったのである。いまは暗号化したコピーを持ち、それを
 // 安全に保つのがこれだ。ディスク上のバイト列は、マスターパスワードなしでは読めて
-// はならない。変わったのは封をすることであって、平文についてのルールではない。
+// はならない。変わったのは暗号化することであって、平文についてのルールではない。
 func assertNoKeyMaterialInBackups(t *testing.T, workspace *storage.Workspace) {
 	t.Helper()
 	backups := filepath.Join(workspace.StateDir(), "backups")
@@ -368,7 +368,7 @@ func TestRevealReturnsTheKeyAndRecordsAnAuditFact(t *testing.T) {
 	}
 }
 
-// **カタログはプログラムを一つも起こさない。** 並べているのはここで生成できる
+// カタログはプログラムを一つも起動しない。並べているのはここで生成できる
 // 鍵であり、それを知っているのはこのプロセス自身である。
 func TestAlgorithmsStartNoProcess(t *testing.T) {
 	service, _ := newTestService(t)
@@ -778,7 +778,7 @@ func TestPublicKeyRefusesAPrivateKeyWearingAPublicName(t *testing.T) {
 	t.Fatalf("the decoy file is not in the inventory")
 }
 
-// declaredGroups は、動作中のアプリケーションが設定エンジンの答えで埋める継ぎ目。
+// declaredGroups は、動作中のアプリケーションが設定エンジンの結果で埋めるインターフェース。
 // テストは自前のものを供給するので、このパッケージが自分で決めるのではなく尋ねて
 // いることが示される。
 func declaredGroups(names ...string) func(string) error {
@@ -893,7 +893,7 @@ func TestHardwareCommandNamesTheGroupDirectory(t *testing.T) {
 
 // ソフトウェア鍵のコメントは ssh.MarshalPrivateKey が埋め込むもので、コマンドライン
 // には届かない。したがって、ハードウェアの経路が必要とするシェル引用のルールは
-// これには当てはまらない。"work laptop" は、人が実際に打ち込むものである。
+// これには当てはまらない。"work laptop" は、ユーザーが実際に打ち込むものである。
 func TestValidateCommentAcceptsAnOrdinaryComment(t *testing.T) {
 	for _, comment := range []string{"work laptop", "aida@mbp", "", "backup key 2026"} {
 		if err := ValidateComment(comment); err != nil {
@@ -991,7 +991,7 @@ func TestRegisterUsesAStoredPassphraseWhenNoneIsTyped(t *testing.T) {
 	}
 }
 
-// 打ち込まれたパスフレーズが常に勝つ。キーボードの前にいる人の方が、ファイルよりも
+// 打ち込まれたパスフレーズが常に勝つ。キーボードの前にいるユーザーの方が、ファイルよりも
 // 新しいからだ。
 func TestATypedPassphraseBeatsTheStoredOne(t *testing.T) {
 	agent := &fakeAgent{available: true}
@@ -1143,7 +1143,7 @@ func TestVerifyPassphraseRevalidationRejectsChangedOrMissingKeyBytes(t *testing.
 //
 // 以前はバックアップを取らなかった。置き換える内容が秘密鍵であり、そのコピーが
 // ~/.ssh/sshc/backups/ にあることは、取り消しを失うことより悪かったからだ。いま
-// バックアップはマスターパスワードで封じられるので、その理由は消えた — そして
+// バックアップはマスターパスワードで暗号化されるので、その理由は消えた。そして
 // ここは、事故が最も回復しにくい書き込みでもある。新しいパスフレーズを打ち間違え
 // れば、その鍵は誰にも開けない鍵になる。
 func TestChangingAPassphraseKeepsASealedBackup(t *testing.T) {
@@ -1231,11 +1231,11 @@ func unsealForTest(sealed []byte) ([]byte, error) {
 
 var testSealMarker = []byte("sealed:")
 
-// **道具が無いことは、機能が無いことである。** Android には ssh-agent が
+// ツールが無いことは、機能が無いことである。Android には ssh-agent が
 // 居ないので agent は nil になる。そのとき一覧が「エージェントは居る」と
 // 言えば、画面は押しても何も起きないボタンを出す。
 //
-// nil を渡すことに意味がある——available を false にした fake は「居るが
+// nil を渡すことに意味がある。available を false にした fake は「居るが
 // 応答しない」であって、「そもそも居ない」ではない。Android は後者である。
 func TestAgentIdentitiesSayNoAgentWhenNoneIsWired(t *testing.T) {
 	service, _ := newServiceWithAgent(t, nil)
@@ -1248,7 +1248,7 @@ func TestAgentIdentitiesSayNoAgentWhenNoneIsWired(t *testing.T) {
 	}
 }
 
-// **このアプリケーションが作るディレクトリの名前を、鍵に付けさせない。**
+// このアプリケーションが作るディレクトリの名前を、鍵に付けさせない。
 //
 // `keys` という名前の鍵を空のワークスペースに生成すると、あとでグループを作るときに
 // 要る `keys/` と同じ場所を取り合う。予約語の一覧が internal/keys と

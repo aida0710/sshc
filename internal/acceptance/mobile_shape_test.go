@@ -19,18 +19,18 @@ import (
 	"sshc/internal/handoff"
 )
 
-// **nil は、機能が無いという答えである。**
+// nil は、機能が無いという結果である。
 //
-// Android には ssh-keygen も ssh-agent も居ないので、それを探す道具を持つこと
-// 自体が嘘になる。置き換えられない更新を提示するのも同じである。だから
+// Android には ssh-keygen も ssh-agent も居ないので、それを探すツールを持つこと
+// 自体が誤りになる。置き換えられない更新を提示するのも同じである。だから
 // mobile/dependencies.go は、それらを nil のまま engine へ渡す。
 //
-// **受け側がそれを扱い損ねると、落ちるのは実機だけである。** 開発機の go test は
-// 常に道具が在る姿で走るので、nil の枝を一度も通らない。
+// 受け側がそれを扱い損ねると、落ちるのは実機だけである。開発機の go test は
+// 常にツールが在る姿で走るので、nil の枝を一度も通らない。
 //
-// ここは、mobile が nil にするものを**数えたうえで**、その姿の engine が
-// 実際に答えることを見る。数えるのは、nil が増えたときにこの検査が
-// 黙って古いままにならないためである。
+// ここは、mobile が nil にするものを数えたうえで、その姿の engine が
+// 実際に返すことを見る。数えるのは、nil が増えたときにこの検査が
+// 暗黙に古いままにならないためである。
 
 // nilledByMobile は、mobile/dependencies.go が nil を渡している依存の名前を返す。
 func nilledByMobile(t *testing.T) []string {
@@ -48,7 +48,7 @@ func nilledByMobile(t *testing.T) []string {
 }
 
 func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
-	// **この検査が扱いを知っているもの。** mobile が新しく nil を渡し始めたら、
+	// この検査が扱いを知っているもの。mobile が新しく nil を渡し始めたら、
 	// ここに足すまで赤くなる。
 	handled := map[string]bool{
 		"Toolchain": true,
@@ -70,7 +70,7 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// mobile/dependencies.go と同じ姿。**道具は一つも渡さない。**
+	// mobile/dependencies.go と同じ姿。ツールは一つも渡さない。
 	server, bootstrap, err := app.Build(app.Dependencies{
 		Home:   home,
 		Owner:  handoff.OwnerEngine,
@@ -102,8 +102,8 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		}
 	})
 
-	// **API は session の背後にある。** 外殻がやるのと同じ交換をここでも通す
-	// ——入口を開いた WebView が最初にすることである。
+	// API は session の背後にある。ネイティブ層がやるのと同じ交換をここでも通す
+	//アクセス URLを開いた WebView が最初にすることである。
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	exchange.Header.Set("X-SSHC-Bootstrap", bootstrap)
-	// **同一生成元であることを言う。** 本物の WebView が送るものと同じ。
+	// 同一生成元であることを言う。本物の WebView が送るものと同じ。
 	exchange.Header.Set("Sec-Fetch-Site", "same-origin")
 	exchange.Header.Set("Origin", server.URL())
 	opened, err := client.Do(exchange)
@@ -134,7 +134,7 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 	}
 	_ = opened.Body.Close()
 
-	// **token は read にも伴う。** cookie はポートに scope されないが token はされる。
+	// token は read にも伴う。cookie はポートに scope されないが token はされる。
 	get := func(path string) *http.Response {
 		t.Helper()
 		request, err := http.NewRequest(http.MethodGet, server.URL()+path, nil)
@@ -150,7 +150,7 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		return response
 	}
 
-	// **すべての route が master password の背後にある。** 金庫を作るのは、
+	// すべての route が master password の背後にある。金庫を作るのは、
 	// パスワードの検査ではなくアプリケーション起動の一部である。
 	initialise, err := http.NewRequest(http.MethodPost, server.URL()+"/api/v1/passwords/initialise",
 		strings.NewReader(`{"passphrase":"a fixture master password"}`))
@@ -170,7 +170,7 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		t.Fatalf("initialise the vault = %d, want 200", unlocked.StatusCode)
 	}
 
-	// **更新: 版だけを答え、「新しいものがある」とは言わない。**
+	// 更新: 版だけを結果、「新しいものがある」とは言わない。
 	//
 	// Checker が nil のとき、ここが落ちれば Android の画面は起動直後に赤くなる。
 	response := get("/api/v1/update")
@@ -190,15 +190,15 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		t.Errorf("current = %q, want the running version", update.Current)
 	}
 	if update.Available || update.Latest != nil {
-		// **置き換えられない更新を提示しない。** Android の APK は、この engine が
+		// 置き換えられない更新を提示しない。Android の APK は、この engine が
 		// 入れ替えられるものではない。
 		t.Errorf("an engine with no checker offered an update: %+v", update)
 	}
 
-	// **道具が無い枝を実際に踏む。**
+	// ツールが無い枝を実際に踏む。
 	//
-	// Toolchain が nil なら、ハードウェア鍵は一覧に出ない——ssh-keygen が
-	// 無い機械で「YubiKey で作れます」と言うのは嘘である。
+	// Toolchain が nil なら、ハードウェア鍵は一覧に出ない。ssh-keygen が
+	// 無い機械で「YubiKey で作れます」と言うのは誤りである。
 	algorithms := get("/api/v1/keys/algorithms")
 	defer func() { _ = algorithms.Body.Close() }()
 	if algorithms.StatusCode != http.StatusOK {
@@ -221,7 +221,7 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		}
 	}
 
-	// KeyAgent が nil なら、届くエージェントは無いと答える。
+	// KeyAgent が nil なら、届くエージェントは無いと返す。
 	keys := get("/api/v1/keys")
 	defer func() { _ = keys.Body.Close() }()
 	if keys.StatusCode != http.StatusOK {
@@ -237,7 +237,7 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		t.Error("an engine with no key agent reported one as reachable")
 	}
 
-	// **画面は出る。** 道具が無いことは、アプリが開かないことではない。
+	// 画面は出る。ツールが無いことは、アプリが開かないことではない。
 	page := get("/")
 	defer func() { _ = page.Body.Close() }()
 	shell, err := io.ReadAll(page.Body)

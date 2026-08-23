@@ -14,10 +14,10 @@ import (
 	"sshc/internal/validate"
 )
 
-// recordingCollector は、鍵を集める継ぎ目を差し替える。
+// recordingCollector は、鍵を集めるインターフェースを差し替える。
 //
 // 本物の握手を見るのは internal/sshclient の側である。ここが確かめるのは、
-// 安全でない宛先を継ぎ目より前で拒むことと、集めた鍵が候補の形になることである。
+// 安全でない宛先をインターフェースより前で拒むことと、集めた鍵が候補の形になることである。
 type recordingCollector struct {
 	addresses []string
 	keys      []ssh.PublicKey
@@ -73,7 +73,7 @@ func TestScanReturnsUnverifiedCandidates(t *testing.T) {
 	}
 }
 
-// 宛先の検査は継ぎ目より前にある。安全でない値でそこへ届いてはならない。
+// 宛先の検査はインターフェースより前にある。安全でない値でそこへ届いてはならない。
 func TestScanRejectsUnsafeTargetsBeforeReachingTheNetwork(t *testing.T) {
 	collector := &recordingCollector{}
 	scanner := knownhosts.Scanner{Collect: collector.collect}

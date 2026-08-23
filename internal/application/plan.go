@@ -9,10 +9,6 @@ import (
 )
 
 // この一式は、EditRequest ひとつを planned へ落とす。
-//
-// **どれも書かない。** 計画を組むだけで、ディスクへ届けるのは commit の側である。
-// service.go に同居していたころ、あそこは 1450 行あり、サービスの入口と計画の
-// 中身が同じ画面に並んでいた。
 
 func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planned, error) {
 	absolute, err := AbsolutePath(s.workspace.Root(), request.Path)
@@ -27,8 +23,7 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 
 	var renameFrom, renameTo HostIdentity
 	if request.Kind == EditFileRaw {
-		// ファイル全体の差し替えはブロックを探さない。**探す相手が居ない** ——
-		// 送られてきたのは、この綴りのファイルがこれからどうあるべきかである。
+		// ファイル全体の置換ではブロックを検索しない。
 		file = config.Parse([]byte(request.Raw))
 	} else {
 		block, ok := FindHostBlock(file, request.Alias)
@@ -92,10 +87,6 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 			BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
 	}
 
-	// コメントは同じホストの note を退役させる。両者は 2 箇所に書かれた
-	// 同じものであり、このアプリケーション無しでも生き残るのは設定の
-	// 方なので、note はコメントと食い違ったまま残されるのではなく、
-	// コメントを書くのと同じ transaction に入る。
 	if request.Kind == EditComment {
 		stored, precondition, err := s.metadata.Load()
 		if err != nil {
@@ -137,9 +128,6 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 }
 
 // planMoveHost は、1 個のホストブロックを別のファイルへ移動する。
-// 両方の設定ファイルと metadata 文書は 1 個の storage.Request なので、
-// move は単一の journal 化された transaction である。何かが stage される前に
-// すべての事前条件がチェックされ、どちらかのファイルが一致しなければ何も書き込まれない。
 func (s *Service) planMoveHost(graph *config.Graph, request EditRequest) (planned, error) {
 	root := s.workspace.Root()
 	request, err := s.resolveDestination(graph, request)
@@ -171,17 +159,6 @@ func (s *Service) planMoveHost(graph *config.Graph, request EditRequest) (planne
 
 	sourceBase := []byte(request.Base)
 	destinationBase := []byte(request.DestinationBase)
-	// グループを名指した move は destination ファイルを名指していなかった
-	// ので、クライアントはそれを読んだことがなく、そのバイト列を渡す
-	// こともできなかった。ディスク上のファイルをその空の base と比較する
-	// と、既に connection を保持しているグループファイルはすべて、アプリケーション外部で
-	// 変更されたものとして報告されてしまう——そのため、グループへの最初の connection は
-	// 成功し、それ以降のものはすべて、起きてもいない外部編集についてのメッセージで失敗した。
-	//
-	// 保証は変わっていない。下にある事前条件は依然としてたった今
-	// 読んだものの digest を運び、storage は commit 中にそれを再チェック
-	// するので、この読み取りと書き込みの間に変化したファイルは、
-	// 依然として transaction 全体を止める。
 	if request.DestinationGroup != "" && request.DestinationBase == "" {
 		destinationBase = destinationDisk
 	}
@@ -266,8 +243,6 @@ func (s *Service) planMoveHost(graph *config.Graph, request EditRequest) (planne
 	}
 	if request.DestinationGroup != "" {
 		// ディレクトリは、Commit が書き込み path を解決する前に作成される。
-		// ここまでたどり着いた plan のためにのみ作成されるので、拒否は
-		// 空のディレクトリを後に残さない。
 		directory, dirErr := AbsolutePath(root, GroupDirectory(request.DestinationGroup))
 		if dirErr != nil {
 			return planned{}, dirErr
@@ -280,9 +255,6 @@ func (s *Service) planMoveHost(graph *config.Graph, request EditRequest) (planne
 		})
 	}
 
-	// ブロックを移動すると、OpenSSH がそれを読む場所が変わり、OpenSSH は
-	// 見つけた最初の値を保持する。何も変わらなかったと仮定するのでは
-	// なく、そのブロックが宣言するすべての具体的な alias について、前後の説明を示す。
 	pending := map[string][]byte{
 		filepath.Clean(sourceAbsolute):      sourceUpdated,
 		filepath.Clean(destinationAbsolute): destinationUpdated,
@@ -346,8 +318,6 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 		return prepared, nil
 	}
 
-	// グループの compilation は、生成された設定ファイルと、まだ
-	// include されていない場合はエントリファイル内の 1 本の Include 行も書き込む。
 	groupsRelative := reconciled.GroupsPath()
 	groupsAbsolute, err := AbsolutePath(root, groupsRelative)
 	if err != nil {
@@ -366,10 +336,7 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 	}
 	entryFile := config.Parse(entryContents)
 
-	// 宣言済み集合は、生成領域が既に名指しているものすべてに、metadata
-	// が presentation を運んでいるすべてのグループを加えたものである。
-	// グループを宣言することが、そもそもそのディレクトリをグループにしているものなので、
-	// これで全部である。誰も宣言しなかったディレクトリは、他人のディレクトリのままである。
+	// 宣言済み集合は、生成領域が既に指定しているものすべてに、metadata
 	declared := declaredGroupSet(entryFile, reconciled)
 	regionPlan, err := PlanRegion(entryFile, declared, groupsRelative)
 	if err != nil {
@@ -395,10 +362,6 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 		pending[filepath.Clean(s.entryPath)] = entryUpdated
 	}
 
-	// membership は、入ってきた設定からではなく、生成領域が生み出す設定から読まなければ
-	// ならない。生成領域がグループのディレクトリを名指すまでは何もそれを読まないので、
-	// この save が宣言しようとしているグループ内のすべてのホストは、
-	// そうしなければ見えないままになり、その settings ブロックは空のまま出てきてしまう。
 	reachable, err := s.resolveWith(pending)
 	if err != nil {
 		return planned{}, err
@@ -418,9 +381,6 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 	prepared.preview.Diffs = append(prepared.preview.Diffs,
 		BuildFileDiff(groupsRelative, diskOrNil(previousGroups, groupsExist), groupContents))
 	pending[filepath.Clean(groupsAbsolute)] = groupContents
-	// ディレクトリがまだ存在しない宣言済みグループは、
-	// include_no_match 警告を生むだけで他には何も生まないので、ディレクトリは
-	// 最初に到着するホストに任せるのではなく、ここで作成される。
 	for _, name := range declared {
 		absolute, dirErr := AbsolutePath(root, GroupDirectory(name))
 		if dirErr != nil {
@@ -433,9 +393,6 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 	if err != nil {
 		return planned{}, err
 	}
-	// 説明すべきホストは、今の設定が持っているものではなく、保存後の
-	// 設定が持つことになるものである。グループのファイルは生成領域がそれらを名指すまで読めな
-	// いので、そうしなければ、グループと共に到着するホストはここで見えないままになってしまう。
 	afterHosts, _ := ProjectHosts(after, root)
 	for _, host := range afterHosts {
 		if host.Group == "" || host.Identity.IsZero() || len(prepared.preview.Effective) >= maxEffectivePreviews {

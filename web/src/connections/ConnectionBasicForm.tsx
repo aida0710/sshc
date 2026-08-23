@@ -190,7 +190,6 @@ export function ConnectionBasicForm({
         setSelectedKey("");
         setInitialKey("");
       } else if (direct.length === 1) {
-        // 綴りの無い値はサーバーが書かないので、?? "" が効くことは実際には無い。
         const configured = formatValues(direct[0]!.values) ?? "";
         const matched = identities.find((candidate) => keyConfigValue(candidate) === configured);
         if (!available || matched === undefined) {
@@ -264,7 +263,6 @@ export function ConnectionBasicForm({
       active = false;
       clearSecrets();
     };
-    // resetKey deliberately represents the server snapshot this draft belongs to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey, keys, secrets, t, preferredKey, savedState]);
 
@@ -471,9 +469,6 @@ export function ConnectionBasicForm({
       if (onRequestRefresh !== undefined) {
         await onRequestRefresh();
       } else if (savedState === undefined) {
-        // A password-only transaction leaves ssh_config byte-for-byte unchanged,
-        // so the detail snapshot key cannot reset this component for us. Refresh
-        // the vault side explicitly and return the action control to unchanged.
         try {
           const status = await secrets.passwordVault();
           const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
@@ -613,8 +608,6 @@ export function ConnectionBasicForm({
                 setSelectedKey(value);
                 const superseded = preferredKey !== null && value !== preferredKey.privateKeyId;
                 setPreferredSuperseded(superseded);
-                // 戻した先がサーバーの現在値なら保存操作は発生しない。その場で
-                // handoff を破棄しても、effect の再初期化は同じ現在値を選ぶだけである。
                 if (superseded && value === initialKey) onPreferredKeyApplied?.();
               }}
               className={control}
@@ -623,7 +616,7 @@ export function ConnectionBasicForm({
               {keyState === "custom" ? <option value="__custom__">{customKey}</option> : null}
               {privateKeys.map((key) => (
                 <option key={key.id} value={key.id}>
-                  {key.relativePath}{key.fingerprint === "" ? "" : ` — ${key.fingerprint}`}
+                  {key.relativePath}{key.fingerprint === "" ? "" : ` · ${key.fingerprint}`}
                 </option>
               ))}
             </select>

@@ -11,7 +11,7 @@ import (
 // processCommandLine と processEnvironment は、走っているプロセスから外から
 // 読めるものを返す。
 //
-// **読めなかったことを「見えなかった」にしない。** 読めなければ検査は
+// 読めなかったことを「見えなかった」にしない。読めなければ検査は
 // 何も確かめておらず、それは通過ではない。
 func processCommandLine(t *testing.T, pid int) string {
 	t.Helper()
@@ -22,9 +22,9 @@ func processCommandLine(t *testing.T, pid int) string {
 	return string(output)
 }
 
-// 環境変数は、この OS では他人のプロセスからは読めないのが普通である
+// 環境変数は、この OS では別のユーザーのプロセスからは読めないのが普通である
 // （Linux の /proc/<pid>/environ は同じ利用者に限られ、macOS では ps eww も
-// 他人には出ない）。**自分が起こした子なので読める**——読めなければ、
+// 別のユーザーには出ない）。自分が起動した子なので読める。読めなければ、
 // 確かめられなかったことを言う。
 func processEnvironment(t *testing.T, pid int) string {
 	t.Helper()

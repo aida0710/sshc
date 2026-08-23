@@ -83,8 +83,6 @@ export function HostDetailPanel({
     setLastAdvanced("Jump");
     setBasicDirty(false);
     setAdvancedDirty(false);
-    // resetKey is the committed snapshot the mounted drafts belong to. A
-    // controlled tab change is only a view change and must not clear dirtiness.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 

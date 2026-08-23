@@ -10,11 +10,11 @@ import (
 
 // FuzzParseKnownHostsRoundTrip は known_hosts のリーダーをファズする。
 //
-// このファイルは ssh が、ssh-keyscan が、そして人の手が書く。つまり、このアプリ
+// このファイルは ssh が、ssh-keyscan が、そしてユーザーの手が書く。つまり、このアプリ
 // ケーションが読む ~/.ssh 配下の成果物のうち、自分で書いたのではない唯一のもの
 // である。重要な不変条件は二つ。変更していないファイルをレンダリングすると元の
-// バイト列が返ること — 削除はファイル全体を書き直すので、触れていない行はすべて
-// 生き残らなければならない — と、Entry を持つと主張する Line は完全なものを
+// バイト列が返ること。削除はファイル全体を書き直すので、触れていない行はすべて
+// 生き残らなければならない。また、Entry を持つと主張する Line は完全なものを
 // 持たなければならないこと。削除の経路は、解析された同一性で行を選ぶからである。
 func FuzzParseKnownHostsRoundTrip(f *testing.F) {
 	sample, err := os.ReadFile(filepath.Join("testdata", "known_hosts.sample"))

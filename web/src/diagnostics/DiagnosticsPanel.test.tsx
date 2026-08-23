@@ -97,8 +97,6 @@ describe("DiagnosticsPanel", () => {
   });
 
   it("offers no check until an alias is typed", async () => {
-    // 箱が空でもすべてのボタンが有効であり、押すとサーバーに空の
-    // alias を説明するよう求めていた。
     const api = buildApi();
     render(<DiagnosticsPanel api={api} />);
 
@@ -139,8 +137,6 @@ describe("DiagnosticsPanel", () => {
   });
 
   it("names the columns of the sources table", async () => {
-    // パス、条件、判定を三つの無ラベル灰色として描いても、
-    // キャプションがどれほど良くても自己説明的にはならない。
     const api = buildApi();
     render(<DiagnosticsPanel api={api} />);
 
@@ -298,7 +294,6 @@ describe("DiagnosticsPanel", () => {
     render(<DiagnosticsPanel api={api} host="bastion" />);
 
     expect(screen.queryByLabelText("Host alias")).not.toBeInTheDocument();
-    // ファイル一覧は Config section に属し、固定されたホストはそれを読まない。
     expect(api.configCheck).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "Check reachability" }));
@@ -323,7 +318,6 @@ describe("DiagnosticsPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Check reachability" }));
     expect(await screen.findByText(/203\.0\.113\.10:22/)).toBeInTheDocument();
 
-    // bastion が得た判定が nas の下に座り、自分のものであるかのように読めてはならない。
     rerender(<DiagnosticsPanel api={api} host="nas" />);
 
     await waitFor(() => expect(screen.queryByText(/203\.0\.113\.10:22/)).not.toBeInTheDocument());

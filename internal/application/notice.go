@@ -1,8 +1,6 @@
 package application
 
-// Notice は、UI が答えをでっち上げるのではなく示さなければならない何かを説明する。
-// Diagnostics は設定 engine から来てファイル構造を説明し、
-// 通知はこの package から来てなぜ射影が不完全なのかを説明する。
+// Notice は、UI が結果をでっち上げるのではなく示さなければならない何かを説明する。
 type Notice struct {
 	Code   string `json:"code"`
 	Path   string `json:"path,omitempty"`
@@ -12,8 +10,6 @@ type Notice struct {
 
 // Notice code は、UI が自前のコピーへ対応付ける安定した識別子である。
 const (
-	// NoticeComplexExternalRule は、値を単純な継承モデルへ射影できない
-	// ホストに印を付ける。UI は代わりに実際の source を示す。
 	NoticeComplexExternalRule = "complex_external_rule"
 	NoticeDuplicateAlias      = "duplicate_alias"
 	NoticeWildcardShadow      = "wildcard_shadow"
@@ -27,17 +23,12 @@ const (
 	NoticeGroupCycle          = "group_cycle"
 	NoticeGroupMemberMissing  = "group_member_missing"
 	NoticeExplainedValuesOnly = "explained_values_only"
-	// 解決を諦めた理由。値の代わりにこれが出る。
-	//
-	// 以前の explained_values_only は「ここに出る値は説明であって答えではない」
-	// という常時の但し書きだった。エンジンが権威になったので、但し書きは消え、
-	// 代わりに**答えられなかったときだけ**その理由が出る。
+	// Refusal は設定を解決できなかった理由である。
 	NoticeMatchExecRefused    = "match_exec_refused"
 	NoticeMatchFinalRefused   = "match_final_refused"
 	NoticeCanonicaliseRefused = "canonicalise_refused"
 	NoticeUnknownTokenRefused = "unknown_token_refused"
 	// NoticeDestinationNotIncluded は、どの Include も届かない destination
-	// ファイルに印を付ける。そこに移動したブロックは OpenSSH に読まれなくなる。
 	NoticeDestinationNotIncluded = "destination_not_included"
 )
 

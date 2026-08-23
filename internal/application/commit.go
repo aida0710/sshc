@@ -7,14 +7,7 @@ import (
 	"sshc/internal/storage"
 )
 
-// commitPlannedRequest は、計画されたトランザクションを唯一のコミット経路に通す。
-//
-// **経路がひとつなのは、衝突の扱いが揃っていなければならないからである。** 以前は
-// Save・commitGroupPlan・RelocateKey・接続の作成が同じ 20 行をそれぞれ書いており、
-// 4 つとも少しずつ違っていた——このうち 3 つは、衝突したパスが自分の計画した設定
-// ファイルでないときも三者マージの報告を組み立てており、base に nil を渡していた。
-// 衝突したのが設定でないなら、報告できることは何も無いので、storage の答えをその
-// まま返すのが正しい。
+// commitPlannedRequest は計画済みトランザクションを共通のコミット処理へ渡す。
 
 func (s *Service) commitPlannedRequest(prepared planned, request storage.Request) (storage.Result, error) {
 	return s.commitPlannedRequestWith(prepared, request, s.manager.Commit)

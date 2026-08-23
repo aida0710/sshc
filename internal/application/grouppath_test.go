@@ -7,11 +7,6 @@ import (
 	"testing"
 )
 
-// グループは 1 つの Include 行だけによって読まれるので、この
-// アプリケーションがグループに入れるファイルは、その行が一致する
-// 名前を持たなければならない。まだ .conf ファイルでないソースから
-// 宛先名を導出すると — 何よりもエントリファイル "config" は、宣言され
-// ていないすべての connection の起点だが — OpenSSH が決して読まないファイルを書いてしまう。
 func TestGroupFileNameIsAlwaysReadByTheGroupInclude(t *testing.T) {
 	const group = "work"
 	pattern := GroupIncludePattern(group)
@@ -69,12 +64,7 @@ func TestValidateGroupNameRefusesEverythingThatIsNotASafeRelativeDirectory(t *te
 	}
 }
 
-// MaxGroupSegments は別パッケージの制限に由来して存在するので、その
-// 理由は、誰かが後で「整理」してしまう単なる数値として残すのではなく、明示的に検証する。
 func TestMaxGroupSegmentsStaysInsideTheKeyScannerDepth(t *testing.T) {
-	// keys/<segments…>/<file> は、~/.ssh から数えて
-	// keys.maxScanDepth に収まらなければならない。さもなければ鍵は
-	// depth_exceeded として報告され、一覧に載る代わりにインベントリから外れる。
 	const keyScannerDepth = 8
 	if 1+MaxGroupSegments+1 > keyScannerDepth {
 		t.Fatalf("a key %d directories deep exceeds the scanner's %d", 1+MaxGroupSegments+1, keyScannerDepth)
@@ -89,9 +79,6 @@ func TestGroupOfPathReadsMembershipFromTheDirectory(t *testing.T) {
 	}{
 		{"connections/work/web.conf", "work", true},
 		{"connections/work/eu/lon.conf", "work/eu", true},
-		// connections/ の直下にあるファイルはどのグループにも属さない:
-		// それに対して Include は生成されないので何にも読まれず、
-		// そのために 4 番目の優先順位階層を作るのは、割に合わないほど説明が難しくなる。
 		{"connections/loose.conf", "", false},
 		{"conf.d/10.conf", "", false},
 		{"config", "", false},
@@ -153,8 +140,6 @@ func TestParentGroupNameIsTheParentDirectory(t *testing.T) {
 }
 
 func TestGroupNameOrderPutsChildrenBeforeParents(t *testing.T) {
-	// OpenSSH は最初に読んだ値を保持するので、より深いグループの
-	// Include が先に来なければ、親が自分の子に勝ってしまう。
 	ordered := GroupNameOrder([]string{"work", "work/eu", "home"}, nil)
 	want := []string{"work/eu", "home", "work"}
 	if len(ordered) != len(want) {

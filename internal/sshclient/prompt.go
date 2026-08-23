@@ -7,13 +7,13 @@ import (
 	"sync"
 )
 
-// ErrPromptAborted は、人が問いに答えずに打ち切ったことを報告する。
+// ErrPromptAborted は、ユーザーが問いに応答せずに打ち切ったことを報告する。
 var ErrPromptAborted = errors.New("the prompt was cancelled")
 
-// Prompter は、接続の途中で人に尋ねる手段である。
+// Prompter は、接続の途中でユーザーに尋ねる手段である。
 //
-// 尋ねることは 4 つある——未知のホスト鍵を受け入れるか、鍵のパスフレーズ、
-// パスワード、keyboard-interactive の質問。**仕組みを 4 つ作らない。**
+// 尋ねることは 4 つある。未知のホスト鍵を受け入れるか、鍵のパスフレーズ、
+// パスワード、keyboard-interactive の質問。仕組みを 4 つ作らない。
 // どれも「端末へ書いて、端末から読む」という同じことである。
 type Prompter interface {
 	// Line は打った文字が見える問い。
@@ -27,8 +27,8 @@ type Prompter interface {
 // StreamPrompter は、端末のストリームへ問いを出す。
 //
 // 端末は raw モードである（xterm.js はローカルエコーを持たない）。だから
-// 見える問いのエコーはこちらが書く。見えない問いでは書かない——**答えを
-// 端末へ書き戻さないのは、それが画面にもスクロールバックにも残るからである。**
+// 見える問いのエコーはこちらが書く。見えない問いでは書かない。結果を
+// 端末へ書き戻さないのは、それが画面にもスクロールバックにも残るからである。
 type StreamPrompter struct {
 	Out io.Writer
 	In  io.Reader
@@ -39,7 +39,7 @@ func (p StreamPrompter) Secret(prompt string) (string, error) { return p.read(pr
 
 // Confirm は yes か no だけを受ける。
 //
-// OpenSSH と同じで、y も Enter も答えにならない。ホスト鍵を受け入れるかどうかは
+// OpenSSH と同じで、y も Enter も結果にならない。ホスト鍵を受け入れるかどうかは
 // 打ち間違いで通ってよい問いではない。
 func (p StreamPrompter) Confirm(prompt string) (bool, error) {
 	for attempt := 0; attempt < maxConfirmAttempts; attempt++ {
@@ -62,10 +62,10 @@ func (p StreamPrompter) Confirm(prompt string) (bool, error) {
 }
 
 // maxConfirmAttempts は、同じ問いを繰り返す回数の上限である。上限が無いと、
-// 答えないクライアントがこの接続の goroutine を永久に保持する。
+// 応答しないクライアントがこの接続の goroutine を永久に保持する。
 const maxConfirmAttempts = 3
 
-// maxAnswer は、ひとつの答えの長さの上限である。
+// maxAnswer は、ひとつの結果の長さの上限である。
 const maxAnswer = 1024
 
 func (p StreamPrompter) read(prompt string, echo bool) (string, error) {
@@ -96,7 +96,7 @@ func (p StreamPrompter) read(prompt string, echo bool) (string, error) {
 			}
 			return string(answer), nil
 		case 0x03, 0x04:
-			// Ctrl-C と Ctrl-D。答えずに打ち切ったという事実である。
+			// Ctrl-C と Ctrl-D。応答せずに打ち切ったという事実である。
 			if _, err := io.WriteString(p.Out, "\r\n"); err != nil {
 				return "", err
 			}
@@ -130,9 +130,9 @@ func (p StreamPrompter) read(prompt string, echo bool) (string, error) {
 
 // InputBuffer は、握手のあいだに打たれたバイト列を溜める。
 //
-// io.Pipe ではない。**あれは書き込みが読み取りを待つ。** 問いが出ていない間に
+// io.Pipe ではない。あれは書き込みが読み取りを待つ。問いが出ていない間に
 // 打たれた文字で WebSocket の読み手が止まり、その接続全体が固まる。ここは
-// 書き込みが決して待たず、上限を超えたぶんは捨てる——溜めるのは人が打った
+// 書き込みが決して待たず、上限を超えたぶんは捨てる。溜めるのはユーザーが打った
 // 数十バイトであって、際限なく増えるものではない。
 type InputBuffer struct {
 	mutex  sync.Mutex
@@ -184,7 +184,7 @@ func (b *InputBuffer) Read(p []byte) (int, error) {
 	return read, nil
 }
 
-// Close は、待っている読み手を EOF で起こす。
+// Close は、待っている読み手を EOF で起動する。
 func (b *InputBuffer) Close() error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()

@@ -16,7 +16,7 @@ import (
 
 // terminalProcess は、本物の端末の向こうで走る sshc ひとつである。
 //
-// **パイプで代用できない。** vault の command はパスワードを求める前に
+// パイプで代用できない。vault の command はパスワードを求める前に
 // 「これは端末か」を訊き、端末でなければ断る。その拒否こそ確かめたいものの
 // ひとつなので、確かめる側は本物の端末を用意しなければならない。
 type terminalProcess struct {
@@ -24,10 +24,10 @@ type terminalProcess struct {
 	terminal *os.File
 	output   *lockedBuffer
 	exited   chan error
-	// drained は、端末から読み切ったことを表す。**command.Wait() は待ってくれ
-	// ない。** あちらが待つのは子だけで、こちらが端末から写している goroutine は
+	// drained は、端末から読み切ったことを表す。command.Wait() は待ってくれ
+	// ない。あちらが待つのは子だけで、こちらが端末から写している goroutine は
 	// 別に走っている。子が終わった瞬間に output を読むと、速く終わった子ほど
-	// 空に見える——落ちるのは、正しく動いているものの方である。
+	// 空に見える。落ちるのは、正しく動いているものの方である。
 	drained chan struct{}
 }
 
@@ -108,7 +108,7 @@ func (process *terminalProcess) wait(t *testing.T, within time.Duration) int {
 }
 
 // waitForOutput は、端末から読み切るのを短く待つ。読み切れなくても進む
-// ——そこで落とすと、確かめたいものではなく後片付けを検査することになる。
+// そこで落とすと、確かめたいものではなく後片付けを検査することになる。
 func (process *terminalProcess) waitForOutput() {
 	select {
 	case <-process.drained:

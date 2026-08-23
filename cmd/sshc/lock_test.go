@@ -7,10 +7,7 @@ import (
 	"testing"
 )
 
-// **エンジンが 2 台になる道を、ここで塞いでいる。** 裸の `sshc` はサブコマンドの
-// どれにも当たらないので、これが無ければそのまま 2 台目が上がる。ロックの実体と
-// 実プロセス試験は internal/enginelock にあり、ここが確かめるのは、この
-// コマンドが同じ状態ディレクトリの同じ engine.lock を名指すことである。
+// CLI が状態ディレクトリ内の同じ engine.lock を使用することを検証する。
 func TestLockEngineStartRefusesASecondEngine(t *testing.T) {
 	stateDir := t.TempDir()
 
@@ -27,8 +24,7 @@ func TestLockEngineStartRefusesASecondEngine(t *testing.T) {
 		t.Fatalf("engine.lock is not in the state directory: %v", statErr)
 	}
 
-	// **プロセスが死ねば必ず外れる。** 手放したあとは次の 1 台が上がれる
-	// ——外れないロックは、誰もエンジンを起こせない状態を永久に残す。
+	// 解放後に別の engine が lock を取得できることを検証する。
 	if err := release(); err != nil {
 		t.Fatalf("release = %v", err)
 	}
