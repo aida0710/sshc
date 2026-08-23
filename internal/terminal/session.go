@@ -63,7 +63,13 @@ type Session struct {
 	// stopping は、繋ぎ直しを待っている最中に閉じられたことを伝える。
 	// **待っているあいだに閉じた人を、次の接続で驚かせない。**
 	stopping chan struct{}
-	delay    func(attempt int) time.Duration
+	// discarded は、人が自分でこのコンソールを閉じたことを表す。
+	//
+	// **終了済みを一覧に残すのは、最後の出力を読ませるためである。** 自分で
+	// 閉じた人はもう読んでいて、そのうえで閉じている——残せば、片付けたはずの
+	// ものが並び続ける。勝手に切れたものは残す。そちらは読まれていない。
+	discarded bool
+	delay     func(attempt int) time.Duration
 
 	// done は pump が終わったことを示す。テストと停止処理だけが待つ。
 	done chan struct{}
@@ -221,6 +227,23 @@ func (s *Session) Resize(size Size) error {
 		return ErrExited
 	}
 	return process.Resize(size)
+}
+
+// Discard は、このセッションが人の意思で閉じられたことを記録する。
+//
+// **停止のときには呼ばない。** engine が畳まれる場面では、一覧そのものが
+// 消える——誰が閉じたかを区別する意味が無い。
+func (s *Session) Discard() {
+	s.mutex.Lock()
+	s.discarded = true
+	s.mutex.Unlock()
+}
+
+// Discarded は、人が自分で閉じたかを答える。
+func (s *Session) Discarded() bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.discarded
 }
 
 // Hangup は子プロセスへ SIGHUP を送る。終了そのものは pump が観測する。

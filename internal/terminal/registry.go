@@ -282,10 +282,20 @@ func (r *Registry) mintID() (string, error) {
 
 // prune は、残す終了済みセッションを新しい方から RetainedExited 本までにする。
 // 生きているセッションは決して捨てない。
+//
+// **人が自分で閉じたものは、数に入れず即座に捨てる。** 残す枠は「読まれて
+// いない終わり方」——勝手に切れた、相手が落ちた——のためにある。閉じた人は
+// もう読んでいて、そのうえで閉じている。
 func (r *Registry) prune() {
 	exited := 0
 	for index := len(r.sessions) - 1; index >= 0; index-- {
 		if r.sessions[index].Live() {
+			continue
+		}
+		// **人が閉じたものは数に入れず、すぐ捨てる。** 残す枠は「読まれて
+		// いない終わり方」のためにある。
+		if r.sessions[index].Discarded() {
+			r.sessions = append(r.sessions[:index], r.sessions[index+1:]...)
 			continue
 		}
 		exited++
@@ -308,9 +318,14 @@ func (r *Registry) Prune() {
 func (r *Registry) MaxSessions() int { return r.limits().MaxSessions }
 
 // Sessions は、生存と終了済みの両方を、開いた順に返す。
+//
+// **数える前に片付ける。** 人が閉じたコンソールは、終わった時点で捨ててよい
+// ——捨てる合図をどこか別の場所から鳴らすより、読む側が来たときに片付ける方が
+// 確実である。終わりを観測するのは pump であり、あれは registry を知らない。
 func (r *Registry) Sessions() []View {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+	r.prune()
 	views := make([]View, 0, len(r.sessions))
 	for _, session := range r.sessions {
 		views = append(views, session.View())
@@ -349,6 +364,9 @@ func (r *Registry) Close(id string) error {
 		return ErrNotFound
 	}
 	if session.Live() {
+		// **自分で閉じたものは、一覧に残さない。** 終了済みを残すのは最後の
+		// 出力を読ませるためであり、閉じた人はもう読んでいる。
+		session.Discard()
 		return session.Hangup()
 	}
 	r.mutex.Lock()
