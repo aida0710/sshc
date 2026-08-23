@@ -9,7 +9,7 @@ import (
 )
 
 // **止め方で終わり方が変わる。** Ctrl-C は人が止めたので 130、SIGTERM は
-// 監督者が止めたので 0 である。この違いは、`sshc headless` を supervisor の
+// 監督者が止めたので 0 である。この違いは、`sshc engine` を supervisor の
 // 下で走らせた人にとって意味を持つ——130 で終わるものを「異常終了」と読んで
 // 再起動し続ける監督者は珍しくない。
 //
@@ -26,7 +26,7 @@ func TestHowTheEngineIsStoppedDecidesHowItEnds(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			home := isolatedHome(t)
-			engine := start(t, home, "headless")
+			engine := start(t, home, "engine")
 			waitForFile(t, handoffPath(home), 30*time.Second, engine)
 
 			if err := engine.Command.Process.Signal(test.signal); err != nil {

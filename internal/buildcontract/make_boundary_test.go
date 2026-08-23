@@ -50,7 +50,6 @@ func main() {
 	keys := []string{
 		"GOENV", "GOOS", "GOARCH", "CGO_ENABLED",
 		"SSHC_NATIVE_VERSION", "SSHC_NATIVE_GOOS", "SSHC_NATIVE_GOARCH", "SSHC_NATIVE_CGO", "SSHC_NATIVE_OUTPUT",
-		"SSHC_NATIVE_MAC_BUNDLES", "SSHC_NATIVE_LINUX_BUNDLES", "SSHC_NATIVE_WINDOWS_BUNDLES",
 		"SSHC_NATIVE_RELEASE_TARGETS", "SSHC_NATIVE_RELEASE_ARCHES", "SSHC_NATIVE_RELEASE_DIR",
 	}
 	environment := make(map[string]string, len(keys))
@@ -82,9 +81,6 @@ func main() {
 	makeExpansionSentinel := filepath.Join(temporary, "make-expansion-sentinel")
 	output := filepath.Join(temporary, `edge path $dollar $(shell go make-expansion-sentinel) "quote" ; & `+"`"+`touch "`+backtickSentinel+`"`+"`"+` %NAME% (paren)`)
 	version := `v1.2.3+$(shell go make-expansion-sentinel)`
-	macBundles := "mac-arm64:darwin:arm64:1:sshc mac-x64:darwin:amd64:1:sshc"
-	linuxBundles := "linux-arm64:linux:arm64:0:sshc linux-x64:linux:amd64:0:sshc"
-	windowsBundles := "win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe"
 	releaseTargets := "darwin/arm64:1 linux/amd64:0"
 	releaseArches := "amd64 arm64"
 	releaseDirectory := filepath.Join(temporary, "release path")
@@ -103,9 +99,6 @@ func main() {
 		"OUTPUT="+output,
 		"VERSION="+version,
 		"GOENV="+filepath.Join(temporary, "hostile-goenv"),
-		"DESKTOP_MAC_BUNDLES="+macBundles,
-		"DESKTOP_LINUX_BUNDLES="+linuxBundles,
-		"DESKTOP_WINDOWS_BUNDLES="+windowsBundles,
 		"RELEASE_TARGETS="+releaseTargets,
 		"RELEASE_CURRENT_ARCHES="+releaseArches,
 		"RELEASE_DIR="+releaseDirectory,
@@ -175,9 +168,6 @@ func main() {
 		"SSHC_NATIVE_CGO":             "0",
 		"SSHC_NATIVE_OUTPUT":          output,
 		"SSHC_NATIVE_VERSION":         version,
-		"SSHC_NATIVE_MAC_BUNDLES":     macBundles,
-		"SSHC_NATIVE_LINUX_BUNDLES":   linuxBundles,
-		"SSHC_NATIVE_WINDOWS_BUNDLES": windowsBundles,
 		"SSHC_NATIVE_RELEASE_TARGETS": releaseTargets,
 		"SSHC_NATIVE_RELEASE_ARCHES":  releaseArches,
 		"SSHC_NATIVE_RELEASE_DIR":     releaseDirectory,
@@ -195,8 +185,7 @@ func main() {
 func TestNativeMakeRecipesContainOnlyFixedInputs(t *testing.T) {
 	contract := readMakefileContract(t)
 	for _, target := range []string{
-		"build", "build-cli", "desktop-bundle-mac", "desktop-bundle-linux",
-		"desktop-bundle-windows", "desktop-version", "release-binaries", "release-cli-current",
+		"build", "build-cli", "release-binaries", "release-cli-current",
 	} {
 		recipe := requireTarget(t, contract, target)
 		withoutRecursiveMake := strings.ReplaceAll(recipe, "$(MAKE)", "make")

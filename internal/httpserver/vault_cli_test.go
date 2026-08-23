@@ -201,7 +201,7 @@ func TestCLIVaultStatusDescribesMissingLockedAndUnlocked(t *testing.T) {
 	service := newCLIVaultService(t)
 	engine := connectEngine(t, ConnectHandlers{
 		Secret: testCLISecret, Passwords: service, Sessions: func() int { return 2 },
-		Owner: handoff.OwnerHeadless, Version: "v-status-test", ProtocolVersion: handoff.ProtocolVersion,
+		Owner: handoff.OwnerEngine, Version: "v-status-test", ProtocolVersion: handoff.ProtocolVersion,
 	})
 	assertStatus := func(vault, unlocked bool) {
 		t.Helper()
@@ -216,7 +216,7 @@ func TestCLIVaultStatusDescribesMissingLockedAndUnlocked(t *testing.T) {
 		if answer.Vault != vault || answer.Unlocked != unlocked || answer.Sessions != 2 {
 			t.Fatalf("answer = %+v, want vault=%v unlocked=%v sessions=2", answer, vault, unlocked)
 		}
-		if answer.Owner != handoff.OwnerHeadless || answer.Version != "v-status-test" || answer.ProtocolVersion != handoff.ProtocolVersion {
+		if answer.Owner != handoff.OwnerEngine || answer.Version != "v-status-test" || answer.ProtocolVersion != handoff.ProtocolVersion {
 			t.Fatalf("identity = owner %q, version %q, protocol %d", answer.Owner, answer.Version, answer.ProtocolVersion)
 		}
 	}
@@ -558,7 +558,7 @@ func newUnconfiguredSyncVaultServer(
 		Passwords:       passwords,
 		Sync:            syncService,
 		Sessions:        sessions,
-		Owner:           handoff.OwnerHeadless,
+		Owner:           handoff.OwnerEngine,
 		Version:         "no-remote-test",
 		ProtocolVersion: handoff.ProtocolVersion,
 	})
@@ -879,7 +879,7 @@ func TestServerSharesCoordinatorBetweenCLIChangeAndBrowserLock(t *testing.T) {
 		Passwords:       passwords,
 		Sync:            syncService,
 		Sessions:        sessions,
-		Owner:           handoff.OwnerHeadless,
+		Owner:           handoff.OwnerEngine,
 		Version:         "coordinator-test",
 		ProtocolVersion: handoff.ProtocolVersion,
 	})

@@ -122,11 +122,11 @@ func TestRunVaultStatusIsHumanReadableWithoutATerminal(t *testing.T) {
 			return
 		}
 		response.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerDesktop, true, false))
+		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerDesktop)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	terminal := &fakePasswordTerminal{terminal: false}
 	var stdout, stderr strings.Builder
@@ -134,7 +134,7 @@ func TestRunVaultStatusIsHumanReadableWithoutATerminal(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("runVault status = %d, stderr = %q", code, stderr.String())
 	}
-	want := "engine: desktop\nversion: v4-test\nprotocol: 1\nvault: locked\nsessions: 2\n"
+	want := "engine: engine\nversion: v4-test\nprotocol: 1\nvault: locked\nsessions: 2\n"
 	if stdout.String() != want {
 		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
 	}
@@ -149,11 +149,11 @@ func TestRunVaultCreateChecksStateBeforePrompting(t *testing.T) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
-		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, true, false))
+		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	terminal := &fakePasswordTerminal{terminal: true}
 	var stdout, stderr strings.Builder
@@ -173,7 +173,7 @@ func TestRunVaultRefusesPasswordActionsWithoutATerminalBeforeAnyRequest(t *testi
 			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
 			defer server.Close()
 			stateDir := t.TempDir()
-			writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+			writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 			var stdout, stderr strings.Builder
 			code := runVault(context.Background(), action, stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
@@ -194,11 +194,11 @@ func TestRunVaultConfirmationMismatchSendsNoMutation(t *testing.T) {
 					posts++
 				}
 				vaultExists := action == "change-password"
-				_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, vaultExists, vaultExists))
+				_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, vaultExists, vaultExists))
 			}))
 			defer server.Close()
 			stateDir := t.TempDir()
-			writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+			writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 			answers := [][]byte{[]byte(vaultPasswordCanary), []byte("different confirmation")}
 			if action == "change-password" {
@@ -229,11 +229,11 @@ func TestRunVaultUnlockSkipsPromptWhenAlreadyUnlocked(t *testing.T) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
-		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerDesktop, true, true))
+		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, true))
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerDesktop)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	terminal := &fakePasswordTerminal{terminal: true}
 	var stdout, stderr strings.Builder
@@ -246,7 +246,7 @@ func TestRunVaultUnlockSkipsPromptWhenAlreadyUnlocked(t *testing.T) {
 func TestRunVaultLockAuthenticationFailureDoesNotBlameAPassword(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet && request.URL.Path == httpserver.VaultStatusPath {
-			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, true, true))
+			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, true))
 			return
 		}
 		if request.Method == http.MethodPost && request.URL.Path == httpserver.VaultLockPath {
@@ -257,7 +257,7 @@ func TestRunVaultLockAuthenticationFailureDoesNotBlameAPassword(t *testing.T) {
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
 	code := runVault(context.Background(), "lock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
@@ -282,7 +282,7 @@ func TestRunVaultLockValidatesLiveIdentityBeforeMutation(t *testing.T) {
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
 	code := runVault(context.Background(), "lock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
@@ -301,7 +301,7 @@ func TestRunVaultLockUsesAuthenticatedSessionPreservingRoute(t *testing.T) {
 			return
 		}
 		if request.Method == http.MethodGet && request.URL.Path == httpserver.VaultStatusPath {
-			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerDesktop, true, true))
+			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, true))
 			return
 		}
 		if request.Method == http.MethodPost && request.URL.Path == httpserver.VaultLockPath {
@@ -317,7 +317,7 @@ func TestRunVaultLockUsesAuthenticatedSessionPreservingRoute(t *testing.T) {
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerDesktop)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 	terminal := &fakePasswordTerminal{terminal: false}
 
 	var stdout, stderr strings.Builder
@@ -354,7 +354,7 @@ func (t *statusThenErrorTransport) RoundTrip(request *http.Request) (*http.Respo
 	if request.Method == http.MethodGet {
 		status := t.status
 		if status == "" {
-			status = vaultStatusBody(handoff.OwnerHeadless, true, false)
+			status = vaultStatusBody(handoff.OwnerEngine, true, false)
 		}
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -393,10 +393,10 @@ func TestRunVaultExplainsUncertainPasswordChangeAfterTimeoutOrCancel(t *testing.
 		t.Run(test.name, func(t *testing.T) {
 			transport := &statusThenErrorTransport{
 				error:  test.err,
-				status: vaultStatusBody(handoff.OwnerHeadless, true, true),
+				status: vaultStatusBody(handoff.OwnerEngine, true, true),
 			}
 			stateDir := t.TempDir()
-			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42805", handoff.OwnerHeadless)
+			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42805", handoff.OwnerEngine)
 			current := []byte("current password")
 			next := []byte(vaultPasswordCanary)
 			confirmation := []byte(vaultPasswordCanary)
@@ -434,13 +434,13 @@ func TestRunVaultExplainsHowToCheckUncertainCreateOrUnlock(t *testing.T) {
 		status string
 		reads  int
 	}{
-		{action: "create", status: vaultStatusBody(handoff.OwnerHeadless, false, false), reads: 2},
-		{action: "unlock", status: vaultStatusBody(handoff.OwnerHeadless, true, false), reads: 1},
+		{action: "create", status: vaultStatusBody(handoff.OwnerEngine, false, false), reads: 2},
+		{action: "unlock", status: vaultStatusBody(handoff.OwnerEngine, true, false), reads: 1},
 	} {
 		t.Run(test.action, func(t *testing.T) {
 			transport := &statusThenErrorTransport{error: context.DeadlineExceeded, status: test.status}
 			stateDir := t.TempDir()
-			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42806", handoff.OwnerHeadless)
+			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42806", handoff.OwnerEngine)
 			answers := make([][]byte, test.reads)
 			for index := range answers {
 				answers[index] = []byte(vaultPasswordCanary)
@@ -526,7 +526,7 @@ func TestRunVaultDoesNotPrintATransportErrorThatReflectsThePassword(t *testing.T
 	transport := &statusThenErrorTransport{error: vaultTransportError{message: []byte("transport reflected " + vaultPasswordCanary)}}
 	client := &http.Client{Transport: transport}
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42802", handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42802", handoff.OwnerEngine)
 	typed := []byte(vaultPasswordCanary)
 
 	var stdout, stderr strings.Builder
@@ -547,7 +547,7 @@ func TestRunVaultDoesNotPrintANonSuccessBodyThatReflectsThePassword(t *testing.T
 	typed := []byte(vaultPasswordCanary)
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet {
-			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, true, false))
+			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
 			return
 		}
 		response.WriteHeader(http.StatusInternalServerError)
@@ -555,7 +555,7 @@ func TestRunVaultDoesNotPrintANonSuccessBodyThatReflectsThePassword(t *testing.T
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
 	code := runVault(context.Background(), "unlock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
@@ -574,14 +574,14 @@ func TestRunVaultDoesNotPrintANonSuccessBodyThatReflectsThePassword(t *testing.T
 func TestRunVaultExplainsAnOversizedPasswordRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet {
-			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, true, false))
+			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
 			return
 		}
 		response.WriteHeader(http.StatusRequestEntityTooLarge)
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 	typed := []byte(vaultPasswordCanary)
 
 	var stdout, stderr strings.Builder
@@ -658,7 +658,7 @@ func TestRunVaultCreateErasesTerminalBuffersAndSendsAuthenticatedJSON(t *testing
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.Method {
 		case http.MethodGet:
-			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, false, false))
+			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, false, false))
 		case http.MethodPost:
 			posts++
 			if request.URL.Path != httpserver.VaultCreatePath || request.Header.Get(handoff.HeaderName) != "the secret" ||
@@ -678,7 +678,7 @@ func TestRunVaultCreateErasesTerminalBuffersAndSendsAuthenticatedJSON(t *testing
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	terminal := &fakePasswordTerminal{terminal: true, answers: [][]byte{first, confirmation}}
 	var stdout, stderr strings.Builder
@@ -700,11 +700,11 @@ func TestRunVaultRejectsInvalidUTF8WithoutSendingASecret(t *testing.T) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
-		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, false, false))
+		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, false, false))
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 	invalid := []byte{0xff, 0xfe}
 	confirmation := []byte{0xff, 0xfe}
 
@@ -721,7 +721,7 @@ func TestRunVaultCancellationReturns130WithoutARequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -739,11 +739,11 @@ func TestRunVaultReadCancellationSendsNoMutation(t *testing.T) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
-		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, true, false))
+		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
 	code := runVault(context.Background(), "unlock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
@@ -759,11 +759,11 @@ func TestRunVaultErasesPartialPasswordReturnedWithReadError(t *testing.T) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
-		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, true, false))
+		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 	typed := []byte(vaultPasswordCanary)
 
 	var stdout, stderr strings.Builder
@@ -787,11 +787,11 @@ func TestRunVaultStopsPromptingWhenContextIsCanceledAfterARead(t *testing.T) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
-		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, false, false))
+		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, false, false))
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 	ctx, cancel := context.WithCancel(context.Background())
 	typed := []byte(vaultPasswordCanary)
 	terminal := &fakePasswordTerminal{
@@ -858,11 +858,11 @@ func TestRunVaultDoesNotPromptAfterPreflightCancellation(t *testing.T) {
 		t.Run(test.action, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			transport := &cancelingStatusTransport{
-				body:   vaultStatusBody(handoff.OwnerHeadless, test.vault, test.unlocked),
+				body:   vaultStatusBody(handoff.OwnerEngine, test.vault, test.unlocked),
 				cancel: cancel,
 			}
 			stateDir := t.TempDir()
-			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42808", handoff.OwnerHeadless)
+			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42808", handoff.OwnerEngine)
 			terminal := &fakePasswordTerminal{terminal: true}
 
 			var stdout, stderr strings.Builder
@@ -882,7 +882,7 @@ func TestRunVaultChangeReportsLocalSuccessWhenRemoteResealFails(t *testing.T) {
 	confirmation := []byte(vaultPasswordCanary)
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet {
-			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerDesktop, true, true))
+			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, true))
 			return
 		}
 		response.Header().Set("Content-Type", "application/json")
@@ -891,7 +891,7 @@ func TestRunVaultChangeReportsLocalSuccessWhenRemoteResealFails(t *testing.T) {
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerDesktop)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
 	code := runVault(context.Background(), "change-password", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
@@ -913,7 +913,7 @@ func TestRunVaultRejectsUnknownLiveOwnerWithoutHumanOutput(t *testing.T) {
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
 	code := runVault(context.Background(), "status", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
@@ -943,7 +943,7 @@ func TestRunVaultRejectsMalformedOrIncompatibleStatusBeforeHumanOutput(t *testin
 			}))
 			defer server.Close()
 			stateDir := t.TempDir()
-			writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+			writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 			var stdout, stderr strings.Builder
 			code := runVault(context.Background(), "status", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
@@ -1016,7 +1016,7 @@ func TestRunVaultBoundsAndClosesEveryResponseBody(t *testing.T) {
 			body := &closingBody{reader: strings.NewReader(strings.Repeat("x", 70<<10))}
 			client := &http.Client{Transport: staticResponseTransport{status: test.status, body: body}}
 			stateDir := t.TempDir()
-			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42801", handoff.OwnerHeadless)
+			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42801", handoff.OwnerEngine)
 			var stdout, stderr strings.Builder
 			code := runVault(context.Background(), test.action, stateDir, client, vaultTestInput(t), &stdout, &stderr,
 				&fakePasswordTerminal{terminal: false})
@@ -1053,7 +1053,7 @@ func TestRunVaultBoundsAndClosesErrorAndPartialResponseBodies(t *testing.T) {
 		{name: "partial response", status: http.StatusMultiStatus, body: strings.Repeat("x", 70<<10), wantPhrase: "changed locally"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			statusBody := &closingBody{reader: strings.NewReader(vaultStatusBody(handoff.OwnerDesktop, true, true))}
+			statusBody := &closingBody{reader: strings.NewReader(vaultStatusBody(handoff.OwnerEngine, true, true))}
 			mutationBody := &closingBody{reader: strings.NewReader(test.body)}
 			transport := &sequencedResponseTransport{responses: []*http.Response{
 				{StatusCode: http.StatusOK, Header: make(http.Header), Body: statusBody},
@@ -1061,7 +1061,7 @@ func TestRunVaultBoundsAndClosesErrorAndPartialResponseBodies(t *testing.T) {
 			}}
 			client := &http.Client{Transport: transport}
 			stateDir := t.TempDir()
-			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42804", handoff.OwnerDesktop)
+			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42804", handoff.OwnerEngine)
 			current := []byte("current password")
 			next := []byte(vaultPasswordCanary)
 			confirmation := []byte(vaultPasswordCanary)

@@ -33,19 +33,11 @@ var startsAProcess = []string{"exec.Command"}
 // **一覧を持つ形にしてあるのは、増えたときに気づくためである。** 「OpenSSH が
 // 無いこと」を検査すると、OpenSSH でない何かが増えても緑のままになる。
 var allowedToStartPrograms = []string{
-	// 束を起こすのは LaunchServices への依頼であり、出力を取る実行ではない。
-	// `/usr/bin/open` を絶対パスで指し、`sshc <接続先>` の ctx と上限の下で
-	// 走る——継ぎ目が守っている性質は、ここでも同じ形で守られている。
-	"cmd/sshc/launch_darwin.go",
-	// Linux には束を名前で起こす仕組みが無いので、外殻が上がるたびに書き残した
-	// 絶対パスひとつを直接起こす。**PATH も shell も引かない。** 引けば、誰の
-	// PATH に何が置かれているかで起こすものが変わる——絶対パスに固定してある点で
-	// `/usr/bin/open` と同じ性質を守っている。
-	"cmd/sshc/launch_linux.go",
-	// Windows も同じ形である。起こすのはインストーラが HKCU に記録した絶対パス
-	// ひとつだけで、**cmd.exe も PowerShell も PATH も間に入らない**。shell を
-	// 通せば、その瞬間にパスが引用と展開の対象になる。
-	"cmd/sshc/launch_windows.go",
+	// 入口をブラウザへ渡す。**出力を取る実行ではない。** 起こしたら手を離すので
+	// 継ぎ目（出力を集めて返す道）を通す必要が無く、渡すのは自分で組み立てた
+	// loopback の URL ひとつだけである。開けなくても失敗ではない——URL は
+	// 標準出力にも出ているので、貼れる綴りは人の手元に残る。
+	"cmd/sshc/browser.go",
 	// ローカルシェルには擬似端末が要る。継ぎ目は出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",

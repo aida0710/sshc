@@ -88,7 +88,7 @@ func testHandoff(target string) handoff.Handoff {
 		SchemaVersion:   handoff.SchemaVersion,
 		URL:             target,
 		Secret:          "the secret",
-		Owner:           handoff.OwnerHeadless,
+		Owner:           handoff.OwnerEngine,
 		PID:             4242,
 		Version:         "test",
 		ProtocolVersion: handoff.ProtocolVersion,
@@ -120,7 +120,7 @@ func TestAskingAMachineThatHasNeverRunAnEngineGetsAnAnswerItCanAct(t *testing.T)
 		t.Fatal("a machine with no handoff answered as if an engine were running")
 	}
 	message := err.Error()
-	for _, want := range []string{"not running", "headless"} {
+	for _, want := range []string{"not running", "sshc engine"} {
 		if !strings.Contains(message, want) {
 			t.Errorf("%q does not tell the reader %q", message, want)
 		}

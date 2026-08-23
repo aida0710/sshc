@@ -253,7 +253,7 @@ func newFixture(t testing.TB) *fixture {
 
 	server, bootstrap, err := app.Build(app.Dependencies{
 		Home:            home,
-		Owner:           handoff.OwnerHeadless,
+		Owner:           handoff.OwnerEngine,
 		PID:             4242,
 		Random:          rand.Reader,
 		Listen:          net.Listen,
