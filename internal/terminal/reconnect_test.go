@@ -185,3 +185,56 @@ func TestKeystrokesDuringAReconnectAreDropped(t *testing.T) {
 		t.Errorf("溜めた打鍵が新しいシェルへ届いた: %q", got)
 	}
 }
+
+// closingSpy は、閉じられたときに**輸送の断絶として**終わる相手を演じる。
+//
+// **実物がそうである。** sshclient.Session.Close は finish(ExitInfo{Code: -1}) を
+// 呼ぶ——閉じる操作は輸送を断つので、あちらからは落ちたのと同じに見える。
+// registry_test の fakeProcess は Code 0 で終わるので、この道は再現できない。
+type closingSpy struct {
+	mutex     sync.Mutex
+	processes []*fakeProcess
+}
+
+func (s *closingSpy) open(_ context.Context, _ terminal.Size) (terminal.Process, error) {
+	process := newFakeProcess()
+	process.onHangup = func(p *fakeProcess) { p.exit(terminal.ExitInfo{Code: terminal.TransportLost}) }
+	s.mutex.Lock()
+	s.processes = append(s.processes, process)
+	s.mutex.Unlock()
+	return process, nil
+}
+
+func (s *closingSpy) count() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return len(s.processes)
+}
+
+// **自分で閉じた人に「繋ぎ直します」と言わない。**
+//
+// 閉じる操作は輸送を断つので、sshclient はそれを TransportLost として報告する
+// ——落ちたのか閉じたのかは、あちらからは見分けられない。見分けられるのは
+// こちら側で、閉じたことは stopping が知っている。
+func TestClosingAConsoleDoesNotPromiseToDialAgain(t *testing.T) {
+	spy := &closingSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := registry.Close(session.ID()); err != nil {
+		t.Fatal(err)
+	}
+
+	waitFor(t, func() bool { return !session.Live() })
+	if strings.Contains(string(session.Snapshot()), "繋ぎ直します") {
+		t.Errorf("閉じた人に、起きない繋ぎ直しを予告した:\n%s", session.Snapshot())
+	}
+	if spy.count() != 1 {
+		t.Errorf("開き直しに行った回数 = %d, want 1（閉じたのだから行かない）", spy.count())
+	}
+}
