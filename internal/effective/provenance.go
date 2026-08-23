@@ -41,6 +41,11 @@ const (
 	ComplexityJumpInvalid       = "jump_invalid"
 	ComplexityJumpCycle         = "jump_cycle"
 	ComplexityJumpDepth         = "jump_depth_exceeded"
+	// ComplexityJumpUnresolved は、経路を辿る前に解決そのものを諦めたことを言う。
+	//
+	// **空の経路と区別する。** 黙って空を返せば、画面は「踏み台を通らない」と
+	// 言う——Match exec を含む設定では、通るかどうかがまさに分からない。
+	ComplexityJumpUnresolved = "jump_unresolved"
 )
 
 // Source は、値の出どころひとつ。Winner は OpenSSH が採用する値を示す。最初に

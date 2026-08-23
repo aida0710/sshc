@@ -142,14 +142,28 @@ type Stage struct {
 	Hostname string
 	User     string
 	Port     string
-	Sources  []Source
 	Complex  bool
 }
 
 // ExpandRoute は、alias とその中のすべての踏み台ホストの ProxyJump 連鎖を展開する。
 // これにより、最初のホップだけでなく経路の全体を表示できる。
-func ExpandRoute(graph *config.Graph, alias string) ([]Stage, []Complexity) {
-	walk := routeWalk{graph: graph, ancestors: map[string]bool{strings.ToLower(alias): true}}
+//
+// **値は Resolve から取る。** かつてここは Project を使っていた。あれは Match
+// ブロックを一切適用しない——条件が接続中の状態に依るからで、「どの行が書いたか」
+// を並べる用途ではそれで正しい。**だがここが答えているのは出所ではなく、踏み台へ
+// 実際に繋ぐ宛先である。**
+//
+// 症状は静かではなかったが、正しくもなかった: Project は Match の存在を
+// complexity として記録するので段は「単純ではない」と印されたものの、HostName と
+// User と Port そのものは間違ったまま画面に出た。そして **ProxyJump 自体が Match
+// の下に書かれていれば、経路は丸ごと空になった** ——画面は「踏み台を通らない」と
+// 言い、実際には通る。
+func ExpandRoute(graph *config.Graph, alias string, facts LocalFacts) ([]Stage, []Complexity) {
+	walk := routeWalk{
+		graph:     graph,
+		facts:     facts,
+		ancestors: map[string]bool{strings.ToLower(alias): true},
+	}
 	return walk.expand(alias, 0)
 }
 
@@ -162,23 +176,35 @@ func ExpandRoute(graph *config.Graph, alias string) ([]Stage, []Complexity) {
 // 展開される。
 type routeWalk struct {
 	graph     *config.Graph
+	facts     LocalFacts
 	ancestors map[string]bool
 	order     int
 }
 
 func (w *routeWalk) expand(alias string, depth int) ([]Stage, []Complexity) {
-	projection := Project(w.graph, alias)
-	source, ok := projection.Value("proxyjump")
-	if !ok {
+	resolution := Resolve(w.graph, alias, w.facts)
+	// **解決を諦めたことを、経路が無いことにしない。** Match exec を含む設定は
+	// 値を出さない。黙って空の経路を返せば、画面は「踏み台を通らない」と言う。
+	if len(resolution.Refusals) > 0 {
+		return nil, []Complexity{{
+			Code:   ComplexityJumpUnresolved,
+			Path:   resolution.Refusals[0].Path,
+			Line:   resolution.Refusals[0].Line,
+			Detail: resolution.Refusals[0].Detail,
+		}}
+	}
+	raw := resolution.Values.First("proxyjump")
+	if raw == "" {
 		return nil, nil
 	}
-	chain, err := ParseChain(source.Value)
+	where := whereAccepted(resolution, "proxyjump")
+	chain, err := ParseChain(raw)
 	if err != nil {
 		return nil, []Complexity{{
 			Code:   ComplexityJumpInvalid,
-			Path:   source.Path,
-			Line:   source.Line,
-			Detail: source.Value,
+			Path:   where.Path,
+			Line:   where.Line,
+			Detail: raw,
 		}}
 	}
 	if chain.Disabled {
@@ -187,8 +213,8 @@ func (w *routeWalk) expand(alias string, depth int) ([]Stage, []Complexity) {
 	if depth >= MaxJumpDepth {
 		return nil, []Complexity{{
 			Code:   ComplexityJumpDepth,
-			Path:   source.Path,
-			Line:   source.Line,
+			Path:   where.Path,
+			Line:   where.Line,
 			Detail: "the jump route is deeper than this engine follows",
 		}}
 	}
@@ -199,39 +225,36 @@ func (w *routeWalk) expand(alias string, depth int) ([]Stage, []Complexity) {
 		if w.order >= MaxRouteStages {
 			complexities = append(complexities, Complexity{
 				Code:   ComplexityJumpDepth,
-				Path:   source.Path,
-				Line:   source.Line,
+				Path:   where.Path,
+				Line:   where.Line,
 				Detail: "the jump route has more hops than this engine follows",
 			})
 			break
 		}
 
-		hopProjection := Project(w.graph, hop.Host)
+		hopResolution := Resolve(w.graph, hop.Host, w.facts)
 		w.order++
 		stage := Stage{
-			Order:    w.order,
-			Depth:    depth,
-			Parent:   alias,
-			Hop:      hop,
+			Order:  w.order,
+			Depth:  depth,
+			Parent: alias,
+			Hop:    hop,
+			// **リストに書かれた値は、そのホップ自身の設定に勝つ。** OpenSSH が
+			// そうする。書かれていなければ、解決した値が答えである。
 			Hostname: hop.Host,
 			User:     hop.User,
 			Port:     hop.Port,
-			Complex:  !hopProjection.Simple(),
+			// **印は残す。** 値は確定していても、同じ alias を二つのブロックが
+			// 主張しているようなことは、書いた本人には見えていない。
+			Complex: len(hopResolution.Notes) > 0 || len(hopResolution.Refusals) > 0,
 		}
-		if hostName, found := hopProjection.Value("hostname"); found {
-			stage.Hostname = hostName.Value
-			stage.Sources = append(stage.Sources, hostName)
-		}
-		if !hop.UserExplicit {
-			if user, found := hopProjection.Value("user"); found {
-				stage.User = user.Value
-				stage.Sources = append(stage.Sources, user)
+		if len(hopResolution.Refusals) == 0 {
+			stage.Hostname = valueOr(hopResolution.Values, "hostname", hop.Host)
+			if !hop.UserExplicit {
+				stage.User = valueOr(hopResolution.Values, "user", hop.User)
 			}
-		}
-		if !hop.PortExplicit {
-			if port, found := hopProjection.Value("port"); found {
-				stage.Port = port.Value
-				stage.Sources = append(stage.Sources, port)
+			if !hop.PortExplicit {
+				stage.Port = valueOr(hopResolution.Values, "port", hop.Port)
 			}
 		}
 		stages = append(stages, stage)
@@ -240,8 +263,8 @@ func (w *routeWalk) expand(alias string, depth int) ([]Stage, []Complexity) {
 		if w.ancestors[lowered] {
 			complexities = append(complexities, Complexity{
 				Code:   ComplexityJumpCycle,
-				Path:   source.Path,
-				Line:   source.Line,
+				Path:   where.Path,
+				Line:   where.Line,
 				Detail: hop.Host + " already appears earlier in this route",
 			})
 			continue
@@ -253,4 +276,17 @@ func (w *routeWalk) expand(alias string, depth int) ([]Stage, []Complexity) {
 		complexities = append(complexities, nestedComplexities...)
 	}
 	return stages, complexities
+}
+
+// whereAccepted は、そのキーワードを採用した行の場所を返す。
+//
+// **値と場所を別々に歩かない。** Resolve は採用した行をそのまま持っているので、
+// 印に添える綴りと行番号はそこから取る。
+func whereAccepted(resolution Resolution, keyword string) Accepted {
+	for _, accepted := range resolution.Accepted {
+		if strings.EqualFold(accepted.Keyword, keyword) {
+			return accepted
+		}
+	}
+	return Accepted{}
 }

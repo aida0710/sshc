@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"sshc/internal/diagnostics"
+	"sshc/internal/effective"
 	"sshc/internal/storage"
 )
 
@@ -40,7 +41,7 @@ func newServiceWorkspace(t *testing.T, contents string) *storage.Workspace {
 
 func newTestService(t *testing.T, probe *scriptedProbe) *diagnostics.Service {
 	t.Helper()
-	service := diagnostics.NewService(newServiceWorkspace(t, serviceConfig), probe.dial)
+	service := diagnostics.NewService(newServiceWorkspace(t, serviceConfig), probe.dial, effective.LocalFacts{})
 	service.Reachability = diagnostics.Reachability{
 		Dialer: dialerFunc(func(context.Context, string, string) (net.Conn, error) {
 			return nil, &net.OpError{Op: "dial", Err: errRefusedForTest}
@@ -75,7 +76,7 @@ func TestConnectionSnapshotDerivesEverythingFromOneGraphRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := diagnostics.NewService(workspace, (&scriptedProbe{}).dial)
+	service := diagnostics.NewService(workspace, (&scriptedProbe{}).dial, effective.LocalFacts{})
 
 	snapshot, err := service.ConnectionSnapshot("bastion")
 	if err != nil {
@@ -163,5 +164,60 @@ func TestServiceAuthenticateSanitisesTheHomePathOutOfReportedOutput(t *testing.T
 	}
 	if !strings.Contains(result.Detail, "unable to authenticate") {
 		t.Error("sanitising removed the reason for the failure")
+	}
+}
+
+// **見せる宛先と、繋ぐ宛先は同じでなければならない。**
+//
+// Destination も ConnectionSnapshot も Project から値を取っていた。あれは Match
+// ブロックを一切適用しない——「どの行が書いたか」を並べる用途ではそれで正しいが、
+// **ここが答えているのは実際に届く相手**である。
+//
+// 到達性の検査は違う機械を叩いて「繋がりません」と答え、鍵の登録画面は
+// 「bastion.internal に入れます」と見せながら、繋ぐのは別の相手だった。
+func TestTheDestinationComesFromTheResolverNotTheProjection(t *testing.T) {
+	workspace := newServiceWorkspace(t, ""+
+		"Match originalhost gateway\n"+
+		"\tHostName 10.4.4.4\n"+
+		"\tPort 2022\n"+
+		"\tUser ops\n")
+	service := diagnostics.NewService(workspace, nil, effective.LocalFacts{})
+
+	hostname, port, err := service.Destination("gateway")
+	if err != nil {
+		t.Fatalf("Destination = %v", err)
+	}
+	if hostname != "10.4.4.4" || port != "2022" {
+		t.Errorf("Destination = %q:%q, want 10.4.4.4:2022", hostname, port)
+	}
+
+	snapshot, err := service.ConnectionSnapshot("gateway")
+	if err != nil {
+		t.Fatalf("ConnectionSnapshot = %v", err)
+	}
+	if snapshot.Hostname != "10.4.4.4" || snapshot.Port != "2022" || snapshot.User != "ops" {
+		t.Errorf("snapshot = %+v, want ops@10.4.4.4:2022", snapshot)
+	}
+}
+
+// **解決を諦めた設定について、当てずっぽうの宛先を返さない。**
+//
+// Match exec はコマンドを実行しうるので、この解決器は評価しない。値が出ない以上、
+// どこへ繋がるかは分からない——alias:22 を叩いた結果を「その接続先への到達性」
+// として見せるのは嘘であり、鍵の登録画面でそれを見せれば、人は確かめようのない
+// ものを確かめることになる。
+func TestAnUnresolvableAliasHasNoDestination(t *testing.T) {
+	workspace := newServiceWorkspace(t, ""+
+		"Match exec \"true\"\n"+
+		"\tHostName 10.5.5.5\n"+
+		"Host gateway\n"+
+		"\tHostName 10.4.4.4\n")
+	service := diagnostics.NewService(workspace, nil, effective.LocalFacts{})
+
+	if _, _, err := service.Destination("gateway"); !errors.Is(err, diagnostics.ErrUnresolvedDestination) {
+		t.Errorf("Destination = %v, want ErrUnresolvedDestination", err)
+	}
+	if _, err := service.ConnectionSnapshot("gateway"); !errors.Is(err, diagnostics.ErrUnresolvedDestination) {
+		t.Errorf("ConnectionSnapshot = %v, want ErrUnresolvedDestination", err)
 	}
 }

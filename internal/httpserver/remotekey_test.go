@@ -15,6 +15,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/diagnostics"
+	"sshc/internal/effective"
 	"sshc/internal/remotekey"
 	"sshc/internal/session"
 	"sshc/internal/sshclient"
@@ -71,7 +72,7 @@ func newRemoteKeyServer(t *testing.T, outputs []sshclient.Output) (*echo.Echo, s
 		t.Fatal(err)
 	}
 
-	diagnosticsService := diagnostics.NewService(workspace, (&recordingProbe{}).dial)
+	diagnosticsService := diagnostics.NewService(workspace, (&recordingProbe{}).dial, effective.LocalFacts{})
 	diagnosticsService.Reachability = diagnostics.Reachability{
 		Dialer: dialerStub(func(context.Context, string, string) (net.Conn, error) {
 			return nil, net.UnknownNetworkError("unreachable in test")
