@@ -46,6 +46,14 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: make release-cli-current
 
+
+      # **綴りは中身を保証しない。** verify-artifact-name が見るのはファイル名
+      # だけで、machine.go 自身が「`sshc-linux-arm64` という名前の amd64
+      # バイナリはその検査を通る」と書いている。束の smoke を消してから、
+      # リリースは**上げるバイナリを一度も起動していなかった。**
+      - name: Smoke the built CLI
+        run: scripts/ci/cli-smoke.sh dist "${GITHUB_REF_NAME}"
+
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: release-macos
@@ -76,6 +84,14 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
         run: make release-cli-current
+
+
+      # **綴りは中身を保証しない。** verify-artifact-name が見るのはファイル名
+      # だけで、machine.go 自身が「`sshc-linux-arm64` という名前の amd64
+      # バイナリはその検査を通る」と書いている。束の smoke を消してから、
+      # リリースは**上げるバイナリを一度も起動していなかった。**
+      - name: Smoke the built CLI
+        run: scripts/ci/cli-smoke.sh dist "${GITHUB_REF_NAME}"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
@@ -121,6 +137,13 @@ jobs:
         env:
           SSHC_NATIVE_VERSION: ${{ github.ref_name }}
         run: go run ./internal/nativebuild/cmd/nativebuild release-current --arches "amd64 arm64" --output-dir dist
+
+
+      # Unix の対。**別に置くのは、あちらの recipe が POSIX のシェルを
+      # 前提にしているからである。** 見ているものは同じで、その一致は
+      # internal/buildcontract が数えている。
+      - name: Smoke the built CLI
+        run: ./scripts/ci/cli-smoke.ps1 -DistDir dist -ExpectedVersion "${{ github.ref_name }}"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
