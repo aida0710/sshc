@@ -196,6 +196,14 @@ export const shellSays = {
   size: windowsShell
     ? '"$($Host.UI.RawUI.WindowSize.Height)-$($Host.UI.RawUI.WindowSize.Width)"'
     : 'stty size | tr " " "-"',
+  // ANSI の赤で 1 語を書く。**配色が端末まで届いたかを見るためのもの。**
+  //
+  // POSIX の `printf` は PowerShell に無い。直書きすると、Windows では逃げ文字が
+  // そのまま出て、確かめたい「赤」ではなく既定の前景色が返る——実際にそうなった。
+  redWord: (word: string) =>
+    windowsShell
+      ? `"$([char]27)[31m${word}$([char]27)[0m"`
+      : `printf '\\033[31m${word}\\033[0m\\n'`,
   // 少し待ってから書く、を背後で行う。**端末が別の画面の裏でも生きている**
   // ことを、あとから届く一行で言う。
   lateEcho: (text: string) =>
