@@ -334,7 +334,7 @@ jobs:
         working-directory: web
 
       - name: Playwright
-        run: xvfb-run --auto-servernum npm run e2e --prefix web
+        run: npm run e2e --prefix web
 
       # **成果物は上げない。上げられるものが無い。**
       #
@@ -354,8 +354,8 @@ jobs:
   # 落ち、その全部がテスト側の Unix 前提だった（POSIX のシェル構文、mode
   # ビット、fixture が DACL を満たしていないこと）。
   #
-  # **Linux のジョブとは要るものが違うので、別に置く。** あちらは xvfb の中で
-  # 実 Electron も起こし、コミット済みバンドルの鮮度も見る。こちらが確かめる
+  # **Linux のジョブとは要るものが違うので、別に置く。** あちらはコミット済み
+  # バンドルの鮮度も見て、Go の側の検査も抱えている。こちらが確かめる
   # のは、**ブラウザから見た製品が Windows でも同じように振る舞うか**である
   # ——ConPTY を実際に踏む唯一の経路がここにある。
   e2e-windows:

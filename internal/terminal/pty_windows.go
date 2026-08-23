@@ -139,9 +139,10 @@ func startPseudoConsole(command Command, size Size, environment *uint16) (_ Proc
 	//
 	// これが無いと、Windows は「標準ハンドルを子へ複製する」という旧来のハックを
 	// 行う。継承を切っていても効くもので、擬似コンソールが与えるはずのハンドルを
-	// 親のもので上書きしてしまう。**このプロセスの stdout は必ずリダイレクトされて
-	// いる**——desktop では Electron へのパイプ、テストでは go test のパイプで
-	// ある。結果として、端末に書かれるはずのものが engine 自身の stdout へ流れる。
+	// 親のもので上書きしてしまう。**このプロセスの stdout は、端末に繋がっている
+	// とは限らない**——supervisor の下ならログファイル、テストでは go test の
+	// パイプである。結果として、端末に書かれるはずのものが engine 自身の
+	// stdout へ流れる。
 	// 立てておくと複製が抑止され、子はコンソールから受け取る。
 	startup.Flags |= windows.STARTF_USESTDHANDLES
 
@@ -222,7 +223,7 @@ func assignToJob(process windows.Handle) (windows.Handle, error) {
 		return 0, fmt.Errorf("terminal: limit the job object: %w", err)
 	}
 	// 入れられないことは致命である。**回避しない。** 入れ子のジョブは Windows 8
-	// 以降で使えるので、Electron や CI エージェントのジョブの中に居ても入る。
+	// 以降で使えるので、CI エージェントや supervisor のジョブの中に居ても入る。
 	if err := windows.AssignProcessToJobObject(job, process); err != nil {
 		windows.CloseHandle(job)
 		return 0, fmt.Errorf("terminal: put the console process in its job: %w", err)
