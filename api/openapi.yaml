@@ -2653,6 +2653,11 @@ components:
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
         fontSize: { type: integer, minimum: 8, maximum: 32 }
         # 無いときは on。false は利用者が明示的に止めた値なので、省略せず運ぶ。
+        # 接続の途中経過をどこまで端末へ書くか。0 は無言、3 は `ssh -vvv` 相当。
+        #
+        # **行き先はログではなく画面である。** 繋がらなかった人・切れた人が
+        # その場で読めなければ意味が無い。
+        verbosity: { type: integer, minimum: 0, maximum: 3 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
         # ローカルシェルが始まる場所。`~` の綴りのまま持つ——home の綴りを
@@ -2675,6 +2680,11 @@ components:
         # 知らない。ここに置くのは、端末ごとに読みやすい大きさが違うからで、
         # 指で持つ画面と机の上の画面では同じ数字が別の意味になる。
         fontSize: { type: integer, minimum: 8, maximum: 32 }
+        # 接続の途中経過をどこまで端末へ書くか。0 は無言、3 は `ssh -vvv` 相当。
+        #
+        # **行き先はログではなく画面である。** 繋がらなかった人・切れた人が
+        # その場で読めなければ意味が無い。
+        verbosity: { type: integer, minimum: 0, maximum: 3 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }

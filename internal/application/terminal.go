@@ -32,6 +32,9 @@ type TerminalSettings struct {
 	ScrollbackBytes int
 	// FontSize は画面が字を描く大きさ。この engine は読むだけで、使わない。
 	FontSize int
+	// Verbosity は、接続の途中経過をどこまで端末へ書くかである。0 は無言。
+	// **この engine はこれを使う** ——FontSize と違い、読む相手はここに居る。
+	Verbosity int
 	// nil は既定の on、false は明示的に止めた値である。
 	CopyOnSelect    *bool
 	RightClickPaste *bool
@@ -57,6 +60,7 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		MaxSessions:     stored.EmbeddedTerminal.MaxSessions,
 		ScrollbackBytes: stored.EmbeddedTerminal.ScrollbackBytes,
 		FontSize:        stored.EmbeddedTerminal.FontSize,
+		Verbosity:       stored.EmbeddedTerminal.Verbosity,
 		CopyOnSelect:    stored.EmbeddedTerminal.CopyOnSelect,
 		RightClickPaste: stored.EmbeddedTerminal.RightClickPaste,
 		Appearance:      appearanceOf(stored.EmbeddedTerminal.Appearance),
@@ -103,6 +107,7 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 			MaxSessions:     settings.MaxSessions,
 			ScrollbackBytes: settings.ScrollbackBytes,
 			FontSize:        settings.FontSize,
+			Verbosity:       settings.Verbosity,
 			StartDirectory:  settings.StartDirectory,
 			CopyOnSelect:    settings.CopyOnSelect,
 			RightClickPaste: settings.RightClickPaste,
