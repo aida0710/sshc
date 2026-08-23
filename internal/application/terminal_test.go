@@ -11,6 +11,7 @@ import (
 
 	"sshc/internal/platform"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 func newTerminalService(t *testing.T) (*Service, *storage.Workspace) {
@@ -284,5 +285,47 @@ func TestSavingDoesNotWriteAnAppearanceNobodyChose(t *testing.T) {
 	}
 	if strings.Contains(string(contents), "appearance") {
 		t.Fatalf("saving the start directory wrote an appearance into metadata:\n%s", contents)
+	}
+}
+
+// **「繋ぎ直さない」は保存できなければならない。**
+//
+// 0 は有効な選択であって、「書かれていない」ではない。値で持つと、切ったつもりの
+// 人は次に読んだときに既定へ戻されている——**しかも黙って戻される。**
+func TestChoosingNoReconnectSurvivesTheRoundTrip(t *testing.T) {
+	service, _ := newTerminalService(t)
+	never := 0
+
+	if _, err := service.SetTerminalSettings(TerminalSettings{Reconnect: &never}); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := service.TerminalSettings()
+	if settings.Reconnect == nil {
+		t.Fatal("繋ぎ直さないという選択が、書かれていない状態として読まれた")
+	}
+	if *settings.Reconnect != 0 {
+		t.Fatalf("Reconnect = %d, want 0", *settings.Reconnect)
+	}
+	// engine が読む形も 0 である。
+	if attempts := service.TerminalReconnects(); attempts != 0 {
+		t.Fatalf("TerminalReconnects = %d, want 0", attempts)
+	}
+}
+
+// 書かれていなければ既定である。**0 と混ぜない。**
+func TestAnUnsetReconnectFallsBackToTheDefault(t *testing.T) {
+	service, _ := newTerminalService(t)
+	if attempts := service.TerminalReconnects(); attempts != terminal.MaxReconnects {
+		t.Fatalf("TerminalReconnects = %d, want %d", attempts, terminal.MaxReconnects)
+	}
+
+	// 範囲の外は既定へ戻す。拒否ではなく差し戻しなのは、読み取り側だからである。
+	tooMany := 99
+	if _, err := service.SetTerminalSettings(TerminalSettings{Reconnect: &tooMany}); err != nil {
+		t.Fatal(err)
+	}
+	if attempts := service.TerminalReconnects(); attempts != terminal.MaxReconnects {
+		t.Fatalf("out of range = %d, want %d", attempts, terminal.MaxReconnects)
 	}
 }

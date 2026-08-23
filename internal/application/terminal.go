@@ -5,6 +5,7 @@ import (
 
 	"sshc/internal/platform"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 // 開始位置を断る理由。
@@ -35,6 +36,11 @@ type TerminalSettings struct {
 	// Verbosity は、接続の途中経過をどこまで端末へ書くかである。0 は無言。
 	// **この engine はこれを使う** ——FontSize と違い、読む相手はここに居る。
 	Verbosity int
+	// Reconnect は、輸送が落ちたときに繋ぎ直しを試みる回数である。
+	//
+	// **ポインタなのは、0 が有効な選択だからである。** 切ったのか選んでいないのか、
+	// 値では区別できない。nil なら terminal.MaxReconnects。
+	Reconnect *int
 	// nil は既定の on、false は明示的に止めた値である。
 	CopyOnSelect    *bool
 	RightClickPaste *bool
@@ -61,6 +67,7 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		ScrollbackBytes: stored.EmbeddedTerminal.ScrollbackBytes,
 		FontSize:        stored.EmbeddedTerminal.FontSize,
 		Verbosity:       stored.EmbeddedTerminal.Verbosity,
+		Reconnect:       stored.EmbeddedTerminal.Reconnect,
 		CopyOnSelect:    stored.EmbeddedTerminal.CopyOnSelect,
 		RightClickPaste: stored.EmbeddedTerminal.RightClickPaste,
 		Appearance:      appearanceOf(stored.EmbeddedTerminal.Appearance),
@@ -108,6 +115,7 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 			ScrollbackBytes: settings.ScrollbackBytes,
 			FontSize:        settings.FontSize,
 			Verbosity:       settings.Verbosity,
+			Reconnect:       settings.Reconnect,
 			StartDirectory:  settings.StartDirectory,
 			CopyOnSelect:    settings.CopyOnSelect,
 			RightClickPaste: settings.RightClickPaste,
@@ -222,4 +230,16 @@ func (s *Service) SetEngineSettings(settings EngineSettings) (SaveResult, error)
 		return SaveResult{}, err
 	}
 	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
+}
+
+// TerminalReconnects は、繋ぎ直しを何回まで試みるかを返す。
+//
+// **書かれていなければ既定である。** 0 は「繋ぎ直さない」という選択であって、
+// 「書かれていない」ではない——だから保存されている形はポインタである。
+func (s *Service) TerminalReconnects() int {
+	settings := s.TerminalSettings()
+	if settings.Reconnect == nil {
+		return terminal.MaxReconnects
+	}
+	return terminal.NormaliseReconnects(*settings.Reconnect)
 }

@@ -70,6 +70,9 @@ type Session struct {
 	// ものが並び続ける。勝手に切れたものは残す。そちらは読まれていない。
 	discarded bool
 	delay     func(attempt int) time.Duration
+	// attempts は、繋ぎ直しを何回まで試みてよいかを、**試みるたびに**答える。
+	// nil なら MaxReconnects。
+	attempts func() int
 
 	// done は pump が終わったことを示す。テストと停止処理だけが待つ。
 	done chan struct{}
@@ -294,14 +297,42 @@ func (s *Session) forceClose() error {
 }
 
 // pump は PTY を読み、バッファへ書き、アタッチしているものへ配る。
-// MaxReconnects は、輸送が落ちたときに繋ぎ直しを試みる回数である。
+// MaxReconnects は、輸送が落ちたときに繋ぎ直しを試みる回数の上限である。
 //
 // **上限があるのは、落ち続ける相手を諦めるためである。** 相手が消えたのなら、
 // 永遠に試み続けるより、そう言って終わる方がよい。
+//
+// **既定でもあり、天井でもある。** 設定はこれ以下の数を選べる——0 なら
+// 一度も繋ぎ直さない。これより大きい数は、読むときにここへ戻す。
 const MaxReconnects = 5
 
 // reconnectBackoff は、試みのあいだに置く間隔である。
 var reconnectBackoff = []time.Duration{time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second}
+
+// ReconnectWindow は、その回数だけ試みたときに、諦めるまでにかかる時間である。
+//
+// **数えて返す。** 「33 秒」と書いた文言が二か所にあると、間隔を変えた日に
+// 片方だけが古いままになる。画面の説明も、それを縛る検査も、ここから取る。
+func ReconnectWindow(attempts int) time.Duration {
+	attempts = NormaliseReconnects(attempts)
+	var total time.Duration
+	for attempt := range attempts {
+		total += reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
+	}
+	return total
+}
+
+// NormaliseReconnects は、範囲の外にある回数を天井へ戻す。
+//
+// **拒否ではなく差し戻しである。** 読み取り側なので、手で書かれた metadata の
+// 数字ひとつが、色もタグもお気に入りも道連れに読めなくしてよい理由はない。
+// **0 は範囲の中である** ——「繋ぎ直さない」は有効な選択である。
+func NormaliseReconnects(attempts int) int {
+	if attempts < 0 || attempts > MaxReconnects {
+		return MaxReconnects
+	}
+	return attempts
+}
 
 func (s *Session) pump(now func() time.Time) {
 	defer close(s.done)
@@ -371,8 +402,18 @@ func (s *Session) reconnect(info ExitInfo) bool {
 	default:
 	}
 
-	if reopen == nil || !info.Lost() || stopping || attempt >= MaxReconnects {
-		if reopen != nil && info.Lost() && attempt >= MaxReconnects {
+	// **回数は試みるたびに読む。** 捕まえてしまうと、設定を 0 にした人は、
+	// いま粘っているセッションが諦めるまで待つことになる——**それがまさに
+	// 0 にした理由である。**
+	limit := MaxReconnects
+	if s.attempts != nil {
+		limit = NormaliseReconnects(s.attempts())
+	}
+
+	if reopen == nil || !info.Lost() || stopping || attempt >= limit {
+		// **0 のときは何も言わない。** 繋ぎ直さないと決めた人に、繋ぎ直しを
+		// 諦めたと報告する意味が無い。終わったことは終了として出る。
+		if reopen != nil && info.Lost() && limit > 0 && attempt >= limit {
 			s.publish([]byte("\r\n[sshc] 繋ぎ直しを諦めました。\r\n"))
 		}
 		return false
@@ -384,7 +425,7 @@ func (s *Session) reconnect(info ExitInfo) bool {
 	}
 	s.publish([]byte(fmt.Sprintf(
 		"\r\n[sshc] 接続が切れました。%d 秒後に繋ぎ直します（%d/%d）。\r\n",
-		int(wait.Seconds()), attempt+1, MaxReconnects)))
+		int(wait.Seconds()), attempt+1, limit)))
 
 	// **待っているあいだ、打つ先は無い。** 閉じた相手へ書きに行かせない。
 	s.mutex.Lock()

@@ -1874,6 +1874,7 @@ export interface components {
             scrollbackBytes?: number;
             fontSize?: number;
             verbosity?: number;
+            reconnect?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
             startDirectory?: string;
@@ -1885,6 +1886,7 @@ export interface components {
             scrollbackBytes?: number;
             fontSize?: number;
             verbosity?: number;
+            reconnect?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
             appearance?: components["schemas"]["TerminalAppearance"];
