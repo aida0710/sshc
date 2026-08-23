@@ -95,8 +95,7 @@ make generate    # api/openapi.yaml から Go と TypeScript を作り直す
 web を直したら `make build` を通してからコミットしてください。CI が食い違いを
 落とします。
 
-Android の AAR は `make android-bind`（NDK が要ります）、iOS の xcframework は
-`make ios-bind`（macOS と Xcode が要ります）。**iOS の外殻はまだありません。**
+Android の AAR は `make android-bind`（NDK が要ります）。
 
 - [docs/design.md](docs/design.md) — なぜそうしたか
 - [docs/manual-acceptance.md](docs/manual-acceptance.md) — 機械で確かめられないもの
