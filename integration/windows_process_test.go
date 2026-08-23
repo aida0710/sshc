@@ -81,6 +81,6 @@ func processAlive(t *testing.T, pid int) bool {
 }
 
 // **ConPTY の子孫が engine より長生きしないこと**は、ここでは確かめない。
-// コンソールを開けるのは画面の側だけで、そこへ届くには engine が私的な標準
-// 出力へ出す入口——ワンタイムの資格情報——が要る。headless はそれを出さない。
-// あの検査は、束を実際に入れて動かす scripts/windows/package-smoke.ps1 が持つ。
+// コンソールを開けるのは画面の側であり、そこへ届くには入口が要る——engine は
+// それを刷らないので、この検査からは届かない。実機で確かめる項目として
+// docs/manual-test-matrix.md が持つ。

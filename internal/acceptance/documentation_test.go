@@ -89,23 +89,25 @@ func TestTheReadmeStatesTheVaultRules(t *testing.T) {
 }
 
 // **ログイン時起動は OS のものである。** sshc は unit も service も
-// スケジュールタスクも作らない。三つの OS それぞれについて、どこで登録するかを
-// 書いていなければ、書いていないのと同じである。
-func TestTheReadmeSendsAutostartToTheOperatingSystem(t *testing.T) {
+// スケジュールタスクも作らない。**エンジンを生かしておく道を一つも書かなければ、
+// 読んだ人は裸の `sshc` を supervisor に登録する。** あれはエンジンを起こさない。
+//
+// 登録するアプリはもう無いので、案内するのは OS のログイン項目ではなく、前面の
+// プロセスを持ち続ける作法である——tmux、systemd、launchd。
+func TestTheReadmeSaysHowToKeepTheEngineAlive(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 
 	if !strings.Contains(readme, "ログイン時起動は OS") {
 		t.Error("README does not say autostart belongs to the operating system")
 	}
-	for _, where := range []string{"ログイン項目", "自動起動", "スタートアップ アプリ"} {
-		if !strings.Contains(readme, where) {
-			t.Errorf("README does not say where to register autostart: %q missing", where)
+	for _, how := range []string{"tmux", "systemd", "launchd"} {
+		if !strings.Contains(readme, how) {
+			t.Errorf("README does not say how to keep the engine alive: %q missing", how)
 		}
 	}
-	// **Dock を Linux の案内に使わない。** あれは macOS のものである。
-	linux := sectionOf(readme, "### Linux", "###")
-	if strings.Contains(linux, "Dock") {
-		t.Error("the Linux guidance mentions the Dock, which is a macOS affordance")
+	// **前面で走ることを言う。** detach しないことが、止め方が一つである理由である。
+	if !strings.Contains(readme, "detach しません") {
+		t.Error("README does not say the engine never detaches")
 	}
 }
 

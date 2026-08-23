@@ -150,10 +150,6 @@ func runNativeBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Write
 		return runHostBuild(args[1:], deps, stdout, stderr)
 	case "guard-host":
 		return runHostGuard(args[1:], deps, stderr)
-	case "desktop":
-		return runDesktopBuild(args[1:], deps, stdout, stderr)
-	case "desktop-version":
-		return runDesktopVersion(args[1:], deps, stderr)
 	case "matrix":
 		return runBuildMatrix(args[1:], deps, stdout, stderr)
 	case "release-current":
@@ -240,99 +236,6 @@ func runHostBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer)
 	return buildNativeCLI(request, version, deps, stdout)
 }
 
-func runDesktopBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
-	flags := newNativeFlagSet("desktop", stderr)
-	expectedHost := flags.String("host", "", "required host operating system")
-	resourceRoot := flags.String("resource-root", "", "desktop resource root")
-	bundles := flags.String("bundles", "", "space separated native bundle records")
-	if err := parseNativeFlags(flags, args); err != nil {
-		return err
-	}
-	if !supportedOS(*expectedHost) {
-		return errors.New("unsupported desktop host")
-	}
-	if deps.hostOS != *expectedHost {
-		return fmt.Errorf("desktop target requires %s host; actual host is %s", *expectedHost, deps.hostOS)
-	}
-	if err := validateDirectoryPath("resource root", *resourceRoot); err != nil {
-		return err
-	}
-	bundleValue := *bundles
-	if bundleValue == "" {
-		bundleValue = environmentValue(deps.environment, desktopBundleEnvironment(*expectedHost))
-	}
-	requests, err := parseDesktopBundles(bundleValue, *expectedHost, *resourceRoot)
-	if err != nil {
-		return err
-	}
-	version, err := resolveVersion(deps)
-	if err != nil {
-		return err
-	}
-	if err := deps.executor.Run(nativeCommand{
-		name:        "npm",
-		args:        []string{"install"},
-		directory:   "desktop",
-		environment: deps.environment,
-	}); err != nil {
-		return err
-	}
-	if err := runWebBuild(deps); err != nil {
-		return err
-	}
-	for _, request := range requests {
-		if err := buildNativeCLI(request, version, deps, stdout); err != nil {
-			return err
-		}
-	}
-	if err := updateDesktopVersion("desktop", version, deps); err != nil {
-		return err
-	}
-	return deps.executor.Run(nativeCommand{
-		name:        "npm",
-		args:        []string{"run", desktopDistScript(*expectedHost)},
-		directory:   "desktop",
-		environment: deps.environment,
-	})
-}
-
-func runDesktopVersion(args []string, deps nativeBuildDeps, stderr io.Writer) error {
-	flags := newNativeFlagSet("desktop-version", stderr)
-	directory := flags.String("directory", "", "desktop package directory")
-	if err := parseNativeFlags(flags, args); err != nil {
-		return err
-	}
-	if err := validateDirectoryPath("desktop directory", *directory); err != nil {
-		return err
-	}
-	version, err := resolveVersion(deps)
-	if err != nil {
-		return err
-	}
-	if version == "dev" {
-		return nil
-	}
-	return updateDesktopVersion(*directory, version, deps)
-}
-
-func updateDesktopVersion(directory, version string, deps nativeBuildDeps) error {
-	if version == "dev" {
-		return nil
-	}
-	return deps.executor.Run(nativeCommand{
-		name:      "npm",
-		directory: directory,
-		args: []string{
-			"version",
-			"--allow-same-version",
-			"--no-git-tag-version",
-			"--",
-			strings.TrimPrefix(version, "v"),
-		},
-		environment: deps.environment,
-	})
-}
-
 func runBuildMatrix(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
 	flags := newNativeFlagSet("matrix", stderr)
 	targets := flags.String("targets", environmentValue(deps.environment, nativeReleaseTargetsEnvironment), "space separated GOOS/GOARCH:CGO records")
@@ -417,12 +320,10 @@ func runCurrentRelease(args []string, deps nativeBuildDeps, stdout, stderr io.Wr
 
 // **npm はその package のディレクトリで走らせる。--prefix に頼らない。**
 //
-// あの旗の意味は下位命令ごとに揃っていない。`npm ci --prefix desktop` は
-// desktop/package.json を読むが、`npm install --prefix desktop` は Windows では
-// カレントの package.json を読みに行き、この repository の root にはそれが無い
-// ので ENOENT で落ちる——Linux と macOS では同じ呼び出しが通るので、
-// **Windows でだけ、束に CLI が入らないまま electron-builder が警告一つで
-// 進み、空の resources\cli を配ることになっていた。**
+// あの旗の意味は下位命令ごとに揃っていない。`npm install --prefix <dir>` は
+// Windows ではカレントの package.json を読みに行き、この repository の root には
+// それが無いので ENOENT で落ちる——Linux と macOS では同じ呼び出しが通るので、
+// **Windows でだけ静かに壊れる**種類の違いである。
 func runWebBuild(deps nativeBuildDeps) error {
 	return deps.executor.Run(nativeCommand{
 		name:        "npm",
@@ -552,53 +453,6 @@ func validateDirectoryPath(label, directory string) error {
 	return nil
 }
 
-func parseDesktopBundles(value, hostOS, resourceRoot string) ([]nativeBuildRequest, error) {
-	records := strings.Fields(value)
-	if len(records) != 2 {
-		return nil, errors.New("desktop bundles must contain exactly two architectures")
-	}
-	seen := make(map[string]bool, 2)
-	requests := make([]nativeBuildRequest, 0, 2)
-	for _, record := range records {
-		parts := strings.Split(record, ":")
-		if len(parts) != 5 {
-			return nil, errors.New("invalid desktop bundle record")
-		}
-		name, goos, goarch, cgo, executable := parts[0], parts[1], parts[2], parts[3], parts[4]
-		if goos != hostOS || name != desktopBundleName(hostOS, goarch) {
-			return nil, errors.New("desktop bundle does not match host layout")
-		}
-		if seen[goarch] {
-			return nil, errors.New("desktop bundle architecture is duplicated")
-		}
-		seen[goarch] = true
-		wantCGO := "0"
-		if hostOS == "darwin" {
-			wantCGO = "1"
-		}
-		wantExecutable := "sshc"
-		if hostOS == "windows" {
-			wantExecutable = "sshc.exe"
-		}
-		if cgo != wantCGO || executable != wantExecutable {
-			return nil, errors.New("desktop bundle has invalid CGO or executable suffix")
-		}
-		output := filepath.Join(resourceRoot, name, executable)
-		if err := ensurePathWithin(resourceRoot, output); err != nil {
-			return nil, err
-		}
-		request := nativeBuildRequest{goos: goos, goarch: goarch, output: output, cgo: cgo}
-		if err := validateBuildRequest(request); err != nil {
-			return nil, err
-		}
-		requests = append(requests, request)
-	}
-	if !seen["amd64"] || !seen["arm64"] {
-		return nil, errors.New("desktop bundles must include amd64 and arm64")
-	}
-	return requests, nil
-}
-
 func parseReleaseTargets(value, outputDir string) ([]nativeBuildRequest, error) {
 	records := strings.Fields(value)
 	if len(records) == 0 {
@@ -652,25 +506,6 @@ func parseReleaseArchitectures(value string) ([]string, error) {
 		return nil, errors.New("release architectures must contain amd64 and arm64")
 	}
 	return architectures, nil
-}
-
-func desktopBundleName(goos, goarch string) string {
-	switch goos + "/" + goarch {
-	case "darwin/arm64":
-		return "mac-arm64"
-	case "darwin/amd64":
-		return "mac-x64"
-	case "linux/arm64":
-		return "linux-arm64"
-	case "linux/amd64":
-		return "linux-x64"
-	case "windows/arm64":
-		return "win32-arm64"
-	case "windows/amd64":
-		return "win32-x64"
-	default:
-		return ""
-	}
 }
 
 func ensurePathWithin(root, path string) error {
@@ -745,32 +580,6 @@ func validateBuildVersion(version string) error {
 
 func containsControlCharacter(value string) bool {
 	return strings.IndexFunc(value, unicode.IsControl) >= 0
-}
-
-func desktopBundleEnvironment(goos string) string {
-	switch goos {
-	case "darwin":
-		return nativeMacBundlesEnvironment
-	case "linux":
-		return nativeLinuxBundlesEnvironment
-	case "windows":
-		return nativeWindowsBundlesEnvironment
-	default:
-		return ""
-	}
-}
-
-func desktopDistScript(goos string) string {
-	switch goos {
-	case "darwin":
-		return "dist:mac"
-	case "linux":
-		return "dist:linux"
-	case "windows":
-		return "dist:win"
-	default:
-		return ""
-	}
 }
 
 func withTargetEnvironment(environment []string, request nativeBuildRequest) []string {
