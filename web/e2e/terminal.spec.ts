@@ -530,7 +530,7 @@ test("paints the console in the colour scheme that was chosen", async ({ page, i
 
   const panel = await openConsolePanel(page);
   await panel.getByRole("button", { name: "Local shell" }).click();
-  const screen = await typeIntoConsole(page, "printf '\\033[31mzzred\\033[0m\\n'");
+  const screen = await typeIntoConsole(page, shellSays.redWord("zzred"));
   await expect(screen).toContainText("zzred", { timeout: 20_000 });
 
   const surface = () =>
