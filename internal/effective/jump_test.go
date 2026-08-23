@@ -56,7 +56,7 @@ func TestExpandRouteFollowsCommaSeparatedAndNestedJumps(t *testing.T) {
 			"\tProxyJump edge\n",
 	})
 
-	stages, complexities := effective.ExpandRoute(graph, "target")
+	stages, complexities := effective.ExpandRoute(graph, "target", effective.LocalFacts{})
 	if len(complexities) != 0 {
 		t.Fatalf("complexities = %#v", complexities)
 	}
@@ -97,7 +97,7 @@ func TestExpandRouteBoundsAWideRoute(t *testing.T) {
 	}
 	contents += "Host h9\n\tHostName 198.51.100.9\n"
 
-	stages, complexities := effective.ExpandRoute(graphFor(t, map[string]string{testConfig: contents}), "h1")
+	stages, complexities := effective.ExpandRoute(graphFor(t, map[string]string{testConfig: contents}), "h1", effective.LocalFacts{})
 	if len(stages) > effective.MaxRouteStages {
 		t.Fatalf("route expanded to %d stages, want at most %d", len(stages), effective.MaxRouteStages)
 	}
@@ -110,7 +110,7 @@ func TestExpandRouteStopsAtACycleAndReportsInvalidValues(t *testing.T) {
 	cyclic := graphFor(t, map[string]string{
 		testConfig: "Host alpha\n\tProxyJump bravo\nHost bravo\n\tProxyJump alpha\n",
 	})
-	stages, complexities := effective.ExpandRoute(cyclic, "alpha")
+	stages, complexities := effective.ExpandRoute(cyclic, "alpha", effective.LocalFacts{})
 	if len(stages) == 0 {
 		t.Fatal("a cycle must still show the hops it walked")
 	}
@@ -121,7 +121,7 @@ func TestExpandRouteStopsAtACycleAndReportsInvalidValues(t *testing.T) {
 	broken := graphFor(t, map[string]string{
 		testConfig: "Host alpha\n\tProxyJump ops@\n",
 	})
-	if _, complexities := effective.ExpandRoute(broken, "alpha"); len(complexities) != 1 ||
+	if _, complexities := effective.ExpandRoute(broken, "alpha", effective.LocalFacts{}); len(complexities) != 1 ||
 		complexities[0].Code != effective.ComplexityJumpInvalid {
 		t.Fatalf("complexities = %#v", complexities)
 	}
@@ -129,7 +129,63 @@ func TestExpandRouteStopsAtACycleAndReportsInvalidValues(t *testing.T) {
 	none := graphFor(t, map[string]string{
 		testConfig: "Host alpha\n\tProxyJump none\n",
 	})
-	if stages, complexities := effective.ExpandRoute(none, "alpha"); len(stages) != 0 || len(complexities) != 0 {
+	if stages, complexities := effective.ExpandRoute(none, "alpha", effective.LocalFacts{}); len(stages) != 0 || len(complexities) != 0 {
 		t.Fatalf("ProxyJump none = %#v, %#v", stages, complexities)
+	}
+}
+
+// **踏み台の値も Match の下から来る。**
+//
+// 経路の展開は Project を使っていた。あれは Match ブロックを一切適用しない
+// ——条件が接続中の状態に依るからで、出所を並べる用途ではそれで正しい。
+// だが**ここが答えているのは出所ではなく、踏み台へ実際に繋ぐ宛先**である。
+//
+// 症状は静かではない。Project は Match の存在を complexity として記録し、
+// この段は Complex を立てる。**それでも HostName と User と Port そのものは
+// 間違ったまま画面に出る。** 「単純ではない」と言いながら、嘘の番号を見せる。
+func TestExpandRouteReadsHopValuesThroughMatchBlocks(t *testing.T) {
+	graph := graphFor(t, map[string]string{
+		testConfig: "Host target\n" +
+			"\tProxyJump bastion\n" +
+			"Match originalhost bastion\n" +
+			"\tHostName 10.9.9.9\n" +
+			"\tUser ops\n" +
+			"\tPort 2222\n",
+	})
+
+	stages, _ := effective.ExpandRoute(graph, "target", effective.LocalFacts{})
+	if len(stages) != 1 {
+		t.Fatalf("stages = %#v", stages)
+	}
+	hop := stages[0]
+	if hop.Hostname != "10.9.9.9" {
+		t.Errorf("hostname = %q, want 10.9.9.9", hop.Hostname)
+	}
+	if hop.User != "ops" {
+		t.Errorf("user = %q, want ops", hop.User)
+	}
+	if hop.Port != "2222" {
+		t.Errorf("port = %q, want 2222", hop.Port)
+	}
+}
+
+// ProxyJump そのものが Match の下に書かれていれば、経路は存在する。
+//
+// Project から読んでいる間、この設定の経路は**空**だった——画面は
+// 「踏み台を通らない」と言い、実際には通る。
+func TestExpandRouteFindsAProxyJumpWrittenUnderMatch(t *testing.T) {
+	graph := graphFor(t, map[string]string{
+		testConfig: "Match originalhost target\n" +
+			"\tProxyJump bastion\n" +
+			"Host bastion\n" +
+			"\tHostName 10.9.9.9\n",
+	})
+
+	stages, _ := effective.ExpandRoute(graph, "target", effective.LocalFacts{})
+	if len(stages) != 1 {
+		t.Fatalf("stages = %#v, want one hop through bastion", stages)
+	}
+	if stages[0].Hostname != "10.9.9.9" {
+		t.Errorf("hostname = %q, want 10.9.9.9", stages[0].Hostname)
 	}
 }

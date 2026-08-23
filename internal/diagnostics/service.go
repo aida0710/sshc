@@ -2,6 +2,8 @@ package diagnostics
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"path/filepath"
 
@@ -60,6 +62,11 @@ type Service struct {
 	Resolver       config.Resolver
 	Reachability   Reachability
 	Authentication Authentication
+	// Facts は、解決に要るこのプロセスの事実である。
+	//
+	// **注入する。** ここで user.Current() を読めば、テストが本物のアカウント名に
+	// 届く——`Match localuser` を含む設定の答えが、走らせた人によって変わる。
+	Facts effective.LocalFacts
 }
 
 // NewService は本番用の依存を配線する。
@@ -70,12 +77,14 @@ type Service struct {
 func NewService(
 	workspace *storage.Workspace,
 	probe func(ctx context.Context, alias string) (sshclient.Probe, error),
+	facts effective.LocalFacts,
 ) *Service {
 	return &Service{
 		Workspace:      workspace,
 		Resolver:       storage.NewResolver(workspace),
 		Reachability:   Reachability{Dialer: &net.Dialer{}},
 		Authentication: Authentication{Dial: probe},
+		Facts:          facts,
 	}
 }
 
@@ -111,21 +120,31 @@ func (s *Service) ConnectionSnapshot(alias string) (ConnectionSnapshot, error) {
 	if err != nil {
 		return ConnectionSnapshot{}, err
 	}
-	projection := effective.Project(graph, alias)
+	// **Project ではなく Resolve から取る。** ここで返す値は、公開鍵を
+	// authorized_keys へ入れてよいかを人に確かめてもらう画面に出る。実際に繋ぐのは
+	// remotekey.Service.Resolve で、そちらは既に Resolve を通っていた。**つまり
+	// 見せていた宛先と、繋ぐ宛先が違いえた** ——Match の下に HostName を書いている人は、
+	// 「bastion.internal に入れます」と確認したうえで別の機械に入れることになる。
+	resolution := effective.Resolve(graph, alias, s.Facts)
+	if len(resolution.Refusals) > 0 {
+		// **推測で埋めない。** どこへ繋がるか分からない設定について、alias を
+		// そのままホスト名として見せれば、人は確かめようのないものを確かめる。
+		return ConnectionSnapshot{}, fmt.Errorf("%w: %s", ErrUnresolvedDestination, resolution.Refusals[0].Code)
+	}
 	snapshot := ConnectionSnapshot{
 		Hostname: alias,
 		Port:     "22",
 		Report:   effective.Scan(graph),
 		Config:   flattened,
 	}
-	if source, ok := projection.Value("hostname"); ok {
-		snapshot.Hostname = source.Value
+	if found := resolution.Values.First("hostname"); found != "" {
+		snapshot.Hostname = found
 	}
-	if source, ok := projection.Value("port"); ok {
-		snapshot.Port = source.Value
+	if found := resolution.Values.First("port"); found != "" {
+		snapshot.Port = found
 	}
-	if source, ok := projection.Value("user"); ok {
-		snapshot.User = source.Value
+	if found := resolution.Values.First("user"); found != "" {
+		snapshot.User = found
 	}
 	return snapshot, nil
 }
@@ -169,7 +188,7 @@ func (s *Service) Inspect(alias string) (Inspection, error) {
 
 	inspection := Inspection{Alias: alias, Report: effective.Scan(graph)}
 	inspection.Projection = effective.Project(graph, alias)
-	inspection.Route, inspection.RouteComplexities = effective.ExpandRoute(graph, alias)
+	inspection.Route, inspection.RouteComplexities = effective.ExpandRoute(graph, alias, s.Facts)
 	return inspection, nil
 }
 
@@ -185,17 +204,32 @@ func (s *Service) Destination(alias string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	projection := effective.Project(graph, alias)
+	// **Project ではなく Resolve から取る。** ここが答えるのは「どの行が書いたか」
+	// ではなく、**実際にダイヤルする宛先**である。Project は Match ブロックを
+	// 一切適用しないので、Match の下に HostName や Port を書いている人に対して、
+	// 到達性の検査は違う相手を叩いていた——そして「繋がりません」と答えていた。
+	resolution := effective.Resolve(graph, alias, s.Facts)
+	if len(resolution.Refusals) > 0 {
+		// **推測で埋めない。** 解決を諦めた設定について、alias:22 を叩いた
+		// 結果を「その接続先への到達性」として見せるのは嘘である。
+		return "", "", fmt.Errorf("%w: %s", ErrUnresolvedDestination, resolution.Refusals[0].Code)
+	}
 	hostname := alias
-	if source, ok := projection.Value("hostname"); ok {
-		hostname = source.Value
+	if found := resolution.Values.First("hostname"); found != "" {
+		hostname = found
 	}
 	port := "22"
-	if source, ok := projection.Value("port"); ok {
-		port = source.Value
+	if found := resolution.Values.First("port"); found != "" {
+		port = found
 	}
 	return hostname, port, nil
 }
+
+// ErrUnresolvedDestination は、この設定について宛先を言えないことを報告する。
+//
+// **黙って alias:22 を返さない。** Match exec を含む設定では、どこへ繋がるかが
+// まさに分からない。分からないものを叩いた結果を到達性として見せない。
+var ErrUnresolvedDestination = errors.New("this configuration does not resolve to one destination")
 
 // Reach は接続先へ直接ダイヤルし、ProxyJump を無視する。
 func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, error) {
