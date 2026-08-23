@@ -18,11 +18,12 @@ import (
 // 読み側は feed が押し込んだものを返し、exit が呼ばれるまで塞がる。これにより、
 // 「終わっていない PTY」と「終わった PTY」をテストが正確に選べる。
 type fakeProcess struct {
-	mutex   sync.Mutex
-	pending [][]byte
-	ready   chan struct{}
-	done    chan struct{}
-	info    terminal.ExitInfo
+	onHangup func(*fakeProcess)
+	mutex    sync.Mutex
+	pending  [][]byte
+	ready    chan struct{}
+	done     chan struct{}
+	info     terminal.ExitInfo
 
 	written    bytes.Buffer
 	sizes      []terminal.Size
@@ -95,7 +96,16 @@ func (p *fakeProcess) Resize(size terminal.Size) error {
 func (p *fakeProcess) Hangup() error {
 	p.mutex.Lock()
 	p.hangups++
+	onHangup := p.onHangup
 	p.mutex.Unlock()
+	// **終わり方を差し替えられるようにする。** PTY を持つ相手は signal で
+	// 終わるが、SSH のセッションは輸送ごと断たれて Code -1 で終わる
+	// （sshclient.Session.Close）——そこを再現できないと、閉じたときの
+	// 繋ぎ直しの判断が検査できない。
+	if onHangup != nil {
+		onHangup(p)
+		return nil
+	}
 	p.exit(terminal.ExitInfo{Signal: "hangup"})
 	return nil
 }
