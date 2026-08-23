@@ -34,9 +34,13 @@ func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
 	stateDir := t.TempDir()
 	writeTestHandoff(t, stateDir, server.URL)
 
-	answer, err := engineStatus(context.Background(), stateDir, &http.Client{Timeout: 5 * time.Second})
+	found, err := readHandoff(stateDir)
 	if err != nil {
-		t.Fatalf("engineStatus: %v", err)
+		t.Fatalf("readHandoff: %v", err)
+	}
+	answer, err := requestStatus(context.Background(), found, &http.Client{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("requestStatus: %v", err)
 	}
 	if !answer.Vault || !answer.Unlocked || answer.Sessions != 3 {
 		t.Fatalf("answer = %+v, want an unlocked vault with 3 sessions", answer)
@@ -95,12 +99,12 @@ func testHandoff(target string) handoff.Handoff {
 	}
 }
 
-// **メニューバーが読む口である。** エンジンに繋がらないとき、人向けの文言では
-// なく非 0 の終了コードで応える必要がある——読むのはコードだけだからだ。
+// **手順の中から読まれる口でもある。** エンジンに繋がらないとき、stdout に
+// 半端な表を残さず、非 0 の終了コードで応える必要がある。
 func TestRunStatusFailsWhenTheEngineIsNotThere(t *testing.T) {
 	var out, errOut strings.Builder
 	status := runStatus(context.Background(), t.TempDir(),
-		&http.Client{Timeout: 5 * time.Second}, &out, &errOut)
+		&http.Client{Timeout: 5 * time.Second}, false, &out, &errOut)
 	if status != 1 {
 		t.Fatalf("status = %d, want 1", status)
 	}
@@ -132,5 +136,55 @@ func TestAskingAMachineThatHasNeverRunAnEngineGetsAnAnswerItCanAct(t *testing.T)
 	// errors.Is で見ている呼び出し側が黙って別の枝へ行く。
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Error("the friendly message dropped fs.ErrNotExist")
+	}
+}
+
+// **既定は人が読む形である。** かつてここは JSON だけを出しており、それは
+// メニューバーが読むためだった——その読み手はもう居ない。
+//
+// **JSON は旗の下に残す。** 手順の中から読んでいる道を、黙って塞がない。
+func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(handoff.HeaderName) != "the secret" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"owner": "engine", "version": "v9-test", "protocolVersion": 1,
+			"vault": true, "unlocked": false, "sessions": 2,
+		})
+	}))
+	defer server.Close()
+
+	stateDir := t.TempDir()
+	writeTestHandoff(t, stateDir, server.URL)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	var table, errOut strings.Builder
+	if code := runStatus(context.Background(), stateDir, client, false, &table, &errOut); code != 0 {
+		t.Fatalf("status = %d\n%s", code, errOut.String())
+	}
+	printed := table.String()
+	for _, want := range []string{"engine", "address", "version", "v9-test", "vault", "locked", "consoles"} {
+		if !strings.Contains(printed, want) {
+			t.Errorf("the table does not mention %q:\n%s", want, printed)
+		}
+	}
+	// **JSON をそのまま人に見せない。** 中括弧が出ていたら、表になっていない。
+	if strings.Contains(printed, "{") {
+		t.Errorf("the default output is still JSON:\n%s", printed)
+	}
+
+	var machine strings.Builder
+	if code := runStatus(context.Background(), stateDir, client, true, &machine, &errOut); code != 0 {
+		t.Fatalf("status --json = %d\n%s", code, errOut.String())
+	}
+	var decoded statusAnswer
+	if err := json.Unmarshal([]byte(machine.String()), &decoded); err != nil {
+		t.Fatalf("--json did not print JSON: %v\n%s", err, machine.String())
+	}
+	if decoded.Sessions != 2 || decoded.Version != "v9-test" {
+		t.Errorf("--json lost fields: %+v", decoded)
 	}
 }

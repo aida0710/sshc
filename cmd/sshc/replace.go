@@ -125,7 +125,9 @@ func replaceRunningEngine(
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	sessions := 0
-	if status, statusErr := engineStatus(ctx, stateDir, client); statusErr == nil {
+	// **handoff を読み直さない。** 上で読んだ一台にだけ尋ねる——待っている
+	// あいだに書き換わったものへ乗り換えれば、止める相手が入れ替わる。
+	if status, statusErr := requestStatus(ctx, found, client); statusErr == nil {
 		sessions = status.Sessions
 	}
 
