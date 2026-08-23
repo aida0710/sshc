@@ -1,40 +1,25 @@
 ## 入れる
 
-> **配布物には署名も公証もありません。** それを入れる手順は
-> [apple-signing.md](apple-signing.md) にあり、**仕込みは済んでいる**
-> ——証明書を入れれば次のリリースから警告は出なくなる。
+**配るのは CLI ひとつです。** アプリの束（.app / .dmg / AppImage / インストーラ）は
+もうありません。署名も公証も要らないので、**Gatekeeper の警告を通る一手間もありません**
+——隔離の印を付けるのはブラウザ経由のダウンロードであり、`curl` で落とした実行体は
+何も言われずに動きます。
 
+画面付きのアプリは Android と iOS だけです。あちらは配布の口がストアしかありません。
 
 ### Homebrew（macOS / Linux）
 
 ```sh
-brew install aida0710/tap/sshc          # 端末から使う CLI
-brew install --cask aida0710/tap/sshc   # アプリ（macOS）
+brew install aida0710/tap/sshc
 ```
 
-**同じ名前で別のものが入ります。** `--cask` を付けるとアプリ、付けないと CLI です。
-両方要るなら両方入れてください。
+**formula はソースから建てます。** Go の toolchain は Homebrew が用意します。
 
-アプリは**署名も公証もしていない**ので、Homebrew が付ける隔離の印のせいで初回に
-「開発元を確認できません」を通ることになります。**それを避ける手段はもうありません**
-——`--no-quarantine` は Homebrew 5.0 で非推奨、5.1 で削除され、代替はありません
-（Gatekeeper の迂回を提供しないという方針です）。
-
-入れたあと、一度だけ下の「macOS」の手順を通してください。dmg で入れたときと同じです。
-
-**ソースからビルドします。** brew が Go を用意して `go build` を回すので、
-入るのはあなたの機械で作られた実体です。置かれるのは brew の prefix
-（`/opt/homebrew/bin` など）で、**そこは最初から PATH に載っています。**
-
-`brew upgrade` で新しくなり、`brew uninstall` で消えます。
-
-### 端末から使うだけなら（Linux / macOS）
+### そのほか（Linux / macOS）
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
 ```
-
-**入るのは CLI ひとつだけです。** アプリは下の各 OS の項を見てください。
 
 この script は置く前に確かめ、**見たものを全部印字します**——機械に合う実体があるか、
 落としたものが公開された checksum と一致するか、置き先が PATH に載っているか、
@@ -45,50 +30,36 @@ curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
 書き換えることはしません** ——載っていなければ、足す 1 行をそのまま綴ります。
 置き先は `SSHC_INSTALL_DIR`、版は `SSHC_VERSION` で変えられます。
 
-入ったら:
-
-```sh
-sshc version     # sshc 0.1.0 darwin/arm64
-```
-
-
-配布物には**署名も公証もありません**。Apple の Developer ID は年 $99 の登録が要り、
-このプロジェクトはまだそれを買っていません。**その結果として何が起きるか**を、
-起きる前にここに書きます。
-
-### macOS
-
-Apple Silicon なら `-mac-arm64.dmg`、Intel なら `-mac-x64.dmg` です。
-
-初回に「"sshc.app" に…マルウェアが含まれていないことを検証できませんでした」が
-出ます。**右クリック →「開く」は macOS 15 以降では効きません。** 次のどちらかを
-一度だけ行ってください。
-
-1. その画面を閉じ、**システム設定 → プライバシーとセキュリティ** を開く。下の方に
-   同じ文が出ているので、隣の **「このまま開く」**。
-2. または端末から:
-
-   ```sh
-   xattr -dr com.apple.quarantine /Applications/sshc.app
-   ```
-
-**この画面が出るのはブラウザで落としたときだけです。** 隔離の印を付けるのは
-ダウンロードしたアプリであって、macOS ではありません。CLI だけで足りるなら、
-`curl` は何も付けないので何も出ません:
-
-```sh
-curl -L -o sshc https://github.com/aida0710/sshc/releases/latest/download/sshc-darwin-arm64
-chmod +x sshc && ./sshc version
-```
-
-**上の install.sh は、これに checksum の照合と置き場所の確認を足したものです。**
-
 ### Windows
 
-Smart App Control が有効な機械では、署名の無い実行ファイルは**警告ではなく拒否**
-されます。SmartScreen は「実行しない」→「詳細情報」→「実行」で越えられます。
-`docs/manual-test-matrix.md` に、署名しても単純には解決しない理由を書いています。
+リリースから `sshc-windows-<アーキ>.exe` を落とし、`sshc.exe` に改名して PATH の
+通った場所へ置きます。**インストーラはありません。** レジストリにも machine の PATH にも
+触れません。
 
-### Linux
+## 使う
 
-AppImage には実行権が要ります（`chmod +x`）。arm64 は tar.gz です。
+```sh
+sshc engine      # エンジンを前面で起こす。この端末は開けたままにする
+sshc             # 別の端末から。入口を刷り、画面があればブラウザで開く
+```
+
+**エンジンを生かしておくのは人です。** tmux でも screen でも systemd でも構いません
+——このアプリケーションは detach しないので、supervisor 側で扱いを変える必要が
+ありません。
+
+```sh
+tmux new -d -s sshc 'sshc engine'
+```
+
+初回は保管庫がありません。エンジンがそう言うので、`sshc vault create` で作ります。
+
+```sh
+sshc vault create    # 端末からしか受け取りません
+sshc vault unlock    # 12 時間触れられなければ自分で閉じます
+```
+
+## 版が食い違ったとき
+
+`sshc` と、走っているエンジンの版が違うと、繋がる前に断ります。**いま走っているのが
+どの実体かを綴りで名指しします** ——古いのがどちらかは、このプロセスには分からない
+ためです。エンジンを止めて、新しい方で起こし直してください。

@@ -15,8 +15,8 @@ import (
 // 構文を壊す。落ち方が「Try に Catch も Finally も無い」のような、直接の
 // 原因を指さないものになるうえ、pwsh 7 で書いている側では再現しない。
 //
-// **これは実機が教えたことである。** package-smoke.ps1 は pwsh 7 で解析が
-// 通っていたのに、Windows 11 の既定の PowerShell では一行も走らなかった。
+// **これは実機が教えたことである。** ある .ps1 は pwsh 7 で解析が通っていたのに、
+// Windows 11 の既定の PowerShell では一行も走らなかった。
 func TestWindowsPowerShellScriptsCarryABOMWhenTheyNeedOne(t *testing.T) {
 	directory := filepath.Join("..", "..", "scripts", "windows")
 	entries, err := os.ReadDir(directory)

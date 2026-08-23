@@ -315,29 +315,6 @@ func TestReleaseCurrentRejectsUnsupportedHostBeforeAllActions(t *testing.T) {
 	}
 }
 
-func TestNativeDesktopGuardUsesActualHostBeforeBuilding(t *testing.T) {
-	executor := &recordingNativeExecutor{}
-	err := runNativeBuild([]string{
-		"desktop",
-		"--host", "windows",
-		"--resource-root", filepath.Join(t.TempDir(), "resources"),
-		"--bundles", "win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe",
-	}, nativeBuildDeps{
-		hostOS:      "linux",
-		hostArch:    "amd64",
-		hostCGO:     "0",
-		environment: []string{nativeVersionEnvironment + "=dev", "GOOS=windows"},
-		executor:    executor,
-		mkdirAll:    os.MkdirAll,
-	}, io.Discard, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "requires windows host; actual host is linux") {
-		t.Fatalf("runNativeBuild() error = %v, want wrong-host rejection", err)
-	}
-	if len(executor.commands) != 0 {
-		t.Fatalf("wrong-host desktop target executed %d commands", len(executor.commands))
-	}
-}
-
 func TestNativeHostGuardRejectsOverrideableTargetOS(t *testing.T) {
 	executor := &recordingNativeExecutor{}
 	err := runNativeBuild([]string{"guard-host", "--host", "windows"}, nativeBuildDeps{
@@ -353,102 +330,6 @@ func TestNativeHostGuardRejectsOverrideableTargetOS(t *testing.T) {
 	}
 	if len(executor.commands) != 0 {
 		t.Fatalf("host guard executed %d commands", len(executor.commands))
-	}
-}
-
-func TestNativeDesktopBuildsExactWindowsResourceLayout(t *testing.T) {
-	executor := &recordingNativeExecutor{}
-	root := filepath.Join(t.TempDir(), "desktop resources")
-	err := runNativeBuild([]string{
-		"desktop",
-		"--host", "windows",
-		"--resource-root", root,
-	}, nativeBuildDeps{
-		hostOS:   "windows",
-		hostArch: "amd64",
-		hostCGO:  "0",
-		environment: []string{
-			nativeVersionEnvironment + "=dev",
-			nativeWindowsBundlesEnvironment + "=win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe",
-		},
-		executor: executor,
-		mkdirAll: os.MkdirAll,
-	}, io.Discard, io.Discard)
-	if err != nil {
-		t.Fatalf("runNativeBuild() error: %v", err)
-	}
-	wantOutputs := []string{
-		filepath.Join(root, "win32-arm64", "sshc.exe"),
-		filepath.Join(root, "win32-x64", "sshc.exe"),
-	}
-	if got := commandOutputs(executor.commands); !reflect.DeepEqual(got, wantOutputs) {
-		t.Fatalf("outputs = %q, want %q", got, wantOutputs)
-	}
-	if len(executor.commands) != 5 {
-		t.Fatalf("commands = %#v, want install, web, two CLI builds, and dist", executor.commands)
-	}
-	// **npm はその package のディレクトリで走る。** --prefix には頼らない——
-	// あの旗は下位命令ごとに意味が揃っておらず、`npm install --prefix desktop`
-	// は Windows で root の package.json を読みに行って落ちた。
-	wantPrefix := []nativeCommand{
-		{name: "npm", args: []string{"install"}, directory: "desktop"},
-		{name: "npm", args: []string{"run", "build"}, directory: "web"},
-	}
-	for index, want := range wantPrefix {
-		got := executor.commands[index]
-		if got.name != want.name || !reflect.DeepEqual(got.args, want.args) || got.directory != want.directory {
-			t.Errorf("command %d = %s %q in %q, want %s %q in %q",
-				index, got.name, got.args, got.directory, want.name, want.args, want.directory)
-		}
-	}
-	if dist := executor.commands[4]; dist.name != "npm" || !reflect.DeepEqual(dist.args, []string{"run", "dist:win"}) || dist.directory != "desktop" {
-		t.Errorf("dist command = %s %q in %q", dist.name, dist.args, dist.directory)
-	}
-	for _, command := range executor.commands {
-		if command.name != "go" {
-			continue
-		}
-		if got := recordedEnvValue(command.environment, "CGO_ENABLED"); got != "0" {
-			t.Errorf("Windows CGO_ENABLED = %q, want 0", got)
-		}
-	}
-}
-
-func TestNativeDesktopUsesHostSpecificBundleChannelAndDistScript(t *testing.T) {
-	tests := []struct {
-		host      string
-		bundles   string
-		bundleEnv string
-		dist      string
-	}{
-		{host: "darwin", bundles: "mac-arm64:darwin:arm64:1:sshc mac-x64:darwin:amd64:1:sshc", bundleEnv: nativeMacBundlesEnvironment, dist: "dist:mac"},
-		{host: "linux", bundles: "linux-arm64:linux:arm64:0:sshc linux-x64:linux:amd64:0:sshc", bundleEnv: nativeLinuxBundlesEnvironment, dist: "dist:linux"},
-		{host: "windows", bundles: "win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe", bundleEnv: nativeWindowsBundlesEnvironment, dist: "dist:win"},
-	}
-	for _, test := range tests {
-		t.Run(test.host, func(t *testing.T) {
-			executor := &recordingNativeExecutor{}
-			err := runNativeBuild([]string{
-				"desktop",
-				"--host", test.host,
-				"--resource-root", filepath.Join(t.TempDir(), "resources"),
-			}, nativeBuildDeps{
-				hostOS:      test.host,
-				hostArch:    "amd64",
-				hostCGO:     "0",
-				environment: []string{nativeVersionEnvironment + "=dev", test.bundleEnv + "=" + test.bundles},
-				executor:    executor,
-				mkdirAll:    func(string, os.FileMode) error { return nil },
-			}, io.Discard, io.Discard)
-			if err != nil {
-				t.Fatalf("runNativeBuild() error: %v", err)
-			}
-			dist := executor.commands[len(executor.commands)-1]
-			want := []string{"run", test.dist}
-			if dist.name != "npm" || !reflect.DeepEqual(dist.args, want) || dist.directory != "desktop" {
-				t.Errorf("dist command = %s %q in %q, want npm %q in desktop", dist.name, dist.args, dist.directory, want)
-			}
-		})
 	}
 }
 
@@ -561,29 +442,6 @@ func TestReleaseCurrentUsesActualHostForBothArchitectures(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestDesktopVersionUsesNPMArgvWithoutShellInterpolation(t *testing.T) {
-	executor := &recordingNativeExecutor{}
-	directory := filepath.Join("desktop package", "app")
-	err := runNativeBuild([]string{"desktop-version", "--directory", directory}, nativeBuildDeps{
-		hostOS:      "windows",
-		hostArch:    "amd64",
-		hostCGO:     "0",
-		environment: []string{nativeVersionEnvironment + "=v3.4.5"},
-		executor:    executor,
-		mkdirAll:    os.MkdirAll,
-	}, io.Discard, io.Discard)
-	if err != nil {
-		t.Fatalf("runNativeBuild() error: %v", err)
-	}
-	if len(executor.commands) != 1 {
-		t.Fatalf("commands = %d, want 1", len(executor.commands))
-	}
-	wantArgs := []string{"version", "--allow-same-version", "--no-git-tag-version", "--", "3.4.5"}
-	if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, wantArgs) || command.directory != directory {
-		t.Fatalf("command = %s %q in %q, want npm %q in %q", command.name, command.args, command.directory, wantArgs, directory)
 	}
 }
 
