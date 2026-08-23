@@ -24,6 +24,7 @@ const (
 	sizeHelperEnvironment       = "SSHC_TERMINAL_SIZE_HELPER"
 	descendantHelperEnvironment = "SSHC_TERMINAL_DESCENDANT_HELPER"
 	idleHelperEnvironment       = "SSHC_TERMINAL_IDLE_HELPER"
+	exitHelperEnvironment       = "SSHC_TERMINAL_EXIT_HELPER"
 )
 
 func TestMain(m *testing.M) {
@@ -35,6 +36,9 @@ func TestMain(m *testing.M) {
 	}
 	if os.Getenv(idleHelperEnvironment) != "" {
 		os.Exit(runIdleHelper())
+	}
+	if os.Getenv(exitHelperEnvironment) != "" {
+		os.Exit(7)
 	}
 	os.Exit(m.Run())
 }
@@ -148,25 +152,27 @@ func readUntil(t *testing.T, process terminal.Process, want string, limit time.D
 }
 
 func TestWindowsConsoleReachesEOFWhenTheChildExitsOnItsOwn(t *testing.T) {
-	shell := powershell(t)
-	process, err := terminal.NewStarter().Start(context.Background(), terminal.Command{
-		Path:      shell,
-		Arguments: []string{"-NoProfile", "-Command", "exit 7"},
-	}, terminal.Size{Cols: 80, Rows: 24})
+	process, err := terminal.NewStarter().Start(context.Background(),
+		selfCommand(t, exitHelperEnvironment), terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatalf("Start = %v", err)
 	}
 	t.Cleanup(func() { _ = process.Close() })
 
-	buffer := make([]byte, 4096)
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		if time.Now().After(deadline) {
-			t.Fatal("the console output never reached EOF after the child exited")
+	ended := make(chan struct{}, 1)
+	go func() {
+		buffer := make([]byte, 4096)
+		for {
+			if _, err := process.Read(buffer); err != nil {
+				ended <- struct{}{}
+				return
+			}
 		}
-		if _, err := process.Read(buffer); err != nil {
-			break
-		}
+	}()
+	select {
+	case <-ended:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the console output never reached EOF after the child exited")
 	}
 	info := process.Wait()
 	if info.Code != 7 || info.Signal != "" {
