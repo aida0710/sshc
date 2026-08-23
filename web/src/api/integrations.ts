@@ -576,6 +576,9 @@ export const integrationsApi: IntegrationsApi = {
         : {}),
       ...(typeof terminal.fontSize === "number" ? { fontSize: terminal.fontSize } : {}),
       ...(typeof terminal.verbosity === "number" ? { verbosity: terminal.verbosity } : {}),
+      // **0 は「繋ぎ直さない」という選択である。** 真偽で振り分けると、
+      // 切った人の選択がここで消える。
+      ...(typeof terminal.reconnect === "number" ? { reconnect: terminal.reconnect } : {}),
       ...(typeof terminal.copyOnSelect === "boolean" ? { copyOnSelect: terminal.copyOnSelect } : {}),
       ...(typeof terminal.rightClickPaste === "boolean"
         ? { rightClickPaste: terminal.rightClickPaste }

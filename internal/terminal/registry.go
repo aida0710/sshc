@@ -45,6 +45,12 @@ type Registry struct {
 	Limits func() Limits
 	// ReconnectDelay は、輸送が落ちたあと繋ぎ直すまでの間隔である。nil なら既定。
 	ReconnectDelay func(attempt int) time.Duration
+	// Reconnects は、繋ぎ直しを何回まで試みてよいかを答える。nil なら既定。
+	//
+	// **一度だけ読まない。** 設定は走っているあいだに変えられる——0 にした人が
+	// 待たされるのは、いま粘っているセッションが諦めるまでであり、**それが
+	// まさに 0 にした理由である。**
+	Reconnects func() int
 	// Now と Random は、テストが時計と ID を固定するためにここにある。
 	Now    func() time.Time
 	Random io.Reader
@@ -90,6 +96,14 @@ func (r *Registry) reconnectDelay(attempt int) time.Duration {
 		return r.ReconnectDelay(attempt)
 	}
 	return reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
+}
+
+// reconnects は、繋ぎ直しを何回まで試みるかである。
+func (r *Registry) reconnects() int {
+	if r.Reconnects == nil {
+		return MaxReconnects
+	}
+	return NormaliseReconnects(r.Reconnects())
 }
 
 func (r *Registry) now() time.Time {
@@ -206,6 +220,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		size:     size,
 		stopping: make(chan struct{}),
 		delay:    r.reconnectDelay,
+		attempts: r.reconnects,
 	}
 	r.mutex.Lock()
 	r.sessions = append(r.sessions, session)

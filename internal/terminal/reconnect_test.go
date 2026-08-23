@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -280,5 +281,99 @@ func TestAConsoleThatDroppedStaysToBeRead(t *testing.T) {
 	waitFor(t, func() bool { return !session.Live() })
 	if len(registry.Sessions()) != 1 {
 		t.Errorf("sessions = %d, want the dropped console kept so its reason can be read", len(registry.Sessions()))
+	}
+}
+
+// **繋ぎ直さないと決めた人は、待たされない。**
+//
+// 閉じたはずのコンソールがしばらく残って見えるのは、繋ぎ直しが粘っている
+// あいだである。0 を選んだ人にとって、それは選んだ覚えのない待ち時間である。
+func TestChoosingNoReconnectEndsTheSessionAtOnce(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newFastRegistry()
+	registry.Reconnects = func() int { return 0 }
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+
+	waitFor(t, func() bool { return !session.Live() })
+	if spy.count() != 1 {
+		t.Errorf("開き直しを %d 回試みた。0 を選んだのに繋ぎ直している", spy.count())
+	}
+	// **諦めたとは言わない。** 繋ぎ直さないと決めた人に、繋ぎ直しを諦めたと
+	// 報告する意味が無い。
+	if strings.Contains(string(session.Snapshot()), "諦めました") {
+		t.Errorf("繋ぎ直さない設定なのに、諦めたと書いた:\n%s", session.Snapshot())
+	}
+}
+
+// **回数は、試みるたびに読む。**
+//
+// 捕まえてしまうと、設定を 0 にした人は、いま粘っているセッションが諦めるまで
+// 待つことになる——**それがまさに 0 にした理由である。**
+func TestLoweringTheReconnectCountStopsASessionAlreadyTrying(t *testing.T) {
+	spy := &openSpy{failUpTo: 99}
+	registry, _ := newRegistry(terminal.DefaultLimits())
+	// **間隔を残す。** 0 にすると 5 回の試みが一瞬で終わり、粘っている最中に
+	// 設定を変えるという場面そのものが作れない。
+	registry.ReconnectDelay = func(int) time.Duration { return 60 * time.Millisecond }
+
+	// **atomic で持つ。** 読むのはセッションの goroutine で、書くのはこの検査
+	// である——設定が走っているあいだに変わるとは、まさにそういう形である。
+	var allowed atomic.Int64
+	allowed.Store(int64(terminal.MaxReconnects))
+	registry.Reconnects = func() int { return int(allowed.Load()) }
+
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	// 落ち続けるので、粘っている最中に入る。
+	waitFor(t, func() bool { return spy.count() >= 2 })
+	if !session.Live() {
+		t.Fatal("まだ粘っているはずが、もう終わっていた")
+	}
+
+	// 粘っているあいだに設定を切る。**次の試みでそれが効かなければならない。**
+	allowed.Store(0)
+	waitFor(t, func() bool { return !session.Live() })
+}
+
+// **画面に出す秒数は、間隔から数える。**
+//
+// 「33 秒」と書いた文言が二か所にあると、間隔を変えた日に片方だけが古いままに
+// なる。読む人はその古い方を信じる。
+func TestTheReconnectWindowIsCountedFromTheGaps(t *testing.T) {
+	if window := terminal.ReconnectWindow(0); window != 0 {
+		t.Errorf("0 回 = %v, want 0", window)
+	}
+	// 1・2・5・10・15 秒。
+	for attempts, want := range map[int]time.Duration{
+		1: time.Second,
+		2: 3 * time.Second,
+		3: 8 * time.Second,
+		5: 33 * time.Second,
+	} {
+		if window := terminal.ReconnectWindow(attempts); window != want {
+			t.Errorf("%d 回 = %v, want %v", attempts, window, want)
+		}
+	}
+	// **範囲の外は天井へ戻す。** 拒否ではなく差し戻しなのは、読み取り側だからである。
+	if terminal.NormaliseReconnects(-1) != terminal.MaxReconnects ||
+		terminal.NormaliseReconnects(99) != terminal.MaxReconnects {
+		t.Error("範囲の外が既定へ戻っていない")
+	}
+	// **0 は範囲の中である。** 「繋ぎ直さない」は有効な選択である。
+	if terminal.NormaliseReconnects(0) != 0 {
+		t.Error("0 が既定へ戻された。切る道が無くなる")
 	}
 }

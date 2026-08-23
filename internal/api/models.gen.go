@@ -413,6 +413,7 @@ type EmbeddedTerminal struct {
 	CopyOnSelect    *bool               `json:"copyOnSelect,omitempty"`
 	FontSize        *int                `json:"fontSize,omitempty"`
 	MaxSessions     *int                `json:"maxSessions,omitempty"`
+	Reconnect       *int                `json:"reconnect,omitempty"`
 	RightClickPaste *bool               `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes *int                `json:"scrollbackBytes,omitempty"`
 	StartDirectory  *string             `json:"startDirectory,omitempty"`
@@ -1113,6 +1114,7 @@ type TerminalSettings struct {
 	CopyOnSelect    *bool               `json:"copyOnSelect,omitempty"`
 	FontSize        *int                `json:"fontSize,omitempty"`
 	MaxSessions     *int                `json:"maxSessions,omitempty"`
+	Reconnect       *int                `json:"reconnect,omitempty"`
 	RightClickPaste *bool               `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes *int                `json:"scrollbackBytes,omitempty"`
 	StartDirectory  *string             `json:"startDirectory,omitempty"`

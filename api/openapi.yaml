@@ -2658,6 +2658,13 @@ components:
         # **行き先はログではなく画面である。** 繋がらなかった人・切れた人が
         # その場で読めなければ意味が無い。
         verbosity: { type: integer, minimum: 0, maximum: 3 }
+        # 輸送が落ちたときに繋ぎ直しを試みる回数。**0 は「繋ぎ直さない」という
+        # 選択であって、「書かれていない」ではない。**
+        #
+        # 閉じたコンソールがしばらく残って見えるのは、ここが粘っているあいだで
+        # ある。切りたい人は 0 を置く。間隔は 1・2・5・10・15 秒なので、
+        # 5 回なら諦めるまで 33 秒。
+        reconnect: { type: integer, minimum: 0, maximum: 5 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
         # ローカルシェルが始まる場所。`~` の綴りのまま持つ——home の綴りを
@@ -2685,6 +2692,13 @@ components:
         # **行き先はログではなく画面である。** 繋がらなかった人・切れた人が
         # その場で読めなければ意味が無い。
         verbosity: { type: integer, minimum: 0, maximum: 3 }
+        # 輸送が落ちたときに繋ぎ直しを試みる回数。**0 は「繋ぎ直さない」という
+        # 選択であって、「書かれていない」ではない。**
+        #
+        # 閉じたコンソールがしばらく残って見えるのは、ここが粘っているあいだで
+        # ある。切りたい人は 0 を置く。間隔は 1・2・5・10・15 秒なので、
+        # 5 回なら諦めるまで 33 秒。
+        reconnect: { type: integer, minimum: 0, maximum: 5 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }

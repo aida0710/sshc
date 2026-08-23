@@ -180,6 +180,37 @@ describe("SettingsPanel", () => {
     expect(within(region).getByRole("checkbox", { name: "Paste with right click" })).not.toBeChecked();
   });
 
+  // **0 は「繋ぎ直さない」という選択である。** 空欄の「決めていない」とは違う。
+  //
+  // 真偽で振り分ける書き方（`reconnect ? {...} : {}`）にすると、切った人の選択が
+  // ここで消えて、次に読んだときには既定へ戻っている。
+  it("saves not reconnecting as a choice, not as an empty field", async () => {
+    const user = userEvent.setup();
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    await user.selectOptions(
+      within(region).getByLabelText("Reconnect after a dropped connection"),
+      "0",
+    );
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setTerminalSettings).toHaveBeenCalledWith({ reconnect: 0 });
+  });
+
+  it("loads a stored choice of never reconnecting", async () => {
+    render(<SettingsPanel api={buildApi({
+      terminalSettings: vi.fn().mockResolvedValue({ reconnect: 0 }),
+      engineSettings: vi.fn().mockResolvedValue({}),
+      setEngineSettings: vi.fn(),
+    })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    expect(await within(region).findByLabelText("Reconnect after a dropped connection"))
+      .toHaveValue("0");
+  });
+
   // 保存されている値は編集できる形で出す。**既定へ丸めて見せない**——
   // 丸めた値を人がそのまま保存すると、選んでいない設定が書き込まれる。
   it("shows the stored numbers and leaves the unset ones blank", async () => {

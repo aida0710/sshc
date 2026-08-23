@@ -47,6 +47,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [portSaved, setPortSaved] = useState(false);
   // 0 は無言。1〜3 が ssh の -v / -vv / -vvv に対応する。
   const [verbosity, setVerbosity] = useState("0");
+  // **空文字は「決めていない」である。** "0" は「繋ぎ直さない」という選択なので、
+  // 同じ入れ物で両方を表すには、選ばれていない状態を別の値で持つしかない。
+  const [reconnect, setReconnect] = useState("");
   const [palette, setPalette] = useState("");
   const [font, setFont] = useState("");
   const [background, setBackground] = useState("");
@@ -68,6 +71,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setScrollback(settings.scrollbackBytes === undefined ? "" : String(settings.scrollbackBytes));
         setFontSize(settings.fontSize === undefined ? "" : String(settings.fontSize));
         setVerbosity(String(settings.verbosity ?? 0));
+        setReconnect(settings.reconnect === undefined ? "" : String(settings.reconnect));
         setPalette(settings.appearance?.palette ?? "");
         setFont(settings.appearance?.font ?? "");
         setBackground(settings.appearance?.background ?? "");
@@ -142,6 +146,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         ...(size === undefined ? {} : { fontSize: size }),
         // 0 は既定なので書かない。書けば metadata に「無言を明示的に選んだ」が残る。
         ...(verbosity === "0" ? {} : { verbosity: Number(verbosity) }),
+        ...(reconnect === "" ? {} : { reconnect: Number(reconnect) }),
         // on は既定なので書かない。off だけを false として明示し、再読み込み
         // しても消えないようにする。
         ...(copyOnSelect ? {} : { copyOnSelect: false }),
@@ -312,6 +317,29 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
             <option value="1">{t("terminal.verbosityBrief")}</option>
             <option value="2">{t("terminal.verbosityDetailed")}</option>
             <option value="3">{t("terminal.verbosityFull")}</option>
+          </select>
+        </Field>
+        {/*
+          **閉じたはずのコンソールがしばらく残って見えるのは、ここが粘って
+          いるあいだである。** 既定は諦めるまで数十秒あり、切りたい人には
+          切る道が要る。
+        */}
+        <Field label={t("terminal.reconnectLabel")} hint={t("terminal.reconnectHint")}>
+          <select
+            className={control}
+            value={reconnect}
+            disabled={terminalBusy}
+            onChange={(event) => {
+              setReconnect(event.target.value);
+              setTerminalSaved(false);
+            }}
+          >
+            <option value="">{t("terminal.reconnectDefault")}</option>
+            <option value="0">{t("terminal.reconnectNever")}</option>
+            <option value="1">{t("terminal.reconnectOnce")}</option>
+            <option value="2">{t("terminal.reconnectTwice")}</option>
+            <option value="3">{t("terminal.reconnectThrice")}</option>
+            <option value="5">{t("terminal.reconnectFive")}</option>
           </select>
         </Field>
         <Field label={t("terminal.paletteLabel")} hint={t("terminal.paletteHint")}>

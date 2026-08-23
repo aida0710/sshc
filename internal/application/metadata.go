@@ -162,7 +162,13 @@ type EmbeddedTerminal struct {
 	// nil は既定の on、false は明示的な off である。bool に omitempty を直接
 	// 付けると false が消え、再起動後に on へ戻ってしまう。
 	// Verbosity は、接続の途中経過をどこまで端末へ書くかである。0 は無言。
-	Verbosity       int   `json:"verbosity,omitempty"`
+	Verbosity int `json:"verbosity,omitempty"`
+	// Reconnect は、輸送が落ちたときに繋ぎ直しを試みる回数である。
+	//
+	// **ポインタなのは、0 が有効な選択だからである。** 「繋ぎ直さない」と
+	// 「選んでいない」は違う——値で持つと、切ったつもりの人が既定に戻される。
+	// 範囲の外は、読むときに既定へ戻す。
+	Reconnect       *int  `json:"reconnect,omitempty"`
 	CopyOnSelect    *bool `json:"copyOnSelect,omitempty"`
 	RightClickPaste *bool `json:"rightClickPaste,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。
