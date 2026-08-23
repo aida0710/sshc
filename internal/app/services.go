@@ -201,7 +201,10 @@ func buildTerminals(configService *application.Service, dependencies Dependencie
 	terminals := &terminal.Registry{
 		Start:  starter,
 		Limits: configService.TerminalLimits,
-		Random: dependencies.Random,
+		// **繋ぎ直しの回数は、試みるたびに読む。** 0 にした人が待たされるのは、
+		// いま粘っているセッションが諦めるまでであり、それがまさに 0 にした理由である。
+		Reconnects: configService.TerminalReconnects,
+		Random:     dependencies.Random,
 	}
 
 	return terminals

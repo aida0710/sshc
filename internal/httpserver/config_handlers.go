@@ -207,6 +207,9 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if request.Verbosity != nil {
 		settings.Verbosity = *request.Verbosity
 	}
+	// **0 は「繋ぎ直さない」であって「書かれていない」ではない。** 値で受けると、
+	// 切ったつもりの人が既定へ戻される。
+	settings.Reconnect = request.Reconnect
 	settings.CopyOnSelect = request.CopyOnSelect
 	settings.RightClickPaste = request.RightClickPaste
 	if request.Appearance != nil {
