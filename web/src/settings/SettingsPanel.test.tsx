@@ -8,6 +8,8 @@ import { SettingsPanel } from "./SettingsPanel";
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
     terminalSettings: vi.fn().mockResolvedValue({}),
+    engineSettings: vi.fn().mockResolvedValue({}),
+    setEngineSettings: vi.fn(),
     setTerminalSettings: vi.fn().mockResolvedValue(undefined),
     changeMasterPassword: vi.fn().mockResolvedValue({
       vault: {
@@ -169,6 +171,8 @@ describe("SettingsPanel", () => {
   it("loads explicitly disabled clipboard choices", async () => {
     render(<SettingsPanel api={buildApi({
       terminalSettings: vi.fn().mockResolvedValue({ copyOnSelect: false, rightClickPaste: false }),
+      engineSettings: vi.fn().mockResolvedValue({}),
+      setEngineSettings: vi.fn(),
     })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
@@ -181,6 +185,8 @@ describe("SettingsPanel", () => {
   it("shows the stored numbers and leaves the unset ones blank", async () => {
     render(<SettingsPanel api={buildApi({
       terminalSettings: vi.fn().mockResolvedValue({ maxSessions: 4 }),
+      engineSettings: vi.fn().mockResolvedValue({}),
+      setEngineSettings: vi.fn(),
     })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });

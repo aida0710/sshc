@@ -40,6 +40,11 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [scrollback, setScrollback] = useState("");
   const [fontSize, setFontSize] = useState("");
   // 空は「選んでいない」であり、テーマに従うという意味である。
+  // engine の設定。**端末のものとは別に保存される。**
+  const [port, setPort] = useState("");
+  const [portBusy, setPortBusy] = useState(false);
+  const [portError, setPortError] = useState("");
+  const [portSaved, setPortSaved] = useState(false);
   const [palette, setPalette] = useState("");
   const [font, setFont] = useState("");
   const [background, setBackground] = useState("");
@@ -68,10 +73,39 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setRightClickPaste(settings.rightClickPaste ?? true);
       })
       .catch(() => undefined);
+    void api
+      .engineSettings()
+      .then((settings) => {
+        if (active) setPort(settings.port === undefined ? "" : String(settings.port));
+      })
+      .catch(() => undefined);
     return () => {
       active = false;
     };
   }, [api]);
+
+  // **受け口の番号は起動時にしか読まれない。** 保存できたことと効いたことは
+  // 別なので、画面はそう言う。
+  async function savePort() {
+    const trimmed = port.trim();
+    const chosen = trimmed === "" ? undefined : Number(trimmed);
+    if (chosen !== undefined && (!Number.isSafeInteger(chosen) || chosen < 1024 || chosen > 65535)) {
+      setPortError(t("engine.portOutOfRange"));
+      setPortSaved(false);
+      return;
+    }
+    setPortBusy(true);
+    setPortError("");
+    setPortSaved(false);
+    try {
+      await api.setEngineSettings(chosen === undefined ? {} : { port: chosen });
+      setPortSaved(true);
+    } catch {
+      setPortError(t("engine.saveFailed"));
+    } finally {
+      setPortBusy(false);
+    }
+  }
 
   // 断られた理由はサーバーが名指しする。**「保存できません」で終わらせない**
   // ——直すのは人であり、直すには何が悪いのかが要る。
@@ -174,6 +208,36 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         同じ値ではない。** 既定を metadata へ書き戻すと、既定を変えた日に
         その人だけが黙って取り残される。だから空欄は空欄のまま送らない。
       */}
+      {/*
+        engine そのものの設定。**端末のものではない**ので節を分ける。ここを
+        変えても、次に engine を起こすまで効かない。
+      */}
+      <section aria-label={t("engine.heading")} className={sectionCard}>
+        <h3 className={sectionHeading}>{t("engine.heading")}</h3>
+        {portError === "" ? null : <Notice tone="danger">{portError}</Notice>}
+        {!portSaved ? null : <Notice tone="notice">{t("engine.saved")}</Notice>}
+        <Field label={t("engine.portLabel")} hint={t("engine.portHint")}>
+          <input
+            type="number"
+            min={1024}
+            max={65535}
+            className={control}
+            value={port}
+            placeholder="30000-60000"
+            disabled={portBusy}
+            onChange={(event) => {
+              setPort(event.target.value);
+              setPortSaved(false);
+            }}
+          />
+        </Field>
+        <div className="flex justify-end">
+          <Button kind="primary" disabled={portBusy} onClick={() => void savePort()}>
+            {t("terminal.startSave")}
+          </Button>
+        </div>
+      </section>
+
       <section aria-label={t("terminal.settingsHeading")} className={sectionCard}>
         <h3 className={sectionHeading}>{t("terminal.settingsHeading")}</h3>
         {terminalError === "" ? null : <Notice tone="danger">{terminalError}</Notice>}

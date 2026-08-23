@@ -49,6 +49,9 @@ type Options struct {
 	UI       fs.FS
 	Version  string
 	Owner    handoff.Owner
+	// StopEngine は、走っている engine に畳んで終わるよう頼む道である。
+	// nil なら停止の口は「実装されていない」と答える。
+	StopEngine func()
 	// ProtocolVersion は handoff と同じ CLI contract の版である。
 	ProtocolVersion int
 	Logger          *slog.Logger
@@ -371,6 +374,7 @@ func New(options Options) (*Server, error) {
 		Owner:           options.Owner,
 		Version:         options.Version,
 		ProtocolVersion: options.ProtocolVersion,
+		StopEngine:      options.StopEngine,
 		WorkspaceKeys: func(alias string) ([]string, error) {
 			if options.Config == nil || options.Keys == nil {
 				return nil, nil

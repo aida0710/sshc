@@ -44,17 +44,29 @@ func defaultEngineDependencies() engineDependencies {
 	}
 }
 
+// engineOptions は、`sshc engine` の旗が決めたことである。
+type engineOptions struct {
+	// Port は 0 なら「決めていない」。保存された設定より強い。
+	Port int
+	// Replace は、走っている engine を訊かずに止めてよいという合図である。
+	Replace bool
+}
+
 func runEngine(
 	ctx context.Context,
 	home string,
+	options engineOptions,
+	stdin io.Reader,
 	stdout, stderr io.Writer,
 ) int {
-	return runEngineWithDependencies(ctx, home, stdout, stderr, defaultEngineDependencies())
+	return runEngineWithDependencies(ctx, home, options, stdin, stdout, stderr, defaultEngineDependencies())
 }
 
 func runEngineWithDependencies(
 	ctx context.Context,
 	home string,
+	options engineOptions,
+	stdin io.Reader,
 	stdout, stderr io.Writer,
 	dependencies engineDependencies,
 ) int {
@@ -67,19 +79,25 @@ func runEngineWithDependencies(
 	// ロックを取ってはならない——取れば、誰も待っていないエンジンが 1 台分の
 	// 席を占める。
 	release, err := dependencies.acquire(app.HandoffDir(home))
-	if err != nil {
-		if errors.Is(err, errEngineRunning) {
-			// **2 台目は立てない。** 起こそうとした人が知りたいのは、既に
-			// 1 台居ることと、その入口の取り方である。
-			fmt.Fprintln(stderr, "sshc: an sshc engine is already running")
-			fmt.Fprintln(stderr, "sshc: run sshc to get a way into it")
+	if errors.Is(err, errEngineRunning) {
+		// **2 台目は立てない。** ただし、走っているものを止める道は要る
+		// ——どこで起こしたか分からない engine を、探して回らずに畳めるように。
+		taken, takeErr := replaceRunningEngine(ctx, home, options, stdin, stdout, stderr, dependencies.acquire)
+		if takeErr != nil {
+			// **断ったことは、もう綴ってある。** ここで重ねると同じ話が二度出る。
+			if !errors.Is(takeErr, errAlreadyRunning) {
+				fmt.Fprintf(stderr, "sshc: %v\n", takeErr)
+			}
 			return 1
 		}
+		release, err = taken, nil
+	}
+	if err != nil {
 		logger.Error("take the engine lock", "error", err)
 		return 1
 	}
 
-	code := runEngineApp(signalCtx, home, stdout, logger, dependencies)
+	code := runEngineApp(signalCtx, home, options, stdout, logger, dependencies)
 
 	// **ロックを手放すのは最後である。** これより後に状態を変えるものは何も無い。
 	if err := release(); err != nil {
@@ -93,6 +111,7 @@ func runEngineWithDependencies(
 func runEngineApp(
 	ctx context.Context,
 	home string,
+	options engineOptions,
 	stdout io.Writer,
 	logger *slog.Logger,
 	dependencies engineDependencies,
@@ -116,6 +135,7 @@ func runEngineApp(
 	parts := newPlatformParts()
 	dependencyValues := app.Dependencies{
 		Random:   rand.Reader,
+		Port:     options.Port,
 		Announce: announceReadiness(stdout),
 		// このアプリケーションが自分自身以外のホストに接触する唯一の場所であり、
 		// 誰かが求めたときにだけ行う。何も取得せず、何も置き換えない。

@@ -60,6 +60,12 @@ type ConnectHandlers struct {
 	Owner           handoff.Owner
 	Version         string
 	ProtocolVersion int
+	// StopEngine は、engine に畳んで終わるよう頼む。nil なら停止の口は答えない。
+	//
+	// **信号ではなく、頼みごとにする。** Windows に SIGTERM は無く、
+	// TerminateProcess は即死である——開いている端末も転送も vault も畳まれない
+	// まま消える。自分自身に頼めば、どの OS でも同じ畳み方を通る。
+	StopEngine func()
 }
 
 type connectRequest struct {
@@ -193,6 +199,14 @@ type openResponse struct {
 // ここが答える相手はメニューバーであり、認可は handoff の秘密ひとつである。
 const StatusPath = "/cli/status"
 
+// StopPath は、走っている engine に「畳んで終わってくれ」と頼む場所である。
+//
+// **どこで起こしたか分からない engine を、止められる必要がある。** tmux の中か、
+// 閉じた端末か、supervisor の下か——探して回るより、走っているものに頼む方が
+// 短い。認可は handoff の秘密ひとつで、それを読めるのはこの計算機の利用者だけ
+// である。
+const StopPath = "/cli/stop"
+
 type CLIStatus struct {
 	Owner           handoff.Owner `json:"owner"`
 	Version         string        `json:"version"`
@@ -230,7 +244,29 @@ func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
 	engine.GET(StatusPath, handlers.Status)
+	engine.POST(StopPath, handlers.Stop)
 	registerVaultCLIRoutes(engine, handlers)
+}
+
+// Stop は、engine に畳んで終わるよう頼む。
+//
+// **先に答えてから畳む。** 畳んでから答えようとすると、受け口ごと消えるので
+// 頼んだ側には「答えが無かった」としか見えない——止まったのか落ちたのかが
+// 区別できなくなる。
+func (h ConnectHandlers) Stop(c *echo.Context) error {
+	if !h.authorised(c.Request()) {
+		return c.NoContent(http.StatusForbidden)
+	}
+	if h.StopEngine == nil {
+		return c.NoContent(http.StatusNotImplemented)
+	}
+	stop := h.StopEngine
+	c.Response().Header().Set("Connection", "close")
+	if err := c.NoContent(http.StatusAccepted); err != nil {
+		return err
+	}
+	go stop()
+	return nil
 }
 
 // Status は、メニューバーと終了時の確認が読む現在地である。

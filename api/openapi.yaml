@@ -1190,6 +1190,25 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/metadata/engine:
+    put:
+      operationId: setEngineSettings
+      # **節まるごとの置き換えである。** 送らなかった項目は書かれていない状態へ
+      # 戻る——そうでないと、一度指定した人が既定へ戻れない。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EngineSettings" }
+      responses:
+        "200":
+          description: The choice was written
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/backgrounds:
     get:
       operationId: listTerminalBackgrounds
@@ -2622,6 +2641,7 @@ components:
         schemaVersion: { type: integer }
         groupsFile: { type: string }
         embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
+        engine: { $ref: "#/components/schemas/EngineSettings" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
     # 埋め込みターミナルの設定。数値の範囲外は読み取りで既定へ戻し、書き込みでは拒否する。
@@ -2658,6 +2678,18 @@ components:
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
+    # engine そのものの設定。**端末のものではない。**
+    #
+    # 受け口の番号は engine が起動時に読むので、変えても次に起こすまで効かない。
+    # 画面はそう言う。
+    EngineSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        # 0 と省略はどちらも「決めていない」であり、そのとき engine は
+        # 30000〜60000 から無作為に引く。**番号は秘密ではない** ——走査すれば
+        # 見つかるし handoff にも書いてある。固定できることは安全の取引ではない。
+        port: { type: integer, minimum: 1024, maximum: 65535 }
     TerminalBackground:
       type: object
       additionalProperties: false

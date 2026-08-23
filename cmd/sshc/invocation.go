@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strconv"
 )
 
 type invocationKind uint8
@@ -25,6 +26,16 @@ const (
 type invocation struct {
 	Kind invocationKind
 	Args []string
+	// Port は `sshc engine --port N` で選ばれた受け口である。0 は「選んでいない」。
+	//
+	// **旗は保存された設定より強い。** その場で決めた人が居るのに、書いてある方を
+	// 使えば、打った番号がどこにも効かない。
+	Port int
+	// Replace は、走っている engine を止めてから起こしてよいという合図である。
+	//
+	// **端末で訊く道とは別に、これが要る。** 手順の中や supervisor の下では
+	// 訊く相手が居ない——そこでは、書いた人が先に答えを決めておくしかない。
+	Replace bool
 }
 
 const (
@@ -53,7 +64,7 @@ func parseInvocation(argv []string) (invocation, error) {
 	args := argv[2:]
 	switch word {
 	case engineSubcommand:
-		return noArguments(invocationEngine, word, args)
+		return parseEngineFlags(args)
 	case ConnectSubcommand:
 		if len(args) > 1 {
 			return invalidInvocation("connect takes at most one search term")
@@ -103,6 +114,35 @@ func parseInvocation(argv []string) (invocation, error) {
 	return invocation{Kind: invocationConnect, Args: []string{word}}, nil
 }
 
+// parseEngineFlags は `sshc engine` の旗を読む。
+//
+// **旗は 2 つだけである。** 増やすたびに、engine を起こす方法が増える——起こし方が
+// 一つであることは、この道具の形そのものである。
+func parseEngineFlags(args []string) (invocation, error) {
+	called := invocation{Kind: invocationEngine}
+	for index := 0; index < len(args); index++ {
+		switch args[index] {
+		case "--replace":
+			called.Replace = true
+		case "--port":
+			index++
+			if index >= len(args) {
+				return invalidInvocation("--port takes a number")
+			}
+			port, err := strconv.Atoi(args[index])
+			// **範囲もここで断る。** 通してしまうと、断るのは bind の失敗になり、
+			// 打った人には「使えない番号」と「埋まっている番号」が同じに見える。
+			if err != nil || port < 1024 || port > 65535 {
+				return invalidInvocation("--port takes a number between 1024 and 65535")
+			}
+			called.Port = port
+		default:
+			return invalidInvocation("engine does not take " + args[index])
+		}
+	}
+	return called, nil
+}
+
 func noArguments(kind invocationKind, command string, args []string) (invocation, error) {
 	if len(args) != 0 {
 		return invalidInvocation(fmt.Sprintf("%s takes no arguments", command))
@@ -130,6 +170,8 @@ func usage(out io.Writer) {
 	fmt.Fprint(out, `usage:
   sshc                 print a way into the running engine, and open it
   sshc engine          run the engine in the foreground; keep it alive yourself
+                       --port <n>  listen there instead of a random port
+                       --replace   stop the running engine first, without asking
   sshc <alias>         connect to a host from ~/.ssh/config in this terminal
   sshc run <alias> ... run one command on a host and print what it wrote
   sshc connect [text]  choose a host in this terminal, then connect
