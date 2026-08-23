@@ -55,7 +55,9 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	configService := application.NewService(workspace, transactions)
 	keyService, keyTransactions := buildKeyService(workspace, dependencies, configService)
 	configService.SetKeyPassphraseVerifier(keyService)
-	diagnosticsService := diagnostics.NewService(workspace, nil)
+	// **事実はここで読んで渡す。** diagnostics の中で user.Current() を読めば、
+	// `Match localuser` を含む設定の答えが、走らせた人によって変わる。
+	diagnosticsService := diagnostics.NewService(workspace, nil, application.LocalFactsFor(dependencies.Home))
 	// 生成領域の書式を知っているのは設定エンジンであり、それを尋ねられるのは
 	// diagnostics ではなくここである。あちらは internal/application を import
 	// しない。これがないと、宣言済みで空のグループのために書かれた Include が

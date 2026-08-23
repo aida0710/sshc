@@ -16,6 +16,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/diagnostics"
+	"sshc/internal/effective"
 	"sshc/internal/session"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
@@ -53,7 +54,7 @@ func newDiagnosticsServer(t *testing.T) (*echo.Echo, session.Credentials, *recor
 	// 認証の継ぎ目を記録係で置き換える。**この検査はネットワークへ出ない。**
 	// 本物の握手を見るのは internal/sshclient の側である。
 	probe := &recordingProbe{}
-	service := diagnostics.NewService(workspace, probe.dial)
+	service := diagnostics.NewService(workspace, probe.dial, effective.LocalFacts{})
 	service.Reachability = diagnostics.Reachability{
 		Dialer: dialerStub(func(context.Context, string, string) (net.Conn, error) {
 			return nil, net.UnknownNetworkError("unreachable in test")
