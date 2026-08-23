@@ -92,7 +92,7 @@ func (d Dialer) probeChain(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	conn, err := d.open(ctx, target, through)
+	conn, err := d.open(ctx, target, through, nil)
 	if err != nil {
 		for _, existing := range opened {
 			_ = existing.Close()

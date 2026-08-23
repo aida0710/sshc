@@ -204,8 +204,8 @@ function openFailureKey(code: string): MessageKey {
       return "terminal.limitRefused";
     case "alias_unresolvable":
       return "terminal.unresolvable";
-    case "proxy_command_refused":
-      return "terminal.proxyCommandRefused";
+    case "proxy_command_with_jump":
+      return "terminal.proxyCommandWithJump";
     case "jump_depth_exceeded":
       return "terminal.jumpDepthExceeded";
     default:

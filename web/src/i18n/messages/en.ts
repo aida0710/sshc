@@ -72,7 +72,7 @@ export const en = {
   "terminal.limitReached": "The limit of {max} open consoles has been reached. Close one to open another.",
   "terminal.limitRefused": "No more consoles can be opened. Close one first.",
   "terminal.unresolvable": "This connection cannot be resolved, so sshc will not guess what it would use. Open Settings analysis to see why.",
-  "terminal.proxyCommandRefused": "ProxyCommand starts a program, and sshc starts nothing to connect. Use ProxyJump instead.",
+  "terminal.proxyCommandWithJump": "This host sets both ProxyCommand and ProxyJump, and they both decide how to reach it. Keep one. ssh refuses this configuration too.",
   "terminal.jumpDepthExceeded": "The ProxyJump chain is too deep to follow.",
   "terminal.openFailed": "The console could not be opened.",
   "terminal.keyBar": "On-screen keys",

@@ -162,9 +162,12 @@ func runConnect(
 }
 
 // connectAdvice は、断った理由に「では何をすればよいか」を添える。
+//
+// **かつてここは「ssh なら繋げる」と言っていた。** ProxyCommand を断っていた
+// 頃の逃げ道である。いまは起こすので、その一文は消えた。
 func connectAdvice(err error) error {
-	if errors.Is(err, sshclient.ErrProxyCommand) {
-		return fmt.Errorf("%w; ~/.ssh/config is untouched, so ssh %s still works", err, "<alias>")
+	if errors.Is(err, sshclient.ErrProxyCommandWithJump) {
+		return fmt.Errorf("%w; keep whichever one you meant", err)
 	}
 	return err
 }
