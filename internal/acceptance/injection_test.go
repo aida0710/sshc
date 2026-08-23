@@ -125,40 +125,6 @@ func TestNoRouteEverLetsAHostileAliasReachAnExternalEffect(t *testing.T) {
 	}
 }
 
-// assertAliasArrivesInert は、alias が argv の中に、"--" separator
-// 直後の要素全体としてちょうど 1 回現れない限り失敗する。
-func assertAliasArrivesInert(t testing.TB, arguments []string, alias string) {
-	t.Helper()
-	separator := -1
-	for index, argument := range arguments {
-		if argument == "--" {
-			separator = index
-			break
-		}
-	}
-	if separator < 0 {
-		t.Fatalf("argv has no %q separator: %#v", "--", arguments)
-	}
-	if separator+1 >= len(arguments) {
-		t.Fatalf("argv ends at the %q separator: %#v", "--", arguments)
-	}
-	if got := arguments[separator+1]; got != alias {
-		t.Fatalf("argv[%d] = %q, want the alias %q whole", separator+1, got, alias)
-	}
-	for index, argument := range arguments[:separator] {
-		if strings.Contains(argument, alias) {
-			t.Fatalf("argv[%d] = %q carries the alias before the %q separator", index, argument, "--")
-		}
-	}
-	for index, argument := range arguments {
-		for _, forbidden := range []string{"\x00", "\n", "\r"} {
-			if strings.Contains(argument, forbidden) {
-				t.Fatalf("argv[%d] = %q contains a control character", index, argument)
-			}
-		}
-	}
-}
-
 // TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard は、
 // 前段に handler を置かずに継ぎ目を直接駆動する。
 //

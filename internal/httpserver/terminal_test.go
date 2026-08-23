@@ -146,12 +146,6 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 	return newScriptedPTY()
 }
 
-func (f *terminalFixture) aliases() []string {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
-	return append([]string(nil), f.connected...)
-}
-
 func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
 	t.Helper()
 	starter := &scriptedStarter{}

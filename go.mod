@@ -46,6 +46,7 @@ require (
 	golang.org/x/mobile v0.0.0-20260813181013-1960c775504c // indirect
 	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 )
@@ -53,4 +54,5 @@ require (
 tool (
 	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 	golang.org/x/mobile/cmd/gomobile
+	golang.org/x/tools/cmd/deadcode
 )
