@@ -403,7 +403,7 @@ test("shows where each value comes from without a confirmation", async ({ page, 
   await expect(show).toBeEnabled();
   await show.click();
 
-  await expect(page.getByRole("table", { name: "Authoritative value sources" })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Configuration lines read by OpenSSH" })).toBeVisible();
 });
 
 test("edits the display order it stores, and shows a favourite in the tree", async ({
@@ -448,7 +448,7 @@ test("re-associates a note whose connection is gone, without guessing", async ({
   await openApplication(page, installation);
   await openSection(page, "Connections");
 
-  const panel = page.getByRole("region", { name: "Settings whose connection is gone" });
+  const panel = page.getByRole("region", { name: "Settings without a connection" });
   await expect(panel).toBeVisible();
   await expect(panel.getByText("retired in config")).toBeVisible();
   await expect(panel.getByText(/tags ci/)).toBeVisible();
