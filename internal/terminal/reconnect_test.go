@@ -238,3 +238,47 @@ func TestClosingAConsoleDoesNotPromiseToDialAgain(t *testing.T) {
 		t.Errorf("開き直しに行った回数 = %d, want 1（閉じたのだから行かない）", spy.count())
 	}
 }
+
+// **自分で閉じたコンソールは、一覧に残さない。**
+//
+// 終了済みを残すのは最後の出力を読ませるためであり、閉じた人はもう読んでいて、
+// そのうえで閉じている。残せば、片付けたはずのものが並び続ける。
+func TestAConsoleThePersonClosedLeavesTheList(t *testing.T) {
+	spy := &closingSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Close(session.ID()); err != nil {
+		t.Fatal(err)
+	}
+
+	waitFor(t, func() bool { return len(registry.Sessions()) == 0 })
+}
+
+// **勝手に切れたものは残す。** そちらは読まれていない——なぜ切れたのかは、
+// 残っている画面にしか書いていない。
+func TestAConsoleThatDroppedStaysToBeRead(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 繋ぎ直しを使い切らせる。**諦めたあとが、読まれるべき終わり方である。**
+	for attempt := 0; attempt <= terminal.MaxReconnects; attempt++ {
+		waitFor(t, func() bool { return spy.count() >= attempt+1 })
+		spy.at(attempt).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	}
+
+	waitFor(t, func() bool { return !session.Live() })
+	if len(registry.Sessions()) != 1 {
+		t.Errorf("sessions = %d, want the dropped console kept so its reason can be read", len(registry.Sessions()))
+	}
+}

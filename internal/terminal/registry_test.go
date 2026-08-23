@@ -234,17 +234,21 @@ func TestOpenRefusesOnceTheLiveLimitIsReached(t *testing.T) {
 	}
 }
 
+// **残す枠は「読まれていない終わり方」のためにある。**
+//
+// かつてここは registry.Close で閉じていたが、それは人が自分で閉じる操作であり、
+// いまはその場で捨てられる——閉じた人はもう読んでいる。残るのは、自分から
+// 終わったものだけである。
 func TestExitedSessionsAreRetainedUpToTheCap(t *testing.T) {
-	registry, _ := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
 
-	// 上限より多く開いて閉じる。残るのは新しい方から RetainedExited 本である。
+	// 上限より多く開いて、**それぞれが自分から終わる。** 残るのは新しい方から
+	// RetainedExited 本である。
 	var opened []string
 	for index := 0; index < terminal.RetainedExited+3; index++ {
 		session := openShell(t, registry)
 		opened = append(opened, session.ID())
-		if err := registry.Close(session.ID()); err != nil {
-			t.Fatal(err)
-		}
+		starter.processes[index].exit(terminal.ExitInfo{Code: 0})
 		waitFor(t, exited(registry, session.ID()))
 		registry.Prune()
 	}
