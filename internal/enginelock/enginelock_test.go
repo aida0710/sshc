@@ -24,11 +24,10 @@ const (
 	helperExitRunning  = 3
 )
 
-// TestMain lets the compiled test binary act as a separate engine process.
+// TestMain はコンパイル済みテストバイナリを別の engine プロセスとして動作させる。
 //
-// **A second process is the only honest proof.** An in-process second Acquire
-// passes against a lock that is merely process-local, which is exactly the
-// shape this package exists to replace.
+// 別プロセスから検査する必要がある。同じプロセスで 2 回目の Acquire を呼ぶだけでは、
+// プロセスローカルなロックでも成功してしまう。
 func TestMain(m *testing.M) {
 	if path := os.Getenv(helperEnvironmentPath); path != "" {
 		os.Exit(runLockHelper(path, os.Getenv(helperEnvironmentMode)))
@@ -73,8 +72,8 @@ func helperCommand(t *testing.T, path, mode string) *exec.Cmd {
 	return command
 }
 
-// lockInSeparateProcess reports the helper's single output line and its exit
-// code. The helper never outlives this call.
+// lockInSeparateProcess は補助プロセスの出力 1 行と終了コードを返す。補助プロセスは
+// この呼び出しより長く残らない。
 func lockInSeparateProcess(t *testing.T, path string) (string, int) {
 	t.Helper()
 	command := helperCommand(t, path, helperModeTry)
@@ -86,8 +85,7 @@ func lockInSeparateProcess(t *testing.T, path string) (string, int) {
 	return strings.TrimSpace(string(output)), command.ProcessState.ExitCode()
 }
 
-// heldLock is a separate process that owns the lock until this process either
-// closes its stdin or kills it.
+// heldLock は、このプロセスが stdin を閉じるか kill するまでロックを所有する別プロセスである。
 type heldLock struct {
 	command *exec.Cmd
 	stdin   io.WriteCloser
@@ -141,8 +139,8 @@ func (h *heldLock) release(t *testing.T) {
 	h.stopped = true
 }
 
-// kill ends the owner without any orderly release. Waiting for the process to
-// be reaped is the synchronisation; no sleep is involved.
+// kill は通常の解放処理を行わず所有プロセスを終了する。プロセスの回収完了を同期条件とし、
+// 固定時間の sleep は使用しない。
 func (h *heldLock) kill(t *testing.T) {
 	t.Helper()
 	if err := h.command.Process.Kill(); err != nil {
@@ -167,7 +165,7 @@ func lockPath(t *testing.T) string {
 	return filepath.Join(t.TempDir(), "state", "engine.lock")
 }
 
-// **エンジンが 2 台になる道を、ここで塞いでいる。** 1 台目が生きているあいだ、
+// エンジンが 2 台になる道を、ここで塞いでいる。1 台目が生きているあいだ、
 // 別プロセスは必ず ErrRunning を受け取らなければならない。
 func TestAcquireRefusesASecondProcessWhileTheLockIsHeld(t *testing.T) {
 	path := lockPath(t)
@@ -184,7 +182,7 @@ func TestAcquireRefusesASecondProcessWhileTheLockIsHeld(t *testing.T) {
 	}
 }
 
-// **プロセスが死ねば必ず外れる。** O_EXCL で作ったファイルは、強制終了された
+// プロセスが死ねば必ず外れる。O_EXCL で作ったファイルは、強制終了された
 // 起動が置いていったものと、いま握られているものを区別できない。
 func TestAcquireSucceedsAfterTheOwningProcessIsKilled(t *testing.T) {
 	path := lockPath(t)

@@ -12,7 +12,7 @@ import (
 // ScanAlgorithms は、ホスト鍵を尋ねる種別の並びである。
 //
 // `ssh-keyscan` の既定と同じ顔ぶれにしてある。サーバーが持っていない種別は
-// 黙って飛ばす——持っていないことは失敗ではない。
+// 暗黙に飛ばす。持っていないことは失敗ではない。
 var ScanAlgorithms = []string{
 	ssh.KeyAlgoED25519,
 	ssh.KeyAlgoECDSA256,
@@ -25,20 +25,20 @@ var ScanAlgorithms = []string{
 
 // DefaultScanTimeout は、ひとつのアドレスを尋ねるのに掛ける上限である。
 //
-// **種別ごとではなく全体の予算である。** 種別ごとにすると、届かないアドレスに
-// 対して上限が種別の数だけ掛かる——7 倍待たされる。
+// 種別ごとではなく全体の予算である。種別ごとにすると、届かないアドレスに
+// 対して上限が種別の数だけ掛かる。7 倍待たされる。
 const DefaultScanTimeout = 15 * time.Second
 
 // errKeyCollected は、鍵を受け取ったので握手を止めるという合図である。
 //
-// 失敗ではない。**鍵を集めるのに資格情報は要らない**ので、鍵が手に入った時点で
+// 失敗ではない。鍵を集めるのに資格情報は要らないので、鍵が手に入った時点で
 // 用は済んでいる。そこから認証へ進むと、集めるだけのはずの操作が資格情報を
 // 差し出すことになる。
 var errKeyCollected = errors.New("sshclient: the host key was collected")
 
 // ScanHostKeys は、そのアドレスが提示するホスト鍵を集める。
 //
-// **認証しない。** 種別ごとに握手を始め、鍵を受け取ったところで断る。これは
+// 認証しない。種別ごとに握手を始め、鍵を受け取ったところで断る。これは
 // ssh-keyscan がしていることと同じである。
 func ScanHostKeys(
 	ctx context.Context,
@@ -64,7 +64,7 @@ func ScanHostKeys(
 		if err != nil {
 			lastErr = err
 			if !reached {
-				// 繋がらなかった。**種別の問題ではない。** 残りを試しても
+				// 繋がらなかった。種別の問題ではない。残りを試しても
 				// 同じ理由で同じだけ待つだけである。
 				break
 			}
@@ -89,7 +89,7 @@ func ScanHostKeys(
 // scanOne は、ひとつの種別について鍵を尋ねる。
 //
 // reached は、そのアドレスに繋がったかを報告する。繋がらなかったことと、
-// その種別を持っていなかったことは別の答えである。
+// その種別を持っていなかったことは別の結果である。
 func scanOne(
 	ctx context.Context,
 	dial func(ctx context.Context, network, address string) (net.Conn, error),

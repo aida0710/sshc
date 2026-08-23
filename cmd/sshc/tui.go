@@ -274,7 +274,7 @@ func renderTUI(output io.Writer, model *tuiModel, width, height int) {
 			fmt.Fprintln(&screen, line)
 		}
 	}
-	// 一覧が画面に収まらないことは黙っていられない。見えている分がすべてだと
+	// 一覧が画面に収まらない場合は明示する。見えている分がすべてだと
 	// 読めてしまうからである。
 	if hidden := len(all) - len(visible); hidden > 0 {
 		fmt.Fprintf(&screen, "\x1b[2m%s\x1b[0m\n", truncate(fmt.Sprintf("  %d more", hidden), width))

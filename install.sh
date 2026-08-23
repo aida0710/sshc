@@ -3,20 +3,15 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
 #
-# **配るものはこれひとつである。** デスクトップの束はもう作っていない——画面を
-# 配るのはこの実体自身で、`sshc engine` が HTTP で web を出し、`sshc` がその
-# 入口を刷る。
+# 配布物は UI を埋め込んだ単一の CLI バイナリである。
+# インストール前の検証内容と変更内容は標準出力へ表示する:
 #
-# **この script は、置く前に確かめる。** curl から sh へ流し込むものが黙って
-# 上書きするのは、渡された側からは何も見えない——だから、何を見て何を決めたかを
-# すべて印字する。確かめるのは順に:
-#
-#   1. この機械のために作られた実体があるか（無ければ、何が無いのかを言う）
-#   2. 落としたものが公開された checksum と一致するか
-#   3. 置き先が PATH に載っているか（載っていなければ、足す 1 行を綴る）
-#   4. 置き先に既に居るものが、この script の置いたものか
-#   5. PATH の手前に別の sshc が居ないか
-#   6. 走っている engine が、いま入れるものと同じ版か
+#   1. OS とアーキテクチャに対応する成果物の有無
+#   2. ダウンロードした成果物の SHA-256
+#   3. インストール先が PATH に含まれるか
+#   4. 既存ファイルを安全に置換できるか
+#   5. PATH 上で別の sshc が先に解決されないか
+#   6. 稼働中の engine とインストール対象のバージョンが一致するか
 #
 # 環境変数:
 #   SSHC_VERSION      入れる版（既定: 最新）
@@ -29,7 +24,7 @@ say() { printf '%s\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 die() { printf 'sshc: %s\n' "$*" >&2; exit 1; }
 
-# ── 落とす道具 ────────────────────────────────────────────────
+# ── ダウンロードツール ─────────────────────────────────────────
 if command -v curl >/dev/null 2>&1; then
   fetch() { curl -fsSL "$1" -o "$2"; }
   fetch_stdout() { curl -fsSL "$1"; }
@@ -40,15 +35,14 @@ else
   die "neither curl nor wget is available"
 fi
 
-# ── ① この機械のために作られた実体があるか ──────────────────
-# **推測しない。** 知らない組み合わせに近そうなものを渡すより、何が無いのかを
-# 言って止まる方が、動かない実体を PATH に置くより親切である。
+# ── ① 対応する成果物を選択する ─────────────────────────────────
+# 未対応の OS またはアーキテクチャでは、代替成果物を推測せず終了する。
 os=$(uname -s)
 arch=$(uname -m)
 case "$os" in
   Linux) goos=linux ;;
   Darwin) goos=darwin ;;
-  *) die "$os is not one of the systems this script installs (Linux, macOS). Windows has an installer: https://github.com/$REPO/releases/latest" ;;
+  *) die "$os is not one of the systems this script installs (Linux, macOS). On Windows, download sshc-windows-amd64.exe or sshc-windows-arm64.exe from https://github.com/$REPO/releases/latest, rename it to sshc.exe, and place it on PATH." ;;
 esac
 case "$arch" in
   x86_64 | amd64) goarch=amd64 ;;
@@ -69,10 +63,7 @@ fi
 say "sshc: installing $asset ($tag)"
 
 # ── 置き先を決める ────────────────────────────────────────────
-# **root で走っているなら /usr/local/bin である。** あそこは Linux でも macOS でも
-# 既定の PATH に載っている。root でないなら ~/.local/bin へ置く——sudo を要求
-# しないことの方が、PATH に載っていることより優先する（載っているかは下で確かめ、
-# 載っていなければ足す 1 行を綴る）。
+# root では /usr/local/bin、それ以外では sudo を要求せず ~/.local/bin を使用する。
 if [ -n "${SSHC_INSTALL_DIR:-}" ]; then
   dir="$SSHC_INSTALL_DIR"
   why="SSHC_INSTALL_DIR"
@@ -86,15 +77,13 @@ fi
 target="$dir/sshc"
 note "into $target ($why)"
 
-# ── ④ そこに既に居るものを見る ────────────────────────────────
-# **自分が置いたもの以外は上書きしない。** そこに何を置くかは利用者が決めたこと
-# であり、パッケージマネージャが持っているかもしれない。
+# ── ④ 既存ファイルを検査する ───────────────────────────────────
+# シンボリックリンクは別の管理元を示す可能性があるため置換しない。
 if [ -e "$target" ] || [ -L "$target" ]; then
   if [ -L "$target" ]; then
-    die "$target is a symlink to $(readlink "$target"). Something else manages it — remove it first, or set SSHC_INSTALL_DIR."
+    die "$target is a symlink to $(readlink "$target"). Remove it first, or set SSHC_INSTALL_DIR."
   fi
-  # **書けるかどうかを決めるのはディレクトリである。** 読み取り専用のファイルでも、
-  # 置いてあるディレクトリに書ければ rename で置き換えられる。
+  # rename の可否は対象ファイルではなく親ディレクトリの権限で決まる。
   [ -w "$dir" ] || die "$target exists and $dir is not writable by you. Re-run with sudo, or set SSHC_INSTALL_DIR."
   note "replacing the sshc already at $target"
 fi
@@ -108,9 +97,7 @@ trap 'rm -rf "$work"' EXIT INT TERM
 fetch "$base/$asset" "$work/sshc" || die "could not download $base/$asset"
 
 # ── ② 公開された checksum と一致するか ────────────────────────
-# **一致しないものは置かない。** curl から sh へ流し込む入れ方は、途中で
-# すり替えられても受け取った側には見えない。checksums.txt は同じリリースが
-# 公開しているので、少なくとも「落ちてきたものが、そのリリースのものか」は言える。
+# 公開された checksums.txt と一致しない成果物はインストールしない。
 if fetch "$base/checksums.txt" "$work/checksums.txt" 2>/dev/null; then
   expected=$(grep " $asset\$" "$work/checksums.txt" | cut -d' ' -f1 || true)
   [ -n "$expected" ] || die "checksums.txt does not list $asset"
@@ -132,12 +119,10 @@ fi
 chmod 0755 "$work/sshc"
 
 # ── ⑥ 走っている engine と同じ版か ────────────────────────────
-# **入れ替える前に訊く。** engine が走っている最中に実体を置き換えると、
-# 端末の sshc と走っているアプリの版が食い違う。あちらはそれを検出して断るので、
-# 壊れはしないが、理由が「なぜ今?」に見える。先に言っておく。
+# 稼働中の engine と新しい CLI のバージョンが異なる場合は事前に通知する。
 running=""
 if command -v sshc >/dev/null 2>&1; then
-  running=$(sshc status 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || true)
+  running=$(sshc status --json 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || true)
 fi
 incoming=$("$work/sshc" version 2>/dev/null | cut -d' ' -f2 || true)
 if [ -n "$running" ] && [ -n "$incoming" ] && [ "$running" != "$incoming" ]; then
@@ -146,15 +131,12 @@ if [ -n "$running" ] && [ -n "$incoming" ] && [ "$running" != "$incoming" ]; the
 fi
 
 # ── 置く ──────────────────────────────────────────────────────
-# **同じディレクトリへ書いてから rename する。** 半分書けたものがその名前を
-# 持つ瞬間を作らない——実行される実体なので、その瞬間に起動した人は壊れた
-# ファイルを実行する。
+# 同じディレクトリ内の rename を使用し、不完全なバイナリが target に現れないようにする。
 mv "$work/sshc" "$target" 2>/dev/null || {
   cp "$work/sshc" "$target.$$" && chmod 0755 "$target.$$" && mv "$target.$$" "$target"
 } || die "could not install into $target"
 
-# **答えられない実体もある。** 0.1.0 には version が無い——入ったことと、
-# それが何かを言えることは別である。
+# version サブコマンドのない旧バージョンではインストール先だけを表示する。
 installed=$("$target" version 2>/dev/null || true)
 if [ -n "$installed" ]; then
   say "sshc: installed $installed"
@@ -172,8 +154,7 @@ if [ -n "$found" ] && [ "$found" != "$target" ]; then
 fi
 
 # ── ③ 置き先が PATH に載っているか ────────────────────────────
-# **PATH を勝手に書き換えない。** シェルの設定は利用者のものである。載って
-# いないなら、足す 1 行をそのまま綴る——打つかどうかは向こうが決める。
+# PATH は変更せず、必要な設定コマンドだけを表示する。
 case ":$PATH:" in
   *":$dir:"*) exit 0 ;;
 esac

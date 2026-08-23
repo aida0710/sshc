@@ -720,7 +720,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Renames a group directory and everything that names it — every connection file under connections/<old>, every key under keys/<old>, every IdentityFile pointing into it, the generated Include region, the compiled settings file and metadata.json — in one journalled transaction. Nested groups travel with their parent. The emptied source directory is reported and is not removed: storage moves files, not directories. */
+        /** @description Renames a group directory and every reference to it: every connection file under connections/<old>, every key under keys/<old>, every IdentityFile pointing into it, the generated Include region, the compiled settings file and metadata.json. The changes use one journalled transaction. Nested groups travel with their parent. The emptied source directory is reported and is not removed: storage moves files, not directories. */
         post: operations["renameGroup"];
         delete?: never;
         options?: never;

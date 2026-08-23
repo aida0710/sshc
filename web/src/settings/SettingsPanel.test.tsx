@@ -32,8 +32,6 @@ async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("SettingsPanel", () => {
-  // 端末の選択という設定は無くなった。接続はこのアプリケーションの中で開く
-  // ので、開く先を選ぶという問い自体が存在しない。
   it("no longer offers a connection application to choose", async () => {
     render(<SettingsPanel api={buildApi()} />);
 
@@ -57,7 +55,7 @@ describe("SettingsPanel", () => {
     await waitFor(() =>
       expect(api.changeMasterPassword).toHaveBeenCalledWith("the old one is long", "the new one is long"),
     );
-    expect(await screen.findByRole("status")).toHaveTextContent(/live snapshot/i);
+    expect(await screen.findByRole("status")).toHaveTextContent(/live bucket snapshot/i);
     expect(screen.getByLabelText("Current master password")).toHaveValue("");
     expect(screen.getByLabelText("New master password")).toHaveValue("");
     expect(screen.getByLabelText("Confirm new master password")).toHaveValue("");
@@ -76,7 +74,7 @@ describe("SettingsPanel", () => {
     await fillMasterPassword(user);
     await user.click(screen.getByRole("button", { name: "Change the master password" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(/still opens with the old password/i);
+    expect(await screen.findByRole("status")).toHaveTextContent(/still requires the old password/i);
   });
 
   it("reports a wrong current password and clears every secret after failure", async () => {
@@ -88,7 +86,7 @@ describe("SettingsPanel", () => {
     await fillMasterPassword(user);
     await user.click(screen.getByRole("button", { name: "Change the master password" }));
 
-    expect(await screen.findByText("That is not the current master password. Nothing was changed.")).toBeInTheDocument();
+    expect(await screen.findByText("The current master password is incorrect. Nothing was changed.")).toBeInTheDocument();
     expect(screen.getByLabelText("Current master password")).toHaveValue("");
     expect(screen.getByLabelText("New master password")).toHaveValue("");
     expect(screen.getByLabelText("Confirm new master password")).toHaveValue("");
@@ -118,8 +116,6 @@ describe("SettingsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Show New master password" }));
     expect(screen.getByLabelText("New master password")).toHaveAttribute("type", "text");
   });
-  // 開始位置は書いた綴りのまま送る。**home の綴りに展開して送らない**——
-  // 展開するのはサーバーであり、保存されるのは書いた形である。
   it("saves the starting directory as it was written", async () => {
     const user = userEvent.setup();
     const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
@@ -133,9 +129,6 @@ describe("SettingsPanel", () => {
     expect(await within(region).findByText(/Saved/)).toBeVisible();
   });
 
-  // **空欄は「設定されていない」であり、既定と同じ値ではない。** 空欄を
-  // 既定の数字で埋めて送ると、それが metadata に焼き付き、既定を変えた日に
-  // その人だけが黙って取り残される。
   it("sends nothing for the fields left empty", async () => {
     const user = userEvent.setup();
     const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
@@ -148,8 +141,6 @@ describe("SettingsPanel", () => {
     expect(setTerminalSettings).toHaveBeenCalledWith({ maxSessions: 4 });
   });
 
-  // 既定は両方 on だが、off は false として明示的に送らなければならない。
-  // false を省略すると保存後の再読み込みで on に戻る。
   it("shows both clipboard conveniences on by default and saves each disabled choice", async () => {
     const user = userEvent.setup();
     const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
@@ -180,10 +171,6 @@ describe("SettingsPanel", () => {
     expect(within(region).getByRole("checkbox", { name: "Paste with right click" })).not.toBeChecked();
   });
 
-  // **0 は「繋ぎ直さない」という選択である。** 空欄の「決めていない」とは違う。
-  //
-  // 真偽で振り分ける書き方（`reconnect ? {...} : {}`）にすると、切った人の選択が
-  // ここで消えて、次に読んだときには既定へ戻っている。
   it("saves not reconnecting as a choice, not as an empty field", async () => {
     const user = userEvent.setup();
     const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
@@ -211,8 +198,6 @@ describe("SettingsPanel", () => {
       .toHaveValue("0");
   });
 
-  // 保存されている値は編集できる形で出す。**既定へ丸めて見せない**——
-  // 丸めた値を人がそのまま保存すると、選んでいない設定が書き込まれる。
   it("shows the stored numbers and leaves the unset ones blank", async () => {
     render(<SettingsPanel api={buildApi({
       terminalSettings: vi.fn().mockResolvedValue({ maxSessions: 4 }),
@@ -226,8 +211,6 @@ describe("SettingsPanel", () => {
     expect(within(region).getByLabelText("Starting directory")).toHaveValue("");
   });
 
-  // 断られた理由をそのまま出す。**「保存できません」で終わらせない**——
-  // 直すのは人であり、直すには何が悪いのかが要る。
   it("says which way the directory was refused", async () => {
     const user = userEvent.setup();
     const setTerminalSettings = vi.fn().mockRejectedValue(
@@ -242,10 +225,9 @@ describe("SettingsPanel", () => {
     await user.type(within(region).getByLabelText("Starting directory"), "~/nowhere");
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
-    expect(await within(region).findByText("That directory does not exist.")).toBeVisible();
+    expect(await within(region).findByText("The specified directory does not exist.")).toBeVisible();
   });
 
-  // 繋ぎっぱなしをまとめて片付ける入口。**エンジンは止めない。**
   it("closes every open connection at once", async () => {
     const user = userEvent.setup();
     const closeAll = vi.fn().mockResolvedValue(undefined);
@@ -271,8 +253,6 @@ describe("SettingsPanel", () => {
     expect(closeAll).toHaveBeenCalledTimes(1);
   });
 
-  // **開き直しは取り消しではない。** ここが終わらせるのは走っている接続の
-  // 全部であり、動いていたものは戻らない。だから一度訊く。
   it("does not end every connection on the first press", async () => {
     const user = userEvent.setup();
     const closeAll = vi.fn().mockResolvedValue(undefined);
@@ -294,8 +274,6 @@ describe("SettingsPanel", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  // **走っているものが 1 本も無ければ訊かない。** 終わった行を片付けるだけの回に
-  // 問いを出せば、次の問いも読まずに押す習慣を作る。
   it("clears finished rows without asking", async () => {
     const user = userEvent.setup();
     const closeAll = vi.fn().mockResolvedValue(undefined);
@@ -319,7 +297,6 @@ describe("SettingsPanel", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  // 閉じるものが無いときに押せると、押した人は何かが起きたと思う。
   it("cannot be pressed when nothing is open", async () => {
     render(
       <SettingsPanel

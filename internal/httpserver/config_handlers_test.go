@@ -173,9 +173,9 @@ func TestEveryConfigMutationRequiresCSRFAndEveryResponseIsUncacheable(t *testing
 	}
 }
 
-// **実際に返る本文に、こちらが知らない項目が無いことを見る。**
+// 実際に返る本文に、こちらが知らない項目が無いことを見る。
 //
-// 相手は生成された双子ではなく、実際に c.JSON へ渡している型そのものである——
+// 相手は生成された双子ではなく、実際に c.JSON へ渡している型そのものである。
 // あの形の Go の定義は 1 つしかない（api/oapi-codegen.yaml の exclude-schemas）。
 // その型が openapi.yaml と一致することは internal/acceptance が見ているので、
 // 2 つ合わせて「返る本文 = 契約」になる。
@@ -286,7 +286,7 @@ func TestErrorBodiesCarryLocationsNeverConfigurationText(t *testing.T) {
 	}
 
 	// 衝突は diff の行を伴うが、これは本質的に設定テキストであるため、
-	// ファイルの中身を書き戻してよい唯一の形である——ただしユーザーに解決を
+	// ファイルの中身を書き戻してよい唯一の形である。ただしユーザーに解決を
 	// 求めている衝突レポートの中に限る。
 	if err := os.WriteFile(filepath.Join(harness.root, "config"), []byte(handlerConfig+"Host later\n"), 0o600); err != nil {
 		t.Fatal(err)

@@ -17,7 +17,7 @@ func (h *testHarness) raw(t *testing.T, method, target string, body []byte) *htt
 	request.Host = "127.0.0.1:43123"
 	request.Header.Set(echo.HeaderContentType, "application/octet-stream")
 	request.Header.Set("Sec-Fetch-Site", "same-origin")
-	// **読み取りにも CSRF ヘッダーが要る。** この API はそう決めてある。
+	// 読み取りにも CSRF ヘッダーが要る。この API はそう決めてある。
 	request.Header.Set(CSRFHeader, h.csrf)
 	if method != http.MethodGet {
 		request.Header.Set(echo.HeaderOrigin, "http://127.0.0.1:43123")
@@ -32,7 +32,7 @@ func pngBytes(payload string) []byte {
 	return append([]byte("\x89PNG\r\n\x1a\n"), []byte(payload)...)
 }
 
-// **名乗られた型ではなく、中身から決まった型を返す。**
+// 名乗られた型ではなく、中身から決まった型を返す。
 //
 // 送ってきた側の Content-Type はこのバイト列について何も保証しない。`.png` と
 // 名乗る HTML を image/png として返せば、それを開いたブラウザが何をするかは
@@ -71,7 +71,7 @@ func TestABackgroundIsServedAsWhatItsBytesSay(t *testing.T) {
 	}
 }
 
-// 画像でないものは置かれない。**拡張子は名乗るだけで、何も証明しない。**
+// 画像でないものは置かれない。拡張子は名乗るだけで、何も証明しない。
 func TestUploadingSomethingThatIsNotAnImageIsRefused(t *testing.T) {
 	harness := newConfigHarness(t)
 
@@ -82,15 +82,14 @@ func TestUploadingSomethingThatIsNotAnImageIsRefused(t *testing.T) {
 	}
 }
 
-// 置かれていない名前は読めない。**綴りで登ろうとしても同じである。**
+// 保存済み一覧にない名前や、パストラバーサルを含む名前は読み取れない。
 func TestReadingABackgroundThatWasNeverStoredIsRefused(t *testing.T) {
 	harness := newConfigHarness(t)
 	if created := harness.raw(t, http.MethodPost, "/api/v1/terminal/backgrounds?name=wall", pngBytes("x")); created.Code != http.StatusCreated {
 		t.Fatalf("POST = %d", created.Code)
 	}
 
-	// **404 を名指しする。** 「200 でなければよい」にすると、認証で弾かれた
-	// だけの応答でも通ってしまう——実際、一度それで緑になっていた。
+	// 未保存の名前には 404 を返す。200 以外という条件では、認証エラーも通過する。
 	for _, name := range []string{"nothing.png", "..%2F..%2Fconfig", "%2Eetc%2Fpasswd"} {
 		response := harness.raw(t, http.MethodGet, "/api/v1/terminal/backgrounds/"+name, nil)
 		if response.Code != http.StatusNotFound {
@@ -99,7 +98,7 @@ func TestReadingABackgroundThatWasNeverStoredIsRefused(t *testing.T) {
 	}
 }
 
-// 一覧は、残りをこちらが数えて返す。**画面が上限を書き写さないためである。**
+// 一覧は、残りをこちらが数えて返す。画面が上限を書き写さないためである。
 func TestTheListSaysHowMuchRoomIsLeft(t *testing.T) {
 	harness := newConfigHarness(t)
 	if created := harness.raw(t, http.MethodPost, "/api/v1/terminal/backgrounds?name=wall", pngBytes("abc")); created.Code != http.StatusCreated {

@@ -46,20 +46,15 @@ func (e *ExecutableDirectiveError) Error() string {
 type AuthenticationResult struct {
 	Outcome       string
 	Authenticated bool
-	// Method は通った認証方式。**推測ではない**——方式は順に試され、通った
-	// 時点で握手が終わるので、最後に試された方式が通った方式である。
+	// Method は認証に成功した方式。
 	Method string
-	// Detail は、答えを人へ説明する文字列。上限つきで、秘密を含まない。
+	// Detail は、結果をユーザーへ説明する文字列。上限つきで、秘密を含まない。
 	Detail    string
 	Truncated bool
 	Elapsed   time.Duration
 }
 
-// Authentication は、本物の SSH 認証の試行を一回実行する。
-//
-// **外部プログラムは起こさない。** かつては `ssh -v` を走らせて出力の語句を
-// 読んでいたが、プロセス内では通ったかどうかが握手の結果そのものである。
-// 文字列から推測する必要が無い。
+// Authentication は、外部プログラムを起動せずに SSH 認証を一度試行する。
 type Authentication struct {
 	// Dial は、接続ひとつ分を組み立てて認証だけを試す。
 	Dial func(ctx context.Context, alias string) (sshclient.Probe, error)
@@ -70,14 +65,12 @@ type Authentication struct {
 // ErrNoAuthenticator は、認証を試す手段が配線されていないことを報告する。
 var ErrNoAuthenticator = errors.New("no authentication probe is available")
 
-// Test は alias に対して認証し、答えが判明した時点で止まる。
+// Test は alias に対して認証し、結果が判明した時点で止まる。
 //
 // acknowledged は、report.Unavoidable() のコマンドをそのまま表示したうえで消費
 // されたアクショントークンから来なければならない。
 //
-// **無効化すべき機能の一覧はもう無い。** かつては転送も LocalCommand も
-// SessionType も、外部の ssh に「するな」と言う必要があった。このクライアントに
-// その機能が無いので、言う相手がいない。
+// プロセス内クライアントが実行しない機能は、個別に無効化する必要がない。
 func (a Authentication) Test(
 	ctx context.Context, report effective.Report, alias string, acknowledged bool,
 ) (AuthenticationResult, error) {
@@ -115,10 +108,7 @@ func (a Authentication) Test(
 	return result, nil
 }
 
-// classify は、失敗の理由を安定した符号へ移す。
-//
-// **型で判断する。** 出力の語句を読んでいたのは、外部のプログラムが理由を
-// 型で返す手段を持たなかったからである。
+// classify は、エラーの型から安定した結果コードを返す。
 func classify(err error) string {
 	var dns *net.DNSError
 	switch {
@@ -151,7 +141,7 @@ func isRefused(err error) bool {
 	return strings.Contains(err.Error(), "connection refused")
 }
 
-// describe は、人に見せる説明を組み立てる。**秘密は含まない。**
+// describe は、秘密情報を含まないユーザー向け説明を組み立てる。
 func describe(err error, probe sshclient.Probe) string {
 	var builder strings.Builder
 	builder.WriteString(err.Error())

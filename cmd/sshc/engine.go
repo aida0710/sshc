@@ -27,10 +27,10 @@ var (
 	errEngineTerminated  = errors.New("engine terminated")
 )
 
-// engineDependencies は、この runner の継ぎ目である。
+// engineDependencies は、この runner のインターフェースである。
 //
-// **可変のパッケージ変数にしない。** 差し替え可能なグローバルを置くと、
-// 並行して走るパッケージのテストが互いの継ぎ目を踏む。
+// 可変のパッケージ変数にしない。差し替え可能なグローバルを置くと、
+// 並行して走るパッケージのテストが互いの依存関係を書き換えてしまう。
 type engineDependencies struct {
 	acquire         func(string) (func() error, error)
 	runApp          func(context.Context, app.Dependencies, string) error
@@ -75,16 +75,16 @@ func runEngineWithDependencies(
 	signalCtx, stopSignals := notifySignals(ctx)
 	defer stopSignals()
 
-	// **所有権はロックより先である。** 持ち主が既に居なくなっていたなら、
-	// ロックを取ってはならない——取れば、誰も待っていないエンジンが 1 台分の
+	// 所有権はロックより先である。持ち主が既に居なくなっていたなら、
+	// ロックを取ってはならない。取れば、誰も待っていないエンジンが 1 台分の
 	// 席を占める。
 	release, err := dependencies.acquire(app.HandoffDir(home))
 	if errors.Is(err, errEngineRunning) {
-		// **2 台目は立てない。** ただし、走っているものを止める道は要る
-		// ——どこで起こしたか分からない engine を、探して回らずに畳めるように。
+		// 2 台目は立てない。ただし、走っているものを止める道は要る
+		//どこで起動したか分からない engine を、探して回らずに畳めるように。
 		taken, takeErr := replaceRunningEngine(ctx, home, options, stdin, stdout, stderr, dependencies.acquire)
 		if takeErr != nil {
-			// **断ったことは、もう綴ってある。** ここで重ねると同じ話が二度出る。
+			// 断ったことは、もう綴ってある。ここで重ねると同じ話が二度出る。
 			if !errors.Is(takeErr, errAlreadyRunning) {
 				fmt.Fprintf(stderr, "sshc: %v\n", takeErr)
 			}
@@ -99,7 +99,7 @@ func runEngineWithDependencies(
 
 	code := runEngineApp(signalCtx, home, options, stdout, logger, dependencies)
 
-	// **ロックを手放すのは最後である。** これより後に状態を変えるものは何も無い。
+	// ロックを手放すのは最後である。これより後に状態を変えるものは何も無い。
 	if err := release(); err != nil {
 		logger.Error("release the engine lock", "error", err)
 		return 1
@@ -177,8 +177,8 @@ func exitForCause(cause error, logger *slog.Logger) int {
 
 // announceReadiness は、受付が始まったことを伝える。
 //
-// **入口はここに出さない。** 出せば、ログにも端末にもワンタイムの資格情報が
-// 残る。入口は `sshc` が求めたときに 1 つずつ発行される。
+// アクセス URLはここに出さない。出せば、ログにも端末にもワンタイムの資格情報が
+// 残る。アクセス URLは `sshc` が求めたときに 1 つずつ発行される。
 func announceReadiness(stdout io.Writer) func(app.Readiness) error {
 	return func(readiness app.Readiness) error {
 		message := "sshc: create the password vault with `sshc vault create`"

@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// markKeyMode と assertKeyModeSurvived は、移動が rename(2) であることを
-// permission bit で確かめる。バイト列がこのプロセスを通って運ばれれば、
-// 新しいファイルは新しい mode を持つ——0400 が生き残ったことが、運ばれて
-// いない証拠である。
 func markKeyMode(t *testing.T, path string) {
 	t.Helper()
 	if err := os.Chmod(path, 0o400); err != nil {

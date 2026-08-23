@@ -16,8 +16,8 @@ import (
 
 // streamSetup は、この検査が繰り返す組み立てをひとつにまとめる。
 //
-// **鍵はサーバーより先に作る。** 受け付ける鍵は ssh.ServerConfig を組んだ時点で
-// 決まるので、あとから足しても認証は通らない——握手そのものが失敗する。
+// 鍵はサーバーより先に作る。受け付ける鍵は ssh.ServerConfig を組んだ時点で
+// 決まるので、あとから足しても認証は通らない。握手そのものが失敗する。
 func streamSetup(
 	t *testing.T, options serverOptions,
 ) (*testServer, sshclient.Dialer, sshclient.Target) {
@@ -28,8 +28,8 @@ func streamSetup(
 	return server, dialerFor(t, server, sshclient.Auth{}), targetWith(server, path)
 }
 
-// **stdout と stderr は分かれて届く。** 混ざれば、出力を集めた側はコマンドの
-// 答えと診断を区別できない。対話セッションがこれを一本に畳んでいるのは端末が
+// stdout と stderr は分かれて届く。混ざれば、出力を集めた側はコマンドの
+// 結果と診断を区別できない。対話セッションがこれを一本に畳んでいるのは端末が
 // ひとつだからで、端末が無いここではその理由が無い。
 func TestStreamKeepsTheTwoOutputsApart(t *testing.T) {
 	_, dialer, target := streamSetup(t, serverOptions{
@@ -57,7 +57,7 @@ func TestStreamKeepsTheTwoOutputsApart(t *testing.T) {
 	}
 }
 
-// **終了コードは結果であって失敗ではない。** 相手が答えたのだから、その答えを
+// 終了コードは結果であって失敗ではない。相手が応答したのだから、その結果を
 // そのまま返す。error にしてしまうと、呼び出し側は「走らなかった」と「走って
 // 失敗した」を区別できない。
 func TestStreamReportsTheRemoteExitStatusWithoutCallingItAnError(t *testing.T) {
@@ -74,7 +74,7 @@ func TestStreamReportsTheRemoteExitStatusWithoutCallingItAnError(t *testing.T) {
 	}
 }
 
-// **相手のシェルが受け取るのは、渡した一本の文字列である。** こちらで引用を
+// 相手のシェルが受け取るのは、渡した一本の文字列である。こちらで引用を
 // 付け直さないので、サーバーに届く文字列は打たれたものと同じでなければならない。
 func TestStreamHandsTheCommandOverUnchanged(t *testing.T) {
 	server, dialer, target := streamSetup(t, serverOptions{})
@@ -90,7 +90,7 @@ func TestStreamHandsTheCommandOverUnchanged(t *testing.T) {
 	}
 }
 
-// **端末を要求しない。** 要求すれば相手の出力に画面制御が混ざり、集めた側が
+// 端末を要求しない。要求すれば相手の出力に画面制御が混ざり、集めた側が
 // 読めなくなる。
 func TestStreamNeverAsksForATerminal(t *testing.T) {
 	server, dialer, target := streamSetup(t, serverOptions{})
@@ -105,7 +105,7 @@ func TestStreamNeverAsksForATerminal(t *testing.T) {
 	}
 }
 
-// **未知のホスト鍵を黙って受け入れない。** 尋ねる相手が居ない実行が、信頼を
+// 未知のホスト鍵を暗黙に受け入れない。尋ねる相手が居ない実行が、信頼を
 // 増やしてはならない。
 func TestStreamRefusesAnUnknownHostInsteadOfTrustingIt(t *testing.T) {
 	_, dialer, target := streamSetup(t, serverOptions{})
@@ -121,8 +121,8 @@ func TestStreamRefusesAnUnknownHostInsteadOfTrustingIt(t *testing.T) {
 	}
 }
 
-// **相手が終わるのを永久には待たない。** ctx が終わればセッションを閉じる。
-// 閉じなければ Ctrl-C を押した人が待たされ続ける。
+// 相手が終わるのを永久には待たない。ctx が終わればセッションを閉じる。
+// 閉じなければ Ctrl-C を押したユーザーが待たされ続ける。
 func TestStreamStopsWhenTheContextIsDone(t *testing.T) {
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
@@ -153,8 +153,8 @@ func TestStreamStopsWhenTheContextIsDone(t *testing.T) {
 	}
 }
 
-// 走らせるものが無いなら、繋ぐ前に断る。**空のコマンドはシェルを開く指示では
-// ない**——この入口は端末を開かないので、それは何も起きないことになる。
+// 走らせるものが無いなら、繋ぐ前に断る。空のコマンドはシェルを開く指示では
+// ない。この入口は端末を開かないので、それは何も起きないことになる。
 func TestStreamRefusesAnEmptyCommandBeforeConnecting(t *testing.T) {
 	server, dialer, target := streamSetup(t, serverOptions{})
 
@@ -172,7 +172,7 @@ func TestStreamRefusesAnEmptyCommandBeforeConnecting(t *testing.T) {
 	}
 }
 
-// **標準入力は相手のコマンドのものである。** 問いの答えを読むためにそこから
+// 標準入力は相手のコマンドのものである。問いの結果を読むためにそこから
 // 取れば、コマンドへ渡すはずのものを奪う。
 func TestStreamForwardsStandardInputToTheCommand(t *testing.T) {
 	received := make(chan string, 1)
@@ -203,8 +203,8 @@ func TestStreamForwardsStandardInputToTheCommand(t *testing.T) {
 	}
 }
 
-// **設定した ServerAliveInterval は、この入口でも効く。** 対話セッションだけが
-// 尊重していて、長く黙って走るコマンドの側が無視していた——途中の機器に接続を
+// 設定した ServerAliveInterval は、この入口でも効く。対話セッションだけが
+// 尊重していて、長く暗黙に走るコマンドの側が無視していた。途中の機器に接続を
 // 捨てられて困るのは、むしろこちらである。
 func TestStreamSendsTheKeepAlivesTheConfigurationAsksFor(t *testing.T) {
 	release := make(chan struct{})
@@ -234,8 +234,8 @@ func TestStreamSendsTheKeepAlivesTheConfigurationAsksFor(t *testing.T) {
 	}
 }
 
-// 設定していないなら送らない。**既定を作らない** —— OpenSSH も既定では送らず、
-// ここで勝手に送り始めると、設定を読んだ人の予想と食い違う。
+// 設定していないなら送らない。既定を作らない。OpenSSH も既定では送らず、
+// ここで勝手に送り始めると、設定を読んだユーザーの予想と食い違う。
 func TestStreamSendsNoKeepAlivesWithoutAnInterval(t *testing.T) {
 	server, dialer, target := streamSetup(t, serverOptions{})
 

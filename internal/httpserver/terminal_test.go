@@ -166,7 +166,7 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
 		Tickets:        &terminal.Tickets{},
 		Shell:          func() (string, error) { return "/bin/zsh", nil },
 		StartDirectory: func() string { return "/home/tester" },
-		// SSH はプロセス内で話す。この検査は PTY の継ぎ目を見ているので、
+		// SSH はプロセス内で通信する。この検査は PTY の継ぎ目を見ているので、
 		// 開いたことだけを記録する接続で足りる。
 		Connect: func(_ context.Context, alias string, _ terminal.Size) (terminal.Process, error) {
 			return fixture.connect(alias), nil
@@ -262,7 +262,7 @@ func TestOpeningASessionReturnsATicketAndListsIt(t *testing.T) {
 		t.Fatalf("maxSessions = %d", listed.MaxSessions)
 	}
 
-	// ローカルシェルはログインシェルとして起こす。そう伝える手段は OS ごとに
+	// ローカルシェルはログインシェルとして起動する。そう伝える手段は OS ごとに
 	// 違うので、表明も分けてある。
 	opened := fixture.starter.opened()
 	if len(opened) != 1 {
@@ -270,15 +270,15 @@ func TestOpeningASessionReturnsATicketAndListsIt(t *testing.T) {
 	}
 	assertOpenedAsALoginShell(t, opened[0])
 
-	// **始まる場所は設定が決める。** 継ぐと、エンジンを起こしたものが
-	// たまたま居た場所でシェルが始まる——デスクトップの外殻から起こせば
+	// 始まる場所は設定が決める。継ぐと、エンジンを起動したものが
+	// たまたま居た場所でシェルが始まる。デスクトップのネイティブ層から起こせば
 	// その端末の作業ディレクトリ、launchd から起こせば `/`。利用者はそのどれも選んでいない。
 	if opened[0].Dir != "/home/tester" {
 		t.Fatalf("the shell started in %q, want the home directory", opened[0].Dir)
 	}
 }
 
-// 上限に達した状態で開こうとした要求は拒否する。黙って古いセッションを
+// 上限に達した状態で開こうとした要求は拒否する。暗黙に古いセッションを
 // 閉じることはしない。
 func TestOpeningPastTheLimitIsRefusedAndClosesNothing(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 2, Scrollback: 1 << 12})
@@ -335,7 +335,7 @@ func TestClosingHangsUpAndThenForgets(t *testing.T) {
 	})
 
 	// 二度目が一覧から消す。終了済みを残すのは、最後の出力を読めるようにするためで、
-	// 消すのは人が明示的にそう言ったときだけである。
+	// 消すのはユーザーが明示的にそう言ったときだけである。
 	if response, body := fixture.do(t, http.MethodDelete, "/api/v1/terminal/sessions/"+id, ""); response.StatusCode != http.StatusOK {
 		t.Fatalf("second close = %d: %s", response.StatusCode, body)
 	}
@@ -347,7 +347,7 @@ func TestClosingHangsUpAndThenForgets(t *testing.T) {
 	}
 }
 
-// チケットは使い捨てである。二度目も、他人が考えた値も、アップグレードせずに
+// チケットは使い捨てである。二度目も、別のユーザーが考えた値も、アップグレードせずに
 // 403 を返す。101 を返してから閉じると、拒否の理由が「繋がったのに切れた」と
 // 区別できなくなる。
 func TestTheStreamRefusesAnythingButOneFreshTicket(t *testing.T) {

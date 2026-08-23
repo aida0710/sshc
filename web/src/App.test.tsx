@@ -3,8 +3,6 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// アプリケーションはマスターパスワードの向こうにあるため、シェルを期待する
-// テストにはすべて開いた vault を与える必要がある。ロック画面には専用のテストがある。
 const openVault = () =>
   Promise.resolve({ exists: true, unlocked: true, aliases: [] as string[], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
 import { App } from "./App";
@@ -155,14 +153,9 @@ describe("App", () => {
 
     await screen.findByRole("heading", { name: "sshc" });
 
-    // グループは見出しではなく名前付きリストである。ここに見出しを置くと
-    // パネル自身の<h2>と衝突する。Playwright はアクセシブルネームを
-    // 部分一致で照合するため、nav の見出し"Keys and hosts"は見出し
-    // "Keys"を探すページレベルのクエリを二重にヒットさせてしまう。
     expect(screen.getByRole("list", { name: "Keys and hosts" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Keys and hosts" })).toBeNull();
 
-    // どの section ボタンも元の名前のままである。
     for (const label of [
       "Home",
       "Connections",
@@ -198,8 +191,6 @@ describe("App", () => {
     await user.click(await screen.findByRole("link", { name: "Connections" }));
     await screen.findByText("connections panel");
 
-    // 中身がなければトグルも出さない。常に提示されながら
-    // 大抵空なペインは、人に開かせない習慣を教えてしまう。
     expect(screen.queryByRole("button", { name: /details/i })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "offer inspector" }));
@@ -548,7 +539,6 @@ describe("App", () => {
     await user.click(await screen.findByRole("link", { name: "Keys" }));
 
     expect(screen.getByText("keys panel")).toBeInTheDocument();
-    // ステータス領域を持つのはシェルだけであり、パネルが二つ目を追加してはならない。
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
@@ -566,7 +556,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "open key prerequisite" }));
 
     expect(screen.getByText("keys panel")).toBeInTheDocument();
-    expect(screen.getByText("Connection setup for lab-node is waiting.")).toBeInTheDocument();
+    expect(screen.getByText("Connection setup for lab-node is paused.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Return to connection setup" }));
 
     expect(screen.getByText("draft lab-node")).toBeInTheDocument();
@@ -605,7 +595,6 @@ describe("App", () => {
     await user.click(await screen.findByRole("link", { name: "Install Key on Server" }));
 
     expect(screen.getByText(/remote keys panel/)).toBeInTheDocument();
-    // ステータス領域を持つのはシェルだけであり、パネルが二つ目を追加してはならない。
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
@@ -647,10 +636,6 @@ describe("App", () => {
     expect(exchange).toHaveBeenCalledTimes(1);
     expect(health).toHaveBeenCalledTimes(1);
   });
-  // パネルはプロバイダの外でレンダリングされると英語に翻訳される。これにより
-  // コンポーネントテストが単体でレンダリングできるようになっている。だが
-  // この便利さはここでは危険でもある。プロバイダのマウントをやめたシェルは
-  // 英語のままでも正しく見えてしまい、他の全員にとっても英語のままになる。
   it("renders every panel inside the language provider", async () => {
     const user = userEvent.setup();
     render(
@@ -663,12 +648,9 @@ describe("App", () => {
       </LanguageProvider>,
     );
 
-    // シェル自身が翻訳を行う。
     expect(await screen.findByRole("status")).toHaveTextContent(ja["shell.active"].replace("{version}", "0.1.0"));
     expect(screen.getByRole("link", { name: ja["section.keys"] })).toBeInTheDocument();
 
-    // 切り替え先の section も同じプロバイダ内にあるため、シェルを
-    // 経由して到達したパネルも翻訳される。
     await user.click(screen.getByRole("link", { name: ja["section.keys"] }));
     expect(screen.getByText("keys panel")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: ja["shell.primaryNavigation"] })).toBeInTheDocument();
@@ -691,8 +673,6 @@ describe("App", () => {
 
     await user.selectOptions(screen.getByLabelText("Language"), "ja");
 
-    // 変わったのはラベルであり、開いているパネルは変わっていない。section の
-    // 識別子は section の名前ではない。
     expect(screen.getByRole("link", { name: ja["section.history"] })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("history panel")).toBeInTheDocument();
   });

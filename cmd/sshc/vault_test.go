@@ -134,10 +134,10 @@ func TestRunVaultStatusIsHumanReadableWithoutATerminal(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("runVault status = %d, stderr = %q", code, stderr.String())
 	}
-	// **`sshc status` と同じ表である。** 描き手は writeStatus ひとつなので、
+	// `sshc status` と同じ表である。描き手は writeStatus ひとつなので、
 	// ここで見るのは「その表が出ていること」であって書式そのものではない。
 	//
-	// 綴りを丸ごと比べない——address は毎回違う番号を持つ。
+	// 表記を丸ごと比べない。address は毎回違う番号を持つ。
 	printed := stdout.String()
 	for _, want := range []string{"version   v4-test", "vault     locked", "consoles  2", "address   " + server.URL} {
 		if !strings.Contains(printed, want) {
@@ -649,8 +649,8 @@ func TestVaultPayloadEncoderEnforcesTheServerFourKiBBoundary(t *testing.T) {
 		t.Fatalf("oversized payload=%v error=%v, want nil and too-large", payload, err)
 	}
 
-	// Escaping can exceed the request boundary even when the entered byte count
-	// does not, so the encoded payload owns the final limit decision.
+	// 入力バイト数が上限内でもエスケープ後に超過しうるため、最終的な上限は
+	// エンコード済みペイロードで判定する。
 	payload, err = vaultPassphrasePayload(bytes.Repeat([]byte{0}, 700))
 	if payload != nil || !errors.Is(err, errVaultRequestTooLarge) {
 		t.Fatalf("escaped oversized payload=%v error=%v", payload, err)

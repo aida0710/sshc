@@ -12,7 +12,7 @@ type fakeLoader struct {
 	files map[string]string
 	fail  map[string]error
 	// globs は、パターンごとの一致をそのまま与える。filepath.Match は大小文字を
-	// 区別するので、Windows の別綴りが返ってくる場面はこれでしか作れない。
+	// 区別するので、Windows の別表記が返ってくる場面はこれでしか作れない。
 	globs map[string][]string
 }
 

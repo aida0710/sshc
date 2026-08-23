@@ -11,10 +11,10 @@ import (
 	"sshc/internal/sshclient"
 )
 
-// valuesFor は、解決器の答えを手で組み立てる。
+// valuesFor は、解決器の結果を手で組み立てる。
 //
 // 設定を読むのはこのパッケージの仕事ではないので、フィクスチャも設定ではなく
-// 「解決の答え」である。
+// 「解決の結果」である。
 func valuesFor(entries map[string][]string) effective.Values {
 	values := effective.Values{Entries: map[string][]string{}}
 	for keyword, list := range entries {
@@ -40,7 +40,7 @@ func TestNewTargetTakesTheValuesTheResolverDecided(t *testing.T) {
 			"hostname": {"203.0.113.10"},
 			"port":     {"2222"},
 			"user":     {"ops"},
-			// 設定に書かれる綴りはスラッシュ区切りである。解くのはこの下。
+			// 設定に書かれる表記はスラッシュ区切りである。解くのはこの下。
 			"identityfile": {"~/.ssh/first", testOutsideKey},
 			"setenv":       {"ONE=1 TWO=2"},
 		},
@@ -57,8 +57,8 @@ func TestNewTargetTakesTheValuesTheResolverDecided(t *testing.T) {
 	if target.Address() != "203.0.113.10:2222" || target.User != "ops" {
 		t.Errorf("target = %+v", target)
 	}
-	// ~ はここで解く。ssh -G は ~ を残すので、解決器の答えには残っている。
-	// **ホームの外にある二つ目は、継ぎ足されず絶対のまま残らなければならない。**
+	// ~ はここで解く。ssh -G は ~ を残すので、解決器の結果には残っている。
+	// ホームの外にある二つ目は、継ぎ足されず絶対のまま残らなければならない。
 	want := []string{filepath.Join(testHome, ".ssh", "first"), testOutsideKey}
 	if len(target.Identities) != 2 || target.Identities[0] != want[0] || target.Identities[1] != want[1] {
 		t.Errorf("identities = %#v, want %#v", target.Identities, want)
@@ -77,11 +77,11 @@ func TestNewTargetRefusesWhenNoHostNameWasDecided(t *testing.T) {
 	}
 }
 
-// **ProxyCommand は接続の一部として運ぶ。** かつてここは断っていた。
+// ProxyCommand は接続の一部として運ぶ。かつてここは断っていた。
 //
-// トークンはこの時点で展開する。解決器は生のまま返す——`ssh -G` がそうする
-// からで、OpenSSH が展開するのは繋ぐ瞬間である。**展開しないと、`%h` を
-// 持ったままの綴りがそのままプログラムの引数になる。**
+// トークンはこの時点で展開する。解決器は生のまま返す。`ssh -G` がそうする
+// からで、OpenSSH が展開するのは繋ぐ瞬間である。展開しないと、`%h` を
+// 持ったままの表記がそのままプログラムの引数になる。
 func TestNewTargetCarriesProxyCommandWithItsTokensExpanded(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"jump": {
@@ -100,8 +100,8 @@ func TestNewTargetCarriesProxyCommandWithItsTokensExpanded(t *testing.T) {
 	}
 }
 
-// **ProxyJump と一緒には書けない。** どちらも「どうやって届くか」を決めるので、
-// 両方書いた人は二つの違う答えを書いている。ssh も断る
+// ProxyJump と一緒には書けない。どちらも「どうやって届くか」を決めるので、
+// 両方書いたユーザーは二つの違う結果を書いている。ssh も断る
 // （"inconsistent options: ProxyCommand+ProxyJump"）。
 func TestNewTargetRefusesProxyCommandTogetherWithProxyJump(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
@@ -117,7 +117,7 @@ func TestNewTargetRefusesProxyCommandTogetherWithProxyJump(t *testing.T) {
 	}
 }
 
-// **ProxyJump none は「使わない」なので、衝突ではない。**
+// ProxyJump none は「使わない」なので、衝突ではない。
 func TestNewTargetAcceptsProxyCommandWhenProxyJumpIsOff(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"one": {
@@ -188,10 +188,10 @@ func TestAJumpListOverridesTheHopOwnUserAndPort(t *testing.T) {
 
 // ProxyJump のトークンは、繋ぐ側が展開する。
 //
-// **`ssh -G` は生のまま報告する。** OpenSSH がこれを展開するのは繋ぐ瞬間だから
+// `ssh -G` は生のまま報告する。OpenSSH がこれを展開するのは繋ぐ瞬間だから
 // であり、解決器もそれに倣っている。だから展開はここでしか起きない。展開しないと
 // `%r@gateway` は「%r という名前の利用者」への認証になり、publickey は通らず、
-// 残る方式も無いまま握手が終わる——実際そうなっていた。
+// 残る方式も無いまま握手が終わる。実際そうなっていた。
 //
 // %r が指すのは最終的な行き先の利用者であって、手前のホップのそれではない。
 func TestProxyJumpTokensAreExpandedAgainstTheFinalDestination(t *testing.T) {
@@ -219,7 +219,7 @@ func TestProxyJumpTokensAreExpandedAgainstTheFinalDestination(t *testing.T) {
 
 // ProxyJump が受け取るのは %%、%h、%n、%p、%r の 5 つだけである。
 //
-// 展開できないものを黙って残さない。その文字列はユーザー名やホスト名として
+// 展開できないものを暗黙に残さない。その文字列はユーザー名やホスト名として
 // そのまま使われる。
 func TestProxyJumpRefusesATokenOpenSSHDoesNotAllowThere(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
@@ -281,7 +281,7 @@ func TestUnhonouredKeywordsBecomeNoticesRatherThanRefusals(t *testing.T) {
 	if !found["remoteforward"] || !found["controlmaster"] {
 		t.Errorf("notices = %#v", notices)
 	}
-	// no と書いてあるものは、無いことが望みなので黙っている。
+	// no は機能を無効にする指定なので通知しない。
 	if found["forwardx11"] {
 		t.Error("ForwardX11 no produced a notice about a feature the user turned off")
 	}
@@ -342,9 +342,9 @@ func TestNumericValuesBecomeDurations(t *testing.T) {
 	}
 }
 
-// **「まだ無い」と「無い」を区別して書く。** 永久に無いものを、来週来るかの
+// 「まだ無い」と「無い」を区別して書く。永久に無いものを、来週来るかの
 // ように言わない。B4 で落とすと決めたキーワードは、その理由を添えて notice を
-// 出し続ける——黙って無視すると、書いた設定が効いていないことに気づけない。
+// 出し続ける。暗黙に無視すると、書いた設定が効いていないことに気づけない。
 func TestDroppedKeywordsSayWhyRatherThanPromisingThemLater(t *testing.T) {
 	entries := map[string][]string{"hostname": {"10.0.0.9"}}
 	dropped := []string{
@@ -377,7 +377,7 @@ func TestDroppedKeywordsSayWhyRatherThanPromisingThemLater(t *testing.T) {
 	}
 }
 
-// 転送は Target に載り、notice にはならない。**実装されたからである。**
+// 転送は Target に載り、notice にはならない。実装されたからである。
 func TestForwardsAreCarriedRatherThanNoticed(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"work": {
@@ -410,8 +410,8 @@ func TestForwardsAreCarriedRatherThanNoticed(t *testing.T) {
 	}
 }
 
-// **bind するのはループバックだけである。** それ以外が書かれていたら束ねて
-// notice を出す——転送の設定ひとつで繋がらなくなる方が困る。
+// bind するのはループバックだけである。それ以外が書かれていたら束ねて
+// notice を出す。転送の設定ひとつで繋がらなくなる方が困る。
 func TestANonLoopbackBindIsFoldedOntoLoopback(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"work": {"hostname": {"10.0.0.9"}, "localforward": {"0.0.0.0:8080 10.0.0.5:80"}},
@@ -450,12 +450,12 @@ func TestAnUnreadableForwardIsSkippedRatherThanFatal(t *testing.T) {
 	}
 }
 
-// HostKeyAlgorithms は、交渉で名乗る順を人が決める指定である。
+// HostKeyAlgorithms は、交渉で名乗る順をユーザーが決める指定である。
 //
-// **書かれていればそれが順序である。** OpenSSH はこの指定があるとき
+// 書かれていればそれが順序である。OpenSSH はこの指定があるとき
 // known_hosts による並べ替えを行わない。先頭の一文字（+ - ^）も OpenSSH が
 // 決めている形であり、それぞれ既定へ足す・既定から外す・既定の先頭へ移す。
-// 書かれていなければ空である。**ここが埋まっていると known_hosts が黙らされる。**
+// 書かれていなければ空である。ここが埋まっていると known_hosts が黙らされる。
 // `ssh -G` は指定が無くても既定の一覧を出力するが、この解決器が既定を入れるのは
 // hostname と user と port の三つだけであり、それに頼っている。
 func TestHostKeyAlgorithmsStaysEmptyWhenNothingWasWritten(t *testing.T) {
@@ -497,7 +497,7 @@ func TestHostKeyAlgorithmsFollowsWhatWasWritten(t *testing.T) {
 		t.Errorf("+ssh-dss changed the head of the default: %#v", appended)
 	}
 
-	// - は既定から外す。**外す側だけがパターンを受け取る。**
+	// - は既定から外す。外す側だけがパターンを受け取る。
 	kept := algorithmsFor(t, "-ecdsa-sha2-*")
 	if len(kept) == 0 {
 		t.Fatal("-ecdsa-sha2-* removed everything")

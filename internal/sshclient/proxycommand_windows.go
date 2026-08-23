@@ -9,25 +9,25 @@ import (
 // ErrNoInterpreter は、ProxyCommand を解釈させる相手が居ないことを報告する。
 var ErrNoInterpreter = errors.New("no command interpreter is available to run ProxyCommand")
 
-// interpreter は、その綴りを走らせるプログラムと引数を返す。
+// interpreter は、その表記を走らせるプログラムと引数を返す。
 //
-// **`cmd.exe` である。** Windows の OpenSSH もそうしており、ProxyCommand の行は
+// `cmd.exe` である。Windows の OpenSSH もそうしており、ProxyCommand の行は
 // あちらでそう解釈される前提で書かれている。PowerShell を使うと、引用と
 // リダイレクトの規則が変わって同じ行が別の意味になる。
 //
-// **PATH では探さない。** 探せば、`cmd.exe` という名前の別のものを起こしうる。
+// PATH では探さない。探せば、`cmd.exe` という名前の別のものを起動しうる。
 // Windows 自身が置いた場所だけを見る。
 func interpreter(command string) (string, []string, error) {
 	shell, err := commandInterpreter(os.LookupEnv)
 	if err != nil {
 		return "", nil, err
 	}
-	// **`exec` に当たるものは cmd.exe に無い。** /c は「これを走らせて終わる」
+	// `exec` に当たるものは cmd.exe に無い。/c は「これを走らせて終わる」
 	// なので、シェルが待つためだけに残ることはない。
 	return shell, []string{"/c", command}, nil
 }
 
-// commandInterpreter は、信頼できる cmd.exe の綴りを返す。
+// commandInterpreter は、信頼できる cmd.exe の表記を返す。
 //
 // lookup を受け取るのは、この選び方を検査できるようにするためである。
 func commandInterpreter(lookup func(string) (string, bool)) (string, error) {

@@ -65,13 +65,13 @@ func NewManager(random io.Reader) (*Manager, string, error) {
 // Reissue は新しいブートストラップトークンを発行し、マネージャが持つものを置き換える。
 //
 // ブートストラップは初回の使用で消費される。これができるまでは、新しいプロセスだけ
-// が次の一つを表示していた — ユーザーがアプリケーションを起動して URL が表示される
+// が次の一つを表示していた。ユーザーがアプリケーションを起動して URL が表示される
 // なら問題ないが、標準出力がどこにも届かないバックグラウンドエージェントとして動く
 // 場合は役に立たない。再発行を求めるのはコマンドラインであり、そもそも求めるには、
 // このユーザーしか読めないファイルを読む必要がある。
 //
 // すでに確立しているセッションは確立したままである。これが置き換えるのは、まだ
-// セッションを持たないブラウザのための入口だけだ。
+// セッションを持たないブラウザのためのアクセス URLだけだ。
 func (m *Manager) Reissue() (string, error) {
 	fresh, err := token(m.random)
 	if err != nil {
@@ -147,10 +147,8 @@ func (m *Manager) RenewCSRF(sessionID string) (string, bool) {
 
 // Authenticate は、セッションが存在するかどうかだけを報告する。
 //
-// 以前は Session そのものを返していた。その actions マップは、このマネージャが
-// 守っている実体そのものである。たまたま呼び出し側がすべて破棄していたので競合は
-// 起きなかったが、保持する呼び出し側がいれば、別の goroutine の書き込みの下で
-// マップを読むことになり、それを知る術もなかった。
+// Session 内の actions マップは Manager のロックで保護する必要があるため、呼び出し側へ
+// Session 自体は公開しない。
 func (m *Manager) Authenticate(sessionID string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

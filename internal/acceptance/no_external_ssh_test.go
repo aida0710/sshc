@@ -8,22 +8,22 @@ import (
 	"sshc/internal/session"
 )
 
-// TestNoConnectionRouteOpensAPseudoTerminal は、接続に関わる経路——設定の解決、
+// TestNoConnectionRouteOpensAPseudoTerminal は、接続に関わる経路。設定の解決、
 // 実効値、到達性、認証、ホスト鍵の取得、公開鍵のリモート登録、対話ターミナル
-// ——のどれも PTY を確保しないことを見る。
+// のどれも PTY を確保しないことを見る。
 //
-// **プロセスの継ぎ目はもうこのハーネスに無い。** 外部プログラムを起こす場所を
+// プロセスのインターフェースはもうこのハーネスに無い。外部プログラムを起動する場所を
 // 押さえるのは TestOnlyTheNamedSubsystemsStartAProgram であり、ここでそれを
-// 表明しても落ちようがない——落ちないテストは、守っているふりをするだけ悪い。
+// 表明しても落ちようがない。落ちないテストは、守っているふりをするだけ悪い。
 //
-// PTY の継ぎ目は残っている。SSH はプロセス内で話すので、この一覧のどれも
+// PTY のインターフェースは残っている。SSH はプロセス内で通信するので、この一覧のどれも
 // そこへ届いてはならない。
 func TestNoConnectionRouteOpensAPseudoTerminal(t *testing.T) {
 	f := newFixture(t)
 	f.scanner.reset()
 
-	// 確認を要する経路には正しい token を渡す。**拒否されたから起動しなかった、
-	// では何も証明できない。**
+	// 確認を要する経路には正しい token を渡す。拒否されたから起動しなかった、
+	// では何も証明できない。
 	requests := []struct {
 		path  string
 		body  map[string]any

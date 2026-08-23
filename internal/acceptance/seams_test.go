@@ -10,7 +10,7 @@ import (
 
 // productionGoFiles は、配布物に載る Go ファイルを走査する。
 //
-// テストは数えない——検査は自分の都合で継ぎ目を組み立ててよく、そこを縛ると、
+// テストは数えない。検査は自分の都合でインターフェースを組み立ててよく、そこを縛ると、
 // 縛りたい本番の性質ではなく検査の書き方を縛ることになる。
 func productionGoFiles(t *testing.T, visit func(relative, contents string)) {
 	t.Helper()
@@ -48,9 +48,9 @@ func productionGoFiles(t *testing.T, visit func(relative, contents string)) {
 
 // buildsTheSSHDialer は、プロセス内 SSH の部品一式を組み立ててよい場所である。
 //
-// **一箇所しかない。** internal/app の sshParts の doc は「組み立てる場所はここ
+// 一箇所しかない。internal/app の sshParts の doc は「組み立てる場所はここ
 // ひとつである……二箇所で組み立てると、片方だけが vault を見る日が来る」と書いて
-// いるが、長いあいだ同じファイルの中に 2 つ目があった——engine 用と
+// いるが、長いあいだ同じファイルの中に 2 つ目があった。engine 用と
 // `sshc <接続先>` 用で、`Stored` と `Password` の差し方だけが違っていた。散文は
 // それを止められない。
 var buildsTheSSHDialer = []string{"internal/app/ssh.go"}
@@ -71,11 +71,11 @@ func TestOnlyOnePlaceAssemblesTheSSHDialer(t *testing.T) {
 // TestOnlyTheCompositionRootOpensTheWorkspace は、~/.ssh を開く場所を internal/app に
 // 閉じる。
 //
-// engine と `sshc <接続先>` は別のプロセスなので、根そのものは 2 つある——**片方が
-// もう片方のオブジェクトを借りることはできない。** 縛れるのは「どのパッケージが
+// engine と `sshc <接続先>` は別のプロセスなので、根そのものは 2 つある。片方が
+// もう片方のオブジェクトを借りることはできない。縛れるのは「どのパッケージが
 // 開いてよいか」の方である。cmd/sshc が自分で開いていた頃、一覧と TUI は engine とは
 // 別の解決器を通っており、Match ブロックの下に書かれた HostName は画面に出なかった
-// ——選んだ先と繋がる先が食い違っていた。
+// 選んだ先と繋がる先が食い違っていた。
 func TestOnlyTheCompositionRootOpensTheWorkspace(t *testing.T) {
 	var found []string
 	productionGoFiles(t, func(relative, contents string) {
@@ -91,10 +91,10 @@ func TestOnlyTheCompositionRootOpensTheWorkspace(t *testing.T) {
 }
 
 // TestEveryManagerInTheEngineIsSealed は、封をされないマネージャが生まれないよう
-// 見張る。
+// 監視する。
 //
-// **封をされないマネージャがひとつでもあると、置き換えられたファイルの以前の
-// 内容が平文で残る。** 鍵 vault のマネージャがそうなっていた期間があり、その間、
+// 封をされないマネージャがひとつでもあると、置き換えられたファイルの以前の
+// 内容が平文で残る。鍵 vault のマネージャがそうなっていた期間があり、その間、
 // パスフレーズの変更は以前の平文の秘密鍵をバックアップに残していた。
 func TestEveryManagerInTheEngineIsSealed(t *testing.T) {
 	var creates, seals []string
@@ -112,8 +112,8 @@ func TestEveryManagerInTheEngineIsSealed(t *testing.T) {
 			t.Errorf("internal/app の外がトランザクションマネージャを作っている: %s", path)
 		}
 	}
-	// **どのファイルかは縛らない。** 縛りたいのは「engine の合成の根が封をする」で
-	// あって、それがどの綴りのファイルに書かれているかではない。
+	// どのファイルかは縛らない。縛りたいのは「engine の合成の根が暗号化する」で
+	// あって、それがどの表記のファイルに書かれているかではない。
 	sealedInsideApp := false
 	for _, path := range seals {
 		if strings.HasPrefix(path, "internal/app/") {
@@ -127,8 +127,8 @@ func TestEveryManagerInTheEngineIsSealed(t *testing.T) {
 
 // persistenceLayer は、ディスクとネットワークの原始操作を持つパッケージである。
 //
-// トランザクション・ジャーナル・世代バックアップ・封・条件付き PUT。**外向きの
-// 応答がここの語彙で組まれてはならない。** 永続化の都合で付けた名前を変えるだけで
+// トランザクション・ジャーナル・世代バックアップ・封・条件付き PUT。外向きの
+// 応答がここの用語で組まれてはならない。永続化の都合で付けた名前を変えるだけで
 // HTTP の契約が動いてしまう。実際、storage の sentinel error は 5 つのハンドラから
 // 直接 errors.Is され、そのままレスポンスの code に対応していた。
 var persistenceLayer = []string{
@@ -140,9 +140,9 @@ var persistenceLayer = []string{
 // TestTheTransportDoesNotReachIntoPersistence は、HTTP 層と永続化層の間に
 // サービス層を挟んだままにする。
 //
-// 語彙が要るなら、それを出しているサービスが別名で公開する——internal/keys の
-// IsExternalChange や internal/remotesync の Client がそれである。**別名であって
-// 包み直しではない**ので errors.Is はどちらの綴りでも通り、翻訳の層は増えない。
+// 用語が要るなら、それを出しているサービスが別名で公開する。internal/keys の
+// IsExternalChange や internal/remotesync の Client がそれである。別名であって
+// 包み直しではないので errors.Is はどちらの表記でも通り、翻訳の層は増えない。
 func TestTheTransportDoesNotReachIntoPersistence(t *testing.T) {
 	var found []string
 	productionGoFiles(t, func(relative, contents string) {

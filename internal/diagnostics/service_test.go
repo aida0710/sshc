@@ -167,14 +167,7 @@ func TestServiceAuthenticateSanitisesTheHomePathOutOfReportedOutput(t *testing.T
 	}
 }
 
-// **見せる宛先と、繋ぐ宛先は同じでなければならない。**
-//
-// Destination も ConnectionSnapshot も Project から値を取っていた。あれは Match
-// ブロックを一切適用しない——「どの行が書いたか」を並べる用途ではそれで正しいが、
-// **ここが答えているのは実際に届く相手**である。
-//
-// 到達性の検査は違う機械を叩いて「繋がりません」と答え、鍵の登録画面は
-// 「bastion.internal に入れます」と見せながら、繋ぐのは別の相手だった。
+// Destination と ConnectionSnapshot が、Match 適用後の同じ接続先を返すことを検証する。
 func TestTheDestinationComesFromTheResolverNotTheProjection(t *testing.T) {
 	workspace := newServiceWorkspace(t, ""+
 		"Match originalhost gateway\n"+
@@ -200,12 +193,7 @@ func TestTheDestinationComesFromTheResolverNotTheProjection(t *testing.T) {
 	}
 }
 
-// **解決を諦めた設定について、当てずっぽうの宛先を返さない。**
-//
-// Match exec はコマンドを実行しうるので、この解決器は評価しない。値が出ない以上、
-// どこへ繋がるかは分からない——alias:22 を叩いた結果を「その接続先への到達性」
-// として見せるのは嘘であり、鍵の登録画面でそれを見せれば、人は確かめようのない
-// ものを確かめることになる。
+// Match exec などで接続先を解決できない場合、alias:22 を代用しないことを検証する。
 func TestAnUnresolvableAliasHasNoDestination(t *testing.T) {
 	workspace := newServiceWorkspace(t, ""+
 		"Match exec \"true\"\n"+

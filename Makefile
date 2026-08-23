@@ -1,8 +1,7 @@
 .PHONY: generate test deadcode build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
-# FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
-# なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
-# 走らせるときは引き上げること: `make fuzz FUZZTIME=10m`。
+# FUZZTIME は target ごとの実行時間。長時間試す場合は、たとえば
+# `make fuzz FUZZTIME=10m` のように上書きする。
 FUZZTIME ?= 30s
 
 # リポジトリ内のすべての fuzz target を package:Target の形で列挙する。target を
@@ -20,26 +19,21 @@ FUZZ_TARGETS = \
 generate:
 	go generate ./internal/api
 	npm run generate:api --prefix web
-	@# ブラウザにも同じ答えを出してほしい規則を web へ配る。表（予約語・パターン・
-	@# 上限）と、判定を突き合わせる適合コーパスの 2 つである。**正本は Go にある**
-	@# ——書き写した表を持っていた間、予約語は Go に 10・画面に 6 あり、`rc` という
-	@# グループ名は画面が緑を出してサーバーが断っていた。
+	@# Go の検証規則と適合コーパスを web 用に生成する。規則の定義は Go 側に置く。
 	go run ./internal/validate/cmd/rulegen .
 
 test:
 	go test ./...
 	go test -race ./...
-	@# Android 向けにビルドタグが食い違っていないことを見る。**CGO_ENABLED=0 で
-	@# 通ることは Android で動くことを意味しない** が、gomobile も NDK も持たない
-	@# 環境で言えるのはここまでであり、ここが赤くなる理由は常にタグの食い違いである。
+	@# Android 向けのビルドタグを検証する。実機向けビルドは CI の Android
+	@# ジョブで gomobile と NDK を使って検証する。
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
 	$(MAKE) deadcode
 	npm test --prefix web
 	npm run typecheck --prefix web
 
-# 参照ゼロの関数を探す。**一つの OS で見ても分からない** ——`_windows.go` からしか
-# 呼ばれないものは Linux から見れば死んで見えるので、出荷する 3 つ全部で到達不能
-# なものだけを数える。中身は scripts/ci/deadcode.sh にある。
+# Linux、macOS、Windows のすべてで到達不能な関数を検出する。
+# 実装は scripts/ci/deadcode.sh を参照。
 deadcode:
 	scripts/ci/deadcode.sh
 
@@ -54,9 +48,8 @@ fuzz:
 e2e: build
 	npm run e2e --prefix web
 
-# verify-generated は API のモデルを再生成し、コミット済みのものと異なれば失敗する。
-# api/openapi.yaml が、Go のモデルと TypeScript の型の両方にとって依然として唯一の
-# 源であることの証明である。
+# API モデルを再生成し、コミット済みの生成物と異なれば失敗する。
+# api/openapi.yaml を Go と TypeScript の共通スキーマとして扱う。
 verify-generated: generate
 	git diff --exit-code -- internal/api/models.gen.go web/src/api/schema.d.ts \
 		web/src/rules/generated.ts web/src/rules/corpus.generated.json
@@ -67,24 +60,18 @@ verify-generated: generate
 build:
 	go run ./internal/nativebuild/cmd/nativebuild host-build --output-dir "bin"
 
-# Android の AAR。**CGO_ENABLED=1 でなければならない** ——Android には
-# /etc/resolv.conf が無く、pure-Go リゾルバは名前を引けない。名前解決は netd を
-# 通るので、bionic の getaddrinfo すなわち cgo リゾルバが要る。gomobile が NDK を
-# 通じて cgo を有効にするので、ここが要求するのは NDK の場所だけである。
+# Android の名前解決には bionic の getaddrinfo を使用するため、AAR は
+# gomobile と NDK を介して cgo を有効にしてビルドする。
 #
 # gomobile は go.mod の tool として固定してある。gobind は gomobile が PATH から
 # 探すので、`go install golang.org/x/mobile/cmd/gobind@latest` を先に一度。
 ANDROID_NDK_HOME ?= $(HOME)/Library/Android/sdk/ndk/28.2.13676358
 
-# **AAR の版は、ここでしか入らない。** cmd/sshc は nativebuild が -X で入れて
-# いるが、AAR は誰も入れていなかった——どの版を配っても engine は自分を "dev" と
-# 名乗り、通知にも handoff にもそう出る。gomobile bind は go build を呼ぶので、
-# ldflags はそのまま届く。
+# AAR 内の engine バージョンは gomobile の ldflags で設定する。
 ANDROID_VERSION ?= dev
 
 android-bind:
-	@# 置き場を作る。**追跡していないので、クローンしたばかりの環境には無い。**
-	@# gomobile は出力先のディレクトリを作らず、無ければそこで失敗する。
+	@# gomobile は出力先を作成しないため、事前に用意する。
 	mkdir -p android/app/libs
 	ANDROID_NDK_HOME="$(ANDROID_NDK_HOME)" PATH="$(HOME)/go/bin:$$PATH" \
 		go tool gomobile bind -target=android/arm64,android/amd64 -androidapi 26 \
@@ -97,22 +84,12 @@ android-bind:
 build-cli:
 	go run ./internal/nativebuild/cmd/nativebuild build
 
-# リリースの成果物。UI のバンドルは 1 度だけ作り、Go だけをターゲットごとに
-# ビルドする。バンドルは埋め込まれるだけで、どの OS 向けかを知らないからだ。
+# UI を一度ビルドし、埋め込んだ Go バイナリを各ターゲット向けに生成する。
 #
-# **darwin は cgo を有効にしたままにする。** 設定エンジンは `%u` と `%i` を
-# 展開するために os/user.Current() を読む。CGO_ENABLED=0 の Go は代わりに
-# /etc/passwd を読み、macOS の通常のアカウントはそこに載っていない。ビルドは
-# 通り、テストも通り、実行時にそのトークンだけが黙って非対応になる——リリース
-# でだけ起きる種類の壊れ方である。Linux は /etc/passwd が本物なので 0 でよい。
+# macOS では `%u` と `%i` の展開に os/user.Current() を使うため cgo を有効にする。
+# Linux では /etc/passwd を参照できるため CGO_ENABLED=0 とする。
 #
-# darwin/amd64 を arm64 のランナーから作れるのは、macOS の SDK が両方の
-# アーキテクチャを持っているからである。
-#
-# **リリースが配る CLI と同じ並びである。** ここが足りないと、手元で
-# `make release-binaries` を回した人は、実際のリリースより狭い束を見て
-# それが全部だと思う。windows は cgo を要らない——設定エンジンが cgo を
-# 要る理由は macOS の os/user.Current() だけである。
+# RELEASE_TARGETS は公開する CLI 成果物の一覧と一致させる。
 RELEASE_TARGETS = darwin/arm64:1 darwin/amd64:1 linux/amd64:0 linux/arm64:0 windows/amd64:0 windows/arm64:0
 RELEASE_CURRENT_ARCHES = amd64 arm64
 RELEASE_DIR ?= dist
@@ -158,15 +135,10 @@ release-binaries:
 release-cli-current:
 	go run ./internal/nativebuild/cmd/nativebuild release-current
 
-# 統合テストのスイートは、コンテナ内の本物の S3 実装と本物の sshd に対して走る。
-# 密閉されたスイートには答えられない二つの問いに答える。本物のオブジェクトストアが
-# 条件付き PUT に何をするのか、そして askpass ヘルパーが、暗号化された秘密鍵を
-# 保存済みの鍵パスフレーズで実際に開いて認証を通せるのか、である。
+# 統合テストはコンテナ内の S3 互換実装と OpenSSH sshd を使用する。
 #
-# どちらのスイートも、環境変数が設定されていなければスキップする。したがって
-# `make test` は密閉されたまま、オフラインのままである。
-# タグは同じ名前のまま別の内容を指せる。統合テストが昨日と今日で異なる
-# サーバーを起動しないよう、マルチアーキテクチャの manifest digest を固定する。
+# 必要な環境変数がなければ統合テストはスキップされる。再現性を保つため、
+# コンテナイメージは manifest digest で固定する。
 S3_IMAGE   ?= chrislusf/seaweedfs@sha256:43b768cd62b00d132439cda881b93fd1adebf1b315e996e794087743821d771d
 SSHD_IMAGE ?= linuxserver/openssh-server@sha256:96b9a4d3b5106746d08d43a6911650d4d21f7d5c7f2ac9660e792bdb5e63157c
 S3_PORT    ?= 8333
@@ -203,19 +175,10 @@ integration-up:
 		chmod 600 /config/.ssh/authorized_keys; \
 		cat >> /config/.ssh/authorized_keys' < .integration-key/id_integration.pub
 
-# OpenSSH 10 は PerSourcePenalties を既定で有効にし、このイメージは 10.3 を積んで
-# いる。ペナルティは送信元アドレスごとに課され、認証せずに切断する接続（すべての
-# ssh-keyscan がそれにあたる）と、認証に失敗する接続（ここのテストのうち二つが
-# 意図的にそうする）が対象になる。スイート全体が数秒のうちにひとつのアドレスから
-# 来るので、ペナルティは閾値を超えて積み上がり、sshd は実行の途中から接続を拒否し
-# 始める。このスイートの初回 CI 実行は、まさにそうやって三つ目のテストで失敗した。
-#
-# 自分のサーバーへ接続する人がこんなことをするわけではないので、このペナルティが
-# 測っているのは製品ではなくテストハーネスである。そこでコンテナに限って無効に
-# し、その結果は仮定せずに確認する。ディレクティブはイメージ内のすべての
-# sshd_config へ書き込む。このイメージが sshd をどれで起動するかはイメージ側の
-# 事情であって、決め打ちする価値のあるものではないからだ — 最初の試みは文書化
-# されたパスを当て推量し、イメージはそれを移動させていた。
+# OpenSSH 10 の PerSourcePenalties は、短時間に同一アドレスから接続を繰り返す
+# 統合テストを途中で拒否する。テスト用コンテナ内だけで無効にし、連続接続で
+# 設定結果を検証する。イメージ内の設定パスが変わる可能性があるため、利用可能な
+# sshd_config を検索して更新する。
 integration-sshd-relax:
 	@docker exec sshc-sshd sh -c ' \
 		found=$$(find /config /etc /defaults -name sshd_config 2>/dev/null); \
@@ -231,10 +194,7 @@ integration-sshd-relax:
 	docker restart sshc-sshd
 	@for i in $$(seq 1 60); do \
 		ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q . && break; sleep 1; done
-	@# The check is the failure mode itself. Eight scans in a row from one
-	@# address is more than the whole suite makes; with the penalty still on,
-	@# sshd starts refusing part way through and this says so here, where the
-	@# cause is obvious, instead of in the middle of a test.
+	@# Verify that repeated connections from one address are accepted.
 	@for i in 1 2 3 4 5 6 7 8; do \
 		ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q . || { \
 			echo "sshd refused connection $$i of 8 from one address: the per-source penalty is still on" >&2; \
@@ -243,24 +203,16 @@ integration-sshd-relax:
 	done
 	@echo "sshd accepts repeated connections from one address"
 
-# 統合テストのコンテナが使う資格情報は開始時に書き出されるもので、秘密ではなく
-# フィクスチャである。このファイルをコミットせず無視するのは、その名前が、誰かが
-# 本物の鍵を置く場所になってしまわないようにするためである。
+# 統合テスト用の資格情報と鍵は実行時に生成し、終了時に削除する。
 integration-down:
 	docker rm -f sshc-s3 sshc-sshd >/dev/null 2>&1 || true
 	rm -f .integration-s3.json
 	rm -f .integration-key/id_integration .integration-key/id_integration.pub
 	rmdir .integration-key 2>/dev/null || true
 
-# 最初の PUT より前にバケットが存在していなければならない。クライアントに意図的に
-# CreateBucket がないのは、アプリケーションもバケットを作らないからである。
-#
-# sshd の側が確かめるのは、**自分で話す SSH が本物の OpenSSH に通じること**で
-# ある。単体テストの相手は Go で書かれたサーバー——実装のもう半分——なので、
-# 両方が同じ勘違いをしていれば緑になる。ここだけがその輪の外にある。
-# 要求するのは `integration-up` が立てる S3 と sshd なので、`go test ./...` からは
-# 外れる——そちらが回すのは、外の何も要らない `integration/`（本物の sshc プロセスを
-# 起こして所有権と vault CLI を確かめる）の方である。
+# integration-up が起動した S3 互換サーバーと OpenSSH sshd に対して、条件付き
+# PUT、SSH 認証、プロセス内 SSH クライアントとの相互運用を検証する。
+# 外部サービスが必要なため `go test ./...` には含めない。
 integration: build
 	SSHC_TEST_S3_ENDPOINT=http://127.0.0.1:$(S3_PORT) \
 	SSHC_TEST_S3_KEY=$(S3_KEY) \
@@ -273,8 +225,8 @@ integration: build
 	SSHC_TEST_SSH_KEY_PASSPHRASE="$(SSH_KEY_PASSPHRASE)" \
 	go test ./internal/objectstore ./internal/remotesync ./internal/sshdconformance -count=1 -v
 
-# バイナリはひとつの安定したパスへ置く。デスクトップの外殻はここへ symlink を
-# 張り、CLI と画面が同じ実体を走らせることを保証する。別の場所でビルドし直すと
+# バイナリは安定したパスへ置く。デスクトップ側はここへ symlink を張り、CLI と UI が
+# 同じバイナリを使用する。別の場所でビルドし直すと
 # 版がずれ、どちらが走っているのか分からなくなる。
 #
 # ~/.local/bin は sudo もシステムディレクトリの所有権も必要としない。PATH に
@@ -310,7 +262,7 @@ install-binary:
 
 # ソースからのチェックアウトにおける更新とは、取得し直してインストールし直すこと
 # である。アプリケーション自身の更新ボタンとは別物だ。あちらは、ビルドするソースを
-# 持たない人のためにリリース済みのバイナリを置き換えるものである。
+# 持たない環境でリリース済みバイナリを更新するためのものである。
 #
 # ローカルのブランチが進んでいる場合、--ff-only はマージコミットを勝手に作らずに
 # 拒否する。「make update」が、誰も頼んでいないコミットを書くものであってはならない

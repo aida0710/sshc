@@ -9,25 +9,19 @@ import (
 )
 
 // ErrNothingToApply は、リモートのスナップショットがすでにこのディスクと一致して
-// いることを報告する。これは失敗ではなく答えである。
+// いることを報告する。これは失敗ではなく結果である。
 var ErrNothingToApply = errors.New("this workspace already matches the snapshot")
 
-// Resolution は、両側で変わったファイルをどちらに寄せるかである。
-//
-// **既定は「決めない」である。** 同じ Host ブロックを双方が変えた二つの
-// ssh_config に、正しいマージは存在しない。どちらかを推測すれば、パーサが守る
-// ために存在するバイト保存の約束が破れる。だから既定では止まり、人が寄せ先を
-// 選んだときだけ、その通りにする。
+// Resolution は、競合したファイルでローカルとリモートのどちらを採用するかを表す。
+// 既定では選択せず、競合として報告する。
 type Resolution string
 
 const (
 	// ResolveNone は、衝突を報告して止まる。
 	ResolveNone Resolution = ""
-	// ResolveLocal は、このマシンの中身を残す。**書かないだけである**——
-	// 次の push が、こちらを向こうへ運ぶ。
+	// ResolveLocal はローカルの内容を維持する。
 	ResolveLocal Resolution = "local"
-	// ResolveRemote は、スナップショットの中身で置き換える。置き換えたものは
-	// 控えが残り、History から戻せる。
+	// ResolveRemote はリモートの内容で置き換え、以前の内容を History に残す。
 	ResolveRemote Resolution = "remote"
 )
 
@@ -44,17 +38,10 @@ type Conflict struct {
 }
 
 // Plan は、復号したスナップショットと現在のワークスペースから、このマシンをそれに
-// 一致させるトランザクションそのもの — あるいは衝突 — を導き出す。
+// 一致させるトランザクション、または衝突を導き出す。
 //
-// ここは、設計の中で最もコストが低く、最も多くを買っている部分である。ひとつの
-// storage.Request として表現できない pull は、このコードベースが持つあらゆる安全性
-// を逃れる pull になる。表現できるからこそ、それらすべてをただで受け継ぐ。
-// Manager.Validate のフックが再解析と再解決を行うので、Include グラフを壊す
-// スナップショットは 1 バイトも着地する前に拒否される。鍵を除く置き換えられたすべて
-// のファイルは世代ディレクトリへバックアップされるので、まずい pull は既存の
-// History 画面のクリック 1 回で取り消せる。ジャーナルは、中断された pull を完了
-// 可能にする。そしてユーザーが承認するプレビューは、既存のファイル単位の差分
-// そのものである。
+// pull 全体を 1 つの storage.Request にし、再解析、事前条件、ジャーナル、
+// 世代バックアップを通常の書き込みと同じ境界で適用する。
 //
 //   - base は、このマシンが最後に同期したスナップショットのマニフェスト。base が
 //     nil なら、このマシンは一度も同期していないので、何も削除とは呼べず、
@@ -84,11 +71,7 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 		baseDigest, hadBase := baseDigests[item.Path]
 		contested := present && (!hadBase || localDigest != baseDigest)
 		if contested && resolve == ResolveNone {
-			// ここでも変わり、あちらでも変わった。自動的な正解は存在しない — 同じ
-			// Host ブロックを双方が変えた二つの ssh_config をマージすることは、
-			// パーサが守るために存在するバイト保存の約束に反する — ので、これは
-			// 推測せずに報告する。base が無いときも同じである: 両側に在って内容が
-			// 違い、どちらが新しいかを知るものがここには無い。
+			// 両側で変更された内容は自動マージせず、digest だけを競合として報告する。
 			conflict := Conflict{Path: item.Path, LocalDigest: localDigest, RemoteDigest: item.SHA256}
 			if hadBase {
 				conflict.BaseDigest = baseDigest
@@ -97,8 +80,7 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 			continue
 		}
 		if contested && resolve == ResolveLocal {
-			// このマシンを残す。**書かないだけである**——次の push が、こちらを
-			// 向こうへ運ぶ。
+			// ローカルを採用する場合は変更を追加しない。
 			continue
 		}
 		precondition := storage.Precondition{}
@@ -109,11 +91,7 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 			Path:         filepath.Join(root, filepath.FromSlash(item.Path)),
 			Contents:     contents[item.Path],
 			Precondition: precondition,
-			// この pull が上書きする秘密鍵も、他のものと同じくバックアップを残す。
-			// 以前は残さなかった。そのコピーが平文の鍵になってしまうからだ。いま
-			// バックアップはマスターパスワードで封じられており、ローカルの鍵を pull が
-			// 置き換えるこの場面こそ、以前のものを取り戻したくなるまさにその場合で
-			// ある。
+			// 秘密鍵を含め、置き換えるファイルは暗号化された世代バックアップへ残す。
 		})
 	}
 
@@ -131,13 +109,13 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 			continue
 		}
 		if localDigest != baseDigest {
-			// あちらで削除され、こちらで編集された。
+			// リモートで削除され、ローカルで編集された競合。
 			switch resolve {
 			case ResolveLocal:
 				// 残す。消さない。
 				continue
 			case ResolveRemote:
-				// あちらに合わせる。控えは残るので History から戻せる。
+				// リモートを採用し、削除前の内容を History に残す。
 			default:
 				conflicts = append(conflicts, Conflict{
 					Path: path, BaseDigest: baseDigest, LocalDigest: localDigest,
@@ -148,12 +126,7 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 		request.Removals = append(request.Removals, storage.Removal{
 			Path:         filepath.Join(root, filepath.FromSlash(path)),
 			Precondition: storage.Precondition{Exists: true, Digest: localDigest},
-			// **消したものの控えを残す。** 既定でそうしないのは、最初の呼び出し側が
-			// 「二度確かめた恒久削除」だったからである——あれは控えが残ること自体が
-			// 意図を台無しにする。こちらは違う。別のマシンで消えたという理由で、
-			// このディスクのファイルが消える。押した人がその中身を見たことすら
-			// 無いかもしれない。控えはマスターパスワードで封じられるので、鍵の
-			// 平文の写しにもならない。
+			// リモート削除を適用する前に、暗号化された世代バックアップを残す。
 			Backup: true,
 		})
 	}

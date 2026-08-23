@@ -16,7 +16,7 @@ var _ platform.Toolchain = process.Toolchain{}
 
 func TestToolchainResolvesEveryProgramThroughTheInjectedStat(t *testing.T) {
 	// 探索の起点はこのファイルシステムの絶対パスでなければならない。Toolchain は
-	// filepath.Join で候補を組み立てるので、Unix 綴りの `/sandbox` を渡すと
+	// filepath.Join で候補を組み立てるので、Unix 表記の `/sandbox` を渡すと
 	// Windows では区切り文字が変わり、fstest 側の鍵と一致しなくなる。
 	sandbox := filepath.Join(filepath.VolumeName(os.TempDir())+string(os.PathSeparator), "sandbox")
 	installed := fstest.MapFS{"sandbox/ssh-keygen": &fstest.MapFile{Mode: 0o755}}

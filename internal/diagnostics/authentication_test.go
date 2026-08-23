@@ -18,7 +18,7 @@ import (
 // scriptedProbe は、認証テストの継ぎ目を差し替える。
 //
 // 本物の握手を見るのは internal/sshclient の側である。ここが確かめるのは、
-// 継ぎ目に届くまでの関門と、答えの符号への移し方である。
+// 継ぎ目に届くまでの関門と、結果の符号への移し方である。
 type scriptedProbe struct {
 	calls  []string
 	result sshclient.Probe
@@ -55,7 +55,7 @@ func TestAuthenticationTestReportsTheMethodThatWorked(t *testing.T) {
 	if !result.Authenticated || result.Outcome != diagnostics.OutcomeAuthenticated {
 		t.Fatalf("result = %+v", result)
 	}
-	// **推測ではない。** 方式は順に試され、通った時点で握手が終わる。
+	// 成功した認証方式が結果に記録される。
 	if result.Method != "publickey" {
 		t.Errorf("method = %q", result.Method)
 	}
@@ -95,8 +95,7 @@ func TestAuthenticationTestRefusesUntilUnavoidableCommandsAreAcknowledged(t *tes
 	}
 }
 
-// **型で判断する。** 出力の語句を読んでいたのは、外部のプログラムが理由を
-// 型で返す手段を持たなかったからである。
+// エラー文ではなく型に基づいて結果を分類する。
 func TestAuthenticationTestClassifiesFailuresByType(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -127,7 +126,7 @@ func TestAuthenticationTestClassifiesFailuresByType(t *testing.T) {
 			t.Errorf("%s: a failure reported authentication", test.name)
 		}
 		// 失敗の説明には、試した方式が入る。何も試していないのか、試して
-		// 断られたのかは別の答えである。
+		// 断られたのかは別の結果である。
 		if !strings.Contains(result.Detail, "publickey") {
 			t.Errorf("%s: detail = %q", test.name, result.Detail)
 		}

@@ -22,9 +22,6 @@ import { Button, Notice } from "../ui/surface";
 
 type AuthenticationKind = CreateConnectionAuthentication["kind"];
 
-// This is the only connection-creation state allowed to leave the modal.
-// Passwords and the vault master password deliberately have no field here, so
-// a prerequisite detour cannot accidentally retain or render a secret.
 export type CreateConnectionDraft = {
   alias: string;
   group: string;
@@ -444,7 +441,7 @@ export function CreateConnectionModal({
                   <select value={keyID} onChange={(event) => setKeyID(event.target.value)} className={control}>
                     {privateKeys.length === 0 ? <option value="">{t("conn.createNoPrivateKeys")}</option> : null}
                     {privateKeys.map((key) => (
-                      <option key={key.id} value={key.id}>{key.relativePath}{key.fingerprint === "" ? "" : ` — ${key.fingerprint}`}</option>
+                      <option key={key.id} value={key.id}>{key.relativePath}{key.fingerprint === "" ? "" : ` · ${key.fingerprint}`}</option>
                     ))}
                   </select>
                 </Field>

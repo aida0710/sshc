@@ -22,7 +22,7 @@ func TestExpandTokensReplacesWhatOpenSSHReplaces(t *testing.T) {
 		{"~/.ssh/%h.key", "~/.ssh/203.0.113.10.key"},
 		{"%n", "bastion"},
 		{"%r@%h:%p", "ops@203.0.113.10:2222"},
-		// 展開は差し込みだけで、パスを組み立て直さない。OpenSSH もそうする——残りは
+		// 展開は差し込みだけで、パスを組み立て直さない。OpenSSH もそうする。残りは
 		// 設定の構文のままであり、それをネイティブなパスに移すのは値を使う側である。
 		{"%d/.ssh/id", testHome + "/.ssh/id"},
 		{"%u/%i", "aida/501"},
@@ -40,8 +40,8 @@ func TestExpandTokensReplacesWhatOpenSSHReplaces(t *testing.T) {
 	}
 }
 
-// 展開できないものを黙って残すと、その文字列はファイル名やコマンドとして
-// そのまま使われる。答えないことと、間違って答えることは別である。
+// 展開できないものを暗黙に残すと、その文字列はファイル名やコマンドとして
+// そのまま使われる。応答しないことと、間違って返すことは別である。
 func TestExpandTokensRefusesWhatItCannotAnswer(t *testing.T) {
 	for _, refused := range []string{
 		// %C は接続の材料からハッシュを作る。ここでは作らない。

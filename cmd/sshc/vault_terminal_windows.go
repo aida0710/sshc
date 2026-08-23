@@ -58,9 +58,9 @@ func (systemPasswordTerminal) ReadPassword(ctx context.Context, input *os.File) 
 	return readWindowsPassword(ctx, windows.Handle(input.Fd()), systemWindowsPasswordOperations())
 }
 
-// readWindowsPassword waits on the console and an explicit cancellation event
-// together. Its helper goroutine only signals the private event and is joined
-// before the event is closed and the exact saved console mode is restored.
+// readWindowsPassword はコンソール入力とキャンセルイベントを同時に待つ。
+// 補助 goroutine は専用イベントを通知するだけで、イベントを閉じて保存済みの
+// コンソールモードを復元する前に終了を待つ。
 func readWindowsPassword(
 	ctx context.Context, input windows.Handle, operations windowsPasswordOperations,
 ) (password []byte, resultErr error) {
@@ -256,9 +256,9 @@ type windowsKeyEventRecord struct {
 	controlKeyState uint32
 }
 
-// INPUT_RECORD is 20 bytes and its KEY_EVENT_RECORD union member is 16 bytes
-// on every supported Windows architecture. Both negative-size checks make a
-// layout mismatch fail at compile time before unsafe decoding can be shipped.
+// 対応するすべての Windows アーキテクチャで、INPUT_RECORD は 20 バイト、union の
+// KEY_EVENT_RECORD は 16 バイトである。負のサイズ検査により、unsafe でデコードする
+// 前提が崩れた場合はコンパイル時に失敗する。
 var (
 	_ [20 - unsafe.Sizeof(windowsInputRecord{})]byte
 	_ [unsafe.Sizeof(windowsInputRecord{}) - 20]byte

@@ -42,7 +42,7 @@ func TestAutoDoesNothingWhenItIsNotOn(t *testing.T) {
 	}
 }
 
-// 押す人が居なくても、変わったものは出ていく。
+// 押すユーザーが居なくても、変わったものは出ていく。
 func TestAutoPushesWhatChangedHere(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
@@ -56,7 +56,7 @@ func TestAutoPushesWhatChangedHere(t *testing.T) {
 		t.Fatal("the live object was never written")
 	}
 	// 二巡目は何も送らない。変わっていないものを押し続ける巡回は、他の端末を
-	// 毎分起こすだけである。
+	// 毎分起動するだけである。
 	before, _ := bucket.uploads()
 	_ = once(t, auto)
 	after, _ := bucket.uploads()
@@ -83,8 +83,8 @@ func TestAutoAppliesWhatAnotherMachinePushed(t *testing.T) {
 	}
 }
 
-// **消えるものがあるなら、巡回は止まる。** 置き換えは History から戻せるが、
-// 消えたファイルは画面から消える。そこは人が見る分岐である。
+// 消えるものがあるなら、巡回は止まる。置き換えは History から戻せるが、
+// 消えたファイルは画面から消える。そこはユーザーが見る分岐である。
 func TestAutoStopsInsteadOfRemovingFiles(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{
@@ -135,8 +135,8 @@ func TestAutoStopsOnAConflict(t *testing.T) {
 	}
 }
 
-// 巡回は、渡された枠の中で走る。**枠がその外へ漏れれば、保管庫は開けっぱなしに
-// なる**ので、包んでいることそのものを見る。
+// 巡回は、渡された枠の中で走る。枠がその外へ漏れれば、保管庫は開けっぱなしに
+// なるので、包んでいることそのものを見る。
 func TestEveryCycleRunsInsideTheUnattendedFrame(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})

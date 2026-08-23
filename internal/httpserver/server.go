@@ -35,7 +35,7 @@ type Options struct {
 	// 残した handoff は、誰にも受け付けられない secret を運ぶことになる。
 	CLISecret string
 	// ConnectWarnings は OpenSSH がそのホストに対して実行するディレクティブを
-	// 名指しする。これにより command line は接続中ではなく接続前にそれらを言える。
+	// 指定する。これにより command line は接続中ではなく接続前にそれらを言える。
 	ConnectWarnings func(alias string) []string
 	// ConnectAliases は、その接続に現れる alias を ProxyJump の手前も含めて
 	// 返す。保存済みパスワードを渡す相手をそこに限るために使う。
@@ -49,8 +49,7 @@ type Options struct {
 	UI       fs.FS
 	Version  string
 	Owner    handoff.Owner
-	// StopEngine は、走っている engine に畳んで終わるよう頼む道である。
-	// nil なら停止の口は「実装されていない」と答える。
+	// StopEngine は engine の停止を要求する。nil の場合、停止 API は未実装として応答する。
 	StopEngine func()
 	// ProtocolVersion は handoff と同じ CLI contract の版である。
 	ProtocolVersion int
@@ -69,21 +68,20 @@ type Options struct {
 	// Sync はワークスペースを object store へ運ぶ。nil の service は
 	// すべての sync ルートを未登録のままにする。
 	Sync *remotesync.Service
-	// AutoSync は、押さなくても進む巡回である。nil でも sync のルートは立つ
-	// ——自動同期が無いだけで、手で押す道は残る。
+	// AutoSync は自動同期の巡回処理。nil でも手動同期 API は登録する。
 	AutoSync *remotesync.Auto
 	// Terminals は埋め込みターミナルのセッションを持つ。nil の registry は
 	// セッションのルートと WebSocket を未登録のままにする。これは、それを
 	// 配線しないテストが当てにしていることである。
 	Terminals *terminal.Registry
 	// TerminalStartDirectory は、ローカルシェルが始まる場所を返す。空なら
-	// このプロセスの作業ディレクトリを継ぐ——**それは誰も選んでいない場所である。**
+	// このプロセスの作業ディレクトリを継ぐ。それは誰も選んでいない場所である。
 	TerminalStartDirectory func() string
-	// LoginShell は、PTY の中で起こすローカルシェルを解決する。
+	// LoginShell は、PTY の中で起動するローカルシェルを解決する。
 	// PATH を見ず、絶対パスかエラーを返す。
 	LoginShell func() (string, error)
 	// TerminalEnvironment は、端末セッションが継ぐ環境である。これは利用者が
-	// 自分で行ったであろう接続なので、検査が使う最小環境ではなく本人の環境を継ぐ。
+	// 自分で行ったであろう接続なので、検査が使う最小環境ではなくユーザー本人の環境を継ぐ。
 	TerminalEnvironment func() []string
 }
 
@@ -95,15 +93,11 @@ type Server struct {
 	url      string
 	engine   *echo.Echo
 
-	// baseCancel は、http.Server.BaseContext が配ったリクエスト用 context を
-	// 一斉に取り消す。停止を始めた合図が、ハンドラと WebSocket の内側まで届く
-	// 唯一の道である。
+	// baseCancel は、停止開始時に全リクエストと WebSocket の context を取り消す。
 	baseCancel context.CancelFunc
 
-	// 停止の状態はひとつの錠と合図にまとめてある。要求ごとの入場と退場も同じ
-	// 錠を通る——**入場の可否と数え上げが別々に動くと、数えられないまま通った
-	// 変更が生まれる。** これは loopback の単一利用者向けなので、その通り道の
-	// 競合は問題にならない。
+	// 停止状態と通知は同じ mutex で保護する。要求の開始と終了も同じ
+	// mutex を使い、受付可否と実行中件数を一貫して更新する。
 	mutex    sync.Mutex
 	waiters  *sync.Cond
 	stopping bool
@@ -126,7 +120,7 @@ func (s *Server) condition() *sync.Cond {
 }
 
 // BeginStopping は、新しい変更と Upgrade を断り始め、配ったリクエスト用
-// context を取り消す。**冪等である。**
+// context を取り消す。冪等である。
 //
 // 読み取りは断らない。停止の途中でも状態は見られるべきであり、止まるのは
 // 状態を変えるものだけである。
@@ -146,7 +140,7 @@ func (s *Server) BeginStopping() {
 }
 
 // BeginShutdown は graceful な停止を頼み、送り出したところで返る。
-// **待たない。** 待つのは Wait だけである。
+// 待たない。待つのは Wait だけである。
 func (s *Server) BeginShutdown() {
 	s.mutex.Lock()
 	if s.begun {
@@ -159,10 +153,7 @@ func (s *Server) BeginShutdown() {
 	go s.record(func() error { return s.http.Shutdown(context.Background()) })
 }
 
-// ForceClose は listener と生きている接続を断つ。**これも待たない。**
-//
-// graceful が返らないことこそが、これが呼ばれる理由である。まだ blocking して
-// いる Shutdown の後ろに並べば、締切は何も起こさないのと同じになる。
+// ForceClose は listener と実行中接続を閉じる。完了は Wait で待つ。
 func (s *Server) ForceClose() {
 	s.mutex.Lock()
 	if s.forced {
@@ -189,7 +180,7 @@ func (s *Server) record(call func() error) {
 // Wait は、唯一の合流点である。
 //
 // 送り出した graceful/force と、停止より前に入場した変更・Upgrade の退場を
-// 待つ。**強制的に接続を閉じたあとも待つ。** これは二度目の猶予ではなく、
+// 待つ。強制的に接続を閉じたあとも待つ。これは二度目の猶予ではなく、
 // engine lock を手放すことが状態変更と重ならないための壁である。取り消しを
 // 無視するハンドラは、2 台目のエンジンを許すよりロックを握らせておく。
 func (s *Server) Wait() error {
@@ -272,19 +263,17 @@ func New(options Options) (*Server, error) {
 		ExpectedHost:   host,
 		ExpectedOrigin: "http://" + host,
 		Sessions:       options.Sessions,
-		// application はマスターパスワードの向こう側にあるのであって、各画面
-		// が個別にそうなのではない。vault なしで組み立てられた server は
-		// したがって施錠されたままであり、これは配線し忘れにとって安全な方向である。
+		// Passwords が未設定の場合も安全側としてロック済みと扱う。
 		Unlocked: func() bool { return options.Passwords != nil && options.Passwords.Unlocked() },
 	}).Middleware)
 
 	server := &Server{listener: options.Listener, engine: e}
-	// **入場の門は Security の後、ルートハンドラの前に置く。**
+	// stoppingGate は Security の後、ルートハンドラの前に置く。
 	//
 	// 無効な Host や、`/api/` の fetch/origin/session/CSRF に反する要求は、
 	// 停止中かどうかに関わらず今までどおり弾かれ、数にも入らない。逆に、
-	// ルート側で見ている非 API の資格情報より門の方が先なので、停止が始まった
-	// あとは資格情報を確かめる前に 503 が返る。この順序は意図であり、テストで
+	// ルート側で検証する非 API の資格情報より stoppingGate が先に動くため、停止開始後は
+	// 資格情報を確かめる前に 503 が返る。この順序はテストで
 	// 固定する。
 	e.Use(server.stoppingGate)
 
@@ -348,9 +337,7 @@ func New(options Options) (*Server, error) {
 		if options.Config != nil {
 			eligibility = options.Config.PasswordEligibility
 		}
-		// bucket の最新スナップショットもマスターパスワードで封印されている
-		// ため、変更すると再び push する。bucket のないマシンには更新すべき
-		// ものがなく、応答はそう伝える。
+		// マスターパスワード変更時は、設定済みなら最新スナップショットも再暗号化する。
 		var keyHosts func([]string) (map[string][]string, error)
 		if options.Config != nil {
 			keyHosts = options.Config.KeyHosts
@@ -405,9 +392,9 @@ func New(options Options) (*Server, error) {
 			Shell:          options.LoginShell,
 			Environment:    options.TerminalEnvironment,
 			StartDirectory: options.TerminalStartDirectory,
-			// askpass はここに無い。**この経路はもう外部の ssh を起こさない。**
+			// askpass はここに無い。この経路はもう外部の ssh を起動しない。
 			// パスフレーズは vault から直接読むか、端末で尋ねる。ヘルパーが
-			// 残っているのは、CLI と診断がまだ OpenSSH を起こすからである。
+			// 残っているのは、CLI と診断がまだ OpenSSH を起動するからである。
 			ExpectedOrigin: "http://" + host,
 		})
 	}
@@ -433,7 +420,7 @@ func New(options Options) (*Server, error) {
 
 // stoppingGate は、状態を変える要求と Upgrade を、原子的に入場させるか断る。
 //
-// **ルートの一覧は持たない。** GET と HEAD 以外のすべてと、実際の Upgrade を
+// ルートの一覧は持たない。GET と HEAD 以外のすべてと、実際の Upgrade を
 // 対象にする。今日の WebSocket は /terminal/stream だが、明日足されるものも
 // 誰も何も覚えていなくてもこの規則を継ぐ。
 func (s *Server) stoppingGate(next echo.HandlerFunc) echo.HandlerFunc {
@@ -532,9 +519,7 @@ func (s *Server) URL() string {
 
 // Serve は listener が止まるまで返らない。
 //
-// **呼び出し側の context を見ない。** 停止を始めてよいのはアプリケーションの
-// ライフサイクルだけであり、server が自分で判断すると、承認された順序
-// ——入場停止、handoff 削除、二つの graceful 要求——を内側から追い越せてしまう。
+// 呼び出し側の context では停止せず、アプリケーションが定めた停止順序に従う。
 func (s *Server) Serve() error {
 	return serveResult(s.http.Serve(s.listener))
 }

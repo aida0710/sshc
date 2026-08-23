@@ -15,12 +15,9 @@ function api(overrides: Partial<TerminalSessionsApi> = {}): TerminalSessionsApi 
   } as TerminalSessionsApi;
 }
 
-// 英語のカタログを通さずに検査するので、翻訳はキーをそのまま返す。
 const translate = ((key: string) => key) as never;
 
 describe("useTerminalSessions", () => {
-  // 上限に達したことと、開けなかったことは別の答えである。前者はどれかを
-  // 閉じれば直り、それが画面の言えることの中でいちばん役に立つ。
   it("separates the session limit from a console that could not be opened", async () => {
     const openTerminalSession = vi
       .fn()
@@ -44,8 +41,6 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("terminal.openFailed");
   });
 
-  // 読めなかった一覧も「読み終えた」と数える。届かない一覧を待ち続けて
-  // ナビゲーションが面を決められないままになる方が悪い。
   it("reports a finished load even when the list could not be read", async () => {
     const terminalSessions = vi.fn().mockRejectedValue(new Error("offline"));
     const { result } = renderHook(() => useTerminalSessions(api({ terminalSessions }), translate));
@@ -54,8 +49,6 @@ describe("useTerminalSessions", () => {
     expect(result.current.sessions).toEqual([]);
   });
 
-  // アプリケーションはマスターパスワードの向こう側にある。施錠中に読みに行くと
-  // その失敗が「0 本だった」として確定し、解錠後も誰も取り直さない。
   it("reads nothing until it is allowed to", async () => {
     const terminalSessions = vi.fn().mockResolvedValue(list);
     const { result, rerender } = renderHook(
@@ -87,8 +80,6 @@ describe("useTerminalSessions", () => {
     expect(outcome).toBe(false);
     expect(result.current.problem).toBe("terminal.renameFailed");
   });
-  // 「開けませんでした」だけでは、次に何をすればよいか分からない。設定そのものが
-  // 接続を許さない場合は、その理由を名指しする。
   it("names why a connection the configuration does not allow was refused", async () => {
     const openTerminalSession = vi.fn().mockRejectedValue(
       new ApiError("proxy_command_with_jump", 422, { code: "proxy_command_with_jump", message: "no" }),
@@ -102,7 +93,6 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("terminal.proxyCommandWithJump");
   });
 
-  // 知らない符号に説明を付けない。付ければ、その説明は必ずいつか嘘になる。
   it("falls back to the plain refusal for a code it does not know", async () => {
     const openTerminalSession = vi.fn().mockRejectedValue(
       new ApiError("something_new", 500, { code: "something_new", message: "no" }),
@@ -116,12 +106,6 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("terminal.openFailed");
   });
 
-  // まとめて閉じるには一巡では足りない。
-  //
-  // **生きているセッションを閉じると SIGHUP が飛ぶだけで、一覧からは消えない。**
-  // 消えるのは、死んだと分かってからもう一度閉じたときである（registry が
-  // そう決めており、終わった理由を読めるようにするためである）。ここでは
-  // その振る舞いをそのまま持つ相手を置いて、一覧が空になるまで巡ることを見る。
   it("closes each session again once it is no longer live", async () => {
     const server = [
       { id: "a", live: true },
@@ -146,24 +130,16 @@ describe("useTerminalSessions", () => {
       await result.current.closeAll();
     });
 
-    // 2 本 × 2 巡。一巡で終わると信じている実装なら、ここで 2 本残る。
     expect(closeTerminalSession).toHaveBeenCalledTimes(4);
     expect(result.current.sessions).toEqual([]);
     expect(result.current.problem).toBe("");
   });
 
-  // **死ぬまでに時間がかかる相手を待つ。**
-  //
-  // 上の偽物は 1 回目の close で即座に死ぬ。現実はそうではない——Windows の
-  // ConPTY は畳むのに時間がかかり、実際 CI の Windows でここが落ちた。呼ばれた
-  // 回数で死ぬ偽物では、**間を置かない実装も通ってしまう**ので、ここでは
-  // 経過時間で死ぬ相手を置く。巡るあいだに間を置く実装だけが空にできる。
   it("keeps trying while a session takes real time to die", async () => {
     const startedAt = Date.now();
     const server = [{ id: "a" }];
     const listing = () => ({ sessions: [...server] as never, maxSessions: 50 });
     const closeTerminalSession = vi.fn(async () => {
-      // 250 ミリ秒経つまでは、閉じても死んだことにならない。
       if (Date.now() - startedAt >= 250) server.length = 0;
       return listing();
     });
@@ -179,7 +155,6 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("");
   });
 
-  // 閉じられなかったものを黙って消えたことにしない。
   it("says so when one of them refuses to close", async () => {
     const one = [{ id: "a" }] as never;
     const client = api({

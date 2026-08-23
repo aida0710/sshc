@@ -218,7 +218,7 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 		t.Errorf("route %s is a confirmation-guarded operation with no row in guardedRoutes", key)
 	}
 	// 逆もまた然り: router が登録していない route を名指す行は、
-	// 何もテストせずに黙って通ってしまう。
+	// 何もテストせずに暗黙に通ってしまう。
 	registered := map[string]bool{}
 	for _, route := range f.apiRoutes() {
 		registered[route.Method+" "+route.Path] = true
@@ -231,12 +231,12 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 }
 
 // requiresConfirmation は、design §8.2 が action token の背後に
-// 置く route の系列を名指しする: 接続するもの、Terminal を起動する
+// 置く route の系列を指定する: 接続するもの、Terminal を起動する
 // もの、known_hosts を編集するもの、リモートホストに key を登録する
 // もの、private key を reveal するもの、あるいはそれを完全削除するもの。
 //
 // POST /api/v1/diagnostics/effective は意図的に含まれていない。
-// **あれはもう何も実行しない。** 設定を読んで値を決めるのはこの
+// あれはもう何も実行しない。設定を読んで値を決めるのはこの
 // アプリケーション自身であり、そこに確認すべき副作用は無い。
 // 実行を伴わない読み取りに action token を要求しても、守るものが無い。
 func requiresConfirmation(path string) bool {
@@ -268,7 +268,7 @@ func requiresConfirmation(path string) bool {
 //
 // この map は便宜ではなく assertion そのものである: ここに行が
 // ないまま漏らす route も失敗し、漏らさなくなった route を持つ行も
-// 失敗する。そのため allowlist は黙って包括的な免除へと広がることができない。
+// 失敗する。そのため allowlist は暗黙に包括的な免除へと広がることができない。
 var contentBearingRoutes = map[string]string{
 	"GET /api/v1/config/overview":  "the overview carries the parsed text of every managed file",
 	"GET /api/v1/config/file":      "the raw editor is the feature; it returns the file the user asked to edit",
@@ -323,7 +323,7 @@ func TestNoResponseCarriesASecretItIsNotEntitledTo(t *testing.T) {
 	// Phase one は POST /api/v1/passwords/lock に触れ、アプリケーション
 	// 全体を閉じてしまう: それ以降のすべての read は vault_locked を
 	// 返す。もう一度開くことで、phase two は problem document ではなく
-	// 中身の詰まった body を見られるようになる — これが、この sweep が
+	// 中身の詰まった body を見られるようになる。これが、この sweep が
 	// 何かを証明することと何も証明しないことの違いである。
 	f.unlockAgain()
 
@@ -380,7 +380,7 @@ func TestNoResponseCarriesASecretItIsNotEntitledTo(t *testing.T) {
 }
 
 // normaliseObservationKey は、concrete な request path を
-// allowlist が使う Echo parameter の綴りへ戻す。
+// allowlist が使う Echo parameter の表記へ戻す。
 func normaliseObservationKey(key, keyID string) string {
 	normalised := strings.Split(key, "?")[0]
 	if keyID != "" {
@@ -435,7 +435,7 @@ func TestNoLogLineCarriesASecret(t *testing.T) {
 // TestNoLogLineCarriesASecret は、何もログしないサーバーに対しては
 // 自明に通ってしまい、このアプリケーションはログがごく少ない。
 // これは、scrape がサーバーの書き込み先と同じ stream を読んでいることを
-// 証明するもので、将来 secret をログしてしまう handler は黙って見逃されず捕まる。
+// 証明するもので、将来 secret をログしてしまう handler は暗黙に見逃されず捕まる。
 func TestTheLogScrapeWouldNoticeASecret(t *testing.T) {
 	f := newFixture(t)
 	if _, err := f.logs.Write([]byte("level=INFO msg=\"planted\" token=" + f.canaries.SessionID + "\n")); err != nil {

@@ -12,12 +12,6 @@ import (
 	"sshc/internal/terminal"
 )
 
-// 本物の PTY を使う検査はこの 1 本だけである。
-//
-// 上の検査はすべて Process インターフェースの偽物に対して走るので、レジストリの
-// ふるまいを確かめるのに実プロセスは要らない。ここで確かめるのは、その偽物が
-// 立っている場所に本物を置いても同じ形で動くこと——確保できること、出力が届く
-// こと、終了理由が読めること——だけである。
 func TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus(t *testing.T) {
 	echo := lookProgram(t, "echo")
 
@@ -57,7 +51,6 @@ func TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus(t *testing.T) {
 	}
 }
 
-// PTY を確保したうえで、そこに置いたプログラムが無ければ開けない。
 func TestOpeningAMissingProgramFails(t *testing.T) {
 	registry := &terminal.Registry{Start: terminal.NewStarter(), Limits: terminal.DefaultLimits}
 	if _, err := registry.Open(context.Background(), terminal.Spec{
@@ -71,8 +64,6 @@ func TestOpeningAMissingProgramFails(t *testing.T) {
 	}
 }
 
-// echo の置き場所はディストリビューションで違う。PATH は見ない——このリポジトリの
-// 他のどこもそうしていない——ので、決め打ちの場所を順に確かめる。
 func lookProgram(t *testing.T, name string) string {
 	t.Helper()
 	for _, directory := range []string{"/bin", "/usr/bin"} {

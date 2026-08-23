@@ -85,8 +85,8 @@ func main() {
 	releaseArches := "amd64 arm64"
 	releaseDirectory := filepath.Join(temporary, "release path")
 	if runtime.GOOS == "windows" {
-		// The structural recipe assertion below covers cmd.exe quote breakout.
-		// Avoid embedding a platform-specific executable payload in this value.
+		// 下の recipe 構造検査で cmd.exe の引用符脱出を検証する。この値にはプラットフォーム
+		// 固有の実行ペイロードを埋め込まない。
 		output = filepath.Join(temporary, `edge path $dollar "quote" ; & `+"`"+`literal`+"`"+` %NAME% (paren)`)
 	} else {
 		output += `"; touch "` + sentinel + `"; #`
@@ -104,10 +104,10 @@ func main() {
 		"RELEASE_DIR="+releaseDirectory,
 	)
 	command.Dir = repository
-	// 継承環境から Make の輸出を上書きさせない、という約束を確かめる。名前の綴りは
+	// 継承環境から Make の輸出を上書きさせない、という約束を確かめる。名前の表記は
 	// ホストの環境の意味論に合わせる。Windows のプロセス環境は大文字小文字を区別
-	// しないので、そこに「別綴り」というものは存在せず、綴りを変えて渡すことは
-	// GNU Make の Windows 移植の変数表を突くだけになる。別綴りそのものの扱いは
+	// しないので、そこに「別表記」というものは存在せず、表記を変えて渡すことは
+	// GNU Make の Windows 移植の変数表を突くだけになる。別表記そのものの扱いは
 	// canonicalizeNativeEnvironment の単体テストが両ホストで見ている。
 	hostileNames := []string{
 		"gOeNv", "gOoS", "GoArCh", "cGo_EnAbLeD",
@@ -178,8 +178,8 @@ func main() {
 		}
 	}
 	// wantEnvironment は fake go が os.LookupEnv で引いた値を見ている。この引き方は
-	// ホスト自身の規則そのもの — Unix では完全一致、Windows では大文字小文字を無視
-	// した照合 — なので、go run が実際に受け取る値をどちらのホストでも表している。
+	// ホスト自身の規則（Unix では完全一致、Windows では大文字小文字を無視した照合）
+	// なので、go run が実際に受け取る値をどちらのホストでも表している。
 }
 
 func TestNativeMakeRecipesContainOnlyFixedInputs(t *testing.T) {
@@ -259,14 +259,14 @@ func main() {
 	}
 }
 
-// sanitizedGoTestEnvironment は、make のレシピを走らせる前に、この検査を起こした
+// sanitizedGoTestEnvironment は、make のレシピを走らせる前に、この検査を起動した
 // 側の行き先指定を消す。
 //
-// **GOOS を継いだまま make を呼ぶと、レシピが何を組み立てるかが呼び出し側で変わる。**
+// GOOS を継いだまま make を呼ぶと、レシピが何を組み立てるかが呼び出し側で変わる。
 // GOENV を off にするのは、開発機の go env の設定を持ち込まないためである。
 //
-// 綴りの畳み込みは、internal/nativebuild が本番でやっているものと同じ形だが、
-// 写しである。**あちらの非公開の道具を、この検査のために公開したくない。**
+// 表記の畳み込みは、internal/nativebuild が本番でやっているものと同じ形だが、
+// 写しである。あちらの非公開のツールを、この検査のために公開したくない。
 func sanitizedGoTestEnvironment(environment []string) []string {
 	result := append([]string(nil), environment...)
 	for _, pair := range [][2]string{{"GOOS", ""}, {"GOARCH", ""}, {"CGO_ENABLED", ""}, {"GOENV", "off"}} {

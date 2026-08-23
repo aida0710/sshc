@@ -142,17 +142,9 @@ type Result struct {
 	Truncated bool
 }
 
-// Service は、リモート登録を実行する。
-//
-// **外部プログラムは起こさない。** リモートで走らせる 1 本のコマンドは、この
-// プロセスが開いた exec チャンネルの上を通る。凍結した設定ファイルも要らない
-// ——接続に使う値を決めるのはこのアプリケーション自身である。
+// Service は、プロセス内 SSH 接続でリモート登録を実行する。
 type Service struct {
-	// Resolve は、alias ひとつ分の接続を決める。**登録一回につき一度だけ呼ばれる。**
-	//
-	// 一度なのは、probe と routine が同じ相手へ届かなければならないからである。
-	// 二度解決すると、その間に設定を書き換えた者が二本目の行き先を変えられる。
-	// かつては設定を凍結してファイルへ書くことで同じ性質を守っていた。
+	// Resolve は probe と登録処理で同じ接続先を使うため、登録ごとに一度だけ呼ぶ。
 	Resolve func(alias string) (sshclient.Target, error)
 	// Run は、決まった接続でコマンドを 1 本走らせる。nil なら登録はできない。
 	Run     func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error)
@@ -195,8 +187,7 @@ func (s Service) Register(ctx context.Context, report effective.Report, configSn
 		return Result{}, ErrNoRunner
 	}
 
-	// **行き先は一度だけ決める。** probe と routine は同じ相手へ届かなければ
-	// ならない。
+	// probe と登録処理で同じ接続先を使う。
 	target, err := s.Resolve(alias)
 	if err != nil {
 		return Result{}, err
@@ -210,7 +201,7 @@ func (s Service) Register(ctx context.Context, report effective.Report, configSn
 		return Result{}, ErrUnsupportedRemote
 	}
 
-	// **公開鍵は stdin を通る。argv には決して乗らない。**
+	// 公開鍵はコマンド引数ではなく標準入力で渡す。
 	output, err := s.Run(ctx, target, Routine, []byte(key.Line+"\n"))
 	if err != nil {
 		return Result{}, err

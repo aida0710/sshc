@@ -99,9 +99,9 @@ type nativeBuildDeps struct {
 	environment []string
 	executor    nativeCommandExecutor
 	mkdirAll    func(string, os.FileMode) error
-	// verifyBinary は、焼けた実体が本当にその行き先のものかを見る。
+	// verifyBinary はビルド済みバイナリが指定ターゲットと一致することを検証する。
 	//
-	// **継ぎ目にしてあるのは、検査が実体を読むからである。** 記録するだけの
+	// 検査がバイナリを読み取るため、テストでは verifyBinary を差し替えられる。
 	// executor で組み立てた検査は、ファイルを一つも作らない。ここを直に
 	// 呼ぶと、そのすべてが「読めなかった」で落ちる。
 	verifyBinary func(path, goos, goarch string) error
@@ -114,9 +114,8 @@ type nativeBuildRequest struct {
 	cgo    string
 }
 
-// RunNativeBuild is the portable entry point used by the Makefile wrapper.
-// It passes commands as argv and target values through an explicit inherited
-// environment, so paths and versions never need shell interpolation.
+// RunNativeBuild は Makefile wrapper が使用する移植可能なエントリーポイントである。コマンドは argv、
+// 対象値は明示的な継承環境で渡し、パスとバージョンを shell 展開しない。
 func RunNativeBuild(args []string, stdout, stderr io.Writer) error {
 	environment := os.Environ()
 	return runNativeBuild(args, nativeBuildDeps{
@@ -318,12 +317,12 @@ func runCurrentRelease(args []string, deps nativeBuildDeps, stdout, stderr io.Wr
 	return nil
 }
 
-// **npm はその package のディレクトリで走らせる。--prefix に頼らない。**
+// npm はその package のディレクトリで走らせる。--prefix に頼らない。
 //
 // あの旗の意味は下位命令ごとに揃っていない。`npm install --prefix <dir>` は
 // Windows ではカレントの package.json を読みに行き、この repository の root には
-// それが無いので ENOENT で落ちる——Linux と macOS では同じ呼び出しが通るので、
-// **Windows でだけ静かに壊れる**種類の違いである。
+// それが無いので ENOENT で落ちる。Linux と macOS では同じ呼び出しが通るので、
+// Windows でだけ静かに壊れる種類の違いである。
 func runWebBuild(deps nativeBuildDeps) error {
 	return deps.executor.Run(nativeCommand{
 		name:        "npm",
@@ -371,8 +370,8 @@ func buildNativeCLI(request nativeBuildRequest, version string, deps nativeBuild
 	if err := buildOne(request, version, deps); err != nil {
 		return err
 	}
-	// **名前ではなく中身を見る。** 束ごとに正しい実体を入れているかは、
-	// 焼いた直後にしか安く確かめられない——配ってからでは、動かない機械の
+	// ファイル名ではなくバイナリヘッダーからターゲットを検証する。
+	// 焼いた直後にしか安く確かめられない。配ってからでは、動かない機械の
 	// 上でしか分からない。
 	if deps.verifyBinary == nil {
 		return nil
@@ -549,9 +548,9 @@ func resolveVersion(deps nativeBuildDeps) (string, error) {
 	return version, nil
 }
 
-// Build versions are either dev or SemVer 2.0 with an optional leading v.
-// This grammar excludes whitespace, quotes, controls, and option-like values,
-// so the same value is one safe Go linker token and one npm positional value.
+// ビルドバージョンは dev、または先頭に v を付けられる SemVer 2.0 とする。空白、引用符、
+// 制御文字、option 形式の値を除外し、Go linker token と npm positional value の両方へ
+// 安全に渡せるようにする。
 func validateBuildVersion(version string) error {
 	if version == "dev" {
 		return nil
@@ -578,9 +577,9 @@ func withTargetEnvironment(environment []string, request nativeBuildRequest) []s
 	result := append([]string(nil), environment...)
 	// GOENV をここでも畳み込む。Makefile も override GOENV = off を輸出している
 	// が、GNU Make の Windows 移植は変数名を大文字小文字で区別するので、呼び出し元
-	// が持っていた別綴りが同じ環境に生き残り、大文字小文字を区別しない Windows の
-	// プロセス環境ではそちらが勝つ。setEnvironmentValue は綴り違いをまとめて畳む
-	// ので、子の go build が見る GOENV はどの綴りでも off ひとつになる。
+	// が持っていた別表記が同じ環境に生き残り、大文字小文字を区別しない Windows の
+	// プロセス環境ではそちらが勝つ。setEnvironmentValue は表記違いをまとめて畳む
+	// ので、子の go build が見る GOENV はどの表記でも off ひとつになる。
 	result = setEnvironmentValue(result, "GOENV", "off")
 	result = setEnvironmentValue(result, "GOOS", request.goos)
 	result = setEnvironmentValue(result, "GOARCH", request.goarch)
@@ -619,10 +618,9 @@ func environmentValue(environment []string, key string) string {
 	return ""
 }
 
-// canonicalizeNativeEnvironment makes the exact Make-exported spelling the
-// only spelling commands can observe. An exact canonical value is authoritative
-// over inherited case aliases. Alias-only and duplicate exact entries fail
-// before validation can execute a command or create an output directory.
+// canonicalizeNativeEnvironment は Make が export した正確な名前だけを子コマンドへ渡す。
+// 正規名の値を大小文字違いの継承値より優先し、別名だけの値と正規名の重複は、検証処理が
+// コマンド実行や出力ディレクトリ作成を行う前に拒否する。
 func canonicalizeNativeEnvironment(environment []string) ([]string, error) {
 	type nativeEnvironmentEntry struct {
 		canonicalCount int

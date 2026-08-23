@@ -6,9 +6,6 @@ import (
 	"sshc/internal/storage"
 )
 
-// MaxDiffLines は二次関数的な最長共通部分列テーブルを
-// 制限する。これを超えるファイルは Truncated を立てた
-// 全面置換として報告され、UI は最小差分を装わずに済む。
 const MaxDiffLines = 4000
 
 // DiffOp は保存プレビューの 1 行を分類する。
@@ -20,8 +17,6 @@ const (
 	DiffDelete  DiffOp = "delete"
 )
 
-// DiffLine は表示される 1 行である。OldLine と NewLine は
-// 1 始まりで、行が片側にしか無いときは 0 になる。
 type DiffLine struct {
 	Op      DiffOp `json:"op"`
 	Text    string `json:"text"`
@@ -40,8 +35,6 @@ type FileDiff struct {
 	Truncated bool       `json:"truncated,omitempty"`
 }
 
-// ConflictReport は、ディスク上のファイルがユーザーが
-// 編集した対象と異なる場合に設計 §9 が要求する三者間ビューである。
 type ConflictReport struct {
 	Path           string     `json:"path"`
 	BaseDigest     string     `json:"baseDigest,omitempty"`
@@ -50,9 +43,6 @@ type ConflictReport struct {
 	LocalChange    []DiffLine `json:"localChange"`
 }
 
-// SplitLines は表示用にファイル内容を分割する。最終行の改行と
-// CRLF ファイルの復帰文字を落とすのは diff ビューがテキストを
-// 見せるためで、ディスクへ書くバイト列は常に構文木由来である。
 func SplitLines(contents []byte) []string {
 	if len(contents) == 0 {
 		return nil
@@ -143,8 +133,6 @@ func BuildFileDiff(path string, before, after []byte) FileDiff {
 	return diff
 }
 
-// BuildConflictReport は外部での変更を説明する: 他の書き手がベースに対して
-// 行ったことと、ユーザーの保留中の編集が同じベースに対して行っていたはずのことである。
 func BuildConflictReport(path string, base, disk, edited []byte) ConflictReport {
 	return ConflictReport{
 		Path:           path,

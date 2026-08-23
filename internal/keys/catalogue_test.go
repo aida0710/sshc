@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// fakeToolchain は固定の絶対パスで答えるので、どのテストも、開発者のマシンに
+// fakeToolchain は固定の絶対パスで返すので、どのテストも、開発者のマシンに
 // たまたま入っている OpenSSH のプログラムに依存しない。
 type fakeToolchain struct {
 	err error
@@ -23,7 +23,7 @@ func (fake fakeToolchain) resolve(path string) (string, error) {
 	return path, nil
 }
 
-// **一覧に載っているものは必ず作れなければならない。** 載っているのに作れない
+// 一覧に載っているものは必ず作れなければならない。載っているのに作れない
 // 項目は、画面のボタンが必ず失敗するということである。
 func TestEveryInProcessVariantCanActuallyBeGenerated(t *testing.T) {
 	catalogue := CatalogueReader{}.Read(context.Background())
@@ -41,7 +41,7 @@ func TestEveryInProcessVariantCanActuallyBeGenerated(t *testing.T) {
 	}
 }
 
-// **インストール済みの OpenSSH には尋ねない。** ここが並べているのは
+// インストール済みの OpenSSH には尋ねない。ここが並べているのは
 // 「ここで生成できる鍵」であり、あちらが何に対応しているかは別の問いである。
 func TestTheCatalogueDoesNotDependOnTheInstalledOpenSSH(t *testing.T) {
 	without := CatalogueReader{}.Read(context.Background())
@@ -59,7 +59,7 @@ func TestTheCatalogueDoesNotDependOnTheInstalledOpenSSH(t *testing.T) {
 	}
 }
 
-// ハードウェア鍵だけは ssh-keygen が要る。無ければ出さない——押せば必ず失敗する
+// ハードウェア鍵だけは ssh-keygen が要る。無ければ出さない。押せば必ず失敗する
 // ボタンを画面に出さない。
 func TestHardwareVariantsAppearOnlyWhenKeygenIsAvailable(t *testing.T) {
 	present := CatalogueReader{Toolchain: fakeToolchain{}}.Read(context.Background())
@@ -120,9 +120,9 @@ func TestHardwareCommandProducesAnUnambiguousArgumentList(t *testing.T) {
 }
 
 // ハードウェア鍵は ssh-keygen を利用者自身が走らせるものである。Android には
-// ssh-keygen が居ない。**打てないコマンドを一覧に出さない。**
+// ssh-keygen が居ない。打てないコマンドを一覧に出さない。
 //
-// Toolchain は interface なので、道具が無いことは nil で表される。Android は
+// Toolchain は interface なので、ツールが無いことは nil で表される。Android は
 // この分岐が本番で使われる最初の場所であり、寄りかかる前にここで固定する。
 func TestCatalogueOffersNoHardwareKeyWithoutAToolchain(t *testing.T) {
 	catalogue := CatalogueReader{Toolchain: nil}.Read(context.Background())

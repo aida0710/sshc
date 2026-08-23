@@ -18,7 +18,7 @@ import (
 
 // echoServer は、届いたバイト列に印を付けて返す本物の TCP 受け口である。
 //
-// これが転送の向こう側になる。**端から端まで見る**——設定に書いたポートへ
+// これが転送の向こう側になる。端から端まで見る。設定に書いたポートへ
 // 繋いだバイト列が、SSH のチャンネルを通ってここへ届くことを確かめる。
 func echoServer(t *testing.T) string {
 	t.Helper()
@@ -116,15 +116,15 @@ func TestALocalForwardCarriesBytesToTheRemoteDestination(t *testing.T) {
 	if got := string(answer[:read]); got != "echo:through the tunnel" {
 		t.Fatalf("the far side received %q", got)
 	}
-	// 転送は一覧に出る。**開いていることが見えないまま開かない。**
+	// 転送は一覧に出る。開いていることが見えないまま開かない。
 	forwards := process.(terminal.Forwarder).Forwards()
 	if len(forwards) != 1 || forwards[0].Problem != "" || forwards[0].To != destination {
 		t.Fatalf("forwards = %#v", forwards)
 	}
 }
 
-// ポートが埋まっているのは普通の出来事である。**その転送だけが失敗し、
-// 接続は続く。**
+// ポートが埋まっているのは普通の出来事である。その転送だけが失敗し、
+// 接続は続く。
 func TestABindFailureDoesNotEndTheSession(t *testing.T) {
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -144,13 +144,13 @@ func TestABindFailureDoesNotEndTheSession(t *testing.T) {
 	if len(forwards) != 1 || forwards[0].Problem == "" {
 		t.Fatalf("forwards = %#v, want the failure recorded", forwards)
 	}
-	// **セッションは生きている。** ポートひとつのためにコンソールを失わない。
+	// セッションは実行中。ポートひとつのためにコンソールを失わない。
 	if _, err := process.Write([]byte("still here\r")); err != nil {
 		t.Fatalf("the session died with the forward: %v", err)
 	}
 }
 
-// **閉じ忘れたポートは、そのプロセスが死ぬまで埋まる。**
+// 閉じ忘れたポートは、そのプロセスが終了するまで埋まる。
 func TestClosingTheSessionReleasesTheForwardedPort(t *testing.T) {
 	port := freePort(t)
 	process, _ := forwardingSession(t, []sshclient.ForwardSpec{{
@@ -242,7 +242,7 @@ func TestADynamicForwardSpeaksSOCKS5Connect(t *testing.T) {
 	}
 }
 
-// **CONNECT だけを受ける。** 持たない機能を受け付けて黙って失敗するより断る。
+// CONNECT だけを受ける。持たない機能を受け付けて暗黙に失敗するより断る。
 func TestADynamicForwardRefusesCommandsItDoesNotHave(t *testing.T) {
 	port := freePort(t)
 	forwardingSession(t, []sshclient.ForwardSpec{{Kind: terminal.ForwardDynamic, ListenPort: port}})
@@ -273,7 +273,7 @@ func TestADynamicForwardRefusesCommandsItDoesNotHave(t *testing.T) {
 	}
 }
 
-// 転送先へ繋がらないのは、その 1 本の問題である。listener は生きている。
+// 転送先へ繋がらないのは、その 1 本の問題である。listener は実行中。
 func TestAnUnreachableDestinationLeavesTheListenerOpen(t *testing.T) {
 	port := freePort(t)
 	forwardingSession(t, []sshclient.ForwardSpec{{
@@ -335,7 +335,7 @@ func TestForwardSpecificationsAreReadTheWayOpenSSHWritesThem(t *testing.T) {
 	}
 }
 
-// **鍵そのものは渡らない。渡るのは鍵を使う権利である。** リモートが
+// 鍵そのものは渡らない。渡るのは鍵を使う権利である。リモートが
 // auth-agent@openssh.com を開くと、その要求はこのチャンネルを通ってこちらの
 // agent へ届く。
 func TestAgentForwardingLendsTheAgentToTheRemote(t *testing.T) {
@@ -389,7 +389,7 @@ func TestAgentForwardingLendsTheAgentToTheRemote(t *testing.T) {
 	}
 }
 
-// **転送できないことを理由に接続を断らない。**
+// 転送できないことを理由に接続を断らない。
 func TestAgentForwardingWithoutAnAgentStillConnects(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{

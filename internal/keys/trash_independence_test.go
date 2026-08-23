@@ -8,14 +8,14 @@ import (
 	"testing"
 )
 
-// **ゴミ箱の一覧は、鍵の一覧と同じ重さを持たない。**
+// ゴミ箱の一覧は、鍵の一覧と同じ重さを持たない。
 //
 // ここが inventory に訊くのは Kind と Fingerprint だけである（restoreBlockers を
 // 見よ）。かつては Inventory() を呼んでおり、あれは走査に加えて ssh_config を
-// 解決して参照を紐付ける——画面は鍵の一覧とこれを同時に読むので、Include を辿る
+// 解決して参照を紐付ける。画面は鍵の一覧とこれを同時に読むので、Include を辿る
 // 一番重い仕事が毎回二度走っていた。実測で 31ms が 7ms になった。
 //
-// **壊れた設定でも落ちないことでは、これを確かめられない。** Inventory() は
+// 壊れた設定でも落ちないことでは、これを確かめられない。Inventory() は
 // 解決の失敗を飲んで走査の結果だけを返すので、どちらの実装でも落ちない。
 // 確かめられるのは「呼んでいないこと」そのものである。
 func TestListingTheTrashDoesNotResolveTheConfiguration(t *testing.T) {

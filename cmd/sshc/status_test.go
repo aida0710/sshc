@@ -18,8 +18,8 @@ import (
 	"sshc/internal/platform/windowsacl/acltest"
 )
 
-// **秘密を持たない者には答えない。** 本物がそうなので、偽物もそうする
-// ——偽物が本物より寛容だと、この検査は製品が壊れていても緑のままになる。
+// 秘密を持たない者には応答しない。本物がそうなので、偽物もそうする
+// 偽物が本物より寛容だと、この検査は製品が壊れていても緑のままになる。
 func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(handoff.HeaderName) != "the secret" || r.URL.Path != httpserver.StatusPath {
@@ -50,11 +50,10 @@ func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
 // 版の異なる CLI が古い規約で API を叩くと、拒否の原因が見えず利用者だけが
 // 取り残される。読み口を一つにすることで、すべての CLI command が同じ復旧策を出す。
 //
-// **「アプリを再起動してください」とは言わない。** 食い違っているのがどちら側かを
-// このプロセスは知らず、**古いのがこちらである状況は設計が自分で作っている**——
-// 外殻は `~/.local/bin/sshc` に自分が張ったリンク以外のものを触らないので、
-// `make install` で入れた実体はアプリを入れ替えても古いまま残る。だから、いま
-// 話しているのがどの実体かを名指しする。
+// 「アプリを再起動してください」とは言わない。食い違っているのがどちら側かを
+// このプロセスは知らず、古いのがこちらである状況は設計が自分で作っている。
+// ネイティブ層は `~/.local/bin/sshc` に自分が張ったリンク以外のものを触らないので、
+// `make install` で配置したバイナリはアプリ更新後も残るため、現在の実行パスを示す。
 func TestReadHandoffExplainsHowToRecoverFromAProtocolMismatch(t *testing.T) {
 	document := testHandoff("http://127.0.0.1:52865")
 	document.ProtocolVersion++
@@ -99,7 +98,7 @@ func testHandoff(target string) handoff.Handoff {
 	}
 }
 
-// **手順の中から読まれる口でもある。** エンジンに繋がらないとき、stdout に
+// 手順の中から読まれる口でもある。エンジンに繋がらないとき、stdout に
 // 半端な表を残さず、非 0 の終了コードで応える必要がある。
 func TestRunStatusFailsWhenTheEngineIsNotThere(t *testing.T) {
 	var out, errOut strings.Builder
@@ -113,11 +112,9 @@ func TestRunStatusFailsWhenTheEngineIsNotThere(t *testing.T) {
 	}
 }
 
-// **入れた直後の機械では、handoff がまだ無い。**
+// 入れた直後の機械では、handoff がまだ無い。
 //
-// そのまま返すと利用者が読むのは `open /home/a/.ssh/sshc/cli: no such file or
-// directory` である。入れて最初に打つのが `sshc status` なので、そこが道の綴りを
-// 返すのは、案内として一番効く場所を捨てている。
+// ファイル操作エラーをそのまま返さず、engine の起動方法を案内する。
 func TestAskingAMachineThatHasNeverRunAnEngineGetsAnAnswerItCanAct(t *testing.T) {
 	_, err := readHandoff(t.TempDir())
 	if err == nil {
@@ -132,17 +129,17 @@ func TestAskingAMachineThatHasNeverRunAnEngineGetsAnAnswerItCanAct(t *testing.T)
 	if strings.Contains(message, "no such file") {
 		t.Errorf("%q spells a path instead of saying what happened", message)
 	}
-	// **判定は壊さない。** 文言のために sentinel を失うと、これを
-	// errors.Is で見ている呼び出し側が黙って別の枝へ行く。
+	// 判定は壊さない。文言のために sentinel を失うと、これを
+	// errors.Is で見ている呼び出し側が暗黙に別の枝へ行く。
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Error("the friendly message dropped fs.ErrNotExist")
 	}
 }
 
-// **既定は人が読む形である。** かつてここは JSON だけを出しており、それは
-// メニューバーが読むためだった——その読み手はもう居ない。
+// 既定はユーザーが読む形である。かつてここは JSON だけを出しており、それは
+// メニューバーが読むためだった。その読み手はもう居ない。
 //
-// **JSON は旗の下に残す。** 手順の中から読んでいる道を、黙って塞がない。
+// JSON は旗の下に残す。手順の中から読んでいる道を、暗黙に塞がない。
 func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(handoff.HeaderName) != "the secret" {
@@ -171,7 +168,7 @@ func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
 			t.Errorf("the table does not mention %q:\n%s", want, printed)
 		}
 	}
-	// **JSON をそのまま人に見せない。** 中括弧が出ていたら、表になっていない。
+	// JSON をそのままユーザーに見せない。中括弧が出ていたら、表になっていない。
 	if strings.Contains(printed, "{") {
 		t.Errorf("the default output is still JSON:\n%s", printed)
 	}

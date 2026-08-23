@@ -1,18 +1,5 @@
 import type { ReactNode } from "react";
 
-// ストロークアイコンの 1 枚のスプライトを一度だけ定義し、`<use>` で参照する。
-//
-// アイコンフォントやスプライトファイルではなくインラインにしているのは、
-// UI が埋め込みファイルシステムから配信され、何も fetch してはならず、
-// フォントは読み込まれるまでの間、四角として描画されてしまうからだ。
-//
-// 形状はマークアップ文字列ではなく JSX だ。文字列にすると
-// dangerouslySetInnerHTML を通じて DOM に届けることになり、この
-// リポジトリは、誰かが読むたびにその呼び出しの隣の文字列がいまだに
-// 定数のままだと証明せずに済むべきだ。
-//
-// アイコンは accessibility tree から隠す。accessible name は、隣の語または
-// アイコンだけを包むボタンの aria-label が提供する。
 export const iconNames = [
   "home",
   "connections",

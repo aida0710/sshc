@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  127.0.0.1 にだけ cleartext を許す。usesCleartextTraffic="true" は使わない
-  ——それは全ホストを開く。engine が居るのは loopback だけである。
+  loopback の engine だけに cleartext 通信を許可する。
 -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">

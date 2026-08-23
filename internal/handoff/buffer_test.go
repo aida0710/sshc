@@ -157,8 +157,8 @@ func TestMintClearsRawRandomBytesOnSuccessAndFailure(t *testing.T) {
 				t.Fatalf("mint = %v", err)
 			}
 			if test.fail {
-				// The encoder is not called on a random-source failure; use the
-				// reader seam below to retain the allocated destination instead.
+				// 乱数源が失敗すると encoder は呼ばれないため、下の reader 差し替えで確保済みの
+				// 出力先を保持する。
 				return
 			}
 			for index, value := range rawAlias {

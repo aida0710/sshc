@@ -358,10 +358,10 @@ func assertExactlyRestricted(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 所有者は、この token の所有者か、その利用者本人のどちらかであればよい。
+	// 所有者は、この token の所有者か、そのユーザー本人のどちらかであればよい。
 	// 昇格した token が作ったものには Windows が Administrators を刻むので、
-	// 利用者本人だけを要求すると、管理者として動く環境では自分で作ったものが
-	// すべて他人のものになる。production の契約は ownedByThisToken にある。
+	// ユーザー本人だけを要求すると、管理者として動く環境では自分で作ったものが
+	// すべて別のユーザーのものになる。production の契約は ownedByThisToken にある。
 	if !owner.Equals(testCurrentUserSID(t)) && !owner.Equals(testTokenOwnerSID(t)) {
 		t.Fatalf("%q owner %s is neither this token's user nor its owner", path, owner)
 	}

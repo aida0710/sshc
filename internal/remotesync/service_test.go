@@ -182,15 +182,15 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 	}
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
 
-	// ファイルソースは Include グラフが答えるものであり、本物のそれは、グラフが到達
-	// するワークスペース内のすべてのファイルを — 種類を問わず — 答える。以前はここで
+	// ファイルソースは Include グラフが返すものであり、本物のそれは、グラフが到達
+	// するワークスペース内のすべてのファイルを、種類を問わず、返す。以前はここで
 	// sshc/ を落としていたので、除外のテストは、それらのファイルへ到達する唯一の
-	// 経路、すなわちそれを名指しする Include 行を、見ることが
+	// 経路、すなわちそれを指定する Include 行を、見ることが
 	// できなかった。
-	// **いま在るものを答える。** 与えられた map を返していたころは、pull が
-	// 置いたファイルをこのソースが知らないままだった——巡回はそれを「こちらには
+	// いま在るものを返す。与えられた map を返していたころは、pull が
+	// 置いたファイルをこのソースが知らないままだった。巡回はそれを「こちらには
 	// 無いもの」と数え、受け取った直後に空のスナップショットを押し返していた。
-	// 本物のソースは Include グラフであり、あちらも到達したものをその都度答える。
+	// 本物のソースは Include グラフであり、あちらも到達したものをその都度返す。
 	source := func() ([]string, error) {
 		var paths []string
 		err := filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
@@ -205,8 +205,8 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 				return err
 			}
 			relative = filepath.ToSlash(relative)
-			// **Include グラフが到達しないものは、ここでも返さない。** 鍵も
-			// 背景も、名指しする Include 行を持たない——それぞれ Collect が
+			// Include グラフが到達しないものは、ここでも返さない。鍵も
+			// 背景も、指定する Include 行を持たない。それぞれ Collect が
 			// 自分で歩いて集める。ここで返してしまうと、その巡回が消えても
 			// テストは緑のままになる。実際に一度そうなった。
 			if strings.HasPrefix(relative, "keys/") || strings.HasPrefix(relative, "sshc/backgrounds/") {
@@ -316,7 +316,7 @@ func TestTheObjectInTheBucketIsCiphertext(t *testing.T) {
 }
 
 func TestAPushCannotOverwriteAnotherMachine(t *testing.T) {
-	// compare-and-swap。これがなければ「自動」は「最後に保存したマシンが黙って勝つ」
+	// compare-and-swap。これがなければ「自動」は「最後に保存したマシンが暗黙に勝つ」
 	// という意味になってしまう。
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{"config": "first\n"})
@@ -658,14 +658,14 @@ func TestBothIsTheDefaultAndTheEmptyStringMeansIt(t *testing.T) {
 
 // vault は移動する。バケットへの鍵は移動しない。
 //
-// 封をされた設定は、まさにこのバケットのアクセスキーを保持している。したがって、
+// 暗号化された設定は、まさにこのバケットのアクセスキーを保持している。したがって、
 // それを運ぶスナップショットは、スナップショットをひとつ入手した者が以後のすべてを
-// 取得できることを意味する。これらは構造上除外されている — Collect は自分が取るものを
-// 列挙する — し、その一覧にワイルドカードが生えたら気づくのがこのテストである。
+// 取得できることを意味する。これらは構造上除外されている、Collect は自分が取るものを
+// 列挙する、し、その一覧にワイルドカードが生えたら気づくのがこのテストである。
 func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{
-		// エントリファイル自身が、封をされた設定を名指ししている。これが、除外が
-		// 生き延びなければならない形である。ファイルソースは Include グラフであり、
+		// エントリファイル自身が、暗号化された設定を指定している。これが、除外が
+		// この場合も除外されなければならない。ファイルソースは Include グラフであり、
 		// グラフは設定が指すものを取ってくるからだ。
 		"config":             "Include sshc/sync-settings\nHost bastion\n",
 		"sshc/secrets":       "sealed vault bytes",
@@ -681,16 +681,16 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	for _, entry := range manifest.Files {
 		packed[entry.Path] = true
 	}
-	// 両替所が繋がっていない設置では、保管庫はファイルのまま旅をする。それは
+	// vault 変換関数が繋がっていない設置では、保管庫はファイルのまま同期される。それは
 	// 版 1 の形であり、マスターパスワードが端末をまたいで共有されていた頃の形で
 	// ある。
 	if !packed["sshc/secrets"] {
 		t.Errorf("the vault does not travel: %v", packed)
 	}
 
-	// **繋がっているなら、ファイルは決して載らない。** ここで見ているのは、
-	// エントリファイルがそれを Include で名指ししている場合である——ファイル
-	// ソースはグラフなので、名指しされたものは入ってくる。
+	// 繋がっているなら、ファイルは決して載らない。ここで見ているのは、
+	// エントリファイルがそれを Include で指定している場合である。ファイル
+	// ソースはグラフなので、指定されたものは入ってくる。
 	installation.service.OpenVault = func() ([]byte, error) { return []byte(`{"schemaVersion":2}`), nil }
 	exchanged, contents, err := installation.service.Collect()
 	if err != nil {
@@ -725,7 +725,7 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 // 試されたことのない設定は、設定済みに見えて何時間もあとの最初の push で失敗する
 // 設定であり、そのときユーザーは、タイプミスをした画面からとうに離れている。まだ
 // スナップショットの入っていないバケットは機能しているバケットだ。404 は、正しくて
-// 空の設定が返す答えである。
+// 空の設定が返す結果である。
 func TestCheckAcceptsAnEmptyBucketAndRefusesABadKey(t *testing.T) {
 	bucket := &fakeBucket{}
 	installation := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
@@ -904,10 +904,7 @@ func TestApplyKeepsTheObjectKeyUsedByPull(t *testing.T) {
 	}
 }
 
-// push のたびに、ライブのオブジェクトの隣へ日付付きのコピーが残る。ライブの方は
-// 固定のキーを保つ。条件付き書き込みには条件をかける対象のオブジェクトがひとつ
-// 必要であり、固定名の代わりに日付名にすれば、あるマシンが別のマシンの作業を黙って
-// 踏み潰すのを止めている唯一のものが失われるからだ。
+// push ごとに日付付きコピーを残し、条件付き書き込み用の最新オブジェクトは固定キーに保つ。
 func TestEveryPushLeavesADatedCopyBesideTheLiveObject(t *testing.T) {
 	bucket := &fakeBucket{}
 	installation := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
@@ -934,7 +931,7 @@ func TestEveryPushLeavesADatedCopyBesideTheLiveObject(t *testing.T) {
 	if !strings.HasSuffix(dated, ".tar.gz.enc") || !strings.Contains(dated, "2026-08-05") {
 		t.Errorf("the dated copy is %q", dated)
 	}
-	// 同じバイト列なので、コピーのコストはアップロード 1 回で、二度目の封じ込めは不要。
+	// 同じバイト列なので、コピーのコストはアップロード 1 回で、二度目の暗号化込めは不要。
 	if !bytes.Equal(bucket.object(live), bucket.object(dated)) {
 		t.Error("the dated copy is not the snapshot that was pushed")
 	}
@@ -945,8 +942,8 @@ func TestEveryPushLeavesADatedCopyBesideTheLiveObject(t *testing.T) {
 //
 // state は、このマシンが最後に見たスナップショットの ETag を記録する。それがどの
 // オブジェクトのものかは記録していなかったので、キーが変わったあとの次の push は、
-// 存在しないオブジェクトの世代に対して If-Match を送り —「別のマシンが push した、
-// まず pull せよ」として拒否され — そこでの pull は、pull すべきものを何も見つけ
+// 存在しないオブジェクトの世代に対して If-Match を送り、「別のマシンが push した、
+// まず pull せよ」として拒否され、そこでの pull は、pull すべきものを何も見つけ
 // られなかった。そこから抜け出す方法は、state ファイルを手で削除する以外になかった。
 func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 	bucket := &fakeBucket{}
@@ -955,7 +952,7 @@ func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 		t.Fatalf("the first push = %v", err)
 	}
 
-	// 設定がパスを名指しするようになったので、ライブのオブジェクトは別の場所にある。
+	// 設定がパスを指定するようになったので、ライブのオブジェクトは別の場所にある。
 	config := installation.config
 	config.Path = "laptops"
 	installation.service.Configure(config, installation.creds, installation.client)
@@ -968,7 +965,7 @@ func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 	}
 }
 
-// **移行の全体がこの 1 本である。** 古い鍵で封じられたものを、新しい鍵で開ける
+// 移行の全体がこの 1 本である。古い鍵で暗号化されたものを、新しい鍵で開ける
 // ようにする。中身は 1 バイトも変わらない。
 func TestRekeyReplacesTheSealAndNotTheContents(t *testing.T) {
 	bucket := &fakeBucket{}
@@ -1008,7 +1005,7 @@ func TestRekeyReplacesTheSealAndNotTheContents(t *testing.T) {
 	}
 }
 
-// 古い鍵を間違えたなら、リモートは元のままでなければならない。封じ直しに
+// 古い鍵を間違えたなら、リモートは元のままでなければならない。再暗号化に
 // 「途中まで」があってはならない。
 func TestRekeyLeavesTheRemoteAloneWhenTheOldKeyIsWrong(t *testing.T) {
 	bucket := &fakeBucket{}
@@ -1026,9 +1023,9 @@ func TestRekeyLeavesTheRemoteAloneWhenTheOldKeyIsWrong(t *testing.T) {
 	}
 }
 
-// **封じ直しは、決して無条件には書かない。** 条件付き書き込みを一切受けない
+// 再暗号化は、決して無条件には書かない。条件付き書き込みを一切受けない
 // バケットを相手にしたとき、通ってしまうなら、それは条件を付けていない証拠で
-// ある——そしてそのとき封じ直しは、他人の作業を消せる操作になっている。
+// ある。そしてそのとき再暗号化は、別のユーザーの作業を消せる操作になっている。
 func TestRekeyNeverFallsBackToAnUnconditionalWrite(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
@@ -1046,7 +1043,7 @@ func TestRekeyNeverFallsBackToAnUnconditionalWrite(t *testing.T) {
 	}
 }
 
-// スナップショットがまだ無いバケットには、封じ直すものが無い。
+// スナップショットがまだ無いバケットには、暗号化し直すものが無い。
 func TestRekeyOnAnEmptyBucketSaysThereIsNoSnapshot(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
@@ -1055,7 +1052,7 @@ func TestRekeyOnAnEmptyBucketSaysThereIsNoSnapshot(t *testing.T) {
 	}
 }
 
-// withVault は、この設置に本物の保管庫を与え、同期へ両替所を繋ぐ。
+// withVault は、この設置に本物の保管庫を与え、同期へvault 変換関数を繋ぐ。
 func withVault(t *testing.T, machine installation, master string) *secret.Service {
 	t.Helper()
 	secrets := secret.NewService(machine.workspace, machine.manager, time.Now)
@@ -1068,8 +1065,8 @@ func withVault(t *testing.T, machine installation, master string) *secret.Servic
 	return secrets
 }
 
-// **これがこの設計そのものである。** 保存したパスワードは端末をまたいで運ばれ、
-// マスターパスワードは端末ごとに別のままである。運ぶのは中身であって封ではない、
+// これがこの設計そのものである。保存したパスワードは端末をまたいで運ばれ、
+// マスターパスワードは端末ごとに別のままである。同期するのは復号済み文書であり、
 // というのはそういう意味である。
 func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	bucket := &fakeBucket{}
@@ -1082,7 +1079,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 		t.Fatalf("Push = %v", err)
 	}
 
-	// 送り出したものの中に、封じられた保管庫は入っていない。
+	// 送り出したものの中に、暗号化された保管庫は入っていない。
 	sealed := bucket.object(remotesync.ObjectName)
 	archive, _, err := envelope.OpenWithin(sealed, syncPassphrase, envelope.AcceptedFromRemote)
 	if err != nil {
@@ -1113,7 +1110,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 		t.Fatalf("Apply = %v", err)
 	}
 
-	// 運ばれてきた。そして読み直されている——次の解錠まで待たされない。
+	// 運ばれてきた。そして読み直されている。次のロック解除まで待たされない。
 	if got := receiver.PasswordFor("bastion"); got != "the password for bastion" {
 		t.Fatalf("the password did not travel: %q", got)
 	}
@@ -1128,7 +1125,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 }
 
 // 何も保存していない保管庫は、運ぶものを持たない。運べば、2 台目の最初の pull は
-// 必ず衝突する——空であることは編集ではない。
+// 必ず衝突する。空であることは編集ではない。
 func TestAnEmptyVaultDoesNotTravel(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
@@ -1153,11 +1150,11 @@ func TestAnEmptyVaultDoesNotTravel(t *testing.T) {
 	}
 }
 
-// 背景の画像も旅に出る。
+// 背景の画像も同期される。
 //
-// **metadata が運ぶのは綴りだけである。** 画像を置いていかれた端末は、
+// metadata が運ぶのは表記だけである。画像を置いていかれた端末は、
 // 「選ばれているのに何も出ない」状態になる。そして Android はサンドボックスの
-// 外を見られないので、**あの端末へ画像を持ち込む道はこれしかない。**
+// 外を見られないので、あの端末へ画像を持ち込む道はこれしかない。
 func TestASnapshotCarriesTheBackgroundImagesTheMetadataNames(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{
 		"config": "Host bastion\n",

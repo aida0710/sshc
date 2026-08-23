@@ -22,10 +22,10 @@ func TestWindowsPasswordReaderCancellationWakesWaitAndRestoresExactMode(t *testi
 		password, err := readWindowsPassword(ctx, windows.Handle(41), fake.operations())
 		result <- windowsPasswordTestResult{password: password, err: err}
 	}()
-	// **待ちへ入ってから取り消す。** ここで確かめたいのは「待っている reader を
-	// 取り消しが起こす」ことである。mode が変わった時点で取り消すと、reader は
-	// まだ待ちに入っておらず、ループの頭の ctx 検査で降りる——それも正しい
-	// 振る舞いだが、起こされたことにはならないので、合図は一度も要らない。
+	// 待ちへ入ってから取り消す。ここで確かめたいのは「待っている reader を
+	// 取り消しが起動する」ことである。mode が変わった時点で取り消すと、reader は
+	// まだ待ちに入っておらず、ループの頭の ctx 検査で降りる。それも正しい
+	// 振る舞いだが、起動されたことにはならないので、合図は一度も要らない。
 	// 速い機械では reader が先に待ちへ入るので通り、混んだ CI で落ちていた。
 	<-fake.waiting
 	cancel()
@@ -207,8 +207,8 @@ type fakeWindowsPasswordOperations struct {
 	modeChangedOnce sync.Once
 	cancelEvent     chan struct{}
 	cancelEventOnce sync.Once
-	// waiting は、reader が実際に待ちへ入ったことを表す。**mode が変わったこと
-	// では代わりにならない** —— あれは待ちに入るより前に起きるので、そこで
+	// waiting は、reader が実際に待ちへ入ったことを表す。mode が変わったこと
+	// では代わりにならない。あれは待ちに入るより前に起きるので、そこで
 	// 取り消すと reader は待たずにループの頭の ctx 検査で降りる。
 	waiting          chan struct{}
 	waitingOnce      sync.Once

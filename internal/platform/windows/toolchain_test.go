@@ -16,7 +16,7 @@ var _ platform.Toolchain = windows.Toolchain{}
 
 // openSSHDirectory は、Windows に同梱される OpenSSH の在り処を作る。
 //
-// 綴りは filepath.Join に任せる。この検査はどの OS でも走るので、区切り文字を
+// 表記は filepath.Join に任せる。この検査はどの OS でも走るので、区切り文字を
 // テストが決めると、macOS 上の期待値だけが Windows の実装と食い違う。
 func openSSHDirectory(t *testing.T, windowsDirectory string) string {
 	t.Helper()
@@ -36,11 +36,11 @@ func writeProgram(t *testing.T, directory, name string) string {
 	return path
 }
 
-// **PATH に置かれた ssh-keygen.exe は決して勝たない。**
+// PATH に置かれた ssh-keygen.exe は決して勝たない。
 //
 // Windows の PATH には利用者が書き込めるディレクトリが並ぶ。そこの一本が鍵の
 // 生成を引き受ければ、生成された鍵はもう利用者のものではない。Toolchain が見る
-// のは同梱された OpenSSH の絶対パスだけであり、無ければ「無い」と答える。
+// のは同梱された OpenSSH の絶対パスだけであり、無ければ「無い」と返す。
 func TestTheToolchainNeverTakesAKeygenFromThePath(t *testing.T) {
 	windowsDirectory := t.TempDir()
 	openSSHDirectory(t, windowsDirectory)
@@ -82,8 +82,8 @@ func TestTheToolchainRefusesADirectoryNamedLikeTheProgram(t *testing.T) {
 	}
 }
 
-// **`.exe` が付いていないものは Windows のプログラムではない。** Unix 側の
-// 綴りをそのまま探すと、同梱の OpenSSH が無いマシンで、たまたま同じ名前の
+// `.exe` が付いていないものは Windows のプログラムではない。Unix 側の
+// 表記をそのまま探すと、同梱の OpenSSH が無いマシンで、たまたま同じ名前の
 // ファイルが選ばれうる。
 func TestTheToolchainDoesNotSettleForTheUnixSpelling(t *testing.T) {
 	windowsDirectory := t.TempDir()

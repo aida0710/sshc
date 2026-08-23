@@ -6,8 +6,7 @@ import (
 	"testing"
 )
 
-// 起こしたものは必ず止める。t.Cleanup に置くのは、表明が失敗した経路でも
-// engine lock が解けるようにするためである。
+// started はテスト終了時に engine lock が必ず解放されるよう Cleanup を登録する。
 func started(t *testing.T) string {
 	t.Helper()
 	url, err := Start(t.TempDir(), t.TempDir())
@@ -18,8 +17,7 @@ func started(t *testing.T) string {
 	return url
 }
 
-// Start が返るのは、listener が bind され、入口が発行された後である。
-// **早く返してはならない** — 呼び出し側はその URL を即座に WebView へ渡す。
+// Start が返した時点で、WebView から入口へ接続できることを検証する。
 func TestStartReturnsAnEntranceThatIsAlreadyServing(t *testing.T) {
 	url := started(t)
 	if !strings.HasPrefix(url, "http://127.0.0.1:") {
@@ -30,9 +28,7 @@ func TestStartReturnsAnEntranceThatIsAlreadyServing(t *testing.T) {
 	}
 }
 
-// **1 プロセスに engine は 1 台である。** Activity が作り直されるたびに
-// もう 1 台起きれば、2 台目が engine lock で落ちるまでの間、同じ状態
-// ディレクトリを 2 つのプロセスが握る。
+// 同一プロセスで2台目の engine を開始できないことを検証する。
 func TestStartRefusesASecondEngine(t *testing.T) {
 	started(t)
 	if _, err := Start(t.TempDir(), t.TempDir()); !errors.Is(err, ErrAlreadyStarted) {
@@ -40,8 +36,7 @@ func TestStartRefusesASecondEngine(t *testing.T) {
 	}
 }
 
-// 止めた後は、また起こせる。foreground service が落とされて作り直される経路が
-// これであり、ここが片道なら 2 度目の起動がアプリの再インストールを要求する。
+// Stop 後に同じプロセスで engine を再開できることを検証する。
 func TestStopLetsTheNextStartSucceed(t *testing.T) {
 	home, cache := t.TempDir(), t.TempDir()
 	if _, err := Start(home, cache); err != nil {
@@ -66,11 +61,7 @@ func TestStopWithoutStartIsAnError(t *testing.T) {
 	}
 }
 
-// **Go の error を Java へ渡して番号に畳ませない。** gomobile は Go の error
-// を Java の Exception へ写すときメッセージ文字列しか運ばないので、戻ってきた
-// 値に errors.Is は効かない。理由は Go 側で確定させ、Java は番号だけを取りに
-// 来る。engine の error は入口の URL を含み得るので、文面を渡さないことには
-// それ自体の意味もある。
+// gomobile 境界で error の型情報が失われても、失敗理由の番号が維持されることを検証する。
 func TestTheFailureKindSurvivesWhereTheErrorWouldNot(t *testing.T) {
 	started(t)
 	if _, err := Start(t.TempDir(), t.TempDir()); err == nil {
@@ -81,8 +72,7 @@ func TestTheFailureKindSurvivesWhereTheErrorWouldNot(t *testing.T) {
 	}
 }
 
-// 成功したら理由は残らない。前回の失敗が残っていると、Java は起動した後で
-// エラー画面を出す。
+// Start 成功時に以前の失敗理由が消去されることを検証する。
 func TestASuccessfulStartClearsTheLastFailure(t *testing.T) {
 	started(t)
 	if got := LastStartFailureKind(); got != KindNone {

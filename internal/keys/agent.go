@@ -16,17 +16,17 @@ import (
 
 // defaultAgentTimeout は、agent との往復ひとつに掛ける上限である。
 //
-// ソケットの向こうは同じマシンの別プロセスであり、答えないなら壊れている。
+// ソケットの向こうは同じマシンの別プロセスであり、応答しないなら壊れている。
 const defaultAgentTimeout = 10 * time.Second
 
-// Agent は、ユーザーの ssh-agent とプロトコルで直接話す。
+// Agent は、ユーザーの ssh-agent とプロトコルで直接通信する。
 //
-// **ssh-add は起こさない。** あれを通していたのは、agent のプロトコルを自分で
-// 話す手段が無かったからである。接続の公開鍵認証が既に同じソケットから鍵を
-// 読んでいるので、**同じソケットに二つの話し方を持たない。**
+// ssh-add は起動しない。以前は agent プロトコルを直接実装していなかったため
+// ssh-add を使用していた。接続の公開鍵認証が既に同じソケットから鍵を
+// 読んでいるので、同じソケットに二つの通信方式を持たない。
 //
 // パスフレーズは、このプロセスの中で鍵を復号してから登録する。子プロセスの
-// 標準入力を通らない——**外に出る秘密が一つ減る。**
+// 標準入力を通らないため、子プロセスへ秘密を渡さずに済む。
 type Agent struct {
 	// Socket は SSH_AUTH_SOCK を読む。テストが差し替えるためにある。
 	Socket func() string
@@ -35,9 +35,9 @@ type Agent struct {
 	Timeout time.Duration
 }
 
-// NewAgent は、この環境の ssh-agent に話しかけるアダプタを返す。
+// NewAgent は、この環境の ssh-agent に接続するアダプタを返す。
 //
-// **どこへ繋ぐかは OS ごとに違う。** Unix は SSH_AUTH_SOCK の指す unix ソケット
+// どこへ繋ぐかは OS ごとに違う。Unix は SSH_AUTH_SOCK の指す unix ソケット
 // で、Windows は固定の named pipe である。その差は agent_unix.go と
 // agent_windows.go が持ち、ここから先のプロトコルは同じひとつである。
 func NewAgent(lookup func(string) (string, bool)) platform.KeyAgent {
@@ -46,8 +46,8 @@ func NewAgent(lookup func(string) (string, bool)) platform.KeyAgent {
 
 // Available は、このプロセスが agent に到達できるかを報告する。
 //
-// **開けるかどうかで答える。** 変数があることは、その先に誰かがいることを
-// 意味しない——死んだ端末が残した SSH_AUTH_SOCK は、いつまでも残る。
+// 開けるかどうかで返す。変数があることは、その先に誰かがいることを
+// 意味しない。死んだ端末が残した SSH_AUTH_SOCK は、いつまでも残る。
 func (a Agent) Available(ctx context.Context) bool {
 	conn, err := a.open(ctx)
 	if err != nil {
@@ -87,7 +87,7 @@ func (a Agent) List(ctx context.Context) ([]platform.AgentIdentity, error) {
 // Add は秘密鍵を 1 つ読み込ませる。
 //
 // 鍵の復号はここで行う。agent が受け取るのは復号済みの鍵であり、パスフレーズ
-// そのものは agent へ渡らない——それが渡るのは ssh-add に読ませていたときの
+// そのものは agent へ渡らない。それが渡るのは ssh-add に読ませていたときの
 // 都合であって、プロトコルの要求ではない。
 func (a Agent) Add(ctx context.Context, request platform.AgentAddRequest) error {
 	contents, err := os.ReadFile(request.PrivateKeyPath)
@@ -156,7 +156,7 @@ func (a Agent) open(ctx context.Context) (net.Conn, error) {
 
 	dial := a.Dial
 	if dial == nil {
-		// **既定を持たない。** ここで unix ソケットへ落とすと、Windows で
+		// 既定を持たない。ここで unix ソケットへ落とすと、Windows で
 		// Dial を配線し忘れた日に「unix ソケットが開けない」という、その OS に
 		// 存在しない理由が返る。宛先を知っているのは組み立てた側だけである。
 		return nil, platform.ErrAgentUnavailable

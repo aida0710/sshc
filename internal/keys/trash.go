@@ -248,7 +248,7 @@ func (service *Service) ListTrash() ([]TrashEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	// **走査だけでよい。** ここが inventory に訊くのは Kind と Fingerprint だけで
+	// 走査だけでよい。ここが inventory に訊くのは Kind と Fingerprint だけで
 	// （restoreBlockers を見よ）、Inventory() が続けて行う ssh_config の解決と参照の
 	// 紐付けは一度も読まれない。Include を辿る解決はこの package で一番重い仕事である。
 	//

@@ -24,17 +24,17 @@ type Dialer struct {
 	HostKeys HostKeys
 	// Dial は TCP を開く。nil なら net.Dialer。テストと、将来の別の輸送のためにある。
 	Dial func(ctx context.Context, network, address string) (net.Conn, error)
-	// Verbosity は、接続の途中経過をどこまで端末へ書くかを、**接続のたびに**
-	// 答える。nil なら無言である。
+	// Verbosity は、接続の途中経過をどこまで端末へ書くかを、接続のたびに
+	// 返す。nil なら無言である。
 	//
-	// **一度だけ読まない。** 設定は走っているあいだに変えられる——捕まえて
-	// しまうと、変えた人は engine を起こし直すまで何も変わらないと感じる。
+	// 一度だけ読まない。設定は走っているあいだに変えられる。捕まえて
+	// しまうと、変えたユーザーは engine を起動し直すまで何も変わらないと感じる。
 	Verbosity func() Verbosity
 }
 
 // Open は、この alias のセッションをひとつ返す。
 //
-// **握手を待たずに返る。** 接続の途中で人に尋ねることがあり、その問いは
+// 握手を待たずに返る。接続の途中でユーザーに尋ねることがあり、その問いは
 // この Process の出力を通って端末へ出るからである。握手を終えてから返すと、
 // 誰も繋がっていない出力へ問いを書くことになる。
 //
@@ -73,8 +73,8 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 
 	size := session.attach(remote, closers)
 
-	// 転送はチャンネルを開いたあと、シェルを起こす前に開く。**開いていることを
-	// 端末の一行目に書く**ためであり、失敗しても接続は続ける。
+	// 転送はチャンネルを開いたあと、シェルを起動する前に開く。開いていることを
+	// 端末の一行目に書くためであり、失敗しても接続は続ける。
 	session.forwarded.open(client, target.Forwards, session.writer)
 	if target.AgentForward {
 		session.forwarded.note(forwardAgent(client, remote, d.Auth.AgentSocket, session.writer))
@@ -90,7 +90,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 	session.run(remote, keepAliveLoop(client, target.KeepAlive, target.KeepAliveMax, session.done))
 }
 
-// start は、チャンネルの上で端末を要求し、シェルかコマンドを起こす。
+// start は、チャンネルの上で端末を要求し、シェルかコマンドを起動する。
 func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, session *Session) error {
 	remote.Stdin = session.input
 	remote.Stdout = session.writer
@@ -118,7 +118,7 @@ func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, se
 
 // chain は、ProxyJump を手前から順に繋ぎ、最後の接続を返す。
 //
-// **プログラムは一つも起こさない。** 各ホップの SSH チャンネルの上に、次の
+// プログラムは一つも起動しない。各ホップの SSH チャンネルの上に、次の
 // ホップへの TCP を載せるだけである。ProxyCommand との違いはそこにある。
 func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace *tracer) (*ssh.Client, []io.Closer, error) {
 	var closers []io.Closer
@@ -180,7 +180,7 @@ func (d Dialer) connectOne(
 		User:            target.User,
 		Auth:            d.Auth.Methods(target, prompt),
 		HostKeyCallback: d.HostKeys.Callback(target, prompt),
-		// **すでに持っている鍵の種類を先に名乗る。** 既定の順序に任せると、
+		// すでに持っている鍵の種類を先に名乗る。既定の順序に任せると、
 		// 三種類の鍵を持つホストが known_hosts にある 1 行とは違う種類を出し、
 		// 正しい鍵が「一致しない鍵」として現れる。
 		HostKeyAlgorithms: d.HostKeys.Algorithms(target),
@@ -209,11 +209,11 @@ func (d Dialer) connectOne(
 
 // open は、この接続先までの輸送をひとつ用意する。
 //
-// **輸送を選ぶのはここだけである。** 手前のホップの上か、ProxyCommand の
+// 輸送を選ぶのはここだけである。手前のホップの上か、ProxyCommand の
 // 標準入出力か、素の TCP か。
 func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, trace *tracer) (net.Conn, error) {
 	if target.ProxyCommand != "" {
-		// **そのプログラムはこの機械で走る。** 手前のホップの中ではない。
+		// そのプログラムはこの機械で走る。手前のホップの中ではない。
 		// 踏み台の向こうのホップに書かれていたら、走らせても設定が言っている
 		// 場所には届かない。
 		if through != nil {
@@ -233,7 +233,7 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 
 // withComplaints は、プログラムが標準エラーへ書いたものを理由に足す。
 //
-// **繋がらなかった理由は、たいていそこにしかない。** `ssh -W` は
+// 繋がらなかった理由は、たいていそこにしかない。`ssh -W` は
 // "Connection refused" を stderr へ書き、こちらから見えるのは「握手が
 // 通らなかった」だけになる。
 func withComplaints(err error, conn net.Conn) error {

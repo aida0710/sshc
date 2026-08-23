@@ -10,7 +10,7 @@ import (
 // 解決を諦める理由。
 //
 // Complexity とは別のものである。あちらは「説明はできるが単純ではない」という
-// 印で、値は出る。こちらは**値を出さない**理由である。
+// 印で、値は出る。こちらは値を出さない理由である。
 const (
 	RefusalMatchExec    = "match_exec"
 	RefusalMatchUnknown = "match_unsupported"
@@ -19,7 +19,7 @@ const (
 	RefusalUnknownToken = "unknown_token"
 )
 
-// Refusal は、この設定について答えを出さない理由ひとつ。
+// Refusal は、この設定について結果を出さない理由ひとつ。
 type Refusal struct {
 	Code   string
 	Path   string
@@ -29,9 +29,7 @@ type Refusal struct {
 
 // Accepted は、解決が採用したディレクティブひとつと、それが書かれている場所。
 //
-// 値と出所を同じ走査から出すのは、別々に歩くとまた「同じ問いに答えるものが 2 つ」
-// になるからである。画面が出所を示せるのは、決定そのものがここから来ているときだけ
-// 意味を持つ。
+// 値と出所を同じ走査から生成し、両者の不一致を防ぐ。
 type Accepted struct {
 	Keyword   string
 	Values    []string
@@ -40,20 +38,20 @@ type Accepted struct {
 	Condition string
 }
 
-// Resolution は、ひとつの alias についての答えである。
+// Resolution は、ひとつの alias についての結果である。
 //
-// Refusals が空でないとき、Values と Accepted は空である。部分的な答えを黙って
-// 返さない——接続に使う値がひとつでも確定しないなら、その alias は解決できていない。
+// Refusals が空でないとき、Values と Accepted は空である。部分的な結果を暗黙に
+// 返さない。接続に使う値がひとつでも確定しないなら、その alias は解決できていない。
 type Resolution struct {
 	Values   Values
 	Accepted []Accepted
 	Refusals []Refusal
-	// Notes は、答えは確定しているが読み手が知っておくべきこと。
+	// Notes は、結果は確定しているが読み手が知っておくべきこと。
 	//
 	// 権威になる前は、これらは「だから ssh -G に委ねる」という意味の
-	// complexity だった。いまは答えが出るので意味が変わる——同じ alias を
+	// complexity だった。いまは結果が出るので意味が変わる。同じ alias を
 	// 二つのブロックが主張していても、勝つのはどちらかが決まっている。
-	// それでも書いた本人には見えていないので、印は残す。
+	// それでも書いたユーザー本人には見えていないので、印は残す。
 	Notes []Complexity
 }
 
@@ -62,26 +60,26 @@ const defaultPort = "22"
 
 // IdentityFile に既定値は持たない。
 //
-// **これは実測に基づく判断である。** 一度は OpenSSH の既定の並びを写したが、
-// 差分テストが macOS と Linux で違う答えを返した——Linux 側のビルドは
+// これは実測に基づく判断である。一度は OpenSSH の既定の並びを写したが、
+// 差分テストが macOS と Linux で違う結果を返した。Linux 側のビルドは
 // ~/.ssh/id_xmss を含んでいた。版とビルドオプションで変わる表であり、
 // 「OpenSSH の既定値表を丸ごと持たない」という判断がここにも当てはまる。
 //
-// 書かれていなければ、この解決器は IdentityFile を答えない。接続に使う鍵を
+// 書かれていなければ、この解決器は IdentityFile を応答しない。接続に使う鍵を
 // 選ぶのはプロセス内 SSH クライアント（B2）であり、そちらは OpenSSH の探索順
 // ではなく、利用者が選んだ鍵と鍵の一覧を使う。
 
 // expandsTokens は、解決の時点でトークンを展開するキーワードと、そこで
 // 許されるトークンを対応づける。
 //
-// **HostName だけである。実機の ssh -G で確かめた。** IdentityFile と
-// CertificateFile のトークンは、-G の出力では展開されないまま出てくる——
+// HostName だけである。実機の ssh -G で確かめた。IdentityFile と
+// CertificateFile のトークンは、-G の出力では展開されないまま出てくる。
 // OpenSSH がそれらを展開するのは接続する瞬間であり、設定を読み終えた時点では
 // ない。ここで展開すると、設定について報告する値が ssh の報告とずれる。
 //
-// **HostName が受け付けるのは %% と %h だけである。これも実機で確かめた。**
+// HostName が受け付けるのは %% と %h だけである。これも実機で確かめた。
 // `HostName %r.example.com` は "unknown key %r" で落ちる。全トークンを
-// 展開すると、本物なら起動しない設定に、こちらだけが答えを出すことになる。
+// 展開すると、本物なら起動しない設定に、こちらだけが結果を出すことになる。
 //
 // 接続に使うときの展開はプロセス内 SSH クライアント（B2）の仕事である。
 // ExpandTokens はそのために置いてある。
@@ -89,8 +87,8 @@ var expandsTokens = map[string]string{"hostname": "h"}
 
 // Resolve は、この alias に接続したときに実際に使われる値を返す。
 //
-// **何も実行しない。** Match exec を含む設定は、値ではなく理由を返す。部分的な
-// 答えを黙って返さないのは、接続に使う値がひとつでも確定しないなら、その alias は
+// 何も実行しない。Match exec を含む設定は、値ではなく理由を返す。部分的な
+// 結果を暗黙に返さないのは、接続に使う値がひとつでも確定しないなら、その alias は
 // 解決できていないからである。
 func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 	values := Values{Entries: map[string][]string{}}
@@ -107,7 +105,7 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 
 	set := func(keyword, value string) bool {
 		// 引数の無いディレクティブは値を主張しない。`User` とだけ書かれた行を
-		// 通すと、user が空文字のまま接続に使われる——それは alias と同じ扱いを
+		// 通すと、user が空文字のまま接続に使われる。それは alias と同じ扱いを
 		// 受けるべき欠落であって、確定した空の値ではない。本物の ssh は設定
 		// 全体を撥ねるが、こちらは書かれていないものとして既定値を埋める。
 		// 行そのものは config の診断が別に報告する。
@@ -148,7 +146,7 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 			if !applies {
 				return
 			}
-			// 数えるのは alias を名指ししているブロックだけである。たまたま
+			// 数えるのは alias を指定しているブロックだけである。たまたま
 			// 一致した catch-all は「二つのブロックがこの名前を主張している」
 			// ではない。それはワイルドカードで一致したという別の話である。
 			if declaresExactly(block.Patterns, alias) {
@@ -227,10 +225,10 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 
 	walkLoadOrder(graph, graph.Root, map[string]bool{}, enterBlock, directive)
 
-	// 読めない Include は拒否ではなく印である。**読めた範囲で解決する。**
+	// 読めない Include は拒否ではなく印である。読めた範囲で解決する。
 	//
 	// 拒否にすると、まだ作られていないディレクトリを Include が指している間、
-	// その alias について何も答えられなくなる。グループを作る保存はまさにその
+	// その alias を解決できなくなる。グループを作る保存はまさにその
 	// 状態を通るので、保存前後の比較が空になっていた。
 	for _, diagnostic := range graph.Diagnostics {
 		if diagnostic.Severity == config.SeverityInfo {
@@ -243,7 +241,7 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 	}
 
 	if len(refusals) > 0 {
-		// 部分的な答えを返さない。ひとつでも確定しないなら解決できていない。
+		// 部分的な結果を返さない。ひとつでも確定しないなら解決できていない。
 		return Resolution{Values: Values{Entries: map[string][]string{}}, Refusals: refusals}
 	}
 
@@ -357,7 +355,7 @@ func valueOr(values Values, keyword, fallback string) string {
 	return fallback
 }
 
-// declaresExactly は、Host 行がパターンによる一致ではなくこの alias を名指しして
+// declaresExactly は、Host 行がパターンによる一致ではなくこの alias を指定して
 // いるかを報告する。catch-all は全 alias に一致し、何も宣言しない。
 func declaresExactly(patterns []config.Pattern, alias string) bool {
 	for _, pattern := range patterns {

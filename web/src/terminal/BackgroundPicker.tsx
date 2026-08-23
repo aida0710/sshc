@@ -6,18 +6,12 @@ import { Button } from "../ui/surface";
 import { control } from "../ui/form";
 import { useBackgroundImage } from "./backgroundImage";
 
-// 背景の画像を選び、持ち込み、捨てる。
-//
-// **画像の置き場はひとつである。** 全体の設定でも接続の設定でも、選ぶ相手は
-// 同じ一覧である——接続ごとに別の置き場を持つと、同じ写真が何枚も溜まる。
-// 違うのは「どれを選んだか」だけなので、選択だけを外から受け取る。
 
 type BackgroundPickerProps = {
   value: string;
   onChange: (next: string) => void;
   tint: number | undefined;
   onTintChange: (next: number | undefined) => void;
-  /** 何も選ばなかったときに何が起きるかを言う綴り。 */
   unchosen: string;
   api?: Pick<IntegrationsApi, "terminalBackgrounds" | "addTerminalBackground" | "deleteTerminalBackground">;
 };
@@ -47,8 +41,6 @@ export function BackgroundPicker({
     void reload().catch(() => undefined);
   }, [reload]);
 
-  // **断られた理由はサーバーが名指しする。** 「保存できません」で終わらせない
-  // ——直すのは人であり、直すには何が悪いのかが要る。
   async function add(file: File) {
     setBusy(true);
     setProblem("");
@@ -77,8 +69,6 @@ export function BackgroundPicker({
     setProblem("");
     try {
       await api.deleteTerminalBackground(name);
-      // **捨てた画像を選んだままにしない。** 名前だけが残ると、端末は
-      // 「選ばれているのに何も出ない」状態になる。
       if (value === name) onChange("");
       await reload();
     } catch {
@@ -120,8 +110,6 @@ export function BackgroundPicker({
           accept="image/png,image/jpeg,image/webp,image/gif"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            // **同じ写真をもう一度選べるようにする。** 値を残すと、二度目の
-            // 選択で change が鳴らない。
             event.target.value = "";
             if (file !== undefined) void add(file);
           }}
@@ -143,7 +131,7 @@ export function BackgroundPicker({
       {value === "" ? null : (
         <label className="flex flex-col gap-1">
           <span className="text-xs text-ink-muted">
-            {t("terminal.tintLabel")} — {tint ?? ""}
+            {t("terminal.tintLabel")} · {tint ?? ""}
           </span>
           <input
             type="range"
@@ -160,8 +148,6 @@ export function BackgroundPicker({
   );
 }
 
-// Thumbnail は 1 枚の見本である。**綴りは JS が取りに行く**ので、素の
-// <img src> では出せない——読み取りにも CSRF トークンが要る。
 function Thumbnail({ name, chosen }: { name: string; chosen: boolean }) {
   const url = useBackgroundImage(name);
   if (url === "") return <div className="h-16 w-24 rounded border border-control-line bg-control" />;

@@ -483,9 +483,9 @@ func TestTargetEnvironmentReplacementIsCaseInsensitiveAndUnique(t *testing.T) {
 	}
 	request := nativeBuildRequest{goos: "windows", goarch: "arm64", cgo: "0"}
 	got := withTargetEnvironment(environment, request)
-	// GOENV も畳む。Makefile 側の override は GNU Make の Windows 移植では別綴りを
+	// GOENV も畳む。Makefile 側の override は GNU Make の Windows 移植では別表記を
 	// 残してしまい、大文字小文字を区別しない Windows のプロセス環境ではその残骸が
-	// 勝つので、子の go build が見る綴りはここで一つに決める。
+	// 勝つので、子の go build が見る表記はここで一つに決める。
 	for key, want := range map[string]string{"GOOS": "windows", "GOARCH": "arm64", "CGO_ENABLED": "0", "GOENV": "off"} {
 		matches := 0
 		for _, entry := range got {

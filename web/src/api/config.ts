@@ -149,10 +149,6 @@ export const configApi = {
   async updateConnection(request: UpdateConnectionRequest): Promise<SaveResult> {
     return validateSaveResult(await mutateJSON<unknown>("/api/v1/connections", "PATCH", request));
   },
-  // グループの名前変更と削除はサーバー操作であり、クライアントが保持する
-  // ドキュメントへの編集ではない。グループはディレクトリであるため、その変更は
-  // N 個のファイル移動に加えて Include 領域、さらにその鍵を名指すすべての
-  // IdentityFile にまで及び、クライアントには組み立てられない一つのトランザクションとなる。
   async renameGroup(from: string, to: string): Promise<SaveResult> {
     return validateSaveResult(await postJSON<unknown>("/api/v1/config/groups/rename", { from, to }));
   },

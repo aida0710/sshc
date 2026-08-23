@@ -20,17 +20,17 @@ import (
 
 const signalHelperEnvironment = "SSHC_SIGNAL_HELPER"
 
-// **Ctrl-Break を別に登録しない。** ランタイムがそれを os.Interrupt として
+// Ctrl-Break を別に登録しない。ランタイムがそれを os.Interrupt として
 // 配るので、Ctrl-C と同じ 130 になる。ここはその事実そのものを固定する
-// ——`syscall.SIGBREAK` を書こうとした版は、そもそもコンパイルが通らなかった。
+// `syscall.SIGBREAK` を書こうとした版は、そもそもコンパイルが通らなかった。
 func TestWindowsCtrlBreakEndsWithTheInterruptCode(t *testing.T) {
 	if os.Getenv(signalHelperEnvironment) != "" {
-		// **子は本物の登録をしてから待つ。** 登録しないまま待てば既定の動作で
-		// 殺され、終了コードは 130 ではなく NT の状態値になる——最初に書いた
+		// 子は本物の登録をしてから待つ。登録しないまま待てば既定の動作で
+		// 殺され、終了コードは 130 ではなく NT の状態値になる。最初に書いた
 		// 版はまさにそれで、実 Windows がそう教えてくれた。
 		ctx, stop := notifySignals(context.Background())
 		defer stop()
-		// **登録し終えたことを先に告げる。** 親がそれを待たずに送ると、まだ
+		// 登録し終えたことを先に告げる。親がそれを待たずに送ると、まだ
 		// 登録の前に届いた合図は既定の動作で処理され、終了コードは 130 では
 		// なく NT の状態値になる。
 		fmt.Println("ready")
@@ -67,7 +67,7 @@ func TestWindowsCtrlBreakEndsWithTheInterruptCode(t *testing.T) {
 		t.Fatal("the helper never finished registering for signals")
 	}
 
-	// プロセスグループへ Ctrl-Break を送る。**Ctrl-C はグループを指定できない。**
+	// プロセスグループへ Ctrl-Break を送る。Ctrl-C はグループを指定できない。
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		err := windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(helper.Process.Pid))

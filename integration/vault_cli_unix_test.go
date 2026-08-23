@@ -15,7 +15,7 @@ import (
 // canary は、このテストが探して回るための、ほかに現れようのない語である。
 const canary = "correct-horse-battery-staple-9f2c1"
 
-// **見つけたものを書き出さない。** 秘密を探す検査が、見つけた秘密を失敗の
+// 見つけたものを書き出さない。秘密を探す検査が、見つけた秘密を失敗の
 // 文言に載せてしまえば、それを CI のログへ配ることになる。どこで見つけたかは
 // 場所と経路だけで足りる。照合は指紋で行う。
 func canaryDigest() string {
@@ -23,7 +23,7 @@ func canaryDigest() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// carriesCanary は、その断片に canary が含まれるかを、書き出さずに答える。
+// carriesCanary は、その断片に canary が含まれるかを、書き出さずに返す。
 func carriesCanary(text string) bool {
 	return strings.Contains(text, canary)
 }
@@ -37,15 +37,15 @@ func liveHeadless(t *testing.T) (string, *testProcess) {
 	return home, engine
 }
 
-// **パスワードは端末からしか受け取らない。** パイプの向こうから来たものは、
-// 履歴にもスクリプトにも残りうる。答えられない問いを書き置いて先へ進むより、
+// パスワードは端末からしか受け取らない。パイプの向こうから来たものは、
+// 履歴にもスクリプトにも残りうる。判定できない問いを書き置いて先へ進むより、
 // 断る方がよい。
 func TestVaultPasswordCommandsRefuseRedirectedInput(t *testing.T) {
 	home, _ := liveHeadless(t)
 
 	for _, action := range []string{"create", "unlock", "change-password"} {
 		process := start(t, home, "vault", action)
-		// stdin は端末ではない——exec が既定で /dev/null を渡す。
+		// stdin は端末ではない。exec が既定で /dev/null を渡す。
 		code := process.wait(t, 20*time.Second)
 
 		if code == 0 {
@@ -94,7 +94,7 @@ func TestVaultCreateUnlockAndLockThroughATerminal(t *testing.T) {
 	}
 }
 
-// **打たれたパスワードは、どこにも書き残されない。** 引数にも、handoff にも、
+// 打たれたパスワードは、どこにも書き残されない。引数にも、handoff にも、
 // state ディレクトリの中の何にも。端末に出ないことは create が echo を止めて
 // いることで、それは別の場所（cmd/sshc の PTY テスト）が見ている。ここが見る
 // のは、ディスクに残るものである。
@@ -134,13 +134,13 @@ func TestTheTypedPasswordIsNowhereOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(found) != 0 {
-		// **場所だけを言う。** 中身を載せれば、この検査そのものが漏らす経路になる。
+		// 場所だけを言う。中身を載せれば、この検査そのものが漏らす経路になる。
 		t.Errorf("the typed password (sha256 %s…) is readable in %v",
 			canaryDigest()[:12], found)
 	}
 }
 
-// **打たれたパスワードは、走っているプロセスからも見えない。** argv は
+// 打たれたパスワードは、走っているプロセスからも見えない。argv は
 // `ps` を打てる誰にでも読め、環境変数は子へ丸ごと継がれる。ディスクに
 // 残さないことと、そこに出さないことは別の約束である。
 func TestTheTypedPasswordIsNotVisibleOnAnyRunningProcess(t *testing.T) {
@@ -169,7 +169,7 @@ func TestTheTypedPasswordIsNotVisibleOnAnyRunningProcess(t *testing.T) {
 	}
 }
 
-// vaultState は `sshc vault status` の一行を読む。**engine に尋ねる。**
+// vaultState は `sshc vault status` の一行を読む。engine に尋ねる。
 // 保管庫のファイルを直接見ると、engine が知っている状態ではなく、ディスクに
 // 残っている形を見ることになる。
 func vaultState(t *testing.T, home string) string {
@@ -179,7 +179,7 @@ func vaultState(t *testing.T, home string) string {
 		t.Fatalf("vault status exit = %d\n%s", code, process.Stderr.String())
 	}
 	for _, line := range strings.Split(process.Stdout.String(), "\n") {
-		// **列で読む。** 表はラベルを右詰めの空白で揃えるので、綴りの前後を
+		// 列で読む。表はラベルを右詰めの空白で揃えるので、表記の前後を
 		// そのまま切り出すと空白が付いてくる。
 		if fields := strings.Fields(line); len(fields) == 2 && fields[0] == "vault" {
 			return fields[1]

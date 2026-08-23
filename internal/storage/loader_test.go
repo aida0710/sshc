@@ -60,7 +60,7 @@ func TestResolverExpandsTheLocalUserAndUid(t *testing.T) {
 // "~/.ssh/…" と書かれた Include は Home に対して展開されるが、それに関する判断は
 // すべて Root に対して行われる。~/.ssh がリンク経由で到達される場合、両者は食い
 // 違い、ユーザーが求めたファイルはルートの外にあると報告されて編集を拒まれていた
-// — 自分自身の ~/.ssh にある、自分自身の設定なのに。
+// 自分自身の ~/.ssh にある、自分自身の設定なのに。
 func TestResolverReadsATildeIncludeUnderASymlinkedHome(t *testing.T) {
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {

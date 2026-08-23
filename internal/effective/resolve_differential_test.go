@@ -20,7 +20,7 @@ import (
 // TestResolveMatchesInstalledOpenSSH は、この解決器が権威であることの完成条件である。
 //
 // `ssh -G` を直接起動して突き合わせる。Evaluator を経由しないのは、あちらが製品から
-// 消えてもこの検査が残るようにするためである——OpenSSH との一致は、製品が何を
+// 消えてもこの検査が残るようにするためである。OpenSSH との一致は、製品が何を
 // 持っているかとは別の話である。
 //
 // 比較はフィクスチャが設定したキーワードに限る。`ssh -G -F file` は、それ以外に
@@ -51,9 +51,9 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 		{
 			// 何も書かれていない alias。既定値をこちらが正しく持っているか。
 			//
-			// identityfile はここに無い。この解決器は既定を持たないと決めた——
+			// identityfile はここに無い。この解決器は既定を持たないと決めた。
 			// OpenSSH の既定の並びは版とビルドで変わり、この検査が macOS と
-			// Linux で違う答えを返したのがその証拠である。
+			// Linux で違う結果を返したのがその証拠である。
 			name:     "defaults nobody wrote",
 			contents: "Host other\n\tPort 2222\n",
 			alias:    "bare",

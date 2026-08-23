@@ -18,27 +18,23 @@ var ErrNoIdentity = errors.New("no identity file and no agent key is available")
 
 // maxPassphraseAttempts は、ひとつの鍵についてパスフレーズを尋ねる回数である。
 //
-// OpenSSH と同じ 3 回。上限が無いと、間違え続ける人がこの接続を保持し続ける。
+// OpenSSH と同じ 3 回。上限が無いと、間違え続けるユーザーがこの接続を保持し続ける。
 const maxPassphraseAttempts = 3
 
-// maxPasswordAttempts は、ひとつの方式を試し直す回数である。
-//
-// OpenSSH の NumberOfPasswordPrompts と同じ 3 回。**保存された答えが古いときに
-// 繋ぐ道が残っている**のはこの回数のおかげであり、一度で諦めると、その alias は
-// 保管庫を直すまで開けなくなる。
+// maxPasswordAttempts は、OpenSSH の NumberOfPasswordPrompts と同じ再試行回数。
 const maxPasswordAttempts = 3
 
 // Auth は、認証に使えるものの全体である。
 type Auth struct {
 	// Stored は、その鍵について保存されているパスフレーズを返す。
 	//
-	// vault を見るのはここである。**尋ねた答えは保存しない**——保存は
-	// Secrets 画面の仕事であり、接続の途中で黙って永続化しない。
+	// vault を見るのはここである。尋ねた結果は保存しない。保存は
+	// Secrets 画面の仕事であり、接続の途中で暗黙に永続化しない。
 	Stored func(path string) (string, bool)
 	// Password は、その alias について保存されているアカウントパスワードを返す。
 	//
-	// **Stored とは別の名前空間である。** あちらはローカルの秘密鍵を開くための
-	// 秘密で、こちらはリモートのアカウントへログインするための秘密である。
+	// Stored とは別の名前空間である。Stored は秘密鍵のロック解除に使い、
+	// Password はリモートアカウントの認証に使う。
 	// 取り違えれば、鍵を開くための秘密がそのままリモートへ送られる。
 	Password func(alias string) (string, bool)
 	// AgentSocket は SSH_AUTH_SOCK。空なら agent は使わない。
@@ -48,7 +44,7 @@ type Auth struct {
 	ReadFile func(path string) ([]byte, error)
 	// Observe は、方式が実際に試された瞬間に呼ばれる。
 	//
-	// **ssh.AuthMethod は封じられた interface なので、外から包めない。**
+	// ssh.AuthMethod は暗号化された interface なので、外から包めない。
 	// どの方式で通ったかを言えるのは、方式を組み立てるここだけである。
 	Observe func(method string)
 }
@@ -65,9 +61,9 @@ func (a Auth) observe(method string) {
 // x/crypto/ssh は、サーバーが提示した方式と突き合わせて、この順に試す。
 func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 	var methods []ssh.AuthMethod
-	// 保存された答えは、この接続を通して一度しか出さない。方式をまたいで
+	// 保存された結果は、この接続を通して一度しか出さない。方式をまたいで
 	// ひとつなのは、password と keyboard-interactive の両方を提示する
-	// サーバーへ、同じ間違った答えを二度送らないためである。
+	// サーバーへ、同じ間違った結果を二度送らないためである。
 	stored := a.storedPassword(target)
 	for _, kind := range target.Methods.Order() {
 		switch kind {
@@ -90,10 +86,7 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 	return methods
 }
 
-// storedPassword は、保存されたパスワードを一度だけ差し出す関数を返す。
-//
-// **一度だけなのは、保存された答えが古いことがあるからである。** 断られても
-// 同じものを出し続ければ、繋ぐ道が残らない。二度目からは人に尋ねる。
+// storedPassword は保存済みパスワードを最初の 1 回だけ返し、以後は対話入力へ切り替える。
 func (a Auth) storedPassword(target Target) func() (string, bool) {
 	if a.Password == nil || target.Alias == "" {
 		return func() (string, bool) { return "", false }
@@ -108,9 +101,9 @@ func (a Auth) storedPassword(target Target) func() (string, bool) {
 	}
 }
 
-// password は、パスワード方式の答えを作る。
+// password は、パスワード方式の結果を作る。
 //
-// **保存されているなら、それを出す。** 保管庫に置いてあるのに毎回尋ねるなら、
+// 保存されているなら、それを出す。保管庫に置いてあるのに毎回尋ねるなら、
 // 置く意味が無い。
 func (a Auth) password(prompt Prompter, stored func() (string, bool)) func() (string, error) {
 	return func() (string, error) {
@@ -122,12 +115,12 @@ func (a Auth) password(prompt Prompter, stored func() (string, bool)) func() (st
 	}
 }
 
-// keyboard は、keyboard-interactive の答えを作る。
+// keyboard は、keyboard-interactive の結果を作る。
 //
-// **保存されたパスワードで答えるのは、問いがひとつで、画面に出さないときだけ
-// である。** それがパスワードを聞かれている形であり、普通の Linux はパスワードを
-// この方式で聞いてくる。問いが複数あるもの（2FA）や、答えを画面に出す問いに
-// パスワードを差し出す意味は無く、差し出せばそれは間違った答えになる。
+// 保存されたパスワードで返すのは、問いがひとつで、画面に出さないときだけ
+// である。それがパスワードを聞かれている形であり、普通の Linux はパスワードを
+// この方式で聞いてくる。問いが複数あるもの（2FA）や、結果を画面に出す問いに
+// パスワードを差し出す意味は無く、差し出せばそれは間違った結果になる。
 func (a Auth) keyboard(prompt Prompter, stored func() (string, bool)) ssh.KeyboardInteractiveChallenge {
 	ask := keyboardChallenge(prompt)
 	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
@@ -149,7 +142,7 @@ func (a Auth) keyboard(prompt Prompter, stored func() (string, bool)) ssh.Keyboa
 func (a Auth) publicKey(target Target, prompt Prompter) (ssh.AuthMethod, bool) {
 	if len(target.Identities) == 0 && (target.IdentitiesOnly || a.AgentSocket == "") {
 		// 鍵がひとつも無い。OpenSSH の既定の探索順（~/.ssh/id_ed25519 など）は
-		// 持たない——B1 が既定値表を持たないと決めた理由がそのまま当てはまる。
+		// 持たない。B1 が既定値表を持たないと決めた理由がそのまま当てはまる。
 		return nil, false
 	}
 	return ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
@@ -161,7 +154,7 @@ func (a Auth) publicKey(target Target, prompt Prompter) (ssh.AuthMethod, bool) {
 // Signers は、この接続で試す鍵を集める。
 //
 // 公開されているのは、鍵がひとつも無いことが独立した失敗であり、それを
-// 検査から名指しできる必要があるからである。
+// 検査から指定できる必要があるからである。
 func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 	var signers []ssh.Signer
 	var failures []string
@@ -207,7 +200,7 @@ func (a Auth) signerFor(path string, prompt Prompter) (ssh.Signer, error) {
 		return nil, err
 	}
 
-	// 保存されているパスフレーズを先に試す。人に尋ねる前に、答えを既に
+	// 保存されているパスフレーズを先に試す。ユーザーに尋ねる前に、結果を既に
 	// 持っているかを見る。
 	if a.Stored != nil {
 		if passphrase, found := a.Stored(path); found {
@@ -256,15 +249,15 @@ func (a Auth) read(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// keyboardChallenge は、サーバーの質問をそのまま人へ渡す。
+// keyboardChallenge は、サーバーの質問をそのままユーザーへ渡す。
 //
 // 質問文を作るのはサーバーである。こちらが言い換えると、2FA の指示が
 // 変わってしまう。
 func keyboardChallenge(prompt Prompter) ssh.KeyboardInteractiveChallenge {
 	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		answers := make([]string, 0, len(questions))
-		// name と instruction は、サーバーが人へ向けて書いた文である。捨てると
-		// 「何を答えればよいか」がその人に届かない。最初の問いの前に置く。
+		// name と instruction は、サーバーがユーザーへ向けて書いた文である。捨てると
+		// 「何を応答すればよいか」がそのユーザーに届かない。最初の問いの前に置く。
 		preamble := strings.TrimSpace(strings.TrimSpace(name) + "\r\n" + strings.TrimSpace(instruction))
 		for index, question := range questions {
 			ask := prompt.Secret

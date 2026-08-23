@@ -24,7 +24,7 @@ func readReleaseWorkflow(t *testing.T) (workflowDocument, string) {
 	return document, string(source)
 }
 
-// **タグ以外では何も公開されない。**
+// タグ以外では何も公開されない。
 //
 // ここに branch の引き金が混ざると、main への push がそのままリリースになる。
 // 版はタグから取るので、そうして出たものは版を名乗れないまま公開される。
@@ -43,11 +43,11 @@ func TestReleaseWorkflowRunsOnlyForTags(t *testing.T) {
 	}
 }
 
-// **束は、それが動く OS の上で作る。**
+// 束は、それが動く OS の上で作る。
 //
 // 一台の macOS から四つ作っていたことがあり、そのとき Windows の
-// インストーラは存在しなかった——NSIS は Windows でしか組めない。
-// この表が縮むと、縮んだぶんが黙って配布物から消える。
+// インストーラは存在しなかった。NSIS は Windows でしか組めない。
+// この表が縮むと、縮んだぶんが暗黙に配布物から消える。
 func TestReleaseWorkflowBuildsEveryPlatformNatively(t *testing.T) {
 	document, _ := readReleaseWorkflow(t)
 
@@ -68,7 +68,7 @@ func TestReleaseWorkflowBuildsEveryPlatformNatively(t *testing.T) {
 	}
 }
 
-// **一つでも作れなければ、何も公開しない。**
+// 一つでも作れなければ、何も公開しない。
 //
 // 部分的なリリースは、利用者から見ると「その OS だけ対応が消えた版」に
 // 見える。落ちたことが分かる方がよい。
@@ -92,10 +92,33 @@ func TestReleasePublishWaitsForEveryPlatform(t *testing.T) {
 	}
 }
 
-// **署名の無い APK は配布物ではない。**
+// すべてのタグに、バージョン管理されたリリースノートを要求する。
+func TestReleaseRequiresVersionControlledNotes(t *testing.T) {
+	_, source := readReleaseWorkflow(t)
+	publish := jobSection(source, "  publish:", "  homebrew:")
+	if publish == "" {
+		t.Fatal("release.yml has no publish job")
+	}
+	for _, required := range []string{
+		`notes_file="docs/releases/$RELEASE_TAG.md"`,
+		`[ ! -f "$notes_file" ]`,
+		`--notes-file "$notes_file"`,
+	} {
+		if !strings.Contains(publish, required) {
+			t.Errorf("publish job is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"--notes-from-tag", "--generate-notes"} {
+		if strings.Contains(publish, forbidden) {
+			t.Errorf("publish job still uses %q instead of version-controlled release notes", forbidden)
+		}
+	}
+}
+
+// 署名の無い APK は配布物ではない。
 //
 // インストールすらできないので、公開しても誰の役にも立たない。debug の鍵で
-// 署名するのはもっと悪い——公開されている鍵なので、誰でも「同じアプリの
+// 署名するのはもっと悪い。公開されている鍵なので、誰でも「同じアプリの
 // 更新」を作れる。だから鍵が無ければ止まり、出来上がったものには
 // apksigner が直接聞く。gradle が成功したことは、署名された証拠ではない。
 func TestReleaseRefusesAnUnsignedAndroidPackage(t *testing.T) {
@@ -122,11 +145,11 @@ func TestReleaseRefusesAnUnsignedAndroidPackage(t *testing.T) {
 	}
 }
 
-// **PowerShell は native command の非ゼロ終了で止まらない。**
+// PowerShell は native command の非ゼロ終了で止まらない。
 //
 // GitHub は step の最後の一つの終了値しか見ないので、前の行が落ちても step は
 // 緑になる。実際にそれで、CLI の入っていないインストーラが「ビルド成功」の
-// まま次の段へ渡った——捕まえたのは smoke であって、ビルドではない。
+// まま次の段へ渡った。捕まえたのは smoke であって、ビルドではない。
 //
 // 二つ以上の命令を並べる Windows の step は、必ず自分で止まるようにする。
 func TestReleaseWindowsStepsStopAtTheFirstFailure(t *testing.T) {
@@ -156,14 +179,14 @@ func TestReleaseWindowsStepsStopAtTheFirstFailure(t *testing.T) {
 	}
 }
 
-// **配るものは、自分が何番かを言えなければならない。**
+// 配るものは、自分が何番かを言えなければならない。
 //
 // APK の versionName はタグから来ていたが、その中で走る engine（AAR）は誰も版を
-// 入れておらず、**どの版を配っても自分を "dev" と名乗っていた**。通知にも handoff
+// 入れておらず、どの版を配っても自分を "dev" と名乗っていた。通知にも handoff
 // にも、`sshc status` にもそう出る。
 //
 // 二つを別々に渡せば「APK は 0.4.2 だが engine は dev」が作れてしまうので、
-// **入力がタグひとつであること**をここで見る。
+// 入力がタグひとつであることをここで見る。
 func TestTheAndroidEngineCarriesTheReleasedVersion(t *testing.T) {
 	_, source := readReleaseWorkflow(t)
 
@@ -183,7 +206,7 @@ func TestTheAndroidEngineCarriesTheReleasedVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// **受け取る側が在ることも見る。** workflow が渡していても、Makefile が
+	// 受け取る側が在ることも見る。workflow が渡していても、Makefile が
 	// それを ldflags に載せていなければ、値はどこにも届かない。
 	if !strings.Contains(string(makefile), "-X sshc/mobile.version=$(ANDROID_VERSION)") {
 		t.Error("Makefile の android-bind が ANDROID_VERSION を ldflags に載せていない")

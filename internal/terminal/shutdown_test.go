@@ -11,21 +11,10 @@ import (
 	"sshc/internal/terminal"
 )
 
-// stubbornProcess は、止まらない相手の三つの形を演じる。
-//
-// **これが停止処理の本当の相手である。** 応答しないリモートに向いた ssh は
-// Hangup の中で返らず、SIGHUP を無視する子は終わらず、壊れたアダプタは
-// 終わったことを言わない。
 type stubbornProcess struct {
-	// blockHangup が閉じられるまで Hangup は返らない。
-	blockHangup chan struct{}
-	// ignoreHangup が真なら、Hangup は即座に返るが何も起こさない。
+	blockHangup  chan struct{}
 	ignoreHangup bool
-	// releaseDone が閉じられるまで、読み取りは終わらない——つまり done も
-	// 閉じない。強制停止だけがこれを解ける。
-	releaseDone chan struct{}
-	// closeOnForce が真なら、強制停止が読み取りを終わらせる。偽なら、
-	// 強制されても終わらない壊れたアダプタである。
+	releaseDone  chan struct{}
 	closeOnForce bool
 
 	forces atomic.Int32
@@ -63,7 +52,6 @@ func (p *stubbornProcess) Wait() terminal.ExitInfo {
 
 func (p *stubbornProcess) Close() error { return nil }
 
-// ForceClose は、レジストリが任意の追加契約として見つける強制停止である。
 func (p *stubbornProcess) ForceClose() error {
 	p.forces.Add(1)
 	if p.closeOnForce {
@@ -86,18 +74,12 @@ func openStubborn(t *testing.T, registry *terminal.Registry, process terminal.Pr
 	}
 }
 
-// **返らない一本が、他のすべてを止めてはならない。**
-//
-// 締切に達したら、強制停止はどのセッションに対しても始まる。Hangup の中で
-// 止まっているものが居ても、無視するものが居ても、終わったことを言わない
-// ものが居ても、である。そして合流は、全部が本当に終わるまで返らない。
 func TestForceCloseReachesEveryProcessWhileOneHangupIsBlocked(t *testing.T) {
 	registry := &terminal.Registry{Limits: func() terminal.Limits { return terminal.DefaultLimits() }}
 
 	blocking := newStubbornProcess(true)
 	ignoring := newStubbornProcess(true)
 	ignoring.ignoreHangup = true
-	// 強制されても done を閉じない、壊れたアダプタ。
 	broken := newStubbornProcess(false)
 	broken.ignoreHangup = true
 
@@ -110,7 +92,6 @@ func TestForceCloseReachesEveryProcessWhileOneHangupIsBlocked(t *testing.T) {
 	waited := make(chan error, 1)
 	go func() { waited <- registry.Wait() }()
 
-	// 締切に相当する合図。coordinator が呼ぶのと同じものである。
 	registry.ForceClose()
 
 	for name, process := range map[string]*stubbornProcess{
@@ -125,15 +106,12 @@ func TestForceCloseReachesEveryProcessWhileOneHangupIsBlocked(t *testing.T) {
 		}
 	}
 
-	// **壊れたアダプタが居るあいだ、合流は返らない。** ここで返してしまうと、
-	// engine lock を手放したあとに状態を変える処理がまだ走っていることになる。
 	select {
 	case err := <-waited:
 		t.Fatalf("Wait returned while a process had not finished: %v", err)
 	case <-time.After(150 * time.Millisecond):
 	}
 
-	// 止まっていた Hangup を解き、壊れたアダプタを終わらせる。
 	close(blocking.blockHangup)
 	broken.release()
 
@@ -147,7 +125,6 @@ func TestForceCloseReachesEveryProcessWhileOneHangupIsBlocked(t *testing.T) {
 	}
 }
 
-// 確保の途中で止まっている Open が居ても、停止は錠を取れる。
 func TestBeginShutdownCancelsAPendingOpenWithoutWaitingForIt(t *testing.T) {
 	registry := &terminal.Registry{Limits: func() terminal.Limits { return terminal.DefaultLimits() }}
 
@@ -166,8 +143,6 @@ func TestBeginShutdownCancelsAPendingOpenWithoutWaitingForIt(t *testing.T) {
 	}()
 	<-entered
 
-	// **待たずに返らなければならない。** ここで確保の完了を待つと、応答しない
-	// 相手への接続が停止そのものを止める。
 	done := make(chan struct{})
 	go func() { registry.BeginShutdown(); close(done) }()
 	select {
@@ -193,8 +168,6 @@ func TestBeginShutdownCancelsAPendingOpenWithoutWaitingForIt(t *testing.T) {
 	}
 }
 
-// 停止のあとに返ってきた Process は、畳まれる。**一覧に載せてはならない。**
-// 載せれば、停止処理が数え終えたあとに生きたセッションが現れる。
 func TestALateProcessIsForcedAndNeverPublished(t *testing.T) {
 	registry := &terminal.Registry{Limits: func() terminal.Limits { return terminal.DefaultLimits() }}
 
@@ -247,11 +220,6 @@ func TestOpenAfterBeginShutdownIsRefused(t *testing.T) {
 	}
 }
 
-// **合流は、入った後に足された仕事も待たなければならない。**
-//
-// 最後のセッションが締切とちょうど同時に終わると、数え上げは一瞬ゼロになる。
-// そこで返してしまう作りだと、まだ走っている強制停止と、engine lock を
-// 手放したあとの処理が重なる。
 func TestWaitAdmitsForceCloseRegisteredAfterItWasEntered(t *testing.T) {
 	registry := &terminal.Registry{Limits: func() terminal.Limits { return terminal.DefaultLimits() }}
 	process := newStubbornProcess(true)
@@ -269,7 +237,6 @@ func TestWaitAdmitsForceCloseRegisteredAfterItWasEntered(t *testing.T) {
 	}()
 	go func() {
 		defer group.Done()
-		// セッションの終了と強制停止を同じ瞬間にぶつける。
 		process.release()
 		registry.ForceClose()
 	}()
@@ -283,13 +250,11 @@ func TestWaitAdmitsForceCloseRegisteredAfterItWasEntered(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Wait did not return")
 	}
-	// 送り出した強制停止が本当に終わっていること。
 	if err := registry.Wait(); err != nil {
 		t.Fatalf("second Wait = %v", err)
 	}
 }
 
-// 停止の呼び出しは、何度でも、同時に来てもよい。
 func TestShutdownCallsAreIdempotentAndConcurrencySafe(t *testing.T) {
 	registry := &terminal.Registry{Limits: func() terminal.Limits { return terminal.DefaultLimits() }}
 	process := newStubbornProcess(true)

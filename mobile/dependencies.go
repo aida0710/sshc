@@ -12,22 +12,8 @@ import (
 	"sshc/internal/ui"
 )
 
-// newDependencies は、モバイルで成立する形の依存一式を組み立てる。
-//
-// cmd/sshc/engine.go の runEngineApp と同じ役目だが、こちらが引き受けないものが
-// ある: 所有権の監視（親が死ねば道連れなので監視する対象が無い）、シグナル
-// （モバイルの OS はプロセスにシグナルを送って落とさない）、終了コードへの写像
-// （返すのは error である）。
-//
-// app.Dependencies の側で意図的に空のままにするのは、自己更新（バイナリを置き
-// 換える経路が無い）と、ssh-keygen・ssh-agent（どちらの OS にも居ない）である。
-//
-// **数を数えた文章をここに書かない。** 以前は「落としているものが 4 つある」と
-// 書いてあり、実際には 6 つだった。どの項目が空でよいのかは dependencies_test.go
-// が一つずつ表明しており、app.Dependencies に項目が増えれば、そこが赤くなって
-// 選択を促す。散文はその数を追いかけられない。
-// **goos を引数で受ける。** ここで runtime.GOOS を読むと、走っているマシンでしか
-// 通らない表明になる——Linux 上のテストは Android の姿を一度も確かめられない。
+// newDependencies はモバイル環境用の依存を組み立てる。自己更新、ssh-keygen、
+// ssh-agent など利用できない機能は nil とする。goos はテスト可能にするため引数で受ける。
 func newDependencies(
 	goos, home, cache string,
 	logger *slog.Logger,
@@ -46,17 +32,13 @@ func newDependencies(
 		Home:     home,
 		Owner:    handoff.OwnerEngine,
 		PID:      os.Getpid(),
-		// **どちらも nil が答えである。** ssh-keygen も ssh-agent もモバイルに
-		// 居ないので、それを探す道具を持つこと自体が嘘になる。受け側は既に
-		// nil を機能の不在として扱う——keys.CatalogueReader はハードウェア鍵を
-		// 一覧に足さず、keys.Service は到達できるエージェントが無いと答える。
+		// モバイルには ssh-keygen と ssh-agent がない。
 		Toolchain: nil,
 		KeyAgent:  nil,
-		// SHELL を読まない。モバイルでそれを設定した人は居ないので、
-		// 読めば偶然の値が権威になる。
+		// モバイルアプリの SHELL 環境変数には依存しない。
 		Lookup:  func(string) (string, bool) { return "", false },
 		Environ: mobileEnvironment(goos, home, cache),
-		// **置き換えられない更新を提示しない。**
+		// モバイルアプリからバイナリを置換できないため、自己更新を無効にする。
 		Updates: nil,
 	}, nil
 }
@@ -69,25 +51,16 @@ func newDependencies(
 // goos を引数で受けるのは、この表がテストできるようにするためである。
 // runtime.GOOS をここで読むと、走っているマシンでしか通らない表明になる。
 //
-// 呼ばれるたびに写しを返す。同じ slice を返すと、受け取った側が append した
-// ものが次の呼び出しに見える——このアプリケーションが渡す環境は、渡した先の
-// 事情で変わってはならない。
+// 呼び出し側の変更が残らないよう、毎回 slice のコピーを返す。
 func mobileEnvironment(goos, home, cache string) func() []string {
 	environ := []string{"HOME=" + home}
-	// **PATH を置くのは、そこを歩ける端末だけである。**
-	//
-	// Android はシェルを起こせるので、/system/bin が見えなければならない。
-	// iOS はプロセスを起こせないので、PATH は誰も読まない——置けば「歩ける道が
-	// ある」と言っているのと同じで、嘘になる。
+	// Android はシェルを起動できるため system PATH を設定する。iOS では省略する。
 	if goos == "android" {
 		environ = append(environ, "PATH=/system/bin:/system/xbin")
 	}
 	environ = append(environ,
 		"TERM=xterm-256color",
-		// **path であって path/filepath ではない。** ここで組み立てているのは
-		// その端末の中の道であり、区切りは常に "/" である。filepath は
-		// これをコンパイルしたホストの区切りを使うので、Windows から見ると
-		// TMPDIR が \data\user\0\app\cache になる。
+		// 対象端末内のパスなので、ビルドホスト依存の filepath ではなく path を使う。
 		"TMPDIR="+path.Clean(cache),
 	)
 	return func() []string { return append([]string(nil), environ...) }

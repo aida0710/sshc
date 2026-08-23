@@ -15,12 +15,7 @@ import (
 
 var version = "dev"
 
-// printVersion は、この実体が何であるかを 1 行で言う。
-//
-// **OS と アーキテクチャを一緒に出す。** 入れ方が増えた——brew、install.sh、
-// 束の中、`make install` ——ので、「入ったが動かない」の相談で最初に要るのは
-// 版よりも「どれをどの機械に入れたのか」である。Rosetta の下で走る amd64 の
-// 実体は、それを言われるまで見分けがつかない。
+// printVersion は version、OS、architecture を 1 行で出力する。
 func printVersion(out io.Writer) {
 	fmt.Fprintf(out, "sshc %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 }
@@ -57,11 +52,10 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 	ctx := context.Background()
 	switch called.Kind {
 	case invocationDesktop:
-		// 裸の `sshc` は入口を刷り、開ける画面があれば開く。**engine は起こさない。**
+		// 引数なしでは engine の UI URL を取得し、ブラウザで開く。engine は起動しない。
 		return runOpen(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr, true)
 	case invocationEngine:
-		// **engine は stdin を読まない。** 端末で走るものが読み始めれば、
-		// 打った人の入力を吸い込む。
+		// engine は stdin を読み取らない。
 		return runEngine(ctx, home,
 			engineOptions{Port: called.Port, Replace: called.Replace},
 			os.Stdin, os.Stdout, os.Stderr)

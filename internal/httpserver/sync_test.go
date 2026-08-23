@@ -43,11 +43,11 @@ func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	// 封をする鍵は保管庫から来る。押した人が打つものではない。
+	// 暗号化する鍵は保管庫から来る。押したユーザーが打つものではない。
 	if err := secrets.SetSyncKey(measuredSyncKey); err != nil {
 		t.Fatal(err)
 	}
-	// 保管庫は封ではなく中身として旅をする。app と同じ形で繋ぐ。
+	// vault は復号済み文書として同期し、受信側で再暗号化する。
 	service.OpenVault = secrets.TravelDocument
 	service.SealVault = secrets.AdoptTravelDocument
 	service.VaultAdopted = secrets.Reload
@@ -56,7 +56,7 @@ func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 	return engine, service
 }
 
-// measuredSyncKey は、この一群のテストがリモートを封じる鍵である。
+// measuredSyncKey は、この一群のテストがリモートを暗号化する鍵である。
 const measuredSyncKey = "AB12-CD34-EF56-GH78-JK90-MN12"
 
 const syncTestPassphrase = "a master password for sync"
@@ -219,7 +219,7 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 	if err := secrets.SetSyncKey(measuredSyncKey); err != nil {
 		t.Fatal(err)
 	}
-	// 保管庫は封ではなく中身として旅をする。app と同じ形で繋ぐ。
+	// vault は復号済み文書として同期し、受信側で再暗号化する。
 	service.OpenVault = secrets.TravelDocument
 	service.SealVault = secrets.AdoptTravelDocument
 	service.VaultAdopted = secrets.Reload
@@ -232,8 +232,8 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 	bucket := &measuredSyncBucket{}
 	engine, service := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
 
-	// **数を直接書かない。** 保管庫のファイル自身もスナップショットに載る
-	// （Collect が sshc/secrets を名指ししている）ので、書いた数は「この
+	// 数を直接書かない。保管庫のファイル自身もスナップショットに載る
+	// （Collect が sshc/secrets を指定している）ので、書いた数は「この
 	// テストが用意したファイルの数」ではない。集めたものと突き合わせる。
 	collected, contents, err := service.Collect()
 	if err != nil {
@@ -290,7 +290,7 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	_, producer := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
-	// producer も consumer も、同じ鍵で封をして開く——それが「端末をまたいで
+	// producer も consumer も、同じ鍵で暗号化して開く。それが「端末をまたいで
 	// 共有される鍵」の意味である。
 	if _, err := producer.Push(context.Background(), measuredSyncKey); err != nil {
 		t.Fatal(err)
@@ -440,7 +440,7 @@ func TestARefusedDirectionIsAConflictAndNotAGatewayFailure(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	// code は設定を名指ししなければならない。"sync_failed" では、
+	// code は設定を指定しなければならない。"sync_failed" では、
 	// このマシンが行った拒否なのに、ユーザーは自分の bucket を疑ってしまう。
 	if body.Code != "sync_push_refused" {
 		t.Errorf("code = %q, want sync_push_refused", body.Code)
@@ -449,7 +449,7 @@ func TestARefusedDirectionIsAConflictAndNotAGatewayFailure(t *testing.T) {
 
 // 設定は保存されるため、2 回目の実行でもそれが残っている。決して
 // 外へ漏れてはならないのは access key である。status は画面が読む
-// ものであり、bucket の場所と vault が施錠中かどうかだけを伝える。
+// ものであり、bucket の場所と vault がロック中かどうかだけを伝える。
 func TestSyncStatusNeverCarriesTheAccessKey(t *testing.T) {
 	engine, service, secrets := syncEngineWithVault(t)
 	_ = service
@@ -527,7 +527,7 @@ func TestConfiguringRefusesAShutVault(t *testing.T) {
 //
 // 末尾のスラッシュは、スナップショットの行き先を画面が示すところ
 // どこでも "https://host//bucket" を生んでいた。リクエスト自体には
-// それは含まれない——client がパス全体を置き換えるからだ——ので、
+// それは含まれない。client がパス全体を置き換えるからだ。ので、
 // これはユーザーに見せて自分の bucket と認識させる値についての話である。
 func TestATrailingSlashOnTheEndpointIsRemoved(t *testing.T) {
 	engine, service, secrets := syncEngineWithVault(t)
@@ -544,7 +544,7 @@ func TestATrailingSlashOnTheEndpointIsRemoved(t *testing.T) {
 	}
 }
 
-// パス付きの endpoint は黙って切り詰めるのではなく拒否する。client
+// パス付きの endpoint は暗黙に切り詰めるのではなく拒否する。client
 // はパスを /bucket/key に置き換えるため、貼り付けられた
 // "…/my-bucket" は何も言わずに捨てられ、ユーザーはこの application が
 // 一度も書いたことのない場所にオブジェクトを探すことになる。
@@ -606,9 +606,9 @@ func TestSettingsThatCannotReachTheBucketAreNotStored(t *testing.T) {
 	}
 }
 
-// **押した人が打つものは、もう無い。** 封をする鍵は保管庫の中にあり、
+// 押したユーザーが打つものは、もう無い。暗号化する鍵は保管庫の中にあり、
 // 保管庫が開いていることが同期してよいことの唯一の条件である。鍵をまだ
-// 決めていないなら、押しても何も起きてはならない——リモートには、誰も
+// 決めていないなら、押しても何も起きてはならない。リモートには、誰も
 // 開けられない書庫が残るからだ。
 func TestPushWithoutAKeyRefusesAndRunsNothing(t *testing.T) {
 	engine, _, secrets := syncEngineWithVault(t)
@@ -627,7 +627,7 @@ func TestPushWithoutAKeyRefusesAndRunsNothing(t *testing.T) {
 		t.Errorf("code = %s", recorder.Body.String())
 	}
 	// そしてそこで止まった。拒否を書き込んでからそれでも実行してしまう
-	// ハンドラは、body に両方の答えを残してしまう。
+	// ハンドラは、body に両方の結果を残してしまう。
 	if strings.Contains(recorder.Body.String(), "sync_failed") {
 		t.Errorf("the push ran after being refused: %s", recorder.Body.String())
 	}
@@ -635,7 +635,7 @@ func TestPushWithoutAKeyRefusesAndRunsNothing(t *testing.T) {
 
 // vault を一度も作ったことのないマシンは、初めての pull を行う
 // マシンである。打ち込まれるパスワードはアーカイブへの鍵であり、
-// ここでは確認できない——確認できるのはアーカイブ自身だけだ。
+// ここでは確認できない。確認できるのはアーカイブ自身だけだ。
 func TestPullOnAMachineWithNoVaultIsNotRefusedForTheWrongReason(t *testing.T) {
 	engine, _ := syncEngine(t)
 	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("")).Code; code != http.StatusOK {
@@ -681,8 +681,8 @@ func TestTheObjectPathIsStoredAndRefusedWhenItCouldEscape(t *testing.T) {
 	}
 }
 
-// **切ったことは保管庫の中に残る。** この実行のあいだだけ止まる切り方は、次に
-// 起こしたときに黙って再開することであり、止めた人はそれを止めたと思っている。
+// 切ったことは保管庫の中に残る。この実行のあいだだけ止まる切り方は、次に
+// 起動したときに暗黙に再開することであり、止めたユーザーはそれを止めたと思っている。
 func TestTheAutoSyncSwitchIsRememberedAndReported(t *testing.T) {
 	engine, _, secrets := syncEngineWithVault(t)
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {

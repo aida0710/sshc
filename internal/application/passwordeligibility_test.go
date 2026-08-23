@@ -9,8 +9,6 @@ import (
 	"sshc/internal/keys"
 )
 
-// newEligibilityService は、これらの規則が扱う 4 個の状況を宣言するエントリファイル
-// と、そのうち 1 個を知っている known_hosts を持つワークスペースを書き出す。
 func newEligibilityService(t *testing.T) *Service {
 	t.Helper()
 	service, workspace := newTestService(t)
@@ -52,9 +50,6 @@ func codesOf(notices []Notice) map[string]bool {
 }
 
 func TestAHostThatRefusesPasswordAuthenticationCannotStoreOne(t *testing.T) {
-	// PasswordAuthentication はクライアント側の設定なので、これが off だと
-	// クライアントはどれほど良いパスワードでも決して提示しない。保存する
-	// ことは、まったく使い道のない秘密をディスクに置くことになる。
 	report, err := newEligibilityService(t).PasswordEligibility("nopassword")
 	if err != nil {
 		t.Fatal(err)
@@ -93,9 +88,6 @@ func TestIdentityFileNoneDoesNotBlockAStoredPassword(t *testing.T) {
 	}
 }
 
-// **鍵は、OpenSSH が使うぶんだけ返る。** IdentityFile は積み上がるディレクティブ
-// なので、2 行書けば 2 本とも接続に使われうる——1 本に絞れないことは、答えられない
-// ことではない。
 func TestWorkspaceKeysNamesEveryKeyTheConnectionCanUse(t *testing.T) {
 	service, workspace := newTestService(t)
 	entry := "Host keyed\n" +
@@ -115,8 +107,7 @@ func TestWorkspaceKeysNamesEveryKeyTheConnectionCanUse(t *testing.T) {
 		"keyed":     {"id_ed25519_server"},
 		"complex":   {"id_first", "id_second"},
 		"inherited": {},
-		// ~/.ssh の外にある鍵は保管庫に現れないので、返しても訊く相手が居ない。
-		"outside": {},
+		"outside":   {},
 	} {
 		got, err := service.WorkspaceKeys(alias)
 		if err != nil {
@@ -128,12 +119,6 @@ func TestWorkspaceKeysNamesEveryKeyTheConnectionCanUse(t *testing.T) {
 	}
 }
 
-// **実行を伴う設定だからといって鍵を隠さない。**
-//
-// かつてここは ProxyCommand・ProxyJump・Match・XAuthLocation を見つけると何も
-// 返さなかった。環境変数で capability を渡し、それが設定の書ける任意の子プロセスへ
-// 継がれることを恐れていた頃の規則である。いまのクライアントはそのどれも実行せず、
-// ProxyJump は自分でプロセス内を辿る——**起こさないプログラムへ秘密は漏れない。**
 func TestWorkspaceKeysNoLongerHidesBehindDirectivesTheClientNeverRuns(t *testing.T) {
 	for name, entry := range map[string]string{
 		"inherited second key": "Host keyed\n\tIdentityFile ~/.ssh/id_direct\nHost *\n\tIdentityFile ~/.ssh/id_global\n",
@@ -158,10 +143,6 @@ func TestWorkspaceKeysNoLongerHidesBehindDirectivesTheClientNeverRuns(t *testing
 	}
 }
 
-// **解決できない設定では、何も答えない。**
-//
-// CanonicalizeHostname は、OpenSSH に別のホスト名で設定を読み直させる。どの鍵が
-// 選ばれるかは DNS の答え次第であり、この解決器は名前を引かない。
 func TestWorkspaceKeysStaysSilentWhenTheConfigurationCannotBeResolved(t *testing.T) {
 	service, workspace := newTestService(t)
 	entry := "Host keyed\n\tCanonicalizeHostname yes\n\tCanonicalDomains example.test\n" +
@@ -178,10 +159,6 @@ func TestWorkspaceKeysStaysSilentWhenTheConfigurationCannotBeResolved(t *testing
 	}
 }
 
-// **入れ替えられた鍵の答えを持ち出さない。**
-//
-// 保管庫には、もう暗号化されていない鍵や、別のものに置き換わった綴りについて古い
-// 項目が残っていることがある。持ち出しても開くものが無い。
 func TestUnlockableWorkspaceKeysRequiresACurrentEncryptedPrivateKey(t *testing.T) {
 	service, workspace := newTestService(t)
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"),
@@ -211,11 +188,6 @@ func TestUnlockableWorkspaceKeysRequiresACurrentEncryptedPrivateKey(t *testing.T
 }
 
 func TestAnUnknownHostKeyIsReportedBecauseTheHelperWillNotAnswerThatQuestion(t *testing.T) {
-	// askpass を強制すると、ホスト鍵の問いも helper へ回されるが、
-	// helper はそれを拒否する。そのため未検証のホストへの最初の接続は
-	// そのプロンプトでパスワードが使われないまま止まる。それをここで
-	// 言明することが、壊れているように見える機能と自ら説明する機能との
-	// 違いになる。
 	report, err := newEligibilityService(t).PasswordEligibility("keyed")
 	if err != nil {
 		t.Fatal(err)
@@ -234,9 +206,6 @@ func TestAnUnknownHostKeyIsReportedBecauseTheHelperWillNotAnswerThatQuestion(t *
 }
 
 func TestANonDefaultPortIsLookedUpInTheFormKnownHostsUses(t *testing.T) {
-	// known_hosts はデフォルト以外のポートを[host]:port として書く。素の
-	// ホストだけを調べると、そのようなホストすべてを未検証として報告して
-	// しまい、常に出ている warning は誰も読まない warning になる。
 	report, err := newEligibilityService(t).PasswordEligibility("oddport")
 	if err != nil {
 		t.Fatal(err)
@@ -263,8 +232,6 @@ func TestAPatternIsNotAHostAndCannotHoldAPassword(t *testing.T) {
 }
 
 func TestAnOrdinaryVerifiedHostHasNothingToSay(t *testing.T) {
-	// すべてのホストに出る warning は雑音であり、
-	// 雑音こそが本当の warning が無視される原因である。
 	report, err := newEligibilityService(t).PasswordEligibility("known")
 	if err != nil {
 		t.Fatal(err)
@@ -277,15 +244,6 @@ func TestAnOrdinaryVerifiedHostHasNothingToSay(t *testing.T) {
 	}
 }
 
-// **Match の下に書かれた設定も、この報告に載らなければならない。**
-//
-// ここは長いあいだ effective.Project を使っていた。あの射影は Match ブロックの値を
-// 決して採らず、「接続中にしか分からない条件がある」という印を complexity として
-// 脇に置くだけである。ところがこの報告は complexity を一度も読まなかったので、
-// 下の設定に対して「保存してよい」と答えていた——そして保存されたパスワードは、
-// PasswordAuthentication no のせいで一度も提示されない。
-//
-// Match host は接続中の状態を要さない。Resolve はこれを評価するので、答えが出る。
 func TestPasswordAuthenticationOffInsideAMatchBlockStillBlocks(t *testing.T) {
 	service, workspace := newTestService(t)
 	entry := "Host guarded\n" +
@@ -309,7 +267,6 @@ func TestPasswordAuthenticationOffInsideAMatchBlockStillBlocks(t *testing.T) {
 	}
 }
 
-// Match の下の HostName も同じように効く。**known_hosts を引く相手が変わる。**
 func TestHostNameInsideAMatchBlockReachesTheReport(t *testing.T) {
 	service, workspace := newTestService(t)
 	entry := "Host shifting\n" +
@@ -330,11 +287,6 @@ func TestHostNameInsideAMatchBlockReachesTheReport(t *testing.T) {
 	}
 }
 
-// **誰も書いていない Port を、書かれた値として報告しない。**
-//
-// 解決器は hostname・user・port の 3 つに既定値を持つ。値の側（Resolution.Values）
-// から Port を読むと、設定に一行も無いのに 22 が載る——そして known_hosts は
-// `[host]:22` ではなく `host` の綴りで書かれるので、引く相手が変わる。
 func TestAnUnwrittenPortIsNotReported(t *testing.T) {
 	service, workspace := newTestService(t)
 	entry := "Host plain\n\tHostName 198.51.100.32\n"

@@ -27,20 +27,13 @@ export type TrashKeyResponse = components["schemas"]["TrashKeyResponse"];
 export type RestoreTrashResponse = components["schemas"]["RestoreTrashResponse"];
 export type PurgeTrashResponse = components["schemas"]["PurgeTrashResponse"];
 
-// action の語彙はサーバーの session パッケージに属し、操作を確認する
-// すべてのサブシステムのためにそれを所有する。これらはその通信上の値だ。
 export const REVEAL_ACTION_KIND = "private_key.reveal";
 export const PURGE_ACTION_KIND = "trash.purge";
 
-// 接続作成が IdentityFile として提示できるのは秘密鍵だけである。公開鍵・証明書・
-// known_hosts・設定ファイルは、インベントリには有用でも認証主体にはならない。
 export function selectablePrivateKeys(inventory: Pick<KeyInventoryResponse, "items">): KeyItem[] {
   return inventory.items.filter((item) => item.kind === "private_key");
 }
 
-// KeyLocationInput は変更しないものを省く。名前とグループは別々の
-// 行き先なので、relocation はどちらか一方または両方を変えられ、
-// 空のグループは実在の答えだ: グループなしの鍵がある ~/.ssh のルートを指す。
 export type KeyLocationInput = {
   newName?: string;
   group?: string;
@@ -69,8 +62,6 @@ export type PassphraseInput = {
   unencrypted: boolean;
 };
 
-// RegisterAgentInput は ssh-add が 1 つの鍵を読み込むのに必要な入力だ。lifetimeSeconds は
-// ssh-add 自身の -t で、0 はエージェントが終了するまで鍵を保持することを意味する。
 export type RegisterAgentInput = {
   passphrase: string;
   lifetimeSeconds: number;
@@ -86,8 +77,6 @@ export type KeysApi = {
   publicKey(keyId: string): Promise<PublicKeyResponse>;
   relocate(keyId: string, change: KeyLocationInput): Promise<RelocateKeyResponse>;
   registerWithAgent(keyId: string, input: RegisterAgentInput): Promise<RegisterKeyResponse>;
-  // エージェントから鍵を取り出す。何も破棄しないので確認は
-  // 不要で、間違っていた場合の代償はもう一度パスフレーズを求められることだけだ。
   deregisterFromAgent(keyId: string): Promise<AgentIdentitiesResponse>;
   trash(keyId: string): Promise<TrashKeyResponse>;
   listTrash(): Promise<TrashListResponse>;
@@ -283,15 +272,9 @@ export const keysApi: KeysApi = {
       }),
     );
   },
-  // 公開鍵は秘密ではないので、これは確認も no-store も監査記録もない
-  // 普通の読み取りだ。サーバーは公開鍵でも証明書でもないエントリを
-  // すべて拒否し、それがこれを成り立たせている。
   async publicKey(keyId) {
     return validatePublicKey(await apiClient.read(`/api/v1/keys/${encodeURIComponent(keyId)}/public`));
   },
-  // ブロックされた relocation は、拒否した理由とともに 409 で応答し、
-  // 何も書き込まれなかった。その理由こそが拒否の要点なので、失敗した
-  // リクエストとして捨てるのではなく、ボディから読み取る。
   async relocate(keyId, change) {
     const response = await apiClient.send(`/api/v1/keys/${encodeURIComponent(keyId)}/location`, {
       method: "POST",
@@ -303,10 +286,6 @@ export const keysApi: KeysApi = {
     }
     return validateRelocate(await response.json());
   },
-  // パスフレーズはリクエストボディの中だけを移動し、それより先には進まない。サーバーはそれを
-  // ssh-add の標準入力に渡すので、argv にも子プロセスの
-  // 環境にも届かない。ここでは複製を一切保持せず、呼び出し側は自身の状態をクリアし、
-  // 応答は何がロックを解いたかではなく、いまエージェントが保持しているものを伝える。
   async registerWithAgent(keyId, input) {
     return validateRegister(
       await apiClient.mutate<unknown>(`/api/v1/keys/${encodeURIComponent(keyId)}/agent`, {
@@ -329,8 +308,6 @@ export const keysApi: KeysApi = {
     return validateTrashList(await apiClient.read("/api/v1/trash"));
   },
   async restore(entryId) {
-    // 拒否された restore は、それを説明するブロッカーとともに 409 で応答する。
-    // それはユーザーが必要とする情報であり、捨てるべき通信の失敗ではない。
     const response = await apiClient.send(`/api/v1/trash/${encodeURIComponent(entryId)}/restore`, {
       method: "POST",
     });

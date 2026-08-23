@@ -91,7 +91,7 @@ describe("ConnectionSummary", () => {
 
     expect(screen.getByRole("heading", { name: "bastion" })).toBeInTheDocument();
     expect(screen.getByText("ops@203.0.113.10:2222")).toBeInTheDocument();
-    expect(screen.getByText("id_work — SHA256:work")).toBeInTheDocument();
+    expect(screen.getByText("id_work · SHA256:work")).toBeInTheDocument();
     expect(screen.getByText("Saved only for this key")).toBeInTheDocument();
     expect(screen.queryByText("Saved password: office")).not.toBeInTheDocument();
     expect(screen.getByText(/is not used and will be unassigned/i)).toBeInTheDocument();

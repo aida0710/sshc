@@ -19,17 +19,12 @@ describe("InspectorToggle", () => {
     expect(screen.getByRole("button", { name: "Hide Display and classification" })).toHaveAttribute("aria-expanded", "true");
   });
 
-  // notice は既定で閉じているペインの中に住んでいるので、問題を抱えた
-  // ホストは問題のないホストとまったく同じに見えてしまう。ドットこそが
-  // ペインを開く価値のあるものにし、それはスクリーンリーダーにも届かなければならない。
   it("says so when what is inside needs attention", () => {
     render(<InspectorToggle label="Display and classification" open={false} attention onToggle={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Show Display and classification Needs attention" })).toBeInTheDocument();
   });
 
-  // accessible name 全体への完全一致であり、それがこのテストを上の
-  // テストの弱い版ではなく正反対のものにしている。
   it("does not say so otherwise", () => {
     render(<InspectorToggle label="Display and classification" open={false} attention={false} onToggle={vi.fn()} />);
 
@@ -57,8 +52,6 @@ describe("InspectorPane", () => {
     expect(pane).toHaveTextContent("nothing yet");
   });
 
-  // 面はひとつである。開いているコンソールの一覧は一番左のナビゲーションに
-  // あるので、このペインが切り替えるものは何も持たない。
   it("draws no segmented control", () => {
     render(<InspectorPane label="Details">nothing yet</InspectorPane>);
 

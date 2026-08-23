@@ -22,7 +22,7 @@ type actionKind struct {
 	fail     func(c *echo.Context, err error) error
 }
 
-// actionRegistry は、session パッケージが共有する action の語彙を、
+// actionRegistry は、session パッケージが共有する action の用語を、
 // 各 kind を所有する evidence source へ対応付ける。
 //
 // 存在しない kind は決して確認可能にならない。このプロセスに組み込まれていない

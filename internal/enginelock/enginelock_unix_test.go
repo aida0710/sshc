@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// ロックファイルは秘密を持たないが、engine 所有権の証拠であり、他人が書ける
+// ロックファイルは秘密を持たないが、engine 所有権の証拠であり、別のユーザーが書ける
 // 場所に置けば所有の直列化そのものを歪められる。既に緩い状態で残っていても、
 // 取得時に締め直す。
 func TestAcquireTightensLooseUnixPrivateState(t *testing.T) {

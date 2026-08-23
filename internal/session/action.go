@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	// ActionTokenTTL は、ひとつの確認が使える時間。これが短いのは、確認に答えるのが
-	// いままさにそのダイアログを目の前にしている人であり、時間をかけるものでは
-	// ないからである。
+	// ActionTokenTTL は確認トークンの有効期間である。確認ダイアログから即時に
+	// 使用する一時トークンなので、有効期間を短くする。
 	ActionTokenTTL = 2 * time.Minute
 	// MaxActionTokensPerSession は、ひとつのセッションが固定できるメモリを制限する。
 	MaxActionTokensPerSession = 32
@@ -52,9 +51,9 @@ func KnownActionKind(kind string) bool { return knownActionKinds[kind] }
 
 // ActionRequest は、確認済みの操作をちょうどひとつ特定する。
 //
-// Evidence は確認ダイアログが表示していた内容のダイジェスト — 通常は実行される
-// ディレクティブか、編集対象ファイルの現在の内容 — である。そのため確認と実行の
-// あいだに変化があれば、黙って別のものに適用されるのではなく、トークンが無効に
+// Evidence は確認ダイアログが表示していた内容のダイジェスト。通常は実行される
+// ディレクティブか、編集対象ファイルの現在の内容である。そのため確認と実行の
+// あいだに変化があれば、暗黙に別のものに適用されるのではなく、トークンが無効に
 // なる。
 type ActionRequest struct {
 	Kind     string

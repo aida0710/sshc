@@ -124,9 +124,6 @@ test("normalizes one trailing slash without leaving the requested section", asyn
 }) => {
   await openApplication(page, { url: atPath(installation.url, "/connections/") });
 
-  // 正規化は接続画面がマウントしてから起きる。その画面は遅延読み込みなので、
-  // 「いつ」ではなく「そこへ落ち着くこと」を表明する。同期に読むと、chunk が
-  // ひとつ増えただけで落ちるテストになる——実際にそうなった。
   await expect.poll(() => new URL(page.url()).pathname).toBe("/connections/servers");
   await expect(page.getByRole("navigation", { name: "Connections" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Connections", exact: true })).toHaveAttribute(

@@ -11,8 +11,8 @@ var ErrNoLoginShell = errors.New("no trusted login shell was found")
 
 // LoginShell は、埋め込みターミナルが開くシェルの絶対パスを返す。
 //
-// **SHELL は見ない。** Windows でそれを置くのは MSYS や Cygwin であり、値は
-// `/usr/bin/bash` のような、Windows が起こせない綴りである。利用者の選択では
+// SHELL は見ない。Windows でそれを置くのは MSYS や Cygwin であり、値は
+// `/usr/bin/bash` のような、Windows が起動できない表記である。利用者の選択では
 // なく、何かをインストールした副作用だ。ここで信頼するのは Windows 自身が置いた
 // 三つの場所だけであり、順は上から下である。
 //
@@ -20,8 +20,8 @@ var ErrNoLoginShell = errors.New("no trusted login shell was found")
 //  2. Windows に同梱された Windows PowerShell
 //  3. %ComSpec%
 //
-// lookup が答えるのは ProgramFiles、WINDIR、ComSpec の三つである。**最初の
-// 二つは環境から取ってはならない**——そこを差し替えられれば、端末に渡るのは
+// lookup が返すのは ProgramFiles、WINDIR、ComSpec の三つである。最初の
+// 二つは環境から取ってはならない。そこを差し替えられれば、端末に渡るのは
 // 利用者のシェルではなくなる。呼び出し側が Windows 自身に尋ねて渡す。
 // stat が nil なら、実在する通常ファイルであることを確かめる。
 func LoginShell(lookup func(string) (string, bool), stat func(string) error) (string, error) {
@@ -36,11 +36,11 @@ func LoginShell(lookup func(string) (string, bool), stat func(string) error) (st
 	return "", ErrNoLoginShell
 }
 
-// LoginArguments は、そのシェルをログインシェルとして起こすための argv の残り。
+// LoginArguments は、そのシェルをログインシェルとして起動するための argv の残り。
 //
-// **Unix のハイフン付き argv[0] に当たるものは Windows に無い。** 代わりに
+// Unix のハイフン付き argv[0] に当たるものは Windows に無い。代わりに
 // あるのは、PowerShell が起動のたびに出す著作権表示だけである。プロファイルは
-// 読ませる——開いているのは利用者のシェルであって、素のインタプリタではない。
+// 読ませる。開いているのは利用者のシェルであって、素のインタプリタではない。
 func LoginArguments(shell string) []string {
 	switch strings.ToLower(programName(shell)) {
 	case "pwsh.exe", "powershell.exe":
@@ -62,7 +62,7 @@ func candidates(lookup func(string) (string, bool)) []string {
 			windowsDirectory, "System32", "WindowsPowerShell", "v1.0", "powershell.exe",
 		))
 	}
-	// **%ComSpec% だけが利用者の環境から来る。** 上の二つと違い、これは綴りその
+	// %ComSpec% だけが利用者の環境から来る。上の二つと違い、これは表記その
 	// ものを疑う。実在するかどうかを尋ねるのは、プログラムの形をしていると
 	// 分かってからである。
 	if comSpec, ok := lookup("ComSpec"); ok && trustedProgramPath(comSpec) {
@@ -71,7 +71,7 @@ func candidates(lookup func(string) (string, bool)) []string {
 	return found
 }
 
-// trustedProgramPath は、環境から来た綴りをそのまま起こしてよいかを決める。
+// trustedProgramPath は、環境から来た表記をそのまま起動してよいかを決める。
 //
 // 求めるのは、ドライブから始まる絶対パスに置かれた一本の `.exe` である。
 // 相対パスは、それを解釈するプロセスの居場所で意味が変わる。引用符と引数は、
@@ -102,7 +102,7 @@ func trustedProgramPath(value string) bool {
 	return strings.HasSuffix(strings.ToLower(normalized), ".exe")
 }
 
-// programName は、Windows の綴りで最後の要素を返す。filepath.Base は動いて
+// programName は、Windows の表記で最後の要素を返す。filepath.Base は動いて
 // いる OS の区切り文字しか知らないので、macOS の上では `\` を分けない。
 func programName(path string) string {
 	if index := strings.LastIndexAny(path, `\/`); index >= 0 {

@@ -4,7 +4,7 @@
 //
 // このパッケージの全テストは、t.TempDir() で隔離された
 // ホームディレクトリを構築し、それに対して app.Build 経由で
-// production server を起動し、プロセス、terminal、agent の継ぎ目を、プログラムを一切
+// production server を起動し、プロセス、terminal、agent のインターフェースを、プログラムを一切
 // 起動しない recorder に置き換える。ここにあるテストは、本物のホームディレクトリ、
 // 本物の agent、Terminal、リモートホストのいずれも読まない。
 package acceptance_test
@@ -51,7 +51,7 @@ const canaryPassphrase = "canary-passphrase-b0e0a1"
 // どの route もそれを返してはならず、leak sweep と path traversal 双方の針である。
 const canaryOutsideContents = "canary-outside-workspace-4f21c7\n"
 
-// fixtureCanaries は、テストがレスポンスとログの中に探す文字列を名指しする。
+// fixtureCanaries は、テストがレスポンスとログの中に探す文字列を指定する。
 type fixtureCanaries struct {
 	Outside        string
 	Passphrase     string
@@ -63,9 +63,9 @@ type fixtureCanaries struct {
 
 // fixedToolchain は、ssh-keygen が見つかったことにする。
 //
-// **走らせはしない。** このアプリケーションが OpenSSH のプログラムを実行しない
-// ことは TestOnlyTheNamedSubsystemsStartAProgram が押さえている——このハーネスは
-// プロセスの継ぎ目そのものを持たないので、ここで「起動しなかった」と表明しても
+// 走らせはしない。このアプリケーションが OpenSSH のプログラムを実行しない
+// ことは TestOnlyTheNamedSubsystemsStartAProgram が押さえている。このハーネスは
+// プロセスのインターフェースそのものを持たないので、ここで「起動しなかった」と表明しても
 // 落ちようがない。
 type fixedToolchain struct{}
 
@@ -256,8 +256,8 @@ func newFixture(t testing.TB) *fixture {
 		Toolchain:       fixedToolchain{},
 		TerminalStarter: terminalStarter,
 		KeyAgent:        fakeAgent{},
-		// このスイートはネットワークへ出ない。ホスト鍵を集める継ぎ目も、
-		// 認証を試す継ぎ目も、プロセスの継ぎ目と同じく記録係で置き換える。
+		// このスイートはネットワークへ出ない。ホスト鍵を集めるインターフェースも、
+		// 認証を試すインターフェースも、プロセスのインターフェースと同じく記録係で置き換える。
 		ScanHostKeys: scanner.collect,
 		Probe:        scanner.probe,
 		RemoteRun:    scanner.remoteRun,
@@ -310,7 +310,7 @@ func newFixture(t testing.TB) *fixture {
 }
 
 // fixtureMasterPassword は harness が初回起動時に設定する値である。
-// これは fixture の値であり、ログ行にもレスポンスにも、平文のどのファイルにも現れない —
+// これは fixture の値であり、ログ行にもレスポンスにも、平文のどのファイルにも現れない。
 // そのこと自体が leak sweep によって検証される。
 const fixtureMasterPassword = "a fixture master password"
 
@@ -482,7 +482,7 @@ func (f *fixture) doAs(t testing.TB, client *http.Client, method, path string, b
 		// 全く同じようにそれを追わねばならない。route sweep はこれを含む
 		// 全 route を呼ぶため、これがなければ同じテスト内でこの後の
 		// すべてのリクエストが、session がもはや知らない token を運ぶ
-		// ことになる — read が token を必要としない間は見えなかった問題である。
+		// ことになる。read が token を必要としない間は見えなかった問題である。
 		body, readErr := io.ReadAll(response.Body)
 		_ = response.Body.Close()
 		if readErr == nil {
@@ -507,7 +507,7 @@ func (f *fixture) doAs(t testing.TB, client *http.Client, method, path string, b
 // adjust function の内側で Cookie ヘッダーを削除しても効かない:
 // http.Client は、呼び出し元がリクエストの構築を終えた後で jar の
 // cookie を付け足すため、ヘッダーは再び現れてしまい、session 要件を
-// 証明するつもりのテストが、黙って cookie を送ってしまうことになる。
+// 証明するつもりのテストが、暗黙に cookie を送ってしまうことになる。
 func (f *fixture) doAnonymous(method, path string, body []byte, adjust ...func(*http.Request)) *http.Response {
 	f.t.Helper()
 	return f.doAs(f.t, f.anonymous, method, path, body, adjust...)
@@ -744,15 +744,15 @@ func TestHarnessStartsTheProductionServerAgainstAnIsolatedHome(t *testing.T) {
 	}
 }
 
-// recordingScanner は、ホスト鍵を集める継ぎ目である。
+// recordingScanner は、ホスト鍵を集めるインターフェースである。
 //
-// **このスイートはネットワークへ出ない。** 本物の握手を見るのは
+// このスイートはネットワークへ出ない。本物の握手を見るのは
 // internal/sshclient の側であり、ここが確かめるのは、確認の無い要求が
-// この継ぎ目に届かないことである。
+// このインターフェースに届かないことである。
 type recordingScanner struct {
-	// hostKey は、この記録係が「そのアドレスにあった」と答える鍵である。
+	// hostKey は、この記録係が「そのアドレスにあった」と返す鍵である。
 	//
-	// **本物の鍵でなければならない。** known_hosts のフィクスチャに書いてある
+	// 本物の鍵でなければならない。known_hosts のフィクスチャに書いてある
 	// 合成の行は wire format として短く、公開鍵として読み戻せない。
 	hostKey ssh.PublicKey
 
@@ -760,7 +760,7 @@ type recordingScanner struct {
 	addresses []string
 	probed    []string
 	ran       []remoteCall
-	// answer は、認証の継ぎ目が返す答えである。既定は「届かなかった」。
+	// answer は、認証のインターフェースが返す結果である。既定は「届かなかった」。
 	answer func() (sshclient.Probe, error)
 }
 
@@ -779,7 +779,7 @@ func (s *recordingScanner) reset() {
 	s.addresses, s.probed, s.ran = nil, nil, nil
 }
 
-// probe は、認証テストの継ぎ目である。**このスイートは認証しない。**
+// probe は、認証テストのインターフェースである。このスイートは認証しない。
 func (s *recordingScanner) probe(_ context.Context, alias string) (sshclient.Probe, error) {
 	s.mutex.Lock()
 	answer := s.answer
@@ -791,21 +791,21 @@ func (s *recordingScanner) probe(_ context.Context, alias string) (sshclient.Pro
 	return sshclient.Probe{}, errors.New("no route to host")
 }
 
-// answers は、以降の認証がどう答えるかを決める。
+// answers は、以降の認証がどう返すかを決める。
 func (s *recordingScanner) answers(answer func() (sshclient.Probe, error)) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.answer = answer
 }
 
-// authenticated は、この継ぎ目に届いた alias である。
+// authenticated は、このインターフェースに届いた alias である。
 func (s *recordingScanner) authenticated() []string {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return append([]string(nil), s.probed...)
 }
 
-// remoteRun は、リモートで 1 本のコマンドを走らせる継ぎ目である。
+// remoteRun は、リモートで 1 本のコマンドを走らせるインターフェースである。
 func (s *recordingScanner) remoteRun(
 	_ context.Context, target sshclient.Target, command string, stdin []byte,
 ) (sshclient.Output, error) {
@@ -825,7 +825,7 @@ type remoteCall struct {
 	stdin   string
 }
 
-// remoted は、リモート実行の継ぎ目に届いたものである。
+// remoted は、リモート実行のインターフェースに届いたものである。
 func (s *recordingScanner) remoted() []remoteCall {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

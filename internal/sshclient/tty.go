@@ -22,14 +22,14 @@ var DefaultLocalSize = terminal.Size{Cols: 80, Rows: 24}
 //
 // 戻るのはセッションが終わったときで、返すのはリモートの終了コードである。
 //
-// **端末の状態は必ず元に戻す。** 戻さないと、このコマンドが終わったあとの
-// シェルがエコーも改行も失ったままになる。だから復元は defer に置く——
+// 端末の状態は必ず元に戻す。戻さないと、このコマンドが終わったあとの
+// シェルがエコーも改行も失ったままになる。だから復元は defer に置く。
 // 途中でどう抜けても通る道に置くしかない。
 func Attach(ctx context.Context, process terminal.Process, in *os.File, out io.Writer) (int, error) {
 	size := DefaultLocalSize
 	descriptor := int(in.Fd())
 
-	// テレタイプでなければ raw にしない。**大きさも問い合わせない。**
+	// テレタイプでなければ raw にしない。大きさも問い合わせない。
 	// パイプの中で走っているときがそれで、その場合でも読み書きは通る。
 	if term.IsTerminal(descriptor) {
 		state, err := term.MakeRaw(descriptor)
@@ -53,7 +53,7 @@ func Attach(ctx context.Context, process terminal.Process, in *os.File, out io.W
 	finish := func() { once.Do(func() { _ = process.Close() }) }
 
 	// 読み手はこの goroutine を出ない。os.Stdin の Read は閉じても返らないので、
-	// 待てば終わらない——セッションが終わったら、こちらは置いていく。
+	// 待てば終わらない。セッションが終わったら、こちらは置いていく。
 	go func() {
 		_, _ = io.Copy(process, in)
 	}()

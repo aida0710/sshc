@@ -2,15 +2,8 @@
 #
 # 参照ゼロの関数を探す。
 #
-# **一つの OS で見ても分からない。** `windowsacl.ValidatePrivatePath` を呼ぶのは
-# `_windows.go` だけなので、Linux から見れば到達不能に見える。逆に Windows から
-# 見れば `platform/macos` が丸ごと死んで見える。だから**出荷する 3 つの OS すべてで
-# 到達不能なものだけ**を死んだものとして扱う——それが積である。
-#
-# **なぜ要るのか。** Electron と生体認証を消したとき、`windowsregistry` package
-# （130 行）と `Vault.Wrap` は書き手が消えたまま残った。どちらも `//go:build windows`
-# だったり本番から呼ばれないだけだったりで、コンパイルは通り続ける。**通るものは、
-# 見張らなければ気づかれない。**
+# OS 固有の参照を考慮し、Linux、macOS、Windows のすべてで到達不能な関数だけを
+# 検出する。コンパイルできても本番から参照されないコードを確認するために使う。
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -26,9 +19,8 @@ trap 'rm -rf "$(dirname "$tool")" "$found"' EXIT
 
 first=1
 for os in linux darwin windows; do
-  # **-test を付ける。** テストからしか呼ばれない補助を「死んでいる」と言うのは
-  # 行き過ぎで、interface を満たすためだけに在る stub まで巻き込む。
-  # node_modules には他人の Go が入っている。
+  # テスト専用の補助や interface 実装を除外するため -test を付ける。
+  # node_modules には別のユーザーの Go が入っている。
   reported="$(mktemp)"
   GOOS="$os" "$tool" -test ./cmd/... ./internal/... ./mobile/... 2>/dev/null \
     | grep -v node_modules \
@@ -44,7 +36,7 @@ for os in linux darwin windows; do
   rm -f "$reported"
 done
 
-# 許すものは理由と一緒に書いてある。**理由の無い許しは置かない。**
+# 許容する到達不能シンボルには理由の記載を必須とする。
 allowed="$(grep -v '^\s*#' scripts/ci/deadcode-allowed.tsv | grep -v '^\s*$' | cut -f1,2 | sort)"
 
 unexpected="$(comm -23 "$found" <(printf '%s\n' "$allowed"))"

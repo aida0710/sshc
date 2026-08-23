@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// **Windows に uid は無い。** user.Current がそこで Uid に入れるのは SID であり、
+// Windows に uid は無い。user.Current がそこで Uid に入れるのは SID であり、
 // 数を期待すると、この OS が持っていないものを要求することになる。ここで確かめる
 // のは、`%i` に入る値がファイル名の一部として使える形をしていることだけである。
 func assertLocalUID(t *testing.T, uid string) {

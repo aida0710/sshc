@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// **既定は無言である。** 毎回この量が流れると、シェルの最初の一画面が押し流される。
+// 既定は無言である。毎回この量が流れると、シェルの最初の一画面が押し流される。
 func TestATracerSaysNothingUntilItIsAsked(t *testing.T) {
 	var out bytes.Buffer
 	trace := newTracer(Quiet, &out)
@@ -48,8 +48,8 @@ func TestATracerStopsAtTheDepthItWasGiven(t *testing.T) {
 	}
 }
 
-// **端末は CRLF を要る。** 生の \n だけを送ると、次の行が前の行の右端から始まる
-// ——PTY はここを通っていないので、誰も直してくれない。
+// 端末は CRLF を要る。生の \n だけを送ると、次の行が前の行の右端から始まる
+// PTY はここを通っていないので、誰も直してくれない。
 func TestEveryTracedLineEndsTheWayATerminalNeeds(t *testing.T) {
 	var out bytes.Buffer
 	newTracer(Brief, &out).say(Brief, "繋ぎます")
@@ -62,16 +62,16 @@ func TestEveryTracedLineEndsTheWayATerminalNeeds(t *testing.T) {
 	}
 }
 
-// **nil の tracer でも落ちない。** 途中経過を出さない道（`sshc run` や到達確認）は
+// nil の tracer でも落ちない。途中経過を出さない道（`sshc run` や到達確認）は
 // tracer を持たないまま同じ関数を通る。
 func TestANilTracerIsSafeToUse(t *testing.T) {
 	var trace *tracer
 	trace.say(Brief, "落ちない")
 	if trace.enabled(Brief) {
-		t.Error("nil の tracer が「書ける」と答えた")
+		t.Error("nil tracer reported itself as writable")
 	}
 	if trace.now().IsZero() {
-		t.Error("nil の tracer が時計に答えなかった")
+		t.Error("nil tracer did not use the supplied clock")
 	}
 	if trace.since(time.Now().Add(-time.Second)) <= 0 {
 		t.Error("nil の tracer が経過を測れなかった")

@@ -1,50 +1,46 @@
-# 端末で engine を持つ
+# エンジンを常駐させる
 
-`sshc engine` は、この端末が engine の持ち主になる、という意味である。画面の
-無い機械で使う入口であり、**前面で走り続ける。** 止まれば engine も止まる。
+`sshc engine` はフォアグラウンドで動作し、起動したターミナルまたはプロセス管理ツールが終了すると停止します。sshc 自身はデーモン化しません。
 
-**マスターパスワードは、どの例にも書かない。** unit ファイルにも、環境変数にも、
-コマンドラインにも置かない。engine を起こしたあと、**別の端末から**
-`sshc vault unlock` を打つ。それが端末を要求するのは、書ける場所へ書かせない
-ためである。
+マスターパスワードを unit ファイル、環境変数、コマンドライン引数へ保存しないでください。エンジンの起動後、別のターミナルから vault のロックを解除します。
 
 ```sh
-sshc engine          # この端末が持つ。Ctrl-C で 130、SIGTERM で 0
-sshc vault unlock      # 別の端末から。同じ engine を開ける
-sshc <接続先>           # 解錠済みの engine に材料を求めて繋ぐ
-sshc run <接続先> <コマンド...>   # 端末を開かずに一つ走らせる
+sshc engine                       # Ctrl+C で終了コード 130、SIGTERM で 0
+sshc vault unlock                 # 別のターミナルから実行
+sshc <接続先>                     # 保存済みの資格情報を利用して接続
+sshc run <接続先> <コマンド...>  # ターミナルを開かずにコマンドを実行
 ```
 
-## systemd（利用者の unit）
+## systemd（ユーザーサービス）
+
+`~/.config/systemd/user/sshc.service`:
+
+次の例はインストールスクリプトの既定パスを使用します。Homebrew などで別の場所へインストールした場合は、`command -v sshc` の結果に合わせて `ExecStart` を変更してください。
 
 ```ini
-# ~/.config/systemd/user/sshc.service
 [Unit]
 Description=sshc engine
 After=default.target
 
 [Service]
-# **前面のまま置く。** これは自分で背後へ回らないので、Type=simple が正しい。
 Type=simple
 ExecStart=%h/.local/bin/sshc engine
 Restart=on-failure
-# Ctrl-C の 130 は「人が止めた」という意味であり、失敗ではない。
-# これを付けないと、手で止めるたびに systemd が起こし直す。
 SuccessExitStatus=130
 
 [Install]
 WantedBy=default.target
 ```
 
+`Type=simple` は、エンジンがフォアグラウンドで動作することを表します。`SuccessExitStatus=130` により、Ctrl+C で停止した場合の自動再起動を防ぎます。
+
 ```sh
 systemctl --user daemon-reload
 systemctl --user enable --now sshc
-# 解錠は別の端末から。unit には何も書かない。
 sshc vault unlock
 ```
 
-**sshc はこの unit を書きません。** 以前は自分で書いていたが、その仕組みごと
-削除した。置くかどうかも、置く場所も、利用者が決めることである。
+sshc は unit ファイルを自動作成しません。配置場所と起動方法は利用者が管理します。
 
 ## tmux
 
@@ -53,69 +49,57 @@ tmux new-session -d -s sshc 'sshc engine'
 tmux new-window -t sshc 'sshc vault unlock; exec $SHELL'
 ```
 
-解錠のために窓を分けるのは、`sshc vault unlock` が端末を要求するからである。
-`tmux send-keys` でパスワードを送ってはならない — **それは打鍵ではなく、
-履歴とログに残る文字列である。**
+`sshc vault unlock` は対話端末を必要とします。`tmux send-keys` でパスワードを送信すると履歴やログに残る可能性があるため、使用しないでください。
 
 ## Docker
 
 ```dockerfile
 FROM debian:stable-slim
 COPY sshc /usr/local/bin/sshc
+RUN install -d -o 1000 -g 1000 /home/sshc
 USER 1000:1000
 ENV HOME=/home/sshc
-ENTRYPOINT ["sshc", "headless"]
+ENTRYPOINT ["sshc", "engine"]
 ```
 
 ```sh
 docker run -d --name sshc -v sshc-home:/home/sshc sshc
-# 解錠は、この容器の中の端末から。
 docker exec -it sshc sshc vault unlock
+docker exec -it sshc sshc <接続先>
 ```
 
-`-it` が要るのは、ここでも端末が要求されるからである。`docker run -e` で
-パスワードを渡す道は無い。**無いのは、作らなかったからである。**
+vault のロック解除には対話端末が必要なので、`docker exec` に `-it` を指定します。マスターパスワードを `docker run -e` で渡す機能はありません。
+
+エンジンはコンテナ内のループバックアドレスで待ち受けます。ホスト側の `sshc` からこのエンジンへ接続することはできないため、UI を使わない運用では接続コマンドも `docker exec` で実行します。
 
 ## Windows（PowerShell）
 
 ```powershell
-# この端末が持つ。閉じれば engine も終わる。
 sshc engine
 ```
 
-別の PowerShell から:
+別の PowerShell から vault のロックを解除します。
 
 ```powershell
 sshc vault unlock
 ```
 
-**タスク スケジューラに登録するなら、対話的なログオン時に、最上位の権限を
-要求せずに。** engine は利用者の `~/.ssh` を開くものなので、別の利用者や
-SYSTEM として走らせると、開く家が変わる。
+タスクスケジューラへ登録する場合は、対話的なログオン時に通常のユーザー権限で実行してください。エンジンは実行ユーザーの `~/.ssh` を使用するため、別のユーザーや SYSTEM として起動すると異なる SSH 設定を参照します。
 
-**sshc は Windows のサービスを入れません。** サービスは利用者のいない文脈で
-走るものであり、端末から解錠するという前提と噛み合わない。
+sshc は Windows サービスをインストールしません。Windows サービスには対話端末がなく、vault をターミナルから解除する運用と一致しないためです。
 
-## 監督者へ渡す約束
+## 終了コード
 
-| 終わり方 | 終了コード | 意味 |
+| 終了条件 | 終了コード | 意味 |
 | --- | --- | --- |
-| Ctrl-C / SIGINT | 130 | 人が止めた |
-| SIGTERM | 0 | 監督者が止めた |
-| 所有権チャンネルの EOF（`sshc engine`） | 0 | 外殻が手を離した |
-| engine lock を取れなかった | 1 | 既に誰かが持っている |
+| Ctrl+C / SIGINT | 130 | 利用者が停止した |
+| SIGTERM | 0 | プロセス管理ツールが停止した |
+| エンジンロックの取得失敗 | 1 | 同じユーザーのエンジンが既に動作している |
 
-**130 を失敗として扱う監督者は多い。** 手で止めるたびに起こし直されないよう、
-`SuccessExitStatus=130` に相当する設定を入れておくこと。
+Ctrl+C の終了コード 130 を正常終了として扱うよう、プロセス管理ツールを設定してください。systemd では上の `SuccessExitStatus=130` が該当します。
 
-これらは `integration/signals_unix_test.go` と `signals_windows_test.go` が
-実プロセスに対して確かめている。
+SIGINT と SIGTERM の終了動作は `integration/signals_unix_test.go`、Windows の Ctrl+Break は `integration/signals_windows_test.go` で実プロセスに対して検証しています。
 
-## 保管庫は 12 時間で閉じます
+## vault の自動ロック
 
-**ここだけ、時計で閉じます。** デスクトップの engine はアプリの子で、アプリを
-終えれば一緒に死にます——蓋を閉じたノートも、開けば OS がログインパスワードを
-訊きます。**`sshc engine` にはそのどちらもありません。** systemd の下で何週間も
-走り続ける engine にとって、12 時間の自動施錠が唯一の歯止めです。
-
-閉じたあと、保管庫を要る操作は `sshc vault unlock` を待ちます。
+常駐モードでは、vault は 12 時間操作がない場合に自動的にロックされます。ロック後もエンジンは動作を続けますが、保存済みのパスワードや鍵パスフレーズを必要とする操作は、`sshc vault unlock` を実行するまで利用できません。

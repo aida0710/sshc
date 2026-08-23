@@ -10,19 +10,9 @@ import (
 )
 
 // TicketTTL は、発行から引き換えまでに許される時間である。
-//
-// これはページがひとつの WebSocket を開くのにかかる時間であって、人が何かを
-// 決めるのにかかる時間ではない。だから短い。
 const TicketTTL = 10 * time.Second
 
 // Tickets は、WebSocket のアップグレードを認可する使い捨ての秘密を持つ。
-//
-// ブラウザは WebSocket のハンドシェイクにカスタムヘッダを付けられないため、
-// /api/ の下に置いたアップグレードは CSRF ヘッダの要求で必ず弾かれる。だから
-// この経路は /api/ の外にあり、別の秘密で認証する。/cli/connect の
-// エンドポイントが /api/ の外にあるのと同じ規則である。
-//
-// ひとつのチケットはひとつのセッション ID に束縛され、一度しか使えない。
 type Tickets struct {
 	// Now と Random は、テストが時計と値を固定するためにここにある。
 	Now    func() time.Time
@@ -79,9 +69,6 @@ func (t *Tickets) Issue(sessionID string) (string, error) {
 }
 
 // Redeem は、そのチケットが束縛しているセッション ID を返し、チケットを使い切る。
-//
-// 二度目は通らない。期限を過ぎたものも通らない。どちらの拒否も外から見て
-// 同じ形をしているので、失敗からチケットの状態は分からない。
 func (t *Tickets) Redeem(token string) (string, bool) {
 	if token == "" {
 		return "", false
@@ -89,8 +76,6 @@ func (t *Tickets) Redeem(token string) (string, bool) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	t.sweep()
-	// 定数時間比較のためにマップを引かずに走査する。チケットは同時に数本しか
-	// 存在しないので、この走査は探索ではなく比較である。
 	for candidate, entry := range t.issued {
 		if len(candidate) == len(token) &&
 			subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) == 1 {
@@ -102,7 +87,6 @@ func (t *Tickets) Redeem(token string) (string, bool) {
 }
 
 // Forget は、あるセッションに対して発行済みのチケットをすべて捨てる。
-// セッションが閉じられたときに呼ばれ、使われなかったチケットを残さない。
 func (t *Tickets) Forget(sessionID string) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()

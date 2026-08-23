@@ -29,7 +29,7 @@ const maxKeyRequestBody = 64 << 10
 
 var errBodyTooLarge = errors.New("request body is larger than the supported maximum")
 
-// confirmationSubjects は、session パッケージが共有する action の語彙を
+// confirmationSubjects は、session パッケージが共有する action の用語を
 // このサブシステム独自のものへ対応付ける。通信上の値を session パッケージが
 // 所有するのは、操作を確認するすべてのサブシステムが同じ表を参照するからである。
 var confirmationSubjects = map[string]keys.ConfirmationSubject{
@@ -62,7 +62,7 @@ type KeyHandlers struct {
 	Keys KeyService
 	// Config は鍵を relocate する。relocation は設定ファイルを書き換えるので、
 	// configuration サービスのトランザクションマネージャを通じてコミットされる。
-	// これは何かが反映される前に再パースと再解決を行う——鍵 vault 自身の
+	// これは何かが反映される前に再パースと再解決を行う。鍵 vault 自身の
 	// マネージャには、意図的にそのような validator がない。
 	Config   *application.Service
 	Secrets  *secret.Service
@@ -92,7 +92,7 @@ func registerKeyRoutes(engine *echo.Echo, handlers KeyHandlers) {
 // decodeBody は、上限付きのリクエストボディを読み取り、生のバイト列を上書きする。
 //
 // JSON からデコードされたパスフレーズは Go の string になる。これは
-// immutable で消去できない——消去できるのは生のバッファだけである。
+// immutable で消去できない。消去できるのは生のバッファだけである。
 // この限界は保証として示すのではなく、ここに明記されている。
 func decodeBody(c *echo.Context, target any) error {
 	body := c.Request().Body

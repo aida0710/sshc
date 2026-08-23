@@ -1,5 +1,3 @@
-// 英語をキーの正本とし、各言語は個別ファイルで管理する。
-// このファイルは既存のimport先を維持する公開窓口に限定する。
 import { en } from "./messages/en";
 import { ja } from "./messages/ja";
 

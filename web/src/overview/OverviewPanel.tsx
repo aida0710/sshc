@@ -15,8 +15,6 @@ type OverviewPanelProps = {
   launch?: (alias: string) => Promise<{ session: { id: string } }>;
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
-  // 開いたコンソールは接続画面で見る。開く場所と見る場所が違うので、
-  // その受け渡しだけをシェルが仲介する。
   onConsoleOpened?: (id: string) => void;
 };
 
@@ -25,9 +23,6 @@ const loadDefaultSync = () => integrationsApi.syncStatus();
 const launchDefault = (alias: string) => integrationsApi.openTerminalSession({ kind: "ssh", alias });
 const informationalNoticeCodes = new Set(["group_empty"]);
 
-// Home は管理画面の要約ではなく接続の入口である。画面を開いただけでは
-// DNS、TCP、ssh のどれにも触れない。接続はこのアプリケーションの中で開き、
-// 開いたコンソールは接続画面へ持っていく。
 export function OverviewPanel({
   loadOverview = loadDefaultOverview,
   loadSync = loadDefaultSync,
@@ -62,9 +57,6 @@ export function OverviewPanel({
     setProblem("");
     try {
       const opened = await launch(alias);
-      // **開いた端末を見せる。** onConsoleOpened がターミナルの面へ連れて行く
-      // ので、そのあとに別の面を指すと、繋いだ本人が接続一覧へ放り出される
-      // ——押した理由がそこには無い。
       onConsoleOpened?.(opened.session.id);
     } catch (error) {
       setProblem(

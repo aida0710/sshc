@@ -11,8 +11,8 @@ import (
 
 // notifySignals は、この OS で終了を意味するものを理由付きで運ぶ。
 //
-// **`syscall.SIGBREAK` は書かない。** Windows の Go にその定数は無く、書けば
-// コンパイルが通らない。Ctrl-Break を別に登録する必要も無い——ランタイムが
+// `syscall.SIGBREAK` は書かない。Windows の Go にその定数は無く、書けば
+// コンパイルが通らない。Ctrl-Break を別に登録する必要も無い。ランタイムが
 // `CTRL_BREAK_EVENT` を `os.Interrupt` として配るので、Ctrl-C と同じく 130 で
 // 終わる。
 //

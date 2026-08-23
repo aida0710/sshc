@@ -11,9 +11,9 @@ import (
 
 // readRights は、「その鍵の中身を読める」に当たるビットだけである。
 //
-// **FILE_ALL_ACCESS を混ぜてはならない。** あれはファイル固有の全ビット
+// FILE_ALL_ACCESS を混ぜてはならない。あれはファイル固有の全ビット
 // （0x1ff）を含むので、OR で足すと書き込みも追記も属性の読みも「読める」に
-// なる——実際、書き込みだけを与えた相手が露出として報告された。
+// なる。実際、書き込みだけを与えた相手が露出として報告された。
 //
 // 足す必要も無い。FILE_ALL_ACCESS を持つ相手は FILE_READ_DATA も持っている
 // ので、下の一つ目で捕まる。GENERIC_READ と GENERIC_ALL は、ファイル固有の
@@ -23,19 +23,19 @@ const readRights = windows.FILE_READ_DATA |
 	windows.GENERIC_ALL
 
 // ReadableByOthers は、その道の中身を、所有者・SYSTEM・Administrators 以外の
-// 誰かが読めるかを答える。
+// 誰かが読めるかを返す。
 //
-// **これが Windows で答えられる唯一の問いである。** mode ビットには誰が読める
-// かが入っていない——Go は通常ファイルに 0666 を合成して返すだけで、それを
+// これが Windows で判定できる唯一の問いである。mode ビットには誰が読める
+// かが入っていない。Go は通常ファイルに 0666 を合成して返すだけで、それを
 // Unix と同じ式で見れば秘密鍵は必ず「危険」になる。誰が読めるかを決めているのは
 // DACL であり、だからここは DACL を歩く。
 //
-// **拒否 (deny) は数えない。** 許可と拒否の効き方は ACE の並び順で決まり、
+// 拒否 (deny) は数えない。許可と拒否の効き方は ACE の並び順で決まり、
 // 順序の壊れた DACL では許可が先に効く。そこで拒否を引き算すると、実際には
-// 読める鍵を「安全」と報告しうる——**間違える方向としてそれが最も悪い。**
+// 読める鍵を「安全」と報告しうる。間違える方向としてそれが最も悪い。
 // 読ませない意図の deny があるのに警告が出るのは、その逆よりずっと軽い。
 //
-// **読めない形は、安全とみなさない。** 解釈できない種類の ACE に出会ったら、
+// 読めない形は、安全とみなさない。解釈できない種類の ACE に出会ったら、
 // 閉じていることを確かめられなかったのだから、危険の側へ倒す。
 func ReadableByOthers(path string) (bool, error) {
 	file, err := openFileNoReparse(path, windows.READ_CONTROL)
@@ -59,8 +59,8 @@ func ReadableByOthers(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// **DACL が無いことは、誰でも読めることである。** 空の DACL（ACE が
-	// ひとつも無い）とは違う——あちらは誰も読めない。
+	// DACL が無いことは、誰でも読めることである。空の DACL（ACE が
+	// ひとつも無い）とは違う。あちらは誰も読めない。
 	if dacl == nil {
 		return true, nil
 	}
@@ -73,9 +73,9 @@ func ReadableByOthers(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// **記述子の所有者だけでは足りない。** 昇格したトークンが作ったファイルの
+	// 記述子の所有者だけでは足りない。昇格したトークンが作ったファイルの
 	// 所有者は、その利用者ではなく Administrators になる。そこで所有者だけを
-	// 見ると、**鍵を実際に持っている本人が「他人」に分類される** ——
+	// 見ると、鍵を実際に持っているユーザー本人が「別のユーザー」に分類される。
 	// 普通に閉じている鍵が、全部危険と報告されることになる。
 	//
 	// 実機で確かめた: 昇格した SSH セッションが書いたファイルの所有者は
@@ -106,8 +106,8 @@ func ReadableByOthers(path string) (bool, error) {
 			return true, nil
 		default:
 			// object ACE などは、ここでは読み方を持たない。ファイルの DACL に
-			// 現れることはまず無いが、現れたなら**閉じていると言える根拠が
-			// 無い**ので、そう答える。
+			// 現れることはまず無いが、現れたなら閉じていると言える根拠が
+			// 無いので、そう返す。
 			return true, fmt.Errorf("%s carries an access entry of type %d that sshc does not read",
 				path, header.Header.AceType)
 		}

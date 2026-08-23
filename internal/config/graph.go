@@ -69,15 +69,15 @@ type Node struct {
 
 // Graph は、ひとつのエントリファイルから到達できる Include 構造。
 //
-// ルートより下の節点は、Root 自身の綴りで鍵付けされる。同じファイルを二通りに
-// 綴った Include は、ひとつの節点に落ち着く。ルートの外の節点は、Include が
-// 名指したままの綴りを保つ——よそのファイルの綴りをこちらで決める理由が無い。
+// ルート以下のノードは Root と同じ形式のパスをキーにする。同じファイルを異なる
+// パス表記で指定した Include は一つのノードに統合する。ルート外のノードは Include
+// に記述されたパスを保つ。
 type Graph struct {
 	Root        string
 	Order       []string
 	Nodes       map[string]*Node
 	Diagnostics []Diagnostic
-	// identities は、同じファイルの別の綴りを最初の節点へ結び直す。Windows の
+	// identities は、同じファイルの別の表記を最初の節点へ結び直す。Windows の
 	// 大小文字違いは同じファイルなので、これが無いと同じ内容が二度読み込まれ、
 	// 循環はいつまでも見つからない。
 	identities map[string]*Node
@@ -114,14 +114,14 @@ func (r Resolver) insideRoot(candidate string) bool {
 	return nativepath.Contains(r.Root, candidate)
 }
 
-// canonical は、ルートより下のパスをルート自身の綴りに揃える。
+// canonical は、ルートより下のパスをルート自身の表記に揃える。
 //
-// **これが無いと、層によって同じファイルが別の名前になる。** Windows で
+// これが無いと、層によって同じファイルが別の名前になる。Windows で
 // `C:/USERS/A/.ssh/conf.d/x.conf` を include すると、その節点の鍵は打たれた
-// 綴りのまま残る。application 層はルートから組み立てた綴りで引くので、一覧に
+// 表記のまま残る。application 層はルートから組み立てた表記で引くので、一覧に
 // 出て編集可能と表示されたホストが、開こうとした瞬間に見つからないと言われる。
 //
-// ルートの外はそのまま返す。よそのファイルの綴りをこちらで決める理由が無い。
+// ルートの外はそのまま返す。よそのファイルの表記をこちらで決める理由が無い。
 func (r Resolver) canonical(candidate string) string {
 	cleaned := filepath.Clean(candidate)
 	if !nativepath.Contains(r.Root, cleaned) {
@@ -193,16 +193,16 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 				node.Includes = append(node.Includes, edge)
 				continue
 			}
-			// **綴りを揃えるのは、辺に載せる前である。** 節点の鍵だけを揃えて辺に
-			// 生の綴りを残すと、同じファイルが二つの名前で現れ、辺をたどる側——
-			// ディレクティブの走査、実効設定、スナップショット、Include 行の
-			// 書き換え——がその節点を見つけられなくなる。
+			// 表記を揃えるのは、辺に載せる前である。節点の鍵だけを揃えて辺に
+			// 生の表記を残すと、同じファイルが二つの名前で現れる。その場合、辺をたどる
+			// ディレクティブ走査、実効設定、スナップショット、Include 行の書き換えが
+			// その節点を見つけられなくなる。
 			for index, match := range matches {
 				matches[index] = r.canonical(match)
 			}
 			sort.Strings(matches)
-			// 生成領域の内側は黙る。その行を書いたのはこのアプリケーション自身で、
-			// 宣言されたグループがまだ空であることは正常な状態である。外側は人が
+			// 生成領域の内側では診断を出さない。その行を書いたのはこのアプリケーション自身で、
+			// 宣言されたグループがまだ空であることは正常な状態である。外側はユーザーが
 			// 書いた行なので、何にも一致しないのは打ち間違いかもしれない。
 			insideGenerated := generated && index > generatedStart && index < generatedEnd
 			if len(matches) == 0 && !insideGenerated {

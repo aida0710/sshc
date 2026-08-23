@@ -21,18 +21,14 @@ func build(t *testing.T) app.Dependencies {
 	return dependencies
 }
 
-// **このアプリケーションは、自分を置き換える経路を Android で持たない。**
-// Checker を配線したままにすると、置き換えられない更新を提示する画面が出る。
+// Android では実行できない自己更新を提示しないことを検証する。
 func TestAndroidOffersNoSelfUpdate(t *testing.T) {
 	if build(t).Updates != nil {
 		t.Error("the Android engine offers a self-update it cannot perform")
 	}
 }
 
-// ssh-keygen も ssh-agent も Android に居ない。どちらも interface なので、
-// **nil がここでの正解であり、配線し忘れではない。** keys.CatalogueReader は
-// nil の Toolchain でハードウェア鍵を足さずに返し、keys.Service は nil の
-// agent を「到達できるエージェントが無い」として扱う。
+// Android に存在しない ssh-keygen と ssh-agent が配線されないことを検証する。
 func TestAndroidHasNeitherToolchainNorAgent(t *testing.T) {
 	dependencies := build(t)
 	if dependencies.Toolchain != nil {
@@ -43,8 +39,7 @@ func TestAndroidHasNeitherToolchainNorAgent(t *testing.T) {
 	}
 }
 
-// **端末は、それを起こしたものの事情を継がない。** Android アプリの環境に
-// 有用な PATH は無く、os.Environ を渡せば /system/bin すら見えないシェルが開く。
+// Android 端末に固定の安全な環境変数を渡すことを検証する。
 func TestAndroidTerminalInheritsAFixedEnvironment(t *testing.T) {
 	got := build(t).Environ()
 	want := []string{
@@ -58,33 +53,22 @@ func TestAndroidTerminalInheritsAFixedEnvironment(t *testing.T) {
 	}
 }
 
-// SHELL は読まない。読めば、たまたま設定されていた値がログインシェルの
-// 権威になる——Android では誰もそれを選んでいない。fallback の一覧だけが答える。
+// Android アプリの SHELL 環境変数に依存しないことを検証する。
 func TestAndroidResolvesTheShellFromFallbacksAlone(t *testing.T) {
 	if _, ok := build(t).Lookup("SHELL"); ok {
 		t.Error("the Android engine reads SHELL from an environment nobody chose")
 	}
 }
 
-// **新しい owner 値を足さない。** 欲しいのは「bootstrap fragment 付きの URL を
-// Announce が返す」という desktop の挙動そのものである。
+// Android でも通常の engine owner を使用することを検証する。
 func TestAndroidAnnouncesAsTheDesktopOwner(t *testing.T) {
 	if got := build(t).Owner; got != handoff.OwnerEngine {
 		t.Errorf("Owner = %q, want %q", got, handoff.OwnerEngine)
 	}
 }
 
-// androidFieldIntent は、app.Dependencies のすべての項目について、Android の
-// engine がそれを配線するのかしないのかと、その理由を並べたものである。
-//
-// **これは書き写しではなく、決定の一覧である。** Android の依存は struct literal
-// で組まれるので、app.Dependencies に項目が増えても Go は何も言わず、新しい項目は
-// 黙って零値になる。零値が正しい答えであることも、配線を忘れただけであることも
-// あり、型はその二つを区別しない。実際にそうやって落ちた項目があり、コメントは
-// 落としたものを 4 つと書いたまま 6 つになっていた。
-//
-// 下の表に無い項目が現れたら、このテストは失敗する。**そのとき求められているのは
-// 表に一行足すことではなく、Android でその項目をどうするかを決めることである。**
+// androidFieldIntent は、app.Dependencies の各項目を Android で配線するか、
+// 意図的に空にするか、既定値へ委ねるかを記録する。
 var androidFieldIntent = map[string]string{
 	// 配線する。
 	"Random":   "wired: crypto/rand",
@@ -95,7 +79,7 @@ var androidFieldIntent = map[string]string{
 	"Home":     "wired: アプリの filesDir",
 	"Owner":    "wired: handoff.OwnerEngine",
 	"PID":      "wired: このプロセス",
-	"Lookup":   "wired: 常に見つからないと答える。SHELL を偶然の権威にしない",
+	"Lookup":   "wired: 常に未検出を返し、SHELL の値には依存しない",
 	"Environ":  "wired: 固定の環境。Android アプリの環境に有用な PATH が無い",
 
 	// 意図して空にする。
@@ -104,10 +88,10 @@ var androidFieldIntent = map[string]string{
 	"Updates":   "absent: バイナリを置き換える経路が無い",
 
 	"StopEngine": "default: Run が自分で埋める。engine を止められるのは engine 自身だけである",
-	"Port":       "default: 番号を選ばせない。WebView は announce された入口を読むだけで、綴りを人が打つ場面が無い",
+	"Port":       "default: WebView は通知された URL を使うため、ポート番号を指定させない",
 
 	// 空で既定に落ちるのが正しいもの。
-	"ScanHostKeys":    "default: internal/sshclient がこのプロセスの中で話す",
+	"ScanHostKeys":    "default: internal/sshclient がプロセス内で SSH 通信する",
 	"Probe":           "default: 同上",
 	"RemoteRun":       "default: 同上",
 	"TerminalStarter": "default: 本物の PTY を確保する。Android では /system/bin/sh",
@@ -127,7 +111,7 @@ func TestEveryDependencyOfTheAndroidEngineIsADecision(t *testing.T) {
 				"配線するのか、意図して空にするのか、既定に落とすのかを決めて androidFieldIntent に書くこと", name)
 			continue
 		}
-		// 表が実態からずれていないことも見る。ずれた表は、無い表よりも悪い。
+		// intent と実際の配線状態が一致することも検証する。
 		if wired := !values.Field(index).IsZero(); wired != strings.HasPrefix(intent, "wired:") {
 			t.Errorf("app.Dependencies.%s: 表は %q と言うが、実際は wired=%v", name, intent, wired)
 		}
@@ -140,11 +124,7 @@ func TestEveryDependencyOfTheAndroidEngineIsADecision(t *testing.T) {
 	}
 }
 
-// **PATH を置くのは、そこを歩ける端末だけである。**
-//
-// Android はシェルを起こせるので /system/bin が見えなければならない。iOS は
-// プロセスを起こせないので、PATH は誰も読まない——置けば「歩ける道がある」と
-// 言っているのと同じで、嘘になる。
+// シェルを起動できる Android だけに PATH を設定することを検証する。
 func TestTheEnvironmentOnlyNamesAPathWhereOneCanBeWalked(t *testing.T) {
 	for _, probe := range []struct {
 		goos     string
@@ -166,7 +146,7 @@ func TestTheEnvironmentOnlyNamesAPathWhereOneCanBeWalked(t *testing.T) {
 	}
 }
 
-// HOME と TMPDIR は、どちらの端末でも要る。**ワークスペースはそこに在る。**
+// HOME、TMPDIR、TERM は Android と iOS の両方に設定する。
 func TestTheEnvironmentAlwaysNamesTheHomeAndTheScratch(t *testing.T) {
 	for _, goos := range []string{"android", "ios"} {
 		environ := mobileEnvironment(goos, "/files", "/caches")()
@@ -178,8 +158,7 @@ func TestTheEnvironmentAlwaysNamesTheHomeAndTheScratch(t *testing.T) {
 	}
 }
 
-// **渡した先の事情で変わってはならない。** 同じ slice を返すと、受け取った側が
-// append したものが次の呼び出しに見える。
+// 呼び出し側の変更が次回の環境へ混入しないことを検証する。
 func TestTheEnvironmentIsCopiedForEveryCaller(t *testing.T) {
 	build := mobileEnvironment("android", "/files", "/caches")
 	first := build()
