@@ -45,6 +45,7 @@ fuzz:
 		go test "./$$package" -run '^$$' -fuzz "^$$name$$" -fuzztime "$(FUZZTIME)"; \
 	done
 
+# E2E は時間がかかるため GitHub Actions では実行せず、必要なときにローカルで走らせる。
 e2e: build
 	npm run e2e --prefix web
 

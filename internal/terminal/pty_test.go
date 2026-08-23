@@ -13,16 +13,25 @@ import (
 )
 
 func TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus(t *testing.T) {
-	echo := lookProgram(t, "echo")
+	shell := lookProgram(t, "sh")
 
 	registry := &terminal.Registry{
 		Start:  terminal.NewStarter(),
 		Limits: func() terminal.Limits { return terminal.Limits{MaxSessions: 2, Scrollback: 16 << 10} },
 	}
+	t.Cleanup(func() {
+		registry.ForceClose()
+		_ = registry.Wait()
+	})
 	session, err := registry.Open(context.Background(), terminal.Spec{
-		Kind: terminal.KindShell, Title: "echo",
-		Size:    terminal.Size{Cols: 80, Rows: 24},
-		Command: terminal.Command{Path: echo, Arguments: []string{"embedded-terminal-canary"}},
+		Kind: terminal.KindShell, Title: "sh",
+		Size: terminal.Size{Cols: 80, Rows: 24},
+		// 子を生かしたまま出力を読む。macOS の PTY は、短命な子が reader の開始前に
+		// slave を閉じると、既に書いた出力を返さず EOF になる場合がある。
+		Command: terminal.Command{
+			Path:      shell,
+			Arguments: []string{"-c", "printf '%s\\n' embedded-terminal-canary; read ignored"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
@@ -30,7 +39,7 @@ func TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus(t *testing.T) {
 
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if session.Exit() != nil && strings.Contains(string(session.Snapshot()), "embedded-terminal-canary") {
+		if strings.Contains(string(session.Snapshot()), "embedded-terminal-canary") {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -38,6 +47,13 @@ func TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus(t *testing.T) {
 
 	if got := string(session.Snapshot()); !strings.Contains(got, "embedded-terminal-canary") {
 		t.Fatalf("the scrollback never received the output: %q", got)
+	}
+	if _, err := session.Write([]byte("\n")); err != nil {
+		t.Fatalf("release the shell: %v", err)
+	}
+	deadline = time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) && session.Exit() == nil {
+		time.Sleep(5 * time.Millisecond)
 	}
 	info := session.Exit()
 	if info == nil {

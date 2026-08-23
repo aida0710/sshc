@@ -159,10 +159,10 @@ test("offers agent registration and refuses it honestly when no agent is reachab
   const row = page.getByRole("row", { name: /id_agent\b/ }).first();
   await expect(row).toBeVisible();
 
-  const register = row.getByRole("button", { name: "Add to agent" });
+  const register = row.getByRole("button", { name: "Add to ssh-agent" });
   await expect(register).toBeVisible();
   await expect(register).toBeDisabled();
-  await expect(page.getByText(/No agent is reachable from this process/)).toBeVisible();
+  await expect(page.getByText(/This process cannot connect to ssh-agent/)).toBeVisible();
 });
 
 test("renames a key and carries every directive that named it", async ({ page, installation }) => {
