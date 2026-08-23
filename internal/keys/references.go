@@ -8,7 +8,7 @@ import (
 	"sshc/internal/storage"
 )
 
-// Reference は、鍵ファイルを名指しする設定ディレクティブひとつ。
+// Reference は、鍵ファイルを指定する設定ディレクティブひとつ。
 type Reference struct {
 	Directive    string
 	ConfigPath   string
@@ -19,7 +19,7 @@ type Reference struct {
 }
 
 // UnresolvedReference は、エンジンが引数の推測を拒むディレクティブ。UI が、
-// でっちあげの答えではなく本当の理由を表示できるようにするためである。
+// でっちあげの結果ではなく本当の理由を表示できるようにするためである。
 type UnresolvedReference struct {
 	Directive  string
 	Value      string
@@ -35,11 +35,11 @@ const (
 	ReasonOutsideWorkspace = "outside_workspace"
 )
 
-// referencedDirectives は、鍵ファイルまたはエージェントを名指しするクライアント
+// referencedDirectives は、鍵ファイルまたはエージェントを指定するクライアント
 // ディレクティブ。それ以外のディレクティブは、このインデックスでは無視される。
 var referencedDirectives = []string{"IdentityFile", "CertificateFile", "IdentityAgent"}
 
-// ReferenceIndex は、ワークスペース相対のパスを、それを名指しするディレクティブに対応付ける。
+// ReferenceIndex は、ワークスペース相対のパスを、それを指定するディレクティブに対応付ける。
 type ReferenceIndex struct {
 	byRelativePath map[string][]Reference
 	agent          []Reference
@@ -55,7 +55,7 @@ func (index *ReferenceIndex) AgentDelegations() []Reference { return index.agent
 func (index *ReferenceIndex) Unresolved() []UnresolvedReference { return index.unresolved }
 
 // BuildReferenceIndex は、Include グラフが到達したすべてのファイルを走査し、どの
-// Host がどの鍵ファイルを名指ししているかを記録する。
+// Host がどの鍵ファイルを指定しているかを記録する。
 func BuildReferenceIndex(graph *config.Graph, workspace *storage.Workspace) *ReferenceIndex {
 	index := &ReferenceIndex{byRelativePath: make(map[string][]Reference)}
 	for _, path := range graph.Order {
@@ -139,7 +139,7 @@ func (index *ReferenceIndex) record(
 		})
 		return
 	}
-	// **鍵はワークスペース相対の識別子で引かれる。** その綴りはスラッシュ区切りで
+	// 鍵はワークスペース相対の識別子で引かれる。その表記はスラッシュ区切りで
 	// あり、Inventory が付ける RelativePath と同じものでなければならない。ここだけ
 	// このファイルシステムの区切り文字にすると、Windows では For がひとつも当たらず、
 	// 鍵を名指す IdentityFile は「誰にも名指されていない」ことになる。
@@ -193,7 +193,7 @@ func expandKeyPath(value, home string) (absolute string, reason string) {
 	return filepath.Clean(expanded), ""
 }
 
-// AttachReferences は、各ファイルを名指ししている Host をそのインベントリの item
+// AttachReferences は、各ファイルを指定している Host をそのインベントリの item
 // へ写し、エンジンが解決できなかったディレクティブを記録する。
 func (inventory *Inventory) AttachReferences(index *ReferenceIndex) {
 	for itemIndex := range inventory.Items {
@@ -204,12 +204,12 @@ func (inventory *Inventory) AttachReferences(index *ReferenceIndex) {
 	inventory.UnresolvedReferences = index.Unresolved()
 }
 
-// ExpandsTo は、IdentityFile 形式の引数がまさにこのファイルを名指ししているかを
+// ExpandsTo は、IdentityFile 形式の引数がまさにこのファイルを指定しているかを
 // 報告する。他のパッケージがその問いを尋ねられる唯一の手段である。expandKeyPath は
-// 非公開のままにしてあるので、このエンジンが何の推測を拒むか — 相対パス、未知の
-// トークン — は一か所で決まる。
-// 素のホームではなくワークスペースを渡す。答えはルート配下のパスとの比較であり、
-// 比較を行う前に二つの綴りを突き合わせておく必要があるからだ。ホームだけを渡すと、
+// 非公開のままにしてあるので、このエンジンが何の推測を拒むか（相対パスや未知の
+// トークン）は一か所で決まる。
+// 素のホームではなくワークスペースを渡す。結果はルート配下のパスとの比較であり、
+// 比較を行う前に二つの表記を突き合わせておく必要があるからだ。ホームだけを渡すと、
 // 展開された "~/.ssh/…" と、解決済みのルートから組み立てたパスとを比較した
 // 呼び出し側は、それらは別のファイルであると告げられて
 // しまった。
@@ -218,10 +218,9 @@ func ExpandsTo(workspace *storage.Workspace, value, absolute string) bool {
 	return reason == "" && workspace.Normalise(expanded) == workspace.Normalise(absolute)
 }
 
-// ResolveWorkspaceKeyPath resolves the same conservative IdentityFile forms as
-// the reference index and returns both the vault subject and the stable,
-// symlink-resolved path sshc must pass to OpenSSH. Relative paths and paths
-// outside ~/.ssh are deliberately not guessed.
+// ResolveWorkspaceKeyPath は参照インデックスと同じ制限で IdentityFile を解決し、Vault の
+// subject と、シンボリックリンクを解決した安定パスを返す。相対パスと ~/.ssh 外の
+// パスは推測しない。
 func ResolveWorkspaceKeyPath(workspace *storage.Workspace, value string) (relative, promptPath string, ok bool) {
 	expanded, reason := expandKeyPath(value, workspace.Home())
 	if reason != "" {

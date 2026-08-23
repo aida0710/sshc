@@ -22,7 +22,5 @@ test("records a change in history and restores the previous bytes", async ({
 
   expect(await clickAndAwait(page, "Restore config", "/api/v1/history/restore")).toBe(200);
 
-  // 復元は、ファイルを単に同等のものにではなく、変更前に
-  // 持っていたバイト列そのものに戻す。
   expect(await installation.read("config")).toBe(original);
 });

@@ -81,7 +81,7 @@ func newRemoteKeyServer(t *testing.T, outputs []sshclient.Output) (*echo.Echo, s
 
 	runner := &sequencedRunner{outputs: outputs}
 	remote := &remotekey.Service{
-		// **行き先は登録一回につき一度だけ決まる。** 実際の解決は
+		// 行き先は登録一回につき一度だけ決まる。実際の解決は
 		// internal/app が配線するので、ここでは設定を読んで宛先を返す。
 		Resolve: func(alias string) (sshclient.Target, error) {
 			runner.resolved = append(runner.resolved, alias)
@@ -347,7 +347,7 @@ func TestRemoteKeyRegisterRejectsAPlanAfterItsExecutionConfigChanges(t *testing.
 	}
 }
 
-// **行き先は登録一回につき一度だけ決まる。**
+// 行き先は登録一回につき一度だけ決まる。
 //
 // かつては設定を凍結してファイルへ書き、`ssh -F` にそれを読ませることで同じ
 // 性質を守っていた。プロセス内では読むファイルが無いので、代わりに解決を

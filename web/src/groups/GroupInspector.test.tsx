@@ -16,8 +16,6 @@ describe("GroupInspector", () => {
 
     expect(screen.getByText(/staged until you choose Save groups/)).toBeInTheDocument();
 
-    // 一文字ずつ。このコントロールはモックされた親が決して書き戻さない
-    // メタデータに制御されているため、各キー入力は同じ値から始まる。
     await user.type(screen.getByLabelText("Display order"), "3");
     expect(onUpdate).toHaveBeenLastCalledWith({ order: 3 });
 
@@ -38,18 +36,13 @@ describe("GroupInspector", () => {
     expect(onUpdate).toHaveBeenCalledWith({ hidden: true });
   });
 
-  // 接続を保持するグループを隠せば、それらも一緒に見えなくなってしまう。
-  // コントロールを拒否する方が、黙って何もしないフラグよりましである。
   it("refuses hiding for a group that holds connections, and says why", () => {
     render(<GroupInspector group={group()} members={["build01"]} onUpdate={vi.fn()} />);
 
     expect(screen.getByLabelText("Hide company from Connections")).toBeDisabled();
-    expect(screen.getByText(/holds connections of its own/)).toBeInTheDocument();
+    expect(screen.getByText(/contains direct connections/)).toBeInTheDocument();
   });
 
-  // colour 入力欄には空の状態がないため、未設定の colour は中立の
-  // 見本を示し、クリア操作はそれ自体独立した行為でなければならない
-  // ——さもなければ「colour がない」ことと「たまたまグレーである colour」が区別できなくなる。
   it("offers no clear button until there is a colour to clear", async () => {
     const onUpdate = vi.fn();
     const user = userEvent.setup();

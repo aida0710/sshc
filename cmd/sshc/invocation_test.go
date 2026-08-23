@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// **接続先とコマンドは別の引数である。** ひとつの語に兼ねさせると、どこまでが
+// 接続先とコマンドは別の引数である。ひとつの語に兼ねさせると、どこまでが
 // 接続先でどこからがコマンドかを推測することになる。
 func TestRunTakesAnAliasAndACommand(t *testing.T) {
 	for _, argv := range [][]string{
@@ -30,7 +30,7 @@ func TestRunTakesAnAliasAndACommand(t *testing.T) {
 	}
 }
 
-// **語は空白ひとつで繋ぐ。** OpenSSH の `ssh host cmd args` と同じで、引用の
+// 語は空白ひとつで繋ぐ。OpenSSH の `ssh host cmd args` と同じで、引用の
 // 規則は相手のシェルのものである。こちらで包み直せば、どちらかのシェルで壊れる。
 func TestTheRemoteCommandIsJoinedWithoutRequoting(t *testing.T) {
 	got := remoteCommand([]string{"go", "test", "./...", "-run", "'Test[A-Z]'"})
@@ -47,8 +47,8 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 	}{
 		{[]string{"sshc"}, invocationDesktop, nil},
 		{[]string{"sshc", "engine"}, invocationEngine, nil},
-		// **headless はもう予約語ではない。** engine を持つ道が 1 つになったので、
-		// この綴りは他と同じただの接続先として読まれる。
+		// headless はもう予約語ではない。engine を持つ道が 1 つになったので、
+		// この表記は他と同じただの接続先として読まれる。
 		{[]string{"sshc", "headless"}, invocationConnect, []string{"headless"}},
 		{[]string{"sshc", "server-a"}, invocationConnect, []string{"server-a"}},
 		{[]string{"sshc", "connect"}, invocationChoose, nil},
@@ -109,10 +109,10 @@ func sameStrings(got, want []string) bool {
 	return true
 }
 
-// **版を訊く道は、打たれる形すべてで通らなければならない。**
+// 版を訊く道は、打たれる形すべてで通らなければならない。
 //
 // `sshc version` が正式だが、`--version` は誰もが最初に打つ形である。受けないと
-// usage と終了コード 2 になり、入れた直後の一行目が失敗する——実際
+// usage と終了コード 2 になり、入れた直後の一行目が失敗する。実際
 // docs/release-install.md は `./sshc --version` を案内していた。
 func TestEveryWayOfAskingForTheVersionIsAccepted(t *testing.T) {
 	for _, word := range []string{"version", "--version", "-v"} {
@@ -133,7 +133,7 @@ func TestAskingForTheVersionTakesNoArguments(t *testing.T) {
 	}
 }
 
-// **入っているものを言うときは、どの機械のものかも言う。** 入れ方が増えたので、
+// 入っているものを言うときは、どの機械のものかも言う。入れ方が増えたので、
 // 「入ったが動かない」の相談で最初に要るのは版よりもそちらである。
 func TestTheVersionLineNamesTheBuildTarget(t *testing.T) {
 	var out strings.Builder

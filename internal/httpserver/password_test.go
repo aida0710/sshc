@@ -531,8 +531,8 @@ func TestEveryCredentialRouteRefusesALockedVault(t *testing.T) {
 // 端から端までの、仕組み全体である。
 //
 // 1 つの名前の下に secret が 1 つ、それを指すホストが 2 つ、そして
-// ホストも secret も名指ししないディスク上のファイルがある。これが
-// secret に名前を付けて得たものだ——以前は 2 台の同じパスワードは
+// ホストも secret も指定しないディスク上のファイルがある。これが
+// secret に名前を付けて得たものだ。以前は 2 台の同じパスワードは
 // 2 つのコピーであり、変更は 2 箇所の編集で、同じものと分かる術がなかった。
 func TestOneNamedSecretServesTwoHostsAndTheFileNamesNeither(t *testing.T) {
 	engine, _, home := passwordEngineIn(t)
@@ -591,7 +591,7 @@ func TestOneNamedSecretServesTwoHostsAndTheFileNamesNeither(t *testing.T) {
 	}
 }
 
-// マスターパスワードの変更は bucket の最新スナップショットも再封印し、
+// マスターパスワードの変更は bucket の最新スナップショットも再暗号化し、
 // できなかった場合はそう伝える。
 func TestChangingTheMasterPasswordReportsWhetherTheBucketFollowed(t *testing.T) {
 	engine, service, _ := passwordEngineIn(t)

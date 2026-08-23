@@ -2,14 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { attachImeKeys, imeKeyCode, withholdFromTerminal } from "./imeKeys";
 
 describe("withholdFromTerminal", () => {
-  // **これが重複の入口である。** 確定した 1 文字ごとに Android は 229 を送り、
-  // xterm はそのたびに setTimeout(0) で textarea の前後を比べる——消さないまま。
   it("withholds the key the IME uses to say it is handling input", () => {
     expect(withholdFromTerminal(imeKeyCode, false)).toBe(true);
   });
 
-  // 変換の最中は渡す。日本語の入力は同じ 229 を使うが、あちらは
-  // compositionstart から compositionend までを xterm が自分で数えている。
   it("hands it over while a composition is running", () => {
     expect(withholdFromTerminal(imeKeyCode, true)).toBe(false);
   });
@@ -27,8 +23,6 @@ describe("attachImeKeys", () => {
     const textarea = document.createElement("textarea");
     container.appendChild(textarea);
     document.body.appendChild(container);
-    // xterm の listener の代わり。**textarea に直接付いている**ので、
-    // 先回りできるのは祖先の capture だけである。
     const terminal = vi.fn();
     textarea.addEventListener("keydown", terminal);
     const detach = attachImeKeys({ container, textarea });
@@ -55,7 +49,6 @@ describe("attachImeKeys", () => {
     detach();
   });
 
-  // 変換が始まったら手を引く。終われば、また取り上げる。
   it("stands aside for the length of a composition", () => {
     const { textarea, terminal, detach, press } = harness();
     textarea.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));

@@ -8,14 +8,14 @@ import (
 	"testing"
 )
 
-// **Windows PowerShell 5.1 は、BOM の無い .ps1 を ANSI として読む。**
+// Windows PowerShell 5.1 は、BOM の無い .ps1 を ANSI として読む。
 //
 // このリポジトリの注釈は日本語なので、BOM が無いと 5.1 の構文解析器が
 // 日本語のバイトを現地のコードページとして読み、引用符や改行を飲み込んで
 // 構文を壊す。落ち方が「Try に Catch も Finally も無い」のような、直接の
 // 原因を指さないものになるうえ、pwsh 7 で書いている側では再現しない。
 //
-// **これは実機が教えたことである。** ある .ps1 は pwsh 7 で解析が通っていたのに、
+// これは実機が教えたことである。ある .ps1 は pwsh 7 で解析が通っていたのに、
 // Windows 11 の既定の PowerShell では一行も走らなかった。
 func TestWindowsPowerShellScriptsCarryABOMWhenTheyNeedOne(t *testing.T) {
 	directory := filepath.Join("..", "..", "scripts", "windows")

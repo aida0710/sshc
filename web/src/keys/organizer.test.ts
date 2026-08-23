@@ -38,9 +38,6 @@ function relocated(overrides: Partial<RelocateKeyResponse> = {}): RelocateKeyRes
 }
 
 describe("folderRows", () => {
-  // **数えるのは、そのフォルダに直接入っているものだけ。**
-  // 子を親に足し込むと、work が 4 と言っているのに開けると空、という
-  // 画面になる——利用者が探しているのは中身であって合計ではない。
   it("counts what is directly inside each folder", () => {
     const items = [
       item("keys/work/id_a"),
@@ -60,7 +57,6 @@ describe("folderRows", () => {
     ]);
   });
 
-  // 親は子の前に来る。ツリーとはそう読めるべきものである。
   it("puts a parent before its children and reports the depth", () => {
     const rows = folderRows([], ["b", "a/deep", "a"]);
     const groups = rows.filter((row) => row.folder.kind === "group");
@@ -69,9 +65,6 @@ describe("folderRows", () => {
     expect(groups.map((row) => row.depth)).toEqual([1, 2, 1]);
   });
 
-  // **宣言されていないディレクトリはフォルダではない。** グループなのは
-  // ~/.ssh/config の行がそう言っているからで、鍵が置かれているからではない。
-  // ここで推測すると、画面が設定エンジンと違うことを言い始める。
   it("does not invent a folder from a path nothing declares", () => {
     const rows = folderRows([item("keys/ghost/id_a")], []);
 
@@ -113,11 +106,6 @@ describe("sameFolder", () => {
 });
 
 describe("moveInto", () => {
-  // **一本が断られても、そこで止めない。**
-  //
-  // relocate は鍵ごとの取引で、解決できない記述があればその鍵を拒否する。
-  // 拒否をまとめて扱うと、10 本のうち 1 本のせいで 9 本が動かない。
-  // 動かせたものは動かし、動かせなかったものは理由と一緒に名前を出す。
   it("moves what it can and names what it could not", async () => {
     const relocate = vi.fn(async (id: string) =>
       id === "keys/work/id_b"
@@ -138,7 +126,6 @@ describe("moveInto", () => {
     expect(outcome.failed).toEqual([]);
   });
 
-  // 落ちた一本も同じ扱いである。**黙って成功に数えない。**
   it("keeps going when one call fails outright", async () => {
     const relocate = vi.fn(async (id: string) => {
       if (id === "keys/work/id_a") throw new Error("network");
@@ -154,8 +141,6 @@ describe("moveInto", () => {
     expect(outcome.moved).toEqual(["keys/work/id_b"]);
   });
 
-  // 既にそこにあるものは触らない。書き換える config が無いのに
-  // 取引を起こす理由が無く、履歴に何も起きなかった行が並ぶだけである。
   it("leaves a key that is already there alone", async () => {
     const relocate = vi.fn(async () => relocated());
 
@@ -169,7 +154,6 @@ describe("moveInto", () => {
     expect(outcome.unchanged).toEqual(["keys/work/id_a"]);
   });
 
-  // グループなしへ移すのは、空の group を送ることである。
   it("moves to the root of ~/.ssh with an empty group", async () => {
     const relocate = vi.fn(async () => relocated());
 
@@ -194,20 +178,12 @@ describe("shownItems", () => {
     kinded("connections/work/box.conf", "config"),
   ];
 
-  // **画面の名前と中身を合わせる。** 「鍵」と書いてある画面に .DS_Store と
-  // 設定ファイルが並ぶのは、この画面が本当は ~/.ssh のファイル一覧だった
-  // からである。設定ファイルにも known_hosts にも専用の画面が既にある。
   it("shows key material and nothing else", () => {
     const shown = shownItems(everything, "keys");
 
     expect(shown.map((found) => found.relativePath)).toEqual(["id_a", "id_a.pub", "id_a-cert.pub"]);
   });
 
-  // **危ういものは、鍵でなくても隠さない。**
-  //
-  // 全部を並べていたのには理由がある——変な名前の秘密鍵や、誰でも読める
-  // ファイルを見落とさないためで、分類はファイル名ではなく中身と権限で
-  // 行われている。絞り込みでそれごと消すと、その目が潰れる。
   it("keeps a file that needs attention even when it is not a key", () => {
     const risky = [...everything, kinded("secret.txt", "other", true)];
 

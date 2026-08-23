@@ -23,7 +23,7 @@ func newWindowsUNCResolver() Resolver {
 	}
 }
 
-// OpenSSH の Include はスラッシュで書かれる。その綴りは設定の構文であって、
+// OpenSSH の Include はスラッシュで書かれる。その表記は設定の構文であって、
 // 行き先はこのファイルシステムのパスである。
 func TestWindowsExpandPatternProducesNativeGlobs(t *testing.T) {
 	resolver := newWindowsDriveResolver()
@@ -70,7 +70,7 @@ func TestWindowsExpandPatternWorksFromAUNCHome(t *testing.T) {
 	}
 }
 
-// 綴りが行き先を決めきれていないものは、推測せずに報告する。推測すれば、
+// 表記が行き先を決めきれていないものは、推測せずに報告する。推測すれば、
 // たまたま別のファイルが読まれる。
 func TestWindowsExpandPatternRefusesAmbiguousAndUnsupportedSpellings(t *testing.T) {
 	resolver := newWindowsDriveResolver()

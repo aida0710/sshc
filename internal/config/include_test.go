@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// testRoot はワークスペース、testConfig はその入口ファイル。testHome と同じく、
-// この OS の綴りでなければ Resolver は受け取らない。
+// testRoot はワークスペース、testConfig はそのエントリーファイル。testHome と同じく、
+// この OS の表記でなければ Resolver は受け取らない。
 var (
 	testRoot   = filepath.Join(testHome, ".ssh")
 	testConfig = filepath.Join(testRoot, "config")
@@ -24,8 +24,8 @@ func newTestResolver() Resolver {
 
 func TestExpandPatternFollowsOpenSSHRules(t *testing.T) {
 	resolver := newTestResolver()
-	// **argument は設定の構文、want はこのファイルシステムのパスである。** OpenSSH の
-	// Include はどの OS でもスラッシュで書かれ、綴りが分かれるのは行き先だけである。
+	// argument は設定の構文、want はこのファイルシステムのパスである。OpenSSH の
+	// Include はどの OS でもスラッシュで書かれ、表記が分かれるのは行き先だけである。
 	outside := filepath.Join(testOutside, "ssh_config")
 	tests := []struct {
 		name     string
@@ -89,7 +89,7 @@ func TestIncludeArgumentsIgnoreOtherDirectives(t *testing.T) {
 // 注意としては出さないと決めている。engine が同じことを別の名前で言えば、片方を
 // 黙らせた判断が無意味になる。
 //
-// 領域の外側の Include は引き続き報告する。そちらは人が書いた行であり、何にも
+// 領域の外側の Include は引き続き報告する。そちらはユーザーが書いた行であり、何にも
 // 一致しないのは打ち間違いの可能性がある。
 func TestNoMatchIsNotReportedInsideTheGeneratedRegion(t *testing.T) {
 	const start = "# >>> generated"

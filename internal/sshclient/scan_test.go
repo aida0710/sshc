@@ -25,7 +25,7 @@ func TestScanHostKeysCollectsWhatTheServerOffers(t *testing.T) {
 	}
 }
 
-// **鍵を集めるのに資格情報は要らない。** サーバーは認証が届いた回数を数えて
+// 鍵を集めるのに資格情報は要らない。サーバーは認証が届いた回数を数えて
 // いるので、集めるだけのはずの操作が何かを差し出していないことを言える。
 func TestScanHostKeysNeverAuthenticates(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "never offered"})

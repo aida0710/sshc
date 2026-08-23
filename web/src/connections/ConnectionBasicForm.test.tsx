@@ -218,13 +218,13 @@ describe("ConnectionBasicForm", () => {
     const second = renderForm({
       problem: { code: "identity_file_invalid", message: "invalid key" },
     });
-    expect(screen.getByText("That SSH private key is no longer selectable. Reload and choose it again.")).toBeInTheDocument();
+    expect(screen.getByText("The selected SSH private key is no longer available. Reload and choose it again.")).toBeInTheDocument();
     second.unmount();
 
     renderForm({
       problem: { code: "credential_already_exists", message: "credential exists" },
     });
-    expect(await screen.findByText(/saved password name already exists/i)).toBeInTheDocument();
+    expect(await screen.findByText(/saved password with this name already exists/i)).toBeInTheDocument();
   });
   it("always renders sparse connection fields without materialising inherited defaults", async () => {
     renderForm();
@@ -730,7 +730,7 @@ describe("ConnectionBasicForm", () => {
       { line: 2, keyword: "IdentityFile", values: ["~/.ssh/id_work"], category: "basic", editable: true },
     ]);
     const wrong = renderForm({ detail, problem: { code: "wrong_passphrase", message: "wrong" } });
-    expect(await screen.findByText("That passphrase does not unlock the selected private key.")).toBeInTheDocument();
+    expect(await screen.findByText("The entered passphrase does not unlock the selected private key.")).toBeInTheDocument();
     wrong.unmount();
     renderForm({ detail, problem: { code: "external_change", message: "changed" } });
     expect(await screen.findByText("The selected private key changed. Reload before saving its passphrase.")).toBeInTheDocument();

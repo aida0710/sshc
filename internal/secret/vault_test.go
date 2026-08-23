@@ -84,7 +84,7 @@ func TestOpenRefusesTheWrongPassphrase(t *testing.T) {
 
 func TestOpenRefusesATamperedFileIncludingItsHeader(t *testing.T) {
 	// ヘッダーは KDF のコストを運ぶ。それが認証されていなければ、攻撃者はそれを
-	// 可能な限り安いパラメータへ書き換え、封じられたときのコストではなくそのコストで
+	// 可能な限り安いパラメータへ書き換え、暗号化されたときのコストではなくそのコストで
 	// パスフレーズを攻撃できてしまう。
 	sealed := sealedVault(t, map[string]string{"bastion": "hunter2"})
 
@@ -202,9 +202,8 @@ func TestSetRefusesAnUnsafeAliasAndAnEmptyPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// alias のルールは、それが記述する対象と一緒に移った。資格情報は、それが何のため
-	// のものかにちなんで名付けられる —「オフィスの VM 群」でよい — ので、Set はもはや
-	// alias を判定しない。判定するのは Assign である。alias が現れるのはそこだからだ。
+	// 資格情報名は alias ではないため、Set では alias の書式を検証しない。
+	// alias を受け取る Assign が検証を担当する。
 	if err := vault.Set(secret.KindPassword, "shared", "x"); err != nil {
 		t.Fatalf("Set = %v", err)
 	}
@@ -220,7 +219,7 @@ func TestSetRefusesAnUnsafeAliasAndAnEmptyPassword(t *testing.T) {
 
 func TestRenameCarriesThePasswordAndLeavesNothingBehind(t *testing.T) {
 	// パスワードを古い alias の下に残したままホストの名前を変えれば、それは孤児に
-	// なる。その名前を尋ねるものは二度と現れず、ユーザーからは、パスワードが黙って
+	// なる。その名前を尋ねるものは二度と現れず、ユーザーからは、パスワードが暗黙に
 	// 効かなくなったように見える。
 	vault, err := secret.Create(passphrase)
 	if err != nil {

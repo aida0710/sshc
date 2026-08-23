@@ -17,9 +17,6 @@ import { PageHeader } from "../ui/page";
 
 type RemoteKeyPanelProps = {
   api?: RemoteKeysApi;
-  // 鍵を打ち込む代わりに選べるようにする鍵インベントリ。これを読んでも
-  // 何も始まらず何にも接続しない。リモートホストに触れるのは
-  // plan と registration だけだ。
   keys?: Pick<KeysApi, "inventory" | "publicKey">;
   preferredPublicKeyPath?: string | null;
   onPreferredPublicKeyHandled?: () => void;
@@ -30,23 +27,11 @@ const outcomeLabels: Record<string, MessageKey> = {
   already_present: "rk.alreadyPresent",
 };
 
-// valuesFromLabels は、確認画面のアカウント詳細がどこから来たかを述べる。
-// このアプリケーションがそれを読んだ場合と ssh 自身が報告した場合とでは
-// 「deploy」の意味が異なるからだ。
 const valuesFromLabels: Record<string, MessageKey> = {
   engine: "rk.valuesFromEngine",
   "ssh -G": "rk.valuesFromSshG",
 };
 
-// RemoteKeyPanel はリモートアカウントの authorized_keys に公開鍵を登録する。
-//
-// 登録は別のマシンの状態を変えるので、独立した確認済み操作となる:
-// パネルはまずサーバーに変更内容を尋ね、alias・実効ユーザー・
-// フィンガープリント・追記される正確な行を示し、その後で初めて
-// 実行を申し出る。どの入力を編集しても plan は取り下げられるので、
-// 確認画面が実際に送られるもの以外を記述することは決してない。
-// このアプリケーションが自動化しないリモートには、ボタンの代わりに
-// 手順が示される。
 export function RemoteKeyPanel({
   api = remoteKeysApi,
   keys = keysApi,
@@ -67,26 +52,16 @@ export function RemoteKeyPanel({
   const [error, setError] = useState("");
   const [candidates, setCandidates] = useState<KeyItem[]>([]);
   const [chosen, setChosen] = useState("");
-  // publicKey() と plan() は読み取りでも、遅れて返った答えが新しい入力を
-  // 上書きすると確認内容と実行内容を分離してしまう。世代は、結果がまだ
-  // 現在の操作に属する場合だけ state へ入るための局所的な取消トークンである。
   const keyLoadGeneration = useRef(0);
   const planGeneration = useRef(0);
   const preferredHandled = useRef(false);
 
-  // **useCallback なのは効果の依存に載せるためである。** 素の関数宣言だと
-  // 描画のたびに別物になり、依存に足せば効果が毎回走り直す（そして中で
-  // setState を呼ぶので止まらない）。閉じ込めている 2 つは、下の効果が既に
-  // 依存しているものと同じなので、固定してもこの効果の走る回数は変わらない。
   const handlePreferredPublicKey = useCallback(() => {
     if (preferredPublicKeyPath === null || preferredHandled.current) return;
     preferredHandled.current = true;
     onPreferredPublicKeyHandled?.();
   }, [preferredPublicKeyPath, onPreferredPublicKeyHandled]);
 
-  // インベントリの読み取りに失敗すると、ピッカーは空のまま、下の
-  // 2 つのフィールドは使える状態で残る。これが存在する前は手で鍵を
-  // 打ち込むのが唯一の方法だった。それはエラーではなくフォールバックのままだ。
   useEffect(() => {
     let active = true;
     if (preferredPublicKeyPath !== null) preferredHandled.current = false;
@@ -115,8 +90,6 @@ export function RemoteKeyPanel({
     };
   }, [keys, onPreferredPublicKeyHandled, preferredPublicKeyPath, handlePreferredPublicKey]);
 
-  // withdraw は、それまでの plan が正当化していたすべてを捨てる。
-  // 編集のたびに実行されるので、確認画面が変わった値のまま残ることはない。
   function withdraw() {
     planGeneration.current += 1;
     setPlanning(false);
@@ -143,9 +116,6 @@ export function RemoteKeyPanel({
     };
   }
 
-  // 選択すると 1 か所から両方のフィールドが埋まるので、ファイルパスと
-  // 鍵の行が別の鍵を記述することはあり得ない——別々に入力させると
-  // まさにそれが起きた。他の編集と同様、既存の plan も取り下げる。
   async function choose(keyId: string) {
     const request = ++keyLoadGeneration.current;
     handlePreferredPublicKey();
@@ -155,7 +125,6 @@ export function RemoteKeyPanel({
     try {
       const key = await keys.publicKey(keyId);
       if (request !== keyLoadGeneration.current) return;
-      // 読み込み中に作られた plan があれば、それはこの鍵についてではない。
       withdraw();
       setKeyPath(key.relativePath);
       setPublicKey(key.publicKey.trimEnd());
@@ -196,8 +165,6 @@ export function RemoteKeyPanel({
         actionToken: plan.actionToken,
       }));
     } catch (failure) {
-      // サポートされていないリモートは、通信の失敗ではなく 1 つの答えだ:
-      // 登録は提供されなくなり、手動の手順がその代わりを務める。
       if (failureCode(failure) === "unsupported_remote") setUnsupported(true);
       setError(describeFailure(failure, t, "rk.registerFailed"));
     } finally {
@@ -222,11 +189,7 @@ export function RemoteKeyPanel({
         <Notice tone="danger">{error}</Notice>
       ) : null}
 
-      {/*
-        1 行設定が 3 つあるのは行としてで、鍵の行は違う: それは base64 の
-        折り返されたかたまりであり、そこまで背の高いボックスの隣にキャプションを
-        置くと、その下の隙間に対するキャプションのように読めてしまう。
-      */}
+
       <Card>
         <Row label={t("rk.pickFromSsh")}>
           <select
@@ -238,7 +201,7 @@ export function RemoteKeyPanel({
             <option value="">{t("rk.typeInstead")}</option>
             {candidates.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.fingerprint === "" ? item.relativePath : `${item.relativePath} — ${item.fingerprint}`}
+                {item.fingerprint === "" ? item.relativePath : `${item.relativePath} · ${item.fingerprint}`}
               </option>
             ))}
           </select>
@@ -271,11 +234,7 @@ export function RemoteKeyPanel({
         />
       </Field>
 
-      {/*
-        登録することがこの画面の目的なので、アクセントをまとうのはそれ 1 つだ。
-        かつては amber のボーダーをまとっていたが、それはこのアプリケーションが
-        アクションではなく notice のために取っておく色だ。
-      */}
+
       <div className="flex gap-2">
         <Button disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
         {manual ? null : (
@@ -289,11 +248,7 @@ export function RemoteKeyPanel({
         <section aria-labelledby="remote-key-plan-heading" className="flex flex-col gap-3 text-sm">
           <h3 id="remote-key-plan-heading" className="font-medium">{t("rk.confirmHeading")}</h3>
 
-          {/*
-            行ではなく description list だ: これはどれも編集不可能であり、`Row` は
-            中身をラベルで包む。保持するものすべてがラベルだからだ。
-            カードとそのヘアラインは同じなので、両者は同じように読める。
-          */}
+
           <Card>
             <dl className="text-sm">
               {[
@@ -394,8 +349,6 @@ export function RemoteKeyPanel({
   );
 }
 
-// describeFailure は、サーバーが拒否に使ったコードをそのまま引用する。
-// ユーザーが言い換えから推測するのではなく調べられるようにするためだ。
 function describeFailure(failure: unknown, t: Translate, fallback: MessageKey): string {
   const code = failureCode(failure);
   return code === "" ? t(fallback) : t("rk.withCode", { message: t(fallback), code });

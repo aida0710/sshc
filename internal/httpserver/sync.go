@@ -18,19 +18,16 @@ import (
 // SyncHandlers はリモートのスナップショットを提供する。
 type SyncHandlers struct {
 	Service *remotesync.Service
-	// Secrets はマスターパスワードで封印された object store の設定を
-	// 保持し、vault の中ではなく脇に置く——vault は持ち運ばれるものであり、
-	// bucket への鍵が bucket の中にあってはならないからだ。nil の場合、
-	// 設定は実行のたびのものになる。これは保存される前にしていたことである。
+	// Secrets は、同期対象外の暗号化ファイルに object store 設定を保存する。
+	// nil の場合、設定はプロセス内だけで有効になる。
 	Secrets *secret.Service
 	// Reach は設定が保存される前にそれが機能するかを尋ねる。これが
 	// 注入されているのは、設定を保存するのはこのハンドラの仕事だが
 	// bucket に到達することはそうではないからで、またこのパッケージの
 	// どのテストもネットワークに触れてはならないからだ。nil の場合は
-	// 実際のチェックを意味する。配線し忘れが黙って「問題なし」になってはならない。
+	// 実際のチェックを意味する。配線し忘れが暗黙に「問題なし」になってはならない。
 	Reach func(ctx context.Context, client *remotesync.Client, key string) error
-	// Auto は、押さなくても進む巡回である。nil のときは、この設置に巡回が無い
-	// ——status は「入っていない」と答え、押しても一巡しない。
+	// Auto は自動同期の巡回処理。nil の場合は無効として応答する。
 	Auto *remotesync.Auto
 }
 
@@ -52,12 +49,8 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.POST("/api/v1/sync/pull", handlers.Pull)
 }
 
-// restore は保存された設定から client を構成する。解錠さえすれば
-// 画面が埋まり push が動くようになるということだ。
-//
-// ここでは施錠中の vault はエラーではない。status がそう伝え、form も
-// なぜ空なのかを伝える。起動時には何も尋ねない。これは画面が必要な
-// ときに自ら尋ねる、というだけのことである。
+// restore は、vault のロック解除後に保存済み設定から client を構成する。
+// ロック中はエラーにせず、status の Locked フィールドで通知する。
 func (h SyncHandlers) restore() {
 	if h.Secrets == nil || !h.Secrets.Unlocked() || h.Service.Configured() {
 		return
@@ -116,8 +109,7 @@ func (h SyncHandlers) statusResponse() api.SyncStatus {
 		Region:     &region,
 		Synced:     state.Synced,
 		Direction:  api.SyncDirection(h.Service.Direction()),
-		// form が空である理由を、空であるときに伝える。access key や
-		// secret は決して含まない。それらは封印されたファイルへ一方通行である。
+		// access key と secret は返さず、入力欄が空になる理由を Locked で示す。
 		Locked:        h.Secrets != nil && !h.Secrets.Unlocked(),
 		KeyConfigured: h.keyConfigured(),
 		Auto:          h.autoResponse(),
@@ -143,11 +135,8 @@ func (h SyncHandlers) Status(c *echo.Context) error { return h.status(c) }
 
 // Configure はこのマシンをある bucket に向ける。
 //
-// credentials はマスターパスワードで封印され、vault の中ではなく脇に
-// 置かれる。vault は持ち運ばれる——Collect は sshc/secrets をはっきり
-// 名指ししている——ので、自分自身の bucket への鍵を運ぶスナップショットは、
-// 便利なブートストラップである以上にはるかに大きな被害範囲になる。
-// 誰かが 1 つのスナップショットを手に入れれば、それ以降のすべてを取得できてしまうからだ。
+// credentials はマスターパスワードで暗号化し、同期対象外の専用ファイルへ保存する。
+// 同期先の資格情報を同期スナップショット自体へ含めない。
 func (h SyncHandlers) Configure(c *echo.Context) error {
 	var request api.SyncSettingsRequest
 	if err := decodeJSON(c, &request); err != nil {
@@ -161,7 +150,7 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	// ".../my-bucket" は何も言わずに捨てられてしまい、ユーザーはこの
 	// application が一度も書いたことのない場所にオブジェクトを探すことになる。
 	// 末尾のスラッシュ 1 つはブラウザがホストに付け足すだけで意味を
-	// 持たないため、拒否ではなく除去する——除去することで、画面が
+	// 持たないため、拒否ではなく除去する。除去することで、画面が
 	// "https://host//bucket" と表示するのも防いでいる。
 	if strings.Trim(parsed.Path, "/") != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return problem(c, http.StatusBadRequest, "endpoint_must_have_no_path")
@@ -223,21 +212,8 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	return h.status(c)
 }
 
-// sealingKey は、リモートのスナップショットを封じている値を保管庫から取り出す。
-//
-// **かつてここはマスターパスワードを検査していた。** 打ち間違いが誰にも開けない
-// 書庫を作るのを防ぐためであり、その目的には正しく働いていた。しかし副作用として、
-// マスターパスワードが端末をまたいだ共有秘密になっていた——1 台で変えれば他の
-// 全端末が締め出され、打つ人が居ないところでは封を開けられなかった。
-//
-// 鍵は保管庫の中にある。**保管庫が開いていることが、同期してよいことの唯一の条件
-// である**——開けられるのはマスターパスワードを知っている人だけなのだから、
-// 権限としてはこれで足りている。
-//
-// 先へ進めない場合はすでに拒否を書き込んでおり、返すエラーは呼び出し元がそのまま
-// 返すべきものである——nil である。レスポンスを書くことがこの application の
-// 拒否の仕方だからだ。そのエラーだけを返せば、呼び出し元は今拒否したはずのことを、
-// 自分の答えの上から続けてしまいかねない。
+// sealingKey は、vault に保存した同期専用の暗号鍵を返す。
+// 取得できない場合は HTTP 応答を書き込み、ok=false を返す。
 func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
 	if h.Secrets == nil {
 		return "", false, problem(c, http.StatusConflict, "sync_key_missing")
@@ -256,7 +232,7 @@ func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
 
 // SetKey は、このワークスペースが同期に使う鍵を決める。
 //
-// 本文が空なら作る。**既定が生成であることに理由がある** — この値は端末をまたいで
+// 本文が空なら作る。既定が生成であることに理由がある、この値は端末をまたいで
 // 共有されるので、どこかに書き留められる。書き留めるなら、覚えられる必要はない。
 //
 // 応答は、採った鍵そのものである。平文でこれが出る唯一の場所であり、画面はこれを
@@ -280,7 +256,7 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 		}
 		key = generated
 	}
-	// 弱い鍵は、封をする段になって初めて分かるのでは遅い。ここで断る。
+	// 弱い鍵は、暗号化する段になって初めて分かるのでは遅い。ここで断る。
 	if err := remotesync.ValidateKey(key); err != nil {
 		if errors.Is(err, remotesync.ErrWeakPassphrase) {
 			return problem(c, http.StatusBadRequest, "passphrase_too_short")
@@ -296,7 +272,7 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 	return c.JSON(http.StatusOK, api.SyncKeyResponse{Key: key})
 }
 
-// Rekey は、古い鍵で封じられたリモートを、いまの鍵で開くようにする。
+// Rekey は、古い鍵で暗号化されたリモートを、いまの鍵で開くようにする。
 //
 // これは移行のためだけにある。ワークスペースには 1 バイトも触れない。
 func (h SyncHandlers) Rekey(c *echo.Context) error {
@@ -476,12 +452,7 @@ func syncProblem(c *echo.Context, err error) error {
 	}
 }
 
-// keyConfigured は、同期の鍵が保管庫に在るかを答える。
-//
-// **値そのものは返さない。** リモートを開ける値を、状態を読むたびに配る API に
-// してはならない。施錠中は「無い」と答える——読めないものについて、在るとも
-// 無いとも言えないが、画面がまず言うべきことは施錠されていることであり、それは
-// 別のフィールドが言っている。
+// keyConfigured は、vault から値を公開せず、同期鍵の設定有無だけを返す。
 func (h SyncHandlers) keyConfigured() bool {
 	if h.Secrets == nil {
 		return false
@@ -510,8 +481,8 @@ func (h SyncHandlers) autoResponse() api.AutoSync {
 
 // SetAuto は、巡回の入切を決める。
 //
-// **切ったことも保管庫の中に残る。** この実行のあいだだけ止まる切り方は、次に
-// 起こしたときに黙って再開することであり、止めた人はそれを止めたと思っている。
+// 切ったことも保管庫の中に残る。この実行のあいだだけ止まる切り方は、次に
+// 起動したときに暗黙に再開することであり、止めたユーザーはそれを止めたと思っている。
 func (h SyncHandlers) SetAuto(c *echo.Context) error {
 	var request api.AutoSyncRequest
 	if err := decodeJSON(c, &request); err != nil {
@@ -529,9 +500,9 @@ func (h SyncHandlers) SetAuto(c *echo.Context) error {
 	return h.status(c)
 }
 
-// Now は、一巡を押した人を待たせたまま行う。
+// Now は、一巡を押したユーザーを待たせたまま行う。
 //
-// 巡回が入っていなければ何も起きない——「今すぐ」は自動同期の一部であって、
+// 巡回が入っていなければ何も起きない。「今すぐ」は自動同期の一部であって、
 // 手動の push と pull はそれぞれのボタンが持っている。
 func (h SyncHandlers) Now(c *echo.Context) error {
 	h.restore()

@@ -12,8 +12,6 @@ import (
 	"sshc/internal/storage"
 )
 
-// SyntaxError は、新しい内容を表現できない save を拒否する。これは
-// location を運ぶが、ファイルの内容を運ぶことは決してない。
 type SyntaxError struct {
 	Path   string
 	Line   int
@@ -39,16 +37,6 @@ type ConflictError struct {
 
 func (e *ConflictError) Error() string { return "external change detected" }
 
-// overlayLoader は、resolver に、transaction が作成しようとしている
-// ファイルを含め、これから書き込もうとしている内容を見せ、
-// そしてこれから取り去ろうとしているファイルを見えなくする。
-//
-// gone は最適化ではない。ファイルを移動する transaction は、
-// destination にそれを書き込み source からそれを取り除くので、
-// pending だけを運ぶ overlay は、そのファイルが両方の場所に同時に
-// 存在する世界に対して graph を解決してしまうことになる。Include glob は 2
-// 回 match し、存在しなくなるはずの重複 alias が報告され、move が実際には直している
-// diagnostic が依然として存在するように見えてしまう。removal についても同じことが言える。
 type overlayLoader struct {
 	base    config.Loader
 	pending map[string][]byte
@@ -60,8 +48,6 @@ func (loader overlayLoader) ReadFile(name string) ([]byte, error) {
 	if contents, ok := loader.pending[cleaned]; ok {
 		return contents, nil
 	}
-	// pending は gone に勝つので、ファイルを、自らも削除する path へ
-	// 移動する transaction は、何も報告しないのではなく新しい内容を読む。
 	if loader.gone[cleaned] {
 		return nil, fs.ErrNotExist
 	}
@@ -99,9 +85,6 @@ func (loader overlayLoader) Glob(pattern string) ([]string, error) {
 	return matches, nil
 }
 
-// overlayFor は、リクエストが生み出そうとしている filesystem を記述
-// する。それが書き込む内容と、もはやそこに無くなる path である。
-// move はその両方に寄与する。その destination が到着し、その source が去るからである。
 func overlayFor(request storage.Request) (map[string][]byte, map[string]bool) {
 	pending := make(map[string][]byte, len(request.Changes)+len(request.Moves))
 	gone := make(map[string]bool, len(request.Moves)+len(request.Removals))
@@ -117,8 +100,6 @@ func overlayFor(request storage.Request) (map[string][]byte, map[string]bool) {
 	return pending, gone
 }
 
-// diagnosticKey は diagnostic を識別し、save が、設定が既に抱えていた
-// 問題によってではなく、それ自身が持ち込む問題によってのみ block されるようにする。
 func diagnosticKey(diagnostic config.Diagnostic) string {
 	return diagnostic.Code + "\x00" + diagnostic.Path + "\x00" + strconv.Itoa(diagnostic.Line)
 }
@@ -132,8 +113,6 @@ func diagnosticBaseline(graph *config.Graph) map[string]bool {
 }
 
 // newUnstructuredLine は、編集が parse 不能にしてしまった行を見つける。
-// 既に parse 不能だった行は許され続ける。エンジンはそれらを逐語的に
-// 保存し、ユーザーは徐々にしか直せないかもしれないからである。
 func newUnstructuredLine(before, after *config.File) (line, column int, found bool) {
 	known := map[string]int{}
 	if before != nil {
@@ -163,20 +142,6 @@ func unstructuredColumn(text string) int {
 	return 1
 }
 
-// validate は storage.Manager.Validate として設置されるので、
-// 事前条件がチェックされた後、何かが journal 化・stage・rename される
-// 前に実行される。これはすべての新しい設定ファイルを parse し、
-// その parse が同じバイト列へ描き戻せることを証明し、新たに parse
-// 不能になった行を拒否し、pending の内容を重ねた状態で Include graph 全体を再解決する。
-//
-// これは設定だけを validate し、他の何も validate しない。ワークスペース
-// の状態ディレクトリの中にあるファイル——metadata.json、journal、
-// backup、password vault——はこのアプリケーション自身のものであり、
-// ssh_config ではない。それらを ssh_config であるかのように parse する
-// ことは、単に無意味であるだけではない。password vault は ciphertext であり、ランダム
-// なバイト列がたまたま奇数個の引用符を含んでしまった blob は"unbalanced quoting"
-// として拒否されていた。それは save のたびのコイン投げであり、これが見つかった経緯
-// である——パスワードを保存した end-to-end テストは、local では通り CI では失敗した。
 func (s *Service) validate(request storage.Request) error {
 	pending, gone := overlayFor(request)
 
@@ -190,8 +155,6 @@ func (s *Service) validate(request storage.Request) error {
 			}
 			continue
 		}
-		// sshc/配下のそれ以外のものはすべてアプリケーションの状態であり、
-		// OpenSSH に読まれることも、Include graph の一部になることも決してない。
 		if isInside(stateDir, cleaned) {
 			continue
 		}
@@ -208,12 +171,6 @@ func (s *Service) validate(request storage.Request) error {
 		}
 	}
 
-	// OpenSSH が読む何にも触れないリクエストは、Include graph を変えている
-	// はずがないので、解決可能な graph を生み出すことを求められない。
-	// vault は sshc/配下にあり、アプリケーション全体がその向こう側にある。
-	// これが無ければ、config ファイルが無いか壊れているワークスペースは、
-	// master password を設定できないワークスペースになってしまい、壊れた
-	// 設定を直すためのツールが、設定が壊れているという理由で起動を拒否することになる。
 	if !s.touchesConfiguration(request) {
 		return nil
 	}
@@ -237,10 +194,6 @@ func (s *Service) validate(request storage.Request) error {
 	return nil
 }
 
-// touchesConfiguration は、リクエストの中のどれかの path が、OpenSSH が
-// 読み得る場所であるかどうかを報告する。metadata 文書はこの
-// アプリケーション自身のものだが、状態ディレクトリの内側ではなく隣に置かれているので、
-// ここでも名指される——それを変えても graph を変えることはできないからである。
 func (s *Service) touchesConfiguration(request storage.Request) bool {
 	stateDir := filepath.Clean(s.workspace.StateDir())
 	metadataPath := filepath.Clean(s.metadata.Path())
@@ -263,15 +216,10 @@ func (s *Service) touchesConfiguration(request storage.Request) bool {
 			return true
 		}
 	}
-	// このアプリケーションが作成または削除するディレクトリは、常に
-	// グループのディレクトリか自分自身のもののどちらかでしかなく、
-	// グループのディレクトリは Include が届く範囲を変える。
 	return len(request.Directories) > 0 || len(request.RemoveDirectories) > 0
 }
 
 // isInside は、path が directory それ自体かその下にあるかを報告する。
-// これは文字列の前方一致ではなく、クリーニング済みの path を構成要素ごとに比較するので、
-// sshc-backup という名前の兄弟が sshc の子であると誤認されることはない。
 func isInside(directory, path string) bool {
 	if path == directory {
 		return true

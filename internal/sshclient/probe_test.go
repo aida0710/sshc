@@ -28,7 +28,7 @@ func TestProbeNamesTheMethodThatWorked(t *testing.T) {
 	}
 }
 
-// **何も尋ねない。** 上限つきで非対話という約束は、外部の ssh に BatchMode を
+// 何も尋ねない。上限つきで非対話という約束は、外部の ssh に BatchMode を
 // 渡していたときと同じである。渡す相手が変わっただけで、約束は変わらない。
 func TestProbeNeverAsksTheUser(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "hunter2"})
@@ -62,7 +62,7 @@ func TestProbeReportsAuthenticationThatDidNotPass(t *testing.T) {
 	}
 }
 
-// **検査のために信頼を増やさない。** 未知のホストは StrictHostKeyChecking=yes
+// 検査のために信頼を増やさない。未知のホストは StrictHostKeyChecking=yes
 // 相当で断る。設定が no と言っていても、こちらは断る。
 func TestProbeRefusesAnUnknownHostEvenWhenTheConfigurationWouldNot(t *testing.T) {
 	path, contents, public := keyPair(t)

@@ -2,11 +2,7 @@ import { describe, expect, it } from "vitest";
 import { asArray, asBoolean, asNumber, asRecord, asString, toProblem } from "./guards";
 import { ApiError } from "./client";
 
-// これらは「サーバーが契約を破ったときに UI が壊れる前に止める」ための検査である。
-//
-// **配列も null も record ではない。** どちらも typeof では "object" なので、
-// そこを通してしまうと `response.items.map(...)` が型の上では有り得ない場所で落ちる。
-describe("応答の見張り", () => {
+describe("応答の型検証", () => {
   it("record として通すのはオブジェクトだけ", () => {
     expect(asRecord({ a: 1 })).toEqual({ a: 1 });
     for (const value of [null, [], "x", 1, undefined]) {
@@ -14,7 +10,7 @@ describe("応答の見張り", () => {
     }
   });
 
-  it("それぞれの型を名指しで確かめる", () => {
+  it("各フィールドの型を明示的に検証する", () => {
     expect(asArray([1])).toEqual([1]);
     expect(asString("x")).toBe("x");
     expect(asNumber(1)).toBe(1);
@@ -22,14 +18,10 @@ describe("応答の見張り", () => {
     expect(() => asArray({})).toThrow();
     expect(() => asString(1)).toThrow();
     expect(() => asNumber("1")).toThrow();
-    // **0 も false も、値である。** 真偽で判定していれば、ここが通らない。
     expect(asNumber(0)).toBe(0);
   });
 });
 
-// toProblem は、投げられたものを画面が読める理由に均す。
-//
-// **画面ごとに書くものではない。** 以前は 4 つの画面がそれぞれ同じ 4 行を持っていた。
 describe("失敗の理由", () => {
   it("サーバーが理由を付けたなら、それを渡す", () => {
     const problem = { code: "vault_locked", message: "locked" };
@@ -45,18 +37,11 @@ describe("失敗の理由", () => {
   });
 });
 
-// **同じ見張りが二箇所にあってはならない。**
-//
-// これらは「サーバーが契約を破ったら UI が壊れる前に止める」ための検査である。
-// 定義が 4 つあった間、「null を record として通さない」のような直しは 1 箇所にしか
-// 入らない状態が、いつでも起こりえた。実際に食い違う前に畳んだが、**散文では
-// 守れないので、ここで数える。**
-describe("見張りの住処", () => {
+describe("型検証関数の配置", () => {
   it("定義はこのファイルにしかない", async () => {
     const { readdir, readFile } = await import("node:fs/promises");
     const { dirname, join } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
-    // **cwd に頼らない。** vitest をどこから起こしたかで答えが変わってはならない。
     const sourceRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
     async function sources(directory: string): Promise<string[]> {

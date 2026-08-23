@@ -331,7 +331,7 @@ func gatedSecurity(t *testing.T, unlocked func() bool) (Security, string, sessio
 // application はもはやマスターパスワードの向こう側にあるものであり、
 // 各画面が個別にそうなのではない。
 //
-// 除外されているのはゲート自身と、そもそも解錠すべき何かが生じる
+// 除外されているのはゲート自身と、そもそもロック解除すべき何かが生じる
 // 前に動く必要のある 2 つのものである。それ以外は vault_locked を返す。
 func TestEveryRouteButTheGateRefusesWhileTheVaultIsShut(t *testing.T) {
 	security, host, credentials := gatedSecurity(t, func() bool { return false })
@@ -372,7 +372,7 @@ func TestEveryRouteButTheGateRefusesWhileTheVaultIsShut(t *testing.T) {
 	}
 }
 
-// 何も配線されていないゲートは施錠されている。配線し忘れが、施錠
+// 何も配線されていないゲートはロックされている。配線し忘れが、ロック
 // された application と開いた application の違いになってはならない。
 func TestAMiddlewareWithNoVaultToAskIsShut(t *testing.T) {
 	security, host, credentials := gatedSecurity(t, nil)
@@ -400,7 +400,7 @@ func alwaysUnlocked() bool { return true }
 
 // cookie はポートに紐づかず、site もまたそうである。
 //
-// 127.0.0.1 上の別のサーバー——他のポートで動く開発用サーバー——が
+// 127.0.0.1 上の別のサーバー。他のポートで動く開発用サーバー。が
 // この application のセッション cookie を受け取ってしまう。SameSite は
 // scheme と registrable domain を比較し、IP はそれ自体が site のすべて
 // だからだ。したがって cookie だけでは何も読めてはならない。CSRF

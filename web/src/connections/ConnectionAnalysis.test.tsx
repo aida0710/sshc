@@ -66,8 +66,7 @@ describe("ConnectionAnalysis", () => {
 
     expect(screen.getByText("HostName 203.0.113.10")).toBeInTheDocument();
     expect(screen.getByText("config:2")).toBeInTheDocument();
-    // 但し書きは無くなった。この値は説明ではなく答えである。
-    expect(screen.getByText(/These values are what this connection uses/)).toBeInTheDocument();
+    expect(screen.getByText(/These are the values used by this connection/)).toBeInTheDocument();
     expect(api.effective).not.toHaveBeenCalled();
   });
 
@@ -78,7 +77,7 @@ describe("ConnectionAnalysis", () => {
     await userEvent.click(screen.getByRole("button", { name: "Show the sources" }));
 
     expect(api.effective).toHaveBeenCalledWith("bastion");
-    expect(await screen.findByRole("table", { name: "Authoritative value sources" })).toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "Configuration lines read by OpenSSH" })).toBeInTheDocument();
     expect(screen.getByText("in effect")).toBeInTheDocument();
   });
 

@@ -12,7 +12,7 @@ import (
 	"sshc/internal/handoff"
 )
 
-// fakeProbe は、生きているエンジンの答えを台本どおりに返す。
+// fakeProbe は、設定された engine 状態を順番に返す。
 type fakeProbe struct {
 	mutex       sync.Mutex
 	answers     []statusAnswer
@@ -78,9 +78,7 @@ func reach(t *testing.T, stateDir string, probe engineProbe, stderr *bytes.Buffe
 		func(handoff.Handoff) engineProbe { return probe }, stderr)
 }
 
-// **このコマンドは engine を起こさない。** 生かしておくのは人であり、ここで
-// できるのは、居ないことと起こし方を言うことだけである。だから四つの出口は
-// すべて「繋ぐ」か「次に打つものを言う」のどちらかで終わる——待ちは無い。
+// reachUnlockedEngine は engine を起動せず、各状態に対応する復旧手順を返す。
 func TestReachUnlockedEngineExplainsInsteadOfStartingOne(t *testing.T) {
 	for _, test := range []struct {
 		name    string
@@ -98,7 +96,7 @@ func TestReachUnlockedEngineExplainsInsteadOfStartingOne(t *testing.T) {
 			wantErr: "sshc vault unlock",
 		},
 		{
-			// **保管庫の不在は解錠ではない。** 無ければ保存された答えは一つも無い。
+			// Vault 未作成と解錠済みを区別する。
 			name:    "no vault says how to create one",
 			running: true,
 			answers: []statusAnswer{{Owner: handoff.OwnerEngine, ProtocolVersion: handoff.ProtocolVersion}},
@@ -139,9 +137,7 @@ func TestReachUnlockedEngineExplainsInsteadOfStartingOne(t *testing.T) {
 	}
 }
 
-// **黙って退かない。** このアプリケーションが ~/.ssh/config に触れないので ssh は
-// 常に動くが、黙って退けば、鍵のパスフレーズを毎回訊かれるのが engine の不在の
-// せいだと分からないままになる。
+// engine が停止中の場合は、通常の ssh を代替手段として明示する。
 func TestTheMissingEngineMessageNamesTheWayThroughWithoutIt(t *testing.T) {
 	_, err := reach(t, t.TempDir(), &fakeProbe{}, &bytes.Buffer{})
 	if err == nil {
@@ -152,7 +148,7 @@ func TestTheMissingEngineMessageNamesTheWayThroughWithoutIt(t *testing.T) {
 	}
 }
 
-// 繋ぐときは、利用者に打ち直させない。元の接続先をそのまま一回要求する。
+// 指定された alias の接続情報を一度だけ要求する。
 func TestConnectionIsRequestedOnceForTheOriginalAlias(t *testing.T) {
 	stateDir := stateWithEngine(t, handoff.OwnerEngine)
 	probe := &fakeProbe{answers: []statusAnswer{unlockedEngine()}}

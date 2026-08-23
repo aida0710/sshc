@@ -29,8 +29,6 @@ export type PasswordVaultStatus = components["schemas"]["PasswordVaultStatus"];
 export type PasswordEligibility = components["schemas"]["PasswordEligibility"];
 export type Credential = components["schemas"]["Credential"];
 export type CredentialList = components["schemas"]["CredentialList"];
-// 二つの名前空間は string ではなく型として表現される。呼び出し側が
-// 三つ目を作ったり、二つを入れ替えたりできないようにするためである。
 export type CredentialKind = "password" | "key_passphrase";
 export type SyncStatus = components["schemas"]["SyncStatus"];
 export type SyncKeyResponse = components["schemas"]["SyncKeyResponse"];
@@ -42,17 +40,12 @@ export type PushResult = components["schemas"]["PushResult"];
 export type PushResponse = components["schemas"]["PushResponse"];
 export type PullResponse = components["schemas"]["PullResponse"];
 
-// アクション語彙はサーバーのセッションパッケージに属し、操作を確認する
-// すべてのサブシステムに対してそれを所有する。これらはその通信上の値である。
 export const REACHABILITY_ACTION_KIND = "diagnostics.reachability";
 export const AUTHENTICATION_ACTION_KIND = "diagnostics.authentication";
 export const KNOWN_HOSTS_DELETE_ACTION_KIND = "known_hosts.delete";
 export const KNOWN_HOSTS_SCAN_ACTION_KIND = "known_hosts.scan";
 export const KNOWN_HOSTS_ADD_ACTION_KIND = "known_hosts.add";
 
-// KnownHostAddition はスキャン候補のうち、書き込まれる鍵を
-// 特定する部分である。フィンガープリントはその一部として送られない。
-// サーバーが鍵自体からフィンガープリントを導出し、ユーザーが入力したものと比較する。
 export type KnownHostAddition = Pick<KnownHostCandidate, "host" | "port" | "keyType" | "key">;
 
 export type IntegrationsApi = {
@@ -60,13 +53,9 @@ export type IntegrationsApi = {
   effective(alias: string): Promise<EffectiveResponse>;
   reachability(alias: string): Promise<ReachabilityResponse>;
   authentication(alias: string, acknowledgeExecutable: boolean): Promise<AuthenticationResponse>;
-  // 埋め込みターミナル。開くことに action token は要らない——vault ゲート
-  // （マスターパスワード）だけが条件である。README がその代償を書いている。
   terminalSessions(): Promise<TerminalSessionList>;
   openTerminalSession(request: OpenTerminalSessionRequest): Promise<OpenTerminalSessionResponse>;
   terminalStreamTicket(id: string): Promise<TerminalStreamTicket>;
-  // 改名は一覧の表示だけを変える。走っているプロセスにも ssh の相手にも
-  // 触れず、metadata へも書かない。セッションと一緒に消える。
   renameTerminalSession(id: string, title: string): Promise<TerminalSessionList>;
   closeTerminalSession(id: string): Promise<TerminalSessionList>;
   knownHosts(query: string): Promise<KnownHostsResponse>;
@@ -77,22 +66,12 @@ export type IntegrationsApi = {
     expectedFingerprint: string,
     acknowledged: boolean,
   ): Promise<KnownHostsChangeResponse>;
-  // vault。ここにあるどのメソッドもパスワードを返すことは決してない。
-  // ステータスはパスワードを持つホストを運ぶだけであり、値が移動するのは
-  // ブラウザからサーバーへ、またはサーバーから askpass ヘルパーへの経路だけである。
   passwordVault(): Promise<PasswordVaultStatus>;
   initialiseVault(passphrase: string): Promise<PasswordVaultStatus>;
   unlockVault(passphrase: string): Promise<PasswordVaultStatus>;
-  // 本文を取らない。差し出すものは無く、証明するのは OS の錠前である。
   lockVault(): Promise<PasswordVaultStatus>;
   changeMasterPassword(current: string, next: string): Promise<ChangeMasterPasswordResult>;
   updateStatus(): Promise<UpdateStatus>;
-  // 開始位置は書かれた綴りのまま往復する。`~/work` は `~/work` のままで
-  // あり、home の綴りに展開されたものが画面へ戻ることはない。
-  //
-  // **0 と空は「設定されていない」である。** 「既定と同じ値」ではない——
-  // 既定を書き戻すと metadata に焼き付き、既定を変えた日にその人だけが
-  // 取り残される。
   terminalSettings(): Promise<TerminalSettings>;
   engineSettings(): Promise<EngineSettings>;
   setEngineSettings(settings: EngineSettings): Promise<void>;
@@ -101,11 +80,6 @@ export type IntegrationsApi = {
   deleteTerminalBackground(name: string): Promise<void>;
   setTerminalSettings(settings: TerminalSettings): Promise<void>;
   passwordEligibility(alias: string): Promise<PasswordEligibility>;
-  // Credential は名前を持つ秘密である。ホストはアカウントパスワードを参照し、
-  // 鍵はパスフレーズを参照する。この二つの名前空間は決して
-  // 混ざらない。誤った方を選べば、鍵のパスフレーズをリモートホストへの
-  // ログインパスワードとして送ってしまう。だから kind はうまく指定すべき
-  // フィールドではなく、すべての呼び出しの一部である。
   credentials(): Promise<CredentialList>;
   storeCredential(kind: CredentialKind, name: string, secret: string): Promise<CredentialList>;
   deleteCredential(kind: CredentialKind, name: string): Promise<CredentialList>;
@@ -113,27 +87,16 @@ export type IntegrationsApi = {
   unassignCredential(kind: CredentialKind, subject: string): Promise<CredentialList>;
   storePassword(alias: string, password: string): Promise<PasswordVaultStatus>;
   forgetPassword(alias: string): Promise<PasswordVaultStatus>;
-  // リモートスナップショット。どのメソッドも資格情報やファイルの中身を返さない。
-  // ステータスはエンドポイントとバケットを運び、pull はパスを運ぶ。
   syncStatus(): Promise<SyncStatus>;
   configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
   pushSnapshot(): Promise<PushResponse>;
-  // resolve は、両側で変わったファイルをどちらに寄せるか。省略すれば決めない
-  // ——衝突を報告して止まる。
   pullSnapshot(apply: boolean, resolve?: "local" | "remote"): Promise<PullResponse>;
-  // 鍵を決める。key を渡さなければ作る。返るのは採られた鍵そのもので、
-  // **平文でそれが出る唯一の場所**である。画面はこれを一度だけ見せる。
   setSyncKey(key?: string): Promise<SyncKeyResponse>;
-  // 巡回の入切。切ったことも保管庫に残る。
   setAutoSync(enabled: boolean): Promise<SyncStatus>;
-  // 一巡を、押した人を待たせたまま行う。
   syncNow(): Promise<SyncStatus>;
-  // 古い鍵で封じられたリモートを、いまの鍵で開くようにする。移行のためだけにある。
   rekeySnapshot(passphrase: string): Promise<SyncStatus>;
 };
 
-// 生成された型は契約を記述するに過ぎない。これらの防護は
-// UI が実際に受け取ったペイロードを検査する。型アサーションは実行時には何も証明しない。
 function validateUpdate(value: unknown): UpdateStatus {
   const record = asRecord(value);
   if (typeof record.current !== "string" || typeof record.available !== "boolean") {
@@ -253,8 +216,6 @@ function validateTerminalSession(value: unknown): TerminalSession {
   if (kind !== "ssh" && kind !== "shell") throw new Error("invalid_response");
   asString(record.title);
   asString(record.startedAt);
-  // alias を持つのは ssh のときだけである。localhost はローカルシェルであって
-  // ssh 接続ではないので、alias を持たない。
   if (record.alias !== undefined) asString(record.alias);
   if (record.exited !== undefined) {
     const exited = asRecord(record.exited);
@@ -262,7 +223,6 @@ function validateTerminalSession(value: unknown): TerminalSession {
     asString(exited.signal);
     asString(exited.at);
   }
-  // 転送を持つのは、それを開いたセッションだけである。
   if (record.forwards !== undefined) {
     for (const forward of asArray(record.forwards)) {
       const entry = asRecord(forward);
@@ -351,8 +311,6 @@ function validateVaultStatus(value: unknown): PasswordVaultStatus {
   return record as unknown as PasswordVaultStatus;
 }
 
-// kind はパスセグメントであるため、呼び出し側が渡した任意の値を
-// 埋め込むのではなく、閉じた集合からここで組み立てる。
 function credentialPath(kind: CredentialKind, name: string): string {
   return `/api/v1/credentials/${kind}/${encodeURIComponent(name)}`;
 }
@@ -392,8 +350,6 @@ function validateSyncStatus(value: unknown): SyncStatus {
   asBoolean(record.keyConfigured);
   const auto = asRecord(record.auto);
   asBoolean(auto.enabled);
-  // phase は画面がどの文を出すかを決める。四つ以外は、未知の状態として
-  // 表示するのではなく拒否する。
   const phase = asString(auto.phase);
   if (phase !== "idle" && phase !== "running" && phase !== "blocked" && phase !== "failed") {
     throw new Error(`unexpected auto sync phase: ${phase}`);
@@ -401,8 +357,6 @@ function validateSyncStatus(value: unknown): SyncStatus {
   asString(record.endpoint);
   asString(record.bucket);
   asBoolean(record.synced);
-  // direction はこのパネルがどのボタンを提示するかを決める。三つの
-  // 値以外は、未知のモードとして表示するのではなく拒否する。
   const direction = asString(record.direction);
   if (direction !== "both" && direction !== "push" && direction !== "pull") {
     throw new Error(`unexpected sync direction: ${direction}`);
@@ -477,23 +431,16 @@ function validatePullResponse(value: unknown): PullResponse {
   return record as unknown as PullResponse;
 }
 
-// readAppearance は、見た目の選択を綴りだけ取り出す。
-//
-// **知らない綴りをここで断らない。** 名乗られた配色が無ければ端末はテーマへ
-// 戻る——配色を 1 つ改名した日に、それを選んでいた人の設定画面が開かなくなる
-// 方が、はるかに悪い。
 function readAppearance(value: unknown): TerminalAppearance {
   const record = asRecord(value);
   return {
     ...(typeof record.palette === "string" ? { palette: record.palette } : {}),
     ...(typeof record.font === "string" ? { font: record.font } : {}),
     ...(typeof record.background === "string" ? { background: record.background } : {}),
-    // **0 を落とさない。** 「かぶせない」という選択である。
     ...(typeof record.backgroundTint === "number" ? { backgroundTint: record.backgroundTint } : {}),
   };
 }
 
-// validateBackground は、1 枚ぶんの応答を確かめる。
 function validateBackground(value: unknown): TerminalBackground {
   const record = asRecord(value);
   return { name: asString(record.name), bytes: asNumber(record.bytes), type: asString(record.type) };
@@ -504,8 +451,6 @@ export const integrationsApi: IntegrationsApi = {
     return validateConfigCheck(await postJSON<unknown>("/api/v1/diagnostics/config", {}));
   },
   async effective(alias) {
-    // 確認トークンは要らない。この経路はもう何も実行しない——値を決めるのは
-    // このアプリケーション自身であり、ここが返すのはその出所である。
     return validateEffective(await postJSON<unknown>("/api/v1/diagnostics/effective", { alias }));
   },
   async reachability(alias) {
@@ -576,8 +521,6 @@ export const integrationsApi: IntegrationsApi = {
         : {}),
       ...(typeof terminal.fontSize === "number" ? { fontSize: terminal.fontSize } : {}),
       ...(typeof terminal.verbosity === "number" ? { verbosity: terminal.verbosity } : {}),
-      // **0 は「繋ぎ直さない」という選択である。** 真偽で振り分けると、
-      // 切った人の選択がここで消える。
       ...(typeof terminal.reconnect === "number" ? { reconnect: terminal.reconnect } : {}),
       ...(typeof terminal.copyOnSelect === "boolean" ? { copyOnSelect: terminal.copyOnSelect } : {}),
       ...(typeof terminal.rightClickPaste === "boolean"
@@ -592,7 +535,6 @@ export const integrationsApi: IntegrationsApi = {
     const engine = asRecord(metadata.engine);
     return typeof engine.port === "number" ? { port: engine.port } : {};
   },
-  // **節まるごとの置き換えである。** 送らなかった項目は書かれていない状態へ戻る。
   async setEngineSettings(settings) {
     await apiClient.mutate("/api/v1/metadata/engine", {
       method: "PUT",
@@ -607,8 +549,6 @@ export const integrationsApi: IntegrationsApi = {
       remainingBytes: asNumber(record.remainingBytes),
     };
   },
-  // **名前を決めるのはサーバーである。** ここが渡すのは希望であって、
-  // 実際の綴りと型は応答が答える。
   async addTerminalBackground(suggested, image) {
     return validateBackground(
       await apiClient.mutate<unknown>(`/api/v1/terminal/backgrounds?name=${encodeURIComponent(suggested)}`, {
@@ -624,8 +564,6 @@ export const integrationsApi: IntegrationsApi = {
     });
     if (!response.ok) throw new ApiError("background_not_removed", response.status, null);
   },
-  // **節まるごとの置き換えである。** 送らなかった項目は、書かれていない状態へ
-  // 戻る——そうでないと、一度指定した人が既定へ戻れない。
   async setTerminalSettings(settings) {
     await apiClient.mutate("/api/v1/metadata/terminal", {
       method: "PUT",
@@ -751,9 +689,6 @@ export const integrationsApi: IntegrationsApi = {
     const token = await issueAction(KNOWN_HOSTS_SCAN_ACTION_KIND, host);
     return validateScan(await postJSON<unknown>("/api/v1/known-hosts/scan", { host, port }, token));
   },
-  // スキャンされた鍵が信頼されるのはここだけであり、ユーザーが与えた
-  // 証明または承認があってのことである。確認はホストに
-  // 紐付けられ、サーバーはそれに対してトークンを消費する。
   async addKnownHost(candidate, expectedFingerprint, acknowledged) {
     const token = await issueAction(KNOWN_HOSTS_ADD_ACTION_KIND, candidate.host);
     return validateChange(

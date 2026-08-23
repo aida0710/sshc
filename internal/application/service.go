@@ -17,11 +17,7 @@ import (
 )
 
 const (
-	// entryFileName は、このアプリケーションが Include graph の root として
-	// 扱う、OpenSSH のユーザー設定ファイルである。
-	entryFileName = "config"
-	// maxEffectivePreviews は、グループ preview が説明する alias の数の上限
-	// であり、大規模な設定が 1 回の preview を無制限の walk に変えてしまわないようにする。
+	entryFileName        = "config"
 	maxEffectivePreviews = 50
 )
 
@@ -29,96 +25,42 @@ var (
 	ErrUnknownEditKind       = errors.New("unknown edit kind")
 	ErrUnknownRecoveryAction = errors.New("unknown recovery action")
 	ErrNotEditable           = errors.New("file is not editable through this application")
-	// ErrGroupNotDeclared は、どの Include 行も宣言していないグループを
-	// 名指す操作を拒否する。存在するディレクトリがグループであるとは限らない。
-	ErrGroupNotDeclared = errors.New("no generated Include line declares that group")
-	// ErrAmbiguousDestination は、グループと path の両方を名指す move を拒否する。
-	// その 2 つは食い違うことがあり、このアプリケーションはどちらかを選ぶことをしない。
+	ErrGroupNotDeclared      = errors.New("no generated Include line declares that group")
+	// ErrAmbiguousDestination は、グループと path の両方を指定した move を拒否する。
 	ErrAmbiguousDestination = errors.New("a move names either a destination group or a destination path")
 )
 
-// EditKind は、UI が要求できる操作を名指す。
+// EditKind は UI が要求できる操作を識別する。
 type EditKind string
 
 const (
-	EditHostFields EditKind = "host_fields"
-	EditBlockRaw   EditKind = "block_raw"
-	EditFileRaw    EditKind = "file_raw"
-	EditRename     EditKind = "rename"
-	EditGroups     EditKind = "groups"
-	EditMetadata   EditKind = "metadata"
-	EditMove       EditKind = "move"
-	// EditComment は、Host ブロックの上のコメント行を設定する。コメントは
-	// metadata ではなく設定の中に存在するので、このアプリケーション無し
-	// でそのファイルを読む誰にとっても残り続ける。
-	EditComment EditKind = "comment"
-	// EditFileRename は 1 個の設定ファイルを移動し、それを名指していた
-	// Include 行を書き換える。EditFileDelete は 1 個を削除し、それらの行を
-	// 取り除く。どちらもブロック操作ではなくファイル操作なので、
-	// file_raw の一形態としてではなく独自の種類として存在する。file_raw
-	// はファイルを空にはできるが、その存在を止めることはできず、もはや
-	// include されていないファイルは空のファイルとは別のものだからである。
-	EditFileRename EditKind = "file_rename"
-	EditFileDelete EditKind = "file_delete"
-	// EditDirectoryCreate と EditDirectoryDelete は、explorer の
-	// ディレクトリ操作である。rename はここには無い。それは中のすべての
-	// ファイルを名指す Include 行を運ばなければならず、これは file_rename
-	// が 1 個のファイルに対して行うのと同じ作業であり、それらの書き換えが積み重なる必要がある。
+	EditHostFields      EditKind = "host_fields"
+	EditBlockRaw        EditKind = "block_raw"
+	EditFileRaw         EditKind = "file_raw"
+	EditRename          EditKind = "rename"
+	EditGroups          EditKind = "groups"
+	EditMetadata        EditKind = "metadata"
+	EditMove            EditKind = "move"
+	EditComment         EditKind = "comment"
+	EditFileRename      EditKind = "file_rename"
+	EditFileDelete      EditKind = "file_delete"
 	EditDirectoryCreate EditKind = "directory_create"
 	EditDirectoryDelete EditKind = "directory_delete"
 )
 
 // EditRequest は、要求された 1 個の変更である。
-//
-// Base は、クライアントが Path のために読み込んだ厳密なバイト列を
-// 運ぶ。ファイルを対象とするすべての編集はそのバイト列に対して適用され、
-// その digest を事前条件として commit されるので、ユーザーは常に自分が
-// 見たものを編集することになり、外部の変更は黙った上書きではなく本物の三者 diff を生む。
-//
-// Fields 内のすべての行番号は 1-based であり、この service が FormField、
-// Source、DiffLine で報告する行番号と一致する。internal/config の
-// 0-based の index が、この境界をどちらの方向にも越えることは決してない。
-// EditRequest は、設定への編集ひとつである。
-//
-// **これは union であって、構造体ではない。** Kind がどの項目に意味があるかを決め、
-// 残りは無視される。JSON の上で 1 つの平らな袋であり続けるのは、画面がそう組み立てて
-// 送るからであり、そこは変えていない——ただし、どれがどれに属するかは、読む人が
-// 12 個の planner を追わなくても分かる必要がある。
-//
-//	Kind                 意味を持つ項目
-//	----                 --------------
-//	host_fields          Path, Base, Alias, Fields
-//	block_raw            Path, Base, Alias, Raw
-//	comment              Path, Base, Alias, Comment
-//	rename               Path, Base, Alias, NewAlias
-//	file_raw             Path, Base, Raw
-//	groups / metadata    Metadata
-//	move                 Path, Base, Alias, DestinationGroup または
-//	                     (DestinationPath, DestinationBase)
-//	file_rename          Path, DestinationPath
-//	file_delete          Path, Base
-//	directory_create     Path
-//	directory_delete     Path
-//
-// **表に無い項目を送っても断らない。** 断る形にすれば、いま動いている画面の
-// どれかが黙って壊れうる。ここは表で示すに留める。
 type EditRequest struct {
-	Kind     EditKind    `json:"kind"`
-	Path     string      `json:"path,omitempty"`
-	Base     string      `json:"base,omitempty"`
-	Alias    string      `json:"alias,omitempty"`
-	NewAlias string      `json:"newAlias,omitempty"`
-	Fields   []FieldEdit `json:"fields,omitempty"`
-	Raw      string      `json:"raw,omitempty"`
-	Comment  string      `json:"comment,omitempty"`
-	Metadata *Metadata   `json:"metadata,omitempty"`
-	// DestinationGroup は、ファイルではなくグループを名指すことでホストを
-	// グループへ移動する。destination path はそこから導出されるので、
-	// 呼び出し側は食い違うグループと path を名指すことができない。両方を送ることは拒否される。
-	DestinationGroup string `json:"destinationGroup,omitempty"`
+	Kind             EditKind    `json:"kind"`
+	Path             string      `json:"path,omitempty"`
+	Base             string      `json:"base,omitempty"`
+	Alias            string      `json:"alias,omitempty"`
+	NewAlias         string      `json:"newAlias,omitempty"`
+	Fields           []FieldEdit `json:"fields,omitempty"`
+	Raw              string      `json:"raw,omitempty"`
+	Comment          string      `json:"comment,omitempty"`
+	Metadata         *Metadata   `json:"metadata,omitempty"`
+	DestinationGroup string      `json:"destinationGroup,omitempty"`
 	// DestinationPath と DestinationBase は、move の 2 番目のファイルを記述する。
-	// DestinationBase は、クライアントがそれのために読み込んだ厳密な
-	// バイト列を運ぶので、destination は source と同じ事前条件の保証を持つ。
 	DestinationPath string `json:"destinationPath,omitempty"`
 	DestinationBase string `json:"destinationBase,omitempty"`
 }
@@ -133,11 +75,9 @@ type SavePreview struct {
 
 // SaveResult は、commit された transaction を報告する。
 type SaveResult struct {
-	TransactionID string      `json:"transactionId"`
-	Written       []string    `json:"written"`
-	Preview       SavePreview `json:"preview"`
-	// KeyRelocations は HTTP 応答には出さず、同じプロセス内で鍵パスに
-	// 結び付いた資格情報を追従させるためだけに運ぶ。
+	TransactionID  string             `json:"transactionId"`
+	Written        []string           `json:"written"`
+	Preview        SavePreview        `json:"preview"`
 	KeyRelocations []RelocatedKeyFile `json:"-"`
 }
 
@@ -201,8 +141,6 @@ type Overview struct {
 	Pending     []PendingView    `json:"pending,omitempty"`
 }
 
-// HostDetail は、ホスト editor が必要とするすべてであり、クライアント
-// が edit base として送り返せるようファイル全体を含む。
 type HostDetail struct {
 	Form      HostForm     `json:"form"`
 	Metadata  HostMetadata `json:"metadata"`
@@ -210,9 +148,6 @@ type HostDetail struct {
 	File      FileContents `json:"file"`
 }
 
-// Service はワークスペースと transaction manager を所有する。これはプロセス内で唯一の書き
-// 手である。すべての mutation は saveMutex によって直列化され、manager の Validate
-// hook はここで設置されるので、どの code path もそれ無しで commit することはできない。
 type Service struct {
 	workspace *storage.Workspace
 	manager   *storage.Manager
@@ -226,8 +161,6 @@ type Service struct {
 	keyPassphrases  KeyPassphraseVerifier
 }
 
-// resolverFor は、生成領域を答えられるリゾルバを組み立てる。これにより、この
-// アプリケーション自身が書いた Include が何にも一致しなかったことは報告されない。
 func resolverFor(workspace *storage.Workspace) config.Resolver {
 	resolver := storage.NewResolver(workspace)
 	resolver.GeneratedRegion = GeneratedRegion
@@ -247,10 +180,6 @@ func NewService(workspace *storage.Workspace, manager *storage.Manager) *Service
 }
 
 // TerminalLimits は、埋め込みターミナルが開くたびに読む上限を返す。
-//
-// 読むのは開くときだけなので、設定を変えても、すでに開いているセッションが
-// 閉じられることはない。metadata が壊れて読めない場合は既定へ戻る。端末が
-// 開けなくなることは、この設定が壊れていることに対する答えとして重すぎる。
 func (s *Service) TerminalLimits() terminal.Limits {
 	metadata, _, err := s.metadata.Load()
 	if err != nil {
@@ -259,9 +188,6 @@ func (s *Service) TerminalLimits() terminal.Limits {
 	return metadata.TerminalLimits()
 }
 
-// displayPath は、UI とエラー payload のために path を表す。ファイルが
-// その内側にあるときは~/.ssh からの相対 path、Include が外側を
-// 指しているときのみ絶対 path となる。log 行はどちらの形式も受け取ることがない。
 func (s *Service) displayPath(absolute string) string {
 	reference := NewFileRef(s.workspace.Root(), absolute)
 	if reference.External {
@@ -319,18 +245,9 @@ func (s *Service) Overview() (Overview, error) {
 	notices = append(notices, orphanNotices...)
 	notices = append(notices, s.unreachedConnectionFiles(graph)...)
 
-	// 宣言とディスクが互いについて何を語っているか。connections/配下に
-	// あってどの Include も名指していないディレクトリこそが、黙って
-	// 何もしないものである。その中のファイルは誰も読まない設定である。
-	// エントリファイルが無いワークスペースはグループを何も宣言せず、nil のファイル
-	// に何を宣言しているか尋ねることが、これが最初に production へ届いた経緯である。
 	entryNode := graph.Nodes[s.entryPath]
 	var groups []GroupView
 	if entryNode != nil && entryNode.File != nil {
-		// 1 個のマーカーしか持たない生成領域は、このアプリケーションから見れば
-		// 何も宣言していないことになり、すべてのグループが未宣言に見えて
-		// しまう。実際に起きたのはそういうことではないし、それを 4 回繰り返して言うことは、
-		// Include 行がまさにそこにある 4 個のディレクトリをユーザーに見に行かせることになる。
 		if _, _, _, regionErr := FindRegion(entryNode.File); errors.Is(regionErr, ErrRegionDamaged) {
 			notices = append(notices, Notice{
 				Code: NoticeRegionDamaged, Path: s.displayPath(s.entryPath),
@@ -380,19 +297,13 @@ func (s *Service) Overview() (Overview, error) {
 	}
 	overview.Pending = pending
 
-	// contract で必須の配列は、通信上で決して null にならない。frontend は
-	// 実行時に形を validate し、配列が無いことは contract 違反であって
-	// 空のリストではない。
 	if overview.Files == nil {
 		overview.Files = []FileNode{}
 	}
 	if overview.Hosts == nil {
 		overview.Hosts = []HostEntry{}
 	}
-	// **エントリファイルが無いワークスペースは、ここを nil のまま通る。**
-	// 初めて起動した Android 端末には ~/.ssh/config が無く、Home 画面は
-	// groups.length を読んで落ちた。この一覧に 1 行足し忘れることが、
-	// そのまま画面の消える不具合になる。
+	// エントリファイルが無いワークスペースは、ここを nil のまま通る。
 	if overview.Groups == nil {
 		overview.Groups = []GroupView{}
 	}
@@ -461,17 +372,6 @@ func (s *Service) FileContents(relative string) (FileContents, error) {
 	}, nil
 }
 
-// planned は、1 個の準備された transaction である。厳密な変更、
-// validator が比較対象とする base の内容、そして呼び出し側が見る preview である。
-// directoryCreates と directoryRemovals は、計画されたディレクトリを
-// journal が取る形に変換する。作成は既に絶対 path で表され、削除は
-// ワークスペース相対の言葉で計画される。それは通知とグループ名が
-// 使う語彙である。
-// requestFor は、計画された transaction が storage request になる唯一の場所である。
-//
-// 以前はこれが 2 個あり、グループ側の path は、save 側の path が持っていて
-// 自分には無いもの——removals と、rename が始めたことを終えるために必要なディレクトリの
-// removals——を静かに落としていた。1 個の関数は自分自身からずれることはできない。
 func (s *Service) requestFor(prepared planned) storage.Request {
 	return storage.Request{
 		Operation:         prepared.operation,
@@ -483,9 +383,6 @@ func (s *Service) requestFor(prepared planned) storage.Request {
 	}
 }
 
-// どちらも重複を除去する。planner は、destination ディレクトリに
-// 着地するファイルごとに 1 回それを追加していく。これはディレクトリが journal の外側で
-// 作成されていたときは無害だったが、journal の内側では重複した path になる。
 func directoryCreates(absolute []string) []storage.DirectoryCreate {
 	creates := make([]storage.DirectoryCreate, 0, len(absolute))
 	seen := map[string]bool{}
@@ -518,26 +415,17 @@ type planned struct {
 	operation string
 	changes   []storage.Change
 	// explicitIdentityFile is meaningful for a connection.update plan. It is
-	// derived from the resulting concrete Host block, never from inherited
-	// effective configuration.
 	explicitIdentityFile bool
 	// passwordAuthenticationOff is evaluated against the resulting graph so a
-	// request that removes a direct key can assign a password in the same save.
 	passwordAuthenticationOff bool
-	// move と removal は、変更と同じ transaction で運ばれるので、ファイルの
-	// 再配置とそれを名指す設定は一緒に着地するか、まったく着地しないか
-	// のどちらかになる。ディレクトリは、Commit がその書き込み path を解決する前に作成される。
-	moves    []storage.Move
-	removals []storage.Removal
-	// ディレクトリは、何かが書き込まれる前に作成され、他のすべての後に
-	// 削除される。どちらも transaction の内側で行われる。journal の外側
-	// での mkdir や rmdir は、復旧記録の無い filesystem 上の効果になってしまう。
-	directories       []string
-	removeDirectories []string
-	base              map[string][]byte
-	baseline          map[string]bool
-	preview           SavePreview
-	keyRelocations    []RelocatedKeyFile
+	moves                     []storage.Move
+	removals                  []storage.Removal
+	directories               []string
+	removeDirectories         []string
+	base                      map[string][]byte
+	baseline                  map[string]bool
+	preview                   SavePreview
+	keyRelocations            []RelocatedKeyFile
 }
 
 // Preview は transaction を準備し、書き込まずにその diff を返す。
@@ -559,9 +447,6 @@ func (s *Service) Save(request EditRequest) (SaveResult, error) {
 	if err != nil {
 		return SaveResult{}, err
 	}
-	// Commit は実際のディレクトリに対して書き込み path を解決するので、
-	// この transaction が必要とするものは先に作成される。ここに到達するのは
-	// 計画済みの transaction だけである。拒否は上流で返され、ディスクは手つかずのままになる。
 	metadataPath := filepath.Clean(s.metadata.Path())
 	for _, change := range prepared.changes {
 		if filepath.Clean(change.Path) != metadataPath {
@@ -583,15 +468,6 @@ func (s *Service) Save(request EditRequest) (SaveResult, error) {
 }
 
 // hostBlockMutations は、Host ブロックひとつを書き換える 4 つの種別である。
-//
-// **表にしてあるのは、これが union だからである。** EditRequest は 14 個の省略可能な
-// 項目を持つ 1 つの構造体で、そのうちどれが意味を持つかは Kind が決める。以前ここは
-// 3 段に入れ子になった switch で、外側は「どの planner か」、中側は「ブロックを
-// 探すか」、内側は「何をするか」を分けていた——3 つとも同じ Kind を見ていた。
-//
-// この表に載る 4 つは、いずれも「ブロックを見つけてから、それを書き換える」という
-// 同じ形をしている。EditFileRaw だけがそこに属さない（探す相手が居ない）ので、
-// 呼び出し側で分ける。
 var hostBlockMutations = map[EditKind]func(*config.Graph, *config.File, config.Block, EditRequest) error{
 	EditHostFields: func(_ *config.Graph, file *config.File, block config.Block, request EditRequest) error {
 		return ApplyFieldEdits(file, block, request.Fields)
@@ -636,16 +512,6 @@ func (s *Service) plan(request EditRequest) (planned, error) {
 }
 
 // resolveDestination は、destination グループを destination path へ変える。
-//
-// ファイルは自分自身の名前を保ったままディレクトリを変えるので、
-// グループ間の move は shell で見えるとおりのものそのものである。同じ
-// ファイルが、どこか別の場所にある。名前はまず GroupFileName を通る。
-// グループは 1 個の Include pattern によって読まれるので、その pattern に match
-// しない名前は、OpenSSH が決して見に行かない場所にブロックを着地させてしまうからである。
-//
-// グループは既に宣言されていなければならない——グループを作ることは
-// それ自身の preview を持つそれ自身の操作であり、move からグループを推測することは、
-// 無関係な要求の副作用としてエントリファイルに Include を置いてしまうことになる。
 func (s *Service) resolveDestination(graph *config.Graph, request EditRequest) (EditRequest, error) {
 	if request.DestinationGroup == "" {
 		return request, nil
@@ -671,14 +537,6 @@ func (s *Service) resolveDestination(graph *config.Graph, request EditRequest) (
 	return request, nil
 }
 
-// destinationWillBeRead は、move が destination を書き込んだ後に
-// OpenSSH がそれを読むかどうかを報告する。
-//
-// 既に Include graph の中にあるファイルは読まれる。まだそこに無いファイルは、
-// 宣言済みグループの Include pattern がそれに match するときに読まれる。graph の glob
-// は、そのときのディスクの状態に対して解決されたものであり、この move こそがファイルをそこ
-// に置くものである。それについて警告すると、グループへの最初の move すべてに通知
-// が付いてしまい、ユーザーがそれをクリックして通り過ぎることを学ぶ、まさにその原因になる。
 func (s *Service) destinationWillBeRead(graph *config.Graph, absolute, relative string) bool {
 	if _, included := graph.Nodes[absolute]; included {
 		return true
@@ -692,23 +550,6 @@ func (s *Service) destinationWillBeRead(graph *config.Graph, absolute, relative 
 	return false
 }
 
-// unreachedConnectionFiles は、解決済み graph 内のどの Include も
-// 届かない、connections/配下のすべての.conf ファイルを報告する。
-//
-// そこにあるファイルは誰にも読まれないが、その間ずっと完全に正しく見える。
-// ブロックは parse でき、ホストの綴りも合っていて、`ssh` は単にそれについて一度も
-// 聞いたことがないだけである。グループ delete は、destination を与えられなかったとき、
-// 意図的にファイルをまさにこの位置に置く。だから、それが報告されるという約束はどこかで
-// 守られなければならず、これは既にすべての画面が読んでいる唯一の view である。
-//
-// 宣言されたグループではないディレクトリも walk される。未宣言で
-// あることこそが、その中のファイルを到達不能にしているものだからである。
-// presentGroupDirectories は、connections/配下のディレクトリを
-// ワークスペース相対でスラッシュ区切りで列挙する。それはグループ名が使う語彙である。
-//
-// そこに存在することがグループを作るのではない——Include 行が
-// そうするのである——そして、まさにそれゆえにこのリストが必要になる。
-// その 2 つの違いこそが diagnostics が報告するものである。
 func (s *Service) presentGroupDirectories() ([]string, error) {
 	root := s.workspace.Root()
 	base := filepath.Join(root, ConnectionsDirectory)
@@ -784,16 +625,6 @@ func (s *Service) unreachedConnectionFiles(graph *config.Graph) []Notice {
 }
 
 // refuseTakenAlias は、Include graph が届くどこであれ、別の Host
-// ブロックが既に宣言している名前への rename を拒否する。
-//
-// graph は編集の前に解決されたものなので、rename されているブロック
-// はまだ古い名前を持っていて、新しい名前と match することはない。
-// 既に持っている名前への rename は no-op であり、自分自身と衝突すると
-// して拒否されるのではなく通される。
-//
-// その alias を直接に名指すブロックだけが数えられる。catch-all はすべての alias に
-// match しどれも宣言しないので、それを理由に拒否してしまうと、`Host *` で終わるあらゆる設定
-// ——それはほとんどの設定である——ですべての rename を拒否することになってしまう。
 func refuseTakenAlias(graph *config.Graph, from, to string) error {
 	if from == to {
 		return nil
@@ -831,8 +662,6 @@ func diskOrNil(contents []byte, exists bool) []byte {
 	return contents
 }
 
-// Pending は中断された transaction を列挙し、部分的な書き込みが
-// 健全な状態として示されることが決してないようにする。
 func (s *Service) Pending() ([]PendingView, error) {
 	pending, err := s.manager.Pending()
 	if err != nil {
@@ -856,9 +685,6 @@ func (s *Service) Pending() ([]PendingView, error) {
 	return views, nil
 }
 
-// Recover は、中断された transaction を完了させるか元に戻す。どちらの
-// 経路も、stage される前に既に validate されていた内容を持つ journal
-// を再生するので、意図的に validator を再度実行しない。
 func (s *Service) Recover(identifier, action string) error {
 	s.saveMutex.Lock()
 	defer s.saveMutex.Unlock()
@@ -872,8 +698,6 @@ func (s *Service) Recover(identifier, action string) error {
 	}
 }
 
-// History は、完了した transaction と、それらのファイルのうち
-// generational backup から復元できるものを列挙する。
 func (s *Service) History() ([]HistoryEntry, error) {
 	records, err := s.manager.History()
 	if err != nil {
@@ -907,8 +731,6 @@ func (s *Service) History() ([]HistoryEntry, error) {
 	return entries, nil
 }
 
-// Restore は、新しい transaction を通じて generational backup を書き
-// 戻すので、restore それ自体も journal 化され、validate され、取り消し可能である。
 func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 	s.saveMutex.Lock()
 	defer s.saveMutex.Unlock()
@@ -931,8 +753,6 @@ func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 	if err != nil {
 		return SaveResult{}, err
 	}
-	// manager を通す。バックアップは ciphertext だからである。ファイルを
-	// 直接読むと、封印されたバイト列がユーザーの設定の上に書き込まれてしまう。
 	contents, err := s.manager.ReadBackup(filepath.Join(record.BackupDir, filepath.FromSlash(relative)))
 	if err != nil {
 		return SaveResult{}, err
@@ -974,14 +794,6 @@ func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 	}, nil
 }
 
-// WorkspaceFiles は、ワークスペース内のすべての設定ファイルを、
-// ワークスペース相対の path で列挙する。
-//
-// これは remote snapshot のために存在する。それは、Include graph を見ることが
-// できないまま、何が設定であるかを知らなければならない。ワークスペース
-// の外側にあるファイル——Include で到達する /etc/ssh/ssh_config など——
-// は除外される。このアプリケーションは ~/.ssh の外側に書き込むことは決してなく、
-// 書き込むことを拒否するはずのファイルを運ぶことも決してあってはならない。
 func (s *Service) WorkspaceFiles() ([]string, error) {
 	graph, err := s.resolver.Resolve(s.entryPath)
 	if err != nil {

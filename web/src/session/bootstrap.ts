@@ -18,19 +18,11 @@ export async function bootstrapSession(
   const params = new URLSearchParams(location.hash.replace(/^#/, ""));
   const bootstrap = params.get("bootstrap") ?? "";
 
-  // リロードはクッキーだけを伴って届く: フラグメントは初回使用時に
-  // 使い切られ、replaceState が履歴に残らないようアドレスバーから
-  // それを取り除いたからだ。それを失敗として扱うことが、あらゆる
-  // リロードでアプリケーションを殺していた原因だ——セッションはずっと
-  // 生きていて、ページに存在していた CSRF トークンだけがなくなっていた。
   if (bootstrap === "") {
     const renewed = await fetcher("/api/v1/session/renew", {
       method: "POST",
       credentials: "same-origin",
     });
-    // もはやセッションを名指さないクッキーは、ここでは回復できない:
-    // ブートストラップフラグメントは起動中のプロセスだけが出力する。この
-    // 2 つの場合が区別されるのは、sshc の再起動が一方の答えになるからだ。
     if (!renewed.ok) throw new Error("session_expired");
     const payload: unknown = await renewed.json();
     if (!isBootstrapResponse(payload)) throw new Error("invalid_bootstrap_response");

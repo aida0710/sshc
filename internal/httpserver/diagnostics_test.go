@@ -51,7 +51,7 @@ func newDiagnosticsServer(t *testing.T) (*echo.Echo, session.Credentials, *recor
 		t.Fatal(err)
 	}
 
-	// 認証の継ぎ目を記録係で置き換える。**この検査はネットワークへ出ない。**
+	// 認証の継ぎ目を記録係で置き換える。この検査はネットワークへ出ない。
 	// 本物の握手を見るのは internal/sshclient の側である。
 	probe := &recordingProbe{}
 	service := diagnostics.NewService(workspace, probe.dial, effective.LocalFacts{})
@@ -119,7 +119,7 @@ func mustMarshal(t *testing.T, value any) []byte {
 	return encoded
 }
 
-// 設定を読むのに確認は要らない。**この経路はもう何も起動しない。**
+// 設定を読むのに確認は要らない。この経路はもう何も起動しない。
 func TestEffectiveEndpointAnswersWithoutStartingAnything(t *testing.T) {
 	engine, credentials, _, _ := newDiagnosticsServer(t)
 

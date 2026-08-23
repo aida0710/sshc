@@ -101,7 +101,7 @@ func TestManifestCarriesNoHostname(t *testing.T) {
 	if manifest.Origin == "" {
 		t.Error("no origin at all, so the interface cannot say where a snapshot came from")
 	}
-	// このフィールドはインストールを区別するためにあり、マシンを名指しするためではない。
+	// このフィールドはインストールを区別するためにあり、マシンを指定するためではない。
 	document, _ := json.Marshal(manifest)
 	for _, forbidden := range []string{"hostname", "Hostname", ".local"} {
 		if bytes.Contains(document, []byte(forbidden)) {

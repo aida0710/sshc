@@ -13,8 +13,8 @@ import (
 
 // distinctReader は、読み出しが決して繰り返さない決定的な乱数源。
 // bytes.Repeat による乱数源は同じ 32 バイトをいつまでも返すので、発行される
-// トークンはすべて同一になり、テスト対象であるトークンごとの管理 — 単回使用、
-// 未使用トークンの上限 — が、黙ってレコードひとつ分に潰れてしまう。
+// トークンはすべて同一になり、テスト対象であるトークンごとの管理。単回使用、
+// 未使用トークンの上限が、暗黙にレコードひとつ分に潰れてしまう。
 type distinctReader struct{ sequence uint64 }
 
 func (r *distinctReader) Read(destination []byte) (int, error) {

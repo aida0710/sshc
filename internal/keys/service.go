@@ -39,7 +39,7 @@ const KeysDirectoryName = "keys"
 
 // fileNamePattern は、安全なパスセグメントをひとつだけ受け付ける。先頭のドット、
 // スラッシュ、'..' セグメントはこのパターンでは不可能なので、
-// Workspace.ResolveForWrite が見る前から、~/.ssh の外のファイルは名指しできない。
+// Workspace.ResolveForWrite が見る前から、~/.ssh の外のファイルは指定できない。
 var fileNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // hardwareCommentPattern は、シェルの引用を必要としない文字だけを受け付ける。
@@ -51,7 +51,7 @@ var hardwareCommentPattern = regexp.MustCompile(`^[A-Za-z0-9@._+=:,/-]{0,127}$`)
 //
 // ソフトウェア鍵はプロセス内で生成され、そのコメントは ssh.MarshalPrivateKey へ
 // 渡るので、シェルには届かず引用も要らない。それでもハードウェア用のルールが
-// 適用されており、空白が拒否されていた — 普通のコメントに最も入りやすい文字であり、
+// 適用されており、空白が拒否されていた。普通のコメントに最も入りやすい文字であり、
 // `ssh-keygen -C "work laptop"` がそこに入れる文字である。ここで拒否するのは、
 // ファイルや、それが書かれる行を壊すもの、すなわち改行、復帰、ヌルで
 // ある。
@@ -60,7 +60,7 @@ var commentPattern = regexp.MustCompile(`^[^\x00\r\n]{0,127}$`)
 // safeArgumentPattern は、このアプリケーションが表示するコマンドラインの各要素に
 // 最後に適用される検査。
 //
-// **区切り文字はこの OS のものである。** Windows の絶対パスは `\` を含み、それを
+// 区切り文字はこの OS のものである。Windows の絶対パスは `\` を含み、それを
 // 落とすと `-f` に渡す鍵のパスが常に弾かれ、ハードウェア鍵のコマンドラインは
 // あの OS で一度も組み立てられない。逆に Unix で `\` を許せば、表示した行が
 // 貼り付け先の sh でエスケープとして読まれる。だから許すのは、その OS が実際に
@@ -100,7 +100,7 @@ func ValidateHardwareComment(comment string) error {
 }
 
 // Service は鍵 vault のユースケース層。HTTP も UI の関心事も持たず、読み取りは
-// ストレージのファイルシステムの継ぎ目を通してのみ、書き込みはジャーナル付きの
+// ストレージのファイルシステムのインターフェースを通してのみ、書き込みはジャーナル付きの
 // トランザクションマネージャを通してのみ行う。
 type Service struct {
 	workspace    *storage.Workspace
@@ -111,11 +111,11 @@ type Service struct {
 	now          func() time.Time
 	random       io.Reader
 	// validateGroup を注入するのは、グループとは何かが設定エンジンの領分だからである
-	// — Include 行が宣言したときにグループは存在する — そしてこのパッケージは、それを
+	//（Include 行が宣言したときにグループは存在する）そしてこのパッケージは、それを
 	// 尋ねるためにそのエンジンを import してはならない。
 	validateGroup func(string) error
 	// storedPassphrase は、ある鍵のために保持されているパスフレーズがあり、vault が
-	// 開いていれば、それを答える。注入する理由は validateGroup と同じである。秘密が
+	// 開いていれば、それを返す。注入する理由は validateGroup と同じである。秘密が
 	// どこにあるかは secret パッケージの領分であり、このパッケージはそれを尋ねるために
 	// import してはならない。nil なら何も保存されていないことを意味し、それは何も保存
 	// されていなかった頃の振る舞いである。
@@ -154,17 +154,17 @@ func (service *Service) SetStoredPassphrase(lookup func(relativePath string) (st
 	service.storedPassphrase = lookup
 }
 
-// PassphraseVerification binds successful decryption to one inventory item and
-// the exact key bytes that were checked. It contains no key material or secret.
+// PassphraseVerification は復号成功を inventory item と検査済みの鍵内容へ関連付ける。
+// 鍵素材や秘密は含まない。
 type PassphraseVerification struct {
 	KeyID        string
 	RelativePath string
 	Digest       string
 }
 
-// VerifyPassphrase resolves only a current inventory ID, requires an encrypted
-// private key, and proves that the submitted passphrase decrypts its exact
-// bytes. Both caller-owned input and the temporary file buffer are wiped.
+// VerifyPassphrase は現在の inventory ID だけを解決し、暗号化秘密鍵に対して、入力された
+// パスフレーズでその内容を復号できることを検証する。呼び出し側の入力と一時ファイルの
+// バッファは消去する。
 func (service *Service) VerifyPassphrase(keyID string, passphrase []byte) (PassphraseVerification, error) {
 	defer Wipe(passphrase)
 	inventory, err := service.Inventory()
@@ -192,8 +192,8 @@ func (service *Service) VerifyPassphrase(keyID string, passphrase []byte) (Passp
 	}, nil
 }
 
-// RevalidatePassphrase refuses a stale verification if the selected key was
-// replaced, edited, or removed before the surrounding transaction commits.
+// RevalidatePassphrase はトランザクションの commit 前に対象鍵が置換、編集、削除された場合、
+// 古い検証結果を拒否する。
 func (service *Service) RevalidatePassphrase(verification PassphraseVerification) error {
 	contents, err := service.workspace.FileSystem().ReadFile(service.absolutePath(verification.RelativePath))
 	if err != nil {
@@ -215,7 +215,7 @@ func (service *Service) absolutePath(relativePath string) string {
 	return filepath.Join(service.workspace.Root(), relativePath)
 }
 
-// Inventory はワークスペースを分類し、各ファイルを名指しする Host を付与する。
+// Inventory はワークスペースを分類し、各ファイルを指定する Host を付与する。
 func (service *Service) Inventory() (*Inventory, error) {
 	inventory, err := NewScanner(service.workspace).Scan()
 	if err != nil {
@@ -236,7 +236,7 @@ func (service *Service) Algorithms(ctx context.Context) Catalogue {
 
 // HardwareCommand は、ハードウェアの方式に対する ssh-keygen の引数リストを返す。
 //
-// このコマンドはグループ配下のフルパスを名指しするので、ユーザーが手で実行しても、
+// このコマンドはグループ配下のフルパスを指定するので、ユーザーが手で実行しても、
 // このアプリケーションが置いたであろう場所にちょうど鍵が置かれる。
 func (service *Service) HardwareCommand(algorithm Algorithm, fileName, group, comment string) ([]string, error) {
 	directory, err := service.groupDirectory(group)
@@ -265,7 +265,7 @@ func (service *Service) groupDirectory(group string) (string, error) {
 // GenerateRequest は、プロセス内での鍵生成ひとつ分。
 //
 // パスフレーズを空にするには Unencrypted を明示的に設定しなければならない。うっかり
-// 空欄になったフィールドから、保護されない鍵が黙って生まれることは決してない。
+// 空欄になったフィールドから、保護されない鍵が暗黙に生まれることは決してない。
 type GenerateRequest struct {
 	Algorithm Algorithm
 	Bits      int
@@ -448,7 +448,7 @@ func (service *Service) ChangePassphrase(change PassphraseChange) (PassphraseRes
 	}, nil
 }
 
-// RevealResult は、確認済みの秘密鍵表示に対する答え。
+// RevealResult は、確認済みの秘密鍵表示に対する結果。
 type RevealResult struct {
 	ID            string
 	RelativePath  string
@@ -461,7 +461,7 @@ type RevealResult struct {
 // Reveal は、秘密鍵ひとつのバイト列を返す。
 //
 // 監査記録はバイト列が返される前に書かれるので、記録できなかった表示は起こらない。
-// 記録はファイルと時刻を名指しし、鍵素材を含むことは決してない。Reveal に他の
+// 記録はファイルと時刻を指定し、鍵素材を含むことは決してない。Reveal に他の
 // 呼び出し側が存在しないのは意図的である。通常の詳細 API が秘密鍵のバイト列を
 // 返すことはない。
 func (service *Service) Reveal(keyID string) (RevealResult, error) {
@@ -536,7 +536,7 @@ func (service *Service) PublicKey(keyID string) (PublicKeyResult, error) {
 }
 
 // ConfirmationSubject は、ワンタイムの確認が対象とする操作の種類を表す。これは
-// このパッケージ自身の語彙であり、HTTP 層が session パッケージのアクション種別を
+// このパッケージ自身の用語であり、HTTP 層が session パッケージのアクション種別を
 // これに対応付ける。そのためユースケース層は、セッションがどう認証されるかに依存
 // しなくてよい。
 type ConfirmationSubject string
@@ -660,7 +660,7 @@ func (service *Service) Register(ctx context.Context, request RegisterRequest) (
 
 	// 呼び出し側が何も渡さなかったときには、保存されているパスフレーズを使う。それが、
 	// エージェントへの鍵の追加を二段階ではなく一度の操作にしている。ただし、打ち込まれた
-	// ものより優先されることは決してない。キーボードの前にいる人の方が、ファイルよりも
+	// ものより優先されることは決してない。キーボードの前にいるユーザーの方が、ファイルよりも
 	// 新しいからである。
 	passphrase := request.Passphrase
 	if len(passphrase) == 0 && service.storedPassphrase != nil {
@@ -703,7 +703,7 @@ func (service *Service) Register(ctx context.Context, request RegisterRequest) (
 //
 // `ssh-add -d` は *公開* 鍵を読むので、これには公開鍵の片割れが存在する必要がある。
 // 公開鍵が失われた identity の削除は、エージェントのプロトコルだけが直接できること
-// であり、このアプリケーションは意図的に ssh-add 経由でエージェントと話す。公開鍵が
+// であり、このアプリケーションは意図的に ssh-add 経由でエージェントと通信する。公開鍵が
 // 見つからないときは、行われていない削除を主張するのではなく、エージェントには手を
 // 触れずに呼び出し側へその旨を
 // 伝える。

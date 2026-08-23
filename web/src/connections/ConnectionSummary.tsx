@@ -35,7 +35,7 @@ export function ConnectionSummary({
   function privateKeyText() {
     switch (summary.privateKey.state) {
       case "none": return t("conn.summaryKeyNone");
-      case "known": return `${summary.privateKey.path} — ${summary.privateKey.fingerprint}`;
+      case "known": return `${summary.privateKey.path} · ${summary.privateKey.fingerprint}`;
       case "custom": return summary.privateKey.path;
       case "complex": return t("conn.summaryKeyComplex");
       case "unavailable": return t("conn.summaryKeyUnavailable", { path: summary.privateKey.path });

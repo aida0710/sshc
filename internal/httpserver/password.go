@@ -23,8 +23,8 @@ type PasswordHandlers struct {
 	// KeyHosts projects saved key subjects through the current SSH configuration.
 	// It returns relationships only; the vault values never cross this boundary.
 	KeyHosts func(relativePaths []string) (map[string][]string, error)
-	// Eligibility は alias と保存されたパスワードの間に何があるかを答える。
-	// これが注入されているのは、答えが設定グラフと known_hosts から
+	// Eligibility は alias と保存されたパスワードの間に何があるかを返す。
+	// これが注入されているのは、結果が設定グラフと known_hosts から
 	// 来るためで、そのどちらについても vault は何も知らない。nil の
 	// 関数は何もチェックしないことを意味し、これはこの仕組みができる
 	// 前に vault がしていたことである。
@@ -119,9 +119,7 @@ type masterPasswordChangeResult struct {
 	SnapshotProblem  *string `json:"snapshotProblem,omitempty"`
 }
 
-// changeMasterPassword は local rekey と remote snapshot の再封印を一つの
-// application operation にする。HTTP の応答規約は browser と CLI で異なるため、
-// ここでは commit 済みかと remote の結果だけを返す。
+// changeMasterPassword は、ローカル vault の鍵変更後に最新スナップショットを再暗号化する。
 func changeMasterPassword(
 	ctx context.Context,
 	service *secret.Service,
@@ -149,7 +147,7 @@ func changeMasterPassword(
 }
 
 // snapshotProblemCode は bucket が更新されなかった理由を、sync 画面が
-// すでに使っている語彙と同じ言葉で名付ける。
+// すでに使っている用語と同じ言葉で名付ける。
 func snapshotProblemCode(err error) string {
 	switch {
 	case errors.Is(err, remotesync.ErrRemoteMoved):
@@ -229,17 +227,9 @@ func (h PasswordHandlers) Unlock(c *echo.Context) error {
 	return h.status(c)
 }
 
-// Change はマスターパスワードを置き換え、それが保持していたものを再封印する。
-//
-// bucket の最新スナップショットは同じパスワードで封印されているため、
-// ここで再び push する — vault にはできない。スナップショットの行き先は
-// object store に属する事柄であり、secret パッケージはそれを import
-// していないからだ。その脇の日付付きコピーはわざと手を付けず残してある。それらは
-// 履歴であり、全部の再封印は bucket 全体のダウンロードと再アップロードを意味する。
-//
-// push が失敗しても変更は元に戻らない。ローカル側はすでに完了して
-// おり、そう伝える方が取り繕うより役に立つ。応答には bucket が
-// 更新されたかどうかと、されなかった理由が含まれる。
+// Change はマスターパスワードを変更し、ローカルの暗号化データを再暗号化する。
+// 設定済みの場合は最新スナップショットも再暗号化するが、履歴コピーは変更しない。
+// リモート更新に失敗しても完了済みのローカル変更は取り消さず、結果に理由を含める。
 func (h PasswordHandlers) Change(c *echo.Context) error {
 	var request api.ChangeMasterPasswordRequest
 	if err := decodeJSON(c, &request); err != nil {
@@ -343,8 +333,8 @@ func eligibilityNotice(notice application.Notice) api.Notice {
 }
 
 // kindOf はパスから namespace を読み取る。namespace は 2 つあり、
-// 黙って 3 つ目が増えることはない。未知の namespace は既定値にせず
-// ここで拒否する。既定値にすると、typo が黙って namespace を選ぶことになるからだ。
+// 暗黙に 3 つ目が増えることはない。未知の namespace は既定値にせず
+// ここで拒否する。既定値にすると、typo が暗黙に namespace を選ぶことになるからだ。
 func kindOf(c *echo.Context) (secret.Kind, bool) {
 	kind := secret.Kind(c.Param("kind"))
 	return kind, secret.ValidKind(kind)
@@ -367,7 +357,7 @@ func credentialProblem(c *echo.Context, err error, uses []string) error {
 	}
 }
 
-// listCredentials は名前とそれを使うものを答える。値は決して返さ
+// listCredentials は名前とそれを使うものを返す。値は決して返さ
 // ない。secret を読める画面は、乗っ取られたブラウザがそこから
 // 読み取れる画面でもあり、選択には名前だけあれば十分だからだ。
 func (h PasswordHandlers) listCredentials(c *echo.Context) error {

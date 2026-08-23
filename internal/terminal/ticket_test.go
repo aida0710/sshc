@@ -37,8 +37,6 @@ func TestATicketIsSpentByItsFirstUse(t *testing.T) {
 	}
 }
 
-// チケットはひとつのセッション ID に束縛される。別のセッションの ID が
-// これで開けるようなら、一覧を読めた者は誰の端末へでも繋げることになる。
 func TestATicketOnlyEverYieldsTheSessionItWasBoundTo(t *testing.T) {
 	tickets, _ := newTickets()
 
@@ -69,7 +67,6 @@ func TestATicketExpires(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 期限の内側では通る。境界そのものは通らない側に倒す。
 	clock.advance(terminal.TicketTTL - time.Millisecond)
 	fresh, err := tickets.Issue("session-b")
 	if err != nil {
@@ -97,8 +94,6 @@ func TestAnUnknownOrEmptyTicketIsRefused(t *testing.T) {
 	}
 }
 
-// 閉じられたセッションのために発行されたチケットは残らない。使われなかった
-// 認可が、もう存在しないものを指したまま宙に浮くことがない。
 func TestForgetDropsEveryTicketForOneSession(t *testing.T) {
 	tickets, _ := newTickets()
 

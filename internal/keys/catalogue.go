@@ -27,17 +27,11 @@ type Catalogue struct {
 
 // generated は、このプロセスが自分で作れる鍵である。
 //
-// **インストール済みの OpenSSH には尋ねない。** 以前は `ssh -Q key` に
-// 「あちらは何に対応しているか」を尋ねていたが、それは答えるべき問いではない。
-// ここが並べているのは「ここで生成できる鍵」であり、生成するのは
-// GeneratePrivateKey の x/crypto である。
+// インストール済みの OpenSSH ではなく、GeneratePrivateKey が使用する x/crypto の
+// 対応範囲を列挙する。
 //
-// 尋ねていたのは、生成した鍵がその人の `ssh` で使えるかを確かめる代理だった。
-// Ed25519・RSA・ECDSA は、対応していない OpenSSH を探す方が難しい。**代理を
-// 立てる必要が無い問いに、代理を立てない。**
-//
-// **この一覧に載っているものは必ず作れなければならない。** 載っているのに
-// 作れない項目は、画面のボタンが必ず失敗するということである。
+// この一覧に載っているものは必ず作れなければならない。載っているのに
+// 作れない項目を掲載すると、対応する画面操作が必ず失敗する。
 var generated = []Variant{
 	{Algorithm: AlgorithmEd25519, Bits: 256, Label: "Ed25519", InProcess: true},
 	{Algorithm: AlgorithmRSA, Bits: 2048, Label: "RSA", InProcess: true},
@@ -50,9 +44,9 @@ var generated = []Variant{
 
 // hardware は、ハードウェアトークンが要る鍵である。
 //
-// **これだけは ssh-keygen が要る。** PIN もタッチも libfido2 も x/crypto に
+// これだけは ssh-keygen が要る。PIN もタッチも libfido2 も x/crypto に
 // 無いので、作るのは OpenSSH のプログラムである。それが見つからない環境では
-// 一覧に出さない——押せば必ず失敗するボタンを画面に出さない。
+// 一覧に出さない。押せば必ず失敗するボタンを画面に出さない。
 var hardware = []Variant{
 	{Algorithm: AlgorithmEd25519SK, Label: "Ed25519 security key", InProcess: false, Reason: ReasonHardwareToken},
 	{Algorithm: AlgorithmECDSASK, Bits: 256, Label: "ECDSA security key", InProcess: false, Reason: ReasonHardwareToken},
@@ -60,7 +54,7 @@ var hardware = []Variant{
 
 // CatalogueReader は、生成できる鍵の一覧を返す。
 //
-// **何も実行しない。** ssh-keygen があるかどうかだけを Toolchain に尋ね、
+// 何も実行しない。ssh-keygen があるかどうかだけを Toolchain に尋ね、
 // あればハードウェア鍵の項目を足す。
 type CatalogueReader struct {
 	Toolchain platform.Toolchain

@@ -85,7 +85,7 @@ func (p *fakeProcess) recorded() ([]byte, []terminal.Size) {
 	return append([]byte(nil), p.written...), append([]terminal.Size(nil), p.sizes...)
 }
 
-// **テレタイプでない入力では raw にしない。大きさも問い合わせない。**
+// テレタイプでない入力では raw にしない。大きさも問い合わせない。
 // パイプの中で走っているときがそれで、その場合でも読み書きは通る。
 func TestAttachDoesNotChangeAPipe(t *testing.T) {
 	reader, writer, err := os.Pipe()
@@ -146,7 +146,7 @@ func TestAttachDoesNotChangeAPipe(t *testing.T) {
 	}
 }
 
-// セッションが終われば Attach も終わる。**待ち続けない。**
+// セッションが終われば Attach も終わる。待ち続けない。
 func TestAttachReturnsWhenTheSessionEnds(t *testing.T) {
 	reader, writer, err := os.Pipe()
 	if err != nil {

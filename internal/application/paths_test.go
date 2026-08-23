@@ -7,17 +7,12 @@ import (
 	"testing"
 )
 
-// uncleaned は、掃除される前の綴りを組み立てる。filepath.Join は Clean を通すので、
-// "掃除したら何になるか" を尋ねる検査は、Join で作った時点で消えてしまう。
 func uncleaned(elements ...string) string {
 	return strings.Join(elements, string(filepath.Separator))
 }
 
 func TestRelativePathRejectsEverythingOutsideTheRoot(t *testing.T) {
 	root := testRoot
-	// 戻り値はスラッシュ区切りの識別子である。**入力だけがネイティブなパスで
-	// あって、答えはどの OS でも同じ綴りでなければならない。** UI と metadata が
-	// 持ち回るのはこの識別子だからだ。
 	tests := []struct {
 		name     string
 		absolute string
@@ -51,8 +46,6 @@ func TestRelativePathRejectsEverythingOutsideTheRoot(t *testing.T) {
 
 func TestAbsolutePathRefusesTraversalAndAbsoluteInput(t *testing.T) {
 	root := testRoot
-	// 受け取るのはスラッシュ区切りの識別子、返すのはこのファイルシステムの
-	// パスである。境界はここにあり、どちらか一方だけを綴り替えると壊れる。
 	absolute, err := AbsolutePath(root, "conf.d/10-home.conf")
 	if err != nil || absolute != filepath.Join(root, "conf.d", "10-home.conf") {
 		t.Fatalf("AbsolutePath = %q, %v", absolute, err)

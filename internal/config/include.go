@@ -36,11 +36,11 @@ type Resolver struct {
 	Loader Loader
 	Home   string
 	Root   string
-	// Normalise は、Home から組み立てたパスを Root の綴りと突き合わせる。両者が
+	// Normalise は、Home から組み立てたパスを Root の表記と突き合わせる。両者が
 	// 異なりうると知っている呼び出し側のためのものだ。ワークスペースはルートを
 	// EvalSymlinks で解決し、ホームは与えられたまま保持するので、~/.ssh がリンク
 	// 経由で到達される場合は常に "~/.ssh/x" と "<root>/x" が二つの名前を持つ同じ
-	// ファイルになる — そしてこれがないと、そうした Include はすべてルートの外に
+	// ファイルになる。そしてこれがないと、そうした Include はすべてルートの外に
 	// あると報告され、編集が拒否されていた。
 	//
 	// 省略可能。これを持たずに作られたリゾルバは、従来どおりに振る舞う。
@@ -55,8 +55,8 @@ type Resolver struct {
 	// 報告しないためである。その行は宣言されたグループごとに 1 本ずつ置かれており、
 	// 宣言済みで中身が空のグループは、作った直後と最後の接続を出した後の正常な
 	// 状態だ。application 層は同じ事実を group_empty として持っていて、それを注意
-	// としては出さないと決めている。engine が同じことを別の名前で言えば、片方を
-	// 黙らせた判断が無意味になる。
+	// としては出さないと決めている。engine が同じことを別名で報告すると、application
+	// 層の抑止処理が機能しなくなる。
 	//
 	// 領域の書式を知っているのは application 層なので、ここでは尋ねる。省略可能で、
 	// これを持たないリゾルバは、範囲の内外を問わず報告する。
@@ -81,7 +81,7 @@ func (r Resolver) maxDepth() int {
 // expandPattern は、Include の引数ひとつを、このファイルシステムの絶対的な
 // グロブパターンに変換する。
 //
-// **引数は、展開が終わるまで設定の構文である。** OpenSSH の Include は
+// 引数は、展開が終わるまで設定の構文である。OpenSSH の Include は
 // スラッシュで書かれ、'~' と '%' はそこでしか意味を持たない。それらを解いた
 // あとで、ちょうど一度だけネイティブなパスへ移す。二度移せば、Windows の
 // ボリューム区切りが素の文字に変わる。
@@ -108,7 +108,7 @@ func (r Resolver) expandPattern(argument string) (string, error) {
 	case nativepath.Supported(native):
 		// そのまま。ルートの外を指す Include も、表示のためには読む。
 	case filepath.IsAbs(native):
-		// filepath は絶対と認めるが、この層は扱えない綴り。device や拡張名前空間が
+		// filepath は絶対と認めるが、この層は扱えない表記。device や拡張名前空間が
 		// これにあたる。
 		return "", ErrUnsupportedExpansion
 	case filepath.VolumeName(native) != "" || strings.HasPrefix(native, string(filepath.Separator)):
@@ -123,7 +123,7 @@ func (r Resolver) expandPattern(argument string) (string, error) {
 	if r.Normalise != nil {
 		cleaned = r.Normalise(cleaned)
 	}
-	// 組み立てた結果も、受け取った綴りと同じ条件を満たさなければならない。
+	// 組み立てた結果も、受け取った表記と同じ条件を満たさなければならない。
 	// 引数の中身は設定ファイルの任意のバイト列なので、NUL を挟むだけで、
 	// どのファイルも指しようのないパスができあがる。
 	if !nativepath.Supported(cleaned) {

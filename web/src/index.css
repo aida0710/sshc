@@ -1,18 +1,4 @@
 @import "tailwindcss";
-
-/* テーマごとに一度だけ与えるパレット。
- *
- * 名前はその値が何のためのものかを言うのであって、何色かを言うのではない。
- * `zinc-800` という名前のトークンには別テーマで別の値を与えられないが、`card`
- * という名前のトークンには与えられる。コンポーネントはこれらを Tailwind の
- * ユーティリティ — `bg-card`、`text-ink-muted`、`border-line` — 経由で参照し、
- * `dark:` variant を持つことは決してない。variant がこのファイルだからである。
- *
- * これらが符号化しているルール。accent は、その画面が存在する目的である唯一の
- * 操作に属する。琥珀は注意、赤は何かを破壊するもの、緑はローカルセッションが
- * 生きていることを意味する。それ以外に色は付かないので、画面上の色は何かが
- * 起きたことを意味する。
- */
 :root {
   color-scheme: light;
 
@@ -36,16 +22,6 @@
   --ui-notice-ink: #7a5a10;
   --ui-danger: #d70015;
   --ui-live: #34794a;
-
-  /* 端末の配色。
-   *
-   * xterm.js は色を JS のオプションとして受け取るので、コンポーネントは
-   * getComputedStyle でこれらを読んで渡す。生の hex をコンポーネントに書かない
-   * ので、palette.test.ts に例外を足さずに済み、ライトとダークで別の値を与えられる。
-   *
-   * 上のパレットと違い、ここでの名前は色そのものである。ANSI の 16 色は
-   * 意味ではなく番号で、リモート側のプログラムがどう使うかをこちらは知らない。
-   */
   --ui-term-bg: #ffffff;
   --ui-term-fg: #1d1d1f;
   --ui-term-cursor: #1d1d1f;
@@ -135,8 +111,6 @@
   --color-notice-ink: var(--ui-notice-ink);
   --color-danger: var(--ui-danger);
   --color-live: var(--ui-live);
-  /* 端末の面だけがユーティリティとして要る。残りの 16 色は xterm.js が
-   * JS のオプションとして受け取るので、クラス名にはならない。 */
   --color-term-bg: var(--ui-term-bg);
 }
 
@@ -145,8 +119,6 @@
   background: var(--ui-canvas);
   color: var(--ui-ink);
 }
-
-/* 動くものはインスペクタだけであり、その動きはここで止まる。 */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -155,35 +127,10 @@
     transition-duration: 0.01ms !important;
   }
 }
-
-
-/*
-  重ねた板の選択の帯。
-
-  **透明な字にも帯は付く。** 付くのは板の側なので、既定の不透明な青を敷けば、
-  下の xterm の字はその下に隠れる——選んだ瞬間に、選んだ範囲だけ読めなくなる。
-  端末が自分の選択に使っているのと同じ半透明を与えて、下の字を透かす。
-  color も透明のままにする。既定の ::selection は字の色まで塗り替えるので、
-  放っておくと隠してあった写しの方が浮かび上がる。
-*/
 .sshc-select-overlay::selection {
   background: var(--ui-term-selection);
   color: transparent;
 }
-
-
-/* 端末の配色。
- *
- * **アプリのテーマとは別物である。** 上の `--ui-term-*` はテーマに従う既定で、
- * ここにあるのは利用者が選んだときだけ効く上書きである。選ばれた名前は端末の
- * 箱に `data-term-palette` として載り、theme.ts がその要素から読む。
- *
- * **名前の一覧をここと TypeScript の両方に書かない。** palettes.test.ts が
- * この CSS を読んで突き合わせ、片方にしかない名前と、20 個揃っていないパレットを
- * 赤にする。
- *
- * 選択色だけは透過を持つ。下の字が透けないと、選んだ範囲が読めなくなる。
- */
 [data-term-palette="solarized-dark"] {
   --ui-term-bg: #002b36;
   --ui-term-fg: #839496;
@@ -321,21 +268,6 @@
   --ui-term-bright-cyan: #66c9d4;
   --ui-term-bright-white: #ffffff;
 }
-
-/* 端末の字体。
- *
- * **同梱するのは、Android に選ぶものが無いからである。** 手元の等幅を並べても、
- * 端末が持っていない名前は何にも解決しない——実機で `fc-list :lang=ja` が 0 だった
- * ように、あちらには選択肢そのものが無い。
- *
- * 4 面とも積む。太字と斜体は端末が実際に使う——プロンプトも ls の色も vim の
- * コメントもそこを通る。ブラウザに合成させると、太字だけ桁がずれる。
- *
- * JetBrains Mono は SIL Open Font License 1.1。全文を fonts/OFL.txt に置いてある。
- *
- * font-display: block にする。**swap にすると、端末が二度測る。** 代替の字で
- * 1 マスの幅を測ってから本物に差し替わると、桁が全部ずれたまま次の描き直しを待つ。
- */
 @font-face {
   font-family: "JetBrains Mono";
   src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
@@ -365,25 +297,11 @@
   font-display: block;
 }
 
-/* **合字を切る。** JetBrains Mono は `->` や `!=` を 1 つの絵にする。端末では
- * 1 マス 1 文字が前提なので、2 文字が 1 つの絵になると桁がずれる。 */
 [data-term-font] .xterm,
 [data-term-font] .sshc-select-overlay {
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
 }
-
-/* 端末の背景画像。
- *
- * **画像は箱が持ち、端末は面を塗らない。** xterm 側の背景を透明にしたうえで、
- * ここが画像とその上の帳を重ねる。測って分かったのは、`allowTransparency` は
- * DOM 描画では何も変えず、**本当の障害物は .xterm-viewport に敷かれた不透明な
- * 黒だった**ということである。だからそこを外す。
- *
- * 帳の濃さは color-mix で作る。**色を JS で解析しない** ——配色の背景色は
- * #rrggbb のことも rgb(...) のこともあり、解析を書けばその両方を追い続ける
- * ことになる。
- */
 [data-term-background] {
   --ui-term-veil: color-mix(in srgb, var(--ui-term-bg) calc(var(--ui-term-tint) * 1%), transparent);
   background-image: linear-gradient(var(--ui-term-veil), var(--ui-term-veil)), var(--ui-term-image);
@@ -391,12 +309,6 @@
   background-position: center;
   background-repeat: no-repeat;
 }
-
-/* **これを外さないと、画像は決して見えない。** xterm はここへ不透明な黒を
- * 敷いており、端末の面の透明度はすべてその黒と合成される。
- *
- * `!important` が要る。**あれは inline の style として書かれる**ので、
- * どれだけ詳しいセレクタを書いても届かない。 */
 [data-term-background] .xterm-viewport {
   background-color: transparent !important;
 }

@@ -21,7 +21,7 @@ func (l fakeLoader) ReadFile(name string) ([]byte, error) {
 	return []byte(contents), nil
 }
 
-// リゾルバが渡してくるパターンはこのファイルシステムの綴りなので、突き合わせも
+// リゾルバが渡してくるパターンはこのファイルシステムの表記なので、突き合わせも
 // filepath で行う。path.Match は Windows の区切りをエスケープとして読み、どの
 // Include も一致しなくなる。
 func (l fakeLoader) Glob(pattern string) ([]string, error) {
@@ -35,8 +35,8 @@ func (l fakeLoader) Glob(pattern string) ([]string, error) {
 	return matches, nil
 }
 
-// testRoot はワークスペース、testConfig はその入口ファイル。testHome と同じく、
-// この OS の綴りでなければ config.Resolver は受け取らない。
+// testRoot はワークスペース、testConfig はそのエントリーファイル。testHome と同じく、
+// この OS の表記でなければ config.Resolver は受け取らない。
 var (
 	testRoot   = filepath.Join(testHome, ".ssh")
 	testConfig = filepath.Join(testRoot, "config")

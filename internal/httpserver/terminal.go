@@ -17,8 +17,8 @@ import (
 
 // StreamPath は、ブラウザが端末の生 I/O を運ぶ場所である。
 //
-// これは意図的に /api/ の下に置かれていない。**ブラウザは WebSocket の
-// ハンドシェイクにカスタムヘッダを付けられない。** Security ミドルウェアは
+// これは意図的に /api/ の下に置かれていない。ブラウザは WebSocket の
+// ハンドシェイクにカスタムヘッダを付けられない。Security ミドルウェアは
 // /api/ 配下の要求すべてに X-SSHC-CSRF を要求するので、そこに置いた
 // アップグレードは必ず弾かれる。代わりに、直前の CSRF 付き要求が発行した
 // 使い捨てのチケットで認可する。/cli/connect のエンドポイントが
@@ -31,22 +31,22 @@ type TerminalHandlers struct {
 	Tickets  *terminal.Tickets
 	// Connect は、alias ひとつ分の対話セッションを開く。
 	//
-	// **外部の ssh は起こさない。** プロセス内で SSH を話すので、確保する
+	// 外部の ssh は起動しない。プロセス内で SSH 接続を行うため、確保する
 	// PTY も無い。nil なら SSH のセッションは開けない。
 	Connect Connector
 	// Shell はローカルシェルの絶対パスを解決する。
 	Shell func() (string, error)
 	// Environment は、セッションが継ぐ環境である。これは利用者が自分で行った
-	// であろう接続なので、検査が使う最小環境ではなく本人の環境を継ぐ。
+	// であろう接続なので、検査が使う最小環境ではなくユーザー本人の環境を継ぐ。
 	Environment func() []string
 	// StartDirectory は、ローカルシェルが始まる場所を返す。
 	//
-	// **継がない。** エンジンの作業ディレクトリは、それを起こしたものが
-	// たまたま居た場所である——シェルから起こせばその作業ディレクトリ、
-	// launchd から起こせば `/` になる。**利用者はそのどれも選んでいない。**
+	// 継がない。エンジンの作業ディレクトリは、それを起動したものが
+	// たまたま居た場所である。シェルから起こせばその作業ディレクトリ、
+	// launchd から起こせば `/` になる。利用者はそのどれも選んでいない。
 	//
 	// 関数なのは、設定が動いている最中に変わるからである。起動時に一度だけ
-	// 読むと、変えた人は次に端末を開いても前の場所に立つ。nil ならこの
+	// 読むと、変えたユーザーは次に端末を開いても前の場所に立つ。nil ならこの
 	// プロセスの作業ディレクトリを継ぐ。
 	StartDirectory func() string
 	// ExpectedOrigin は、アップグレードで完全一致を求める値である。
@@ -167,7 +167,7 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 		return terminal.Spec{
 			Kind: terminal.KindShell, Title: shellTitle(shell), Size: size,
 			Command: terminal.Command{
-				// ログインシェルとしての起こし方は OS ごとに違う。Unix は
+				// ログインシェルとしての起動し方は OS ごとに違う。Unix は
 				// argv[0]、Windows は引数で伝える。ここはその区別を持たない。
 				Path: shell, Argv0: platform.LoginArgv0(shell),
 				Arguments: platform.LoginArguments(shell), Env: h.environment(),
@@ -186,7 +186,7 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 		return terminal.Spec{}, terminal.ErrNoStarter
 	}
 
-	// 設定を読むのはここである。読めなければセッションを作らない——設定の
+	// 設定を読むのはここである。読めなければセッションを作らない。設定の
 	// 問題は接続画面が表示できるので、端末に理由を書く必要が無い。接続そのものの
 	// 出来事（届かない、認証が通らない）は、開いたセッションの中で語られる。
 	target := *alias
@@ -197,10 +197,10 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			// **成功したセッションの寿命は、要求から切り離す。** Dialer.Open は
+			// 成功したセッションの寿命は、要求から切り離す。Dialer.Open は
 			// すぐ返り、渡された context を非同期の接続のあいだ持ち続けるので、
 			// 要求の context をそのまま渡すと、開いた HTTP ハンドラが返った瞬間に
-			// SSH セッションが死ぬ。取り消す権利は Process.Close が持つ。
+			// SSH セッションが終了する。取り消す権利は Process.Close が持つ。
 			sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 			process, err := h.Connect(sessionCtx, target, size)
 			if err != nil {
@@ -212,7 +212,7 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 	}, nil
 }
 
-// sessionLifetime は、セッションが生きているあいだだけ続く context を Process に
+// sessionLifetime は、セッションが実行中あいだだけ続く context を Process に
 // 結び付ける。
 type sessionLifetime struct {
 	terminal.Process
@@ -227,7 +227,7 @@ func (s *sessionLifetime) Close() error {
 
 // ForceClose は、包んだ Process の強制停止を素通しする。
 //
-// **ここで落としてはならない。** 落とせば、レジストリからは強制停止を持たない
+// ここで落としてはならない。落とせば、レジストリからは強制停止を持たない
 // Process に見え、締切に達しても輸送が切れなくなる。
 func (s *sessionLifetime) ForceClose() error {
 	var err error
@@ -273,12 +273,12 @@ func (h TerminalHandlers) environment() []string {
 func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 	switch {
 	case errors.Is(err, terminal.ErrSessionLimit):
-		// 黙って古いセッションを閉じることはしない。
+		// 暗黙に古いセッションを閉じることはしない。
 		return problem(c, http.StatusConflict, "terminal_session_limit")
 	case errors.Is(err, validate.ErrUnsafeAlias), errors.Is(err, errMissingAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
-	// 設定そのものが接続を許さない場合は、その理由を名指しする。
+	// 設定により接続できない場合は、その理由を返す。
 	// 「開けませんでした」だけでは、次に何をすればよいか分からない。
 	if code, named := connectProblem(err); named {
 		return problem(c, http.StatusUnprocessableEntity, code)
@@ -288,11 +288,10 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 
 // Ticket は、すでに開いているセッションへ繋ぎ直すためのチケットを出す。
 //
-// リロードしたページには、開いたときのチケットが残っていない——使い捨てで、
-// しかも最初の接続で使い切られている。PTY はこの常駐プロセスの中で生きている
-// ので、繋ぎ直す手段が要る。それがこれである。
+// チケットは単回使用のため、ページを再読み込みしたクライアントへ新しい値を発行する。
+// PTY は engine 内で継続しており、新しいチケットで再接続できる。
 //
-// 終了済みのセッションにも出す。読めるものがあるからだ。
+// 終了済みセッションにも発行し、残っている出力を再表示できるようにする。
 func (h TerminalHandlers) Ticket(c *echo.Context) error {
 	id := c.Param("id")
 	if id == "" || len(id) > maxSessionIdentifier {
@@ -316,8 +315,7 @@ func (h TerminalHandlers) Ticket(c *echo.Context) error {
 // セッションの識別子にも触れない。名前が要るのは、同じ相手へ複数本開いたときに
 // 行が見分けられなくなるからである。
 //
-// 名前は metadata へ書かない。セッションはこのプロセスの寿命までしか生きない
-// ので、ディスクへ書けば必ず孤児が残る。
+// 名前は metadata へ保存しない。セッションは現在のプロセス内でだけ有効である。
 func (h TerminalHandlers) Rename(c *echo.Context) error {
 	id := c.Param("id")
 	if id == "" || len(id) > maxSessionIdentifier {

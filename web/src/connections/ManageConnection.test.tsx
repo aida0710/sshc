@@ -85,8 +85,6 @@ describe("ManageConnection", () => {
     expect(harness.props.onDelete).toHaveBeenCalledOnce();
   });
 
-  // **同じ場所を二度叩いても消えない。** かつてここは、押すと同じ位置のボタンが
-  // 「削除を確定」に変わる形だった——触る画面では素早い二度押しがそのまま通る。
   it("survives a double tap on the delete button", async () => {
     const user = userEvent.setup();
     const harness = renderManage();
@@ -96,7 +94,6 @@ describe("ManageConnection", () => {
     expect(harness.props.onDelete).not.toHaveBeenCalled();
   });
 
-  // 何も読まずに Enter を叩いた人は、失うものが無い方へ落ちる。
   it("puts the keyboard on the side that keeps the connection", async () => {
     const user = userEvent.setup();
     const harness = renderManage();

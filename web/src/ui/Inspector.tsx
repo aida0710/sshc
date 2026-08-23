@@ -2,14 +2,6 @@ import type { ReactNode } from "react";
 import { Icon } from "./icons";
 import { useTranslate } from "../i18n/context";
 
-// セクションが右側のペインに何を置くか、そしてそこにあるものが
-// 注意を必要とするかどうか。null を渡すセクションにはトグルすら付かない:
-// どこにでも提供されるのに 10 回のうち 9 回は空のペインは、人々にそれを
-// 開かないよう教え込んでしまう。
-//
-// 面はひとつである。開いているコンソールの一覧は、ここではなく一番左の
-// ナビゲーションにある——セクションごとに中身が変わって既定で閉じている
-// ペインは、「いま何本繋がっているか」を答える場所として噛み合わない。
 export type InspectorContent = { label: string; attention: boolean; body: ReactNode } | null;
 
 export const inspectorId = "inspector";
@@ -27,10 +19,6 @@ export function InspectorToggle({
 }) {
   const t = useTranslate();
   const action = t(open ? "shell.inspectorHideNamed" : "shell.inspectorShowNamed", { label });
-  // 名前は 2 つの sr-only span から組み立てるのではなく、ここに直接書く。
-  // 隣接する span はセパレータなしで連結され——「Show detailsNeeds
-  // attention」——になる。両者の間にあるのは aria-hidden なアイコンだけで、
-  // JSX がその周りの空白を取り除いてしまうからだ。
   const name = attention ? `${action} ${t("shell.inspectorAttention")}` : action;
   return (
     <button
@@ -45,7 +33,7 @@ export function InspectorToggle({
     >
       <Icon name="inspector" className="h-4 w-4" />
       <span className="hidden max-w-44 truncate text-xs sm:inline">{label}</span>
-      {/* ドットは目のためのもので、上の文はそれ以外のすべての人のためのものだ。 */}
+
       {attention ? (
         <span
           aria-hidden="true"
@@ -61,11 +49,6 @@ export function InspectorPane({ label, children }: { label: string; children: Re
     <aside
       id={inspectorId}
       aria-label={label}
-      // **狭い画面では面を奪う。** 17rem の柱を 360px の脇に立てると残るのは
-      // 5rem である。どちらも読めない 2 つより、読める 1 つを出す。
-      //
-      // z-10 は header (z-20) より下である。面を覆っても、それを閉じるトグルは
-      // 必ず帯の上に残る。
       className="fixed inset-0 z-10 overflow-y-auto bg-sidebar p-3 lg:relative lg:z-auto lg:border-l lg:border-line"
     >
       {children}

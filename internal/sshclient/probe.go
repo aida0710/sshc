@@ -14,26 +14,26 @@ import (
 type Probe struct {
 	// Method は通った認証方式。空なら、どれも通らなかった。
 	//
-	// **どの鍵で通ったかは言わない。** 公開鍵認証では、鍵の一覧を渡したあと
+	// どの鍵で通ったかは言わない。公開鍵認証では、鍵の一覧を渡したあと
 	// どれを使うかを決めるのは相手であり、こちらはその判断を見ていない。
 	Method string
 	// Tried は、こちらから試した方式を試した順に並べたもの。
 	Tried []string
 	// Banner はサーバーが送った文言。空でありうる。
 	Banner string
-	// Elapsed は接続を始めてから答えが出るまで。
+	// Elapsed は接続を始めてから結果が出るまで。
 	Elapsed time.Duration
 }
 
 // Probe は、接続して認証だけを試し、チャンネルを開かずに閉じる。
 //
-// **何も尋ねない。** Prompter を渡さないので、パスフレーズもパスワードも
-// 端末には出ない。保存されているパスフレーズは使う——それは尋ねずに済む答えで
+// 何も尋ねない。Prompter を渡さないので、パスフレーズもパスワードも
+// 端末には出ない。保存されているパスフレーズは使う。それは尋ねずに済む結果で
 // ある。これは「上限つきで非対話」というこの検査の約束をそのまま引き継いでいる。
 func (d Dialer) Probe(ctx context.Context, target Target) (Probe, error) {
 	started := time.Now()
 
-	// 未知のホストを黙って受け入れない。StrictHostKeyChecking=yes 相当である。
+	// 未知のホストを暗黙に受け入れない。StrictHostKeyChecking=yes 相当である。
 	// 検査のために信頼を増やしてはならない。
 	strict := target
 	strict.Strict = "yes"
@@ -66,7 +66,7 @@ func (d Dialer) Probe(ctx context.Context, target Target) (Probe, error) {
 // probeChain は、ProxyJump の手前側を普通に繋いでから、最後の一段だけを
 // 記録付きで繋ぐ。
 //
-// 手前のホップも認証を要求するが、答えたい問いは「最後のホストに認証できるか」
+// 手前のホップも認証を要求するが、応答したい問いは「最後のホストに認証できるか」
 // である。手前で止まったなら、それはそのまま失敗として返る。
 func (d Dialer) probeChain(
 	ctx context.Context, target Target, auth []ssh.AuthMethod, recorder *methodRecorder,
@@ -107,10 +107,10 @@ func (d Dialer) probeChain(
 		User:            target.User,
 		Auth:            auth,
 		HostKeyCallback: d.HostKeys.Callback(target, nil),
-		// **認証テストは、実接続と同じ鍵の種類を名乗る。** ここだけ既定の順序に
+		// 認証テストは、実接続と同じ鍵の種類を名乗る。ここだけ既定の順序に
 		// 任せていたので、三種類の鍵を持つホストが known_hosts にある 1 行とは
 		// 違う種類を出し、実際には繋がるホストを認証テストが host_key_changed と
-		// 報告しうた。**検査が本番と違う条件で繋ぐなら、それは検査ではない。**
+		// 報告しうた。検査が本番と違う条件で繋ぐなら、それは検査ではない。
 		HostKeyAlgorithms: d.HostKeys.Algorithms(target),
 		BannerCallback:    recorder.noteBanner,
 		Timeout:           timeout,
@@ -129,7 +129,7 @@ func (d Dialer) probeChain(
 // methodRecorder は、どの方式がいつ試されたかを見る。
 //
 // x/crypto は「どれで通ったか」を返さないが、方式は順に試され、通った時点で
-// 握手が終わる。**だから最後に呼ばれた方式が通った方式である。** 推測ではない。
+// 握手が終わる。だから最後に呼ばれた方式が通った方式である。推測ではない。
 type methodRecorder struct {
 	mutex    sync.Mutex
 	attempts []string
@@ -172,6 +172,6 @@ func (r *methodRecorder) banner() string {
 
 // ErrNoAuthMethod は、試せる認証方式がひとつも無いことを報告する。
 //
-// 鍵も agent も無く、尋ねる先も無い接続である。**繋がらなかったのではなく、
-// 差し出すものが何も無かった**ので、失敗の理由としては別物である。
+// 鍵も agent も無く、尋ねる先も無い接続である。繋がらなかったのではなく、
+// 差し出すものが何も無かったので、失敗の理由としては別物である。
 var ErrNoAuthMethod = errors.New("no authentication method is available for this connection")

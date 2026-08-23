@@ -26,8 +26,6 @@ func TestSetHostCommentReplacesOnlyTheAttachedRun(t *testing.T) {
 	}
 
 	got := string(file.Render())
-	// 空行の上のバナーは変更されない。Host 行より
-	// 後のバイトもすべて同じである。
 	if !strings.HasPrefix(got, "# Managed by hand since 2019. Do not reformat.\n\n") {
 		t.Fatalf("the file banner was rewritten:\n%s", got)
 	}
@@ -88,8 +86,6 @@ func TestClearHostNoteKeepsEveryOtherFieldAndEntry(t *testing.T) {
 	if cleared.Hosts[1].Note != "kept" {
 		t.Fatalf("another host's note was cleared: %#v", cleared.Hosts[1])
 	}
-	// 入力を変更してはならない。保存が
-	// 拒否された場合、プランナーがまだそれを必要とするからだ。
 	if metadata.Hosts[0].Note != "gone" {
 		t.Fatalf("ClearHostNote mutated its argument")
 	}
@@ -107,12 +103,6 @@ func TestClearHostNoteDropsAnEntryThatHeldNothingElse(t *testing.T) {
 	}
 }
 
-// **note を消しても、他に語られたことは残る。**
-//
-// ここはかつて残す条件を項目で並べていた（tags・colour・favourite・order）。
-// 並べると、新しく足した項目をここへ書き足し忘れた日に、note を消しただけで
-// その設定ごと消える。見た目を足したときがまさにその状況だった——この検査は、
-// **並べていたら落ちる**ように書いてある。
 func TestClearHostNoteKeepsAnEntryThatOnlyChoseHowItLooks(t *testing.T) {
 	target := HostIdentity{Path: "config", Alias: "prod"}
 	cleared := ClearHostNote(Metadata{
@@ -135,8 +125,6 @@ func TestClearHostNoteKeepsAnEntryThatOnlyChoseHowItLooks(t *testing.T) {
 	}
 }
 
-// orphan は「向こうが消えた」という観測であって、人が語ったことではない。
-// それだけが残った entry は、以前と同じく捨てる。
 func TestClearHostNoteDropsAnEntryThatOnlyRecordsItsHostIsGone(t *testing.T) {
 	target := HostIdentity{Path: "config", Alias: "bastion"}
 	cleared := ClearHostNote(Metadata{
@@ -149,9 +137,6 @@ func TestClearHostNoteDropsAnEntryThatOnlyRecordsItsHostIsGone(t *testing.T) {
 	}
 }
 
-// ヘッダーの上のコメントに意味を持たせたことで、移動が
-// 運ぶべきものが変わった。置き去りにすると、去った
-// ブロックの説明が、ソースファイル中で次に続くブロックの説明になる。
 func TestExtractHostBlockTakesTheAttachedCommentWithIt(t *testing.T) {
 	file := config.Parse([]byte(
 		"# the production bastion\n" +
@@ -174,7 +159,6 @@ func TestExtractHostBlockTakesTheAttachedCommentWithIt(t *testing.T) {
 	if strings.Contains(remaining, "the production bastion") {
 		t.Fatalf("the departed block's comment was left behind:\n%s", remaining)
 	}
-	// nas は自分自身のものを保持し、継承はしない。
 	if remaining != "# the file server\nHost nas\n" {
 		t.Fatalf("remaining = %q", remaining)
 	}
@@ -191,8 +175,6 @@ func TestExtractHostBlockLeavesAFileBannerBehind(t *testing.T) {
 		t.Fatalf("ExtractHostBlock error = %v", err)
 	}
 
-	// バナーは空行で区切られているので、ファイルに属し、
-	// ファイルと共にとどまる。
 	if got := string(file.Render()); got != "# Managed by hand. Do not reformat.\n\n" {
 		t.Fatalf("remaining = %q", got)
 	}

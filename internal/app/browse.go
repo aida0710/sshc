@@ -12,11 +12,7 @@ import (
 	"sshc/internal/storage"
 )
 
-// Connection は、端末から名指しできる接続先ひとつと、それを見分けるための値である。
-//
-// **ここに載る値は、実際に接続へ使われるものと同じでなければならない。** 一覧が
-// 別の解決器を通っていた頃、Match ブロックの下に書かれた HostName は画面に出ず、
-// 選んだ先と繋がる先が食い違った。
+// Connection は、端末から指定できる接続先ひとつと、それを見分けるための値である。
 type Connection struct {
 	Alias    string
 	HostName string
@@ -25,14 +21,6 @@ type Connection struct {
 	Port string
 }
 
-// ReadConnections は、~/.ssh/config と到達できる Include が宣言する具体的な接続先を、
-// OpenSSH と同じ読み取り順で返す。
-//
-// **`Host *` のようなパターンは接続先の名前ではないので返さない。** 同じ名前は
-// 最初の一度だけである。
-//
-// 設定がまだ無いことは空の一覧だが、**あるのに読めないことはエラーである** ——
-// 壊れた設定を空の設定に見せると、ホストが無いことにされてしまう。
 func ReadConnections(home string) ([]Connection, error) {
 	workspace, graph, err := readConfigGraph(home)
 	if err != nil {
@@ -56,9 +44,6 @@ func ReadConnections(home string) ([]Connection, error) {
 }
 
 // ReadWorkspaceMetadata は、接続先に付いた印（お気に入り・タグ）を返す。
-//
-// 一覧を出す側は設定と印の両方を要るが、印はワークスペースの持ち物なので、
-// 設定の読み取りとは別の入口にしてある。読めなければ印が無いだけで、一覧は出る。
 func ReadWorkspaceMetadata(home string) (application.Metadata, error) {
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {
@@ -68,8 +53,6 @@ func ReadWorkspaceMetadata(home string) (application.Metadata, error) {
 	return metadata, err
 }
 
-// concreteAliases は、OpenSSH と同じ読み取り順で Host 行を訪れ、実際にコマンドの
-// 宛先として使える具体名だけを返す。
 func concreteAliases(graph *config.Graph) []string {
 	seen := map[string]bool{}
 	aliases := []string{}
@@ -101,8 +84,6 @@ func readConfigGraph(home string) (*storage.Workspace, *config.Graph, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("read config: %w", err)
 	}
-	// config がまだ存在しないことは空の一覧である。一方、存在するのに読めない場合は、
-	// 正しい一覧を返せないので成功したふりをしない。
 	if root := graph.Nodes[graph.Root]; root != nil && root.File == nil && !root.Missing {
 		return nil, nil, errors.New("cannot read ~/.ssh/config")
 	}

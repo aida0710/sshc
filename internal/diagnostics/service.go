@@ -31,11 +31,8 @@ type ConfigReport struct {
 	Diagnostics []config.Diagnostic
 }
 
-// Inspection は、実効設定の画面が必要とするすべて。
-//
-// **ssh を回さないので、実行の可否も確認も結果もここには無い。** 値を決めるのは
-// effective.Resolve であり、この検査が運ぶのは出所と、単純に説明できない理由と、
-// ジャンプ経路である。
+// Inspection は、実効設定の出所、評価を拒否した理由、ジャンプ経路を保持する。
+// SSH の実行結果は含まない。
 type Inspection struct {
 	Alias             string
 	Report            effective.Report
@@ -62,18 +59,13 @@ type Service struct {
 	Resolver       config.Resolver
 	Reachability   Reachability
 	Authentication Authentication
-	// Facts は、解決に要るこのプロセスの事実である。
-	//
-	// **注入する。** ここで user.Current() を読めば、テストが本物のアカウント名に
-	// 届く——`Match localuser` を含む設定の答えが、走らせた人によって変わる。
+	// Facts は Match localuser などの解決に使うローカル環境情報。
 	Facts effective.LocalFacts
 }
 
 // NewService は本番用の依存を配線する。
 //
-// probe は、接続ひとつ分を組み立てて認証だけを試す。**外部プログラムは
-// 起こさない。** nil なら認証テストは「手段が無い」と答える——できないことを
-// できるふりで隠さない。
+// probe はプロセス内で認証だけを試す。nil の場合、認証テストは利用不可となる。
 func NewService(
 	workspace *storage.Workspace,
 	probe func(ctx context.Context, alias string) (sshclient.Probe, error),
@@ -120,15 +112,11 @@ func (s *Service) ConnectionSnapshot(alias string) (ConnectionSnapshot, error) {
 	if err != nil {
 		return ConnectionSnapshot{}, err
 	}
-	// **Project ではなく Resolve から取る。** ここで返す値は、公開鍵を
-	// authorized_keys へ入れてよいかを人に確かめてもらう画面に出る。実際に繋ぐのは
-	// remotekey.Service.Resolve で、そちらは既に Resolve を通っていた。**つまり
-	// 見せていた宛先と、繋ぐ宛先が違いえた** ——Match の下に HostName を書いている人は、
-	// 「bastion.internal に入れます」と確認したうえで別の機械に入れることになる。
+	// 公開鍵登録の確認画面と実際の接続先を一致させるため、Project ではなく
+	// Resolve で接続先を決定する。
 	resolution := effective.Resolve(graph, alias, s.Facts)
 	if len(resolution.Refusals) > 0 {
-		// **推測で埋めない。** どこへ繋がるか分からない設定について、alias を
-		// そのままホスト名として見せれば、人は確かめようのないものを確かめる。
+		// 接続先を解決できない場合は alias をホスト名として代用しない。
 		return ConnectionSnapshot{}, fmt.Errorf("%w: %s", ErrUnresolvedDestination, resolution.Refusals[0].Code)
 	}
 	snapshot := ConnectionSnapshot{
@@ -204,14 +192,11 @@ func (s *Service) Destination(alias string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	// **Project ではなく Resolve から取る。** ここが答えるのは「どの行が書いたか」
-	// ではなく、**実際にダイヤルする宛先**である。Project は Match ブロックを
-	// 一切適用しないので、Match の下に HostName や Port を書いている人に対して、
-	// 到達性の検査は違う相手を叩いていた——そして「繋がりません」と答えていた。
+	// 実際の接続先を返すため、Match ブロックを適用しない Project ではなく
+	// Resolve を使用する。
 	resolution := effective.Resolve(graph, alias, s.Facts)
 	if len(resolution.Refusals) > 0 {
-		// **推測で埋めない。** 解決を諦めた設定について、alias:22 を叩いた
-		// 結果を「その接続先への到達性」として見せるのは嘘である。
+		// 解決できない場合は alias:22 を接続先として代用しない。
 		return "", "", fmt.Errorf("%w: %s", ErrUnresolvedDestination, resolution.Refusals[0].Code)
 	}
 	hostname := alias
@@ -225,10 +210,7 @@ func (s *Service) Destination(alias string) (string, string, error) {
 	return hostname, port, nil
 }
 
-// ErrUnresolvedDestination は、この設定について宛先を言えないことを報告する。
-//
-// **黙って alias:22 を返さない。** Match exec を含む設定では、どこへ繋がるかが
-// まさに分からない。分からないものを叩いた結果を到達性として見せない。
+// ErrUnresolvedDestination は、設定から単一の接続先を解決できないことを表す。
 var ErrUnresolvedDestination = errors.New("this configuration does not resolve to one destination")
 
 // Reach は接続先へ直接ダイヤルし、ProxyJump を無視する。
@@ -246,7 +228,7 @@ func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, 
 // Authenticate は、alias に対する認証テストを実行する。
 //
 // 取り込んだ stderr はユーザーに表示されるので、先にホームディレクトリを "~" に
-// 書き換える。冗長な OpenSSH の出力は、読んだファイルをすべて絶対パスで名指しする
+// 書き換える。冗長な OpenSSH の出力は、読んだファイルをすべて絶対パスで指定する
 // ため、そうしないとアカウント名がレスポンスの本文へ運ばれてしまう。
 func (s *Service) Authenticate(ctx context.Context, alias string, acknowledged bool) (AuthenticationResult, error) {
 	report, err := s.Safety()

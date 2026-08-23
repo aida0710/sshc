@@ -19,11 +19,11 @@ func lookupOf(environment map[string]string) func(string) (string, bool) {
 	}
 }
 
-// existing は、その綴りのファイルだけが実在するファイルシステムを演じる。
+// existing は、その表記のファイルだけが実在するファイルシステムを演じる。
 //
 // 実ファイルを置かずに済ませるのは、ここで確かめたいのがドライブ文字を持つ
-// Windows の綴りだからである。macOS の一時ディレクトリでは、拒むべき綴りと
-// 受け入れるべき綴りの区別そのものが作れない。
+// Windows の表記だからである。macOS の一時ディレクトリでは、拒むべき表記と
+// 受け入れるべき表記の区別そのものが作れない。
 func existing(paths ...string) func(string) error {
 	return func(path string) error {
 		if slices.Contains(paths, path) {
@@ -94,10 +94,10 @@ func TestTheLoginShellFallsBackToComSpec(t *testing.T) {
 	}
 }
 
-// **PATH に置かれた pwsh.exe は決して勝たない。**
+// PATH に置かれた pwsh.exe は決して勝たない。
 //
 // 端末に渡すのは利用者のシェルであって、環境がたまたま先に挙げたプログラムでは
-// ない。信頼できる場所に一本も無いなら、開かないことが答えである。
+// ない。信頼できる場所に一本も無いなら、開かないことが結果である。
 func TestTheLoginShellNeverTakesAShellFromThePath(t *testing.T) {
 	poisoned := t.TempDir()
 	writeShell(t, poisoned, "pwsh.exe")
@@ -130,11 +130,11 @@ func TestTheLoginShellFindsNothingInAnEmptyEnvironment(t *testing.T) {
 	}
 }
 
-// **%ComSpec% だけは利用者の環境から来る。**
+// %ComSpec% だけは利用者の環境から来る。
 //
-// だから、そこに書かれた綴りは実行してよいプログラムの形をしていなければ
-// ならない。ここに並ぶのはどれも「実在する」と答えるファイルシステムの上で
-// 拒まれる——拒む理由は綴りそのものにあり、そこに何があるかではない。
+// だから、そこに書かれた表記は実行してよいプログラムの形をしていなければ
+// ならない。ここに並ぶのはどれも「実在する」と返すファイルシステムの上で
+// 拒まれる。拒む理由は表記そのものにあり、そこに何があるかではない。
 func TestTheLoginShellRefusesAnUntrustedComSpec(t *testing.T) {
 	for name, value := range map[string]string{
 		"relative":          `cmd.exe`,
@@ -188,8 +188,8 @@ func TestTheLoginShellAcceptsOrdinaryWindowsSpellings(t *testing.T) {
 	}
 }
 
-// **PowerShell は起動のたびに著作権表示を出す。** 端末を開いた利用者が最初に
-// 見るのはそれではない。プロファイルは読ませる——開いているのは利用者のシェルで
+// PowerShell は起動のたびに著作権表示を出す。端末を開いた利用者が最初に
+// 見るのはそれではない。プロファイルは読ませる。開いているのは利用者のシェルで
 // あって、素のインタプリタではないからだ。
 func TestLoginArgumentsSilenceOnlyTheBanner(t *testing.T) {
 	for name, expected := range map[string]struct {

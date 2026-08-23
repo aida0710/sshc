@@ -62,7 +62,7 @@ func TestMatchAppliesEvaluatesEveryCriterionWithoutRunningAnything(t *testing.T)
 }
 
 // 解決器は何も実行しない。exec の結果に依存する設定は、値を推測するのではなく
-// 解決できないと答える。
+// 解決できないと返す。
 func TestMatchAppliesRefusesToRunAnything(t *testing.T) {
 	_, err := effective.MatchApplies([]config.Criterion{{Keyword: "exec", Argument: "true"}}, matchContext())
 	if !errors.Is(err, effective.ErrMatchExec) {
@@ -71,9 +71,9 @@ func TestMatchAppliesRefusesToRunAnything(t *testing.T) {
 
 	// ただし、先に外れる条件があれば exec には届かない。OpenSSH は Match 行の
 	// 属性を左から評価し、外れた時点で打ち切るので、そのブロックの exec は走らない
-	// ——走らないものを理由に解決を拒むと、繋げる設定を繋げないと言うことになる。
+	//走らないものを理由に解決を拒むと、繋げる設定を繋げないと言うことになる。
 	//
-	// これは OpenSSH の評価順に依存している。差分テストがそこを見張る。
+	// これは OpenSSH の評価順に依存している。差分テストがそこを監視する。
 	applies, err := effective.MatchApplies([]config.Criterion{
 		{Keyword: "host", Argument: "nothing"}, {Keyword: "exec", Argument: "true"},
 	}, matchContext())
@@ -82,7 +82,7 @@ func TestMatchAppliesRefusesToRunAnything(t *testing.T) {
 	}
 }
 
-// 答えられない属性を真として扱えば、書いていないブロックを適用することになる。
+// 判定できない属性を真として扱えば、書いていないブロックを適用することになる。
 func TestMatchAppliesSaysWhenItCannotAnswer(t *testing.T) {
 	_, err := effective.MatchApplies(
 		[]config.Criterion{{Keyword: "localnetwork", Argument: "192.0.2.0/24"}}, matchContext())

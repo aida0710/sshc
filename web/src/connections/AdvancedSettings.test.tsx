@@ -89,9 +89,6 @@ describe("AdvancedSettings", () => {
     expect(harness.props.onBlockRaw).not.toHaveBeenCalled();
   });
 
-  // エンジンは、ブロック内で既出のキーワードに duplicate を付けて送ってくる。
-  // OpenSSH が採用するのは最初の 1 つなので、二つ目以降の行は書いてあっても
-  // 効かない。それを言わない画面は、効かない値を編集させることになる。
   it("says which directives a previous line in the block already decided", () => {
     const duplicated: HostDetail = {
       ...detail,

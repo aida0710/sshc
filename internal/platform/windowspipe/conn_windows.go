@@ -1,12 +1,12 @@
 //go:build windows
 
-// Package windowspipe は、Windows の named pipe を net.Conn として話す。
+// Package windowspipe は、Windows の named pipe を net.Conn として通信する。
 //
-// **これは agent のためにある。** Unix のこのアプリケーションが SSH_AUTH_SOCK
+// これは agent のためにある。Unix のこのアプリケーションが SSH_AUTH_SOCK
 // の unix ソケットへ繋ぐところで、Windows の OpenSSH は固定の named pipe を
 // 待っている。プロトコルは同じなので、必要なのは運ぶ管だけである。
 //
-// **x/sys だけで書く。** named pipe のために依存をひとつ増やすと、鍵とパス
+// x/sys だけで書く。named pipe のために依存をひとつ増やすと、鍵とパス
 // フレーズが通る経路に、このプロジェクトが読んでいないコードが入る。
 package windowspipe
 
@@ -25,14 +25,14 @@ import (
 
 // AgentPipe は、Windows の OpenSSH エージェントが待っている場所である。
 //
-// **環境変数で差し替えない。** Unix の SSH_AUTH_SOCK は OpenSSH 自身の約束
+// 環境変数で差し替えない。Unix の SSH_AUTH_SOCK は OpenSSH 自身の約束
 // だが、Windows にその約束は無い。読める変数をひとつでも見れば、それは
 // 「鍵とパスフレーズを任意のパイプへ渡す方法」になる。名前はひとつだけである。
 const AgentPipe = `\\.\pipe\openssh-ssh-agent`
 
-// pipeBusyRetry は、パイプの実体がすべて埋まっているときに待つ長さである。
+// pipeBusyRetry は named pipe の全インスタンスが使用中の場合の再試行間隔である。
 //
-// OpenSSH のエージェントは接続ごとに実体を作り直すので、混み合った瞬間に
+// OpenSSH agent は接続ごとに pipe instance を再作成するため、使用中の場合は
 // ERROR_PIPE_BUSY が返ることがある。そこで諦めると、二本目の接続がたまたま
 // 失敗する。
 const pipeBusyRetry = 100 * time.Millisecond
@@ -45,7 +45,7 @@ var (
 
 // DialContext は、named pipe をひとつ開く。
 //
-// **開くまでの待ちも ctx に従う。** パイプが埋まっているときの再試行で、
+// 開くまでの待ちも ctx に従う。パイプが埋まっているときの再試行で、
 // キャンセルされた呼び出し元を待たせない。
 func DialContext(ctx context.Context, path string) (net.Conn, error) {
 	name, err := windows.UTF16PtrFromString(path)
@@ -75,7 +75,7 @@ func DialContext(ctx context.Context, path string) (net.Conn, error) {
 	}
 }
 
-// waitForPipe は、実体がひとつ空くのを待つ。ctx が先に終われば、その理由を返す。
+// waitForPipe は pipe instance が利用可能になるまで待機する。
 func waitForPipe(ctx context.Context, name *uint16) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -97,7 +97,7 @@ func waitForPipe(ctx context.Context, name *uint16) error {
 
 // conn は、開いた named pipe ひとつである。
 //
-// **読みと書きは別の event を持つ。** ひとつを共有すると、同時に走った読みと
+// 読みと書きは別の event を持つ。ひとつを共有すると、同時に走った読みと
 // 書きが互いの完了を待ってしまう。net.Conn は両方を同時に呼ばれてよい。
 type conn struct {
 	address pipeAddress
@@ -113,7 +113,7 @@ type conn struct {
 
 // operation は、片方向の重なり合う入出力ひとつぶんの状態である。
 //
-// **overlapped も buffer も、この構造体が持つ。** 呼び出し元の slice をその
+// overlapped も buffer も、この構造体が持つ。呼び出し元の slice をその
 // まま渡すと、kernel が書き込んでいる最中に Go のスタックが動きうる。ヒープ
 // 上のこの領域は動かないので、そこを経由して写す。
 type operation struct {
@@ -127,7 +127,7 @@ type operation struct {
 }
 
 // maxPipeMessage は、一度に運ぶ最大の長さである。agent のメッセージはこれより
-// ずっと小さい——鍵ひとつぶんの blob が通れば足りる。
+// ずっと小さい。鍵ひとつぶんの blob が通れば足りる。
 const maxPipeMessage = 32 << 10
 
 func newConn(handle windows.Handle, path string) (net.Conn, error) {
@@ -160,8 +160,8 @@ func (pipe *conn) Read(buffer []byte) (int, error) {
 
 // Write は、渡されたぶんを書き切る。
 //
-// **一度の重なり合う書き込みには上限がある。** io.Writer は、書けた長さが
-// 短いなら error を返せと言う——黙って短く返すと、agent のメッセージが途中で
+// 一度の重なり合う書き込みには上限がある。io.Writer は、書けた長さが
+// 短いなら error を返せと言う。暗黙に短く返すと、agent のメッセージが途中で
 // 切れたまま「成功」として扱われる。上限より長いものは分けて運ぶ。
 func (pipe *conn) Write(buffer []byte) (int, error) {
 	written := 0
@@ -180,7 +180,7 @@ func (pipe *conn) Write(buffer []byte) (int, error) {
 
 // perform は、重なり合う入出力ひとつを最後まで面倒を見る。
 //
-// 締切で解けたときは CancelIoEx を投げ、**そのうえで結果を回収する**。
+// 締切で解けたときは CancelIoEx を投げ、そのうえで結果を回収する。
 // 回収しないまま戻ると、kernel はまだこの構造体へ書き込みうる。
 func (pipe *conn) perform(operation *operation, verb string, buffer []byte, writing bool) (int, error) {
 	select {
@@ -260,8 +260,8 @@ func (pipe *conn) awaitCompletion(operation *operation, verb string) (uint32, er
 func (pipe *conn) cancel(operation *operation, verb string, reason error) (uint32, error) {
 	_ = windows.CancelIoEx(pipe.handle, &operation.overlapped)
 	var done uint32
-	// wait=true で回収する。**取り下げたことと、kernel が手を引いたことは
-	// 別である。** 回収せずに戻れば、この構造体はまだ書き換えられうる。
+	// wait=true で回収する。取り下げたことと、kernel が手を引いたことは
+	// 別である。回収せずに戻れば、この構造体はまだ書き換えられうる。
 	_ = windows.GetOverlappedResult(pipe.handle, &operation.overlapped, &done, true)
 	return done, pipe.opError(verb, reason)
 }
@@ -282,8 +282,8 @@ func (pipe *conn) opError(verb string, err error) error {
 
 // Close は、待っている入出力ごと閉じる。
 //
-// **CancelIoEx を先に投げる。** 閉じるだけでは、この handle で待っている読みは
-// 解けない——解けないまま CloseHandle すると、kernel が触っている最中の
+// CancelIoEx を先に投げる。閉じるだけでは、この handle で待っている読みは
+// 解けない。解けないまま CloseHandle すると、kernel が触っている最中の
 // handle を無効にすることになる。
 func (pipe *conn) Close() error {
 	var err error
@@ -353,7 +353,7 @@ func (operation *operation) remaining() uint32 {
 	return uint32(milliseconds)
 }
 
-// pipeAddress は、この接続の宛先である。**資格情報を持たない。**
+// pipeAddress は、この接続の宛先である。資格情報を持たない。
 // 名前は固定であり、そこに秘密は現れない。
 type pipeAddress string
 

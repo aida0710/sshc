@@ -49,22 +49,22 @@ type Chain struct {
 //
 // ssh_config(5) の TOKENS が「ProxyCommand and ProxyJump accept the tokens
 // %%, %h, %n, %p, and %r」と言っている。いずれも最終的な行き先の値を指す
-// ——手前のホップではない。
+// 手前のホップではない。
 //
-// **二つで一つの規則である。** 同じ文が両方を名指しているので、別々の表を
+// 二つで一つの規則である。同じ文が両方を指定しているので、別々の表を
 // 持たない。
 const proxyTokens = "hnpr"
 
 // ExpandProxyTokens は、ProxyJump と ProxyCommand の値のトークンを展開する。
 //
-// **解決器はここを生のまま返す。** `ssh -G` がそうするからであり、この製品が
+// 解決器はここを生のまま返す。`ssh -G` がそうするからであり、この製品が
 // 設定について報告する値は ssh の報告と一致していなければならない。OpenSSH が
 // これを展開するのは繋ぐ瞬間なので、展開するのも繋ぐ側である。
 //
 // 展開しないと、`ProxyJump %r@gateway` は「%r という名前の利用者」として
 // ゲートウェイに認証を試みることになる。publickey は当然通らず、残る方式も
-// 無いので、握手はそこで終わる——実際そうなっていた。ProxyCommand なら、
-// `%h` を持ったままの綴りがそのままプログラムの引数になる。
+// 無いので、握手はそこで終わる。実際そうなっていた。ProxyCommand なら、
+// `%h` を持ったままの表記がそのままプログラムの引数になる。
 //
 // 許した 5 つ以外は拒む。展開できないまま残せば、その文字列がユーザー名や
 // ホスト名やコマンドの引数としてそのまま使われる。
@@ -152,16 +152,8 @@ type Stage struct {
 // ExpandRoute は、alias とその中のすべての踏み台ホストの ProxyJump 連鎖を展開する。
 // これにより、最初のホップだけでなく経路の全体を表示できる。
 //
-// **値は Resolve から取る。** かつてここは Project を使っていた。あれは Match
-// ブロックを一切適用しない——条件が接続中の状態に依るからで、「どの行が書いたか」
-// を並べる用途ではそれで正しい。**だがここが答えているのは出所ではなく、踏み台へ
-// 実際に繋ぐ宛先である。**
-//
-// 症状は静かではなかったが、正しくもなかった: Project は Match の存在を
-// complexity として記録するので段は「単純ではない」と印されたものの、HostName と
-// User と Port そのものは間違ったまま画面に出た。そして **ProxyJump 自体が Match
-// の下に書かれていれば、経路は丸ごと空になった** ——画面は「踏み台を通らない」と
-// 言い、実際には通る。
+// 接続先の値は Match ブロックを評価する Resolve から取る。出所を示す Project は
+// Match を適用しないため、実際の接続経路の計算には使用しない。
 func ExpandRoute(graph *config.Graph, alias string, facts LocalFacts) ([]Stage, []Complexity) {
 	walk := routeWalk{
 		graph:     graph,
@@ -187,8 +179,8 @@ type routeWalk struct {
 
 func (w *routeWalk) expand(alias string, depth int) ([]Stage, []Complexity) {
 	resolution := Resolve(w.graph, alias, w.facts)
-	// **解決を諦めたことを、経路が無いことにしない。** Match exec を含む設定は
-	// 値を出さない。黙って空の経路を返せば、画面は「踏み台を通らない」と言う。
+	// 解決を諦めたことを、経路が無いことにしない。Match exec を含む設定は
+	// 値を出さない。暗黙に空の経路を返せば、画面は「踏み台を通らない」と言う。
 	if len(resolution.Refusals) > 0 {
 		return nil, []Complexity{{
 			Code:   ComplexityJumpUnresolved,
@@ -243,13 +235,13 @@ func (w *routeWalk) expand(alias string, depth int) ([]Stage, []Complexity) {
 			Depth:  depth,
 			Parent: alias,
 			Hop:    hop,
-			// **リストに書かれた値は、そのホップ自身の設定に勝つ。** OpenSSH が
-			// そうする。書かれていなければ、解決した値が答えである。
+			// リストに書かれた値は、そのホップ自身の設定に勝つ。OpenSSH が
+			// そうする。書かれていなければ、解決した値が結果である。
 			Hostname: hop.Host,
 			User:     hop.User,
 			Port:     hop.Port,
-			// **印は残す。** 値は確定していても、同じ alias を二つのブロックが
-			// 主張しているようなことは、書いた本人には見えていない。
+			// 印は残す。値は確定していても、同じ alias を二つのブロックが
+			// 主張しているようなことは、書いたユーザー本人には見えていない。
 			Complex: len(hopResolution.Notes) > 0 || len(hopResolution.Refusals) > 0,
 		}
 		if len(hopResolution.Refusals) == 0 {
@@ -284,8 +276,8 @@ func (w *routeWalk) expand(alias string, depth int) ([]Stage, []Complexity) {
 
 // whereAccepted は、そのキーワードを採用した行の場所を返す。
 //
-// **値と場所を別々に歩かない。** Resolve は採用した行をそのまま持っているので、
-// 印に添える綴りと行番号はそこから取る。
+// 値と場所を別々に歩かない。Resolve は採用した行をそのまま持っているので、
+// 印に添える表記と行番号はそこから取る。
 func whereAccepted(resolution Resolution, keyword string) Accepted {
 	for _, accepted := range resolution.Accepted {
 		if strings.EqualFold(accepted.Keyword, keyword) {

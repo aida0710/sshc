@@ -19,17 +19,7 @@ import type {
 } from "./forms";
 import { describeBlocker, noteLabels, rowDanger } from "./labels";
 
-// 鍵の画面が開くフォームである。
-//
-// **prop の束は hook の戻り値そのものである。** ワークフローごとに状態をまとめた
-// 結果、そのフォームが要るものは既に 1 つの値になっている——ここで 10 個の prop に
-// 開き直す理由が無い。以前これらは KeysScreen の 1600 行の中に並んでおり、どの入力が
-// どのフォームのものかは、閉じ括弧を数えないと分からなかった。
 
-// namedStoredFor / dedicatedStoredFor は、保管庫がこの鍵の答えを持っているかを見る。
-//
-// **施錠された保管庫は何も答えない。** それでもフィールドを空欄のままにしてよいとは
-// 判断できる。
 function namedStoredFor(phrases: Credential[], item: KeyItem): Credential | undefined {
   return phrases.find((credential) => credential.uses.includes(item.relativePath));
 }
@@ -42,7 +32,6 @@ function hasStoredFor(phrases: Credential[], dedicatedPaths: string[], item: Key
   return namedStoredFor(phrases, item) !== undefined || dedicatedStoredFor(dedicatedPaths, item);
 }
 
-// RelocateForm は、鍵の名前を変える／別のグループへ移す。
 export function RelocateForm({
   form,
   groups,
@@ -95,9 +84,6 @@ export function RelocateForm({
   );
 }
 
-// PassphraseForm は、鍵のパスフレーズを変える／外す。
-//
-// **入力は 1 回の送信の間だけここに居る。** 成功しても失敗しても消える。
 export function PassphraseForm({
   form,
   onSubmit,
@@ -160,7 +146,6 @@ export function PassphraseForm({
   );
 }
 
-// AgentForm は、鍵を ssh-agent へ登録する。
 export function AgentForm({
   form,
   storedPhrases,
@@ -192,8 +177,6 @@ export function AgentForm({
       <p className="text-sm text-ink-muted">{t("keys.registerNote")}</p>
       <Card>
         {item.encrypted && (
-          // 「Passphrase」ではなく「Key passphrase」: 生成フォームにはそれ自身の
-          // フィールドがあり、同じ名前の 2 つのコントロールでは見分けられない。
           <Row label={t("keys.keyPassphrase")} {...(!stored ? {} : { hint: t("keys.typedWins") })}>
             <input
               className={control}
@@ -216,12 +199,7 @@ export function AgentForm({
           </select>
         </Row>
       </Card>
-      {/*
-        保存されたパスフレーズは、鍵の追加を 2 アクションではなく 1 アクションに変える。
-        **ここに現れるのは鍵のパスフレーズだけである** ——このピッカーでアカウント
-        パスワードを提供すれば、リモートホストのログイン資格情報をローカルの鍵に渡す
-        ことになる。だからこそ保管庫は 2 つの名前空間を分けている。
-      */}
+
       {item.encrypted && stored && (
         <p className={hintText}>
           {dedicatedStoredFor(dedicatedPhrasePaths, item)
@@ -261,7 +239,6 @@ export function AgentForm({
   );
 }
 
-// StoredPassphrasePanel は、鍵に保管庫のパスフレーズを割り当てる。
 export function StoredPassphrasePanel({
   form,
   storedPhrases,
@@ -350,11 +327,6 @@ export function StoredPassphrasePanel({
   );
 }
 
-// TrashConfirmation は、鍵をごみ箱へ移す前に、何が一緒に動くかを言う。
-//
-// **公開鍵が秘密鍵の隣から消えても驚かないように。** 両者は 1 つの鍵だからこそ
-// 一緒に移動する。この鍵を名指すホストもここで挙げる——存在しないファイルを指す
-// IdentityFile は、ssh が報告した上でそのまま続行してしまうものである。
 export function TrashConfirmation({
   item,
   members,
@@ -389,7 +361,7 @@ export function TrashConfirmation({
           <ul className="flex flex-col gap-0.5 font-mono text-xs text-notice-ink">
             {item.references.map((reference, index) => (
               <li key={`${reference.configPath}-${reference.line}-${index}`}>
-                {`${reference.hostPatterns.join(" ")} — ${reference.configPath}:${reference.line}`}
+                {`${reference.hostPatterns.join(" ")} · ${reference.configPath}:${reference.line}`}
               </li>
             ))}
           </ul>
@@ -408,10 +380,6 @@ export function TrashConfirmation({
   );
 }
 
-// RelocateResult は、鍵を動かそうとした結果である。
-//
-// **断られた relocation は、報告して忘れるべき失敗ではない。** サーバーは何も
-// 書かずに理由を伝えたので、その理由は画面に残る。
 export function RelocateResult({
   result,
   onClose,

@@ -47,8 +47,8 @@ func TestTheHandoffLetsTheCommandLineAskForOneConnection(t *testing.T) {
 	if answer.Alias != "bastion" {
 		t.Errorf("answer = %+v", answer)
 	}
-	// このフィクスチャには保存済みパスフレーズが無い。**答えは空でよい**
-	// ——コマンドラインは端末で尋ねられる。
+	// このフィクスチャには保存済みパスフレーズが無い。結果は空でよい
+	//コマンドラインは端末で尋ねられる。
 	if answer.Passphrase != "" {
 		t.Errorf("the answer carried a passphrase nobody stored: %+v", answer)
 	}

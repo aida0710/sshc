@@ -31,7 +31,7 @@ func registerDiagnosticsRoutes(engine *echo.Echo, handlers DiagnosticsHandlers) 
 //
 // そのいずれもが、現時点での設定が持つ実行可能なディレクティブに結び付く。
 // それこそが確認ダイアログの表示内容そのものだからである。したがって、確認と
-// リクエストの間に編集が入ると、別のコマンドを黙って実行するのではなく、
+// リクエストの間に編集が入ると、別のコマンドを暗黙に実行するのではなく、
 // トークンが無効になる。
 func addDiagnosticsActions(registry actionRegistry, service *diagnostics.Service) {
 	evidence := func(target string) (string, error) {
@@ -197,7 +197,7 @@ func (h DiagnosticsHandlers) Authentication(c *echo.Context) error {
 
 // TerminalCommand は、alias に対するコマンドテキストを返す。
 //
-// 埋め込みターミナルができたあともこれが残っているのは、自分の端末で開きたい人が
+// 埋め込みターミナルができたあともこれが残っているのは、自分の端末で開きたいユーザーが
 // いるからである。何も起動しないので確認も要らない。
 
 func describeDirectives(directives []effective.Executable) []api.ExecutableDirective {

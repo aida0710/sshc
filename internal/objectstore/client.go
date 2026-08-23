@@ -1,14 +1,11 @@
-// Package objectstore は、このアプリケーションが必要とする範囲の S3 API を話す。
+// Package objectstore は、このアプリケーションで使用する S3 API を実装する。
 //
-// 中身は aws-sdk-go-v2 である。以前はここに手書きの SigV4 署名器と、path-style で
-// URL を組み立てるだけのリクエスト構築があった。読み切れる大きさではあったが、
-// S3 互換ストアごとの差や署名仕様の変更を自前で持ち続ける理由はないため、SDK に
-// それらを任せている。既存設定との互換性のため、アドレッシングは path-style の
-// ままである。
+// aws-sdk-go-v2 を使用し、S3 互換ストアとの差異と署名仕様を SDK に委ねる。
+// 既存設定との互換性を保つため、アドレッシングは path-style とする。
 //
 // このパッケージが残っているのは、SDK が面倒を見ない性質がいくつかあるからである。
 // エンドポイントはループバックでない限り https であること、本文には必ず上限が
-// あること、そしてストアの拒否理由がこのアプリケーションの語彙へ畳まれ、S3 の
+// あること、そしてストアの拒否理由がこのアプリケーションの用語へ畳まれ、S3 の
 // エラードキュメントが呼び出し側へ漏れないこと。
 package objectstore
 
@@ -38,7 +35,7 @@ var (
 	// ErrNotFound は、そのキーの下にオブジェクトが存在しないことを報告する。
 	ErrNotFound = errors.New("no object under that key")
 	// ErrRefused は、それ以外の拒否をすべて報告する。本文は持ち回らない。S3 の
-	// エラードキュメントはバケット名とリクエスト ID を名指しするが、どちらもこの
+	// エラードキュメントにはバケット名とリクエスト ID が含まれるが、どちらもこの
 	// アプリケーションが表示するメッセージに入れてよいものではない。
 	ErrRefused = errors.New("the object store refused the request")
 	// ErrBothConditions は、If-Match と If-None-Match を同時に設定した呼び出しを
@@ -77,7 +74,7 @@ type Object struct {
 	ETag string
 }
 
-// Client は、このアプリケーションが必要とする範囲の S3 API を話す。
+// Client は、このアプリケーションで使用する S3 API を呼び出す。
 type Client struct {
 	HTTP *http.Client
 	// RequestTimeout はリクエスト全体の上限。0 なら 60 秒である。テストや、明示的に
@@ -101,8 +98,8 @@ var ErrInsecureEndpoint = errors.New("the object store endpoint must be https un
 
 // loopbackHosts は、平文の http で到達してよいホスト。
 //
-// これがあるのは、このクライアントを本物の S3 実装 — このマシン上の SeaweedFS か
-// MinIO、あるいは CI のサービスコンテナ — に対して動かせるようにするためである。
+// これがあるのは、このクライアントを本物の S3 実装（このマシン上の SeaweedFS、
+// MinIO、または CI のサービスコンテナ）に対して動かせるようにするためである。
 // 本物のサーバーが条件付き PUT に何をするかを知る方法は、それしかない。
 // ループバック接続はマシンの外からは観測できないので、そこには TLS が守るものが
 // ない。それ以外はすべて https でなければならない。
@@ -296,12 +293,12 @@ func (c Client) Put(ctx context.Context, key string, body []byte, ifMatch, ifNon
 	return aws.ToString(output.ETag), nil
 }
 
-// classify は、ストアの答えをこのアプリケーションの語彙へ畳む。
+// classify は、ストアの結果をこのアプリケーションの用語へ畳む。
 //
-// レスポンスを伴わないエラー — 接続の拒否、名前解決の失敗、タイムアウト — は
+// レスポンスを伴わないエラー（接続の拒否、名前解決の失敗、タイムアウト）は
 // そのまま返す。S3 のエラードキュメントを含みようがないからだ。レスポンスを
 // 伴うものは番兵へ写し、本文はここで捨てる。SDK のエラーはストアが述べた
-// メッセージを持っており、それはバケット名とリクエスト ID を名指しする。
+// メッセージにはバケット名とリクエスト ID が含まれる場合がある。
 func classify(err error) error {
 	var response *awshttp.ResponseError
 	if !errors.As(err, &response) {
@@ -310,7 +307,7 @@ func classify(err error) error {
 	switch response.HTTPStatusCode() {
 	case http.StatusNotFound:
 		return ErrNotFound
-	// 412 は、If-Match または If-None-Match の失敗に対する文書化された答え。
+	// 412 は、If-Match または If-None-Match の失敗に対する文書化された結果。
 	// 409 をここに入れているのは、衝突する書き込みを直列化するストアが代わりに
 	// これを返すことがあるからで、呼び出し側にとって両者の意味は同じ。すなわち、
 	// 誰かが先に到達した、ということである。

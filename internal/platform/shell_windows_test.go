@@ -12,14 +12,14 @@ import (
 
 // このファイルは Windows の runner でしか走らない。どこから選ぶかという方針
 // そのものは internal/platform/windows の検査がどの OS でも走らせるので、ここで
-// 確かめるのは、この機械が本当に答えるかどうかだけである——Windows 自身に尋ねた
+// 確かめるのは、この機械が本当に返すかどうかだけである。Windows 自身に尋ねた
 // 在り処に、実在する PowerShell があること。
 
-// **環境を一つも渡されなくても、シェルは見つからなければならない。**
+// 環境を一つも渡されなくても、シェルは見つからなければならない。
 //
-// ログイン項目や launcher から起こされた常駐プロセスは、環境を持っていない
-// ことがある。Unix が /bin の絶対パスで答えるのと同じ場面で、Windows が
-// 「シェルが無い」と答えれば、ローカル端末は一本も開かない。
+// ログイン項目や launcher から起動された常駐プロセスは、環境を持っていない
+// ことがある。Unix が /bin の絶対パスで返すのと同じ場面で、Windows が
+// 「シェルが無い」と応答すれば、ローカル端末は一本も開かない。
 func TestTheLoginShellNeedsNoEnvironmentOnWindows(t *testing.T) {
 	shell, err := LoginShell(nil)
 	if err != nil {

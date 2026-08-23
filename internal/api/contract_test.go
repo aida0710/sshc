@@ -97,7 +97,7 @@ func TestGeneratedKeyVaultModels(t *testing.T) {
 		t.Fatalf("unexpected reveal response: %#v", reveal)
 	}
 
-	// リクエストは、コミット済みのセッション語彙 — kind と target — を指定する。
+	// リクエストはコミット済みのセッション用語である kind と target を指定する。
 	// evidence は呼び出し側からは決して渡されない。サーバーが、確認ダイアログに
 	// 表示されていた内容から導出する。
 	request := IssueActionRequest{Kind: "private_key.reveal", Target: item.Id}

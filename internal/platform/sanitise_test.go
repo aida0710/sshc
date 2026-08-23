@@ -10,7 +10,7 @@ import (
 func TestSanitiseHomePathsReplacesEveryOccurrence(t *testing.T) {
 	const home = "/Users/tester"
 	// 本物の `ssh -v` の出力は、読み込んだ設定ファイルと identity ファイルを、
-	// それぞれ絶対パスで名指しする。
+	// それぞれ絶対パスで指定する。
 	verbose := "debug1: Reading configuration data /Users/tester/.ssh/config\r\n" +
 		"debug1: identity file /Users/tester/.ssh/id_ed25519 type 3\n" +
 		"debug1: Authenticated to bastion ([203.0.113.10]:22).\n"

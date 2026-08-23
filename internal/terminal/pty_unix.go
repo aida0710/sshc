@@ -13,11 +13,7 @@ import (
 	"github.com/creack/pty"
 )
 
-// UnixStarter は、本物の擬似端末を確保する唯一の実装である。
-//
-// stdlib にこれを行う手段はない。golang.org/x/term が扱えるのは既存の fd の
-// raw モードとサイズだけで、対を確保することはできない。creack/pty は darwin と
-// linux の両方を覆う。
+// UnixStarter は Unix の擬似端末を確保する。
 type UnixStarter struct{}
 
 func NewStarter() Starter { return UnixStarter{} }
@@ -26,8 +22,6 @@ func (UnixStarter) Start(ctx context.Context, command Command, size Size) (Proce
 	if command.Path == "" {
 		return nil, errors.New("terminal: the program path is empty")
 	}
-	// 確保が取り消されたなら、起こさない。ここで起こしてしまえば、誰も
-	// 引き取らない子プロセスが残る。
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -37,9 +31,6 @@ func (UnixStarter) Start(ctx context.Context, command Command, size Size) (Proce
 	}
 	child.Env = command.Env
 	child.Dir = command.Dir
-	// StartWithSize は setsid と TIOCSCTTY を立てる。子は自分のセッションの
-	// リーダーになり、この PTY を制御端末として持つ。だから SIGHUP はその
-	// プロセスグループ全体に届き、ssh が起こした何かが取り残されることはない。
 	file, err := pty.StartWithSize(child, &pty.Winsize{Cols: size.Cols, Rows: size.Rows})
 	if err != nil {
 		return nil, err
@@ -60,9 +51,6 @@ func (p *unixProcess) Resize(size Size) error {
 }
 
 // Hangup は、子のプロセスグループ全体へ SIGHUP を送る。
-//
-// 負の pid を渡すのはグループを指すためであり、それは子が session leader だから
-// 成立する。子ひとつに送ると、その子が起こしたものが親を失ったまま残る。
 func (p *unixProcess) Hangup() error {
 	if p.child.Process == nil {
 		return nil
@@ -77,11 +65,7 @@ func (p *unixProcess) Hangup() error {
 	return nil
 }
 
-// ForceClose は、子のプロセスグループへ SIGKILL を送り、PTY を手放す。
-//
-// SIGHUP と SIGTERM を無視する子が居る。**無視できない合図がひとつ要る。**
-// PTY も閉じるのは、それが pump の読み取りを終わらせ、セッションの done を
-// 閉じさせる唯一の手だからである。
+// ForceClose は子プロセスグループへ SIGKILL を送り、PTY を解放する。
 func (p *unixProcess) ForceClose() error {
 	var killErr error
 	if p.child.Process != nil {

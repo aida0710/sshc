@@ -149,8 +149,6 @@ describe("SecretsPanel", () => {
     );
   });
 
-  // 2 台のマシンがまだ指している名前を削除すれば、後でどこか別の
-  // 場所で両方が壊れる。サーバーは拒否し、画面は何が拒否したかを伝える。
   it("says what still uses a credential the server refused to delete", async () => {
     const user = userEvent.setup();
     const api = buildApi({
@@ -161,11 +159,9 @@ describe("SecretsPanel", () => {
 
     await user.click(within(passwords).getByRole("button", { name: "Delete office-vm" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/still uses/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/still assigned/i);
   });
 
-  // 起動時には何も尋ねられない。閉じた vault はここでそう言い、開くことを
-  // 申し出る。「シークレットが消えた」と読める空リストを見せるのではなく。
   it("offers to unlock rather than showing an empty list", async () => {
     const api = buildApi({
       passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),

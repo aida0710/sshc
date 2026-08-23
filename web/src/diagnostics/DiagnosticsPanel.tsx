@@ -22,20 +22,10 @@ import { PageHeader } from "../ui/page";
 
 type DiagnosticsPanelProps = {
   api?: IntegrationsApi;
-  // Standalone checks suggest known aliases, but the input remains free-form
-  // so a one-off hostname or address does not first have to become a saved connection.
   hosts?: string[];
-  // 診断対象のホスト。独立した section はこれを undefined のままにして
-  // alias を尋ねるが、ホストエディタは既にどの接続が開いているか
-  // 知っているため、それを渡し alias フィールドはレンダリングされない。固定
-  // されたホストは設定の読み込みも省く。それはこのホストでは
-  // なくファイル集合を記述するものであり、Config section の役目である。
   host?: string;
 };
 
-// この画面のすべての検査はユーザーが意図して開始する。パネルを開く
-// ことは設定を読むだけで何も実行しない。他の各操作は
-// 確認を消費し、プロセスを起動し得る。
 export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: DiagnosticsPanelProps) {
   const t = useTranslate();
   const embedded = host !== undefined;
@@ -64,9 +54,6 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
     };
   }, [api, embedded, t]);
 
-  // このパネルのすべての結果は一つのホストについてのものである。別の
-  // ホストを開けばそれらを消さなければならない。さもなければ前の
-  // 接続が得た到達性の判定が新しい名前の下に座り、自分のものであるかのように読めてしまう。
   useEffect(() => {
     setEffective(null);
     setReach(null);
@@ -88,10 +75,6 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
 
   const directives = effective?.executableDirectives ?? [];
 
-  // すべての検査は手書きのボタン一つずつではなく、ここでの一つの
-  // エントリである。要点は防護にある。alias は必須であり、最初の
-  // 検査が実行中は二つ目を始めてはならない。四回書き出せば、五つ目の
-  // 検査がいずれそのどちらかを欠いたまま追加されてしまう。
   const checks: { label: string; start: () => void }[] = [
     {
       label: t("diag.explain"),
@@ -210,23 +193,11 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
         </div>
       ) : null}
 
-      {/*
-        勝者だけでなくすべての候補を列挙する。OpenSSH は
-        keyword について最初に読んだ値を保つため、「なぜこれで
-        あってあれではないのか」は負けた行についての問いであり、
-        それらを隠すテーブルはそれに答えられない。勝者は唯一の行に
-        なるのではなく、印を付けられる。
-      */}
+
       {effective && effective.sources.length > 0 ? (
-        // パスと条件の五つの列は狭いウィンドウには収まらず、
-        // ページが横にスクロールするものになってはならない。
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            {/*
-              キャプションはテーブルを説明するが、列が何であるかは
-              一度も述べていなかった。パス、条件、判定を
-              三つの無ラベルな灰色として描いても、自己説明的にはならない。
-            */}
+
             <caption className={`mb-2 text-left ${hintText}`}>{t("diag.sourcesCaption")}</caption>
             <thead>
               <tr className={tableHeadRow}>
@@ -257,12 +228,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
         </div>
       ) : null}
 
-      {/*
-        design §5.5 と§6.1 はどちらも接続経路が見えることを
-        求めており、このエンジンが解決できなかったホップは推測される
-        のではなく印が付けられる。解決できたホップだけを描けば、
-        「分からない」ことが連鎖の中の自信ありげな空白に変わってしまう。
-      */}
+
       {effective && effective.route.length > 0 ? (
         <div className={`${sectionCard} text-sm`}>
           <h3 className={sectionHeading}>{t("diag.route")}</h3>
@@ -288,11 +254,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
         </div>
       ) : null}
 
-      {/*
-        エンジンは導出できない値を捏造することを拒否する。これらの
-        注記はそう述べる場所であり、「これが答えである」ことと
-        「これについては OpenSSH が権威である」ことの違いである。
-      */}
+
       {effective && effective.complexities.length > 0 ? (
         <div className="rounded border border-notice-line p-3 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.notSimple")}</h3>
@@ -313,11 +275,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
       {reach ? (
         <div className={`${sectionCard} text-sm`}>
           <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
-          {/*
-            アドレスと判定はダッシュで繋いだ一つの文だった。これらは
-            二つの異なる事実——どこへ発信したか、何が起きたか——であり、
-            アドレスは等幅で読む価値のある方である。
-          */}
+
           <p className="font-mono text-xs text-ink">{reach.address}</p>
           <p className="text-ink">{reach.outcome}</p>
           <p className={hintText}>{reach.notice}</p>

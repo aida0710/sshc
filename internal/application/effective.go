@@ -27,20 +27,12 @@ type EffectiveEntry struct {
 }
 
 // Effective は、alias が受け取る値である。
-//
-// **説明ではなく答えである。** 以前は Approximate を常に true にして「これは
-// 出所の説明であって最終的な答えではない、権威は ssh -G だ」と言っていた。
-// エンジンが権威になったので、その但し書きは無くなった。答えられない設定では
-// 値の代わりに理由が notice として出る。
 type Effective struct {
 	Alias   string           `json:"alias"`
 	Entries []EffectiveEntry `json:"entries"`
 	Notices []Notice         `json:"notices,omitempty"`
 }
 
-// declaresExactly は、Host 行がパターンによる一致ではなく
-// この alias を名指ししているかどうかを報告する。catch-all は全 alias に一致し
-// 何も宣言しないので、「2 つのブロックがこの名前を主張する」ケースには決してなり得ない。
 func declaresExactly(patterns []config.Pattern, alias string) bool {
 	for _, pattern := range patterns {
 		if pattern.Negated || pattern.Wildcard {
@@ -53,15 +45,7 @@ func declaresExactly(patterns []config.Pattern, alias string) bool {
 	return false
 }
 
-// ComputeEffective は、この alias が受け取る値を答える。
-//
-// 決めているのは effective.Resolve である。**この関数は歩かない。** 以前はここに
-// 二つ目の走査があり、片方は「出所の説明」もう片方は「接続画面の値」と名乗って
-// 共存していた。どちらも「権威ではない」と言うことで釣り合っていたが、権威を
-// 持つ以上、同じ問いに答えるものが二つあってはならない。
-//
-// 解決できない設定（Match exec、Match final、CanonicalizeHostname など）では、
-// 値の代わりに理由を notice として返す。部分的な答えを黙って返さない。
+// ComputeEffective は、この alias が受け取る値を返す。
 func ComputeEffective(graph *config.Graph, root, alias string, facts effective.LocalFacts) Effective {
 	computed := Effective{Alias: alias, Entries: []EffectiveEntry{}}
 	resolution := effective.Resolve(graph, alias, facts)
@@ -76,7 +60,7 @@ func ComputeEffective(graph *config.Graph, root, alias string, facts effective.L
 		return computed
 	}
 
-	// 答えは確定しているが、書いた本人には見えていないこと。
+	// 結果は確定しているが、書いたユーザー本人には見えていないこと。
 	for _, note := range resolution.Notes {
 		computed.Notices = appendNotice(computed.Notices, Notice{
 			Code: noteNotices[note.Code], Path: note.Path, Line: note.Line, Detail: note.Detail,
@@ -103,11 +87,6 @@ func ComputeEffective(graph *config.Graph, root, alias string, facts effective.L
 }
 
 // LocalFactsFor は、トークン展開に要るこのプロセスの事実を読む。
-//
-// ユーザー名と uid はプロセスの性質であってワークスペースの性質ではないので、
-// home のように注入するのではなくここで読む。ファイルには触れないため、これで
-// テストが本物のホームディレクトリに届くことはない。読めない環境では、その
-// トークンを供給しないことで、解決が拒む形になる。
 func LocalFactsFor(home string) effective.LocalFacts {
 	facts := effective.LocalFacts{Home: home}
 	if current, err := user.Current(); err == nil {
@@ -120,7 +99,7 @@ func LocalFactsFor(home string) effective.LocalFacts {
 	return facts
 }
 
-// noteNotices は、確定した答えに添える印を画面の語彙へ移す。
+// noteNotices は、確定した結果に添える印を画面の用語へ移す。
 var noteNotices = map[string]string{
 	effective.ComplexityDuplicateAlias:    NoticeDuplicateAlias,
 	effective.ComplexityWildcardPattern:   NoticeWildcardShadow,
@@ -128,10 +107,7 @@ var noteNotices = map[string]string{
 	effective.ComplexityUnresolvedInclude: NoticeExplainedValuesOnly,
 }
 
-// refusalNotices は、解決を諦めた理由を画面の語彙へ移す。
-//
-// 知らないコードは explained_values_only へ落とす。新しい理由が増えたときに、
-// 画面が黙って何も言わなくなるより、但し書きが出る方がよい。
+// refusalNotices は設定を解決できなかった理由を UI 用 notice へ変換する。
 var refusalNotices = map[string]string{
 	effective.RefusalMatchExec:    NoticeMatchExecRefused,
 	effective.RefusalMatchFinal:   NoticeMatchFinalRefused,
@@ -149,8 +125,6 @@ type EffectiveChange struct {
 	AfterSources  []Source `json:"afterSources,omitempty"`
 }
 
-// EffectiveDiff は、グループの変更を保存する前に設計 §5.4 が
-// 要求する前後比較ビューである。
 type EffectiveDiff struct {
 	Alias   string            `json:"alias"`
 	Changes []EffectiveChange `json:"changes"`
@@ -230,12 +204,6 @@ func equalStrings(first, second []string) bool {
 	return true
 }
 
-// equalSources は、行番号を無視して 2 つの説明が値をどこから得たかを
-// 比較する。ファイルとそれを支配するブロックが変わっていない値は、
-// そのファイルの他の場所での編集が行を 1 つ下げただけでは変化した
-// ことにならない。それを変化として報告すれば、グループのプレビューが
-// ユーザーがしていない編集で埋まってしまう。別のファイルや別の Host / Match
-// ブロックへ本当に移動した値は Path、Absolute、Condition が異なり、引き続き報告される。
 func equalSources(first, second []Source) bool {
 	if len(first) != len(second) {
 		return false
@@ -255,9 +223,6 @@ func equivalentSource(first, second Source) bool {
 }
 
 // ErrUnresolvable は、その alias に接続できない理由を運ぶ。
-//
-// Refusal は「値を出さない理由」であり、接続もできない。理由の符号をそのまま
-// 持つのは、呼び出し側が画面の文言へ移せるようにするためである。
 type ErrUnresolvable struct {
 	Alias   string
 	Codes   []string
@@ -269,10 +234,6 @@ func (e *ErrUnresolvable) Error() string {
 }
 
 // ResolveConnection は、この alias に接続したときに実際に使われる値を返す。
-//
-// **接続はこの答えだけを使う。** 設定を読むのはここ一箇所であり、SSH を話す
-// パッケージは ~/.ssh/config を開かない——開けば「この alias に接続すると何が
-// 使われるか」に答えるものがまた二つになる。
 func (s *Service) ResolveConnection(alias string) (effective.Values, error) {
 	graph, err := s.resolve()
 	if err != nil {

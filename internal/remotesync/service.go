@@ -27,31 +27,21 @@ const StatePath = "sshc/sync-state.json"
 // tar.gz である。ライブのオブジェクトも、日付付きのコピーも、これを持つ。
 const archiveSuffix = "tar.gz.enc"
 
-// ObjectName は、設定が指すパスの下に置かれるライブのスナップショット。
-//
-// 名前がそれ自体を語る。envelope の内側でアーカイブは tar.gz であり、オブジェクト
-// 自体は暗号文である。以前の名前 — workspace.snapshot — はそのどちらも語らなかった
-// し、誰も知らない拡張子は、それをダウンロードした誰かに「このファイルは壊れて
-// いる」と結論させかねない。
+// ObjectName は、設定したパスの下に置く最新スナップショットの名前。
+// 内容が暗号化された tar.gz であることを接尾辞で示す。
 const ObjectName = "workspace." + archiveSuffix
 
 // VaultPath は、保管庫がディスク上で置かれている場所。
 const VaultPath = "sshc/secrets"
 
-// TravelPath は、保管庫がスナップショットの中で名乗る名前。
-//
-// **別の名前であることに意味がある。** 中に入っているのは封ではなく中身なので、
-// 受け取った側がそのままディスクへ置いてはならない。名前が違えば、置く前に必ず
-// この経路を通る。
+// TravelPath は、復号済みの vault 文書をスナップショット内で識別する名前。
+// VaultPath と分けることで、受信時にローカルの鍵による再暗号化を必須にする。
 const TravelPath = "sshc/secrets.json"
 
 // SnapshotPrefix は、ライブのオブジェクトの隣に、push ごとの日付付きコピーを保持する。
 //
-// ライブのオブジェクトが固定のキーを保つのは、条件付き書き込みには条件をかける
-// 対象のオブジェクトがひとつ必要であり、その条件こそが、あるマシンが別のマシンの
-// 作業を黙って踏み潰すのを止めている唯一のものだからだ。これらのコピーは手で読む
-// ためのものである。このアプリケーションのどれもそれを読まないし、際限なく溜まる
-// のを防ぐのはバケットのライフサイクルルールである。
+// 固定キーへの条件付き書き込みで同時更新を検出する。日付付きコピーは手動復旧用で、
+// 保持期間はバケットのライフサイクルルールで管理する。
 const SnapshotPrefix = "snapshots/"
 
 // datedLayout は、スナップショットが作られた瞬間にちなんでコピーを名付ける。
@@ -110,11 +100,11 @@ type Direction string
 const (
 	// DirectionBoth は既定。このマシンは push もでき、apply もできる。
 	DirectionBoth Direction = "both"
-	// DirectionPush は、そのマシンが源であるとき — 設定が保存する価値のあるものである
-	// ワークステーション — のためのもの。スナップショットを適用しないので、別のマシン
+	// DirectionPush は、そのマシンが源であるとき、設定が保存する価値のあるものである
+	// ワークステーション、のためのもの。スナップショットを適用しないので、別のマシン
 	// が push したものがこのディスク上のものを上書きすることはない。
 	DirectionPush Direction = "push"
-	// DirectionPull は、そのマシンが写しであるとき — 共有のマシンや一時的なマシン —
+	// DirectionPull は、そのマシンが写しであるとき、共有のマシンや一時的なマシン 、
 	// のためのもの。バケットへ書き込まないので、ここで行ったことが他のマシンへ届く
 	// ことはない。
 	DirectionPull Direction = "pull"
@@ -198,8 +188,8 @@ type state struct {
 	// 次の条件付き書き込みが比較される世代である。
 	ETag string `json:"etag"`
 	// Key は、その ETag が属するオブジェクト。世代はひとつのオブジェクトについての
-	// 事実なので、設定を別のオブジェクトへ向けること — 新しいパスや、オブジェクトに
-	// 正直な名前を与えた改名 — は、保存された世代を無意味にする。これがないと、次の
+	// 事実なので、設定を別のオブジェクトへ向けること、新しいパスや、オブジェクトに
+	// 正直な名前を与えた改名、は、保存された世代を無意味にする。これがないと、次の
 	// push は存在しないオブジェクトの世代を要求し、「別のマシンが push した」として
 	// 拒否され、そこで勧められた pull は、pull すべきものを何ひとつ見つけられな
 	// かった。
@@ -218,8 +208,8 @@ type state struct {
 
 // FileSource は、スナップショットに含めるべきワークスペース相対のパスを列挙する。
 //
-// これを注入するのは、「どのファイルが設定の一部なのか」が Include グラフの答える
-// 問いであり、このパッケージからはそれが見えないからだ。答えを渡す形にすることで
+// これを注入するのは、「どのファイルが設定の一部なのか」が Include グラフの返す
+// 問いであり、このパッケージからはそれが見えないからだ。結果を渡す形にすることで
 // 依存の向きが正しく保たれる。ここにあるものは、設定サービスを何ひとつ import
 // しない。
 type FileSource func() ([]string, error)
@@ -243,18 +233,12 @@ type Service struct {
 	now          func() string
 	newOrigin    func() (string, error)
 
-	// OpenVault と SealVault は、保管庫を旅に出し、旅から受け取る両替所である。
-	//
-	// **このパッケージは secret を import しない。** 依存の向きは、storage の
-	// Seal と Unseal がそうしているのと同じ理由でこの形に保つ——同期は、保管庫が
-	// 何でできているかを知らないまま運べる。
-	//
-	// どちらも nil なら、保管庫は封のまま運ばれる。それは版 1 の挙動であり、
-	// マスターパスワードが端末をまたいで共有されていた頃の挙動である。
+	// OpenVault と SealVault は、vault 文書の復号と受信側での再暗号化を抽象化する。
+	// secret パッケージへの依存を避けるため、関数として注入する。
+	// どちらも nil の場合は、互換性のため暗号化済みファイルをそのまま同期する。
 	OpenVault func() ([]byte, error)
 	SealVault func(document []byte) ([]byte, error)
-	// VaultAdopted は、保管庫の中身を置き換えたあとに鳴る。走っている実行が
-	// 古い秘密を配り続けないための合図であって、同期はそれが誰に届くかを知らない。
+	// VaultAdopted は、vault の置換後にメモリ上の状態を再読込する通知。
 	VaultAdopted func() error
 
 	mu      sync.Mutex
@@ -278,8 +262,8 @@ func NewService(workspace *storage.Workspace, transactions *storage.Manager, fil
 func (s *Service) Configure(config Config, credentials objectstore.Credentials, client *objectstore.Client) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// 末尾のスラッシュがリクエストへ届いたことはない — クライアントはパス全体を
-	// 置き換える — が、スナップショットの行き先を表示するすべての画面には
+	// 末尾のスラッシュがリクエストへ届いたことはない、クライアントはパス全体を
+	// 置き換えるが、スナップショットの行き先を表示するすべての画面には
 	// "https://host//bucket" として届いていた。設定を保存する場所だけでなくここで
 	// 切り詰めることで、これができる前に保存されたものもきれいになる。
 	config.Endpoint = strings.TrimRight(config.Endpoint, "/")
@@ -317,17 +301,10 @@ func (s *Service) Direction() Direction {
 	return s.binding.config.Direction
 }
 
-// neverTravels は、どんな名前を与えられようとスナップショットが運んではならない
-// ファイル。
-//
-// この除外は以前は暗黙だった。Collect は自分が取るものを列挙するので、列挙されて
-// いないものは外れる。それは Collect が自分で加えるものについては真だが、与えられる
-// ものについては真ではない — ファイルソースは Include グラフであり、これらのいずれか
-// を名指しする Include 行があれば、それは入ってしまう。そうなればバケットへの鍵が
-// バケットの中に入る。この設計が避けるために存在するまさにその配置なので、ないもの
-// と決めてかからず、ここで拒否する。
+// neverTravels は、Include グラフに現れても同期対象から除外するファイル。
+// オブジェクトストア資格情報や端末固有の状態をスナップショットへ含めない。
 var neverTravels = []string{
-	// オブジェクトストアの資格情報。封じられてはいるが、自分のバケットへの鍵を運ぶ
+	// オブジェクトストアの資格情報。暗号化されてはいるが、自分のバケットへの鍵を運ぶ
 	// スナップショットは、スナップショットをひとつ入手した者が以後のすべてを取得
 	// できることを意味する。
 	SettingsPathRelative,
@@ -343,9 +320,8 @@ var neverTravels = []string{
 	StatePath,
 }
 
-// SettingsPathRelative は、封をされたオブジェクトストアの設定。secret パッケージ
-// から import せずここで名指ししてある。あちらはこちらを何ひとつ import しないし、
-// これからも import しないままでなければならない。
+// SettingsPathRelative は、暗号化されたオブジェクトストア設定の相対パス。
+// secret パッケージとの循環依存を避けるため、ここでも定義する。
 const SettingsPathRelative = "sshc/sync-settings"
 
 func excluded(relative string) bool {
@@ -359,9 +335,9 @@ func excluded(relative string) bool {
 
 // Collect は、スナップショットに含めるべきすべてのファイルを読む。
 //
-// すなわち、FileSource が名指しするもの — エントリファイルと、Include グラフが
-// ワークスペース内で到達するすべて — に加えて、metadata.json、パスワードの vault、
-// そしてすべての鍵である。ソースが名指しするのに存在しないファイルは、失敗させず
+// すなわち、FileSource が指定するもの、エントリファイルと、Include グラフが
+// ワークスペース内で到達するすべてに加えて、metadata.json、パスワードの vault、
+// そしてすべての鍵である。ソースが指定するのに存在しないファイルは、失敗させず
 // にスキップする。Include はまだ存在しないファイルを指しうるし、それは診断であって
 // 同期を拒む理由ではない。
 func (s *Service) Collect() (Manifest, map[string][]byte, error) {
@@ -378,15 +354,12 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 	if err != nil {
 		return Manifest{}, nil, err
 	}
-	// **背景の画像も旅に出る。** metadata が名指しするのは綴りだけなので、
-	// 画像を置いていかれた端末は「選ばれているのに何も出ない」状態になる。
-	// Android は自分でファイルを選べない（サンドボックスの外を見られない）ので、
-	// **あの端末へ画像を持ち込む道はこれしかない。**
+	// metadata が参照する背景画像も同期する。Android はサンドボックス外の
+	// ファイルを直接選択できないため、同期経由で画像本体を受け取る。
 	relatives = append(relatives, backgrounds...)
 	relatives = append(relatives, "sshc/metadata.json")
-	// **保管庫は、両替所があるならファイルとしては載せない。** 載せれば、
-	// この端末のマスターパスワードで封じられたものが旅に出ることになり、
-	// 受け取った端末はそれ以降、送り主のパスワードでしか開けなくなる。
+	// OpenVault がある場合は、端末固有の鍵で暗号化された vault ファイルを除外し、
+	// 復号済み文書を同期用の鍵で保護する。
 	if s.OpenVault == nil {
 		relatives = append(relatives, VaultPath)
 	}
@@ -399,10 +372,7 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 		if seen[relative] || checkPath(relative) != nil || excluded(relative) {
 			continue
 		}
-		// **保管庫のファイルは、両替所があるなら決して載せない。** ファイル
-		// ソースは Include グラフであり、これを名指しする行があれば入って
-		// しまう——入れば、この端末のマスターパスワードで封じられたものが
-		// 旅に出ることになる。
+		// Include グラフから渡された場合も、端末固有の鍵で暗号化された vault は除外する。
 		if relative == VaultPath && s.OpenVault != nil {
 			continue
 		}
@@ -463,7 +433,7 @@ func (s *Service) walkKeys() ([]string, error) {
 }
 
 // walkUnder は、ワークスペース相対のディレクトリ 1 つの下にある通常ファイルを
-// 集める。無ければ何も返さない——**同期を拒む理由ではない。**
+// 集める。無ければ何も返さない。同期を拒む理由ではない。
 func (s *Service) walkUnder(directory string) ([]string, error) {
 	root := filepath.Join(s.workspace.Root(), filepath.FromSlash(directory))
 	var found []string
@@ -494,9 +464,9 @@ func (s *Service) walkUnder(directory string) ([]string, error) {
 //
 // これは、打ち間違いと「正しく見えるのに何時間もあとの最初の push で、タイプミスを
 // した画面から遠く離れたところで失敗する設定」とのあいだに立つものである。まだ
-// スナップショットを持たないバケットは「見つからない」と答えるが、それは機能して
+// スナップショットを持たないバケットは「見つからない」と返すが、それは機能して
 // いるバケットである。問いは、このエンドポイント・このバケット名・この資格情報が、
-// 答えを返すストアに届くかどうかであって、そこへ何かが push されたかどうかでは
+// 結果を返すストアに届くかどうかであって、そこへ何かが push されたかどうかでは
 // ない。
 func (s *Service) Check(ctx context.Context) error {
 	binding, err := s.configuredBinding()
@@ -516,12 +486,10 @@ func Check(ctx context.Context, client *objectstore.Client, key string) error {
 	return nil
 }
 
-// Push は、このワークスペースを封じて書き込む。リモートが動いていれば拒否する。
+// Push は、このワークスペースを暗号化して書き込む。リモートが動いていれば拒否する。
 //
-// 条件こそが要点のすべてである。最初の書き込みには If-None-Match: *、それ以降の
-// すべての書き込みには If-Match: <最後に見た ETag>。これにより、どの push も別の
-// マシンの作業を黙って踏み潰せない — それが、これについて「自動」という語を安全に
-// 使えるようにしている。
+// 最初の書き込みには If-None-Match: *、以後は最後に確認した ETag を If-Match に
+// 指定し、別端末による更新を上書きしない。
 func (s *Service) Push(ctx context.Context, passphrase string) (PushResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
@@ -651,7 +619,7 @@ func (s *Service) Pull(ctx context.Context, passphrase string, resolve Resolutio
 		return PullResult{}, err
 	}
 	// この envelope の中のパラメータを選んだのは、それを書いた誰かであって、必ずしも
-	// このインストールではない。他人のスナップショットが、パスフレーズの誤りが判明
+	// このインストールではない。別のユーザーのスナップショットが、パスフレーズの誤りが判明
 	// する前にこのマシンへ 1 ギガバイトと 16 スレッドを費やさせられるようであっては
 	// ならない。
 	archive, _, err := envelope.OpenWithin(object.Body, passphrase, envelope.AcceptedFromRemote)
@@ -701,7 +669,7 @@ func (s *Service) Apply(result PullResult) error {
 	}
 	if len(result.Request.Changes)+len(result.Request.Removals) > 0 {
 		// 別のマシンからのスナップショットは、このマシンにはないかもしれない
-		// ディレクトリ — connections/work/、keys/work/ — を名指しする。そして
+		// ディレクトリ（connections/work/、keys/work/）を指定する。そして
 		// トランザクションマネージャが所有するのはファイルであってディレクトリでは
 		// ない。ResolveForWrite は、親のない書き込みを拒否する。そこで、その
 		// ディレクトリを同じリクエストに載せる。以前はジャーナルの外で作っており、
@@ -712,7 +680,7 @@ func (s *Service) Apply(result PullResult) error {
 			return err
 		}
 		// 保管庫を置き換えたなら、それを配っている側に読み直させる。読み直さな
-		// ければ、運ばれてきたパスワードは次に解錠するまで存在しないのと同じで
+		// ければ、運ばれてきたパスワードは次にロック解除するまで存在しないのと同じで
 		// ある。
 		if s.VaultAdopted != nil && replacesVault(s.workspace.Root(), result.Request) {
 			if err := s.VaultAdopted(); err != nil {
@@ -776,9 +744,7 @@ func (s *Service) localDigests(remote Manifest, base *Manifest) (map[string]stri
 
 	digests := map[string]string{}
 	for path := range paths {
-		// **旅の名前に対応するファイルは、ディスクに無い。** ここでディスクを
-		// 読めば必ず「こちらには無い」となり、保管庫は毎回そのまま上書きされる
-		// ——両側で同じ中身でも、である。突き合わせる相手は中身である。
+		// TravelPath はディスク上に存在しないため、復号済み vault 文書の digest を使う。
 		if path == TravelPath && s.OpenVault != nil {
 			document, err := s.OpenVault()
 			if err != nil {
@@ -816,7 +782,7 @@ func (s *Service) readState() (state, error) {
 	var parsed state
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		// 壊れた state ファイルは回復可能である。次の pull はこのマシンを、一度も
-		// 同期していないマシンとして扱う。それは保守的な扱いだ — 何も削除せず、
+		// 同期していないマシンとして扱う。それは保守的な扱いだ、何も削除せず、
 		// 推測する代わりに衝突として報告する。
 		return state{}, nil
 	}
@@ -844,7 +810,7 @@ func (s *Service) writeState(next state) error {
 			Path:         s.statePath(),
 			Contents:     body,
 			Precondition: precondition,
-			// state は秘密を何も名指ししないが、このアプリケーション自身のファイルで
+			// state は秘密を何も指定しないが、このアプリケーション自身のファイルで
 			// あり、同期のたびにその世代が増えるのは、バックアップディレクトリの中の
 			// 雑音でしかない。
 			SkipBackup: true,
@@ -889,28 +855,26 @@ func (s *Service) DisplayPath(absolute string) string {
 	return filepath.ToSlash(relative)
 }
 
-// RekeyResult は、封じ直したオブジェクトについて画面が言えることである。
+// RekeyResult は、再暗号化したオブジェクトについて画面が言えることである。
 type RekeyResult struct {
 	// Bytes は、書き戻した暗号文の大きさ。
 	Bytes int64
-	// CompletedAt は、封じ直しが済んだ時刻。
+	// CompletedAt は、再暗号化が済んだ時刻。
 	CompletedAt string
 }
 
-// Rekey は、リモートのライブオブジェクトを古い鍵で開き、新しい鍵で封じ直す。
+// Rekey は、リモートのライブオブジェクトを古い鍵で開き、新しい鍵で暗号化し直す。
 //
-// **これは移行のためだけにある。** かつてスナップショットを封じていたのは、この
-// ワークスペースのマスターパスワードそのものだった。鍵をそこから外した以上、
-// すでにバケットにあるものは、新しい鍵では開かない。人にできるのは「古い方を一度
-// だけ思い出す」ことであり、この関数はそれを受け取って封だけを替える。
+// 旧形式はマスターパスワードで暗号化されているため、移行時だけ古いパスワードで
+// 復号し、現在の同期鍵で再暗号化する。
 //
-// **ワークスペースには 1 バイトも触れない。** 中身は開いたものをそのまま封じ直す
+// ワークスペースには 1 バイトも触れない。中身は開いたものをそのまま暗号化し直す
 // のであって、作り直すのではない。したがって失敗しても、ローカルにもリモートにも
-// 何も起きていない——古い鍵が違えば、開く前に止まる。
+// 何も起きていない。古い鍵が違えば、開く前に止まる。
 //
 // 書き戻しは、いま読んだ ETag を条件にする。その間に他の端末が push していたなら
-// ErrRemoteMoved であり、もう一度やればよい。**条件を外して上書きすれば、
-// 封じ直しが他人の作業を消す操作になる。**
+// ErrRemoteMoved であり、もう一度やればよい。条件を外して上書きすれば、
+// 再暗号化が別のユーザーの作業を消す操作になる。
 func (s *Service) Rekey(ctx context.Context, from, to string) (RekeyResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
@@ -936,9 +900,9 @@ func (s *Service) Rekey(ctx context.Context, from, to string) (RekeyResult, erro
 	if err != nil {
 		return RekeyResult{}, err
 	}
-	// 読んだ版だけを置き換える。push と同じ組み合わせである——ETag を返さない
+	// 読んだ版だけを置き換える。push と同じ組み合わせである。ETag を返さない
 	// バケットでは「まだ無いときだけ作る」に落ちるので、いま読んだものが在る以上
-	// 必ず条件で弾かれる。**無条件の書き込みへは決して落ちない。**
+	// 必ず条件で弾かれる。無条件の書き込みへは決して落ちない。
 	ifMatch, ifNoneMatch := object.ETag, ""
 	if ifMatch == "" {
 		ifNoneMatch = "*"
@@ -949,17 +913,14 @@ func (s *Service) Rekey(ctx context.Context, from, to string) (RekeyResult, erro
 		}
 		return RekeyResult{}, err
 	}
-	// **state は触らない。** 中身は変わっていないので、このマシンが最後に同期した
+	// state は触らない。中身は変わっていないので、このマシンが最後に同期した
 	// ものも変わっていない。ETag だけは新しくなるが、次の push が条件を外したときに
 	// 分かることであり、そこは既存の道が扱う。
 	return RekeyResult{Bytes: int64(len(sealed)), CompletedAt: s.now()}, nil
 }
 
-// exchangeVault は、旅の名前で届いた中身を、この端末の封に包み直して置き換える。
-//
-// **届くのは中身であって、ディスク上のファイルではない。** だから前提も組み直す
-// ——Plan が組んだのは旅の名前についてのものだからである。そして送り主に保管庫が
-// 無かったことを、こちらのものを消す理由にはしない。
+// exchangeVault は TravelPath の文書を受信側の鍵で再暗号化し、VaultPath へ置く。
+// 送信側に vault がない場合は、受信側の vault を削除しない。
 func (s *Service) exchangeVault(request *storage.Request) error {
 	if s.SealVault == nil {
 		return nil
@@ -990,7 +951,7 @@ func (s *Service) exchangeVault(request *storage.Request) error {
 	return nil
 }
 
-// replacesVault は、このリクエストが保管庫のファイルを書き換えるかを答える。
+// replacesVault は、このリクエストが保管庫のファイルを書き換えるかを返す。
 func replacesVault(root string, request storage.Request) bool {
 	vault := filepath.Join(root, filepath.FromSlash(VaultPath))
 	for _, change := range request.Changes {
@@ -1001,10 +962,10 @@ func replacesVault(root string, request storage.Request) bool {
 	return false
 }
 
-// Diverged は、このディスクが最後に同期したものと違うかを答える。
+// Diverged は、このディスクが最後に同期したものと違うかを返す。
 //
-// 巡回が「押し出すものがあるか」を知るための問いである。**中身を数えるのは
-// ここだけで、送るかどうかの判断に HTTP は 1 本も要らない。**
+// 巡回が「押し出すものがあるか」を知るための問いである。中身を数えるのは
+// ここだけで、送るかどうかの判断に HTTP は 1 本も要らない。
 func (s *Service) Diverged() (bool, error) {
 	manifest, _, err := s.Collect()
 	if err != nil {
@@ -1034,10 +995,9 @@ func (s *Service) Diverged() (bool, error) {
 }
 
 // RemoteMoved は、ライブのオブジェクトが、このマシンが最後に見たものと違うかを
-// 答える。
+// 返す。
 //
-// **毎回まるごと取ってこないための一手である。** HEAD は ETag だけを返すので、
-// 何も変わっていない分には、巡回はほとんど何も運ばない。
+// HEAD で ETag だけを確認し、スナップショット全体の取得を避ける。
 func (s *Service) RemoteMoved(ctx context.Context) (bool, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {

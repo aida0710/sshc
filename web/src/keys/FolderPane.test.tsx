@@ -68,9 +68,6 @@ describe("FolderPane", () => {
     expect(onDropInto).toHaveBeenCalledWith({ kind: "ungrouped" });
   });
 
-  // **「すべて」は置き場ではない。** あれは絞り込みを外すことであって、
-  // ~/.ssh の中の実在の場所ではない。放れてしまうと、利用者は鍵をどこかへ
-  // 移したつもりになるが、移った先は無い。
   it("refuses a key dropped onto all keys, which is a filter and not a place", () => {
     const { onDropInto } = paint({ dragging: true });
 

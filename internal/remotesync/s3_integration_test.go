@@ -113,7 +113,7 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	// 実際のマシンは、埋まっているバケットに出会えばまず pull する。これも同じことを
 	// する。pull すれば ETag を知るので、push は本来あるべき If-Match になる。
 	// ワークスペースがすでに一致している場合、Pull は完全な結果とともに
-	// ErrNothingToApply を答える — それは API の形であって失敗ではなく、その結果を
+	// ErrNothingToApply を返す、それは API の形であって失敗ではなく、その結果を
 	// apply することが ETag を記録する。
 	result, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	switch {
@@ -122,9 +122,9 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 			t.Fatalf("Apply of the snapshot already in the bucket = %v", err)
 		}
 	case errors.Is(err, remotesync.ErrNoSnapshot), errors.Is(err, objectstore.ErrNotFound):
-		// 空のバケット — 新しいコンテナが始まる状態である。そこから学ぶものは何もなく、
-		// push はオブジェクトを作る書き込みになる。サービスが答えるのは ErrNoSnapshot で、
-		// その下のクライアントが答えるのは ErrNotFound。どちらもここへ届き
+		// 空のバケット、新しいコンテナが始まる状態である。そこから学ぶものは何もなく、
+		// push はオブジェクトを作る書き込みになる。サービスが返すのは ErrNoSnapshot で、
+		// その下のクライアントが返すのは ErrNotFound。どちらもここへ届き
 		// うる。
 	default:
 		t.Fatalf("Pull before push = %v", err)

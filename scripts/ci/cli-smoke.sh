@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 #
-# 出荷するその実体を、起こして確かめる。
-#
-# **綴りは中身を保証しない。** verify-artifact-name が見るのはファイル名だけで、
-# nativebuild/machine.go 自身が「`sshc-linux-arm64` という名前の amd64 バイナリは
-# その検査を通る」と書いている。束の smoke を消したあと、リリースは
-# `make test` → build → upload だけになり、**上げるバイナリを一度も起動しなかった。**
+# リリース対象のバイナリを実行して検証する。
+# ファイル名だけでは OS やアーキテクチャを保証できない。
 #
 # ここが確かめるのは、開発機の go test では出ない類の壊れ方である:
 #
@@ -13,8 +9,7 @@
 #   - 画面が入っていない（go:embed が空でも build は通る）
 #   - engine が起きない（受け口、handoff、状態ディレクトリ）
 #
-# **走らせられるのは host の arch だけである。** 別の arch のものは名前しか
-# 確かめられない。それを黙って「確かめた」と言わない。
+# 実行検証はホストと同じアーキテクチャの成果物だけを対象とする。
 set -euo pipefail
 
 if [ "$#" -ne 2 ]; then
@@ -39,7 +34,7 @@ fi
 say() { printf '  %s\n' "$1"; }
 echo "cli-smoke: $binary"
 
-# ① 自分が何であるかを言えること。
+# ① バージョン、OS、アーキテクチャを確認する。
 version_line=$("$binary" version)
 say "$version_line"
 [ "$version_line" = "sshc $expected $goos/$goarch" ] || {
@@ -47,10 +42,7 @@ say "$version_line"
 	exit 1
 }
 
-# ② engine が居ないときに、次に何をすればよいかを言えること。
-#
-# **綴りではなく行動を返す。** ここが `open ...: no such file or directory` を
-# 返していた頃、入れた直後の人が最初に読むのがそれだった。
+# ② engine が停止中の場合に復旧手順が表示されることを確認する。
 set +e
 absent=$("$binary" status 2>&1)
 absent_code=$?
@@ -61,7 +53,7 @@ case "$absent" in
 	*) echo "the no-engine message does not say what to do: $absent" >&2; exit 1 ;;
 esac
 
-# ③ 起こして、答えて、畳めること。
+# ③ 起動、応答、正常終了を確認する。
 home=$(mktemp -d)
 export HOME="$home"
 mkdir -p "$home/.ssh"
@@ -84,8 +76,7 @@ case "$status" in
 	*) echo "status did not report a running engine: $status" >&2; exit 1 ;;
 esac
 
-# ④ **画面が入っていること。** go:embed の中身が空でもビルドは通る。
-#    実際に入口を開いて、SPA の器が返ることを見る。
+# ④ 埋め込み UI を HTTP 経由で取得できることを確認する。
 entrance=$("$binary" open)
 page=$(curl --silent --show-error --fail --max-time 10 "$entrance")
 case "$page" in

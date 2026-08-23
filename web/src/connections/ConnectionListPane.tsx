@@ -5,11 +5,6 @@ import { ConnectionTree, type HostSelection } from "./ConnectionTree";
 import type { DragPayload } from "./dragdrop";
 
 
-// ConnectionListPane は、左の柱である。宣言されている接続の木と、新しく作る入口。
-//
-// **狭い画面では、これと詳細のどちらかしか出ない。** どちらを出すかは幅ではなく
-// 「何かが選ばれているか」で決まり、それは既にルートが持っている——だから
-// matchMedia は要らない。選択が変われば、クラスが変わる。
 export function ConnectionListPane({
   overview,
   selection,

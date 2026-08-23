@@ -15,8 +15,6 @@ describe("canDrop, for a connection", () => {
     expect(canDrop(nas, "work", groups)).toBe(true);
   });
 
-  // 空の target は"no group"見出しであり、ディレクトリへではなく
-  // エントリファイルへ戻す移動である。
   it("accepts the no-group heading", () => {
     expect(canDrop(nas, "", groups)).toBe(true);
   });
@@ -40,14 +38,10 @@ describe("canDrop, for a group", () => {
     expect(canDrop(work, "work", groups)).toBe(false);
   });
 
-  // グループは自分自身を含むことができない。サーバーはこれを
-  // ErrGroupSelfNesting として拒否する。target は単に提示されない。
   it("refuses its own descendant", () => {
     expect(canDrop(work, "work/eu", groups)).toBe(false);
   });
 
-  // ErrGroupExists。二つのグループは同じパスを共有できず、サーバーは
-  // ユーザーがどちらを残すつもりだったかを推測しない。
   it("refuses a parent that already holds a group of that name", () => {
     expect(canDrop({ kind: "group", name: "client-a/work" }, "", ["client-a/work", "work"])).toBe(false);
   });
@@ -60,10 +54,6 @@ describe("canDrop, for a group", () => {
     expect(canDrop(work, "", groups)).toBe(false);
   });
 
-  // ValidateGroupName は七つ以上のセグメントを拒否する。この制限は
-  // 鍵スキャナーに由来する。スキャナーは~/.ssh から八階層下まで辿り、
-  // そのうち一つを"keys"に使う。七つ目のグループセグメントにある鍵は
-  // 一覧に載らず、インベントリから消えてしまう。
   it("refuses a nesting deeper than six segments", () => {
     const deep = ["a", "a/b/c/d/e/f"];
     expect(canDrop({ kind: "group", name: "a" }, "a/b/c/d/e/f", deep)).toBe(false);

@@ -1,11 +1,5 @@
-// Package sshclient は、このプロセスの中で SSH を話す。
-//
-// 外部の ssh を起こさない。**ProxyCommand だけが例外で、あれは利用者が
-// 「これで繋げ」と書いた綴りそのものである**（proxycommand.go）。
-//
-// 設定を読むのは internal/effective であり、このパッケージが受け取るのは
-// その答えだけである——~/.ssh/config をここで読むと、「この alias に接続すると
-// 何が使われるか」に答えるものがまた二つになる。
+// Package sshclient は、解決済みの ssh_config 設定を使ってプロセス内で SSH 接続を実行する。
+// 外部プログラムを起動するのは、利用者が明示した ProxyCommand だけである。
 package sshclient
 
 import (
@@ -29,10 +23,7 @@ var (
 	ErrNoHostName = errors.New("this alias resolves to no host name")
 )
 
-// Notice は、接続はするが honour しなかった設定ひとつである。
-//
-// Refusal と違って接続は続く。転送が無いことを理由に接続そのものを断ると、
-// 転送を使っていない日にも繋がらなくなる。
+// Notice は、接続を続行しつつ適用しなかった設定を報告する。
 type Notice struct {
 	Keyword string
 	Detail  string
@@ -40,11 +31,10 @@ type Notice struct {
 
 // unhonoured は、読みはするが従わないキーワードである。
 //
-// **ここに無いものは黙って無視される。** OpenSSH の全キーワードを列挙するのでは
+// ここに無いものは暗黙に無視される。OpenSSH の全キーワードを列挙するのでは
 // なく、「利用者が書いたのに効かない」と気づける必要があるものだけを挙げる。
 //
-// **「まだ無い」と「無い」を区別して書く。** 永久に無いものを、来週来るかの
-// ように言わない。落とすと決めた理由はそれぞれの文言に入れてある。
+// 各メッセージには適用しない理由を含める。
 var unhonoured = map[string]string{
 	// 無い。
 	"remoteforward":   "sshc does not ask the remote to listen; that inverts the direction of trust and depends on the server's AllowTcpForwarding",
@@ -114,24 +104,24 @@ type Target struct {
 	// Jump は ProxyJump の連鎖である。手前から順に繋ぐ。
 	Jump []Target
 
-	// ProxyCommand は、この接続先へ届くために起こすプログラムの綴りである。
+	// ProxyCommand は、この接続先へ届くために起動するプログラムの表記である。
 	//
-	// **トークンは展開済みである。** 解決器は生のまま返す——`ssh -G` がそう
+	// トークンは展開済みである。解決器は生のまま返す。`ssh -G` がそう
 	// するからで、OpenSSH が展開するのは繋ぐ瞬間である。空なら普通に TCP で繋ぐ。
 	ProxyCommand string
 
 	// Notices は、この接続について言っておくべきことである。
 	//
-	// **Target が持っている。** 以前は NewTarget が別の戻り値として返しており、
-	// 唯一の呼び出し元がそれを `_` で捨てていた——「読むが従わない」と書いた
+	// Target が持っている。以前は NewTarget が別の戻り値として返しており、
+	// 唯一の呼び出し元がそれを `_` で捨てていた。「読むが従わない」と書いた
 	// 7 つのキーワードは、誰にも届いていなかった。値と一緒に運べば、捨てるには
 	// 捨てると書かなければならない。
 	Notices []Notice
 
 	// Forwards は、この接続の上に開く転送である。
 	//
-	// **bind するのはループバックだけである。** 設定がそれ以外を求めていたら
-	// 束ねて notice を出す——転送の設定ひとつで繋がらなくなる方が困る。
+	// bind するのはループバックだけである。設定がそれ以外を求めていたら
+	// 束ねて notice を出す。転送の設定ひとつで繋がらなくなる方が困る。
 	Forwards []ForwardSpec
 	// AgentForward は、こちらの agent をリモートへ貸すかである。
 	AgentForward bool
@@ -206,8 +196,8 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 	target.AgentForward = yes(values.First("forwardagent"))
 
 	notices := append(noticesFor(values), forwardNotices...)
-	// **トークンを展開するのはここである。** 解決器は ProxyJump を生のまま返す
-	// ——`ssh -G` がそうするからだ。%r が指すのは、いま組み立てているこの行き先の
+	// トークンを展開するのはここである。解決器は ProxyJump を生のまま返す
+	// `ssh -G` がそうするからだ。%r が指すのは、いま組み立てているこの行き先の
 	// 利用者であり、手前のホップのそれではない。
 	tokens := effective.TokenTarget{
 		Alias: alias, HostName: target.HostName, Port: target.Port, RemoteUser: target.User,
@@ -251,7 +241,7 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 
 // parseForwards は、設定に書かれた転送を読む。
 //
-// **読めない値は notice を出して飛ばす。** 転送の書式ひとつで接続できなく
+// 読めない値は notice を出して飛ばす。転送の書式ひとつで接続できなく
 // なる理由が無い。
 func parseForwards(values effective.Values) ([]ForwardSpec, []Notice) {
 	var specs []ForwardSpec
@@ -283,7 +273,7 @@ func parseForwards(values effective.Values) ([]ForwardSpec, []Notice) {
 			specs = append(specs, spec)
 		}
 	}
-	// map の走査は順序を持たない。開く順を固定する——同じ設定が毎回同じ
+	// map の走査は順序を持たない。開く順を固定する。同じ設定が毎回同じ
 	// 順で報告されないと、画面の一覧が接続のたびに並び替わる。
 	sort.Slice(specs, func(i, j int) bool {
 		if specs[i].Kind != specs[j].Kind {
@@ -301,7 +291,7 @@ func noticesFor(values effective.Values) []Notice {
 		if !listed {
 			continue
 		}
-		// no/none と書いてあるものは、無いことが望みなので黙っている。
+		// no/none は機能を無効にする指定なので通知しない。
 		switch strings.ToLower(values.First(keyword)) {
 		case "no", "none":
 			continue
@@ -313,9 +303,9 @@ func noticesFor(values effective.Values) []Notice {
 
 // hostKeyAlgorithmsFrom は HostKeyAlgorithms の指定を読む。
 //
-// **先頭の一文字は OpenSSH が決めている形である。** + は既定へ足し、- は既定から
+// 先頭の一文字は OpenSSH が決めている形である。+ は既定へ足し、- は既定から
 // 外し、^ は既定の先頭へ移す。それ以外は既定を置き換える。外す側だけがパターンを
-// 受け取る——`-ecdsa-sha2-*` のような書き方は、足す側には意味が無い。
+// 受け取る。`-ecdsa-sha2-*` のような書き方は、足す側には意味が無い。
 //
 // 何も書かれていなければ nil を返す。そのとき順を決めるのは known_hosts である。
 func hostKeyAlgorithmsFrom(values effective.Values) []string {
@@ -391,7 +381,7 @@ func methodsFrom(values effective.Values) Methods {
 	return methods
 }
 
-// parseEnv は SetEnv の値を読む。一行に複数の代入が並ぶ——`SetEnv ONE=1 TWO=2`。
+// parseEnv は SetEnv の値を読む。一行に複数の代入が並ぶ。`SetEnv ONE=1 TWO=2`。
 func parseEnv(entries []string) []EnvVar {
 	var variables []EnvVar
 	for _, entry := range entries {
@@ -408,7 +398,7 @@ func parseEnv(entries []string) []EnvVar {
 
 // absolutePaths は、鍵のパスを絶対パスにする。
 //
-// ~ の展開は internal/effective が済ませていない——あちらは ssh -G と同じ答えを
+// ~ の展開は internal/effective が済ませていない。あちらは ssh -G と同じ結果を
 // 返す約束であり、ssh -G は ~ を残す。接続に使うのはこちらなので、ここで解く。
 func absolutePaths(entries []string, home string) []string {
 	var paths []string

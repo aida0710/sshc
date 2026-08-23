@@ -14,13 +14,7 @@ import (
 	"sshc/internal/validate"
 )
 
-// runRemote は、接続先でコマンドをひとつ走らせ、その終了状態をそのまま返す。
-//
-// **`sshc <接続先>` とは形が違う。** あちらは端末を開いて人が座るためのもので、
-// 出力には画面制御が混ざる。こちらは集めて読むためのもので、stdout と stderr を
-// 分け、終了状態を返す。保管庫が持っている鍵のパスフレーズを使えるのは同じで、
-// **それがこの入口の理由である**——保存済みの答えを持っているのに、無人の
-// 操作でそれを使えないのでは、保管庫が半分しか働いていない。
+// runRemote は非対話コマンドを実行し、stdout、stderr、終了コードを保持する。
 func runRemote(
 	ctx context.Context, alias, command, home, stateDir string, client *http.Client, stdin io.Reader, stdout, stderr io.Writer,
 ) int {
@@ -29,10 +23,7 @@ func runRemote(
 		return 2
 	}
 
-	// **待たない。** `sshc <接続先>` は施錠された desktop を無期限に待つが、
-	// それは人が窓を開けて解錠するのを待てる場面での話である。この入口は
-	// 書かれた手順の中で走るものなので、答える人の居ない待ちは、ただ止まった
-	// ままになる。施錠されているなら、そう言って降りる。
+	// 非対話実行では Vault の解錠を待機せず、施錠状態をエラーとして返す。
 	session, err := reachUnlockedEngine(ctx, stateDir, client,
 		func(found handoff.Handoff) engineProbe {
 			return httpProbe{found: found, client: client}
@@ -69,7 +60,7 @@ func runRemote(
 	return code
 }
 
-// runAdvice は、無人の実行が断った理由に「では何をすればよいか」を添える。
+// runAdvice は非対話実行エラーに復旧手順を追加する。
 func runAdvice(err error) error {
 	switch {
 	case errors.Is(err, sshclient.ErrHostKeyUnknown):
@@ -80,18 +71,13 @@ func runAdvice(err error) error {
 	return err
 }
 
-// remoteCommand は、打たれた語をひとつの文字列にする。
-//
-// **相手のシェルが解釈する一本の文字列である。** OpenSSH の `ssh host cmd args`
-// と同じで、区切りは空白ひとつ、引用の規則は相手のシェルのものになる。こちらで
-// 引用を付け直さないのは、相手が何のシェルかを知らないからである——PowerShell と
-// bash では正解が違い、推測して包めば、どちらかで壊れる。
+// remoteCommand は引数をリモートシェル用の単一文字列に結合する。
+// 引用規則はリモートシェルに依存するため、ローカルでは再引用しない。
 func remoteCommand(words []string) string {
 	return strings.Join(words, " ")
 }
 
-// savedPassphraseFor と savedPasswordFor は、engine が返した答えを
-// sshclient が引ける形にする。`runConnect` と同じ組み立てである。
+// savedPassphraseFor と savedPasswordFor は engine 応答を sshclient の検索関数へ変換する。
 func savedPassphraseFor(answer connectAnswer) func(string) (string, bool) {
 	if len(answer.Passphrases) == 0 {
 		return nil

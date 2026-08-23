@@ -79,13 +79,13 @@ func TestNoRouteEverLetsAHostileAliasReachAnExternalEffect(t *testing.T) {
 	f := newFixture(t)
 	publicKey := string(bytes.TrimSpace(f.read("id_ed25519.pub")))
 
-	// 正のコントロール: 安全な alias は継ぎ目に届かねばならず、そのままの
-	// 1 つの値として到達しなければならない。**かつてはこれが argv の "--" の
-	// 後ろに来ることを見ていた。** コマンドラインがもう無いので、見るのは
-	// 継ぎ目へ渡る値そのものである。
+	// 正のコントロール: 安全な alias はインターフェースに届かねばならず、そのままの
+	// 1 つの値として到達しなければならない。かつてはこれが argv の "--" の
+	// 後ろに来ることを見ていた。コマンドラインがもう無いので、見るのは
+	// インターフェースへ渡る値そのものである。
 	//
-	// 公開鍵のリモート登録を使う。**認証テストも設定の解決もプロセスを
-	// 起こさなくなった**ので、あちらの継ぎ目はネットワークであり、この検査が
+	// 公開鍵のリモート登録を使う。認証テストも設定の解決もプロセスを
+	// 起動しなくなったので、あちらのインターフェースはネットワークであり、この検査が
 	// 守っているのはコマンドラインである。
 	f.scanner.reset()
 	readBody(t, f.do(http.MethodPost, "/api/v1/remote-keys/register", mustJSON(t, map[string]any{
@@ -126,7 +126,7 @@ func TestNoRouteEverLetsAHostileAliasReachAnExternalEffect(t *testing.T) {
 }
 
 // TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard は、
-// 前段に handler を置かずに継ぎ目を直接駆動する。
+// 前段に handler を置かずにインターフェースを直接駆動する。
 //
 // 上の HTTP テストでは、2 つの alias check のどちらがリクエストを
 // 拒否したのか区別できない: handler も検証するし、接続を組み立てる
@@ -153,7 +153,7 @@ func TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 正のコントロール: 安全な alias は継ぎ目に届く。
+	// 正のコントロール: 安全な alias はインターフェースに届く。
 	if _, err := service.Register(
 		context.Background(), effective.Report{}, nil, "bastion", key, true,
 	); err != nil {
@@ -162,7 +162,7 @@ func TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 	if len(reached) == 0 {
 		t.Fatal("a safe alias never reached the seam; every refusal below would prove nothing")
 	}
-	// **alias はそのままの 1 つの文字列として届く。** かつてはこれが argv の
+	// alias はそのままの 1 つの文字列として届く。かつてはこれが argv の
 	// "--" の後ろに来ることを見ていた。argv がもう無いので、見るのは値そのものである。
 	for _, seen := range reached {
 		if seen != "bastion" {
@@ -194,8 +194,8 @@ func TestRemoteRegistrationNeverInterpolatesInputIntoTheRemoteShell(t *testing.T
 
 	publicKey := string(bytes.TrimSpace(f.read("id_ed25519.pub")))
 
-	// 正のコントロール: 本物の登録は継ぎ目に 2 回届く — POSIX の
-	// probe と固定の routine — そして key は stdin を伝わり、コマンドには決して乗らない。
+	// 正のコントロール: 本物の登録はインターフェースに 2 回届く。POSIX の
+	// probe と固定の routine。そして key は stdin を伝わり、コマンドには決して乗らない。
 	f.scanner.reset()
 	token := f.remoteKeyPlanToken(t, "bastion")
 	registered := f.do(http.MethodPost, "/api/v1/remote-keys/register", mustJSON(t, map[string]any{

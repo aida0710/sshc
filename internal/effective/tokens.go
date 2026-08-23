@@ -7,8 +7,8 @@ import (
 
 // ErrUnknownToken は、ここで展開できないトークンを報告する。
 //
-// 展開できないものを黙って残すと、`%C` を含む IdentityFile が、そういう名前の
-// ファイルを指しているかのように見える。答えないことと、間違って答えることは
+// 展開できないものを暗黙に残すと、`%C` を含む IdentityFile が、そういう名前の
+// ファイルを指しているかのように見える。応答しないことと、間違って返すことは
 // 別である。
 var ErrUnknownToken = errors.New("that token cannot be expanded here")
 

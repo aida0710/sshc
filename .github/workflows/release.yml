@@ -1,17 +1,5 @@
-# リリースの成果物を作り、公開する。
-#
-# **タグだけが引き金である。** ブランチへの push では何も走らない。リリースは
-# 意図的な行為であり、バイナリが報告する版は、それがビルドされた元のタグ
-# そのものだからだ。
-#
-# **束は、それが動く OS の上で作る。** 以前はこれを macOS 一台でやっていた。
-# そのため Windows のインストーラは存在せず（NSIS は Windows でしか組めない）、
-# Android も無く、しかも束を作る手順そのものが壊れていた——呼んで
-# いた make の的が Makefile に無かった。いまは OS ごとに job があり、それぞれが
-# 自分の CLI と自分の束を作り、**自分で開いて確かめてから**渡す。
-#
-# **CI はタグでは走らない**（push は main だけ、あとは pull request）。だから
-# 各 job の Verify が、このタグに対する唯一の検証である。
+# タグからリリース成果物をビルドして公開する。
+# OS 固有の成果物は対象 OS の runner でビルドし、各ジョブ内で検証する。
 name: Release
 
 on:
@@ -45,12 +33,7 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
         run: make release-cli-current
-
-
-      # **綴りは中身を保証しない。** verify-artifact-name が見るのはファイル名
-      # だけで、machine.go 自身が「`sshc-linux-arm64` という名前の amd64
-      # バイナリはその検査を通る」と書いている。束の smoke を消してから、
-      # リリースは**上げるバイナリを一度も起動していなかった。**
+      # ファイル名の検査ではアーキテクチャを保証できないため、成果物を実行する。
       - name: Smoke the built CLI
         run: scripts/ci/cli-smoke.sh dist "${GITHUB_REF_NAME}"
 
@@ -84,12 +67,7 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
         run: make release-cli-current
-
-
-      # **綴りは中身を保証しない。** verify-artifact-name が見るのはファイル名
-      # だけで、machine.go 自身が「`sshc-linux-arm64` という名前の amd64
-      # バイナリはその検査を通る」と書いている。束の smoke を消してから、
-      # リリースは**上げるバイナリを一度も起動していなかった。**
+      # ファイル名の検査ではアーキテクチャを保証できないため、成果物を実行する。
       - name: Smoke the built CLI
         run: scripts/ci/cli-smoke.sh dist "${GITHUB_REF_NAME}"
 
@@ -116,16 +94,11 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
 
-      # **make は使わない。** CI もここでは使っていない——recipe が POSIX の
-      # シェルを前提にしているからである。Makefile が呼んでいるのと同じ
-      # nativebuild を直接呼び、Makefile が環境で渡している値を flag で渡す。
-      # 束の一覧が二か所になるので、内部の契約テストが両者の一致を見ている。
-      #
-      # -race はここでは走らせない。Windows のランナーに C の道具が無く、
-      # race detector はそれを要る。CI 側も同じ扱いである。
-      # **PowerShell は native command の非ゼロ終了で止まらない。** GitHub は
-      # 最後の一つの終了値しか見ないので、前の行が落ちても step は緑になる——
-      # 実際それで、CLI の入っていないインストーラがそのまま次の段へ渡った。
+      # Makefile の recipe は POSIX シェルを前提とするため、Windows では
+      # nativebuild を直接実行する。成果物一覧との一致は契約テストで検証する。
+      # Windows runner には race detector に必要な C ツールチェーンがないため、
+      # このジョブでは -race を実行しない。PowerShell では native command の
+      # 非ゼロ終了を確実に検出するよう、次の2変数を設定する。
       - name: Verify
         run: |
           $ErrorActionPreference = 'Stop'
@@ -137,11 +110,7 @@ jobs:
         env:
           SSHC_NATIVE_VERSION: ${{ github.ref_name }}
         run: go run ./internal/nativebuild/cmd/nativebuild release-current --arches "amd64 arm64" --output-dir dist
-
-
-      # Unix の対。**別に置くのは、あちらの recipe が POSIX のシェルを
-      # 前提にしているからである。** 見ているものは同じで、その一致は
-      # internal/buildcontract が数えている。
+      # Windows 用成果物を実行して、アーキテクチャとバージョンを検証する。
       - name: Smoke the built CLI
         run: ./scripts/ci/cli-smoke.ps1 -DistDir dist -ExpectedVersion "${{ github.ref_name }}"
 
@@ -167,10 +136,7 @@ jobs:
           java-version: 21
           cache: gradle
 
-      # **鍵が無ければ、ここで止める。** 署名されていない APK はインストール
-      # すらできないので、配っても誰の役にも立たない。黙って debug の鍵で
-      # 署名するのはもっと悪い——あれは公開されている鍵であり、誰でも
-      # 「同じアプリの更新」を作れてしまう。
+      # 配布用の署名鍵がなければ停止する。debug 鍵へのフォールバックは行わない。
       - name: Require a signing key
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -195,13 +161,11 @@ jobs:
             echo "runner image did not provide an NDK" >&2
             exit 1
           }
-          # **APK の versionName と同じ入力から取る。** 別々に渡せば、
-          # 「APK は 0.4.2 だが engine は dev」という組み合わせが作れてしまう。
+          # APK と組み込み engine に同じバージョンを設定する。
           make android-bind ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" \
             ANDROID_VERSION="${GITHUB_REF_NAME#v}"
 
-      # 鍵はここでだけ実体になる。作業ディレクトリの外に置くのは、
-      # うっかり成果物に入らないようにするためである。
+      # 署名鍵は runner の一時ディレクトリに置き、成果物へ混入させない。
       - name: assembleRelease
         working-directory: android
         env:
@@ -218,9 +182,7 @@ jobs:
               -PsshcVersionName="${GITHUB_REF_NAME#v}"
           rm -f "$keystore"
 
-      # **署名されたことを、gradle の成功で判断しない。** 設定が外れていても
-      # assembleRelease は通り、未署名の APK を残す。出来上がったものに
-      # 直接聞く。
+      # Gradle の終了状態だけでなく、apksigner で成果物の署名を検証する。
       - name: The APK is signed
         run: |
           set -eu
@@ -243,16 +205,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      # 本文のために checkout する。**入れ方は成果物と一緒に配られなければ
-      # ならない** ——署名していない配布物は、初回に何が起きるかを先に言わない
-      # 限り、壊れているようにしか見えない。
+      # version-controlled なリリース本文を取得するため checkout する。
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           path: incoming
 
-      # 各 job が置いた木を一枚にする。名前はすべて sshc- で始まるので、
-      # 公開するものと、そうでないものが取り違えられない。
+      # 各ジョブの sshc-* 成果物を公開用ディレクトリへ集約する。
       - name: Collect
         run: |
           set -eu
@@ -260,10 +219,7 @@ jobs:
           find incoming -type f -name 'sshc-*' -exec cp {} dist/ \;
           ls -la dist
 
-      # チェックサムは、手でダウンロードしたものを検証する人のためにある。
-      # それが記述する対象の隣に公開されるので、転送の途中切断は捕まえられるが、
-      # このリリースが正直かどうかについては何も言わない — README がどちらで
-      # あるかを述べており、そうでないかのようにほのめかしてはいない。
+      # 手動ダウンロード用の SHA-256 チェックサムを生成する。
       - name: Package
         run: cd dist && sha256sum sshc-* > checksums.txt
 
@@ -273,24 +229,18 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           GH_REPO: ${{ github.repository }}
         run: |
+          notes_file="docs/releases/$RELEASE_TAG.md"
+          if [ ! -f "$notes_file" ]; then
+            echo "release notes file is missing: $notes_file" >&2
+            exit 1
+          fi
           gh release create "$RELEASE_TAG" \
             --title "$RELEASE_TAG" \
-            --notes-file docs/release-install.md \
-            --generate-notes \
+            --notes-file "$notes_file" \
             dist/sshc-* dist/checksums.txt
 
-  # tap の formula を、いま出した版へ合わせる。
-  #
-  # **正本は packaging/homebrew/sshc.rb である。** ここがやるのは version と
-  # sha256 を差し替えて向こうへ押すことだけで、中身の判断はしない。tap の側を
-  # 手で直すと、次のリリースで上書きされる。
-  #
-  # **押す鍵は tap ひとつにしか効かない。** ここが要るのは「あの repo の
-  # Formula/ を書き換える」ことだけで、アカウント全体に効く PAT を置く理由は
-  # 無い——deploy key なら、漏れても届く先がその 1 つに限られる。
-  #
-  # **設定されていなければ、何もせずに緑で終わる。** 無いうちにここが赤くなると、
-  # **formula とは何の関係も無いリリースが失敗したように見える。**
+  # packaging/homebrew/sshc.rb を基に、公開したタグとチェックサムで tap を更新する。
+  # tap 専用の deploy key が未設定の場合は、このジョブを正常終了する。
   homebrew:
     name: Homebrew tap
     needs: [publish]
@@ -311,8 +261,7 @@ jobs:
             exit 0
           fi
 
-          # **formula が指すのは、リリースの成果物ではなく tag の tarball である。**
-          # ソースからビルドさせるので、押さえるべき sha256 も tarball のものになる。
+          # Formula はタグのソース tarball とその SHA-256 を参照する。
           tarball="https://github.com/$SOURCE_REPO/archive/refs/tags/$RELEASE_TAG.tar.gz"
           curl -fsSL "$tarball" -o source.tar.gz
           sum=$(sha256sum source.tar.gz | cut -d' ' -f1)
@@ -322,13 +271,11 @@ jobs:
               -e "s#^  sha256 .*#  sha256 \"$sum\"#" \
               packaging/homebrew/sshc.rb > sshc.rb
 
-          # 差し替えが効いたことを見る。**sed が空振りしても 0 で終わる**ので、
-          # ここで見ないと 0.0.0 のままの formula を押してしまう。
+          # sed は置換対象がなくても成功するため、結果を明示的に検証する。
           grep -q "$sum" sshc.rb || { echo "the checksum was not written into the formula" >&2; exit 1; }
           grep -q "$RELEASE_TAG" sshc.rb || { echo "the tag was not written into the formula" >&2; exit 1; }
 
-          # **鍵はファイルにしか置けない。** 環境変数のままでは ssh が読まない。
-          # 作るのは runner の中の一時ディレクトリで、job が終われば消える。
+          # deploy key を runner 内の SSH 設定へ一時的に保存する。
           mkdir -p ~/.ssh
           printf '%s\n' "$TAP_KEY" > ~/.ssh/tap
           chmod 600 ~/.ssh/tap
@@ -342,10 +289,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # **先に add してから比べる。** `git diff` は追跡されていないファイルを
-          # 見ないので、**まだ無い一度目は「変化なし」と読まれる** ——実際
-          # v0.2.0 でそれが起き、job は 6 秒で緑になって何も押さなかった。
-          # 索引に入れてから比べれば、新規も変更も同じ 1 つの問いになる。
+          # 新規ファイルも比較対象に含めるため、add 後の staged diff を確認する。
           git add Formula/sshc.rb
           if git diff --cached --quiet; then
             echo "the tap already describes $RELEASE_TAG."

@@ -19,25 +19,24 @@ import (
 	"sshc/internal/httpserver"
 )
 
-// 走っている engine を止めてから起こす。
+// 走っている engine を止めてから起動する。
 //
-// **どこで起こしたか分からない engine を、止められる必要がある。** tmux の中か、
-// 閉じた端末か、supervisor の下か——探して回るより、走っているものに頼む方が短い。
+// どこで起動したか分からない engine を、止められる必要がある。tmux の中か、
+// 閉じた端末か、supervisor の下か。探して回るより、走っているものに頼む方が短い。
 //
-// **黙って止めない。** 止めれば開いている端末も転送も落ち、保管庫は施錠される。
-// 端末なら訊き、端末でなければ `--replace` を書いた人にだけ従う。
+// 暗黙に止めない。止めれば開いている端末も転送も落ち、保管庫は施錠される。
+// 端末なら訊き、端末でなければ `--replace` を書いたユーザーにだけ従う。
 
 // engineReleaseTimeout は、頼んだ engine が席を空けるのを待つ上限である。
 //
-// **engine 自身の締切から導く。** あちらが畳むのに使ってよい時間より短く待てば、
+// engine 自身の締切から導く。あちらが畳むのに使ってよい時間より短く待てば、
 // 間に合ったはずのものを諦めることになる。倍率は、頼みが届いてから畳み始める
 // までの往復と、ロックが落ちるのを見に行く間隔ぶんの余裕である。
 const engineReleaseTimeout = 5 * app.DefaultShutdownTimeout
 
 // askToReplace は、走っている engine を止めてよいかを決める。
 //
-// 止めてよいなら true を返す。**訊けない場面では訊かない** ——手順の中や
-// supervisor の下で問いを出せば、答える人の居ない待ちで止まったままになる。
+// 止めてよいなら true を返す。対話入力できない環境では確認を行わない。
 func askToReplace(found handoff.Handoff, sessions int, replace bool, stdin io.Reader, stdout io.Writer) bool {
 	if replace {
 		return true
@@ -57,7 +56,7 @@ func askToReplace(found handoff.Handoff, sessions int, replace bool, stdin io.Re
 	if err != nil {
 		return false
 	}
-	// **既定は No である。** 何も読まずに Enter を叩いた人が落ちる先は、
+	// 既定は No である。何も読まずに Enter を叩いたユーザーが落ちる先は、
 	// 失うものが無い方でなければならない。
 	switch strings.ToLower(strings.TrimSpace(answer)) {
 	case "y", "yes":
@@ -68,7 +67,7 @@ func askToReplace(found handoff.Handoff, sessions int, replace bool, stdin io.Re
 
 // stopRunningEngine は、走っている engine に畳んで終わるよう頼み、席が空くのを待つ。
 //
-// **頼むのであって、殺すのではない。** 開いている端末も転送も vault も、engine
+// 頼むのであって、殺すのではない。開いている端末も転送も vault も、engine
 // 自身にしか畳めない。
 func stopRunningEngine(
 	ctx context.Context, stateDir string, found handoff.Handoff, client *http.Client,
@@ -89,13 +88,13 @@ func stopRunningEngine(
 		return fmt.Errorf("the running engine refused to stop (%d)", response.StatusCode)
 	}
 
-	// **席が空くまで待つ。** 頼んだ直後に自分が握りにいくと、まだ畳んでいる
+	// 席が空くまで待つ。頼んだ直後に自分が握りにいくと、まだ畳んでいる
 	// 相手からロックを奪えず、理由の分からない失敗になる。
 	deadline := time.Now().Add(engineReleaseTimeout)
 	for {
 		release, err := acquire(stateDir)
 		if err == nil {
-			// 空いた。**すぐ手放す** ——本番の取得はこのあと通常の道で行う。
+			// 空いた。すぐ手放す。本番の取得はこのあと通常の道で行う。
 			_ = release()
 			return nil
 		}
@@ -108,7 +107,7 @@ func stopRunningEngine(
 
 // replaceRunningEngine は、走っている engine を止めて席を受け取る。
 //
-// **止めてよいと決まったときだけ止める。** 決まらなければ、居ることと入口の
+// 止めてよいと決まったときだけ止める。決まらなければ、居ることとアクセス URLの
 // 取り方を言って断る。
 func replaceRunningEngine(
 	ctx context.Context, home string, options engineOptions,
@@ -118,14 +117,14 @@ func replaceRunningEngine(
 	stateDir := app.HandoffDir(home)
 	found, err := readHandoff(stateDir)
 	if err != nil {
-		// handoff が読めないのに錠は握られている。**何が居るのかを言えない以上、
-		// 止めてよいとも言えない。**
+		// handoff が読めないのに錠は握られている。何が居るのかを言えない以上、
+		// 止めてよいとも言えない。
 		return nil, fmt.Errorf("an sshc engine holds the lock but left no readable handoff; stop it yourself")
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	sessions := 0
-	// **handoff を読み直さない。** 上で読んだ一台にだけ尋ねる——待っている
+	// handoff を読み直さない。上で読んだ一台にだけ尋ねる。待っている
 	// あいだに書き換わったものへ乗り換えれば、止める相手が入れ替わる。
 	if status, statusErr := requestStatus(ctx, found, client); statusErr == nil {
 		sessions = status.Sessions
@@ -143,6 +142,5 @@ func replaceRunningEngine(
 	return acquire(stateDir)
 }
 
-// errAlreadyRunning は、断ったことそのものである。**理由は既に出してある** ——
-// 呼び出し側はこれを見て、二度目の綴りを出さない。
+// errAlreadyRunning は、重複するエラーメッセージの出力を防ぐための内部エラーである。
 var errAlreadyRunning = errors.New("an sshc engine is already running")

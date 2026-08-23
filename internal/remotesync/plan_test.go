@@ -86,7 +86,7 @@ func TestANewFileGetsAPreconditionThatItDoesNotExist(t *testing.T) {
 // ローカルの秘密鍵を上書きする pull は、以前のものを残す。
 //
 // 以前はバックアップを求めなかった。そのコピーが平文の鍵になってしまうからだ。いま
-// バックアップはマスターパスワードで封じられており、そしてここは、置き換えられた鍵
+// バックアップはマスターパスワードで暗号化されており、そしてここは、置き換えられた鍵
 // こそが取り戻したいものになるまさにその場合である。別のマシンからのスナップショット
 // が、ローカルの鍵の上に着地するのだから。
 func TestPlanKeepsTheKeyAPullOverwrites(t *testing.T) {
@@ -234,7 +234,7 @@ func TestAnIdenticalSnapshotIsNothingToApply(t *testing.T) {
 func TestPlanNeedsNothingStorageDoesNotAlreadyHave(t *testing.T) {
 	// 現在の Change、Removal、Request で pull を表現できないなら、設計の方が誤って
 	// いるのであって、ストレージ層を膨らませるのではなく計画へ戻るべきである。これは、
-	// 生成される形がまさにその語彙だけでできていることを
+	// 生成される形がまさにその用語だけでできていることを
 	// 表明する。
 	base := manifestOf(file("config", "old", false), file("gone.conf", "g", false))
 	local := map[string]string{"config": digestOf("old"), "gone.conf": digestOf("g")}
@@ -250,8 +250,8 @@ func TestPlanNeedsNothingStorageDoesNotAlreadyHave(t *testing.T) {
 	}
 }
 
-// **別のマシンで消えたという理由で消えるファイルは、取り戻せなければならない。**
-// 押した人は、その中身を見たことすら無いかもしれない。
+// 別のマシンで消えたという理由で消えるファイルは、取り戻せなければならない。
+// 押したユーザーは、その中身を見たことすら無いかもしれない。
 func TestARemovalCarriedByAPullKeepsACopy(t *testing.T) {
 	base := remotesync.Manifest{Files: []remotesync.Entry{
 		{Path: "config", SHA256: "aaa"},
@@ -272,8 +272,8 @@ func TestARemovalCarriedByAPullKeepsACopy(t *testing.T) {
 	}
 }
 
-// **寄せ先を選んだなら、その通りにする。** 2 台目が自分の設定を持ったまま
-// 最初の pull をすると、いまは必ず衝突する——選ぶ道が無ければ、その 2 台目は
+// 寄せ先を選んだなら、その通りにする。2 台目が自分の設定を持ったまま
+// 最初の pull をすると、いまは必ず衝突する。選ぶ道が無ければ、その 2 台目は
 // 一度も同期を終えられない。
 func TestChoosingTheRemoteSideWritesTheContestedFile(t *testing.T) {
 	base := manifestOf(file("config", "base", false))
@@ -293,7 +293,7 @@ func TestChoosingTheRemoteSideWritesTheContestedFile(t *testing.T) {
 	}
 }
 
-// こちらを残すなら、**書かないだけである**。次の push が、こちらを向こうへ運ぶ。
+// こちらを残すなら、書かないだけである。次の push が、こちらを向こうへ運ぶ。
 func TestChoosingThisMachineWritesNothingForTheContestedFile(t *testing.T) {
 	base := manifestOf(file("config", "base", false))
 	remote := manifestOf(file("config", "theirs", false))

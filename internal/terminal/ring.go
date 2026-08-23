@@ -1,14 +1,6 @@
 package terminal
 
 // Ring は、セッションひとつ分のスクロールバックである。
-//
-// **メモリのみ。ディスクへは一切書かない。** 端末の出力には、保存済み
-// パスワードを使った接続の痕跡も、リモート側が表示した何もかもが混ざる。
-// 世代バックアップも history もこれを受け取らない。
-//
-// 上限に達したら、古いバイトから静かに上書きする。読まないクライアントが
-// いても書き込みが詰まらないのはこの性質のおかげであり、詰まらないという
-// ことは PTY が止まらないということである。
 type Ring struct {
 	data  []byte
 	start int
@@ -24,8 +16,6 @@ func NewRing(capacity int) *Ring {
 
 func (r *Ring) Len() int { return r.size }
 
-// Write は決して失敗せず、決して短く書かない。上限より長い書き込みは、
-// 末尾の Cap バイトだけを残す——それが、上書きしたあとに残っているはずのものだからだ。
 func (r *Ring) Write(p []byte) (int, error) {
 	written := len(p)
 	capacity := len(r.data)
@@ -50,9 +40,6 @@ func (r *Ring) Write(p []byte) (int, error) {
 }
 
 // Snapshot は、いま保持しているバイト列を古い順に返す。
-//
-// 返すのは複製である。再アタッチのたびに WebSocket へ渡され、その間も PTY は
-// 書き続けているので、内部の配列をそのまま見せるわけにはいかない。
 func (r *Ring) Snapshot() []byte {
 	out := make([]byte, r.size)
 	if r.size == 0 {

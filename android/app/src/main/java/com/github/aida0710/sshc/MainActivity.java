@@ -27,10 +27,7 @@ import android.widget.TextView;
 
 import mobile.Mobile;
 
-/**
- * 画面はこの 1 枚である。engine は EngineService が持っているので、ここがする
- * のは「入口を受け取って WebView へ渡す」ことだけ。
- */
+/** EngineService から接続 URL を受け取り、WebView に表示する Activity。 */
 public final class MainActivity extends Activity {
     private static final String TAG = "sshc";
 
@@ -42,9 +39,7 @@ public final class MainActivity extends Activity {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
             service = ((EngineService.LocalBinder) binder).service();
-            // **通知から止められたら、この画面も畳む。** bind が残っている限り
-            // service は destroy されないので、engine だけ落ちた抜け殻の画面が
-            // 残る——WebView は繋がらない先を叩き続ける。
+            // 通知から engine が停止された場合は、接続不能な WebView を残さず終了する。
             service.listen(MainActivity.this::finishAndRemoveTask);
             String entrance = service.entrance();
             if (entrance == null) {
@@ -56,17 +51,15 @@ public final class MainActivity extends Activity {
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            // service が落ちた。START_STICKY で作り直されるので、次に
-            // 繋がったときに onServiceConnected がまた入口を配る。
+            // START_STICKY により service が再作成されると、onServiceConnected で
+            // 新しい接続 URL を受け取る。
         }
     };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // **これを言わないと、挿入量は子に届かない。** decor が自分で
-        // fitsSystemWindows を処理して消費してしまうので、こちらの listener
-        // には全部ゼロが渡る——余白が付かないのはそれが理由だった。
+        // WindowInsets を子 View の listener で処理する。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
         }
@@ -78,8 +71,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (service != null) {
-            // **service はこちらより長く生きる。** Activity の参照を持たせた
-            // まま離れると、畳まれた画面を掴み続けることになる。
+            // service は Activity より長く存続するため、Activity への参照を解除する。
             service.listen(null);
             service = null;
         }
@@ -87,8 +79,7 @@ public final class MainActivity extends Activity {
             unbindService(connection);
             bound = false;
         }
-        // **engine は止めない。** 画面が回っただけで SSH セッションが切れる
-        // ことになる。engine を畳むのは service を止めるときである。
+        // 構成変更による Activity の破棄では engine を停止しない。
         super.onDestroy();
     }
 
@@ -99,37 +90,26 @@ public final class MainActivity extends Activity {
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
 
-        // **debuggable なビルドでだけ開ける。** これを開けると、同じ機械の
-        // Chrome DevTools からこのページの中身が読め、任意の JS が走る。
-        // release では決して有効にしない——画面の中身も session cookie も
-        // そこから見える。
+        // WebView のデバッグはページ内容と session cookie を参照できるため、
+        // debuggable ビルドだけで有効にする。
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             WebView.setWebContentsDebuggingEnabled(true);
         }
 
-        // **targetSdk 35 以降、edge-to-edge は強制である。** 何もしなければ
-        // WebView はステータスバーとナビゲーションバーの下にも描かれ、画面の
-        // 上端と下端が読めなくなる。
-        //
-        // **決め打ちの数値を置かない。** 必要な余白は端末ごとに違う——
-        // ステータスバーの高さも、ジェスチャーバーの有無も、ノッチや
-        // パンチホールの張り出しも。WindowInsets はそれを実測値で答えるので、
-        // 尋ねればよい。
+        // targetSdk 35 以降の edge-to-edge 表示に合わせ、system bar と display cutout の
+        // 余白は固定値ではなく WindowInsets から取得する。
 
-        // 何も外へ出さない。この画面が話す相手は loopback の engine だけである。
+        // 何も外へ出さない。この画面が通信する相手は loopback の engine だけである。
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                // **URL を出さない。** 入口の fragment を含み得る。落ちたのが
-                // 主文書かどうかと、その理由だけを残す。
+                // fragment に資格情報を含む可能性があるため、URL はログへ出さない。
                 Log.e(TAG, "web resource failed: mainFrame=" + request.isForMainFrame()
                         + " code=" + error.getErrorCode());
             }
         });
 
-        // **画面が白いままのとき、答えはここにしかない。** WebView の console は
-        // どこにも出ないので、logcat へ渡す。これが無いと、engine が起きたのに
-        // 画面が出ないという状態を、外から見分ける手段が無い。
+        // WebView の console を logcat へ転送し、画面描画の失敗を診断できるようにする。
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage message) {
@@ -143,33 +123,21 @@ public final class MainActivity extends Activity {
         setContentView(frame(webView));
     }
 
-    /**
-     * 挿入量を受け止める器。
-     *
-     * <p>WebView に直接 padding を置かず、1 枚挟む。padding の外側に見えるのは
-     * この器の背景であり、WebView 自身の背景ではページの読み込み前に白く光る。
-     */
+    /** WindowInsets の padding とページ背景色を適用するコンテナを作る。 */
     private FrameLayout frame(View content) {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(chromeColour());
         root.addView(content, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         avoidSystemBars(root);
-        // 一度きりの配布を自分から要求する。attach のタイミング次第では、
-        // listener を付けた後の dispatch が既に済んでいることがある。
+        // listener 登録前に dispatch 済みの場合に備えて再適用を要求する。
         root.requestApplyInsets();
         return root;
     }
 
-    /**
-     * **Go の error 文を出さない。** 入口の URL を含み得るので、番号に対応する
-     * こちらの文字列だけを出す。
-     */
+    /** URL を含みうる Go のエラー文を表示せず、失敗種別に対応する文言を表示する。 */
     private void showFailure(long reason) {
-        // **番号は書かない。** ここは以前 `case 2:` と直に書いていた——
-        // mobile/sshc.go の iota の途中に一つ挿すだけで、この画面が黙って別の
-        // 文言を出す状態だった。gomobile は export された定数を Java 側にも
-        // 生やすので、**数は Go に 1 つだけ**在ればよい。
+        // gomobile が生成する定数を使い、Go 側の失敗種別と一致させる。
         int message;
         if (reason == Mobile.KindAlreadyStarted) {
             message = R.string.failure_already_started;
@@ -186,23 +154,16 @@ public final class MainActivity extends Activity {
         setContentView(frame(view));
     }
 
-    /**
-     * システムバーの下に潜らないよう、挿入量をそのまま padding にする。
-     *
-     * <p>setFitsSystemWindows では届かなかった。自分で聞けば、返ってくるのは
-     * この端末の実測値である。
-     */
+    /** system bar、display cutout、IME の inset を padding に反映する。 */
     private void avoidSystemBars(View view) {
         view.setOnApplyWindowInsetsListener((target, insets) -> {
             int left, top, right, bottom;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // 表示の切り欠きも一緒に見る。横向きにすると、ノッチは
-                // ステータスバーではなく左右の縁に来る。
+                // 横向きで左右へ移動する display cutout も含める。
                 Insets bars = insets.getInsets(
                         WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-                // **キーボードもバーである。** decorFitsSystemWindows(false) を
-                // 言った時点で adjustResize は効かなくなるので、IME の高さを
-                // 自分で避けないと、画面上のキー列がソフトキーボードの下に潜る。
+                // decorFitsSystemWindows(false) では adjustResize が効かないため、
+                // IME の高さも padding に含める。
                 Insets keyboard = insets.getInsets(WindowInsets.Type.ime());
                 left = bars.left;
                 top = bars.top;
@@ -215,38 +176,21 @@ public final class MainActivity extends Activity {
                 bottom = insets.getSystemWindowInsetBottom();
             }
             target.setPadding(left, top, right, bottom);
-            // **受け止めても、消さない。**
-            //
-            // ここで WindowInsets.CONSUMED を返していた。避けたのだから先へ
-            // 渡す必要は無い、という理屈である。**その 1 行がソフトキーボードを
-            // 閉じていた。** 叩いて開き、挿入量がここへ届き、消して返した
-            // 116ms 後に、このプロセス自身が HIDE_SOFT_INPUT を出す——
-            // ImeTracker のログに毎回そう出る。IME の挿入量を木の途中で
-            // 消すと、入力接続を持っている WebView にそれが届かない。
-            //
-            // 余白は既に付けたので、そのまま渡しても二重にはならない。WebView は
-            // fitsSystemWindows を持たないため、受け取っても何もしない。
+            // WebView の入力接続まで IME inset を届けるため、insets は消費しない。
             return insets;
         });
     }
 
     /**
-     * 余白の帯を塗る色。
-     *
-     * <p>padding の外側に見えるのは WebView 自身の背景なので、ページと違う色だと
-     * 上端に別の板が乗っているように見える。値は web/src/index.css の
-     * --ui-toolbar と同じもので、**そちらを変えたらここも変える**。2 か所に
-     * 書くのは、ネイティブの外殻がページのトークンを読む手段を持たないためである。
+     * WindowInsets の余白へ適用する色を返す。
+     * web/src/index.css の --ui-toolbar と同期し、ページ読込前の色差を防ぐ。
      */
     private int chromeColour() {
         int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         return night == Configuration.UI_MODE_NIGHT_YES ? 0xFF2A2A2C : 0xFFFBFBFD;
     }
 
-    /**
-     * uiMode を configChanges で受けているので、テーマが変わっても Activity は
-     * 作り直されない。**帯の色だけが取り残される**ので、ここで塗り直す。
-     */
+    /** configChanges で受けた uiMode の変更をコンテナ背景へ反映する。 */
     @Override
     public void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration);
@@ -256,13 +200,7 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /**
-     * 戻るキーは WebView の履歴に繋ぐ。web/src/routing がセクションを URL として
-     * 持っているので、履歴はそのまま Android の戻るキーの意味になる。
-     *
-     * <p>onBackPressed ではなく onKeyDown なのは、前者を今の形で使うには
-     * androidx.activity が要るからである。glue 150 行のために依存を 1 つ増やさない。
-     */
+    /** 戻るキーで WebView の履歴を移動する。androidx.activity への依存は追加しない。 */
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK && webView != null && webView.canGoBack()) {

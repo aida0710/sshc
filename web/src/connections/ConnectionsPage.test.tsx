@@ -62,8 +62,6 @@ const detail = {
   },
 };
 
-// インスペクタの中身はページの DOM ではなくシェルへ渡されるので、
-// 表明するにはその callback が受け取った React 要素を描かなければならない。
 function inspectorText(inspector: ReturnType<typeof vi.fn>): string {
   const calls = inspector.mock.calls as [InspectorContent][];
   for (let index = calls.length - 1; index >= 0; index -= 1) {
@@ -77,8 +75,6 @@ function inspectorText(inspector: ReturnType<typeof vi.fn>): string {
   return "";
 }
 
-// 開いているセッションはシェルが持つ。この画面は開くだけで、描くのは
-// Terminal 画面なので、どのテストも空の一覧を渡せば足りる。
 const consoleProps = {
   consoles: {
     sessions: [], maxSessions: 50, busy: false, problem: "", loaded: true,
@@ -90,8 +86,6 @@ const consoleProps = {
 };
 
 beforeEach(() => {
-  // モジュールの factory はこれらを vi.fn()で作っており、restoreMocks は
-  // それに手を触れないため、呼び出し記録はテストごとに手動でクリアする必要がある。
   vi.clearAllMocks();
   vi.mocked(configApi.overview).mockResolvedValue(overview as never);
   vi.mocked(configApi.host).mockResolvedValue(detail as never);
@@ -254,9 +248,6 @@ describe("ConnectionsPage", () => {
     );
 
     await screen.findByRole("heading", { name: "bastion" });
-    // **見出しが出たことは、欄が埋まったことではない。** 埋まる前に clear
-    // すると何も消えず、そのあと届いた 22 の後ろへ 2222 が足されて 222222 に
-    // なる。速い機械では先に埋まるので通り、CI でだけ落ちていた。
     const port = await screen.findByLabelText("Port");
     await waitFor(() => expect(port).toHaveValue(22));
     await user.clear(port);
@@ -526,15 +517,10 @@ describe("ConnectionsPage", () => {
     expect(consoles.open).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: "Connect" }));
 
-    // 外部の端末アプリケーションは起こさない。開くのはこのアプリケーションの
-    // 中の PTY であり、action token は要らない。開いた一本は、一覧を持って
-    // いるシェルへ渡す——この画面は選ばれた一本を描くだけである。
     expect(consoles.open).toHaveBeenCalledWith({ kind: "ssh", alias: "bastion" });
     await waitFor(() => expect(onShowConsole).toHaveBeenCalledWith("console-1"));
   });
 
-  // 右のペインが持つのは接続の表示設定だけである。開いているコンソールの
-  // 一覧は一番左のナビゲーションにあり、この画面はそこへ何も差し出さない。
   it("offers the display settings to the pane, and nothing at all until a connection is open", async () => {
     const user = userEvent.setup();
     const inspector = vi.fn();
@@ -545,7 +531,7 @@ describe("ConnectionsPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
 
-    await waitFor(() => expect(inspectorText(inspector)).toMatch(/This application only/));
+    await waitFor(() => expect(inspectorText(inspector)).toMatch(/sshc-only settings/));
     expect(inspectorText(inspector)).not.toMatch(/Local shell/);
   });
 
@@ -561,12 +547,6 @@ describe("ConnectionsPage", () => {
   });
 
   it("keeps the diff of what was written on screen after the save reloads the host", async () => {
-    // save は自分が書いたホストを再選択する。以前はこれが選択
-    // effect に、同じ二つの値を持つ新しいオブジェクトを渡していたため、
-    // effect が詳細を二度目に取得し、その答えが返るとプレビューを
-    // 消していた。差分が見えていたのはちょうど一回のリクエストに
-    // かかった時間だけだった。エンドツーエンドスイートはたまたまその
-    // ウィンドウの中を覗いていたため見えていたが、そうでなければ CI で失敗していた。
     const user = userEvent.setup();
     vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1",
@@ -591,8 +571,6 @@ describe("ConnectionsPage", () => {
     await user.type(input, "2299");
     await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
 
-    // 流れ全体で二回。一回は選択のため、もう一回は save 自身が
-    // 行うリロードのため。三回目は差分を消してしまう重複である。
     await waitFor(() => expect(configApi.host).toHaveBeenCalledTimes(2));
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -634,7 +612,6 @@ describe("ConnectionsPage", () => {
 
     await user.click(screen.getByRole("button", { name: /nas/ }));
 
-    // 差分が記述するのは、もはや開いていないブロックのバイトである。
     await waitFor(() =>
       expect(screen.getByRole("region", { name: "Save preview" }))
         .toHaveTextContent("Change a value to see exactly what would be written."));
@@ -853,7 +830,7 @@ describe("ConnectionsPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "More connection actions" }));
-    expect(screen.getByText(/Primary group changes where sshc organises the connection/)).toBeInTheDocument();
+    expect(screen.getByText(/Primary group controls where sshc organises the connection/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Change storage file" })).toBeDisabled();
     await user.selectOptions(await screen.findByLabelText("Storage file"), "conf.d/10-home.conf");
     await user.click(screen.getByRole("button", { name: "Change storage file" }));
@@ -998,8 +975,6 @@ describe("taking a connection out of every group", () => {
 });
 
 describe("dropping in the tree", () => {
-  // jsdom にはドラッグ実装がないため、transfer は tree が触れる二つの
-  // ものを運ぶスタブである。
   function transfer(payload: DragPayload) {
     const store = new Map<string, string>([[dragMimeType, JSON.stringify(payload)]]);
     return {

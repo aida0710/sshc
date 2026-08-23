@@ -15,28 +15,14 @@ import (
 
 var (
 	// ErrGroupExists は、既に存在するグループへの名前変更を拒否する。
-	// 2 組の設定をマージすることは、このアプリケーションが下さない決定だからだ。
 	ErrGroupExists = errors.New("a group of that name already exists")
 	// ErrGroupSelfNesting は、グループを自分自身の中へ移動することを拒否する。
 	ErrGroupSelfNesting = errors.New("a group cannot be nested inside itself")
 )
 
-// NoticeGroupDirectoryLeftover は、名前変更が削除できなかったディレクトリを名指しする。
-//
-// storage.Move はファイルを移動する。ディレクトリ自体の名前変更には、ダイジェストを持た
-// ないものに対する事前条件と、それに見合う巻き戻しの仕組みを持つジャーナルアクションが
-// 必要になる。これはグループの機能ではなく、ストレージ層の設計上の決定である。だから
-// 名前変更は N 回のファイル移動であり、空になった元のディレクトリはそのまま残る。
-// ちょうど、ごみ箱からの復元が既にそのエントリディレクトリを残しているのと同じだ。
+// NoticeGroupDirectoryLeftover は、名前変更後に削除できなかったディレクトリを報告する。
 const NoticeGroupDirectoryLeftover = "group_directory_leftover"
 
-// RenameGroup は、グループとそれを名指しするすべてのものを 1 つのジャーナル済み
-// トランザクションで名前変更する: connections/<old> 配下のすべての connection ファイル、
-// keys/<old> 配下のすべての鍵、その鍵ディレクトリを指していたすべての IdentityFile、
-// 生成された Include region、コンパイル済み settings ファイル、metadata.json である。
-//
-// ネストしたグループはその親と共に移動する。グループ名は
-// ディレクトリパスであり、親ディレクトリの名前変更は子の名前も変えるからだ。
 func (s *Service) RenameGroup(inventory *keys.Inventory, from, to string) (SaveResult, error) {
 	s.saveMutex.Lock()
 	defer s.saveMutex.Unlock()
@@ -45,12 +31,6 @@ func (s *Service) RenameGroup(inventory *keys.Inventory, from, to string) (SaveR
 	})
 }
 
-// DeleteGroup は、グループの宣言を削除し、その connections を
-// 別のグループへ、destination が空ならワークスペースのルートへ再配置する。
-//
-// 設定ファイルが削除されることは決してない。ごみ箱は鍵のため
-// にあり、設定用のごみ箱は存在しない。グループを削除する
-// 副作用としてそれを新設するのは、導入するにはこれ以上ないほど悪い場所だろう。
 func (s *Service) DeleteGroup(inventory *keys.Inventory, name, destination string) (SaveResult, error) {
 	s.saveMutex.Lock()
 	defer s.saveMutex.Unlock()
@@ -115,12 +95,8 @@ func (s *Service) planGroupRename(graph *config.Graph, inventory *keys.Inventory
 		case name == from:
 			renamed[name] = to
 		case strings.HasPrefix(name, from+"/"):
-			// ネストしたグループの名前は親の名前を含むので、親の名前
-			// 変更はそれも変える。置き去りにすればそのファイルが取り残されてしまう。
 			renamed[name] = to + strings.TrimPrefix(name, from)
 		case name == to || strings.HasPrefix(name, to+"/"):
-			// 2 組の設定をマージすることには明らかに正しい答えがない
-			// 決定なので、推測するのではなく拒否する。
 			return planned{}, ErrGroupExists
 		}
 	}
@@ -177,9 +153,6 @@ func (s *Service) planGroupDelete(graph *config.Graph, inventory *keys.Inventory
 		}
 	}
 
-	// グループとその子孫のすべてのファイルは 1 つの destination へ
-	// 移動する: 平坦化することが「このグループは無くなる」という
-	// ことの意味であり、驚きではなくプレビューで明言される。
 	moved := make(map[string]string, len(removed))
 	for candidate := range removed {
 		moved[candidate] = destination
@@ -188,10 +161,6 @@ func (s *Service) planGroupDelete(graph *config.Graph, inventory *keys.Inventory
 }
 
 // planGroupLayout は、グループの名前変更や削除に必要な 1 つのトランザクションを構築する。
-//
-// renamed は、影響を受ける各グループ名を、そのファイルの
-// 移動先グループへ対応付ける。空の destination はワークスペースの
-// ルートを意味する。next は、region がその後に宣言すべきグループ集合である。
 func (s *Service) planGroupLayout(
 	graph *config.Graph,
 	inventory *keys.Inventory,
@@ -217,21 +186,12 @@ func (s *Service) planGroupLayout(
 	return layout.prepared, nil
 }
 
-// groupLayout は、グループの名前変更や削除を 1 つのトランザクションへ落とす途中の
-// 状態である。
-//
-// **局面をまたいで持ち回るものを、名前のある値にまとめてある。** 以前これらは
-// planGroupLayout の 218 行の中に生の変数として並んでおり、どの局面が何を触るのかは
-// 全体を頭に入れないと分からなかった。局面は順に依存する——ファイルの移動が決まって
-// 初めて鍵の参照を書き換えられ、それが済んで初めて領域と settings を組み直せる。
 type groupLayout struct {
 	service   *Service
 	graph     *config.Graph
 	inventory *keys.Inventory
 	root      string
-	// renamed は、影響を受ける各グループ名を、そのファイルの移動先グループへ対応
-	// 付ける。空の destination はワークスペースのルートを意味する。
-	renamed map[string]string
+	renamed   map[string]string
 	// next は、region がその後に宣言すべきグループ集合である。
 	next                []string
 	discardPresentation bool
@@ -241,14 +201,11 @@ type groupLayout struct {
 	metadataPrecondition storage.Precondition
 	connectionMoves      []groupRelocation
 	keyMoves             []groupRelocation
-	// entryFile と entryUpdated は、生成領域を書き直したあとのエントリファイルで
-	// ある。**settings の再生成がこれを読む** —— 領域が宣言し直したグループの上で
-	// layout を組むので、書き直す前の姿では答えが変わる。
-	entryFile    *config.File
-	entryUpdated []byte
+	entryFile            *config.File
+	entryUpdated         []byte
 }
 
-// stage は、全局面を順に通す。**並びに意味がある。**
+// stage は、全局面を順に通す。並びに意味がある。
 func (g *groupLayout) stage() error {
 	for _, phase := range []func() error{
 		g.stageMoves, g.rewriteMovedKeyReferences, g.stageEntryRegion,
@@ -312,9 +269,6 @@ func (g *groupLayout) stageMoves() error {
 		g.prepared.directories = append(g.prepared.directories, directory)
 	}
 	for _, relocation := range g.connectionMoves {
-		// ファイルで宣言されたすべての alias はパスが変わるので、
-		// その metadata エントリも identity が変わる。これを同じトランザクションで
-		// 行うことが、エントリがユーザーの手作業での再関連付けを要する孤児になるのを防ぐ。
 		g.updated = RelocateHostIdentities(g.updated, relocation.from, relocation.to)
 	}
 	g.updated.Groups = renameGroupMetadata(g.updated.Groups, g.renamed, g.discardPresentation)
@@ -322,12 +276,7 @@ func (g *groupLayout) stageMoves() error {
 }
 
 // rewriteMovedKeyReferences は、移動する鍵を指す IdentityFile 行を書き換える。
-//
-// **半端にしか適用できない名前変更は丸ごと拒否する** —— 鍵の relocation が適用
-// するのと同じ規則である。同じ書き換えだからだ。
 func (g *groupLayout) rewriteMovedKeyReferences() error {
-	// 移動する鍵は、IdentityFile 行が追従しなければならない鍵で
-	// あり、それは鍵の relocation が行うのと同じ書き換えである。
 	keyRelocations := make([]keyRelocation, 0, len(g.keyMoves))
 	members := make([]keys.Item, 0, len(g.keyMoves))
 	for _, relocation := range g.keyMoves {
@@ -339,8 +288,6 @@ func (g *groupLayout) rewriteMovedKeyReferences() error {
 		keyRelocations = append(keyRelocations, keyRelocation{from: relocation.from, to: relocation.to})
 	}
 	if blockers := g.service.keyRelocationBlockers(g.graph, g.inventory, members, keyRelocations, "", false); len(blockers) > 0 {
-		// 半端にしか適用できない名前変更は丸ごと拒否される: 鍵の
-		// relocation が適用するのと同じ規則である。同じ書き換えだからだ。
 		return &GroupBlockedError{Blockers: blockers}
 	}
 	changes, _, err := g.service.rewriteKeyReferences(members, keyRelocations)
@@ -390,8 +337,6 @@ func (g *groupLayout) stageEntryRegion() error {
 
 // stageGroupSettings は、groups.sshc.conf を、このトランザクションが生む layout から再生成する。
 func (g *groupLayout) stageGroupSettings() error {
-	// settings ファイルはコメントでグループを名指しし、メンバーを
-	// 列挙するので、このトランザクションが生む layout から再生成される。
 	pending := map[string][]byte{filepath.Clean(g.service.entryPath): g.entryUpdated}
 	gone := map[string]bool{}
 	for _, move := range g.prepared.moves {
@@ -451,12 +396,9 @@ func (g *groupLayout) stageMetadata() error {
 	return nil
 }
 
-// noteLeftovers は、空になるディレクトリを削除に載せ、残るものと届かなくなる接続を言う。
+// noteLeftovers は削除可能なディレクトリと到達不能になる接続を報告する。
 func (g *groupLayout) noteLeftovers() error {
 	// この操作が空にするディレクトリは、深い方から順に同じトランザクションで一緒に削除される。
-	// 何かを保持したままのディレクトリはそのまま残され、明言される:
-	// グループのファイルはグループと共に移動するが、何にも宣言されていない
-	// ディレクトリは移動しない。どこへ行くべきか誰も知らないからだ。
 	sources := make([]string, 0, len(g.renamed)*2)
 	for name := range g.renamed {
 		sources = append(sources, GroupDirectory(name), GroupKeyDirectory(name))
@@ -476,11 +418,6 @@ func (g *groupLayout) noteLeftovers() error {
 			Code: NoticeGroupDirectoryLeftover, Detail: name, Path: directory,
 		})
 	}
-	// destination のない削除は、その connections をどの Include も
-	// 名指ししない connections/ の直下に置く。それは設計どおりに
-	// 動作しているということであり、同時に connection が設定から
-	// 外れるということでもある。だからそれは保存の前、ここで
-	// 述べられる。何かが解決しなくなってからユーザーが気づくのに任せるのではなく。
 	for _, relocation := range g.connectionMoves {
 		if _, inGroup := GroupOfPath(relocation.to); inGroup {
 			continue
@@ -493,16 +430,12 @@ func (g *groupLayout) noteLeftovers() error {
 }
 
 // GroupBlockedError は、グループ操作が拒否した理由を報告する。
-// 鍵の relocation が生むのと同じ blocker コードを運ぶ。
-// 起こるはずだった書き換えが同じものだからだ。
 type GroupBlockedError struct {
 	Blockers []string
 }
 
 func (e *GroupBlockedError) Error() string { return "group operation blocked" }
 
-// groupFileMoves は、影響を受けるグループディレクトリの
-// いずれかの下にあるすべてのファイルと、その移動先を列挙する。
 func (s *Service) groupFileMoves(renamed map[string]string, root string, directoryOf func(string) string) ([]groupRelocation, error) {
 	names := make([]string, 0, len(renamed))
 	for name := range renamed {
@@ -524,21 +457,8 @@ func (s *Service) groupFileMoves(renamed map[string]string, root string, directo
 		destination := renamed[name]
 		for _, entry := range entries {
 			if entry.IsDir() {
-				// ネストしたグループは renamed の中で独自の destination を
-				// 持つ別のエントリなので、ここからそのファイルが二重に移動されることはない。
 				continue
 			}
-			// destination がない場合、ファイルはグループの中ではなく
-			// 自身のツリーの直下 — connections/ または keys/ — に置かれる。
-			// connection にとってそれは何にも読まれないことを意味し、プレビューは今やそれを
-			// はっきり述べる。鍵にとってはディレクトリ以外は何も変わらないことを意味する。
-			//
-			// 両方のルートは意図的に同じに扱う。以前はこれが行っていた
-			// ように鍵をワークスペースのルートへ向けると、ディレクトリが
-			// "." になり、AbsolutePath はそれをルートだからという理由で
-			// 拒否していた。削除全体は "path is outside the ssh directory" で
-			// 失敗し、鍵を保持するグループは、置き先を別に名指ししない限り
-			// 一切削除できなかった。
 			target := root + "/" + entry.Name()
 			if destination != "" {
 				target = directoryOf(destination) + "/" + entry.Name()
@@ -549,13 +469,6 @@ func (s *Service) groupFileMoves(renamed map[string]string, root string, directo
 	return moves, nil
 }
 
-// renameGroupMetadata は、グループ操作が影響するプレゼンテーション
-// エントリを書き換える。
-//
-// 名前変更は色、note、settings を新しい名前へ運ぶ。別名の下の
-// 同じグループだからだ。削除はそれらを破棄する: destination は
-// 独自のプレゼンテーションを持つ別のグループであり、削除された
-// グループの色で黙って塗り直すのは、誰も求めていない変更になってしまう。
 func renameGroupMetadata(groups []GroupMetadata, renamed map[string]string, discard bool) []GroupMetadata {
 	updated := make([]GroupMetadata, 0, len(groups))
 	for _, group := range groups {
@@ -581,26 +494,14 @@ func groupOrder(metadata Metadata) map[string]int {
 	return order
 }
 
-// resolveOverlay は、このトランザクションを既に適用したファイル
-// システムに対してグラフを解決する。
 func (s *Service) resolveOverlay(pending map[string][]byte, gone map[string]bool) (*config.Graph, error) {
 	resolver := s.resolver
 	resolver.Loader = overlayLoader{base: s.resolver.Loader, pending: pending, gone: gone}
 	return resolver.Resolve(s.entryPath)
 }
 
-// emptiedDirectories は、このトランザクションがこれらの
-// ディレクトリのうちどれを空にし、どれがまだ何かを保持しているかを割り出す。
-//
-// 削除可能なものは深い順に返る。それはジャーナルが適用する
-// 順序であり、機能しうる唯一の順序である: 親は子がすべて
-// 無くなって初めて空になる。そもそも存在しないディレクトリはどちらでもない。
 func (s *Service) emptiedDirectories(sources []string, moving map[string]bool) (removable, left []string, err error) {
 	root := s.workspace.Root()
-	// 候補となるのは、この操作が明け渡そうとしているディレクトリ
-	// だけである。誰も宣言していないサブディレクトリは、たとえ
-	// たまたま空であっても候補ではない。それはこの操作が削除する
-	// ものではなく、その上のグループディレクトリを生かし続ける。
 	ours := map[string]bool{}
 	for _, source := range sources {
 		ours[source] = true

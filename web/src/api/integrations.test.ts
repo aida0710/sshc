@@ -30,8 +30,6 @@ afterEach(() => {
 });
 
 describe("integrationsApi.addKnownHost", () => {
-  // アクションの種類はサーバーのセッションパッケージが所有する。ここで綴りを
-  // 変えれば、サーバーが拒否するトークンを作ってしまう。
   it("uses the committed action vocabulary", () => {
     expect(KNOWN_HOSTS_ADD_ACTION_KIND).toBe("known_hosts.add");
   });
@@ -48,8 +46,6 @@ describe("integrationsApi.addKnownHost", () => {
 
     const [actionPath, actionInit] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(actionPath).toBe("/api/v1/actions");
-    // 含まれるのは操作と target だけである。トークンが紐付く証跡は
-    // 発行時と消費時にサーバー側で導出される。
     expect(sentJson(actionInit)).toEqual({
       kind: "known_hosts.add",
       target: "new.example.com",
@@ -100,7 +96,6 @@ describe("integrationsApi terminal sessions", () => {
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/terminal/sessions");
     expect(init.method).toBe("POST");
-    // 起動に action token は要らない。CSRF ヘッダだけが条件である。
     expect(new Headers(init.headers).get("X-SSHC-CSRF")).toBe(csrfToken);
     expect(new Headers(init.headers).get("X-SSHC-Action")).toBeNull();
   });
@@ -131,9 +126,6 @@ describe("integrationsApi terminal settings", () => {
     });
   });
 
-  // **保存した値が戻ってこなければ、設定は保存されていないのと同じである。**
-  // この写像は項目を 1 つずつ名指すので、足し忘れると画面は空欄を見せ、人は
-  // 何も設定していないと信じる。実際に fontSize でそうなった。
   it("brings every stored field back", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
       schemaVersion: 3,
@@ -258,7 +250,6 @@ describe("integrationsApi remote sync measurements", () => {
     await expect(integrationsApi.pushSnapshot()).resolves.toEqual(response);
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/sync/push");
-    // 押した人が打つものはもう無い。封をする鍵は保管庫の中にある。
     expect(sentJson(init)).toEqual({});
   });
 

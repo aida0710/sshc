@@ -159,7 +159,7 @@ func TestReissueMintsAWayInWithoutDisturbingTheSessions(t *testing.T) {
 		t.Fatalf("the reissued bootstrap does not work: %v", err)
 	}
 	// すでに存在するセッションには手を触れない。これは、セッションを持たないブラウザ
-	// のための入口であって、持っているものを終わらせる手段ではない。
+	// のためのアクセス URLであって、持っているものを終わらせる手段ではない。
 	if ok := manager.Authenticate(established.SessionID); !ok {
 		t.Error("an established session was lost")
 	}

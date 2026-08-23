@@ -225,8 +225,8 @@ func (address fakeAddr) String() string  { return string(address) }
 
 // reload には cookie があり CSRF トークンはない。したがって更新自体が
 // トークンを要求することはできない。bootstrap とまったく同様にこの
-// チェックからは除外されているが、それ以外——有効なセッション、
-// Origin、Fetch Metadata——はすべて守られている。cross-site のページはこれらを作れない。
+// チェックからは除外されているが、それ以外。有効なセッション、
+// Origin、Fetch Metadata。はすべて守られている。cross-site のページはこれらを作れない。
 // SameSite=Strict が cookie を与えず、Sec-Fetch-Site も偽造できないからだ。
 func newRenewServer(t *testing.T) (*echo.Echo, session.Credentials) {
 	t.Helper()

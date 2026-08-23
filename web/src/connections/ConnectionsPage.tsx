@@ -49,12 +49,6 @@ import { ConnectionSummary } from "./ConnectionSummary";
 import { loadConnectionSavedState, type ConnectionSavedState } from "./connectionSavedState";
 import { ManageConnection } from "./ManageConnection";
 
-// Groups 画面が報告し、この画面は報告しないもの。
-//
-// `group_empty` がここに無いのは、もはやどこでも notice として報告
-// されないからだ。宣言済みグループが何も持たない状態は、作られた直後
-// のすべてのグループがある状態そのものであり、Groups 画面はその行自体
-// に "Members: none" と表示している。
 const groupNoticeCodes = new Set([
   "group_not_declared",
   "group_directory_missing",
@@ -62,9 +56,6 @@ const groupNoticeCodes = new Set([
   "group_directory_leftover",
 ]);
 
-// These describe one pattern block, host block, or effective-value view. The
-// tree and selected detail retain them; showing them above an empty detail pane
-// makes a warning look global while offering no object to inspect.
 const selectionNoticeCodes = new Set([
   "complex_external_rule",
   "wildcard_shadow",
@@ -77,11 +68,7 @@ const selectionNoticeCodes = new Set([
 
 
 type ConnectionsPageProps = {
-  // alias を持たない Host パターンには connection identity がないため、
-  // 管理ツリーから Config の該当行へ渡す。
   onOpenFile?: (path: string, line: number) => void;
-  // 右側ペインの中身を、シェルへ差し出す。connection が開いていない間は
-  // null——何か開くまでは、調べるものが何も無いからだ。
   onInspector: (content: InspectorContent) => void;
   creationDraft?: CreateConnectionDraft | null;
   onCreationDraftChange?: (draft: CreateConnectionDraft | null) => void;
@@ -91,8 +78,6 @@ type ConnectionsPageProps = {
   onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
-  // 開いているセッションはシェルが持つ。**描くのは Terminal 画面である**
-  // ——ここは開くだけで、開けたら向こうへ渡す。
   consoles: TerminalSessionsState;
   onShowConsole: (id: string) => void;
 };
@@ -119,9 +104,6 @@ export function ConnectionsPage({
   const initialRoute = parseConnectionLocation(location);
   const initialTarget = initialRoute.kind === "valid" ? initialRoute.target : null;
   const [overview, setOverview] = useState<Overview | null>(null);
-  // どのグループにも属さない connection が向かう先。このページが決め
-  // つけるのではなく、サーバーがエントリファイルを報告する。"config" は
-  // 最初の overview が届くまでの、あくまで暫定のフォールバックである。
   const entryPath = overview?.entry.path ?? "config";
   const {
     selection, setSelection,
@@ -181,9 +163,6 @@ export function ConnectionsPage({
     return emitLocation(connectionLocation(null), options);
   }
 
-  // 書き込み済みの identity は、後続の GET より先に画面と URL の正本にする。
-  // detail は selection effect が新しい identity から読み直す。GET が一時的に
-  // 失敗しても、URL がもう存在しない旧 alias/path を指し続けることはない。
   function followCommittedIdentity(
     identity: HostSelection,
     panel: ConnectionPanel = activePanel,
@@ -234,9 +213,6 @@ export function ConnectionsPage({
     void reload();
   }, [reload]);
 
-  // URL は、選択・表示パネルの共有可能な正本である。popstate を受けた親が
-  // location を更新すると、戻る/進むでも同じ connection を復元する。
-  // URL に秘密や絶対パスは入らず、parser が安全な相対パスだけを通す。
   useEffect(() => {
     const parsed = parseConnectionLocation(location);
     if (parsed.kind === "redirect") {
@@ -309,8 +285,6 @@ export function ConnectionsPage({
     setPreview(null);
     setProblem(null);
     setManaging(false);
-    // emitLocation はこの effect と同じ render の location callback を使う。
-    // 親が callback を作り直すこと自体は URL state の変化ではない。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 
@@ -343,15 +317,11 @@ export function ConnectionsPage({
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [editorDirty]);
 
-  // Home で開かれたセッションは、この画面へ来た時点で選択される。
 
 
 
   useEffect(() => {
     if (detail === null || overview === null) {
-      // 開いている接続が無ければ、このペインに調べるものは無い。開いている
-      // コンソールの一覧は一番左のナビゲーションにあるので、ここが空でも
-      // ローカルシェルへ行く道は残っている。
       onInspector(null);
       return;
     }
@@ -363,12 +333,6 @@ export function ConnectionsPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail, overview, onInspector]);
 
-  // 依存配列にしているのは selection オブジェクトではなく二つの値その
-  // ものである。保存すると、たった今書き込んだホストを再選択するからだ。
-  // 中身が等しくても identity が新しいオブジェクトはこの effect を再実
-  // 行させてしまい、submit が既に取得中の detail を再度取得し、その答え
-  // が届いた時点で、保存が直後に作ったプレビューを破棄してしまっていた。
-  // 書き込んだ内容の diff は、リクエスト一回分の時間だけ画面に出て、その後消えていた。
   const selectedPath = selection === null ? "" : selection.path;
   const selectedAlias = selection === null ? "" : selection.alias;
   useEffect(() => {
@@ -402,8 +366,6 @@ export function ConnectionsPage({
     };
   }, [selectedPath, selectedAlias, setDetail, setSavedState, setProblem, setMissingSelection]);
 
-  // 編集で開いているホストが削除された場合、reselect は false になる
-  // ——消したばかりのブロックをサーバーへすぐに問い合わせずに済ませるためだ。
   async function submit(request: EditRequest, reselect = true): Promise<SaveAttempt> {
     let result: Awaited<ReturnType<typeof configApi.save>>;
     try {
@@ -448,11 +410,6 @@ export function ConnectionsPage({
     return { saved: true, overview: nextOverview };
   }
 
-  // Basic は ssh_config の共通フィールドと vault の関連付けを一つの
-  // トランザクションにする専用 use case である。失敗を再送出するのは、
-  // フォーム自身が入力済みの秘密だけを破棄し、非秘密の下書きを保持する
-  // 必要があるためである。ページは同時に、詳細な Problem と conflict diff
-  // を既存の Save preview に残す。
   async function onBasicSave(request: UpdateConnectionRequest) {
     let result: Awaited<ReturnType<typeof configApi.updateConnection>>;
     try {
@@ -463,9 +420,6 @@ export function ConnectionsPage({
       throw error;
     }
 
-    // The commit is the success boundary. Reset the draft immediately so
-    // secret and non-secret inputs cannot be submitted twice while the saved
-    // snapshot is being confirmed by follow-up reads.
     setPreview(result.preview);
     setProblem(null);
     setLocalError("");
@@ -508,10 +462,6 @@ export function ConnectionsPage({
     }
   }
 
-  // この防護は残す——具体的な alias を持たないエントリには identity が
-  // 無く、host エンドポイントはそれに invalid_request を返す。ツリーは
-  // そのようなブロックをここへは決してルーティングせず、ファイルビューへ送る。
-  // alias の無い selection は将来の呼び出し元が作っても、サーバーへ届いてはならない。
   function onSelect(host: HostEntry) {
     if (host.identity.alias === "") return;
     const nextSelection = { path: host.identity.path, alias: host.identity.alias };
@@ -519,19 +469,9 @@ export function ConnectionsPage({
     const selectingCurrent = currentSelection?.path === nextSelection.path
       && currentSelection.alias === nextSelection.alias;
     if (!navigateTarget(nextSelection, "Basic", "Jump")) return;
-    // URL と selection が同じなら、そのクリックは何も破棄しない。ここで
-    // detail を空にしても selection effect は identity の変化を検出できず、
-    // 同じ connection を再び開けなくなる。下書きも同じ identity のものなので保つ。
     if (selectingCurrent) return;
-    // 別の connection を選ぶと、直前の保存の diff は破棄される——それは
-    // もう開いていないブロックのバイトを記述しているからだ。保存はここで
-    // はなく submit を通じて再選択を行い、その diff は画面に残しておく。
     setPreview(null);
     setProblem(null);
-    // The selection highlight changes immediately, so the detail must not keep
-    // showing the previous host while the new request is in flight. Otherwise
-    // a fast edit can be submitted against a connection the tree no longer
-    // appears to have selected.
     setDetail(null);
     setSavedState(null);
     setMissingSelection(false);
@@ -569,14 +509,6 @@ export function ConnectionsPage({
     });
   }
 
-  // connection をグループへ移動するのはファイル移動であるため、リクエ
-  // ストはグループ名を渡し、サーバーがそこから移動先パスを導く。パスも
-  // 併せて送ってしまうと両者が食い違い得るため、サーバーはそれを即座に拒否する。
-  //
-  // 空のグループは「どのグループの外にも」を意味し、これはディレクト
-  // リへの移動ではなくエントリファイルへ戻す移動である。この形には
-  // エントリファイルのバイトが要るため、移動先はファイル間移動と同じ
-  // ように、自分自身の事前条件で守られる。
   async function onMoveToGroup(group: string) {
     if (detail === null) return;
     const path = detail.form.entry.file.path ?? "";
@@ -593,8 +525,6 @@ export function ConnectionsPage({
       if (moved !== undefined) {
         followCommittedIdentity(moved.identity);
       } else {
-        // 保存は完了したが、新しい path を決める overview を読めなかった。
-        // 消えた旧 path を共有可能な URL として残すより一覧へ戻す方が正確である。
         leaveCommittedIdentityUnknown();
       }
       return;
@@ -616,15 +546,6 @@ export function ConnectionsPage({
     }
   }
 
-  // ドロップは、このページが既に行っている移動のどれか一つを、ドラッ
-  // グされたものに応じて選ぶだけである。サーバーに新しいものは何も届
-  // かない——connection は移動であり、親が変わるグループは新しいパスへのリネームである。
-  //
-  // ドラッグされた connection は選択中のものとは限らないため、そのファ
-  // イルのバイトは開いている detail から取るのではなくここで読む。選択
-  // されていないものなら現在の detail は保ち、選択中のものなら保存後の
-  // identity だけを追う。後者をしないと、画面上は移動済みなのに URL は
-  // 存在しなくなった古いファイルを指し続ける。
   async function onTreeDrop(payload: DragPayload, target: string) {
     if (editorDirty || refreshState !== "idle") return;
     try {
@@ -705,8 +626,6 @@ export function ConnectionsPage({
     }
   }
 
-  // このコメントは configuration ファイルに書き込まれるため、そのファイ
-  // ルへの他のあらゆる編集と同じ base と事前条件の経路を通る。
   function onComment(comment: string) {
     if (detail === null || selection === null) return;
     void submit({
@@ -740,8 +659,6 @@ export function ConnectionsPage({
     await reload();
   }
 
-  // 接続はこのアプリケーションの中で開く。外部の端末アプリケーションは
-  // 起こさない。action token も要らない——vault ゲートだけが条件である。
   async function connectHost() {
     if (selection === null || launching || editorDirty || refreshState !== "idle") return;
     setLaunching(true);
@@ -773,9 +690,6 @@ export function ConnectionsPage({
     }
   }
 
-  // この移動は読み込み済みの base を両方運び、サーバーが各ファイルをそ
-  // れぞれの事前条件で守れるようにする。再選択は submit ではなくここで
-  // 行う——移動がコミットされた時点で、ホストは新しいパスに存在するからだ。
   async function moveHost(target: string) {
     if (detail === null || selection === null || target === "") return;
     try {
@@ -829,12 +743,7 @@ export function ConnectionsPage({
 
   return (
     <>
-    {/* ウィンドウの端まで届く二つのペイン。detail の minmax(0,…) は、
-        inspector が開いたときにも内容幅を保たず縮められるようにする。
 
-        **狭い画面では二つではなく一つである。** どちらを出すかは幅ではなく
-        「何かが選ばれているか」で決まり、それは既にルートが持っている
-        ——だから matchMedia は要らない。選択が変われば、クラスが変わる。 */}
     <div className="grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[19rem_minmax(0,1fr)]">
       <ConnectionListPane
         overview={overview}
@@ -856,20 +765,11 @@ export function ConnectionsPage({
           selection === null ? "hidden" : "flex"
         }`}
       >
-        {/*
-          狭い画面で一覧へ戻る唯一の道である。md 以上では出さない——隣に
-          一覧が見えているので、戻る先を指す必要がない。
-        */}
+
         <Button className="w-fit md:hidden" onClick={() => clearTarget()}>
           {t("conn.allConnections")}
         </Button>
-        {/*
-          グループ単位の notice は Groups 画面のものであり、README にもそう
-          書いてある——それらは宣言とディスクが互いについて何を語っているか
-          を記述するもので、この画面が対処できることではない。ここに届いて
-          いたのは、overview が運ぶすべての notice をこのリストへ渡していた
-          からにすぎない。
-        */}
+
         <NoticeList
           notices={overview.notices.filter(
             (notice) => !groupNoticeCodes.has(notice.code) && !selectionNoticeCodes.has(notice.code),

@@ -7,20 +7,20 @@ import (
 	"testing"
 )
 
-// **Go でない原文が、連れの Go を失ったまま残ることがある。**
+// Go でない原文が、連れの Go を失ったまま残ることがある。
 //
 // これは実際に起きた。生体認証を畳んだとき `biometric_darwin.go` と `.h` は消せた
-// のに `.m` が残り、**Linux では一度も見えなかった** ——`//go:build darwin` が
+// のに `.m` が残り、Linux では一度も見えなかった。`//go:build darwin` が
 // パッケージごと除外するからである。macOS の CI が初めてこう言った:
 //
 //	Objective-C source files not allowed when not using cgo or SWIG
 //
-// 手元の OS では通り、別の OS でだけ落ちる種類の残骸なので、**ファイルの並びから
-// 見つけるしかない。** cgo の原文は、それを `import "C"` する Go と対でしか
-// 意味を持たない——連れが居ないなら、それは誰も読まないバイト列である。
+// 手元の OS では通り、別の OS でだけ落ちる種類の残骸なので、ファイルの並びから
+// 見つけるしかない。cgo の原文は、それを `import "C"` する Go と対でしか
+// 意味を持たない。連れが居ないなら、それは誰も読まないバイト列である。
 func TestNoCompiledSourceOutlivesItsGoCompanion(t *testing.T) {
 	root := filepath.Join("..", "..")
-	// **並べるのは cgo が拾う拡張子である。** 拾わないものは、置いてあっても
+	// 並べるのは cgo が拾う拡張子である。拾わないものは、置いてあっても
 	// ビルドに入らないので、ここが見張る対象ではない。
 	compiled := map[string]bool{".m": true, ".mm": true, ".c": true, ".cc": true, ".cpp": true, ".h": true, ".hpp": true, ".s": true}
 
@@ -69,7 +69,7 @@ func TestNoCompiledSourceOutlivesItsGoCompanion(t *testing.T) {
 		t.Errorf("these are compiled by cgo but no Go file here imports \"C\":\n  %s",
 			strings.Join(orphans, "\n  "))
 	}
-	// **0 件で緑になるのは、歩き方を間違えたときも同じである。**
+	// 0 件で緑になるのは、歩き方を間違えたときも同じである。
 	if checked == 0 {
 		t.Log("no cgo sources in this checkout; the walk found nothing to judge")
 	}

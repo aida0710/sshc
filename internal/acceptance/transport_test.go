@@ -45,7 +45,7 @@ func TestEveryAPIRouteRefusesTheWrongHostOriginAndFetchSite(t *testing.T) {
 		t.Run(route.Method+" "+route.Path, func(t *testing.T) {
 			// 正のコントロール: 正しいリクエストは transport rule によって
 			// 拒否されてはならない。さもなければ以下の敵対的なケースは何も証明しない。
-			// 別の理由 — action token の欠落、未知の identifier — で
+			// 別の理由（action token の欠落、未知の identifier）で
 			// 拒否されるのは十分ありうるし、ここではそれで構わない。
 			baseline := f.do(route.Method, path, emptyBodyFor(route.Method))
 			baselineBody := readBody(t, baseline)
@@ -118,18 +118,18 @@ func TestEveryAPIRouteExceptBootstrapRequiresASession(t *testing.T) {
 
 // CSRF ヘッダーも、route ごとに書き並べるのではなく列挙して確かめる。
 //
-// **セッションと同じ扱いにする。** 守りはどれも「増えたときに気づく」形で
-// 持たなければ、増えた日に誰も気づかない——手で並べた一覧は、新しい
+// セッションと同じ扱いにする。守りはどれも「増えたときに気づく」形で
+// 持たなければ、増えた日に誰も気づかない。手で並べた一覧は、新しい
 // エンドポイントが足された瞬間に静かに古くなる。実際、この suite に来る前の
 // 単体の一覧は metadata の 2 つを載せていなかった。
 //
 // cookie がポートに紐づかないことがこのヘッダーの理由である。127.0.0.1 は
 // それ自体が site なので、同じアドレスの別のポートで動くサーバーがこの
-// cookie を受け取る。**受け取っても、token は受け取らない。**
+// cookie を受け取る。受け取っても、token は受け取らない。
 func TestEveryAPIRouteThatChangesSomethingRequiresTheCSRFHeader(t *testing.T) {
 	// 除外は 2 つだけで、どちらもトークンをまだ持てない要求である。
 	//
-	// **一覧にして持つのは、3 つ目が足された日に気づくためである。** 除外を
+	// 一覧にして持つのは、3 つ目が足された日に気づくためである。除外を
 	// middleware の条件式の中だけに置くと、増えたことは誰にも見えない。
 	exempt := map[string]string{
 		"/api/v1/session/bootstrap": "セッションを作る要求である。作る前にトークンは無い",
@@ -191,7 +191,7 @@ func TestEveryAPIResponseIsNoStoreAndCarriesTheExactPolicy(t *testing.T) {
 	}
 	// 'unsafe-inline' はもう一律には禁じられない。style-src ひとつだけがそれを
 	// 持ち、その理由は internal/httpserver/security.go にある。したがって
-	// 禁じるのはディレクティブ単位である——スクリプト側にそれが現れたら、
+	// 禁じるのはディレクティブ単位である。スクリプト側にそれが現れたら、
 	// それは実測ではなく諦めである。
 	for _, forbidden := range []string{"unsafe-eval", "http:", "https:", "*"} {
 		if strings.Contains(policy, forbidden) {
@@ -320,7 +320,7 @@ func TestRouteTableMatchesTheOpenAPIContract(t *testing.T) {
 	}
 }
 
-// echoPath は OpenAPI の path template を Echo の parameter 綴りに変換する。
+// echoPath は OpenAPI の path template を Echo の parameter 表記に変換する。
 func echoPath(path string) string {
 	replaced := strings.ReplaceAll(path, "{", ":")
 	return strings.ReplaceAll(replaced, "}", "")
