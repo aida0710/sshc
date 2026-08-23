@@ -1,6 +1,7 @@
 # すべての push と pull request に対する検証ワークフロー。
 # ジョブは失敗した検査を識別できる単位に分割する。検査内容はローカルの
-# `make test`、`make verify-generated`、`make e2e` と一致させる。
+# `make test`、`make verify-generated` と一致させる。時間のかかる E2E は
+# `make e2e` でローカル実行する。
 name: CI
 
 on:
@@ -282,75 +283,6 @@ jobs:
       - name: Stop the containers
         if: always()
         run: make integration-down
-
-  e2e:
-    name: End to end
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci --prefix web
-
-      - name: Build the binary
-        run: make build
-
-      # web/src とコミット済みの埋め込みバンドルが一致することを確認する。
-      - name: The committed bundle matches the sources
-        run: |
-          if ! git diff --exit-code -- internal/ui/dist; then
-            echo "internal/ui/dist is stale. Run: make build, and commit the result." >&2
-            exit 1
-          fi
-
-      # ビルド済みバイナリを localhost で起動し、Chromium から検証する。
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-        working-directory: web
-
-      - name: Playwright
-        run: npm run e2e --prefix web
-
-      # E2E の出力には秘密情報が含まれる可能性があるため、レポート、trace、
-      # video、screenshot、test-results はアップロードしない。
-
-  # Windows 固有のプロセス、ACL、ConPTY を含むブラウザ操作を検証する。
-  # Linux ジョブとは依存関係が異なるため、別ジョブとして実行する。
-  e2e-windows:
-    name: End to end (Windows)
-    runs-on: windows-2025
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci --prefix web
-
-      - name: Build the binary
-        run: go run ./internal/nativebuild/cmd/nativebuild host-build --output-dir bin
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-        working-directory: web
-
-      - name: Playwright
-        run: npm run e2e --prefix web
-
-      # E2E の出力には秘密情報が含まれる可能性があるため、レポート、trace、
-      # video、screenshot、test-results はアップロードしない。
 
   security:
     name: Dependency security

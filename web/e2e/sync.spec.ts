@@ -98,7 +98,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await expect(page.getByRole("heading", { name: "Previous success" })).toBeVisible();
   refusePush = true;
   await page.getByRole("button", { name: "Push this workspace" }).click();
-  await expect(page.getByRole("alert")).toContainText("live snapshot was not updated");
+  await expect(page.getByRole("alert")).toContainText("update was cancelled");
   await expect(page.getByRole("alert")).toContainText("dated history copy");
   await expect(page.getByRole("heading", { name: "Previous success" })).toBeVisible();
 });

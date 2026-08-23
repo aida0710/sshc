@@ -58,40 +58,22 @@ func TestCIWorkflowProvidesNativeGoMatrices(t *testing.T) {
 	}
 }
 
-// ブラウザから見た製品は、Windows でも同じでなければならない。そして
-// それを確かめる経路はひとつしかない。e2e である。ConPTY を実際に踏むのも、
-// 鍵の一覧が Windows で何を表示するかを見るのも、ここだけである。
-//
-// ジョブが消えたら落ちる。初めて実機で走らせたとき 8 件が落ち、その全部が
-// テスト側の Unix 前提だった。このジョブが無ければ、次に誰かが同じことを
-// 書いた瞬間から、誰も気づかないまま壊れている。
-func TestCIWorkflowRunsTheEndToEndSuiteOnWindows(t *testing.T) {
+// E2E は実バイナリをブラウザから操作するため時間がかかる。CI からは外し、
+// Makefile のローカル実行経路を維持する。
+func TestCIWorkflowLeavesTheEndToEndSuiteForLocalRuns(t *testing.T) {
 	document := readWorkflowDocument(t)
-
-	job, present := document.Jobs["e2e-windows"]
-	if !present {
-		t.Fatal("the workflow has no e2e-windows job; the browser-facing suite would only ever run on Linux")
-	}
-	if job.RunsOn != "windows-2025" {
-		t.Errorf("e2e-windows runs on %q, want windows-2025", job.RunsOn)
+	for _, id := range []string{"e2e", "e2e-windows"} {
+		if _, present := document.Jobs[id]; present {
+			t.Errorf("jobs.%s runs E2E in GitHub Actions; use make e2e locally", id)
+		}
 	}
 
-	source, err := os.ReadFile(workflowPath())
+	makefile, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	windows := withoutYAMLComments(jobSection(string(source), "e2e-windows:", "security:"))
-	if !strings.Contains(windows, "npm run e2e --prefix web") {
-		t.Error("the Windows e2e job does not run the suite")
-	}
-	// どのジョブも xvfb を持ち込まない。あれは窓を要求する Electron を
-	// 窓なしで動かすためのもので、その Electron はもう無い。Chromium は
-	// headless で走るので Linux でも要らず、Windows には存在すらしない。
-	//
-	// Windows のジョブだけを見ていたのでは足りない。実際、Electron が消えた
-	// 後も Linux のジョブは xvfb-run を被せたままで、何も守らない 1 行が残った。
-	if strings.Contains(string(source), "xvfb") {
-		t.Error("a job invokes xvfb, which no longer wraps anything")
+	if !strings.Contains(string(makefile), "e2e: build\n\tnpm run e2e --prefix web") {
+		t.Error("Makefile does not retain the local E2E target")
 	}
 }
 
@@ -326,7 +308,7 @@ func validateNativeWorkflow(document workflowDocument) []string {
 	if _, ok := document.Jobs["macos"]; ok {
 		problems = append(problems, "the old jobs.macos duplicate must be folded into jobs.go")
 	}
-	for _, id := range []string{"web", "generated", "integration", "e2e", "security", "android", "deadcode"} {
+	for _, id := range []string{"web", "generated", "integration", "security", "android", "deadcode"} {
 		job, ok := document.Jobs[id]
 		if !ok {
 			problems = append(problems, "single-instance job "+id+" is missing")

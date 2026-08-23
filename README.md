@@ -79,7 +79,7 @@ Go 1.26 と Node.js 22 が必要です。
 ```sh
 make build       # Web UI をビルドし、bin/sshc を生成
 make test        # Go と Web UI のテストを実行
-make e2e         # 実バイナリに対する Playwright テストを実行
+make e2e         # 実バイナリに対する Playwright テストをローカル実行
 make generate    # OpenAPI から Go と TypeScript のコードを再生成
 ```
 
