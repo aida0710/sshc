@@ -42,13 +42,14 @@ type Dependencies struct {
 	Random io.Reader
 	// Announce は、この常駐が受け付けられる状態になったことを伝える。
 	//
-	// **ブラウザは開かない。** 画面はデスクトップの外殻が出すので、この
-	// プロセスが既定のブラウザを起こす理由はもう無い。nil なら何も言わない
-	// ——ログへトークンを落とさないための、自動化からの明示的な選択である。
+	// **engine 自身はブラウザを開かない。** 開くのは、走っている engine から
+	// 入口を貰いに来た裸の `sshc` である。engine は tmux の中や supervisor の
+	// 下で走っていることがあり、そこに画面があるとは限らない。
 	//
-	// 入口の URL を運ぶのは desktop の owner のときだけである。headless に
-	// 渡す Readiness は URL を持たない——**持たせれば、それを出さない約束は
-	// 呼び出し側の注意深さに委ねられる。**
+	// **入口の URL を運ぶかどうかは、受け取る側で決まる。** Android の外殻は
+	// これをそのまま WebView へ読み込ませるので要るが、端末へ書く実装
+	// （announceReadiness）は URL に触れない——**書けばトークンがログに残る。**
+	// nil なら何も言わない。自動化からの明示的な選択である。
 	Announce func(Readiness) error
 	Listen   ListenFunc
 	// StopEngine は Run が自分で埋める。**呼び出し側が渡すものではない**
@@ -104,17 +105,22 @@ type Dependencies struct {
 	// sleep せずにトークンを老化させる。
 	SessionNow func() time.Time
 	// ShutdownTimeout は、graceful な後始末に与える猶予である。0 なら
-	// defaultShutdownTimeout。
+	// DefaultShutdownTimeout。
 	//
-	// **外側の強制終了より確実に短くなければならない。** desktop の外殻は
-	// stdin を閉じた時点から 5 秒で数え始めるので、Go 側のタイマーは必ずその
-	// 後に始まる。等しい値を置けば、内側の強制停止に到達する前に外から殺される。
+	// **外側で待っている者より確実に短くなければならない。** 席を空けるのを
+	// 待つのは `sshc engine --replace` であり、あちらが諦めた後に engine が
+	// 畳み終えても、席は空いたのに起こし直す側は失敗した後、という順序になる。
+	// だから外側の上限（engineReleaseTimeout）はこの値から導いてある。
 	// テストは秒を待たずに済むよう、ここへ短い値を注入する。
 	ShutdownTimeout time.Duration
 }
 
-// defaultShutdownTimeout は、承認済みの内側の締切である。
-const defaultShutdownTimeout = 4 * time.Second
+// DefaultShutdownTimeout は、承認済みの内側の締切である。
+//
+// **これを外へ出しているのは、待つ側に数えさせるためである。** 以前ここは
+// 非公開で、外側の猶予は別の場所に別の数として書かれていた。片方だけ動かせば
+// 順序は黙って壊れる。
+const DefaultShutdownTimeout = 4 * time.Second
 
 // Readiness は、受け付けを始めた常駐がどんな状態かを述べる。
 type Readiness struct {
@@ -411,7 +417,7 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 func (r runtime) unwind(dependencies Dependencies) error {
 	timeout := dependencies.ShutdownTimeout
 	if timeout <= 0 {
-		timeout = defaultShutdownTimeout
+		timeout = DefaultShutdownTimeout
 	}
 	// **締切は後始末の goroutine から独立している。** 手前の段が予想外に
 	// 詰まっても、強制停止の一斉開始はそれでも起きる。

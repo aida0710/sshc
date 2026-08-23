@@ -28,7 +28,11 @@ import (
 // 端末なら訊き、端末でなければ `--replace` を書いた人にだけ従う。
 
 // engineReleaseTimeout は、頼んだ engine が席を空けるのを待つ上限である。
-const engineReleaseTimeout = 20 * time.Second
+//
+// **engine 自身の締切から導く。** あちらが畳むのに使ってよい時間より短く待てば、
+// 間に合ったはずのものを諦めることになる。倍率は、頼みが届いてから畳み始める
+// までの往復と、ロックが落ちるのを見に行く間隔ぶんの余裕である。
+const engineReleaseTimeout = 5 * app.DefaultShutdownTimeout
 
 // askToReplace は、走っている engine を止めてよいかを決める。
 //

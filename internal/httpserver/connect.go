@@ -49,7 +49,7 @@ type ConnectHandlers struct {
 	// これは session manager を持たないビルドの状態である。
 	//
 	// **かつては Sessions という名だった。** その名は下の、生きているコンソール
-	// の本数を返す field に譲った——メニューバーが尋ねるのは本数であり、
+	// の本数を返す field に譲った——`sshc status` が尋ねるのは本数であり、
 	// *session.Manager そのものではないので、そちらのほうが呼び出し側に近い名である。
 	Bootstrap *session.Manager
 	BaseURL   string
@@ -193,10 +193,10 @@ type openResponse struct {
 	URL string `json:"url"`
 }
 
-// StatusPath は、外殻が「いまどうなっているか」を尋ねる場所である。
+// StatusPath は、走っている engine に「いまどうなっているか」を尋ねる場所である。
 //
 // **これは画面のための口ではない。** 画面は自分の session を持っている。
-// ここが答える相手はメニューバーであり、認可は handoff の秘密ひとつである。
+// ここが答える相手は `sshc status` であり、認可は handoff の秘密ひとつである。
 const StatusPath = "/cli/status"
 
 // StopPath は、走っている engine に「畳んで終わってくれ」と頼む場所である。
@@ -269,7 +269,10 @@ func (h ConnectHandlers) Stop(c *echo.Context) error {
 	return nil
 }
 
-// Status は、メニューバーと終了時の確認が読む現在地である。
+// Status は、走っている engine の現在地である。
+//
+// **読むのは `sshc status` と、engine を止めてよいかを決める側である。** 端末が
+// 開いたままの engine を黙って畳めば、その端末も転送も落ちる。
 func (h ConnectHandlers) Status(c *echo.Context) error {
 	if !h.authorised(c.Request()) {
 		return c.NoContent(http.StatusForbidden)

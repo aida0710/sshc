@@ -130,12 +130,14 @@ func TestOnlyOneOwnerWinsAStartRace(t *testing.T) {
 			continue
 		}
 		// **負けた側は、負けたと言って終わる。** 何かに躓いて落ちただけなら、
-		// この検査は「一台しか残らなかった」を偶然で満たしてしまう。desktop は
-		// engineBusyExit(3) を外殻へ返し、headless は端末に理由を書いて 1 で
-		// 終わる——どちらの番号も、ロックに弾かれたことだけを意味する。
+		// この検査は「一台しか残らなかった」を偶然で満たしてしまう。理由を端末に
+		// 書いて 1 で終わるのが、ロックに弾かれたときの唯一の出方である。
+		//
+		// **以前はここが 3 も通していた。** Electron の外殻へ ownership の衝突を
+		// 別番号で知らせていた頃の名残で、その読み手が消えた今は 1 しか出ない。
 		code := process.wait(t, 5*time.Second)
-		if code != 1 && code != 3 {
-			t.Errorf("a loser exited with %d, want the refusal 1 or 3\n%s",
+		if code != 1 {
+			t.Errorf("a loser exited with %d, want the refusal 1\n%s",
 				code, process.Stderr.String())
 		}
 	}

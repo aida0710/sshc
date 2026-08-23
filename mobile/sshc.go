@@ -37,7 +37,7 @@ var (
 
 // running は、このプロセスの唯一の engine である。
 //
-// **構造体を bind して Kotlin にインスタンスを持たせない。** 1 プロセスに
+// **構造体を bind して Java にインスタンスを持たせない。** 1 プロセスに
 // engine は 1 台という制約は Android では設計判断ではなく事実であり、複数
 // 持てる形を見せれば、持てないものを持てるように見せることになる。
 var running struct {
@@ -48,10 +48,10 @@ var running struct {
 	// lastKind は、直前の Start が失敗した理由である。
 	//
 	// **なぜ error ではなく番号を別に持つのか。** gomobile は Go の error を
-	// Java の Exception へ写すとき、メッセージ文字列しか運ばない。Kotlin が
+	// Java の Exception へ写すとき、メッセージ文字列しか運ばない。Java が
 	// 受け取った Exception を Go へ返しても、それは元の error ではなく同じ
 	// 文面を持つ別物になるので、errors.Is はこの境界を越えられない。理由の
-	// 区別は Go 側で確定させ、Kotlin は番号だけを取りに来る。
+	// 区別は Go 側で確定させ、Java は番号だけを取りに来る。
 	lastKind int
 }
 
@@ -128,7 +128,7 @@ func Stop() error {
 	return err
 }
 
-// Start が失敗した理由。**Kotlin はこの番号だけを見る。**
+// Start が失敗した理由。**Java はこの番号だけを見る。**
 const (
 	kindNone = iota
 	kindUnknown
@@ -140,7 +140,7 @@ const (
 // fail は、失敗の理由を記録してからその error を返す。
 //
 // **running の mutex を握ったまま呼ぶこと。** Start と LastStartFailureKind が
-// 同じ錠の下に居るので、Kotlin が catch してから番号を取りに来るまでの間に
+// 同じ錠の下に居るので、Java が catch してから番号を取りに来るまでの間に
 // 別の Start が理由を上書きすることはない。
 func fail(kind int, err error) error {
 	running.lastKind = kind
@@ -149,7 +149,7 @@ func fail(kind int, err error) error {
 
 // LastStartFailureKind は、直前の Start が失敗した理由を番号ひとつで返す。
 //
-// **error そのものを Kotlin へ渡して番号に畳ませない。** gomobile は Go の
+// **error そのものを Java へ渡して番号に畳ませない。** gomobile は Go の
 // error を Java の Exception へ写すときメッセージ文字列しか運ばないので、
 // 戻ってきた値に errors.Is は効かない。それに、engine の error は入口の URL を
 // 含み得る——文面を境界の向こうへ出せば logcat とエラー画面に bootstrap

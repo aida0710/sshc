@@ -84,10 +84,14 @@ func TestCIWorkflowRunsTheEndToEndSuiteOnWindows(t *testing.T) {
 	if !strings.Contains(windows, "npm run e2e --prefix web") {
 		t.Error("the Windows e2e job does not run the suite")
 	}
-	// **xvfb を持ち込まない。** あれは Linux の Electron を窓なしで動かすための
-	// もので、Windows には無い。書けばジョブごと落ちる。
-	if strings.Contains(windows, "xvfb") {
-		t.Error("the Windows e2e job invokes xvfb, which does not exist there")
+	// **どのジョブも xvfb を持ち込まない。** あれは窓を要求する Electron を
+	// 窓なしで動かすためのもので、その Electron はもう無い。Chromium は
+	// headless で走るので Linux でも要らず、Windows には存在すらしない。
+	//
+	// **Windows のジョブだけを見ていたのでは足りない。** 実際、Electron が消えた
+	// 後も Linux のジョブは xvfb-run を被せたままで、何も守らない 1 行が残った。
+	if strings.Contains(string(source), "xvfb") {
+		t.Error("a job invokes xvfb, which no longer wraps anything")
 	}
 }
 
