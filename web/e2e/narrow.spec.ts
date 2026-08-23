@@ -1,4 +1,5 @@
 import { expect, test, openApplication, sessionStatus } from "./support/environment";
+import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard } from "./support/terminal";
 
 // このファイルだけが 360x800 で走る。**既存の spec を狭い幅でもう一周させない**
 // ——17 本すべてをドロワー越しの操作へ書き換えることになり、守るものより
@@ -191,7 +192,7 @@ test("sends a real control character from the on-screen keys", async ({ page, in
   // 止められるものを走らせる。**Ctrl+C が 0x03 にならなければ、シェルは 60 秒
   // 戻ってこない。** 送ったバイトを覗くのではなく、シェルがまた打鍵を受ける
   // ようになることで表明する。
-  await page.locator(".xterm-helper-textarea").focus();
+  await terminalKeyboard(page).focus();
   await page.keyboard.type("sleep 60");
   await page.keyboard.press("Enter");
 
@@ -201,7 +202,7 @@ test("sends a real control character from the on-screen keys", async ({ page, in
   const keys = page.getByLabel("On-screen keys");
   await expect(keys).toBeVisible();
   await keys.getByRole("button", { name: "Ctrl", exact: true }).click();
-  await page.locator(".xterm-helper-textarea").focus();
+  await terminalKeyboard(page).focus();
   await page.keyboard.type("c");
 
   // 引用符は、打った行と出た行を別物にするために入れてある。これが無いと、
@@ -222,8 +223,8 @@ test("sends a real control character from the on-screen keys", async ({ page, in
   // ↑ は履歴を 1 つ戻す。同じ印が 2 度目に現れたなら、送られたのはラベルの
   // 文字列ではなく制御列である。見るのは端末の行だけ——section はキーバーを
   // 含むので、そこを見るとボタンのラベルに一致してしまう。
-  const rows = page.locator(".xterm-rows");
-  await page.locator(".xterm-helper-textarea").focus();
+  const rows = drawnRows(page);
+  await terminalKeyboard(page).focus();
   // 印は 1 行に収まる長さでなければならない。**この幅の端末は 20 桁ほどしか
   // 無く**、跨いだ文字列は行の継ぎ目で切れて、どんな部分一致にも当たらない。
   await page.keyboard.type(": zzq");
@@ -249,9 +250,9 @@ test("lays a selectable layer over the terminal, outside the element that blocks
   await nav.getByRole("tab", { name: "Terminals" }).click();
   await nav.getByRole("button", { name: "Local shell" }).click();
 
-  const rows = page.locator(".xterm-rows");
+  const rows = drawnRows(page);
   await expect(rows).toContainText(/[$#%>]/, { timeout: 20_000 });
-  await page.locator(".xterm-helper-textarea").focus();
+  await terminalKeyboard(page).focus();
   await page.keyboard.type("echo zzq");
   await page.keyboard.press("Enter");
   await expect(rows).toContainText("zzq", { timeout: 20_000 });
@@ -259,22 +260,22 @@ test("lays a selectable layer over the terminal, outside the element that blocks
   const overlay = page.locator(".sshc-select-overlay");
   await expect(overlay).toHaveCount(1);
 
-  // **これがこの設計そのものである。** .xterm の中では長押しからの選択が
+  // **これがこの設計そのものである。** 端末の木の中では長押しからの選択が
   // 始まらないので、字は必ずその外に無ければならない。
-  expect(await overlay.evaluate((node) => node.closest(".xterm") === null)).toBe(true);
+  expect(await outsideTerminal(overlay)).toBe(true);
   await expect.poll(async () => (await overlay.textContent()) ?? "").toContain("zzq");
 
   // 重ならなければ、帯は別の字の上に出る。
-  const shape = await page.evaluate(() => {
+  const screen = await screenRect(page);
+  const shape = await page.evaluate((face) => {
     const layer = document.querySelector(".sshc-select-overlay")!.getBoundingClientRect();
-    const screen = document.querySelector(".xterm-screen")!.getBoundingClientRect();
     return {
-      dx: Math.abs(layer.x - screen.x),
-      dy: Math.abs(layer.y - screen.y),
-      dw: Math.abs(layer.width - screen.width),
-      dh: Math.abs(layer.height - screen.height),
+      dx: Math.abs(layer.x - face.x),
+      dy: Math.abs(layer.y - face.y),
+      dw: Math.abs(layer.width - face.width),
+      dh: Math.abs(layer.height - face.height),
     };
-  });
+  }, screen);
   expect(shape.dx).toBeLessThanOrEqual(1);
   expect(shape.dy).toBeLessThanOrEqual(1);
   expect(shape.dw).toBeLessThanOrEqual(1);
@@ -282,16 +283,16 @@ test("lays a selectable layer over the terminal, outside the element that blocks
 
   // **字送りを決めているのは font ではなく letter-spacing である。** xterm が
   // 較正したその値を写しているので、桁がずれない。名前が変われば、ここが落ちる。
-  const metrics = await page.evaluate(() => {
+  const source = await drawnRowFont(page);
+  const metrics = await page.evaluate((drawn) => {
     const layer = getComputedStyle(document.querySelector(".sshc-select-overlay")!);
-    const source = getComputedStyle(document.querySelector(".xterm-rows")!);
     return {
-      sameFamily: layer.fontFamily === source.fontFamily,
-      sameSize: layer.fontSize === source.fontSize,
-      sameSpacing: layer.letterSpacing === source.letterSpacing,
+      sameFamily: layer.fontFamily === drawn.fontFamily,
+      sameSize: layer.fontSize === drawn.fontSize,
+      sameSpacing: layer.letterSpacing === drawn.letterSpacing,
       colour: layer.color,
     };
-  });
+  }, source);
   expect(metrics.sameFamily).toBe(true);
   expect(metrics.sameSize).toBe(true);
   expect(metrics.sameSpacing).toBe(true);
@@ -327,7 +328,7 @@ test("asks before closing a live console, in the middle of the screen and not in
   const nav = page.getByRole("navigation", { name: "Primary" });
   await nav.getByRole("tab", { name: "Terminals" }).click();
   await nav.getByRole("button", { name: "Local shell" }).click();
-  await expect(page.locator(".xterm-rows")).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await expect(drawnRows(page)).toContainText(/[$#%>]/, { timeout: 20_000 });
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   await nav.getByRole("button", { name: /^Close / }).first().click();
