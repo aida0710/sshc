@@ -115,23 +115,3 @@ func (process *terminalProcess) waitForOutput() {
 	case <-time.After(2 * time.Second):
 	}
 }
-
-func (process *terminalProcess) running() bool {
-	select {
-	case err := <-process.exited:
-		process.exited <- err
-		return false
-	default:
-		return true
-	}
-}
-
-// interrupt は Ctrl-C の一バイトを端末へ送る。信号を直接送らないのは、利用者が
-// 押すのがキーだからである——端末の line discipline がそれを信号に変える経路
-// ごと確かめたい。
-func (process *terminalProcess) interrupt(t *testing.T) {
-	t.Helper()
-	if _, err := process.terminal.Write([]byte{3}); err != nil {
-		t.Fatal(err)
-	}
-}

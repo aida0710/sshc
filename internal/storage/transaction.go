@@ -347,8 +347,6 @@ func (p *journalPlan) add(entry journalEntry, staged, previous []byte) {
 	p.previous = append(p.previous, previous)
 }
 
-func (p *journalPlan) len() int { return len(p.entries) }
-
 func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) {
 	if request.Operation == "" {
 		return Result{}, ErrInvalidOperation

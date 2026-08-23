@@ -22,7 +22,6 @@ func NewRing(capacity int) *Ring {
 	return &Ring{data: make([]byte, capacity)}
 }
 
-func (r *Ring) Cap() int { return len(r.data) }
 func (r *Ring) Len() int { return r.size }
 
 // Write は決して失敗せず、決して短く書かない。上限より長い書き込みは、

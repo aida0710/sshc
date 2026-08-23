@@ -25,6 +25,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.TextView;
 
+import mobile.Mobile;
+
 /**
  * 画面はこの 1 枚である。engine は EngineService が持っているので、ここがする
  * のは「入口を受け取って WebView へ渡す」ことだけ。
@@ -34,11 +36,16 @@ public final class MainActivity extends Activity {
 
     private WebView webView;
     private boolean bound;
+    private EngineService service;
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
-            EngineService service = ((EngineService.LocalBinder) binder).service();
+            service = ((EngineService.LocalBinder) binder).service();
+            // **通知から止められたら、この画面も畳む。** bind が残っている限り
+            // service は destroy されないので、engine だけ落ちた抜け殻の画面が
+            // 残る——WebView は繋がらない先を叩き続ける。
+            service.listen(MainActivity.this::finishAndRemoveTask);
             String entrance = service.entrance();
             if (entrance == null) {
                 showFailure(service.failure());
@@ -70,6 +77,12 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (service != null) {
+            // **service はこちらより長く生きる。** Activity の参照を持たせた
+            // まま離れると、畳まれた画面を掴み続けることになる。
+            service.listen(null);
+            service = null;
+        }
         if (bound) {
             unbindService(connection);
             bound = false;
@@ -152,20 +165,20 @@ public final class MainActivity extends Activity {
      * **Go の error 文を出さない。** 入口の URL を含み得るので、番号に対応する
      * こちらの文字列だけを出す。
      */
-    private void showFailure(int reason) {
+    private void showFailure(long reason) {
+        // **番号は書かない。** ここは以前 `case 2:` と直に書いていた——
+        // mobile/sshc.go の iota の途中に一つ挿すだけで、この画面が黙って別の
+        // 文言を出す状態だった。gomobile は export された定数を Java 側にも
+        // 生やすので、**数は Go に 1 つだけ**在ればよい。
         int message;
-        switch (reason) {
-            case 2:
-                message = R.string.failure_already_started;
-                break;
-            case 3:
-                message = R.string.failure_listen;
-                break;
-            case 4:
-                message = R.string.failure_stopped_early;
-                break;
-            default:
-                message = R.string.failure_unknown;
+        if (reason == Mobile.KindAlreadyStarted) {
+            message = R.string.failure_already_started;
+        } else if (reason == Mobile.KindListenFailed) {
+            message = R.string.failure_listen;
+        } else if (reason == Mobile.KindStoppedEarly) {
+            message = R.string.failure_stopped_early;
+        } else {
+            message = R.string.failure_unknown;
         }
         TextView view = new TextView(this);
         view.setText(message);

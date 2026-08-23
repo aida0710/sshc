@@ -89,9 +89,8 @@ type View struct {
 	Forwards []Forward
 }
 
-func (s *Session) ID() string    { return s.id }
-func (s *Session) Kind() Kind    { return s.kind }
-func (s *Session) Alias() string { return s.alias }
+func (s *Session) ID() string { return s.id }
+func (s *Session) Kind() Kind { return s.kind }
 
 // Title は一覧に出す名前である。改名できるので、ロックの中で読む。
 func (s *Session) Title() string {

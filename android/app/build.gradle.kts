@@ -66,4 +66,10 @@ android {
 dependencies {
     // sshc.aar は `make android-bind` が置く。Go の成果物なので追跡しない。
     implementation(files("libs/sshc.aar"))
+
+    // **端末もエミュレータも要らない検査のためだけに在る。** 外殻の判断のうち
+    // Android を必要としないものは src/test へ出してあり、そこは JVM で走る。
+    // ここに androidTest（実機が要る側）は無い——CI が持てないものを置くと、
+    // 「在るのに一度も走らない検査」になる。
+    testImplementation("junit:junit:4.13.2")
 }

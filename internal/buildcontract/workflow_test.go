@@ -327,7 +327,7 @@ func validateNativeWorkflow(document workflowDocument) []string {
 	if _, ok := document.Jobs["macos"]; ok {
 		problems = append(problems, "the old jobs.macos duplicate must be folded into jobs.go")
 	}
-	for _, id := range []string{"web", "generated", "integration", "e2e", "security", "android"} {
+	for _, id := range []string{"web", "generated", "integration", "e2e", "security", "android", "deadcode"} {
 		job, ok := document.Jobs[id]
 		if !ok {
 			problems = append(problems, "single-instance job "+id+" is missing")

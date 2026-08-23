@@ -76,8 +76,8 @@ func TestTheFailureKindSurvivesWhereTheErrorWouldNot(t *testing.T) {
 	if _, err := Start(t.TempDir(), t.TempDir()); err == nil {
 		t.Fatal("a second Start succeeded")
 	}
-	if got := LastStartFailureKind(); got != kindAlreadyStarted {
-		t.Errorf("LastStartFailureKind() = %d, want %d", got, kindAlreadyStarted)
+	if got := LastStartFailureKind(); got != KindAlreadyStarted {
+		t.Errorf("LastStartFailureKind() = %d, want %d", got, KindAlreadyStarted)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestTheFailureKindSurvivesWhereTheErrorWouldNot(t *testing.T) {
 // エラー画面を出す。
 func TestASuccessfulStartClearsTheLastFailure(t *testing.T) {
 	started(t)
-	if got := LastStartFailureKind(); got != kindNone {
-		t.Errorf("LastStartFailureKind() = %d, want %d", got, kindNone)
+	if got := LastStartFailureKind(); got != KindNone {
+		t.Errorf("LastStartFailureKind() = %d, want %d", got, KindNone)
 	}
 }

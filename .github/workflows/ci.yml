@@ -169,6 +169,13 @@ jobs:
           }
           make android-bind ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
 
+      # **コンパイルが通ることは、動くことではない。** ここが assembleDebug しか
+      # 無かった間、外殻の Java は一度も実行されないまま配られていた。端末を
+      # 要さない判断は src/test に出してあるので、JVM だけで走る。
+      - name: Unit tests
+        working-directory: android
+        run: ./gradlew --no-daemon test
+
       - name: assembleDebug
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
@@ -225,6 +232,24 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # **参照ゼロを見つける仕組みが無かった。** Electron と生体認証を消したとき、
+  # windowsregistry package（130 行）と Vault.Wrap は書き手が消えたまま残った。
+  # どちらもコンパイルは通り続けるので、見張らなければ誰も気づかない。
+  #
+  # **go のジョブに置かない。** あちらは OS ごとに走るが、この検査は 1 回の中で
+  # 3 つの OS すべてを見る——`_windows.go` からしか呼ばれないものは Linux から
+  # 見れば死んで見えるので、積を取らなければ嘘をつく。
+  deadcode:
+    name: Dead code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: make deadcode
 
   generated:
     name: Generated files

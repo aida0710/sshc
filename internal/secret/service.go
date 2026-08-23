@@ -144,16 +144,6 @@ func (s *Service) IdleTimeout() time.Duration {
 	return s.idle
 }
 
-// SetIdleTimeout は、時計で閉じるまでの時間を決める。
-//
-// **決めるのは engine を起こした側である。** この package は、自分が画面の
-// ある機械に居るのかサーバに居るのかを知らない。
-func (s *Service) SetIdleTimeout(idle time.Duration) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.idle = idle
-}
-
 // open は vault を返す。IdleTimeout より長く触れられていなければ、先にそれを
 // 閉じる。
 //
@@ -569,17 +559,6 @@ func (s *Service) UnassignCredential(kind Kind, subject string) error {
 	vault.Unassign(kind, subject)
 	s.mu.Unlock()
 	return s.write()
-}
-
-// AssignedCredential は、subject が参照している名前を報告する。
-func (s *Service) AssignedCredential(kind Kind, subject string) (string, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	vault := s.open()
-	if vault == nil {
-		return "", false
-	}
-	return vault.Assigned(kind, subject)
 }
 
 // PasswordFor は、alias を、それに与えるべき値へ解決する。存在しないとき、および

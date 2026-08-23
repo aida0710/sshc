@@ -110,12 +110,6 @@ func (t *recordingTerminal) launched() []string {
 	return programs
 }
 
-func (t *recordingTerminal) opened() []terminal.Command {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	return append([]terminal.Command(nil), t.commands...)
-}
-
 func (t *recordingTerminal) reset() {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -777,13 +771,6 @@ func (s *recordingScanner) collect(
 	defer s.mutex.Unlock()
 	s.addresses = append(s.addresses, address)
 	return []ssh.PublicKey{s.hostKey}, nil
-}
-
-// reached は、この継ぎ目に届いた宛先である。
-func (s *recordingScanner) reached() []string {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return append([]string(nil), s.addresses...)
 }
 
 func (s *recordingScanner) reset() {
