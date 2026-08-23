@@ -42,12 +42,21 @@ func TestOpeningAnSSHSessionStartsNoProcess(t *testing.T) {
 //
 // 設定の問題は接続画面が既に表示できる。端末に理由を書く必要が無いばかりか、
 // 書けば「接続を試みた」という嘘になる。
+//
+// **例は ProxyCommand + ProxyJump である。** どちらも「どうやって届くか」を
+// 決めるものなので、両方書いた人は二つの違う答えを書いている。ssh も同じ設定を
+// 断る（"inconsistent options: ProxyCommand+ProxyJump"）。
+//
+// かつてここは ProxyCommand ひとつを例にしていた。**あれは解決できないのでは
+// なく、このアプリケーションが断っていただけである** ——いまは起こすので、
+// 例として成り立たない。
 func TestAnUnresolvableAliasOpensNoSession(t *testing.T) {
 	f := newFixture(t)
 	mustWrite(t, f.root+"/config", []byte(""+
 		"Host refused\n"+
 		"\tHostName 203.0.113.10\n"+
-		"\tProxyCommand /usr/bin/nc %h %p\n"), 0o600)
+		"\tProxyCommand /usr/bin/nc %h %p\n"+
+		"\tProxyJump gateway\n"), 0o600)
 
 	response := f.do(http.MethodPost, "/api/v1/terminal/sessions",
 		mustJSON(t, map[string]any{"kind": "ssh", "alias": "refused"}))

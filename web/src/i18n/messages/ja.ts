@@ -56,7 +56,7 @@ export const ja = {
   "terminal.limitReached": "同時に開けるコンソールの上限（{max}）に達しました。どれかを閉じてください。",
   "terminal.limitRefused": "これ以上コンソールを開けません。どれかを閉じてください。",
   "terminal.unresolvable": "この接続は解決できないため、使われる値を推測しません。理由は「設定の分析」で確認できます。",
-  "terminal.proxyCommandRefused": "ProxyCommand はプログラムを起こしますが、sshc は接続のために何も実行しません。ProxyJump を使ってください。",
+  "terminal.proxyCommandWithJump": "この接続先は ProxyCommand と ProxyJump の両方を書いています。どちらも「どうやって届くか」を決めるものなので、片方にしてください。ssh も同じ設定を断ります。",
   "terminal.jumpDepthExceeded": "ProxyJump の連鎖が深すぎて辿れません。",
   "terminal.openFailed": "コンソールを開けませんでした。",
   "terminal.keyBar": "画面上のキー",

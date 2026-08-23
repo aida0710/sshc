@@ -1,8 +1,11 @@
 // Package sshclient は、このプロセスの中で SSH を話す。
 //
-// 外部の ssh を起こさない。設定を読むのは internal/effective であり、この
-// パッケージが受け取るのはその答えだけである——~/.ssh/config をここで読むと、
-// 「この alias に接続すると何が使われるか」に答えるものがまた二つになる。
+// 外部の ssh を起こさない。**ProxyCommand だけが例外で、あれは利用者が
+// 「これで繋げ」と書いた綴りそのものである**（proxycommand.go）。
+//
+// 設定を読むのは internal/effective であり、このパッケージが受け取るのは
+// その答えだけである——~/.ssh/config をここで読むと、「この alias に接続すると
+// 何が使われるか」に答えるものがまた二つになる。
 package sshclient
 
 import (
@@ -20,12 +23,6 @@ import (
 
 // 接続を組み立てられない理由。
 var (
-	// ErrProxyCommand は、接続のためにプログラムを起こす設定を断る。
-	//
-	// B1 が Match exec について決めたことと同じ理由である。**このアプリケーションは
-	// 接続のために何も実行しない。** ~/.ssh/config は正本のまま残るので、その人は
-	// 端末から ssh で繋げる——逃げ道は構造上ある。
-	ErrProxyCommand = errors.New("ProxyCommand starts a program, which this client does not do")
 	// ErrJumpDepth は、深すぎる ProxyJump の連鎖を断る。
 	ErrJumpDepth = errors.New("the ProxyJump chain is too deep")
 	// ErrNoHostName は、接続先が決まらない設定を断る。
@@ -54,7 +51,7 @@ var unhonoured = map[string]string{
 	"forwardx11":      "sshc has no X server behind it; a browser terminal cannot show an X window",
 	"controlmaster":   "connection sharing has no meaning inside this process; sshc reuses the connection it already holds",
 	"controlpath":     "connection sharing has no meaning inside this process; sshc reuses the connection it already holds",
-	"localcommand":    "sshc starts no program to connect",
+	"localcommand":    "sshc runs nothing after connecting; the only command it starts for a connection is ProxyCommand, because that one is the connection",
 	"certificatefile": "sshc does not read host or user certificates; an organisation that hands out certificates hands out ssh with them",
 	"sendenv":         "the value would come from this application's environment, not from your shell, so sshc sends nothing rather than the wrong thing",
 }
@@ -117,6 +114,20 @@ type Target struct {
 	// Jump は ProxyJump の連鎖である。手前から順に繋ぐ。
 	Jump []Target
 
+	// ProxyCommand は、この接続先へ届くために起こすプログラムの綴りである。
+	//
+	// **トークンは展開済みである。** 解決器は生のまま返す——`ssh -G` がそう
+	// するからで、OpenSSH が展開するのは繋ぐ瞬間である。空なら普通に TCP で繋ぐ。
+	ProxyCommand string
+
+	// Notices は、この接続について言っておくべきことである。
+	//
+	// **Target が持っている。** 以前は NewTarget が別の戻り値として返しており、
+	// 唯一の呼び出し元がそれを `_` で捨てていた——「読むが従わない」と書いた
+	// 7 つのキーワードは、誰にも届いていなかった。値と一緒に運べば、捨てるには
+	// 捨てると書かなければならない。
+	Notices []Notice
+
 	// Forwards は、この接続の上に開く転送である。
 	//
 	// **bind するのはループバックだけである。** 設定がそれ以外を求めていたら
@@ -150,20 +161,22 @@ func (t Target) Address() string { return net.JoinHostPort(t.HostName, t.Port) }
 type Resolver func(alias string) (effective.Values, error)
 
 // NewTarget は、解決済みの値から接続ひとつ分を組み立てる。
-func NewTarget(alias string, resolve Resolver, home string) (Target, []Notice, error) {
+func NewTarget(alias string, resolve Resolver, home string) (Target, error) {
 	return newTarget(alias, resolve, home, effective.MaxJumpDepth)
 }
 
-func newTarget(alias string, resolve Resolver, home string, depth int) (Target, []Notice, error) {
+func newTarget(alias string, resolve Resolver, home string, depth int) (Target, error) {
 	if depth <= 0 {
-		return Target{}, nil, ErrJumpDepth
+		return Target{}, ErrJumpDepth
 	}
 	values, err := resolve(alias)
 	if err != nil {
-		return Target{}, nil, err
+		return Target{}, err
 	}
-	if values.First("proxycommand") != "" && !strings.EqualFold(values.First("proxycommand"), "none") {
-		return Target{}, nil, ErrProxyCommand
+	proxyCommand := noneToEmpty(values.First("proxycommand"))
+	if proxyCommand != "" && values.First("proxyjump") != "" &&
+		!strings.EqualFold(values.First("proxyjump"), "none") {
+		return Target{}, ErrProxyCommandWithJump
 	}
 
 	target := Target{
@@ -185,7 +198,7 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 		HostKeyAlgorithms: hostKeyAlgorithmsFrom(values),
 	}
 	if target.HostName == "" {
-		return Target{}, nil, ErrNoHostName
+		return Target{}, ErrNoHostName
 	}
 
 	forwards, forwardNotices := parseForwards(values)
@@ -196,23 +209,31 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 	// **トークンを展開するのはここである。** 解決器は ProxyJump を生のまま返す
 	// ——`ssh -G` がそうするからだ。%r が指すのは、いま組み立てているこの行き先の
 	// 利用者であり、手前のホップのそれではない。
-	jump, err := effective.ExpandChainTokens(values.First("proxyjump"), effective.TokenTarget{
+	tokens := effective.TokenTarget{
 		Alias: alias, HostName: target.HostName, Port: target.Port, RemoteUser: target.User,
-	})
+	}
+	if proxyCommand != "" {
+		expanded, err := effective.ExpandProxyTokens(proxyCommand, tokens)
+		if err != nil {
+			return Target{}, err
+		}
+		target.ProxyCommand = expanded
+	}
+	jump, err := effective.ExpandProxyTokens(values.First("proxyjump"), tokens)
 	if err != nil {
-		return Target{}, nil, err
+		return Target{}, err
 	}
 	chain, err := effective.ParseChain(jump)
 	if err != nil {
-		return Target{}, nil, err
+		return Target{}, err
 	}
 	if !chain.Disabled {
 		for _, hop := range chain.Hops {
 			// リストに書かれた user と port は、そのホップ自身の設定に勝つ。
 			// OpenSSH がそう決めている。
-			stage, hopNotices, err := newTarget(hop.Host, resolve, home, depth-1)
+			stage, err := newTarget(hop.Host, resolve, home, depth-1)
 			if err != nil {
-				return Target{}, nil, err
+				return Target{}, err
 			}
 			if hop.UserExplicit {
 				stage.User = hop.User
@@ -221,10 +242,11 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 				stage.Port = hop.Port
 			}
 			target.Jump = append(target.Jump, stage)
-			notices = append(notices, hopNotices...)
+			notices = append(notices, stage.Notices...)
 		}
 	}
-	return target, notices, nil
+	target.Notices = notices
+	return target, nil
 }
 
 // parseForwards は、設定に書かれた転送を読む。

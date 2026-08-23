@@ -45,14 +45,17 @@ type Chain struct {
 	Hops     []Hop
 }
 
-// jumpTokens は、OpenSSH が ProxyJump に許すトークンである。
+// proxyTokens は、OpenSSH が ProxyJump と ProxyCommand に許すトークンである。
 //
 // ssh_config(5) の TOKENS が「ProxyCommand and ProxyJump accept the tokens
 // %%, %h, %n, %p, and %r」と言っている。いずれも最終的な行き先の値を指す
 // ——手前のホップではない。
-const jumpTokens = "hnpr"
+//
+// **二つで一つの規則である。** 同じ文が両方を名指しているので、別々の表を
+// 持たない。
+const proxyTokens = "hnpr"
 
-// ExpandChainTokens は、ProxyJump の値のトークンを展開する。
+// ExpandProxyTokens は、ProxyJump と ProxyCommand の値のトークンを展開する。
 //
 // **解決器はここを生のまま返す。** `ssh -G` がそうするからであり、この製品が
 // 設定について報告する値は ssh の報告と一致していなければならない。OpenSSH が
@@ -60,15 +63,16 @@ const jumpTokens = "hnpr"
 //
 // 展開しないと、`ProxyJump %r@gateway` は「%r という名前の利用者」として
 // ゲートウェイに認証を試みることになる。publickey は当然通らず、残る方式も
-// 無いので、握手はそこで終わる——実際そうなっていた。
+// 無いので、握手はそこで終わる——実際そうなっていた。ProxyCommand なら、
+// `%h` を持ったままの綴りがそのままプログラムの引数になる。
 //
 // 許した 5 つ以外は拒む。展開できないまま残せば、その文字列がユーザー名や
-// ホスト名としてそのまま使われる。
-func ExpandChainTokens(raw string, target TokenTarget) (string, error) {
-	if !usesOnlyTokens(raw, jumpTokens) {
+// ホスト名やコマンドの引数としてそのまま使われる。
+func ExpandProxyTokens(raw string, target TokenTarget) (string, error) {
+	if !usesOnlyTokens(raw, proxyTokens) {
 		return "", ErrUnknownToken
 	}
-	// ProxyJump はローカルの事実（%u、%d、%i、%l）を受け取らない。空の
+	// どちらもローカルの事実（%u、%d、%i、%l）を受け取らない。空の
 	// LocalFacts を渡すのは、上の検査がそれらを既に拒しているからである。
 	return ExpandTokens(raw, LocalFacts{}, target)
 }

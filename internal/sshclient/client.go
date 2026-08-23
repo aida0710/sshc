@@ -2,6 +2,7 @@ package sshclient
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -168,7 +169,7 @@ func (d Dialer) connectOne(
 	}
 	trace.say(Detailed, "上限は %s です。", timeout)
 
-	conn, err := d.open(ctx, target, through)
+	conn, err := d.open(ctx, target, through, trace)
 	if err != nil {
 		trace.say(Brief, "繋がりませんでした: %v", err)
 		return nil, err
@@ -195,6 +196,7 @@ func (d Dialer) connectOne(
 	}
 	connection, channels, requests, err := ssh.NewClientConn(conn, target.Address(), config)
 	if err != nil {
+		err = withComplaints(err, conn)
 		_ = conn.Close()
 		trace.say(Brief, "握手が通りませんでした: %v", err)
 		return nil, err
@@ -205,7 +207,21 @@ func (d Dialer) connectOne(
 	return ssh.NewClient(connection, channels, requests), nil
 }
 
-func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client) (net.Conn, error) {
+// open は、この接続先までの輸送をひとつ用意する。
+//
+// **輸送を選ぶのはここだけである。** 手前のホップの上か、ProxyCommand の
+// 標準入出力か、素の TCP か。
+func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, trace *tracer) (net.Conn, error) {
+	if target.ProxyCommand != "" {
+		// **そのプログラムはこの機械で走る。** 手前のホップの中ではない。
+		// 踏み台の向こうのホップに書かれていたら、走らせても設定が言っている
+		// 場所には届かない。
+		if through != nil {
+			return nil, ErrProxyCommandThroughJump
+		}
+		trace.announce("ProxyCommand を起こします: %s", target.ProxyCommand)
+		return startProxyCommand(target.ProxyCommand)
+	}
 	if through != nil {
 		return through.DialContext(ctx, "tcp", target.Address())
 	}
@@ -213,6 +229,23 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client) (n
 		return d.Dial(ctx, "tcp", target.Address())
 	}
 	return (&net.Dialer{}).DialContext(ctx, "tcp", target.Address())
+}
+
+// withComplaints は、プログラムが標準エラーへ書いたものを理由に足す。
+//
+// **繋がらなかった理由は、たいていそこにしかない。** `ssh -W` は
+// "Connection refused" を stderr へ書き、こちらから見えるのは「握手が
+// 通らなかった」だけになる。
+func withComplaints(err error, conn net.Conn) error {
+	command, ok := conn.(*commandConn)
+	if !ok {
+		return err
+	}
+	said := command.Complaints()
+	if said == "" {
+		return err
+	}
+	return fmt.Errorf("%w: ProxyCommand said: %s", err, said)
 }
 
 func closeAll(closers []io.Closer) {
