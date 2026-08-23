@@ -5,6 +5,19 @@ import {
   shellSays,
   test,
 } from "./support/environment";
+import {
+  drawnRowCount,
+  drawnRowFont,
+  drawnRows,
+  drawnSpan,
+  markTerminal,
+  selectionMarks,
+  surfaceBackgroundImage,
+  surfaceToken,
+  terminalKeyboard,
+  terminalScreen,
+  viewportBackground,
+} from "./support/terminal";
 
 // 埋め込みターミナルの end-to-end。
 //
@@ -35,7 +48,7 @@ async function typeIntoConsole(page: import("@playwright/test").Page, line: stri
   await expect(screen).toBeVisible();
   // プロンプトが出るまでは、打った文字はどこにも解釈されない。
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
-  await page.locator(".xterm-helper-textarea").focus();
+  await terminalKeyboard(page).focus();
   await page.keyboard.type(line);
   await page.keyboard.press("Enter");
   return screen;
@@ -213,7 +226,7 @@ test("copies what was selected in the console as soon as selection finishes", as
 
   // 端末いっぱいを引きずる。行の高さも桁の幅も環境で違うので、座標では
   // なく端から端まで動かす。
-  const rows = page.locator(".xterm-rows");
+  const rows = drawnRows(page);
   const box = await rows.boundingBox();
   expect(box).not.toBeNull();
   if (box === null) return;
@@ -221,7 +234,7 @@ test("copies what was selected in the console as soon as selection finishes", as
   await page.mouse.down();
   await page.mouse.move(box.x + box.width - 2, box.y + box.height - 2, { steps: 12 });
   await page.mouse.up();
-  await expect(page.locator(".xterm-selection div").first()).toBeAttached();
+  await expect(selectionMarks(page).first()).toBeAttached();
   await expect
     .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
     .toContain("selectable-canary");
@@ -239,7 +252,7 @@ test("pastes the clipboard into the console with right click", async ({ page, co
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
   await page.evaluate(() => navigator.clipboard.writeText("echo right-click-paste-canary"));
 
-  await page.locator(".xterm-screen").click({ button: "right", position: { x: 20, y: 20 } });
+  await terminalScreen(page).click({ button: "right", position: { x: 20, y: 20 } });
   await page.keyboard.press("Enter");
 
   await expect(screen).toContainText("right-click-paste-canary", { timeout: 20_000 });
@@ -269,7 +282,7 @@ test("can turn automatic selection copy off for an already open console", async 
 
   await openSection(page, "Terminal");
   await page.evaluate(() => navigator.clipboard.writeText("clipboard-sentinel"));
-  const rows = page.locator(".xterm-rows");
+  const rows = drawnRows(page);
   const box = await rows.boundingBox();
   expect(box).not.toBeNull();
   if (box === null) return;
@@ -277,7 +290,7 @@ test("can turn automatic selection copy off for an already open console", async 
   await page.mouse.down();
   await page.mouse.move(box.x + box.width - 2, box.y + box.height - 2, { steps: 12 });
   await page.mouse.up();
-  await expect(page.locator(".xterm-selection div").first()).toBeAttached();
+  await expect(selectionMarks(page).first()).toBeAttached();
 
   await expect.poll(async () => page.evaluate(() => navigator.clipboard.readText())).toBe("clipboard-sentinel");
 });
@@ -295,7 +308,7 @@ test("fits the terminal inside the space it was given", async ({ page, installat
   await panel.getByRole("button", { name: "Local shell" }).click();
   await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
 
-  const measured = await page.locator(".xterm-rows").evaluate((node) => {
+  const measured = await drawnRows(page).evaluate((node) => {
     const frame = (node as HTMLElement).closest("main");
     return {
       rows: Math.round((node as HTMLElement).getBoundingClientRect().height),
@@ -449,7 +462,7 @@ test("tells the pseudo-terminal how big it is as soon as it attaches", async ({ 
 
   const reported = (await screen.innerText()).match(/(\d+)-(\d+)/);
   expect(reported).not.toBeNull();
-  const drawn = await page.locator(".xterm-rows").evaluate((node) => node.children.length);
+  const drawn = await drawnRowCount(page);
   expect(Number(reported?.[1])).toBe(drawn);
   // 既定の 80 桁のままではない。この窓はそれより広い。
   expect(Number(reported?.[2])).toBeGreaterThan(80);
@@ -469,8 +482,8 @@ test("keeps the same terminal alive while another screen is shown", async ({ pag
   const screen = await typeIntoConsole(page, "echo stays-mounted");
   await expect(screen).toContainText("stays-mounted", { timeout: 20_000 });
 
-  // 作り直されたら消える印を、いまの xterm に付ける。
-  await page.locator(".xterm").first().evaluate((node) => node.setAttribute("data-e2e-mark", "1"));
+  // 作り直されたら消える印を、いまの端末に付ける。
+  const sameTerminal = await markTerminal(page, "1");
   // 隠れているあいだにも出力は届く。受け取るのは同じ端末である。
   //
   // **打った行そのものには現れない文字列でなければならない。** 打鍵は
@@ -493,7 +506,7 @@ test("keeps the same terminal alive while another screen is shown", async ({ pag
     .click();
 
   await expect(screen).toBeVisible();
-  await expect(page.locator(".xterm[data-e2e-mark='1']")).toBeAttached();
+  await expect(sameTerminal).toBeAttached();
   await expect(screen).toContainText("stays-mounted");
   await expect(screen).toContainText("late-42", { timeout: 20_000 });
 });
@@ -533,15 +546,10 @@ test("paints the console in the colour scheme that was chosen", async ({ page, i
   const screen = await typeIntoConsole(page, shellSays.redWord("zzred"));
   await expect(screen).toContainText("zzred", { timeout: 20_000 });
 
-  const surface = () =>
-    page.locator(".xterm").evaluate((node) => {
-      const box = (node as HTMLElement).parentElement!;
-      return getComputedStyle(box).getPropertyValue("--ui-term-bg").trim();
-    });
+  const surface = () => surfaceToken(page, "--ui-term-bg");
   // xterm が描いた「赤」そのもの。テーマを受け取っていなければ、ここは既定の赤のままである。
   const drawnRed = () =>
-    page
-      .locator(".xterm-rows span", { hasText: "zzred" })
+    drawnSpan(page, "zzred")
       .last()
       .evaluate((node) => getComputedStyle(node as HTMLElement).color);
 
@@ -579,10 +587,9 @@ test("loads the font it ships and hands it to the console", async ({ page, insta
   await panel.getByRole("button", { name: "Local shell" }).click();
   await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
 
-  // **字体を持っているのは .xterm-rows である。** そこは xterm が桁を較正する
-  // 場所でもあり、metrics.ts が読んでいるのと同じ場所である。
-  const family = () =>
-    page.locator(".xterm-rows").evaluate((node) => getComputedStyle(node as HTMLElement).fontFamily);
+  // **字体を持っているのは字を描いている場所である。** そこは xterm が桁を
+  // 較正する場所でもあり、metrics.ts が読んでいるのと同じ場所である。
+  const family = async () => (await drawnRowFont(page)).fontFamily;
   expect(await family()).not.toContain("JetBrains Mono");
 
   await panel.getByRole("tab", { name: "Settings" }).click();
@@ -642,13 +649,10 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   await expect(settings.getByText(/Saved/)).toBeVisible();
 
   await openSection(page, "Terminal");
-  const wiring = await page.locator(".xterm").evaluate((node) => {
-    const box = (node as HTMLElement).parentElement!;
-    return {
-      image: getComputedStyle(box).backgroundImage,
-      viewport: getComputedStyle(document.querySelector(".xterm-viewport")!).backgroundColor,
-    };
-  });
+  const wiring = {
+    image: await surfaceBackgroundImage(page),
+    viewport: await viewportBackground(page),
+  };
   // **綴りは data: である。** url() には CSRF ヘッダーを付けられないので、
   // 画像は JS が取りに行っている。
   expect(wiring.image).toContain("data:image/png");

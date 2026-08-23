@@ -115,4 +115,40 @@ describe("xterm の DOM を知る場所", () => {
     }
     expect(elsewhere).toEqual([]);
   });
+
+  // **検査の側も同じ縛りを負う。**
+  //
+  // 製品を片付けた時点で、spec には 20 箇所の `.xterm-*` が残っていた。あれは
+  // DOM renderer が描く木の綴りであり、WebGL に替えれば字は canvas の中にあって
+  // DOM には無い。**散っている限り、renderer を替える試みは 20 箇所の書き換えから
+  // 始まる** ——「速いか測ってみる」が安い実験でなくなる。
+  //
+  // 集めても canvas に字が無いことは変わらない。変わるのは、直す場所が
+  // 一つになることである。
+  it("is support/terminal.ts and nowhere else in the e2e suite", async () => {
+    const { readdir, readFile } = await import("node:fs/promises");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const e2eRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "e2e");
+
+    async function specs(directory: string): Promise<string[]> {
+      const entries = await readdir(directory, { withFileTypes: true });
+      const found: string[] = [];
+      for (const entry of entries) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) found.push(...(await specs(path)));
+        else if (/\.ts$/.test(entry.name)) found.push(path);
+      }
+      return found;
+    }
+
+    // Playwright は locator で掻く。document.querySelector も evaluate の中で使える。
+    const reaches = /(?:locator|querySelector|querySelectorAll|closest)\s*\(\s*["'`][^"'`]*\.xterm/;
+    const elsewhere: string[] = [];
+    for (const path of await specs(e2eRoot)) {
+      if (path.endsWith(join("support", "terminal.ts"))) continue;
+      if (reaches.test(await readFile(path, "utf8"))) elsewhere.push(path);
+    }
+    expect(elsewhere).toEqual([]);
+  });
 });
