@@ -155,3 +155,37 @@ func TestReleaseWindowsStepsStopAtTheFirstFailure(t *testing.T) {
 		}
 	}
 }
+
+// **配るものは、自分が何番かを言えなければならない。**
+//
+// APK の versionName はタグから来ていたが、その中で走る engine（AAR）は誰も版を
+// 入れておらず、**どの版を配っても自分を "dev" と名乗っていた**。通知にも handoff
+// にも、`sshc status` にもそう出る。
+//
+// 二つを別々に渡せば「APK は 0.4.2 だが engine は dev」が作れてしまうので、
+// **入力がタグひとつであること**をここで見る。
+func TestTheAndroidEngineCarriesTheReleasedVersion(t *testing.T) {
+	_, source := readReleaseWorkflow(t)
+
+	android := jobSection(source, "  android:", "  publish:")
+	if android == "" {
+		t.Fatal("release.yml に android のジョブが無い")
+	}
+
+	if !strings.Contains(android, `ANDROID_VERSION="${GITHUB_REF_NAME#v}"`) {
+		t.Error("gomobile bind にタグの版を渡していない。AAR は dev のまま配られる")
+	}
+	if !strings.Contains(android, `-PsshcVersionName="${GITHUB_REF_NAME#v}"`) {
+		t.Error("gradle にタグの版を渡していない")
+	}
+
+	makefile, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// **受け取る側が在ることも見る。** workflow が渡していても、Makefile が
+	// それを ldflags に載せていなければ、値はどこにも届かない。
+	if !strings.Contains(string(makefile), "-X sshc/mobile.version=$(ANDROID_VERSION)") {
+		t.Error("Makefile の android-bind が ANDROID_VERSION を ldflags に載せていない")
+	}
+}

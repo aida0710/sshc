@@ -1,4 +1,4 @@
-.PHONY: generate test build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test deadcode build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
 # なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
@@ -33,8 +33,15 @@ test:
 	@# 通ることは Android で動くことを意味しない** が、gomobile も NDK も持たない
 	@# 環境で言えるのはここまでであり、ここが赤くなる理由は常にタグの食い違いである。
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
+	$(MAKE) deadcode
 	npm test --prefix web
 	npm run typecheck --prefix web
+
+# 参照ゼロの関数を探す。**一つの OS で見ても分からない** ——`_windows.go` からしか
+# 呼ばれないものは Linux から見れば死んで見えるので、出荷する 3 つ全部で到達不能
+# なものだけを数える。中身は scripts/ci/deadcode.sh にある。
+deadcode:
+	scripts/ci/deadcode.sh
 
 fuzz:
 	@set -e; for target in $(FUZZ_TARGETS); do \
@@ -69,12 +76,19 @@ build:
 # 探すので、`go install golang.org/x/mobile/cmd/gobind@latest` を先に一度。
 ANDROID_NDK_HOME ?= $(HOME)/Library/Android/sdk/ndk/28.2.13676358
 
+# **AAR の版は、ここでしか入らない。** cmd/sshc は nativebuild が -X で入れて
+# いるが、AAR は誰も入れていなかった——どの版を配っても engine は自分を "dev" と
+# 名乗り、通知にも handoff にもそう出る。gomobile bind は go build を呼ぶので、
+# ldflags はそのまま届く。
+ANDROID_VERSION ?= dev
+
 android-bind:
 	@# 置き場を作る。**追跡していないので、クローンしたばかりの環境には無い。**
 	@# gomobile は出力先のディレクトリを作らず、無ければそこで失敗する。
 	mkdir -p android/app/libs
 	ANDROID_NDK_HOME="$(ANDROID_NDK_HOME)" PATH="$(HOME)/go/bin:$$PATH" \
 		go tool gomobile bind -target=android/arm64,android/amd64 -androidapi 26 \
+		-ldflags "-X sshc/mobile.version=$(ANDROID_VERSION)" \
 		-o android/app/libs/sshc.aar ./mobile
 
 # build-cli は native runner と release job が共有する最小の CLI build primitive。

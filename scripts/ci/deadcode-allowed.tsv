@@ -1,0 +1,8 @@
+# 3 OS すべてで到達不能でも、消してはならないもの。
+#
+# **理由の無い行は置かない。** 「いつか使う」は理由ではない。
+#
+# 書式: <ファイル><TAB><シンボル><TAB><理由>
+
+internal/httpserver/diagnostics_test.go	stubToolchain.KeyGen	interface を満たすためだけに在る。消すとコンパイルが通らない。
+mobile/sshc.go	Version	gomobile が Java 側に生やす。呼び手は JNI の向こう (EngineService の通知) に居るので、Go からは到達不能に見える。

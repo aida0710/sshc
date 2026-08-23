@@ -508,14 +508,6 @@ func parseReleaseArchitectures(value string) ([]string, error) {
 	return architectures, nil
 }
 
-func ensurePathWithin(root, path string) error {
-	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return errors.New("resource output escapes resource root")
-	}
-	return nil
-}
-
 func resolveHostCGO(deps nativeBuildDeps) (string, error) {
 	if deps.hostCGO == "0" || deps.hostCGO == "1" {
 		return deps.hostCGO, nil

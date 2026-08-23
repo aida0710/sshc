@@ -110,16 +110,3 @@ func TestTheReadmeSaysHowToKeepTheEngineAlive(t *testing.T) {
 		t.Error("README does not say the engine never detaches")
 	}
 }
-
-// sectionOf は、見出しから次の見出しまでを返す。無ければ空である。
-func sectionOf(text, heading, next string) string {
-	start := strings.Index(text, heading)
-	if start < 0 {
-		return ""
-	}
-	rest := text[start+len(heading):]
-	if end := strings.Index(rest, next); end >= 0 {
-		return rest[:end]
-	}
-	return rest
-}

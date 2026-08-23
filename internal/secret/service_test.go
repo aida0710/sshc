@@ -407,18 +407,6 @@ func TestTheVaultKeepsGenerationsAndNoneOfThemIsReadable(t *testing.T) {
 	}
 }
 
-func unlockedWithPassword(t *testing.T) *secret.Service {
-	t.Helper()
-	service, _ := newService(t)
-	if err := service.Initialise(passphrase); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.Set("bastion", "hunter2"); err != nil {
-		t.Fatal(err)
-	}
-	return service
-}
-
 // サービスの資格情報まわりの面。すべての画面とすべてのルートが通る場所である。
 // ロックされた vault は空リストではなく ErrLocked を答える。「見えない」と
 // 「存在しない」は別の事実だからだ。

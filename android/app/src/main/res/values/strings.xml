@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">sshc</string>
     <string name="engine_running">sshc is running</string>
+    <!-- 通知から engine を畳む。**これが無かった間、止める道は一本も無かった。** -->
+    <string name="engine_stop">Stop</string>
     <!--
       engine が起きなかった理由。**Go の error 文は出さない** ——入口の URL を
       含み得るので、番号に対応するこちらの文だけを出す。

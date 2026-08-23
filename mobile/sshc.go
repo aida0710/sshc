@@ -63,14 +63,14 @@ func Start(home, cache string) (string, error) {
 	running.Lock()
 	defer running.Unlock()
 	if running.cancel != nil {
-		return "", fail(kindAlreadyStarted, ErrAlreadyStarted)
+		return "", fail(KindAlreadyStarted, ErrAlreadyStarted)
 	}
 
 	// **ロックは engine より先である。** 2 台目が app.Run へ入ってから落ちると、
 	// その一瞬だけ同じ状態ディレクトリを 2 つが握る。
 	release, err := enginelock.Acquire(filepath.Join(app.HandoffDir(home), "engine.lock"))
 	if err != nil {
-		return "", fail(kindAlreadyStarted, err)
+		return "", fail(KindAlreadyStarted, err)
 	}
 
 	// gomobile bind は標準 log の出力先を logcat へ差し替える。slog をそこへ
@@ -83,7 +83,7 @@ func Start(home, cache string) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", fail(kindUnknown, errors.Join(err, release()))
+		return "", fail(KindUnknown, errors.Join(err, release()))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -99,15 +99,15 @@ func Start(home, cache string) (string, error) {
 	select {
 	case url := <-entrance:
 		running.cancel, running.done, running.release = cancel, done, release
-		running.lastKind = kindNone
+		running.lastKind = KindNone
 		return url, nil
 	case err := <-failed:
 		cancel()
 		<-done
-		return "", fail(kindListenFailed, errors.Join(errListenFailed, err, release()))
+		return "", fail(KindListenFailed, errors.Join(errListenFailed, err, release()))
 	case <-done:
 		cancel()
-		return "", fail(kindStoppedEarly, errors.Join(errEngineStoppedEarly, release()))
+		return "", fail(KindStoppedEarly, errors.Join(errEngineStoppedEarly, release()))
 	}
 }
 
@@ -129,12 +129,18 @@ func Stop() error {
 }
 
 // Start が失敗した理由。**Java はこの番号だけを見る。**
+//
+// **export しているのは、番号を境界の向こうへ渡すためである。** gomobile は
+// export された定数を Java 側にも生やすので、あちらは `Mobile.KindListenFailed`
+// と書ける。以前は Java が `case 3:` と直に書いており、**この iota の途中に
+// 一つ挿すだけで、Android が黙って別の文言を出す状態**だった——番号が 2 か所に
+// あって、突き合わせる者が居なかった。
 const (
-	kindNone = iota
-	kindUnknown
-	kindAlreadyStarted
-	kindListenFailed
-	kindStoppedEarly
+	KindNone = iota
+	KindUnknown
+	KindAlreadyStarted
+	KindListenFailed
+	KindStoppedEarly
 )
 
 // fail は、失敗の理由を記録してからその error を返す。
