@@ -7,6 +7,7 @@ export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
 export type ReachabilityResponse = components["schemas"]["ReachabilityResponse"];
 export type AuthenticationResponse = components["schemas"]["AuthenticationResponse"];
 export type TerminalSettings = components["schemas"]["TerminalSettings"];
+export type EngineSettings = components["schemas"]["EngineSettings"];
 export type TerminalForward = components["schemas"]["TerminalForward"];
 export type TerminalSession = components["schemas"]["TerminalSession"];
 export type TerminalAppearance = components["schemas"]["TerminalAppearance"];
@@ -93,6 +94,8 @@ export type IntegrationsApi = {
   // 既定を書き戻すと metadata に焼き付き、既定を変えた日にその人だけが
   // 取り残される。
   terminalSettings(): Promise<TerminalSettings>;
+  engineSettings(): Promise<EngineSettings>;
+  setEngineSettings(settings: EngineSettings): Promise<void>;
   terminalBackgrounds(): Promise<TerminalBackgroundList>;
   addTerminalBackground(suggested: string, image: Blob): Promise<TerminalBackground>;
   deleteTerminalBackground(name: string): Promise<void>;
@@ -578,6 +581,20 @@ export const integrationsApi: IntegrationsApi = {
         : {}),
       ...(terminal.appearance === undefined ? {} : { appearance: readAppearance(terminal.appearance) }),
     };
+  },
+  async engineSettings() {
+    const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
+    if (metadata.engine === undefined) return {};
+    const engine = asRecord(metadata.engine);
+    return typeof engine.port === "number" ? { port: engine.port } : {};
+  },
+  // **節まるごとの置き換えである。** 送らなかった項目は書かれていない状態へ戻る。
+  async setEngineSettings(settings) {
+    await apiClient.mutate("/api/v1/metadata/engine", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify(settings),
+    });
   },
   async terminalBackgrounds() {
     const record = asRecord(await apiClient.read("/api/v1/terminal/backgrounds"));

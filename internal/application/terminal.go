@@ -174,3 +174,47 @@ func storedAppearance(chosen TerminalAppearance) *TerminalAppearance {
 	}
 	return &chosen
 }
+
+// EngineSettings は、保存されている engine の設定をそのまま返す。
+//
+// **正規化しない。** 画面はこれを編集するので、既定へ戻した値を見せると、人が
+// 何も触っていないのに「既定を明示的に選んだ」状態が保存されてしまう。
+func (s *Service) EngineSettings() EngineSettings {
+	stored, _, err := s.metadata.Load()
+	if err != nil || stored.Engine == nil {
+		return EngineSettings{}
+	}
+	return *stored.Engine
+}
+
+// SetEngineSettings は、節をまるごと置き換える。
+//
+// **置き換えなのは、消せる必要があるからである。** 一度番号を決めた人が無作為へ
+// 戻れなければ、戻る手段は metadata を手で書くことだけになる。
+func (s *Service) SetEngineSettings(settings EngineSettings) (SaveResult, error) {
+	stored, precondition, err := s.metadata.Load()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	if settings == (EngineSettings{}) {
+		// 何も設定されていないなら節ごと消す。**空の節を残さない。**
+		stored.Engine = nil
+	} else {
+		stored.Engine = &settings
+	}
+	if err := s.metadata.EnsureDirectory(); err != nil {
+		return SaveResult{}, err
+	}
+	change, err := s.metadata.Change(stored, precondition)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	result, err := s.manager.Commit(storage.Request{
+		Operation: "engine.settings",
+		Changes:   []storage.Change{change},
+	})
+	if err != nil {
+		return SaveResult{}, err
+	}
+	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
+}

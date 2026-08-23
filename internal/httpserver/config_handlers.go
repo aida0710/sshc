@@ -45,6 +45,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.POST("/api/v1/config/groups/delete", handlers.DeleteGroup)
 	engine.GET("/api/v1/metadata", handlers.Metadata)
 	engine.PUT("/api/v1/metadata/terminal", handlers.SetTerminal)
+	engine.PUT("/api/v1/metadata/engine", handlers.SetEngine)
 	registerBackgroundRoutes(engine, handlers)
 	engine.GET("/api/v1/history", handlers.History)
 	engine.POST("/api/v1/history/restore", handlers.Restore)
@@ -283,4 +284,29 @@ func (h ConfigHandlers) Recover(c *echo.Context) error {
 		return serviceProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.RecoverResponse{Status: "ok"})
+}
+
+// SetEngine は、engine そのものの設定を書き戻す。
+//
+// **受け口の番号は起動時にしか読まれない。** 変えても、次に engine を起こすまで
+// 効かない——画面はそう言う。
+func (h ConfigHandlers) SetEngine(c *echo.Context) error {
+	var request api.EngineSettings
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	settings := application.EngineSettings{}
+	if request.Port != nil {
+		// **範囲はここで断る。** 通せば、断るのは次の起動の bind であり、
+		// そのとき画面はもう閉じている。
+		if *request.Port < 1024 || *request.Port > 65535 {
+			return problem(c, http.StatusBadRequest, "port_out_of_range")
+		}
+		settings.Port = *request.Port
+	}
+	result, err := h.Service.SetEngineSettings(settings)
+	if err != nil {
+		return serviceProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, result)
 }

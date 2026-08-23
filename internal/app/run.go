@@ -51,8 +51,15 @@ type Dependencies struct {
 	// 呼び出し側の注意深さに委ねられる。**
 	Announce func(Readiness) error
 	Listen   ListenFunc
-	UI       fs.FS
-	Logger   *slog.Logger
+	// StopEngine は Run が自分で埋める。**呼び出し側が渡すものではない**
+	// ——engine を止められるのは engine 自身だけである。
+	StopEngine func()
+	// Port は、受け口の番号である。**0 は「決めていない」であり、そのときは
+	// 30000 以上から無作為に引く。** 決めた人が居るのに黙って別の番号へ逃げると、
+	// その人がブラウザへ打つ綴りが外れるので、0 でなければその番号だけを試す。
+	Port   int
+	UI     fs.FS
+	Logger *slog.Logger
 	// Home はユーザーのホームディレクトリ。オペレーティングシステムから読んでよいのは
 	// cmd/sshc だけで、テストはいずれも一時ディレクトリを注入する。
 	Home string
@@ -185,7 +192,19 @@ type runtime struct {
 // build は Run が後片付けに使う秘密も返す。ファイルを読み直すと、その間に別の
 // 実行が公開した秘密を自分のものと誤認して消せるためである。
 func build(dependencies Dependencies, version string) (runtime, error) {
-	listener, err := dependencies.Listen("tcp4", "127.0.0.1:0")
+	// **サービスを先に組む。** 受け口の番号は保存された設定にも書けるので、
+	// それを読むにはワークスペースが要る。旗で決めた番号があるなら設定は見ない
+	// ——**旗の方が強い**、がこの順の意味である。
+	services, err := newEngineServices(dependencies)
+	if err != nil {
+		return runtime{}, err
+	}
+	wanted := dependencies.Port
+	if wanted == 0 {
+		wanted = services.config.EngineSettings().Port
+	}
+
+	listener, err := listenLoopback(dependencies.Listen, wanted, randomBelow)
 	if err != nil {
 		return runtime{}, fmt.Errorf("listen: %w", err)
 	}
@@ -199,11 +218,6 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		sessions.Now = dependencies.SessionNow
 	}
 
-	services, err := newEngineServices(dependencies)
-	if err != nil {
-		listener.Close()
-		return runtime{}, err
-	}
 	configService := services.config
 	keyService := services.keys
 	diagnosticsService := services.diagnostics
@@ -243,6 +257,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		UI:              dependencies.UI,
 		Version:         version,
 		Owner:           dependencies.Owner,
+		StopEngine:      dependencies.StopEngine,
 		ProtocolVersion: handoff.ProtocolVersion,
 		Logger:          dependencies.Logger,
 		Config:          configService,
@@ -318,6 +333,14 @@ func HandoffDir(home string) string {
 }
 
 func Run(ctx context.Context, dependencies Dependencies, version string) error {
+	// **頼まれて終わる道を用意する。** 走っている engine を、どこで起こしたか
+	// 分からないまま止められる必要がある——探して回るより、走っているものに
+	// 頼む方が短い。信号ではなく取り消しにするのは、Windows に SIGTERM が無く、
+	// TerminateProcess では端末も転送も vault も畳まれないまま消えるからである。
+	asked, stopAsked := context.WithCancel(ctx)
+	defer stopAsked()
+	dependencies.StopEngine = stopAsked
+
 	built, err := build(dependencies, version)
 	if err != nil {
 		return err
@@ -329,7 +352,7 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	// 巡回は、この実行と同じ寿命を持つ。**止めるのは ctx である**——後始末の
 	// 段に足すと、そこへ辿り着くまでのあいだ、畳んでいる最中のワークスペースへ
 	// 別のマシンのスナップショットを置きにいくことがありうる。
-	loop, stopLoop := context.WithCancel(ctx)
+	loop, stopLoop := context.WithCancel(asked)
 	defer stopLoop()
 	go built.autoSync.Run(loop)
 
@@ -366,7 +389,8 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	case err := <-serveErrors:
 		// Serve が自分から戻った。後始末はそれでも全部通る。
 		return errors.Join(err, built.unwind(dependencies))
-	case <-ctx.Done():
+	case <-asked.Done():
+		// 取り消しの出どころ（信号か、頼みごとか）は問わない。畳み方は同じである。
 		return stop(nil)
 	}
 }

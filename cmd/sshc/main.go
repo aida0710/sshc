@@ -67,7 +67,9 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 	case invocationEngine:
 		// **engine は stdin を読まない。** 端末で走るものが読み始めれば、
 		// 打った人の入力を吸い込む。
-		return runEngine(ctx, home, os.Stdout, os.Stderr)
+		return runEngine(ctx, home,
+			engineOptions{Port: called.Port, Replace: called.Replace},
+			os.Stdin, os.Stdout, os.Stderr)
 	case invocationConnect:
 		return runConnect(ctx, called.Args[0], home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
 	case invocationRun:
