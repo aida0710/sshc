@@ -1,6 +1,6 @@
 # 端末で engine を持つ
 
-`sshc headless` は、この端末が engine の持ち主になる、という意味である。画面の
+`sshc engine` は、この端末が engine の持ち主になる、という意味である。画面の
 無い機械で使う入口であり、**前面で走り続ける。** 止まれば engine も止まる。
 
 **マスターパスワードは、どの例にも書かない。** unit ファイルにも、環境変数にも、
@@ -9,7 +9,7 @@
 ためである。
 
 ```sh
-sshc headless          # この端末が持つ。Ctrl-C で 130、SIGTERM で 0
+sshc engine          # この端末が持つ。Ctrl-C で 130、SIGTERM で 0
 sshc vault unlock      # 別の端末から。同じ engine を開ける
 sshc <接続先>           # 解錠済みの engine に材料を求めて繋ぐ
 sshc run <接続先> <コマンド...>   # 端末を開かずに一つ走らせる
@@ -26,7 +26,7 @@ After=default.target
 [Service]
 # **前面のまま置く。** これは自分で背後へ回らないので、Type=simple が正しい。
 Type=simple
-ExecStart=%h/.local/bin/sshc headless
+ExecStart=%h/.local/bin/sshc engine
 Restart=on-failure
 # Ctrl-C の 130 は「人が止めた」という意味であり、失敗ではない。
 # これを付けないと、手で止めるたびに systemd が起こし直す。
@@ -49,7 +49,7 @@ sshc vault unlock
 ## tmux
 
 ```sh
-tmux new-session -d -s sshc 'sshc headless'
+tmux new-session -d -s sshc 'sshc engine'
 tmux new-window -t sshc 'sshc vault unlock; exec $SHELL'
 ```
 
@@ -80,7 +80,7 @@ docker exec -it sshc sshc vault unlock
 
 ```powershell
 # この端末が持つ。閉じれば engine も終わる。
-sshc headless
+sshc engine
 ```
 
 別の PowerShell から:
@@ -115,7 +115,7 @@ SYSTEM として走らせると、開く家が変わる。
 
 **ここだけ、時計で閉じます。** デスクトップの engine はアプリの子で、アプリを
 終えれば一緒に死にます——蓋を閉じたノートも、開けば OS がログインパスワードを
-訊きます。**`sshc headless` にはそのどちらもありません。** systemd の下で何週間も
+訊きます。**`sshc engine` にはそのどちらもありません。** systemd の下で何週間も
 走り続ける engine にとって、12 時間の自動施錠が唯一の歯止めです。
 
 閉じたあと、保管庫を要る操作は `sshc vault unlock` を待ちます。

@@ -31,12 +31,17 @@ const secretLength = 32
 // hazard. 4 KiB leaves ample room for future schema fields.
 const handoffDocumentMaxSize = 4 << 10
 
-// Owner は、engine の生存期間を引き受ける外殻を表す。
+// Owner は、engine の生存期間を引き受ける相手を表す。
+//
+// **いまは 1 つしかない。** かつては desktop（Electron の外殻が engine を子として
+// 抱える）と headless（端末や supervisor が持つ）に分かれていた。外殻が無くなり、
+// engine を生かしておくのは常に人（tmux でも systemd でも）になったので、区別も
+// 消えた。**値そのものは残す** ——handoff は engine の身元でもあり、別の engine を
+// 掴んでいないことをここで確かめている。
 type Owner string
 
 const (
-	OwnerDesktop  Owner = "desktop"
-	OwnerHeadless Owner = "headless"
+	OwnerEngine Owner = "engine"
 
 	SchemaVersion   = 1
 	ProtocolVersion = 1
@@ -273,7 +278,7 @@ func validate(document Handoff) error {
 	if document.ProtocolVersion != ProtocolVersion {
 		return fmt.Errorf("%w: got %d, want %d", ErrProtocolVersion, document.ProtocolVersion, ProtocolVersion)
 	}
-	if document.Owner != OwnerDesktop && document.Owner != OwnerHeadless {
+	if document.Owner != OwnerEngine {
 		return fmt.Errorf("%w: unknown owner", ErrInvalid)
 	}
 	if document.Secret == "" {

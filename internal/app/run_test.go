@@ -34,7 +34,7 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 	dependencies := Dependencies{
 		Random: bytes.NewReader(bytes.Repeat([]byte{0x81}, 96)),
 		Announce: func(readiness Readiness) error {
-			opened <- readiness.DesktopURL
+			opened <- readiness.Entrance
 			return nil
 		},
 		Listen: func(network, address string) (net.Listener, error) {
@@ -44,7 +44,7 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 		UI:     fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:   t.TempDir(),
-		Owner:  handoff.OwnerDesktop,
+		Owner:  handoff.OwnerEngine,
 		PID:    4242,
 	}
 
@@ -87,7 +87,7 @@ func TestRunLeavesAReplacementHandoffOwnedByAnotherSecret(t *testing.T) {
 	dependencies := Dependencies{
 		Random: bytes.NewReader(bytes.Repeat([]byte{0x82}, 96)),
 		Announce: func(readiness Readiness) error {
-			base, _, found := strings.Cut(readiness.DesktopURL, "/#")
+			base, _, found := strings.Cut(readiness.Entrance, "/#")
 			if !found {
 				return errors.New("missing bootstrap target")
 			}
@@ -95,7 +95,7 @@ func TestRunLeavesAReplacementHandoffOwnedByAnotherSecret(t *testing.T) {
 				SchemaVersion:   handoff.SchemaVersion,
 				URL:             base,
 				Secret:          replacementSecret,
-				Owner:           handoff.OwnerDesktop,
+				Owner:           handoff.OwnerEngine,
 				PID:             4243,
 				Version:         "another-test",
 				ProtocolVersion: handoff.ProtocolVersion,
@@ -107,7 +107,7 @@ func TestRunLeavesAReplacementHandoffOwnedByAnotherSecret(t *testing.T) {
 		UI:     fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:   home,
-		Owner:  handoff.OwnerDesktop,
+		Owner:  handoff.OwnerEngine,
 		PID:    4242,
 	}
 
@@ -141,7 +141,7 @@ func TestRunReturnsServerFailureWithoutWaitingForCancellation(t *testing.T) {
 		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:     t.TempDir(),
-		Owner:    handoff.OwnerHeadless,
+		Owner:    handoff.OwnerEngine,
 		PID:      4242,
 	}
 
@@ -168,7 +168,7 @@ func TestRunShutsServerDownWhenTheEntranceCannotBeAnnounced(t *testing.T) {
 		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:     t.TempDir(),
-		Owner:    handoff.OwnerHeadless,
+		Owner:    handoff.OwnerEngine,
 		PID:      4242,
 	}
 
@@ -244,14 +244,14 @@ func TestRunExposesTheKeyVaultAndItsTrashThroughTheWiredProcess(t *testing.T) {
 	dependencies := Dependencies{
 		Random: rand.Reader,
 		Announce: func(readiness Readiness) error {
-			opened <- readiness.DesktopURL
+			opened <- readiness.Entrance
 			return nil
 		},
 		Listen:    net.Listen,
 		UI:        fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:      home,
-		Owner:     handoff.OwnerDesktop,
+		Owner:     handoff.OwnerEngine,
 		PID:       4242,
 		Toolchain: stubToolchain{},
 		KeyAgent:  stubKeyAgent{},
@@ -355,7 +355,7 @@ func TestBuildReturnsAServerAndAOneTimeBootstrapToken(t *testing.T) {
 		Listen: net.Listen,
 		UI:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Owner:  handoff.OwnerHeadless,
+		Owner:  handoff.OwnerEngine,
 		PID:    4242,
 	}, "build-test")
 	if err != nil {
@@ -391,7 +391,7 @@ func TestBuildWritesAVersionedOwnedHandoff(t *testing.T) {
 		Listen: net.Listen,
 		UI:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Owner:  handoff.OwnerDesktop,
+		Owner:  handoff.OwnerEngine,
 		PID:    777,
 	}, "v1.2.3")
 	if err != nil {
@@ -405,7 +405,7 @@ func TestBuildWritesAVersionedOwnedHandoff(t *testing.T) {
 	if document.SchemaVersion != handoff.SchemaVersion || document.ProtocolVersion != handoff.ProtocolVersion {
 		t.Errorf("versions = schema %d protocol %d", document.SchemaVersion, document.ProtocolVersion)
 	}
-	if document.URL != server.URL() || document.Owner != handoff.OwnerDesktop || document.PID != 777 || document.Version != "v1.2.3" {
+	if document.URL != server.URL() || document.Owner != handoff.OwnerEngine || document.PID != 777 || document.Version != "v1.2.3" {
 		t.Errorf("document = %#v", document)
 	}
 

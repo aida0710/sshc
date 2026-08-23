@@ -48,7 +48,7 @@ func TestCtrlBreakStopsTheEngineWithTheInterruptedStatus(t *testing.T) {
 // 属している——そこへ送れば、送った側のテストも一緒に受け取る。
 func startInOwnGroup(t *testing.T, home string) *testProcess {
 	t.Helper()
-	command := exec.Command(binaryPath, "headless")
+	command := exec.Command(binaryPath, "engine")
 	command.Env = []string{
 		"PATH=" + osPath(),
 		"HOME=" + home,

@@ -37,11 +37,11 @@ func TestRunVaultPromptCtrlCReturns130WithoutEnterAndRestoresEcho(t *testing.T) 
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		requests.Add(1)
-		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerHeadless, false, false))
+		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, false, false))
 	}))
 	defer server.Close()
 	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerHeadless)
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	command := exec.Command(os.Args[0], "-test.run=^TestVaultPromptPTYHelperProcess$")
 	command.Env = append(os.Environ(), vaultPTYHelperEnvironment+"=1", vaultPTYStateEnvironment+"="+stateDir)

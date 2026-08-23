@@ -51,7 +51,7 @@ type workflowStep struct {
 	ContinueOnError *bool          `yaml:"continue-on-error"`
 }
 
-func TestCIWorkflowProvidesNativeGoAndDesktopLifecycleMatrices(t *testing.T) {
+func TestCIWorkflowProvidesNativeGoMatrices(t *testing.T) {
 	document := readWorkflowDocument(t)
 	if problems := validateNativeWorkflow(document); len(problems) != 0 {
 		t.Fatalf("native workflow contract violations:\n- %s", strings.Join(problems, "\n- "))
@@ -320,17 +320,6 @@ func validateNativeWorkflow(document workflowDocument) []string {
 		problems = append(problems, validateSetupOrder("jobs.go", goJob, "actions/setup-go")...)
 	}
 
-	desktopJob, ok := document.Jobs["desktop"]
-	if !ok {
-		problems = append(problems, "jobs.desktop is missing")
-	} else {
-		problems = append(problems, validateNativeMatrix("jobs.desktop", desktopJob, false)...)
-		problems = append(problems, validateDesktopSteps(desktopJob)...)
-		problems = append(problems, validatePinnedSetup(desktopJob, "actions/checkout")...)
-		problems = append(problems, validatePinnedSetup(desktopJob, "actions/setup-node")...)
-		problems = append(problems, validateSetupOrder("jobs.desktop", desktopJob, "actions/setup-node")...)
-	}
-
 	if _, ok := document.Jobs["macos"]; ok {
 		problems = append(problems, "the old jobs.macos duplicate must be folded into jobs.go")
 	}
@@ -441,25 +430,6 @@ func validateGoSteps(job workflowJob) []string {
 	return problems
 }
 
-func validateDesktopSteps(job workflowJob) []string {
-	var problems []string
-	problems = append(problems, validateSeparatedRunShells("jobs.desktop", job)...)
-	if !strings.Contains(strings.ToLower(job.Name), "lifecycle") || strings.Contains(strings.ToLower(job.Name), "smoke") {
-		problems = append(problems, "jobs.desktop name must identify lifecycle tests, not package/window smoke")
-	}
-	for _, command := range []string{"npm ci --prefix desktop", "npm test --prefix desktop"} {
-		for _, platform := range []runContract{
-			{run: command, condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
-			{run: command, condition: "${{ runner.os == 'Windows' }}", shell: "pwsh"},
-		} {
-			if !hasRunContract(job, platform) {
-				problems = append(problems, fmt.Sprintf("jobs.desktop lacks run=%q if=%q shell=%q", platform.run, platform.condition, platform.shell))
-			}
-		}
-	}
-	return problems
-}
-
 func validatePinnedSetup(job workflowJob, action string) []string {
 	var matches []workflowStep
 	for _, step := range job.Steps {
@@ -475,11 +445,6 @@ func validatePinnedSetup(job workflowJob, action string) []string {
 	if action == "actions/setup-go" {
 		if fmt.Sprint(step.With["go-version-file"]) != "go.mod" || fmt.Sprint(step.With["cache-dependency-path"]) != "go.sum" {
 			problems = append(problems, "native Go setup must use go.mod and go.sum")
-		}
-	}
-	if action == "actions/setup-node" {
-		if fmt.Sprint(step.With["node-version"]) != "22" || fmt.Sprint(step.With["cache"]) != "npm" || fmt.Sprint(step.With["cache-dependency-path"]) != "desktop/package-lock.json" {
-			problems = append(problems, "desktop Node setup must use Node 22 and the desktop npm lockfile cache")
 		}
 	}
 	return problems

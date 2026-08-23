@@ -112,10 +112,16 @@ const defaultShutdownTimeout = 4 * time.Second
 // Readiness は、受け付けを始めた常駐がどんな状態かを述べる。
 type Readiness struct {
 	Owner handoff.Owner
-	// DesktopURL は OwnerDesktop のときだけ空でない。
-	DesktopURL string
+	// Entrance は、この起動ぶんの入口である。
+	//
+	// **受け取った側が、出してよい相手を知っている。** 画面を抱えている外殻
+	// （Android の WebView）はこれをそのまま読み込む——あちらには入口を後から
+	// 求める口が無い。端末で走る engine は**これを出さない**。出せば、ログにも
+	// 画面にもワンタイムの資格情報が残る。あちらは `sshc` が求めたときに 1 つ
+	// ずつ発行する。
+	Entrance string
 	// VaultExists は、まだ作られていない vault と、作られていて施錠されている
-	// vault を分ける。headless の案内はこれだけで決まる。
+	// vault を分ける。案内はこれだけで決まる。
 	VaultExists bool
 }
 
@@ -346,9 +352,10 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 				return stop(fmt.Errorf("read the vault state: %w", err))
 			}
 		}
-		readiness := Readiness{Owner: dependencies.Owner, VaultExists: exists}
-		if dependencies.Owner == handoff.OwnerDesktop {
-			readiness.DesktopURL = built.server.URL() + "/#bootstrap=" + built.bootstrap
+		readiness := Readiness{
+			Owner:       dependencies.Owner,
+			Entrance:    built.server.URL() + "/#bootstrap=" + built.bootstrap,
+			VaultExists: exists,
 		}
 		if err := dependencies.Announce(readiness); err != nil {
 			return stop(fmt.Errorf("announce the entrance: %w", err))

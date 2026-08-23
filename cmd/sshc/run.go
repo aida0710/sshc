@@ -22,8 +22,7 @@ import (
 // **それがこの入口の理由である**——保存済みの答えを持っているのに、無人の
 // 操作でそれを使えないのでは、保管庫が半分しか働いていない。
 func runRemote(
-	ctx context.Context, alias, command, home, stateDir string, client *http.Client,
-	launcher desktopLauncher, stdin io.Reader, stdout, stderr io.Writer,
+	ctx context.Context, alias, command, home, stateDir string, client *http.Client, stdin io.Reader, stdout, stderr io.Writer,
 ) int {
 	if err := validate.Alias(alias); err != nil {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
@@ -34,10 +33,10 @@ func runRemote(
 	// それは人が窓を開けて解錠するのを待てる場面での話である。この入口は
 	// 書かれた手順の中で走るものなので、答える人の居ない待ちは、ただ止まった
 	// ままになる。施錠されているなら、そう言って降りる。
-	session, err := reachUnlockedEngine(ctx, stateDir, client, launcher,
+	session, err := reachUnlockedEngine(ctx, stateDir, client,
 		func(found handoff.Handoff) engineProbe {
 			return httpProbe{found: found, client: client}
-		}, stderr, false)
+		}, stderr)
 	if err != nil {
 		if errors.Is(err, errInterrupted) {
 			return 130

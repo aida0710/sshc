@@ -42,7 +42,7 @@ func newDependencies(
 		UI:       assets,
 		Logger:   logger,
 		Home:     home,
-		Owner:    handoff.OwnerDesktop,
+		Owner:    handoff.OwnerEngine,
 		PID:      os.Getpid(),
 		// **どちらも nil が答えである。** ssh-keygen も ssh-agent も Android に
 		// 居ないので、それを探す道具を持つこと自体が嘘になる。受け側は既に

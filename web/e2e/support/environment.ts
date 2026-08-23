@@ -137,36 +137,51 @@ function startBinary(
   home: string,
 ): Promise<{ child: ChildProcess; url: string }> {
   return new Promise((resolvePromise, rejectPromise) => {
-    // HOME は使い捨てのディレクトリであり、PATH が継承される
-    // のは子プロセスが報告対象になりうる OpenSSH のプログラムを
-    // 見つけるためだけだ。このスイートのどの spec も、それを起動するルートを引き起こさない。
-    // **このスイートは Electron の役をする。** 裸の `sshc` はデスクトップを
-    // 起こす公開の入口なので、画面の無いランナーでは起動できない。入口の URL を
-    // 受け取れるのは engine owner だけであり、その資格は stdin に開いたままの
-    // 寿命チャンネルである——閉じればエンジンは自分で終わる。
+    // HOME は使い捨てのディレクトリであり、PATH が継承されるのは子プロセスが
+    // 報告対象になりうる OpenSSH のプログラムを見つけるためだけだ。このスイートの
+    // どの spec も、それを起動するルートを引き起こさない。
     //
+    // **このスイートは、利用者と同じ手順を踏む。** `sshc engine` を前面で起こし、
+    // 入口は `sshc` に刷らせる——engine は入口を出さない（出せばワンタイムの
+    // 資格情報が端末にもログにも残る）ので、受け取る道はこれひとつである。
     const child = spawn(binaryPath, ["engine"], {
       env: isolatedEnvironment(home),
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    let buffered = "";
-    const timer = setTimeout(
-      () => rejectPromise(new Error("sshc printed no URL within 10s")),
-      10_000,
-    );
-    child.stdout?.on("data", (chunk: Buffer) => {
-      buffered += chunk.toString("utf8");
-      const newline = buffered.indexOf("\n");
-      if (newline < 0) return;
-      clearTimeout(timer);
-      resolvePromise({ child, url: buffered.slice(0, newline).trim() });
-    });
+    let exited = false;
     child.on("exit", (code) => {
-      clearTimeout(timer);
-      rejectPromise(
-        new Error(`sshc exited with ${String(code)} before printing a URL`),
-      );
+      exited = true;
+      rejectPromise(new Error(`sshc engine exited with ${String(code)}`));
     });
+
+    // engine が受付を始めるまで、入口は取れない。**待つのは短い間隔で、
+    // 上限つきで。** 起こらない起動を無限に待つと、失敗が見えなくなる。
+    const deadline = Date.now() + 15_000;
+    const ask = () => {
+      if (exited) return;
+      if (Date.now() > deadline) {
+        rejectPromise(new Error("sshc printed no URL within 15s"));
+        return;
+      }
+      const asking = spawn(binaryPath, ["open"], {
+        env: isolatedEnvironment(home),
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      let printed = "";
+      asking.stdout?.on("data", (chunk: Buffer) => {
+        printed += chunk.toString("utf8");
+      });
+      asking.on("exit", (code) => {
+        const url = printed.trim();
+        if (code === 0 && url.startsWith("http://")) {
+          resolvePromise({ child, url });
+          return;
+        }
+        setTimeout(ask, 100);
+      });
+      asking.on("error", () => setTimeout(ask, 100));
+    };
+    ask();
   });
 }
 

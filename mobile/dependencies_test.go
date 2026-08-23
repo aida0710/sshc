@@ -69,8 +69,8 @@ func TestAndroidResolvesTheShellFromFallbacksAlone(t *testing.T) {
 // **新しい owner 値を足さない。** 欲しいのは「bootstrap fragment 付きの URL を
 // Announce が返す」という desktop の挙動そのものである。
 func TestAndroidAnnouncesAsTheDesktopOwner(t *testing.T) {
-	if got := build(t).Owner; got != handoff.OwnerDesktop {
-		t.Errorf("Owner = %q, want %q", got, handoff.OwnerDesktop)
+	if got := build(t).Owner; got != handoff.OwnerEngine {
+		t.Errorf("Owner = %q, want %q", got, handoff.OwnerEngine)
 	}
 }
 
@@ -93,7 +93,7 @@ var androidFieldIntent = map[string]string{
 	"UI":       "wired: 埋め込んだ SPA",
 	"Logger":   "wired: 呼び出し元が渡す",
 	"Home":     "wired: アプリの filesDir",
-	"Owner":    "wired: handoff.OwnerDesktop",
+	"Owner":    "wired: handoff.OwnerEngine",
 	"PID":      "wired: このプロセス",
 	"Lookup":   "wired: 常に見つからないと答える。SHELL を偶然の権威にしない",
 	"Environ":  "wired: 固定の環境。Android アプリの環境に有用な PATH が無い",

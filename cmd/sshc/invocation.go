@@ -11,7 +11,6 @@ const (
 	invocationInvalid invocationKind = iota
 	invocationDesktop
 	invocationEngine
-	invocationHeadless
 	invocationConnect
 	invocationRun
 	invocationChoose
@@ -29,13 +28,12 @@ type invocation struct {
 }
 
 const (
-	engineSubcommand   = "engine"
-	headlessSubcommand = "headless"
-	vaultSubcommand    = "vault"
-	runSubcommand      = "run"
-	helpSubcommand     = "help"
-	versionSubcommand  = "version"
-	StatusSubcommand   = "status"
+	engineSubcommand  = "engine"
+	vaultSubcommand   = "vault"
+	runSubcommand     = "run"
+	helpSubcommand    = "help"
+	versionSubcommand = "version"
+	StatusSubcommand  = "status"
 )
 
 // parseInvocation は、コマンドが誰の責務を求めるかを副作用なしに決める。
@@ -56,8 +54,6 @@ func parseInvocation(argv []string) (invocation, error) {
 	switch word {
 	case engineSubcommand:
 		return noArguments(invocationEngine, word, args)
-	case headlessSubcommand:
-		return noArguments(invocationHeadless, word, args)
 	case ConnectSubcommand:
 		if len(args) > 1 {
 			return invalidInvocation("connect takes at most one search term")
@@ -127,14 +123,13 @@ func invalidInvocation(reason string) (invocation, error) {
 
 // usage は、alias より先に読む予約語を全て示す。
 //
-// `sshc engine` は Electron が子 engine の lifetime を所有するためだけの入口であり、
-// 普通の利用者が直接実行するものではない。この理由を usage に出すことで、内部用の
-// 語が通常の headless 起動と同じものに見えるのを避ける。
+// **`sshc engine` は前面で走り続ける。** 生かしておくのは人であり、この道具では
+// ない——tmux でも systemd でも、その計算機でプロセスを持つ作法に任せる。裸の
+// `sshc` はそれを起こさず、走っているものへの入口を刷るだけである。
 func usage(out io.Writer) {
 	fmt.Fprint(out, `usage:
-  sshc                 launch or focus the desktop application
-  sshc engine          internal: run the engine owned by Electron
-  sshc headless        run a foreground engine for terminals and supervisors
+  sshc                 print a way into the running engine, and open it
+  sshc engine          run the engine in the foreground; keep it alive yourself
   sshc <alias>         connect to a host from ~/.ssh/config in this terminal
   sshc run <alias> ... run one command on a host and print what it wrote
   sshc connect [text]  choose a host in this terminal, then connect

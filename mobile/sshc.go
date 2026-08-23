@@ -78,7 +78,7 @@ func Start(home, cache string) (string, error) {
 
 	entrance := make(chan string, 1)
 	dependencies, err := newDependencies(home, cache, logger, func(readiness app.Readiness) error {
-		entrance <- readiness.DesktopURL
+		entrance <- readiness.Entrance
 		return nil
 	})
 	if err != nil {

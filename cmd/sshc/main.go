@@ -62,18 +62,17 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 	ctx := context.Background()
 	switch called.Kind {
 	case invocationDesktop:
-		return runDesktop(ctx, app.HandoffDir(home), client, newDesktopLauncher(), os.Stderr)
+		// 裸の `sshc` は入口を刷り、開ける画面があれば開く。**engine は起こさない。**
+		return runOpen(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr, true)
 	case invocationEngine:
-		return runEngine(ctx, engineDesktop, home, os.Stdin, os.Stdout, os.Stderr)
-	case invocationHeadless:
-		// **headless は所有権のために stdin を読まない。** 端末で走るものが
-		// 読み始めれば、打った人の入力を吸い込む。
-		return runEngine(ctx, engineHeadless, home, nil, os.Stdout, os.Stderr)
+		// **engine は stdin を読まない。** 端末で走るものが読み始めれば、
+		// 打った人の入力を吸い込む。
+		return runEngine(ctx, home, os.Stdout, os.Stderr)
 	case invocationConnect:
-		return runConnect(ctx, called.Args[0], home, app.HandoffDir(home), client, newDesktopLauncher(), os.Stdin, os.Stdout, os.Stderr)
+		return runConnect(ctx, called.Args[0], home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
 	case invocationRun:
 		return runRemote(ctx, called.Args[0], remoteCommand(called.Args[1:]), home,
-			app.HandoffDir(home), client, newDesktopLauncher(),
+			app.HandoffDir(home), client,
 			os.Stdin, os.Stdout, os.Stderr)
 	case invocationChoose:
 		query := ""
@@ -88,11 +87,11 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
 			return 1
 		}
-		return runConnect(ctx, alias, home, app.HandoffDir(home), client, newDesktopLauncher(), os.Stdin, os.Stdout, os.Stderr)
+		return runConnect(ctx, alias, home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
 	case invocationList:
 		return runList(home, os.Stdout, os.Stderr)
 	case invocationOpen:
-		return runOpen(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr)
+		return runOpen(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr, false)
 	case invocationStatus:
 		return runStatus(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr)
 	case invocationVault:

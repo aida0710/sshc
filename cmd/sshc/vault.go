@@ -72,7 +72,7 @@ func runVault(
 
 	found, err := readHandoff(stateDir)
 	if err != nil {
-		fmt.Fprintln(stderr, "sshc: no compatible running engine; start the desktop app or run sshc headless")
+		fmt.Fprintln(stderr, "sshc: no compatible running engine; start the desktop app or run sshc engine")
 		return 1
 	}
 	status, err := fetchVaultStatus(ctx, found, client)

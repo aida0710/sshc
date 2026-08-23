@@ -46,8 +46,16 @@ const OpenSubcommand = "open"
 // **開く相手はもう居ない。** 画面はデスクトップの外殻が出すので、この
 // コマンドの仕事は「入口をひとつ発行して渡す」ことだけになった。渡す先は、
 // 自分でそれを開く親プロセスか、それを読む人である。
+// runOpen は、走っている engine に入口をひとつ発行させ、その綴りを出す。
+//
+// **入口は毎回新しい。** 一度出したものを覚えて配り直すと、その綴りは端末の
+// スクロールバックの中で生き続ける——engine が走っているあいだずっと使える鍵が、
+// 誰でも読める場所に残ることになる。
+//
+// open は、それをブラウザへ渡すかどうかである。裸の `sshc` は渡し、`sshc open` は
+// 渡さない——後者は書かれた手順の中から呼ばれるもので、そこに開く相手は居ない。
 func runOpen(
-	ctx context.Context, stateDir string, client *http.Client, stdout, stderr io.Writer,
+	ctx context.Context, stateDir string, client *http.Client, stdout, stderr io.Writer, open bool,
 ) int {
 	found, err := readHandoff(stateDir)
 	if err != nil {
@@ -55,7 +63,10 @@ func runOpen(
 			fmt.Fprintf(stderr, "sshc: %v\n", err)
 			return 1
 		}
+		// **起こし方まで言う。** 「動いていない」だけでは、次に何を打てばよいかが
+		// 分からない——engine を生かしておくのは人であり、この道具ではない。
 		fmt.Fprintln(stderr, "sshc: not running")
+		fmt.Fprintln(stderr, "sshc: start one with `sshc engine`, and keep that terminal open")
 		return 1
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, found.URL+httpserver.OpenPath, bytes.NewReader([]byte("{}")))
@@ -83,28 +94,12 @@ func runOpen(
 		return 1
 	}
 	fmt.Fprintln(stdout, answer.URL)
-	return 0
-}
-
-// waitForHandoff は、ロックを取った方が handoff を書き終えるのを短く待つ。
-//
-// **待つのはロックに負けた経路だけである。** そこには「1 台目が確かに居る」と
-// いう根拠がある——ロックがそう言った。`sshc open` を打った人には根拠が無いので、
-// 居なければ待たずに 1 で終わる方がよい。
-//
-// 上限を持つのは、1 台目が listener を上げる前に殺された日でも、ここで永久に
-// 待たないためである。
-func waitForHandoff(ctx context.Context, stateDir string) {
-	for attempt := 0; attempt < 40; attempt++ {
-		if _, err := readHandoff(stateDir); err == nil {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(100 * time.Millisecond):
-		}
+	if open {
+		// **開けなくても失敗ではない。** 綴りは既に出してあるので、貼れるものは
+		// 人の手元に残っている。
+		openInBrowser(ctx, answer.URL)
 	}
+	return 0
 }
 
 // runConnect は、生きているエンジンに接続材料を求め、**このプロセスの中で**
@@ -116,8 +111,7 @@ func waitForHandoff(ctx context.Context, stateDir string) {
 // 思ってしまう。保存済みを使わない接続がほしいなら `ssh <接続先>` があり、
 // このアプリケーションは ~/.ssh/config に触れないので、それは常に動く。
 func runConnect(
-	ctx context.Context, alias, home, stateDir string, client *http.Client,
-	launcher desktopLauncher, stdin *os.File, stdout, stderr io.Writer,
+	ctx context.Context, alias, home, stateDir string, client *http.Client, stdin *os.File, stdout, stderr io.Writer,
 ) int {
 	if err := validate.Alias(alias); err != nil {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
@@ -127,9 +121,9 @@ func runConnect(
 	// 待つあいだの Ctrl-C だけをここで拾う。SSH が始まったあとの端末は raw で、
 	// Ctrl-C は信号ではなく一バイトとして相手へ渡る——そちらを横取りしない。
 	waitCtx, stopWaiting := signal.NotifyContext(ctx, os.Interrupt)
-	session, err := reachUnlockedEngine(waitCtx, stateDir, client, launcher, func(found handoff.Handoff) engineProbe {
+	session, err := reachUnlockedEngine(waitCtx, stateDir, client, func(found handoff.Handoff) engineProbe {
 		return httpProbe{found: found, client: client}
-	}, stderr, true)
+	}, stderr)
 	stopWaiting()
 	if err != nil {
 		if errors.Is(err, errInterrupted) {

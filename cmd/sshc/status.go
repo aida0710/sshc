@@ -125,7 +125,7 @@ func readHandoff(stateDir string) (handoff.Handoff, error) {
 type engineNotRunning struct{ cause error }
 
 func (e engineNotRunning) Error() string {
-	return "sshc is not running; open the app, or run sshc headless in another terminal"
+	return "sshc is not running; run sshc engine in another terminal and keep it open"
 }
 
 func (e engineNotRunning) Unwrap() error { return e.cause }

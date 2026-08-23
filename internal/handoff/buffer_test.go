@@ -16,7 +16,7 @@ func validBufferedHandoff() Handoff {
 		SchemaVersion:   SchemaVersion,
 		URL:             "http://127.0.0.1:52865",
 		Secret:          "buffer-canary-secret",
-		Owner:           OwnerHeadless,
+		Owner:           OwnerEngine,
 		PID:             4242,
 		Version:         "test",
 		ProtocolVersion: ProtocolVersion,

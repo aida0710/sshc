@@ -36,9 +36,6 @@ func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 			"build-cli": {
 				helper + ` build`,
 			},
-			"desktop-version": {
-				helper + ` desktop-version --directory desktop`,
-			},
 			"release-binaries": {
 				helper + ` matrix`,
 			},
@@ -60,10 +57,6 @@ func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 		for _, target := range []string{
 			"build",
 			"build-cli",
-			"desktop-bundle-mac",
-			"desktop-bundle-linux",
-			"desktop-bundle-windows",
-			"desktop-version",
 			"release-cli-current",
 		} {
 			recipe := requireTarget(t, contract, target)
@@ -90,78 +83,6 @@ func TestMakefileProvidesPortableNativeBuildContracts(t *testing.T) {
 		want := helper + " build\n"
 		if recipe != want {
 			t.Errorf("build-cli recipe = %q, want fixed %q", recipe, want)
-		}
-	})
-
-	t.Run("desktop targets bind the correct bundles host guards and scripts", func(t *testing.T) {
-		expectedBundles := map[string][]string{
-			"DESKTOP_MAC_BUNDLES": {
-				"mac-arm64:darwin:arm64:1:sshc",
-				"mac-x64:darwin:amd64:1:sshc",
-			},
-			"DESKTOP_LINUX_BUNDLES": {
-				"linux-arm64:linux:arm64:0:sshc",
-				"linux-x64:linux:amd64:0:sshc",
-			},
-			"DESKTOP_WINDOWS_BUNDLES": {
-				"win32-arm64:windows:arm64:0:sshc.exe",
-				"win32-x64:windows:amd64:0:sshc.exe",
-			},
-		}
-		for variable, want := range expectedBundles {
-			got, ok := contract.variables[variable]
-			if !ok {
-				t.Errorf("Makefile variable %s is missing", variable)
-				continue
-			}
-			if strings.Join(got, " ") != strings.Join(want, " ") {
-				t.Errorf("%s = %q, want %q", variable, got, want)
-			}
-		}
-
-		targets := []struct {
-			name string
-			host string
-		}{
-			{name: "desktop-bundle-mac", host: "darwin"},
-			{name: "desktop-bundle-linux", host: "linux"},
-			{name: "desktop-bundle-windows", host: "windows"},
-		}
-		for _, target := range targets {
-			recipe := requireTarget(t, contract, target.name)
-			for _, required := range []string{
-				`guard-host --host ` + target.host,
-				`desktop --host ` + target.host,
-				`--resource-root desktop/resources`,
-			} {
-				if !strings.Contains(recipe, required) {
-					t.Errorf("%s recipe does not contain %q\nrecipe:\n%s", target.name, required, recipe)
-				}
-			}
-			guardIndex := strings.Index(recipe, "guard-host --host "+target.host)
-			cliBuildIndex := strings.Index(recipe, "desktop --host "+target.host)
-			if guardIndex < 0 || cliBuildIndex < 0 || guardIndex >= cliBuildIndex {
-				t.Errorf("%s must guard host before the helper performs mutations\nrecipe:\n%s", target.name, recipe)
-			}
-			for _, other := range targets {
-				if other.name == target.name {
-					continue
-				}
-				for _, forbidden := range []string{
-					"--host " + other.host,
-				} {
-					if strings.Contains(recipe, forbidden) {
-						t.Errorf("%s recipe is swapped with %q\nrecipe:\n%s", target.name, forbidden, recipe)
-					}
-				}
-			}
-		}
-
-		if _, exists := contract.targets["desktop-dist"]; exists {
-			t.Error("desktop-dist must be removed; packages are built only on their native OS")
-		}
-		if _, exists := contract.targets["desktop-run"]; !exists {
-			t.Error("desktop-run must remain available for host development")
 		}
 	})
 

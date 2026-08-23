@@ -6,7 +6,7 @@
 #
 # **束は、それが動く OS の上で作る。** 以前はこれを macOS 一台でやっていた。
 # そのため Windows のインストーラは存在せず（NSIS は Windows でしか組めない）、
-# Android も無く、しかも desktop の束を作る手順そのものが壊れていた——呼んで
+# Android も無く、しかも束を作る手順そのものが壊れていた——呼んで
 # いた make の的が Makefile に無かった。いまは OS ごとに job があり、それぞれが
 # 自分の CLI と自分の束を作り、**自分で開いて確かめてから**渡す。
 #
@@ -37,11 +37,6 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
-      # **`make test` は外殻のテストも回す。** かつてあれは node 標準の
-      # テストランナーだけで走り、依存を増やさなかった——外殻が TypeScript に
-      # なってからは tsc を通すので、ここで入れておかないと `make test` が
-      # 「型検査ができない」で止まる。**web だけ入れれば足りた時代は終わった。**
-      - run: npm ci --prefix desktop
 
       - name: Verify
         run: make test
@@ -51,60 +46,10 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: make release-cli-current
 
-      # **証明書があれば署名して公証し、無ければ ad-hoc で済ませる。**
-      #
-      # 公証を通した束は、利用者の初回に Gatekeeper を通さない。証明書が無い
-      # あいだは desktop/adhoc.ts が ad-hoc 署名を付ける——**配布署名の代わりでは
-      # ないが、封と中身の辻褄は合う**（arm64 では署名の無い実行体はそもそも
-      # 起動しない）。利用者が初回に通る手順は docs/release-install.md にある。
-      #
-      # 切り替えは環境変数だけで起きる。CSC_LINK が空なら auto-discovery を
-      # 切り、adhoc.ts がそれを見て自分の出番だと判断する。**secret を入れる前と
-      # 後で、この workflow を書き換える必要は無い。**
-      #
-      # 公証は APPLE_API_* が揃ったときだけ走る（electron-builder が判定する）。
-      # App Store Connect の API key を使うのは、Apple ID と app-specific password
-      # より漏れたときの被害が小さいからである。
-      #
-      # **一行で足りる。** この的が npm install も web のビルドも、束ごとの CLI も
-      # 版付けも electron-builder も順に走らせる。以前ここで electron-builder を
-      # もう一度呼んでいたが、余分なだけでなく、**前の段が落ちたことを隠した。**
-      - name: Build the desktop bundles
-        env:
-          VERSION: ${{ github.ref_name }}
-          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.APPLE_CERTIFICATE_P12 == '' && 'false' || 'true' }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -eu
-          # **鍵はファイルにしか置けない。** electron-builder が @electron/notarize
-          # へ渡すのは道であって中身ではない。runner の中の一時ファイルで、
-          # job が終われば消える。
-          if [ -n "${{ secrets.APPLE_API_KEY }}" ]; then
-            printf '%s' '${{ secrets.APPLE_API_KEY }}' > "$RUNNER_TEMP/AuthKey.p8"
-            export APPLE_API_KEY="$RUNNER_TEMP/AuthKey.p8"
-          fi
-          make desktop-bundle-mac
-
-      # **開いていない束を配らない。** 中身が違っていてもビルドは通る——
-      # Windows では実際に、空の resources\cli が利用者の PATH に載った。
-      - name: Open the bundles
-        run: |
-          set -eu
-          arm64=$(ls desktop/dist/*-arm64.dmg)
-          x64=$(ls desktop/dist/*.dmg | grep -v -- '-arm64')
-          sh scripts/macos/package-smoke.sh --dmg "$arm64" --architecture arm64 --work-root "$RUNNER_TEMP/smoke-arm64"
-          sh scripts/macos/package-smoke.sh --dmg "$x64" --architecture x64 --work-root "$RUNNER_TEMP/smoke-x64"
-
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: release-macos
-          path: |
-            dist/sshc-darwin-*
-            desktop/dist/*.dmg
+          path: dist/sshc-darwin-*
           if-no-files-found: error
           retention-days: 1
 
@@ -123,11 +68,6 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
-      # **`make test` は外殻のテストも回す。** かつてあれは node 標準の
-      # テストランナーだけで走り、依存を増やさなかった——外殻が TypeScript に
-      # なってからは tsc を通すので、ここで入れておかないと `make test` が
-      # 「型検査ができない」で止まる。**web だけ入れれば足りた時代は終わった。**
-      - run: npm ci --prefix desktop
 
       - name: Verify
         run: make test
@@ -137,33 +77,10 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: make release-cli-current
 
-      # **Linux は形が二つある。** x64 は AppImage、arm64 は tar.gz である。
-      # electron-builder が arm64 向けに積む AppImage の runtime は、版の付か
-      # ない libz.so を要求する——zlib1g-dev が入れるもので、普通の機械には
-      # 無い。あの束は展開すらできず、利用者は起動できない。x64 の runtime は
-      # libz.so.1 を見ており無事なので、そちらは AppImage のままにしてある。
-      - name: Build the desktop bundles
-        env:
-          VERSION: ${{ github.ref_name }}
-        run: make desktop-bundle-linux
-
-      # x64 はこのランナーの上で本当に動く。arm64 は動かせないので、
-      # 中身だけを見る——スクリプトがどちらをしたかを結果に書く。
-      - name: Open the bundles
-        run: |
-          set -eu
-          appimage=$(ls desktop/dist/*.AppImage)
-          archive=$(ls desktop/dist/*-arm64.tar.gz)
-          sh scripts/linux/package-smoke.sh --package "$appimage" --architecture x64 --work-root "$RUNNER_TEMP/smoke-x64"
-          sh scripts/linux/package-smoke.sh --package "$archive" --architecture arm64 --work-root "$RUNNER_TEMP/smoke-arm64"
-
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: release-linux
-          path: |
-            dist/sshc-linux-*
-            desktop/dist/*.AppImage
-            desktop/dist/*.tar.gz
+          path: dist/sshc-linux-*
           if-no-files-found: error
           retention-days: 1
 
@@ -205,32 +122,10 @@ jobs:
           SSHC_NATIVE_VERSION: ${{ github.ref_name }}
         run: go run ./internal/nativebuild/cmd/nativebuild release-current --arches "amd64 arm64" --output-dir dist
 
-      # 版付けも electron-builder も、この的が中でやる。
-      - name: Build the desktop bundles
-        env:
-          SSHC_NATIVE_VERSION: ${{ github.ref_name }}
-        run: go run ./internal/nativebuild/cmd/nativebuild desktop --host windows --resource-root desktop/resources --bundles "win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe"
-
-      # x64 だけを開く。arm64 のインストーラはこのランナーでは動かせず、
-      # smoke は実際に入れて PATH と DACL と所有権を見るものだからである。
-      - name: Open the bundle
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $true
-          $installer = (Get-ChildItem desktop/dist/*-win-x64-setup.exe | Select-Object -First 1).FullName
-          ./scripts/windows/package-smoke.ps1 -Installer $installer -Architecture x64 -WorkRoot "$env:RUNNER_TEMP\smoke-x64"
-
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: release-windows
-          # **アーキごとの二つだけを渡す。** electron-builder は両対応の
-          # `-win-setup.exe` も一緒に作るが、あれは誰も開いていない三つ目で
-          # あり、利用者にはどれを取ればよいかが増えるだけである。
-          path: |
-            dist/sshc-windows-*
-            desktop/dist/*-win-x64-setup.exe
-            desktop/dist/*-win-arm64-setup.exe
+          path: dist/sshc-windows-*
           if-no-files-found: error
           retention-days: 1
 
@@ -401,20 +296,6 @@ jobs:
               -e "s#^  sha256 .*#  sha256 \"$sum\"#" \
               packaging/homebrew/sshc.rb > sshc.rb
 
-          # **cask は dmg を指す。** formula がソースを建てるのに対し、こちらは
-          # 出来上がった束を配る——押さえる sha256 も、リリースが公開した
-          # checksums.txt のものである。
-          curl -fsSL "https://github.com/$SOURCE_REPO/releases/download/$RELEASE_TAG/checksums.txt" -o checksums.txt
-          armSum=$(grep " sshc-$version-mac-arm64.dmg\$" checksums.txt | cut -d' ' -f1)
-          intelSum=$(grep " sshc-$version-mac-x64.dmg\$" checksums.txt | cut -d' ' -f1)
-          [ -n "$armSum" ] && [ -n "$intelSum" ] || { echo "checksums.txt に dmg が無い" >&2; exit 1; }
-          sed -e "s#^  version .*#  version \"$version\"#" \
-              -e "s#^  sha256 arm: .*#  sha256 arm: \"$armSum\",#" \
-              -e "s#^         intel: .*#         intel: \"$intelSum\"#" \
-              packaging/homebrew/sshc-cask.rb > sshc-cask.rb
-          grep -q "$armSum" sshc-cask.rb || { echo "cask に arm の checksum が入らなかった" >&2; exit 1; }
-          grep -q "$intelSum" sshc-cask.rb || { echo "cask に intel の checksum が入らなかった" >&2; exit 1; }
-
           # 差し替えが効いたことを見る。**sed が空振りしても 0 で終わる**ので、
           # ここで見ないと 0.0.0 のままの formula を押してしまう。
           grep -q "$sum" sshc.rb || { echo "the checksum was not written into the formula" >&2; exit 1; }
@@ -429,9 +310,8 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap -o IdentitiesOnly=yes"
 
           git clone --depth 1 "git@github.com:$TAP_REPO.git" tap
-          mkdir -p tap/Formula tap/Casks
+          mkdir -p tap/Formula
           cp sshc.rb tap/Formula/sshc.rb
-          cp sshc-cask.rb tap/Casks/sshc.rb
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -440,7 +320,7 @@ jobs:
           # 見ないので、**まだ無い一度目は「変化なし」と読まれる** ——実際
           # v0.2.0 でそれが起き、job は 6 秒で緑になって何も押さなかった。
           # 索引に入れてから比べれば、新規も変更も同じ 1 つの問いになる。
-          git add Formula/sshc.rb Casks/sshc.rb
+          git add Formula/sshc.rb
           if git diff --cached --quiet; then
             echo "the tap already describes $RELEASE_TAG."
             exit 0

@@ -55,7 +55,7 @@ func testDependencies(t *testing.T) Dependencies {
 		Listen: net.Listen,
 		UI:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Owner:  handoff.OwnerHeadless,
+		Owner:  handoff.OwnerEngine,
 		PID:    4242,
 		// 秒を待たない。締切そのものが検査対象であって、その長さではない。
 		ShutdownTimeout: 40 * time.Millisecond,

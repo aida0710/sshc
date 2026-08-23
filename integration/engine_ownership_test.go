@@ -2,7 +2,6 @@ package integration
 
 import (
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -11,17 +10,10 @@ import (
 	"sshc/internal/handoff"
 )
 
-// **裸の `sshc` は engine を起こさない。** 誰が engine の寿命を持つかは外殻が
+// **裸の `sshc` は engine を起こさない。** 誰が engine の寿命を持つかは人が
 // 決めることで、端末で打たれた一語がそれを横取りしてはならない。この性質は
 // プロセスの外からしか確かめられない——ロックはこのプロセスの中には無い。
 func TestBareInvocationTakesNoEngineLock(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		// darwin の bare activation は LaunchServices に本物の束を訊く。
-		// 開発機で走らせれば、その人が入れている sshc.app が、隔離した家では
-		// なく本物の HOME に対して上がる。テストが利用者のアプリを起こしては
-		// ならない。Linux は記録が無ければ断るので、そちらで確かめる。
-		t.Skip("bare activation asks LaunchServices for a real bundle here")
-	}
 	home := isolatedHome(t)
 
 	process := start(t, home)
@@ -36,17 +28,17 @@ func TestBareInvocationTakesNoEngineLock(t *testing.T) {
 	if _, err := os.Stat(handoffPath(home)); !os.IsNotExist(err) {
 		t.Errorf("bare sshc published a handoff; it started an engine")
 	}
-	if !strings.Contains(process.Stderr.String(), "sshc headless") {
-		t.Errorf("stderr = %q, want the headless command named", process.Stderr.String())
+	if !strings.Contains(process.Stderr.String(), "not running") {
+		t.Errorf("stderr = %q, want it to say nothing is running", process.Stderr.String())
 	}
 }
 
-// **headless は入口を出さない。** 出せば、端末にもログにもワンタイムの資格情報
+// **engine は入口を出さない。** 出せば、端末にもログにもワンタイムの資格情報
 // が残る。読み手はスクロールバックであり、それは誰にでも見せられる場所ではない。
 func TestHeadlessRunsInTheForegroundWithoutPublishingABootstrapToken(t *testing.T) {
 	home := isolatedHome(t)
 
-	process := start(t, home, "headless")
+	process := start(t, home, "engine")
 	waitForFile(t, handoffPath(home), 30*time.Second, process)
 
 	if !process.running() {
@@ -69,7 +61,7 @@ func TestHeadlessRunsInTheForegroundWithoutPublishingABootstrapToken(t *testing.
 	}
 
 	document := readHandoff(t, home)
-	if document.Owner != handoff.OwnerHeadless {
+	if document.Owner != handoff.OwnerEngine {
 		t.Errorf("owner = %q, want headless", document.Owner)
 	}
 }
@@ -78,10 +70,10 @@ func TestHeadlessRunsInTheForegroundWithoutPublishingABootstrapToken(t *testing.
 // 守っている。
 func TestASecondHeadlessRefusesToStart(t *testing.T) {
 	home := isolatedHome(t)
-	first := start(t, home, "headless")
+	first := start(t, home, "engine")
 	waitForFile(t, handoffPath(home), 30*time.Second, first)
 
-	second := start(t, home, "headless")
+	second := start(t, home, "engine")
 	code := second.wait(t, 20*time.Second)
 
 	if code != 1 {
@@ -92,29 +84,6 @@ func TestASecondHeadlessRefusesToStart(t *testing.T) {
 	}
 	if !first.running() {
 		t.Error("the first engine died when the second one was refused")
-	}
-}
-
-// **所有権のチャンネルが閉じることが、終わってよいという意味である。**
-// 殺すのではない——閉じれば engine は端末も転送も vault も畳んでからロックを
-// 外す。この経路は同じプロセスの中では作れない。
-func TestClosingTheOwnershipChannelStopsTheEngine(t *testing.T) {
-	home := isolatedHome(t)
-	engine := startOwned(t, home)
-	waitForFile(t, handoffPath(home), 30*time.Second, engine)
-
-	if err := engine.Ownership.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	if code := engine.wait(t, 20*time.Second); code != 0 {
-		t.Errorf("exit = %d, want 0; closing the channel is an ordinary ending\n%s",
-			code, engine.Stderr.String())
-	}
-	// 畳み終えたなら、次の owner のために場所は空いている。
-	takeOverAsHeadless(t, home)
-	if readHandoff(t, home).Owner != handoff.OwnerHeadless {
-		t.Error("the replacement engine did not take the seat the desktop engine left")
 	}
 }
 
@@ -135,7 +104,7 @@ func TestOnlyOneOwnerWinsAStartRace(t *testing.T) {
 			if index%2 == 0 {
 				process = startOwned(t, home)
 			} else {
-				process = start(t, home, "headless")
+				process = start(t, home, "engine")
 			}
 			mutex.Lock()
 			processes = append(processes, process)
@@ -183,7 +152,7 @@ func TestOnlyOneOwnerWinsAStartRace(t *testing.T) {
 // プロセスと一緒に消える。残った handoff は、次の owner が置き換える。
 func TestAKilledEngineReleasesItsLockAndItsHandoffIsReplaced(t *testing.T) {
 	home := isolatedHome(t)
-	first := start(t, home, "headless")
+	first := start(t, home, "engine")
 	waitForFile(t, handoffPath(home), 30*time.Second, first)
 	before := readHandoff(t, home)
 
