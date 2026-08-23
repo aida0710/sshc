@@ -75,9 +75,13 @@ func newSSHParts(
 }
 
 // target は、alias ひとつ分の接続を組み立てる。
+//
+// **通知は Target が持っている。** 以前ここは第 2 の戻り値として受け取って
+// `_` で捨てており、「読むが従わない」と書いた 7 つのキーワード
+// （RemoteForward、ForwardX11、SendEnv……）は誰にも届いていなかった。
+// いまは接続を開くときに端末へ出る。
 func (p sshParts) target(alias string) (sshclient.Target, error) {
-	target, _, err := sshclient.NewTarget(alias, p.resolve, p.home)
-	return target, err
+	return sshclient.NewTarget(alias, p.resolve, p.home)
 }
 
 // connector は、埋め込みターミナルが開く対話セッションである。

@@ -250,15 +250,16 @@ func completionConditions() []completionCondition {
 				{proofGoTest, "TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard"},
 			},
 			Manual: []proof{{proofManual, "M1. 実リモートホストへの接続テスト"}},
-			Gap: "**このアプリケーションは接続のために外部プログラムを一つも起こさない。** " +
-				"だから「危険ディレクティブを実行してしまう」経路そのものが無い——" +
-				"ProxyCommand と Match exec は解決の時点で断り、LocalCommand も " +
-				"KnownHostsCommand もこのクライアントに機能として無い。残っているのは " +
-				"RemoteCommand で、あれは設定に書かれたコマンドを**リモートで**走らせる" +
-				"——利用者が書いたとおりのことであり、暗黙ではない。自動化が届かないのは、" +
-				"実リモートがそれをどう扱うかだけで、それが M1 である。alias の関門は" +
-				"三層あるので、どれか一層だけを外しても route の検査は緑のままである点にも" +
-				"注意すること。",
+			Gap: "**このアプリケーションが自分の判断で起こすプログラムは無い。** " +
+				"Match exec は解決の時点で断り、LocalCommand も KnownHostsCommand も " +
+				"このクライアントに機能として無い。**ProxyCommand は起こす** ——" +
+				"利用者が「これで繋げ」と書いた綴りであり、断ることは「その接続先は " +
+				"扱えない」と言うことだった。黙っては起こさない: 綴りは接続のたびに " +
+				"端末へ 1 行出る。RemoteCommand は設定に書かれたコマンドを**リモートで**" +
+				"走らせる——どちらも利用者が書いたとおりのことであり、暗黙ではない。" +
+				"自動化が届かないのは、実リモートがそれをどう扱うかだけで、それが M1 " +
+				"である。alias の関門は三層あるので、どれか一層だけを外しても route の" +
+				"検査は緑のままである点にも注意すること。",
 		},
 		{
 			Number:  12,

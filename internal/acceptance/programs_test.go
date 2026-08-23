@@ -21,10 +21,15 @@ var startsAProcess = []string{"exec.Command"}
 
 // allowedToStartPrograms は、そこからプログラムを起こしてよいファイルである。
 //
-// **このアプリケーションは OpenSSH のプログラムを一つも実行しない。** 接続も、
+// **このアプリケーションは OpenSSH のプログラムを自分から選んで実行しない。**
 // 認証も、鍵の一覧も、agent への登録も、このプロセスの中で行う。`ssh-keygen` は
 // 名前を出すだけで、走らせるのは利用者である——`HardwareCommand` が返すのは
 // 画面に表示する引数の並びである。
+//
+// **接続には例外がひとつある。** ProxyCommand は、利用者が「これで繋げ」と
+// 書いた綴りをそのまま起こす設定であり、それを断ることは「その接続先は扱えない」
+// と言うことだった。起こす綴りを選ぶのはこのアプリケーションではなく、
+// ~/.ssh/config を書いた本人である。
 //
 // ログイン時起動は OS に任せた。launchd や systemd の unit を書いていたのは
 // このアプリケーション自身だったが、その仕組みごと消えた。ここに並ぶものは
@@ -45,6 +50,16 @@ var allowedToStartPrograms = []string{
 	// artifact verifier の sh/pwsh だけを allowlist 済み argv で起動し、caller input を
 	// shell command line として組み立てない。
 	"internal/nativebuild/nativebuild.go",
+	// ProxyCommand は、接続そのものを外部のプログラムに任せる設定である。
+	//
+	// **ここだけは、利用者が書いた文字列をシェルに渡す。** ~/.ssh/config の
+	// その 1 行を、ssh が読むのと同じように解釈するためであり、綴りを分解して
+	// argv を組み立てると、引用もリダイレクトも書けなくなる——それは ssh と
+	// 違う意味になる。
+	//
+	// **黙って起こさない。** 起こす綴りは接続のたびに端末へ 1 行出る
+	// （tracer.announce）。既定が無言であることの、ただ一つの例外である。
+	"internal/sshclient/proxycommand.go",
 }
 
 // TestOnlyTheNamedSubsystemsStartAProgram は、プロセスを起こす場所を固定する。

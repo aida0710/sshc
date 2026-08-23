@@ -70,6 +70,21 @@ func (t *tracer) say(level Verbosity, format string, args ...any) {
 	_, _ = io.WriteString(t.writer, "\r\n[sshc] "+fmt.Sprintf(format, args...)+"\r\n")
 }
 
+// announce は、level に関わらず 1 行書く。
+//
+// **既定が無言であることの、ただ一つの例外である。** 接続のために利用者の
+// 設定に書かれたプログラムを起こすとき、それを黙って行わない。何が走るかを
+// 知らないまま走ることが無いようにするためであり、繋がるまで数秒かかる理由も
+// そこにある——`cloudflared` や `aws ssm` は、すぐには繋がらない。
+//
+// **これを二つ目にしない。** 無言を選んだ人の画面を、この一行以外で汚さない。
+func (t *tracer) announce(format string, args ...any) {
+	if t == nil || t.writer == nil {
+		return
+	}
+	_, _ = io.WriteString(t.writer, "\r\n[sshc] "+fmt.Sprintf(format, args...)+"\r\n")
+}
+
 // since は、始まりからの経過を返す。Full のときだけ意味を持つ。
 func (t *tracer) since(start time.Time) time.Duration { return t.now().Sub(start) }
 

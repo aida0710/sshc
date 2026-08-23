@@ -71,7 +71,9 @@ type Dependencies struct {
 	PID   int
 	// Toolchain と KeyAgent は、鍵 vault とオペレーティングシステムとの境界。
 	//
-	// **このアプリケーションは OpenSSH のプログラムを一つも実行しない。**
+	// **このアプリケーションは OpenSSH のプログラムを自分から実行しない。**
+	// 例外は ProxyCommand ひとつで、あれは利用者が「これで繋げ」と書いた綴りを
+	// そのまま起こす（internal/sshclient/proxycommand.go）。
 	// Toolchain に残っているのは ssh-keygen だけで、それも走らせるのは利用者で
 	// ある——見つかるかどうかで、ハードウェア鍵の項目を一覧に出してよいかを
 	// 決める。KeyAgent が nil の場合、エージェント登録は到達できるエージェントが
