@@ -54,10 +54,9 @@ func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 
 	for phrase, why := range map[string]string{
-		"sshc engine":   "the entry point Electron uses to own an engine",
-		"sshc headless": "the way to own an engine from a terminal",
-		"sshc vault":    "where passwords are typed",
-		"sshc run":      "how a written procedure reaches a host",
+		"sshc engine": "the way to own an engine from a terminal",
+		"sshc vault":  "where passwords are typed",
+		"sshc run":    "how a written procedure reaches a host",
 	} {
 		if !strings.Contains(readme, phrase) {
 			t.Errorf("README never mentions %q (%s)", phrase, why)

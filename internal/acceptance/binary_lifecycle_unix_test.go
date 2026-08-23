@@ -54,9 +54,9 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 
 	home := t.TempDir()
 	// acceptance harness 自身が foreground engine の所有者である。bare `sshc` は
-	// desktop を起動・前面化する公開入口なので、画面のない検査は明示的な headless
+	// 裸の `sshc` は入口を刷るだけで engine を起こさないので、ここは明示的に engine
 	// owner として起動し、SIGTERM まで自分で寿命を管理する。
-	process := exec.Command(binary, "headless")
+	process := exec.Command(binary, "engine")
 	process.Env = isolatedEnvironment(home)
 	stdout, err := process.StdoutPipe()
 	if err != nil {
@@ -99,18 +99,18 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatalf("the binary announced nothing within 15s; stderr:\n%s", stderr.String())
 	}
-	// **headless は入口を出さない。** 出せば、ワンタイムの資格情報が端末にも
+	// **engine は入口を出さない。** 出せば、ワンタイムの資格情報が端末にも
 	// ログにも残る。言うのは、次に何を打てばよいかだけである。
 	if announced != "sshc: create the password vault with `sshc vault create`" {
-		t.Fatalf("headless announcement = %q", announced)
+		t.Fatalf("engine announcement = %q", announced)
 	}
 	for _, canary := range []string{"http://", "bootstrap", "127.0.0.1"} {
 		if strings.Contains(announced, canary) || strings.Contains(stderr.String(), canary) {
-			t.Fatalf("headless leaked %q; stdout %q stderr:\n%s", canary, announced, stderr.String())
+			t.Fatalf("the engine leaked %q; stdout %q stderr:\n%s", canary, announced, stderr.String())
 		}
 	}
 
-	// 入口は名簿から読む。それが `sshc <alias>` の通る道であり、headless が
+	// 入口は名簿から読む。それが `sshc <alias>` の通る道であり、engine が
 	// 実際に受け付けていることの公開された証拠である。
 	var document handoff.Handoff
 	deadline := time.Now().Add(15 * time.Second)
@@ -154,7 +154,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	// 経路可能なアドレス上の同じポートへの接続は受け付けてはならない。
 	assertBoundToLoopbackOnly(t, host)
 
-	// **headless にブートストラップは無い。** 資格情報は名簿にあり、それを
+	// **engine はブートストラップを刷らない。** 資格情報は名簿にあり、それを
 	// 持つのは `sshc <alias>` である。ここではその公開された経路を通す。
 	status, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+httpserver.StatusPath, nil)
 	if err != nil {

@@ -21,18 +21,6 @@ import (
 
 // engineMode は、エンジンの寿命を誰が引き受けるかである。
 //
-// **bool にしない。** どちらの owner かは、終了コードも、入口の出し方も、
-// stdin を見るかどうかも変える。真偽値ひとつでそれを運ぶと、意味が呼び出し側の
-// 記憶に残るだけになる。
-type engineMode uint8
-
-const (
-	// engineDesktop は Electron が持つ内部のエンジンである。
-	engineDesktop engineMode = iota + 1
-	// engineHeadless は、端末や supervisor が持つ公開のエンジンである。
-	engineHeadless
-)
-
 // 終了の理由。context.WithCancelCause でこれを運び、終了コードを決める。
 var (
 	errEngineInterrupted = errors.New("engine interrupted")
@@ -44,35 +32,29 @@ var (
 // **可変のパッケージ変数にしない。** 差し替え可能なグローバルを置くと、
 // 並行して走るパッケージのテストが互いの継ぎ目を踏む。
 type engineDependencies struct {
-	acquire          func(string) (func() error, error)
-	ownershipMonitor func(io.Reader) (ownershipMonitor, error)
-	runApp           func(context.Context, app.Dependencies, string) error
-	shutdownTimeout  time.Duration
+	acquire         func(string) (func() error, error)
+	runApp          func(context.Context, app.Dependencies, string) error
+	shutdownTimeout time.Duration
 }
 
 func defaultEngineDependencies() engineDependencies {
 	return engineDependencies{
-		acquire:          lockEngineStart,
-		ownershipMonitor: newOwnershipMonitor,
-		runApp:           app.Run,
+		acquire: lockEngineStart,
+		runApp:  app.Run,
 	}
 }
 
 func runEngine(
 	ctx context.Context,
-	mode engineMode,
 	home string,
-	ownership io.Reader,
 	stdout, stderr io.Writer,
 ) int {
-	return runEngineWithDependencies(ctx, mode, home, ownership, stdout, stderr, defaultEngineDependencies())
+	return runEngineWithDependencies(ctx, home, stdout, stderr, defaultEngineDependencies())
 }
 
 func runEngineWithDependencies(
 	ctx context.Context,
-	mode engineMode,
 	home string,
-	ownership io.Reader,
 	stdout, stderr io.Writer,
 	dependencies engineDependencies,
 ) int {
@@ -84,47 +66,21 @@ func runEngineWithDependencies(
 	// **所有権はロックより先である。** 持ち主が既に居なくなっていたなら、
 	// ロックを取ってはならない——取れば、誰も待っていないエンジンが 1 台分の
 	// 席を占める。
-	var monitor ownershipMonitor
-	var ownershipEvents <-chan error
-	if mode == engineDesktop {
-		created, err := dependencies.ownershipMonitor(ownership)
-		if err != nil {
-			fmt.Fprintln(stderr, "sshc: "+ownershipMessage(err))
-			return 1
-		}
-		monitor = created
-		events, err := monitor.Start(signalCtx)
-		if err != nil {
-			fmt.Fprintln(stderr, "sshc: "+ownershipMessage(err))
-			return 1
-		}
-		ownershipEvents = events
-	}
-
 	release, err := dependencies.acquire(app.HandoffDir(home))
 	if err != nil {
-		if monitor != nil {
-			_ = monitor.Stop()
-		}
-		switch {
-		case errors.Is(err, errEngineRunning) && mode == engineDesktop:
-			return engineBusyExit
-		case errors.Is(err, errEngineRunning):
-			fmt.Fprintln(stderr, "sshc: an sshc engine is already running; stop it before starting another")
+		if errors.Is(err, errEngineRunning) {
+			// **2 台目は立てない。** 起こそうとした人が知りたいのは、既に
+			// 1 台居ることと、その入口の取り方である。
+			fmt.Fprintln(stderr, "sshc: an sshc engine is already running")
+			fmt.Fprintln(stderr, "sshc: run sshc to get a way into it")
 			return 1
 		}
 		logger.Error("take the engine lock", "error", err)
 		return 1
 	}
 
-	code := runEngineApp(signalCtx, mode, home, stdout, logger, ownershipEvents, dependencies)
+	code := runEngineApp(signalCtx, home, stdout, logger, dependencies)
 
-	if monitor != nil {
-		if err := monitor.Stop(); err != nil {
-			logger.Error("stop the ownership monitor", "error", err)
-			code = 1
-		}
-	}
 	// **ロックを手放すのは最後である。** これより後に状態を変えるものは何も無い。
 	if err := release(); err != nil {
 		logger.Error("release the engine lock", "error", err)
@@ -136,11 +92,9 @@ func runEngineWithDependencies(
 // runEngineApp は、アプリケーションを走らせ、終わった理由を終了コードへ写す。
 func runEngineApp(
 	ctx context.Context,
-	mode engineMode,
 	home string,
 	stdout io.Writer,
 	logger *slog.Logger,
-	ownershipEvents <-chan error,
 	dependencies engineDependencies,
 ) int {
 	assets, err := ui.FS()
@@ -155,23 +109,14 @@ func runEngineApp(
 		select {
 		case <-ctx.Done():
 			cancel(context.Cause(ctx))
-		case cause := <-ownershipEvents:
-			if cause == nil {
-				cause = errOwnershipEnded
-			}
-			cancel(cause)
 		case <-runCtx.Done():
 		}
 	}()
 
-	owner := handoff.OwnerHeadless
-	if mode == engineDesktop {
-		owner = handoff.OwnerDesktop
-	}
 	parts := newPlatformParts()
 	dependencyValues := app.Dependencies{
 		Random:   rand.Reader,
-		Announce: announceReadiness(mode, stdout),
+		Announce: announceReadiness(stdout),
 		// このアプリケーションが自分自身以外のホストに接触する唯一の場所であり、
 		// 誰かが求めたときにだけ行う。何も取得せず、何も置き換えない。
 		Updates: &selfupdate.Checker{
@@ -182,7 +127,7 @@ func runEngineApp(
 		UI:              assets,
 		Logger:          logger,
 		Home:            home,
-		Owner:           owner,
+		Owner:           handoff.OwnerEngine,
 		PID:             os.Getpid(),
 		Toolchain:       parts.Toolchain,
 		KeyAgent:        parts.KeyAgent,
@@ -205,42 +150,23 @@ func exitForCause(cause error, logger *slog.Logger) int {
 	switch {
 	case errors.Is(cause, errEngineInterrupted):
 		return 130
-	case errors.Is(cause, errOwnershipProtocol), errors.Is(cause, errOwnershipRead):
-		// **秘密は書かない。** 理由の名前だけを残す。
-		logger.Error("desktop ownership failed", "cause", cause.Error())
-		return 1
 	}
-	// 正常終了、SIGTERM、呼び出し側の取り消し、そして所有権の EOF。
+	// 正常終了、SIGTERM、呼び出し側の取り消し。
 	return 0
 }
 
-// announceReadiness は、受付が始まったことをこの owner にふさわしい形で伝える。
-func announceReadiness(mode engineMode, stdout io.Writer) func(app.Readiness) error {
+// announceReadiness は、受付が始まったことを伝える。
+//
+// **入口はここに出さない。** 出せば、ログにも端末にもワンタイムの資格情報が
+// 残る。入口は `sshc` が求めたときに 1 つずつ発行される。
+func announceReadiness(stdout io.Writer) func(app.Readiness) error {
 	return func(readiness app.Readiness) error {
-		if mode == engineDesktop {
-			// 入口の URL は、Electron が読む私的な stdout だけへ出る。
-			_, err := fmt.Fprintln(stdout, readiness.DesktopURL)
-			return err
-		}
-		// **headless は入口を出さない。** 出せば、ログにも端末にもワンタイムの
-		// 資格情報が残る。ここで言うのは、次に何を打てばよいかだけである。
 		message := "sshc: create the password vault with `sshc vault create`"
 		if readiness.VaultExists {
 			message = "sshc: unlock the password vault with `sshc vault unlock`"
 		}
 		_, err := fmt.Fprintln(stdout, message)
 		return err
-	}
-}
-
-func ownershipMessage(err error) string {
-	switch {
-	case errors.Is(err, errOwnershipEnded):
-		return "the desktop application closed the engine ownership channel before the engine started"
-	case errors.Is(err, errOwnershipProtocol):
-		return "the desktop engine was started without a usable ownership channel"
-	default:
-		return "the desktop engine could not watch its ownership channel"
 	}
 }
 

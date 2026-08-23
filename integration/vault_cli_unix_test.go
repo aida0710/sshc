@@ -32,7 +32,7 @@ func carriesCanary(text string) bool {
 func liveHeadless(t *testing.T) (string, *testProcess) {
 	t.Helper()
 	home := isolatedHome(t)
-	engine := start(t, home, "headless")
+	engine := start(t, home, "engine")
 	waitForFile(t, handoffPath(home), 30*time.Second, engine)
 	return home, engine
 }

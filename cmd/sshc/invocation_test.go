@@ -47,7 +47,9 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 	}{
 		{[]string{"sshc"}, invocationDesktop, nil},
 		{[]string{"sshc", "engine"}, invocationEngine, nil},
-		{[]string{"sshc", "headless"}, invocationHeadless, nil},
+		// **headless はもう予約語ではない。** engine を持つ道が 1 つになったので、
+		// この綴りは他と同じただの接続先として読まれる。
+		{[]string{"sshc", "headless"}, invocationConnect, []string{"headless"}},
 		{[]string{"sshc", "server-a"}, invocationConnect, []string{"server-a"}},
 		{[]string{"sshc", "connect"}, invocationChoose, nil},
 		{[]string{"sshc", "connect", "prod"}, invocationChoose, []string{"prod"}},

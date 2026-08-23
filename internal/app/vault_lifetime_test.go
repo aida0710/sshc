@@ -19,7 +19,7 @@ import (
 // ここが確かめるのは、その判断が実際に届いていることである——秘密を持つ側で
 // 正しく振る舞っても、渡し忘れていれば意味が無い。
 func TestTheVaultClosesOnTheSameClockWhoeverStartedTheEngine(t *testing.T) {
-	for _, owner := range []handoff.Owner{handoff.OwnerDesktop, handoff.OwnerHeadless} {
+	for _, owner := range []handoff.Owner{handoff.OwnerEngine, handoff.OwnerEngine} {
 		t.Run(string(owner), func(t *testing.T) {
 			services, err := newEngineServices(Dependencies{
 				Home:   t.TempDir(),

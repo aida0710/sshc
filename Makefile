@@ -1,4 +1,4 @@
-.PHONY: generate test build build-cli android-bind desktop icons desktop-run desktop-version desktop-bundle-mac desktop-bundle-linux desktop-bundle-windows release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
 # なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
@@ -35,14 +35,6 @@ test:
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
 	npm test --prefix web
 	npm run typecheck --prefix web
-	@# 外殻も検査する。**install-cli は利用者の ~/.local/bin に触る**ので、
-	@# 「自分が張ったリンクでなければ触らない」という規則は落とせない。
-	@#
-	@# **ここは desktop の node_modules を要る。** かつて外殻は素の JS で、node 標準の
-	@# テストランナーだけで走ったので依存を増やさなかった——TypeScript になってからは
-	@# tsc を通す。この的を回す CI の段は、先に `npm ci --prefix desktop` を通すこと
-	@# （release.yml の macos と linux がそれである）。
-	npm test --prefix desktop
 
 fuzz:
 	@set -e; for target in $(FUZZ_TARGETS); do \
@@ -91,74 +83,6 @@ android-bind:
 build-cli:
 	go run ./internal/nativebuild/cmd/nativebuild build
 
-# デスクトップの外殻。
-#
-# **束ごとに入る sshc は、その束のプラットフォームのものでなければならない。**
-# 一つを使い回すと、Linux の AppImage に macOS のバイナリが入る——ビルドは
-# 通り、配ってから初めて壊れる種類の間違いである。electron-builder の
-# ${os}-${arch} がその選択を行うので、こちらはその名前で置く。
-DESKTOP_MAC_BUNDLES = mac-arm64:darwin:arm64:1:sshc mac-x64:darwin:amd64:1:sshc
-DESKTOP_LINUX_BUNDLES = linux-arm64:linux:arm64:0:sshc linux-x64:linux:amd64:0:sshc
-DESKTOP_WINDOWS_BUNDLES = win32-arm64:windows:arm64:0:sshc.exe win32-x64:windows:amd64:0:sshc.exe
-
-# desktop は、外殻を動かすのに要るものを揃える。開発中はホストの bin/sshc を
-# 使うので、束ごとのバイナリはここでは作らない。
-desktop:
-	npm install --prefix desktop
-
-# icons は SVG からアプリの図を焼き直す。
-#
-# **正本は desktop/build/icon.svg である。** PNG は焼いたものだが、束を作るのに
-# 要るのでコミットしてある——`internal/ui/dist` と同じ扱いである。図を直したら
-# これを走らせる。焼くのに使うのは web が持っている Chromium なので、
-# 変換のためだけの依存は無い。
-icons:
-	npm run icons --prefix desktop
-
-# desktop-run は、束を作らずにその場で外殻を開く。開発中の入口である。
-#
-# **走っているアプリがあるなら、先に終わらせる。** 二度目の `npm start` は
-# `requestSingleInstanceLock` に弾かれてすぐ消えるので、焼き直したものは走ら
-# ないまま、先に居るアプリが古いエンジンで画面を配り続ける。メニューバーの
-# 「終了」で畳めば、次の起動が新しい実体を上げる。
-#
-# **だから install を通す**——理由は端末の側にある。`sshc` と打った人が走らせる
-# のは `~/.local/bin/sshc` であって、この checkout の bin/sshc ではない。外殻は
-# 起動のたびに install-cli を試すが、`desktop/install-cli.ts` はそこに自分が
-# 張ったリンク以外のもの（`make install` が置いた実体など）があるなら触らない
-# ——一度でも `make install` を通した機械では、画面だけが新しく、端末は古い版を
-# 走らせ続ける。install-binary がそこを入れ替える。
-#
-# install が失敗しても止まらない。**ここで要るのは外殻が新しいことだけ**で
-# あり、それは bin/sshc を焼いた時点で済んでいる（外殻はそれを直接起こす）
-# ——端末側の実体を入れ替えるのは、それとは別の、外の世界に効く操作である。
-# あれが転んだからといって、アプリを開けない理由にはならない。ビルドの失敗は
-# ここに含めない（それは下の build が先に落ちる）。
-desktop-run: build desktop
-	-@$(MAKE) --no-print-directory install-binary \
-		INSTALL_SOURCE="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
-	npm start --prefix desktop
-
-# desktop package は artifact を実際に動かす OS 上でだけ作る。各 target は
-# electron-builder が選ぶ resource directory に両 architecture の CLI を置く。
-desktop-bundle-mac:
-	go run ./internal/nativebuild/cmd/nativebuild guard-host --host darwin
-	go run ./internal/nativebuild/cmd/nativebuild desktop --host darwin --resource-root desktop/resources
-
-desktop-bundle-linux:
-	go run ./internal/nativebuild/cmd/nativebuild guard-host --host linux
-	go run ./internal/nativebuild/cmd/nativebuild desktop --host linux --resource-root desktop/resources
-
-desktop-bundle-windows:
-	go run ./internal/nativebuild/cmd/nativebuild guard-host --host windows
-	go run ./internal/nativebuild/cmd/nativebuild desktop --host windows --resource-root desktop/resources
-
-# **版はひとつである。** 束の中の sshc と、その束自身が別の版を名乗ると、
-# どちらが本当かを言えるものが無くなる。dev のときは package.json の既定の
-# ままにする——npm は "dev" を版として受け付けない。
-desktop-version:
-	go run ./internal/nativebuild/cmd/nativebuild desktop-version --directory desktop
-
 # リリースの成果物。UI のバンドルは 1 度だけ作り、Go だけをターゲットごとに
 # ビルドする。バンドルは埋め込まれるだけで、どの OS 向けかを知らないからだ。
 #
@@ -188,14 +112,10 @@ override SSHC_NATIVE_GOOS := $(value GOOS)
 override SSHC_NATIVE_GOARCH := $(value GOARCH)
 override SSHC_NATIVE_CGO := $(value CGO_ENABLED)
 override SSHC_NATIVE_OUTPUT := $(value OUTPUT)
-override SSHC_NATIVE_MAC_BUNDLES := $(value DESKTOP_MAC_BUNDLES)
-override SSHC_NATIVE_LINUX_BUNDLES := $(value DESKTOP_LINUX_BUNDLES)
-override SSHC_NATIVE_WINDOWS_BUNDLES := $(value DESKTOP_WINDOWS_BUNDLES)
 override SSHC_NATIVE_RELEASE_TARGETS := $(value RELEASE_TARGETS)
 override SSHC_NATIVE_RELEASE_ARCHES := $(value RELEASE_CURRENT_ARCHES)
 override SSHC_NATIVE_RELEASE_DIR := $(value RELEASE_DIR)
 export SSHC_NATIVE_VERSION SSHC_NATIVE_GOOS SSHC_NATIVE_GOARCH SSHC_NATIVE_CGO SSHC_NATIVE_OUTPUT
-export SSHC_NATIVE_MAC_BUNDLES SSHC_NATIVE_LINUX_BUNDLES SSHC_NATIVE_WINDOWS_BUNDLES
 export SSHC_NATIVE_RELEASE_TARGETS SSHC_NATIVE_RELEASE_ARCHES SSHC_NATIVE_RELEASE_DIR
 
 # Neutralize Go's target-selection inputs before go run compiles the host helper. Export
@@ -208,14 +128,13 @@ export SSHC_NATIVE_RELEASE_TARGETS SSHC_NATIVE_RELEASE_ARCHES SSHC_NATIVE_RELEAS
 # favour. Windows CI showed this directly. What the child go build sees is settled one
 # layer down instead, by withTargetEnvironment in nativebuild.go; a SSHC_NATIVE_* name that
 # survives under the wrong spelling makes canonicalizeNativeEnvironment refuse to build.
-override NATIVE_GO_RUN_TARGETS := build build-cli desktop-bundle-mac desktop-bundle-linux desktop-bundle-windows desktop-version release-binaries release-cli-current
+override NATIVE_GO_RUN_TARGETS := build build-cli release-binaries release-cli-current
 export GOENV GOOS GOARCH CGO_ENABLED
 $(NATIVE_GO_RUN_TARGETS): override GOENV = off
 $(NATIVE_GO_RUN_TARGETS): override GOOS =
 $(NATIVE_GO_RUN_TARGETS): override GOARCH =
 $(NATIVE_GO_RUN_TARGETS): override CGO_ENABLED =
 unexport OUTPUT VERSION RELEASE_DIR RELEASE_TARGETS RELEASE_CURRENT_ARCHES
-unexport DESKTOP_MAC_BUNDLES DESKTOP_LINUX_BUNDLES DESKTOP_WINDOWS_BUNDLES
 
 release-binaries:
 	go run ./internal/nativebuild/cmd/nativebuild matrix

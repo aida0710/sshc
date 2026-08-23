@@ -12,29 +12,6 @@ import (
 	"sshc/internal/platform/windowsacl"
 )
 
-// **Electron が殺されたら、その engine も終わる。** 所有権のチャンネルは
-// 親が持っている書き込み端であり、親のプロセスが消えればその端も消える。
-// 畳んで閉じる経路（TestClosingTheOwnershipChannelStopsTheEngine）とは
-// 別の道であり、外殻が落ちた日に engine だけが残らないことを見る。
-func TestTheEngineStopsWhenItsOwnerIsKilled(t *testing.T) {
-	home := isolatedHome(t)
-	engine := startOwned(t, home)
-	waitForFile(t, handoffPath(home), 30*time.Second, engine)
-
-	// 書き込み端を握っているのはこのテストの側なので、外殻の死は端を落とす
-	// ことで表す。**閉じるのではなく、握っていた側が消えることを演じる。**
-	if err := engine.Ownership.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	if code := engine.wait(t, 30*time.Second); code != 0 {
-		t.Errorf("exit = %d, want 0\n%s", code, engine.Stderr.String())
-	}
-	if processAlive(t, engine.Command.Process.Pid) {
-		t.Error("the engine process is still alive after its owner let go")
-	}
-}
-
 // **engine が置くものは、この利用者しか読めない。** handoff にはワンタイムの
 // 資格情報が入っており、engine.lock と保管庫は同じディレクトリに居る。Windows
 // でそれを言うのは mode ビットではなく DACL であり、単体テストが確かめている
@@ -42,7 +19,7 @@ func TestTheEngineStopsWhenItsOwnerIsKilled(t *testing.T) {
 // その道を通ったか**である。
 func TestWhatALiveEngineWritesIsReadableOnlyByThisUser(t *testing.T) {
 	home := isolatedHome(t)
-	engine := start(t, home, "headless")
+	engine := start(t, home, "engine")
 	waitForFile(t, handoffPath(home), 30*time.Second, engine)
 
 	for name, path := range map[string]string{
@@ -66,7 +43,7 @@ func TestWhatALiveEngineWritesIsReadableOnlyByThisUser(t *testing.T) {
 // 上がれない——これは Windows でしか確かめられない。
 func TestTheLockSurvivesNoOneAfterAnAbnormalDeath(t *testing.T) {
 	home := isolatedHome(t)
-	first := start(t, home, "headless")
+	first := start(t, home, "engine")
 	waitForFile(t, handoffPath(home), 30*time.Second, first)
 	if _, err := os.Stat(lockPath(home)); err != nil {
 		t.Fatalf("the engine holds no lock file: %v", err)
@@ -77,7 +54,7 @@ func TestTheLockSurvivesNoOneAfterAnAbnormalDeath(t *testing.T) {
 	}
 	first.wait(t, 20*time.Second)
 
-	second := start(t, home, "headless")
+	second := start(t, home, "engine")
 	waitForFile(t, handoffPath(home), 30*time.Second, second)
 	if !second.running() {
 		t.Fatalf("the next owner could not take the lock\n%s", second.Stderr.String())

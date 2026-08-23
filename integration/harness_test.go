@@ -72,10 +72,7 @@ type testProcess struct {
 	Command *exec.Cmd
 	Stdout  *lockedBuffer
 	Stderr  *lockedBuffer
-	// Ownership は、engine の所有権チャンネルである。desktop の owner だけが
-	// 持ち、閉じることが「もう要らない」という意味になる。
-	Ownership *os.File
-	exited    chan error
+	exited  chan error
 }
 
 // isolatedHome は、このテストひとりのための家を作る。
@@ -132,14 +129,13 @@ func startPrepared(t *testing.T, command *exec.Cmd) *testProcess {
 	return process
 }
 
-// startOwned は、Electron と同じ形で engine を起こす。所有権は書ける側の
-// パイプであり、それを閉じることが engine への「終わってよい」である。
+// startOwned は、engine を前面のプロセスとして起こす。
+//
+// **所有権のチャンネルはもう無い。** かつては書ける側のパイプを閉じることが
+// engine への「終わってよい」だったが、外殻が消えたので、終わらせるのは信号か
+// この関数が返す handle だけである。
 func startOwned(t *testing.T, home string) *testProcess {
 	t.Helper()
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
 	command := exec.Command(binaryPath, "engine")
 	command.Env = []string{
 		"PATH=" + osPath(),
@@ -148,27 +144,19 @@ func startOwned(t *testing.T, home string) *testProcess {
 		"TMPDIR=" + home,
 		"SystemRoot=" + osSystemRoot(),
 	}
-	command.Stdin = reader
 	process := &testProcess{
-		Command:   command,
-		Stdout:    &lockedBuffer{},
-		Stderr:    &lockedBuffer{},
-		Ownership: writer,
-		exited:    make(chan error, 1),
+		Command: command,
+		Stdout:  &lockedBuffer{},
+		Stderr:  &lockedBuffer{},
+		exited:  make(chan error, 1),
 	}
 	command.Stdout = process.Stdout
 	command.Stderr = process.Stderr
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	// 親の側は子へ渡した端を手放す。持ったままだと、writer を閉じても子には
-	// EOF が届かない。
-	_ = reader.Close()
 	go func() { process.exited <- command.Wait() }()
-	t.Cleanup(func() {
-		_ = writer.Close()
-		process.kill()
-	})
+	t.Cleanup(func() { process.kill() })
 	return process
 }
 
@@ -259,7 +247,7 @@ func takeOverAsHeadless(t *testing.T, home string) *testProcess {
 	deadline := time.Now().Add(60 * time.Second)
 	var last *testProcess
 	for time.Now().Before(deadline) {
-		next := start(t, home, "headless")
+		next := start(t, home, "engine")
 		settled := time.Now().Add(15 * time.Second)
 		for time.Now().Before(settled) {
 			if !next.running() {

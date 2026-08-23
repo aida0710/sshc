@@ -68,32 +68,6 @@ func TestReleaseWorkflowBuildsEveryPlatformNatively(t *testing.T) {
 	}
 }
 
-// **開いていない束を配らない。**
-//
-// 中身が入れ替わっていてもビルドは通る。実際に、Windows の資源の道が
-// 合わなくなったとき、空の resources\cli が利用者の PATH に載った。
-// smoke はその一段だけを見ている——束を開いて、動かして、確かめる。
-func TestReleaseOpensEveryDesktopBundleBeforePublishing(t *testing.T) {
-	document, _ := readReleaseWorkflow(t)
-
-	for job, smoke := range map[string]string{
-		"macos":   "scripts/macos/package-smoke.sh",
-		"linux":   "scripts/linux/package-smoke.sh",
-		"windows": "scripts/windows/package-smoke.ps1",
-	} {
-		found := document.Jobs[job]
-		opened := false
-		for _, step := range found.Steps {
-			if strings.Contains(step.Run, smoke) {
-				opened = true
-			}
-		}
-		if !opened {
-			t.Errorf("the %s job never runs %s; it would publish a bundle nobody opened", job, smoke)
-		}
-	}
-}
-
 // **一つでも作れなければ、何も公開しない。**
 //
 // 部分的なリリースは、利用者から見ると「その OS だけ対応が消えた版」に
@@ -115,25 +89,6 @@ func TestReleasePublishWaitsForEveryPlatform(t *testing.T) {
 		if !found {
 			t.Errorf("publish does not wait for %s; a release could go out without it", required)
 		}
-	}
-}
-
-// **Windows の束の一覧が二か所にある。**
-//
-// あちらは make を使えないので（recipe が POSIX のシェルを前提にしている）、
-// workflow が nativebuild を直接呼び、Makefile が環境で渡している値を flag で
-// 渡している。二つが離れると、束に入る CLI が想定と違う——ビルドは通り、
-// 配ってから壊れる種類の間違いである。
-func TestReleaseWindowsBundlesMatchTheMakefile(t *testing.T) {
-	_, source := readReleaseWorkflow(t)
-	contract := readMakefileContract(t)
-
-	wanted := contract.variables["DESKTOP_WINDOWS_BUNDLES"]
-	if len(wanted) == 0 {
-		t.Fatal("the Makefile no longer defines DESKTOP_WINDOWS_BUNDLES")
-	}
-	if !strings.Contains(source, "--bundles \""+strings.Join(wanted, " ")+"\"") {
-		t.Errorf("the release workflow does not pass the Makefile's Windows bundles (%s)", strings.Join(wanted, " "))
 	}
 }
 
@@ -198,62 +153,5 @@ func TestReleaseWindowsStepsStopAtTheFirstFailure(t *testing.T) {
 				"only the last exit code is read, so an earlier failure would pass as green",
 				step.Name, commands)
 		}
-	}
-}
-
-// **`make test` を回す job は、外殻の依存も入れておかなければならない。**
-//
-// かつて外殻は素の JS で、`npm test --prefix desktop` は node 標準のテスト
-// ランナーだけで走った——依存が要らないので、web を入れるだけで足りた。
-// TypeScript になってからは tsc を通すので、入れずに回すと **`make test` が
-// 「型検査ができない」で止まる。** 実際 v0.2.0 の最初のリリースがそれで落ちた。
-//
-// **CI では起きない。** あちらの desktop の job は自分で入れており、`make test` を
-// 回すのはリリースの側だけだからである。
-func TestEveryReleaseJobThatRunsMakeTestInstallsTheShell(t *testing.T) {
-	document, _ := readReleaseWorkflow(t)
-	for name, job := range document.Jobs {
-		runsMakeTest := false
-		installsShell := false
-		for _, step := range job.Steps {
-			if strings.Contains(step.Run, "make test") {
-				runsMakeTest = true
-			}
-			if strings.Contains(step.Run, "npm ci --prefix desktop") {
-				installsShell = true
-			}
-		}
-		if runsMakeTest && !installsShell {
-			t.Errorf("jobs.%s runs make test without installing the desktop dependencies it needs", name)
-		}
-	}
-}
-
-// **証明書が無いあいだも、リリースは今までどおり出なければならない。**
-//
-// 署名と公証は secret が揃ったときだけ起きる。揃う前に必須にすると、**買う前の
-// リリースが全部止まる** ——tap の deploy key で同じ判断をしたのと同じ理由である。
-//
-// ここが数えるのは、その切り替えが環境変数だけで起きること。証明書を入れた日に
-// workflow を書き換える必要があるなら、それは書き換え忘れる日でもある。
-func TestSigningTurnsItselfOnWithoutEditingTheWorkflow(t *testing.T) {
-	_, source := readReleaseWorkflow(t)
-
-	// 証明書が無いときは auto-discovery を切る。切らないと electron-builder が
-	// runner の keychain を探し、見つからないと落ちる。
-	if !strings.Contains(source, "CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.APPLE_CERTIFICATE_P12 == '' && 'false' || 'true' }}") {
-		t.Error("証明書の有無で auto-discovery を切り替えていない: " +
-			"無いときに切らないと、買う前のリリースが落ちる")
-	}
-
-	// 公証は App Store Connect の API key で行う。**Apple ID と app-specific
-	// password より、漏れたときの被害が小さい。**
-	for _, variable := range []string{"APPLE_API_KEY_ID", "APPLE_API_ISSUER", "APPLE_TEAM_ID"} {
-		if !strings.Contains(source, variable) {
-			t.Errorf("公証に要る %s が渡されていない", variable)
-		}
-	}
-	if strings.Contains(source, "APPLE_APP_SPECIFIC_PASSWORD") {
-		t.Error("Apple ID の password を渡している: API key の方が漏れたときの被害が小さい")
 	}
 }

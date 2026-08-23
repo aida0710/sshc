@@ -278,7 +278,7 @@ func TestOpeningASessionReturnsATicketAndListsIt(t *testing.T) {
 
 	// **始まる場所は設定が決める。** 継ぐと、エンジンを起こしたものが
 	// たまたま居た場所でシェルが始まる——デスクトップの外殻から起こせば
-	// `desktop/`、launchd から起こせば `/`。利用者はそのどれも選んでいない。
+	// その端末の作業ディレクトリ、launchd から起こせば `/`。利用者はそのどれも選んでいない。
 	if opened[0].Dir != "/home/tester" {
 		t.Fatalf("the shell started in %q, want the home directory", opened[0].Dir)
 	}

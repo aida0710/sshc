@@ -19,7 +19,7 @@ func validDocument() handoff.Handoff {
 		SchemaVersion:   handoff.SchemaVersion,
 		URL:             "http://127.0.0.1:52865",
 		Secret:          "a secret for exactly this running engine",
-		Owner:           handoff.OwnerHeadless,
+		Owner:           handoff.OwnerEngine,
 		PID:             4242,
 		Version:         "v1.2.3",
 		ProtocolVersion: handoff.ProtocolVersion,

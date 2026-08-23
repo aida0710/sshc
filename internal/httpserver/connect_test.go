@@ -345,7 +345,7 @@ func TestCLIStatusIncludesOwner(t *testing.T) {
 		Listener:        fakeListener{address: &net.TCPAddr{IP: net.IP{127, 0, 0, 1}, Port: 43123}},
 		CLISecret:       cliSecret,
 		Passwords:       service,
-		Owner:           handoff.OwnerDesktop,
+		Owner:           handoff.OwnerEngine,
 		Version:         "v1.2.3-test",
 		ProtocolVersion: handoff.ProtocolVersion,
 	})
@@ -364,7 +364,7 @@ func TestCLIStatusIncludesOwner(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.Owner != handoff.OwnerDesktop || answer.Version != "v1.2.3-test" || answer.ProtocolVersion != handoff.ProtocolVersion {
+	if answer.Owner != handoff.OwnerEngine || answer.Version != "v1.2.3-test" || answer.ProtocolVersion != handoff.ProtocolVersion {
 		t.Fatalf("identity = owner %q, version %q, protocol %d", answer.Owner, answer.Version, answer.ProtocolVersion)
 	}
 	var raw map[string]json.RawMessage

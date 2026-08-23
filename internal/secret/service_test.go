@@ -1810,7 +1810,7 @@ func TestAVaultClosesTheMomentItIsAskedTo(t *testing.T) {
 
 // **触れられないまま置かれた金庫は、時計で閉じる。**
 //
-// どこで走っていても同じである。`sshc headless` は systemd の下で何週間も走り、
+// どこで走っていても同じである。`sshc engine` は systemd の下で何週間も走り、
 // 蓋も画面ロックも無い——そして窓を閉じても生き続ける engine も、同じ状況である。
 func TestAVaultLeftAloneShutsItself(t *testing.T) {
 	clock := time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
