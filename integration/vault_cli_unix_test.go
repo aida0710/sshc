@@ -179,8 +179,10 @@ func vaultState(t *testing.T, home string) string {
 		t.Fatalf("vault status exit = %d\n%s", code, process.Stderr.String())
 	}
 	for _, line := range strings.Split(process.Stdout.String(), "\n") {
-		if state, found := strings.CutPrefix(line, "vault: "); found {
-			return strings.TrimSpace(state)
+		// **列で読む。** 表はラベルを右詰めの空白で揃えるので、綴りの前後を
+		// そのまま切り出すと空白が付いてくる。
+		if fields := strings.Fields(line); len(fields) == 2 && fields[0] == "vault" {
+			return fields[1]
 		}
 	}
 	t.Fatalf("vault status printed no vault line:\n%s", process.Stdout.String())
