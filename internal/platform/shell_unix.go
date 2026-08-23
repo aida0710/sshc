@@ -26,6 +26,15 @@ func shellFallbacks(goos string) []string {
 		return []string{"/bin/zsh", "/bin/bash", "/bin/sh"}
 	case "android":
 		return []string{"/system/bin/sh"}
+	case "ios":
+		// **iOS はプロセスを起こせない。** サンドボックスが fork も exec も
+		// 禁じているので、置いてあるかどうか以前に、どのシェルも開けない。
+		//
+		// **空を返すことに意味がある。** 候補を並べれば、埋め込みターミナルは
+		// 存在しない道を毎回探し、開けなかった理由を「見つからない」と言う
+		// ——本当の理由は「この OS では開けない」であり、それは探して分かる
+		// ことではない。SSH の接続は純粋な Go の通信なので、そちらは動く。
+		return nil
 	default:
 		return []string{"/bin/bash", "/bin/zsh", "/bin/sh"}
 	}

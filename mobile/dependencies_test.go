@@ -13,7 +13,7 @@ import (
 
 func build(t *testing.T) app.Dependencies {
 	t.Helper()
-	dependencies, err := newDependencies("/data/user/0/app/files", "/data/user/0/app/cache",
+	dependencies, err := newDependencies("android", "/data/user/0/app/files", "/data/user/0/app/cache",
 		slog.Default(), func(app.Readiness) error { return nil })
 	if err != nil {
 		t.Fatalf("newDependencies = %v", err)
@@ -136,6 +136,57 @@ func TestEveryDependencyOfTheAndroidEngineIsADecision(t *testing.T) {
 	for name := range androidFieldIntent {
 		if _, ok := structure.FieldByName(name); !ok {
 			t.Errorf("androidFieldIntent に app.Dependencies から消えた項目 %s が残っている", name)
+		}
+	}
+}
+
+// **PATH を置くのは、そこを歩ける端末だけである。**
+//
+// Android はシェルを起こせるので /system/bin が見えなければならない。iOS は
+// プロセスを起こせないので、PATH は誰も読まない——置けば「歩ける道がある」と
+// 言っているのと同じで、嘘になる。
+func TestTheEnvironmentOnlyNamesAPathWhereOneCanBeWalked(t *testing.T) {
+	for _, probe := range []struct {
+		goos     string
+		wantPath bool
+	}{
+		{goos: "android", wantPath: true},
+		{goos: "ios", wantPath: false},
+	} {
+		environ := mobileEnvironment(probe.goos, "/home", "/cache")()
+		found := false
+		for _, entry := range environ {
+			if strings.HasPrefix(entry, "PATH=") {
+				found = true
+			}
+		}
+		if found != probe.wantPath {
+			t.Errorf("%s environment PATH present = %v, want %v: %q", probe.goos, found, probe.wantPath, environ)
+		}
+	}
+}
+
+// HOME と TMPDIR は、どちらの端末でも要る。**ワークスペースはそこに在る。**
+func TestTheEnvironmentAlwaysNamesTheHomeAndTheScratch(t *testing.T) {
+	for _, goos := range []string{"android", "ios"} {
+		environ := mobileEnvironment(goos, "/files", "/caches")()
+		for _, want := range []string{"HOME=/files", "TMPDIR=/caches", "TERM=xterm-256color"} {
+			if !slices.Contains(environ, want) {
+				t.Errorf("%s environment = %q, want it to contain %q", goos, environ, want)
+			}
+		}
+	}
+}
+
+// **渡した先の事情で変わってはならない。** 同じ slice を返すと、受け取った側が
+// append したものが次の呼び出しに見える。
+func TestTheEnvironmentIsCopiedForEveryCaller(t *testing.T) {
+	build := mobileEnvironment("android", "/files", "/caches")
+	first := build()
+	_ = append(first, "INJECTED=1")
+	for _, entry := range build() {
+		if entry == "INJECTED=1" {
+			t.Fatal("a caller's append leaked into the next environment")
 		}
 	}
 }

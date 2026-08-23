@@ -80,6 +80,18 @@ func TestShellFallbacksOnAndroidNameTheOnlyShellThatExists(t *testing.T) {
 	}
 }
 
+// **iOS では、どのシェルも開けない。** サンドボックスが fork も exec も禁じている
+// ので、置いてあるかどうか以前の話である。
+//
+// 候補を並べると、埋め込みターミナルは存在しない道を毎回探し、開けなかった理由を
+// 「見つからない」と言う——本当の理由は「この OS では開けない」であり、それは
+// 探して分かることではない。
+func TestShellFallbacksOnIOSNameNothingAtAll(t *testing.T) {
+	if got := shellFallbacks("ios"); len(got) != 0 {
+		t.Errorf("shellFallbacks(ios) = %q, want nothing; iOS cannot start a process", got)
+	}
+}
+
 // macOS の既定は zsh、それ以外の unix は bash である。**android を足したことで
 // この 2 つが変わっていないこと**を、同じ場所で言う。
 func TestShellFallbacksKeepTheirExistingOrder(t *testing.T) {

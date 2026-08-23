@@ -11,6 +11,7 @@ import (
 	"log"
 	"log/slog"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"sshc/internal/app"
@@ -77,7 +78,7 @@ func Start(home, cache string) (string, error) {
 	logger := slog.New(slog.NewTextHandler(log.Writer(), &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	entrance := make(chan string, 1)
-	dependencies, err := newDependencies(home, cache, logger, func(readiness app.Readiness) error {
+	dependencies, err := newDependencies(runtime.GOOS, home, cache, logger, func(readiness app.Readiness) error {
 		entrance <- readiness.Entrance
 		return nil
 	})
