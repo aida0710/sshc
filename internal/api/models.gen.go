@@ -418,6 +418,11 @@ type EmbeddedTerminal struct {
 	StartDirectory  *string             `json:"startDirectory,omitempty"`
 }
 
+// EngineSettings defines model for EngineSettings.
+type EngineSettings struct {
+	Port *int `json:"port,omitempty"`
+}
+
 // ExecutableDirective defines model for ExecutableDirective.
 type ExecutableDirective struct {
 	Command     string `json:"command"`
@@ -697,6 +702,7 @@ type KnownHostsScanResponse struct {
 // Metadata defines model for Metadata.
 type Metadata struct {
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
+	Engine           *EngineSettings   `json:"engine,omitempty"`
 	Groups           *[]GroupMetadata  `json:"groups,omitempty"`
 	GroupsFile       *string           `json:"groupsFile,omitempty"`
 	Hosts            *[]HostMetadata   `json:"hosts,omitempty"`
@@ -1318,6 +1324,9 @@ type DeleteKnownHostsJSONRequestBody = KnownHostsDeleteRequest
 
 // ScanKnownHostsJSONRequestBody defines body for ScanKnownHosts for application/json ContentType.
 type ScanKnownHostsJSONRequestBody = KnownHostsScanRequest
+
+// SetEngineSettingsJSONRequestBody defines body for SetEngineSettings for application/json ContentType.
+type SetEngineSettingsJSONRequestBody = EngineSettings
 
 // SetTerminalSettingsJSONRequestBody defines body for SetTerminalSettings for application/json ContentType.
 type SetTerminalSettingsJSONRequestBody = TerminalSettings

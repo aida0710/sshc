@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sshc/internal/sshclient"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -52,8 +53,21 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 	go func() { done <- Run(ctx, dependencies, "test") }()
 
 	target := <-opened
-	if gotNetwork != "tcp4" || gotAddress != "127.0.0.1:0" {
-		t.Fatalf("listen = %s %s", gotNetwork, gotAddress)
+	// **番号は自分で選ぶ。** OS に任せる（`:0`）と、機械ごとに違う一時ポートの
+	// 範囲へ落ちる——Linux は 32768 から、macOS は 49152 から。
+	if gotNetwork != "tcp4" {
+		t.Fatalf("listen network = %s, want tcp4", gotNetwork)
+	}
+	host, port, err := net.SplitHostPort(gotAddress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	number, err := strconv.Atoi(port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if host != "127.0.0.1" || number < LowestPort || number > HighestPort {
+		t.Fatalf("listen = %s, want 127.0.0.1 in %d..%d", gotAddress, LowestPort, HighestPort)
 	}
 	parsed, err := url.Parse(target)
 	if err != nil {

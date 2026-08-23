@@ -92,6 +92,19 @@ type HostMetadata struct {
 	Appearance *TerminalAppearance `json:"appearance,omitempty"`
 }
 
+// EngineSettings は、engine そのものの設定である。
+//
+// **受け口の番号は起動時にしか読まれない。** 変えても、次に engine を起こすまで
+// 効かない——画面はそう言う。
+//
+// 0 は「決めていない」であり、そのとき engine は 30000〜60000 から無作為に引く。
+// **番号は秘密ではない** ——走査すれば見つかるし handoff にも書いてある。固定
+// できることは安全を下げる取引ではない。ただし固定した番号は先に握られうるので、
+// 既定は無作為のままにしてある。
+type EngineSettings struct {
+	Port int `json:"port,omitempty"`
+}
+
 // TerminalAppearance は、端末の見た目の選択である。
 //
 // **名前で持ち、色そのものは持たない。** 配色と字体の中身は画面が一度だけ
@@ -171,8 +184,13 @@ type Metadata struct {
 	// EmbeddedTerminal はポインタである。書かれていない文書と、既定と同じ値が
 	// 明示的に書かれた文書を、書き戻すときに区別できるようにするためだ。
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
-	Groups           []GroupMetadata   `json:"groups,omitempty"`
-	Hosts            []HostMetadata    `json:"hosts,omitempty"`
+	// Engine は engine そのものの設定である。**端末のものではない。**
+	//
+	// ポインタなのは、書かれていない文書と、既定と同じ値が明示的に書かれた文書を
+	// 区別するためである。
+	Engine *EngineSettings `json:"engine,omitempty"`
+	Groups []GroupMetadata `json:"groups,omitempty"`
+	Hosts  []HostMetadata  `json:"hosts,omitempty"`
 }
 
 // TerminalStartDirectory は、ローカルシェルが始まる場所を、書かれたままの

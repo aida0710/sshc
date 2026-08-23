@@ -954,6 +954,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metadata/engine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setEngineSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/backgrounds": {
         parameters: {
             query?: never;
@@ -1849,6 +1865,7 @@ export interface components {
             schemaVersion: number;
             groupsFile?: string;
             embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
+            engine?: components["schemas"]["EngineSettings"];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
         };
@@ -1869,6 +1886,9 @@ export interface components {
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
             appearance?: components["schemas"]["TerminalAppearance"];
+        };
+        EngineSettings: {
+            port?: number;
         };
         TerminalBackground: {
             name: string;
@@ -3812,6 +3832,33 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TerminalSettings"];
+            };
+        };
+        responses: {
+            /** @description The choice was written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setEngineSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EngineSettings"];
             };
         };
         responses: {
