@@ -333,6 +333,22 @@ func (s *Session) reconnect(info ExitInfo) bool {
 	stopping := s.exited != nil
 	s.mutex.Unlock()
 
+	// **閉じられたことを、待ちに入る前に見る。**
+	//
+	// 閉じる操作は輸送を断つので、sshclient はそれを TransportLost として報告する
+	// ——落ちたのか閉じたのかは、あちらからは見分けられない。見分けられるのは
+	// こちら側だけである。
+	//
+	// これを下の select にだけ任せていた。**あそこは両方が準備できていると
+	// 無作為に選ぶ** ——待ちが 0 に近い場面では、閉じたはずのセッションが繋ぎ
+	// 直って戻ってきた。そして戻ってこない場合でも、文言だけは先に出ていた
+	// ——「1 秒後に繋ぎ直します」と予告してから、繋ぎ直さずに終わっていた。
+	select {
+	case <-s.stopping:
+		stopping = true
+	default:
+	}
+
 	if reopen == nil || !info.Lost() || stopping || attempt >= MaxReconnects {
 		if reopen != nil && info.Lost() && attempt >= MaxReconnects {
 			s.publish([]byte("\r\n[sshc] 繋ぎ直しを諦めました。\r\n"))
