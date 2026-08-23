@@ -36,6 +36,31 @@ curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
 通った場所へ置きます。**インストーラはありません。** レジストリにも machine の PATH にも
 触れません。
 
+## 0.3.x から上げる
+
+**0.4.0 でアプリ（.app / .dmg / AppImage / インストーラ）は無くなりました。** 端末に
+古い実体が残っていると、新しい CLI を入れてもそちらが走り続けます。**入っている
+のに古い、という形で現れる**ので、上げたあと一度だけ片付けてください。
+
+```sh
+sshc version                      # 0.4.0 でなければ、下を順に
+brew uninstall --cask sshc        # 旧アプリ。**これが残っていると brew は formula を張りません**
+ls -l ~/.local/bin/sshc           # 旧アプリが置いた実体（あれば）
+rm ~/.local/bin/sshc
+rm -rf ~/.local/share/sshc        # その実体の本体
+brew link --overwrite sshc
+```
+
+**二つの理由が重なります。** `brew install` は、cask が入っていると
+`sshc cask is installed, skipping link.` と言って**張らずに終わります**。加えて
+`~/.local/bin` は Homebrew より前に PATH へ載っていることが多いので、張れていても
+古い方が走ります。どちらも `brew install` の出力に書かれますが、**新しく入った
+という行の下**にあるので見落としやすいところです。
+
+古い版が走っていると、こう見えます——`sshc headless` が usage に居る、
+`sshc` が「open it once from Applications」と言う、`sshc engine` が
+「ownership channel」と言う。どれも 0.4.0 には無い綴りです。
+
 ## 使う
 
 ```sh

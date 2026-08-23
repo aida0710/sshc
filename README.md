@@ -22,6 +22,9 @@ curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
 **配るのは CLI ひとつです。** 署名も公証もインストーラも要りません。詳しくは
 [docs/release-install.md](docs/release-install.md)。
 
+**0.3.x から上げる人は、旧アプリを外してください** ——残っていると Homebrew は
+新しい実体を張らず、古い方が走り続けます（[上げ方](docs/release-install.md#03x-から上げる)）。
+
 Android は[リリース](https://github.com/aida0710/sshc/releases)の APK です。
 
 ## 使う
