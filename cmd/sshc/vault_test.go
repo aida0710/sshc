@@ -134,9 +134,15 @@ func TestRunVaultStatusIsHumanReadableWithoutATerminal(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("runVault status = %d, stderr = %q", code, stderr.String())
 	}
-	want := "engine: engine\nversion: v4-test\nprotocol: 1\nvault: locked\nsessions: 2\n"
-	if stdout.String() != want {
-		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+	// **`sshc status` と同じ表である。** 描き手は writeStatus ひとつなので、
+	// ここで見るのは「その表が出ていること」であって書式そのものではない。
+	//
+	// 綴りを丸ごと比べない——address は毎回違う番号を持つ。
+	printed := stdout.String()
+	for _, want := range []string{"version   v4-test", "vault     locked", "consoles  2", "address   " + server.URL} {
+		if !strings.Contains(printed, want) {
+			t.Errorf("stdout does not contain %q:\n%s", want, printed)
+		}
 	}
 	if stderr.String() != "" || terminal.reads != 0 || requests != 1 {
 		t.Fatalf("stderr=%q reads=%d requests=%d", stderr.String(), terminal.reads, requests)

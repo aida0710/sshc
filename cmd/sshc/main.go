@@ -90,7 +90,7 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 	case invocationOpen:
 		return runOpen(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr, false)
 	case invocationStatus:
-		return runStatus(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr)
+		return runStatus(ctx, app.HandoffDir(home), client, called.JSON, os.Stdout, os.Stderr)
 	case invocationVault:
 		// password 読み取り中と loopback request 中の Ctrl-C を public 130 にする。
 		// engine の ownership signal は runEngine が別に持つため、ここでは利用者が

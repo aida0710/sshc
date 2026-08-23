@@ -87,14 +87,9 @@ func runVault(
 		return 130
 	}
 	if action == "status" {
-		state := "missing"
-		if status.Vault && status.Unlocked {
-			state = "unlocked"
-		} else if status.Vault {
-			state = "locked"
-		}
-		fmt.Fprintf(stdout, "engine: %s\nversion: %s\nprotocol: %d\nvault: %s\nsessions: %d\n",
-			status.Owner, status.Version, status.ProtocolVersion, state, status.Sessions)
+		// **`sshc status` と同じ表を出す。** 同じ内容を二通りに書いていた間、
+		// 片方に項目を足しても、もう片方は古いままになった。
+		writeStatus(stdout, found, status)
 		return 0
 	}
 

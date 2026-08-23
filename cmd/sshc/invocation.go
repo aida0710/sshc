@@ -36,6 +36,12 @@ type invocation struct {
 	// **端末で訊く道とは別に、これが要る。** 手順の中や supervisor の下では
 	// 訊く相手が居ない——そこでは、書いた人が先に答えを決めておくしかない。
 	Replace bool
+	// JSON は `sshc status --json` で選ばれる、機械が読む形である。
+	//
+	// **既定が人向けになったので、旗が要る。** 以前ここは JSON しか出さず、
+	// それはメニューバーが読むためだった。読み手が人に変わっても、**手順の中から
+	// 読んでいる道を黙って塞がない。**
+	JSON bool
 }
 
 const (
@@ -85,6 +91,9 @@ func parseInvocation(argv []string) (invocation, error) {
 	case OpenSubcommand:
 		return noArguments(invocationOpen, word, args)
 	case StatusSubcommand:
+		if len(args) == 1 && args[0] == "--json" {
+			return invocation{Kind: invocationStatus, JSON: true}, nil
+		}
 		return noArguments(invocationStatus, word, args)
 	case vaultSubcommand:
 		if len(args) != 1 {
@@ -177,7 +186,8 @@ func usage(out io.Writer) {
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
   sshc open            print a new way into the UI
-  sshc status          print the engine's status as JSON, for the shell
+  sshc status          print what the running engine is doing
+                       --json      print it as JSON, for the shell
   sshc vault status    describe the running engine and vault
   sshc vault create    create and unlock a new vault
   sshc vault unlock    unlock the vault in the running engine

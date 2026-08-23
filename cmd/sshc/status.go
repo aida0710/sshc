@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 
 	"io/fs"
 
@@ -15,34 +16,79 @@ import (
 	"sshc/internal/httpserver"
 )
 
-// runStatus は、エンジンの様子をそのまま JSON で書き出す。
+// runStatus は、走っている engine の様子を書き出す。
 //
-// **これは人のための表示ではない。** 読むのはメニューバーであり、だから
-// 整形もしないし、翻訳もしない。エンジンが居なければ 1 で終わる。
+// **既定は人が読む形である。** かつてここは JSON だけを出しており、それは
+// メニューバーが読むためだった——その読み手はもう居ない。打つのは人であり、
+// 人が最初に見たいのは「動いているか、金庫は開いているか、端末は何本か」である。
+//
+// **JSON は残す。** 手順の中から読んでいる人が居る道を、黙って塞がない。
+// エンジンが居なければ 1 で終わる。
 func runStatus(
-	ctx context.Context, stateDir string, client *http.Client, stdout, stderr io.Writer,
+	ctx context.Context, stateDir string, client *http.Client, asJSON bool, stdout, stderr io.Writer,
 ) int {
-	answer, err := engineStatus(ctx, stateDir, client)
+	found, err := readHandoff(stateDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1
 	}
-	encoded, err := json.Marshal(answer)
+	answer, err := requestStatus(ctx, found, client)
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1
 	}
-	fmt.Fprintln(stdout, string(encoded))
+	if asJSON {
+		encoded, err := json.Marshal(answer)
+		if err != nil {
+			fmt.Fprintf(stderr, "sshc: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(encoded))
+		return 0
+	}
+	writeStatus(stdout, found, answer)
 	return 0
 }
 
-// engineStatus は、handoff を読んだうえで、そのエンジンに尋ねる。
-func engineStatus(ctx context.Context, stateDir string, client *http.Client) (statusAnswer, error) {
-	found, err := readHandoff(stateDir)
-	if err != nil {
-		return statusAnswer{}, err
+// writeStatus は、engine の様子を人が読む形で書く。
+//
+// **描くのはここだけである。** 同じ内容が `sshc status` と `sshc vault status` に
+// 別々の書式で書かれていた——片方に項目を足しても、もう片方は古いままになる。
+//
+// **列で揃える。** 打った人が探すのは値であって、ラベルの綴りではない。
+func writeStatus(out io.Writer, found handoff.Handoff, answer statusAnswer) {
+	rows := [][2]string{
+		{"engine", fmt.Sprintf("running (pid %d)", found.PID)},
+		{"address", found.URL},
+		{"version", answer.Version},
+		{"protocol", strconv.Itoa(answer.ProtocolVersion)},
+		{"vault", vaultState(answer)},
+		{"consoles", strconv.Itoa(answer.Sessions)},
 	}
-	return requestStatus(ctx, found, client)
+	width := 0
+	for _, row := range rows {
+		if len(row[0]) > width {
+			width = len(row[0])
+		}
+	}
+	for _, row := range rows {
+		fmt.Fprintf(out, "%-*s  %s\n", width, row[0], row[1])
+	}
+}
+
+// vaultState は、金庫の 3 つの状態をひとつの語にする。
+//
+// **「無い」と「施錠」を混ぜない。** 前者に要るのは `sshc vault create` で、
+// 後者に要るのは `sshc vault unlock` である——読む人が次に打つものが違う。
+func vaultState(answer statusAnswer) string {
+	switch {
+	case answer.Vault && answer.Unlocked:
+		return "unlocked"
+	case answer.Vault:
+		return "locked"
+	default:
+		return "missing"
+	}
 }
 
 // requestStatus は、渡された一台にだけ尋ねる。
