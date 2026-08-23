@@ -1873,6 +1873,7 @@ export interface components {
             maxSessions?: number;
             scrollbackBytes?: number;
             fontSize?: number;
+            verbosity?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
             startDirectory?: string;
@@ -1883,6 +1884,7 @@ export interface components {
             maxSessions?: number;
             scrollbackBytes?: number;
             fontSize?: number;
+            verbosity?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
             appearance?: components["schemas"]["TerminalAppearance"];

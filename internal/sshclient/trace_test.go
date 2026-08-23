@@ -1,0 +1,79 @@
+package sshclient
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+	"time"
+)
+
+// **既定は無言である。** 毎回この量が流れると、シェルの最初の一画面が押し流される。
+func TestATracerSaysNothingUntilItIsAsked(t *testing.T) {
+	var out bytes.Buffer
+	trace := newTracer(Quiet, &out)
+	trace.say(Brief, "繋ぎます")
+	trace.say(Detailed, "鍵を試します")
+	trace.say(Full, "算法は %s", "x")
+	if out.Len() != 0 {
+		t.Errorf("quiet の tracer が書いた: %q", out.String())
+	}
+}
+
+// 求められた深さまでを言い、それより深い話はしない。
+func TestATracerStopsAtTheDepthItWasGiven(t *testing.T) {
+	for _, probe := range []struct {
+		level Verbosity
+		want  []Verbosity
+		skip  []Verbosity
+	}{
+		{level: Brief, want: []Verbosity{Brief}, skip: []Verbosity{Detailed, Full}},
+		{level: Detailed, want: []Verbosity{Brief, Detailed}, skip: []Verbosity{Full}},
+		{level: Full, want: []Verbosity{Brief, Detailed, Full}},
+	} {
+		var out bytes.Buffer
+		trace := newTracer(probe.level, &out)
+		for _, level := range []Verbosity{Brief, Detailed, Full} {
+			trace.say(level, "level-%d", int(level))
+		}
+		for _, level := range probe.want {
+			if !strings.Contains(out.String(), "level-"+string(rune('0'+int(level)))) {
+				t.Errorf("level %d で level-%d が出ていない: %q", probe.level, level, out.String())
+			}
+		}
+		for _, level := range probe.skip {
+			if strings.Contains(out.String(), "level-"+string(rune('0'+int(level)))) {
+				t.Errorf("level %d で level-%d まで出た: %q", probe.level, level, out.String())
+			}
+		}
+	}
+}
+
+// **端末は CRLF を要る。** 生の \n だけを送ると、次の行が前の行の右端から始まる
+// ——PTY はここを通っていないので、誰も直してくれない。
+func TestEveryTracedLineEndsTheWayATerminalNeeds(t *testing.T) {
+	var out bytes.Buffer
+	newTracer(Brief, &out).say(Brief, "繋ぎます")
+	written := out.String()
+	if !strings.HasPrefix(written, "\r\n") || !strings.HasSuffix(written, "\r\n") {
+		t.Errorf("written = %q, want it wrapped in CRLF", written)
+	}
+	if strings.Contains(strings.ReplaceAll(written, "\r\n", ""), "\n") {
+		t.Errorf("written = %q, want no bare newline", written)
+	}
+}
+
+// **nil の tracer でも落ちない。** 途中経過を出さない道（`sshc run` や到達確認）は
+// tracer を持たないまま同じ関数を通る。
+func TestANilTracerIsSafeToUse(t *testing.T) {
+	var trace *tracer
+	trace.say(Brief, "落ちない")
+	if trace.enabled(Brief) {
+		t.Error("nil の tracer が「書ける」と答えた")
+	}
+	if trace.now().IsZero() {
+		t.Error("nil の tracer が時計に答えなかった")
+	}
+	if trace.since(time.Now().Add(-time.Second)) <= 0 {
+		t.Error("nil の tracer が経過を測れなかった")
+	}
+}

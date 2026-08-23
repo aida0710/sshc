@@ -23,6 +23,12 @@ type Dialer struct {
 	HostKeys HostKeys
 	// Dial は TCP を開く。nil なら net.Dialer。テストと、将来の別の輸送のためにある。
 	Dial func(ctx context.Context, network, address string) (net.Conn, error)
+	// Verbosity は、接続の途中経過をどこまで端末へ書くかを、**接続のたびに**
+	// 答える。nil なら無言である。
+	//
+	// **一度だけ読まない。** 設定は走っているあいだに変えられる——捕まえて
+	// しまうと、変えた人は engine を起こし直すまで何も変わらないと感じる。
+	Verbosity func() Verbosity
 }
 
 // Open は、この alias のセッションをひとつ返す。
@@ -42,13 +48,20 @@ func (d Dialer) Open(ctx context.Context, target Target, size terminal.Size) (te
 
 func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 	prompt := session.Prompter()
+	level := Quiet
+	if d.Verbosity != nil {
+		level = d.Verbosity()
+	}
+	trace := newTracer(level, session.writer)
+	started := trace.now()
 
-	client, closers, err := d.chain(ctx, target, prompt)
+	client, closers, err := d.chain(ctx, target, prompt, trace)
 	if err != nil {
 		session.fail("sshc: " + err.Error())
 		return
 	}
 	closers = append(closers, client)
+	trace.say(Brief, "認証できました。セッションを開きます。")
 
 	remote, err := client.NewSession()
 	if err != nil {
@@ -71,6 +84,8 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 		closeAll(closers)
 		return
 	}
+	trace.say(Brief, "開きました。")
+	trace.say(Full, "ここまで %s。", trace.since(started).Round(time.Millisecond))
 	session.run(remote, keepAliveLoop(client, target.KeepAlive, target.KeepAliveMax, session.done))
 }
 
@@ -104,12 +119,20 @@ func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, se
 //
 // **プログラムは一つも起こさない。** 各ホップの SSH チャンネルの上に、次の
 // ホップへの TCP を載せるだけである。ProxyCommand との違いはそこにある。
-func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter) (*ssh.Client, []io.Closer, error) {
+func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace *tracer) (*ssh.Client, []io.Closer, error) {
 	var closers []io.Closer
 	var through *ssh.Client
 
+	if len(target.Jump) > 0 && trace.enabled(Detailed) {
+		hops := make([]string, 0, len(target.Jump))
+		for _, hop := range target.Jump {
+			hops = append(hops, hop.Address())
+		}
+		trace.say(Detailed, "経由地 %d か所: %s", len(hops), strings.Join(hops, " → "))
+	}
+
 	for _, hop := range target.Jump {
-		client, err := d.connectOne(ctx, hop, through, prompt)
+		client, err := d.connectOne(ctx, hop, through, prompt, trace)
 		if err != nil {
 			closeAll(closers)
 			return nil, nil, err
@@ -118,7 +141,7 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter) (*ssh
 		through = client
 	}
 
-	client, err := d.connectOne(ctx, target, through, prompt)
+	client, err := d.connectOne(ctx, target, through, prompt, trace)
 	if err != nil {
 		closeAll(closers)
 		return nil, nil, err
@@ -128,8 +151,9 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter) (*ssh
 
 // connectOne は、ホップひとつへ繋ぐ。through が非 nil なら、その接続の上を通る。
 func (d Dialer) connectOne(
-	ctx context.Context, target Target, through *ssh.Client, prompt Prompter,
+	ctx context.Context, target Target, through *ssh.Client, prompt Prompter, trace *tracer,
 ) (*ssh.Client, error) {
+	started := trace.now()
 	timeout := target.Timeout
 	if timeout <= 0 {
 		timeout = DefaultTimeout
@@ -137,10 +161,19 @@ func (d Dialer) connectOne(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	if through != nil {
+		trace.say(Brief, "%s へ、%s を経由して繋ぎます。", target.Address(), "手前のホップ")
+	} else {
+		trace.say(Brief, "%s へ繋ぎます（利用者 %s）。", target.Address(), target.User)
+	}
+	trace.say(Detailed, "上限は %s です。", timeout)
+
 	conn, err := d.open(ctx, target, through)
 	if err != nil {
+		trace.say(Brief, "繋がりませんでした: %v", err)
 		return nil, err
 	}
+	trace.say(Detailed, "TCP が開きました（%s）。", trace.since(started).Round(time.Millisecond))
 
 	config := &ssh.ClientConfig{
 		User:            target.User,
@@ -157,12 +190,18 @@ func (d Dialer) connectOne(
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	}
+	if trace.enabled(Detailed) {
+		trace.say(Detailed, "試せる認証は %d 通りです。", len(config.Auth))
+	}
 	connection, channels, requests, err := ssh.NewClientConn(conn, target.Address(), config)
 	if err != nil {
 		_ = conn.Close()
+		trace.say(Brief, "握手が通りませんでした: %v", err)
 		return nil, err
 	}
 	_ = conn.SetDeadline(time.Time{})
+	trace.say(Full, "相手が名乗った版は %s です。", connection.ServerVersion())
+	trace.say(Detailed, "握手が通りました（%s）。", trace.since(started).Round(time.Millisecond))
 	return ssh.NewClient(connection, channels, requests), nil
 }
 

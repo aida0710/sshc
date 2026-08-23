@@ -161,6 +161,8 @@ type EmbeddedTerminal struct {
 	FontSize int `json:"fontSize,omitempty"`
 	// nil は既定の on、false は明示的な off である。bool に omitempty を直接
 	// 付けると false が消え、再起動後に on へ戻ってしまう。
+	// Verbosity は、接続の途中経過をどこまで端末へ書くかである。0 は無言。
+	Verbosity       int   `json:"verbosity,omitempty"`
 	CopyOnSelect    *bool `json:"copyOnSelect,omitempty"`
 	RightClickPaste *bool `json:"rightClickPaste,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。

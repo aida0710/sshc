@@ -436,3 +436,52 @@ func TestHangupEndsTheSession(t *testing.T) {
 	}
 	_ = process.Close()
 }
+
+// **繋がるまでのあいだ、何が起きているかを端末そのものへ書く。**
+//
+// 行き先はログではなく画面である——繋がらなかった人・切れた人がその場で読めなければ
+// 意味が無い。`ssh -v` が stderr へ書くのと同じ理由で、同じ場所へ書く。
+func TestTheConnectionLogReachesTheTerminalWhenItIsAsked(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(channel ssh.Channel) { _, _ = io.WriteString(channel, "ready\r\n") },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	dialer := dialerFor(t, server, auth)
+	dialer.Verbosity = func() sshclient.Verbosity { return sshclient.Detailed }
+	process, err := dialer.Open(context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	// 深さ 2 が言うのは、繋ぎ先と、握手が通ったことである。
+	readUntil(t, process, "へ繋ぎます")
+	readUntil(t, process, "握手が通りました")
+	readUntil(t, process, "ready")
+}
+
+// **既定は無言である。** 毎回この量が流れると、シェルの最初の一画面が押し流される。
+func TestNothingIsWrittenWhenTheLogWasNotAskedFor(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(channel ssh.Channel) { _, _ = io.WriteString(channel, "ready\r\n") },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	process, err := dialerFor(t, server, auth).Open(context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	// **最初に届くのがシェルの出力である。** 途中経過が混ざっていれば、
+	// この読み取りはそれを先に見る。
+	seen := readUntil(t, process, "ready")
+	if strings.Contains(seen, "[sshc]") {
+		t.Errorf("何も頼んでいないのに途中経過が出た:\n%s", seen)
+	}
+}

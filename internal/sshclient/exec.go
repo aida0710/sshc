@@ -58,7 +58,7 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	client, closers, err := d.chain(ctx, strict, nil)
+	client, closers, err := d.chain(ctx, strict, nil, nil)
 	if err != nil {
 		return Output{Elapsed: time.Since(started)}, err
 	}
