@@ -50,6 +50,10 @@ func newSSHParts(
 ) sshParts {
 	return sshParts{
 		dialer: sshclient.Dialer{
+			// **接続のたびに読む。** 設定は走っているあいだに変えられる。
+			Verbosity: func() sshclient.Verbosity {
+				return sshclient.Verbosity(config.TerminalSettings().Verbosity)
+			},
 			Auth: sshclient.Auth{
 				AgentSocket: os.Getenv("SSH_AUTH_SOCK"),
 				Stored:      passphrase,

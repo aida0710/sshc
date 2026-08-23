@@ -55,7 +55,7 @@ func (d Dialer) Stream(
 	strict := target
 	strict.Strict = "yes"
 
-	client, closers, err := d.chain(ctx, strict, nil)
+	client, closers, err := d.chain(ctx, strict, nil, nil)
 	if err != nil {
 		return RemoteFailureExit, err
 	}

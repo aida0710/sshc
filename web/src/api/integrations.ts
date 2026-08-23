@@ -575,6 +575,7 @@ export const integrationsApi: IntegrationsApi = {
         ? { scrollbackBytes: terminal.scrollbackBytes }
         : {}),
       ...(typeof terminal.fontSize === "number" ? { fontSize: terminal.fontSize } : {}),
+      ...(typeof terminal.verbosity === "number" ? { verbosity: terminal.verbosity } : {}),
       ...(typeof terminal.copyOnSelect === "boolean" ? { copyOnSelect: terminal.copyOnSelect } : {}),
       ...(typeof terminal.rightClickPaste === "boolean"
         ? { rightClickPaste: terminal.rightClickPaste }

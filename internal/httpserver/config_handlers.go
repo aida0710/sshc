@@ -204,6 +204,9 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if request.FontSize != nil {
 		settings.FontSize = *request.FontSize
 	}
+	if request.Verbosity != nil {
+		settings.Verbosity = *request.Verbosity
+	}
 	settings.CopyOnSelect = request.CopyOnSelect
 	settings.RightClickPaste = request.RightClickPaste
 	if request.Appearance != nil {

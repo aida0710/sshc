@@ -45,6 +45,8 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [portBusy, setPortBusy] = useState(false);
   const [portError, setPortError] = useState("");
   const [portSaved, setPortSaved] = useState(false);
+  // 0 は無言。1〜3 が ssh の -v / -vv / -vvv に対応する。
+  const [verbosity, setVerbosity] = useState("0");
   const [palette, setPalette] = useState("");
   const [font, setFont] = useState("");
   const [background, setBackground] = useState("");
@@ -65,6 +67,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setMaxSessions(settings.maxSessions === undefined ? "" : String(settings.maxSessions));
         setScrollback(settings.scrollbackBytes === undefined ? "" : String(settings.scrollbackBytes));
         setFontSize(settings.fontSize === undefined ? "" : String(settings.fontSize));
+        setVerbosity(String(settings.verbosity ?? 0));
         setPalette(settings.appearance?.palette ?? "");
         setFont(settings.appearance?.font ?? "");
         setBackground(settings.appearance?.background ?? "");
@@ -137,6 +140,8 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         ...(sessions === undefined ? {} : { maxSessions: sessions }),
         ...(bytes === undefined ? {} : { scrollbackBytes: bytes }),
         ...(size === undefined ? {} : { fontSize: size }),
+        // 0 は既定なので書かない。書けば metadata に「無言を明示的に選んだ」が残る。
+        ...(verbosity === "0" ? {} : { verbosity: Number(verbosity) }),
         // on は既定なので書かない。off だけを false として明示し、再読み込み
         // しても消えないようにする。
         ...(copyOnSelect ? {} : { copyOnSelect: false }),
@@ -293,6 +298,22 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
           数字」ではない**ので、置くのは placeholder だけである。書けば、その
           日から既定を変えてもこの人だけが取り残される。
         */}
+        <Field label={t("terminal.verbosityLabel")} hint={t("terminal.verbosityHint")}>
+          <select
+            className={control}
+            value={verbosity}
+            disabled={terminalBusy}
+            onChange={(event) => {
+              setVerbosity(event.target.value);
+              setTerminalSaved(false);
+            }}
+          >
+            <option value="0">{t("terminal.verbosityQuiet")}</option>
+            <option value="1">{t("terminal.verbosityBrief")}</option>
+            <option value="2">{t("terminal.verbosityDetailed")}</option>
+            <option value="3">{t("terminal.verbosityFull")}</option>
+          </select>
+        </Field>
         <Field label={t("terminal.paletteLabel")} hint={t("terminal.paletteHint")}>
           <AppearancePicker
             choices={palettes}

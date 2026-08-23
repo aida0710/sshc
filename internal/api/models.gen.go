@@ -416,6 +416,7 @@ type EmbeddedTerminal struct {
 	RightClickPaste *bool               `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes *int                `json:"scrollbackBytes,omitempty"`
 	StartDirectory  *string             `json:"startDirectory,omitempty"`
+	Verbosity       *int                `json:"verbosity,omitempty"`
 }
 
 // EngineSettings defines model for EngineSettings.
@@ -1115,6 +1116,7 @@ type TerminalSettings struct {
 	RightClickPaste *bool               `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes *int                `json:"scrollbackBytes,omitempty"`
 	StartDirectory  *string             `json:"startDirectory,omitempty"`
+	Verbosity       *int                `json:"verbosity,omitempty"`
 }
 
 // TerminalStreamTicket defines model for TerminalStreamTicket.
