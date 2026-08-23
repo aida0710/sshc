@@ -25,11 +25,6 @@ func printVersion(out io.Writer) {
 	fmt.Fprintf(out, "sshc %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 }
 
-// engineBusyExit は、Electron が所有する engine が既存 engine の lock を取れなかった
-// ときの終了コードである。外殻は自分の子を殺せても他人の engine は殺せないため、
-// 入口を渡さずこの番号で ownership の衝突を知らせる。
-const engineBusyExit = 3
-
 func main() {
 	called, err := parseInvocation(os.Args)
 	if err != nil {

@@ -66,9 +66,9 @@ func TestStopWithoutStartIsAnError(t *testing.T) {
 	}
 }
 
-// **Go の error を Kotlin へ渡して番号に畳ませない。** gomobile は Go の error
+// **Go の error を Java へ渡して番号に畳ませない。** gomobile は Go の error
 // を Java の Exception へ写すときメッセージ文字列しか運ばないので、戻ってきた
-// 値に errors.Is は効かない。理由は Go 側で確定させ、Kotlin は番号だけを取りに
+// 値に errors.Is は効かない。理由は Go 側で確定させ、Java は番号だけを取りに
 // 来る。engine の error は入口の URL を含み得るので、文面を渡さないことには
 // それ自体の意味もある。
 func TestTheFailureKindSurvivesWhereTheErrorWouldNot(t *testing.T) {
@@ -81,7 +81,7 @@ func TestTheFailureKindSurvivesWhereTheErrorWouldNot(t *testing.T) {
 	}
 }
 
-// 成功したら理由は残らない。前回の失敗が残っていると、Kotlin は起動した後で
+// 成功したら理由は残らない。前回の失敗が残っていると、Java は起動した後で
 // エラー画面を出す。
 func TestASuccessfulStartClearsTheLastFailure(t *testing.T) {
 	started(t)

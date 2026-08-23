@@ -1,4 +1,4 @@
-.PHONY: generate test build build-cli android-bind ios-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの時間である。`make fuzz` は単発の実行ではなくキャンペーン
 # なので、既定値は通常の検証パスの一部として回せる程度に短くしてある。腰を据えて
@@ -76,21 +76,6 @@ android-bind:
 	ANDROID_NDK_HOME="$(ANDROID_NDK_HOME)" PATH="$(HOME)/go/bin:$$PATH" \
 		go tool gomobile bind -target=android/arm64,android/amd64 -androidapi 26 \
 		-o android/app/libs/sshc.aar ./mobile
-
-# iOS の xcframework。**macOS でしか作れない** ——gomobile が clang と iOS SDK を
-# Xcode から引くためで、これは Apple が他の OS へ配っていないものである。
-#
-# **cgo は Android と同じ理由で要る。** iOS にも /etc/resolv.conf は無く、名前解決は
-# システムのリゾルバを通る。gomobile が SDK を通じて cgo を有効にする。
-#
-# 対象は実機（arm64）と simulator（arm64/amd64）の 3 つ。**simulator を落とさない**
-# ——落とすと、実機を持っていない人は一度も動かせない。
-ios-bind:
-	@# 置き場を作る。**追跡していないので、クローンしたばかりの環境には無い。**
-	mkdir -p ios/Frameworks
-	PATH="$(HOME)/go/bin:$$PATH" \
-		go tool gomobile bind -target=ios/arm64,iossimulator/arm64,iossimulator/amd64 \
-		-o ios/Frameworks/Sshc.xcframework ./mobile
 
 # build-cli は native runner と release job が共有する最小の CLI build primitive。
 # target と output は caller の決定であり、暗黙の host 値や探索結果を使わない。
