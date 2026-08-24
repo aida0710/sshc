@@ -519,7 +519,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                       onInspector: setInspector,
                       consoles,
                       onShowConsole: showConsole,
-                      onTerminalSettingsChange: setTerminalSettings,
+                      onTerminalSettingsChange: async (settings) => {
+                        setTerminalSettings(settings);
+                        await consoles.refresh();
+                      },
                     }}
                     declared={{ groups, knownAliases }}
                   />

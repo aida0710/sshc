@@ -92,13 +92,11 @@ func TestServerServesStaticFilesAndShutsDownAfterCancellation(t *testing.T) {
 
 	server.BeginStopping()
 	server.BeginShutdown()
-	select {
-	case err := <-serveDone:
-		if err != nil {
-			t.Fatalf("Serve error = %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("Serve did not exit after context cancellation")
+	if err := server.Wait(); err != nil {
+		t.Fatalf("Wait = %v", err)
+	}
+	if err := <-serveDone; err != nil {
+		t.Fatalf("Serve error = %v", err)
 	}
 	connection, err := net.DialTimeout("tcp4", listener.Addr().String(), 100*time.Millisecond)
 	if err == nil {

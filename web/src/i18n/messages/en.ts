@@ -72,6 +72,7 @@ export const en = {
   "terminal.clipboardRefused": "The clipboard could not be accessed.",
   "terminal.settingsHeading": "Terminal",
   "terminal.settingsSaved": "Saved. Clipboard choices apply now; new consoles use the other settings.",
+  "terminal.settingsLoading": "Loading terminal settings…",
   "terminal.maxSessionsLabel": "Consoles open at once",
   "terminal.maxSessionsHint": "Enter a value from 1 to 200. Leave it empty to use 50. When the limit is reached, no new console can be opened; existing consoles remain open.",
   "terminal.scrollbackLabel": "Scrollback per console (bytes)",

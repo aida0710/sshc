@@ -13,6 +13,7 @@ jobs:
   macos:
     name: macOS
     runs-on: macos-14
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -26,8 +27,10 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
 
-      - name: Verify
-        run: make test
+      # Linux jobがfull suiteを一度実行する。ここでは配布対象OSに固有のPTY、path、
+      # user解決を再実行し、同じWeb/deadcode/race検査を3runnerで重複させない。
+      - name: Verify macOS behaviour
+        run: go test -v -count=1 ./...
 
       - name: Build the CLI for this OS
         env:
@@ -47,6 +50,7 @@ jobs:
   linux:
     name: Linux
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -60,7 +64,9 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
 
-      - name: Verify
+      # tagがmain以外を指しても未検証の成果物を公開しないよう、full suiteは
+      # Linuxで一度実行する。macOSとWindowsはOS固有のGo testだけを受け持つ。
+      - name: Verify the full source tree
         run: make test
 
       - name: Build the CLI for this OS
@@ -81,6 +87,7 @@ jobs:
   windows:
     name: Windows
     runs-on: windows-2025
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -99,12 +106,12 @@ jobs:
       # Windows runner には race detector に必要な C ツールチェーンがないため、
       # このジョブでは -race を実行しない。PowerShell では native command の
       # 非ゼロ終了を確実に検出するよう、次の2変数を設定する。
-      - name: Verify
+      - name: Verify Windows behaviour
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           go build ./...
-          go test ./...
+          go test -v -count=1 ./...
 
       - name: Build the CLI for this OS
         env:
@@ -124,6 +131,7 @@ jobs:
   android:
     name: Android
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -202,6 +210,7 @@ jobs:
     name: Publish
     needs: [macos, linux, windows, android]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
@@ -245,6 +254,7 @@ jobs:
     name: Homebrew tap
     needs: [publish]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
