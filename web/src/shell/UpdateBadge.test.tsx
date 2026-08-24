@@ -11,7 +11,9 @@ describe("UpdateBadge", () => {
   it("shows the version and offers nothing when there is nothing newer", async () => {
     render(<UpdateBadge api={buildApi({ current: "0.1.0", available: false })} />);
 
-    expect(await screen.findByText("Version 0.1.0")).toBeInTheDocument();
+    const version = await screen.findByText("Version 0.1.0");
+    expect(version).toBeInTheDocument();
+    expect(version.parentElement).toHaveClass("border-t");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 

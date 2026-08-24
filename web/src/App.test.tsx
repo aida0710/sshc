@@ -10,6 +10,7 @@ import type { InspectorContent } from "./ui/Inspector";
 import { LanguageProvider } from "./i18n/context";
 import { ThemeProvider } from "./theme/context";
 import { ja } from "./i18n/messages";
+import { ApiError, apiClient } from "./api/client";
 
 vi.mock("./connections/ConnectionsPage", () => ({
   ConnectionsPage: ({
@@ -136,6 +137,8 @@ vi.mock("./secrets/LockScreen", () => ({
 const csrfToken = "c".repeat(43);
 
 afterEach(() => {
+  apiClient.clear();
+  vi.unstubAllGlobals();
   window.history.replaceState(null, "", "/");
   window.localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
@@ -672,6 +675,50 @@ describe("App", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Secure local session could not be started. Restart sshc and use the newly opened tab.",
     );
+  });
+
+  it("shows a centered session-ended recovery screen when startup renewal says the session expired", async () => {
+    render(<App bootstrap={vi.fn().mockRejectedValue(new Error("session_expired"))} health={vi.fn()} vault={openVault} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Reload to renew the local session");
+    expect(alert.closest("main")).toHaveClass("min-h-screen", "place-items-center");
+    expect(screen.getByRole("button", { name: "Reload session" })).toBeVisible();
+  });
+
+  it("keeps a startup API 401 on the centered session-ended screen", async () => {
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vi.fn().mockRejectedValue(new ApiError("invalid_session", 401, null))}
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reload to renew the local session");
+    expect(screen.queryByText("Secure local session could not be started")).toBeNull();
+  });
+
+  it("replaces the ready shell with the session-ended screen after an API reports invalid_session", async () => {
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+    await screen.findByRole("status", { name: "" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: "invalid_session", message: "request rejected" }),
+      { status: 401, headers: { "Content-Type": "application/problem+json" } },
+    )));
+
+    await act(async () => {
+      await expect(apiClient.read("/api/v1/example")).rejects.toMatchObject({ code: "invalid_session" });
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Reload to renew the local session");
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
   });
 
   it("uses a shared bootstrap exchange once when StrictMode re-runs effects", async () => {

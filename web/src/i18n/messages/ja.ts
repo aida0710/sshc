@@ -7,6 +7,9 @@ export const ja = {
   "shell.bootstrapFailed":
     "ローカルセッションを開始できませんでした。sshc を再起動し、新しく開いたタブを使ってください。",
   "shell.bootstrapRetry": "もう一度試す",
+  "shell.sessionEndedHeading": "セッションが終了しました",
+  "shell.sessionEnded": "再読み込みしてローカルセッションを更新してください。更新できない場合は sshc を再起動し、新しく開いたタブを使ってください。",
+  "shell.sessionReload": "セッションを再読み込み",
   "shell.pageNotFound": "ページが見つかりません",
   "shell.pageNotFoundDescription": "このURLに対応するsshcのセクションはありません。",
   "shell.goHome": "ホームへ移動",
