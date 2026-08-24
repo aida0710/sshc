@@ -1359,10 +1359,14 @@ paths:
     parameters: *sftpAlias
     get:
       operationId: downloadSFTPFile
-      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: Range, in: header, required: false, schema: { type: string, pattern: "^bytes=[0-9]+-$" } }
       responses:
         "200": { description: Remote file bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        "206": { description: Remaining remote file bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
         "404": { $ref: "#/components/responses/Problem" }
+        "416": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/archive:
     parameters: *sftpAlias
     get:
@@ -1384,6 +1388,50 @@ paths:
         "201": { description: File uploaded atomically, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransfer" } } } }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/uploads/{id}:
+    parameters:
+      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+      - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+    post:
+      operationId: startSFTPResumableUpload
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPStartUploadRequest" } } } }
+      responses:
+        "200": { description: Upload initialized or resumed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPResumableUpload" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: appendSFTPResumableUpload
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: offset, in: query, required: true, schema: { type: integer, format: int64, minimum: 0 } }
+        - { name: total, in: query, required: true, schema: { type: integer, format: int64, minimum: 0 } }
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary, maxLength: 2097152 } } } }
+      responses:
+        "200": { description: Chunk appended, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPResumableUpload" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: cancelSFTPResumableUpload
+      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: Part file removed, content: { application/json: { schema: { $ref: "#/components/schemas/ChangedResponse" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/uploads/{id}/complete:
+    parameters:
+      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+      - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+    post:
+      operationId: completeSFTPResumableUpload
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPCompleteUploadRequest" } } } }
+      responses:
+        "201": { description: Part file atomically published, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransfer" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/entry:
     parameters: *sftpAlias
     patch:
@@ -3221,6 +3269,33 @@ components:
         path: { type: string }
         bytes: { type: integer, format: int64, minimum: 0 }
         revision: { type: string }
+    SFTPStartUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [path, size, overwrite]
+      properties:
+        path: { type: string }
+        size: { type: integer, format: int64, minimum: 0 }
+        overwrite: { type: boolean }
+        expectedRevision: { type: string }
+    SFTPCompleteUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [path, size, expectedRevision]
+      properties:
+        path: { type: string }
+        size: { type: integer, format: int64, minimum: 0 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPResumableUpload:
+      type: object
+      additionalProperties: false
+      required: [id, path, offset, size]
+      properties:
+        id: { type: string }
+        path: { type: string }
+        offset: { type: integer, format: int64, minimum: 0 }
+        size: { type: integer, format: int64, minimum: 0 }
+        expectedRevision: { type: string }
     WorkspacePane:
       type: object
       additionalProperties: false

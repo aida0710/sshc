@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { SFTPPanel } from "./SFTPPanel";
 import { ApiError } from "../api/client";
+import { sftpTransferQueue } from "./transferQueue";
+import { sftpDownloadQueue } from "./downloadQueue";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -10,19 +12,31 @@ const api = vi.hoisted(() => ({
   mkdir: vi.fn(),
   chmod: vi.fn(),
   download: vi.fn(),
+  startUpload: vi.fn(),
+  appendUpload: vi.fn(),
+  completeUpload: vi.fn(),
+  cancelUpload: vi.fn(),
 }));
 
 vi.mock("./api", () => ({ sftpApi: api }));
 
 describe("SFTPPanel uploads", () => {
   beforeEach(() => {
+	for (const job of sftpTransferQueue.getSnapshot()) void sftpTransferQueue.cancel(job.id);
+	sftpTransferQueue.clearFinished();
+	for (const job of sftpDownloadQueue.getSnapshot()) sftpDownloadQueue.cancel(job.id);
+	sftpDownloadQueue.clearFinished();
     vi.clearAllMocks();
     api.list.mockResolvedValue({ path: "/remote", entries: [] });
     api.mkdir.mockResolvedValue(undefined);
+	api.startUpload.mockImplementation(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "absent" }));
+	api.appendUpload.mockImplementation(async (_alias: string, id: string, path: string, _offset: number, total: number) => ({ id, path, offset: total, size: total, expectedRevision: "" }));
+	api.completeUpload.mockResolvedValue(undefined);
+	api.cancelUpload.mockResolvedValue(undefined);
   });
 
   it("uploads every dropped file separately and keeps per-file results", async () => {
-    api.upload.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("upload_failed"));
+    api.startUpload.mockResolvedValueOnce({ id: "one", path: "/remote/first.txt", offset: 0, size: 5, expectedRevision: "absent" }).mockRejectedValueOnce(new Error("upload_failed"));
     render(<SFTPPanel aliases={["edge"]} />);
     expect(api.list).not.toHaveBeenCalled();
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
@@ -34,9 +48,9 @@ describe("SFTPPanel uploads", () => {
       dataTransfer: { files: [first, second] },
     });
 
-    await waitFor(() => expect(api.upload).toHaveBeenCalledTimes(2));
-    expect(api.upload).toHaveBeenNthCalledWith(1, "edge", "/remote/first.txt", first, false, expect.any(AbortSignal));
-    expect(api.upload).toHaveBeenNthCalledWith(2, "edge", "/remote/second.txt", second, false, expect.any(AbortSignal));
+    await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(2));
+    expect(api.startUpload).toHaveBeenNthCalledWith(1, "edge", expect.any(String), "/remote/first.txt", first.size, false, "");
+    expect(api.startUpload).toHaveBeenNthCalledWith(2, "edge", expect.any(String), "/remote/second.txt", second.size, false, "");
     expect(await screen.findByText("Uploaded")).toBeInTheDocument();
     expect(await screen.findByText("upload_failed")).toBeInTheDocument();
   });
@@ -98,16 +112,16 @@ describe("SFTPPanel uploads", () => {
     expect(picker).not.toBeNull();
     fireEvent.change(picker as HTMLInputElement, { target: { files: [nested] } });
 
-    await waitFor(() => expect(api.upload).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(1));
     expect(api.mkdir.mock.calls).toEqual([
       ["edge", "/remote/project"],
       ["edge", "/remote/project/config"],
     ]);
-    expect(api.upload).toHaveBeenCalledWith("edge", "/remote/project/config/file.txt", nested, false, expect.any(AbortSignal));
+    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/project/config/file.txt", nested.size, false, "");
   });
 
   it("asks before retrying an existing remote file with overwrite enabled", async () => {
-    api.upload.mockRejectedValueOnce(new ApiError("sftp_exists", 409, null)).mockResolvedValueOnce(undefined);
+    api.startUpload.mockRejectedValueOnce(new ApiError("sftp_exists", 409, null)).mockImplementationOnce(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "meta" }));
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
     await waitFor(() => expect(api.list).toHaveBeenCalled());
@@ -115,10 +129,10 @@ describe("SFTPPanel uploads", () => {
     const picker = container.querySelectorAll<HTMLInputElement>('input[type="file"]')[0];
     fireEvent.change(picker as HTMLInputElement, { target: { files: [file] } });
 
-    expect(await screen.findByText("Overwrite this remote file?")).toBeVisible();
+    expect(await screen.findByText("Overwrite confirmation required")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Overwrite" }));
-    await waitFor(() => expect(api.upload).toHaveBeenCalledTimes(2));
-    expect(api.upload).toHaveBeenLastCalledWith("edge", "/remote/existing.txt", file, true, expect.any(AbortSignal));
+    await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(2));
+    expect(api.startUpload).toHaveBeenLastCalledWith("edge", expect.any(String), "/remote/existing.txt", file.size, true, "");
   });
 
   it("downloads folders as archives and changes permissions with the current revision", async () => {
