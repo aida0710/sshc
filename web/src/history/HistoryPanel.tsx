@@ -17,13 +17,26 @@ export function HistoryPanel() {
   const [message, setMessage] = useState("");
 
   const reload = useCallback(async () => {
-    try {
-      const [history, overview] = await Promise.all([configApi.history(), configApi.overview()]);
-      setEntries(history);
-      setPending(overview.pending ?? []);
-    } catch (error) {
-      setProblem(toProblem(error));
+    const [historyResult, overviewResult] = await Promise.allSettled([
+      configApi.history(),
+      configApi.overview(),
+    ]);
+    let nextProblem: Problem | null = null;
+
+    if (historyResult.status === "fulfilled") {
+      setEntries(historyResult.value);
+    } else {
+      setEntries((current) => current ?? []);
+      nextProblem = toProblem(historyResult.reason);
     }
+
+    if (overviewResult.status === "fulfilled") {
+      setPending(overviewResult.value.pending ?? []);
+    } else if (nextProblem === null) {
+      nextProblem = toProblem(overviewResult.reason);
+    }
+
+    setProblem(nextProblem);
   }, []);
 
   useEffect(() => {

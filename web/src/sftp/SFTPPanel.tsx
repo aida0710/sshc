@@ -423,10 +423,10 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
           {progress === null ? null : <div className="border-b border-line px-3 py-2 text-xs"><div className="flex items-center gap-2"><progress className="min-w-24 grow" max={progress.totalBytes ?? progress.total} value={progress.totalBytes === null ? progress.processed : progress.bytes} /><span className="tabular-nums text-ink-muted">{progress.kind === "upload" ? `${progress.processed}/${progress.total} · ${progress.bytes.toLocaleString()}/${(progress.totalBytes ?? 0).toLocaleString()} B` : `${progress.bytes.toLocaleString()} B`}</span>{transferAbort.current === null ? null : <button type="button" className="text-danger" onClick={cancelTransfer}>{t("sftp.cancelTransfer")}</button>}</div></div>}
           {uploads.length === 0 ? null : <ul aria-label={t("sftp.uploads")} className="max-h-28 overflow-auto border-b border-line px-3 py-2 text-xs">{uploads.map((item) => <li key={item.id} className="flex min-w-0 items-center gap-2"><span className="min-w-0 grow truncate font-mono">{item.name}</span><span className={item.status === "failed" ? "text-danger" : item.status === "done" ? "text-live" : "text-ink-muted"}>{item.status === "failed" ? item.problem : t(`sftp.upload.${item.status}`)}</span></li>)}</ul>}
           <div className="min-h-0 min-w-0 overflow-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[52rem] text-left text-sm">
               <thead className="sticky top-0 bg-card text-xs text-ink-muted"><tr>
                 <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2">{t("sftp.name")}</SortableTableHeader>
-                <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2">{t("sftp.type")}</SortableTableHeader>
+                <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="w-24 whitespace-nowrap px-3 py-2">{t("sftp.type")}</SortableTableHeader>
                 <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2 text-right" buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
                 <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2">{t("sftp.modified")}</SortableTableHeader>
                 <SortableTableHeader column="mode" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2">{t("sftp.permissions")}</SortableTableHeader>
@@ -438,7 +438,7 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
                     <td className="max-w-48 px-3 py-2">
                       <button type="button" className="block w-full truncate text-left font-mono hover:text-accent" onClick={() => entry.type === "directory" ? void load(entry.path) : void openText(entry)}>{entry.type === "directory" ? "▸ " : ""}{entry.name}</button>
                     </td>
-                    <td className="px-3 py-2 text-xs text-ink-muted">{t(`sftp.type.${entry.type}`)}</td>
+                    <td className="w-24 whitespace-nowrap px-3 py-2 text-xs text-ink-muted">{t(`sftp.type.${entry.type}`)}</td>
                     <td className="px-3 py-2 text-right text-xs text-ink-muted">{entry.type === "file" ? entry.size.toLocaleString() : "—"}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-muted">{new Date(entry.modifiedAt).toLocaleString()}</td>
                     <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-ink-muted">{entry.mode}</td>
