@@ -103,6 +103,58 @@ func TestGivingUpIsSaidOutLoud(t *testing.T) {
 	if !strings.Contains(string(session.Snapshot()), "試行上限に達しました") {
 		t.Error("諦めたことを言っていない")
 	}
+	view := session.View()
+	if view.State != terminal.StateExited || view.Problem != "reconnect_exhausted" {
+		t.Errorf("state/problem = %q/%q, want exited/reconnect_exhausted", view.State, view.Problem)
+	}
+}
+
+func TestReconnectStateIsVisibleWhileWaiting(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newRegistry(terminal.DefaultLimits())
+	registry.ReconnectDelay = func(int) time.Duration { return time.Hour }
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+
+	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+	view := session.View()
+	if view.Reconnect == nil || view.Reconnect.Attempt != 1 || view.Reconnect.Limit != terminal.MaxReconnects {
+		t.Fatalf("reconnect = %#v", view.Reconnect)
+	}
+	if view.Reconnect.RetryAt.IsZero() {
+		t.Error("次回試行時刻が無い")
+	}
+	if err := registry.Close(session.ID()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return !session.Live() })
+}
+
+func TestReconnectStopsWhenTheFailureNeedsUserAction(t *testing.T) {
+	spy := &openSpy{failUpTo: 1 + terminal.MaxReconnects}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		ReconnectError: func(error) (bool, string) { return false, "host_key_changed" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+
+	waitFor(t, func() bool { return !session.Live() })
+	if spy.count() != 2 {
+		t.Fatalf("open calls = %d, want initial + one reconnect", spy.count())
+	}
+	view := session.View()
+	if view.Problem != "host_key_changed" || view.State != terminal.StateExited {
+		t.Fatalf("state/problem = %q/%q", view.State, view.Problem)
+	}
 }
 
 func TestALocalShellIsNeverDialledAgain(t *testing.T) {
@@ -292,10 +344,10 @@ func TestTheReconnectWindowIsCountedFromTheGaps(t *testing.T) {
 		t.Errorf("0 回 = %v, want 0", window)
 	}
 	for attempts, want := range map[int]time.Duration{
-		1: time.Second,
-		2: 3 * time.Second,
-		3: 8 * time.Second,
-		5: 33 * time.Second,
+		1: 2 * time.Second,
+		2: 4 * time.Second,
+		3: 10 * time.Second,
+		5: 40 * time.Second,
 	} {
 		if window := terminal.ReconnectWindow(attempts); window != want {
 			t.Errorf("%d 回 = %v, want %v", attempts, window, want)

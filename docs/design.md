@@ -205,12 +205,16 @@
 
   ネットワーク切り替え、端末の sleep、接続先の再起動による切断は自動再接続の対象です。シェルが `exit` で終了した場合は再接続しません。`sshclient` はネットワーク切断を `TransportLost` として記録し、終了コードと区別します。
 
-  再試行間隔は 1、2、5、10、15 秒です。既定の 5 回では、再試行終了まで最大 33 秒かかります。この間、切断されたコンソールは一覧に残ります。利用者が明示的に閉じた場合は再試行しません。設定画面の「ターミナル」で 0〜5 回を選択でき、0 は再接続なしを意味します。
+  再試行間隔の基準は 1、2、5、10、15 秒です。同時に切れた接続が一斉に再試行しないよう、session IDから計算した安定した±20%のjitterを加えます。既定の5回では、再試行終了まで最大40秒かかります。この間、切断されたコンソールは一覧に残ります。利用者が明示的に閉じた場合は再試行しません。設定画面の「ターミナル」で0〜5回を選択でき、0は再接続なしを意味します。
 
   - 再試行回数は試行ごとに設定から読み、実行中に 0 へ変更した場合は次の試行を行いません
   - 0 は明示的な設定値であり、未設定（既定値を使用）と区別するため pointer として保存します
   - 0 の場合は「再接続を諦めました」というメッセージを表示しません
-  - UI の「5 回・最大 33 秒」は再試行間隔から計算します。`internal/acceptance` は両言語の表示値を `terminal.ReconnectWindow` と照合します
+  - 10秒以上安定していた接続は過去の再試行回数を持ち越さず、短時間に切断を繰り返す接続だけを上限で止めます
+  - host key変更、失効、未知鍵、利用可能なidentityや認証方式の欠如、鍵パスフレーズの問題は、利用者の確認が必要なのでreopenを1回で止め、固定problem codeを返します
+  - UI の「5 回・最大 40 秒」は最大jitterを含む再試行間隔から計算します。`internal/acceptance` は両言語の表示値を `terminal.ReconnectWindow` と照合します
+
+  session APIはSSH processの状態を`connecting`、`connected`、`reconnecting`、`exited`で返します。再接続中は試行回数、上限、次回時刻と固定problem codeを返し、raw transport errorは返しません。WebSocketの接続状態はbrowser attachmentの状態であり、SSH processとは別に表示します。Web UIはsessionが存在するときだけ2秒間隔で一覧を更新し、世代番号が古い応答を捨てます。
 
 - PTY と terminal session は engine が保持します。ブラウザのタブを閉じたり再読み込みしたりしてもセッションは継続し、再接続時に scrollback を再生します。子プロセスの終了、利用者による終了、engine の終了で破棄します。終了済みセッションは、接続失敗の詳細を確認できるよう新しいものから 20 件まで一覧に残します。
 - scrollback はメモリにだけ保持し、ディスクには保存しません。世代バックアップ、journal、history、remote snapshot の対象外です。`TestTheScrollbackNeverReachesTheStateDirectory` は `~/.ssh` 全体を走査して検査します。1 セッションの既定上限は 256 KiB（設定範囲 16 KiB〜4 MiB）、同時セッション数の既定上限は 50（設定範囲 1〜200）です。設定画面の「ターミナル」から変更し、`metadata.json` の `embeddedTerminal` に保存します。未設定は既定値を使用する状態であり、既定値と同じ値を明示的には保存しません。上限到達時は `terminal_session_limit` で新規作成を拒否し、既存セッションを自動終了しません。
@@ -233,7 +237,7 @@
 - uploadはfile/folder pickerとDrag & Dropを同じ経路へ集約し、relative pathを検査して親directoryを浅い順に作成してから、ファイルごとに独立したAPI要求として順番に送ります。空directoryはDrag & Dropで維持します。aggregate progressとcancelを表示し、1件が失敗しても残りを続けます。既存ファイルは409を受けた時点で個別に上書き確認し、暗黙には置換しません。directory downloadはsymlinkを追跡しないZIP streamで、symlinkはextract先を脱出できないようlink targetを内容とする通常ファイルへ変換します。chmodは現在のmetadata revisionと単回action tokenを必要とし、symlinkには適用しません。SFTP favoriteは持ちません。
 - SFTP は左ナビの Start 内で Terminal の直前に置きます。画面を開いただけでは接続せず、利用者が host を選んだ後に初めて一覧を取得します。SFTP、鍵、`known_hosts` の表は操作列を除く各データ列をクライアント側で安定ソートし、現在の方向を `aria-sort` でも公開します。
 - Monaco Editor は SFTP 画面を開いたときだけ読み込みます。editor worker は build に同梱して同一 origin から読み込み、blob URL や CDN は使用しません。従来の `script-src 'self'` と Trusted Types の方針は維持します。
-- Workspace は alias、分割木、比率、focus だけを `~/.ssh/sshc/workspaces.json` に保存します。split separatorはpointerまたはkeyboardで10〜90%へ変更し、その比率を保存します。Focus Modeは保存木を変更せず単一paneだけを一時表示し、Escで元layoutへ戻します。terminal session ID、scrollback、remote process は保存せず、再オープンは各 alias への新しい接続になります。このファイルは端末固有で、世代 backup と remote snapshot の対象外です。Broadcast Input は明示的な toggle が有効な間、キー入力を workspace 内の全 pane へ同じ byte 列で送ります。pane移動はterminal本体ではなく専用handleから開始し、drop先paneとruntime node全体を交換します。alias、session ID、接続状態はpaneに追従し、split方向、比率、focus pane IDは変えません。handleを2つ順に選んでも同じ交換を行えます。Command Centerはlayout内のpane IDとaliasから実行対象を作り、既定では同じaliasをhostごとに1回へまとめ、opt-inでpaneごとにも実行します。
+- Workspace は alias、分割木、比率、focus だけを `~/.ssh/sshc/workspaces.json` に保存します。split separatorはpointerまたはkeyboardで10〜90%へ変更し、その比率を保存します。Focus Modeは保存木を変更せず単一paneだけを一時表示し、Escで元layoutへ戻します。terminal session ID、scrollback、remote process は保存せず、再オープンは各 alias への新しい接続になります。Homeは名前、pane数、更新時刻の一覧だけを読み、明示的な「ワークスペースを開く」でrestore要求を1回だけTerminalへ渡します。一部paneの接続失敗は他paneを閉じません。このファイルは端末固有で、世代 backup と remote snapshot の対象外です。Broadcast Input は明示的な toggle が有効な間、キー入力を workspace 内の全 pane へ同じ byte 列で送ります。pane移動はterminal本体ではなく専用handleから開始し、drop先paneとruntime node全体を交換します。alias、session ID、接続状態はpaneに追従し、split方向、比率、focus pane IDは変えません。handleを2つ順に選んでも同じ交換を行えます。Command Centerはlayout内のpane IDとaliasから実行対象を作り、既定では同じaliasをhostごとに1回へまとめ、opt-inでpaneごとにも実行します。
 - Terminal内検索はxtermのメモリ上のscrollbackを大文字小文字を区別せず走査し、前後の一致を選択表示します。入力履歴もlive sessionのメモリ内だけに最大200件保持し、Workspace、snapshot、diskには保存しません。command候補はprefix一致を頻度と新しさで並べます。remote path候補はterminalのcwdを推測せず、SSH aliasがある場合にabsolute pathの親directoryだけをSFTPで列挙します。
 - Snippet library と startup binding は `~/.ssh/sshc/snippets.json` に保存し、暗号化された remote snapshot の対象です。command には `{{name}}` 形式の変数を使用できます。secret 型の入力値は保存も応答もせず、結果表示では伏せます。command 本文へ直接書かれた秘密までは識別できないため、本文に秘密を保存してはいけません。
 - 複数ホスト実行は、Snippetまたは直接入力したcommandについて、解決済みの接続先と展開後 command を preview に表示し、その evidence に紐づく単回 action token を消費して開始します。paneごとの`targetId`は同じaliasを重複実行してもpreviewから結果まで維持します。1 job は最大 64 targets、既定の並列数は 4（上限 8）で、server shutdown と利用者の cancel に追従します。各 target は専用の非対話 SSH execution を使用するため、表示中terminalのcwd、環境変数、shell stateは継承しません。未接続paneも現在のaliasを解決できれば対象になり、出力と結果数には上限があります。

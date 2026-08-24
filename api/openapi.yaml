@@ -2054,7 +2054,7 @@ components:
     TerminalSession:
       type: object
       additionalProperties: false
-      required: [id, kind, title, startedAt]
+      required: [id, kind, title, startedAt, state, problem]
       properties:
         id: { type: string }
         kind: { type: string, enum: [ssh, shell] }
@@ -2063,9 +2063,23 @@ components:
         alias: { type: string }
         title: { type: string }
         startedAt: { type: string }
+        # SSH process の状態。browser と WebSocket の link 状態は含まない。
+        state: { type: string, enum: [connecting, connected, reconnecting, exited] }
+        # 画面が翻訳する固定コード。raw transport error は返さない。
+        problem: { type: string }
+        reconnect: { $ref: "#/components/schemas/TerminalReconnect" }
         exited: { $ref: "#/components/schemas/TerminalExit" }
         # 現在開いている転送。
         forwards: { type: array, items: { $ref: "#/components/schemas/TerminalForward" } }
+    TerminalReconnect:
+      type: object
+      additionalProperties: false
+      required: [attempt, limit, retryAt, problem]
+      properties:
+        attempt: { type: integer, minimum: 1, maximum: 5 }
+        limit: { type: integer, minimum: 1, maximum: 5 }
+        retryAt: { type: string, format: date-time }
+        problem: { type: string }
     TerminalExit:
       type: object
       additionalProperties: false

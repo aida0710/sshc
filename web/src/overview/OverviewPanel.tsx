@@ -6,6 +6,8 @@ import { useTranslate } from "../i18n/context";
 import { hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
+import { workspaceApi, type SavedWorkspace } from "../features/workspaces/api";
+import { storedPaneCount } from "../features/workspaces/layout";
 
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
@@ -13,15 +15,18 @@ type OverviewPanelProps = {
   loadOverview?: () => Promise<Overview>;
   loadSync?: () => Promise<SyncStatus>;
   loadRecent?: () => Promise<RecentConnectionList>;
+  loadWorkspaces?: () => Promise<SavedWorkspace[]>;
   launch?: (alias: string) => Promise<{ session: { id: string } }>;
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
   onConsoleOpened?: (id: string) => void;
+  onOpenWorkspace?: (id: string) => void;
 };
 
 const loadDefaultOverview = () => configApi.overview();
 const loadDefaultSync = () => integrationsApi.syncStatus();
 const loadDefaultRecent = () => integrationsApi.recentConnections();
+const loadDefaultWorkspaces = () => workspaceApi.list();
 const launchDefault = (alias: string) => integrationsApi.openTerminalSession({ kind: "ssh", alias });
 const informationalNoticeCodes = new Set(["group_empty"]);
 
@@ -29,33 +34,37 @@ export function OverviewPanel({
   loadOverview = loadDefaultOverview,
   loadSync = loadDefaultSync,
   loadRecent = loadDefaultRecent,
+  loadWorkspaces = loadDefaultWorkspaces,
   launch = launchDefault,
   onNavigate,
   onNavigateLocation,
   onConsoleOpened,
+  onOpenWorkspace = () => undefined,
 }: OverviewPanelProps) {
   const t = useTranslate();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [recent, setRecent] = useState<RecentConnectionList["connections"]>([]);
+  const [workspaces, setWorkspaces] = useState<SavedWorkspace[]>([]);
   const [launching, setLaunching] = useState("");
   const [problem, setProblem] = useState("");
 
   useEffect(() => {
     let active = true;
-    void Promise.allSettled([loadOverview(), loadSync(), loadRecent()]).then(([workspace, remote, history]) => {
+    void Promise.allSettled([loadOverview(), loadSync(), loadRecent(), loadWorkspaces()]).then(([workspace, remote, history, saved]) => {
       if (!active) return;
       if (workspace.status === "fulfilled") setOverview(workspace.value);
       else setProblem(t("home.loadFailed"));
       if (remote.status === "fulfilled") setSync(remote.value);
       if (history.status === "fulfilled") setRecent(history.value.connections.slice(0, 5));
+      if (saved.status === "fulfilled") setWorkspaces(saved.value);
       setLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [loadOverview, loadSync, loadRecent, t]);
+  }, [loadOverview, loadSync, loadRecent, loadWorkspaces, t]);
 
   async function connect(alias: string) {
     setLaunching(alias);
@@ -173,6 +182,36 @@ export function OverviewPanel({
                 </li>
               );
             })}
+          </ul>
+        </section>
+      )}
+
+      {workspaces.length === 0 ? null : (
+        <section aria-labelledby="saved-workspaces-heading" className="sshc-card overflow-hidden rounded-xl bg-card">
+          <div className="border-b border-line px-4 py-3 sm:px-5">
+            <h3 id="saved-workspaces-heading" className="font-semibold">{t("home.savedWorkspaces")}</h3>
+            <p className="mt-0.5 text-xs text-ink-muted">{t("home.savedWorkspacesHint")}</p>
+          </div>
+          <ul aria-label={t("home.savedWorkspaceList")} className="divide-y divide-line">
+            {workspaces.map((workspace) => (
+              <li key={workspace.id} className="flex min-w-0 flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">{workspace.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-ink-muted">
+                    {t("home.workspacePanes", { count: storedPaneCount(workspace.layout) })}
+                    {" · "}
+                    <time dateTime={workspace.updatedAt}>{t("home.workspaceUpdated", { at: formatConnectedAt(workspace.updatedAt) })}</time>
+                  </p>
+                </div>
+                <Button
+                  kind="primary"
+                  className="min-h-10 w-full shrink-0 sm:w-auto md:min-h-0"
+                  onClick={() => onOpenWorkspace(workspace.id)}
+                >
+                  {t("home.openWorkspace")}
+                </Button>
+              </li>
+            ))}
           </ul>
         </section>
       )}

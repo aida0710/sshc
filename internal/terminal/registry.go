@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"hash/fnv"
 	"io"
 	"sync"
 	"time"
@@ -19,8 +20,11 @@ type Spec struct {
 	Command Command
 	Size    Size
 	// Open は呼び出し側が Process を生成するコールバックである。
-	Open    func(ctx context.Context, size Size) (Process, error)
-	Cleanup func()
+	Open func(ctx context.Context, size Size) (Process, error)
+	// ReconnectError は再接続失敗を分類する。retry=false なら即座に停止する。
+	// problem は公開用の固定コードであり、raw error を含めない。
+	ReconnectError func(error) (retry bool, problem string)
+	Cleanup        func()
 }
 
 // Registry は、開いているセッションと、終了して残しているセッションを持つ。
@@ -63,11 +67,23 @@ func (r *Registry) condition() *sync.Cond {
 }
 
 // reconnectDelay は、繋ぎ直しを待つ間隔である。
-func (r *Registry) reconnectDelay(attempt int) time.Duration {
+func (r *Registry) reconnectDelay(attempt int, sessionID string) time.Duration {
 	if r.ReconnectDelay != nil {
 		return r.ReconnectDelay(attempt)
 	}
-	return reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
+	return jitteredReconnectDelay(attempt, sessionID)
+}
+
+// jitteredReconnectDelay は、同時に切れたセッションの再接続を分散する。
+// ランダムな session ID で集中を避けつつ、同じセッションの表示時刻は純粋計算で
+// 安定させる。
+func jitteredReconnectDelay(attempt int, sessionID string) time.Duration {
+	base := reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(sessionID))
+	_, _ = hash.Write([]byte{byte(attempt), byte(attempt >> 8)})
+	percent := 80 + int(hash.Sum32()%41)
+	return base * time.Duration(percent) / 100
 }
 
 // reconnects は、繋ぎ直しを何回まで試みるかである。
@@ -175,10 +191,14 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		cleanup: spec.Cleanup,
 		done:    make(chan struct{}),
 		// 繋ぎ直せるのは、開き方を知っているセッションだけである。
-		reopen:   spec.Open,
-		size:     size,
-		stopping: make(chan struct{}),
-		delay:    r.reconnectDelay,
+		reopen:         spec.Open,
+		reconnectError: spec.ReconnectError,
+		size:           size,
+		stopping:       make(chan struct{}),
+		state:          StateConnected,
+		delay: func(attempt int) time.Duration {
+			return r.reconnectDelay(attempt, id)
+		},
 		attempts: r.reconnects,
 	}
 	r.mutex.Lock()

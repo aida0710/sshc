@@ -66,6 +66,26 @@ type ExitInfo struct {
 	At     time.Time
 }
 
+// State は、SSH process の接続ライフサイクルである。WebSocket の接続状態とは
+// 別物であり、ブラウザが外れても process が生きていれば connected のままである。
+type State string
+
+const (
+	StateConnecting   State = "connecting"
+	StateConnected    State = "connected"
+	StateReconnecting State = "reconnecting"
+	StateExited       State = "exited"
+)
+
+// ReconnectView は、次の再接続試行を画面へ説明するための公開情報である。
+// raw error は含めない。Problem は画面が翻訳する固定コードだけを持つ。
+type ReconnectView struct {
+	Attempt int
+	Limit   int
+	RetryAt time.Time
+	Problem string
+}
+
 // TransportLost は、シェルが終わったのではなく輸送が落ちたことを表す終了コード。
 const TransportLost = -1
 

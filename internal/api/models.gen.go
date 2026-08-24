@@ -236,6 +236,30 @@ func (e TerminalSessionKind) Valid() bool {
 	}
 }
 
+// Defines values for TerminalSessionState.
+const (
+	Connected    TerminalSessionState = "connected"
+	Connecting   TerminalSessionState = "connecting"
+	Exited       TerminalSessionState = "exited"
+	Reconnecting TerminalSessionState = "reconnecting"
+)
+
+// Valid indicates whether the value is a known member of the TerminalSessionState enum.
+func (e TerminalSessionState) Valid() bool {
+	switch e {
+	case Connected:
+		return true
+	case Connecting:
+		return true
+	case Exited:
+		return true
+	case Reconnecting:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WorkspaceReconnectPaneState.
 const (
 	ReconnectRequired WorkspaceReconnectPaneState = "reconnect_required"
@@ -1438,19 +1462,33 @@ type TerminalForward struct {
 	To      string `json:"to"`
 }
 
+// TerminalReconnect defines model for TerminalReconnect.
+type TerminalReconnect struct {
+	Attempt int       `json:"attempt"`
+	Limit   int       `json:"limit"`
+	Problem string    `json:"problem"`
+	RetryAt time.Time `json:"retryAt"`
+}
+
 // TerminalSession defines model for TerminalSession.
 type TerminalSession struct {
-	Alias     *string             `json:"alias,omitempty"`
-	Exited    *TerminalExit       `json:"exited,omitempty"`
-	Forwards  *[]TerminalForward  `json:"forwards,omitempty"`
-	Id        string              `json:"id"`
-	Kind      TerminalSessionKind `json:"kind"`
-	StartedAt string              `json:"startedAt"`
-	Title     string              `json:"title"`
+	Alias     *string              `json:"alias,omitempty"`
+	Exited    *TerminalExit        `json:"exited,omitempty"`
+	Forwards  *[]TerminalForward   `json:"forwards,omitempty"`
+	Id        string               `json:"id"`
+	Kind      TerminalSessionKind  `json:"kind"`
+	Problem   string               `json:"problem"`
+	Reconnect *TerminalReconnect   `json:"reconnect,omitempty"`
+	StartedAt string               `json:"startedAt"`
+	State     TerminalSessionState `json:"state"`
+	Title     string               `json:"title"`
 }
 
 // TerminalSessionKind defines model for TerminalSession.Kind.
 type TerminalSessionKind string
+
+// TerminalSessionState defines model for TerminalSession.State.
+type TerminalSessionState string
 
 // TerminalSessionList defines model for TerminalSessionList.
 type TerminalSessionList struct {

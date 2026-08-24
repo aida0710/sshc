@@ -92,7 +92,7 @@ beforeEach(() => {
   vi.mocked(integrationsApi.terminalSessions).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
   vi.mocked(integrationsApi.closeTerminalSession).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
   vi.mocked(integrationsApi.openTerminalSession).mockResolvedValue({
-    session: { id: "console-1", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z" },
+    session: { id: "console-1", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z", state: "connected", problem: "" },
     streamTicket: "one-time",
   } as never);
   vi.mocked(integrationsApi.passwordVault).mockResolvedValue({
@@ -499,7 +499,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     const opened = {
       id: "console-1", kind: "ssh" as const, alias: "bastion", title: "bastion",
-      startedAt: "2026-08-13T09:00:00Z",
+      startedAt: "2026-08-13T09:00:00Z", state: "connected" as const, problem: "",
     };
     const consoles = { ...consoleProps.consoles, open: vi.fn(async () => opened) };
     const onShowConsole = vi.fn();

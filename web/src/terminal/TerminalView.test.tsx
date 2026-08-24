@@ -17,7 +17,7 @@ vi.mock("./stream", () => ({
 const { TerminalView } = await import("./TerminalView");
 
 const session: TerminalSession = {
-  id: "a", kind: "shell", title: "zsh", startedAt: "2026-08-14T09:00:00Z",
+  id: "a", kind: "shell", title: "zsh", startedAt: "2026-08-14T09:00:00Z", state: "connected", problem: "",
 };
 
 function renderView(terminalStreamTicket = vi.fn(async () => ({ streamTicket: "one-time" }))) {
