@@ -34,6 +34,11 @@ test("draws one separator above the desktop navigation version", async ({ page, 
   await stubUpdateStatus(page);
   await openApplication(page, installation);
 
+  const header = page.getByRole("banner");
+  const brandMark = header.locator("[data-sshc-brand-mark]");
+  await expect(brandMark).toBeVisible();
+  await expect(brandMark).toHaveAttribute("viewBox", "0 0 512 512");
+  await expect(header).not.toContainText(">_");
   await expect.poll(() => navigationFooterTopBorders(page)).toBe(1);
 });
 

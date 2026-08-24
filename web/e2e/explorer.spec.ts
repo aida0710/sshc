@@ -21,6 +21,39 @@ test("shows the Include hierarchy and edits an included file", async ({ page, in
   expect(after).toContain("Host nas");
 });
 
+test("keeps long conditional Include paths inside the hierarchy pane", async ({
+  page,
+  installation,
+}) => {
+  const pattern = "connections/dubguild/high-performance-computing/*.conf";
+  await installation.write(
+    "config",
+    `Host mado-office-with-a-long-condition\n\tInclude ${pattern}\n`,
+  );
+  await installation.write(
+    "connections/dubguild/high-performance-computing/mado-office.conf",
+    "Host compute\n\tHostName 198.51.100.42\n",
+  );
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await openApplication(page, installation);
+  await openSection(page, "Config");
+
+  const includePattern = page.getByText(pattern, { exact: true });
+  await expect(includePattern).toBeVisible();
+  await expect(page.getByText("inside Host mado-office-with-a-long-condition", { exact: true })).toBeVisible();
+  const card = includePattern.locator("..");
+  expect(
+    await card.evaluate((element) => element.scrollWidth - element.clientWidth),
+    "the Include card has horizontal overflow",
+  ).toBeLessThanOrEqual(0);
+  const [patternBox, cardBox] = await Promise.all([includePattern.boundingBox(), card.boundingBox()]);
+  expect(patternBox).not.toBeNull();
+  expect(cardBox).not.toBeNull();
+  if (patternBox !== null && cardBox !== null) {
+    expect(patternBox.x + patternBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5);
+  }
+});
+
 test("renames an included file and carries the Include that named it", async ({
   page,
   installation,

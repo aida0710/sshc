@@ -108,6 +108,10 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
 
   const navigation = page.getByRole("navigation", { name: "Primary" });
+  const brandMark = navigation.locator("[data-sshc-brand-mark]");
+  await expect(brandMark).toBeVisible();
+  await expect(brandMark).toHaveAttribute("viewBox", "0 0 512 512");
+  await expect(navigation).not.toContainText(">_");
   const version = navigation.getByText(/^Version /);
   await expect(version).toBeVisible();
   const borders = await version.evaluate((node) => {

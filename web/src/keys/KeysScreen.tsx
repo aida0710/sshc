@@ -51,6 +51,7 @@ import { KeyInspector } from "./KeyInspector";
 import {
   folderRows,
   groupOfKeyPath,
+  includeKeyPairContext,
   itemsInFolder,
   moveInto,
   shownItems,
@@ -494,7 +495,8 @@ export function KeysScreen({
   const query = keyQuery.trim().toLowerCase();
   const shown = shownItems(inventory.items, listFilter);
   const rows = folderRows(shown, groups);
-  const visibleItems = itemsInFolder(shown, folder).filter((item) =>
+  const folderItems = itemsInFolder(shown, folder);
+  const directlyMatchedItems = folderItems.filter((item) =>
     query === "" ||
     item.relativePath.toLowerCase().includes(query) ||
     item.kind.toLowerCase().includes(query) ||
@@ -504,6 +506,7 @@ export function KeysScreen({
       reference.hostPatterns.some((pattern) => pattern.toLowerCase().includes(query)),
     ),
   );
+  const visibleItems = query === "" ? directlyMatchedItems : includeKeyPairContext(folderItems, directlyMatchedItems);
   const keyAttention =
     inventory.unreadable.length +
     inventory.unresolvedReferences.length +
@@ -641,6 +644,7 @@ export function KeysScreen({
                 selected={selectedKey}
                 moreActionsFor={moreActionsFor}
                 now={now}
+                revealRelated={query !== ""}
                 actions={rowActions}
               />
             </div>

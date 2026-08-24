@@ -9,6 +9,7 @@ import {
 import { ConsoleList } from "../terminal/ConsoleList";
 import { UpdateBadge } from "./UpdateBadge";
 import { Icon, type IconName } from "../ui/icons";
+import { BrandMark } from "../ui/BrandMark";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { sectionPath, type Section } from "../routing/sectionRoute";
@@ -80,12 +81,7 @@ export function AppNavigation({
       } ${desktopVisible ? "md:flex" : "md:hidden"}`}
     >
       <div className="mb-3 flex shrink-0 items-center gap-2 border-b border-line px-1 pb-3 md:hidden">
-        <span
-          aria-hidden="true"
-          className="grid h-8 w-8 place-items-center rounded-lg bg-accent font-mono text-[11px] font-bold tracking-tighter text-accent-ink"
-        >
-          &gt;_
-        </span>
+        <BrandMark className="h-8 w-8" />
         <span className="text-sm font-bold tracking-tight">{t("shell.title")}</span>
       </div>
 

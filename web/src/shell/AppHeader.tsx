@@ -1,5 +1,6 @@
 import { InspectorToggle, type InspectorContent } from "../ui/Inspector";
 import { Icon } from "../ui/icons";
+import { BrandMark } from "../ui/BrandMark";
 import { autoControl } from "../ui/form";
 import { useLanguage } from "../i18n/context";
 import { locales, type Locale } from "../i18n/locale";
@@ -70,12 +71,7 @@ export function AppHeader({
         </button>
 
         <div className="hidden shrink-0 items-center gap-2 md:flex">
-          <span
-            aria-hidden="true"
-            className="grid h-7 w-7 place-items-center rounded-lg bg-accent font-mono text-[10px] font-bold tracking-tighter text-accent-ink shadow-sm"
-          >
-            &gt;_
-          </span>
+          <BrandMark className="h-7 w-7 drop-shadow-sm" />
           <h1 className="whitespace-nowrap text-sm font-bold tracking-tight">{t("shell.title")}</h1>
         </div>
 

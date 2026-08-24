@@ -20,6 +20,14 @@ const overview = {
         line: 2,
         pattern: "conf.d/*.conf",
         matches: [{ path: "conf.d/10-home.conf", absolute: "/home/tester/.ssh/conf.d/10-home.conf" }],
+      }, {
+        line: 3,
+        pattern: "connections/dubguild/high-performance-computing/*.conf",
+        condition: "Host mado-office-with-a-long-condition",
+        matches: [{
+          path: "connections/dubguild/high-performance-computing/mado-office.conf",
+          absolute: "/home/tester/.ssh/connections/dubguild/high-performance-computing/mado-office.conf",
+        }],
       }],
     },
     { file: { path: "conf.d/10-home.conf", absolute: "/home/tester/.ssh/conf.d/10-home.conf" }, editable: true, loads: 1 },
@@ -91,6 +99,17 @@ describe("ConfigExplorer", () => {
     expect(await screen.findByRole("button", { name: "config" })).toBeInTheDocument();
     expect(screen.getByText("conf.d/*.conf")).toBeInTheDocument();
     expect(screen.getByText(/include_no_match/)).toBeInTheDocument();
+  });
+
+  it("wraps long Include paths and conditions inside the hierarchy card", async () => {
+    render(<ConfigExplorer />);
+
+    const pattern = await screen.findByText("connections/dubguild/high-performance-computing/*.conf");
+    const condition = screen.getByText("inside Host mado-office-with-a-long-condition");
+
+    expect(pattern).toHaveClass("block", "break-all");
+    expect(pattern.closest("div")).toHaveClass("min-w-0", "overflow-hidden");
+    expect(condition).toHaveClass("block", "break-words");
   });
 
   it("marks a file outside ~/.ssh as read only", async () => {

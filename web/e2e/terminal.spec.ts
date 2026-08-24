@@ -85,7 +85,11 @@ async function saveTerminalSettings(page: Page, region: Locator): Promise<Respon
 test("opens a local shell, runs a command and shows its output", async ({ page, installation }) => {
   const violations = watchForPolicyViolations(page);
   await openApplication(page, installation);
+  await openSection(page, "Terminal");
 
+  const emptyState = page.getByRole("heading", { name: "No console is open" }).locator("..");
+  await expect(emptyState.locator("[data-sshc-brand-mark]")).toBeVisible();
+  await expect(emptyState).not.toContainText(">_");
   const panel = await openConsolePanel(page);
   await panel.getByRole("button", { name: "Local shell" }).click();
 

@@ -1073,6 +1073,7 @@ export const en = {
   "keys.colActions": "Actions",
   "keys.permissionRisk": "Permissions too open",
   "keys.showPublicKey": "Show public key",
+  "keys.relatedPublicFiles": "Public key files ({count})",
   "keys.showPrivateKey": "Show private key",
   "keys.changePassphrase": "Change passphrase",
   "keys.moreActions": "More actions",

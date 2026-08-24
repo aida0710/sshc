@@ -657,6 +657,40 @@ describe("KeysScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("public key could not be read");
     expect(screen.queryByLabelText("Public key")).not.toBeInTheDocument();
   });
+
+  it("toggles public material below its private key while leaving a public-only key visible", async () => {
+    const user = userEvent.setup();
+    const inventory = buildInventory();
+    const privateKey = inventory.items[0]!;
+    inventory.items = [
+      { ...privateKey, id: "paired-public", relativePath: "id_work.pub", kind: "public_key" },
+      {
+        ...privateKey,
+        id: "standalone-public",
+        relativePath: "colleague.pub",
+        kind: "public_key",
+        fingerprint: "SHA256:colleague",
+      },
+      privateKey,
+    ];
+    render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(inventory) })} />);
+
+    const privateRow = (await screen.findByRole("button", { name: "id_work" })).closest("tr")!;
+    const toggle = within(privateRow).getByRole("button", { name: "Public key files (1)" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "id_work.pub" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "colleague.pub" })).toBeVisible();
+
+    await user.click(toggle);
+
+    const pairedPublic = await screen.findByRole("button", { name: "id_work.pub" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(privateRow.compareDocumentPosition(pairedPublic.closest("tr")!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+
+    await user.click(toggle);
+    expect(screen.queryByRole("button", { name: "id_work.pub" })).not.toBeInTheDocument();
+  });
+
   it("relocates a key and reports what moved and what it rewrote", async () => {
     const user = userEvent.setup();
     const api = buildApi();
@@ -716,9 +750,10 @@ describe("KeysScreen", () => {
     ];
     render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(inventory) })} />);
 
+    const privateRow = (await screen.findByRole("button", { name: "id_work" })).closest("tr")!;
+    await userEvent.click(within(privateRow).getByRole("button", { name: "Public key files (1)" }));
     const publicRow = await screen.findByRole("row", { name: /id_work\.pub/ });
     expect(within(publicRow).queryByRole("button", { name: "Rename or move" })).not.toBeInTheDocument();
-    const privateRow = screen.getByRole("row", { name: /id_work\s/ });
     await userEvent.click(within(privateRow).getByRole("button", { name: "More actions" }));
     expect(within(privateRow).getByRole("button", { name: "Rename or move" })).toBeInTheDocument();
   });
