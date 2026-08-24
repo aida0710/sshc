@@ -86,6 +86,19 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
 }
 
 describe("DiagnosticsPanel", () => {
+  it("explains that the source table scrolls sideways on narrow screens", async () => {
+    const { container } = render(<DiagnosticsPanel api={buildApi()} />);
+
+    await userEvent.type(screen.getByLabelText("Host alias"), "bastion");
+    const explain = screen.getByRole("button", { name: "Explain" });
+    expect(container.firstElementChild).toHaveClass("[&_button]:min-h-10", "md:[&_button]:min-h-0");
+    await userEvent.click(explain);
+
+    const hint = await screen.findByText("Swipe sideways to see every column");
+    expect(hint).toHaveClass("md:hidden");
+    expect(screen.getByRole("table").parentElement).toHaveClass("overflow-x-auto");
+  });
+
   it("runs no check until the user asks for one", async () => {
     const api = buildApi();
     render(<DiagnosticsPanel api={api} />);

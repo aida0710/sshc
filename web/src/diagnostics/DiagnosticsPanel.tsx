@@ -20,6 +20,8 @@ import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 
+const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
+
 type DiagnosticsPanelProps = {
   api?: IntegrationsApi;
   hosts?: string[];
@@ -100,7 +102,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
   return (
     <section
       aria-label={embedded ? t("diag.forHost", { host: host ?? "" }) : undefined}
-      className={embedded ? "flex flex-col gap-4" : "mx-auto flex w-full max-w-5xl flex-col gap-6"}
+      className={`${embedded ? "flex flex-col gap-4" : "mx-auto flex w-full max-w-5xl flex-col gap-6"} ${mobileTouchTargets}`}
     >
       {embedded ? null : (
         <PageHeader title={t("diag.heading")} description={t("diag.pageDescription")} />
@@ -217,36 +219,42 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
 
 
       {effective && effective.sources.length > 0 ? (
-        <section className="overflow-x-auto px-4 py-4">
-          <table className="w-full text-sm">
+        <section className="px-4 py-4">
+          <p className="mb-2 flex items-center justify-end gap-1 text-xs text-ink-muted md:hidden">
+            {t("diag.tableScrollHint")}
+            <span aria-hidden="true">→</span>
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
 
-            <caption className={`mb-2 text-left ${hintText}`}>{t("diag.sourcesCaption")}</caption>
-            <thead>
-              <tr className={tableHeadRow}>
-                <th scope="col" className={tableHeadCell}>{t("diag.columnKeyword")}</th>
-                <th scope="col" className={tableHeadCell}>{t("diag.columnValue")}</th>
-                <th scope="col" className={tableHeadCell}>{t("diag.columnWhere")}</th>
-                <th scope="col" className={tableHeadCell}>{t("diag.columnCondition")}</th>
-                <th scope="col" className={tableHeadCell}>{t("diag.columnState")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {effective.sources.map((source) => (
-                <tr
-                  key={`${source.path}:${source.line}:${source.keyword}`}
-                  className={`border-b border-line ${source.winner ? "" : "opacity-60"}`}
-                >
-                  <th scope="row" className="py-1.5 pr-3 text-left font-normal text-ink-muted">
-                    {source.keyword}
-                  </th>
-                  <td className="py-1.5 pr-3 font-mono text-xs text-ink">{source.value}</td>
-                  <td className="py-1.5 pr-3 font-mono text-xs text-ink-faint">{`${source.path}:${source.line}`}</td>
-                  <td className="py-1.5 pr-3 font-mono text-xs text-ink-faint">{source.condition}</td>
-                  <td className="py-1.5 text-ink-faint">{source.winner ? t("diag.inEffect") : t("diag.superseded")}</td>
+              <caption className={`mb-2 text-left ${hintText}`}>{t("diag.sourcesCaption")}</caption>
+              <thead>
+                <tr className={tableHeadRow}>
+                  <th scope="col" className={tableHeadCell}>{t("diag.columnKeyword")}</th>
+                  <th scope="col" className={tableHeadCell}>{t("diag.columnValue")}</th>
+                  <th scope="col" className={tableHeadCell}>{t("diag.columnWhere")}</th>
+                  <th scope="col" className={tableHeadCell}>{t("diag.columnCondition")}</th>
+                  <th scope="col" className={tableHeadCell}>{t("diag.columnState")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {effective.sources.map((source) => (
+                  <tr
+                    key={`${source.path}:${source.line}:${source.keyword}`}
+                    className={`border-b border-line ${source.winner ? "" : "opacity-60"}`}
+                  >
+                    <th scope="row" className="py-1.5 pr-3 text-left font-normal text-ink-muted">
+                      {source.keyword}
+                    </th>
+                    <td className="py-1.5 pr-3 font-mono text-xs text-ink">{source.value}</td>
+                    <td className="py-1.5 pr-3 font-mono text-xs text-ink-faint">{`${source.path}:${source.line}`}</td>
+                    <td className="py-1.5 pr-3 font-mono text-xs text-ink-faint">{source.condition}</td>
+                    <td className="py-1.5 text-ink-faint">{source.winner ? t("diag.inEffect") : t("diag.superseded")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
 

@@ -19,19 +19,27 @@ export function Row({
   hint,
   warning,
   action,
+  stackOnNarrow = false,
 }: {
   label: string;
   children: ReactNode;
   hint?: string | undefined;
   warning?: string | undefined;
   action?: ReactNode;
+  stackOnNarrow?: boolean;
 }) {
+  const rowLayout = stackOnNarrow
+    ? "flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2"
+    : "flex items-center gap-3 px-3 py-2";
+  const labelLayout = stackOnNarrow
+    ? "flex min-w-0 flex-1 flex-col items-stretch gap-1.5 sm:flex-row sm:items-center sm:gap-3"
+    : "flex min-w-0 flex-1 items-center gap-3";
   return (
     <div className="border-t border-hairline first:border-t-0">
-      <div className="flex items-center gap-3 px-3 py-2">
-        <label className="flex min-w-0 flex-1 items-center gap-3">
-          <span className="w-32 shrink-0 text-sm text-ink-muted">{label}</span>
-          <span className="ml-auto flex min-w-0 flex-1 justify-end">{children}</span>
+      <div className={rowLayout}>
+        <label className={labelLayout}>
+          <span className={`${stackOnNarrow ? "w-full sm:w-32" : "w-32"} shrink-0 text-sm text-ink-muted`}>{label}</span>
+          <span className={`${stackOnNarrow ? "w-full sm:w-auto" : "ml-auto"} flex min-w-0 flex-1 justify-end`}>{children}</span>
         </label>
         {action === undefined ? null : <span className="shrink-0">{action}</span>}
       </div>

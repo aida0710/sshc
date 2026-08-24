@@ -16,6 +16,10 @@ import { Icon, type IconName } from "../ui/icons";
 import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 
+const mobileTouchTargets =
+  "[&_button]:min-h-10 [&_a]:inline-flex [&_a]:min-h-10 [&_a]:items-center " +
+  "md:[&_button]:min-h-0 md:[&_a]:min-h-0";
+
 function SettingsSection({
   id,
   label,
@@ -284,7 +288,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
     nextMaster === confirmMaster;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <div className={`mx-auto flex w-full max-w-6xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader title={t("settings.heading")} description={t("settings.pageDescription")} />
 
       <nav aria-label={t("settings.heading")} className="flex flex-wrap gap-1 border-b border-line pb-3">

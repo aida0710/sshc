@@ -48,7 +48,7 @@ export function ConnectionListPane({
       </div>
       <Button
         kind="primary"
-        className="shrink-0 px-2.5 py-1.5 text-xs"
+        className="min-h-10 shrink-0 px-2.5 py-1.5 text-xs md:min-h-0"
         onClick={onBeginCreation}
       >
         {t("conn.new")}
@@ -59,7 +59,7 @@ export function ConnectionListPane({
         <section className="flex flex-col gap-2 rounded-lg border border-line bg-card p-3 text-sm" role="status">
           <p className="font-medium">{t("browser.invalidUrl")}</p>
           <Button
-            className="self-start"
+            className="min-h-10 self-start md:min-h-0"
             onClick={onDismissInvalidLocation}
           >
             {t("browser.backToServers")}

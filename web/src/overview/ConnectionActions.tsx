@@ -55,7 +55,7 @@ export function ConnectionActions({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="flex size-9 items-center justify-center rounded-md border border-control-line bg-card text-ink hover:bg-select-fill"
+        className="flex size-10 items-center justify-center rounded-md border border-control-line bg-card text-ink hover:bg-select-fill md:size-9"
       >
         <Icon name="moreHorizontal" className="size-5" />
       </button>
@@ -71,7 +71,7 @@ export function ConnectionActions({
               setOpen(false);
               onOpenSettings(settingsLocation);
             }}
-            className="block w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-select-fill"
+            className="block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-select-fill md:min-h-0"
           >
             {t("home.openConnectionSettings")}
           </button>
@@ -83,7 +83,7 @@ export function ConnectionActions({
               setOpen(false);
               onConnect();
             }}
-            className="block w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-select-fill disabled:text-ink-faint"
+            className="block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-select-fill disabled:text-ink-faint md:min-h-0"
           >
             {opening ? t("home.opening") : t("home.connect")}
           </button>

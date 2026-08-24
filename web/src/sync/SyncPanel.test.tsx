@@ -68,6 +68,14 @@ const nothingToDo: PullResponse = {
 };
 
 describe("SyncPanel", () => {
+  it("stacks sync row labels above their controls on narrow screens", async () => {
+    const { container } = render(<SyncPanel api={buildApi(unconfigured, nothingToDo)} />);
+
+    const endpoint = await screen.findByLabelText("Endpoint");
+    expect(endpoint.closest("label")).toHaveClass("flex-col", "sm:flex-row");
+    expect(container.firstElementChild).toHaveClass("[&_button]:min-h-10", "md:[&_button]:min-h-0");
+  });
+
   it("shows a retry action when the sync status cannot be loaded", async () => {
     const syncStatus = vi
       .fn()

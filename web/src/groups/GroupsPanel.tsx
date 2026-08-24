@@ -256,7 +256,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("groups.pageTitle")} description={t("groups.pageDescription")} />
       <div className="sshc-card grid overflow-hidden rounded-xl bg-card sm:grid-cols-3">
         {[
@@ -502,7 +502,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       {unsaved ? (
         <section
           aria-label={t("groups.unsavedBarLabel")}
-          className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-notice-line bg-notice p-3 shadow-lg"
+          className="z-10 flex flex-wrap items-center gap-3 rounded-xl border border-notice-line bg-notice p-3 shadow-lg sm:sticky sm:bottom-0"
         >
           <p className="min-w-0 grow text-sm text-notice-ink">{t("groups.unsavedBarNote")}</p>
           <Button onClick={() => void run("preview")}>

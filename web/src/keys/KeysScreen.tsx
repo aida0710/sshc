@@ -510,7 +510,7 @@ export function KeysScreen({
     inventory.items.filter((item) => item.permissionRisk).length;
 
   return (
-    <section className="mx-auto flex w-full max-w-7xl flex-col gap-7">
+    <section className="mx-auto flex w-full max-w-7xl flex-col gap-7 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader
         title={t("keys.heading")}
         description={t("keys.pageDescription")}
@@ -633,7 +633,7 @@ export function KeysScreen({
               }}
               onDropInto={(target) => void moveChosen(target)}
             />
-            <div className="min-w-0 grow overflow-x-auto">
+            <div className="min-w-0 grow md:overflow-x-auto">
               <KeyTable
                 items={visibleItems}
                 inventory={inventory}
@@ -875,8 +875,8 @@ export function KeysScreen({
           {t("keys.createHeading")}
         </h3>
         <Card>
-          <Row label={t("keys.algorithm")}>
-            <select className={control} value={algorithm} onChange={(event) => setAlgorithm(event.target.value)}>
+          <Row label={t("keys.algorithm")} stackOnNarrow>
+            <select className={`${control} min-h-10 sm:min-h-0`} value={algorithm} onChange={(event) => setAlgorithm(event.target.value)}>
               {variants.map((variant) => (
                 <option key={`${variant.algorithm}-${variant.bits}`} value={variant.algorithm}>
                   {variant.label}
@@ -884,8 +884,8 @@ export function KeysScreen({
               ))}
             </select>
           </Row>
-          <Row label={t("keys.createGroup")}>
-            <select className={control} value={createGroup} onChange={(event) => setCreateGroup(event.target.value)}>
+          <Row label={t("keys.createGroup")} stackOnNarrow>
+            <select className={`${control} min-h-10 sm:min-h-0`} value={createGroup} onChange={(event) => setCreateGroup(event.target.value)}>
               <option value="">{t("keys.groupNone")}</option>
               {groups.map((group) => (
                 <option key={group} value={group}>
@@ -894,16 +894,16 @@ export function KeysScreen({
               ))}
             </select>
           </Row>
-          <Row label={t("keys.fileName")}>
-            <input className={control} value={fileName} onChange={(event) => setFileName(event.target.value)} />
+          <Row label={t("keys.fileName")} stackOnNarrow>
+            <input className={`${control} min-h-10 sm:min-h-0`} value={fileName} onChange={(event) => setFileName(event.target.value)} />
           </Row>
-          <Row label={t("keys.comment")}>
-            <input className={control} value={comment} onChange={(event) => setComment(event.target.value)} />
+          <Row label={t("keys.comment")} stackOnNarrow>
+            <input className={`${control} min-h-10 sm:min-h-0`} value={comment} onChange={(event) => setComment(event.target.value)} />
           </Row>
           {inProcess && (
-            <Row label={t("keys.passphrase")}>
+            <Row label={t("keys.passphrase")} stackOnNarrow>
               <input
-                className={control}
+                className={`${control} min-h-10 sm:min-h-0`}
                 type="password"
                 value={passphrase}
                 onChange={(event) => setPassphrase(event.target.value)}
