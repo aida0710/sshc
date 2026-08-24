@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import {
   type IntegrationsApi,
@@ -40,21 +40,28 @@ export function useTerminalSessions(
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const refreshGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
+    const generation = refreshGeneration.current + 1;
+    refreshGeneration.current = generation;
     try {
       const listed = await api.terminalSessions();
+      if (generation !== refreshGeneration.current) return;
       setSessions(listed.sessions);
       setMaxSessions(listed.maxSessions);
     } catch {
     } finally {
-      setLoaded(true);
+      if (generation === refreshGeneration.current) setLoaded(true);
     }
   }, [api, enabled]);
 
   useEffect(() => {
     void refresh();
+    return () => {
+      refreshGeneration.current += 1;
+    };
   }, [refresh]);
 
   const open = useCallback(

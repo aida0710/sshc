@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
-	"time"
 
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
@@ -79,13 +78,8 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 	}
 
 	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("Run = %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("Run did not stop after cancellation")
+	if err := <-done; err != nil {
+		t.Fatalf("Run = %v", err)
 	}
 }
 
@@ -135,19 +129,25 @@ func TestRunLeavesAReplacementHandoffOwnedByAnotherSecret(t *testing.T) {
 
 var errAccept = errors.New("accept failed")
 
-type failingListener struct{}
+type failingListener struct {
+	failed chan struct{}
+}
 
-func (failingListener) Accept() (net.Conn, error) { return nil, errAccept }
-func (failingListener) Close() error              { return nil }
-func (failingListener) Addr() net.Addr {
+func (listener *failingListener) Accept() (net.Conn, error) {
+	listener.failed <- struct{}{}
+	return nil, errAccept
+}
+func (*failingListener) Close() error { return nil }
+func (*failingListener) Addr() net.Addr {
 	return &net.TCPAddr{IP: net.IP{127, 0, 0, 1}, Port: 43123}
 }
 
 func TestRunReturnsServerFailureWithoutWaitingForCancellation(t *testing.T) {
+	listener := &failingListener{failed: make(chan struct{}, 1)}
 	dependencies := Dependencies{
 		Random:   bytes.NewReader(bytes.Repeat([]byte{0x91}, 96)),
 		Announce: func(Readiness) error { return nil },
-		Listen:   func(string, string) (net.Listener, error) { return failingListener{}, nil },
+		Listen:   func(string, string) (net.Listener, error) { return listener, nil },
 		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home:     t.TempDir(),
@@ -158,13 +158,11 @@ func TestRunReturnsServerFailureWithoutWaitingForCancellation(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- Run(context.Background(), dependencies, "test") }()
 
-	select {
-	case err := <-done:
-		if !errors.Is(err, errAccept) {
-			t.Fatalf("Run error = %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("Run waited for context after server failure")
+	// Accept の失敗を同期点にする。起動時間を含む wall clock と競争させず、
+	// context を取り消していない状態でその失敗が Run から返ることを確かめる。
+	<-listener.failed
+	if err := <-done; !errors.Is(err, errAccept) {
+		t.Fatalf("Run error = %v", err)
 	}
 }
 

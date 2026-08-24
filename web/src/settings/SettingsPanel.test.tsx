@@ -32,6 +32,44 @@ async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("SettingsPanel", () => {
+  it("does not accept terminal edits before initial settings finish loading", async () => {
+    let finishLoading: (settings: { maxSessions: number }) => void = () => undefined;
+    const terminalSettings = vi.fn(() => new Promise<{ maxSessions: number }>((resolve) => {
+      finishLoading = resolve;
+    }));
+    render(<SettingsPanel api={buildApi({ terminalSettings })} />);
+
+    const region = screen.getByRole("region", { name: "Terminal" });
+    const sessions = within(region).getByLabelText("Consoles open at once");
+    expect(sessions).toBeDisabled();
+    expect(within(region).getByRole("status")).toHaveTextContent("Loading terminal settings");
+
+    finishLoading({ maxSessions: 2 });
+    await waitFor(() => expect(sessions).toBeEnabled());
+    expect(sessions).toHaveValue(2);
+  });
+
+  it("waits for the application to refresh terminal state before reporting a save", async () => {
+    const user = userEvent.setup();
+    let finishRefresh: () => void = () => undefined;
+    const refreshed = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const onTerminalSettingsChange = vi.fn(() => refreshed);
+    render(<SettingsPanel api={buildApi()} onTerminalSettingsChange={onTerminalSettingsChange} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    const sessions = within(region).getByLabelText("Consoles open at once");
+    await waitFor(() => expect(sessions).toBeEnabled());
+    await user.type(sessions, "2");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onTerminalSettingsChange).toHaveBeenCalledWith({ maxSessions: 2 }));
+    expect(within(region).queryByText(/Saved/)).not.toBeInTheDocument();
+    finishRefresh();
+    expect(await within(region).findByText(/Saved/)).toBeVisible();
+  });
+
   it("no longer offers a connection application to choose", async () => {
     render(<SettingsPanel api={buildApi()} />);
 

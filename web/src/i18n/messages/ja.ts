@@ -74,6 +74,7 @@ export const ja = {
   "terminal.clipboardRefused": "クリップボードにアクセスできませんでした。",
   "terminal.settingsHeading": "ターミナル",
   "terminal.settingsSaved": "保存しました。クリップボード設定はすぐに反映され、その他はこれから開くコンソールが使います。",
+  "terminal.settingsLoading": "ターミナル設定を読み込んでいます…",
   "terminal.maxSessionsLabel": "同時に開ける本数",
   "terminal.maxSessionsHint": "1〜200。空欄の場合は 50 です。上限に達すると新しいコンソールを開けません。既存のコンソールは自動的に閉じられません。",
   "terminal.scrollbackLabel": "1 本あたりのスクロールバック（バイト）",

@@ -22,6 +22,7 @@ jobs:
   go:
     name: Go native (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -86,18 +87,22 @@ jobs:
       - name: go test (Unix)
         if: ${{ runner.os != 'Windows' }}
         shell: bash
-        run: go test ./...
+        run: go test -count=1 ./...
 
       - name: go test (Windows)
         if: ${{ runner.os == 'Windows' }}
         shell: pwsh
-        run: go test ./...
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          & go test -v -count=1 ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-normal-windows.log"
+          $testExit = $LASTEXITCODE
+          exit $testExit
 
       # 実行時間と失敗種別を区別するため race detector を別ステップにする。
       - name: go test -race (Unix)
         if: ${{ runner.os != 'Windows' }}
         shell: bash
-        run: go test -race ./...
+        run: go test -count=1 -race ./...
 
       # windows-2025 x64 は通常 race 対応である。もし toolchain 自身がこの
       # platform を unsupported と明言した場合だけ neutral にし、test failure、
@@ -107,9 +112,8 @@ jobs:
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
-          $raceLines = @(& go test -race ./... 2>&1)
+          $raceLines = @(& go test -v -count=1 -race ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-race-windows.log")
           $raceExit = $LASTEXITCODE
-          $raceLines | ForEach-Object { Write-Output $_ }
           if ($raceExit -eq 0) {
             exit 0
           }
@@ -120,11 +124,23 @@ jobs:
           }
           exit $raceExit
 
+      # Console出力が切り詰められても、ConPTY停止時の直前のtest名と出力を
+      # 完全な形で取得できるよう、失敗したWindows runだけlogを保存する。
+      - name: Upload Windows test logs
+        if: ${{ failure() && runner.os == 'Windows' }}
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: go-test-logs-windows
+          path: ${{ runner.temp }}/go-test-*-windows.log
+          if-no-files-found: warn
+          retention-days: 7
+
   # gomobile、Gradle、manifest を含む配布経路で APK を検証する。
   # NDK は runner image の既存バージョンを使用する。
   android:
     name: Android APK
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -170,6 +186,7 @@ jobs:
   web:
     name: Web
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
@@ -208,6 +225,7 @@ jobs:
   deadcode:
     name: Dead code
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -219,6 +237,7 @@ jobs:
   generated:
     name: Generated files
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -241,6 +260,7 @@ jobs:
   integration:
     name: Integration
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -266,10 +286,12 @@ jobs:
       - name: Create the bucket
         # アプリケーションはバケットを作成しないため、テスト側で用意する。
         run: |
-          docker exec sshc-s3 sh -c '
-            mkdir -p /data/buckets/sshc-test' || true
+          docker exec sshc-s3 sh -ceu '
+            mkdir -p /data/buckets/sshc-test
+            test -d /data/buckets/sshc-test'
           curl -sS -X PUT "http://127.0.0.1:8333/sshc-test" \
-            -H "Authorization: none" >/dev/null 2>&1 || true
+            -H "Authorization: none" >/dev/null || \
+            echo "::warning::SeaweedFS declined the optional S3 bucket PUT; the verified data directory remains available"
 
       - name: Integration tests
         run: make integration
@@ -277,8 +299,10 @@ jobs:
       - name: Container logs
         if: failure()
         run: |
-          docker logs sshc-s3 2>&1 | tail -50
-          docker logs sshc-sshd 2>&1 | tail -50
+          docker ps -a --filter name=sshc-s3 --filter name=sshc-sshd
+          docker inspect --format '{{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}' sshc-s3 sshc-sshd || true
+          docker logs sshc-s3 2>&1 | tail -200
+          docker logs sshc-sshd 2>&1 | tail -200
 
       - name: Stop the containers
         if: always()
@@ -287,6 +311,7 @@ jobs:
   security:
     name: Dependency security
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6

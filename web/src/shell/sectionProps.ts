@@ -34,7 +34,7 @@ export type Shell = {
   onInspector: (content: InspectorContent) => void;
   consoles: TerminalSessionsState;
   onShowConsole: (id: string) => void;
-  onTerminalSettingsChange: (settings: TerminalSettings) => void;
+  onTerminalSettingsChange: (settings: TerminalSettings) => Promise<void>;
 };
 
 export type Declared = {
