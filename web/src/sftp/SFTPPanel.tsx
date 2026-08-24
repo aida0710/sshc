@@ -12,8 +12,8 @@ import {
 } from "../ui/tableSort";
 import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 import { directoryPaths, safeRelativePath, symbolicModeToOctal, type LocalTransferFile } from "./transfers";
-import { sftpTransferQueue } from "./transferQueue";
-import { sftpDownloadQueue } from "./downloadQueue";
+import { TransferManagerList } from "./TransferManagerList";
+import { sftpTransferManager } from "./transferManager";
 
 const MonacoEditor = lazy(() =>
   import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
@@ -91,8 +91,7 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
   });
   const upload = useRef<HTMLInputElement>(null);
   const folderUpload = useRef<HTMLInputElement>(null);
-  const uploadJobs = useSyncExternalStore(sftpTransferQueue.subscribe, sftpTransferQueue.getSnapshot);
-  const downloadJobs = useSyncExternalStore(sftpDownloadQueue.subscribe, sftpDownloadQueue.getSnapshot);
+  const transferJobs = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   const refreshedUploads = useRef(new Set<string>());
   const dirty = opened !== null && contents !== opened.contents;
   const displayedEntries = ordered(
@@ -139,13 +138,13 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
   }, [alias]);
 
   useEffect(() => {
-    const completed = uploadJobs.filter((job) => job.status === "done" && job.alias === alias && parentOf(job.remotePath) === path && !refreshedUploads.current.has(job.id));
+    const completed = transferJobs.filter((job) => job.direction === "upload" && job.status === "completed" && job.alias === alias && parentOf(job.remotePath) === path && !refreshedUploads.current.has(job.id));
     if (completed.length === 0) return;
     for (const job of completed) refreshedUploads.current.add(job.id);
     void load(path, alias, true);
     // load intentionally follows the current alias/path snapshot for each completed job.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uploadJobs, alias, path]);
+  }, [transferJobs, alias, path]);
 
   async function openText(entry: RemoteEntry) {
     if (dirty) {
@@ -253,9 +252,12 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
         }
       }
     }
-    sftpTransferQueue.add(safeFiles.map((source) => ({
+    const folderName = [...safeDirectories, ...safeFiles.map((source) => source.relativePath)]
+      .map((value) => value.split("/")[0] ?? value).find((value) => value !== "") ?? t("sftp.manager.folder");
+    const folderBatch = safeDirectories.length > 0 || safeFiles.length > 1 || safeFiles.some((source) => source.relativePath.includes("/"));
+    sftpTransferManager.addUploads(safeFiles.map((source) => ({
       alias, remotePath: join(path, source.relativePath), localName: source.relativePath, file: source.file,
-    })));
+    })), { name: folderBatch ? folderName : safeFiles[0]?.relativePath ?? folderName, kind: folderBatch ? "folder" : "file" });
     setBusy(false);
   }
 
@@ -270,7 +272,7 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
   async function download(entry: RemoteEntry) {
     if (busy) return;
     setProblem("");
-    sftpDownloadQueue.add(alias, entry.path, entry.type === "directory", entry.type === "file" ? entry.size : null);
+    sftpTransferManager.addDownload(alias, entry.path, entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1);
   }
 
   async function chmod(entry: RemoteEntry) {
@@ -356,8 +358,7 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
               }}
             />
           </div>
-          {uploadJobs.length === 0 ? null : <div className="max-h-40 overflow-auto border-b border-line px-3 py-2 text-xs"><div className="mb-1 flex items-center"><span className="font-medium">{t("sftp.uploads")}</span><button type="button" className="ml-auto text-ink-muted" onClick={() => sftpTransferQueue.clearFinished()}>{t("sftp.transfer.clear")}</button></div><ul aria-label={t("sftp.uploads")} className="space-y-1">{uploadJobs.map((item) => <li key={item.id} className="flex min-w-0 items-center gap-2"><span className="min-w-0 grow truncate font-mono" title={`${item.alias}:${item.remotePath}`}>{item.localName}</span><progress className="w-20" max={Math.max(item.size, 1)} value={item.offset} /><span className="shrink-0 tabular-nums text-ink-muted">{item.offset.toLocaleString()}/{item.size.toLocaleString()} B</span><span className={item.status === "failed" ? "text-danger" : item.status === "done" ? "text-live" : "text-ink-muted"}>{item.status === "failed" ? item.problem : t(`sftp.upload.${item.status}`)}</span>{item.status === "uploading" || item.status === "queued" ? <button type="button" className="text-accent" onClick={() => sftpTransferQueue.pause(item.id)}>{t("sftp.transfer.pause")}</button> : null}{item.status === "paused" || item.status === "failed" ? <button type="button" className="text-accent" onClick={() => sftpTransferQueue.resume(item.id)}>{t("sftp.transfer.resume")}</button> : null}{item.status === "needs_overwrite" ? <button type="button" className="text-notice-ink" onClick={() => sftpTransferQueue.overwrite(item.id)}>{t("sftp.overwrite")}</button> : null}{item.status !== "done" && item.status !== "cancelled" ? <button type="button" className="text-danger" onClick={() => void sftpTransferQueue.cancel(item.id)}>{t("sftp.cancel")}</button> : null}</li>)}</ul></div>}
-          {downloadJobs.length === 0 ? null : <div className="max-h-32 overflow-auto border-b border-line px-3 py-2 text-xs"><div className="mb-1 flex items-center"><span className="font-medium">{t("sftp.downloads")}</span><button type="button" className="ml-auto text-ink-muted" onClick={() => sftpDownloadQueue.clearFinished()}>{t("sftp.transfer.clear")}</button></div><ul aria-label={t("sftp.downloads")} className="space-y-1">{downloadJobs.map((item) => <li key={item.id} className="flex min-w-0 items-center gap-2"><span className="min-w-0 grow truncate font-mono">{item.remotePath}</span><progress className="w-20" max={Math.max(item.total ?? 1, 1)} value={item.bytes} /><span className={item.status === "failed" ? "text-danger" : item.status === "done" ? "text-live" : "text-ink-muted"}>{item.status === "failed" ? item.problem : t(`sftp.download.${item.status}`)}</span>{item.status === "downloading" ? <button type="button" className="text-danger" onClick={() => sftpDownloadQueue.cancel(item.id)}>{t("sftp.cancel")}</button> : null}</li>)}</ul></div>}
+          <TransferManagerList />
           <div className="min-h-0 min-w-0 overflow-auto">
             <table className="w-full min-w-[52rem] text-left text-sm">
               <thead className="sticky top-0 bg-card text-xs text-ink-muted"><tr>
