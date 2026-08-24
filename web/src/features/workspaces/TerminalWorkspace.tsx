@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { TerminalSession } from "../../api/integrations";
 import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
@@ -9,6 +9,7 @@ import { workspaceApi, type SavedWorkspace } from "./api";
 import { WorkspaceCommandCenter } from "./WorkspaceCommandCenter";
 
 export type BroadcastInput = { sequence: number; source: string; data: string };
+export type WorkspaceRestoreRequest = { id: string; sequence: number };
 
 function paneID(): string { return crypto.randomUUID().replaceAll("-", ""); }
 
@@ -23,13 +24,15 @@ function findPane(root: RuntimeNode, id: string): RuntimePane | null {
 }
 
 export function TerminalWorkspace({
-  sessions, activeSessionId, onActive, onOpenAlias, renderTerminal,
+  sessions, activeSessionId, onActive, onOpenAlias, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
 }: {
   sessions: TerminalSession[];
   activeSessionId: string | null;
   onActive: (id: string) => void;
   onOpenAlias: (alias: string) => Promise<TerminalSession | null>;
   renderTerminal: (session: TerminalSession, onInput: (data: string) => void, injected: BroadcastInput | null) => ReactNode;
+  restoreRequest?: WorkspaceRestoreRequest | null;
+  onRestoreConsumed?: (sequence: number) => void;
 }) {
   const t = useTranslate();
   const [layout, setLayout] = useState<LayoutState | null>(null);
@@ -42,6 +45,7 @@ export function TerminalWorkspace({
   const [dropPaneId, setDropPaneId] = useState<string | null>(null);
   const [input, setInput] = useState<BroadcastInput | null>(null);
   const [problem, setProblem] = useState("");
+  const consumedRestore = useRef(0);
   const active = sessions.find((session) => session.id === activeSessionId) ?? null;
   const commandTargets = useMemo<ExecutionTarget[]>(() => {
     if (layout !== null) return executionTargets(layout.root, "pane");
@@ -159,21 +163,42 @@ export function TerminalWorkspace({
     } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
   }
 
-  async function restore() {
-    if (selectedWorkspace === "") return;
+  const restoreWorkspace = useCallback(async (id: string) => {
+    if (id === "") return;
     try {
-      const stored = await workspaceApi.restore(selectedWorkspace);
-      setLayout(restoreLayout(stored.layout, stored.focusedPaneId));
-      visit(stored.layout, (id, alias) => {
-        update({ type: "connection-starting", paneId: id });
-        void onOpenAlias(alias).then((session) => {
-          if (session === null) update({ type: "connection-failed", paneId: id, problem: "open_failed" });
-          else { update({ type: "connection-started", paneId: id, sessionId: session.id }); if (id === stored.focusedPaneId) onActive(session.id); }
-        });
+      const stored = await workspaceApi.restore(id);
+      setSelectedWorkspace(id);
+      setFocusModePaneId(null);
+      let restored = restoreLayout(stored.layout, stored.focusedPaneId);
+      const panes: { id: string; alias: string }[] = [];
+      visit(stored.layout, (paneId, alias) => {
+        panes.push({ id: paneId, alias });
+        restored = reduceLayout(restored, { type: "connection-starting", paneId });
       });
+      setLayout(restored);
+      await Promise.all(panes.map(async (pane) => {
+        const session = await onOpenAlias(pane.alias);
+        if (session === null) {
+          setLayout((current) => current === null ? current : reduceLayout(current, {
+            type: "connection-failed", paneId: pane.id, problem: "open_failed",
+          }));
+          return;
+        }
+        setLayout((current) => current === null ? current : reduceLayout(current, {
+          type: "connection-started", paneId: pane.id, sessionId: session.id,
+        }));
+        if (pane.id === stored.focusedPaneId) onActive(session.id);
+      }));
       setProblem("");
     } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
-  }
+  }, [onActive, onOpenAlias]);
+
+  useEffect(() => {
+    if (restoreRequest === null || restoreRequest.sequence <= consumedRestore.current) return;
+    consumedRestore.current = restoreRequest.sequence;
+    onRestoreConsumed(restoreRequest.sequence);
+    void restoreWorkspace(restoreRequest.id);
+  }, [onRestoreConsumed, restoreRequest, restoreWorkspace]);
 
   function terminal(session: TerminalSession) {
     return renderTerminal(session, (data) => {
@@ -227,5 +252,5 @@ export function TerminalWorkspace({
 
   const empty = active === null && layout === null;
   const focusNode = focusModePaneId === null || layout === null ? null : findPane(layout.root, focusModePaneId);
-  return <div className="flex h-full min-h-0 flex-col"><div className="flex flex-wrap items-center gap-2 border-b border-line bg-toolbar px-3 py-2"><Button disabled={active?.kind !== "ssh" || focusModePaneId !== null} onClick={() => void split("horizontal")}>{t("workspace.splitRight")}</Button><Button disabled={active?.kind !== "ssh" || focusModePaneId !== null} onClick={() => void split("vertical")}>{t("workspace.splitDown")}</Button><label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={broadcast} onChange={(event) => setBroadcast(event.target.checked)} />{t("workspace.broadcast")}</label><Button disabled={commandTargets.length === 0} onClick={() => setCommandCenter((current) => !current)}>{t("workspace.commandCenter")}</Button>{focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}<select aria-label={t("workspace.saved")} value={selectedWorkspace} onChange={(event) => setSelectedWorkspace(event.target.value)} className="ml-auto rounded border border-control-line bg-control px-2 py-1 text-xs"><option value="">{t("workspace.new")}</option>{saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><Button disabled={layout === null && active?.kind !== "ssh"} onClick={() => void saveWorkspace()}>{t("workspace.save")}</Button><Button disabled={selectedWorkspace === ""} onClick={() => { setFocusModePaneId(null); void restore(); }}>{t("workspace.reopen")}</Button><button disabled={selectedWorkspace === ""} className="text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button></div>{commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}{problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}<div className="flex min-h-0 flex-1 flex-col">{empty ? <div className="flex h-full items-center justify-center p-6"><section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status"><BrandMark className="mx-auto size-12 drop-shadow-sm" /><h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p><div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div></section></div> : layout === null ? (active === null ? null : terminal(active)) : focusNode === null ? renderNode(layout.root) : renderNode({ pane: focusNode })}</div></div>;
+  return <div className="flex h-full min-h-0 flex-col"><div className="flex flex-wrap items-center gap-2 border-b border-line bg-toolbar px-3 py-2"><Button disabled={active?.kind !== "ssh" || focusModePaneId !== null} onClick={() => void split("horizontal")}>{t("workspace.splitRight")}</Button><Button disabled={active?.kind !== "ssh" || focusModePaneId !== null} onClick={() => void split("vertical")}>{t("workspace.splitDown")}</Button><label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={broadcast} onChange={(event) => setBroadcast(event.target.checked)} />{t("workspace.broadcast")}</label><Button disabled={commandTargets.length === 0} onClick={() => setCommandCenter((current) => !current)}>{t("workspace.commandCenter")}</Button>{focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}<select aria-label={t("workspace.saved")} value={selectedWorkspace} onChange={(event) => setSelectedWorkspace(event.target.value)} className="ml-auto rounded border border-control-line bg-control px-2 py-1 text-xs"><option value="">{t("workspace.new")}</option>{saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><Button disabled={layout === null && active?.kind !== "ssh"} onClick={() => void saveWorkspace()}>{t("workspace.save")}</Button><Button disabled={selectedWorkspace === ""} onClick={() => void restoreWorkspace(selectedWorkspace)}>{t("workspace.reopen")}</Button><button disabled={selectedWorkspace === ""} className="text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button></div>{commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}{problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}<div className="flex min-h-0 flex-1 flex-col">{empty ? <div className="flex h-full items-center justify-center p-6"><section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status"><BrandMark className="mx-auto size-12 drop-shadow-sm" /><h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p><div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div></section></div> : layout === null ? (active === null ? null : terminal(active)) : focusNode === null ? renderNode(layout.root) : renderNode({ pane: focusNode })}</div></div>;
 }

@@ -36,16 +36,20 @@ type Session struct {
 	title   string
 	started time.Time
 
-	mutex   sync.Mutex
-	buffer  *Ring
-	streams map[*Stream]bool
-	process Process
-	exited  *ExitInfo
-	cleanup func()
+	mutex         sync.Mutex
+	buffer        *Ring
+	streams       map[*Stream]bool
+	process       Process
+	exited        *ExitInfo
+	cleanup       func()
+	state         State
+	problem       string
+	reconnectView *ReconnectView
 
-	reopen  func(ctx context.Context, size Size) (Process, error)
-	size    Size
-	retries int
+	reopen         func(ctx context.Context, size Size) (Process, error)
+	reconnectError func(error) (retry bool, problem string)
+	size           Size
+	retries        int
 	// stopping は、繋ぎ直しを待っている最中に閉じられたことを伝える。
 	stopping chan struct{}
 	// discarded は、ユーザーが自分でこのコンソールを閉じたことを表す。
@@ -60,12 +64,15 @@ type Session struct {
 
 // View は、一覧に出すためのセッションひとつ分である。
 type View struct {
-	ID      string
-	Kind    Kind
-	Alias   string
-	Title   string
-	Started time.Time
-	Exited  *ExitInfo
+	ID        string
+	Kind      Kind
+	Alias     string
+	Title     string
+	Started   time.Time
+	Exited    *ExitInfo
+	State     State
+	Problem   string
+	Reconnect *ReconnectView
 	// Forwards は、このセッションが開いている転送である。
 	Forwards []Forward
 }
@@ -111,7 +118,11 @@ func (s *Session) View() View {
 	defer s.mutex.Unlock()
 	view := View{
 		ID: s.id, Kind: s.kind, Alias: s.alias, Title: s.title,
-		Started: s.started,
+		Started: s.started, State: s.state, Problem: s.problem,
+	}
+	if s.reconnectView != nil {
+		status := *s.reconnectView
+		view.Reconnect = &status
 	}
 	if s.exited != nil {
 		info := *s.exited
@@ -243,6 +254,12 @@ func (s *Session) forceClose() error {
 // pump は PTY を読み、バッファへ書き、アタッチしているものへ配る。
 const MaxReconnects = 5
 
+// ReconnectSettled は、再接続予算を戻してよい連続稼働時間である。短時間に
+// 切断を繰り返す接続は有限回で止め、安定していた接続の過去の失敗は持ち越さない。
+const ReconnectSettled = 10 * time.Second
+
+const reconnectJitterMaxPercent = 120
+
 // reconnectBackoff は、試みのあいだに置く間隔である。
 var reconnectBackoff = []time.Duration{time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second}
 
@@ -253,7 +270,8 @@ func ReconnectWindow(attempts int) time.Duration {
 	for attempt := range attempts {
 		total += reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
 	}
-	return total
+	maximum := total * reconnectJitterMaxPercent / 100
+	return ((maximum + time.Second - 1) / time.Second) * time.Second
 }
 
 // NormaliseReconnects は、範囲の外にある回数を天井へ戻す。
@@ -266,6 +284,7 @@ func NormaliseReconnects(attempts int) int {
 
 func (s *Session) pump(now func() time.Time) {
 	defer close(s.done)
+	connectedAt := s.started
 	for {
 		buffer := make([]byte, readChunk)
 		for {
@@ -282,11 +301,17 @@ func (s *Session) pump(now func() time.Time) {
 			info.At = now()
 		}
 		_ = s.process.Close()
+		if info.At.Sub(connectedAt) >= ReconnectSettled {
+			s.mutex.Lock()
+			s.retries = 0
+			s.mutex.Unlock()
+		}
 
-		if !s.reconnect(info) {
+		if !s.reconnect(info, now) {
 			s.finish(info)
 			return
 		}
+		connectedAt = now()
 	}
 }
 
@@ -301,66 +326,96 @@ func (s *Session) stopReconnecting() {
 	}
 }
 
-func (s *Session) reconnect(info ExitInfo) bool {
-	s.mutex.Lock()
-	reopen, size, attempt := s.reopen, s.size, s.retries
-	stopping := s.exited != nil
-	s.mutex.Unlock()
-
-	// 閉じられたことを、待ちに入る前に見る。
-	select {
-	case <-s.stopping:
-		stopping = true
-	default:
-	}
-
-	limit := MaxReconnects
-	if s.attempts != nil {
-		limit = NormaliseReconnects(s.attempts())
-	}
-
-	if reopen == nil || !info.Lost() || stopping || attempt >= limit {
-		if reopen != nil && info.Lost() && limit > 0 && attempt >= limit {
-			s.publish([]byte("\r\n[sshc] 再接続の試行上限に達しました。\r\n"))
-		}
+func (s *Session) reconnect(info ExitInfo, now func() time.Time) bool {
+	if !info.Lost() {
 		return false
 	}
-
-	wait := reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
-	if s.delay != nil {
-		wait = s.delay(attempt)
-	}
-	s.publish([]byte(fmt.Sprintf(
-		"\r\n[sshc] 接続が切れました。%d 秒後に繋ぎ直します（%d/%d）。\r\n",
-		int(wait.Seconds()), attempt+1, limit)))
-
-	// 待っているあいだ、打つ先は無い。 閉じた相手へ書きに行かせない。
-	s.mutex.Lock()
-	s.process = nil
-	s.mutex.Unlock()
-
-	select {
-	case <-time.After(wait):
-	case <-s.stopping:
-		return false
-	}
-
-	process, err := reopen(context.Background(), size)
-	if err != nil {
+	for {
 		s.mutex.Lock()
-		s.retries++
+		reopen, size, attempt := s.reopen, s.size, s.retries
+		stopping := s.exited != nil
 		s.mutex.Unlock()
-		s.publish([]byte("\r\n[sshc] " + err.Error() + "\r\n"))
-		return s.reconnect(info)
-	}
+		select {
+		case <-s.stopping:
+			stopping = true
+		default:
+		}
 
-	s.mutex.Lock()
-	s.process = process
-	s.retries++
-	s.mutex.Unlock()
-	// これは新しいシェルである。 前のものが残っていると思わせない。
-	s.publish([]byte("\r\n[sshc] 繋ぎ直しました。新しいシェルです。前の画面より上は、切れる前の記録です。\r\n"))
-	return true
+		limit := MaxReconnects
+		if s.attempts != nil {
+			limit = NormaliseReconnects(s.attempts())
+		}
+		if reopen == nil || stopping || attempt >= limit {
+			if reopen != nil && limit > 0 && attempt >= limit {
+				s.mutex.Lock()
+				s.problem = "reconnect_exhausted"
+				s.mutex.Unlock()
+				s.publish([]byte("\r\n[sshc] 再接続の試行上限に達しました。\r\n"))
+			}
+			return false
+		}
+
+		wait := reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
+		if s.delay != nil {
+			wait = s.delay(attempt)
+		}
+		retryAt := now().Add(wait)
+		s.mutex.Lock()
+		s.process = nil
+		s.state = StateReconnecting
+		s.reconnectView = &ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: retryAt}
+		s.mutex.Unlock()
+		seconds := int((wait + time.Second - 1) / time.Second)
+		s.publish([]byte(fmt.Sprintf(
+			"\r\n[sshc] 接続が切れました。%d 秒後に繋ぎ直します（%d/%d）。\r\n",
+			seconds, attempt+1, limit)))
+
+		timer := time.NewTimer(wait)
+		select {
+		case <-timer.C:
+		case <-s.stopping:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return false
+		}
+
+		process, err := reopen(context.Background(), size)
+		if err != nil {
+			retry, problem := true, "reconnect_failed"
+			if s.reconnectError != nil {
+				retry, problem = s.reconnectError(err)
+			}
+			s.mutex.Lock()
+			s.retries++
+			if s.reconnectView != nil {
+				s.reconnectView.Problem = problem
+			}
+			if !retry {
+				s.problem = problem
+			}
+			s.mutex.Unlock()
+			s.publish([]byte("\r\n[sshc] " + err.Error() + "\r\n"))
+			if !retry {
+				return false
+			}
+			continue
+		}
+
+		s.mutex.Lock()
+		s.process = process
+		s.retries++
+		s.state = StateConnected
+		s.problem = ""
+		s.reconnectView = nil
+		s.mutex.Unlock()
+		// これは新しいシェルである。 前のものが残っていると思わせない。
+		s.publish([]byte("\r\n[sshc] 繋ぎ直しました。新しいシェルです。前の画面より上は、切れる前の記録です。\r\n"))
+		return true
+	}
 }
 
 func (s *Session) publish(chunk []byte) {
@@ -389,6 +444,8 @@ func (s *Session) finish(info ExitInfo) {
 		return
 	}
 	s.exited = &info
+	s.state = StateExited
+	s.reconnectView = nil
 	for stream := range s.streams {
 		delete(s.streams, stream)
 		stream.close()

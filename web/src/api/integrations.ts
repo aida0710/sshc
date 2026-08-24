@@ -219,6 +219,19 @@ function validateTerminalSession(value: unknown): TerminalSession {
   if (kind !== "ssh" && kind !== "shell") throw new Error("invalid_response");
   asString(record.title);
   asString(record.startedAt);
+  const state = asString(record.state);
+  if (state !== "connecting" && state !== "connected" && state !== "reconnecting" && state !== "exited") {
+    throw new Error("invalid_response");
+  }
+  asString(record.problem);
+  if (record.reconnect !== undefined) {
+    const reconnect = asRecord(record.reconnect);
+    const attempt = asNonnegativeInteger(reconnect.attempt);
+    const limit = asNonnegativeInteger(reconnect.limit);
+    if (attempt < 1 || attempt > 5 || limit < 1 || limit > 5 || attempt > limit) throw new Error("invalid_response");
+    asString(reconnect.retryAt);
+    asString(reconnect.problem);
+  }
   if (record.alias !== undefined) asString(record.alias);
   if (record.exited !== undefined) {
     const exited = asRecord(record.exited);

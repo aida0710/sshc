@@ -5,13 +5,13 @@ import { ConsoleList } from "./ConsoleList";
 import type { TerminalSession } from "../api/integrations";
 
 const live: TerminalSession = {
-  id: "a", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z",
+  id: "a", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z", state: "connected", problem: "",
 };
 const shell: TerminalSession = {
-  id: "b", kind: "shell", title: "zsh", startedAt: "2026-08-13T09:01:00Z",
+  id: "b", kind: "shell", title: "zsh", startedAt: "2026-08-13T09:01:00Z", state: "connected", problem: "",
 };
 const dead: TerminalSession = {
-  id: "c", kind: "ssh", alias: "db-primary", title: "db-primary", startedAt: "2026-08-13T09:02:00Z",
+  id: "c", kind: "ssh", alias: "db-primary", title: "db-primary", startedAt: "2026-08-13T09:02:00Z", state: "exited", problem: "",
   exited: { code: 255, signal: "", at: "2026-08-13T09:02:01Z" },
 };
 

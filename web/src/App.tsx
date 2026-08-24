@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type MouseEvent,
@@ -43,7 +44,7 @@ import {
 } from "./routing/useSectionRoute";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
 import { useTerminalSessions, type TerminalSessionsState } from "./terminal/sessions";
-import { TerminalWorkspace } from "./features/workspaces/TerminalWorkspace";
+import { TerminalWorkspace, type WorkspaceRestoreRequest } from "./features/workspaces/TerminalWorkspace";
 
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -196,6 +197,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const consoles = useTerminalSessions(integrationsApi, t, state === "ready");
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>({});
   const [activeConsole, setActiveConsole] = useState<string | null>(null);
+  const [workspaceRestoreRequest, setWorkspaceRestoreRequest] = useState<WorkspaceRestoreRequest | null>(null);
+  const workspaceRestoreSequence = useRef(0);
   const [navFace, setNavFace] = useState<NavFace | null>(null);
 
   useEffect(() => {
@@ -235,6 +238,15 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     },
     [navigate, consoles],
   );
+
+  const openWorkspace = useCallback((id: string) => {
+    workspaceRestoreSequence.current += 1;
+    setWorkspaceRestoreRequest({ id, sequence: workspaceRestoreSequence.current });
+    navigate("Terminal");
+  }, [navigate]);
+  const consumeWorkspaceRestore = useCallback((sequence: number) => {
+    setWorkspaceRestoreRequest((current) => current?.sequence === sequence ? null : current);
+  }, []);
 
   const [consoleOrder, setConsoleOrder] = useState<string[]>([]);
   const orderedConsoles = useMemo(() => {
@@ -529,6 +541,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     hostAppearance={hostAppearance}
                     onActive={showConsole}
                     onOpenAlias={(alias) => consoles.open({ kind: "ssh", alias })}
+                    restoreRequest={workspaceRestoreRequest}
+                    onRestoreConsumed={consumeWorkspaceRestore}
                   />
                 </div>
               ) : null}
@@ -561,6 +575,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                       onInspector: setInspector,
                       consoles,
                       onShowConsole: showConsole,
+                      onOpenWorkspace: openWorkspace,
                       onTerminalSettingsChange: async (settings) => {
                         setTerminalSettings(settings);
                         await consoles.refresh();
@@ -638,6 +653,8 @@ function TerminalScreen({
   hostAppearance,
   onActive,
   onOpenAlias,
+  restoreRequest,
+  onRestoreConsumed,
 }: {
   consoles: TerminalSessionsState;
   activeConsole: string | null;
@@ -645,9 +662,11 @@ function TerminalScreen({
   hostAppearance: Map<string, TerminalAppearance>;
   onActive: (id: string) => void;
   onOpenAlias: (alias: string) => Promise<import("./api/integrations").TerminalSession | null>;
+  restoreRequest: WorkspaceRestoreRequest | null;
+  onRestoreConsumed: (sequence: number) => void;
 }) {
   return (
-    <TerminalWorkspace sessions={consoles.sessions} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} renderTerminal={(session, onInput, injected) => {
+    <TerminalWorkspace sessions={consoles.sessions} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} restoreRequest={restoreRequest} onRestoreConsumed={onRestoreConsumed} renderTerminal={(session, onInput, injected) => {
       const appearance = resolveAppearance(session.alias === undefined ? undefined : hostAppearance.get(session.alias), settings.appearance);
       return <Suspense fallback={<RouteSkeleton kind="terminal" />}><TerminalView key={session.id} session={session} {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })} {...(appearance.palette === "" ? {} : { palette: appearance.palette })} {...(appearance.font === "" ? {} : { font: appearance.font })} {...(appearance.background === "" ? {} : { background: appearance.background })} {...(appearance.tint === undefined ? {} : { tint: appearance.tint })} copyOnSelect={settings.copyOnSelect ?? true} rightClickPaste={settings.rightClickPaste ?? true} onInput={onInput} injectedInput={injected} onExit={() => consoles.markExited(session.id)} /></Suspense>;
     }} />
@@ -656,13 +675,14 @@ function TerminalScreen({
 
 function PaddedSection({ section, navigation, handoff, shell, declared }: SectionViewProps) {
   const { fileTarget, onNavigate, onNavigateLocation } = navigation;
-  const { onLock, onInspector, consoles, onShowConsole, onTerminalSettingsChange } = shell;
+  const { onLock, onInspector, consoles, onShowConsole, onOpenWorkspace, onTerminalSettingsChange } = shell;
   if (section === "Home") {
     return (
       <OverviewPanel
         onNavigate={onNavigate}
         onNavigateLocation={onNavigateLocation}
         onConsoleOpened={onShowConsole}
+        onOpenWorkspace={onOpenWorkspace}
       />
     );
   }

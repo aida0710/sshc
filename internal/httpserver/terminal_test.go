@@ -273,6 +273,9 @@ func TestOpeningASessionReturnsATicketAndListsIt(t *testing.T) {
 	if listed.Sessions[0].Kind != api.TerminalSessionKindShell || listed.Sessions[0].Alias != nil {
 		t.Fatalf("a local shell is not an ssh connection: %#v", listed.Sessions[0])
 	}
+	if listed.Sessions[0].State != api.TerminalSessionState("connected") || listed.Sessions[0].Problem != "" {
+		t.Fatalf("state/problem = %q/%q", listed.Sessions[0].State, listed.Sessions[0].Problem)
+	}
 	if listed.MaxSessions != 4 {
 		t.Fatalf("maxSessions = %d", listed.MaxSessions)
 	}
@@ -532,6 +535,9 @@ func TestTheStreamCarriesOutputKeystrokesAndTheExit(t *testing.T) {
 	}
 	if listed.Sessions[0].Exited.Code != 42 {
 		t.Fatalf("exit = %#v", listed.Sessions[0].Exited)
+	}
+	if listed.Sessions[0].State != api.TerminalSessionState("exited") {
+		t.Fatalf("state = %q, want exited", listed.Sessions[0].State)
 	}
 }
 

@@ -3,6 +3,7 @@ import type { TerminalForward, TerminalSession } from "../api/integrations";
 import { useTranslate, type Translate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Icon } from "../ui/icons";
+import { terminalProblemKey } from "./sessions";
 
 type ConsoleListProps = {
   sessions: TerminalSession[];
@@ -118,10 +119,17 @@ export function ConsoleList({
           onDrop={() => drop(null)}
         >
           {sessions.map((session, index) => {
-            const running = session.exited === undefined;
+            const running = session.state !== "exited";
             const destination = session.kind === "ssh" ? session.alias ?? "" : t("terminal.localhost");
-            const status = running
-              ? t("terminal.running")
+            const status = session.problem !== ""
+              ? t(terminalProblemKey(session.problem))
+              : session.state === "reconnecting"
+              ? t("terminal.reconnectingAttempt", {
+                  attempt: String(session.reconnect?.attempt ?? 1),
+                  limit: String(session.reconnect?.limit ?? 1),
+                })
+              : running
+                ? t(session.state === "connecting" ? "terminal.connecting" : "terminal.running")
               : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
             return (
               <li
@@ -158,7 +166,11 @@ export function ConsoleList({
 
                   <span
                     aria-hidden="true"
-                    className={`mt-1.5 size-1.5 shrink-0 rounded-full ${running ? "bg-live" : "bg-ink-faint"}`}
+                    className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
+                      session.state === "reconnecting" || session.state === "connecting"
+                        ? "bg-notice-ink"
+                        : running ? "bg-live" : "bg-ink-faint"
+                    }`}
                   />
                   <div className="min-w-0 grow">
                     {renaming === session.id ? (

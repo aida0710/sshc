@@ -46,7 +46,7 @@ test("moves workspace panes by drag and drop and saves the new placement", async
     if (request.method() === "POST") {
       const body = request.postDataJSON() as { alias?: string };
       const alias = body.alias ?? "bastion";
-      const session = { id: `${alias}-session`, kind: "ssh", alias, title: alias, startedAt: "2026-08-24T09:00:00Z", forwards: [] };
+      const session = { id: `${alias}-session`, kind: "ssh", alias, title: alias, startedAt: "2026-08-24T09:00:00Z", state: "connected", problem: "", forwards: [] };
       if (!sessions.some((item) => item.id === session.id)) sessions.push(session);
       await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ session, streamTicket: "fixture-stream-ticket" }) });
       return;
@@ -84,4 +84,52 @@ test("moves workspace panes by drag and drop and saves the new placement", async
   expect(layout.ratio).toBe(65);
   expect(layout.first.pane.alias).toBe("nas");
   expect(layout.second.pane.alias).toBe("bastion");
+});
+
+test("opens a saved workspace from Home only after the explicit action", async ({ page, installation }) => {
+  const opened: string[] = [];
+  const sessions: Array<Record<string, unknown>> = [];
+  await page.route("**/api/v1/workspaces**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const body = path.endsWith("/restore") ? { workspace: savedWorkspace } : { workspaces: [savedWorkspace] };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith("/stream")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ streamTicket: "fixture-stream-ticket" }) });
+      return;
+    }
+    if (request.method() === "POST") {
+      const alias = (request.postDataJSON() as { alias: string }).alias;
+      opened.push(alias);
+      const session = {
+        id: `${alias}-home-session`, kind: "ssh", alias, title: alias,
+        startedAt: "2026-08-24T09:00:00Z", state: "connected", problem: "", forwards: [],
+      };
+      sessions.push(session);
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ session, streamTicket: "fixture-stream-ticket" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sessions, maxSessions: 12 }) });
+  });
+
+  await openApplication(page, installation);
+  const workspaces = page.getByRole("list", { name: "Saved terminal workspaces" });
+  await expect(workspaces.getByText("Production", { exact: true })).toBeVisible();
+  await expect(workspaces.getByText(/2 panes/)).toBeVisible();
+  expect(opened).toEqual([]);
+
+  await workspaces.getByRole("button", { name: "Open workspace" }).click();
+  await expect(page).toHaveURL(/\/terminal$/);
+  await expect.poll(() => opened.sort()).toEqual(["bastion", "nas"]);
+  await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
+
+  await openSection(page, "Home");
+  await page.getByRole("list", { name: "Saved terminal workspaces" })
+    .getByRole("button", { name: "Open workspace" }).click();
+  await expect(page).toHaveURL(/\/terminal$/);
+  await expect.poll(() => opened.length).toBe(4);
+  await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
 });

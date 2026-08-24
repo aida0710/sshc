@@ -21,6 +21,7 @@ import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
 import { sftpApi } from "../sftp/api";
 import { absolutePathDraft, findBufferMatches, frequentCommandSuggestions, updateCommandDraft } from "./productivity";
+import { terminalProblemKey } from "./sessions";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -143,7 +144,7 @@ export function TerminalView({
       cols: 80,
       rows: 24,
       convertEol: false,
-      cursorBlink: session.exited === undefined,
+      cursorBlink: session.state !== "exited",
       fontFamily: fontStack(font ?? ""),
       fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
       theme: terminalTheme(container, hasBackground),
@@ -290,7 +291,7 @@ export function TerminalView({
             },
           });
           setLink({ phase: "live" });
-          if (session.exited === undefined) view.focus();
+          if (session.state !== "exited") view.focus();
           syncSize();
         })
         .catch((error: unknown) => {
@@ -381,7 +382,11 @@ export function TerminalView({
         <span
           aria-hidden="true"
           className={`size-2 shrink-0 rounded-full ${
-            session.exited !== undefined ? "bg-ink-faint" : link.phase === "live" ? "bg-live" : "bg-notice-ink"
+            session.state === "exited"
+              ? "bg-ink-faint"
+              : session.state === "reconnecting" || session.state === "connecting" || link.phase !== "live"
+                ? "bg-notice-ink"
+                : "bg-live"
           }`}
         />
         <p className="min-w-0 truncate font-mono text-xs font-semibold text-ink">{session.title}</p>
@@ -396,6 +401,21 @@ export function TerminalView({
       {problem === "" ? null : (
         <p role="status" className="shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
           {problem}
+        </p>
+      )}
+
+      {session.state !== "reconnecting" ? null : (
+        <p role="status" className="shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
+          {t("terminal.reconnectingAttempt", {
+            attempt: String(session.reconnect?.attempt ?? 1),
+            limit: String(session.reconnect?.limit ?? 1),
+          })}
+        </p>
+      )}
+
+      {session.problem === "" ? null : (
+        <p role="alert" className="shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
+          {t(terminalProblemKey(session.problem))}
         </p>
       )}
 

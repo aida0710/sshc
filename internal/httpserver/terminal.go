@@ -77,6 +77,16 @@ func describeSession(view terminal.View) api.TerminalSession {
 		Kind:      api.TerminalSessionKind(view.Kind),
 		Title:     view.Title,
 		StartedAt: view.Started.UTC().Format(time.RFC3339),
+		State:     api.TerminalSessionState(view.State),
+		Problem:   view.Problem,
+	}
+	if view.Reconnect != nil {
+		described.Reconnect = &api.TerminalReconnect{
+			Attempt: view.Reconnect.Attempt,
+			Limit:   view.Reconnect.Limit,
+			RetryAt: view.Reconnect.RetryAt.UTC(),
+			Problem: view.Reconnect.Problem,
+		}
 	}
 	if view.Alias != "" {
 		alias := view.Alias
@@ -230,6 +240,12 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 				}
 			}
 			return lifetime, nil
+		},
+		ReconnectError: func(err error) (bool, string) {
+			if code, requiresAction := connectProblem(err); requiresAction {
+				return false, code
+			}
+			return true, "reconnect_failed"
 		},
 	}, nil
 }
