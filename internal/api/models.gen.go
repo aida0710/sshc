@@ -68,6 +68,42 @@ func (e PullRequestResolve) Valid() bool {
 	}
 }
 
+// Defines values for SFTPCreateTransferJobRequestDirection.
+const (
+	SFTPCreateTransferJobRequestDirectionDownload SFTPCreateTransferJobRequestDirection = "download"
+	SFTPCreateTransferJobRequestDirectionUpload   SFTPCreateTransferJobRequestDirection = "upload"
+)
+
+// Valid indicates whether the value is a known member of the SFTPCreateTransferJobRequestDirection enum.
+func (e SFTPCreateTransferJobRequestDirection) Valid() bool {
+	switch e {
+	case SFTPCreateTransferJobRequestDirectionDownload:
+		return true
+	case SFTPCreateTransferJobRequestDirectionUpload:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SFTPCreateTransferJobRequestKind.
+const (
+	SFTPCreateTransferJobRequestKindFile   SFTPCreateTransferJobRequestKind = "file"
+	SFTPCreateTransferJobRequestKindFolder SFTPCreateTransferJobRequestKind = "folder"
+)
+
+// Valid indicates whether the value is a known member of the SFTPCreateTransferJobRequestKind enum.
+func (e SFTPCreateTransferJobRequestKind) Valid() bool {
+	switch e {
+	case SFTPCreateTransferJobRequestKindFile:
+		return true
+	case SFTPCreateTransferJobRequestKindFolder:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SFTPEntryType.
 const (
 	SFTPEntryTypeDirectory SFTPEntryType = "directory"
@@ -94,13 +130,124 @@ func (e SFTPEntryType) Valid() bool {
 
 // Defines values for SFTPMkdirRequestType.
 const (
-	SFTPMkdirRequestTypeDirectory SFTPMkdirRequestType = "directory"
+	Directory SFTPMkdirRequestType = "directory"
 )
 
 // Valid indicates whether the value is a known member of the SFTPMkdirRequestType enum.
 func (e SFTPMkdirRequestType) Valid() bool {
 	switch e {
-	case SFTPMkdirRequestTypeDirectory:
+	case Directory:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SFTPTransferJobDirection.
+const (
+	SFTPTransferJobDirectionDownload SFTPTransferJobDirection = "download"
+	SFTPTransferJobDirectionUpload   SFTPTransferJobDirection = "upload"
+)
+
+// Valid indicates whether the value is a known member of the SFTPTransferJobDirection enum.
+func (e SFTPTransferJobDirection) Valid() bool {
+	switch e {
+	case SFTPTransferJobDirectionDownload:
+		return true
+	case SFTPTransferJobDirectionUpload:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SFTPTransferJobKind.
+const (
+	File   SFTPTransferJobKind = "file"
+	Folder SFTPTransferJobKind = "folder"
+)
+
+// Valid indicates whether the value is a known member of the SFTPTransferJobKind enum.
+func (e SFTPTransferJobKind) Valid() bool {
+	switch e {
+	case File:
+		return true
+	case Folder:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SFTPTransferJobStatus.
+const (
+	SFTPTransferJobStatusCancelled      SFTPTransferJobStatus = "cancelled"
+	SFTPTransferJobStatusCompleted      SFTPTransferJobStatus = "completed"
+	SFTPTransferJobStatusFailed         SFTPTransferJobStatus = "failed"
+	SFTPTransferJobStatusNeedsOverwrite SFTPTransferJobStatus = "needs_overwrite"
+	SFTPTransferJobStatusPaused         SFTPTransferJobStatus = "paused"
+	SFTPTransferJobStatusQueued         SFTPTransferJobStatus = "queued"
+	SFTPTransferJobStatusReattach       SFTPTransferJobStatus = "reattach"
+	SFTPTransferJobStatusRunning        SFTPTransferJobStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the SFTPTransferJobStatus enum.
+func (e SFTPTransferJobStatus) Valid() bool {
+	switch e {
+	case SFTPTransferJobStatusCancelled:
+		return true
+	case SFTPTransferJobStatusCompleted:
+		return true
+	case SFTPTransferJobStatusFailed:
+		return true
+	case SFTPTransferJobStatusNeedsOverwrite:
+		return true
+	case SFTPTransferJobStatusPaused:
+		return true
+	case SFTPTransferJobStatusQueued:
+		return true
+	case SFTPTransferJobStatusReattach:
+		return true
+	case SFTPTransferJobStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SFTPTransferJobActionRequestAction.
+const (
+	Cancel         SFTPTransferJobActionRequestAction = "cancel"
+	Complete       SFTPTransferJobActionRequestAction = "complete"
+	Fail           SFTPTransferJobActionRequestAction = "fail"
+	NeedsOverwrite SFTPTransferJobActionRequestAction = "needs_overwrite"
+	Pause          SFTPTransferJobActionRequestAction = "pause"
+	Progress       SFTPTransferJobActionRequestAction = "progress"
+	Resume         SFTPTransferJobActionRequestAction = "resume"
+	Retry          SFTPTransferJobActionRequestAction = "retry"
+	Start          SFTPTransferJobActionRequestAction = "start"
+)
+
+// Valid indicates whether the value is a known member of the SFTPTransferJobActionRequestAction enum.
+func (e SFTPTransferJobActionRequestAction) Valid() bool {
+	switch e {
+	case Cancel:
+		return true
+	case Complete:
+		return true
+	case Fail:
+		return true
+	case NeedsOverwrite:
+		return true
+	case Pause:
+		return true
+	case Progress:
+		return true
+	case Resume:
+		return true
+	case Retry:
+		return true
+	case Start:
 		return true
 	default:
 		return false
@@ -130,25 +277,25 @@ func (e SnippetJobStatus) Valid() bool {
 
 // Defines values for SnippetTargetResultStatus.
 const (
-	Cancelled SnippetTargetResultStatus = "cancelled"
-	Failed    SnippetTargetResultStatus = "failed"
-	Queued    SnippetTargetResultStatus = "queued"
-	Running   SnippetTargetResultStatus = "running"
-	Succeeded SnippetTargetResultStatus = "succeeded"
+	SnippetTargetResultStatusCancelled SnippetTargetResultStatus = "cancelled"
+	SnippetTargetResultStatusFailed    SnippetTargetResultStatus = "failed"
+	SnippetTargetResultStatusQueued    SnippetTargetResultStatus = "queued"
+	SnippetTargetResultStatusRunning   SnippetTargetResultStatus = "running"
+	SnippetTargetResultStatusSucceeded SnippetTargetResultStatus = "succeeded"
 )
 
 // Valid indicates whether the value is a known member of the SnippetTargetResultStatus enum.
 func (e SnippetTargetResultStatus) Valid() bool {
 	switch e {
-	case Cancelled:
+	case SnippetTargetResultStatusCancelled:
 		return true
-	case Failed:
+	case SnippetTargetResultStatusFailed:
 		return true
-	case Queued:
+	case SnippetTargetResultStatusQueued:
 		return true
-	case Running:
+	case SnippetTargetResultStatusRunning:
 		return true
-	case Succeeded:
+	case SnippetTargetResultStatusSucceeded:
 		return true
 	default:
 		return false
@@ -1166,6 +1313,24 @@ type SFTPCompleteUploadRequest struct {
 	Size             int64  `json:"size"`
 }
 
+// SFTPCreateTransferJobRequest defines model for SFTPCreateTransferJobRequest.
+type SFTPCreateTransferJobRequest struct {
+	Alias      string                                `json:"alias"`
+	BatchId    string                                `json:"batchId"`
+	Direction  SFTPCreateTransferJobRequestDirection `json:"direction"`
+	Id         string                                `json:"id"`
+	Kind       SFTPCreateTransferJobRequestKind      `json:"kind"`
+	Name       string                                `json:"name"`
+	RemotePath string                                `json:"remotePath"`
+	TotalBytes int64                                 `json:"totalBytes"`
+}
+
+// SFTPCreateTransferJobRequestDirection defines model for SFTPCreateTransferJobRequest.Direction.
+type SFTPCreateTransferJobRequestDirection string
+
+// SFTPCreateTransferJobRequestKind defines model for SFTPCreateTransferJobRequest.Kind.
+type SFTPCreateTransferJobRequestKind string
+
 // SFTPEntry defines model for SFTPEntry.
 type SFTPEntry struct {
 	Mode       string        `json:"mode"`
@@ -1236,6 +1401,52 @@ type SFTPTransfer struct {
 	Bytes    int64  `json:"bytes"`
 	Path     string `json:"path"`
 	Revision string `json:"revision"`
+}
+
+// SFTPTransferJob defines model for SFTPTransferJob.
+type SFTPTransferJob struct {
+	Alias            string                   `json:"alias"`
+	Attempt          int                      `json:"attempt"`
+	BatchId          string                   `json:"batchId"`
+	BytesPerSecond   float64                  `json:"bytesPerSecond"`
+	CreatedAt        time.Time                `json:"createdAt"`
+	Direction        SFTPTransferJobDirection `json:"direction"`
+	Id               string                   `json:"id"`
+	Kind             SFTPTransferJobKind      `json:"kind"`
+	Name             string                   `json:"name"`
+	Problem          string                   `json:"problem"`
+	RemainingSeconds int64                    `json:"remainingSeconds"`
+	RemotePath       string                   `json:"remotePath"`
+	Status           SFTPTransferJobStatus    `json:"status"`
+	TotalBytes       int64                    `json:"totalBytes"`
+	TransferredBytes int64                    `json:"transferredBytes"`
+	UpdatedAt        time.Time                `json:"updatedAt"`
+}
+
+// SFTPTransferJobDirection defines model for SFTPTransferJob.Direction.
+type SFTPTransferJobDirection string
+
+// SFTPTransferJobKind defines model for SFTPTransferJob.Kind.
+type SFTPTransferJobKind string
+
+// SFTPTransferJobStatus defines model for SFTPTransferJob.Status.
+type SFTPTransferJobStatus string
+
+// SFTPTransferJobActionRequest defines model for SFTPTransferJobActionRequest.
+type SFTPTransferJobActionRequest struct {
+	Action           SFTPTransferJobActionRequestAction `json:"action"`
+	Problem          *string                            `json:"problem,omitempty"`
+	ResetProgress    *bool                              `json:"resetProgress,omitempty"`
+	TransferredBytes *int64                             `json:"transferredBytes,omitempty"`
+}
+
+// SFTPTransferJobActionRequestAction defines model for SFTPTransferJobActionRequest.Action.
+type SFTPTransferJobActionRequestAction string
+
+// SFTPTransferJobList defines model for SFTPTransferJobList.
+type SFTPTransferJobList struct {
+	Jobs          []SFTPTransferJob `json:"jobs"`
+	MaxConcurrent int               `json:"maxConcurrent"`
 }
 
 // Setting defines model for Setting.
@@ -1885,6 +2096,12 @@ type PlanRemoteKeyRegistrationJSONRequestBody = RemoteKeyPlanRequest
 
 // RegisterRemoteKeyJSONRequestBody defines body for RegisterRemoteKey for application/json ContentType.
 type RegisterRemoteKeyJSONRequestBody = RemoteKeyRegisterRequest
+
+// CreateSFTPTransferJobJSONRequestBody defines body for CreateSFTPTransferJob for application/json ContentType.
+type CreateSFTPTransferJobJSONRequestBody = SFTPCreateTransferJobRequest
+
+// UpdateSFTPTransferJobJSONRequestBody defines body for UpdateSFTPTransferJob for application/json ContentType.
+type UpdateSFTPTransferJobJSONRequestBody = SFTPTransferJobActionRequest
 
 // CreateSFTPDirectoryJSONRequestBody defines body for CreateSFTPDirectory for application/json ContentType.
 type CreateSFTPDirectoryJSONRequestBody = SFTPMkdirRequest

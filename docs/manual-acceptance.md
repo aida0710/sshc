@@ -92,8 +92,11 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 3. 別のフォルダをアップロードし、既存名へ衝突させる。上書き確認で1件を上書きし、別の1件をskipして、残りが続行されることを確認する。別の転送では取消し、未開始fileが送られないことを確認する。
 4. textをMonacoで開き、別のSSH sessionから内容を変更した後に保存して、競合として拒否されることを確認する。
 5. file download、directoryのZIP download、rename、空directoryの作成と削除を確認する。非空directoryが再帰削除されないことも確認する。
-6. 2 MiBを超えるfileをuploadし、転送中にpauseしてからresumeする。別画面へ移動して戻っても同じjobとbytes進捗が残り、完了前はtarget名のfileが見えず、完了後だけ一覧へ現れることを確認する。
-7. 転送中にnetworkを一時的に切り、uploadがremote offsetから、file downloadがHTTP Rangeから再開することを確認する。folder ZIPはresume対象外であることも確認する。
+6. upload／file download／folder downloadを3件以上追加し、Transfer Managerが同時2件だけを実行すること、fileごとにbytes、速度、残り時間、attempt、statusを表示することを確認する。
+7. 2 MiBを超えるfileをuploadし、転送中にpauseしてからresumeする。別画面へ移動して戻っても同じjobとbytes進捗が残り、完了前はtarget名のfileが見えず、完了後だけ一覧へ現れ、別画面でも完了通知が出ることを確認する。
+8. folder uploadのうち1 fileだけを失敗させ、batchの「失敗のみ再試行」で成功済みfileを再送せず失敗fileだけattemptが増えることを確認する。
+9. 転送中にnetworkを一時的に切り、uploadがremote part sizeから、file downloadがHTTP Rangeから再開することを確認する。folder ZIPはretry時に先頭からやり直すことも確認する。
+10. pause／resume／retry／cancelをuploadとfile downloadで試し、cancelしたuploadのpart fileが削除されること、失敗通知を閉じられることを確認する。
 8. fileとdirectoryの権限をchmodで変更し、一覧の権限・更新日時・種別列とsortを確認する。symlinkにはchmodが表示されないことを確認する。
 9. 作成したfileとdirectoryを削除して原状復帰する。
 

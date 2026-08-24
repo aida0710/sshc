@@ -30,6 +30,37 @@ export type ResumableUpload = {
   expectedRevision: string;
 };
 
+export type TransferDirection = "upload" | "download";
+export type TransferKind = "file" | "folder";
+export type TransferJobStatus = "queued" | "running" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
+export type TransferJobAction = "start" | "pause" | "resume" | "retry" | "cancel" | "progress" | "complete" | "fail" | "needs_overwrite";
+
+export type TransferJob = {
+  id: string;
+  batchId: string;
+  alias: string;
+  direction: TransferDirection;
+  kind: TransferKind;
+  name: string;
+  remotePath: string;
+  totalBytes: number;
+  transferredBytes: number;
+  bytesPerSecond: number;
+  remainingSeconds: number;
+  status: TransferJobStatus;
+  attempt: number;
+  problem: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateTransferJob = Pick<TransferJob, "id" | "batchId" | "alias" | "direction" | "kind" | "name" | "remotePath" | "totalBytes">;
+
+export type StreamDownloadOptions = {
+  signal?: AbortSignal;
+  onChunk: (chunk: Uint8Array, total: number | null) => void;
+};
+
 function pathFor(alias: string, suffix: string, remotePath: string): string {
   return `/api/v1/sftp/${encodeURIComponent(alias)}/${suffix}?path=${encodeURIComponent(remotePath)}`;
 }
@@ -62,7 +93,39 @@ function resumableUpload(value: unknown): ResumableUpload {
   };
 }
 
+function transferJob(value: unknown): TransferJob {
+  const job = asRecord(value);
+  const direction = asString(job.direction);
+  const kind = asString(job.kind);
+  const status = asString(job.status);
+  if ((direction !== "upload" && direction !== "download") || (kind !== "file" && kind !== "folder") ||
+      !["queued", "running", "paused", "reattach", "needs_overwrite", "completed", "failed", "cancelled"].includes(status)) {
+    throw new Error("invalid_response");
+  }
+  return {
+    id: asString(job.id), batchId: asString(job.batchId), alias: asString(job.alias), direction, kind,
+    name: asString(job.name), remotePath: asString(job.remotePath), totalBytes: asNumber(job.totalBytes),
+    transferredBytes: asNumber(job.transferredBytes), bytesPerSecond: asNumber(job.bytesPerSecond),
+    remainingSeconds: asNumber(job.remainingSeconds), status: status as TransferJobStatus,
+    attempt: asNumber(job.attempt), problem: asString(job.problem), createdAt: asString(job.createdAt), updatedAt: asString(job.updatedAt),
+  };
+}
+
 export const sftpApi = {
+  async listTransfers(): Promise<{ maxConcurrent: number; jobs: TransferJob[] }> {
+    const value = asRecord(await apiClient.read("/api/v1/sftp/transfers"));
+    return { maxConcurrent: asNumber(value.maxConcurrent), jobs: asArray(value.jobs).map(transferJob) };
+  },
+  async createTransfer(input: CreateTransferJob): Promise<TransferJob> {
+    return transferJob(await apiClient.mutate<unknown>("/api/v1/sftp/transfers", {
+      method: "POST", headers: jsonHeaders, body: JSON.stringify(input),
+    }));
+  },
+  async updateTransfer(id: string, action: TransferJobAction, options: { transferredBytes?: number; problem?: string; resetProgress?: boolean } = {}): Promise<TransferJob> {
+    return transferJob(await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/actions`, {
+      method: "POST", headers: jsonHeaders, body: JSON.stringify({ action, ...options }),
+    }));
+  },
   async list(alias: string, remotePath: string): Promise<{ path: string; entries: RemoteEntry[] }> {
     const value = asRecord(await apiClient.read(pathFor(alias, "entries", remotePath)));
     return { path: asString(value.path), entries: asArray(value.entries).map(entry) };
@@ -139,41 +202,31 @@ export const sftpApi = {
       method: "DELETE",
     });
   },
-  async download(alias: string, remotePath: string, directory = false, options: TransferOptions = {}): Promise<number> {
-    const chunks: Uint8Array[] = [];
-    let bytes = 0;
-    let total: number | null = null;
-    let failures = 0;
-    while (true) {
-      try {
-        const headers = !directory && bytes > 0 ? { Range: `bytes=${bytes}-` } : undefined;
-        const response = await apiClient.send(pathFor(alias, directory ? "archive" : "download", remotePath), {
-          method: "GET", ...(headers === undefined ? {} : { headers }), ...(options.signal === undefined ? {} : { signal: options.signal }),
-        });
-        if (!response.ok || (!directory && bytes > 0 && response.status !== 206)) throw new Error("download_failed");
-        const length = Number(response.headers.get("Content-Length"));
-        if (total === null && Number.isFinite(length) && length >= 0) total = bytes + length;
-        if (response.body === null) {
-          const buffer = new Uint8Array(await (await response.blob()).arrayBuffer());
-          chunks.push(buffer);
-          bytes += buffer.byteLength;
-          options.onProgress?.(bytes, total);
-        } else {
-          const reader = response.body.getReader();
-          while (true) {
-            const next = await reader.read();
-            if (next.done) break;
-            chunks.push(next.value);
-            bytes += next.value.byteLength;
-            options.onProgress?.(bytes, total);
-          }
-        }
-        break;
-      } catch (error) {
-        if (directory || options.signal?.aborted || failures >= 2) throw error;
-        failures += 1;
-      }
+  async streamDownload(alias: string, remotePath: string, directory: boolean, offset: number, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }> {
+    const headers = !directory && offset > 0 ? { Range: `bytes=${offset}-` } : undefined;
+    const response = await apiClient.send(pathFor(alias, directory ? "archive" : "download", remotePath), {
+      method: "GET", ...(headers === undefined ? {} : { headers }), ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
+    if (!response.ok || (!directory && offset > 0 && response.status !== 206)) throw new Error("download_failed");
+    const length = Number(response.headers.get("Content-Length"));
+    const total = Number.isFinite(length) && length >= 0 ? offset + length : null;
+    let bytes = offset;
+    if (response.body === null) {
+      const chunk = new Uint8Array(await (await response.blob()).arrayBuffer());
+      bytes += chunk.byteLength;
+      options.onChunk(chunk, total);
+      return { bytes, total };
     }
+    const reader = response.body.getReader();
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      bytes += next.value.byteLength;
+      options.onChunk(next.value, total);
+    }
+    return { bytes, total };
+  },
+  saveDownload(remotePath: string, directory: boolean, chunks: Uint8Array[]): void {
     const blob = new Blob(chunks as BlobPart[], { type: directory ? "application/zip" : "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -181,6 +234,32 @@ export const sftpApi = {
     anchor.download = `${remotePath.split("/").filter(Boolean).at(-1) ?? "download"}${directory ? ".zip" : ""}`;
     anchor.click();
     URL.revokeObjectURL(url);
+  },
+  async download(alias: string, remotePath: string, directory = false, options: TransferOptions = {}): Promise<number> {
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    let total: number | null = null;
+    let failures = 0;
+    while (true) {
+      try {
+        const streamed = await this.streamDownload(alias, remotePath, directory, bytes, {
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+          onChunk: (chunk, reportedTotal) => {
+            chunks.push(chunk);
+            bytes += chunk.byteLength;
+            total = reportedTotal ?? total;
+            options.onProgress?.(bytes, total);
+          },
+        });
+        bytes = streamed.bytes;
+        total = streamed.total ?? total;
+        break;
+      } catch (error) {
+        if (directory || options.signal?.aborted || failures >= 2) throw error;
+        failures += 1;
+      }
+    }
+    this.saveDownload(remotePath, directory, chunks);
     return bytes;
   },
   async chmod(alias: string, remotePath: string, mode: string, expectedRevision: string): Promise<RemoteEntry> {
