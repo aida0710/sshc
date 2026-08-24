@@ -25,6 +25,8 @@ const (
 	ActionRemoteKeyRegister = "remote_key.register"
 	ActionRevealPrivateKey  = "private_key.reveal"
 	ActionPurgeTrashEntry   = "trash.purge"
+	ActionSFTPDelete        = "sftp.delete"
+	ActionSnippetExecute    = "snippet.execute"
 )
 
 var (
@@ -43,6 +45,8 @@ var knownActionKinds = map[string]bool{
 	ActionRemoteKeyRegister: true,
 	ActionRevealPrivateKey:  true,
 	ActionPurgeTrashEntry:   true,
+	ActionSFTPDelete:        true,
+	ActionSnippetExecute:    true,
 }
 
 // KnownActionKind は、kind がこのアプリケーションのいずれかの確認対象となる操作か

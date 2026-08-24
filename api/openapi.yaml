@@ -1319,6 +1319,149 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/entries:
+    parameters: &sftpAlias
+      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+    get:
+      operationId: listSFTPEntries
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Remote directory listing, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPListing" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSFTPDirectory
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPMkdirRequest" } } } }
+      responses:
+        "201": { description: Directory created, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/text:
+    parameters: *sftpAlias
+    get:
+      operationId: readSFTPText
+      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: Editable UTF-8 file, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTextFile" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: saveSFTPText
+      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPSaveTextRequest" } } } }
+      responses:
+        "200": { description: Text saved atomically, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTextFile" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/download:
+    parameters: *sftpAlias
+    get:
+      operationId: downloadSFTPFile
+      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: Remote file bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/upload:
+    parameters: *sftpAlias
+    post:
+      operationId: uploadSFTPFile
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: overwrite, in: query, required: true, schema: { type: boolean } }
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary, maxLength: 2097152 } } } }
+      responses:
+        "201": { description: File uploaded atomically, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransfer" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/entry:
+    parameters: *sftpAlias
+    patch:
+      operationId: renameSFTPEntry
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPRenameRequest" } } } }
+      responses:
+        "200": { description: Entry renamed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSFTPEntry
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Entry deleted, content: { application/json: { schema: { $ref: "#/components/schemas/ChangedResponse" } } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/workspaces:
+    get:
+      operationId: listTerminalWorkspaces
+      responses:
+        "200": { description: Device-local terminal workspaces, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceList" } } } }
+    post:
+      operationId: createTerminalWorkspace
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceDefinition" } } } }
+      responses:
+        "201": { description: Workspace saved, content: { application/json: { schema: { $ref: "#/components/schemas/TerminalWorkspace" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/workspaces/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, maxLength: 64 } } ]
+    get:
+      operationId: getTerminalWorkspace
+      responses: { "200": { description: Saved workspace, content: { application/json: { schema: { $ref: "#/components/schemas/TerminalWorkspace" } } } }, "404": { $ref: "#/components/responses/Problem" } }
+    put:
+      operationId: updateTerminalWorkspace
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceDefinition" } } } }
+      responses: { "200": { description: Updated workspace, content: { application/json: { schema: { $ref: "#/components/schemas/TerminalWorkspace" } } } }, "404": { $ref: "#/components/responses/Problem" } }
+    delete:
+      operationId: deleteTerminalWorkspace
+      responses: { "200": { description: Workspace deleted, content: { application/json: { schema: { $ref: "#/components/schemas/ChangedResponse" } } } }, "404": { $ref: "#/components/responses/Problem" } }
+  /api/v1/workspaces/{id}/restore:
+    post:
+      operationId: restoreTerminalWorkspace
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, maxLength: 64 } } ]
+      responses: { "200": { description: Layout and explicit reconnect plan, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceRestorePlan" } } } }, "404": { $ref: "#/components/responses/Problem" } }
+  /api/v1/snippets:
+    get:
+      operationId: listSnippets
+      responses: { "200": { description: Snippet library, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetLibrary" } } } } }
+    post:
+      operationId: createSnippet
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetDraft" } } } }
+      responses: { "201": { description: Snippet created, content: { application/json: { schema: { $ref: "#/components/schemas/Snippet" } } } }, "400": { $ref: "#/components/responses/Problem" } }
+  /api/v1/snippets/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, maxLength: 64 } } ]
+    put:
+      operationId: updateSnippet
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetDraft" } } } }
+      responses: { "200": { description: Snippet updated, content: { application/json: { schema: { $ref: "#/components/schemas/Snippet" } } } }, "404": { $ref: "#/components/responses/Problem" } }
+    delete:
+      operationId: deleteSnippet
+      responses: { "200": { description: Snippet deleted, content: { application/json: { schema: { $ref: "#/components/schemas/ChangedResponse" } } } }, "404": { $ref: "#/components/responses/Problem" } }
+  /api/v1/snippets/startup/{alias}:
+    put:
+      operationId: setStartupSnippet
+      parameters: [ { name: alias, in: path, required: true, schema: { type: string, maxLength: 255 } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/StartupSnippetRequest" } } } }
+      responses: { "200": { description: Startup assignment updated, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetLibrary" } } } }, "400": { $ref: "#/components/responses/Problem" } }
+  /api/v1/snippets/preview:
+    post:
+      operationId: previewSnippetExecution
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetPreviewRequest" } } } }
+      responses: { "200": { description: Exact targets and commands plus one-time action token, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetPreview" } } } }, "400": { $ref: "#/components/responses/Problem" } }
+  /api/v1/snippets/jobs:
+    post:
+      operationId: executeSnippet
+      parameters: [ { name: X-SSHC-Action, in: header, required: true, schema: { type: string } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetExecuteRequest" } } } }
+      responses: { "202": { description: Execution job started, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetJob" } } } }, "403": { $ref: "#/components/responses/Problem" }, "409": { $ref: "#/components/responses/Problem" } }
+  /api/v1/snippets/jobs/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string, maxLength: 64 } } ]
+    get:
+      operationId: getSnippetJob
+      responses: { "200": { description: Per-host execution state, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetJob" } } } }, "404": { $ref: "#/components/responses/Problem" } }
+    delete:
+      operationId: cancelSnippetJob
+      responses: { "202": { description: Cancellation requested, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetJob" } } } }, "404": { $ref: "#/components/responses/Problem" } }
 components:
   schemas:
     BootstrapResponse:
@@ -2977,6 +3120,231 @@ components:
       required: [status]
       properties:
         status: { type: string, enum: [ok], x-go-type: string }
+    ChangedResponse:
+      type: object
+      additionalProperties: false
+      required: [changed]
+      properties: { changed: { type: boolean } }
+    SFTPEntry:
+      type: object
+      additionalProperties: false
+      required: [name, path, type, size, mode, modifiedAt, revision]
+      properties:
+        name: { type: string }
+        path: { type: string }
+        type: { type: string, enum: [file, directory, symlink, other] }
+        size: { type: integer, format: int64, minimum: 0 }
+        mode: { type: string }
+        modifiedAt: { type: string, format: date-time }
+        revision: { type: string }
+    SFTPListing:
+      type: object
+      additionalProperties: false
+      required: [path, entries]
+      properties:
+        path: { type: string }
+        entries: { type: array, items: { $ref: "#/components/schemas/SFTPEntry" } }
+    SFTPTextFile:
+      type: object
+      additionalProperties: false
+      required: [entry, contents, revision]
+      properties:
+        entry: { $ref: "#/components/schemas/SFTPEntry" }
+        contents: { type: string, maxLength: 2097152 }
+        revision: { type: string }
+    SFTPSaveTextRequest:
+      type: object
+      additionalProperties: false
+      required: [contents, expectedRevision]
+      properties:
+        contents: { type: string, maxLength: 2097152 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPMkdirRequest:
+      type: object
+      additionalProperties: false
+      required: [path, type]
+      properties:
+        path: { type: string }
+        type: { type: string, enum: [directory] }
+    SFTPRenameRequest:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties: { from: { type: string }, to: { type: string } }
+    SFTPTransfer:
+      type: object
+      additionalProperties: false
+      required: [path, bytes, revision]
+      properties:
+        path: { type: string }
+        bytes: { type: integer, format: int64, minimum: 0 }
+        revision: { type: string }
+    WorkspacePane:
+      type: object
+      additionalProperties: false
+      required: [id, alias]
+      properties: { id: { type: string }, alias: { type: string } }
+    WorkspaceSplit:
+      type: object
+      additionalProperties: false
+      required: [direction, ratio, first, second]
+      properties:
+        direction: { type: string, enum: [horizontal, vertical] }
+        ratio: { type: integer, minimum: 10, maximum: 90 }
+        first: { $ref: "#/components/schemas/WorkspaceNode" }
+        second: { $ref: "#/components/schemas/WorkspaceNode" }
+    WorkspaceNode:
+      type: object
+      additionalProperties: false
+      properties:
+        pane: { $ref: "#/components/schemas/WorkspacePane" }
+        split: { $ref: "#/components/schemas/WorkspaceSplit" }
+    WorkspaceDefinition:
+      type: object
+      additionalProperties: false
+      required: [name, layout, focusedPaneId]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        layout: { $ref: "#/components/schemas/WorkspaceNode" }
+        focusedPaneId: { type: string }
+    TerminalWorkspace:
+      allOf:
+        - { $ref: "#/components/schemas/WorkspaceDefinition" }
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    WorkspaceList:
+      type: object
+      additionalProperties: false
+      required: [workspaces]
+      properties: { workspaces: { type: array, items: { $ref: "#/components/schemas/TerminalWorkspace" } } }
+    WorkspaceReconnectPane:
+      type: object
+      additionalProperties: false
+      required: [paneId, alias, state]
+      properties:
+        paneId: { type: string }
+        alias: { type: string }
+        state: { type: string, enum: [reconnect_required] }
+    WorkspaceRestorePlan:
+      type: object
+      additionalProperties: false
+      required: [workspace, panes]
+      properties:
+        workspace: { $ref: "#/components/schemas/TerminalWorkspace" }
+        panes: { type: array, items: { $ref: "#/components/schemas/WorkspaceReconnectPane" } }
+    SnippetVariable:
+      type: object
+      additionalProperties: false
+      required: [name, type]
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [string, integer, boolean, secret] }
+        required: { type: boolean }
+        default: { type: string }
+        description: { type: string }
+    SnippetDraft:
+      type: object
+      additionalProperties: false
+      required: [name, description, command, variables]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 96 }
+        description: { type: string, maxLength: 2048 }
+        command: { type: string, minLength: 1, maxLength: 65536 }
+        variables: { type: array, maxItems: 32, items: { $ref: "#/components/schemas/SnippetVariable" } }
+    Snippet:
+      allOf:
+        - { $ref: "#/components/schemas/SnippetDraft" }
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    StartupSnippet:
+      type: object
+      additionalProperties: false
+      required: [alias, snippetId]
+      properties:
+        alias: { type: string }
+        snippetId: { type: string }
+        inputs: { type: object, additionalProperties: { type: string } }
+    StartupSnippetRequest:
+      type: object
+      additionalProperties: false
+      required: [snippetId, inputs]
+      properties:
+        snippetId: { type: string }
+        inputs: { type: object, additionalProperties: { type: string } }
+    SnippetLibrary:
+      type: object
+      additionalProperties: false
+      required: [snippets, startup]
+      properties:
+        snippets: { type: array, items: { $ref: "#/components/schemas/Snippet" } }
+        startup: { type: array, items: { $ref: "#/components/schemas/StartupSnippet" } }
+    SnippetPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [snippetId, aliases, inputs]
+      properties:
+        snippetId: { type: string }
+        aliases: { type: array, minItems: 1, maxItems: 64, items: { type: string } }
+        inputs: { type: object, additionalProperties: { type: string } }
+    SnippetPreviewTarget:
+      type: object
+      additionalProperties: false
+      required: [target, command]
+      properties:
+        target:
+          type: object
+          additionalProperties: false
+          required: [alias, hostName, user, port]
+          properties: { alias: { type: string }, hostName: { type: string }, user: { type: string }, port: { type: string } }
+        command: { type: string }
+    SnippetPreview:
+      type: object
+      additionalProperties: false
+      required: [snippetId, evidence, targets, actionToken, actionExpiresAt]
+      properties:
+        snippetId: { type: string }
+        evidence: { type: string }
+        targets: { type: array, items: { $ref: "#/components/schemas/SnippetPreviewTarget" } }
+        actionToken: { type: string }
+        actionExpiresAt: { type: string, format: date-time }
+    SnippetExecuteRequest:
+      allOf:
+        - { $ref: "#/components/schemas/SnippetPreviewRequest" }
+        - type: object
+          required: [evidence, concurrency]
+          properties:
+            evidence: { type: string }
+            concurrency: { type: integer, minimum: 1, maximum: 8 }
+    SnippetTargetResult:
+      type: object
+      additionalProperties: false
+      required: [alias, status]
+      properties:
+        alias: { type: string }
+        status: { type: string, enum: [queued, running, succeeded, failed, cancelled] }
+        exitCode: { type: integer }
+        stdout: { type: string }
+        stderr: { type: string }
+        truncated: { type: boolean }
+        problem: { type: string }
+    SnippetJob:
+      type: object
+      additionalProperties: false
+      required: [id, status, startedAt, results]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [running, completed, cancelled] }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+        results: { type: array, items: { $ref: "#/components/schemas/SnippetTargetResult" } }
   responses:
     Problem:
       description: Request rejected

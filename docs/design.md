@@ -226,6 +226,17 @@
 - 応答に載せる `ssh` の出力は上限つきで、ホームディレクトリのパスを `~` に置換してから返します。利用者のアカウント名を応答本文へ持ち出さないためです。
 - 自動テストは実リモートホストと利用者の `~/.ssh` を使用しません。例外は、一時ディレクトリの fixture に対して `ssh -G -F` を実行する差分テスト（`ssh` がない場合は skip）と、実 PTY で `/bin/echo` を起動するテスト 1 件です。前者はこの解決器と OpenSSH の結果を比較する検査専用経路で、製品コードからは使用しません。後者もリモートホストと利用者設定にはアクセスしません。
 
+## SFTP、Workspace、Snippets の境界
+
+- SFTP はターミナル channel と同じ接続設定、vault、`known_hosts`、`ProxyJump` chain を使いますが、現在の対話ターミナルの transport 自体は共有しません。各 API 操作に専用の非対話 SSH transport と SFTP subsystem を開き、処理後に全 hop を閉じます。未知のホスト鍵は常に拒否するため、最初の確認はターミナル接続で行う必要があります。
+- リモート editor は UTF-8 の通常ファイルだけを扱い、上限は 2 MiB です。バイナリまたは大きなファイルは download を使用します。save は読み込み時の revision と現在の stat を比較して外部変更を検出し、同じ directory の一時ファイルを書いて rename します。既存 mode は維持します。delete は表示した stat に紐づく単回 action token が必要で、directory の再帰削除と symlink の追跡はしません。
+- uploadはinputの複数選択とDrag & Dropを同じ経路へ集約し、ファイルごとに独立したAPI要求として順番に送ります。1件が失敗しても残りを続け、各ファイルの結果を画面へ残します。既存ファイルは暗黙に上書きしません。
+- Monaco Editor は Files 画面を開いたときだけ読み込みます。editor worker は build に同梱して同一 origin から読み込み、blob URL や CDN は使用しません。従来の `script-src 'self'` と Trusted Types の方針は維持します。
+- Workspace は alias、分割木、比率、focus だけを `~/.ssh/sshc/workspaces.json` に保存します。terminal session ID、scrollback、remote process は保存せず、再オープンは各 alias への新しい接続になります。このファイルは端末固有で、世代 backup と remote snapshot の対象外です。Broadcast Input は明示的な toggle が有効な間、キー入力を workspace 内の全 pane へ同じ byte 列で送ります。
+- Snippet library と startup binding は `~/.ssh/sshc/snippets.json` に保存し、暗号化された remote snapshot の対象です。command には `{{name}}` 形式の変数を使用できます。secret 型の入力値は保存も応答もせず、結果表示では伏せます。command 本文へ直接書かれた秘密までは識別できないため、本文に秘密を保存してはいけません。
+- 複数ホスト実行は、解決済みの接続先と展開後 command を preview に表示し、その evidence に紐づく単回 action token を消費して開始します。1 job は最大 64 targets、既定の並列数は 4（上限 8）で、server shutdown と利用者の cancel に追従します。各 target は専用の非対話 SSH execution を使用し、出力と結果数には上限があります。
+- Startup snippet は alias ごとの opt-in です。secret 変数を持つ snippet は設定できず、必要な通常変数は binding に保存します。初回接続と自動再接続の双方で、認証および remote shell の準備完了を `Ready` channel で確認してから command と carriage return を送ります。認証 prompt へ command を誤送信しません。
+
 ## 強化とリリースの境界
 
 - リクエスト本文には二段の上限があります。middleware の `MaxRequestBodyCeiling`（2 MiB）が全 `/api/` 要求の天井で、各ハンドラーはさらに小さい上限を持ちます。宣言された `Content-Length` が天井を超える要求はハンドラーへ届く前に 413 で拒否し、長さを宣言しない chunked 要求は読み取り自体を天井で打ち切ります。本文を読まないルート（`/api/v1/diagnostics/config` や `/api/v1/keys/{keyId}/trash`）にも同じ天井が掛かるのは前者のためです。
@@ -236,6 +247,7 @@
 - 配布物は UI を埋め込んだ単一バイナリです。`otool -L` はシステムライブラリのみを表示し、同梱ランタイムはありません。`make e2e` は毎回ビルドし直した実バイナリを Playwright で駆動するため、埋め込み済み UI が古いままだと E2E が失敗します。
 - `make verify-generated` は `api/openapi.yaml` から Go と TypeScript の型を再生成し、コミット済みの生成物と一致しなければ失敗します。生成物を手で編集してはいけません。
 - 自動テストは実際の `~/.ssh`、ssh-agent、リモートホストへ一切触れません。実バイナリを起動する試験でも `HOME` は一時ディレクトリです。実際に外部へ影響する操作（実接続、実 `authorized_keys` 変更、実ホストへのホスト鍵取得）は `docs/manual-acceptance.md` の手動試験に分離しています。`internal/sshclient` は 127.0.0.1 に立てたプロセス内の SSH サーバーと本物の握手を行いますが、そこもリモートではありません。
+- `make integration`は固定digestのOpenSSHコンテナに対してSFTP subsystemを実際に開き、upload／download／text save／競合拒否／rename／list／deleteを往復します。環境変数がない通常の`go test ./...`ではskipし、利用者のホストへ接続しません。
 - 設計 §12 の完成条件は `go test ./internal/acceptance -run TestDesignCompletionConditions -v` で一覧できます。各条件について、それを証明するテスト名とコマンド名、そして自動化が届かない範囲を出力します。13 行のうち 7 行が自動テストのみで成立し、5 行は自動化が越えてはならない境界で止まり、1 行は OpenSSH が入っている場合にのみ証明されます。
 - `internal/acceptance` はテストファイルのみで構成され、配布バイナリには含まれません。`TestNoTestOnlyPackageReachesTheShippedBinary` がそれを検査します。
 - ログへの秘密混入検査は `app.Build` へ渡した logger だけを見ています。グローバルの `slog` 既定 logger へ書くと検査を素通りするため、新しいログは必ず注入された logger を使ってください。

@@ -27,7 +27,10 @@ import (
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
 	"sshc/internal/session"
+	sshcSFTP "sshc/internal/sftp"
+	"sshc/internal/snippets"
 	"sshc/internal/terminal"
+	"sshc/internal/workspace"
 )
 
 type Options struct {
@@ -63,7 +66,10 @@ type Options struct {
 	KnownHosts  *knownhosts.Service
 	RemoteKeys  *remotekey.Service
 	// Recent は、この端末で成功した接続を現在の設定へ解決する。
-	Recent *recent.Service
+	Recent     *recent.Service
+	SFTP       *sshcSFTP.Service
+	Workspaces *workspace.Service
+	Snippets   *snippets.Service
 	// Passwords は保存されたパスワードの vault である。nil の service は
 	// すべてのパスワード用ルートを未登録のままに
 	// する。これは、それを配線しないテストが当てにしていることである。
@@ -272,7 +278,8 @@ func New(options Options) (*Server, error) {
 		Unlocked: func() bool { return options.Passwords != nil && options.Passwords.Unlocked() },
 	}).Middleware)
 
-	server := &Server{listener: options.Listener, engine: e}
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	server := &Server{listener: options.Listener, engine: e, baseCancel: baseCancel}
 	// stoppingGate は Security の後、ルートハンドラの前に置く。
 	//
 	// 無効な Host や、`/api/` の fetch/origin/session/CSRF に反する要求は、
@@ -306,6 +313,9 @@ func New(options Options) (*Server, error) {
 	if options.KnownHosts != nil {
 		addKnownHostsActions(registry, options.KnownHosts)
 	}
+	if options.SFTP != nil {
+		addSFTPActions(registry, options.SFTP)
+	}
 	actions := ActionHandlers{Sessions: options.Sessions, Kinds: registry}
 
 	if options.Keys != nil {
@@ -324,6 +334,15 @@ func New(options Options) (*Server, error) {
 		registerRemoteKeyRoutes(e, RemoteKeyHandlers{
 			Service: options.RemoteKeys, Diagnostics: options.Diagnostics, Actions: actions,
 		})
+	}
+	if options.SFTP != nil {
+		registerSFTPRoutes(e, SFTPHandlers{Service: options.SFTP, Actions: actions})
+	}
+	if options.Workspaces != nil {
+		registerWorkspaceRoutes(e, WorkspaceHandlers{Service: options.Workspaces})
+	}
+	if options.Snippets != nil {
+		registerSnippetRoutes(e, SnippetHandlers{Service: options.Snippets, Actions: actions, BaseContext: baseCtx})
 	}
 	// browser と CLI の password change は、同じ remote reseal operation を使う。
 	var reseal func(context.Context, string) error
@@ -400,6 +419,16 @@ func New(options Options) (*Server, error) {
 			Environment:    options.TerminalEnvironment,
 			StartDirectory: options.TerminalStartDirectory,
 			Connected:      options.ConnectionOpened,
+			Startup: func(alias string) (string, bool) {
+				if options.Snippets == nil {
+					return "", false
+				}
+				preview, err := options.Snippets.PreviewStartup(alias)
+				if err != nil || len(preview.Targets) != 1 {
+					return "", false
+				}
+				return preview.Targets[0].Command, true
+			},
 			// askpass はここに無い。この経路はもう外部の ssh を起動しない。
 			// パスフレーズは vault から直接読むか、端末で尋ねる。ヘルパーが
 			// 残っているのは、CLI と診断がまだ OpenSSH を起動するからである。
@@ -413,8 +442,6 @@ func New(options Options) (*Server, error) {
 	e.GET("/*", static)
 	e.HEAD("/*", static)
 
-	baseCtx, baseCancel := context.WithCancel(context.Background())
-	server.baseCancel = baseCancel
 	server.url = "http://" + host
 	server.http = &http.Server{
 		Handler:           e,

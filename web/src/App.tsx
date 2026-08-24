@@ -17,11 +17,10 @@ import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/
 import type { FileTarget } from "./explorer/ConfigExplorer";
 import { LockScreen } from "./secrets/LockScreen";
 import { OverviewPanel } from "./overview/OverviewPanel";
-import { useLanguage, useTranslate } from "./i18n/context";
+import { useLanguage } from "./i18n/context";
 import type { Locale } from "./i18n/locale";
 import { secondaryAction } from "./ui/form";
 import { IconSprite, type IconName } from "./ui/icons";
-import { BrandMark } from "./ui/BrandMark";
 import { InspectorPane, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
 import type { Theme } from "./theme/theme";
@@ -44,6 +43,7 @@ import {
 } from "./routing/useSectionRoute";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
 import { useTerminalSessions, type TerminalSessionsState } from "./terminal/sessions";
+import { TerminalWorkspace } from "./features/workspaces/TerminalWorkspace";
 
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -81,6 +81,8 @@ const KnownHostsPanel = lazy(() =>
 const RemoteKeyPanel = lazy(() =>
   import("./remotekeys/RemoteKeyPanel").then(({ RemoteKeyPanel }) => ({ default: RemoteKeyPanel })),
 );
+const SFTPPanel = lazy(() => import("./sftp/SFTPPanel").then(({ SFTPPanel }) => ({ default: SFTPPanel })));
+const SnippetsPanel = lazy(() => import("./snippets/SnippetsPanel").then(({ SnippetsPanel }) => ({ default: SnippetsPanel })));
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -92,6 +94,8 @@ const sectionLabels: Record<Section, MessageKey> = {
   Home: "section.home",
   Connections: "section.connections",
   Terminal: "section.terminal",
+  Files: "section.files",
+  Snippets: "section.snippets",
   Config: "section.config",
   Groups: "section.groups",
   Keys: "section.keys",
@@ -113,6 +117,8 @@ const sectionIcons: Record<Section, IconName> = {
   Home: "home",
   Connections: "connections",
   Terminal: "terminal",
+  Files: "config",
+  Snippets: "terminal",
   Config: "config",
   Groups: "groups",
   Keys: "keys",
@@ -127,9 +133,9 @@ const sectionIcons: Record<Section, IconName> = {
 
 const navGroups: { label: MessageKey; sections: Section[] }[] = [
   { label: "shell.navStart", sections: ["Home", "Connections", "Terminal"] },
-  { label: "shell.navConnections", sections: ["Config", "Groups"] },
+  { label: "shell.navConnections", sections: ["Config", "Groups", "Files"] },
   { label: "shell.navKeysHosts", sections: ["Keys", "Known Hosts", "Remote Keys"] },
-  { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Settings", "Sync", "History"] },
+  { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Snippets", "Settings", "Sync", "History"] },
 ];
 
 
@@ -247,13 +253,14 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const duplicateConsole = useCallback(
     async (id: string) => {
       const session = consoles.sessions.find((candidate) => candidate.id === id);
-      if (session === undefined) return;
+      if (session === undefined) return null;
       const opened = await consoles.open(
         session.kind === "ssh" && session.alias !== undefined
           ? { kind: "ssh", alias: session.alias }
           : { kind: "shell" },
       );
       if (opened !== null) showConsole(opened.id);
+      return opened;
     },
     [consoles, showConsole],
   );
@@ -520,6 +527,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     activeConsole={activeConsole}
                     settings={terminalSettings}
                     hostAppearance={hostAppearance}
+                    onActive={showConsole}
+                    onOpenAlias={(alias) => consoles.open({ kind: "ssh", alias })}
                   />
                 </div>
               ) : null}
@@ -627,51 +636,21 @@ function TerminalScreen({
   activeConsole,
   settings,
   hostAppearance,
+  onActive,
+  onOpenAlias,
 }: {
   consoles: TerminalSessionsState;
   activeConsole: string | null;
   settings: TerminalSettings;
   hostAppearance: Map<string, TerminalAppearance>;
+  onActive: (id: string) => void;
+  onOpenAlias: (alias: string) => Promise<import("./api/integrations").TerminalSession | null>;
 }) {
-  const t = useTranslate();
-  const session = consoles.sessions.find((entry) => entry.id === activeConsole);
-  const appearance = resolveAppearance(
-    session?.alias === undefined ? undefined : hostAppearance.get(session.alias),
-    settings.appearance,
-  );
-  if (session === undefined) {
-    return (
-      <div className="flex h-full items-center justify-center p-6">
-        <section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status">
-          <BrandMark className="mx-auto size-12 drop-shadow-sm" />
-          <h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2>
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p>
-          <div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner">
-            <span className="text-live">$</span> ssh host
-            <span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" />
-          </div>
-        </section>
-      </div>
-    );
-  }
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <Suspense fallback={<RouteSkeleton kind="terminal" />}>
-
-        <TerminalView
-          key={session.id}
-          session={session}
-          {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })}
-          {...(appearance.palette === "" ? {} : { palette: appearance.palette })}
-          {...(appearance.font === "" ? {} : { font: appearance.font })}
-          {...(appearance.background === "" ? {} : { background: appearance.background })}
-          {...(appearance.tint === undefined ? {} : { tint: appearance.tint })}
-          copyOnSelect={settings.copyOnSelect ?? true}
-          rightClickPaste={settings.rightClickPaste ?? true}
-          onExit={() => consoles.markExited(session.id)}
-        />
-      </Suspense>
-    </div>
+    <TerminalWorkspace sessions={consoles.sessions} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} renderTerminal={(session, onInput, injected) => {
+      const appearance = resolveAppearance(session.alias === undefined ? undefined : hostAppearance.get(session.alias), settings.appearance);
+      return <Suspense fallback={<RouteSkeleton kind="terminal" />}><TerminalView key={session.id} session={session} {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })} {...(appearance.palette === "" ? {} : { palette: appearance.palette })} {...(appearance.font === "" ? {} : { font: appearance.font })} {...(appearance.background === "" ? {} : { background: appearance.background })} {...(appearance.tint === undefined ? {} : { tint: appearance.tint })} copyOnSelect={settings.copyOnSelect ?? true} rightClickPaste={settings.rightClickPaste ?? true} onInput={onInput} injectedInput={injected} onExit={() => consoles.markExited(session.id)} /></Suspense>;
+    }} />
   );
 }
 
@@ -689,6 +668,12 @@ function PaddedSection({ section, navigation, handoff, shell, declared }: Sectio
   }
   if (section === "Config") {
     return <ConfigExplorer target={fileTarget} />;
+  }
+  if (section === "Files") {
+    return <SFTPPanel aliases={declared.knownAliases} />;
+  }
+  if (section === "Snippets") {
+    return <SnippetsPanel aliases={declared.knownAliases} />;
   }
   if (section === "Groups") {
     return <GroupsPanel onInspector={onInspector} />;

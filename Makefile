@@ -245,7 +245,7 @@ integration: build
 	SSHC_TEST_SSH_PASSWORD=$(SSH_PASS) \
 	SSHC_TEST_SSH_KEY="$(CURDIR)/.integration-key/id_integration" \
 	SSHC_TEST_SSH_KEY_PASSPHRASE="$(SSH_KEY_PASSPHRASE)" \
-	go test ./internal/objectstore ./internal/remotesync ./internal/sshdconformance -count=1 -v
+	go test ./internal/objectstore ./internal/remotesync ./internal/sftp ./internal/sshdconformance -count=1 -v
 
 # バイナリは安定したパスへ置く。デスクトップ側はここへ symlink を張り、CLI と UI が
 # 同じバイナリを使用する。別の場所でビルドし直すと
