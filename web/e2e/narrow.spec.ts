@@ -4,14 +4,33 @@ import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard 
 
 const hosts = "Host alpha\n\tHostName 198.51.100.10\n\nHost bravo\n\tHostName 198.51.100.11\n";
 
-async function openSectionThroughDrawer(page: import("@playwright/test").Page, name: string) {
+const sections = [
+  { navigation: "Connections", heading: "Connections" },
+  { navigation: "Config", heading: "Configuration files" },
+  { navigation: "Groups", heading: "Groups" },
+  { navigation: "Keys", heading: "Keys" },
+  { navigation: "Known Hosts", heading: "Known Hosts" },
+  { navigation: "Install Key on Server", heading: "Install Key on Server" },
+  { navigation: "Ad hoc checks", heading: "Ad hoc checks" },
+  { navigation: "Secrets", heading: "The vault" },
+  { navigation: "Settings", heading: "Settings" },
+  { navigation: "Sync", heading: "Remote sync" },
+  { navigation: "History", heading: "History" },
+  { navigation: "Terminal", heading: "No console is open" },
+] as const;
+
+async function openSectionThroughDrawer(
+  page: import("@playwright/test").Page,
+  name: string,
+  heading = name,
+) {
   await expect(sessionStatus(page)).toContainText("Local session active");
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   await page
     .getByRole("navigation", { name: "Primary" })
     .getByRole("link", { name, exact: true })
     .click();
-  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
 }
 
 async function expectNoHorizontalOverflow(page: import("@playwright/test").Page, where: string) {
@@ -52,15 +71,51 @@ async function expectNoHorizontalOverflow(page: import("@playwright/test").Page,
 
 test("keeps every section inside 360 pixels", async ({ page, installation }) => {
   await installation.write("conf.d/20-lab.conf", hosts);
+  await page.route("**/api/v1/sync", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        configured: false,
+        keyConfigured: false,
+        locked: false,
+        auto: { enabled: false, phase: "idle" },
+        synced: false,
+        direction: "both",
+      }),
+    });
+  });
   await openApplication(page, installation);
+  await expect(page.getByRole("heading", { name: "Your connections", exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page, "Home");
+  await expectNothingCutOff(page, "Home");
 
-  for (const section of ["Connections", "Keys", "Known Hosts", "Ad hoc checks", "Settings"]) {
-    await openSectionThroughDrawer(page, section);
-    await expectNoHorizontalOverflow(page, section);
-    await expectNothingCutOff(page, section);
+  for (const section of sections) {
+    await openSectionThroughDrawer(page, section.navigation, section.heading);
+    await expectNoHorizontalOverflow(page, section.navigation);
+    await expectNothingCutOff(page, section.navigation);
+    if (section.navigation === "Known Hosts") {
+      await expectFullyInsideViewport(
+        page,
+        page.getByRole("button", { name: "Delete", exact: true }),
+        "Known Hosts delete",
+      );
+    }
   }
 });
+
+async function expectFullyInsideViewport(
+  page: import("@playwright/test").Page,
+  locator: import("@playwright/test").Locator,
+  name: string,
+) {
+  const box = await locator.boundingBox();
+  expect(box, `${name} is not rendered`).not.toBeNull();
+  const viewport = page.viewportSize();
+  expect(viewport, `${name}: viewport is unavailable`).not.toBeNull();
+  expect(box!.x, `${name}: left edge`).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width, `${name}: right edge`).toBeLessThanOrEqual(viewport!.width);
+}
 
 async function expectNothingCutOff(page: import("@playwright/test").Page, where: string) {
   const escaped = await page.evaluate(() => {

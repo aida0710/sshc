@@ -12,8 +12,10 @@ export function AppHeader({
   version,
   state,
   navigationOpen,
+  desktopNavigationVisible,
   navigationId,
   onToggleNavigation,
+  onToggleDesktopNavigation,
   inspector,
   inspectorOpen,
   onToggleInspector,
@@ -27,8 +29,10 @@ export function AppHeader({
   version: string;
   state: string;
   navigationOpen: boolean;
+  desktopNavigationVisible: boolean;
   navigationId: string;
   onToggleNavigation: () => void;
+  onToggleDesktopNavigation: () => void;
   inspector: InspectorContent | null;
   inspectorOpen: boolean;
   onToggleInspector: () => void;
@@ -40,62 +44,77 @@ export function AppHeader({
 }) {
   const { t, locale, setLocale } = useLanguage();
   return (
-    <header className="relative z-20 flex min-h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2 md:gap-3 md:px-5">
-      <button
-        type="button"
-        aria-label={t("shell.navigationToggle")}
-        aria-expanded={navigationOpen}
-        aria-controls={navigationId}
-        onClick={() => onToggleNavigation()}
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-control-line bg-card text-ink shadow-sm md:hidden"
-      >
-        <Icon name="menu" className="h-4 w-4" />
-      </button>
-
-      <div className="flex shrink-0 items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="hidden h-7 w-7 place-items-center rounded-lg bg-accent font-mono text-[10px] font-bold tracking-tighter text-accent-ink shadow-sm sm:grid"
+    <header className="relative z-20 flex shrink-0 flex-col gap-2 border-b border-line bg-toolbar px-3 py-2 md:min-h-12 md:flex-row md:items-center md:gap-3 md:px-5">
+      <div className="flex w-full min-w-0 items-center gap-2 md:contents">
+        <button
+          type="button"
+          aria-label={t("shell.navigationToggle")}
+          aria-expanded={navigationOpen}
+          aria-controls={navigationId}
+          onClick={() => onToggleNavigation()}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-control-line bg-card text-ink shadow-sm md:hidden"
         >
-          &gt;_
-        </span>
-        <h1 className="hidden whitespace-nowrap text-sm font-bold tracking-tight md:block">{t("shell.title")}</h1>
+          <Icon name="menu" className="h-4 w-4" />
+        </button>
+
+        <button
+          type="button"
+          aria-label={t(desktopNavigationVisible ? "shell.navigationHide" : "shell.navigationShow")}
+          aria-expanded={desktopNavigationVisible}
+          aria-controls={navigationId}
+          title={t(desktopNavigationVisible ? "shell.navigationHide" : "shell.navigationShow")}
+          onClick={() => onToggleDesktopNavigation()}
+          className="hidden h-8 w-8 shrink-0 place-items-center rounded-lg border border-control-line bg-card text-ink shadow-sm md:grid"
+        >
+          <Icon name="menu" className="h-4 w-4" />
+        </button>
+
+        <div className="hidden shrink-0 items-center gap-2 md:flex">
+          <span
+            aria-hidden="true"
+            className="grid h-7 w-7 place-items-center rounded-lg bg-accent font-mono text-[10px] font-bold tracking-tighter text-accent-ink shadow-sm"
+          >
+            &gt;_
+          </span>
+          <h1 className="whitespace-nowrap text-sm font-bold tracking-tight">{t("shell.title")}</h1>
+        </div>
+
+        <span aria-hidden="true" className="hidden h-5 w-px bg-line md:block" />
+        <p className="min-w-0 flex-1 truncate text-base font-semibold md:text-sm">
+          {route.kind === "section" && route.section !== undefined
+            ? t(sectionLabels[route.section])
+            : t("shell.pageNotFound")}
+        </p>
+
+        <p
+          role="status"
+          className="flex min-w-0 shrink-0 items-center gap-2 rounded-full border border-line bg-card px-2 py-1 text-xs text-ink-muted shadow-sm"
+        >
+          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-live shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-live)_14%,transparent)]" />
+          <span className="sr-only lg:not-sr-only lg:max-w-52 lg:truncate">
+            {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
+          </span>
+        </p>
+
+        {inspector === null ? null : (
+          <span className="shrink-0 [&>button]:h-10 [&>button]:min-w-10 [&>button]:justify-center md:contents md:[&>button]:h-auto md:[&>button]:min-w-0">
+            <InspectorToggle
+              label={inspector.label}
+              open={inspectorOpen}
+              attention={inspector.attention}
+              onToggle={() => onToggleInspector()}
+            />
+          </span>
+        )}
       </div>
 
-      <span aria-hidden="true" className="hidden h-5 w-px bg-line md:block" />
-      <p className="min-w-0 truncate text-sm font-semibold">
-        {route.kind === "section" && route.section !== undefined
-          ? t(sectionLabels[route.section])
-          : t("shell.pageNotFound")}
-      </p>
-
-      <span className="min-w-0 flex-1" />
-      <p
-        role="status"
-        className="flex min-w-0 shrink-0 items-center gap-2 rounded-full border border-line bg-card px-2 py-1 text-xs text-ink-muted shadow-sm"
-      >
-        <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-live shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-live)_14%,transparent)]" />
-        <span className="sr-only lg:not-sr-only lg:max-w-52 lg:truncate">
-          {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
-        </span>
-      </p>
-
-      {inspector === null ? null : (
-        <InspectorToggle
-          label={inspector.label}
-          open={inspectorOpen}
-          attention={inspector.attention}
-          onToggle={() => onToggleInspector()}
-        />
-      )}
-
-      <div className="flex shrink-0 items-center gap-1 rounded-lg border border-control-line bg-control p-0.5 shadow-sm">
+      <div className="flex w-full shrink-0 items-center gap-1 rounded-lg border border-control-line bg-control p-0.5 shadow-sm md:w-auto">
         <label htmlFor="appearance" className="sr-only">{t("shell.theme")}</label>
         <select
           id="appearance"
           value={theme}
           onChange={(event) => onThemeChange(event.target.value as Theme)}
-          className={`${autoControl} w-[4.75rem] border-0 bg-transparent px-1.5 py-1 text-xs shadow-none sm:w-auto`}
+          className={`${autoControl} h-10 min-w-0 basis-0 grow border-0 bg-transparent px-2 py-1 text-sm shadow-none md:h-auto md:w-auto md:basis-auto md:grow-0 md:px-1.5 md:text-xs`}
         >
           {themes.map((candidate) => (
             <option key={candidate} value={candidate}>
@@ -109,7 +128,7 @@ export function AppHeader({
           id="language"
           value={locale}
           onChange={(event) => setLocale(event.target.value as Locale)}
-          className={`${autoControl} w-16 border-0 bg-transparent px-1.5 py-1 text-xs shadow-none sm:w-auto`}
+          className={`${autoControl} h-10 min-w-0 basis-0 grow border-0 bg-transparent px-2 py-1 text-sm shadow-none md:h-auto md:w-auto md:basis-auto md:grow-0 md:px-1.5 md:text-xs`}
         >
           {locales.map((candidate) => (
             <option key={candidate} value={candidate}>

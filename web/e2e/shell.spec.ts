@@ -74,3 +74,45 @@ test("scrolls the primary navigation on its own when the viewport is short", asy
   await expect(page.getByRole("banner")).toBeInViewport();
   expect(await sections.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
+
+test("resizes, hides, and restores the desktop navigation", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  const handle = page.getByRole("separator", { name: "Resize navigation" });
+  await expect(navigation).toBeVisible();
+  await expect(handle).toHaveAttribute("aria-valuenow", "240");
+
+  const handleBox = await handle.boundingBox();
+  expect(handleBox).not.toBeNull();
+  if (handleBox === null) return;
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 80, handleBox.y + handleBox.height / 2);
+  await page.mouse.up();
+
+  await expect(handle).toHaveAttribute("aria-valuenow", "320");
+  await expect
+    .poll(() => navigation.evaluate((element) => Math.round(element.getBoundingClientRect().width)))
+    .toBe(320);
+
+  await page.reload();
+  await expect(page.getByRole("separator", { name: "Resize navigation" })).toHaveAttribute(
+    "aria-valuenow",
+    "320",
+  );
+
+  await page.getByRole("button", { name: "Hide navigation" }).click();
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Show navigation" })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeHidden();
+  await page.getByRole("button", { name: "Show navigation" }).click();
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  await expect(page.getByRole("separator", { name: "Resize navigation" })).toHaveAttribute(
+    "aria-valuenow",
+    "320",
+  );
+});

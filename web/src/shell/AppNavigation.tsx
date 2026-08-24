@@ -1,4 +1,11 @@
-import type { MouseEvent, ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { ConsoleList } from "../terminal/ConsoleList";
 import { UpdateBadge } from "./UpdateBadge";
 import { Icon, type IconName } from "../ui/icons";
@@ -7,10 +14,18 @@ import type { MessageKey } from "../i18n/messages";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type { TerminalSession } from "../api/integrations";
+import {
+  clampNavigationWidth,
+  maximumNavigationWidth,
+  minimumNavigationWidth,
+} from "./navigationLayout";
 
 export function AppNavigation({
   navigationId,
   navigationOpen,
+  desktopVisible,
+  desktopWidth,
+  onDesktopWidthChange,
   navGroups,
   section,
   sectionIcons,
@@ -28,6 +43,9 @@ export function AppNavigation({
 }: {
   navigationId: string;
   navigationOpen: boolean;
+  desktopVisible: boolean;
+  desktopWidth: number;
+  onDesktopWidthChange: (width: number) => void;
   navGroups: { label: MessageKey; sections: Section[] }[];
   section: Section | null;
   sectionIcons: Record<Section, IconName>;
@@ -57,9 +75,9 @@ export function AppNavigation({
     <nav
       id={navigationId}
       aria-label={t("shell.primaryNavigation")}
-      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 flex-col overflow-hidden border-r border-line bg-sidebar p-3 shadow-2xl transition-transform md:static md:z-auto md:w-auto md:translate-x-0 md:shadow-none ${
+      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-3 shadow-2xl transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
         navigationOpen ? "translate-x-0" : "-translate-x-full"
-      }`}
+      } ${desktopVisible ? "md:flex" : "md:hidden"}`}
     >
       <div className="mb-3 flex shrink-0 items-center gap-2 border-b border-line px-1 pb-3 md:hidden">
         <span
@@ -134,11 +152,108 @@ export function AppNavigation({
       <div className="shrink-0 border-t border-line pt-2">
         <UpdateBadge />
       </div>
+
+      <NavigationResizeHandle width={desktopWidth} onWidthChange={onDesktopWidthChange} />
     </nav>
   );
 }
 
 export type NavFace = "settings" | "terminal";
+
+export function NavigationResizeHandle({
+  width,
+  onWidthChange,
+}: {
+  width: number;
+  onWidthChange: (width: number) => void;
+}) {
+  const t = useTranslate();
+  const drag = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
+  const queuedWidth = useRef(width);
+  const animationFrame = useRef<number | null>(null);
+  const previousUserSelect = useRef("");
+
+  useEffect(() => {
+    queuedWidth.current = width;
+  }, [width]);
+
+  useEffect(() => () => {
+    if (animationFrame.current !== null) window.cancelAnimationFrame(animationFrame.current);
+    if (drag.current !== null) document.body.style.userSelect = previousUserSelect.current;
+  }, []);
+
+  function publish(nextWidth: number) {
+    queuedWidth.current = clampNavigationWidth(nextWidth);
+    if (animationFrame.current !== null) return;
+    animationFrame.current = window.requestAnimationFrame(() => {
+      animationFrame.current = null;
+      onWidthChange(queuedWidth.current);
+    });
+  }
+
+  function finish(pointerId: number) {
+    if (drag.current?.pointerId !== pointerId) return;
+    drag.current = null;
+    document.body.style.userSelect = previousUserSelect.current;
+    if (animationFrame.current !== null) {
+      window.cancelAnimationFrame(animationFrame.current);
+      animationFrame.current = null;
+      onWidthChange(queuedWidth.current);
+    }
+  }
+
+  function start(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || drag.current !== null) return;
+    event.preventDefault();
+    drag.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: width };
+    queuedWidth.current = width;
+    previousUserSelect.current = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function move(event: ReactPointerEvent<HTMLDivElement>) {
+    const active = drag.current;
+    if (active === null || active.pointerId !== event.pointerId) return;
+    publish(active.startWidth + event.clientX - active.startX);
+  }
+
+  function useKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
+    let nextWidth: number | null = null;
+    const step = event.shiftKey ? 32 : 8;
+    if (event.key === "ArrowLeft") nextWidth = width - step;
+    if (event.key === "ArrowRight") nextWidth = width + step;
+    if (event.key === "Home") nextWidth = minimumNavigationWidth;
+    if (event.key === "End") nextWidth = maximumNavigationWidth;
+    if (nextWidth === null) return;
+    event.preventDefault();
+    onWidthChange(clampNavigationWidth(nextWidth));
+  }
+
+  return (
+    <div
+      role="separator"
+      aria-label={t("shell.navigationResize")}
+      aria-orientation="vertical"
+      aria-valuemin={minimumNavigationWidth}
+      aria-valuemax={maximumNavigationWidth}
+      aria-valuenow={width}
+      tabIndex={0}
+      onPointerDown={start}
+      onPointerMove={move}
+      onPointerUp={(event) => finish(event.pointerId)}
+      onPointerCancel={(event) => finish(event.pointerId)}
+      onLostPointerCapture={(event) => finish(event.pointerId)}
+      onKeyDown={useKeyboard}
+      className="group absolute inset-y-0 right-0 hidden w-2 cursor-col-resize touch-none items-center justify-center outline-none md:flex"
+    >
+      <span
+        aria-hidden="true"
+        className="h-full w-px bg-transparent transition-colors group-hover:bg-accent group-focus-visible:w-0.5 group-focus-visible:bg-accent"
+      />
+    </div>
+  );
+}
 
 function NavigationLink({
   name,
