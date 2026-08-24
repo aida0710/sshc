@@ -71,6 +71,23 @@ describe("SFTPPanel uploads", () => {
     expect(within(table).getAllByRole("row")[1]).toHaveTextContent("alpha");
   });
 
+  it("keeps the type header and values on one line in a scrollable table", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [
+        { name: "project", path: "/remote/project", type: "directory", size: 0, mode: "0755", modifiedAt: "2026-08-24T10:00:00Z", revision: "r1" },
+      ],
+    });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+
+    const table = await screen.findByRole("table");
+    expect(table).toHaveClass("min-w-[52rem]");
+    expect(within(table).getByRole("columnheader", { name: /Type/ }))
+      .toHaveClass("whitespace-nowrap");
+    expect(within(table).getByText("Folder")).toHaveClass("whitespace-nowrap");
+  });
+
   it("preserves folder paths and creates parent directories before upload", async () => {
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
