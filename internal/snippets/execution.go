@@ -53,7 +53,7 @@ func (s *Service) Start(parent context.Context, request ExecuteRequest) (Job, er
 		cancel: cancel, done: make(chan struct{}),
 	}
 	for index, target := range planned {
-		state.view.Results[index] = TargetResult{Alias: target.target.Alias, Status: TargetQueued}
+		state.view.Results[index] = TargetResult{TargetID: target.targetID, Alias: target.target.Alias, Status: TargetQueued}
 	}
 	s.active[id] = state
 	s.jobs.Unlock()

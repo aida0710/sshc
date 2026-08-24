@@ -94,6 +94,22 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 5. download、rename、空directoryの作成と削除を確認する。非空directoryが再帰削除されないことも確認する。
 6. 作成したfileとdirectoryを削除して原状復帰する。
 
+## M8. Workspace Command Center
+
+1. 同じaliasを2つ含み、別aliasを1つ含む3 paneのWorkspaceを開く。
+2. 直接入力で`pwd`をpreviewし、「ホストごとに1回」では2 targets、「ペインごとに1回」では3 targetsになることを確認する。
+3. 各paneの対話shellで別々のdirectoryへ移動してから実行し、Command Centerの`pwd`がpaneのcwdを継承しないことを確認する。
+4. 変数付きSnippetを選び、展開後commandと3件の接続先をpreviewして実行する。同じaliasの2結果が別々に表示されることを確認する。
+5. 1件を実行中に取消し、未開始targetを含めて取消状態になることを確認する。
+
+## M9. Workspace paneの配置交換
+
+1. 3 pane以上のnested Workspaceを開き、各paneで識別できるcommand outputを表示する。
+2. 1つ目のpaneの移動handleを別paneへDrag & Dropし、2つのpane位置だけが交換されることを確認する。
+3. 交換後も各terminalのscrollbackと接続が対応するpaneに残り、split方向と比率が変わらないことを確認する。
+4. 移動handleを2つ順に選択し、Drag & Dropと同じ交換が行われることを確認する。最初のhandleでEscapeを押すと選択を解除できることも確認する。
+5. Workspaceを保存して再度開き、交換後の配置でaliasごとに新規接続されることを確認する。
+
 ## 記録
 
 未実施は空欄のままにせず「未実施」と書きます。空欄は「実施したが記録し忘れた」と区別がつきません。
@@ -107,6 +123,8 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 | 未記録 | M5 | 未記録 | 未記録 | 未実施 | 本番 `~/.ssh` のコピーが必要 |
 | 未記録 | M6 | 未記録 | 未記録 | 未実施 | Android 実機と adb が必要 |
 | 未記録 | M7 | 未記録 | 未記録 | 未実施 | 削除してよい実ホストのdirectoryが必要 |
+| 未記録 | M8 | 未記録 | 未記録 | 未実施 | 複数paneで接続できる検証用ホストが必要 |
+| 未記録 | M9 | 未記録 | 未記録 | 未実施 | 複数paneで接続できる検証用ホストが必要 |
 
 ## Android エミュレータで WebView を調査する
 

@@ -1218,11 +1218,19 @@ type SnippetDraft struct {
 
 // SnippetExecuteRequest defines model for SnippetExecuteRequest.
 type SnippetExecuteRequest struct {
-	Aliases     []string          `json:"aliases"`
-	Concurrency int               `json:"concurrency"`
-	Evidence    string            `json:"evidence"`
-	Inputs      map[string]string `json:"inputs"`
-	SnippetId   string            `json:"snippetId"`
+	Aliases     *[]string                 `json:"aliases,omitempty"`
+	Command     *string                   `json:"command,omitempty"`
+	Concurrency int                       `json:"concurrency"`
+	Evidence    string                    `json:"evidence"`
+	Inputs      map[string]string         `json:"inputs"`
+	SnippetId   *string                   `json:"snippetId,omitempty"`
+	Targets     *[]SnippetExecutionTarget `json:"targets,omitempty"`
+}
+
+// SnippetExecutionTarget defines model for SnippetExecutionTarget.
+type SnippetExecutionTarget struct {
+	Alias    string `json:"alias"`
+	TargetId string `json:"targetId"`
 }
 
 // SnippetJob defines model for SnippetJob.
@@ -1252,11 +1260,13 @@ type SnippetPreview struct {
 	Targets         []SnippetPreviewTarget `json:"targets"`
 }
 
-// SnippetPreviewRequest defines model for SnippetPreviewRequest.
+// SnippetPreviewRequest Exactly one of snippetId or command and exactly one of aliases or targets must be supplied. targets permits repeated aliases when targetId values are distinct.
 type SnippetPreviewRequest struct {
-	Aliases   []string          `json:"aliases"`
-	Inputs    map[string]string `json:"inputs"`
-	SnippetId string            `json:"snippetId"`
+	Aliases   *[]string                 `json:"aliases,omitempty"`
+	Command   *string                   `json:"command,omitempty"`
+	Inputs    map[string]string         `json:"inputs"`
+	SnippetId *string                   `json:"snippetId,omitempty"`
+	Targets   *[]SnippetExecutionTarget `json:"targets,omitempty"`
 }
 
 // SnippetPreviewTarget defines model for SnippetPreviewTarget.
@@ -1268,6 +1278,7 @@ type SnippetPreviewTarget struct {
 		Port     string `json:"port"`
 		User     string `json:"user"`
 	} `json:"target"`
+	TargetId string `json:"targetId"`
 }
 
 // SnippetTargetResult defines model for SnippetTargetResult.
@@ -1278,6 +1289,7 @@ type SnippetTargetResult struct {
 	Status    SnippetTargetResultStatus `json:"status"`
 	Stderr    *string                   `json:"stderr,omitempty"`
 	Stdout    *string                   `json:"stdout,omitempty"`
+	TargetId  string                    `json:"targetId"`
 	Truncated *bool                     `json:"truncated,omitempty"`
 }
 

@@ -2458,14 +2458,22 @@ export interface components {
             snippets: components["schemas"]["Snippet"][];
             startup: components["schemas"]["StartupSnippet"][];
         };
+        /** @description Exactly one of snippetId or command and exactly one of aliases or targets must be supplied. targets permits repeated aliases when targetId values are distinct. */
         SnippetPreviewRequest: {
-            snippetId: string;
-            aliases: string[];
+            snippetId?: string;
+            command?: string;
+            aliases?: string[];
+            targets?: components["schemas"]["SnippetExecutionTarget"][];
             inputs: {
                 [key: string]: string;
             };
         };
+        SnippetExecutionTarget: {
+            targetId: string;
+            alias: string;
+        };
         SnippetPreviewTarget: {
+            targetId: string;
             target: {
                 alias: string;
                 hostName: string;
@@ -2487,6 +2495,7 @@ export interface components {
             concurrency: number;
         };
         SnippetTargetResult: {
+            targetId: string;
             alias: string;
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -5009,7 +5018,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Exact targets and commands plus one-time action token */
+            /** @description Exact targets and commands plus one-time action token for a snippet or ad-hoc command */
             200: {
                 headers: {
                     [name: string]: unknown;

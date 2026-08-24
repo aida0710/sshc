@@ -46,10 +46,17 @@ export type LayoutAction =
   | { type: "split"; paneId: string; direction: SplitDirection; pane: StoredPane }
   | { type: "resize-split"; path: ("first" | "second")[]; ratio: number }
   | { type: "close"; paneId: string }
+  | { type: "swap-panes"; sourcePaneId: string; targetPaneId: string }
   | { type: "connection-starting"; paneId: string }
   | { type: "connection-started"; paneId: string; sessionId: string }
   | { type: "connection-failed"; paneId: string; problem: string }
   | { type: "engine-restarted" };
+
+export type ExecutionTarget = {
+  targetId: string;
+  alias: string;
+  state: ReconnectState;
+};
 
 export function restoreLayout(root: StoredNode, focusedPaneId: string): LayoutState {
   const hydrated = hydrateNode(root);
@@ -95,6 +102,20 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
         focusedPaneId: state.focusedPaneId === action.paneId ? (panes[0] ?? "") : state.focusedPaneId,
       };
     }
+    case "swap-panes": {
+      if (action.sourcePaneId === action.targetPaneId) return state;
+      const source = runtimePane(state.root, action.sourcePaneId);
+      const target = runtimePane(state.root, action.targetPaneId);
+      if (source === undefined || target === undefined) return state;
+      return {
+        ...state,
+        root: mapRuntimePanes(state.root, (pane) => {
+          if (pane.id === source.id) return target;
+          if (pane.id === target.id) return source;
+          return pane;
+        }),
+      };
+    }
     case "connection-starting":
       return updatePaneState(state, action.paneId, (pane) => ({ id: pane.id, alias: pane.alias, state: "connecting" }));
     case "connection-started":
@@ -124,6 +145,17 @@ export function paneIDs(root: RuntimeNode): string[] {
   const ids: string[] = [];
   visitPanes(root, (pane) => ids.push(pane.id));
   return ids;
+}
+
+export function executionTargets(root: RuntimeNode, mode: "host" | "pane"): ExecutionTarget[] {
+  const targets: ExecutionTarget[] = [];
+  const seen = new Set<string>();
+  visitPanes(root, (pane) => {
+    if (mode === "host" && seen.has(pane.alias)) return;
+    seen.add(pane.alias);
+    targets.push({ targetId: pane.id, alias: pane.alias, state: pane.state });
+  });
+  return targets;
 }
 
 function updatePaneState(
@@ -199,6 +231,11 @@ function mapRuntimePanes(root: RuntimeNode, map: (pane: RuntimePane) => RuntimeP
       second: mapRuntimePanes(root.split.second, map),
     },
   };
+}
+
+function runtimePane(root: RuntimeNode, paneId: string): RuntimePane | undefined {
+  if (root.pane !== undefined) return root.pane.id === paneId ? root.pane : undefined;
+  return runtimePane(root.split.first, paneId) ?? runtimePane(root.split.second, paneId);
 }
 
 function visitPanes(root: RuntimeNode, visit: (pane: RuntimePane) => void): void {

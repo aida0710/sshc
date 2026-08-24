@@ -240,6 +240,109 @@ func TestPreviewEvidenceDetectsSnippetAndTargetChanges(t *testing.T) {
 	}
 }
 
+func TestAdHocCommandPreviewAndExecution(t *testing.T) {
+	service := testService(&memoryRepository{}, func(ctx context.Context, alias, command string) (CommandOutput, error) {
+		return CommandOutput{Stdout: []byte(alias + ":" + command)}, nil
+	})
+	request := PreviewRequest{
+		Command: "uname -a",
+		Targets: []RequestedTarget{{TargetID: "pane-a", Alias: "bastion"}},
+	}
+	preview, err := service.Preview(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.SnippetID != "" || len(preview.Targets) != 1 || preview.Targets[0].TargetID != "pane-a" || preview.Targets[0].Command != "uname -a" {
+		t.Fatalf("preview = %#v", preview)
+	}
+	if preview.ActionTarget() == "" {
+		t.Fatal("ad-hoc preview action target is empty")
+	}
+	job, err := service.Start(context.Background(), ExecuteRequest{PreviewRequest: request, Evidence: preview.Evidence})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished, err := service.Wait(context.Background(), job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := finished.Results[0]
+	if result.TargetID != "pane-a" || result.Alias != "bastion" || result.Stdout != "bastion:uname -a" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestAdHocCommandEvidenceRejectsChangedCommand(t *testing.T) {
+	service := testService(&memoryRepository{}, func(context.Context, string, string) (CommandOutput, error) {
+		return CommandOutput{}, nil
+	})
+	request := PreviewRequest{Command: "uptime", Targets: []RequestedTarget{{TargetID: "pane-a", Alias: "bastion"}}}
+	preview, err := service.Preview(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Command = "reboot"
+	_, err = service.Start(context.Background(), ExecuteRequest{PreviewRequest: request, Evidence: preview.Evidence})
+	if !errors.Is(err, ErrPreviewChanged) {
+		t.Fatalf("Start = %v, want ErrPreviewChanged", err)
+	}
+}
+
+func TestAdHocCommandDoesNotInterpretSnippetPlaceholders(t *testing.T) {
+	service := testService(&memoryRepository{}, nil)
+	command := `printf '%s\n' '{{raw-shell-text}}'`
+	preview, err := service.Preview(PreviewRequest{
+		Command: command,
+		Targets: []RequestedTarget{{TargetID: "pane-a", Alias: "bastion"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Targets[0].Command != command {
+		t.Fatalf("command = %q", preview.Targets[0].Command)
+	}
+}
+
+func TestDuplicateAliasIsAllowedWithDistinctTargetIDs(t *testing.T) {
+	service := testService(&memoryRepository{}, func(context.Context, string, string) (CommandOutput, error) {
+		return CommandOutput{}, nil
+	})
+	request := PreviewRequest{
+		Command: "uptime",
+		Targets: []RequestedTarget{
+			{TargetID: "pane-a", Alias: "bastion"},
+			{TargetID: "pane-b", Alias: "bastion"},
+		},
+	}
+	preview, err := service.Preview(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := service.Start(context.Background(), ExecuteRequest{PreviewRequest: request, Evidence: preview.Evidence})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.Results[0].TargetID != "pane-a" || job.Results[1].TargetID != "pane-b" {
+		t.Fatalf("job = %#v", job)
+	}
+}
+
+func TestExecutionRequestRejectsAmbiguousSourcesAndTargets(t *testing.T) {
+	service := testService(&memoryRepository{}, nil)
+	snippet := createSnippet(t, service, Draft{Name: "Check", Command: "uptime"})
+	tests := []PreviewRequest{
+		{SnippetID: snippet.ID, Command: "uptime", Aliases: []string{"bastion"}},
+		{Aliases: []string{"bastion"}},
+		{Command: "uptime", Aliases: []string{"bastion"}, Targets: []RequestedTarget{{TargetID: "pane-a", Alias: "bastion"}}},
+		{Command: "uptime", Targets: []RequestedTarget{{TargetID: "pane-a", Alias: "bastion"}, {TargetID: "pane-a", Alias: "database"}}},
+	}
+	for _, request := range tests {
+		if _, err := service.Preview(request); !errors.Is(err, ErrInvalidTarget) && !errors.Is(err, ErrInvalidSnippet) {
+			t.Fatalf("Preview(%#v) = %v", request, err)
+		}
+	}
+}
+
 func TestMultiExecutionIsBoundedAndKeepsHostResults(t *testing.T) {
 	var active atomic.Int32
 	var maximum atomic.Int32

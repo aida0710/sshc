@@ -1447,7 +1447,7 @@ paths:
     post:
       operationId: previewSnippetExecution
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetPreviewRequest" } } } }
-      responses: { "200": { description: Exact targets and commands plus one-time action token, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetPreview" } } } }, "400": { $ref: "#/components/responses/Problem" } }
+      responses: { "200": { description: Exact targets and commands plus one-time action token for a snippet or ad-hoc command, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetPreview" } } } }, "400": { $ref: "#/components/responses/Problem" } }
   /api/v1/snippets/jobs:
     post:
       operationId: executeSnippet
@@ -3289,16 +3289,27 @@ components:
     SnippetPreviewRequest:
       type: object
       additionalProperties: false
-      required: [snippetId, aliases, inputs]
+      description: Exactly one of snippetId or command and exactly one of aliases or targets must be supplied. targets permits repeated aliases when targetId values are distinct.
+      required: [inputs]
       properties:
         snippetId: { type: string }
+        command: { type: string, minLength: 1, maxLength: 65536 }
         aliases: { type: array, minItems: 1, maxItems: 64, items: { type: string } }
+        targets: { type: array, minItems: 1, maxItems: 64, items: { $ref: "#/components/schemas/SnippetExecutionTarget" } }
         inputs: { type: object, additionalProperties: { type: string } }
+    SnippetExecutionTarget:
+      type: object
+      additionalProperties: false
+      required: [targetId, alias]
+      properties:
+        targetId: { type: string, minLength: 1, maxLength: 255 }
+        alias: { type: string, minLength: 1, maxLength: 255 }
     SnippetPreviewTarget:
       type: object
       additionalProperties: false
-      required: [target, command]
+      required: [targetId, target, command]
       properties:
+        targetId: { type: string }
         target:
           type: object
           additionalProperties: false
@@ -3326,8 +3337,9 @@ components:
     SnippetTargetResult:
       type: object
       additionalProperties: false
-      required: [alias, status]
+      required: [targetId, alias, status]
       properties:
+        targetId: { type: string }
         alias: { type: string }
         status: { type: string, enum: [queued, running, succeeded, failed, cancelled] }
         exitCode: { type: integer }
