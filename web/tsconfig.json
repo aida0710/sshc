@@ -15,7 +15,7 @@
     "exactOptionalPropertyTypes": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom/vitest"]
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom/vitest"]
   },
   "include": ["src", "vite.config.ts", "vitest.setup.ts"]
 }

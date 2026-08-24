@@ -31,6 +31,8 @@ type TerminalViewProps = {
   background?: string;
   tint?: number;
   font?: string;
+  onInput?: (data: string) => void;
+  injectedInput?: { sequence: number; data: string } | null;
 };
 
 type Link =
@@ -54,6 +56,8 @@ export function TerminalView({
   font,
   background,
   tint,
+  onInput,
+  injectedInput,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
@@ -72,6 +76,9 @@ export function TerminalView({
   const armed = useRef<Modifiers>(modifiers);
   armed.current = modifiers;
   const send = useRef<(label: string) => void>(() => {});
+  const inject = useRef<(data: string) => void>(() => {});
+  const inputCallback = useRef(onInput);
+  inputCallback.current = onInput;
 
   useEffect(() => {
     const container = host.current;
@@ -146,14 +153,19 @@ export function TerminalView({
 
     const typed = (data: string) => {
       const { ctrl, alt } = armed.current;
-      stream?.send(applyModifiers(data, ctrl, alt));
+      const encoded = applyModifiers(data, ctrl, alt);
+      stream?.send(encoded);
+      inputCallback.current?.(encoded);
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
     send.current = (label: string) => {
       const { ctrl, alt } = armed.current;
-      stream?.send(encodeKey(label, ctrl, alt));
+      const encoded = encodeKey(label, ctrl, alt);
+      stream?.send(encoded);
+      inputCallback.current?.(encoded);
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
+    inject.current = (data: string) => stream?.send(data);
     view.onData(typed);
 
     const attach = () => {
@@ -244,9 +256,14 @@ export function TerminalView({
       stream?.close();
       view.dispose();
       terminal.current = null;
+      inject.current = () => {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, api]);
+
+  useEffect(() => {
+    if (injectedInput !== null && injectedInput !== undefined) inject.current(injectedInput.data);
+  }, [injectedInput]);
 
   useEffect(() => {
     if (terminal.current === null || host.current === null) return;

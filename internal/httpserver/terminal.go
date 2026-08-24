@@ -54,6 +54,9 @@ type TerminalHandlers struct {
 	// Connected は、SSH接続とstream ticketの作成が成功したあとに呼ぶ。
 	// 履歴の失敗で接続を失わせないため、エラーは呼び出し側が処理する。
 	Connected func(alias string)
+	// Startup returns an explicitly configured non-secret command. It is sent
+	// only after authentication and remote shell startup have completed.
+	Startup func(alias string) (string, bool)
 }
 
 func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
@@ -213,7 +216,20 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 				cancel()
 				return nil, err
 			}
-			return &sessionLifetime{Process: process, cancel: cancel}, nil
+			lifetime := &sessionLifetime{Process: process, cancel: cancel}
+			// Open is also called by the registry when a disconnected transport is
+			// re-established. Resolve and inject the startup snippet here so every
+			// successful connection gets the same explicit startup automation.
+			if h.Startup != nil {
+				if command, ok := h.Startup(target); ok && command != "" {
+					go func() {
+						if err := <-lifetime.Ready(); err == nil {
+							_, _ = lifetime.Write([]byte(command + "\r"))
+						}
+					}()
+				}
+			}
+			return lifetime, nil
 		},
 	}, nil
 }
@@ -223,6 +239,16 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 type sessionLifetime struct {
 	terminal.Process
 	cancel context.CancelFunc
+}
+
+func (s *sessionLifetime) Ready() <-chan error {
+	if ready, ok := s.Process.(interface{ Ready() <-chan error }); ok {
+		return ready.Ready()
+	}
+	result := make(chan error, 1)
+	result <- nil
+	close(result)
+	return result
 }
 
 func (s *sessionLifetime) Close() error {

@@ -5,6 +5,8 @@ const routes = [
   ["Home", "/"],
   ["Connections", "/connections"],
   ["Terminal", "/terminal"],
+  ["Files", "/files"],
+  ["Snippets", "/snippets"],
   ["Config", "/config"],
   ["Groups", "/groups"],
   ["Keys", "/keys"],
