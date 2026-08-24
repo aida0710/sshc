@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState, type DragEvent as ReactDragEvent } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -12,6 +12,8 @@ import {
 } from "../ui/tableSort";
 import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 import { directoryPaths, safeRelativePath, symbolicModeToOctal, type LocalTransferFile } from "./transfers";
+import { sftpTransferQueue } from "./transferQueue";
+import { sftpDownloadQueue } from "./downloadQueue";
 
 const MonacoEditor = lazy(() =>
   import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
@@ -28,10 +30,7 @@ function join(parent: string, name: string): string {
   return `${parent === "/" ? "" : parent}/${name}`;
 }
 
-type UploadItem = { id: string; name: string; size: number; status: "pending" | "uploading" | "done" | "failed" | "skipped" | "cancelled"; problem?: string };
 type SFTPSort = "name" | "type" | "size" | "modified" | "mode";
-type TransferProgress = { kind: "upload" | "download"; processed: number; total: number; bytes: number; totalBytes: number | null };
-type OverwriteDecision = { path: string; decide: (overwrite: boolean) => void };
 
 type DroppedEntry = {
   isFile: boolean;
@@ -85,9 +84,6 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [deleting, setDeleting] = useState<RemoteEntry | null>(null);
-  const [uploads, setUploads] = useState<UploadItem[]>([]);
-  const [progress, setProgress] = useState<TransferProgress | null>(null);
-  const [overwriteDecision, setOverwriteDecision] = useState<OverwriteDecision | null>(null);
   const [dragging, setDragging] = useState(false);
   const [sort, setSort] = useState<{ key: SFTPSort; direction: SortDirection }>({
     key: "name",
@@ -95,8 +91,9 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
   });
   const upload = useRef<HTMLInputElement>(null);
   const folderUpload = useRef<HTMLInputElement>(null);
-  const transferAbort = useRef<AbortController | null>(null);
-  const cancelled = useRef(false);
+  const uploadJobs = useSyncExternalStore(sftpTransferQueue.subscribe, sftpTransferQueue.getSnapshot);
+  const downloadJobs = useSyncExternalStore(sftpDownloadQueue.subscribe, sftpDownloadQueue.getSnapshot);
+  const refreshedUploads = useRef(new Set<string>());
   const dirty = opened !== null && contents !== opened.contents;
   const displayedEntries = ordered(
     entries,
@@ -140,6 +137,15 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
     if (alias !== "") void load("/", alias);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alias]);
+
+  useEffect(() => {
+    const completed = uploadJobs.filter((job) => job.status === "done" && job.alias === alias && parentOf(job.remotePath) === path && !refreshedUploads.current.has(job.id));
+    if (completed.length === 0) return;
+    for (const job of completed) refreshedUploads.current.add(job.id);
+    void load(path, alias, true);
+    // load intentionally follows the current alias/path snapshot for each completed job.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadJobs, alias, path]);
 
   async function openText(entry: RemoteEntry) {
     if (dirty) {
@@ -233,71 +239,24 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
       return safe === null ? [] : [safe];
     });
     if (safeFiles.length === 0 && safeDirectories.length === 0) return;
-    const batch = safeFiles.map((item) => ({ id: crypto.randomUUID(), name: item.relativePath, size: item.file.size, status: "pending" as const }));
-    setUploads(batch);
-    setProgress(null);
     setBusy(true);
-    cancelled.current = false;
-    const controller = new AbortController();
-    transferAbort.current = controller;
-    const totalBytes = safeFiles.reduce((sum, item) => sum + item.file.size, 0);
-    let processed = 0;
-    let processedBytes = 0;
-    if (safeFiles.length > 0) setProgress({ kind: "upload", processed: 0, total: safeFiles.length, bytes: 0, totalBytes });
     const directories = [...new Set([...directoryPaths(safeFiles), ...safeDirectories])]
       .sort((left, right) => left.split("/").length - right.split("/").length || left.localeCompare(right));
     for (const directory of directories) {
-      if (cancelled.current) break;
       try {
         await sftpApi.mkdir(alias, join(path, directory));
       } catch (error) {
         if (failureCode(error) !== "sftp_exists") {
           setProblem(failureCode(error) || "sftp_failed");
-          cancelled.current = true;
+          setBusy(false);
+          return;
         }
       }
     }
-    for (let index = 0; index < safeFiles.length; index++) {
-      const source = safeFiles[index];
-      const item = batch[index];
-      if (source === undefined || item === undefined) continue;
-      if (cancelled.current) {
-        setUploads((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "cancelled" } : candidate));
-        continue;
-      }
-      setUploads((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "uploading" } : candidate));
-      try {
-        const remotePath = join(path, source.relativePath);
-        try {
-          await sftpApi.upload(alias, remotePath, source.file, false, controller.signal);
-        } catch (error) {
-          if (failureCode(error) !== "sftp_exists") throw error;
-          const overwrite = await new Promise<boolean>((decide) => setOverwriteDecision({ path: remotePath, decide }));
-          if (cancelled.current) throw new DOMException("cancelled", "AbortError");
-          if (!overwrite) {
-            setUploads((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "skipped" } : candidate));
-            continue;
-          }
-          await sftpApi.upload(alias, remotePath, source.file, true, controller.signal);
-        }
-        setUploads((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "done" } : candidate));
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          setUploads((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "cancelled" } : candidate));
-          cancelled.current = true;
-          continue;
-        }
-        const uploadProblem = failureCode(error) || (error instanceof Error ? error.message : "upload_failed");
-        setUploads((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "failed", problem: uploadProblem } : candidate));
-      } finally {
-        processed += 1;
-        processedBytes += source.file.size;
-        setProgress({ kind: "upload", processed, total: safeFiles.length, bytes: processedBytes, totalBytes });
-      }
-    }
-    transferAbort.current = null;
-    setOverwriteDecision(null);
-    await load(path, alias, true);
+    sftpTransferQueue.add(safeFiles.map((source) => ({
+      alias, remotePath: join(path, source.relativePath), localName: source.relativePath, file: source.file,
+    })));
+    setBusy(false);
   }
 
   async function acceptDrop(event: ReactDragEvent<HTMLDivElement>) {
@@ -308,33 +267,10 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
     await uploadFiles(selection.files, selection.directories);
   }
 
-  function cancelTransfer() {
-    cancelled.current = true;
-    transferAbort.current?.abort();
-    overwriteDecision?.decide(false);
-    setOverwriteDecision(null);
-  }
-
   async function download(entry: RemoteEntry) {
     if (busy) return;
-    setBusy(true);
     setProblem("");
-    cancelled.current = false;
-    const controller = new AbortController();
-    transferAbort.current = controller;
-    setProgress({ kind: "download", processed: 0, total: 1, bytes: 0, totalBytes: entry.type === "file" ? entry.size : null });
-    try {
-      await sftpApi.download(alias, entry.path, entry.type === "directory", {
-        signal: controller.signal,
-        onProgress: (bytes, total) => setProgress({ kind: "download", processed: 0, total: 1, bytes, totalBytes: total }),
-      });
-      setProgress((current) => current === null ? current : { ...current, processed: 1 });
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) setProblem(error instanceof Error ? error.message : "download_failed");
-    } finally {
-      transferAbort.current = null;
-      setBusy(false);
-    }
+    sftpDownloadQueue.add(alias, entry.path, entry.type === "directory", entry.type === "file" ? entry.size : null);
   }
 
   async function chmod(entry: RemoteEntry) {
@@ -420,8 +356,8 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
               }}
             />
           </div>
-          {progress === null ? null : <div className="border-b border-line px-3 py-2 text-xs"><div className="flex items-center gap-2"><progress className="min-w-24 grow" max={progress.totalBytes ?? progress.total} value={progress.totalBytes === null ? progress.processed : progress.bytes} /><span className="tabular-nums text-ink-muted">{progress.kind === "upload" ? `${progress.processed}/${progress.total} · ${progress.bytes.toLocaleString()}/${(progress.totalBytes ?? 0).toLocaleString()} B` : `${progress.bytes.toLocaleString()} B`}</span>{transferAbort.current === null ? null : <button type="button" className="text-danger" onClick={cancelTransfer}>{t("sftp.cancelTransfer")}</button>}</div></div>}
-          {uploads.length === 0 ? null : <ul aria-label={t("sftp.uploads")} className="max-h-28 overflow-auto border-b border-line px-3 py-2 text-xs">{uploads.map((item) => <li key={item.id} className="flex min-w-0 items-center gap-2"><span className="min-w-0 grow truncate font-mono">{item.name}</span><span className={item.status === "failed" ? "text-danger" : item.status === "done" ? "text-live" : "text-ink-muted"}>{item.status === "failed" ? item.problem : t(`sftp.upload.${item.status}`)}</span></li>)}</ul>}
+          {uploadJobs.length === 0 ? null : <div className="max-h-40 overflow-auto border-b border-line px-3 py-2 text-xs"><div className="mb-1 flex items-center"><span className="font-medium">{t("sftp.uploads")}</span><button type="button" className="ml-auto text-ink-muted" onClick={() => sftpTransferQueue.clearFinished()}>{t("sftp.transfer.clear")}</button></div><ul aria-label={t("sftp.uploads")} className="space-y-1">{uploadJobs.map((item) => <li key={item.id} className="flex min-w-0 items-center gap-2"><span className="min-w-0 grow truncate font-mono" title={`${item.alias}:${item.remotePath}`}>{item.localName}</span><progress className="w-20" max={Math.max(item.size, 1)} value={item.offset} /><span className="shrink-0 tabular-nums text-ink-muted">{item.offset.toLocaleString()}/{item.size.toLocaleString()} B</span><span className={item.status === "failed" ? "text-danger" : item.status === "done" ? "text-live" : "text-ink-muted"}>{item.status === "failed" ? item.problem : t(`sftp.upload.${item.status}`)}</span>{item.status === "uploading" || item.status === "queued" ? <button type="button" className="text-accent" onClick={() => sftpTransferQueue.pause(item.id)}>{t("sftp.transfer.pause")}</button> : null}{item.status === "paused" || item.status === "failed" ? <button type="button" className="text-accent" onClick={() => sftpTransferQueue.resume(item.id)}>{t("sftp.transfer.resume")}</button> : null}{item.status === "needs_overwrite" ? <button type="button" className="text-notice-ink" onClick={() => sftpTransferQueue.overwrite(item.id)}>{t("sftp.overwrite")}</button> : null}{item.status !== "done" && item.status !== "cancelled" ? <button type="button" className="text-danger" onClick={() => void sftpTransferQueue.cancel(item.id)}>{t("sftp.cancel")}</button> : null}</li>)}</ul></div>}
+          {downloadJobs.length === 0 ? null : <div className="max-h-32 overflow-auto border-b border-line px-3 py-2 text-xs"><div className="mb-1 flex items-center"><span className="font-medium">{t("sftp.downloads")}</span><button type="button" className="ml-auto text-ink-muted" onClick={() => sftpDownloadQueue.clearFinished()}>{t("sftp.transfer.clear")}</button></div><ul aria-label={t("sftp.downloads")} className="space-y-1">{downloadJobs.map((item) => <li key={item.id} className="flex min-w-0 items-center gap-2"><span className="min-w-0 grow truncate font-mono">{item.remotePath}</span><progress className="w-20" max={Math.max(item.total ?? 1, 1)} value={item.bytes} /><span className={item.status === "failed" ? "text-danger" : item.status === "done" ? "text-live" : "text-ink-muted"}>{item.status === "failed" ? item.problem : t(`sftp.download.${item.status}`)}</span>{item.status === "downloading" ? <button type="button" className="text-danger" onClick={() => sftpDownloadQueue.cancel(item.id)}>{t("sftp.cancel")}</button> : null}</li>)}</ul></div>}
           <div className="min-h-0 min-w-0 overflow-auto">
             <table className="w-full min-w-[52rem] text-left text-sm">
               <thead className="sticky top-0 bg-card text-xs text-ink-muted"><tr>
@@ -485,17 +421,6 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
           cancelLabel={t("sftp.cancel")}
           onConfirm={() => void remove()}
           onCancel={() => setDeleting(null)}
-        />
-      )}
-      {overwriteDecision === null ? null : (
-        <ConfirmDialog
-          id="sftp-overwrite-heading"
-          heading={t("sftp.overwriteHeading")}
-          body={<p className="break-all text-sm text-ink-muted">{overwriteDecision.path}</p>}
-          confirmLabel={t("sftp.overwrite")}
-          cancelLabel={t("sftp.skip")}
-          onConfirm={() => { overwriteDecision.decide(true); setOverwriteDecision(null); }}
-          onCancel={() => { overwriteDecision.decide(false); setOverwriteDecision(null); }}
         />
       )}
     </section>

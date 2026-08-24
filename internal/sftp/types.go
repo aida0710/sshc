@@ -24,6 +24,9 @@ var (
 	ErrAlreadyExists    = errors.New("remote path already exists")
 	ErrRevisionRequired = errors.New("content revision is required")
 	ErrTransferTooLarge = errors.New("uploaded file exceeds the requested size limit")
+	ErrInvalidTransfer  = errors.New("invalid transfer identifier")
+	ErrOffsetMismatch   = errors.New("upload offset does not match the remote part file")
+	ErrUploadIncomplete = errors.New("upload part file is incomplete")
 )
 
 type EntryType string
@@ -61,6 +64,26 @@ type Transfer struct {
 	Revision string
 }
 
+type ResumableUpload struct {
+	ID               string
+	Path             string
+	Offset           int64
+	Size             int64
+	ExpectedRevision string
+}
+
+type StartUploadOptions struct {
+	Size             int64
+	Overwrite        bool
+	ExpectedRevision string
+}
+
+type WriteSeekCloser interface {
+	io.Writer
+	io.Seeker
+	io.Closer
+}
+
 type UploadOptions struct {
 	// Overwrite は、既存ファイルを置換してよいことを呼び出し側が確認した場合だけ指定する。
 	Overwrite bool
@@ -81,6 +104,7 @@ type Remote interface {
 	ReadLink(path string) (string, error)
 	Open(path string) (io.ReadCloser, error)
 	Create(path string) (io.WriteCloser, error)
+	OpenFile(path string, flags int) (WriteSeekCloser, error)
 	Mkdir(path string) error
 	Chmod(path string, mode fs.FileMode) error
 	Replace(oldPath, newPath string) error

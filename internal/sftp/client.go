@@ -31,6 +31,10 @@ func (c *Client) Open(path string) (io.ReadCloser, error) { return c.client.Open
 
 func (c *Client) Create(path string) (io.WriteCloser, error) { return c.client.Create(path) }
 
+func (c *Client) OpenFile(path string, flags int) (WriteSeekCloser, error) {
+	return c.client.OpenFile(path, flags)
+}
+
 func (c *Client) Mkdir(path string) error { return c.client.Mkdir(path) }
 
 func (c *Client) Chmod(path string, mode fs.FileMode) error { return c.client.Chmod(path, mode) }

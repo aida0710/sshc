@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path"
@@ -171,6 +172,62 @@ func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	}
 	if err := service.Delete(t.Context(), "integration", root); err != nil {
 		t.Fatalf("delete directory: %v", err)
+	}
+}
+
+func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
+	service := integrationService(t)
+	manager := sftp.NewTransferManager(&service)
+	root := fmt.Sprintf("/tmp/sshc-sftp-resume-%d", time.Now().UnixNano())
+	target := path.Join(root, "large.bin")
+	cancelled := path.Join(root, "cancel.bin")
+	t.Cleanup(func() {
+		_ = service.Delete(context.Background(), "integration", target)
+		_ = manager.Cancel(context.Background(), "integration", "cancel_transfer_123", cancelled)
+		_ = service.Delete(context.Background(), "integration", root)
+	})
+	if _, err := service.Mkdir(t.Context(), "integration", root); err != nil {
+		t.Fatal(err)
+	}
+	payload := bytes.Repeat([]byte("resumable-data-"), 180_000)
+	started, err := manager.Start(t.Context(), "integration", "large_transfer_123", target, sftp.StartUploadOptions{Size: int64(len(payload))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := 1 << 20
+	if _, err := manager.Append(t.Context(), "integration", started.ID, target, 0, int64(len(payload)), payload[:first]); err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := manager.Start(t.Context(), "integration", started.ID, target, sftp.StartUploadOptions{Size: int64(len(payload)), ExpectedRevision: started.ExpectedRevision})
+	if err != nil || resumed.Offset != int64(first) {
+		t.Fatalf("resume = %+v, %v", resumed, err)
+	}
+	if _, err := manager.Append(t.Context(), "integration", started.ID, target, resumed.Offset, int64(len(payload)), payload[first:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Complete(t.Context(), "integration", started.ID, target, int64(len(payload)), started.ExpectedRevision); err != nil {
+		t.Fatal(err)
+	}
+	var tail bytes.Buffer
+	if _, err := service.DownloadFrom(t.Context(), "integration", target, int64(first), &tail); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(tail.Bytes(), payload[first:]) {
+		t.Fatalf("resumed download bytes = %d", tail.Len())
+	}
+
+	cancelStart, err := manager.Start(t.Context(), "integration", "cancel_transfer_123", cancelled, sftp.StartUploadOptions{Size: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Append(t.Context(), "integration", cancelStart.ID, cancelled, 0, 4, []byte("part")); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Cancel(t.Context(), "integration", cancelStart.ID, cancelled); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Stat(t.Context(), "integration", cancelled); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("cancelled target = %v", err)
 	}
 }
 

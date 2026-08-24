@@ -1158,6 +1158,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/{alias}/uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["startSFTPResumableUpload"];
+        delete: operations["cancelSFTPResumableUpload"];
+        options?: never;
+        head?: never;
+        patch: operations["appendSFTPResumableUpload"];
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/uploads/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeSFTPResumableUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/{alias}/entry": {
         parameters: {
             query?: never;
@@ -2431,6 +2469,28 @@ export interface components {
             /** Format: int64 */
             bytes: number;
             revision: string;
+        };
+        SFTPStartUploadRequest: {
+            path: string;
+            /** Format: int64 */
+            size: number;
+            overwrite: boolean;
+            expectedRevision?: string;
+        };
+        SFTPCompleteUploadRequest: {
+            path: string;
+            /** Format: int64 */
+            size: number;
+            expectedRevision: string;
+        };
+        SFTPResumableUpload: {
+            id: string;
+            path: string;
+            /** Format: int64 */
+            offset: number;
+            /** Format: int64 */
+            size: number;
+            expectedRevision?: string;
         };
         WorkspacePane: {
             id: string;
@@ -4688,7 +4748,9 @@ export interface operations {
             query: {
                 path: string;
             };
-            header?: never;
+            header?: {
+                Range?: string;
+            };
             path: {
                 alias: string;
             };
@@ -4705,7 +4767,17 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
+            /** @description Remaining remote file bytes */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
             404: components["responses"]["Problem"];
+            416: components["responses"]["Problem"];
         };
     };
     downloadSFTPDirectoryArchive: {
@@ -4763,6 +4835,128 @@ export interface operations {
             };
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
+        };
+    };
+    startSFTPResumableUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPStartUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Upload initialized or resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPResumableUpload"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    cancelSFTPResumableUpload: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Part file removed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangedResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    appendSFTPResumableUpload: {
+        parameters: {
+            query: {
+                path: string;
+                offset: number;
+                total: number;
+            };
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Chunk appended */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPResumableUpload"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    completeSFTPResumableUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPCompleteUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Part file atomically published */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTransfer"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     deleteSFTPEntry: {

@@ -22,6 +22,14 @@ export type TransferOptions = {
   onProgress?: (bytes: number, total: number | null) => void;
 };
 
+export type ResumableUpload = {
+  id: string;
+  path: string;
+  offset: number;
+  size: number;
+  expectedRevision: string;
+};
+
 function pathFor(alias: string, suffix: string, remotePath: string): string {
   return `/api/v1/sftp/${encodeURIComponent(alias)}/${suffix}?path=${encodeURIComponent(remotePath)}`;
 }
@@ -40,6 +48,17 @@ function entry(value: unknown): RemoteEntry {
     mode: asString(item.mode),
     modifiedAt: asString(item.modifiedAt),
     revision: asString(item.revision),
+  };
+}
+
+function resumableUpload(value: unknown): ResumableUpload {
+  const upload = asRecord(value);
+  return {
+    id: asString(upload.id),
+    path: asString(upload.path),
+    offset: asNumber(upload.offset),
+    size: asNumber(upload.size),
+    expectedRevision: asString(upload.expectedRevision),
   };
 }
 
@@ -92,29 +111,70 @@ export const sftpApi = {
       ...(signal === undefined ? {} : { signal }),
     });
   },
+  async startUpload(alias: string, id: string, remotePath: string, size: number, overwrite: boolean, expectedRevision = ""): Promise<ResumableUpload> {
+    return resumableUpload(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ path: remotePath, size, overwrite, ...(expectedRevision === "" ? {} : { expectedRevision }) }),
+    }));
+  },
+  async appendUpload(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload> {
+    const query = `/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}`;
+    return resumableUpload(await apiClient.mutate<unknown>(query, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: chunk,
+      ...(signal === undefined ? {} : { signal }),
+    }));
+  },
+  async completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string): Promise<void> {
+    await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ path: remotePath, size, expectedRevision }),
+    });
+  },
+  async cancelUpload(alias: string, id: string, remotePath: string): Promise<void> {
+    await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}`, {
+      method: "DELETE",
+    });
+  },
   async download(alias: string, remotePath: string, directory = false, options: TransferOptions = {}): Promise<number> {
-    const response = await apiClient.send(pathFor(alias, directory ? "archive" : "download", remotePath), { method: "GET", ...(options.signal === undefined ? {} : { signal: options.signal }) });
-    if (!response.ok) throw new Error("download_failed");
-    const totalHeader = Number(response.headers.get("Content-Length"));
-    const total = Number.isFinite(totalHeader) && totalHeader > 0 ? totalHeader : null;
-    let blob: Blob;
+    const chunks: Uint8Array[] = [];
     let bytes = 0;
-    if (response.body === null) {
-      blob = await response.blob();
-      bytes = blob.size;
-      options.onProgress?.(bytes, total);
-    } else {
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      while (true) {
-        const next = await reader.read();
-        if (next.done) break;
-        chunks.push(next.value);
-        bytes += next.value.byteLength;
-        options.onProgress?.(bytes, total);
+    let total: number | null = null;
+    let failures = 0;
+    while (true) {
+      try {
+        const headers = !directory && bytes > 0 ? { Range: `bytes=${bytes}-` } : undefined;
+        const response = await apiClient.send(pathFor(alias, directory ? "archive" : "download", remotePath), {
+          method: "GET", ...(headers === undefined ? {} : { headers }), ...(options.signal === undefined ? {} : { signal: options.signal }),
+        });
+        if (!response.ok || (!directory && bytes > 0 && response.status !== 206)) throw new Error("download_failed");
+        const length = Number(response.headers.get("Content-Length"));
+        if (total === null && Number.isFinite(length) && length >= 0) total = bytes + length;
+        if (response.body === null) {
+          const buffer = new Uint8Array(await (await response.blob()).arrayBuffer());
+          chunks.push(buffer);
+          bytes += buffer.byteLength;
+          options.onProgress?.(bytes, total);
+        } else {
+          const reader = response.body.getReader();
+          while (true) {
+            const next = await reader.read();
+            if (next.done) break;
+            chunks.push(next.value);
+            bytes += next.value.byteLength;
+            options.onProgress?.(bytes, total);
+          }
+        }
+        break;
+      } catch (error) {
+        if (directory || options.signal?.aborted || failures >= 2) throw error;
+        failures += 1;
       }
-      blob = new Blob(chunks as BlobPart[], { type: directory ? "application/zip" : "application/octet-stream" });
     }
+    const blob = new Blob(chunks as BlobPart[], { type: directory ? "application/zip" : "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
