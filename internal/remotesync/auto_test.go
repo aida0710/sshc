@@ -24,6 +24,16 @@ func once(t *testing.T, auto *remotesync.Auto) remotesync.AutoView {
 	return auto.Once(context.Background())
 }
 
+// UI は engine 起動直後、一巡目のtickerより先にstatusを読む。ゼロ値の空文字は
+// APIのphaseではないため、まだ一度も走っていなくてもidleと答える。
+func TestAutoStartsIdleBeforeItsFirstCycle(t *testing.T) {
+	auto := remotesync.NewAuto(nil, time.Minute, func() string { return "unused" })
+	view := auto.View()
+	if view.Phase != remotesync.AutoIdle || view.Enabled {
+		t.Fatalf("initial view = %+v, want disabled idle", view)
+	}
+}
+
 // 入っていなければ、巡回は何もしない。バケットへ 1 本も投げない。
 func TestAutoDoesNothingWhenItIsNotOn(t *testing.T) {
 	bucket := &fakeBucket{}
