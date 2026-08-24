@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryPanel } from "./HistoryPanel";
 import { configApi } from "../api/config";
+import { ApiError } from "../api/client";
 
 vi.mock("../api/config", async () => {
   const actual = await vi.importActual<typeof import("../api/config")>("../api/config");
@@ -59,5 +60,26 @@ describe("HistoryPanel", () => {
     await user.click(screen.getByRole("button", { name: "Roll back" }));
 
     await waitFor(() => expect(configApi.recover).toHaveBeenCalledWith("20260805T115900.000-ffff", "rollback"));
+  });
+
+  it("leaves the loading state and reports a history request failure", async () => {
+    vi.mocked(configApi.history).mockRejectedValueOnce(new ApiError("history_unavailable", 500, null));
+
+    render(<HistoryPanel />);
+
+    expect(await screen.findByText("The request was rejected (history_unavailable)."))
+      .toBeInTheDocument();
+    expect(screen.queryByText("Loading history…")).not.toBeInTheDocument();
+  });
+
+  it("keeps completed history visible when the overview request fails", async () => {
+    vi.mocked(configApi.overview).mockRejectedValueOnce(new ApiError("overview_unavailable", 500, null));
+
+    render(<HistoryPanel />);
+
+    expect(await screen.findByText("config.host_fields")).toBeInTheDocument();
+    expect(screen.getByText("The request was rejected (overview_unavailable)."))
+      .toBeInTheDocument();
+    expect(screen.queryByText("Loading history…")).not.toBeInTheDocument();
   });
 });
