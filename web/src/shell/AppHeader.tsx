@@ -82,15 +82,20 @@ export function AppHeader({
             : t("shell.pageNotFound")}
         </p>
 
-        <p
-          role="status"
-          className="flex min-w-0 shrink-0 items-center gap-2 rounded-full border border-line bg-card px-2 py-1 text-xs text-ink-muted shadow-sm"
+        <p role="status" className="sr-only">
+          {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
+        </p>
+
+        <div
+          aria-hidden="true"
+          data-session-status-badge
+          className="hidden min-w-0 shrink-0 items-center gap-2 rounded-full border border-line bg-card px-2 py-1 text-xs text-ink-muted shadow-sm md:flex"
         >
           <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-live shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-live)_14%,transparent)]" />
-          <span className="sr-only lg:not-sr-only lg:max-w-52 lg:truncate">
+          <span className="hidden lg:block lg:max-w-52 lg:truncate">
             {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
           </span>
-        </p>
+        </div>
 
         {inspector === null ? null : (
           <span className="shrink-0 [&>button]:h-10 [&>button]:min-w-10 [&>button]:justify-center md:contents md:[&>button]:h-auto md:[&>button]:min-w-0">

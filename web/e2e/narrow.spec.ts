@@ -129,6 +129,13 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   expect(borders).toBe(1);
 });
 
+test("removes the session status badge from the mobile header", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  await expect(sessionStatus(page)).toContainText("Local session active");
+  await expect(page.locator("[data-session-status-badge]")).toBeHidden();
+});
+
 test("keeps every section inside 360 pixels", async ({ page, installation }) => {
   await installation.write("conf.d/20-lab.conf", hosts);
   await installation.write(

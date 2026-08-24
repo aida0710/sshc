@@ -21,6 +21,7 @@ for (const appearance of ["light", "dark"] as const) {
   test(`every section renders in ${appearance}`, async ({ page, installation }) => {
     await openApplication(page, installation);
 
+    await expect(page.locator("[data-session-status-badge]")).toBeVisible();
     await page.getByLabel("Appearance").selectOption(appearance);
     await expect(page.locator("html")).toHaveAttribute("data-theme", appearance);
     await expect(sessionStatus(page)).toContainText("Local session active");
