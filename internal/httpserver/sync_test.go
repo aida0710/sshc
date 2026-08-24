@@ -730,6 +730,30 @@ func TestTheAutoSyncSwitchIsRememberedAndReported(t *testing.T) {
 	}
 }
 
+func TestFreshAutoSyncIsReportedAsIdle(t *testing.T) {
+	_, service, secrets := syncEngineWithVault(t)
+	auto := remotesync.NewAuto(service, time.Minute, func() string { return "2026-08-24T00:00:00Z" })
+	engine := echo.New()
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Auto: auto, Reach: reachable})
+
+	status := sendSync(t, engine, http.MethodGet, "/api/v1/sync", "")
+	if status.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/sync = %d: %s", status.Code, status.Body.String())
+	}
+	var body struct {
+		Auto struct {
+			Enabled bool   `json:"enabled"`
+			Phase   string `json:"phase"`
+		} `json:"auto"`
+	}
+	if err := json.Unmarshal(status.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Auto.Enabled || body.Auto.Phase != "idle" {
+		t.Errorf("fresh auto status = %+v, want disabled idle", body.Auto)
+	}
+}
+
 // 巡回の無い設置で「今すぐ」を押しても、何も起きない。押せてしまえば、
 // 画面は起きていないことを起きたと言うことになる。
 func TestSyncNowWithoutALoopIsRefused(t *testing.T) {

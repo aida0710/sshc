@@ -288,3 +288,33 @@ describe("integrationsApi remote sync measurements", () => {
     await expect(integrationsApi.pullSnapshot(false)).rejects.toThrow("invalid_response");
   });
 });
+
+describe("integrationsApi.syncStatus", () => {
+  const cleanInstall = {
+    configured: false,
+    keyConfigured: false,
+    locked: true,
+    auto: { enabled: false, phase: "idle" },
+    endpoint: "",
+    bucket: "",
+    path: "",
+    region: "",
+    synced: false,
+    direction: "both",
+  };
+
+  it("accepts the complete unconfigured status returned by a fresh engine", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(cleanInstall)));
+
+    await expect(integrationsApi.syncStatus()).resolves.toEqual(cleanInstall);
+  });
+
+  it.each([
+    { ...cleanInstall, auto: { enabled: false, phase: "" } },
+    { ...cleanInstall, auto: { enabled: false } },
+  ])("rejects a status outside the auto phase contract %#", async (body) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
+
+    await expect(integrationsApi.syncStatus()).rejects.toThrow();
+  });
+});
