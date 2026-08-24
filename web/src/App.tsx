@@ -8,7 +8,7 @@ import {
   type CSSProperties,
   type MouseEvent,
 } from "react";
-import { apiClient, whenLocked, type HealthResponse } from "./api/client";
+import { apiClient, failureCode, whenLocked, whenSessionEnded, type HealthResponse } from "./api/client";
 import { integrationsApi, type PasswordVaultStatus, type TerminalAppearance, type TerminalSettings } from "./api/integrations";
 import { resolveAppearance } from "./terminal/appearance";
 import { configApi } from "./api/config";
@@ -146,7 +146,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const { route, location, navigate, navigateLocation, setNavigationBlocker } = useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
-  const [state, setState] = useState<"starting" | "locked" | "ready" | "error">("starting");
+  const [state, setState] = useState<"starting" | "locked" | "ready" | "session-ended" | "error">("starting");
   const [failure, setFailure] = useState("");
   const [vaultExists, setVaultExists] = useState(false);
   const [version, setVersion] = useState("");
@@ -319,6 +319,16 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       .catch((reason: unknown) => {
         console.error("sshc could not start its session", reason);
         if (!active) return;
+        const code = failureCode(reason);
+        if (
+          (reason instanceof Error && reason.message === "session_expired") ||
+          code === "session_required" ||
+          code === "invalid_session" ||
+          code === "invalid_csrf"
+        ) {
+          setState("session-ended");
+          return;
+        }
         setFailure(reason instanceof Error ? reason.message : String(reason));
         setState("error");
       });
@@ -335,6 +345,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       setState("locked");
     });
     return () => whenLocked(null);
+  }, []);
+
+  useEffect(() => {
+    whenSessionEnded(() => setState("session-ended"));
+    return () => whenSessionEnded(null);
   }, []);
 
   useEffect(() => {
@@ -392,6 +407,23 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         >
           {t("shell.bootstrapRetry")}
         </Button>
+      </main>
+    );
+  }
+
+  if (state === "session-ended") {
+    return (
+      <main className="grid min-h-screen place-items-center bg-canvas p-6 text-ink">
+        <section className="sshc-card flex w-full max-w-md flex-col items-start gap-4 rounded-2xl bg-card p-6 sm:p-8">
+          <h1 className="text-lg font-semibold">{t("shell.sessionEndedHeading")}</h1>
+          <p role="alert" className="text-sm leading-6 text-ink-muted">{t("shell.sessionEnded")}</p>
+          <Button
+            kind="primary"
+            onClick={() => window.location.replace(window.location.pathname + window.location.search)}
+          >
+            {t("shell.sessionReload")}
+          </Button>
+        </section>
       </main>
     );
   }

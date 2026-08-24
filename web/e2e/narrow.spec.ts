@@ -1,4 +1,4 @@
-import { expect, test, openApplication, sessionStatus } from "./support/environment";
+import { expect, masterPassword, test, openApplication, sessionStatus } from "./support/environment";
 import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard } from "./support/terminal";
 
 
@@ -68,6 +68,60 @@ async function expectNoHorizontalOverflow(page: import("@playwright/test").Page,
     `${where} scrolls sideways at 360px; past the right edge: ${culprits.join(", ") || "nothing measurable"}`,
   ).toBeLessThanOrEqual(0);
 }
+
+test("keeps password setup inside 360 pixels without a decorative icon", async ({
+  page,
+  installation,
+}) => {
+  await page.goto(installation.url);
+
+  await expect(page.getByText(/cannot be recovered/i)).toBeVisible();
+  await expect(page.locator('use[href="#icon-secrets"]')).toHaveCount(0);
+  await expectNoHorizontalOverflow(page, "First-run password setup");
+  await expectFullyInsideViewport(
+    page,
+    page.getByRole("button", { name: "Create the vault" }),
+    "Create the vault",
+  );
+
+  await page.getByLabel("Master password", { exact: true }).fill(masterPassword);
+  await page.getByLabel("Confirm master password", { exact: true }).fill(masterPassword);
+  await page.getByRole("button", { name: "Create the vault" }).click();
+  await expect(sessionStatus(page)).toContainText("Local session active");
+  await openSectionThroughDrawer(page, "Secrets", "The vault");
+  await page.getByRole("button", { name: "Lock sshc" }).click();
+
+  await expect(page.getByText("Give your master password to open sshc.")).toBeVisible();
+  await expect(page.locator('use[href="#icon-secrets"]')).toHaveCount(0);
+  await expectNoHorizontalOverflow(page, "Existing-vault password screen");
+  await expectFullyInsideViewport(page, page.getByRole("button", { name: "Open" }), "Open sshc");
+});
+
+test("draws one separator above the version in the mobile drawer", async ({ page, installation }) => {
+  await page.route("**/api/v1/update", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ current: "test", available: false }),
+    });
+  });
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  const version = navigation.getByText(/^Version /);
+  await expect(version).toBeVisible();
+  const borders = await version.evaluate((node) => {
+    const navigation = node.closest("nav");
+    let current: HTMLElement | null = node.parentElement;
+    let count = 0;
+    while (current !== null && current !== navigation) {
+      if (Number.parseFloat(getComputedStyle(current).borderTopWidth) > 0) count += 1;
+      current = current.parentElement;
+    }
+    return count;
+  });
+  expect(borders).toBe(1);
+});
 
 test("keeps every section inside 360 pixels", async ({ page, installation }) => {
   await installation.write("conf.d/20-lab.conf", hosts);

@@ -5,6 +5,38 @@ const manyHosts = Array.from(
   (_unused, index) => `Host lab-${String(index).padStart(2, "0")}\n\tHostName 198.51.100.${index + 1}\n`,
 ).join("\n");
 
+async function navigationFooterTopBorders(page: import("@playwright/test").Page): Promise<number> {
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  const version = navigation.getByText(/^Version /);
+  await expect(version).toBeVisible();
+  return version.evaluate((node) => {
+    const navigation = node.closest("nav");
+    let current: HTMLElement | null = node.parentElement;
+    let borders = 0;
+    while (current !== null && current !== navigation) {
+      if (Number.parseFloat(getComputedStyle(current).borderTopWidth) > 0) borders += 1;
+      current = current.parentElement;
+    }
+    return borders;
+  });
+}
+
+async function stubUpdateStatus(page: import("@playwright/test").Page) {
+  await page.route("**/api/v1/update", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ current: "test", available: false }),
+    });
+  });
+}
+
+test("draws one separator above the desktop navigation version", async ({ page, installation }) => {
+  await stubUpdateStatus(page);
+  await openApplication(page, installation);
+
+  await expect.poll(() => navigationFooterTopBorders(page)).toBe(1);
+});
+
 test("keeps the header and the primary navigation still while a panel scrolls", async ({
   page,
   installation,

@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,6 +57,12 @@ func integrationBucket(t *testing.T) (objectstore.Client, string) {
 // realInstallation は、プロセス内の偽物ではなく本物のサーバーに向けた
 // newInstallation。実行どうしが衝突しないよう、各テストは自前のオブジェクトキーを持つ。
 func realInstallation(t *testing.T, files map[string]string) installation {
+	return realInstallationAt(t, "", files)
+}
+
+// realInstallationAt は、同じバケット内の独立したprefixへ設置を向ける。
+// 複数のfresh workspaceを一つのシナリオで動かすテストは、同じpathを渡す。
+func realInstallationAt(t *testing.T, objectPath string, files map[string]string) installation {
 	t.Helper()
 	client, endpoint := integrationBucket(t)
 
@@ -78,24 +87,73 @@ func realInstallation(t *testing.T, files map[string]string) installation {
 	}
 	source := func() ([]string, error) {
 		var paths []string
-		for name := range files {
-			if strings.HasPrefix(name, "keys/") || strings.HasPrefix(name, "sshc/") {
-				continue
+		err := filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
-			paths = append(paths, name)
-		}
-		return paths, nil
+			if entry.IsDir() {
+				return nil
+			}
+			relative, err := filepath.Rel(root, name)
+			if err != nil {
+				return err
+			}
+			relative = filepath.ToSlash(relative)
+			// Collect自身が鍵と背景を歩く。それ以外は、本番のInclude graphと
+			// 同じく、その時点でworkspaceに存在するファイルを返す。
+			if strings.HasPrefix(relative, "keys/") || strings.HasPrefix(relative, "sshc/backgrounds/") {
+				return nil
+			}
+			paths = append(paths, relative)
+			return nil
+		})
+		return paths, err
 	}
 	counter := 0
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
 	service := remotesync.NewService(workspace,
-		storage.NewManager(workspace, time.Now, rand.Reader), source,
+		manager, source,
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
 		func() (string, error) { counter++; return "origin-integration", nil })
-	service.Configure(
-		remotesync.Config{Endpoint: endpoint, Bucket: client.Bucket, Region: client.Region},
-		client.Creds, &client,
-	)
-	return installation{service: service, workspace: workspace, home: home}
+	config := remotesync.Config{
+		Endpoint: endpoint, Bucket: client.Bucket, Path: objectPath, Region: client.Region,
+	}
+	service.Configure(config, client.Creds, &client)
+	return installation{
+		service: service, workspace: workspace, manager: manager, home: home,
+		config: config, creds: client.Creds, client: &client,
+	}
+}
+
+// connectionGate は、実際のS3 clientのtransportだけを切断する。復帰時は同じclient、
+// 同じ資格情報、同じSeaweedFS endpointを通るので、再設定で状態を作り直してはいない。
+type connectionGate struct {
+	offline atomic.Bool
+	base    http.RoundTripper
+}
+
+func (g *connectionGate) RoundTrip(request *http.Request) (*http.Response, error) {
+	if g.offline.Load() {
+		return nil, fmt.Errorf("integration network is disconnected")
+	}
+	return g.base.RoundTrip(request)
+}
+
+func writeRealWorkspace(t *testing.T, machine installation, name, contents string) {
+	t.Helper()
+	absolute := filepath.Join(machine.workspace.Root(), filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(absolute), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(absolute, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func uniqueRealPath(t *testing.T) string {
+	t.Helper()
+	name := strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
+	return fmt.Sprintf("integration/%s/%d-%d", name, os.Getpid(), time.Now().UnixNano())
 }
 
 func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
@@ -152,6 +210,127 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	}
 	if got := second.read(t, "keys/work/id_ed25519"); !strings.HasPrefix(got, "-----BEGIN") {
 		t.Errorf("the private key did not arrive: %q", got)
+	}
+}
+
+// 一つの実運用シナリオで、初回同期から競合解決、鍵交換、回線復帰までを通す。
+// 個々の性質には密閉された単体テストもあるが、ここではすべてのread/writeが
+// aws-sdk-go-v2の署名を経て実際のSeaweedFSへ届くことを検証する。
+func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testing.T) {
+	ctx := context.Background()
+	remotePath := uniqueRealPath(t)
+	first := realInstallationAt(t, remotePath, map[string]string{
+		"config": "Host shared\n  HostName first.example\n",
+	})
+	second := realInstallationAt(t, remotePath, map[string]string{})
+
+	if _, err := first.service.Push(ctx, syncPassphrase); err != nil {
+		t.Fatalf("first workspace initial Push = %v", err)
+	}
+	if _, err := second.service.Pull(ctx, "this is not the shared sync key", remotesync.ResolveNone); !errors.Is(err, remotesync.ErrWrongPassphrase) {
+		t.Fatalf("second workspace Pull with a different key = %v, want ErrWrongPassphrase", err)
+	}
+
+	initial, err := second.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("second workspace initial Pull = %v", err)
+	}
+	if err := second.service.Apply(initial); err != nil {
+		t.Fatalf("second workspace initial Apply = %v", err)
+	}
+	if got := second.read(t, "config"); got != "Host shared\n  HostName first.example\n" {
+		t.Fatalf("second workspace config after initial Pull = %q", got)
+	}
+
+	// 両方が同じbaseを知ったあと、同じファイルを別々に編集する。
+	writeRealWorkspace(t, first, "config", "Host shared\n  HostName remote-change.example\n")
+	if _, err := first.service.Push(ctx, syncPassphrase); err != nil {
+		t.Fatalf("first workspace Push after editing = %v", err)
+	}
+	writeRealWorkspace(t, second, "config", "Host shared\n  HostName local-choice.example\n")
+
+	conflicted, err := second.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("second workspace conflict preview = %v", err)
+	}
+	if len(conflicted.Conflicts) == 0 {
+		t.Fatal("two divergent real workspaces produced no conflict")
+	}
+	if err := second.service.Apply(conflicted); !errors.Is(err, remotesync.ErrConflicts) {
+		t.Fatalf("Apply with unresolved real conflict = %v, want ErrConflicts", err)
+	}
+	if got := second.read(t, "config"); got != "Host shared\n  HostName local-choice.example\n" {
+		t.Fatalf("refused conflict Apply changed the local file: %q", got)
+	}
+
+	// 利用者がlocalを選んだ状態をbaseとして記録し、その選択を逆方向へpushする。
+	localChoice, err := second.service.Pull(ctx, syncPassphrase, remotesync.ResolveLocal)
+	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
+		t.Fatalf("resolve conflict in favour of local = %v", err)
+	}
+	if err := second.service.Apply(localChoice); err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
+		t.Fatalf("Apply local conflict resolution = %v", err)
+	}
+	if _, err := second.service.Push(ctx, syncPassphrase); err != nil {
+		t.Fatalf("second workspace Push of local conflict choice = %v", err)
+	}
+
+	chosen, err := first.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("first workspace Pull of the chosen resolution = %v", err)
+	}
+	if err := first.service.Apply(chosen); err != nil {
+		t.Fatalf("first workspace Apply of the chosen resolution = %v", err)
+	}
+	if got := first.read(t, "config"); got != "Host shared\n  HostName local-choice.example\n" {
+		t.Fatalf("the conflict choice did not travel back: %q", got)
+	}
+
+	const nextSyncKey = "a new correct horse battery staple for sync"
+	if _, err := first.service.Rekey(ctx, "not the current sync key", nextSyncKey); !errors.Is(err, remotesync.ErrWrongPassphrase) {
+		t.Fatalf("Rekey with a different old key = %v, want ErrWrongPassphrase", err)
+	}
+	if _, err := first.service.Rekey(ctx, syncPassphrase, nextSyncKey); err != nil {
+		t.Fatalf("Rekey through the real bucket = %v", err)
+	}
+	if _, err := second.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone); !errors.Is(err, remotesync.ErrWrongPassphrase) {
+		t.Fatalf("old key opened the rekeyed real object: %v", err)
+	}
+
+	// Rekey changes the live object's ETag. Pulling and applying the unchanged contents records
+	// that new generation before the next conditional push.
+	rekeyed, err := first.service.Pull(ctx, nextSyncKey, remotesync.ResolveNone)
+	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
+		t.Fatalf("first workspace Pull after Rekey = %v", err)
+	}
+	if err := first.service.Apply(rekeyed); err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
+		t.Fatalf("first workspace Apply after Rekey = %v", err)
+	}
+	writeRealWorkspace(t, first, "config", "Host shared\n  HostName after-recovery.example\n")
+	if _, err := first.service.Push(ctx, nextSyncKey); err != nil {
+		t.Fatalf("first workspace Push with the new key = %v", err)
+	}
+
+	gate := &connectionGate{base: http.DefaultTransport}
+	second.client.HTTP = &http.Client{Transport: gate, Timeout: 5 * time.Second}
+	gate.offline.Store(true)
+	if _, err := second.service.Pull(ctx, nextSyncKey, remotesync.ResolveNone); err == nil {
+		t.Fatal("Pull succeeded while the integration transport was disconnected")
+	}
+	if got := second.read(t, "config"); got != "Host shared\n  HostName local-choice.example\n" {
+		t.Fatalf("a disconnected Pull changed the workspace: %q", got)
+	}
+
+	gate.offline.Store(false)
+	recovered, err := second.service.Pull(ctx, nextSyncKey, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("Pull after network recovery = %v", err)
+	}
+	if err := second.service.Apply(recovered); err != nil {
+		t.Fatalf("Apply after network recovery = %v", err)
+	}
+	if got := second.read(t, "config"); got != "Host shared\n  HostName after-recovery.example\n" {
+		t.Fatalf("second workspace after recovery = %q", got)
 	}
 }
 

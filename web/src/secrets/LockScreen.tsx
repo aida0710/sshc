@@ -4,7 +4,6 @@ import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
-import { Icon } from "../ui/icons";
 
 type LockScreenProps = {
   exists: boolean;
@@ -51,10 +50,7 @@ export function LockScreen({ exists, onOpen, api = integrationsApi }: LockScreen
   return (
     <main className="flex min-h-screen items-center justify-center bg-canvas p-6">
       <section className="sshc-card grid w-full max-w-3xl overflow-hidden rounded-2xl bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(20rem,1.1fr)]">
-        <div className="flex min-h-60 flex-col justify-between gap-8 bg-toolbar p-7 md:p-10">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-select-fill text-accent">
-            <Icon name="secrets" className="h-6 w-6" />
-          </span>
+        <div className="flex min-h-60 flex-col justify-center gap-8 bg-toolbar p-7 md:p-10">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-ink">{t("shell.title")}</h1>
             <p className="mt-2 text-sm leading-6 text-ink-muted">{exists ? t("lock.explainOpen") : t("lock.explainNew")}</p>

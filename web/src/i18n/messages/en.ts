@@ -5,6 +5,9 @@ export const en = {
   "shell.bootstrapFailed":
     "Secure local session could not be started. Restart sshc and use the newly opened tab.",
   "shell.bootstrapRetry": "Try again",
+  "shell.sessionEndedHeading": "Session ended",
+  "shell.sessionEnded": "Reload to renew the local session. If it no longer exists, restart sshc and use the newly opened tab.",
+  "shell.sessionReload": "Reload session",
   "shell.pageNotFound": "Page not found",
   "shell.pageNotFoundDescription": "No sshc section exists at this URL.",
   "shell.goHome": "Go to Home",

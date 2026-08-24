@@ -149,7 +149,7 @@ export function AppNavigation({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-line pt-2">
+      <div className="shrink-0 pt-2">
         <UpdateBadge />
       </div>
 
