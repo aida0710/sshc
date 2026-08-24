@@ -187,7 +187,7 @@ public final class MainActivity extends Activity {
      */
     private int chromeColour() {
         int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        return night == Configuration.UI_MODE_NIGHT_YES ? 0xFF2A2A2C : 0xFFFBFBFD;
+        return night == Configuration.UI_MODE_NIGHT_YES ? 0xFF0D1925 : 0xFFF9FBFD;
     }
 
     /** configChanges で受けた uiMode の変更をコンテナ背景へ反映する。 */

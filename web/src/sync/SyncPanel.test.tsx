@@ -68,6 +68,25 @@ const nothingToDo: PullResponse = {
 };
 
 describe("SyncPanel", () => {
+  it("shows a retry action when the sync status cannot be loaded", async () => {
+    const syncStatus = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(configured);
+    const api = buildApi(configured, nothingToDo, { syncStatus });
+
+    render(<SyncPanel api={api} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Reading the sync settings");
+    expect(await screen.findByRole("alert")).toHaveTextContent("The sync settings could not be read");
+    expect(screen.queryByText("Reading the sync settings…")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByText("https://acc.r2.cloudflarestorage.com/sshc")).toBeInTheDocument();
+    expect(syncStatus).toHaveBeenCalledTimes(2);
+  });
+
   it("says what travels before the form asks for anything", async () => {
     render(<SyncPanel api={buildApi(unconfigured, nothingToDo)} />);
 
