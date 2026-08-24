@@ -29,6 +29,11 @@
   --ui-connect-hero-end: #164e63;
   --ui-connect-mark: #a5f3fc;
   --ui-connect-star: #fcd34d;
+  --ui-brand-background: #09111f;
+  --ui-brand-gradient-start: #38bdf8;
+  --ui-brand-gradient-middle: #667eea;
+  --ui-brand-gradient-end: #8b5cf6;
+  --ui-brand-cursor: #eaf2ff;
   --ui-card-shadow: 0 1px 2px rgb(18 40 59 / 0.05), 0 12px 32px rgb(18 40 59 / 0.035);
   --ui-skeleton: #e4ebf1;
   --ui-skeleton-highlight: #f5f8fa;

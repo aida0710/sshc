@@ -1,8 +1,9 @@
-import type { DragEvent } from "react";
+import { useState, type DragEvent } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
 import { noteLabels, rowAction, rowDanger, rowPrimary } from "./labels";
+import { keyItemGroups } from "./organizer";
 
 export type KeyRowActions = {
   onSelect: (item: KeyItem) => void;
@@ -27,6 +28,7 @@ export function KeyTable({
   selected,
   moreActionsFor,
   now,
+  revealRelated = false,
   actions,
 }: {
   items: KeyItem[];
@@ -35,9 +37,41 @@ export function KeyTable({
   selected: string | null;
   moreActionsFor: string;
   now: number;
+  revealRelated?: boolean;
   actions: KeyRowActions;
 }) {
   const t = useTranslate();
+  const [expandedRelated, setExpandedRelated] = useState<ReadonlySet<string>>(new Set());
+  const grouped = keyItemGroups(items);
+  const displayed = grouped.flatMap((group) => {
+    const relatedExpanded = revealRelated || expandedRelated.has(group.primary.id);
+    return [
+      {
+        item: group.primary,
+        relatedCount: group.related.length,
+        relatedExpanded,
+        relatedTo: null as string | null,
+      },
+      ...(relatedExpanded
+        ? group.related.map((item) => ({
+            item,
+            relatedCount: 0,
+            relatedExpanded: false,
+            relatedTo: group.primary.id,
+          }))
+        : []),
+    ];
+  });
+
+  function toggleRelated(item: KeyItem) {
+    setExpandedRelated((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      return next;
+    });
+  }
+
   return (
     <table className="block w-full text-left text-sm md:table md:min-w-[56rem]">
       <caption className="sr-only">{t("keys.tableCaption")}</caption>
@@ -53,15 +87,16 @@ export function KeyTable({
         </tr>
       </thead>
       <tbody className="block md:table-row-group">
-        {items.map((item) => {
+        {displayed.map(({ item, relatedCount, relatedExpanded, relatedTo }) => {
           const heldByAgent = agentHolds(inventory, item);
           const isSelected = selected === item.id;
           return (
             <tr
               key={item.id}
+              data-key-related-to={relatedTo ?? undefined}
               className={`grid grid-cols-[2.25rem_minmax(0,1fr)] border-b border-hairline align-top transition-colors last:border-b-0 hover:bg-select-fill md:table-row ${
                 isSelected ? "bg-select-fill" : ""
-              }`}
+              } ${relatedTo === null ? "" : "bg-surface-subtle"}`}
             >
               <td className="row-span-3 py-3 pl-2 md:table-cell md:pl-3">
                 {renameable(item, inventory.items) ? (
@@ -87,7 +122,7 @@ export function KeyTable({
                   </div>
                 ) : null}
               </td>
-              <td className="min-w-0 py-3 pr-3 md:table-cell md:pr-4">
+              <td className={`min-w-0 py-3 pr-3 md:table-cell md:pr-4 ${relatedTo === null ? "" : "pl-3 md:pl-6"}`}>
                 <button
                   type="button"
                   aria-pressed={isSelected}
@@ -103,6 +138,18 @@ export function KeyTable({
                 )}
                 {item.comment === "" ? null : (
                   <p className="mt-0.5 max-w-xs truncate text-xs text-ink-muted">{item.comment}</p>
+                )}
+                {relatedCount === 0 ? null : (
+                  <button
+                    type="button"
+                    aria-expanded={relatedExpanded}
+                    disabled={revealRelated}
+                    onClick={() => toggleRelated(item)}
+                    className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-md bg-surface px-2 py-1 text-xs font-medium text-ink-muted hover:text-ink disabled:cursor-default md:min-h-0"
+                  >
+                    <span aria-hidden="true" className="font-mono text-ink-faint">{relatedExpanded ? "▾" : "▸"}</span>
+                    {t("keys.relatedPublicFiles", { count: relatedCount })}
+                  </button>
                 )}
               </td>
               <td className="col-start-2 min-w-0 pb-3 pr-3 md:table-cell md:py-3 md:pr-4">
@@ -238,7 +285,7 @@ export function KeyTable({
             </tr>
           );
         })}
-        {items.length === 0 && (
+        {displayed.length === 0 && (
           <tr className="block md:table-row">
             <td colSpan={5} className="block p-8 text-center text-sm text-ink-muted md:table-cell">
               {inventory.items.length === 0 ? t("keys.inventoryEmpty") : t("keys.noMatches")}

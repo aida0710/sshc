@@ -47,6 +47,50 @@ export function shownItems(items: KeyItem[], filter: ListFilter): KeyItem[] {
   return items.filter((item) => keyKinds.has(item.kind) || item.permissionRisk);
 }
 
+export type KeyItemGroup = { primary: KeyItem; related: KeyItem[] };
+
+function relatedFingerprint(item: KeyItem): string {
+  if (item.kind === "public_key") return item.fingerprint;
+  if (item.kind === "certificate") return item.certificate?.signedKeyFingerprint ?? "";
+  return "";
+}
+
+export function keyItemGroups(items: KeyItem[]): KeyItemGroup[] {
+  const privateByFingerprint = new Map<string, KeyItem>();
+  for (const item of items) {
+    if (item.kind === "private_key" && item.fingerprint !== "" && !privateByFingerprint.has(item.fingerprint)) {
+      privateByFingerprint.set(item.fingerprint, item);
+    }
+  }
+
+  const relatedByPrivate = new Map<string, KeyItem[]>();
+  const relatedIDs = new Set<string>();
+  for (const item of items) {
+    const fingerprint = relatedFingerprint(item);
+    if (fingerprint === "") continue;
+    const privateKey = privateByFingerprint.get(fingerprint);
+    if (privateKey === undefined) continue;
+    relatedByPrivate.set(privateKey.id, [...(relatedByPrivate.get(privateKey.id) ?? []), item]);
+    relatedIDs.add(item.id);
+  }
+
+  return items.flatMap((item) => {
+    if (relatedIDs.has(item.id)) return [];
+    return [{ primary: item, related: relatedByPrivate.get(item.id) ?? [] }];
+  });
+}
+
+export function includeKeyPairContext(items: KeyItem[], matched: KeyItem[]): KeyItem[] {
+  const matchedIDs = new Set(matched.map((item) => item.id));
+  for (const group of keyItemGroups(items)) {
+    const members = [group.primary, ...group.related];
+    if (members.some((item) => matchedIDs.has(item.id))) {
+      for (const item of members) matchedIDs.add(item.id);
+    }
+  }
+  return items.filter((item) => matchedIDs.has(item.id));
+}
+
 export type MoveOutcome = {
   moved: string[];
   unchanged: string[];

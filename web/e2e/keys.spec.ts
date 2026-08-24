@@ -69,6 +69,15 @@ test("lists generated keys and reveals one only after an explicit confirmation",
 
   const row = page.getByRole("row", { name: /id_e2e\b/ }).first();
   await expect(row).toBeVisible();
+  const publicFiles = row.getByRole("button", { name: "Public key files (1)" });
+  await expect(publicFiles).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("button", { name: "id_e2e.pub", exact: true })).toHaveCount(0);
+  await publicFiles.click();
+  const publicRow = page.getByRole("row", { name: /id_e2e\.pub/ });
+  await expect(publicRow).toBeVisible();
+  await expect(publicRow).toHaveAttribute("data-key-related-to");
+  await publicFiles.click();
+  await expect(publicRow).toHaveCount(0);
 
   await row.getByRole("button", { name: "id_e2e", exact: true }).click();
   await page.getByRole("button", { name: "Show Key details" }).click();

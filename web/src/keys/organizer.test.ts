@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import type { KeyItem, RelocateKeyResponse } from "./api";
-import { folderRows, itemsInFolder, moveInto, sameFolder, shownItems, type Folder } from "./organizer";
+import {
+  folderRows,
+  includeKeyPairContext,
+  itemsInFolder,
+  keyItemGroups,
+  moveInto,
+  sameFolder,
+  shownItems,
+  type Folder,
+} from "./organizer";
 
 function item(relativePath: string, id = relativePath): KeyItem {
   return {
@@ -194,5 +203,54 @@ describe("shownItems", () => {
 
   it("shows everything when asked to", () => {
     expect(shownItems(everything, "all")).toHaveLength(everything.length);
+  });
+});
+
+describe("keyItemGroups", () => {
+  it("puts matching public material under its private key and leaves public-only files alone", () => {
+    const privateKey = { ...item("id_work", "private"), fingerprint: "SHA256:work" };
+    const publicKey = {
+      ...item("id_work.pub", "public"),
+      kind: "public_key",
+      fingerprint: "SHA256:work",
+    } as KeyItem;
+    const certificate = {
+      ...item("id_work-cert.pub", "certificate"),
+      kind: "certificate",
+      fingerprint: "SHA256:certificate",
+      certificate: { signedKeyFingerprint: "SHA256:work" },
+    } as KeyItem;
+    const standalone = {
+      ...item("colleague.pub", "standalone"),
+      kind: "public_key",
+      fingerprint: "SHA256:colleague",
+    } as KeyItem;
+
+    const grouped = keyItemGroups([publicKey, standalone, privateKey, certificate]);
+
+    expect(grouped.map((group) => group.primary.id)).toEqual(["standalone", "private"]);
+    expect(grouped.find((group) => group.primary.id === "private")?.related.map((entry) => entry.id)).toEqual([
+      "public",
+      "certificate",
+    ]);
+  });
+
+  it("includes both halves when a search matches one member of a pair", () => {
+    const privateKey = { ...item("id_work", "private"), fingerprint: "SHA256:work" };
+    const publicKey = {
+      ...item("id_work.pub", "public"),
+      kind: "public_key",
+      fingerprint: "SHA256:work",
+    } as KeyItem;
+    const standalone = {
+      ...item("colleague.pub", "standalone"),
+      kind: "public_key",
+      fingerprint: "SHA256:colleague",
+    } as KeyItem;
+
+    expect(includeKeyPairContext([privateKey, publicKey, standalone], [publicKey]).map((entry) => entry.id)).toEqual([
+      "private",
+      "public",
+    ]);
   });
 });

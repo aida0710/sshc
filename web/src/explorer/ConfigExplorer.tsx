@@ -268,14 +268,14 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
                       )}
                       <p className="mt-0.5 text-xs text-ink-faint">{state}</p>
                       {(node.includes ?? []).map((include) => (
-                        <div key={`${node.file.absolute}:${include.line}:${include.pattern}`} className="mt-2 rounded-md bg-surface-subtle px-2 py-1.5 text-xs text-ink-muted">
-                          <span className="font-mono">{include.pattern}</span>
+                        <div key={`${node.file.absolute}:${include.line}:${include.pattern}`} className="mt-2 min-w-0 overflow-hidden rounded-md bg-surface-subtle px-2 py-1.5 text-xs text-ink-muted">
+                          <span className="block break-all font-mono leading-5">{include.pattern}</span>
                           {include.condition === undefined ? null : (
-                            <span className="ml-1 text-notice-ink">{t("explorer.insideCondition", { condition: include.condition })}</span>
+                            <span className="mt-0.5 block break-words leading-5 text-notice-ink">{t("explorer.insideCondition", { condition: include.condition })}</span>
                           )}
                           <ul className="mt-1">
                             {(include.matches ?? []).map((match) => (
-                              <li key={match.absolute} className="truncate font-mono text-ink-faint">{`→ ${match.path ?? match.absolute}`}</li>
+                              <li key={match.absolute} className="truncate font-mono text-ink-faint" title={match.path ?? match.absolute}>{`→ ${match.path ?? match.absolute}`}</li>
                             ))}
                           </ul>
                         </div>
