@@ -4,8 +4,11 @@ import { availableParallelism } from "node:os";
 // ローカルではコアの4分の1を残し、共有 CI では半分だけを使用する。
 function workerCount(): number {
   const cores = availableParallelism();
-  if (process.env.CI) return Math.max(2, Math.floor(cores / 2));
-  return Math.max(2, Math.floor((cores * 3) / 4));
+  const requested = process.env.CI ? Math.floor(cores / 2) : Math.floor((cores * 3) / 4);
+  // 各 worker は Chromium と sshc engine を1つずつ起動する。大きな開発機で
+  // CPU 比率だけを使うと数十組が同時に ConPTY/PTY を確保し、製品の session
+  // 上限や runner の process 起動時間を測るテストになってしまう。
+  return Math.min(process.env.CI ? 8 : 12, Math.max(2, requested));
 }
 
 // E2E では秘密鍵を表示する操作があるため、trace、動画、スクリーンショットを
@@ -17,8 +20,9 @@ export default defineConfig({
   // 一つずつ動かす。
   fullyParallel: true,
   workers: workerCount(),
-  // CI では不安定なテストを要約に記録するため一度だけ再試行する。
-  retries: process.env.CI ? 1 : 0,
+  // 失敗した操作は同じ run でやり直さない。flake も失敗として残し、traceを
+  // 使わないこのsuiteでは assertion と engine logから原因を調べる。
+  retries: 0,
   forbidOnly: true,
   timeout: 30_000,
   expect: { timeout: 10_000 },

@@ -78,19 +78,26 @@ func TestCheckClassifiesFailuresWithoutGuessing(t *testing.T) {
 }
 
 func TestCheckAppliesItsOwnTimeout(t *testing.T) {
+	const timeout = 2 * time.Hour
+	var deadline time.Time
+	var hasDeadline bool
 	reachability := diagnostics.Reachability{
-		Timeout: 50 * time.Millisecond,
+		Timeout: timeout,
 		Dialer: dialerFunc(func(ctx context.Context, _, _ string) (net.Conn, error) {
-			<-ctx.Done()
-			return nil, ctx.Err()
+			deadline, hasDeadline = ctx.Deadline()
+			return nil, context.DeadlineExceeded
 		}),
 	}
-	started := time.Now()
+	before := time.Now()
 	result := reachability.Check(context.Background(), "slow.internal", "22")
+	after := time.Now()
 	if result.Outcome != diagnostics.ReachabilityTimeout {
 		t.Fatalf("outcome = %q", result.Outcome)
 	}
-	if time.Since(started) > time.Second {
-		t.Error("the check did not apply its own timeout")
+	if !hasDeadline {
+		t.Fatal("the dial context has no deadline")
+	}
+	if deadline.Before(before.Add(timeout)) || deadline.After(after.Add(timeout)) {
+		t.Errorf("dial deadline = %v, want the configured %v from Check", deadline, timeout)
 	}
 }

@@ -23,8 +23,8 @@ generate:
 	go run ./internal/validate/cmd/rulegen .
 
 test:
-	go test ./...
-	go test -race ./...
+	go test -count=1 ./...
+	go test -count=1 -race ./...
 	@# Android 向けのビルドタグを検証する。実機向けビルドは CI の Android
 	@# ジョブで gomobile と NDK を使って検証する。
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
@@ -164,10 +164,24 @@ integration-up:
 	@ssh-keygen -q -t ed25519 -N "$(SSH_KEY_PASSPHRASE)" \
 		-f .integration-key/id_integration -C sshc-integration
 	@echo "waiting for the containers to answer"
-	@for i in $$(seq 1 60); do \
-		curl -s -o /dev/null http://127.0.0.1:$(S3_PORT)/ && break; sleep 1; done
-	@for i in $$(seq 1 60); do \
-		(exec 3<>/dev/tcp/127.0.0.1/$(SSHD_PORT)) 2>/dev/null && break; sleep 1; done
+	@ready=0; for i in $$(seq 1 60); do \
+		if curl -sS -o /dev/null http://127.0.0.1:$(S3_PORT)/; then ready=1; break; fi; \
+		sleep 1; \
+	done; \
+	if [ "$$ready" != 1 ]; then \
+		echo "SeaweedFS did not answer on port $(S3_PORT) within 60s" >&2; \
+		docker logs sshc-s3 2>&1 | tail -100 >&2 || true; \
+		exit 1; \
+	fi
+	@ready=0; for i in $$(seq 1 60); do \
+		if ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q .; then ready=1; break; fi; \
+		sleep 1; \
+	done; \
+	if [ "$$ready" != 1 ]; then \
+		echo "sshd did not answer on port $(SSHD_PORT) within 60s" >&2; \
+		docker logs sshc-sshd 2>&1 | tail -100 >&2 || true; \
+		exit 1; \
+	fi
 	@$(MAKE) --no-print-directory integration-sshd-relax
 	@docker exec -i sshc-sshd sh -c ' \
 		umask 077; \
@@ -193,8 +207,15 @@ integration-sshd-relax:
 		done; \
 		echo "PerSourcePenalties no ->" $$found'
 	docker restart sshc-sshd
-	@for i in $$(seq 1 60); do \
-		ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q . && break; sleep 1; done
+	@ready=0; for i in $$(seq 1 60); do \
+		if ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q .; then ready=1; break; fi; \
+		sleep 1; \
+	done; \
+	if [ "$$ready" != 1 ]; then \
+		echo "sshd did not return after restart within 60s" >&2; \
+		docker logs sshc-sshd 2>&1 | tail -100 >&2 || true; \
+		exit 1; \
+	fi
 	@# Verify that repeated connections from one address are accepted.
 	@for i in 1 2 3 4 5 6 7 8; do \
 		ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q . || { \

@@ -25,6 +25,7 @@ const (
 	descendantHelperEnvironment = "SSHC_TERMINAL_DESCENDANT_HELPER"
 	idleHelperEnvironment       = "SSHC_TERMINAL_IDLE_HELPER"
 	exitHelperEnvironment       = "SSHC_TERMINAL_EXIT_HELPER"
+	markerHelperEnvironment     = "SSHC_TERMINAL_MARKER_HELPER"
 )
 
 func TestMain(m *testing.M) {
@@ -39,6 +40,10 @@ func TestMain(m *testing.M) {
 	}
 	if os.Getenv(exitHelperEnvironment) != "" {
 		os.Exit(7)
+	}
+	if os.Getenv(markerHelperEnvironment) != "" {
+		fmt.Println("sshc-marker-9f2c")
+		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }
@@ -180,12 +185,9 @@ func TestWindowsConsoleReachesEOFWhenTheChildExitsOnItsOwn(t *testing.T) {
 	}
 }
 
-func TestWindowsConsoleCarriesAMarkerBackFromPowerShell(t *testing.T) {
-	shell := powershell(t)
-	process, err := terminal.NewStarter().Start(context.Background(), terminal.Command{
-		Path:      shell,
-		Arguments: []string{"-NoProfile", "-Command", "Write-Output 'sshc-marker-9f2c'"},
-	}, terminal.Size{Cols: 120, Rows: 30})
+func TestWindowsConsoleCarriesAMarkerBackFromChild(t *testing.T) {
+	process, err := terminal.NewStarter().Start(context.Background(),
+		selfCommand(t, markerHelperEnvironment), terminal.Size{Cols: 120, Rows: 30})
 	if err != nil {
 		t.Fatalf("Start = %v", err)
 	}

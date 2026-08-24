@@ -73,7 +73,7 @@ test("enforces the content security policy in the browser, not only in the heade
     } catch {
       return false;
     }
-    await new Promise((done) => setTimeout(done, 100));
+    await new Promise<void>((done) => requestAnimationFrame(() => done()));
     return Boolean((window as unknown as Record<string, unknown>)[marker]);
   });
   expect(inlineRan, "an inline script executed despite the policy").toBe(false);

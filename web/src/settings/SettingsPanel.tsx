@@ -119,7 +119,7 @@ function TerminalPreview({
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
-  onTerminalSettingsChange?: (settings: TerminalSettings) => void;
+  onTerminalSettingsChange?: (settings: TerminalSettings) => void | Promise<void>;
   consoles?: Pick<TerminalSessionsState, "sessions" | "busy" | "closeAll">;
 };
 
@@ -150,6 +150,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [copyOnSelect, setCopyOnSelect] = useState(true);
   const [rightClickPaste, setRightClickPaste] = useState(true);
   const [terminalBusy, setTerminalBusy] = useState(false);
+  const [terminalLoaded, setTerminalLoaded] = useState(false);
   const [terminalError, setTerminalError] = useState("");
   const [terminalSaved, setTerminalSaved] = useState(false);
 
@@ -171,7 +172,10 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setCopyOnSelect(settings.copyOnSelect ?? true);
         setRightClickPaste(settings.rightClickPaste ?? true);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setTerminalLoaded(true);
+      });
     void api
       .engineSettings()
       .then((settings) => {
@@ -237,7 +241,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         ...(appearanceOf({ palette, font, background, tint })),
       };
       await api.setTerminalSettings(next);
-      onTerminalSettingsChange?.(next);
+      await onTerminalSettingsChange?.(next);
       setTerminalSaved(true);
     } catch (error) {
       const code = failureCode(error);
@@ -338,6 +342,10 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         </SettingsSection>
 
         <SettingsSection id="settings-terminal" label={t("terminal.settingsHeading")} icon="terminal">
+          <fieldset
+            disabled={!terminalLoaded || terminalBusy}
+            className="min-w-0 border-0 p-0 disabled:opacity-70"
+          >
           <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_19rem]">
             <div className="grid min-w-0 gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
@@ -510,13 +518,18 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
             </div>
           </div>
           <ActionArea status={terminalError === ""
-            ? (!terminalSaved ? undefined : <p role="status" className="text-sm text-live">{t("terminal.settingsSaved")}</p>)
+            ? (!terminalLoaded
+                ? <p role="status" className="text-sm text-ink-muted">{t("terminal.settingsLoading")}</p>
+                : !terminalSaved
+                  ? undefined
+                  : <p role="status" className="text-sm text-live">{t("terminal.settingsSaved")}</p>)
             : <Notice tone="danger">{terminalError}</Notice>}
           >
             <Button kind="primary" disabled={terminalBusy} onClick={() => void saveTerminal()}>
               {t("terminal.startSave")}
             </Button>
           </ActionArea>
+          </fieldset>
         </SettingsSection>
 
         {consoles === undefined ? null : (

@@ -65,6 +65,30 @@ describe("useTerminalSessions", () => {
     expect(terminalSessions).toHaveBeenCalled();
   });
 
+  it("does not let an older refresh overwrite a newer session limit", async () => {
+    let resolveInitial: (value: typeof list) => void = () => undefined;
+    const initial = new Promise<typeof list>((resolve) => {
+      resolveInitial = resolve;
+    });
+    const terminalSessions = vi
+      .fn()
+      .mockReturnValueOnce(initial)
+      .mockResolvedValueOnce({ sessions: [], maxSessions: 1 });
+    const { result } = renderHook(() => useTerminalSessions(api({ terminalSessions }), translate));
+
+    await waitFor(() => expect(terminalSessions).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.maxSessions).toBe(1);
+
+    await act(async () => {
+      resolveInitial({ sessions: [], maxSessions: 50 });
+      await initial;
+    });
+    expect(result.current.maxSessions).toBe(1);
+  });
+
   it("says so when a rename is refused and keeps the list it had", async () => {
     const renameTerminalSession = vi.fn().mockRejectedValue(
       new ApiError("invalid_terminal_title", 400, { code: "invalid_terminal_title", message: "no" }),
@@ -135,12 +159,11 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("");
   });
 
-  it("keeps trying while a session takes real time to die", async () => {
-    const startedAt = Date.now();
+  it("keeps trying while a session takes several attempts to die", async () => {
     const server = [{ id: "a" }];
     const listing = () => ({ sessions: [...server] as never, maxSessions: 50 });
     const closeTerminalSession = vi.fn(async () => {
-      if (Date.now() - startedAt >= 250) server.length = 0;
+      if (closeTerminalSession.mock.calls.length >= 3) server.length = 0;
       return listing();
     });
     const client = api({ terminalSessions: vi.fn(async () => listing()), closeTerminalSession });

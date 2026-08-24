@@ -375,12 +375,29 @@ func validateGoSteps(job workflowJob) []string {
 		{run: "go vet ./...", condition: "${{ runner.os == 'Windows' }}", shell: "pwsh"},
 		{run: "go build ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
 		{run: "go build ./...", condition: "${{ runner.os == 'Windows' }}", shell: "pwsh"},
-		{run: "go test ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
-		{run: "go test ./...", condition: "${{ runner.os == 'Windows' }}", shell: "pwsh"},
-		{run: "go test -race ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
+		{run: "go test -count=1 ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
+		{run: "go test -count=1 -race ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
 	} {
 		if !hasRunContract(job, required) {
 			problems = append(problems, fmt.Sprintf("jobs.go lacks run=%q if=%q shell=%q", required.run, required.condition, required.shell))
+		}
+	}
+
+	windowsTest, ok := namedStep(job, "go test (Windows)")
+	if !ok {
+		problems = append(problems, "jobs.go lacks the Windows test step")
+	} else {
+		if windowsTest.If != "${{ runner.os == 'Windows' }}" || windowsTest.Shell != "pwsh" {
+			problems = append(problems, "the Windows test step must be Windows-only PowerShell")
+		}
+		for _, fragment := range []string{
+			"& go test -v -count=1 ./... 2>&1 | Tee-Object -FilePath",
+			"$testExit = $LASTEXITCODE",
+			"exit $testExit",
+		} {
+			if !strings.Contains(windowsTest.Run, fragment) {
+				problems = append(problems, fmt.Sprintf("the Windows test step lacks diagnostic fragment %q", fragment))
+			}
 		}
 	}
 
@@ -396,7 +413,7 @@ func validateGoSteps(job workflowJob) []string {
 	}
 	for _, fragment := range []string{
 		"$PSNativeCommandUseErrorActionPreference = $false",
-		"@(& go test -race ./... 2>&1)",
+		"@(& go test -v -count=1 -race ./... 2>&1 | Tee-Object -FilePath",
 		"$raceExit = $LASTEXITCODE",
 		"if ($raceExit -eq 0)",
 		"$raceOutput -ceq '-race is not supported on windows/amd64'",

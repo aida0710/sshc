@@ -1,10 +1,12 @@
 import {
   expect,
+  type Installation,
   openApplication,
   openSection,
   shellSays,
   test,
 } from "./support/environment";
+import type { Locator, Page, Response } from "@playwright/test";
 import {
   drawnRowCount,
   drawnRowFont,
@@ -46,6 +48,38 @@ async function openConsolePanel(page: import("@playwright/test").Page) {
   await nav.getByRole("tab", { name: "Terminals" }).click();
   await expect(nav.getByRole("button", { name: "Local shell" })).toBeVisible();
   return nav;
+}
+
+async function seedTerminalSettings(installation: Installation) {
+  await installation.write(
+    "sshc/metadata.json",
+    JSON.stringify({
+      schemaVersion: 3,
+      embeddedTerminal: { maxSessions: 2, scrollbackBytes: 16384 },
+    }),
+  );
+}
+
+async function openLoadedTerminalSettings(page: Page): Promise<Locator> {
+  await openSection(page, "Settings");
+  const region = page.getByRole("region", { name: "Terminal" });
+  // The sentinel proves that the Settings effect has applied its metadata GET.
+  // Without this gate, a slow initial GET can overwrite a value filled by the test.
+  await expect(region.getByLabel("Consoles open at once")).toHaveValue("2");
+  return region;
+}
+
+async function saveTerminalSettings(page: Page, region: Locator): Promise<Response> {
+  const save = region.getByRole("button", { name: "Save" });
+  const responsePromise = page.waitForResponse((response) => {
+    const request = response.request();
+    return new URL(response.url()).pathname === "/api/v1/metadata/terminal" && request.method() === "PUT";
+  });
+  await save.click();
+  const response = await responsePromise;
+  expect(response.ok()).toBe(true);
+  await expect(save).toBeEnabled();
+  return response;
 }
 
 test("opens a local shell, runs a command and shows its output", async ({ page, installation }) => {
@@ -124,35 +158,46 @@ test("shows an open console again after a reload instead of claiming there are n
 });
 
 test("applies the session limit set from the settings screen", async ({ page, installation }) => {
+  await seedTerminalSettings(installation);
   await openApplication(page, installation);
 
-  await openSection(page, "Settings");
-  const region = page.getByRole("region", { name: "Terminal" });
+  const region = await openLoadedTerminalSettings(page);
   await region.getByLabel("Consoles open at once").fill("1");
-  await region.getByRole("button", { name: "Save" }).click();
-  await expect(region.getByText(/Saved/)).toBeVisible();
+  const saved = await saveTerminalSettings(page, region);
+  expect(saved.request().postDataJSON()).toEqual(expect.objectContaining({ maxSessions: 1 }));
+  expect(JSON.parse(await installation.read("sshc/metadata.json"))).toEqual(
+    expect.objectContaining({ embeddedTerminal: expect.objectContaining({ maxSessions: 1 }) }),
+  );
 
   const panel = await openConsolePanel(page);
   const openShell = panel.getByRole("button", { name: "Local shell" });
+  const created = page.waitForResponse((response) => {
+    const request = response.request();
+    return new URL(response.url()).pathname === "/api/v1/terminal/sessions" && request.method() === "POST";
+  });
+  const refreshed = page.waitForResponse((response) => {
+    const request = response.request();
+    return new URL(response.url()).pathname === "/api/v1/terminal/sessions" && request.method() === "GET";
+  });
   await openShell.click();
+  expect((await created).status()).toBe(201);
+  const listed = await refreshed;
+  expect((await listed.json()).maxSessions).toBe(1);
   const consoles = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
   await expect(consoles).toHaveCount(1);
-
-  await expect(consoles.first()).toContainText("connected");
 
   await expect(openShell).toBeDisabled();
   await expect(panel).toContainText("limit of 1 open consoles");
 });
 
 test("starts local shells where the setting says", async ({ page, installation }) => {
+  await seedTerminalSettings(installation);
   await installation.write("../workspace/marker", "");
   await openApplication(page, installation);
 
-  await openSection(page, "Settings");
-  const region = page.getByRole("region", { name: "Terminal" });
+  const region = await openLoadedTerminalSettings(page);
   await region.getByLabel("Starting directory").fill("~/workspace");
-  await region.getByRole("button", { name: "Save" }).click();
-  await expect(region.getByText(/Saved/)).toBeVisible();
+  await saveTerminalSettings(page, region);
 
   const panel = await openConsolePanel(page);
   await panel.getByRole("button", { name: "Local shell" }).click();
@@ -207,6 +252,7 @@ test("can turn automatic selection copy off for an already open console", async 
   context,
   installation,
 }) => {
+  await seedTerminalSettings(installation);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
 
@@ -216,11 +262,9 @@ test("can turn automatic selection copy off for an already open console", async 
   await expect(screen).toContainText("copy-setting-canary", { timeout: 20_000 });
 
   await panel.getByRole("tab", { name: "Settings" }).click();
-  await openSection(page, "Settings");
-  const settings = page.getByRole("region", { name: "Terminal" });
+  const settings = await openLoadedTerminalSettings(page);
   await settings.getByRole("checkbox", { name: "Copy selected text automatically" }).uncheck();
-  await settings.getByRole("button", { name: "Save" }).click();
-  await expect(settings.getByText(/Saved/)).toBeVisible();
+  await saveTerminalSettings(page, settings);
 
   await openSection(page, "Terminal");
   await page.evaluate(() => navigator.clipboard.writeText("clipboard-sentinel"));
@@ -401,6 +445,7 @@ test("does not hand npm's own environment to the shell", async ({ page, installa
 });
 
 test("paints the console in the colour scheme that was chosen", async ({ page, installation }) => {
+  await seedTerminalSettings(installation);
   await openApplication(page, installation);
 
   const panel = await openConsolePanel(page);
@@ -418,11 +463,9 @@ test("paints the console in the colour scheme that was chosen", async ({ page, i
   const beforeRed = await drawnRed();
 
   await panel.getByRole("tab", { name: "Settings" }).click();
-  await openSection(page, "Settings");
-  const settings = page.getByRole("region", { name: "Terminal" });
+  const settings = await openLoadedTerminalSettings(page);
   await settings.getByLabel("Colour scheme").selectOption("dracula");
-  await settings.getByRole("button", { name: "Save" }).click();
-  await expect(settings.getByText(/Saved/)).toBeVisible();
+  await saveTerminalSettings(page, settings);
 
   await openSection(page, "Terminal");
   await expect.poll(surface).toBe("#282a36");
@@ -432,6 +475,7 @@ test("paints the console in the colour scheme that was chosen", async ({ page, i
 });
 
 test("loads the font it ships and hands it to the console", async ({ page, installation }) => {
+  await seedTerminalSettings(installation);
   await openApplication(page, installation);
 
   const panel = await openConsolePanel(page);
@@ -442,11 +486,9 @@ test("loads the font it ships and hands it to the console", async ({ page, insta
   expect(await family()).not.toContain("JetBrains Mono");
 
   await panel.getByRole("tab", { name: "Settings" }).click();
-  await openSection(page, "Settings");
-  const settings = page.getByRole("region", { name: "Terminal" });
+  const settings = await openLoadedTerminalSettings(page);
   await settings.getByLabel("Font family").selectOption("jetbrains-mono");
-  await settings.getByRole("button", { name: "Save" }).click();
-  await expect(settings.getByText(/Saved/)).toBeVisible();
+  await saveTerminalSettings(page, settings);
 
   await openSection(page, "Terminal");
   await expect.poll(family).toContain("JetBrains Mono");
@@ -456,6 +498,7 @@ test("loads the font it ships and hands it to the console", async ({ page, insta
 });
 
 test("wears the image that was brought in, and gets out of its way", async ({ page, installation }) => {
+  await seedTerminalSettings(installation);
   await openApplication(page, installation);
 
   const panel = await openConsolePanel(page);
@@ -473,8 +516,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   });
 
   await panel.getByRole("tab", { name: "Settings" }).click();
-  await openSection(page, "Settings");
-  const settings = page.getByRole("region", { name: "Terminal" });
+  const settings = await openLoadedTerminalSettings(page);
   await settings.locator('input[type="file"]').setInputFiles({
     name: "Canary Wall.png",
     mimeType: "image/png",
@@ -483,8 +525,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   const thumbnail = settings.getByRole("img", { name: "canary-wall.png" });
   await expect(thumbnail).toBeVisible();
   await expect.poll(async () => thumbnail.evaluate((node) => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
-  await settings.getByRole("button", { name: "Save" }).click();
-  await expect(settings.getByText(/Saved/)).toBeVisible();
+  await saveTerminalSettings(page, settings);
 
   await openSection(page, "Terminal");
   const wiring = {
