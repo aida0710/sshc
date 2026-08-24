@@ -336,7 +336,9 @@ func New(options Options) (*Server, error) {
 		})
 	}
 	if options.SFTP != nil {
-		registerSFTPRoutes(e, SFTPHandlers{Service: options.SFTP, Actions: actions})
+		registerSFTPRoutes(e, SFTPHandlers{
+			Service: options.SFTP, Transfers: sshcSFTP.NewTransferManager(options.SFTP), Actions: actions,
+		})
 	}
 	if options.Workspaces != nil {
 		registerWorkspaceRoutes(e, WorkspaceHandlers{Service: options.Workspaces})

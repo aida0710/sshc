@@ -40,6 +40,9 @@ func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, e
 	}
 	entries := make([]Entry, 0, len(infos))
 	for _, info := range infos {
+		if isUploadPartName(info.Name()) {
+			continue
+		}
 		entries = append(entries, entryFrom(cleaned, info))
 	}
 	sort.Slice(entries, func(left, right int) bool {
@@ -139,9 +142,18 @@ func (s Service) SaveText(
 }
 
 func (s Service) Download(ctx context.Context, alias, remotePath string, destination io.Writer) (Transfer, error) {
+	return s.DownloadFrom(ctx, alias, remotePath, 0, destination)
+}
+
+// DownloadFrom resumes a regular-file download at offset. SFTP files support Seek;
+// the fallback discard keeps the Remote test boundary compatible with simpler readers.
+func (s Service) DownloadFrom(ctx context.Context, alias, remotePath string, offset int64, destination io.Writer) (Transfer, error) {
 	cleaned, err := cleanPath(remotePath, false)
 	if err != nil {
 		return Transfer{}, err
+	}
+	if offset < 0 {
+		return Transfer{}, ErrOffsetMismatch
 	}
 	remote, err := s.open(ctx, alias)
 	if err != nil {
@@ -155,11 +167,23 @@ func (s Service) Download(ctx context.Context, alias, remotePath string, destina
 	if !info.Mode().IsRegular() {
 		return Transfer{}, ErrNotRegularFile
 	}
+	if offset > info.Size() {
+		return Transfer{}, ErrOffsetMismatch
+	}
 	file, err := remote.Open(cleaned)
 	if err != nil {
 		return Transfer{}, err
 	}
 	defer file.Close()
+	if offset > 0 {
+		if seeker, ok := file.(io.Seeker); ok {
+			if _, err := seeker.Seek(offset, io.SeekStart); err != nil {
+				return Transfer{}, err
+			}
+		} else if _, err := io.CopyN(io.Discard, &contextReader{ctx: ctx, reader: file}, offset); err != nil {
+			return Transfer{}, err
+		}
+	}
 	written, err := copyContext(ctx, destination, file, 0)
 	if err != nil {
 		return Transfer{}, err

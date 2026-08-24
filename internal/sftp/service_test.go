@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -109,6 +110,17 @@ func (r *fakeRemote) Create(candidate string) (io.WriteCloser, error) {
 	return &fakeWriter{remote: r, path: candidate}, nil
 }
 
+func (r *fakeRemote) OpenFile(candidate string, flags int) (sftp.WriteSeekCloser, error) {
+	if flags != os.O_WRONLY {
+		return nil, fs.ErrInvalid
+	}
+	info, ok := r.nodes[candidate]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	return &fakeSeekWriter{remote: r, path: candidate, contents: append([]byte(nil), info.content...)}, nil
+}
+
 func (r *fakeRemote) Mkdir(candidate string) error {
 	if _, ok := r.nodes[candidate]; ok {
 		return fs.ErrExist
@@ -177,6 +189,44 @@ type fakeWriter struct {
 	path   string
 	buffer bytes.Buffer
 	closed bool
+}
+
+type fakeSeekWriter struct {
+	remote   *fakeRemote
+	path     string
+	contents []byte
+	offset   int64
+	closed   bool
+}
+
+func (w *fakeSeekWriter) Seek(offset int64, whence int) (int64, error) {
+	if whence != io.SeekStart || offset < 0 {
+		return 0, fs.ErrInvalid
+	}
+	w.offset = offset
+	return offset, nil
+}
+
+func (w *fakeSeekWriter) Write(contents []byte) (int, error) {
+	end := w.offset + int64(len(contents))
+	if end > int64(len(w.contents)) {
+		w.contents = append(w.contents, make([]byte, end-int64(len(w.contents)))...)
+	}
+	copy(w.contents[w.offset:end], contents)
+	w.offset = end
+	return len(contents), nil
+}
+
+func (w *fakeSeekWriter) Close() error {
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+	info := w.remote.nodes[w.path]
+	info.content = append([]byte(nil), w.contents...)
+	info.modTime = w.remote.now()
+	w.remote.nodes[w.path] = info
+	return nil
 }
 
 func (w *fakeWriter) Write(contents []byte) (int, error) {

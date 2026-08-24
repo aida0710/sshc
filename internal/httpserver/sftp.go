@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -19,8 +20,9 @@ import (
 )
 
 type SFTPHandlers struct {
-	Service *sshcSFTP.Service
-	Actions ActionHandlers
+	Service   *sshcSFTP.Service
+	Transfers *sshcSFTP.TransferManager
+	Actions   ActionHandlers
 }
 
 type sftpEntry struct {
@@ -41,6 +43,10 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.GET("/api/v1/sftp/:alias/download", handlers.Download)
 	engine.GET("/api/v1/sftp/:alias/archive", handlers.DownloadArchive)
 	engine.POST("/api/v1/sftp/:alias/upload", handlers.Upload)
+	engine.POST("/api/v1/sftp/:alias/uploads/:id", handlers.StartUpload)
+	engine.PATCH("/api/v1/sftp/:alias/uploads/:id", handlers.AppendUpload)
+	engine.POST("/api/v1/sftp/:alias/uploads/:id/complete", handlers.CompleteUpload)
+	engine.DELETE("/api/v1/sftp/:alias/uploads/:id", handlers.CancelUpload)
 	engine.PATCH("/api/v1/sftp/:alias/entry", handlers.Rename)
 	engine.DELETE("/api/v1/sftp/:alias/entry", handlers.Delete)
 	engine.PATCH("/api/v1/sftp/:alias/mode", handlers.Chmod)
@@ -57,9 +63,9 @@ func sftpProblem(c *echo.Context, err error) error {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return problem(c, http.StatusNotFound, "sftp_not_found")
-	case errors.Is(err, sshcSFTP.ErrInvalidAlias), errors.Is(err, sshcSFTP.ErrInvalidPath), errors.Is(err, sshcSFTP.ErrRootOperation), errors.Is(err, sshcSFTP.ErrRevisionRequired):
+	case errors.Is(err, sshcSFTP.ErrInvalidAlias), errors.Is(err, sshcSFTP.ErrInvalidPath), errors.Is(err, sshcSFTP.ErrRootOperation), errors.Is(err, sshcSFTP.ErrRevisionRequired), errors.Is(err, sshcSFTP.ErrInvalidTransfer):
 		return problem(c, http.StatusBadRequest, "invalid_request")
-	case errors.Is(err, sshcSFTP.ErrConflict):
+	case errors.Is(err, sshcSFTP.ErrConflict), errors.Is(err, sshcSFTP.ErrOffsetMismatch), errors.Is(err, sshcSFTP.ErrUploadIncomplete):
 		return problem(c, http.StatusConflict, "sftp_conflict")
 	case errors.Is(err, sshcSFTP.ErrAlreadyExists):
 		return problem(c, http.StatusConflict, "sftp_exists")
@@ -157,16 +163,53 @@ func (h SFTPHandlers) Download(c *echo.Context) error {
 	if name == "." || name == "/" || name == "" {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
+	entry, err := h.Service.Stat(c.Request().Context(), c.Param("alias"), remotePath)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	if entry.Type != sshcSFTP.EntryFile {
+		return sftpProblem(c, sshcSFTP.ErrNotRegularFile)
+	}
+	offset, ranged, err := downloadOffset(c.Request().Header.Get("Range"), entry.Size)
+	if err != nil {
+		c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes */%d", entry.Size))
+		return problem(c, http.StatusRequestedRangeNotSatisfiable, "sftp_range_invalid")
+	}
 	c.Response().Header().Set("Content-Type", "application/octet-stream")
 	c.Response().Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	c.Response().Header().Set("Accept-Ranges", "bytes")
+	c.Response().Header().Set("Content-Length", strconv.FormatInt(entry.Size-offset, 10))
+	if ranged {
+		c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", offset, entry.Size-1, entry.Size))
+		c.Response().WriteHeader(http.StatusPartialContent)
+	}
 	output := &countingWriter{write: c.Response().Write}
-	if _, err := h.Service.Download(c.Request().Context(), c.Param("alias"), remotePath, output); err != nil {
+	if _, err := h.Service.DownloadFrom(c.Request().Context(), c.Param("alias"), remotePath, offset, output); err != nil {
 		if output.written > 0 {
 			return err
 		}
 		return sftpProblem(c, err)
 	}
 	return nil
+}
+
+func downloadOffset(header string, size int64) (int64, bool, error) {
+	if header == "" {
+		return 0, false, nil
+	}
+	if !strings.HasPrefix(header, "bytes=") || strings.Contains(header, ",") {
+		return 0, false, sshcSFTP.ErrOffsetMismatch
+	}
+	value := strings.TrimPrefix(header, "bytes=")
+	start, end, ok := strings.Cut(value, "-")
+	if !ok || start == "" || end != "" {
+		return 0, false, sshcSFTP.ErrOffsetMismatch
+	}
+	offset, err := strconv.ParseInt(start, 10, 64)
+	if err != nil || offset < 0 || offset >= size {
+		return 0, false, sshcSFTP.ErrOffsetMismatch
+	}
+	return offset, true, nil
 }
 
 func (h SFTPHandlers) DownloadArchive(c *echo.Context) error {
@@ -210,6 +253,90 @@ func (h SFTPHandlers) Upload(c *echo.Context) error {
 		return sftpProblem(c, err)
 	}
 	return c.JSON(http.StatusCreated, transfer)
+}
+
+type resumableUploadResponse struct {
+	ID               string `json:"id"`
+	Path             string `json:"path"`
+	Offset           int64  `json:"offset"`
+	Size             int64  `json:"size"`
+	ExpectedRevision string `json:"expectedRevision"`
+}
+
+func describeResumableUpload(upload sshcSFTP.ResumableUpload) resumableUploadResponse {
+	return resumableUploadResponse{
+		ID: upload.ID, Path: upload.Path, Offset: upload.Offset, Size: upload.Size,
+		ExpectedRevision: upload.ExpectedRevision,
+	}
+}
+
+func (h SFTPHandlers) StartUpload(c *echo.Context) error {
+	var body struct {
+		Path             string `json:"path"`
+		Size             int64  `json:"size"`
+		Overwrite        bool   `json:"overwrite"`
+		ExpectedRevision string `json:"expectedRevision"`
+	}
+	if err := decodeJSON(c, &body); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	upload, err := h.Transfers.Start(c.Request().Context(), c.Param("alias"), c.Param("id"), body.Path, sshcSFTP.StartUploadOptions{
+		Size: body.Size, Overwrite: body.Overwrite, ExpectedRevision: body.ExpectedRevision,
+	})
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, describeResumableUpload(upload))
+}
+
+func (h SFTPHandlers) AppendUpload(c *echo.Context) error {
+	offset, err := strconv.ParseInt(c.QueryParam("offset"), 10, 64)
+	if err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	total, err := strconv.ParseInt(c.QueryParam("total"), 10, 64)
+	if err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	contents, err := io.ReadAll(io.LimitReader(c.Request().Body, MaxRequestBodyCeiling+1))
+	if err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if len(contents) > MaxRequestBodyCeiling {
+		return problem(c, http.StatusRequestEntityTooLarge, "sftp_transfer_too_large")
+	}
+	upload, err := h.Transfers.Append(c.Request().Context(), c.Param("alias"), c.Param("id"), c.QueryParam("path"), offset, total, contents)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, describeResumableUpload(upload))
+}
+
+func (h SFTPHandlers) CompleteUpload(c *echo.Context) error {
+	var body struct {
+		Path             string `json:"path"`
+		Size             int64  `json:"size"`
+		ExpectedRevision string `json:"expectedRevision"`
+	}
+	if err := decodeJSON(c, &body); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	transfer, err := h.Transfers.Complete(c.Request().Context(), c.Param("alias"), c.Param("id"), body.Path, body.Size, body.ExpectedRevision)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	return c.JSON(http.StatusCreated, struct {
+		Path     string `json:"path"`
+		Bytes    int64  `json:"bytes"`
+		Revision string `json:"revision"`
+	}{transfer.Path, transfer.Bytes, transfer.Revision})
+}
+
+func (h SFTPHandlers) CancelUpload(c *echo.Context) error {
+	if err := h.Transfers.Cancel(c.Request().Context(), c.Param("alias"), c.Param("id"), c.QueryParam("path")); err != nil {
+		return sftpProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]bool{"changed": true})
 }
 
 func (h SFTPHandlers) Delete(c *echo.Context) error {

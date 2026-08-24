@@ -1159,6 +1159,13 @@ type SFTPChmodRequest struct {
 	Path             string `json:"path"`
 }
 
+// SFTPCompleteUploadRequest defines model for SFTPCompleteUploadRequest.
+type SFTPCompleteUploadRequest struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Path             string `json:"path"`
+	Size             int64  `json:"size"`
+}
+
 // SFTPEntry defines model for SFTPEntry.
 type SFTPEntry struct {
 	Mode       string        `json:"mode"`
@@ -1194,10 +1201,27 @@ type SFTPRenameRequest struct {
 	To   string `json:"to"`
 }
 
+// SFTPResumableUpload defines model for SFTPResumableUpload.
+type SFTPResumableUpload struct {
+	ExpectedRevision *string `json:"expectedRevision,omitempty"`
+	Id               string  `json:"id"`
+	Offset           int64   `json:"offset"`
+	Path             string  `json:"path"`
+	Size             int64   `json:"size"`
+}
+
 // SFTPSaveTextRequest defines model for SFTPSaveTextRequest.
 type SFTPSaveTextRequest struct {
 	Contents         string `json:"contents"`
 	ExpectedRevision string `json:"expectedRevision"`
+}
+
+// SFTPStartUploadRequest defines model for SFTPStartUploadRequest.
+type SFTPStartUploadRequest struct {
+	ExpectedRevision *string `json:"expectedRevision,omitempty"`
+	Overwrite        bool    `json:"overwrite"`
+	Path             string  `json:"path"`
+	Size             int64   `json:"size"`
 }
 
 // SFTPTextFile defines model for SFTPTextFile.
@@ -1709,7 +1733,8 @@ type DownloadSFTPDirectoryArchiveParams struct {
 
 // DownloadSFTPFileParams defines parameters for DownloadSFTPFile.
 type DownloadSFTPFileParams struct {
-	Path string `form:"path" json:"path"`
+	Path  string  `form:"path" json:"path"`
+	Range *string `json:"Range,omitempty"`
 }
 
 // ListSFTPEntriesParams defines parameters for ListSFTPEntries.
@@ -1742,6 +1767,18 @@ type SaveSFTPTextParams struct {
 type UploadSFTPFileParams struct {
 	Path      string `form:"path" json:"path"`
 	Overwrite bool   `form:"overwrite" json:"overwrite"`
+}
+
+// CancelSFTPResumableUploadParams defines parameters for CancelSFTPResumableUpload.
+type CancelSFTPResumableUploadParams struct {
+	Path string `form:"path" json:"path"`
+}
+
+// AppendSFTPResumableUploadParams defines parameters for AppendSFTPResumableUpload.
+type AppendSFTPResumableUploadParams struct {
+	Path   string `form:"path" json:"path"`
+	Offset int64  `form:"offset" json:"offset"`
+	Total  int64  `form:"total" json:"total"`
 }
 
 // ExecuteSnippetParams defines parameters for ExecuteSnippet.
@@ -1860,6 +1897,12 @@ type ChmodSFTPEntryJSONRequestBody = SFTPChmodRequest
 
 // SaveSFTPTextJSONRequestBody defines body for SaveSFTPText for application/json ContentType.
 type SaveSFTPTextJSONRequestBody = SFTPSaveTextRequest
+
+// StartSFTPResumableUploadJSONRequestBody defines body for StartSFTPResumableUpload for application/json ContentType.
+type StartSFTPResumableUploadJSONRequestBody = SFTPStartUploadRequest
+
+// CompleteSFTPResumableUploadJSONRequestBody defines body for CompleteSFTPResumableUpload for application/json ContentType.
+type CompleteSFTPResumableUploadJSONRequestBody = SFTPCompleteUploadRequest
 
 // CreateSnippetJSONRequestBody defines body for CreateSnippet for application/json ContentType.
 type CreateSnippetJSONRequestBody = SnippetDraft
