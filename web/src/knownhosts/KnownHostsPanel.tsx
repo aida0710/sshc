@@ -18,8 +18,17 @@ import {
 } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
+import {
+  compareText,
+  nextSort,
+  ordered,
+  SortableTableHeader,
+  type SortDirection,
+} from "../ui/tableSort";
 
 type KnownHostsPanelProps = { api?: IntegrationsApi };
+type CandidateSort = "host" | "type" | "fingerprint" | "trust";
+type TrustedSort = Exclude<CandidateSort, "trust">;
 
 export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps) {
   const t = useTranslate();
@@ -34,6 +43,14 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
   const [acknowledged, setAcknowledged] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [candidateSort, setCandidateSort] = useState<{ key: CandidateSort; direction: SortDirection }>({
+    key: "host",
+    direction: "ascending",
+  });
+  const [trustedSort, setTrustedSort] = useState<{ key: TrustedSort; direction: SortDirection }>({
+    key: "host",
+    direction: "ascending",
+  });
 
   useEffect(() => {
     let active = true;
@@ -131,6 +148,27 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
   }
 
   const provenOrAcknowledged = expectedFingerprint.trim() !== "" || acknowledged;
+  const displayedCandidates = ordered(candidates, (left, right) => {
+    if (candidateSort.key === "type") return compareText(left.keyType, right.keyType);
+    if (candidateSort.key === "fingerprint") return compareText(left.fingerprint, right.fingerprint);
+    if (candidateSort.key === "trust") return 0;
+    return compareText(left.host, right.host);
+  }, candidateSort.direction);
+  const displayedEntries = ordered(listing?.entries ?? [], (left, right) => {
+    if (trustedSort.key === "type") return compareText(left.keyType, right.keyType);
+    if (trustedSort.key === "fingerprint") return compareText(left.fingerprint, right.fingerprint);
+    const leftHost = left.hashed ? t("kh.hashed") : left.hosts.join(", ");
+    const rightHost = right.hashed ? t("kh.hashed") : right.hosts.join(", ");
+    return compareText(leftHost, rightHost);
+  }, trustedSort.direction);
+
+  function changeCandidateSort(key: CandidateSort) {
+    setCandidateSort((current) => nextSort(current.key, current.direction, key));
+  }
+
+  function changeTrustedSort(key: TrustedSort) {
+    setTrustedSort((current) => nextSort(current.key, current.direction, key));
+  }
 
   return (
     <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
@@ -187,15 +225,15 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
               <caption className="mb-2 text-left text-ink-muted">{t("kh.scanCandidates")}</caption>
               <thead>
                 <tr className={tableHeadRow}>
-                  <th scope="col" className={tableHeadCell}>{t("kh.columnHost")}</th>
-                  <th scope="col" className={tableHeadCell}>{t("kh.columnType")}</th>
-                  <th scope="col" className={tableHeadCell}>{t("kh.columnFingerprint")}</th>
-                  <th scope="col" className={tableHeadCell}>{t("kh.columnTrust")}</th>
+                  <SortableTableHeader column="host" activeColumn={candidateSort.key} direction={candidateSort.direction} onSort={changeCandidateSort} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
+                  <SortableTableHeader column="type" activeColumn={candidateSort.key} direction={candidateSort.direction} onSort={changeCandidateSort} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
+                  <SortableTableHeader column="fingerprint" activeColumn={candidateSort.key} direction={candidateSort.direction} onSort={changeCandidateSort} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
+                  <SortableTableHeader column="trust" activeColumn={candidateSort.key} direction={candidateSort.direction} onSort={changeCandidateSort} className={tableHeadCell}>{t("kh.columnTrust")}</SortableTableHeader>
                   <th scope="col" className={tableHeadCell}>{t("kh.columnActions")}</th>
                 </tr>
               </thead>
               <tbody>
-                {candidates.map((candidate) => (
+                {displayedCandidates.map((candidate) => (
                   <tr key={`${candidate.host}-${candidate.fingerprint}`} className="border-b border-line last:border-b-0">
                     <td className="py-2 pr-3">{candidate.host}</td>
                     <td className="py-2 pr-3 text-ink-muted">{candidate.keyType}</td>
@@ -280,14 +318,14 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
               <caption className="sr-only">{listing.path}</caption>
               <thead className="hidden sm:table-header-group">
                 <tr className={tableHeadRow}>
-                  <th scope="col" className={tableHeadCell}>{t("kh.columnHost")}</th>
-                  <th scope="col" className={tableHeadCell}>{t("kh.columnType")}</th>
-                  <th scope="col" className={tableHeadCell}>{t("kh.columnFingerprint")}</th>
+                  <SortableTableHeader column="host" activeColumn={trustedSort.key} direction={trustedSort.direction} onSort={changeTrustedSort} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
+                  <SortableTableHeader column="type" activeColumn={trustedSort.key} direction={trustedSort.direction} onSort={changeTrustedSort} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
+                  <SortableTableHeader column="fingerprint" activeColumn={trustedSort.key} direction={trustedSort.direction} onSort={changeTrustedSort} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
                   <th scope="col" className={tableHeadCell}>{t("kh.columnActions")}</th>
                 </tr>
               </thead>
               <tbody className="block sm:table-row-group">
-                {listing.entries.map((item) => (
+                {displayedEntries.map((item) => (
                   <tr key={`${item.line}-${item.digest}`} className="grid gap-2 border-b border-line py-3 last:border-b-0 sm:table-row sm:py-0">
                     <td className="flex min-w-0 items-start justify-between gap-4 sm:table-cell sm:py-2 sm:pr-3">
                       <span aria-hidden="true" className="shrink-0 text-xs font-medium uppercase tracking-wide text-ink-muted sm:hidden">{t("kh.columnHost")}</span>

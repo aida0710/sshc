@@ -49,6 +49,13 @@ import { FolderPane } from "./FolderPane";
 import type { InspectorContent } from "../ui/Inspector";
 import { KeyInspector } from "./KeyInspector";
 import {
+  compareText,
+  nextSort,
+  ordered,
+  SortableTableHeader,
+  type SortDirection,
+} from "../ui/tableSort";
+import {
   folderRows,
   groupOfKeyPath,
   includeKeyPairContext,
@@ -69,6 +76,8 @@ type KeysScreenProps = {
 };
 
 type ScreenState = "loading" | "ready" | "error";
+type TrashSort = "files" | "age" | "status";
+type AgentSort = "algorithm" | "fingerprint" | "comment";
 
 
 
@@ -147,6 +156,14 @@ export function KeysScreen({
   } = relocateForm;
   const [pendingPurge, setPendingPurge] = useState("");
   const [pendingTrash, setPendingTrash] = useState<KeyItem | null>(null);
+  const [trashSort, setTrashSort] = useState<{ key: TrashSort; direction: SortDirection }>({
+    key: "files",
+    direction: "ascending",
+  });
+  const [agentSort, setAgentSort] = useState<{ key: AgentSort; direction: SortDirection }>({
+    key: "algorithm",
+    direction: "ascending",
+  });
   const [failure, setFailure] = useState("");
   const {
     folder, setFolder,
@@ -662,14 +679,18 @@ export function KeysScreen({
           <caption className="sr-only">{t("keys.trashCaption")}</caption>
           <thead>
             <tr className={tableHeadRow}>
-              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFiles")}</th>
-              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colAge")}</th>
-              <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colStatus")}</th>
+              <SortableTableHeader column="files" activeColumn={trashSort.key} direction={trashSort.direction} onSort={(key) => setTrashSort((current) => nextSort(current.key, current.direction, key))} className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFiles")}</SortableTableHeader>
+              <SortableTableHeader column="age" activeColumn={trashSort.key} direction={trashSort.direction} onSort={(key) => setTrashSort((current) => nextSort(current.key, current.direction, key))} className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colAge")}</SortableTableHeader>
+              <SortableTableHeader column="status" activeColumn={trashSort.key} direction={trashSort.direction} onSort={(key) => setTrashSort((current) => nextSort(current.key, current.direction, key))} className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colStatus")}</SortableTableHeader>
               <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colActions")}</th>
             </tr>
           </thead>
           <tbody>
-            {trash.entries.map((entry) => (
+            {ordered(trash.entries, (left, right) => {
+              if (trashSort.key === "age") return left.ageDays - right.ageDays;
+              if (trashSort.key === "status") return compareText(left.restorable ? t("keys.restorable") : left.blockers.join(", "), right.restorable ? t("keys.restorable") : right.blockers.join(", "));
+              return compareText(left.files.map((file) => file.originalRelativePath).join(", "), right.files.map((file) => file.originalRelativePath).join(", "));
+            }, trashSort.direction).map((entry) => (
               <tr key={entry.id} className="border-b border-line align-top">
                 <td className="py-2 pr-3 font-mono text-xs">
                   {entry.files.map((file) => file.originalRelativePath).join(", ")}
@@ -799,13 +820,17 @@ export function KeysScreen({
               <caption className="sr-only">{t("keys.agentIdentitiesCaption")}</caption>
               <thead>
                 <tr className={tableHeadRow}>
-                  <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colAlgorithm")}</th>
-                  <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFingerprint")}</th>
-                  <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colComment")}</th>
+                  <SortableTableHeader column="algorithm" activeColumn={agentSort.key} direction={agentSort.direction} onSort={(key) => setAgentSort((current) => nextSort(current.key, current.direction, key))} className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colAlgorithm")}</SortableTableHeader>
+                  <SortableTableHeader column="fingerprint" activeColumn={agentSort.key} direction={agentSort.direction} onSort={(key) => setAgentSort((current) => nextSort(current.key, current.direction, key))} className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFingerprint")}</SortableTableHeader>
+                  <SortableTableHeader column="comment" activeColumn={agentSort.key} direction={agentSort.direction} onSort={(key) => setAgentSort((current) => nextSort(current.key, current.direction, key))} className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colComment")}</SortableTableHeader>
                 </tr>
               </thead>
               <tbody>
-                {inventory.agentIdentities.map((identity) => (
+                {ordered(inventory.agentIdentities, (left, right) => {
+                  if (agentSort.key === "fingerprint") return compareText(left.fingerprint, right.fingerprint);
+                  if (agentSort.key === "comment") return compareText(left.comment, right.comment);
+                  return compareText(`${left.algorithm}\u0000${left.bits}`, `${right.algorithm}\u0000${right.bits}`);
+                }, agentSort.direction).map((identity) => (
                   <tr key={identity.fingerprint} className="border-b border-line">
                     <td className="py-2 pr-3">
                       {identity.bits > 0 ? `${identity.algorithm} · ${identity.bits}` : identity.algorithm}

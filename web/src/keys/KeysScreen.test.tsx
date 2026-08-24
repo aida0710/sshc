@@ -259,6 +259,19 @@ describe("KeysScreen", () => {
     expect(within(legacyRow).getByText("Fingerprint unavailable")).toBeInTheDocument();
   });
 
+  it("sorts the key inventory from every data-column header", async () => {
+    render(<KeysScreen api={buildApi()} />);
+
+    const table = await screen.findByRole("table", { name: "Files classified by content and permissions" });
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("id_work");
+    await userEvent.click(within(table).getByRole("button", { name: /File.*sort descending/ }));
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("legacy");
+    await userEvent.click(within(table).getByRole("button", { name: /Kind.*sort ascending/ }));
+    expect(within(table).getByRole("columnheader", { name: /Kind/ })).toHaveAttribute("aria-sort", "ascending");
+    await userEvent.click(within(table).getByRole("button", { name: /State.*sort ascending/ }));
+    expect(within(table).getByRole("columnheader", { name: /State/ })).toHaveAttribute("aria-sort", "ascending");
+  });
+
   it("stacks key creation fields at phone widths", async () => {
     render(<KeysScreen api={buildApi()} />);
 

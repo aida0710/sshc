@@ -4,6 +4,15 @@ import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
 import { noteLabels, rowAction, rowDanger, rowPrimary } from "./labels";
 import { keyItemGroups } from "./organizer";
+import {
+  compareText,
+  nextSort,
+  ordered,
+  SortableTableHeader,
+  type SortDirection,
+} from "../ui/tableSort";
+
+type KeySort = "file" | "kind" | "state";
 
 export type KeyRowActions = {
   onSelect: (item: KeyItem) => void;
@@ -42,8 +51,20 @@ export function KeyTable({
 }) {
   const t = useTranslate();
   const [expandedRelated, setExpandedRelated] = useState<ReadonlySet<string>>(new Set());
+  const [sort, setSort] = useState<{ key: KeySort; direction: SortDirection }>({
+    key: "file",
+    direction: "ascending",
+  });
   const grouped = keyItemGroups(items);
-  const displayed = grouped.flatMap((group) => {
+  const compareItems = (left: KeyItem, right: KeyItem) => {
+    if (sort.key === "kind") {
+      return compareText(`${left.kind}\u0000${left.algorithm}\u0000${left.bits}`, `${right.kind}\u0000${right.algorithm}\u0000${right.bits}`);
+    }
+    if (sort.key === "state") return compareText(keyState(left, inventory), keyState(right, inventory));
+    return compareText(left.relativePath, right.relativePath);
+  };
+  const sortedGroups = ordered(grouped, (left, right) => compareItems(left.primary, right.primary), sort.direction);
+  const displayed = sortedGroups.flatMap((group) => {
     const relatedExpanded = revealRelated || expandedRelated.has(group.primary.id);
     return [
       {
@@ -53,7 +74,7 @@ export function KeyTable({
         relatedTo: null as string | null,
       },
       ...(relatedExpanded
-        ? group.related.map((item) => ({
+        ? ordered(group.related, compareItems, sort.direction).map((item) => ({
             item,
             relatedCount: 0,
             relatedExpanded: false,
@@ -72,6 +93,10 @@ export function KeyTable({
     });
   }
 
+  function changeSort(key: KeySort) {
+    setSort((current) => nextSort(current.key, current.direction, key));
+  }
+
   return (
     <table className="block w-full text-left text-sm md:table md:min-w-[56rem]">
       <caption className="sr-only">{t("keys.tableCaption")}</caption>
@@ -80,9 +105,9 @@ export function KeyTable({
           <th scope="col" className={`${tableHeadCell} w-12 pl-3`}>
             <span className="sr-only">{t("keys.colChoose")}</span>
           </th>
-          <th scope="col" className={`${tableHeadCell} w-[30%] whitespace-nowrap`}>{t("keys.colFile")}</th>
-          <th scope="col" className={`${tableHeadCell} w-[18%] whitespace-nowrap`}>{t("keys.colKind")}</th>
-          <th scope="col" className={`${tableHeadCell} w-[20%] whitespace-nowrap`}>{t("keys.colState")}</th>
+          <SortableTableHeader column="file" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className={`${tableHeadCell} w-[30%] whitespace-nowrap`}>{t("keys.colFile")}</SortableTableHeader>
+          <SortableTableHeader column="kind" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className={`${tableHeadCell} w-[18%] whitespace-nowrap`}>{t("keys.colKind")}</SortableTableHeader>
+          <SortableTableHeader column="state" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className={`${tableHeadCell} w-[20%] whitespace-nowrap`}>{t("keys.colState")}</SortableTableHeader>
           <th scope="col" className={`${tableHeadCell} whitespace-nowrap text-right`}>{t("keys.colActions")}</th>
         </tr>
       </thead>
@@ -343,4 +368,13 @@ export function renameable(item: KeyItem, items: KeyItem[]): boolean {
 export function agentHolds(inventory: KeyInventoryResponse, item: KeyItem): boolean {
   if (!inventory.agentAvailable || item.fingerprint === "") return false;
   return inventory.agentIdentities.some((identity) => identity.fingerprint === item.fingerprint);
+}
+
+function keyState(item: KeyItem, inventory: KeyInventoryResponse): string {
+  return [
+    item.permissionRisk ? "permission-risk" : "",
+    agentHolds(inventory, item) ? "in-agent" : "",
+    item.references.length > 0 ? `used-${item.references.length}` : "",
+    ...item.notes,
+  ].join("\u0000");
 }

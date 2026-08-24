@@ -17,6 +17,11 @@ export type RemoteTextFile = {
   revision: string;
 };
 
+export type TransferOptions = {
+  signal?: AbortSignal;
+  onProgress?: (bytes: number, total: number | null) => void;
+};
+
 function pathFor(alias: string, suffix: string, remotePath: string): string {
   return `/api/v1/sftp/${encodeURIComponent(alias)}/${suffix}?path=${encodeURIComponent(remotePath)}`;
 }
@@ -78,24 +83,53 @@ export const sftpApi = {
     });
     if (!response.ok) throw new Error("delete_failed");
   },
-  async upload(alias: string, remotePath: string, file: File, overwrite: boolean): Promise<void> {
+  async upload(alias: string, remotePath: string, file: File, overwrite: boolean, signal?: AbortSignal): Promise<void> {
     const query = `${pathFor(alias, "upload", remotePath)}&overwrite=${overwrite ? "true" : "false"}`;
-    const response = await apiClient.send(query, {
+    await apiClient.mutate<unknown>(query, {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream", "X-SSHC-Filename": encodeURIComponent(file.name) },
       body: file,
+      ...(signal === undefined ? {} : { signal }),
     });
-    if (!response.ok) throw new Error("upload_failed");
   },
-  async download(alias: string, remotePath: string): Promise<void> {
-    const response = await apiClient.send(pathFor(alias, "download", remotePath), { method: "GET" });
+  async download(alias: string, remotePath: string, directory = false, options: TransferOptions = {}): Promise<number> {
+    const response = await apiClient.send(pathFor(alias, directory ? "archive" : "download", remotePath), { method: "GET", ...(options.signal === undefined ? {} : { signal: options.signal }) });
     if (!response.ok) throw new Error("download_failed");
-    const blob = await response.blob();
+    const totalHeader = Number(response.headers.get("Content-Length"));
+    const total = Number.isFinite(totalHeader) && totalHeader > 0 ? totalHeader : null;
+    let blob: Blob;
+    let bytes = 0;
+    if (response.body === null) {
+      blob = await response.blob();
+      bytes = blob.size;
+      options.onProgress?.(bytes, total);
+    } else {
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        chunks.push(next.value);
+        bytes += next.value.byteLength;
+        options.onProgress?.(bytes, total);
+      }
+      blob = new Blob(chunks as BlobPart[], { type: directory ? "application/zip" : "application/octet-stream" });
+    }
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = remotePath.split("/").filter(Boolean).at(-1) ?? "download";
+    anchor.download = `${remotePath.split("/").filter(Boolean).at(-1) ?? "download"}${directory ? ".zip" : ""}`;
     anchor.click();
     URL.revokeObjectURL(url);
+    return bytes;
+  },
+  async chmod(alias: string, remotePath: string, mode: string, expectedRevision: string): Promise<RemoteEntry> {
+    const target = `${alias}:${remotePath}:${mode}`;
+    const token = await issueAction("sftp.chmod", target);
+    return entry(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/mode`, {
+      method: "PATCH",
+      headers: { ...jsonHeaders, "X-SSHC-Action": token },
+      body: JSON.stringify({ path: remotePath, mode, expectedRevision }),
+    }));
   },
 };

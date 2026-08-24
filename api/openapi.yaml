@@ -1363,6 +1363,15 @@ paths:
       responses:
         "200": { description: Remote file bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
         "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/archive:
+    parameters: *sftpAlias
+    get:
+      operationId: downloadSFTPDirectoryArchive
+      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: Remote directory ZIP archive, content: { application/zip: { schema: { type: string, format: binary } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/upload:
     parameters: *sftpAlias
     post:
@@ -1392,6 +1401,17 @@ paths:
         "200": { description: Entry deleted, content: { application/json: { schema: { $ref: "#/components/schemas/ChangedResponse" } } } }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/mode:
+    parameters: *sftpAlias
+    patch:
+      operationId: chmodSFTPEntry
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodRequest" } } } }
+      responses:
+        "200": { description: Entry permissions changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/workspaces:
     get:
       operationId: listTerminalWorkspaces
@@ -3171,6 +3191,14 @@ components:
       additionalProperties: false
       required: [from, to]
       properties: { from: { type: string }, to: { type: string } }
+    SFTPChmodRequest:
+      type: object
+      additionalProperties: false
+      required: [path, mode, expectedRevision]
+      properties:
+        path: { type: string }
+        mode: { type: string, pattern: "^0?[0-7]{3}$" }
+        expectedRevision: { type: string, minLength: 1 }
     SFTPTransfer:
       type: object
       additionalProperties: false

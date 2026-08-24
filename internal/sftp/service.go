@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -166,6 +167,119 @@ func (s Service) Download(ctx context.Context, alias, remotePath string, destina
 	return Transfer{Path: cleaned, Bytes: written, Revision: metadataRevision(info)}, nil
 }
 
+// DownloadArchive streams a directory as a ZIP without following symlinks.
+// Symlinks become regular text entries containing the link target so extraction cannot escape via a link.
+func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, destination io.Writer) (Transfer, error) {
+	cleaned, err := cleanPath(remotePath, false)
+	if err != nil {
+		return Transfer{}, err
+	}
+	remote, err := s.open(ctx, alias)
+	if err != nil {
+		return Transfer{}, err
+	}
+	defer remote.Close()
+	info, err := remote.Lstat(cleaned)
+	if err != nil {
+		return Transfer{}, err
+	}
+	if !info.IsDir() {
+		return Transfer{}, ErrNotDirectory
+	}
+	rootName := path.Base(cleaned)
+	if !validArchiveName(rootName) {
+		return Transfer{}, ErrInvalidPath
+	}
+	archive := zip.NewWriter(destination)
+	var written int64
+	if err := archiveDirectory(ctx, archive, remote, cleaned, rootName, &written); err != nil {
+		_ = archive.Close()
+		return Transfer{}, err
+	}
+	if err := archive.Close(); err != nil {
+		return Transfer{}, err
+	}
+	return Transfer{Path: cleaned, Bytes: written, Revision: metadataRevision(info)}, nil
+}
+
+func archiveDirectory(ctx context.Context, archive *zip.Writer, remote Remote, directory, archivePath string, written *int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	header := &zip.FileHeader{Name: strings.TrimSuffix(archivePath, "/") + "/", Method: zip.Store}
+	header.SetMode(fs.ModeDir | 0o755)
+	if _, err := archive.CreateHeader(header); err != nil {
+		return err
+	}
+	infos, err := remote.ReadDir(ctx, directory)
+	if err != nil {
+		return err
+	}
+	sort.Slice(infos, func(i, j int) bool { return infos[i].Name() < infos[j].Name() })
+	for _, info := range infos {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !validArchiveName(info.Name()) {
+			return ErrInvalidPath
+		}
+		remoteChild := path.Join(directory, info.Name())
+		archiveChild := path.Join(archivePath, info.Name())
+		switch {
+		case info.IsDir():
+			if err := archiveDirectory(ctx, archive, remote, remoteChild, archiveChild, written); err != nil {
+				return err
+			}
+		case info.Mode()&fs.ModeSymlink != 0:
+			target, err := remote.ReadLink(remoteChild)
+			if err != nil {
+				return err
+			}
+			// Materialize the target as a regular text entry. Creating an actual
+			// symlink in an archive can escape the extraction directory.
+			header := &zip.FileHeader{Name: archiveChild, Method: zip.Store}
+			header.SetMode(0o600)
+			entry, err := archive.CreateHeader(header)
+			if err != nil {
+				return err
+			}
+			count, err := io.WriteString(entry, target)
+			*written += int64(count)
+			if err != nil {
+				return err
+			}
+		case info.Mode().IsRegular():
+			header, err := zip.FileInfoHeader(info)
+			if err != nil {
+				return err
+			}
+			header.Name, header.Method = archiveChild, zip.Deflate
+			entry, err := archive.CreateHeader(header)
+			if err != nil {
+				return err
+			}
+			file, err := remote.Open(remoteChild)
+			if err != nil {
+				return err
+			}
+			count, copyErr := copyContext(ctx, entry, file, 0)
+			closeErr := file.Close()
+			*written += count
+			if copyErr != nil {
+				return copyErr
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+		}
+	}
+	return nil
+}
+
+func validArchiveName(name string) bool {
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\\\x00")
+}
+
 func (s Service) Upload(
 	ctx context.Context, alias, remotePath string, source io.Reader, options UploadOptions,
 ) (Transfer, error) {
@@ -252,6 +366,39 @@ func (s Service) Mkdir(ctx context.Context, alias, remotePath string) (Entry, er
 		return Entry{}, err
 	}
 	return entryFrom(path.Dir(cleaned), namedInfo{FileInfo: info, name: path.Base(cleaned)}), nil
+}
+
+func (s Service) Chmod(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string) (Entry, error) {
+	if expectedRevision == "" {
+		return Entry{}, ErrRevisionRequired
+	}
+	cleaned, err := cleanPath(remotePath, false)
+	if err != nil {
+		return Entry{}, err
+	}
+	remote, err := s.open(ctx, alias)
+	if err != nil {
+		return Entry{}, err
+	}
+	defer remote.Close()
+	info, err := remote.Lstat(cleaned)
+	if err != nil {
+		return Entry{}, err
+	}
+	if info.Mode()&fs.ModeSymlink != 0 || (!info.Mode().IsRegular() && !info.IsDir()) {
+		return Entry{}, ErrNotRegularFile
+	}
+	if metadataRevision(info) != expectedRevision {
+		return Entry{}, ErrConflict
+	}
+	if err := remote.Chmod(cleaned, mode.Perm()); err != nil {
+		return Entry{}, err
+	}
+	updated, err := remote.Lstat(cleaned)
+	if err != nil {
+		return Entry{}, err
+	}
+	return entryFrom(path.Dir(cleaned), namedInfo{FileInfo: updated, name: path.Base(cleaned)}), nil
 }
 
 // Rename は既存の移動先を上書きしない。置換は Upload と SaveText だけが明示的に扱う。

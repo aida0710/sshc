@@ -332,16 +332,21 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               : t("sync.neverSynced")}
           </p>
         </header>
-        <div className="px-1 py-2 sm:px-3">
-          <SyncRow label={t("sync.key")} hint={t("sync.keyHint")}>
-            <div className="flex flex-col gap-2">
+        <div className="grid gap-4 p-4 lg:grid-cols-2">
+          <section aria-labelledby="sync-key-heading" className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 id="sync-key-heading" className={sectionHeading}>{t("sync.key")}</h4>
+              <span className={`rounded-full px-2 py-1 text-xs font-medium ${status.keyConfigured ? "bg-select-fill text-accent" : "bg-notice text-notice-ink"}`}>
+                {status.keyConfigured ? t("sync.keyReady") : t("sync.keyNeeded")}
+              </span>
+            </div>
+            <p className="text-sm leading-6 text-ink-muted">{t("sync.keyHint")}</p>
+            <p className="text-sm font-medium text-ink">{t(status.keyConfigured ? "sync.keySet" : "sync.keyMissing")}</p>
+            <div className="flex flex-col gap-3 border-t border-line pt-3">
               {revealed === "" ? (
-                <p className="text-sm text-ink-muted">
-                  {status.keyConfigured ? t("sync.keySet") : t("sync.keyMissing")}
-                </p>
+                null
               ) : (
                 <>
-
                   <output className="select-all break-all rounded border border-line bg-surface px-3 py-2 font-mono text-sm text-ink">
                     {revealed}
                   </output>
@@ -384,10 +389,12 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 {status.keyConfigured ? t("sync.keyReplace") : t("sync.keyCreate")}
               </Button>
             </div>
-          </SyncRow>
+          </section>
 
-          <SyncRow label={t("sync.rekey")} hint={t("sync.rekeyHint")}>
-            <div className="flex flex-col gap-2">
+          <details className="rounded-lg border border-line bg-surface-subtle p-4">
+            <summary className="cursor-pointer text-sm font-medium text-ink">{t("sync.rekeyHeading")}</summary>
+            <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
+              <p className="text-sm leading-6 text-ink-muted">{t("sync.rekeyHint")}</p>
               <input
                 type="password"
                 aria-label={t("sync.rekeyOldKey")}
@@ -414,12 +421,12 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 {t("sync.rekey")}
               </button>
             </div>
-          </SyncRow>
-        </div>
+          </details>
 
-        <div className="border-t border-line px-1 py-2 sm:px-3">
-          <SyncRow label={t("sync.auto")} hint={t("sync.autoHint")}>
-            <div className="flex flex-col gap-2">
+          <section aria-labelledby="sync-auto-heading" className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4">
+            <h4 id="sync-auto-heading" className={sectionHeading}>{t("sync.auto")}</h4>
+            <p className="text-sm leading-6 text-ink-muted">{t("sync.autoHint")}</p>
+            <div className="flex flex-col gap-3 border-t border-line pt-3">
               <label className="flex items-center gap-2 text-sm text-ink">
                 <input
                   type="checkbox"
@@ -459,39 +466,44 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 {t("sync.autoNow")}
               </button>
             </div>
-          </SyncRow>
+          </section>
+
+          <section aria-labelledby="sync-transfer-heading" className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4">
+            <h4 id="sync-transfer-heading" className={sectionHeading}>{t("sync.transferHeading")}</h4>
+            <p className="text-sm leading-6 text-ink-muted">{t("sync.transferHint")}</p>
+            <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+              <Button
+                kind="primary"
+                disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull"}
+                onClick={() =>
+                  void run(
+                    () => api.pushSnapshot(),
+                    (next) => {
+                      setStatusState({ phase: "ready", value: next.status });
+                      setPreview(null);
+                      setResultView({ kind: "push", result: next.result });
+                      setNotice(t("sync.pushed"));
+                    },
+                    t("sync.pushFailed"),
+                  )
+                }
+              >
+                {t("sync.push")}
+              </Button>
+              <Button
+                disabled={busy || !status.configured || !status.keyConfigured}
+                onClick={() => void previewWith(undefined)}
+              >
+                {t("sync.preview")}
+              </Button>
+            </div>
+          </section>
         </div>
         {status.direction === "both" ? null : (
           <p role="status" className="border-t border-notice-line bg-notice px-4 py-3 text-sm text-notice-ink">
             {t(`sync.direction.${status.direction}.active`)}
           </p>
         )}
-        <div className="flex flex-wrap gap-2 border-t border-line bg-toolbar px-4 py-3">
-          <Button
-            kind="primary"
-            disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull"}
-            onClick={() =>
-              void run(
-                () => api.pushSnapshot(),
-                (next) => {
-                  setStatusState({ phase: "ready", value: next.status });
-                  setPreview(null);
-                  setResultView({ kind: "push", result: next.result });
-                  setNotice(t("sync.pushed"));
-                },
-                t("sync.pushFailed"),
-              )
-            }
-          >
-            {t("sync.push")}
-          </Button>
-          <Button
-            disabled={busy || !status.configured || !status.keyConfigured}
-            onClick={() => void previewWith(undefined)}
-          >
-            {t("sync.preview")}
-          </Button>
-        </div>
       </section>
 
       {resultView !== null ? (

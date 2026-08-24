@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { TerminalSession } from "../../api/integrations";
 import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
@@ -37,6 +37,7 @@ export function TerminalWorkspace({
   const [selectedWorkspace, setSelectedWorkspace] = useState("");
   const [broadcast, setBroadcast] = useState(false);
   const [commandCenter, setCommandCenter] = useState(false);
+  const [focusModePaneId, setFocusModePaneId] = useState<string | null>(null);
   const [movingPaneId, setMovingPaneId] = useState<string | null>(null);
   const [dropPaneId, setDropPaneId] = useState<string | null>(null);
   const [input, setInput] = useState<BroadcastInput | null>(null);
@@ -57,6 +58,15 @@ export function TerminalWorkspace({
       setDropPaneId(null);
     }
   }, [layout, movingPaneId]);
+  useEffect(() => {
+    if (focusModePaneId === null) return;
+    if (layout === null || !paneIDs(layout.root).includes(focusModePaneId)) setFocusModePaneId(null);
+  }, [focusModePaneId, layout]);
+  useEffect(() => {
+    const exit = (event: KeyboardEvent) => { if (event.key === "Escape") setFocusModePaneId(null); };
+    window.addEventListener("keydown", exit);
+    return () => window.removeEventListener("keydown", exit);
+  }, []);
 
   function update(action: LayoutAction) { setLayout((current) => current === null ? current : reduceLayout(current, action)); }
 
@@ -86,6 +96,30 @@ export function TerminalWorkspace({
     event.stopPropagation();
     const sourcePaneId = movingPaneId ?? event.dataTransfer.getData("text/plain");
     if (sourcePaneId !== "") finishPaneMove(sourcePaneId, targetPaneId);
+  }
+
+  function beginResize(event: ReactPointerEvent<HTMLDivElement>, path: ("first" | "second")[], direction: SplitDirection) {
+    event.preventDefault();
+    event.stopPropagation();
+    const container = event.currentTarget.parentElement;
+    if (container === null) return;
+    const pointerId = event.pointerId;
+    event.currentTarget.setPointerCapture(pointerId);
+    const move = (next: PointerEvent) => {
+      const bounds = container.getBoundingClientRect();
+      const extent = direction === "horizontal" ? bounds.width : bounds.height;
+      if (extent <= 0) return;
+      const offset = direction === "horizontal" ? next.clientX - bounds.left : next.clientY - bounds.top;
+      update({ type: "resize-split", path, ratio: offset / extent * 100 });
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+    window.addEventListener("pointercancel", stop, { once: true });
   }
 
   async function split(direction: SplitDirection) {
@@ -167,13 +201,21 @@ export function TerminalWorkspace({
         >
           {session === undefined ? <div className="grid h-full min-h-40 place-items-center text-sm text-ink-muted">{node.pane.state === "failed" ? node.pane.problem : t("workspace.reconnecting")}</div> : terminal(session)}
           {multiple ? <button type="button" draggable aria-pressed={moving} aria-label={t(moving ? "workspace.movePanePicked" : "workspace.movePane", { alias: node.pane.alias })} title={t("workspace.movePane", { alias: node.pane.alias })} className="absolute left-2 top-2 z-20 cursor-grab rounded bg-toolbar px-2 py-1 text-xs shadow-sm active:cursor-grabbing" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); choosePaneMove(node.pane.id); }} onDragStart={(event) => beginPaneDrag(event, node.pane.id)} onDragEnd={() => { setMovingPaneId(null); setDropPaneId(null); }} onKeyDown={(event) => { if (event.key === "Escape") { setMovingPaneId(null); setDropPaneId(null); } }}>⠿</button> : null}
+          {multiple ? <button type="button" aria-pressed={focusModePaneId === node.pane.id} aria-label={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: node.pane.alias })} title={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: node.pane.alias })} className="absolute right-9 top-2 z-20 rounded bg-toolbar px-1.5 text-xs" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setFocusModePaneId((current) => current === node.pane.id ? null : node.pane.id); }}>⛶</button> : null}
           {multiple ? <button type="button" aria-label={t("workspace.closePane")} className="absolute right-2 top-2 z-20 rounded bg-toolbar px-1.5 text-xs" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); update({ type: "close", paneId: node.pane.id }); }}>×</button> : null}
           {dropping ? <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-accent/10"><span className="rounded bg-toolbar px-3 py-2 text-xs font-medium shadow">{t("workspace.swapWith", { alias: node.pane.alias })}</span></div> : null}
         </div>
       );
     }
     const row = node.split.direction === "horizontal";
-    return <div className={`flex h-full min-h-0 min-w-0 flex-1 ${row ? "flex-row" : "flex-col"}`}><div style={{ flexBasis: `${node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.first, [...path, "first"])}</div><div role="separator" aria-orientation={row ? "vertical" : "horizontal"} className={row ? "w-1 cursor-col-resize bg-line" : "h-1 cursor-row-resize bg-line"} /><div style={{ flexBasis: `${100 - node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.second, [...path, "second"])}</div></div>;
+    const resizeStep = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const decrease = event.key === (row ? "ArrowLeft" : "ArrowUp");
+      const increase = event.key === (row ? "ArrowRight" : "ArrowDown");
+      if (!decrease && !increase) return;
+      event.preventDefault();
+      update({ type: "resize-split", path, ratio: node.split.ratio + (decrease ? -5 : 5) });
+    };
+    return <div className={`flex h-full min-h-0 min-w-0 flex-1 ${row ? "flex-row" : "flex-col"}`}><div style={{ flexBasis: `${node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.first, [...path, "first"])}</div><div role="separator" tabIndex={0} aria-label={t("workspace.resizeSplit")} aria-orientation={row ? "vertical" : "horizontal"} aria-valuemin={10} aria-valuemax={90} aria-valuenow={node.split.ratio} onPointerDown={(event) => beginResize(event, path, node.split.direction)} onKeyDown={resizeStep} className={`shrink-0 touch-none bg-line transition-colors hover:bg-accent focus:bg-accent focus:outline-none ${row ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"}`} /><div style={{ flexBasis: `${100 - node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.second, [...path, "second"])}</div></div>;
   }
 
   // A local shell does not participate in an SSH workspace. Keep its terminal
@@ -184,5 +226,6 @@ export function TerminalWorkspace({
   }
 
   const empty = active === null && layout === null;
-  return <div className="flex h-full min-h-0 flex-col"><div className="flex flex-wrap items-center gap-2 border-b border-line bg-toolbar px-3 py-2"><Button disabled={active?.kind !== "ssh"} onClick={() => void split("horizontal")}>{t("workspace.splitRight")}</Button><Button disabled={active?.kind !== "ssh"} onClick={() => void split("vertical")}>{t("workspace.splitDown")}</Button><label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={broadcast} onChange={(event) => setBroadcast(event.target.checked)} />{t("workspace.broadcast")}</label><Button disabled={commandTargets.length === 0} onClick={() => setCommandCenter((current) => !current)}>{t("workspace.commandCenter")}</Button><select aria-label={t("workspace.saved")} value={selectedWorkspace} onChange={(event) => setSelectedWorkspace(event.target.value)} className="ml-auto rounded border border-control-line bg-control px-2 py-1 text-xs"><option value="">{t("workspace.new")}</option>{saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><Button disabled={layout === null && active?.kind !== "ssh"} onClick={() => void saveWorkspace()}>{t("workspace.save")}</Button><Button disabled={selectedWorkspace === ""} onClick={() => void restore()}>{t("workspace.reopen")}</Button><button disabled={selectedWorkspace === ""} className="text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button></div>{commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}{problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}<div className="flex min-h-0 flex-1 flex-col">{empty ? <div className="flex h-full items-center justify-center p-6"><section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status"><BrandMark className="mx-auto size-12 drop-shadow-sm" /><h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p><div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner"><span className="text-live">$</span> ssh host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div></section></div> : layout === null ? (active === null ? null : terminal(active)) : renderNode(layout.root)}</div></div>;
+  const focusNode = focusModePaneId === null || layout === null ? null : findPane(layout.root, focusModePaneId);
+  return <div className="flex h-full min-h-0 flex-col"><div className="flex flex-wrap items-center gap-2 border-b border-line bg-toolbar px-3 py-2"><Button disabled={active?.kind !== "ssh" || focusModePaneId !== null} onClick={() => void split("horizontal")}>{t("workspace.splitRight")}</Button><Button disabled={active?.kind !== "ssh" || focusModePaneId !== null} onClick={() => void split("vertical")}>{t("workspace.splitDown")}</Button><label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={broadcast} onChange={(event) => setBroadcast(event.target.checked)} />{t("workspace.broadcast")}</label><Button disabled={commandTargets.length === 0} onClick={() => setCommandCenter((current) => !current)}>{t("workspace.commandCenter")}</Button>{focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}<select aria-label={t("workspace.saved")} value={selectedWorkspace} onChange={(event) => setSelectedWorkspace(event.target.value)} className="ml-auto rounded border border-control-line bg-control px-2 py-1 text-xs"><option value="">{t("workspace.new")}</option>{saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><Button disabled={layout === null && active?.kind !== "ssh"} onClick={() => void saveWorkspace()}>{t("workspace.save")}</Button><Button disabled={selectedWorkspace === ""} onClick={() => { setFocusModePaneId(null); void restore(); }}>{t("workspace.reopen")}</Button><button disabled={selectedWorkspace === ""} className="text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button></div>{commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}{problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}<div className="flex min-h-0 flex-1 flex-col">{empty ? <div className="flex h-full items-center justify-center p-6"><section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status"><BrandMark className="mx-auto size-12 drop-shadow-sm" /><h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p><div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div></section></div> : layout === null ? (active === null ? null : terminal(active)) : focusNode === null ? renderNode(layout.root) : renderNode({ pane: focusNode })}</div></div>;
 }

@@ -158,10 +158,17 @@ describe("App", () => {
 
     expect(screen.getByRole("list", { name: "Keys and hosts" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Keys and hosts" })).toBeNull();
+    expect(within(screen.getByRole("list", { name: "Start" })).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Home",
+      "Connections",
+      "SFTP",
+      "Terminal",
+    ]);
 
     for (const label of [
       "Home",
       "Connections",
+      "SFTP",
       "Config",
       "Groups",
       "Keys",

@@ -1,6 +1,7 @@
 package sftp_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
@@ -79,6 +80,17 @@ func (r *fakeRemote) Lstat(candidate string) (fs.FileInfo, error) {
 		return nil, fs.ErrNotExist
 	}
 	return info, nil
+}
+
+func (r *fakeRemote) ReadLink(candidate string) (string, error) {
+	info, ok := r.nodes[candidate]
+	if !ok {
+		return "", fs.ErrNotExist
+	}
+	if info.mode&fs.ModeSymlink == 0 {
+		return "", fs.ErrInvalid
+	}
+	return string(info.content), nil
 }
 
 func (r *fakeRemote) Open(candidate string) (io.ReadCloser, error) {
@@ -376,6 +388,65 @@ func TestDownloadMkdirRenameAndDelete(t *testing.T) {
 	}
 	if _, ok := remote.nodes["/home/b"]; ok {
 		t.Fatal("renamed file remained after delete")
+	}
+}
+
+func TestDownloadArchiveAndChmod(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/home":               directory("home"),
+		"/home/project":       directory("project"),
+		"/home/project/a":     file("a", "alpha", 0o640),
+		"/home/project/link":  {name: "link", content: []byte("../escape"), mode: fs.ModeSymlink | 0o777, modTime: testTime},
+		"/home/project/sub":   directory("sub"),
+		"/home/project/sub/b": file("b", "beta", 0o600),
+	})
+	service := serviceFor(remote)
+	var contents bytes.Buffer
+	transfer, err := service.DownloadArchive(context.Background(), "edge", "/home/project", &contents)
+	if err != nil {
+		t.Fatalf("DownloadArchive() = %v", err)
+	}
+	if transfer.Bytes != 18 {
+		t.Fatalf("archive bytes = %d, want 18", transfer.Bytes)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(contents.Bytes()), int64(contents.Len()))
+	if err != nil {
+		t.Fatalf("zip.NewReader() = %v", err)
+	}
+	var names []string
+	for _, entry := range reader.File {
+		names = append(names, entry.Name)
+	}
+	if got := strings.Join(names, ","); got != "project/,project/a,project/link,project/sub/,project/sub/b" {
+		t.Fatalf("archive entries = %q", got)
+	}
+	link := reader.File[2]
+	if link.Mode()&fs.ModeSymlink != 0 || !link.Mode().IsRegular() {
+		t.Fatalf("archived link mode = %v", link.Mode())
+	}
+	opened, err := link.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := io.ReadAll(opened)
+	_ = opened.Close()
+	if err != nil || string(target) != "../escape" {
+		t.Fatalf("archived link = %q, %v", target, err)
+	}
+
+	before, err := service.Stat(context.Background(), "edge", "/home/project/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Chmod(context.Background(), "edge", "/home/project/a", 0o600, "stale"); !errors.Is(err, sftp.ErrConflict) {
+		t.Fatalf("Chmod(stale) = %v, want conflict", err)
+	}
+	changed, err := service.Chmod(context.Background(), "edge", "/home/project/a", 0o600, before.Revision)
+	if err != nil {
+		t.Fatalf("Chmod() = %v", err)
+	}
+	if changed.Mode.Perm() != 0o600 {
+		t.Fatalf("mode = %o", changed.Mode.Perm())
 	}
 }
 
