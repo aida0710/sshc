@@ -139,7 +139,7 @@ func (h SnippetHandlers) Preview(c *echo.Context) error {
 	if err != nil {
 		return snippetProblem(c, err)
 	}
-	issued, err := h.Actions.issueEvidence(c, session.ActionSnippetExecute, preview.SnippetID, preview.Evidence)
+	issued, err := h.Actions.issueEvidence(c, session.ActionSnippetExecute, preview.ActionTarget(), preview.Evidence)
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func (h SnippetHandlers) Start(c *echo.Context) error {
 	if err != nil {
 		return snippetProblem(c, err)
 	}
-	if allowed, response := h.Actions.consumeEvidence(c, session.ActionSnippetExecute, preview.SnippetID, preview.Evidence); !allowed {
+	if allowed, response := h.Actions.consumeEvidence(c, session.ActionSnippetExecute, preview.ActionTarget(), preview.Evidence); !allowed {
 		return response
 	}
 	parent := h.BaseContext

@@ -227,46 +227,39 @@ func (s *Service) PreviewStartup(alias string) (Preview, error) {
 }
 
 type plannedTarget struct {
-	target  Target
-	command string
-	secrets []string
-	run     RunFunc
+	targetID string
+	target   Target
+	command  string
+	secrets  []string
+	run      RunFunc
+}
+
+type planSource struct {
+	kind      string
+	snippetID string
+	updatedAt time.Time
+	command   string
 }
 
 func (s *Service) plan(request PreviewRequest) (Preview, []plannedTarget, error) {
 	if s.resolve == nil {
 		return Preview{}, nil, ErrNoResolver
 	}
-	if len(request.Aliases) == 0 || len(request.Aliases) > MaxTargets {
+	requested, err := normaliseTargets(request)
+	if err != nil {
 		return Preview{}, nil, ErrInvalidTarget
 	}
-	s.mutation.Lock()
-	library, err := s.load()
-	s.mutation.Unlock()
+	source, expanded, secrets, err := s.planSource(request)
 	if err != nil {
 		return Preview{}, nil, err
 	}
-	index := snippetIndex(library, request.SnippetID)
-	if index < 0 {
-		return Preview{}, nil, ErrUnknownSnippet
-	}
-	snippet := library.Snippets[index]
-	expanded, err := expand(snippet.Command, snippet.Variables, request.Inputs)
-	if err != nil {
-		return Preview{}, nil, err
-	}
-	secrets := secretValues(snippet.Variables, request.Inputs)
-	seen := make(map[string]bool, len(request.Aliases))
-	planned := make([]plannedTarget, 0, len(request.Aliases))
-	public := make([]TargetPreview, 0, len(request.Aliases))
-	for _, alias := range request.Aliases {
+	planned := make([]plannedTarget, 0, len(requested))
+	public := make([]TargetPreview, 0, len(requested))
+	for _, requestedTarget := range requested {
+		alias := requestedTarget.Alias
 		if err := validate.Alias(alias); err != nil || len(alias) > 255 {
 			return Preview{}, nil, ErrInvalidTarget
 		}
-		if seen[alias] {
-			return Preview{}, nil, ErrDuplicateTarget
-		}
-		seen[alias] = true
 		resolution, err := s.resolve(alias)
 		if err != nil {
 			return Preview{}, nil, err
@@ -276,30 +269,92 @@ func (s *Service) plan(request PreviewRequest) (Preview, []plannedTarget, error)
 			target.Alias = alias
 		}
 		planned = append(planned, plannedTarget{
-			target: target, command: expanded.command, secrets: append([]string(nil), secrets...),
+			targetID: requestedTarget.TargetID, target: target, command: expanded.command, secrets: append([]string(nil), secrets...),
 			run: resolution.Run,
 		})
-		public = append(public, TargetPreview{Target: target, Command: expanded.display})
+		public = append(public, TargetPreview{TargetID: requestedTarget.TargetID, Target: target, Command: expanded.display})
 	}
-	evidence, err := planEvidence(snippet, planned)
+	evidence, err := planEvidence(source, planned)
 	if err != nil {
 		return Preview{}, nil, err
 	}
-	return Preview{Evidence: evidence, SnippetID: snippet.ID, Targets: public}, planned, nil
+	return Preview{Evidence: evidence, SnippetID: source.snippetID, Targets: public}, planned, nil
 }
 
-func planEvidence(snippet Snippet, planned []plannedTarget) (string, error) {
+func (s *Service) planSource(request PreviewRequest) (planSource, expansion, []string, error) {
+	if (request.SnippetID == "") == (request.Command == "") {
+		return planSource{}, expansion{}, nil, ErrInvalidSnippet
+	}
+	if request.Command != "" {
+		if len(request.Command) > MaxCommandBytes || strings.IndexByte(request.Command, 0) >= 0 {
+			return planSource{}, expansion{}, nil, ErrInvalidSnippet
+		}
+		if len(request.Inputs) > 0 {
+			return planSource{}, expansion{}, nil, ErrUnknownVariable
+		}
+		expanded := expansion{command: request.Command, display: request.Command}
+		return planSource{kind: "command", command: request.Command}, expanded, nil, nil
+	}
+	s.mutation.Lock()
+	library, err := s.load()
+	s.mutation.Unlock()
+	if err != nil {
+		return planSource{}, expansion{}, nil, err
+	}
+	index := snippetIndex(library, request.SnippetID)
+	if index < 0 {
+		return planSource{}, expansion{}, nil, ErrUnknownSnippet
+	}
+	snippet := library.Snippets[index]
+	expanded, err := expand(snippet.Command, snippet.Variables, request.Inputs)
+	if err != nil {
+		return planSource{}, expansion{}, nil, err
+	}
+	return planSource{kind: "snippet", snippetID: snippet.ID, updatedAt: snippet.UpdatedAt}, expanded, secretValues(snippet.Variables, request.Inputs), nil
+}
+
+func normaliseTargets(request PreviewRequest) ([]RequestedTarget, error) {
+	if len(request.Aliases) > 0 && len(request.Targets) > 0 {
+		return nil, ErrInvalidTarget
+	}
+	requested := request.Targets
+	if len(request.Aliases) > 0 {
+		requested = make([]RequestedTarget, len(request.Aliases))
+		for index, alias := range request.Aliases {
+			requested[index] = RequestedTarget{TargetID: alias, Alias: alias}
+		}
+	}
+	if len(requested) == 0 || len(requested) > MaxTargets {
+		return nil, ErrInvalidTarget
+	}
+	seen := make(map[string]bool, len(requested))
+	for _, target := range requested {
+		if target.TargetID == "" || len(target.TargetID) > 255 || strings.TrimSpace(target.TargetID) != target.TargetID || strings.IndexByte(target.TargetID, 0) >= 0 {
+			return nil, ErrInvalidTarget
+		}
+		if seen[target.TargetID] {
+			return nil, ErrDuplicateTarget
+		}
+		seen[target.TargetID] = true
+	}
+	return requested, nil
+}
+
+func planEvidence(source planSource, planned []plannedTarget) (string, error) {
 	type evidenceTarget struct {
-		Target  Target `json:"target"`
-		Command string `json:"command"`
+		TargetID string `json:"targetId"`
+		Target   Target `json:"target"`
+		Command  string `json:"command"`
 	}
 	payload := struct {
-		SnippetID string           `json:"snippetId"`
-		UpdatedAt time.Time        `json:"updatedAt"`
+		Kind      string           `json:"kind"`
+		SnippetID string           `json:"snippetId,omitempty"`
+		UpdatedAt time.Time        `json:"updatedAt,omitempty"`
+		Command   string           `json:"command,omitempty"`
 		Targets   []evidenceTarget `json:"targets"`
-	}{SnippetID: snippet.ID, UpdatedAt: snippet.UpdatedAt}
+	}{Kind: source.kind, SnippetID: source.snippetID, UpdatedAt: source.updatedAt, Command: source.command}
 	for _, target := range planned {
-		payload.Targets = append(payload.Targets, evidenceTarget{Target: target.target, Command: target.command})
+		payload.Targets = append(payload.Targets, evidenceTarget{TargetID: target.targetID, Target: target.target, Command: target.command})
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {

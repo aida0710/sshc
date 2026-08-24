@@ -122,21 +122,41 @@ type Resolution struct {
 
 type ResolveFunc func(alias string) (Resolution, error)
 
+// RequestedTarget gives one execution target a caller-stable identity. Alias
+// resolves the SSH host; TargetID distinguishes multiple workspace panes that
+// intentionally point at the same alias.
+type RequestedTarget struct {
+	TargetID string `json:"targetId"`
+	Alias    string `json:"alias"`
+}
+
 type PreviewRequest struct {
-	SnippetID string            `json:"snippetId"`
-	Aliases   []string          `json:"aliases"`
+	SnippetID string            `json:"snippetId,omitempty"`
+	Command   string            `json:"command,omitempty"`
+	Aliases   []string          `json:"aliases,omitempty"`
+	Targets   []RequestedTarget `json:"targets,omitempty"`
 	Inputs    map[string]string `json:"inputs,omitempty"`
 }
 
 type TargetPreview struct {
-	Target  Target `json:"target"`
-	Command string `json:"command"`
+	TargetID string `json:"targetId"`
+	Target   Target `json:"target"`
+	Command  string `json:"command"`
 }
 
 type Preview struct {
 	Evidence  string          `json:"evidence"`
 	SnippetID string          `json:"snippetId"`
 	Targets   []TargetPreview `json:"targets"`
+}
+
+// ActionTarget binds the one-time confirmation token to the selected snippet
+// or, for an ad-hoc command, to the exact preview evidence.
+func (p Preview) ActionTarget() string {
+	if p.SnippetID != "" {
+		return p.SnippetID
+	}
+	return "command:" + p.Evidence
 }
 
 type ExecuteRequest struct {
@@ -156,6 +176,7 @@ const (
 )
 
 type TargetResult struct {
+	TargetID  string       `json:"targetId"`
 	Alias     string       `json:"alias"`
 	Status    TargetStatus `json:"status"`
 	ExitCode  int          `json:"exitCode,omitempty"`
