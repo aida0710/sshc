@@ -48,6 +48,7 @@ describe("the catalogue", () => {
         "kh.heading",
         "rk.alias",
         "rk.hostAlias",
+        "section.files",
         "section.knownHosts",
         "shell.languageEnglish",
         "shell.languageJapanese",

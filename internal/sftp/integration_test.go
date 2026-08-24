@@ -1,6 +1,7 @@
 package sftp_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
@@ -143,6 +144,24 @@ func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	}
 	if len(entries) != 2 || entries[0].Name != "first.txt" || entries[1].Name != "renamed.bin" {
 		t.Fatalf("entries = %#v", entries)
+	}
+	changed, err := service.Chmod(t.Context(), "integration", first, 0o640, entries[0].Revision)
+	if err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	if changed.Mode.Perm() != 0o640 {
+		t.Fatalf("chmod mode = %o", changed.Mode.Perm())
+	}
+	var archived bytes.Buffer
+	if _, err := service.DownloadArchive(t.Context(), "integration", root, &archived); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(archived.Bytes()), int64(archived.Len()))
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	if len(reader.File) != 3 || reader.File[0].Name != path.Base(root)+"/" {
+		t.Fatalf("archive entries = %#v", reader.File)
 	}
 
 	for _, candidate := range []string{first, renamed} {

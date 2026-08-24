@@ -1128,6 +1128,13 @@ type RewrittenKeyReference struct {
 	To         string `json:"to"`
 }
 
+// SFTPChmodRequest defines model for SFTPChmodRequest.
+type SFTPChmodRequest struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Mode             string `json:"mode"`
+	Path             string `json:"path"`
+}
+
 // SFTPEntry defines model for SFTPEntry.
 type SFTPEntry struct {
 	Mode       string        `json:"mode"`
@@ -1657,6 +1664,11 @@ type BootstrapSessionParams struct {
 	XSSHCBootstrap string `json:"X-SSHC-Bootstrap"`
 }
 
+// DownloadSFTPDirectoryArchiveParams defines parameters for DownloadSFTPDirectoryArchive.
+type DownloadSFTPDirectoryArchiveParams struct {
+	Path string `form:"path" json:"path"`
+}
+
 // DownloadSFTPFileParams defines parameters for DownloadSFTPFile.
 type DownloadSFTPFileParams struct {
 	Path string `form:"path" json:"path"`
@@ -1670,6 +1682,11 @@ type ListSFTPEntriesParams struct {
 // DeleteSFTPEntryParams defines parameters for DeleteSFTPEntry.
 type DeleteSFTPEntryParams struct {
 	Path        string `form:"path" json:"path"`
+	XSSHCAction string `json:"X-SSHC-Action"`
+}
+
+// ChmodSFTPEntryParams defines parameters for ChmodSFTPEntry.
+type ChmodSFTPEntryParams struct {
 	XSSHCAction string `json:"X-SSHC-Action"`
 }
 
@@ -1799,6 +1816,9 @@ type CreateSFTPDirectoryJSONRequestBody = SFTPMkdirRequest
 
 // RenameSFTPEntryJSONRequestBody defines body for RenameSFTPEntry for application/json ContentType.
 type RenameSFTPEntryJSONRequestBody = SFTPRenameRequest
+
+// ChmodSFTPEntryJSONRequestBody defines body for ChmodSFTPEntry for application/json ContentType.
+type ChmodSFTPEntryJSONRequestBody = SFTPChmodRequest
 
 // SaveSFTPTextJSONRequestBody defines body for SaveSFTPText for application/json ContentType.
 type SaveSFTPTextJSONRequestBody = SFTPSaveTextRequest

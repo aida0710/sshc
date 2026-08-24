@@ -66,6 +66,13 @@ test("moves workspace panes by drag and drop and saves the new placement", async
   await panes.nth(0).getByRole("button", { name: /Move bastion pane/ }).dragTo(panes.nth(1));
   await expect(panes.nth(0)).toHaveAttribute("data-pane-alias", "nas");
   await expect(panes.nth(1)).toHaveAttribute("data-pane-alias", "bastion");
+  const separator = page.getByRole("separator", { name: "Resize split" });
+  await separator.press("ArrowRight");
+  await expect(separator).toHaveAttribute("aria-valuenow", "65");
+  await panes.nth(0).getByRole("button", { name: "Focus nas" }).click();
+  await expect(panes).toHaveCount(1);
+  await page.getByRole("button", { name: "Exit focus mode" }).first().click();
+  await expect(panes).toHaveCount(2);
 
   page.once("dialog", (dialog) => dialog.accept("Production"));
   await page.getByRole("button", { name: "Save layout" }).click();
@@ -74,7 +81,7 @@ test("moves workspace panes by drag and drop and saves the new placement", async
   if (savedRequest === undefined) throw new Error("workspace save request was not captured");
   const layout = (savedRequest.layout as typeof savedWorkspace.layout).split;
   expect(layout.direction).toBe("horizontal");
-  expect(layout.ratio).toBe(60);
+  expect(layout.ratio).toBe(65);
   expect(layout.first.pane.alias).toBe("nas");
   expect(layout.second.pane.alias).toBe("bastion");
 });

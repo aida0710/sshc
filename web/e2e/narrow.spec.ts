@@ -6,7 +6,7 @@ const hosts = "Host alpha\n\tHostName 198.51.100.10\n\nHost bravo\n\tHostName 19
 
 const sections = [
   { navigation: "Connections", heading: "Connections" },
-  { navigation: "Files", heading: "Remote files" },
+  { navigation: "SFTP", heading: "Remote files" },
   { navigation: "Snippets", heading: "Snippets" },
   { navigation: "Config", heading: "Configuration files" },
   { navigation: "Groups", heading: "Groups" },

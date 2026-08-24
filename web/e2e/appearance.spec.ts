@@ -4,7 +4,7 @@ import { openApplication, openSection, sessionStatus } from "./support/environme
 const sections = [
   "Home",
   "Connections",
-  "Files",
+  "SFTP",
   "Snippets",
   "Config",
   "Groups",

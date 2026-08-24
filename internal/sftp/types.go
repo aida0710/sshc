@@ -78,6 +78,7 @@ type Remote interface {
 	io.Closer
 	ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error)
 	Lstat(path string) (fs.FileInfo, error)
+	ReadLink(path string) (string, error)
 	Open(path string) (io.ReadCloser, error)
 	Create(path string) (io.WriteCloser, error)
 	Mkdir(path string) error
