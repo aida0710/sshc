@@ -261,6 +261,20 @@ export function TerminalView({
 
   return (
     <section aria-label={t("terminal.screenLabel", { title: session.title })} className="relative flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
+        <span
+          aria-hidden="true"
+          className={`size-2 shrink-0 rounded-full ${
+            session.exited !== undefined ? "bg-ink-faint" : link.phase === "live" ? "bg-live" : "bg-notice-ink"
+          }`}
+        />
+        <p className="min-w-0 truncate font-mono text-xs font-semibold text-ink">{session.title}</p>
+        {session.alias === undefined || session.alias === session.title ? null : (
+          <span className="truncate rounded-md bg-surface px-2 py-0.5 font-mono text-[11px] text-ink-muted">
+            {session.alias}
+          </span>
+        )}
+      </div>
       {problem === "" ? null : (
         <p role="status" className="shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
           {problem}

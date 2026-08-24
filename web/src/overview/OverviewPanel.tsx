@@ -76,12 +76,13 @@ export function OverviewPanel({
   const recoveryAttention = overview?.pending?.length ?? 0;
   const attention = configurationAttention + recoveryAttention;
   const connectionCount = overview?.hosts.filter((host) => host.identity.alias !== "").length ?? 0;
+  const favouriteCount = overview?.metadata.hosts?.filter((host) => host.favourite === true).length ?? 0;
 
   return (
-    <section aria-labelledby="home-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <section aria-labelledby="home-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 id="home-heading" className="text-xl font-semibold">{t("home.heading")}</h2>
+          <h2 id="home-heading" className="text-2xl font-semibold tracking-tight">{t("home.heading")}</h2>
           <p className="mt-1 text-sm text-ink-muted">{t("home.intro")}</p>
         </div>
         <Button onClick={() => onNavigate("Connections")}>
@@ -91,61 +92,103 @@ export function OverviewPanel({
 
       {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <section
+        aria-labelledby="quick-connect-heading"
+        className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_18px_50px_-38px_rgba(15,23,42,0.7)]"
+      >
+        <div className="sshc-connect-hero relative overflow-hidden px-5 py-5 text-white sm:px-6">
+          <div aria-hidden="true" className="absolute -right-10 -top-16 size-44 rounded-full border border-white/10" />
+          <div aria-hidden="true" className="absolute -right-2 -top-4 size-24 rounded-full border border-white/10" />
+          <div className="relative flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <span
+                aria-hidden="true"
+                className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg border border-white/15 bg-white/10 font-mono text-sm text-connect-mark"
+              >
+                &gt;_
+              </span>
+              <div>
+                <h3 id="quick-connect-heading" className="text-base font-semibold tracking-tight">
+                  {t("home.quickConnect")}
+                </h3>
+                <p className="mt-1 text-sm text-white/70">{t("home.quickConnectHint")}</p>
+              </div>
+            </div>
+            <p className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs text-white/80">
+              <span aria-hidden="true" className="mr-1.5 text-connect-star">★</span>
+              {t("home.favourite")} · {overview === null ? "—" : favouriteCount}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5">
+          {loading ? (
+            <p aria-live="polite" className={hintText}>{t("home.loading")}</p>
+          ) : overview === null ? null : (
+            <QuickConnectBrowser
+              overview={overview}
+              launching={launching}
+              onConnect={(alias) => void connect(alias)}
+              onOpenSettings={onNavigateLocation}
+            />
+          )}
+        </div>
+      </section>
+
+      <dl
+        role="group"
+        aria-label={`${t("home.connections")}, ${t("home.groups")}, ${t("home.attention")}`}
+        className="grid overflow-hidden rounded-xl border border-line bg-toolbar sm:grid-cols-3"
+      >
         <Summary label={t("home.connections")} value={overview === null ? "—" : connectionCount} />
         <Summary label={t("home.groups")} value={overview === null ? "—" : overview.groups.length} />
         <Summary label={t("home.attention")} value={overview === null ? "—" : attention} attention={attention > 0} />
-      </div>
-
-      <section aria-labelledby="quick-connect-heading" className="flex flex-col gap-3">
-        <div>
-          <h3 id="quick-connect-heading" className="font-medium">{t("home.quickConnect")}</h3>
-          <p className={hintText}>{t("home.quickConnectHint")}</p>
-        </div>
-
-        {loading ? (
-          <p aria-live="polite" className={hintText}>{t("home.loading")}</p>
-        ) : overview === null ? null : (
-          <QuickConnectBrowser
-            overview={overview}
-            launching={launching}
-            onConnect={(alias) => void connect(alias)}
-            onOpenSettings={onNavigateLocation}
-          />
-        )}
-      </section>
+      </dl>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <section className="rounded-xl border border-line bg-card p-4">
-          <h3 className="font-medium">{t("home.workspace")}</h3>
-          <p className="mt-1 text-sm text-ink-muted">
-            {overview === null
-              ? t("home.workspaceUnavailable")
-              : attention === 0
-                ? t("home.workspaceClean")
-                : t("home.workspaceAttention", { count: attention })}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {configurationAttention === 0 ? null : (
-              <Button onClick={() => onNavigate("Config")}>{t("home.openConfig")}</Button>
-            )}
-            {recoveryAttention === 0 ? null : (
-              <Button onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>
-            )}
+        <section className="sshc-card rounded-xl bg-card p-4">
+          <div className="flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className={`mt-1 size-2 shrink-0 rounded-full ${attention > 0 ? "bg-notice-ink" : "bg-live"}`}
+            />
+            <div className="min-w-0 flex-1">
+              <h3 className="font-medium">{t("home.workspace")}</h3>
+              <p className="mt-1 text-sm text-ink-muted">
+                {overview === null
+                  ? t("home.workspaceUnavailable")
+                  : attention === 0
+                    ? t("home.workspaceClean")
+                    : t("home.workspaceAttention", { count: attention })}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {configurationAttention === 0 ? null : (
+                  <Button onClick={() => onNavigate("Config")}>{t("home.openConfig")}</Button>
+                )}
+                {recoveryAttention === 0 ? null : (
+                  <Button onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>
+                )}
+              </div>
+            </div>
           </div>
         </section>
-        <section className="rounded-xl border border-line bg-card p-4">
-          <h3 className="font-medium">{t("home.sync")}</h3>
-          <p className="mt-1 text-sm text-ink-muted">
-            {sync === null
-              ? t("home.syncUnavailable")
-              : !sync.configured
-                ? t("home.syncNotConfigured")
-                : sync.synced
-                  ? t("home.syncLast", { at: sync.lastSyncedAt ?? "—", count: sync.fileCount ?? 0 })
-                  : t("home.syncNever")}
-          </p>
-          <Button className="mt-3" onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
+        <section className="sshc-card rounded-xl bg-card p-4">
+          <div className="flex items-start gap-3">
+            <span aria-hidden="true" className="mt-1 font-mono text-xs text-accent">↕</span>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-medium">{t("home.sync")}</h3>
+              <p className="mt-1 text-sm text-ink-muted">
+                {sync === null
+                  ? t("home.syncUnavailable")
+                  : !sync.configured
+                    ? t("home.syncNotConfigured")
+                    : sync.synced
+                      ? t("home.syncLast", { at: sync.lastSyncedAt ?? "—", count: sync.fileCount ?? 0 })
+                      : t("home.syncNever")}
+              </p>
+              <Button className="mt-3" onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
+            </div>
+          </div>
         </section>
       </div>
     </section>
@@ -154,9 +197,11 @@ export function OverviewPanel({
 
 function Summary({ label, value, attention = false }: { label: string; value: string | number; attention?: boolean }) {
   return (
-    <div className={`rounded-xl border bg-card p-4 ${attention ? "border-notice-line" : "border-line"}`}>
-      <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</p>
+    <div className="flex items-center justify-between gap-4 border-t border-line px-4 py-3 first:border-t-0 sm:border-l sm:border-t-0 sm:first:border-l-0">
+      <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
+      <dd className={`font-mono text-lg font-semibold tabular-nums ${attention ? "text-notice-ink" : "text-ink"}`}>
+        {value}
+      </dd>
     </div>
   );
 }

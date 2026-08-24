@@ -103,10 +103,10 @@ export function HostDetailPanel({
   }
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-5">
       <NoticeList notices={detail.form.notices ?? []} />
 
-      <div role="tablist" aria-label={t("conn.editorLabel")} className="flex gap-1 border-b border-line">
+      <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 flex gap-1 rounded-lg bg-select-fill p-1 shadow-sm">
         {areas.map((item) => (
           <button
             key={item.area}
@@ -114,7 +114,7 @@ export function HostDetailPanel({
             role="tab"
             aria-selected={panel === item.area}
             onClick={() => selectArea(item.area)}
-            className={`px-3 py-2 text-sm ${panel === item.area ? "border-b-2 border-ink text-ink" : "text-ink-muted"}`}
+            className={`flex-1 rounded-md px-3 py-2 text-sm transition-colors ${panel === item.area ? "bg-card font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"}`}
           >
             {t(item.label)}
           </button>

@@ -19,6 +19,7 @@ import { control, Field, fieldLabel, hintText, sectionHeading } from "../ui/form
 import { PasswordField } from "../ui/PasswordField";
 import { isValidHostName } from "../rules/rules";
 import { Button, Notice } from "../ui/surface";
+import { Icon } from "../ui/icons";
 
 type AuthenticationKind = CreateConnectionAuthentication["kind"];
 
@@ -293,17 +294,22 @@ export function CreateConnectionModal({
   })();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-4 backdrop-blur-sm">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-connection-heading"
-        className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-line bg-card shadow-xl"
+        className="sshc-card flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-card shadow-xl"
       >
-        <div className="border-b border-line px-5 py-4">
-          <div>
-            <h2 id="create-connection-heading" className="font-semibold">{t("conn.createTitle")}</h2>
-            <p className={`mt-1 ${hintText}`}>{t("conn.createDescription")}</p>
+        <div className="border-b border-line px-5 py-5">
+          <div className="flex items-start gap-3">
+            <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">
+              <Icon name="plus" className="size-5" />
+            </span>
+            <div>
+              <h2 id="create-connection-heading" className="text-lg font-semibold tracking-tight text-ink">{t("conn.createTitle")}</h2>
+              <p className={`mt-1 ${hintText}`}>{t("conn.createDescription")}</p>
+            </div>
           </div>
         </div>
 
@@ -311,7 +317,14 @@ export function CreateConnectionModal({
           <div className="flex min-h-0 flex-col gap-6 overflow-y-auto p-5">
             {error === "" ? null : <Notice tone="danger">{error}</Notice>}
             <section className="flex flex-col gap-3" aria-labelledby="create-connection-section">
-              <h3 id="create-connection-section" className={sectionHeading}>{t("conn.createConnectionSection")}</h3>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <h3 id="create-connection-section" className={sectionHeading}>{t("conn.createConnectionSection")}</h3>
+                {alias === "" || hostName === "" ? null : (
+                  <p className="rounded-md bg-tree px-2.5 py-1.5 font-mono text-xs text-ink-muted">
+                    {`${alias}  ${user === "" ? "" : `${user}@`}${hostName}:${port || "22"}`}
+                  </p>
+                )}
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <Field label={t("conn.createNameRequired")}>
@@ -407,7 +420,7 @@ export function CreateConnectionModal({
                 </div>
               ) : null}
 
-              <fieldset className="flex flex-col gap-2" disabled={loading}>
+              <fieldset className="grid gap-2 sm:grid-cols-2" disabled={loading}>
                 <legend className={fieldLabel}>{t("conn.createAuthenticationMethod")}</legend>
                 {([
                   ["identity_file", "conn.createIdentityFile"],
@@ -415,7 +428,7 @@ export function CreateConnectionModal({
                   ["saved_password", "conn.createSavedPassword"],
                   ["new_shared_password", "conn.createNewSharedPassword"],
                 ] as const).map(([kind, label]) => (
-                  <label key={kind} className="flex items-center gap-2 text-sm text-ink">
+                  <label key={kind} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-card p-3 text-sm text-ink transition-colors hover:bg-select-fill has-[:checked]:border-accent has-[:checked]:bg-select-fill">
                     <input
                       type="radio"
                       name="create-authentication"

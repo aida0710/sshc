@@ -2,7 +2,7 @@ import type { DragEvent } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
-import { noteLabels, rowAction, rowDanger } from "./labels";
+import { noteLabels, rowAction, rowDanger, rowPrimary } from "./labels";
 
 export type KeyRowActions = {
   onSelect: (item: KeyItem) => void;
@@ -39,183 +39,212 @@ export function KeyTable({
 }) {
   const t = useTranslate();
   return (
-  <table className="w-full text-left text-sm">
-    <caption className="sr-only">{t("keys.tableCaption")}</caption>
-    <thead>
-      <tr className={tableHeadRow}>
-        <th scope="col" className={`${tableHeadCell} w-8`}>
-          <span className="sr-only">{t("keys.colChoose")}</span>
-        </th>
-        <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFile")}</th>
-        <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colKind")}</th>
-        <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colState")}</th>
-        <th scope="col" className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colActions")}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {items.map((item) => (
-        <tr
-          key={item.id}
-          className="border-b border-line align-top transition-colors last:border-b-0 hover:bg-select-fill"
-        >
-          <td className="py-3 pl-3">
-
-            {renameable(item, inventory.items) ? (
-              <div className="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  aria-label={t("keys.chooseKey", { path: item.relativePath })}
-                  checked={chosen.has(item.id)}
-                  onChange={(event) => actions.onToggleChosen(item, event.target.checked)}
-                />
-
-
-                <span
-                  draggable
-                  aria-label={t("keys.dragKey", { path: item.relativePath })}
-                  onDragStart={(event) => actions.onBeginDrag(event, item)}
-                  onDragEnd={actions.onEndDrag}
-                  className="flex cursor-grab select-none items-center rounded px-2 py-2 text-base leading-none text-ink-faint hover:bg-select-fill active:cursor-grabbing"
-                >
-                  ⠿
-                </span>
-              </div>
-            ) : null}
-          </td>
-          <td className="py-3 pr-3">
-            <button
-              type="button"
-              aria-pressed={selected === item.id}
-              onClick={() => actions.onSelect(item)}
-              className="text-left font-mono text-xs text-ink underline-offset-2 hover:underline"
+    <table className="w-full min-w-[56rem] text-left text-sm">
+      <caption className="sr-only">{t("keys.tableCaption")}</caption>
+      <thead>
+        <tr className={`${tableHeadRow} bg-surface-subtle`}>
+          <th scope="col" className={`${tableHeadCell} w-12 pl-3`}>
+            <span className="sr-only">{t("keys.colChoose")}</span>
+          </th>
+          <th scope="col" className={`${tableHeadCell} w-[30%] whitespace-nowrap`}>{t("keys.colFile")}</th>
+          <th scope="col" className={`${tableHeadCell} w-[18%] whitespace-nowrap`}>{t("keys.colKind")}</th>
+          <th scope="col" className={`${tableHeadCell} w-[20%] whitespace-nowrap`}>{t("keys.colState")}</th>
+          <th scope="col" className={`${tableHeadCell} whitespace-nowrap text-right`}>{t("keys.colActions")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((item) => {
+          const heldByAgent = agentHolds(inventory, item);
+          const isSelected = selected === item.id;
+          return (
+            <tr
+              key={item.id}
+              className={`border-b border-hairline align-top transition-colors last:border-b-0 hover:bg-select-fill ${
+                isSelected ? "bg-select-fill" : ""
+              }`}
             >
-              {item.relativePath}
-            </button>
-          </td>
-          <td className="py-2 pr-3">
-            {item.kind}
-            {item.certificate === undefined ? null : (
-              <ul className="text-xs text-ink-muted">
-                {certificateLines(item.certificate, now, t).map((line) => (
-                  <li key={line.text} className={line.expired ? "text-danger" : undefined}>
-                    {line.text}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </td>
-
-          <td className="py-2 pr-3 text-xs">
-            <span className="flex flex-wrap gap-2">
-              {item.permissionRisk && <span className="text-notice-ink">{t("keys.permissionRisk")}</span>}
-              {agentHolds(inventory, item) && <span className="text-live">{t("keys.stateInAgent")}</span>}
-              {item.references.length > 0 && (
-                <span className="text-ink-muted">{t("keys.stateUsedBy", { count: item.references.length })}</span>
-              )}
-              {item.notes.map((note) => (
-                <span key={note} className="text-notice-ink">
-                  {note in noteLabels ? t(noteLabels[note]!) : note}
-                </span>
-              ))}
-            </span>
-          </td>
-          <td className="py-2">
-            <div className="flex flex-wrap gap-1">
-            {(item.kind === "public_key" || item.kind === "certificate") && (
-              <button type="button" className={rowAction} onClick={() => actions.onShowPublicKey(item)}>
-                {t("keys.showPublicKey")}
-              </button>
-            )}
-            {item.kind === "private_key" && (
-              <>
-                <button type="button" className={rowAction} onClick={() => actions.onReveal(item)}>
-                  {t("keys.showPrivateKey")}
-                </button>
-                {item.encrypted ? (
-                  <button
-                    type="button"
-                    className={rowAction}
-                    onClick={() => actions.onManageStoredPassphrase(item)}
-                  >
-                    {t("keys.manageStoredPassphrase")}
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className={rowAction}
-                  disabled={!inventory.agentAvailable}
-                  onClick={() => actions.onAddToAgent(item)}
-                >
-                  {t("keys.addToAgent")}
-                </button>
-                {agentHolds(inventory, item) && (
-                  <button
-                    type="button"
-                    className={rowAction}
-                    onClick={() => actions.onRemoveFromAgent(item)}
-                  >
-                    {t("keys.removeFromAgent")}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className={rowAction}
-                  aria-expanded={moreActionsFor === item.id}
-                  onClick={() => actions.onToggleMoreActions(item)}
-                >
-                  {t("keys.moreActions")}
-                </button>
-                {moreActionsFor === item.id ? (
-                  <div className="flex flex-wrap gap-1 rounded-md border border-line bg-surface-subtle p-1">
-                    <button
-                      type="button"
-                      className={rowAction}
-                      onClick={() => actions.onChangePassphrase(item)}
+              <td className="py-3 pl-3">
+                {renameable(item, inventory.items) ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      aria-label={t("keys.chooseKey", { path: item.relativePath })}
+                      checked={chosen.has(item.id)}
+                      onChange={(event) => actions.onToggleChosen(item, event.target.checked)}
+                      className="h-4 w-4 accent-accent"
+                    />
+                    <span
+                      draggable
+                      aria-label={t("keys.dragKey", { path: item.relativePath })}
+                      onDragStart={(event) => actions.onBeginDrag(event, item)}
+                      onDragEnd={actions.onEndDrag}
+                      className="flex cursor-grab select-none items-center rounded px-1.5 py-1 text-sm leading-none text-ink-faint hover:bg-surface active:cursor-grabbing"
                     >
-                      {t("keys.changePassphrase")}
+                      ⠿
+                    </span>
+                  </div>
+                ) : null}
+              </td>
+              <td className="py-3 pr-4">
+                <button
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => actions.onSelect(item)}
+                  className="block max-w-full text-left font-mono text-sm font-semibold text-ink underline-offset-4 hover:text-accent hover:underline"
+                >
+                  {item.relativePath}
+                </button>
+                {item.fingerprint === "" ? null : (
+                  <p className="mt-1 max-w-xs truncate font-mono text-[11px] text-ink-muted" title={item.fingerprint}>
+                    {item.fingerprint}
+                  </p>
+                )}
+                {item.comment === "" ? null : (
+                  <p className="mt-0.5 max-w-xs truncate text-xs text-ink-muted">{item.comment}</p>
+                )}
+              </td>
+              <td className="py-3 pr-4">
+                <span className="inline-flex rounded-md bg-surface px-2 py-1 text-xs text-ink-muted">
+                  {item.kind}
+                </span>
+                {item.algorithm === "" ? null : (
+                  <p className="mt-2 font-mono text-xs font-medium text-ink">
+                    {item.bits > 0 ? `${item.algorithm} · ${item.bits}` : item.algorithm}
+                  </p>
+                )}
+                {item.certificate === undefined ? null : (
+                  <ul className="mt-1 text-xs text-ink-muted">
+                    {certificateLines(item.certificate, now, t).map((line) => (
+                      <li key={line.text} className={line.expired ? "text-danger" : undefined}>
+                        {line.text}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </td>
+              <td className="py-3 pr-4 text-xs">
+                <span className="flex flex-wrap gap-1.5">
+                  {item.permissionRisk && (
+                    <span className="rounded-md bg-notice px-2 py-1 font-medium text-notice-ink">
+                      {t("keys.permissionRisk")}
+                    </span>
+                  )}
+                  {heldByAgent && (
+                    <span className="inline-flex items-center gap-1.5 rounded-md bg-surface px-2 py-1 font-medium text-live">
+                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-live" />
+                      {t("keys.stateInAgent")}
+                    </span>
+                  )}
+                  {item.references.length > 0 && (
+                    <span className="rounded-md bg-surface px-2 py-1 text-ink-muted">
+                      {t("keys.stateUsedBy", { count: item.references.length })}
+                    </span>
+                  )}
+                  {item.notes.map((note) => (
+                    <span key={note} className="rounded-md bg-notice px-2 py-1 text-notice-ink">
+                      {note in noteLabels ? t(noteLabels[note]!) : note}
+                    </span>
+                  ))}
+                </span>
+              </td>
+              <td className="py-3 pr-3">
+                <div className="flex flex-wrap justify-end gap-1">
+                  {(item.kind === "public_key" || item.kind === "certificate") && (
+                    <button type="button" className={rowPrimary} onClick={() => actions.onShowPublicKey(item)}>
+                      {t("keys.showPublicKey")}
                     </button>
-                    {renameable(item, inventory.items) ? (
+                  )}
+                  {item.kind === "private_key" && (
+                    <>
+                      <button type="button" className={rowAction} onClick={() => actions.onReveal(item)}>
+                        {t("keys.showPrivateKey")}
+                      </button>
+                      {item.encrypted ? (
+                        <button
+                          type="button"
+                          className={rowAction}
+                          onClick={() => actions.onManageStoredPassphrase(item)}
+                        >
+                          {t("keys.manageStoredPassphrase")}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={heldByAgent ? rowAction : rowPrimary}
+                        disabled={!inventory.agentAvailable}
+                        onClick={() => actions.onAddToAgent(item)}
+                      >
+                        {t("keys.addToAgent")}
+                      </button>
+                      {heldByAgent && (
+                        <button
+                          type="button"
+                          className={rowAction}
+                          onClick={() => actions.onRemoveFromAgent(item)}
+                        >
+                          {t("keys.removeFromAgent")}
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={rowAction}
-                        onClick={() => actions.onRelocate(item)}
+                        aria-expanded={moreActionsFor === item.id}
+                        onClick={() => actions.onToggleMoreActions(item)}
                       >
-                        {t("keys.relocate")}
+                        {t("keys.moreActions")}
                       </button>
-                    ) : null}
+                      {moreActionsFor === item.id ? (
+                        <div className="mt-1 flex basis-full flex-wrap justify-end gap-1 rounded-lg bg-surface-subtle p-1.5">
+                          <button
+                            type="button"
+                            className={rowAction}
+                            onClick={() => actions.onChangePassphrase(item)}
+                          >
+                            {t("keys.changePassphrase")}
+                          </button>
+                          {renameable(item, inventory.items) ? (
+                            <button
+                              type="button"
+                              className={rowAction}
+                              onClick={() => actions.onRelocate(item)}
+                            >
+                              {t("keys.relocate")}
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={rowDanger}
+                            onClick={() => actions.onMoveToTrash(item)}
+                          >
+                            {t("keys.moveToTrash")}
+                          </button>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                  {item.kind !== "private_key" && renameable(item, inventory.items) && (
                     <button
                       type="button"
-                      className={rowDanger}
-                      onClick={() => actions.onMoveToTrash(item)}
+                      className={rowAction}
+                      onClick={() => actions.onRelocate(item)}
                     >
-                      {t("keys.moveToTrash")}
+                      {t("keys.relocate")}
                     </button>
-                  </div>
-                ) : null}
-              </>
-            )}
-            {item.kind !== "private_key" && renameable(item, inventory.items) && (
-              <button
-                type="button"
-                className={rowAction}
-                onClick={() => actions.onRelocate(item)}
-              >
-                {t("keys.relocate")}
-              </button>
-            )}
-            </div>
-          </td>
-        </tr>
-      ))}
-      {items.length === 0 && (
-        <tr>
-          <td colSpan={5} className="p-5 text-sm text-ink-muted">
-            {inventory.items.length === 0 ? t("keys.inventoryEmpty") : t("keys.noMatches")}
-          </td>
-        </tr>
-      )}
-    </tbody>
-  </table>
+                  )}
+                </div>
+              </td>
+            </tr>
+          );
+        })}
+        {items.length === 0 && (
+          <tr>
+            <td colSpan={5} className="p-8 text-center text-sm text-ink-muted">
+              {inventory.items.length === 0 ? t("keys.inventoryEmpty") : t("keys.noMatches")}
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
   );
 }
 

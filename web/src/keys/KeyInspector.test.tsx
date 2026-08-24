@@ -31,7 +31,7 @@ const item: KeyItem = {
 };
 
 describe("KeyInspector", () => {
-  it("shows what the table no longer carries", () => {
+  it("shows the complete technical identity", () => {
     render(<KeyInspector item={item} now={0} />);
 
     expect(screen.getByText("SHA256:abcdef")).toBeInTheDocument();

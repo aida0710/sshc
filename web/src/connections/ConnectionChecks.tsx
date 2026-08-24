@@ -6,7 +6,7 @@ import type {
   ReachabilityResponse,
 } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
-import { hintText, sectionCard, sectionHeading } from "../ui/form";
+import { hintText, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 
 type ChecksApi = Pick<IntegrationsApi, "effective" | "reachability" | "authentication">;
@@ -87,7 +87,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   const blocked = disabled || busy !== null;
 
   return (
-    <section aria-label={t("conn.checksLabel")} className="flex flex-col gap-3">
+    <section aria-label={t("conn.checksLabel")} className="flex flex-col gap-3 rounded-lg bg-tree px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button disabled={blocked} onClick={() => void checkReachability()}>
           {busy === "reachability" ? t("conn.checking") : t("conn.checkReachability")}
@@ -125,26 +125,29 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
         </div>
       )}
 
-      {reachability === null ? null : (
-        <div className={`${sectionCard} text-sm`}>
-          <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
-          <p className="font-mono text-xs text-ink">{reachability.address}</p>
-          <p className="text-ink">{reachability.outcome}</p>
-          <p className={hintText}>{reachability.notice}</p>
-        </div>
-      )}
-
-      {authentication === null ? null : (
-        <div className={`${sectionCard} text-sm`}>
-          <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
-          <p className="text-ink">{authentication.outcome}</p>
-          {authentication.method === "" ? null : (
-            <p className={hintText}>{t("diag.authenticationMethod", { method: authentication.method })}</p>
+      {reachability === null && authentication === null ? null : (
+        <div className="sshc-card grid overflow-hidden rounded-lg bg-card sm:grid-cols-2 sm:divide-x sm:divide-line">
+          {reachability === null ? null : (
+            <div className="flex flex-col gap-1.5 p-3 text-sm">
+              <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
+              <p className="font-mono text-xs text-ink">{reachability.address}</p>
+              <p className="font-medium text-ink">{reachability.outcome}</p>
+              <p className={hintText}>{reachability.notice}</p>
+            </div>
           )}
-          {authentication.detail === "" ? null : (
-            <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink-muted">
-              {authentication.detail}
-            </pre>
+          {authentication === null ? null : (
+            <div className="flex flex-col gap-1.5 border-t border-line p-3 text-sm sm:border-t-0">
+              <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
+              <p className="font-medium text-ink">{authentication.outcome}</p>
+              {authentication.method === "" ? null : (
+                <p className={hintText}>{t("diag.authenticationMethod", { method: authentication.method })}</p>
+              )}
+              {authentication.detail === "" ? null : (
+                <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink-muted">
+                  {authentication.detail}
+                </pre>
+              )}
+            </div>
           )}
         </div>
       )}

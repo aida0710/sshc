@@ -4,22 +4,22 @@ import { noteLabels } from "./labels";
 import { certificateLines } from "./KeyTable";
 import type { KeyItem } from "./api";
 
-
 export function KeyInspector({ item, now }: { item: KeyItem; now: number }) {
   const t = useTranslate();
   const references = item.references.map((reference) => reference.hostPatterns.join(" "));
 
   return (
     <div className="flex flex-col gap-4">
-      <dl className="flex flex-col gap-2 text-sm">
-        <Fact
-          label={t("keys.colFile")}
-          value={<span className="font-mono text-xs break-all">{item.relativePath}</span>}
-        />
-        <Fact
-          label={t("keys.colAlgorithm")}
-          value={item.bits > 0 ? `${item.algorithm} · ${item.bits}` : item.algorithm}
-        />
+      <header className="rounded-lg bg-surface-subtle p-3">
+        <p className="break-all font-mono text-sm font-semibold text-ink">{item.relativePath}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+          <span className="rounded-md bg-surface px-2 py-1">{item.kind}</span>
+          <span className="font-mono">
+            {item.bits > 0 ? `${item.algorithm} · ${item.bits}` : item.algorithm}
+          </span>
+        </div>
+      </header>
+      <dl className="grid gap-3 text-sm">
         {item.fingerprint === "" ? null : (
           <Fact
             label={t("keys.colFingerprint")}
@@ -67,8 +67,8 @@ export function KeyInspector({ item, now }: { item: KeyItem; now: number }) {
 
 function Fact({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-xs text-ink-muted">{label}</dt>
+    <div className="grid gap-0.5 border-b border-hairline pb-3 last:border-b-0 last:pb-0">
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
       <dd className="text-ink">{value}</dd>
     </div>
   );
