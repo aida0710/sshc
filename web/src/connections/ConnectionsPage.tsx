@@ -744,7 +744,7 @@ export function ConnectionsPage({
   return (
     <>
 
-    <div className="grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[19rem_minmax(0,1fr)]">
+    <div className="grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[21rem_minmax(0,1fr)]">
       <ConnectionListPane
         overview={overview}
         selection={selection}
@@ -761,7 +761,7 @@ export function ConnectionsPage({
         movesDisabled={editorDirty || refreshState !== "idle"}
       />
       <div
-        className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 md:flex md:p-6 ${
+        className={`min-h-0 flex-col gap-5 overflow-y-auto p-4 md:flex md:p-6 ${
           selection === null ? "hidden" : "flex"
         }`}
       >

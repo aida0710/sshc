@@ -17,6 +17,7 @@ import { useTheme } from "./theme/context";
 import type { Theme } from "./theme/theme";
 import type { MessageKey } from "./i18n/messages";
 import { Button } from "./ui/surface";
+import { RouteSkeleton } from "./ui/RouteSkeleton";
 import { sectionPath, type Section } from "./routing/sectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation, type NavFace } from "./shell/AppNavigation";
@@ -444,7 +445,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                 </div>
               ) : null}
               {route.kind === "section" ? (
-                <Suspense fallback={null}>
+                <Suspense fallback={<RouteSkeleton />}>
                   <SectionView
                     section={route.section}
                     navigation={{
@@ -558,16 +559,26 @@ function TerminalScreen({
   if (session === undefined) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <section className="max-w-sm text-center" role="status">
-          <h2 className="text-lg font-semibold text-ink">{t("terminal.emptyHeading")}</h2>
-          <p className="mt-1 text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p>
+        <section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status">
+          <span
+            aria-hidden="true"
+            className="mx-auto grid size-12 place-items-center rounded-xl bg-accent font-mono text-sm font-bold text-accent-ink shadow-sm"
+          >
+            &gt;_
+          </span>
+          <h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p>
+          <div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner">
+            <span className="text-live">$</span> ssh host
+            <span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" />
+          </div>
         </section>
       </div>
     );
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteSkeleton kind="terminal" />}>
 
         <TerminalView
           key={session.id}

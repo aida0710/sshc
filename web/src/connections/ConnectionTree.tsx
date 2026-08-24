@@ -177,7 +177,7 @@ export function ConnectionTree({
 
   function renderItems(items: DecoratedHost[]): ReactNode {
     return (
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col gap-1.5">
         {items.map((item) => {
           const host = item.host;
           const active = selected?.path === host.identity.path && selected.alias === host.identity.alias;
@@ -213,6 +213,7 @@ export function ConnectionTree({
             <li key={`${host.file.absolute}:${host.line}`}>
               <button
                 type="button"
+                aria-label={host.identity.alias}
                 aria-current={active ? "true" : undefined}
                 aria-describedby={descriptionId}
                 draggable={grouping === "groups" && !movesDisabled}
@@ -224,10 +225,10 @@ export function ConnectionTree({
                   group: item.group,
                 })}
                 onDragEnd={() => setDragging(null)}
-                className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm transition-colors ${
+                className={`w-full rounded-lg px-3 py-2.5 text-left text-sm transition-all ${
                   active
-                    ? "border-control-line bg-select-fill shadow-sm"
-                    : "border-transparent hover:border-line hover:bg-card"
+                    ? "bg-card text-ink shadow-sm ring-1 ring-control-line"
+                    : "text-ink-muted hover:bg-card hover:text-ink"
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -235,8 +236,11 @@ export function ConnectionTree({
                     <span aria-hidden="true" className="inline-block size-2 shrink-0 rounded-full" style={{ backgroundColor: item.colour }} />
                   )}
                   {item.favourite ? <span aria-hidden="true" className="text-notice-ink">★</span> : null}
-                  <span className="truncate font-medium">{host.identity.alias}</span>
+                  <span className={`truncate ${active ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
                   {item.duplicateAlias ? <span aria-hidden="true" className="text-notice-ink">⧉</span> : null}
+                </span>
+                <span className="mt-1 block truncate font-mono text-[0.68rem] leading-4 text-ink-faint">
+                  {host.file.path ?? host.file.absolute}
                 </span>
                 {item.tags.length === 0 ? null : (
                   <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">
@@ -270,7 +274,7 @@ export function ConnectionTree({
         key={node.name}
         aria-label={node.name}
         {...dropHandlers(node.name)}
-        className={`flex flex-col gap-1 rounded ${accepts(node.name) ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
+      className={`flex flex-col gap-1 rounded-lg ${accepts(node.name) ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
       >
         <div className="flex items-center gap-1">
           {node.children.length === 0 ? null : (
@@ -293,7 +297,7 @@ export function ConnectionTree({
             draggable={!movesDisabled}
             onDragStart={(event) => startDrag(event, { kind: "group", name: node.name })}
             onDragEnd={() => setDragging(null)}
-            className={`${movesDisabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"} rounded px-1 text-xs font-semibold uppercase tracking-wide text-ink-faint`}
+            className={`${movesDisabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"} rounded px-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint`}
           >
             <span aria-hidden="true" className="me-1 font-normal tracking-tighter">⋮⋮</span>
             {node.label}
@@ -318,7 +322,7 @@ export function ConnectionTree({
   }
 
   return (
-    <nav aria-label={t("tree.navLabel")} className="flex h-full flex-col gap-3">
+    <nav aria-label={t("tree.navLabel")} className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <Segmented
           label={t("tree.arrangeBy")}
@@ -343,23 +347,25 @@ export function ConnectionTree({
           {t("tree.favouritesOnly")}
         </button>
       </div>
-      {grouping === "groups" && groupTree.length > 0 && !movesDisabled ? (
-        <p className="text-xs text-ink-faint">{t("tree.dragGroupHint")}</p>
-      ) : null}
-      <label className="text-xs text-ink-muted" htmlFor="connection-filter">{t("tree.filter")}</label>
-      <input
-        id="connection-filter"
-        type="search"
-        value={query}
-        onChange={(event) => setQuery(event.currentTarget.value)}
-        placeholder={t("tree.filterPlaceholder")}
-        className={`${control} rounded-lg`}
-      />
+      <div className="flex flex-col gap-1.5">
+        <label className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint" htmlFor="connection-filter">{t("tree.filter")}</label>
+        <input
+          id="connection-filter"
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          placeholder={t("tree.filterPlaceholder")}
+          className={`${control} rounded-lg bg-card px-3 py-2`}
+        />
+        {grouping === "groups" && groupTree.length > 0 && !movesDisabled ? (
+          <p className="text-xs text-ink-faint">{t("tree.dragGroupHint")}</p>
+        ) : null}
+      </div>
       {visible.length === 0 ? <p role="status" className="text-sm text-ink-muted">{t("tree.noMatch")}</p> : null}
       {grouping === "files" ? (
         fileSections.map((section) => section.items.length === 0 ? null : (
           <section key={section.title} className="flex flex-col gap-1">
-            <h2 className="rounded px-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">{section.title}</h2>
+            <h2 className="rounded px-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">{section.title}</h2>
             {renderItems(section.items)}
           </section>
         ))
@@ -369,9 +375,9 @@ export function ConnectionTree({
           <section
             aria-label={t("tree.ungrouped")}
             {...dropHandlers("")}
-            className={`flex flex-col gap-1 rounded ${accepts("") ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
+            className={`flex flex-col gap-1 rounded-lg ${accepts("") ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
           >
-            <h2 className="rounded px-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">{t("tree.ungrouped")}</h2>
+            <h2 className="rounded px-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">{t("tree.ungrouped")}</h2>
             {ungrouped.length === 0
               ? <p className="px-2 py-1 text-xs text-ink-faint">{t("tree.groupEmpty")}</p>
               : renderItems(ungrouped)}

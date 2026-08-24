@@ -40,28 +40,32 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
 
   return (
     <section aria-label={t("conn.analysisLabel")} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <h3 className={sectionHeading}>{t("conn.analysisExplained")}</h3>
-        <p className={hintText}>{t("conn.analysisExplainedHint")}</p>
-        <ul className="overflow-hidden rounded-xl border border-line bg-card">
+      <div className="flex flex-col gap-3">
+        <div>
+          <h3 className={sectionHeading}>{t("conn.analysisExplained")}</h3>
+          <p className={`mt-1 ${hintText}`}>{t("conn.analysisExplainedHint")}</p>
+        </div>
+        <ul className="sshc-card overflow-hidden rounded-xl bg-card">
           {detail.effective.entries.map((entry, index) => (
-            <li key={`${entry.keyword}-${index}`} className="border-t border-hairline px-3 py-2 first:border-t-0">
+            <li key={`${entry.keyword}-${index}`} className="grid gap-1 border-t border-hairline px-4 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.7fr)] sm:items-baseline">
               <p className="font-mono text-xs text-ink">{`${entry.keyword} ${entry.values.join(" ")}`}</p>
-              <p className={hintText}>{`${entry.source.path ?? entry.source.absolute ?? ""}:${entry.source.line ?? 0}`}</p>
+              <p className={`${hintText} break-all font-mono sm:text-right`}>{`${entry.source.path ?? entry.source.absolute ?? ""}:${entry.source.line ?? 0}`}</p>
             </li>
           ))}
         </ul>
         <NoticeList notices={detail.effective.notices ?? []} />
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-line pt-4">
-        <div>
+      <div className="flex flex-col gap-4 border-t border-line pt-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
           <h3 className={sectionHeading}>{t("conn.analysisAuthoritative")}</h3>
-          <p className={hintText}>{t("conn.analysisAuthoritativeHint")}</p>
+          <p className={`mt-1 ${hintText}`}>{t("conn.analysisAuthoritativeHint")}</p>
+          </div>
+          <Button disabled={busy || disabled} onClick={() => void inspect()}>
+            {busy ? t("conn.analysisRunning") : t("conn.analysisRun")}
+          </Button>
         </div>
-        <Button className="self-start" disabled={busy || disabled} onClick={() => void inspect()}>
-          {busy ? t("conn.analysisRunning") : t("conn.analysisRun")}
-        </Button>
         {error === "" ? null : <Notice tone="danger">{error}</Notice>}
 
         {effective !== null && effective.executableDirectives.length > 0 ? (
@@ -86,7 +90,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
         ) : null}
 
         {effective !== null && effective.sources.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="sshc-card overflow-x-auto rounded-xl bg-card px-4 py-2">
             <table aria-label={t("conn.analysisSources")} className="w-full text-sm">
               <thead>
                 <tr className={tableHeadRow}>

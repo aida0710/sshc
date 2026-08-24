@@ -2,26 +2,36 @@
 :root {
   color-scheme: light;
 
-  --ui-canvas: #f5f5f7;
-  --ui-sidebar: #f4f4f6;
-  --ui-tree: #fafafc;
-  --ui-toolbar: #fbfbfd;
+  --ui-canvas: #f3f7fa;
+  --ui-sidebar: #eaf1f6;
+  --ui-tree: #f7fafc;
+  --ui-toolbar: #f9fbfd;
   --ui-card: #ffffff;
-  --ui-line: #e5e5ea;
-  --ui-hairline: #f0f0f3;
-  --ui-control: #ffffff;
-  --ui-control-line: #dcdce1;
-  --ui-select-fill: rgb(0 0 0 / 0.07);
-  --ui-ink: #1d1d1f;
-  --ui-ink-muted: #6e6e73;
-  --ui-ink-faint: #a1a1a6;
-  --ui-accent: #007aff;
+  --ui-surface: #edf3f7;
+  --ui-surface-subtle: #f7fafc;
+  --ui-line: #d9e3eb;
+  --ui-hairline: #eaf0f4;
+  --ui-control: #fbfdff;
+  --ui-control-line: #c5d3df;
+  --ui-select-fill: rgb(17 54 82 / 0.08);
+  --ui-ink: #12283b;
+  --ui-ink-muted: #5c7182;
+  --ui-ink-faint: #8899a7;
+  --ui-accent: #086fd6;
   --ui-accent-ink: #ffffff;
-  --ui-notice: #fff6e5;
-  --ui-notice-line: #f5dfae;
-  --ui-notice-ink: #7a5a10;
-  --ui-danger: #d70015;
-  --ui-live: #34794a;
+  --ui-notice: #fff6df;
+  --ui-notice-line: #efd08b;
+  --ui-notice-ink: #71500a;
+  --ui-danger: #c92b3a;
+  --ui-live: #087d63;
+  --ui-connect-hero-start: #111827;
+  --ui-connect-hero-middle: #172554;
+  --ui-connect-hero-end: #164e63;
+  --ui-connect-mark: #a5f3fc;
+  --ui-connect-star: #fcd34d;
+  --ui-card-shadow: 0 1px 2px rgb(18 40 59 / 0.05), 0 12px 32px rgb(18 40 59 / 0.035);
+  --ui-skeleton: #e4ebf1;
+  --ui-skeleton-highlight: #f5f8fa;
   --ui-term-bg: #ffffff;
   --ui-term-fg: #1d1d1f;
   --ui-term-cursor: #1d1d1f;
@@ -47,26 +57,31 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --ui-canvas: #1c1c1e;
-  --ui-sidebar: #252527;
-  --ui-tree: #1f1f21;
-  --ui-toolbar: #2a2a2c;
-  --ui-card: #2c2c2e;
-  --ui-line: #3a3a3c;
-  --ui-hairline: #3a3a3c;
-  --ui-control: #1c1c1e;
-  --ui-control-line: #48484a;
-  --ui-select-fill: rgb(140 140 150 / 0.26);
-  --ui-ink: #f5f5f7;
-  --ui-ink-muted: #98989d;
-  --ui-ink-faint: #6e6e73;
-  --ui-accent: #0a84ff;
-  --ui-accent-ink: #ffffff;
+  --ui-canvas: #0a141f;
+  --ui-sidebar: #0e1c29;
+  --ui-tree: #0f1b27;
+  --ui-toolbar: #0d1925;
+  --ui-card: #142433;
+  --ui-surface: #192b3b;
+  --ui-surface-subtle: #11202d;
+  --ui-line: #263b4d;
+  --ui-hairline: #1d3040;
+  --ui-control: #101e2b;
+  --ui-control-line: #385166;
+  --ui-select-fill: rgb(119 166 200 / 0.17);
+  --ui-ink: #edf6ff;
+  --ui-ink-muted: #a0b4c4;
+  --ui-ink-faint: #71879a;
+  --ui-accent: #4ca8ff;
+  --ui-accent-ink: #07131e;
   --ui-notice: rgb(255 159 10 / 0.13);
   --ui-notice-line: rgb(255 159 10 / 0.32);
   --ui-notice-ink: #f0b429;
-  --ui-danger: #ff6961;
-  --ui-live: #5fd88a;
+  --ui-danger: #ff7a82;
+  --ui-live: #5adab2;
+  --ui-card-shadow: 0 1px 2px rgb(0 0 0 / 0.25), 0 16px 40px rgb(0 0 0 / 0.14);
+  --ui-skeleton: #1b3041;
+  --ui-skeleton-highlight: #263e50;
 
   --ui-term-bg: #1c1c1e;
   --ui-term-fg: #f5f5f7;
@@ -96,6 +111,8 @@
   --color-tree: var(--ui-tree);
   --color-toolbar: var(--ui-toolbar);
   --color-card: var(--ui-card);
+  --color-surface: var(--ui-surface);
+  --color-surface-subtle: var(--ui-surface-subtle);
   --color-line: var(--ui-line);
   --color-hairline: var(--ui-hairline);
   --color-control: var(--ui-control);
@@ -111,6 +128,8 @@
   --color-notice-ink: var(--ui-notice-ink);
   --color-danger: var(--ui-danger);
   --color-live: var(--ui-live);
+  --color-connect-mark: var(--ui-connect-mark);
+  --color-connect-star: var(--ui-connect-star);
   --color-term-bg: var(--ui-term-bg);
 }
 
@@ -119,12 +138,57 @@
   background: var(--ui-canvas);
   color: var(--ui-ink);
 }
+
+.sshc-card {
+  box-shadow: 0 0 0 1px var(--ui-line), var(--ui-card-shadow);
+}
+
+.sshc-connect-hero {
+  background: linear-gradient(
+    135deg,
+    var(--ui-connect-hero-start) 0%,
+    var(--ui-connect-hero-middle) 56%,
+    var(--ui-connect-hero-end) 100%
+  );
+}
+
+.sshc-skeleton {
+  animation: sshc-skeleton-shimmer 1.6s ease-in-out infinite;
+  background: linear-gradient(
+    100deg,
+    var(--ui-skeleton) 28%,
+    var(--ui-skeleton-highlight) 42%,
+    var(--ui-skeleton) 56%
+  );
+  background-size: 240% 100%;
+}
+
+@keyframes sshc-skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .sshc-skeleton {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .sshc-card {
+    border: 1px solid CanvasText;
+    box-shadow: none;
   }
 }
 .sshc-select-overlay::selection {

@@ -4,7 +4,7 @@ import { dangerAction, hintText, primaryAction, secondaryAction } from "./form";
 export function Card({ children, padded = false }: { children: ReactNode; padded?: boolean }) {
   return (
     <div
-      className={`overflow-hidden rounded-xl border border-line bg-card ${
+      className={`sshc-card overflow-hidden rounded-xl bg-card ${
         padded ? "flex flex-col gap-3 p-3" : ""
       }`}
     >
@@ -73,15 +73,15 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex gap-0.5 rounded-md bg-select-fill p-0.5">
+    <div role="group" aria-label={label} className="flex gap-0.5 rounded-lg bg-select-fill p-0.5">
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
-          className={`rounded px-2.5 py-0.5 text-xs ${
-            value === option.value ? "bg-card text-ink shadow-sm" : "text-ink-muted"
+          className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
+            value === option.value ? "bg-card text-ink shadow-sm" : "text-ink-muted hover:text-ink"
           }`}
         >
           {option.label}

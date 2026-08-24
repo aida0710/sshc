@@ -36,7 +36,7 @@ const noticeKeys: Record<string, MessageKey> = {
 
 function DiffView({ lines }: { lines: DiffLine[] }) {
   return (
-    <pre className="max-h-72 overflow-auto rounded bg-canvas p-3 text-xs leading-5">
+    <pre className="max-h-72 overflow-auto rounded-lg bg-tree p-3 font-mono text-xs leading-5">
       {lines.map((line, index) => (
         <div
           key={`${line.op}-${line.oldLine ?? 0}-${line.newLine ?? 0}-${index}`}
@@ -101,8 +101,15 @@ export function SavePreviewPanel({
 }) {
   const t = useTranslate();
   return (
-    <section aria-labelledby="preview-heading" className="flex flex-col gap-3 rounded border border-line p-4">
-      <h3 id="preview-heading" className="text-sm font-medium">{t("preview.heading")}</h3>
+    <section aria-labelledby="preview-heading" className="flex flex-col gap-3 border-t border-line pt-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 id="preview-heading" className="text-sm font-medium text-ink">{t("preview.heading")}</h3>
+        {preview === null ? null : (
+          <span className="rounded-full bg-select-fill px-2 py-1 text-xs text-ink-muted">
+            {preview.diffs.length}
+          </span>
+        )}
+      </div>
 
       {problem === null ? null : (
         <Band tone="danger">
