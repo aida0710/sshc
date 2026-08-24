@@ -211,6 +211,19 @@ describe("SettingsPanel", () => {
     expect(within(region).getByLabelText("Starting directory")).toHaveValue("");
   });
 
+  it("updates the terminal preview from the appearance controls", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<SettingsPanel api={buildApi()} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    await user.selectOptions(within(region).getByLabelText("Colour scheme"), "nord");
+    await user.type(within(region).getByLabelText("Font size"), "16");
+
+    const preview = container.querySelector("[data-terminal-preview]");
+    expect(preview).toHaveAttribute("data-term-palette", "nord");
+    expect(preview).toHaveStyle({ fontSize: "16px" });
+  });
+
   it("says which way the directory was refused", async () => {
     const user = userEvent.setup();
     const setTerminalSettings = vi.fn().mockRejectedValue(

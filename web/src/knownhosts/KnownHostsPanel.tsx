@@ -12,13 +12,12 @@ import {
   CheckboxField,
   Field,
   control,
-  sectionCard,
   sectionHeading,
   tableHeadCell,
   tableHeadRow,
 } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PageHeader } from "../ui/page";
 
 type KnownHostsPanelProps = { api?: IntegrationsApi };
 
@@ -136,18 +135,18 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
   return (
     <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("kh.heading")} description={t("kh.pageDescription")} />
-      <MetricGrid>
-        <MetricCard label={t("kh.metricEntries")} value={listing?.entries.length ?? 0} />
-        <MetricCard
-          label={t("kh.metricHashed")}
-          value={listing?.entries.filter((entry) => entry.hashed).length ?? 0}
-        />
-        <MetricCard
-          label={t("kh.metricCandidates")}
-          value={candidates.length}
-          attention={candidates.length > 0}
-        />
-      </MetricGrid>
+      <div className="sshc-card flex flex-wrap divide-x divide-line overflow-hidden rounded-xl bg-card">
+        {[
+          [t("kh.metricEntries"), listing?.entries.length ?? 0],
+          [t("kh.metricHashed"), listing?.entries.filter((entry) => entry.hashed).length ?? 0],
+          [t("kh.metricCandidates"), candidates.length],
+        ].map(([label, value], index) => (
+          <div key={String(label)} className="flex min-w-40 flex-1 items-center justify-between gap-4 px-4 py-3">
+            <span className="text-xs font-medium text-ink-muted">{label}</span>
+            <span className={`font-mono text-lg font-semibold ${index === 2 && candidates.length > 0 ? "text-notice-ink" : "text-ink"}`}>{value}</span>
+          </div>
+        ))}
+      </div>
 
       <p aria-live="polite" className="text-sm text-ink-muted">
         {status}
@@ -157,26 +156,33 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
       ) : null}
 
 
-      <section className={sectionCard} aria-labelledby="known-hosts-scan-heading">
-        <h3 id="known-hosts-scan-heading" className={sectionHeading}>
-          {t("kh.scanHeading")}
-        </h3>
-        <div className="flex flex-wrap items-end gap-2">
-          <Field label={t("kh.hostToScan")}>
-            <input
-              value={scanHost}
-              onChange={(event) => setScanHost(event.target.value)}
-              className={control}
-            />
-          </Field>
-          <Button onClick={() => void scan()}>
-            {t("kh.scan")}
-          </Button>
+      <section className="sshc-card overflow-hidden rounded-xl bg-card" aria-labelledby="known-hosts-scan-heading">
+        <div className="flex flex-wrap items-end justify-between gap-4 bg-surface-subtle px-4 py-4">
+          <div>
+            <h3 id="known-hosts-scan-heading" className={sectionHeading}>
+              {t("kh.scanHeading")}
+            </h3>
+            <p className="mt-1 text-xs text-ink-muted">{t("kh.pageDescription")}</p>
+          </div>
+          <div className="flex min-w-64 flex-1 flex-wrap items-end gap-2 sm:max-w-xl">
+            <div className="min-w-48 flex-1">
+              <Field label={t("kh.hostToScan")}>
+                <input
+                  value={scanHost}
+                  onChange={(event) => setScanHost(event.target.value)}
+                  className={control}
+                />
+              </Field>
+            </div>
+            <Button kind="primary" onClick={() => void scan()}>
+              {t("kh.scan")}
+            </Button>
+          </div>
         </div>
 
-        {notice ? <p className="text-sm text-notice-ink">{notice}</p> : null}
+        {notice ? <p className="border-t border-notice-line bg-notice px-4 py-3 text-sm text-notice-ink">{notice}</p> : null}
         {candidates.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto px-4 py-3">
             <table className="w-full text-sm">
               <caption className="mb-2 text-left text-ink-muted">{t("kh.scanCandidates")}</caption>
               <thead>
@@ -195,7 +201,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
                     <td className="py-2 pr-3 text-ink-muted">{candidate.keyType}</td>
                     <td className="py-2 pr-3 font-mono text-xs text-ink-muted">{candidate.fingerprint}</td>
 
-                    <td className="py-2 pr-3 text-notice-ink">{t("kh.unverified")}</td>
+                    <td className="py-2 pr-3"><span className="rounded-full bg-notice px-2 py-1 text-xs font-medium text-notice-ink">{t("kh.unverified")}</span></td>
                     <td className="py-2">
                       <Button
                         onClick={() => openAdd(candidate)}
@@ -211,7 +217,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
         ) : null}
 
         {adding ? (
-          <div className="rounded border border-notice-line p-3 text-sm">
+          <div className="border-t border-notice-line bg-notice p-4 text-sm">
             <h3 className="font-medium text-notice-ink">{t("kh.addHeading")}</h3>
             <p className="text-ink-muted">{t("kh.addExplain", { host: adding.host })}</p>
             <p className="text-ink-muted">
@@ -234,7 +240,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
                 type="button"
                 disabled={!provenOrAcknowledged}
                 onClick={() => void confirmAdd()}
-                className="rounded border border-notice-line px-3 py-1 disabled:border-line disabled:text-ink-faint"
+                className="rounded-md bg-accent px-3 py-1.5 font-medium text-accent-ink disabled:bg-line disabled:text-ink-faint"
               >
                 {t("kh.addToKnownHosts")}
               </button>
@@ -246,25 +252,32 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
         ) : null}
       </section>
 
-      <section className={sectionCard} aria-labelledby="known-hosts-trusted-heading">
-        <h3 id="known-hosts-trusted-heading" className={sectionHeading}>
-          {t("kh.trustedHeading")}
-        </h3>
-        <Field label={t("kh.search")}>
-          <input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              void search(event.target.value);
-            }}
-            className={control}
-          />
-        </Field>
+      <section className="sshc-card overflow-hidden rounded-xl bg-card" aria-labelledby="known-hosts-trusted-heading">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line px-4 py-4">
+          <div>
+            <h3 id="known-hosts-trusted-heading" className={sectionHeading}>
+              {t("kh.trustedHeading")}
+            </h3>
+            {listing ? <p className="mt-1 font-mono text-xs text-ink-faint">{listing.path}</p> : null}
+          </div>
+          <div className="w-full sm:w-72">
+            <Field label={t("kh.search")}>
+              <input
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  void search(event.target.value);
+                }}
+                className={control}
+              />
+            </Field>
+          </div>
+        </div>
 
         {listing ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto px-4 pb-4">
             <table className="w-full text-sm">
-              <caption className="mb-2 text-left text-ink-muted">{listing.path}</caption>
+              <caption className="sr-only">{listing.path}</caption>
               <thead>
                 <tr className={tableHeadRow}>
                   <th scope="col" className={tableHeadCell}>{t("kh.columnHost")}</th>
@@ -278,7 +291,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
                   <tr key={`${item.line}-${item.digest}`} className="border-b border-line last:border-b-0">
                     <td className="py-2 pr-3">{item.hashed ? t("kh.hashed") : item.hosts.join(", ")}</td>
                     <td className="py-2 pr-3 text-ink-muted">{item.keyType}</td>
-                    <td className="py-2 pr-3 font-mono text-xs text-ink-muted">{item.fingerprint}</td>
+                    <td className="py-3 pr-3 font-mono text-xs text-ink-muted">{item.fingerprint}</td>
                     <td className="py-2">
                       <Button
                         onClick={() => setPending(item)}
@@ -294,7 +307,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
         ) : null}
 
         {pending ? (
-          <div className="rounded border border-control-line p-3 text-sm">
+          <div className="border-t border-line bg-surface-subtle p-4 text-sm">
             <p>
               {t("kh.confirmRemove", { line: pending.line, fingerprint: pending.fingerprint })}
             </p>

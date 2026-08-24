@@ -14,11 +14,11 @@ import {
   Field,
   control,
   hintText,
-  sectionCard,
   sectionHeading,
 } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PageHeader } from "../ui/page";
+import { Icon } from "../ui/icons";
 
 type SecretsPanelProps = {
   api?: IntegrationsApi;
@@ -139,14 +139,22 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <PageHeader title={t("secrets.heading")} description={t("secrets.pageDescription")} />
-        <section aria-label={t("secrets.heading")} className={sectionCard}>
-          <h3 className={sectionHeading}>{creating ? t("secrets.create") : t("secrets.unlock")}</h3>
-          <p className={hintText}>{creating ? t("secrets.explainNew") : t("secrets.explainLocked")}</p>
-          {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-          <PasswordField label={t("secrets.master")} value={master} onChange={setMaster} />
-          <div>
+        <section aria-label={t("secrets.heading")} className="sshc-card grid overflow-hidden rounded-xl bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
+          <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-select-fill text-accent">
+              <Icon name="secrets" className="h-6 w-6" />
+            </span>
+            <div>
+              <h3 className="text-lg font-semibold text-ink">{creating ? t("secrets.create") : t("secrets.unlock")}</h3>
+              <p className="mt-2 text-sm leading-6 text-ink-muted">{creating ? t("secrets.explainNew") : t("secrets.explainLocked")}</p>
+            </div>
+          </div>
+          <div className="flex flex-col justify-center gap-4 p-6 md:p-8">
+            {error === "" ? null : <Notice tone="danger">{error}</Notice>}
+            <PasswordField label={t("secrets.master")} value={master} onChange={setMaster} />
             <Button
               kind="primary"
+              className="self-start"
               onClick={() =>
                 void run(
                   () => (creating ? api.initialiseVault(master) : api.unlockVault(master)),
@@ -163,71 +171,64 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
   }
 
   const { credentials, dedicatedKeyPassphrases, keyHostUsageComplete } = credentialList;
+  const passwordCount = credentials.filter((credential) => credential.kind === "password").length;
+  const passphraseCount = credentials.filter((credential) => credential.kind === "key_passphrase").length +
+    dedicatedKeyPassphrases.length;
+  const assignmentCount = credentials.reduce((count, credential) => count + credential.uses.length, 0) +
+    dedicatedKeyPassphrases.length;
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <PageHeader title={t("secrets.heading")} description={t("secrets.pageDescription")} />
-      <MetricGrid>
-        <MetricCard
-          label={t("secrets.metricPasswords")}
-          value={credentials.filter((credential) => credential.kind === "password").length}
-        />
-        <MetricCard
-          label={t("secrets.metricPassphrases")}
-          value={
-            credentials.filter((credential) => credential.kind === "key_passphrase").length +
-            dedicatedKeyPassphrases.length
-          }
-        />
-        <MetricCard
-          label={t("secrets.metricAssignments")}
-          value={
-            credentials.reduce((count, credential) => count + credential.uses.length, 0) +
-            dedicatedKeyPassphrases.length
-          }
-        />
-      </MetricGrid>
+      <PageHeader
+        title={t("secrets.heading")}
+        description={t("secrets.pageDescription")}
+        actions={<Button onClick={() => void api.lockVault().then(() => onLock?.())}>{t("secrets.lock")}</Button>}
+      />
+      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-xl bg-toolbar">
+        {[
+          [t("secrets.metricPasswords"), passwordCount],
+          [t("secrets.metricPassphrases"), passphraseCount],
+          [t("secrets.metricAssignments"), assignmentCount],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="flex min-w-40 flex-1 items-center justify-between gap-4 border-r border-hairline px-4 py-2.5 last:border-r-0">
+            <dt className="text-xs font-medium text-ink-muted">{label}</dt>
+            <dd className="font-mono text-sm font-semibold text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {keyHostUsageComplete ? null : <Notice>{t("secrets.keyHostUsageIncomplete")}</Notice>}
-      <div>
-        <Button
-          onClick={() => void api.lockVault().then(() => onLock?.())}
-        >
-          {t("secrets.lock")}
-        </Button>
-      </div>
 
       {kinds.map((group) => {
         const draft = draftFor(group.kind);
         const mine = credentials.filter((credential) => credential.kind === group.kind);
         const dedicated = group.kind === "key_passphrase" ? dedicatedKeyPassphrases : [];
         return (
-          <section key={group.kind} aria-label={t(group.heading)} className={sectionCard}>
-            <h3 className={sectionHeading}>{t(group.heading)}</h3>
+          <section key={group.kind} aria-label={t(group.heading)} className="sshc-card overflow-hidden rounded-xl bg-card">
+            <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Icon name={group.kind === "password" ? "connections" : "keys"} className="h-4 w-4 text-ink-muted" />
+                <h3 className={sectionHeading}>{t(group.heading)}</h3>
+              </div>
+              <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">{mine.length + dedicated.length}</span>
+            </header>
             {mine.length === 0 && dedicated.length === 0 ? (
-              <p className={hintText}>{t("secrets.none")}</p>
+              <p className="px-4 py-6 text-sm text-ink-muted">{t("secrets.none")}</p>
             ) : (
-              <ul className="grid gap-3 sm:grid-cols-2">
+              <ul className="divide-y divide-line">
                 {mine.map((credential) => (
                   <li key={credential.name}>
                     <article
                       aria-label={credential.name}
-                      className="flex h-full flex-col gap-4 rounded-xl border border-line bg-card p-4"
+                      className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(10rem,0.8fr)_minmax(0,1.4fr)_auto] lg:items-start"
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <h4 className="font-semibold text-ink">{credential.name}</h4>
-                        <Button
-                          kind="danger"
-                          onClick={() =>
-                            void run(
-                              () => api.deleteCredential(group.kind, credential.name),
-                              t("secrets.deleteFailed"),
-                            )
-                          }
-                        >
-                          {t("secrets.delete", { name: credential.name })}
-                        </Button>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-select-fill text-ink-muted">
+                          <Icon name={group.kind === "password" ? "secrets" : "keys"} className="h-4 w-4" />
+                        </span>
+                        <h4 className="truncate font-mono text-sm font-semibold text-ink">{credential.name}</h4>
                       </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
                       {credential.kind === "key_passphrase" ? (
                         <UsageList
                           label={t("secrets.keys")}
@@ -249,6 +250,18 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                           <p className={hintText}>{t("secrets.keyHostsUnavailable")}</p>
                         </div>
                       )}
+                      </div>
+                      <Button
+                        kind="danger"
+                        onClick={() =>
+                          void run(
+                            () => api.deleteCredential(group.kind, credential.name),
+                            t("secrets.deleteFailed"),
+                          )
+                        }
+                      >
+                        {t("secrets.delete", { name: credential.name })}
+                      </Button>
                     </article>
                   </li>
                 ))}
@@ -256,27 +269,20 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                   <li key={credential.key}>
                     <article
                       aria-label={credential.key}
-                      className="flex h-full flex-col gap-4 rounded-xl border border-line bg-card p-4"
+                      className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(10rem,0.8fr)_minmax(0,1.4fr)_auto] lg:items-start"
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="flex flex-col gap-1">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-select-fill text-ink-muted">
+                          <Icon name="keys" className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
                           <h4 className="font-semibold text-ink">
                             {keyBasename(credential.key)}
                           </h4>
                           <p className={hintText}>{t("secrets.dedicated")}</p>
                         </div>
-                        <Button
-                          kind="danger"
-                          onClick={() =>
-                            void run(
-                              () => api.unassignCredential("key_passphrase", credential.key),
-                              t("secrets.deleteFailed"),
-                            )
-                          }
-                        >
-                          {t("secrets.removeDedicated", { key: credential.key })}
-                        </Button>
                       </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
                       <UsageList
                         label={t("secrets.keys")}
                         values={[credential.key]}
@@ -296,28 +302,36 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                           <p className={hintText}>{t("secrets.keyHostsUnavailable")}</p>
                         </div>
                       )}
+                      </div>
+                      <Button
+                        kind="danger"
+                        onClick={() =>
+                          void run(
+                            () => api.unassignCredential("key_passphrase", credential.key),
+                            t("secrets.deleteFailed"),
+                          )
+                        }
+                      >
+                        {t("secrets.removeDedicated", { key: credential.key })}
+                      </Button>
                     </article>
                   </li>
                 ))}
               </ul>
             )}
 
-            <div className="flex flex-wrap items-end gap-3">
-              <Field label={t(group.nameLabel)}>
-                <input
-                  value={draft.name}
-                  onChange={(event) => setDrafts({ ...drafts, [group.kind]: { ...draft, name: event.target.value } })}
-                  className={control}
-                />
-              </Field>
-              <Field label={t(group.valueLabel)}>
-                <input
-                  type="password"
-                  value={draft.secret}
-                  onChange={(event) => setDrafts({ ...drafts, [group.kind]: { ...draft, secret: event.target.value } })}
-                  className={control}
-                />
-              </Field>
+            <div className="grid items-end gap-3 border-t border-line bg-toolbar px-4 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <Field label={t(group.nameLabel)}><input
+                value={draft.name}
+                onChange={(event) => setDrafts({ ...drafts, [group.kind]: { ...draft, name: event.target.value } })}
+                className={control}
+              /></Field>
+              <Field label={t(group.valueLabel)}><input
+                type="password"
+                value={draft.secret}
+                onChange={(event) => setDrafts({ ...drafts, [group.kind]: { ...draft, secret: event.target.value } })}
+                className={control}
+              /></Field>
               <Button
                 kind="primary"
                 disabled={draft.name === "" || draft.secret === ""}

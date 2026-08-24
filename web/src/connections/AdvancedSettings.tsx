@@ -129,8 +129,8 @@ export function AdvancedSettings({
   ];
 
   return (
-    <section aria-label={t("conn.advancedLabel")} className="flex flex-col gap-3">
-      <div role="tablist" aria-label={t("conn.advancedViews")} className="flex gap-1 border-b border-line">
+    <section aria-label={t("conn.advancedLabel")} className="flex flex-col gap-4">
+      <div role="tablist" aria-label={t("conn.advancedViews")} className="flex gap-1 rounded-lg bg-select-fill p-1">
         {tabs.map((tab) => (
           <button
             key={tab.area}
@@ -138,7 +138,7 @@ export function AdvancedSettings({
             role="tab"
             aria-selected={area === tab.area}
             onClick={() => onAreaChange(tab.area)}
-            className={`px-3 py-2 text-sm ${area === tab.area ? "border-b-2 border-ink text-ink" : "text-ink-muted"}`}
+            className={`flex-1 rounded-md px-3 py-2 text-sm transition-colors ${area === tab.area ? "bg-card font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"}`}
           >
             {t(tab.label)}
           </button>
@@ -185,7 +185,7 @@ export function AdvancedSettings({
           </Card>
         )}
 
-        <div hidden={area !== "Directives"} className="flex flex-col gap-2 rounded border border-line p-3">
+        <div hidden={area !== "Directives"} className="sshc-card flex flex-col gap-3 rounded-xl bg-card p-4">
           <label htmlFor="new-directive" className="text-xs text-ink-muted">{t("host.newDirective")}</label>
           <input
             id="new-directive"
@@ -207,7 +207,7 @@ export function AdvancedSettings({
           </Button>
         </div>
 
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-line bg-canvas py-3">
+        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-line bg-canvas/95 py-3">
           <Button disabled={!fieldDirty} onClick={discard}>{t("conn.discardChanges")}</Button>
           <Button kind="primary" disabled={!fieldDirty || fieldsDisabled} onClick={submitFieldEdits}>
             {t("host.saveChanges")}
@@ -226,9 +226,9 @@ export function AdvancedSettings({
           onChange={(event) => setBlockRaw(event.target.value)}
           rows={16}
           spellCheck={false}
-          className="rounded border border-control-line bg-canvas p-3 font-mono text-xs"
+          className="min-h-80 rounded-lg border border-control-line bg-tree p-4 font-mono text-xs leading-5 text-ink focus:border-accent focus:outline-none"
         />
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-line bg-canvas py-3">
+        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-line bg-canvas/95 py-3">
           <Button disabled={!rawDirty} onClick={discard}>{t("conn.discardChanges")}</Button>
           <Button kind="primary" disabled={!rawDirty || rawDisabled} onClick={() => onBlockRaw(blockRaw)}>
             {t("host.saveBlock")}

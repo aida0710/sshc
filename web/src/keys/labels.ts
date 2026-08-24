@@ -3,7 +3,9 @@ import type { MessageKey } from "../i18n/messages";
 
 
 export const rowAction =
-  "rounded border border-control-line px-2 py-1 text-xs hover:bg-select-fill disabled:text-ink-faint";
+  "rounded-md border border-transparent px-2 py-1.5 text-xs text-ink-muted hover:border-control-line hover:bg-select-fill hover:text-ink disabled:text-ink-faint";
+export const rowPrimary =
+  "rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-ink hover:brightness-110 disabled:bg-line disabled:text-ink-faint";
 export const rowDanger = "rounded border border-control-line px-2 py-1 text-xs text-danger hover:bg-select-fill";
 
 export const noteLabels: Record<string, MessageKey> = {

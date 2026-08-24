@@ -3,7 +3,7 @@ import type { FileNode, GroupMetadata, HostDetail } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { Button, Card, Row } from "../ui/surface";
+import { Button } from "../ui/surface";
 import { identityKey } from "./connectionBrowser";
 
 type ManageConnectionProps = {
@@ -59,33 +59,34 @@ export function ManageConnection({
     <section
       aria-label={t("conn.manageLabel")}
       aria-disabled={disabled}
-      className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4"
+      className="sshc-card flex shrink-0 flex-col gap-5 overflow-hidden rounded-xl bg-card p-5"
     >
       <div>
-        <h3 className={sectionHeading}>{t("conn.manageLabel")}</h3>
-        <p className={hintText}>{t("conn.manageIndependent")}</p>
+        <h3 className="text-base font-semibold tracking-tight text-ink">{t("conn.manageLabel")}</h3>
+        <p className={`mt-1 ${hintText}`}>{t("conn.manageIndependent")}</p>
         {disabled ? <p className="mt-1 text-xs text-notice-ink">{t("conn.manageDraftBlocked")}</p> : null}
       </div>
 
       <fieldset disabled={disabled} className="contents">
-        <Card>
-          <Row
-            label={t("host.renameAlias")}
-            action={<Button disabled={!renameDirty} onClick={() => onRename(renameTo)}>{t("host.rename")}</Button>}
-          >
-            <input
+        <div className="grid gap-5 border-t border-line pt-5 lg:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <label htmlFor="manage-rename-alias" className={sectionHeading}>{t("host.renameAlias")}</label>
+            <div className="flex items-center gap-2">
+              <input
+              id="manage-rename-alias"
               aria-label={t("host.renameAlias")}
               value={renameTo}
               onChange={(event) => setRenameTo(event.target.value)}
               className={control}
             />
-          </Row>
-          <Row
-            label={t("host.primaryGroup")}
-            hint={t("host.groupNoneMeans")}
-            action={<Button disabled={!groupDirty} onClick={() => onMoveToGroup(group)}>{t("host.moveToGroup")}</Button>}
-          >
-            <select
+              <Button disabled={!renameDirty} onClick={() => onRename(renameTo)}>{t("host.rename")}</Button>
+            </div>
+          </div>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <label htmlFor="manage-primary-group" className={sectionHeading}>{t("host.primaryGroup")}</label>
+            <div className="flex items-center gap-2">
+              <select
+              id="manage-primary-group"
               aria-label={t("host.primaryGroup")}
               value={group}
               onChange={(event) => setGroup(event.target.value)}
@@ -94,11 +95,14 @@ export function ManageConnection({
               <option value="">{t("host.groupNone")}</option>
               {groups.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
             </select>
-          </Row>
-        </Card>
+              <Button disabled={!groupDirty} onClick={() => onMoveToGroup(group)}>{t("host.moveToGroup")}</Button>
+            </div>
+            <span className={hintText}>{t("host.groupNoneMeans")}</span>
+          </div>
+        </div>
 
-        <label className="flex flex-col gap-2">
-          <span className="text-sm text-ink-muted">{t("host.comment")}</span>
+        <label className="flex flex-col gap-2 border-t border-line pt-5">
+          <span className={sectionHeading}>{t("host.comment")}</span>
           <textarea
             aria-label={t("host.comment")}
             value={comment}
@@ -116,10 +120,11 @@ export function ManageConnection({
           {t("host.saveComment")}
         </Button>
 
-        <div className="flex flex-col gap-3 border-t border-line pt-4">
-          <Button className="self-start" onClick={onDuplicate}>{t("conn.duplicate")}</Button>
-          <p className={hintText}>{t("conn.storageFileNote")}</p>
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="grid gap-4 border-t border-line pt-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div className="flex flex-col gap-2">
+            <h4 className={sectionHeading}>{t("conn.moveToFile")}</h4>
+            <p className={hintText}>{t("conn.storageFileNote")}</p>
+            <div className="flex flex-wrap items-center gap-2">
             <label htmlFor="manage-storage-file" className="text-sm text-ink-muted">{t("conn.moveToFile")}</label>
             <select
               id="manage-storage-file"
@@ -134,11 +139,12 @@ export function ManageConnection({
                 .map((node) => <option key={node.file.absolute} value={node.file.path}>{node.file.path}</option>)}
             </select>
             <Button disabled={file === ""} onClick={() => onMoveToFile(file)}>{t("conn.move")}</Button>
+            </div>
           </div>
+          <Button className="self-start lg:self-end" onClick={onDuplicate}>{t("conn.duplicate")}</Button>
         </div>
 
-        <div className="border-t border-danger/30 pt-4">
-
+        <div className="border-t border-danger/30 pt-5">
           <Button kind="danger" onClick={() => setConfirmingDelete(true)}>{t("conn.delete")}</Button>
           {confirmingDelete ? (
             <ConfirmDialog

@@ -1,18 +1,117 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { failureCode } from "../api/client";
 import { integrationsApi, type IntegrationsApi, type TerminalSettings } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
-import { PasswordField } from "../ui/PasswordField";
-import { CheckboxField, Field, control, hintText, sectionCard, sectionHeading } from "../ui/form";
-import { PageHeader } from "../ui/page";
-import { Button, Notice } from "../ui/surface";
-import type { TerminalSessionsState } from "../terminal/sessions";
-import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { AppearancePicker } from "../terminal/AppearancePicker";
 import { BackgroundPicker } from "../terminal/BackgroundPicker";
-import { appearanceOf } from "../terminal/appearance";
-import { fonts } from "../terminal/fonts";
+import { appearanceOf, defaultTint } from "../terminal/appearance";
+import { useBackgroundImage } from "../terminal/backgroundImage";
+import { fontStack, fonts } from "../terminal/fonts";
 import { palettes } from "../terminal/palettes";
+import type { TerminalSessionsState } from "../terminal/sessions";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { PasswordField } from "../ui/PasswordField";
+import { CheckboxField, Field, control, hintText } from "../ui/form";
+import { Icon, type IconName } from "../ui/icons";
+import { PageHeader } from "../ui/page";
+import { Button, Notice } from "../ui/surface";
+
+function SettingsSection({
+  id,
+  label,
+  icon,
+  children,
+}: {
+  id: string;
+  label: string;
+  icon: IconName;
+  children: ReactNode;
+}) {
+  return (
+    <section id={id} aria-label={label} className="scroll-mt-6 border-b border-line last:border-b-0">
+      <div className="grid gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-8 lg:py-8">
+        <header className="flex items-center gap-3 self-start lg:sticky lg:top-6">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">
+            <Icon name={icon} />
+          </span>
+          <h3 className="text-sm font-semibold text-ink">{label}</h3>
+        </header>
+        <div className="min-w-0">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+function ActionArea({ children, status }: { children: ReactNode; status?: ReactNode }) {
+  return (
+    <div className="mt-6 flex min-h-12 flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+      <div className="min-w-0 flex-1">{status}</div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+function TerminalPreview({
+  palette,
+  font,
+  background,
+  tint,
+  fontSize,
+}: {
+  palette: string;
+  font: string;
+  background: string;
+  tint: number | undefined;
+  fontSize: string;
+}) {
+  const backgroundURL = useBackgroundImage(background);
+  const chosenSize = Number(fontSize);
+  const previewSize = Number.isFinite(chosenSize) && chosenSize >= 8 && chosenSize <= 32 ? chosenSize : 13;
+  const hasBackground = background !== "" && backgroundURL !== "";
+  const style = {
+    color: "var(--ui-term-fg)",
+    fontFamily: fontStack(font),
+    fontSize: previewSize,
+    ...(hasBackground
+      ? {
+          "--ui-term-image": `url("${backgroundURL}")`,
+          "--ui-term-tint": String(tint ?? defaultTint),
+        }
+      : {}),
+  } as CSSProperties;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-control-line bg-term-bg shadow-sm" aria-hidden="true">
+      <div className="flex items-center gap-1.5 border-b border-white/10 bg-black/20 px-3 py-2">
+        <span className="h-2 w-2 rounded-full bg-danger" />
+        <span className="h-2 w-2 rounded-full bg-notice-ink" />
+        <span className="h-2 w-2 rounded-full bg-live" />
+        <span className="ml-2 font-mono text-[10px] text-white/60">sshc · preview</span>
+      </div>
+      <div
+        data-terminal-preview=""
+        {...(palette === "" ? {} : { "data-term-palette": palette })}
+        {...(font === "" ? {} : { "data-term-font": font })}
+        {...(hasBackground ? { "data-term-background": background } : {})}
+        style={style}
+        className="min-h-40 bg-term-bg p-4 font-mono leading-relaxed"
+      >
+        <p>
+          <span style={{ color: "var(--ui-term-green)" }}>workspace</span>{" "}
+          <span style={{ color: "var(--ui-term-blue)" }}>main</span>
+        </p>
+        <p>
+          <span style={{ color: "var(--ui-term-cyan)" }}>$</span> ssh example.com
+        </p>
+        <p style={{ color: "var(--ui-term-bright-black)" }}>Connected to example.com</p>
+        <p>
+          <span style={{ color: "var(--ui-term-cyan)" }}>$</span>{" "}
+          <span className="inline-block h-[1em] w-[0.5em] translate-y-[0.12em] bg-current" />
+        </p>
+      </div>
+    </div>
+  );
+}
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
@@ -185,261 +284,308 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
     nextMaster === confirmMaster;
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <PageHeader title={t("settings.heading")} description={t("settings.pageDescription")} />
 
-
-
-      <section aria-label={t("engine.heading")} className={sectionCard}>
-        <h3 className={sectionHeading}>{t("engine.heading")}</h3>
-        {portError === "" ? null : <Notice tone="danger">{portError}</Notice>}
-        {!portSaved ? null : <Notice tone="notice">{t("engine.saved")}</Notice>}
-        <Field label={t("engine.portLabel")} hint={t("engine.portHint")}>
-          <input
-            type="number"
-            min={1024}
-            max={65535}
-            className={control}
-            value={port}
-            placeholder="30000-60000"
-            disabled={portBusy}
-            onChange={(event) => {
-              setPort(event.target.value);
-              setPortSaved(false);
-            }}
-          />
-        </Field>
-        <div className="flex justify-end">
-          <Button kind="primary" disabled={portBusy} onClick={() => void savePort()}>
-            {t("terminal.startSave")}
-          </Button>
-        </div>
-      </section>
-
-      <section aria-label={t("terminal.settingsHeading")} className={sectionCard}>
-        <h3 className={sectionHeading}>{t("terminal.settingsHeading")}</h3>
-        {terminalError === "" ? null : <Notice tone="danger">{terminalError}</Notice>}
-        {!terminalSaved ? null : (
-          <p role="status" className="text-sm text-live">{t("terminal.settingsSaved")}</p>
+      <nav aria-label={t("settings.heading")} className="flex flex-wrap gap-1 border-b border-line pb-3">
+        <a href="#settings-engine" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
+          {t("engine.heading")}
+        </a>
+        <a href="#settings-terminal" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
+          {t("terminal.settingsHeading")}
+        </a>
+        {consoles === undefined ? null : (
+          <a href="#settings-connections" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
+            {t("desktop.closeAllHeading")}
+          </a>
         )}
-        <Field label={t("terminal.startLabel")} hint={t("terminal.startHint")}>
-          <input
-            type="text"
-            className={control}
-            value={startDirectory}
-            spellCheck={false}
-            placeholder="~/"
-            disabled={terminalBusy}
-            onChange={(event) => {
-              setStartDirectory(event.target.value);
-              setTerminalSaved(false);
-            }}
-          />
-        </Field>
-        <Field label={t("terminal.maxSessionsLabel")} hint={t("terminal.maxSessionsHint")}>
-          <input
-            type="number"
-            min={1}
-            max={200}
-            className={control}
-            value={maxSessions}
-            placeholder="50"
-            disabled={terminalBusy}
-            onChange={(event) => {
-              setMaxSessions(event.target.value);
-              setTerminalSaved(false);
-            }}
-          />
-        </Field>
-        <Field label={t("terminal.scrollbackLabel")} hint={t("terminal.scrollbackHint")}>
-          <input
-            type="number"
-            min={16384}
-            max={4194304}
-            className={control}
-            value={scrollback}
-            placeholder="262144"
-            disabled={terminalBusy}
-            onChange={(event) => {
-              setScrollback(event.target.value);
-              setTerminalSaved(false);
-            }}
-          />
-        </Field>
+        <a href="#settings-password" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
+          {t("secrets.changeHeading")}
+        </a>
+      </nav>
 
-        <Field label={t("terminal.verbosityLabel")} hint={t("terminal.verbosityHint")}>
-          <select
-            className={control}
-            value={verbosity}
-            disabled={terminalBusy}
-            onChange={(event) => {
-              setVerbosity(event.target.value);
-              setTerminalSaved(false);
-            }}
+      <div className="sshc-card overflow-hidden rounded-xl bg-card">
+        <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings">
+          <div className="max-w-2xl">
+            <Field label={t("engine.portLabel")} hint={t("engine.portHint")}>
+              <input
+                type="number"
+                min={1024}
+                max={65535}
+                className={control}
+                value={port}
+                placeholder="30000-60000"
+                disabled={portBusy}
+                onChange={(event) => {
+                  setPort(event.target.value);
+                  setPortSaved(false);
+                }}
+              />
+            </Field>
+            <ActionArea status={portError === ""
+              ? (!portSaved ? undefined : <Notice tone="notice">{t("engine.saved")}</Notice>)
+              : <Notice tone="danger">{portError}</Notice>}
+            >
+              <Button kind="primary" disabled={portBusy} onClick={() => void savePort()}>
+                {t("terminal.startSave")}
+              </Button>
+            </ActionArea>
+          </div>
+        </SettingsSection>
+
+        <SettingsSection id="settings-terminal" label={t("terminal.settingsHeading")} icon="terminal">
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_19rem]">
+            <div className="grid min-w-0 gap-5 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Field label={t("terminal.startLabel")} hint={t("terminal.startHint")}>
+                  <input
+                    type="text"
+                    className={control}
+                    value={startDirectory}
+                    spellCheck={false}
+                    placeholder="~/"
+                    disabled={terminalBusy}
+                    onChange={(event) => {
+                      setStartDirectory(event.target.value);
+                      setTerminalSaved(false);
+                    }}
+                  />
+                </Field>
+              </div>
+              <Field label={t("terminal.maxSessionsLabel")} hint={t("terminal.maxSessionsHint")}>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  className={control}
+                  value={maxSessions}
+                  placeholder="50"
+                  disabled={terminalBusy}
+                  onChange={(event) => {
+                    setMaxSessions(event.target.value);
+                    setTerminalSaved(false);
+                  }}
+                />
+              </Field>
+              <Field label={t("terminal.scrollbackLabel")} hint={t("terminal.scrollbackHint")}>
+                <input
+                  type="number"
+                  min={16384}
+                  max={4194304}
+                  className={control}
+                  value={scrollback}
+                  placeholder="262144"
+                  disabled={terminalBusy}
+                  onChange={(event) => {
+                    setScrollback(event.target.value);
+                    setTerminalSaved(false);
+                  }}
+                />
+              </Field>
+              <Field label={t("terminal.verbosityLabel")} hint={t("terminal.verbosityHint")}>
+                <select
+                  className={control}
+                  value={verbosity}
+                  disabled={terminalBusy}
+                  onChange={(event) => {
+                    setVerbosity(event.target.value);
+                    setTerminalSaved(false);
+                  }}
+                >
+                  <option value="0">{t("terminal.verbosityQuiet")}</option>
+                  <option value="1">{t("terminal.verbosityBrief")}</option>
+                  <option value="2">{t("terminal.verbosityDetailed")}</option>
+                  <option value="3">{t("terminal.verbosityFull")}</option>
+                </select>
+              </Field>
+              <Field label={t("terminal.reconnectLabel")} hint={t("terminal.reconnectHint")}>
+                <select
+                  className={control}
+                  value={reconnect}
+                  disabled={terminalBusy}
+                  onChange={(event) => {
+                    setReconnect(event.target.value);
+                    setTerminalSaved(false);
+                  }}
+                >
+                  <option value="">{t("terminal.reconnectDefault")}</option>
+                  <option value="0">{t("terminal.reconnectNever")}</option>
+                  <option value="1">{t("terminal.reconnectOnce")}</option>
+                  <option value="2">{t("terminal.reconnectTwice")}</option>
+                  <option value="3">{t("terminal.reconnectThrice")}</option>
+                  <option value="5">{t("terminal.reconnectFive")}</option>
+                </select>
+              </Field>
+              <Field label={t("terminal.paletteLabel")} hint={t("terminal.paletteHint")}>
+                <AppearancePicker
+                  choices={palettes}
+                  value={palette}
+                  onChange={(next) => {
+                    setPalette(next);
+                    setTerminalSaved(false);
+                  }}
+                  unchosen={t("terminal.paletteFollowsTheme")}
+                />
+              </Field>
+              <Field label={t("terminal.fontLabel")} hint={t("terminal.fontHint")}>
+                <AppearancePicker
+                  choices={fonts}
+                  value={font}
+                  onChange={(next) => {
+                    setFont(next);
+                    setTerminalSaved(false);
+                  }}
+                  unchosen={t("terminal.fontFollowsSystem")}
+                />
+              </Field>
+              <Field label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint")}>
+                <input
+                  type="number"
+                  min={8}
+                  max={32}
+                  className={control}
+                  value={fontSize}
+                  placeholder="15 / 13"
+                  disabled={terminalBusy}
+                  onChange={(event) => {
+                    setFontSize(event.target.value);
+                    setTerminalSaved(false);
+                  }}
+                />
+              </Field>
+              <div className="sm:col-span-2">
+                <Field label={t("terminal.backgroundLabel")} hint={t("terminal.backgroundHint")}>
+                  <BackgroundPicker
+                    value={background}
+                    onChange={(next) => {
+                      setBackground(next);
+                      setTerminalSaved(false);
+                    }}
+                    tint={tint}
+                    onTintChange={(next) => {
+                      setTint(next);
+                      setTerminalSaved(false);
+                    }}
+                    unchosen={t("terminal.backgroundNone")}
+                  />
+                </Field>
+              </div>
+              <div className="flex flex-col gap-1 rounded-lg bg-select-fill p-3">
+                <CheckboxField
+                  label={t("terminal.copyOnSelectLabel")}
+                  checked={copyOnSelect}
+                  disabled={terminalBusy}
+                  onChange={(checked) => {
+                    setCopyOnSelect(checked);
+                    setTerminalSaved(false);
+                  }}
+                />
+                <p className={hintText}>{t("terminal.copyOnSelectHint")}</p>
+              </div>
+              <div className="flex flex-col gap-1 rounded-lg bg-select-fill p-3">
+                <CheckboxField
+                  label={t("terminal.rightClickPasteLabel")}
+                  checked={rightClickPaste}
+                  disabled={terminalBusy}
+                  onChange={(checked) => {
+                    setRightClickPaste(checked);
+                    setTerminalSaved(false);
+                  }}
+                />
+                <p className={hintText}>{t("terminal.rightClickPasteHint")}</p>
+              </div>
+            </div>
+            <div className="self-start xl:sticky xl:top-6">
+              <TerminalPreview
+                palette={palette}
+                font={font}
+                background={background}
+                tint={tint}
+                fontSize={fontSize}
+              />
+            </div>
+          </div>
+          <ActionArea status={terminalError === ""
+            ? (!terminalSaved ? undefined : <p role="status" className="text-sm text-live">{t("terminal.settingsSaved")}</p>)
+            : <Notice tone="danger">{terminalError}</Notice>}
           >
-            <option value="0">{t("terminal.verbosityQuiet")}</option>
-            <option value="1">{t("terminal.verbosityBrief")}</option>
-            <option value="2">{t("terminal.verbosityDetailed")}</option>
-            <option value="3">{t("terminal.verbosityFull")}</option>
-          </select>
-        </Field>
+            <Button kind="primary" disabled={terminalBusy} onClick={() => void saveTerminal()}>
+              {t("terminal.startSave")}
+            </Button>
+          </ActionArea>
+        </SettingsSection>
 
-        <Field label={t("terminal.reconnectLabel")} hint={t("terminal.reconnectHint")}>
-          <select
-            className={control}
-            value={reconnect}
-            disabled={terminalBusy}
-            onChange={(event) => {
-              setReconnect(event.target.value);
-              setTerminalSaved(false);
-            }}
-          >
-            <option value="">{t("terminal.reconnectDefault")}</option>
-            <option value="0">{t("terminal.reconnectNever")}</option>
-            <option value="1">{t("terminal.reconnectOnce")}</option>
-            <option value="2">{t("terminal.reconnectTwice")}</option>
-            <option value="3">{t("terminal.reconnectThrice")}</option>
-            <option value="5">{t("terminal.reconnectFive")}</option>
-          </select>
-        </Field>
-        <Field label={t("terminal.paletteLabel")} hint={t("terminal.paletteHint")}>
-          <AppearancePicker
-            choices={palettes}
-            value={palette}
-            onChange={setPalette}
-            unchosen={t("terminal.paletteFollowsTheme")}
-          />
-        </Field>
-        <Field label={t("terminal.fontLabel")} hint={t("terminal.fontHint")}>
-          <AppearancePicker
-            choices={fonts}
-            value={font}
-            onChange={setFont}
-            unchosen={t("terminal.fontFollowsSystem")}
-          />
-        </Field>
-        <Field label={t("terminal.backgroundLabel")} hint={t("terminal.backgroundHint")}>
-          <BackgroundPicker
-            value={background}
-            onChange={setBackground}
-            tint={tint}
-            onTintChange={setTint}
-            unchosen={t("terminal.backgroundNone")}
-          />
-        </Field>
-        <Field label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint")}>
-          <input
-            type="number"
-            min={8}
-            max={32}
-            className={control}
-            value={fontSize}
-            placeholder="15 / 13"
-            disabled={terminalBusy}
-            onChange={(event) => {
-              setFontSize(event.target.value);
-              setTerminalSaved(false);
-            }}
-          />
-        </Field>
-        <div className="flex flex-col gap-1">
-          <CheckboxField
-            label={t("terminal.copyOnSelectLabel")}
-            checked={copyOnSelect}
-            disabled={terminalBusy}
-            onChange={(checked) => {
-              setCopyOnSelect(checked);
-              setTerminalSaved(false);
-            }}
-          />
-          <p className={hintText}>{t("terminal.copyOnSelectHint")}</p>
-        </div>
-        <div className="flex flex-col gap-1">
-          <CheckboxField
-            label={t("terminal.rightClickPasteLabel")}
-            checked={rightClickPaste}
-            disabled={terminalBusy}
-            onChange={(checked) => {
-              setRightClickPaste(checked);
-              setTerminalSaved(false);
-            }}
-          />
-          <p className={hintText}>{t("terminal.rightClickPasteHint")}</p>
-        </div>
-        <Button
-          kind="primary"
-          className="self-start"
-          disabled={terminalBusy}
-          onClick={() => void saveTerminal()}
-        >
-          {t("terminal.startSave")}
-        </Button>
-      </section>
+        {consoles === undefined ? null : (
+          <SettingsSection id="settings-connections" label={t("desktop.closeAllHeading")} icon="connections">
+            <p className="max-w-2xl text-sm leading-6 text-ink-muted">{t("desktop.closeAllNote")}</p>
+            <ActionArea status={(
+              <p role="status" className="text-sm text-ink-muted">
+                <span className="mr-2 inline-block h-2 w-2 rounded-full bg-live" />
+                {t("desktop.openCount", { count: consoles.sessions.length })}
+              </p>
+            )}>
+              <Button
+                disabled={consoles.busy || consoles.sessions.length === 0}
+                onClick={() =>
+                  liveConsoles === 0 ? void consoles.closeAll() : setConfirmingCloseAll(true)
+                }
+              >
+                {t("desktop.closeAll")}
+              </Button>
+            </ActionArea>
+            {confirmingCloseAll ? (
+              <ConfirmDialog
+                id="close-all-consoles-heading"
+                heading={t("desktop.closeAllHeading2", { count: String(liveConsoles) })}
+                body={<p className="text-sm text-ink-muted">{t("desktop.closeAllBody")}</p>}
+                confirmLabel={t("desktop.closeAllConfirm")}
+                cancelLabel={t("desktop.closeAllCancel")}
+                onCancel={() => setConfirmingCloseAll(false)}
+                onConfirm={() => {
+                  setConfirmingCloseAll(false);
+                  void consoles.closeAll();
+                }}
+              />
+            ) : null}
+          </SettingsSection>
+        )}
 
-
-      {consoles === undefined ? null : (
-        <section aria-label={t("desktop.closeAllHeading")} className={sectionCard}>
-          <h3 className={sectionHeading}>{t("desktop.closeAllHeading")}</h3>
-          <p className={hintText}>{t("desktop.closeAllNote")}</p>
-          <p role="status" className="text-sm text-ink-muted">
-            {t("desktop.openCount", { count: consoles.sessions.length })}
-          </p>
-          <Button
-            className="self-start"
-            disabled={consoles.busy || consoles.sessions.length === 0}
-            onClick={() =>
-              liveConsoles === 0 ? void consoles.closeAll() : setConfirmingCloseAll(true)
-            }
-          >
-            {t("desktop.closeAll")}
-          </Button>
-          {confirmingCloseAll ? (
-            <ConfirmDialog
-              id="close-all-consoles-heading"
-              heading={t("desktop.closeAllHeading2", { count: String(liveConsoles) })}
-              body={<p className="text-sm text-ink-muted">{t("desktop.closeAllBody")}</p>}
-              confirmLabel={t("desktop.closeAllConfirm")}
-              cancelLabel={t("desktop.closeAllCancel")}
-              onCancel={() => setConfirmingCloseAll(false)}
-              onConfirm={() => {
-                setConfirmingCloseAll(false);
-                void consoles.closeAll();
-              }}
-            />
-          ) : null}
-        </section>
-      )}
-
-      <section aria-label={t("secrets.changeHeading")} className={sectionCard}>
-        <h3 className={sectionHeading}>{t("secrets.changeHeading")}</h3>
-        <p className={hintText}>{t("secrets.changeNote")}</p>
-        {masterError === "" ? null : <Notice tone="danger">{masterError}</Notice>}
-        {changed === "" ? null : <p role="status" className="text-sm text-live">{changed}</p>}
-        <PasswordField
-          label={t("secrets.currentMaster")}
-          value={currentMaster}
-          onChange={setCurrentMaster}
-          disabled={masterBusy}
-        />
-        <PasswordField
-          label={t("secrets.newMaster")}
-          value={nextMaster}
-          onChange={setNextMaster}
-          disabled={masterBusy}
-        />
-        <PasswordField
-          label={t("secrets.confirmMaster")}
-          value={confirmMaster}
-          onChange={setConfirmMaster}
-          disabled={masterBusy}
-        />
-        <Button kind="primary" className="self-start"
-          disabled={!canChangeMaster}
-          onClick={() => void changeMaster()}
-        >
-          {t("secrets.change")}
-        </Button>
-      </section>
+        <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets">
+          <div className="max-w-2xl">
+            <p className="mb-5 text-sm leading-6 text-ink-muted">{t("secrets.changeNote")}</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <PasswordField
+                  label={t("secrets.currentMaster")}
+                  value={currentMaster}
+                  onChange={setCurrentMaster}
+                  disabled={masterBusy}
+                />
+              </div>
+              <PasswordField
+                label={t("secrets.newMaster")}
+                value={nextMaster}
+                onChange={setNextMaster}
+                disabled={masterBusy}
+              />
+              <PasswordField
+                label={t("secrets.confirmMaster")}
+                value={confirmMaster}
+                onChange={setConfirmMaster}
+                disabled={masterBusy}
+              />
+            </div>
+            <ActionArea status={masterError === ""
+              ? (changed === "" ? undefined : <p role="status" className="text-sm text-live">{changed}</p>)
+              : <Notice tone="danger">{masterError}</Notice>}
+            >
+              <Button kind="primary" disabled={!canChangeMaster} onClick={() => void changeMaster()}>
+                {t("secrets.change")}
+              </Button>
+            </ActionArea>
+          </div>
+        </SettingsSection>
+      </div>
     </div>
   );
 }

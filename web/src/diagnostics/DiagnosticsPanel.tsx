@@ -11,7 +11,6 @@ import {
   Field,
   control,
   hintText,
-  sectionCard,
   sectionHeading,
   tableHeadCell,
   tableHeadRow,
@@ -19,6 +18,7 @@ import {
 import { useTranslate } from "../i18n/context";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
+import { Icon } from "../ui/icons";
 
 type DiagnosticsPanelProps = {
   api?: IntegrationsApi;
@@ -95,6 +95,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
     },
   ];
   const blocked = busy || alias === "";
+  const hasResults = effective !== null || reach !== null || auth !== null;
 
   return (
     <section
@@ -105,58 +106,78 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
         <PageHeader title={t("diag.heading")} description={t("diag.pageDescription")} />
       )}
 
-      <p aria-live="polite" className={hintText}>
-        {busy ? t("diag.running") : alias === "" ? t("diag.needsAlias") : t("diag.idle")}
-      </p>
       {error ? (
         <Notice tone="danger">{error}</Notice>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-2">
-        {embedded ? null : (
-          <div className="w-56">
-            <Field label={t("diag.hostAlias")}>
-              <input
-                value={typedAlias}
-                onChange={(event) => setTypedAlias(event.target.value)}
-                list="diagnostic-host-options"
-                placeholder="bastion"
-                className={control}
-              />
-            </Field>
-            <datalist id="diagnostic-host-options">
-              {hosts.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}
-            </datalist>
+      <section className="sshc-card overflow-hidden rounded-xl bg-card" aria-label={t("diag.heading")}>
+        <div className="flex flex-col gap-4 bg-toolbar px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-end gap-3">
+            {embedded ? (
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">{t("diag.hostAlias")}</p>
+                <p className="mt-1 truncate font-mono text-base font-semibold text-ink">{alias}</p>
+              </div>
+            ) : (
+              <div className="min-w-56 flex-1 sm:max-w-sm">
+                <Field label={t("diag.hostAlias")}>
+                  <input
+                    value={typedAlias}
+                    onChange={(event) => setTypedAlias(event.target.value)}
+                    list="diagnostic-host-options"
+                    placeholder="bastion"
+                    className={`${control} font-mono`}
+                  />
+                </Field>
+                <datalist id="diagnostic-host-options">
+                  {hosts.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}
+                </datalist>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {checks.map((check, index) => (
+                <Button
+                  key={check.label}
+                  kind={index === 0 ? "primary" : "secondary"}
+                  onClick={check.start}
+                  disabled={blocked}
+                >
+                  {check.label}
+                </Button>
+              ))}
+            </div>
           </div>
-        )}
-        {checks.map((check) => (
-          <Button
-            key={check.label}
-            onClick={check.start}
-            disabled={blocked}
-          >
-            {check.label}
-          </Button>
-        ))}
-      </div>
+          <p aria-live="polite" className="flex items-center gap-2 text-xs text-ink-muted">
+            <span className={`h-2 w-2 rounded-full ${busy ? "bg-notice-ink" : alias === "" ? "bg-ink-faint" : "bg-live"}`} />
+            {busy ? t("diag.running") : alias === "" ? t("diag.needsAlias") : t("diag.idle")}
+          </p>
+        </div>
+      </section>
 
       {config ? (
-        <div className={sectionCard}>
-          <h3 className={sectionHeading}>{t("diag.configuration")}</h3>
-          <ul className="flex flex-col gap-1">
+        <section className="sshc-card overflow-hidden rounded-xl bg-card">
+          <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Icon name="config" className="h-4 w-4 text-ink-muted" />
+              <h3 className={sectionHeading}>{t("diag.configuration")}</h3>
+            </div>
+            <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">{config.files.length}</span>
+          </header>
+          <ul className="divide-y divide-hairline px-4">
             {config.files.map((file) => (
-              <li key={file.path} className="font-mono text-xs text-ink-muted">
+              <li key={file.path} className="flex items-center gap-2 py-2.5 font-mono text-xs text-ink-muted">
+                <span className={`h-1.5 w-1.5 rounded-full ${file.missing ? "bg-notice-ink" : "bg-live"}`} />
                 {file.path}
                 {file.missing ? <span className="text-notice-ink">{t("diag.missingSuffix")}</span> : null}
               </li>
             ))}
           </ul>
           {config.diagnostics.length > 0 ? (
-            <ul className="flex flex-col gap-1">
+            <ul className="border-t border-line bg-surface-subtle px-4 py-3">
               {config.diagnostics.map((diagnostic, index) => (
                 <li
                   key={`${diagnostic.code}-${index}`}
-                  className={`font-mono text-xs ${
+                  className={`py-1 font-mono text-xs ${
                     diagnostic.severity === "error"
                       ? "text-danger"
                       : diagnostic.severity === "warning"
@@ -169,11 +190,12 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
               ))}
             </ul>
           ) : null}
-        </div>
+        </section>
       ) : null}
 
+      {hasResults ? <div className="sshc-card overflow-hidden rounded-xl bg-card">
       {directives.length > 0 ? (
-        <div className="rounded border border-notice-line p-3 text-sm">
+        <section className="border-b border-notice-line bg-notice px-4 py-4 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.canRunCommand")}</h3>
           <p className="text-ink-muted">{effective?.tokenWarning}</p>
           <ul className="mt-2 flex flex-col gap-1">
@@ -190,12 +212,12 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       ) : null}
 
 
       {effective && effective.sources.length > 0 ? (
-        <div className="overflow-x-auto">
+        <section className="overflow-x-auto px-4 py-4">
           <table className="w-full text-sm">
 
             <caption className={`mb-2 text-left ${hintText}`}>{t("diag.sourcesCaption")}</caption>
@@ -225,17 +247,21 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : null}
 
 
       {effective && effective.route.length > 0 ? (
-        <div className={`${sectionCard} text-sm`}>
-          <h3 className={sectionHeading}>{t("diag.route")}</h3>
-          <ol className="flex flex-col gap-1">
+        <section className="border-t border-line px-4 py-4 text-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <Icon name="connections" className="h-4 w-4 text-ink-muted" />
+            <h3 className={sectionHeading}>{t("diag.route")}</h3>
+          </div>
+          <ol className="flex flex-col gap-2">
             {effective.route.map((stage) => (
-              <li key={`${stage.order}-${stage.hop}`} style={{ marginInlineStart: `${stage.depth}rem` }}>
-                <span className="text-ink">{stage.hop}</span>
+              <li key={`${stage.order}-${stage.hop}`} className="flex items-start gap-3" style={{ marginInlineStart: `${stage.depth}rem` }}>
+                <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-[10px] text-ink-muted">{stage.order + 1}</span>
+                <div><span className="font-medium text-ink">{stage.hop}</span>
                 {stage.complex ? (
                   <span className="ml-2 text-notice-ink">{t("diag.hopComplex")}</span>
                 ) : (
@@ -248,15 +274,16 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
                 {stage.parent === "" ? null : (
                   <span className="ml-2 text-ink-faint">{t("diag.reachedThrough", { parent: stage.parent })}</span>
                 )}
+                </div>
               </li>
             ))}
           </ol>
-        </div>
+        </section>
       ) : null}
 
 
       {effective && effective.complexities.length > 0 ? (
-        <div className="rounded border border-notice-line p-3 text-sm">
+        <section className="border-t border-notice-line bg-notice px-4 py-4 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.notSimple")}</h3>
           <p className="text-ink-muted">{t("diag.notSimpleDetail")}</p>
           <ul className="mt-2 flex flex-col gap-1">
@@ -269,31 +296,39 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       ) : null}
 
-      {reach ? (
-        <div className={`${sectionCard} text-sm`}>
-          <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
+      {reach || auth ? <div className="grid border-t border-line md:grid-cols-2 md:divide-x md:divide-line">
+        {reach ? (
+          <section className="flex flex-col gap-2 px-4 py-4 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
+              <span className="h-2 w-2 rounded-full bg-live" />
+            </div>
+            <p className="font-mono text-xs text-ink">{reach.address}</p>
+            <p className="font-medium text-ink">{reach.outcome}</p>
+            <p className={hintText}>{reach.notice}</p>
+          </section>
+        ) : null}
 
-          <p className="font-mono text-xs text-ink">{reach.address}</p>
-          <p className="text-ink">{reach.outcome}</p>
-          <p className={hintText}>{reach.notice}</p>
-        </div>
-      ) : null}
-
-      {auth ? (
-        <div className={`${sectionCard} text-sm`}>
-          <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
-          <p className="text-ink">{auth.outcome}</p>
-          {auth.method ? (
-            <p className={hintText}>{t("diag.authenticationMethod", { method: auth.method })}</p>
-          ) : null}
-          {auth.detail ? (
-            <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink-muted">{auth.detail}</pre>
-          ) : null}
-        </div>
-      ) : null}
+        {auth ? (
+          <section className="flex flex-col gap-2 border-t border-line px-4 py-4 text-sm md:border-t-0">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
+              <span className={`h-2 w-2 rounded-full ${auth.authenticated ? "bg-live" : "bg-notice-ink"}`} />
+            </div>
+            <p className="font-medium text-ink">{auth.outcome}</p>
+            {auth.method ? (
+              <p className={hintText}>{t("diag.authenticationMethod", { method: auth.method })}</p>
+            ) : null}
+            {auth.detail ? (
+              <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink-muted">{auth.detail}</pre>
+            ) : null}
+          </section>
+        ) : null}
+      </div> : null}
+      </div> : null}
 
     </section>
   );

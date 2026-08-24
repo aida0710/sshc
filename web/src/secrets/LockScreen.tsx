@@ -2,9 +2,9 @@ import { useState } from "react";
 import { failureCode } from "../api/client";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
-import { hintText } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
+import { Icon } from "../ui/icons";
 
 type LockScreenProps = {
   exists: boolean;
@@ -49,36 +49,36 @@ export function LockScreen({ exists, onOpen, api = integrationsApi }: LockScreen
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-4 p-6">
-      <h1 className="text-lg font-medium">{t("shell.title")}</h1>
-      <p className={hintText}>{exists ? t("lock.explainOpen") : t("lock.explainNew")}</p>
+    <main className="flex min-h-screen items-center justify-center bg-canvas p-6">
+      <section className="sshc-card grid w-full max-w-3xl overflow-hidden rounded-2xl bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(20rem,1.1fr)]">
+        <div className="flex min-h-60 flex-col justify-between gap-8 bg-toolbar p-7 md:p-10">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-select-fill text-accent">
+            <Icon name="secrets" className="h-6 w-6" />
+          </span>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-ink">{t("shell.title")}</h1>
+            <p className="mt-2 text-sm leading-6 text-ink-muted">{exists ? t("lock.explainOpen") : t("lock.explainNew")}</p>
+          </div>
+        </div>
 
-      {exists ? null : <p className="text-sm text-notice-ink">{t("lock.noRecovery")}</p>}
-      {error === "" ? null : (
-        <Notice tone="danger">{error}</Notice>
-      )}
-
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <PasswordField label={t("lock.password")} value={password} onChange={setPassword} autoFocus />
-        {exists ? null : (
-          <PasswordField label={t("lock.confirm")} value={confirmation} onChange={setConfirmation} />
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            kind="primary"
-            type="submit"
-            disabled={busy || tooShort || mismatched}
-          >
+        <form
+          className="flex flex-col justify-center gap-4 p-7 md:p-10"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          {exists ? null : <p className="rounded-lg bg-notice px-3 py-2 text-sm text-notice-ink">{t("lock.noRecovery")}</p>}
+          {error === "" ? null : <Notice tone="danger">{error}</Notice>}
+          <PasswordField label={t("lock.password")} value={password} onChange={setPassword} autoFocus />
+          {exists ? null : (
+            <PasswordField label={t("lock.confirm")} value={confirmation} onChange={setConfirmation} />
+          )}
+          <Button kind="primary" className="self-start" type="submit" disabled={busy || tooShort || mismatched}>
             {exists ? t("lock.open") : t("lock.create")}
           </Button>
-        </div>
-      </form>
+        </form>
+      </section>
     </main>
   );
 }

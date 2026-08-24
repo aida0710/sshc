@@ -5,14 +5,14 @@ import { useTranslate } from "../i18n/context";
 import type { Problem } from "../api/client";
 import { configApi, type FileContents, type Overview, type SavePreview } from "../api/config";
 import { SavePreviewPanel } from "../connections/SavePreview";
+import { Icon } from "../ui/icons";
 import {
   control,
   fieldLabel,
   hintText,
-  sectionCard,
   sectionHeading,
 } from "../ui/form";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PageHeader } from "../ui/page";
 
 export type FileTarget = { path: string; line: number };
 
@@ -213,223 +213,194 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <PageHeader title={t("explorer.pageTitle")} description={t("explorer.pageDescription")} />
-      <MetricGrid>
-        <MetricCard label={t("explorer.metricFiles")} value={overview.files.length} />
-        <MetricCard label={t("explorer.metricEditable")} value={editableFiles} />
-        <MetricCard
-          label={t("explorer.metricDiagnostics")}
-          value={overview.diagnostics.length}
-          attention={overview.diagnostics.length > 0}
-        />
-      </MetricGrid>
+      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-xl bg-toolbar">
+        {[
+          [t("explorer.metricFiles"), overview.files.length, false],
+          [t("explorer.metricEditable"), editableFiles, false],
+          [t("explorer.metricDiagnostics"), overview.diagnostics.length, overview.diagnostics.length > 0],
+        ].map(([label, value, attention]) => (
+          <div key={String(label)} className="flex min-w-36 flex-1 items-center justify-between gap-4 border-r border-hairline px-4 py-2.5 last:border-r-0">
+            <dt className={`text-xs font-medium ${attention ? "text-notice-ink" : "text-ink-muted"}`}>{label}</dt>
+            <dd className={`font-mono text-sm font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</dd>
+          </div>
+        ))}
+      </dl>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
-      <section aria-labelledby="explorer-heading" className={`${sectionCard} self-start`}>
-        <h3 id="explorer-heading" className={sectionHeading}>{t("explorer.hierarchy")}</h3>
-        <ul className="flex flex-col gap-2">
-          {overview.files.map((node) => {
-            const current = (node.file.path ?? node.file.absolute) === openPath;
-            return (
-              <li
-                key={node.file.absolute}
-                className={`rounded border p-2 ${current ? "border-control-line bg-control" : "border-line"}`}
-              >
-                {node.file.path === undefined ? (
-                  <p className="text-sm text-ink-muted">
-                    <span className="font-mono text-xs">{node.file.absolute}</span>
-                    <span className="block text-xs text-notice-ink">
-                      {t("explorer.externalFile")}
-                    </span>
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    aria-current={current ? "true" : "false"}
-                    onClick={() => void open(node.file.path ?? "")}
-                    className={`text-left font-mono text-sm hover:underline ${current ? "font-semibold text-ink" : "text-ink-muted"}`}
-                  >
-                    {node.file.path}
-                  </button>
-                )}
-                <p className={hintText}>
-                  {t("explorer.fileState", {
-                    missing: node.missing === true ? t("explorer.missing") : "",
-                    loads: node.loads > 1 ? t("explorer.readTimes", { count: node.loads }) : "",
-                    editable: node.editable ? t("explorer.editable") : t("explorer.readOnly"),
-                  })}
-                </p>
-                {(node.includes ?? []).map((include) => (
-                  <div key={`${node.file.absolute}:${include.line}:${include.pattern}`} className="mt-1 text-xs text-ink-muted">
-                    <span className="font-mono">{include.pattern}</span>
+      {jump === "" ? null : <p aria-live="polite" className={hintText}>{jump}</p>}
 
-                    {include.condition === undefined ? null : (
-                      <span className="ml-1 text-notice-ink">
-                        {t("explorer.insideCondition", { condition: include.condition })}
-                      </span>
-                    )}
-                    <ul className="ml-3">
-                      {(include.matches ?? []).map((match) => (
-                        <li key={match.absolute} className="font-mono">
-                          {`→ ${match.path ?? match.absolute}`}
-                        </li>
+      <div className="sshc-card grid min-h-0 grid-cols-1 overflow-hidden rounded-xl bg-card lg:grid-cols-[19rem_minmax(0,1fr)]">
+        <section aria-labelledby="explorer-heading" className="flex min-h-0 flex-col bg-tree lg:border-r lg:border-line">
+          <div className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Icon name="config" className="h-4 w-4 text-ink-muted" />
+              <h3 id="explorer-heading" className={sectionHeading}>{t("explorer.hierarchy")}</h3>
+            </div>
+            <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">{overview.files.length}</span>
+          </div>
+
+          <ul className="flex max-h-96 flex-col gap-0.5 overflow-y-auto p-2 lg:max-h-none lg:flex-1">
+            {overview.files.map((node) => {
+              const current = (node.file.path ?? node.file.absolute) === openPath;
+              const state = t("explorer.fileState", {
+                missing: node.missing === true ? t("explorer.missing") : "",
+                loads: node.loads > 1 ? t("explorer.readTimes", { count: node.loads }) : "",
+                editable: node.editable ? t("explorer.editable") : t("explorer.readOnly"),
+              });
+              return (
+                <li key={node.file.absolute} className={`rounded-lg ${current ? "bg-select-fill" : "hover:bg-surface-subtle"}`}>
+                  <div className="flex items-start gap-2.5 px-2.5 py-2">
+                    <Icon name="config" className={`mt-0.5 h-4 w-4 ${current ? "text-accent" : "text-ink-faint"}`} />
+                    <div className="min-w-0 flex-1">
+                      {node.file.path === undefined ? (
+                        <p className="text-sm text-ink-muted">
+                          <span className="block break-all font-mono text-xs">{node.file.absolute}</span>
+                          <span className="mt-1 block text-xs leading-5 text-notice-ink">{t("explorer.externalFile")}</span>
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-current={current ? "true" : "false"}
+                          onClick={() => void open(node.file.path ?? "")}
+                          className={`block w-full truncate text-left font-mono text-sm ${current ? "font-semibold text-ink" : "text-ink-muted hover:text-ink"}`}
+                        >
+                          {node.file.path}
+                        </button>
+                      )}
+                      <p className="mt-0.5 text-xs text-ink-faint">{state}</p>
+                      {(node.includes ?? []).map((include) => (
+                        <div key={`${node.file.absolute}:${include.line}:${include.pattern}`} className="mt-2 rounded-md bg-surface-subtle px-2 py-1.5 text-xs text-ink-muted">
+                          <span className="font-mono">{include.pattern}</span>
+                          {include.condition === undefined ? null : (
+                            <span className="ml-1 text-notice-ink">{t("explorer.insideCondition", { condition: include.condition })}</span>
+                          )}
+                          <ul className="mt-1">
+                            {(include.matches ?? []).map((match) => (
+                              <li key={match.absolute} className="truncate font-mono text-ink-faint">{`→ ${match.path ?? match.absolute}`}</li>
+                            ))}
+                          </ul>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
-                ))}
-              </li>
-            );
-          })}
-        </ul>
-
-        <div className="flex flex-col gap-2 rounded-lg border border-line bg-canvas p-3">
-          <h3 className={sectionHeading}>{t("explorer.workspaceActions")}</h3>
-          <label htmlFor="new-file-path" className={fieldLabel}>{t("explorer.newFilePath")}</label>
-          <input
-            id="new-file-path"
-            value={newPath}
-            onChange={(event) => setNewPath(event.target.value)}
-            placeholder="conf.d/30-lab.conf"
-            className={control}
-          />
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => void createFile()}
-              disabled={newPath === ""}
-            >
-              {t("explorer.createFile")}
-            </Button>
-            <Button
-              onClick={() => void createDirectory()}
-              disabled={newPath === ""}
-            >
-              {t("explorer.createDirectory")}
-            </Button>
-            <Button
-              kind="danger"
-              onClick={() => void deleteDirectory()}
-              disabled={newPath === ""}
-            >
-              {t("explorer.deleteDirectory")}
-            </Button>
-          </div>
-          <p className={hintText}>{t("explorer.newFileNote")}</p>
-          <details className="text-xs text-ink-muted">
-            <summary className="cursor-pointer text-ink">{t("explorer.directoryHelp")}</summary>
-            <p className="mt-2 leading-5">{t("explorer.directoryNote")}</p>
-          </details>
-        </div>
-
-        <h3 className={sectionHeading}>{t("explorer.diagnostics")}</h3>
-        {overview.diagnostics.length === 0 ? (
-          <p className={hintText}>{t("explorer.noIncludeProblem")}</p>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {overview.diagnostics.map((diagnostic, index) => (
-              <li
-                key={`${diagnostic.code}-${index}`}
-                className={`font-mono text-xs ${diagnostic.severity === "error" ? "text-danger" : diagnostic.severity === "warning" ? "text-notice-ink" : "text-ink-muted"}`}
-              >
-                {`${diagnostic.code} ${diagnostic.path ?? diagnostic.absolute ?? ""}${diagnostic.line === undefined ? "" : `:${diagnostic.line}`} ${diagnostic.detail ?? ""}`}
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
-        )}
-      </section>
 
-      <section className="flex flex-col gap-3">
-        {jump === "" ? null : <p aria-live="polite" className={hintText}>{jump}</p>}
-        {file === null ? (
-          <div role="status" className={`${sectionCard} min-h-64 items-center justify-center text-center`}>
-            <h3 className={sectionHeading}>{t("explorer.emptyHeading")}</h3>
-            <p className={hintText}>{t("explorer.selectFile")}</p>
-          </div>
-        ) : (
-          <div className={sectionCard}>
-            <div className="flex items-baseline justify-between gap-2">
-              <label htmlFor="file-raw" className={fieldLabel}>
-                {t("explorer.fileText", { path: file.file.path ?? file.file.absolute })}
-              </label>
-
-              {modified ? <span className="text-xs text-notice-ink">{t("explorer.unsaved")}</span> : null}
-            </div>
-            <textarea
-              id="file-raw"
-              ref={editorRef}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              rows={24}
-              spellCheck={false}
-              disabled={!file.editable}
-              className="w-full resize-y rounded border border-control-line bg-canvas p-3 font-mono text-xs text-ink focus:border-accent focus:outline-none disabled:border-line disabled:text-ink-faint"
+          <div className="flex flex-col gap-2 border-t border-line bg-toolbar p-3">
+            <h3 className={sectionHeading}>{t("explorer.workspaceActions")}</h3>
+            <label htmlFor="new-file-path" className={fieldLabel}>{t("explorer.newFilePath")}</label>
+            <input
+              id="new-file-path"
+              value={newPath}
+              onChange={(event) => setNewPath(event.target.value)}
+              placeholder="conf.d/30-lab.conf"
+              className={`${control} font-mono text-xs`}
             />
-            <div className="flex gap-2">
-              <Button onClick={() => void run("preview")}>
-                {t("explorer.preview")}
-              </Button>
-              <Button
-                kind="primary"
-                onClick={() => void run("save")}
-                disabled={!file.editable}
-              >
-                {t("explorer.saveFile")}
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => void createFile()} disabled={newPath === ""}>{t("explorer.createFile")}</Button>
+              <Button onClick={() => void createDirectory()} disabled={newPath === ""}>{t("explorer.createDirectory")}</Button>
+              <Button kind="danger" onClick={() => void deleteDirectory()} disabled={newPath === ""}>{t("explorer.deleteDirectory")}</Button>
             </div>
+            <p className={hintText}>{t("explorer.newFileNote")}</p>
+            <details className="text-xs text-ink-muted">
+              <summary className="cursor-pointer text-ink">{t("explorer.directoryHelp")}</summary>
+              <p className="mt-2 leading-5">{t("explorer.directoryNote")}</p>
+            </details>
+          </div>
 
-            {file.file.path === undefined || !file.editable ? null : (
-              <div className="flex flex-col gap-2 rounded border border-line p-3">
-                <h4 className={sectionHeading}>{t("explorer.fileOperations")}</h4>
-
-                <p className={hintText}>{t("explorer.fileOperationsNote")}</p>
-                <label htmlFor="rename-file-path" className={fieldLabel}>{t("explorer.renameTo")}</label>
-                <input
-                  id="rename-file-path"
-                  value={renameTo}
-                  onChange={(event) => setRenameTo(event.target.value)}
-                  placeholder={file.file.path}
-                  className={control}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    onClick={() => void renameFile()}
-                    disabled={renameTo === "" || renameTo === file.file.path || modified}
-                  >
-                    {t("explorer.renameFile")}
-                  </Button>
-                  {confirmingDelete ? (
-                    <>
-                      <Button
-                        kind="danger"
-                        onClick={() => void deleteFile()}
-                      >
-                        {t("explorer.confirmDelete")}
-                      </Button>
-                      <Button
-                        onClick={() => setConfirmingDelete(false)}
-                      >
-                        {t("explorer.cancelDelete")}
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      onClick={() => setConfirmingDelete(true)}
-                      disabled={modified}
-                    >
-                      {t("explorer.deleteFile")}
-                    </Button>
-                  )}
-                </div>
-
-                <p className={hintText}>
-                  {modified ? t("explorer.saveOrDiscardFirst") : t("explorer.deleteIsRecoverable")}
-                </p>
-              </div>
+          <div className={`border-t border-line p-3 ${overview.diagnostics.length > 0 ? "bg-notice" : "bg-toolbar"}`}>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className={sectionHeading}>{t("explorer.diagnostics")}</h3>
+              <span className={`font-mono text-xs ${overview.diagnostics.length > 0 ? "text-notice-ink" : "text-ink-faint"}`}>{overview.diagnostics.length}</span>
+            </div>
+            {overview.diagnostics.length === 0 ? (
+              <p className={hintText}>{t("explorer.noIncludeProblem")}</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {overview.diagnostics.map((diagnostic, index) => (
+                  <li key={`${diagnostic.code}-${index}`} className={`font-mono text-xs ${diagnostic.severity === "error" ? "text-danger" : diagnostic.severity === "warning" ? "text-notice-ink" : "text-ink-muted"}`}>
+                    {`${diagnostic.code} ${diagnostic.path ?? diagnostic.absolute ?? ""}${diagnostic.line === undefined ? "" : `:${diagnostic.line}`} ${diagnostic.detail ?? ""}`}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-        )}
-        <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />
-      </section>
+        </section>
+
+        <section className="flex min-w-0 flex-col border-t border-line lg:border-t-0">
+          {file === null ? (
+            <div role="status" className="flex min-h-96 flex-1 flex-col items-center justify-center gap-2 bg-surface-subtle p-8 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface text-ink-faint">
+                <Icon name="config" className="h-6 w-6" />
+              </span>
+              <h3 className={sectionHeading}>{t("explorer.emptyHeading")}</h3>
+              <p className={hintText}>{t("explorer.selectFile")}</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${modified ? "bg-notice-ink" : file.editable ? "bg-live" : "bg-ink-faint"}`} />
+                  <span className="truncate font-mono text-sm font-semibold text-ink">{file.file.path ?? file.file.absolute}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md bg-surface px-2 py-1 text-xs text-ink-muted">{file.editable ? t("explorer.editable") : t("explorer.readOnly")}</span>
+                  {modified ? <span className="rounded-md bg-notice px-2 py-1 text-xs font-medium text-notice-ink">{t("explorer.unsaved")}</span> : null}
+                </div>
+              </div>
+              <label htmlFor="file-raw" className="sr-only">{t("explorer.fileText", { path: file.file.path ?? file.file.absolute })}</label>
+              <textarea
+                id="file-raw"
+                ref={editorRef}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                rows={24}
+                spellCheck={false}
+                disabled={!file.editable}
+                className="min-h-96 w-full flex-1 resize-y border-0 bg-control p-4 font-mono text-xs leading-6 text-ink focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent disabled:bg-surface-subtle disabled:text-ink-faint"
+              />
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-toolbar px-4 py-3">
+                <Button onClick={() => void run("preview")}>{t("explorer.preview")}</Button>
+                <Button kind="primary" onClick={() => void run("save")} disabled={!file.editable}>{t("explorer.saveFile")}</Button>
+              </div>
+
+              {file.file.path === undefined || !file.editable ? null : (
+                <div className="flex flex-col gap-2 border-t border-line bg-surface-subtle p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h4 className={sectionHeading}>{t("explorer.fileOperations")}</h4>
+                      <p className={`mt-1 ${hintText}`}>{t("explorer.fileOperationsNote")}</p>
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-end justify-end gap-2 sm:flex-nowrap">
+                      <label htmlFor="rename-file-path" className="sr-only">{t("explorer.renameTo")}</label>
+                      <input
+                        id="rename-file-path"
+                        value={renameTo}
+                        onChange={(event) => setRenameTo(event.target.value)}
+                        placeholder={file.file.path}
+                        className={`${control} min-w-48 max-w-sm font-mono text-xs`}
+                      />
+                      <Button onClick={() => void renameFile()} disabled={renameTo === "" || renameTo === file.file.path || modified}>{t("explorer.renameFile")}</Button>
+                      {confirmingDelete ? (
+                        <>
+                          <Button kind="danger" onClick={() => void deleteFile()}>{t("explorer.confirmDelete")}</Button>
+                          <Button onClick={() => setConfirmingDelete(false)}>{t("explorer.cancelDelete")}</Button>
+                        </>
+                      ) : (
+                        <Button onClick={() => setConfirmingDelete(true)} disabled={modified}>{t("explorer.deleteFile")}</Button>
+                      )}
+                    </div>
+                  </div>
+                  <p className={hintText}>{modified ? t("explorer.saveOrDiscardFirst") : t("explorer.deleteIsRecoverable")}</p>
+                </div>
+              )}
+            </>
+          )}
+        </section>
       </div>
+
+      <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />
     </div>
   );
 }

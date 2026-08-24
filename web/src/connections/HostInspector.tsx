@@ -1,6 +1,6 @@
 import type { HostDetail, HostMetadata } from "../api/config";
 import { CheckboxField, Field, control, fieldLabel, hintText } from "../ui/form";
-import { Button, Card } from "../ui/surface";
+import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { NoticeList } from "./SavePreview";
 import { AppearancePicker } from "../terminal/AppearancePicker";
@@ -30,13 +30,15 @@ export function HostInspector({
   const fromElsewhere = inherited(detail);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
 
       <section className="flex flex-col gap-3">
-        <h3 className={fieldLabel}>{t("inspector.appOnly")}</h3>
-        <p className={hintText}>{t("inspector.hostSavesImmediately")}</p>
+        <div>
+          <h3 className="text-sm font-semibold text-ink">{t("inspector.appOnly")}</h3>
+          <p className={`mt-1 ${hintText}`}>{t("inspector.hostSavesImmediately")}</p>
+        </div>
 
-        <Card padded>
+        <div className="flex flex-col gap-4 rounded-xl bg-tree p-4">
         <CheckboxField
           label={t("host.favourite")}
           checked={detail.metadata.favourite === true}
@@ -115,7 +117,7 @@ export function HostInspector({
             className={control}
           />
         </Field>
-        </Card>
+        </div>
       </section>
 
       <section className="flex flex-col gap-2">
@@ -132,9 +134,9 @@ export function HostInspector({
         {fromElsewhere.length === 0 ? (
           <p className={hintText}>{t("inspector.noInherited")}</p>
         ) : (
-          <ul className="flex flex-col gap-1">
+          <ul className="overflow-hidden rounded-lg bg-tree">
             {fromElsewhere.map((entry, index) => (
-              <li key={`${entry.keyword}-${index}`} className="text-xs text-ink-muted">
+              <li key={`${entry.keyword}-${index}`} className="border-t border-hairline px-3 py-2 font-mono text-xs text-ink-muted first:border-t-0">
                 {`${entry.keyword} ${entry.values.join(" ")} · ${
                   entry.source.path ?? entry.source.absolute ?? ""
                 }:${entry.source.line ?? 0}`}

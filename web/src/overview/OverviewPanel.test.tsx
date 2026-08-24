@@ -58,6 +58,25 @@ const sync = {
 } as SyncStatus;
 
 describe("OverviewPanel", () => {
+  it("places quick connect before the compact workspace summary", async () => {
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue(overview)}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        launch={vi.fn()}
+        onNavigate={vi.fn()}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+
+    const quickConnect = await screen.findByRole("heading", { name: "Quick connect" });
+    const metrics = screen.getByRole("group", { name: "Connections, Groups, Needs attention" });
+    expect(quickConnect.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(within(metrics).getByText("2")).toBeInTheDocument();
+    expect(within(metrics).getAllByText("1")).toHaveLength(2);
+    expect(screen.getByText("Favourite · 1")).toBeInTheDocument();
+  });
+
   it("puts favourites first, searches groups and launches only from the explicit action", async () => {
     const launch = vi.fn().mockResolvedValue({ launched: true });
     render(

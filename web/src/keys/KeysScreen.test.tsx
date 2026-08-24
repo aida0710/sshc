@@ -245,7 +245,7 @@ describe("KeysScreen", () => {
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
     expect(within(workRow).getByText("referenced by 1")).toBeInTheDocument();
-    expect(within(workRow).queryByText("SHA256:abcdef")).not.toBeInTheDocument();
+    expect(within(workRow).getByText("SHA256:abcdef")).toBeInTheDocument();
 
     const legacyRow = screen.getByRole("row", { name: /legacy/ });
     expect(within(legacyRow).getByText("Permissions too open")).toBeInTheDocument();

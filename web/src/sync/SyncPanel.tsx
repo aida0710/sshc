@@ -15,8 +15,9 @@ import {
   hintText,
   sectionHeading,
 } from "../ui/form";
-import { Button, Card, Notice, Row } from "../ui/surface";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { Button, Notice, Row } from "../ui/surface";
+import { PageHeader } from "../ui/page";
+import { Icon } from "../ui/icons";
 import { SyncResultCard, type SyncResultView } from "./SyncResultCard";
 
 type SyncPanelProps = { api?: IntegrationsApi };
@@ -126,34 +127,38 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
         {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-        <section className="flex flex-col gap-3 rounded-xl border border-line bg-card p-5">
-          <h3 className={sectionHeading}>{t("sync.bucketHeading")}</h3>
-          <p className="text-sm text-ink-muted">{t("sync.sealed")}</p>
-          <Field label={t("secrets.master")}>
-            <input
-              type="password"
-              value={master}
-              onChange={(event) => setMaster(event.target.value)}
-              className={control}
-            />
-          </Field>
-          <Button
-            kind="primary"
-            disabled={busy || master === ""}
-            onClick={() =>
-              void run(
-                () => api.unlockVault(master),
-                () => {
-                  setMaster("");
-                  void reload();
-                },
-                t("sync.unlockFailed"),
-                (code) => (code === "vault_missing" ? t("sync.noVault") : ""),
-              )
-            } className="self-start"
-          >
-            {t("secrets.unlock")}
-          </Button>
+        <section className="sshc-card grid overflow-hidden rounded-xl bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
+          <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-select-fill text-accent">
+              <Icon name="sync" className="h-6 w-6" />
+            </span>
+            <div>
+              <h3 className="text-lg font-semibold text-ink">{t("sync.bucketHeading")}</h3>
+              <p className="mt-2 text-sm leading-6 text-ink-muted">{t("sync.sealed")}</p>
+            </div>
+          </div>
+          <div className="flex flex-col justify-center gap-4 p-6 md:p-8">
+            <Field label={t("secrets.master")}>
+              <input type="password" value={master} onChange={(event) => setMaster(event.target.value)} className={control} />
+            </Field>
+            <Button
+              kind="primary"
+              disabled={busy || master === ""}
+              onClick={() =>
+                void run(
+                  () => api.unlockVault(master),
+                  () => {
+                    setMaster("");
+                    void reload();
+                  },
+                  t("sync.unlockFailed"),
+                  (code) => (code === "vault_missing" ? t("sync.noVault") : ""),
+                )
+              } className="self-start"
+            >
+              {t("secrets.unlock")}
+            </Button>
+          </div>
         </section>
       </div>
     );
@@ -164,25 +169,29 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
-      <MetricGrid>
-        <MetricCard
-          label={t("sync.metricConfiguration")}
-          value={t(status.configured ? "sync.stateConfigured" : "sync.stateNotConfigured")}
-        />
-        <MetricCard label={t("sync.metricDirection")} value={t(`sync.direction.${status.direction}`)} />
-        <MetricCard
-          label={t("sync.metricSnapshot")}
-          value={status.synced ? status.fileCount ?? 0 : "—"}
-          detail={status.synced ? status.lastSyncedAt ?? "" : t("sync.neverSynced")}
-        />
-      </MetricGrid>
+      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-xl bg-toolbar">
+        {[
+          [t("sync.metricConfiguration"), t(status.configured ? "sync.stateConfigured" : "sync.stateNotConfigured")],
+          [t("sync.metricDirection"), t(`sync.direction.${status.direction}`)],
+          [t("sync.metricSnapshot"), status.synced ? status.fileCount ?? 0 : "—"],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="flex min-w-40 flex-1 items-center justify-between gap-4 border-r border-hairline px-4 py-2.5 last:border-r-0">
+            <dt className="text-xs font-medium text-ink-muted">{label}</dt>
+            <dd className="font-mono text-sm font-semibold text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
 
       <p className={hintText}>{t("sync.warning")}</p>
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {notice === "" ? null : <p role="status" className="text-sm text-ink-muted">{notice}</p>}
 
-      <section className="flex flex-col gap-3 rounded-xl border border-line bg-card p-5">
-        <h3 className={sectionHeading}>{t("sync.bucketHeading")}</h3>
+      <section className="sshc-card overflow-hidden rounded-xl bg-card">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Icon name="remoteKeys" className="h-4 w-4 text-ink-muted" />
+            <h3 className={sectionHeading}>{t("sync.bucketHeading")}</h3>
+          </div>
         {status.configured ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="font-mono text-xs text-ink-muted">
@@ -197,11 +206,12 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             ) : null}
           </div>
         ) : (
-          <p className="text-sm text-ink-muted">{t("sync.notConfigured")}</p>
+          <p className="text-xs text-ink-muted">{t("sync.notConfigured")}</p>
         )}
+        </header>
 
         {!status.configured || editingSettings ? <>
-        <Card>
+        <div className="px-1 py-2 sm:px-3">
           <Row label={t("sync.endpoint")} hint={t("sync.endpointHint")}>
             <input
               value={endpoint}
@@ -249,41 +259,46 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               <option value="pull">{t("sync.direction.pull")}</option>
             </select>
           </Row>
-        </Card>
-        <Button
-          kind="primary"
-          disabled={busy || endpoint === "" || bucket === "" || accessKeyId === "" || secretAccessKey === ""}
-          onClick={() =>
-            void run(
-              () => api.configureSync({ endpoint, bucket, path, region, accessKeyId, secretAccessKey, direction }),
-              (next) => {
-                setStatus(next);
-                setAccessKeyId("");
-                setSecretAccessKey("");
-                setEditingSettings(false);
-              },
-              t("sync.configureFailed"),
-            )
-          } className="self-start"
-        >
-          {t("sync.configure")}
-        </Button>
-        {status.configured ? (
-          <Button disabled={busy} onClick={() => setEditingSettings(false)}>
-            {t("sync.cancelSettings")}
+        </div>
+        <div className="flex flex-wrap gap-2 border-t border-line bg-toolbar px-4 py-3">
+          <Button
+            kind="primary"
+            disabled={busy || endpoint === "" || bucket === "" || accessKeyId === "" || secretAccessKey === ""}
+            onClick={() =>
+              void run(
+                () => api.configureSync({ endpoint, bucket, path, region, accessKeyId, secretAccessKey, direction }),
+                (next) => {
+                  setStatus(next);
+                  setAccessKeyId("");
+                  setSecretAccessKey("");
+                  setEditingSettings(false);
+                },
+                t("sync.configureFailed"),
+              )
+            }
+          >
+            {t("sync.configure")}
           </Button>
-        ) : null}
+          {status.configured ? (
+            <Button disabled={busy} onClick={() => setEditingSettings(false)}>{t("sync.cancelSettings")}</Button>
+          ) : null}
+        </div>
         </> : null}
       </section>
 
-      <section className="flex flex-col gap-3 rounded-xl border border-line bg-card p-5">
-        <h3 className={sectionHeading}>{t("sync.snapshotHeading")}</h3>
-        <p className={hintText}>
-          {status.synced
-            ? t("sync.lastSynced", { at: status.lastSyncedAt ?? "", count: status.fileCount ?? 0 })
-            : t("sync.neverSynced")}
-        </p>
-        <Card>
+      <section className="sshc-card overflow-hidden rounded-xl bg-card">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Icon name="sync" className="h-4 w-4 text-ink-muted" />
+            <h3 className={sectionHeading}>{t("sync.snapshotHeading")}</h3>
+          </div>
+          <p className={hintText}>
+            {status.synced
+              ? t("sync.lastSynced", { at: status.lastSyncedAt ?? "", count: status.fileCount ?? 0 })
+              : t("sync.neverSynced")}
+          </p>
+        </header>
+        <div className="px-1 py-2 sm:px-3">
           <Row label={t("sync.key")} hint={t("sync.keyHint")}>
             <div className="flex flex-col gap-2">
               {revealed === "" ? (
@@ -366,9 +381,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               </button>
             </div>
           </Row>
-        </Card>
+        </div>
 
-        <Card>
+        <div className="border-t border-line px-1 py-2 sm:px-3">
           <Row label={t("sync.auto")} hint={t("sync.autoHint")}>
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 text-sm text-ink">
@@ -407,13 +422,13 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               </button>
             </div>
           </Row>
-        </Card>
+        </div>
         {status.direction === "both" ? null : (
-          <p role="status" className="text-sm text-notice-ink">
+          <p role="status" className="border-t border-notice-line bg-notice px-4 py-3 text-sm text-notice-ink">
             {t(`sync.direction.${status.direction}.active`)}
           </p>
         )}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 border-t border-line bg-toolbar px-4 py-3">
           <Button
             kind="primary"
             disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull"}
@@ -448,8 +463,12 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       )}
 
       {preview === null ? null : (
-        <section className="flex flex-col gap-3 rounded-xl border border-line bg-card p-5">
-          <h3 className={sectionHeading}>{t("sync.previewHeading")}</h3>
+        <section className="sshc-card overflow-hidden rounded-xl bg-card">
+          <header className="flex items-center gap-2 border-b border-line bg-toolbar px-4 py-3">
+            <Icon name="config" className="h-4 w-4 text-ink-muted" />
+            <h3 className={sectionHeading}>{t("sync.previewHeading")}</h3>
+          </header>
+          <div className="flex flex-col gap-3 px-4 py-4">
           {conflicted ? (
             <>
 
@@ -535,6 +554,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           >
             {t("sync.apply")}
           </Button>
+          </div>
         </section>
       )}
     </div>

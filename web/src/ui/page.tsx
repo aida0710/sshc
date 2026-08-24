@@ -11,8 +11,8 @@ export function PageHeader({
 }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0">
-        <h2 className="text-xl font-semibold text-ink">{title}</h2>
+      <div className="relative min-w-0 pl-4 before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-accent">
+        <h2 className="text-2xl font-semibold tracking-tight text-ink">{title}</h2>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-ink-muted">{description}</p>
       </div>
 
@@ -36,16 +36,20 @@ export function MetricCard({
   attention?: boolean;
 }) {
   return (
-    <div className={`rounded-xl border bg-card p-4 ${attention ? "border-notice-line" : "border-line"}`}>
-      <p className={`text-xs font-medium uppercase tracking-wide ${attention ? "text-notice-ink" : "text-ink-muted"}`}>
+    <div className={`px-4 py-3.5 ${attention ? "bg-notice" : "bg-card"}`}>
+      <p className={`text-xs font-medium tracking-wide ${attention ? "text-notice-ink" : "text-ink-muted"}`}>
         {label}
       </p>
-      <p className="mt-1 text-2xl font-semibold text-ink">{value}</p>
+      <p className="mt-1 text-xl font-semibold tracking-tight text-ink">{value}</p>
       {detail === undefined ? null : <p className="mt-1 text-xs text-ink-muted">{detail}</p>}
     </div>
   );
 }
 
 export function MetricGrid({ children }: { children: ReactNode }) {
-  return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{children}</div>;
+  return (
+    <div className="sshc-card grid gap-px overflow-hidden rounded-xl bg-line sm:grid-cols-2 lg:grid-cols-3">
+      {children}
+    </div>
+  );
 }

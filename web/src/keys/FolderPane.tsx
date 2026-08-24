@@ -26,9 +26,14 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
   const [over, setOver] = useState("");
 
   return (
-    <nav aria-label={t("keys.foldersLabel")} className="w-56 shrink-0 self-start md:sticky md:top-4">
-      <h3 className={sectionHeading}>{t("keys.folders")}</h3>
-      <ul className="mt-2 flex flex-col gap-0.5">
+    <nav
+      aria-label={t("keys.foldersLabel")}
+      className="w-full shrink-0 bg-surface-subtle p-3 md:w-52 md:self-stretch md:border-r md:border-line"
+    >
+      <h3 className={`${sectionHeading} px-2 py-1 text-xs uppercase tracking-wider text-ink-muted`}>
+        {t("keys.folders")}
+      </h3>
+      <ul className="mt-1 flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
         {rows.map((row) => {
           const target = dropTargetOf(row.folder);
           const current = sameFolder(row.folder, selected);
@@ -60,14 +65,22 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
                       }
                 }
                 style={{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }}
-                className={`flex w-full items-center justify-between rounded py-2 pr-2 text-left text-sm ${
-                  current ? "bg-control font-semibold text-ink" : "text-ink-muted hover:bg-select-fill"
+                className={`flex min-w-max items-center justify-between gap-3 rounded-lg py-2 pr-2 text-left text-sm md:w-full md:min-w-0 ${
+                  current ? "bg-card font-semibold text-ink shadow-sm" : "text-ink-muted hover:bg-select-fill hover:text-ink"
                 } ${dragging && target !== null ? "outline outline-1 outline-dashed outline-control-line" : ""} ${
                   over === key ? "bg-accent/20 outline-2 outline-solid outline-accent" : ""
                 }`}
               >
-                <span className="truncate">{labelOf(row.folder, t)}</span>
-                <span className="ml-2 shrink-0 text-xs tabular-nums text-ink-muted">{row.count}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${current ? "bg-accent" : "bg-ink-faint"}`}
+                  />
+                  <span className="truncate">{labelOf(row.folder, t)}</span>
+                </span>
+                <span className="shrink-0 rounded-full bg-surface px-1.5 py-0.5 text-[11px] tabular-nums text-ink-muted">
+                  {row.count}
+                </span>
               </button>
             </li>
           );

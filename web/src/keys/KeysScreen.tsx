@@ -25,14 +25,15 @@ import {
   CheckboxField,
   control,
   hintText,
-  secondaryAction,
+  primaryAction,
   sectionCard,
   sectionHeading,
   tableHeadCell,
   tableHeadRow,
 } from "../ui/form";
 import { Button, Card, Row } from "../ui/surface";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PageHeader } from "../ui/page";
+import { Icon } from "../ui/icons";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import {
   keysApi,
@@ -509,45 +510,41 @@ export function KeysScreen({
     inventory.items.filter((item) => item.permissionRisk).length;
 
   return (
-    <section className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+    <section className="mx-auto flex w-full max-w-7xl flex-col gap-7">
       <PageHeader
         title={t("keys.heading")}
         description={t("keys.pageDescription")}
         actions={
-          <>
-            <a href="#create-key-heading" className={secondaryAction}>{t("keys.createHeading")}</a>
-            <label>
-              <span className="sr-only">{t("keys.listFilter")}</span>
-              <select
-                className={control}
-                value={listFilter}
-                onChange={(event) => setListFilter(event.target.value as ListFilter)}
-              >
-                <option value="keys">{t("keys.listFilterKeys")}</option>
-                <option value="all">{t("keys.listFilterAll")}</option>
-              </select>
-            </label>
-            <label className="w-full sm:w-72">
-              <span className="sr-only">{t("keys.search")}</span>
-              <input
-                type="search"
-                value={keyQuery}
-                onChange={(event) => setKeyQuery(event.target.value)}
-                placeholder={t("keys.searchPlaceholder")}
-                className={control}
-              />
-            </label>
-          </>
+          <a href="#create-key-heading" className={primaryAction}>
+            {t("keys.createHeading")}
+          </a>
         }
       />
-      <MetricGrid>
-        <MetricCard label={t("keys.metricFiles")} value={inventory.items.length} />
-        <MetricCard
-          label={t("keys.metricPrivate")}
-          value={inventory.items.filter((item) => item.kind === "private_key").length}
-        />
-        <MetricCard label={t("keys.metricAttention")} value={keyAttention} attention={keyAttention > 0} />
-      </MetricGrid>
+      <dl className="sshc-card grid overflow-hidden rounded-xl bg-card sm:grid-cols-3 sm:divide-x sm:divide-line">
+        <div className="flex items-center gap-3 border-b border-line px-4 py-3 sm:border-b-0">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-accent">
+            <Icon name="keys" className="h-5 w-5" />
+          </span>
+          <div>
+            <dt className="text-xs font-medium tracking-wide text-ink-muted">{t("keys.metricFiles")}</dt>
+            <dd className="mt-0.5 text-xl font-semibold tabular-nums text-ink">{inventory.items.length}</dd>
+          </div>
+        </div>
+        <div className="border-b border-line px-4 py-3 sm:border-b-0">
+          <dt className="text-xs font-medium tracking-wide text-ink-muted">{t("keys.metricPrivate")}</dt>
+          <dd className="mt-1 text-xl font-semibold tabular-nums text-ink">
+            {inventory.items.filter((item) => item.kind === "private_key").length}
+          </dd>
+        </div>
+        <div className={`px-4 py-3 ${keyAttention > 0 ? "bg-notice" : ""}`}>
+          <dt className={`text-xs font-medium tracking-wide ${keyAttention > 0 ? "text-notice-ink" : "text-ink-muted"}`}>
+            {t("keys.metricAttention")}
+          </dt>
+          <dd className={`mt-1 text-xl font-semibold tabular-nums ${keyAttention > 0 ? "text-notice-ink" : "text-ink"}`}>
+            {keyAttention}
+          </dd>
+        </div>
+      </dl>
       {failure !== "" && (
         <p role="alert" className="rounded-md border border-control-line p-3 text-sm text-danger">
           {failure}
@@ -597,30 +594,59 @@ export function KeysScreen({
         </div>
       )}
 
-      <div className="flex flex-col gap-4 md:flex-row">
-      <FolderPane
-        rows={rows}
-        selected={folder}
-        dragging={dragging}
-        onSelect={(next) => {
-          setFolder(next);
-          setMoveOutcome(null);
-        }}
-        onDropInto={(target) => void moveChosen(target)}
-      />
-      <div className="min-w-0 grow overflow-x-auto rounded-xl border border-line bg-card">
-      <KeyTable
-        items={visibleItems}
-        inventory={inventory}
-        chosen={chosen}
-        selected={selectedKey}
-        moreActionsFor={moreActionsFor}
-        now={now}
-        actions={rowActions}
-      />
-      </div>
+      <section aria-label={t("keys.metricFiles")} className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <p className="font-mono text-xs font-medium text-ink-muted">~/.ssh</p>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <label>
+              <span className="sr-only">{t("keys.listFilter")}</span>
+              <select
+                className={control}
+                value={listFilter}
+                onChange={(event) => setListFilter(event.target.value as ListFilter)}
+              >
+                <option value="keys">{t("keys.listFilterKeys")}</option>
+                <option value="all">{t("keys.listFilterAll")}</option>
+              </select>
+            </label>
+            <label className="min-w-0 grow sm:w-72 sm:grow-0">
+              <span className="sr-only">{t("keys.search")}</span>
+              <input
+                type="search"
+                value={keyQuery}
+                onChange={(event) => setKeyQuery(event.target.value)}
+                placeholder={t("keys.searchPlaceholder")}
+                className={control}
+              />
+            </label>
+          </div>
+        </div>
+        <div className="sshc-card overflow-hidden rounded-xl bg-card">
+          <div className="flex flex-col md:flex-row">
+            <FolderPane
+              rows={rows}
+              selected={folder}
+              dragging={dragging}
+              onSelect={(next) => {
+                setFolder(next);
+                setMoveOutcome(null);
+              }}
+              onDropInto={(target) => void moveChosen(target)}
+            />
+            <div className="min-w-0 grow overflow-x-auto">
+              <KeyTable
+                items={visibleItems}
+                inventory={inventory}
+                chosen={chosen}
+                selected={selectedKey}
+                moreActionsFor={moreActionsFor}
+                now={now}
+                actions={rowActions}
+              />
+            </div>
+          </div>
 
-      <details className="rounded-xl border border-line bg-card p-4">
+      <details className="border-t border-line bg-surface-subtle p-4">
         <summary className="cursor-pointer text-sm font-medium text-ink">
           {t("keys.trashSummary", { count: trash.entries.length })}
         </summary>
@@ -686,7 +712,8 @@ export function KeysScreen({
         </div>
         </div>
       </details>
-      </div>
+        </div>
+      </section>
 
       <StoredPassphrasePanel
         form={storedPassphraseForm}
