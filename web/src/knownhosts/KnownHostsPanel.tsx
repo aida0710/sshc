@@ -133,7 +133,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
   const provenOrAcknowledged = expectedFingerprint.trim() !== "" || acknowledged;
 
   return (
-    <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("kh.heading")} description={t("kh.pageDescription")} />
       <div className="sshc-card flex flex-wrap divide-x divide-line overflow-hidden rounded-xl bg-card">
         {[

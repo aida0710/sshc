@@ -226,15 +226,17 @@ export function QuickConnectBrowser({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Segmented
-          label={t("browser.modeLabel")}
-          value={browser.view}
-          options={[
-            { value: "servers", label: t("browser.servers") },
-            { value: "groups", label: t("browser.groups") },
-          ]}
-          onChange={(view) => setBrowser(view === "servers" ? { view: "servers" } : { view: "groups", scope: "root" })}
-        />
+        <div className="[&_button]:min-h-10 md:[&_button]:min-h-0">
+          <Segmented
+            label={t("browser.modeLabel")}
+            value={browser.view}
+            options={[
+              { value: "servers", label: t("browser.servers") },
+              { value: "groups", label: t("browser.groups") },
+            ]}
+            onChange={(view) => setBrowser(view === "servers" ? { view: "servers" } : { view: "groups", scope: "root" })}
+          />
+        </div>
         <label className="w-full sm:w-72">
           <span className="sr-only">{t("home.search")}</span>
           <input
@@ -242,7 +244,7 @@ export function QuickConnectBrowser({
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder={t("home.searchPlaceholder")}
-            className={control}
+            className={`${control} min-h-10 md:min-h-0`}
           />
         </label>
       </div>
@@ -250,7 +252,7 @@ export function QuickConnectBrowser({
         type="button"
         aria-pressed={favouritesOnly}
         onClick={() => setFavouritesOnly((current) => !current)}
-        className={`self-start rounded px-2 py-1 text-xs ${
+        className={`min-h-10 self-start rounded px-2 py-1 text-xs md:min-h-0 ${
           favouritesOnly ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-card"
         }`}
       >

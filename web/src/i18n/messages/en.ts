@@ -547,6 +547,7 @@ export const en = {
   "diag.canRunCommand": "This configuration can run a command",
   "diag.directiveAt": "{keyword} at {path}:{line}",
   "diag.sourcesCaption": "Source of each value. A line marked “superseded” was read after the effective value and had no effect.",
+  "diag.tableScrollHint": "Swipe sideways to see every column",
   "diag.columnKeyword": "Keyword",
   "diag.columnValue": "Value",
   "diag.columnWhere": "Read from",

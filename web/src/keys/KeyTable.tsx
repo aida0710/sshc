@@ -39,9 +39,9 @@ export function KeyTable({
 }) {
   const t = useTranslate();
   return (
-    <table className="w-full min-w-[56rem] text-left text-sm">
+    <table className="block w-full text-left text-sm md:table md:min-w-[56rem]">
       <caption className="sr-only">{t("keys.tableCaption")}</caption>
-      <thead>
+      <thead className="hidden md:table-header-group">
         <tr className={`${tableHeadRow} bg-surface-subtle`}>
           <th scope="col" className={`${tableHeadCell} w-12 pl-3`}>
             <span className="sr-only">{t("keys.colChoose")}</span>
@@ -52,45 +52,47 @@ export function KeyTable({
           <th scope="col" className={`${tableHeadCell} whitespace-nowrap text-right`}>{t("keys.colActions")}</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody className="block md:table-row-group">
         {items.map((item) => {
           const heldByAgent = agentHolds(inventory, item);
           const isSelected = selected === item.id;
           return (
             <tr
               key={item.id}
-              className={`border-b border-hairline align-top transition-colors last:border-b-0 hover:bg-select-fill ${
+              className={`grid grid-cols-[2.25rem_minmax(0,1fr)] border-b border-hairline align-top transition-colors last:border-b-0 hover:bg-select-fill md:table-row ${
                 isSelected ? "bg-select-fill" : ""
               }`}
             >
-              <td className="py-3 pl-3">
+              <td className="row-span-3 py-3 pl-2 md:table-cell md:pl-3">
                 {renameable(item, inventory.items) ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      aria-label={t("keys.chooseKey", { path: item.relativePath })}
-                      checked={chosen.has(item.id)}
-                      onChange={(event) => actions.onToggleChosen(item, event.target.checked)}
-                      className="h-4 w-4 accent-accent"
-                    />
+                  <div className="flex flex-col items-center gap-1 md:flex-row">
+                    <label className="grid min-h-10 min-w-8 place-items-center md:min-h-0 md:min-w-0">
+                      <input
+                        type="checkbox"
+                        aria-label={t("keys.chooseKey", { path: item.relativePath })}
+                        checked={chosen.has(item.id)}
+                        onChange={(event) => actions.onToggleChosen(item, event.target.checked)}
+                        className="h-4 w-4 accent-accent"
+                      />
+                    </label>
                     <span
                       draggable
                       aria-label={t("keys.dragKey", { path: item.relativePath })}
                       onDragStart={(event) => actions.onBeginDrag(event, item)}
                       onDragEnd={actions.onEndDrag}
-                      className="flex cursor-grab select-none items-center rounded px-1.5 py-1 text-sm leading-none text-ink-faint hover:bg-surface active:cursor-grabbing"
+                      className="flex min-h-10 min-w-8 cursor-grab select-none items-center justify-center rounded px-1.5 py-1 text-sm leading-none text-ink-faint hover:bg-surface active:cursor-grabbing md:min-h-0 md:min-w-0"
                     >
                       ⠿
                     </span>
                   </div>
                 ) : null}
               </td>
-              <td className="py-3 pr-4">
+              <td className="min-w-0 py-3 pr-3 md:table-cell md:pr-4">
                 <button
                   type="button"
                   aria-pressed={isSelected}
                   onClick={() => actions.onSelect(item)}
-                  className="block max-w-full text-left font-mono text-sm font-semibold text-ink underline-offset-4 hover:text-accent hover:underline"
+                  className="block min-h-10 max-w-full break-all text-left font-mono text-sm font-semibold text-ink underline-offset-4 hover:text-accent hover:underline md:min-h-0 md:break-normal"
                 >
                   {item.relativePath}
                 </button>
@@ -103,7 +105,7 @@ export function KeyTable({
                   <p className="mt-0.5 max-w-xs truncate text-xs text-ink-muted">{item.comment}</p>
                 )}
               </td>
-              <td className="py-3 pr-4">
+              <td className="col-start-2 min-w-0 pb-3 pr-3 md:table-cell md:py-3 md:pr-4">
                 <span className="inline-flex rounded-md bg-surface px-2 py-1 text-xs text-ink-muted">
                   {item.kind}
                 </span>
@@ -122,7 +124,7 @@ export function KeyTable({
                   </ul>
                 )}
               </td>
-              <td className="py-3 pr-4 text-xs">
+              <td className="col-start-2 min-w-0 pb-3 pr-3 text-xs md:table-cell md:py-3 md:pr-4">
                 <span className="flex flex-wrap gap-1.5">
                   {item.permissionRisk && (
                     <span className="rounded-md bg-notice px-2 py-1 font-medium text-notice-ink">
@@ -147,8 +149,8 @@ export function KeyTable({
                   ))}
                 </span>
               </td>
-              <td className="py-3 pr-3">
-                <div className="flex flex-wrap justify-end gap-1">
+              <td className="col-span-2 border-t border-hairline p-3 md:table-cell md:border-t-0 md:py-3 md:pr-3 md:pl-0">
+                <div className="flex flex-wrap justify-start gap-2 md:justify-end md:gap-1 [&>button]:min-h-10 md:[&>button]:min-h-0">
                   {(item.kind === "public_key" || item.kind === "certificate") && (
                     <button type="button" className={rowPrimary} onClick={() => actions.onShowPublicKey(item)}>
                       {t("keys.showPublicKey")}
@@ -194,7 +196,7 @@ export function KeyTable({
                         {t("keys.moreActions")}
                       </button>
                       {moreActionsFor === item.id ? (
-                        <div className="mt-1 flex basis-full flex-wrap justify-end gap-1 rounded-lg bg-surface-subtle p-1.5">
+                        <div className="mt-1 flex basis-full flex-wrap justify-start gap-2 rounded-lg bg-surface-subtle p-1.5 md:justify-end md:gap-1 [&>button]:min-h-10 md:[&>button]:min-h-0">
                           <button
                             type="button"
                             className={rowAction}
@@ -237,8 +239,8 @@ export function KeyTable({
           );
         })}
         {items.length === 0 && (
-          <tr>
-            <td colSpan={5} className="p-8 text-center text-sm text-ink-muted">
+          <tr className="block md:table-row">
+            <td colSpan={5} className="block p-8 text-center text-sm text-ink-muted md:table-cell">
               {inventory.items.length === 0 ? t("keys.inventoryEmpty") : t("keys.noMatches")}
             </td>
           </tr>

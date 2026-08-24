@@ -261,7 +261,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
                           type="button"
                           aria-current={current ? "true" : "false"}
                           onClick={() => void open(node.file.path ?? "")}
-                          className={`block w-full truncate text-left font-mono text-sm ${current ? "font-semibold text-ink" : "text-ink-muted hover:text-ink"}`}
+                          className={`block min-h-10 w-full truncate text-left font-mono text-sm md:min-h-0 ${current ? "font-semibold text-ink" : "text-ink-muted hover:text-ink"}`}
                         >
                           {node.file.path}
                         </button>
@@ -295,12 +295,12 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
               value={newPath}
               onChange={(event) => setNewPath(event.target.value)}
               placeholder="conf.d/30-lab.conf"
-              className={`${control} font-mono text-xs`}
+              className={`${control} min-h-10 font-mono text-xs md:min-h-0`}
             />
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void createFile()} disabled={newPath === ""}>{t("explorer.createFile")}</Button>
-              <Button onClick={() => void createDirectory()} disabled={newPath === ""}>{t("explorer.createDirectory")}</Button>
-              <Button kind="danger" onClick={() => void deleteDirectory()} disabled={newPath === ""}>{t("explorer.deleteDirectory")}</Button>
+              <Button className="min-h-10 md:min-h-0" onClick={() => void createFile()} disabled={newPath === ""}>{t("explorer.createFile")}</Button>
+              <Button className="min-h-10 md:min-h-0" onClick={() => void createDirectory()} disabled={newPath === ""}>{t("explorer.createDirectory")}</Button>
+              <Button kind="danger" className="min-h-10 md:min-h-0" onClick={() => void deleteDirectory()} disabled={newPath === ""}>{t("explorer.deleteDirectory")}</Button>
             </div>
             <p className={hintText}>{t("explorer.newFileNote")}</p>
             <details className="text-xs text-ink-muted">
@@ -361,8 +361,8 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
                 className="min-h-96 w-full flex-1 resize-y border-0 bg-control p-4 font-mono text-xs leading-6 text-ink focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent disabled:bg-surface-subtle disabled:text-ink-faint"
               />
               <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-toolbar px-4 py-3">
-                <Button onClick={() => void run("preview")}>{t("explorer.preview")}</Button>
-                <Button kind="primary" onClick={() => void run("save")} disabled={!file.editable}>{t("explorer.saveFile")}</Button>
+                <Button className="min-h-10 md:min-h-0" onClick={() => void run("preview")}>{t("explorer.preview")}</Button>
+                <Button kind="primary" className="min-h-10 md:min-h-0" onClick={() => void run("save")} disabled={!file.editable}>{t("explorer.saveFile")}</Button>
               </div>
 
               {file.file.path === undefined || !file.editable ? null : (
@@ -379,16 +379,16 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
                         value={renameTo}
                         onChange={(event) => setRenameTo(event.target.value)}
                         placeholder={file.file.path}
-                        className={`${control} min-w-48 max-w-sm font-mono text-xs`}
+                        className={`${control} min-h-10 min-w-48 max-w-sm font-mono text-xs md:min-h-0`}
                       />
-                      <Button onClick={() => void renameFile()} disabled={renameTo === "" || renameTo === file.file.path || modified}>{t("explorer.renameFile")}</Button>
+                      <Button className="min-h-10 md:min-h-0" onClick={() => void renameFile()} disabled={renameTo === "" || renameTo === file.file.path || modified}>{t("explorer.renameFile")}</Button>
                       {confirmingDelete ? (
                         <>
-                          <Button kind="danger" onClick={() => void deleteFile()}>{t("explorer.confirmDelete")}</Button>
-                          <Button onClick={() => setConfirmingDelete(false)}>{t("explorer.cancelDelete")}</Button>
+                          <Button kind="danger" className="min-h-10 md:min-h-0" onClick={() => void deleteFile()}>{t("explorer.confirmDelete")}</Button>
+                          <Button className="min-h-10 md:min-h-0" onClick={() => setConfirmingDelete(false)}>{t("explorer.cancelDelete")}</Button>
                         </>
                       ) : (
-                        <Button onClick={() => setConfirmingDelete(true)} disabled={modified}>{t("explorer.deleteFile")}</Button>
+                        <Button className="min-h-10 md:min-h-0" onClick={() => setConfirmingDelete(true)} disabled={modified}>{t("explorer.deleteFile")}</Button>
                       )}
                     </div>
                   </div>

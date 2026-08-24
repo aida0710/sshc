@@ -493,6 +493,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
               {route.kind === "section" ? (
                 <Suspense fallback={<RouteSkeleton />}>
                   <SectionView
+                    key={route.section}
                     section={route.section}
                     navigation={{
                       location,

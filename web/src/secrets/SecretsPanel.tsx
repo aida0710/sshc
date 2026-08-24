@@ -20,6 +20,8 @@ import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 
+const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
+
 type SecretsPanelProps = {
   api?: IntegrationsApi;
   onLock?: () => void;
@@ -137,7 +139,7 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
   if (!status.unlocked) {
     const creating = !status.exists;
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
         <PageHeader title={t("secrets.heading")} description={t("secrets.pageDescription")} />
         <section aria-label={t("secrets.heading")} className="sshc-card grid overflow-hidden rounded-xl bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
           <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
@@ -178,7 +180,7 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
     dedicatedKeyPassphrases.length;
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader
         title={t("secrets.heading")}
         description={t("secrets.pageDescription")}

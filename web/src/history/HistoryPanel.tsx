@@ -7,6 +7,7 @@ import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 
+const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
 export function HistoryPanel() {
   const t = useTranslate();
@@ -58,7 +59,7 @@ export function HistoryPanel() {
   const restorableCount = entries.reduce((count, entry) => count + (entry.restorable?.length ?? 0), 0);
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <div className={`mx-auto flex w-full max-w-6xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader title={t("history.pageTitle")} description={t("history.pageDescription")} />
       <dl className="sshc-card flex flex-wrap overflow-hidden rounded-xl bg-toolbar">
         {[

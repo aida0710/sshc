@@ -85,7 +85,7 @@ export function OverviewPanel({
           <h2 id="home-heading" className="text-2xl font-semibold tracking-tight">{t("home.heading")}</h2>
           <p className="mt-1 text-sm text-ink-muted">{t("home.intro")}</p>
         </div>
-        <Button onClick={() => onNavigate("Connections")}>
+        <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Connections")}>
           {t("home.manageConnections")}
         </Button>
       </div>
@@ -163,10 +163,10 @@ export function OverviewPanel({
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {configurationAttention === 0 ? null : (
-                  <Button onClick={() => onNavigate("Config")}>{t("home.openConfig")}</Button>
+                  <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Config")}>{t("home.openConfig")}</Button>
                 )}
                 {recoveryAttention === 0 ? null : (
-                  <Button onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>
+                  <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>
                 )}
               </div>
             </div>
@@ -186,7 +186,7 @@ export function OverviewPanel({
                       ? t("home.syncLast", { at: sync.lastSyncedAt ?? "—", count: sync.fileCount ?? 0 })
                       : t("home.syncNever")}
               </p>
-              <Button className="mt-3" onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
+              <Button className="mt-3 min-h-10 md:min-h-0" onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
             </div>
           </div>
         </section>

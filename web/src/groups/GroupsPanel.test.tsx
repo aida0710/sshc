@@ -84,7 +84,8 @@ describe("GroupsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Add group" }));
 
     const bar = screen.getByRole("region", { name: "Unsaved group changes" });
-    expect(bar).toHaveClass("sticky");
+    expect(bar).not.toHaveClass("sticky");
+    expect(bar).toHaveClass("sm:sticky", "sm:bottom-0");
     expect(within(bar).getByText(/Save or discard them before renaming or removing/)).toBeInTheDocument();
     expect(within(bar).getByRole("button", { name: "Preview group changes" })).toBeEnabled();
     expect(within(bar).getByRole("button", { name: "Discard group changes" })).toBeEnabled();

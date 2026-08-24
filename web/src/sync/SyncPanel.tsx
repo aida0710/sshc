@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { failureCode } from "../api/client";
 import {
   integrationsApi,
@@ -15,12 +15,26 @@ import {
   hintText,
   sectionHeading,
 } from "../ui/form";
-import { Button, Notice, Row } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { SyncResultCard, type SyncResultView } from "./SyncResultCard";
 
 type SyncPanelProps = { api?: IntegrationsApi };
+
+const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
+
+function SyncRow({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+  return (
+    <div className="border-t border-hairline first:border-t-0">
+      <label className="flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2">
+        <span className="w-full shrink-0 text-sm text-ink-muted sm:w-32">{label}</span>
+        <span className="flex min-w-0 flex-1 justify-start sm:ml-auto sm:justify-end">{children}</span>
+      </label>
+      {hint === undefined ? null : <p className={`px-3 pb-3 sm:pb-2 ${hintText}`}>{hint}</p>}
+    </div>
+  );
+}
 
 type SyncStatusState =
   | { phase: "loading" }
@@ -130,7 +144,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
 
   if (statusState.phase === "error") {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
         <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
         <Notice tone="danger">{statusState.message}</Notice>
         <Button onClick={() => void reload()} className="self-start">
@@ -144,7 +158,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
 
   if (status.locked) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
         <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
         {error === "" ? null : <Notice tone="danger">{error}</Notice>}
         <section className="sshc-card grid overflow-hidden rounded-xl bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
@@ -187,7 +201,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const conflicted = (preview?.conflicts ?? []).length > 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
       <dl className="sshc-card flex flex-wrap overflow-hidden rounded-xl bg-toolbar">
         {[
@@ -232,43 +246,43 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
 
         {!status.configured || editingSettings ? <>
         <div className="px-1 py-2 sm:px-3">
-          <Row label={t("sync.endpoint")} hint={t("sync.endpointHint")}>
+          <SyncRow label={t("sync.endpoint")} hint={t("sync.endpointHint")}>
             <input
               value={endpoint}
               onChange={(event) => setEndpoint(event.target.value)}
               placeholder="https://<account>.r2.cloudflarestorage.com"
               className={control}
             />
-          </Row>
-          <Row label={t("sync.bucket")}>
+          </SyncRow>
+          <SyncRow label={t("sync.bucket")}>
             <input value={bucket} onChange={(event) => setBucket(event.target.value)} className={control} />
-          </Row>
+          </SyncRow>
 
-          <Row label={t("sync.path")} hint={t("sync.pathHint")}>
+          <SyncRow label={t("sync.path")} hint={t("sync.pathHint")}>
             <input value={path} onChange={(event) => setPath(event.target.value)} className={control} />
-          </Row>
+          </SyncRow>
 
-          <Row label={t("sync.region")} hint={t("sync.regionHint")}>
+          <SyncRow label={t("sync.region")} hint={t("sync.regionHint")}>
             <input value={region} onChange={(event) => setRegion(event.target.value)} className={control} />
-          </Row>
-          <Row label={t("sync.accessKeyId")}>
+          </SyncRow>
+          <SyncRow label={t("sync.accessKeyId")}>
             <input
               value={accessKeyId}
               onChange={(event) => setAccessKeyId(event.target.value)}
               className={control}
             />
-          </Row>
+          </SyncRow>
 
-          <Row label={t("sync.secretAccessKey")} hint={t("sync.credentialsNote")}>
+          <SyncRow label={t("sync.secretAccessKey")} hint={t("sync.credentialsNote")}>
             <input
               type="password"
               value={secretAccessKey}
               onChange={(event) => setSecretAccessKey(event.target.value)}
               className={control}
             />
-          </Row>
+          </SyncRow>
 
-          <Row label={t("sync.direction")} hint={t(`sync.direction.${direction}.hint`)}>
+          <SyncRow label={t("sync.direction")} hint={t(`sync.direction.${direction}.hint`)}>
             <select
               value={direction}
               onChange={(event) => setDirection(event.target.value as SyncDirection)}
@@ -278,7 +292,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               <option value="push">{t("sync.direction.push")}</option>
               <option value="pull">{t("sync.direction.pull")}</option>
             </select>
-          </Row>
+          </SyncRow>
         </div>
         <div className="flex flex-wrap gap-2 border-t border-line bg-toolbar px-4 py-3">
           <Button
@@ -319,7 +333,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           </p>
         </header>
         <div className="px-1 py-2 sm:px-3">
-          <Row label={t("sync.key")} hint={t("sync.keyHint")}>
+          <SyncRow label={t("sync.key")} hint={t("sync.keyHint")}>
             <div className="flex flex-col gap-2">
               {revealed === "" ? (
                 <p className="text-sm text-ink-muted">
@@ -370,9 +384,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 {status.keyConfigured ? t("sync.keyReplace") : t("sync.keyCreate")}
               </Button>
             </div>
-          </Row>
+          </SyncRow>
 
-          <Row label={t("sync.rekey")} hint={t("sync.rekeyHint")}>
+          <SyncRow label={t("sync.rekey")} hint={t("sync.rekeyHint")}>
             <div className="flex flex-col gap-2">
               <input
                 type="password"
@@ -400,11 +414,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 {t("sync.rekey")}
               </button>
             </div>
-          </Row>
+          </SyncRow>
         </div>
 
         <div className="border-t border-line px-1 py-2 sm:px-3">
-          <Row label={t("sync.auto")} hint={t("sync.autoHint")}>
+          <SyncRow label={t("sync.auto")} hint={t("sync.autoHint")}>
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 text-sm text-ink">
                 <input
@@ -445,7 +459,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 {t("sync.autoNow")}
               </button>
             </div>
-          </Row>
+          </SyncRow>
         </div>
         {status.direction === "both" ? null : (
           <p role="status" className="border-t border-notice-line bg-notice px-4 py-3 text-sm text-notice-ink">
