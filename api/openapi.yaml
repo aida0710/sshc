@@ -1388,6 +1388,29 @@ paths:
         "201": { description: File uploaded atomically, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransfer" } } } }
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/transfers:
+    get:
+      operationId: listSFTPTransferJobs
+      responses:
+        "200": { description: Shared SFTP transfer queue, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJobList" } } } }
+    post:
+      operationId: createSFTPTransferJob
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPCreateTransferJobRequest" } } } }
+      responses:
+        "201": { description: Transfer job registered, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJob" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/transfers/{id}/actions:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+    post:
+      operationId: updateSFTPTransferJob
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJobActionRequest" } } } }
+      responses:
+        "200": { description: Updated transfer job, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJob" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/uploads/{id}:
     parameters:
       - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
@@ -3269,6 +3292,56 @@ components:
         path: { type: string }
         bytes: { type: integer, format: int64, minimum: 0 }
         revision: { type: string }
+    SFTPTransferJob:
+      type: object
+      additionalProperties: false
+      required: [id, batchId, alias, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, attempt, problem, createdAt, updatedAt]
+      properties:
+        id: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
+        batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
+        alias: { type: string, minLength: 1, maxLength: 255 }
+        direction: { type: string, enum: [upload, download] }
+        kind: { type: string, enum: [file, folder] }
+        name: { type: string, minLength: 1, maxLength: 1024 }
+        remotePath: { type: string, minLength: 1 }
+        totalBytes: { type: integer, format: int64, minimum: -1 }
+        transferredBytes: { type: integer, format: int64, minimum: 0 }
+        bytesPerSecond: { type: number, format: double, minimum: 0 }
+        remainingSeconds: { type: integer, format: int64, minimum: -1 }
+        status: { type: string, enum: [queued, running, paused, reattach, needs_overwrite, completed, failed, cancelled] }
+        attempt: { type: integer, minimum: 1 }
+        problem: { type: string, maxLength: 128 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SFTPTransferJobList:
+      type: object
+      additionalProperties: false
+      required: [maxConcurrent, jobs]
+      properties:
+        maxConcurrent: { type: integer, minimum: 1, maximum: 16 }
+        jobs: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPTransferJob" } }
+    SFTPCreateTransferJobRequest:
+      type: object
+      additionalProperties: false
+      required: [id, batchId, alias, direction, kind, name, remotePath, totalBytes]
+      properties:
+        id: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
+        batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
+        alias: { type: string, minLength: 1, maxLength: 255 }
+        direction: { type: string, enum: [upload, download] }
+        kind: { type: string, enum: [file, folder] }
+        name: { type: string, minLength: 1, maxLength: 1024 }
+        remotePath: { type: string, minLength: 1 }
+        totalBytes: { type: integer, format: int64, minimum: -1 }
+    SFTPTransferJobActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [start, pause, resume, retry, cancel, progress, complete, fail, needs_overwrite] }
+        transferredBytes: { type: integer, format: int64, minimum: 0 }
+        problem: { type: string, maxLength: 128 }
+        resetProgress: { type: boolean }
     SFTPStartUploadRequest:
       type: object
       additionalProperties: false

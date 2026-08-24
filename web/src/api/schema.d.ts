@@ -1158,6 +1158,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSFTPTransferJobs"];
+        put?: never;
+        post: operations["createSFTPTransferJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/transfers/{id}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["updateSFTPTransferJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/{alias}/uploads/{id}": {
         parameters: {
             query?: never;
@@ -2469,6 +2503,58 @@ export interface components {
             /** Format: int64 */
             bytes: number;
             revision: string;
+        };
+        SFTPTransferJob: {
+            id: string;
+            batchId: string;
+            alias: string;
+            /** @enum {string} */
+            direction: "upload" | "download";
+            /** @enum {string} */
+            kind: "file" | "folder";
+            name: string;
+            remotePath: string;
+            /** Format: int64 */
+            totalBytes: number;
+            /** Format: int64 */
+            transferredBytes: number;
+            /** Format: double */
+            bytesPerSecond: number;
+            /** Format: int64 */
+            remainingSeconds: number;
+            /** @enum {string} */
+            status: "queued" | "running" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
+            attempt: number;
+            problem: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SFTPTransferJobList: {
+            maxConcurrent: number;
+            jobs: components["schemas"]["SFTPTransferJob"][];
+        };
+        SFTPCreateTransferJobRequest: {
+            id: string;
+            batchId: string;
+            alias: string;
+            /** @enum {string} */
+            direction: "upload" | "download";
+            /** @enum {string} */
+            kind: "file" | "folder";
+            name: string;
+            remotePath: string;
+            /** Format: int64 */
+            totalBytes: number;
+        };
+        SFTPTransferJobActionRequest: {
+            /** @enum {string} */
+            action: "start" | "pause" | "resume" | "retry" | "cancel" | "progress" | "complete" | "fail" | "needs_overwrite";
+            /** Format: int64 */
+            transferredBytes?: number;
+            problem?: string;
+            resetProgress?: boolean;
         };
         SFTPStartUploadRequest: {
             path: string;
@@ -4835,6 +4921,81 @@ export interface operations {
             };
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
+        };
+    };
+    listSFTPTransferJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Shared SFTP transfer queue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTransferJobList"];
+                };
+            };
+        };
+    };
+    createSFTPTransferJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPCreateTransferJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Transfer job registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTransferJob"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    updateSFTPTransferJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPTransferJobActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated transfer job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTransferJob"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     startSFTPResumableUpload: {

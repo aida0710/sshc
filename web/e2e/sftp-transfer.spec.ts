@@ -42,19 +42,20 @@ test("keeps a chunked SFTP upload running while another section is open", async 
     mimeType: "application/octet-stream",
     buffer: Buffer.alloc((2 << 20) + 17, 0x61),
   });
-  await expect(page.getByText("Uploading…")).toBeVisible();
+  await expect(page.getByText("Transferring…")).toBeVisible();
 
   await openSection(page, "Connections");
   releaseFirstChunk?.();
+  await expect(page.getByText("Upload completed: large.bin")).toBeVisible();
   await openSection(page, "SFTP");
-  await expect(page.getByText("Uploaded")).toBeVisible();
+  await expect(page.getByText("Completed", { exact: true })).toBeVisible();
   expect(chunks).toBe(3);
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.8.1-sftp-transfer-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.0-transfer-manager-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 360, height: 800 });
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.8.1-sftp-transfer-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.0-transfer-manager-mobile.png`, fullPage: true });
   }
 });

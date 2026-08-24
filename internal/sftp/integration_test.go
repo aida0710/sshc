@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -189,31 +190,49 @@ func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
 	if _, err := service.Mkdir(t.Context(), "integration", root); err != nil {
 		t.Fatal(err)
 	}
-	payload := bytes.Repeat([]byte("resumable-data-"), 180_000)
+	payload := make([]byte, (64<<20)+17)
+	for index := range payload {
+		payload[index] = byte((index*31 + 17) % 251)
+	}
 	started, err := manager.Start(t.Context(), "integration", "large_transfer_123", target, sftp.StartUploadOptions{Size: int64(len(payload))})
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := 1 << 20
-	if _, err := manager.Append(t.Context(), "integration", started.ID, target, 0, int64(len(payload)), payload[:first]); err != nil {
-		t.Fatal(err)
+	const chunk = 1 << 20
+	const resumeAfter = 7 << 20
+	for offset := 0; offset < resumeAfter; offset += chunk {
+		if _, err := manager.Append(t.Context(), "integration", started.ID, target, int64(offset), int64(len(payload)), payload[offset:offset+chunk]); err != nil {
+			t.Fatal(err)
+		}
 	}
 	resumed, err := manager.Start(t.Context(), "integration", started.ID, target, sftp.StartUploadOptions{Size: int64(len(payload)), ExpectedRevision: started.ExpectedRevision})
-	if err != nil || resumed.Offset != int64(first) {
+	if err != nil || resumed.Offset != int64(resumeAfter) {
 		t.Fatalf("resume = %+v, %v", resumed, err)
 	}
-	if _, err := manager.Append(t.Context(), "integration", started.ID, target, resumed.Offset, int64(len(payload)), payload[first:]); err != nil {
-		t.Fatal(err)
+	for offset := resumeAfter; offset < len(payload); offset += chunk {
+		end := min(offset+chunk, len(payload))
+		if _, err := manager.Append(t.Context(), "integration", started.ID, target, int64(offset), int64(len(payload)), payload[offset:end]); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := manager.Complete(t.Context(), "integration", started.ID, target, int64(len(payload)), started.ExpectedRevision); err != nil {
 		t.Fatal(err)
 	}
-	var tail bytes.Buffer
-	if _, err := service.DownloadFrom(t.Context(), "integration", target, int64(first), &tail); err != nil {
+	downloaded := sha256.New()
+	if _, err := service.Download(t.Context(), "integration", target, downloaded); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(tail.Bytes(), payload[first:]) {
-		t.Fatalf("resumed download bytes = %d", tail.Len())
+	wantDigest := sha256.Sum256(payload)
+	if !bytes.Equal(downloaded.Sum(nil), wantDigest[:]) {
+		t.Fatalf("large fixture digest = %x, want %x", downloaded.Sum(nil), wantDigest)
+	}
+	tail := sha256.New()
+	if _, err := service.DownloadFrom(t.Context(), "integration", target, int64(resumeAfter), tail); err != nil {
+		t.Fatal(err)
+	}
+	wantTail := sha256.Sum256(payload[resumeAfter:])
+	if !bytes.Equal(tail.Sum(nil), wantTail[:]) {
+		t.Fatalf("resumed download digest = %x, want %x", tail.Sum(nil), wantTail)
 	}
 
 	cancelStart, err := manager.Start(t.Context(), "integration", "cancel_transfer_123", cancelled, sftp.StartUploadOptions{Size: 4})

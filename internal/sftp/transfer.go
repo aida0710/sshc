@@ -10,6 +10,7 @@ import (
 	"path"
 	"regexp"
 	"sync"
+	"time"
 )
 
 const AbsentRevision = "absent"
@@ -23,6 +24,13 @@ type TransferManager struct {
 	Service *Service
 	mutex   sync.Mutex
 	locks   map[string]*transferLock
+
+	jobsMutex     sync.Mutex
+	jobs          map[string]*transferJobRecord
+	jobOrder      []string
+	activeJobs    int
+	maxConcurrent int
+	now           func() time.Time
 }
 
 type transferLock struct {
@@ -31,7 +39,9 @@ type transferLock struct {
 }
 
 func NewTransferManager(service *Service) *TransferManager {
-	return &TransferManager{Service: service, locks: make(map[string]*transferLock)}
+	manager := &TransferManager{Service: service, locks: make(map[string]*transferLock)}
+	manager.ConfigureJobs(DefaultTransferConcurrency, time.Now)
+	return manager
 }
 
 func (m *TransferManager) Start(ctx context.Context, alias, id, remotePath string, options StartUploadOptions) (ResumableUpload, error) {

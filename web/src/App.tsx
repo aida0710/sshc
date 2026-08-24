@@ -45,6 +45,8 @@ import {
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
 import { useTerminalSessions, type TerminalSessionsState } from "./terminal/sessions";
 import { TerminalWorkspace, type WorkspaceRestoreRequest } from "./features/workspaces/TerminalWorkspace";
+import { TransferNotifications } from "./sftp/TransferNotifications";
+import { sftpTransferManager } from "./sftp/transferManager";
 
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -213,6 +215,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       active = false;
     };
   }, [state, section]);
+
+  useEffect(() => {
+    if (state === "ready") void sftpTransferManager.reconcile().catch(() => undefined);
+  }, [state]);
 
   useEffect(() => {
     if (navFace !== null || !consoles.loaded) return;
@@ -609,6 +615,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           <InspectorPane label={inspector.label}>{inspector.body}</InspectorPane>
         ) : null}
       </div>
+      {state === "ready" ? <TransferNotifications /> : null}
     </div>
   );
 }

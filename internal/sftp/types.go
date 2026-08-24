@@ -27,6 +27,9 @@ var (
 	ErrInvalidTransfer  = errors.New("invalid transfer identifier")
 	ErrOffsetMismatch   = errors.New("upload offset does not match the remote part file")
 	ErrUploadIncomplete = errors.New("upload part file is incomplete")
+	ErrTransferNotFound = errors.New("transfer job was not found")
+	ErrTransferState    = errors.New("transfer job state transition is invalid")
+	ErrTransferLimit    = errors.New("transfer concurrency limit reached")
 )
 
 type EntryType string
