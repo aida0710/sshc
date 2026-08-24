@@ -366,6 +366,31 @@ describe("App", () => {
     expect(screen.getByText("settings panel")).toBeInTheDocument();
   });
 
+  it("starts each section at the top of its own scroll surface", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/config");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    const config = await screen.findByText("config panel no target");
+    const configScroller = config.parentElement;
+    expect(configScroller).not.toBeNull();
+    configScroller!.scrollTop = 320;
+
+    await user.click(screen.getByRole("link", { name: "Keys" }));
+
+    const keys = await screen.findByText("keys panel");
+    const keysScroller = keys.parentElement;
+    expect(keysScroller).not.toBeNull();
+    expect(keysScroller).not.toBe(configScroller);
+    expect(keysScroller).toHaveProperty("scrollTop", 0);
+  });
+
   it("updates the URL for link and programmatic navigation", async () => {
     const user = userEvent.setup();
     render(

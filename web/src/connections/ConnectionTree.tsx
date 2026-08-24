@@ -197,7 +197,7 @@ export function ConnectionTree({
                     type="button"
                     aria-describedby={descriptionId}
                     onClick={() => onOpenPatternRule(host.file.path ?? "", host.line)}
-                    className="w-full rounded px-2 py-1 text-left text-sm hover:bg-select-fill"
+                    className="min-h-10 w-full rounded px-2 py-1 text-left text-sm hover:bg-select-fill md:min-h-0"
                   >
                     <span className="block">{labelFor(host)}</span>
                     <span className="block text-xs text-ink-faint">
@@ -324,20 +324,22 @@ export function ConnectionTree({
   return (
     <nav aria-label={t("tree.navLabel")} className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <Segmented
-          label={t("tree.arrangeBy")}
-          value={grouping}
-          options={[
-            { value: "groups", label: t("tree.byGroups") },
-            { value: "files", label: t("tree.byFiles") },
-          ]}
-          onChange={setGrouping}
-        />
+        <div className="[&_button]:min-h-10 md:[&_button]:min-h-0">
+          <Segmented
+            label={t("tree.arrangeBy")}
+            value={grouping}
+            options={[
+              { value: "groups", label: t("tree.byGroups") },
+              { value: "files", label: t("tree.byFiles") },
+            ]}
+            onChange={setGrouping}
+          />
+        </div>
         <button
           type="button"
           aria-pressed={favouritesOnly}
           onClick={() => setFavouritesOnly((current) => !current)}
-          className={`rounded-md border px-2.5 py-1 text-xs ${
+          className={`min-h-10 rounded-md border px-2.5 py-1 text-xs md:min-h-0 ${
             favouritesOnly
               ? "border-notice-line bg-notice text-notice-ink"
               : "border-control-line bg-card text-ink-muted hover:text-ink"
@@ -355,7 +357,7 @@ export function ConnectionTree({
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
           placeholder={t("tree.filterPlaceholder")}
-          className={`${control} rounded-lg bg-card px-3 py-2`}
+          className={`${control} min-h-10 rounded-lg bg-card px-3 py-2 md:min-h-0`}
         />
         {grouping === "groups" && groupTree.length > 0 && !movesDisabled ? (
           <p className="text-xs text-ink-faint">{t("tree.dragGroupHint")}</p>

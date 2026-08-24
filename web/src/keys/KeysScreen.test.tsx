@@ -243,13 +243,29 @@ describe("KeysScreen", () => {
   it("lists classified files with the marks that stop a scan", async () => {
     render(<KeysScreen api={buildApi()} />);
 
+    const inventoryTable = await screen.findByRole("table", {
+      name: "Files classified by content and permissions",
+    });
+    expect(inventoryTable).toHaveClass("block", "w-full", "md:table", "md:min-w-[56rem]");
+    expect(inventoryTable).not.toHaveClass("min-w-[56rem]");
+
     const workRow = await screen.findByRole("row", { name: /id_work/ });
+    expect(workRow).toHaveClass("grid", "md:table-row");
     expect(within(workRow).getByText("referenced by 1")).toBeInTheDocument();
     expect(within(workRow).getByText("SHA256:abcdef")).toBeInTheDocument();
 
     const legacyRow = screen.getByRole("row", { name: /legacy/ });
     expect(within(legacyRow).getByText("Permissions too open")).toBeInTheDocument();
     expect(within(legacyRow).getByText("Fingerprint unavailable")).toBeInTheDocument();
+  });
+
+  it("stacks key creation fields at phone widths", async () => {
+    render(<KeysScreen api={buildApi()} />);
+
+    const fileName = await screen.findByLabelText("File name");
+    const row = fileName.closest("label")?.parentElement;
+    expect(row).toHaveClass("flex-col", "items-stretch", "sm:flex-row", "sm:items-center");
+    expect(fileName).toHaveClass("min-h-10", "sm:min-h-0");
   });
 
   it("hands the chosen key to the inspector, and takes it back", async () => {

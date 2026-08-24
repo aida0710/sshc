@@ -179,7 +179,7 @@ export function RemoteKeyPanel({
     (unavoidable.length > 0 && !acknowledged);
 
   return (
-    <section aria-label={t("rk.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <section aria-label={t("rk.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("rk.heading")} description={t("rk.pageDescription")} />
 
       <p aria-live="polite" className="rounded-lg bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
