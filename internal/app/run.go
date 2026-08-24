@@ -167,11 +167,17 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Diagnostics:     diagnosticsService,
 		KnownHosts:      knownHostsService,
 		RemoteKeys:      remoteKeyService,
+		Recent:          services.recent,
 		Passwords:       passwordService,
 		Connect:         ssh.connector(),
-		Sync:            syncService,
-		AutoSync:        autoSync,
-		Terminals:       terminals,
+		ConnectionOpened: func(alias string) {
+			if err := services.recentStore.Record(alias); err != nil && dependencies.Logger != nil {
+				dependencies.Logger.Warn("record recent SSH connection", "alias", alias, "error", err)
+			}
+		},
+		Sync:      syncService,
+		AutoSync:  autoSync,
+		Terminals: terminals,
 		// SSH のプログラムはもう要らない。接続はこのプロセスの中で通信する。
 		TerminalStartDirectory: configService.TerminalStartDirectory,
 		LoginShell:             func() (string, error) { return platform.LoginShell(dependencies.Lookup) },

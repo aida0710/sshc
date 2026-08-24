@@ -265,6 +265,17 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/connections/recent:
+    get:
+      operationId: listRecentConnections
+      responses:
+        "200":
+          description: Successful SSH connections on this device, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecentConnectionList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   # リロードしたページは、一覧から自分のセッションを見つけ、そこへ繋ぎ直す。
   # チケットは使い捨てなので、繋ぎ直すたびに新しいものが要る。開くことと
   # 繋ぐことを別のルートにしてあるのはそのためである。
@@ -2525,6 +2536,25 @@ components:
       properties:
         path: { type: string }
         alias: { type: string }
+    RecentConnection:
+      type: object
+      additionalProperties: false
+      required: [alias, hostName, user, port, lastConnectedAt]
+      properties:
+        alias: { type: string }
+        hostName: { type: string }
+        user: { type: string }
+        port: { type: string }
+        lastConnectedAt: { type: string, format: date-time }
+    RecentConnectionList:
+      type: object
+      additionalProperties: false
+      required: [connections]
+      properties:
+        connections:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/RecentConnection" }
     HostEntry:
       type: object
       additionalProperties: false

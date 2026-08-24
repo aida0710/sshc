@@ -244,6 +244,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/connections/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRecentConnections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/sessions/{id}/stream": {
         parameters: {
             query?: never;
@@ -1809,6 +1825,17 @@ export interface components {
             path: string;
             alias: string;
         };
+        RecentConnection: {
+            alias: string;
+            hostName: string;
+            user: string;
+            port: string;
+            /** Format: date-time */
+            lastConnectedAt: string;
+        };
+        RecentConnectionList: {
+            connections: components["schemas"]["RecentConnection"][];
+        };
         HostEntry: {
             identity: components["schemas"]["HostIdentity"];
             file: components["schemas"]["FileRef"];
@@ -2499,6 +2526,28 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    listRecentConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful SSH connections on this device, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentConnectionList"];
+                };
+            };
+            401: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
         };
     };

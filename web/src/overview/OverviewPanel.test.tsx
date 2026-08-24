@@ -63,6 +63,7 @@ describe("OverviewPanel", () => {
       <OverviewPanel
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
         launch={vi.fn()}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
@@ -83,6 +84,7 @@ describe("OverviewPanel", () => {
       <OverviewPanel
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
         launch={launch}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
@@ -116,6 +118,7 @@ describe("OverviewPanel", () => {
       <OverviewPanel
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
         launch={launch}
         onNavigate={vi.fn()}
         onNavigateLocation={navigateLocation}
@@ -141,6 +144,7 @@ describe("OverviewPanel", () => {
       <OverviewPanel
         loadOverview={loadOverview}
         loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
         launch={vi.fn()}
         onNavigate={navigate}
         onNavigateLocation={vi.fn()}
@@ -172,6 +176,7 @@ describe("OverviewPanel", () => {
           }],
         })}
         loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
         launch={vi.fn()}
         onNavigate={navigate}
         onNavigateLocation={vi.fn()}
@@ -182,5 +187,34 @@ describe("OverviewPanel", () => {
     expect(screen.queryByRole("button", { name: "Review configuration" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Recover changes" }));
     expect(navigate).toHaveBeenCalledWith("History");
+  });
+
+  it("shows current targets for recent connections and reconnects from the primary action", async () => {
+    const launch = vi.fn().mockResolvedValue({ session: { id: "session-1" } });
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue(overview)}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({
+          connections: [{
+            alias: "database",
+            hostName: "db.example.com",
+            user: "deploy",
+            port: "2202",
+            lastConnectedAt: "2026-08-24T15:30:00Z",
+          }],
+        })}
+        launch={launch}
+        onNavigate={vi.fn()}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+
+    const recentList = await screen.findByRole("list", { name: "Recently used connections" });
+    expect(within(recentList).getByText("database")).toBeInTheDocument();
+    expect(within(recentList).getByText("deploy@db.example.com:2202")).toBeInTheDocument();
+    expect(within(recentList).getByText("database").closest("li")).toHaveTextContent("work · Last connected");
+    await userEvent.click(within(recentList).getByRole("button", { name: "Connect" }));
+    await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
   });
 });

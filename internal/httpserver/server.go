@@ -21,6 +21,7 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/handoff"
 	"sshc/internal/knownhosts"
+	"sshc/internal/recent"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
@@ -61,6 +62,8 @@ type Options struct {
 	Diagnostics *diagnostics.Service
 	KnownHosts  *knownhosts.Service
 	RemoteKeys  *remotekey.Service
+	// Recent は、この端末で成功した接続を現在の設定へ解決する。
+	Recent *recent.Service
 	// Passwords は保存されたパスワードの vault である。nil の service は
 	// すべてのパスワード用ルートを未登録のままに
 	// する。これは、それを配線しないテストが当てにしていることである。
@@ -74,6 +77,8 @@ type Options struct {
 	// セッションのルートと WebSocket を未登録のままにする。これは、それを
 	// 配線しないテストが当てにしていることである。
 	Terminals *terminal.Registry
+	// ConnectionOpened は、SSHセッションとstream ticketの両方を作れたあとに呼ぶ。
+	ConnectionOpened func(alias string)
 	// TerminalStartDirectory は、ローカルシェルが始まる場所を返す。空なら
 	// このプロセスの作業ディレクトリを継ぐ。それは誰も選んでいない場所である。
 	TerminalStartDirectory func() string
@@ -283,7 +288,9 @@ func New(options Options) (*Server, error) {
 	e.GET("/api/v1/health", handlers.Health)
 	if options.Config != nil {
 		registerConfigRoutes(e, ConfigHandlers{Service: options.Config, Keys: options.Keys, Secrets: options.Passwords})
-		registerConnectionRoutes(e, ConnectionHandlers{Service: options.Config, Keys: options.Keys, Secrets: options.Passwords})
+		registerConnectionRoutes(e, ConnectionHandlers{
+			Service: options.Config, Keys: options.Keys, Secrets: options.Passwords, Recent: options.Recent,
+		})
 	}
 
 	// 操作を確認するすべてのサブシステムは、自分の evidence resolver を
@@ -392,6 +399,7 @@ func New(options Options) (*Server, error) {
 			Shell:          options.LoginShell,
 			Environment:    options.TerminalEnvironment,
 			StartDirectory: options.TerminalStartDirectory,
+			Connected:      options.ConnectionOpened,
 			// askpass はここに無い。この経路はもう外部の ssh を起動しない。
 			// パスフレーズは vault から直接読むか、端末で尋ねる。ヘルパーが
 			// 残っているのは、CLI と診断がまだ OpenSSH を起動するからである。

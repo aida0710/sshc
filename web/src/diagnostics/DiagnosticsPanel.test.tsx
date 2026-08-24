@@ -42,6 +42,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
       elapsedMs: 40,
     }),
     terminalSessions: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
+    recentConnections: vi.fn().mockResolvedValue({ connections: [] }),
     openTerminalSession: vi.fn(),
     terminalStreamTicket: vi.fn(),
     closeTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),

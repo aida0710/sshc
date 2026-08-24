@@ -12,6 +12,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/keys"
+	"sshc/internal/recent"
 	"sshc/internal/secret"
 	"sshc/internal/validate"
 )
@@ -23,11 +24,31 @@ type ConnectionHandlers struct {
 	Service *application.Service
 	Secrets *secret.Service
 	Keys    KeyService
+	Recent  *recent.Service
 }
 
 func registerConnectionRoutes(engine *echo.Echo, handlers ConnectionHandlers) {
+	engine.GET("/api/v1/connections/recent", handlers.ListRecent)
 	engine.POST("/api/v1/connections", handlers.Create)
 	engine.PATCH("/api/v1/connections", handlers.Update)
+}
+
+func (h ConnectionHandlers) ListRecent(c *echo.Context) error {
+	if h.Recent == nil {
+		return c.JSON(http.StatusOK, api.RecentConnectionList{Connections: []api.RecentConnection{}})
+	}
+	connections, err := h.Recent.List()
+	if err != nil {
+		return problem(c, http.StatusInternalServerError, "recent_connections_failed")
+	}
+	listed := make([]api.RecentConnection, 0, len(connections))
+	for _, connection := range connections {
+		listed = append(listed, api.RecentConnection{
+			Alias: connection.Alias, HostName: connection.HostName, User: connection.User,
+			Port: connection.Port, LastConnectedAt: connection.LastConnectedAt,
+		})
+	}
+	return c.JSON(http.StatusOK, api.RecentConnectionList{Connections: listed})
 }
 
 func (h ConnectionHandlers) Create(c *echo.Context) error {

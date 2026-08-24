@@ -667,10 +667,11 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 		// エントリファイル自身が、暗号化された設定を指定している。これが、除外が
 		// この場合も除外されなければならない。ファイルソースは Include グラフであり、
 		// グラフは設定が指すものを取ってくるからだ。
-		"config":             "Include sshc/sync-settings\nHost bastion\n",
-		"sshc/secrets":       "sealed vault bytes",
-		"sshc/sync-settings": "sealed access key",
-		"sshc/cli":           `{"url":"http://127.0.0.1:1","secret":"s"}`,
+		"config":                       "Include sshc/sync-settings\nHost bastion\n",
+		"sshc/secrets":                 "sealed vault bytes",
+		"sshc/sync-settings":           "sealed access key",
+		"sshc/cli":                     `{"url":"http://127.0.0.1:1","secret":"s"}`,
+		"sshc/recent-connections.json": `{"schemaVersion":1,"entries":[]}`,
 	})
 
 	manifest, contents, err := installation.service.Collect()
@@ -710,7 +711,7 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 		t.Errorf("what travelled was not the contents: %q", contents[remotesync.TravelPath])
 	}
 	installation.service.OpenVault = nil
-	for _, excluded := range []string{secret.SettingsPath, "sshc/cli"} {
+	for _, excluded := range []string{secret.SettingsPath, "sshc/cli", "sshc/recent-connections.json"} {
 		if packed[excluded] {
 			t.Errorf("the snapshot carries %s: %v", excluded, packed)
 		}

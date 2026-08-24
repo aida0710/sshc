@@ -137,6 +137,7 @@ type terminalFixture struct {
 	mutex    sync.Mutex
 	// connected は、プロセス内 SSH に渡された alias である。
 	connected []string
+	recorded  []string
 }
 
 func (f *terminalFixture) connect(alias string) terminal.Process {
@@ -144,6 +145,12 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 	defer f.mutex.Unlock()
 	f.connected = append(f.connected, alias)
 	return newScriptedPTY()
+}
+
+func (f *terminalFixture) record(alias string) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.recorded = append(f.recorded, alias)
 }
 
 func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
@@ -171,6 +178,7 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
 		Connect: func(_ context.Context, alias string, _ terminal.Size) (terminal.Process, error) {
 			return fixture.connect(alias), nil
 		},
+		Connected:      fixture.record,
 		ExpectedOrigin: fixture.origin,
 	})
 	server.Config.Handler = engine
@@ -317,6 +325,19 @@ func TestOpeningAnSSHSessionNeedsASafeAlias(t *testing.T) {
 	}
 	if opened := fixture.starter.opened(); len(opened) != 0 {
 		t.Fatalf("a refused request still opened %#v", opened)
+	}
+}
+
+func TestASuccessfulSSHSessionIsRecordedAfterItCanBeStreamed(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	fixture.mutex.Lock()
+	defer fixture.mutex.Unlock()
+	if len(fixture.recorded) != 1 || fixture.recorded[0] != "bastion" {
+		t.Fatalf("recorded = %#v", fixture.recorded)
 	}
 }
 

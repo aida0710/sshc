@@ -12,8 +12,10 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/keys"
+	"sshc/internal/recent"
 	"sshc/internal/secret"
 	"sshc/internal/session"
 	"sshc/internal/storage"
@@ -36,6 +38,7 @@ type connectionHTTPHarness struct {
 	*testHarness
 	passwords *secret.Service
 	keys      *stubKeyService
+	recent    *recent.Store
 }
 
 func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarness {
@@ -88,7 +91,15 @@ func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarn
 		},
 	}
 	service.SetKeyPassphraseVerifier(keyStub)
-	registerConnectionRoutes(engine, ConnectionHandlers{Service: service, Secrets: passwords, Keys: keyStub})
+	recentStore := recent.NewStore(workspace, func() time.Time {
+		return time.Date(2026, 8, 24, 15, 30, 0, 0, time.UTC)
+	})
+	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
+		return recent.Target{Alias: alias, HostName: "current.example", User: "deploy", Port: "2202"}, nil
+	})
+	registerConnectionRoutes(engine, ConnectionHandlers{
+		Service: service, Secrets: passwords, Keys: keyStub, Recent: recentService,
+	})
 	registerPasswordRoutes(engine, PasswordHandlers{Service: passwords})
 
 	return &connectionHTTPHarness{
@@ -96,7 +107,33 @@ func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarn
 			echo: engine, cookie: &http.Cookie{Name: SessionCookie, Value: credentials.SessionID},
 			csrf: credentials.CSRFToken, root: workspace.Root(), service: service,
 		},
-		passwords: passwords, keys: keyStub,
+		passwords: passwords, keys: keyStub, recent: recentStore,
+	}
+}
+
+func TestRecentConnectionsEndpointReturnsCurrentTargetsNewestFirst(t *testing.T) {
+	harness := newConnectionHTTPHarness(t, true)
+	if err := harness.recent.Record("existing"); err != nil {
+		t.Fatal(err)
+	}
+	response := harness.call(t, http.MethodGet, "/api/v1/connections/recent", nil, true, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("recent = %d, body %s", response.Code, response.Body.String())
+	}
+	var listed api.RecentConnectionList
+	decoder := json.NewDecoder(bytes.NewReader(response.Body.Bytes()))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Connections) != 1 {
+		t.Fatalf("connections = %#v", listed.Connections)
+	}
+	connection := listed.Connections[0]
+	if connection.Alias != "existing" || connection.HostName != "current.example" ||
+		connection.User != "deploy" || connection.Port != "2202" ||
+		!connection.LastConnectedAt.Equal(time.Date(2026, 8, 24, 15, 30, 0, 0, time.UTC)) {
+		t.Fatalf("connection = %#v", connection)
 	}
 }
 

@@ -17,6 +17,8 @@ export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
 export type OpenTerminalSessionRequest = components["schemas"]["OpenTerminalSessionRequest"];
 export type OpenTerminalSessionResponse = components["schemas"]["OpenTerminalSessionResponse"];
 export type TerminalStreamTicket = components["schemas"]["TerminalStreamTicket"];
+export type RecentConnection = components["schemas"]["RecentConnection"];
+export type RecentConnectionList = components["schemas"]["RecentConnectionList"];
 export type KnownHostsResponse = components["schemas"]["KnownHostsResponse"];
 export type KnownHostEntry = components["schemas"]["KnownHostEntry"];
 export type KnownHostsChangeResponse = components["schemas"]["KnownHostsChangeResponse"];
@@ -54,6 +56,7 @@ export type IntegrationsApi = {
   reachability(alias: string): Promise<ReachabilityResponse>;
   authentication(alias: string, acknowledgeExecutable: boolean): Promise<AuthenticationResponse>;
   terminalSessions(): Promise<TerminalSessionList>;
+  recentConnections(): Promise<RecentConnectionList>;
   openTerminalSession(request: OpenTerminalSessionRequest): Promise<OpenTerminalSessionResponse>;
   terminalStreamTicket(id: string): Promise<TerminalStreamTicket>;
   renameTerminalSession(id: string, title: string): Promise<TerminalSessionList>;
@@ -240,6 +243,21 @@ function validateTerminalSessionList(value: unknown): TerminalSessionList {
   for (const session of asArray(record.sessions)) validateTerminalSession(session);
   asNonnegativeInteger(record.maxSessions);
   return record as unknown as TerminalSessionList;
+}
+
+function validateRecentConnections(value: unknown): RecentConnectionList {
+  const record = asRecord(value);
+  const connections = asArray(record.connections).map((value) => {
+    const connection = asRecord(value);
+    return {
+      alias: asString(connection.alias),
+      hostName: asString(connection.hostName),
+      user: asString(connection.user),
+      port: asString(connection.port),
+      lastConnectedAt: asString(connection.lastConnectedAt),
+    };
+  });
+  return { connections };
 }
 
 function validateOpenTerminalSession(value: unknown): OpenTerminalSessionResponse {
@@ -465,6 +483,9 @@ export const integrationsApi: IntegrationsApi = {
   },
   async terminalSessions() {
     return validateTerminalSessionList(await apiClient.read("/api/v1/terminal/sessions"));
+  },
+  async recentConnections() {
+    return validateRecentConnections(await apiClient.read("/api/v1/connections/recent"));
   },
   async openTerminalSession(request) {
     return validateOpenTerminalSession(

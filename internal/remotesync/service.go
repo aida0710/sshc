@@ -317,6 +317,8 @@ var neverTravels = []string{
 	"sshc/backups",
 	"sshc/history",
 	"sshc/trash",
+	// 接続履歴はこの端末での操作状態であり、別の端末へ移さない。
+	"sshc/recent-connections.json",
 	StatePath,
 }
 

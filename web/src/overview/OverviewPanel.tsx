@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import { configApi, type Overview } from "../api/config";
-import { integrationsApi, type SyncStatus } from "../api/integrations";
+import { integrationsApi, type RecentConnectionList, type SyncStatus } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
@@ -12,6 +12,7 @@ export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 type OverviewPanelProps = {
   loadOverview?: () => Promise<Overview>;
   loadSync?: () => Promise<SyncStatus>;
+  loadRecent?: () => Promise<RecentConnectionList>;
   launch?: (alias: string) => Promise<{ session: { id: string } }>;
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
@@ -20,12 +21,14 @@ type OverviewPanelProps = {
 
 const loadDefaultOverview = () => configApi.overview();
 const loadDefaultSync = () => integrationsApi.syncStatus();
+const loadDefaultRecent = () => integrationsApi.recentConnections();
 const launchDefault = (alias: string) => integrationsApi.openTerminalSession({ kind: "ssh", alias });
 const informationalNoticeCodes = new Set(["group_empty"]);
 
 export function OverviewPanel({
   loadOverview = loadDefaultOverview,
   loadSync = loadDefaultSync,
+  loadRecent = loadDefaultRecent,
   launch = launchDefault,
   onNavigate,
   onNavigateLocation,
@@ -35,22 +38,24 @@ export function OverviewPanel({
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [sync, setSync] = useState<SyncStatus | null>(null);
+  const [recent, setRecent] = useState<RecentConnectionList["connections"]>([]);
   const [launching, setLaunching] = useState("");
   const [problem, setProblem] = useState("");
 
   useEffect(() => {
     let active = true;
-    void Promise.allSettled([loadOverview(), loadSync()]).then(([workspace, remote]) => {
+    void Promise.allSettled([loadOverview(), loadSync(), loadRecent()]).then(([workspace, remote, history]) => {
       if (!active) return;
       if (workspace.status === "fulfilled") setOverview(workspace.value);
       else setProblem(t("home.loadFailed"));
       if (remote.status === "fulfilled") setSync(remote.value);
+      if (history.status === "fulfilled") setRecent(history.value.connections.slice(0, 5));
       setLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [loadOverview, loadSync, t]);
+  }, [loadOverview, loadSync, loadRecent, t]);
 
   async function connect(alias: string) {
     setLaunching(alias);
@@ -135,6 +140,43 @@ export function OverviewPanel({
         </div>
       </section>
 
+      {recent.length === 0 ? null : (
+        <section aria-labelledby="recent-connections-heading" className="sshc-card overflow-hidden rounded-xl bg-card">
+          <div className="border-b border-line px-4 py-3 sm:px-5">
+            <h3 id="recent-connections-heading" className="font-semibold">{t("home.recentConnections")}</h3>
+            <p className="mt-0.5 text-xs text-ink-muted">{t("home.recentConnectionsHint")}</p>
+          </div>
+          <ul aria-label={t("home.recentConnectionList")} className="divide-y divide-line">
+            {recent.map((connection) => {
+              const host = connection.hostName.includes(":") ? `[${connection.hostName}]` : connection.hostName;
+              const destination = `${connection.user === "" ? "" : `${connection.user}@`}${host}:${connection.port}`;
+              const connectedAt = formatConnectedAt(connection.lastConnectedAt);
+              const group = overview?.hosts.find((candidate) => candidate.identity.alias === connection.alias)?.group ?? "";
+              return (
+                <li key={connection.alias} className="flex min-w-0 flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-mono text-sm font-semibold text-ink">{connection.alias}</p>
+                    <p className="truncate font-mono text-xs text-ink-muted">{destination}</p>
+                    <p className="mt-0.5 truncate text-xs text-ink-faint">
+                      {group === "" ? null : <span>{group} · </span>}
+                      <time dateTime={connection.lastConnectedAt}>{t("home.lastConnected", { at: connectedAt })}</time>
+                    </p>
+                  </div>
+                  <Button
+                    kind="primary"
+                    className="min-h-10 w-full shrink-0 sm:w-auto md:min-h-0"
+                    disabled={launching !== ""}
+                    onClick={() => void connect(connection.alias)}
+                  >
+                    {launching === connection.alias ? t("home.opening") : t("home.connect")}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
       <dl
         role="group"
         aria-label={`${t("home.connections")}, ${t("home.groups")}, ${t("home.attention")}`}
@@ -193,6 +235,12 @@ export function OverviewPanel({
       </div>
     </section>
   );
+}
+
+function formatConnectedAt(value: string): string {
+  const connectedAt = new Date(value);
+  if (Number.isNaN(connectedAt.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(connectedAt);
 }
 
 function Summary({ label, value, attention = false }: { label: string; value: string | number; attention?: boolean }) {

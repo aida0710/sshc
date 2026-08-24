@@ -51,6 +51,9 @@ type TerminalHandlers struct {
 	StartDirectory func() string
 	// ExpectedOrigin は、アップグレードで完全一致を求める値である。
 	ExpectedOrigin string
+	// Connected は、SSH接続とstream ticketの作成が成功したあとに呼ぶ。
+	// 履歴の失敗で接続を失わせないため、エラーは呼び出し側が処理する。
+	Connected func(alias string)
 }
 
 func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
@@ -151,6 +154,9 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		// チケットを出せなければ誰も繋げない。開いたものは閉じる。
 		_ = h.Registry.Close(session.ID())
 		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
+	}
+	if kind == terminal.KindSSH && h.Connected != nil {
+		h.Connected(*request.Alias)
 	}
 	return c.JSON(http.StatusCreated, api.OpenTerminalSessionResponse{
 		Session: describeSession(session.View()), StreamTicket: ticket,

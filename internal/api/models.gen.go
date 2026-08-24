@@ -5,6 +5,7 @@ package api
 
 import (
 	"encoding/json"
+	"time"
 )
 
 // Defines values for AutoSyncPhase.
@@ -831,6 +832,20 @@ type ReachabilityResponse struct {
 	ElapsedMs int    `json:"elapsedMs"`
 	Notice    string `json:"notice"`
 	Outcome   string `json:"outcome"`
+}
+
+// RecentConnection defines model for RecentConnection.
+type RecentConnection struct {
+	Alias           string    `json:"alias"`
+	HostName        string    `json:"hostName"`
+	LastConnectedAt time.Time `json:"lastConnectedAt"`
+	Port            string    `json:"port"`
+	User            string    `json:"user"`
+}
+
+// RecentConnectionList defines model for RecentConnectionList.
+type RecentConnectionList struct {
+	Connections []RecentConnection `json:"connections"`
 }
 
 // RecoverRequest defines model for RecoverRequest.

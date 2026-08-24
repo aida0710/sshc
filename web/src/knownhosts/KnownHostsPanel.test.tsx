@@ -46,6 +46,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     reachability: vi.fn(),
     authentication: vi.fn(),
     terminalSessions: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
+    recentConnections: vi.fn().mockResolvedValue({ connections: [] }),
     openTerminalSession: vi.fn(),
     terminalStreamTicket: vi.fn(),
     closeTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
