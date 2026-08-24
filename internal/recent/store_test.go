@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/recent"
 	"sshc/internal/storage"
 )
@@ -76,13 +77,7 @@ func TestAStoredDocumentIsPrivateAndAReplacementLeavesNoTemporaryFile(t *testing
 	if err := store.Record("database"); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(store.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		t.Fatalf("mode = %o, want no group or other access", info.Mode().Perm())
-	}
+	assertStoredDocumentPrivate(t, store.Path())
 	children, err := os.ReadDir(workspace.StateDir())
 	if err != nil {
 		t.Fatal(err)
@@ -100,9 +95,7 @@ func TestRecordDoesNotOverwriteAnInvalidDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 	invalid := []byte(`{"schemaVersion":1,"entries":[{"alias":"bastion","lastConnectedAt":"not-a-time"}]}`)
-	if err := os.WriteFile(store.Path(), invalid, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, store.Path(), invalid)
 	if err := store.Record("database"); !errors.Is(err, recent.ErrInvalidDocument) {
 		t.Fatalf("Record = %v, want ErrInvalidDocument", err)
 	}
