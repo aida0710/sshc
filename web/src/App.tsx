@@ -21,6 +21,7 @@ import { useLanguage, useTranslate } from "./i18n/context";
 import type { Locale } from "./i18n/locale";
 import { secondaryAction } from "./ui/form";
 import { IconSprite, type IconName } from "./ui/icons";
+import { BrandMark } from "./ui/BrandMark";
 import { InspectorPane, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
 import type { Theme } from "./theme/theme";
@@ -642,12 +643,7 @@ function TerminalScreen({
     return (
       <div className="flex h-full items-center justify-center p-6">
         <section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status">
-          <span
-            aria-hidden="true"
-            className="mx-auto grid size-12 place-items-center rounded-xl bg-accent font-mono text-sm font-bold text-accent-ink shadow-sm"
-          >
-            &gt;_
-          </span>
+          <BrandMark className="mx-auto size-12 drop-shadow-sm" />
           <h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p>
           <div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner">

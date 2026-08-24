@@ -1067,6 +1067,7 @@ export const ja = {
   "keys.colActions": "操作",
   "keys.permissionRisk": "権限が緩すぎます",
   "keys.showPublicKey": "公開鍵を表示",
+  "keys.relatedPublicFiles": "公開鍵ファイル（{count}）",
   "keys.showPrivateKey": "秘密鍵を表示",
   "keys.changePassphrase": "パスフレーズを変更",
   "keys.moreActions": "その他の操作",
