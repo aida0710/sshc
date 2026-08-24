@@ -1,4 +1,13 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
 import { apiClient, whenLocked, type HealthResponse } from "./api/client";
 import { integrationsApi, type PasswordVaultStatus, type TerminalAppearance, type TerminalSettings } from "./api/integrations";
 import { resolveAppearance } from "./terminal/appearance";
@@ -21,6 +30,13 @@ import { RouteSkeleton } from "./ui/RouteSkeleton";
 import { sectionPath, type Section } from "./routing/sectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation, type NavFace } from "./shell/AppNavigation";
+import {
+  clampNavigationWidth,
+  detectNavigationVisible,
+  detectNavigationWidth,
+  rememberNavigationVisible,
+  rememberNavigationWidth,
+} from "./shell/navigationLayout";
 import type { Declared, Handoff, Navigation, Shell } from "./shell/sectionProps";
 import {
   useSectionRoute,
@@ -144,6 +160,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const consumePreferredConnectionKey = useCallback(() => setPreferredConnectionKey(null), []);
   const consumePreferredPublicKey = useCallback(() => setPreferredPublicKey(null), []);
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [desktopNavigationVisible, setDesktopNavigationVisible] = useState(detectNavigationVisible);
+  const [desktopNavigationWidth, setDesktopNavigationWidth] = useState(detectNavigationWidth);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
 
@@ -155,6 +173,19 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     document.addEventListener("keydown", close);
     return () => document.removeEventListener("keydown", close);
   }, [navigationOpen]);
+
+  function toggleDesktopNavigation() {
+    setDesktopNavigationVisible((visible) => {
+      rememberNavigationVisible(!visible);
+      return !visible;
+    });
+  }
+
+  function resizeDesktopNavigation(width: number) {
+    const nextWidth = clampNavigationWidth(width);
+    setDesktopNavigationWidth(nextWidth);
+    rememberNavigationWidth(nextWidth);
+  }
   const consoles = useTerminalSessions(integrationsApi, t, state === "ready");
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>({});
   const [activeConsole, setActiveConsole] = useState<string | null>(null);
@@ -374,8 +405,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         version={version}
         state={state}
         navigationOpen={navigationOpen}
+        desktopNavigationVisible={desktopNavigationVisible}
         navigationId={navigationId}
         onToggleNavigation={() => setNavigationOpen((open) => !open)}
+        onToggleDesktopNavigation={toggleDesktopNavigation}
         inspector={inspector}
         inspectorOpen={inspectorOpen}
         onToggleInspector={() => setInspectorOpen((open) => !open)}
@@ -386,8 +419,18 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         onThemeChange={setTheme}
       />
       <div
-        className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[15rem_minmax(0,1fr)] ${
-          inspector !== null && inspectorOpen ? "lg:grid-cols-[15rem_minmax(0,1fr)_17rem]" : ""
+        data-desktop-navigation-visible={desktopNavigationVisible}
+        style={{ "--navigation-width": `${desktopNavigationWidth}px` } as CSSProperties}
+        className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${
+          desktopNavigationVisible
+            ? "md:grid-cols-[var(--navigation-width)_minmax(0,1fr)]"
+            : "md:grid-cols-[minmax(0,1fr)]"
+        } ${
+          inspector !== null && inspectorOpen
+            ? desktopNavigationVisible
+              ? "lg:grid-cols-[var(--navigation-width)_minmax(0,1fr)_17rem]"
+              : "lg:grid-cols-[minmax(0,1fr)_17rem]"
+            : ""
         }`}
       >
 
@@ -401,6 +444,9 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         <AppNavigation
           navigationId={navigationId}
           navigationOpen={navigationOpen}
+          desktopVisible={desktopNavigationVisible}
+          desktopWidth={desktopNavigationWidth}
+          onDesktopWidthChange={resizeDesktopNavigation}
           navGroups={navGroups}
           section={section}
           sectionIcons={sectionIcons}

@@ -178,6 +178,34 @@ describe("App", () => {
     expect(settings.querySelector("use")).toHaveAttribute("href", "#icon-settings");
   });
 
+  it("restores and changes the desktop navigation layout", async () => {
+    window.localStorage.setItem("sshc.navigation.visible", "false");
+    window.localStorage.setItem("sshc.navigation.width", "312");
+    const user = userEvent.setup();
+    const { container } = render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    await screen.findByRole("heading", { name: "sshc" });
+    const layout = container.querySelector<HTMLElement>("[data-desktop-navigation-visible]");
+    expect(layout).toHaveAttribute("data-desktop-navigation-visible", "false");
+    expect(layout?.style.getPropertyValue("--navigation-width")).toBe("312px");
+
+    await user.click(screen.getByRole("button", { name: "Show navigation" }));
+    expect(layout).toHaveAttribute("data-desktop-navigation-visible", "true");
+    expect(window.localStorage.getItem("sshc.navigation.visible")).toBe("true");
+
+    const resize = screen.getByRole("separator", { name: "Resize navigation" });
+    resize.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(layout?.style.getPropertyValue("--navigation-width")).toBe("320px");
+    expect(window.localStorage.getItem("sshc.navigation.width")).toBe("320");
+  });
+
   it("keeps the inspector open across a section change", async () => {
     const user = userEvent.setup();
     render(

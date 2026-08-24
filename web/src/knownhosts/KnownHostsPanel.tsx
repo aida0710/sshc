@@ -275,10 +275,10 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
         </div>
 
         {listing ? (
-          <div className="overflow-x-auto px-4 pb-4">
-            <table className="w-full text-sm">
+          <div className="px-4 pb-4">
+            <table className="block w-full text-sm sm:table">
               <caption className="sr-only">{listing.path}</caption>
-              <thead>
+              <thead className="hidden sm:table-header-group">
                 <tr className={tableHeadRow}>
                   <th scope="col" className={tableHeadCell}>{t("kh.columnHost")}</th>
                   <th scope="col" className={tableHeadCell}>{t("kh.columnType")}</th>
@@ -286,14 +286,24 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
                   <th scope="col" className={tableHeadCell}>{t("kh.columnActions")}</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="block sm:table-row-group">
                 {listing.entries.map((item) => (
-                  <tr key={`${item.line}-${item.digest}`} className="border-b border-line last:border-b-0">
-                    <td className="py-2 pr-3">{item.hashed ? t("kh.hashed") : item.hosts.join(", ")}</td>
-                    <td className="py-2 pr-3 text-ink-muted">{item.keyType}</td>
-                    <td className="py-3 pr-3 font-mono text-xs text-ink-muted">{item.fingerprint}</td>
-                    <td className="py-2">
+                  <tr key={`${item.line}-${item.digest}`} className="grid gap-2 border-b border-line py-3 last:border-b-0 sm:table-row sm:py-0">
+                    <td className="flex min-w-0 items-start justify-between gap-4 sm:table-cell sm:py-2 sm:pr-3">
+                      <span aria-hidden="true" className="shrink-0 text-xs font-medium uppercase tracking-wide text-ink-muted sm:hidden">{t("kh.columnHost")}</span>
+                      <span className="min-w-0 break-all text-right sm:text-left">{item.hashed ? t("kh.hashed") : item.hosts.join(", ")}</span>
+                    </td>
+                    <td className="flex min-w-0 items-start justify-between gap-4 text-ink-muted sm:table-cell sm:py-2 sm:pr-3">
+                      <span aria-hidden="true" className="shrink-0 text-xs font-medium uppercase tracking-wide sm:hidden">{t("kh.columnType")}</span>
+                      <span className="min-w-0 break-all text-right sm:text-left">{item.keyType}</span>
+                    </td>
+                    <td className="flex min-w-0 items-start justify-between gap-4 font-mono text-xs text-ink-muted sm:table-cell sm:py-3 sm:pr-3">
+                      <span aria-hidden="true" className="shrink-0 font-sans font-medium uppercase tracking-wide sm:hidden">{t("kh.columnFingerprint")}</span>
+                      <span className="min-w-0 break-all text-right sm:text-left">{item.fingerprint}</span>
+                    </td>
+                    <td className="flex justify-end sm:table-cell sm:py-2">
                       <Button
+                        className="w-full sm:w-auto"
                         onClick={() => setPending(item)}
                       >
                         {t("kh.delete")}

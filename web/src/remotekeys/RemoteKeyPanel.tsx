@@ -257,10 +257,10 @@ export function RemoteKeyPanel({
             <span aria-hidden="true" className={`h-2 w-2 rounded-full ${plan === null ? "bg-ink-faint" : "bg-live"}`} />
             {plan === null ? t("rk.showWhatWouldHappen") : t("rk.confirmHeading")}
           </div>
-          <div className="flex gap-2">
-            <Button disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button className="w-full sm:w-auto" disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
             {manual ? null : (
-              <Button kind="primary" disabled={blocked} onClick={() => void register()}>
+              <Button className="w-full sm:w-auto" kind="primary" disabled={blocked} onClick={() => void register()}>
                 {t("rk.register")}
               </Button>
             )}

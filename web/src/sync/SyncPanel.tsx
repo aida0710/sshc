@@ -22,6 +22,11 @@ import { SyncResultCard, type SyncResultView } from "./SyncResultCard";
 
 type SyncPanelProps = { api?: IntegrationsApi };
 
+type SyncStatusState =
+  | { phase: "loading" }
+  | { phase: "error"; message: string }
+  | { phase: "ready"; value: SyncStatus };
+
 const refusals: Record<string, MessageKey> = {
   wrong_master_password: "sync.wrongMaster",
   wrong_passphrase: "sync.wrongKey",
@@ -35,7 +40,7 @@ const refusals: Record<string, MessageKey> = {
 
 export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const t = useTranslate();
-  const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [statusState, setStatusState] = useState<SyncStatusState>({ phase: "loading" });
   const [endpoint, setEndpoint] = useState("");
   const [bucket, setBucket] = useState("");
   const [path, setPath] = useState("");
@@ -69,10 +74,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   }
 
   const reload = useCallback(async () => {
+    setStatusState({ phase: "loading" });
     try {
-      setStatus(await api.syncStatus());
+      setStatusState({ phase: "ready", value: await api.syncStatus() });
     } catch {
-      setError(t("sync.statusFailed"));
+      setStatusState({ phase: "error", message: t("sync.statusFailed") });
     }
   }, [api, t]);
 
@@ -118,9 +124,23 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     );
   }
 
-  if (status === null) {
+  if (statusState.phase === "loading") {
     return <p role="status" className={hintText}>{t("sync.loading")}</p>;
   }
+
+  if (statusState.phase === "error") {
+    return (
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
+        <Notice tone="danger">{statusState.message}</Notice>
+        <Button onClick={() => void reload()} className="self-start">
+          {t("shell.bootstrapRetry")}
+        </Button>
+      </div>
+    );
+  }
+
+  const status = statusState.value;
 
   if (status.locked) {
     return (
@@ -268,7 +288,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               void run(
                 () => api.configureSync({ endpoint, bucket, path, region, accessKeyId, secretAccessKey, direction }),
                 (next) => {
-                  setStatus(next);
+                  setStatusState({ phase: "ready", value: next });
                   setAccessKeyId("");
                   setSecretAccessKey("");
                   setEditingSettings(false);
@@ -368,7 +388,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   void run(
                     () => api.rekeySnapshot(oldKey),
                     (next) => {
-                      setStatus(next);
+                      setStatusState({ phase: "ready", value: next });
                       setOldKey("");
                       setNotice(t("sync.rekeyed"));
                     },
@@ -394,7 +414,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   onChange={(event) =>
                     void run(
                       () => api.setAutoSync(event.target.checked),
-                      (next) => setStatus(next),
+                      (next) => setStatusState({ phase: "ready", value: next }),
                       t("sync.autoFailed"),
                     )
                   }
@@ -414,7 +434,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 type="button"
                 disabled={busy || !status.auto.enabled}
                 onClick={() =>
-                  void run(() => api.syncNow(), (next) => setStatus(next), t("sync.autoNowFailed"))
+                  void run(
+                    () => api.syncNow(),
+                    (next) => setStatusState({ phase: "ready", value: next }),
+                    t("sync.autoNowFailed"),
+                  )
                 }
                 className="self-start rounded border border-line px-3 py-1.5 text-sm text-ink"
               >
@@ -436,7 +460,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               void run(
                 () => api.pushSnapshot(),
                 (next) => {
-                  setStatus(next.status);
+                  setStatusState({ phase: "ready", value: next.status });
                   setPreview(null);
                   setResultView({ kind: "push", result: next.result });
                   setNotice(t("sync.pushed"));
