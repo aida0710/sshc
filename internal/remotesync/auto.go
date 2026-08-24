@@ -63,7 +63,12 @@ func NewAuto(service *Service, interval time.Duration, now func() string) *Auto 
 	if interval <= 0 {
 		interval = AutoInterval
 	}
-	return &Auto{service: service, interval: interval, now: now}
+	return &Auto{
+		service:  service,
+		interval: interval,
+		now:      now,
+		view:     AutoView{Phase: AutoIdle},
+	}
 }
 
 // View は、画面へ渡す形の現在地。

@@ -170,6 +170,36 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		t.Fatalf("initialise the vault = %d, want 200", unlocked.StatusCode)
 	}
 
+	// Sync route は mobile でも desktop と同じ service を使う。app.Build は Auto を
+	// 配線する一方、起動直後にはまだ最初の巡回が来ていない。その時点でも Web の
+	// runtime validator が読める完全な状態を返さなければ、Android だけ Sync 画面が
+	// 「状態を読み込めませんでした」になる。
+	syncStatus := get("/api/v1/sync")
+	defer func() { _ = syncStatus.Body.Close() }()
+	if syncStatus.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/v1/sync = %d, want 200", syncStatus.StatusCode)
+	}
+	var cleanSync struct {
+		Configured    bool   `json:"configured"`
+		Synced        bool   `json:"synced"`
+		Direction     string `json:"direction"`
+		KeyConfigured bool   `json:"keyConfigured"`
+		Auto          struct {
+			Enabled bool   `json:"enabled"`
+			Phase   string `json:"phase"`
+		} `json:"auto"`
+	}
+	if err := json.NewDecoder(syncStatus.Body).Decode(&cleanSync); err != nil {
+		t.Fatalf("decode clean sync status: %v", err)
+	}
+	if cleanSync.Configured || cleanSync.Synced || cleanSync.KeyConfigured || cleanSync.Auto.Enabled {
+		t.Errorf("a clean mobile engine reported configured sync: %+v", cleanSync)
+	}
+	if cleanSync.Direction != "both" || cleanSync.Auto.Phase != "idle" {
+		t.Errorf("clean mobile sync state = direction %q, auto phase %q; want both, idle",
+			cleanSync.Direction, cleanSync.Auto.Phase)
+	}
+
 	// 更新: 版だけを結果、「新しいものがある」とは言わない。
 	//
 	// Checker が nil のとき、ここが落ちれば Android の画面は起動直後に赤くなる。
