@@ -17,6 +17,13 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
       ],
     }),
   );
+  await installation.write(
+    "sshc/recent-connections.json",
+    JSON.stringify({
+      schemaVersion: 1,
+      entries: [{ alias: "bastion", lastConnectedAt: "2026-08-24T15:30:00Z" }],
+    }),
+  );
 
   const terminalRequests: string[] = [];
   page.on("request", (request) => {
@@ -32,6 +39,9 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
   await expect(page.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("list", { name: "Available connections" }).getByText(/bastion/)).toBeVisible();
   await expect(page.getByText("nas", { exact: true })).toBeVisible();
+  const recent = page.getByRole("list", { name: "Recently used connections" });
+  await expect(recent.getByText("bastion", { exact: true })).toBeVisible();
+  await expect(recent.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
   expect(terminalRequests).toEqual([]);
 
   await page.getByRole("searchbox", { name: "Search connections" }).fill("production");

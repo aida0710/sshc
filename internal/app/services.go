@@ -11,6 +11,7 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
+	"sshc/internal/recent"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
@@ -31,6 +32,8 @@ type engineServices struct {
 	remoteKeys   *remotekey.Service
 	sync         *remotesync.Service
 	autoSync     *remotesync.Auto
+	recentStore  *recent.Store
+	recent       *recent.Service
 	terminals    *terminal.Registry
 	ssh          sshParts
 }
@@ -58,10 +61,20 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 
 	// パスワード保管用の vault も設定のトランザクションマネージャを共有する。~/.ssh
 	passwordService := secret.NewService(workspace, transactions, time.Now)
+	recentStore := recent.NewStore(workspace, time.Now)
 
 	// プロセス内 SSH クライアントの依存関係をここで一度だけ組み立てる。
 	ssh := newSSHParts(configService, knownHostsService, workspace.Home(),
 		storedPassphrase(passwordService, workspace.Root()), storedPassword(passwordService))
+	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
+		target, err := ssh.target(alias)
+		if err != nil {
+			return recent.Target{}, err
+		}
+		return recent.Target{
+			Alias: target.Alias, HostName: target.HostName, User: target.User, Port: target.Port,
+		}, nil
+	})
 	probe := dependencies.Probe
 	if probe == nil {
 		probe = ssh.probe()
@@ -87,7 +100,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		workspace: workspace, transactions: transactions,
 		config: configService, keys: keyService, diagnostics: diagnosticsService,
 		knownHosts: knownHostsService, passwords: passwordService,
-		remoteKeys: remoteKeyService, ssh: ssh,
+		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService, ssh: ssh,
 	}
 	services.sync, services.autoSync = buildSync(workspace, transactions, configService, passwordService, dependencies)
 	services.terminals = buildTerminals(configService, dependencies)

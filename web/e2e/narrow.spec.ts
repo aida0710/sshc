@@ -129,6 +129,13 @@ test("draws one separator above the version in the mobile drawer", async ({ page
 
 test("keeps every section inside 360 pixels", async ({ page, installation }) => {
   await installation.write("conf.d/20-lab.conf", hosts);
+  await installation.write(
+    "sshc/recent-connections.json",
+    JSON.stringify({
+      schemaVersion: 1,
+      entries: [{ alias: "bastion", lastConnectedAt: "2026-08-24T15:30:00Z" }],
+    }),
+  );
   await page.route("**/api/v1/sync", async (route) => {
     await route.fulfill({
       status: 200,
@@ -147,6 +154,11 @@ test("keeps every section inside 360 pixels", async ({ page, installation }) => 
   await expect(page.getByRole("heading", { name: "Your connections", exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page, "Home");
   await expectNothingCutOff(page, "Home");
+  await expectFullyInsideViewport(
+    page,
+    page.getByRole("list", { name: "Recently used connections" }).getByRole("button", { name: "Connect" }),
+    "Recent connection",
+  );
 
   for (const section of sections) {
     await openSectionThroughDrawer(page, section.navigation, section.heading);
