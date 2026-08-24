@@ -168,6 +168,9 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		KnownHosts:      knownHostsService,
 		RemoteKeys:      remoteKeyService,
 		Recent:          services.recent,
+		SFTP:            services.sftp,
+		Workspaces:      services.workspaces,
+		Snippets:        services.snippets,
 		Passwords:       passwordService,
 		Connect:         ssh.connector(),
 		ConnectionOpened: func(alias string) {

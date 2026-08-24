@@ -15,9 +15,12 @@ import (
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
+	sshcSFTP "sshc/internal/sftp"
+	"sshc/internal/snippets"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	terminalworkspace "sshc/internal/workspace"
 )
 
 // engineServices は、engine がひとつのワークスペースの上に組む部品一式である。
@@ -34,6 +37,9 @@ type engineServices struct {
 	autoSync     *remotesync.Auto
 	recentStore  *recent.Store
 	recent       *recent.Service
+	sftp         *sshcSFTP.Service
+	workspaces   *terminalworkspace.Service
+	snippets     *snippets.Service
 	terminals    *terminal.Registry
 	ssh          sshParts
 }
@@ -75,6 +81,8 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 			Alias: target.Alias, HostName: target.HostName, User: target.User, Port: target.Port,
 		}, nil
 	})
+	sftpService := &sshcSFTP.Service{Open: ssh.sftp()}
+	workspaceService := terminalworkspace.NewService(terminalworkspace.NewStore(workspace), time.Now, dependencies.Random)
 	probe := dependencies.Probe
 	if probe == nil {
 		probe = ssh.probe()
@@ -87,6 +95,26 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		remoteRun = ssh.run()
 	}
 	remoteKeyService := &remotekey.Service{Resolve: ssh.target, Run: remoteRun}
+	snippetStore := snippets.NewStore(workspace)
+	snippetService := snippets.NewService(snippets.Options{
+		Repository: snippetStore,
+		Resolve: func(alias string) (snippets.Resolution, error) {
+			target, err := ssh.target(alias)
+			if err != nil {
+				return snippets.Resolution{}, err
+			}
+			return snippets.Resolution{
+				Target: snippets.Target{Alias: target.Alias, HostName: target.HostName, User: target.User, Port: target.Port},
+				Run: func(ctx context.Context, command string) (snippets.CommandOutput, error) {
+					output, err := remoteRun(ctx, target, command, nil)
+					return snippets.CommandOutput{
+						ExitCode: output.ExitCode, Stdout: output.Stdout, Stderr: output.Stderr, Truncated: output.Truncated,
+					}, err
+				},
+			}, nil
+		},
+		Now: time.Now, Random: dependencies.Random,
+	})
 
 	keyService.SetStoredPassphrase(passwordService.KeyPassphraseFor)
 
@@ -100,7 +128,8 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		workspace: workspace, transactions: transactions,
 		config: configService, keys: keyService, diagnostics: diagnosticsService,
 		knownHosts: knownHostsService, passwords: passwordService,
-		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService, ssh: ssh,
+		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
+		sftp: sftpService, workspaces: workspaceService, snippets: snippetService, ssh: ssh,
 	}
 	services.sync, services.autoSync = buildSync(workspace, transactions, configService, passwordService, dependencies)
 	services.terminals = buildTerminals(configService, dependencies)
@@ -117,7 +146,13 @@ func buildSync(
 ) (*remotesync.Service, *remotesync.Auto) {
 	// スナップショットは、どのファイルが設定なのかを知る必要がある。それは Include
 	syncService := remotesync.NewService(workspace, transactions,
-		func() ([]string, error) { return configService.WorkspaceFiles() },
+		func() ([]string, error) {
+			files, err := configService.WorkspaceFiles()
+			if err != nil {
+				return nil, err
+			}
+			return append(files, snippets.PathRelative), nil
+		},
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
 		newOrigin(dependencies.Random),
 	)

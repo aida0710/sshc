@@ -85,6 +85,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 		closeAll(closers)
 		return
 	}
+	session.markReady(nil)
 	trace.say(Brief, "開きました。")
 	trace.say(Full, "ここまで %s。", trace.since(started).Round(time.Millisecond))
 	session.run(remote, keepAliveLoop(client, target.KeepAlive, target.KeepAliveMax, session.done))

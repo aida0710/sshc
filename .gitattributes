@@ -9,3 +9,7 @@
 # 画像は行末を持たない。text=auto の判定に任せず、はっきり除く。
 *.png binary
 *.svg text eol=lf
+
+# Viteが生成するminified assetには、Monacoの文字列値として行末空白を含むものがある。
+# sourceではなく再生成可能な配布物なので、Gitのwhitespace検査はsrcとGo側に限定する。
+internal/ui/dist/assets/** -whitespace

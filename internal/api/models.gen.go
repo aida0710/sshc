@@ -10,22 +10,22 @@ import (
 
 // Defines values for AutoSyncPhase.
 const (
-	Blocked AutoSyncPhase = "blocked"
-	Failed  AutoSyncPhase = "failed"
-	Idle    AutoSyncPhase = "idle"
-	Running AutoSyncPhase = "running"
+	AutoSyncPhaseBlocked AutoSyncPhase = "blocked"
+	AutoSyncPhaseFailed  AutoSyncPhase = "failed"
+	AutoSyncPhaseIdle    AutoSyncPhase = "idle"
+	AutoSyncPhaseRunning AutoSyncPhase = "running"
 )
 
 // Valid indicates whether the value is a known member of the AutoSyncPhase enum.
 func (e AutoSyncPhase) Valid() bool {
 	switch e {
-	case Blocked:
+	case AutoSyncPhaseBlocked:
 		return true
-	case Failed:
+	case AutoSyncPhaseFailed:
 		return true
-	case Idle:
+	case AutoSyncPhaseIdle:
 		return true
-	case Running:
+	case AutoSyncPhaseRunning:
 		return true
 	default:
 		return false
@@ -62,6 +62,117 @@ func (e PullRequestResolve) Valid() bool {
 	case Local:
 		return true
 	case Remote:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SFTPEntryType.
+const (
+	SFTPEntryTypeDirectory SFTPEntryType = "directory"
+	SFTPEntryTypeFile      SFTPEntryType = "file"
+	SFTPEntryTypeOther     SFTPEntryType = "other"
+	SFTPEntryTypeSymlink   SFTPEntryType = "symlink"
+)
+
+// Valid indicates whether the value is a known member of the SFTPEntryType enum.
+func (e SFTPEntryType) Valid() bool {
+	switch e {
+	case SFTPEntryTypeDirectory:
+		return true
+	case SFTPEntryTypeFile:
+		return true
+	case SFTPEntryTypeOther:
+		return true
+	case SFTPEntryTypeSymlink:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SFTPMkdirRequestType.
+const (
+	SFTPMkdirRequestTypeDirectory SFTPMkdirRequestType = "directory"
+)
+
+// Valid indicates whether the value is a known member of the SFTPMkdirRequestType enum.
+func (e SFTPMkdirRequestType) Valid() bool {
+	switch e {
+	case SFTPMkdirRequestTypeDirectory:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SnippetJobStatus.
+const (
+	SnippetJobStatusCancelled SnippetJobStatus = "cancelled"
+	SnippetJobStatusCompleted SnippetJobStatus = "completed"
+	SnippetJobStatusRunning   SnippetJobStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the SnippetJobStatus enum.
+func (e SnippetJobStatus) Valid() bool {
+	switch e {
+	case SnippetJobStatusCancelled:
+		return true
+	case SnippetJobStatusCompleted:
+		return true
+	case SnippetJobStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SnippetTargetResultStatus.
+const (
+	Cancelled SnippetTargetResultStatus = "cancelled"
+	Failed    SnippetTargetResultStatus = "failed"
+	Queued    SnippetTargetResultStatus = "queued"
+	Running   SnippetTargetResultStatus = "running"
+	Succeeded SnippetTargetResultStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the SnippetTargetResultStatus enum.
+func (e SnippetTargetResultStatus) Valid() bool {
+	switch e {
+	case Cancelled:
+		return true
+	case Failed:
+		return true
+	case Queued:
+		return true
+	case Running:
+		return true
+	case Succeeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SnippetVariableType.
+const (
+	Boolean SnippetVariableType = "boolean"
+	Integer SnippetVariableType = "integer"
+	Secret  SnippetVariableType = "secret"
+	String  SnippetVariableType = "string"
+)
+
+// Valid indicates whether the value is a known member of the SnippetVariableType enum.
+func (e SnippetVariableType) Valid() bool {
+	switch e {
+	case Boolean:
+		return true
+	case Integer:
+		return true
+	case Secret:
+		return true
+	case String:
 		return true
 	default:
 		return false
@@ -119,6 +230,39 @@ func (e TerminalSessionKind) Valid() bool {
 	case TerminalSessionKindShell:
 		return true
 	case TerminalSessionKindSsh:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkspaceReconnectPaneState.
+const (
+	ReconnectRequired WorkspaceReconnectPaneState = "reconnect_required"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceReconnectPaneState enum.
+func (e WorkspaceReconnectPaneState) Valid() bool {
+	switch e {
+	case ReconnectRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkspaceSplitDirection.
+const (
+	Horizontal WorkspaceSplitDirection = "horizontal"
+	Vertical   WorkspaceSplitDirection = "vertical"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceSplitDirection enum.
+func (e WorkspaceSplitDirection) Valid() bool {
+	switch e {
+	case Horizontal:
+		return true
+	case Vertical:
 		return true
 	default:
 		return false
@@ -215,6 +359,11 @@ type ChangePassphraseResponse struct {
 	Notes         []string `json:"notes"`
 	RelativePath  string   `json:"relativePath"`
 	TransactionId string   `json:"transactionId"`
+}
+
+// ChangedResponse defines model for ChangedResponse.
+type ChangedResponse struct {
+	Changed bool `json:"changed"`
 }
 
 // ComplexityNote defines model for ComplexityNote.
@@ -979,6 +1128,61 @@ type RewrittenKeyReference struct {
 	To         string `json:"to"`
 }
 
+// SFTPEntry defines model for SFTPEntry.
+type SFTPEntry struct {
+	Mode       string        `json:"mode"`
+	ModifiedAt time.Time     `json:"modifiedAt"`
+	Name       string        `json:"name"`
+	Path       string        `json:"path"`
+	Revision   string        `json:"revision"`
+	Size       int64         `json:"size"`
+	Type       SFTPEntryType `json:"type"`
+}
+
+// SFTPEntryType defines model for SFTPEntry.Type.
+type SFTPEntryType string
+
+// SFTPListing defines model for SFTPListing.
+type SFTPListing struct {
+	Entries []SFTPEntry `json:"entries"`
+	Path    string      `json:"path"`
+}
+
+// SFTPMkdirRequest defines model for SFTPMkdirRequest.
+type SFTPMkdirRequest struct {
+	Path string               `json:"path"`
+	Type SFTPMkdirRequestType `json:"type"`
+}
+
+// SFTPMkdirRequestType defines model for SFTPMkdirRequest.Type.
+type SFTPMkdirRequestType string
+
+// SFTPRenameRequest defines model for SFTPRenameRequest.
+type SFTPRenameRequest struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// SFTPSaveTextRequest defines model for SFTPSaveTextRequest.
+type SFTPSaveTextRequest struct {
+	Contents         string `json:"contents"`
+	ExpectedRevision string `json:"expectedRevision"`
+}
+
+// SFTPTextFile defines model for SFTPTextFile.
+type SFTPTextFile struct {
+	Contents string    `json:"contents"`
+	Entry    SFTPEntry `json:"entry"`
+	Revision string    `json:"revision"`
+}
+
+// SFTPTransfer defines model for SFTPTransfer.
+type SFTPTransfer struct {
+	Bytes    int64  `json:"bytes"`
+	Path     string `json:"path"`
+	Revision string `json:"revision"`
+}
+
 // Setting defines model for Setting.
 type Setting struct {
 	Keyword string   `json:"keyword"`
@@ -991,6 +1195,118 @@ type SnapshotSummary struct {
 	FileCount     int    `json:"fileCount"`
 	SnapshotBytes int64  `json:"snapshotBytes"`
 	SourceBytes   int64  `json:"sourceBytes"`
+}
+
+// Snippet defines model for Snippet.
+type Snippet struct {
+	Command     string            `json:"command"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	Description string            `json:"description"`
+	Id          string            `json:"id"`
+	Name        string            `json:"name"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
+	Variables   []SnippetVariable `json:"variables"`
+}
+
+// SnippetDraft defines model for SnippetDraft.
+type SnippetDraft struct {
+	Command     string            `json:"command"`
+	Description string            `json:"description"`
+	Name        string            `json:"name"`
+	Variables   []SnippetVariable `json:"variables"`
+}
+
+// SnippetExecuteRequest defines model for SnippetExecuteRequest.
+type SnippetExecuteRequest struct {
+	Aliases     []string          `json:"aliases"`
+	Concurrency int               `json:"concurrency"`
+	Evidence    string            `json:"evidence"`
+	Inputs      map[string]string `json:"inputs"`
+	SnippetId   string            `json:"snippetId"`
+}
+
+// SnippetJob defines model for SnippetJob.
+type SnippetJob struct {
+	FinishedAt *time.Time            `json:"finishedAt,omitempty"`
+	Id         string                `json:"id"`
+	Results    []SnippetTargetResult `json:"results"`
+	StartedAt  time.Time             `json:"startedAt"`
+	Status     SnippetJobStatus      `json:"status"`
+}
+
+// SnippetJobStatus defines model for SnippetJob.Status.
+type SnippetJobStatus string
+
+// SnippetLibrary defines model for SnippetLibrary.
+type SnippetLibrary struct {
+	Snippets []Snippet        `json:"snippets"`
+	Startup  []StartupSnippet `json:"startup"`
+}
+
+// SnippetPreview defines model for SnippetPreview.
+type SnippetPreview struct {
+	ActionExpiresAt time.Time              `json:"actionExpiresAt"`
+	ActionToken     string                 `json:"actionToken"`
+	Evidence        string                 `json:"evidence"`
+	SnippetId       string                 `json:"snippetId"`
+	Targets         []SnippetPreviewTarget `json:"targets"`
+}
+
+// SnippetPreviewRequest defines model for SnippetPreviewRequest.
+type SnippetPreviewRequest struct {
+	Aliases   []string          `json:"aliases"`
+	Inputs    map[string]string `json:"inputs"`
+	SnippetId string            `json:"snippetId"`
+}
+
+// SnippetPreviewTarget defines model for SnippetPreviewTarget.
+type SnippetPreviewTarget struct {
+	Command string `json:"command"`
+	Target  struct {
+		Alias    string `json:"alias"`
+		HostName string `json:"hostName"`
+		Port     string `json:"port"`
+		User     string `json:"user"`
+	} `json:"target"`
+}
+
+// SnippetTargetResult defines model for SnippetTargetResult.
+type SnippetTargetResult struct {
+	Alias     string                    `json:"alias"`
+	ExitCode  *int                      `json:"exitCode,omitempty"`
+	Problem   *string                   `json:"problem,omitempty"`
+	Status    SnippetTargetResultStatus `json:"status"`
+	Stderr    *string                   `json:"stderr,omitempty"`
+	Stdout    *string                   `json:"stdout,omitempty"`
+	Truncated *bool                     `json:"truncated,omitempty"`
+}
+
+// SnippetTargetResultStatus defines model for SnippetTargetResult.Status.
+type SnippetTargetResultStatus string
+
+// SnippetVariable defines model for SnippetVariable.
+type SnippetVariable struct {
+	Default     *string             `json:"default,omitempty"`
+	Description *string             `json:"description,omitempty"`
+	Name        string              `json:"name"`
+	Required    *bool               `json:"required,omitempty"`
+	Type        SnippetVariableType `json:"type"`
+}
+
+// SnippetVariableType defines model for SnippetVariable.Type.
+type SnippetVariableType string
+
+// StartupSnippet defines model for StartupSnippet.
+type StartupSnippet struct {
+	Alias     string             `json:"alias"`
+	Inputs    *map[string]string `json:"inputs,omitempty"`
+	SnippetId string             `json:"snippetId"`
+}
+
+// StartupSnippetRequest defines model for StartupSnippetRequest.
+type StartupSnippetRequest struct {
+	Inputs    map[string]string `json:"inputs"`
+	SnippetId string            `json:"snippetId"`
 }
 
 // StoreCredentialRequest defines model for StoreCredentialRequest.
@@ -1141,6 +1457,16 @@ type TerminalStreamTicket struct {
 	StreamTicket string `json:"streamTicket"`
 }
 
+// TerminalWorkspace defines model for TerminalWorkspace.
+type TerminalWorkspace struct {
+	CreatedAt     time.Time     `json:"createdAt"`
+	FocusedPaneId string        `json:"focusedPaneId"`
+	Id            string        `json:"id"`
+	Layout        WorkspaceNode `json:"layout"`
+	Name          string        `json:"name"`
+	UpdatedAt     time.Time     `json:"updatedAt"`
+}
+
 // TrashEntrySummary defines model for TrashEntrySummary.
 type TrashEntrySummary struct {
 	AgeDays    int                `json:"ageDays"`
@@ -1237,6 +1563,57 @@ type ValueSource struct {
 	Winner    bool   `json:"winner"`
 }
 
+// WorkspaceDefinition defines model for WorkspaceDefinition.
+type WorkspaceDefinition struct {
+	FocusedPaneId string        `json:"focusedPaneId"`
+	Layout        WorkspaceNode `json:"layout"`
+	Name          string        `json:"name"`
+}
+
+// WorkspaceList defines model for WorkspaceList.
+type WorkspaceList struct {
+	Workspaces []TerminalWorkspace `json:"workspaces"`
+}
+
+// WorkspaceNode defines model for WorkspaceNode.
+type WorkspaceNode struct {
+	Pane  *WorkspacePane  `json:"pane,omitempty"`
+	Split *WorkspaceSplit `json:"split,omitempty"`
+}
+
+// WorkspacePane defines model for WorkspacePane.
+type WorkspacePane struct {
+	Alias string `json:"alias"`
+	Id    string `json:"id"`
+}
+
+// WorkspaceReconnectPane defines model for WorkspaceReconnectPane.
+type WorkspaceReconnectPane struct {
+	Alias  string                      `json:"alias"`
+	PaneId string                      `json:"paneId"`
+	State  WorkspaceReconnectPaneState `json:"state"`
+}
+
+// WorkspaceReconnectPaneState defines model for WorkspaceReconnectPane.State.
+type WorkspaceReconnectPaneState string
+
+// WorkspaceRestorePlan defines model for WorkspaceRestorePlan.
+type WorkspaceRestorePlan struct {
+	Panes     []WorkspaceReconnectPane `json:"panes"`
+	Workspace TerminalWorkspace        `json:"workspace"`
+}
+
+// WorkspaceSplit defines model for WorkspaceSplit.
+type WorkspaceSplit struct {
+	Direction WorkspaceSplitDirection `json:"direction"`
+	First     WorkspaceNode           `json:"first"`
+	Ratio     int                     `json:"ratio"`
+	Second    WorkspaceNode           `json:"second"`
+}
+
+// WorkspaceSplitDirection defines model for WorkspaceSplit.Direction.
+type WorkspaceSplitDirection string
+
 // GetConfigFileParams defines parameters for GetConfigFile.
 type GetConfigFileParams struct {
 	Path string `form:"path" json:"path"`
@@ -1266,6 +1643,43 @@ type RegisterRemoteKeyParams struct {
 // BootstrapSessionParams defines parameters for BootstrapSession.
 type BootstrapSessionParams struct {
 	XSSHCBootstrap string `json:"X-SSHC-Bootstrap"`
+}
+
+// DownloadSFTPFileParams defines parameters for DownloadSFTPFile.
+type DownloadSFTPFileParams struct {
+	Path string `form:"path" json:"path"`
+}
+
+// ListSFTPEntriesParams defines parameters for ListSFTPEntries.
+type ListSFTPEntriesParams struct {
+	Path string `form:"path" json:"path"`
+}
+
+// DeleteSFTPEntryParams defines parameters for DeleteSFTPEntry.
+type DeleteSFTPEntryParams struct {
+	Path        string `form:"path" json:"path"`
+	XSSHCAction string `json:"X-SSHC-Action"`
+}
+
+// ReadSFTPTextParams defines parameters for ReadSFTPText.
+type ReadSFTPTextParams struct {
+	Path string `form:"path" json:"path"`
+}
+
+// SaveSFTPTextParams defines parameters for SaveSFTPText.
+type SaveSFTPTextParams struct {
+	Path string `form:"path" json:"path"`
+}
+
+// UploadSFTPFileParams defines parameters for UploadSFTPFile.
+type UploadSFTPFileParams struct {
+	Path      string `form:"path" json:"path"`
+	Overwrite bool   `form:"overwrite" json:"overwrite"`
+}
+
+// ExecuteSnippetParams defines parameters for ExecuteSnippet.
+type ExecuteSnippetParams struct {
+	XSSHCAction string `json:"X-SSHC-Action"`
 }
 
 // AddTerminalBackgroundParams defines parameters for AddTerminalBackground.
@@ -1368,6 +1782,30 @@ type PlanRemoteKeyRegistrationJSONRequestBody = RemoteKeyPlanRequest
 // RegisterRemoteKeyJSONRequestBody defines body for RegisterRemoteKey for application/json ContentType.
 type RegisterRemoteKeyJSONRequestBody = RemoteKeyRegisterRequest
 
+// CreateSFTPDirectoryJSONRequestBody defines body for CreateSFTPDirectory for application/json ContentType.
+type CreateSFTPDirectoryJSONRequestBody = SFTPMkdirRequest
+
+// RenameSFTPEntryJSONRequestBody defines body for RenameSFTPEntry for application/json ContentType.
+type RenameSFTPEntryJSONRequestBody = SFTPRenameRequest
+
+// SaveSFTPTextJSONRequestBody defines body for SaveSFTPText for application/json ContentType.
+type SaveSFTPTextJSONRequestBody = SFTPSaveTextRequest
+
+// CreateSnippetJSONRequestBody defines body for CreateSnippet for application/json ContentType.
+type CreateSnippetJSONRequestBody = SnippetDraft
+
+// ExecuteSnippetJSONRequestBody defines body for ExecuteSnippet for application/json ContentType.
+type ExecuteSnippetJSONRequestBody = SnippetExecuteRequest
+
+// PreviewSnippetExecutionJSONRequestBody defines body for PreviewSnippetExecution for application/json ContentType.
+type PreviewSnippetExecutionJSONRequestBody = SnippetPreviewRequest
+
+// SetStartupSnippetJSONRequestBody defines body for SetStartupSnippet for application/json ContentType.
+type SetStartupSnippetJSONRequestBody = StartupSnippetRequest
+
+// UpdateSnippetJSONRequestBody defines body for UpdateSnippet for application/json ContentType.
+type UpdateSnippetJSONRequestBody = SnippetDraft
+
 // SetAutoSyncJSONRequestBody defines body for SetAutoSync for application/json ContentType.
 type SetAutoSyncJSONRequestBody = AutoSyncRequest
 
@@ -1388,3 +1826,9 @@ type OpenTerminalSessionJSONRequestBody = OpenTerminalSessionRequest
 
 // RenameTerminalSessionJSONRequestBody defines body for RenameTerminalSession for application/json ContentType.
 type RenameTerminalSessionJSONRequestBody = RenameTerminalSessionRequest
+
+// CreateTerminalWorkspaceJSONRequestBody defines body for CreateTerminalWorkspace for application/json ContentType.
+type CreateTerminalWorkspaceJSONRequestBody = WorkspaceDefinition
+
+// UpdateTerminalWorkspaceJSONRequestBody defines body for UpdateTerminalWorkspace for application/json ContentType.
+type UpdateTerminalWorkspaceJSONRequestBody = WorkspaceDefinition

@@ -1068,6 +1068,246 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/{alias}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listSFTPEntries"];
+        put?: never;
+        post: operations["createSFTPDirectory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get: operations["readSFTPText"];
+        put: operations["saveSFTPText"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get: operations["downloadSFTPFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["uploadSFTPFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteSFTPEntry"];
+        options?: never;
+        head?: never;
+        patch: operations["renameSFTPEntry"];
+        trace?: never;
+    };
+    "/api/v1/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTerminalWorkspaces"];
+        put?: never;
+        post: operations["createTerminalWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getTerminalWorkspace"];
+        put: operations["updateTerminalWorkspace"];
+        post?: never;
+        delete: operations["deleteTerminalWorkspace"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restoreTerminalWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/snippets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSnippets"];
+        put?: never;
+        post: operations["createSnippet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/snippets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateSnippet"];
+        post?: never;
+        delete: operations["deleteSnippet"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/snippets/startup/{alias}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setStartupSnippet"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/snippets/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["previewSnippetExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/snippets/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["executeSnippet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/snippets/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getSnippetJob"];
+        put?: never;
+        post?: never;
+        delete: operations["cancelSnippetJob"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2096,6 +2336,175 @@ export interface components {
         RecoverResponse: {
             /** @enum {string} */
             status: "ok";
+        };
+        ChangedResponse: {
+            changed: boolean;
+        };
+        SFTPEntry: {
+            name: string;
+            path: string;
+            /** @enum {string} */
+            type: "file" | "directory" | "symlink" | "other";
+            /** Format: int64 */
+            size: number;
+            mode: string;
+            /** Format: date-time */
+            modifiedAt: string;
+            revision: string;
+        };
+        SFTPListing: {
+            path: string;
+            entries: components["schemas"]["SFTPEntry"][];
+        };
+        SFTPTextFile: {
+            entry: components["schemas"]["SFTPEntry"];
+            contents: string;
+            revision: string;
+        };
+        SFTPSaveTextRequest: {
+            contents: string;
+            expectedRevision: string;
+        };
+        SFTPMkdirRequest: {
+            path: string;
+            /** @enum {string} */
+            type: "directory";
+        };
+        SFTPRenameRequest: {
+            from: string;
+            to: string;
+        };
+        SFTPTransfer: {
+            path: string;
+            /** Format: int64 */
+            bytes: number;
+            revision: string;
+        };
+        WorkspacePane: {
+            id: string;
+            alias: string;
+        };
+        WorkspaceSplit: {
+            /** @enum {string} */
+            direction: "horizontal" | "vertical";
+            ratio: number;
+            first: components["schemas"]["WorkspaceNode"];
+            second: components["schemas"]["WorkspaceNode"];
+        };
+        WorkspaceNode: {
+            pane?: components["schemas"]["WorkspacePane"];
+            split?: components["schemas"]["WorkspaceSplit"];
+        };
+        WorkspaceDefinition: {
+            name: string;
+            layout: components["schemas"]["WorkspaceNode"];
+            focusedPaneId: string;
+        };
+        TerminalWorkspace: components["schemas"]["WorkspaceDefinition"] & {
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        WorkspaceList: {
+            workspaces: components["schemas"]["TerminalWorkspace"][];
+        };
+        WorkspaceReconnectPane: {
+            paneId: string;
+            alias: string;
+            /** @enum {string} */
+            state: "reconnect_required";
+        };
+        WorkspaceRestorePlan: {
+            workspace: components["schemas"]["TerminalWorkspace"];
+            panes: components["schemas"]["WorkspaceReconnectPane"][];
+        };
+        SnippetVariable: {
+            name: string;
+            /** @enum {string} */
+            type: "string" | "integer" | "boolean" | "secret";
+            required?: boolean;
+            default?: string;
+            description?: string;
+        };
+        SnippetDraft: {
+            name: string;
+            description: string;
+            command: string;
+            variables: components["schemas"]["SnippetVariable"][];
+        };
+        Snippet: components["schemas"]["SnippetDraft"] & {
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        StartupSnippet: {
+            alias: string;
+            snippetId: string;
+            inputs?: {
+                [key: string]: string;
+            };
+        };
+        StartupSnippetRequest: {
+            snippetId: string;
+            inputs: {
+                [key: string]: string;
+            };
+        };
+        SnippetLibrary: {
+            snippets: components["schemas"]["Snippet"][];
+            startup: components["schemas"]["StartupSnippet"][];
+        };
+        SnippetPreviewRequest: {
+            snippetId: string;
+            aliases: string[];
+            inputs: {
+                [key: string]: string;
+            };
+        };
+        SnippetPreviewTarget: {
+            target: {
+                alias: string;
+                hostName: string;
+                user: string;
+                port: string;
+            };
+            command: string;
+        };
+        SnippetPreview: {
+            snippetId: string;
+            evidence: string;
+            targets: components["schemas"]["SnippetPreviewTarget"][];
+            actionToken: string;
+            /** Format: date-time */
+            actionExpiresAt: string;
+        };
+        SnippetExecuteRequest: components["schemas"]["SnippetPreviewRequest"] & {
+            evidence: string;
+            concurrency: number;
+        };
+        SnippetTargetResult: {
+            alias: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+            exitCode?: number;
+            stdout?: string;
+            stderr?: string;
+            truncated?: boolean;
+            problem?: string;
+        };
+        SnippetJob: {
+            id: string;
+            /** @enum {string} */
+            status: "running" | "completed" | "cancelled";
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            results: components["schemas"]["SnippetTargetResult"][];
         };
     };
     responses: {
@@ -4099,6 +4508,590 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    listSFTPEntries: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remote directory listing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPListing"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    createSFTPDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPMkdirRequest"];
+            };
+        };
+        responses: {
+            /** @description Directory created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    readSFTPText: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Editable UTF-8 file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTextFile"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    saveSFTPText: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPSaveTextRequest"];
+            };
+        };
+        responses: {
+            /** @description Text saved atomically */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTextFile"];
+                };
+            };
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+        };
+    };
+    downloadSFTPFile: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remote file bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    uploadSFTPFile: {
+        parameters: {
+            query: {
+                path: string;
+                overwrite: boolean;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description File uploaded atomically */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTransfer"];
+                };
+            };
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+        };
+    };
+    deleteSFTPEntry: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entry deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangedResponse"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    renameSFTPEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description Entry renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            409: components["responses"]["Problem"];
+        };
+    };
+    listTerminalWorkspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Device-local terminal workspaces */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceList"];
+                };
+            };
+        };
+    };
+    createTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceDefinition"];
+            };
+        };
+        responses: {
+            /** @description Workspace saved */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalWorkspace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+        };
+    };
+    getTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalWorkspace"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    updateTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceDefinition"];
+            };
+        };
+        responses: {
+            /** @description Updated workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalWorkspace"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    deleteTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangedResponse"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    restoreTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Layout and explicit reconnect plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceRestorePlan"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    listSnippets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Snippet library */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnippetLibrary"];
+                };
+            };
+        };
+    };
+    createSnippet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnippetDraft"];
+            };
+        };
+        responses: {
+            /** @description Snippet created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Snippet"];
+                };
+            };
+            400: components["responses"]["Problem"];
+        };
+    };
+    updateSnippet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnippetDraft"];
+            };
+        };
+        responses: {
+            /** @description Snippet updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Snippet"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    deleteSnippet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Snippet deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangedResponse"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    setStartupSnippet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartupSnippetRequest"];
+            };
+        };
+        responses: {
+            /** @description Startup assignment updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnippetLibrary"];
+                };
+            };
+            400: components["responses"]["Problem"];
+        };
+    };
+    previewSnippetExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnippetPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact targets and commands plus one-time action token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnippetPreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+        };
+    };
+    executeSnippet: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnippetExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description Execution job started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnippetJob"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    getSnippetJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-host execution state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnippetJob"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    cancelSnippetJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancellation requested */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnippetJob"];
+                };
+            };
             404: components["responses"]["Problem"];
         };
     };

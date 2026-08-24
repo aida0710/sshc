@@ -273,7 +273,7 @@ function NavigationLink({
       onClick={(event) => {
         onNavigate(event, name);
       }}
-      className={`group relative my-0.5 flex w-full items-center gap-2.5 overflow-hidden rounded-lg px-2 py-2.5 text-left text-sm transition-colors md:py-1 ${
+      className={`group relative my-0.5 flex w-full items-center gap-2.5 overflow-hidden rounded-lg px-2 py-2.5 text-left text-sm transition-colors md:py-0.5 ${
         active
           ? "bg-card font-semibold text-ink shadow-sm"
           : "font-medium text-ink-muted hover:bg-select-fill hover:text-ink"
@@ -282,7 +282,7 @@ function NavigationLink({
       {active ? <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-accent" /> : null}
       <span
         aria-hidden="true"
-        className={`grid h-7 w-7 shrink-0 place-items-center rounded-md transition-colors md:h-6 md:w-6 ${
+        className={`grid h-7 w-7 shrink-0 place-items-center rounded-md transition-colors md:h-5 md:w-5 ${
           active ? "bg-accent text-accent-ink" : "bg-control text-ink-muted group-hover:text-ink"
         }`}
       >

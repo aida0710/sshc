@@ -24,6 +24,8 @@
   --ui-notice-ink: #71500a;
   --ui-danger: #c92b3a;
   --ui-live: #087d63;
+  --ui-code-bg: #111827;
+  --ui-code-fg: #f8fafc;
   --ui-connect-hero-start: #111827;
   --ui-connect-hero-middle: #172554;
   --ui-connect-hero-end: #164e63;
@@ -84,6 +86,8 @@
   --ui-notice-ink: #f0b429;
   --ui-danger: #ff7a82;
   --ui-live: #5adab2;
+  --ui-code-bg: #070d14;
+  --ui-code-fg: #edf6ff;
   --ui-card-shadow: 0 1px 2px rgb(0 0 0 / 0.25), 0 16px 40px rgb(0 0 0 / 0.14);
   --ui-skeleton: #1b3041;
   --ui-skeleton-highlight: #263e50;
@@ -133,6 +137,8 @@
   --color-notice-ink: var(--ui-notice-ink);
   --color-danger: var(--ui-danger);
   --color-live: var(--ui-live);
+  --color-code-bg: var(--ui-code-bg);
+  --color-code-fg: var(--ui-code-fg);
   --color-connect-mark: var(--ui-connect-mark);
   --color-connect-star: var(--ui-connect-star);
   --color-term-bg: var(--ui-term-bg);

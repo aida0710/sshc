@@ -103,6 +103,13 @@ type scriptedStarter struct {
 	commands  []terminal.Command
 }
 
+type readinessPTY struct {
+	*scriptedPTY
+	connected chan error
+}
+
+func (p *readinessPTY) Ready() <-chan error { return p.connected }
+
 func (s *scriptedStarter) Start(_ context.Context, command terminal.Command, _ terminal.Size) (terminal.Process, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -283,6 +290,50 @@ func TestOpeningASessionReturnsATicketAndListsIt(t *testing.T) {
 	// その端末の作業ディレクトリ、launchd から起こせば `/`。利用者はそのどれも選んでいない。
 	if opened[0].Dir != "/home/tester" {
 		t.Fatalf("the shell started in %q, want the home directory", opened[0].Dir)
+	}
+}
+
+func TestStartupSnippetWaitsForEverySSHConnectionToBecomeReady(t *testing.T) {
+	var opened []*readinessPTY
+	handlers := TerminalHandlers{
+		Connect: func(_ context.Context, _ string, _ terminal.Size) (terminal.Process, error) {
+			process := &readinessPTY{scriptedPTY: newScriptedPTY(), connected: make(chan error, 1)}
+			opened = append(opened, process)
+			return process, nil
+		},
+		Startup: func(alias string) (string, bool) {
+			if alias != "production" {
+				t.Fatalf("startup alias = %q", alias)
+			}
+			return "cd /srv/app", true
+		},
+	}
+	alias := "production"
+	spec, err := handlers.spec(terminal.KindSSH, &alias, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for attempt := 0; attempt < 2; attempt++ {
+		process, err := spec.Open(context.Background(), terminal.Size{Cols: 80, Rows: 24})
+		if err != nil {
+			t.Fatal(err)
+		}
+		candidate := opened[attempt]
+		if got := candidate.keystrokes(); got != "" {
+			t.Fatalf("attempt %d wrote before ready: %q", attempt, got)
+		}
+		candidate.connected <- nil
+		close(candidate.connected)
+		deadline := time.Now().Add(time.Second)
+		for candidate.keystrokes() == "" && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		if got := candidate.keystrokes(); got != "cd /srv/app\r" {
+			t.Fatalf("attempt %d startup = %q", attempt, got)
+		}
+		candidate.exit(terminal.ExitInfo{})
+		_ = process.Close()
 	}
 }
 

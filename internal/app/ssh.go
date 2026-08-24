@@ -9,11 +9,14 @@ import (
 	"strings"
 	"time"
 
+	pkgsftp "github.com/pkg/sftp"
+
 	"sshc/internal/application"
 	"sshc/internal/effective"
 	"sshc/internal/httpserver"
 	"sshc/internal/knownhosts"
 	"sshc/internal/secret"
+	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
@@ -113,6 +116,36 @@ func (p sshParts) run() func(ctx context.Context, target sshclient.Target, comma
 	return func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error) {
 		return p.dialer.Run(ctx, target, command, stdin)
 	}
+}
+
+// sftp opens a non-interactive SFTP channel using the same target resolution,
+// credentials, known-host policy and ProxyJump transport as terminal sessions.
+func (p sshParts) sftp() sshcSFTP.OpenRemote {
+	return func(ctx context.Context, alias string) (sshcSFTP.Remote, error) {
+		target, err := p.target(alias)
+		if err != nil {
+			return nil, err
+		}
+		connection, err := p.dialer.Connect(ctx, target)
+		if err != nil {
+			return nil, err
+		}
+		client, err := pkgsftp.NewClient(connection.Client())
+		if err != nil {
+			_ = connection.Close()
+			return nil, err
+		}
+		return &sftpRemote{Remote: sshcSFTP.NewClient(client), transport: connection}, nil
+	}
+}
+
+type sftpRemote struct {
+	sshcSFTP.Remote
+	transport *sshclient.Connection
+}
+
+func (remote *sftpRemote) Close() error {
+	return errors.Join(remote.Remote.Close(), remote.transport.Close())
 }
 
 // storedPassphrase は、鍵の絶対パスを vault の保存値へ対応づける。

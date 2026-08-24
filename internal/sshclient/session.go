@@ -2,6 +2,7 @@ package sshclient
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 	"time"
@@ -48,15 +49,17 @@ type Session struct {
 
 	exit      terminal.ExitInfo
 	done      chan struct{}
+	ready     chan error
 	closeOnce sync.Once
 	doneOnce  sync.Once
+	readyOnce sync.Once
 }
 
 func newSession(size terminal.Size, cancel context.CancelFunc) *Session {
 	reader, writer := io.Pipe()
 	return &Session{
 		input: NewInputBuffer(), reader: reader, writer: writer,
-		size: size, cancel: cancel, done: make(chan struct{}),
+		size: size, cancel: cancel, done: make(chan struct{}), ready: make(chan error, 1),
 	}
 }
 
@@ -66,6 +69,17 @@ func (s *Session) Forwards() []terminal.Forward { return s.forwarded.list() }
 // Prompter は、この端末のストリームへ問いを出す。
 func (s *Session) Prompter() Prompter {
 	return StreamPrompter{Out: s.writer, In: s.input}
+}
+
+// Ready reports when authentication and remote shell startup have completed.
+// Startup automation waits here so its bytes cannot answer an authentication prompt.
+func (s *Session) Ready() <-chan error { return s.ready }
+
+func (s *Session) markReady(err error) {
+	s.readyOnce.Do(func() {
+		s.ready <- err
+		close(s.ready)
+	})
 }
 
 func (s *Session) Read(b []byte) (int, error) { return s.reader.Read(b) }
@@ -113,6 +127,7 @@ func (s *Session) Wait() terminal.ExitInfo {
 // Close は、繋いだものを手前まで含めて手放す。
 func (s *Session) Close() error {
 	s.closeOnce.Do(func() {
+		s.markReady(context.Canceled)
 		if s.cancel != nil {
 			s.cancel()
 		}
@@ -165,6 +180,7 @@ func (s *Session) finish(info terminal.ExitInfo) {
 //
 // セッションは残す。接続できなかった理由が読めるのはそこだけである。
 func (s *Session) fail(reason string) {
+	s.markReady(errors.New(reason))
 	_, _ = io.WriteString(s.writer, "\r\n"+reason+"\r\n")
 	s.finish(terminal.ExitInfo{Code: 255, At: time.Now()})
 	_ = s.writer.Close()
