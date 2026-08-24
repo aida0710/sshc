@@ -64,6 +64,14 @@ export function useTerminalSessions(
     };
   }, [refresh]);
 
+  useEffect(() => {
+    if (!enabled || sessions.length === 0) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void refresh();
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [enabled, refresh, sessions.length]);
+
   const open = useCallback(
     async (request: OpenTerminalSessionRequest): Promise<TerminalSession | null> => {
       setBusy(true);
@@ -73,7 +81,7 @@ export function useTerminalSessions(
         await refresh();
         return opened.session;
       } catch (error) {
-        setProblem(translate(openFailureKey(failureCode(error))));
+        setProblem(translate(terminalProblemKey(failureCode(error))));
         return null;
       } finally {
         setBusy(false);
@@ -146,7 +154,7 @@ export function useTerminalSessions(
     setSessions((current) =>
       current.map((session) =>
         session.id === id && session.exited === undefined
-          ? { ...session, exited: { code: 0, signal: "", at: "" } }
+          ? { ...session, state: "exited", exited: { code: 0, signal: "", at: "" } }
           : session,
       ),
     );
@@ -155,7 +163,7 @@ export function useTerminalSessions(
   return { sessions, maxSessions, busy, problem, loaded, rename, open, close, closeAll, refresh, markExited };
 }
 
-function openFailureKey(code: string): MessageKey {
+export function terminalProblemKey(code: string): MessageKey {
   switch (code) {
     case "terminal_session_limit":
       return "terminal.limitRefused";
@@ -165,6 +173,24 @@ function openFailureKey(code: string): MessageKey {
       return "terminal.proxyCommandWithJump";
     case "jump_depth_exceeded":
       return "terminal.jumpDepthExceeded";
+    case "host_key_unknown":
+      return "terminal.hostKeyUnknown";
+    case "host_key_changed":
+      return "terminal.hostKeyChanged";
+    case "host_key_revoked":
+      return "terminal.hostKeyRevoked";
+    case "identity_unavailable":
+      return "terminal.identityUnavailable";
+    case "authentication_unavailable":
+      return "terminal.authenticationUnavailable";
+    case "authentication_cancelled":
+      return "terminal.authenticationCancelled";
+    case "key_passphrase_required":
+      return "terminal.keyPassphraseRequired";
+    case "reconnect_failed":
+      return "terminal.reconnectFailed";
+    case "reconnect_exhausted":
+      return "terminal.reconnectExhausted";
     default:
       return "terminal.openFailed";
   }

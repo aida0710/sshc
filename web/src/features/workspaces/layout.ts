@@ -147,6 +147,11 @@ export function paneIDs(root: RuntimeNode): string[] {
   return ids;
 }
 
+export function storedPaneCount(root: StoredNode): number {
+  if (root.pane !== undefined) return 1;
+  return storedPaneCount(root.split.first) + storedPaneCount(root.split.second);
+}
+
 export function executionTargets(root: RuntimeNode, mode: "host" | "pane"): ExecutionTarget[] {
   const targets: ExecutionTarget[] = [];
   const seen = new Set<string>();

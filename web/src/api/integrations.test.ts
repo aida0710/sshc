@@ -84,6 +84,7 @@ describe("integrationsApi.addKnownHost", () => {
 describe("integrationsApi terminal sessions", () => {
   const session = {
     id: "3f9c", kind: "shell", title: "zsh", startedAt: "2026-08-13T09:00:00Z",
+    state: "connected", problem: "",
   };
 
   it("opens a session and returns the single-use stream ticket", async () => {
@@ -103,6 +104,9 @@ describe("integrationsApi terminal sessions", () => {
   it.each([
     { sessions: [{ ...session, kind: "telnet" }], maxSessions: 50 },
     { sessions: [{ ...session, id: 3 }], maxSessions: 50 },
+    { sessions: [{ ...session, state: "lost" }], maxSessions: 50 },
+    { sessions: [{ ...session, problem: 3 }], maxSessions: 50 },
+    { sessions: [{ ...session, state: "reconnecting", reconnect: { attempt: 0, limit: 5, retryAt: "x", problem: "" } }], maxSessions: 50 },
     { sessions: [{ ...session, exited: { code: "0", signal: "", at: "" } }], maxSessions: 50 },
     { sessions: [], maxSessions: -1 },
     { sessions: {}, maxSessions: 50 },

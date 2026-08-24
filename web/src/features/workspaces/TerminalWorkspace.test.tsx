@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../../api/integrations";
 import { TerminalWorkspace } from "./TerminalWorkspace";
 
-const workspace = vi.hoisted(() => ({ list: vi.fn().mockResolvedValue([]) }));
+const workspace = vi.hoisted(() => ({
+  list: vi.fn().mockResolvedValue([]),
+  restore: vi.fn(),
+}));
 vi.mock("./api", () => ({ workspaceApi: workspace }));
 
 const primary: TerminalSession = {
@@ -14,6 +17,8 @@ const primary: TerminalSession = {
   alias: "edge",
   title: "Primary terminal",
   startedAt: "2026-08-24T09:00:00Z",
+  state: "connected",
+  problem: "",
 };
 
 function Harness() {
@@ -30,6 +35,8 @@ function Harness() {
         alias,
         title: "Duplicate terminal",
         startedAt: "2026-08-24T09:01:00Z",
+        state: "connected",
+        problem: "",
       };
       setSessions((current) => current.some((session) => session.id === duplicate.id) ? current : [...current, duplicate]);
       return duplicate;
@@ -108,5 +115,54 @@ describe("TerminalWorkspace pane movement", () => {
     expect(screen.getAllByRole("button", { name: "Exit focus mode" })).toHaveLength(2);
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+  });
+
+  it("consumes a Home restore request once and leaves only the failed pane unavailable", async () => {
+    workspace.restore.mockResolvedValue({
+      id: "workspace-1",
+      name: "Production pair",
+      layout: {
+        split: {
+          direction: "horizontal",
+          ratio: 50,
+          first: { pane: { id: "pane-a", alias: "web-a" } },
+          second: { pane: { id: "pane-b", alias: "web-b" } },
+        },
+      },
+      focusedPaneId: "pane-a",
+      createdAt: "2026-08-24T10:00:00Z",
+      updatedAt: "2026-08-24T11:00:00Z",
+    });
+    const open = vi.fn(async (alias: string) => alias === "web-a"
+      ? { ...primary, id: "restored-a", alias: "web-a", title: "Restored web-a" }
+      : null);
+
+    function RestoreHarness({ sequence }: { sequence: number }) {
+      const [sessions, setSessions] = useState<TerminalSession[]>([]);
+      return <TerminalWorkspace
+        sessions={sessions}
+        activeSessionId={null}
+        onActive={() => undefined}
+        onOpenAlias={async (alias) => {
+          const session = await open(alias);
+          if (session !== null) setSessions((current) => [...current, session]);
+          return session;
+        }}
+        restoreRequest={{ id: "workspace-1", sequence }}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+
+    const { container, rerender } = render(<RestoreHarness sequence={1} />);
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(workspace.restore).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2);
+    expect(screen.getByText("Restored web-a")).toBeInTheDocument();
+    expect(screen.getByText("open_failed")).toBeInTheDocument();
+
+    rerender(<RestoreHarness sequence={1} />);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(workspace.restore).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(2);
   });
 });

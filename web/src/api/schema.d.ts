@@ -1710,8 +1710,19 @@ export interface components {
             alias?: string;
             title: string;
             startedAt: string;
+            /** @enum {string} */
+            state: "connecting" | "connected" | "reconnecting" | "exited";
+            problem: string;
+            reconnect?: components["schemas"]["TerminalReconnect"];
             exited?: components["schemas"]["TerminalExit"];
             forwards?: components["schemas"]["TerminalForward"][];
+        };
+        TerminalReconnect: {
+            attempt: number;
+            limit: number;
+            /** Format: date-time */
+            retryAt: string;
+            problem: string;
         };
         TerminalExit: {
             code: number;
