@@ -43,6 +43,21 @@ function paneTitles(container: HTMLElement): string[] {
 }
 
 describe("TerminalWorkspace pane movement", () => {
+  it("shows the sshc command name when no console is open", async () => {
+    render(
+      <TerminalWorkspace
+        sessions={[]}
+        activeSessionId={null}
+        onActive={() => undefined}
+        onOpenAlias={vi.fn()}
+        renderTerminal={() => null}
+      />,
+    );
+
+    expect(await screen.findByRole("status")).toHaveTextContent("sshc host");
+    expect(screen.getByRole("status")).not.toHaveTextContent("ssh host");
+  });
+
   it("swaps panes by drag and drop and exposes the same operation to keyboard users", async () => {
     const user = userEvent.setup();
     const { container } = render(<Harness />);
@@ -74,5 +89,24 @@ describe("TerminalWorkspace pane movement", () => {
     await user.click(handles[1] as HTMLElement);
     await waitFor(() => expect(paneTitles(container)[0]).toContain("Primary terminal"));
     expect(paneTitles(container)[1]).toContain("Duplicate terminal");
+  });
+
+  it("resizes a split with the keyboard and can focus one pane", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Split right" }));
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+
+    const separator = screen.getByRole("separator", { name: "Resize split" });
+    expect(separator).toHaveAttribute("aria-valuenow", "50");
+    fireEvent.keyDown(separator, { key: "ArrowRight" });
+    expect(separator).toHaveAttribute("aria-valuenow", "55");
+
+    const focusButtons = screen.getAllByRole("button", { name: "Focus edge" });
+    await user.click(focusButtons[0] as HTMLElement);
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(1));
+    expect(screen.getAllByRole("button", { name: "Exit focus mode" })).toHaveLength(2);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
   });
 });

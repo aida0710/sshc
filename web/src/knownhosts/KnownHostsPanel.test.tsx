@@ -109,6 +109,30 @@ describe("KnownHostsPanel", () => {
     expect(within(row).getByText(/SHA256:bytFrSjx/)).toBeInTheDocument();
   });
 
+  it("sorts trusted entries from every data-column header", async () => {
+    const alpha = {
+      ...entry,
+      line: 3,
+      digest: "b".repeat(64),
+      hosts: ["alpha.example.com"],
+      keyType: "ecdsa-sha2-nistp256",
+      fingerprint: "SHA256:alpha",
+    };
+    const api = buildApi({
+      knownHosts: vi.fn().mockResolvedValue({ path: "~/.ssh/known_hosts", entries: [entry, alpha] }),
+    });
+    render(<KnownHostsPanel api={api} />);
+
+    const table = await screen.findByRole("table", { name: "~/.ssh/known_hosts" });
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("alpha.example.com");
+    await userEvent.click(within(table).getByRole("button", { name: /Host.*sort descending/ }));
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("bastion.example.com");
+    await userEvent.click(within(table).getByRole("button", { name: /Key type.*sort ascending/ }));
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("ecdsa-sha2-nistp256");
+    await userEvent.click(within(table).getByRole("button", { name: /Fingerprint.*sort ascending/ }));
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("SHA256:alpha");
+  });
+
   it("confirms before deleting and sends the digest of the line that was shown", async () => {
     const api = buildApi();
     render(<KnownHostsPanel api={api} />);

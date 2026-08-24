@@ -1122,6 +1122,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/{alias}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get: operations["downloadSFTPDirectoryArchive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/{alias}/upload": {
         parameters: {
             query?: never;
@@ -1156,6 +1174,24 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["renameSFTPEntry"];
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["chmodSFTPEntry"];
         trace?: never;
     };
     "/api/v1/workspaces": {
@@ -2373,6 +2409,11 @@ export interface components {
         SFTPRenameRequest: {
             from: string;
             to: string;
+        };
+        SFTPChmodRequest: {
+            path: string;
+            mode: string;
+            expectedRevision: string;
         };
         SFTPTransfer: {
             path: string;
@@ -4656,6 +4697,32 @@ export interface operations {
             404: components["responses"]["Problem"];
         };
     };
+    downloadSFTPDirectoryArchive: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remote directory ZIP archive */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
     uploadSFTPFile: {
         parameters: {
             query: {
@@ -4739,6 +4806,36 @@ export interface operations {
                     "application/json": components["schemas"]["SFTPEntry"];
                 };
             };
+            409: components["responses"]["Problem"];
+        };
+    };
+    chmodSFTPEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPChmodRequest"];
+            };
+        };
+        responses: {
+            /** @description Entry permissions changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
         };
     };

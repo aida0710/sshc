@@ -63,9 +63,9 @@ sshc status                   # エンジンの状態を表示（--json に対�
 ## 主な機能
 
 - OpenSSH 互換の設定管理: コメント、記述順、空白を保ったまま編集し、外部変更との競合を検出します。
-- ブラウザ内ターミナル: ポート転送、エージェント転送、未知のホスト鍵の確認、切断時の再接続、`ProxyJump`、`ProxyCommand` に対応します。
-- SFTP ファイル操作: 保存済み接続を使ったリモート閲覧、複数ファイル選択と Drag & Drop によるファイルごとのアップロード、ダウンロード、作成、名前変更、削除に対応します。UTF-8 の 2 MiB 以下のファイルは、遅延ロードされる Monaco Editor で競合を検出しながら編集できます。
-- Workspace: 複数の SSH 接続を縦横に分割し、キー入力を全 pane へ送る Broadcast Input を利用できます。paneの移動handleをDrag & Dropするか2つ順に選ぶと、接続を維持したまま配置を交換できます。pane 構成は端末内に保存でき、再オープン時は各接続を新しく開始します。Workspace内のhostまたはpaneを対象に、直接入力したcommandや保存済みSnippetをpreview後に一括実行できます。
+- ブラウザ内ターミナル: ポート転送、エージェント転送、未知のホスト鍵の確認、切断時の再接続、`ProxyJump`、`ProxyCommand` に対応します。scrollback検索、live session内のcommand履歴、頻度順command候補、absolute remote path補完も利用できます。
+- SFTP ファイル操作: 保存済み接続を使ったリモート閲覧、ファイル／フォルダの選択と Drag & Drop による再帰アップロード、進捗、取消、上書き確認、ファイルdownload、フォルダのZIP download、作成、名前変更、chmod、削除に対応します。UTF-8 の 2 MiB 以下のファイルは、遅延ロードされる Monaco Editor で競合を検出しながら編集できます。
+- Workspace: 複数の SSH 接続を縦横に分割し、区切りをDragして比率を保存できます。単一paneへ集中するFocus Modeと、キー入力を全paneへ送るBroadcast Inputを利用できます。paneの移動handleをDrag & Dropするか2つ順に選ぶと、接続を維持したまま配置を交換できます。pane 構成は端末内に保存でき、再オープン時は各接続を新しく開始します。Workspace内のhostまたはpaneを対象に、直接入力したcommandや保存済みSnippetをpreview後に一括実行できます。
 - Snippets と automation: `{{variable}}` を含むコマンドを保存し、接続先と展開後コマンドを確認してから複数ホストへ実行できます。明示的に選んだ snippet は、SSH shell の準備完了後に startup command として送信できます。
 - 接続ログ: `ssh -v` 相当の情報を、4 段階の詳細度でターミナルに表示します。
 - 表示設定: 6 種類のカラーパレット、同梱の JetBrains Mono、背景画像を全体または接続ごとに設定できます。

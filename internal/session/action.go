@@ -26,6 +26,7 @@ const (
 	ActionRevealPrivateKey  = "private_key.reveal"
 	ActionPurgeTrashEntry   = "trash.purge"
 	ActionSFTPDelete        = "sftp.delete"
+	ActionSFTPChmod         = "sftp.chmod"
 	ActionSnippetExecute    = "snippet.execute"
 )
 
@@ -46,6 +47,7 @@ var knownActionKinds = map[string]bool{
 	ActionRevealPrivateKey:  true,
 	ActionPurgeTrashEntry:   true,
 	ActionSFTPDelete:        true,
+	ActionSFTPChmod:         true,
 	ActionSnippetExecute:    true,
 }
 

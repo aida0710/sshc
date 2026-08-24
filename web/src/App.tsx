@@ -132,8 +132,8 @@ const sectionIcons: Record<Section, IconName> = {
 };
 
 const navGroups: { label: MessageKey; sections: Section[] }[] = [
-  { label: "shell.navStart", sections: ["Home", "Connections", "Terminal"] },
-  { label: "shell.navConnections", sections: ["Config", "Groups", "Files"] },
+  { label: "shell.navStart", sections: ["Home", "Connections", "Files", "Terminal"] },
+  { label: "shell.navConnections", sections: ["Config", "Groups"] },
   { label: "shell.navKeysHosts", sections: ["Keys", "Known Hosts", "Remote Keys"] },
   { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Snippets", "Settings", "Sync", "History"] },
 ];

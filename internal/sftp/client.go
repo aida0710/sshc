@@ -25,6 +25,8 @@ func (c *Client) ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error
 
 func (c *Client) Lstat(path string) (fs.FileInfo, error) { return c.client.Lstat(path) }
 
+func (c *Client) ReadLink(path string) (string, error) { return c.client.ReadLink(path) }
+
 func (c *Client) Open(path string) (io.ReadCloser, error) { return c.client.Open(path) }
 
 func (c *Client) Create(path string) (io.WriteCloser, error) { return c.client.Create(path) }

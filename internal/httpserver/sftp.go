@@ -39,9 +39,11 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.GET("/api/v1/sftp/:alias/text", handlers.ReadText)
 	engine.PUT("/api/v1/sftp/:alias/text", handlers.SaveText)
 	engine.GET("/api/v1/sftp/:alias/download", handlers.Download)
+	engine.GET("/api/v1/sftp/:alias/archive", handlers.DownloadArchive)
 	engine.POST("/api/v1/sftp/:alias/upload", handlers.Upload)
 	engine.PATCH("/api/v1/sftp/:alias/entry", handlers.Rename)
 	engine.DELETE("/api/v1/sftp/:alias/entry", handlers.Delete)
+	engine.PATCH("/api/v1/sftp/:alias/mode", handlers.Chmod)
 }
 
 func describeSFTPEntry(entry sshcSFTP.Entry) sftpEntry {
@@ -167,6 +169,24 @@ func (h SFTPHandlers) Download(c *echo.Context) error {
 	return nil
 }
 
+func (h SFTPHandlers) DownloadArchive(c *echo.Context) error {
+	remotePath := c.QueryParam("path")
+	name := path.Base(remotePath)
+	if name == "." || name == "/" || name == "" {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	c.Response().Header().Set("Content-Type", "application/zip")
+	c.Response().Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".zip"}))
+	output := &countingWriter{write: c.Response().Write}
+	if _, err := h.Service.DownloadArchive(c.Request().Context(), c.Param("alias"), remotePath, output); err != nil {
+		if output.written > 0 {
+			return err
+		}
+		return sftpProblem(c, err)
+	}
+	return nil
+}
+
 type countingWriter struct {
 	write   func([]byte) (int, error)
 	written int64
@@ -204,6 +224,31 @@ func (h SFTPHandlers) Delete(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]bool{"changed": true})
 }
 
+func (h SFTPHandlers) Chmod(c *echo.Context) error {
+	var body struct {
+		Path             string `json:"path"`
+		Mode             string `json:"mode"`
+		ExpectedRevision string `json:"expectedRevision"`
+	}
+	if err := decodeJSON(c, &body); err != nil || (len(body.Mode) != 3 && len(body.Mode) != 4) {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	parsed, err := strconv.ParseUint(body.Mode, 8, 12)
+	if err != nil || parsed > 0o777 {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	alias := c.Param("alias")
+	target := alias + ":" + body.Path + ":" + body.Mode
+	if allowed, response := h.Actions.consume(c, session.ActionSFTPChmod, target); !allowed {
+		return response
+	}
+	entry, err := h.Service.Chmod(c.Request().Context(), alias, body.Path, fs.FileMode(parsed), body.ExpectedRevision)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, describeSFTPEntry(entry))
+}
+
 func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
 	registry[session.ActionSFTPDelete] = actionKind{
 		evidence: func(target string) (string, error) {
@@ -216,6 +261,24 @@ func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
 				return "", err
 			}
 			return fmt.Sprintf("%s:%s:%d", entry.Type, entry.Revision, entry.Size), nil
+		},
+		fail: sftpProblem,
+	}
+	registry[session.ActionSFTPChmod] = actionKind{
+		evidence: func(target string) (string, error) {
+			alias, remainder, ok := strings.Cut(target, ":")
+			if !ok {
+				return "", sshcSFTP.ErrInvalidPath
+			}
+			separator := strings.LastIndexByte(remainder, ':')
+			if separator <= 0 || separator == len(remainder)-1 {
+				return "", sshcSFTP.ErrInvalidPath
+			}
+			entry, err := service.Stat(context.Background(), alias, remainder[:separator])
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%s:%s:%s", entry.Type, entry.Revision, entry.Mode.Perm()), nil
 		},
 		fail: sftpProblem,
 	}

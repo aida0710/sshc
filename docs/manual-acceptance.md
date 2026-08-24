@@ -87,12 +87,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 OpenSSHコンテナに対するプロトコル往復は`make integration`で自動検査します。この項目では実際の権限、遅延、サーバー固有設定とブラウザ操作を確認します。
 
-1. 削除してよい検証用directoryを実ホストに作り、Filesから開く。
-2. 小さいtext、binary、同名ではない複数ファイルをまとめて選択し、各ファイルが個別に完了表示されることを確認する。
-3. 別の複数ファイルをファイル一覧へDrag & Dropし、1件を意図的に既存名へ衝突させる。衝突した1件だけが失敗し、残りが続行されることを確認する。
+1. 削除してよい検証用directoryを実ホストに作り、SFTPから開く。
+2. nested directory、空directory、小さいtext／binaryを含むフォルダをDrag & Dropし、階層と空directoryが維持され、進捗とfile別結果が表示されることを確認する。
+3. 別のフォルダをアップロードし、既存名へ衝突させる。上書き確認で1件を上書きし、別の1件をskipして、残りが続行されることを確認する。別の転送では取消し、未開始fileが送られないことを確認する。
 4. textをMonacoで開き、別のSSH sessionから内容を変更した後に保存して、競合として拒否されることを確認する。
-5. download、rename、空directoryの作成と削除を確認する。非空directoryが再帰削除されないことも確認する。
-6. 作成したfileとdirectoryを削除して原状復帰する。
+5. file download、directoryのZIP download、rename、空directoryの作成と削除を確認する。非空directoryが再帰削除されないことも確認する。
+6. fileとdirectoryの権限をchmodで変更し、一覧の権限・更新日時・種別列とsortを確認する。symlinkにはchmodが表示されないことを確認する。
+7. 作成したfileとdirectoryを削除して原状復帰する。
 
 ## M8. Workspace Command Center
 
@@ -109,6 +110,15 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 3. 交換後も各terminalのscrollbackと接続が対応するpaneに残り、split方向と比率が変わらないことを確認する。
 4. 移動handleを2つ順に選択し、Drag & Dropと同じ交換が行われることを確認する。最初のhandleでEscapeを押すと選択を解除できることも確認する。
 5. Workspaceを保存して再度開き、交換後の配置でaliasごとに新規接続されることを確認する。
+6. 縦横それぞれのseparatorをDragして比率を変更し、保存・再オープン後に復元されることを確認する。矢印キーでも5%ずつ変更できることを確認する。
+7. 任意paneをFocus Modeへ切り替え、他paneの接続を閉じずに単一paneだけが表示されること、Escとtoolbarの両方で元layoutへ戻ることを確認する。
+
+## M10. Terminal検索・履歴・補完
+
+1. 長い出力を作り、Ctrl/Cmd+Fでscrollback内の語を検索する。Enter／Shift+Enterと前後buttonで全一致を巡回できることを確認する。
+2. 同じprefixを持つcommandを複数回実行し、入力中に頻度順の候補が表示され、Tabまたは候補buttonで残りが入力されることを確認する。
+3. SSH terminalでabsolute remote pathを入力し、SFTPで読める親directoryの候補が表示されることを確認する。relative pathではcwdを推測した候補が出ないことを確認する。
+4. terminalを閉じて開き直し、以前のcommand履歴がdiskやWorkspaceから復元されないことを確認する。
 
 ## 記録
 
@@ -125,6 +135,7 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 | 未記録 | M7 | 未記録 | 未記録 | 未実施 | 削除してよい実ホストのdirectoryが必要 |
 | 未記録 | M8 | 未記録 | 未記録 | 未実施 | 複数paneで接続できる検証用ホストが必要 |
 | 未記録 | M9 | 未記録 | 未記録 | 未実施 | 複数paneで接続できる検証用ホストが必要 |
+| 未記録 | M10 | 未記録 | 未記録 | 未実施 | 長い出力とSFTP可能な検証用ホストが必要 |
 
 ## Android エミュレータで WebView を調査する
 
