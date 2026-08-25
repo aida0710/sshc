@@ -564,6 +564,8 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "sync_not_configured")
 	case errors.Is(err, remotesync.ErrRemoteMoved):
 		return problem(c, http.StatusConflict, "sync_remote_moved")
+	case errors.Is(err, remotesync.ErrNothingToPush):
+		return problem(c, http.StatusConflict, "sync_nothing_to_push")
 	case errors.Is(err, remotesync.ErrNoSnapshot):
 		return problem(c, http.StatusNotFound, "sync_no_snapshot")
 	case errors.Is(err, remotesync.ErrConflicts):

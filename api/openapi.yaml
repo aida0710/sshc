@@ -381,7 +381,7 @@ paths:
             schema: { $ref: "#/components/schemas/SyncPushRequest" }
       responses:
         "200":
-          description: Snapshot written
+          description: Snapshot written because the local manifest changed
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PushResponse" }

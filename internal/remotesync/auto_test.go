@@ -75,6 +75,34 @@ func TestAutoPushesWhatChangedHere(t *testing.T) {
 	}
 }
 
+func TestSendOnlyAutoStopsBeforeUploadingWhenRemoteMoved(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "remote\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "Remote setup"); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{"config": "local\n"})
+	consumer.direct(remotesync.DirectionPush)
+	auto := autoFor(t, consumer, true)
+	before, _ := bucket.uploads()
+
+	view := once(t, auto)
+	if view.Phase != remotesync.AutoBlocked || view.Detail != "remote_moved" {
+		t.Fatalf("view = %+v, want blocked remote_moved", view)
+	}
+	if after, _ := bucket.uploads(); after != before {
+		t.Fatalf("send-only check uploaded before resolving remote: %d objects became %d", before, after)
+	}
+
+	view = once(t, auto)
+	if view.Phase != remotesync.AutoBlocked || view.Detail != "remote_moved" {
+		t.Fatalf("second view = %+v, want blocked remote_moved", view)
+	}
+	if after, _ := bucket.uploads(); after != before {
+		t.Fatalf("blocked retry uploaded: %d objects became %d", before, after)
+	}
+}
+
 // 向こうが進んでいれば、押されなくても取り込む。
 func TestAutoAppliesWhatAnotherMachinePushed(t *testing.T) {
 	bucket := &fakeBucket{}

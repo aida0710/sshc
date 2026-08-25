@@ -145,7 +145,22 @@ func (a *Auto) keyFor() (string, bool) {
 // receive はリモート更新を取り込む。done はこの巡回を終了すべきことを示す。
 func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool) {
 	if a.service.Direction() == DirectionPush {
-		return AutoIdle, "", false
+		moved, remoteETag, err := a.service.remoteGeneration(ctx)
+		if err != nil {
+			return AutoFailed, failureDetail(err), true
+		}
+		if !moved {
+			a.clearBlocked()
+			return AutoIdle, "", false
+		}
+		if detail, ok := a.blocked(remoteETag); ok {
+			return AutoBlocked, detail, true
+		}
+		// A send-only installation cannot resolve a remote generation by
+		// downloading it. Stop before creating a history candidate and wait for
+		// an explicit force push or a direction change.
+		a.rememberBlocked(remoteETag, "remote_moved")
+		return AutoBlocked, "remote_moved", true
 	}
 	// 動いていないものは取りに行かない。HEAD は ETag だけを返す。
 	moved, remoteETag, err := a.service.remoteGeneration(ctx)
@@ -201,7 +216,7 @@ func (a *Auto) send(ctx context.Context, key string) (AutoPhase, string) {
 	}
 	if _, err := a.service.push(ctx, key, "", ""); err != nil {
 		switch {
-		case errors.Is(err, ErrPushRefused):
+		case errors.Is(err, ErrPushRefused), errors.Is(err, ErrNothingToPush):
 			return AutoIdle, ""
 		case errors.Is(err, ErrRemoteMoved):
 			// 次の巡回が先に受け取る。失敗ではなく、順番の問題である。

@@ -161,6 +161,16 @@ describe("SyncPanel", () => {
     await waitFor(() => expect(api.syncBucketStatus).toHaveBeenCalledTimes(2));
   });
 
+  it("does not offer a push when the local workspace is unchanged", async () => {
+    const api = buildApi(configured, nothingToDo, {
+      syncPushDraft: vi.fn().mockResolvedValue({ message: "Record current workspace", added: 0, modified: 0, removed: 0 }),
+    });
+    render(<SyncPanel api={api} />);
+
+    expect(await screen.findByText("There are no local changes to push.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Push this workspace" })).toBeDisabled();
+  });
+
   it("compares and restores one encrypted revision without rewinding the remote head", async () => {
     const historyKey = "snapshots/2026-08-25-015400-aabbcc-000001.tar.gz.enc";
     const pullSnapshot = vi.fn().mockResolvedValue({
@@ -389,7 +399,7 @@ describe("SyncPanel", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Push this workspace" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/current snapshot.*update was cancelled/i);
-    expect(screen.getByRole("alert")).toHaveTextContent(/dated history copy.*may remain/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/cancelled before retrying/i);
     expect(screen.getByRole("heading", { name: "Previous success" })).toBeInTheDocument();
   });
 
@@ -595,6 +605,16 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     expect(await screen.findByText(/would remove files from this machine/i)).toBeInTheDocument();
+  });
+
+  it("explains that send-only auto sync stopped before uploading a moved remote", async () => {
+    const api = buildApi(
+      { ...configured, auto: { enabled: true, phase: "blocked", detail: "remote_moved", at: "2026-08-25T09:00:00Z" } },
+      nothingToDo,
+    );
+    render(<SyncPanel api={api} />);
+
+    expect(await screen.findByText(/stopped before uploading because another machine changed/i)).toBeInTheDocument();
   });
 
   it("turns the loop on and keeps what the server answered", async () => {

@@ -3436,7 +3436,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Snapshot written */
+            /** @description Snapshot written because the local manifest changed */
             200: {
                 headers: {
                     [name: string]: unknown;

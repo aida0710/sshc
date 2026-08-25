@@ -20,6 +20,11 @@ type manifestChanges struct {
 	removed  []string
 }
 
+func manifestChanged(base *Manifest, next Manifest) bool {
+	changes := diffManifests(base, next)
+	return len(changes.added)+len(changes.modified)+len(changes.removed) > 0
+}
+
 func diffManifests(base *Manifest, next Manifest) manifestChanges {
 	changes := manifestChanges{}
 	before := map[string]Entry{}

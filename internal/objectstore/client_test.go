@@ -84,6 +84,21 @@ func TestPutRefusesBothConditionsAtOnceWithoutSendingAnything(t *testing.T) {
 	}
 }
 
+func TestDeleteRemovesOnlyTheNamedObject(t *testing.T) {
+	var method, path string
+	client, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	if err := client.Delete(context.Background(), "snapshots/candidate"); err != nil {
+		t.Fatalf("Delete = %v", err)
+	}
+	if method != http.MethodDelete || path != "/sshc/snapshots/candidate" {
+		t.Fatalf("request = %s %s", method, path)
+	}
+}
+
 func TestAFailedConditionIsItsOwnError(t *testing.T) {
 	// 「誰かが先に到達した」は失敗ではなく結果であり、呼び出し側はそれを失敗と
 	// 見分けられなければならない。
@@ -202,9 +217,12 @@ func TestEveryRequestIsSignedAndCarriesNoCredentialInTheURL(t *testing.T) {
 	if _, err := client.Put(context.Background(), "k", []byte("b"), "", "*"); err != nil {
 		t.Fatal(err)
 	}
+	if err := client.Delete(context.Background(), "k"); err != nil {
+		t.Fatal(err)
+	}
 
-	if len(seen) != 3 {
-		t.Fatalf("requests = %d, want 3", len(seen))
+	if len(seen) != 4 {
+		t.Fatalf("requests = %d, want 4", len(seen))
 	}
 	for _, request := range seen {
 		authorization := request.Header.Get("Authorization")
