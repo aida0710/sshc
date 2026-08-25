@@ -168,6 +168,8 @@ public final class MainActivity extends Activity {
             message = R.string.failure_listen;
         } else if (reason == Mobile.KindStoppedEarly) {
             message = R.string.failure_stopped_early;
+        } else if (reason == Mobile.KindStorageUnavailable) {
+            message = R.string.failure_storage;
         } else {
             message = R.string.failure_unknown;
         }
