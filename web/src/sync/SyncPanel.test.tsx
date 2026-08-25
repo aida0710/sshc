@@ -31,6 +31,15 @@ const configured: SyncStatus = {
   lastSyncedAt: "2026-08-05T00:00:00Z",
   fileCount: 7,
 };
+const bucketStatus = {
+  checkedAt: "2026-08-25T01:55:00Z",
+  localIsLive: true,
+  historyTruncated: false,
+  live: { key: "workspace.tar.gz.enc", size: 900, lastModified: "2026-08-25T01:54:00Z" },
+  history: [
+    { key: "snapshots/2026-08-25-015400-aabbcc-000001.tar.gz.enc", size: 900, lastModified: "2026-08-25T01:54:00Z" },
+  ],
+};
 
 function buildApi(status: SyncStatus, pull: PullResponse, overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
@@ -46,6 +55,16 @@ function buildApi(status: SyncStatus, pull: PullResponse, overrides: Partial<Int
       },
     }),
     pullSnapshot: vi.fn().mockResolvedValue(pull),
+    syncBucketStatus: vi.fn().mockResolvedValue(bucketStatus),
+    forcePushSnapshot: vi.fn().mockResolvedValue({
+      status,
+      result: {
+        summary: measuredSummary,
+        objectCount: 2,
+        uploadedBytes: 1800,
+        completedAt: "2026-08-25T01:56:00Z",
+      },
+    }),
     ...overrides,
   } as unknown as IntegrationsApi;
 }
@@ -100,6 +119,38 @@ describe("SyncPanel", () => {
 
     expect(await screen.findByText(/including private keys/)).toBeInTheDocument();
     expect(screen.getByText(/guess the encryption key offline/)).toBeInTheDocument();
+  });
+
+  it("reads the current object and dated history from the bucket", async () => {
+    const api = buildApi(configured, nothingToDo);
+    render(<SyncPanel api={api} />);
+
+    expect(await screen.findByRole("heading", { name: "Bucket status" })).toBeInTheDocument();
+    expect(await screen.findByText("workspace.tar.gz.enc")).toBeInTheDocument();
+    expect(screen.getByText("snapshots/2026-08-25-015400-aabbcc-000001.tar.gz.enc")).toBeInTheDocument();
+    expect(api.syncBucketStatus).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole("button", { name: "Refresh bucket status" }));
+    await waitFor(() => expect(api.syncBucketStatus).toHaveBeenCalledTimes(2));
+  });
+
+  it("requires explicit confirmation before replacing the remote snapshot", async () => {
+    const api = buildApi(configured, nothingToDo);
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByText("Replace the remote snapshot", { selector: "summary" }));
+    const replace = screen.getByRole("button", { name: "Replace the remote snapshot" });
+    expect(replace).toBeDisabled();
+    await userEvent.click(screen.getByRole("checkbox", { name: /current remote snapshot/i }));
+    expect(replace).toBeEnabled();
+    await userEvent.click(replace);
+    await waitFor(() => expect(api.forcePushSnapshot).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not offer the removed legacy migration", async () => {
+    render(<SyncPanel api={buildApi(configured, nothingToDo)} />);
+    await screen.findByRole("heading", { name: "Bucket status" });
+    expect(screen.queryByText("Migrate a legacy snapshot")).not.toBeInTheDocument();
   });
 
   it("configures a bucket and clears the credentials from the form", async () => {
@@ -521,5 +572,28 @@ describe("SyncPanel", () => {
     await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, "remote"));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
     await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "remote"));
+  });
+
+  it("can acknowledge a local conflict choice even when it writes no files", async () => {
+    const conflicted = {
+      ...nothingToDo,
+      conflicts: [{ path: "config", changedHere: true, changedThere: true }],
+    };
+    const keepLocal = { ...conflicted, conflicts: [] };
+    const pullSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce(conflicted)
+      .mockResolvedValue(keepLocal);
+    const api = buildApi(configured, conflicted, { pullSnapshot });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep this machine's version" }));
+
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, "local"));
+    const apply = await screen.findByRole("button", { name: "Apply the snapshot" });
+    expect(apply).toBeEnabled();
+    await userEvent.click(apply);
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "local"));
   });
 });

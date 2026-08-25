@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -19,6 +20,7 @@ import (
 	"sshc/internal/objectstore"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
+	"sshc/internal/session"
 	"sshc/internal/storage"
 )
 
@@ -166,6 +168,12 @@ func (b *measuredSyncBucket) liveBytes() int {
 	return len(b.objects[remotesync.ObjectName].body)
 }
 
+func (b *measuredSyncBucket) liveETag() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.objects[remotesync.ObjectName].etag
+}
+
 func (b *measuredSyncBucket) uploadedBytes() (int, int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -176,7 +184,7 @@ func (b *measuredSyncBucket) uploadedBytes() (int, int) {
 	return len(b.putBytes), total
 }
 
-func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[string]string) (*echo.Echo, *remotesync.Service) {
+func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[string]string) (*echo.Echo, *remotesync.Service, *secret.Service) {
 	t.Helper()
 	home := t.TempDir()
 	root := filepath.Join(home, ".ssh")
@@ -225,12 +233,12 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 	service.VaultAdopted = secrets.Reload
 	engine := echo.New()
 	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable})
-	return engine, service
+	return engine, service, secrets
 }
 
 func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *testing.T) {
 	bucket := &measuredSyncBucket{}
-	engine, service := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
+	engine, service, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
 
 	// 数を直接書かない。保管庫のファイル自身もスナップショットに載る
 	// （Collect が sshc/secrets を指定している）ので、書いた数は「この
@@ -287,15 +295,55 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 	}
 }
 
+func TestForcePushRequiresAOneTimeConfirmationForTheCurrentRemoteGeneration(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	_, service, secrets := measuredSyncEngine(t, bucket, map[string]string{"config": "Host replacement\n"})
+	if _, err := service.Push(context.Background(), measuredSyncKey); err != nil {
+		t.Fatalf("initial Push = %v", err)
+	}
+
+	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x61}, 4096)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, err := manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked}).Middleware)
+	registry := actionRegistry{}
+	addSyncActions(registry, service)
+	actions := ActionHandlers{Sessions: manager, Kinds: registry}
+	registerActionRoutes(engine, actions)
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable, Actions: actions})
+
+	before := bucket.liveETag()
+	without := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/sync/force-push", nil, "")
+	if without.Code != http.StatusForbidden || bucket.liveETag() != before {
+		t.Fatalf("force push without confirmation = %d, ETag %q -> %q", without.Code, before, bucket.liveETag())
+	}
+
+	token := issueToken(t, engine, credentials, session.ActionSyncForcePush, remotesync.ForcePushTarget)
+	forced := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/sync/force-push", nil, token)
+	if forced.Code != http.StatusOK || bucket.liveETag() == before {
+		t.Fatalf("confirmed force push = %d: %s", forced.Code, forced.Body.String())
+	}
+	replayed := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/sync/force-push", nil, token)
+	if replayed.Code != http.StatusForbidden {
+		t.Fatalf("replayed confirmation = %d, want 403: %s", replayed.Code, replayed.Body.String())
+	}
+}
+
 func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	bucket := &measuredSyncBucket{}
-	_, producer := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
+	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
 	// producer も consumer も、同じ鍵で暗号化して開く。それが「端末をまたいで
 	// 共有される鍵」の意味である。
 	if _, err := producer.Push(context.Background(), measuredSyncKey); err != nil {
 		t.Fatal(err)
 	}
-	engine, _ := measuredSyncEngine(t, bucket, map[string]string{})
+	engine, _, _ := measuredSyncEngine(t, bucket, map[string]string{})
 
 	preview := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"apply":false}`)
 	if preview.Code != http.StatusOK {

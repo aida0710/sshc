@@ -201,6 +201,18 @@ func TestBuildRefusesAnEntryWithNoContents(t *testing.T) {
 	}
 }
 
+func TestBuildRefusesContentsLargerThanTheReadLimit(t *testing.T) {
+	body := bytes.Repeat([]byte{'x'}, remotesync.MaxSnapshotBytes+1)
+	_, err := remotesync.Build(remotesync.Manifest{
+		Files: []remotesync.Entry{{
+			Path: "sshc/backgrounds/too-large.png", SHA256: remotesync.Digest(body), Mode: "0600",
+		}},
+	}, map[string][]byte{"sshc/backgrounds/too-large.png": body})
+	if !errors.Is(err, remotesync.ErrSnapshotTooLarge) {
+		t.Fatalf("Build = %v, want ErrSnapshotTooLarge", err)
+	}
+}
+
 func FuzzReadSnapshot(f *testing.F) {
 	// Read は攻撃者由来の入力を解析する。アーカイブはバケットから来るのであり、その
 	// バケットに書ける者が、その中身を選ぶ。

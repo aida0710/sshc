@@ -41,12 +41,15 @@ export type SyncOperation = components["schemas"]["SyncOperation"];
 export type PushResult = components["schemas"]["PushResult"];
 export type PushResponse = components["schemas"]["PushResponse"];
 export type PullResponse = components["schemas"]["PullResponse"];
+export type SyncBucketStatus = components["schemas"]["SyncBucketStatus"];
 
 export const REACHABILITY_ACTION_KIND = "diagnostics.reachability";
 export const AUTHENTICATION_ACTION_KIND = "diagnostics.authentication";
 export const KNOWN_HOSTS_DELETE_ACTION_KIND = "known_hosts.delete";
 export const KNOWN_HOSTS_SCAN_ACTION_KIND = "known_hosts.scan";
 export const KNOWN_HOSTS_ADD_ACTION_KIND = "known_hosts.add";
+export const SYNC_FORCE_PUSH_ACTION_KIND = "sync.force_push";
+export const SYNC_FORCE_PUSH_TARGET = "remote-workspace";
 
 export type KnownHostAddition = Pick<KnownHostCandidate, "host" | "port" | "keyType" | "key">;
 
@@ -93,11 +96,12 @@ export type IntegrationsApi = {
   syncStatus(): Promise<SyncStatus>;
   configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
   pushSnapshot(): Promise<PushResponse>;
+  forcePushSnapshot(): Promise<PushResponse>;
+  syncBucketStatus(): Promise<SyncBucketStatus>;
   pullSnapshot(apply: boolean, resolve?: "local" | "remote"): Promise<PullResponse>;
   setSyncKey(key?: string): Promise<SyncKeyResponse>;
   setAutoSync(enabled: boolean): Promise<SyncStatus>;
   syncNow(): Promise<SyncStatus>;
-  rekeySnapshot(passphrase: string): Promise<SyncStatus>;
 };
 
 function validateUpdate(value: unknown): UpdateStatus {
@@ -445,6 +449,22 @@ function validatePushResponse(value: unknown): PushResponse {
   return record as unknown as PushResponse;
 }
 
+function validateSyncBucketStatus(value: unknown): SyncBucketStatus {
+  const record = asRecord(value);
+  asString(record.checkedAt);
+  asBoolean(record.localIsLive);
+  asBoolean(record.historyTruncated);
+  const validateObject = (value: unknown) => {
+    const item = asRecord(value);
+    asString(item.key);
+    asNonnegativeInteger(item.size);
+    if (item.lastModified !== undefined) asString(item.lastModified);
+  };
+  if (record.live !== undefined) validateObject(record.live);
+  for (const item of asArray(record.history)) validateObject(item);
+  return record as unknown as SyncBucketStatus;
+}
+
 function validatePullResponse(value: unknown): PullResponse {
   const record = asRecord(value);
   asBoolean(record.applied);
@@ -683,6 +703,13 @@ export const integrationsApi: IntegrationsApi = {
   async pushSnapshot() {
     return validatePushResponse(await postJSON<unknown>("/api/v1/sync/push", {}));
   },
+  async forcePushSnapshot() {
+    const token = await issueAction(SYNC_FORCE_PUSH_ACTION_KIND, SYNC_FORCE_PUSH_TARGET);
+    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/force-push", {}, token));
+  },
+  async syncBucketStatus() {
+    return validateSyncBucketStatus(await apiClient.read("/api/v1/sync/bucket"));
+  },
   async pullSnapshot(apply, resolve) {
     return validatePullResponse(
       await postJSON<unknown>("/api/v1/sync/pull", resolve === undefined ? { apply } : { apply, resolve }),
@@ -708,9 +735,6 @@ export const integrationsApi: IntegrationsApi = {
   },
   async syncNow() {
     return validateSyncStatus(await postJSON<unknown>("/api/v1/sync/now", {}));
-  },
-  async rekeySnapshot(passphrase) {
-    return validateSyncStatus(await postJSON<unknown>("/api/v1/sync/rekey", { passphrase }));
   },
   async knownHosts(query) {
     return validateKnownHosts(await apiClient.read(`/api/v1/known-hosts?query=${encodeURIComponent(query)}`));

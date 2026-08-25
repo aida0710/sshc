@@ -4,10 +4,11 @@ import {
   integrationsApi,
   type IntegrationsApi,
   type PullResponse,
+  type SyncBucketStatus,
   type SyncDirection,
   type SyncStatus,
 } from "../api/integrations";
-import { useTranslate } from "../i18n/context";
+import { useLanguage } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import {
   Field,
@@ -18,7 +19,7 @@ import {
 import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
-import { SyncResultCard, type SyncResultView } from "./SyncResultCard";
+import { formatBytes, SyncResultCard, type SyncResultView } from "./SyncResultCard";
 
 type SyncPanelProps = { api?: IntegrationsApi };
 
@@ -41,6 +42,12 @@ type SyncStatusState =
   | { phase: "error"; message: string }
   | { phase: "ready"; value: SyncStatus };
 
+type BucketStatusState =
+  | { phase: "idle" }
+  | { phase: "loading" }
+  | { phase: "error"; message: string }
+  | { phase: "ready"; value: SyncBucketStatus };
+
 const refusals: Record<string, MessageKey> = {
   wrong_master_password: "sync.wrongMaster",
   wrong_passphrase: "sync.wrongKey",
@@ -53,7 +60,7 @@ const refusals: Record<string, MessageKey> = {
 };
 
 export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
-  const t = useTranslate();
+  const { locale, t } = useLanguage();
   const [statusState, setStatusState] = useState<SyncStatusState>({ phase: "loading" });
   const [endpoint, setEndpoint] = useState("");
   const [bucket, setBucket] = useState("");
@@ -66,7 +73,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [revealed, setRevealed] = useState("");
   const [ownKey, setOwnKey] = useState("");
   const [chooseOwn, setChooseOwn] = useState(false);
-  const [oldKey, setOldKey] = useState("");
+  const [bucketState, setBucketState] = useState<BucketStatusState>({ phase: "idle" });
+  const [forceConfirmed, setForceConfirmed] = useState(false);
   const [acceptedRemovals, setAcceptedRemovals] = useState(false);
   const [resolve, setResolve] = useState<"local" | "remote" | undefined>(undefined);
   const [preview, setPreview] = useState<PullResponse | null>(null);
@@ -87,18 +95,40 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     setEditingSettings(true);
   }
 
+  const refreshBucket = useCallback(async () => {
+    setBucketState({ phase: "loading" });
+    try {
+      setBucketState({ phase: "ready", value: await api.syncBucketStatus() });
+    } catch {
+      setBucketState({ phase: "error", message: t("sync.bucketStatusFailed") });
+    }
+  }, [api, t]);
+
   const reload = useCallback(async () => {
     setStatusState({ phase: "loading" });
     try {
-      setStatusState({ phase: "ready", value: await api.syncStatus() });
+      const next = await api.syncStatus();
+      setStatusState({ phase: "ready", value: next });
+      if (next.configured) void refreshBucket();
+      else setBucketState({ phase: "idle" });
     } catch {
       setStatusState({ phase: "error", message: t("sync.statusFailed") });
     }
-  }, [api, t]);
+  }, [api, refreshBucket, t]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const shouldPollBucket =
+    statusState.phase === "ready" && statusState.value.configured && !statusState.value.locked;
+  useEffect(() => {
+    if (!shouldPollBucket) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") void refreshBucket();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [refreshBucket, shouldPollBucket]);
 
   async function run<T>(
     operation: () => Promise<T>,
@@ -216,6 +246,17 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         ))}
       </dl>
 
+      <ol aria-label={t("sync.flowHeading")} className="grid overflow-hidden rounded-xl border border-line bg-toolbar sm:grid-cols-3">
+        {["sync.flowBucket", "sync.flowKey", "sync.flowOperate"].map((key, index) => (
+          <li key={key} className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-xs font-semibold text-accent">
+              {index + 1}
+            </span>
+            <span className="text-sm text-ink">{t(key as MessageKey)}</span>
+          </li>
+        ))}
+      </ol>
+
       <p className={hintText}>{t("sync.warning")}</p>
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {notice === "" ? null : <p role="status" className="text-sm text-ink-muted">{notice}</p>}
@@ -306,6 +347,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   setAccessKeyId("");
                   setSecretAccessKey("");
                   setEditingSettings(false);
+                  setForceConfirmed(false);
+                  void refreshBucket();
                 },
                 t("sync.configureFailed"),
               )
@@ -391,38 +434,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             </div>
           </section>
 
-          <details className="rounded-lg border border-line bg-surface-subtle p-4">
-            <summary className="cursor-pointer text-sm font-medium text-ink">{t("sync.rekeyHeading")}</summary>
-            <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
-              <p className="text-sm leading-6 text-ink-muted">{t("sync.rekeyHint")}</p>
-              <input
-                type="password"
-                aria-label={t("sync.rekeyOldKey")}
-                value={oldKey}
-                onChange={(event) => setOldKey(event.target.value)}
-                className={control}
-              />
-              <button
-                type="button"
-                disabled={busy || !status.configured || !status.keyConfigured || oldKey === ""}
-                onClick={() =>
-                  void run(
-                    () => api.rekeySnapshot(oldKey),
-                    (next) => {
-                      setStatusState({ phase: "ready", value: next });
-                      setOldKey("");
-                      setNotice(t("sync.rekeyed"));
-                    },
-                    t("sync.rekeyFailed"),
-                  )
-                }
-                className="self-start rounded border border-line px-3 py-1.5 text-sm text-ink"
-              >
-                {t("sync.rekey")}
-              </button>
-            </div>
-          </details>
-
           <section aria-labelledby="sync-auto-heading" className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4">
             <h4 id="sync-auto-heading" className={sectionHeading}>{t("sync.auto")}</h4>
             <p className="text-sm leading-6 text-ink-muted">{t("sync.autoHint")}</p>
@@ -483,6 +494,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                       setPreview(null);
                       setResultView({ kind: "push", result: next.result });
                       setNotice(t("sync.pushed"));
+                      void refreshBucket();
                     },
                     t("sync.pushFailed"),
                   )
@@ -497,6 +509,116 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 {t("sync.preview")}
               </Button>
             </div>
+          </section>
+
+          <section aria-labelledby="sync-bucket-state-heading" className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4 lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 id="sync-bucket-state-heading" className={sectionHeading}>{t("sync.bucketStateHeading")}</h4>
+                <p className={`mt-1 ${hintText}`}>{t("sync.bucketStateHint")}</p>
+              </div>
+              <Button disabled={busy || bucketState.phase === "loading"} onClick={() => void refreshBucket()}>
+                {t("sync.bucketRefresh")}
+              </Button>
+            </div>
+
+            {bucketState.phase === "idle" ? (
+              <p className={hintText}>{t("sync.bucketNotConfigured")}</p>
+            ) : bucketState.phase === "loading" ? (
+              <p role="status" className={hintText}>{t("sync.bucketLoading")}</p>
+            ) : bucketState.phase === "error" ? (
+              <Notice tone="danger">{bucketState.message}</Notice>
+            ) : (
+              <div className="grid gap-3 border-t border-line pt-3 lg:grid-cols-2">
+                <div className="rounded border border-line bg-surface p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">{t("sync.bucketLive")}</p>
+                  {bucketState.value.live === undefined ? (
+                    <p className="mt-2 text-sm text-ink-muted">{t("sync.bucketLiveEmpty")}</p>
+                  ) : (
+                    <div className="mt-2 flex flex-col gap-1">
+                      <p className="break-all font-mono text-xs text-ink">{bucketState.value.live.key}</p>
+                      <p className={hintText}>
+                        {t("sync.bucketObjectMeta", {
+                          size: formatBytes(bucketState.value.live.size, locale),
+                          at: bucketState.value.live.lastModified ?? "—",
+                        })}
+                      </p>
+                      <p className={`text-sm font-medium ${bucketState.value.localIsLive ? "text-success" : "text-notice-ink"}`}>
+                        {t(bucketState.value.localIsLive ? "sync.bucketLocalCurrent" : "sync.bucketLocalBehind")}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded border border-line bg-surface p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    {t("sync.bucketHistory", { count: bucketState.value.history.length })}
+                  </p>
+                  {bucketState.value.historyTruncated ? (
+                    <p className="mt-2 text-xs text-notice-ink">{t("sync.bucketHistoryTruncated")}</p>
+                  ) : null}
+                  {bucketState.value.history.length === 0 ? (
+                    <p className="mt-2 text-sm text-ink-muted">{t("sync.bucketHistoryEmpty")}</p>
+                  ) : (
+                    <ul className="mt-2 max-h-48 space-y-2 overflow-auto pr-1">
+                      {bucketState.value.history.map((item) => (
+                        <li key={item.key} className="rounded border border-hairline px-2 py-1.5">
+                          <p className="break-all font-mono text-xs text-ink">{item.key}</p>
+                          <p className={hintText}>
+                            {t("sync.bucketObjectMeta", {
+                              size: formatBytes(item.size, locale),
+                              at: item.lastModified ?? "—",
+                            })}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {bucketState.value.live === undefined || status.direction === "pull" ? null : (
+                  <details className="rounded border border-danger/40 bg-danger/5 p-3 lg:col-span-2">
+                    <summary className="cursor-pointer text-sm font-medium text-danger">{t("sync.forceHeading")}</summary>
+                    <div className="mt-3 flex flex-col gap-3 border-t border-danger/30 pt-3">
+                      <p className="text-sm leading-6 text-ink-muted">{t("sync.forceHint")}</p>
+                      <label className="flex items-start gap-2 text-sm text-ink">
+                        <input
+                          type="checkbox"
+                          checked={forceConfirmed}
+                          onChange={(event) => setForceConfirmed(event.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span>{t("sync.forceConfirm")}</span>
+                      </label>
+                      <Button
+                        kind="danger"
+                        disabled={busy || !forceConfirmed || !status.keyConfigured}
+                        onClick={() =>
+                          void run(
+                            () => api.forcePushSnapshot(),
+                            (next) => {
+                              setStatusState({ phase: "ready", value: next.status });
+                              setPreview(null);
+                              setResultView({ kind: "push", result: next.result });
+                              setForceConfirmed(false);
+                              setNotice(t("sync.forcePushed"));
+                              void refreshBucket();
+                            },
+                            t("sync.forceFailed"),
+                          )
+                        }
+                      >
+                        {t("sync.forcePush")}
+                      </Button>
+                    </div>
+                  </details>
+                )}
+
+                <p className={`lg:col-span-2 ${hintText}`}>
+                  {t("sync.bucketCheckedAt", { at: bucketState.value.checkedAt })}
+                </p>
+              </div>
+            )}
           </section>
         </div>
         {status.direction === "both" ? null : (
@@ -586,8 +708,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               busy ||
               conflicted ||
               status.direction === "push" ||
-              (preview.removed.length > 0 && !acceptedRemovals) ||
-              preview.written.length + preview.removed.length === 0
+              (preview.removed.length > 0 && !acceptedRemovals)
             }
             onClick={() =>
               void run(

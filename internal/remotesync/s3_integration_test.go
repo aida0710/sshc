@@ -227,6 +227,13 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	if _, err := first.service.Push(ctx, syncPassphrase); err != nil {
 		t.Fatalf("first workspace initial Push = %v", err)
 	}
+	bucketView, err := first.service.BucketStatus(ctx)
+	if err != nil {
+		t.Fatalf("BucketStatus after initial Push = %v", err)
+	}
+	if bucketView.Live == nil || len(bucketView.History) != 1 || !bucketView.LocalIsLive {
+		t.Fatalf("BucketStatus after initial Push = %#v", bucketView)
+	}
 	if _, err := second.service.Pull(ctx, "this is not the shared sync key", remotesync.ResolveNone); !errors.Is(err, remotesync.ErrWrongPassphrase) {
 		t.Fatalf("second workspace Pull with a different key = %v, want ErrWrongPassphrase", err)
 	}
@@ -286,35 +293,15 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 		t.Fatalf("the conflict choice did not travel back: %q", got)
 	}
 
-	const nextSyncKey = "a new correct horse battery staple for sync"
-	if _, err := first.service.Rekey(ctx, "not the current sync key", nextSyncKey); !errors.Is(err, remotesync.ErrWrongPassphrase) {
-		t.Fatalf("Rekey with a different old key = %v, want ErrWrongPassphrase", err)
-	}
-	if _, err := first.service.Rekey(ctx, syncPassphrase, nextSyncKey); err != nil {
-		t.Fatalf("Rekey through the real bucket = %v", err)
-	}
-	if _, err := second.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone); !errors.Is(err, remotesync.ErrWrongPassphrase) {
-		t.Fatalf("old key opened the rekeyed real object: %v", err)
-	}
-
-	// Rekey changes the live object's ETag. Pulling and applying the unchanged contents records
-	// that new generation before the next conditional push.
-	rekeyed, err := first.service.Pull(ctx, nextSyncKey, remotesync.ResolveNone)
-	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
-		t.Fatalf("first workspace Pull after Rekey = %v", err)
-	}
-	if err := first.service.Apply(rekeyed); err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
-		t.Fatalf("first workspace Apply after Rekey = %v", err)
-	}
 	writeRealWorkspace(t, first, "config", "Host shared\n  HostName after-recovery.example\n")
-	if _, err := first.service.Push(ctx, nextSyncKey); err != nil {
-		t.Fatalf("first workspace Push with the new key = %v", err)
+	if _, err := first.service.Push(ctx, syncPassphrase); err != nil {
+		t.Fatalf("first workspace Push after conflict resolution = %v", err)
 	}
 
 	gate := &connectionGate{base: http.DefaultTransport}
 	second.client.HTTP = &http.Client{Transport: gate, Timeout: 5 * time.Second}
 	gate.offline.Store(true)
-	if _, err := second.service.Pull(ctx, nextSyncKey, remotesync.ResolveNone); err == nil {
+	if _, err := second.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone); err == nil {
 		t.Fatal("Pull succeeded while the integration transport was disconnected")
 	}
 	if got := second.read(t, "config"); got != "Host shared\n  HostName local-choice.example\n" {
@@ -322,7 +309,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	}
 
 	gate.offline.Store(false)
-	recovered, err := second.service.Pull(ctx, nextSyncKey, remotesync.ResolveNone)
+	recovered, err := second.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatalf("Pull after network recovery = %v", err)
 	}
@@ -331,6 +318,43 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	}
 	if got := second.read(t, "config"); got != "Host shared\n  HostName after-recovery.example\n" {
 		t.Fatalf("second workspace after recovery = %q", got)
+	}
+}
+
+func TestAgainstARealBucketForcePushUsesTheConfirmedGeneration(t *testing.T) {
+	ctx := context.Background()
+	remotePath := uniqueRealPath(t)
+	first := realInstallationAt(t, remotePath, map[string]string{"config": "Host first\n"})
+	replacement := realInstallationAt(t, remotePath, map[string]string{"config": "Host replacement\n"})
+
+	if _, err := first.service.Push(ctx, syncPassphrase); err != nil {
+		t.Fatalf("initial Push = %v", err)
+	}
+	stale, err := replacement.service.ForcePushConfirmation(ctx, remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatalf("first ForcePushConfirmation = %v", err)
+	}
+	writeRealWorkspace(t, first, "config", "Host newer-generation\n")
+	if _, err := first.service.Push(ctx, syncPassphrase); err != nil {
+		t.Fatalf("competing Push = %v", err)
+	}
+	if _, err := replacement.service.ForcePush(ctx, syncPassphrase, stale.ETag); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("ForcePush with stale confirmed generation = %v, want ErrRemoteMoved", err)
+	}
+
+	current, err := replacement.service.ForcePushConfirmation(ctx, remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatalf("second ForcePushConfirmation = %v", err)
+	}
+	if _, err := replacement.service.ForcePush(ctx, syncPassphrase, current.ETag); err != nil {
+		t.Fatalf("ForcePush with current confirmed generation = %v", err)
+	}
+	view, err := replacement.service.BucketStatus(ctx)
+	if err != nil {
+		t.Fatalf("BucketStatus after ForcePush = %v", err)
+	}
+	if view.Live == nil || !view.LocalIsLive || len(view.History) < 3 {
+		t.Fatalf("BucketStatus after ForcePush = %#v", view)
 	}
 }
 
