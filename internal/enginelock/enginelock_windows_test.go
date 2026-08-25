@@ -96,7 +96,12 @@ func TestWindowsEngineLockPinsTheDirectoryBeforeAPathReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = first() }()
+	// The contention contract is covered independently. Keeping the byte-range
+	// lock here would prevent Windows from renaming its parent directory, so it
+	// would test a filesystem restriction instead of the handle-relative open.
+	if err := first(); err != nil {
+		t.Fatal(err)
+	}
 
 	moved := filepath.Join(root, "state-original")
 	outside := filepath.Join(root, "outside")
@@ -114,18 +119,18 @@ func TestWindowsEngineLockPinsTheDirectoryBeforeAPathReplacement(t *testing.T) {
 	}
 	t.Cleanup(func() { afterLockDirectoryOpen = nil })
 
-	second, err := Acquire(path)
-	if !errors.Is(err, ErrRunning) {
-		if second != nil {
-			_ = second()
-		}
-		t.Fatalf("Acquire across directory replacement = %v, want ErrRunning", err)
+	release, err := Acquire(path)
+	if err != nil {
+		t.Fatalf("Acquire across directory replacement = %v", err)
 	}
-	if second != nil {
-		t.Fatal("a contended Acquire returned a release function")
+	if err := release(); err != nil {
+		t.Fatal(err)
 	}
 	if _, statErr := os.Lstat(filepath.Join(outside, "engine.lock")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("replacement target received a lock file: %v", statErr)
+	}
+	if _, statErr := os.Lstat(filepath.Join(moved, "engine.lock")); statErr != nil {
+		t.Fatalf("pinned directory lost its lock file: %v", statErr)
 	}
 }
 
