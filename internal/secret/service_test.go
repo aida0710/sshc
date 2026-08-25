@@ -45,7 +45,7 @@ func assignTestPasswordCredential(service *secret.Service, subject, name string)
 }
 
 type syncCASFileSystem struct {
-	storage.OSFileSystem
+	storage.FileSystem
 	path        string
 	replacement []byte
 	armed       bool
@@ -53,7 +53,7 @@ type syncCASFileSystem struct {
 }
 
 func (f *syncCASFileSystem) ReadFile(path string) ([]byte, error) {
-	body, err := f.OSFileSystem.ReadFile(path)
+	body, err := f.FileSystem.ReadFile(path)
 	if err != nil || !f.armed || path != f.path {
 		return body, err
 	}
@@ -1022,15 +1022,21 @@ func newRekeyFaultHarness(t *testing.T) (*secret.Service, *storage.Manager, *rek
 		t.Fatal(err)
 	}
 
+	// Windows の EvalSymlinks は drive letter と各 path component の大小文字を
+	// canonical form へ直す。障害注入対象は呼び出し元の home 表記ではなく、実際に
+	// transaction が使用する解決済み workspace path で保持する。
 	targets := map[string][]byte{}
-	for _, path := range []string{vaultPath(home), filepath.Join(home, ".ssh", filepath.FromSlash(secret.SettingsPath))} {
+	for _, path := range []string{
+		filepath.Join(workspace.Root(), filepath.FromSlash(secret.WorkspacePath)),
+		filepath.Join(workspace.Root(), filepath.FromSlash(secret.SettingsPath)),
+	} {
 		body, readErr := os.ReadFile(path)
 		if readErr != nil {
 			t.Fatal(readErr)
 		}
 		targets[path] = body
 	}
-	backupRoot := filepath.Join(home, ".ssh", "sshc", storage.BackupDirectoryName)
+	backupRoot := filepath.Join(workspace.StateDir(), storage.BackupDirectoryName)
 	if err := filepath.Walk(backupRoot, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -2094,12 +2100,23 @@ func TestSyncSettingsCASUsesTheDocumentWhichWasMutated(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	settingsPath := filepath.Join(home, ".ssh", filepath.FromSlash(secret.SettingsPath))
-	fileSystem := &syncCASFileSystem{path: settingsPath, replacement: []byte("externally replaced settings\n")}
+	// Embed the FileSystem contract rather than OSFileSystem itself. On Windows,
+	// embedding the concrete type would also promote ReadPrivateFile, causing the
+	// workspace's authenticated private-state reader to bypass this ReadFile fault
+	// injector entirely.
+	fileSystem := &syncCASFileSystem{
+		FileSystem:  storage.OSFileSystem{},
+		replacement: []byte("externally replaced settings\n"),
+	}
 	workspace, err := storage.NewWorkspace(fileSystem, home)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Use the canonical path returned by Workspace. Windows EvalSymlinks can
+	// normalize drive and component case, while the caller's home keeps its
+	// original spelling.
+	settingsPath := filepath.Join(workspace.Root(), filepath.FromSlash(secret.SettingsPath))
+	fileSystem.path = settingsPath
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
 	service := secret.NewService(workspace, manager, time.Now)
 	if err := service.Initialise(passphrase); err != nil {
