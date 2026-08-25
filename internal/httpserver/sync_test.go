@@ -252,7 +252,11 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 		wantSource += int64(len(body))
 	}
 
-	response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", "")
+	draft := sendSync(t, engine, http.MethodGet, "/api/v1/sync/push", "")
+	if draft.Code != http.StatusOK || !strings.Contains(draft.Body.String(), `"message"`) {
+		t.Fatalf("push draft = %d: %s", draft.Code, draft.Body.String())
+	}
+	response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", `{"message":"Set up edge hosts"}`)
 	if response.Code != http.StatusOK {
 		t.Fatalf("push = %d: %s", response.Code, response.Body.String())
 	}

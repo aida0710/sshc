@@ -40,6 +40,7 @@ export type SnapshotSummary = components["schemas"]["SnapshotSummary"];
 export type SyncOperation = components["schemas"]["SyncOperation"];
 export type PushResult = components["schemas"]["PushResult"];
 export type PushResponse = components["schemas"]["PushResponse"];
+export type SyncPushDraft = components["schemas"]["SyncPushDraft"];
 export type PullResponse = components["schemas"]["PullResponse"];
 export type SyncBucketStatus = components["schemas"]["SyncBucketStatus"];
 export type SyncHistory = components["schemas"]["SyncHistory"];
@@ -98,8 +99,9 @@ export type IntegrationsApi = {
   forgetPassword(alias: string): Promise<PasswordVaultStatus>;
   syncStatus(): Promise<SyncStatus>;
   configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
-  pushSnapshot(): Promise<PushResponse>;
-  forcePushSnapshot(): Promise<PushResponse>;
+  syncPushDraft(): Promise<SyncPushDraft>;
+  pushSnapshot(message?: string): Promise<PushResponse>;
+  forcePushSnapshot(message?: string): Promise<PushResponse>;
   syncBucketStatus(): Promise<SyncBucketStatus>;
   syncHistory(): Promise<SyncHistory>;
   diffSyncHistory(key: string): Promise<SyncHistoryDiff>;
@@ -454,6 +456,15 @@ function validatePushResponse(value: unknown): PushResponse {
   return record as unknown as PushResponse;
 }
 
+function validateSyncPushDraft(value: unknown): SyncPushDraft {
+  const record = asRecord(value);
+  asString(record.message);
+  asNonnegativeInteger(record.added);
+  asNonnegativeInteger(record.modified);
+  asNonnegativeInteger(record.removed);
+  return record as unknown as SyncPushDraft;
+}
+
 function validateSyncBucketStatus(value: unknown): SyncBucketStatus {
   const record = asRecord(value);
   asString(record.checkedAt);
@@ -488,6 +499,7 @@ function validateSyncHistory(value: unknown): SyncHistory {
     asString(revision.key);
     asRevision(revision.revision);
     if (revision.parentRevision !== undefined) asRevision(revision.parentRevision);
+    if (revision.message !== undefined) asString(revision.message);
     asString(revision.createdAt);
     asString(revision.origin);
     asNonnegativeInteger(revision.fileCount);
@@ -747,12 +759,15 @@ export const integrationsApi: IntegrationsApi = {
       }),
     );
   },
-  async pushSnapshot() {
-    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/push", {}));
+  async syncPushDraft() {
+    return validateSyncPushDraft(await apiClient.read("/api/v1/sync/push"));
   },
-  async forcePushSnapshot() {
+  async pushSnapshot(message) {
+    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/push", message === undefined ? {} : { message }));
+  },
+  async forcePushSnapshot(message) {
     const token = await issueAction(SYNC_FORCE_PUSH_ACTION_KIND, SYNC_FORCE_PUSH_TARGET);
-    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/force-push", {}, token));
+    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/force-push", message === undefined ? {} : { message }, token));
   },
   async syncBucketStatus() {
     return validateSyncBucketStatus(await apiClient.read("/api/v1/sync/bucket"));

@@ -51,6 +51,7 @@ const historyStatus = {
   revisions: [{
     key: "snapshots/2026-08-25-015400-aabbcc-000001.tar.gz.enc",
     revision: historyRevision,
+    message: "Update config",
     createdAt: "2026-08-25T01:54:00Z",
     origin: "opaque-device-a",
     fileCount: 7,
@@ -64,6 +65,7 @@ const historyStatus = {
 function buildApi(status: SyncStatus, pull: PullResponse, overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
     syncStatus: vi.fn().mockResolvedValue(status),
+    syncPushDraft: vi.fn().mockResolvedValue({ message: "Update config", added: 0, modified: 1, removed: 0 }),
     configureSync: vi.fn().mockResolvedValue({ ...status, configured: true }),
     pushSnapshot: vi.fn().mockResolvedValue({
       status: { ...status, synced: true },
@@ -199,7 +201,24 @@ describe("SyncPanel", () => {
     await userEvent.click(screen.getByRole("checkbox", { name: /current remote snapshot/i }));
     expect(replace).toBeEnabled();
     await userEvent.click(replace);
-    await waitFor(() => expect(api.forcePushSnapshot).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.forcePushSnapshot).toHaveBeenCalledWith("Update config"));
+  });
+
+  it("starts with the generated message and sends the user's edit", async () => {
+    const pushSnapshot = vi.fn().mockResolvedValue({
+      status: configured,
+      result: { summary: measuredSummary, objectCount: 2, uploadedBytes: 1800, completedAt: "2026-08-25T02:00:00Z" },
+    });
+    const api = buildApi(configured, nothingToDo, { pushSnapshot });
+    render(<SyncPanel api={api} />);
+
+    const message = await screen.findByLabelText("Commit message");
+    expect(message).toHaveValue("Update config");
+    await userEvent.clear(message);
+    await userEvent.type(message, "Refresh production hosts");
+    await userEvent.click(screen.getByRole("button", { name: "Push this workspace" }));
+    await waitFor(() => expect(pushSnapshot).toHaveBeenCalledWith("Refresh production hosts"));
+    expect(await screen.findByText("Update config")).toBeInTheDocument();
   });
 
   it("does not offer the removed legacy migration", async () => {

@@ -1009,6 +1009,43 @@ func TestHistoryDiffRestoreAndBranch(t *testing.T) {
 	}
 }
 
+func TestPushDraftAndEncryptedHistoryMessages(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	draft, err := machine.service.PushDraft()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if draft.Added == 0 || draft.Message == "" {
+		t.Fatalf("initial draft = %#v", draft)
+	}
+	if _, err := machine.service.PushWithMessage(context.Background(), syncPassphrase, "Initial SSH setup"); err != nil {
+		t.Fatal(err)
+	}
+	machine.write(t, "config", "Host two\n")
+	draft, err = machine.service.PushDraft()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if draft.Modified != 1 || draft.Message != "Update config" {
+		t.Fatalf("updated draft = %#v", draft)
+	}
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	history, err := machine.service.History(context.Background(), syncPassphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := map[string]bool{}
+	for _, revision := range history.Revisions {
+		messages[revision.Message] = true
+	}
+	if !messages["Initial SSH setup"] || !messages["Update config"] {
+		t.Fatalf("history messages = %#v", history.Revisions)
+	}
+}
+
 func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})

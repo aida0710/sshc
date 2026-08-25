@@ -526,24 +526,34 @@ func Check(ctx context.Context, client *objectstore.Client, key string) error {
 // 最初の書き込みには If-None-Match: *、以後は最後に確認した ETag を If-Match に
 // 指定し、別端末による更新を上書きしない。
 func (s *Service) Push(ctx context.Context, passphrase string) (PushResult, error) {
+	return s.PushWithMessage(ctx, passphrase, "")
+}
+
+// PushWithMessage writes a snapshot with an editable message. An empty message
+// uses the same local-diff summary as automatic sync.
+func (s *Service) PushWithMessage(ctx context.Context, passphrase, message string) (PushResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
-	return s.push(ctx, passphrase, "")
+	return s.push(ctx, passphrase, "", message)
 }
 
 // ForcePush replaces the exact remote ETag which the user confirmed. It never
 // performs an unconditional write; a remote change after confirmation is
 // reported as ErrRemoteMoved.
 func (s *Service) ForcePush(ctx context.Context, passphrase, expectedETag string) (PushResult, error) {
+	return s.ForcePushWithMessage(ctx, passphrase, expectedETag, "")
+}
+
+func (s *Service) ForcePushWithMessage(ctx context.Context, passphrase, expectedETag, message string) (PushResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
 	if expectedETag == "" {
 		return PushResult{}, ErrForcePushTarget
 	}
-	return s.push(ctx, passphrase, expectedETag)
+	return s.push(ctx, passphrase, expectedETag, message)
 }
 
-func (s *Service) push(ctx context.Context, passphrase, forcedETag string) (PushResult, error) {
+func (s *Service) push(ctx context.Context, passphrase, forcedETag, message string) (PushResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
 		return PushResult{}, err
@@ -583,6 +593,10 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag string) (Push
 			}
 		}
 	}
+	if strings.TrimSpace(message) == "" {
+		message = draftFor(current.Base, manifest).Message
+	}
+	manifest.Message = message
 	if err := FinalizeManifest(&manifest, parentRevision); err != nil {
 		return PushResult{}, err
 	}
@@ -644,6 +658,29 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag string) (Push
 		return result, err
 	}
 	return result, nil
+}
+
+// PushDraft returns the same generated message used by unattended pushes.
+func (s *Service) PushDraft() (PushDraft, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	manifest, _, err := s.Collect()
+	if err != nil {
+		return PushDraft{}, err
+	}
+	current, err := s.readState()
+	if err != nil {
+		return PushDraft{}, err
+	}
+	binding, err := s.configuredBinding()
+	if err != nil {
+		return PushDraft{}, err
+	}
+	base := current.Base
+	if current.Key != ObjectKeyFor(binding.config) {
+		base = nil
+	}
+	return draftFor(base, manifest), nil
 }
 
 // BucketObjectView is non-secret object metadata shown on the sync screen.

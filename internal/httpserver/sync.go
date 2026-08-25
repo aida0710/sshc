@@ -49,6 +49,7 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.PUT("/api/v1/sync/key", handlers.SetKey)
 	engine.PUT("/api/v1/sync/auto", handlers.SetAuto)
 	engine.POST("/api/v1/sync/now", handlers.Now)
+	engine.GET("/api/v1/sync/push", handlers.PushDraft)
 	engine.POST("/api/v1/sync/push", handlers.Push)
 	engine.POST("/api/v1/sync/force-push", handlers.ForcePush)
 	engine.POST("/api/v1/sync/pull", handlers.Pull)
@@ -294,11 +295,21 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 
 func (h SyncHandlers) Push(c *echo.Context) error {
 	h.restore()
+	var request api.SyncPushRequest
+	if c.Request().ContentLength != 0 {
+		if err := decodeJSON(c, &request); err != nil {
+			return problem(c, http.StatusBadRequest, "invalid_request")
+		}
+	}
 	key, ok, err := h.sealingKey(c)
 	if !ok {
 		return err
 	}
-	result, err := h.Service.Push(c.Request().Context(), key)
+	message := ""
+	if request.Message != nil {
+		message = *request.Message
+	}
+	result, err := h.Service.PushWithMessage(c.Request().Context(), key, message)
 	if err != nil {
 		return syncProblem(c, err)
 	}
@@ -311,8 +322,25 @@ func (h SyncHandlers) Push(c *echo.Context) error {
 	})
 }
 
+func (h SyncHandlers) PushDraft(c *echo.Context) error {
+	h.restore()
+	draft, err := h.Service.PushDraft()
+	if err != nil {
+		return syncProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, api.SyncPushDraft{
+		Message: draft.Message, Added: draft.Added, Modified: draft.Modified, Removed: draft.Removed,
+	})
+}
+
 func (h SyncHandlers) ForcePush(c *echo.Context) error {
 	h.restore()
+	var request api.SyncPushRequest
+	if c.Request().ContentLength != 0 {
+		if err := decodeJSON(c, &request); err != nil {
+			return problem(c, http.StatusBadRequest, "invalid_request")
+		}
+	}
 	key, ok, err := h.sealingKey(c)
 	if !ok {
 		return err
@@ -325,7 +353,11 @@ func (h SyncHandlers) ForcePush(c *echo.Context) error {
 		remotesync.ForcePushTarget, confirmation.Evidence); !allowed {
 		return response
 	}
-	result, err := h.Service.ForcePush(c.Request().Context(), key, confirmation.ETag)
+	message := ""
+	if request.Message != nil {
+		message = *request.Message
+	}
+	result, err := h.Service.ForcePushWithMessage(c.Request().Context(), key, confirmation.ETag, message)
 	if err != nil {
 		return syncProblem(c, err)
 	}
@@ -381,6 +413,7 @@ func (h SyncHandlers) History(c *echo.Context) error {
 		response.Revisions = append(response.Revisions, api.SyncHistoryRevision{
 			Key: revision.Key, Revision: revision.Revision,
 			ParentRevision: syncStringPointer(revision.ParentRevision),
+			Message:        syncStringPointer(revision.Message),
 			CreatedAt:      revision.CreatedAt, Origin: revision.Origin,
 			FileCount: revision.FileCount, Size: revision.Size,
 			LastModified: syncStringPointer(revision.LastModified),
@@ -551,6 +584,8 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "sync_force_target_invalid")
 	case errors.Is(err, remotesync.ErrHistoryTarget):
 		return problem(c, http.StatusBadRequest, "sync_history_target_invalid")
+	case errors.Is(err, remotesync.ErrCommitMessage):
+		return problem(c, http.StatusBadRequest, "sync_commit_message_invalid")
 	case errors.Is(err, remotesync.ErrWrongPassphrase):
 		return problem(c, http.StatusForbidden, "wrong_passphrase")
 	case errors.Is(err, remotesync.ErrWeakPassphrase):

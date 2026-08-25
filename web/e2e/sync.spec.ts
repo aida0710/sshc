@@ -12,6 +12,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   };
   let lastOperation: Record<string, unknown> | undefined;
   let refusePush = false;
+  let pushedMessage = "";
   const status = () => ({
     configured: true,
     keyConfigured: true,
@@ -75,6 +76,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
               key: "snapshots/2026-08-25-020900-head.tar.gz.enc",
               revision: "b".repeat(64),
               parentRevision: "a".repeat(64),
+              message: "Update config and production hosts",
               createdAt: "2026-08-25T02:09:00Z",
               origin: "device-head",
               fileCount: 12,
@@ -86,6 +88,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
             {
               key: "snapshots/2026-08-24-180000-parent.tar.gz.enc",
               revision: "a".repeat(64),
+              message: "Add initial SSH workspace",
               createdAt: "2026-08-24T18:00:00Z",
               origin: "device-old",
               fileCount: 11,
@@ -123,12 +126,21 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
         });
         return;
       }
+      pushedMessage = request.postDataJSON().message ?? "";
       const result = { summary, objectCount: 2, uploadedBytes: 3_800_000, completedAt: "2026-08-12T01:30:03Z" };
       lastOperation = { kind: "push", ...result };
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ status: status(), result }),
+      });
+      return;
+    }
+    if (path === "/api/v1/sync/push" && request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Update config", added: 1, modified: 1, removed: 0 }),
       });
       return;
     }
@@ -165,23 +177,25 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await expect(page.getByText("The remote generation differs")).toBeVisible();
   await expect(page.getByText("Legacy snapshot migration")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Encrypted revision history" })).toBeVisible();
+  await expect(page.getByLabel("Commit message")).toHaveValue("Update config");
   await page.getByRole("button", { name: /aaaaaaaaaaaa.*ancestor/i }).click();
   await expect(page.getByText("Modified · 1")).toBeVisible();
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.10.0-sync-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.11.0-sync-desktop.png`, fullPage: true });
     await page.getByRole("heading", { name: "Bucket status" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.10.0-sync-history-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.11.0-sync-history-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 360, height: 800 });
     await page.getByRole("heading", { name: "Remote sync" }).scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.10.0-sync-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.11.0-sync-mobile.png`, fullPage: true });
     await page.getByRole("heading", { name: "Encrypted revision history" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.10.0-sync-history-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.11.0-sync-history-mobile.png`, fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
   }
   await page.getByRole("button", { name: "Push this workspace" }).click();
+  expect(pushedMessage).toBe("Update config");
   await expect(page.getByRole("heading", { name: "This push" })).toBeVisible();
   await expect(page.getByText("S3 transfer 3.8 MB (2 objects, history + live)")).toBeVisible();
 

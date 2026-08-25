@@ -30,6 +30,7 @@ type HistoryRevisionView struct {
 	Key            string          `json:"key"`
 	Revision       string          `json:"revision"`
 	ParentRevision string          `json:"parentRevision,omitempty"`
+	Message        string          `json:"message,omitempty"`
 	CreatedAt      string          `json:"createdAt"`
 	Origin         string          `json:"origin"`
 	FileCount      int             `json:"fileCount"`
@@ -126,7 +127,7 @@ func (s *Service) History(ctx context.Context, passphrase string) (HistoryView, 
 		meta := bucketObjectView(binding.config, info)
 		view.Revisions = append(view.Revisions, HistoryRevisionView{
 			Key: meta.Key, Revision: manifest.Revision,
-			ParentRevision: manifest.ParentRevision, CreatedAt: manifest.CreatedAt,
+			ParentRevision: manifest.ParentRevision, Message: manifest.Message, CreatedAt: manifest.CreatedAt,
 			Origin: manifest.Origin, FileCount: len(manifest.Files), Size: info.Size,
 			LastModified: meta.LastModified, Legacy: manifest.SchemaVersion < 3,
 		})

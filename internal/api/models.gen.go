@@ -1683,6 +1683,7 @@ type SyncHistoryRevision struct {
 	Key            string              `json:"key"`
 	LastModified   *string             `json:"lastModified,omitempty"`
 	Legacy         bool                `json:"legacy"`
+	Message        *string             `json:"message,omitempty"`
 	Origin         string              `json:"origin"`
 	ParentRevision *string             `json:"parentRevision,omitempty"`
 	Relation       SyncHistoryRelation `json:"relation"`
@@ -1714,6 +1715,20 @@ type SyncOperation struct {
 
 // SyncOperationKind defines model for SyncOperationKind.
 type SyncOperationKind string
+
+// SyncPushDraft defines model for SyncPushDraft.
+type SyncPushDraft struct {
+	Added    int    `json:"added"`
+	Message  string `json:"message"`
+	Modified int    `json:"modified"`
+	Removed  int    `json:"removed"`
+}
+
+// SyncPushRequest defines model for SyncPushRequest.
+type SyncPushRequest struct {
+	Message    *string `json:"message,omitempty"`
+	Passphrase *string `json:"passphrase,omitempty"`
+}
 
 // SyncSettingsRequest defines model for SyncSettingsRequest.
 type SyncSettingsRequest struct {
@@ -2227,6 +2242,9 @@ type UpdateSnippetJSONRequestBody = SnippetDraft
 // SetAutoSyncJSONRequestBody defines body for SetAutoSync for application/json ContentType.
 type SetAutoSyncJSONRequestBody = AutoSyncRequest
 
+// ForcePushSnapshotJSONRequestBody defines body for ForcePushSnapshot for application/json ContentType.
+type ForcePushSnapshotJSONRequestBody = SyncPushRequest
+
 // DiffSyncHistoryJSONRequestBody defines body for DiffSyncHistory for application/json ContentType.
 type DiffSyncHistoryJSONRequestBody = SyncHistoryDiffRequest
 
@@ -2235,6 +2253,9 @@ type SetSyncKeyJSONRequestBody = SyncKeyRequest
 
 // PullSnapshotJSONRequestBody defines body for PullSnapshot for application/json ContentType.
 type PullSnapshotJSONRequestBody = PullRequest
+
+// PushSnapshotJSONRequestBody defines body for PushSnapshot for application/json ContentType.
+type PushSnapshotJSONRequestBody = SyncPushRequest
 
 // ConfigureSyncJSONRequestBody defines body for ConfigureSync for application/json ContentType.
 type ConfigureSyncJSONRequestBody = SyncSettingsRequest

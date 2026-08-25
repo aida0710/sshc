@@ -362,9 +362,23 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/push:
+    get:
+      operationId: getSyncPushDraft
+      responses:
+        "200":
+          description: Message suggested from the local changes since the acknowledged snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncPushDraft" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
     post:
       operationId: pushSnapshot
-      # 本文は無い。暗号化する鍵は保管庫の中にあり、押したユーザーが打つものではない。
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SyncPushRequest" }
       responses:
         "200":
           description: Snapshot written
@@ -382,6 +396,11 @@ paths:
       # 実行時もそのETagをIf-Matchに使い、無条件には上書きしない。
       parameters:
         - { name: X-SSHC-Action, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SyncPushRequest" }
       responses:
         "200":
           description: The confirmed remote snapshot was replaced
@@ -2310,6 +2329,23 @@ components:
       properties:
         status: { $ref: "#/components/schemas/SyncStatus" }
         result: { $ref: "#/components/schemas/PushResult" }
+    SyncPushRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        # 空ならサーバーがローカル差分から同じ下書きを再生成する。
+        message: { type: string, maxLength: 240 }
+        # v0.5以前のclient互換。現在はvault内の同期鍵を使い、この値は無視する。
+        passphrase: { type: string }
+    SyncPushDraft:
+      type: object
+      additionalProperties: false
+      required: [message, added, modified, removed]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 240 }
+        added: { type: integer, minimum: 0, maximum: 4096 }
+        modified: { type: integer, minimum: 0, maximum: 4096 }
+        removed: { type: integer, minimum: 0, maximum: 4096 }
     SyncBucketObject:
       type: object
       additionalProperties: false
@@ -2342,6 +2378,8 @@ components:
         key: { type: string, minLength: 1, maxLength: 1024 }
         revision: { type: string, pattern: "^[0-9a-f]{64}$" }
         parentRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
+        # v4以降の暗号化manifestに保存される。旧世代では省略される。
+        message: { type: string, maxLength: 240 }
         createdAt: { type: string }
         # hostnameではなく、manifest内のopaque installation ID。
         origin: { type: string }

@@ -75,6 +75,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     storePassword: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
     forgetPassword: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
     syncStatus: vi.fn().mockResolvedValue({ configured: false, endpoint: "", bucket: "", synced: false }),
+    syncPushDraft: vi.fn().mockResolvedValue({ message: "Record current workspace", added: 0, modified: 0, removed: 0 }),
     configureSync: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: false }),
     pushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
     forcePushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),

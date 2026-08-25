@@ -34,12 +34,16 @@ const ManifestName = "manifest.json"
 
 // SchemaVersion は、マニフェスト文書のバージョン。
 //
+// バージョン 4 では、履歴のコミットメッセージを暗号化manifestへ追加した。
 // バージョン 3 では、暗号化されたスナップショットをGit風の履歴として辿れるよう、
 // 内容から検証できるrevision IDと親revision IDを持つ。
 // バージョン 2 では vault の復号済み文書を同期し、受信側で再暗号化する。
 // バージョン 1 の読込互換性は、すでに作成済みのスナップショットを引き続き
 // 読み取れるよう維持する。専用の再暗号化操作は提供しない。
-const SchemaVersion = 3
+const SchemaVersion = 4
+
+// MaxCommitMessageRunes は、履歴へ保存する一行メッセージの最大長。
+const MaxCommitMessageRunes = 240
 
 // MaxSnapshotBytes は、Read が展開する量に上限を設ける。スナップショットは ~/.ssh
 // である。これに近づくものは、ワークスペースではなく展開爆弾だ。
@@ -65,6 +69,8 @@ var (
 	// ErrManifestMismatch は、ダイジェストがマニフェストと一致しないファイル、または
 	// マニフェストに載っていないファイルを報告する。
 	ErrManifestMismatch = errors.New("the snapshot's files do not match its manifest")
+	// ErrCommitMessage は、長すぎる、または複数行のコミットメッセージを報告する。
+	ErrCommitMessage = errors.New("the snapshot commit message is not valid")
 )
 
 // Entry は、スナップショット内のファイルひとつを記述する。
@@ -102,14 +108,17 @@ type Manifest struct {
 	Revision string `json:"revision,omitempty"`
 	// ParentRevision は、このsnapshotを作る直前にlocalが採用していた世代。
 	// 空ならrootまたはv1/v2から引き継げなかった履歴である。
-	ParentRevision string  `json:"parentRevision,omitempty"`
-	Files          []Entry `json:"files"`
+	ParentRevision string `json:"parentRevision,omitempty"`
+	// Message はremoteでは暗号化manifest内だけに保存し、object metadataへ複製しない。
+	Message string  `json:"message,omitempty"`
+	Files   []Entry `json:"files"`
 }
 
 type revisionDocument struct {
 	CreatedAt      string  `json:"createdAt"`
 	Origin         string  `json:"origin"`
 	ParentRevision string  `json:"parentRevision,omitempty"`
+	Message        string  `json:"message,omitempty"`
 	Files          []Entry `json:"files"`
 }
 
@@ -121,7 +130,7 @@ func RevisionFor(manifest Manifest) (string, error) {
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	document, err := json.Marshal(revisionDocument{
 		CreatedAt: manifest.CreatedAt, Origin: manifest.Origin,
-		ParentRevision: manifest.ParentRevision, Files: files,
+		ParentRevision: manifest.ParentRevision, Message: manifest.Message, Files: files,
 	})
 	if err != nil {
 		return "", err
@@ -136,12 +145,32 @@ func FinalizeManifest(manifest *Manifest, parentRevision string) error {
 	}
 	manifest.SchemaVersion = SchemaVersion
 	manifest.ParentRevision = parentRevision
+	message, err := NormalizeCommitMessage(manifest.Message)
+	if err != nil {
+		return err
+	}
+	manifest.Message = message
 	revision, err := RevisionFor(*manifest)
 	if err != nil {
 		return err
 	}
 	manifest.Revision = revision
 	return nil
+}
+
+// NormalizeCommitMessage trims the editable one-line message and validates its
+// encrypted manifest representation.
+func NormalizeCommitMessage(message string) (string, error) {
+	message = strings.TrimSpace(message)
+	if len([]rune(message)) > MaxCommitMessageRunes || strings.ContainsAny(message, "\r\n") {
+		return "", ErrCommitMessage
+	}
+	for _, character := range message {
+		if character < 0x20 || character == 0x7f {
+			return "", ErrCommitMessage
+		}
+	}
+	return message, nil
 }
 
 func validRevision(revision string) bool {
@@ -160,6 +189,11 @@ func validRevision(revision string) bool {
 // ある。
 func Build(manifest Manifest, contents map[string][]byte) ([]byte, error) {
 	manifest.SchemaVersion = SchemaVersion
+	message, err := NormalizeCommitMessage(manifest.Message)
+	if err != nil {
+		return nil, err
+	}
+	manifest.Message = message
 	if len(manifest.Files) > MaxEntries {
 		return nil, ErrSnapshotTooLarge
 	}
@@ -279,6 +313,12 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 	}
 	if manifest.SchemaVersion > SchemaVersion {
 		return Manifest{}, nil, ErrUnsupportedVersion
+	}
+	if manifest.SchemaVersion >= 4 {
+		message, err := NormalizeCommitMessage(manifest.Message)
+		if err != nil || message != manifest.Message {
+			return Manifest{}, nil, ErrManifestMismatch
+		}
 	}
 	if len(manifest.Files) != len(contents) {
 		return Manifest{}, nil, ErrManifestMismatch
