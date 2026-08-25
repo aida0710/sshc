@@ -353,7 +353,7 @@ func New(options Options) (*Server, error) {
 	var reseal func(context.Context, string) error
 	if options.Sync != nil {
 		reseal = func(ctx context.Context, passphrase string) error {
-			_, err := options.Sync.Push(ctx, passphrase)
+			_, err := options.Sync.Push(ctx, passphrase, "")
 			return err
 		}
 	}

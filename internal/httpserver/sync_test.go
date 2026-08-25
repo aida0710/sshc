@@ -216,7 +216,7 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 	server := httptest.NewTLSServer(http.HandlerFunc(bucket.handler))
 	t.Cleanup(server.Close)
 	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
-	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto"}
+	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
 	service.Configure(config, credentials, &objectstore.Client{
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
 	})
@@ -299,10 +299,26 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 	}
 }
 
+func TestPushRejectsRequestsFromOlderClients(t *testing.T) {
+	engine, _ := syncEngine(t)
+	for name, body := range map[string]string{
+		"no body":               "",
+		"empty object":          `{}`,
+		"deprecated passphrase": `{"passphrase":"old-client-value"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			response := send(t, engine, http.MethodPost, "/api/v1/sync/push", body, nil)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("push = %d, want 400: %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestForcePushRequiresAOneTimeConfirmationForTheCurrentRemoteGeneration(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	_, service, secrets := measuredSyncEngine(t, bucket, map[string]string{"config": "Host replacement\n"})
-	if _, err := service.Push(context.Background(), measuredSyncKey); err != nil {
+	if _, err := service.Push(context.Background(), measuredSyncKey, ""); err != nil {
 		t.Fatalf("initial Push = %v", err)
 	}
 
@@ -323,17 +339,18 @@ func TestForcePushRequiresAOneTimeConfirmationForTheCurrentRemoteGeneration(t *t
 	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable, Actions: actions})
 
 	before := bucket.liveETag()
-	without := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/sync/force-push", nil, "")
+	requestBody := []byte(`{"message":"Replace remote workspace"}`)
+	without := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/sync/force-push", requestBody, "")
 	if without.Code != http.StatusForbidden || bucket.liveETag() != before {
 		t.Fatalf("force push without confirmation = %d, ETag %q -> %q", without.Code, before, bucket.liveETag())
 	}
 
 	token := issueToken(t, engine, credentials, session.ActionSyncForcePush, remotesync.ForcePushTarget)
-	forced := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/sync/force-push", nil, token)
+	forced := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/sync/force-push", requestBody, token)
 	if forced.Code != http.StatusOK || bucket.liveETag() == before {
 		t.Fatalf("confirmed force push = %d: %s", forced.Code, forced.Body.String())
 	}
-	replayed := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/sync/force-push", nil, token)
+	replayed := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/sync/force-push", requestBody, token)
 	if replayed.Code != http.StatusForbidden {
 		t.Fatalf("replayed confirmation = %d, want 403: %s", replayed.Code, replayed.Body.String())
 	}
@@ -344,7 +361,7 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
 	// producer も consumer も、同じ鍵で暗号化して開く。それが「端末をまたいで
 	// 共有される鍵」の意味である。
-	if _, err := producer.Push(context.Background(), measuredSyncKey); err != nil {
+	if _, err := producer.Push(context.Background(), measuredSyncKey, ""); err != nil {
 		t.Fatal(err)
 	}
 	engine, _, _ := measuredSyncEngine(t, bucket, map[string]string{})
@@ -442,20 +459,16 @@ func TestSettingsCarryTheDirectionThroughToTheService(t *testing.T) {
 	}
 }
 
-func TestSettingsWithoutADirectionMeanBoth(t *testing.T) {
+func TestSettingsWithoutADirectionAreRefused(t *testing.T) {
 	engine, service := syncEngine(t)
 	if recorder := send(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("pull"), nil); recorder.Code != http.StatusOK {
 		t.Fatalf("PUT = %d", recorder.Code)
 	}
-	if recorder := send(t, engine, http.MethodPut, "/api/v1/sync/settings", settings(""), nil); recorder.Code != http.StatusOK {
-		t.Fatalf("PUT = %d", recorder.Code)
+	if recorder := send(t, engine, http.MethodPut, "/api/v1/sync/settings", settings(""), nil); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("PUT without direction = %d, want 400", recorder.Code)
 	}
-	// フィールドを省略することは「今までどおりにする」ではない。設定
-	// form は設定全体を送るため、direction が欠けていることは既定値の
-	// 要求を意味する。それを設定した form より長生きした一方向設定は、
-	// 誰にも見えない設定になってしまう。
-	if got := service.Direction(); got != remotesync.DirectionBoth {
-		t.Errorf("direction = %q after settings with no direction, want both", got)
+	if got := service.Direction(); got != remotesync.DirectionPull {
+		t.Errorf("direction = %q after refused settings, want previous pull", got)
 	}
 }
 
@@ -482,7 +495,7 @@ func TestARefusedDirectionIsAConflictAndNotAGatewayFailure(t *testing.T) {
 		t.Fatalf("PUT = %d", recorder.Code)
 	}
 
-	recorder := send(t, engine, http.MethodPost, "/api/v1/sync/push", `{"passphrase":"correct horse battery staple"}`, nil)
+	recorder := send(t, engine, http.MethodPost, "/api/v1/sync/push", `{"message":"Test receive-only mode"}`, nil)
 	if recorder.Code != http.StatusConflict {
 		t.Fatalf("POST /push on a receive-only machine = %d, want 409: %s", recorder.Code, recorder.Body.String())
 	}
@@ -510,7 +523,7 @@ func TestSyncStatusNeverCarriesTheAccessKey(t *testing.T) {
 	}
 
 	configure := `{"endpoint":"https://s3.example.invalid","bucket":"b","region":"auto",` +
-		`"accessKeyId":"AKIAEXAMPLE","secretAccessKey":"s3cret-key"}`
+		`"accessKeyId":"AKIAEXAMPLE","secretAccessKey":"s3cret-key","direction":"both"}`
 	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", configure).Code; code != http.StatusOK {
 		t.Fatalf("configure = %d", code)
 	}
@@ -536,7 +549,7 @@ func TestSyncStatusSaysWhichRegionIsConfigured(t *testing.T) {
 	}
 
 	configure := `{"endpoint":"https://s3.example.invalid","bucket":"b","region":"eu-west-2",` +
-		`"accessKeyId":"AKIAEXAMPLE","secretAccessKey":"s3cret-key"}`
+		`"accessKeyId":"AKIAEXAMPLE","secretAccessKey":"s3cret-key","direction":"both"}`
 	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", configure).Code; code != http.StatusOK {
 		t.Fatalf("configure = %d", code)
 	}
@@ -569,7 +582,7 @@ func TestConfiguringRefusesAShutVault(t *testing.T) {
 	}
 	secrets.Lock()
 
-	configure := `{"endpoint":"https://s3.example.invalid","bucket":"b","accessKeyId":"k","secretAccessKey":"s"}`
+	configure := `{"endpoint":"https://s3.example.invalid","bucket":"b","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
 	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", configure).Code; code != http.StatusConflict {
 		t.Errorf("configure while locked = %d, want 409", code)
 	}
@@ -586,7 +599,7 @@ func TestATrailingSlashOnTheEndpointIsRemoved(t *testing.T) {
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"endpoint":"https://s3.example.invalid/","bucket":"b","accessKeyId":"k","secretAccessKey":"s"}`
+	body := `{"endpoint":"https://s3.example.invalid/","bucket":"b","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
 	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", body).Code; code != http.StatusOK {
 		t.Fatalf("configure = %d", code)
 	}
@@ -605,7 +618,7 @@ func TestAnEndpointWithAPathIsRefused(t *testing.T) {
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"endpoint":"https://s3.example.invalid/my-bucket","bucket":"b","accessKeyId":"k","secretAccessKey":"s"}`
+	body := `{"endpoint":"https://s3.example.invalid/my-bucket","bucket":"b","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
 	recorder := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", body)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("configure with a path = %d, want 400", recorder.Code)
@@ -645,7 +658,7 @@ func TestSettingsThatCannotReachTheBucketAreNotStored(t *testing.T) {
 		Reach: func(context.Context, *objectstore.Client, string) error { return objectstore.ErrRefused },
 	})
 
-	body := `{"endpoint":"https://s3.example.invalid","bucket":"b","accessKeyId":"k","secretAccessKey":"s"}`
+	body := `{"endpoint":"https://s3.example.invalid","bucket":"b","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
 	recorder := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", body)
 	if recorder.Code != http.StatusBadGateway {
 		t.Fatalf("configure against an unreachable bucket = %d, want 502: %s", recorder.Code, recorder.Body.String())
@@ -667,11 +680,11 @@ func TestPushWithoutAKeyRefusesAndRunsNothing(t *testing.T) {
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("")).Code; code != http.StatusOK {
+	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("both")).Code; code != http.StatusOK {
 		t.Fatalf("configure = %d", code)
 	}
 
-	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", "")
+	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", `{"message":"Test missing key"}`)
 	if recorder.Code != http.StatusConflict {
 		t.Fatalf("push without a key = %d, want 409: %s", recorder.Code, recorder.Body.String())
 	}
@@ -690,7 +703,7 @@ func TestPushWithoutAKeyRefusesAndRunsNothing(t *testing.T) {
 // ここでは確認できない。確認できるのはアーカイブ自身だけだ。
 func TestPullOnAMachineWithNoVaultIsNotRefusedForTheWrongReason(t *testing.T) {
 	engine, _ := syncEngine(t)
-	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("")).Code; code != http.StatusOK {
+	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("both")).Code; code != http.StatusOK {
 		t.Fatalf("configure = %d", code)
 	}
 
@@ -708,7 +721,7 @@ func TestTheObjectPathIsStoredAndRefusedWhenItCouldEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	body := `{"endpoint":"https://s3.example.invalid","bucket":"b","path":"/laptops/","accessKeyId":"k","secretAccessKey":"s"}`
+	body := `{"endpoint":"https://s3.example.invalid","bucket":"b","path":"/laptops/","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
 	recorder := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", body)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("configure = %d: %s", recorder.Code, recorder.Body.String())
@@ -722,7 +735,7 @@ func TestTheObjectPathIsStoredAndRefusedWhenItCouldEscape(t *testing.T) {
 
 	for _, unsafe := range []string{"../elsewhere", "a//b", "a b"} {
 		escaping := `{"endpoint":"https://s3.example.invalid","bucket":"b","path":"` + unsafe +
-			`","accessKeyId":"k","secretAccessKey":"s"}`
+			`","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
 		if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", escaping).Code; code != http.StatusBadRequest {
 			t.Errorf("configure with path %q = %d, want 400", unsafe, code)
 		}

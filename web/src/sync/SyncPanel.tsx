@@ -569,10 +569,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             <div className="flex flex-wrap gap-2 border-t border-line pt-3">
               <Button
                 kind="primary"
-                disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull"}
+                disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull" || pushMessage.trim() === ""}
                 onClick={() =>
                   void run(
-                    () => api.pushSnapshot(pushMessage.trim() || undefined),
+                    () => api.pushSnapshot(pushMessage.trim()),
                     (next) => {
                       setStatusState({ phase: "ready", value: next.status });
                       setPreview(null);
@@ -679,10 +679,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                       </label>
                       <Button
                         kind="danger"
-                        disabled={busy || !forceConfirmed || !status.keyConfigured}
+                        disabled={busy || !forceConfirmed || !status.keyConfigured || pushMessage.trim() === ""}
                         onClick={() =>
                           void run(
-                            () => api.forcePushSnapshot(pushMessage.trim() || undefined),
+                            () => api.forcePushSnapshot(pushMessage.trim()),
                             (next) => {
                               setStatusState({ phase: "ready", value: next.status });
                               setPreview(null);
@@ -772,7 +772,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                             })}
                           </span>
                           <span className="mt-1 block text-sm font-medium text-ink">
-                            {revision.message ?? t("sync.historyNoMessage")}
+                            {revision.message}
                           </span>
                           {revision.parentRevision === undefined ? null : (
                             <span className="mt-1 block font-mono text-[11px] text-ink-muted">

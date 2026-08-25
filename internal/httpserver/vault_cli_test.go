@@ -857,8 +857,11 @@ func TestServerSharesCoordinatorBetweenCLIChangeAndBrowserLock(t *testing.T) {
 		func() string { return "2026-08-15T00:00:00Z" },
 		func() (string, error) { return "vault-order-test", nil },
 	)
+	syncService.OpenVault = passwords.TravelDocument
+	syncService.SealVault = passwords.AdoptTravelDocument
+	syncService.VaultAdopted = passwords.Reload
 	syncService.Configure(
-		remotesync.Config{Endpoint: bucketServer.URL, Bucket: "sshc", Region: "auto"},
+		remotesync.Config{Endpoint: bucketServer.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth},
 		credentials,
 		&objectstore.Client{
 			HTTP: bucketServer.Client(), Endpoint: bucketServer.URL,

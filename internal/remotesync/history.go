@@ -23,7 +23,6 @@ const (
 	HistoryHead     HistoryRelation = "head"
 	HistoryAncestor HistoryRelation = "ancestor"
 	HistoryBranch   HistoryRelation = "branch"
-	HistoryLegacy   HistoryRelation = "legacy"
 )
 
 type HistoryRevisionView struct {
@@ -37,7 +36,6 @@ type HistoryRevisionView struct {
 	Size           int64           `json:"size"`
 	LastModified   string          `json:"lastModified,omitempty"`
 	Relation       HistoryRelation `json:"relation"`
-	Legacy         bool            `json:"legacy"`
 }
 
 type HistoryView struct {
@@ -129,7 +127,7 @@ func (s *Service) History(ctx context.Context, passphrase string) (HistoryView, 
 			Key: meta.Key, Revision: manifest.Revision,
 			ParentRevision: manifest.ParentRevision, Message: manifest.Message, CreatedAt: manifest.CreatedAt,
 			Origin: manifest.Origin, FileCount: len(manifest.Files), Size: info.Size,
-			LastModified: meta.LastModified, Legacy: manifest.SchemaVersion < 3,
+			LastModified: meta.LastModified,
 		})
 	}
 
@@ -147,8 +145,6 @@ func (s *Service) History(ctx context.Context, passphrase string) (HistoryView, 
 		switch {
 		case entry.Revision == liveManifest.Revision:
 			entry.Relation = HistoryHead
-		case entry.Legacy:
-			entry.Relation = HistoryLegacy
 		case ancestors[entry.Revision]:
 			entry.Relation = HistoryAncestor
 		default:

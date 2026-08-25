@@ -1910,8 +1910,7 @@ export interface components {
             result: components["schemas"]["PushResult"];
         };
         SyncPushRequest: {
-            message?: string;
-            passphrase?: string;
+            message: string;
         };
         SyncPushDraft: {
             message: string;
@@ -1933,12 +1932,12 @@ export interface components {
             historyTruncated: boolean;
         };
         /** @enum {string} */
-        SyncHistoryRelation: "head" | "ancestor" | "branch" | "legacy";
+        SyncHistoryRelation: "head" | "ancestor" | "branch";
         SyncHistoryRevision: {
             key: string;
             revision: string;
             parentRevision?: string;
-            message?: string;
+            message: string;
             createdAt: string;
             origin: string;
             fileCount: number;
@@ -1946,7 +1945,6 @@ export interface components {
             size: number;
             lastModified?: string;
             relation: components["schemas"]["SyncHistoryRelation"];
-            legacy: boolean;
         };
         SyncHistory: {
             checkedAt: string;
@@ -1988,7 +1986,7 @@ export interface components {
             region?: string;
             accessKeyId: string;
             secretAccessKey: string;
-            direction?: components["schemas"]["SyncDirection"];
+            direction: components["schemas"]["SyncDirection"];
         };
         AutoSync: {
             enabled: boolean;

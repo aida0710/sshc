@@ -1,6 +1,7 @@
 package remotesync
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -23,6 +24,8 @@ import (
 // ルートからの相対である。他のすべてのファイルと同じくトランザクションマネージャを
 // 通して書かれるので、同期の記録が書きかけで残ることはない。
 const StatePath = "sshc/sync-state.json"
+
+const stateSchemaVersion = 1
 
 // archiveSuffix は、そのバイト列が何であるかを示す。暗号化された envelope の中の
 // tar.gz である。ライブのオブジェクトも、日付付きのコピーも、これを持つ。
@@ -112,6 +115,8 @@ var (
 	// ErrForcePushTarget reports a force-push confirmation for anything other
 	// than the single live workspace object.
 	ErrForcePushTarget = errors.New("the force-push target is not valid")
+	// ErrVaultCodec は、現行のvault交換形式を扱う関数が接続されていない構成を報告する。
+	ErrVaultCodec = errors.New("the sync vault codec is not configured")
 )
 
 // Direction は、このマシンがどちら向きにデータを動かしてよいかを表す。
@@ -135,11 +140,10 @@ const (
 	DirectionPull Direction = "pull"
 )
 
-// ParseDirection は三つの名前を受け付け、空文字列は both として扱う。direction を
-// 一度も聞いたことのない呼び出し側は、従来どおりに振る舞う。
+// ParseDirection は現行契約の三つの名前だけを受け付ける。
 func ParseDirection(name string) (Direction, bool) {
 	switch Direction(name) {
-	case "", DirectionBoth:
+	case DirectionBoth:
 		return DirectionBoth, true
 	case DirectionPush:
 		return DirectionPush, true
@@ -209,6 +213,7 @@ type SyncStateView struct {
 
 // state は、最後に成功した同期についての、このマシンの記録。
 type state struct {
+	SchemaVersion int `json:"schemaVersion"`
 	// ETag は、このマシンが最後に push または pull したスナップショットを識別する。
 	// 次の条件付き書き込みが比較される世代である。
 	ETag string `json:"etag"`
@@ -218,17 +223,15 @@ type state struct {
 	// push は存在しないオブジェクトの世代を要求し、「別のマシンが push した」として
 	// 拒否され、そこで勧められた pull は、pull すべきものを何ひとつ見つけられな
 	// かった。
-	Key string `json:"key,omitempty"`
+	Key string `json:"key"`
 	// Base は、そのスナップショットのマニフェスト。あとの pull に「別のマシンで削除
 	// された」と「前回の同期以降ここで作られた」の違いを教えるのが、これで
 	// ある。
-	Base *Manifest `json:"base,omitempty"`
+	Base *Manifest `json:"base"`
 	// Origin は、このインストールの不透明な ID。一度だけ生成され、マシンに関する何から
 	// も導出されない。
-	Origin string `json:"origin"`
-	// LastOperation was added after the original state format. Omitting it is
-	// valid and keeps old installations readable without a migration.
-	LastOperation *SyncOperation `json:"lastOperation,omitempty"`
+	Origin        string         `json:"origin"`
+	LastOperation *SyncOperation `json:"lastOperation"`
 }
 
 // FileSource は、スナップショットに含めるべきワークスペース相対のパスを列挙する。
@@ -261,7 +264,6 @@ type Service struct {
 
 	// OpenVault と SealVault は、vault 文書の復号と受信側での再暗号化を抽象化する。
 	// secret パッケージへの依存を避けるため、関数として注入する。
-	// どちらも nil の場合は、互換性のため暗号化済みファイルをそのまま同期する。
 	OpenVault func() ([]byte, error)
 	SealVault func(document []byte) ([]byte, error)
 	// VaultAdopted は、vault の置換後にメモリ上の状態を再読込する通知。
@@ -308,7 +310,8 @@ func (s *Service) configuredBinding() (remoteBinding, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	binding := s.binding
-	if binding.client == nil || binding.config.Bucket == "" || binding.creds.AccessKeyID == "" {
+	if _, ok := ParseDirection(string(binding.config.Direction)); !ok || binding.client == nil ||
+		binding.config.Bucket == "" || binding.creds.AccessKeyID == "" {
 		return remoteBinding{}, ErrNotConfigured
 	}
 	return binding, nil
@@ -318,13 +321,15 @@ func (s *Service) configuredBinding() (remoteBinding, error) {
 func (s *Service) Configured() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.binding.client != nil && s.binding.config.Bucket != "" && s.binding.creds.AccessKeyID != ""
+	_, validDirection := ParseDirection(string(s.binding.config.Direction))
+	return validDirection && s.binding.client != nil && s.binding.config.Bucket != "" && s.binding.creds.AccessKeyID != ""
 }
 
 // Direction は、このマシンがどちら向きにデータを動かしてよいかを報告する。
 func (s *Service) Direction() Direction {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// 未設定のserviceには保存済み契約がない。status formの初期選択だけは通常の双方向を返す。
 	if s.binding.config.Direction == "" {
 		return DirectionBoth
 	}
@@ -376,6 +381,9 @@ func excluded(relative string) bool {
 // にスキップする。Include はまだ存在しないファイルを指しうるし、それは診断であって
 // 同期を拒む理由ではない。
 func (s *Service) Collect() (Manifest, map[string][]byte, error) {
+	if s.OpenVault == nil {
+		return Manifest{}, nil, ErrVaultCodec
+	}
 	relatives, err := s.files()
 	if err != nil {
 		return Manifest{}, nil, err
@@ -393,12 +401,6 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 	// ファイルを直接選択できないため、同期経由で画像本体を受け取る。
 	relatives = append(relatives, backgrounds...)
 	relatives = append(relatives, "sshc/metadata.json")
-	// OpenVault がある場合は、端末固有の鍵で暗号化された vault ファイルを除外し、
-	// 復号済み文書を同期用の鍵で保護する。
-	if s.OpenVault == nil {
-		relatives = append(relatives, VaultPath)
-	}
-
 	seen := map[string]bool{}
 	contents := map[string][]byte{}
 	var entries []Entry
@@ -408,7 +410,7 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 			continue
 		}
 		// Include グラフから渡された場合も、端末固有の鍵で暗号化された vault は除外する。
-		if relative == VaultPath && s.OpenVault != nil {
+		if relative == VaultPath {
 			continue
 		}
 		seen[relative] = true
@@ -426,28 +428,19 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 			mode = "0700"
 		}
 		contents[relative] = body
-		entries = append(entries, Entry{
-			Path:   relative,
-			SHA256: Digest(body),
-			Mode:   mode,
-			// 秘密鍵とは、keys/ 配下で .pub の接尾辞を持たないものすべてである。この印が、
-			// pull にそれを SkipBackup 付きで適用させる。
-			Secret: strings.HasPrefix(relative, "keys/") && !strings.HasSuffix(relative, ".pub"),
-		})
+		entries = append(entries, Entry{Path: relative, SHA256: Digest(body), Mode: mode})
 	}
 	// 保管庫は中身として載る。ディスク上のどのファイルとも対応しないので、
 	// ここだけは読むのではなく尋ねる。
-	if s.OpenVault != nil {
-		document, err := s.OpenVault()
-		if err != nil {
-			return Manifest{}, nil, err
-		}
-		if document != nil {
-			contents[TravelPath] = document
-			entries = append(entries, Entry{
-				Path: TravelPath, SHA256: Digest(document), Mode: "0600",
-			})
-		}
+	document, err := s.OpenVault()
+	if err != nil {
+		return Manifest{}, nil, err
+	}
+	if document != nil {
+		contents[TravelPath] = document
+		entries = append(entries, Entry{
+			Path: TravelPath, SHA256: Digest(document), Mode: "0600",
+		})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 
@@ -525,13 +518,8 @@ func Check(ctx context.Context, client *objectstore.Client, key string) error {
 //
 // 最初の書き込みには If-None-Match: *、以後は最後に確認した ETag を If-Match に
 // 指定し、別端末による更新を上書きしない。
-func (s *Service) Push(ctx context.Context, passphrase string) (PushResult, error) {
-	return s.PushWithMessage(ctx, passphrase, "")
-}
-
-// PushWithMessage writes a snapshot with an editable message. An empty message
-// uses the same local-diff summary as automatic sync.
-func (s *Service) PushWithMessage(ctx context.Context, passphrase, message string) (PushResult, error) {
+// messageが空の場合は、自動同期と同じローカル差分の要約を使う。
+func (s *Service) Push(ctx context.Context, passphrase, message string) (PushResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
 	return s.push(ctx, passphrase, "", message)
@@ -540,11 +528,7 @@ func (s *Service) PushWithMessage(ctx context.Context, passphrase, message strin
 // ForcePush replaces the exact remote ETag which the user confirmed. It never
 // performs an unconditional write; a remote change after confirmation is
 // reported as ErrRemoteMoved.
-func (s *Service) ForcePush(ctx context.Context, passphrase, expectedETag string) (PushResult, error) {
-	return s.ForcePushWithMessage(ctx, passphrase, expectedETag, "")
-}
-
-func (s *Service) ForcePushWithMessage(ctx context.Context, passphrase, expectedETag, message string) (PushResult, error) {
+func (s *Service) ForcePush(ctx context.Context, passphrase, expectedETag, message string) (PushResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
 	if expectedETag == "" {
@@ -1027,7 +1011,11 @@ func (s *Service) readState() (state, error) {
 		return state{}, err
 	}
 	var parsed state
-	if err := json.Unmarshal(body, &parsed); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&parsed); err != nil || parsed.SchemaVersion != stateSchemaVersion ||
+		parsed.ETag == "" || parsed.Key == "" || parsed.Base == nil || parsed.LastOperation == nil ||
+		parsed.Base.SchemaVersion != SchemaVersion {
 		// 壊れた state ファイルは回復可能である。次の pull はこのマシンを、一度も
 		// 同期していないマシンとして扱う。それは保守的な扱いだ、何も削除せず、
 		// 推測する代わりに衝突として報告する。
@@ -1037,6 +1025,7 @@ func (s *Service) readState() (state, error) {
 }
 
 func (s *Service) writeState(next state) error {
+	next.SchemaVersion = stateSchemaVersion
 	body, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		return err
@@ -1106,7 +1095,7 @@ func (s *Service) DisplayPath(absolute string) string {
 // 送信側に vault がない場合は、受信側の vault を削除しない。
 func (s *Service) exchangeVault(request *storage.Request) error {
 	if s.SealVault == nil {
-		return nil
+		return ErrVaultCodec
 	}
 	travelled := filepath.Join(s.workspace.Root(), filepath.FromSlash(TravelPath))
 	local := filepath.Join(s.workspace.Root(), filepath.FromSlash(VaultPath))

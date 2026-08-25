@@ -34,13 +34,9 @@ const ManifestName = "manifest.json"
 
 // SchemaVersion は、マニフェスト文書のバージョン。
 //
-// バージョン 4 では、履歴のコミットメッセージを暗号化manifestへ追加した。
-// バージョン 3 では、暗号化されたスナップショットをGit風の履歴として辿れるよう、
-// 内容から検証できるrevision IDと親revision IDを持つ。
-// バージョン 2 では vault の復号済み文書を同期し、受信側で再暗号化する。
-// バージョン 1 の読込互換性は、すでに作成済みのスナップショットを引き続き
-// 読み取れるよう維持する。専用の再暗号化操作は提供しない。
-const SchemaVersion = 4
+// バージョン 5 は、revision、parent、messageを必須契約とする。過去形式を読み分ける
+// 分岐は持たず、この版が書く形式だけを受け付ける。
+const SchemaVersion = 5
 
 // MaxCommitMessageRunes は、履歴へ保存する一行メッセージの最大長。
 const MaxCommitMessageRunes = 240
@@ -55,8 +51,8 @@ const MaxEntries = 4096
 var (
 	// ErrNotASnapshot は、そもそもスナップショットでないバイト列を報告する。
 	ErrNotASnapshot = errors.New("these bytes are not an sshc snapshot")
-	// ErrUnsupportedVersion は、より新しいビルドが作ったスナップショットを報告する。
-	ErrUnsupportedVersion = errors.New("this snapshot was written by a newer version of sshc")
+	// ErrUnsupportedVersion は、このビルドと異なるschemaのスナップショットを報告する。
+	ErrUnsupportedVersion = errors.New("this snapshot schema is not supported")
 	// ErrUnsafePath は、ワークスペースから抜け出すパスを持つエントリを報告する。
 	// スナップショットは信用できない入力であり、tar の中の "../" は最も古い手口で
 	// ある。
@@ -84,14 +80,6 @@ type Entry struct {
 	// Mode を運ぶのは、ビットの誤った秘密鍵が、OpenSSH の拒む秘密鍵になるからで
 	// ある。受け付けるのは 0600 と 0700 だけ。
 	Mode string `json:"mode"`
-	// Secret は秘密鍵であることを示す。
-	//
-	// いまこれを読む側は居ない。以前は pull にこの印で SkipBackup を付けさせて
-	// いた。バックアップが平文の鍵の写しになるからである。バックアップがマスター
-	// パスワードで暗号化されるようになった時点でその理由は消え、pull は鍵も他の
-	// ファイルと同じく世代に残すようになった。印だけがマニフェストに残っている。
-	// 古いスナップショットにも書かれているので、読める形は保つ。
-	Secret bool `json:"secret,omitempty"`
 }
 
 // Manifest は、スナップショットの索引。
@@ -105,12 +93,12 @@ type Manifest struct {
 	Origin string `json:"origin"`
 	// Revision はcreatedAt、origin、parent、filesから決まる内容ID。暗号化された
 	// manifest内にだけ置き、S3 providerへfile digestや系譜を平文公開しない。
-	Revision string `json:"revision,omitempty"`
+	Revision string `json:"revision"`
 	// ParentRevision は、このsnapshotを作る直前にlocalが採用していた世代。
-	// 空ならrootまたはv1/v2から引き継げなかった履歴である。
+	// 空なら履歴のrootである。
 	ParentRevision string `json:"parentRevision,omitempty"`
 	// Message はremoteでは暗号化manifest内だけに保存し、object metadataへ複製しない。
-	Message string  `json:"message,omitempty"`
+	Message string  `json:"message"`
 	Files   []Entry `json:"files"`
 }
 
@@ -118,13 +106,13 @@ type revisionDocument struct {
 	CreatedAt      string  `json:"createdAt"`
 	Origin         string  `json:"origin"`
 	ParentRevision string  `json:"parentRevision,omitempty"`
-	Message        string  `json:"message,omitempty"`
+	Message        string  `json:"message"`
 	Files          []Entry `json:"files"`
 }
 
 // RevisionFor returns the stable content identity of a manifest. Revision and
-// schemaVersion are deliberately excluded so the same v1/v2 snapshot can be
-// represented as a legacy node without rewriting it.
+// schemaVersion are excluded because they describe, rather than comprise, the
+// revision contents.
 func RevisionFor(manifest Manifest) (string, error) {
 	files := append([]Entry(nil), manifest.Files...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
@@ -162,7 +150,7 @@ func FinalizeManifest(manifest *Manifest, parentRevision string) error {
 // encrypted manifest representation.
 func NormalizeCommitMessage(message string) (string, error) {
 	message = strings.TrimSpace(message)
-	if len([]rune(message)) > MaxCommitMessageRunes || strings.ContainsAny(message, "\r\n") {
+	if message == "" || len([]rune(message)) > MaxCommitMessageRunes || strings.ContainsAny(message, "\r\n") {
 		return "", ErrCommitMessage
 	}
 	for _, character := range message {
@@ -296,7 +284,18 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 		}
 
 		if header.Name == ManifestName {
-			if err := json.Unmarshal(body, &manifest); err != nil {
+			var version struct {
+				SchemaVersion int `json:"schemaVersion"`
+			}
+			if err := json.Unmarshal(body, &version); err != nil {
+				return Manifest{}, nil, ErrNotASnapshot
+			}
+			if version.SchemaVersion != SchemaVersion {
+				return Manifest{}, nil, ErrUnsupportedVersion
+			}
+			decoder := json.NewDecoder(bytes.NewReader(body))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&manifest); err != nil {
 				return Manifest{}, nil, ErrNotASnapshot
 			}
 			seenManifest = true
@@ -311,14 +310,9 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 	if !seenManifest {
 		return Manifest{}, nil, ErrNotASnapshot
 	}
-	if manifest.SchemaVersion > SchemaVersion {
-		return Manifest{}, nil, ErrUnsupportedVersion
-	}
-	if manifest.SchemaVersion >= 4 {
-		message, err := NormalizeCommitMessage(manifest.Message)
-		if err != nil || message != manifest.Message {
-			return Manifest{}, nil, ErrManifestMismatch
-		}
+	message, err := NormalizeCommitMessage(manifest.Message)
+	if err != nil || message != manifest.Message {
+		return Manifest{}, nil, ErrManifestMismatch
 	}
 	if len(manifest.Files) != len(contents) {
 		return Manifest{}, nil, ErrManifestMismatch
@@ -342,16 +336,9 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 	if err != nil {
 		return Manifest{}, nil, ErrManifestMismatch
 	}
-	if manifest.SchemaVersion >= 3 {
-		if manifest.Revision != revision ||
-			(manifest.ParentRevision != "" && !validRevision(manifest.ParentRevision)) {
-			return Manifest{}, nil, ErrManifestMismatch
-		}
-	} else {
-		// Legacy snapshots had no explicit graph identity. A derived ID lets the
-		// UI display and compare them without mutating the remote object.
-		manifest.Revision = revision
-		manifest.ParentRevision = ""
+	if manifest.Revision != revision ||
+		(manifest.ParentRevision != "" && !validRevision(manifest.ParentRevision)) {
+		return Manifest{}, nil, ErrManifestMismatch
 	}
 	return manifest, contents, nil
 }
