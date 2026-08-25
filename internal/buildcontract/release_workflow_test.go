@@ -25,11 +25,12 @@ func readReleaseWorkflow(t *testing.T) (workflowDocument, string) {
 	return document, string(source)
 }
 
-// タグ以外では何も公開されない。
+// 自動公開はタグだけで、手動復旧も既存タグを必須入力にする。
 //
 // ここに branch の引き金が混ざると、main への push がそのままリリースになる。
-// 版はタグから取るので、そうして出たものは版を名乗れないまま公開される。
-func TestReleaseWorkflowRunsOnlyForTags(t *testing.T) {
+// 手動復旧は保護タグを動かせない場合に必要だが、入力タグをcheckoutし、そのcommitの
+// main祖先性と成功CIを再検証しなければ、未検証のmainを公開できてしまう。
+func TestReleaseWorkflowRequiresAValidatedTagForAutomaticAndManualRuns(t *testing.T) {
 	_, source := readReleaseWorkflow(t)
 
 	trigger := withoutYAMLComments(source)
@@ -39,8 +40,18 @@ func TestReleaseWorkflowRunsOnlyForTags(t *testing.T) {
 	if strings.Contains(trigger, "branches:") {
 		t.Error("the release workflow triggers on a branch; every push to it would publish")
 	}
-	if strings.Contains(trigger, "workflow_dispatch") {
-		t.Error("the release workflow can be started by hand, which publishes without a tag to name the version")
+	for _, required := range []string{
+		"workflow_dispatch:",
+		"tag:",
+		"required: true",
+		`RELEASE_TAG: ${{ inputs.tag || github.ref_name }}`,
+		`ref: ${{ env.RELEASE_TAG }}`,
+		`RELEASE_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")`,
+		"scripts/ci/verify-release-source.sh",
+	} {
+		if !strings.Contains(trigger, required) {
+			t.Errorf("release recovery is missing validated-tag contract %q", required)
+		}
 	}
 }
 
@@ -123,12 +134,12 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 		"sshc-darwin-amd64", "sshc-darwin-arm64",
 		"sshc-linux-amd64", "sshc-linux-arm64",
 		"sshc-windows-amd64.exe", "sshc-windows-arm64.exe",
-		"sshc-android-${GITHUB_REF_NAME}.apk",
+		"sshc-android-${RELEASE_TAG}.apk",
 		`[ "$count" -eq 1 ]`,
 		`[ "$count" -eq 7 ]`,
 		`--verify-tag`,
 		`--draft`,
-		`jq -e '.draft == true'`,
+		`jq -e '.[0].draft == true'`,
 		`gh api --method DELETE "repos/$GH_REPO/releases/$draft_id"`,
 		`.draft == true`,
 		`all(.assets[]; .size > 0)`,
@@ -249,10 +260,10 @@ func TestTheAndroidEngineCarriesTheReleasedVersion(t *testing.T) {
 		t.Fatal("release.yml に android のジョブが無い")
 	}
 
-	if !strings.Contains(android, `ANDROID_VERSION="${GITHUB_REF_NAME#v}"`) {
+	if !strings.Contains(android, `ANDROID_VERSION="${RELEASE_TAG#v}"`) {
 		t.Error("gomobile bind にタグの版を渡していない。AAR は dev のまま配られる")
 	}
-	if !strings.Contains(android, `-PsshcVersionName="${GITHUB_REF_NAME#v}"`) {
+	if !strings.Contains(android, `-PsshcVersionName="${RELEASE_TAG#v}"`) {
 		t.Error("gradle にタグの版を渡していない")
 	}
 
