@@ -165,6 +165,9 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 			etag := `"` + string(rune('a'+b.generation)) + `"`
 			b.objects[key] = storedObject{body: body, etag: etag}
 			w.Header().Set("ETag", etag)
+		case http.MethodDelete:
+			delete(b.objects, key)
+			w.WriteHeader(http.StatusNoContent)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
@@ -390,13 +393,49 @@ func TestAPushCannotOverwriteAnotherMachine(t *testing.T) {
 	}
 
 	// そして、一度同期したあとに遅れをとったマシンも拒否される。
+	first.write(t, "config", "first changed\n")
 	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
-		t.Fatalf("a second push from the same machine = %v", err)
+		t.Fatalf("a changed second push from the same machine = %v", err)
 	}
 	// 別のマシンがライブのオブジェクトを書いたので、こちらの ETag は古い。
 	bucket.replace(remotesync.ObjectName, `"somebody else"`)
+	first.write(t, "config", "first changed again\n")
 	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("a stale push = %v, want ErrRemoteMoved", err)
+	}
+}
+
+func TestAnUnchangedManualPushCreatesNoHistory(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := bucket.uploads()
+
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Duplicate"); !errors.Is(err, remotesync.ErrNothingToPush) {
+		t.Fatalf("unchanged Push = %v, want ErrNothingToPush", err)
+	}
+	if after, _ := bucket.uploads(); after != before {
+		t.Fatalf("unchanged Push created objects: %d then %d", before, after)
+	}
+}
+
+func TestARejectedLiveCASRemovesItsHistoryCandidate(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := bucket.uploads()
+	machine.write(t, "config", "Host changed\n")
+	bucket.refuseConditional = true
+
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Change host"); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("Push = %v, want ErrRemoteMoved", err)
+	}
+	if after, _ := bucket.uploads(); after != before {
+		t.Fatalf("rejected Push left a history candidate: %d objects became %d", before, after)
 	}
 }
 
@@ -595,6 +634,7 @@ func TestFailedPushReportsItsCompletedUploadAndPreservesPriorSuccess(t *testing.
 		t.Fatal(err)
 	}
 	bucket.replace(remotesync.ObjectName, `"moved"`)
+	machine.write(t, "config", "two\n")
 
 	partial, err := machine.service.Push(context.Background(), syncPassphrase, "")
 	if !errors.Is(err, remotesync.ErrRemoteMoved) {
@@ -873,6 +913,34 @@ func TestTwoPushesAtTheSameTimestampKeepTwoHistoryObjects(t *testing.T) {
 	}
 }
 
+func TestChangingToAnotherBucketDoesNotReuseThePreviousGeneration(t *testing.T) {
+	firstBucket := &fakeBucket{}
+	machine := newInstallation(t, firstBucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial workspace"); err != nil {
+		t.Fatal(err)
+	}
+
+	secondBucket := &fakeBucket{}
+	server := httptest.NewTLSServer(secondBucket.handler())
+	t.Cleanup(server.Close)
+	config := machine.config
+	config.Endpoint = server.URL
+	client := &objectstore.Client{
+		HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region,
+		Creds: machine.creds,
+	}
+	machine.service.Configure(config, machine.creds, client)
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Start the new bucket"); err != nil {
+		t.Fatalf("Push to another bucket = %v", err)
+	}
+	if got := len(secondBucket.keys()); got != 2 {
+		t.Fatalf("new bucket objects = %d, want history and live; keys = %v", got, secondBucket.keys())
+	}
+	if got := len(firstBucket.keys()); got != 2 {
+		t.Fatalf("old bucket was changed: %v", firstBucket.keys())
+	}
+}
+
 func TestBucketStatusReadsLiveAndDatedHistoryFromTheRemote(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
@@ -1128,8 +1196,8 @@ func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 	if err := <-firstDone; err != nil {
 		t.Fatalf("first Push = %v", err)
 	}
-	if err := <-secondDone; err != nil {
-		t.Fatalf("second Push = %v", err)
+	if err := <-secondDone; !errors.Is(err, remotesync.ErrNothingToPush) {
+		t.Fatalf("second Push = %v, want ErrNothingToPush after serialization", err)
 	}
 }
 
