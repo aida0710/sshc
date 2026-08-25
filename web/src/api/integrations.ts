@@ -100,8 +100,8 @@ export type IntegrationsApi = {
   syncStatus(): Promise<SyncStatus>;
   configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
   syncPushDraft(): Promise<SyncPushDraft>;
-  pushSnapshot(message?: string): Promise<PushResponse>;
-  forcePushSnapshot(message?: string): Promise<PushResponse>;
+  pushSnapshot(message: string): Promise<PushResponse>;
+  forcePushSnapshot(message: string): Promise<PushResponse>;
   syncBucketStatus(): Promise<SyncBucketStatus>;
   syncHistory(): Promise<SyncHistory>;
   diffSyncHistory(key: string): Promise<SyncHistoryDiff>;
@@ -505,10 +505,9 @@ function validateSyncHistory(value: unknown): SyncHistory {
     asNonnegativeInteger(revision.fileCount);
     asNonnegativeInteger(revision.size);
     if (revision.lastModified !== undefined) asString(revision.lastModified);
-    if (!["head", "ancestor", "branch", "legacy"].includes(asString(revision.relation))) {
+    if (!["head", "ancestor", "branch"].includes(asString(revision.relation))) {
       throw new Error("invalid_response");
     }
-    asBoolean(revision.legacy);
   }
   return record as unknown as SyncHistory;
 }
@@ -763,11 +762,11 @@ export const integrationsApi: IntegrationsApi = {
     return validateSyncPushDraft(await apiClient.read("/api/v1/sync/push"));
   },
   async pushSnapshot(message) {
-    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/push", message === undefined ? {} : { message }));
+    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/push", { message }));
   },
   async forcePushSnapshot(message) {
     const token = await issueAction(SYNC_FORCE_PUSH_ACTION_KIND, SYNC_FORCE_PUSH_TARGET);
-    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/force-push", message === undefined ? {} : { message }, token));
+    return validatePushResponse(await postJSON<unknown>("/api/v1/sync/force-push", { message }, token));
   },
   async syncBucketStatus() {
     return validateSyncBucketStatus(await apiClient.read("/api/v1/sync/bucket"));

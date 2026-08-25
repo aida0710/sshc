@@ -18,20 +18,20 @@ func manifestOf(files ...remotesync.Entry) remotesync.Manifest {
 	return remotesync.Manifest{SchemaVersion: remotesync.SchemaVersion, Files: files}
 }
 
-func file(path, contents string, secret bool) remotesync.Entry {
-	return remotesync.Entry{Path: path, SHA256: digestOf(contents), Mode: "0600", Secret: secret}
+func file(path, contents string) remotesync.Entry {
+	return remotesync.Entry{Path: path, SHA256: digestOf(contents), Mode: "0600"}
 }
 
 func TestPlanProducesOneTransaction(t *testing.T) {
 	remote := manifestOf(
-		file("config", "new config", false),
-		file("connections/work/lon.conf", "new host", false),
+		file("config", "new config"),
+		file("connections/work/lon.conf", "new host"),
 	)
 	contents := map[string][]byte{
 		"config":                    []byte("new config"),
 		"connections/work/lon.conf": []byte("new host"),
 	}
-	base := manifestOf(file("config", "old config", false))
+	base := manifestOf(file("config", "old config"))
 	local := map[string]string{"config": digestOf("old config")}
 
 	request, conflicts, err := remotesync.Plan(root, &base, local, remote, contents, remotesync.ResolveNone)
@@ -55,8 +55,8 @@ func TestPlanProducesOneTransaction(t *testing.T) {
 func TestEveryChangeCarriesAPrecondition(t *testing.T) {
 	// 事前条件がゼロの変更は、見ずに上書きすることになる。それは、このアプリケーション
 	// が他のどこでもしていない唯一のことである。
-	remote := manifestOf(file("config", "new", false))
-	base := manifestOf(file("config", "old", false))
+	remote := manifestOf(file("config", "new"))
+	base := manifestOf(file("config", "old"))
 	local := map[string]string{"config": digestOf("old")}
 
 	request, _, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("new")}, remotesync.ResolveNone)
@@ -70,7 +70,7 @@ func TestEveryChangeCarriesAPrecondition(t *testing.T) {
 }
 
 func TestANewFileGetsAPreconditionThatItDoesNotExist(t *testing.T) {
-	remote := manifestOf(file("connections/new.conf", "x", false))
+	remote := manifestOf(file("connections/new.conf", "x"))
 	base := manifestOf()
 
 	request, _, err := remotesync.Plan(root, &base, map[string]string{}, remote,
@@ -91,8 +91,8 @@ func TestANewFileGetsAPreconditionThatItDoesNotExist(t *testing.T) {
 // が、ローカルの鍵の上に着地するのだから。
 func TestPlanKeepsTheKeyAPullOverwrites(t *testing.T) {
 	remote := manifestOf(
-		file("config", "c", false),
-		file("keys/work/id_ed25519", "private", true),
+		file("config", "c"),
+		file("keys/work/id_ed25519", "private"),
 	)
 	base := manifestOf()
 
@@ -113,12 +113,12 @@ func TestPlanKeepsTheKeyAPullOverwrites(t *testing.T) {
 func TestPlanDistinguishesDeletedThereFromCreatedHere(t *testing.T) {
 	// 両者を区別できるのは、最後に同期したマニフェストだけである。ここを間違えると、
 	// ユーザーがいま作ったばかりのファイルが削除される。
-	base := manifestOf(file("connections/gone.conf", "old", false))
+	base := manifestOf(file("connections/gone.conf", "old"))
 	local := map[string]string{
 		"connections/gone.conf": digestOf("old"),  // base にあり remote にない → あちらで削除された
 		"connections/new.conf":  digestOf("mine"), // どちらにもない → ここで作られた
 	}
-	remote := manifestOf(file("config", "c", false))
+	remote := manifestOf(file("config", "c"))
 
 	request, conflicts, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("c")}, remotesync.ResolveNone)
 	if err != nil {
@@ -141,9 +141,9 @@ func TestPlanReportsAConflictInsteadOfChoosing(t *testing.T) {
 	// 両側で変わった。同じ Host ブロックを双方が変えた二つの ssh_config のマージに
 	// 正解はなく、推測すれば、パーサが守るために存在するバイト保存の約束に反する
 	// ことになる。
-	base := manifestOf(file("config", "common ancestor", false))
+	base := manifestOf(file("config", "common ancestor"))
 	local := map[string]string{"config": digestOf("mine")}
-	remote := manifestOf(file("config", "theirs", false))
+	remote := manifestOf(file("config", "theirs"))
 
 	request, conflicts, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("theirs")}, remotesync.ResolveNone)
 	if err != nil {
@@ -166,9 +166,9 @@ func TestPlanReportsAConflictInsteadOfChoosing(t *testing.T) {
 func TestAConflictCarriesNoContents(t *testing.T) {
 	// 秘密鍵のバイト列を運ぶ衝突レコードは、レスポンス本文の中にあるその鍵のコピー
 	// になってしまう。
-	base := manifestOf(file("keys/id_ed25519", "ancestor", true))
+	base := manifestOf(file("keys/id_ed25519", "ancestor"))
 	local := map[string]string{"keys/id_ed25519": digestOf("local key material")}
-	remote := manifestOf(file("keys/id_ed25519", "remote key material", true))
+	remote := manifestOf(file("keys/id_ed25519", "remote key material"))
 
 	_, conflicts, err := remotesync.Plan(root, &base, local, remote,
 		map[string][]byte{"keys/id_ed25519": []byte("remote key material")}, remotesync.ResolveNone)
@@ -186,7 +186,7 @@ func TestAConflictCarriesNoContents(t *testing.T) {
 }
 
 func TestDeletedThereButEditedHereIsAConflict(t *testing.T) {
-	base := manifestOf(file("config", "ancestor", false))
+	base := manifestOf(file("config", "ancestor"))
 	local := map[string]string{"config": digestOf("edited here")}
 	remote := manifestOf()
 
@@ -206,7 +206,7 @@ func TestAFirstSyncDeletesNothing(t *testing.T) {
 	// base のマニフェストがなければ何も削除とは呼べないので、一度も同期していない
 	// マシンが pull によってファイルを失うことはない。
 	local := map[string]string{"connections/local-only.conf": digestOf("mine")}
-	remote := manifestOf(file("config", "c", false))
+	remote := manifestOf(file("config", "c"))
 
 	request, conflicts, err := remotesync.Plan(root, nil, local, remote, map[string][]byte{"config": []byte("c")}, remotesync.ResolveNone)
 	if err != nil {
@@ -221,9 +221,9 @@ func TestAFirstSyncDeletesNothing(t *testing.T) {
 }
 
 func TestAnIdenticalSnapshotIsNothingToApply(t *testing.T) {
-	base := manifestOf(file("config", "same", false))
+	base := manifestOf(file("config", "same"))
 	local := map[string]string{"config": digestOf("same")}
-	remote := manifestOf(file("config", "same", false))
+	remote := manifestOf(file("config", "same"))
 
 	_, _, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("same")}, remotesync.ResolveNone)
 	if !errors.Is(err, remotesync.ErrNothingToApply) {
@@ -236,9 +236,9 @@ func TestPlanNeedsNothingStorageDoesNotAlreadyHave(t *testing.T) {
 	// いるのであって、ストレージ層を膨らませるのではなく計画へ戻るべきである。これは、
 	// 生成される形がまさにその用語だけでできていることを
 	// 表明する。
-	base := manifestOf(file("config", "old", false), file("gone.conf", "g", false))
+	base := manifestOf(file("config", "old"), file("gone.conf", "g"))
 	local := map[string]string{"config": digestOf("old"), "gone.conf": digestOf("g")}
-	remote := manifestOf(file("config", "new", false))
+	remote := manifestOf(file("config", "new"))
 
 	request, _, err := remotesync.Plan(root, &base, local, remote, map[string][]byte{"config": []byte("new")}, remotesync.ResolveNone)
 	if err != nil {
@@ -276,8 +276,8 @@ func TestARemovalCarriedByAPullKeepsACopy(t *testing.T) {
 // 最初の pull をすると、いまは必ず衝突する。選ぶ道が無ければ、その 2 台目は
 // 一度も同期を終えられない。
 func TestChoosingTheRemoteSideWritesTheContestedFile(t *testing.T) {
-	base := manifestOf(file("config", "base", false))
-	remote := manifestOf(file("config", "theirs", false))
+	base := manifestOf(file("config", "base"))
+	remote := manifestOf(file("config", "theirs"))
 	local := map[string]string{"config": digestOf("mine")}
 
 	request, conflicts, err := remotesync.Plan(root, &base, local, remote,
@@ -295,8 +295,8 @@ func TestChoosingTheRemoteSideWritesTheContestedFile(t *testing.T) {
 
 // こちらを残すなら、書かないだけである。次の push が、こちらを向こうへ運ぶ。
 func TestChoosingThisMachineWritesNothingForTheContestedFile(t *testing.T) {
-	base := manifestOf(file("config", "base", false))
-	remote := manifestOf(file("config", "theirs", false))
+	base := manifestOf(file("config", "base"))
+	remote := manifestOf(file("config", "theirs"))
 	local := map[string]string{"config": digestOf("mine")}
 
 	request, conflicts, err := remotesync.Plan(root, &base, local, remote,
@@ -311,8 +311,8 @@ func TestChoosingThisMachineWritesNothingForTheContestedFile(t *testing.T) {
 
 // あちらで消え、こちらで編集された。こちらを残すなら消さない。
 func TestChoosingThisMachineKeepsAFileTheOtherSideRemoved(t *testing.T) {
-	base := manifestOf(file("config", "base", false), file("connections/x.conf", "base", false))
-	remote := manifestOf(file("config", "base", false))
+	base := manifestOf(file("config", "base"), file("connections/x.conf", "base"))
+	remote := manifestOf(file("config", "base"))
 	local := map[string]string{"config": digestOf("base"), "connections/x.conf": digestOf("mine")}
 
 	request, conflicts, err := remotesync.Plan(root, &base, local, remote,

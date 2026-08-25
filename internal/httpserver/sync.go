@@ -82,7 +82,7 @@ func (h SyncHandlers) restore() {
 	}
 	direction, ok := remotesync.ParseDirection(settings.Direction)
 	if !ok {
-		direction = remotesync.DirectionBoth
+		return
 	}
 	credentials := remotesync.Credentials{
 		AccessKeyID: settings.AccessKeyID, SecretAccessKey: settings.SecretAccessKey,
@@ -184,13 +184,9 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	if request.Region != nil && *request.Region != "" {
 		region = *request.Region
 	}
-	direction := remotesync.DirectionBoth
-	if request.Direction != nil {
-		parsed, ok := remotesync.ParseDirection(string(*request.Direction))
-		if !ok {
-			return problem(c, http.StatusBadRequest, "unknown_sync_direction")
-		}
-		direction = parsed
+	direction, ok := remotesync.ParseDirection(string(request.Direction))
+	if !ok {
+		return problem(c, http.StatusBadRequest, "unknown_sync_direction")
 	}
 
 	credentials := remotesync.Credentials{
@@ -296,20 +292,18 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 func (h SyncHandlers) Push(c *echo.Context) error {
 	h.restore()
 	var request api.SyncPushRequest
-	if c.Request().ContentLength != 0 {
-		if err := decodeJSON(c, &request); err != nil {
-			return problem(c, http.StatusBadRequest, "invalid_request")
-		}
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	message, err := remotesync.NormalizeCommitMessage(request.Message)
+	if err != nil {
+		return syncProblem(c, err)
 	}
 	key, ok, err := h.sealingKey(c)
 	if !ok {
 		return err
 	}
-	message := ""
-	if request.Message != nil {
-		message = *request.Message
-	}
-	result, err := h.Service.PushWithMessage(c.Request().Context(), key, message)
+	result, err := h.Service.Push(c.Request().Context(), key, message)
 	if err != nil {
 		return syncProblem(c, err)
 	}
@@ -336,10 +330,12 @@ func (h SyncHandlers) PushDraft(c *echo.Context) error {
 func (h SyncHandlers) ForcePush(c *echo.Context) error {
 	h.restore()
 	var request api.SyncPushRequest
-	if c.Request().ContentLength != 0 {
-		if err := decodeJSON(c, &request); err != nil {
-			return problem(c, http.StatusBadRequest, "invalid_request")
-		}
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	message, err := remotesync.NormalizeCommitMessage(request.Message)
+	if err != nil {
+		return syncProblem(c, err)
 	}
 	key, ok, err := h.sealingKey(c)
 	if !ok {
@@ -353,11 +349,7 @@ func (h SyncHandlers) ForcePush(c *echo.Context) error {
 		remotesync.ForcePushTarget, confirmation.Evidence); !allowed {
 		return response
 	}
-	message := ""
-	if request.Message != nil {
-		message = *request.Message
-	}
-	result, err := h.Service.ForcePushWithMessage(c.Request().Context(), key, confirmation.ETag, message)
+	result, err := h.Service.ForcePush(c.Request().Context(), key, confirmation.ETag, message)
 	if err != nil {
 		return syncProblem(c, err)
 	}
@@ -413,11 +405,11 @@ func (h SyncHandlers) History(c *echo.Context) error {
 		response.Revisions = append(response.Revisions, api.SyncHistoryRevision{
 			Key: revision.Key, Revision: revision.Revision,
 			ParentRevision: syncStringPointer(revision.ParentRevision),
-			Message:        syncStringPointer(revision.Message),
+			Message:        revision.Message,
 			CreatedAt:      revision.CreatedAt, Origin: revision.Origin,
 			FileCount: revision.FileCount, Size: revision.Size,
 			LastModified: syncStringPointer(revision.LastModified),
-			Relation:     api.SyncHistoryRelation(revision.Relation), Legacy: revision.Legacy,
+			Relation:     api.SyncHistoryRelation(revision.Relation),
 		})
 	}
 	return c.JSON(http.StatusOK, response)
@@ -593,7 +585,7 @@ func syncProblem(c *echo.Context, err error) error {
 	case errors.Is(err, remotesync.ErrCostRefused):
 		return problem(c, http.StatusConflict, "snapshot_cost_refused")
 	case errors.Is(err, remotesync.ErrUnsupportedEnvelopeVersion), errors.Is(err, remotesync.ErrUnsupportedVersion):
-		return problem(c, http.StatusConflict, "snapshot_too_new")
+		return problem(c, http.StatusConflict, "snapshot_schema_unsupported")
 	case errors.Is(err, remotesync.ErrUnsafePath), errors.Is(err, remotesync.ErrUnsafeMode),
 		errors.Is(err, remotesync.ErrManifestMismatch), errors.Is(err, remotesync.ErrNotASnapshot):
 		return problem(c, http.StatusConflict, "snapshot_rejected")

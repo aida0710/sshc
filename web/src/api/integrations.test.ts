@@ -280,10 +280,10 @@ describe("integrationsApi remote sync measurements", () => {
     const fetcher = vi.fn().mockResolvedValue(jsonResponse(response));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.pushSnapshot()).resolves.toEqual(response);
+    await expect(integrationsApi.pushSnapshot("Update config")).resolves.toEqual(response);
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/sync/push");
-    expect(sentJson(init)).toEqual({});
+    expect(sentJson(init)).toEqual({ message: "Update config" });
   });
 
   it("binds a force push to a one-time confirmation token", async () => {
@@ -297,7 +297,7 @@ describe("integrationsApi remote sync measurements", () => {
       .mockResolvedValueOnce(jsonResponse(response));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.forcePushSnapshot()).resolves.toEqual(response);
+    await expect(integrationsApi.forcePushSnapshot("Replace remote workspace")).resolves.toEqual(response);
     expect(fetcher).toHaveBeenCalledTimes(2);
     const firstCall = fetcher.mock.calls[0] as [string, RequestInit] | undefined;
     expect(firstCall).toBeDefined();
@@ -308,6 +308,7 @@ describe("integrationsApi remote sync measurements", () => {
     const [path, init] = fetcher.mock.calls[1] as [string, RequestInit];
     expect(path).toBe("/api/v1/sync/force-push");
     expect(new Headers(init.headers).get("X-SSHC-Action")).toBe("action-token");
+    expect(sentJson(init)).toEqual({ message: "Replace remote workspace" });
   });
 
   it("validates live and history metadata read from the bucket", async () => {
@@ -345,7 +346,7 @@ describe("integrationsApi remote sync measurements", () => {
   ])("rejects malformed push measurements %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
-    await expect(integrationsApi.pushSnapshot()).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.pushSnapshot("Update config")).rejects.toThrow("invalid_response");
   });
 
   it.each([

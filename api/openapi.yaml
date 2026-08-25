@@ -2332,11 +2332,9 @@ components:
     SyncPushRequest:
       type: object
       additionalProperties: false
+      required: [message]
       properties:
-        # 空ならサーバーがローカル差分から同じ下書きを再生成する。
-        message: { type: string, maxLength: 240 }
-        # v0.5以前のclient互換。現在はvault内の同期鍵を使い、この値は無視する。
-        passphrase: { type: string }
+        message: { type: string, minLength: 1, maxLength: 240 }
     SyncPushDraft:
       type: object
       additionalProperties: false
@@ -2369,17 +2367,16 @@ components:
         historyTruncated: { type: boolean }
     SyncHistoryRelation:
       type: string
-      enum: [head, ancestor, branch, legacy]
+      enum: [head, ancestor, branch]
     SyncHistoryRevision:
       type: object
       additionalProperties: false
-      required: [key, revision, createdAt, origin, fileCount, size, relation, legacy]
+      required: [key, revision, message, createdAt, origin, fileCount, size, relation]
       properties:
         key: { type: string, minLength: 1, maxLength: 1024 }
         revision: { type: string, pattern: "^[0-9a-f]{64}$" }
         parentRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
-        # v4以降の暗号化manifestに保存される。旧世代では省略される。
-        message: { type: string, maxLength: 240 }
+        message: { type: string, minLength: 1, maxLength: 240 }
         createdAt: { type: string }
         # hostnameではなく、manifest内のopaque installation ID。
         origin: { type: string }
@@ -2387,7 +2384,6 @@ components:
         size: { type: integer, format: int64, minimum: 0 }
         lastModified: { type: string }
         relation: { $ref: "#/components/schemas/SyncHistoryRelation" }
-        legacy: { type: boolean }
     SyncHistory:
       type: object
       additionalProperties: false
@@ -2441,7 +2437,7 @@ components:
     SyncSettingsRequest:
       type: object
       additionalProperties: false
-      required: [endpoint, bucket, accessKeyId, secretAccessKey]
+      required: [endpoint, bucket, accessKeyId, secretAccessKey, direction]
       properties:
         endpoint: { type: string, minLength: 1, maxLength: 2048 }
         bucket: { type: string, minLength: 1, maxLength: 255 }

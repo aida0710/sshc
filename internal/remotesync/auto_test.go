@@ -79,7 +79,7 @@ func TestAutoPushesWhatChangedHere(t *testing.T) {
 func TestAutoAppliesWhatAnotherMachinePushed(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase); err != nil {
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{})
@@ -101,7 +101,7 @@ func TestAutoStopsInsteadOfRemovingFiles(t *testing.T) {
 		"config":               "Host bastion\n",
 		"connections/old.conf": "Host old\n",
 	})
-	if _, err := first.service.Push(context.Background(), syncPassphrase); err != nil {
+	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatal(err)
 	}
 	second := newInstallation(t, bucket, map[string]string{})
@@ -113,7 +113,7 @@ func TestAutoStopsInsteadOfRemovingFiles(t *testing.T) {
 
 	// 1 台目が片方を消して押し出す。
 	first.remove(t, "connections/old.conf")
-	if _, err := first.service.Push(context.Background(), syncPassphrase); err != nil {
+	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -130,7 +130,7 @@ func TestAutoStopsInsteadOfRemovingFiles(t *testing.T) {
 func TestAutoStopsOnAConflict(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := first.service.Push(context.Background(), syncPassphrase); err != nil {
+	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatal(err)
 	}
 	second := newInstallation(t, bucket, map[string]string{"config": "Host something else\n"})
@@ -159,7 +159,7 @@ func TestAutoStopsOnAConflict(t *testing.T) {
 func TestAutoAcknowledgesAnUnchangedRemoteGeneration(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase); err != nil {
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
