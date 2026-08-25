@@ -107,4 +107,31 @@ describe("TerminalView", () => {
     expect(screen.queryByText(/Attempt/)).toBeNull();
     expect(ticket).toHaveBeenCalledTimes(1);
   });
+
+  it("offers an explicit reconnect inside an exited SSH terminal and reattaches", async () => {
+    const ticket = vi.fn(async () => ({ streamTicket: "one-time" }));
+    const onReconnect = vi.fn().mockResolvedValue(true);
+    render(<TerminalView session={{ ...session, kind: "ssh", alias: "bastion", title: "bastion", state: "exited", exited: { code: 255, signal: "", at: "2026-08-26T01:00:00Z" } }} api={{ terminalStreamTicket: ticket }} onReconnect={onReconnect} />);
+    await waitFor(() => expect(ticket).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+
+    expect(onReconnect).toHaveBeenCalledOnce();
+    await waitFor(() => expect(ticket).toHaveBeenCalledTimes(2));
+  });
+
+  it("keeps the reconnect action in the terminal when the attempt is refused", async () => {
+    const onReconnect = vi.fn().mockResolvedValue(false);
+    render(<TerminalView session={{ ...session, kind: "ssh", alias: "bastion", title: "bastion", state: "exited", exited: { code: 255, signal: "", at: "2026-08-26T01:00:00Z" } }} onReconnect={onReconnect} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Reconnect" }));
+
+    expect(await screen.findByText(/could not be reconnected/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeEnabled();
+  });
+
+  it("does not offer SSH reconnect for an exited local shell", () => {
+    render(<TerminalView session={{ ...session, state: "exited", exited: { code: 0, signal: "", at: "2026-08-26T01:00:00Z" } }} onReconnect={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+  });
 });

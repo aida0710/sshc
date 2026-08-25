@@ -27,6 +27,7 @@ type TerminalViewProps = {
   session: TerminalSession;
   api?: Pick<IntegrationsApi, "terminalStreamTicket">;
   onExit?: () => void;
+  onReconnect?: () => Promise<boolean>;
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
@@ -54,6 +55,7 @@ export function TerminalView({
   session,
   api = integrationsApi,
   onExit,
+  onReconnect,
   copyOnSelect = true,
   fontSize,
   rightClickPaste = true,
@@ -74,6 +76,7 @@ export function TerminalView({
   const clipboardSettings = useRef<TerminalClipboardSettings>({ copyOnSelect, rightClickPaste });
   clipboardSettings.current = { copyOnSelect, rightClickPaste };
   const [problem, setProblem] = useState("");
+  const [manualReconnectBusy, setManualReconnectBusy] = useState(false);
   const [link, setLink] = useState<Link>({ phase: "connecting", attempt: 1 });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,6 +105,21 @@ export function TerminalView({
   ].slice(0, 6), [commandDraft, commandSuggestions, pathSuggestions]);
   const completionItemsRef = useRef<Completion[]>([]);
   completionItemsRef.current = completionItems;
+
+  async function reconnectExitedSession() {
+    if (onReconnect === undefined || manualReconnectBusy) return;
+    setManualReconnectBusy(true);
+    setProblem("");
+    try {
+      if (await onReconnect()) {
+        control.current.now();
+        return;
+      }
+      setProblem(t("terminal.manualReconnectFailed"));
+    } finally {
+      setManualReconnectBusy(false);
+    }
+  }
 
   useEffect(() => {
     const parsed = absolutePathDraft(commandDraft);
@@ -457,11 +475,23 @@ export function TerminalView({
         </div>
       )}
       {session.exited === undefined ? null : (
-        <p role="status" className="shrink-0 border-b border-line bg-card px-3 py-1.5 text-xs text-ink-muted">
-          {session.exited.signal === ""
-            ? t("terminal.exitedWithCode", { code: String(session.exited.code) })
-            : t("terminal.exitedWithSignal", { signal: session.exited.signal })}
-        </p>
+        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-card px-3 py-1.5 text-xs text-ink-muted">
+          <p className="min-w-0 grow">
+            {session.exited.signal === ""
+              ? t("terminal.exitedWithCode", { code: String(session.exited.code) })
+              : t("terminal.exitedWithSignal", { signal: session.exited.signal })}
+          </p>
+          {session.kind !== "ssh" || session.alias === undefined || onReconnect === undefined ? null : (
+            <button
+              type="button"
+              disabled={manualReconnectBusy}
+              onClick={() => void reconnectExitedSession()}
+              className="min-h-8 shrink-0 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill disabled:opacity-50"
+            >
+              {t(manualReconnectBusy ? "terminal.manualReconnecting" : "terminal.manualReconnect")}
+            </button>
+          )}
+        </div>
       )}
 
 

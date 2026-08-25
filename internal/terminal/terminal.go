@@ -134,6 +134,9 @@ var (
 	ErrNotFound = errors.New("no such terminal session")
 	// ErrExited は、終了済みのセッションへ書こうとしたことを報告する。
 	ErrExited = errors.New("the terminal session has exited")
+	// ErrReconnectUnavailable は、実行中または開き方を保持しないセッションの
+	// 明示再接続を拒否したことを報告する。
+	ErrReconnectUnavailable = errors.New("the terminal session cannot be reconnected")
 	// ErrNoStarter は、PTY を確保する手段が配線されていないことを報告する。
 	ErrNoStarter = errors.New("no pseudo-terminal is available")
 	// ErrInvalidSize は、TIOCSWINSZ へ渡せない大きさを拒否する。

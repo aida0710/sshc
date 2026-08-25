@@ -49,6 +49,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     recentConnections: vi.fn().mockResolvedValue({ connections: [] }),
     openTerminalSession: vi.fn(),
     terminalStreamTicket: vi.fn(),
+    reconnectTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
     closeTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
     renameTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
     knownHosts: vi.fn().mockResolvedValue({ path: "~/.ssh/known_hosts", entries: [entry] }),

@@ -66,6 +66,7 @@ export type IntegrationsApi = {
   recentConnections(): Promise<RecentConnectionList>;
   openTerminalSession(request: OpenTerminalSessionRequest): Promise<OpenTerminalSessionResponse>;
   terminalStreamTicket(id: string): Promise<TerminalStreamTicket>;
+  reconnectTerminalSession(id: string): Promise<TerminalSessionList>;
   renameTerminalSession(id: string, title: string): Promise<TerminalSessionList>;
   closeTerminalSession(id: string): Promise<TerminalSessionList>;
   knownHosts(query: string): Promise<KnownHostsResponse>;
@@ -594,6 +595,11 @@ export const integrationsApi: IntegrationsApi = {
   async terminalStreamTicket(id) {
     return validateStreamTicket(
       await postJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/stream`, {}),
+    );
+  },
+  async reconnectTerminalSession(id) {
+    return validateTerminalSessionList(
+      await postJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/reconnect`, {}),
     );
   },
   async renameTerminalSession(id, title) {

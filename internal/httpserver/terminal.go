@@ -63,6 +63,7 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.GET("/api/v1/terminal/sessions", handlers.List)
 	engine.POST("/api/v1/terminal/sessions", handlers.Open)
 	engine.POST("/api/v1/terminal/sessions/:id/stream", handlers.Ticket)
+	engine.POST("/api/v1/terminal/sessions/:id/reconnect", handlers.Reconnect)
 	engine.PATCH("/api/v1/terminal/sessions/:id", handlers.Rename)
 	engine.DELETE("/api/v1/terminal/sessions/:id", handlers.Close)
 	engine.GET(StreamPath, handlers.Stream)
@@ -354,6 +355,29 @@ func (h TerminalHandlers) Ticket(c *echo.Context) error {
 		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
 	}
 	return c.JSON(http.StatusCreated, api.TerminalStreamTicket{StreamTicket: ticket})
+}
+
+// Reconnect は終了済みSSHセッションを、同じID、pane、scrollbackを保って
+// 新しいshellとして開き直す。host keyと認証は保存済みのOpen経路で再検査する。
+func (h TerminalHandlers) Reconnect(c *echo.Context) error {
+	id := c.Param("id")
+	if id == "" || len(id) > maxSessionIdentifier {
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	}
+	_, err := h.Registry.Reconnect(c.Request().Context(), id)
+	switch {
+	case errors.Is(err, terminal.ErrNotFound):
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	case errors.Is(err, terminal.ErrReconnectUnavailable):
+		return problem(c, http.StatusConflict, "terminal_reconnect_unavailable")
+	case errors.Is(err, terminal.ErrSessionLimit):
+		return problem(c, http.StatusConflict, "terminal_session_limit")
+	case errors.Is(err, terminal.ErrShuttingDown):
+		return problem(c, http.StatusServiceUnavailable, "terminal_start_failed")
+	case err != nil:
+		return h.startProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, h.list())
 }
 
 // Close は、生存中なら子プロセスに SIGHUP、終了済みなら一覧から消す。

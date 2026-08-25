@@ -10,7 +10,7 @@ import type { MessageKey } from "../i18n/messages";
 
 export type TerminalSessionsApi = Pick<
   IntegrationsApi,
-  "terminalSessions" | "openTerminalSession" | "closeTerminalSession" | "renameTerminalSession"
+  "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "renameTerminalSession"
 >;
 
 export type TerminalSessionsState = {
@@ -21,6 +21,7 @@ export type TerminalSessionsState = {
   loaded: boolean;
   rename: (id: string, title: string) => Promise<boolean>;
   open: (request: OpenTerminalSessionRequest) => Promise<TerminalSession | null>;
+  reconnect: (id: string) => Promise<boolean>;
   close: (id: string) => Promise<void>;
   closeAll: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -106,6 +107,26 @@ export function useTerminalSessions(
     [api, translate],
   );
 
+  const reconnect = useCallback(
+    async (id: string): Promise<boolean> => {
+      setBusy(true);
+      setProblem("");
+      try {
+        const listed = await api.reconnectTerminalSession(id);
+        setSessions(listed.sessions);
+        setMaxSessions(listed.maxSessions);
+        return true;
+      } catch (error) {
+        setProblem(translate(terminalProblemKey(failureCode(error))));
+        await refresh();
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [api, refresh, translate],
+  );
+
   const closeAll = useCallback(async () => {
     setBusy(true);
     let failed = false;
@@ -160,7 +181,7 @@ export function useTerminalSessions(
     );
   }, []);
 
-  return { sessions, maxSessions, busy, problem, loaded, rename, open, close, closeAll, refresh, markExited };
+  return { sessions, maxSessions, busy, problem, loaded, rename, open, reconnect, close, closeAll, refresh, markExited };
 }
 
 export function terminalProblemKey(code: string): MessageKey {
