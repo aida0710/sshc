@@ -37,7 +37,9 @@ func TestEveryReleaseJobSmokesWhatItBuilt(t *testing.T) {
 				strings.TrimSpace(job.id), job.invocation)
 		}
 		// 版を渡していなければ、-X が外れても気づけない。
-		if !strings.Contains(section, "GITHUB_REF_NAME") && !strings.Contains(section, "github.ref_name") {
+		if !strings.Contains(section, "RELEASE_TAG") &&
+			!strings.Contains(section, "GITHUB_REF_NAME") &&
+			!strings.Contains(section, "github.ref_name") {
 			t.Errorf("%s は smoke にタグの版を渡していない", strings.TrimSpace(job.id))
 		}
 	}
