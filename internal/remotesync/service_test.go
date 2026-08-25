@@ -915,6 +915,100 @@ func TestBucketStatusReadsLiveAndDatedHistoryFromTheRemote(t *testing.T) {
 	}
 }
 
+func TestHistoryDiffRestoreAndBranch(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{
+		"config": "Host one\n", "connections/old.conf": "Host old\n",
+	})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	first, err := machine.service.History(context.Background(), syncPassphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Revisions) != 1 || first.Revisions[0].Relation != remotesync.HistoryHead {
+		t.Fatalf("first history = %#v", first)
+	}
+	rootRevision, rootKey := first.HeadRevision, first.Revisions[0].Key
+
+	machine.write(t, "config", "Host two\n")
+	machine.write(t, "connections/new.conf", "Host new\n")
+	machine.remove(t, "connections/old.conf")
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := machine.service.History(context.Background(), syncPassphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if history.HeadRevision == rootRevision || len(history.Revisions) != 2 {
+		t.Fatalf("second history = %#v", history)
+	}
+	var rootSeen, headSeen bool
+	for _, revision := range history.Revisions {
+		switch revision.Revision {
+		case rootRevision:
+			rootSeen = revision.Relation == remotesync.HistoryAncestor
+		case history.HeadRevision:
+			headSeen = revision.Relation == remotesync.HistoryHead && revision.ParentRevision == rootRevision
+		}
+	}
+	if !rootSeen || !headSeen {
+		t.Fatalf("relations = %#v", history.Revisions)
+	}
+
+	diff, err := machine.service.DiffHistory(context.Background(), syncPassphrase, rootKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(diff.Added, ",") != "connections/new.conf" ||
+		strings.Join(diff.Modified, ",") != "config" ||
+		strings.Join(diff.Removed, ",") != "connections/old.conf" {
+		t.Fatalf("diff = %#v", diff)
+	}
+	if _, err := machine.service.DiffHistory(context.Background(), syncPassphrase, "../workspace.tar.gz.enc"); !errors.Is(err, remotesync.ErrHistoryTarget) {
+		t.Fatalf("invalid history key = %v", err)
+	}
+
+	restored, err := machine.service.PullHistory(context.Background(), syncPassphrase, rootKey, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := machine.service.Apply(restored); err != nil {
+		t.Fatal(err)
+	}
+	if got := machine.read(t, "config"); got != "Host one\n" {
+		t.Fatalf("restored config = %q", got)
+	}
+	machine.write(t, "config", "Host branch\n")
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+
+	branched, err := machine.service.History(context.Background(), syncPassphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var branchSeen, restoredAncestor, newHead bool
+	for _, revision := range branched.Revisions {
+		switch revision.Relation {
+		case remotesync.HistoryBranch:
+			branchSeen = true
+		case remotesync.HistoryAncestor:
+			if revision.Revision == rootRevision {
+				restoredAncestor = true
+			}
+		case remotesync.HistoryHead:
+			newHead = revision.ParentRevision == rootRevision
+		}
+	}
+	if !branchSeen || !restoredAncestor || !newHead {
+		t.Fatalf("branched history = %#v", branched.Revisions)
+	}
+}
+
 func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})

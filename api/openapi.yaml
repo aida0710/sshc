@@ -405,6 +405,38 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/history:
+    get:
+      operationId: getSyncHistory
+      responses:
+        "200":
+          description: Bounded Git-like graph decoded from recent encrypted snapshots
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncHistory" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/history/diff:
+    post:
+      operationId: diffSyncHistory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SyncHistoryDiffRequest" }
+      responses:
+        "200":
+          description: Path-only changes from one historical revision to the live head
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncHistoryDiff" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/key:
     put:
       operationId: setSyncKey
@@ -2299,6 +2331,62 @@ components:
           maxItems: 10000
           items: { $ref: "#/components/schemas/SyncBucketObject" }
         historyTruncated: { type: boolean }
+    SyncHistoryRelation:
+      type: string
+      enum: [head, ancestor, branch, legacy]
+    SyncHistoryRevision:
+      type: object
+      additionalProperties: false
+      required: [key, revision, createdAt, origin, fileCount, size, relation, legacy]
+      properties:
+        key: { type: string, minLength: 1, maxLength: 1024 }
+        revision: { type: string, pattern: "^[0-9a-f]{64}$" }
+        parentRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
+        createdAt: { type: string }
+        # hostnameではなく、manifest内のopaque installation ID。
+        origin: { type: string }
+        fileCount: { type: integer, minimum: 0, maximum: 4096 }
+        size: { type: integer, format: int64, minimum: 0 }
+        lastModified: { type: string }
+        relation: { $ref: "#/components/schemas/SyncHistoryRelation" }
+        legacy: { type: boolean }
+    SyncHistory:
+      type: object
+      additionalProperties: false
+      required: [checkedAt, headRevision, revisions, historyTruncated, downloadTruncated, downloadedBytes]
+      properties:
+        checkedAt: { type: string }
+        headRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
+        revisions:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/SyncHistoryRevision" }
+        historyTruncated: { type: boolean }
+        downloadTruncated: { type: boolean }
+        downloadedBytes: { type: integer, format: int64, minimum: 0, maximum: 134217728 }
+    SyncHistoryDiffRequest:
+      type: object
+      additionalProperties: false
+      required: [key]
+      properties:
+        key: { type: string, minLength: 1, maxLength: 1024 }
+    SyncHistoryDiff:
+      type: object
+      additionalProperties: false
+      required: [fromRevision, toRevision, added, modified, removed, downloadedBytes]
+      properties:
+        fromRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
+        toRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
+        added:
+          type: array
+          items: { type: string }
+        modified:
+          type: array
+          items: { type: string }
+        removed:
+          type: array
+          items: { type: string }
+        downloadedBytes: { type: integer, format: int64, minimum: 0 }
     SyncOperation:
       type: object
       additionalProperties: false
@@ -2366,6 +2454,9 @@ components:
         apply: { type: boolean }
         # 両側で変更されたファイルの採用元。省略時は衝突を報告して停止する。
         resolve: { type: string, enum: [local, remote] }
+        # 省略時はlive head。指定時はconfigured snapshots/配下のimmutable historyを
+        # preview／applyする。remote head自体はこの操作では巻き戻さない。
+        historyKey: { type: string, minLength: 1, maxLength: 1024 }
     SyncConflict:
       type: object
       additionalProperties: false
