@@ -20,8 +20,6 @@ curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
 
 Windows を含む各 OS 向けのバイナリと Android APK は、[GitHub Releases](https://github.com/aida0710/sshc/releases) からダウンロードできます。デスクトップアプリ、インストーラ、macOS の app bundle は配布していません。
 
-0.3.x 以前のデスクトップアプリから移行する場合は、古い cask と実行ファイルを削除してください。手順は[インストールガイド](docs/release-install.md#03x-からの移行)にあります。
-
 ## 基本的な使い方
 
 最初にエンジンを起動し、別のターミナルから UI を開きます。
