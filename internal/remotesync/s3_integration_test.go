@@ -254,6 +254,26 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	if _, err := first.service.Push(ctx, syncPassphrase); err != nil {
 		t.Fatalf("first workspace Push after editing = %v", err)
 	}
+	history, err := first.service.History(ctx, syncPassphrase)
+	if err != nil {
+		t.Fatalf("History against the real bucket = %v", err)
+	}
+	var ancestorKey string
+	for _, revision := range history.Revisions {
+		if revision.Relation == remotesync.HistoryAncestor {
+			ancestorKey = revision.Key
+		}
+	}
+	if ancestorKey == "" {
+		t.Fatalf("real bucket history has no ancestor: %#v", history.Revisions)
+	}
+	diff, err := first.service.DiffHistory(ctx, syncPassphrase, ancestorKey)
+	if err != nil {
+		t.Fatalf("DiffHistory against the real bucket = %v", err)
+	}
+	if len(diff.Modified) != 1 || diff.Modified[0] != "config" {
+		t.Fatalf("real bucket history diff = %#v", diff)
+	}
 	writeRealWorkspace(t, second, "config", "Host shared\n  HostName local-choice.example\n")
 
 	conflicted, err := second.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone)

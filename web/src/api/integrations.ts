@@ -42,6 +42,9 @@ export type PushResult = components["schemas"]["PushResult"];
 export type PushResponse = components["schemas"]["PushResponse"];
 export type PullResponse = components["schemas"]["PullResponse"];
 export type SyncBucketStatus = components["schemas"]["SyncBucketStatus"];
+export type SyncHistory = components["schemas"]["SyncHistory"];
+export type SyncHistoryRevision = components["schemas"]["SyncHistoryRevision"];
+export type SyncHistoryDiff = components["schemas"]["SyncHistoryDiff"];
 
 export const REACHABILITY_ACTION_KIND = "diagnostics.reachability";
 export const AUTHENTICATION_ACTION_KIND = "diagnostics.authentication";
@@ -98,7 +101,9 @@ export type IntegrationsApi = {
   pushSnapshot(): Promise<PushResponse>;
   forcePushSnapshot(): Promise<PushResponse>;
   syncBucketStatus(): Promise<SyncBucketStatus>;
-  pullSnapshot(apply: boolean, resolve?: "local" | "remote"): Promise<PullResponse>;
+  syncHistory(): Promise<SyncHistory>;
+  diffSyncHistory(key: string): Promise<SyncHistoryDiff>;
+  pullSnapshot(apply: boolean, resolve?: "local" | "remote", historyKey?: string): Promise<PullResponse>;
   setSyncKey(key?: string): Promise<SyncKeyResponse>;
   setAutoSync(enabled: boolean): Promise<SyncStatus>;
   syncNow(): Promise<SyncStatus>;
@@ -465,6 +470,48 @@ function validateSyncBucketStatus(value: unknown): SyncBucketStatus {
   return record as unknown as SyncBucketStatus;
 }
 
+function asRevision(value: unknown): string {
+  const revision = asString(value);
+  if (!/^[0-9a-f]{64}$/.test(revision)) throw new Error("invalid_response");
+  return revision;
+}
+
+function validateSyncHistory(value: unknown): SyncHistory {
+  const record = asRecord(value);
+  asString(record.checkedAt);
+  asRevision(record.headRevision);
+  asBoolean(record.historyTruncated);
+  asBoolean(record.downloadTruncated);
+  asNonnegativeInteger(record.downloadedBytes);
+  for (const raw of asArray(record.revisions)) {
+    const revision = asRecord(raw);
+    asString(revision.key);
+    asRevision(revision.revision);
+    if (revision.parentRevision !== undefined) asRevision(revision.parentRevision);
+    asString(revision.createdAt);
+    asString(revision.origin);
+    asNonnegativeInteger(revision.fileCount);
+    asNonnegativeInteger(revision.size);
+    if (revision.lastModified !== undefined) asString(revision.lastModified);
+    if (!["head", "ancestor", "branch", "legacy"].includes(asString(revision.relation))) {
+      throw new Error("invalid_response");
+    }
+    asBoolean(revision.legacy);
+  }
+  return record as unknown as SyncHistory;
+}
+
+function validateSyncHistoryDiff(value: unknown): SyncHistoryDiff {
+  const record = asRecord(value);
+  asRevision(record.fromRevision);
+  asRevision(record.toRevision);
+  for (const path of asArray(record.added)) asString(path);
+  for (const path of asArray(record.modified)) asString(path);
+  for (const path of asArray(record.removed)) asString(path);
+  asNonnegativeInteger(record.downloadedBytes);
+  return record as unknown as SyncHistoryDiff;
+}
+
 function validatePullResponse(value: unknown): PullResponse {
   const record = asRecord(value);
   asBoolean(record.applied);
@@ -710,9 +757,20 @@ export const integrationsApi: IntegrationsApi = {
   async syncBucketStatus() {
     return validateSyncBucketStatus(await apiClient.read("/api/v1/sync/bucket"));
   },
-  async pullSnapshot(apply, resolve) {
+  async syncHistory() {
+    return validateSyncHistory(await apiClient.read("/api/v1/sync/history"));
+  },
+  async diffSyncHistory(key) {
+    return validateSyncHistoryDiff(await postJSON<unknown>("/api/v1/sync/history/diff", { key }));
+  },
+  async pullSnapshot(apply, resolve, historyKey) {
+    const request = {
+      apply,
+      ...(resolve === undefined ? {} : { resolve }),
+      ...(historyKey === undefined ? {} : { historyKey }),
+    };
     return validatePullResponse(
-      await postJSON<unknown>("/api/v1/sync/pull", resolve === undefined ? { apply } : { apply, resolve }),
+      await postJSON<unknown>("/api/v1/sync/pull", request),
     );
   },
   async setSyncKey(key) {

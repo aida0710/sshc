@@ -567,6 +567,25 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag string) (Push
 		return PushResult{}, err
 	}
 	manifest.Origin = current.Origin
+	objectKey := ObjectKeyFor(binding.config)
+	if current.Key != objectKey {
+		// 別のremote headに保存されたbaseを、新しいbucketの親として記録しない。
+		current.ETag = ""
+		current.Base = nil
+	}
+	parentRevision := ""
+	if current.Base != nil {
+		parentRevision = current.Base.Revision
+		if parentRevision == "" {
+			parentRevision, err = RevisionFor(*current.Base)
+			if err != nil {
+				return PushResult{}, err
+			}
+		}
+	}
+	if err := FinalizeManifest(&manifest, parentRevision); err != nil {
+		return PushResult{}, err
+	}
 	archive, err := Build(manifest, contents)
 	if err != nil {
 		return PushResult{}, err
@@ -581,13 +600,6 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag string) (Push
 	}
 	result := PushResult{Summary: snapshotSummary(manifest, contents, len(sealed))}
 
-	objectKey := ObjectKeyFor(binding.config)
-	if current.Key != objectKey {
-		// 別のオブジェクトの世代は、このオブジェクトについて何も語らない。
-		// If-None-Match へフォールバックすることは、push がオブジェクトを作り、
-		// すでに誰かが置いたものの上には書かないことを意味する。
-		current.ETag = ""
-	}
 	ifMatch, ifNoneMatch := forcedETag, ""
 	if ifMatch == "" {
 		ifMatch = current.ETag
@@ -770,31 +782,55 @@ type PullResult struct {
 func (s *Service) Pull(ctx context.Context, passphrase string, resolve Resolution) (PullResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
-	return s.pull(ctx, passphrase, resolve)
+	return s.pull(ctx, passphrase, resolve, "")
 }
 
-func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolution) (PullResult, error) {
+// PullHistory previews one immutable dated snapshot. Applying it writes local
+// files and records the current live ETag, but keeps the selected manifest as
+// Base. The next push therefore creates a new head whose parent is the restored
+// revision without unconditionally rewinding the remote object.
+func (s *Service) PullHistory(ctx context.Context, passphrase, historyKey string, resolve Resolution) (PullResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	return s.pull(ctx, passphrase, resolve, historyKey)
+}
+
+func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolution, historyKey string) (PullResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
 		return PullResult{}, err
 	}
 	objectKey := ObjectKeyFor(binding.config)
-	object, err := binding.client.Get(ctx, objectKey)
+	sourceKey := objectKey
+	stateETag := ""
+	if historyKey != "" {
+		sourceKey, err = historyObjectKey(binding.config, historyKey)
+		if err != nil {
+			return PullResult{}, err
+		}
+		live, statErr := binding.client.Stat(ctx, objectKey)
+		if statErr != nil && !errors.Is(statErr, objectstore.ErrNotFound) {
+			return PullResult{}, statErr
+		}
+		if statErr == nil {
+			stateETag = live.ETag
+		}
+	}
+	object, err := binding.client.Get(ctx, sourceKey)
 	if err != nil {
 		if errors.Is(err, objectstore.ErrNotFound) {
 			return PullResult{}, ErrNoSnapshot
 		}
 		return PullResult{}, err
 	}
+	if historyKey == "" {
+		stateETag = object.ETag
+	}
 	// この envelope の中のパラメータを選んだのは、それを書いた誰かであって、必ずしも
 	// このインストールではない。別のユーザーのスナップショットが、パスフレーズの誤りが判明
 	// する前にこのマシンへ 1 ギガバイトと 16 スレッドを費やさせられるようであっては
 	// ならない。
-	archive, _, err := envelope.OpenWithin(object.Body, passphrase, envelope.AcceptedFromRemote)
-	if err != nil {
-		return PullResult{}, err
-	}
-	manifest, contents, err := Read(archive)
+	manifest, contents, err := openSnapshotObject(object, passphrase)
 	if err != nil {
 		return PullResult{}, err
 	}
@@ -819,7 +855,7 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 		Request: request, Conflicts: conflicts, Manifest: manifest,
 		Summary:         snapshotSummary(manifest, contents, len(object.Body)),
 		DownloadedBytes: int64(len(object.Body)), CompletedAt: s.now(),
-		ETag: object.ETag, Origin: manifest.Origin, objectKey: objectKey,
+		ETag: stateETag, Origin: manifest.Origin, objectKey: objectKey,
 	}, err
 }
 

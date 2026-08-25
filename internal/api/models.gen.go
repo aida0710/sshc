@@ -347,6 +347,30 @@ func (e SyncDirection) Valid() bool {
 	}
 }
 
+// Defines values for SyncHistoryRelation.
+const (
+	Ancestor SyncHistoryRelation = "ancestor"
+	Branch   SyncHistoryRelation = "branch"
+	Head     SyncHistoryRelation = "head"
+	Legacy   SyncHistoryRelation = "legacy"
+)
+
+// Valid indicates whether the value is a known member of the SyncHistoryRelation enum.
+func (e SyncHistoryRelation) Valid() bool {
+	switch e {
+	case Ancestor:
+		return true
+	case Branch:
+		return true
+	case Head:
+		return true
+	case Legacy:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SyncOperationKind.
 const (
 	SyncOperationKindApply SyncOperationKind = "apply"
@@ -1105,8 +1129,9 @@ type PublicKeyResponse struct {
 
 // PullRequest defines model for PullRequest.
 type PullRequest struct {
-	Apply   *bool               `json:"apply,omitempty"`
-	Resolve *PullRequestResolve `json:"resolve,omitempty"`
+	Apply      *bool               `json:"apply,omitempty"`
+	HistoryKey *string             `json:"historyKey,omitempty"`
+	Resolve    *PullRequestResolve `json:"resolve,omitempty"`
 }
 
 // PullRequestResolve defines model for PullRequest.Resolve.
@@ -1622,6 +1647,48 @@ type SyncConflict struct {
 
 // SyncDirection defines model for SyncDirection.
 type SyncDirection string
+
+// SyncHistory defines model for SyncHistory.
+type SyncHistory struct {
+	CheckedAt         string                `json:"checkedAt"`
+	DownloadTruncated bool                  `json:"downloadTruncated"`
+	DownloadedBytes   int64                 `json:"downloadedBytes"`
+	HeadRevision      string                `json:"headRevision"`
+	HistoryTruncated  bool                  `json:"historyTruncated"`
+	Revisions         []SyncHistoryRevision `json:"revisions"`
+}
+
+// SyncHistoryDiff defines model for SyncHistoryDiff.
+type SyncHistoryDiff struct {
+	Added           []string `json:"added"`
+	DownloadedBytes int64    `json:"downloadedBytes"`
+	FromRevision    string   `json:"fromRevision"`
+	Modified        []string `json:"modified"`
+	Removed         []string `json:"removed"`
+	ToRevision      string   `json:"toRevision"`
+}
+
+// SyncHistoryDiffRequest defines model for SyncHistoryDiffRequest.
+type SyncHistoryDiffRequest struct {
+	Key string `json:"key"`
+}
+
+// SyncHistoryRelation defines model for SyncHistoryRelation.
+type SyncHistoryRelation string
+
+// SyncHistoryRevision defines model for SyncHistoryRevision.
+type SyncHistoryRevision struct {
+	CreatedAt      string              `json:"createdAt"`
+	FileCount      int                 `json:"fileCount"`
+	Key            string              `json:"key"`
+	LastModified   *string             `json:"lastModified,omitempty"`
+	Legacy         bool                `json:"legacy"`
+	Origin         string              `json:"origin"`
+	ParentRevision *string             `json:"parentRevision,omitempty"`
+	Relation       SyncHistoryRelation `json:"relation"`
+	Revision       string              `json:"revision"`
+	Size           int64               `json:"size"`
+}
 
 // SyncKeyRequest defines model for SyncKeyRequest.
 type SyncKeyRequest struct {
@@ -2159,6 +2226,9 @@ type UpdateSnippetJSONRequestBody = SnippetDraft
 
 // SetAutoSyncJSONRequestBody defines body for SetAutoSync for application/json ContentType.
 type SetAutoSyncJSONRequestBody = AutoSyncRequest
+
+// DiffSyncHistoryJSONRequestBody defines body for DiffSyncHistory for application/json ContentType.
+type DiffSyncHistoryJSONRequestBody = SyncHistoryDiffRequest
 
 // SetSyncKeyJSONRequestBody defines body for SetSyncKey for application/json ContentType.
 type SetSyncKeyJSONRequestBody = SyncKeyRequest

@@ -69,6 +69,64 @@ func TestRoundTripIsByteIdentical(t *testing.T) {
 	}
 }
 
+func TestRevisionIsStableAndCarriesItsParent(t *testing.T) {
+	contents := map[string][]byte{"config": []byte("Host bastion\n")}
+	manifest := remotesync.Manifest{
+		CreatedAt: "2026-08-25T02:00:00Z", Origin: "opaque-installation-id",
+		Files: []remotesync.Entry{entry("config", string(contents["config"]), false)},
+	}
+	parent := strings.Repeat("a", 64)
+	if err := remotesync.FinalizeManifest(&manifest, parent); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := remotesync.Build(manifest, contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := remotesync.Read(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ParentRevision != parent || len(got.Revision) != 64 {
+		t.Fatalf("manifest = %#v", got)
+	}
+	want, err := remotesync.RevisionFor(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Revision != want {
+		t.Fatalf("revision = %q, want %q", got.Revision, want)
+	}
+}
+
+func TestReadRefusesATamperedRevision(t *testing.T) {
+	body := "Host bastion\n"
+	archive := handBuilt(t, map[string]string{"config": body}, remotesync.Manifest{
+		SchemaVersion: remotesync.SchemaVersion,
+		CreatedAt:     "2026-08-25T02:00:00Z", Origin: "opaque-installation-id",
+		Revision: strings.Repeat("0", 64),
+		Files:    []remotesync.Entry{entry("config", body, false)},
+	})
+	if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrManifestMismatch) {
+		t.Fatalf("Read = %v, want ErrManifestMismatch", err)
+	}
+}
+
+func TestReadDerivesAnIdentityForALegacySnapshot(t *testing.T) {
+	body := "Host bastion\n"
+	archive := handBuilt(t, map[string]string{"config": body}, remotesync.Manifest{
+		SchemaVersion: 2, CreatedAt: "2026-08-25T02:00:00Z", Origin: "legacy-installation",
+		Files: []remotesync.Entry{entry("config", body, false)},
+	})
+	manifest, _, err := remotesync.Read(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Revision) != 64 || manifest.ParentRevision != "" {
+		t.Fatalf("legacy manifest = %#v", manifest)
+	}
+}
+
 func TestAPrivateKeyIsMarkedSecret(t *testing.T) {
 	// pull は secret のエントリを SkipBackup 付きで適用する。この印を失えば、同期の
 	// たびに ~/.ssh/sshc/backups/ に鍵素材のコピーが残ることになる。

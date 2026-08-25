@@ -19,6 +19,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -33,10 +34,12 @@ const ManifestName = "manifest.json"
 
 // SchemaVersion は、マニフェスト文書のバージョン。
 //
+// バージョン 3 では、暗号化されたスナップショットをGit風の履歴として辿れるよう、
+// 内容から検証できるrevision IDと親revision IDを持つ。
 // バージョン 2 では vault の復号済み文書を同期し、受信側で再暗号化する。
 // バージョン 1 の読込互換性は、すでに作成済みのスナップショットを引き続き
 // 読み取れるよう維持する。専用の再暗号化操作は提供しない。
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // MaxSnapshotBytes は、Read が展開する量に上限を設ける。スナップショットは ~/.ssh
 // である。これに近づくものは、ワークスペースではなく展開爆弾だ。
@@ -93,8 +96,60 @@ type Manifest struct {
 	// マシンから来た」と言えるようにするためだ。不透明な ID であって、決してホスト名
 	// ではない。バケットを読める者なら誰でも見られるオブジェクトの中のホスト名は、
 	// 不要な開示である。
-	Origin string  `json:"origin"`
-	Files  []Entry `json:"files"`
+	Origin string `json:"origin"`
+	// Revision はcreatedAt、origin、parent、filesから決まる内容ID。暗号化された
+	// manifest内にだけ置き、S3 providerへfile digestや系譜を平文公開しない。
+	Revision string `json:"revision,omitempty"`
+	// ParentRevision は、このsnapshotを作る直前にlocalが採用していた世代。
+	// 空ならrootまたはv1/v2から引き継げなかった履歴である。
+	ParentRevision string  `json:"parentRevision,omitempty"`
+	Files          []Entry `json:"files"`
+}
+
+type revisionDocument struct {
+	CreatedAt      string  `json:"createdAt"`
+	Origin         string  `json:"origin"`
+	ParentRevision string  `json:"parentRevision,omitempty"`
+	Files          []Entry `json:"files"`
+}
+
+// RevisionFor returns the stable content identity of a manifest. Revision and
+// schemaVersion are deliberately excluded so the same v1/v2 snapshot can be
+// represented as a legacy node without rewriting it.
+func RevisionFor(manifest Manifest) (string, error) {
+	files := append([]Entry(nil), manifest.Files...)
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	document, err := json.Marshal(revisionDocument{
+		CreatedAt: manifest.CreatedAt, Origin: manifest.Origin,
+		ParentRevision: manifest.ParentRevision, Files: files,
+	})
+	if err != nil {
+		return "", err
+	}
+	return Digest(document), nil
+}
+
+// FinalizeManifest prepares a new manifest for writing and records its parent.
+func FinalizeManifest(manifest *Manifest, parentRevision string) error {
+	if parentRevision != "" && !validRevision(parentRevision) {
+		return ErrManifestMismatch
+	}
+	manifest.SchemaVersion = SchemaVersion
+	manifest.ParentRevision = parentRevision
+	revision, err := RevisionFor(*manifest)
+	if err != nil {
+		return err
+	}
+	manifest.Revision = revision
+	return nil
+}
+
+func validRevision(revision string) bool {
+	if len(revision) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(revision)
+	return err == nil
 }
 
 // Build は、与えられたファイルを圧縮アーカイブに詰める。
@@ -119,6 +174,17 @@ func Build(manifest Manifest, contents map[string][]byte) ([]byte, error) {
 		if _, ok := contents[entry.Path]; !ok {
 			return nil, ErrManifestMismatch
 		}
+	}
+	expectedRevision, err := RevisionFor(manifest)
+	if err != nil {
+		return nil, err
+	}
+	if manifest.Revision == "" {
+		manifest.Revision = expectedRevision
+	}
+	if manifest.Revision != expectedRevision ||
+		(manifest.ParentRevision != "" && !validRevision(manifest.ParentRevision)) {
+		return nil, ErrManifestMismatch
 	}
 	document, err := json.Marshal(manifest)
 	if err != nil {
@@ -231,6 +297,21 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 		if Digest(body) != entry.SHA256 {
 			return Manifest{}, nil, ErrManifestMismatch
 		}
+	}
+	revision, err := RevisionFor(manifest)
+	if err != nil {
+		return Manifest{}, nil, ErrManifestMismatch
+	}
+	if manifest.SchemaVersion >= 3 {
+		if manifest.Revision != revision ||
+			(manifest.ParentRevision != "" && !validRevision(manifest.ParentRevision)) {
+			return Manifest{}, nil, ErrManifestMismatch
+		}
+	} else {
+		// Legacy snapshots had no explicit graph identity. A derived ID lets the
+		// UI display and compare them without mutating the remote object.
+		manifest.Revision = revision
+		manifest.ParentRevision = ""
 	}
 	return manifest, contents, nil
 }

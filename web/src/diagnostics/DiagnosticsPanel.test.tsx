@@ -79,6 +79,8 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     pushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
     forcePushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
     syncBucketStatus: vi.fn().mockResolvedValue({ checkedAt: "2026-08-25T00:00:00Z", localIsLive: false, historyTruncated: false, history: [] }),
+    syncHistory: vi.fn().mockResolvedValue({ checkedAt: "2026-08-25T00:00:00Z", headRevision: "a".repeat(64), revisions: [], historyTruncated: false, downloadTruncated: false, downloadedBytes: 0 }),
+    diffSyncHistory: vi.fn(),
     setSyncKey: vi.fn().mockResolvedValue({ key: "AB12-CD34-EF56-GH78-JK90-MN12" }),
     setAutoSync: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
     syncNow: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),

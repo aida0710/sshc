@@ -53,6 +53,7 @@ describe("the catalogue", () => {
         "shell.languageEnglish",
         "shell.languageJapanese",
         "shell.title",
+        "sync.historyRelation.head",
         "terminal.localhost",
         "terminal.rowDetail",
       ].sort(),

@@ -372,6 +372,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSyncHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/history/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["diffSyncHistory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/key": {
         parameters: {
             query?: never;
@@ -1890,6 +1922,42 @@ export interface components {
             history: components["schemas"]["SyncBucketObject"][];
             historyTruncated: boolean;
         };
+        /** @enum {string} */
+        SyncHistoryRelation: "head" | "ancestor" | "branch" | "legacy";
+        SyncHistoryRevision: {
+            key: string;
+            revision: string;
+            parentRevision?: string;
+            createdAt: string;
+            origin: string;
+            fileCount: number;
+            /** Format: int64 */
+            size: number;
+            lastModified?: string;
+            relation: components["schemas"]["SyncHistoryRelation"];
+            legacy: boolean;
+        };
+        SyncHistory: {
+            checkedAt: string;
+            headRevision: string;
+            revisions: components["schemas"]["SyncHistoryRevision"][];
+            historyTruncated: boolean;
+            downloadTruncated: boolean;
+            /** Format: int64 */
+            downloadedBytes: number;
+        };
+        SyncHistoryDiffRequest: {
+            key: string;
+        };
+        SyncHistoryDiff: {
+            fromRevision: string;
+            toRevision: string;
+            added: string[];
+            modified: string[];
+            removed: string[];
+            /** Format: int64 */
+            downloadedBytes: number;
+        };
         SyncOperation: {
             kind: components["schemas"]["SyncOperationKind"];
             summary: components["schemas"]["SnapshotSummary"];
@@ -1931,6 +1999,7 @@ export interface components {
             apply?: boolean;
             /** @enum {string} */
             resolve?: "local" | "remote";
+            historyKey?: string;
         };
         SyncConflict: {
             path: string;
@@ -3393,6 +3462,59 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    getSyncHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded Git-like graph decoded from recent encrypted snapshots */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncHistory"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    diffSyncHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncHistoryDiffRequest"];
+            };
+        };
+        responses: {
+            /** @description Path-only changes from one historical revision to the live head */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncHistoryDiff"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
         };
