@@ -127,6 +127,45 @@ test("draws one separator above the version in the mobile drawer", async ({ page
     return count;
   });
   expect(borders).toBe(1);
+
+  const home = navigation.getByRole("link", { name: "Home", exact: true });
+  const terminal = navigation.getByRole("link", { name: "Terminal", exact: true });
+  const [homeBox, terminalBox] = await Promise.all([home.boundingBox(), terminal.boundingBox()]);
+  expect(homeBox).not.toBeNull();
+  expect(terminalBox).not.toBeNull();
+  if (homeBox !== null && terminalBox !== null) {
+    expect(terminalBox.y + terminalBox.height - homeBox.y).toBeLessThanOrEqual(164);
+  }
+});
+
+test("opens quick connection actions above the trigger on mobile", async ({ page, installation }) => {
+  await installation.write("conf.d/20-lab.conf", hosts);
+  await openApplication(page, installation);
+
+  const trigger = page.getByRole("button", { name: "Actions for alpha" });
+  await trigger.click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+
+  const [triggerBox, menuBox] = await Promise.all([trigger.boundingBox(), menu.boundingBox()]);
+  expect(triggerBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  if (triggerBox !== null && menuBox !== null) {
+    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(triggerBox.y);
+    expect(menuBox.y).toBeGreaterThanOrEqual(0);
+  }
+  await expect(menu.getByRole("menuitem", { name: "Open connection settings" })).toBeInViewport();
+  await expect(menu.getByRole("menuitem", { name: "Connect", exact: true })).toBeInViewport();
+});
+
+test("hides split and broadcast controls on mobile", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSectionThroughDrawer(page, "Terminal", "No console is open");
+
+  await expect(page.getByRole("button", { name: "Split right" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Split down" })).toBeHidden();
+  await expect(page.getByText("Broadcast input", { exact: true })).toBeHidden();
+  await expect(page.getByRole("navigation", { name: "Primary" })).toHaveClass(/shadow-none/);
 });
 
 test("removes the session status badge from the mobile header", async ({ page, installation }) => {
