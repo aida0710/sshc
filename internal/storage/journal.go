@@ -16,6 +16,7 @@ import (
 var (
 	ErrUnknownTransaction = errors.New("no pending transaction with that identifier")
 	ErrCannotComplete     = errors.New("staged contents are missing or altered")
+	ErrCannotRollback     = errors.New("the transaction has crossed its durable commit point")
 	// ErrRecoveryStateUnknown は、中断されたトランザクションの対象が、記録された
 	// 変更前でも変更後でもない状態にあることを述べる。復旧はそこから先を推測しない。
 	ErrRecoveryStateUnknown = errors.New("an interrupted transaction target no longer matches its recorded before or after state")
@@ -88,14 +89,14 @@ func (m *Manager) Pending() ([]Pending, error) {
 			Status:      record.Status,
 			StartedAt:   record.StartedAt,
 			Committed:   record.Committed,
-			CanComplete: !unresolved && record.Status == statusStaged && !record.Atomic,
-			CanRollback: !unresolved,
+			CanComplete: !unresolved && ((record.Status == statusStaged && !record.Atomic) || (record.Status == statusApplied && record.DiscardBackups)),
+			CanRollback: !unresolved && record.Status != statusApplied,
 		}
 		for index, entry := range record.Entries {
 			pendingEntry := PendingEntry{
 				Path:      entry.Path,
 				Target:    entry.Target,
-				Action:    entry.action(),
+				Action:    entry.Action,
 				Committed: index < record.Committed,
 				HasBackup: entry.Backup != "",
 			}
@@ -121,6 +122,12 @@ func (m *Manager) Pending() ([]Pending, error) {
 // 内容を持つのは置き換えだけである。移動と削除は、その意図の全体をジャーナルの
 // エントリに持っている。
 func (m *Manager) Complete(identifier string) error {
+	unlock, err := m.workspace.lockMutation()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	record, journalPath, err := m.loadPending(identifier)
 	if err != nil {
 		return err
@@ -128,11 +135,14 @@ func (m *Manager) Complete(identifier string) error {
 	// Atomic 記録は永続化文書とプロセス内状態（開いたパスワード Vault）を対応付ける。
 	// callback 失敗後にディスク側だけを完了するとプロセス内状態が古くなるため、
 	// 復旧時はロールバックする。新しい要求でディスクとメモリをまとめて更新できる。
+	if record.Status == statusApplied && record.DiscardBackups {
+		return m.finishApplied(record, journalPath)
+	}
 	if record.Atomic || record.Status != statusStaged {
 		return ErrCannotComplete
 	}
 	for index := record.Committed; index < len(record.Entries); index++ {
-		if record.Entries[index].action() != actionWrite {
+		if record.Entries[index].Action != actionWrite {
 			continue
 		}
 		if !m.stagedMatches(record.Entries[index]) {
@@ -151,9 +161,18 @@ func (m *Manager) Complete(identifier string) error {
 // 実際には行っていない復旧を報告するのではなく、
 // 拒否する。
 func (m *Manager) Rollback(identifier string) error {
+	unlock, err := m.workspace.lockMutation()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	record, journalPath, err := m.loadPending(identifier)
 	if err != nil {
 		return err
+	}
+	if record.Status == statusApplied {
+		return ErrCannotRollback
 	}
 	return m.rollbackRecord(record, journalPath)
 }
@@ -167,10 +186,10 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 		// バックアップを残した削除は、置き換えと同じくらい可逆である。バイト列は
 		// 世代ディレクトリにあり、モードはエントリにある。巻き戻せないのは、意図して
 		// 何も残さなかったものだけである。
-		if entry.action() == actionRemove && entry.NoBackup {
+		if entry.Action == actionRemove && entry.NoBackup {
 			return ErrIrreversibleRemoval
 		}
-		if entry.action() == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.noOpWrite() {
+		if entry.Action == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.noOpWrite() {
 			return ErrIrreversibleChange
 		}
 	}
@@ -178,7 +197,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 	fileSystem := m.workspace.FileSystem()
 	for index := record.Committed - 1; index >= 0; index-- {
 		entry := record.Entries[index]
-		if entry.action() == actionMove {
+		if entry.Action == actionMove {
 			if err := m.moveFile(entry.Target, entry.Path); err != nil {
 				return err
 			}
@@ -190,7 +209,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 			}
 			continue
 		}
-		if entry.action() == actionMakeDir {
+		if entry.Action == actionMakeDir {
 			// もとからあったディレクトリは、このトランザクションが取り除いてよいもの
 			// ではない。取り消すのはこれが作ったものだけであり、しかもまだ空である
 			// 場合に限る。その後に何かが書き込まれているかもしれず、それを巻き戻しと
@@ -217,7 +236,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 			}
 			continue
 		}
-		if entry.action() == actionRemoveDir {
+		if entry.Action == actionRemoveDir {
 			// 取り除かれた時点で空だったので、空のまま作り直せば失われたものが
 			// そのまま復元される。
 			if err := m.workspace.EnsureDirectory(entry.Path); err != nil {
@@ -233,7 +252,13 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 				// 変わっていないものを、作られなかった控えから戻す必要はない。
 				continue
 			}
-			contents, readErr := m.ReadBackup(entry.Backup)
+			var contents []byte
+			var readErr error
+			if record.DiscardBackups {
+				contents, readErr = fileSystem.ReadFile(entry.Backup)
+			} else {
+				contents, readErr = m.ReadBackup(entry.Backup)
+			}
 			if readErr != nil {
 				return readErr
 			}
@@ -316,6 +341,28 @@ func (m *Manager) reconcileRecord(record *journalRecord) (bool, error) {
 	if record.Status == statusCompleted || record.Status == statusRolledBack {
 		return false, nil
 	}
+	statusChanged := false
+	if record.Status == statusApplied {
+		allApplied := true
+		for _, entry := range record.Entries {
+			evidence, err := m.entryEvidence(entry)
+			if err != nil {
+				return false, err
+			}
+			if evidence == evidenceUnapplied {
+				allApplied = false
+			}
+		}
+		if allApplied {
+			return false, nil
+		}
+		// A failed durability write can leave an applied marker visible while the
+		// same process has already begun rollback. Never finalize that mixed state
+		// forward: return it to the rollback-capable staged state and reconstruct
+		// its real prefix below.
+		record.Status = statusStaged
+		statusChanged = true
+	}
 	if !record.Atomic && record.Status != statusStaged {
 		return false, nil
 	}
@@ -353,7 +400,7 @@ func (m *Manager) reconcileRecord(record *journalRecord) (bool, error) {
 	// 数え直すのは進捗だけである。ステージ済みファイルを手放すのは finish の
 	// 仕事にしてある。ここで消すと、変更用の錠を持たない一覧の呼び出しが、
 	// 走っている最中のトランザクションの一時ファイルを消せてしまう。
-	changed := record.Committed != committed
+	changed := statusChanged || record.Committed != committed
 	record.Committed = committed
 	return changed, nil
 }
@@ -377,7 +424,7 @@ const (
 // entryApplied はエントリの対象変更が適用済みかを返す。記録された変更前・変更後の
 // どちらでもない状態は推測せず拒否する。復旧の両方向がこの判定に依存するためである。
 func (m *Manager) entryEvidence(entry journalEntry) (entryEvidence, error) {
-	switch entry.action() {
+	switch entry.Action {
 	case actionMakeDir:
 		if entry.HadPrevious {
 			// もとからあったディレクトリは、作る前も作った後も同じように在る。
@@ -575,7 +622,7 @@ func (m *Manager) validateLoadedJournalRecord(record journalRecord, name, direct
 		return invalidJournal("unexpected journal directory")
 	}
 	if pending {
-		if record.Status != statusStaging && record.Status != statusStaged {
+		if record.Status != statusStaging && record.Status != statusStaged && record.Status != statusApplied {
 			return invalidJournal("unexpected pending status")
 		}
 	} else {
@@ -583,9 +630,12 @@ func (m *Manager) validateLoadedJournalRecord(record journalRecord, name, direct
 			return invalidJournal("unexpected history status")
 		}
 	}
-	if record.Status == statusStaging || record.Status == statusStaged {
+	if record.Status == statusStaging || record.Status == statusStaged || record.Status == statusApplied {
 		if record.FinishedAt != nil {
 			return invalidJournal("unfinished record has a finish time")
+		}
+		if record.Status == statusApplied && (!record.Atomic || !record.DiscardBackups || record.Committed != len(record.Entries)) {
+			return invalidJournal("applied record is not a complete discard-backup transaction")
 		}
 		if record.Status == statusStaging && !record.Atomic && record.Committed != 0 {
 			return invalidJournal("non-atomic staging progress is not durable")
@@ -624,6 +674,9 @@ func (m *Manager) validateLoadedJournalRecord(record journalRecord, name, direct
 	}
 	if noteEntries != 0 && (noteEntries != len(record.Entries) || !history || record.Status != statusCompleted || record.Atomic) {
 		return invalidJournal("note entries require completed non-atomic history")
+	}
+	if record.DiscardBackups && !record.Atomic {
+		return invalidJournal("discard-backup record is not atomic")
 	}
 	return nil
 }
@@ -730,6 +783,9 @@ func (m *Manager) validateLoadedBackup(record journalRecord, entry journalEntry,
 		return nil
 	}
 	if entry.Backup == "" {
+		if record.DiscardBackups && (record.Status == statusApplied || record.Status == statusCompleted || record.Status == statusRolledBack) {
+			return nil
+		}
 		if (pending && record.Status == statusStaging) || record.Status == statusRolledBack {
 			return nil
 		}

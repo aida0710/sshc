@@ -87,17 +87,6 @@ type WriteSeekCloser interface {
 	io.Closer
 }
 
-type UploadOptions struct {
-	// Overwrite は、既存ファイルを置換してよいことを呼び出し側が確認した場合だけ指定する。
-	Overwrite bool
-	// ExpectedRevision があれば、既存ファイルの metadata revision が一致する場合だけ置換する。
-	ExpectedRevision string
-	// MaxBytes は 0 なら転送量を制限しない。
-	MaxBytes int64
-	// Mode は新規ファイルへ適用する。0 なら 0600。既存ファイルでは現在の mode を維持する。
-	Mode fs.FileMode
-}
-
 // Remote は SFTP client のうち service が使う操作だけを表す。
 // 実装は同じ接続に対する呼び出しを直列化する必要はない。Service は操作ごとに接続を開く。
 type Remote interface {

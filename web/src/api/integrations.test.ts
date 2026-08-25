@@ -333,10 +333,12 @@ describe("integrationsApi remote sync measurements", () => {
       summary,
       downloadedBytes: 900,
       completedAt: "2026-08-12T01:03:00Z",
+      remoteETag: '"generation-1"',
+      remoteRevision: "a".repeat(64),
     };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(response)));
 
-    await expect(integrationsApi.pullSnapshot(true)).resolves.toEqual(response);
+    await expect(integrationsApi.pullSnapshot(true, undefined, undefined, response)).resolves.toEqual(response);
   });
 
   it.each([
@@ -387,5 +389,21 @@ describe("integrationsApi.syncStatus", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
     await expect(integrationsApi.syncStatus()).rejects.toThrow();
+  });
+});
+
+describe("integrationsApi.setSyncKey", () => {
+  it("sends the destructive history confirmation only when the caller supplies it", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ key: "a sufficiently long synchronization key" }));
+    vi.stubGlobal("fetch", fetcher);
+
+    await integrationsApi.setSyncKey("a sufficiently long synchronization key", true);
+
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/sync/key");
+    expect(sentJson(init)).toEqual({
+      key: "a sufficiently long synchronization key",
+      confirmHistoryLoss: true,
+    });
   });
 });

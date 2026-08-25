@@ -20,7 +20,6 @@ var ScanAlgorithms = []string{
 	ssh.KeyAlgoECDSA521,
 	ssh.KeyAlgoRSASHA512,
 	ssh.KeyAlgoRSASHA256,
-	ssh.KeyAlgoRSA,
 }
 
 // DefaultScanTimeout は、ひとつのアドレスを尋ねるのに掛ける上限である。
@@ -70,7 +69,7 @@ func ScanHostKeys(
 			}
 			continue
 		}
-		// 同じ鍵を二度並べない。RSA は三つの署名アルゴリズムで同じ鍵を出す。
+		// 同じ鍵を二度並べない。RSA は二つのSHA-2署名アルゴリズムで同じ鍵を出す。
 		fingerprint := ssh.FingerprintSHA256(key)
 		if seen[fingerprint] {
 			continue

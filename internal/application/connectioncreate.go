@@ -21,6 +21,7 @@ var (
 	ErrInvalidIdentityFile         = errors.New("identity file must name an inventoried private key")
 	ErrConnectionDestinationExists = errors.New("the connection destination file already exists")
 	ErrUnknownCreateAuthentication = errors.New("unknown connection authentication kind")
+	ErrConnectionChanged           = errors.New("connection authentication destination changed while saving")
 )
 
 // CreateAuthenticationKind identifies the one source of authentication a new
@@ -100,7 +101,13 @@ func (s *Service) CreateConnection(
 			return CreateConnectionResult{}, secret.ErrLocked
 		}
 
-		mutation := passwordMutationForCreate(request)
+		s.saveMutex.Lock()
+		initial, _, err := s.planCreateConnection(inventory, request)
+		s.saveMutex.Unlock()
+		if err != nil {
+			return CreateConnectionResult{}, err
+		}
+		mutation := passwordMutationForCreate(request, initial.authenticationBinding)
 		var created CreateConnectionResult
 		_, err = secrets.WithPasswordMutation(mutation, func(vaultChange storage.Change) (storage.Result, error) {
 			s.saveMutex.Lock()
@@ -109,6 +116,9 @@ func (s *Service) CreateConnection(
 			prepared, identity, planErr := s.planCreateConnection(inventory, request)
 			if planErr != nil {
 				return storage.Result{}, planErr
+			}
+			if prepared.authenticationBinding != mutation.Binding {
+				return storage.Result{}, ErrConnectionChanged
 			}
 			storageRequest := s.requestFor(prepared)
 			storageRequest.Changes = append(storageRequest.Changes, vaultChange)
@@ -189,7 +199,7 @@ func validateConnectionUser(user string) error {
 	return nil
 }
 
-func passwordMutationForCreate(request CreateConnectionRequest) secret.PasswordMutation {
+func passwordMutationForCreate(request CreateConnectionRequest, binding string) secret.PasswordMutation {
 	kind := secret.PasswordMutationDedicated
 	switch request.Authentication.Kind {
 	case CreateAuthenticationSavedPassword:
@@ -202,6 +212,7 @@ func passwordMutationForCreate(request CreateConnectionRequest) secret.PasswordM
 		Alias:      request.Alias,
 		Credential: request.Authentication.Credential,
 		Password:   request.Authentication.Password,
+		Binding:    binding,
 	}
 }
 
@@ -292,6 +303,10 @@ func (s *Service) planCreateConnection(
 		ComputeEffective(graph, s.workspace.Root(), request.Alias, s.localFacts()),
 		ComputeEffective(after, s.workspace.Root(), request.Alias, s.localFacts()),
 	)}
+	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, request.Alias)
+	if err != nil {
+		return planned{}, HostIdentity{}, err
+	}
 	return prepared, HostIdentity{Path: relative, Alias: request.Alias}, nil
 }
 

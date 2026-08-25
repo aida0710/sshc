@@ -201,7 +201,7 @@ func TestCreateConnectionCommitsEveryPasswordModeWithTheConfig(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CreateConnection = %v", err)
 			}
-			if got := harness.secrets.PasswordFor(alias); got != test.wantSecret {
+			if got := passwordForCurrentTarget(t, harness.service, harness.secrets, alias); got != test.wantSecret {
 				t.Errorf("PasswordFor = %q, want %q", got, test.wantSecret)
 			}
 			listed, err := harness.secrets.Credentials()
@@ -236,12 +236,9 @@ func TestCreateConnectionCommitsEveryPasswordModeWithTheConfig(t *testing.T) {
 	}
 }
 
-func TestCreateConnectionContinuesWhenAnOrphanedVaultAssignmentAlreadyMatches(t *testing.T) {
+func TestCreateConnectionBindsASavedCredentialToTheCreatedDestination(t *testing.T) {
 	harness := newConnectionCreateHarness(t)
 	if err := harness.secrets.SetCredential(secret.KindPassword, "office", "shared-secret"); err != nil {
-		t.Fatal(err)
-	}
-	if err := harness.secrets.AssignCredential(secret.KindPassword, "restored", "office"); err != nil {
 		t.Fatal(err)
 	}
 	vaultPath := filepath.Join(harness.workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
@@ -254,7 +251,7 @@ func TestCreateConnectionContinuesWhenAnOrphanedVaultAssignmentAlreadyMatches(t 
 		Authentication: CreateAuthentication{Kind: CreateAuthenticationSavedPassword, Credential: "office"},
 	})
 	if err != nil {
-		t.Fatalf("CreateConnection with matching orphaned assignment = %v", err)
+		t.Fatalf("CreateConnection with saved credential = %v", err)
 	}
 	if result.Identity != (HostIdentity{Path: "config", Alias: "restored"}) {
 		t.Fatalf("created identity = %#v", result.Identity)
@@ -266,8 +263,15 @@ func TestCreateConnectionContinuesWhenAnOrphanedVaultAssignmentAlreadyMatches(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(vaultAfter, vaultBefore) {
-		t.Fatal("matching orphaned assignment resealed the vault")
+	if bytes.Equal(vaultAfter, vaultBefore) {
+		t.Fatal("the saved credential was not bound to the created destination")
+	}
+	binding, err := harness.service.PasswordBinding("restored")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := harness.secrets.BoundPasswordFor("restored", binding); got != "shared-secret" {
+		t.Fatalf("bound password = %q, want shared-secret", got)
 	}
 }
 
@@ -363,7 +367,7 @@ func TestCreateConnectionCommitFailureLeavesConfigAndVaultUnchanged(t *testing.T
 	if !bytes.Equal(afterVault, beforeVault) {
 		t.Error("failed commit changed the vault")
 	}
-	if got := harness.secrets.PasswordFor("atomic-node"); got != "" {
+	if got := passwordForCurrentTarget(t, harness.service, harness.secrets, "atomic-node"); got != "" {
 		t.Errorf("failed commit published %q in memory", got)
 	}
 	if _, statErr := os.Stat(filepath.Join(harness.workspace.Root(), "connections", "home-lab", "others", "atomic-node.conf")); !errors.Is(statErr, os.ErrNotExist) {

@@ -54,17 +54,33 @@ func integrationBucket(t *testing.T) (objectstore.Client, string) {
 	}, endpoint
 }
 
-// realInstallation は、プロセス内の偽物ではなく本物のサーバーに向けた
-// newInstallation。実行どうしが衝突しないよう、各テストは自前のオブジェクトキーを持つ。
-func realInstallation(t *testing.T, files map[string]string) installation {
-	return realInstallationAt(t, "", files)
-}
-
 // realInstallationAt は、同じバケット内の独立したprefixへ設置を向ける。
 // 複数のfresh workspaceを一つのシナリオで動かすテストは、同じpathを渡す。
 func realInstallationAt(t *testing.T, objectPath string, files map[string]string) installation {
 	t.Helper()
+	if !strings.HasPrefix(objectPath, "sshc-audit/") {
+		t.Fatalf("real bucket tests must use an isolated sshc-audit/ prefix, got %q", objectPath)
+	}
 	client, endpoint := integrationBucket(t)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		prefix := strings.Trim(objectPath, "/") + "/"
+		objects, truncated, err := client.ListNewest(cleanupCtx, prefix, 1000)
+		if err != nil {
+			t.Errorf("list isolated integration objects for cleanup = %v", err)
+			return
+		}
+		if truncated {
+			t.Errorf("isolated integration prefix unexpectedly contains more than 1000 objects: %q", objectPath)
+			return
+		}
+		for _, object := range objects {
+			if err := client.Delete(cleanupCtx, object.Key); err != nil {
+				t.Errorf("cleanup %q = %v", object.Key, err)
+			}
+		}
+	})
 
 	home := t.TempDir()
 	root := filepath.Join(home, ".ssh")
@@ -121,7 +137,9 @@ func realInstallationAt(t *testing.T, objectPath string, files map[string]string
 		Endpoint: endpoint, Bucket: client.Bucket, Path: objectPath, Region: client.Region,
 		Direction: remotesync.DirectionBoth,
 	}
-	service.Configure(config, client.Creds, &client)
+	if err := service.Configure(config, client.Creds, &client); err != nil {
+		t.Fatal(err)
+	}
 	return installation{
 		service: service, workspace: workspace, manager: manager, home: home,
 		config: config, creds: client.Creds, client: &client,
@@ -156,26 +174,31 @@ func writeRealWorkspace(t *testing.T, machine installation, name, contents strin
 func uniqueRealPath(t *testing.T) string {
 	t.Helper()
 	name := strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
-	return fmt.Sprintf("integration/%s/%d-%d", name, os.Getpid(), time.Now().UnixNano())
+	return fmt.Sprintf("sshc-audit/remotesync/%s/%d-%d", name, os.Getpid(), time.Now().UnixNano())
+}
+
+// TestAgainstARealBucketAuditPrefixIsEmpty is invoked separately after the
+// lifecycle suite, so every per-test cleanup has finished before this check.
+func TestAgainstARealBucketAuditPrefixIsEmpty(t *testing.T) {
+	client, _ := integrationBucket(t)
+	objects, truncated, err := client.ListNewest(context.Background(), "sshc-audit/remotesync/", 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || len(objects) != 0 {
+		t.Fatalf("isolated remotesync audit prefix is not empty: count=%d truncated=%v", len(objects), truncated)
+	}
 }
 
 func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
-	first := realInstallation(t, map[string]string{
+	remotePath := uniqueRealPath(t)
+	first := realInstallationAt(t, remotePath, map[string]string{
 		"config":               "Host bastion\r\n\tPort 2222   \n",
 		"keys/work/id_ed25519": "-----BEGIN OPENSSH PRIVATE KEY-----\nnot really\n",
-		"sshc/metadata.json":   `{"schemaVersion":2}`,
+		"sshc/metadata.json":   `{"schemaVersion":3}`,
 	})
-	// オブジェクトキーは固定なので、以前に使われたことのあるバケットにはすでに
-	// スナップショットがあり、条件付き書き込みは拒否される。それはクライアントが
-	// 正しく振る舞っているということであり、以前はそのせいでこのテストがコンテナ
-	// あたりちょうど一度しか通らなかった。二度目の実行は、一度目が残したオブジェクト
-	// の上で失敗した。それでは誰も頻繁には走らせられない。
-	//
-	// 実際のマシンは、埋まっているバケットに出会えばまず pull する。これも同じことを
-	// する。pull すれば ETag を知るので、push は本来あるべき If-Match になる。
-	// ワークスペースがすでに一致している場合、Pull は完全な結果とともに
-	// ErrNothingToApply を返す、それは API の形であって失敗ではなく、その結果を
-	// apply することが ETag を記録する。
+	// テストごとの隔離prefixなので通常は空だが、同じtest process内の再試行で
+	// すでにobjectがある場合も本番と同じくpullしてETagを記録してから進める。
 	result, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	switch {
 	case err == nil, errors.Is(err, remotesync.ErrNothingToApply):
@@ -194,7 +217,7 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 		t.Fatalf("Push = %v", err)
 	}
 
-	second := realInstallation(t, map[string]string{})
+	second := realInstallationAt(t, remotePath, map[string]string{})
 	result, err = second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatalf("Pull = %v", err)
@@ -384,20 +407,22 @@ func TestAgainstARealBucketForcePushUsesTheConfirmedGeneration(t *testing.T) {
 func TestAgainstARealBucketAStalePushIsRefused(t *testing.T) {
 	// 「自動」という語が乗っている性質を、このリポジトリを読んでいないサーバーに
 	// 対して検査する。
-	first := realInstallation(t, map[string]string{"config": "first\n"})
+	remotePath := uniqueRealPath(t)
+	first := realInstallationAt(t, remotePath, map[string]string{"config": "first\n"})
 	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil &&
 		!errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("Push = %v", err)
 	}
 
-	behind := realInstallation(t, map[string]string{"config": "second\n"})
+	behind := realInstallationAt(t, remotePath, map[string]string{"config": "second\n"})
 	if _, err := behind.service.Push(context.Background(), syncPassphrase, ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("a machine that has never synced pushed anyway: %v", err)
 	}
 }
 
 func TestAgainstARealBucketTheObjectIsCiphertext(t *testing.T) {
-	machine := realInstallation(t, map[string]string{
+	remotePath := uniqueRealPath(t)
+	machine := realInstallationAt(t, remotePath, map[string]string{
 		"config":               "Host bastion\n\tHostName 203.0.113.10\n",
 		"keys/work/id_ed25519": "PRIVATE KEY MATERIAL",
 	})
@@ -407,7 +432,7 @@ func TestAgainstARealBucketTheObjectIsCiphertext(t *testing.T) {
 	}
 
 	client, _ := integrationBucket(t)
-	object, err := client.Get(context.Background(), remotesync.ObjectName)
+	object, err := client.Get(context.Background(), remotesync.ObjectKeyFor(machine.config))
 	if err != nil {
 		t.Fatalf("Get = %v", err)
 	}
@@ -419,13 +444,14 @@ func TestAgainstARealBucketTheObjectIsCiphertext(t *testing.T) {
 }
 
 func TestAgainstARealBucketTheWrongPassphraseCannotRead(t *testing.T) {
-	machine := realInstallation(t, map[string]string{"config": "Host bastion\n"})
+	remotePath := uniqueRealPath(t)
+	machine := realInstallationAt(t, remotePath, map[string]string{"config": "Host bastion\n"})
 	if _, err := machine.service.Push(context.Background(), syncPassphrase, ""); err != nil &&
 		!errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("Push = %v", err)
 	}
 
-	other := realInstallation(t, map[string]string{})
+	other := realInstallationAt(t, remotePath, map[string]string{})
 	if _, err := other.service.Pull(context.Background(), "a completely different passphrase", remotesync.ResolveNone); err == nil {
 		t.Fatal("the snapshot opened with the wrong passphrase")
 	}

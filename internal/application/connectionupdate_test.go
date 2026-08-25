@@ -262,9 +262,7 @@ func TestUpdateConnectionRollsBackWhenTheSecondFileCommitFails(t *testing.T) {
 	if err := secrets.Initialise(connectionUpdatePassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := secrets.Set("edge", "must-be-cleaned"); err != nil {
-		t.Fatal(err)
-	}
+	setPasswordForCurrentTarget(t, service, secrets, "edge", "must-be-cleaned")
 	keyService := keys.NewService(keys.ServiceOptions{
 		Workspace: workspace, Transactions: manager, Resolver: storage.NewResolver(workspace),
 	})
@@ -309,7 +307,7 @@ func TestUpdateConnectionRollsBackWhenTheSecondFileCommitFails(t *testing.T) {
 	if !bytes.Equal(vaultAfter, vaultBefore) {
 		t.Fatal("sealed vault changed after failed transaction")
 	}
-	if got := secrets.PasswordFor("edge"); got != "must-be-cleaned" {
+	if got := passwordForCurrentTarget(t, service, secrets, "edge"); got != "must-be-cleaned" {
 		t.Fatalf("memory vault did not preserve original password: %q", got)
 	}
 	if _, ok := secrets.KeyPassphraseFor("id_update"); ok {
@@ -392,7 +390,7 @@ func TestUpdateConnectionCommitsEveryPasswordModeWithTheConfig(t *testing.T) {
 			if err != nil {
 				t.Fatalf("UpdateConnection = %v", err)
 			}
-			if got := harness.secrets.PasswordFor("edge"); got != test.wantSecret {
+			if got := passwordForCurrentTarget(t, harness.service, harness.secrets, "edge"); got != test.wantSecret {
 				t.Errorf("PasswordFor(edge) = %q, want %q", got, test.wantSecret)
 			}
 			listed, err := harness.secrets.Credentials()
@@ -442,7 +440,7 @@ func TestUpdateConnectionCanChangeOnlyTheStoredPassword(t *testing.T) {
 	if got := readFile(t, harness.workspace, "config"); got != before {
 		t.Errorf("password-only update changed config: %q", got)
 	}
-	if got := harness.secrets.PasswordFor("edge"); got != "connection-only" {
+	if got := passwordForCurrentTarget(t, harness.service, harness.secrets, "edge"); got != "connection-only" {
 		t.Errorf("PasswordFor(edge) = %q", got)
 	}
 	if len(result.Written) != 0 || len(result.Preview.Diffs) != 0 {
@@ -456,7 +454,11 @@ func TestUpdateConnectionSkipsASemanticallyUnchangedPasswordAssignment(t *testin
 	if err := harness.secrets.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
 		t.Fatal(err)
 	}
-	if err := harness.secrets.AssignCredential(secret.KindPassword, "edge", "office"); err != nil {
+	binding, err := harness.service.PasswordBinding("edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.secrets.AssignPasswordCredential("edge", "office", binding); err != nil {
 		t.Fatal(err)
 	}
 	vaultPath := filepath.Join(harness.workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
@@ -482,8 +484,49 @@ func TestUpdateConnectionSkipsASemanticallyUnchangedPasswordAssignment(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(vaultAfter, vaultBefore) {
-		t.Fatal("same assignment resealed the vault")
+	if bytes.Equal(vaultAfter, vaultBefore) {
+		t.Fatal("explicitly reconfirming the assignment for a new port did not update its binding")
+	}
+	updatedBinding, err := harness.service.PasswordBinding("edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := harness.secrets.BoundPasswordFor("edge", updatedBinding); got != "shared" {
+		t.Fatalf("reconfirmed password = %q, want shared", got)
+	}
+}
+
+func TestChangingAuthenticationDestinationStopsAutomaticPasswordRelease(t *testing.T) {
+	const before = "Host edge\n\tHostName original.example\n\tUser deploy\n\tPort 22\n"
+	harness := newConnectionUpdateHarness(t, before)
+	original, err := harness.service.PasswordBinding("edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.secrets.SetBound("edge", "must-not-travel", original); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
+		HostName: &ConnectionStringChange{Action: ConnectionChangeSet, Value: "retargeted.example"},
+		Password: UpdateConnectionPassword{Kind: UpdatePasswordUnchanged},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	retargeted, err := harness.service.PasswordBinding("edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retargeted == original {
+		t.Fatal("changing HostName did not change the authentication binding")
+	}
+	if got := harness.secrets.BoundPasswordFor("edge", retargeted); got != "" {
+		t.Fatalf("retargeted host received the old password: %q", got)
+	}
+	if got := harness.secrets.BoundPasswordFor("edge", original); got != "must-not-travel" {
+		t.Fatalf("the stored password was destroyed instead of held for reconfirmation: %q", got)
 	}
 }
 
@@ -529,13 +572,13 @@ func TestUpdateConnectionRemovesDedicatedOrUnassignsReusablePassword(t *testing.
 			name: "dedicated",
 			prepare: func(t *testing.T, service *secret.Service) {
 				t.Helper()
-				if err := service.Set("edge", "dedicated"); err != nil {
+				if err := setTestBoundPassword(service, "edge", "dedicated"); err != nil {
 					t.Fatal(err)
 				}
 			},
 			verify: func(t *testing.T, service *secret.Service) {
 				t.Helper()
-				if got := service.PasswordFor("edge"); got != "" {
+				if got := testBoundPasswordFor(service, "edge"); got != "" {
 					t.Errorf("dedicated password survived: %q", got)
 				}
 			},
@@ -547,7 +590,7 @@ func TestUpdateConnectionRemovesDedicatedOrUnassignsReusablePassword(t *testing.
 				if err := service.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
 					t.Fatal(err)
 				}
-				if err := service.AssignCredential(secret.KindPassword, "edge", "office"); err != nil {
+				if err := assignTestBoundPassword(service, "edge", "office"); err != nil {
 					t.Fatal(err)
 				}
 			},
@@ -558,7 +601,7 @@ func TestUpdateConnectionRemovesDedicatedOrUnassignsReusablePassword(t *testing.
 					t.Fatal(err)
 				}
 				uses, exists := listed[secret.KindPassword]["office"]
-				if !exists || len(uses) != 0 || service.PasswordFor("edge") != "" {
+				if !exists || len(uses) != 0 || testBoundPasswordFor(service, "edge") != "" {
 					t.Errorf("reusable password after removal = %#v, exists %t", uses, exists)
 				}
 			},
@@ -615,7 +658,7 @@ func TestUpdateConnectionRejectsAnIneligiblePassword(t *testing.T) {
 	if !errors.Is(err, ErrPasswordIneligible) {
 		t.Fatalf("UpdateConnection = %v, want ErrPasswordIneligible", err)
 	}
-	if got := harness.secrets.PasswordFor("edge"); got != "" {
+	if got := passwordForCurrentTarget(t, harness.service, harness.secrets, "edge"); got != "" {
 		t.Errorf("ineligible password was stored: %q", got)
 	}
 }
@@ -647,7 +690,7 @@ func TestUpdateConnectionPasswordConflictPublishesNothing(t *testing.T) {
 		t.Fatal(readErr)
 	}
 	_, hasKeyPassphrase := harness.secrets.KeyPassphraseFor("id_update")
-	if !bytes.Equal(afterVault, beforeVault) || harness.secrets.PasswordFor("edge") != "" || hasKeyPassphrase {
+	if !bytes.Equal(afterVault, beforeVault) || passwordForCurrentTarget(t, harness.service, harness.secrets, "edge") != "" || hasKeyPassphrase {
 		t.Error("conflicted update changed vault disk or memory")
 	}
 }
@@ -689,7 +732,7 @@ func TestUpdateConnectionCommitFailureLeavesConfigAndVaultUnchanged(t *testing.T
 		t.Fatal(readErr)
 	}
 	_, hasKeyPassphrase := harness.secrets.KeyPassphraseFor("id_update")
-	if !bytes.Equal(afterVault, beforeVault) || harness.secrets.PasswordFor("edge") != "" || hasKeyPassphrase {
+	if !bytes.Equal(afterVault, beforeVault) || passwordForCurrentTarget(t, harness.service, harness.secrets, "edge") != "" || hasKeyPassphrase {
 		t.Error("failed update changed vault disk or memory")
 	}
 }
@@ -749,7 +792,7 @@ func TestUpdateConnectionRejectsIdentityPasswordAndKeyPassphraseTogether(t *test
 	if readErr != nil {
 		t.Fatal(readErr)
 	}
-	if !bytes.Equal(beforeVault, afterVault) || harness.secrets.PasswordFor("edge") != "" {
+	if !bytes.Equal(beforeVault, afterVault) || passwordForCurrentTarget(t, harness.service, harness.secrets, "edge") != "" {
 		t.Fatal("rejected key/password update changed vault")
 	}
 	if _, ok := harness.secrets.KeyPassphraseFor("id_update"); ok {
@@ -767,12 +810,12 @@ func TestUpdateConnectionDirectKeyCleansDedicatedOrReusablePassword(t *testing.T
 		{
 			name: "dedicated",
 			prepare: func(t *testing.T, service *secret.Service) {
-				if err := service.Set("edge", "dedicated"); err != nil {
+				if err := setTestBoundPassword(service, "edge", "dedicated"); err != nil {
 					t.Fatal(err)
 				}
 			},
 			verify: func(t *testing.T, service *secret.Service) {
-				if got := service.PasswordFor("edge"); got != "" {
+				if got := testBoundPasswordFor(service, "edge"); got != "" {
 					t.Fatalf("dedicated password survived cleanup: %q", got)
 				}
 			},
@@ -784,7 +827,7 @@ func TestUpdateConnectionDirectKeyCleansDedicatedOrReusablePassword(t *testing.T
 					t.Fatal(err)
 				}
 				for _, alias := range []string{"edge", "nas"} {
-					if err := service.AssignCredential(secret.KindPassword, alias, "office"); err != nil {
+					if err := assignTestBoundPassword(service, alias, "office"); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -834,7 +877,7 @@ func TestUpdateConnectionCanInheritDirectKeyAndAssignPasswordTogether(t *testing
 	if got := readFile(t, harness.workspace, "config"); strings.Contains(got, "\tIdentityFile ~/.ssh/id_update") {
 		t.Fatalf("direct key survived: %q", got)
 	}
-	if got := harness.secrets.PasswordFor("edge"); got != "account-secret" {
+	if got := passwordForCurrentTarget(t, harness.service, harness.secrets, "edge"); got != "account-secret" {
 		t.Fatalf("password = %q", got)
 	}
 	if !slices.Equal(result.Written, []string{"config"}) {

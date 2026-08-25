@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -22,7 +21,6 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/handoff"
-	"sshc/internal/objectstore"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/session"
@@ -257,7 +255,7 @@ func TestCLIVaultStatusDoesNotResetVaultInactivity(t *testing.T) {
 	}
 }
 
-func TestCLIVaultChangeReturnsStructuredPartialSuccess(t *testing.T) {
+func TestCLIVaultChangeReencryptsLocalStateWithoutARemoteResult(t *testing.T) {
 	service := newCLIVaultService(t)
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
@@ -265,30 +263,12 @@ func TestCLIVaultChangeReturnsStructuredPartialSuccess(t *testing.T) {
 	const next = "another valid password"
 	engine := connectEngine(t, ConnectHandlers{
 		Secret: testCLISecret, Passwords: service,
-		vault: newVaultOperations(service, func(_ context.Context, passphrase string) error {
-			if passphrase != next {
-				t.Fatalf("reseal passphrase = %q", passphrase)
-			}
-			return remotesync.ErrPushRefused
-		}),
+		vault: newVaultOperations(service),
 	})
 	response := send(t, engine, http.MethodPost, testVaultChangePath,
 		`{"current":"`+testPassphrase+`","next":"`+next+`"}`, cliHeaders(testCLISecret))
-	if response.Code != http.StatusMultiStatus {
-		t.Fatalf("change = %d, want 207: %s", response.Code, response.Body.String())
-	}
-	var answer struct {
-		SnapshotResealed bool    `json:"snapshotResealed"`
-		SnapshotProblem  *string `json:"snapshotProblem"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
-		t.Fatal(err)
-	}
-	if answer.SnapshotResealed || answer.SnapshotProblem == nil || *answer.SnapshotProblem != "sync_push_refused" {
-		t.Fatalf("partial result = %+v", answer)
-	}
-	if strings.Contains(response.Body.String(), testPassphrase) || strings.Contains(response.Body.String(), next) {
-		t.Fatal("partial response contains an entered password")
+	if response.Code != http.StatusNoContent || response.Body.Len() != 0 {
+		t.Fatalf("change = %d, want empty 204: %s", response.Code, response.Body.String())
 	}
 	service.Lock()
 	if err := service.Unlock(next); err != nil {
@@ -347,182 +327,6 @@ func TestLegacyCLIUnlockRouteIsNotRegistered(t *testing.T) {
 	response := send(t, engine, http.MethodPost, "/cli/unlock", `{"passphrase":"anything at all"}`, cliHeaders(testCLISecret))
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("legacy unlock = %d, want 404", response.Code)
-	}
-}
-
-func TestVaultOperationsSerializeLocalChangeThroughRemoteReseal(t *testing.T) {
-	service := newCLIVaultService(t)
-	service.SetSleep(func(time.Duration) {})
-	if err := service.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	const first = "first replacement password"
-	const second = "second replacement password"
-	firstReseal := make(chan struct{})
-	releaseFirst := make(chan struct{})
-	secondReseal := make(chan struct{})
-	var remoteMu sync.Mutex
-	remotePassword := ""
-	operations := newVaultOperations(service, func(_ context.Context, passphrase string) error {
-		remoteMu.Lock()
-		remotePassword = passphrase
-		remoteMu.Unlock()
-		switch passphrase {
-		case first:
-			close(firstReseal)
-			<-releaseFirst
-		case second:
-			close(secondReseal)
-		}
-		return nil
-	})
-
-	firstDone := make(chan error, 1)
-	go func() {
-		_, err := operations.Change(context.Background(), testPassphrase, first)
-		firstDone <- err
-	}()
-	<-firstReseal
-
-	secondCalling := make(chan struct{})
-	secondDone := make(chan error, 1)
-	go func() {
-		close(secondCalling)
-		_, err := operations.Change(context.Background(), first, second)
-		secondDone <- err
-	}()
-	<-secondCalling
-	select {
-	case <-secondReseal:
-		t.Fatal("second reseal overtook the first reseal")
-	case err := <-secondDone:
-		t.Fatalf("second change completed before the first reseal: %v", err)
-	case <-time.After(100 * time.Millisecond):
-	}
-
-	close(releaseFirst)
-	if err := <-firstDone; err != nil {
-		t.Fatalf("first change: %v", err)
-	}
-	if err := <-secondDone; err != nil {
-		t.Fatalf("second change: %v", err)
-	}
-	select {
-	case <-secondReseal:
-	default:
-		t.Fatal("second reseal did not run after the first")
-	}
-	remoteMu.Lock()
-	gotRemote := remotePassword
-	remoteMu.Unlock()
-	if gotRemote != second {
-		t.Fatalf("remote password = %q, want final generation", gotRemote)
-	}
-	service.Lock()
-	if err := service.Unlock(first); !errors.Is(err, secret.ErrWrongPassphrase) {
-		t.Fatalf("first replacement still unlocks: %v", err)
-	}
-	if err := service.Unlock(second); err != nil {
-		t.Fatalf("final local password does not unlock: %v", err)
-	}
-}
-
-func TestVaultLockWaitsForRemoteReseal(t *testing.T) {
-	service := newCLIVaultService(t)
-	if err := service.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	resealStarted := make(chan struct{})
-	releaseReseal := make(chan struct{})
-	operations := newVaultOperations(service, func(context.Context, string) error {
-		close(resealStarted)
-		<-releaseReseal
-		return nil
-	})
-	changeDone := make(chan error, 1)
-	go func() {
-		_, err := operations.Change(context.Background(), testPassphrase, "replacement password")
-		changeDone <- err
-	}()
-	<-resealStarted
-
-	lockCalling := make(chan struct{})
-	lockDone := make(chan struct{})
-	go func() {
-		close(lockCalling)
-		operations.Lock()
-		close(lockDone)
-	}()
-	<-lockCalling
-	select {
-	case <-lockDone:
-		t.Fatal("vault lock interleaved before remote reseal finished")
-	case <-time.After(100 * time.Millisecond):
-	}
-	if !service.Unlocked() {
-		t.Fatal("vault locked while remote reseal was still running")
-	}
-
-	close(releaseReseal)
-	if err := <-changeDone; err != nil {
-		t.Fatal(err)
-	}
-	<-lockDone
-	if service.Unlocked() {
-		t.Fatal("vault remained unlocked after the ordered lock")
-	}
-}
-
-func TestCanceledVaultChangeDoesNotRunAfterWaitingForReseal(t *testing.T) {
-	service := newCLIVaultService(t)
-	if err := service.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	resealStarted := make(chan struct{})
-	releaseReseal := make(chan struct{})
-	var reseals int
-	var resealMu sync.Mutex
-	operations := newVaultOperations(service, func(context.Context, string) error {
-		resealMu.Lock()
-		reseals++
-		current := reseals
-		resealMu.Unlock()
-		if current == 1 {
-			close(resealStarted)
-			<-releaseReseal
-		}
-		return nil
-	})
-	firstDone := make(chan error, 1)
-	go func() {
-		_, err := operations.Change(context.Background(), testPassphrase, "first replacement password")
-		firstDone <- err
-	}()
-	<-resealStarted
-
-	ctx, cancel := context.WithCancel(context.Background())
-	secondDone := make(chan error, 1)
-	go func() {
-		_, err := operations.Change(ctx, "first replacement password", "canceled replacement password")
-		secondDone <- err
-	}()
-	cancel()
-	close(releaseReseal)
-	if err := <-firstDone; err != nil {
-		t.Fatal(err)
-	}
-	if err := <-secondDone; !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled change = %v, want context.Canceled", err)
-	}
-	resealMu.Lock()
-	gotReseals := reseals
-	resealMu.Unlock()
-	if gotReseals != 1 {
-		t.Fatalf("canceled waiter ran %d reseals", gotReseals)
-	}
-	service.Lock()
-	if err := service.Unlock("first replacement password"); err != nil {
-		t.Fatalf("canceled waiter changed the local password: %v", err)
 	}
 }
 
@@ -606,8 +410,8 @@ func TestServerPreservesBrowserShapeWhenRemoteIsUnconfigured(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.SnapshotResealed || answer.SnapshotProblem != nil {
-		t.Fatalf("unconfigured remote result = %+v", answer)
+	if !answer.Vault.Exists || !answer.Vault.Unlocked {
+		t.Fatalf("local vault result = %+v", answer)
 	}
 }
 
@@ -813,129 +617,3 @@ func TestVaultMutationsReturnInternalErrorForStorageFailure(t *testing.T) {
 }
 
 var _ io.ReadCloser = (*unreadVaultBody)(nil)
-
-type blockingVaultResealBucket struct {
-	entered chan struct{}
-	release chan struct{}
-	once    sync.Once
-}
-
-func (b *blockingVaultResealBucket) ServeHTTP(response http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodPut {
-		response.WriteHeader(http.StatusNotFound)
-		return
-	}
-	b.once.Do(func() { close(b.entered) })
-	<-b.release
-	_, _ = io.Copy(io.Discard, request.Body)
-	response.Header().Set("ETag", `"resealed"`)
-	response.WriteHeader(http.StatusOK)
-}
-
-func TestServerSharesCoordinatorBetweenCLIChangeAndBrowserLock(t *testing.T) {
-	home := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	manager := storage.NewManager(workspace, time.Now, rand.Reader)
-	passwords := secret.NewService(workspace, manager, time.Now)
-	if err := passwords.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	bucket := &blockingVaultResealBucket{entered: make(chan struct{}), release: make(chan struct{})}
-	bucketServer := httptest.NewTLSServer(bucket)
-	t.Cleanup(bucketServer.Close)
-	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
-	syncService := remotesync.NewService(
-		workspace,
-		manager,
-		func() ([]string, error) { return nil, nil },
-		func() string { return "2026-08-15T00:00:00Z" },
-		func() (string, error) { return "vault-order-test", nil },
-	)
-	syncService.OpenVault = passwords.TravelDocument
-	syncService.SealVault = passwords.AdoptTravelDocument
-	syncService.VaultAdopted = passwords.Reload
-	syncService.Configure(
-		remotesync.Config{Endpoint: bucketServer.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth},
-		credentials,
-		&objectstore.Client{
-			HTTP: bucketServer.Client(), Endpoint: bucketServer.URL,
-			Bucket: "sshc", Region: "auto", Creds: credentials,
-		},
-	)
-	sessions, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x69}, 96)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	browserCredentials, err := sessions.Bootstrap(bootstrap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server, err := New(Options{
-		Listener:        fakeListener{address: &net.TCPAddr{IP: net.IP{127, 0, 0, 1}, Port: 43123}},
-		CLISecret:       testCLISecret,
-		Passwords:       passwords,
-		Sync:            syncService,
-		Sessions:        sessions,
-		Owner:           handoff.OwnerEngine,
-		Version:         "coordinator-test",
-		ProtocolVersion: handoff.ProtocolVersion,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	changeDone := make(chan *httptest.ResponseRecorder, 1)
-	go func() {
-		request := httptest.NewRequest(http.MethodPost, VaultChangePath,
-			strings.NewReader(`{"current":"`+testPassphrase+`","next":"ordered replacement password"}`))
-		request.Host = "127.0.0.1:43123"
-		request.Header.Set(echo.HeaderContentType, "application/json")
-		request.Header.Set(handoff.HeaderName, testCLISecret)
-		response := httptest.NewRecorder()
-		server.http.Handler.ServeHTTP(response, request)
-		changeDone <- response
-	}()
-	<-bucket.entered
-
-	lockCalling := make(chan struct{})
-	lockDone := make(chan *httptest.ResponseRecorder, 1)
-	go func() {
-		request := httptest.NewRequest(http.MethodPost, "/api/v1/passwords/lock", strings.NewReader(`{}`))
-		request.Host = "127.0.0.1:43123"
-		request.Header.Set(echo.HeaderContentType, "application/json")
-		request.Header.Set("Sec-Fetch-Site", "same-origin")
-		request.Header.Set(echo.HeaderOrigin, "http://127.0.0.1:43123")
-		request.Header.Set(CSRFHeader, browserCredentials.CSRFToken)
-		request.AddCookie(&http.Cookie{Name: SessionCookie, Value: browserCredentials.SessionID})
-		response := httptest.NewRecorder()
-		close(lockCalling)
-		server.http.Handler.ServeHTTP(response, request)
-		lockDone <- response
-	}()
-	<-lockCalling
-	select {
-	case response := <-lockDone:
-		t.Fatalf("browser lock completed during CLI reseal: %d", response.Code)
-	case <-time.After(100 * time.Millisecond):
-	}
-	if !passwords.Unlocked() {
-		t.Fatal("browser lock interleaved with CLI reseal")
-	}
-
-	close(bucket.release)
-	if response := <-changeDone; response.Code != http.StatusNoContent {
-		t.Fatalf("CLI change = %d: %s", response.Code, response.Body.String())
-	}
-	if response := <-lockDone; response.Code != http.StatusOK {
-		t.Fatalf("browser lock = %d: %s", response.Code, response.Body.String())
-	}
-	if passwords.Unlocked() {
-		t.Fatal("ordered browser lock did not run after CLI reseal")
-	}
-}

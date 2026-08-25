@@ -214,6 +214,66 @@ func TestNewWorkspaceResolvesSymlinkedRootAndRejectsRelativeHome(t *testing.T) {
 	}
 }
 
+func TestWorkspaceReadRejectsReplacedRootSymlink(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, ".ssh")
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "config"), []byte("trusted\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := NewWorkspace(OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := root + "-original"
+	if err := os.Rename(root, original); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "config"), []byte("outside secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, root); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := workspace.FileSystem().ReadFile(filepath.Join(workspace.Root(), "config")); err == nil {
+		t.Fatal("workspace read followed a root symlink installed after startup")
+	}
+	if _, err := workspace.ResolveForWrite(filepath.Join(workspace.Root(), "config")); !errors.Is(err, ErrSymlinkPath) {
+		t.Fatalf("ResolveForWrite after root replacement = %v, want ErrSymlinkPath", err)
+	}
+	if err := workspace.EnsureDirectory(filepath.Join(workspace.Root(), "sshc")); !errors.Is(err, ErrSymlinkPath) {
+		t.Fatalf("EnsureDirectory after root replacement = %v, want ErrSymlinkPath", err)
+	}
+}
+
+func TestWorkspaceReadRejectsParentSymlink(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, ".ssh")
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := NewWorkspace(OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("outside secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "included")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := workspace.FileSystem().ReadFile(filepath.Join(root, "included", "secret")); err == nil {
+		t.Fatal("workspace read followed an intermediate symlink")
+	}
+}
+
 func TestResolveForWriteAcceptsOnlyRealFilesInsideTheRoot(t *testing.T) {
 	workspace := newTestWorkspace(t)
 	root := workspace.Root()

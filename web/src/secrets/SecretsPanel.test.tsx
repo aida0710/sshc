@@ -30,7 +30,6 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     unassignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     changeMasterPassword: vi.fn().mockResolvedValue({
       vault: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] },
-      snapshotResealed: true,
     }),
     updateStatus: vi.fn().mockResolvedValue({ current: "dev", available: false, restartRequired: false }),
     ...overrides,

@@ -153,7 +153,7 @@ func (s *Service) UpdateConnection(
 			Kind: secret.PasswordMutationRemove, Alias: request.Identity.Alias,
 		}
 	} else if !passwordUnchanged {
-		passwordMutation, err := passwordMutationForUpdate(request)
+		passwordMutation, err := passwordMutationForUpdate(request, prepared.authenticationBinding)
 		if err != nil {
 			return SaveResult{}, err
 		}
@@ -184,6 +184,10 @@ func (s *Service) UpdateConnection(
 		prepared, changed, planErr := s.planConnectionUpdate(inventory, request)
 		if planErr != nil {
 			return storage.Result{}, planErr
+		}
+		if mutation.Password != nil && mutation.Password.Kind != secret.PasswordMutationRemove &&
+			prepared.authenticationBinding != mutation.Password.Binding {
+			return storage.Result{}, ErrConnectionChanged
 		}
 		if prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove {
 			return storage.Result{}, ErrPasswordIneligible
@@ -265,7 +269,7 @@ func (s *Service) validateConnectionKeyPassphrase(
 	return s.keyPassphrases.RevalidatePassphrase(*verification)
 }
 
-func passwordMutationForUpdate(request UpdateConnectionRequest) (secret.PasswordMutation, error) {
+func passwordMutationForUpdate(request UpdateConnectionRequest, binding string) (secret.PasswordMutation, error) {
 	kind := secret.PasswordMutationKind("")
 	switch request.Password.Kind {
 	case UpdatePasswordDedicated:
@@ -282,6 +286,7 @@ func passwordMutationForUpdate(request UpdateConnectionRequest) (secret.Password
 	return secret.PasswordMutation{
 		Kind: kind, Alias: request.Identity.Alias,
 		Credential: request.Password.Credential, Password: request.Password.Password,
+		Binding: binding,
 	}, nil
 }
 
@@ -400,6 +405,10 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 		_, prepared.explicitIdentityFile = directIdentityFile(file, block)
 		_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(
 			effective.Resolve(graph, request.Identity.Alias, s.localFacts()))
+		prepared.authenticationBinding, err = s.passwordBindingForGraph(graph, request.Identity.Alias)
+		if err != nil {
+			return planned{}, false, err
+		}
 		return prepared, false, s.verifyConnectionUpdateBase(absolute, request.Identity.Path, base, base)
 	}
 	if err := ApplyFieldEdits(file, block, edits); err != nil {
@@ -437,6 +446,10 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 	_, prepared.explicitIdentityFile = directIdentityFile(file, updatedBlock)
 	_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(
 		effective.Resolve(after, request.Identity.Alias, s.localFacts()))
+	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, request.Identity.Alias)
+	if err != nil {
+		return planned{}, false, err
+	}
 	return prepared, true, nil
 }
 

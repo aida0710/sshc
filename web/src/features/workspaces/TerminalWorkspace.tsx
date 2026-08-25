@@ -11,7 +11,11 @@ import { WorkspaceCommandCenter } from "./WorkspaceCommandCenter";
 export type BroadcastInput = { sequence: number; source: string; data: string };
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
 
-function paneID(): string { return crypto.randomUUID().replaceAll("-", ""); }
+function paneID(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
 
 function visit(root: StoredNode, callback: (id: string, alias: string) => void) {
   if (root.pane !== undefined) { callback(root.pane.id, root.pane.alias); return; }

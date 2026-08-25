@@ -136,7 +136,7 @@ jobs:
           retention-days: 7
 
   # gomobile、Gradle、manifest を含む配布経路で APK を検証する。
-  # NDK は runner image の既存バージョンを使用する。
+  # NDK はリポジトリで固定したrevisionだけを使用する。
   android:
     name: Android APK
     runs-on: ubuntu-24.04
@@ -158,13 +158,14 @@ jobs:
       - name: Install gobind
         run: go install golang.org/x/mobile/cmd/gobind
 
+      - name: Prepare the pinned Android NDK
+        id: android-ndk
+        run: scripts/ci/prepare-android-ndk.sh
+
       - name: gomobile bind
-        run: |
-          test -n "$ANDROID_NDK_LATEST_HOME" || {
-            echo "runner image did not provide an NDK" >&2
-            exit 1
-          }
-          make android-bind ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+        env:
+          SSHC_ANDROID_NDK_HOME: ${{ steps.android-ndk.outputs.path }}
+        run: make android-bind ANDROID_NDK_HOME="$SSHC_ANDROID_NDK_HOME"
 
       # Android SDK を必要としないホスト側ロジックを JVM テストで検証する。
       - name: Unit tests

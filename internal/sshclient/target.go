@@ -3,6 +3,9 @@
 package sshclient
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net"
 	"path/filepath"
@@ -142,6 +145,35 @@ type Target struct {
 
 // Address は、dial する宛先である。
 func (t Target) Address() string { return net.JoinHostPort(t.HostName, t.Port) }
+
+// AuthenticationBinding returns a stable digest of the resolved destination and
+// the route used to authenticate it. Saved account passwords are released only
+// when this digest still matches the value recorded when the assignment was made.
+// Alias is deliberately absent: renaming an alias does not change its peer.
+func (t Target) AuthenticationBinding() string {
+	type destination struct {
+		HostName          string
+		Port              string
+		User              string
+		Jump              []string
+		ProxyCommand      string
+		AgentForward      bool
+		Strict            string
+		HostKeyAlgorithms []string
+		Methods           []string
+	}
+	bound := destination{
+		HostName: t.HostName, Port: t.Port, User: t.User,
+		ProxyCommand: t.ProxyCommand, AgentForward: t.AgentForward, Strict: t.Strict,
+		HostKeyAlgorithms: slices.Clone(t.HostKeyAlgorithms), Methods: t.Methods.Order(),
+	}
+	for _, hop := range t.Jump {
+		bound.Jump = append(bound.Jump, hop.AuthenticationBinding())
+	}
+	encoded, _ := json.Marshal(bound)
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:])
+}
 
 // Resolver は alias ひとつ分の解決である。
 //

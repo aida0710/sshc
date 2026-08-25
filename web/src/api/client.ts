@@ -1,4 +1,5 @@
 import type { components } from "./schema";
+import { clearSessionCSRF, storeSessionCSRF } from "../session/bootstrap";
 
 export type HealthResponse = components["schemas"]["HealthResponse"];
 export type Problem = components["schemas"]["Problem"];
@@ -75,6 +76,7 @@ function validCSRF(value: unknown): value is { csrfToken: string } {
 function endSession(expectedToken?: string) {
   if (expectedToken !== undefined && csrfToken !== expectedToken) return;
   csrfToken = null;
+  clearSessionCSRF();
   onSessionEnded?.();
 }
 
@@ -87,6 +89,7 @@ async function renewCSRF(expectedToken: string): Promise<boolean> {
       const response = await fetch("/api/v1/session/renew", {
         method: "POST",
         credentials: "same-origin",
+        headers: { "X-SSHC-CSRF": expectedToken },
       });
       if (csrfToken !== expectedToken) return csrfToken !== null;
       if (!response.ok) {
@@ -99,6 +102,7 @@ async function renewCSRF(expectedToken: string): Promise<boolean> {
         return false;
       }
       csrfToken = payload.csrfToken;
+      storeSessionCSRF(payload.csrfToken);
       return true;
     } catch {
       endSession(expectedToken);
@@ -155,6 +159,7 @@ export const apiClient = {
   clear() {
     csrfToken = null;
     renewal = null;
+    clearSessionCSRF();
   },
   async health(): Promise<HealthResponse> {
     const response = await fetch("/api/v1/health", { credentials: "same-origin" });

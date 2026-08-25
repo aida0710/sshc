@@ -5,7 +5,10 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
+	"sshc/internal/enginelock"
 	"sshc/internal/platform/nativepath"
 )
 
@@ -15,7 +18,21 @@ var (
 	ErrMissingDirectory = errors.New("parent directory does not exist")
 	ErrNotDirectory     = errors.New("path component is not a directory")
 	ErrInvalidHome      = errors.New("home directory must be an absolute path")
+	ErrWorkspaceBusy    = errors.New("another sshc process is updating this workspace")
 )
+
+const (
+	mutationLockName = "mutation.lock"
+	mutationLockWait = 30 * time.Second
+)
+
+var workspaceMutationLockDirectory = func(workspace *Workspace) (string, error) {
+	// The lock belongs to the workspace identity, not to process environment.
+	// XDG_CACHE_HOME/HOME can legitimately differ between two processes that
+	// edit the same explicit workspace; using either would silently split them.
+	// sshc state is private, symlink-checked by Workspace, and excluded from sync.
+	return workspace.StateDir(), nil
+}
 
 // Workspace は、すべての書き込みを、解決済みのユーザーの ~/.ssh ディレクトリに固定する。
 //
@@ -27,6 +44,49 @@ type Workspace struct {
 	fileSystem FileSystem
 	home       string
 	root       string
+	// mutation はこのWorkspaceを共有するManagerを直列化する。別processは同じmutexを
+	// 共有できないため、lockMutationはさらにStateDir内のOS file lockも取得する。
+	mutation sync.Mutex
+}
+
+func (w *Workspace) lockMutation() (func(), error) {
+	w.mutation.Lock()
+	lockDirectory, err := workspaceMutationLockDirectory(w)
+	if err != nil {
+		w.mutation.Unlock()
+		return nil, err
+	}
+	// The production lock lives below the workspace root. Validate and create
+	// that path through Workspace before handing it to the generic OS lock: the
+	// generic API accepts arbitrary paths and must not turn a replaced ~/.ssh
+	// symlink into an out-of-workspace mkdir, chmod, or lock-file creation.
+	if w.Contains(lockDirectory) {
+		if err := w.EnsureDirectory(lockDirectory); err != nil {
+			w.mutation.Unlock()
+			return nil, err
+		}
+	}
+
+	lockPath := filepath.Join(lockDirectory, mutationLockName)
+	deadline := time.Now().Add(mutationLockWait)
+	for {
+		release, err := enginelock.Acquire(lockPath)
+		if err == nil {
+			return func() {
+				_ = release()
+				w.mutation.Unlock()
+			}, nil
+		}
+		if !errors.Is(err, enginelock.ErrRunning) {
+			w.mutation.Unlock()
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			w.mutation.Unlock()
+			return nil, ErrWorkspaceBusy
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // privateFileReader は任意実装とし、FileSystem の fake と呼び出し側へ Windows 固有の
@@ -47,6 +107,13 @@ func (fileSystem workspaceFileSystem) ReadFile(path string) ([]byte, error) {
 		return fileSystem.privateReader.ReadPrivateFile(path)
 	}
 	return fileSystem.FileSystem.ReadFile(path)
+}
+
+func (fileSystem workspaceFileSystem) WriteAtomic(path, prefix string, permission fs.FileMode, contents []byte) error {
+	if writer, ok := fileSystem.FileSystem.(atomicFileWriter); ok {
+		return writer.WriteAtomic(path, prefix, permission, contents)
+	}
+	return writeAtomicFileFallback(fileSystem.FileSystem, path, prefix, permission, contents)
 }
 
 // NewWorkspace は home/.ssh を解決する。ディレクトリがないことはエラーではない。
@@ -150,6 +217,9 @@ func (w *Workspace) ResolveForWriteUnder(candidate string, planned map[string]bo
 	if !filepath.IsAbs(cleaned) || !w.Contains(cleaned) {
 		return "", ErrOutsideWorkspace
 	}
+	if err := w.validateRoot(false); err != nil {
+		return "", err
+	}
 	relative, err := filepath.Rel(w.root, cleaned)
 	// ルートそのものは書き込み先ではない。素の文字列比較で弾かない。
 	// まわりの包含判断は大小文字を畳むので、Windows ではルートの別表記だけが
@@ -204,6 +274,9 @@ func (w *Workspace) ResolveDirectory(candidate string) (string, error) {
 	if !filepath.IsAbs(cleaned) || !w.Contains(cleaned) {
 		return "", ErrOutsideWorkspace
 	}
+	if err := w.validateRoot(true); err != nil {
+		return "", err
+	}
 	relative, err := filepath.Rel(w.root, cleaned)
 	// ルートそのものは書き込み先ではない。素の文字列比較で弾かない。
 	// まわりの包含判断は大小文字を畳むので、Windows ではルートの別表記だけが
@@ -240,12 +313,17 @@ func (w *Workspace) EnsureDirectory(candidate string) error {
 	if !w.Contains(cleaned) {
 		return ErrOutsideWorkspace
 	}
-	if _, err := w.fileSystem.Lstat(w.root); errors.Is(err, fs.ErrNotExist) {
+	rootInfo, rootErr := w.fileSystem.Lstat(w.root)
+	if errors.Is(rootErr, fs.ErrNotExist) {
 		if err := w.fileSystem.MkdirAll(w.root, DirectoryPermission); err != nil {
 			return err
 		}
-	} else if err != nil {
-		return err
+	} else if rootErr != nil {
+		return rootErr
+	} else if rootInfo.Mode()&fs.ModeSymlink != 0 {
+		return ErrSymlinkPath
+	} else if !rootInfo.IsDir() {
+		return ErrNotDirectory
 	}
 
 	relative, err := filepath.Rel(w.root, cleaned)
@@ -277,6 +355,26 @@ func (w *Workspace) EnsureDirectory(candidate string) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func (w *Workspace) validateRoot(allowMissing bool) error {
+	info, err := w.fileSystem.Lstat(w.root)
+	if errors.Is(err, fs.ErrNotExist) && allowMissing {
+		return nil
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return ErrMissingDirectory
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return ErrSymlinkPath
+	}
+	if !info.IsDir() {
+		return ErrNotDirectory
 	}
 	return nil
 }

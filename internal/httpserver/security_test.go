@@ -416,9 +416,18 @@ func TestReadsRequireTheTokenAsWellAsTheCookie(t *testing.T) {
 	if recorder := runGuarded(t, host, security, credentials, http.MethodGet, "/api/v1/keys"); recorder.Code != http.StatusOK {
 		t.Errorf("GET with both = %d, want 200", recorder.Code)
 	}
-	// 更新はトークンを失ったページがそれを得る手段であるため、まさに
-	// 求めているそのトークンを求められるわけにはいかない。
-	if recorder := runGuarded(t, host, security, withoutToken, http.MethodPost, "/api/v1/session/renew"); recorder.Code != http.StatusOK {
-		t.Errorf("renew with no token = %d, want it to pass", recorder.Code)
+	// localhost の別 port で cookie を受け取った server は、raw HTTP request の
+	// Host、Origin、Fetch Metadata を正しい値に偽装できる。その場合でも token
+	// なしには更新も、その後の確認発行、秘密鍵表示、shell 起動にも届かない。
+	privileged := []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/session/renew"},
+		{http.MethodPost, "/api/v1/actions"},
+		{http.MethodPost, "/api/v1/keys/key-one/reveal"},
+		{http.MethodPost, "/api/v1/terminal/sessions"},
+	}
+	for _, route := range privileged {
+		if recorder := runGuarded(t, host, security, withoutToken, route.method, route.path); recorder.Code != http.StatusForbidden {
+			t.Errorf("forged localhost %s %s with cookie only = %d, want 403", route.method, route.path, recorder.Code)
+		}
 	}
 }

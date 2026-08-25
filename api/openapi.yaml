@@ -1402,7 +1402,8 @@ paths:
     parameters: *sftpAlias
     get:
       operationId: readSFTPText
-      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
       responses:
         "200": { description: Editable UTF-8 file, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTextFile" } } } }
         "404": { $ref: "#/components/responses/Problem" }
@@ -1422,33 +1423,33 @@ paths:
       operationId: downloadSFTPFile
       parameters:
         - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: jobId, in: query, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+        - { name: verify, in: query, required: false, schema: { type: boolean }, description: Verify an already durable complete OPFS file without requesting an invalid EOF range }
         - { name: Range, in: header, required: false, schema: { type: string, pattern: "^bytes=[0-9]+-$" } }
+        - { name: If-Range, in: header, required: false, schema: { type: string }, description: Opaque ETag returned by the first response }
       responses:
-        "200": { description: Remote file bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
-        "206": { description: Remaining remote file bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        "200":
+          description: Remote file bytes, or a replacement from byte zero when If-Range no longer matches
+          headers: { ETag: { required: true, schema: { type: string } } }
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        "206":
+          description: Remaining bytes of the exact revision named by If-Range
+          headers: { ETag: { required: true, schema: { type: string } } }
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        "204": { description: The supplied If-Range revision still owns the complete file }
         "404": { $ref: "#/components/responses/Problem" }
         "416": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/archive:
     parameters: *sftpAlias
     get:
       operationId: downloadSFTPDirectoryArchive
-      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: jobId, in: query, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
       responses:
         "200": { description: Remote directory ZIP archive, content: { application/zip: { schema: { type: string, format: binary } } } }
         "404": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
-  /api/v1/sftp/{alias}/upload:
-    parameters: *sftpAlias
-    post:
-      operationId: uploadSFTPFile
-      parameters:
-        - { name: path, in: query, required: true, schema: { type: string } }
-        - { name: overwrite, in: query, required: true, schema: { type: boolean } }
-      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary, maxLength: 2097152 } } } }
-      responses:
-        "201": { description: File uploaded atomically, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransfer" } } } }
-        "409": { $ref: "#/components/responses/Problem" }
-        "413": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/transfers:
     get:
       operationId: listSFTPTransferJobs
@@ -1469,6 +1470,17 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJobActionRequest" } } } }
       responses:
         "200": { description: Updated transfer job, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJob" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/transfers/{id}/download-checkpoint:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+    post:
+      operationId: checkpointSFTPDownload
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPDownloadCheckpointRequest" } } } }
+      responses:
+        "200": { description: Durable download checkpoint accepted, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJob" } } } }
         "400": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
@@ -1770,14 +1782,9 @@ components:
     ChangeMasterPasswordResult:
       type: object
       additionalProperties: false
-      required: [vault, snapshotResealed]
+      required: [vault]
       properties:
         vault: { $ref: "#/components/schemas/PasswordVaultStatus" }
-        # バケットのライブのスナップショットが新しいパスワードで暗号化し直されたか。
-        # 理由付きの false は、ローカルの変更は済んでいるが、バケットにはまだ古い
-        # パスワードでしか開かないものが残っている、という意味である。
-        snapshotResealed: { type: boolean }
-        snapshotProblem: { type: string }
     StoreCredentialRequest:
       type: object
       additionalProperties: false
@@ -2387,7 +2394,7 @@ components:
     SyncHistory:
       type: object
       additionalProperties: false
-      required: [checkedAt, headRevision, revisions, historyTruncated, downloadTruncated, downloadedBytes]
+      required: [checkedAt, headRevision, revisions, historyTruncated, downloadTruncated, downloadedBytes, skipped]
       properties:
         checkedAt: { type: string }
         headRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
@@ -2398,6 +2405,9 @@ components:
         historyTruncated: { type: boolean }
         downloadTruncated: { type: boolean }
         downloadedBytes: { type: integer, format: int64, minimum: 0, maximum: 134217728 }
+        # 現行schemaで開けないimmutable history objectの数。live head自体が
+        # 開けない場合は、この応答を成功させず通常どおりエラーにする。
+        skipped: { type: integer, minimum: 0, maximum: 50 }
     SyncHistoryDiffRequest:
       type: object
       additionalProperties: false
@@ -2471,6 +2481,9 @@ components:
       properties:
         # 省略時は安全な値を生成する。端末間で共有するため、利用者が保管する。
         key: { type: string, minLength: 1, maxLength: 1024 }
+        # 既存鍵の置換では過去のimmutable historyは旧鍵のまま残り、以後読めない。
+        # 初回設定には不要。破壊的な結果を理解した明示確認として扱う。
+        confirmHistoryLoss: { type: boolean }
     SyncKeyResponse:
       type: object
       additionalProperties: false
@@ -2491,6 +2504,10 @@ components:
         # 省略時はlive head。指定時はconfigured snapshots/配下のimmutable historyを
         # preview／applyする。remote head自体はこの操作では巻き戻さない。
         historyKey: { type: string, minLength: 1, maxLength: 1024 }
+        # apply時は直前のpreviewが返した値を必須とする。二つのrequestの間に
+        # live headが変わった場合、別世代を黙って適用せず409で再previewを促す。
+        expectedETag: { type: string, maxLength: 1024 }
+        expectedRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
     SyncConflict:
       type: object
       additionalProperties: false
@@ -2502,7 +2519,7 @@ components:
     PullResponse:
       type: object
       additionalProperties: false
-      required: [applied, conflicts, written, removed, summary, downloadedBytes, completedAt]
+      required: [applied, conflicts, written, removed, summary, downloadedBytes, completedAt, remoteETag, remoteRevision]
       properties:
         applied: { type: boolean }
         summary: { $ref: "#/components/schemas/SnapshotSummary" }
@@ -2522,6 +2539,8 @@ components:
           type: array
           items: { type: string }
         origin: { type: string }
+        remoteETag: { type: string }
+        remoteRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
     PasswordVaultStatus:
       type: object
       additionalProperties: false
@@ -3496,8 +3515,16 @@ components:
       properties:
         action: { type: string, enum: [start, pause, resume, retry, cancel, progress, complete, fail, needs_overwrite] }
         transferredBytes: { type: integer, format: int64, minimum: 0 }
+        totalBytes: { type: integer, format: int64, minimum: 0 }
         problem: { type: string, maxLength: 128 }
         resetProgress: { type: boolean }
+    SFTPDownloadCheckpointRequest:
+      type: object
+      additionalProperties: false
+      required: [offset, revision]
+      properties:
+        offset: { type: integer, format: int64, minimum: 0 }
+        revision: { type: string, minLength: 1, maxLength: 256 }
     SFTPStartUploadRequest:
       type: object
       additionalProperties: false
@@ -3510,11 +3537,12 @@ components:
     SFTPCompleteUploadRequest:
       type: object
       additionalProperties: false
-      required: [path, size, expectedRevision]
+      required: [path, size, expectedRevision, sourceFingerprint]
       properties:
         path: { type: string }
         size: { type: integer, format: int64, minimum: 0 }
         expectedRevision: { type: string, minLength: 1 }
+        sourceFingerprint: { type: string, pattern: '^tree-sha256:[0-9a-f]{64}$' }
     SFTPResumableUpload:
       type: object
       additionalProperties: false

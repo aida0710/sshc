@@ -137,16 +137,5 @@ func (s *Store) write(entries []Entry) error {
 		return err
 	}
 	contents = append(contents, '\n')
-	directory := s.workspace.StateDir()
-	temporary, err := s.workspace.FileSystem().WriteTemp(
-		directory, temporaryName, storage.FilePermission, contents,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = s.workspace.FileSystem().Remove(temporary) }()
-	if err := s.workspace.FileSystem().Rename(temporary, s.Path()); err != nil {
-		return err
-	}
-	return s.workspace.FileSystem().SyncDir(directory)
+	return storage.WriteAtomicFile(s.workspace.FileSystem(), s.Path(), temporaryName, storage.FilePermission, contents)
 }

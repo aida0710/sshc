@@ -40,21 +40,40 @@ public final class MainActivity extends Activity {
         public void onServiceConnected(ComponentName name, IBinder binder) {
             service = ((EngineService.LocalBinder) binder).service();
             // 通知から engine が停止された場合は、接続不能な WebView を残さず終了する。
-            service.listen(MainActivity.this::finishAndRemoveTask);
-            String entrance = service.entrance();
-            if (entrance == null) {
-                showFailure(service.failure());
-                return;
-            }
-            showEntrance(entrance);
+            service.listen(new EngineService.Listener() {
+                @Override
+                public void engineReady() {
+                    consumeEntrance();
+                }
+
+                @Override
+                public void engineStopped() {
+                    finishAndRemoveTask();
+                }
+            });
+            consumeEntrance();
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            // START_STICKY により service が再作成されると、onServiceConnected で
-            // 新しい接続 URL を受け取る。
+            // OS停止後にserviceを常駐再開しない。利用者がActivityを開き直したときだけ
+            // 新しいengineと接続URLを作る。
         }
     };
+
+    /** Engine start is asynchronous; null with no failure means keep waiting. */
+    private void consumeEntrance() {
+        if (service == null) return;
+        String entrance = service.entrance();
+        if (entrance != null) {
+            showEntrance(entrance);
+            return;
+        }
+        long failure = service.failure();
+        if (failure == Mobile.KindNone) return;
+        releaseService();
+        showFailure(failure);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,8 +89,14 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        releaseService();
+        // 構成変更による Activity の破棄では engine を停止しない。
+        super.onDestroy();
+    }
+
+    /** Activity の参照と bind を同時に外す。起動失敗時にも service を再作成可能にする。 */
+    private void releaseService() {
         if (service != null) {
-            // service は Activity より長く存続するため、Activity への参照を解除する。
             service.listen(null);
             service = null;
         }
@@ -79,8 +104,6 @@ public final class MainActivity extends Activity {
             unbindService(connection);
             bound = false;
         }
-        // 構成変更による Activity の破棄では engine を停止しない。
-        super.onDestroy();
     }
 
     private void showEntrance(String entrance) {

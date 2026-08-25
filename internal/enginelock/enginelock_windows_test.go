@@ -88,5 +88,46 @@ func TestWindowsEngineLockRefusesAJunctionedStateDirectory(t *testing.T) {
 	}
 }
 
+func TestWindowsEngineLockPinsTheDirectoryBeforeAPathReplacement(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "state")
+	path := filepath.Join(directory, "engine.lock")
+	first, err := Acquire(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = first() }()
+
+	moved := filepath.Join(root, "state-original")
+	outside := filepath.Join(root, "outside")
+	if err := os.Mkdir(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	afterLockDirectoryOpen = func() {
+		afterLockDirectoryOpen = nil
+		if renameErr := os.Rename(directory, moved); renameErr != nil {
+			t.Fatal(renameErr)
+		}
+		if output, junctionErr := exec.Command("cmd.exe", "/c", "mklink", "/J", directory, outside).CombinedOutput(); junctionErr != nil {
+			t.Fatalf("replace state with junction: %v: %s", junctionErr, output)
+		}
+	}
+	t.Cleanup(func() { afterLockDirectoryOpen = nil })
+
+	second, err := Acquire(path)
+	if !errors.Is(err, ErrRunning) {
+		if second != nil {
+			_ = second()
+		}
+		t.Fatalf("Acquire across directory replacement = %v, want ErrRunning", err)
+	}
+	if second != nil {
+		t.Fatal("a contended Acquire returned a release function")
+	}
+	if _, statErr := os.Lstat(filepath.Join(outside, "engine.lock")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("replacement target received a lock file: %v", statErr)
+	}
+}
+
 // installForeignOwnerExactDACL は、現在のトークンが持つ別の owner SID を使って、
 // 「自分では所有していないが自分は読み書きできる」状態を作る。管理者権限は要らない。

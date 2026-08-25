@@ -1,17 +1,19 @@
 import { expect, openApplication, openSection, test } from "./support/environment";
 
-test("renews a CSRF token invalidated by another page without dropping the shell", async ({
+test("keeps another page working when one page renews its CSRF token", async ({
   page,
   installation,
 }) => {
   await openApplication(page, installation);
 
   // Simulate another page renewing the same cookie while this page still holds the
-  // previous in-memory token. Deliberately discard the newly returned token.
+  // previous token. Deliberately discard the newly returned tab token.
   expect(await page.evaluate(async () => {
+    const csrf = window.sessionStorage.getItem("sshc.session.csrf") ?? "";
     const response = await fetch("/api/v1/session/renew", {
       method: "POST",
       credentials: "same-origin",
+      headers: { "X-SSHC-CSRF": csrf },
     });
     return response.ok;
   })).toBe(true);

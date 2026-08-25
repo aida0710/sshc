@@ -38,3 +38,41 @@ func TestOSFileSystemWriteTempAppliesPOSIXPermission(t *testing.T) {
 		t.Fatalf("permission = %v, want %v", info.Mode().Perm(), FilePermission)
 	}
 }
+
+func TestWriteAtomicFilePinsParentBeforeSymlinkReplacement(t *testing.T) {
+	base := t.TempDir()
+	parent := filepath.Join(base, "state")
+	original := filepath.Join(base, "state-original")
+	outside := filepath.Join(base, "outside")
+	for _, directory := range []string{parent, outside} {
+		if err := os.Mkdir(directory, DirectoryPermission); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := filepath.Join(parent, "vault")
+	if err := os.WriteFile(target, []byte("old"), FilePermission); err != nil {
+		t.Fatal(err)
+	}
+
+	err := writeAtomicFileNativeWith(target, ".vault-", FilePermission, []byte("sealed"), func() {
+		if err := os.Rename(parent, original); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(outside, parent); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(outside, "vault")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("outside target error = %v, want not exist", err)
+	}
+	contents, err := os.ReadFile(filepath.Join(original, "vault"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "sealed" {
+		t.Fatalf("pinned target contents = %q, want sealed", contents)
+	}
+}
