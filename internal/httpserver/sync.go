@@ -7,12 +7,14 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
+	"sshc/internal/session"
 )
 
 // SyncHandlers はリモートのスナップショットを提供する。
@@ -29,6 +31,9 @@ type SyncHandlers struct {
 	Reach func(ctx context.Context, client *remotesync.Client, key string) error
 	// Auto は自動同期の巡回処理。nil の場合は無効として応答する。
 	Auto *remotesync.Auto
+	// Actions binds a destructive force push to the exact remote ETag which the
+	// user inspected and confirmed.
+	Actions ActionHandlers
 }
 
 func (h SyncHandlers) reach(ctx context.Context, client *remotesync.Client, key string) error {
@@ -44,9 +49,22 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.PUT("/api/v1/sync/key", handlers.SetKey)
 	engine.PUT("/api/v1/sync/auto", handlers.SetAuto)
 	engine.POST("/api/v1/sync/now", handlers.Now)
-	engine.POST("/api/v1/sync/rekey", handlers.Rekey)
 	engine.POST("/api/v1/sync/push", handlers.Push)
+	engine.POST("/api/v1/sync/force-push", handlers.ForcePush)
 	engine.POST("/api/v1/sync/pull", handlers.Pull)
+	engine.GET("/api/v1/sync/bucket", handlers.Bucket)
+}
+
+func addSyncActions(registry actionRegistry, service *remotesync.Service) {
+	registry[session.ActionSyncForcePush] = actionKind{
+		evidence: func(target string) (string, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			confirmation, err := service.ForcePushConfirmation(ctx, target)
+			return confirmation.Evidence, err
+		},
+		fail: syncProblem,
+	}
 }
 
 // restore は、vault のロック解除後に保存済み設定から client を構成する。
@@ -272,25 +290,6 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 	return c.JSON(http.StatusOK, api.SyncKeyResponse{Key: key})
 }
 
-// Rekey は、古い鍵で暗号化されたリモートを、いまの鍵で開くようにする。
-//
-// これは移行のためだけにある。ワークスペースには 1 バイトも触れない。
-func (h SyncHandlers) Rekey(c *echo.Context) error {
-	h.restore()
-	var request api.PassphraseRequest
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	key, ok, err := h.sealingKey(c)
-	if !ok {
-		return err
-	}
-	if _, err := h.Service.Rekey(c.Request().Context(), request.Passphrase, key); err != nil {
-		return syncProblem(c, err)
-	}
-	return h.status(c)
-}
-
 func (h SyncHandlers) Push(c *echo.Context) error {
 	h.restore()
 	key, ok, err := h.sealingKey(c)
@@ -308,6 +307,63 @@ func (h SyncHandlers) Push(c *echo.Context) error {
 			UploadedBytes: result.UploadedBytes, CompletedAt: result.CompletedAt,
 		},
 	})
+}
+
+func (h SyncHandlers) ForcePush(c *echo.Context) error {
+	h.restore()
+	key, ok, err := h.sealingKey(c)
+	if !ok {
+		return err
+	}
+	confirmation, err := h.Service.ForcePushConfirmation(c.Request().Context(), remotesync.ForcePushTarget)
+	if err != nil {
+		return syncProblem(c, err)
+	}
+	if allowed, response := h.Actions.consumeEvidence(c, session.ActionSyncForcePush,
+		remotesync.ForcePushTarget, confirmation.Evidence); !allowed {
+		return response
+	}
+	result, err := h.Service.ForcePush(c.Request().Context(), key, confirmation.ETag)
+	if err != nil {
+		return syncProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, api.PushResponse{
+		Status: h.statusResponse(),
+		Result: api.PushResult{
+			Summary: snapshotSummaryResponse(result.Summary), ObjectCount: result.ObjectCount,
+			UploadedBytes: result.UploadedBytes, CompletedAt: result.CompletedAt,
+		},
+	})
+}
+
+func (h SyncHandlers) Bucket(c *echo.Context) error {
+	h.restore()
+	view, err := h.Service.BucketStatus(c.Request().Context())
+	if err != nil {
+		return syncProblem(c, err)
+	}
+	response := api.SyncBucketStatus{
+		CheckedAt: view.CheckedAt, History: make([]api.SyncBucketObject, 0, len(view.History)),
+		HistoryTruncated: view.HistoryTruncated, LocalIsLive: view.LocalIsLive,
+	}
+	if view.Live != nil {
+		response.Live = &api.SyncBucketObject{
+			Key: view.Live.Key, Size: view.Live.Size, LastModified: syncStringPointer(view.Live.LastModified),
+		}
+	}
+	for _, item := range view.History {
+		response.History = append(response.History, api.SyncBucketObject{
+			Key: item.Key, Size: item.Size, LastModified: syncStringPointer(item.LastModified),
+		})
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+func syncStringPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 // Pull は既定でプレビューし、求められたときだけ適用する。
@@ -434,6 +490,8 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "sync_push_refused")
 	case errors.Is(err, remotesync.ErrApplyRefused):
 		return problem(c, http.StatusConflict, "sync_apply_refused")
+	case errors.Is(err, remotesync.ErrForcePushTarget):
+		return problem(c, http.StatusBadRequest, "sync_force_target_invalid")
 	case errors.Is(err, remotesync.ErrWrongPassphrase):
 		return problem(c, http.StatusForbidden, "wrong_passphrase")
 	case errors.Is(err, remotesync.ErrWeakPassphrase):

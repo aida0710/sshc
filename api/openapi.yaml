@@ -375,6 +375,36 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/force-push:
+    post:
+      operationId: forcePushSnapshot
+      # 現在のendpoint・bucket・object key・ETagへ結び付いた一度限りの確認が必要。
+      # 実行時もそのETagをIf-Matchに使い、無条件には上書きしない。
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The confirmed remote snapshot was replaced
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/bucket:
+    get:
+      operationId: getSyncBucketStatus
+      responses:
+        "200":
+          description: Live object and dated history metadata read directly from the bucket
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncBucketStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/key:
     put:
       operationId: setSyncKey
@@ -425,26 +455,6 @@ paths:
               schema: { $ref: "#/components/schemas/SyncStatus" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/sync/rekey:
-    post:
-      operationId: rekeySnapshot
-      # 古い鍵で開き、いまの鍵で暗号化し直す。移行のためだけにある。
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/PassphraseRequest" }
-      responses:
-        "200":
-          description: The remote snapshot now opens with the stored key
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SyncStatus" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/pull:
     post:
@@ -2268,6 +2278,27 @@ components:
       properties:
         status: { $ref: "#/components/schemas/SyncStatus" }
         result: { $ref: "#/components/schemas/PushResult" }
+    SyncBucketObject:
+      type: object
+      additionalProperties: false
+      required: [key, size]
+      properties:
+        key: { type: string, minLength: 1 }
+        size: { type: integer, format: int64, minimum: 0 }
+        lastModified: { type: string }
+    SyncBucketStatus:
+      type: object
+      additionalProperties: false
+      required: [checkedAt, localIsLive, history, historyTruncated]
+      properties:
+        checkedAt: { type: string }
+        localIsLive: { type: boolean }
+        live: { $ref: "#/components/schemas/SyncBucketObject" }
+        history:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/SyncBucketObject" }
+        historyTruncated: { type: boolean }
     SyncOperation:
       type: object
       additionalProperties: false

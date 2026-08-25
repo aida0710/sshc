@@ -316,6 +316,9 @@ func New(options Options) (*Server, error) {
 	if options.SFTP != nil {
 		addSFTPActions(registry, options.SFTP)
 	}
+	if options.Sync != nil {
+		addSyncActions(registry, options.Sync)
+	}
 	actions := ActionHandlers{Sessions: options.Sessions, Kinds: registry}
 
 	if options.Keys != nil {
@@ -410,6 +413,7 @@ func New(options Options) (*Server, error) {
 	if options.Sync != nil {
 		registerSyncRoutes(e, SyncHandlers{
 			Service: options.Sync, Secrets: options.Passwords, Auto: options.AutoSync,
+			Actions: actions,
 		})
 	}
 	if options.Terminals != nil {

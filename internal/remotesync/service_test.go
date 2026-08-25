@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/xml"
 	"errors"
 	"io/fs"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +39,7 @@ type fakeBucket struct {
 	mu         sync.Mutex
 	objects    map[string]storedObject
 	generation int
+	gets       int
 	// refuseConditional は、すべての条件付き PUT を失敗させる。R2 がそれらに対応して
 	// いないと判明した場合に、計画にあるフォールバックがどう働くかを試すための
 	// ものである。
@@ -87,6 +90,39 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 		if b.objects == nil {
 			b.objects = map[string]storedObject{}
 		}
+		if r.Method == http.MethodGet && r.URL.Query().Get("list-type") == "2" {
+			type content struct {
+				Key          string `xml:"Key"`
+				LastModified string `xml:"LastModified"`
+				ETag         string `xml:"ETag"`
+				Size         int    `xml:"Size"`
+				StorageClass string `xml:"StorageClass"`
+			}
+			type result struct {
+				XMLName     xml.Name  `xml:"ListBucketResult"`
+				Name        string    `xml:"Name"`
+				Prefix      string    `xml:"Prefix"`
+				KeyCount    int       `xml:"KeyCount"`
+				MaxKeys     int       `xml:"MaxKeys"`
+				IsTruncated bool      `xml:"IsTruncated"`
+				Contents    []content `xml:"Contents"`
+			}
+			prefix := r.URL.Query().Get("prefix")
+			listed := result{Name: "sshc", Prefix: prefix, MaxKeys: 1000}
+			for key, stored := range b.objects {
+				if strings.HasPrefix(key, prefix) {
+					listed.Contents = append(listed.Contents, content{
+						Key: key, LastModified: "2026-08-25T01:00:00Z", ETag: stored.etag,
+						Size: len(stored.body), StorageClass: "STANDARD",
+					})
+				}
+			}
+			sort.Slice(listed.Contents, func(i, j int) bool { return listed.Contents[i].Key < listed.Contents[j].Key })
+			listed.KeyCount = len(listed.Contents)
+			w.Header().Set("Content-Type", "application/xml")
+			_ = xml.NewEncoder(w).Encode(listed)
+			return
+		}
 		key := b.key(r.URL.Path)
 		stored, present := b.objects[key]
 		switch r.Method {
@@ -96,7 +132,10 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 				return
 			}
 			w.Header().Set("ETag", stored.etag)
+			w.Header().Set("Content-Length", strconv.Itoa(len(stored.body)))
+			w.Header().Set("Last-Modified", "Tue, 25 Aug 2026 01:00:00 GMT")
 			if r.Method == http.MethodGet {
+				b.gets++
 				_, _ = w.Write(stored.body)
 			}
 		case http.MethodPut:
@@ -130,6 +169,12 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	}
+}
+
+func (b *fakeBucket) downloads() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.gets
 }
 
 type installation struct {
@@ -264,6 +309,17 @@ func (i installation) read(t *testing.T, name string) string {
 		t.Fatalf("read %s: %v", name, err)
 	}
 	return string(body)
+}
+
+func (i installation) write(t *testing.T, name, contents string) {
+	t.Helper()
+	absolute := filepath.Join(i.workspace.Root(), filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(absolute), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(absolute, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestASnapshotTravelsBetweenTwoMachines(t *testing.T) {
@@ -802,6 +858,155 @@ func TestTheKeysFollowTheConfiguredPath(t *testing.T) {
 	}
 }
 
+func TestTwoPushesAtTheSameTimestampKeepTwoHistoryObjects(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	machine.write(t, "config", "Host bastion\n  Port 2222\n")
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+
+	var history int
+	for _, key := range bucket.keys() {
+		if strings.HasPrefix(key, remotesync.SnapshotPrefix) {
+			history++
+		}
+	}
+	if history != 2 {
+		t.Fatalf("history objects = %d, want 2; keys = %v", history, bucket.keys())
+	}
+}
+
+func TestBucketStatusReadsLiveAndDatedHistoryFromTheRemote(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	machine.write(t, "config", "Host two\n")
+	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := machine.service.BucketStatus(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Live == nil || view.Live.Key != remotesync.ObjectName || view.Live.Size == 0 {
+		t.Fatalf("live = %#v", view.Live)
+	}
+	if len(view.History) != 2 {
+		t.Fatalf("history = %#v", view.History)
+	}
+	if !view.LocalIsLive || view.CheckedAt == "" {
+		t.Fatalf("bucket view = %#v", view)
+	}
+
+	bucket.replace(remotesync.ObjectName, `"someone-else"`)
+	view, err = machine.service.BucketStatus(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.LocalIsLive {
+		t.Fatal("a changed remote generation was reported as locally acknowledged")
+	}
+}
+
+func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
+	bucket := &fakeBucket{}
+	first := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
+	if _, err := first.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	second := newInstallation(t, bucket, map[string]string{"config": "Host replacement\n"})
+	if _, err := second.service.Push(context.Background(), syncPassphrase); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("normal Push = %v, want ErrRemoteMoved", err)
+	}
+	confirmation, err := second.service.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if confirmation.ETag == "" || confirmation.Evidence == "" {
+		t.Fatalf("confirmation = %#v", confirmation)
+	}
+	if _, err := second.service.ForcePush(context.Background(), syncPassphrase, confirmation.ETag); err != nil {
+		t.Fatalf("ForcePush = %v", err)
+	}
+
+	pulled, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(pulled.Request.Changes[0].Contents); got != "Host replacement\n" {
+		t.Fatalf("remote contents = %q", got)
+	}
+
+	stale, err := second.service.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket.replace(remotesync.ObjectName, `"moved-after-confirmation"`)
+	if _, err := second.service.ForcePush(context.Background(), syncPassphrase, stale.ETag); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("ForcePush after remote change = %v, want ErrRemoteMoved", err)
+	}
+}
+
+func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{})
+	firstEntered := make(chan struct{})
+	secondEntered := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var calls int
+	var callsMu sync.Mutex
+	files := func() ([]string, error) {
+		callsMu.Lock()
+		calls++
+		call := calls
+		callsMu.Unlock()
+		switch call {
+		case 1:
+			close(firstEntered)
+			<-releaseFirst
+		case 2:
+			close(secondEntered)
+		}
+		return nil, nil
+	}
+	service := remotesync.NewService(machine.workspace, machine.manager, files,
+		func() string { return "2026-08-25T02:00:00Z" },
+		func() (string, error) { return "serialized-origin", nil })
+	service.Configure(machine.config, machine.creds, machine.client)
+
+	firstDone := make(chan error, 1)
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := service.Push(context.Background(), syncPassphrase)
+		firstDone <- err
+	}()
+	<-firstEntered
+	go func() {
+		_, err := service.Push(context.Background(), syncPassphrase)
+		secondDone <- err
+	}()
+
+	select {
+	case <-secondEntered:
+		t.Fatal("a second Push entered Collect while the first operation was running")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseFirst)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first Push = %v", err)
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second Push = %v", err)
+	}
+}
+
 // 同期の途中で設定画面が別のバケットを保存しても、ひとつの push は開始時点の
 // client と config の組を最後まで使う。別々に読むと、古い client が新しい Path を
 // 受け取り、どちらの設定にも存在しない場所へスナップショットを書いてしまう。
@@ -963,93 +1168,6 @@ func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 	}
 	if got := bucket.object("laptops/" + remotesync.ObjectName); got == nil {
 		t.Errorf("nothing was written to the new key: %v", bucket.keys())
-	}
-}
-
-// 移行の全体がこの 1 本である。古い鍵で暗号化されたものを、新しい鍵で開ける
-// ようにする。中身は 1 バイトも変わらない。
-func TestRekeyReplacesTheSealAndNotTheContents(t *testing.T) {
-	bucket := &fakeBucket{}
-	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	before := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
-
-	const fresh = "AB12-CD34-EF56-GH78-JK90-MN12"
-	result, err := machine.service.Rekey(context.Background(), syncPassphrase, fresh)
-	if err != nil {
-		t.Fatalf("Rekey = %v", err)
-	}
-	after := bucket.object(remotesync.ObjectName)
-	if result.Bytes != int64(len(after)) || result.CompletedAt == "" {
-		t.Fatalf("rekey result = %#v, object is %d bytes", result, len(after))
-	}
-	if bytes.Equal(before, after) {
-		t.Fatal("the object was written back under the same seal")
-	}
-
-	// 新しい鍵で開き、古い鍵では開かない。
-	sealed, _, err := envelope.OpenWithin(after, fresh, envelope.AcceptedFromRemote)
-	if err != nil {
-		t.Fatalf("the rekeyed object does not open with the new key: %v", err)
-	}
-	manifest, contents, err := remotesync.Read(sealed)
-	if err != nil {
-		t.Fatalf("Read = %v", err)
-	}
-	if len(manifest.Files) != 1 || string(contents["config"]) != "Host bastion\n" {
-		t.Fatalf("the contents changed: %#v %q", manifest.Files, contents["config"])
-	}
-	if _, _, err := envelope.OpenWithin(after, syncPassphrase, envelope.AcceptedFromRemote); err == nil {
-		t.Fatal("the old key still opens the object")
-	}
-}
-
-// 古い鍵を間違えたなら、リモートは元のままでなければならない。再暗号化に
-// 「途中まで」があってはならない。
-func TestRekeyLeavesTheRemoteAloneWhenTheOldKeyIsWrong(t *testing.T) {
-	bucket := &fakeBucket{}
-	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	before := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
-
-	if _, err := machine.service.Rekey(context.Background(), "not the old key at all", "AB12-CD34-EF56-GH78-JK90-MN12"); err == nil {
-		t.Fatal("Rekey accepted the wrong old key")
-	}
-	if !bytes.Equal(before, bucket.object(remotesync.ObjectName)) {
-		t.Fatal("the object changed even though the old key was wrong")
-	}
-}
-
-// 再暗号化は、決して無条件には書かない。条件付き書き込みを一切受けない
-// バケットを相手にしたとき、通ってしまうなら、それは条件を付けていない証拠で
-// ある。そしてそのとき再暗号化は、別のユーザーの作業を消せる操作になっている。
-func TestRekeyNeverFallsBackToAnUnconditionalWrite(t *testing.T) {
-	bucket := &fakeBucket{}
-	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := machine.service.Push(context.Background(), syncPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	before := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
-	bucket.refuseConditional = true
-
-	if _, err := machine.service.Rekey(context.Background(), syncPassphrase, "AB12-CD34-EF56-GH78-JK90-MN12"); !errors.Is(err, remotesync.ErrRemoteMoved) {
-		t.Fatalf("Rekey = %v, want ErrRemoteMoved", err)
-	}
-	if !bytes.Equal(before, bucket.object(remotesync.ObjectName)) {
-		t.Fatal("the object changed even though every conditional write was refused")
-	}
-}
-
-// スナップショットがまだ無いバケットには、暗号化し直すものが無い。
-func TestRekeyOnAnEmptyBucketSaysThereIsNoSnapshot(t *testing.T) {
-	bucket := &fakeBucket{}
-	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := machine.service.Rekey(context.Background(), syncPassphrase, "AB12-CD34-EF56-GH78-JK90-MN12"); !errors.Is(err, remotesync.ErrNoSnapshot) {
-		t.Fatalf("Rekey = %v, want ErrNoSnapshot", err)
 	}
 }
 

@@ -56,6 +56,11 @@ type Auto struct {
 
 	mu   sync.Mutex
 	view AutoView
+	// blockedETag is the remote generation which needs a human decision. A
+	// ticker still performs HEAD, but does not download or derive a key again
+	// until that generation changes or a manual Apply advances local state.
+	blockedETag   string
+	blockedDetail string
 }
 
 // NewAuto は、巡回を組み立てる。走り出すのは Run が呼ばれてからである。
@@ -116,6 +121,8 @@ func (a *Auto) run(ctx context.Context) AutoView {
 	if !ok {
 		return a.View()
 	}
+	a.service.operationMu.Lock()
+	defer a.service.operationMu.Unlock()
 	a.enter(AutoRunning, "")
 
 	if phase, detail, done := a.receive(ctx, key); done {
@@ -141,32 +148,37 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 		return AutoIdle, "", false
 	}
 	// 動いていないものは取りに行かない。HEAD は ETag だけを返す。
-	moved, err := a.service.RemoteMoved(ctx)
+	moved, remoteETag, err := a.service.remoteGeneration(ctx)
 	if err != nil {
 		return AutoFailed, failureDetail(err), true
 	}
 	if !moved {
+		a.clearBlocked()
 		return AutoIdle, "", false
 	}
+	if detail, ok := a.blocked(remoteETag); ok {
+		return AutoBlocked, detail, true
+	}
 	// 自動同期では競合の解決先を選ばない。
-	result, err := a.service.Pull(ctx, key, ResolveNone)
+	result, err := a.service.pull(ctx, key, ResolveNone)
 	switch {
-	case errors.Is(err, ErrNothingToApply), errors.Is(err, ErrNoSnapshot):
+	case errors.Is(err, ErrNoSnapshot):
 		return AutoIdle, "", false
-	case err != nil:
+	case err != nil && !errors.Is(err, ErrNothingToApply):
 		return AutoFailed, failureDetail(err), true
 	}
 	if len(result.Conflicts) > 0 {
+		a.rememberBlocked(result.ETag, "conflicts")
 		return AutoBlocked, "conflicts", true
 	}
 	// 削除はユーザーの確認が必要なため自動適用しない。
 	if len(result.Request.Removals) > 0 {
+		a.rememberBlocked(result.ETag, "removals")
 		return AutoBlocked, "removals", true
 	}
-	if len(result.Request.Changes) == 0 {
-		return AutoIdle, "", false
-	}
-	if err := a.service.Apply(result); err != nil {
+	// 差分がなくてもApplyはremote世代を記録する。これを省くと同じsnapshotを
+	// 毎分取得し続け、次のpushも古いETagで拒否される。
+	if err := a.service.apply(result); err != nil {
 		if errors.Is(err, ErrApplyRefused) {
 			return AutoIdle, "", false
 		}
@@ -180,14 +192,14 @@ func (a *Auto) send(ctx context.Context, key string) (AutoPhase, string) {
 	if a.service.Direction() == DirectionPull {
 		return AutoIdle, ""
 	}
-	changed, err := a.service.Diverged()
+	changed, err := a.service.diverged()
 	if err != nil {
 		return AutoFailed, failureDetail(err)
 	}
 	if !changed {
 		return AutoIdle, ""
 	}
-	if _, err := a.service.Push(ctx, key); err != nil {
+	if _, err := a.service.push(ctx, key, ""); err != nil {
 		switch {
 		case errors.Is(err, ErrPushRefused):
 			return AutoIdle, ""
@@ -198,6 +210,26 @@ func (a *Auto) send(ctx context.Context, key string) (AutoPhase, string) {
 		return AutoFailed, failureDetail(err)
 	}
 	return AutoIdle, ""
+}
+
+func (a *Auto) rememberBlocked(etag, detail string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.blockedETag = etag
+	a.blockedDetail = detail
+}
+
+func (a *Auto) blocked(etag string) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.blockedDetail, etag != "" && a.blockedETag == etag
+}
+
+func (a *Auto) clearBlocked() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.blockedETag = ""
+	a.blockedDetail = ""
 }
 
 func (a *Auto) enter(phase AutoPhase, detail string) {

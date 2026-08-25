@@ -286,6 +286,43 @@ describe("integrationsApi remote sync measurements", () => {
     expect(sentJson(init)).toEqual({});
   });
 
+  it("binds a force push to a one-time confirmation token", async () => {
+    const response = {
+      status,
+      result: { summary, objectCount: 2, uploadedBytes: 1800, completedAt: "2026-08-12T01:02:04Z" },
+    };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ token: "action-token", expiresAt: "2026-08-12T01:04:04Z" }))
+      .mockResolvedValueOnce(jsonResponse(response));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.forcePushSnapshot()).resolves.toEqual(response);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const firstCall = fetcher.mock.calls[0] as [string, RequestInit] | undefined;
+    expect(firstCall).toBeDefined();
+    expect(sentJson(firstCall![1])).toEqual({
+      kind: "sync.force_push",
+      target: "remote-workspace",
+    });
+    const [path, init] = fetcher.mock.calls[1] as [string, RequestInit];
+    expect(path).toBe("/api/v1/sync/force-push");
+    expect(new Headers(init.headers).get("X-SSHC-Action")).toBe("action-token");
+  });
+
+  it("validates live and history metadata read from the bucket", async () => {
+    const response = {
+      checkedAt: "2026-08-25T01:55:00Z",
+      localIsLive: false,
+      historyTruncated: false,
+      live: { key: "workspace.tar.gz.enc", size: 900, lastModified: "2026-08-25T01:54:00Z" },
+      history: [{ key: "snapshots/one.tar.gz.enc", size: 901 }],
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(response)));
+
+    await expect(integrationsApi.syncBucketStatus()).resolves.toEqual(response);
+  });
+
   it("accepts the measured result of an apply download", async () => {
     const response = {
       applied: true,

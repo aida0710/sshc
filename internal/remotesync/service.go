@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -44,8 +45,14 @@ const TravelPath = "sshc/secrets.json"
 // 保持期間はバケットのライフサイクルルールで管理する。
 const SnapshotPrefix = "snapshots/"
 
+// ForcePushTarget is the fixed action-token target used for replacing the live
+// remote snapshot. The token evidence also binds endpoint, bucket, object key,
+// and ETag, so changing any of them invalidates the confirmation.
+const ForcePushTarget = "remote-workspace"
+
 // datedLayout は、スナップショットが作られた瞬間にちなんでコピーを名付ける。
-// ソート可能で、秒まで一意である。1 分間に 2 回の push が衝突してはならない。
+// 人がS3の一覧から時刻を読める形は維持し、一意性はoriginとprocess内sequenceを
+// 加えたsnapshotKeyForが担う。
 const datedLayout = "2006-01-02-150405"
 
 // joinKey は、設定されたパスの下にパスセグメントをひとつ置く。パスは既定で空で
@@ -72,6 +79,21 @@ func SnapshotKeyFor(config Config, createdAt string) (string, error) {
 	return joinKey(config.Path, SnapshotPrefix+moment.UTC().Format(datedLayout)+"."+archiveSuffix), nil
 }
 
+func snapshotKeyFor(config Config, createdAt, origin string, sealed []byte, sequence uint64) (string, error) {
+	moment, err := time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return "", err
+	}
+	originID := Digest([]byte(origin))[:16]
+	// The ciphertext contains a fresh random salt and nonce. Its digest keeps
+	// history unique across process restarts even when the stable origin and the
+	// second-resolution timestamp are identical. sequence also avoids relying
+	// on randomness alone for multiple pushes in one process.
+	snapshotID := Digest(sealed)[:16]
+	name := moment.UTC().Format(datedLayout) + "-" + originID + "-" + snapshotID + "-" + fmt.Sprintf("%06d", sequence)
+	return joinKey(config.Path, SnapshotPrefix+name+"."+archiveSuffix), nil
+}
+
 var (
 	// ErrNotConfigured は、バケットが設定されていないことを報告する。
 	ErrNotConfigured = errors.New("remote sync is not configured")
@@ -87,6 +109,9 @@ var (
 	ErrPushRefused = errors.New("this machine is set to receive only")
 	// ErrApplyRefused は、送信専用に設定されたマシンでの apply を報告する。
 	ErrApplyRefused = errors.New("this machine is set to send only")
+	// ErrForcePushTarget reports a force-push confirmation for anything other
+	// than the single live workspace object.
+	ErrForcePushTarget = errors.New("the force-push target is not valid")
 )
 
 // Direction は、このマシンがどちら向きにデータを動かしてよいかを表す。
@@ -232,6 +257,7 @@ type Service struct {
 	files        FileSource
 	now          func() string
 	newOrigin    func() (string, error)
+	historySeq   uint64
 
 	// OpenVault と SealVault は、vault 文書の復号と受信側での再暗号化を抽象化する。
 	// secret パッケージへの依存を避けるため、関数として注入する。
@@ -241,8 +267,12 @@ type Service struct {
 	// VaultAdopted は、vault の置換後にメモリ上の状態を再読込する通知。
 	VaultAdopted func() error
 
-	mu      sync.Mutex
-	binding remoteBinding
+	// operationMu serializes every stateful sync operation, including a complete
+	// automatic receive/send cycle. binding has a separate, short-lived lock so
+	// status reads and configuration do not wait for network I/O.
+	operationMu sync.Mutex
+	mu          sync.Mutex
+	binding     remoteBinding
 }
 
 // NewService は、未設定のサービスを返す。
@@ -496,6 +526,24 @@ func Check(ctx context.Context, client *objectstore.Client, key string) error {
 // 最初の書き込みには If-None-Match: *、以後は最後に確認した ETag を If-Match に
 // 指定し、別端末による更新を上書きしない。
 func (s *Service) Push(ctx context.Context, passphrase string) (PushResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	return s.push(ctx, passphrase, "")
+}
+
+// ForcePush replaces the exact remote ETag which the user confirmed. It never
+// performs an unconditional write; a remote change after confirmation is
+// reported as ErrRemoteMoved.
+func (s *Service) ForcePush(ctx context.Context, passphrase, expectedETag string) (PushResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	if expectedETag == "" {
+		return PushResult{}, ErrForcePushTarget
+	}
+	return s.push(ctx, passphrase, expectedETag)
+}
+
+func (s *Service) push(ctx context.Context, passphrase, forcedETag string) (PushResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
 		return PushResult{}, err
@@ -540,15 +588,19 @@ func (s *Service) Push(ctx context.Context, passphrase string) (PushResult, erro
 		// すでに誰かが置いたものの上には書かないことを意味する。
 		current.ETag = ""
 	}
-	ifMatch, ifNoneMatch := current.ETag, ""
+	ifMatch, ifNoneMatch := forcedETag, ""
 	if ifMatch == "" {
-		ifNoneMatch = "*"
+		ifMatch = current.ETag
+		if ifMatch == "" {
+			ifNoneMatch = "*"
+		}
 	}
 	// 日付付きのコピーが先。それが失敗すれば push は何も中途半端に残さず失敗する。
 	// ライブの書き込みがそのあと競争に負けても、残るのはこのマシンがその時刻に確かに
 	// 作ったスナップショットであり、それはそのフォルダが保持していると述べている
 	// ものそのものである。
-	dated, err := SnapshotKeyFor(binding.config, manifest.CreatedAt)
+	s.historySeq++
+	dated, err := snapshotKeyFor(binding.config, manifest.CreatedAt, current.Origin, sealed, s.historySeq)
 	if err != nil {
 		return result, err
 	}
@@ -582,6 +634,111 @@ func (s *Service) Push(ctx context.Context, passphrase string) (PushResult, erro
 	return result, nil
 }
 
+// BucketObjectView is non-secret object metadata shown on the sync screen.
+type BucketObjectView struct {
+	Key          string `json:"key"`
+	Size         int64  `json:"size"`
+	LastModified string `json:"lastModified,omitempty"`
+}
+
+// BucketView is a live inspection of the configured bucket. History is sorted
+// newest first and contains metadata only; encrypted bodies are not downloaded.
+type BucketView struct {
+	CheckedAt        string             `json:"checkedAt"`
+	Live             *BucketObjectView  `json:"live,omitempty"`
+	History          []BucketObjectView `json:"history"`
+	HistoryTruncated bool               `json:"historyTruncated"`
+	LocalIsLive      bool               `json:"localIsLive"`
+}
+
+const maxBucketHistoryObjects = 10000
+
+func (s *Service) BucketStatus(ctx context.Context) (BucketView, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	return s.bucketStatus(ctx)
+}
+
+func (s *Service) bucketStatus(ctx context.Context) (BucketView, error) {
+	binding, err := s.configuredBinding()
+	if err != nil {
+		return BucketView{}, err
+	}
+	objectKey := ObjectKeyFor(binding.config)
+	view := BucketView{CheckedAt: s.now(), History: []BucketObjectView{}}
+	live, err := binding.client.Stat(ctx, objectKey)
+	if err != nil && !errors.Is(err, objectstore.ErrNotFound) {
+		return BucketView{}, err
+	}
+	if err == nil {
+		view.Live = bucketObjectView(binding.config, live)
+		current, stateErr := s.readState()
+		if stateErr != nil {
+			return BucketView{}, stateErr
+		}
+		view.LocalIsLive = current.Key == objectKey && current.ETag != "" && current.ETag == live.ETag
+	}
+	history, truncated, err := binding.client.ListNewest(ctx, joinKey(binding.config.Path, SnapshotPrefix), maxBucketHistoryObjects)
+	if err != nil {
+		return BucketView{}, err
+	}
+	view.HistoryTruncated = truncated
+	sort.Slice(history, func(i, j int) bool {
+		if history[i].LastModified.Equal(history[j].LastModified) {
+			return history[i].Key > history[j].Key
+		}
+		return history[i].LastModified.After(history[j].LastModified)
+	})
+	for _, item := range history {
+		view.History = append(view.History, *bucketObjectView(binding.config, item))
+	}
+	return view, nil
+}
+
+func bucketObjectView(config Config, item objectstore.ObjectInfo) *BucketObjectView {
+	key := item.Key
+	if prefix := strings.Trim(config.Path, "/"); prefix != "" {
+		key = strings.TrimPrefix(key, prefix+"/")
+	}
+	modified := ""
+	if !item.LastModified.IsZero() {
+		modified = item.LastModified.UTC().Format(time.RFC3339)
+	}
+	return &BucketObjectView{Key: key, Size: item.Size, LastModified: modified}
+}
+
+type ForcePushConfirmation struct {
+	ETag     string
+	Evidence string
+}
+
+// ForcePushConfirmation binds one action token to the current configured
+// destination and live ETag. The handler passes the same ETag to ForcePush, so
+// a race after token consumption still fails the conditional PUT.
+func (s *Service) ForcePushConfirmation(ctx context.Context, target string) (ForcePushConfirmation, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	if target != ForcePushTarget {
+		return ForcePushConfirmation{}, ErrForcePushTarget
+	}
+	binding, err := s.configuredBinding()
+	if err != nil {
+		return ForcePushConfirmation{}, err
+	}
+	objectKey := ObjectKeyFor(binding.config)
+	live, err := binding.client.Stat(ctx, objectKey)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			return ForcePushConfirmation{}, ErrNoSnapshot
+		}
+		return ForcePushConfirmation{}, err
+	}
+	evidence := Digest([]byte(strings.Join([]string{
+		binding.config.Endpoint, binding.config.Bucket, objectKey, live.ETag,
+	}, "\x00")))
+	return ForcePushConfirmation{ETag: live.ETag, Evidence: evidence}, nil
+}
+
 func snapshotSummary(manifest Manifest, contents map[string][]byte, snapshotBytes int) SnapshotSummary {
 	var sourceBytes int64
 	for _, body := range contents {
@@ -611,6 +768,12 @@ type PullResult struct {
 // 何も書かない。Apply を別の呼び出しにしてあるのは、書き込みの前に必ず見せる
 // プレビューを、このアプリケーションの他の部分と同じくユーザーに見せるためである。
 func (s *Service) Pull(ctx context.Context, passphrase string, resolve Resolution) (PullResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	return s.pull(ctx, passphrase, resolve)
+}
+
+func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolution) (PullResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
 		return PullResult{}, err
@@ -663,6 +826,12 @@ func (s *Service) Pull(ctx context.Context, passphrase string, resolve Resolutio
 // Apply は pull をコミットする。どれかのファイルが衝突しているあいだは拒否する。
 // 半分だけ適用すれば、どちらの側とも一致しないワークスペースになるからだ。
 func (s *Service) Apply(result PullResult) error {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	return s.apply(result)
+}
+
+func (s *Service) apply(result PullResult) error {
 	// direction は Pull ではなくここで検査する。プレビューは何も書かないので、
 	// 送信専用のマシンでも、どれだけ遅れているかは知ることができる。
 	// これが、別のマシンのバイト列をこのディスクへ置く呼び出しである。
@@ -860,70 +1029,6 @@ func (s *Service) DisplayPath(absolute string) string {
 	return filepath.ToSlash(relative)
 }
 
-// RekeyResult は、再暗号化したオブジェクトについて画面が言えることである。
-type RekeyResult struct {
-	// Bytes は、書き戻した暗号文の大きさ。
-	Bytes int64
-	// CompletedAt は、再暗号化が済んだ時刻。
-	CompletedAt string
-}
-
-// Rekey は、リモートのライブオブジェクトを古い鍵で開き、新しい鍵で暗号化し直す。
-//
-// 旧形式はマスターパスワードで暗号化されているため、移行時だけ古いパスワードで
-// 復号し、現在の同期鍵で再暗号化する。
-//
-// ワークスペースには 1 バイトも触れない。中身は開いたものをそのまま暗号化し直す
-// のであって、作り直すのではない。したがって失敗しても、ローカルにもリモートにも
-// 何も起きていない。古い鍵が違えば、開く前に止まる。
-//
-// 書き戻しは、いま読んだ ETag を条件にする。その間に他の端末が push していたなら
-// ErrRemoteMoved であり、もう一度やればよい。条件を外して上書きすれば、
-// 再暗号化が別のユーザーの作業を消す操作になる。
-func (s *Service) Rekey(ctx context.Context, from, to string) (RekeyResult, error) {
-	binding, err := s.configuredBinding()
-	if err != nil {
-		return RekeyResult{}, err
-	}
-	objectKey := ObjectKeyFor(binding.config)
-	object, err := binding.client.Get(ctx, objectKey)
-	if err != nil {
-		if errors.Is(err, objectstore.ErrNotFound) {
-			return RekeyResult{}, ErrNoSnapshot
-		}
-		return RekeyResult{}, err
-	}
-	archive, _, err := envelope.OpenWithin(object.Body, from, envelope.AcceptedFromRemote)
-	if err != nil {
-		return RekeyResult{}, err
-	}
-	key, err := envelope.Derive(to)
-	if err != nil {
-		return RekeyResult{}, err
-	}
-	sealed, err := key.Seal(archive)
-	if err != nil {
-		return RekeyResult{}, err
-	}
-	// 読んだ版だけを置き換える。push と同じ組み合わせである。ETag を返さない
-	// バケットでは「まだ無いときだけ作る」に落ちるので、いま読んだものが在る以上
-	// 必ず条件で弾かれる。無条件の書き込みへは決して落ちない。
-	ifMatch, ifNoneMatch := object.ETag, ""
-	if ifMatch == "" {
-		ifNoneMatch = "*"
-	}
-	if _, err := binding.client.Put(ctx, objectKey, sealed, ifMatch, ifNoneMatch); err != nil {
-		if errors.Is(err, objectstore.ErrPreconditionFailed) {
-			return RekeyResult{}, ErrRemoteMoved
-		}
-		return RekeyResult{}, err
-	}
-	// state は触らない。中身は変わっていないので、このマシンが最後に同期した
-	// ものも変わっていない。ETag だけは新しくなるが、次の push が条件を外したときに
-	// 分かることであり、そこは既存の道が扱う。
-	return RekeyResult{Bytes: int64(len(sealed)), CompletedAt: s.now()}, nil
-}
-
 // exchangeVault は TravelPath の文書を受信側の鍵で再暗号化し、VaultPath へ置く。
 // 送信側に vault がない場合は、受信側の vault を削除しない。
 func (s *Service) exchangeVault(request *storage.Request) error {
@@ -967,11 +1072,10 @@ func replacesVault(root string, request storage.Request) bool {
 	return false
 }
 
-// Diverged は、このディスクが最後に同期したものと違うかを返す。
-//
-// 巡回が「押し出すものがあるか」を知るための問いである。中身を数えるのは
-// ここだけで、送るかどうかの判断に HTTP は 1 本も要らない。
-func (s *Service) Diverged() (bool, error) {
+// diverged は、このディスクが最後に同期したものと違うかを返す。
+// 自動巡回がoperationMuを保持したまま「押し出すものがあるか」を判断する内部操作
+// であり、この判断にHTTPは1本も要らない。
+func (s *Service) diverged() (bool, error) {
 	manifest, _, err := s.Collect()
 	if err != nil {
 		return false, err
@@ -999,31 +1103,30 @@ func (s *Service) Diverged() (bool, error) {
 	return false, nil
 }
 
-// RemoteMoved は、ライブのオブジェクトが、このマシンが最後に見たものと違うかを
-// 返す。
-//
-// HEAD で ETag だけを確認し、スナップショット全体の取得を避ける。
-func (s *Service) RemoteMoved(ctx context.Context) (bool, error) {
+// remoteGeneration はHEADでETagだけを確認し、ライブオブジェクトが最後に同期した
+// 世代から変わったかと現在のETagを返す。Autoは競合中の世代を覚え、同じ暗号文を
+// 毎分ダウンロード・復号しない。呼び出し側はoperationMuを保持する。
+func (s *Service) remoteGeneration(ctx context.Context) (bool, string, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	objectKey := ObjectKeyFor(binding.config)
 	etag, err := binding.client.Head(ctx, objectKey)
 	if err != nil {
 		if errors.Is(err, objectstore.ErrNotFound) {
 			// まだ誰も置いていない。受け取るものは無い。
-			return false, nil
+			return false, "", nil
 		}
-		return false, err
+		return false, "", err
 	}
 	current, err := s.readState()
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	// 別のオブジェクトの世代は、このオブジェクトについて何も語らない。
 	if current.Key != objectKey {
-		return true, nil
+		return true, etag, nil
 	}
-	return etag != current.ETag, nil
+	return etag != current.ETag, etag, nil
 }

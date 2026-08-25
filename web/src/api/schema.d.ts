@@ -340,6 +340,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/force-push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["forcePushSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/bucket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSyncBucketStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/key": {
         parameters: {
             query?: never;
@@ -382,22 +414,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["syncNow"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sync/rekey": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["rekeySnapshot"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1861,6 +1877,19 @@ export interface components {
             status: components["schemas"]["SyncStatus"];
             result: components["schemas"]["PushResult"];
         };
+        SyncBucketObject: {
+            key: string;
+            /** Format: int64 */
+            size: number;
+            lastModified?: string;
+        };
+        SyncBucketStatus: {
+            checkedAt: string;
+            localIsLive: boolean;
+            live?: components["schemas"]["SyncBucketObject"];
+            history: components["schemas"]["SyncBucketObject"][];
+            historyTruncated: boolean;
+        };
         SyncOperation: {
             kind: components["schemas"]["SyncOperationKind"];
             summary: components["schemas"]["SnapshotSummary"];
@@ -3318,6 +3347,56 @@ export interface operations {
             409: components["responses"]["Problem"];
         };
     };
+    forcePushSnapshot: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The confirmed remote snapshot was replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    getSyncBucketStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live object and dated history metadata read directly from the bucket */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncBucketStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
     setSyncKey: {
         parameters: {
             query?: never;
@@ -3394,35 +3473,6 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-        };
-    };
-    rekeySnapshot: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PassphraseRequest"];
-            };
-        };
-        responses: {
-            /** @description The remote snapshot now opens with the stored key */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SyncStatus"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
         };
     };

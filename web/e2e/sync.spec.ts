@@ -36,6 +36,30 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(status()) });
       return;
     }
+    if (path === "/api/v1/sync/bucket" && request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          checkedAt: "2026-08-25T02:10:00Z",
+          localIsLive: false,
+          historyTruncated: false,
+          live: {
+            key: "workspace.tar.gz.enc",
+            size: 1_900_000,
+            lastModified: "2026-08-25T02:09:00Z",
+          },
+          history: [
+            {
+              key: "snapshots/2026-08-25-020900-4f524947494e3031-aabbccddeeff0011-000001.tar.gz.enc",
+              size: 1_900_000,
+              lastModified: "2026-08-25T02:09:00Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
     if (path === "/api/v1/sync/push" && request.method() === "POST") {
       if (refusePush) {
         await route.fulfill({
@@ -83,6 +107,23 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
 
   await openApplication(page, installation);
   await openSection(page, "Sync");
+  await expect(page.getByText("Dated history · 1")).toBeVisible();
+  await expect(page.getByText("The remote generation differs")).toBeVisible();
+  await expect(page.getByText("Legacy snapshot migration")).toHaveCount(0);
+
+  const visualDirectory = process.env.SSHC_VISUAL_DIR;
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.2-sync-desktop.png`, fullPage: true });
+    await page.getByRole("heading", { name: "Bucket status" }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.2-sync-bucket-desktop.png`, fullPage: true });
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.getByRole("heading", { name: "Remote sync" }).scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.2-sync-mobile.png`, fullPage: true });
+    await page.getByRole("heading", { name: "Bucket status" }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.2-sync-bucket-mobile.png`, fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
+  }
   await page.getByRole("button", { name: "Push this workspace" }).click();
   await expect(page.getByRole("heading", { name: "This push" })).toBeVisible();
   await expect(page.getByText("S3 transfer 3.8 MB (2 objects, history + live)")).toBeVisible();
