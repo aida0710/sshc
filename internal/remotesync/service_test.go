@@ -1314,7 +1314,11 @@ func TestHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleGraph(t *testing.T)
 		t.Fatal(err)
 	}
 	started := make(chan struct{})
+	replacementStarted := make(chan struct{})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseHistory := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseHistory)
 	var calls int
 	var callsMu sync.Mutex
 	envelope.OnDerive = func(step func()) {
@@ -1325,6 +1329,8 @@ func TestHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleGraph(t *testing.T)
 		if call == 1 {
 			close(started)
 			<-release
+		} else if call == 2 {
+			close(replacementStarted)
 		}
 		step()
 	}
@@ -1343,14 +1349,14 @@ func TestHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleGraph(t *testing.T)
 		)
 	}()
 	select {
-	case err := <-rotationDone:
-		if err != nil {
-			t.Fatalf("ReplaceKey while History derives = %v", err)
-		}
+	case <-replacementStarted:
 	case <-time.After(2 * time.Second):
 		t.Fatal("History held operationMu while deriving and blocked ReplaceKey")
 	}
-	close(release)
+	releaseHistory()
+	if err := <-rotationDone; err != nil {
+		t.Fatalf("ReplaceKey while History derives = %v", err)
+	}
 	if err := <-historyDone; !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("History after key replacement = %v, want ErrRemoteMoved", err)
 	}
@@ -1368,7 +1374,11 @@ func TestDiffHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleDiff(t *testing
 	}
 	key := history.Revisions[0].Key
 	started := make(chan struct{})
+	replacementStarted := make(chan struct{})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseDiff := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseDiff)
 	var calls int
 	var callsMu sync.Mutex
 	envelope.OnDerive = func(step func()) {
@@ -1379,6 +1389,8 @@ func TestDiffHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleDiff(t *testing
 		if call == 1 {
 			close(started)
 			<-release
+		} else if call == 2 {
+			close(replacementStarted)
 		}
 		step()
 	}
@@ -1397,14 +1409,14 @@ func TestDiffHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleDiff(t *testing
 		)
 	}()
 	select {
-	case err := <-rotationDone:
-		if err != nil {
-			t.Fatalf("ReplaceKey while DiffHistory derives = %v", err)
-		}
+	case <-replacementStarted:
 	case <-time.After(2 * time.Second):
 		t.Fatal("DiffHistory held operationMu while deriving and blocked ReplaceKey")
 	}
-	close(release)
+	releaseDiff()
+	if err := <-rotationDone; err != nil {
+		t.Fatalf("ReplaceKey while DiffHistory derives = %v", err)
+	}
 	if err := <-diffDone; !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("DiffHistory after key replacement = %v, want ErrRemoteMoved", err)
 	}
