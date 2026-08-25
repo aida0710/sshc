@@ -92,6 +92,15 @@ func TestCrashSpoolCleanupRejectsSymlinksAndUntrustedDirectories(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// POSIX mode bits do not restrict a Windows DACL. Build the trusted
+	// fixtures through the same platform policy as production so this test
+	// verifies cleanup eligibility instead of relying on os.Mkdir's inherited
+	// permissions.
+	for _, candidate := range []string{trusted, young} {
+		if err := prepareDownloadSpoolDirectory(candidate); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.Chmod(wide, 0o755); err != nil {
 		t.Fatal(err)
 	}
