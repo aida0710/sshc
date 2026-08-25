@@ -11,5 +11,6 @@
     <string name="failure_already_started">Another sshc engine is already running on this device.</string>
     <string name="failure_listen">sshc could not take a local port on this device.</string>
     <string name="failure_stopped_early">The sshc engine stopped before it could open.</string>
+    <string name="failure_storage">sshc could not open its private storage. Restart the device, then try again.</string>
     <string name="failure_unknown">sshc could not start.</string>
 </resources>

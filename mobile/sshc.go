@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -30,6 +31,7 @@ var (
 
 	errListenFailed       = errors.New("the engine could not take a loopback port")
 	errEngineStoppedEarly = errors.New("the engine stopped before it announced an entrance")
+	errPrivateState       = errors.New("the Android private storage path is unavailable")
 )
 
 // running は、このプロセスで唯一の engine の状態を保持する。
@@ -53,11 +55,23 @@ func Start(home, cache string) (string, error) {
 	if running.cancel != nil {
 		return "", fail(KindAlreadyStarted, ErrAlreadyStarted)
 	}
+	resolvedHome, err := canonicalPrivateDirectory(home)
+	if err != nil {
+		return "", fail(KindStorageUnavailable, errors.Join(errPrivateState, err))
+	}
+	resolvedCache, err := canonicalPrivateDirectory(cache)
+	if err != nil {
+		return "", fail(KindStorageUnavailable, errors.Join(errPrivateState, err))
+	}
+	home, cache = resolvedHome, resolvedCache
 
 	// app.Run の前にロックを取得し、同じ状態ディレクトリの同時利用を防ぐ。
 	release, err := enginelock.Acquire(filepath.Join(app.HandoffDir(home), "engine.lock"))
 	if err != nil {
-		return "", fail(KindAlreadyStarted, err)
+		if errors.Is(err, enginelock.ErrRunning) {
+			return "", fail(KindAlreadyStarted, err)
+		}
+		return "", fail(KindStorageUnavailable, errors.Join(errPrivateState, err))
 	}
 
 	// gomobile bind は標準 log の出力先を logcat へ差し替える。slog をそこへ
@@ -98,6 +112,28 @@ func Start(home, cache string) (string, error) {
 	}
 }
 
+// canonicalPrivateDirectory は /data/user/0 など、Android framework が返す
+// private directory の別名だけを解決する。解決後のアプリ用rootより下では、
+// engine側のdescriptor-relative walkerが引き続きsymlinkを拒否する。
+func canonicalPrivateDirectory(path string) (string, error) {
+	cleaned := filepath.Clean(path)
+	if !filepath.IsAbs(cleaned) {
+		return "", errors.New("private storage path is not absolute")
+	}
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", errors.New("private storage path is not a directory")
+	}
+	return resolved, nil
+}
+
 // Stop は app.Run の終了を待ってから engine lock を解放する。
 func Stop() error {
 	running.Lock()
@@ -119,6 +155,7 @@ const (
 	KindAlreadyStarted
 	KindListenFailed
 	KindStoppedEarly
+	KindStorageUnavailable
 )
 
 // fail は running の mutex を保持した状態で失敗理由を記録する。
