@@ -199,7 +199,7 @@ func (a *Auto) send(ctx context.Context, key string) (AutoPhase, string) {
 	if !changed {
 		return AutoIdle, ""
 	}
-	if _, err := a.service.push(ctx, key, ""); err != nil {
+	if _, err := a.service.push(ctx, key, "", ""); err != nil {
 		switch {
 		case errors.Is(err, ErrPushRefused):
 			return AutoIdle, ""

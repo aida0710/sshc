@@ -73,7 +73,8 @@ func TestRevisionIsStableAndCarriesItsParent(t *testing.T) {
 	contents := map[string][]byte{"config": []byte("Host bastion\n")}
 	manifest := remotesync.Manifest{
 		CreatedAt: "2026-08-25T02:00:00Z", Origin: "opaque-installation-id",
-		Files: []remotesync.Entry{entry("config", string(contents["config"]), false)},
+		Message: "Add bastion connection",
+		Files:   []remotesync.Entry{entry("config", string(contents["config"]), false)},
 	}
 	parent := strings.Repeat("a", 64)
 	if err := remotesync.FinalizeManifest(&manifest, parent); err != nil {
@@ -87,7 +88,7 @@ func TestRevisionIsStableAndCarriesItsParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ParentRevision != parent || len(got.Revision) != 64 {
+	if got.ParentRevision != parent || got.Message != "Add bastion connection" || len(got.Revision) != 64 {
 		t.Fatalf("manifest = %#v", got)
 	}
 	want, err := remotesync.RevisionFor(got)
@@ -96,6 +97,26 @@ func TestRevisionIsStableAndCarriesItsParent(t *testing.T) {
 	}
 	if got.Revision != want {
 		t.Fatalf("revision = %q, want %q", got.Revision, want)
+	}
+}
+
+func TestCommitMessageParticipatesInRevisionAndRejectsInvalidText(t *testing.T) {
+	manifest := remotesync.Manifest{CreatedAt: "2026-08-25T02:00:00Z", Origin: "origin", Message: "first", Files: []remotesync.Entry{}}
+	first, err := remotesync.RevisionFor(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Message = "second"
+	second, err := remotesync.RevisionFor(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("a changed commit message kept the same revision")
+	}
+	manifest.Message = "two\nlines"
+	if err := remotesync.FinalizeManifest(&manifest, ""); !errors.Is(err, remotesync.ErrCommitMessage) {
+		t.Fatalf("FinalizeManifest = %v, want ErrCommitMessage", err)
 	}
 }
 
@@ -124,6 +145,27 @@ func TestReadDerivesAnIdentityForALegacySnapshot(t *testing.T) {
 	}
 	if len(manifest.Revision) != 64 || manifest.ParentRevision != "" {
 		t.Fatalf("legacy manifest = %#v", manifest)
+	}
+}
+
+func TestReadKeepsVersionThreeGraphCompatibility(t *testing.T) {
+	body := "Host old-client\n"
+	manifest := remotesync.Manifest{
+		SchemaVersion: 3, CreatedAt: "2026-08-24T02:00:00Z", Origin: "v3-installation",
+		Files: []remotesync.Entry{entry("config", body, false)},
+	}
+	revision, err := remotesync.RevisionFor(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Revision = revision
+	archive := handBuilt(t, map[string]string{"config": body}, manifest)
+	got, _, err := remotesync.Read(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SchemaVersion != 3 || got.Revision != revision || got.Message != "" {
+		t.Fatalf("v3 manifest = %#v", got)
 	}
 }
 
