@@ -5,6 +5,15 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "再実行する既存のrelease tag"
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 permissions:
   actions: read
@@ -18,14 +27,16 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
       - name: Require protected main ancestry and successful CI for this SHA
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_REPOSITORY: ${{ github.repository }}
-          RELEASE_SHA: ${{ github.sha }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: scripts/ci/verify-release-source.sh
+        run: |
+          RELEASE_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
+          export RELEASE_SHA
+          scripts/ci/verify-release-source.sh
 
   macos:
     name: macOS
@@ -34,6 +45,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
@@ -52,11 +65,11 @@ jobs:
 
       - name: Build the CLI for this OS
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ env.RELEASE_TAG }}
         run: make release-cli-current
       # ファイル名の検査ではアーキテクチャを保証できないため、成果物を実行する。
       - name: Smoke the built CLI
-        run: scripts/ci/cli-smoke.sh dist "${GITHUB_REF_NAME}"
+        run: scripts/ci/cli-smoke.sh dist "$RELEASE_TAG"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
@@ -72,6 +85,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
@@ -90,11 +105,11 @@ jobs:
 
       - name: Build the CLI for this OS
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ env.RELEASE_TAG }}
         run: make release-cli-current
       # ファイル名の検査ではアーキテクチャを保証できないため、成果物を実行する。
       - name: Smoke the built CLI
-        run: scripts/ci/cli-smoke.sh dist "${GITHUB_REF_NAME}"
+        run: scripts/ci/cli-smoke.sh dist "$RELEASE_TAG"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
@@ -110,6 +125,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
@@ -135,11 +152,11 @@ jobs:
 
       - name: Build the CLI for this OS
         env:
-          SSHC_NATIVE_VERSION: ${{ github.ref_name }}
+          SSHC_NATIVE_VERSION: ${{ env.RELEASE_TAG }}
         run: go run ./internal/nativebuild/cmd/nativebuild release-current --arches "amd64 arm64" --output-dir dist
       # Windows 用成果物を実行して、アーキテクチャとバージョンを検証する。
       - name: Smoke the built CLI
-        run: ./scripts/ci/cli-smoke.ps1 -DistDir dist -ExpectedVersion "${{ github.ref_name }}"
+        run: ./scripts/ci/cli-smoke.ps1 -DistDir dist -ExpectedVersion "$env:RELEASE_TAG"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
@@ -155,6 +172,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
@@ -194,7 +213,7 @@ jobs:
         run: |
           # APK と組み込み engine に同じバージョンを設定する。
           make android-bind ANDROID_NDK_HOME="$SSHC_ANDROID_NDK_HOME" \
-            ANDROID_VERSION="${GITHUB_REF_NAME#v}"
+            ANDROID_VERSION="${RELEASE_TAG#v}"
 
       # 署名鍵は runner の一時ディレクトリに置き、成果物へ混入させない。
       - name: assembleRelease
@@ -210,7 +229,7 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$keystore"
           ANDROID_KEYSTORE_PATH="$keystore" \
             ./gradlew --no-daemon assembleRelease \
-              -PsshcVersionName="${GITHUB_REF_NAME#v}"
+              -PsshcVersionName="${RELEASE_TAG#v}"
           rm -f "$keystore"
 
       # Gradle の終了状態だけでなく、apksigner で成果物の署名を検証する。
@@ -223,17 +242,16 @@ jobs:
           printf '%s\n' "$verification"
           expected=$(tr -d '[:space:]' < .github/android-release-signer.sha256 | tr '[:lower:]' '[:upper:]')
           actual=$(printf '%s\n' "$verification" |
-            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
-            tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
-          count=$(printf '%s\n' "$verification" |
-            grep -c '^Signer #[0-9][0-9]* certificate SHA-256 digest: ' || true)
+            sed -n -E 's/^(Signer #[0-9]+|V[0-9]+ Signer): certificate SHA-256 digest: ([0-9a-fA-F]+)$/\2/p' |
+            tr '[:lower:]' '[:upper:]' | sort -u)
+          count=$(printf '%s\n' "$actual" | sed '/^$/d' | wc -l | tr -d ' ')
           case "$expected" in
             ''|*[!0-9A-F]*) echo "the committed Android signer fingerprint is invalid" >&2; exit 1 ;;
           esac
           [ "${#expected}" -eq 64 ] || { echo "the committed Android signer fingerprint must be SHA-256" >&2; exit 1; }
           [ "$count" -eq 1 ] || { echo "the APK must have exactly one signer" >&2; exit 1; }
           [ "$actual" = "$expected" ] || { echo "the APK was signed by an unexpected certificate" >&2; exit 1; }
-          cp "$apk" "sshc-android-${GITHUB_REF_NAME}.apk"
+          cp "$apk" "sshc-android-${RELEASE_TAG}.apk"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
@@ -257,6 +275,8 @@ jobs:
     steps:
       # version-controlled なリリース本文を取得するため checkout する。
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           path: incoming
@@ -274,7 +294,7 @@ jobs:
           sshc-linux-arm64
           sshc-windows-amd64.exe
           sshc-windows-arm64.exe
-          sshc-android-${GITHUB_REF_NAME}.apk
+          sshc-android-${RELEASE_TAG}.apk
           "
           for name in $expected_assets; do
             matches=$(find incoming -type f -name "$name" -print)
@@ -308,7 +328,6 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
           GH_REPO: ${{ github.repository }}
         run: |
           notes_file="docs/releases/$RELEASE_TAG.md"
@@ -361,11 +380,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Update the tap
         env:
           TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
-          RELEASE_TAG: ${{ github.ref_name }}
           SOURCE_REPO: ${{ github.repository }}
           TAP_REPO: aida0710/homebrew-tap
         run: |
