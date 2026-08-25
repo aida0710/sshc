@@ -13,6 +13,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   let lastOperation: Record<string, unknown> | undefined;
   let refusePush = false;
   let pushedMessage = "";
+  let localChanges = true;
   const status = () => ({
     configured: true,
     keyConfigured: true,
@@ -125,6 +126,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
         return;
       }
       pushedMessage = request.postDataJSON().message ?? "";
+      localChanges = false;
       const result = { summary, objectCount: 2, uploadedBytes: 3_800_000, completedAt: "2026-08-12T01:30:03Z" };
       lastOperation = { kind: "push", ...result };
       await route.fulfill({
@@ -138,7 +140,11 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ message: "Update config", added: 1, modified: 1, removed: 0 }),
+        body: JSON.stringify(
+          localChanges
+            ? { message: "Update config", added: 1, modified: 1, removed: 0 }
+            : { message: "Record current workspace", added: 0, modified: 0, removed: 0 },
+        ),
       });
       return;
     }
@@ -180,21 +186,27 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.0-sync-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-desktop.png`, fullPage: true });
     await page.getByRole("heading", { name: "Bucket status" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.0-sync-history-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-history-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 360, height: 800 });
     await page.getByRole("heading", { name: "Remote sync" }).scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.0-sync-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-mobile.png`, fullPage: true });
     await page.getByRole("heading", { name: "Encrypted revision history" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.0-sync-history-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-history-mobile.png`, fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
   }
   await page.getByRole("button", { name: "Push this workspace" }).click();
   expect(pushedMessage).toBe("Update config");
   await expect(page.getByRole("heading", { name: "This push" })).toBeVisible();
   await expect(page.getByText("S3 transfer 3.8 MB (2 objects, history + live)")).toBeVisible();
+  await expect(page.getByText("There are no local changes to push.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Push this workspace" })).toBeDisabled();
+  if (visualDirectory !== undefined) {
+    await page.getByLabel("Commit message").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-no-changes-desktop.png`, fullPage: true });
+  }
 
   await page.getByRole("button", { name: "Check for changes" }).click();
   await expect(page.getByRole("heading", { name: "Pull preview" })).toBeVisible();
@@ -203,11 +215,12 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await expect(page.getByRole("heading", { name: "Apply result" })).toBeVisible();
   await expect(page.getByText("Downloaded again for apply: 1.9 MB")).toBeVisible();
 
+  localChanges = true;
   await page.reload();
   await expect(page.getByRole("heading", { name: "Previous success" })).toBeVisible();
   refusePush = true;
   await page.getByRole("button", { name: "Push this workspace" }).click();
   await expect(page.getByRole("alert")).toContainText("update was cancelled");
-  await expect(page.getByRole("alert")).toContainText("dated history copy");
+  await expect(page.getByRole("alert")).toContainText("cancelled before retrying");
   await expect(page.getByRole("heading", { name: "Previous success" })).toBeVisible();
 });

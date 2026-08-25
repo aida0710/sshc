@@ -372,6 +372,23 @@ func (c Client) Put(ctx context.Context, key string, body []byte, ifMatch, ifNon
 	return aws.ToString(output.ETag), nil
 }
 
+// Delete removes one exact object. S3 treats an already-missing key as a
+// successful deletion, which makes this suitable for cleaning up a history
+// candidate after its live compare-and-swap loses a race.
+func (c Client) Delete(ctx context.Context, key string) error {
+	api, err := c.api()
+	if err != nil {
+		return err
+	}
+	_, err = api.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(c.Bucket), Key: aws.String(objectKey(key)),
+	})
+	if err != nil {
+		return classify(err)
+	}
+	return nil
+}
+
 // classify は、ストアの結果をこのアプリケーションの用語へ畳む。
 //
 // レスポンスを伴わないエラー（接続の拒否、名前解決の失敗、タイムアウト）は

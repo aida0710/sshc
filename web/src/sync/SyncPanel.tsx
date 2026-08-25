@@ -66,6 +66,7 @@ const refusals: Record<string, MessageKey> = {
   sync_failed: "sync.unreachable",
   endpoint_must_have_no_path: "sync.endpointPath",
   sync_remote_moved: "sync.remoteMoved",
+  sync_nothing_to_push: "sync.noLocalChanges",
   sync_commit_message_invalid: "sync.commitMessageInvalid",
 };
 
@@ -284,6 +285,8 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   }
 
   const conflicted = (preview?.conflicts ?? []).length > 0;
+  const pushChangeCount =
+    pushDraft === null ? null : pushDraft.added + pushDraft.modified + pushDraft.removed;
   const selectedHistory =
     historyState.phase === "ready" && selectedHistoryKey !== null
       ? historyState.value.revisions.find((revision) => revision.key === selectedHistoryKey)
@@ -515,7 +518,13 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               </label>
               <p role="status" className={hintText}>
                 {status.auto.phase === "blocked"
-                  ? t(status.auto.detail === "conflicts" ? "sync.autoBlockedConflicts" : "sync.autoBlockedRemovals")
+                  ? t(
+                    status.auto.detail === "conflicts"
+                      ? "sync.autoBlockedConflicts"
+                      : status.auto.detail === "remote_moved"
+                        ? "sync.autoBlockedRemoteMoved"
+                        : "sync.autoBlockedRemovals",
+                  )
                   : status.auto.phase === "failed"
                     ? t("sync.autoFailedLast")
                     : status.auto.at === undefined || !status.auto.enabled
@@ -559,7 +568,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               <span id="sync-commit-message-hint" className={hintText}>
                 {pushDraft === null
                   ? t("sync.commitMessageHint")
-                  : t("sync.commitMessageChanges", {
+                  : pushChangeCount === 0
+                    ? t("sync.noLocalChanges")
+                    : t("sync.commitMessageChanges", {
                       added: pushDraft.added,
                       modified: pushDraft.modified,
                       removed: pushDraft.removed,
@@ -569,7 +580,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             <div className="flex flex-wrap gap-2 border-t border-line pt-3">
               <Button
                 kind="primary"
-                disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull" || pushMessage.trim() === ""}
+                disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull" || pushMessage.trim() === "" || pushChangeCount === null || pushChangeCount === 0}
                 onClick={() =>
                   void run(
                     () => api.pushSnapshot(pushMessage.trim()),

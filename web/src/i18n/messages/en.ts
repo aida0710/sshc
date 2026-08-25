@@ -671,6 +671,8 @@ export const en = {
     "Automatic sync stopped because the same files changed on this machine and another machine. Select Check for changes to compare them.",
   "sync.autoBlockedRemovals":
     "Automatic sync stopped because applying the snapshot would remove files from this machine. Select Check for changes to review them.",
+  "sync.autoBlockedRemoteMoved":
+    "Automatic sync stopped before uploading because another machine changed the remote snapshot. Download those changes or explicitly replace the confirmed remote snapshot.",
   "sync.autoFailedLast": "The previous check could not reach the bucket. Automatic sync will try again.",
   "sync.autoFailed": "The setting could not be saved.",
   "sync.autoNow": "Sync now",
@@ -730,8 +732,9 @@ export const en = {
   "sync.push": "Push this workspace",
   "sync.pushed": "Pushed.",
   "sync.pushFailed": "The snapshot could not be uploaded. If another machine uploaded changes after this machine's last sync, download those changes first.",
+  "sync.noLocalChanges": "There are no local changes to push.",
   "sync.remoteMoved":
-    "Another machine changed the current snapshot, so the update was cancelled. A dated history copy from this attempt may remain. Download the other machine's changes before trying again.",
+    "Another machine changed the current snapshot, so the update was cancelled before retrying. Download the other machine's changes or explicitly replace the confirmed remote snapshot.",
   "sync.preview": "Check for changes",
   "sync.pullFailed": "The snapshot could not be read.",
   "sync.alreadyMatches": "This workspace already matches the snapshot.",

@@ -104,6 +104,10 @@ var (
 	// 報告する。compare-and-swap の失敗であり、それこそが自動 push を安全にしている
 	// 性質である。何も上書きされない。
 	ErrRemoteMoved = errors.New("another machine has pushed since this one last synced")
+	// ErrNothingToPush reports a manual push whose file set is already the
+	// current local base. Re-encrypting identical data would only create a
+	// duplicate history object.
+	ErrNothingToPush = errors.New("the workspace has no changes to push")
 	// ErrNoSnapshot は、空のバケットを報告する。
 	ErrNoSnapshot = errors.New("the bucket holds no snapshot yet")
 	// ErrConflicts は、判断なしには pull を適用できないことを報告する。
@@ -224,6 +228,10 @@ type state struct {
 	// 拒否され、そこで勧められた pull は、pull すべきものを何ひとつ見つけられな
 	// かった。
 	Key string `json:"key"`
+	// Target は Endpoint、Bucket、Region、Key から作る同期先の識別子。同じ Key を
+	// 使う別バケットへ設定を変えたとき、以前の ETag と Base を流用しないために持つ。
+	// 資格情報と direction は同期先そのものではないため含めない。
+	Target string `json:"target,omitempty"`
 	// Base は、そのスナップショットのマニフェスト。あとの pull に「別のマシンで削除
 	// された」と「前回の同期以降ここで作られた」の違いを教えるのが、これで
 	// ある。
@@ -251,6 +259,16 @@ type remoteBinding struct {
 	config Config
 	creds  objectstore.Credentials
 	client *objectstore.Client
+}
+
+func targetID(config Config) string {
+	return Digest([]byte(strings.Join([]string{
+		config.Endpoint, config.Bucket, config.Region, ObjectKeyFor(config),
+	}, "\x00")))
+}
+
+func stateMatchesTarget(current state, config Config) bool {
+	return current.Target != "" && current.Target == targetID(config) && current.Key == ObjectKeyFor(config)
 }
 
 // Service は、一度にひとつの push か pull を行う。
@@ -562,10 +580,14 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 	}
 	manifest.Origin = current.Origin
 	objectKey := ObjectKeyFor(binding.config)
-	if current.Key != objectKey {
+	sameTarget := stateMatchesTarget(current, binding.config)
+	if !sameTarget {
 		// 別のremote headに保存されたbaseを、新しいbucketの親として記録しない。
 		current.ETag = ""
 		current.Base = nil
+	}
+	if forcedETag == "" && sameTarget && current.Base != nil && !manifestChanged(current.Base, manifest) {
+		return PushResult{}, ErrNothingToPush
 	}
 	parentRevision := ""
 	if current.Base != nil {
@@ -605,10 +627,8 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 			ifNoneMatch = "*"
 		}
 	}
-	// 日付付きのコピーが先。それが失敗すれば push は何も中途半端に残さず失敗する。
-	// ライブの書き込みがそのあと競争に負けても、残るのはこのマシンがその時刻に確かに
-	// 作ったスナップショットであり、それはそのフォルダが保持していると述べている
-	// ものそのものである。
+	// 日付付きの候補が先。それが失敗すればライブは更新しない。ライブの条件付き
+	// 書き込みが競争に負けたことを確定できた場合は、この候補だけを削除する。
 	s.historySeq++
 	dated, err := snapshotKeyFor(binding.config, manifest.CreatedAt, current.Origin, sealed, s.historySeq)
 	if err != nil {
@@ -623,6 +643,9 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 	etag, err := client.Put(ctx, objectKey, sealed, ifMatch, ifNoneMatch)
 	if err != nil {
 		if errors.Is(err, objectstore.ErrPreconditionFailed) {
+			if cleanupErr := client.Delete(ctx, dated); cleanupErr != nil {
+				return result, errors.Join(ErrRemoteMoved, fmt.Errorf("remove the rejected history candidate: %w", cleanupErr))
+			}
 			return result, ErrRemoteMoved
 		}
 		return result, err
@@ -636,7 +659,7 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 		CompletedAt: result.CompletedAt,
 	}
 	if err := s.writeState(state{
-		ETag: etag, Key: objectKey, Base: &manifest, Origin: current.Origin,
+		ETag: etag, Key: objectKey, Target: targetID(binding.config), Base: &manifest, Origin: current.Origin,
 		LastOperation: &operation,
 	}); err != nil {
 		return result, err
@@ -661,7 +684,7 @@ func (s *Service) PushDraft() (PushDraft, error) {
 		return PushDraft{}, err
 	}
 	base := current.Base
-	if current.Key != ObjectKeyFor(binding.config) {
+	if !stateMatchesTarget(current, binding.config) {
 		base = nil
 	}
 	return draftFor(base, manifest), nil
@@ -709,7 +732,7 @@ func (s *Service) bucketStatus(ctx context.Context) (BucketView, error) {
 		if stateErr != nil {
 			return BucketView{}, stateErr
 		}
-		view.LocalIsLive = current.Key == objectKey && current.ETag != "" && current.ETag == live.ETag
+		view.LocalIsLive = stateMatchesTarget(current, binding.config) && current.ETag != "" && current.ETag == live.ETag
 	}
 	history, truncated, err := binding.client.ListNewest(ctx, joinKey(binding.config.Path, SnapshotPrefix), maxBucketHistoryObjects)
 	if err != nil {
@@ -794,6 +817,7 @@ type PullResult struct {
 	ETag            string
 	Origin          string
 	objectKey       string
+	target          string
 }
 
 // Pull はスナップショットを取得し、それを適用すると何が変わるかを算出する。
@@ -860,12 +884,16 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 	if err != nil {
 		return PullResult{}, err
 	}
-	local, err := s.localDigests(manifest, current.Base)
+	base := current.Base
+	if !stateMatchesTarget(current, binding.config) {
+		base = nil
+	}
+	local, err := s.localDigests(manifest, base)
 	if err != nil {
 		return PullResult{}, err
 	}
 
-	request, conflicts, err := Plan(s.workspace.Root(), current.Base, local, manifest, contents, resolve)
+	request, conflicts, err := Plan(s.workspace.Root(), base, local, manifest, contents, resolve)
 	if exchangeErr := s.exchangeVault(&request); exchangeErr != nil {
 		return PullResult{}, exchangeErr
 	}
@@ -876,7 +904,7 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 		Request: request, Conflicts: conflicts, Manifest: manifest,
 		Summary:         snapshotSummary(manifest, contents, len(object.Body)),
 		DownloadedBytes: int64(len(object.Body)), CompletedAt: s.now(),
-		ETag: stateETag, Origin: manifest.Origin, objectKey: objectKey,
+		ETag: stateETag, Origin: manifest.Origin, objectKey: objectKey, target: targetID(binding.config),
 	}, err
 }
 
@@ -937,7 +965,7 @@ func (s *Service) apply(result PullResult) error {
 		CompletedAt: s.now(),
 	}
 	return s.writeState(state{
-		ETag: result.ETag, Key: result.objectKey, Base: &manifest, Origin: origin,
+		ETag: result.ETag, Key: result.objectKey, Target: result.target, Base: &manifest, Origin: origin,
 		LastOperation: &operation,
 	})
 }
@@ -1070,6 +1098,10 @@ func (s *Service) SyncState() SyncStateView {
 	if err != nil || current.ETag == "" || current.Base == nil {
 		return SyncStateView{}
 	}
+	binding, err := s.configuredBinding()
+	if err != nil || !stateMatchesTarget(current, binding.config) {
+		return SyncStateView{}
+	}
 	view := SyncStateView{
 		Synced: true, At: current.Base.CreatedAt, Origin: current.Base.Origin,
 		Files: len(current.Base.Files),
@@ -1150,19 +1182,14 @@ func (s *Service) diverged() (bool, error) {
 		// 一度も同期していない。載せるものがあるなら、それは違いである。
 		return len(manifest.Files) > 0, nil
 	}
-	if len(manifest.Files) != len(current.Base.Files) {
-		return true, nil
+	binding, err := s.configuredBinding()
+	if err != nil {
+		return false, err
 	}
-	base := make(map[string]string, len(current.Base.Files))
-	for _, item := range current.Base.Files {
-		base[item.Path] = item.SHA256
+	if !stateMatchesTarget(current, binding.config) {
+		return len(manifest.Files) > 0, nil
 	}
-	for _, item := range manifest.Files {
-		if base[item.Path] != item.SHA256 {
-			return true, nil
-		}
-	}
-	return false, nil
+	return manifestChanged(current.Base, manifest), nil
 }
 
 // remoteGeneration はHEADでETagだけを確認し、ライブオブジェクトが最後に同期した
@@ -1187,7 +1214,7 @@ func (s *Service) remoteGeneration(ctx context.Context) (bool, string, error) {
 		return false, "", err
 	}
 	// 別のオブジェクトの世代は、このオブジェクトについて何も語らない。
-	if current.Key != objectKey {
+	if !stateMatchesTarget(current, binding.config) {
 		return true, etag, nil
 	}
 	return etag != current.ETag, etag, nil

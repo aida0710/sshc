@@ -297,6 +297,15 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 	if reloadedBody.LastOperation == nil || reloadedBody.LastOperation.Kind != remotesync.OperationPush {
 		t.Errorf("reloaded status lost the persisted operation: %s", reloaded.Body.String())
 	}
+
+	unchanged := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", `{"message":"Duplicate edge hosts"}`)
+	if unchanged.Code != http.StatusConflict || !strings.Contains(unchanged.Body.String(), `"code":"sync_nothing_to_push"`) {
+		t.Fatalf("unchanged push = %d: %s", unchanged.Code, unchanged.Body.String())
+	}
+	afterCount, _ := bucket.uploadedBytes()
+	if afterCount != putCount {
+		t.Fatalf("unchanged push wrote %d more objects", afterCount-putCount)
+	}
 }
 
 func TestPushRejectsRequestsFromOlderClients(t *testing.T) {
