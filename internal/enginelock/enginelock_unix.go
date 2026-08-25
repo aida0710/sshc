@@ -11,6 +11,8 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
+
+	"sshc/internal/platform/nativepath"
 )
 
 var afterLockDirectoryOpen func()
@@ -62,6 +64,10 @@ func openOrCreateLockDirectory(path string) (*os.File, error) {
 	cleaned := filepath.Clean(path)
 	if !filepath.IsAbs(cleaned) {
 		return nil, os.ErrInvalid
+	}
+	cleaned, err := nativepath.ResolveRootAlias(cleaned)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrUnsafeStateDirectory, path, err)
 	}
 	current, err := os.Open(string(filepath.Separator))
 	if err != nil {
