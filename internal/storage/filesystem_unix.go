@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"golang.org/x/sys/unix"
+
+	"sshc/internal/platform/nativepath"
 )
 
 const (
@@ -32,6 +34,10 @@ func openNoFollow(path string, directory bool) (*os.File, error) {
 	cleaned := filepath.Clean(path)
 	if !filepath.IsAbs(cleaned) {
 		return nil, os.ErrInvalid
+	}
+	cleaned, err := nativepath.ResolveRootAlias(cleaned)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrSymlinkPath, path, err)
 	}
 
 	// A final-component O_NOFOLLOW is insufficient: an attacker can replace any
@@ -78,6 +84,10 @@ func makePrivateDirectories(path string, permission fs.FileMode) error {
 	cleaned := filepath.Clean(path)
 	if !filepath.IsAbs(cleaned) {
 		return os.ErrInvalid
+	}
+	cleaned, err := nativepath.ResolveRootAlias(cleaned)
+	if err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrSymlinkPath, path, err)
 	}
 	current, err := os.Open(string(filepath.Separator))
 	if err != nil {
