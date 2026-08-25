@@ -1597,6 +1597,22 @@ type StorePasswordRequest struct {
 	Password string `json:"password"`
 }
 
+// SyncBucketObject defines model for SyncBucketObject.
+type SyncBucketObject struct {
+	Key          string  `json:"key"`
+	LastModified *string `json:"lastModified,omitempty"`
+	Size         int64   `json:"size"`
+}
+
+// SyncBucketStatus defines model for SyncBucketStatus.
+type SyncBucketStatus struct {
+	CheckedAt        string             `json:"checkedAt"`
+	History          []SyncBucketObject `json:"history"`
+	HistoryTruncated bool               `json:"historyTruncated"`
+	Live             *SyncBucketObject  `json:"live,omitempty"`
+	LocalIsLive      bool               `json:"localIsLive"`
+}
+
 // SyncConflict defines model for SyncConflict.
 type SyncConflict struct {
 	ChangedHere  bool   `json:"changedHere"`
@@ -1997,6 +2013,11 @@ type ExecuteSnippetParams struct {
 	XSSHCAction string `json:"X-SSHC-Action"`
 }
 
+// ForcePushSnapshotParams defines parameters for ForcePushSnapshot.
+type ForcePushSnapshotParams struct {
+	XSSHCAction string `json:"X-SSHC-Action"`
+}
+
 // AddTerminalBackgroundParams defines parameters for AddTerminalBackground.
 type AddTerminalBackgroundParams struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty"`
@@ -2144,9 +2165,6 @@ type SetSyncKeyJSONRequestBody = SyncKeyRequest
 
 // PullSnapshotJSONRequestBody defines body for PullSnapshot for application/json ContentType.
 type PullSnapshotJSONRequestBody = PullRequest
-
-// RekeySnapshotJSONRequestBody defines body for RekeySnapshot for application/json ContentType.
-type RekeySnapshotJSONRequestBody = PassphraseRequest
 
 // ConfigureSyncJSONRequestBody defines body for ConfigureSync for application/json ContentType.
 type ConfigureSyncJSONRequestBody = SyncSettingsRequest

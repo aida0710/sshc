@@ -34,7 +34,8 @@ const ManifestName = "manifest.json"
 // SchemaVersion は、マニフェスト文書のバージョン。
 //
 // バージョン 2 では vault の復号済み文書を同期し、受信側で再暗号化する。
-// バージョン 1 の読込互換性は旧形式の移行に必要なため維持する。
+// バージョン 1 の読込互換性は、すでに作成済みのスナップショットを引き続き
+// 読み取れるよう維持する。専用の再暗号化操作は提供しない。
 const SchemaVersion = 2
 
 // MaxSnapshotBytes は、Read が展開する量に上限を設ける。スナップショットは ~/.ssh
@@ -119,15 +120,22 @@ func Build(manifest Manifest, contents map[string][]byte) ([]byte, error) {
 			return nil, ErrManifestMismatch
 		}
 	}
+	document, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, err
+	}
+	total := int64(len(document))
+	for _, entry := range manifest.Files {
+		total += int64(len(contents[entry.Path]))
+		if total > MaxSnapshotBytes {
+			return nil, ErrSnapshotTooLarge
+		}
+	}
 
 	var compressed bytes.Buffer
 	zip := gzip.NewWriter(&compressed)
 	archive := tar.NewWriter(zip)
 
-	document, err := json.Marshal(manifest)
-	if err != nil {
-		return nil, err
-	}
 	if err := writeEntry(archive, ManifestName, document, 0o600); err != nil {
 		return nil, err
 	}

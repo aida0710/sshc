@@ -11,6 +11,7 @@ package objectstore
 
 import (
 	"bytes"
+	"container/heap"
 	"context"
 	"errors"
 	"io"
@@ -72,6 +73,15 @@ type Object struct {
 	// 比較対象であり、このクライアントがリモートについて覚えている唯一のもので
 	// ある。
 	ETag string
+}
+
+// ObjectInfo is metadata returned by HEAD and LIST. It never contains object
+// contents, credentials, or a presigned URL.
+type ObjectInfo struct {
+	Key          string
+	ETag         string
+	Size         int64
+	LastModified time.Time
 }
 
 // Client は、このアプリケーションで使用する S3 API を呼び出す。
@@ -242,17 +252,86 @@ func (c Client) Get(ctx context.Context, key string) (Object, error) {
 
 // Head は、本文なしで ETag を返す。
 func (c Client) Head(ctx context.Context, key string) (string, error) {
+	info, err := c.Stat(ctx, key)
+	return info.ETag, err
+}
+
+// Stat returns metadata for one object without downloading its body.
+func (c Client) Stat(ctx context.Context, key string) (ObjectInfo, error) {
 	api, err := c.api()
 	if err != nil {
-		return "", err
+		return ObjectInfo{}, err
 	}
 	output, err := api.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(c.Bucket), Key: aws.String(objectKey(key)),
 	})
 	if err != nil {
-		return "", classify(err)
+		return ObjectInfo{}, classify(err)
 	}
-	return aws.ToString(output.ETag), nil
+	return ObjectInfo{
+		Key: objectKey(key), ETag: aws.ToString(output.ETag),
+		Size: aws.ToInt64(output.ContentLength), LastModified: aws.ToTime(output.LastModified),
+	}, nil
+}
+
+// ListNewest scans every page below prefix and returns at most the newest limit
+// entries. S3 only lists keys in ascending lexical order, so stopping after
+// limit entries would return the oldest dated snapshots. A bounded min-heap
+// inspects the complete bucket history without allocating for every object.
+func (c Client) ListNewest(ctx context.Context, prefix string, limit int) ([]ObjectInfo, bool, error) {
+	api, err := c.api()
+	if err != nil {
+		return nil, false, err
+	}
+	if limit <= 0 {
+		return []ObjectInfo{}, false, nil
+	}
+	paginator := s3.NewListObjectsV2Paginator(api, &s3.ListObjectsV2Input{
+		Bucket: aws.String(c.Bucket), Prefix: aws.String(objectKey(prefix)), MaxKeys: aws.Int32(1000),
+	})
+	listed := objectInfoHeap{}
+	heap.Init(&listed)
+	total := 0
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, false, classify(err)
+		}
+		for _, item := range page.Contents {
+			total++
+			info := ObjectInfo{
+				Key: aws.ToString(item.Key), ETag: aws.ToString(item.ETag),
+				Size: aws.ToInt64(item.Size), LastModified: aws.ToTime(item.LastModified),
+			}
+			if listed.Len() < limit {
+				heap.Push(&listed, info)
+			} else if objectInfoEarlier(listed[0], info) {
+				listed[0] = info
+				heap.Fix(&listed, 0)
+			}
+		}
+	}
+	return []ObjectInfo(listed), total > len(listed), nil
+}
+
+type objectInfoHeap []ObjectInfo
+
+func (h objectInfoHeap) Len() int           { return len(h) }
+func (h objectInfoHeap) Less(i, j int) bool { return objectInfoEarlier(h[i], h[j]) }
+func (h objectInfoHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *objectInfoHeap) Push(value any)    { *h = append(*h, value.(ObjectInfo)) }
+func (h *objectInfoHeap) Pop() any {
+	old := *h
+	last := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return last
+}
+
+func objectInfoEarlier(left, right ObjectInfo) bool {
+	if left.LastModified.Equal(right.LastModified) {
+		return left.Key < right.Key
+	}
+	return left.LastModified.Before(right.LastModified)
 }
 
 // Put はオブジェクトを書き、新しい ETag を返す。

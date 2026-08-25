@@ -28,6 +28,7 @@ const (
 	ActionSFTPDelete        = "sftp.delete"
 	ActionSFTPChmod         = "sftp.chmod"
 	ActionSnippetExecute    = "snippet.execute"
+	ActionSyncForcePush     = "sync.force_push"
 )
 
 var (
@@ -49,6 +50,7 @@ var knownActionKinds = map[string]bool{
 	ActionSFTPDelete:        true,
 	ActionSFTPChmod:         true,
 	ActionSnippetExecute:    true,
+	ActionSyncForcePush:     true,
 }
 
 // KnownActionKind は、kind がこのアプリケーションのいずれかの確認対象となる操作か

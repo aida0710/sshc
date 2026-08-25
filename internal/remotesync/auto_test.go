@@ -143,6 +143,38 @@ func TestAutoStopsOnAConflict(t *testing.T) {
 	if got := second.read(t, "config"); got != "Host something else\n" {
 		t.Fatalf("the local file was overwritten: %q", got)
 	}
+
+	// 同じremote世代についてはHEADだけで止まり、snapshotのdownloadとKDFを
+	// 1分ごとに繰り返さない。
+	downloads := bucket.downloads()
+	view = once(t, auto)
+	if view.Phase != remotesync.AutoBlocked || view.Detail != "conflicts" {
+		t.Fatalf("second blocked view = %+v", view)
+	}
+	if got := bucket.downloads(); got != downloads {
+		t.Fatalf("blocked cycle downloaded again: %d then %d", downloads, got)
+	}
+}
+
+func TestAutoAcknowledgesAnUnchangedRemoteGeneration(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	auto := autoFor(t, consumer, true)
+
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("first cycle = %+v", view)
+	}
+	downloads := bucket.downloads()
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("second cycle = %+v", view)
+	}
+	if got := bucket.downloads(); got != downloads {
+		t.Fatalf("the acknowledged generation downloaded again: %d then %d", downloads, got)
+	}
 }
 
 // 巡回は、渡された枠の中で走る。枠がその外へ漏れれば、保管庫は開けっぱなしに

@@ -118,6 +118,74 @@ func TestGetMapsNotFoundAndReturnsTheETag(t *testing.T) {
 	}
 }
 
+func TestStatAndListReturnMetadataWithoutDownloadingBodies(t *testing.T) {
+	modified := "2026-08-25T01:02:03.000Z"
+	client, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodHead:
+			w.Header().Set("ETag", `"live"`)
+			w.Header().Set("Content-Length", "42")
+			w.Header().Set("Last-Modified", "Tue, 25 Aug 2026 01:02:03 GMT")
+		case r.Method == http.MethodGet && r.URL.Query().Get("list-type") == "2":
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?>`+
+				`<ListBucketResult><Name>sshc</Name><Prefix>snapshots/</Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated>`+
+				`<Contents><Key>snapshots/2026-08-25.tar.gz.enc</Key><LastModified>`+modified+`</LastModified><ETag>&quot;history&quot;</ETag><Size>41</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>`)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	})
+
+	info, err := client.Stat(context.Background(), "workspace.tar.gz.enc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.ETag != `"live"` || info.Size != 42 || info.LastModified.IsZero() {
+		t.Fatalf("Stat = %#v", info)
+	}
+	listed, truncated, err := client.ListNewest(context.Background(), "snapshots/", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated {
+		t.Fatal("List unexpectedly reported truncation")
+	}
+	if len(listed) != 1 || listed[0].Key != "snapshots/2026-08-25.tar.gz.enc" || listed[0].Size != 41 {
+		t.Fatalf("List = %#v", listed)
+	}
+}
+
+func TestListNewestScansPastOldEntriesWithBoundedResults(t *testing.T) {
+	client, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Query().Get("list-type") != "2" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?>`+
+			`<ListBucketResult><Name>sshc</Name><Prefix>snapshots/</Prefix><KeyCount>3</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated>`+
+			`<Contents><Key>snapshots/a</Key><LastModified>2026-08-23T01:00:00.000Z</LastModified><ETag>&quot;a&quot;</ETag><Size>1</Size></Contents>`+
+			`<Contents><Key>snapshots/b</Key><LastModified>2026-08-24T01:00:00.000Z</LastModified><ETag>&quot;b&quot;</ETag><Size>2</Size></Contents>`+
+			`<Contents><Key>snapshots/c</Key><LastModified>2026-08-25T01:00:00.000Z</LastModified><ETag>&quot;c&quot;</ETag><Size>3</Size></Contents>`+
+			`</ListBucketResult>`)
+	})
+
+	listed, truncated, err := client.ListNewest(context.Background(), "snapshots/", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !truncated || len(listed) != 2 {
+		t.Fatalf("ListNewest = %#v, truncated %v", listed, truncated)
+	}
+	keys := map[string]bool{}
+	for _, item := range listed {
+		keys[item.Key] = true
+	}
+	if !keys["snapshots/b"] || !keys["snapshots/c"] || keys["snapshots/a"] {
+		t.Fatalf("ListNewest kept %#v, want b and c", listed)
+	}
+}
+
 func TestEveryRequestIsSignedAndCarriesNoCredentialInTheURL(t *testing.T) {
 	var seen []*http.Request
 	client, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
