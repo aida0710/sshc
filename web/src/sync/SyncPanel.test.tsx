@@ -41,6 +41,26 @@ const bucketStatus = {
   ],
 };
 
+const historyRevision = "a".repeat(64);
+const historyStatus = {
+  checkedAt: "2026-08-25T01:55:00Z",
+  headRevision: historyRevision,
+  historyTruncated: false,
+  downloadTruncated: false,
+  downloadedBytes: 1800,
+  revisions: [{
+    key: "snapshots/2026-08-25-015400-aabbcc-000001.tar.gz.enc",
+    revision: historyRevision,
+    createdAt: "2026-08-25T01:54:00Z",
+    origin: "opaque-device-a",
+    fileCount: 7,
+    size: 900,
+    lastModified: "2026-08-25T01:54:00Z",
+    relation: "head" as const,
+    legacy: false,
+  }],
+};
+
 function buildApi(status: SyncStatus, pull: PullResponse, overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
     syncStatus: vi.fn().mockResolvedValue(status),
@@ -56,6 +76,12 @@ function buildApi(status: SyncStatus, pull: PullResponse, overrides: Partial<Int
     }),
     pullSnapshot: vi.fn().mockResolvedValue(pull),
     syncBucketStatus: vi.fn().mockResolvedValue(bucketStatus),
+    syncHistory: vi.fn().mockResolvedValue(historyStatus),
+    diffSyncHistory: vi.fn().mockResolvedValue({
+      fromRevision: historyRevision,
+      toRevision: historyRevision,
+      added: [], modified: [], removed: [], downloadedBytes: 1800,
+    }),
     forcePushSnapshot: vi.fn().mockResolvedValue({
       status,
       result: {
@@ -132,6 +158,35 @@ describe("SyncPanel", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Refresh bucket status" }));
     await waitFor(() => expect(api.syncBucketStatus).toHaveBeenCalledTimes(2));
+  });
+
+  it("compares and restores one encrypted revision without rewinding the remote head", async () => {
+    const historyKey = "snapshots/2026-08-25-015400-aabbcc-000001.tar.gz.enc";
+    const pullSnapshot = vi.fn().mockResolvedValue({
+      ...nothingToDo,
+      written: ["config"],
+    });
+    const diffSyncHistory = vi.fn().mockResolvedValue({
+      fromRevision: historyRevision,
+      toRevision: "b".repeat(64),
+      added: ["connections/new.conf"],
+      modified: ["config"],
+      removed: ["connections/old.conf"],
+      downloadedBytes: 1800,
+    });
+    const api = buildApi(configured, nothingToDo, { pullSnapshot, diffSyncHistory });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /aaaaaaaaaaaa.*HEAD/i }));
+    await waitFor(() => expect(diffSyncHistory).toHaveBeenCalledWith(historyKey));
+    expect(await screen.findByText("Added · 1")).toBeInTheDocument();
+    expect(screen.getByText("Modified · 1")).toBeInTheDocument();
+    expect(screen.getByText("Removed · 1")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Preview restoring this revision" }));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, undefined, historyKey));
+    await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, undefined, historyKey));
   });
 
   it("requires explicit confirmation before replacing the remote snapshot", async () => {
@@ -227,13 +282,13 @@ describe("SyncPanel", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
 
-    await waitFor(() => expect(api.pullSnapshot).toHaveBeenCalledWith(false, undefined));
+    await waitFor(() => expect(api.pullSnapshot).toHaveBeenCalledWith(false, undefined, undefined));
     expect(await screen.findByText("connections/work/lon.conf")).toBeInTheDocument();
     expect(screen.getByText("connections/old.conf")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("checkbox", { name: /overwrite files in ~\/.ssh/i }));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
-    await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith(true, undefined));
+    await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith(true, undefined, undefined));
   });
 
   it("shows a conflict and refuses to apply it", async () => {
@@ -569,9 +624,9 @@ describe("SyncPanel", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
     await userEvent.click(await screen.findByRole("button", { name: "Use the other machine's version" }));
 
-    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, "remote"));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, "remote", undefined));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
-    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "remote"));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "remote", undefined));
   });
 
   it("can acknowledge a local conflict choice even when it writes no files", async () => {
@@ -590,10 +645,10 @@ describe("SyncPanel", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
     await userEvent.click(await screen.findByRole("button", { name: "Keep this machine's version" }));
 
-    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, "local"));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, "local", undefined));
     const apply = await screen.findByRole("button", { name: "Apply the snapshot" });
     expect(apply).toBeEnabled();
     await userEvent.click(apply);
-    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "local"));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "local", undefined));
   });
 });

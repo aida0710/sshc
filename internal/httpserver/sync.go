@@ -53,6 +53,8 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.POST("/api/v1/sync/force-push", handlers.ForcePush)
 	engine.POST("/api/v1/sync/pull", handlers.Pull)
 	engine.GET("/api/v1/sync/bucket", handlers.Bucket)
+	engine.GET("/api/v1/sync/history", handlers.History)
+	engine.POST("/api/v1/sync/history/diff", handlers.HistoryDiff)
 }
 
 func addSyncActions(registry actionRegistry, service *remotesync.Service) {
@@ -359,6 +361,56 @@ func (h SyncHandlers) Bucket(c *echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
+func (h SyncHandlers) History(c *echo.Context) error {
+	h.restore()
+	key, ok, err := h.sealingKey(c)
+	if !ok {
+		return err
+	}
+	view, err := h.Service.History(c.Request().Context(), key)
+	if err != nil {
+		return syncProblem(c, err)
+	}
+	response := api.SyncHistory{
+		CheckedAt: view.CheckedAt, HeadRevision: view.HeadRevision,
+		HistoryTruncated: view.HistoryTruncated, DownloadTruncated: view.DownloadTruncated,
+		DownloadedBytes: view.DownloadedBytes,
+		Revisions:       make([]api.SyncHistoryRevision, 0, len(view.Revisions)),
+	}
+	for _, revision := range view.Revisions {
+		response.Revisions = append(response.Revisions, api.SyncHistoryRevision{
+			Key: revision.Key, Revision: revision.Revision,
+			ParentRevision: syncStringPointer(revision.ParentRevision),
+			CreatedAt:      revision.CreatedAt, Origin: revision.Origin,
+			FileCount: revision.FileCount, Size: revision.Size,
+			LastModified: syncStringPointer(revision.LastModified),
+			Relation:     api.SyncHistoryRelation(revision.Relation), Legacy: revision.Legacy,
+		})
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+func (h SyncHandlers) HistoryDiff(c *echo.Context) error {
+	h.restore()
+	var request api.SyncHistoryDiffRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	key, ok, err := h.sealingKey(c)
+	if !ok {
+		return err
+	}
+	diff, err := h.Service.DiffHistory(c.Request().Context(), key, request.Key)
+	if err != nil {
+		return syncProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, api.SyncHistoryDiff{
+		FromRevision: diff.FromRevision, ToRevision: diff.ToRevision,
+		Added: diff.Added, Modified: diff.Modified, Removed: diff.Removed,
+		DownloadedBytes: diff.DownloadedBytes,
+	})
+}
+
 func syncStringPointer(value string) *string {
 	if value == "" {
 		return nil
@@ -392,7 +444,12 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 			return problem(c, http.StatusBadRequest, "invalid_request")
 		}
 	}
-	result, err := h.Service.Pull(c.Request().Context(), key, resolve)
+	var result remotesync.PullResult
+	if request.HistoryKey == nil {
+		result, err = h.Service.Pull(c.Request().Context(), key, resolve)
+	} else {
+		result, err = h.Service.PullHistory(c.Request().Context(), key, *request.HistoryKey, resolve)
+	}
 	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
 		return syncProblem(c, err)
 	}
@@ -492,6 +549,8 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "sync_apply_refused")
 	case errors.Is(err, remotesync.ErrForcePushTarget):
 		return problem(c, http.StatusBadRequest, "sync_force_target_invalid")
+	case errors.Is(err, remotesync.ErrHistoryTarget):
+		return problem(c, http.StatusBadRequest, "sync_history_target_invalid")
 	case errors.Is(err, remotesync.ErrWrongPassphrase):
 		return problem(c, http.StatusForbidden, "wrong_passphrase")
 	case errors.Is(err, remotesync.ErrWeakPassphrase):

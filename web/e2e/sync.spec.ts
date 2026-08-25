@@ -60,6 +60,60 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       });
       return;
     }
+    if (path === "/api/v1/sync/history" && request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          checkedAt: "2026-08-25T02:10:00Z",
+          headRevision: "b".repeat(64),
+          historyTruncated: false,
+          downloadTruncated: false,
+          downloadedBytes: 5_700_000,
+          revisions: [
+            {
+              key: "snapshots/2026-08-25-020900-head.tar.gz.enc",
+              revision: "b".repeat(64),
+              parentRevision: "a".repeat(64),
+              createdAt: "2026-08-25T02:09:00Z",
+              origin: "device-head",
+              fileCount: 12,
+              size: 1_900_000,
+              lastModified: "2026-08-25T02:09:00Z",
+              relation: "head",
+              legacy: false,
+            },
+            {
+              key: "snapshots/2026-08-24-180000-parent.tar.gz.enc",
+              revision: "a".repeat(64),
+              createdAt: "2026-08-24T18:00:00Z",
+              origin: "device-old",
+              fileCount: 11,
+              size: 1_800_000,
+              lastModified: "2026-08-24T18:00:00Z",
+              relation: "ancestor",
+              legacy: false,
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    if (path === "/api/v1/sync/history/diff" && request.method() === "POST") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          fromRevision: "a".repeat(64),
+          toRevision: "b".repeat(64),
+          added: ["connections/production.conf"],
+          modified: ["config"],
+          removed: ["connections/retired.conf"],
+          downloadedBytes: 3_700_000,
+        }),
+      });
+      return;
+    }
     if (path === "/api/v1/sync/push" && request.method() === "POST") {
       if (refusePush) {
         await route.fulfill({
@@ -110,18 +164,21 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await expect(page.getByText("Dated history · 1")).toBeVisible();
   await expect(page.getByText("The remote generation differs")).toBeVisible();
   await expect(page.getByText("Legacy snapshot migration")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Encrypted revision history" })).toBeVisible();
+  await page.getByRole("button", { name: /aaaaaaaaaaaa.*ancestor/i }).click();
+  await expect(page.getByText("Modified · 1")).toBeVisible();
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.2-sync-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.10.0-sync-desktop.png`, fullPage: true });
     await page.getByRole("heading", { name: "Bucket status" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.2-sync-bucket-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.10.0-sync-history-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 360, height: 800 });
     await page.getByRole("heading", { name: "Remote sync" }).scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.2-sync-mobile.png`, fullPage: true });
-    await page.getByRole("heading", { name: "Bucket status" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.2-sync-bucket-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.10.0-sync-mobile.png`, fullPage: true });
+    await page.getByRole("heading", { name: "Encrypted revision history" }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.10.0-sync-history-mobile.png`, fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
   }
   await page.getByRole("button", { name: "Push this workspace" }).click();

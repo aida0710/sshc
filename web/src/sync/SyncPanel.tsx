@@ -6,6 +6,8 @@ import {
   type PullResponse,
   type SyncBucketStatus,
   type SyncDirection,
+  type SyncHistory,
+  type SyncHistoryDiff,
   type SyncStatus,
 } from "../api/integrations";
 import { useLanguage } from "../i18n/context";
@@ -48,6 +50,12 @@ type BucketStatusState =
   | { phase: "error"; message: string }
   | { phase: "ready"; value: SyncBucketStatus };
 
+type HistoryState =
+  | { phase: "idle" }
+  | { phase: "loading" }
+  | { phase: "error"; message: string }
+  | { phase: "ready"; value: SyncHistory };
+
 const refusals: Record<string, MessageKey> = {
   wrong_master_password: "sync.wrongMaster",
   wrong_passphrase: "sync.wrongKey",
@@ -74,6 +82,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [ownKey, setOwnKey] = useState("");
   const [chooseOwn, setChooseOwn] = useState(false);
   const [bucketState, setBucketState] = useState<BucketStatusState>({ phase: "idle" });
+  const [historyState, setHistoryState] = useState<HistoryState>({ phase: "idle" });
+  const [historyDiff, setHistoryDiff] = useState<SyncHistoryDiff | null>(null);
+  const [selectedHistoryKey, setSelectedHistoryKey] = useState<string | null>(null);
+  const [previewHistoryKey, setPreviewHistoryKey] = useState<string | undefined>(undefined);
   const [forceConfirmed, setForceConfirmed] = useState(false);
   const [acceptedRemovals, setAcceptedRemovals] = useState(false);
   const [resolve, setResolve] = useState<"local" | "remote" | undefined>(undefined);
@@ -104,6 +116,19 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     }
   }, [api, t]);
 
+  const refreshHistory = useCallback(async () => {
+    setHistoryState({ phase: "loading" });
+    try {
+      const value = await api.syncHistory();
+      setHistoryState({ phase: "ready", value });
+      setSelectedHistoryKey((current) =>
+        current !== null && value.revisions.some((revision) => revision.key === current) ? current : null,
+      );
+    } catch {
+      setHistoryState({ phase: "error", message: t("sync.historyFailed") });
+    }
+  }, [api, t]);
+
   const reload = useCallback(async () => {
     setStatusState({ phase: "loading" });
     try {
@@ -111,10 +136,12 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       setStatusState({ phase: "ready", value: next });
       if (next.configured) void refreshBucket();
       else setBucketState({ phase: "idle" });
+      if (next.configured && next.keyConfigured) void refreshHistory();
+      else setHistoryState({ phase: "idle" });
     } catch {
       setStatusState({ phase: "error", message: t("sync.statusFailed") });
     }
-  }, [api, refreshBucket, t]);
+  }, [api, refreshBucket, refreshHistory, t]);
 
   useEffect(() => {
     void reload();
@@ -150,10 +177,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     }
   }
 
-  async function previewWith(choice?: "local" | "remote") {
+  async function previewWith(choice?: "local" | "remote", historyKey?: string) {
     setResolve(choice);
+    setPreviewHistoryKey(historyKey);
     await run(
-      () => api.pullSnapshot(false, choice),
+      () => api.pullSnapshot(false, choice, historyKey),
       (next) => {
         setPreview(next);
         setAcceptedRemovals(false);
@@ -165,6 +193,16 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         );
       },
       t("sync.pullFailed"),
+    );
+  }
+
+  async function selectHistory(key: string) {
+    setSelectedHistoryKey(key);
+    setHistoryDiff(null);
+    await run(
+      () => api.diffSyncHistory(key),
+      (next) => setHistoryDiff(next),
+      t("sync.historyDiffFailed"),
     );
   }
 
@@ -229,6 +267,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   }
 
   const conflicted = (preview?.conflicts ?? []).length > 0;
+  const selectedHistory =
+    historyState.phase === "ready" && selectedHistoryKey !== null
+      ? historyState.value.revisions.find((revision) => revision.key === selectedHistoryKey)
+      : undefined;
 
   return (
     <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
@@ -349,6 +391,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   setEditingSettings(false);
                   setForceConfirmed(false);
                   void refreshBucket();
+                  if (next.keyConfigured) void refreshHistory();
                 },
                 t("sync.configureFailed"),
               )
@@ -495,6 +538,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                       setResultView({ kind: "push", result: next.result });
                       setNotice(t("sync.pushed"));
                       void refreshBucket();
+                      void refreshHistory();
                     },
                     t("sync.pushFailed"),
                   )
@@ -603,6 +647,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                               setForceConfirmed(false);
                               setNotice(t("sync.forcePushed"));
                               void refreshBucket();
+                              void refreshHistory();
                             },
                             t("sync.forceFailed"),
                           )
@@ -617,6 +662,120 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 <p className={`lg:col-span-2 ${hintText}`}>
                   {t("sync.bucketCheckedAt", { at: bucketState.value.checkedAt })}
                 </p>
+              </div>
+            )}
+          </section>
+
+          <section aria-labelledby="sync-history-heading" className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4 lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 id="sync-history-heading" className={sectionHeading}>{t("sync.historyHeading")}</h4>
+                <p className={`mt-1 ${hintText}`}>{t("sync.historyHint")}</p>
+              </div>
+              <Button
+                disabled={busy || !status.keyConfigured || historyState.phase === "loading"}
+                onClick={() => void refreshHistory()}
+              >
+                {t("sync.historyRefresh")}
+              </Button>
+            </div>
+
+            {historyState.phase === "idle" ? (
+              <p className={hintText}>{t("sync.historyNeedsKey")}</p>
+            ) : historyState.phase === "loading" ? (
+              <p role="status" className={hintText}>{t("sync.historyLoading")}</p>
+            ) : historyState.phase === "error" ? (
+              <Notice tone="danger">{historyState.message}</Notice>
+            ) : (
+              <div className="border-t border-line pt-3">
+                <p className={hintText}>
+                  {t("sync.historySummary", {
+                    count: historyState.value.revisions.length,
+                    size: formatBytes(historyState.value.downloadedBytes, locale),
+                  })}
+                </p>
+                {historyState.value.historyTruncated || historyState.value.downloadTruncated ? (
+                  <p className="mt-1 text-xs text-notice-ink">{t("sync.historyTruncated")}</p>
+                ) : null}
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
+                  <ol className="max-h-80 space-y-2 overflow-auto pr-1" aria-label={t("sync.historyTimeline")}>
+                    {historyState.value.revisions.map((revision) => (
+                      <li key={revision.key} className="relative border-l-2 border-line pl-4">
+                        <span className="absolute -left-[5px] top-4 h-2 w-2 rounded-full bg-accent" />
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void selectHistory(revision.key)}
+                          className={`w-full rounded border px-3 py-2 text-left ${
+                            selectedHistoryKey === revision.key
+                              ? "border-accent bg-select-fill"
+                              : "border-hairline bg-surface hover:border-line"
+                          }`}
+                        >
+                          <span className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-mono text-xs font-semibold text-ink">{revision.revision.slice(0, 12)}</span>
+                            <span className="rounded-full bg-toolbar px-2 py-0.5 text-[11px] font-medium text-ink-muted">
+                              {t(`sync.historyRelation.${revision.relation}` as MessageKey)}
+                            </span>
+                          </span>
+                          <span className="mt-1 block text-xs text-ink-muted">
+                            {t("sync.historyRevisionMeta", {
+                              at: revision.createdAt,
+                              count: revision.fileCount,
+                              origin: revision.origin.slice(0, 8),
+                            })}
+                          </span>
+                          {revision.parentRevision === undefined ? null : (
+                            <span className="mt-1 block font-mono text-[11px] text-ink-muted">
+                              {t("sync.historyParent", { revision: revision.parentRevision.slice(0, 12) })}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+
+                  <div className="min-w-0 rounded border border-line bg-surface p-3">
+                    {selectedHistory === undefined ? (
+                      <p className={hintText}>{t("sync.historySelect")}</p>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">{t("sync.historySelected")}</p>
+                          <p className="mt-1 break-all font-mono text-xs text-ink">{selectedHistory.key}</p>
+                        </div>
+                        {historyDiff === null ? (
+                          <p role="status" className={hintText}>{busy ? t("sync.historyDiffLoading") : t("sync.historyDiffEmpty")}</p>
+                        ) : (
+                          <div className="grid gap-2 text-xs sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                            {([
+                              ["added", historyDiff.added, "text-success"],
+                              ["modified", historyDiff.modified, "text-notice-ink"],
+                              ["removed", historyDiff.removed, "text-danger"],
+                            ] as const).map(([kind, paths, tone]) => (
+                              <div key={kind} className="min-w-0 rounded bg-toolbar p-2">
+                                <p className={`font-medium ${tone}`}>{t(`sync.historyDiff.${kind}` as MessageKey, { count: paths.length })}</p>
+                                <ul className="mt-1 max-h-24 space-y-0.5 overflow-auto font-mono text-[11px] text-ink-muted">
+                                  {paths.map((path) => <li key={path} className="break-all">{path}</li>)}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <p className={hintText}>{t("sync.historyRestoreHint")}</p>
+                        <Button
+                          kind="primary"
+                          disabled={busy || status.direction === "push"}
+                          onClick={() => void previewWith(undefined, selectedHistory.key)}
+                          className="self-start"
+                        >
+                          {t("sync.historyRestorePreview")}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </section>
@@ -655,7 +814,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void previewWith("local")}
+                  onClick={() => void previewWith("local", previewHistoryKey)}
                   className="rounded border border-line px-3 py-1.5 text-sm text-ink"
                 >
                   {t("sync.keepMine")}
@@ -663,7 +822,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void previewWith("remote")}
+                  onClick={() => void previewWith("remote", previewHistoryKey)}
                   className="rounded border border-line px-3 py-1.5 text-sm text-ink"
                 >
                   {t("sync.takeTheirs")}
@@ -712,7 +871,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             }
             onClick={() =>
               void run(
-                () => api.pullSnapshot(true, resolve),
+                () => api.pullSnapshot(true, resolve, previewHistoryKey),
                 (next) => {
                   setPreview(next);
                   setResultView({ kind: "apply", result: next });

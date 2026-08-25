@@ -160,7 +160,7 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 		return AutoBlocked, detail, true
 	}
 	// 自動同期では競合の解決先を選ばない。
-	result, err := a.service.pull(ctx, key, ResolveNone)
+	result, err := a.service.pull(ctx, key, ResolveNone, "")
 	switch {
 	case errors.Is(err, ErrNoSnapshot):
 		return AutoIdle, "", false
