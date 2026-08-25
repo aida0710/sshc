@@ -41,6 +41,26 @@ type connectionHTTPHarness struct {
 	recent    *recent.Store
 }
 
+func setPasswordForHTTPConnection(t *testing.T, harness *connectionHTTPHarness, alias, password string) {
+	t.Helper()
+	binding, err := harness.testHarness.service.PasswordBinding(alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.passwords.SetBound(alias, password, binding); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func passwordForHTTPConnection(t *testing.T, harness *connectionHTTPHarness, alias string) string {
+	t.Helper()
+	binding, err := harness.testHarness.service.PasswordBinding(alias)
+	if err != nil {
+		return ""
+	}
+	return harness.passwords.BoundPasswordFor(alias, binding)
+}
+
 func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarness {
 	t.Helper()
 	home := t.TempDir()
@@ -100,7 +120,9 @@ func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarn
 	registerConnectionRoutes(engine, ConnectionHandlers{
 		Service: service, Secrets: passwords, Keys: keyStub, Recent: recentService,
 	})
-	registerPasswordRoutes(engine, PasswordHandlers{Service: passwords})
+	registerPasswordRoutes(engine, PasswordHandlers{
+		Service: passwords, Binding: service.PasswordBinding,
+	})
 
 	return &connectionHTTPHarness{
 		testHarness: &testHarness{
@@ -162,7 +184,7 @@ func TestCreateConnectionEndpointCommitsAndReturnsOnlySafeData(t *testing.T) {
 	}) {
 		t.Fatalf("result = %#v", result)
 	}
-	if got := harness.passwords.PasswordFor("new-node"); got != password {
+	if got := passwordForHTTPConnection(t, harness, "new-node"); got != password {
 		t.Fatalf("stored password = %q", got)
 	}
 	body := response.Body.String()
@@ -292,7 +314,7 @@ func TestUpdateConnectionEndpointCommitsAndReturnsOnlySafeData(t *testing.T) {
 	if result.TransactionID == "" || len(result.Written) != 1 || result.Written[0] != "config" {
 		t.Fatalf("result = %#v", result)
 	}
-	if got := harness.passwords.PasswordFor("existing"); got != password {
+	if got := passwordForHTTPConnection(t, harness, "existing"); got != password {
 		t.Fatalf("stored password = %q", got)
 	}
 	updated, err := os.ReadFile(filepath.Join(harness.root, "config"))
@@ -344,9 +366,7 @@ func TestUpdateConnectionEndpointDecodesEveryPasswordMutation(t *testing.T) {
 			name: "remove", password: map[string]any{"kind": "remove"},
 			prepare: func(t *testing.T, harness *connectionHTTPHarness) {
 				t.Helper()
-				if err := harness.passwords.Set("existing", "remove-me"); err != nil {
-					t.Fatal(err)
-				}
+				setPasswordForHTTPConnection(t, harness, "existing", "remove-me")
 			}, want: "",
 		},
 	}
@@ -360,7 +380,7 @@ func TestUpdateConnectionEndpointDecodesEveryPasswordMutation(t *testing.T) {
 			if response.Code != http.StatusOK {
 				t.Fatalf("update = %d, body %s", response.Code, response.Body.String())
 			}
-			if got := harness.passwords.PasswordFor("existing"); got != test.want {
+			if got := passwordForHTTPConnection(t, harness, "existing"); got != test.want {
 				t.Errorf("PasswordFor(existing) = %q, want %q", got, test.want)
 			}
 		})

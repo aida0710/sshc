@@ -21,12 +21,16 @@ func Acquire(path string) (func() error, error) {
 	return acquire(path)
 }
 
-// newRelease は unlock と close を一度だけ実行し、結果を後続呼び出しへ返す。
-func newRelease(file *os.File, unlock func() error) func() error {
+// newReleaseWithDirectory keeps the directory identity alive until the lock is
+// released. The lock file was opened relative to this handle, so both resources
+// are one acquisition and must be closed exactly once together.
+func newReleaseWithDirectory(file, directory *os.File, unlock func() error) func() error {
 	var once sync.Once
 	var result error
 	return func() error {
-		once.Do(func() { result = errors.Join(unlock(), file.Close()) })
+		once.Do(func() {
+			result = errors.Join(unlock(), file.Close(), directory.Close())
+		})
 		return result
 	}
 }

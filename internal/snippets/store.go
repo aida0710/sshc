@@ -100,17 +100,7 @@ func (s *Store) Save(library Library) error {
 		return err
 	}
 	contents = append(contents, '\n')
-	temporary, err := s.workspace.FileSystem().WriteTemp(
-		s.workspace.StateDir(), temporaryName, storage.FilePermission, contents,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = s.workspace.FileSystem().Remove(temporary) }()
-	if err := s.workspace.FileSystem().Rename(temporary, s.Path()); err != nil {
-		return err
-	}
-	return s.workspace.FileSystem().SyncDir(s.workspace.StateDir())
+	return storage.WriteAtomicFile(s.workspace.FileSystem(), s.Path(), temporaryName, storage.FilePermission, contents)
 }
 
 func validateLibrary(library Library) error {

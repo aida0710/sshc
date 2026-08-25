@@ -15,17 +15,12 @@ type Handlers struct {
 	Version  string
 }
 
-// Renew は、cookie がすでに指しているセッションに対して新しい CSRF トークンを発行する。
+// Renew は、cookie と現在の CSRF token が指しているセッションに対して新しい
+// CSRF token を発行する。
 //
-// reload するとトークンは失われる。トークンはページの中にあり、別のトークンを
-// 生成したはずの bootstrap フラグメントは初回使用時に消費済みだからだ。これが
-// なければ、バイナリを再起動するまで reload 後のアプリケーションは死んでいた。
-//
-// これは CSRF トークンを提示しない。reload にはトークンがないからで、
-// bootstrap と同じ免除であり、同じもの。Host、Origin、Fetch Metadata、
-// そして bootstrap とは異なりすでに存在するセッション。によって守られている。
-// クロスサイトのページはそのいずれも作り出せない。SameSite=Strict が
-// cookie を差し止め、Sec-Fetch-Site は偽造できないからである。
+// middleware が先に現在の token を検証する。cookie は port に束縛されないので、
+// localhost の別 server が受け取った cookie だけから token を再発行してはならない。
+// reload に必要な token は browser の port-origin scoped sessionStorage に残す。
 func (h Handlers) Renew(c *echo.Context) error {
 	if h.Sessions == nil {
 		return problem(c, http.StatusInternalServerError, "bootstrap_failed")
@@ -34,7 +29,7 @@ func (h Handlers) Renew(c *echo.Context) error {
 	if err != nil {
 		return problem(c, http.StatusUnauthorized, "session_required")
 	}
-	csrf, ok := h.Sessions.RenewCSRF(cookie.Value)
+	csrf, ok := h.Sessions.RenewCSRF(cookie.Value, c.Request().Header.Get(CSRFHeader))
 	if !ok {
 		return problem(c, http.StatusUnauthorized, "invalid_session")
 	}

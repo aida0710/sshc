@@ -205,6 +205,108 @@ func TestAutoAcknowledgesAnUnchangedRemoteGeneration(t *testing.T) {
 	}
 }
 
+func TestAutoBlocksWhenAnAcknowledgedLiveObjectWasDeleted(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{})
+	auto := autoFor(t, consumer, true)
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("initial receive = %+v", view)
+	}
+	bucket.removeObject(remotesync.ObjectName)
+	view := once(t, auto)
+	if view.Phase != remotesync.AutoBlocked || view.Detail != "remote_deleted" {
+		t.Fatalf("deleted live = %+v, want blocked remote_deleted", view)
+	}
+}
+
+func TestAutoCachesAnUnreadableRemoteGeneration(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{})
+	auto := autoFor(t, consumer, true)
+	key := "a wrong but sufficiently long synchronization key"
+	auto.Key = func() (string, bool) { return key, true }
+	first := once(t, auto)
+	if first.Phase != remotesync.AutoFailed || first.Detail != "wrong_passphrase" {
+		t.Fatalf("first unreadable generation = %+v", first)
+	}
+	downloads := bucket.downloads()
+	second := once(t, auto)
+	if second.Phase != remotesync.AutoFailed || second.Detail != "wrong_passphrase" {
+		t.Fatalf("cached unreadable generation = %+v", second)
+	}
+	if got := bucket.downloads(); got != downloads {
+		t.Fatalf("same unreadable generation downloaded again: %d then %d", downloads, got)
+	}
+	key = syncPassphrase
+	third := once(t, auto)
+	if third.Phase != remotesync.AutoIdle {
+		t.Fatalf("corrected key did not retry the same ETag: %+v", third)
+	}
+	if got := bucket.downloads(); got != downloads+1 {
+		t.Fatalf("corrected key downloads = %d, want %d", got, downloads+1)
+	}
+}
+
+func TestAutoRetriesATransientFailureAfterBoundedBackoff(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{})
+	auto := remotesync.NewAuto(consumer.service, 10*time.Millisecond, func() string { return "2026-08-18T00:00:00Z" })
+	auto.Enabled = func() bool { return true }
+	auto.Key = func() (string, bool) { return syncPassphrase, true }
+	bucket.refuseObjectGets(3)
+	if first := once(t, auto); first.Phase != remotesync.AutoFailed || first.Detail != "unreachable" {
+		t.Fatalf("first transient failure = %+v", first)
+	}
+	downloads := bucket.downloads()
+	if second := once(t, auto); second.Phase != remotesync.AutoFailed || second.Detail != "unreachable" {
+		t.Fatalf("backoff view = %+v", second)
+	}
+	if got := bucket.downloads(); got != downloads {
+		t.Fatalf("transient failure retried before backoff: %d then %d", downloads, got)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if third := once(t, auto); third.Phase != remotesync.AutoIdle {
+		t.Fatalf("transient failure did not expire: %+v", third)
+	}
+	if got := bucket.downloads(); got != downloads+1 {
+		t.Fatalf("retry downloads = %d, want %d", got, downloads+1)
+	}
+}
+
+func TestAutoConfigurationResetClearsFailureEvidence(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{})
+	auto := autoFor(t, consumer, true)
+	auto.Key = func() (string, bool) { return "a wrong but sufficiently long synchronization key", true }
+	if view := once(t, auto); view.Phase != remotesync.AutoFailed {
+		t.Fatalf("first view = %+v", view)
+	}
+	downloads := bucket.downloads()
+	auto.ResetRemoteCache()
+	if view := once(t, auto); view.Phase != remotesync.AutoFailed {
+		t.Fatalf("view after reset = %+v", view)
+	}
+	if got := bucket.downloads(); got != downloads+1 {
+		t.Fatalf("configuration reset kept stale failure cache: %d then %d", downloads, got)
+	}
+}
+
 // 巡回は、渡された枠の中で走る。枠がその外へ漏れれば、保管庫は開けっぱなしに
 // なるので、包んでいることそのものを見る。
 func TestEveryCycleRunsInsideTheUnattendedFrame(t *testing.T) {

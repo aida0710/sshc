@@ -44,6 +44,9 @@ type ConnectHandlers struct {
 	// Aliases は、この接続に現れる alias を、ProxyJump の手前も含めて返す。
 	// nil なら行き先ひとつだけを見る。
 	Aliases func(alias string) []string
+	// PasswordBinding resolves the authentication destination digest for each
+	// alias in the connection chain.
+	PasswordBinding func(alias string) (string, error)
 	// Bootstrap はブラウザ用 URL を生成し、BaseURL はその接続先を返す。
 	// 両方が nil であれば、このアプリケーションはコマンドラインから開けない。
 	// これは session manager を持たないビルドの状態である。
@@ -98,8 +101,9 @@ type connectResponse struct {
 	// Passphrase とは別の名前空間である。あちらはローカルの秘密鍵を開く
 	// ための秘密で、こちらはリモートのアカウントへログインするための秘密である。
 	// 混ぜれば、鍵を開くための秘密がそのままリモートへ送られる。
-	Passwords map[string]string `json:"passwords,omitempty"`
-	Warnings  []string          `json:"warnings"`
+	Passwords        map[string]string `json:"passwords,omitempty"`
+	PasswordBindings map[string]string `json:"passwordBindings,omitempty"`
+	Warnings         []string          `json:"warnings"`
 }
 
 // savedPassword は、その alias について保存されているアカウントパスワードを返す。
@@ -114,20 +118,30 @@ type connectResponse struct {
 // 増えることは書いておく。境界は動かないが、動かないことは自明ではない。
 // 返すのはこの接続に現れる alias のぶんだけである。保管庫を一覧にはしない
 // 尋ねられた接続に要るものと、要らないものを区別する。
-func savedPasswords(passwords *secret.Service, aliases []string) map[string]string {
-	if passwords == nil {
-		return nil
+func savedPasswords(
+	passwords *secret.Service,
+	aliases []string,
+	binding func(alias string) (string, error),
+) (map[string]string, map[string]string) {
+	if passwords == nil || binding == nil {
+		return nil, nil
 	}
 	found := map[string]string{}
+	bindings := map[string]string{}
 	for _, alias := range aliases {
-		if password := passwords.PasswordFor(alias); password != "" {
+		current, err := binding(alias)
+		if err != nil {
+			continue
+		}
+		if password := passwords.BoundPasswordFor(alias, current); password != "" {
 			found[alias] = password
+			bindings[alias] = current
 		}
 	}
 	if len(found) == 0 {
-		return nil
+		return nil, nil
 	}
-	return found
+	return found, bindings
 }
 
 // connectionAliases は、この接続に現れる alias を返す。行き先と、ProxyJump の
@@ -233,7 +247,7 @@ func liveSessions(views []terminal.View) int {
 
 func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	if handlers.vault == nil {
-		handlers.vault = newVaultOperations(handlers.Passwords, nil)
+		handlers.vault = newVaultOperations(handlers.Passwords)
 	}
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
@@ -343,6 +357,6 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 	// 鍵もパスワードも、同じ連鎖を見る。
 	aliases := h.connectionAliases(decoded.Alias)
 	answer.Passphrases = savedPassphrases(h.Passwords, aliases, h.WorkspaceKeys)
-	answer.Passwords = savedPasswords(h.Passwords, aliases)
+	answer.Passwords, answer.PasswordBindings = savedPasswords(h.Passwords, aliases, h.PasswordBinding)
 	return c.JSON(http.StatusOK, answer)
 }

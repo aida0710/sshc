@@ -99,6 +99,80 @@ func OpenOrCreateFile(path string) (*os.File, error) {
 	return file, nil
 }
 
+// OpenPrivateDirectory opens and retains the exact private directory identity.
+// Every component is resolved with OBJ_DONT_REPARSE and the returned handle is
+// authenticated before it can be used as a relative-create root.
+func OpenPrivateDirectory(path string) (*os.File, error) {
+	if err := EnsureDirectory(path); err != nil {
+		return nil, err
+	}
+	access := uint32(windows.FILE_TRAVERSE | windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL | windows.WRITE_DAC)
+	directory, err := openDirectoryNoReparse(path, access)
+	if err != nil {
+		return nil, err
+	}
+	if err := restrictDirectoryHandle(directory); err != nil {
+		_ = directory.Close()
+		return nil, err
+	}
+	return directory, nil
+}
+
+// OpenOrCreateFileAt creates or opens name relative to an already authenticated
+// directory handle. A concurrent rename or junction replacement of the path
+// used to obtain that directory therefore cannot redirect the file operation.
+func OpenOrCreateFileAt(directory *os.File, name string) (*os.File, error) {
+	if directory == nil || name == "" || name != filepath.Base(name) || strings.ContainsAny(name, `/\\`) {
+		return nil, os.ErrInvalid
+	}
+	descriptor, userSID, err := newPrivateSecurityDescriptor(false)
+	if err != nil {
+		return nil, err
+	}
+	objectName, err := windows.NewNTUnicodeString(name)
+	if err != nil {
+		return nil, err
+	}
+	attributes := &windows.OBJECT_ATTRIBUTES{
+		Length:             uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
+		RootDirectory:      windows.Handle(directory.Fd()),
+		ObjectName:         objectName,
+		Attributes:         windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
+		SecurityDescriptor: descriptor,
+	}
+	var handle windows.Handle
+	status := windows.IO_STATUS_BLOCK{}
+	err = windows.NtCreateFile(
+		&handle,
+		windows.GENERIC_READ|windows.GENERIC_WRITE|windows.READ_CONTROL|windows.WRITE_DAC|windows.DELETE|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE,
+		attributes,
+		&status,
+		nil,
+		0,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		windows.FILE_OPEN_IF,
+		windows.FILE_NON_DIRECTORY_FILE|windows.FILE_SYNCHRONOUS_IO_NONALERT,
+		0,
+		0,
+	)
+	runtime.KeepAlive(directory)
+	runtime.KeepAlive(descriptor)
+	runtime.KeepAlive(userSID)
+	if err != nil {
+		return nil, mapNoReparseError(err)
+	}
+	file := os.NewFile(uintptr(handle), filepath.Join(directory.Name(), name))
+	if file == nil {
+		_ = windows.CloseHandle(handle)
+		return nil, os.ErrInvalid
+	}
+	if err := restrictFileHandle(file); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
 // EnsureDirectory は不足している各要素を非公開 descriptor で作る。既存の親は変更せず、
 // 最終ディレクトリを一度だけ開いて現在ユーザーの所有権、種類、reparse 状態を検査し、
 // そのハンドルで権限を制限する。
@@ -209,6 +283,21 @@ func restrictHandle(file *os.File, directory bool) error {
 		return os.ErrInvalid
 	}
 	handle := windows.Handle(file.Fd())
+	err := restrictNativeHandle(handle, directory)
+	runtime.KeepAlive(file)
+	return err
+}
+
+// RestrictDirectoryNativeHandle は所有権を移さず、検証済みの native directory
+// handle に非公開 DACL を適用する。
+func RestrictDirectoryNativeHandle(handle windows.Handle) error {
+	if handle == 0 || handle == windows.InvalidHandle {
+		return os.ErrInvalid
+	}
+	return restrictNativeHandle(handle, true)
+}
+
+func restrictNativeHandle(handle windows.Handle, directory bool) error {
 	if err := validateHandleType(handle, directory); err != nil {
 		return err
 	}
@@ -259,7 +348,6 @@ func restrictHandle(file *os.File, directory bool) error {
 	runtime.KeepAlive(privateDescriptor)
 
 	restricted, err := isHandleRestricted(handle, directory, userSID)
-	runtime.KeepAlive(file)
 	runtime.KeepAlive(descriptor)
 	runtime.KeepAlive(userSID)
 	if err != nil {

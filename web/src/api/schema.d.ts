@@ -1188,24 +1188,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/sftp/{alias}/upload": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                alias: string;
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["uploadSFTPFile"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/sftp/transfers": {
         parameters: {
             query?: never;
@@ -1234,6 +1216,24 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["updateSFTPTransferJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/transfers/{id}/download-checkpoint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checkpointSFTPDownload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1565,8 +1565,6 @@ export interface components {
         };
         ChangeMasterPasswordResult: {
             vault: components["schemas"]["PasswordVaultStatus"];
-            snapshotResealed: boolean;
-            snapshotProblem?: string;
         };
         StoreCredentialRequest: {
             secret: string;
@@ -1954,6 +1952,7 @@ export interface components {
             downloadTruncated: boolean;
             /** Format: int64 */
             downloadedBytes: number;
+            skipped: number;
         };
         SyncHistoryDiffRequest: {
             key: string;
@@ -2000,6 +1999,7 @@ export interface components {
         };
         SyncKeyRequest: {
             key?: string;
+            confirmHistoryLoss?: boolean;
         };
         SyncKeyResponse: {
             key: string;
@@ -2009,6 +2009,8 @@ export interface components {
             /** @enum {string} */
             resolve?: "local" | "remote";
             historyKey?: string;
+            expectedETag?: string;
+            expectedRevision?: string;
         };
         SyncConflict: {
             path: string;
@@ -2025,6 +2027,8 @@ export interface components {
             written: string[];
             removed: string[];
             origin?: string;
+            remoteETag: string;
+            remoteRevision: string;
         };
         PasswordVaultStatus: {
             exists: boolean;
@@ -2660,8 +2664,15 @@ export interface components {
             action: "start" | "pause" | "resume" | "retry" | "cancel" | "progress" | "complete" | "fail" | "needs_overwrite";
             /** Format: int64 */
             transferredBytes?: number;
+            /** Format: int64 */
+            totalBytes?: number;
             problem?: string;
             resetProgress?: boolean;
+        };
+        SFTPDownloadCheckpointRequest: {
+            /** Format: int64 */
+            offset: number;
+            revision: string;
         };
         SFTPStartUploadRequest: {
             path: string;
@@ -2675,6 +2686,7 @@ export interface components {
             /** Format: int64 */
             size: number;
             expectedRevision: string;
+            sourceFingerprint: string;
         };
         SFTPResumableUpload: {
             id: string;
@@ -5044,9 +5056,14 @@ export interface operations {
         parameters: {
             query: {
                 path: string;
+                jobId: string;
+                /** @description Verify an already durable complete OPFS file without requesting an invalid EOF range */
+                verify?: boolean;
             };
             header?: {
                 Range?: string;
+                /** @description Opaque ETag returned by the first response */
+                "If-Range"?: string;
             };
             path: {
                 alias: string;
@@ -5055,18 +5072,27 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Remote file bytes */
+            /** @description Remote file bytes, or a replacement from byte zero when If-Range no longer matches */
             200: {
                 headers: {
+                    ETag: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/octet-stream": string;
                 };
             };
-            /** @description Remaining remote file bytes */
+            /** @description The supplied If-Range revision still owns the complete file */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Remaining bytes of the exact revision named by If-Range */
             206: {
                 headers: {
+                    ETag: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5081,6 +5107,7 @@ export interface operations {
         parameters: {
             query: {
                 path: string;
+                jobId: string;
             };
             header?: never;
             path: {
@@ -5101,37 +5128,6 @@ export interface operations {
             };
             404: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
-        };
-    };
-    uploadSFTPFile: {
-        parameters: {
-            query: {
-                path: string;
-                overwrite: boolean;
-            };
-            header?: never;
-            path: {
-                alias: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/octet-stream": string;
-            };
-        };
-        responses: {
-            /** @description File uploaded atomically */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SFTPTransfer"];
-                };
-            };
-            409: components["responses"]["Problem"];
-            413: components["responses"]["Problem"];
         };
     };
     listSFTPTransferJobs: {
@@ -5196,6 +5192,35 @@ export interface operations {
         };
         responses: {
             /** @description Updated transfer job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTransferJob"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    checkpointSFTPDownload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPDownloadCheckpointRequest"];
+            };
+        };
+        responses: {
+            /** @description Durable download checkpoint accepted */
             200: {
                 headers: {
                     [name: string]: unknown;

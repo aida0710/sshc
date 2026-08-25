@@ -1,64 +1,24 @@
 import { apiClient } from "../api/client";
 import { asArray, asNumber, asRecord, asString, issueAction, jsonHeaders } from "../api/guards";
+import type { components } from "../api/schema";
 
-export type RemoteEntry = {
-  name: string;
-  path: string;
-  type: "file" | "directory" | "symlink" | "other";
-  size: number;
-  mode: string;
-  modifiedAt: string;
-  revision: string;
-};
-
-export type RemoteTextFile = {
-  entry: RemoteEntry;
-  contents: string;
-  revision: string;
-};
-
-export type TransferOptions = {
-  signal?: AbortSignal;
-  onProgress?: (bytes: number, total: number | null) => void;
-};
-
-export type ResumableUpload = {
-  id: string;
-  path: string;
-  offset: number;
-  size: number;
-  expectedRevision: string;
-};
-
-export type TransferDirection = "upload" | "download";
-export type TransferKind = "file" | "folder";
-export type TransferJobStatus = "queued" | "running" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
-export type TransferJobAction = "start" | "pause" | "resume" | "retry" | "cancel" | "progress" | "complete" | "fail" | "needs_overwrite";
-
-export type TransferJob = {
-  id: string;
-  batchId: string;
-  alias: string;
-  direction: TransferDirection;
-  kind: TransferKind;
-  name: string;
-  remotePath: string;
-  totalBytes: number;
-  transferredBytes: number;
-  bytesPerSecond: number;
-  remainingSeconds: number;
-  status: TransferJobStatus;
-  attempt: number;
-  problem: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type CreateTransferJob = Pick<TransferJob, "id" | "batchId" | "alias" | "direction" | "kind" | "name" | "remotePath" | "totalBytes">;
+export type RemoteEntry = components["schemas"]["SFTPEntry"];
+export type RemoteTextFile = components["schemas"]["SFTPTextFile"];
+type GeneratedResumableUpload = components["schemas"]["SFTPResumableUpload"];
+export type ResumableUpload = Omit<GeneratedResumableUpload, "expectedRevision"> & { expectedRevision: string };
+export type TransferJob = components["schemas"]["SFTPTransferJob"];
+export type CreateTransferJob = components["schemas"]["SFTPCreateTransferJobRequest"];
+export type TransferDirection = TransferJob["direction"];
+export type TransferKind = TransferJob["kind"];
+export type TransferJobStatus = TransferJob["status"];
+export type TransferJobAction = components["schemas"]["SFTPTransferJobActionRequest"]["action"];
 
 export type StreamDownloadOptions = {
   signal?: AbortSignal;
-  onChunk: (chunk: Uint8Array, total: number | null) => void;
+  revision?: string;
+  onChunk: (chunk: Uint8Array, total: number | null) => void | Promise<void>;
+  onRevision?: (revision: string) => void;
+  onReset?: (total: number | null) => void | Promise<void>;
 };
 
 function pathFor(alias: string, suffix: string, remotePath: string): string {
@@ -121,10 +81,20 @@ export const sftpApi = {
       method: "POST", headers: jsonHeaders, body: JSON.stringify(input),
     }));
   },
-  async updateTransfer(id: string, action: TransferJobAction, options: { transferredBytes?: number; problem?: string; resetProgress?: boolean } = {}): Promise<TransferJob> {
+  async updateTransfer(id: string, action: TransferJobAction, options: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean } = {}): Promise<TransferJob> {
     return transferJob(await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/actions`, {
       method: "POST", headers: jsonHeaders, body: JSON.stringify({ action, ...options }),
     }));
+  },
+  async checkpointDownload(id: string, offset: number, revision: string): Promise<TransferJob> {
+    return transferJob(await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/download-checkpoint`, {
+      method: "POST", headers: jsonHeaders, body: JSON.stringify({ offset, revision }),
+    }));
+  },
+  async verifyDownload(alias: string, jobId: string, remotePath: string, revision: string): Promise<void> {
+    const endpoint = `${pathFor(alias, "download", remotePath)}&jobId=${encodeURIComponent(jobId)}&verify=true`;
+    const response = await apiClient.send(endpoint, { method: "GET", headers: { "If-Range": revision } });
+    if (response.status !== 204) throw new Error("download_changed");
   },
   async list(alias: string, remotePath: string): Promise<{ path: string; entries: RemoteEntry[] }> {
     const value = asRecord(await apiClient.read(pathFor(alias, "entries", remotePath)));
@@ -165,15 +135,6 @@ export const sftpApi = {
     });
     if (!response.ok) throw new Error("delete_failed");
   },
-  async upload(alias: string, remotePath: string, file: File, overwrite: boolean, signal?: AbortSignal): Promise<void> {
-    const query = `${pathFor(alias, "upload", remotePath)}&overwrite=${overwrite ? "true" : "false"}`;
-    await apiClient.mutate<unknown>(query, {
-      method: "POST",
-      headers: { "Content-Type": "application/octet-stream", "X-SSHC-Filename": encodeURIComponent(file.name) },
-      body: file,
-      ...(signal === undefined ? {} : { signal }),
-    });
-  },
   async startUpload(alias: string, id: string, remotePath: string, size: number, overwrite: boolean, expectedRevision = ""): Promise<ResumableUpload> {
     return resumableUpload(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, {
       method: "POST",
@@ -190,11 +151,11 @@ export const sftpApi = {
       ...(signal === undefined ? {} : { signal }),
     }));
   },
-  async completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string): Promise<void> {
+  async completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string, sourceFingerprint: string): Promise<void> {
     await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, {
       method: "POST",
       headers: jsonHeaders,
-      body: JSON.stringify({ path: remotePath, size, expectedRevision }),
+      body: JSON.stringify({ path: remotePath, size, expectedRevision, sourceFingerprint }),
     });
   },
   async cancelUpload(alias: string, id: string, remotePath: string): Promise<void> {
@@ -202,19 +163,28 @@ export const sftpApi = {
       method: "DELETE",
     });
   },
-  async streamDownload(alias: string, remotePath: string, directory: boolean, offset: number, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }> {
-    const headers = !directory && offset > 0 ? { Range: `bytes=${offset}-` } : undefined;
-    const response = await apiClient.send(pathFor(alias, directory ? "archive" : "download", remotePath), {
+  async streamDownload(alias: string, jobId: string, remotePath: string, directory: boolean, offset: number, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }> {
+    const headers = !directory && offset > 0
+      ? { Range: `bytes=${offset}-`, ...(options.revision === undefined ? {} : { "If-Range": options.revision }) }
+      : undefined;
+    const endpoint = `${pathFor(alias, directory ? "archive" : "download", remotePath)}&jobId=${encodeURIComponent(jobId)}`;
+    const response = await apiClient.send(endpoint, {
       method: "GET", ...(headers === undefined ? {} : { headers }), ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
-    if (!response.ok || (!directory && offset > 0 && response.status !== 206)) throw new Error("download_failed");
+    if (!response.ok || (!directory && offset > 0 && response.status !== 200 && response.status !== 206)) throw new Error("download_failed");
     const length = Number(response.headers.get("Content-Length"));
-    const total = Number.isFinite(length) && length >= 0 ? offset + length : null;
-    let bytes = offset;
+    const reset = !directory && offset > 0 && response.status === 200;
+    const responseOffset = reset ? 0 : offset;
+    const total = Number.isFinite(length) && length >= 0 ? responseOffset + length : null;
+    const revision = response.headers.get("ETag");
+    if (!directory && revision === null) throw new Error("download_revision_missing");
+    if (revision !== null) options.onRevision?.(revision);
+    if (reset) await options.onReset?.(total);
+    let bytes = responseOffset;
     if (response.body === null) {
       const chunk = new Uint8Array(await (await response.blob()).arrayBuffer());
       bytes += chunk.byteLength;
-      options.onChunk(chunk, total);
+      await options.onChunk(chunk, total);
       return { bytes, total };
     }
     const reader = response.body.getReader();
@@ -222,45 +192,20 @@ export const sftpApi = {
       const next = await reader.read();
       if (next.done) break;
       bytes += next.value.byteLength;
-      options.onChunk(next.value, total);
+      await options.onChunk(next.value, total);
     }
     return { bytes, total };
   },
-  saveDownload(remotePath: string, directory: boolean, chunks: Uint8Array[]): void {
-    const blob = new Blob(chunks as BlobPart[], { type: directory ? "application/zip" : "application/octet-stream" });
+  saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): void {
+    const blob = new Blob(chunks, { type: directory ? "application/zip" : "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${remotePath.split("/").filter(Boolean).at(-1) ?? "download"}${directory ? ".zip" : ""}`;
+    const components = remotePath.split("/").filter(Boolean);
+    anchor.download = `${components[components.length - 1] ?? "download"}${directory ? ".zip" : ""}`;
     anchor.click();
-    URL.revokeObjectURL(url);
-  },
-  async download(alias: string, remotePath: string, directory = false, options: TransferOptions = {}): Promise<number> {
-    const chunks: Uint8Array[] = [];
-    let bytes = 0;
-    let total: number | null = null;
-    let failures = 0;
-    while (true) {
-      try {
-        const streamed = await this.streamDownload(alias, remotePath, directory, bytes, {
-          ...(options.signal === undefined ? {} : { signal: options.signal }),
-          onChunk: (chunk, reportedTotal) => {
-            chunks.push(chunk);
-            bytes += chunk.byteLength;
-            total = reportedTotal ?? total;
-            options.onProgress?.(bytes, total);
-          },
-        });
-        bytes = streamed.bytes;
-        total = streamed.total ?? total;
-        break;
-      } catch (error) {
-        if (directory || options.signal?.aborted || failures >= 2) throw error;
-        failures += 1;
-      }
-    }
-    this.saveDownload(remotePath, directory, chunks);
-    return bytes;
+    // WebView/Safari may consume the object URL after click() returns.
+    globalThis.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   },
   async chmod(alias: string, remotePath: string, mode: string, expectedRevision: string): Promise<RemoteEntry> {
     const target = `${alias}:${remotePath}:${mode}`;

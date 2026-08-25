@@ -39,8 +39,14 @@ type fakeRemote struct {
 	replacements [][2]string
 	removals     []string
 	replaceErr   error
+	replaceHook  func()
+	closeHook    func()
+	removeErr    error
+	removeHook   func(string)
 	writeErr     error
 	createHook   func()
+	openHook     func(string)
+	lstatHook    func(string) error
 	tick         int
 }
 
@@ -54,7 +60,13 @@ func remoteWith(entries map[string]node) *fakeRemote {
 	return &fakeRemote{nodes: entries}
 }
 
-func (r *fakeRemote) Close() error { r.closed = true; return nil }
+func (r *fakeRemote) Close() error {
+	if r.closeHook != nil {
+		r.closeHook()
+	}
+	r.closed = true
+	return nil
+}
 
 func (r *fakeRemote) ReadDir(ctx context.Context, directory string) ([]fs.FileInfo, error) {
 	if err := ctx.Err(); err != nil {
@@ -76,6 +88,11 @@ func (r *fakeRemote) ReadDir(ctx context.Context, directory string) ([]fs.FileIn
 }
 
 func (r *fakeRemote) Lstat(candidate string) (fs.FileInfo, error) {
+	if r.lstatHook != nil {
+		if err := r.lstatHook(candidate); err != nil {
+			return nil, err
+		}
+	}
 	info, ok := r.nodes[candidate]
 	if !ok {
 		return nil, fs.ErrNotExist
@@ -95,6 +112,9 @@ func (r *fakeRemote) ReadLink(candidate string) (string, error) {
 }
 
 func (r *fakeRemote) Open(candidate string) (io.ReadCloser, error) {
+	if r.openHook != nil {
+		r.openHook(candidate)
+	}
 	info, ok := r.nodes[candidate]
 	if !ok {
 		return nil, fs.ErrNotExist
@@ -141,6 +161,9 @@ func (r *fakeRemote) Chmod(candidate string, mode fs.FileMode) error {
 
 func (r *fakeRemote) Replace(from, to string) error {
 	r.replacements = append(r.replacements, [2]string{from, to})
+	if r.replaceHook != nil {
+		r.replaceHook()
+	}
 	if r.replaceErr != nil {
 		return r.replaceErr
 	}
@@ -163,6 +186,12 @@ func (r *fakeRemote) move(from, to string) error {
 
 func (r *fakeRemote) Remove(candidate string) error {
 	r.removals = append(r.removals, candidate)
+	if r.removeHook != nil {
+		r.removeHook(candidate)
+	}
+	if r.removeErr != nil {
+		return r.removeErr
+	}
 	if _, ok := r.nodes[candidate]; !ok {
 		return fs.ErrNotExist
 	}
@@ -372,40 +401,6 @@ func TestSaveTextRequiresCurrentContentRevisionAndAtomicallyReplaces(t *testing.
 	}
 }
 
-func TestUploadProtectsExistingFilesAndCleansFailedTemporaryFiles(t *testing.T) {
-	remote := remoteWith(map[string]node{"/data.bin": file("data.bin", "old", 0o644)})
-	service := serviceFor(remote)
-	entry, err := service.Stat(context.Background(), "edge", "/data.bin")
-	if err != nil {
-		t.Fatalf("Stat() = %v", err)
-	}
-	if _, err := service.Upload(context.Background(), "edge", "/data.bin", strings.NewReader("new"), sftp.UploadOptions{}); !errors.Is(err, sftp.ErrAlreadyExists) {
-		t.Fatalf("Upload(existing) = %v, want ErrAlreadyExists", err)
-	}
-	if _, err := service.Upload(context.Background(), "edge", "/data.bin", strings.NewReader("new"), sftp.UploadOptions{
-		Overwrite: true, ExpectedRevision: "meta-sha256:stale",
-	}); !errors.Is(err, sftp.ErrConflict) {
-		t.Fatalf("Upload(stale) = %v, want ErrConflict", err)
-	}
-
-	transfer, err := service.Upload(context.Background(), "edge", "/data.bin", strings.NewReader("new"), sftp.UploadOptions{
-		Overwrite: true, ExpectedRevision: entry.Revision,
-	})
-	if err != nil {
-		t.Fatalf("Upload() = %v", err)
-	}
-	if transfer.Bytes != 3 || string(remote.nodes["/data.bin"].content) != "new" || remote.nodes["/data.bin"].mode.Perm() != 0o644 {
-		t.Fatalf("transfer = %#v, node = %#v", transfer, remote.nodes["/data.bin"])
-	}
-
-	if _, err := service.Upload(context.Background(), "edge", "/large", strings.NewReader("12345"), sftp.UploadOptions{MaxBytes: 4}); !errors.Is(err, sftp.ErrTransferTooLarge) {
-		t.Fatalf("Upload(large) = %v, want ErrTransferTooLarge", err)
-	}
-	if _, ok := remote.nodes["/.upload.sshc.tmp"]; ok {
-		t.Fatal("failed upload left a temporary file")
-	}
-}
-
 func TestDownloadMkdirRenameAndDelete(t *testing.T) {
 	remote := remoteWith(map[string]node{
 		"/home":       directory("home"),
@@ -414,12 +409,17 @@ func TestDownloadMkdirRenameAndDelete(t *testing.T) {
 	})
 	service := serviceFor(remote)
 	var downloaded bytes.Buffer
-	transfer, err := service.Download(context.Background(), "edge", "/home/a", &downloaded)
+	prepared, err := service.PrepareDownload(context.Background(), "edge", "/home/a")
+	if err != nil {
+		t.Fatalf("PrepareDownload() = %v", err)
+	}
+	defer prepared.Close()
+	written, err := prepared.WriteFrom(context.Background(), 0, &downloaded)
 	if err != nil {
 		t.Fatalf("Download() = %v", err)
 	}
-	if downloaded.String() != "contents" || transfer.Bytes != 8 {
-		t.Fatalf("download = %q, transfer = %#v", downloaded.String(), transfer)
+	if downloaded.String() != "contents" || written != 8 {
+		t.Fatalf("download = %q, written = %d", downloaded.String(), written)
 	}
 	if _, err := service.Mkdir(context.Background(), "edge", "/home/new"); err != nil {
 		t.Fatalf("Mkdir() = %v", err)
@@ -438,6 +438,44 @@ func TestDownloadMkdirRenameAndDelete(t *testing.T) {
 	}
 	if _, ok := remote.nodes["/home/b"]; ok {
 		t.Fatal("renamed file remained after delete")
+	}
+}
+
+func TestPrepareDownloadRevisionBindsTheExactServedContents(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/report.bin": {name: "report.bin", mode: 0o600, content: []byte("old-data"), modTime: testTime},
+	})
+	service := serviceFor(remote)
+
+	first, err := service.PrepareDownload(t.Context(), "edge", "/report.bin")
+	if err != nil {
+		t.Fatalf("prepare first download: %v", err)
+	}
+	defer first.Close()
+
+	// SFTP v3 metadata cannot distinguish this replacement: the size, mode and
+	// second-resolution modification time are intentionally identical.
+	remote.nodes["/report.bin"] = node{
+		name: "report.bin", mode: 0o600, content: []byte("new-data"), modTime: testTime,
+	}
+	second, err := service.PrepareDownload(t.Context(), "edge", "/report.bin")
+	if err != nil {
+		t.Fatalf("prepare replacement download: %v", err)
+	}
+	defer second.Close()
+
+	if first.Revision == second.Revision {
+		t.Fatalf("content revisions matched for distinct bytes: %q", first.Revision)
+	}
+	var firstContents, secondContents bytes.Buffer
+	if _, err := first.WriteFrom(t.Context(), 0, &firstContents); err != nil {
+		t.Fatalf("read first prepared download: %v", err)
+	}
+	if _, err := second.WriteFrom(t.Context(), 0, &secondContents); err != nil {
+		t.Fatalf("read replacement prepared download: %v", err)
+	}
+	if firstContents.String() != "old-data" || secondContents.String() != "new-data" {
+		t.Fatalf("prepared contents = %q, %q", firstContents.String(), secondContents.String())
 	}
 }
 
@@ -497,6 +535,59 @@ func TestDownloadArchiveAndChmod(t *testing.T) {
 	}
 	if changed.Mode.Perm() != 0o600 {
 		t.Fatalf("mode = %o", changed.Mode.Perm())
+	}
+}
+
+func TestDownloadArchiveSkipsUnpublishedUploadParts(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/project":         directory("project"),
+		"/project/visible": file("visible", "ok", 0o600),
+		"/project/.secret.sshc-upload-transfer_hidden1.part": file(".secret.sshc-upload-transfer_hidden1.part", "partial-secret", 0o600),
+	})
+	var contents bytes.Buffer
+	if _, err := serviceFor(remote).DownloadArchive(t.Context(), "edge", "/project", &contents); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(contents.Bytes()), int64(contents.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range reader.File {
+		if strings.Contains(entry.Name, "sshc-upload") {
+			t.Fatalf("partial upload leaked as %q", entry.Name)
+		}
+	}
+}
+
+func TestMkdirTreatsAnExistingDirectoryAsSuccess(t *testing.T) {
+	remote := remoteWith(map[string]node{"/project": directory("project")})
+	entry, err := serviceFor(remote).Mkdir(t.Context(), "edge", "/project")
+	if err != nil || entry.Type != sftp.EntryDirectory {
+		t.Fatalf("existing directory = %+v, %v", entry, err)
+	}
+	remote.nodes["/file"] = file("file", "x", 0o600)
+	if _, err := serviceFor(remote).Mkdir(t.Context(), "edge", "/file"); !errors.Is(err, sftp.ErrAlreadyExists) {
+		t.Fatalf("existing file = %v", err)
+	}
+}
+
+func TestDownloadArchiveRejectsARegularFileThatGrowsAfterListing(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/project":   directory("project"),
+		"/project/a": file("a", "a", 0o600),
+	})
+	remote.openHook = func(candidate string) {
+		if candidate != "/project/a" {
+			return
+		}
+		changed := remote.nodes[candidate]
+		changed.content = []byte("expanded")
+		remote.nodes[candidate] = changed
+		remote.openHook = nil
+	}
+	var destination bytes.Buffer
+	if _, err := serviceFor(remote).DownloadArchive(t.Context(), "edge", "/project", &destination); !errors.Is(err, sftp.ErrConflict) {
+		t.Fatalf("growing archive entry = %v", err)
 	}
 }
 

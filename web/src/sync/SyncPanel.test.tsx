@@ -48,6 +48,7 @@ const historyStatus = {
   historyTruncated: false,
   downloadTruncated: false,
   downloadedBytes: 1800,
+  skipped: 0,
   revisions: [{
     key: "snapshots/2026-08-25-015400-aabbcc-000001.tar.gz.enc",
     revision: historyRevision,
@@ -111,6 +112,8 @@ const nothingToDo: PullResponse = {
   summary: measuredSummary,
   downloadedBytes: 900,
   completedAt: "2026-08-12T01:02:04Z",
+  remoteETag: '"generation-1"',
+  remoteRevision: historyRevision,
 };
 
 describe("SyncPanel", () => {
@@ -197,7 +200,9 @@ describe("SyncPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Preview restoring this revision" }));
     await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, undefined, historyKey));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
-    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, undefined, historyKey));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(
+      true, undefined, historyKey, expect.objectContaining({ remoteRevision: historyRevision }),
+    ));
   });
 
   it("requires explicit confirmation before replacing the remote snapshot", async () => {
@@ -312,7 +317,9 @@ describe("SyncPanel", () => {
 
     await userEvent.click(screen.getByRole("checkbox", { name: /overwrite files in ~\/.ssh/i }));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
-    await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith(true, undefined, undefined));
+    await waitFor(() => expect(api.pullSnapshot).toHaveBeenLastCalledWith(
+      true, undefined, undefined, expect.objectContaining({ remoteRevision: historyRevision }),
+    ));
   });
 
   it("shows a conflict and refuses to apply it", async () => {
@@ -522,6 +529,24 @@ describe("SyncPanel", () => {
     expect(screen.queryByText("a key chosen by hand")).not.toBeInTheDocument();
   });
 
+  it("tells the user to re-enter the same new key after an interrupted rotation", async () => {
+    const setSyncKey = vi.fn().mockRejectedValue(new ApiError("sync_key_recovery_required", 409, null));
+    const api = buildApi(configured, nothingToDo, {
+      setSyncKey,
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByLabelText("Choose the key myself"));
+    await userEvent.type(screen.getByLabelText("Key"), "the same new synchronization key");
+    const replace = screen.getByRole("button", { name: "Replace the key" });
+    expect(replace).toBeDisabled();
+    await userEvent.click(screen.getByLabelText(/older history snapshots will remain encrypted/i));
+    await userEvent.click(replace);
+
+    await waitFor(() => expect(setSyncKey).toHaveBeenCalledWith("the same new synchronization key", true));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/same new synchronization key again/i);
+  });
+
   it("offers no push or pull until a key exists", async () => {
     const api = buildApi({ ...configured, keyConfigured: false }, nothingToDo);
     render(<SyncPanel api={api} />);
@@ -565,6 +590,8 @@ describe("SyncPanel", () => {
       summary: { createdAt: "2026-08-12T01:30:00Z", fileCount: 2, sourceBytes: 10, snapshotBytes: 20 },
       downloadedBytes: 20,
       completedAt: "2026-08-12T01:31:00Z",
+      remoteETag: '"generation-1"',
+      remoteRevision: historyRevision,
       conflicts: [],
       written: [],
       removed: ["~/.ssh/connections/old.conf"],
@@ -586,6 +613,8 @@ describe("SyncPanel", () => {
       summary: { createdAt: "2026-08-12T01:30:00Z", fileCount: 2, sourceBytes: 10, snapshotBytes: 20 },
       downloadedBytes: 20,
       completedAt: "2026-08-12T01:31:00Z",
+      remoteETag: '"generation-1"',
+      remoteRevision: historyRevision,
       conflicts: [],
       written: ["~/.ssh/config"],
       removed: [],
@@ -617,6 +646,16 @@ describe("SyncPanel", () => {
     expect(await screen.findByText(/stopped before uploading because another machine changed/i)).toBeInTheDocument();
   });
 
+  it("explains that an acknowledged live snapshot was deleted", async () => {
+    const api = buildApi(
+      { ...configured, auto: { enabled: true, phase: "blocked", detail: "remote_deleted", at: "2026-08-25T09:00:00Z" } },
+      nothingToDo,
+    );
+    render(<SyncPanel api={api} />);
+
+    expect(await screen.findByText(/live snapshot was deleted from the bucket/i)).toBeInTheDocument();
+  });
+
   it("turns the loop on and keeps what the server answered", async () => {
     const setAutoSync = vi
       .fn()
@@ -643,6 +682,8 @@ describe("SyncPanel", () => {
       summary: { createdAt: "2026-08-12T01:30:00Z", fileCount: 1, sourceBytes: 10, snapshotBytes: 20 },
       downloadedBytes: 20,
       completedAt: "2026-08-12T01:31:00Z",
+      remoteETag: '"generation-1"',
+      remoteRevision: historyRevision,
       conflicts: [{ path: "config", changedHere: true, changedThere: true }],
       written: [],
       removed: [],
@@ -660,7 +701,7 @@ describe("SyncPanel", () => {
 
     await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(false, "remote", undefined));
     await userEvent.click(await screen.findByRole("button", { name: "Apply the snapshot" }));
-    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "remote", undefined));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "remote", undefined, resolved));
   });
 
   it("can acknowledge a local conflict choice even when it writes no files", async () => {
@@ -683,6 +724,6 @@ describe("SyncPanel", () => {
     const apply = await screen.findByRole("button", { name: "Apply the snapshot" });
     expect(apply).toBeEnabled();
     await userEvent.click(apply);
-    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "local", undefined));
+    await waitFor(() => expect(pullSnapshot).toHaveBeenLastCalledWith(true, "local", undefined, keepLocal));
   });
 });

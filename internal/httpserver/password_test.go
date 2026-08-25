@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -18,7 +17,6 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/application"
-	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
 )
@@ -46,7 +44,7 @@ func passwordEngineIn(t *testing.T) (*echo.Echo, *secret.Service, string) {
 
 	engine := echo.New()
 	registerPasswordRoutes(engine, PasswordHandlers{
-		Service: service,
+		Service: service, Binding: fixedPasswordBinding,
 	})
 	return engine, service, home
 }
@@ -67,7 +65,7 @@ func passwordEngineWithKeyHosts(
 	service := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
 	engine := echo.New()
 	registerPasswordRoutes(engine, PasswordHandlers{
-		Service:  service,
+		Service: service, Binding: fixedPasswordBinding,
 		KeyHosts: keyHosts,
 	})
 	return engine, service, home
@@ -112,7 +110,7 @@ func TestNoPasswordRouteEverReturnsAPassword(t *testing.T) {
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Set("bastion", "hunter2"); err != nil {
+	if err := service.SetBound("bastion", "hunter2", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,7 +136,7 @@ func TestStatusReportsWhichHostsHaveAPasswordAndNothingElse(t *testing.T) {
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Set("bastion", "hunter2"); err != nil {
+	if err := service.SetBound("bastion", "hunter2", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
 
@@ -203,7 +201,7 @@ func TestStoreRefusesAPasswordTheHostWouldNeverBeOffered(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerPasswordRoutes(engine, PasswordHandlers{
-		Service: service,
+		Service: service, Binding: fixedPasswordBinding,
 		Eligibility: func(alias string) (application.PasswordEligibility, error) {
 			return application.PasswordEligibility{
 				Alias:    alias,
@@ -239,6 +237,36 @@ func TestStoreRefusesAPasswordTheHostWouldNeverBeOffered(t *testing.T) {
 	}
 }
 
+func TestPasswordWritesFailClosedWithoutAuthenticationBinding(t *testing.T) {
+	home := t.TempDir()
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	registerPasswordRoutes(engine, PasswordHandlers{Service: service})
+
+	for name, response := range map[string]*httptest.ResponseRecorder{
+		"dedicated": send(t, engine, http.MethodPut, "/api/v1/passwords/edge", `{"password":"secret"}`, nil),
+		"saved": send(t, engine, http.MethodPut, credentialPath("password", "/assign"),
+			`{"subject":"edge","name":"office"}`, nil),
+	} {
+		if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "config_unreadable") {
+			t.Errorf("%s password write = %d: %s", name, response.Code, response.Body.String())
+		}
+	}
+	if service.Has("edge") {
+		t.Fatal("password write without an authentication binding changed the vault")
+	}
+}
+
 func TestAssignCredentialRefusesAPasswordForADirectKeyButNotAKeyPassphrase(t *testing.T) {
 	_, service := passwordEngine(t)
 	if err := service.Initialise(testPassphrase); err != nil {
@@ -252,7 +280,7 @@ func TestAssignCredentialRefusesAPasswordForADirectKeyButNotAKeyPassphrase(t *te
 	}
 	engine := echo.New()
 	registerPasswordRoutes(engine, PasswordHandlers{
-		Service: service,
+		Service: service, Binding: fixedPasswordBinding,
 		Eligibility: func(alias string) (application.PasswordEligibility, error) {
 			return application.PasswordEligibility{
 				Alias: alias, Storable: false,
@@ -263,7 +291,7 @@ func TestAssignCredentialRefusesAPasswordForADirectKeyButNotAKeyPassphrase(t *te
 
 	password := send(t, engine, http.MethodPut, credentialPath("password", "/assign"),
 		`{"subject":"bastion","name":"office"}`, nil)
-	if password.Code != http.StatusConflict || service.PasswordFor("bastion") != "" {
+	if password.Code != http.StatusConflict || service.BoundPasswordFor("bastion", testPasswordBinding) != "" {
 		t.Fatalf("password assignment = %d: %s", password.Code, password.Body.String())
 	}
 	keyPhrase := send(t, engine, http.MethodPut, credentialPath("key_passphrase", "/assign"),
@@ -279,7 +307,7 @@ func TestEligibilityIsReadableAndCarriesTheWarnings(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerPasswordRoutes(engine, PasswordHandlers{
-		Service: service,
+		Service: service, Binding: fixedPasswordBinding,
 		Eligibility: func(alias string) (application.PasswordEligibility, error) {
 			return application.PasswordEligibility{
 				Alias: alias, Storable: true,
@@ -382,7 +410,7 @@ func TestCredentialsListIncludesNamedAndDedicatedHostUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := service.AssignCredential(secret.KindPassword, "web-1", "office"); err != nil {
+	if err := service.AssignPasswordCredential("web-1", "office", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"keys/id_a", "keys/id_b"} {
@@ -585,15 +613,15 @@ func TestOneNamedSecretServesTwoHostsAndTheFileNamesNeither(t *testing.T) {
 		t.Fatalf("Unlock = %v", err)
 	}
 	for _, alias := range []string{"web-1", "web-2"} {
-		if got := reopened.PasswordFor(alias); got != "hunter2" {
+		if got := reopened.BoundPasswordFor(alias, testPasswordBinding); got != "hunter2" {
 			t.Errorf("PasswordFor(%q) = %q, want the one secret both point at", alias, got)
 		}
 	}
 }
 
-// マスターパスワードの変更は bucket の最新スナップショットも再暗号化し、
-// できなかった場合はそう伝える。
-func TestChangingTheMasterPasswordReportsWhetherTheBucketFollowed(t *testing.T) {
+// マスターパスワード変更はローカル暗号化だけを変更し、remote同期状態を応答へ
+// 混ぜない。remote snapshotは専用の同期鍵で暗号化されている。
+func TestChangingTheMasterPasswordReturnsTheLocalVaultState(t *testing.T) {
 	engine, service, _ := passwordEngineIn(t)
 	if code := send(t, engine, http.MethodPost, "/api/v1/passwords/initialise",
 		`{"passphrase":"`+testPassphrase+`"}`, nil).Code; code != http.StatusOK {
@@ -601,8 +629,6 @@ func TestChangingTheMasterPasswordReportsWhetherTheBucketFollowed(t *testing.T) 
 	}
 	_ = service
 
-	// bucket が配線されていない場合、ローカル側は完了しており、応答は
-	// リモート側も完了したとは主張しない。
 	recorder := send(t, engine, http.MethodPost, "/api/v1/passwords/change",
 		`{"current":"`+testPassphrase+`","next":"a different master password"}`, nil)
 	if recorder.Code != http.StatusOK {
@@ -612,8 +638,8 @@ func TestChangingTheMasterPasswordReportsWhetherTheBucketFollowed(t *testing.T) 
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if answer.SnapshotResealed {
-		t.Error("it claims the bucket was updated when no bucket is configured")
+	if !answer.Vault.Exists || !answer.Vault.Unlocked {
+		t.Fatalf("vault status = %+v", answer.Vault)
 	}
 
 	// そして今動くのは新しい方である。
@@ -624,34 +650,5 @@ func TestChangingTheMasterPasswordReportsWhetherTheBucketFollowed(t *testing.T) 
 	if code := send(t, engine, http.MethodPost, "/api/v1/passwords/unlock",
 		`{"passphrase":"a different master password"}`, nil).Code; code != http.StatusOK {
 		t.Error("the new master password does not unlock")
-	}
-}
-
-func TestChangingTheMasterPasswordKeepsTheBrowserPartialSuccessContract(t *testing.T) {
-	service := newCLIVaultService(t)
-	if err := service.Initialise(testPassphrase); err != nil {
-		t.Fatal(err)
-	}
-	engine := echo.New()
-	registerPasswordRoutes(engine, PasswordHandlers{
-		Service: service,
-		ResealSnapshot: func(context.Context, string) error {
-			return remotesync.ErrPushRefused
-		},
-	})
-	response := send(t, engine, http.MethodPost, "/api/v1/passwords/change",
-		`{"current":"`+testPassphrase+`","next":"another valid password"}`, nil)
-	if response.Code != http.StatusOK {
-		t.Fatalf("browser change = %d, want 200: %s", response.Code, response.Body.String())
-	}
-	var answer api.ChangeMasterPasswordResult
-	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
-		t.Fatal(err)
-	}
-	if answer.SnapshotResealed || answer.SnapshotProblem == nil || *answer.SnapshotProblem != "sync_push_refused" {
-		t.Fatalf("partial result = %+v", answer)
-	}
-	if !answer.Vault.Exists || !answer.Vault.Unlocked {
-		t.Fatalf("vault status = %+v", answer.Vault)
 	}
 }

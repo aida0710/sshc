@@ -387,16 +387,15 @@ export const en = {
   "desktop.closeAll": "Close every connection",
   "secrets.changeHeading": "Master password",
   "secrets.changeNote":
-    "Changing the master password re-encrypts the vault, sync settings, and every local backup, then uploads a new live snapshot to the bucket. Dated history snapshots remain encrypted with the old password because updating them would require downloading and uploading the entire bucket.",
+    "Changing the master password re-encrypts the local vault, sync settings, and every local backup. Remote snapshots use the separate synchronization key and are not rewritten.",
   "secrets.currentMaster": "Current master password",
   "secrets.newMaster": "New master password",
   "secrets.confirmMaster": "Confirm new master password",
   "secrets.change": "Change the master password",
   "secrets.wrongCurrent": "The current master password is incorrect. Nothing was changed.",
   "secrets.changeFailed": "The master password could not be changed.",
-  "secrets.changedWithSnapshot": "The master password was changed. The vault, local backups, and live bucket snapshot now use the new password.",
-  "secrets.changedWithoutSnapshot":
-    "The master password was changed on this machine, but the bucket could not be updated ({reason}). Its snapshot still requires the old password. Push again when the bucket is reachable.",
+  "secrets.changedMasterLocally":
+    "The master password was changed. The local vault, sync settings, and local backups now use the new password. Remote snapshots were not rewritten.",
   "section.secrets": "Secrets",
   "lock.explainNew":
     "Choose a master password to encrypt stored passwords, key passphrases, sync settings, and all backups created by sshc.",
@@ -673,7 +672,11 @@ export const en = {
     "Automatic sync stopped because applying the snapshot would remove files from this machine. Select Check for changes to review them.",
   "sync.autoBlockedRemoteMoved":
     "Automatic sync stopped before uploading because another machine changed the remote snapshot. Download those changes or explicitly replace the confirmed remote snapshot.",
+  "sync.autoBlockedRemoteDeleted":
+    "The previously synchronized live snapshot was deleted from the bucket. Automatic sync stopped so it will not silently recreate or overwrite it.",
   "sync.autoFailedLast": "The previous check could not reach the bucket. Automatic sync will try again.",
+  "sync.autoFailedWrongKey": "The remote snapshot cannot be opened with this machine's synchronization key. The same generation will not be downloaded again automatically.",
+  "sync.autoFailedSchema": "The remote snapshot uses an unsupported format. The same generation will not be downloaded again automatically.",
   "sync.autoFailed": "The setting could not be saved.",
   "sync.autoNow": "Sync now",
   "sync.autoNowFailed": "The sync check could not be run.",
@@ -707,6 +710,7 @@ export const en = {
   "sync.historyFailed": "The encrypted revision history could not be read.",
   "sync.historySummary": "{count} revisions · downloaded {size}",
   "sync.historyTruncated": "Only the newest bounded history window is decoded. Older objects remain in the bucket list above.",
+  "sync.historySkipped": "{count} history object(s) could not be opened with the current format or key and were skipped.",
   "sync.historyTimeline": "Revision timeline",
   "sync.historyRelation.head": "HEAD",
   "sync.historyRelation.ancestor": "ancestor",
@@ -735,6 +739,11 @@ export const en = {
   "sync.noLocalChanges": "There are no local changes to push.",
   "sync.remoteMoved":
     "Another machine changed the current snapshot, so the update was cancelled before retrying. Download the other machine's changes or explicitly replace the confirmed remote snapshot.",
+  "sync.previewStale": "The remote snapshot changed after this preview. Preview it again before applying.",
+  "sync.remoteDeleted": "The live remote snapshot was deleted before apply. Refresh the bucket status.",
+  "sync.keyRecoveryRequired": "Synchronization key replacement was interrupted. Enter the same new synchronization key again to recover.",
+  "sync.keyRecoveryTargetChange": "Finish the interrupted key replacement before changing the bucket or path.",
+  "sync.keyHistoryLossConfirm": "I understand that older history snapshots will remain encrypted with the previous key and will no longer be readable.",
   "sync.preview": "Check for changes",
   "sync.pullFailed": "The snapshot could not be read.",
   "sync.alreadyMatches": "This workspace already matches the snapshot.",

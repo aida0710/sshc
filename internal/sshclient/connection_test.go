@@ -37,3 +37,39 @@ func TestSubsystemConnectionRefusesAnUnknownHostWithoutPersistingIt(t *testing.T
 		t.Fatal("a non-interactive subsystem persisted an unknown host key")
 	}
 }
+
+func TestSubsystemConnectionRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
+	path, contents, public := keyPair(t)
+	inner := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
+	edge := newTestServer(t, serverOptions{
+		AcceptKeys:       []ssh.PublicKey{public},
+		AllowDirectTCPIP: true,
+	})
+	edge.allow(inner.Address())
+
+	knownInner := knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())
+	written := 0
+	dialer := sshclient.Dialer{
+		Auth: sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
+		HostKeys: sshclient.HostKeys{
+			Read: func() ([]byte, error) { return []byte(knownInner), nil },
+			Add:  func(knownhosts.Candidate) error { written++; return nil },
+		},
+	}
+	final := targetWith(inner, path)
+	edgeTarget := targetWith(edge, path)
+	edgeTarget.Strict = "no"
+	final.Jump = []sshclient.Target{edgeTarget}
+
+	connection, err := dialer.Connect(context.Background(), final)
+	if connection != nil {
+		_ = connection.Close()
+		t.Fatal("an unknown ProxyJump returned an authenticated subsystem transport")
+	}
+	if !errors.Is(err, sshclient.ErrHostKeyUnknown) {
+		t.Fatalf("Connect = %v, want ErrHostKeyUnknown", err)
+	}
+	if written != 0 {
+		t.Fatal("a non-interactive subsystem persisted an unknown ProxyJump host key")
+	}
+}

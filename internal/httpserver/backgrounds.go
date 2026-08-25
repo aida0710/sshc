@@ -26,6 +26,11 @@ func registerBackgroundRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.DELETE("/api/v1/terminal/backgrounds/:name", handlers.DeleteBackground)
 }
 
+type backgroundListResponse struct {
+	Backgrounds    []application.Background `json:"backgrounds"`
+	RemainingBytes int                      `json:"remainingBytes"`
+}
+
 // backgroundList は、置いてある画像と、あと何バイト置けるかを返す。
 //
 // 残りを数えるのはこちらである。画面が上限を書き写すと、上限を変えた日に
@@ -43,9 +48,8 @@ func (h ConfigHandlers) Backgrounds(c *echo.Context) error {
 	if remaining < 0 {
 		remaining = 0
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"backgrounds":    backgrounds,
-		"remainingBytes": remaining,
+	return c.JSON(http.StatusOK, backgroundListResponse{
+		Backgrounds: backgrounds, RemainingBytes: remaining,
 	})
 }
 

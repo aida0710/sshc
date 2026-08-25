@@ -221,11 +221,9 @@ type fakeAddr string
 func (address fakeAddr) Network() string { return string(address) }
 func (address fakeAddr) String() string  { return string(address) }
 
-// reload には cookie があり CSRF トークンはない。したがって更新自体が
-// トークンを要求することはできない。bootstrap とまったく同様にこの
-// チェックからは除外されているが、それ以外。有効なセッション、
-// Origin、Fetch Metadata。はすべて守られている。cross-site のページはこれらを作れない。
-// SameSite=Strict が cookie を与えず、Sec-Fetch-Site も偽造できないからだ。
+// reload は port-origin scoped sessionStorage に残した CSRF token を提示する。
+// localhost の別 port は session cookie を受け取れるため、cookie 単独で更新を
+// 許すと、raw HTTP で Origin と Fetch Metadata を偽装して token を取得できてしまう。
 func newRenewServer(t *testing.T) (*echo.Echo, session.Credentials) {
 	t.Helper()
 	// 変化するソースである。一定のソースではすべてのトークンが同一になり、
@@ -277,10 +275,15 @@ func sendRenewRequest(t *testing.T, engine *echo.Echo, target, sessionID, csrf s
 	return response
 }
 
-func TestRenewIssuesATokenWithoutPresentingOne(t *testing.T) {
+func TestRenewRequiresAnIssuedTokenAndKeepsOtherTabsWorking(t *testing.T) {
 	engine, credentials := newRenewServer(t)
 
-	response := sendRenewRequest(t, engine, "/api/v1/session/renew", credentials.SessionID, "")
+	without := sendRenewRequest(t, engine, "/api/v1/session/renew", credentials.SessionID, "")
+	if without.Code != http.StatusForbidden {
+		t.Fatalf("renew without CSRF = %d, want 403: %s", without.Code, without.Body.String())
+	}
+
+	response := sendRenewRequest(t, engine, "/api/v1/session/renew", credentials.SessionID, credentials.CSRFToken)
 	if response.Code != http.StatusOK {
 		t.Fatalf("renew = %d, want 200: %s", response.Code, response.Body.String())
 	}
@@ -293,11 +296,12 @@ func TestRenewIssuesATokenWithoutPresentingOne(t *testing.T) {
 	if answer.CSRFToken == "" || answer.CSRFToken == credentials.CSRFToken {
 		t.Fatalf("csrfToken = %q, want a fresh one", answer.CSRFToken)
 	}
-	// 退役したトークンはもう検証を通らない。これは renew ルート自身が
-	// 示している。古いトークンを提示した 2 回目の renew はそれでも問題なく
-	// 通るが、manager の方はすでに先へ進んでいる。
-	if sendRenewRequest(t, engine, "/api/v1/session/renew", credentials.SessionID, "").Code != http.StatusOK {
-		t.Error("a second renew was refused")
+	// 別tabが保持する既存tokenも引き続き使える。cookieだけの要求は上で拒否済みである。
+	if code := sendRenewRequest(t, engine, "/api/v1/session/renew", credentials.SessionID, credentials.CSRFToken).Code; code != http.StatusOK {
+		t.Errorf("renew from another tab = %d, want 200", code)
+	}
+	if code := sendRenewRequest(t, engine, "/api/v1/session/renew", credentials.SessionID, answer.CSRFToken).Code; code != http.StatusOK {
+		t.Errorf("renew with current CSRF = %d, want 200", code)
 	}
 }
 

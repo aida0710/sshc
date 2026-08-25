@@ -45,6 +45,7 @@ type HistoryView struct {
 	HistoryTruncated  bool                  `json:"historyTruncated"`
 	DownloadTruncated bool                  `json:"downloadTruncated"`
 	DownloadedBytes   int64                 `json:"downloadedBytes"`
+	Skipped           int                   `json:"skipped"`
 }
 
 type HistoryDiff struct {
@@ -54,6 +55,90 @@ type HistoryDiff struct {
 	Modified        []string `json:"modified"`
 	Removed         []string `json:"removed"`
 	DownloadedBytes int64    `json:"downloadedBytes"`
+}
+
+type historyReadSnapshot struct {
+	binding        remoteBinding
+	bindingVersion uint64
+	state          historyStateSnapshot
+}
+
+type historyStateSnapshot struct {
+	target       string
+	key          string
+	etag         string
+	baseRevision string
+}
+
+func snapshotHistoryState(current state) historyStateSnapshot {
+	snapshot := historyStateSnapshot{target: current.Target, key: current.Key, etag: current.ETag}
+	if current.Base != nil {
+		snapshot.baseRevision = current.Base.Revision
+	}
+	return snapshot
+}
+
+// captureHistoryRead holds the global mutation lock only while taking the local
+// binding/state snapshot. The expensive network and Argon2 work happens after it
+// is released, so push/apply/key rotation are not stalled by the history graph.
+func (s *Service) captureHistoryRead() (historyReadSnapshot, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	binding, version, err := s.configuredBindingVersion()
+	if err != nil {
+		return historyReadSnapshot{}, err
+	}
+	current, err := s.readState()
+	if err != nil {
+		return historyReadSnapshot{}, err
+	}
+	// Keep the explicit generation check even though Configure is serialized:
+	// it documents the evidence carried across the later lock-free network work.
+	_, latestVersion, err := s.configuredBindingVersion()
+	if err != nil {
+		return historyReadSnapshot{}, err
+	}
+	if latestVersion != version {
+		return historyReadSnapshot{}, ErrRemoteMoved
+	}
+	return historyReadSnapshot{
+		binding: binding, bindingVersion: version, state: snapshotHistoryState(current),
+	}, nil
+}
+
+// validateHistoryRead rejects a graph if the live object, configured target, or
+// acknowledged local generation changed while it was being decoded. The HEAD is
+// deliberately outside operationMu; only the short local comparison is serialized.
+func (s *Service) validateHistoryRead(ctx context.Context, captured historyReadSnapshot, liveETag string) error {
+	etag, err := captured.binding.client.Head(ctx, ObjectKeyFor(captured.binding.config))
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			return ErrRemoteMoved
+		}
+		return err
+	}
+	if etag != liveETag {
+		return ErrRemoteMoved
+	}
+
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	// Keep the binding lock until the function returns successfully. Configure
+	// can therefore be wholly before this validation or wholly after it, never
+	// between the version comparison and returning the graph.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.bindingVersion != captured.bindingVersion {
+		return ErrRemoteMoved
+	}
+	current, err := s.readState()
+	if err != nil {
+		return err
+	}
+	if snapshotHistoryState(current) != captured.state {
+		return ErrRemoteMoved
+	}
+	return nil
 }
 
 func openSnapshotObject(object objectstore.Object, passphrase string) (Manifest, map[string][]byte, error) {
@@ -68,13 +153,14 @@ func openSnapshotObject(object objectstore.Object, passphrase string) (Manifest,
 // still complete in BucketStatus; this method limits downloaded ciphertext so
 // rendering a graph cannot turn a large bucket into an unbounded transfer.
 func (s *Service) History(ctx context.Context, passphrase string) (HistoryView, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
+	s.historyMu.Lock()
+	defer s.historyMu.Unlock()
 
-	binding, err := s.configuredBinding()
+	captured, err := s.captureHistoryRead()
 	if err != nil {
 		return HistoryView{}, err
 	}
+	binding := captured.binding
 	liveKey := ObjectKeyFor(binding.config)
 	liveObject, err := binding.client.Get(ctx, liveKey)
 	if err != nil {
@@ -116,10 +202,19 @@ func (s *Service) History(ctx context.Context, passphrase string) (HistoryView, 
 		if err != nil {
 			return HistoryView{}, err
 		}
+		// LIST metadata and the downloaded immutable candidate must describe the
+		// same object. A store (or attacker with bucket credentials) replacing it
+		// between the calls must make this graph stale, not silently rewrite it.
+		if info.ETag == "" || object.ETag != info.ETag {
+			return HistoryView{}, ErrRemoteMoved
+		}
 		view.DownloadedBytes += int64(len(object.Body))
 		manifest, _, err := openSnapshotObject(object, passphrase)
 		if err != nil {
-			return HistoryView{}, err
+			// live head was opened with this key above. A single legacy, rotated-key,
+			// or corrupt immutable history object must not hide every usable revision.
+			view.Skipped++
+			continue
 		}
 		manifests[manifest.Revision] = manifest
 		meta := bucketObjectView(binding.config, info)
@@ -150,6 +245,9 @@ func (s *Service) History(ctx context.Context, passphrase string) (HistoryView, 
 		default:
 			entry.Relation = HistoryBranch
 		}
+	}
+	if err := s.validateHistoryRead(ctx, captured, liveObject.ETag); err != nil {
+		return HistoryView{}, err
 	}
 	return view, nil
 }
@@ -184,17 +282,19 @@ func (s *Service) historySnapshot(ctx context.Context, binding remoteBinding, pa
 // DiffHistory compares one historical snapshot with the current remote head.
 // Only paths and change kinds leave the service; file contents stay in memory.
 func (s *Service) DiffHistory(ctx context.Context, passphrase, key string) (HistoryDiff, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	binding, err := s.configuredBinding()
+	s.historyMu.Lock()
+	defer s.historyMu.Unlock()
+
+	captured, err := s.captureHistoryRead()
+	if err != nil {
+		return HistoryDiff{}, err
+	}
+	binding := captured.binding
+	liveObject, err := binding.client.Get(ctx, ObjectKeyFor(binding.config))
 	if err != nil {
 		return HistoryDiff{}, err
 	}
 	from, _, fromBytes, err := s.historySnapshot(ctx, binding, passphrase, key)
-	if err != nil {
-		return HistoryDiff{}, err
-	}
-	liveObject, err := binding.client.Get(ctx, ObjectKeyFor(binding.config))
 	if err != nil {
 		return HistoryDiff{}, err
 	}
@@ -226,6 +326,9 @@ func (s *Service) DiffHistory(ctx context.Context, passphrase, key string) (Hist
 	sort.Strings(diff.Added)
 	sort.Strings(diff.Modified)
 	sort.Strings(diff.Removed)
+	if err := s.validateHistoryRead(ctx, captured, liveObject.ETag); err != nil {
+		return HistoryDiff{}, err
+	}
 	return diff, nil
 }
 

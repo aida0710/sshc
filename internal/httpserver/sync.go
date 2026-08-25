@@ -17,6 +17,8 @@ import (
 	"sshc/internal/session"
 )
 
+var errSyncKeyMissing = errors.New("synchronization key is missing")
+
 // SyncHandlers はリモートのスナップショットを提供する。
 type SyncHandlers struct {
 	Service *remotesync.Service
@@ -91,7 +93,7 @@ func (h SyncHandlers) restore() {
 		Endpoint: settings.Endpoint, Bucket: settings.Bucket, Path: settings.Path,
 		Region: settings.Region, Direction: direction,
 	}
-	h.Service.Configure(config, credentials, remotesync.NewClient(config, credentials))
+	_ = h.Service.Configure(config, credentials, remotesync.NewClient(config, credentials))
 }
 
 func snapshotSummaryResponse(summary remotesync.SnapshotSummary) api.SnapshotSummary {
@@ -163,8 +165,15 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
+	if len(request.Endpoint) == 0 || len(request.Endpoint) > 2048 ||
+		len(request.AccessKeyId) == 0 || len(request.AccessKeyId) > 512 ||
+		len(request.SecretAccessKey) == 0 || len(request.SecretAccessKey) > 512 ||
+		(request.Path != nil && len(*request.Path) > 255) ||
+		(request.Region != nil && len(*request.Region) > 64) {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
 	parsed, err := url.Parse(request.Endpoint)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Opaque != "" {
 		return problem(c, http.StatusBadRequest, "endpoint_must_be_https")
 	}
 	// client はパス全体を /bucket/key に置き換えるため、貼り付けられた
@@ -173,7 +182,8 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	// 末尾のスラッシュ 1 つはブラウザがホストに付け足すだけで意味を
 	// 持たないため、拒否ではなく除去する。除去することで、画面が
 	// "https://host//bucket" と表示するのも防いでいる。
-	if strings.Trim(parsed.Path, "/") != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawPath != "" ||
+		parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
 		return problem(c, http.StatusBadRequest, "endpoint_must_have_no_path")
 	}
 	endpoint := strings.TrimRight(request.Endpoint, "/")
@@ -213,38 +223,76 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 
 	// 使われる前に保存する。これにより、次の実行では消えているはずの
 	// 設定を使ったと応答が主張してしまうことはない。
+	persist := func() error { return nil }
 	if h.Secrets != nil {
-		if err := h.Secrets.SetSyncSettings(secret.SyncSettings{
-			Endpoint: endpoint, Bucket: request.Bucket, Path: path, Region: region,
-			AccessKeyID: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey,
-			Direction: string(direction),
-		}); err != nil {
+		persist = func() error {
+			return h.Secrets.SetSyncSettings(secret.SyncSettings{
+				Endpoint: endpoint, Bucket: request.Bucket, Path: path, Region: region,
+				AccessKeyID: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey,
+				Direction: string(direction),
+			})
+		}
+	}
+	if err := h.Service.Reconfigure(config, credentials, client, persist); err != nil {
+		if errors.Is(err, remotesync.ErrRecoveryTargetChange) || errors.Is(err, remotesync.ErrRecoveryRequired) {
+			return syncProblem(c, err)
+		}
+		if h.Secrets != nil {
 			if errors.Is(err, secret.ErrLocked) {
 				return problem(c, http.StatusConflict, "vault_locked")
 			}
 			return problem(c, http.StatusInternalServerError, "vault_failed")
 		}
+		return syncProblem(c, err)
 	}
-	h.Service.Configure(config, credentials, client)
+	if h.Auto != nil {
+		h.Auto.ResetRemoteCache()
+	}
 	return h.status(c)
 }
 
 // sealingKey は、vault に保存した同期専用の暗号鍵を返す。
 // 取得できない場合は HTTP 応答を書き込み、ok=false を返す。
 func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
-	if h.Secrets == nil {
-		return "", false, problem(c, http.StatusConflict, "sync_key_missing")
-	}
-	settings, err := h.Secrets.SyncSettings()
+	key, err := h.currentSyncKey()
 	switch {
 	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoVault):
 		return "", false, problem(c, http.StatusConflict, "vault_locked")
+	case errors.Is(err, errSyncKeyMissing):
+		return "", false, problem(c, http.StatusConflict, "sync_key_missing")
 	case err != nil:
 		return "", false, problem(c, http.StatusInternalServerError, "vault_unreadable")
-	case settings.Key == "":
-		return "", false, problem(c, http.StatusConflict, "sync_key_missing")
 	}
-	return settings.Key, true, nil
+	return key, true, nil
+}
+
+func (h SyncHandlers) currentSyncKey() (string, error) {
+	if h.Secrets == nil {
+		return "", errSyncKeyMissing
+	}
+	settings, err := h.Secrets.SyncSettings()
+	if err != nil {
+		return "", err
+	}
+	if settings.Key == "" {
+		return "", errSyncKeyMissing
+	}
+	return settings.Key, nil
+}
+
+func (h SyncHandlers) keyProvider() remotesync.KeyProvider {
+	return h.currentSyncKey
+}
+
+func syncKeyProblem(c *echo.Context, err error) error {
+	switch {
+	case errors.Is(err, errSyncKeyMissing):
+		return problem(c, http.StatusConflict, "sync_key_missing")
+	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoVault):
+		return problem(c, http.StatusConflict, "vault_locked")
+	default:
+		return syncProblem(c, err)
+	}
 }
 
 // SetKey は、このワークスペースが同期に使う鍵を決める。
@@ -255,6 +303,7 @@ func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
 // 応答は、採った鍵そのものである。平文でこれが出る唯一の場所であり、画面はこれを
 // 一度だけ見せる。
 func (h SyncHandlers) SetKey(c *echo.Context) error {
+	h.restore()
 	var request api.SyncKeyRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
@@ -264,6 +313,9 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 	}
 	key := ""
 	if request.Key != nil {
+		if len(*request.Key) == 0 || len(*request.Key) > 1024 {
+			return problem(c, http.StatusBadRequest, "invalid_request")
+		}
 		key = strings.TrimSpace(*request.Key)
 	}
 	if key == "" {
@@ -280,9 +332,29 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 		}
 		return problem(c, http.StatusInternalServerError, "vault_unreadable")
 	}
-	if err := h.Secrets.SetSyncKey(key); err != nil {
+	confirmHistoryLoss := request.ConfirmHistoryLoss != nil && *request.ConfirmHistoryLoss
+	if err := h.Service.ReplaceKeyUsing(c.Request().Context(), key, confirmHistoryLoss, func() (string, func() error, error) {
+		settings, err := h.Secrets.SyncSettings()
+		if err != nil {
+			return "", nil, err
+		}
+		commit := func() error {
+			if err := h.Secrets.SetSyncKeyIfSettingsMatch(settings, key); errors.Is(err, secret.ErrSyncSettingsChanged) {
+				return remotesync.ErrRemoteMoved
+			} else {
+				return err
+			}
+		}
+		return settings.Key, commit, nil
+	}); err != nil {
 		if errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault) {
 			return problem(c, http.StatusConflict, "vault_locked")
+		}
+		if errors.Is(err, remotesync.ErrRemoteMoved) || errors.Is(err, remotesync.ErrWrongPassphrase) ||
+			errors.Is(err, remotesync.ErrUnsupportedEnvelopeVersion) || errors.Is(err, remotesync.ErrUnsupportedVersion) ||
+			errors.Is(err, remotesync.ErrNotASnapshot) || errors.Is(err, remotesync.ErrRecoveryRequired) ||
+			errors.Is(err, remotesync.ErrHistoryKeyLossConfirmation) {
+			return syncProblem(c, err)
 		}
 		return problem(c, http.StatusInternalServerError, "vault_failed")
 	}
@@ -299,13 +371,9 @@ func (h SyncHandlers) Push(c *echo.Context) error {
 	if err != nil {
 		return syncProblem(c, err)
 	}
-	key, ok, err := h.sealingKey(c)
-	if !ok {
-		return err
-	}
-	result, err := h.Service.Push(c.Request().Context(), key, message)
+	result, err := h.Service.PushUsing(c.Request().Context(), h.keyProvider(), message)
 	if err != nil {
-		return syncProblem(c, err)
+		return syncKeyProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.PushResponse{
 		Status: h.statusResponse(),
@@ -337,10 +405,6 @@ func (h SyncHandlers) ForcePush(c *echo.Context) error {
 	if err != nil {
 		return syncProblem(c, err)
 	}
-	key, ok, err := h.sealingKey(c)
-	if !ok {
-		return err
-	}
 	confirmation, err := h.Service.ForcePushConfirmation(c.Request().Context(), remotesync.ForcePushTarget)
 	if err != nil {
 		return syncProblem(c, err)
@@ -349,9 +413,9 @@ func (h SyncHandlers) ForcePush(c *echo.Context) error {
 		remotesync.ForcePushTarget, confirmation.Evidence); !allowed {
 		return response
 	}
-	result, err := h.Service.ForcePush(c.Request().Context(), key, confirmation.ETag, message)
+	result, err := h.Service.ForcePushUsing(c.Request().Context(), h.keyProvider(), confirmation.ETag, message)
 	if err != nil {
-		return syncProblem(c, err)
+		return syncKeyProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.PushResponse{
 		Status: h.statusResponse(),
@@ -399,6 +463,7 @@ func (h SyncHandlers) History(c *echo.Context) error {
 		CheckedAt: view.CheckedAt, HeadRevision: view.HeadRevision,
 		HistoryTruncated: view.HistoryTruncated, DownloadTruncated: view.DownloadTruncated,
 		DownloadedBytes: view.DownloadedBytes,
+		Skipped:         view.Skipped,
 		Revisions:       make([]api.SyncHistoryRevision, 0, len(view.Revisions)),
 	}
 	for _, revision := range view.Revisions {
@@ -419,6 +484,9 @@ func (h SyncHandlers) HistoryDiff(c *echo.Context) error {
 	h.restore()
 	var request api.SyncHistoryDiffRequest
 	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if len(request.Key) == 0 || len(request.Key) > 1024 {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	key, ok, err := h.sealingKey(c)
@@ -454,9 +522,14 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	key, ok, err := h.sealingKey(c)
-	if !ok {
-		return err
+	if request.Apply != nil && *request.Apply &&
+		(request.ExpectedETag == nil || request.ExpectedRevision == nil) {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if (request.HistoryKey != nil && (len(*request.HistoryKey) == 0 || len(*request.HistoryKey) > 1024)) ||
+		(request.ExpectedETag != nil && len(*request.ExpectedETag) > 1024) ||
+		(request.ExpectedRevision != nil && !validSyncRevision(*request.ExpectedRevision)) {
+		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	resolve := remotesync.ResolveNone
 	if request.Resolve != nil {
@@ -469,22 +542,37 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 			return problem(c, http.StatusBadRequest, "invalid_request")
 		}
 	}
+	historyKey := ""
+	if request.HistoryKey != nil {
+		historyKey = *request.HistoryKey
+	}
 	var result remotesync.PullResult
-	if request.HistoryKey == nil {
-		result, err = h.Service.Pull(c.Request().Context(), key, resolve)
+	var err error
+	if request.Apply != nil && *request.Apply {
+		result, err = h.Service.PullAndApplyUsing(c.Request().Context(), h.keyProvider(), resolve, historyKey,
+			*request.ExpectedETag, *request.ExpectedRevision)
 	} else {
-		result, err = h.Service.PullHistory(c.Request().Context(), key, *request.HistoryKey, resolve)
+		key, ok, keyErr := h.sealingKey(c)
+		if !ok {
+			return keyErr
+		}
+		if historyKey == "" {
+			result, err = h.Service.Pull(c.Request().Context(), key, resolve)
+		} else {
+			result, err = h.Service.PullHistory(c.Request().Context(), key, historyKey, resolve)
+		}
 	}
 	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
-		return syncProblem(c, err)
+		return syncKeyProblem(c, err)
 	}
 
 	response := api.PullResponse{
 		Applied: false, Summary: snapshotSummaryResponse(result.Summary),
 		DownloadedBytes: result.DownloadedBytes, CompletedAt: result.CompletedAt,
-		Conflicts: make([]api.SyncConflict, 0, len(result.Conflicts)),
-		Written:   make([]string, 0, len(result.Request.Changes)),
-		Removed:   make([]string, 0, len(result.Request.Removals)),
+		Conflicts:  make([]api.SyncConflict, 0, len(result.Conflicts)),
+		Written:    make([]string, 0, len(result.Request.Changes)),
+		Removed:    make([]string, 0, len(result.Request.Removals)),
+		RemoteETag: result.ETag, RemoteRevision: result.Manifest.Revision,
 	}
 	for _, conflict := range result.Conflicts {
 		response.Conflicts = append(response.Conflicts, api.SyncConflict{
@@ -505,9 +593,6 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 	}
 
 	if request.Apply != nil && *request.Apply {
-		if err := h.Service.Apply(result); err != nil {
-			return syncProblem(c, err)
-		}
 		response.Applied = true
 		// Apply is a second request and therefore a second download. Its
 		// completion is the point after the workspace transaction and state
@@ -518,6 +603,18 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 		}
 	}
 	return c.JSON(http.StatusOK, response)
+}
+
+func validSyncRevision(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, character := range value {
+		if !((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 // safeObjectPath は bucket 名と同じくらい狭く絞ってあり、理由も同じである。
@@ -564,6 +661,16 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "sync_not_configured")
 	case errors.Is(err, remotesync.ErrRemoteMoved):
 		return problem(c, http.StatusConflict, "sync_remote_moved")
+	case errors.Is(err, remotesync.ErrRemoteDeleted):
+		return problem(c, http.StatusConflict, "sync_remote_deleted")
+	case errors.Is(err, remotesync.ErrPreviewStale):
+		return problem(c, http.StatusConflict, "preview_stale")
+	case errors.Is(err, remotesync.ErrRecoveryRequired):
+		return problem(c, http.StatusConflict, "sync_key_recovery_required")
+	case errors.Is(err, remotesync.ErrRecoveryTargetChange):
+		return problem(c, http.StatusConflict, "sync_key_recovery_target_change")
+	case errors.Is(err, remotesync.ErrHistoryKeyLossConfirmation):
+		return problem(c, http.StatusConflict, "sync_history_key_loss_confirmation_required")
 	case errors.Is(err, remotesync.ErrNothingToPush):
 		return problem(c, http.StatusConflict, "sync_nothing_to_push")
 	case errors.Is(err, remotesync.ErrNoSnapshot):

@@ -37,10 +37,8 @@ var (
 	ErrWrongPassphrase = errors.New("the passphrase did not open this data")
 	// ErrNotAnEnvelope は、そのバイト列がそもそも暗号化したブロブではないと報告する。
 	ErrNotAnEnvelope = errors.New("these bytes are not an sshc envelope")
-	// ErrUnsupportedVersion は、より新しいビルドが書いたブロブであることを報告する。
-	// 独立したエラーにしてあるのは、「このビルドは古すぎる」と「あなたのデータは
-	// 失われた」が、ユーザーに伝える内容として別物だからである。
-	ErrUnsupportedVersion = errors.New("this data was written by a newer version of sshc")
+	// ErrUnsupportedVersion は、現行形式ではないブロブを報告する。
+	ErrUnsupportedVersion = errors.New("this sshc envelope version is not supported")
 	// ErrCostRefused は、このアプリケーションが書くどの envelope にも必要ないほどの
 	// 作業量を要求するヘッダーを報告する。
 	ErrCostRefused = errors.New("this data demands an unreasonable amount of work to open")
@@ -285,7 +283,7 @@ func readHeader(sealed []byte) (header []byte, params Params, rest []byte, err e
 	if [magicLength]byte(sealed[:magicLength]) != magic {
 		return nil, Params{}, nil, ErrNotAnEnvelope
 	}
-	if sealed[magicLength] > envelopeVersion {
+	if sealed[magicLength] != envelopeVersion {
 		return nil, Params{}, nil, ErrUnsupportedVersion
 	}
 	if sealed[magicLength+1] != kdfArgon2id {

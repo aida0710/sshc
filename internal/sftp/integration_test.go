@@ -86,6 +86,26 @@ func integrationService(t *testing.T) sftp.Service {
 	}}
 }
 
+func integrationUpload(t *testing.T, service *sftp.Service, target string, payload []byte, overwrite bool) {
+	t.Helper()
+	manager := sftp.NewTransferManager(service)
+	id := fmt.Sprintf("transfer_%x", time.Now().UnixNano())
+	started, err := manager.Start(t.Context(), "integration", id, target, sftp.StartUploadOptions{Size: int64(len(payload)), Overwrite: overwrite})
+	if err != nil {
+		t.Fatalf("start fixture upload: %v", err)
+	}
+	if _, err := manager.Append(t.Context(), "integration", id, target, 0, int64(len(payload)), payload); err != nil {
+		t.Fatalf("append fixture upload: %v", err)
+	}
+	fingerprint, err := sftp.SourceFingerprint(t.Context(), bytes.NewReader(payload), int64(len(payload)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Complete(t.Context(), "integration", id, target, int64(len(payload)), started.ExpectedRevision, fingerprint); err != nil {
+		t.Fatalf("complete fixture upload: %v", err)
+	}
+}
+
 func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	service := integrationService(t)
 	root := fmt.Sprintf("/tmp/sshc-sftp-%d", time.Now().UnixNano())
@@ -102,17 +122,18 @@ func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	if _, err := service.Mkdir(t.Context(), "integration", root); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if _, err := service.Upload(t.Context(), "integration", first, strings.NewReader("alpha\n"), sftp.UploadOptions{}); err != nil {
-		t.Fatalf("upload text: %v", err)
-	}
-	if _, err := service.Upload(t.Context(), "integration", second, bytes.NewReader([]byte{0, 1, 2, 3}), sftp.UploadOptions{}); err != nil {
-		t.Fatalf("upload binary: %v", err)
-	}
+	integrationUpload(t, &service, first, []byte("alpha\n"), false)
+	integrationUpload(t, &service, second, []byte{0, 1, 2, 3}, false)
 
 	var downloaded bytes.Buffer
-	if _, err := service.Download(t.Context(), "integration", first, &downloaded); err != nil {
+	prepared, err := service.PrepareDownload(t.Context(), "integration", first)
+	if err != nil {
+		t.Fatalf("prepare download: %v", err)
+	}
+	if _, err := prepared.WriteFrom(t.Context(), 0, &downloaded); err != nil {
 		t.Fatalf("download: %v", err)
 	}
+	_ = prepared.Close()
 	if got := downloaded.String(); got != "alpha\n" {
 		t.Fatalf("downloaded = %q", got)
 	}
@@ -130,9 +151,7 @@ func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	}
 
 	stale := saved.Revision
-	if _, err := service.Upload(t.Context(), "integration", first, strings.NewReader("external\n"), sftp.UploadOptions{Overwrite: true}); err != nil {
-		t.Fatalf("external upload: %v", err)
-	}
+	integrationUpload(t, &service, first, []byte("external\n"), true)
 	if _, err := service.SaveText(t.Context(), "integration", first, "mine\n", stale); !errors.Is(err, sftp.ErrConflict) {
 		t.Fatalf("stale save = %v, want ErrConflict", err)
 	}
@@ -215,11 +234,19 @@ func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := manager.Complete(t.Context(), "integration", started.ID, target, int64(len(payload)), started.ExpectedRevision); err != nil {
+	fingerprint, err := sftp.SourceFingerprint(t.Context(), bytes.NewReader(payload), int64(len(payload)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Complete(t.Context(), "integration", started.ID, target, int64(len(payload)), started.ExpectedRevision, fingerprint); err != nil {
 		t.Fatal(err)
 	}
 	downloaded := sha256.New()
-	if _, err := service.Download(t.Context(), "integration", target, downloaded); err != nil {
+	prepared, err := service.PrepareDownload(t.Context(), "integration", target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepared.WriteFrom(t.Context(), 0, downloaded); err != nil {
 		t.Fatal(err)
 	}
 	wantDigest := sha256.Sum256(payload)
@@ -227,9 +254,10 @@ func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
 		t.Fatalf("large fixture digest = %x, want %x", downloaded.Sum(nil), wantDigest)
 	}
 	tail := sha256.New()
-	if _, err := service.DownloadFrom(t.Context(), "integration", target, int64(resumeAfter), tail); err != nil {
+	if _, err := prepared.WriteFrom(t.Context(), int64(resumeAfter), tail); err != nil {
 		t.Fatal(err)
 	}
+	_ = prepared.Close()
 	wantTail := sha256.Sum256(payload[resumeAfter:])
 	if !bytes.Equal(tail.Sum(nil), wantTail[:]) {
 		t.Fatalf("resumed download digest = %x, want %x", tail.Sum(nil), wantTail)

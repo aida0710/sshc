@@ -177,9 +177,11 @@ func (d Dialer) connectOne(
 	}
 	trace.say(Detailed, "TCP が開きました（%s）。", trace.since(started).Round(time.Millisecond))
 
+	authMethods, closeAuth := d.Auth.methodsWithCleanup(target, prompt)
+	defer closeAuth()
 	config := &ssh.ClientConfig{
 		User:            target.User,
-		Auth:            d.Auth.Methods(target, prompt),
+		Auth:            authMethods,
 		HostKeyCallback: d.HostKeys.Callback(target, prompt),
 		// すでに持っている鍵の種類を先に名乗る。既定の順序に任せると、
 		// 三種類の鍵を持つホストが known_hosts にある 1 行とは違う種類を出し、

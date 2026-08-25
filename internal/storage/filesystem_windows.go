@@ -3,7 +3,10 @@
 package storage
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,12 +20,171 @@ import (
 
 const fileDeleteChild = 0x00000040
 
+const (
+	tempRandomByteCount = 16
+	tempCollisionLimit  = 128
+)
+
 func makePrivateDirectories(path string, permission fs.FileMode) error {
-	return windowsacl.EnsureDirectory(path)
+	absolute, err := cleanAbsoluteDOSPath(path)
+	if err != nil {
+		return err
+	}
+	volume := filepath.VolumeName(absolute)
+	root := volume + string(os.PathSeparator)
+	relative, err := filepath.Rel(root, absolute)
+	if err != nil || relative == "." || filepath.IsAbs(relative) {
+		return os.ErrInvalid
+	}
+	current, err := openAbsoluteNoReparseDirectory(root, windows.FILE_TRAVERSE)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = windows.CloseHandle(current) }()
+	components := strings.Split(relative, string(os.PathSeparator))
+	for index, component := range components {
+		if component == "" || component == "." || component == ".." {
+			return os.ErrInvalid
+		}
+		final := index == len(components)-1
+		access := uint32(windows.FILE_TRAVERSE)
+		if final {
+			access |= windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL | windows.WRITE_DAC
+		}
+		next, openErr := openRelativeNoReparse(current, component, access, true, false)
+		created := false
+		if errors.Is(openErr, fs.ErrNotExist) {
+			next, openErr = createRelativeDirectoryNoReparse(current, component)
+			created = openErr == nil
+			if errors.Is(openErr, windows.ERROR_FILE_EXISTS) || errors.Is(openErr, windows.ERROR_ALREADY_EXISTS) {
+				next, openErr = openRelativeNoReparse(current, component, access, true, false)
+				created = false
+			}
+		}
+		if openErr != nil {
+			return openErr
+		}
+		if created || final {
+			if err := windowsacl.RestrictDirectoryNativeHandle(next); err != nil {
+				_ = windows.CloseHandle(next)
+				return err
+			}
+		}
+		_ = windows.CloseHandle(current)
+		current = next
+	}
+	return nil
+}
+
+func createRelativeDirectoryNoReparse(parent windows.Handle, name string) (windows.Handle, error) {
+	objectName, err := windows.NewNTUnicodeString(name)
+	if err != nil {
+		return 0, err
+	}
+	attributes := &windows.OBJECT_ATTRIBUTES{
+		Length:        uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
+		RootDirectory: parent,
+		ObjectName:    objectName,
+		Attributes:    windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
+	}
+	var handle windows.Handle
+	var status windows.IO_STATUS_BLOCK
+	err = windows.NtCreateFile(
+		&handle,
+		windows.FILE_TRAVERSE|windows.FILE_READ_ATTRIBUTES|windows.READ_CONTROL|windows.WRITE_DAC,
+		attributes,
+		&status,
+		nil,
+		0,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		windows.FILE_CREATE,
+		windows.FILE_DIRECTORY_FILE,
+		0,
+		0,
+	)
+	if err != nil {
+		return 0, mapNtError(err)
+	}
+	return handle, nil
 }
 
 func createPrivateTemp(directory, prefix string) (*os.File, error) {
-	return windowsacl.CreateTemp(directory, prefix)
+	absolute, err := cleanAbsoluteDOSPath(directory)
+	if err != nil {
+		return nil, err
+	}
+	parent, err := openNoReparseDirectoryWithAccess(absolute, windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild)
+	if err != nil {
+		return nil, err
+	}
+	defer windows.CloseHandle(parent)
+	return createPrivateTempRelative(parent, absolute, prefix)
+}
+
+func createPrivateTempRelative(parent windows.Handle, directory, prefix string) (*os.File, error) {
+	if prefix != filepath.Base(prefix) || strings.ContainsRune(prefix, os.PathSeparator) {
+		return nil, os.ErrInvalid
+	}
+	randomBytes := make([]byte, tempRandomByteCount)
+	defer clear(randomBytes)
+	for attempt := 0; attempt < tempCollisionLimit; attempt++ {
+		if _, err := rand.Read(randomBytes); err != nil {
+			return nil, err
+		}
+		name := prefix + hex.EncodeToString(randomBytes)
+		handle, err := createRelativeNoReparse(parent, name)
+		if errors.Is(err, windows.ERROR_FILE_EXISTS) || errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		file := os.NewFile(uintptr(handle), filepath.Join(directory, name))
+		if file == nil {
+			_ = discardFileHandle(handle)
+			_ = windows.CloseHandle(handle)
+			return nil, os.ErrInvalid
+		}
+		if err := windowsacl.RestrictFileHandle(file); err != nil {
+			_ = discardFileHandle(handle)
+			_ = file.Close()
+			return nil, err
+		}
+		return file, nil
+	}
+	return nil, fmt.Errorf("create private Windows temp: collision limit exceeded")
+}
+
+func createRelativeNoReparse(parent windows.Handle, name string) (windows.Handle, error) {
+	objectName, err := windows.NewNTUnicodeString(name)
+	if err != nil {
+		return 0, err
+	}
+	attributes := &windows.OBJECT_ATTRIBUTES{
+		Length:        uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
+		RootDirectory: parent,
+		ObjectName:    objectName,
+		Attributes:    windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
+	}
+	var handle windows.Handle
+	var status windows.IO_STATUS_BLOCK
+	err = windows.NtCreateFile(
+		&handle,
+		windows.FILE_WRITE_DATA|windows.FILE_WRITE_ATTRIBUTES|windows.FILE_READ_ATTRIBUTES|windows.READ_CONTROL|windows.WRITE_DAC|windows.DELETE|windows.SYNCHRONIZE,
+		attributes,
+		&status,
+		nil,
+		0,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		windows.FILE_CREATE,
+		windows.FILE_NON_DIRECTORY_FILE|windows.FILE_SYNCHRONOUS_IO_NONALERT|windows.FILE_WRITE_THROUGH,
+		0,
+		0,
+	)
+	if err != nil {
+		return 0, mapNtError(err)
+	}
+	return handle, nil
 }
 
 func openRegularNoFollow(path string) (*os.File, error) {
@@ -252,15 +414,44 @@ func normalizeDOSPath(path string) (string, error) {
 }
 
 func replaceFile(oldPath, newPath string) error {
-	oldUTF16, err := windows.UTF16PtrFromString(oldPath)
+	oldAbsolute, err := cleanAbsoluteDOSPath(oldPath)
 	if err != nil {
 		return err
 	}
-	newUTF16, err := windows.UTF16PtrFromString(newPath)
+	newAbsolute, err := cleanAbsoluteDOSPath(newPath)
 	if err != nil {
 		return err
 	}
-	return windows.MoveFileEx(oldUTF16, newUTF16, windows.MOVEFILE_REPLACE_EXISTING|windows.MOVEFILE_WRITE_THROUGH)
+	if !strings.EqualFold(filepath.VolumeName(oldAbsolute), filepath.VolumeName(newAbsolute)) {
+		return windows.ERROR_NOT_SAME_DEVICE
+	}
+	sourceParent, err := openNoReparseDirectory(filepath.Dir(oldAbsolute))
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(sourceParent)
+	source, err := openRelativeNoReparseWithOptions(
+		sourceParent,
+		filepath.Base(oldAbsolute),
+		windows.DELETE|windows.FILE_READ_ATTRIBUTES,
+		false,
+		true,
+		windows.FILE_WRITE_THROUGH,
+	)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(source)
+
+	destinationParent, err := openNoReparseDirectoryWithAccess(
+		filepath.Dir(newAbsolute),
+		windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild,
+	)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(destinationParent)
+	return renamePrivateFileHandle(source, destinationParent, filepath.Base(newAbsolute))
 }
 
 type fileRenameInformation struct {
@@ -354,10 +545,89 @@ func renamePrivateFileHandle(source, destinationParent windows.Handle, destinati
 	))
 }
 
+type fileDispositionInformation struct {
+	DeleteFile byte
+}
+
+func discardFileHandle(handle windows.Handle) error {
+	information := fileDispositionInformation{DeleteFile: 1}
+	status := windows.IO_STATUS_BLOCK{}
+	return mapNtError(windows.NtSetInformationFile(
+		handle,
+		&status,
+		(*byte)(unsafe.Pointer(&information)),
+		uint32(unsafe.Sizeof(information)),
+		windows.FileDispositionInformation,
+	))
+}
+
+func removeNoFollow(path string) error {
+	absolute, err := cleanAbsoluteDOSPath(path)
+	if err != nil {
+		return err
+	}
+	parent, err := openNoReparseDirectoryWithAccess(filepath.Dir(absolute), windows.FILE_TRAVERSE|fileDeleteChild)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(parent)
+	handle, err := openRelativeNoReparse(parent, filepath.Base(absolute), windows.DELETE|windows.FILE_READ_ATTRIBUTES, false, true)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle)
+	return discardFileHandle(handle)
+}
+
 func syncDirectory(path string) error {
 	// Windows には Unix の directory fsync に相当する API がない。このため
-	// WriteTemp の file.Sync、replaceFile の MOVEFILE_WRITE_THROUGH、および
+	// WriteTemp の file.Sync、handle-relative rename の write-through、および
 	// MovePrivate の write-through source handle を永続化境界にし、ここでは
-	// それ以上の永続性を装わない。
-	return nil
+	// それ以上の永続性を装わない。ただし path の再解析点を追わずに開き、呼出し側が
+	// 検証した directory と別の場所を同期したことにしない。
+	directory, err := openNoReparseDirectory(path)
+	if err != nil {
+		return err
+	}
+	return windows.CloseHandle(directory)
+}
+
+func writeAtomicFileNative(path, prefix string, permission fs.FileMode, contents []byte) error {
+	return writeAtomicFileNativeWith(path, prefix, permission, contents, nil)
+}
+
+func writeAtomicFileNativeWith(path, prefix string, permission fs.FileMode, contents []byte, afterParentOpen func()) error {
+	absolute, err := cleanAbsoluteDOSPath(path)
+	if err != nil {
+		return err
+	}
+	directory := filepath.Dir(absolute)
+	parent, err := openNoReparseDirectoryWithAccess(directory, windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(parent)
+	if afterParentOpen != nil {
+		afterParentOpen()
+	}
+	temporary, err := createPrivateTempRelative(parent, directory, prefix)
+	if err != nil {
+		return err
+	}
+	handle := windows.Handle(temporary.Fd())
+	removeTemporary := true
+	defer func() {
+		if removeTemporary {
+			_ = discardFileHandle(handle)
+		}
+		_ = temporary.Close()
+	}()
+	if err := writeAndFlush(temporary, permission, contents); err != nil {
+		return err
+	}
+	if err := renamePrivateFileHandle(handle, parent, filepath.Base(absolute)); err != nil {
+		return err
+	}
+	removeTemporary = false
+	return temporary.Close()
 }

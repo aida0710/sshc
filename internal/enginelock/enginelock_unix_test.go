@@ -78,3 +78,81 @@ func TestAcquireRefusesAStateDirectoryThatIsASymlink(t *testing.T) {
 		t.Fatalf("the symlink target was tightened to %v", info.Mode().Perm())
 	}
 }
+
+func TestAcquireRefusesALockFileThatIsASymlink(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "unrelated")
+	if err := os.WriteFile(target, []byte("unchanged"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lockPath := filepath.Join(directory, "engine.lock")
+	if err := os.Symlink(target, lockPath); err != nil {
+		t.Fatal(err)
+	}
+
+	release, err := Acquire(lockPath)
+	if err == nil {
+		if release != nil {
+			_ = release()
+		}
+		t.Fatal("Acquire followed a symlinked lock file")
+	}
+	if release != nil {
+		t.Fatal("a refused Acquire returned a release function")
+	}
+	contents, readErr := os.ReadFile(target)
+	if readErr != nil || string(contents) != "unchanged" {
+		t.Fatalf("symlink target contents = %q, %v", contents, readErr)
+	}
+	info, statErr := os.Stat(target)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("symlink target mode = %v", info.Mode().Perm())
+	}
+}
+
+func TestAcquirePinsTheDirectoryBeforeAPathReplacement(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "state")
+	path := filepath.Join(directory, "engine.lock")
+	first, err := Acquire(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = first() }()
+
+	moved := filepath.Join(root, "state-original")
+	outside := filepath.Join(root, "outside")
+	if err := os.Mkdir(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	afterLockDirectoryOpen = func() {
+		afterLockDirectoryOpen = nil
+		if renameErr := os.Rename(directory, moved); renameErr != nil {
+			t.Fatal(renameErr)
+		}
+		if symlinkErr := os.Symlink(outside, directory); symlinkErr != nil {
+			t.Fatal(symlinkErr)
+		}
+	}
+	t.Cleanup(func() { afterLockDirectoryOpen = nil })
+
+	second, err := Acquire(path)
+	if !errors.Is(err, ErrRunning) {
+		if second != nil {
+			_ = second()
+		}
+		t.Fatalf("Acquire across directory replacement = %v, want ErrRunning", err)
+	}
+	if second != nil {
+		t.Fatal("a contended Acquire returned a release function")
+	}
+	if _, statErr := os.Lstat(filepath.Join(outside, "engine.lock")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("replacement target received a lock file: %v", statErr)
+	}
+}

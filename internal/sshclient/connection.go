@@ -23,15 +23,25 @@ type Connection struct {
 // caller. Close must be called when its subsystem operation is complete.
 func (d Dialer) Connect(ctx context.Context, target Target) (*Connection, error) {
 	// A subsystem has no terminal on which to ask whether an unknown host key
-	// should be trusted. Force the non-interactive path to fail closed even when
-	// the saved target would normally allow an interactive confirmation.
-	strict := target
-	strict.Strict = "yes"
+	// should be trusted. Force every stage of the non-interactive path to fail
+	// closed even when the saved target would normally allow an interactive
+	// confirmation. Applying this only to the final host leaves ProxyJump hops
+	// able to auto-register an unknown key before the subsystem reaches it.
+	strict := requireKnownHosts(target)
 	client, closers, err := d.chain(ctx, strict, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &Connection{client: client, closers: append(closers, client)}, nil
+}
+
+func requireKnownHosts(target Target) Target {
+	target.Strict = "yes"
+	target.Jump = append([]Target(nil), target.Jump...)
+	for index := range target.Jump {
+		target.Jump[index] = requireKnownHosts(target.Jump[index])
+	}
+	return target
 }
 
 // Client exposes the authenticated transport to SSH channel protocols.

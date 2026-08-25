@@ -165,16 +165,7 @@ func (store *Store) write(workspaces []Workspace) error {
 		return err
 	}
 	contents = append(contents, '\n')
-	directory := store.workspace.StateDir()
-	temporary, err := store.workspace.FileSystem().WriteTemp(directory, temporaryName, storage.FilePermission, contents)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = store.workspace.FileSystem().Remove(temporary) }()
-	if err := store.workspace.FileSystem().Rename(temporary, store.Path()); err != nil {
-		return err
-	}
-	return store.workspace.FileSystem().SyncDir(directory)
+	return storage.WriteAtomicFile(store.workspace.FileSystem(), store.Path(), temporaryName, storage.FilePermission, contents)
 }
 
 func sortWorkspaces(workspaces []Workspace) {

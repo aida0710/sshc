@@ -7,11 +7,29 @@ on:
     tags: ["v*"]
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
+  verify-source:
+    name: Verify release source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - name: Require protected main ancestry and successful CI for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: scripts/ci/verify-release-source.sh
+
   macos:
     name: macOS
+    needs: [verify-source]
     runs-on: macos-14
     timeout-minutes: 30
     steps:
@@ -49,6 +67,7 @@ jobs:
 
   linux:
     name: Linux
+    needs: [verify-source]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -86,6 +105,7 @@ jobs:
 
   windows:
     name: Windows
+    needs: [verify-source]
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
@@ -130,6 +150,7 @@ jobs:
 
   android:
     name: Android
+    needs: [verify-source]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -163,14 +184,16 @@ jobs:
       - name: Install gobind
         run: go install golang.org/x/mobile/cmd/gobind
 
+      - name: Prepare the pinned Android NDK
+        id: android-ndk
+        run: scripts/ci/prepare-android-ndk.sh
+
       - name: gomobile bind
+        env:
+          SSHC_ANDROID_NDK_HOME: ${{ steps.android-ndk.outputs.path }}
         run: |
-          test -n "$ANDROID_NDK_LATEST_HOME" || {
-            echo "runner image did not provide an NDK" >&2
-            exit 1
-          }
           # APK と組み込み engine に同じバージョンを設定する。
-          make android-bind ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" \
+          make android-bind ANDROID_NDK_HOME="$SSHC_ANDROID_NDK_HOME" \
             ANDROID_VERSION="${GITHUB_REF_NAME#v}"
 
       # 署名鍵は runner の一時ディレクトリに置き、成果物へ混入させない。
@@ -196,7 +219,20 @@ jobs:
           set -eu
           apk=$(ls android/app/build/outputs/apk/release/*.apk)
           signer=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
-          "$signer" verify --print-certs "$apk"
+          verification=$("$signer" verify --print-certs "$apk")
+          printf '%s\n' "$verification"
+          expected=$(tr -d '[:space:]' < .github/android-release-signer.sha256 | tr '[:lower:]' '[:upper:]')
+          actual=$(printf '%s\n' "$verification" |
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
+            tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+          count=$(printf '%s\n' "$verification" |
+            grep -c '^Signer #[0-9][0-9]* certificate SHA-256 digest: ' || true)
+          case "$expected" in
+            ''|*[!0-9A-F]*) echo "the committed Android signer fingerprint is invalid" >&2; exit 1 ;;
+          esac
+          [ "${#expected}" -eq 64 ] || { echo "the committed Android signer fingerprint must be SHA-256" >&2; exit 1; }
+          [ "$count" -eq 1 ] || { echo "the APK must have exactly one signer" >&2; exit 1; }
+          [ "$actual" = "$expected" ] || { echo "the APK was signed by an unexpected certificate" >&2; exit 1; }
           cp "$apk" "sshc-android-${GITHUB_REF_NAME}.apk"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
@@ -208,11 +244,16 @@ jobs:
 
   publish:
     name: Publish
-    needs: [macos, linux, windows, android]
+    # GitHub Release は外部から見える最終 commit point。必須の tap 更新が失敗した
+    # 後に Release だけが残る部分公開を避けるため、Homebrew 成功後にだけ公開する。
+    needs: [macos, linux, windows, android, homebrew]
     runs-on: ubuntu-24.04
+    environment: release
     timeout-minutes: 10
     permissions:
+      attestations: write
       contents: write
+      id-token: write
     steps:
       # version-controlled なリリース本文を取得するため checkout する。
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -220,18 +261,50 @@ jobs:
         with:
           path: incoming
 
-      # 各ジョブの sshc-* 成果物を公開用ディレクトリへ集約する。
+      # 公開契約の7成果物を各1件だけ受理する。広いglobで同名を上書きすると、
+      # job側の重複や欠落を隠したまま部分的なReleaseを作れてしまう。
       - name: Collect
         run: |
           set -eu
           mkdir -p dist
-          find incoming -type f -name 'sshc-*' -exec cp {} dist/ \;
+          expected_assets="
+          sshc-darwin-amd64
+          sshc-darwin-arm64
+          sshc-linux-amd64
+          sshc-linux-arm64
+          sshc-windows-amd64.exe
+          sshc-windows-arm64.exe
+          sshc-android-${GITHUB_REF_NAME}.apk
+          "
+          for name in $expected_assets; do
+            matches=$(find incoming -type f -name "$name" -print)
+            count=$(printf '%s\n' "$matches" | sed '/^$/d' | wc -l | tr -d ' ')
+            [ "$count" -eq 1 ] || {
+              echo "expected exactly one release artifact named $name, found $count" >&2
+              exit 1
+            }
+            cp "$matches" "dist/$name"
+          done
+          count=$(find incoming -type f -name 'sshc-*' | wc -l | tr -d ' ')
+          [ "$count" -eq 7 ] || {
+            echo "expected exactly 7 release artifacts, found $count" >&2
+            exit 1
+          }
           ls -la dist
 
       # 手動ダウンロード用の SHA-256 チェックサムを生成する。
       - name: Package
         run: cd dist && sha256sum sshc-* > checksums.txt
 
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/sshc-*
+            dist/checksums.txt
+
+      # Immutable Releasesでは公開後にassetを追加できない。先にdraftへ全assetを置き、
+      # APIで公開契約を満たすことを確認してから一度だけpublishする。
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -243,17 +316,48 @@ jobs:
             echo "release notes file is missing: $notes_file" >&2
             exit 1
           fi
+          # 直前のrunがasset upload中に停止しても、公開済みreleaseには触れず、
+          # 同じtagの未公開draftだけを捨てて再構築できるようにする。
+          if existing=$(gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" 2>/dev/null); then
+            printf '%s' "$existing" | jq -e '.draft == true' >/dev/null || {
+              echo "a published release already exists for $RELEASE_TAG" >&2
+              exit 1
+            }
+            draft_id=$(printf '%s' "$existing" | jq -er '.id')
+            gh api --method DELETE "repos/$GH_REPO/releases/$draft_id"
+          fi
           gh release create "$RELEASE_TAG" \
+            --verify-tag \
+            --draft \
             --title "$RELEASE_TAG" \
             --notes-file "$notes_file" \
             dist/sshc-* dist/checksums.txt
+          release=$(gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG")
+          printf '%s' "$release" | jq -e '
+            .draft == true and
+            ([.assets[].name] | sort) == ([
+              "checksums.txt",
+              "sshc-android-'"$RELEASE_TAG"'.apk",
+              "sshc-darwin-amd64",
+              "sshc-darwin-arm64",
+              "sshc-linux-amd64",
+              "sshc-linux-arm64",
+              "sshc-windows-amd64.exe",
+              "sshc-windows-arm64.exe"
+            ] | sort) and
+            all(.assets[]; .size > 0)
+          ' >/dev/null
+          gh release edit "$RELEASE_TAG" --draft=false --latest
 
-  # packaging/homebrew/sshc.rb を基に、公開したタグとチェックサムで tap を更新する。
-  # tap 専用の deploy key が未設定の場合は、このジョブを正常終了する。
+  # packaging/homebrew/sshc.rb を基に、検証済みタグとチェックサムで tap を更新する。
+  # tap もリリース成果物の一部なので、専用 deploy key が無ければ失敗として扱う。
   homebrew:
     name: Homebrew tap
-    needs: [publish]
+    # 全成果物の build/smoke が済んでから tap を更新する。ただし GitHub Release の
+    # 公開より前に gate し、tap の失敗で公開済み Release が取り残されないようにする。
+    needs: [macos, linux, windows, android]
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -267,8 +371,8 @@ jobs:
         run: |
           set -eu
           if [ -z "${TAP_KEY:-}" ]; then
-            echo "HOMEBREW_TAP_DEPLOY_KEY is not set; leaving the tap alone." >&2
-            exit 0
+            echo "HOMEBREW_TAP_DEPLOY_KEY is not set; the release cannot update its required tap." >&2
+            exit 1
           fi
 
           # Formula はタグのソース tarball とその SHA-256 を参照する。
@@ -289,7 +393,11 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$TAP_KEY" > ~/.ssh/tap
           chmod 600 ~/.ssh/tap
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          install -m 600 .github/github.com.known_hosts ~/.ssh/known_hosts
+          ssh-keygen -F github.com -f ~/.ssh/known_hosts >/dev/null || {
+            echo "the committed GitHub SSH host keys are missing" >&2
+            exit 1
+          }
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap -o IdentitiesOnly=yes"
 
           git clone --depth 1 "git@github.com:$TAP_REPO.git" tap

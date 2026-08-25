@@ -377,70 +377,37 @@ func TestVaultRefusesToDeleteACredentialInUseAndSaysWhatUsesIt(t *testing.T) {
 	}
 }
 
-// バージョン 1 の文書は、alias ごとにパスワードを持ち、名前は持たなかった。世界に
-// 多くともひとつしか存在せず、移行は移行する対象より大きくなるので、画面が「もう
-// 一度設定してください」に変えられるエラーで拒否する。
-func TestAVersionOneDocumentIsRefused(t *testing.T) {
+func TestUnsupportedVaultDocumentsAreRefused(t *testing.T) {
 	key, err := envelope.Derive(passphrase)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := key.Seal([]byte(`{"schemaVersion":1,"passwords":{"web-1":"s3cret"}}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := secret.Open(sealed, passphrase); !errors.Is(err, secret.ErrOldVault) {
-		t.Fatalf("Open error = %v, want ErrOldVault", err)
+	for name, document := range map[string]string{
+		"old v2": `{"schemaVersion":2,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`,
+		"old v3": `{"schemaVersion":3,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`,
+		"future": `{"schemaVersion":5,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`,
+	} {
+		sealed, err := key.Seal([]byte(document))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := secret.Open(sealed, passphrase); !errors.Is(err, secret.ErrUnsupportedVersion) {
+			t.Fatalf("Open(%s) error = %v, want ErrUnsupportedVersion", name, err)
+		}
 	}
 }
 
-func TestVersion3OpensVersionTwoAndResealsWithoutLosingCredentials(t *testing.T) {
+func TestCurrentVaultDocumentRejectsUnknownCompatibilityFields(t *testing.T) {
 	key, err := envelope.Derive(passphrase)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := key.Seal([]byte(`{"schemaVersion":2,"passwords":{"office":"account-secret"},"dedicatedPasswords":{"edge":"dedicated-account"},"keyPassphrases":{"shared":"shared-phrase"},"hosts":{"web":"office"},"keys":{"keys/id_a":"shared"}}`))
+	sealed, err := key.Seal([]byte(`{"schemaVersion":4,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{},"legacyPasswords":{}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	vault, err := secret.Open(sealed, passphrase)
-	if err != nil {
-		t.Fatalf("Open(version 2) = %v", err)
-	}
-	if got, ok := vault.SecretFor(secret.KindPassword, "edge"); !ok || got != "dedicated-account" {
-		t.Fatalf("dedicated password after migration = %q, %v", got, ok)
-	}
-	if got, ok := vault.SecretFor(secret.KindKeyPassphrase, "keys/id_a"); !ok || got != "shared-phrase" {
-		t.Fatalf("named key passphrase after migration = %q, %v", got, ok)
-	}
-
-	resealed, err := vault.Seal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	plaintext, _, err := envelope.Open(resealed, passphrase)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Contains(plaintext, []byte(`"schemaVersion":3`)) {
-		t.Fatalf("resealed document = %s, want schema version 3", plaintext)
-	}
-}
-
-func TestVersion3RefusesAFuturePlaintextDocument(t *testing.T) {
-	key, err := envelope.Derive(passphrase)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sealed, err := key.Seal([]byte(`{"schemaVersion":4,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := secret.Open(sealed, passphrase); !errors.Is(err, secret.ErrUnsupportedVersion) {
-		t.Fatalf("Open(version 4) = %v, want ErrUnsupportedVersion", err)
+	if _, err := secret.Open(sealed, passphrase); !errors.Is(err, secret.ErrWrongPassphrase) {
+		t.Fatalf("Open error = %v, want ErrWrongPassphrase", err)
 	}
 }
 

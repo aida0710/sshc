@@ -3,6 +3,7 @@ package sshclient
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -36,7 +37,7 @@ type Auth struct {
 	// Stored とは別の名前空間である。Stored は秘密鍵のロック解除に使い、
 	// Password はリモートアカウントの認証に使う。
 	// 取り違えれば、鍵を開くための秘密がそのままリモートへ送られる。
-	Password func(alias string) (string, bool)
+	Password func(target Target) (string, bool)
 	// AgentSocket は SSH_AUTH_SOCK。空なら agent は使わない。
 	AgentSocket string
 	// ReadFile は鍵ファイルを読む。テストがフィクスチャを渡すためにある。
@@ -47,6 +48,20 @@ type Auth struct {
 	// ssh.AuthMethod は暗号化された interface なので、外から包めない。
 	// どの方式で通ったかを言えるのは、方式を組み立てるここだけである。
 	Observe func(method string)
+	// registerAgent is set on a per-handshake copy by methodsWithCleanup.
+	// Agent signers keep their socket alive, so the dialer must close it once
+	// authentication has completed or failed.
+	registerAgent func(io.Closer)
+}
+
+func (a Auth) methodsWithCleanup(target Target, prompt Prompter) ([]ssh.AuthMethod, func()) {
+	var closers []io.Closer
+	a.registerAgent = func(closer io.Closer) { closers = append(closers, closer) }
+	return a.Methods(target, prompt), func() {
+		for index := len(closers) - 1; index >= 0; index-- {
+			_ = closers[index].Close()
+		}
+	}
 }
 
 func (a Auth) observe(method string) {
@@ -97,7 +112,7 @@ func (a Auth) storedPassword(target Target) func() (string, bool) {
 			return "", false
 		}
 		offered = true
-		return a.Password(target.Alias)
+		return a.Password(target)
 	}
 }
 
@@ -238,7 +253,11 @@ func (a Auth) agentSigners() ([]ssh.Signer, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 接続はここで閉じない。返した Signer が署名のたびに使う。
+	if a.registerAgent != nil {
+		a.registerAgent(conn)
+	}
+	// Signer は認証中にこの接続を使う。methodsWithCleanupを使う接続経路は
+	// handshake終了時に明示的に閉じる。
 	return agent.NewClient(conn).Signers()
 }
 

@@ -17,6 +17,10 @@ type workspaceDefinition struct {
 	FocusedPaneID string         `json:"focusedPaneId"`
 }
 
+type workspaceListResponse struct {
+	Workspaces []workspace.Workspace `json:"workspaces"`
+}
+
 func registerWorkspaceRoutes(engine *echo.Echo, handlers WorkspaceHandlers) {
 	engine.GET("/api/v1/workspaces", handlers.List)
 	engine.POST("/api/v1/workspaces", handlers.Create)
@@ -50,9 +54,7 @@ func (h WorkspaceHandlers) List(c *echo.Context) error {
 	if err != nil {
 		return workspaceProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, struct {
-		Workspaces []workspace.Workspace `json:"workspaces"`
-	}{items})
+	return c.JSON(http.StatusOK, workspaceListResponse{Workspaces: items})
 }
 
 func (h WorkspaceHandlers) Get(c *echo.Context) error {
@@ -91,7 +93,7 @@ func (h WorkspaceHandlers) Delete(c *echo.Context) error {
 	if err := h.Service.Delete(c.Param("id")); err != nil {
 		return workspaceProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, map[string]bool{"changed": true})
+	return c.JSON(http.StatusOK, changedResponse{Changed: true})
 }
 
 func (h WorkspaceHandlers) Restore(c *echo.Context) error {

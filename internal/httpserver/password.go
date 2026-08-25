@@ -11,7 +11,6 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/application"
-	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/validate"
 )
@@ -29,29 +28,23 @@ type PasswordHandlers struct {
 	// 関数は何もチェックしないことを意味し、これはこの仕組みができる
 	// 前に vault がしていたことである。
 	Eligibility func(alias string) (application.PasswordEligibility, error)
-	// ResealSnapshot は新しいマスターパスワードでワークスペースを再度 push し、
-	// bucket の最新スナップショットが古いパスワードでしか開けないままにはしない。
-	// これが注入されているのは、スナップショットの行き先が object store に
-	// 属する事柄だからで、nil はこのマシンに更新すべき bucket がないことを意味する。
-	ResealSnapshot func(ctx context.Context, passphrase string) error
+	// Binding returns the resolved authentication destination that a stored
+	// account password is allowed to reach.
+	Binding func(alias string) (string, error)
 }
 
 var errVaultUnavailable = errors.New("vault service unavailable")
 
 // vaultOperations は browser と CLI が共有する vault operation の順序境界である。
-// local rekey の commit から remote reseal の完了までを一つとして扱うため、
-// 次世代の change や lock が途中へ入らない。
+// local rekeyの全transactionを一つとして扱い、次世代のchangeやlockが
+// vault/settings/backupsの再封印途中へ入らないようにする。
 type vaultOperations struct {
-	mu             sync.Mutex
-	service        *secret.Service
-	resealSnapshot func(context.Context, string) error
+	mu      sync.Mutex
+	service *secret.Service
 }
 
-func newVaultOperations(
-	service *secret.Service,
-	resealSnapshot func(context.Context, string) error,
-) *vaultOperations {
-	return &vaultOperations{service: service, resealSnapshot: resealSnapshot}
+func newVaultOperations(service *secret.Service) *vaultOperations {
+	return &vaultOperations{service: service}
 }
 
 func (v *vaultOperations) State() (secret.State, error) {
@@ -95,73 +88,28 @@ func (v *vaultOperations) Change(
 	ctx context.Context,
 	current string,
 	next string,
-) (masterPasswordChangeResult, error) {
+) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if err := ctx.Err(); err != nil {
-		return masterPasswordChangeResult{}, err
+		return err
 	}
 	if v.service == nil {
-		return masterPasswordChangeResult{}, errVaultUnavailable
+		return errVaultUnavailable
 	}
 	state, err := v.service.State()
 	if err != nil {
-		return masterPasswordChangeResult{}, err
+		return err
 	}
 	if !state.Unlocked {
-		return masterPasswordChangeResult{}, secret.ErrLocked
+		return secret.ErrLocked
 	}
-	return changeMasterPassword(ctx, v.service, v.resealSnapshot, current, next)
-}
-
-type masterPasswordChangeResult struct {
-	SnapshotResealed bool    `json:"snapshotResealed"`
-	SnapshotProblem  *string `json:"snapshotProblem,omitempty"`
-}
-
-// changeMasterPassword は、ローカル vault の鍵変更後に最新スナップショットを再暗号化する。
-func changeMasterPassword(
-	ctx context.Context,
-	service *secret.Service,
-	resealSnapshot func(context.Context, string) error,
-	current string,
-	next string,
-) (masterPasswordChangeResult, error) {
-	if err := service.ChangeMasterPassword(current, next); err != nil {
-		return masterPasswordChangeResult{}, err
-	}
-
-	result := masterPasswordChangeResult{SnapshotResealed: true}
-	if resealSnapshot != nil {
-		if err := resealSnapshot(ctx, next); err != nil {
-			if errors.Is(err, remotesync.ErrNotConfigured) {
-				return masterPasswordChangeResult{SnapshotResealed: false}, nil
-			}
-			reason := snapshotProblemCode(err)
-			result.SnapshotResealed, result.SnapshotProblem = false, &reason
-		}
-	} else {
-		result.SnapshotResealed = false
-	}
-	return result, nil
-}
-
-// snapshotProblemCode は bucket が更新されなかった理由を、sync 画面が
-// すでに使っている用語と同じ言葉で名付ける。
-func snapshotProblemCode(err error) string {
-	switch {
-	case errors.Is(err, remotesync.ErrRemoteMoved):
-		return "sync_remote_moved"
-	case errors.Is(err, remotesync.ErrPushRefused):
-		return "sync_push_refused"
-	default:
-		return "sync_failed"
-	}
+	return v.service.ChangeMasterPassword(current, next)
 }
 
 func registerPasswordRoutes(engine *echo.Echo, handlers PasswordHandlers) {
 	if handlers.vault == nil {
-		handlers.vault = newVaultOperations(handlers.Service, handlers.ResealSnapshot)
+		handlers.vault = newVaultOperations(handlers.Service)
 	}
 	engine.GET("/api/v1/passwords", handlers.Status)
 	engine.POST("/api/v1/passwords/initialise", handlers.Initialise)
@@ -227,23 +175,18 @@ func (h PasswordHandlers) Unlock(c *echo.Context) error {
 	return h.status(c)
 }
 
-// Change はマスターパスワードを変更し、ローカルの暗号化データを再暗号化する。
-// 設定済みの場合は最新スナップショットも再暗号化するが、履歴コピーは変更しない。
-// リモート更新に失敗しても完了済みのローカル変更は取り消さず、結果に理由を含める。
+// Change はマスターパスワードを変更し、ローカルのvault、同期設定、世代backupを
+// 再封印する。remote snapshotは専用の同期鍵で暗号化されるため変更しない。
 func (h PasswordHandlers) Change(c *echo.Context) error {
 	var request api.ChangeMasterPasswordRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	changed, err := h.vault.Change(c.Request().Context(), request.Current, request.Next)
-	if err != nil {
+	if err := h.vault.Change(c.Request().Context(), request.Current, request.Next); err != nil {
 		return passwordProblem(c, err)
 	}
 
-	answer := api.ChangeMasterPasswordResult{
-		SnapshotResealed: changed.SnapshotResealed,
-		SnapshotProblem:  changed.SnapshotProblem,
-	}
+	answer := api.ChangeMasterPasswordResult{}
 
 	state, err := h.vault.State()
 	if err != nil {
@@ -485,6 +428,14 @@ func (h PasswordHandlers) AssignCredential(c *echo.Context) error {
 		if blocked, response := h.ensurePasswordStorable(c, request.Subject); blocked {
 			return response
 		}
+		binding, response := h.passwordBinding(c, request.Subject)
+		if response != nil {
+			return response
+		}
+		if err := h.Service.AssignPasswordCredential(request.Subject, request.Name, binding); err != nil {
+			return credentialProblem(c, err, nil)
+		}
+		return h.listCredentials(c)
 	}
 	if err := h.Service.AssignCredential(kind, request.Subject, request.Name); err != nil {
 		return credentialProblem(c, err, nil)
@@ -515,10 +466,25 @@ func (h PasswordHandlers) Store(c *echo.Context) error {
 	if blocked, response := h.ensurePasswordStorable(c, alias); blocked {
 		return response
 	}
-	if err := h.Service.Set(alias, request.Password); err != nil {
+	binding, response := h.passwordBinding(c, alias)
+	if response != nil {
+		return response
+	}
+	if err := h.Service.SetBound(alias, request.Password, binding); err != nil {
 		return passwordProblem(c, err)
 	}
 	return h.status(c)
+}
+
+func (h PasswordHandlers) passwordBinding(c *echo.Context, alias string) (string, error) {
+	if h.Binding == nil {
+		return "", problem(c, http.StatusInternalServerError, "config_unreadable")
+	}
+	binding, err := h.Binding(alias)
+	if err != nil {
+		return "", problem(c, http.StatusInternalServerError, "config_unreadable")
+	}
+	return binding, nil
 }
 
 // ensurePasswordStorable guards every route that creates a password-to-host

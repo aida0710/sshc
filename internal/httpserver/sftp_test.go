@@ -84,8 +84,8 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 		t.Fatalf("limit = %d: %s", response.Code, response.Body.String())
 	}
 	progress := int64(4)
-	if response := action("transfer_http01", "progress", &progress); response.Code != http.StatusOK {
-		t.Fatalf("progress = %d: %s", response.Code, response.Body.String())
+	if response := action("transfer_http01", "progress", &progress); response.Code != http.StatusConflict {
+		t.Fatalf("client-authored upload progress = %d: %s", response.Code, response.Body.String())
 	}
 
 	response := httptest.NewRecorder()
@@ -104,7 +104,7 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if listed.MaxConcurrent != 1 || len(listed.Jobs) != 2 || listed.Jobs[0].Status != "running" || listed.Jobs[0].TransferredBytes != 4 {
+	if listed.MaxConcurrent != 1 || len(listed.Jobs) != 2 || listed.Jobs[0].Status != "running" || listed.Jobs[0].TransferredBytes != 0 {
 		t.Fatalf("listed = %+v", listed)
 	}
 }

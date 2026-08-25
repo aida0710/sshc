@@ -25,11 +25,8 @@ type ConfigHandlers struct {
 
 // historyList は、履歴の応答である。
 //
-// 生成型を使えない唯一の理由がここにある。api.HistoryList が抱えるのは
-// api.HistoryEntry で、application.HistoryEntry とは JSON としては同じ形だが
-// Go の型としては別物である。詰め替えの関数を置くより、application の値をその
-// まま載せる方が、この 1 エンドポイントについては素直である。ずれていないことは
-// TestGeneratedContractMatchesTheTypesWeSerialise が見ている。
+// applicationの値を詰め替えずにそのまま載せる。重複する生成型は作らず、形の一致は
+// acceptanceとwire contract testでOpenAPIへ直接照合する。
 type historyList struct {
 	Entries []application.HistoryEntry `json:"entries"`
 }

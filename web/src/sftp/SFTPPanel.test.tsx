@@ -56,7 +56,10 @@ describe("SFTPPanel uploads", () => {
   });
 
   it("uploads every dropped file separately and keeps per-file results", async () => {
-    api.startUpload.mockResolvedValueOnce({ id: "one", path: "/remote/first.txt", offset: 0, size: 5, expectedRevision: "absent" }).mockRejectedValueOnce(new Error("upload_failed"));
+    api.startUpload.mockImplementation(async (_alias, _id, remotePath, size) => {
+      if (remotePath.endsWith("second.txt")) throw new Error("upload_failed");
+      return { id: "one", path: remotePath, offset: 0, size, expectedRevision: "absent" };
+    });
     render(<SFTPPanel aliases={["edge"]} />);
     expect(api.list).not.toHaveBeenCalled();
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
@@ -69,8 +72,8 @@ describe("SFTPPanel uploads", () => {
     });
 
     await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(2));
-    expect(api.startUpload).toHaveBeenNthCalledWith(1, "edge", expect.any(String), "/remote/first.txt", first.size, false, "");
-    expect(api.startUpload).toHaveBeenNthCalledWith(2, "edge", expect.any(String), "/remote/second.txt", second.size, false, "");
+    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/first.txt", first.size, false, "");
+    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/second.txt", second.size, false, "");
     expect(await screen.findByText("Completed")).toBeInTheDocument();
     expect(await screen.findByText("upload_failed")).toBeInTheDocument();
   });
@@ -140,6 +143,26 @@ describe("SFTPPanel uploads", () => {
     expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/project/config/file.txt", nested.size, false, "");
   });
 
+  it("rejects queue overflow before creating remote directories and always releases the busy state", async () => {
+    const reserve = vi.spyOn(sftpTransferManager, "reserveUploads")
+      .mockImplementationOnce(() => { throw new Error("sftp_transfer_limit"); });
+    const { container } = render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const nested = new File(["nested"], "file.txt");
+    Object.defineProperty(nested, "webkitRelativePath", { value: "project/file.txt" });
+    const folderPicker = container.querySelector<HTMLInputElement>('input[webkitdirectory]');
+    fireEvent.change(folderPicker as HTMLInputElement, { target: { files: [nested] } });
+
+    expect(await screen.findByText("sftp_transfer_limit")).toBeVisible();
+    expect(api.mkdir).not.toHaveBeenCalled();
+    const plain = new File(["plain"], "plain.txt");
+    const filePicker = container.querySelectorAll<HTMLInputElement>('input[type="file"]')[0];
+    fireEvent.change(filePicker as HTMLInputElement, { target: { files: [plain] } });
+    await waitFor(() => expect(api.startUpload).toHaveBeenCalledOnce());
+    reserve.mockRestore();
+  });
+
   it("asks before retrying an existing remote file with overwrite enabled", async () => {
     api.startUpload.mockRejectedValueOnce(new ApiError("sftp_exists", 409, null)).mockImplementationOnce(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "meta" }));
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
@@ -167,7 +190,7 @@ describe("SFTPPanel uploads", () => {
     await screen.findByRole("button", { name: /project/ });
 
     await userEvent.click(screen.getByRole("button", { name: "Download" }));
-    await waitFor(() => expect(api.streamDownload).toHaveBeenCalledWith("edge", "/remote/project", true, 0, expect.objectContaining({ signal: expect.any(AbortSignal) })));
+    await waitFor(() => expect(api.streamDownload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/project", true, 0, expect.objectContaining({ signal: expect.any(AbortSignal) })));
     await userEvent.click(screen.getByRole("button", { name: "Change permissions" }));
     await waitFor(() => expect(api.chmod).toHaveBeenCalledWith("edge", "/remote/project", "750", "rev"));
   });

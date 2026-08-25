@@ -3,6 +3,7 @@ package buildcontract
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -89,6 +90,59 @@ func TestReleasePublishWaitsForEveryPlatform(t *testing.T) {
 		if !found {
 			t.Errorf("publish does not wait for %s; a release could go out without it", required)
 		}
+	}
+}
+
+func TestReleasePublishesOnlyAfterTheRequiredHomebrewTap(t *testing.T) {
+	document, _ := readReleaseWorkflow(t)
+	publish, publishPresent := document.Jobs["publish"]
+	homebrew, homebrewPresent := document.Jobs["homebrew"]
+	if !publishPresent || !homebrewPresent {
+		t.Fatal("the release requires both publish and homebrew jobs")
+	}
+	if !slices.Contains(publish.Needs, "homebrew") {
+		t.Error("publish does not wait for Homebrew; a tap failure could leave a public partial release")
+	}
+	if slices.Contains(homebrew.Needs, "publish") {
+		t.Error("Homebrew still runs after publish; the public release is no longer the final commit point")
+	}
+	for _, required := range []string{"macos", "linux", "windows", "android"} {
+		if !slices.Contains(homebrew.Needs, required) {
+			t.Errorf("Homebrew does not wait for %s; the tap could point at an unverified release", required)
+		}
+	}
+}
+
+func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
+	_, source := readReleaseWorkflow(t)
+	publish := jobSection(source, "  publish:", "  homebrew:")
+	if publish == "" {
+		t.Fatal("release.yml has no publish job")
+	}
+	for _, required := range []string{
+		"sshc-darwin-amd64", "sshc-darwin-arm64",
+		"sshc-linux-amd64", "sshc-linux-arm64",
+		"sshc-windows-amd64.exe", "sshc-windows-arm64.exe",
+		"sshc-android-${GITHUB_REF_NAME}.apk",
+		`[ "$count" -eq 1 ]`,
+		`[ "$count" -eq 7 ]`,
+		`--verify-tag`,
+		`--draft`,
+		`jq -e '.draft == true'`,
+		`gh api --method DELETE "repos/$GH_REPO/releases/$draft_id"`,
+		`.draft == true`,
+		`all(.assets[]; .size > 0)`,
+		`gh release edit "$RELEASE_TAG" --draft=false --latest`,
+	} {
+		if !strings.Contains(publish, required) {
+			t.Errorf("publish artifact gate is missing %q", required)
+		}
+	}
+	if strings.Contains(publish, `-exec cp {} dist/`) {
+		t.Error("publish still silently overwrites duplicate artifact basenames")
+	}
+	if strings.Index(publish, `gh release create "$RELEASE_TAG"`) > strings.Index(publish, `--draft=false --latest`) {
+		t.Error("release publish happens before the complete draft is verified")
 	}
 }
 

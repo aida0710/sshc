@@ -146,12 +146,8 @@ func (h ConnectHandlers) VaultChange(c *echo.Context) error {
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
 	}
-	result, err := h.vault.Change(c.Request().Context(), request.Current, request.Next)
-	if err != nil {
+	if err := h.vault.Change(c.Request().Context(), request.Current, request.Next); err != nil {
 		return vaultCLIProblem(c, err)
-	}
-	if result.SnapshotProblem != nil {
-		return c.JSON(http.StatusMultiStatus, result)
 	}
 	return c.NoContent(http.StatusNoContent)
 }

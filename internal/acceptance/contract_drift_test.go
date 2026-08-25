@@ -27,7 +27,8 @@ import (
 // 写しではなく契約と比べるので、こちらの方が本来正しい。
 //
 // `make verify-generated` は「生成物が仕様と一致するか」しか見ない。実際に返る
-// JSON が仕様と一致するかを見るのは、ここだけである。
+// application 型はここで、handler 固有 DTO の再帰的な形は httpserver の契約テストで
+// OpenAPI と突き合わせる。
 var servedTypes = []struct {
 	schema string
 	value  any

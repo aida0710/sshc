@@ -88,12 +88,16 @@ func savedPassphraseFor(answer connectAnswer) func(string) (string, bool) {
 	}
 }
 
-func savedPasswordFor(answer connectAnswer) func(string) (string, bool) {
+func savedPasswordFor(answer connectAnswer) func(sshclient.Target) (string, bool) {
 	if len(answer.Passwords) == 0 {
 		return nil
 	}
-	return func(candidate string) (string, bool) {
-		stored, found := answer.Passwords[candidate]
-		return stored, found && stored != ""
+	return func(candidate sshclient.Target) (string, bool) {
+		stored, found := answer.Passwords[candidate.Alias]
+		binding := answer.PasswordBindings[candidate.Alias]
+		if !found || stored == "" || binding != candidate.AuthenticationBinding() {
+			return "", false
+		}
+		return stored, true
 	}
 }

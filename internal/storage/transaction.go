@@ -30,6 +30,7 @@ const (
 
 	statusStaging    = "staging"
 	statusStaged     = "staged"
+	statusApplied    = "applied"
 	statusCompleted  = "completed"
 	statusRolledBack = "rolled_back"
 )
@@ -220,22 +221,13 @@ type journalEntry struct {
 	PreviousDigest string `json:"previousDigest,omitempty"`
 }
 
-// action は既定で write にする。移動と削除が存在するより前に書かれたジャーナル
-// でも、正しく再生できるようにするためである。
-func (e journalEntry) action() string {
-	if e.Action == "" {
-		return actionWrite
-	}
-	return e.Action
-}
-
 // noOpWrite は、書いても中身が変わらない置き換えを言う。
 //
 // application 層は metadata の書き込みを毎回、変わっていなくても最後に足すので、
 // これは例外ではなく日常の記録である。巻き戻せない変更ではない。戻したあとの
 // 対象は同じバイト列であり、控えを残さなかったとしても失うものが無い。
 func (e journalEntry) noOpWrite() bool {
-	return e.action() == actionWrite && e.HadPrevious && e.Digest == e.PreviousDigest
+	return e.Action == actionWrite && e.HadPrevious && e.Digest == e.PreviousDigest
 }
 
 // zeroBytes は、鍵素材を保持しているかもしれないバッファを上書きする。keys.Wipe と
@@ -247,15 +239,19 @@ func zeroBytes(contents []byte) {
 }
 
 type journalRecord struct {
-	ID         string         `json:"id"`
-	Version    int            `json:"version"`
-	Operation  string         `json:"operation"`
-	Status     string         `json:"status"`
-	StartedAt  time.Time      `json:"startedAt"`
-	FinishedAt *time.Time     `json:"finishedAt,omitempty"`
-	Committed  int            `json:"committed"`
-	Atomic     bool           `json:"atomic,omitempty"`
-	Entries    []journalEntry `json:"entries"`
+	ID         string     `json:"id"`
+	Version    int        `json:"version"`
+	Operation  string     `json:"operation"`
+	Status     string     `json:"status"`
+	StartedAt  time.Time  `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	Committed  int        `json:"committed"`
+	Atomic     bool       `json:"atomic,omitempty"`
+	// DiscardBackups marks an atomic replacement whose previous bytes exist only
+	// to recover an interrupted commit. They bypass the normal backup sealer and
+	// are removed once either the old or the new generation is authoritative.
+	DiscardBackups bool           `json:"discardBackups,omitempty"`
+	Entries        []journalEntry `json:"entries"`
 }
 
 // Manager は、ワークスペース内でジャーナル付きの原子的な複数ファイル書き込みを行う。
@@ -293,7 +289,7 @@ func NewManager(workspace *Workspace, now func() time.Time, random io.Reader) *M
 // は「完了させる」か「復元する」かを選べる。複数のファイルが関わるとき、それが
 // 唯一の誠実な選択肢である。
 func (m *Manager) Commit(request Request) (Result, error) {
-	return m.commit(request, false)
+	return m.commit(request, false, false)
 }
 
 // CommitAtomic は Commit より厳しい失敗時規則で書き込みトランザクションを適用する。
@@ -312,7 +308,26 @@ func (m *Manager) CommitAtomic(request Request) (Result, error) {
 			return Result{}, ErrAtomicWriteOnly
 		}
 	}
-	return m.commit(request, true)
+	return m.commit(request, true, false)
+}
+
+// CommitAtomicDiscardBackups atomically replaces a set of already-encrypted
+// documents. Previous bytes are journaled verbatim for rollback, rather than
+// being sealed a second time, and are discarded at the transaction boundary.
+// This is intentionally narrow: master-key rotation is its only caller.
+func (m *Manager) CommitAtomicDiscardBackups(request Request) (Result, error) {
+	if request.Operation == "" {
+		return Result{}, ErrInvalidOperation
+	}
+	if len(request.Directories) > 0 || len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
+		return Result{}, ErrAtomicWriteOnly
+	}
+	for _, change := range request.Changes {
+		if change.SkipBackup {
+			return Result{}, ErrAtomicWriteOnly
+		}
+	}
+	return m.commit(request, true, true)
 }
 
 // journalPlan は、これから記録するエントリと、それに紐づく内容をひとつの値にする。
@@ -343,7 +358,7 @@ func (p *journalPlan) add(entry journalEntry, staged, previous []byte) {
 	p.previous = append(p.previous, previous)
 }
 
-func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) {
+func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool) (Result, error) {
 	if request.Operation == "" {
 		return Result{}, ErrInvalidOperation
 	}
@@ -351,6 +366,12 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 		len(request.Directories)+len(request.RemoveDirectories) == 0 {
 		return Result{}, ErrNoChanges
 	}
+	unlock, err := m.workspace.lockMutation()
+	if err != nil {
+		return Result{}, err
+	}
+	defer unlock()
+
 	fileSystem := m.workspace.FileSystem()
 
 	capacity := len(request.Changes) + len(request.Moves) + len(request.Removals) +
@@ -398,13 +419,14 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	}
 
 	record := journalRecord{
-		ID:        identifier,
-		Version:   journalVersion,
-		Operation: request.Operation,
-		Status:    statusStaging,
-		StartedAt: m.now().UTC(),
-		Entries:   plan.entries,
-		Atomic:    rollbackOnError,
+		ID:             identifier,
+		Version:        journalVersion,
+		Operation:      request.Operation,
+		Status:         statusStaging,
+		StartedAt:      m.now().UTC(),
+		Entries:        plan.entries,
+		Atomic:         rollbackOnError,
+		DiscardBackups: discardBackups,
 	}
 	journalPath := filepath.Join(journalDirectory, identifier+".json")
 	if err := m.writeRecord(journalPath, record); err != nil {
@@ -426,7 +448,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 		}
 		// finish は履歴の公開前にメモリ上の記録を変更する。履歴の公開または current
 		// journal の削除に失敗した場合は、終端状態ではなく復旧可能な current 状態を保存する。
-		if record.Status == statusCompleted || record.Status == statusRolledBack {
+		if record.Status == statusCompleted || record.Status == statusRolledBack || record.Status == statusApplied {
 			record.Status = statusStaged
 			record.FinishedAt = nil
 		}
@@ -449,7 +471,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	// ない理由のすべてである。
 	for index := range record.Entries {
 		entry := record.Entries[index]
-		if entry.action() != actionMakeDir {
+		if entry.Action != actionMakeDir {
 			continue
 		}
 		if err := m.workspace.EnsureDirectory(entry.Path); err != nil {
@@ -466,7 +488,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	// plan.entries そのものなので、以前の内容もステージする内容も、同じ添字で引ける。
 	for index := range record.Entries {
 		entry := &record.Entries[index]
-		if entry.action() != actionWrite && entry.action() != actionRemove {
+		if entry.Action != actionWrite && entry.Action != actionRemove {
 			continue
 		}
 		if !entry.HadPrevious || entry.NoBackup {
@@ -481,7 +503,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 			return fail(err)
 		}
 		contents := plan.previous[index]
-		if m.Seal != nil {
+		if m.Seal != nil && !discardBackups {
 			sealed, err := m.Seal(contents)
 			if err != nil {
 				return fail(err)
@@ -497,7 +519,7 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	// 新しいファイルはすべて対象の隣にステージし、あとの rename が原子的になるようにする。
 	for index := range record.Entries {
 		entry := &record.Entries[index]
-		if entry.action() != actionWrite {
+		if entry.Action != actionWrite {
 			continue
 		}
 		temporaryPath, err := fileSystem.WriteTemp(
@@ -519,6 +541,19 @@ func (m *Manager) commit(request Request, rollbackOnError bool) (Result, error) 
 	if err := m.commitStaged(&record, journalPath); err != nil {
 		return fail(err)
 	}
+	if discardBackups {
+		// This durable marker is the commit point. Before it, recovery rolls all
+		// targets back. Once it exists, every target is already the new generation,
+		// so recovery only finishes deleting rollback material.
+		record.Status = statusApplied
+		if err := m.writeRecord(journalPath, record); err != nil {
+			return fail(err)
+		}
+		// Cleanup is idempotent. A failure here leaves the applied marker for a
+		// later Complete call, but cannot make the committed targets mixed again.
+		_ = m.finishApplied(&record, journalPath)
+		return result, nil
+	}
 	if err := m.finish(&record, journalPath, statusCompleted); err != nil {
 		return fail(err)
 	}
@@ -529,7 +564,7 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 	fileSystem := m.workspace.FileSystem()
 	for index := record.Committed; index < len(record.Entries); index++ {
 		entry := record.Entries[index]
-		switch entry.action() {
+		switch entry.Action {
 		case actionMove:
 			if err := m.moveFile(entry.Path, entry.Target); err != nil {
 				return err
@@ -643,18 +678,37 @@ func (m *Manager) Note(operation string, paths []string) (Result, error) {
 	if len(paths) == 0 {
 		return Result{}, ErrNoChanges
 	}
-	entries := make([]journalEntry, 0, len(paths))
-	claimed := make([]string, 0, len(paths))
-	for _, path := range paths {
-		resolved, err := m.workspace.ResolveForWrite(path)
-		if err != nil {
-			return Result{}, err
+	resolveEntries := func() ([]journalEntry, error) {
+		entries := make([]journalEntry, 0, len(paths))
+		claimed := make([]string, 0, len(paths))
+		for _, path := range paths {
+			resolved, err := m.workspace.ResolveForWrite(path)
+			if err != nil {
+				return nil, err
+			}
+			if journalPathAlreadyClaimed(claimed, resolved) {
+				return nil, ErrDuplicatePath
+			}
+			claimed = append(claimed, resolved)
+			entries = append(entries, journalEntry{Action: actionNote, Path: resolved})
 		}
-		if journalPathAlreadyClaimed(claimed, resolved) {
-			return Result{}, ErrDuplicatePath
-		}
-		claimed = append(claimed, resolved)
-		entries = append(entries, journalEntry{Action: actionNote, Path: resolved})
+		return entries, nil
+	}
+	// Reject lexical/structural errors before acquiring the persistent lock. The
+	// same resolution is repeated under the lock so the preflight is not trusted
+	// as a TOCTOU security decision.
+	if _, err := resolveEntries(); err != nil {
+		return Result{}, err
+	}
+	unlock, err := m.workspace.lockMutation()
+	if err != nil {
+		return Result{}, err
+	}
+	defer unlock()
+
+	entries, err := resolveEntries()
+	if err != nil {
+		return Result{}, err
 	}
 
 	identifier, err := m.newIdentifier()
@@ -698,6 +752,11 @@ func (m *Manager) finish(record *journalRecord, journalPath, status string) erro
 		}
 		record.Entries[index].Temp = ""
 	}
+	if record.DiscardBackups {
+		if err := m.discardRollbackBackups(record); err != nil {
+			return err
+		}
+	}
 	finished := m.now().UTC()
 	record.FinishedAt = &finished
 	record.Status = status
@@ -709,6 +768,54 @@ func (m *Manager) finish(record *journalRecord, journalPath, status string) erro
 		return err
 	}
 	return fileSystem.SyncDir(filepath.Dir(journalPath))
+}
+
+func (m *Manager) finishApplied(record *journalRecord, journalPath string) error {
+	if record.Status != statusApplied || !record.DiscardBackups || record.Committed != len(record.Entries) {
+		return ErrCannotComplete
+	}
+	return m.finish(record, journalPath, statusCompleted)
+}
+
+func (m *Manager) discardRollbackBackups(record *journalRecord) error {
+	fileSystem := m.workspace.FileSystem()
+	directories := map[string]bool{}
+	backupRoot := filepath.Join(m.workspace.StateDir(), backupDirectoryName, record.ID)
+	for index := range record.Entries {
+		backup := record.Entries[index].Backup
+		if backup == "" {
+			continue
+		}
+		if err := fileSystem.Remove(backup); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		if err := fileSystem.SyncDir(filepath.Dir(backup)); err != nil {
+			return err
+		}
+		record.Entries[index].Backup = ""
+		for directory := filepath.Dir(backup); privateStateContains(backupRoot, directory); directory = filepath.Dir(directory) {
+			directories[directory] = true
+			if sameJournalPath(directory, backupRoot) {
+				break
+			}
+		}
+	}
+	ordered := make([]string, 0, len(directories))
+	for directory := range directories {
+		ordered = append(ordered, directory)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return len(ordered[i]) > len(ordered[j]) })
+	for _, directory := range ordered {
+		if err := fileSystem.Remove(directory); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			// A directory can legitimately contain a normal generation backup when
+			// the transaction had a no-op entry. Leave it rather than broadening the
+			// cleanup into recursive deletion.
+			if !errors.Is(err, fs.ErrInvalid) {
+				continue
+			}
+		}
+	}
+	return nil
 }
 
 // currentState は、置き換えられるファイルを読む。返されるモードは、既存のより
@@ -729,16 +836,7 @@ func (m *Manager) currentState(path string) (contents []byte, mode fs.FileMode, 
 }
 
 func (m *Manager) writeFile(path string, contents []byte, permission fs.FileMode) error {
-	fileSystem := m.workspace.FileSystem()
-	temporaryPath, err := fileSystem.WriteTemp(filepath.Dir(path), temporaryPrefix, permission, contents)
-	if err != nil {
-		return err
-	}
-	if err := fileSystem.Rename(temporaryPath, path); err != nil {
-		_ = fileSystem.Remove(temporaryPath)
-		return err
-	}
-	return fileSystem.SyncDir(filepath.Dir(path))
+	return WriteAtomicFile(m.workspace.FileSystem(), path, temporaryPrefix, permission, contents)
 }
 
 func (m *Manager) writeRecord(path string, record journalRecord) error {

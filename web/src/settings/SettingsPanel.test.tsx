@@ -19,7 +19,6 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
         dedicatedKeyPassphrases: [],
         minPassphraseLength: 12,
       },
-      snapshotResealed: true,
     }),
     ...overrides,
   } as unknown as IntegrationsApi;
@@ -78,7 +77,7 @@ describe("SettingsPanel", () => {
     expect(screen.queryByLabelText("Open connections with")).toBeNull();
   });
 
-  it("validates, changes the master password, reports the live snapshot, and clears every field", async () => {
+  it("validates, changes the local master password, and clears every field", async () => {
     const user = userEvent.setup();
     const api = buildApi();
     render(<SettingsPanel api={api} />);
@@ -93,26 +92,10 @@ describe("SettingsPanel", () => {
     await waitFor(() =>
       expect(api.changeMasterPassword).toHaveBeenCalledWith("the old one is long", "the new one is long"),
     );
-    expect(await screen.findByRole("status")).toHaveTextContent(/live bucket snapshot/i);
+    expect(await screen.findByRole("status")).toHaveTextContent(/remote snapshots were not rewritten/i);
     expect(screen.getByLabelText("Current master password")).toHaveValue("");
     expect(screen.getByLabelText("New master password")).toHaveValue("");
     expect(screen.getByLabelText("Confirm new master password")).toHaveValue("");
-  });
-
-  it("reports a local-only change when the bucket snapshot was not resealed", async () => {
-    const user = userEvent.setup();
-    render(<SettingsPanel api={buildApi({
-      changeMasterPassword: vi.fn().mockResolvedValue({
-        vault: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] },
-        snapshotResealed: false,
-        snapshotProblem: "sync_failed",
-      }),
-    })} />);
-    await screen.findByRole("region", { name: "Master password" });
-    await fillMasterPassword(user);
-    await user.click(screen.getByRole("button", { name: "Change the master password" }));
-
-    expect(await screen.findByRole("status")).toHaveTextContent(/still requires the old password/i);
   });
 
   it("reports a wrong current password and clears every secret after failure", async () => {

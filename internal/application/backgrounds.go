@@ -154,14 +154,14 @@ func (s *Service) AddBackground(suggested string, contents []byte) (Background, 
 	}
 
 	root := s.backgroundsRoot()
-	if err := s.workspace.FileSystem().MkdirAll(root, storage.DirectoryPermission); err != nil {
+	if err := s.workspace.EnsureDirectory(root); err != nil {
 		return Background{}, err
 	}
-	temporary, err := s.workspace.FileSystem().WriteTemp(root, "background", storage.FilePermission, contents)
+	target, err := s.workspace.ResolveForWrite(filepath.Join(root, name))
 	if err != nil {
 		return Background{}, err
 	}
-	if err := s.workspace.FileSystem().Rename(temporary, filepath.Join(root, name)); err != nil {
+	if err := storage.WriteAtomicFile(s.workspace.FileSystem(), target, "background", storage.FilePermission, contents); err != nil {
 		return Background{}, err
 	}
 	return Background{Name: name, Bytes: len(contents), Type: mediaType}, nil
@@ -194,7 +194,11 @@ func (s *Service) RemoveBackground(name string) error {
 	}
 	for _, background := range existing {
 		if background.Name == name {
-			return s.workspace.FileSystem().Remove(filepath.Join(s.backgroundsRoot(), name))
+			target, err := s.workspace.ResolveForWrite(filepath.Join(s.backgroundsRoot(), name))
+			if err != nil {
+				return err
+			}
+			return s.workspace.FileSystem().Remove(target)
 		}
 	}
 	return ErrUnknownBackground

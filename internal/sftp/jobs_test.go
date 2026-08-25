@@ -1,7 +1,11 @@
 package sftp_test
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"io/fs"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,6 +132,35 @@ func TestStaleRunningTransferReleasesItsSlot(t *testing.T) {
 	}
 }
 
+func TestActiveDataPlaneIsNotFailedByTheStaleSweep(t *testing.T) {
+	now := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
+	manager := sftp.NewTransferManager(nil)
+	manager.ConfigureJobs(1, func() time.Time { return now })
+	created, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "transfer_longrun", BatchID: "batch_longrun1", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "large", RemotePath: "/large", TotalBytes: 1 << 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(created.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	done, err := manager.KeepJobActive(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(10 * time.Minute)
+	if got := manager.ListJobs()[0].Status; got != sftp.TransferRunning {
+		t.Fatalf("active data plane was swept as %q", got)
+	}
+	done()
+	now = now.Add(3 * time.Minute)
+	if got := manager.ListJobs()[0].Status; got != sftp.TransferFailed {
+		t.Fatalf("inactive stale job status = %q", got)
+	}
+}
+
 func TestTransferRetryCanResetNonResumableProgress(t *testing.T) {
 	manager := sftp.NewTransferManager(nil)
 	created, err := manager.CreateJob(sftp.CreateTransferJob{
@@ -150,5 +183,460 @@ func TestTransferRetryCanResetNonResumableProgress(t *testing.T) {
 	retried, err := manager.UpdateJob(created.ID, sftp.UpdateTransferJob{Action: sftp.TransferRetryAction, ResetProgress: true})
 	if err != nil || retried.TransferredBytes != 0 || retried.Attempt != 2 || retried.Status != sftp.TransferQueued {
 		t.Fatalf("reset retry = %+v, %v", retried, err)
+	}
+}
+
+func TestUploadDataPlaneRequiresTheRunningOwningJob(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	input := sftp.CreateTransferJob{
+		ID: "transfer_owner01", BatchID: "batch_owner001", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: 6,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.AuthorizeUpload(input.ID, input.Alias, input.RemotePath, input.TotalBytes, false); !errors.Is(err, sftp.ErrTransferState) {
+		t.Fatalf("queued authorization = %v", err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.AuthorizeUpload(input.ID, input.Alias, input.RemotePath, input.TotalBytes, false); err != nil {
+		t.Fatalf("owner authorization = %v", err)
+	}
+	for _, changed := range []struct {
+		alias string
+		path  string
+		total int64
+	}{{"other", "/file", 6}, {"edge", "/other", 6}, {"edge", "/file", 7}} {
+		if err := manager.AuthorizeUpload(input.ID, changed.alias, changed.path, changed.total, false); !errors.Is(err, sftp.ErrConflict) {
+			t.Fatalf("changed identity authorization = %v", err)
+		}
+	}
+}
+
+func TestRunningDownloadCanResetToAReplacementRevisionSize(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	created, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "transfer_replace", BatchID: "batch_replace01", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: 6,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(created.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	oldProgress := int64(3)
+	if _, err := manager.UpdateJob(created.ID, sftp.UpdateTransferJob{Action: sftp.TransferProgressAction, TransferredBytes: &oldProgress}); err != nil {
+		t.Fatal(err)
+	}
+	zero, replacementSize := int64(0), int64(7)
+	reset, err := manager.UpdateJob(created.ID, sftp.UpdateTransferJob{
+		Action: sftp.TransferProgressAction, TransferredBytes: &zero, TotalBytes: &replacementSize, ResetProgress: true,
+	})
+	if err != nil || reset.TransferredBytes != 0 || reset.TotalBytes != replacementSize || reset.Status != sftp.TransferRunning {
+		t.Fatalf("replacement reset = %+v, %v", reset, err)
+	}
+	const revision = `"content-sha256:replacement"`
+	if _, err := manager.BeginDownload(created.ID, replacementSize, revision, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.RecordDownloadSent(created.ID, replacementSize, replacementSize, revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.AcknowledgeDownload(created.ID, replacementSize, revision); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := manager.UpdateJobFromClient(created.ID, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction})
+	if err != nil || completed.Status != sftp.TransferCompleted || completed.TotalBytes != replacementSize {
+		t.Fatalf("replacement completion = %+v, %v", completed, err)
+	}
+}
+
+func TestDownloadDataPlaneRequiresTheRunningOwningJob(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	input := sftp.CreateTransferJob{
+		ID: "transfer_downown", BatchID: "batch_downowner", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: 6,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.AuthorizeDownload(input.ID, input.Alias, input.RemotePath, input.Kind); !errors.Is(err, sftp.ErrTransferState) {
+		t.Fatalf("queued download authorization = %v", err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	for _, changed := range []struct {
+		id, alias, path string
+		kind            sftp.TransferKind
+	}{
+		{"transfer_missing", "edge", "/file", sftp.TransferFile},
+		{input.ID, "other", "/file", sftp.TransferFile},
+		{input.ID, "edge", "/other", sftp.TransferFile},
+		{input.ID, "edge", "/file", sftp.TransferFolder},
+	} {
+		if _, err := manager.AuthorizeDownload(changed.id, changed.alias, changed.path, changed.kind); err == nil {
+			t.Fatalf("changed download identity was authorized: %+v", changed)
+		}
+	}
+	if _, err := manager.AuthorizeDownload(input.ID, input.Alias, input.RemotePath, input.Kind); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction}); !errors.Is(err, sftp.ErrTransferState) {
+		t.Fatalf("early client completion = %v", err)
+	}
+	const revision = `"content-sha256:owner"`
+	if _, err := manager.BeginDownload(input.ID, 6, revision, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.RecordDownloadSent(input.ID, 6, 6, revision); err != nil {
+		t.Fatal(err)
+	}
+	if job, err := manager.AcknowledgeDownload(input.ID, 6, revision); err != nil || job.Status != sftp.TransferRunning {
+		t.Fatalf("durable server-bounded progress = %+v, %v", job, err)
+	}
+	completed, err := manager.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction})
+	if err != nil || completed.Status != sftp.TransferCompleted {
+		t.Fatalf("durable client acknowledgement = %+v, %v", completed, err)
+	}
+}
+
+func TestClientCannotForgeDownloadProgressThroughFailRetryAndComplete(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	input := sftp.CreateTransferJob{
+		ID: "transfer_forgery", BatchID: "batch_forgery1", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: 6,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	forged := int64(6)
+	if _, err := manager.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{
+		Action: sftp.TransferFailAction, TransferredBytes: &forged, Problem: "network",
+	}); !errors.Is(err, sftp.ErrInvalidTransfer) {
+		t.Fatalf("client fail progress = %v", err)
+	}
+	job := manager.ListJobs()[0]
+	if job.Status != sftp.TransferRunning || job.TransferredBytes != 0 {
+		t.Fatalf("rejected mutation changed job: %+v", job)
+	}
+	if _, err := manager.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction, TransferredBytes: &forged}); !errors.Is(err, sftp.ErrTransferState) {
+		t.Fatalf("forged complete = %v", err)
+	}
+}
+
+func TestDownloadProgressRequiresRevisionBoundServerSentBytesAndAllowsDurableRollback(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	input := sftp.CreateTransferJob{
+		ID: "transfer_durable", BatchID: "batch_durable1", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: 8,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	const revision = `"content-sha256:abc"`
+	if _, err := manager.BeginDownload(input.ID, 8, revision, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.AcknowledgeDownload(input.ID, 1, revision); !errors.Is(err, sftp.ErrOffsetMismatch) {
+		t.Fatalf("ack beyond sent = %v", err)
+	}
+	if _, err := manager.RecordDownloadSent(input.ID, 6, 8, revision); err != nil {
+		t.Fatal(err)
+	}
+	acked, err := manager.AcknowledgeDownload(input.ID, 4, revision)
+	if err != nil || acked.TransferredBytes != 4 {
+		t.Fatalf("durable ack = %+v, %v", acked, err)
+	}
+	rolledBack, err := manager.AcknowledgeDownload(input.ID, 2, revision)
+	if err != nil || rolledBack.TransferredBytes != 2 {
+		t.Fatalf("durable rollback = %+v, %v", rolledBack, err)
+	}
+	if _, err := manager.BeginDownload(input.ID, 8, revision, 2); err != nil {
+		t.Fatalf("resume from durable offset = %v", err)
+	}
+	if _, err := manager.AcknowledgeDownload(input.ID, 2, `"other"`); !errors.Is(err, sftp.ErrTransferState) {
+		t.Fatalf("wrong revision ack = %v", err)
+	}
+}
+
+func TestCompleteDownloadVerificationCannotManufactureSentBytes(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	input := sftp.CreateTransferJob{
+		ID: "transfer_verifyno", BatchID: "batch_verifyno1", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: 8,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	const revision = `"content-sha256:verify"`
+	if _, err := manager.BeginDownload(input.ID, 8, revision, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.VerifyDownloadComplete(input.ID, 8, revision); !errors.Is(err, sftp.ErrOffsetMismatch) {
+		t.Fatalf("verify without sent evidence = %v", err)
+	}
+	if _, err := manager.RecordDownloadSent(input.ID, 8, 8, revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.VerifyDownloadComplete(input.ID, 8, revision); err != nil {
+		t.Fatalf("verify after full send = %v", err)
+	}
+}
+
+func TestTransferQueueHasAHardLimitWhenNothingCanBeEvicted(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	for index := 0; index < 200; index++ {
+		id := fmt.Sprintf("transfer_%08d", index)
+		if _, err := manager.CreateJob(sftp.CreateTransferJob{
+			ID: id, BatchID: "batch_capacity1", Alias: "edge", Direction: sftp.TransferDownload,
+			Kind: sftp.TransferFile, Name: id, RemotePath: "/" + id, TotalBytes: 1,
+		}); err != nil {
+			t.Fatalf("create %d: %v", index, err)
+		}
+	}
+	if _, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "transfer_overflow", BatchID: "batch_capacity1", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "overflow", RemotePath: "/overflow", TotalBytes: 1,
+	}); !errors.Is(err, sftp.ErrTransferLimit) {
+		t.Fatalf("overflow = %v", err)
+	}
+}
+
+func TestEvictingAFailedUploadCleansItsOrphanPart(t *testing.T) {
+	remote := remoteWith(map[string]node{"/remote": directory("remote")})
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})
+	input := sftp.CreateTransferJob{
+		ID: "transfer_orphan1", BatchID: "batch_orphan001", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "orphan.bin", RemotePath: "/remote/orphan.bin", TotalBytes: 4,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	started, err := manager.Start(t.Context(), input.Alias, input.ID, input.RemotePath, sftp.StartUploadOptions{Size: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Append(t.Context(), input.Alias, input.ID, input.RemotePath, 0, 4, []byte("part")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferFailAction, Problem: "connection_lost"}); err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 199; index++ {
+		id := fmt.Sprintf("transfer_keep%03d", index)
+		if _, err := manager.CreateJob(sftp.CreateTransferJob{
+			ID: id, BatchID: "batch_orphan001", Alias: "edge", Direction: sftp.TransferDownload,
+			Kind: sftp.TransferFile, Name: id, RemotePath: "/" + id, TotalBytes: 1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "transfer_newslot", BatchID: "batch_orphan001", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "new", RemotePath: "/new", TotalBytes: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for candidate := range remote.nodes {
+		if strings.Contains(candidate, started.ID) {
+			t.Fatalf("evicted upload part remains at %q", candidate)
+		}
+	}
+}
+
+func TestFailedEvictionCleanupKeepsARetryableTombstone(t *testing.T) {
+	remote := remoteWith(map[string]node{"/remote": directory("remote")})
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})
+	orphan := sftp.CreateTransferJob{
+		ID: "transfer_tombstone", BatchID: "batch_tombstone", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "orphan.bin", RemotePath: "/remote/orphan.bin", TotalBytes: 4,
+	}
+	if _, err := manager.CreateJob(orphan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(orphan.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(t.Context(), orphan.Alias, orphan.ID, orphan.RemotePath, sftp.StartUploadOptions{Size: 4}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Append(t.Context(), orphan.Alias, orphan.ID, orphan.RemotePath, 0, 4, []byte("part")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(orphan.ID, sftp.UpdateTransferJob{Action: sftp.TransferFailAction, Problem: "network"}); err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 199; index++ {
+		id := fmt.Sprintf("transfer_tomb%03d", index)
+		if _, err := manager.CreateJob(sftp.CreateTransferJob{ID: id, BatchID: orphan.BatchID, Alias: "edge", Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: id, RemotePath: "/" + id, TotalBytes: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	input := sftp.CreateTransferJob{ID: "transfer_aftertomb", BatchID: orphan.BatchID, Alias: "edge", Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: "new", RemotePath: "/new", TotalBytes: 1}
+	remote.removeErr = errors.New("cleanup unavailable")
+	if _, err := manager.CreateJob(input); !errors.Is(err, sftp.ErrTransferLimit) {
+		t.Fatalf("admission with failed cleanup = %v", err)
+	}
+	jobs := manager.ListJobs()
+	if len(jobs) != 200 {
+		t.Fatalf("jobs after failed cleanup = %d", len(jobs))
+	}
+	foundTombstone := false
+	for _, job := range jobs {
+		if job.ID == orphan.ID {
+			foundTombstone = job.Problem == "sftp_cleanup_pending"
+		}
+		if job.ID == input.ID {
+			t.Fatal("new job was admitted before orphan cleanup")
+		}
+	}
+	if !foundTombstone {
+		t.Fatal("cleanup tombstone was forgotten")
+	}
+	if _, err := manager.UpdateJobFromClient(orphan.ID, sftp.UpdateTransferJob{Action: sftp.TransferRetryAction}); !errors.Is(err, sftp.ErrTransferState) {
+		t.Fatalf("client cleared cleanup tombstone = %v", err)
+	}
+	remote.removeErr = nil
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	for _, job := range manager.ListJobs() {
+		if job.ID == orphan.ID {
+			t.Fatal("cleanup tombstone remains after retry")
+		}
+	}
+	part := "/remote/.orphan.bin.sshc-upload-transfer_tombstone.part"
+	if _, err := remote.Lstat(part); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("orphan part remains after retry: %v", err)
+	}
+}
+
+func TestFailedCleanupTombstoneDoesNotBlockSafeDownloadEviction(t *testing.T) {
+	remote := remoteWith(map[string]node{"/remote": directory("remote")})
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})
+	orphan := sftp.CreateTransferJob{
+		ID: "transfer_safeevict", BatchID: "batch_safeevict", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "orphan.bin", RemotePath: "/remote/orphan.bin", TotalBytes: 4,
+	}
+	if _, err := manager.CreateJob(orphan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(orphan.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(t.Context(), orphan.Alias, orphan.ID, orphan.RemotePath, sftp.StartUploadOptions{Size: 4}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Append(t.Context(), orphan.Alias, orphan.ID, orphan.RemotePath, 0, 4, []byte("part")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(orphan.ID, sftp.UpdateTransferJob{Action: sftp.TransferFailAction, Problem: "network"}); err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 199; index++ {
+		id := fmt.Sprintf("transfer_safe%03d", index)
+		if _, err := manager.CreateJob(sftp.CreateTransferJob{ID: id, BatchID: orphan.BatchID, Alias: "edge", Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: id, RemotePath: "/" + id, TotalBytes: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	remote.removeErr = errors.New("cleanup unavailable")
+	first := sftp.CreateTransferJob{ID: "transfer_blocked1", BatchID: orphan.BatchID, Alias: "edge", Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: "blocked", RemotePath: "/blocked", TotalBytes: 1}
+	if _, err := manager.CreateJob(first); !errors.Is(err, sftp.ErrTransferLimit) {
+		t.Fatalf("initial failed cleanup = %v", err)
+	}
+	if _, err := manager.UpdateJobFromClient("transfer_safe000", sftp.UpdateTransferJob{Action: sftp.TransferCancelAction}); err != nil {
+		t.Fatal(err)
+	}
+	removals := len(remote.removals)
+	admitted := sftp.CreateTransferJob{ID: "transfer_admitted", BatchID: orphan.BatchID, Alias: "other", Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: "admitted", RemotePath: "/admitted", TotalBytes: 1}
+	if _, err := manager.CreateJob(admitted); err != nil {
+		t.Fatalf("safe terminal eviction was blocked by tombstone: %v", err)
+	}
+	if len(remote.removals) != removals {
+		t.Fatal("cleanup tombstone was retried before a network-free eviction")
+	}
+	jobs := manager.ListJobs()
+	if len(jobs) != 200 {
+		t.Fatalf("jobs after safe eviction = %d", len(jobs))
+	}
+	foundTombstone, foundAdmitted := false, false
+	for _, job := range jobs {
+		if job.ID == orphan.ID {
+			foundTombstone = job.Problem == "sftp_cleanup_pending"
+		}
+		foundAdmitted = foundAdmitted || job.ID == admitted.ID
+	}
+	if !foundTombstone || !foundAdmitted {
+		t.Fatalf("tombstone/admitted = %v/%v", foundTombstone, foundAdmitted)
+	}
+}
+
+func TestEvictionNetworkCleanupDoesNotHoldTheJobsMutex(t *testing.T) {
+	remote := remoteWith(map[string]node{"/remote": directory("remote")})
+	cleanupStarted := make(chan struct{})
+	releaseCleanup := make(chan struct{})
+	remote.removeHook = func(string) {
+		select {
+		case <-cleanupStarted:
+		default:
+			close(cleanupStarted)
+		}
+		<-releaseCleanup
+	}
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})
+	input := sftp.CreateTransferJob{
+		ID: "transfer_evictio", BatchID: "batch_eviction1", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "old", RemotePath: "/remote/old", TotalBytes: 1,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(t.Context(), input.Alias, input.ID, input.RemotePath, sftp.StartUploadOptions{Size: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferFailAction, Problem: "network"}); err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 199; index++ {
+		id := fmt.Sprintf("transfer_lock%03d", index)
+		if _, err := manager.CreateJob(sftp.CreateTransferJob{ID: id, BatchID: "batch_eviction1", Alias: "edge", Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: id, RemotePath: "/" + id, TotalBytes: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	created := make(chan error, 1)
+	go func() {
+		_, err := manager.CreateJob(sftp.CreateTransferJob{ID: "transfer_locknew", BatchID: "batch_eviction1", Alias: "edge", Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: "new", RemotePath: "/new", TotalBytes: 1})
+		created <- err
+	}()
+	<-cleanupStarted
+	listed := make(chan struct{})
+	go func() { _ = manager.ListJobs(); close(listed) }()
+	select {
+	case <-listed:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("ListJobs blocked on eviction network cleanup")
+	}
+	close(releaseCleanup)
+	if err := <-created; err != nil {
+		t.Fatal(err)
 	}
 }

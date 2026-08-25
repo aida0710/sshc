@@ -50,6 +50,17 @@ type FileSystem interface {
 // OSFileSystem は FileSystem のネイティブ OS 実装。
 type OSFileSystem struct{}
 
+// atomicFileWriter は、一時ファイルの作成から rename と親 directory の同期まで、
+// 同じ検証済み directory handle に固定できるネイティブ実装である。FileSystem の
+// fault-injection fake は従来どおり各段階を包めるよう、任意 interface にしておく。
+type atomicFileWriter interface {
+	WriteAtomic(path, prefix string, permission fs.FileMode, contents []byte) error
+}
+
+func (OSFileSystem) WriteAtomic(path, prefix string, permission fs.FileMode, contents []byte) error {
+	return writeAtomicFileNative(path, prefix, permission, contents)
+}
+
 func (OSFileSystem) ReadFile(path string) ([]byte, error) {
 	file, err := openRegularNoFollow(path)
 	if err != nil {
@@ -99,7 +110,7 @@ func writeTemp(directory, prefix string, permission fs.FileMode, contents []byte
 		if file != nil {
 			path := file.Name()
 			_ = file.Close()
-			_ = os.Remove(path)
+			_ = removeNoFollow(path)
 		}
 		return "", err
 	}
@@ -109,11 +120,11 @@ func writeTemp(directory, prefix string, permission fs.FileMode, contents []byte
 	path := file.Name()
 	if err := writeAndFlush(file, permission, contents); err != nil {
 		_ = file.Close()
-		_ = os.Remove(path)
+		_ = removeNoFollow(path)
 		return "", err
 	}
 	if err := file.Close(); err != nil {
-		_ = os.Remove(path)
+		_ = removeNoFollow(path)
 		return "", err
 	}
 	return path, nil
@@ -135,8 +146,30 @@ func (OSFileSystem) MovePrivate(oldPath, newPath string) error {
 	return movePrivateFile(oldPath, newPath)
 }
 
-func (OSFileSystem) Remove(path string) error { return os.Remove(path) }
+func (OSFileSystem) Remove(path string) error { return removeNoFollow(path) }
 
 func (OSFileSystem) SyncDir(path string) error { return syncDirectory(path) }
 
 func (OSFileSystem) EvalSymlinks(path string) (string, error) { return filepath.EvalSymlinks(path) }
+
+// WriteAtomicFile は同じディレクトリの非公開一時ファイルへ書き、1回のrenameで公開する。
+// 失敗経路では一時ファイルを除去し、公開後は親ディレクトリを同期する。
+func WriteAtomicFile(fileSystem FileSystem, path, prefix string, permission fs.FileMode, contents []byte) error {
+	if writer, ok := fileSystem.(atomicFileWriter); ok {
+		return writer.WriteAtomic(path, prefix, permission, contents)
+	}
+	return writeAtomicFileFallback(fileSystem, path, prefix, permission, contents)
+}
+
+func writeAtomicFileFallback(fileSystem FileSystem, path, prefix string, permission fs.FileMode, contents []byte) error {
+	directory := filepath.Dir(path)
+	temporary, err := fileSystem.WriteTemp(directory, prefix, permission, contents)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = fileSystem.Remove(temporary) }()
+	if err := fileSystem.Rename(temporary, path); err != nil {
+		return err
+	}
+	return fileSystem.SyncDir(directory)
+}

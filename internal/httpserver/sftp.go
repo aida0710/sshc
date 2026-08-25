@@ -26,26 +26,72 @@ type SFTPHandlers struct {
 }
 
 type sftpEntry struct {
-	Name       string `json:"name"`
-	Path       string `json:"path"`
-	Type       string `json:"type"`
-	Size       int64  `json:"size"`
-	Mode       string `json:"mode"`
-	ModifiedAt string `json:"modifiedAt"`
-	Revision   string `json:"revision"`
+	Name       string             `json:"name"`
+	Path       string             `json:"path"`
+	Type       sshcSFTP.EntryType `json:"type"`
+	Size       int64              `json:"size"`
+	Mode       string             `json:"mode"`
+	ModifiedAt string             `json:"modifiedAt"`
+	Revision   string             `json:"revision"`
+}
+
+type sftpListingResponse struct {
+	Path    string      `json:"path"`
+	Entries []sftpEntry `json:"entries"`
+}
+
+type sftpTextFileResponse struct {
+	Entry    sftpEntry `json:"entry"`
+	Contents string    `json:"contents"`
+	Revision string    `json:"revision"`
+}
+
+type sftpSaveTextRequest struct {
+	Contents         string `json:"contents"`
+	ExpectedRevision string `json:"expectedRevision"`
+}
+
+type sftpMkdirType string
+
+const sftpMkdirDirectory sftpMkdirType = "directory"
+
+type sftpMkdirRequest struct {
+	Path string        `json:"path"`
+	Type sftpMkdirType `json:"type"`
+}
+
+type sftpRenameRequest struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+type sftpChmodRequest struct {
+	Path             string `json:"path"`
+	Mode             string `json:"mode"`
+	ExpectedRevision string `json:"expectedRevision"`
+}
+
+type sftpTransferResponse struct {
+	Path     string `json:"path"`
+	Bytes    int64  `json:"bytes"`
+	Revision string `json:"revision"`
+}
+
+type changedResponse struct {
+	Changed bool `json:"changed"`
 }
 
 func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.GET("/api/v1/sftp/transfers", handlers.ListTransfers)
 	engine.POST("/api/v1/sftp/transfers", handlers.CreateTransfer)
 	engine.POST("/api/v1/sftp/transfers/:id/actions", handlers.UpdateTransfer)
+	engine.POST("/api/v1/sftp/transfers/:id/download-checkpoint", handlers.CheckpointDownload)
 	engine.GET("/api/v1/sftp/:alias/entries", handlers.List)
 	engine.POST("/api/v1/sftp/:alias/entries", handlers.Mkdir)
 	engine.GET("/api/v1/sftp/:alias/text", handlers.ReadText)
 	engine.PUT("/api/v1/sftp/:alias/text", handlers.SaveText)
 	engine.GET("/api/v1/sftp/:alias/download", handlers.Download)
 	engine.GET("/api/v1/sftp/:alias/archive", handlers.DownloadArchive)
-	engine.POST("/api/v1/sftp/:alias/upload", handlers.Upload)
 	engine.POST("/api/v1/sftp/:alias/uploads/:id", handlers.StartUpload)
 	engine.PATCH("/api/v1/sftp/:alias/uploads/:id", handlers.AppendUpload)
 	engine.POST("/api/v1/sftp/:alias/uploads/:id/complete", handlers.CompleteUpload)
@@ -57,7 +103,7 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 
 func describeSFTPEntry(entry sshcSFTP.Entry) sftpEntry {
 	return sftpEntry{
-		Name: entry.Name, Path: entry.Path, Type: string(entry.Type), Size: entry.Size,
+		Name: entry.Name, Path: entry.Path, Type: entry.Type, Size: entry.Size,
 		Mode: entry.Mode.String(), ModifiedAt: entry.ModifiedAt.UTC().Format(time.RFC3339Nano), Revision: entry.Revision,
 	}
 }
@@ -90,32 +136,61 @@ func sftpProblem(c *echo.Context, err error) error {
 }
 
 type sftpTransferJobResponse struct {
-	ID               string  `json:"id"`
-	BatchID          string  `json:"batchId"`
-	Alias            string  `json:"alias"`
-	Direction        string  `json:"direction"`
-	Kind             string  `json:"kind"`
-	Name             string  `json:"name"`
-	RemotePath       string  `json:"remotePath"`
-	TotalBytes       int64   `json:"totalBytes"`
-	TransferredBytes int64   `json:"transferredBytes"`
-	BytesPerSecond   float64 `json:"bytesPerSecond"`
-	RemainingSeconds int64   `json:"remainingSeconds"`
-	Status           string  `json:"status"`
-	Attempt          int     `json:"attempt"`
-	Problem          string  `json:"problem"`
-	CreatedAt        string  `json:"createdAt"`
-	UpdatedAt        string  `json:"updatedAt"`
+	ID               string                     `json:"id"`
+	BatchID          string                     `json:"batchId"`
+	Alias            string                     `json:"alias"`
+	Direction        sshcSFTP.TransferDirection `json:"direction"`
+	Kind             sshcSFTP.TransferKind      `json:"kind"`
+	Name             string                     `json:"name"`
+	RemotePath       string                     `json:"remotePath"`
+	TotalBytes       int64                      `json:"totalBytes"`
+	TransferredBytes int64                      `json:"transferredBytes"`
+	BytesPerSecond   float64                    `json:"bytesPerSecond"`
+	RemainingSeconds int64                      `json:"remainingSeconds"`
+	Status           sshcSFTP.TransferJobStatus `json:"status"`
+	Attempt          int                        `json:"attempt"`
+	Problem          string                     `json:"problem"`
+	CreatedAt        string                     `json:"createdAt"`
+	UpdatedAt        string                     `json:"updatedAt"`
 }
 
 func describeTransferJob(job sshcSFTP.TransferJob) sftpTransferJobResponse {
 	return sftpTransferJobResponse{
-		ID: job.ID, BatchID: job.BatchID, Alias: job.Alias, Direction: string(job.Direction),
-		Kind: string(job.Kind), Name: job.Name, RemotePath: job.RemotePath, TotalBytes: job.TotalBytes,
+		ID: job.ID, BatchID: job.BatchID, Alias: job.Alias, Direction: job.Direction,
+		Kind: job.Kind, Name: job.Name, RemotePath: job.RemotePath, TotalBytes: job.TotalBytes,
 		TransferredBytes: job.TransferredBytes, BytesPerSecond: job.BytesPerSecond,
-		RemainingSeconds: job.RemainingSeconds, Status: string(job.Status), Attempt: job.Attempt,
+		RemainingSeconds: job.RemainingSeconds, Status: job.Status, Attempt: job.Attempt,
 		Problem: job.Problem, CreatedAt: job.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: job.UpdatedAt.Format(time.RFC3339Nano),
 	}
+}
+
+type sftpTransferJobListResponse struct {
+	MaxConcurrent int                       `json:"maxConcurrent"`
+	Jobs          []sftpTransferJobResponse `json:"jobs"`
+}
+
+type sftpCreateTransferJobRequest struct {
+	ID         string                     `json:"id"`
+	BatchID    string                     `json:"batchId"`
+	Alias      string                     `json:"alias"`
+	Direction  sshcSFTP.TransferDirection `json:"direction"`
+	Kind       sshcSFTP.TransferKind      `json:"kind"`
+	Name       string                     `json:"name"`
+	RemotePath string                     `json:"remotePath"`
+	TotalBytes int64                      `json:"totalBytes"`
+}
+
+type sftpTransferJobActionRequest struct {
+	Action           sshcSFTP.TransferJobAction `json:"action"`
+	TransferredBytes *int64                     `json:"transferredBytes,omitempty"`
+	TotalBytes       *int64                     `json:"totalBytes,omitempty"`
+	Problem          string                     `json:"problem,omitempty"`
+	ResetProgress    bool                       `json:"resetProgress,omitempty"`
+}
+
+type sftpDownloadCheckpointRequest struct {
+	Offset   int64  `json:"offset"`
+	Revision string `json:"revision"`
 }
 
 func (h SFTPHandlers) ListTransfers(c *echo.Context) error {
@@ -124,29 +199,19 @@ func (h SFTPHandlers) ListTransfers(c *echo.Context) error {
 	for _, job := range jobs {
 		described = append(described, describeTransferJob(job))
 	}
-	return c.JSON(http.StatusOK, struct {
-		MaxConcurrent int                       `json:"maxConcurrent"`
-		Jobs          []sftpTransferJobResponse `json:"jobs"`
-	}{MaxConcurrent: h.Transfers.MaxConcurrent(), Jobs: described})
+	return c.JSON(http.StatusOK, sftpTransferJobListResponse{
+		MaxConcurrent: h.Transfers.MaxConcurrent(), Jobs: described,
+	})
 }
 
 func (h SFTPHandlers) CreateTransfer(c *echo.Context) error {
-	var body struct {
-		ID         string `json:"id"`
-		BatchID    string `json:"batchId"`
-		Alias      string `json:"alias"`
-		Direction  string `json:"direction"`
-		Kind       string `json:"kind"`
-		Name       string `json:"name"`
-		RemotePath string `json:"remotePath"`
-		TotalBytes int64  `json:"totalBytes"`
-	}
+	var body sftpCreateTransferJobRequest
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	job, err := h.Transfers.CreateJob(sshcSFTP.CreateTransferJob{
 		ID: body.ID, BatchID: body.BatchID, Alias: body.Alias,
-		Direction: sshcSFTP.TransferDirection(body.Direction), Kind: sshcSFTP.TransferKind(body.Kind),
+		Direction: body.Direction, Kind: body.Kind,
 		Name: body.Name, RemotePath: body.RemotePath, TotalBytes: body.TotalBytes,
 	})
 	if err != nil {
@@ -156,19 +221,26 @@ func (h SFTPHandlers) CreateTransfer(c *echo.Context) error {
 }
 
 func (h SFTPHandlers) UpdateTransfer(c *echo.Context) error {
-	var body struct {
-		Action           string `json:"action"`
-		TransferredBytes *int64 `json:"transferredBytes"`
-		Problem          string `json:"problem"`
-		ResetProgress    bool   `json:"resetProgress"`
-	}
+	var body sftpTransferJobActionRequest
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	job, err := h.Transfers.UpdateJob(c.Param("id"), sshcSFTP.UpdateTransferJob{
-		Action: sshcSFTP.TransferJobAction(body.Action), TransferredBytes: body.TransferredBytes,
-		Problem: body.Problem, ResetProgress: body.ResetProgress,
+	job, err := h.Transfers.UpdateJobFromClient(c.Param("id"), sshcSFTP.UpdateTransferJob{
+		Action: body.Action, TransferredBytes: body.TransferredBytes,
+		TotalBytes: body.TotalBytes, Problem: body.Problem, ResetProgress: body.ResetProgress,
 	})
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, describeTransferJob(job))
+}
+
+func (h SFTPHandlers) CheckpointDownload(c *echo.Context) error {
+	var body sftpDownloadCheckpointRequest
+	if err := decodeJSON(c, &body); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	job, err := h.Transfers.AcknowledgeDownload(c.Param("id"), body.Offset, body.Revision)
 	if err != nil {
 		return sftpProblem(c, err)
 	}
@@ -185,10 +257,7 @@ func (h SFTPHandlers) List(c *echo.Context) error {
 	for _, entry := range entries {
 		described = append(described, describeSFTPEntry(entry))
 	}
-	return c.JSON(http.StatusOK, struct {
-		Path    string      `json:"path"`
-		Entries []sftpEntry `json:"entries"`
-	}{Path: remotePath, Entries: described})
+	return c.JSON(http.StatusOK, sftpListingResponse{Path: remotePath, Entries: described})
 }
 
 func (h SFTPHandlers) ReadText(c *echo.Context) error {
@@ -196,18 +265,13 @@ func (h SFTPHandlers) ReadText(c *echo.Context) error {
 	if err != nil {
 		return sftpProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, struct {
-		Entry    sftpEntry `json:"entry"`
-		Contents string    `json:"contents"`
-		Revision string    `json:"revision"`
-	}{describeSFTPEntry(file.Entry), file.Contents, file.Revision})
+	return c.JSON(http.StatusOK, sftpTextFileResponse{
+		Entry: describeSFTPEntry(file.Entry), Contents: file.Contents, Revision: file.Revision,
+	})
 }
 
 func (h SFTPHandlers) SaveText(c *echo.Context) error {
-	var body struct {
-		Contents         string `json:"contents"`
-		ExpectedRevision string `json:"expectedRevision"`
-	}
+	var body sftpSaveTextRequest
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -215,19 +279,14 @@ func (h SFTPHandlers) SaveText(c *echo.Context) error {
 	if err != nil {
 		return sftpProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, struct {
-		Entry    sftpEntry `json:"entry"`
-		Contents string    `json:"contents"`
-		Revision string    `json:"revision"`
-	}{describeSFTPEntry(file.Entry), file.Contents, file.Revision})
+	return c.JSON(http.StatusOK, sftpTextFileResponse{
+		Entry: describeSFTPEntry(file.Entry), Contents: file.Contents, Revision: file.Revision,
+	})
 }
 
 func (h SFTPHandlers) Mkdir(c *echo.Context) error {
-	var body struct {
-		Path string `json:"path"`
-		Type string `json:"type"`
-	}
-	if err := decodeJSON(c, &body); err != nil || body.Type != "directory" {
+	var body sftpMkdirRequest
+	if err := decodeJSON(c, &body); err != nil || body.Type != sftpMkdirDirectory {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	entry, err := h.Service.Mkdir(c.Request().Context(), c.Param("alias"), body.Path)
@@ -238,10 +297,7 @@ func (h SFTPHandlers) Mkdir(c *echo.Context) error {
 }
 
 func (h SFTPHandlers) Rename(c *echo.Context) error {
-	var body struct {
-		From string `json:"from"`
-		To   string `json:"to"`
-	}
+	var body sftpRenameRequest
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -254,36 +310,70 @@ func (h SFTPHandlers) Rename(c *echo.Context) error {
 
 func (h SFTPHandlers) Download(c *echo.Context) error {
 	remotePath := c.QueryParam("path")
+	job, done, err := h.Transfers.StartDownloadDataPlane(c.QueryParam("jobId"), c.Param("alias"), remotePath, sshcSFTP.TransferFile)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	defer done()
 	name := path.Base(remotePath)
 	if name == "." || name == "/" || name == "" {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	entry, err := h.Service.Stat(c.Request().Context(), c.Param("alias"), remotePath)
+	prepared, err := h.Transfers.PrepareOwnedDownload(c.Request().Context(), job.ID, c.Param("alias"), remotePath)
 	if err != nil {
 		return sftpProblem(c, err)
 	}
-	if entry.Type != sshcSFTP.EntryFile {
-		return sftpProblem(c, sshcSFTP.ErrNotRegularFile)
+	defer prepared.Close()
+	etag := strconv.Quote(prepared.Revision)
+	c.Response().Header().Set("ETag", etag)
+	if c.QueryParam("verify") == "true" {
+		if c.Request().Header.Get("If-Range") != etag {
+			return sftpProblem(c, sshcSFTP.ErrConflict)
+		}
+		if _, err := h.Transfers.BeginDownload(job.ID, prepared.Size, etag, job.TransferredBytes); err != nil {
+			return sftpProblem(c, err)
+		}
+		if _, err := h.Transfers.VerifyDownloadComplete(job.ID, prepared.Size, etag); err != nil {
+			return sftpProblem(c, err)
+		}
+		return c.NoContent(http.StatusNoContent)
 	}
-	offset, ranged, err := downloadOffset(c.Request().Header.Get("Range"), entry.Size)
+	offset, ranged, err := downloadOffset(c.Request().Header.Get("Range"), prepared.Size)
 	if err != nil {
-		c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes */%d", entry.Size))
+		c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes */%d", prepared.Size))
 		return problem(c, http.StatusRequestedRangeNotSatisfiable, "sftp_range_invalid")
+	}
+	// If-Range pins a resumed download to the revision that produced its
+	// already-received prefix. If the path now names another revision, ignore
+	// Range and send the new file from byte zero; the browser then discards its
+	// old chunks before accepting this response.
+	if ranged && c.Request().Header.Get("If-Range") != etag {
+		offset, ranged = 0, false
+	}
+	job, err = h.Transfers.BeginDownload(job.ID, prepared.Size, etag, offset)
+	if err != nil {
+		return sftpProblem(c, err)
 	}
 	c.Response().Header().Set("Content-Type", "application/octet-stream")
 	c.Response().Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
 	c.Response().Header().Set("Accept-Ranges", "bytes")
-	c.Response().Header().Set("Content-Length", strconv.FormatInt(entry.Size-offset, 10))
+	c.Response().Header().Set("Content-Length", strconv.FormatInt(prepared.Size-offset, 10))
 	if ranged {
-		c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", offset, entry.Size-1, entry.Size))
+		c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", offset, prepared.Size-1, prepared.Size))
 		c.Response().WriteHeader(http.StatusPartialContent)
 	}
-	output := &countingWriter{write: c.Response().Write}
-	if _, err := h.Service.DownloadFrom(c.Request().Context(), c.Param("alias"), remotePath, offset, output); err != nil {
+	output := &countingWriter{write: c.Response().Write, progress: func(written int64) error {
+		_, progressErr := h.Transfers.RecordDownloadSent(job.ID, offset+written, prepared.Size, etag)
+		return progressErr
+	}}
+	if _, err := prepared.WriteFrom(c.Request().Context(), offset, output); err != nil {
 		if output.written > 0 {
 			return err
 		}
 		return sftpProblem(c, err)
+	}
+	if _, err := h.Transfers.RecordDownloadSent(job.ID, offset+output.written, prepared.Size, etag); err != nil {
+		return err
 	}
 	return nil
 }
@@ -309,45 +399,60 @@ func downloadOffset(header string, size int64) (int64, bool, error) {
 
 func (h SFTPHandlers) DownloadArchive(c *echo.Context) error {
 	remotePath := c.QueryParam("path")
+	job, done, err := h.Transfers.StartDownloadDataPlane(c.QueryParam("jobId"), c.Param("alias"), remotePath, sshcSFTP.TransferFolder)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	defer done()
+	if job.TransferredBytes != 0 {
+		return sftpProblem(c, sshcSFTP.ErrOffsetMismatch)
+	}
 	name := path.Base(remotePath)
 	if name == "." || name == "/" || name == "" {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
+	prepared, err := h.Transfers.PrepareOwnedArchive(c.Request().Context(), job.ID, c.Param("alias"), remotePath)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	defer prepared.Close()
 	c.Response().Header().Set("Content-Type", "application/zip")
+	etag := strconv.Quote(prepared.Revision)
+	c.Response().Header().Set("ETag", etag)
+	if _, err := h.Transfers.BeginDownload(job.ID, prepared.Size, etag, 0); err != nil {
+		return sftpProblem(c, err)
+	}
 	c.Response().Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".zip"}))
-	output := &countingWriter{write: c.Response().Write}
-	if _, err := h.Service.DownloadArchive(c.Request().Context(), c.Param("alias"), remotePath, output); err != nil {
+	c.Response().Header().Set("Content-Length", strconv.FormatInt(prepared.Size, 10))
+	output := &countingWriter{write: c.Response().Write, progress: func(written int64) error {
+		_, progressErr := h.Transfers.RecordDownloadSent(job.ID, written, prepared.Size, etag)
+		return progressErr
+	}}
+	if _, err := prepared.WriteFrom(c.Request().Context(), 0, output); err != nil {
 		if output.written > 0 {
 			return err
 		}
 		return sftpProblem(c, err)
 	}
+	if _, err := h.Transfers.RecordDownloadSent(job.ID, output.written, prepared.Size, etag); err != nil {
+		return err
+	}
 	return nil
 }
 
 type countingWriter struct {
-	write   func([]byte) (int, error)
-	written int64
+	write    func([]byte) (int, error)
+	progress func(int64) error
+	written  int64
 }
 
 func (writer *countingWriter) Write(contents []byte) (int, error) {
 	written, err := writer.write(contents)
 	writer.written += int64(written)
+	if err == nil && writer.progress != nil {
+		err = writer.progress(writer.written)
+	}
 	return written, err
-}
-
-func (h SFTPHandlers) Upload(c *echo.Context) error {
-	overwrite, err := strconv.ParseBool(c.QueryParam("overwrite"))
-	if err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	transfer, err := h.Service.Upload(c.Request().Context(), c.Param("alias"), c.QueryParam("path"), c.Request().Body, sshcSFTP.UploadOptions{
-		Overwrite: overwrite, MaxBytes: MaxRequestBodyCeiling,
-	})
-	if err != nil {
-		return sftpProblem(c, err)
-	}
-	return c.JSON(http.StatusCreated, transfer)
 }
 
 type resumableUploadResponse struct {
@@ -355,7 +460,21 @@ type resumableUploadResponse struct {
 	Path             string `json:"path"`
 	Offset           int64  `json:"offset"`
 	Size             int64  `json:"size"`
-	ExpectedRevision string `json:"expectedRevision"`
+	ExpectedRevision string `json:"expectedRevision,omitempty"`
+}
+
+type sftpStartUploadRequest struct {
+	Path             string `json:"path"`
+	Size             int64  `json:"size"`
+	Overwrite        bool   `json:"overwrite"`
+	ExpectedRevision string `json:"expectedRevision,omitempty"`
+}
+
+type sftpCompleteUploadRequest struct {
+	Path              string `json:"path"`
+	Size              int64  `json:"size"`
+	ExpectedRevision  string `json:"expectedRevision"`
+	SourceFingerprint string `json:"sourceFingerprint"`
 }
 
 func describeResumableUpload(upload sshcSFTP.ResumableUpload) resumableUploadResponse {
@@ -366,16 +485,11 @@ func describeResumableUpload(upload sshcSFTP.ResumableUpload) resumableUploadRes
 }
 
 func (h SFTPHandlers) StartUpload(c *echo.Context) error {
-	var body struct {
-		Path             string `json:"path"`
-		Size             int64  `json:"size"`
-		Overwrite        bool   `json:"overwrite"`
-		ExpectedRevision string `json:"expectedRevision"`
-	}
+	var body sftpStartUploadRequest
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	upload, err := h.Transfers.Start(c.Request().Context(), c.Param("alias"), c.Param("id"), body.Path, sshcSFTP.StartUploadOptions{
+	upload, err := h.Transfers.StartOwned(c.Request().Context(), c.Param("alias"), c.Param("id"), body.Path, sshcSFTP.StartUploadOptions{
 		Size: body.Size, Overwrite: body.Overwrite, ExpectedRevision: body.ExpectedRevision,
 	})
 	if err != nil {
@@ -400,7 +514,7 @@ func (h SFTPHandlers) AppendUpload(c *echo.Context) error {
 	if len(contents) > MaxRequestBodyCeiling {
 		return problem(c, http.StatusRequestEntityTooLarge, "sftp_transfer_too_large")
 	}
-	upload, err := h.Transfers.Append(c.Request().Context(), c.Param("alias"), c.Param("id"), c.QueryParam("path"), offset, total, contents)
+	upload, err := h.Transfers.AppendOwned(c.Request().Context(), c.Param("alias"), c.Param("id"), c.QueryParam("path"), offset, total, contents)
 	if err != nil {
 		return sftpProblem(c, err)
 	}
@@ -408,30 +522,24 @@ func (h SFTPHandlers) AppendUpload(c *echo.Context) error {
 }
 
 func (h SFTPHandlers) CompleteUpload(c *echo.Context) error {
-	var body struct {
-		Path             string `json:"path"`
-		Size             int64  `json:"size"`
-		ExpectedRevision string `json:"expectedRevision"`
-	}
+	var body sftpCompleteUploadRequest
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	transfer, err := h.Transfers.Complete(c.Request().Context(), c.Param("alias"), c.Param("id"), body.Path, body.Size, body.ExpectedRevision)
+	transfer, err := h.Transfers.CompleteOwned(c.Request().Context(), c.Param("alias"), c.Param("id"), body.Path, body.Size, body.ExpectedRevision, body.SourceFingerprint)
 	if err != nil {
 		return sftpProblem(c, err)
 	}
-	return c.JSON(http.StatusCreated, struct {
-		Path     string `json:"path"`
-		Bytes    int64  `json:"bytes"`
-		Revision string `json:"revision"`
-	}{transfer.Path, transfer.Bytes, transfer.Revision})
+	return c.JSON(http.StatusCreated, sftpTransferResponse{
+		Path: transfer.Path, Bytes: transfer.Bytes, Revision: transfer.Revision,
+	})
 }
 
 func (h SFTPHandlers) CancelUpload(c *echo.Context) error {
-	if err := h.Transfers.Cancel(c.Request().Context(), c.Param("alias"), c.Param("id"), c.QueryParam("path")); err != nil {
+	if err := h.Transfers.CancelOwned(c.Request().Context(), c.Param("alias"), c.Param("id"), c.QueryParam("path")); err != nil {
 		return sftpProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, map[string]bool{"changed": true})
+	return c.JSON(http.StatusOK, changedResponse{Changed: true})
 }
 
 func (h SFTPHandlers) Delete(c *echo.Context) error {
@@ -443,15 +551,11 @@ func (h SFTPHandlers) Delete(c *echo.Context) error {
 	if err := h.Service.Delete(c.Request().Context(), alias, remotePath); err != nil {
 		return sftpProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, map[string]bool{"changed": true})
+	return c.JSON(http.StatusOK, changedResponse{Changed: true})
 }
 
 func (h SFTPHandlers) Chmod(c *echo.Context) error {
-	var body struct {
-		Path             string `json:"path"`
-		Mode             string `json:"mode"`
-		ExpectedRevision string `json:"expectedRevision"`
-	}
+	var body sftpChmodRequest
 	if err := decodeJSON(c, &body); err != nil || (len(body.Mode) != 3 && len(body.Mode) != 4) {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}

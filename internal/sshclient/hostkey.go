@@ -56,15 +56,10 @@ func (h HostKeys) Callback(target Target, prompt Prompter) ssh.HostKeyCallback {
 //
 // 証明書のアルゴリズムは入れない。このクライアントは証明書を読まないので、
 // 名乗れば、受け取っても突き合わせられないものを相手に選ばせることになる。
-//
-// 末尾の ssh-rsa は SHA-1 の署名であり、OpenSSH の既定からはもう外れている。
-// ここに残すのは、それしか持たない古いサーバーへ今日繋がっているからで、
-// 最後にあるので他に選べるものがあれば選ばれない。
 var defaultHostKeyAlgorithms = []string{
 	ssh.KeyAlgoED25519,
 	ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521,
 	ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256,
-	ssh.KeyAlgoRSA,
 }
 
 // Algorithms は、この接続で名乗るホスト鍵アルゴリズムを優先順に返す。
@@ -126,10 +121,11 @@ func (h HostKeys) Algorithms(target Target) []string {
 // RSA だけは、鍵の種類と署名アルゴリズムが一対一ではない。known_hosts は
 // ssh-rsa としか書かないが、それをそのまま名乗ると SHA-1 の署名だけを求める
 // ことになり、SHA-1 を断る今どきのサーバーとは繋がらない。同じ鍵で名乗れる
-// 三つを OpenSSH と同じ順で返す。
+// SHA-2の二つをOpenSSHと同じ順で返す。SHA-1のssh-rsaは利用者が
+// HostKeyAlgorithmsで明示した接続だけに限る。
 func signatureAlgorithms(keyType string) []string {
 	if keyType == ssh.KeyAlgoRSA {
-		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA}
+		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
 	}
 	return []string{keyType}
 }

@@ -27,8 +27,9 @@ type connectAnswer struct {
 	Passphrases map[string]string `json:"passphrases"`
 	// Passwords は、この接続に現れる alias ごとの保存済みアカウントパスワード。
 	// 行き先だけでなく ProxyJump の手前も含む。Passphrase とは別の名前空間である。
-	Passwords map[string]string `json:"passwords"`
-	Warnings  []string          `json:"warnings"`
+	Passwords        map[string]string `json:"passwords"`
+	PasswordBindings map[string]string `json:"passwordBindings"`
+	Warnings         []string          `json:"warnings"`
 }
 
 // OpenSubcommand は起動中の engine から UI URL を取得する予約語である。

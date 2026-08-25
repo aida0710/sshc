@@ -21,13 +21,20 @@ type Credentials struct {
 }
 
 type Session struct {
-	csrfHash [sha256.Size]byte
+	// csrfHashes keeps a small, bounded set so tabs which share one session do
+	// not revoke each other when one refreshes its token. Only hashes are kept;
+	// a cookie without one of the origin-scoped tokens is still useless.
+	csrfHashes [][sha256.Size]byte
 	// actions は、このセッションの未使用の確認を保持する。キーは配られたトークンの
 	// ダイジェストで、セッション自身のキーの付け方とまったく同じである。このマップは
 	// Session 値のすべてのコピーで共有されており、それによってアクション用のヘルパー
 	// は、もう一度検索することなくここへ到達できる。
 	actions map[[sha256.Size]byte]actionRecord
 }
+
+// MaxCSRFTokensPerSession bounds memory and the lifetime of an abandoned tab
+// token. A ninth renewal evicts the oldest token.
+const MaxCSRFTokensPerSession = 8
 
 type Manager struct {
 	mu            sync.RWMutex
@@ -108,26 +115,18 @@ func (m *Manager) Bootstrap(presented string) (Credentials, error) {
 
 	m.bootstrapUsed = true
 	m.sessions[sha256.Sum256([]byte(sessionID))] = Session{
-		csrfHash: sha256.Sum256([]byte(csrf)),
-		actions:  make(map[[sha256.Size]byte]actionRecord),
+		csrfHashes: [][sha256.Size]byte{sha256.Sum256([]byte(csrf))},
+		actions:    make(map[[sha256.Size]byte]actionRecord),
 	}
 	return Credentials{SessionID: sessionID, CSRFToken: csrf}, nil
 }
 
-// RenewCSRF は、すでに存在するセッションのために新しい CSRF トークンを発行する。
+// RenewCSRF は、有効な現在のtokenを持つpageへ新しいCSRF tokenを発行する。
 //
-// リロードするとトークンは失われる。ページの中にあったからだ。Cookie は残るので
-// セッションは残る。これがないと、ブートストラップのフラグメントは初回の使用で
-// 消費され、次の一つを表示するのは新しいプロセスだけなので、バイナリを起動し直す
-// までアプリケーションは死んだままだった。
-//
-// トークンは返すのではなく発行し直す。このマネージャが保持するのはハッシュだけで
-// あってトークンではない。それが、メモリの漏洩を全セッションのトークンの漏洩に
-// しない性質であり、発行し直す方式はその性質を保つ。古いトークンは検証を通らなく
-// なるが、それが正しい。セッションにつきページはひとつであり、新しいトークンが
-// 発行されたあとも古いものが通るなら、それは誰も意図せず持っている二本目の鍵に
-// なってしまう。
-func (m *Manager) RenewCSRF(sessionID string) (string, bool) {
+// Cookieはportへ束縛されないので、提示token自体もここで再検証する。複数tabが同じ
+// sessionを使う場合に一方の更新で他方を切断しないよう、既存tokenは上限付きで保持する。
+// 上限を越えた最古tokenは退役する。
+func (m *Manager) RenewCSRF(sessionID, presented string) (string, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -136,11 +135,20 @@ func (m *Manager) RenewCSRF(sessionID string) (string, bool) {
 	if !ok {
 		return "", false
 	}
+	if !csrfMatches(existing.csrfHashes, presented) {
+		return "", false
+	}
 	csrf, err := token(m.random)
 	if err != nil {
 		return "", false
 	}
-	existing.csrfHash = sha256.Sum256([]byte(csrf))
+	freshHash := sha256.Sum256([]byte(csrf))
+	if len(existing.csrfHashes) < MaxCSRFTokensPerSession {
+		existing.csrfHashes = append(existing.csrfHashes, freshHash)
+	} else {
+		copy(existing.csrfHashes, existing.csrfHashes[1:])
+		existing.csrfHashes[len(existing.csrfHashes)-1] = freshHash
+	}
 	m.sessions[key] = existing
 	return csrf, true
 }
@@ -165,6 +173,14 @@ func (m *Manager) VerifyCSRF(sessionID, csrf string) bool {
 	if !ok {
 		return false
 	}
-	presentedHash := sha256.Sum256([]byte(csrf))
-	return subtle.ConstantTimeCompare(presentedHash[:], sessionValue.csrfHash[:]) == 1
+	return csrfMatches(sessionValue.csrfHashes, csrf)
+}
+
+func csrfMatches(hashes [][sha256.Size]byte, presented string) bool {
+	presentedHash := sha256.Sum256([]byte(presented))
+	matched := 0
+	for _, candidate := range hashes {
+		matched |= subtle.ConstantTimeCompare(presentedHash[:], candidate[:])
+	}
+	return matched == 1
 }

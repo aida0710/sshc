@@ -89,16 +89,15 @@ test("enforces the content security policy in the browser, not only in the heade
   expect(crossOrigin).toBe("blocked");
 });
 
-test("keeps no secret in persistent browser storage", async ({ page, installation }) => {
+test("keeps only the origin-scoped CSRF token in session storage", async ({ page, installation }) => {
   await openApplication(page, installation);
   await expect(sessionStatus(page)).toContainText("Local session active");
 
-  expect(
-    await page.evaluate(() => ({
-      local: window.localStorage.length,
-      session: window.sessionStorage.length,
-    })),
-  ).toEqual({ local: 0, session: 0 });
+  expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual([]);
+  expect(await page.evaluate(() => Object.keys(window.sessionStorage))).toEqual(["sshc.session.csrf"]);
+  expect(await page.evaluate(() => window.sessionStorage.getItem("sshc.session.csrf"))).toMatch(
+    /^[A-Za-z0-9_-]{43}$/,
+  );
 
   await page.getByLabel("Language").selectOption("ja");
 
@@ -109,7 +108,7 @@ test("keeps no secret in persistent browser storage", async ({ page, installatio
   }));
   expect(stored.keys).toEqual(["sshc.language"]);
   expect(["en", "ja"]).toContain(stored.language);
-  expect(stored.session).toBe(0);
+  expect(stored.session).toBe(1);
 });
 
 test("keeps the chosen appearance, and writes nothing else", async ({ page, installation }) => {

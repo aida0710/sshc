@@ -272,12 +272,8 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
     setMasterError("");
     setChanged("");
     try {
-      const result = await api.changeMasterPassword(currentMaster, nextMaster);
-      setChanged(
-        result.snapshotResealed
-          ? t("secrets.changedWithSnapshot")
-          : t("secrets.changedWithoutSnapshot", { reason: result.snapshotProblem ?? "" }),
-      );
+      await api.changeMasterPassword(currentMaster, nextMaster);
+      setChanged(t("secrets.changedMasterLocally"));
     } catch (caught) {
       setMasterError(
         failureCode(caught) === "wrong_passphrase" ? t("secrets.wrongCurrent") : t("secrets.changeFailed"),

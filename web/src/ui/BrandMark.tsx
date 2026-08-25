@@ -1,7 +1,7 @@
 import { useId } from "react";
 
 export function BrandMark({ className = "h-7 w-7" }: { className?: string }) {
-  const gradientId = `sshc-brand-gradient-${useId().replaceAll(":", "")}`;
+  const gradientId = `sshc-brand-gradient-${useId().split(":").join("")}`;
 
   return (
     <svg

@@ -103,11 +103,6 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		isBootstrap := request.Method == http.MethodPost && request.URL.Path == "/api/v1/session/bootstrap"
-		// CSRF トークンの更新は、トークンを提示できない。reload には cookie
-		// だけがあって他は何もないからだ。除外されているのはこの確認だけで、
-		// 以下のセッションは依然として必須である。これは bootstrap の除外が
-		// そうではないのとは違う。
-		isRenew := request.Method == http.MethodPost && request.URL.Path == "/api/v1/session/renew"
 		isStateChanging := request.Method != http.MethodGet && request.Method != http.MethodHead
 		if (isStateChanging || isBootstrap) && request.Header.Get(echo.HeaderOrigin) != s.ExpectedOrigin {
 			return problem(c, http.StatusForbidden, "cross_site_request")
@@ -130,18 +125,15 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		// ポートに紐づかず site もそうなので、127.0.0.1 上の別のサーバーが
 		// これを受け取ってしまう。SameSite は scheme と registrable domain
 		// を比較し、IP はそれ自体が site のすべてだからだ。トークンは
-		// ページのメモリに存在してそこへは決して渡らないため、それを要求
-		// することで漏洩した cookie 単体を無価値にしている。
-		//
-		// 更新が除外されているのは、トークンを失ったページがそれを得る
-		// 手段だからだ。reload には cookie だけがあり他は何もない。
+		// port を含む origin に分離された sessionStorage にあり、別 port へは
+		// 渡らないため、それを要求することで漏洩した cookie 単体を無価値にする。
 		claimed := c.Path() != "" && c.Path() != spaFallbackRoute
 		// Health はトークンからもゲートからも除外されている。これが運ぶ
 		// のはバージョン文字列だけであり、ページが落ち着く前になされる
 		// 唯一のリクエストでもあるため、ここでトークンを要求すれば、得る
 		// ものなく bootstrap の順序の罠にはまるだけになる。
 		isHealth := request.Method == http.MethodGet && request.URL.Path == "/api/v1/health"
-		if (isStateChanging || claimed) && !isRenew && !isHealth &&
+		if (isStateChanging || claimed) && !isHealth &&
 			!s.Sessions.VerifyCSRF(cookie.Value, request.Header.Get(CSRFHeader)) {
 			return problem(c, http.StatusForbidden, "invalid_csrf")
 		}

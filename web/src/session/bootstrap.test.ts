@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bootstrapSession } from "./bootstrap";
+
+beforeEach(() => {
+  window.sessionStorage.clear();
+});
 
 describe("bootstrapSession", () => {
   it("exchanges a valid fragment once and removes it from browser history", async () => {
@@ -25,6 +29,7 @@ describe("bootstrapSession", () => {
     }));
     expect(replaceState).toHaveBeenCalledWith(null, "", "/");
     expect(state.csrfToken).toBe(csrfToken);
+    expect(window.sessionStorage.getItem("sshc.session.csrf")).toBe(csrfToken);
   });
 
   it.each([
@@ -74,7 +79,9 @@ describe("bootstrapSession", () => {
 describe("a reload", () => {
   it("renews the token for the session the cookie already names", async () => {
     const replaceState = vi.fn();
+    const oldToken = "c".repeat(43);
     const csrfToken = "d".repeat(43);
+    window.sessionStorage.setItem("sshc.session.csrf", oldToken);
     const fetcher = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ csrfToken }),
       { status: 200, headers: { "Content-Type": "application/json" } },
@@ -85,16 +92,30 @@ describe("a reload", () => {
     expect(fetcher).toHaveBeenCalledWith("/api/v1/session/renew", expect.objectContaining({
       method: "POST",
       credentials: "same-origin",
+      headers: expect.objectContaining({ "X-SSHC-CSRF": oldToken }),
     }));
     expect(state.csrfToken).toBe(csrfToken);
+    expect(window.sessionStorage.getItem("sshc.session.csrf")).toBe(csrfToken);
     expect(replaceState).not.toHaveBeenCalled();
   });
 
+  it("does not try cookie-only renewal when this port-origin has no token", async () => {
+    const fetcher = vi.fn();
+
+    await expect(
+      bootstrapSession({ hash: "", pathname: "/", search: "" }, { replaceState: vi.fn() }, fetcher),
+    ).rejects.toThrow("session_expired");
+
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("says the session is gone when the cookie no longer names one", async () => {
+    window.sessionStorage.setItem("sshc.session.csrf", "c".repeat(43));
     const fetcher = vi.fn().mockResolvedValue(new Response("", { status: 401 }));
 
     await expect(
       bootstrapSession({ hash: "", pathname: "/", search: "" }, { replaceState: vi.fn() }, fetcher),
     ).rejects.toThrow("session_expired");
+    expect(window.sessionStorage).toHaveLength(0);
   });
 });

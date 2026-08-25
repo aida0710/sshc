@@ -43,7 +43,15 @@ type fakeBucket struct {
 	// refuseConditional は、すべての条件付き PUT を失敗させる。R2 がそれらに対応して
 	// いないと判明した場合に、計画にあるフォールバックがどう働くかを試すための
 	// ものである。
-	refuseConditional bool
+	refuseConditional        bool
+	refuseLiveConditional    bool
+	refuseNextConditional    bool
+	failAfterConditional     bool
+	failConditionalResponses int
+	contentAddressedETag     bool
+	listETagOverride         string
+	historyUnconditional     int
+	refuseGets               int
 }
 
 type storedObject struct {
@@ -75,6 +83,47 @@ func (b *fakeBucket) replace(key, etag string) {
 	stored := b.objects[key]
 	stored.etag = etag
 	b.objects[key] = stored
+}
+
+func (b *fakeBucket) removeObject(key string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	delete(b.objects, key)
+}
+
+func (b *fakeBucket) putObject(key string, body []byte, etag string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.objects == nil {
+		b.objects = map[string]storedObject{}
+	}
+	b.objects[key] = storedObject{body: body, etag: etag}
+}
+
+func (b *fakeBucket) refuseNextConditionalPut() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.refuseNextConditional = true
+}
+
+// failAfterNextConditionalPut simulates a lost or 5xx response after the
+// object store has durably applied the conditional write.
+func (b *fakeBucket) failAfterNextConditionalPut() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.failAfterConditional = true
+}
+
+func (b *fakeBucket) restoreConditionalResponses() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.failConditionalResponses = 0
+}
+
+func (b *fakeBucket) refuseObjectGets(count int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.refuseGets = count
 }
 
 func (b *fakeBucket) object(key string) []byte {
@@ -111,8 +160,12 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 			listed := result{Name: "sshc", Prefix: prefix, MaxKeys: 1000}
 			for key, stored := range b.objects {
 				if strings.HasPrefix(key, prefix) {
+					etag := stored.etag
+					if b.listETagOverride != "" {
+						etag = b.listETagOverride
+					}
 					listed.Contents = append(listed.Contents, content{
-						Key: key, LastModified: "2026-08-25T01:00:00Z", ETag: stored.etag,
+						Key: key, LastModified: "2026-08-25T01:00:00Z", ETag: etag,
 						Size: len(stored.body), StorageClass: "STANDARD",
 					})
 				}
@@ -131,6 +184,11 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
+			if r.Method == http.MethodGet && b.refuseGets > 0 {
+				b.refuseGets--
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 			w.Header().Set("ETag", stored.etag)
 			w.Header().Set("Content-Length", strconv.Itoa(len(stored.body)))
 			w.Header().Set("Last-Modified", "Tue, 25 Aug 2026 01:00:00 GMT")
@@ -140,6 +198,23 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 			}
 		case http.MethodPut:
 			ifMatch, ifNone := r.Header.Get("If-Match"), r.Header.Get("If-None-Match")
+			if b.failConditionalResponses > 0 && (ifMatch != "" || ifNone != "") {
+				b.failConditionalResponses--
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			if b.refuseNextConditional && (ifMatch != "" || ifNone != "") {
+				b.refuseNextConditional = false
+				w.WriteHeader(http.StatusPreconditionFailed)
+				return
+			}
+			if strings.Contains(key, remotesync.SnapshotPrefix) && ifNone != "*" {
+				b.historyUnconditional++
+			}
+			if b.refuseLiveConditional && strings.HasSuffix(key, remotesync.ObjectName) && (ifMatch != "" || ifNone != "") {
+				w.WriteHeader(http.StatusPreconditionFailed)
+				return
+			}
 			if b.refuseConditional && (ifMatch != "" || ifNone != "") {
 				w.WriteHeader(http.StatusPreconditionFailed)
 				return
@@ -163,7 +238,18 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 			}
 			b.generation++
 			etag := `"` + string(rune('a'+b.generation)) + `"`
+			if b.contentAddressedETag {
+				etag = `"` + remotesync.Digest(body) + `"`
+			}
 			b.objects[key] = storedObject{body: body, etag: etag}
+			if b.failAfterConditional && (ifMatch != "" || ifNone != "") {
+				b.failAfterConditional = false
+				// Keep every automatic SDK retry ambiguous as well. The test
+				// explicitly restores the network before starting recovery.
+				b.failConditionalResponses = 16
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 			w.Header().Set("ETag", etag)
 		case http.MethodDelete:
 			delete(b.objects, key)
@@ -178,6 +264,12 @@ func (b *fakeBucket) downloads() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.gets
+}
+
+func (b *fakeBucket) unconditionalHistoryPuts() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.historyUnconditional
 }
 
 type installation struct {
@@ -198,7 +290,9 @@ type installation struct {
 func (i installation) direct(direction remotesync.Direction) {
 	config := i.config
 	config.Direction = direction
-	i.service.Configure(config, i.creds, i.client)
+	if err := i.service.Configure(config, i.creds, i.client); err != nil {
+		panic(err)
+	}
 }
 
 func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) installation {
@@ -281,7 +375,9 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto",
 		Creds: credentials,
 	}
-	service.Configure(config, credentials, client)
+	if err := service.Configure(config, credentials, client); err != nil {
+		t.Fatal(err)
+	}
 	return installation{
 		service: service, workspace: workspace, manager: manager, home: home,
 		config: config, creds: credentials, client: client,
@@ -332,7 +428,7 @@ func TestASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	first := newInstallation(t, bucket, map[string]string{
 		"config":               "Host bastion\r\n\tPort 2222   \n",
 		"keys/work/id_ed25519": "-----BEGIN OPENSSH PRIVATE KEY-----\n",
-		"sshc/metadata.json":   `{"schemaVersion":2}`,
+		"sshc/metadata.json":   `{"schemaVersion":3}`,
 	})
 	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatalf("Push = %v", err)
@@ -429,7 +525,7 @@ func TestARejectedLiveCASRemovesItsHistoryCandidate(t *testing.T) {
 	}
 	before, _ := bucket.uploads()
 	machine.write(t, "config", "Host changed\n")
-	bucket.refuseConditional = true
+	bucket.refuseLiveConditional = true
 
 	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Change host"); !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("Push = %v, want ErrRemoteMoved", err)
@@ -452,6 +548,69 @@ func TestPullRefusesTheWrongPassphraseAndWritesNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(second.home, ".ssh", "config")); !errors.Is(err, os.ErrNotExist) {
 		t.Error("a refused pull wrote a file")
+	}
+}
+
+func TestPullAndApplyRejectsARemoteChangeAfterTheDownload(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host remote\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{"config": "Host local\n"})
+	preview, err := consumer.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	envelope.OnDerive = func(step func()) {
+		once.Do(func() {
+			close(started)
+			<-release
+		})
+		step()
+	}
+	t.Cleanup(func() { envelope.OnDerive = nil })
+	done := make(chan error, 1)
+	go func() {
+		_, err := consumer.service.PullAndApply(context.Background(), syncPassphrase, remotesync.ResolveRemote, "",
+			preview.ETag, preview.Manifest.Revision)
+		done <- err
+	}()
+	<-started
+	bucket.replace(remotesync.ObjectName, `"changed-after-get"`)
+	close(release)
+	if err := <-done; !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("PullAndApply = %v, want ErrRemoteMoved", err)
+	}
+	if got := consumer.read(t, "config"); got != "Host local\n" {
+		t.Fatalf("stale preview changed config to %q", got)
+	}
+}
+
+func TestHistoryApplyRejectsAMissingLiveObjectWithoutWritingFiles(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host remote\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	history, err := producer.service.History(context.Background(), syncPassphrase)
+	if err != nil || len(history.Revisions) == 0 {
+		t.Fatalf("History = (%#v, %v)", history, err)
+	}
+	bucket.removeObject(remotesync.ObjectName)
+	consumer := newInstallation(t, bucket, map[string]string{"config": "Host local\n"})
+	result, err := consumer.service.PullHistory(context.Background(), syncPassphrase, history.Revisions[0].Key, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := consumer.service.Apply(result); !errors.Is(err, remotesync.ErrRemoteDeleted) {
+		t.Fatalf("Apply = %v, want ErrRemoteDeleted", err)
+	}
+	if got := consumer.read(t, "config"); got != "Host local\n" {
+		t.Fatalf("history apply changed config to %q", got)
 	}
 }
 
@@ -772,9 +931,10 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 		"sshc/sync-settings":           "sealed access key",
 		"sshc/cli":                     `{"url":"http://127.0.0.1:1","secret":"s"}`,
 		"sshc/recent-connections.json": `{"schemaVersion":1,"entries":[]}`,
+		"sshc/mutation.lock":           "runtime lock state",
 	})
 
-	installation.service.OpenVault = func() ([]byte, error) { return []byte(`{"schemaVersion":2}`), nil }
+	installation.service.OpenVault = func() ([]byte, error) { return []byte(`{"schemaVersion":4}`), nil }
 	exchanged, contents, err := installation.service.Collect()
 	if err != nil {
 		t.Fatalf("Collect = %v", err)
@@ -789,10 +949,15 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	if !packed[remotesync.TravelPath] {
 		t.Errorf("the vault contents did not travel: %v", packed)
 	}
-	if string(contents[remotesync.TravelPath]) != `{"schemaVersion":2}` {
+	if string(contents[remotesync.TravelPath]) != `{"schemaVersion":4}` {
 		t.Errorf("what travelled was not the contents: %q", contents[remotesync.TravelPath])
 	}
-	for _, excluded := range []string{secret.SettingsPath, "sshc/cli", "sshc/recent-connections.json"} {
+	for _, excluded := range []string{
+		secret.SettingsPath,
+		"sshc/cli",
+		"sshc/recent-connections.json",
+		"sshc/mutation.lock",
+	} {
 		if packed[excluded] {
 			t.Errorf("the snapshot carries %s: %v", excluded, packed)
 		}
@@ -836,11 +1001,13 @@ func TestCheckRefusesABucketThatWillNotAnswer(t *testing.T) {
 	installation := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
 	// 存在しないホストへ向けられたクライアント。エンドポイントの打ち間違いは、ここから
 	// はこう見える。
-	installation.service.Configure(
+	if err := installation.service.Configure(
 		remotesync.Config{Endpoint: "https://127.0.0.1:1", Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth},
 		installation.creds,
 		&objectstore.Client{Endpoint: "https://127.0.0.1:1", Bucket: "sshc", Region: "auto", Creds: installation.creds},
-	)
+	); err != nil {
+		t.Fatal(err)
+	}
 	if err := installation.service.Check(context.Background()); err == nil {
 		t.Error("Check against an unreachable endpoint returned nil")
 	}
@@ -857,9 +1024,11 @@ func TestCheckSaysWhenNothingIsConfigured(t *testing.T) {
 // 与えられたものがどこから来たかを信用せず、自分で切り詰めるからだ。
 func TestAStoredTrailingSlashIsTrimmedWhenItIsConfigured(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host bastion\n"})
-	installation.service.Configure(
+	if err := installation.service.Configure(
 		remotesync.Config{Endpoint: "https://s3.example.invalid/", Bucket: "b", Region: "auto", Direction: remotesync.DirectionBoth},
-		installation.creds, installation.client)
+		installation.creds, installation.client); err != nil {
+		t.Fatal(err)
+	}
 
 	if endpoint, _, _, _ := installation.service.Target(); endpoint != "https://s3.example.invalid" {
 		t.Errorf("endpoint = %q, want the trailing slash gone", endpoint)
@@ -929,7 +1098,9 @@ func TestChangingToAnotherBucketDoesNotReuseThePreviousGeneration(t *testing.T) 
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region,
 		Creds: machine.creds,
 	}
-	machine.service.Configure(config, machine.creds, client)
+	if err := machine.service.Configure(config, machine.creds, client); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Start the new bucket"); err != nil {
 		t.Fatalf("Push to another bucket = %v", err)
 	}
@@ -1107,6 +1278,569 @@ func TestPushDraftAndEncryptedHistoryMessages(t *testing.T) {
 	}
 }
 
+func TestHistorySkipsAnUnreadableImmutableObject(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	bucket.putObject(remotesync.SnapshotPrefix+"unreadable.tar.gz.enc", []byte("not an envelope"), `"legacy"`)
+
+	history, err := machine.service.History(context.Background(), syncPassphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if history.Skipped != 1 || len(history.Revisions) != 1 {
+		t.Fatalf("history = %#v, want one revision and one skipped object", history)
+	}
+}
+
+func TestHistoryRejectsAnObjectChangedAfterListing(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	bucket.listETagOverride = `"stale-list-entry"`
+	if _, err := machine.service.History(context.Background(), syncPassphrase); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("History = %v, want ErrRemoteMoved", err)
+	}
+}
+
+func TestHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleGraph(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls int
+	var callsMu sync.Mutex
+	envelope.OnDerive = func(step func()) {
+		callsMu.Lock()
+		calls++
+		call := calls
+		callsMu.Unlock()
+		if call == 1 {
+			close(started)
+			<-release
+		}
+		step()
+	}
+	t.Cleanup(func() { envelope.OnDerive = nil })
+
+	historyDone := make(chan error, 1)
+	go func() {
+		_, err := machine.service.History(context.Background(), syncPassphrase)
+		historyDone <- err
+	}()
+	<-started
+	rotationDone := make(chan error, 1)
+	go func() {
+		rotationDone <- machine.service.ReplaceKey(
+			context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error { return nil },
+		)
+	}()
+	select {
+	case err := <-rotationDone:
+		if err != nil {
+			t.Fatalf("ReplaceKey while History derives = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("History held operationMu while deriving and blocked ReplaceKey")
+	}
+	close(release)
+	if err := <-historyDone; !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("History after key replacement = %v, want ErrRemoteMoved", err)
+	}
+}
+
+func TestDiffHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleDiff(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	history, err := machine.service.History(context.Background(), syncPassphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := history.Revisions[0].Key
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls int
+	var callsMu sync.Mutex
+	envelope.OnDerive = func(step func()) {
+		callsMu.Lock()
+		calls++
+		call := calls
+		callsMu.Unlock()
+		if call == 1 {
+			close(started)
+			<-release
+		}
+		step()
+	}
+	t.Cleanup(func() { envelope.OnDerive = nil })
+
+	diffDone := make(chan error, 1)
+	go func() {
+		_, err := machine.service.DiffHistory(context.Background(), syncPassphrase, key)
+		diffDone <- err
+	}()
+	<-started
+	rotationDone := make(chan error, 1)
+	go func() {
+		rotationDone <- machine.service.ReplaceKey(
+			context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error { return nil },
+		)
+	}()
+	select {
+	case err := <-rotationDone:
+		if err != nil {
+			t.Fatalf("ReplaceKey while DiffHistory derives = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("DiffHistory held operationMu while deriving and blocked ReplaceKey")
+	}
+	close(release)
+	if err := <-diffDone; !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("DiffHistory after key replacement = %v, want ErrRemoteMoved", err)
+	}
+}
+
+func TestHistoryDiscardsAResultFromAReconfiguredBinding(t *testing.T) {
+	firstBucket := &fakeBucket{}
+	machine := newInstallation(t, firstBucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	envelope.OnDerive = func(step func()) {
+		once.Do(func() {
+			close(started)
+			<-release
+		})
+		step()
+	}
+	t.Cleanup(func() { envelope.OnDerive = nil })
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := machine.service.History(context.Background(), syncPassphrase)
+		done <- err
+	}()
+	<-started
+	other := newInstallation(t, &fakeBucket{}, map[string]string{})
+	if err := machine.service.Configure(other.config, other.creds, other.client); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("History after Configure = %v, want ErrRemoteMoved", err)
+	}
+}
+
+func TestConcurrentHistoryCallsShareTheDedicatedAdmissionLock(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls int
+	var callsMu sync.Mutex
+	envelope.OnDerive = func(step func()) {
+		callsMu.Lock()
+		calls++
+		call := calls
+		callsMu.Unlock()
+		if call == 1 {
+			close(started)
+			<-release
+		}
+		step()
+	}
+	t.Cleanup(func() { envelope.OnDerive = nil })
+
+	firstDone := make(chan error, 1)
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := machine.service.History(context.Background(), syncPassphrase)
+		firstDone <- err
+	}()
+	<-started
+	downloads := bucket.downloads()
+	go func() {
+		_, err := machine.service.History(context.Background(), syncPassphrase)
+		secondDone <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	if got := bucket.downloads(); got != downloads {
+		t.Fatalf("second History started remote work concurrently: downloads %d then %d", downloads, got)
+	}
+	close(release)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first History = %v", err)
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second History = %v", err)
+	}
+}
+
+func TestReplaceKeyCommitsLocallyOnlyAfterRemoteCAS(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	const next = "a different strong shared synchronization key"
+	committed := false
+	if err := machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error {
+		committed = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !committed {
+		t.Fatal("local key commit was not called")
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	if _, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone); !errors.Is(err, remotesync.ErrWrongPassphrase) {
+		t.Fatalf("old key Pull = %v, want ErrWrongPassphrase", err)
+	}
+	if _, err := reader.service.Pull(context.Background(), next, remotesync.ResolveNone); err != nil {
+		t.Fatalf("new key Pull = %v", err)
+	}
+}
+
+func TestReplaceKeyRequiresExplicitHistoryLossConfirmation(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	before := bucket.object(remotesync.ObjectName)
+	committed := false
+	err := machine.service.ReplaceKey(context.Background(), syncPassphrase,
+		"a different strong shared synchronization key", false, func() error {
+			committed = true
+			return nil
+		})
+	if !errors.Is(err, remotesync.ErrHistoryKeyLossConfirmation) {
+		t.Fatalf("ReplaceKey = %v, want ErrHistoryKeyLossConfirmation", err)
+	}
+	if committed || !bytes.Equal(before, bucket.object(remotesync.ObjectName)) {
+		t.Fatal("unconfirmed replacement changed local or remote key state")
+	}
+}
+
+func TestReplaceKeyRestoresRemoteWhenLocalCommitFails(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	commitErr := errors.New("local commit failed")
+	err := machine.service.ReplaceKey(context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error {
+		return commitErr
+	})
+	if !errors.Is(err, commitErr) {
+		t.Fatalf("ReplaceKey = %v, want local commit error", err)
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	if _, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone); err != nil {
+		t.Fatalf("rolled back object is not readable with old key: %v", err)
+	}
+	if err := machine.service.ReplaceKey(context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error {
+		return nil
+	}); err != nil {
+		t.Fatalf("state did not follow the rollback ETag: %v", err)
+	}
+}
+
+func TestReplaceKeyRollbackSurvivesTheRequestCancellation(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	commitErr := errors.New("local commit failed")
+	err := machine.service.ReplaceKey(ctx, syncPassphrase, "a different strong shared synchronization key", true, func() error {
+		cancel()
+		return commitErr
+	})
+	if !errors.Is(err, commitErr) {
+		t.Fatalf("ReplaceKey = %v, want local commit error", err)
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	if _, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone); err != nil {
+		t.Fatalf("rollback reused the canceled request context: %v", err)
+	}
+}
+
+func TestInterruptedKeyRotationCanBeRecoveredByReenteringTheNewKey(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	const next = "a different strong shared synchronization key"
+	commitErr := errors.New("local commit failed")
+	err := machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error {
+		bucket.refuseNextConditionalPut()
+		return commitErr
+	})
+	if !errors.Is(err, remotesync.ErrRecoveryRequired) {
+		t.Fatalf("ReplaceKey = %v, want ErrRecoveryRequired", err)
+	}
+	journal, err := os.ReadFile(filepath.Join(machine.home, ".ssh", filepath.FromSlash(remotesync.KeyRecoveryPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(journal, []byte(syncPassphrase)) || bytes.Contains(journal, []byte(next)) {
+		t.Fatal("recovery journal contains synchronization key material")
+	}
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "blocked"); !errors.Is(err, remotesync.ErrRecoveryRequired) {
+		t.Fatalf("Push after uncertain rotation = %v, want ErrRecoveryRequired", err)
+	}
+	other := machine.config
+	other.Path = "other-target"
+	if err := machine.service.Configure(other, machine.creds, machine.client); !errors.Is(err, remotesync.ErrRecoveryTargetChange) {
+		t.Fatalf("Configure during recovery = %v, want ErrRecoveryTargetChange", err)
+	}
+	if handled, err := machine.service.ResolveKeyRecovery(context.Background(), "wrong but sufficiently long candidate key", func() error { return nil }); !handled || !errors.Is(err, remotesync.ErrWrongPassphrase) {
+		t.Fatalf("wrong recovery key = (%v, %v)", handled, err)
+	}
+	committed := false
+	if handled, err := machine.service.ResolveKeyRecovery(context.Background(), next, func() error {
+		committed = true
+		return nil
+	}); !handled || err != nil {
+		t.Fatalf("ResolveKeyRecovery = (%v, %v)", handled, err)
+	}
+	if !committed {
+		t.Fatal("recovered key was not committed locally")
+	}
+	if _, err := os.Stat(filepath.Join(machine.home, ".ssh", filepath.FromSlash(remotesync.KeyRecoveryPath))); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("recovery journal remains: %v", err)
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	if _, err := reader.service.Pull(context.Background(), next, remotesync.ResolveNone); err != nil {
+		t.Fatalf("advanced object is not readable with recovered key: %v", err)
+	}
+}
+
+func TestPreparedKeyJournalRecoversAPutThatAdvancedBeforeTheJournal(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	const next = "a different strong shared synchronization key"
+	recoveryWrites := 0
+	machine.manager.Validate = func(request storage.Request) error {
+		if request.Operation != "sync.key-recovery" {
+			return nil
+		}
+		recoveryWrites++
+		if recoveryWrites == 2 {
+			bucket.refuseNextConditionalPut()
+			return errors.New("simulated crash before advanced journal")
+		}
+		return nil
+	}
+	err := machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error { return nil })
+	if !errors.Is(err, remotesync.ErrRecoveryRequired) {
+		t.Fatalf("ReplaceKey = %v, want ErrRecoveryRequired", err)
+	}
+	machine.manager.Validate = nil
+	journal, err := os.ReadFile(filepath.Join(machine.home, ".ssh", filepath.FromSlash(remotesync.KeyRecoveryPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(journal, []byte(`"phase": "prepared"`)) ||
+		!bytes.Contains(journal, []byte(`"newCiphertextSHA256"`)) {
+		t.Fatalf("prepared journal lacks ciphertext evidence: %s", journal)
+	}
+	if bytes.Contains(journal, []byte(next)) || bytes.Contains(journal, []byte(syncPassphrase)) {
+		t.Fatal("prepared recovery journal contains key material")
+	}
+	committed := false
+	if handled, err := machine.service.ResolveKeyRecovery(context.Background(), next, func() error {
+		committed = true
+		return nil
+	}); !handled || err != nil || !committed {
+		t.Fatalf("ResolveKeyRecovery = (%v, %v), committed=%v", handled, err, committed)
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	if _, err := reader.service.Pull(context.Background(), next, remotesync.ResolveNone); err != nil {
+		t.Fatalf("prepared recovery did not adopt the actual ETag: %v", err)
+	}
+}
+
+func TestPreparedKeyJournalRecoversWhenTheInitialPutResponseIsLost(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	const next = "a different strong shared synchronization key"
+	bucket.failAfterNextConditionalPut()
+	err := machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error { return nil })
+	if !errors.Is(err, remotesync.ErrRecoveryRequired) {
+		t.Fatalf("ReplaceKey = %v, want ErrRecoveryRequired", err)
+	}
+	bucket.restoreConditionalResponses()
+	journalPath := filepath.Join(machine.home, ".ssh", filepath.FromSlash(remotesync.KeyRecoveryPath))
+	journal, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(journal, []byte(`"phase": "prepared"`)) {
+		t.Fatalf("journal = %s, want prepared phase", journal)
+	}
+	committed := false
+	if handled, err := machine.service.ResolveKeyRecovery(context.Background(), next, func() error {
+		committed = true
+		return nil
+	}); !handled || err != nil || !committed {
+		t.Fatalf("ResolveKeyRecovery = (%v, %v), committed=%v", handled, err, committed)
+	}
+	if _, err := os.Stat(journalPath); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("recovery journal remains: %v", err)
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	if _, err := reader.service.Pull(context.Background(), next, remotesync.ResolveNone); err != nil {
+		t.Fatalf("response-loss recovery did not adopt the observed ETag: %v", err)
+	}
+}
+
+func TestKeyRecoveryFailsClosedWhenTheLiveCiphertextMatchesNeitherGeneration(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	const next = "a different strong shared synchronization key"
+	bucket.failAfterNextConditionalPut()
+	if err := machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error { return nil }); !errors.Is(err, remotesync.ErrRecoveryRequired) {
+		t.Fatalf("ReplaceKey = %v, want ErrRecoveryRequired", err)
+	}
+	bucket.restoreConditionalResponses()
+	bucket.putObject(remotesync.ObjectName, []byte("third-party ciphertext"), `"third-party"`)
+
+	committed := false
+	handled, err := machine.service.ResolveKeyRecovery(context.Background(), next, func() error {
+		committed = true
+		return nil
+	})
+	if !handled || !errors.Is(err, remotesync.ErrRecoveryRequired) {
+		t.Fatalf("ResolveKeyRecovery = (%v, %v), want fail-closed recovery", handled, err)
+	}
+	if committed {
+		t.Fatal("unknown live ciphertext committed the candidate synchronization key")
+	}
+	journalPath := filepath.Join(machine.home, ".ssh", filepath.FromSlash(remotesync.KeyRecoveryPath))
+	if _, err := os.Stat(journalPath); err != nil {
+		t.Fatalf("fail-closed recovery removed its journal: %v", err)
+	}
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "blocked"); !errors.Is(err, remotesync.ErrRecoveryRequired) {
+		t.Fatalf("Push after unknown live ciphertext = %v, want ErrRecoveryRequired", err)
+	}
+}
+
+func TestRollbackResponseLossConvergesWhenOldCiphertextKeepsItsETag(t *testing.T) {
+	bucket := &fakeBucket{contentAddressedETag: true}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	const next = "a different strong shared synchronization key"
+	commitErr := errors.New("local commit failed")
+	err := machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error {
+		bucket.failAfterNextConditionalPut()
+		return commitErr
+	})
+	if !errors.Is(err, remotesync.ErrRecoveryRequired) {
+		t.Fatalf("ReplaceKey = %v, want ErrRecoveryRequired", err)
+	}
+	bucket.restoreConditionalResponses()
+	journalPath := filepath.Join(machine.home, ".ssh", filepath.FromSlash(remotesync.KeyRecoveryPath))
+	journal, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(journal, []byte(`"oldCiphertextSHA256"`)) {
+		t.Fatalf("journal lacks old ciphertext evidence: %s", journal)
+	}
+	committed := false
+	handled, err := machine.service.ResolveKeyRecovery(context.Background(), next, func() error {
+		committed = true
+		return nil
+	})
+	if handled || err != nil {
+		t.Fatalf("ResolveKeyRecovery = (%v, %v), want old generation convergence", handled, err)
+	}
+	if committed {
+		t.Fatal("old-ciphertext recovery committed the candidate new key")
+	}
+	if _, err := os.Stat(journalPath); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("recovery journal remains: %v", err)
+	}
+	machine.write(t, "config", "Host after-rollback\n")
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "After rollback"); err != nil {
+		t.Fatalf("old key generation did not adopt the observed rollback ETag: %v", err)
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	if _, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone); err != nil {
+		t.Fatalf("rolled-back head is not readable with the old key: %v", err)
+	}
+}
+
+func TestReplaceKeyRollsRemoteBackBeforeLocalCommitWhenStateWriteFails(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	stateWrites := 0
+	machine.manager.Validate = func(request storage.Request) error {
+		if request.Operation == "sync.state" {
+			stateWrites++
+			if stateWrites == 1 {
+				return errors.New("state write failed")
+			}
+		}
+		return nil
+	}
+	committed := false
+	err := machine.service.ReplaceKey(context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error {
+		committed = true
+		return nil
+	})
+	if err == nil {
+		t.Fatal("ReplaceKey succeeded despite the refused state write")
+	}
+	if committed {
+		t.Fatal("local key was committed before sync state")
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	if _, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone); err != nil {
+		t.Fatalf("state failure did not restore the old remote key: %v", err)
+	}
+	if err := machine.service.ReplaceKey(context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error {
+		return nil
+	}); err != nil {
+		t.Fatalf("state did not record the rollback ETag: %v", err)
+	}
+}
+
 func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
@@ -1173,7 +1907,9 @@ func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 		func() (string, error) { return "serialized-origin", nil })
 	service.OpenVault = func() ([]byte, error) { return nil, nil }
 	service.SealVault = func(document []byte) ([]byte, error) { return document, nil }
-	service.Configure(machine.config, machine.creds, machine.client)
+	if err := service.Configure(machine.config, machine.creds, machine.client); err != nil {
+		t.Fatal(err)
+	}
 
 	firstDone := make(chan error, 1)
 	secondDone := make(chan error, 1)
@@ -1201,10 +1937,9 @@ func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 	}
 }
 
-// 同期の途中で設定画面が別のバケットを保存しても、ひとつの push は開始時点の
-// client と config の組を最後まで使う。別々に読むと、古い client が新しい Path を
-// 受け取り、どちらの設定にも存在しない場所へスナップショットを書いてしまう。
-func TestPushKeepsOneRemoteBindingWhenReconfigured(t *testing.T) {
+// Configure は実行中の同期が終わるまで成功しない。設定保存の応答後にも旧bucketへの
+// 書き込みが続く状態を作らず、ひとつのoperationはひとつのbindingだけを使う。
+func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
 		t.Fatal(err)
@@ -1241,9 +1976,11 @@ func TestPushKeepsOneRemoteBindingWhenReconfigured(t *testing.T) {
 			Creds: credentials,
 		}
 	}
-	service.Configure(remotesync.Config{
+	if err := service.Configure(remotesync.Config{
 		Endpoint: oldServer.URL, Bucket: "sshc", Region: "auto", Path: "old", Direction: remotesync.DirectionBoth,
-	}, credentials, client(oldServer))
+	}, credentials, client(oldServer)); err != nil {
+		t.Fatal(err)
+	}
 
 	result := make(chan error, 1)
 	go func() {
@@ -1256,9 +1993,21 @@ func TestPushKeepsOneRemoteBindingWhenReconfigured(t *testing.T) {
 		close(resume)
 		t.Fatal("Push did not reach collection")
 	}
-	service.Configure(remotesync.Config{
-		Endpoint: newServer.URL, Bucket: "sshc", Region: "auto", Path: "new", Direction: remotesync.DirectionBoth,
-	}, credentials, client(newServer))
+	configured := make(chan struct{})
+	go func() {
+		if err := service.Configure(remotesync.Config{
+			Endpoint: newServer.URL, Bucket: "sshc", Region: "auto", Path: "new", Direction: remotesync.DirectionBoth,
+		}, credentials, client(newServer)); err != nil {
+			panic(err)
+		}
+		close(configured)
+	}()
+	select {
+	case <-configured:
+		close(resume)
+		t.Fatal("Configure completed while the old binding was still in use")
+	case <-time.After(50 * time.Millisecond):
+	}
 	close(resume)
 
 	select {
@@ -1269,6 +2018,11 @@ func TestPushKeepsOneRemoteBindingWhenReconfigured(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Push did not finish")
 	}
+	select {
+	case <-configured:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Configure did not finish after Push")
+	}
 	if got := oldBucket.keys(); len(got) != 2 || oldBucket.object("old/"+remotesync.ObjectName) == nil {
 		t.Errorf("old binding holds %v, want its live object and dated copy", got)
 	}
@@ -1277,10 +2031,331 @@ func TestPushKeepsOneRemoteBindingWhenReconfigured(t *testing.T) {
 	}
 }
 
-// Pull のプレビュー後に接続先が変わっても、Apply が記録する ETag は取得元のキーに
-// 属する。新しいキーの世代として記録すると、その次の push は存在しないオブジェクトへ
-// 古い If-Match を送り、自分自身を「別のマシンが更新した」と誤認してしまう。
-func TestApplyKeepsTheObjectKeyUsedByPull(t *testing.T) {
+func TestPushReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host initial\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	machine.write(t, "config", "Host changed\n")
+	const next = "a different strong shared synchronization key"
+	currentKey := syncPassphrase
+	commitEntered := make(chan struct{})
+	releaseCommit := make(chan struct{})
+	rotationDone := make(chan error, 1)
+	go func() {
+		rotationDone <- machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error {
+			close(commitEntered)
+			<-releaseCommit
+			currentKey = next
+			return nil
+		})
+	}()
+	<-commitEntered
+	providerCalled := make(chan struct{})
+	pushDone := make(chan error, 1)
+	go func() {
+		_, err := machine.service.PushUsing(context.Background(), func() (string, error) {
+			close(providerCalled)
+			return currentKey, nil
+		}, "After rotation")
+		pushDone <- err
+	}()
+	select {
+	case <-providerCalled:
+		close(releaseCommit)
+		t.Fatal("Push captured the old key before ReplaceKey released operationMu")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseCommit)
+	if err := <-rotationDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-pushDone; err != nil {
+		t.Fatal(err)
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	result, err := reader.service.Pull(context.Background(), next, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("new head was not sealed by the current key: %v", err)
+	}
+	if got := string(result.Request.Changes[0].Contents); got != "Host changed\n" {
+		t.Fatalf("pushed config = %q", got)
+	}
+}
+
+func TestForcePushReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host initial\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	const next = "a different strong shared synchronization key"
+	currentKey := syncPassphrase
+	commitEntered := make(chan struct{})
+	releaseCommit := make(chan struct{})
+	rotationDone := make(chan error, 1)
+	go func() {
+		rotationDone <- machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error {
+			close(commitEntered)
+			<-releaseCommit
+			currentKey = next
+			return nil
+		})
+	}()
+	<-commitEntered
+	providerCalled := make(chan string, 1)
+	forceDone := make(chan error, 1)
+	go func() {
+		_, err := machine.service.ForcePushUsing(context.Background(), func() (string, error) {
+			providerCalled <- currentKey
+			return currentKey, nil
+		}, `"preview-before-rotation"`, "Forced")
+		forceDone <- err
+	}()
+	select {
+	case key := <-providerCalled:
+		close(releaseCommit)
+		t.Fatalf("ForcePush captured %q before rotation completed", key)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseCommit)
+	if err := <-rotationDone; err != nil {
+		t.Fatal(err)
+	}
+	if key := <-providerCalled; key != next {
+		t.Fatalf("ForcePush key = %q, want rotated key", key)
+	}
+	if err := <-forceDone; !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("ForcePush = %v, want stale ETag refusal", err)
+	}
+}
+
+func TestPullAndApplyReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host remote\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := machine.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
+		t.Fatal(err)
+	}
+	const next = "a different strong shared synchronization key"
+	currentKey := syncPassphrase
+	commitEntered := make(chan struct{})
+	releaseCommit := make(chan struct{})
+	rotationDone := make(chan error, 1)
+	go func() {
+		rotationDone <- machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error {
+			close(commitEntered)
+			<-releaseCommit
+			currentKey = next
+			return nil
+		})
+	}()
+	<-commitEntered
+	providerCalled := make(chan string, 1)
+	applyDone := make(chan error, 1)
+	go func() {
+		_, err := machine.service.PullAndApplyUsing(context.Background(), func() (string, error) {
+			providerCalled <- currentKey
+			return currentKey, nil
+		}, remotesync.ResolveNone, "", preview.ETag, preview.Manifest.Revision)
+		applyDone <- err
+	}()
+	select {
+	case key := <-providerCalled:
+		close(releaseCommit)
+		t.Fatalf("PullAndApply captured %q before rotation completed", key)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseCommit)
+	if err := <-rotationDone; err != nil {
+		t.Fatal(err)
+	}
+	if key := <-providerCalled; key != next {
+		t.Fatalf("PullAndApply key = %q, want rotated key", key)
+	}
+	if err := <-applyDone; !errors.Is(err, remotesync.ErrPreviewStale) {
+		t.Fatalf("PullAndApply = %v, want stale preview refusal", err)
+	}
+}
+
+func TestAutoReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host initial\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	machine.write(t, "config", "Host auto-change\n")
+	const next = "a different strong shared synchronization key"
+	currentKey := syncPassphrase
+	commitEntered := make(chan struct{})
+	releaseCommit := make(chan struct{})
+	rotationDone := make(chan error, 1)
+	go func() {
+		rotationDone <- machine.service.ReplaceKey(context.Background(), syncPassphrase, next, true, func() error {
+			close(commitEntered)
+			<-releaseCommit
+			currentKey = next
+			return nil
+		})
+	}()
+	<-commitEntered
+	auto := remotesync.NewAuto(machine.service, time.Minute, func() string { return "2026-08-25T00:00:00Z" })
+	auto.Enabled = func() bool { return true }
+	providerCalled := make(chan struct{})
+	auto.Key = func() (string, bool) {
+		close(providerCalled)
+		return currentKey, true
+	}
+	autoDone := make(chan remotesync.AutoView, 1)
+	go func() { autoDone <- auto.Once(context.Background()) }()
+	select {
+	case <-providerCalled:
+		close(releaseCommit)
+		t.Fatal("Auto captured the old key before ReplaceKey released operationMu")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseCommit)
+	if err := <-rotationDone; err != nil {
+		t.Fatal(err)
+	}
+	if view := <-autoDone; view.Phase != remotesync.AutoIdle {
+		t.Fatalf("Auto = %+v", view)
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	if _, err := reader.service.Pull(context.Background(), next, remotesync.ResolveNone); err != nil {
+		t.Fatalf("auto head was not sealed by the current key: %v", err)
+	}
+}
+
+func TestReconfigurePersistsSettingsAndSwapsBindingBeforeAWaitingPush(t *testing.T) {
+	oldBucket := &fakeBucket{}
+	machine := newInstallation(t, oldBucket, map[string]string{"config": "Host local\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	oldObjects := len(oldBucket.keys())
+	newBucket := &fakeBucket{}
+	server := httptest.NewTLSServer(newBucket.handler())
+	t.Cleanup(server.Close)
+	config := machine.config
+	config.Endpoint = server.URL
+	config.Path = "new"
+	client := &objectstore.Client{HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region, Creds: machine.creds}
+	const newTargetKey = "a different strong shared synchronization key"
+	currentKey := syncPassphrase
+	persistEntered := make(chan struct{})
+	releasePersist := make(chan struct{})
+	reconfigureDone := make(chan error, 1)
+	go func() {
+		reconfigureDone <- machine.service.Reconfigure(config, machine.creds, client, func() error {
+			currentKey = newTargetKey
+			close(persistEntered)
+			<-releasePersist
+			return nil
+		})
+	}()
+	<-persistEntered
+	pushDone := make(chan error, 1)
+	go func() {
+		_, err := machine.service.PushUsing(context.Background(), func() (string, error) { return currentKey, nil }, "New target")
+		pushDone <- err
+	}()
+	select {
+	case err := <-pushDone:
+		close(releasePersist)
+		t.Fatalf("Push crossed the settings/binding transaction: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releasePersist)
+	if err := <-reconfigureDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-pushDone; err != nil {
+		t.Fatal(err)
+	}
+	if len(oldBucket.keys()) != oldObjects {
+		t.Fatalf("old target changed during Reconfigure: %v", oldBucket.keys())
+	}
+	reader := newInstallation(t, newBucket, map[string]string{})
+	readerConfig := reader.config
+	readerConfig.Path = "new"
+	if err := reader.service.Configure(readerConfig, reader.creds, reader.client); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.service.Pull(context.Background(), newTargetKey, remotesync.ResolveNone); err != nil {
+		t.Fatalf("new target was not written with persisted key: %v", err)
+	}
+}
+
+func TestSetKeyWaitsForReconfigurePersistenceAndReadsTheNewGeneration(t *testing.T) {
+	oldBucket := &fakeBucket{}
+	machine := newInstallation(t, oldBucket, map[string]string{"config": "Host local\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	newBucket := &fakeBucket{}
+	server := httptest.NewTLSServer(newBucket.handler())
+	t.Cleanup(server.Close)
+	config := machine.config
+	config.Endpoint = server.URL
+	config.Path = "new"
+	client := &objectstore.Client{HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region, Creds: machine.creds}
+
+	persistEntered := make(chan struct{})
+	releasePersist := make(chan struct{})
+	reconfigureDone := make(chan error, 1)
+	go func() {
+		reconfigureDone <- machine.service.Reconfigure(config, machine.creds, client, func() error {
+			close(persistEntered)
+			<-releasePersist
+			return nil
+		})
+	}()
+	<-persistEntered
+
+	providerCalled := make(chan struct{})
+	committedTarget := make(chan string, 1)
+	setKeyDone := make(chan error, 1)
+	go func() {
+		setKeyDone <- machine.service.ReplaceKeyUsing(context.Background(),
+			"a different strong shared synchronization key", true,
+			func() (string, func() error, error) {
+				close(providerCalled)
+				return syncPassphrase, func() error {
+					_, _, path, _ := machine.service.Target()
+					committedTarget <- path
+					return nil
+				}, nil
+			})
+	}()
+	select {
+	case <-providerCalled:
+		close(releasePersist)
+		t.Fatal("SetKey read the old settings while Reconfigure persist was in progress")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releasePersist)
+	if err := <-reconfigureDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-setKeyDone; err != nil {
+		t.Fatal(err)
+	}
+	if path := <-committedTarget; path != "new" {
+		t.Fatalf("SetKey committed against path %q, want new binding", path)
+	}
+	if got := newBucket.keys(); len(got) != 0 {
+		t.Fatalf("first key setup for a new target unexpectedly rewrote remote objects: %v", got)
+	}
+}
+
+// Preview evidence belongs to one binding generation. Reconfiguration makes it
+// stale and Apply must not write files from the old bucket.
+func TestApplyRejectsAPreviewFromAReconfiguredBinding(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
 	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
@@ -1294,9 +2369,11 @@ func TestApplyKeepsTheObjectKeyUsedByPull(t *testing.T) {
 	}
 	config := consumer.config
 	config.Path = "new"
-	consumer.service.Configure(config, consumer.creds, consumer.client)
-	if err := consumer.service.Apply(result); err != nil {
-		t.Fatalf("consumer Apply = %v", err)
+	if err := consumer.service.Configure(config, consumer.creds, consumer.client); err != nil {
+		t.Fatal(err)
+	}
+	if err := consumer.service.Apply(result); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("consumer Apply = %v, want ErrRemoteMoved", err)
 	}
 	if _, err := consumer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatalf("Push after reconfiguration = %v", err)
@@ -1313,6 +2390,9 @@ func TestEveryPushLeavesADatedCopyBesideTheLiveObject(t *testing.T) {
 
 	if _, err := installation.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatalf("Push = %v", err)
+	}
+	if got := bucket.unconditionalHistoryPuts(); got != 0 {
+		t.Fatalf("history objects created without If-None-Match: * = %d", got)
 	}
 
 	keys := bucket.keys()
@@ -1357,7 +2437,9 @@ func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 	// 設定がパスを指定するようになったので、ライブのオブジェクトは別の場所にある。
 	config := installation.config
 	config.Path = "laptops"
-	installation.service.Configure(config, installation.creds, installation.client)
+	if err := installation.service.Configure(config, installation.creds, installation.client); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := installation.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatalf("the push after the key changed = %v", err)
@@ -1387,7 +2469,8 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
 	sender := withVault(t, first, "the first machine's master")
-	if err := sender.Set("bastion", "the password for bastion"); err != nil {
+	const binding = "abababababababababababababababababababababababababababababababab"
+	if err := sender.SetBound("bastion", "the password for bastion", binding); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
@@ -1426,7 +2509,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	}
 
 	// 運ばれてきた。そして読み直されている。次のロック解除まで待たされない。
-	if got := receiver.PasswordFor("bastion"); got != "the password for bastion" {
+	if got := receiver.BoundPasswordFor("bastion", binding); got != "the password for bastion" {
 		t.Fatalf("the password did not travel: %q", got)
 	}
 	// そして 2 台目は、いまも自分のマスターパスワードで開く。
@@ -1434,7 +2517,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	if err := receiver.Unlock("the second machine's own master"); err != nil {
 		t.Fatalf("the second machine can no longer open its own vault: %v", err)
 	}
-	if got := receiver.PasswordFor("bastion"); got != "the password for bastion" {
+	if got := receiver.BoundPasswordFor("bastion", binding); got != "the password for bastion" {
 		t.Fatalf("after unlocking with its own master password: %q", got)
 	}
 }
@@ -1473,7 +2556,7 @@ func TestAnEmptyVaultDoesNotTravel(t *testing.T) {
 func TestASnapshotCarriesTheBackgroundImagesTheMetadataNames(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{
 		"config": "Host bastion\n",
-		"sshc/metadata.json": `{"schemaVersion":2,"hosts":[{"identity":{"path":"config","alias":"bastion"},` +
+		"sshc/metadata.json": `{"schemaVersion":3,"hosts":[{"identity":{"path":"config","alias":"bastion"},` +
 			`"appearance":{"background":"office.png"}}]}`,
 		"sshc/backgrounds/office.png": "\x89PNG\r\n\x1a\nbytes",
 	})

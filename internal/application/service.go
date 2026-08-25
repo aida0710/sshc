@@ -418,14 +418,17 @@ type planned struct {
 	explicitIdentityFile bool
 	// passwordAuthenticationOff is evaluated against the resulting graph so a
 	passwordAuthenticationOff bool
-	moves                     []storage.Move
-	removals                  []storage.Removal
-	directories               []string
-	removeDirectories         []string
-	base                      map[string][]byte
-	baseline                  map[string]bool
-	preview                   SavePreview
-	keyRelocations            []RelocatedKeyFile
+	// authenticationBinding binds a saved account password to the fully resolved
+	// destination produced by this plan.
+	authenticationBinding string
+	moves                 []storage.Move
+	removals              []storage.Removal
+	directories           []string
+	removeDirectories     []string
+	base                  map[string][]byte
+	baseline              map[string]bool
+	preview               SavePreview
+	keyRelocations        []RelocatedKeyFile
 }
 
 // Preview は transaction を準備し、書き込まずにその diff を返す。

@@ -60,7 +60,19 @@ type Auto struct {
 	// ticker still performs HEAD, but does not download or derive a key again
 	// until that generation changes or a manual Apply advances local state.
 	blockedETag   string
+	blockedTarget string
 	blockedDetail string
+	// failedETag is an unreadable remote generation. Retrying the same object
+	// every minute would repeat both the download and password KDF without any
+	// chance of a different result; a changed ETag clears the implicit cache key.
+	failedTarget        string
+	failedETag          string
+	failedKeyID         string
+	failedDetail        string
+	failedDeterministic bool
+	failedUntil         time.Time
+	failedAttempts      int
+	clock               func() time.Time
 }
 
 // NewAuto は、巡回を組み立てる。走り出すのは Run が呼ばれてからである。
@@ -72,6 +84,7 @@ func NewAuto(service *Service, interval time.Duration, now func() string) *Auto 
 		service:  service,
 		interval: interval,
 		now:      now,
+		clock:    time.Now,
 		view:     AutoView{Phase: AutoIdle},
 	}
 }
@@ -117,12 +130,15 @@ func (a *Auto) run(ctx context.Context) AutoView {
 	if !a.enabled() {
 		return a.View()
 	}
+	a.service.operationMu.Lock()
+	defer a.service.operationMu.Unlock()
+	// Read the key only after winning the same operation boundary as ReplaceKey.
+	// Otherwise a waiter can retain the old key, observe the new ETag, and push
+	// old-key ciphertext over the freshly rotated live object.
 	key, ok := a.keyFor()
 	if !ok {
 		return a.View()
 	}
-	a.service.operationMu.Lock()
-	defer a.service.operationMu.Unlock()
 	a.enter(AutoRunning, "")
 
 	if phase, detail, done := a.receive(ctx, key); done {
@@ -145,34 +161,45 @@ func (a *Auto) keyFor() (string, bool) {
 // receive はリモート更新を取り込む。done はこの巡回を終了すべきことを示す。
 func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool) {
 	if a.service.Direction() == DirectionPush {
-		moved, remoteETag, err := a.service.remoteGeneration(ctx)
+		generation, err := a.service.inspectRemoteGeneration(ctx)
 		if err != nil {
 			return AutoFailed, failureDetail(err), true
 		}
-		if !moved {
+		if !generation.moved {
 			a.clearBlocked()
+			a.clearFailed()
 			return AutoIdle, "", false
 		}
-		if detail, ok := a.blocked(remoteETag); ok {
+		if generation.deleted {
+			return AutoBlocked, "remote_deleted", true
+		}
+		if detail, ok := a.blocked(generation.target, generation.etag); ok {
 			return AutoBlocked, detail, true
 		}
 		// A send-only installation cannot resolve a remote generation by
 		// downloading it. Stop before creating a history candidate and wait for
 		// an explicit force push or a direction change.
-		a.rememberBlocked(remoteETag, "remote_moved")
+		a.rememberBlocked(generation.target, generation.etag, "remote_moved")
 		return AutoBlocked, "remote_moved", true
 	}
 	// 動いていないものは取りに行かない。HEAD は ETag だけを返す。
-	moved, remoteETag, err := a.service.remoteGeneration(ctx)
+	generation, err := a.service.inspectRemoteGeneration(ctx)
 	if err != nil {
 		return AutoFailed, failureDetail(err), true
 	}
-	if !moved {
+	if !generation.moved {
 		a.clearBlocked()
+		a.clearFailed()
 		return AutoIdle, "", false
 	}
-	if detail, ok := a.blocked(remoteETag); ok {
+	if generation.deleted {
+		return AutoBlocked, "remote_deleted", true
+	}
+	if detail, ok := a.blocked(generation.target, generation.etag); ok {
 		return AutoBlocked, detail, true
+	}
+	if detail, ok := a.failed(generation, key); ok {
+		return AutoFailed, detail, true
 	}
 	// 自動同期では競合の解決先を選ばない。
 	result, err := a.service.pull(ctx, key, ResolveNone, "")
@@ -180,19 +207,25 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 	case errors.Is(err, ErrNoSnapshot):
 		return AutoIdle, "", false
 	case err != nil && !errors.Is(err, ErrNothingToApply):
-		return AutoFailed, failureDetail(err), true
+		detail := failureDetail(err)
+		a.rememberFailed(generation, key, err, detail)
+		return AutoFailed, detail, true
 	}
+	a.clearFailed()
 	if len(result.Conflicts) > 0 {
-		a.rememberBlocked(result.ETag, "conflicts")
+		a.rememberBlocked(result.target, result.ETag, "conflicts")
 		return AutoBlocked, "conflicts", true
 	}
 	// 削除はユーザーの確認が必要なため自動適用しない。
 	if len(result.Request.Removals) > 0 {
-		a.rememberBlocked(result.ETag, "removals")
+		a.rememberBlocked(result.target, result.ETag, "removals")
 		return AutoBlocked, "removals", true
 	}
 	// 差分がなくてもApplyはremote世代を記録する。これを省くと同じsnapshotを
 	// 毎分取得し続け、次のpushも古いETagで拒否される。
+	if err := a.service.validatePullForApply(ctx, result); err != nil {
+		return AutoFailed, failureDetail(err), true
+	}
 	if err := a.service.apply(result); err != nil {
 		if errors.Is(err, ErrApplyRefused) {
 			return AutoIdle, "", false
@@ -227,24 +260,100 @@ func (a *Auto) send(ctx context.Context, key string) (AutoPhase, string) {
 	return AutoIdle, ""
 }
 
-func (a *Auto) rememberBlocked(etag, detail string) {
+func (a *Auto) rememberBlocked(target, etag, detail string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.blockedTarget = target
 	a.blockedETag = etag
 	a.blockedDetail = detail
 }
 
-func (a *Auto) blocked(etag string) (string, bool) {
+func (a *Auto) blocked(target, etag string) (string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.blockedDetail, etag != "" && a.blockedETag == etag
+	return a.blockedDetail, target != "" && etag != "" &&
+		a.blockedTarget == target && a.blockedETag == etag
 }
 
 func (a *Auto) clearBlocked() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.blockedETag = ""
+	a.blockedTarget = ""
 	a.blockedDetail = ""
+}
+
+func (a *Auto) rememberFailed(generation remoteGeneration, key string, cause error, detail string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	keyID := Digest([]byte(key))
+	same := a.failedTarget == generation.target && a.failedETag == generation.etag && a.failedKeyID == keyID
+	if same {
+		a.failedAttempts++
+	} else {
+		a.failedAttempts = 1
+	}
+	a.failedTarget = generation.target
+	a.failedETag = generation.etag
+	// Store only a one-way identifier. Auto must notice a corrected key without
+	// retaining the synchronization secret itself in another long-lived field.
+	a.failedKeyID = keyID
+	a.failedDetail = detail
+	a.failedDeterministic = deterministicSyncFailure(cause)
+	if a.failedDeterministic {
+		a.failedUntil = time.Time{}
+		return
+	}
+	delay := a.interval
+	for attempt := 1; attempt < a.failedAttempts && delay < 5*time.Minute; attempt++ {
+		delay *= 2
+	}
+	if delay > 5*time.Minute {
+		delay = 5 * time.Minute
+	}
+	a.failedUntil = a.clock().Add(delay)
+}
+
+func (a *Auto) failed(generation remoteGeneration, key string) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	match := generation.etag != "" &&
+		a.failedTarget == generation.target && a.failedETag == generation.etag &&
+		a.failedKeyID == Digest([]byte(key))
+	if !match {
+		return "", false
+	}
+	if a.failedDeterministic || a.clock().Before(a.failedUntil) {
+		return a.failedDetail, true
+	}
+	return "", false
+}
+
+func (a *Auto) clearFailed() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.failedETag = ""
+	a.failedTarget = ""
+	a.failedKeyID = ""
+	a.failedDetail = ""
+	a.failedDeterministic = false
+	a.failedUntil = time.Time{}
+	a.failedAttempts = 0
+}
+
+// ResetRemoteCache is called after a successful configuration change. An ETag
+// is meaningful only within one target, and credentials/direction can also turn
+// a previously failed operation into a valid one.
+func (a *Auto) ResetRemoteCache() {
+	a.clearBlocked()
+	a.clearFailed()
+}
+
+func deterministicSyncFailure(err error) bool {
+	return errors.Is(err, ErrWrongPassphrase) || errors.Is(err, ErrUnsupportedEnvelopeVersion) ||
+		errors.Is(err, ErrUnsupportedVersion) || errors.Is(err, ErrCostRefused) ||
+		errors.Is(err, ErrUnsafePath) || errors.Is(err, ErrUnsafeMode) ||
+		errors.Is(err, ErrManifestMismatch) || errors.Is(err, ErrNotASnapshot)
 }
 
 func (a *Auto) enter(phase AutoPhase, detail string) {
@@ -264,8 +373,17 @@ func failureDetail(err error) string {
 		return "not_configured"
 	case errors.Is(err, ErrRemoteMoved):
 		return "remote_moved"
+	case errors.Is(err, ErrRemoteDeleted):
+		return "remote_deleted"
 	case errors.Is(err, ErrConflicts):
 		return "conflicts"
+	case errors.Is(err, ErrWrongPassphrase):
+		return "wrong_passphrase"
+	case errors.Is(err, ErrUnsupportedEnvelopeVersion), errors.Is(err, ErrUnsupportedVersion):
+		return "snapshot_schema_unsupported"
+	case errors.Is(err, ErrUnsafePath), errors.Is(err, ErrUnsafeMode),
+		errors.Is(err, ErrManifestMismatch), errors.Is(err, ErrNotASnapshot):
+		return "snapshot_rejected"
 	}
 	return "unreachable"
 }

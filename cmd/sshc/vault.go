@@ -280,11 +280,7 @@ func finishVaultMutation(
 	body, err := readAndCloseVaultResponse(response)
 	defer zeroBytes(body)
 	if err != nil {
-		if path == httpserver.VaultChangePath && response.StatusCode == http.StatusMultiStatus {
-			fmt.Fprintln(stderr, "sshc: vault password changed locally, but the remote result was invalid")
-		} else {
-			fmt.Fprintln(stderr, "sshc: the running engine returned an invalid vault response")
-		}
+		fmt.Fprintln(stderr, "sshc: the running engine returned an invalid vault response")
 		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 			return 130
 		}
@@ -294,17 +290,6 @@ func finishVaultMutation(
 		fmt.Fprintln(stdout, success)
 		return 0
 	}
-	if path == httpserver.VaultChangePath && response.StatusCode == http.StatusMultiStatus {
-		// 207 は local transaction が完了したあとの remote failure だけに使う。
-		// remote の本文は秘密を反射する可能性を考え、そのまま表示しない。
-		if validVaultPartialResult(body) {
-			fmt.Fprintln(stderr, "sshc: vault password changed locally, but the remote snapshot reseal failed")
-		} else {
-			fmt.Fprintln(stderr, "sshc: vault password changed locally, but the remote result was invalid")
-		}
-		return 1
-	}
-
 	switch response.StatusCode {
 	case http.StatusUnauthorized:
 		if path == httpserver.VaultUnlockPath || path == httpserver.VaultChangePath {
@@ -330,24 +315,6 @@ func writeUncertainVaultResult(path string, stderr io.Writer) {
 		return
 	}
 	fmt.Fprintln(stderr, "sshc: vault request outcome is uncertain; run sshc vault status to check the result")
-}
-
-type vaultPartialResult struct {
-	SnapshotResealed bool    `json:"snapshotResealed"`
-	SnapshotProblem  *string `json:"snapshotProblem"`
-}
-
-func validVaultPartialResult(body []byte) bool {
-	var result vaultPartialResult
-	if err := decodeVaultResponseJSON(body, &result); err != nil || result.SnapshotResealed || result.SnapshotProblem == nil {
-		return false
-	}
-	switch *result.SnapshotProblem {
-	case "sync_remote_moved", "sync_push_refused", "sync_failed":
-		return true
-	default:
-		return false
-	}
 }
 
 func fetchVaultStatus(

@@ -41,7 +41,8 @@ func (d Dialer) Probe(ctx context.Context, target Target) (Probe, error) {
 	recorder := &methodRecorder{}
 	auth := d.Auth
 	auth.Observe = recorder.note
-	methods := auth.Methods(strict, nil)
+	methods, closeAuth := auth.methodsWithCleanup(strict, nil)
+	defer closeAuth()
 	if len(methods) == 0 {
 		return Probe{Elapsed: time.Since(started)}, ErrNoAuthMethod
 	}

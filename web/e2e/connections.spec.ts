@@ -438,7 +438,7 @@ test("re-associates a note whose connection is gone, without guessing", async ({
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 3,
       groups: [{ name: "work" }],
       hosts: [
         { identity: { path: "config", alias: "retired" }, tags: ["ci"], note: "the old builder" },

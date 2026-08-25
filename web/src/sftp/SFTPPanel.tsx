@@ -239,26 +239,36 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
     });
     if (safeFiles.length === 0 && safeDirectories.length === 0) return;
     setBusy(true);
-    const directories = [...new Set([...directoryPaths(safeFiles), ...safeDirectories])]
-      .sort((left, right) => left.split("/").length - right.split("/").length || left.localeCompare(right));
-    for (const directory of directories) {
-      try {
-        await sftpApi.mkdir(alias, join(path, directory));
-      } catch (error) {
-        if (failureCode(error) !== "sftp_exists") {
-          setProblem(failureCode(error) || "sftp_failed");
-          setBusy(false);
-          return;
+    setProblem("");
+    const selections = safeFiles.map((source) => ({
+      alias, remotePath: join(path, source.relativePath), localName: source.relativePath, file: source.file,
+    }));
+    let admission: ReturnType<typeof sftpTransferManager.reserveUploads> | undefined;
+    try {
+      admission = sftpTransferManager.reserveUploads(selections);
+      const directories = [...new Set([...directoryPaths(safeFiles), ...safeDirectories])]
+        .sort((left, right) => left.split("/").length - right.split("/").length || left.localeCompare(right));
+      for (const directory of directories) {
+        try {
+          await sftpApi.mkdir(alias, join(path, directory));
+        } catch (error) {
+          if (failureCode(error) !== "sftp_exists") throw error;
         }
       }
+      const folderName = [...safeDirectories, ...safeFiles.map((source) => source.relativePath)]
+        .map((value) => value.split("/")[0] ?? value).find((value) => value !== "") ?? t("sftp.manager.folder");
+      const folderBatch = safeDirectories.length > 0 || safeFiles.length > 1 || safeFiles.some((source) => source.relativePath.includes("/"));
+      sftpTransferManager.addUploads(selections, {
+        name: folderBatch ? folderName : safeFiles[0]?.relativePath ?? folderName,
+        kind: folderBatch ? "folder" : "file",
+      }, admission);
+      admission = undefined;
+    } catch (error) {
+      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
+    } finally {
+      admission?.release();
+      setBusy(false);
     }
-    const folderName = [...safeDirectories, ...safeFiles.map((source) => source.relativePath)]
-      .map((value) => value.split("/")[0] ?? value).find((value) => value !== "") ?? t("sftp.manager.folder");
-    const folderBatch = safeDirectories.length > 0 || safeFiles.length > 1 || safeFiles.some((source) => source.relativePath.includes("/"));
-    sftpTransferManager.addUploads(safeFiles.map((source) => ({
-      alias, remotePath: join(path, source.relativePath), localName: source.relativePath, file: source.file,
-    })), { name: folderBatch ? folderName : safeFiles[0]?.relativePath ?? folderName, kind: folderBatch ? "folder" : "file" });
-    setBusy(false);
   }
 
   async function acceptDrop(event: ReactDragEvent<HTMLDivElement>) {
@@ -272,7 +282,11 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
   async function download(entry: RemoteEntry) {
     if (busy) return;
     setProblem("");
-    sftpTransferManager.addDownload(alias, entry.path, entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1);
+    try {
+      sftpTransferManager.addDownload(alias, entry.path, entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1);
+    } catch (error) {
+      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
+    }
   }
 
   async function chmod(entry: RemoteEntry) {

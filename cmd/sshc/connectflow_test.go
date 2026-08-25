@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"sshc/internal/handoff"
+	"sshc/internal/sshclient"
 )
 
 // fakeProbe は、設定された engine 状態を順番に返す。
@@ -20,6 +21,25 @@ type fakeProbe struct {
 	statusErr   error
 	connections []string
 	connection  connectAnswer
+}
+
+func TestCLIRechecksPasswordBindingAgainstItsResolvedTarget(t *testing.T) {
+	target := sshclient.Target{
+		Alias: "edge", HostName: "original.example", Port: "22", User: "deploy",
+		Methods: sshclient.DefaultMethods(),
+	}
+	answer := connectAnswer{
+		Passwords:        map[string]string{"edge": "must-not-travel"},
+		PasswordBindings: map[string]string{"edge": target.AuthenticationBinding()},
+	}
+	lookup := savedPasswordFor(answer)
+	if password, ok := lookup(target); !ok || password != "must-not-travel" {
+		t.Fatalf("matching target = %q, %v", password, ok)
+	}
+	target.HostName = "retargeted.example"
+	if password, ok := lookup(target); ok || password != "" {
+		t.Fatalf("retargeted destination received password = %q, %v", password, ok)
+	}
 }
 
 func (probe *fakeProbe) Status(context.Context) (statusAnswer, error) {

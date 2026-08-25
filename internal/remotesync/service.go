@@ -25,7 +25,28 @@ import (
 // 通して書かれるので、同期の記録が書きかけで残ることはない。
 const StatePath = "sshc/sync-state.json"
 
+// KeyRecoveryPath records only remote generation metadata for an interrupted
+// key rotation. Key material remains solely in the encrypted secret service.
+const KeyRecoveryPath = "sshc/sync-key-recovery.json"
+
 const stateSchemaVersion = 1
+
+const (
+	keyRecoverySchemaVersion  = 1
+	keyRecoveryPrepared       = "prepared"
+	keyRecoveryRemoteAdvanced = "remote_advanced"
+)
+
+type keyRecoveryJournal struct {
+	SchemaVersion       int    `json:"schemaVersion"`
+	Phase               string `json:"phase"`
+	Target              string `json:"target"`
+	ObjectKey           string `json:"objectKey"`
+	OldETag             string `json:"oldETag"`
+	NewETag             string `json:"newETag,omitempty"`
+	OldCiphertextSHA256 string `json:"oldCiphertextSHA256"`
+	NewCiphertextSHA256 string `json:"newCiphertextSHA256"`
+}
 
 // archiveSuffix は、そのバイト列が何であるかを示す。暗号化された envelope の中の
 // tar.gz である。ライブのオブジェクトも、日付付きのコピーも、これを持つ。
@@ -104,6 +125,17 @@ var (
 	// 報告する。compare-and-swap の失敗であり、それこそが自動 push を安全にしている
 	// 性質である。何も上書きされない。
 	ErrRemoteMoved = errors.New("another machine has pushed since this one last synced")
+	// ErrRemoteDeleted reports that a preview cannot be committed because the
+	// live object whose generation would be acknowledged no longer exists.
+	ErrRemoteDeleted = errors.New("the acknowledged remote snapshot was deleted")
+	// ErrPreviewStale reports that an apply request is not bound to the exact
+	// ETag and manifest revision which the user previewed.
+	ErrPreviewStale = errors.New("the synchronization preview is stale")
+	// ErrRecoveryRequired stops synchronization after an interrupted key
+	// rotation whose remote/local outcome cannot be proven without user input.
+	ErrRecoveryRequired           = errors.New("an interrupted synchronization key rotation requires recovery")
+	ErrRecoveryTargetChange       = errors.New("the synchronization target cannot change during key recovery")
+	ErrHistoryKeyLossConfirmation = errors.New("key replacement requires confirmation that older history will become unreadable")
 	// ErrNothingToPush reports a manual push whose file set is already the
 	// current local base. Re-encrypting identical data would only create a
 	// duplicate history object.
@@ -250,6 +282,16 @@ type state struct {
 // しない。
 type FileSource func() ([]string, error)
 
+// KeyProvider returns the current synchronization key while operationMu is
+// held. Callers must not snapshot a key before waiting for another stateful
+// operation, because a completed rotation changes both the key and live ETag.
+type KeyProvider func() (string, error)
+
+// KeyReplacementProvider reads the old key and prepares its exact local CAS
+// while operationMu is held. This keeps a concurrent Reconfigure's persisted
+// settings and in-memory remote binding in one generation.
+type KeyReplacementProvider func() (oldKey string, commit func() error, err error)
+
 // remoteBinding は、ひとつの設定保存で切り替わるリモート接続一式。
 //
 // client は Endpoint、Bucket、Region、資格情報を自分の中にも保持する。したがって、
@@ -291,8 +333,13 @@ type Service struct {
 	// automatic receive/send cycle. binding has a separate, short-lived lock so
 	// status reads and configuration do not wait for network I/O.
 	operationMu sync.Mutex
-	mu          sync.Mutex
-	binding     remoteBinding
+	// historyMu prevents several callers from multiplying the bounded but
+	// expensive history downloads and Argon2 work. History never holds
+	// operationMu while doing remote I/O or decryption.
+	historyMu      sync.Mutex
+	mu             sync.Mutex
+	binding        remoteBinding
+	bindingVersion uint64
 }
 
 // NewService は、未設定のサービスを返す。
@@ -309,30 +356,86 @@ func NewService(workspace *storage.Workspace, transactions *storage.Manager, fil
 // 資格情報はメモリ上に保持され、ワークスペースへ書かれることは決してない。自分の
 // バケットへの鍵を運ぶスナップショットは、ブートストラップの便宜と引き換えに
 // 爆発半径をはるかに大きくする。
-func (s *Service) Configure(config Config, credentials objectstore.Credentials, client *objectstore.Client) {
+func (s *Service) Configure(config Config, credentials objectstore.Credentials, client *objectstore.Client) error {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	config = normalizeConfig(config)
+	if err := s.validateRecoveryTarget(config); err != nil {
+		return err
+	}
+	s.configure(config, credentials, client)
+	return nil
+}
+
+// Reconfigure persists credentials and swaps the in-memory binding inside the
+// same operation boundary. No key rotation can observe new secret settings with
+// the previous remote client, or the reverse.
+func (s *Service) Reconfigure(config Config, credentials objectstore.Credentials, client *objectstore.Client, persist func() error) error {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	config = normalizeConfig(config)
+	if persist == nil {
+		return errors.New("remote sync settings persistence is not configured")
+	}
+	if err := s.validateRecoveryTarget(config); err != nil {
+		return err
+	}
+	if err := persist(); err != nil {
+		return err
+	}
+	s.configure(config, credentials, client)
+	return nil
+}
+
+// configure applies one complete remote binding while operationMu is held.
+// Configure must be wholly before or wholly after every stateful operation so
+// a successful settings response never leaves an older operation running.
+func (s *Service) configure(config Config, credentials objectstore.Credentials, client *objectstore.Client) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// 末尾のスラッシュがリクエストへ届いたことはない、クライアントはパス全体を
 	// 置き換えるが、スナップショットの行き先を表示するすべての画面には
 	// "https://host//bucket" として届いていた。設定を保存する場所だけでなくここで
 	// 切り詰めることで、これができる前に保存されたものもきれいになる。
+	config = normalizeConfig(config)
+	s.binding = remoteBinding{config: config, creds: credentials, client: client}
+	s.bindingVersion++
+}
+
+func normalizeConfig(config Config) Config {
 	config.Endpoint = strings.TrimRight(config.Endpoint, "/")
 	config.Path = strings.Trim(config.Path, "/")
-	s.binding = remoteBinding{config: config, creds: credentials, client: client}
+	return config
+}
+
+func (s *Service) validateRecoveryTarget(config Config) error {
+	journal, exists, err := s.readKeyRecovery()
+	if err != nil {
+		return err
+	}
+	if exists && (journal.Target != targetID(config) || journal.ObjectKey != ObjectKeyFor(config)) {
+		return ErrRecoveryTargetChange
+	}
+	return nil
 }
 
 // configuredBinding は、同期処理の開始時点の接続一式をひとつの値として返す。
 // Configure はこのロックの前か後のどちらかにしか現れず、一回の操作の途中で
 // config と client の世代が混ざることはない。
 func (s *Service) configuredBinding() (remoteBinding, error) {
+	binding, _, err := s.configuredBindingVersion()
+	return binding, err
+}
+
+func (s *Service) configuredBindingVersion() (remoteBinding, uint64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	binding := s.binding
 	if _, ok := ParseDirection(string(binding.config.Direction)); !ok || binding.client == nil ||
 		binding.config.Bucket == "" || binding.creds.AccessKeyID == "" {
-		return remoteBinding{}, ErrNotConfigured
+		return remoteBinding{}, 0, ErrNotConfigured
 	}
-	return binding, nil
+	return binding, s.bindingVersion, nil
 }
 
 // Configured は、バケットと資格情報が設定されているかを報告する。
@@ -375,7 +478,12 @@ var neverTravels = []string{
 	// pane layout is device-local and contains no process/session state that can
 	// be meaningfully restored on another engine.
 	"sshc/workspaces.json",
+	// The workspace-wide process lock is runtime coordination state. Including
+	// it would make every serialized local mutation look like a user edit and
+	// can also surface a meaningless lock file on another machine.
+	"sshc/mutation.lock",
 	StatePath,
+	KeyRecoveryPath,
 }
 
 // SettingsPathRelative は、暗号化されたオブジェクトストア設定の相対パス。
@@ -543,6 +651,21 @@ func (s *Service) Push(ctx context.Context, passphrase, message string) (PushRes
 	return s.push(ctx, passphrase, "", message)
 }
 
+func (s *Service) PushUsing(ctx context.Context, key KeyProvider, message string) (PushResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	// Preserve the public Push contract for a vault that has no remote target:
+	// configuration is the first prerequisite, before a synchronization key.
+	if _, err := s.configuredBinding(); err != nil {
+		return PushResult{}, err
+	}
+	passphrase, err := currentOperationKey(key)
+	if err != nil {
+		return PushResult{}, err
+	}
+	return s.push(ctx, passphrase, "", message)
+}
+
 // ForcePush replaces the exact remote ETag which the user confirmed. It never
 // performs an unconditional write; a remote change after confirmation is
 // reported as ErrRemoteMoved.
@@ -555,9 +678,289 @@ func (s *Service) ForcePush(ctx context.Context, passphrase, expectedETag, messa
 	return s.push(ctx, passphrase, expectedETag, message)
 }
 
+func (s *Service) ForcePushUsing(ctx context.Context, key KeyProvider, expectedETag, message string) (PushResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	if expectedETag == "" {
+		return PushResult{}, ErrForcePushTarget
+	}
+	passphrase, err := currentOperationKey(key)
+	if err != nil {
+		return PushResult{}, err
+	}
+	return s.push(ctx, passphrase, expectedETag, message)
+}
+
+func currentOperationKey(provider KeyProvider) (string, error) {
+	if provider == nil {
+		return "", errors.New("synchronization key provider is not configured")
+	}
+	key, err := provider()
+	if err != nil {
+		return "", err
+	}
+	if key == "" {
+		return "", ErrWeakPassphrase
+	}
+	return key, nil
+}
+
+// ReplaceKey changes the key of an acknowledged live object with compare-and-swap,
+// then commits the local key. If the local commit fails, the remote ciphertext is
+// restored with another CAS so neither side silently advances on its own.
+//
+// A key on a machine which has never acknowledged this target is local setup, not
+// remote rotation: it may be the key needed to open an existing remote snapshot.
+func (s *Service) ReplaceKey(ctx context.Context, oldKey, newKey string, confirmHistoryLoss bool, commit func() error) error {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	return s.replaceKey(ctx, oldKey, newKey, confirmHistoryLoss, commit)
+}
+
+func (s *Service) ReplaceKeyUsing(ctx context.Context, newKey string, confirmHistoryLoss bool, provider KeyReplacementProvider) error {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	if provider == nil {
+		return errors.New("sync key replacement provider is not configured")
+	}
+	oldKey, commit, err := provider()
+	if err != nil {
+		return err
+	}
+	return s.replaceKey(ctx, oldKey, newKey, confirmHistoryLoss, commit)
+}
+
+func (s *Service) replaceKey(ctx context.Context, oldKey, newKey string, confirmHistoryLoss bool, commit func() error) error {
+	if commit == nil {
+		return errors.New("sync key commit is not configured")
+	}
+	if !s.Configured() {
+		return commit()
+	}
+	binding, err := s.configuredBinding()
+	if err != nil {
+		return err
+	}
+	if handled, err := s.resolveKeyRecovery(ctx, binding, newKey, commit); handled || err != nil {
+		return err
+	}
+	if oldKey == "" || oldKey == newKey {
+		return commit()
+	}
+	if !confirmHistoryLoss {
+		return ErrHistoryKeyLossConfirmation
+	}
+	current, err := s.readState()
+	if err != nil {
+		return err
+	}
+	if !stateMatchesTarget(current, binding.config) || current.ETag == "" {
+		return commit()
+	}
+	objectKey := ObjectKeyFor(binding.config)
+	object, err := binding.client.Get(ctx, objectKey)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			return ErrRemoteMoved
+		}
+		return err
+	}
+	if object.ETag != current.ETag {
+		return ErrRemoteMoved
+	}
+	archive, _, err := envelope.OpenWithin(object.Body, oldKey, envelope.AcceptedFromRemote)
+	if err != nil {
+		return err
+	}
+	// Rotation is deliberately not a legacy reader. Refuse to bless ciphertext
+	// whose snapshot schema this binary would not otherwise accept.
+	if _, _, err := Read(archive); err != nil {
+		return err
+	}
+	key, err := envelope.Derive(newKey)
+	if err != nil {
+		return err
+	}
+	resealed, err := key.Seal(archive)
+	if err != nil {
+		return err
+	}
+	recovery := keyRecoveryJournal{
+		SchemaVersion: keyRecoverySchemaVersion, Phase: keyRecoveryPrepared,
+		Target: targetID(binding.config), ObjectKey: objectKey, OldETag: object.ETag,
+		OldCiphertextSHA256: Digest(object.Body),
+		NewCiphertextSHA256: Digest(resealed),
+	}
+	if err := s.writeKeyRecovery(recovery); err != nil {
+		return err
+	}
+	newETag, err := binding.client.Put(ctx, objectKey, resealed, object.ETag, "")
+	if err != nil {
+		if errors.Is(err, objectstore.ErrPreconditionFailed) {
+			if cleanupErr := s.removeKeyRecovery(); cleanupErr != nil {
+				return errors.Join(err, ErrRecoveryRequired, fmt.Errorf("clear sync key recovery journal: %w", cleanupErr))
+			}
+			return ErrRemoteMoved
+		}
+		// A timeout, disconnect, or 5xx can arrive after the store committed the
+		// conditional PUT. Keep the prepared evidence until a fresh GET proves
+		// whether the live body is exactly the old or new ciphertext.
+		return errors.Join(err, ErrRecoveryRequired)
+	}
+	recovery.Phase = keyRecoveryRemoteAdvanced
+	recovery.NewETag = newETag
+	rollback := func(cause error) error {
+		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		rollbackETag, rollbackErr := binding.client.Put(rollbackCtx, objectKey, object.Body, newETag, "")
+		if rollbackErr != nil {
+			if errors.Is(rollbackErr, objectstore.ErrPreconditionFailed) {
+				rollbackErr = ErrRemoteMoved
+			}
+			return errors.Join(cause, ErrRecoveryRequired, fmt.Errorf("restore remote sync key: %w", rollbackErr))
+		}
+		restored := current
+		restored.ETag = rollbackETag
+		if stateErr := s.writeState(restored); stateErr != nil {
+			return errors.Join(cause, ErrRecoveryRequired, fmt.Errorf("record restored remote sync key: %w", stateErr))
+		}
+		if removeErr := s.removeKeyRecovery(); removeErr != nil {
+			return errors.Join(cause, ErrRecoveryRequired, fmt.Errorf("clear sync key recovery journal: %w", removeErr))
+		}
+		return cause
+	}
+	if err := s.writeKeyRecovery(recovery); err != nil {
+		return rollback(errors.Join(ErrRecoveryRequired, fmt.Errorf("record advanced remote sync key: %w", err)))
+	}
+	advanced := current
+	advanced.ETag = newETag
+	if err := s.writeState(advanced); err != nil {
+		return rollback(err)
+	}
+	if err := commit(); err != nil {
+		return rollback(err)
+	}
+	if err := s.removeKeyRecovery(); err != nil {
+		return errors.Join(ErrRecoveryRequired, fmt.Errorf("clear sync key recovery journal: %w", err))
+	}
+	return nil
+}
+
+// ResolveKeyRecovery lets the user re-enter the candidate new key after a
+// process crash. The journal stores only ETags; candidate possession is proven
+// by decrypting and validating the exact advanced live object.
+func (s *Service) ResolveKeyRecovery(ctx context.Context, candidate string, commit func() error) (bool, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	if commit == nil {
+		return false, errors.New("sync key commit is not configured")
+	}
+	binding, err := s.configuredBinding()
+	if err != nil {
+		return false, err
+	}
+	return s.resolveKeyRecovery(ctx, binding, candidate, commit)
+}
+
+func (s *Service) resolveKeyRecovery(ctx context.Context, binding remoteBinding, candidate string, commit func() error) (bool, error) {
+	journal, exists, err := s.readKeyRecovery()
+	if err != nil || !exists {
+		return exists, err
+	}
+	if journal.Target != targetID(binding.config) || journal.ObjectKey != ObjectKeyFor(binding.config) {
+		return true, ErrRecoveryRequired
+	}
+	etag, err := binding.client.Head(ctx, journal.ObjectKey)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			return true, ErrRecoveryRequired
+		}
+		return true, err
+	}
+	if etag == journal.OldETag {
+		current, err := s.readState()
+		if err != nil {
+			return true, err
+		}
+		if !stateMatchesTarget(current, binding.config) || current.Base == nil {
+			return true, ErrRecoveryRequired
+		}
+		current.ETag = etag
+		if err := s.writeState(current); err != nil {
+			return true, errors.Join(ErrRecoveryRequired, err)
+		}
+		if err := s.removeKeyRecovery(); err != nil {
+			return true, errors.Join(ErrRecoveryRequired, err)
+		}
+		return false, nil
+	}
+	object, err := binding.client.Get(ctx, journal.ObjectKey)
+	if err != nil {
+		return true, err
+	}
+	if object.ETag != etag {
+		return true, ErrRemoteMoved
+	}
+	bodyDigest := Digest(object.Body)
+	if bodyDigest == journal.OldCiphertextSHA256 {
+		current, err := s.readState()
+		if err != nil {
+			return true, err
+		}
+		if !stateMatchesTarget(current, binding.config) || current.Base == nil {
+			return true, ErrRecoveryRequired
+		}
+		current.ETag = etag
+		if err := s.writeState(current); err != nil {
+			return true, errors.Join(ErrRecoveryRequired, err)
+		}
+		if err := s.removeKeyRecovery(); err != nil {
+			return true, errors.Join(ErrRecoveryRequired, err)
+		}
+		// The remote conclusively contains the original ciphertext, so the
+		// encrypted vault must remain on the original key. ReplaceKey may now
+		// retry the requested rotation as a fresh operation.
+		return false, nil
+	}
+	if bodyDigest != journal.NewCiphertextSHA256 {
+		return true, ErrRecoveryRequired
+	}
+	if journal.Phase == keyRecoveryRemoteAdvanced && (journal.NewETag == "" || etag != journal.NewETag) {
+		return true, ErrRecoveryRequired
+	}
+	archive, _, err := envelope.OpenWithin(object.Body, candidate, envelope.AcceptedFromRemote)
+	if err != nil {
+		return true, err
+	}
+	if _, _, err := Read(archive); err != nil {
+		return true, err
+	}
+	current, err := s.readState()
+	if err != nil {
+		return true, err
+	}
+	if !stateMatchesTarget(current, binding.config) || current.Base == nil {
+		return true, ErrRecoveryRequired
+	}
+	current.ETag = etag
+	if err := s.writeState(current); err != nil {
+		return true, errors.Join(ErrRecoveryRequired, err)
+	}
+	if err := commit(); err != nil {
+		return true, errors.Join(ErrRecoveryRequired, err)
+	}
+	if err := s.removeKeyRecovery(); err != nil {
+		return true, errors.Join(ErrRecoveryRequired, err)
+	}
+	return true, nil
+}
+
 func (s *Service) push(ctx context.Context, passphrase, forcedETag, message string) (PushResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
+		return PushResult{}, err
+	}
+	if err := s.ensureNoKeyRecovery(ctx, binding); err != nil {
 		return PushResult{}, err
 	}
 	if binding.config.Direction == DirectionPull {
@@ -634,7 +1037,7 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 	if err != nil {
 		return result, err
 	}
-	if _, err := client.Put(ctx, dated, sealed, "", ""); err != nil {
+	if _, err := client.Put(ctx, dated, sealed, "", "*"); err != nil {
 		return result, err
 	}
 	result.ObjectCount++
@@ -818,6 +1221,11 @@ type PullResult struct {
 	Origin          string
 	objectKey       string
 	target          string
+	sourceKey       string
+	sourceETag      string
+	bindingVersion  uint64
+	localState      historyStateSnapshot
+	liveMissing     bool
 }
 
 // Pull はスナップショットを取得し、それを適用すると何が変わるかを算出する。
@@ -841,13 +1249,22 @@ func (s *Service) PullHistory(ctx context.Context, passphrase, historyKey string
 }
 
 func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolution, historyKey string) (PullResult, error) {
-	binding, err := s.configuredBinding()
+	binding, bindingVersion, err := s.configuredBindingVersion()
 	if err != nil {
 		return PullResult{}, err
 	}
+	if err := s.ensureNoKeyRecovery(ctx, binding); err != nil {
+		return PullResult{}, err
+	}
+	current, err := s.readState()
+	if err != nil {
+		return PullResult{}, err
+	}
+	localState := snapshotHistoryState(current)
 	objectKey := ObjectKeyFor(binding.config)
 	sourceKey := objectKey
 	stateETag := ""
+	liveMissing := false
 	if historyKey != "" {
 		sourceKey, err = historyObjectKey(binding.config, historyKey)
 		if err != nil {
@@ -859,6 +1276,8 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 		}
 		if statErr == nil {
 			stateETag = live.ETag
+		} else {
+			liveMissing = true
 		}
 	}
 	object, err := binding.client.Get(ctx, sourceKey)
@@ -880,10 +1299,6 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 		return PullResult{}, err
 	}
 
-	current, err := s.readState()
-	if err != nil {
-		return PullResult{}, err
-	}
 	base := current.Base
 	if !stateMatchesTarget(current, binding.config) {
 		base = nil
@@ -905,7 +1320,47 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 		Summary:         snapshotSummary(manifest, contents, len(object.Body)),
 		DownloadedBytes: int64(len(object.Body)), CompletedAt: s.now(),
 		ETag: stateETag, Origin: manifest.Origin, objectKey: objectKey, target: targetID(binding.config),
+		sourceKey: sourceKey, sourceETag: object.ETag, bindingVersion: bindingVersion,
+		localState: localState, liveMissing: liveMissing,
 	}, err
+}
+
+// PullAndApply downloads, verifies and commits one exact preview generation as
+// a single service operation. The expected values come from the earlier
+// user-visible preview; this method then takes a fresh remote/local snapshot
+// and keeps operationMu through the final workspace commit.
+func (s *Service) PullAndApply(ctx context.Context, passphrase string, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	return s.pullAndApply(ctx, passphrase, resolve, historyKey, expectedETag, expectedRevision)
+}
+
+func (s *Service) PullAndApplyUsing(ctx context.Context, key KeyProvider, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	passphrase, err := currentOperationKey(key)
+	if err != nil {
+		return PullResult{}, err
+	}
+	return s.pullAndApply(ctx, passphrase, resolve, historyKey, expectedETag, expectedRevision)
+}
+
+func (s *Service) pullAndApply(ctx context.Context, passphrase string, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
+	result, err := s.pull(ctx, passphrase, resolve, historyKey)
+	if err != nil && !errors.Is(err, ErrNothingToApply) {
+		return PullResult{}, err
+	}
+	if expectedETag == "" || expectedRevision == "" ||
+		result.ETag != expectedETag || result.Manifest.Revision != expectedRevision {
+		return PullResult{}, ErrPreviewStale
+	}
+	if err := s.validatePullForApply(ctx, result); err != nil {
+		return PullResult{}, err
+	}
+	if err := s.apply(result); err != nil {
+		return PullResult{}, err
+	}
+	return result, nil
 }
 
 // Apply は pull をコミットする。どれかのファイルが衝突しているあいだは拒否する。
@@ -913,7 +1368,54 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 func (s *Service) Apply(result PullResult) error {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
+	if err := s.validatePullForApply(context.Background(), result); err != nil {
+		return err
+	}
 	return s.apply(result)
+}
+
+func (s *Service) validatePullForApply(ctx context.Context, result PullResult) error {
+	if result.liveMissing || result.ETag == "" {
+		return ErrRemoteDeleted
+	}
+	binding, version, err := s.configuredBindingVersion()
+	if err != nil {
+		return err
+	}
+	if version != result.bindingVersion || targetID(binding.config) != result.target ||
+		ObjectKeyFor(binding.config) != result.objectKey {
+		return ErrRemoteMoved
+	}
+	current, err := s.readState()
+	if err != nil {
+		return err
+	}
+	if snapshotHistoryState(current) != result.localState {
+		return ErrRemoteMoved
+	}
+	remoteETag, err := binding.client.Head(ctx, result.objectKey)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			return ErrRemoteDeleted
+		}
+		return err
+	}
+	if remoteETag != result.ETag {
+		return ErrRemoteMoved
+	}
+	if result.sourceKey != "" && result.sourceKey != result.objectKey {
+		sourceETag, err := binding.client.Head(ctx, result.sourceKey)
+		if err != nil {
+			if errors.Is(err, objectstore.ErrNotFound) {
+				return ErrRemoteMoved
+			}
+			return err
+		}
+		if sourceETag != result.sourceETag {
+			return ErrRemoteMoved
+		}
+	}
+	return nil
 }
 
 func (s *Service) apply(result PullResult) error {
@@ -1028,6 +1530,100 @@ func (s *Service) localDigests(remote Manifest, base *Manifest) (map[string]stri
 
 func (s *Service) statePath() string {
 	return filepath.Join(s.workspace.Root(), filepath.FromSlash(StatePath))
+}
+
+func (s *Service) keyRecoveryPath() string {
+	return filepath.Join(s.workspace.Root(), filepath.FromSlash(KeyRecoveryPath))
+}
+
+func (s *Service) readKeyRecovery() (keyRecoveryJournal, bool, error) {
+	body, err := s.workspace.FileSystem().ReadFile(s.keyRecoveryPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return keyRecoveryJournal{}, false, nil
+	}
+	if err != nil {
+		return keyRecoveryJournal{}, false, err
+	}
+	var journal keyRecoveryJournal
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&journal); err != nil || journal.SchemaVersion != keyRecoverySchemaVersion ||
+		journal.Target == "" || journal.ObjectKey == "" || journal.OldETag == "" ||
+		len(journal.OldCiphertextSHA256) != 64 || len(journal.NewCiphertextSHA256) != 64 ||
+		(journal.Phase != keyRecoveryPrepared && journal.Phase != keyRecoveryRemoteAdvanced) ||
+		(journal.Phase == keyRecoveryRemoteAdvanced && journal.NewETag == "") {
+		return keyRecoveryJournal{}, true, ErrRecoveryRequired
+	}
+	return journal, true, nil
+}
+
+func (s *Service) writeKeyRecovery(journal keyRecoveryJournal) error {
+	body, err := json.MarshalIndent(journal, "", "  ")
+	if err != nil {
+		return err
+	}
+	body = append(body, '\n')
+	if err := s.workspace.EnsureDirectory(s.workspace.StateDir()); err != nil {
+		return err
+	}
+	precondition := storage.Precondition{}
+	if current, readErr := s.workspace.FileSystem().ReadFile(s.keyRecoveryPath()); readErr == nil {
+		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(current)}
+	} else if !errors.Is(readErr, fs.ErrNotExist) {
+		return readErr
+	}
+	_, err = s.transactions.Commit(storage.Request{
+		Operation: "sync.key-recovery",
+		Changes: []storage.Change{{
+			Path: s.keyRecoveryPath(), Contents: body, Precondition: precondition, SkipBackup: true,
+		}},
+	})
+	return err
+}
+
+func (s *Service) removeKeyRecovery() error {
+	body, err := s.workspace.FileSystem().ReadFile(s.keyRecoveryPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = s.transactions.Commit(storage.Request{
+		Operation: "sync.key-recovery.clear",
+		Removals: []storage.Removal{{
+			Path:         s.keyRecoveryPath(),
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(body)},
+		}},
+	})
+	return err
+}
+
+// ensureNoKeyRecovery resolves only the outcome which can be proven without
+// either key: a prepared rotation whose old ETag is still live. Every uncertain
+// remote advance stops before another sync operation can obscure the evidence.
+func (s *Service) ensureNoKeyRecovery(ctx context.Context, binding remoteBinding) error {
+	journal, exists, err := s.readKeyRecovery()
+	if err != nil || !exists {
+		return err
+	}
+	if journal.Target != targetID(binding.config) || journal.ObjectKey != ObjectKeyFor(binding.config) {
+		return ErrRecoveryRequired
+	}
+	etag, err := binding.client.Head(ctx, journal.ObjectKey)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			return ErrRecoveryRequired
+		}
+		return err
+	}
+	if etag != journal.OldETag {
+		return ErrRecoveryRequired
+	}
+	// The old ciphertext is still authoritative. A prepared journal therefore
+	// proves that the remote CAS never advanced (or was rolled back before any
+	// local key commit), so the marker can be safely cleared.
+	return s.removeKeyRecovery()
 }
 
 func (s *Service) readState() (state, error) {
@@ -1192,30 +1788,41 @@ func (s *Service) diverged() (bool, error) {
 	return manifestChanged(current.Base, manifest), nil
 }
 
-// remoteGeneration はHEADでETagだけを確認し、ライブオブジェクトが最後に同期した
-// 世代から変わったかと現在のETagを返す。Autoは競合中の世代を覚え、同じ暗号文を
-// 毎分ダウンロード・復号しない。呼び出し側はoperationMuを保持する。
-func (s *Service) remoteGeneration(ctx context.Context) (bool, string, error) {
+type remoteGeneration struct {
+	moved   bool
+	etag    string
+	deleted bool
+	target  string
+}
+
+// inspectRemoteGeneration はHEADでETagだけを確認し、ライブオブジェクトが最後に同期した
+// 世代から変わったかを返す。一度確認済みのliveが消えた場合も変更として扱い、空の
+// bucketと区別する。呼び出し側はoperationMuを保持する。
+func (s *Service) inspectRemoteGeneration(ctx context.Context) (remoteGeneration, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
-		return false, "", err
-	}
-	objectKey := ObjectKeyFor(binding.config)
-	etag, err := binding.client.Head(ctx, objectKey)
-	if err != nil {
-		if errors.Is(err, objectstore.ErrNotFound) {
-			// まだ誰も置いていない。受け取るものは無い。
-			return false, "", nil
-		}
-		return false, "", err
+		return remoteGeneration{}, err
 	}
 	current, err := s.readState()
 	if err != nil {
-		return false, "", err
+		return remoteGeneration{}, err
+	}
+	objectKey := ObjectKeyFor(binding.config)
+	target := targetID(binding.config)
+	etag, err := binding.client.Head(ctx, objectKey)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			if stateMatchesTarget(current, binding.config) && current.ETag != "" {
+				return remoteGeneration{moved: true, deleted: true, target: target}, nil
+			}
+			// まだ誰も置いていない。受け取るものは無い。
+			return remoteGeneration{target: target}, nil
+		}
+		return remoteGeneration{}, err
 	}
 	// 別のオブジェクトの世代は、このオブジェクトについて何も語らない。
 	if !stateMatchesTarget(current, binding.config) {
-		return true, etag, nil
+		return remoteGeneration{moved: true, etag: etag, target: target}, nil
 	}
-	return etag != current.ETag, etag, nil
+	return remoteGeneration{moved: etag != current.ETag, etag: etag, target: target}, nil
 }

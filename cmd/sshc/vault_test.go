@@ -373,7 +373,7 @@ func (t *statusThenErrorTransport) RoundTrip(request *http.Request) (*http.Respo
 	return nil, t.error
 }
 
-func TestVaultCommandClientAllowsRemoteResealToFinish(t *testing.T) {
+func TestVaultCommandClientAllowsLocalReencryptionToFinish(t *testing.T) {
 	base := &http.Client{Timeout: 5 * time.Second}
 	got := vaultCommandClient(base)
 	if got == base {
@@ -882,37 +882,6 @@ func TestRunVaultDoesNotPromptAfterPreflightCancellation(t *testing.T) {
 	}
 }
 
-func TestRunVaultChangeReportsLocalSuccessWhenRemoteResealFails(t *testing.T) {
-	current := []byte("current password")
-	next := []byte(vaultPasswordCanary)
-	confirmation := []byte(vaultPasswordCanary)
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.Method == http.MethodGet {
-			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, true))
-			return
-		}
-		response.Header().Set("Content-Type", "application/json")
-		response.WriteHeader(http.StatusMultiStatus)
-		_, _ = io.WriteString(response, `{"snapshotResealed":false,"snapshotProblem":"sync_failed"}`)
-	}))
-	defer server.Close()
-	stateDir := t.TempDir()
-	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
-
-	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "change-password", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: true, answers: [][]byte{current, next, confirmation}})
-	if code != 1 || !strings.Contains(stderr.String(), "changed locally") || !strings.Contains(stderr.String(), "remote") {
-		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	if !allZero(current) || !allZero(next) || !allZero(confirmation) {
-		t.Fatal("change-password terminal buffers were not erased")
-	}
-	if strings.Contains(stdout.String()+stderr.String(), vaultPasswordCanary) {
-		t.Fatal("partial-success output leaked a password")
-	}
-}
-
 func TestRunVaultRejectsUnknownLiveOwnerWithoutHumanOutput(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		_, _ = io.WriteString(response, vaultStatusBody(handoff.Owner("unknown"), true, false))
@@ -1048,7 +1017,7 @@ func (t *sequencedResponseTransport) RoundTrip(request *http.Request) (*http.Res
 	return response, nil
 }
 
-func TestRunVaultBoundsAndClosesErrorAndPartialResponseBodies(t *testing.T) {
+func TestRunVaultBoundsAndClosesErrorResponseBodies(t *testing.T) {
 	for _, test := range []struct {
 		name       string
 		status     int
@@ -1056,7 +1025,7 @@ func TestRunVaultBoundsAndClosesErrorAndPartialResponseBodies(t *testing.T) {
 		wantPhrase string
 	}{
 		{name: "ordinary error", status: http.StatusInternalServerError, body: "failed", wantPhrase: "operation failed"},
-		{name: "partial response", status: http.StatusMultiStatus, body: strings.Repeat("x", 70<<10), wantPhrase: "changed locally"},
+		{name: "unexpected response", status: http.StatusMultiStatus, body: strings.Repeat("x", 70<<10), wantPhrase: "invalid vault response"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			statusBody := &closingBody{reader: strings.NewReader(vaultStatusBody(handoff.OwnerEngine, true, true))}
@@ -1081,9 +1050,6 @@ func TestRunVaultBoundsAndClosesErrorAndPartialResponseBodies(t *testing.T) {
 			}
 			if !strings.Contains(stderr.String(), test.wantPhrase) {
 				t.Fatalf("stderr=%q, want phrase %q", stderr.String(), test.wantPhrase)
-			}
-			if test.status == http.StatusMultiStatus && !strings.Contains(stderr.String(), "remote result was invalid") {
-				t.Fatalf("stderr=%q, want invalid remote result guidance", stderr.String())
 			}
 			if strings.Contains(stdout.String()+stderr.String(), vaultPasswordCanary) {
 				t.Fatal("error/partial response leaked the password")

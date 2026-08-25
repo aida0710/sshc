@@ -23,7 +23,7 @@ func newTestWorkspace(t *testing.T) *storage.Workspace {
 	return workspace
 }
 
-func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsAFutureSchema(t *testing.T) {
+func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsUnsupportedSchemas(t *testing.T) {
 	empty, err := DecodeMetadata(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -43,17 +43,8 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsAFutureSchema(t *testing.T) 
 	if _, err := DecodeMetadata([]byte(`{"schemaVersion":1,`)); err == nil {
 		t.Fatal("truncated metadata was accepted")
 	}
-	previous, err := DecodeMetadata([]byte(`{"schemaVersion":2,"terminal":"iterm2",` +
-		`"customTerminal":{"application":"/Applications/Term.app","arguments":["-e"]},` +
-		`"hosts":[{"identity":{"path":"config","alias":"bastion"},"favourite":true}]}`))
-	if err != nil {
-		t.Fatalf("a version 2 document = %v, want it to survive", err)
-	}
-	if len(previous.Hosts) != 1 || !previous.Hosts[0].Favourite {
-		t.Fatalf("a version 2 document lost its hosts: %#v", previous)
-	}
-	if previous.EmbeddedTerminal != nil {
-		t.Fatalf("the old terminal choice became embedded settings: %#v", previous.EmbeddedTerminal)
+	if _, err := DecodeMetadata([]byte(`{"schemaVersion":2,"hosts":[]}`)); !errors.Is(err, ErrMetadataVersion) {
+		t.Fatalf("old schema error = %v, want ErrMetadataVersion", err)
 	}
 }
 
@@ -184,26 +175,6 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 	}
 	if !strings.Contains(string(encoded), `"schemaVersion": 3`) {
 		t.Errorf("encoded metadata is not version 3:\n%s", encoded)
-	}
-}
-
-func TestDecodeMetadataDropsGroupMembershipFromAnOlderDocument(t *testing.T) {
-	const document = `{"schemaVersion":1,"groups":[{"name":"work","parent":"company"}],` +
-		`"hosts":[{"identity":{"path":"config","alias":"bastion"},"group":"work","colour":"#f97316"}]}`
-
-	metadata, err := DecodeMetadata([]byte(document))
-	if err != nil {
-		t.Fatalf("DecodeMetadata error = %v", err)
-	}
-	if len(metadata.Hosts) != 1 || metadata.Hosts[0].Colour != "#f97316" {
-		t.Fatalf("hosts = %#v, want the presentation kept", metadata.Hosts)
-	}
-	encoded, err := EncodeMetadata(metadata)
-	if err != nil {
-		t.Fatalf("EncodeMetadata error = %v", err)
-	}
-	if strings.Contains(string(encoded), "company") {
-		t.Errorf("the parent survived re-encoding:\n%s", encoded)
 	}
 }
 

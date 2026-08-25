@@ -10,22 +10,22 @@ import (
 
 // Defines values for AutoSyncPhase.
 const (
-	AutoSyncPhaseBlocked AutoSyncPhase = "blocked"
-	AutoSyncPhaseFailed  AutoSyncPhase = "failed"
-	AutoSyncPhaseIdle    AutoSyncPhase = "idle"
-	AutoSyncPhaseRunning AutoSyncPhase = "running"
+	Blocked AutoSyncPhase = "blocked"
+	Failed  AutoSyncPhase = "failed"
+	Idle    AutoSyncPhase = "idle"
+	Running AutoSyncPhase = "running"
 )
 
 // Valid indicates whether the value is a known member of the AutoSyncPhase enum.
 func (e AutoSyncPhase) Valid() bool {
 	switch e {
-	case AutoSyncPhaseBlocked:
+	case Blocked:
 		return true
-	case AutoSyncPhaseFailed:
+	case Failed:
 		return true
-	case AutoSyncPhaseIdle:
+	case Idle:
 		return true
-	case AutoSyncPhaseRunning:
+	case Running:
 		return true
 	default:
 		return false
@@ -62,264 +62,6 @@ func (e PullRequestResolve) Valid() bool {
 	case Local:
 		return true
 	case Remote:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SFTPCreateTransferJobRequestDirection.
-const (
-	SFTPCreateTransferJobRequestDirectionDownload SFTPCreateTransferJobRequestDirection = "download"
-	SFTPCreateTransferJobRequestDirectionUpload   SFTPCreateTransferJobRequestDirection = "upload"
-)
-
-// Valid indicates whether the value is a known member of the SFTPCreateTransferJobRequestDirection enum.
-func (e SFTPCreateTransferJobRequestDirection) Valid() bool {
-	switch e {
-	case SFTPCreateTransferJobRequestDirectionDownload:
-		return true
-	case SFTPCreateTransferJobRequestDirectionUpload:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SFTPCreateTransferJobRequestKind.
-const (
-	SFTPCreateTransferJobRequestKindFile   SFTPCreateTransferJobRequestKind = "file"
-	SFTPCreateTransferJobRequestKindFolder SFTPCreateTransferJobRequestKind = "folder"
-)
-
-// Valid indicates whether the value is a known member of the SFTPCreateTransferJobRequestKind enum.
-func (e SFTPCreateTransferJobRequestKind) Valid() bool {
-	switch e {
-	case SFTPCreateTransferJobRequestKindFile:
-		return true
-	case SFTPCreateTransferJobRequestKindFolder:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SFTPEntryType.
-const (
-	SFTPEntryTypeDirectory SFTPEntryType = "directory"
-	SFTPEntryTypeFile      SFTPEntryType = "file"
-	SFTPEntryTypeOther     SFTPEntryType = "other"
-	SFTPEntryTypeSymlink   SFTPEntryType = "symlink"
-)
-
-// Valid indicates whether the value is a known member of the SFTPEntryType enum.
-func (e SFTPEntryType) Valid() bool {
-	switch e {
-	case SFTPEntryTypeDirectory:
-		return true
-	case SFTPEntryTypeFile:
-		return true
-	case SFTPEntryTypeOther:
-		return true
-	case SFTPEntryTypeSymlink:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SFTPMkdirRequestType.
-const (
-	Directory SFTPMkdirRequestType = "directory"
-)
-
-// Valid indicates whether the value is a known member of the SFTPMkdirRequestType enum.
-func (e SFTPMkdirRequestType) Valid() bool {
-	switch e {
-	case Directory:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SFTPTransferJobDirection.
-const (
-	SFTPTransferJobDirectionDownload SFTPTransferJobDirection = "download"
-	SFTPTransferJobDirectionUpload   SFTPTransferJobDirection = "upload"
-)
-
-// Valid indicates whether the value is a known member of the SFTPTransferJobDirection enum.
-func (e SFTPTransferJobDirection) Valid() bool {
-	switch e {
-	case SFTPTransferJobDirectionDownload:
-		return true
-	case SFTPTransferJobDirectionUpload:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SFTPTransferJobKind.
-const (
-	File   SFTPTransferJobKind = "file"
-	Folder SFTPTransferJobKind = "folder"
-)
-
-// Valid indicates whether the value is a known member of the SFTPTransferJobKind enum.
-func (e SFTPTransferJobKind) Valid() bool {
-	switch e {
-	case File:
-		return true
-	case Folder:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SFTPTransferJobStatus.
-const (
-	SFTPTransferJobStatusCancelled      SFTPTransferJobStatus = "cancelled"
-	SFTPTransferJobStatusCompleted      SFTPTransferJobStatus = "completed"
-	SFTPTransferJobStatusFailed         SFTPTransferJobStatus = "failed"
-	SFTPTransferJobStatusNeedsOverwrite SFTPTransferJobStatus = "needs_overwrite"
-	SFTPTransferJobStatusPaused         SFTPTransferJobStatus = "paused"
-	SFTPTransferJobStatusQueued         SFTPTransferJobStatus = "queued"
-	SFTPTransferJobStatusReattach       SFTPTransferJobStatus = "reattach"
-	SFTPTransferJobStatusRunning        SFTPTransferJobStatus = "running"
-)
-
-// Valid indicates whether the value is a known member of the SFTPTransferJobStatus enum.
-func (e SFTPTransferJobStatus) Valid() bool {
-	switch e {
-	case SFTPTransferJobStatusCancelled:
-		return true
-	case SFTPTransferJobStatusCompleted:
-		return true
-	case SFTPTransferJobStatusFailed:
-		return true
-	case SFTPTransferJobStatusNeedsOverwrite:
-		return true
-	case SFTPTransferJobStatusPaused:
-		return true
-	case SFTPTransferJobStatusQueued:
-		return true
-	case SFTPTransferJobStatusReattach:
-		return true
-	case SFTPTransferJobStatusRunning:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SFTPTransferJobActionRequestAction.
-const (
-	Cancel         SFTPTransferJobActionRequestAction = "cancel"
-	Complete       SFTPTransferJobActionRequestAction = "complete"
-	Fail           SFTPTransferJobActionRequestAction = "fail"
-	NeedsOverwrite SFTPTransferJobActionRequestAction = "needs_overwrite"
-	Pause          SFTPTransferJobActionRequestAction = "pause"
-	Progress       SFTPTransferJobActionRequestAction = "progress"
-	Resume         SFTPTransferJobActionRequestAction = "resume"
-	Retry          SFTPTransferJobActionRequestAction = "retry"
-	Start          SFTPTransferJobActionRequestAction = "start"
-)
-
-// Valid indicates whether the value is a known member of the SFTPTransferJobActionRequestAction enum.
-func (e SFTPTransferJobActionRequestAction) Valid() bool {
-	switch e {
-	case Cancel:
-		return true
-	case Complete:
-		return true
-	case Fail:
-		return true
-	case NeedsOverwrite:
-		return true
-	case Pause:
-		return true
-	case Progress:
-		return true
-	case Resume:
-		return true
-	case Retry:
-		return true
-	case Start:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SnippetJobStatus.
-const (
-	SnippetJobStatusCancelled SnippetJobStatus = "cancelled"
-	SnippetJobStatusCompleted SnippetJobStatus = "completed"
-	SnippetJobStatusRunning   SnippetJobStatus = "running"
-)
-
-// Valid indicates whether the value is a known member of the SnippetJobStatus enum.
-func (e SnippetJobStatus) Valid() bool {
-	switch e {
-	case SnippetJobStatusCancelled:
-		return true
-	case SnippetJobStatusCompleted:
-		return true
-	case SnippetJobStatusRunning:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SnippetTargetResultStatus.
-const (
-	SnippetTargetResultStatusCancelled SnippetTargetResultStatus = "cancelled"
-	SnippetTargetResultStatusFailed    SnippetTargetResultStatus = "failed"
-	SnippetTargetResultStatusQueued    SnippetTargetResultStatus = "queued"
-	SnippetTargetResultStatusRunning   SnippetTargetResultStatus = "running"
-	SnippetTargetResultStatusSucceeded SnippetTargetResultStatus = "succeeded"
-)
-
-// Valid indicates whether the value is a known member of the SnippetTargetResultStatus enum.
-func (e SnippetTargetResultStatus) Valid() bool {
-	switch e {
-	case SnippetTargetResultStatusCancelled:
-		return true
-	case SnippetTargetResultStatusFailed:
-		return true
-	case SnippetTargetResultStatusQueued:
-		return true
-	case SnippetTargetResultStatusRunning:
-		return true
-	case SnippetTargetResultStatusSucceeded:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SnippetVariableType.
-const (
-	Boolean SnippetVariableType = "boolean"
-	Integer SnippetVariableType = "integer"
-	Secret  SnippetVariableType = "secret"
-	String  SnippetVariableType = "string"
-)
-
-// Valid indicates whether the value is a known member of the SnippetVariableType enum.
-func (e SnippetVariableType) Valid() bool {
-	switch e {
-	case Boolean:
-		return true
-	case Integer:
-		return true
-	case Secret:
-		return true
-	case String:
 		return true
 	default:
 		return false
@@ -428,39 +170,6 @@ func (e TerminalSessionState) Valid() bool {
 	}
 }
 
-// Defines values for WorkspaceReconnectPaneState.
-const (
-	ReconnectRequired WorkspaceReconnectPaneState = "reconnect_required"
-)
-
-// Valid indicates whether the value is a known member of the WorkspaceReconnectPaneState enum.
-func (e WorkspaceReconnectPaneState) Valid() bool {
-	switch e {
-	case ReconnectRequired:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for WorkspaceSplitDirection.
-const (
-	Horizontal WorkspaceSplitDirection = "horizontal"
-	Vertical   WorkspaceSplitDirection = "vertical"
-)
-
-// Valid indicates whether the value is a known member of the WorkspaceSplitDirection enum.
-func (e WorkspaceSplitDirection) Valid() bool {
-	switch e {
-	case Horizontal:
-		return true
-	case Vertical:
-		return true
-	default:
-		return false
-	}
-}
-
 // AgentIdentitiesResponse defines model for AgentIdentitiesResponse.
 type AgentIdentitiesResponse struct {
 	AgentAvailable bool            `json:"agentAvailable"`
@@ -532,9 +241,7 @@ type ChangeMasterPasswordRequest struct {
 
 // ChangeMasterPasswordResult defines model for ChangeMasterPasswordResult.
 type ChangeMasterPasswordResult struct {
-	SnapshotProblem  *string             `json:"snapshotProblem,omitempty"`
-	SnapshotResealed bool                `json:"snapshotResealed"`
-	Vault            PasswordVaultStatus `json:"vault"`
+	Vault PasswordVaultStatus `json:"vault"`
 }
 
 // ChangePassphraseRequest defines model for ChangePassphraseRequest.
@@ -551,11 +258,6 @@ type ChangePassphraseResponse struct {
 	Notes         []string `json:"notes"`
 	RelativePath  string   `json:"relativePath"`
 	TransactionId string   `json:"transactionId"`
-}
-
-// ChangedResponse defines model for ChangedResponse.
-type ChangedResponse struct {
-	Changed bool `json:"changed"`
 }
 
 // ComplexityNote defines model for ComplexityNote.
@@ -723,22 +425,6 @@ type DiffLine struct {
 	Text    string `json:"text"`
 }
 
-// EditRequest defines model for EditRequest.
-type EditRequest struct {
-	Alias            *string      `json:"alias,omitempty"`
-	Base             *string      `json:"base,omitempty"`
-	Comment          *string      `json:"comment,omitempty"`
-	DestinationBase  *string      `json:"destinationBase,omitempty"`
-	DestinationGroup *string      `json:"destinationGroup,omitempty"`
-	DestinationPath  *string      `json:"destinationPath,omitempty"`
-	Fields           *[]FieldEdit `json:"fields,omitempty"`
-	Kind             string       `json:"kind"`
-	Metadata         *Metadata    `json:"metadata,omitempty"`
-	NewAlias         *string      `json:"newAlias,omitempty"`
-	Path             *string      `json:"path,omitempty"`
-	Raw              *string      `json:"raw,omitempty"`
-}
-
 // EffectiveResponse defines model for EffectiveResponse.
 type EffectiveResponse struct {
 	Alias                string                `json:"alias"`
@@ -747,19 +433,6 @@ type EffectiveResponse struct {
 	Route                []JumpStage           `json:"route"`
 	Sources              []ValueSource         `json:"sources"`
 	TokenWarning         string                `json:"tokenWarning"`
-}
-
-// EmbeddedTerminal defines model for EmbeddedTerminal.
-type EmbeddedTerminal struct {
-	Appearance      *TerminalAppearance `json:"appearance,omitempty"`
-	CopyOnSelect    *bool               `json:"copyOnSelect,omitempty"`
-	FontSize        *int                `json:"fontSize,omitempty"`
-	MaxSessions     *int                `json:"maxSessions,omitempty"`
-	Reconnect       *int                `json:"reconnect,omitempty"`
-	RightClickPaste *bool               `json:"rightClickPaste,omitempty"`
-	ScrollbackBytes *int                `json:"scrollbackBytes,omitempty"`
-	StartDirectory  *string             `json:"startDirectory,omitempty"`
-	Verbosity       *int                `json:"verbosity,omitempty"`
 }
 
 // EngineSettings defines model for EngineSettings.
@@ -777,14 +450,6 @@ type ExecutableDirective struct {
 	OnEvaluate  bool   `json:"onEvaluate"`
 	Overridable bool   `json:"overridable"`
 	Path        string `json:"path"`
-}
-
-// FieldEdit defines model for FieldEdit.
-type FieldEdit struct {
-	Action  string    `json:"action"`
-	Keyword *string   `json:"keyword,omitempty"`
-	Line    *int      `json:"line,omitempty"`
-	Values  *[]string `json:"values,omitempty"`
 }
 
 // GenerateKeyRequest defines model for GenerateKeyRequest.
@@ -816,16 +481,6 @@ type GroupDeleteRequest struct {
 	Name        string  `json:"name"`
 }
 
-// GroupMetadata defines model for GroupMetadata.
-type GroupMetadata struct {
-	Colour   *string    `json:"colour,omitempty"`
-	Hidden   *bool      `json:"hidden,omitempty"`
-	Name     string     `json:"name"`
-	Note     *string    `json:"note,omitempty"`
-	Order    *int       `json:"order,omitempty"`
-	Settings *[]Setting `json:"settings,omitempty"`
-}
-
 // GroupRenameRequest defines model for GroupRenameRequest.
 type GroupRenameRequest struct {
 	From string `json:"from"`
@@ -853,38 +508,10 @@ type HealthResponse struct {
 	Version string `json:"version"`
 }
 
-// HistoryEntry defines model for HistoryEntry.
-type HistoryEntry struct {
-	FinishedAt *string   `json:"finishedAt,omitempty"`
-	Id         string    `json:"id"`
-	Operation  string    `json:"operation"`
-	Paths      []string  `json:"paths"`
-	Restorable *[]string `json:"restorable,omitempty"`
-	StartedAt  string    `json:"startedAt"`
-	Status     string    `json:"status"`
-}
-
-// HistoryList defines model for HistoryList.
-type HistoryList struct {
-	Entries []HistoryEntry `json:"entries"`
-}
-
 // HostIdentity defines model for HostIdentity.
 type HostIdentity struct {
 	Alias string `json:"alias"`
 	Path  string `json:"path"`
-}
-
-// HostMetadata defines model for HostMetadata.
-type HostMetadata struct {
-	Appearance *TerminalAppearance `json:"appearance,omitempty"`
-	Colour     *string             `json:"colour,omitempty"`
-	Favourite  *bool               `json:"favourite,omitempty"`
-	Identity   HostIdentity        `json:"identity"`
-	Note       *string             `json:"note,omitempty"`
-	Order      *int                `json:"order,omitempty"`
-	Orphan     *bool               `json:"orphan,omitempty"`
-	Tags       *[]string           `json:"tags,omitempty"`
 }
 
 // IssueActionRequest defines model for IssueActionRequest.
@@ -1043,16 +670,6 @@ type KnownHostsScanResponse struct {
 	Notice     string               `json:"notice"`
 }
 
-// Metadata defines model for Metadata.
-type Metadata struct {
-	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
-	Engine           *EngineSettings   `json:"engine,omitempty"`
-	Groups           *[]GroupMetadata  `json:"groups,omitempty"`
-	GroupsFile       *string           `json:"groupsFile,omitempty"`
-	Hosts            *[]HostMetadata   `json:"hosts,omitempty"`
-	SchemaVersion    int               `json:"schemaVersion"`
-}
-
 // Notice defines model for Notice.
 type Notice struct {
 	Code   string  `json:"code"`
@@ -1126,9 +743,11 @@ type PublicKeyResponse struct {
 
 // PullRequest defines model for PullRequest.
 type PullRequest struct {
-	Apply      *bool               `json:"apply,omitempty"`
-	HistoryKey *string             `json:"historyKey,omitempty"`
-	Resolve    *PullRequestResolve `json:"resolve,omitempty"`
+	Apply            *bool               `json:"apply,omitempty"`
+	ExpectedETag     *string             `json:"expectedETag,omitempty"`
+	ExpectedRevision *string             `json:"expectedRevision,omitempty"`
+	HistoryKey       *string             `json:"historyKey,omitempty"`
+	Resolve          *PullRequestResolve `json:"resolve,omitempty"`
 }
 
 // PullRequestResolve defines model for PullRequest.Resolve.
@@ -1141,6 +760,8 @@ type PullResponse struct {
 	Conflicts       []SyncConflict  `json:"conflicts"`
 	DownloadedBytes int64           `json:"downloadedBytes"`
 	Origin          *string         `json:"origin,omitempty"`
+	RemoteETag      string          `json:"remoteETag"`
+	RemoteRevision  string          `json:"remoteRevision"`
 	Removed         []string        `json:"removed"`
 	Summary         SnapshotSummary `json:"summary"`
 	Written         []string        `json:"written"`
@@ -1321,292 +942,12 @@ type RewrittenKeyReference struct {
 	To         string `json:"to"`
 }
 
-// SFTPChmodRequest defines model for SFTPChmodRequest.
-type SFTPChmodRequest struct {
-	ExpectedRevision string `json:"expectedRevision"`
-	Mode             string `json:"mode"`
-	Path             string `json:"path"`
-}
-
-// SFTPCompleteUploadRequest defines model for SFTPCompleteUploadRequest.
-type SFTPCompleteUploadRequest struct {
-	ExpectedRevision string `json:"expectedRevision"`
-	Path             string `json:"path"`
-	Size             int64  `json:"size"`
-}
-
-// SFTPCreateTransferJobRequest defines model for SFTPCreateTransferJobRequest.
-type SFTPCreateTransferJobRequest struct {
-	Alias      string                                `json:"alias"`
-	BatchId    string                                `json:"batchId"`
-	Direction  SFTPCreateTransferJobRequestDirection `json:"direction"`
-	Id         string                                `json:"id"`
-	Kind       SFTPCreateTransferJobRequestKind      `json:"kind"`
-	Name       string                                `json:"name"`
-	RemotePath string                                `json:"remotePath"`
-	TotalBytes int64                                 `json:"totalBytes"`
-}
-
-// SFTPCreateTransferJobRequestDirection defines model for SFTPCreateTransferJobRequest.Direction.
-type SFTPCreateTransferJobRequestDirection string
-
-// SFTPCreateTransferJobRequestKind defines model for SFTPCreateTransferJobRequest.Kind.
-type SFTPCreateTransferJobRequestKind string
-
-// SFTPEntry defines model for SFTPEntry.
-type SFTPEntry struct {
-	Mode       string        `json:"mode"`
-	ModifiedAt time.Time     `json:"modifiedAt"`
-	Name       string        `json:"name"`
-	Path       string        `json:"path"`
-	Revision   string        `json:"revision"`
-	Size       int64         `json:"size"`
-	Type       SFTPEntryType `json:"type"`
-}
-
-// SFTPEntryType defines model for SFTPEntry.Type.
-type SFTPEntryType string
-
-// SFTPListing defines model for SFTPListing.
-type SFTPListing struct {
-	Entries []SFTPEntry `json:"entries"`
-	Path    string      `json:"path"`
-}
-
-// SFTPMkdirRequest defines model for SFTPMkdirRequest.
-type SFTPMkdirRequest struct {
-	Path string               `json:"path"`
-	Type SFTPMkdirRequestType `json:"type"`
-}
-
-// SFTPMkdirRequestType defines model for SFTPMkdirRequest.Type.
-type SFTPMkdirRequestType string
-
-// SFTPRenameRequest defines model for SFTPRenameRequest.
-type SFTPRenameRequest struct {
-	From string `json:"from"`
-	To   string `json:"to"`
-}
-
-// SFTPResumableUpload defines model for SFTPResumableUpload.
-type SFTPResumableUpload struct {
-	ExpectedRevision *string `json:"expectedRevision,omitempty"`
-	Id               string  `json:"id"`
-	Offset           int64   `json:"offset"`
-	Path             string  `json:"path"`
-	Size             int64   `json:"size"`
-}
-
-// SFTPSaveTextRequest defines model for SFTPSaveTextRequest.
-type SFTPSaveTextRequest struct {
-	Contents         string `json:"contents"`
-	ExpectedRevision string `json:"expectedRevision"`
-}
-
-// SFTPStartUploadRequest defines model for SFTPStartUploadRequest.
-type SFTPStartUploadRequest struct {
-	ExpectedRevision *string `json:"expectedRevision,omitempty"`
-	Overwrite        bool    `json:"overwrite"`
-	Path             string  `json:"path"`
-	Size             int64   `json:"size"`
-}
-
-// SFTPTextFile defines model for SFTPTextFile.
-type SFTPTextFile struct {
-	Contents string    `json:"contents"`
-	Entry    SFTPEntry `json:"entry"`
-	Revision string    `json:"revision"`
-}
-
-// SFTPTransfer defines model for SFTPTransfer.
-type SFTPTransfer struct {
-	Bytes    int64  `json:"bytes"`
-	Path     string `json:"path"`
-	Revision string `json:"revision"`
-}
-
-// SFTPTransferJob defines model for SFTPTransferJob.
-type SFTPTransferJob struct {
-	Alias            string                   `json:"alias"`
-	Attempt          int                      `json:"attempt"`
-	BatchId          string                   `json:"batchId"`
-	BytesPerSecond   float64                  `json:"bytesPerSecond"`
-	CreatedAt        time.Time                `json:"createdAt"`
-	Direction        SFTPTransferJobDirection `json:"direction"`
-	Id               string                   `json:"id"`
-	Kind             SFTPTransferJobKind      `json:"kind"`
-	Name             string                   `json:"name"`
-	Problem          string                   `json:"problem"`
-	RemainingSeconds int64                    `json:"remainingSeconds"`
-	RemotePath       string                   `json:"remotePath"`
-	Status           SFTPTransferJobStatus    `json:"status"`
-	TotalBytes       int64                    `json:"totalBytes"`
-	TransferredBytes int64                    `json:"transferredBytes"`
-	UpdatedAt        time.Time                `json:"updatedAt"`
-}
-
-// SFTPTransferJobDirection defines model for SFTPTransferJob.Direction.
-type SFTPTransferJobDirection string
-
-// SFTPTransferJobKind defines model for SFTPTransferJob.Kind.
-type SFTPTransferJobKind string
-
-// SFTPTransferJobStatus defines model for SFTPTransferJob.Status.
-type SFTPTransferJobStatus string
-
-// SFTPTransferJobActionRequest defines model for SFTPTransferJobActionRequest.
-type SFTPTransferJobActionRequest struct {
-	Action           SFTPTransferJobActionRequestAction `json:"action"`
-	Problem          *string                            `json:"problem,omitempty"`
-	ResetProgress    *bool                              `json:"resetProgress,omitempty"`
-	TransferredBytes *int64                             `json:"transferredBytes,omitempty"`
-}
-
-// SFTPTransferJobActionRequestAction defines model for SFTPTransferJobActionRequest.Action.
-type SFTPTransferJobActionRequestAction string
-
-// SFTPTransferJobList defines model for SFTPTransferJobList.
-type SFTPTransferJobList struct {
-	Jobs          []SFTPTransferJob `json:"jobs"`
-	MaxConcurrent int               `json:"maxConcurrent"`
-}
-
-// Setting defines model for Setting.
-type Setting struct {
-	Keyword string   `json:"keyword"`
-	Values  []string `json:"values"`
-}
-
 // SnapshotSummary defines model for SnapshotSummary.
 type SnapshotSummary struct {
 	CreatedAt     string `json:"createdAt"`
 	FileCount     int    `json:"fileCount"`
 	SnapshotBytes int64  `json:"snapshotBytes"`
 	SourceBytes   int64  `json:"sourceBytes"`
-}
-
-// Snippet defines model for Snippet.
-type Snippet struct {
-	Command     string            `json:"command"`
-	CreatedAt   time.Time         `json:"createdAt"`
-	Description string            `json:"description"`
-	Id          string            `json:"id"`
-	Name        string            `json:"name"`
-	UpdatedAt   time.Time         `json:"updatedAt"`
-	Variables   []SnippetVariable `json:"variables"`
-}
-
-// SnippetDraft defines model for SnippetDraft.
-type SnippetDraft struct {
-	Command     string            `json:"command"`
-	Description string            `json:"description"`
-	Name        string            `json:"name"`
-	Variables   []SnippetVariable `json:"variables"`
-}
-
-// SnippetExecuteRequest defines model for SnippetExecuteRequest.
-type SnippetExecuteRequest struct {
-	Aliases     *[]string                 `json:"aliases,omitempty"`
-	Command     *string                   `json:"command,omitempty"`
-	Concurrency int                       `json:"concurrency"`
-	Evidence    string                    `json:"evidence"`
-	Inputs      map[string]string         `json:"inputs"`
-	SnippetId   *string                   `json:"snippetId,omitempty"`
-	Targets     *[]SnippetExecutionTarget `json:"targets,omitempty"`
-}
-
-// SnippetExecutionTarget defines model for SnippetExecutionTarget.
-type SnippetExecutionTarget struct {
-	Alias    string `json:"alias"`
-	TargetId string `json:"targetId"`
-}
-
-// SnippetJob defines model for SnippetJob.
-type SnippetJob struct {
-	FinishedAt *time.Time            `json:"finishedAt,omitempty"`
-	Id         string                `json:"id"`
-	Results    []SnippetTargetResult `json:"results"`
-	StartedAt  time.Time             `json:"startedAt"`
-	Status     SnippetJobStatus      `json:"status"`
-}
-
-// SnippetJobStatus defines model for SnippetJob.Status.
-type SnippetJobStatus string
-
-// SnippetLibrary defines model for SnippetLibrary.
-type SnippetLibrary struct {
-	Snippets []Snippet        `json:"snippets"`
-	Startup  []StartupSnippet `json:"startup"`
-}
-
-// SnippetPreview defines model for SnippetPreview.
-type SnippetPreview struct {
-	ActionExpiresAt time.Time              `json:"actionExpiresAt"`
-	ActionToken     string                 `json:"actionToken"`
-	Evidence        string                 `json:"evidence"`
-	SnippetId       string                 `json:"snippetId"`
-	Targets         []SnippetPreviewTarget `json:"targets"`
-}
-
-// SnippetPreviewRequest Exactly one of snippetId or command and exactly one of aliases or targets must be supplied. targets permits repeated aliases when targetId values are distinct.
-type SnippetPreviewRequest struct {
-	Aliases   *[]string                 `json:"aliases,omitempty"`
-	Command   *string                   `json:"command,omitempty"`
-	Inputs    map[string]string         `json:"inputs"`
-	SnippetId *string                   `json:"snippetId,omitempty"`
-	Targets   *[]SnippetExecutionTarget `json:"targets,omitempty"`
-}
-
-// SnippetPreviewTarget defines model for SnippetPreviewTarget.
-type SnippetPreviewTarget struct {
-	Command string `json:"command"`
-	Target  struct {
-		Alias    string `json:"alias"`
-		HostName string `json:"hostName"`
-		Port     string `json:"port"`
-		User     string `json:"user"`
-	} `json:"target"`
-	TargetId string `json:"targetId"`
-}
-
-// SnippetTargetResult defines model for SnippetTargetResult.
-type SnippetTargetResult struct {
-	Alias     string                    `json:"alias"`
-	ExitCode  *int                      `json:"exitCode,omitempty"`
-	Problem   *string                   `json:"problem,omitempty"`
-	Status    SnippetTargetResultStatus `json:"status"`
-	Stderr    *string                   `json:"stderr,omitempty"`
-	Stdout    *string                   `json:"stdout,omitempty"`
-	TargetId  string                    `json:"targetId"`
-	Truncated *bool                     `json:"truncated,omitempty"`
-}
-
-// SnippetTargetResultStatus defines model for SnippetTargetResult.Status.
-type SnippetTargetResultStatus string
-
-// SnippetVariable defines model for SnippetVariable.
-type SnippetVariable struct {
-	Default     *string             `json:"default,omitempty"`
-	Description *string             `json:"description,omitempty"`
-	Name        string              `json:"name"`
-	Required    *bool               `json:"required,omitempty"`
-	Type        SnippetVariableType `json:"type"`
-}
-
-// SnippetVariableType defines model for SnippetVariable.Type.
-type SnippetVariableType string
-
-// StartupSnippet defines model for StartupSnippet.
-type StartupSnippet struct {
-	Alias     string             `json:"alias"`
-	Inputs    *map[string]string `json:"inputs,omitempty"`
-	SnippetId string             `json:"snippetId"`
-}
-
-// StartupSnippetRequest defines model for StartupSnippetRequest.
-type StartupSnippetRequest struct {
-	Inputs    map[string]string `json:"inputs"`
-	SnippetId string            `json:"snippetId"`
 }
 
 // StoreCredentialRequest defines model for StoreCredentialRequest.
@@ -1653,6 +994,7 @@ type SyncHistory struct {
 	HeadRevision      string                `json:"headRevision"`
 	HistoryTruncated  bool                  `json:"historyTruncated"`
 	Revisions         []SyncHistoryRevision `json:"revisions"`
+	Skipped           int                   `json:"skipped"`
 }
 
 // SyncHistoryDiff defines model for SyncHistoryDiff.
@@ -1689,7 +1031,8 @@ type SyncHistoryRevision struct {
 
 // SyncKeyRequest defines model for SyncKeyRequest.
 type SyncKeyRequest struct {
-	Key *string `json:"key,omitempty"`
+	ConfirmHistoryLoss *bool   `json:"confirmHistoryLoss,omitempty"`
+	Key                *string `json:"key,omitempty"`
 }
 
 // SyncKeyResponse defines model for SyncKeyResponse.
@@ -1762,19 +1105,6 @@ type TerminalAppearance struct {
 	Palette        *string `json:"palette,omitempty"`
 }
 
-// TerminalBackground defines model for TerminalBackground.
-type TerminalBackground struct {
-	Bytes int    `json:"bytes"`
-	Name  string `json:"name"`
-	Type  string `json:"type"`
-}
-
-// TerminalBackgroundList defines model for TerminalBackgroundList.
-type TerminalBackgroundList struct {
-	Backgrounds    []TerminalBackground `json:"backgrounds"`
-	RemainingBytes int                  `json:"remainingBytes"`
-}
-
 // TerminalExit defines model for TerminalExit.
 type TerminalExit struct {
 	At     string `json:"at"`
@@ -1840,16 +1170,6 @@ type TerminalSettings struct {
 // TerminalStreamTicket defines model for TerminalStreamTicket.
 type TerminalStreamTicket struct {
 	StreamTicket string `json:"streamTicket"`
-}
-
-// TerminalWorkspace defines model for TerminalWorkspace.
-type TerminalWorkspace struct {
-	CreatedAt     time.Time     `json:"createdAt"`
-	FocusedPaneId string        `json:"focusedPaneId"`
-	Id            string        `json:"id"`
-	Layout        WorkspaceNode `json:"layout"`
-	Name          string        `json:"name"`
-	UpdatedAt     time.Time     `json:"updatedAt"`
 }
 
 // TrashEntrySummary defines model for TrashEntrySummary.
@@ -1947,322 +1267,3 @@ type ValueSource struct {
 	Value     string `json:"value"`
 	Winner    bool   `json:"winner"`
 }
-
-// WorkspaceDefinition defines model for WorkspaceDefinition.
-type WorkspaceDefinition struct {
-	FocusedPaneId string        `json:"focusedPaneId"`
-	Layout        WorkspaceNode `json:"layout"`
-	Name          string        `json:"name"`
-}
-
-// WorkspaceList defines model for WorkspaceList.
-type WorkspaceList struct {
-	Workspaces []TerminalWorkspace `json:"workspaces"`
-}
-
-// WorkspaceNode defines model for WorkspaceNode.
-type WorkspaceNode struct {
-	Pane  *WorkspacePane  `json:"pane,omitempty"`
-	Split *WorkspaceSplit `json:"split,omitempty"`
-}
-
-// WorkspacePane defines model for WorkspacePane.
-type WorkspacePane struct {
-	Alias string `json:"alias"`
-	Id    string `json:"id"`
-}
-
-// WorkspaceReconnectPane defines model for WorkspaceReconnectPane.
-type WorkspaceReconnectPane struct {
-	Alias  string                      `json:"alias"`
-	PaneId string                      `json:"paneId"`
-	State  WorkspaceReconnectPaneState `json:"state"`
-}
-
-// WorkspaceReconnectPaneState defines model for WorkspaceReconnectPane.State.
-type WorkspaceReconnectPaneState string
-
-// WorkspaceRestorePlan defines model for WorkspaceRestorePlan.
-type WorkspaceRestorePlan struct {
-	Panes     []WorkspaceReconnectPane `json:"panes"`
-	Workspace TerminalWorkspace        `json:"workspace"`
-}
-
-// WorkspaceSplit defines model for WorkspaceSplit.
-type WorkspaceSplit struct {
-	Direction WorkspaceSplitDirection `json:"direction"`
-	First     WorkspaceNode           `json:"first"`
-	Ratio     int                     `json:"ratio"`
-	Second    WorkspaceNode           `json:"second"`
-}
-
-// WorkspaceSplitDirection defines model for WorkspaceSplit.Direction.
-type WorkspaceSplitDirection string
-
-// GetConfigFileParams defines parameters for GetConfigFile.
-type GetConfigFileParams struct {
-	Path string `form:"path" json:"path"`
-}
-
-// GetConfigHostParams defines parameters for GetConfigHost.
-type GetConfigHostParams struct {
-	Path  string `form:"path" json:"path"`
-	Alias string `form:"alias" json:"alias"`
-}
-
-// RevealPrivateKeyParams defines parameters for RevealPrivateKey.
-type RevealPrivateKeyParams struct {
-	XSSHCAction string `json:"X-SSHC-Action"`
-}
-
-// ListKnownHostsParams defines parameters for ListKnownHosts.
-type ListKnownHostsParams struct {
-	Query *string `form:"query,omitempty" json:"query,omitempty"`
-}
-
-// RegisterRemoteKeyParams defines parameters for RegisterRemoteKey.
-type RegisterRemoteKeyParams struct {
-	XSSHCAction string `json:"X-SSHC-Action"`
-}
-
-// BootstrapSessionParams defines parameters for BootstrapSession.
-type BootstrapSessionParams struct {
-	XSSHCBootstrap string `json:"X-SSHC-Bootstrap"`
-}
-
-// DownloadSFTPDirectoryArchiveParams defines parameters for DownloadSFTPDirectoryArchive.
-type DownloadSFTPDirectoryArchiveParams struct {
-	Path string `form:"path" json:"path"`
-}
-
-// DownloadSFTPFileParams defines parameters for DownloadSFTPFile.
-type DownloadSFTPFileParams struct {
-	Path  string  `form:"path" json:"path"`
-	Range *string `json:"Range,omitempty"`
-}
-
-// ListSFTPEntriesParams defines parameters for ListSFTPEntries.
-type ListSFTPEntriesParams struct {
-	Path string `form:"path" json:"path"`
-}
-
-// DeleteSFTPEntryParams defines parameters for DeleteSFTPEntry.
-type DeleteSFTPEntryParams struct {
-	Path        string `form:"path" json:"path"`
-	XSSHCAction string `json:"X-SSHC-Action"`
-}
-
-// ChmodSFTPEntryParams defines parameters for ChmodSFTPEntry.
-type ChmodSFTPEntryParams struct {
-	XSSHCAction string `json:"X-SSHC-Action"`
-}
-
-// ReadSFTPTextParams defines parameters for ReadSFTPText.
-type ReadSFTPTextParams struct {
-	Path string `form:"path" json:"path"`
-}
-
-// SaveSFTPTextParams defines parameters for SaveSFTPText.
-type SaveSFTPTextParams struct {
-	Path string `form:"path" json:"path"`
-}
-
-// UploadSFTPFileParams defines parameters for UploadSFTPFile.
-type UploadSFTPFileParams struct {
-	Path      string `form:"path" json:"path"`
-	Overwrite bool   `form:"overwrite" json:"overwrite"`
-}
-
-// CancelSFTPResumableUploadParams defines parameters for CancelSFTPResumableUpload.
-type CancelSFTPResumableUploadParams struct {
-	Path string `form:"path" json:"path"`
-}
-
-// AppendSFTPResumableUploadParams defines parameters for AppendSFTPResumableUpload.
-type AppendSFTPResumableUploadParams struct {
-	Path   string `form:"path" json:"path"`
-	Offset int64  `form:"offset" json:"offset"`
-	Total  int64  `form:"total" json:"total"`
-}
-
-// ExecuteSnippetParams defines parameters for ExecuteSnippet.
-type ExecuteSnippetParams struct {
-	XSSHCAction string `json:"X-SSHC-Action"`
-}
-
-// ForcePushSnapshotParams defines parameters for ForcePushSnapshot.
-type ForcePushSnapshotParams struct {
-	XSSHCAction string `json:"X-SSHC-Action"`
-}
-
-// AddTerminalBackgroundParams defines parameters for AddTerminalBackground.
-type AddTerminalBackgroundParams struct {
-	Name *string `form:"name,omitempty" json:"name,omitempty"`
-}
-
-// PurgeTrashEntryParams defines parameters for PurgeTrashEntry.
-type PurgeTrashEntryParams struct {
-	XSSHCAction string `json:"X-SSHC-Action"`
-}
-
-// IssueActionTokenJSONRequestBody defines body for IssueActionToken for application/json ContentType.
-type IssueActionTokenJSONRequestBody = IssueActionRequest
-
-// DeleteGroupJSONRequestBody defines body for DeleteGroup for application/json ContentType.
-type DeleteGroupJSONRequestBody = GroupDeleteRequest
-
-// RenameGroupJSONRequestBody defines body for RenameGroup for application/json ContentType.
-type RenameGroupJSONRequestBody = GroupRenameRequest
-
-// PreviewConfigEditJSONRequestBody defines body for PreviewConfigEdit for application/json ContentType.
-type PreviewConfigEditJSONRequestBody = EditRequest
-
-// SaveConfigEditJSONRequestBody defines body for SaveConfigEdit for application/json ContentType.
-type SaveConfigEditJSONRequestBody = EditRequest
-
-// UpdateConnectionJSONRequestBody defines body for UpdateConnection for application/json ContentType.
-type UpdateConnectionJSONRequestBody = UpdateConnectionRequest
-
-// CreateConnectionJSONRequestBody defines body for CreateConnection for application/json ContentType.
-type CreateConnectionJSONRequestBody = CreateConnectionRequest
-
-// AssignCredentialJSONRequestBody defines body for AssignCredential for application/json ContentType.
-type AssignCredentialJSONRequestBody = AssignCredentialRequest
-
-// StoreCredentialJSONRequestBody defines body for StoreCredential for application/json ContentType.
-type StoreCredentialJSONRequestBody = StoreCredentialRequest
-
-// TestAuthenticationJSONRequestBody defines body for TestAuthentication for application/json ContentType.
-type TestAuthenticationJSONRequestBody = AuthenticationRequest
-
-// InspectEffectiveConfigurationJSONRequestBody defines body for InspectEffectiveConfiguration for application/json ContentType.
-type InspectEffectiveConfigurationJSONRequestBody = AliasRequest
-
-// CheckReachabilityJSONRequestBody defines body for CheckReachability for application/json ContentType.
-type CheckReachabilityJSONRequestBody = AliasRequest
-
-// RecoverTransactionJSONRequestBody defines body for RecoverTransaction for application/json ContentType.
-type RecoverTransactionJSONRequestBody = RecoverRequest
-
-// RestoreHistoryEntryJSONRequestBody defines body for RestoreHistoryEntry for application/json ContentType.
-type RestoreHistoryEntryJSONRequestBody = RestoreRequest
-
-// GenerateKeyJSONRequestBody defines body for GenerateKey for application/json ContentType.
-type GenerateKeyJSONRequestBody = GenerateKeyRequest
-
-// BuildHardwareKeyCommandJSONRequestBody defines body for BuildHardwareKeyCommand for application/json ContentType.
-type BuildHardwareKeyCommandJSONRequestBody = HardwareCommandRequest
-
-// RegisterKeyWithAgentJSONRequestBody defines body for RegisterKeyWithAgent for application/json ContentType.
-type RegisterKeyWithAgentJSONRequestBody = RegisterKeyRequest
-
-// RelocateKeyJSONRequestBody defines body for RelocateKey for application/json ContentType.
-type RelocateKeyJSONRequestBody = RelocateKeyRequest
-
-// ChangeKeyPassphraseJSONRequestBody defines body for ChangeKeyPassphrase for application/json ContentType.
-type ChangeKeyPassphraseJSONRequestBody = ChangePassphraseRequest
-
-// AddKnownHostJSONRequestBody defines body for AddKnownHost for application/json ContentType.
-type AddKnownHostJSONRequestBody = KnownHostsAddRequest
-
-// DeleteKnownHostsJSONRequestBody defines body for DeleteKnownHosts for application/json ContentType.
-type DeleteKnownHostsJSONRequestBody = KnownHostsDeleteRequest
-
-// ScanKnownHostsJSONRequestBody defines body for ScanKnownHosts for application/json ContentType.
-type ScanKnownHostsJSONRequestBody = KnownHostsScanRequest
-
-// SetEngineSettingsJSONRequestBody defines body for SetEngineSettings for application/json ContentType.
-type SetEngineSettingsJSONRequestBody = EngineSettings
-
-// SetTerminalSettingsJSONRequestBody defines body for SetTerminalSettings for application/json ContentType.
-type SetTerminalSettingsJSONRequestBody = TerminalSettings
-
-// ChangeMasterPasswordJSONRequestBody defines body for ChangeMasterPassword for application/json ContentType.
-type ChangeMasterPasswordJSONRequestBody = ChangeMasterPasswordRequest
-
-// InitialisePasswordVaultJSONRequestBody defines body for InitialisePasswordVault for application/json ContentType.
-type InitialisePasswordVaultJSONRequestBody = PassphraseRequest
-
-// UnlockPasswordVaultJSONRequestBody defines body for UnlockPasswordVault for application/json ContentType.
-type UnlockPasswordVaultJSONRequestBody = PassphraseRequest
-
-// StorePasswordJSONRequestBody defines body for StorePassword for application/json ContentType.
-type StorePasswordJSONRequestBody = StorePasswordRequest
-
-// PlanRemoteKeyRegistrationJSONRequestBody defines body for PlanRemoteKeyRegistration for application/json ContentType.
-type PlanRemoteKeyRegistrationJSONRequestBody = RemoteKeyPlanRequest
-
-// RegisterRemoteKeyJSONRequestBody defines body for RegisterRemoteKey for application/json ContentType.
-type RegisterRemoteKeyJSONRequestBody = RemoteKeyRegisterRequest
-
-// CreateSFTPTransferJobJSONRequestBody defines body for CreateSFTPTransferJob for application/json ContentType.
-type CreateSFTPTransferJobJSONRequestBody = SFTPCreateTransferJobRequest
-
-// UpdateSFTPTransferJobJSONRequestBody defines body for UpdateSFTPTransferJob for application/json ContentType.
-type UpdateSFTPTransferJobJSONRequestBody = SFTPTransferJobActionRequest
-
-// CreateSFTPDirectoryJSONRequestBody defines body for CreateSFTPDirectory for application/json ContentType.
-type CreateSFTPDirectoryJSONRequestBody = SFTPMkdirRequest
-
-// RenameSFTPEntryJSONRequestBody defines body for RenameSFTPEntry for application/json ContentType.
-type RenameSFTPEntryJSONRequestBody = SFTPRenameRequest
-
-// ChmodSFTPEntryJSONRequestBody defines body for ChmodSFTPEntry for application/json ContentType.
-type ChmodSFTPEntryJSONRequestBody = SFTPChmodRequest
-
-// SaveSFTPTextJSONRequestBody defines body for SaveSFTPText for application/json ContentType.
-type SaveSFTPTextJSONRequestBody = SFTPSaveTextRequest
-
-// StartSFTPResumableUploadJSONRequestBody defines body for StartSFTPResumableUpload for application/json ContentType.
-type StartSFTPResumableUploadJSONRequestBody = SFTPStartUploadRequest
-
-// CompleteSFTPResumableUploadJSONRequestBody defines body for CompleteSFTPResumableUpload for application/json ContentType.
-type CompleteSFTPResumableUploadJSONRequestBody = SFTPCompleteUploadRequest
-
-// CreateSnippetJSONRequestBody defines body for CreateSnippet for application/json ContentType.
-type CreateSnippetJSONRequestBody = SnippetDraft
-
-// ExecuteSnippetJSONRequestBody defines body for ExecuteSnippet for application/json ContentType.
-type ExecuteSnippetJSONRequestBody = SnippetExecuteRequest
-
-// PreviewSnippetExecutionJSONRequestBody defines body for PreviewSnippetExecution for application/json ContentType.
-type PreviewSnippetExecutionJSONRequestBody = SnippetPreviewRequest
-
-// SetStartupSnippetJSONRequestBody defines body for SetStartupSnippet for application/json ContentType.
-type SetStartupSnippetJSONRequestBody = StartupSnippetRequest
-
-// UpdateSnippetJSONRequestBody defines body for UpdateSnippet for application/json ContentType.
-type UpdateSnippetJSONRequestBody = SnippetDraft
-
-// SetAutoSyncJSONRequestBody defines body for SetAutoSync for application/json ContentType.
-type SetAutoSyncJSONRequestBody = AutoSyncRequest
-
-// ForcePushSnapshotJSONRequestBody defines body for ForcePushSnapshot for application/json ContentType.
-type ForcePushSnapshotJSONRequestBody = SyncPushRequest
-
-// DiffSyncHistoryJSONRequestBody defines body for DiffSyncHistory for application/json ContentType.
-type DiffSyncHistoryJSONRequestBody = SyncHistoryDiffRequest
-
-// SetSyncKeyJSONRequestBody defines body for SetSyncKey for application/json ContentType.
-type SetSyncKeyJSONRequestBody = SyncKeyRequest
-
-// PullSnapshotJSONRequestBody defines body for PullSnapshot for application/json ContentType.
-type PullSnapshotJSONRequestBody = PullRequest
-
-// PushSnapshotJSONRequestBody defines body for PushSnapshot for application/json ContentType.
-type PushSnapshotJSONRequestBody = SyncPushRequest
-
-// ConfigureSyncJSONRequestBody defines body for ConfigureSync for application/json ContentType.
-type ConfigureSyncJSONRequestBody = SyncSettingsRequest
-
-// OpenTerminalSessionJSONRequestBody defines body for OpenTerminalSession for application/json ContentType.
-type OpenTerminalSessionJSONRequestBody = OpenTerminalSessionRequest
-
-// RenameTerminalSessionJSONRequestBody defines body for RenameTerminalSession for application/json ContentType.
-type RenameTerminalSessionJSONRequestBody = RenameTerminalSessionRequest
-
-// CreateTerminalWorkspaceJSONRequestBody defines body for CreateTerminalWorkspace for application/json ContentType.
-type CreateTerminalWorkspaceJSONRequestBody = WorkspaceDefinition
-
-// UpdateTerminalWorkspaceJSONRequestBody defines body for UpdateTerminalWorkspace for application/json ContentType.
-type UpdateTerminalWorkspaceJSONRequestBody = WorkspaceDefinition

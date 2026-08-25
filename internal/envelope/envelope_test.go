@@ -66,6 +66,24 @@ func TestAKeyRefusesTamperedBytes(t *testing.T) {
 	}
 }
 
+func TestAKeyRejectsBothOlderAndNewerEnvelopeVersions(t *testing.T) {
+	key, err := envelope.Derive("correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := key.Seal([]byte("current format"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, version := range map[string]byte{"older": 0, "newer": 2} {
+		candidate := append([]byte(nil), sealed...)
+		candidate[16] = version
+		if _, err := key.Open(candidate); !errors.Is(err, envelope.ErrUnsupportedVersion) {
+			t.Fatalf("%s version error = %v, want ErrUnsupportedVersion", name, err)
+		}
+	}
+}
+
 // 鍵の導出は意図的に高価なので、同時に何個走れるかは呼び出し側ではなくこちらが
 // 決める数字である。
 //

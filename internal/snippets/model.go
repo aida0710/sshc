@@ -67,9 +67,9 @@ type Variable struct {
 type Snippet struct {
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
-	Description string     `json:"description,omitempty"`
+	Description string     `json:"description"`
 	Command     string     `json:"command"`
-	Variables   []Variable `json:"variables,omitempty"`
+	Variables   []Variable `json:"variables"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
 }
@@ -135,7 +135,7 @@ type PreviewRequest struct {
 	Command   string            `json:"command,omitempty"`
 	Aliases   []string          `json:"aliases,omitempty"`
 	Targets   []RequestedTarget `json:"targets,omitempty"`
-	Inputs    map[string]string `json:"inputs,omitempty"`
+	Inputs    map[string]string `json:"inputs"`
 }
 
 type TargetPreview struct {
@@ -162,7 +162,7 @@ func (p Preview) ActionTarget() string {
 type ExecuteRequest struct {
 	PreviewRequest
 	Evidence    string `json:"evidence"`
-	Concurrency int    `json:"concurrency,omitempty"`
+	Concurrency int    `json:"concurrency"`
 }
 
 type TargetStatus string

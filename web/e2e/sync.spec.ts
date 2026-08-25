@@ -72,6 +72,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
           historyTruncated: false,
           downloadTruncated: false,
           downloadedBytes: 5_700_000,
+          skipped: 0,
           revisions: [
             {
               key: "snapshots/2026-08-25-020900-head.tar.gz.enc",
@@ -155,6 +156,8 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
         summary,
         downloadedBytes: 1_900_000,
         completedAt: apply ? "2026-08-12T01:32:00Z" : "2026-08-12T01:31:00Z",
+        remoteETag: '"sync-e2e-generation"',
+        remoteRevision: "b".repeat(64),
         conflicts: [],
         written: ["config"],
         removed: [],
@@ -186,15 +189,15 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-desktop.png`, fullPage: true });
     await page.getByRole("heading", { name: "Bucket status" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-history-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-history-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 360, height: 800 });
     await page.getByRole("heading", { name: "Remote sync" }).scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-mobile.png`, fullPage: true });
     await page.getByRole("heading", { name: "Encrypted revision history" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-history-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-history-mobile.png`, fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
   }
   await page.getByRole("button", { name: "Push this workspace" }).click();
@@ -205,7 +208,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await expect(page.getByRole("button", { name: "Push this workspace" })).toBeDisabled();
   if (visualDirectory !== undefined) {
     await page.getByLabel("Commit message").scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.12.1-sync-no-changes-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-no-changes-desktop.png`, fullPage: true });
   }
 
   await page.getByRole("button", { name: "Check for changes" }).click();

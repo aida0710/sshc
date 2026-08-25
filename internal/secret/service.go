@@ -2,7 +2,6 @@ package secret
 
 import (
 	"crypto/subtle"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -31,6 +30,9 @@ var (
 	ErrCredentialAlreadyExists = errors.New("a credential of that kind already has that name")
 	// ErrUnknownPasswordMutation は接続作成が扱う三つのパスワード源以外を拒否する。
 	ErrUnknownPasswordMutation = errors.New("that is not a password mutation kind")
+	// ErrPasswordBindingRequired prevents an account-password assignment from
+	// bypassing the resolved authentication-destination check.
+	ErrPasswordBindingRequired = errors.New("an authentication destination binding is required")
 )
 
 // PasswordMutationKind は、接続作成が vault に行う変更を表す。専用パスワードと
@@ -53,6 +55,7 @@ type PasswordMutation struct {
 	Alias      string
 	Credential string
 	Password   string
+	Binding    string
 }
 
 // KeyPassphraseMutation replaces the unlock value owned by one private-key
@@ -384,14 +387,15 @@ func (s *Service) Has(alias string) bool {
 	return ok
 }
 
-// Set は、alias ひとつ分のパスワードを保存し、vault を書き込む。
-//
-// 資格情報は alias を名前として取る。秘密に名前が付いたいま、「このホストのために
-// とにかくパスワードを保存する」とはそういう意味である。複数のホストで共有するに
-// は、代わりに既存の名前を割り当てる。
-func (s *Service) Set(alias, password string) error {
+// SetBound stores a dedicated password and records the resolved authentication
+// destination that may receive it.
+func (s *Service) SetBound(alias, password, binding string) error {
+	if !validAuthenticationBinding(binding) {
+		return ErrPasswordBindingRequired
+	}
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
+
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
@@ -399,6 +403,10 @@ func (s *Service) Set(alias, password string) error {
 		return ErrLocked
 	}
 	if err := vault.SetDedicatedPassword(alias, password); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if err := vault.BindPassword(alias, binding); err != nil {
 		s.mu.Unlock()
 		return err
 	}
@@ -512,6 +520,9 @@ func (s *Service) DeleteCredential(kind Kind, name string) error {
 // AssignCredential は、subject を同じ種別の資格情報に向ける。種別が防護である。
 // 他方の種別の名前が現れるマップは存在しない。
 func (s *Service) AssignCredential(kind Kind, subject, name string) error {
+	if kind == KindPassword {
+		return ErrPasswordBindingRequired
+	}
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 	s.mu.Lock()
@@ -521,6 +532,33 @@ func (s *Service) AssignCredential(kind Kind, subject, name string) error {
 		return ErrLocked
 	}
 	if err := vault.Assign(kind, subject, name); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.mu.Unlock()
+	return s.write()
+}
+
+// AssignPasswordCredential binds a named account password to the current
+// resolved authentication destination of one alias.
+func (s *Service) AssignPasswordCredential(subject, name, binding string) error {
+	if !validAuthenticationBinding(binding) {
+		return ErrPasswordBindingRequired
+	}
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	s.mu.Lock()
+	vault := s.use()
+	if vault == nil {
+		s.mu.Unlock()
+		return ErrLocked
+	}
+	if err := vault.Assign(KindPassword, subject, name); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if err := vault.BindPassword(subject, binding); err != nil {
 		s.mu.Unlock()
 		return err
 	}
@@ -543,17 +581,16 @@ func (s *Service) UnassignCredential(kind Kind, subject string) error {
 	return s.write()
 }
 
-// PasswordFor は、alias を、それに与えるべき値へ解決する。存在しないとき、および
-// vault が閉じているときは "" を返す。重要な呼び出し側、askpass の応答、は、
-// Redeem のエラーで両者を区別する。
-func (s *Service) PasswordFor(alias string) string {
+// BoundPasswordFor returns a password only if current resolved destination is
+// identical to the destination confirmed when the password was assigned.
+func (s *Service) BoundPasswordFor(alias, binding string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return ""
 	}
-	value, _ := vault.SecretFor(KindPassword, alias)
+	value, _ := vault.BoundPasswordFor(alias, binding)
 	return value
 }
 
@@ -682,37 +719,55 @@ func (s *Service) SyncSettings() (SyncSettings, error) {
 // 鍵を見せるのは作った一度だけで、以後は伏せ字である。ので、素直に置き換えれば、
 // bucket を編集しただけでリモートのスナップショットが誰にも開けなくなる。
 func (s *Service) SetSyncSettings(settings SyncSettings) error {
-	return s.writeSyncSettings(func(stored SyncSettings) SyncSettings {
+	return s.writeSyncSettings(func(stored SyncSettings) (SyncSettings, error) {
 		if settings.Key == "" {
 			settings.Key = stored.Key
 		}
 		// 自動同期の入切も form の欄ではない。bucket を編集しただけで、
 		// 巡回が暗黙に止まってはならない。
 		settings.Auto = stored.Auto
-		return settings
+		return settings, nil
 	})
 }
 
 // SetSyncAuto は、自動同期の入切だけを置き換える。
 func (s *Service) SetSyncAuto(enabled bool) error {
-	return s.writeSyncSettings(func(stored SyncSettings) SyncSettings {
+	return s.writeSyncSettings(func(stored SyncSettings) (SyncSettings, error) {
 		stored.Auto = enabled
-		return stored
+		return stored, nil
 	})
 }
 
 // SetSyncKey は、同期の鍵だけを置き換える。他の設定はそのまま残る。
 func (s *Service) SetSyncKey(key string) error {
-	return s.writeSyncSettings(func(stored SyncSettings) SyncSettings {
+	return s.writeSyncSettings(func(stored SyncSettings) (SyncSettings, error) {
 		stored.Key = key
-		return stored
+		return stored, nil
+	})
+}
+
+var ErrSyncSettingsChanged = errors.New("the synchronization settings changed")
+
+// SetSyncKeyIfSettingsMatch commits a rotated key only to the exact remote
+// binding whose ciphertext was changed. Auto is deliberately excluded: toggling
+// the scheduler does not change a remote target generation.
+func (s *Service) SetSyncKeyIfSettingsMatch(expected SyncSettings, key string) error {
+	return s.writeSyncSettings(func(stored SyncSettings) (SyncSettings, error) {
+		if stored.Endpoint != expected.Endpoint || stored.Bucket != expected.Bucket ||
+			stored.Path != expected.Path || stored.Region != expected.Region ||
+			stored.AccessKeyID != expected.AccessKeyID || stored.SecretAccessKey != expected.SecretAccessKey ||
+			stored.Direction != expected.Direction || stored.Key != expected.Key {
+			return SyncSettings{}, ErrSyncSettingsChanged
+		}
+		stored.Key = key
+		return stored, nil
 	})
 }
 
 // writeSyncSettings は、いま保存されているものを読み、mutate に渡し、返ってきた
 // ものを暗号化して書く。読みと書きは同じ mutationMu の下で起きるので、二つの呼び出しが
 // 互いの結果を踏まない。
-func (s *Service) writeSyncSettings(mutate func(SyncSettings) SyncSettings) error {
+func (s *Service) writeSyncSettings(mutate func(SyncSettings) (SyncSettings, error)) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 	s.mu.Lock()
@@ -735,7 +790,12 @@ func (s *Service) writeSyncSettings(mutate func(SyncSettings) SyncSettings) erro
 		s.mu.Unlock()
 		return readErr
 	}
-	sealed, err := vault.SealSettings(mutate(stored))
+	next, err := mutate(stored)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	sealed, err := vault.SealSettings(next)
 	s.mu.Unlock()
 	if err != nil {
 		return err
@@ -743,10 +803,14 @@ func (s *Service) writeSyncSettings(mutate func(SyncSettings) SyncSettings) erro
 	if err := s.workspace.EnsureDirectory(s.workspace.StateDir()); err != nil {
 		return err
 	}
-	current, readErr := s.workspace.FileSystem().ReadFile(s.settingsPath())
 	precondition := storage.Precondition{}
 	if readErr == nil {
-		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(current)}
+		// Bind the write to the exact document which mutate consumed. Re-reading
+		// here and accepting that digest would silently overwrite an external
+		// writer which won the race between decrypt and commit.
+		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(existing)}
+	} else if !errors.Is(readErr, fs.ErrNotExist) {
+		return readErr
 	}
 	_, err = s.transactions.Commit(storage.Request{
 		Operation: "sync.settings",
@@ -920,22 +984,33 @@ func (s *Service) WithConnectionSecretsTransaction(
 }
 
 func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool, error) {
+	if mutation.Kind != PasswordMutationRemove && !validAuthenticationBinding(mutation.Binding) {
+		return false, ErrPasswordBindingRequired
+	}
 	switch mutation.Kind {
 	case PasswordMutationDedicated:
 		if current, ok := vault.dedicatedPasswords[mutation.Alias]; ok &&
 			len(current) == len(mutation.Password) &&
-			subtle.ConstantTimeCompare([]byte(current), []byte(mutation.Password)) == 1 {
+			subtle.ConstantTimeCompare([]byte(current), []byte(mutation.Password)) == 1 &&
+			vault.passwordBindings[mutation.Alias] == mutation.Binding {
 			return false, nil
 		}
 		if err := clone.SetDedicatedPassword(mutation.Alias, mutation.Password); err != nil {
 			return false, err
 		}
+		if err := clone.BindPassword(mutation.Alias, mutation.Binding); err != nil {
+			return false, err
+		}
 		return true, nil
 	case PasswordMutationSaved:
-		if current, ok := vault.Assigned(KindPassword, mutation.Alias); ok && current == mutation.Credential {
+		if current, ok := vault.Assigned(KindPassword, mutation.Alias); ok &&
+			current == mutation.Credential && vault.passwordBindings[mutation.Alias] == mutation.Binding {
 			return false, nil
 		}
 		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
+			return false, err
+		}
+		if err := clone.BindPassword(mutation.Alias, mutation.Binding); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -947,6 +1022,9 @@ func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool
 			return false, err
 		}
 		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
+			return false, err
+		}
+		if err := clone.BindPassword(mutation.Alias, mutation.Binding); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -993,14 +1071,13 @@ func (s *Service) Aliases() []string {
 // ことだ。バックアップは、そこから復元するために存在するのであり、誰にも開けない
 // バックアップはバックアップではない。
 //
-// トランザクションはひとつ。置き換えるものの世代コピーは保持しない。そしてそこが、
-// SkipBackup がいまも正しい唯一の場所である。古い鍵で暗号化された古い vault のコピー
-// は、これが終わった瞬間に開けなくなるからだ。すべてはジャーナルにステージされる
-// ので、中断されても完了させられる。できないのは巻き戻しであり、Rollback はそれを
-// できるふりをせずに述べる。
+// トランザクションはひとつ。古い暗号文は適用途中の巻き戻しにだけ使う一時的な控えへ
+// 保存し、commit point を越えたら破棄する。commit point より前のクラッシュは全対象を
+// 古い世代へ、以後のクラッシュは全対象を新しい世代へ収束させる。
 //
-// リモートのスナップショットを暗号化し直すのはこの関数の仕事ではない。それはオブジェクト
-// ストアのものであり、このパッケージはそれを import しない。push は呼び出し側が行う。
+// リモートのスナップショットは独立した同期鍵で暗号化されているため、マスターパスワード
+// の変更とは無関係である。この関数はローカルの vault、同期設定、世代バックアップだけを
+// 再暗号化する。
 func (s *Service) ChangeMasterPassword(current, next string) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -1016,22 +1093,20 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 		s.mu.Unlock()
 		return ErrLocked
 	}
-	previous, err := vault.Rekey(next)
+	candidate := vault.clone()
+	previous, err := candidate.Rekey(next)
 	if err != nil {
 		s.mu.Unlock()
 		return err
 	}
-	// ここから先、vault は新しい鍵を保持する。したがって、これが暗号化するものは
-	// 新しい鍵で暗号化され、これ以前に暗号化されたものは古い鍵で開かれる。
-	changes, buildErr := s.reSealed(vault, previous)
+	// 稼働中の vault は commit point まで古い鍵のまま保つ。候補だけが新しい鍵で
+	// 暗号化し、失敗経路でプロセス内状態を戻す必要そのものをなくす。
+	changes, buildErr := s.reSealed(candidate, previous)
 	if buildErr != nil {
-		// 古い鍵を戻す。何も書かれていないので、メモリ上の vault はディスク上の
-		// vault と一致し続けなければならない。
-		vault.key = previous
 		s.mu.Unlock()
 		return buildErr
 	}
-	sealed, sealErr := vault.Seal()
+	sealed, sealErr := candidate.Seal()
 	s.mu.Unlock()
 	if sealErr != nil {
 		return sealErr
@@ -1042,19 +1117,17 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 		return readErr
 	}
 	changes = append(changes, storage.Change{
-		Path: s.path(), Contents: sealed, SkipBackup: true,
+		Path: s.path(), Contents: sealed,
 		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(previousVault)},
 	})
-	if _, err := s.transactions.Commit(storage.Request{
+	if _, err := s.transactions.CommitAtomicDiscardBackups(storage.Request{
 		Operation: "secret.rekey",
 		Changes:   changes,
 	}); err != nil {
-		s.mu.Lock()
-		vault.key = previous
-		s.mu.Unlock()
 		return err
 	}
 	s.mu.Lock()
+	s.vault = candidate
 	s.baseline = slices.Clone(sealed)
 	s.mu.Unlock()
 	return nil
@@ -1079,7 +1152,7 @@ func (s *Service) reSealed(vault *Vault, previous envelope.Key) ([]storage.Chang
 			return nil, sealErr
 		}
 		changes = append(changes, storage.Change{
-			Path: s.settingsPath(), Contents: resealed, SkipBackup: true,
+			Path: s.settingsPath(), Contents: resealed,
 			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(settings)},
 		})
 	case errors.Is(err, fs.ErrNotExist):
@@ -1104,17 +1177,17 @@ func (s *Service) reSealed(vault *Vault, previous envelope.Key) ([]storage.Chang
 		}
 		plaintext, openErr := previous.Open(body)
 		if openErr != nil {
-			// バックアップがそもそも暗号化されるようになる前に書かれたものは、この
-			// 関数が変換すべきものではない。そのひとつのために変更全体を拒むのは、
-			// そのまま残すより悪い。
-			return nil
+			// 現行形式のバックアップを一件でも開けないなら、鍵を替えてはならない。
+			// 破損と旧形式は安全に区別できず、無視して進むと旧鍵を失った時点で
+			// その世代だけが永久に復元不能になる。
+			return openErr
 		}
 		resealed, sealErr := vault.SealBytes(plaintext)
 		if sealErr != nil {
 			return sealErr
 		}
 		changes = append(changes, storage.Change{
-			Path: path, Contents: resealed, SkipBackup: true,
+			Path: path, Contents: resealed,
 			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(body)},
 		})
 		return nil
@@ -1152,21 +1225,17 @@ func (s *Service) AdoptTravelDocument(plain []byte) ([]byte, error) {
 	if vault == nil {
 		return nil, ErrLocked
 	}
-	// 読めないものを暗号化しない。暗号化してしまえば、次に開いたときに壊れているのは
-	// 保管庫であり、原因はもうどこにも残っていない。
-	var incoming document
-	if err := json.Unmarshal(plain, &incoming); err != nil {
-		return nil, ErrNotAVault
+	// 現行文書として完全に開けないものを暗号化しない。旧schemaや未知fieldを
+	// そのまま保存する互換経路は持たず、現行の正規形だけを採用する。
+	incoming, err := openDocument(plain, vault.key)
+	if err != nil {
+		return nil, err
 	}
-	if incoming.SchemaVersion > SchemaVersion {
-		return nil, ErrUnsupportedVersion
+	canonical, err := incoming.Document()
+	if err != nil {
+		return nil, err
 	}
-	if incoming.SchemaVersion < 2 {
-		return nil, ErrOldVault
-	}
-	// 受け取ったバイト列をそのまま暗号化する。組み直せば、こちらがまだ知らない
-	// 項目を落とすことになる。
-	return vault.SealBytes(plain)
+	return vault.SealBytes(canonical)
 }
 
 // Reload は、ディスク上の保管庫を読み直す。

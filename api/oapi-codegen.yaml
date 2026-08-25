@@ -4,6 +4,53 @@ generate:
   models: true
 output-options:
   skip-prune: false
+  # Go側はmodelsだけを生成し、operation client/serverは生成しない。既定templateが
+  # models生成にも付加する未使用のParams／JSONRequestBody aliasを空templateで省く。
+  user-templates:
+    param-types.tmpl: ../../api/templates/models-only-operation-types.tmpl
+    request-bodies.tmpl: ../../api/templates/models-only-operation-types.tmpl
+  # 次の HTTP 境界は application/sftp/snippets/workspace のドメイン型を
+  # 明示的に変換して扱う。Go の生成型や operation 別 alias/params は
+  # 使わないため operation ごと除外し、同じ wire shape の型を二重に持たない。
+  # TypeScript の生成はこの Go 専用設定を使わないので、ブラウザ側の契約型は
+  # 引き続き生成される。
+  exclude-operation-ids:
+    - listTerminalBackgrounds
+    - addTerminalBackground
+    - getTerminalBackground
+    - deleteTerminalBackground
+    - listSFTPEntries
+    - createSFTPDirectory
+    - readSFTPText
+    - saveSFTPText
+    - downloadSFTPFile
+    - downloadSFTPDirectoryArchive
+    - listSFTPTransferJobs
+    - createSFTPTransferJob
+    - updateSFTPTransferJob
+    - checkpointSFTPDownload
+    - startSFTPResumableUpload
+    - appendSFTPResumableUpload
+    - cancelSFTPResumableUpload
+    - completeSFTPResumableUpload
+    - renameSFTPEntry
+    - deleteSFTPEntry
+    - chmodSFTPEntry
+    - listTerminalWorkspaces
+    - createTerminalWorkspace
+    - getTerminalWorkspace
+    - updateTerminalWorkspace
+    - deleteTerminalWorkspace
+    - restoreTerminalWorkspace
+    - listSnippets
+    - createSnippet
+    - updateSnippet
+    - deleteSnippet
+    - setStartupSnippet
+    - previewSnippetExecution
+    - executeSnippet
+    - getSnippetJob
+    - cancelSnippetJob
   # 次の型は internal/application で定義する。重複生成すると optional の表現や
   # 名前付き型の制約が失われるため、生成対象から除外する。OpenAPI との整合性は
   # internal/acceptance/contract_drift_test.go で検証する。
@@ -28,3 +75,18 @@ output-options:
     - SavePreview
     - SaveResult
     - Source
+    # workspace operation を Go 生成から外しても、再帰 schema は generator の prune
+    # 後に残るため明示的に除外する。実際の型は internal/workspace にある。
+    - WorkspaceNode
+    - WorkspacePane
+    - WorkspaceSplit
+    # application/httpserverの手書き型だけを使う現行config wire shape。
+    - EditRequest
+    - EmbeddedTerminal
+    - FieldEdit
+    - GroupMetadata
+    - HistoryEntry
+    - HistoryList
+    - HostMetadata
+    - Metadata
+    - Setting

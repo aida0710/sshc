@@ -101,12 +101,8 @@ test("lists generated keys and reveals one only after an explicit confirmation",
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(page.locator("body")).not.toContainText("BEGIN OPENSSH PRIVATE KEY");
 
-  expect(
-    await page.evaluate(() => ({
-      local: window.localStorage.length,
-      session: window.sessionStorage.length,
-    })),
-  ).toEqual({ local: 0, session: 0 });
+  expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual([]);
+  expect(await page.evaluate(() => Object.keys(window.sessionStorage))).toEqual(["sshc.session.csrf"]);
   expect(await page.evaluate(() => document.cookie)).toBe("");
 });
 

@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"io"
 	"testing"
@@ -91,10 +92,10 @@ func (r *countingReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestRenewCSRFIssuesAWorkingTokenAndRetiresTheOld(t *testing.T) {
+func TestRenewCSRFIssuesAWorkingTokenWithoutDisconnectingAnotherTab(t *testing.T) {
 	// 変動する乱数源。定数の乱数源ではすべてのトークンが同一になり、古いトークンを
 	// そのまま返す実装でもこのテストが通ってしまう。
-	manager, bootstrap, err := NewManager(&countingReader{})
+	manager, bootstrap, err := NewManager(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +104,7 @@ func TestRenewCSRFIssuesAWorkingTokenAndRetiresTheOld(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	renewed, ok := manager.RenewCSRF(credentials.SessionID)
+	renewed, ok := manager.RenewCSRF(credentials.SessionID, credentials.CSRFToken)
 	if !ok || renewed == "" {
 		t.Fatalf("RenewCSRF = %q, %v", renewed, ok)
 	}
@@ -113,8 +114,8 @@ func TestRenewCSRFIssuesAWorkingTokenAndRetiresTheOld(t *testing.T) {
 	if !manager.VerifyCSRF(credentials.SessionID, renewed) {
 		t.Error("the renewed token does not verify")
 	}
-	if manager.VerifyCSRF(credentials.SessionID, credentials.CSRFToken) {
-		t.Error("the retired token still verifies")
+	if !manager.VerifyCSRF(credentials.SessionID, credentials.CSRFToken) {
+		t.Error("renewal disconnected another tab holding the previous token")
 	}
 }
 
@@ -124,8 +125,37 @@ func TestRenewCSRFRefusesASessionThatIsNotThere(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, ok := manager.RenewCSRF("not a session"); ok {
+	if _, ok := manager.RenewCSRF("not a session", "not a token"); ok {
 		t.Error("RenewCSRF answered for a session that does not exist")
+	}
+}
+
+func TestRenewCSRFRequiresAnExistingTokenAndBoundsTabTokens(t *testing.T) {
+	manager, bootstrap, err := NewManager(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, err := manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := manager.RenewCSRF(credentials.SessionID, "cookie-only attacker"); ok {
+		t.Fatal("renewal accepted a token that was never issued")
+	}
+
+	current := credentials.CSRFToken
+	issued := []string{current}
+	for range MaxCSRFTokensPerSession {
+		current, _ = manager.RenewCSRF(credentials.SessionID, current)
+		issued = append(issued, current)
+	}
+	if manager.VerifyCSRF(credentials.SessionID, issued[0]) {
+		t.Fatal("the oldest token survived beyond the per-session bound")
+	}
+	for _, value := range issued[1:] {
+		if !manager.VerifyCSRF(credentials.SessionID, value) {
+			t.Fatal("a token inside the bounded tab window was retired")
+		}
 	}
 }
 

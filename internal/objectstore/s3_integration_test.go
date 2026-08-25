@@ -59,9 +59,17 @@ func integrationClient(t *testing.T) objectstore.Client {
 
 // uniqueKey は、このクライアントが持たない delete 動詞を必要とせずに、実行どうしを
 // 独立に保つ。テストバイナリ自身の pid とテスト名があれば足りる。
-func uniqueKey(t *testing.T) string {
+func uniqueKey(t *testing.T, client objectstore.Client) string {
 	t.Helper()
-	return "integration/" + t.Name() + "/" + time.Now().UTC().Format("20060102T150405.000000000")
+	key := "sshc-audit/objectstore/" + t.Name() + "/" + time.Now().UTC().Format("20060102T150405.000000000")
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := client.Delete(cleanupCtx, key); err != nil {
+			t.Errorf("cleanup %q = %v", key, err)
+		}
+	})
+	return key
 }
 
 func TestAgainstARealServerTheSignatureIsAccepted(t *testing.T) {
@@ -69,7 +77,7 @@ func TestAgainstARealServerTheSignatureIsAccepted(t *testing.T) {
 	// ヘッダーの集合か、ペイロードのハッシュが、どの単体テストにも見えない形で
 	// 誤っている。単体テストはこのクライアントを自分自身と比べているだけだからだ。
 	client := integrationClient(t)
-	key := uniqueKey(t)
+	key := uniqueKey(t, client)
 
 	etag, err := client.Put(context.Background(), key, []byte("hello"), "", "*")
 	if err != nil {
@@ -92,7 +100,7 @@ func TestAgainstARealServerIfNoneMatchRefusesASecondCreate(t *testing.T) {
 	// これは最初の書き込みの防護である。一度も同期していないマシンが、他のマシンが
 	// すでに作ったスナップショットを置き換えられてはならない。
 	client := integrationClient(t)
-	key := uniqueKey(t)
+	key := uniqueKey(t, client)
 
 	if _, err := client.Put(context.Background(), key, []byte("first"), "", "*"); err != nil {
 		t.Fatalf("the first PUT = %v", err)
@@ -116,7 +124,7 @@ func TestAgainstARealServerIfMatchRefusesAStaleWrite(t *testing.T) {
 	// 性質でもある。遅れをとったマシンは、先を行っているマシンを踏み潰すことが
 	// できない。
 	client := integrationClient(t)
-	key := uniqueKey(t)
+	key := uniqueKey(t, client)
 
 	first, err := client.Put(context.Background(), key, []byte("one"), "", "*")
 	if err != nil {
@@ -148,7 +156,7 @@ func TestAgainstARealServerIfMatchRefusesAStaleWrite(t *testing.T) {
 
 func TestAgainstARealServerHeadReturnsTheSameETagAsGet(t *testing.T) {
 	client := integrationClient(t)
-	key := uniqueKey(t)
+	key := uniqueKey(t, client)
 
 	written, err := client.Put(context.Background(), key, []byte("x"), "", "*")
 	if err != nil {
@@ -170,7 +178,20 @@ func TestAgainstARealServerHeadReturnsTheSameETagAsGet(t *testing.T) {
 func TestAgainstARealServerAMissingObjectIsNotFound(t *testing.T) {
 	client := integrationClient(t)
 
-	if _, err := client.Get(context.Background(), uniqueKey(t)); !errors.Is(err, objectstore.ErrNotFound) {
+	if _, err := client.Get(context.Background(), uniqueKey(t, client)); !errors.Is(err, objectstore.ErrNotFound) {
 		t.Fatalf("GET of a missing object = %v, want ErrNotFound", err)
+	}
+}
+
+// TestAgainstARealServerAuditPrefixIsEmpty is run explicitly after the real
+// bucket suite. It verifies cleanup without listing or touching production keys.
+func TestAgainstARealServerAuditPrefixIsEmpty(t *testing.T) {
+	client := integrationClient(t)
+	objects, truncated, err := client.ListNewest(context.Background(), "sshc-audit/objectstore/", 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || len(objects) != 0 {
+		t.Fatalf("isolated objectstore audit prefix is not empty: count=%d truncated=%v", len(objects), truncated)
 	}
 }

@@ -38,7 +38,7 @@ func newSSHParts(
 	hosts *knownhosts.Service,
 	home string,
 	passphrase func(absolute string) (string, bool),
-	password func(alias string) (string, bool),
+	password func(target sshclient.Target) (string, bool),
 ) sshParts {
 	return sshParts{
 		dialer: sshclient.Dialer{
@@ -163,12 +163,12 @@ func storedPassphrase(passwords *secret.Service, root string) func(string) (stri
 }
 
 // storedPassword は、alias について保存されたアカウントパスワードを返す。
-func storedPassword(passwords *secret.Service) func(string) (string, bool) {
+func storedPassword(passwords *secret.Service) func(sshclient.Target) (string, bool) {
 	if passwords == nil {
 		return nil
 	}
-	return func(alias string) (string, bool) {
-		password := passwords.PasswordFor(alias)
+	return func(target sshclient.Target) (string, bool) {
+		password := passwords.BoundPasswordFor(target.Alias, target.AuthenticationBinding())
 		return password, password != ""
 	}
 }
@@ -210,7 +210,7 @@ type CLIConnection struct{ parts sshParts }
 func NewCLIConnection(
 	home string,
 	passphrase func(relativePath string) (string, bool),
-	password func(alias string) (string, bool),
+	password func(target sshclient.Target) (string, bool),
 ) (CLIConnection, error) {
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {
