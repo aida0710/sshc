@@ -11,6 +11,8 @@ import (
 	"sshc/internal/platform/windowsacl"
 )
 
+var afterLockDirectoryOpen func()
+
 // lockedByteCount は 1 である。ロックされた範囲そのものは読まれない。必要なのは
 // 「誰かが握っている」という OS の事実だけであり、ファイルの中身ではない。
 const lockedByteCount = 1
@@ -22,10 +24,20 @@ const lockedByteCount = 1
 // 通す。ロックファイルは秘密を持たないが engine 所有権の証拠であり、別のユーザーが
 // 書けるロックは所有の直列化そのものを歪められる。
 func acquire(path string) (func() error, error) {
-	if err := windowsacl.EnsureDirectory(filepath.Dir(path)); err != nil {
+	directory, err := windowsacl.OpenPrivateDirectory(filepath.Dir(path))
+	if err != nil {
 		return nil, err
 	}
-	file, err := windowsacl.OpenOrCreateFile(path)
+	closeDirectory := true
+	defer func() {
+		if closeDirectory {
+			_ = directory.Close()
+		}
+	}()
+	if afterLockDirectoryOpen != nil {
+		afterLockDirectoryOpen()
+	}
+	file, err := windowsacl.OpenOrCreateFileAt(directory, filepath.Base(path))
 	if err != nil {
 		// 共有違反は ErrRunning にしない。エンジンの開き方は常に
 		// FILE_SHARE_READ|WRITE|DELETE なので、エンジン同士がこれを起動することは
@@ -49,7 +61,8 @@ func acquire(path string) (func() error, error) {
 		}
 		return nil, errors.Join(lockErr, closeErr)
 	}
-	return newRelease(file, func() error {
+	closeDirectory = false
+	return newReleaseWithDirectory(file, directory, func() error {
 		return windows.UnlockFileEx(handle, 0, lockedByteCount, 0, overlapped)
 	}), nil
 }

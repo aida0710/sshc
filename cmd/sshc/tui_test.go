@@ -134,7 +134,7 @@ func TestTUILoadsConcreteHostsAndPutsFavouritesFirst(t *testing.T) {
 		0o600); err != nil {
 		t.Fatal(err)
 	}
-	metadata := `{"schemaVersion":2,"terminal":"terminal","hosts":[` +
+	metadata := `{"schemaVersion":3,"hosts":[` +
 		`{"identity":{"path":"config","alias":"bastion"},"favourite":true,"tags":["eu"]}]}`
 	acltest.WritePrivateFile(t, filepath.Join(ssh, "sshc", "metadata.json"), []byte(metadata))
 	hosts, err := loadTUIHosts(home)

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -21,6 +22,177 @@ type Service struct {
 	Open OpenRemote
 	// TemporaryPath はテスト時に差し替える。本番では対象と同じディレクトリへ予測不能な名前を作る。
 	TemporaryPath func(target string) (string, error)
+}
+
+const (
+	maxArchiveEntries = 10_000
+	maxArchiveDepth   = 64
+	maxArchiveBytes   = int64(1 << 30)
+)
+
+type archiveBudget struct {
+	entries int
+	bytes   int64
+}
+
+// PreparedDownload is an immutable local spool of one remote-file read. Its
+// revision hashes the exact bytes that will be sent, rather than SFTP v3's
+// second-resolution metadata. This prevents equal-size, same-mtime remote
+// replacements from being joined to an older downloaded prefix.
+type PreparedDownload struct {
+	file     *os.File
+	name     string
+	remove   bool
+	lease    *preparedSpoolLease
+	Size     int64
+	Revision string
+}
+
+func (download *PreparedDownload) Close() error {
+	if download == nil || download.file == nil {
+		return nil
+	}
+	err := download.file.Close()
+	var removeErr error
+	if download.remove {
+		removeErr = os.Remove(download.name)
+	} else if download.lease != nil {
+		download.lease.release()
+	}
+	download.file = nil
+	return errors.Join(err, removeErr)
+}
+
+type boundedArchiveWriter struct {
+	destination io.Writer
+	remaining   int64
+}
+
+func (writer *boundedArchiveWriter) Write(contents []byte) (int, error) {
+	if int64(len(contents)) > writer.remaining {
+		return 0, ErrTransferTooLarge
+	}
+	written, err := writer.destination.Write(contents)
+	writer.remaining -= int64(written)
+	return written, err
+}
+
+func (s Service) prepareArchive(ctx context.Context, alias, remotePath, temporaryDirectory string, maxBytes int64) (_ *PreparedDownload, resultErr error) {
+	if maxBytes <= 0 {
+		return nil, ErrInvalidTransfer
+	}
+	temporary, err := os.CreateTemp(temporaryDirectory, "archive-*.part")
+	if err != nil {
+		return nil, err
+	}
+	prepared := &PreparedDownload{file: temporary, name: temporary.Name(), remove: true}
+	defer func() {
+		if resultErr != nil {
+			_ = prepared.Close()
+		}
+	}()
+	hash := sha256.New()
+	destination := &boundedArchiveWriter{destination: io.MultiWriter(temporary, hash), remaining: maxBytes}
+	if _, err := s.DownloadArchive(ctx, alias, remotePath, destination); err != nil {
+		return nil, err
+	}
+	if err := temporary.Sync(); err != nil {
+		return nil, err
+	}
+	info, err := temporary.Stat()
+	if err != nil {
+		return nil, err
+	}
+	prepared.Size = info.Size()
+	prepared.Revision = "content-sha256:" + hex.EncodeToString(hash.Sum(nil))
+	return prepared, nil
+}
+
+func (download *PreparedDownload) WriteFrom(ctx context.Context, offset int64, destination io.Writer) (int64, error) {
+	if download == nil || download.file == nil || offset < 0 || offset > download.Size {
+		return 0, ErrOffsetMismatch
+	}
+	if _, err := download.file.Seek(offset, io.SeekStart); err != nil {
+		return 0, err
+	}
+	return copyContext(ctx, destination, io.LimitReader(download.file, download.Size-offset), 0)
+}
+
+func (s Service) PrepareDownload(ctx context.Context, alias, remotePath string) (_ *PreparedDownload, resultErr error) {
+	return s.prepareDownload(ctx, alias, remotePath, "", nil)
+}
+
+func (s Service) prepareDownload(ctx context.Context, alias, remotePath, temporaryDirectory string, reserve func(int64) error) (_ *PreparedDownload, resultErr error) {
+	cleaned, err := cleanPath(remotePath, false)
+	if err != nil {
+		return nil, err
+	}
+	remote, err := s.open(ctx, alias)
+	if err != nil {
+		return nil, err
+	}
+	defer remote.Close()
+	before, err := remote.Lstat(cleaned)
+	if err != nil {
+		return nil, err
+	}
+	if !before.Mode().IsRegular() {
+		return nil, ErrNotRegularFile
+	}
+	if before.Size() < 0 || before.Size() > maxArchiveBytes {
+		return nil, ErrTransferTooLarge
+	}
+	// Reserve the complete known size before opening or creating a spool. This
+	// makes the process-wide disk quota a hard bound even with concurrent jobs.
+	if reserve != nil {
+		if err := reserve(before.Size()); err != nil {
+			return nil, err
+		}
+	}
+	source, err := remote.Open(cleaned)
+	if err != nil {
+		return nil, err
+	}
+	defer source.Close()
+	temporary, err := os.CreateTemp(temporaryDirectory, "download-*.part")
+	if err != nil {
+		return nil, err
+	}
+	prepared := &PreparedDownload{file: temporary, name: temporary.Name(), remove: true}
+	defer func() {
+		if resultErr != nil {
+			_ = prepared.Close()
+		}
+	}()
+	hash := sha256.New()
+	// The manager reserved exactly before.Size() bytes. Limit the open handle to
+	// that amount and probe one extra byte without writing it, so a growing
+	// remote file can never make the disk spool exceed the reservation.
+	written, err := copyContext(ctx, io.MultiWriter(temporary, hash), io.LimitReader(source, before.Size()), 0)
+	if err != nil {
+		return nil, err
+	}
+	var extra [1]byte
+	extraBytes, extraErr := source.Read(extra[:])
+	if extraBytes != 0 {
+		return nil, ErrConflict
+	}
+	if extraErr != nil && !errors.Is(extraErr, io.EOF) {
+		return nil, extraErr
+	}
+	after, err := remote.Lstat(cleaned)
+	if err != nil {
+		return nil, err
+	}
+	if written != before.Size() || metadataRevision(before) != metadataRevision(after) {
+		return nil, ErrConflict
+	}
+	if err := temporary.Sync(); err != nil {
+		return nil, err
+	}
+	prepared.Size = written
+	prepared.Revision = "content-sha256:" + hex.EncodeToString(hash.Sum(nil))
+	return prepared, nil
 }
 
 func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, error) {
@@ -141,56 +313,6 @@ func (s Service) SaveText(
 	return readText(ctx, remote, cleaned)
 }
 
-func (s Service) Download(ctx context.Context, alias, remotePath string, destination io.Writer) (Transfer, error) {
-	return s.DownloadFrom(ctx, alias, remotePath, 0, destination)
-}
-
-// DownloadFrom resumes a regular-file download at offset. SFTP files support Seek;
-// the fallback discard keeps the Remote test boundary compatible with simpler readers.
-func (s Service) DownloadFrom(ctx context.Context, alias, remotePath string, offset int64, destination io.Writer) (Transfer, error) {
-	cleaned, err := cleanPath(remotePath, false)
-	if err != nil {
-		return Transfer{}, err
-	}
-	if offset < 0 {
-		return Transfer{}, ErrOffsetMismatch
-	}
-	remote, err := s.open(ctx, alias)
-	if err != nil {
-		return Transfer{}, err
-	}
-	defer remote.Close()
-	info, err := remote.Lstat(cleaned)
-	if err != nil {
-		return Transfer{}, err
-	}
-	if !info.Mode().IsRegular() {
-		return Transfer{}, ErrNotRegularFile
-	}
-	if offset > info.Size() {
-		return Transfer{}, ErrOffsetMismatch
-	}
-	file, err := remote.Open(cleaned)
-	if err != nil {
-		return Transfer{}, err
-	}
-	defer file.Close()
-	if offset > 0 {
-		if seeker, ok := file.(io.Seeker); ok {
-			if _, err := seeker.Seek(offset, io.SeekStart); err != nil {
-				return Transfer{}, err
-			}
-		} else if _, err := io.CopyN(io.Discard, &contextReader{ctx: ctx, reader: file}, offset); err != nil {
-			return Transfer{}, err
-		}
-	}
-	written, err := copyContext(ctx, destination, file, 0)
-	if err != nil {
-		return Transfer{}, err
-	}
-	return Transfer{Path: cleaned, Bytes: written, Revision: metadataRevision(info)}, nil
-}
-
 // DownloadArchive streams a directory as a ZIP without following symlinks.
 // Symlinks become regular text entries containing the link target so extraction cannot escape via a link.
 func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, destination io.Writer) (Transfer, error) {
@@ -216,7 +338,8 @@ func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, 
 	}
 	archive := zip.NewWriter(destination)
 	var written int64
-	if err := archiveDirectory(ctx, archive, remote, cleaned, rootName, &written); err != nil {
+	budget := &archiveBudget{entries: 1}
+	if err := archiveDirectory(ctx, archive, remote, cleaned, rootName, 1, budget, &written); err != nil {
 		_ = archive.Close()
 		return Transfer{}, err
 	}
@@ -226,7 +349,10 @@ func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, 
 	return Transfer{Path: cleaned, Bytes: written, Revision: metadataRevision(info)}, nil
 }
 
-func archiveDirectory(ctx context.Context, archive *zip.Writer, remote Remote, directory, archivePath string, written *int64) error {
+func archiveDirectory(
+	ctx context.Context, archive *zip.Writer, remote Remote, directory, archivePath string,
+	depth int, budget *archiveBudget, written *int64,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -244,14 +370,24 @@ func archiveDirectory(ctx context.Context, archive *zip.Writer, remote Remote, d
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if isUploadPartName(info.Name()) {
+			continue
+		}
 		if !validArchiveName(info.Name()) {
 			return ErrInvalidPath
+		}
+		budget.entries++
+		if budget.entries > maxArchiveEntries {
+			return ErrTransferTooLarge
 		}
 		remoteChild := path.Join(directory, info.Name())
 		archiveChild := path.Join(archivePath, info.Name())
 		switch {
 		case info.IsDir():
-			if err := archiveDirectory(ctx, archive, remote, remoteChild, archiveChild, written); err != nil {
+			if depth >= maxArchiveDepth {
+				return ErrTransferTooLarge
+			}
+			if err := archiveDirectory(ctx, archive, remote, remoteChild, archiveChild, depth+1, budget, written); err != nil {
 				return err
 			}
 		case info.Mode()&fs.ModeSymlink != 0:
@@ -259,6 +395,10 @@ func archiveDirectory(ctx context.Context, archive *zip.Writer, remote Remote, d
 			if err != nil {
 				return err
 			}
+			if int64(len(target)) > maxArchiveBytes-budget.bytes {
+				return ErrTransferTooLarge
+			}
+			budget.bytes += int64(len(target))
 			// Materialize the target as a regular text entry. Creating an actual
 			// symlink in an archive can escape the extraction directory.
 			header := &zip.FileHeader{Name: archiveChild, Method: zip.Store}
@@ -273,6 +413,10 @@ func archiveDirectory(ctx context.Context, archive *zip.Writer, remote Remote, d
 				return err
 			}
 		case info.Mode().IsRegular():
+			available := maxArchiveBytes - budget.bytes
+			if info.Size() < 0 || info.Size() > available {
+				return ErrTransferTooLarge
+			}
 			header, err := zip.FileInfoHeader(info)
 			if err != nil {
 				return err
@@ -286,7 +430,7 @@ func archiveDirectory(ctx context.Context, archive *zip.Writer, remote Remote, d
 			if err != nil {
 				return err
 			}
-			count, copyErr := copyContext(ctx, entry, file, 0)
+			count, copyErr := copyContext(ctx, entry, io.LimitReader(file, available+1), 0)
 			closeErr := file.Close()
 			*written += count
 			if copyErr != nil {
@@ -295,6 +439,13 @@ func archiveDirectory(ctx context.Context, archive *zip.Writer, remote Remote, d
 			if closeErr != nil {
 				return closeErr
 			}
+			if count > available {
+				return ErrTransferTooLarge
+			}
+			if count != info.Size() {
+				return ErrConflict
+			}
+			budget.bytes += count
 		}
 	}
 	return nil
@@ -302,74 +453,6 @@ func archiveDirectory(ctx context.Context, archive *zip.Writer, remote Remote, d
 
 func validArchiveName(name string) bool {
 	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\\\x00")
-}
-
-func (s Service) Upload(
-	ctx context.Context, alias, remotePath string, source io.Reader, options UploadOptions,
-) (Transfer, error) {
-	cleaned, err := cleanPath(remotePath, false)
-	if err != nil {
-		return Transfer{}, err
-	}
-	if options.MaxBytes < 0 {
-		return Transfer{}, ErrTransferTooLarge
-	}
-	remote, err := s.open(ctx, alias)
-	if err != nil {
-		return Transfer{}, err
-	}
-	defer remote.Close()
-
-	mode := options.Mode.Perm()
-	info, statErr := remote.Lstat(cleaned)
-	switch {
-	case statErr == nil:
-		if !info.Mode().IsRegular() {
-			return Transfer{}, ErrNotRegularFile
-		}
-		if !options.Overwrite {
-			return Transfer{}, ErrAlreadyExists
-		}
-		if options.ExpectedRevision != "" && metadataRevision(info) != options.ExpectedRevision {
-			return Transfer{}, ErrConflict
-		}
-		mode = info.Mode().Perm()
-	case !errors.Is(statErr, fs.ErrNotExist):
-		return Transfer{}, statErr
-	case options.ExpectedRevision != "":
-		return Transfer{}, ErrConflict
-	}
-	if mode == 0 {
-		mode = 0o600
-	}
-	var verify func() error
-	if statErr == nil && options.ExpectedRevision != "" {
-		verify = func() error {
-			latest, err := remote.Lstat(cleaned)
-			if err != nil || metadataRevision(latest) != options.ExpectedRevision {
-				return ErrConflict
-			}
-			return nil
-		}
-	} else if errors.Is(statErr, fs.ErrNotExist) {
-		verify = func() error {
-			if _, err := remote.Lstat(cleaned); errors.Is(err, fs.ErrNotExist) {
-				return nil
-			} else if err != nil {
-				return err
-			}
-			return ErrAlreadyExists
-		}
-	}
-	written, err := s.replace(ctx, remote, cleaned, source, mode, options.MaxBytes, verify)
-	if err != nil {
-		return Transfer{}, err
-	}
-	updated, err := remote.Lstat(cleaned)
-	if err != nil {
-		return Transfer{}, err
-	}
-	return Transfer{Path: cleaned, Bytes: written, Revision: metadataRevision(updated)}, nil
 }
 
 func (s Service) Mkdir(ctx context.Context, alias, remotePath string) (Entry, error) {
@@ -382,8 +465,15 @@ func (s Service) Mkdir(ctx context.Context, alias, remotePath string) (Entry, er
 		return Entry{}, err
 	}
 	defer remote.Close()
-	if err := remote.Mkdir(cleaned); err != nil {
-		return Entry{}, err
+	if mkdirErr := remote.Mkdir(cleaned); mkdirErr != nil {
+		info, statErr := remote.Lstat(cleaned)
+		if statErr != nil {
+			return Entry{}, mkdirErr
+		}
+		if !info.IsDir() {
+			return Entry{}, ErrAlreadyExists
+		}
+		return entryFrom(path.Dir(cleaned), namedInfo{FileInfo: info, name: path.Base(cleaned)}), nil
 	}
 	info, err := remote.Lstat(cleaned)
 	if err != nil {

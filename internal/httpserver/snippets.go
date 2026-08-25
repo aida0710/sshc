@@ -29,6 +29,19 @@ type snippetLibrary struct {
 	Startup  []snippets.Startup `json:"startup"`
 }
 
+type startupSnippetRequest struct {
+	SnippetID string            `json:"snippetId"`
+	Inputs    map[string]string `json:"inputs"`
+}
+
+type snippetPreviewResponse struct {
+	SnippetID       string                   `json:"snippetId"`
+	Evidence        string                   `json:"evidence"`
+	Targets         []snippets.TargetPreview `json:"targets"`
+	ActionToken     string                   `json:"actionToken"`
+	ActionExpiresAt string                   `json:"actionExpiresAt"`
+}
+
 func registerSnippetRoutes(engine *echo.Echo, handlers SnippetHandlers) {
 	engine.GET("/api/v1/snippets", handlers.List)
 	engine.POST("/api/v1/snippets", handlers.Create)
@@ -109,14 +122,11 @@ func (h SnippetHandlers) Delete(c *echo.Context) error {
 	if err := h.Service.Delete(c.Param("id")); err != nil {
 		return snippetProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, map[string]bool{"changed": true})
+	return c.JSON(http.StatusOK, changedResponse{Changed: true})
 }
 
 func (h SnippetHandlers) SetStartup(c *echo.Context) error {
-	var request struct {
-		SnippetID string            `json:"snippetId"`
-		Inputs    map[string]string `json:"inputs"`
-	}
+	var request startupSnippetRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -143,11 +153,10 @@ func (h SnippetHandlers) Preview(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, struct {
-		snippets.Preview
-		ActionToken     string `json:"actionToken"`
-		ActionExpiresAt string `json:"actionExpiresAt"`
-	}{Preview: preview, ActionToken: issued.Token, ActionExpiresAt: issued.ExpiresAt})
+	return c.JSON(http.StatusOK, snippetPreviewResponse{
+		SnippetID: preview.SnippetID, Evidence: preview.Evidence, Targets: preview.Targets,
+		ActionToken: issued.Token, ActionExpiresAt: issued.ExpiresAt,
+	})
 }
 
 func (h SnippetHandlers) Start(c *echo.Context) error {

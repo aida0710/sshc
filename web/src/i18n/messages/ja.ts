@@ -389,16 +389,15 @@ export const ja = {
   "desktop.closeAll": "接続をすべて閉じる",
   "secrets.changeHeading": "マスターパスワード",
   "secrets.changeNote":
-    "変更すると、vault、同期設定、このマシンの全バックアップを新しいパスワードで再暗号化し、バケットへ最新のスナップショットを再送信します。日付付きの履歴スナップショットは、バケット全体の再取得と再送信が必要になるため、古いパスワードで暗号化されたまま残ります。",
+    "変更すると、ローカルの vault、同期設定、このマシンの全バックアップを新しいパスワードで再暗号化します。リモートスナップショットは別の同期鍵を使うため書き換えません。",
   "secrets.currentMaster": "現在のマスターパスワード",
   "secrets.newMaster": "新しいマスターパスワード",
   "secrets.confirmMaster": "新しいマスターパスワード（確認）",
   "secrets.change": "マスターパスワードを変更",
   "secrets.wrongCurrent": "現在のマスターパスワードが違います。何も変更していません。",
   "secrets.changeFailed": "マスターパスワードを変更できませんでした。",
-  "secrets.changedWithSnapshot": "マスターパスワードを変更しました。vault、ローカルバックアップ、バケットの最新スナップショットは新しいパスワードで暗号化されています。",
-  "secrets.changedWithoutSnapshot":
-    "このマシンのマスターパスワードは変更しましたが、バケットを更新できませんでした（{reason}）。バケット内のスナップショットには古いパスワードが必要です。接続が回復したら再度送信してください。",
+  "secrets.changedMasterLocally":
+    "マスターパスワードを変更しました。ローカルの vault、同期設定、バックアップは新しいパスワードで暗号化されています。リモートスナップショットは書き換えていません。",
   "section.secrets": "秘密",
   "lock.explainNew":
     "マスターパスワードを設定してください。保存済みパスワード、鍵のパスフレーズ、同期設定、sshc が作成するすべてのバックアップを暗号化します。",
@@ -669,7 +668,11 @@ export const ja = {
     "自動同期を停止しました。適用すると、このマシンからファイルが削除されます。「変更を確認」で対象を確認してください。",
   "sync.autoBlockedRemoteMoved":
     "別のマシンがリモートスナップショットを変更したため、送信前に自動同期を停止しました。変更を取得するか、確認したリモートスナップショットを明示的に置き換えてください。",
+  "sync.autoBlockedRemoteDeleted":
+    "以前同期したライブスナップショットがバケットから削除されています。暗黙に再作成または上書きしないよう、自動同期を停止しました。",
   "sync.autoFailedLast": "前回はバケットに接続できませんでした。次回の自動同期で再試行します。",
+  "sync.autoFailedWrongKey": "このマシンの同期鍵ではリモートスナップショットを開けません。同じ世代を自動で再取得しません。",
+  "sync.autoFailedSchema": "リモートスナップショットの形式に対応していません。同じ世代を自動で再取得しません。",
   "sync.autoFailed": "設定を保存できませんでした。",
   "sync.autoNow": "今すぐ同期",
   "sync.autoNowFailed": "その確認を実行できませんでした。",
@@ -703,6 +706,7 @@ export const ja = {
   "sync.historyFailed": "暗号化された世代履歴を読み取れませんでした。",
   "sync.historySummary": "{count}世代・取得 {size}",
   "sync.historyTruncated": "上限内の新しい履歴だけを復号しています。古いobjectは上のバケット一覧に残っています。",
+  "sync.historySkipped": "現行形式または現在の鍵で開けない履歴objectを{count}件スキップしました。",
   "sync.historyTimeline": "世代タイムライン",
   "sync.historyRelation.head": "HEAD",
   "sync.historyRelation.ancestor": "祖先",
@@ -731,6 +735,11 @@ export const ja = {
   "sync.noLocalChanges": "送信するローカル変更はありません。",
   "sync.remoteMoved":
     "別のマシンが最新のスナップショットを変更したため、再送信せず停止しました。先に変更を取得するか、確認したリモートスナップショットを明示的に置き換えてください。",
+  "sync.previewStale": "プレビュー後にリモートのスナップショットが変わりました。もう一度プレビューしてから適用してください。",
+  "sync.remoteDeleted": "適用前にリモートのライブスナップショットが削除されました。バケットの状態を更新してください。",
+  "sync.keyRecoveryRequired": "同期キーの置き換えが中断されました。同じ新しい同期キーをもう一度入力して復旧してください。",
+  "sync.keyRecoveryTargetChange": "中断された同期キーの置き換えを完了してから、バケットまたはパスを変更してください。",
+  "sync.keyHistoryLossConfirm": "過去の履歴スナップショットは以前のキーで暗号化されたままとなり、読み取れなくなることを理解しました。",
   "sync.preview": "変更を確認",
   "sync.pullFailed": "スナップショットを読み取れませんでした。",
   "sync.alreadyMatches": "このワークスペースは既にスナップショットと一致しています。",

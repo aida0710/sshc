@@ -4,8 +4,11 @@
 package secret
 
 import (
+	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"slices"
 	"strings"
@@ -25,7 +28,7 @@ const SettingsPath = "sshc/sync-settings"
 
 // SchemaVersion は、暗号化の内側にある平文文書のバージョン。ヘッダーは envelope
 // 用に自前のバージョンを運ぶ。
-const SchemaVersion = 3
+const SchemaVersion = 4
 
 // envelope のエラーは再エクスポートしてある。vault を扱う呼び出し側が、どの
 // パッケージがそれを暗号化したかを知らずに済むようにするためだ。
@@ -43,10 +46,6 @@ var (
 	// ErrEmptySecret は空のパスワードを拒否する。プロンプト上では、誤ったものと
 	// 区別がつかないからだ。
 	ErrEmptySecret = errors.New("the password is empty")
-	// ErrOldVault は、秘密に名前が付く前の文書を報告する。世界に多くともひとつしか
-	// 存在せず、移行のコードは移行される対象より大きくなるので、拒否したうえで画面が
-	// 最初からやり直すことを提案する。
-	ErrOldVault = errors.New("this vault predates named credentials and cannot be read")
 	// ErrUnknownKind は、どちらでもない名前空間を拒否する。
 	ErrUnknownKind = errors.New("that is not a credential kind")
 	// ErrUnknownCredential は、その名前空間に存在しない名前への参照を拒否する。
@@ -121,6 +120,7 @@ type document struct {
 	KeyPassphrases          map[string]string `json:"keyPassphrases"`
 	DedicatedKeyPassphrases map[string]string `json:"dedicatedKeyPassphrases,omitempty"`
 	Hosts                   map[string]string `json:"hosts"`
+	PasswordBindings        map[string]string `json:"passwordBindings,omitempty"`
 	Keys                    map[string]string `json:"keys"`
 }
 
@@ -134,6 +134,7 @@ type Vault struct {
 	secrets                 map[Kind]map[string]string
 	subjects                map[Kind]map[string]string
 	dedicatedPasswords      map[string]string
+	passwordBindings        map[string]string
 	dedicatedKeyPassphrases map[string]string
 }
 
@@ -152,6 +153,7 @@ func Create(passphrase string) (*Vault, error) {
 	return &Vault{
 		key: key, secrets: secrets, subjects: subjects,
 		dedicatedPasswords:      map[string]string{},
+		passwordBindings:        map[string]string{},
 		dedicatedKeyPassphrases: map[string]string{},
 	}, nil
 }
@@ -177,18 +179,16 @@ func OpenWith(sealed []byte, key envelope.Key) (*Vault, error) {
 
 func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
 	var parsed document
-	if err := json.Unmarshal(plaintext, &parsed); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(plaintext))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&parsed); err != nil {
 		return nil, ErrWrongPassphrase
 	}
-	if parsed.SchemaVersion > SchemaVersion {
-		return nil, ErrUnsupportedVersion
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, ErrWrongPassphrase
 	}
-	// バージョン 1 の文書は、alias ごとにパスワードを持ち、名前をまったく持たな
-	// かった。世界に多くともひとつしか存在せず、そのための移行は移行する対象より
-	// 大きくなるので、暗黙に作り変えるのではなく、画面が「もう一度設定してください」
-	// に変えられるエラーで拒否する。
-	if parsed.SchemaVersion < 2 {
-		return nil, ErrOldVault
+	if parsed.SchemaVersion != SchemaVersion {
+		return nil, ErrUnsupportedVersion
 	}
 	secrets, subjects := newMaps()
 	for kind, stored := range map[Kind]map[string]string{
@@ -218,6 +218,7 @@ func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
 	return &Vault{
 		key: key, secrets: secrets, subjects: subjects,
 		dedicatedPasswords:      dedicatedPasswords,
+		passwordBindings:        maps.Clone(parsed.PasswordBindings),
 		dedicatedKeyPassphrases: dedicatedKeyPassphrases,
 	}, nil
 }
@@ -296,6 +297,9 @@ func (v *Vault) Empty() bool {
 // Document は、同期用に復号済みの vault 文書を返す。
 // 呼び出し側は、この文書を同期鍵で暗号化したアーカイブにだけ格納する。
 func (v *Vault) Document() ([]byte, error) {
+	if v.passwordBindings == nil {
+		v.passwordBindings = map[string]string{}
+	}
 	return json.Marshal(document{
 		SchemaVersion:           SchemaVersion,
 		Passwords:               v.secrets[KindPassword],
@@ -303,6 +307,7 @@ func (v *Vault) Document() ([]byte, error) {
 		KeyPassphrases:          v.secrets[KindKeyPassphrase],
 		DedicatedKeyPassphrases: v.dedicatedKeyPassphrases,
 		Hosts:                   v.subjects[KindPassword],
+		PasswordBindings:        v.passwordBindings,
 		Keys:                    v.subjects[KindKeyPassphrase],
 	})
 }
@@ -338,6 +343,7 @@ func (v *Vault) SetDedicatedPassword(alias, value string) error {
 		return ErrEmptySecret
 	}
 	delete(v.subjects[KindPassword], alias)
+	delete(v.passwordBindings, alias)
 	v.dedicatedPasswords[alias] = value
 	return nil
 }
@@ -346,6 +352,30 @@ func (v *Vault) SetDedicatedPassword(alias, value string) error {
 // alias is already the requested state and is therefore not an error.
 func (v *Vault) RemoveDedicatedPassword(alias string) {
 	delete(v.dedicatedPasswords, alias)
+	delete(v.passwordBindings, alias)
+}
+
+// BindPassword records the resolved authentication destination for one alias.
+func (v *Vault) BindPassword(alias, binding string) error {
+	if err := validate.Alias(alias); err != nil || !validAuthenticationBinding(binding) {
+		return ErrUnsafeName
+	}
+	if _, ok := v.SecretFor(KindPassword, alias); !ok {
+		return ErrUnknownCredential
+	}
+	if v.passwordBindings == nil {
+		v.passwordBindings = map[string]string{}
+	}
+	v.passwordBindings[alias] = binding
+	return nil
+}
+
+func validAuthenticationBinding(binding string) bool {
+	if len(binding) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(binding)
+	return err == nil
 }
 
 // SetDedicatedKeyPassphrase stores an unlock value owned by exactly one private
@@ -388,6 +418,7 @@ func (v *Vault) clone() *Vault {
 	return &Vault{
 		key: v.key, secrets: secrets, subjects: subjects,
 		dedicatedPasswords:      maps.Clone(v.dedicatedPasswords),
+		passwordBindings:        maps.Clone(v.passwordBindings),
 		dedicatedKeyPassphrases: maps.Clone(v.dedicatedKeyPassphrases),
 	}
 }
@@ -454,6 +485,7 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 	}
 	if kind == KindPassword {
 		delete(v.dedicatedPasswords, subject)
+		delete(v.passwordBindings, subject)
 	} else {
 		delete(v.dedicatedKeyPassphrases, subject)
 	}
@@ -464,7 +496,9 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 // Unassign は subject の参照を忘れる。subject がなくてもエラーではない。
 func (v *Vault) Unassign(kind Kind, subject string) {
 	delete(v.subjects[kind], subject)
-	if kind == KindKeyPassphrase {
+	if kind == KindPassword {
+		delete(v.passwordBindings, subject)
+	} else if kind == KindKeyPassphrase {
 		delete(v.dedicatedKeyPassphrases, subject)
 	}
 }
@@ -508,6 +542,16 @@ func (v *Vault) SecretFor(kind Kind, subject string) (string, bool) {
 	return v.Secret(kind, name)
 }
 
+// BoundPasswordFor releases an account password only to the destination that
+// was current when its host assignment was confirmed.
+func (v *Vault) BoundPasswordFor(subject, binding string) (string, bool) {
+	stored, ok := v.passwordBindings[subject]
+	if !ok || stored != binding {
+		return "", false
+	}
+	return v.SecretFor(KindPassword, subject)
+}
+
 // Rename は、subject の参照を新しい名前へ引き継ぐ。ホストの名前変更はこれを
 // しなければならず、さもなければ参照は、誰も尋ねない名前の下に暗黙に孤児に
 // なる。
@@ -520,6 +564,7 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 			delete(v.dedicatedPasswords, from)
 			delete(v.subjects[kind], to)
 			v.dedicatedPasswords[to] = value
+			v.movePasswordBinding(from, to)
 			return nil
 		}
 	}
@@ -545,7 +590,19 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 	}
 	delete(v.subjects[kind], from)
 	v.subjects[kind][to] = name
+	if kind == KindPassword {
+		v.movePasswordBinding(from, to)
+	}
 	return nil
+}
+
+func (v *Vault) movePasswordBinding(from, to string) {
+	binding, ok := v.passwordBindings[from]
+	delete(v.passwordBindings, from)
+	delete(v.passwordBindings, to)
+	if ok {
+		v.passwordBindings[to] = binding
+	}
 }
 
 // RelocateSubjects は複数の subject 名を一つのスナップショットとして移す。

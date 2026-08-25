@@ -378,14 +378,14 @@ func TestPreviewAndSaveRoundTripThroughTheContract(t *testing.T) {
 	}
 
 	history := harness.call(t, http.MethodGet, "/api/v1/history", nil, true, true)
-	var generatedHistory api.HistoryList
+	var servedHistory historyList
 	historyDecoder := json.NewDecoder(bytes.NewReader(history.Body.Bytes()))
 	historyDecoder.DisallowUnknownFields()
-	if err := historyDecoder.Decode(&generatedHistory); err != nil {
+	if err := historyDecoder.Decode(&servedHistory); err != nil {
 		t.Fatalf("history does not match the contract: %v", err)
 	}
-	if len(generatedHistory.Entries) != 1 {
-		t.Fatalf("history entries = %#v", generatedHistory.Entries)
+	if len(servedHistory.Entries) != 1 {
+		t.Fatalf("history entries = %#v", servedHistory.Entries)
 	}
 }
 

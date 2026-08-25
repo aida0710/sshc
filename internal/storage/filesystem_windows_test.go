@@ -53,6 +53,44 @@ func TestOSFileSystemTightensExistingWindowsPrivateState(t *testing.T) {
 	}
 }
 
+func TestWriteAtomicFilePinsWindowsParentBeforeJunctionReplacement(t *testing.T) {
+	base := t.TempDir()
+	parent := filepath.Join(base, "state")
+	original := filepath.Join(base, "state-original")
+	outside := filepath.Join(base, "outside")
+	for _, directory := range []string{parent, outside} {
+		if err := os.Mkdir(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := filepath.Join(parent, "vault")
+	if err := os.WriteFile(target, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := writeAtomicFileNativeWith(target, ".vault-", FilePermission, []byte("sealed"), func() {
+		if err := os.Rename(parent, original); err != nil {
+			t.Fatal(err)
+		}
+		if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", parent, outside).CombinedOutput(); err != nil {
+			t.Fatalf("create junction fixture: %v: %s", err, output)
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(outside, "vault")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("outside target error = %v, want not exist", err)
+	}
+	contents, err := os.ReadFile(filepath.Join(original, "vault"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "sealed" {
+		t.Fatalf("pinned target contents = %q, want sealed", contents)
+	}
+}
+
 func TestWriteTempStopsBeforeContentsAndCleansWhenPrivateCreationFails(t *testing.T) {
 	directory := t.TempDir()
 	want := errors.New("private creation failed")

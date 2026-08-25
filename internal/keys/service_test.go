@@ -56,6 +56,97 @@ func newServiceWithAgent(t *testing.T, agent platform.KeyAgent) (*Service, *stor
 	return service, workspace
 }
 
+func serviceForSharedWorkspace(workspace *storage.Workspace, manager *storage.Manager, clock func() time.Time) *Service {
+	manager.Seal = sealForTest
+	manager.Unseal = unsealForTest
+	return NewService(ServiceOptions{
+		Workspace:    workspace,
+		Transactions: manager,
+		Resolver:     storage.NewResolver(workspace),
+		Catalogue:    CatalogueReader{Toolchain: fakeToolchain{}},
+		Now:          clock,
+		Random:       rand.Reader,
+	})
+}
+
+func TestConcurrentTrashAndPassphraseChangeCannotSplitKeyPair(t *testing.T) {
+	initial, workspace := newTestService(t)
+	generated, err := initial.Generate(GenerateRequest{
+		Algorithm:   AlgorithmEd25519,
+		FileName:    "id_concurrent",
+		Comment:     "concurrency test",
+		Unencrypted: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trashClock := steppingClock(time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC))
+	changeClock := steppingClock(time.Date(2026, 8, 5, 11, 0, 0, 0, time.UTC))
+	trashManager := storage.NewManager(workspace, trashClock, rand.Reader)
+	changeManager := storage.NewManager(workspace, changeClock, rand.Reader)
+	trashService := serviceForSharedWorkspace(workspace, trashManager, trashClock)
+	changeService := serviceForSharedWorkspace(workspace, changeManager, changeClock)
+
+	trashValidated := make(chan struct{})
+	releaseTrash := make(chan struct{})
+	changeValidated := make(chan struct{})
+	trashManager.Validate = func(storage.Request) error {
+		close(trashValidated)
+		<-releaseTrash
+		return nil
+	}
+	changeManager.Validate = func(storage.Request) error {
+		close(changeValidated)
+		return nil
+	}
+
+	trashResult := make(chan error, 1)
+	go func() {
+		_, err := trashService.Trash(generated.ID)
+		trashResult <- err
+	}()
+	<-trashValidated
+
+	changeResult := make(chan error, 1)
+	go func() {
+		_, err := changeService.ChangePassphrase(PassphraseChange{
+			KeyID: generated.ID, Unencrypted: true,
+		})
+		changeResult <- err
+	}()
+
+	select {
+	case <-changeValidated:
+		t.Fatal("passphrase change reached validation while trash commit was in progress")
+	case err := <-changeResult:
+		t.Fatalf("passphrase change returned before trash commit completed: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseTrash)
+	if err := <-trashResult; err != nil {
+		t.Fatalf("trash: %v", err)
+	}
+	if err := <-changeResult; err == nil {
+		t.Fatal("passphrase change unexpectedly recreated the private key after trash")
+	}
+
+	if _, err := os.Stat(filepath.Join(workspace.Root(), generated.RelativePath)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("private key still present after trash: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace.Root(), generated.PublicRelativePath)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("public key still present after trash: %v", err)
+	}
+	entries, err := trashService.ListTrash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || len(entries[0].Files) != 2 {
+		t.Fatalf("trash entries = %#v, want one intact key pair", entries)
+	}
+}
+
 // assertNoKeyMaterialInBackups は世代バックアップのディレクトリを走査し、そこに
 // 平文の秘密鍵を持つファイルがあれば失敗させる。
 //

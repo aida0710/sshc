@@ -86,6 +86,8 @@ describe("apiClient", () => {
 
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(fetcher.mock.calls[1]?.[0]).toBe("/api/v1/session/renew");
+    const renewal = fetcher.mock.calls[1]?.[1] as RequestInit;
+    expect(new Headers(renewal.headers).get("X-SSHC-CSRF")).toBe(oldToken);
     const retry = fetcher.mock.calls[2]?.[1] as RequestInit;
     expect(new Headers(retry.headers).get("X-SSHC-CSRF")).toBe(freshToken);
     expect(retry.method).toBe("POST");

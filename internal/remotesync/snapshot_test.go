@@ -25,7 +25,7 @@ func buildFixture(t *testing.T) ([]byte, map[string][]byte) {
 	contents := map[string][]byte{
 		"config":                    []byte("# Managed by hand\r\nHost bastion\n\tPort 2222   \n"),
 		"connections/work/lon.conf": []byte("Host lon-1\n\tHostName 203.0.113.11\n"),
-		"sshc/metadata.json":        []byte(`{"schemaVersion":2}`),
+		"sshc/metadata.json":        []byte(`{"schemaVersion":3}`),
 		"keys/work/id_ed25519":      []byte("-----BEGIN OPENSSH PRIVATE KEY-----\nnot really\n"),
 	}
 	manifest := remotesync.Manifest{

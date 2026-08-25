@@ -47,8 +47,8 @@ func addSession(t *testing.T, manager *Manager, sessionID string) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	manager.sessions[sha256.Sum256([]byte(sessionID))] = Session{
-		csrfHash: sha256.Sum256([]byte("csrf-" + sessionID)),
-		actions:  make(map[[sha256.Size]byte]actionRecord),
+		csrfHashes: [][sha256.Size]byte{sha256.Sum256([]byte("csrf-" + sessionID))},
+		actions:    make(map[[sha256.Size]byte]actionRecord),
 	}
 }
 

@@ -96,6 +96,31 @@ func TestOSFileSystemWriteTempCreatesPrivateFileInTargetDirectory(t *testing.T) 
 	}
 }
 
+func TestWriteAtomicFileReplacesTargetAndLeavesNoTemporarySibling(t *testing.T) {
+	directory := t.TempDir()
+	target := filepath.Join(directory, "state.json")
+	if err := os.WriteFile(target, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteAtomicFile(OSFileSystem{}, target, ".state-", FilePermission, []byte("new\n")); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "new\n" {
+		t.Fatalf("contents = %q, want new contents", contents)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(target) {
+		t.Fatalf("directory entries = %#v, want only the target", entries)
+	}
+}
+
 func TestOSFileSystemSyncDirAndGlobAreLexical(t *testing.T) {
 	directory := t.TempDir()
 	for _, name := range []string{"20-b.conf", "10-a.conf"} {

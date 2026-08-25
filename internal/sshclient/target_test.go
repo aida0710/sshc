@@ -24,6 +24,46 @@ func valuesFor(entries map[string][]string) effective.Values {
 	return values
 }
 
+func TestAuthenticationBindingCoversDestinationAndJumpRoute(t *testing.T) {
+	base := sshclient.Target{
+		Alias: "edge", HostName: "edge.example", Port: "22", User: "deploy",
+		Strict: "yes", Methods: sshclient.DefaultMethods(),
+		Jump: []sshclient.Target{{
+			Alias: "bastion", HostName: "jump.example", Port: "2222", User: "ops",
+			Strict: "yes", Methods: sshclient.DefaultMethods(),
+		}},
+	}
+	original := base.AuthenticationBinding()
+	if len(original) != 64 {
+		t.Fatalf("binding length = %d, want a SHA-256 hex digest", len(original))
+	}
+
+	tests := map[string]func(*sshclient.Target){
+		"hostname":      func(target *sshclient.Target) { target.HostName = "other.example" },
+		"port":          func(target *sshclient.Target) { target.Port = "2200" },
+		"user":          func(target *sshclient.Target) { target.User = "root" },
+		"proxy command": func(target *sshclient.Target) { target.ProxyCommand = "nc proxy 22" },
+		"jump host":     func(target *sshclient.Target) { target.Jump[0].HostName = "other-jump.example" },
+		"jump user":     func(target *sshclient.Target) { target.Jump[0].User = "root" },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			changed := base
+			changed.Jump = append([]sshclient.Target{}, base.Jump...)
+			mutate(&changed)
+			if got := changed.AuthenticationBinding(); got == original {
+				t.Fatalf("binding did not change: %s", got)
+			}
+		})
+	}
+
+	renamed := base
+	renamed.Alias = "renamed-edge"
+	if got := renamed.AuthenticationBinding(); got != original {
+		t.Fatalf("alias-only rename changed destination binding: %s != %s", got, original)
+	}
+}
+
 func resolverFor(table map[string]map[string][]string) sshclient.Resolver {
 	return func(alias string) (effective.Values, error) {
 		entries, known := table[alias]

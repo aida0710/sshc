@@ -22,7 +22,7 @@ const (
 )
 
 var (
-	ErrMetadataVersion  = errors.New("metadata schema version is newer than this build supports")
+	ErrMetadataVersion  = errors.New("metadata schema version is not supported")
 	ErrMetadataSecret   = errors.New("metadata may not contain key material")
 	ErrMetadataPath     = errors.New("metadata host path must be relative to the ssh directory")
 	ErrMetadataGroup    = errors.New("metadata group definition is invalid")
@@ -153,11 +153,8 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if err := json.Unmarshal(contents, &metadata); err != nil {
 		return Metadata{}, err
 	}
-	if metadata.SchemaVersion > MetadataSchemaVersion {
+	if metadata.SchemaVersion != MetadataSchemaVersion {
 		return Metadata{}, ErrMetadataVersion
-	}
-	if metadata.SchemaVersion == 0 {
-		metadata.SchemaVersion = MetadataSchemaVersion
 	}
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile

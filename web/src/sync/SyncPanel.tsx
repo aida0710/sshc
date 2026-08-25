@@ -66,6 +66,11 @@ const refusals: Record<string, MessageKey> = {
   sync_failed: "sync.unreachable",
   endpoint_must_have_no_path: "sync.endpointPath",
   sync_remote_moved: "sync.remoteMoved",
+  sync_remote_deleted: "sync.remoteDeleted",
+  sync_key_recovery_required: "sync.keyRecoveryRequired",
+  sync_key_recovery_target_change: "sync.keyRecoveryTargetChange",
+  sync_history_key_loss_confirmation_required: "sync.keyHistoryLossConfirm",
+  preview_stale: "sync.previewStale",
   sync_nothing_to_push: "sync.noLocalChanges",
   sync_commit_message_invalid: "sync.commitMessageInvalid",
 };
@@ -84,6 +89,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [revealed, setRevealed] = useState("");
   const [ownKey, setOwnKey] = useState("");
   const [chooseOwn, setChooseOwn] = useState(false);
+  const [confirmHistoryLoss, setConfirmHistoryLoss] = useState(false);
   const [bucketState, setBucketState] = useState<BucketStatusState>({ phase: "idle" });
   const [historyState, setHistoryState] = useState<HistoryState>({ phase: "idle" });
   const [historyDiff, setHistoryDiff] = useState<SyncHistoryDiff | null>(null);
@@ -476,15 +482,28 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   className={control}
                 />
               ) : null}
+              {status.keyConfigured ? (
+                <label className="flex items-start gap-2 text-sm text-danger">
+                  <input
+                    type="checkbox"
+                    checked={confirmHistoryLoss}
+                    onChange={(event) => setConfirmHistoryLoss(event.target.checked)}
+                  />
+                  <span>{t("sync.keyHistoryLossConfirm")}</span>
+                </label>
+              ) : null}
               <Button
                 kind="primary"
-                disabled={busy || (chooseOwn && ownKey === "")}
+                disabled={busy || (chooseOwn && ownKey === "") || (status.keyConfigured && !confirmHistoryLoss)}
                 onClick={() =>
                   void run(
-                    () => api.setSyncKey(chooseOwn ? ownKey : undefined),
+                    () => status.keyConfigured
+                      ? api.setSyncKey(chooseOwn ? ownKey : undefined, true)
+                      : api.setSyncKey(chooseOwn ? ownKey : undefined),
                     (next) => {
                       setRevealed(chooseOwn ? "" : next.key);
                       setOwnKey("");
+                      setConfirmHistoryLoss(false);
                       setNotice(t("sync.keySaved"));
                       void reload();
                     },
@@ -521,12 +540,20 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   ? t(
                     status.auto.detail === "conflicts"
                       ? "sync.autoBlockedConflicts"
+                      : status.auto.detail === "remote_deleted"
+                        ? "sync.autoBlockedRemoteDeleted"
                       : status.auto.detail === "remote_moved"
                         ? "sync.autoBlockedRemoteMoved"
                         : "sync.autoBlockedRemovals",
                   )
                   : status.auto.phase === "failed"
-                    ? t("sync.autoFailedLast")
+                    ? t(
+                      status.auto.detail === "wrong_passphrase"
+                        ? "sync.autoFailedWrongKey"
+                        : status.auto.detail === "snapshot_schema_unsupported"
+                          ? "sync.autoFailedSchema"
+                          : "sync.autoFailedLast",
+                    )
                     : status.auto.at === undefined || !status.auto.enabled
                       ? t("sync.autoIdle")
                       : t("sync.autoLastRan", { at: status.auto.at })}
@@ -753,6 +780,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 {historyState.value.historyTruncated || historyState.value.downloadTruncated ? (
                   <p className="mt-1 text-xs text-notice-ink">{t("sync.historyTruncated")}</p>
                 ) : null}
+                {historyState.value.skipped > 0 ? (
+                  <p className="mt-1 text-xs text-notice-ink">
+                    {t("sync.historySkipped", { count: historyState.value.skipped })}
+                  </p>
+                ) : null}
 
                 <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
                   <ol className="max-h-80 space-y-2 overflow-auto pr-1" aria-label={t("sync.historyTimeline")}>
@@ -930,7 +962,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             }
             onClick={() =>
               void run(
-                () => api.pullSnapshot(true, resolve, previewHistoryKey),
+                () => api.pullSnapshot(true, resolve, previewHistoryKey, preview),
                 (next) => {
                   setPreview(next);
                   setResultView({ kind: "apply", result: next });

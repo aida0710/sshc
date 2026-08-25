@@ -25,7 +25,7 @@ func TestWindowsPrivateVaultJournalBackupAndSyncStateUsesProtectedDACL(t *testin
 	if err := service.Initialise(passphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Set("server", "password"); err != nil {
+	if err := service.SetBound("server", "password", "abababababababababababababababababababababababababababababababab"); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.SetSyncSettings(secret.SyncSettings{Bucket: "bucket", AccessKeyID: "id", SecretAccessKey: "key"}); err != nil {

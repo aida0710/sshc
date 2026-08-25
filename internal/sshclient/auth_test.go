@@ -322,8 +322,8 @@ func TestAStoredPasswordAnswersWithoutAskingTheUser(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "hunter2"})
 	// 結果を持たない。尋ねられた時点でこの接続は失敗する。
 	prompt := &scriptedPrompter{}
-	auth := sshclient.Auth{Password: func(alias string) (string, bool) {
-		return "hunter2", alias == "bastion"
+	auth := sshclient.Auth{Password: func(target sshclient.Target) (string, bool) {
+		return "hunter2", target.Alias == "bastion"
 	}}
 
 	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
@@ -339,7 +339,7 @@ func TestAStoredPasswordAnswersWithoutAskingTheUser(t *testing.T) {
 func TestAStoredPasswordAnswersASingleHiddenQuestion(t *testing.T) {
 	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Password: ": "hunter2"}})
 	prompt := &scriptedPrompter{}
-	auth := sshclient.Auth{Password: func(string) (string, bool) { return "hunter2", true }}
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) { return "hunter2", true }}
 
 	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
 		t.Fatalf("connect = %v", err)
@@ -356,7 +356,7 @@ func TestAStoredPasswordDoesNotAnswerATwoQuestionChallenge(t *testing.T) {
 		"Password: ": "hunter2", "Verification code: ": "123456",
 	}})
 	prompt := &scriptedPrompter{answers: []string{"one", "two"}}
-	auth := sshclient.Auth{Password: func(string) (string, bool) { return "hunter2", true }}
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) { return "hunter2", true }}
 
 	_ = connect(t, server, targetWith(server), auth, prompt)
 
@@ -370,7 +370,7 @@ func TestAStoredPasswordDoesNotAnswerATwoQuestionChallenge(t *testing.T) {
 func TestAStaleStoredPasswordStillLetsTheUserAnswer(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "hunter2"})
 	prompt := &scriptedPrompter{answers: []string{"hunter2"}}
-	auth := sshclient.Auth{Password: func(string) (string, bool) { return "what it used to be", true }}
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) { return "what it used to be", true }}
 
 	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
 		t.Fatalf("connect = %v", err)

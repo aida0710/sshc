@@ -105,8 +105,13 @@ export type IntegrationsApi = {
   syncBucketStatus(): Promise<SyncBucketStatus>;
   syncHistory(): Promise<SyncHistory>;
   diffSyncHistory(key: string): Promise<SyncHistoryDiff>;
-  pullSnapshot(apply: boolean, resolve?: "local" | "remote", historyKey?: string): Promise<PullResponse>;
-  setSyncKey(key?: string): Promise<SyncKeyResponse>;
+  pullSnapshot(
+    apply: boolean,
+    resolve?: "local" | "remote",
+    historyKey?: string,
+    expected?: Pick<PullResponse, "remoteETag" | "remoteRevision">,
+  ): Promise<PullResponse>;
+  setSyncKey(key?: string, confirmHistoryLoss?: boolean): Promise<SyncKeyResponse>;
   setAutoSync(enabled: boolean): Promise<SyncStatus>;
   syncNow(): Promise<SyncStatus>;
 };
@@ -494,6 +499,7 @@ function validateSyncHistory(value: unknown): SyncHistory {
   asBoolean(record.historyTruncated);
   asBoolean(record.downloadTruncated);
   asNonnegativeInteger(record.downloadedBytes);
+  asNonnegativeInteger(record.skipped);
   for (const raw of asArray(record.revisions)) {
     const revision = asRecord(raw);
     asString(revision.key);
@@ -529,6 +535,8 @@ function validatePullResponse(value: unknown): PullResponse {
   validateSnapshotSummary(record.summary);
   asNonnegativeInteger(record.downloadedBytes);
   asString(record.completedAt);
+  asString(record.remoteETag);
+  asRevision(record.remoteRevision);
   for (const conflict of asArray(record.conflicts)) {
     const entry = asRecord(conflict);
     asString(entry.path);
@@ -686,12 +694,7 @@ export const integrationsApi: IntegrationsApi = {
   async changeMasterPassword(current, next) {
     const answer = await postJSON<unknown>("/api/v1/passwords/change", { current, next });
     const record = asRecord(answer);
-    if (typeof record.snapshotResealed !== "boolean") throw new Error("invalid_response");
-    return {
-      vault: validateVaultStatus(record.vault),
-      snapshotResealed: record.snapshotResealed,
-      ...(typeof record.snapshotProblem === "string" ? { snapshotProblem: record.snapshotProblem } : {}),
-    };
+    return { vault: validateVaultStatus(record.vault) };
   },
   async passwordEligibility(alias) {
     return validatePasswordEligibility(
@@ -777,22 +780,29 @@ export const integrationsApi: IntegrationsApi = {
   async diffSyncHistory(key) {
     return validateSyncHistoryDiff(await postJSON<unknown>("/api/v1/sync/history/diff", { key }));
   },
-  async pullSnapshot(apply, resolve, historyKey) {
+  async pullSnapshot(apply, resolve, historyKey, expected) {
+    if (apply && expected === undefined) throw new Error("invalid_request");
     const request = {
       apply,
       ...(resolve === undefined ? {} : { resolve }),
       ...(historyKey === undefined ? {} : { historyKey }),
+      ...(expected === undefined
+        ? {}
+        : { expectedETag: expected.remoteETag, expectedRevision: expected.remoteRevision }),
     };
     return validatePullResponse(
       await postJSON<unknown>("/api/v1/sync/pull", request),
     );
   },
-  async setSyncKey(key) {
+  async setSyncKey(key, confirmHistoryLoss) {
     return validateSyncKey(
       await apiClient.mutate<unknown>("/api/v1/sync/key", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(key === undefined ? {} : { key }),
+        body: JSON.stringify({
+          ...(key === undefined ? {} : { key }),
+          ...(confirmHistoryLoss === undefined ? {} : { confirmHistoryLoss }),
+        }),
       }),
     );
   },

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,10 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 )
+
+var testPasswordBinding = strings.Repeat("ab", 32)
+
+func fixedPasswordBinding(string) (string, error) { return testPasswordBinding, nil }
 
 func connectEngine(t *testing.T, handlers ConnectHandlers) *echo.Echo {
 	t.Helper()
@@ -44,11 +49,11 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.Set("bastion", "legacy-password"); err != nil {
+	if err := vault.SetBound("bastion", "legacy-password", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault,
+		Secret: cliSecret, Passwords: vault, PasswordBinding: fixedPasswordBinding,
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -65,6 +70,23 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	// 自分の欄には載る。保存してあるのに使わないなら、保存させる意味が無い。
 	if answer.Passwords["bastion"] != "legacy-password" {
 		t.Fatalf("the stored account password did not reach the command line: %+v", answer)
+	}
+	if answer.PasswordBindings["bastion"] != testPasswordBinding {
+		t.Fatalf("the destination binding did not accompany the password: %+v", answer)
+	}
+
+	retargeted := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault,
+		PasswordBinding: func(string) (string, error) { return strings.Repeat("cd", 32), nil },
+	})
+	refused := send(t, retargeted, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	var after connectResponse
+	if err := json.Unmarshal(refused.Body.Bytes(), &after); err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Passwords) != 0 || len(after.PasswordBindings) != 0 {
+		t.Fatalf("retargeted connection received a saved password: %+v", after)
 	}
 }
 
@@ -84,11 +106,11 @@ func TestAnAliasWithOnlyAnAccountPasswordCarriesNoKey(t *testing.T) {
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.Set("password-only", "stored-account-password"); err != nil {
+	if err := vault.SetBound("password-only", "stored-account-password", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault,
+		Secret: cliSecret, Passwords: vault, PasswordBinding: fixedPasswordBinding,
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"password-only"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -127,13 +149,14 @@ func TestConnectCarriesThePasswordsOfTheWholeJumpChain(t *testing.T) {
 	for alias, password := range map[string]string{
 		"far": "the destination", "edge": "the way in", "elsewhere": "nothing to do with this",
 	} {
-		if err := vault.Set(alias, password); err != nil {
+		if err := vault.SetBound(alias, password, testPasswordBinding); err != nil {
 			t.Fatal(err)
 		}
 	}
 	engine := connectEngine(t, ConnectHandlers{
 		Secret: cliSecret, Passwords: vault,
-		Aliases: func(alias string) []string { return []string{"edge", alias} },
+		Aliases:         func(alias string) []string { return []string{"edge", alias} },
+		PasswordBinding: fixedPasswordBinding,
 	})
 
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"far"}`,
@@ -216,7 +239,7 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.Set("bastion", "legacy-password"); err != nil {
+	if err := vault.SetBound("bastion", "stored-password", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, ConnectHandlers{

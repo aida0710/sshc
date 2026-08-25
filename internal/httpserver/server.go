@@ -349,26 +349,17 @@ func New(options Options) (*Server, error) {
 	if options.Snippets != nil {
 		registerSnippetRoutes(e, SnippetHandlers{Service: options.Snippets, Actions: actions, BaseContext: baseCtx})
 	}
-	// browser と CLI の password change は、同じ remote reseal operation を使う。
-	var reseal func(context.Context, string) error
-	if options.Sync != nil {
-		reseal = func(ctx context.Context, passphrase string) error {
-			_, err := options.Sync.Push(ctx, passphrase, "")
-			return err
-		}
-	}
-	vault := newVaultOperations(options.Passwords, reseal)
+	vault := newVaultOperations(options.Passwords)
 	if options.Passwords != nil {
-		// eligibility チェックは設定グラフと known_hosts を読むため、
-		// vault からではなく configuration service から来る。vault は
-		// そのどちらについても何も知らない。configuration service がなければ
-		// 何もチェックされず、これはこの仕組みができる前に vault がしていた
-		// ことであり、vault だけを配線するテストが当てにしていることでもある。
+		// Eligibility and authentication-destination binding come from the
+		// configuration graph. A missing configuration service leaves password
+		// writes fail-closed in PasswordHandlers.
 		var eligibility func(string) (application.PasswordEligibility, error)
+		var passwordBinding func(string) (string, error)
 		if options.Config != nil {
 			eligibility = options.Config.PasswordEligibility
+			passwordBinding = options.Config.PasswordBinding
 		}
-		// マスターパスワード変更時は、設定済みなら最新スナップショットも再暗号化する。
 		var keyHosts func([]string) (map[string][]string, error)
 		if options.Config != nil {
 			keyHosts = options.Config.KeyHosts
@@ -378,6 +369,7 @@ func New(options Options) (*Server, error) {
 			vault:       vault,
 			KeyHosts:    keyHosts,
 			Eligibility: eligibility,
+			Binding:     passwordBinding,
 		})
 	}
 	// `sshc <alias>` は、1 つの接続に必要なものをここに求める。secret は
@@ -399,8 +391,14 @@ func New(options Options) (*Server, error) {
 			}
 			return options.Config.UnlockableWorkspaceKeys(alias, options.Keys.Inventory)
 		},
-		Warnings:  options.ConnectWarnings,
-		Aliases:   options.ConnectAliases,
+		Warnings: options.ConnectWarnings,
+		Aliases:  options.ConnectAliases,
+		PasswordBinding: func(alias string) (string, error) {
+			if options.Config == nil {
+				return "", errors.New("configuration unavailable")
+			}
+			return options.Config.PasswordBinding(alias)
+		},
 		Bootstrap: options.Sessions,
 		BaseURL:   "http://" + host,
 		Sessions: func() int {

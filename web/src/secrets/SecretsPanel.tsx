@@ -89,7 +89,8 @@ function UsageList({ label, values, emptyLabel }: UsageListProps) {
 }
 
 function keyBasename(key: string): string {
-  return key.split("/").filter(Boolean).at(-1) ?? key;
+  const components = key.split("/").filter(Boolean);
+  return components[components.length - 1] ?? key;
 }
 
 export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProps) {

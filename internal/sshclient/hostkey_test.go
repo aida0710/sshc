@@ -292,7 +292,7 @@ func TestWhatTheConfigurationWroteWinsOverKnownHosts(t *testing.T) {
 }
 
 // RSA だけは、鍵の種類と署名アルゴリズムが一対一ではない。ssh-rsa としか
-// 書かれていない 1 行から、同じ鍵で名乗れる三つを出す。SHA-1 だけを名乗ると、
+// 書かれていない 1 行から、同じ鍵で名乗れるSHA-2の二つを出す。SHA-1を名乗ると、
 // それを断るサーバーには繋がらない。
 func TestAnRSAEntryOffersTheSHA2SignaturesToo(t *testing.T) {
 	private, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -306,7 +306,7 @@ func TestAnRSAEntryOffersTheSHA2SignaturesToo(t *testing.T) {
 	recorder := hostKeysFor(knownHostsLine("203.0.113.10", public))
 
 	algorithms := recorder.Algorithms(sshclient.Target{HostName: "203.0.113.10", Port: "22"})
-	want := []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA}
+	want := []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
 	if len(algorithms) != len(want) {
 		t.Fatalf("algorithms = %#v, want %#v", algorithms, want)
 	}

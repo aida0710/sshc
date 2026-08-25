@@ -53,9 +53,9 @@ test("keeps a chunked SFTP upload running while another section is open", async 
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.0-transfer-manager-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-transfer-manager-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 360, height: 800 });
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.9.0-transfer-manager-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-transfer-manager-mobile.png`, fullPage: true });
   }
 });

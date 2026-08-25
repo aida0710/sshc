@@ -26,6 +26,8 @@ const pull: PullResponse = {
   written: ["config", "connections/work/lon.conf", "keys/work/id_ed25519"],
   removed: ["connections/old.conf"],
   conflicts: [{ path: "config", changedHere: true, changedThere: true }],
+  remoteETag: '"generation-1"',
+  remoteRevision: "a".repeat(64),
 };
 
 function renderJapanese(view: Parameters<typeof SyncResultCard>[0]["view"]) {

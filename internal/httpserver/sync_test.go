@@ -217,9 +217,11 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 	t.Cleanup(server.Close)
 	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
 	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
-	service.Configure(config, credentials, &objectstore.Client{
+	if err := service.Configure(config, credentials, &objectstore.Client{
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	secrets := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
@@ -385,6 +387,8 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 		DownloadedBytes int64                      `json:"downloadedBytes"`
 		CompletedAt     string                     `json:"completedAt"`
 		Written         []string                   `json:"written"`
+		RemoteETag      string                     `json:"remoteETag"`
+		RemoteRevision  string                     `json:"remoteRevision"`
 	}
 	if err := json.Unmarshal(preview.Body.Bytes(), &previewBody); err != nil {
 		t.Fatal(err)
@@ -396,7 +400,14 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 		t.Errorf("preview written = %v", previewBody.Written)
 	}
 
-	applied := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"apply":true}`)
+	applyRequest, err := json.Marshal(map[string]any{
+		"apply": true, "expectedETag": previewBody.RemoteETag,
+		"expectedRevision": previewBody.RemoteRevision,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", string(applyRequest))
 	if applied.Code != http.StatusOK {
 		t.Fatalf("apply = %d: %s", applied.Code, applied.Body.String())
 	}
@@ -422,6 +433,55 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	if statusBody.LastOperation == nil || statusBody.LastOperation.Kind != remotesync.OperationApply ||
 		statusBody.LastOperation.DownloadedBytes != int64(bucket.liveBytes()) || statusBody.LastOperation.Written != 1 {
 		t.Errorf("applied operation = %+v", statusBody.LastOperation)
+	}
+}
+
+func TestApplyRejectsARemoteGenerationThatChangedAfterPreview(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host first\n"})
+	if _, err := producer.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	engine, _, _ := measuredSyncEngine(t, bucket, map[string]string{})
+	preview := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"apply":false}`)
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview = %d: %s", preview.Code, preview.Body.String())
+	}
+	var generation struct {
+		RemoteETag     string `json:"remoteETag"`
+		RemoteRevision string `json:"remoteRevision"`
+	}
+	if err := json.Unmarshal(preview.Body.Bytes(), &generation); err != nil {
+		t.Fatal(err)
+	}
+
+	_, replacement, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host second\n"})
+	if _, err := replacement.ForcePush(context.Background(), measuredSyncKey, bucket.liveETag(), "Replacement snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	request, err := json.Marshal(map[string]any{
+		"apply": true, "expectedETag": generation.RemoteETag,
+		"expectedRevision": generation.RemoteRevision,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", string(request))
+	if applied.Code != http.StatusConflict || !strings.Contains(applied.Body.String(), `"code":"preview_stale"`) {
+		t.Fatalf("stale apply = %d: %s", applied.Code, applied.Body.String())
+	}
+}
+
+func TestApplyWithoutPreviewGenerationIsRefused(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host first\n"})
+	if _, err := producer.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	engine, _, _ := measuredSyncEngine(t, bucket, map[string]string{})
+	response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"apply":true}`)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("apply without preview generation = %d, want 400: %s", response.Code, response.Body.String())
 	}
 }
 
@@ -634,6 +694,68 @@ func TestAnEndpointWithAPathIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "endpoint_must_have_no_path") {
 		t.Errorf("code = %s", recorder.Body.String())
+	}
+}
+
+func TestSyncRuntimeValidationRejectsSchemaBypasses(t *testing.T) {
+	engine, _ := syncEngine(t)
+	for _, endpoint := range []string{
+		"https://user:password@example.invalid",
+		"https://example.invalid?bucket=other",
+		"https://example.invalid#fragment",
+		"https://example.invalid/%2f",
+		"https:opaque-endpoint",
+	} {
+		body, err := json.Marshal(map[string]any{
+			"endpoint": endpoint, "bucket": "sshc", "accessKeyId": "AKID",
+			"secretAccessKey": "secret", "direction": "both",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", string(body)); response.Code != http.StatusBadRequest {
+			t.Errorf("endpoint %q = %d, want 400: %s", endpoint, response.Code, response.Body.String())
+		}
+	}
+	tooLong := strings.Repeat("x", 513)
+	settingsBody, _ := json.Marshal(map[string]any{
+		"endpoint": "https://example.invalid", "bucket": "sshc", "accessKeyId": tooLong,
+		"secretAccessKey": "secret", "direction": "both",
+	})
+	if response := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", string(settingsBody)); response.Code != http.StatusBadRequest {
+		t.Errorf("oversized access key = %d, want 400", response.Code)
+	}
+	keyBody, _ := json.Marshal(map[string]string{"key": strings.Repeat("k", 1025)})
+	if response := sendSync(t, engine, http.MethodPut, "/api/v1/sync/key", string(keyBody)); response.Code != http.StatusBadRequest {
+		t.Errorf("oversized sync key = %d, want 400", response.Code)
+	}
+	if response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull",
+		`{"apply":true,"expectedETag":"etag","expectedRevision":"NOT-A-REVISION"}`); response.Code != http.StatusBadRequest {
+		t.Errorf("invalid revision = %d, want 400", response.Code)
+	}
+	historyBody, _ := json.Marshal(map[string]string{"key": strings.Repeat("h", 1025)})
+	if response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/history/diff", string(historyBody)); response.Code != http.StatusBadRequest {
+		t.Errorf("oversized history key = %d, want 400", response.Code)
+	}
+}
+
+func TestReplacingASyncKeyRequiresHistoryLossConfirmation(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	engine, service, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
+	if _, err := service.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	const next = "ZX98-YW76-VU54-TS32-RQ10-PO98"
+	body, _ := json.Marshal(map[string]any{"key": next})
+	refused := sendSync(t, engine, http.MethodPut, "/api/v1/sync/key", string(body))
+	if refused.Code != http.StatusConflict ||
+		!strings.Contains(refused.Body.String(), "sync_history_key_loss_confirmation_required") {
+		t.Fatalf("unconfirmed replacement = %d: %s", refused.Code, refused.Body.String())
+	}
+	confirmedBody, _ := json.Marshal(map[string]any{"key": next, "confirmHistoryLoss": true})
+	confirmed := sendSync(t, engine, http.MethodPut, "/api/v1/sync/key", string(confirmedBody))
+	if confirmed.Code != http.StatusOK {
+		t.Fatalf("confirmed replacement = %d: %s", confirmed.Code, confirmed.Body.String())
 	}
 }
 
