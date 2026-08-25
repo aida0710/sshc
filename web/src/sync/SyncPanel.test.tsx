@@ -58,7 +58,6 @@ const historyStatus = {
     size: 900,
     lastModified: "2026-08-25T01:54:00Z",
     relation: "head" as const,
-    legacy: false,
   }],
 };
 
@@ -215,16 +214,12 @@ describe("SyncPanel", () => {
     const message = await screen.findByLabelText("Commit message");
     expect(message).toHaveValue("Update config");
     await userEvent.clear(message);
+    expect(screen.getByRole("button", { name: "Push this workspace" })).toBeDisabled();
     await userEvent.type(message, "Refresh production hosts");
+    expect(screen.getByRole("button", { name: "Push this workspace" })).toBeEnabled();
     await userEvent.click(screen.getByRole("button", { name: "Push this workspace" }));
     await waitFor(() => expect(pushSnapshot).toHaveBeenCalledWith("Refresh production hosts"));
     expect(await screen.findByText("Update config")).toBeInTheDocument();
-  });
-
-  it("does not offer the removed legacy migration", async () => {
-    render(<SyncPanel api={buildApi(configured, nothingToDo)} />);
-    await screen.findByRole("heading", { name: "Bucket status" });
-    expect(screen.queryByText("Migrate a legacy snapshot")).not.toBeInTheDocument();
   });
 
   it("configures a bucket and clears the credentials from the form", async () => {

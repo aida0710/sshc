@@ -352,7 +352,6 @@ const (
 	Ancestor SyncHistoryRelation = "ancestor"
 	Branch   SyncHistoryRelation = "branch"
 	Head     SyncHistoryRelation = "head"
-	Legacy   SyncHistoryRelation = "legacy"
 )
 
 // Valid indicates whether the value is a known member of the SyncHistoryRelation enum.
@@ -363,8 +362,6 @@ func (e SyncHistoryRelation) Valid() bool {
 	case Branch:
 		return true
 	case Head:
-		return true
-	case Legacy:
 		return true
 	default:
 		return false
@@ -1682,8 +1679,7 @@ type SyncHistoryRevision struct {
 	FileCount      int                 `json:"fileCount"`
 	Key            string              `json:"key"`
 	LastModified   *string             `json:"lastModified,omitempty"`
-	Legacy         bool                `json:"legacy"`
-	Message        *string             `json:"message,omitempty"`
+	Message        string              `json:"message"`
 	Origin         string              `json:"origin"`
 	ParentRevision *string             `json:"parentRevision,omitempty"`
 	Relation       SyncHistoryRelation `json:"relation"`
@@ -1726,19 +1722,18 @@ type SyncPushDraft struct {
 
 // SyncPushRequest defines model for SyncPushRequest.
 type SyncPushRequest struct {
-	Message    *string `json:"message,omitempty"`
-	Passphrase *string `json:"passphrase,omitempty"`
+	Message string `json:"message"`
 }
 
 // SyncSettingsRequest defines model for SyncSettingsRequest.
 type SyncSettingsRequest struct {
-	AccessKeyId     string         `json:"accessKeyId"`
-	Bucket          string         `json:"bucket"`
-	Direction       *SyncDirection `json:"direction,omitempty"`
-	Endpoint        string         `json:"endpoint"`
-	Path            *string        `json:"path,omitempty"`
-	Region          *string        `json:"region,omitempty"`
-	SecretAccessKey string         `json:"secretAccessKey"`
+	AccessKeyId     string        `json:"accessKeyId"`
+	Bucket          string        `json:"bucket"`
+	Direction       SyncDirection `json:"direction"`
+	Endpoint        string        `json:"endpoint"`
+	Path            *string       `json:"path,omitempty"`
+	Region          *string       `json:"region,omitempty"`
+	SecretAccessKey string        `json:"secretAccessKey"`
 }
 
 // SyncStatus defines model for SyncStatus.

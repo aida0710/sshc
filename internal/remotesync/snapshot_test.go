@@ -12,12 +12,11 @@ import (
 	"sshc/internal/remotesync"
 )
 
-func entry(path, contents string, secret bool) remotesync.Entry {
+func entry(path, contents string) remotesync.Entry {
 	return remotesync.Entry{
 		Path:   path,
 		SHA256: remotesync.Digest([]byte(contents)),
 		Mode:   "0600",
-		Secret: secret,
 	}
 }
 
@@ -32,12 +31,16 @@ func buildFixture(t *testing.T) ([]byte, map[string][]byte) {
 	manifest := remotesync.Manifest{
 		CreatedAt: "2026-08-05T00:00:00Z",
 		Origin:    "opaque-installation-id",
+		Message:   "Test workspace snapshot",
 		Files: []remotesync.Entry{
-			entry("config", string(contents["config"]), false),
-			entry("connections/work/lon.conf", string(contents["connections/work/lon.conf"]), false),
-			entry("sshc/metadata.json", string(contents["sshc/metadata.json"]), false),
-			entry("keys/work/id_ed25519", string(contents["keys/work/id_ed25519"]), true),
+			entry("config", string(contents["config"])),
+			entry("connections/work/lon.conf", string(contents["connections/work/lon.conf"])),
+			entry("sshc/metadata.json", string(contents["sshc/metadata.json"])),
+			entry("keys/work/id_ed25519", string(contents["keys/work/id_ed25519"])),
 		},
+	}
+	if err := remotesync.FinalizeManifest(&manifest, ""); err != nil {
+		t.Fatalf("FinalizeManifest = %v", err)
 	}
 	archive, err := remotesync.Build(manifest, contents)
 	if err != nil {
@@ -74,7 +77,7 @@ func TestRevisionIsStableAndCarriesItsParent(t *testing.T) {
 	manifest := remotesync.Manifest{
 		CreatedAt: "2026-08-25T02:00:00Z", Origin: "opaque-installation-id",
 		Message: "Add bastion connection",
-		Files:   []remotesync.Entry{entry("config", string(contents["config"]), false)},
+		Files:   []remotesync.Entry{entry("config", string(contents["config"]))},
 	}
 	parent := strings.Repeat("a", 64)
 	if err := remotesync.FinalizeManifest(&manifest, parent); err != nil {
@@ -118,6 +121,10 @@ func TestCommitMessageParticipatesInRevisionAndRejectsInvalidText(t *testing.T) 
 	if err := remotesync.FinalizeManifest(&manifest, ""); !errors.Is(err, remotesync.ErrCommitMessage) {
 		t.Fatalf("FinalizeManifest = %v, want ErrCommitMessage", err)
 	}
+	manifest.Message = "   "
+	if err := remotesync.FinalizeManifest(&manifest, ""); !errors.Is(err, remotesync.ErrCommitMessage) {
+		t.Fatalf("FinalizeManifest with blank message = %v, want ErrCommitMessage", err)
+	}
 }
 
 func TestReadRefusesATamperedRevision(t *testing.T) {
@@ -126,69 +133,19 @@ func TestReadRefusesATamperedRevision(t *testing.T) {
 		SchemaVersion: remotesync.SchemaVersion,
 		CreatedAt:     "2026-08-25T02:00:00Z", Origin: "opaque-installation-id",
 		Revision: strings.Repeat("0", 64),
-		Files:    []remotesync.Entry{entry("config", body, false)},
+		Files:    []remotesync.Entry{entry("config", body)},
 	})
 	if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrManifestMismatch) {
 		t.Fatalf("Read = %v, want ErrManifestMismatch", err)
 	}
 }
 
-func TestReadDerivesAnIdentityForALegacySnapshot(t *testing.T) {
-	body := "Host bastion\n"
-	archive := handBuilt(t, map[string]string{"config": body}, remotesync.Manifest{
-		SchemaVersion: 2, CreatedAt: "2026-08-25T02:00:00Z", Origin: "legacy-installation",
-		Files: []remotesync.Entry{entry("config", body, false)},
-	})
-	manifest, _, err := remotesync.Read(archive)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(manifest.Revision) != 64 || manifest.ParentRevision != "" {
-		t.Fatalf("legacy manifest = %#v", manifest)
-	}
-}
-
-func TestReadKeepsVersionThreeGraphCompatibility(t *testing.T) {
-	body := "Host old-client\n"
-	manifest := remotesync.Manifest{
-		SchemaVersion: 3, CreatedAt: "2026-08-24T02:00:00Z", Origin: "v3-installation",
-		Files: []remotesync.Entry{entry("config", body, false)},
-	}
-	revision, err := remotesync.RevisionFor(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	manifest.Revision = revision
-	archive := handBuilt(t, map[string]string{"config": body}, manifest)
-	got, _, err := remotesync.Read(archive)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.SchemaVersion != 3 || got.Revision != revision || got.Message != "" {
-		t.Fatalf("v3 manifest = %#v", got)
-	}
-}
-
-func TestAPrivateKeyIsMarkedSecret(t *testing.T) {
-	// pull は secret のエントリを SkipBackup 付きで適用する。この印を失えば、同期の
-	// たびに ~/.ssh/sshc/backups/ に鍵素材のコピーが残ることになる。
-	archive, _ := buildFixture(t)
-
-	manifest, _, err := remotesync.Read(archive)
-	if err != nil {
-		t.Fatal(err)
-	}
-	secrets := 0
-	for _, item := range manifest.Files {
-		if item.Secret {
-			secrets++
-			if !strings.HasPrefix(item.Path, "keys/") {
-				t.Errorf("%s is marked secret", item.Path)
-			}
+func TestReadRejectsEveryOtherSchemaVersion(t *testing.T) {
+	for _, version := range []int{1, 2, 3, 4, remotesync.SchemaVersion + 1} {
+		archive := handBuilt(t, map[string]string{}, remotesync.Manifest{SchemaVersion: version})
+		if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrUnsupportedVersion) {
+			t.Errorf("schema %d: Read = %v, want ErrUnsupportedVersion", version, err)
 		}
-	}
-	if secrets != 1 {
-		t.Errorf("%d entries marked secret, want 1", secrets)
 	}
 }
 
@@ -285,17 +242,15 @@ func TestReadRefusesSomethingThatIsNotASnapshot(t *testing.T) {
 	}
 }
 
-func TestReadSaysUpgradeForASnapshotFromANewerBuild(t *testing.T) {
-	archive := handBuilt(t, map[string]string{}, remotesync.Manifest{SchemaVersion: remotesync.SchemaVersion + 1})
-	if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrUnsupportedVersion) {
-		t.Fatalf("Read = %v, want ErrUnsupportedVersion", err)
-	}
-}
-
 func TestBuildRefusesAnEntryWithNoContents(t *testing.T) {
-	_, err := remotesync.Build(remotesync.Manifest{
-		Files: []remotesync.Entry{{Path: "config", SHA256: "x", Mode: "0600"}},
-	}, map[string][]byte{})
+	manifest := remotesync.Manifest{
+		Message: "Test missing contents",
+		Files:   []remotesync.Entry{{Path: "config", SHA256: "x", Mode: "0600"}},
+	}
+	if err := remotesync.FinalizeManifest(&manifest, ""); err != nil {
+		t.Fatal(err)
+	}
+	_, err := remotesync.Build(manifest, map[string][]byte{})
 	if !errors.Is(err, remotesync.ErrManifestMismatch) {
 		t.Fatalf("Build = %v, want ErrManifestMismatch", err)
 	}
@@ -303,11 +258,16 @@ func TestBuildRefusesAnEntryWithNoContents(t *testing.T) {
 
 func TestBuildRefusesContentsLargerThanTheReadLimit(t *testing.T) {
 	body := bytes.Repeat([]byte{'x'}, remotesync.MaxSnapshotBytes+1)
-	_, err := remotesync.Build(remotesync.Manifest{
+	manifest := remotesync.Manifest{
+		Message: "Test size limit",
 		Files: []remotesync.Entry{{
 			Path: "sshc/backgrounds/too-large.png", SHA256: remotesync.Digest(body), Mode: "0600",
 		}},
-	}, map[string][]byte{"sshc/backgrounds/too-large.png": body})
+	}
+	if err := remotesync.FinalizeManifest(&manifest, ""); err != nil {
+		t.Fatal(err)
+	}
+	_, err := remotesync.Build(manifest, map[string][]byte{"sshc/backgrounds/too-large.png": body})
 	if !errors.Is(err, remotesync.ErrSnapshotTooLarge) {
 		t.Fatalf("Build = %v, want ErrSnapshotTooLarge", err)
 	}
@@ -351,6 +311,9 @@ func handBuilt(t *testing.T, files map[string]string, manifest remotesync.Manife
 	t.Helper()
 	if manifest.SchemaVersion == 0 {
 		manifest.SchemaVersion = remotesync.SchemaVersion
+	}
+	if manifest.Message == "" {
+		manifest.Message = "Test snapshot"
 	}
 	document, err := json.Marshal(manifest)
 	if err != nil {
@@ -438,8 +401,14 @@ func TestOpenRefusesAnEntryThatIsNotAFile(t *testing.T) {
 			var compressed bytes.Buffer
 			zip := gzip.NewWriter(&compressed)
 			archive := tar.NewWriter(zip)
-			manifest := `{"schemaVersion":1,"createdAt":"2026-08-05T00:00:00Z","origin":"o","files":[]}`
-			writeRaw(t, archive, remotesync.ManifestName, manifest)
+			document, err := json.Marshal(remotesync.Manifest{
+				SchemaVersion: remotesync.SchemaVersion, CreatedAt: "2026-08-05T00:00:00Z",
+				Origin: "o", Message: "Test unsafe archive entry", Files: []remotesync.Entry{},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeRaw(t, archive, remotesync.ManifestName, string(document))
 			if err := archive.WriteHeader(&entry.header); err != nil {
 				t.Fatal(err)
 			}
