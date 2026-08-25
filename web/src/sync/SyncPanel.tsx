@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { failureCode } from "../api/client";
 import {
   integrationsApi,
@@ -8,6 +8,7 @@ import {
   type SyncDirection,
   type SyncHistory,
   type SyncHistoryDiff,
+  type SyncPushDraft,
   type SyncStatus,
 } from "../api/integrations";
 import { useLanguage } from "../i18n/context";
@@ -65,6 +66,7 @@ const refusals: Record<string, MessageKey> = {
   sync_failed: "sync.unreachable",
   endpoint_must_have_no_path: "sync.endpointPath",
   sync_remote_moved: "sync.remoteMoved",
+  sync_commit_message_invalid: "sync.commitMessageInvalid",
 };
 
 export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
@@ -95,6 +97,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
+  const [pushDraft, setPushDraft] = useState<SyncPushDraft | null>(null);
+  const [pushMessage, setPushMessage] = useState("");
+  const pushMessageDirty = useRef(false);
 
   function editSettings(current: SyncStatus) {
     setEndpoint(current.endpoint ?? "");
@@ -129,6 +134,16 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     }
   }, [api, t]);
 
+  const refreshPushDraft = useCallback(async () => {
+    try {
+      const draft = await api.syncPushDraft();
+      setPushDraft(draft);
+      if (!pushMessageDirty.current) setPushMessage(draft.message);
+    } catch {
+      setPushDraft(null);
+    }
+  }, [api]);
+
   const reload = useCallback(async () => {
     setStatusState({ phase: "loading" });
     try {
@@ -138,10 +153,12 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       else setBucketState({ phase: "idle" });
       if (next.configured && next.keyConfigured) void refreshHistory();
       else setHistoryState({ phase: "idle" });
+      if (next.configured) void refreshPushDraft();
+      else setPushDraft(null);
     } catch {
       setStatusState({ phase: "error", message: t("sync.statusFailed") });
     }
-  }, [api, refreshBucket, refreshHistory, t]);
+  }, [api, refreshBucket, refreshHistory, refreshPushDraft, t]);
 
   useEffect(() => {
     void reload();
@@ -525,18 +542,44 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           <section aria-labelledby="sync-transfer-heading" className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4">
             <h4 id="sync-transfer-heading" className={sectionHeading}>{t("sync.transferHeading")}</h4>
             <p className="text-sm leading-6 text-ink-muted">{t("sync.transferHint")}</p>
+            <div className="flex flex-col gap-1 border-t border-line pt-3 text-sm text-ink">
+              <label htmlFor="sync-commit-message" className="font-medium">{t("sync.commitMessage")}</label>
+              <input
+                id="sync-commit-message"
+                aria-describedby="sync-commit-message-hint"
+                value={pushMessage}
+                maxLength={240}
+                onChange={(event) => {
+                  pushMessageDirty.current = true;
+                  setPushMessage(event.target.value);
+                }}
+                className={control}
+                placeholder={t("sync.commitMessagePlaceholder")}
+              />
+              <span id="sync-commit-message-hint" className={hintText}>
+                {pushDraft === null
+                  ? t("sync.commitMessageHint")
+                  : t("sync.commitMessageChanges", {
+                      added: pushDraft.added,
+                      modified: pushDraft.modified,
+                      removed: pushDraft.removed,
+                    })}
+              </span>
+            </div>
             <div className="flex flex-wrap gap-2 border-t border-line pt-3">
               <Button
                 kind="primary"
                 disabled={busy || !status.configured || !status.keyConfigured || status.direction === "pull"}
                 onClick={() =>
                   void run(
-                    () => api.pushSnapshot(),
+                    () => api.pushSnapshot(pushMessage.trim() || undefined),
                     (next) => {
                       setStatusState({ phase: "ready", value: next.status });
                       setPreview(null);
                       setResultView({ kind: "push", result: next.result });
                       setNotice(t("sync.pushed"));
+                      pushMessageDirty.current = false;
+                      void refreshPushDraft();
                       void refreshBucket();
                       void refreshHistory();
                     },
@@ -639,13 +682,15 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                         disabled={busy || !forceConfirmed || !status.keyConfigured}
                         onClick={() =>
                           void run(
-                            () => api.forcePushSnapshot(),
+                            () => api.forcePushSnapshot(pushMessage.trim() || undefined),
                             (next) => {
                               setStatusState({ phase: "ready", value: next.status });
                               setPreview(null);
                               setResultView({ kind: "push", result: next.result });
                               setForceConfirmed(false);
                               setNotice(t("sync.forcePushed"));
+                              pushMessageDirty.current = false;
+                              void refreshPushDraft();
                               void refreshBucket();
                               void refreshHistory();
                             },
@@ -725,6 +770,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                               count: revision.fileCount,
                               origin: revision.origin.slice(0, 8),
                             })}
+                          </span>
+                          <span className="mt-1 block text-sm font-medium text-ink">
+                            {revision.message ?? t("sync.historyNoMessage")}
                           </span>
                           {revision.parentRevision === undefined ? null : (
                             <span className="mt-1 block font-mono text-[11px] text-ink-muted">

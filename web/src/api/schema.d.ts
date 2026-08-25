@@ -331,7 +331,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["getSyncPushDraft"];
         put?: never;
         post: operations["pushSnapshot"];
         delete?: never;
@@ -1909,6 +1909,16 @@ export interface components {
             status: components["schemas"]["SyncStatus"];
             result: components["schemas"]["PushResult"];
         };
+        SyncPushRequest: {
+            message?: string;
+            passphrase?: string;
+        };
+        SyncPushDraft: {
+            message: string;
+            added: number;
+            modified: number;
+            removed: number;
+        };
         SyncBucketObject: {
             key: string;
             /** Format: int64 */
@@ -1928,6 +1938,7 @@ export interface components {
             key: string;
             revision: string;
             parentRevision?: string;
+            message?: string;
             createdAt: string;
             origin: string;
             fileCount: number;
@@ -3392,7 +3403,7 @@ export interface operations {
             403: components["responses"]["Problem"];
         };
     };
-    pushSnapshot: {
+    getSyncPushDraft: {
         parameters: {
             query?: never;
             header?: never;
@@ -3400,6 +3411,32 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Message suggested from the local changes since the acknowledged snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncPushDraft"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    pushSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SyncPushRequest"];
+            };
+        };
         responses: {
             /** @description Snapshot written */
             200: {
@@ -3425,7 +3462,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SyncPushRequest"];
+            };
+        };
         responses: {
             /** @description The confirmed remote snapshot was replaced */
             200: {
