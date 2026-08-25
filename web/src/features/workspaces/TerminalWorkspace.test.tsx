@@ -51,7 +51,7 @@ function paneTitles(container: HTMLElement): string[] {
 
 describe("TerminalWorkspace pane movement", () => {
   it("shows the sshc command name when no console is open", async () => {
-    render(
+    const { container } = render(
       <TerminalWorkspace
         sessions={[]}
         activeSessionId={null}
@@ -63,6 +63,7 @@ describe("TerminalWorkspace pane movement", () => {
 
     expect(await screen.findByRole("status")).toHaveTextContent("sshc host");
     expect(screen.getByRole("status")).not.toHaveTextContent("ssh host");
+    expect(container.querySelector("[data-desktop-workspace-controls]")).toHaveClass("hidden", "md:flex");
   });
 
   it("swaps panes by drag and drop and exposes the same operation to keyboard users", async () => {

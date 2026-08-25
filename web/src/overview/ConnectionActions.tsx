@@ -62,7 +62,7 @@ export function ConnectionActions({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 z-20 mt-1 min-w-48 rounded-lg border border-line bg-card p-1 shadow-lg"
+          className="absolute bottom-full right-0 z-20 mb-1 min-w-48 rounded-lg border border-line bg-card p-1 shadow-lg"
         >
           <button
             type="button"

@@ -143,6 +143,7 @@ describe("QuickConnectBrowser", () => {
     const card = screen.getByText("nas").closest("li");
     expect(card).not.toBeNull();
     await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for nas" }));
+    expect(within(card as HTMLElement).getByRole("menu")).toHaveClass("bottom-full", "mb-1");
     await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Open connection settings" }));
     expect(openSettings).toHaveBeenCalledWith(
       "/connections/servers?path=connections%2Fhome.conf&host=nas&panel=basic",

@@ -76,11 +76,11 @@ export function AppNavigation({
     <nav
       id={navigationId}
       aria-label={t("shell.primaryNavigation")}
-      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-3 shadow-2xl transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
-        navigationOpen ? "translate-x-0" : "-translate-x-full"
+      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:translate-x-0 md:p-3 md:shadow-none ${
+        navigationOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full shadow-none"
       } ${desktopVisible ? "md:flex" : "md:hidden"}`}
     >
-      <div className="mb-3 flex shrink-0 items-center gap-2 border-b border-line px-1 pb-3 md:hidden">
+      <div className="mb-2 flex shrink-0 items-center gap-2 border-b border-line px-1 pb-2 md:hidden">
         <BrandMark className="h-8 w-8" />
         <span className="text-sm font-bold tracking-tight">{t("shell.title")}</span>
       </div>
@@ -98,7 +98,7 @@ export function AppNavigation({
       <div
         role="tablist"
         aria-label={t("shell.navFaces")}
-        className="my-3 grid shrink-0 grid-cols-2 gap-1 rounded-xl border border-control-line bg-control p-1 md:my-2"
+        className="my-1.5 grid shrink-0 grid-cols-2 gap-1 rounded-xl border border-control-line bg-control p-1 md:my-2"
       >
         {(["settings", "terminal"] as NavFace[]).map((face) => (
           <button
@@ -145,7 +145,7 @@ export function AppNavigation({
         )}
       </div>
 
-      <div className="shrink-0 pt-2">
+      <div className="shrink-0 pt-1 md:pt-2">
         <UpdateBadge />
       </div>
 
@@ -273,7 +273,7 @@ function NavigationLink({
       onClick={(event) => {
         onNavigate(event, name);
       }}
-      className={`group relative my-0.5 flex w-full items-center gap-2.5 overflow-hidden rounded-lg px-2 py-2.5 text-left text-sm transition-colors md:py-0.5 ${
+      className={`group relative flex min-h-10 w-full items-center gap-2 overflow-hidden rounded-lg px-2 py-1 text-left text-sm transition-colors md:my-0.5 md:min-h-0 md:gap-2.5 md:py-0.5 ${
         active
           ? "bg-card font-semibold text-ink shadow-sm"
           : "font-medium text-ink-muted hover:bg-select-fill hover:text-ink"
@@ -282,7 +282,7 @@ function NavigationLink({
       {active ? <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-accent" /> : null}
       <span
         aria-hidden="true"
-        className={`grid h-7 w-7 shrink-0 place-items-center rounded-md transition-colors md:h-5 md:w-5 ${
+        className={`grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors md:h-5 md:w-5 ${
           active ? "bg-accent text-accent-ink" : "bg-control text-ink-muted group-hover:text-ink"
         }`}
       >
@@ -295,10 +295,10 @@ function NavigationLink({
 
 function NavigationGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="mb-3 md:mb-2">
+    <div className="mb-1.5 md:mb-2">
       <span
         aria-hidden="true"
-        className="block px-2 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint md:pb-0.5"
+        className="block px-2 pb-0.5 pt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint"
       >
         {label}
       </span>
