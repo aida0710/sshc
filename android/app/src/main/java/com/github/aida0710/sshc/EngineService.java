@@ -23,9 +23,8 @@ public final class EngineService extends Service {
     private static final String TAG = "sshc";
     private static final String CHANNEL = "engine";
     private static final int NOTIFICATION_ID = 1;
-    // Mobile.Start and Mobile.Stop share a Go process-global lifecycle. A single
-    // worker serializes them across successive Service instances, so reopening
-    // while the previous stop is still draining never blocks Android's main looper.
+    // Mobile.StartとMobile.StopはGo process-global lifecycleを共有する。一つのworkerで
+    // Service世代をまたいで直列化し、前世代の停止中に開き直してもmain looperを塞がない。
     private static final ExecutorService ENGINE = Executors.newSingleThreadExecutor(command -> {
         Thread worker = new Thread(command, "sshc-engine-lifecycle");
         worker.setDaemon(true);
@@ -43,12 +42,11 @@ public final class EngineService extends Service {
 
     private final LocalBinder binder = new LocalBinder();
     private String entrance;
-    private boolean started;
-    private volatile boolean stopping;
     private long failure;
     private Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final EngineShutdown shutdown = new EngineShutdown(ENGINE, this::stopEngine);
+    private final EngineLease lease = new EngineLease();
 
     public final class LocalBinder extends Binder {
         EngineService service() {
@@ -118,8 +116,8 @@ public final class EngineService extends Service {
 
     /** foreground と service を main looper 上で即時に外し、Go の待機だけを worker へ送る。 */
     private void stopServiceAndEngine(Integer startId) {
-        stopping = true;
-        boolean shouldStopEngine = detachEngine();
+        boolean shouldStopEngine = lease.requestStop();
+        entrance = null;
         stopForeground(STOP_FOREGROUND_REMOVE);
         if (startId == null) {
             stopSelf();
@@ -131,15 +129,8 @@ public final class EngineService extends Service {
     }
 
     private void requestEngineShutdown() {
-        stopping = true;
-        if (detachEngine()) shutdown.request();
-    }
-
-    private boolean detachEngine() {
-        if (!started) return false;
-        started = false;
         entrance = null;
-        return true;
+        if (lease.requestStop()) shutdown.request();
     }
 
     private void stopEngine() {
@@ -151,29 +142,25 @@ public final class EngineService extends Service {
     }
 
     private void startEngine() {
-        if (stopping) return;
+        if (lease.isStopping()) return;
         try {
             String startedEntrance = Mobile.start(getFilesDir().getAbsolutePath(), getCacheDir().getAbsolutePath());
-            if (stopping) {
-                // Stop arrived while Mobile.start was running. Finish the same
-                // serialized lifecycle task before a newer Service may start again.
+            if (!lease.publishStartedEngine()) {
+                // Mobile.start中に停止要求が来た。次のService世代を起動する前に、
+                // 同じlifecycle worker上で停止まで完了する。
                 stopEngine();
                 return;
             }
             main.post(() -> {
-                if (stopping) {
-                    shutdown.request();
-                    return;
-                }
+                if (lease.isStopping()) return;
                 entrance = startedEntrance;
-                started = true;
                 failure = Mobile.KindNone;
                 if (listener != null) listener.engineReady();
             });
         } catch (Exception error) {
             long reason = Mobile.lastStartFailureKind();
             main.post(() -> {
-                if (stopping) return;
+                if (lease.isStopping()) return;
                 failure = reason;
                 Log.e(TAG, "the engine did not start; reason " + failure);
                 if (listener != null) listener.engineReady();
