@@ -25,6 +25,14 @@ curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
 
 ダウンロード、チェックサム、書き込み権限の確認に失敗した場合、既存の実行ファイルを変更せず終了します。通常は `~/.local/bin` にインストールし、root で実行した場合は `/usr/local/bin` を使用します。
 
+GitHub CLIを使用できる場合は、配置前にartifact provenanceも検証できます。`<downloaded-file>`にはCLIまたはAPKの実ファイルを指定します。
+
+```sh
+gh attestation verify <downloaded-file> --repo aida0710/sshc
+```
+
+この検査は、SHA-256による転送破損の検出に加え、そのdigestが`aida0710/sshc`のRelease workflowで生成されたことをGitHubの署名済みattestationから確認します。
+
 インストール後、配置先が `PATH` に含まれていない場合や、別の `sshc` が先に解決される場合は警告と設定例を表示します。`PATH` は自動変更しません。実行中のエンジンと新しい CLI のバージョンが異なる場合も、置き換え前に警告します。
 
 インストール先は `SSHC_INSTALL_DIR`、バージョンは `SSHC_VERSION` で変更できます。
@@ -37,35 +45,7 @@ sshc は Windows インストーラを提供せず、レジストリやシステ
 
 ## Android
 
-[GitHub Releases](https://github.com/aida0710/sshc/releases) から `sshc-android-v<version>.apk` をダウンロードしてください。APK はリリース用の鍵で署名されています。
-
-## 0.3.x からの移行
-
-0.4.0 でデスクトップアプリの配布を終了しました。旧アプリが残っていると Homebrew formula がリンクされない場合や、`PATH` 上で古い `sshc` が優先される場合があります。
-
-macOS で旧 cask を使用していた場合は、次の手順で削除します。
-
-```sh
-sshc version
-brew uninstall --cask sshc
-old="$HOME/.local/share/sshc/bin/sshc"
-if [ "$(readlink "$HOME/.local/bin/sshc" 2>/dev/null)" = "$old" ]; then
-  rm "$HOME/.local/bin/sshc"
-fi
-rm -f "$old"
-rmdir "$HOME/.local/share/sshc/bin" "$HOME/.local/share/sshc" 2>/dev/null || true
-brew link --overwrite sshc
-```
-
-この手順は、`~/.local/bin/sshc` が旧デスクトップアプリの管理下にあるバイナリを指す場合だけ、そのリンクを削除します。`~/.local/share/sshc` に別のファイルがある場合はディレクトリを削除しません。
-
-移行後も古いバージョンが起動する場合は、次のコマンドで実行ファイルの場所を確認します。
-
-```sh
-command -v sshc        # macOS / Linux
-where.exe sshc         # Windows
-sshc version
-```
+[GitHub Releases](https://github.com/aida0710/sshc/releases) から `sshc-android-v<version>.apk` をダウンロードしてください。APK はリリース用の固定した証明書で署名され、Release workflowは公開前に証明書のSHA-256 fingerprintを照合します。
 
 ## 起動
 

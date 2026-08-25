@@ -182,7 +182,7 @@
 - アプリケーション自身の更新は行いません。新しいバージョンがある場合はリリースページへのリンクだけを表示し、ダウンロードとバイナリ置換は利用者が行います。
 - 自己更新機能は一度実装した後に削除しました。ネットワークから取得したバイナリの置換には署名検証が必要ですが、署名鍵を release workflow から参照できる場所に置くと、リポジトリを制御できる主体も同じ鍵へアクセスできます。この構成ではリポジトリ侵害への保護が増えず、鍵のローテーション順を誤ると既存インストールを更新できなくなるため、機能を維持しないと判断しました。
 - リリースでは 6 つの CLI バイナリを生成します（`sshc-darwin-arm64`、`sshc-darwin-amd64`、`sshc-linux-amd64`、`sshc-linux-arm64`、`sshc-windows-amd64.exe`、`sshc-windows-arm64.exe`）。各 OS の runner がその OS 向けの 2 アーキテクチャをビルドします。darwin では `CGO_ENABLED=1` を使用します。設定エンジンは `%u` と `%i` の展開に `os/user.Current()` を使用し、cgo を無効にした Go は `/etc/passwd` を参照するため、macOS の通常ユーザーではこれらの token を解決できない場合があります。Linux と Windows の CLI は `CGO_ENABLED=0` でビルドします。Android は署名済み APK を別ジョブで生成し、6 つの CLI とともにリリースへ添付します。
-- リリースには `checksums.txt` を添付します。これはダウンロード中の破損検出に使用します。バイナリと同じ配布元から取得するため、配布元の正当性は保証しません。アプリケーション自身は更新ファイルを取得しないため、実行時の checksum 検証はありません。
+- リリースには `checksums.txt` を添付します。これはダウンロード中の破損検出に使用します。さらに、公開するCLIとAPKのdigestへGitHub artifact attestationを発行し、`gh attestation verify <file> --repo aida0710/sshc`でtagのRelease workflow由来であることを検証できます。アプリケーション自身は更新ファイルを取得しないため、実行時のchecksum／attestation検証はありません。
 - ソースから使っている場合の更新は `make update`（`git pull --ff-only` + `make install`）です。
 
 - `make install` は `~/.local/bin/sshc` へ atomic にインストールし、sudo は不要です。`make uninstall` はこのバイナリだけを削除します。
