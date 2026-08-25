@@ -9,6 +9,7 @@ function api(overrides: Partial<TerminalSessionsApi> = {}): TerminalSessionsApi 
   return {
     terminalSessions: vi.fn().mockResolvedValue(list),
     openTerminalSession: vi.fn(),
+    reconnectTerminalSession: vi.fn().mockResolvedValue(list),
     closeTerminalSession: vi.fn().mockResolvedValue(list),
     renameTerminalSession: vi.fn().mockResolvedValue(list),
     ...overrides,
@@ -103,6 +104,45 @@ describe("useTerminalSessions", () => {
 
     expect(outcome).toBe(false);
     expect(result.current.problem).toBe("terminal.renameFailed");
+  });
+
+  it("reconnects the same retained session and adopts the returned state", async () => {
+    const connected = {
+      id: "a", kind: "ssh", alias: "bastion", title: "bastion",
+      startedAt: "2026-08-26T01:00:00Z", state: "connected", problem: "",
+    } as const;
+    const reconnectTerminalSession = vi.fn().mockResolvedValue({ sessions: [connected], maxSessions: 50 });
+    const client = api({ reconnectTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    let outcome = false;
+    await act(async () => {
+      outcome = await result.current.reconnect("a");
+    });
+
+    expect(outcome).toBe(true);
+    expect(reconnectTerminalSession).toHaveBeenCalledWith("a");
+    expect(result.current.sessions).toEqual([connected]);
+  });
+
+  it("reports a refused explicit reconnect and refreshes the retained state", async () => {
+    const terminalSessions = vi.fn().mockResolvedValue(list);
+    const reconnectTerminalSession = vi.fn().mockRejectedValue(
+      new ApiError("host_key_changed", 422, { code: "host_key_changed", message: "changed" }),
+    );
+    const client = api({ terminalSessions, reconnectTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    let outcome = true;
+    await act(async () => {
+      outcome = await result.current.reconnect("a");
+    });
+
+    expect(outcome).toBe(false);
+    expect(result.current.problem).toBe("terminal.hostKeyChanged");
+    expect(terminalSessions).toHaveBeenCalledTimes(2);
   });
   it("names why a connection the configuration does not allow was refused", async () => {
     const openTerminalSession = vi.fn().mockRejectedValue(

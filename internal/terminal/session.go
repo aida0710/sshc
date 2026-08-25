@@ -456,3 +456,79 @@ func (s *Session) finish(info ExitInfo) {
 		cleanup()
 	}
 }
+
+// prepareManualReconnect は終了済みのSSHセッションを同じIDで再利用する。
+// 呼び出し側が新しいProcessを確保する間はconnectingとして数え、同時実行と
+// session上限の迂回を防ぐ。
+func (s *Session) prepareManualReconnect() (func(context.Context, Size) (Process, error), Size, ExitInfo, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.exited == nil || s.reopen == nil || s.discarded {
+		return nil, Size{}, ExitInfo{}, ErrReconnectUnavailable
+	}
+	previous := *s.exited
+	s.process = nil
+	s.exited = nil
+	s.state = StateConnecting
+	s.problem = ""
+	s.reconnectView = nil
+	s.retries = 0
+	s.stopping = make(chan struct{})
+	s.done = make(chan struct{})
+	return s.reopen, s.size, previous, nil
+}
+
+func (s *Session) manualReconnectProblem(err error) string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.reconnectError == nil {
+		return "reconnect_failed"
+	}
+	_, problem := s.reconnectError(err)
+	if problem == "" {
+		return "reconnect_failed"
+	}
+	return problem
+}
+
+// failManualReconnect は接続前の終了状態へ戻す。新しく作ったdoneを閉じるため、
+// engine停止も失敗した接続を待ち続けない。
+func (s *Session) failManualReconnect(previous ExitInfo, problem string) {
+	s.mutex.Lock()
+	s.process = nil
+	s.exited = &previous
+	s.state = StateExited
+	s.problem = problem
+	s.reconnectView = nil
+	done := s.done
+	for stream := range s.streams {
+		delete(s.streams, stream)
+		stream.close()
+	}
+	s.mutex.Unlock()
+	close(done)
+}
+
+// completeManualReconnect はcloseやshutdownが先行していなければ、新しいProcessを
+// 同じsessionへ公開する。
+func (s *Session) completeManualReconnect(process Process, started time.Time) bool {
+	s.mutex.Lock()
+	stopped := s.discarded
+	select {
+	case <-s.stopping:
+		stopped = true
+	default:
+	}
+	if stopped || s.exited != nil || s.state != StateConnecting {
+		s.mutex.Unlock()
+		return false
+	}
+	s.process = process
+	s.started = started
+	s.state = StateConnected
+	s.problem = ""
+	s.reconnectView = nil
+	s.mutex.Unlock()
+	s.publish([]byte("\r\n[sshc] 手動で繋ぎ直しました。新しいシェルです。前の画面より上は、切れる前の記録です。\r\n"))
+	return true
+}
