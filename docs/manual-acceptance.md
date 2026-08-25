@@ -20,6 +20,7 @@
 6. Known Hosts パネルで「Scan」を実行し、候補が「unverified」と表示されること、別経路で得た fingerprint を入力するか明示的に承認するまで「Add to known_hosts」が押せないことを確認する。この操作は実際に対象アドレスへ接続するため、自動テストには含めていません。
 7. 接続を開いて実際に操作する。`vim` を開いてウィンドウを広げ、`window-change` によって描画が追随することを確認する。`LocalForward` を設定して接続し、転送が一覧に表示されること、そのポート経由で接続先に到達できること、コンソールを閉じるとポートが解放されることを確認する。
 8. 未知のホストへ接続し、fingerprint を含む確認プロンプトが端末に表示されることを確認する。`yes` では接続されて `known_hosts` に 1 行追加され、`no` では接続されずファイルも変更されないことを確認する。次に、既知のホストの鍵を変更して接続し、確認プロンプトを表示せず接続を拒否することを確認する。
+9. remote shellを`exit`で終了し、終了表示内の「再接続」を押す。同じpaneで新しいshellが開き、終了前のscrollbackが境界メッセージより上に残ることを確認する。再び終了させ、再接続を押した直後にconsoleを閉じた場合は、接続完了後にsessionが復活しないことを確認する。
 
 ## M2. 実 `authorized_keys` への公開鍵登録
 
@@ -82,6 +83,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 6. 画面を回転し、`configChanges` によって Activity が再作成されず、セッションと WebView の状態が維持されることを確認する。
 7. Keys 画面に `ecdsa-sk` / `ed25519-sk` が表示されず、「エージェントに追加」が無効であることを確認する。Android で利用できない機能を UI に表示しないことの確認である。
 8. UI のどこにも CLI の利用を案内する文言が表示されないことを確認する。Android にはコマンドを入力できる端末がないためである。
+9. Android 13以降で初回起動、強制停止後の起動、taskから除去してすぐ再起動を試し、`Another sshc engine is already running on this device.`が誤表示されないことを確認する。実際に同一processで二重起動した場合だけこの表示になること、private storageを開けない場合は別のstorage errorになることもlogcatで確認する。
 
 ## M7. 実ホストでのSFTP
 

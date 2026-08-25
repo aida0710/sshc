@@ -366,6 +366,153 @@ func TestExitLeavesTheSessionReadableAndClosesEveryAttachment(t *testing.T) {
 	}
 }
 
+func TestExitedSSHSessionReconnectsWithTheSameIdentityAndScrollback(t *testing.T) {
+	registry, _ := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	first := newFakeProcess()
+	second := newFakeProcess()
+	processes := []*fakeProcess{first, second}
+	next := 0
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "bastion", Title: "bastion",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) {
+			process := processes[next]
+			next++
+			return process, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.feed("before exit\n")
+	waitFor(t, func() bool { return strings.Contains(string(session.Snapshot()), "before exit") })
+	first.exit(terminal.ExitInfo{Code: 255})
+	waitFor(t, func() bool { return session.Exit() != nil })
+
+	reconnected, err := registry.Reconnect(context.Background(), session.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reconnected != session || reconnected.ID() != session.ID() {
+		t.Fatal("Reconnect replaced the session identity")
+	}
+	view := session.View()
+	if view.State != terminal.StateConnected || view.Exited != nil || view.Problem != "" {
+		t.Fatalf("reconnected view = %#v", view)
+	}
+	if snapshot := string(session.Snapshot()); !strings.Contains(snapshot, "before exit") ||
+		!strings.Contains(snapshot, "新しいシェル") {
+		t.Fatalf("reconnected scrollback = %q", snapshot)
+	}
+	second.exit(terminal.ExitInfo{})
+	waitFor(t, func() bool { return session.Exit() != nil })
+}
+
+func TestManualReconnectRefusesLiveAndLocalSessions(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	live := openShell(t, registry)
+	if _, err := registry.Reconnect(context.Background(), live.ID()); !errors.Is(err, terminal.ErrReconnectUnavailable) {
+		t.Fatalf("Reconnect(live) = %v", err)
+	}
+	starter.last().exit(terminal.ExitInfo{})
+	waitFor(t, func() bool { return live.Exit() != nil })
+	if _, err := registry.Reconnect(context.Background(), live.ID()); !errors.Is(err, terminal.ErrReconnectUnavailable) {
+		t.Fatalf("Reconnect(local shell) = %v", err)
+	}
+}
+
+func TestClosingWhileManualReconnectOpensDoesNotResurrectTheSession(t *testing.T) {
+	registry, _ := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	first := newFakeProcess()
+	replacement := newFakeProcess()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	opened := 0
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "bastion", Title: "bastion",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) {
+			opened++
+			if opened == 1 {
+				return first, nil
+			}
+			close(entered)
+			<-release
+			return replacement, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.exit(terminal.ExitInfo{Code: 255})
+	waitFor(t, func() bool { return session.Exit() != nil })
+
+	result := make(chan error, 1)
+	go func() {
+		_, reconnectErr := registry.Reconnect(context.Background(), session.ID())
+		result <- reconnectErr
+	}()
+	<-entered
+	if err := registry.Close(session.ID()); err != nil {
+		t.Fatal(err)
+	}
+	replacement.exit(terminal.ExitInfo{})
+	close(release)
+	if reconnectErr := <-result; !errors.Is(reconnectErr, terminal.ErrReconnectUnavailable) {
+		t.Fatalf("Reconnect after close = %v", reconnectErr)
+	}
+	registry.Prune()
+	if _, ok := registry.Lookup(session.ID()); ok {
+		t.Fatal("the manually closed session was resurrected")
+	}
+}
+
+func TestPendingManualReconnectCountsAsOneSession(t *testing.T) {
+	registry, _ := newRegistry(terminal.Limits{MaxSessions: 2, Scrollback: 1 << 10})
+	first := newFakeProcess()
+	replacement := newFakeProcess()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	opened := 0
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "bastion", Title: "bastion",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) {
+			opened++
+			if opened == 1 {
+				return first, nil
+			}
+			close(entered)
+			<-release
+			return replacement, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.exit(terminal.ExitInfo{Code: 255})
+	waitFor(t, func() bool { return session.Exit() != nil })
+
+	result := make(chan error, 1)
+	go func() {
+		_, reconnectErr := registry.Reconnect(context.Background(), session.ID())
+		result <- reconnectErr
+	}()
+	<-entered
+	second := openShell(t, registry)
+	if _, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindShell, Command: terminal.Command{Path: "/bin/zsh"},
+	}); !errors.Is(err, terminal.ErrSessionLimit) {
+		t.Fatalf("third Open() = %v, want ErrSessionLimit", err)
+	}
+
+	replacement.exit(terminal.ExitInfo{})
+	close(release)
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Close(second.ID()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWriteAndResizeReachThePTY(t *testing.T) {
 	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
 	session := openShell(t, registry)

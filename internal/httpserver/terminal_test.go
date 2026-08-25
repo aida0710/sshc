@@ -144,6 +144,7 @@ type terminalFixture struct {
 	mutex    sync.Mutex
 	// connected は、プロセス内 SSH に渡された alias である。
 	connected []string
+	ssh       []*scriptedPTY
 	recorded  []string
 }
 
@@ -151,7 +152,9 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	f.connected = append(f.connected, alias)
-	return newScriptedPTY()
+	process := newScriptedPTY()
+	f.ssh = append(f.ssh, process)
+	return process
 }
 
 func (f *terminalFixture) record(alias string) {
@@ -392,6 +395,77 @@ func TestASuccessfulSSHSessionIsRecordedAfterItCanBeStreamed(t *testing.T) {
 	defer fixture.mutex.Unlock()
 	if len(fixture.recorded) != 1 || fixture.recorded[0] != "bastion" {
 		t.Fatalf("recorded = %#v", fixture.recorded)
+	}
+}
+
+func TestExitedSSHSessionCanBeExplicitlyReconnectedInPlace(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	var opened api.OpenTerminalSessionResponse
+	if err := json.Unmarshal([]byte(body), &opened); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mutex.Lock()
+	first := fixture.ssh[0]
+	fixture.mutex.Unlock()
+	first.feed("before manual reconnect\r\n")
+	first.exit(terminal.ExitInfo{Code: 255})
+	waitUntil(t, func() bool {
+		session, ok := fixture.registry.Lookup(opened.Session.Id)
+		return ok && session.Exit() != nil
+	})
+
+	response, body = fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions/"+opened.Session.Id+"/reconnect", "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("reconnect = %d: %s", response.StatusCode, body)
+	}
+	var listed api.TerminalSessionList
+	if err := json.Unmarshal([]byte(body), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Sessions) != 1 || listed.Sessions[0].Id != opened.Session.Id ||
+		listed.Sessions[0].State != api.TerminalSessionState("connected") || listed.Sessions[0].Exited != nil {
+		t.Fatalf("sessions after reconnect = %#v", listed.Sessions)
+	}
+	fixture.mutex.Lock()
+	if len(fixture.connected) != 2 || fixture.connected[1] != "bastion" {
+		t.Fatalf("connections = %#v", fixture.connected)
+	}
+	second := fixture.ssh[1]
+	fixture.mutex.Unlock()
+
+	ticket := fixture.newTicket(t, opened.Session.Id)
+	connection, _ := fixture.dial(t, ticket)
+	if connection == nil {
+		t.Fatal("the reconnected stream was unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	kind, payload, err := connection.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind != websocket.MessageBinary || !strings.Contains(string(payload), "before manual reconnect") ||
+		!strings.Contains(string(payload), "新しいシェル") {
+		t.Fatalf("replayed = %v %q", kind, payload)
+	}
+	second.exit(terminal.ExitInfo{})
+}
+
+func TestExplicitReconnectRefusesALocalShell(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	id, _ := fixture.openShell(t)
+	fixture.starter.last().exit(terminal.ExitInfo{})
+	waitUntil(t, func() bool {
+		session, ok := fixture.registry.Lookup(id)
+		return ok && session.Exit() != nil
+	})
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions/"+id+"/reconnect", "")
+	if response.StatusCode != http.StatusConflict || !strings.Contains(body, "terminal_reconnect_unavailable") {
+		t.Fatalf("local reconnect = %d: %s", response.StatusCode, body)
 	}
 }
 

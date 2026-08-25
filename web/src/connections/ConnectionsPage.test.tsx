@@ -23,7 +23,7 @@ vi.mock("../api/config", async () => {
 vi.mock("../api/integrations", () => ({
   integrationsApi: {
     terminalSessions: vi.fn(), openTerminalSession: vi.fn(), terminalStreamTicket: vi.fn(),
-    closeTerminalSession: vi.fn(), renameTerminalSession: vi.fn(),
+    reconnectTerminalSession: vi.fn(), closeTerminalSession: vi.fn(), renameTerminalSession: vi.fn(),
     passwordVault: vi.fn(), credentials: vi.fn(),
     passwordEligibility: vi.fn(), initialiseVault: vi.fn(), unlockVault: vi.fn(),
   },
@@ -79,6 +79,7 @@ const consoleProps = {
   consoles: {
     sessions: [], maxSessions: 50, busy: false, problem: "", loaded: true,
     rename: vi.fn(async () => true), open: vi.fn(async () => null), close: vi.fn(async () => undefined),
+    reconnect: vi.fn(async () => false),
     closeAll: vi.fn(async () => undefined),
     refresh: vi.fn(async () => undefined), markExited: vi.fn(),
   },

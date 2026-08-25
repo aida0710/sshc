@@ -101,6 +101,20 @@ describe("integrationsApi terminal sessions", () => {
     expect(new Headers(init.headers).get("X-SSHC-Action")).toBeNull();
   });
 
+  it("reconnects an exited session without an action token", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ sessions: [session], maxSessions: 50 }));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.reconnectTerminalSession("session id"))
+      .resolves.toEqual({ sessions: [session], maxSessions: 50 });
+
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/terminal/sessions/session%20id/reconnect");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("X-SSHC-CSRF")).toBe(csrfToken);
+    expect(new Headers(init.headers).get("X-SSHC-Action")).toBeNull();
+  });
+
   it.each([
     { sessions: [{ ...session, kind: "telnet" }], maxSessions: 50 },
     { sessions: [{ ...session, id: 3 }], maxSessions: 50 },

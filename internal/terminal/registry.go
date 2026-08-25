@@ -47,8 +47,9 @@ type Registry struct {
 	closing bool
 	forced  bool
 
-	pending    map[uint64]context.CancelFunc
-	nextTicket uint64
+	pending           map[uint64]context.CancelFunc
+	pendingReconnects int
+	nextTicket        uint64
 	// outstanding は、送り出したまま戻っていない graceful/force の呼び出し数。
 	outstanding int
 	joined      []error
@@ -115,6 +116,19 @@ func (r *Registry) random() io.Reader {
 	return r.Random
 }
 
+// liveCount は、確保中または生存中のセッション数を重複なく返す。
+// 手動再接続は既存セッションを生存状態へ戻してから pending にも載るため、
+// pendingReconnects の分だけ二重計上を除く。
+func (r *Registry) liveCount() int {
+	live := len(r.pending) - r.pendingReconnects
+	for _, session := range r.sessions {
+		if session.Live() {
+			live++
+		}
+	}
+	return live
+}
+
 // Open は PTY をひとつ確保し、その中でプログラムを起動する。
 func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 	limits := r.limits()
@@ -128,13 +142,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		r.mutex.Unlock()
 		return nil, ErrNoStarter
 	}
-	live := len(r.pending)
-	for _, session := range r.sessions {
-		if session.Live() {
-			live++
-		}
-	}
-	if live >= limits.MaxSessions {
+	if r.liveCount() >= limits.MaxSessions {
 		r.mutex.Unlock()
 		return nil, ErrSessionLimit
 	}
@@ -318,6 +326,66 @@ func (r *Registry) Lookup(id string) (*Session, bool) {
 		}
 	}
 	return nil, false
+}
+
+// Reconnect は終了済みのSSHセッションを同じIDとscrollbackのまま開き直す。
+// 新規Openと同じ上限に数え、closeやengine停止が先行したProcessは公開しない。
+func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {
+	limits := r.limits()
+	r.mutex.Lock()
+	if r.closing {
+		r.mutex.Unlock()
+		return nil, ErrShuttingDown
+	}
+	var session *Session
+	for _, candidate := range r.sessions {
+		if candidate.id == id {
+			session = candidate
+			break
+		}
+	}
+	if session == nil {
+		r.mutex.Unlock()
+		return nil, ErrNotFound
+	}
+	if r.liveCount() >= limits.MaxSessions {
+		r.mutex.Unlock()
+		return nil, ErrSessionLimit
+	}
+	reopen, size, previous, err := session.prepareManualReconnect()
+	if err != nil {
+		r.mutex.Unlock()
+		return nil, err
+	}
+	creation, cancel := context.WithCancel(ctx)
+	ticket := r.reserve(cancel)
+	r.pendingReconnects++
+	r.mutex.Unlock()
+
+	process, openErr := reopen(creation, size)
+
+	r.mutex.Lock()
+	delete(r.pending, ticket)
+	r.pendingReconnects--
+	r.condition().Broadcast()
+	lost := r.closing || creation.Err() != nil
+	r.mutex.Unlock()
+	cancel()
+
+	if openErr != nil {
+		session.failManualReconnect(previous, session.manualReconnectProblem(openErr))
+		return nil, openErr
+	}
+	if lost || !session.completeManualReconnect(process, r.now()) {
+		r.discard(process, nil)
+		session.failManualReconnect(previous, "")
+		if lost {
+			return nil, ErrShuttingDown
+		}
+		return nil, ErrReconnectUnavailable
+	}
+	go session.pump(r.now)
+	return session, nil
 }
 
 // Close は、生存中なら子プロセスに SIGHUP を送り、終了済みなら一覧から消す。
