@@ -36,7 +36,7 @@ export function ErrorDiagnosticNotice({
             <h2 id="request-failure-heading" className="text-sm font-semibold text-danger">
               {t("diagnostic.requestFailed")}
             </h2>
-            <p role="status" className="mt-1 text-xs leading-5 text-ink-muted">
+            <p className="mt-1 text-xs leading-5 text-ink-muted">
               {t("diagnostic.requestFailedHint", { code: diagnostic.code })}
             </p>
           </div>
