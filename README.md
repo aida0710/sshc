@@ -12,11 +12,14 @@ macOS と Linux では Homebrew を利用できます。
 brew install aida0710/tap/sshc
 ```
 
-または、インストールスクリプトを実行します。
+または、取得するスクリプトとバイナリを同じリリースへ固定して実行します。
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
+SSHC_VERSION=v0.13.3 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.13.3/install.sh | sh'
 ```
+
+`main` 上の可変なスクリプトを直接実行せず、導入したい[リリース](https://github.com/aida0710/sshc/releases)のタグをURLと`SSHC_VERSION`の両方へ指定してください。
 
 Windows を含む各 OS 向けのバイナリと Android APK は、[GitHub Releases](https://github.com/aida0710/sshc/releases) からダウンロードできます。デスクトップアプリ、インストーラ、macOS の app bundle は配布していません。
 

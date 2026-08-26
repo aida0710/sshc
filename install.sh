@@ -1,7 +1,8 @@
 #!/bin/sh
 # sshc の CLI を入れる。
 #
-#   curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
+#   SSHC_VERSION=v0.13.3 sh -c \
+#     'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.13.3/install.sh | sh'
 #
 # 配布物は UI を埋め込んだ単一の CLI バイナリである。
 # インストール前の検証内容と変更内容は標準出力へ表示する:
@@ -55,6 +56,10 @@ asset="sshc-$goos-$goarch"
 if [ -n "${SSHC_VERSION:-}" ]; then
   tag="$SSHC_VERSION"
   case "$tag" in v*) ;; *) tag="v$tag" ;; esac
+  if ! printf '%s\n' "$tag" |
+    grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+    die "SSHC_VERSION is not a semantic version: $tag"
+  fi
   base="https://github.com/$REPO/releases/download/$tag"
 else
   tag=latest

@@ -55,6 +55,29 @@ func TestReleaseWorkflowRequiresAValidatedTagForAutomaticAndManualRuns(t *testin
 	}
 }
 
+func TestReleaseWorkflowSerializesEveryVersionAndNeverPromotesBackwards(t *testing.T) {
+	_, source := readReleaseWorkflow(t)
+	for _, required := range []string{
+		"group: release-publication",
+		"cancel-in-progress: false",
+		"release-channel: ${{ steps.policy.outputs.release_channel }}",
+		"promote-latest: ${{ steps.policy.outputs.promote_latest }}",
+		`RELEASE_CHANNEL: ${{ needs.verify-source.outputs.release-channel }}`,
+		`PROMOTE_LATEST: ${{ needs.verify-source.outputs.promote-latest }}`,
+		`[ "$RELEASE_CHANNEL" = stable ] && [ "$PROMOTE_LATEST" = true ]`,
+		`-f make_latest="$make_latest"`,
+		"the tap already has newer stable",
+		`"$GITHUB_EVENT_NAME" != workflow_dispatch`,
+		`sort -V | tail -1`,
+		`release_channel=prerelease`,
+		`a published release already exists`,
+	} {
+		if !strings.Contains(source, required) {
+			t.Errorf("release monotonicity contract lacks %q", required)
+		}
+	}
+}
+
 // 束は、それが動く OS の上で作る。
 //
 // 一台の macOS から四つ作っていたことがあり、そのとき Windows の
@@ -87,19 +110,13 @@ func TestReleaseWorkflowBuildsEveryPlatformNatively(t *testing.T) {
 func TestReleasePublishWaitsForEveryPlatform(t *testing.T) {
 	document, _ := readReleaseWorkflow(t)
 
-	publish, present := document.Jobs["publish"]
+	stage, present := document.Jobs["stage-release"]
 	if !present {
-		t.Fatal("the release has no publish job")
+		t.Fatal("the release has no stage-release job")
 	}
 	for _, required := range []string{"macos", "linux", "windows", "android"} {
-		found := false
-		for _, need := range publish.Needs {
-			if need == required {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("publish does not wait for %s; a release could go out without it", required)
+		if !slices.Contains(stage.Needs, required) {
+			t.Errorf("stage-release does not wait for %s; an incomplete draft could reach the tap", required)
 		}
 	}
 }
@@ -108,27 +125,26 @@ func TestReleasePublishesOnlyAfterTheRequiredHomebrewTap(t *testing.T) {
 	document, _ := readReleaseWorkflow(t)
 	publish, publishPresent := document.Jobs["publish"]
 	homebrew, homebrewPresent := document.Jobs["homebrew"]
-	if !publishPresent || !homebrewPresent {
-		t.Fatal("the release requires both publish and homebrew jobs")
+	_, stagePresent := document.Jobs["stage-release"]
+	if !publishPresent || !homebrewPresent || !stagePresent {
+		t.Fatal("the release requires stage, publish, and homebrew jobs")
 	}
 	if !slices.Contains(publish.Needs, "homebrew") {
 		t.Error("publish does not wait for Homebrew; a tap failure could leave a public partial release")
 	}
-	if slices.Contains(homebrew.Needs, "publish") {
-		t.Error("Homebrew still runs after publish; the public release is no longer the final commit point")
+	if !slices.Contains(homebrew.Needs, "stage-release") {
+		t.Error("Homebrew runs before the complete attested release draft exists")
 	}
-	for _, required := range []string{"macos", "linux", "windows", "android"} {
-		if !slices.Contains(homebrew.Needs, required) {
-			t.Errorf("Homebrew does not wait for %s; the tap could point at an unverified release", required)
-		}
+	if !slices.Contains(publish.Needs, "stage-release") {
+		t.Error("publish does not refer to the previously verified draft")
 	}
 }
 
 func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 	_, source := readReleaseWorkflow(t)
-	publish := jobSection(source, "  publish:", "  homebrew:")
-	if publish == "" {
-		t.Fatal("release.yml has no publish job")
+	stage := jobSection(source, "  stage-release:", "  homebrew:")
+	if stage == "" {
+		t.Fatal("release.yml has no stage-release job")
 	}
 	for _, required := range []string{
 		"sshc-darwin-amd64", "sshc-darwin-arm64",
@@ -143,38 +159,39 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 		`gh api --method DELETE "repos/$GH_REPO/releases/$draft_id"`,
 		`.draft == true`,
 		`all(.assets[]; .size > 0)`,
-		`gh release edit "$RELEASE_TAG" --draft=false --latest`,
+		`.prerelease == $expected_prerelease`,
+		`release_id=%s`,
 	} {
-		if !strings.Contains(publish, required) {
-			t.Errorf("publish artifact gate is missing %q", required)
+		if !strings.Contains(stage, required) {
+			t.Errorf("stage artifact gate is missing %q", required)
 		}
 	}
-	if strings.Contains(publish, `-exec cp {} dist/`) {
-		t.Error("publish still silently overwrites duplicate artifact basenames")
+	if strings.Contains(stage, `-exec cp {} dist/`) {
+		t.Error("stage still silently overwrites duplicate artifact basenames")
 	}
-	if strings.Index(publish, `gh release create "$RELEASE_TAG"`) > strings.Index(publish, `--draft=false --latest`) {
-		t.Error("release publish happens before the complete draft is verified")
+	if strings.Contains(stage, `draft=false`) {
+		t.Error("the staging job publishes before Homebrew succeeds")
 	}
 }
 
 // すべてのタグに、バージョン管理されたリリースノートを要求する。
 func TestReleaseRequiresVersionControlledNotes(t *testing.T) {
 	_, source := readReleaseWorkflow(t)
-	publish := jobSection(source, "  publish:", "  homebrew:")
-	if publish == "" {
-		t.Fatal("release.yml has no publish job")
+	stage := jobSection(source, "  stage-release:", "  homebrew:")
+	if stage == "" {
+		t.Fatal("release.yml has no stage-release job")
 	}
 	for _, required := range []string{
 		`notes_file="docs/releases/$RELEASE_TAG.md"`,
 		`[ ! -f "$notes_file" ]`,
 		`--notes-file "$notes_file"`,
 	} {
-		if !strings.Contains(publish, required) {
-			t.Errorf("publish job is missing %q", required)
+		if !strings.Contains(stage, required) {
+			t.Errorf("stage job is missing %q", required)
 		}
 	}
 	for _, forbidden := range []string{"--notes-from-tag", "--generate-notes"} {
-		if strings.Contains(publish, forbidden) {
+		if strings.Contains(stage, forbidden) {
 			t.Errorf("publish job still uses %q instead of version-controlled release notes", forbidden)
 		}
 	}
@@ -255,7 +272,7 @@ func TestReleaseWindowsStepsStopAtTheFirstFailure(t *testing.T) {
 func TestTheAndroidEngineCarriesTheReleasedVersion(t *testing.T) {
 	_, source := readReleaseWorkflow(t)
 
-	android := jobSection(source, "  android:", "  publish:")
+	android := jobSection(source, "  android:", "  stage-release:")
 	if android == "" {
 		t.Fatal("release.yml に android のジョブが無い")
 	}
