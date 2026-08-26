@@ -188,7 +188,7 @@ func TestReleaseRequiresExactSHACIAndAuthenticatedArtifacts(t *testing.T) {
 		`actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA`,
 		`.head_sha == $sha and`,
 		`.head_branch == "main" and`,
-		`.event == "push" and`,
+		`(.event == "push" or .event == "workflow_dispatch") and`,
 		`.conclusion == "success"`,
 	} {
 		if !strings.Contains(gate, required) {
