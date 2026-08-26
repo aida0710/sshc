@@ -10,6 +10,10 @@ import (
 // ErrPromptAborted は、ユーザーが問いに応答せずに打ち切ったことを報告する。
 var ErrPromptAborted = errors.New("the prompt was cancelled")
 
+// ErrPromptUnavailable は、利用者へ質問できない接続で追加の入力が必要になった
+// ことを報告する。保存済み資格情報はこのエラーより先に試される。
+var ErrPromptUnavailable = errors.New("authentication requires user input, but this operation is non-interactive")
+
 // Prompter は、接続の途中でユーザーに尋ねる手段である。
 //
 // 尋ねることは 4 つある。未知のホスト鍵を受け入れるか、鍵のパスフレーズ、
@@ -23,6 +27,25 @@ type Prompter interface {
 	// Confirm は yes か no を求める。
 	Confirm(prompt string) (bool, error)
 }
+
+// nonInteractivePrompter は、保存済み資格情報を対話接続と同じ認証経路へ
+// 通しつつ、追加質問だけを拒否する。nil を渡すと Auth.Methods が password と
+// keyboard-interactive 自体を除外し、vault に保存済みの結果まで使えなくなる。
+type nonInteractivePrompter struct{}
+
+func (nonInteractivePrompter) Line(string) (string, error) {
+	return "", ErrPromptUnavailable
+}
+
+func (nonInteractivePrompter) Secret(string) (string, error) {
+	return "", ErrPromptUnavailable
+}
+
+func (nonInteractivePrompter) Confirm(string) (bool, error) {
+	return false, ErrPromptUnavailable
+}
+
+var noPrompt Prompter = nonInteractivePrompter{}
 
 // StreamPrompter は、端末のストリームへ問いを出す。
 //

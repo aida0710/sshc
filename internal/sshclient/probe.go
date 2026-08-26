@@ -27,9 +27,9 @@ type Probe struct {
 
 // Probe は、接続して認証だけを試し、チャンネルを開かずに閉じる。
 //
-// 何も尋ねない。Prompter を渡さないので、パスフレーズもパスワードも
-// 端末には出ない。保存されているパスフレーズは使う。それは尋ねずに済む結果で
-// ある。これは「上限つきで非対話」というこの検査の約束をそのまま引き継いでいる。
+// 保存済み資格情報は対話接続と同じ認証経路で使うが、追加質問は拒否する。
+// パスフレーズもパスワードも端末には出ず、入力も待たない。これは「上限つきで
+// 非対話」というこの検査の約束をそのまま引き継いでいる。
 func (d Dialer) Probe(ctx context.Context, target Target) (Probe, error) {
 	started := time.Now()
 
@@ -41,7 +41,7 @@ func (d Dialer) Probe(ctx context.Context, target Target) (Probe, error) {
 	recorder := &methodRecorder{}
 	auth := d.Auth
 	auth.Observe = recorder.note
-	methods, closeAuth := auth.methodsWithCleanup(strict, nil)
+	methods, closeAuth := auth.methodsWithCleanup(strict, noPrompt)
 	defer closeAuth()
 	if len(methods) == 0 {
 		return Probe{Elapsed: time.Since(started)}, ErrNoAuthMethod
@@ -75,7 +75,7 @@ func (d Dialer) probeChain(
 	var through *ssh.Client
 	var opened []ssh.Conn
 	for _, hop := range target.Jump {
-		client, err := d.connectOne(ctx, hop, through, nil, nil)
+		client, err := d.connectOne(ctx, hop, through, noPrompt, nil)
 		if err != nil {
 			for _, conn := range opened {
 				_ = conn.Close()

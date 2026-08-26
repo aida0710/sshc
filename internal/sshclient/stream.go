@@ -34,8 +34,8 @@ type Streams struct {
 // 端末は要求しない。要求すれば出力に画面制御が混ざり、集めた側が読めなく
 // なる。端末が要る用（`sudo` など）は、この入口の担当ではない。
 //
-// Prompter を渡さず、未知のホスト鍵も受け入れない。保存済みの鍵パスフレーズは
-// 使用できるが、対話を要する password 認証は使用しない。
+// 保存済み資格情報は対話接続と同じ認証経路で使用するが、追加質問は拒否し、
+// 未知のホスト鍵も受け入れない。標準入力はすべてリモートコマンドへ渡す。
 //
 // error はコマンドを実行できなかった場合だけ返す。リモートの終了コードは第1戻り値で返す。
 func (d Dialer) Stream(
@@ -48,7 +48,7 @@ func (d Dialer) Stream(
 	strict := target
 	strict.Strict = "yes"
 
-	client, closers, err := d.chain(ctx, strict, nil, nil)
+	client, closers, err := d.chain(ctx, strict, noPrompt, nil)
 	if err != nil {
 		return RemoteFailureExit, err
 	}
