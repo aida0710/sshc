@@ -251,7 +251,9 @@ func migrationHarness(
 		t.Fatal(err)
 	}
 	vaultPath := filepath.Join(workspace.Root(), filepath.FromSlash(WorkspacePath))
-	if err := os.WriteFile(vaultPath, original, 0o600); err != nil {
+	// 本番と同じprivate write経路を使う。os.WriteFileではWindowsのDACLが
+	// 制限されず、migration以前にworkspaceのprivate read検査で拒否される。
+	if err := storage.WriteAtomicFile(fileSystem, vaultPath, ".migration-vault-", storage.FilePermission, original); err != nil {
 		t.Fatal(err)
 	}
 	return service, workspace, manager, vaultPath, original
