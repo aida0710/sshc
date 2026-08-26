@@ -145,7 +145,14 @@ func (c *commandConn) Close() error {
 		case <-finished:
 		case <-time.After(proxyCommandGrace):
 			_ = c.process.Process.Kill()
-			<-finished
+			// Windows の cmd.exe は子プロセスが継承した pipe を保持していると、
+			// Kill 後も Wait が返らないことがある。Close は接続終了処理なので、
+			// 外部コマンドの不作法によって無期限に止めない。
+			select {
+			case <-finished:
+			case <-time.After(proxyCommandGrace):
+				c.closeErr = errors.New("ProxyCommand did not stop after it was killed")
+			}
 		}
 	})
 	return c.closeErr
