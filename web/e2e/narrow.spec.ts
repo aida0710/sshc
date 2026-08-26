@@ -137,7 +137,7 @@ test("explains an older vault with both schema versions on mobile", async ({ pag
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
-      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.15.1-vault-version-mobile.png`,
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.15.2-vault-version-mobile.png`,
       fullPage: true,
     });
   }

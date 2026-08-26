@@ -154,7 +154,7 @@ func TestTheInstallScriptReadsTheRunningEngineVersionFromJSON(t *testing.T) {
 }
 
 func TestTheDocumentedInstallerPinsScriptAndArtifactsToOneRelease(t *testing.T) {
-	for _, path := range []string{"README.md", filepath.Join("docs", "release-install.md")} {
+	for _, path := range []string{"README.md", filepath.Join("docs", "release-install.md"), "install.sh"} {
 		body, err := os.ReadFile(filepath.Join("..", "..", path))
 		if err != nil {
 			t.Fatal(err)
@@ -163,7 +163,7 @@ func TestTheDocumentedInstallerPinsScriptAndArtifactsToOneRelease(t *testing.T) 
 		if strings.Contains(text, "raw.githubusercontent.com/aida0710/sshc/main/install.sh") {
 			t.Errorf("%s still executes the mutable main installer", path)
 		}
-		for _, required := range []string{"SSHC_VERSION=v0.15.1", "/sshc/v0.15.1/install.sh"} {
+		for _, required := range []string{"SSHC_VERSION=v0.15.2", "/sshc/v0.15.2/install.sh"} {
 			if !strings.Contains(text, required) {
 				t.Errorf("%s lacks version-pinned installer fragment %q", path, required)
 			}
