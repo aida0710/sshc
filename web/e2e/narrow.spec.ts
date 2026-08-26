@@ -137,7 +137,7 @@ test("explains an older vault with both schema versions on mobile", async ({ pag
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
-      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.15.2-vault-version-mobile.png`,
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.15.3-vault-version-mobile.png`,
       fullPage: true,
     });
   }
@@ -178,7 +178,7 @@ test("reports a completed vault migration with both versions on mobile", async (
   await expectNoHorizontalOverflow(page, "vault migration notice");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
-      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.15.2-vault-migration-mobile.png`,
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.15.3-vault-migration-mobile.png`,
       fullPage: true,
     });
   }
