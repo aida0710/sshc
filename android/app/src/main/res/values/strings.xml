@@ -8,7 +8,6 @@
       Go の error 文には入口 URL が含まれ得るため、失敗理由の番号に対応する
       固定文だけを表示する。
     -->
-    <string name="failure_already_started">Another sshc engine is already running on this device.</string>
     <string name="failure_listen">sshc could not take a local port on this device.</string>
     <string name="failure_stopped_early">The sshc engine stopped before it could open.</string>
     <string name="failure_storage">sshc could not open its private storage. Restart the device, then try again.</string>

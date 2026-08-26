@@ -83,7 +83,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 6. 画面を回転し、`configChanges` によって Activity が再作成されず、セッションと WebView の状態が維持されることを確認する。
 7. Keys 画面に `ecdsa-sk` / `ed25519-sk` が表示されず、「エージェントに追加」が無効であることを確認する。Android で利用できない機能を UI に表示しないことの確認である。
 8. UI のどこにも CLI の利用を案内する文言が表示されないことを確認する。Android にはコマンドを入力できる端末がないためである。
-9. Android 13以降で初回起動、強制停止後の起動、taskから除去してすぐ再起動を試し、`Another sshc engine is already running on this device.`が誤表示されないことを確認する。実際に同一processで二重起動した場合だけこの表示になること、private storageを開けない場合は別のstorage errorになることもlogcatで確認する。
+9. Android 13以降で初回起動、強制停止後の起動、taskから除去してすぐ再起動を試し、毎回Web UIへ到達することを確認する。Service再生成などで同一processの起動要求が重複しても、古いengineを置き換えて通常画面へ収束し、二重起動エラー画面を表示しないことをlogcatでも確認する。private storageを開けない場合はstorage errorになることも確認する。
 
 ## M7. 実ホストでのSFTP
 

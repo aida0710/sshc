@@ -175,6 +175,7 @@
 - **cookie はポートに紐づきません。** 同じ `127.0.0.1` の別ポートに居るサーバーがこの session の cookie を受け取りうるので、読み取りにも CSRF トークンを要求します。トークンはページのメモリにあり、そこへは渡りません。
 - デスクトップパッケージは廃止し、`sshc-<OS>-<アーキ>` 形式の CLI バイナリだけを配布します。署名、公証、インストーラは使用しません。`curl` で取得し、`chmod +x` を設定して実行できます。Homebrew formula はソースからビルドします。
 - GUI アプリケーションとして配布するのは Android 版だけです。Android ではストア配布と WebView へのアクセス URL の受け渡しが必要です。iOS 版はラッパー、CI、検査がない状態で `ios-bind` target だけが残っていたため廃止しました。engine 側の `mobile` は gomobile のビルド対象として iOS を扱えますが、iOS 版の配布は保証しません。
+- Android版のengine ownerは同一packageの単一app processです。desktop／CLI用のOS file lockは使わず、Go側のprocess内mutexでstart／stopを直列化します。Service再生成などで`Start`が重複した場合は二重起動エラーにせず、以前のengineを停止して新しいengineへ置き換えます。desktop／CLIは別processを起動できるため、引き続き`engine.lock`を保持します。
 
 ## 更新の境界
 
