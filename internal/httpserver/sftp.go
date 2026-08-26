@@ -17,6 +17,7 @@ import (
 
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
+	"sshc/internal/validate"
 )
 
 type SFTPHandlers struct {
@@ -110,6 +111,8 @@ func describeSFTPEntry(entry sshcSFTP.Entry) sftpEntry {
 
 func sftpProblem(c *echo.Context, err error) error {
 	switch {
+	case errors.Is(err, validate.ErrUnsafeAlias):
+		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	case errors.Is(err, fs.ErrNotExist):
 		return problem(c, http.StatusNotFound, "sftp_not_found")
 	case errors.Is(err, sshcSFTP.ErrTransferNotFound):
@@ -289,7 +292,13 @@ func (h SFTPHandlers) Mkdir(c *echo.Context) error {
 	if err := decodeJSON(c, &body); err != nil || body.Type != sftpMkdirDirectory {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	entry, err := h.Service.Mkdir(c.Request().Context(), c.Param("alias"), body.Path)
+	alias := c.Param("alias")
+	unlock, err := h.Transfers.LockOperation(alias, body.Path)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	defer unlock()
+	entry, err := h.Service.Mkdir(c.Request().Context(), alias, body.Path)
 	if err != nil {
 		return sftpProblem(c, err)
 	}
@@ -301,7 +310,13 @@ func (h SFTPHandlers) Rename(c *echo.Context) error {
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	entry, err := h.Service.Rename(c.Request().Context(), c.Param("alias"), body.From, body.To)
+	alias := c.Param("alias")
+	unlock, err := h.Transfers.LockOperation(alias, body.From, body.To)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	defer unlock()
+	entry, err := h.Service.Rename(c.Request().Context(), alias, body.From, body.To)
 	if err != nil {
 		return sftpProblem(c, err)
 	}
@@ -544,6 +559,11 @@ func (h SFTPHandlers) CancelUpload(c *echo.Context) error {
 
 func (h SFTPHandlers) Delete(c *echo.Context) error {
 	alias, remotePath := c.Param("alias"), c.QueryParam("path")
+	unlock, err := h.Transfers.LockOperation(alias, remotePath)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	defer unlock()
 	target := alias + ":" + remotePath
 	if allowed, response := h.Actions.consume(c, session.ActionSFTPDelete, target); !allowed {
 		return response
@@ -564,6 +584,11 @@ func (h SFTPHandlers) Chmod(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	alias := c.Param("alias")
+	unlock, err := h.Transfers.LockOperation(alias, body.Path)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	defer unlock()
 	target := alias + ":" + body.Path + ":" + body.Mode
 	if allowed, response := h.Actions.consume(c, session.ActionSFTPChmod, target); !allowed {
 		return response
@@ -577,12 +602,12 @@ func (h SFTPHandlers) Chmod(c *echo.Context) error {
 
 func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
 	registry[session.ActionSFTPDelete] = actionKind{
-		evidence: func(target string) (string, error) {
+		evidence: func(ctx context.Context, target string) (string, error) {
 			alias, remotePath, ok := strings.Cut(target, ":")
 			if !ok {
 				return "", sshcSFTP.ErrInvalidPath
 			}
-			entry, err := service.Stat(context.Background(), alias, remotePath)
+			entry, err := service.Stat(ctx, alias, remotePath)
 			if err != nil {
 				return "", err
 			}
@@ -591,7 +616,7 @@ func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
 		fail: sftpProblem,
 	}
 	registry[session.ActionSFTPChmod] = actionKind{
-		evidence: func(target string) (string, error) {
+		evidence: func(ctx context.Context, target string) (string, error) {
 			alias, remainder, ok := strings.Cut(target, ":")
 			if !ok {
 				return "", sshcSFTP.ErrInvalidPath
@@ -600,7 +625,7 @@ func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
 			if separator <= 0 || separator == len(remainder)-1 {
 				return "", sshcSFTP.ErrInvalidPath
 			}
-			entry, err := service.Stat(context.Background(), alias, remainder[:separator])
+			entry, err := service.Stat(ctx, alias, remainder[:separator])
 			if err != nil {
 				return "", err
 			}

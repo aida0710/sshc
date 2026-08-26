@@ -45,10 +45,12 @@ func (d Dialer) Stream(
 		return RemoteFailureExit, errors.New("no remote command was given")
 	}
 	// 未知のホストを暗黙に受け入れない。Run と同じ理由である。
-	strict := target
-	strict.Strict = "yes"
+	strict := requireKnownHosts(target)
+	// ProxyCommand is a local process, not remote command stderr. It must still
+	// be visible at this CLI boundary even when connection verbosity is quiet.
+	trace := newTracer(Quiet, streams.Err)
 
-	client, closers, err := d.chain(ctx, strict, noPrompt, nil)
+	client, closers, err := d.chain(ctx, strict, noPrompt, trace)
 	if err != nil {
 		return RemoteFailureExit, err
 	}

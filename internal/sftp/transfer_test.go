@@ -106,6 +106,121 @@ func TestTransferManagerCloseReleasesRetainedRemoteAndRejectsNewWork(t *testing.
 	}
 }
 
+type blockingLstatRemote struct {
+	*fakeRemote
+	target      string
+	entered     chan struct{}
+	release     chan struct{}
+	enteredOnce sync.Once
+	closeOnce   sync.Once
+}
+
+func (remote *blockingLstatRemote) Lstat(candidate string) (fs.FileInfo, error) {
+	if candidate != remote.target {
+		return remote.fakeRemote.Lstat(candidate)
+	}
+	remote.enteredOnce.Do(func() { close(remote.entered) })
+	<-remote.release
+	return nil, fs.ErrClosed
+}
+
+func (remote *blockingLstatRemote) Close() error {
+	remote.closeOnce.Do(func() { close(remote.release) })
+	return nil
+}
+
+func TestUploadRequestCancellationClosesRetainedRemote(t *testing.T) {
+	const target = "/target.bin"
+	remote := &blockingLstatRemote{
+		fakeRemote: remoteWith(nil),
+		target:     target,
+		entered:    make(chan struct{}),
+		release:    make(chan struct{}),
+	}
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+		return remote, nil
+	}})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		_, err := manager.Start(ctx, "edge", "transfer_cancel1", target, sftp.StartUploadOptions{Size: 1})
+		done <- err
+	}()
+	<-remote.entered
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, fs.ErrClosed) {
+			t.Fatalf("Start after request cancellation = %v, want closed transport", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("request cancellation did not close the retained upload transport")
+	}
+	if err := manager.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLockOperationSerializesOppositePathOrders(t *testing.T) {
+	manager := sftp.NewTransferManager(&sftp.Service{})
+	firstUnlock, err := manager.LockOperation("edge", "/target", "/source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	acquired := make(chan func(), 1)
+	go func() {
+		close(started)
+		unlock, lockErr := manager.LockOperation("edge", "/source", "/target")
+		if lockErr != nil {
+			acquired <- nil
+			return
+		}
+		acquired <- unlock
+	}()
+	<-started
+	select {
+	case unlock := <-acquired:
+		if unlock != nil {
+			unlock()
+		}
+		firstUnlock()
+		t.Fatal("opposite path order did not serialize on the same normalized locks")
+	default:
+	}
+	firstUnlock()
+	select {
+	case unlock := <-acquired:
+		if unlock == nil {
+			t.Fatal("second LockOperation failed")
+		}
+		unlock()
+	case <-time.After(time.Second):
+		t.Fatal("opposite path order deadlocked")
+	}
+}
+
+func TestTransferJobsRejectReservedInternalPaths(t *testing.T) {
+	manager := sftp.NewTransferManager(&sftp.Service{})
+	for index, remotePath := range []string{
+		"/.report.sshc-upload-transfer_12345678.part",
+		"/.report.sshc-0123456789abcdef01234567.tmp",
+	} {
+		_, err := manager.CreateJob(sftp.CreateTransferJob{
+			ID:         "transfer_public" + string(rune('0'+index)),
+			BatchID:    "batch_public01",
+			Alias:      "edge",
+			Direction:  sftp.TransferDownload,
+			Kind:       sftp.TransferFile,
+			RemotePath: remotePath,
+			TotalBytes: 1,
+		})
+		if !errors.Is(err, sftp.ErrInvalidPath) {
+			t.Errorf("CreateJob(%q) = %v, want ErrInvalidPath", remotePath, err)
+		}
+	}
+}
+
 func TestManagerSerializesTextPublicationsForTheSameTarget(t *testing.T) {
 	remote := remoteWith(map[string]node{"/note.txt": file("note.txt", "before", 0o600)})
 	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}

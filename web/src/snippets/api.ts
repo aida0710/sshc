@@ -7,7 +7,8 @@ export type Startup = { alias: string; snippetId: string; inputs?: Record<string
 export type SnippetDraft = Pick<Snippet, "name" | "command"> & { description: string; variables: SnippetVariable[] };
 export type ExecutionTarget = { targetId: string; alias: string };
 export type ExecutionPreviewRequest = { snippetId?: string; command?: string; targets: ExecutionTarget[]; inputs: Record<string, string> };
-export type Preview = { snippetId: string; evidence: string; actionToken: string; actionExpiresAt: string; targets: { targetId: string; target: { alias: string; hostName: string; user: string; port: string }; command: string }[] };
+export type RouteHop = { alias: string; hostName: string; user: string; port: string; proxyCommand: string; strictHostKey: string; authentication: string[]; identityFiles: string[]; identitiesOnly: boolean; hostKeyAlgorithms: string[] };
+export type Preview = { snippetId: string; evidence: string; actionToken: string; actionExpiresAt: string; targets: { targetId: string; target: { alias: string; hostName: string; user: string; port: string; route: RouteHop[] }; command: string }[] };
 export type Job = { id: string; status: "running" | "completed" | "cancelled"; startedAt: string; finishedAt?: string; results: { targetId: string; alias: string; status: string; exitCode?: number; stdout?: string; stderr?: string; truncated?: boolean; problem?: string }[] };
 
 function variable(value: unknown): SnippetVariable {
@@ -31,7 +32,7 @@ function job(value: unknown): Job {
 
 function parsePreview(value: unknown): Preview {
   const item = asRecord(value);
-  return { snippetId: asString(item.snippetId), evidence: asString(item.evidence), actionToken: asString(item.actionToken), actionExpiresAt: asString(item.actionExpiresAt), targets: asArray(item.targets).map((raw) => { const targetPreview = asRecord(raw); const target = asRecord(targetPreview.target); return { targetId: asString(targetPreview.targetId), target: { alias: asString(target.alias), hostName: asString(target.hostName), user: asString(target.user), port: asString(target.port) }, command: asString(targetPreview.command) }; }) };
+  return { snippetId: asString(item.snippetId), evidence: asString(item.evidence), actionToken: asString(item.actionToken), actionExpiresAt: asString(item.actionExpiresAt), targets: asArray(item.targets).map((raw) => { const targetPreview = asRecord(raw); const target = asRecord(targetPreview.target); return { targetId: asString(targetPreview.targetId), target: { alias: asString(target.alias), hostName: asString(target.hostName), user: asString(target.user), port: asString(target.port), route: asArray(target.route ?? []).map((rawHop) => { const hop = asRecord(rawHop); return { alias: asString(hop.alias), hostName: asString(hop.hostName), user: asString(hop.user), port: asString(hop.port), proxyCommand: asString(hop.proxyCommand ?? ""), strictHostKey: asString(hop.strictHostKey), authentication: asArray(hop.authentication ?? []).map(asString), identityFiles: asArray(hop.identityFiles ?? []).map(asString), identitiesOnly: hop.identitiesOnly === true, hostKeyAlgorithms: asArray(hop.hostKeyAlgorithms ?? []).map(asString) }; }) }, command: asString(targetPreview.command) }; }) };
 }
 
 export const snippetsApi = {

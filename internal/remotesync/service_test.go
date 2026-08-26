@@ -423,6 +423,43 @@ func (i installation) write(t *testing.T, name, contents string) {
 	}
 }
 
+func TestPersistedRestoreCannotOverwriteAnExplicitBinding(t *testing.T) {
+	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host current\n"})
+	restoredConfig := installation.config
+	restoredConfig.Bucket = "stale-restored-bucket"
+	restoredCredentials := objectstore.Credentials{AccessKeyID: "STALE", SecretAccessKey: "stale"}
+	restoredClient := *installation.client
+	restoredClient.Bucket = restoredConfig.Bucket
+	restoredClient.Creds = restoredCredentials
+
+	applied, err := installation.service.ConfigureIfUnconfigured(restoredConfig, restoredCredentials, &restoredClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied {
+		t.Fatal("persisted restore overwrote an already explicit binding")
+	}
+	_, bucket, _, _ := installation.service.Target()
+	if bucket != installation.config.Bucket {
+		t.Fatalf("bucket = %q, want explicit %q", bucket, installation.config.Bucket)
+	}
+}
+
+func TestCollectRunsInsideStableSnapshotHook(t *testing.T) {
+	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host current\n"})
+	called := false
+	installation.service.StableSnapshot = func(snapshot func() error) error {
+		called = true
+		return snapshot()
+	}
+	if _, _, err := installation.service.Collect(); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("Collect bypassed StableSnapshot")
+	}
+}
+
 func TestASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{

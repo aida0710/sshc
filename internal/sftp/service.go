@@ -15,7 +15,10 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
+
+	"sshc/internal/validate"
 )
 
 type Service struct {
@@ -123,11 +126,11 @@ func (s Service) PrepareDownload(ctx context.Context, alias, remotePath string) 
 }
 
 func (s Service) prepareDownload(ctx context.Context, alias, remotePath, temporaryDirectory string, reserve func(int64) error) (_ *PreparedDownload, resultErr error) {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return nil, err
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return nil, err
 	}
@@ -196,11 +199,11 @@ func (s Service) prepareDownload(ctx context.Context, alias, remotePath, tempora
 }
 
 func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, error) {
-	cleaned, err := cleanPath(remotePath, true)
+	cleaned, err := cleanPublicPath(remotePath, true)
 	if err != nil {
 		return nil, err
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +215,7 @@ func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, e
 	}
 	entries := make([]Entry, 0, len(infos))
 	for _, info := range infos {
-		if isUploadPartName(info.Name()) {
+		if isInternalName(info.Name()) {
 			continue
 		}
 		entries = append(entries, entryFrom(cleaned, info))
@@ -234,11 +237,11 @@ func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, e
 }
 
 func (s Service) Stat(ctx context.Context, alias, remotePath string) (Entry, error) {
-	cleaned, err := cleanPath(remotePath, true)
+	cleaned, err := cleanPublicPath(remotePath, true)
 	if err != nil {
 		return Entry{}, err
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -251,11 +254,11 @@ func (s Service) Stat(ctx context.Context, alias, remotePath string) (Entry, err
 }
 
 func (s Service) ReadText(ctx context.Context, alias, remotePath string) (TextFile, error) {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return TextFile{}, err
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return TextFile{}, err
 	}
@@ -275,11 +278,11 @@ func (s Service) SaveText(
 	if !validText([]byte(contents)) {
 		return TextFile{}, ErrNotUTF8
 	}
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return TextFile{}, err
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return TextFile{}, err
 	}
@@ -316,11 +319,11 @@ func (s Service) SaveText(
 // DownloadArchive streams a directory as a ZIP without following symlinks.
 // Symlinks become regular text entries containing the link target so extraction cannot escape via a link.
 func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, destination io.Writer) (Transfer, error) {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return Transfer{}, err
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -370,7 +373,7 @@ func archiveDirectory(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if isUploadPartName(info.Name()) {
+		if isInternalName(info.Name()) {
 			continue
 		}
 		if !validArchiveName(info.Name()) {
@@ -456,11 +459,11 @@ func validArchiveName(name string) bool {
 }
 
 func (s Service) Mkdir(ctx context.Context, alias, remotePath string) (Entry, error) {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return Entry{}, err
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -486,11 +489,11 @@ func (s Service) Chmod(ctx context.Context, alias, remotePath string, mode fs.Fi
 	if expectedRevision == "" {
 		return Entry{}, ErrRevisionRequired
 	}
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return Entry{}, err
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -517,18 +520,18 @@ func (s Service) Chmod(ctx context.Context, alias, remotePath string, mode fs.Fi
 
 // Rename は既存の移動先を上書きしない。置換は Upload と SaveText だけが明示的に扱う。
 func (s Service) Rename(ctx context.Context, alias, from, to string) (Entry, error) {
-	source, err := cleanPath(from, false)
+	source, err := cleanPublicPath(from, false)
 	if err != nil {
 		return Entry{}, err
 	}
-	target, err := cleanPath(to, false)
+	target, err := cleanPublicPath(to, false)
 	if err != nil {
 		return Entry{}, err
 	}
 	if source == target {
 		return Entry{}, ErrAlreadyExists
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -550,11 +553,11 @@ func (s Service) Rename(ctx context.Context, alias, from, to string) (Entry, err
 
 // Delete はファイル、symlink、空ディレクトリだけを削除する。再帰削除は提供しない。
 func (s Service) Delete(ctx context.Context, alias, remotePath string) error {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return err
 	}
-	remote, err := s.open(ctx, alias)
+	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return err
 	}
@@ -570,13 +573,24 @@ func (s Service) Delete(ctx context.Context, alias, remotePath string) error {
 }
 
 func (s Service) open(ctx context.Context, alias string) (Remote, error) {
-	if strings.TrimSpace(alias) == "" {
-		return nil, ErrInvalidAlias
+	if err := validateAlias(alias); err != nil {
+		return nil, err
 	}
 	if s.Open == nil {
 		return nil, ErrUnavailable
 	}
 	return s.Open(ctx, alias)
+}
+
+// openRequest binds an operation-scoped remote to the request context. Closing
+// the SFTP transport is the only portable way to wake a pkg/sftp Read or Write
+// which is already blocked when its context is cancelled.
+func (s Service) openRequest(ctx context.Context, alias string) (Remote, error) {
+	remote, err := s.open(ctx, alias)
+	if err != nil {
+		return nil, err
+	}
+	return bindRemoteContext(ctx, remote), nil
 }
 
 func (s Service) replace(
@@ -695,6 +709,62 @@ func cleanPath(candidate string, allowRoot bool) (string, error) {
 	return cleaned, nil
 }
 
+func cleanPublicPath(candidate string, allowRoot bool) (string, error) {
+	cleaned, err := cleanPath(candidate, allowRoot)
+	if err != nil {
+		return "", err
+	}
+	for _, segment := range strings.Split(strings.TrimPrefix(cleaned, "/"), "/") {
+		if isInternalName(segment) {
+			return "", ErrInvalidPath
+		}
+	}
+	return cleaned, nil
+}
+
+func validateAlias(alias string) error {
+	if strings.TrimSpace(alias) == "" {
+		return ErrInvalidAlias
+	}
+	return validate.Alias(alias)
+}
+
+type contextRemote struct {
+	Remote
+	once     sync.Once
+	mutex    sync.Mutex
+	stop     func() bool
+	closed   bool
+	closeErr error
+}
+
+func bindRemoteContext(ctx context.Context, remote Remote) Remote {
+	bound := &contextRemote{Remote: remote}
+	stop := context.AfterFunc(ctx, func() { _ = bound.Close() })
+	bound.mutex.Lock()
+	bound.stop = stop
+	closed := bound.closed
+	bound.mutex.Unlock()
+	if closed {
+		stop()
+	}
+	return bound
+}
+
+func (remote *contextRemote) Close() error {
+	remote.once.Do(func() {
+		remote.mutex.Lock()
+		remote.closed = true
+		stop := remote.stop
+		remote.mutex.Unlock()
+		if stop != nil {
+			stop()
+		}
+		remote.closeErr = remote.Remote.Close()
+	})
+	return remote.closeErr
+}
+
 func entryFrom(parent string, info fs.FileInfo) Entry {
 	typeOf := EntryOther
 	switch {
@@ -759,7 +829,11 @@ func (r *contextReader) Read(contents []byte) (int, error) {
 	case <-r.ctx.Done():
 		return 0, r.ctx.Err()
 	default:
-		return r.reader.Read(contents)
+		read, err := r.reader.Read(contents)
+		if err != nil && r.ctx.Err() != nil {
+			return read, r.ctx.Err()
+		}
+		return read, err
 	}
 }
 

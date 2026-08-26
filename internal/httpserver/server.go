@@ -131,11 +131,12 @@ func (s *Server) condition() *sync.Cond {
 	return s.waiters
 }
 
-// BeginStopping は、新しい変更と Upgrade を断り始め、配ったリクエスト用
-// context を取り消す。冪等である。
+// BeginStopping は、新しい変更、Upgrade、SFTP data-plane 要求を断り始め、
+// 配ったリクエスト用 context を取り消す。冪等である。
 //
-// 読み取りは断らない。停止の途中でも状態は見られるべきであり、止まるのは
-// 状態を変えるものだけである。
+// 通常の読み取りは断らない。停止の途中でも状態は見られるべきである。
+// ただしSFTPのGET／HEADはSSH transport、plaintext spool、transfer jobを所有する
+// data-plane操作なので、終了資源との競合を避けるため変更要求と同じ境界で止める。
 func (s *Server) BeginStopping() {
 	s.mutex.Lock()
 	if s.stopping {
@@ -477,18 +478,24 @@ func New(options Options) (*Server, error) {
 	return server, nil
 }
 
-// stoppingGate は、状態を変える要求と Upgrade を、原子的に入場させるか断る。
+// stoppingGate は、状態を変える要求、Upgrade、SFTP data-plane要求を、
+// 原子的に入場させるか断る。
 //
-// ルートの一覧は持たない。GET と HEAD 以外のすべてと、実際の Upgrade を
-// 対象にする。今日の WebSocket は /terminal/stream だが、明日足されるものも
-// 誰も何も覚えていなくてもこの規則を継ぐ。
+// ルートの一覧は持たない。GET と HEAD 以外のすべて、実際の Upgrade、
+// /api/v1/sftp/配下を対象にする。今日の WebSocket は /terminal/stream だが、
+// 明日足されるものも誰も何も覚えていなくてもこの規則を継ぐ。
 func (s *Server) stoppingGate(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		request := c.Request()
-		if request.Method == http.MethodGet && !isUpgrade(request) {
+		// SFTP GET handlers are data-plane operations: they open SSH transports,
+		// prepare plaintext spools and advance transfer jobs. Count every SFTP
+		// request so shutdown cannot close the manager or release the engine while
+		// a nominally read-only HTTP method still owns those resources.
+		trackSFTP := strings.HasPrefix(request.URL.Path, "/api/v1/sftp/")
+		if request.Method == http.MethodGet && !isUpgrade(request) && !trackSFTP {
 			return next(c)
 		}
-		if request.Method == http.MethodHead {
+		if request.Method == http.MethodHead && !trackSFTP {
 			return next(c)
 		}
 		if !s.admit() {

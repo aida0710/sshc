@@ -101,6 +101,23 @@ type Target struct {
 	HostName string `json:"hostName"`
 	User     string `json:"user"`
 	Port     string `json:"port"`
+	// Route is ordered from the first ProxyJump hop to the final destination.
+	// It is both shown at confirmation time and included in preview evidence, so
+	// a later ProxyCommand or authentication-route change invalidates the token.
+	Route []RouteHop `json:"route,omitempty"`
+}
+
+type RouteHop struct {
+	Alias             string   `json:"alias"`
+	HostName          string   `json:"hostName"`
+	User              string   `json:"user"`
+	Port              string   `json:"port"`
+	ProxyCommand      string   `json:"proxyCommand,omitempty"`
+	StrictHostKey     string   `json:"strictHostKey"`
+	Authentication    []string `json:"authentication"`
+	IdentityFiles     []string `json:"identityFiles,omitempty"`
+	IdentitiesOnly    bool     `json:"identitiesOnly,omitempty"`
+	HostKeyAlgorithms []string `json:"hostKeyAlgorithms,omitempty"`
 }
 
 type CommandOutput struct {

@@ -7,12 +7,15 @@ import (
 	"errors"
 	"log"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -61,6 +64,13 @@ var running struct {
 // 返るのは listener が bind され Announce が呼ばれた後である。呼び出し側は
 // この URL を即座に WebView へ渡すので、早く返せば空のページが出る。
 func Start(home, cache string) (string, error) {
+	return startWith(home, cache, app.Run, probeEntrance)
+}
+
+type engineRunner func(context.Context, app.Dependencies, string) error
+type entranceProbe func(context.Context, string) error
+
+func startWith(home, cache string, run engineRunner, probe entranceProbe) (string, error) {
 	running.Lock()
 	defer running.Unlock()
 	// Androidでは一つのapp processだけがengineを所有する。Serviceの再生成などで
@@ -92,18 +102,51 @@ func Start(home, cache string) (string, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	// Ownership moves to running.cancel only on a successful start. Keeping one
+	// deferred release makes every earlier return cancel the engine context;
+	// success replaces this local value after saving the original callback.
+	defer func() { cancel() }()
 	done := make(chan struct{})
 	failed := make(chan error, 1)
 	go func() {
 		defer close(done)
-		if runErr := app.Run(ctx, dependencies, version); runErr != nil && !errors.Is(runErr, context.Canceled) {
+		if runErr := run(ctx, dependencies, version); runErr != nil && !errors.Is(runErr, context.Canceled) {
 			failed <- runErr
 		}
 	}()
 
 	select {
 	case url := <-entrance:
+		// AnnounceとServe失敗は別goroutineで競合する。入口が実際に応答することを
+		// 成功境界にし、既に停止したengineのURLをWebViewへ渡さない。
+		if probe == nil {
+			probe = probeEntrance
+		}
+		if probeErr := probe(ctx, url); probeErr != nil {
+			cancel()
+			<-done
+			select {
+			case runErr := <-failed:
+				kind, reason := classifyStartFailure(runErr)
+				return "", fail(kind, errors.Join(reason, runErr, probeErr))
+			default:
+			}
+			return "", fail(KindEngineStartFailed, errors.Join(errEngineStartFailed, probeErr))
+		}
+		// Probe直後までにRunが終了していた場合も、成功より具体的な失敗を優先する。
+		select {
+		case <-done:
+			select {
+			case runErr := <-failed:
+				kind, reason := classifyStartFailure(runErr)
+				return "", fail(kind, errors.Join(reason, runErr))
+			default:
+			}
+			return "", fail(KindStoppedEarly, errEngineStoppedEarly)
+		default:
+		}
 		running.cancel, running.done = cancel, done
+		cancel = func() {}
 		running.lastKind = KindNone
 		running.lastDetail = ""
 		return url, nil
@@ -124,6 +167,36 @@ func Start(home, cache string) (string, error) {
 		}
 		return "", fail(KindStoppedEarly, errEngineStoppedEarly)
 	}
+}
+
+const entranceProbeTimeout = 3 * time.Second
+
+func probeEntrance(parent context.Context, entrance string) error {
+	parsed, err := url.Parse(entrance)
+	if err != nil || parsed.Scheme != "http" || parsed.Host == "" {
+		return errors.New("the engine announced an invalid entrance")
+	}
+	parsed.Fragment = ""
+	parsed.RawFragment = ""
+	// API は bootstrap 前でも session cookie を要求するため、プローブ自体が
+	// bootstrap を消費しない公開 SPA 入口で Serve の生存を確認する。
+	parsed.Path = "/"
+	parsed.RawQuery = ""
+	ctx, cancel := context.WithTimeout(parent, entranceProbeTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return err
+	}
+	response, err := (&http.Client{}).Do(request)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		return errors.New("the engine entrance probe was refused")
+	}
+	return nil
 }
 
 func classifyStartFailure(err error) (int, error) {

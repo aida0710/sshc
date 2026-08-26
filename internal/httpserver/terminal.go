@@ -317,6 +317,15 @@ func (s *sessionLifetime) Forwards() []terminal.Forward {
 	return nil
 }
 
+// AwaitingPrompt preserves the optional pre-Ready input capability across the
+// lifetime wrapper. Without it the registry would discard password and host-key answers.
+func (s *sessionLifetime) AwaitingPrompt() bool {
+	if prompting, ok := s.Process.(terminal.Prompting); ok {
+		return prompting.AwaitingPrompt()
+	}
+	return false
+}
+
 func (s *sessionLifetime) Close() error {
 	err := s.Process.Close()
 	s.cancel()

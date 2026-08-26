@@ -81,21 +81,12 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 	// サーバーへ、同じ間違った結果を二度送らないためである。
 	stored := a.storedPassword(target)
 	if _, nonInteractive := prompt.(nonInteractivePrompter); nonInteractive {
-		// 質問できない経路では、保存値がある場合だけ password 系の方式を
-		// 組み立てる。nil と同じ「何も提示できない」結果を保ちつつ、vault の
-		// 保存値まで捨てていた従来の分岐をなくす。
-		password, found := stored()
-		if !found {
+		// provider が無いなら password 系を組み立てない。provider がある場合も、
+		// ここでは vault を読まず、サーバーが実際に方式を提示した callback 内で
+		// 初めて stored を呼ぶ。publickey で通る接続が password を取り出しては
+		// ならない。
+		if a.Password == nil || target.Alias == "" {
 			prompt = nil
-		} else {
-			offered := false
-			stored = func() (string, bool) {
-				if offered {
-					return "", false
-				}
-				offered = true
-				return password, true
-			}
 		}
 	}
 	for _, kind := range target.Methods.Order() {

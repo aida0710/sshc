@@ -15,14 +15,16 @@ import (
 
 type readyProcess struct {
 	*fakeProcess
-	ready chan error
+	ready  chan error
+	prompt atomic.Bool
 }
 
 func newReadyProcess() *readyProcess {
 	return &readyProcess{fakeProcess: newFakeProcess(), ready: make(chan error, 1)}
 }
 
-func (p *readyProcess) Ready() <-chan error { return p.ready }
+func (p *readyProcess) Ready() <-chan error  { return p.ready }
+func (p *readyProcess) AwaitingPrompt() bool { return p.prompt.Load() }
 
 func (p *readyProcess) finishOpen(err error) {
 	p.ready <- err
@@ -333,6 +335,55 @@ func TestKeystrokesDuringAReconnectAreDropped(t *testing.T) {
 	if got := spy.at(1).keystrokes(); got != "" {
 		t.Errorf("溜めた打鍵が新しいシェルへ届いた: %q", got)
 	}
+}
+
+func TestKeystrokesDuringReconnectHandshakeAreDroppedUntilReady(t *testing.T) {
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := spy.at(0)
+	first.finishOpen(nil)
+	waitFor(t, func() bool { return session.View().State == terminal.StateConnected })
+	first.exit(terminal.ExitInfo{Code: terminal.TransportLost})
+
+	waitFor(t, func() bool { return spy.count() >= 2 })
+	second := spy.at(1)
+	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+	if _, err := session.Write([]byte("dangerous-command\r")); err != nil {
+		t.Fatalf("Write during handshake = %v", err)
+	}
+	if got := second.keystrokes(); got != "" {
+		t.Fatalf("Ready前の入力が新しいshellへ渡った: %q", got)
+	}
+
+	second.finishOpen(nil)
+	second.exit(terminal.ExitInfo{Code: 0})
+}
+
+func TestAuthenticationPromptStillAcceptsInputBeforeReady(t *testing.T) {
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	process := spy.at(0)
+	process.prompt.Store(true)
+	if _, err := session.Write([]byte("answer\r")); err != nil {
+		t.Fatalf("Write to prompt = %v", err)
+	}
+	if got := process.keystrokes(); got != "answer\r" {
+		t.Fatalf("prompt answer = %q", got)
+	}
+	process.finishOpen(context.Canceled)
+	process.exit(terminal.ExitInfo{Code: terminal.TransportLost})
 }
 
 type closingSpy struct {

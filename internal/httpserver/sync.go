@@ -62,8 +62,8 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 
 func addSyncActions(registry actionRegistry, service *remotesync.Service) {
 	registry[session.ActionSyncForcePush] = actionKind{
-		evidence: func(target string) (string, error) {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		evidence: func(parent context.Context, target string) (string, error) {
+			ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 			defer cancel()
 			confirmation, err := service.ForcePushConfirmation(ctx, target)
 			return confirmation.Evidence, err
@@ -93,7 +93,7 @@ func (h SyncHandlers) restore() {
 		Endpoint: settings.Endpoint, Bucket: settings.Bucket, Path: settings.Path,
 		Region: settings.Region, Direction: direction,
 	}
-	_ = h.Service.Configure(config, credentials, remotesync.NewClient(config, credentials))
+	_, _ = h.Service.ConfigureIfUnconfigured(config, credentials, remotesync.NewClient(config, credentials))
 }
 
 func snapshotSummaryResponse(summary remotesync.SnapshotSummary) api.SnapshotSummary {

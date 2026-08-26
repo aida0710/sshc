@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ const AbsentRevision = "absent"
 
 var transferIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,128}$`)
 var uploadPartNamePattern = regexp.MustCompile(`^\..+\.sshc-upload-[A-Za-z0-9_-]{8,128}\.part$`)
+var editorTemporaryNamePattern = regexp.MustCompile(`^\..+\.sshc-[0-9a-f]{24}\.tmp$`)
 
 // TransferManager serializes requests that operate on the same resumable part file.
 // Different files remain independent so a large queue can make bounded parallel progress.
@@ -525,7 +527,7 @@ func (m *TransferManager) CompleteOwned(ctx context.Context, alias, id, remotePa
 }
 
 func (m *TransferManager) replayAcknowledgedAppend(id, alias, remotePath string, offset, total int64, chunkSize int) (ResumableUpload, bool, error) {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return ResumableUpload{}, false, err
 	}
@@ -546,7 +548,7 @@ func (m *TransferManager) replayAcknowledgedAppend(id, alias, remotePath string,
 }
 
 func (m *TransferManager) replayCompletedUpload(id, alias, remotePath string, total int64) (Transfer, bool, error) {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return Transfer{}, false, err
 	}
@@ -609,6 +611,8 @@ func (m *TransferManager) Start(ctx context.Context, alias, id, remotePath strin
 	if err != nil {
 		return ResumableUpload{}, err
 	}
+	stopCancellation := m.watchRemoteCancellation(ctx, alias, id, cleaned, remote)
+	defer stopCancellation()
 	keepRemote := false
 	defer func() {
 		if !keepRemote {
@@ -659,6 +663,8 @@ func (m *TransferManager) Append(ctx context.Context, alias, id, remotePath stri
 	if err != nil {
 		return ResumableUpload{}, err
 	}
+	stopCancellation := m.watchRemoteCancellation(ctx, alias, id, cleaned, remote)
+	defer stopCancellation()
 	keepRemote := false
 	defer func() {
 		if !keepRemote {
@@ -719,6 +725,8 @@ func (m *TransferManager) Complete(ctx context.Context, alias, id, remotePath st
 	if err != nil {
 		return Transfer{}, err
 	}
+	stopCancellation := m.watchRemoteCancellation(ctx, alias, id, cleaned, remote)
+	defer stopCancellation()
 	defer m.releaseRemote(alias, id, cleaned)
 	part := uploadPartPath(cleaned, id)
 	info, err := remote.Lstat(part)
@@ -822,6 +830,8 @@ func (m *TransferManager) Cancel(ctx context.Context, alias, id, remotePath stri
 	if err != nil {
 		return err
 	}
+	stopCancellation := m.watchRemoteCancellation(ctx, alias, id, cleaned, remote)
+	defer stopCancellation()
 	defer m.releaseRemote(alias, id, cleaned)
 	err = remote.Remove(uploadPartPath(cleaned, id))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -916,7 +926,7 @@ func resumablePath(id, remotePath string) (string, error) {
 	if !transferIDPattern.MatchString(id) {
 		return "", ErrInvalidTransfer
 	}
-	return cleanPath(remotePath, false)
+	return cleanPublicPath(remotePath, false)
 }
 
 func uploadPartPath(target, id string) string {
@@ -925,6 +935,54 @@ func uploadPartPath(target, id string) string {
 
 func isUploadPartName(name string) bool {
 	return uploadPartNamePattern.MatchString(name)
+}
+
+func isInternalName(name string) bool {
+	return isUploadPartName(name) || editorTemporaryNamePattern.MatchString(name)
+}
+
+// LockOperation serializes every public mutation which can affect the given
+// remote paths. Sorting canonical paths gives Rename a stable two-lock order
+// and prevents two opposite renames from deadlocking.
+func (m *TransferManager) LockOperation(alias string, remotePaths ...string) (func(), error) {
+	if m == nil || m.Service == nil || m.isClosed() {
+		return nil, ErrUnavailable
+	}
+	if err := validateAlias(alias); err != nil {
+		return nil, err
+	}
+	unique := make(map[string]struct{}, len(remotePaths))
+	paths := make([]string, 0, len(remotePaths))
+	for _, remotePath := range remotePaths {
+		cleaned, err := cleanPublicPath(remotePath, false)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := unique[cleaned]; exists {
+			continue
+		}
+		unique[cleaned] = struct{}{}
+		paths = append(paths, cleaned)
+	}
+	if len(paths) == 0 {
+		return nil, ErrInvalidPath
+	}
+	sort.Strings(paths)
+	unlocks := make([]func(), 0, len(paths))
+	for _, remotePath := range paths {
+		unlocks = append(unlocks, m.lock(alias, remotePath))
+	}
+	if m.isClosed() {
+		for index := len(unlocks) - 1; index >= 0; index-- {
+			unlocks[index]()
+		}
+		return nil, ErrUnavailable
+	}
+	return func() {
+		for index := len(unlocks) - 1; index >= 0; index-- {
+			unlocks[index]()
+		}
+	}, nil
 }
 
 func (m *TransferManager) lock(alias, target string) func() {
@@ -985,13 +1043,21 @@ func (m *TransferManager) transferRemote(ctx context.Context, alias, id, target 
 	return remote, nil
 }
 
+// watchRemoteCancellation closes and detaches a retained upload transport only
+// when the current request is cancelled. Normal request completion stops the
+// watcher and preserves the connection for the next chunk.
+func (m *TransferManager) watchRemoteCancellation(ctx context.Context, alias, id, target string, remote Remote) func() {
+	stop := context.AfterFunc(ctx, func() { m.releaseRemoteIf(alias, id, target, remote) })
+	return func() { stop() }
+}
+
 // SaveText serializes editor publication with resumable upload publication
 // for the same alias and target in this engine generation.
 func (m *TransferManager) SaveText(ctx context.Context, alias, remotePath, contents, expectedRevision string) (TextFile, error) {
 	if m == nil || m.Service == nil || m.isClosed() {
 		return TextFile{}, ErrUnavailable
 	}
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return TextFile{}, err
 	}
@@ -1002,6 +1068,21 @@ func (m *TransferManager) SaveText(ctx context.Context, alias, remotePath, conte
 
 func (m *TransferManager) releaseRemote(alias, id, target string) {
 	remote := m.detachRemote(alias, id, target)
+	if remote != nil {
+		_ = remote.Close()
+	}
+}
+
+func (m *TransferManager) releaseRemoteIf(alias, id, target string, expected Remote) {
+	key := transferRemoteKey(alias, id, target)
+	m.mutex.Lock()
+	remote := m.remotes[key]
+	if remote == expected {
+		delete(m.remotes, key)
+	} else {
+		remote = nil
+	}
+	m.mutex.Unlock()
 	if remote != nil {
 		_ = remote.Close()
 	}

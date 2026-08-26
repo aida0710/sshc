@@ -289,7 +289,7 @@ func NewManager(workspace *Workspace, now func() time.Time, random io.Reader) *M
 // は「完了させる」か「復元する」かを選べる。複数のファイルが関わるとき、それが
 // 唯一の誠実な選択肢である。
 func (m *Manager) Commit(request Request) (Result, error) {
-	return m.commit(request, false, false)
+	return m.commit(request, false, false, nil)
 }
 
 // CommitAtomic は Commit より厳しい失敗時規則で書き込みトランザクションを適用する。
@@ -308,7 +308,7 @@ func (m *Manager) CommitAtomic(request Request) (Result, error) {
 			return Result{}, ErrAtomicWriteOnly
 		}
 	}
-	return m.commit(request, true, false)
+	return m.commit(request, true, false, nil)
 }
 
 // CommitAtomicDiscardBackups atomically replaces a set of already-encrypted
@@ -327,7 +327,45 @@ func (m *Manager) CommitAtomicDiscardBackups(request Request) (Result, error) {
 			return Result{}, ErrAtomicWriteOnly
 		}
 	}
-	return m.commit(request, true, true)
+	return m.commit(request, true, true, nil)
+}
+
+// CommitAtomicDiscardBackupsAndPublish performs the narrow rekey transaction
+// and publishes its in-memory key generation before releasing the workspace
+// mutation barrier. publish must be infallible: it runs only after the durable
+// applied marker is the authoritative commit point.
+func (m *Manager) CommitAtomicDiscardBackupsAndPublish(request Request, publish func()) (Result, error) {
+	if publish == nil {
+		return m.CommitAtomicDiscardBackups(request)
+	}
+	if request.Operation == "" {
+		return Result{}, ErrInvalidOperation
+	}
+	if len(request.Directories) > 0 || len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
+		return Result{}, ErrAtomicWriteOnly
+	}
+	for _, change := range request.Changes {
+		if change.SkipBackup {
+			return Result{}, ErrAtomicWriteOnly
+		}
+	}
+	return m.commit(request, true, true, publish)
+}
+
+// WithSnapshot holds the same process and OS mutation barrier as Commit while
+// fn reads a coherent workspace generation. Callers that also coordinate
+// secrets must acquire their secret mutation barrier before entering here,
+// matching the established secret-writer -> workspace lock order.
+func (m *Manager) WithSnapshot(fn func() error) error {
+	if fn == nil {
+		return nil
+	}
+	unlock, err := m.workspace.lockMutation()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return fn()
 }
 
 // journalPlan は、これから記録するエントリと、それに紐づく内容をひとつの値にする。
@@ -358,7 +396,7 @@ func (p *journalPlan) add(entry journalEntry, staged, previous []byte) {
 	p.previous = append(p.previous, previous)
 }
 
-func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool) (Result, error) {
+func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool, publish func()) (Result, error) {
 	if request.Operation == "" {
 		return Result{}, ErrInvalidOperation
 	}
@@ -548,6 +586,9 @@ func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool) 
 		record.Status = statusApplied
 		if err := m.writeRecord(journalPath, record); err != nil {
 			return fail(err)
+		}
+		if publish != nil {
+			publish()
 		}
 		// Cleanup is idempotent. A failure here leaves the applied marker for a
 		// later Complete call, but cannot make the committed targets mixed again.

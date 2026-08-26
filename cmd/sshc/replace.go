@@ -37,13 +37,18 @@ const engineReleaseTimeout = 5 * app.DefaultShutdownTimeout
 // askToReplace は、走っている engine を止めてよいかを決める。
 //
 // 止めてよいなら true を返す。対話入力できない環境では確認を行わない。
-func askToReplace(found handoff.Handoff, sessions int, replace bool, stdin io.Reader, stdout io.Writer) bool {
+func askToReplace(
+	ctx context.Context, found handoff.Handoff, sessions int, replace bool, stdin io.Reader, stdout io.Writer,
+) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	if replace {
-		return true
+		return true, nil
 	}
 	file, isFile := stdin.(*os.File)
 	if !isFile || !term.IsTerminal(int(file.Fd())) {
-		return false
+		return false, nil
 	}
 	fmt.Fprintf(stdout, "sshc: an sshc engine is already running (pid %d, %s)\n", found.PID, found.URL)
 	if sessions > 0 {
@@ -52,17 +57,32 @@ func askToReplace(found handoff.Handoff, sessions int, replace bool, stdin io.Re
 	fmt.Fprintln(stdout, "sshc: stopping it also locks the password vault")
 	fmt.Fprint(stdout, "sshc: stop it and start here? [y/N] ")
 
-	answer, err := bufio.NewReader(stdin).ReadString('\n')
-	if err != nil {
-		return false
+	type result struct {
+		answer string
+		err    error
+	}
+	answered := make(chan result, 1)
+	go func() {
+		answer, err := bufio.NewReader(stdin).ReadString('\n')
+		answered <- result{answer: answer, err: err}
+	}()
+	var answer string
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case read := <-answered:
+		if read.err != nil {
+			return false, nil
+		}
+		answer = read.answer
 	}
 	// 既定は No である。何も読まずに Enter を叩いたユーザーが落ちる先は、
 	// 失うものが無い方でなければならない。
 	switch strings.ToLower(strings.TrimSpace(answer)) {
 	case "y", "yes":
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 // stopRunningEngine は、走っている engine に畳んで終わるよう頼み、席が空くのを待つ。
@@ -90,7 +110,10 @@ func stopRunningEngine(
 
 	// 席が空くまで待つ。頼んだ直後に自分が握りにいくと、まだ畳んでいる
 	// 相手からロックを奪えず、理由の分からない失敗になる。
-	deadline := time.Now().Add(engineReleaseTimeout)
+	timeout := time.NewTimer(engineReleaseTimeout)
+	defer timeout.Stop()
+	retry := time.NewTicker(100 * time.Millisecond)
+	defer retry.Stop()
 	for {
 		release, err := acquire(stateDir)
 		if err == nil {
@@ -98,10 +121,13 @@ func stopRunningEngine(
 			_ = release()
 			return nil
 		}
-		if time.Now().After(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout.C:
 			return fmt.Errorf("the running engine did not let go within %s", engineReleaseTimeout)
+		case <-retry.C:
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -130,7 +156,11 @@ func replaceRunningEngine(
 		sessions = status.Sessions
 	}
 
-	if !askToReplace(found, sessions, options.Replace, stdin, stdout) {
+	replace, askErr := askToReplace(ctx, found, sessions, options.Replace, stdin, stdout)
+	if askErr != nil {
+		return nil, askErr
+	}
+	if !replace {
 		fmt.Fprintln(stderr, "sshc: an sshc engine is already running")
 		fmt.Fprintln(stderr, "sshc: run sshc to get a way into it, or sshc engine --replace to take over")
 		return nil, errAlreadyRunning

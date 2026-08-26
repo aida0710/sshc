@@ -114,7 +114,7 @@ const (
 // that owns their slot. Without this check, callers could append or complete a
 // part file without ever acquiring one of the backend concurrency slots.
 func (m *TransferManager) AuthorizeUpload(id, alias, remotePath string, total int64, cancelling bool) error {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil || !transferIDPattern.MatchString(id) {
 		return ErrInvalidTransfer
 	}
@@ -145,7 +145,7 @@ func (m *TransferManager) AuthorizeUpload(id, alias, remotePath string, total in
 // AuthorizeDownload binds a GET data-plane request to a running download job
 // which already owns a shared queue slot.
 func (m *TransferManager) AuthorizeDownload(id, alias, remotePath string, kind TransferKind) (TransferJob, error) {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil || !transferIDPattern.MatchString(id) {
 		return TransferJob{}, ErrInvalidTransfer
 	}
@@ -170,7 +170,7 @@ func (m *TransferManager) AuthorizeDownload(id, alias, remotePath string, kind T
 // one jobsMutex critical section. Cancel cannot slip between authorization and
 // the stale-sweep protection token.
 func (m *TransferManager) StartDownloadDataPlane(id, alias, remotePath string, kind TransferKind) (TransferJob, func(), error) {
-	cleaned, err := cleanPath(remotePath, false)
+	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil || !transferIDPattern.MatchString(id) {
 		return TransferJob{}, nil, ErrInvalidTransfer
 	}
@@ -388,7 +388,10 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 		(input.Kind != TransferFile && input.Kind != TransferFolder) {
 		return TransferJob{}, ErrInvalidTransfer
 	}
-	cleaned, err := cleanPath(input.RemotePath, false)
+	if err := validateAlias(input.Alias); err != nil {
+		return TransferJob{}, err
+	}
+	cleaned, err := cleanPublicPath(input.RemotePath, false)
 	if err != nil {
 		return TransferJob{}, err
 	}

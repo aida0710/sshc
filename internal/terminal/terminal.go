@@ -48,6 +48,10 @@ type Forwarder interface{ Forwards() []Forward }
 // prompts must be streamed before the handshake has completed.
 type Readier interface{ Ready() <-chan error }
 
+// Promptingは、Ready前でも利用者の入力を認証promptへの回答として受け取れる
+// Processである。これを実装しない非同期Processへの先行入力は捨てる。
+type Prompting interface{ AwaitingPrompt() bool }
+
 // Size は端末の桁数と行数である。
 type Size struct {
 	Cols uint16

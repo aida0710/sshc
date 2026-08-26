@@ -82,8 +82,11 @@ func runEngineWithDependencies(
 	if errors.Is(err, errEngineRunning) {
 		// 2 台目は立てない。ただし、走っているものを止める道は要る
 		//どこで起動したか分からない engine を、探して回らずに畳めるように。
-		taken, takeErr := replaceRunningEngine(ctx, home, options, stdin, stdout, stderr, dependencies.acquire)
+		taken, takeErr := replaceRunningEngine(signalCtx, home, options, stdin, stdout, stderr, dependencies.acquire)
 		if takeErr != nil {
+			if signalCtx.Err() != nil {
+				return exitForCause(context.Cause(signalCtx), logger)
+			}
 			// 断ったことは、もう綴ってある。ここで重ねると同じ話が二度出る。
 			if !errors.Is(takeErr, errAlreadyRunning) {
 				fmt.Fprintf(stderr, "sshc: %v\n", takeErr)
@@ -95,6 +98,13 @@ func runEngineWithDependencies(
 	if err != nil {
 		logger.Error("take the engine lock", "error", err)
 		return 1
+	}
+	if signalCtx.Err() != nil {
+		if releaseErr := release(); releaseErr != nil {
+			logger.Error("release the engine lock", "error", releaseErr)
+			return 1
+		}
+		return exitForCause(context.Cause(signalCtx), logger)
 	}
 
 	code := runEngineApp(signalCtx, home, options, stdout, logger, dependencies)

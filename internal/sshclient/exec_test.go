@@ -2,12 +2,15 @@ package sshclient_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
+	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
 )
 
@@ -130,5 +133,90 @@ func TestRunUsesAStoredPasswordWithoutAskingTheUser(t *testing.T) {
 	}
 	if output.ExitCode != 0 {
 		t.Fatalf("exit = %d, want 0", output.ExitCode)
+	}
+}
+
+func TestRunStopsWhenTheContextIsDone(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(ssh.Channel) { <-release },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan error, 1)
+	go func() {
+		_, err := dialerFor(t, server, auth).Run(ctx, targetWith(server, path), "sleep forever", nil)
+		finished <- err
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && server.Command() == "" {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if server.Command() == "" {
+		t.Fatal("the remote command never started")
+	}
+	cancel()
+	select {
+	case err := <-finished:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Run = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run did not stop after context cancellation")
+	}
+}
+
+func TestRunUsesFailureExitWhenTheRemoteOmitsAStatus(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public}, OmitExitStatus: true,
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	output, err := dialerFor(t, server, auth).Run(
+		context.Background(), targetWith(server, path), "broken", nil,
+	)
+	if err == nil {
+		t.Fatal("Run accepted a command result without an exit status")
+	}
+	if output.ExitCode != sshclient.RemoteFailureExit {
+		t.Fatalf("exit = %d, want %d", output.ExitCode, sshclient.RemoteFailureExit)
+	}
+}
+
+func TestRunRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
+	path, contents, public := keyPair(t)
+	inner := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
+	edge := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public}, AllowDirectTCPIP: true,
+	})
+	edge.allow(inner.Address())
+	written := 0
+	dialer := sshclient.Dialer{
+		Auth: sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
+		HostKeys: sshclient.HostKeys{
+			Read: func() ([]byte, error) {
+				return []byte(knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())), nil
+			},
+			Add: func(knownhosts.Candidate) error { written++; return nil },
+		},
+	}
+	target := targetWith(inner, path)
+	jump := targetWith(edge, path)
+	jump.Strict = "no"
+	target.Jump = []sshclient.Target{jump}
+
+	output, err := dialer.Run(context.Background(), target, "true", nil)
+	if !errors.Is(err, sshclient.ErrHostKeyUnknown) {
+		t.Fatalf("Run = %v, want ErrHostKeyUnknown", err)
+	}
+	if output.ExitCode != sshclient.RemoteFailureExit {
+		t.Fatalf("exit = %d, want %d", output.ExitCode, sshclient.RemoteFailureExit)
+	}
+	if written != 0 {
+		t.Fatal("Run persisted an unknown ProxyJump host key")
 	}
 }
