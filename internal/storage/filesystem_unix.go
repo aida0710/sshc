@@ -22,6 +22,34 @@ const (
 	tempCollisionLimit  = 128
 )
 
+func openWalkDirectoryAt(parent *os.File, component string, readable bool) (*os.File, error) {
+	fd, err := unix.Openat(int(parent.Fd()), component, walkDirectoryFlags(readable), 0)
+	if err != nil {
+		return nil, classifyNoFollowOpenError(parent, component, err)
+	}
+	next := os.NewFile(uintptr(fd), component)
+	if next == nil {
+		_ = unix.Close(fd)
+		return nil, os.ErrInvalid
+	}
+	return next, nil
+}
+
+func classifyNoFollowOpenError(parent *os.File, component string, openErr error) error {
+	if errors.Is(openErr, unix.ELOOP) {
+		return ErrSymlinkPath
+	}
+	// LinuxのO_PATH|O_NOFOLLOW|O_DIRECTORYはsymlinkをENOTDIRとして返す。
+	// 追跡せずに現在のentry型だけを確認し、従来の公開error分類を維持する。
+	if errors.Is(openErr, unix.ENOTDIR) {
+		var stat unix.Stat_t
+		if err := unix.Fstatat(int(parent.Fd()), component, &stat, unix.AT_SYMLINK_NOFOLLOW); err == nil && stat.Mode&unix.S_IFMT == unix.S_IFLNK {
+			return ErrSymlinkPath
+		}
+	}
+	return openErr
+}
+
 func openRegularNoFollow(path string) (*os.File, error) {
 	return openNoFollow(path, false)
 }
@@ -45,7 +73,7 @@ func openNoFollow(path string, directory bool) (*os.File, error) {
 	// Starting at an open filesystem root and using openat keeps every following
 	// lookup relative to a directory descriptor that was itself opened without
 	// following a symlink.
-	current, err := os.Open(string(filepath.Separator))
+	current, err := openWalkRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -59,23 +87,28 @@ func openNoFollow(path string, directory bool) (*os.File, error) {
 			_ = current.Close()
 			return nil, os.ErrInvalid
 		}
-		flags := unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW
-		if index < len(components)-1 || directory {
-			flags |= unix.O_DIRECTORY
+		final := index == len(components)-1
+		var next *os.File
+		var openErr error
+		if !final || directory {
+			next, openErr = openWalkDirectoryAt(current, component, final)
+		} else {
+			fd, err := unix.Openat(int(current.Fd()), component, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+			if err != nil {
+				openErr = classifyNoFollowOpenError(current, component, err)
+			} else {
+				next = os.NewFile(uintptr(fd), component)
+				if next == nil {
+					_ = unix.Close(fd)
+					openErr = os.ErrInvalid
+				}
+			}
 		}
-		fd, openErr := unix.Openat(int(current.Fd()), component, flags, 0)
 		_ = current.Close()
 		if openErr != nil {
-			if errors.Is(openErr, unix.ELOOP) {
-				return nil, ErrSymlinkPath
-			}
 			return nil, openErr
 		}
-		current = os.NewFile(uintptr(fd), component)
-		if current == nil {
-			_ = unix.Close(fd)
-			return nil, os.ErrInvalid
-		}
+		current = next
 	}
 	return current, nil
 }
@@ -89,7 +122,7 @@ func makePrivateDirectories(path string, permission fs.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrSymlinkPath, path, err)
 	}
-	current, err := os.Open(string(filepath.Separator))
+	current, err := openWalkRoot()
 	if err != nil {
 		return err
 	}
@@ -99,27 +132,20 @@ func makePrivateDirectories(path string, permission fs.FileMode) error {
 		return os.ErrInvalid
 	}
 	components := strings.Split(relative, string(filepath.Separator))
-	for _, component := range components {
+	for index, component := range components {
 		if component == "" || component == "." || component == ".." {
 			return os.ErrInvalid
 		}
-		fd, openErr := unix.Openat(int(current.Fd()), component, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_DIRECTORY, 0)
+		final := index == len(components)-1
+		next, openErr := openWalkDirectoryAt(current, component, final)
 		if errors.Is(openErr, unix.ENOENT) {
 			if err := unix.Mkdirat(int(current.Fd()), component, uint32(permission.Perm())); err != nil && !errors.Is(err, unix.EEXIST) {
 				return err
 			}
-			fd, openErr = unix.Openat(int(current.Fd()), component, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_DIRECTORY, 0)
+			next, openErr = openWalkDirectoryAt(current, component, final)
 		}
 		if openErr != nil {
-			if errors.Is(openErr, unix.ELOOP) {
-				return ErrSymlinkPath
-			}
 			return openErr
-		}
-		next := os.NewFile(uintptr(fd), component)
-		if next == nil {
-			_ = unix.Close(fd)
-			return os.ErrInvalid
 		}
 		_ = current.Close()
 		current = next

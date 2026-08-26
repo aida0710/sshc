@@ -9,7 +9,15 @@ import {
   type CSSProperties,
   type MouseEvent,
 } from "react";
-import { apiClient, failureCode, whenLocked, whenSessionEnded, type HealthResponse } from "./api/client";
+import {
+  apiClient,
+  failureCode,
+  whenLocked,
+  whenRequestFailed,
+  whenSessionEnded,
+  type HealthResponse,
+  type RequestFailureDiagnostic,
+} from "./api/client";
 import { integrationsApi, type PasswordVaultStatus, type TerminalAppearance, type TerminalSettings } from "./api/integrations";
 import { resolveAppearance } from "./terminal/appearance";
 import { configApi } from "./api/config";
@@ -47,6 +55,7 @@ import { useTerminalSessions, type TerminalSessionsState } from "./terminal/sess
 import { TerminalWorkspace, type WorkspaceRestoreRequest } from "./features/workspaces/TerminalWorkspace";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
+import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -160,6 +169,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const [failure, setFailure] = useState("");
   const [vaultExists, setVaultExists] = useState(false);
   const [version, setVersion] = useState("");
+  const [requestFailure, setRequestFailure] = useState<RequestFailureDiagnostic | null>(null);
   const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
   const [groups, setGroups] = useState<string[]>([]);
   const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
@@ -379,6 +389,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   }, []);
 
   useEffect(() => {
+    whenRequestFailed(setRequestFailure);
+    return () => whenRequestFailed(null);
+  }, []);
+
+  useEffect(() => {
     if (state !== "ready") return;
     let active = true;
     void configApi
@@ -417,23 +432,32 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
 
   if (state === "error") {
     return (
-      <main className="flex flex-col items-start gap-3 p-6">
-        <h1 className="text-base font-semibold">{t("shell.title")}</h1>
-        <p role="alert" className="text-sm text-danger">{t("shell.bootstrapFailed")}</p>
-
-        {failure === "" ? null : (
-          <code className="max-w-full overflow-x-auto rounded-md border border-line bg-card px-2 py-1 text-xs">
-            {failure}
-          </code>
+      <div className="min-h-screen bg-canvas text-ink">
+        {requestFailure === null ? null : (
+          <ErrorDiagnosticNotice
+            diagnostic={requestFailure}
+            version={version}
+            onClose={() => setRequestFailure(null)}
+          />
         )}
+        <main className="flex flex-col items-start gap-3 p-6">
+          <h1 className="text-base font-semibold">{t("shell.title")}</h1>
+          <p role="alert" className="text-sm text-danger">{t("shell.bootstrapFailed")}</p>
 
-        <Button
-          kind="primary"
-          onClick={() => window.location.replace(window.location.pathname + window.location.search)}
-        >
-          {t("shell.bootstrapRetry")}
-        </Button>
-      </main>
+          {failure === "" ? null : (
+            <code className="max-w-full overflow-x-auto rounded-md border border-line bg-card px-2 py-1 text-xs">
+              {failure}
+            </code>
+          )}
+
+          <Button
+            kind="primary"
+            onClick={() => window.location.replace(window.location.pathname + window.location.search)}
+          >
+            {t("shell.bootstrapRetry")}
+          </Button>
+        </main>
+      </div>
     );
   }
 
@@ -476,6 +500,13 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         theme={theme}
         onThemeChange={setTheme}
       />
+      {requestFailure === null ? null : (
+        <ErrorDiagnosticNotice
+          diagnostic={requestFailure}
+          version={version}
+          onClose={() => setRequestFailure(null)}
+        />
+      )}
       <div
         data-desktop-navigation-visible={desktopNavigationVisible}
         style={{ "--navigation-width": `${desktopNavigationWidth}px` } as CSSProperties}
