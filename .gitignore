@@ -8,6 +8,7 @@
 /web/playwright-report/
 /web/test-results/
 /test-results/
+/artifacts/
 .DS_Store
 .worktrees/
 /.claude/worktrees/
@@ -19,6 +20,7 @@
 # デスクトップの外殻。束は作るたびに変わるので追跡しない。
 # tsc の出力。electron-builder の dist/ とは別物である。
 /android/app/libs/
+/android/local.properties
 /android/.gradle/
 /android/build/
 /android/app/build/

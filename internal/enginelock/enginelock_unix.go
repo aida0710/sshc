@@ -69,7 +69,7 @@ func openOrCreateLockDirectory(path string) (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrUnsafeStateDirectory, path, err)
 	}
-	current, err := os.Open(string(filepath.Separator))
+	current, err := openLockWalkRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -79,15 +79,14 @@ func openOrCreateLockDirectory(path string) (*os.File, error) {
 			_ = current.Close()
 			return nil, os.ErrInvalid
 		}
-		fd, openErr := unix.Openat(int(current.Fd()), component,
-			unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_DIRECTORY, 0)
+		final := index == len(components)-1
+		fd, openErr := unix.Openat(int(current.Fd()), component, lockWalkDirectoryFlags(final), 0)
 		if errors.Is(openErr, unix.ENOENT) {
 			if mkdirErr := unix.Mkdirat(int(current.Fd()), component, 0o700); mkdirErr != nil && !errors.Is(mkdirErr, unix.EEXIST) {
 				_ = current.Close()
 				return nil, mkdirErr
 			}
-			fd, openErr = unix.Openat(int(current.Fd()), component,
-				unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_DIRECTORY, 0)
+			fd, openErr = unix.Openat(int(current.Fd()), component, lockWalkDirectoryFlags(final), 0)
 		}
 		if openErr != nil {
 			_ = current.Close()

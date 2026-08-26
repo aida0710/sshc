@@ -83,4 +83,51 @@ describe("LockScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/master password is incorrect/i);
     expect(onOpen).not.toHaveBeenCalled();
   });
+
+  it("shows a copyable safe diagnostic when Android storage rejects vault creation", async () => {
+    const api = buildApi({
+      initialiseVault: vi.fn().mockRejectedValue(new ApiError("vault_storage_permission_denied", 500, {
+        code: "vault_storage_permission_denied",
+        message: "request rejected",
+        detail: "the operating system denied access to the app's private storage",
+      })),
+    });
+    render(<LockScreen exists={false} version="0.13.6" onOpen={vi.fn()} api={api} />);
+
+    await userEvent.type(screen.getByLabelText("Master password"), "a long enough password");
+    await userEvent.type(screen.getByLabelText("Confirm master password"), "a long enough password");
+    await userEvent.click(screen.getByRole("button", { name: "Create the vault" }));
+
+    expect(await screen.findByText(/Android denied access/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Show diagnostic details"));
+    expect(screen.getByText(/Version: 0\.13\.6/)).toHaveTextContent(
+      "Operation: POST /api/v1/passwords/initialise",
+    );
+    expect(screen.getByText(/Version: 0\.13\.6/)).not.toHaveTextContent("a long enough password");
+  });
+
+  it("switches a stale creation screen to unlock when a vault already exists", async () => {
+    const onExists = vi.fn();
+    const api = buildApi({
+      initialiseVault: vi.fn().mockRejectedValue(new ApiError("vault_already_exists", 409, null)),
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true,
+        unlocked: false,
+        aliases: [],
+        dedicatedKeyPassphrases: [],
+      }),
+    });
+    const { rerender } = render(
+      <LockScreen exists={false} version="0.13.6" onOpen={vi.fn()} onExists={onExists} api={api} />,
+    );
+
+    await userEvent.type(screen.getByLabelText("Master password"), "a long enough password");
+    await userEvent.type(screen.getByLabelText("Confirm master password"), "a long enough password");
+    await userEvent.click(screen.getByRole("button", { name: "Create the vault" }));
+    await waitFor(() => expect(onExists).toHaveBeenCalledTimes(1));
+
+    rerender(<LockScreen exists version="0.13.6" onOpen={vi.fn()} onExists={onExists} api={api} />);
+    expect(screen.queryByLabelText("Confirm master password")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
+  });
 });

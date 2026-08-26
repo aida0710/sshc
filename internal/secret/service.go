@@ -33,6 +33,9 @@ var (
 	// ErrPasswordBindingRequired prevents an account-password assignment from
 	// bypassing the resolved authentication-destination check.
 	ErrPasswordBindingRequired = errors.New("an authentication destination binding is required")
+	// ErrStorageBusy は、別のworkspace更新が完了せずvaultを書き込めないことを報告する。
+	// HTTP層へstorage実装を公開せず、利用者に再試行可能な競合として伝える境界である。
+	ErrStorageBusy = storage.ErrWorkspaceBusy
 )
 
 // PasswordMutationKind は、接続作成が vault に行う変更を表す。専用パスワードと
