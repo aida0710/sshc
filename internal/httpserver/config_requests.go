@@ -42,14 +42,16 @@ var (
 // problemPayload は OpenAPI の Problem スキーマの通信形式である。
 // location と安定した code を運ぶが、ファイルの中身は決して運ばない。
 type problemPayload struct {
-	Code        string                       `json:"code"`
-	Message     string                       `json:"message"`
-	Detail      string                       `json:"detail,omitempty"`
-	Path        string                       `json:"path,omitempty"`
-	Line        int                          `json:"line,omitempty"`
-	Column      int                          `json:"column,omitempty"`
-	Diagnostics []application.DiagnosticView `json:"diagnostics,omitempty"`
-	Conflict    *application.ConflictReport  `json:"conflict,omitempty"`
+	Code            string                       `json:"code"`
+	Message         string                       `json:"message"`
+	Detail          string                       `json:"detail,omitempty"`
+	Path            string                       `json:"path,omitempty"`
+	Line            int                          `json:"line,omitempty"`
+	Column          int                          `json:"column,omitempty"`
+	Diagnostics     []application.DiagnosticView `json:"diagnostics,omitempty"`
+	Conflict        *application.ConflictReport  `json:"conflict,omitempty"`
+	CurrentVersion  *int                         `json:"currentVersion,omitempty"`
+	RequiredVersion *int                         `json:"requiredVersion,omitempty"`
 	// Blockers は group 操作が拒否した理由を示す。これらはコロンの後に
 	// detail を伴う安定した code であり、鍵の relocation が使うのと同じ形である。
 	Blockers []string `json:"blockers,omitempty"`

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/envelope"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
 )
@@ -28,6 +29,118 @@ func newService(t *testing.T) (*secret.Service, string) {
 		t.Fatal(err)
 	}
 	return secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now), home
+}
+
+func legacyVault(t *testing.T, password string) []byte {
+	t.Helper()
+	key, err := envelope.Derive(password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := key.Seal([]byte(`{"schemaVersion":3,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sealed
+}
+
+func recoveryService(t *testing.T) (*secret.Service, *storage.Workspace, *storage.Manager) {
+	t.Helper()
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	service := secret.NewService(workspace, manager, time.Now)
+	manager.Seal = service.SealBackup
+	manager.Unseal = service.OpenBackup
+	return service, workspace, manager
+}
+
+func TestUnsupportedVaultCanRecoverTheNewestCompatibleGeneration(t *testing.T) {
+	service, workspace, manager := recoveryService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := setTestPassword(service, "bastion", "hunter2"); err != nil {
+		t.Fatal(err)
+	}
+	vaultPath := filepath.Join(workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
+	current, err := os.ReadFile(vaultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := legacyVault(t, passphrase)
+	if _, err := manager.Commit(storage.Request{
+		Operation: "test.install-legacy-vault",
+		Changes: []storage.Change{{
+			Path: vaultPath, Contents: legacy,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(current)},
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service.Lock()
+	if err := service.Unlock(passphrase); !errors.Is(err, secret.ErrOlderSchema) {
+		t.Fatalf("Unlock = %v, want ErrOlderSchema", err)
+	}
+
+	if err := service.RecoverCompatibleBackup(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if got := testPasswordFor(service, "bastion"); got != "hunter2" {
+		t.Fatalf("recovered password = %q", got)
+	}
+	service.Lock()
+	if err := service.Unlock(passphrase); err != nil {
+		t.Fatalf("recovered vault did not survive restart: %v", err)
+	}
+}
+
+func TestUnsupportedVaultCanBeResetWithoutRemovingSSHFiles(t *testing.T) {
+	service, workspace, _ := recoveryService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetSyncSettings(secret.SyncSettings{
+		Endpoint: "https://objects.example", Bucket: "workspace", AccessKeyID: "id", SecretAccessKey: "secret",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(workspace.Root(), "config")
+	if err := os.WriteFile(configPath, []byte("Host bastion\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	vaultPath := filepath.Join(workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
+	if err := os.WriteFile(vaultPath, legacyVault(t, passphrase), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service.Lock()
+
+	if err := service.ResetUnsupported(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if !service.Unlocked() {
+		t.Fatal("reset vault is not unlocked")
+	}
+	settings, err := service.SyncSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings != (secret.SyncSettings{}) {
+		t.Fatalf("sync settings survived reset: %#v", settings)
+	}
+	if body, err := os.ReadFile(configPath); err != nil || string(body) != "Host bastion\n" {
+		t.Fatalf("SSH config = %q, %v", body, err)
+	}
+	service.Lock()
+	if err := service.Unlock(passphrase); err != nil {
+		t.Fatalf("reset vault did not survive restart: %v", err)
+	}
 }
 
 const testAuthenticationBinding = "abababababababababababababababababababababababababababababababab"

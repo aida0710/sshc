@@ -84,6 +84,69 @@ describe("LockScreen", () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it("shows exact vault schema versions and restores a compatible backup", async () => {
+    const onOpen = vi.fn();
+    const api = buildApi({
+      unlockVault: vi.fn().mockRejectedValue(new ApiError("vault_schema_older", 409, {
+        code: "vault_schema_older",
+        message: "request rejected",
+        currentVersion: 3,
+        requiredVersion: 4,
+      })),
+      recoverCompatibleVault: vi.fn().mockResolvedValue({
+        exists: true,
+        unlocked: true,
+        aliases: [],
+        dedicatedKeyPassphrases: [],
+      }),
+    });
+    render(
+      <LanguageProvider initial="ja">
+        <LockScreen exists onOpen={onOpen} api={api} />
+      </LanguageProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText("マスターパスワード"), "a long enough password");
+    await userEvent.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "vault のバージョンが古いです（必要なバージョン: 4、現在: 3）。",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "互換性のある vault を復元" }));
+    await waitFor(() => expect(api.recoverCompatibleVault).toHaveBeenCalledWith("a long enough password"));
+    expect(onOpen).toHaveBeenCalled();
+  });
+
+  it("requires an explicit acknowledgement before replacing an unsupported vault", async () => {
+    const onOpen = vi.fn();
+    const api = buildApi({
+      unlockVault: vi.fn().mockRejectedValue(new ApiError("vault_schema_newer", 409, {
+        code: "vault_schema_newer",
+        message: "request rejected",
+        currentVersion: 5,
+        requiredVersion: 4,
+      })),
+      resetUnsupportedVault: vi.fn().mockResolvedValue({
+        exists: true,
+        unlocked: true,
+        aliases: [],
+        dedicatedKeyPassphrases: [],
+      }),
+    });
+    render(<LockScreen exists onOpen={onOpen} api={api} />);
+
+    await userEvent.type(screen.getByLabelText("Master password"), "a long enough password");
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("supported: 4, current: 5");
+
+    const reset = screen.getByRole("button", { name: "Create an empty vault" });
+    expect(reset).toBeDisabled();
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(reset);
+    await waitFor(() => expect(api.resetUnsupportedVault).toHaveBeenCalledWith("a long enough password"));
+    expect(onOpen).toHaveBeenCalled();
+  });
+
   it("shows a copyable safe diagnostic when Android storage rejects vault creation", async () => {
     const api = buildApi({
       initialiseVault: vi.fn().mockRejectedValue(new ApiError("vault_storage_permission_denied", 500, {

@@ -428,6 +428,18 @@ export const en = {
   "lock.storageReadOnly": "The app's private storage is read-only. Restart the device and try again.",
   "lock.storageBusy": "Another vault update is still finishing. Wait a moment and try again.",
   "lock.storageIO": "Android reported an input/output failure while accessing the app's private storage.",
+  "lock.schemaOlder": "The vault format is old (required: {required}, current: {current}).",
+  "lock.schemaNewer": "The vault format is newer than this sshc build (supported: {required}, current: {current}).",
+  "lock.envelopeUnsupported": "The encrypted vault container uses an unsupported format. Open diagnostic details for support.",
+  "lock.schemaRecoveryHint":
+    "Restore the newest compatible local backup first. If none exists, you can create an empty vault without deleting SSH configuration or key files.",
+  "lock.restoreCompatibleBackup": "Restore a compatible vault backup",
+  "lock.noCompatibleBackup": "No compatible local vault backup was found. Nothing was changed.",
+  "lock.recoveryFailed": "The compatible vault backup could not be restored.",
+  "lock.resetUnsupportedAcknowledge":
+    "I understand that saved passwords, saved key passphrases, and synchronization settings will be reset. SSH configuration and key files remain.",
+  "lock.resetUnsupported": "Create an empty vault",
+  "lock.resetFailed": "The unsupported vault could not be safely replaced.",
   "lock.failed": "The vault could not be opened.",
   "section.sync": "Sync",
   "section.history": "History",

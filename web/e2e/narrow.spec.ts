@@ -99,6 +99,50 @@ test("keeps password setup inside 360 pixels without a decorative icon", async (
   await expectFullyInsideViewport(page, page.getByRole("button", { name: "Open" }), "Open sshc");
 });
 
+test("explains an older vault with both schema versions on mobile", async ({ page, installation }) => {
+  await page.addInitScript(() => window.localStorage.setItem("sshc.language", "ja"));
+  await page.route("**/api/v1/passwords", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        exists: true,
+        unlocked: false,
+        aliases: [],
+        dedicatedKeyPassphrases: [],
+      }),
+    });
+  });
+  await page.route("**/api/v1/passwords/unlock", async (route) => {
+    await route.fulfill({
+      status: 409,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        code: "vault_schema_older",
+        message: "request rejected",
+        currentVersion: 3,
+        requiredVersion: 4,
+      }),
+    });
+  });
+
+  await page.goto(installation.url);
+  await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
+  await page.getByRole("button", { name: "開く" }).click();
+
+  await expect(page.getByRole("alert")).toContainText(
+    "vault のバージョンが古いです（必要なバージョン: 4、現在: 3）。",
+  );
+  await expect(page.getByRole("button", { name: "互換性のある vault を復元" })).toBeVisible();
+  await expectNoHorizontalOverflow(page, "古い vault の復旧画面");
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.15.1-vault-version-mobile.png`,
+      fullPage: true,
+    });
+  }
+});
+
 test("draws one separator above the version in the mobile drawer", async ({ page, installation }) => {
   await page.route("**/api/v1/update", async (route) => {
     await route.fulfill({

@@ -160,6 +160,39 @@ describe("integrationsApi recent connections", () => {
   });
 });
 
+describe("integrationsApi vault format recovery", () => {
+  const status = {
+    exists: true,
+    unlocked: true,
+    aliases: [],
+    dedicatedKeyPassphrases: [],
+  };
+
+  it("requests the newest compatible backup with the supplied master password", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse(status));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.recoverCompatibleVault("master password"))
+      .resolves.toEqual(status);
+
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/passwords/recover-compatible-backup");
+    expect(sentJson(init)).toEqual({ passphrase: "master password" });
+  });
+
+  it("sends the explicit destructive acknowledgement when resetting", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse(status));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.resetUnsupportedVault("master password"))
+      .resolves.toEqual(status);
+
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/passwords/reset-unsupported");
+    expect(sentJson(init)).toEqual({ passphrase: "master password", acknowledged: true });
+  });
+});
+
 describe("integrationsApi terminal settings", () => {
   it("keeps explicitly disabled clipboard choices and leaves absent defaults unset", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({

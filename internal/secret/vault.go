@@ -41,6 +41,12 @@ var (
 )
 
 var (
+	// ErrOlderSchema は、復号には成功したものの、平文documentが現行schemaより古い
+	// ことを報告する。envelope形式の不一致と分けることで、画面が「新しすぎる」と
+	// 誤案内せず、安全な復旧操作だけを提示できる。
+	ErrOlderSchema = errors.New("the vault schema is older than this application supports")
+	// ErrNewerSchema は、復号済みdocumentがこのbuildより新しいschemaを要求する。
+	ErrNewerSchema = errors.New("the vault schema is newer than this application supports")
 	// ErrUnsafeName は、安全な alias ではない alias を拒否する。
 	ErrUnsafeName = errors.New("that is not a safe host alias")
 	// ErrEmptySecret は空のパスワードを拒否する。プロンプト上では、誤ったものと
@@ -55,6 +61,27 @@ var (
 	// ErrCredentialInUse は、まだ何かが指している秘密の削除を拒む。
 	ErrCredentialInUse = errors.New("something still uses this credential")
 )
+
+// SchemaVersionError は、復号後に判明したvault documentの版差である。schema番号は
+// 秘密ではなく、診断へ載せても資格情報やpassphraseを明かさない。
+type SchemaVersionError struct {
+	Found     int
+	Supported int
+}
+
+func (e *SchemaVersionError) Error() string {
+	return "vault schema version is not supported"
+}
+
+func (e *SchemaVersionError) Is(target error) bool {
+	if target == ErrUnsupportedVersion {
+		return true
+	}
+	if e.Found < e.Supported {
+		return target == ErrOlderSchema
+	}
+	return target == ErrNewerSchema
+}
 
 // MinPassphraseLength は、これが受け付ける最短の vault パスフレーズ長。
 const MinPassphraseLength = envelope.MinPassphraseLength
@@ -188,7 +215,7 @@ func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
 		return nil, ErrWrongPassphrase
 	}
 	if parsed.SchemaVersion != SchemaVersion {
-		return nil, ErrUnsupportedVersion
+		return nil, &SchemaVersionError{Found: parsed.SchemaVersion, Supported: SchemaVersion}
 	}
 	secrets, subjects := newMaps()
 	for kind, stored := range map[Kind]map[string]string{

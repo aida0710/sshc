@@ -36,6 +36,12 @@ var (
 	// ErrStorageBusy は、別のworkspace更新が完了せずvaultを書き込めないことを報告する。
 	// HTTP層へstorage実装を公開せず、利用者に再試行可能な競合として伝える境界である。
 	ErrStorageBusy = storage.ErrWorkspaceBusy
+	// ErrRecoveryNotNeeded は現行vaultに対する復旧・再作成を拒否する。復旧APIが
+	// 通常のvaultを置き換える破壊的な近道にならないための境界である。
+	ErrRecoveryNotNeeded = errors.New("the current vault does not need format recovery")
+	// ErrNoCompatibleBackup は、現行schemaとして開ける世代backupが見つからないことを
+	// 報告する。探索は現在のvaultを変更しない。
+	ErrNoCompatibleBackup = errors.New("no compatible vault backup was found")
 )
 
 // PasswordMutationKind は、接続作成が vault に行う変更を表す。専用パスワードと
@@ -358,6 +364,145 @@ func (s *Service) Unlock(passphrase string) error {
 	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
 	// 通ったパスワードは、誤ったものが積み上げたものを消し去る。
+	s.refusals = 0
+	s.mu.Unlock()
+	return nil
+}
+
+// RecoverCompatibleBackup は、現在のvaultが復号後のschema不一致だった場合に限り、
+// 同じmaster passwordで開ける直近の現行schema世代へ戻す。世代backupはvault鍵で
+// 二重に封じられているが、envelope headerがsaltを運ぶためpassphraseから直接開ける。
+func (s *Service) RecoverCompatibleBackup(passphrase string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	current, err := s.unsupportedVault(passphrase)
+	if err != nil {
+		return err
+	}
+	history, err := s.transactions.History()
+	if err != nil {
+		return err
+	}
+
+	const maximumCandidates = 32
+	checked := 0
+	for _, record := range history {
+		if checked >= maximumCandidates || !slices.Contains(record.Paths, s.path()) {
+			continue
+		}
+		checked++
+		backupPath := filepath.Join(record.BackupDir, filepath.FromSlash(WorkspacePath))
+		wrapped, readErr := s.workspace.FileSystem().ReadFile(backupPath)
+		if errors.Is(readErr, fs.ErrNotExist) {
+			continue
+		}
+		if readErr != nil {
+			return readErr
+		}
+		candidateSealed, _, openErr := envelope.Open(wrapped, passphrase)
+		if openErr != nil {
+			continue
+		}
+		candidate, openErr := Open(candidateSealed, passphrase)
+		if openErr != nil {
+			continue
+		}
+		return s.replaceUnsupportedVault(current, candidateSealed, candidate, nil, "secret.recover-compatible-backup")
+	}
+	return ErrNoCompatibleBackup
+}
+
+// ResetUnsupported は、正しいmaster passwordで復号できるがschemaだけが扱えない
+// vaultを空の現行vaultへ置き換える。SSH設定と鍵は変更せず、同期資格情報は古いvault
+// 鍵へ結び付いているため同じtransactionで外す。両方の旧暗号文は世代backupへ残る。
+func (s *Service) ResetUnsupported(passphrase string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	current, err := s.unsupportedVault(passphrase)
+	if err != nil {
+		return err
+	}
+	candidate, err := Create(passphrase)
+	if err != nil {
+		return err
+	}
+	sealed, err := candidate.Seal()
+	if err != nil {
+		return err
+	}
+
+	var removals []storage.Removal
+	settingsPath := s.settingsPath()
+	settings, readErr := s.workspace.FileSystem().ReadFile(settingsPath)
+	switch {
+	case readErr == nil:
+		removals = append(removals, storage.Removal{
+			Path: settingsPath, Backup: true,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(settings)},
+		})
+	case errors.Is(readErr, fs.ErrNotExist):
+	default:
+		return readErr
+	}
+	return s.replaceUnsupportedVault(current, sealed, candidate, removals, "secret.reset-unsupported")
+}
+
+func (s *Service) unsupportedVault(passphrase string) ([]byte, error) {
+	sealed, err := s.workspace.FileSystem().ReadFile(s.path())
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, ErrNoVault
+		}
+		return nil, err
+	}
+	_, err = Open(sealed, passphrase)
+	switch {
+	case err == nil:
+		return nil, ErrRecoveryNotNeeded
+	case errors.Is(err, ErrWrongPassphrase):
+		s.refuse()
+		return nil, err
+	case errors.Is(err, ErrOlderSchema), errors.Is(err, ErrNewerSchema):
+		return sealed, nil
+	default:
+		return nil, err
+	}
+}
+
+func (s *Service) replaceUnsupportedVault(
+	current []byte,
+	sealed []byte,
+	candidate *Vault,
+	removals []storage.Removal,
+	operation string,
+) error {
+	s.mu.Lock()
+	s.vault = candidate
+	s.baseline = slices.Clone(current)
+	s.used = s.now()
+	s.mu.Unlock()
+
+	_, err := s.transactions.Commit(storage.Request{
+		Operation: operation,
+		Changes: []storage.Change{{
+			Path: s.path(), Contents: sealed,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(current)},
+		}},
+		Removals: removals,
+	})
+	if err != nil {
+		s.mu.Lock()
+		s.vault = nil
+		s.baseline = nil
+		s.used = time.Time{}
+		s.mu.Unlock()
+		return err
+	}
+
+	s.mu.Lock()
+	s.baseline = slices.Clone(sealed)
 	s.refusals = 0
 	s.mu.Unlock()
 	return nil

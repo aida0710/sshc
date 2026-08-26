@@ -742,15 +742,17 @@ type PasswordVaultStatus struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	Blockers    *[]string       `json:"blockers,omitempty"`
-	Code        string          `json:"code"`
-	Column      *int            `json:"column,omitempty"`
-	Conflict    *ConflictReport `json:"conflict,omitempty"`
-	Detail      *string         `json:"detail,omitempty"`
-	Diagnostics *[]Diagnostic   `json:"diagnostics,omitempty"`
-	Line        *int            `json:"line,omitempty"`
-	Message     string          `json:"message"`
-	Path        *string         `json:"path,omitempty"`
+	Blockers        *[]string       `json:"blockers,omitempty"`
+	Code            string          `json:"code"`
+	Column          *int            `json:"column,omitempty"`
+	Conflict        *ConflictReport `json:"conflict,omitempty"`
+	CurrentVersion  *int            `json:"currentVersion,omitempty"`
+	Detail          *string         `json:"detail,omitempty"`
+	Diagnostics     *[]Diagnostic   `json:"diagnostics,omitempty"`
+	Line            *int            `json:"line,omitempty"`
+	Message         string          `json:"message"`
+	Path            *string         `json:"path,omitempty"`
+	RequiredVersion *int            `json:"requiredVersion,omitempty"`
 }
 
 // PublicKeyResponse defines model for PublicKeyResponse.
@@ -928,6 +930,12 @@ type RemoteKeyRegisterResponse struct {
 // RenameTerminalSessionRequest defines model for RenameTerminalSessionRequest.
 type RenameTerminalSessionRequest struct {
 	Title string `json:"title"`
+}
+
+// ResetUnsupportedVaultRequest defines model for ResetUnsupportedVaultRequest.
+type ResetUnsupportedVaultRequest struct {
+	Acknowledged bool   `json:"acknowledged"`
+	Passphrase   string `json:"passphrase"`
 }
 
 // RestoreRequest defines model for RestoreRequest.
