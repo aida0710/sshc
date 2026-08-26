@@ -42,6 +42,31 @@ test("draws one separator above the desktop navigation version", async ({ page, 
   await expect.poll(() => navigationFooterTopBorders(page)).toBe(1);
 });
 
+test("shows safe diagnostics for a failed operation", async ({ page, installation }) => {
+  await stubUpdateStatus(page);
+  await page.route("**/api/v1/config/overview", async (route) => {
+    await route.fulfill({
+      status: 502,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        code: "config_read_failed",
+        message: "request rejected",
+        detail: "the workspace configuration could not be read",
+      }),
+    });
+  });
+  await openApplication(page, installation);
+
+  await expect(page.getByRole("heading", { name: "The operation could not be completed" })).toBeVisible();
+  await page.getByText("Show diagnostic details").click();
+  const report = page.getByText(/Code: config_read_failed/);
+  await expect(report).toContainText("Operation: GET /api/v1/config/overview");
+  await expect(report).not.toContainText("?");
+
+  const screenshotPath = process.env.SSHC_DIAGNOSTIC_SCREENSHOT;
+  if (screenshotPath !== undefined) await page.screenshot({ path: screenshotPath, fullPage: true });
+});
+
 test("keeps the header and the primary navigation still while a panel scrolls", async ({
   page,
   installation,
