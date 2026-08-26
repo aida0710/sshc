@@ -3,7 +3,9 @@ package sshclient
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"syscall"
 )
 
 // ErrNoInterpreter は、ProxyCommand を解釈させる相手が居ないことを報告する。
@@ -24,7 +26,15 @@ func interpreter(command string) (string, []string, error) {
 	}
 	// `exec` に当たるものは cmd.exe に無い。/c は「これを走らせて終わる」
 	// なので、シェルが待つためだけに残ることはない。
-	return shell, []string{"/c", command}, nil
+	return shell, []string{"/d", "/s", "/c", command}, nil
+}
+
+// cmd.exeはCommandLineToArgvWと異なるquote規則を使う。os/execにargvの
+// escapeを任せるとcommand内のdouble quoteがbackslash付きで渡り、空白を含む
+// executable pathを起動できない。shellへ渡す部分だけをraw command lineにする。
+func configureProxyCommandProcess(command *exec.Cmd, line string) {
+	command.Args = nil
+	command.SysProcAttr = &syscall.SysProcAttr{CmdLine: `/d /s /c "` + line + `"`}
 }
 
 // commandInterpreter は、信頼できる cmd.exe の表記を返す。
