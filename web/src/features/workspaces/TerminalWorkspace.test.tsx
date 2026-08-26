@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -19,6 +19,12 @@ const primary: TerminalSession = {
   startedAt: "2026-08-24T09:00:00Z",
   state: "connected",
   problem: "",
+};
+const secondary: TerminalSession = {
+  ...primary,
+  id: "secondary-session",
+  alias: "database",
+  title: "Database terminal",
 };
 
 function Harness() {
@@ -47,6 +53,15 @@ function Harness() {
 
 function paneTitles(container: HTMLElement): string[] {
   return [...container.querySelectorAll<HTMLElement>("[data-workspace-pane]")].map((pane) => pane.textContent ?? "");
+}
+
+function dragAt(target: HTMLElement, kind: "dragEnter" | "drop", dataTransfer: object, clientX: number, clientY: number) {
+  const event = createEvent[kind](target, { dataTransfer });
+  Object.defineProperties(event, {
+    clientX: { value: clientX },
+    clientY: { value: clientY },
+  });
+  fireEvent(target, event);
 }
 
 describe("TerminalWorkspace pane movement", () => {
@@ -81,13 +96,15 @@ describe("TerminalWorkspace pane movement", () => {
     const dataTransfer = {
       effectAllowed: "none",
       dropEffect: "none",
+      types: ["application/x-sshc-console"],
       setData: (kind: string, value: string) => values.set(kind, value),
       getData: (kind: string) => values.get(kind) ?? "",
     };
+    Object.defineProperty(target, "getBoundingClientRect", { value: () => ({ left: 0, right: 100, top: 0, bottom: 100, width: 100, height: 100 }) });
     fireEvent.dragStart(handles[0] as HTMLElement, { dataTransfer });
-    fireEvent.dragEnter(target as HTMLElement, { dataTransfer });
-    expect(target).toHaveTextContent("Exchange with edge");
-    fireEvent.drop(target as HTMLElement, { dataTransfer });
+    dragAt(target as HTMLElement, "dragEnter", dataTransfer, 95, 50);
+    expect(target).toHaveTextContent("Place on the right");
+    dragAt(target as HTMLElement, "drop", dataTransfer, 95, 50);
     await waitFor(() => expect(paneTitles(container)[0]).toContain("Duplicate terminal"));
     expect(paneTitles(container)[1]).toContain("Primary terminal");
 
@@ -97,6 +114,127 @@ describe("TerminalWorkspace pane movement", () => {
     await user.click(handles[1] as HTMLElement);
     await waitFor(() => expect(paneTitles(container)[0]).toContain("Primary terminal"));
     expect(paneTitles(container)[1]).toContain("Duplicate terminal");
+  });
+
+  it("creates a live workspace by docking an already connected terminal on a pane edge", async () => {
+    const changed = vi.fn();
+    function DockHarness() {
+      const [active, setActive] = useState(primary.id);
+      return <TerminalWorkspace
+        sessions={[primary, secondary]}
+        activeSessionId={active}
+        onActive={setActive}
+        onOpenAlias={vi.fn()}
+        onLiveWorkspaceChange={changed}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+    const { container } = render(<DockHarness />);
+    const target = container.querySelector<HTMLElement>("[data-single-terminal-drop-target]");
+    expect(target).not.toBeNull();
+    Object.defineProperty(target, "getBoundingClientRect", { value: () => ({ left: 0, right: 100, top: 0, bottom: 100, width: 100, height: 100 }) });
+    const dataTransfer = {
+      effectAllowed: "none",
+      dropEffect: "none",
+      types: ["application/x-sshc-console"],
+      setData: vi.fn(),
+      getData: (kind: string) => kind === "application/x-sshc-console" ? secondary.id : "",
+    };
+
+    dragAt(target as HTMLElement, "dragEnter", dataTransfer, 95, 50);
+    expect(container.querySelector("[data-dock-preview='right']")).toHaveTextContent("Place on the right");
+    dragAt(target as HTMLElement, "drop", dataTransfer, 95, 50);
+
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+    expect(paneTitles(container)[0]).toContain("Primary terminal");
+    expect(paneTitles(container)[1]).toContain("Database terminal");
+    await waitFor(() => expect(changed).toHaveBeenCalledWith(expect.objectContaining({
+      name: "edge + database",
+      memberSessionIds: [primary.id, secondary.id],
+      focusedSessionId: secondary.id,
+    })));
+  });
+
+  it("shows one workspace terminal at a time on a compact viewport", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 767px)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+    try {
+      function CompactHarness() {
+        const [active, setActive] = useState(primary.id);
+        return <TerminalWorkspace
+          sessions={[primary, secondary]}
+          activeSessionId={active}
+          onActive={setActive}
+          onOpenAlias={vi.fn()}
+          renderTerminal={(session) => <div>{session.title}</div>}
+        />;
+      }
+      const user = userEvent.setup();
+      const { container } = render(<CompactHarness />);
+      const target = container.querySelector<HTMLElement>("[data-single-terminal-drop-target]");
+      expect(target).not.toBeNull();
+      Object.defineProperty(target, "getBoundingClientRect", { value: () => ({ left: 0, right: 100, top: 0, bottom: 100, width: 100, height: 100 }) });
+      const dataTransfer = {
+        effectAllowed: "none",
+        dropEffect: "none",
+        types: ["application/x-sshc-console"],
+        setData: vi.fn(),
+        getData: (kind: string) => kind === "application/x-sshc-console" ? secondary.id : "",
+      };
+      dragAt(target as HTMLElement, "drop", dataTransfer, 95, 50);
+
+      await waitFor(() => expect(screen.getByRole("navigation", { name: "Workspace terminals" })).toBeVisible());
+      expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(1);
+      expect(screen.getByText("Database terminal")).toBeVisible();
+      expect(screen.queryByText("Primary terminal")).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: "edge" }));
+      await waitFor(() => expect(screen.getByText("Primary terminal")).toBeVisible());
+      expect(screen.queryByText("Database terminal")).toBeNull();
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it("keeps a workspace through a transiently incomplete session refresh", async () => {
+    function ReconciliationHarness({ available }: { available: TerminalSession[] }) {
+      const [active, setActive] = useState(primary.id);
+      return <TerminalWorkspace
+        sessions={available}
+        activeSessionId={active}
+        onActive={setActive}
+        onOpenAlias={vi.fn()}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+    const { container, rerender } = render(<ReconciliationHarness available={[primary, secondary]} />);
+    const target = container.querySelector<HTMLElement>("[data-single-terminal-drop-target]");
+    expect(target).not.toBeNull();
+    Object.defineProperty(target, "getBoundingClientRect", { value: () => ({ left: 0, right: 100, top: 0, bottom: 100, width: 100, height: 100 }) });
+    const dataTransfer = {
+      effectAllowed: "none",
+      dropEffect: "none",
+      types: ["application/x-sshc-console"],
+      setData: vi.fn(),
+      getData: (kind: string) => kind === "application/x-sshc-console" ? secondary.id : "",
+    };
+    dragAt(target as HTMLElement, "drop", dataTransfer, 95, 50);
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+
+    rerender(<ReconciliationHarness available={[primary]} />);
+    rerender(<ReconciliationHarness available={[primary, secondary]} />);
+    await new Promise((resolve) => window.setTimeout(resolve, 550));
+
+    expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2);
   });
 
   it("resizes a split with the keyboard and can focus one pane", async () => {

@@ -1,4 +1,5 @@
 export type SplitDirection = "horizontal" | "vertical";
+export type DockEdge = "left" | "right" | "top" | "bottom";
 export type ReconnectState = "reconnect_required" | "connecting" | "connected" | "failed";
 
 export type StoredPane = {
@@ -44,6 +45,7 @@ export type LayoutState = {
 export type LayoutAction =
   | { type: "focus"; paneId: string }
   | { type: "split"; paneId: string; direction: SplitDirection; pane: StoredPane }
+  | { type: "dock-pane"; targetPaneId: string; edge: DockEdge; pane: RuntimePane }
   | { type: "resize-split"; path: ("first" | "second")[]; ratio: number }
   | { type: "close"; paneId: string }
   | { type: "swap-panes"; sourcePaneId: string; targetPaneId: string }
@@ -87,6 +89,27 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
       }));
       if (root === state.root) return state;
       return { root, focusedPaneId: action.pane.id };
+    }
+    case "dock-pane": {
+      if (action.pane.id === "" || action.pane.alias === "" || action.pane.id === action.targetPaneId) return state;
+      const existing = runtimePane(state.root, action.pane.id);
+      const withoutSource = existing === undefined ? state.root : removePane(state.root, action.pane.id);
+      if (withoutSource === null || runtimePane(withoutSource, action.targetPaneId) === undefined) return state;
+      const direction: SplitDirection = action.edge === "left" || action.edge === "right" ? "horizontal" : "vertical";
+      const before = action.edge === "left" || action.edge === "top";
+      const pane = existing ?? action.pane;
+      const ratio = existing !== undefined && paneIDs(state.root).length === 2 && state.root.split?.direction === direction
+        ? state.root.split.ratio
+        : 50;
+      const root = replacePane(withoutSource, action.targetPaneId, (target) => ({
+        split: {
+          direction,
+          ratio,
+          first: before ? { pane } : { pane: target },
+          second: before ? { pane: target } : { pane },
+        },
+      }));
+      return root === withoutSource ? state : { root, focusedPaneId: pane.id };
     }
     case "resize-split": {
       const ratio = Math.min(90, Math.max(10, Math.round(action.ratio)));
@@ -144,6 +167,12 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
 export function paneIDs(root: RuntimeNode): string[] {
   const ids: string[] = [];
   visitPanes(root, (pane) => ids.push(pane.id));
+  return ids;
+}
+
+export function paneSessionIDs(root: RuntimeNode): string[] {
+  const ids: string[] = [];
+  visitPanes(root, (pane) => { if (pane.sessionId !== undefined) ids.push(pane.sessionId); });
   return ids;
 }
 

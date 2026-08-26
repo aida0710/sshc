@@ -45,6 +45,29 @@ describe("ConsoleList", () => {
     expect(rows[2]).toHaveTextContent("exited 255 · db-primary");
   });
 
+  it("collapses split terminals into one live workspace entry", async () => {
+    const user = userEvent.setup();
+    const props = renderList({
+      workspace: {
+        id: "live-workspace",
+        name: "bastion + db-primary",
+        memberSessionIds: [live.id, dead.id],
+        focusedSessionId: live.id,
+      },
+    });
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("bastion + db-primary")).toBeVisible();
+    expect(screen.getByText("2 terminals")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "bastion" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Show terminals in bastion + db-primary" }));
+    expect(screen.getByRole("button", { name: "bastion" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "db-primary" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "bastion + db-primary" }));
+    expect(props.onSelect).toHaveBeenCalledWith(live.id);
+  });
+
   it("renames a session in place and leaves its destination alone", async () => {
     const user = userEvent.setup();
     const props = renderList();

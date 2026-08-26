@@ -63,7 +63,11 @@ test("moves workspace panes by drag and drop and saves the new placement", async
   await expect(panes).toHaveCount(2);
   await expect(panes.nth(0)).toHaveAttribute("data-pane-alias", "bastion");
   await expect(panes.nth(1)).toHaveAttribute("data-pane-alias", "nas");
-  await panes.nth(0).getByRole("button", { name: /Move bastion pane/ }).dragTo(panes.nth(1));
+  const destination = await panes.nth(1).boundingBox();
+  expect(destination).not.toBeNull();
+  await panes.nth(0).getByRole("button", { name: /Move bastion pane/ }).dragTo(panes.nth(1), {
+    targetPosition: { x: destination!.width - 8, y: destination!.height / 2 },
+  });
   await expect(panes.nth(0)).toHaveAttribute("data-pane-alias", "nas");
   await expect(panes.nth(1)).toHaveAttribute("data-pane-alias", "bastion");
   const separator = page.getByRole("separator", { name: "Resize split" });

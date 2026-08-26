@@ -4,6 +4,7 @@ import { useTranslate, type Translate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Icon } from "../ui/icons";
 import { terminalProblemKey } from "./sessions";
+import { consoleDragMimeType, type LiveWorkspaceSummary } from "../features/workspaces/live";
 
 type ConsoleListProps = {
   sessions: TerminalSession[];
@@ -11,6 +12,7 @@ type ConsoleListProps = {
   maxSessions: number;
   busy: boolean;
   problem: string;
+  workspace?: LiveWorkspaceSummary | null;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
@@ -18,8 +20,6 @@ type ConsoleListProps = {
   onReorder: (order: string[]) => void;
   onOpenShell: () => void;
 };
-
-const dragMimeType = "application/x-sshc-console";
 
 function describeForward(t: Translate, forward: TerminalForward): string {
   switch (forward.kind) {
@@ -38,6 +38,7 @@ export function ConsoleList({
   maxSessions,
   busy,
   problem,
+  workspace = null,
   onSelect,
   onClose,
   onRename,
@@ -52,10 +53,17 @@ export function ConsoleList({
   const [draft, setDraft] = useState("");
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropBefore, setDropBefore] = useState<string | null>(null);
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const live = sessions.filter((session) => session.exited === undefined).length;
   const full = maxSessions > 0 && live >= maxSessions;
+  const workspaceMembers = new Set(workspace?.memberSessionIds ?? []);
+  const groupedSessions = workspace === null ? [] : sessions.filter((session) => workspaceMembers.has(session.id));
+  const standaloneSessions = sessions.filter((session) => !workspaceMembers.has(session.id));
+  const displayedSessions = workspace !== null && workspaceExpanded
+    ? [...groupedSessions, ...standaloneSessions]
+    : standaloneSessions;
 
   useEffect(() => {
     if (menuFor !== null && !sessions.some((session) => session.id === menuFor)) setMenuFor(null);
@@ -114,11 +122,31 @@ export function ConsoleList({
           aria-label={t("terminal.consoleList")}
           className="flex flex-col gap-0.5"
           onDragOver={(event: DragEvent) => {
-            if (event.dataTransfer.types.includes(dragMimeType)) event.preventDefault();
+            if (event.dataTransfer.types.includes(consoleDragMimeType)) event.preventDefault();
           }}
           onDrop={() => drop(null)}
         >
-          {sessions.map((session, index) => {
+          {workspace === null || groupedSessions.length < 2 ? null : (
+            <li className="rounded-lg border border-control-line bg-control/70 p-1">
+              <div className={`flex items-center gap-1 rounded-md ${workspaceMembers.has(selected ?? "") ? "bg-select-fill" : ""}`}>
+                <button
+                  type="button"
+                  aria-label={workspaceExpanded ? t("workspace.collapseGroup", { name: workspace.name }) : t("workspace.expandGroup", { name: workspace.name })}
+                  aria-expanded={workspaceExpanded}
+                  onClick={() => setWorkspaceExpanded((current) => !current)}
+                  className="flex size-7 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"
+                >
+                  <span aria-hidden="true" className="text-xs">{workspaceExpanded ? "▾" : "▸"}</span>
+                </button>
+                <button type="button" aria-label={workspace.name} onClick={() => onSelect(workspace.focusedSessionId)} className="min-w-0 grow px-1 py-1 text-left">
+                  <span className="block truncate text-sm font-medium text-ink">{workspace.name}</span>
+                  <span className="block text-xs text-ink-faint">{t("workspace.groupCount", { count: String(groupedSessions.length) })}</span>
+                </button>
+              </div>
+            </li>
+          )}
+          {displayedSessions.map((session) => {
+            const index = sessions.findIndex((candidate) => candidate.id === session.id);
             const running = session.state !== "exited";
             const destination = session.kind === "ssh" ? session.alias ?? "" : t("terminal.localhost");
             const status = session.problem !== ""
@@ -136,7 +164,7 @@ export function ConsoleList({
                 key={session.id}
                 draggable={renaming === null}
                 onDragStart={(event: DragEvent) => {
-                  event.dataTransfer.setData(dragMimeType, session.id);
+                  event.dataTransfer.setData(consoleDragMimeType, session.id);
                   event.dataTransfer.effectAllowed = "move";
                   setDragging(session.id);
                 }}
@@ -145,7 +173,7 @@ export function ConsoleList({
                   setDropBefore(null);
                 }}
                 onDragOver={(event: DragEvent) => {
-                  if (!event.dataTransfer.types.includes(dragMimeType)) return;
+                  if (!event.dataTransfer.types.includes(consoleDragMimeType)) return;
                   event.preventDefault();
                   setDropBefore(session.id);
                 }}
@@ -153,7 +181,7 @@ export function ConsoleList({
                   event.stopPropagation();
                   drop(session.id);
                 }}
-                className={`relative ${dragging === session.id ? "opacity-40" : ""}`}
+                className={`relative ${dragging === session.id ? "opacity-40" : ""} ${workspaceMembers.has(session.id) ? "ml-4 border-l border-line pl-1" : ""}`}
               >
                 {dropBefore === session.id && dragging !== session.id ? (
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />

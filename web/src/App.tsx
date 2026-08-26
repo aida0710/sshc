@@ -53,6 +53,7 @@ import {
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
 import { useTerminalSessions, type TerminalSessionsState } from "./terminal/sessions";
 import { TerminalWorkspace, type WorkspaceRestoreRequest } from "./features/workspaces/TerminalWorkspace";
+import type { LiveWorkspaceSummary } from "./features/workspaces/live";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
@@ -209,6 +210,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const consoles = useTerminalSessions(integrationsApi, t, state === "ready");
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>({});
   const [activeConsole, setActiveConsole] = useState<string | null>(null);
+  const [liveWorkspace, setLiveWorkspace] = useState<LiveWorkspaceSummary | null>(null);
   const [workspaceRestoreRequest, setWorkspaceRestoreRequest] = useState<WorkspaceRestoreRequest | null>(null);
   const workspaceRestoreSequence = useRef(0);
   const [navFace, setNavFace] = useState<NavFace | null>(null);
@@ -551,6 +553,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           consoles={consoles}
           orderedConsoles={orderedConsoles}
           activeConsole={activeConsole}
+          liveWorkspace={liveWorkspace}
           onShowConsole={showConsole}
           onDuplicateConsole={(id) => void duplicateConsole(id)}
           onReorderConsoles={setConsoleOrder}
@@ -579,6 +582,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     settings={terminalSettings}
                     hostAppearance={hostAppearance}
                     onActive={showConsole}
+                    onLiveWorkspaceChange={setLiveWorkspace}
                     onOpenAlias={(alias) => consoles.open({ kind: "ssh", alias })}
                     restoreRequest={workspaceRestoreRequest}
                     onRestoreConsumed={consumeWorkspaceRestore}
@@ -692,6 +696,7 @@ function TerminalScreen({
   settings,
   hostAppearance,
   onActive,
+  onLiveWorkspaceChange,
   onOpenAlias,
   restoreRequest,
   onRestoreConsumed,
@@ -701,12 +706,13 @@ function TerminalScreen({
   settings: TerminalSettings;
   hostAppearance: Map<string, TerminalAppearance>;
   onActive: (id: string) => void;
+  onLiveWorkspaceChange: (workspace: LiveWorkspaceSummary | null) => void;
   onOpenAlias: (alias: string) => Promise<import("./api/integrations").TerminalSession | null>;
   restoreRequest: WorkspaceRestoreRequest | null;
   onRestoreConsumed: (sequence: number) => void;
 }) {
   return (
-    <TerminalWorkspace sessions={consoles.sessions} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} restoreRequest={restoreRequest} onRestoreConsumed={onRestoreConsumed} renderTerminal={(session, onInput, injected) => {
+    <TerminalWorkspace sessions={consoles.sessions} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} restoreRequest={restoreRequest} onRestoreConsumed={onRestoreConsumed} onLiveWorkspaceChange={onLiveWorkspaceChange} renderTerminal={(session, onInput, injected) => {
       const appearance = resolveAppearance(session.alias === undefined ? undefined : hostAppearance.get(session.alias), settings.appearance);
       return <Suspense fallback={<RouteSkeleton kind="terminal" />}><TerminalView key={session.id} session={session} {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })} {...(appearance.palette === "" ? {} : { palette: appearance.palette })} {...(appearance.font === "" ? {} : { font: appearance.font })} {...(appearance.background === "" ? {} : { background: appearance.background })} {...(appearance.tint === undefined ? {} : { tint: appearance.tint })} copyOnSelect={settings.copyOnSelect ?? true} rightClickPaste={settings.rightClickPaste ?? true} onInput={onInput} injectedInput={injected} onExit={() => consoles.markExited(session.id)} onReconnect={() => consoles.reconnect(session.id)} /></Suspense>;
     }} />
