@@ -94,6 +94,9 @@ func TestRunUpdateRejectsAnInvalidRemoteTag(t *testing.T) {
 }
 
 func TestShellReceiptBindsTheExecutableDigest(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("install.shのreceiptはWindowsでは更新対象にしない")
+	}
 	directory := t.TempDir()
 	executable := filepath.Join(directory, "sshc")
 	contents := []byte("a published sshc binary")
@@ -159,8 +162,19 @@ func TestHomebrewCandidateRequiresItsOwnExecutable(t *testing.T) {
 		t.Fatal(err)
 	}
 	found, err := detectInstallation(kegBinary)
-	if err != nil || found.manager != managerHomebrew || found.brew != brew {
+	if err != nil || found.manager != managerHomebrew {
 		t.Fatalf("detect = %#v, %v", found, err)
+	}
+	foundInfo, err := os.Stat(found.brew)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantInfo, err := os.Stat(brew)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(foundInfo, wantInfo) {
+		t.Fatalf("detected brew %q is not the fixture %q", found.brew, brew)
 	}
 }
 

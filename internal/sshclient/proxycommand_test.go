@@ -49,7 +49,13 @@ func relayCommand(t *testing.T, address string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return `"` + self + `" -test.run=^TestProxyCommandRelay$ -sshc.relay=` + address
+	quoted := `"` + self + `"`
+	if runtime.GOOS == "windows" {
+		// cmd.exeではbackslashがquoteをescapeしない。実行ファイル名を通常の
+		// double quoteで囲み、空白を含むrunnerの一時pathもひとつのargvにする。
+		quoted = `"` + self + `"`
+	}
+	return quoted + ` -test.run=^TestProxyCommandRelay$ -sshc.relay=` + address
 }
 
 // closedPort は、誰も待ち受けていないポートを返す。
