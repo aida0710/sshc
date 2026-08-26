@@ -2,7 +2,10 @@
 
 package sshclient
 
-import "errors"
+import (
+	"errors"
+	"os/exec"
+)
 
 // posixShell は、ProxyCommand を解釈させるシェルである。
 //
@@ -26,3 +29,5 @@ var ErrNoInterpreter = errors.New("no shell is available to run ProxyCommand")
 func interpreter(command string) (string, []string, error) {
 	return posixShell, []string{"-c", "exec " + command}, nil
 }
+
+func configureProxyCommandProcess(_ *exec.Cmd, _ string) {}

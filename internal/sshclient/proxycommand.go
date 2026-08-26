@@ -53,6 +53,7 @@ func startProxyCommand(command string) (net.Conn, error) {
 
 	complaints := &boundedBuffer{limit: proxyCommandStderrLimit}
 	process := exec.Command(name, arguments...)
+	configureProxyCommandProcess(process, command)
 	process.Stdin = childStdin
 	process.Stdout = childStdout
 	process.Stderr = complaints

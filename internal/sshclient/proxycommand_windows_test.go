@@ -3,6 +3,7 @@ package sshclient
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -56,5 +57,18 @@ func TestTheCommandInterpreterComesFromWindowsItself(t *testing.T) {
 	// 何も無ければ、起動する相手が居ないと言う。
 	if _, err := commandInterpreter(func(string) (string, bool) { return "", false }); !errors.Is(err, ErrNoInterpreter) {
 		t.Errorf("with nothing to go on = %v, want ErrNoInterpreter", err)
+	}
+}
+
+func TestProxyCommandUsesCmdExeRawCommandLine(t *testing.T) {
+	const line = `"C:\\Program Files\\helper.exe" --stdio`
+	command := exec.Command(`C:\\Windows\\System32\\cmd.exe`, "/d", "/s", "/c", line)
+	configureProxyCommandProcess(command, line)
+	if len(command.Args) != 0 {
+		t.Fatalf("Args = %#v, want raw CmdLine only", command.Args)
+	}
+	want := `/d /s /c "` + line + `"`
+	if command.SysProcAttr == nil || command.SysProcAttr.CmdLine != want {
+		t.Fatalf("CmdLine = %#v, want %q", command.SysProcAttr, want)
 	}
 }
