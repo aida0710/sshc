@@ -736,6 +736,8 @@ type PasswordVaultStatus struct {
 	Aliases                 []string `json:"aliases"`
 	DedicatedKeyPassphrases []string `json:"dedicatedKeyPassphrases"`
 	Exists                  bool     `json:"exists"`
+	MigratedFromVersion     *int     `json:"migratedFromVersion,omitempty"`
+	MigratedToVersion       *int     `json:"migratedToVersion,omitempty"`
 	MinPassphraseLength     *int     `json:"minPassphraseLength,omitempty"`
 	Unlocked                bool     `json:"unlocked"`
 }

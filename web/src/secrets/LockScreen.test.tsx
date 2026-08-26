@@ -147,6 +147,29 @@ describe("LockScreen", () => {
     expect(onOpen).toHaveBeenCalled();
   });
 
+  it("explains a failed migration and says that the original vault remains", async () => {
+    const api = buildApi({
+      unlockVault: vi.fn().mockRejectedValue(new ApiError("vault_migration_failed", 409, {
+        code: "vault_migration_failed",
+        message: "request rejected",
+        currentVersion: 4,
+        requiredVersion: 5,
+      })),
+    });
+    render(
+      <LanguageProvider initial="ja">
+        <LockScreen exists onOpen={vi.fn()} api={api} />
+      </LanguageProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText("マスターパスワード"), "a long enough password");
+    await userEvent.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "vault をバージョン 4 から 5 へ更新できませんでした。元の vault は変更していません。",
+    );
+  });
+
   it("shows a copyable safe diagnostic when Android storage rejects vault creation", async () => {
     const api = buildApi({
       initialiseVault: vi.fn().mockRejectedValue(new ApiError("vault_storage_permission_denied", 500, {

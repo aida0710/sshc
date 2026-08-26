@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ApiError, type RequestFailureDiagnostic } from "../api/client";
-import { integrationsApi, type IntegrationsApi } from "../api/integrations";
+import { integrationsApi, type IntegrationsApi, type PasswordVaultStatus } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
@@ -8,7 +8,7 @@ import { ErrorDiagnosticNotice } from "../shell/ErrorDiagnosticNotice";
 
 type LockScreenProps = {
   exists: boolean;
-  onOpen: () => void;
+  onOpen: (status?: PasswordVaultStatus) => void;
   onExists?: () => void;
   version?: string;
   api?: IntegrationsApi;
@@ -44,14 +44,12 @@ export function LockScreen({
     setVersionMismatch(null);
     setResetAcknowledged(false);
     try {
-      if (exists) {
-        await api.unlockVault(password);
-      } else {
-        await api.initialiseVault(password);
-      }
+      const status = exists
+        ? await api.unlockVault(password)
+        : await api.initialiseVault(password);
       setPassword("");
       setConfirmation("");
-      onOpen();
+      onOpen(status);
     } catch (caught) {
       const code = caught instanceof ApiError ? caught.code : "network_request_failed";
       const method = "POST";
@@ -114,6 +112,16 @@ export function LockScreen({
           setError(t(kind === "older" ? "lock.schemaOlder" : "lock.schemaNewer", { current, required }));
           break;
         }
+        case "vault_migration_failed": {
+          const current = caught instanceof ApiError && typeof caught.problem?.currentVersion === "number"
+            ? caught.problem.currentVersion
+            : 0;
+          const required = caught instanceof ApiError && typeof caught.problem?.requiredVersion === "number"
+            ? caught.problem.requiredVersion
+            : 0;
+          setError(t("lock.migrationFailed", { current, required }));
+          break;
+        }
         case "vault_envelope_unsupported":
           setError(t("lock.envelopeUnsupported"));
           break;
@@ -129,10 +137,10 @@ export function LockScreen({
     setBusy(true);
     setError("");
     try {
-      await api.recoverCompatibleVault(password);
+      const status = await api.recoverCompatibleVault(password);
       setPassword("");
       setVersionMismatch(null);
-      onOpen();
+      onOpen(status);
     } catch (caught) {
       const code = caught instanceof ApiError ? caught.code : "network_request_failed";
       setError(t(code === "vault_compatible_backup_missing" ? "lock.noCompatibleBackup" : "lock.recoveryFailed"));
@@ -146,11 +154,11 @@ export function LockScreen({
     setBusy(true);
     setError("");
     try {
-      await api.resetUnsupportedVault(password);
+      const status = await api.resetUnsupportedVault(password);
       setPassword("");
       setVersionMismatch(null);
       setResetAcknowledged(false);
-      onOpen();
+      onOpen(status);
     } catch {
       setError(t("lock.resetFailed"));
     } finally {

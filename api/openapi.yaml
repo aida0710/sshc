@@ -2714,6 +2714,9 @@ components:
           type: array
           items: { type: string }
         minPassphraseLength: { type: integer }
+        # 直前の明示的なunlockで自動migrationを行った場合だけ返す。
+        migratedFromVersion: { type: integer }
+        migratedToVersion: { type: integer }
     # blocker は保存済みパスワードを使用不能にするので、保存自体を拒否する。
     # warning は利用者が確認すべき状態を示すが、保存を禁止しない。
     PasswordEligibility:

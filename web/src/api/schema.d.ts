@@ -2155,6 +2155,8 @@ export interface components {
             aliases: string[];
             dedicatedKeyPassphrases: string[];
             minPassphraseLength?: number;
+            migratedFromVersion?: number;
+            migratedToVersion?: number;
         };
         PasswordEligibility: {
             alias: string;
