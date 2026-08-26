@@ -150,6 +150,15 @@ func (s *Session) Exit() *ExitInfo {
 	return &info
 }
 
+// Done は現在のprocess世代のpumpが終了したとき閉じる。返したchannelは、手動再接続が
+// 新しい世代を開始しても元の世代を指し続けるため、呼び出し側は待ち始めた終了だけを
+// 決定的に観測できる。
+func (s *Session) Done() <-chan struct{} {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.done
+}
+
 func (s *Session) Live() bool { return s.Exit() == nil }
 
 // View は一覧に出すための写しである。

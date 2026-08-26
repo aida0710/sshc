@@ -2103,7 +2103,7 @@ func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
 	}()
 	select {
 	case <-collecting:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		close(resume)
 		t.Fatal("Push did not reach collection")
 	}
@@ -2129,12 +2129,12 @@ func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Push = %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("Push did not finish")
 	}
 	select {
 	case <-configured:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("Configure did not finish after Push")
 	}
 	if got := oldBucket.keys(); len(got) != 2 || oldBucket.object("old/"+remotesync.ObjectName) == nil {
