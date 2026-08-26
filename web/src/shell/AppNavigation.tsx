@@ -15,6 +15,7 @@ import type { MessageKey } from "../i18n/messages";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type { TerminalSession } from "../api/integrations";
+import type { LiveWorkspaceSummary } from "../features/workspaces/live";
 import {
   clampNavigationWidth,
   maximumNavigationWidth,
@@ -37,6 +38,7 @@ export function AppNavigation({
   consoles,
   orderedConsoles,
   activeConsole,
+  liveWorkspace,
   onShowConsole,
   onDuplicateConsole,
   onReorderConsoles,
@@ -57,6 +59,7 @@ export function AppNavigation({
   consoles: TerminalSessionsState;
   orderedConsoles: TerminalSession[];
   activeConsole: string | null;
+  liveWorkspace: LiveWorkspaceSummary | null;
   onShowConsole: (id: string) => void;
   onDuplicateConsole: (id: string) => void;
   onReorderConsoles: (order: string[]) => void;
@@ -124,6 +127,7 @@ export function AppNavigation({
           <ConsoleList
             sessions={orderedConsoles}
             selected={activeConsole}
+            workspace={liveWorkspace}
             maxSessions={consoles.maxSessions}
             busy={consoles.busy}
             problem={consoles.problem}
