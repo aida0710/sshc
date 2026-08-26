@@ -179,11 +179,11 @@
 
 ## 更新の境界
 
-- 更新確認は、このアプリケーションが SSH 接続先以外の外部ホストへ通信する唯一の機能です。`https://api.github.com/repos/aida0710/sshc/releases/latest` へ 1 回 GET します。server side からリクエストするため、ページの `connect-src` は `'self'` のままです。自動実行せず、画面を開いたときだけ実行します。
-- アプリケーション自身の更新は行いません。新しいバージョンがある場合はリリースページへのリンクだけを表示し、ダウンロードとバイナリ置換は利用者が行います。
-- 自己更新機能は一度実装した後に削除しました。ネットワークから取得したバイナリの置換には署名検証が必要ですが、署名鍵を release workflow から参照できる場所に置くと、リポジトリを制御できる主体も同じ鍵へアクセスできます。この構成ではリポジトリ侵害への保護が増えず、鍵のローテーション順を誤ると既存インストールを更新できなくなるため、機能を維持しないと判断しました。
+- 更新確認は、このアプリケーションが SSH 接続先以外の外部ホストへ通信する唯一の機能です。`https://api.github.com/repos/aida0710/sshc/releases/latest`へengine起動直後と画面上の確認時にGETします。起動時はHTTP受付開始を先に通知し、3秒以内のbest-effort確認だけを行います。失敗やoffline状態でengineを停止せず、新しい安定版がある場合だけ`sshc update`を案内します。server sideからリクエストするため、ページの`connect-src`は`'self'`のままです。
+- `sshc update`は任意の実行ファイルを直接置換しません。Homebrew版は`brew --prefix --installed aida0710/tap/sshc`の管理対象と実行中ファイルを`SameFile`で照合してから、同じ`brew`のformula更新へ委ねます。`install.sh`版は隣接receiptに記録したrepository、安定版、SHA-256が実行中ファイルと一致するときだけ、確認した最新tagに固定したinstallerへ委ねます。Windows、手動配置、source build、変更済みファイル、判定不能な導入は拒否します。
+- 以前削除した自己更新機能は、アプリケーション自身がネットワークからbinaryを取得して直接置換する方式でした。署名鍵をrelease workflowと同じ主体が扱う構成ではrepository侵害への防御が増えず、独自updaterの失敗境界だけが増えるため復活させません。現在の更新入口は既存のHomebrewまたはtag固定`install.sh`を管理元として維持し、後者はReleaseの`checksums.txt`、digest付きreceipt、同一directory内renameを必須にします。
 - リリースでは 6 つの CLI バイナリを生成します（`sshc-darwin-arm64`、`sshc-darwin-amd64`、`sshc-linux-amd64`、`sshc-linux-arm64`、`sshc-windows-amd64.exe`、`sshc-windows-arm64.exe`）。各 OS の runner がその OS 向けの 2 アーキテクチャをビルドします。darwin では `CGO_ENABLED=1` を使用します。設定エンジンは `%u` と `%i` の展開に `os/user.Current()` を使用し、cgo を無効にした Go は `/etc/passwd` を参照するため、macOS の通常ユーザーではこれらの token を解決できない場合があります。Linux と Windows の CLI は `CGO_ENABLED=0` でビルドします。Android は署名済み APK を別ジョブで生成し、6 つの CLI とともにリリースへ添付します。
-- リリースには `checksums.txt` を添付します。これはダウンロード中の破損検出に使用します。さらに、公開するCLIとAPKのdigestへGitHub artifact attestationを発行し、`gh attestation verify <file> --repo aida0710/sshc`でtagのRelease workflow由来であることを検証できます。アプリケーション自身は更新ファイルを取得しないため、実行時のchecksum／attestation検証はありません。
+- リリースには `checksums.txt` を添付します。これはダウンロード中の破損検出に使用します。さらに、公開するCLIとAPKのdigestへGitHub artifact attestationを発行し、`gh attestation verify <file> --repo aida0710/sshc`でtagのRelease workflow由来であることを検証できます。`install.sh`経由の更新も公開済みtagの`checksums.txt`と照合します。Homebrew版はtag sourceのSHA-256をformulaが検査します。
 - ソースから使っている場合の更新は `make update`（`git pull --ff-only` + `make install`）です。
 
 - `make install` は `~/.local/bin/sshc` へ atomic にインストールし、sudo は不要です。`make uninstall` はこのバイナリだけを削除します。
@@ -196,7 +196,7 @@
 - `sshc list` は `~/.ssh/config` と到達可能な `Include` を読み、具体的な接続先 alias を辞書順で 1 行ずつ表示します。`Host *`、ワイルドカード、否定パターンは接続先名ではないため表示せず、重複 alias は 1 回だけ表示します。設定の読み取り時に `ssh` や `Match exec` は実行しません。
 - `sshc connect` は現在のターミナルに検索 TUI を表示します。alias、設定から計算した `HostName`・`User`・`Port`、metadata のタグで絞り込み、お気に入りを先に表示します。上下キーで選択し、Enter で同じ端末から接続します。Web UI は起動せず、`sshc <接続先>` と同じ保存済み鍵パスフレーズの経路を使用します。設定ファイルが存在するが読み取れない場合は、接続先 0 件として扱わず読み取りエラーを表示します。
 - TUI の入力は端末からの read 単位で解釈します。`Esc` は単独キーであると同時に矢印キー列の先頭でもあるため、read の末尾にある場合だけ単独キーとして扱います。未対応の escape sequence は終端まで読み捨て、`Delete` や `Ctrl-矢印` の後続バイトが検索文字列に入らないようにします。行は端末幅で切り、表示できない件数を `N more` として表示します。
-- サブコマンドの一覧は `sshc -h` と `sshc connect --help` に出ます。`open`、`list`、`connect`、`status`、`help` は alias より先に読まれるので、その名前のホストへはこのコマンドからは繋げません。それが usage に書いてある理由です。
+- サブコマンドの一覧は `sshc -h` と `sshc connect --help` に出ます。`open`、`list`、`connect`、`status`、`update`、`help` は alias より先に読まれるので、その名前のホストへはこのコマンドからは繋げません。それが usage に書いてある理由です。
 - `sshc <接続先>` は外部の `ssh` を起動せず、現在のターミナルからプロセス内 SSH client で接続します。engine は `~/.ssh/sshc/cli`（0600）に URL と起動ごとの秘密を保存し、CLI はこの情報を使って保存済み資格情報を取得します。応答には単回トークンではなく、その接続に必要な資格情報を直接含めます。engine は ProxyJump の接続チェーンを解決し、各 alias が使用する鍵パスフレーズとアカウントパスワードだけを返します。`Match exec` や `CanonicalizeHostname` により外部実行または DNS なしでは鍵を決定できない場合は返しません。接続チェーンに含まれない資格情報も返しません。2FA など保存値で処理できないプロンプトは端末に表示します。アカウントパスワードを追加しても、このファイルを読み取れる主体は既に vault 暗号文、秘密鍵、任意 alias の保存済みパスフレーズへアクセスできるため、信頼境界は変わりません。強制終了後にファイルが残っても参照先ポートには接続できず、秘密は次回起動時に再生成されます。
 - engine が動作していない場合は `sshc engine` の起動方法を表示して終了します。CLI 自身は engine を起動しません。保存済み資格情報を使わずに接続する場合は、`ssh <接続先>` を利用できます。
 - vault が施錠中の場合、`sshc <接続先>` は解錠を待ちます。UI または別端末の `sshc vault unlock` で同じ engine を解錠すると、待機中の接続が続行します。この接続コマンド自体はマスターパスワードを要求しません。以前使用していた `/cli/unlock` route は削除済みで、`TestLegacyCLIUnlockRouteIsNotRegistered` が 404 を検査します。desktop は UI を 1 回 foreground にして無期限に待機し、headless は待機しません。

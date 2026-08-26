@@ -23,6 +23,12 @@ SSHC_VERSION=v0.13.6 sh -c \
 
 Windows を含む各 OS 向けのバイナリと Android APK は、[GitHub Releases](https://github.com/aida0710/sshc/releases) からダウンロードできます。デスクトップアプリ、インストーラ、macOS の app bundle は配布していません。
 
+Homebrewまたはreceipt対応版の`install.sh`で導入したsshcは、同じ管理元へ処理を委ねて更新できます。手動配置やソースビルドは自動で置き換えません。
+
+```sh
+sshc update
+```
+
 ## 基本的な使い方
 
 最初にエンジンを起動し、別のターミナルから UI を開きます。
@@ -57,6 +63,7 @@ sshc run <接続先> <コマンド> # リモートコマンドを実行
 sshc connect                  # 一覧から接続先を選択
 sshc list                     # Host alias の一覧を表示
 sshc status                   # エンジンの状態を表示（--json に対応）
+sshc update                   # Homebrew／install.sh経由の導入を更新
 ```
 
 引数なしの `sshc` はエンジンを起動しません。実行中のエンジンを置き換えるには `sshc engine --replace` を使用します。

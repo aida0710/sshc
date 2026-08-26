@@ -27,11 +27,9 @@ die() { printf 'sshc: %s\n' "$*" >&2; exit 1; }
 
 # ── ダウンロードツール ─────────────────────────────────────────
 if command -v curl >/dev/null 2>&1; then
-  fetch() { curl -fsSL "$1" -o "$2"; }
-  fetch_stdout() { curl -fsSL "$1"; }
+  fetch() { curl -fsSL --connect-timeout 10 --max-time 180 "$1" -o "$2"; }
 elif command -v wget >/dev/null 2>&1; then
-  fetch() { wget -qO "$2" "$1"; }
-  fetch_stdout() { wget -qO- "$1"; }
+  fetch() { wget -q -T 30 -t 3 -O "$2" "$1"; }
 else
   die "neither curl nor wget is available"
 fi
@@ -98,7 +96,15 @@ mkdir -p "$dir" || die "could not create $dir"
 
 # ── 落とす ────────────────────────────────────────────────────
 work=$(mktemp -d) || die "could not create a temporary directory"
-trap 'rm -rf "$work"' EXIT INT TERM
+staged=""
+receipt_staged=""
+cleanup() {
+  rm -rf "$work"
+  [ -z "$staged" ] || rm -f "$staged"
+  [ -z "$receipt_staged" ] || rm -f "$receipt_staged"
+}
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT TERM
 fetch "$base/$asset" "$work/sshc" || die "could not download $base/$asset"
 
 # ── ② 公開された checksum と一致するか ────────────────────────
@@ -130,16 +136,30 @@ if command -v sshc >/dev/null 2>&1; then
   running=$(sshc status --json 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || true)
 fi
 incoming=$("$work/sshc" version 2>/dev/null | cut -d' ' -f2 || true)
+[ -n "$incoming" ] || die "the downloaded sshc does not report its version"
 if [ -n "$running" ] && [ -n "$incoming" ] && [ "$running" != "$incoming" ]; then
   note "an engine is running version $running; after this it will not match $incoming"
   note "quit the sshc app (or the terminal running it) and start it again"
 fi
 
 # ── 置く ──────────────────────────────────────────────────────
-# 同じディレクトリ内の rename を使用し、不完全なバイナリが target に現れないようにする。
-mv "$work/sshc" "$target" 2>/dev/null || {
-  cp "$work/sshc" "$target.$$" && chmod 0755 "$target.$$" && mv "$target.$$" "$target"
-} || die "could not install into $target"
+# target と同じディレクトリに完全な一時ファイルを作り、同一filesystem内の rename
+# だけで公開する。/tmp からの mv はfilesystemをまたぐとcopyになり、既存targetを
+# 部分的に書き換え得るため使用しない。
+staged=$(mktemp "$dir/.sshc.install.XXXXXX") || die "could not stage the executable in $dir"
+cp "$work/sshc" "$staged" && chmod 0755 "$staged" || die "could not stage the executable in $dir"
+
+# install.sh由来であることをpathの推測に頼らず判定できるよう、実際に配置する
+# binaryのdigestと版をreceiptへ結び付ける。receiptも同じdirectoryで原子的に公開する。
+receipt="$dir/.sshc-install-receipt.json"
+receipt_staged=$(mktemp "$dir/.sshc.receipt.XXXXXX") || die "could not stage the install receipt in $dir"
+printf '{"schemaVersion":1,"manager":"install.sh","repository":"%s","version":"%s","sha256":"%s"}\n' \
+  "$REPO" "$incoming" "$actual" > "$receipt_staged" || die "could not write the install receipt"
+chmod 0644 "$receipt_staged" || die "could not protect the install receipt"
+mv "$receipt_staged" "$receipt" || die "could not install the receipt into $receipt"
+receipt_staged=""
+mv "$staged" "$target" || die "could not install into $target"
+staged=""
 
 # version サブコマンドのない旧バージョンではインストール先だけを表示する。
 installed=$("$target" version 2>/dev/null || true)
