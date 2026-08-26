@@ -556,16 +556,25 @@ func TestExplicitReconnectRefusesALocalShell(t *testing.T) {
 func TestClosingHangsUpAndThenForgets(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
 	id, _ := fixture.openShell(t)
+	session, ok := fixture.registry.Lookup(id)
+	if !ok {
+		t.Fatal("the opened session disappeared")
+	}
 
 	response, body := fixture.do(t, http.MethodDelete, "/api/v1/terminal/sessions/"+id, "")
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("close = %d: %s", response.StatusCode, body)
 	}
-	// 終了は非同期に観測される。終了済みとして一覧に残るのを待つ。
-	waitUntil(t, func() bool {
-		session, ok := fixture.registry.Lookup(id)
-		return ok && session.Exit() != nil
-	})
+	// 終了は非同期に観測される。実時間のpollingではなく、このprocess世代のpump完了を
+	// 待つ。全package race実行のCPU飽和を製品の失敗と取り違えないためである。
+	select {
+	case <-session.Done():
+	case <-time.After(30 * time.Second):
+		t.Fatal("the session pump did not finish after hangup")
+	}
+	if session.Exit() == nil {
+		t.Fatal("the finished session has no exit status")
+	}
 
 	// 二度目が一覧から消す。終了済みを残すのは、最後の出力を読めるようにするためで、
 	// 消すのはユーザーが明示的にそう言ったときだけである。
