@@ -162,9 +162,7 @@ public final class MainActivity extends Activity {
     private void showFailure(long reason) {
         // gomobile が生成する定数を使い、Go 側の失敗種別と一致させる。
         int message;
-        if (reason == Mobile.KindAlreadyStarted) {
-            message = R.string.failure_already_started;
-        } else if (reason == Mobile.KindListenFailed) {
+        if (reason == Mobile.KindListenFailed) {
             message = R.string.failure_listen;
         } else if (reason == Mobile.KindStoppedEarly) {
             message = R.string.failure_stopped_early;

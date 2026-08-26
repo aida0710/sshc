@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// started はテスト終了時に engine lock が必ず解放されるよう Cleanup を登録する。
+// started はテスト終了時に engine が必ず停止するよう Cleanup を登録する。
 func started(t *testing.T) string {
 	t.Helper()
 	url, err := Start(t.TempDir(), t.TempDir())
@@ -28,11 +28,23 @@ func TestStartReturnsAnEntranceThatIsAlreadyServing(t *testing.T) {
 	}
 }
 
-// 同一プロセスで2台目の engine を開始できないことを検証する。
-func TestStartRefusesASecondEngine(t *testing.T) {
-	started(t)
-	if _, err := Start(t.TempDir(), t.TempDir()); !errors.Is(err, ErrAlreadyStarted) {
-		t.Errorf("second Start = %v, want ErrAlreadyStarted", err)
+// Serviceの再生成でStartが重複しても、古いengineを置き換えて入口を返す。
+func TestStartReplacesTheRunningEngine(t *testing.T) {
+	home, cache := t.TempDir(), t.TempDir()
+	first, err := Start(home, cache)
+	if err != nil {
+		t.Fatalf("first Start = %v", err)
+	}
+	second, err := Start(home, cache)
+	if err != nil {
+		t.Fatalf("second Start = %v", err)
+	}
+	t.Cleanup(func() { _ = Stop() })
+	if second == "" || second == first {
+		t.Errorf("replacement entrance = %q, first = %q", second, first)
+	}
+	if got := LastStartFailureKind(); got != KindNone {
+		t.Errorf("LastStartFailureKind() = %d, want %d", got, KindNone)
 	}
 }
 
@@ -63,12 +75,11 @@ func TestStopWithoutStartIsAnError(t *testing.T) {
 
 // gomobile 境界で error の型情報が失われても、失敗理由の番号が維持されることを検証する。
 func TestTheFailureKindSurvivesWhereTheErrorWouldNot(t *testing.T) {
-	started(t)
-	if _, err := Start(t.TempDir(), t.TempDir()); err == nil {
-		t.Fatal("a second Start succeeded")
+	if _, err := Start("relative-home", t.TempDir()); err == nil {
+		t.Fatal("Start accepted a relative private storage path")
 	}
-	if got := LastStartFailureKind(); got != KindAlreadyStarted {
-		t.Errorf("LastStartFailureKind() = %d, want %d", got, KindAlreadyStarted)
+	if got := LastStartFailureKind(); got != KindStorageUnavailable {
+		t.Errorf("LastStartFailureKind() = %d, want %d", got, KindStorageUnavailable)
 	}
 }
 
