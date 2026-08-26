@@ -564,6 +564,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/passwords/recover-compatible-backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recoverCompatiblePasswordVaultBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/passwords/reset-unsupported": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resetUnsupportedPasswordVault"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/update": {
         parameters: {
             query?: never;
@@ -1534,6 +1566,8 @@ export interface components {
             diagnostics?: components["schemas"]["Diagnostic"][];
             conflict?: components["schemas"]["ConflictReport"];
             blockers?: string[];
+            currentVersion?: number;
+            requiredVersion?: number;
         };
         KeyReference: {
             directive: string;
@@ -1610,6 +1644,10 @@ export interface components {
         ChangeMasterPasswordRequest: {
             current: string;
             next: string;
+        };
+        ResetUnsupportedVaultRequest: {
+            passphrase: string;
+            acknowledged: boolean;
         };
         ChangeMasterPasswordResult: {
             vault: components["schemas"]["PasswordVaultStatus"];
@@ -3934,6 +3972,64 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    recoverCompatiblePasswordVaultBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PassphraseRequest"];
+            };
+        };
+        responses: {
+            /** @description The newest compatible vault backup was restored and unlocked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordVaultStatus"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    resetUnsupportedPasswordVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetUnsupportedVaultRequest"];
+            };
+        };
+        responses: {
+            /** @description The unsupported vault was backed up and replaced by an empty current vault */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordVaultStatus"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     checkForUpdate: {

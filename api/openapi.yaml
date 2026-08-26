@@ -633,6 +633,44 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/passwords/recover-compatible-backup:
+    post:
+      operationId: recoverCompatiblePasswordVaultBackup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PassphraseRequest" }
+      responses:
+        "200":
+          description: The newest compatible vault backup was restored and unlocked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/passwords/reset-unsupported:
+    post:
+      operationId: resetUnsupportedPasswordVault
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResetUnsupportedVaultRequest" }
+      responses:
+        "200":
+          description: The unsupported vault was backed up and replaced by an empty current vault
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/update:
     get:
       operationId: checkForUpdate
@@ -1715,6 +1753,8 @@ components:
         diagnostics: { type: array, items: { $ref: "#/components/schemas/Diagnostic" } }
         conflict: { $ref: "#/components/schemas/ConflictReport" }
         blockers: { type: array, items: { type: string } }
+        currentVersion: { type: integer, minimum: 0 }
+        requiredVersion: { type: integer, minimum: 1 }
         # blockers は拒否理由を安定したコードで返す。
     KeyReference:
       type: object
@@ -1839,6 +1879,13 @@ components:
       properties:
         current: { type: string, minLength: 1, maxLength: 1024 }
         next: { type: string, minLength: 1, maxLength: 1024 }
+    ResetUnsupportedVaultRequest:
+      type: object
+      additionalProperties: false
+      required: [passphrase, acknowledged]
+      properties:
+        passphrase: { type: string, minLength: 1, maxLength: 1024 }
+        acknowledged: { type: boolean }
     ChangeMasterPasswordResult:
       type: object
       additionalProperties: false
