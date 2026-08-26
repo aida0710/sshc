@@ -712,9 +712,9 @@ function TerminalScreen({
   onRestoreConsumed: (sequence: number) => void;
 }) {
   return (
-    <TerminalWorkspace sessions={consoles.sessions} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} restoreRequest={restoreRequest} onRestoreConsumed={onRestoreConsumed} onLiveWorkspaceChange={onLiveWorkspaceChange} renderTerminal={(session, onInput, injected) => {
+    <TerminalWorkspace sessions={consoles.sessions} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} restoreRequest={restoreRequest} onRestoreConsumed={onRestoreConsumed} onLiveWorkspaceChange={onLiveWorkspaceChange} renderTerminal={(session) => {
       const appearance = resolveAppearance(session.alias === undefined ? undefined : hostAppearance.get(session.alias), settings.appearance);
-      return <Suspense fallback={<RouteSkeleton kind="terminal" />}><TerminalView key={session.id} session={session} {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })} {...(appearance.palette === "" ? {} : { palette: appearance.palette })} {...(appearance.font === "" ? {} : { font: appearance.font })} {...(appearance.background === "" ? {} : { background: appearance.background })} {...(appearance.tint === undefined ? {} : { tint: appearance.tint })} copyOnSelect={settings.copyOnSelect ?? true} rightClickPaste={settings.rightClickPaste ?? true} onInput={onInput} injectedInput={injected} onExit={() => consoles.markExited(session.id)} onReconnect={() => consoles.reconnect(session.id)} /></Suspense>;
+      return <Suspense fallback={<RouteSkeleton kind="terminal" />}><TerminalView key={session.id} session={session} {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })} {...(appearance.palette === "" ? {} : { palette: appearance.palette })} {...(appearance.font === "" ? {} : { font: appearance.font })} {...(appearance.background === "" ? {} : { background: appearance.background })} {...(appearance.tint === undefined ? {} : { tint: appearance.tint })} copyOnSelect={settings.copyOnSelect ?? true} rightClickPaste={settings.rightClickPaste ?? true} onExit={() => consoles.markExited(session.id)} onReconnect={() => consoles.reconnect(session.id)} /></Suspense>;
     }} />
   );
 }

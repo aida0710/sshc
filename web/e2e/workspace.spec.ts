@@ -56,8 +56,9 @@ test("moves workspace panes by drag and drop and saves the new placement", async
 
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  await page.getByLabel("Saved workspaces").selectOption("production");
-  await page.getByRole("button", { name: "Reopen" }).click();
+  await page.getByText("Saved layouts", { exact: true }).first().click();
+  await page.getByLabel("Choose a saved layout").selectOption("production");
+  await page.getByRole("button", { name: "Open this layout" }).click();
 
   const panes = page.locator("[data-workspace-pane]");
   await expect(panes).toHaveCount(2);
@@ -79,7 +80,7 @@ test("moves workspace panes by drag and drop and saves the new placement", async
   await expect(panes).toHaveCount(2);
 
   page.once("dialog", (dialog) => dialog.accept("Production"));
-  await page.getByRole("button", { name: "Save layout" }).click();
+  await page.getByRole("button", { name: "Save with a name" }).click();
   await expect.poll(() => savedRequests.length).toBe(1);
   const savedRequest = savedRequests[0];
   if (savedRequest === undefined) throw new Error("workspace save request was not captured");
@@ -120,19 +121,19 @@ test("opens a saved workspace from Home only after the explicit action", async (
   });
 
   await openApplication(page, installation);
-  const workspaces = page.getByRole("list", { name: "Saved terminal workspaces" });
+  const workspaces = page.getByRole("list", { name: "Saved terminal layouts" });
   await expect(workspaces.getByText("Production", { exact: true })).toBeVisible();
   await expect(workspaces.getByText(/2 panes/)).toBeVisible();
   expect(opened).toEqual([]);
 
-  await workspaces.getByRole("button", { name: "Open workspace" }).click();
+  await workspaces.getByRole("button", { name: "Open layout" }).click();
   await expect(page).toHaveURL(/\/terminal$/);
   await expect.poll(() => opened.sort()).toEqual(["bastion", "nas"]);
   await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
 
   await openSection(page, "Home");
-  await page.getByRole("list", { name: "Saved terminal workspaces" })
-    .getByRole("button", { name: "Open workspace" }).click();
+  await page.getByRole("list", { name: "Saved terminal layouts" })
+    .getByRole("button", { name: "Open layout" }).click();
   await expect(page).toHaveURL(/\/terminal$/);
   await expect.poll(() => opened.length).toBe(4);
   await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);

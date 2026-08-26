@@ -36,6 +36,13 @@ func TestStoreRejectsMalformedPaneTrees(t *testing.T) {
 			candidate.Layout = split(workspace.Vertical, pane("pane-1", "web"), pane("pane-2", "db"))
 			candidate.Layout.Split.Ratio = 9
 		},
+		"more than four panes": func(candidate *workspace.Workspace) {
+			candidate.Layout = split(workspace.Horizontal,
+				split(workspace.Vertical, pane("pane-1", "web"), pane("pane-2", "db")),
+				split(workspace.Vertical, pane("pane-3", "logs"), split(workspace.Horizontal,
+					pane("pane-4", "metrics"), pane("pane-5", "worker"))),
+			)
+		},
 		"control in alias": func(candidate *workspace.Workspace) { candidate.Layout.Pane.Alias = "db\nserver" },
 	}
 	for name, change := range cases {

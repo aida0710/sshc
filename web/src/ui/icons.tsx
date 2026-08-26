@@ -16,6 +16,8 @@ export const iconNames = [
   "inspector",
   "moreHorizontal",
   "terminal",
+  "movePane",
+  "focus",
   "close",
   "plus",
   "menu",
@@ -108,6 +110,17 @@ const shapes: Record<IconName, ReactNode> = {
       <path d="M7 9.5l3 2.5-3 2.5M12.5 15.5h4.5" />
     </>
   ),
+  movePane: (
+    <>
+      <circle cx="8" cy="6" r="1" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="6" r="1" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="18" r="1" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="18" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  focus: <path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5" />,
   close: <path d="M6 6l12 12M18 6L6 18" />,
   plus: <path d="M12 5v14M5 12h14" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,

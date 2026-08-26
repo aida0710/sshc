@@ -247,11 +247,11 @@ describe("OverviewPanel", () => {
       />,
     );
 
-    const list = await screen.findByRole("list", { name: "Saved terminal workspaces" });
+    const list = await screen.findByRole("list", { name: "Saved terminal layouts" });
     expect(within(list).getByText("Production pair")).toBeInTheDocument();
     expect(within(list).getByText(/2 panes/)).toBeInTheDocument();
     expect(openWorkspace).not.toHaveBeenCalled();
-    await userEvent.click(within(list).getByRole("button", { name: "Open workspace" }));
+    await userEvent.click(within(list).getByRole("button", { name: "Open layout" }));
     expect(openWorkspace).toHaveBeenCalledTimes(1);
     expect(openWorkspace).toHaveBeenCalledWith("workspace-1");
   });

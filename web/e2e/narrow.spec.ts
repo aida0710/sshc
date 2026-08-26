@@ -158,13 +158,15 @@ test("opens quick connection actions above the trigger on mobile", async ({ page
   await expect(menu.getByRole("menuitem", { name: "Connect", exact: true })).toBeInViewport();
 });
 
-test("hides split and broadcast controls on mobile", async ({ page, installation }) => {
+test("keeps workspace management out of the mobile terminal", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSectionThroughDrawer(page, "Terminal", "No console is open");
 
-  await expect(page.getByRole("button", { name: "Split right" })).toBeHidden();
-  await expect(page.getByRole("button", { name: "Split down" })).toBeHidden();
-  await expect(page.getByText("Broadcast input", { exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Split right" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Split down" })).toHaveCount(0);
+  await expect(page.locator("[data-desktop-workspace-controls]")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Broadcast…" })).toBeHidden();
+  await expect(page.locator("summary").filter({ hasText: "Saved layouts" })).toBeHidden();
   await expect(page.getByRole("navigation", { name: "Primary" })).toHaveClass(/shadow-none/);
 });
 
