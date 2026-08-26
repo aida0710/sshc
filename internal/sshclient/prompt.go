@@ -229,10 +229,6 @@ func (b *InputBuffer) endPrompt() {
 	if b.prompts > 0 {
 		b.prompts--
 	}
-	if b.gated && !b.usable && b.prompts == 0 {
-		// Enterとprompt終了の境界で先行入力された次の行をshellへ渡さない。
-		b.data = nil
-	}
 	b.mutex.Unlock()
 }
 

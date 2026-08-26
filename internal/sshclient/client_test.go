@@ -202,6 +202,29 @@ func TestOnlyAnExplicitAuthenticationPromptAcceptsInputBeforeReady(t *testing.T)
 	}
 }
 
+func TestInputTypedAfterAPasswordAnswerReachesTheNewShell(t *testing.T) {
+	server := newTestServer(t, serverOptions{
+		Password: "hunter2",
+		OnShell: func(channel ssh.Channel) {
+			line := make([]byte, 64)
+			read, _ := channel.Read(line)
+			_, _ = channel.Write(line[:read])
+		},
+	})
+	process, err := dialerFor(t, server, sshclient.Auth{}).Open(
+		context.Background(), targetWith(server), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "Password: ")
+	if _, err := process.Write([]byte("hunter2\recho after-auth\r")); err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, process, "echo after-auth")
+}
+
 func TestResizeSendsAWindowChange(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{
