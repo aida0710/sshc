@@ -1,6 +1,7 @@
 export type SplitDirection = "horizontal" | "vertical";
 export type DockEdge = "left" | "right" | "top" | "bottom";
 export type ReconnectState = "reconnect_required" | "connecting" | "connected" | "failed";
+export const MAX_WORKSPACE_PANES = 4;
 
 export type StoredPane = {
   id: string;
@@ -78,7 +79,7 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
     case "focus":
       return paneIDs(state.root).includes(action.paneId) ? { ...state, focusedPaneId: action.paneId } : state;
     case "split": {
-      if (paneIDs(state.root).includes(action.pane.id) || action.pane.id === "" || action.pane.alias === "") return state;
+      if (paneIDs(state.root).length >= MAX_WORKSPACE_PANES || paneIDs(state.root).includes(action.pane.id) || action.pane.id === "" || action.pane.alias === "") return state;
       const root = replacePane(state.root, action.paneId, (current) => ({
         split: {
           direction: action.direction,
@@ -93,6 +94,7 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
     case "dock-pane": {
       if (action.pane.id === "" || action.pane.alias === "" || action.pane.id === action.targetPaneId) return state;
       const existing = runtimePane(state.root, action.pane.id);
+      if (existing === undefined && paneIDs(state.root).length >= MAX_WORKSPACE_PANES) return state;
       const withoutSource = existing === undefined ? state.root : removePane(state.root, action.pane.id);
       if (withoutSource === null || runtimePane(withoutSource, action.targetPaneId) === undefined) return state;
       const direction: SplitDirection = action.edge === "left" || action.edge === "right" ? "horizontal" : "vertical";

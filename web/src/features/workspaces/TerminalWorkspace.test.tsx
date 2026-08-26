@@ -28,7 +28,7 @@ const secondary: TerminalSession = {
 };
 
 function Harness() {
-  const [sessions, setSessions] = useState<TerminalSession[]>([primary]);
+  const [sessions, setSessions] = useState<TerminalSession[]>([primary, secondary]);
   const [active, setActive] = useState(primary.id);
   return <TerminalWorkspace
     sessions={sessions}
@@ -64,6 +64,23 @@ function dragAt(target: HTMLElement, kind: "dragEnter" | "drop", dataTransfer: o
   fireEvent(target, event);
 }
 
+function consoleTransfer(sessionId: string) {
+  return {
+    effectAllowed: "none",
+    dropEffect: "none",
+    types: ["application/x-sshc-console"],
+    setData: vi.fn(),
+    getData: (kind: string) => kind === "application/x-sshc-console" ? sessionId : "",
+  };
+}
+
+function dockConnectedSession(container: HTMLElement, sessionId = secondary.id) {
+  const target = container.querySelector<HTMLElement>("[data-single-terminal-drop-target]");
+  expect(target).not.toBeNull();
+  Object.defineProperty(target, "getBoundingClientRect", { value: () => ({ left: 0, right: 100, top: 0, bottom: 100, width: 100, height: 100 }) });
+  dragAt(target as HTMLElement, "drop", consoleTransfer(sessionId), 95, 50);
+}
+
 describe("TerminalWorkspace pane movement", () => {
   it("shows the sshc command name when no console is open", async () => {
     const { container } = render(
@@ -79,17 +96,18 @@ describe("TerminalWorkspace pane movement", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("sshc host");
     expect(screen.getByRole("status")).not.toHaveTextContent("ssh host");
     expect(container.querySelector("[data-desktop-workspace-controls]")).toHaveClass("hidden", "md:flex");
+    expect(screen.queryByRole("button", { name: "Split right" })).toBeNull();
   });
 
   it("swaps panes by drag and drop and exposes the same operation to keyboard users", async () => {
     const user = userEvent.setup();
     const { container } = render(<Harness />);
-    await user.click(screen.getByRole("button", { name: "Split right" }));
+    dockConnectedSession(container);
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
     expect(paneTitles(container)[0]).toContain("Primary terminal");
-    expect(paneTitles(container)[1]).toContain("Duplicate terminal");
+    expect(paneTitles(container)[1]).toContain("Database terminal");
 
-    let handles = screen.getAllByRole("button", { name: /Move edge pane/ });
+    let handles = screen.getAllByRole("button", { name: /Move .* pane/ });
     const target = handles[1]?.closest<HTMLElement>("[data-workspace-pane]");
     expect(target).not.toBeNull();
     const values = new Map<string, string>();
@@ -105,15 +123,15 @@ describe("TerminalWorkspace pane movement", () => {
     dragAt(target as HTMLElement, "dragEnter", dataTransfer, 95, 50);
     expect(target).toHaveTextContent("Place on the right");
     dragAt(target as HTMLElement, "drop", dataTransfer, 95, 50);
-    await waitFor(() => expect(paneTitles(container)[0]).toContain("Duplicate terminal"));
+    await waitFor(() => expect(paneTitles(container)[0]).toContain("Database terminal"));
     expect(paneTitles(container)[1]).toContain("Primary terminal");
 
-    handles = screen.getAllByRole("button", { name: /Move edge pane/ });
+    handles = screen.getAllByRole("button", { name: /Move .* pane/ });
     await user.click(handles[0] as HTMLElement);
     expect(handles[0]).toHaveAttribute("aria-pressed", "true");
     await user.click(handles[1] as HTMLElement);
     await waitFor(() => expect(paneTitles(container)[0]).toContain("Primary terminal"));
-    expect(paneTitles(container)[1]).toContain("Duplicate terminal");
+    expect(paneTitles(container)[1]).toContain("Database terminal");
   });
 
   it("creates a live workspace by docking an already connected terminal on a pane edge", async () => {
@@ -155,6 +173,41 @@ describe("TerminalWorkspace pane movement", () => {
     })));
   });
 
+  it("rejects a fifth terminal while keeping the four-pane layout", async () => {
+    const extra = [
+      { ...primary, id: "logs-session", alias: "logs", title: "Logs terminal" },
+      { ...primary, id: "metrics-session", alias: "metrics", title: "Metrics terminal" },
+      { ...primary, id: "worker-session", alias: "worker", title: "Worker terminal" },
+    ];
+    function LimitHarness() {
+      const [active, setActive] = useState(primary.id);
+      return <TerminalWorkspace
+        sessions={[primary, secondary, ...extra]}
+        activeSessionId={active}
+        onActive={setActive}
+        onOpenAlias={vi.fn()}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+    const { container } = render(<LimitHarness />);
+    dockConnectedSession(container);
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+
+    for (const session of extra) {
+      const target = container.querySelector<HTMLElement>("[data-workspace-pane]");
+      expect(target).not.toBeNull();
+      Object.defineProperty(target, "getBoundingClientRect", { configurable: true, value: () => ({ left: 0, right: 100, top: 0, bottom: 100, width: 100, height: 100 }) });
+      dragAt(target as HTMLElement, "drop", consoleTransfer(session.id), 95, 50);
+      if (session.id !== "worker-session") {
+        await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(session.id === "logs-session" ? 3 : 4));
+      }
+    }
+
+    expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(4);
+    expect(screen.getByRole("alert")).toHaveTextContent("up to 4 terminals");
+    expect(screen.queryByText("Worker terminal")).toBeNull();
+  });
+
   it("shows one workspace terminal at a time on a compact viewport", async () => {
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -194,6 +247,8 @@ describe("TerminalWorkspace pane movement", () => {
 
       await waitFor(() => expect(screen.getByRole("navigation", { name: "Workspace terminals" })).toBeVisible());
       expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(1);
+      expect(container.querySelector("[data-pane-toolbar]")).toBeNull();
+      expect(container.querySelector("[data-desktop-workspace-controls]")).toHaveClass("hidden", "md:flex");
       expect(screen.getByText("Database terminal")).toBeVisible();
       expect(screen.queryByText("Primary terminal")).toBeNull();
 
@@ -240,7 +295,7 @@ describe("TerminalWorkspace pane movement", () => {
   it("resizes a split with the keyboard and can focus one pane", async () => {
     const user = userEvent.setup();
     const { container } = render(<Harness />);
-    await user.click(screen.getByRole("button", { name: "Split right" }));
+    dockConnectedSession(container);
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
 
     const separator = screen.getByRole("separator", { name: "Resize split" });

@@ -4,12 +4,12 @@ import { failureCode } from "../../api/client";
 import { useTranslate, type Translate } from "../../i18n/context";
 import { Button } from "../../ui/surface";
 import { BrandMark } from "../../ui/BrandMark";
-import { executionTargets, paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type DockEdge, type ExecutionTarget, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane, type SplitDirection, type StoredNode } from "./layout";
+import { Icon } from "../../ui/icons";
+import { executionTargets, MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type DockEdge, type ExecutionTarget, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane, type SplitDirection, type StoredNode } from "./layout";
 import { workspaceApi, type SavedWorkspace } from "./api";
 import { WorkspaceCommandCenter } from "./WorkspaceCommandCenter";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
 
-export type BroadcastInput = { sequence: number; source: string; data: string };
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
 
 function paneID(): string {
@@ -75,7 +75,7 @@ export function TerminalWorkspace({
   activeSessionId: string | null;
   onActive: (id: string) => void;
   onOpenAlias: (alias: string) => Promise<TerminalSession | null>;
-  renderTerminal: (session: TerminalSession, onInput: (data: string) => void, injected: BroadcastInput | null) => ReactNode;
+  renderTerminal: (session: TerminalSession) => ReactNode;
   restoreRequest?: WorkspaceRestoreRequest | null;
   onRestoreConsumed?: (sequence: number) => void;
   onLiveWorkspaceChange?: (workspace: LiveWorkspaceSummary | null) => void;
@@ -84,13 +84,11 @@ export function TerminalWorkspace({
   const [layout, setLayout] = useState<LayoutState | null>(null);
   const [saved, setSaved] = useState<SavedWorkspace[]>([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState("");
-  const [broadcast, setBroadcast] = useState(false);
   const [commandCenter, setCommandCenter] = useState(false);
   const [focusModePaneId, setFocusModePaneId] = useState<string | null>(null);
   const [movingPaneId, setMovingPaneId] = useState<string | null>(null);
   const [dockTarget, setDockTarget] = useState<{ paneId: string; edge: DockEdge } | null>(null);
   const [compactViewport, setCompactViewport] = useState(compactWorkspaceViewport);
-  const [input, setInput] = useState<BroadcastInput | null>(null);
   const [problem, setProblem] = useState("");
   const consumedRestore = useRef(0);
   const liveWorkspaceID = useRef(paneID());
@@ -234,6 +232,10 @@ export function TerminalWorkspace({
     }
     if (layout === null || !showingWorkspace) return;
     const existing = findPaneBySession(layout.root, source.id);
+    if (existing === null && paneIDs(layout.root).length >= MAX_WORKSPACE_PANES) {
+      setProblem(t("workspace.maxPanes", { count: MAX_WORKSPACE_PANES }));
+      return;
+    }
     const pane: RuntimePane = existing ?? {
       id: paneID(), alias: source.alias,
       state: source.state === "connected" ? "connected" : source.state === "exited" ? "failed" : "connecting",
@@ -307,30 +309,6 @@ export function TerminalWorkspace({
     window.addEventListener("pointercancel", stop, { once: true });
   }
 
-  async function split(direction: SplitDirection) {
-    if (layout !== null && !showingWorkspace) {
-      setProblem(t("workspace.oneLiveOnly"));
-      return;
-    }
-    const focusedPane = layout === null ? null : findPane(layout.root, layout.focusedPaneId);
-    const focusedSession = layout === null
-      ? active
-      : focusedPane?.sessionId === undefined ? null : sessionByID.get(focusedPane.sessionId) ?? null;
-    if (focusedSession?.kind !== "ssh" || focusedSession.alias === undefined) return;
-    const firstID = layout?.focusedPaneId ?? paneID();
-    if (layout === null) setLayout(restoreLayout({ pane: { id: firstID, alias: focusedSession.alias } }, firstID));
-    const secondID = paneID();
-    const opened = await onOpenAlias(focusedSession.alias);
-    if (opened === null) { setProblem(t("workspace.openFailed")); return; }
-    setLayout((current) => {
-      const base = current ?? restoreLayout({ pane: { id: firstID, alias: focusedSession.alias ?? "" } }, firstID);
-      let next = reduceLayout(base, { type: "connection-started", paneId: firstID, sessionId: focusedSession.id });
-      next = reduceLayout(next, { type: "split", paneId: firstID, direction, pane: { id: secondID, alias: focusedSession.alias ?? "" } });
-      return reduceLayout(next, { type: "connection-started", paneId: secondID, sessionId: opened.id });
-    });
-    onActive(opened.id);
-  }
-
   async function saveWorkspace() {
     let effective = visibleLayout;
     if (effective === null && active?.kind === "ssh" && active.alias !== undefined) {
@@ -384,11 +362,7 @@ export function TerminalWorkspace({
     void restoreWorkspace(restoreRequest.id);
   }, [onRestoreConsumed, restoreRequest, restoreWorkspace]);
 
-  function terminal(session: TerminalSession) {
-    return renderTerminal(session, (data) => {
-      if (broadcast) setInput((current) => ({ sequence: (current?.sequence ?? 0) + 1, source: session.id, data }));
-    }, input?.source === session.id ? null : input);
-  }
+  function terminal(session: TerminalSession) { return renderTerminal(session); }
 
   function singleTerminal(session: TerminalSession) {
     if (session.kind !== "ssh") return terminal(session);
@@ -433,10 +407,13 @@ export function TerminalWorkspace({
           onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDockTarget((current) => current?.paneId === node.pane.id ? null : current); }}
           onDrop={(event) => dropPane(event, node.pane.id)}
         >
-          {session === undefined ? <div className="grid h-full min-h-40 place-items-center text-sm text-ink-muted">{node.pane.state === "failed" ? node.pane.problem : t("workspace.reconnecting")}</div> : terminal(session)}
-          {multiple && !compactViewport ? <button type="button" draggable aria-pressed={moving} aria-label={t(moving ? "workspace.movePanePicked" : "workspace.movePane", { alias: node.pane.alias })} title={t("workspace.movePane", { alias: node.pane.alias })} className="absolute left-2 top-2 z-20 cursor-grab rounded bg-toolbar px-2 py-1 text-xs shadow-sm active:cursor-grabbing" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); choosePaneMove(node.pane.id); }} onDragStart={(event) => beginPaneDrag(event, node.pane.id)} onDragEnd={() => setMovingPaneId(null)} onKeyDown={(event) => { if (event.key === "Escape") setMovingPaneId(null); }}>⠿</button> : null}
-          {multiple && !compactViewport ? <button type="button" aria-pressed={focusModePaneId === node.pane.id} aria-label={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: node.pane.alias })} title={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: node.pane.alias })} className="absolute right-9 top-2 z-20 rounded bg-toolbar px-1.5 text-xs" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setFocusModePaneId((current) => current === node.pane.id ? null : node.pane.id); }}>⛶</button> : null}
-          {multiple && !compactViewport ? <button type="button" aria-label={t("workspace.detachPane")} title={t("workspace.detachPane")} className="absolute right-2 top-2 z-20 rounded bg-toolbar px-1.5 text-xs" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); detachPane(node.pane.id); }}>×</button> : null}
+          {multiple && !compactViewport ? <div data-pane-toolbar className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-toolbar px-1.5">
+            <button type="button" draggable aria-pressed={moving} aria-label={t(moving ? "workspace.movePanePicked" : "workspace.movePane", { alias: node.pane.alias })} title={t("workspace.movePane", { alias: node.pane.alias })} className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill active:cursor-grabbing" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); choosePaneMove(node.pane.id); }} onDragStart={(event) => beginPaneDrag(event, node.pane.id)} onDragEnd={() => setMovingPaneId(null)} onKeyDown={(event) => { if (event.key === "Escape") setMovingPaneId(null); }}><Icon name="movePane" className="size-3.5" /></button>
+            <span className="min-w-0 grow truncate text-xs font-medium text-ink-muted">{node.pane.alias}</span>
+            <button type="button" aria-pressed={focusModePaneId === node.pane.id} aria-label={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: node.pane.alias })} title={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: node.pane.alias })} className="flex size-6 shrink-0 items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setFocusModePaneId((current) => current === node.pane.id ? null : node.pane.id); }}><Icon name="focus" className="size-3.5" /></button>
+            <button type="button" aria-label={t("workspace.detachPane")} title={t("workspace.detachPane")} className="flex size-6 shrink-0 items-center justify-center rounded text-sm text-ink-muted hover:bg-select-fill" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); detachPane(node.pane.id); }}><Icon name="close" className="size-3.5" /></button>
+          </div> : null}
+          <div className="flex min-h-0 flex-1 flex-col">{session === undefined ? <div className="grid h-full min-h-40 place-items-center text-sm text-ink-muted">{node.pane.state === "failed" ? node.pane.problem : t("workspace.reconnecting")}</div> : terminal(session)}</div>
           {docking ? <div data-dock-preview={dockTarget.edge} className={`pointer-events-none absolute z-10 grid place-items-center border-2 border-accent bg-accent/20 ${dockOverlayClass(dockTarget.edge)}`}><span className="rounded bg-toolbar px-3 py-2 text-xs font-medium shadow">{dockLabel(t, dockTarget.edge)}</span></div> : null}
         </div>
       );
@@ -466,5 +443,49 @@ export function TerminalWorkspace({
     ? { pane: compactPane } as RuntimeNode
     : focusNode === null ? visibleLayout?.root ?? null : { pane: focusNode } as RuntimeNode;
   const compactPanes = visibleLayout === null ? [] : paneIDs(visibleLayout.root).map((id) => findPane(visibleLayout.root, id)).filter((pane): pane is RuntimePane => pane !== null);
-  return <div className="flex h-full min-h-0 flex-col"><div className="flex flex-wrap items-center gap-2 border-b border-line bg-toolbar px-3 py-2"><div data-desktop-workspace-controls className="hidden items-center gap-2 md:flex"><Button disabled={active?.kind !== "ssh" || focusModePaneId !== null} onClick={() => void split("horizontal")}>{t("workspace.splitRight")}</Button><Button disabled={active?.kind !== "ssh" || focusModePaneId !== null} onClick={() => void split("vertical")}>{t("workspace.splitDown")}</Button><label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={broadcast} onChange={(event) => setBroadcast(event.target.checked)} />{t("workspace.broadcast")}</label></div><Button disabled={commandTargets.length === 0} onClick={() => setCommandCenter((current) => !current)}>{t("workspace.commandCenter")}</Button>{focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}<select aria-label={t("workspace.saved")} value={selectedWorkspace} onChange={(event) => setSelectedWorkspace(event.target.value)} className="ml-auto rounded border border-control-line bg-control px-2 py-1 text-xs"><option value="">{t("workspace.new")}</option>{saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><Button disabled={visibleLayout === null && active?.kind !== "ssh"} onClick={() => void saveWorkspace()}>{t("workspace.save")}</Button><Button disabled={selectedWorkspace === ""} onClick={() => void restoreWorkspace(selectedWorkspace)}>{t("workspace.reopen")}</Button><button disabled={selectedWorkspace === ""} className="text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button></div>{commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}{problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}{compactViewport && compactPanes.length > 1 ? <nav aria-label={t("workspace.mobilePaneSwitcher")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-toolbar px-2 py-1">{compactPanes.map((pane) => <button key={pane.id} type="button" aria-current={pane.id === visibleLayout?.focusedPaneId ? "page" : undefined} className={`max-w-40 shrink-0 truncate rounded px-3 py-1.5 text-xs ${pane.id === visibleLayout?.focusedPaneId ? "bg-select-fill text-ink" : "text-ink-muted"}`} onClick={() => { update({ type: "focus", paneId: pane.id }); if (pane.sessionId !== undefined) onActive(pane.sessionId); }}>{pane.alias}</button>)}</nav> : null}<div className="flex min-h-0 flex-1 flex-col">{empty ? <div className="flex h-full items-center justify-center p-6"><section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status"><BrandMark className="mx-auto size-12 drop-shadow-sm" /><h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p><div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div></section></div> : visibleLayout === null ? (active === null ? null : singleTerminal(active)) : displayedNode === null ? null : renderNode(displayedNode)}</div></div>;
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div data-desktop-workspace-controls className="hidden shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2 md:flex">
+        <Button disabled={commandTargets.length === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
+        {focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}
+        <details className="group relative ml-auto">
+          <summary className="cursor-pointer list-none rounded-md border border-control-line bg-control px-3 py-1.5 text-xs text-ink marker:hidden hover:bg-select-fill">{t("workspace.savedLayouts")}</summary>
+          <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-80 rounded-lg border border-control-line bg-card p-3 shadow-xl">
+            <h2 className="text-sm font-semibold text-ink">{t("workspace.savedLayouts")}</h2>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">{t("workspace.savedDescription", { count: MAX_WORKSPACE_PANES })}</p>
+            <select aria-label={t("workspace.saved")} value={selectedWorkspace} onChange={(event) => setSelectedWorkspace(event.target.value)} className="mt-3 w-full rounded border border-control-line bg-control px-2 py-1.5 text-xs">
+              <option value="">{t("workspace.new")}</option>
+              {saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button disabled={visibleLayout === null && active?.kind !== "ssh"} onClick={() => void saveWorkspace()}>{t("workspace.save")}</Button>
+              <Button disabled={selectedWorkspace === ""} onClick={() => void restoreWorkspace(selectedWorkspace)}>{t("workspace.reopen")}</Button>
+              <button disabled={selectedWorkspace === ""} className="px-2 text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button>
+            </div>
+          </div>
+        </details>
+      </div>
+      {commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}
+      {problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}
+      {compactViewport && compactPanes.length > 1 ? (
+        <nav aria-label={t("workspace.mobilePaneSwitcher")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-toolbar px-2 py-1">
+          {compactPanes.map((pane) => (
+            <button key={pane.id} type="button" aria-current={pane.id === visibleLayout?.focusedPaneId ? "page" : undefined} className={`max-w-40 shrink-0 truncate rounded px-3 py-1.5 text-xs ${pane.id === visibleLayout?.focusedPaneId ? "bg-select-fill text-ink" : "text-ink-muted"}`} onClick={() => { update({ type: "focus", paneId: pane.id }); if (pane.sessionId !== undefined) onActive(pane.sessionId); }}>{pane.alias}</button>
+          ))}
+        </nav>
+      ) : null}
+      <div className="flex min-h-0 flex-1 flex-col">
+        {empty ? (
+          <div className="flex h-full items-center justify-center p-6">
+            <section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status">
+              <BrandMark className="mx-auto size-12 drop-shadow-sm" />
+              <h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p>
+              <div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div>
+            </section>
+          </div>
+        ) : visibleLayout === null ? (active === null ? null : singleTerminal(active)) : displayedNode === null ? null : renderNode(displayedNode)}
+      </div>
+    </div>
+  );
 }

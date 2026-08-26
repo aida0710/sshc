@@ -35,8 +35,6 @@ type TerminalViewProps = {
   background?: string;
   tint?: number;
   font?: string;
-  onInput?: (data: string) => void;
-  injectedInput?: { sequence: number; data: string } | null;
 };
 
 type Link =
@@ -63,8 +61,6 @@ export function TerminalView({
   font,
   background,
   tint,
-  onInput,
-  injectedInput,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
@@ -94,10 +90,7 @@ export function TerminalView({
   const armed = useRef<Modifiers>(modifiers);
   armed.current = modifiers;
   const send = useRef<(label: string) => void>(() => {});
-  const inject = useRef<(data: string) => void>(() => {});
   const acceptCompletion = useRef<(completion: Completion) => void>(() => {});
-  const inputCallback = useRef(onInput);
-  inputCallback.current = onInput;
   const commandSuggestions = useMemo(() => frequentCommandSuggestions(commandHistory, commandDraft), [commandDraft, commandHistory]);
   const completionItems = useMemo<Completion[]>(() => [
     ...commandSuggestions.map((value) => ({ kind: "command" as const, value, prefix: commandDraft.trimStart() })),
@@ -233,7 +226,6 @@ export function TerminalView({
       const { ctrl, alt } = armed.current;
       const encoded = applyModifiers(data, ctrl, alt);
       stream?.send(encoded);
-      inputCallback.current?.(encoded);
       rememberInput(encoded);
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
@@ -241,16 +233,13 @@ export function TerminalView({
       const { ctrl, alt } = armed.current;
       const encoded = encodeKey(label, ctrl, alt);
       stream?.send(encoded);
-      inputCallback.current?.(encoded);
       rememberInput(encoded);
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
-    inject.current = (data: string) => stream?.send(data);
     acceptCompletion.current = (completion) => {
       if (completion.prefix === "" || !completion.value.startsWith(completion.prefix)) return;
       const suffix = completion.value.slice(completion.prefix.length);
       stream?.send(suffix);
-      inputCallback.current?.(suffix);
       rememberInput(suffix);
       view.focus();
     };
@@ -372,16 +361,11 @@ export function TerminalView({
       stream?.close();
       view.dispose();
       terminal.current = null;
-      inject.current = () => {};
       acceptCompletion.current = () => {};
       searchStep.current = () => {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, api]);
-
-  useEffect(() => {
-    if (injectedInput !== null && injectedInput !== undefined) inject.current(injectedInput.data);
-  }, [injectedInput]);
 
   useEffect(() => {
     if (terminal.current === null || host.current === null) return;

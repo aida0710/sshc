@@ -31,6 +31,16 @@ describe("WorkspaceCommandCenter", () => {
     api.startExecution.mockResolvedValue({ id: "job", status: "completed", startedAt: "2026-08-24T10:00:00Z", results: [] });
   });
 
+  it("opens as a modal and closes with Escape", async () => {
+    const close = vi.fn();
+    render(<WorkspaceCommandCenter paneTargets={[{ targetId: "pane-a", alias: "edge", state: "connected" }]} onClose={close} />);
+
+    expect(screen.getByRole("dialog", { name: "Broadcast to terminals" })).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByText(/Live keystrokes are never shared/)).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it("deduplicates aliases by default and can intentionally execute each pane", async () => {
     const user = userEvent.setup();
     render(<WorkspaceCommandCenter paneTargets={[

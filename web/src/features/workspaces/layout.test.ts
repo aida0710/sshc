@@ -185,4 +185,39 @@ describe("workspace layout", () => {
     expect(paneSessionIDs(state.root)).toContain("metrics-session");
     expect(state.root.split?.second.split?.direction).toBe("horizontal");
   });
+
+  it("limits a live workspace to four panes while still allowing rearrangement", () => {
+    const four: StoredNode = {
+      split: {
+        direction: "horizontal",
+        ratio: 50,
+        first: stored,
+        second: {
+          split: {
+            direction: "vertical",
+            ratio: 50,
+            first: { pane: { id: "logs", alias: "logs-prod" } },
+            second: { pane: { id: "metrics", alias: "metrics-prod" } },
+          },
+        },
+      },
+    };
+    const state = restoreLayout(four, "metrics");
+    const rejected = reduceLayout(state, {
+      type: "dock-pane",
+      targetPaneId: "metrics",
+      edge: "bottom",
+      pane: { id: "fifth", alias: "fifth-prod", state: "connected", sessionId: "fifth-session" },
+    });
+    expect(rejected).toBe(state);
+
+    const moved = reduceLayout(state, {
+      type: "dock-pane",
+      targetPaneId: "web",
+      edge: "top",
+      pane: { id: "metrics", alias: "metrics-prod", state: "reconnect_required" },
+    });
+    expect(paneIDs(moved.root)).toHaveLength(4);
+    expect(paneIDs(moved.root)[0]).toBe("metrics");
+  });
 });

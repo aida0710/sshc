@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
 import { snippetsApi, type ExecutionPreviewRequest, type Job, type Preview, type Snippet } from "../../snippets/api";
@@ -19,6 +20,9 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
   const [job, setJob] = useState<Job | null>(null);
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const closeCallback = useRef(onClose);
+  closeCallback.current = onClose;
 
   const selectedSnippet = useMemo(() => snippets.find((item) => item.id === snippetId) ?? null, [snippetId, snippets]);
   const targets = useMemo(() => {
@@ -46,6 +50,15 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
     }, 600);
     return () => window.clearInterval(timer);
   }, [job]);
+
+  useEffect(() => {
+    closeButton.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeCallback.current();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, []);
 
   function invalidate() {
     setPrepared(null);
@@ -85,12 +98,13 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
     }
   }
 
-  return (
-    <section className="max-h-[48%] shrink-0 overflow-auto border-b border-line bg-card px-3 py-3" aria-labelledby="workspace-command-heading">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="workspace-command-heading" className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-xl border border-control-line bg-card p-4 shadow-2xl">
+      <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <h2 id="workspace-command-heading" className="grow text-sm font-semibold">{t("workspace.commandCenter")}</h2>
-          <button type="button" onClick={onClose} aria-label={t("workspace.commandClose")} className="rounded px-2 text-lg text-ink-muted hover:bg-select-fill">×</button>
+          <div className="grow"><h2 id="workspace-command-heading" className="text-base font-semibold">{t("workspace.broadcastHeading")}</h2><p className="mt-1 text-xs text-ink-muted">{t("workspace.broadcastDescription")}</p></div>
+          <button ref={closeButton} type="button" onClick={onClose} aria-label={t("workspace.commandClose")} className="flex size-8 shrink-0 items-center justify-center rounded text-lg text-ink-muted hover:bg-select-fill">×</button>
         </div>
         {problem === "" ? null : <p role="alert" className="rounded bg-notice px-3 py-2 text-xs text-notice-ink">{problem}</p>}
         <div className="grid gap-3 lg:grid-cols-[minmax(18rem,0.9fr)_minmax(20rem,1.1fr)]">
@@ -120,6 +134,8 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
         {prepared === null ? null : <section className="rounded-lg border border-notice-line bg-notice p-3"><h3 className="text-sm font-medium">{t("workspace.previewHeading")}</h3><div className="mt-2 grid max-h-48 gap-2 overflow-auto md:grid-cols-2">{prepared.preview.targets.map((target) => <div key={target.targetId} className="min-w-0"><p className="truncate text-xs font-medium">{target.target.alias} · {target.target.user}@{target.target.hostName}:{target.target.port}</p>{(target.target.route ?? []).map((hop, index) => <p key={`${hop.alias}-${index}`} className="mt-1 break-all text-xs text-muted">{index + 1}. {hop.user}@{hop.hostName}:{hop.port}{hop.proxyCommand === "" ? "" : ` · ProxyCommand: ${hop.proxyCommand}`}</p>)}<pre className="mt-1 overflow-auto rounded bg-code-bg p-2 text-xs text-code-fg">{target.command}</pre></div>)}</div><Button kind="primary" className="mt-3" disabled={busy} onClick={() => void run()}>{t("workspace.runTargets", { count: prepared.preview.targets.length })}</Button></section>}
         {job === null ? null : <section className="rounded-lg border border-line bg-card p-3"><div className="flex items-center gap-2"><h3 className="grow text-sm font-medium">{t("snippets.results")} · {job.status}</h3>{job.status === "running" ? <Button onClick={() => void snippetsApi.cancel(job.id).then(setJob)}>{t("snippets.cancel")}</Button> : null}</div><div className="mt-2 grid max-h-56 gap-2 overflow-auto md:grid-cols-2">{job.results.map((result) => <div key={result.targetId} className="min-w-0 rounded border border-line p-2"><p className="text-xs font-medium">{result.alias} · {result.status}{result.exitCode === undefined ? "" : ` (${result.exitCode})`}</p>{result.stdout ? <pre className="mt-1 max-h-32 overflow-auto rounded bg-code-bg p-2 text-xs text-code-fg">{result.stdout}</pre> : null}{result.stderr ? <pre className="mt-1 max-h-32 overflow-auto rounded bg-danger/10 p-2 text-xs text-danger">{result.stderr}</pre> : null}{result.problem ? <p className="mt-1 text-xs text-danger">{result.problem}</p> : null}</div>)}</div></section>}
       </div>
-    </section>
+      </section>
+    </div>,
+    document.body,
   );
 }
