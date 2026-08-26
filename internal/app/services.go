@@ -50,6 +50,11 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	if err != nil {
 		return nil, fmt.Errorf("workspace: %w", err)
 	}
+	// handoffや履歴などのprivate stateを組み立てる前に、共通path walkerで
+	// state directoryを確定する。起動外殻ごとのlockに安全検査を兼務させない。
+	if err := workspace.EnsureDirectory(workspace.StateDir()); err != nil {
+		return nil, fmt.Errorf("workspace state: %w", err)
+	}
 	transactions := storage.NewManager(workspace, time.Now, dependencies.Random)
 	configService := application.NewService(workspace, transactions)
 	keyService, keyTransactions := buildKeyService(workspace, dependencies, configService)

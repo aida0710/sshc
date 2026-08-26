@@ -13,7 +13,7 @@ import (
 	"sync"
 
 	"sshc/internal/app"
-	"sshc/internal/enginelock"
+	"sshc/internal/storage"
 )
 
 // version は、この AAR のバージョンである。
@@ -25,9 +25,7 @@ var version = "dev"
 func Version() string { return version }
 
 var (
-	// ErrAlreadyStarted は、このプロセスの engine が既に受け付けていることを言う。
-	ErrAlreadyStarted = errors.New("an engine is already running in this process")
-	ErrNotStarted     = errors.New("no engine is running in this process")
+	ErrNotStarted = errors.New("no engine is running in this process")
 
 	errListenFailed       = errors.New("the engine could not take a loopback port")
 	errEngineStoppedEarly = errors.New("the engine stopped before it announced an entrance")
@@ -37,9 +35,8 @@ var (
 // running は、このプロセスで唯一の engine の状態を保持する。
 var running struct {
 	sync.Mutex
-	cancel  context.CancelFunc
-	done    chan struct{}
-	release func() error
+	cancel context.CancelFunc
+	done   chan struct{}
 	// lastKind は、gomobile の error 変換で型情報が失われないよう、直前の
 	// Start の失敗理由を数値で保持する。
 	lastKind int
@@ -52,8 +49,11 @@ var running struct {
 func Start(home, cache string) (string, error) {
 	running.Lock()
 	defer running.Unlock()
+	// Androidでは一つのapp processだけがengineを所有する。Serviceの再生成などで
+	// Startが重複した場合は、利用者へ二重起動errorを見せず、古いengineの停止を
+	// 待って同じ直列区間で置き換える。
 	if running.cancel != nil {
-		return "", fail(KindAlreadyStarted, ErrAlreadyStarted)
+		stopLocked()
 	}
 	resolvedHome, err := canonicalPrivateDirectory(home)
 	if err != nil {
@@ -64,16 +64,6 @@ func Start(home, cache string) (string, error) {
 		return "", fail(KindStorageUnavailable, errors.Join(errPrivateState, err))
 	}
 	home, cache = resolvedHome, resolvedCache
-
-	// app.Run の前にロックを取得し、同じ状態ディレクトリの同時利用を防ぐ。
-	release, err := enginelock.Acquire(filepath.Join(app.HandoffDir(home), "engine.lock"))
-	if err != nil {
-		if errors.Is(err, enginelock.ErrRunning) {
-			return "", fail(KindAlreadyStarted, err)
-		}
-		return "", fail(KindStorageUnavailable, errors.Join(errPrivateState, err))
-	}
-
 	// gomobile bind は標準 log の出力先を logcat へ差し替える。slog をそこへ
 	// 流し込めば、cgo を 1 行も書かずに logcat へ出る。
 	logger := slog.New(slog.NewTextHandler(log.Writer(), &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -84,7 +74,7 @@ func Start(home, cache string) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", fail(KindUnknown, errors.Join(err, release()))
+		return "", fail(KindUnknown, err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -99,16 +89,23 @@ func Start(home, cache string) (string, error) {
 
 	select {
 	case url := <-entrance:
-		running.cancel, running.done, running.release = cancel, done, release
+		running.cancel, running.done = cancel, done
 		running.lastKind = KindNone
 		return url, nil
 	case err := <-failed:
 		cancel()
 		<-done
-		return "", fail(KindListenFailed, errors.Join(errListenFailed, err, release()))
+		kind := KindListenFailed
+		reason := errListenFailed
+		if errors.Is(err, storage.ErrSymlinkPath) || errors.Is(err, storage.ErrNotDirectory) ||
+			errors.Is(err, storage.ErrOutsideWorkspace) || errors.Is(err, storage.ErrInvalidHome) {
+			kind = KindStorageUnavailable
+			reason = errPrivateState
+		}
+		return "", fail(kind, errors.Join(reason, err))
 	case <-done:
 		cancel()
-		return "", fail(KindStoppedEarly, errors.Join(errEngineStoppedEarly, release()))
+		return "", fail(KindStoppedEarly, errEngineStoppedEarly)
 	}
 }
 
@@ -134,25 +131,28 @@ func canonicalPrivateDirectory(path string) (string, error) {
 	return resolved, nil
 }
 
-// Stop は app.Run の終了を待ってから engine lock を解放する。
+// Stop は app.Run の終了を待つ。
 func Stop() error {
 	running.Lock()
 	defer running.Unlock()
 	if running.cancel == nil {
 		return ErrNotStarted
 	}
+	stopLocked()
+	return nil
+}
+
+// stopLocked はrunningのmutexを保持した呼び出し元から、現在のengineを停止する。
+func stopLocked() {
 	running.cancel()
 	<-running.done
-	err := running.release()
-	running.cancel, running.done, running.release = nil, nil, nil
-	return err
+	running.cancel, running.done = nil, nil
 }
 
 // Start の失敗理由。gomobile が同じ定数を Java 側へ公開する。
 const (
 	KindNone = iota
 	KindUnknown
-	KindAlreadyStarted
 	KindListenFailed
 	KindStoppedEarly
 	KindStorageUnavailable

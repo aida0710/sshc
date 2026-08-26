@@ -110,8 +110,11 @@ func TestTheAndroidShellReadsTheFailureKindsFromGo(t *testing.T) {
 	if strings.Contains(failure, "private void showFailure(int ") {
 		t.Error("showFailure が int を取っている。Mobile.lastStartFailureKind は long を返す")
 	}
+	if strings.Contains(java, "KindAlreadyStarted") {
+		t.Error("Android単一process内の重複起動をfatal errorとして再導入している")
+	}
 
-	for _, kind := range []string{"KindAlreadyStarted", "KindListenFailed", "KindStoppedEarly"} {
+	for _, kind := range []string{"KindListenFailed", "KindStoppedEarly", "KindStorageUnavailable"} {
 		if !strings.Contains(failure, "Mobile."+kind) {
 			t.Errorf("showFailure が Mobile.%s を読んでいない", kind)
 		}
