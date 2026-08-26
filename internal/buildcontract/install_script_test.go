@@ -130,3 +130,44 @@ func TestTheInstallScriptReadsTheRunningEngineVersionFromJSON(t *testing.T) {
 		t.Error("install.sh does not extract the version field from status JSON")
 	}
 }
+
+func TestTheDocumentedInstallerPinsScriptAndArtifactsToOneRelease(t *testing.T) {
+	for _, path := range []string{"README.md", filepath.Join("docs", "release-install.md")} {
+		body, err := os.ReadFile(filepath.Join("..", "..", path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(body)
+		if strings.Contains(text, "raw.githubusercontent.com/aida0710/sshc/main/install.sh") {
+			t.Errorf("%s still executes the mutable main installer", path)
+		}
+		for _, required := range []string{"SSHC_VERSION=v0.13.3", "/sshc/v0.13.3/install.sh"} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s lacks version-pinned installer fragment %q", path, required)
+			}
+		}
+	}
+
+	script := readInstallScript(t)
+	for _, required := range []string{"SSHC_VERSION is not a semantic version", "grep -Eq '^v(0|[1-9][0-9]*)"} {
+		if !strings.Contains(script, required) {
+			t.Errorf("install.sh does not reject an unsafe version input: lacks %q", required)
+		}
+	}
+}
+
+func TestStartupScriptStartsTheForegroundEngineWithoutUpdatingSource(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", "startup.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(body)
+	if !strings.Contains(script, "exec ./bin/sshc engine") {
+		t.Error("startup.sh builds the CLI but does not start the engine")
+	}
+	for _, forbidden := range []string{"\ngit pull", "\nmake update", "exec ./bin/sshc\n"} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("startup.sh mixes startup with %q", forbidden)
+		}
+	}
+}

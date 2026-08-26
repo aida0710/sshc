@@ -13,8 +13,11 @@ Homebrew formula はソースからビルドするため、Go toolchain も Home
 ## インストールスクリプト（macOS / Linux）
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/main/install.sh | sh
+SSHC_VERSION=v0.13.3 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.13.3/install.sh | sh'
 ```
+
+URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、pipeで直接実行しません。新しい版へ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。
 
 スクリプトは次の項目を確認してからバイナリを配置します。
 
@@ -70,6 +73,17 @@ sshc vault unlock
 同じ操作は Web UI からも実行できます。CLI は対話端末からのみマスターパスワードを読み取り、コマンドライン引数や環境変数からは受け取りません。
 
 vault は 12 時間操作がない場合に自動的にロックされます。
+
+## リポジトリ管理者向けの公開保護
+
+workflow内の検査だけでは、公開後のasset変更や管理者資格情報の侵害を止められません。リポジトリ設定で次を維持します。
+
+- GitHub Immutable Releasesを有効にし、公開済みReleaseのassetと本文を変更不能にする
+- `release` environmentにrequired reviewerを設定し、self reviewとadministrator bypassを無効にする
+- `main`のbranch protectionをadministratorにも適用し、required CIとreviewを迂回させない
+- `v*` tagの更新と削除を禁止し、bypass actorを設定しない
+
+これらはrepository外の設定であり、workflowのcommitだけでは有効になりません。公開前監査ではGitHub APIまたはSettings画面で現在値を確認します。
 
 ## バージョン不一致
 

@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
-# 更新は、取得するリビジョンを確認できるよう通常の起動とは分けて行う。
+# source checkoutから開発用engineを起動する。更新は取得するrevisionを確認できるよう
+# このscriptでは行わず、別途git pull --ff-onlyを実行する。
 make build
-exec ./bin/sshc
+exec ./bin/sshc engine
