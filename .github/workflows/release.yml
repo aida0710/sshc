@@ -15,6 +15,12 @@ on:
 env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
+# Homebrew tap、GitHub Releaseのlatest印、draftを全versionで一列に更新する。
+# 古いrunをcancelするとtapだけ更新した状態を作り得るため、必ず最後まで待たせる。
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
+
 permissions:
   actions: read
   contents: read
@@ -24,6 +30,11 @@ jobs:
     name: Verify release source
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      release-sha: ${{ steps.policy.outputs.release_sha }}
+      release-channel: ${{ steps.policy.outputs.release_channel }}
+      promote-latest: ${{ steps.policy.outputs.promote_latest }}
+      latest-stable: ${{ steps.policy.outputs.latest_stable }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -38,6 +49,58 @@ jobs:
           export RELEASE_SHA
           scripts/ci/verify-release-source.sh
 
+      # 手動復旧ではcheckout先に旧版のscriptが含まれ得るため、公開channelと単調性は
+      # 現在のworkflow自身に置く。GitHubのlatest印ではなく公開済みstable tagの最大値を見る。
+      - name: Select a monotonic publication policy
+        id: policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          RELEASE_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
+          releases=$(gh api --paginate \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/$RELEASE_REPOSITORY/releases?per_page=100" | jq -s '[.[][]]')
+          same=$(printf '%s' "$releases" | jq --arg tag "$RELEASE_TAG" '[.[] | select(.tag_name == $tag)]')
+          same_count=$(printf '%s' "$same" | jq 'length')
+          [ "$same_count" -le 1 ] || { echo "multiple releases exist for $RELEASE_TAG" >&2; exit 1; }
+          if printf '%s' "$same" | jq -e 'any(.[]; .draft == false)' >/dev/null; then
+            echo "a published release already exists for $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          case "$RELEASE_TAG" in
+            *-*|*+*) release_channel=prerelease ;;
+            *) release_channel=stable ;;
+          esac
+          promote_latest=false
+          latest_stable=$(printf '%s' "$releases" | jq -r '
+            .[] |
+            select(.draft == false and .prerelease == false) |
+            .tag_name |
+            select(test("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
+          ' | sort -V | tail -1)
+          if [ "$release_channel" = stable ]; then
+            if [ -z "$latest_stable" ]; then
+              promote_latest=true
+            else
+              newest=$(printf '%s\n%s\n' "$latest_stable" "$RELEASE_TAG" | sort -V | tail -1)
+              if [ "$newest" = "$RELEASE_TAG" ] && [ "$latest_stable" != "$RELEASE_TAG" ]; then
+                promote_latest=true
+              elif [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
+                echo "automatic release $RELEASE_TAG would not advance published stable $latest_stable" >&2
+                exit 1
+              fi
+            fi
+          fi
+
+          printf 'release_sha=%s\n' "$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          printf 'release_channel=%s\n' "$release_channel" >> "$GITHUB_OUTPUT"
+          printf 'promote_latest=%s\n' "$promote_latest" >> "$GITHUB_OUTPUT"
+          printf 'latest_stable=%s\n' "$latest_stable" >> "$GITHUB_OUTPUT"
+          echo "publication policy: channel=$release_channel promote_latest=$promote_latest latest_stable=${latest_stable:-none}"
+
   macos:
     name: macOS
     needs: [verify-source]
@@ -46,7 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.verify-source.outputs.release-sha }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
@@ -86,7 +149,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.verify-source.outputs.release-sha }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
@@ -126,7 +189,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.verify-source.outputs.release-sha }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
@@ -169,11 +232,12 @@ jobs:
     name: Android
     needs: [verify-source]
     runs-on: ubuntu-24.04
+    environment: release
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.verify-source.outputs.release-sha }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
@@ -260,14 +324,16 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  publish:
-    name: Publish
-    # GitHub Release は外部から見える最終 commit point。必須の tap 更新が失敗した
-    # 後に Release だけが残る部分公開を避けるため、Homebrew 成功後にだけ公開する。
-    needs: [macos, linux, windows, android, homebrew]
+  stage-release:
+    name: Stage release
+    # tapを書き換える前に、attestation付きの完全なdraftを作る。tap成功後に残る
+    # 可変処理をdraft公開の一回だけへ縮め、失敗時は同じtagの手動復旧で再構築する。
+    needs: [macos, linux, windows, android, verify-source]
     runs-on: ubuntu-24.04
     environment: release
     timeout-minutes: 10
+    outputs:
+      release-id: ${{ steps.stage.outputs.release_id }}
     permissions:
       attestations: write
       contents: write
@@ -276,7 +342,7 @@ jobs:
       # version-controlled なリリース本文を取得するため checkout する。
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.verify-source.outputs.release-sha }}
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           path: incoming
@@ -325,15 +391,31 @@ jobs:
 
       # Immutable Releasesでは公開後にassetを追加できない。先にdraftへ全assetを置き、
       # APIで公開契約を満たすことを確認してから一度だけpublishする。
-      - name: Publish
+      - name: Stage a complete draft
+        id: stage
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_CHANNEL: ${{ needs.verify-source.outputs.release-channel }}
+          PROMOTE_LATEST: ${{ needs.verify-source.outputs.promote-latest }}
         run: |
+          set -eu
           notes_file="docs/releases/$RELEASE_TAG.md"
           if [ ! -f "$notes_file" ]; then
             echo "release notes file is missing: $notes_file" >&2
             exit 1
+          fi
+          if [ "$RELEASE_CHANNEL" = stable ] && [ "$PROMOTE_LATEST" = true ]; then
+            for installer_doc in README.md docs/release-install.md install.sh; do
+              grep -F "SSHC_VERSION=$RELEASE_TAG" "$installer_doc" >/dev/null || {
+                echo "$installer_doc does not pin the promoted installer to $RELEASE_TAG" >&2
+                exit 1
+              }
+              grep -F "/sshc/$RELEASE_TAG/install.sh" "$installer_doc" >/dev/null || {
+                echo "$installer_doc does not fetch the promoted installer from $RELEASE_TAG" >&2
+                exit 1
+              }
+            done
           fi
           # 直前のrunがasset upload中に停止しても、公開済みreleaseには触れず、
           # 同じtagの未公開draftだけを捨てて再構築できるようにする。
@@ -355,9 +437,16 @@ jobs:
             draft_id=$(printf '%s' "$matches" | jq -er '.[0].id')
             gh api --method DELETE "repos/$GH_REPO/releases/$draft_id"
           fi
+          prerelease_args=
+          expected_prerelease=false
+          if [ "$RELEASE_CHANNEL" = prerelease ]; then
+            prerelease_args=--prerelease
+            expected_prerelease=true
+          fi
           gh release create "$RELEASE_TAG" \
             --verify-tag \
             --draft \
+            $prerelease_args \
             --title "$RELEASE_TAG" \
             --notes-file "$notes_file" \
             dist/sshc-* dist/checksums.txt
@@ -367,11 +456,14 @@ jobs:
             exit 1
           }
           release=$(printf '%s' "$matches" | jq '.[0]')
-          printf '%s' "$release" | jq -e '
+          printf '%s' "$release" | jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --argjson expected_prerelease "$expected_prerelease" '
             .draft == true and
+            .prerelease == $expected_prerelease and
             ([.assets[].name] | sort) == ([
               "checksums.txt",
-              "sshc-android-'"$RELEASE_TAG"'.apk",
+              ("sshc-android-" + $tag + ".apk"),
               "sshc-darwin-amd64",
               "sshc-darwin-arm64",
               "sshc-linux-amd64",
@@ -381,7 +473,8 @@ jobs:
             ] | sort) and
             all(.assets[]; .size > 0)
           ' >/dev/null
-          gh release edit "$RELEASE_TAG" --draft=false --latest
+          release_id=$(printf '%s' "$release" | jq -er '.id')
+          printf 'release_id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
 
   # packaging/homebrew/sshc.rb を基に、検証済みタグとチェックサムで tap を更新する。
   # tap もリリース成果物の一部なので、専用 deploy key が無ければ失敗として扱う。
@@ -389,22 +482,27 @@ jobs:
     name: Homebrew tap
     # 全成果物の build/smoke が済んでから tap を更新する。ただし GitHub Release の
     # 公開より前に gate し、tap の失敗で公開済み Release が取り残されないようにする。
-    needs: [macos, linux, windows, android]
+    needs: [stage-release, verify-source]
     runs-on: ubuntu-latest
     environment: release
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.verify-source.outputs.release-sha }}
 
       - name: Update the tap
         env:
           TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           SOURCE_REPO: ${{ github.repository }}
           TAP_REPO: aida0710/homebrew-tap
+          RELEASE_CHANNEL: ${{ needs.verify-source.outputs.release-channel }}
         run: |
           set -eu
+          if [ "$RELEASE_CHANNEL" != stable ]; then
+            echo "$RELEASE_TAG is not a stable release; leaving the stable Homebrew tap unchanged."
+            exit 0
+          fi
           if [ -z "${TAP_KEY:-}" ]; then
             echo "HOMEBREW_TAP_DEPLOY_KEY is not set; the release cannot update its required tap." >&2
             exit 1
@@ -436,6 +534,17 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap -o IdentitiesOnly=yes"
 
           git clone --depth 1 "git@github.com:$TAP_REPO.git" tap
+
+          # 手動復旧で古いtagを指定してもstable tapを巻き戻さない。全release runを
+          # concurrencyで直列化したうえで、push直前のtapをもう一度正本として比較する。
+          current_tag=$(sed -n -E 's#.*archive/refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)\.tar\.gz.*#\1#p' tap/Formula/sshc.rb | head -1)
+          if [ -n "$current_tag" ]; then
+            newest=$(printf '%s\n%s\n' "$current_tag" "$RELEASE_TAG" | sort -V | tail -1)
+            if [ "$newest" != "$RELEASE_TAG" ]; then
+              echo "the tap already has newer stable $current_tag; recovery will not downgrade it to $RELEASE_TAG"
+              exit 0
+            fi
+          fi
           mkdir -p tap/Formula
           cp sshc.rb tap/Formula/sshc.rb
           cd tap
@@ -450,3 +559,38 @@ jobs:
           fi
           git commit -m "sshc $version"
           git push
+
+  publish:
+    name: Publish
+    # 完全なdraftとtap更新が成功した後は、一回のAPI更新だけで公開状態へ移す。
+    needs: [stage-release, homebrew, verify-source]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the staged release without moving stable backwards
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ needs.stage-release.outputs.release-id }}
+          RELEASE_CHANNEL: ${{ needs.verify-source.outputs.release-channel }}
+          PROMOTE_LATEST: ${{ needs.verify-source.outputs.promote-latest }}
+        run: |
+          set -eu
+          [ -n "$RELEASE_ID" ] || { echo "the staged release id is missing" >&2; exit 1; }
+          make_latest=false
+          if [ "$RELEASE_CHANNEL" = stable ] && [ "$PROMOTE_LATEST" = true ]; then
+            make_latest=true
+          fi
+          gh api --method PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
+            -F draft=false \
+            -f make_latest="$make_latest" >/dev/null
+          published=$(gh api "repos/$GH_REPO/releases/$RELEASE_ID")
+          printf '%s' "$published" | jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --argjson expected_prerelease "$([ "$RELEASE_CHANNEL" = prerelease ] && echo true || echo false)" '
+              .tag_name == $tag and
+              .draft == false and
+              .prerelease == $expected_prerelease
+            ' >/dev/null

@@ -1,6 +1,8 @@
 package buildcontract
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -83,12 +85,17 @@ func TestAndroidDataSyncEngineHasABoundedLifetime(t *testing.T) {
 	activity := readContractFile(t, "android", "app", "src", "main", "java", "com", "github", "aida0710", "sshc", "MainActivity.java")
 	for _, required := range []string{
 		"long failure = service.failure();",
-		"releaseService();",
+		"showFailure(failure, service.failureCode(), service.failureDetail());",
+		"startForegroundService(new Intent(this, EngineService.class));",
+		"service.retry()",
 		"unbindService(connection);",
 	} {
 		if !strings.Contains(activity, required) {
-			t.Errorf("failed engine start cannot release the old service for retry: lacks %q", required)
+			t.Errorf("failed engine start cannot expose diagnostics and retry safely: lacks %q", required)
 		}
+	}
+	if strings.Contains(activity, "releaseService();\n        showFailure") {
+		t.Error("failure screen unbinds the stopped service, so its in-place retry cannot work")
 	}
 }
 
@@ -96,6 +103,13 @@ func TestGradleDistributionAndDependenciesAreChecksumPinned(t *testing.T) {
 	wrapper := readContractFile(t, "android", "gradle", "wrapper", "gradle-wrapper.properties")
 	if !strings.Contains(wrapper, "distributionSha256Sum=84fbba45c7f4c64abc77460e1c00f541e9f960e3c7ed2538f1ede19eacd873ae") {
 		t.Error("Gradle 9.7.0 distribution SHA-256 is not pinned")
+	}
+	jar, err := os.ReadFile(filepath.Join("..", "..", "android", "gradle", "wrapper", "gradle-wrapper.jar"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprintf("%x", sha256.Sum256(jar)); got != "7a9ce74cff467ca1bf60a4fcd9f05185acceda4d0f382434d393e17864262c5d" {
+		t.Errorf("Gradle wrapper JAR SHA-256 = %s, want the official 9.7.0 wrapper", got)
 	}
 	metadata := readContractFile(t, "android", "gradle", "verification-metadata.xml")
 	for _, required := range []string{
@@ -197,8 +211,8 @@ func TestReleaseRequiresExactSHACIAndAuthenticatedArtifacts(t *testing.T) {
 
 func TestReleaseFailsWhenTheHomebrewDeployKeyIsMissing(t *testing.T) {
 	workflow := readContractFile(t, ".github", "workflows", "release.yml")
-	if count := strings.Count(workflow, "    environment: release"); count != 2 {
-		t.Errorf("publish and Homebrew must both use the release environment; found %d jobs", count)
+	if count := strings.Count(workflow, "    environment: release"); count != 3 {
+		t.Errorf("Android signing, release staging, and Homebrew must all use the release environment; found %d jobs", count)
 	}
 	start := strings.Index(workflow, "  homebrew:")
 	if start < 0 {
