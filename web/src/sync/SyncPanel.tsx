@@ -9,6 +9,7 @@ import {
   type SyncHistory,
   type SyncHistoryDiff,
   type SyncPushDraft,
+  type SyncSetupCheckResponse,
   type SyncStatus,
 } from "../api/integrations";
 import { useLanguage } from "../i18n/context";
@@ -73,6 +74,8 @@ const refusals: Record<string, MessageKey> = {
   preview_stale: "sync.previewStale",
   sync_nothing_to_push: "sync.noLocalChanges",
   sync_commit_message_invalid: "sync.commitMessageInvalid",
+  sync_setup_target_changed: "sync.setup.changed",
+  sync_setup_target_incomplete: "sync.setup.incomplete",
 };
 
 export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
@@ -85,6 +88,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [accessKeyId, setAccessKeyId] = useState("");
   const [secretAccessKey, setSecretAccessKey] = useState("");
   const [direction, setDirection] = useState<SyncDirection>("both");
+  const [setupCheck, setSetupCheck] = useState<SyncSetupCheckResponse | null>(null);
   const [master, setMaster] = useState("");
   const [revealed, setRevealed] = useState("");
   const [ownKey, setOwnKey] = useState("");
@@ -116,8 +120,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     setDirection(current.direction);
     setAccessKeyId("");
     setSecretAccessKey("");
+    setSetupCheck(null);
     setEditingSettings(true);
   }
+
+  const setupInput = { endpoint, bucket, path, region, accessKeyId, secretAccessKey };
 
   const refreshBucket = useCallback(async () => {
     setBucketState({ phase: "loading" });
@@ -170,6 +177,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    setSetupCheck(null);
+  }, [endpoint, bucket, path, region, accessKeyId, secretAccessKey]);
 
   const shouldPollBucket =
     statusState.phase === "ready" && statusState.value.configured && !statusState.value.locked;
@@ -314,7 +325,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         ))}
       </dl>
 
-      <ol aria-label={t("sync.flowHeading")} className="grid overflow-hidden rounded-xl border border-line bg-toolbar sm:grid-cols-3">
+      {status.configured ? null : <ol aria-label={t("sync.flowHeading")} className="grid overflow-hidden rounded-xl border border-line bg-toolbar sm:grid-cols-3">
         {["sync.flowBucket", "sync.flowKey", "sync.flowOperate"].map((key, index) => (
           <li key={key} className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-xs font-semibold text-accent">
@@ -323,11 +334,101 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             <span className="text-sm text-ink">{t(key as MessageKey)}</span>
           </li>
         ))}
-      </ol>
+      </ol>}
 
       <p className={hintText}>{t("sync.warning")}</p>
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {notice === "" ? null : <p role="status" className="text-sm text-ink-muted">{notice}</p>}
+      {revealed === "" ? null : (
+        <Notice tone="notice">
+          <span className="block">{t("sync.keyShownOnce")}</span>
+          <output className="mt-2 block select-all break-all font-mono text-sm">{revealed}</output>
+        </Notice>
+      )}
+
+      {status.configured ? (
+        <section className="sshc-card overflow-hidden rounded-xl bg-card">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+            <div>
+              <h3 className={sectionHeading}>{t("sync.overviewHeading")}</h3>
+              <p className={`mt-1 ${hintText}`}>
+                {status.synced
+                  ? t("sync.lastSynced", { at: status.lastSyncedAt ?? "", count: status.fileCount ?? 0 })
+                  : t("sync.neverSynced")}
+              </p>
+            </div>
+            <span className="rounded-full bg-select-fill px-2 py-1 text-xs font-medium text-accent">
+              {t(`sync.direction.${status.direction}`)}
+            </span>
+          </header>
+          <div className="flex flex-col gap-4 p-4">
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={status.auto.enabled}
+                disabled={busy || !status.keyConfigured}
+                onChange={(event) =>
+                  void run(
+                    () => api.setAutoSync(event.target.checked),
+                    (next) => setStatusState({ phase: "ready", value: next }),
+                    t("sync.autoFailed"),
+                  )
+                }
+              />
+              {t("sync.autoEnable")}
+            </label>
+            <p role="status" className={hintText}>
+              {status.auto.phase === "blocked"
+                ? t(
+                  status.auto.detail === "conflicts"
+                    ? "sync.autoBlockedConflicts"
+                    : status.auto.detail === "remote_deleted"
+                      ? "sync.autoBlockedRemoteDeleted"
+                      : status.auto.detail === "remote_moved"
+                        ? "sync.autoBlockedRemoteMoved"
+                        : "sync.autoBlockedRemovals",
+                )
+                : status.auto.phase === "failed"
+                  ? t(
+                    status.auto.detail === "wrong_passphrase"
+                      ? "sync.autoFailedWrongKey"
+                      : status.auto.detail === "snapshot_schema_unsupported"
+                        ? "sync.autoFailedSchema"
+                        : "sync.autoFailedLast",
+                  )
+                  : status.auto.at === undefined
+                    ? t("sync.autoIdle")
+                    : t("sync.autoLastRan", { at: status.auto.at })}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                kind="primary"
+                disabled={busy || !status.keyConfigured}
+                onClick={() => void run(
+                  () => api.syncNow(),
+                  (next) => setStatusState({ phase: "ready", value: next }),
+                  t("sync.autoNowFailed"),
+                )}
+              >
+                {t("sync.autoNow")}
+              </Button>
+              {status.direction === "push" ? null : (
+                <Button disabled={busy || !status.keyConfigured} onClick={() => void previewWith(undefined)}>
+                  {t("sync.receiveRemote")}
+                </Button>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <details open={!status.configured || editingSettings} className="group">
+        {status.configured ? (
+          <summary className="cursor-pointer list-none rounded-xl border border-line bg-toolbar px-4 py-3 text-sm font-medium text-ink marker:hidden">
+            {t("sync.manageSettings")}
+          </summary>
+        ) : null}
+        <div className={status.configured ? "mt-4 flex flex-col gap-6" : "flex flex-col gap-6"}>
 
       <section className="sshc-card overflow-hidden rounded-xl bg-card">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
@@ -392,46 +493,95 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           </SyncRow>
 
           <SyncRow label={t("sync.direction")} hint={t(`sync.direction.${direction}.hint`)}>
-            <select
-              value={direction}
-              onChange={(event) => setDirection(event.target.value as SyncDirection)}
-              className={control}
-            >
-              <option value="both">{t("sync.direction.both")}</option>
-              <option value="push">{t("sync.direction.push")}</option>
-              <option value="pull">{t("sync.direction.pull")}</option>
+            <select value={direction} onChange={(event) => setDirection(event.target.value as SyncDirection)} className={control}>
+              <option value="both">{t("sync.role.main")}</option>
+              <option value="pull">{t("sync.role.receive")}</option>
+              <optgroup label={t("sync.role.advanced")}>
+                <option value="push">{t("sync.role.send")}</option>
+              </optgroup>
             </select>
           </SyncRow>
         </div>
-        <div className="flex flex-wrap gap-2 border-t border-line bg-toolbar px-4 py-3">
+        <div className="flex flex-col gap-3 border-t border-line bg-toolbar px-4 py-3">
+          {setupCheck === null ? null : (
+            <Notice tone={setupCheck.state === "incomplete" ? "danger" : "notice"}>
+              {t(`sync.setup.${setupCheck.state}`)}
+              {setupCheck.state === "incomplete" ? ` ${t("sync.setup.useAnotherPath")}` : ""}
+            </Notice>
+          )}
+          {setupCheck === null || setupCheck.state === "incomplete" ? null : (
+            <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-3">
+              <p className="text-sm text-ink">
+                {setupCheck.state === "existing" ? t("sync.setup.existingKey") : t("sync.setup.emptyKey")}
+              </p>
+              {setupCheck.state === "empty" ? (
+                <label className="flex items-center gap-2 text-sm text-ink-muted">
+                  <input type="checkbox" checked={chooseOwn} onChange={(event) => setChooseOwn(event.target.checked)} />
+                  {t("sync.keyChooseOwn")}
+                </label>
+              ) : null}
+              {setupCheck.state === "existing" || chooseOwn ? (
+                <input
+                  type="password"
+                  aria-label={t("sync.keyOwnValue")}
+                  value={ownKey}
+                  onChange={(event) => setOwnKey(event.target.value)}
+                  className={control}
+                />
+              ) : null}
+              <Button
+                kind="primary"
+                disabled={busy || (setupCheck.state === "existing" && ownKey === "") || (chooseOwn && ownKey === "")}
+                onClick={() => void run(
+                  () => api.completeSyncSetup({
+                    ...setupInput,
+                    direction,
+                    expectedState: setupCheck.state,
+                    ...(setupCheck.etag === undefined ? {} : { expectedETag: setupCheck.etag }),
+                    historyPresent: setupCheck.historyPresent,
+                    key: setupCheck.state === "existing" || chooseOwn ? ownKey : "",
+                  }),
+                  (next) => {
+                    setStatusState({ phase: "ready", value: next.status });
+                    setRevealed(next.generatedKey ?? "");
+                    setOwnKey("");
+                    setAccessKeyId("");
+                    setSecretAccessKey("");
+                    setSetupCheck(null);
+                    setEditingSettings(false);
+                    setNotice(next.generatedKey === undefined ? t("sync.setup.saved") : t("sync.keyShownOnce"));
+                  },
+                  t("sync.configureFailed"),
+                )}
+              >
+                {t("sync.setup.save")}
+              </Button>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
           <Button
-            kind="primary"
             disabled={busy || endpoint === "" || bucket === "" || accessKeyId === "" || secretAccessKey === ""}
-            onClick={() =>
-              void run(
-                () => api.configureSync({ endpoint, bucket, path, region, accessKeyId, secretAccessKey, direction }),
-                (next) => {
-                  setStatusState({ phase: "ready", value: next });
-                  setAccessKeyId("");
-                  setSecretAccessKey("");
-                  setEditingSettings(false);
-                  setForceConfirmed(false);
-                  void refreshBucket();
-                  if (next.keyConfigured) void refreshHistory();
-                },
-                t("sync.configureFailed"),
-              )
-            }
+            onClick={() => void run(
+              () => api.checkSyncSetup(setupInput),
+              (next) => {
+                setSetupCheck(next);
+                setOwnKey("");
+                setChooseOwn(false);
+              },
+              t("sync.configureFailed"),
+            )}
           >
-            {t("sync.configure")}
+            {t("sync.setup.check")}
           </Button>
           {status.configured ? (
             <Button disabled={busy} onClick={() => setEditingSettings(false)}>{t("sync.cancelSettings")}</Button>
           ) : null}
+          </div>
         </div>
         </> : null}
       </section>
 
+      {status.configured ? (
       <section className="sshc-card overflow-hidden rounded-xl bg-card">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
           <div className="flex items-center gap-2">
@@ -455,16 +605,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             <p className="text-sm leading-6 text-ink-muted">{t("sync.keyHint")}</p>
             <p className="text-sm font-medium text-ink">{t(status.keyConfigured ? "sync.keySet" : "sync.keyMissing")}</p>
             <div className="flex flex-col gap-3 border-t border-line pt-3">
-              {revealed === "" ? (
-                null
-              ) : (
-                <>
-                  <output className="select-all break-all rounded border border-line bg-surface px-3 py-2 font-mono text-sm text-ink">
-                    {revealed}
-                  </output>
-                  <p className="text-sm text-notice-ink">{t("sync.keyShownOnce")}</p>
-                </>
-              )}
               <label className="flex items-center gap-2 text-sm text-ink-muted">
                 <input
                   type="checkbox"
@@ -513,65 +653,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               >
                 {status.keyConfigured ? t("sync.keyReplace") : t("sync.keyCreate")}
               </Button>
-            </div>
-          </section>
-
-          <section aria-labelledby="sync-auto-heading" className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4">
-            <h4 id="sync-auto-heading" className={sectionHeading}>{t("sync.auto")}</h4>
-            <p className="text-sm leading-6 text-ink-muted">{t("sync.autoHint")}</p>
-            <div className="flex flex-col gap-3 border-t border-line pt-3">
-              <label className="flex items-center gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={status.auto.enabled}
-                  disabled={busy || !status.configured || !status.keyConfigured}
-                  onChange={(event) =>
-                    void run(
-                      () => api.setAutoSync(event.target.checked),
-                      (next) => setStatusState({ phase: "ready", value: next }),
-                      t("sync.autoFailed"),
-                    )
-                  }
-                />
-                {t("sync.autoEnable")}
-              </label>
-              <p role="status" className={hintText}>
-                {status.auto.phase === "blocked"
-                  ? t(
-                    status.auto.detail === "conflicts"
-                      ? "sync.autoBlockedConflicts"
-                      : status.auto.detail === "remote_deleted"
-                        ? "sync.autoBlockedRemoteDeleted"
-                      : status.auto.detail === "remote_moved"
-                        ? "sync.autoBlockedRemoteMoved"
-                        : "sync.autoBlockedRemovals",
-                  )
-                  : status.auto.phase === "failed"
-                    ? t(
-                      status.auto.detail === "wrong_passphrase"
-                        ? "sync.autoFailedWrongKey"
-                        : status.auto.detail === "snapshot_schema_unsupported"
-                          ? "sync.autoFailedSchema"
-                          : "sync.autoFailedLast",
-                    )
-                    : status.auto.at === undefined || !status.auto.enabled
-                      ? t("sync.autoIdle")
-                      : t("sync.autoLastRan", { at: status.auto.at })}
-              </p>
-              <button
-                type="button"
-                disabled={busy || !status.auto.enabled}
-                onClick={() =>
-                  void run(
-                    () => api.syncNow(),
-                    (next) => setStatusState({ phase: "ready", value: next }),
-                    t("sync.autoNowFailed"),
-                  )
-                }
-                className="self-start rounded border border-line px-3 py-1.5 text-sm text-ink"
-              >
-                {t("sync.autoNow")}
-              </button>
             </div>
           </section>
 
@@ -877,6 +958,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           </p>
         )}
       </section>
+      ) : null}
+
+        </div>
+      </details>
 
       {resultView !== null ? (
         <SyncResultCard view={resultView} />

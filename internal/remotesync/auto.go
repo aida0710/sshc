@@ -128,8 +128,19 @@ func (a *Auto) Once(ctx context.Context) AutoView {
 	return a.run(ctx)
 }
 
+// Now runs one user-requested cycle even when scheduled automatic sync is off.
+func (a *Auto) Now(ctx context.Context) AutoView {
+	a.cycleMu.Lock()
+	defer a.cycleMu.Unlock()
+	return a.runEnabled(ctx, false)
+}
+
 func (a *Auto) run(ctx context.Context) AutoView {
-	if !a.enabled() {
+	return a.runEnabled(ctx, true)
+}
+
+func (a *Auto) runEnabled(ctx context.Context, requireEnabled bool) AutoView {
+	if requireEnabled && !a.enabled() {
 		return a.View()
 	}
 	a.service.operationMu.Lock()

@@ -47,6 +47,8 @@ func (h SyncHandlers) reach(ctx context.Context, client *remotesync.Client, key 
 
 func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.GET("/api/v1/sync", handlers.Status)
+	engine.POST("/api/v1/sync/setup/check", handlers.CheckSetup)
+	engine.PUT("/api/v1/sync/setup", handlers.CompleteSetup)
 	engine.PUT("/api/v1/sync/settings", handlers.Configure)
 	engine.PUT("/api/v1/sync/key", handlers.SetKey)
 	engine.PUT("/api/v1/sync/auto", handlers.SetAuto)
@@ -58,6 +60,145 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.GET("/api/v1/sync/bucket", handlers.Bucket)
 	engine.GET("/api/v1/sync/history", handlers.History)
 	engine.POST("/api/v1/sync/history/diff", handlers.HistoryDiff)
+}
+
+func syncSetupInput(request api.SyncSetupCheckRequest) (remotesync.Config, remotesync.Credentials, error) {
+	if len(request.Endpoint) == 0 || len(request.Endpoint) > 2048 ||
+		len(request.AccessKeyId) == 0 || len(request.AccessKeyId) > 512 ||
+		len(request.SecretAccessKey) == 0 || len(request.SecretAccessKey) > 512 ||
+		(request.Path != nil && len(*request.Path) > 255) ||
+		(request.Region != nil && len(*request.Region) > 64) {
+		return remotesync.Config{}, remotesync.Credentials{}, errors.New("invalid_request")
+	}
+	parsed, err := url.Parse(request.Endpoint)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Opaque != "" {
+		return remotesync.Config{}, remotesync.Credentials{}, errors.New("endpoint_must_be_https")
+	}
+	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawPath != "" || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return remotesync.Config{}, remotesync.Credentials{}, errors.New("endpoint_must_have_no_path")
+	}
+	if !safeBucketName(request.Bucket) {
+		return remotesync.Config{}, remotesync.Credentials{}, errors.New("unsafe_bucket_name")
+	}
+	path := ""
+	if request.Path != nil {
+		path = strings.Trim(*request.Path, "/")
+	}
+	if !safeObjectPath(path) {
+		return remotesync.Config{}, remotesync.Credentials{}, errors.New("unsafe_object_path")
+	}
+	region := "auto"
+	if request.Region != nil && *request.Region != "" {
+		region = *request.Region
+	}
+	return remotesync.Config{
+		Endpoint: strings.TrimRight(request.Endpoint, "/"), Bucket: request.Bucket,
+		Path: path, Region: region, Direction: remotesync.DirectionBoth,
+	}, remotesync.Credentials{AccessKeyID: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey}, nil
+}
+
+func setupInputProblem(c *echo.Context, err error) error {
+	switch err.Error() {
+	case "endpoint_must_be_https", "endpoint_must_have_no_path", "unsafe_bucket_name", "unsafe_object_path":
+		return problem(c, http.StatusBadRequest, err.Error())
+	default:
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+}
+
+// CheckSetup probes an exact destination without persisting credentials.
+func (h SyncHandlers) CheckSetup(c *echo.Context) error {
+	var request api.SyncSetupCheckRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	config, credentials, err := syncSetupInput(request)
+	if err != nil {
+		return setupInputProblem(c, err)
+	}
+	inspection, err := remotesync.InspectSetupTarget(c.Request().Context(), remotesync.NewClient(config, credentials), config)
+	if err != nil {
+		return syncProblem(c, err)
+	}
+	response := api.SyncSetupCheckResponse{
+		State: api.SyncSetupTargetState(inspection.State), HistoryPresent: inspection.HistoryPresent,
+		CheckedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	if inspection.ETag != "" {
+		response.Etag = &inspection.ETag
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+// CompleteSetup verifies an existing snapshot key and persists all secret
+// settings only after every network and cryptographic check has succeeded.
+func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
+	var request api.SyncSetupRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	config, credentials, err := syncSetupInput(api.SyncSetupCheckRequest{
+		Endpoint: request.Endpoint, Bucket: request.Bucket, Path: request.Path, Region: request.Region,
+		AccessKeyId: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey,
+	})
+	if err != nil {
+		return setupInputProblem(c, err)
+	}
+	direction, ok := remotesync.ParseDirection(string(request.Direction))
+	if !ok {
+		return problem(c, http.StatusBadRequest, "unknown_sync_direction")
+	}
+	if !request.ExpectedState.Valid() ||
+		(request.ExpectedState == api.Existing && request.ExpectedETag == nil) {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	config.Direction = direction
+	if h.Secrets == nil {
+		return problem(c, http.StatusConflict, "vault_locked")
+	}
+	key := strings.TrimSpace(request.Key)
+	generated := false
+	if key == "" {
+		if request.ExpectedState != api.Empty {
+			return problem(c, http.StatusBadRequest, "sync_key_missing")
+		}
+		key, err = remotesync.NewKey()
+		if err != nil {
+			return problem(c, http.StatusInternalServerError, "key_generation_failed")
+		}
+		generated = true
+	}
+	if len(key) > 1024 {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	expected := remotesync.SetupInspection{
+		State: remotesync.SetupTargetState(request.ExpectedState), HistoryPresent: request.HistoryPresent,
+	}
+	if request.ExpectedETag != nil {
+		expected.ETag = *request.ExpectedETag
+	}
+	client := remotesync.NewClient(config, credentials)
+	err = h.Service.CompleteSetup(c.Request().Context(), config, credentials, client, expected, key, func() error {
+		return h.Secrets.SetSyncSettings(secret.SyncSettings{
+			Endpoint: config.Endpoint, Bucket: config.Bucket, Path: config.Path, Region: config.Region,
+			AccessKeyID: credentials.AccessKeyID, SecretAccessKey: credentials.SecretAccessKey,
+			Direction: string(direction), Key: key,
+		})
+	})
+	if err != nil {
+		if errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault) {
+			return problem(c, http.StatusConflict, "vault_locked")
+		}
+		return syncProblem(c, err)
+	}
+	if h.Auto != nil {
+		h.Auto.ResetRemoteCache()
+	}
+	response := api.SyncSetupResponse{Status: h.statusResponse()}
+	if generated {
+		response.GeneratedKey = &key
+	}
+	return c.JSON(http.StatusOK, response)
 }
 
 func addSyncActions(registry actionRegistry, service *remotesync.Service) {
@@ -165,54 +306,18 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if len(request.Endpoint) == 0 || len(request.Endpoint) > 2048 ||
-		len(request.AccessKeyId) == 0 || len(request.AccessKeyId) > 512 ||
-		len(request.SecretAccessKey) == 0 || len(request.SecretAccessKey) > 512 ||
-		(request.Path != nil && len(*request.Path) > 255) ||
-		(request.Region != nil && len(*request.Region) > 64) {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	parsed, err := url.Parse(request.Endpoint)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Opaque != "" {
-		return problem(c, http.StatusBadRequest, "endpoint_must_be_https")
-	}
-	// client はパス全体を /bucket/key に置き換えるため、貼り付けられた
-	// ".../my-bucket" は何も言わずに捨てられてしまい、ユーザーはこの
-	// application が一度も書いたことのない場所にオブジェクトを探すことになる。
-	// 末尾のスラッシュ 1 つはブラウザがホストに付け足すだけで意味を
-	// 持たないため、拒否ではなく除去する。除去することで、画面が
-	// "https://host//bucket" と表示するのも防いでいる。
-	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawPath != "" ||
-		parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
-		return problem(c, http.StatusBadRequest, "endpoint_must_have_no_path")
-	}
-	endpoint := strings.TrimRight(request.Endpoint, "/")
-	if !safeBucketName(request.Bucket) {
-		return problem(c, http.StatusBadRequest, "unsafe_bucket_name")
-	}
-	region := "auto"
-	if request.Region != nil && *request.Region != "" {
-		region = *request.Region
+	config, credentials, err := syncSetupInput(api.SyncSetupCheckRequest{
+		Endpoint: request.Endpoint, Bucket: request.Bucket, Path: request.Path, Region: request.Region,
+		AccessKeyId: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey,
+	})
+	if err != nil {
+		return setupInputProblem(c, err)
 	}
 	direction, ok := remotesync.ParseDirection(string(request.Direction))
 	if !ok {
 		return problem(c, http.StatusBadRequest, "unknown_sync_direction")
 	}
-
-	credentials := remotesync.Credentials{
-		AccessKeyID:     request.AccessKeyId,
-		SecretAccessKey: request.SecretAccessKey,
-	}
-	path := ""
-	if request.Path != nil {
-		path = strings.Trim(*request.Path, "/")
-	}
-	if !safeObjectPath(path) {
-		return problem(c, http.StatusBadRequest, "unsafe_object_path")
-	}
-	config := remotesync.Config{
-		Endpoint: endpoint, Bucket: request.Bucket, Path: path, Region: region, Direction: direction,
-	}
+	config.Direction = direction
 	// 保存する前に試す。一度も試されなかった設定は、typo が最初の
 	// push で何時間も後に別の場所で表面化する設定になってしまう。
 	// ここは、ユーザーが自分の打ったものをまだ見られる唯一の画面である。
@@ -227,8 +332,8 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	if h.Secrets != nil {
 		persist = func() error {
 			return h.Secrets.SetSyncSettings(secret.SyncSettings{
-				Endpoint: endpoint, Bucket: request.Bucket, Path: path, Region: region,
-				AccessKeyID: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey,
+				Endpoint: config.Endpoint, Bucket: config.Bucket, Path: config.Path, Region: config.Region,
+				AccessKeyID: credentials.AccessKeyID, SecretAccessKey: credentials.SecretAccessKey,
 				Direction: string(direction),
 			})
 		}
@@ -669,6 +774,10 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "sync_key_recovery_required")
 	case errors.Is(err, remotesync.ErrRecoveryTargetChange):
 		return problem(c, http.StatusConflict, "sync_key_recovery_target_change")
+	case errors.Is(err, remotesync.ErrSetupTargetChanged):
+		return problem(c, http.StatusConflict, "sync_setup_target_changed")
+	case errors.Is(err, remotesync.ErrSetupTargetIncomplete):
+		return problem(c, http.StatusConflict, "sync_setup_target_incomplete")
 	case errors.Is(err, remotesync.ErrHistoryKeyLossConfirmation):
 		return problem(c, http.StatusConflict, "sync_history_key_loss_confirmation_required")
 	case errors.Is(err, remotesync.ErrNothingToPush):
@@ -750,18 +859,21 @@ func (h SyncHandlers) SetAuto(c *echo.Context) error {
 		}
 		return problem(c, http.StatusInternalServerError, "vault_failed")
 	}
+	if request.Enabled && h.Auto != nil {
+		h.restore()
+		h.Auto.Now(c.Request().Context())
+	}
 	return h.status(c)
 }
 
 // Now は、一巡を押したユーザーを待たせたまま行う。
 //
-// 巡回が入っていなければ何も起きない。「今すぐ」は自動同期の一部であって、
-// 手動の push と pull はそれぞれのボタンが持っている。
+// 自動同期の入切とは独立した、明示的な一巡である。
 func (h SyncHandlers) Now(c *echo.Context) error {
 	h.restore()
 	if h.Auto == nil {
 		return problem(c, http.StatusConflict, "auto_sync_off")
 	}
-	h.Auto.Once(c.Request().Context())
+	h.Auto.Now(c.Request().Context())
 	return h.status(c)
 }

@@ -423,6 +423,71 @@ func (i installation) write(t *testing.T, name, contents string) {
 	}
 }
 
+func TestCompleteSetupVerifiesRemoteBeforePersisting(t *testing.T) {
+	bucket := &fakeBucket{}
+	writer := newInstallation(t, bucket, map[string]string{"config": "Host writer\n"})
+	empty, err := remotesync.InspectSetupTarget(context.Background(), writer.client, writer.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty.State != remotesync.SetupTargetEmpty || empty.HistoryPresent {
+		t.Fatalf("empty inspection = %+v", empty)
+	}
+	if _, err := writer.service.Push(context.Background(), syncPassphrase, "Initial snapshot"); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := newInstallation(t, bucket, map[string]string{"config": "Host reader\n"})
+	existing, err := remotesync.InspectSetupTarget(context.Background(), reader.client, reader.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if existing.State != remotesync.SetupTargetExisting || existing.ETag == "" || !existing.HistoryPresent {
+		t.Fatalf("existing inspection = %+v", existing)
+	}
+	persisted := 0
+	persist := func() error { persisted++; return nil }
+	if err := reader.service.CompleteSetup(context.Background(), reader.config, reader.creds, reader.client,
+		existing, "a wrong but sufficiently long synchronization key", persist); !errors.Is(err, remotesync.ErrWrongPassphrase) {
+		t.Fatalf("CompleteSetup with wrong key = %v, want ErrWrongPassphrase", err)
+	}
+	if persisted != 0 {
+		t.Fatalf("wrong key persisted settings %d times", persisted)
+	}
+	if err := reader.service.CompleteSetup(context.Background(), reader.config, reader.creds, reader.client,
+		existing, syncPassphrase, persist); err != nil {
+		t.Fatal(err)
+	}
+	if persisted != 1 {
+		t.Fatalf("verified setup persisted settings %d times, want 1", persisted)
+	}
+}
+
+func TestCompleteSetupRefusesOrphanedHistory(t *testing.T) {
+	bucket := &fakeBucket{}
+	writer := newInstallation(t, bucket, map[string]string{"config": "Host writer\n"})
+	if _, err := writer.service.Push(context.Background(), syncPassphrase, "Initial snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	bucket.removeObject(remotesync.ObjectName)
+	inspection, err := remotesync.InspectSetupTarget(context.Background(), writer.client, writer.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inspection.State != remotesync.SetupTargetIncomplete {
+		t.Fatalf("inspection state = %q, want incomplete", inspection.State)
+	}
+	persisted := false
+	err = writer.service.CompleteSetup(context.Background(), writer.config, writer.creds, writer.client,
+		inspection, syncPassphrase, func() error { persisted = true; return nil })
+	if !errors.Is(err, remotesync.ErrSetupTargetIncomplete) {
+		t.Fatalf("CompleteSetup = %v, want ErrSetupTargetIncomplete", err)
+	}
+	if persisted {
+		t.Fatal("incomplete target persisted settings")
+	}
+}
+
 func TestPersistedRestoreCannotOverwriteAnExplicitBinding(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host current\n"})
 	restoredConfig := installation.config

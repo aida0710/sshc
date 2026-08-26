@@ -82,6 +82,8 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     syncStatus: vi.fn().mockResolvedValue({ configured: false, endpoint: "", bucket: "", synced: false }),
     syncPushDraft: vi.fn().mockResolvedValue({ message: "Record current workspace", added: 0, modified: 0, removed: 0 }),
     configureSync: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: false }),
+    checkSyncSetup: vi.fn(),
+    completeSyncSetup: vi.fn(),
     pushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
     forcePushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
     syncBucketStatus: vi.fn().mockResolvedValue({ checkedAt: "2026-08-25T00:00:00Z", localIsLive: false, historyTruncated: false, history: [] }),

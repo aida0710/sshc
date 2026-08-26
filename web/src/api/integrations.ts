@@ -35,6 +35,10 @@ export type CredentialKind = "password" | "key_passphrase";
 export type SyncStatus = components["schemas"]["SyncStatus"];
 export type SyncKeyResponse = components["schemas"]["SyncKeyResponse"];
 export type SyncSettingsRequest = components["schemas"]["SyncSettingsRequest"];
+export type SyncSetupCheckRequest = components["schemas"]["SyncSetupCheckRequest"];
+export type SyncSetupCheckResponse = components["schemas"]["SyncSetupCheckResponse"];
+export type SyncSetupRequest = components["schemas"]["SyncSetupRequest"];
+export type SyncSetupResponse = components["schemas"]["SyncSetupResponse"];
 export type SyncDirection = components["schemas"]["SyncDirection"];
 export type SnapshotSummary = components["schemas"]["SnapshotSummary"];
 export type SyncOperation = components["schemas"]["SyncOperation"];
@@ -99,6 +103,8 @@ export type IntegrationsApi = {
   storePassword(alias: string, password: string): Promise<PasswordVaultStatus>;
   forgetPassword(alias: string): Promise<PasswordVaultStatus>;
   syncStatus(): Promise<SyncStatus>;
+  checkSyncSetup(settings: SyncSetupCheckRequest): Promise<SyncSetupCheckResponse>;
+  completeSyncSetup(settings: SyncSetupRequest): Promise<SyncSetupResponse>;
   configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
   syncPushDraft(): Promise<SyncPushDraft>;
   pushSnapshot(message: string): Promise<PushResponse>;
@@ -416,6 +422,25 @@ function validateSyncStatus(value: unknown): SyncStatus {
   if (record.fileCount !== undefined) asNonnegativeInteger(record.fileCount);
   if (record.lastOperation !== undefined) validateSyncOperation(record.lastOperation);
   return record as unknown as SyncStatus;
+}
+
+function validateSyncSetupCheck(value: unknown): SyncSetupCheckResponse {
+  const record = asRecord(value);
+  const state = asString(record.state);
+  if (state !== "empty" && state !== "existing" && state !== "incomplete") {
+    throw new Error(`unexpected sync setup state: ${state}`);
+  }
+  asBoolean(record.historyPresent);
+  asString(record.checkedAt);
+  if (record.etag !== undefined) asString(record.etag);
+  return record as unknown as SyncSetupCheckResponse;
+}
+
+function validateSyncSetup(value: unknown): SyncSetupResponse {
+  const record = asRecord(value);
+  validateSyncStatus(record.status);
+  if (record.generatedKey !== undefined) asString(record.generatedKey);
+  return record as unknown as SyncSetupResponse;
 }
 
 function validateSnapshotSummary(value: unknown): SnapshotSummary {
@@ -757,6 +782,24 @@ export const integrationsApi: IntegrationsApi = {
   },
   async syncStatus() {
     return validateSyncStatus(await apiClient.read("/api/v1/sync"));
+  },
+  async checkSyncSetup(settings) {
+    return validateSyncSetupCheck(
+      await apiClient.mutate<unknown>("/api/v1/sync/setup/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      }),
+    );
+  },
+  async completeSyncSetup(settings) {
+    return validateSyncSetup(
+      await apiClient.mutate<unknown>("/api/v1/sync/setup", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      }),
+    );
   },
   async configureSync(settings) {
     return validateSyncStatus(

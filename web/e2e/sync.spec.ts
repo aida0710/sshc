@@ -1,5 +1,64 @@
 import { expect, openApplication, openSection, test } from "./support/environment";
 
+test("checks an existing destination and verifies its shared key before saving", async ({ page, installation }) => {
+  let completed: Record<string, unknown> | undefined;
+  const unconfigured = {
+    configured: false, keyConfigured: false, locked: false,
+    auto: { enabled: false, phase: "idle" }, endpoint: "", bucket: "",
+    path: "", region: "", synced: false, direction: "both",
+  };
+  await page.route("**/api/v1/sync**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/v1/sync" && request.method() === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(unconfigured) });
+      return;
+    }
+    if (path === "/api/v1/sync/setup/check" && request.method() === "POST") {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ state: "existing", historyPresent: true, checkedAt: "2026-08-26T12:00:00Z", etag: '"head-1"' }),
+      });
+      return;
+    }
+    if (path === "/api/v1/sync/setup" && request.method() === "PUT") {
+      completed = request.postDataJSON();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ status: { ...unconfigured, configured: true, keyConfigured: true, endpoint: "https://r2.example.test", bucket: "sshc", path: "team" } }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await openApplication(page, installation);
+  await openSection(page, "Sync");
+  await page.getByLabel("Endpoint").fill("https://r2.example.test");
+  await page.getByLabel("Bucket name").fill("sshc");
+  await page.getByLabel("Path in the bucket").fill("team");
+  await page.getByLabel("Access key ID").fill("AKID");
+  await page.getByLabel("Secret access key").fill("secret");
+  await page.getByRole("button", { name: "Check connection" }).click();
+  await expect(page.getByText("Existing sync data was found.")).toBeVisible();
+  await expect(page.getByText(/actual snapshot will be decrypted/i)).toBeVisible();
+  await page.getByRole("textbox", { name: "Key", exact: true }).fill("AB12-CD34-EF56-GH78-JK90-MN12");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.setViewportSize({ width: 360, height: 800 });
+    const navigation = page.getByRole("button", { name: "Navigation" });
+    if (await navigation.getAttribute("aria-expanded") === "true") await navigation.click();
+    await page.waitForTimeout(500);
+    await page.getByText("Existing sync data was found.").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.15.0-sync-setup-existing-mobile.png` });
+  }
+  await page.getByRole("button", { name: "Verify and save" }).click();
+  await expect.poll(() => completed).toMatchObject({
+    expectedState: "existing", expectedETag: '"head-1"', historyPresent: true,
+    direction: "both", key: "AB12-CD34-EF56-GH78-JK90-MN12",
+  });
+  await expect(page.getByText("Manage sync settings")).toBeVisible();
+});
+
 test("shows push, preview, apply, persisted success, and a later failure as distinct results", async ({
   page,
   installation,
@@ -180,6 +239,9 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
 
   await openApplication(page, installation);
   await openSection(page, "Sync");
+  await expect(page.getByRole("button", { name: "Sync now" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Receive from remote" })).toBeVisible();
+  await page.getByText("Manage sync settings").click();
   await expect(page.getByText("Dated history · 1")).toBeVisible();
   await expect(page.getByText("The remote generation differs")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Encrypted revision history" })).toBeVisible();
@@ -189,15 +251,15 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.15.0-sync-desktop.png`, fullPage: true });
     await page.getByRole("heading", { name: "Bucket status" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-history-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.15.0-sync-history-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 360, height: 800 });
     await page.getByRole("heading", { name: "Remote sync" }).scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.15.0-sync-mobile.png`, fullPage: true });
     await page.getByRole("heading", { name: "Encrypted revision history" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-history-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.15.0-sync-history-mobile.png`, fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
   }
   await page.getByRole("button", { name: "Push this workspace" }).click();
@@ -208,7 +270,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await expect(page.getByRole("button", { name: "Push this workspace" })).toBeDisabled();
   if (visualDirectory !== undefined) {
     await page.getByLabel("Commit message").scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.13.0-sync-no-changes-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.15.0-sync-no-changes-desktop.png`, fullPage: true });
   }
 
   await page.getByRole("button", { name: "Check for changes" }).click();
@@ -221,6 +283,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   localChanges = true;
   await page.reload();
   await expect(page.getByRole("heading", { name: "Previous success" })).toBeVisible();
+  await page.getByText("Manage sync settings").click();
   refusePush = true;
   await page.getByRole("button", { name: "Push this workspace" }).click();
   await expect(page.getByRole("alert")).toContainText("update was cancelled");
