@@ -65,6 +65,13 @@ const historyStatus = {
 function buildApi(status: SyncStatus, pull: PullResponse, overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
     syncStatus: vi.fn().mockResolvedValue(status),
+    checkSyncSetup: vi.fn().mockResolvedValue({
+      state: "empty", historyPresent: false, checkedAt: "2026-08-26T00:00:00Z",
+    }),
+    completeSyncSetup: vi.fn().mockResolvedValue({
+      status: { ...status, configured: true, keyConfigured: true },
+      generatedKey: "ABCD-EFGH-JKMP-QRST-VWXY-Z012",
+    }),
     syncPushDraft: vi.fn().mockResolvedValue({ message: "Update config", added: 0, modified: 1, removed: 0 }),
     configureSync: vi.fn().mockResolvedValue({ ...status, configured: true }),
     pushSnapshot: vi.fn().mockResolvedValue({
@@ -245,10 +252,11 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
-    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check connection" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Verify and save" }));
 
     await waitFor(() =>
-      expect(api.configureSync).toHaveBeenCalledWith({
+      expect(api.completeSyncSetup).toHaveBeenCalledWith(expect.objectContaining({
         endpoint: "https://acc.r2.cloudflarestorage.com",
         bucket: "sshc",
         path: "",
@@ -256,7 +264,8 @@ describe("SyncPanel", () => {
         accessKeyId: "AKID",
         secretAccessKey: "the-secret",
         direction: "both",
-      }),
+        expectedState: "empty",
+      })),
     );
     await waitFor(() => expect(screen.queryByLabelText("Secret access key")).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Edit bucket settings" })).toBeInTheDocument();
@@ -283,20 +292,21 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Region"), "eu-west-2");
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
-    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check connection" }));
 
     await waitFor(() =>
-      expect(api.configureSync).toHaveBeenCalledWith(
+      expect(api.checkSyncSetup).toHaveBeenCalledWith(
         expect.objectContaining({ region: "eu-west-2" }),
       ),
     );
   });
 
-  it("offers no push or pull until a bucket and a passphrase are given", async () => {
+  it("does not show transfer controls before setup is complete", async () => {
     render(<SyncPanel api={buildApi(unconfigured, nothingToDo)} />);
 
-    expect(await screen.findByRole("button", { name: "Push this workspace" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Check for changes" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Check connection" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Push this workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Check for changes" })).not.toBeInTheDocument();
   });
 
   it("previews before it applies", async () => {
@@ -419,10 +429,11 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
     await userEvent.selectOptions(screen.getByLabelText("Direction"), "pull");
-    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check connection" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Verify and save" }));
 
     await waitFor(() =>
-      expect(api.configureSync).toHaveBeenCalledWith(
+      expect(api.completeSyncSetup).toHaveBeenCalledWith(
         expect.objectContaining({ direction: "pull" }),
       ),
     );
@@ -557,7 +568,7 @@ describe("SyncPanel", () => {
 
   it("says nothing was saved when the bucket did not answer", async () => {
     const api = buildApi(unconfigured, nothingToDo, {
-      configureSync: vi.fn().mockRejectedValue(new ApiError("bucket_refused", 502, null)),
+      checkSyncSetup: vi.fn().mockRejectedValue(new ApiError("bucket_refused", 502, null)),
     });
     render(<SyncPanel api={api} />);
 
@@ -565,14 +576,14 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
-    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check connection" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Nothing was saved/i);
   });
 
   it("explains an endpoint that carries a path instead of just refusing it", async () => {
     const api = buildApi(unconfigured, nothingToDo, {
-      configureSync: vi.fn().mockRejectedValue(new ApiError("endpoint_must_have_no_path", 400, null)),
+      checkSyncSetup: vi.fn().mockRejectedValue(new ApiError("endpoint_must_have_no_path", 400, null)),
     });
     render(<SyncPanel api={api} />);
 
@@ -580,7 +591,7 @@ describe("SyncPanel", () => {
     await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
     await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
     await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
-    await userEvent.click(await screen.findByRole("button", { name: "Use this bucket" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check connection" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/no bucket name and no path/i);
   });
@@ -669,11 +680,15 @@ describe("SyncPanel", () => {
     expect(await screen.findByRole("checkbox", { name: /Keep this machine in sync/i })).toBeChecked();
   });
 
-  it("offers no manual cycle while the loop is off", async () => {
-    const api = buildApi(configured, nothingToDo);
+  it("offers a manual cycle while the loop is off", async () => {
+    const syncNow = vi.fn().mockResolvedValue(configured);
+    const api = buildApi(configured, nothingToDo, { syncNow });
     render(<SyncPanel api={api} />);
 
-    expect(await screen.findByRole("button", { name: "Sync now" })).toBeDisabled();
+    const button = await screen.findByRole("button", { name: "Sync now" });
+    expect(button).toBeEnabled();
+    await userEvent.click(button);
+    await waitFor(() => expect(syncNow).toHaveBeenCalledOnce());
   });
 
   it("offers both sides of a conflict and previews the choice before applying it", async () => {

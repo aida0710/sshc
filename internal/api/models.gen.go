@@ -128,6 +128,27 @@ func (e SyncOperationKind) Valid() bool {
 	}
 }
 
+// Defines values for SyncSetupTargetState.
+const (
+	Empty      SyncSetupTargetState = "empty"
+	Existing   SyncSetupTargetState = "existing"
+	Incomplete SyncSetupTargetState = "incomplete"
+)
+
+// Valid indicates whether the value is a known member of the SyncSetupTargetState enum.
+func (e SyncSetupTargetState) Valid() bool {
+	switch e {
+	case Empty:
+		return true
+	case Existing:
+		return true
+	case Incomplete:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TerminalSessionKind.
 const (
 	TerminalSessionKindShell TerminalSessionKind = "shell"
@@ -1078,6 +1099,48 @@ type SyncSettingsRequest struct {
 	Region          *string       `json:"region,omitempty"`
 	SecretAccessKey string        `json:"secretAccessKey"`
 }
+
+// SyncSetupCheckRequest defines model for SyncSetupCheckRequest.
+type SyncSetupCheckRequest struct {
+	AccessKeyId     string  `json:"accessKeyId"`
+	Bucket          string  `json:"bucket"`
+	Endpoint        string  `json:"endpoint"`
+	Path            *string `json:"path,omitempty"`
+	Region          *string `json:"region,omitempty"`
+	SecretAccessKey string  `json:"secretAccessKey"`
+}
+
+// SyncSetupCheckResponse defines model for SyncSetupCheckResponse.
+type SyncSetupCheckResponse struct {
+	CheckedAt      string               `json:"checkedAt"`
+	Etag           *string              `json:"etag,omitempty"`
+	HistoryPresent bool                 `json:"historyPresent"`
+	State          SyncSetupTargetState `json:"state"`
+}
+
+// SyncSetupRequest defines model for SyncSetupRequest.
+type SyncSetupRequest struct {
+	AccessKeyId     string               `json:"accessKeyId"`
+	Bucket          string               `json:"bucket"`
+	Direction       SyncDirection        `json:"direction"`
+	Endpoint        string               `json:"endpoint"`
+	ExpectedETag    *string              `json:"expectedETag,omitempty"`
+	ExpectedState   SyncSetupTargetState `json:"expectedState"`
+	HistoryPresent  bool                 `json:"historyPresent"`
+	Key             string               `json:"key"`
+	Path            *string              `json:"path,omitempty"`
+	Region          *string              `json:"region,omitempty"`
+	SecretAccessKey string               `json:"secretAccessKey"`
+}
+
+// SyncSetupResponse defines model for SyncSetupResponse.
+type SyncSetupResponse struct {
+	GeneratedKey *string    `json:"generatedKey,omitempty"`
+	Status       SyncStatus `json:"status"`
+}
+
+// SyncSetupTargetState defines model for SyncSetupTargetState.
+type SyncSetupTargetState string
 
 // SyncStatus defines model for SyncStatus.
 type SyncStatus struct {

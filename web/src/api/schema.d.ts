@@ -324,6 +324,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/setup/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checkSyncSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["completeSyncSetup"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/settings": {
         parameters: {
             query?: never;
@@ -2003,6 +2035,39 @@ export interface components {
             secretAccessKey: string;
             direction: components["schemas"]["SyncDirection"];
         };
+        /** @enum {string} */
+        SyncSetupTargetState: "empty" | "existing" | "incomplete";
+        SyncSetupCheckRequest: {
+            endpoint: string;
+            bucket: string;
+            path?: string;
+            region?: string;
+            accessKeyId: string;
+            secretAccessKey: string;
+        };
+        SyncSetupCheckResponse: {
+            state: components["schemas"]["SyncSetupTargetState"];
+            historyPresent: boolean;
+            checkedAt: string;
+            etag?: string;
+        };
+        SyncSetupRequest: {
+            endpoint: string;
+            bucket: string;
+            path?: string;
+            region?: string;
+            accessKeyId: string;
+            secretAccessKey: string;
+            direction: components["schemas"]["SyncDirection"];
+            expectedState: components["schemas"]["SyncSetupTargetState"];
+            expectedETag?: string;
+            historyPresent: boolean;
+            key: string;
+        };
+        SyncSetupResponse: {
+            status: components["schemas"]["SyncStatus"];
+            generatedKey?: string;
+        };
         AutoSync: {
             enabled: boolean;
             /** @enum {string} */
@@ -3442,6 +3507,63 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+        };
+    };
+    checkSyncSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncSetupCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact bucket and path inspected without persisting credentials */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSetupCheckResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    completeSyncSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncSetupRequest"];
+            };
+        };
+        responses: {
+            /** @description Verified settings and shared key saved atomically */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSetupResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     configureSync: {

@@ -52,6 +52,23 @@ func TestAutoDoesNothingWhenItIsNotOn(t *testing.T) {
 	}
 }
 
+func TestManualNowRunsWhenAutomaticSyncIsOff(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	auto := autoFor(t, machine, false)
+
+	view := auto.Now(context.Background())
+	if view.Phase != remotesync.AutoIdle {
+		t.Fatalf("view = %+v, want idle", view)
+	}
+	if len(bucket.object(remotesync.ObjectName)) == 0 {
+		t.Fatal("manual sync did not write the live object while automatic sync was off")
+	}
+	if auto.View().Enabled {
+		t.Fatal("manual sync changed the automatic sync preference")
+	}
+}
+
 // 押すユーザーが居なくても、変わったものは出ていく。
 func TestAutoPushesWhatChangedHere(t *testing.T) {
 	bucket := &fakeBucket{}
