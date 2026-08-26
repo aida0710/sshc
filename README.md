@@ -15,8 +15,8 @@ brew install aida0710/tap/sshc
 または、取得するスクリプトとバイナリを同じリリースへ固定して実行します。
 
 ```sh
-SSHC_VERSION=v0.13.5 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.13.5/install.sh | sh'
+SSHC_VERSION=v0.13.6 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.13.6/install.sh | sh'
 ```
 
 `main` 上の可変なスクリプトを直接実行せず、導入したい[リリース](https://github.com/aida0710/sshc/releases)のタグをURLと`SSHC_VERSION`の両方へ指定してください。
