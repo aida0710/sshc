@@ -4,6 +4,14 @@ import { clearSessionCSRF, storeSessionCSRF } from "../session/bootstrap";
 export type HealthResponse = components["schemas"]["HealthResponse"];
 export type Problem = components["schemas"]["Problem"];
 
+export type RequestFailureDiagnostic = Readonly<{
+  code: string;
+  status: number;
+  method: string;
+  path: string;
+  detail?: string;
+}>;
+
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -36,6 +44,8 @@ async function readProblem(response: Response): Promise<Problem | null> {
 
 let onLocked: (() => void) | null = null;
 let onSessionEnded: (() => void) | null = null;
+let onRequestFailed: ((diagnostic: RequestFailureDiagnostic) => void) | null = null;
+const reportedResponses = new WeakSet<Response>();
 
 export function whenLocked(handler: (() => void) | null) {
   onLocked = handler;
@@ -45,10 +55,56 @@ export function whenSessionEnded(handler: (() => void) | null) {
   onSessionEnded = handler;
 }
 
-async function failure(response: Response): Promise<ApiError> {
+export function whenRequestFailed(handler: ((diagnostic: RequestFailureDiagnostic) => void) | null) {
+  onRequestFailed = handler;
+}
+
+function diagnosticPath(path: string): string {
+  try {
+    return new URL(path, window.location.origin).pathname;
+  } catch {
+    return "/api";
+  }
+}
+
+function notifyFailure(diagnostic: RequestFailureDiagnostic) {
+  if (["vault_locked", "session_required", "invalid_session", "invalid_csrf"].includes(diagnostic.code)) return;
+  // 4xxは各操作画面が入力不備や競合を具体的に説明する。共通通知まで重ねると
+  // alertが二重になり、画面readerにも同じ失敗を二度伝えてしまう。
+  if (diagnostic.status >= 400 && diagnostic.status < 500) return;
+  // 更新確認は任意のbackground taskであり、製品操作の失敗ではない。
+  if (diagnostic.code === "update_check_failed") return;
+  onRequestFailed?.(diagnostic);
+}
+
+function notifyNetworkFailure(method: string, path: string) {
+  notifyFailure({ code: "network_request_failed", status: 0, method, path: diagnosticPath(path) });
+}
+
+function notifyResponseFailure(
+  response: Response,
+  problem: Problem | null,
+  method: string,
+  path: string,
+) {
+  if (reportedResponses.has(response)) return;
+  reportedResponses.add(response);
+  const code = problem?.code ?? "request_failed";
+  const detail = problem?.detail;
+  notifyFailure({
+    code,
+    status: response.status,
+    method,
+    path: diagnosticPath(path),
+    ...(typeof detail === "string" && detail !== "" ? { detail } : {}),
+  });
+}
+
+async function failure(response: Response, method: string, path: string): Promise<ApiError> {
   const problem = await readProblem(response);
   const code = problem?.code ?? "request_failed";
   if (code === "vault_locked") onLocked?.();
+  notifyResponseFailure(response, problem, method, path);
   return new ApiError(code, response.status, problem);
 }
 
@@ -162,14 +218,26 @@ export const apiClient = {
     clearSessionCSRF();
   },
   async health(): Promise<HealthResponse> {
-    const response = await fetch("/api/v1/health", { credentials: "same-origin" });
-    if (!response.ok) throw new Error("health_failed");
+    let response: Response;
+    try {
+      response = await fetch("/api/v1/health", { credentials: "same-origin" });
+    } catch (error) {
+      notifyNetworkFailure("GET", "/api/v1/health");
+      throw error;
+    }
+    if (!response.ok) throw await failure(response, "GET", "/api/v1/health");
     return validateHealth(await response.json());
   },
   async read(path: string): Promise<unknown> {
     if (!csrfToken) throw new Error("csrf_unavailable");
-    const response = await requestWithSession(path, {}, csrfToken);
-    if (!response.ok) throw await failure(response);
+    let response: Response;
+    try {
+      response = await requestWithSession(path, {}, csrfToken);
+    } catch (error) {
+      notifyNetworkFailure("GET", path);
+      throw error;
+    }
+    if (!response.ok) throw await failure(response, "GET", path);
     return response.json() as Promise<unknown>;
   },
   async send(path: string, init: RequestInit): Promise<Response> {
@@ -179,11 +247,23 @@ export const apiClient = {
     }
     if (!csrfToken) throw new Error("csrf_unavailable");
 
-    return requestWithSession(path, init, csrfToken);
+    const method = init.method ?? "POST";
+    let response: Response;
+    try {
+      response = await requestWithSession(path, init, csrfToken);
+    } catch (error) {
+      notifyNetworkFailure(method, path);
+      throw error;
+    }
+    if (!response.ok) {
+      notifyResponseFailure(response, await readProblem(response.clone()), method, path);
+    }
+    return response;
   },
   async mutate<T>(path: string, init: RequestInit): Promise<T> {
+    const method = init.method ?? "POST";
     const response = await this.send(path, init);
-    if (!response.ok) throw await failure(response);
+    if (!response.ok) throw await failure(response, method, path);
     return response.json() as Promise<T>;
   },
 };

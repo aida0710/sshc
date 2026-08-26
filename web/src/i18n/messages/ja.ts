@@ -472,6 +472,12 @@ export const ja = {
   "copy.publicKey": "公開鍵",
   "copy.keyLine": "鍵の行",
   "copy.remoteCommand": "リモートコマンド",
+  "copy.diagnosticReport": "診断レポート",
+
+  "diagnostic.requestFailed": "操作を完了できませんでした",
+  "diagnostic.requestFailedHint": "sshc が {code} を報告しました。問い合わせ時は安全な診断情報を開いてください。",
+  "diagnostic.showDetails": "診断情報を表示",
+  "diagnostic.dismiss": "エラーを閉じる",
 
   "history.requestRejected": "要求が拒否されました（{code}）。",
   "history.pageTitle": "履歴",

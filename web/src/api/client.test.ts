@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiClient, whenSessionEnded } from "./client";
+import { apiClient, whenRequestFailed, whenSessionEnded } from "./client";
 
 afterEach(() => {
   apiClient.clear();
   whenSessionEnded(null);
+  whenRequestFailed(null);
   vi.unstubAllGlobals();
 });
 
@@ -170,5 +171,94 @@ describe("apiClient", () => {
     await expect(apiClient.read("/api/v1/example")).rejects.toMatchObject({ code: "invalid_csrf" });
 
     expect(ended).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports the final API failure without exposing query parameters", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: "sftp_failed", message: "request rejected", detail: "connection closed" }),
+      { status: 502, headers: { "Content-Type": "application/problem+json" } },
+    )));
+    apiClient.setCSRF("c".repeat(43));
+
+    await expect(apiClient.read("/api/v1/sftp/files?alias=private-host&path=%2Fsecret"))
+      .rejects.toMatchObject({ code: "sftp_failed" });
+
+    expect(diagnostic).toHaveBeenCalledWith({
+      code: "sftp_failed",
+      status: 502,
+      method: "GET",
+      path: "/api/v1/sftp/files",
+      detail: "connection closed",
+    });
+  });
+
+  it("reports network failure using fixed safe diagnostics", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed for secret URL")));
+    apiClient.setCSRF("c".repeat(43));
+
+    await expect(apiClient.mutate("/api/v1/sync/push?access_key=secret", {
+      method: "POST",
+      body: JSON.stringify({ secret: "not reported" }),
+    })).rejects.toThrow("fetch failed");
+
+    expect(diagnostic).toHaveBeenCalledWith({
+      code: "network_request_failed",
+      status: 0,
+      method: "POST",
+      path: "/api/v1/sync/push",
+    });
+  });
+
+  it("reports failed raw responses used by streaming APIs", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: "download_failed", message: "request rejected" }),
+      { status: 502, headers: { "Content-Type": "application/problem+json" } },
+    )));
+    apiClient.setCSRF("c".repeat(43));
+
+    const response = await apiClient.send("/api/v1/sftp/download?path=%2Fprivate", { method: "GET" });
+
+    expect(response.status).toBe(502);
+    expect(diagnostic).toHaveBeenCalledWith({
+      code: "download_failed",
+      status: 502,
+      method: "GET",
+      path: "/api/v1/sftp/download",
+    });
+  });
+
+  it("does not report session lifecycle responses as operation failures", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: "invalid_session", message: "request rejected" }),
+      { status: 401, headers: { "Content-Type": "application/problem+json" } },
+    )));
+    apiClient.setCSRF("c".repeat(43));
+
+    await expect(apiClient.read("/api/v1/example")).rejects.toMatchObject({ code: "invalid_session" });
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [409, "sync_remote_moved"],
+    [502, "update_check_failed"],
+  ])("leaves expected or background failures to their local UI (%i %s)", async (status, code) => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code, message: "request rejected" }),
+      { status, headers: { "Content-Type": "application/problem+json" } },
+    )));
+    apiClient.setCSRF("c".repeat(43));
+
+    await expect(apiClient.read("/api/v1/example")).rejects.toMatchObject({ code });
+    expect(diagnostic).not.toHaveBeenCalled();
   });
 });

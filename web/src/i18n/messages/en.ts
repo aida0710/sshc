@@ -470,6 +470,12 @@ export const en = {
   "copy.publicKey": "public key",
   "copy.keyLine": "key line",
   "copy.remoteCommand": "remote command",
+  "copy.diagnosticReport": "diagnostic report",
+
+  "diagnostic.requestFailed": "The operation could not be completed",
+  "diagnostic.requestFailedHint": "sshc reported {code}. Open the safe diagnostic details when reporting the problem.",
+  "diagnostic.showDetails": "Show diagnostic details",
+  "diagnostic.dismiss": "Dismiss error",
 
   "history.requestRejected": "The request was rejected ({code}).",
   "history.pageTitle": "History",
