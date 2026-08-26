@@ -263,6 +263,8 @@ func TestAutoRetriesATransientFailureAfterBoundedBackoff(t *testing.T) {
 	}
 	consumer := newInstallation(t, bucket, map[string]string{})
 	auto := remotesync.NewAuto(consumer.service, 10*time.Millisecond, func() string { return "2026-08-18T00:00:00Z" })
+	current := time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
+	auto.Clock = func() time.Time { return current }
 	auto.Enabled = func() bool { return true }
 	auto.Key = func() (string, bool) { return syncPassphrase, true }
 	bucket.refuseObjectGets(3)
@@ -276,7 +278,7 @@ func TestAutoRetriesATransientFailureAfterBoundedBackoff(t *testing.T) {
 	if got := bucket.downloads(); got != downloads {
 		t.Fatalf("transient failure retried before backoff: %d then %d", downloads, got)
 	}
-	time.Sleep(20 * time.Millisecond)
+	current = current.Add(20 * time.Millisecond)
 	if third := once(t, auto); third.Phase != remotesync.AutoIdle {
 		t.Fatalf("transient failure did not expire: %+v", third)
 	}

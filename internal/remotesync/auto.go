@@ -46,6 +46,9 @@ type Auto struct {
 	Enabled func() bool
 	// Unattended は、自動処理による参照を vault の利用時刻に数えないようにする。
 	Unattended func(run func())
+	// Clock はbackoff判定に使う単調時計である。未指定ならtime.Nowを使う。
+	// testは実時間のsleepに依存せず、期限の前後を明示的に進められる。
+	Clock func() time.Time
 
 	interval time.Duration
 	now      func() string
@@ -72,7 +75,6 @@ type Auto struct {
 	failedDeterministic bool
 	failedUntil         time.Time
 	failedAttempts      int
-	clock               func() time.Time
 }
 
 // NewAuto は、巡回を組み立てる。走り出すのは Run が呼ばれてからである。
@@ -84,7 +86,7 @@ func NewAuto(service *Service, interval time.Duration, now func() string) *Auto 
 		service:  service,
 		interval: interval,
 		now:      now,
-		clock:    time.Now,
+		Clock:    time.Now,
 		view:     AutoView{Phase: AutoIdle},
 	}
 }
@@ -327,6 +329,13 @@ func (a *Auto) failed(generation remoteGeneration, key string) (string, bool) {
 		return a.failedDetail, true
 	}
 	return "", false
+}
+
+func (a *Auto) clock() time.Time {
+	if a.Clock == nil {
+		return time.Now()
+	}
+	return a.Clock()
 }
 
 func (a *Auto) clearFailed() {
