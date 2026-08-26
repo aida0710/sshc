@@ -70,8 +70,30 @@ func TestTheInstallScriptRefusesAnythingItCannotVerify(t *testing.T) {
 		}
 	}
 	// checksum の検証前にバイナリを配置してはならない。
-	if strings.Index(script, "published checksum") > strings.Index(script, `mv "$work/sshc" "$target"`) {
+	install := strings.Index(script, `mv "$staged" "$target"`)
+	if install < 0 || strings.Index(script, "published checksum") > install {
 		t.Error("install.sh installs before it verifies the checksum")
+	}
+}
+
+func TestTheInstallScriptPublishesAtomicallyAndWritesABoundReceipt(t *testing.T) {
+	script := readInstallScript(t)
+	for _, required := range []string{
+		`mktemp "$dir/.sshc.install.XXXXXX"`,
+		`mv "$staged" "$target"`,
+		`.sshc-install-receipt.json`,
+		`"manager":"install.sh"`,
+		`"sha256":"%s"`,
+		`"$incoming" "$actual"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("atomic install/receipt contract lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{`mv "$work/sshc" "$target"`, `"$target.$$"`} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("install.sh still uses unsafe publication %q", forbidden)
+		}
 	}
 }
 

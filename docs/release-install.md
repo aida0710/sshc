@@ -40,6 +40,20 @@ gh attestation verify <downloaded-file> --repo aida0710/sshc
 
 インストール先は `SSHC_INSTALL_DIR`、バージョンは `SSHC_VERSION` で変更できます。
 
+新しい`install.sh`は配置先の隣に、導入元、バージョン、配置したバイナリのSHA-256を含むreceiptを原子的に保存します。`sshc update`はこのdigestが現在の実行ファイルと一致するときだけ、公開済みtagに固定した`install.sh`へ更新を委ねます。receiptのない旧installer、手動コピー、`make install`、変更済みバイナリを推測で置き換えません。旧installerから移行する場合は、上記のtag固定手順を一度手動で実行してください。
+
+## 自動判定による更新
+
+```sh
+sshc update
+```
+
+- Homebrew版は、`brew --prefix --installed aida0710/tap/sshc`の`bin/sshc`と実行中ファイルが同一であることを確認し、`brew upgrade --formula --no-ask aida0710/tap/sshc`を実行します。
+- `install.sh`版はdigest付きreceiptを確認し、GitHubの最新安定版tagに固定したinstallerを実行します。installerは公開された`checksums.txt`でバイナリを検証し、同一ディレクトリ内のrenameで置換します。
+- Windows、手動配置、ソースビルド、判定不能な導入は変更せず、元の導入方法で更新するよう表示します。
+
+更新時にengineが動作していた場合、engineは旧バイナリのままです。更新後に停止し、新しい`sshc engine`を起動してください。
+
 ## Windows
 
 [GitHub Releases](https://github.com/aida0710/sshc/releases) から、x64 では `sshc-windows-amd64.exe`、Arm64 では `sshc-windows-arm64.exe` をダウンロードしてください。ファイル名を `sshc.exe` に変更し、`PATH` に含まれるディレクトリへ配置します。

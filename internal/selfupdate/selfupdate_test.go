@@ -24,13 +24,37 @@ func TestNewerComparesNumbersAndNotText(t *testing.T) {
 		{"1.0.0", "1.0.0", false},
 		{"v1.2.3", "v1.2.4", true},
 		{"1.2.3", "1.2.3", false},
+		{"v1.2.3-beta.2", "v1.2.3-beta.10", true},
+		{"v1.2.3", "v1.2.3-beta.10", false},
 		// リリースでないビルドには、リリースがあることは伝え、どれだけ遅れているかは
 		// 決して伝えない。
 		{"dev", "0.1.0", true},
-		{"0.1.0", "dev", true},
+		// ネットワークから来た不正なtagを更新として扱わない。
+		{"0.1.0", "dev", false},
+		{"0.1.0", "definitely-not-a-release", false},
 	} {
 		if got := selfupdate.Newer(test.current, test.candidate); got != test.want {
 			t.Errorf("Newer(%q, %q) = %v, want %v", test.current, test.candidate, got, test.want)
+		}
+	}
+}
+
+func TestStableTagOnlyAcceptsCanonicalStableReleases(t *testing.T) {
+	for _, test := range []struct {
+		value string
+		want  string
+		ok    bool
+	}{
+		{"v1.2.3", "v1.2.3", true},
+		{"1.2.3", "v1.2.3", true},
+		{"v1.2.3-rc.1", "", false},
+		{"v1.2.3+build", "", false},
+		{"latest", "", false},
+		{"v01.2.3", "", false},
+	} {
+		got, ok := selfupdate.StableTag(test.value)
+		if got != test.want || ok != test.ok {
+			t.Errorf("StableTag(%q) = %q, %v; want %q, %v", test.value, got, ok, test.want, test.ok)
 		}
 	}
 }
