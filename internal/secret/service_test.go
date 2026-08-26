@@ -1667,7 +1667,9 @@ func TestPasswordMutationCanCommitAConfigBackupWithoutDeadlocking(t *testing.T) 
 		if err != nil {
 			t.Fatalf("WithPasswordMutation = %v", err)
 		}
-	case <-time.After(3 * time.Second):
+	// Windows runnerではvaultの鍵導出とsealが数秒掛かる。ここで検査したいのは
+	// lock循環による停止であり、暗号化の処理時間ではないため十分な上限を置く。
+	case <-time.After(15 * time.Second):
 		t.Fatal("password mutation deadlocked while storage sealed the config backup")
 	}
 }
