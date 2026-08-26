@@ -15,8 +15,8 @@ brew install aida0710/tap/sshc
 または、取得するスクリプトとバイナリを同じリリースへ固定して実行します。
 
 ```sh
-SSHC_VERSION=v0.13.7 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.13.7/install.sh | sh'
+SSHC_VERSION=v0.14.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.14.0/install.sh | sh'
 ```
 
 `main` 上の可変なスクリプトを直接実行せず、導入したい[リリース](https://github.com/aida0710/sshc/releases)のタグをURLと`SSHC_VERSION`の両方へ指定してください。
@@ -73,7 +73,7 @@ sshc update                   # Homebrew／install.sh経由の導入を更新
 - OpenSSH 互換の設定管理: コメント、記述順、空白を保ったまま編集し、外部変更との競合を検出します。
 - ブラウザ内ターミナル: ポート転送、エージェント転送、未知のホスト鍵の確認、切断時の自動再接続と終了後の明示再接続、`ProxyJump`、`ProxyCommand` に対応します。明示再接続は同じpaneとscrollbackを残したまま新しいshellを開きます。接続・再接続・終了を区別して表示し、利用者の確認が必要なホスト鍵や認証の問題は無条件に再試行しません。scrollback検索、live session内のcommand履歴、頻度順command候補、absolute remote path補完も利用できます。
 - SFTP ファイル操作: 保存済み接続を使ったリモート閲覧、ファイル／フォルダの選択と Drag & Drop による再帰アップロード、ファイルdownload、フォルダのZIP download、作成、名前変更、chmod、削除に対応します。upload／download共通のTransfer Managerが同時2件までを実行し、file単位の進捗・速度・残り時間、pause／resume／retry／cancel、folder batchの失敗fileだけの再実行、別画面でのbackground転送と完了／失敗通知を提供します。large uploadは1 MiB chunkとremote part fileで通信断後のoffsetから再開してatomic renameし、file downloadはHTTP Rangeで再開します。UTF-8 の 2 MiB 以下のファイルは、遅延ロードされる Monaco Editor で競合を検出しながら編集できます。
-- Workspace: 複数の SSH 接続を縦横に分割し、区切りをDragして比率を保存できます。単一paneへ集中するFocus Modeと、キー入力を全paneへ送るBroadcast Inputを利用できます。paneの移動handleをDrag & Dropするか2つ順に選ぶと、接続を維持したまま配置を交換できます。pane 構成は端末内に保存でき、Homeの一覧から1回の明示操作で再オープンできます。再オープン時は各接続を新しく開始し、一部が失敗しても成功したpaneを維持します。Workspace内のhostまたはpaneを対象に、直接入力したcommandや保存済みSnippetをpreview後に一括実行できます。
+- Workspace: 接続済みターミナルを表示中のターミナルの上下左右へDrag & Dropすると、接続を増やさずLive Workspaceとして分割し、接続一覧でも1つのグループにまとめます。区切りをDragして比率を変更でき、単一paneへ集中するFocus Modeと、キー入力を全paneへ送るBroadcast Inputを利用できます。スマホでは分割を小さく並べず、Workspace内のターミナルをタブで1画面ずつ切り替えます。pane 構成は端末内に保存でき、Homeの一覧から1回の明示操作で再オープンできます。再オープン時は各接続を新しく開始し、一部が失敗しても成功したpaneを維持します。Workspace内のhostまたはpaneを対象に、直接入力したcommandや保存済みSnippetをpreview後に一括実行できます。
 - Snippets と automation: `{{variable}}` を含むコマンドを保存し、接続先と展開後コマンドを確認してから複数ホストへ実行できます。明示的に選んだ snippet は、SSH shell の準備完了後に startup command として送信できます。
 - 接続ログ: `ssh -v` 相当の情報を、4 段階の詳細度でターミナルに表示します。
 - 表示設定: 6 種類のカラーパレット、同梱の JetBrains Mono、背景画像を全体または接続ごとに設定できます。
