@@ -328,6 +328,11 @@ type Service struct {
 	SealVault func(document []byte) ([]byte, error)
 	// VaultAdopted は、vault の置換後にメモリ上の状態を再読込する通知。
 	VaultAdopted func() error
+	// StableSnapshot runs Collect's complete local read while application-level
+	// secret and workspace mutation barriers are held. A nil hook preserves the
+	// standalone package behaviour used by tests and embedders that have no
+	// shared mutation coordinator.
+	StableSnapshot func(func() error) error
 
 	// operationMu serializes every stateful sync operation, including a complete
 	// automatic receive/send cycle. binding has a separate, short-lived lock so
@@ -365,6 +370,23 @@ func (s *Service) Configure(config Config, credentials objectstore.Credentials, 
 	}
 	s.configure(config, credentials, client)
 	return nil
+}
+
+// ConfigureIfUnconfigured restores a persisted binding without overwriting a
+// binding explicitly configured while the persisted settings were being read.
+// The check and publication share operationMu with Reconfigure.
+func (s *Service) ConfigureIfUnconfigured(config Config, credentials objectstore.Credentials, client *objectstore.Client) (bool, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	if s.configured() {
+		return false, nil
+	}
+	config = normalizeConfig(config)
+	if err := s.validateRecoveryTarget(config); err != nil {
+		return false, err
+	}
+	s.configure(config, credentials, client)
+	return true, nil
 }
 
 // Reconfigure persists credentials and swaps the in-memory binding inside the
@@ -442,6 +464,16 @@ func (s *Service) configuredBindingVersion() (remoteBinding, uint64, error) {
 func (s *Service) Configured() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.configuredLocked()
+}
+
+func (s *Service) configured() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.configuredLocked()
+}
+
+func (s *Service) configuredLocked() bool {
 	_, validDirection := ParseDirection(string(s.binding.config.Direction))
 	return validDirection && s.binding.client != nil && s.binding.config.Bucket != "" && s.binding.creds.AccessKeyID != ""
 }
@@ -507,6 +539,24 @@ func excluded(relative string) bool {
 // にスキップする。Include はまだ存在しないファイルを指しうるし、それは診断であって
 // 同期を拒む理由ではない。
 func (s *Service) Collect() (Manifest, map[string][]byte, error) {
+	var manifest Manifest
+	var contents map[string][]byte
+	collect := func() error {
+		var err error
+		manifest, contents, err = s.collect()
+		return err
+	}
+	if s.StableSnapshot != nil {
+		if err := s.StableSnapshot(collect); err != nil {
+			return Manifest{}, nil, err
+		}
+	} else if err := collect(); err != nil {
+		return Manifest{}, nil, err
+	}
+	return manifest, contents, nil
+}
+
+func (s *Service) collect() (Manifest, map[string][]byte, error) {
 	if s.OpenVault == nil {
 		return Manifest{}, nil, ErrVaultCodec
 	}

@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -35,12 +36,12 @@ func registerKnownHostsRoutes(engine *echo.Echo, handlers KnownHostsHandlers) {
 // ディスク上の何も変えず、スキャン対象のホストの方に紐づく。
 // 留め金として意味を持つのは、その対象だけだからだ。
 func addKnownHostsActions(registry actionRegistry, service *knownhosts.Service) {
-	fileEvidence := func(string) (string, error) { return service.Evidence() }
+	fileEvidence := func(context.Context, string) (string, error) { return service.Evidence() }
 	for _, kind := range []string{session.ActionKnownHostsDelete, session.ActionKnownHostsAdd} {
 		registry[kind] = actionKind{evidence: fileEvidence, fail: knownHostsProblem}
 	}
 	registry[session.ActionKnownHostsScan] = actionKind{
-		evidence: func(target string) (string, error) {
+		evidence: func(_ context.Context, target string) (string, error) {
 			if err := validate.Hostname(target); err != nil {
 				return "", err
 			}

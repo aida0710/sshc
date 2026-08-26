@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -34,7 +35,7 @@ func registerDiagnosticsRoutes(engine *echo.Echo, handlers DiagnosticsHandlers) 
 // リクエストの間に編集が入ると、別のコマンドを暗黙に実行するのではなく、
 // トークンが無効になる。
 func addDiagnosticsActions(registry actionRegistry, service *diagnostics.Service) {
-	evidence := func(target string) (string, error) {
+	evidence := func(_ context.Context, target string) (string, error) {
 		if err := validate.Alias(target); err != nil {
 			return "", err
 		}

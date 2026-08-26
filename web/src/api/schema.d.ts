@@ -2812,6 +2812,18 @@ export interface components {
                 hostName: string;
                 user: string;
                 port: string;
+                route?: {
+                    alias: string;
+                    hostName: string;
+                    user: string;
+                    port: string;
+                    proxyCommand?: string;
+                    strictHostKey: string;
+                    authentication: string[];
+                    identityFiles?: string[];
+                    identitiesOnly?: boolean;
+                    hostKeyAlgorithms?: string[];
+                }[];
             };
             command: string;
         };

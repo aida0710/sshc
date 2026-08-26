@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -53,6 +54,61 @@ func TestWaitJoinsWorkRegisteredWhileClosingOwnedResources(t *testing.T) {
 	server.record(func() error { return nil })
 	if err := <-waited; err != nil {
 		t.Fatalf("Wait = %v", err)
+	}
+}
+
+func TestStoppingGateTracksSFTPGetAndRejectsItAfterStopping(t *testing.T) {
+	server := &Server{}
+	engine := echo.New()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	firstDone := make(chan struct{})
+	var calls atomic.Int32
+	engine.GET("/api/v1/sftp/:alias/download", server.stoppingGate(func(c *echo.Context) error {
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+		return c.NoContent(http.StatusNoContent)
+	}))
+
+	go func() {
+		defer close(firstDone)
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/sftp/edge/download", nil))
+		if response.Code != http.StatusNoContent {
+			t.Errorf("first SFTP GET = %d, want %d", response.Code, http.StatusNoContent)
+		}
+	}()
+	<-entered
+	server.mutex.Lock()
+	inFlight := server.inFlight
+	server.mutex.Unlock()
+	if inFlight != 1 {
+		t.Fatalf("in-flight SFTP GETs = %d, want 1", inFlight)
+	}
+
+	server.BeginStopping()
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/sftp/edge/download", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("SFTP GET after BeginStopping = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("handler calls after stopping = %d, want 1", got)
+	}
+
+	close(release)
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatal("admitted SFTP GET did not finish")
+	}
+	server.mutex.Lock()
+	inFlight = server.inFlight
+	server.mutex.Unlock()
+	if inFlight != 0 {
+		t.Fatalf("in-flight SFTP GETs after completion = %d, want 0", inFlight)
 	}
 }
 

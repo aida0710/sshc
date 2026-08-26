@@ -55,6 +55,10 @@ var noPrompt Prompter = nonInteractivePrompter{}
 type StreamPrompter struct {
 	Out io.Writer
 	In  io.Reader
+	// begin と end は、非同期SSH sessionが通常入力と認証回答を区別するための
+	// 内部hookである。公開Prompterの利用者は設定しなくてよい。
+	begin func()
+	end   func()
 }
 
 func (p StreamPrompter) Line(prompt string) (string, error)   { return p.read(prompt, true) }
@@ -92,6 +96,12 @@ const maxConfirmAttempts = 3
 const maxAnswer = 1024
 
 func (p StreamPrompter) read(prompt string, echo bool) (string, error) {
+	if p.begin != nil {
+		p.begin()
+	}
+	if p.end != nil {
+		defer p.end()
+	}
 	if prompt != "" {
 		if _, err := io.WriteString(p.Out, prompt); err != nil {
 			return "", err
@@ -162,6 +172,11 @@ type InputBuffer struct {
 	ready  *sync.Cond
 	data   []byte
 	closed bool
+	// gatedはSSHのReady前だけ有効にする。認証promptが待っている間の回答だけを
+	// 受け付け、通常の打鍵を新しいshellへ持ち越さない。
+	gated   bool
+	usable  bool
+	prompts int
 }
 
 // MaxBufferedInput は、問いが出ていない間に溜める量の上限である。
@@ -180,6 +195,10 @@ func (b *InputBuffer) Write(p []byte) (int, error) {
 	if b.closed {
 		return 0, io.ErrClosedPipe
 	}
+	if b.gated && !b.usable && b.prompts == 0 {
+		// 端末のwriterは入力を再送できないため、拒否ではなく消費済みとして捨てる。
+		return len(p), nil
+	}
 	if room := MaxBufferedInput - len(b.data); room > 0 {
 		if len(p) < room {
 			room = len(p)
@@ -190,6 +209,44 @@ func (b *InputBuffer) Write(p []byte) (int, error) {
 	// 捨てた分も書けたことにする。書き手は端末の入力であり、溢れたことを
 	// 伝える先が無い。伝えられるのはこの接続が固まることだけである。
 	return len(p), nil
+}
+
+// enablePromptGateは、このbufferを非同期SSH handshake用にする。
+func (b *InputBuffer) enablePromptGate() {
+	b.mutex.Lock()
+	b.gated = true
+	b.mutex.Unlock()
+}
+
+func (b *InputBuffer) beginPrompt() {
+	b.mutex.Lock()
+	b.prompts++
+	b.mutex.Unlock()
+}
+
+func (b *InputBuffer) endPrompt() {
+	b.mutex.Lock()
+	if b.prompts > 0 {
+		b.prompts--
+	}
+	if b.gated && !b.usable && b.prompts == 0 {
+		// Enterとprompt終了の境界で先行入力された次の行をshellへ渡さない。
+		b.data = nil
+	}
+	b.mutex.Unlock()
+}
+
+func (b *InputBuffer) markUsable() {
+	b.mutex.Lock()
+	b.usable = true
+	b.ready.Broadcast()
+	b.mutex.Unlock()
+}
+
+func (b *InputBuffer) awaitingPrompt() bool {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	return !b.closed && !b.usable && b.prompts > 0
 }
 
 // Read は、バイトが来るか閉じられるまで待つ。

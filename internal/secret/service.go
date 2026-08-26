@@ -986,6 +986,19 @@ func (s *Service) WithConnectionSecretsTransaction(
 	return result, nil
 }
 
+// WithStableSnapshot prevents vault/settings writers and master-key rotation
+// from crossing a remote snapshot. The callback may then take the workspace
+// mutation lock; this is the same mutationMu -> workspace order used by secret
+// transactions and rekey.
+func (s *Service) WithStableSnapshot(snapshot func() error) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	if snapshot == nil {
+		return nil
+	}
+	return snapshot()
+}
+
 func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool, error) {
 	if mutation.Kind != PasswordMutationRemove && !validAuthenticationBinding(mutation.Binding) {
 		return false, ErrPasswordBindingRequired
@@ -1123,16 +1136,20 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 		Path: s.path(), Contents: sealed,
 		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(previousVault)},
 	})
-	if _, err := s.transactions.CommitAtomicDiscardBackups(storage.Request{
+	if _, err := s.transactions.CommitAtomicDiscardBackupsAndPublish(storage.Request{
 		Operation: "secret.rekey",
 		Changes:   changes,
+	}, func() {
+		// Publish while the workspace mutation barrier still excludes a normal
+		// commit. Its SealBackup callback can therefore observe only the new key
+		// after the rekeyed backup set is durable.
+		s.mu.Lock()
+		s.vault = candidate
+		s.baseline = slices.Clone(sealed)
+		s.mu.Unlock()
 	}); err != nil {
 		return err
 	}
-	s.mu.Lock()
-	s.vault = candidate
-	s.baseline = slices.Clone(sealed)
-	s.mu.Unlock()
 	return nil
 }
 

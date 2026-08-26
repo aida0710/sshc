@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +18,17 @@ import (
 	"sshc/internal/sshclient"
 	"sshc/internal/terminal"
 )
+
+type closeObservedConn struct {
+	net.Conn
+	once   sync.Once
+	closed chan struct{}
+}
+
+func (c *closeObservedConn) Close() error {
+	c.once.Do(func() { close(c.closed) })
+	return c.Conn.Close()
+}
 
 // dialerFor は、このサーバーのホスト鍵を既知として組み立てた Dialer である。
 func dialerFor(t *testing.T, server *testServer, auth sshclient.Auth) sshclient.Dialer {
@@ -157,6 +169,36 @@ func TestWhatIsTypedReachesTheRemoteStdin(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("nothing reached the remote stdin")
+	}
+}
+
+func TestOnlyAnExplicitAuthenticationPromptAcceptsInputBeforeReady(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	process, err := dialerFor(t, server, sshclient.Auth{}).Open(
+		context.Background(), targetWith(server), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	if _, ok := process.(terminal.Prompting); !ok {
+		t.Fatal("SSH process does not expose its prompt state")
+	}
+	readUntil(t, process, "Password: ")
+	prompting := process.(terminal.Prompting)
+	if !prompting.AwaitingPrompt() {
+		t.Fatal("password prompt was not marked as awaiting input")
+	}
+	drain(process)
+	if _, err := process.Write([]byte("hunter2\r")); err != nil {
+		t.Fatal(err)
+	}
+	readier := process.(terminal.Readier)
+	if readyErr := <-readier.Ready(); readyErr != nil {
+		t.Fatalf("Ready = %v", readyErr)
+	}
+	if prompting.AwaitingPrompt() {
+		t.Fatal("prompt remained active after authentication")
 	}
 }
 
@@ -409,6 +451,39 @@ func TestAnUnreachableAddressFailsWithinItsTimeout(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the connection did not give up within its timeout")
+	}
+}
+
+func TestClosingASessionCancelsAHandshakeAndClosesItsRawTransport(t *testing.T) {
+	clientEnd, serverEnd := net.Pipe()
+	t.Cleanup(func() { _ = serverEnd.Close() })
+	transport := &closeObservedConn{Conn: clientEnd, closed: make(chan struct{})}
+	dialed := make(chan struct{})
+	dialer := sshclient.Dialer{Dial: func(context.Context, string, string) (net.Conn, error) {
+		close(dialed)
+		return transport, nil
+	}}
+	target := sshclient.Target{
+		Alias: "stalled", HostName: "127.0.0.1", Port: "22", User: "ops",
+		Timeout: 5 * time.Second, Methods: sshclient.DefaultMethods(),
+	}
+
+	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-dialed:
+	case <-time.After(time.Second):
+		t.Fatal("the handshake never opened its transport")
+	}
+	if err := process.Close(); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+	select {
+	case <-transport.closed:
+	case <-time.After(time.Second):
+		t.Fatal("Session.Close did not close the pre-attach raw transport")
 	}
 }
 

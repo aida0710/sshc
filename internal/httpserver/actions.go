@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -18,7 +19,7 @@ import (
 // 鍵が見つからない場合は 404 を、
 // 設定が読めない場合は 500 を、両者が共有するエンドポイントを通じて返す。
 type actionKind struct {
-	evidence func(target string) (string, error)
+	evidence func(ctx context.Context, target string) (string, error)
 	fail     func(c *echo.Context, err error) error
 }
 
@@ -68,7 +69,7 @@ func (h ActionHandlers) IssueAction(c *echo.Context) error {
 	if sessionID == "" {
 		return problem(c, http.StatusUnauthorized, "session_required")
 	}
-	evidence, err := kind.evidence(body.Target)
+	evidence, err := kind.evidence(c.Request().Context(), body.Target)
 	if err != nil {
 		return kind.fail(c, err)
 	}
@@ -131,7 +132,7 @@ func (h ActionHandlers) consume(c *echo.Context, kind, target string) (bool, err
 	if !known {
 		return false, problem(c, http.StatusForbidden, "action_token_invalid")
 	}
-	evidence, err := registered.evidence(target)
+	evidence, err := registered.evidence(c.Request().Context(), target)
 	if err != nil {
 		return false, registered.fail(c, err)
 	}
@@ -171,7 +172,7 @@ func (h ActionHandlers) consumeEvidence(c *echo.Context, kind, target, evidence 
 func addKeyActions(registry actionRegistry, service KeyService) {
 	for wireKind, subject := range confirmationSubjects {
 		registry[wireKind] = actionKind{
-			evidence: func(target string) (string, error) {
+			evidence: func(_ context.Context, target string) (string, error) {
 				return service.ConfirmationEvidence(subject, target)
 			},
 			fail: keyProblem,

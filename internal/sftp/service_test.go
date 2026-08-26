@@ -11,10 +11,12 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"sshc/internal/sftp"
+	"sshc/internal/validate"
 )
 
 var testTime = time.Date(2026, 8, 24, 7, 0, 0, 0, time.UTC)
@@ -606,6 +608,7 @@ func TestUnsafeInputsFailBeforeOpeningAConnection(t *testing.T) {
 		{name: "root delete", run: func() error { return service.Delete(context.Background(), "edge", "/") }, want: sftp.ErrRootOperation},
 		{name: "root mkdir", run: func() error { _, err := service.Mkdir(context.Background(), "edge", "/"); return err }, want: sftp.ErrRootOperation},
 		{name: "empty alias", run: func() error { _, err := service.Stat(context.Background(), " ", "/"); return err }, want: sftp.ErrInvalidAlias},
+		{name: "hostile alias", run: func() error { _, err := service.List(context.Background(), "$(touch-pwned)", "/"); return err }, want: validate.ErrUnsafeAlias},
 		{name: "missing revision", run: func() error { _, err := service.SaveText(context.Background(), "edge", "/file", "x", ""); return err }, want: sftp.ErrRevisionRequired},
 	}
 	for _, test := range tests {
@@ -617,6 +620,90 @@ func TestUnsafeInputsFailBeforeOpeningAConnection(t *testing.T) {
 	}
 	if opened != 0 {
 		t.Fatalf("opened = %d, want 0", opened)
+	}
+}
+
+func TestInternalTransferPathsAreHiddenAndRejectedByPublicOperations(t *testing.T) {
+	const uploadPart = "/.report.sshc-upload-transfer_12345678.part"
+	const editorTemporary = "/.report.sshc-0123456789abcdef01234567.tmp"
+	remote := remoteWith(map[string]node{
+		"/report":       file("report", "published", 0o600),
+		uploadPart:      file(path.Base(uploadPart), "partial", 0o600),
+		editorTemporary: file(path.Base(editorTemporary), "staged", 0o600),
+	})
+	service := serviceFor(remote)
+	entries, err := service.List(t.Context(), "edge", "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Path != "/report" {
+		t.Fatalf("public entries = %#v, want only /report", entries)
+	}
+	for _, internal := range []string{uploadPart, editorTemporary} {
+		if _, err := service.Stat(t.Context(), "edge", internal); !errors.Is(err, sftp.ErrInvalidPath) {
+			t.Errorf("Stat(%q) = %v, want ErrInvalidPath", internal, err)
+		}
+		if err := service.Delete(t.Context(), "edge", internal); !errors.Is(err, sftp.ErrInvalidPath) {
+			t.Errorf("Delete(%q) = %v, want ErrInvalidPath", internal, err)
+		}
+		if _, err := service.Rename(t.Context(), "edge", internal, "/published"); !errors.Is(err, sftp.ErrInvalidPath) {
+			t.Errorf("Rename(%q) = %v, want ErrInvalidPath", internal, err)
+		}
+	}
+}
+
+type blockingReadRemote struct {
+	*fakeRemote
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (remote *blockingReadRemote) Open(string) (io.ReadCloser, error) {
+	remote.once.Do(func() { close(remote.entered) })
+	return blockingReadCloser{release: remote.release}, nil
+}
+
+func (remote *blockingReadRemote) Close() error {
+	select {
+	case <-remote.release:
+	default:
+		close(remote.release)
+	}
+	return nil
+}
+
+type blockingReadCloser struct{ release <-chan struct{} }
+
+func (reader blockingReadCloser) Read([]byte) (int, error) {
+	<-reader.release
+	return 0, fs.ErrClosed
+}
+
+func (blockingReadCloser) Close() error { return nil }
+
+func TestRequestCancellationClosesABlockedRemoteRead(t *testing.T) {
+	remote := &blockingReadRemote{
+		fakeRemote: remoteWith(map[string]node{"/large.bin": file("large.bin", "x", 0o600)}),
+		entered:    make(chan struct{}),
+		release:    make(chan struct{}),
+	}
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.PrepareDownload(ctx, "edge", "/large.bin")
+		done <- err
+	}()
+	<-remote.entered
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("PrepareDownload cancellation = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancel did not close the blocked SFTP transport")
 	}
 }
 

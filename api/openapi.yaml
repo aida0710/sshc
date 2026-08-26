@@ -3711,7 +3711,27 @@ components:
           type: object
           additionalProperties: false
           required: [alias, hostName, user, port]
-          properties: { alias: { type: string }, hostName: { type: string }, user: { type: string }, port: { type: string } }
+          properties:
+            alias: { type: string }
+            hostName: { type: string }
+            user: { type: string }
+            port: { type: string }
+            route:
+              type: array
+              items:
+                type: object
+                required: [alias, hostName, user, port, strictHostKey, authentication]
+                properties:
+                  alias: { type: string }
+                  hostName: { type: string }
+                  user: { type: string }
+                  port: { type: string }
+                  proxyCommand: { type: string }
+                  strictHostKey: { type: string }
+                  authentication: { type: array, items: { type: string } }
+                  identityFiles: { type: array, items: { type: string } }
+                  identitiesOnly: { type: boolean }
+                  hostKeyAlgorithms: { type: array, items: { type: string } }
         command: { type: string }
     SnippetPreview:
       type: object

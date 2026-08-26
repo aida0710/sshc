@@ -38,10 +38,12 @@ type Output struct {
 // ロケールに依存しないよう、ssh_config の SetEnv も送らない。
 func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []byte) (Output, error) {
 	started := time.Now()
+	failed := func() Output {
+		return Output{ExitCode: RemoteFailureExit, Elapsed: time.Since(started)}
+	}
 
 	// 非対話処理では未知のホストを信頼済みに変更しない。
-	strict := target
-	strict.Strict = "yes"
+	strict := requireKnownHosts(target)
 
 	timeout := strict.Timeout
 	if timeout <= 0 {
@@ -52,7 +54,7 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 
 	client, closers, err := d.chain(ctx, strict, noPrompt, nil)
 	if err != nil {
-		return Output{Elapsed: time.Since(started)}, err
+		return failed(), err
 	}
 	defer func() {
 		_ = client.Close()
@@ -61,7 +63,7 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 
 	session, err := client.NewSession()
 	if err != nil {
-		return Output{Elapsed: time.Since(started)}, err
+		return failed(), err
 	}
 	defer func() { _ = session.Close() }()
 
@@ -72,15 +74,33 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 		session.Stdin = bytes.NewReader(stdin)
 	}
 
-	output := Output{}
+	// Run は session.Run の最中にも ctx の所有下にある。チャンネルだけでなく
+	// 輸送も閉じるのは、応答しない相手の Close を待たずに解除するためである。
+	finished := make(chan struct{})
+	defer close(finished)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = client.Close()
+			closeAll(closers)
+			_ = session.Close()
+		case <-finished:
+		}
+	}()
+
+	output := Output{ExitCode: RemoteFailureExit}
 	runErr := session.Run(command)
 	output.Stdout, output.Stderr = stdout.Bytes(), stderr.Bytes()
 	output.Truncated = stdout.truncated || stderr.truncated
 	output.Elapsed = time.Since(started)
+	if cause := ctx.Err(); cause != nil {
+		return output, cause
+	}
 
 	var exit *ssh.ExitError
 	switch {
 	case runErr == nil:
+		output.ExitCode = 0
 	case errors.As(runErr, &exit):
 		// 終了コードは結果であって失敗ではない。リモートが応答したのだから、
 		// その結果を返す。
