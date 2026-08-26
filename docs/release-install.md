@@ -13,8 +13,8 @@ Homebrew formula はソースからビルドするため、Go toolchain も Home
 ## インストールスクリプト（macOS / Linux）
 
 ```sh
-SSHC_VERSION=v0.13.3 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.13.3/install.sh | sh'
+SSHC_VERSION=v0.13.4 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.13.4/install.sh | sh'
 ```
 
 URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、pipeで直接実行しません。新しい版へ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。

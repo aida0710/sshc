@@ -8,9 +8,9 @@ public final class FailureReportTest {
     @Test
     public void 共有用の版とcodeと詳細を整形する() {
         assertEquals(
-                "Version: 0.13.3\nCode: port_unavailable\nDetail: listen: permission denied"
+                "Version: 0.13.4\nCode: port_unavailable\nDetail: listen: permission denied"
                         + "\nAndroid: 16 (SDK 36)\nDevice: Google Pixel 9\nABI: arm64-v8a",
-                FailureReport.render("0.13.3", "port_unavailable", "listen: permission denied",
+                FailureReport.render("0.13.4", "port_unavailable", "listen: permission denied",
                         "16", 36, "Google", "Pixel 9", "arm64-v8a"));
     }
 
