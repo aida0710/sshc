@@ -430,6 +430,10 @@ export const en = {
   "lock.storageIO": "Android reported an input/output failure while accessing the app's private storage.",
   "lock.schemaOlder": "The vault format is old (required: {required}, current: {current}).",
   "lock.schemaNewer": "The vault format is newer than this sshc build (supported: {required}, current: {current}).",
+  "lock.migrationFailed":
+    "The vault could not be migrated from version {current} to {required}. The original vault was not changed.",
+  "lock.migrationCompleted": "The vault was safely migrated from version {current} to {required}.",
+  "lock.migrationDismiss": "Dismiss migration notice",
   "lock.envelopeUnsupported": "The encrypted vault container uses an unsupported format. Open diagnostic details for support.",
   "lock.schemaRecoveryHint":
     "Restore the newest compatible local backup first. If none exists, you can create an empty vault without deleting SSH configuration or key files.",

@@ -143,6 +143,47 @@ test("explains an older vault with both schema versions on mobile", async ({ pag
   }
 });
 
+test("reports a completed vault migration with both versions on mobile", async ({ page, installation }) => {
+  await page.addInitScript(() => window.localStorage.setItem("sshc.language", "ja"));
+  await page.goto(installation.url);
+  await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
+  await page.getByLabel("マスターパスワード（確認）", { exact: true }).fill(masterPassword);
+  await page.getByRole("button", { name: "vault を作成" }).click();
+  await expect(page.getByText(/ローカルセッション有効/).first()).toBeAttached();
+
+  await page.goto(new URL("/secrets", installation.url).toString());
+  await page.getByRole("button", { name: "sshc をロック" }).click();
+  const unlocked = await page.evaluate(async (passphrase) => {
+    const csrf = window.sessionStorage.getItem("sshc.session.csrf") ?? "";
+    const response = await fetch("/api/v1/passwords/unlock", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-SSHC-CSRF": csrf },
+      body: JSON.stringify({ passphrase }),
+    });
+    if (!response.ok) throw new Error(`direct unlock failed with ${response.status}`);
+    return response.json() as Promise<Record<string, unknown>>;
+  }, masterPassword);
+  await page.route("**/api/v1/passwords/unlock", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...unlocked, migratedFromVersion: 4, migratedToVersion: 5 }),
+    });
+  });
+  await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
+  await page.getByRole("button", { name: "開く" }).click();
+
+  await expect(page.getByText("vault をバージョン 4 から 5 へ安全に更新しました。")).toBeVisible();
+  await expectNoHorizontalOverflow(page, "vault migration notice");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.15.2-vault-migration-mobile.png`,
+      fullPage: true,
+    });
+  }
+});
+
 test("draws one separator above the version in the mobile drawer", async ({ page, installation }) => {
   await page.route("**/api/v1/update", async (route) => {
     await route.fulfill({

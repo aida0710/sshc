@@ -432,6 +432,10 @@ export const ja = {
   "lock.storageIO": "Android がアプリ専用ストレージへの入出力エラーを報告しました。",
   "lock.schemaOlder": "vault のバージョンが古いです（必要なバージョン: {required}、現在: {current}）。",
   "lock.schemaNewer": "vault のバージョンがこの sshc より新しいです（対応バージョン: {required}、現在: {current}）。",
+  "lock.migrationFailed":
+    "vault をバージョン {current} から {required} へ更新できませんでした。元の vault は変更していません。",
+  "lock.migrationCompleted": "vault をバージョン {current} から {required} へ安全に更新しました。",
+  "lock.migrationDismiss": "更新通知を閉じる",
   "lock.envelopeUnsupported": "暗号化 vault の外枠が未対応の形式です。診断情報を開いて共有してください。",
   "lock.schemaRecoveryHint":
     "まず互換性のある最新のローカルバックアップを復元できます。見つからない場合は、SSH 設定と鍵ファイルを残して空の vault を作成できます。",

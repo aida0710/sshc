@@ -364,6 +364,8 @@ function validateVaultStatus(value: unknown): PasswordVaultStatus {
   asBoolean(record.unlocked);
   for (const alias of asArray(record.aliases)) asString(alias);
   for (const relativePath of asArray(record.dedicatedKeyPassphrases)) asString(relativePath);
+  if (record.migratedFromVersion !== undefined) asNumber(record.migratedFromVersion);
+  if (record.migratedToVersion !== undefined) asNumber(record.migratedToVersion);
   return record as unknown as PasswordVaultStatus;
 }
 

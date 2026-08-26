@@ -126,10 +126,16 @@ vi.mock("./remotekeys/RemoteKeyPanel", () => ({
   ),
 }));
 vi.mock("./secrets/LockScreen", () => ({
-  LockScreen: ({ exists, onOpen }: { exists: boolean; onOpen: () => void }) => (
+  LockScreen: ({ exists, onOpen }: {
+    exists: boolean;
+    onOpen: (status?: { migratedFromVersion?: number; migratedToVersion?: number }) => void;
+  }) => (
     <div>
       <span>{exists ? "existing vault fixture" : "new vault fixture"}</span>
-      <button type="button" onClick={onOpen}>unlock fixture</button>
+      <button type="button" onClick={() => onOpen()}>unlock fixture</button>
+      <button type="button" onClick={() => onOpen({ migratedFromVersion: 4, migratedToVersion: 5 })}>
+        migrate fixture
+      </button>
     </div>
   ),
 }));
@@ -526,6 +532,24 @@ describe("App", () => {
 
     expect(await screen.findByText("connections panel")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/connections/servers");
+  });
+
+  it("shows and dismisses the version pair after an automatic vault migration", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] })}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "migrate fixture" }));
+    expect(await screen.findByText(
+      "The vault was safely migrated from version 4 to 5.",
+    )).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dismiss migration notice" }));
+    expect(screen.queryByText("The vault was safely migrated from version 4 to 5.")).not.toBeInTheDocument();
   });
 
   it("remembers that a newly opened vault exists when it is locked again", async () => {

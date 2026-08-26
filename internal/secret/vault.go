@@ -187,11 +187,20 @@ func Create(passphrase string) (*Vault, error) {
 
 // Open は、passphrase で sealed を復号する。
 func Open(sealed []byte, passphrase string) (*Vault, error) {
+	vault, _, err := openSealedWithMigrations(sealed, passphrase, registeredDocumentMigrations)
+	return vault, err
+}
+
+func openSealedWithMigrations(
+	sealed []byte,
+	passphrase string,
+	migrations migrationRegistry,
+) (*Vault, Migration, error) {
 	plaintext, key, err := envelope.Open(sealed, passphrase)
 	if err != nil {
-		return nil, err
+		return nil, Migration{}, err
 	}
-	return openDocument(plaintext, key)
+	return openDocumentWithMigrations(plaintext, key, migrations)
 }
 
 // OpenWith は、すでに導出してある鍵で vault を開く。
@@ -205,17 +214,36 @@ func OpenWith(sealed []byte, key envelope.Key) (*Vault, error) {
 }
 
 func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
+	vault, _, err := openDocumentWithMigrations(plaintext, key, registeredDocumentMigrations)
+	return vault, err
+}
+
+func openDocumentWithMigrations(
+	plaintext []byte,
+	key envelope.Key,
+	migrations migrationRegistry,
+) (*Vault, Migration, error) {
+	plaintext, migration, err := migrateDocument(plaintext, migrations)
+	if err != nil {
+		return nil, Migration{}, err
+	}
 	var parsed document
 	decoder := json.NewDecoder(bytes.NewReader(plaintext))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&parsed); err != nil {
-		return nil, ErrWrongPassphrase
+		if migration.Applied() {
+			return nil, Migration{}, &MigrationError{From: migration.From, To: migration.To, Cause: err}
+		}
+		return nil, Migration{}, ErrWrongPassphrase
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return nil, ErrWrongPassphrase
+		if migration.Applied() {
+			return nil, Migration{}, &MigrationError{From: migration.From, To: migration.To, Cause: err}
+		}
+		return nil, Migration{}, ErrWrongPassphrase
 	}
 	if parsed.SchemaVersion != SchemaVersion {
-		return nil, &SchemaVersionError{Found: parsed.SchemaVersion, Supported: SchemaVersion}
+		return nil, Migration{}, &SchemaVersionError{Found: parsed.SchemaVersion, Supported: SchemaVersion}
 	}
 	secrets, subjects := newMaps()
 	for kind, stored := range map[Kind]map[string]string{
@@ -247,7 +275,7 @@ func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
 		dedicatedPasswords:      dedicatedPasswords,
 		passwordBindings:        maps.Clone(parsed.PasswordBindings),
 		dedicatedKeyPassphrases: dedicatedKeyPassphrases,
-	}, nil
+	}, migration, nil
 }
 
 // SealSettings は、オブジェクトストアの設定を vault 自身の鍵で暗号化する。隣に置く

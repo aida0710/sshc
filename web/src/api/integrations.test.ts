@@ -245,6 +245,37 @@ describe("integrationsApi.passwordVault", () => {
     });
   });
 
+  it("accepts the safe version pair reported after a vault migration", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      exists: true,
+      unlocked: true,
+      aliases: [],
+      dedicatedKeyPassphrases: [],
+      migratedFromVersion: 4,
+      migratedToVersion: 5,
+    })));
+
+    await expect(integrationsApi.passwordVault()).resolves.toMatchObject({
+      migratedFromVersion: 4,
+      migratedToVersion: 5,
+    });
+  });
+
+  it.each([
+    { migratedFromVersion: "4", migratedToVersion: 5 },
+    { migratedFromVersion: 4, migratedToVersion: "5" },
+  ])("rejects a malformed migration status", async (migration) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      exists: true,
+      unlocked: true,
+      aliases: [],
+      dedicatedKeyPassphrases: [],
+      ...migration,
+    })));
+
+    await expect(integrationsApi.passwordVault()).rejects.toThrow("invalid_response");
+  });
+
   it.each([
     { exists: true, unlocked: true, aliases: [] },
     { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: "keys/id_edge" },

@@ -165,13 +165,18 @@ func (h PasswordHandlers) status(c *echo.Context) error {
 	if dedicatedKeyPassphrases == nil {
 		dedicatedKeyPassphrases = []string{}
 	}
-	return c.JSON(http.StatusOK, api.PasswordVaultStatus{
+	answer := api.PasswordVaultStatus{
 		Exists:                  state.Exists,
 		Unlocked:                state.Unlocked,
 		Aliases:                 aliases,
 		DedicatedKeyPassphrases: dedicatedKeyPassphrases,
 		MinPassphraseLength:     &minimum,
-	})
+	}
+	if state.LastMigration.Applied() {
+		answer.MigratedFromVersion = &state.LastMigration.From
+		answer.MigratedToVersion = &state.LastMigration.To
+	}
+	return c.JSON(http.StatusOK, answer)
 }
 
 func (h PasswordHandlers) Status(c *echo.Context) error { return h.status(c) }
@@ -567,6 +572,7 @@ func (h PasswordHandlers) Forget(c *echo.Context) error {
 
 func passwordProblem(c *echo.Context, err error) error {
 	var schema *secret.SchemaVersionError
+	var migration *secret.MigrationError
 	switch {
 	case errors.Is(err, secret.ErrLocked):
 		return problem(c, http.StatusConflict, "vault_locked")
@@ -574,6 +580,11 @@ func passwordProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "vault_already_exists")
 	case errors.Is(err, secret.ErrNoVault):
 		return problem(c, http.StatusNotFound, "vault_missing")
+	case errors.As(err, &migration) && errors.Is(err, secret.ErrMigrationFailed):
+		return problemWith(c, http.StatusConflict, problemPayload{
+			Code: "vault_migration_failed", Detail: fmt.Sprintf("vault migration from schema %d to %d failed before the original vault was replaced", migration.From, migration.To),
+			CurrentVersion: &migration.From, RequiredVersion: &migration.To,
+		})
 	case errors.Is(err, secret.ErrWrongPassphrase):
 		return problem(c, http.StatusForbidden, "wrong_passphrase")
 	case errors.As(err, &schema) && errors.Is(err, secret.ErrOlderSchema):
