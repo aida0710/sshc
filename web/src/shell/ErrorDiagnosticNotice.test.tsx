@@ -11,7 +11,7 @@ describe("ErrorDiagnosticNotice", () => {
     render(
       <LanguageProvider>
         <ErrorDiagnosticNotice
-          version="0.13.4"
+          version="0.13.5"
           diagnostic={{
             code: "sftp_failed",
             status: 502,
@@ -25,7 +25,7 @@ describe("ErrorDiagnosticNotice", () => {
     );
 
     await user.click(screen.getByText("Show diagnostic details"));
-    expect(screen.getByText(/Version: 0\.13\.4/)).toHaveTextContent(
+    expect(screen.getByText(/Version: 0\.13\.5/)).toHaveTextContent(
       "Operation: POST /api/v1/sftp/transfers",
     );
     await user.click(screen.getByRole("button", { name: "Dismiss error" }));
