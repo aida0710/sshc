@@ -171,6 +171,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const [vaultExists, setVaultExists] = useState(false);
   const [version, setVersion] = useState("");
   const [requestFailure, setRequestFailure] = useState<RequestFailureDiagnostic | null>(null);
+  const [vaultMigration, setVaultMigration] = useState<{ from: number; to: number } | null>(null);
   const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
   const [groups, setGroups] = useState<string[]>([]);
   const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
@@ -426,7 +427,13 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         exists={vaultExists}
         version={version}
         onExists={() => setVaultExists(true)}
-        onOpen={() => {
+        onOpen={(status) => {
+          if (
+            typeof status?.migratedFromVersion === "number" &&
+            typeof status.migratedToVersion === "number"
+          ) {
+            setVaultMigration({ from: status.migratedFromVersion, to: status.migratedToVersion });
+          }
           setVaultExists(true);
           setState("ready");
         }}
@@ -561,6 +568,16 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         />
 
         <main className="relative flex min-h-0 flex-col overflow-hidden">
+          {vaultMigration === null ? null : (
+            <div role="status" className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink">
+              <p className="min-w-0 grow">
+                {t("lock.migrationCompleted", { current: vaultMigration.from, required: vaultMigration.to })}
+              </p>
+              <Button className="shrink-0" onClick={() => setVaultMigration(null)}>
+                {t("lock.migrationDismiss")}
+              </Button>
+            </div>
+          )}
           {connectionDraft !== null && (section === "Groups" || section === "Keys") ? (
             <div className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink">
               <p className="min-w-0 grow truncate">

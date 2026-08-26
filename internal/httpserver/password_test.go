@@ -720,6 +720,31 @@ func TestPasswordProblemReportsTheExactVaultSchemaDirection(t *testing.T) {
 	}
 }
 
+func TestPasswordProblemReportsTheExactFailingMigrationWithoutItsCause(t *testing.T) {
+	engine := echo.New()
+	engine.GET("/", func(c *echo.Context) error {
+		return passwordProblem(c, &secret.MigrationError{
+			From: 4, To: 5, Cause: errors.New("private migration detail"),
+		})
+	})
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer api.Problem
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Code != "vault_migration_failed" || answer.CurrentVersion == nil || *answer.CurrentVersion != 4 ||
+		answer.RequiredVersion == nil || *answer.RequiredVersion != 5 {
+		t.Fatalf("problem = %#v", answer)
+	}
+	if strings.Contains(recorder.Body.String(), "private migration detail") {
+		t.Fatalf("problem exposed the internal migration cause: %s", recorder.Body.String())
+	}
+}
+
 func TestResetUnsupportedVaultRequiresAnExplicitAcknowledgement(t *testing.T) {
 	engine, _ := passwordEngine(t)
 	for _, body := range []string{

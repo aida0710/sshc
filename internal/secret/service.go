@@ -94,6 +94,9 @@ type Service struct {
 	workspace    *storage.Workspace
 	transactions *storage.Manager
 	now          func() time.Time
+	// migrationsは、復号後の文書へ適用できる連続したschema更新である。
+	// 本番ではpackageの固定registryを使い、testだけが失敗点とatomic性を注入する。
+	migrations migrationRegistry
 
 	// sleep は拒否がどう待つかを表す。テストがバックオフを実際に消費せずに観測できる
 	// よう注入する。
@@ -105,7 +108,13 @@ type Service struct {
 	mutationMu sync.Mutex
 	mu         sync.Mutex
 	vault      *Vault
-	baseline   []byte
+	// backupVaultは、未commitの候補鍵で世代backupを封じる間だけ存在する。
+	// open/useはこれを返さないため、diskのcommit pointより先に候補が公開されない。
+	backupVault *Vault
+	baseline    []byte
+	// lastMigrationは、この実行で最後にunlockが自動更新した版だけをstatusへ運ぶ。
+	// 秘密を含まず、lockまたは通常unlockで消える。
+	lastMigration Migration
 	// refusals は、連続して誤ったマスターパスワードの回数を数える。これが、拒否のたび
 	// に前回より遅く応答させている。
 	refusals int
@@ -125,8 +134,9 @@ type Service struct {
 
 // State は status surface が一度に公開する vault の状態である。
 type State struct {
-	Exists   bool
-	Unlocked bool
+	Exists        bool
+	Unlocked      bool
+	LastMigration Migration
 }
 
 // NewService はロックされたサービスを返す。Unlock まで何も読めない。
@@ -135,6 +145,7 @@ func NewService(workspace *storage.Workspace, transactions *storage.Manager, now
 		workspace:    workspace,
 		transactions: transactions,
 		now:          now,
+		migrations:   registeredDocumentMigrations,
 		idle:         IdleTimeout,
 	}
 }
@@ -160,6 +171,7 @@ func (s *Service) open() *Vault {
 	if s.idle > 0 && s.now().Sub(s.used) >= s.idle {
 		s.vault = nil
 		s.baseline = nil
+		s.lastMigration = Migration{}
 		return nil
 	}
 	return s.vault
@@ -234,10 +246,12 @@ func (s *Service) State() (State, error) {
 		// disk 上の vault を失ったあとも導出済み key だけを使い続けない。
 		s.vault = nil
 		s.baseline = nil
+		s.lastMigration = Migration{}
 	}
 	unlocked := s.open() != nil
+	migration := s.lastMigration
 	s.mu.Unlock()
-	return State{Exists: exists, Unlocked: unlocked}, nil
+	return State{Exists: exists, Unlocked: unlocked, LastMigration: migration}, nil
 }
 
 // Unlocked は、このセッションでパスフレーズが与えられたかを報告する。
@@ -270,6 +284,7 @@ func (s *Service) Initialise(passphrase string) error {
 	s.mu.Lock()
 	s.vault = vault
 	s.used = s.now()
+	s.lastMigration = Migration{}
 	s.mu.Unlock()
 	if err := s.write(); err != nil {
 		// disk に公開できなかった vault を memory だけで使える状態にしない。
@@ -351,18 +366,26 @@ func (s *Service) Unlock(passphrase string) error {
 		}
 		return err
 	}
-	vault, err := Open(sealed, passphrase)
+	vault, migration, err := openSealedWithMigrations(sealed, passphrase, s.migrations)
 	if err != nil {
 		if errors.Is(err, ErrWrongPassphrase) {
 			s.refuse()
 		}
 		return err
 	}
+	if migration.Applied() {
+		migrated, sealErr := vault.Seal()
+		if sealErr != nil {
+			return &MigrationError{From: migration.From, To: migration.To, Cause: sealErr}
+		}
+		return s.replaceVault(sealed, migrated, vault, nil, "secret.migrate-vault", migration)
+	}
 
 	s.mu.Lock()
 	s.vault = vault
 	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
+	s.lastMigration = Migration{}
 	// 通ったパスワードは、誤ったものが積み上げたものを消し去る。
 	s.refusals = 0
 	s.mu.Unlock()
@@ -404,11 +427,17 @@ func (s *Service) RecoverCompatibleBackup(passphrase string) error {
 		if openErr != nil {
 			continue
 		}
-		candidate, openErr := Open(candidateSealed, passphrase)
+		candidate, migration, openErr := openSealedWithMigrations(candidateSealed, passphrase, s.migrations)
 		if openErr != nil {
 			continue
 		}
-		return s.replaceUnsupportedVault(current, candidateSealed, candidate, nil, "secret.recover-compatible-backup")
+		if migration.Applied() {
+			candidateSealed, openErr = candidate.Seal()
+			if openErr != nil {
+				return &MigrationError{From: migration.From, To: migration.To, Cause: openErr}
+			}
+		}
+		return s.replaceVault(current, candidateSealed, candidate, nil, "secret.recover-compatible-backup", migration)
 	}
 	return ErrNoCompatibleBackup
 }
@@ -446,7 +475,7 @@ func (s *Service) ResetUnsupported(passphrase string) error {
 	default:
 		return readErr
 	}
-	return s.replaceUnsupportedVault(current, sealed, candidate, removals, "secret.reset-unsupported")
+	return s.replaceVault(current, sealed, candidate, removals, "secret.reset-unsupported", Migration{})
 }
 
 func (s *Service) unsupportedVault(passphrase string) ([]byte, error) {
@@ -457,7 +486,7 @@ func (s *Service) unsupportedVault(passphrase string) ([]byte, error) {
 		}
 		return nil, err
 	}
-	_, err = Open(sealed, passphrase)
+	_, _, err = openSealedWithMigrations(sealed, passphrase, s.migrations)
 	switch {
 	case err == nil:
 		return nil, ErrRecoveryNotNeeded
@@ -471,17 +500,16 @@ func (s *Service) unsupportedVault(passphrase string) ([]byte, error) {
 	}
 }
 
-func (s *Service) replaceUnsupportedVault(
+func (s *Service) replaceVault(
 	current []byte,
 	sealed []byte,
 	candidate *Vault,
 	removals []storage.Removal,
 	operation string,
+	migration Migration,
 ) error {
 	s.mu.Lock()
-	s.vault = candidate
-	s.baseline = slices.Clone(current)
-	s.used = s.now()
+	s.backupVault = candidate
 	s.mu.Unlock()
 
 	_, err := s.transactions.Commit(storage.Request{
@@ -492,8 +520,9 @@ func (s *Service) replaceUnsupportedVault(
 		}},
 		Removals: removals,
 	})
+	s.mu.Lock()
+	s.backupVault = nil
 	if err != nil {
-		s.mu.Lock()
 		s.vault = nil
 		s.baseline = nil
 		s.used = time.Time{}
@@ -501,9 +530,11 @@ func (s *Service) replaceUnsupportedVault(
 		return err
 	}
 
-	s.mu.Lock()
+	s.vault = candidate
 	s.baseline = slices.Clone(sealed)
+	s.used = s.now()
 	s.refusals = 0
+	s.lastMigration = migration
 	s.mu.Unlock()
 	return nil
 }
@@ -517,7 +548,9 @@ func (s *Service) Lock() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.vault = nil
+	s.backupVault = nil
 	s.baseline = nil
+	s.lastMigration = Migration{}
 }
 
 // Has は、alias にパスワードが保存されているかを報告する。ロック中はエラーでは
@@ -816,6 +849,9 @@ func (s *Service) RelocateKeyPassphrases(relocations map[string]string) error {
 func (s *Service) SealBackup(plaintext []byte) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.backupVault != nil {
+		return s.backupVault.SealBytes(plaintext)
+	}
 	vault := s.use()
 	if vault == nil {
 		return nil, ErrLocked
