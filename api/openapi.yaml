@@ -24,12 +24,15 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
   /api/v1/session/renew:
     post:
-      # リロードすると、ページの中にあった CSRF トークンは失われる。そして次の
-      # ひとつを生むはずのブートストラップのフラグメントは、初回の使用で消費されて
-      # いる。これは、Cookie がすでに指定しているセッションのためにトークンを
-      # 発行する。CSRF トークンを提示しないのは、リロード直後にはそれがないからだ。
-      # 守っているのはセッション、Origin、そして Fetch Metadata である。
+      # リロード後も port-origin ごとの sessionStorage に残る現在の CSRF トークンを
+      # 検証し、同じセッションへ新しいトークンを発行する。Cookie はポートに紐づかない
+      # ため、Cookie、Origin、Fetch Metadata だけで再発行してはならない。
       operationId: renewSession
+      parameters:
+        - name: X-SSHC-CSRF
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
       responses:
         "200":
           description: A fresh CSRF token for the existing session

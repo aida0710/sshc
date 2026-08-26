@@ -1,6 +1,8 @@
 package com.github.aida0710.sshc;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -23,7 +25,13 @@ import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
 import android.widget.TextView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.Toast;
+
+import java.util.Arrays;
 
 import mobile.Mobile;
 
@@ -71,8 +79,7 @@ public final class MainActivity extends Activity {
         }
         long failure = service.failure();
         if (failure == Mobile.KindNone) return;
-        releaseService();
-        showFailure(failure);
+        showFailure(failure, service.failureCode(), service.failureDetail());
     }
 
     @Override
@@ -158,8 +165,8 @@ public final class MainActivity extends Activity {
         return root;
     }
 
-    /** URL を含みうる Go のエラー文を表示せず、失敗種別に対応する文言を表示する。 */
-    private void showFailure(long reason) {
+    /** 伏せ字化済みの診断情報と、その場で再試行できる操作を表示する。 */
+    private void showFailure(long reason, String code, String detail) {
         // gomobile が生成する定数を使い、Go 側の失敗種別と一致させる。
         int message;
         if (reason == Mobile.KindListenFailed) {
@@ -168,13 +175,84 @@ public final class MainActivity extends Activity {
             message = R.string.failure_stopped_early;
         } else if (reason == Mobile.KindStorageUnavailable) {
             message = R.string.failure_storage;
+        } else if (reason == Mobile.KindEngineStartFailed) {
+            message = R.string.failure_engine_start;
         } else {
             message = R.string.failure_unknown;
         }
-        TextView view = new TextView(this);
-        view.setText(message);
-        view.setPadding(48, 48, 48, 48);
-        setContentView(frame(view));
+
+        String report = FailureReport.render(
+                Mobile.version(), code, detail,
+                Build.VERSION.RELEASE, Build.VERSION.SDK_INT,
+                Build.MANUFACTURER, Build.MODEL,
+                String.join(", ", Arrays.asList(Build.SUPPORTED_ABIS)));
+        int gap = dp(16);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(24), dp(32), dp(24), dp(32));
+
+        TextView title = new TextView(this);
+        title.setText(message);
+        title.setTextSize(20);
+        content.addView(title, matchWidthWrapHeight());
+
+        TextView explanation = new TextView(this);
+        explanation.setText(R.string.failure_explanation);
+        explanation.setTextSize(15);
+        LinearLayout.LayoutParams explanationLayout = matchWidthWrapHeight();
+        explanationLayout.setMargins(0, gap, 0, 0);
+        content.addView(explanation, explanationLayout);
+
+        TextView diagnostics = new TextView(this);
+        diagnostics.setText(report);
+        diagnostics.setTextIsSelectable(true);
+        diagnostics.setTextSize(14);
+        diagnostics.setTypeface(android.graphics.Typeface.MONOSPACE);
+        LinearLayout.LayoutParams diagnosticsLayout = matchWidthWrapHeight();
+        diagnosticsLayout.setMargins(0, gap, 0, 0);
+        content.addView(diagnostics, diagnosticsLayout);
+
+        Button copy = new Button(this);
+        copy.setText(R.string.failure_copy);
+        copy.setOnClickListener(view -> {
+            ClipboardManager clipboard = getSystemService(ClipboardManager.class);
+            clipboard.setPrimaryClip(ClipData.newPlainText("sshc diagnostics", report));
+            Toast.makeText(this, R.string.failure_copied, Toast.LENGTH_SHORT).show();
+        });
+        LinearLayout.LayoutParams copyLayout = matchWidthWrapHeight();
+        copyLayout.setMargins(0, gap, 0, 0);
+        content.addView(copy, copyLayout);
+
+        Button retry = new Button(this);
+        retry.setText(R.string.failure_retry);
+        retry.setOnClickListener(view -> {
+            if (service == null) return;
+            retry.setEnabled(false);
+            retry.setText(R.string.failure_retrying);
+            // stopSelf済みのbound serviceを再びstarted stateへ戻す。
+            startForegroundService(new Intent(this, EngineService.class));
+            if (!service.retry()) {
+                retry.setEnabled(true);
+                retry.setText(R.string.failure_retry);
+            }
+        });
+        LinearLayout.LayoutParams retryLayout = matchWidthWrapHeight();
+        retryLayout.setMargins(0, dp(8), 0, 0);
+        content.addView(retry, retryLayout);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(content, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
+        setContentView(frame(scroll));
+    }
+
+    private LinearLayout.LayoutParams matchWidthWrapHeight() {
+        return new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     /** system bar、display cutout、IME の inset を padding に反映する。 */

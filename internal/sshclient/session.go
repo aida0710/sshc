@@ -179,9 +179,12 @@ func (s *Session) finish(info terminal.ExitInfo) {
 // fail は、接続できなかった理由を端末へ書いて終わらせる。
 //
 // セッションは残す。接続できなかった理由が読めるのはそこだけである。
-func (s *Session) fail(reason string) {
-	s.markReady(errors.New(reason))
-	_, _ = io.WriteString(s.writer, "\r\n"+reason+"\r\n")
+func (s *Session) fail(reason error) {
+	if reason == nil {
+		reason = errors.New("ssh connection failed")
+	}
+	s.markReady(reason)
+	_, _ = io.WriteString(s.writer, "\r\n"+reason.Error()+"\r\n")
 	s.finish(terminal.ExitInfo{Code: 255, At: time.Now()})
 	_ = s.writer.Close()
 	_ = s.input.Close()

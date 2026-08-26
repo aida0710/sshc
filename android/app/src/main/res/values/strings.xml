@@ -4,12 +4,15 @@
     <string name="engine_running">sshc is running</string>
     <!-- 通知から engine を停止する操作。 -->
     <string name="engine_stop">Stop</string>
-    <!--
-      Go の error 文には入口 URL が含まれ得るため、失敗理由の番号に対応する
-      固定文だけを表示する。
-    -->
+    <!-- Go側で詳細からcredentialと制御文字を除去し、共有可能な長さに制限する。 -->
     <string name="failure_listen">sshc could not take a local port on this device.</string>
     <string name="failure_stopped_early">The sshc engine stopped before it could open.</string>
     <string name="failure_storage">sshc could not open its private storage. Restart the device, then try again.</string>
+    <string name="failure_engine_start">The sshc engine could not initialize.</string>
     <string name="failure_unknown">sshc could not start.</string>
+    <string name="failure_explanation">Copy these safe diagnostic details when reporting the problem, or try starting the engine again.</string>
+    <string name="failure_copy">Copy diagnostic details</string>
+    <string name="failure_copied">Diagnostic details copied</string>
+    <string name="failure_retry">Try again</string>
+    <string name="failure_retrying">Starting…</string>
 </resources>

@@ -2,6 +2,8 @@ package terminal_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -10,6 +12,50 @@ import (
 
 	"sshc/internal/terminal"
 )
+
+type readyProcess struct {
+	*fakeProcess
+	ready chan error
+}
+
+func newReadyProcess() *readyProcess {
+	return &readyProcess{fakeProcess: newFakeProcess(), ready: make(chan error, 1)}
+}
+
+func (p *readyProcess) Ready() <-chan error { return p.ready }
+
+func (p *readyProcess) finishOpen(err error) {
+	p.ready <- err
+	close(p.ready)
+}
+
+type readyOpenSpy struct {
+	mutex     sync.Mutex
+	processes []*readyProcess
+}
+
+func (s *readyOpenSpy) open(_ context.Context, _ terminal.Size) (terminal.Process, error) {
+	process := newReadyProcess()
+	s.mutex.Lock()
+	s.processes = append(s.processes, process)
+	s.mutex.Unlock()
+	return process, nil
+}
+
+func (s *readyOpenSpy) at(index int) *readyProcess {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if index >= len(s.processes) {
+		return nil
+	}
+	return s.processes[index]
+}
+
+func (s *readyOpenSpy) count() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return len(s.processes)
+}
 
 type openSpy struct {
 	mutex     sync.Mutex
@@ -106,6 +152,84 @@ func TestGivingUpIsSaidOutLoud(t *testing.T) {
 	view := session.View()
 	if view.State != terminal.StateExited || view.Problem != "reconnect_exhausted" {
 		t.Errorf("state/problem = %q/%q, want exited/reconnect_exhausted", view.State, view.Problem)
+	}
+}
+
+func TestAsynchronousHandshakeFailuresConsumeTheReconnectBudget(t *testing.T) {
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if state := session.View().State; state != terminal.StateConnecting {
+		t.Fatalf("initial state = %q, want connecting", state)
+	}
+	connected := make(chan struct{}, 1)
+	session.WhenConnected(func() { connected <- struct{}{} })
+	select {
+	case <-connected:
+		t.Fatal("connected callback ran before the asynchronous handshake")
+	default:
+	}
+	spy.at(0).finishOpen(nil)
+	waitFor(t, func() bool { return session.View().State == terminal.StateConnected })
+	select {
+	case <-connected:
+	case <-time.After(time.Second):
+		t.Fatal("connected callback did not run after Ready succeeded")
+	}
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+
+	for attempt := 1; attempt <= terminal.MaxReconnects; attempt++ {
+		waitFor(t, func() bool { return spy.count() > attempt })
+		candidate := spy.at(attempt)
+		candidate.finishOpen(context.DeadlineExceeded)
+		candidate.exit(terminal.ExitInfo{Code: 255})
+	}
+
+	waitFor(t, func() bool { return !session.Live() })
+	if calls := spy.count(); calls != 1+terminal.MaxReconnects {
+		t.Fatalf("open calls = %d, want initial + %d reconnects", calls, terminal.MaxReconnects)
+	}
+	view := session.View()
+	if view.State != terminal.StateExited || view.Problem != "reconnect_exhausted" {
+		t.Fatalf("state/problem = %q/%q, want exited/reconnect_exhausted", view.State, view.Problem)
+	}
+}
+
+func TestAsynchronousHandshakeErrorKeepsItsTypedClassification(t *testing.T) {
+	classified := errors.New("classified handshake failure")
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		ReconnectError: func(err error) (bool, string) {
+			if errors.Is(err, classified) {
+				return false, "host_key_changed"
+			}
+			return true, "reconnect_failed"
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy.at(0).finishOpen(nil)
+	waitFor(t, func() bool { return session.View().State == terminal.StateConnected })
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	waitFor(t, func() bool { return spy.count() == 2 })
+	spy.at(1).finishOpen(fmt.Errorf("wrapped: %w", classified))
+	spy.at(1).exit(terminal.ExitInfo{Code: 255})
+
+	waitFor(t, func() bool { return !session.Live() })
+	if calls := spy.count(); calls != 2 {
+		t.Fatalf("open calls = %d, want classification to stop after one reconnect", calls)
+	}
+	if problem := session.View().Problem; problem != "host_key_changed" {
+		t.Fatalf("problem = %q, want host_key_changed", problem)
 	}
 }
 
@@ -214,6 +338,109 @@ func TestKeystrokesDuringAReconnectAreDropped(t *testing.T) {
 type closingSpy struct {
 	mutex     sync.Mutex
 	processes []*fakeProcess
+}
+
+type reclaimedProcess struct {
+	*fakeProcess
+	closed chan struct{}
+	once   sync.Once
+}
+
+func newReclaimedProcess() *reclaimedProcess {
+	return &reclaimedProcess{fakeProcess: newFakeProcess(), closed: make(chan struct{})}
+}
+
+func (p *reclaimedProcess) Close() error {
+	p.once.Do(func() {
+		p.fakeProcess.exit(terminal.ExitInfo{Code: -1})
+		close(p.closed)
+	})
+	return nil
+}
+
+func (p *reclaimedProcess) ForceClose() error { return p.Close() }
+
+type blockingReconnectSpy struct {
+	initial     *fakeProcess
+	entered     chan struct{}
+	replacement chan *reclaimedProcess
+	calls       atomic.Int32
+}
+
+func newBlockingReconnectSpy() *blockingReconnectSpy {
+	return &blockingReconnectSpy{
+		initial: newFakeProcess(), entered: make(chan struct{}),
+		replacement: make(chan *reclaimedProcess, 1),
+	}
+}
+
+func (s *blockingReconnectSpy) open(ctx context.Context, _ terminal.Size) (terminal.Process, error) {
+	if s.calls.Add(1) == 1 {
+		return s.initial, nil
+	}
+	close(s.entered)
+	<-ctx.Done()
+	process := newReclaimedProcess()
+	s.replacement <- process
+	return process, nil
+}
+
+func TestStoppingDuringReconnectOpenCancelsAndReclaimsTheReturnedProcess(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		stop func(*terminal.Registry, *terminal.Session) error
+	}{
+		{name: "close", stop: func(registry *terminal.Registry, session *terminal.Session) error {
+			return registry.Close(session.ID())
+		}},
+		{name: "shutdown", stop: func(registry *terminal.Registry, _ *terminal.Session) error {
+			registry.BeginShutdown()
+			return registry.Wait()
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spy := newBlockingReconnectSpy()
+			registry, _ := newFastRegistry()
+			session, err := registry.Open(context.Background(), terminal.Spec{
+				Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			spy.initial.exit(terminal.ExitInfo{Code: terminal.TransportLost})
+			select {
+			case <-spy.entered:
+			case <-time.After(time.Second):
+				t.Fatal("reconnect Open was not entered")
+			}
+
+			stopped := make(chan error, 1)
+			go func() { stopped <- test.stop(registry, session) }()
+			var replacement *reclaimedProcess
+			select {
+			case replacement = <-spy.replacement:
+			case <-time.After(time.Second):
+				t.Fatal("reconnect context was not cancelled")
+			}
+			select {
+			case <-replacement.closed:
+			case <-time.After(time.Second):
+				t.Fatal("Process returned after stop was not reclaimed")
+			}
+			select {
+			case err := <-stopped:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("stop did not join the reconnect lifecycle")
+			}
+			waitFor(t, func() bool { return !session.Live() })
+			if state := session.View().State; state == terminal.StateConnected {
+				t.Fatal("a Process returned after stop was published as connected")
+			}
+		})
+	}
 }
 
 func (s *closingSpy) open(_ context.Context, _ terminal.Size) (terminal.Process, error) {

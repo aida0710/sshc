@@ -32,6 +32,10 @@ import (
 
 type ListenFunc func(network, address string) (net.Listener, error)
 
+// ErrListen はengineがloopback listenerを確保できなかったことを表す。
+// mobile外殻はこのsentinelだけをport failureとして利用者へ案内する。
+var ErrListen = errors.New("listen")
+
 // unsafeAliasWarning は alias を拒否する理由を示す。
 const unsafeAliasWarning = "This alias contains characters that could change the meaning of a command line, so this connection will be refused."
 
@@ -96,12 +100,14 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 
 // runtime は、build が組み立てたもののうち、寿命の管理に要るものである。
 type runtime struct {
-	server    *httpserver.Server
-	bootstrap string
-	document  handoff.Handoff
-	terminals *terminal.Registry
-	passwords *secret.Service
-	autoSync  *remotesync.Auto
+	server     *httpserver.Server
+	bootstrap  string
+	document   handoff.Handoff
+	terminals  *terminal.Registry
+	passwords  *secret.Service
+	autoSync   *remotesync.Auto
+	autoCancel context.CancelFunc
+	autoDone   chan struct{}
 }
 
 func build(dependencies Dependencies, version string) (runtime, error) {
@@ -116,7 +122,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 
 	listener, err := listenLoopback(dependencies.Listen, wanted, randomBelow)
 	if err != nil {
-		return runtime{}, fmt.Errorf("listen: %w", err)
+		return runtime{}, fmt.Errorf("%w: %w", ErrListen, err)
 	}
 
 	sessions, bootstrap, err := session.NewManager(dependencies.Random)
@@ -240,9 +246,7 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	serveErrors := make(chan error, 1)
 	go func() { serveErrors <- built.server.Serve() }()
 
-	loop, stopLoop := context.WithCancel(asked)
-	defer stopLoop()
-	go built.autoSync.Run(loop)
+	built.startAutoSync(asked)
 
 	// すべての経路で HTTP サーバーの停止完了を待つ。
 	stop := func(reason error) error {
@@ -291,6 +295,14 @@ func (r runtime) unwind(dependencies Dependencies) error {
 	})
 	defer deadline.Stop()
 
+	// AutoSync may finish a context-free local commit after its last remote
+	// request. Cancel it before any other service starts unwinding, and retain
+	// its completion as an engine-lifetime barrier so an Android Stop→Start
+	// cannot overlap two generations of local writes.
+	if r.autoCancel != nil {
+		r.autoCancel()
+	}
+
 	r.server.BeginStopping()
 
 	var joined []error
@@ -301,10 +313,20 @@ func (r runtime) unwind(dependencies Dependencies) error {
 	r.terminals.BeginShutdown()
 	r.server.BeginShutdown()
 
-	barriers := make(chan error, 2)
+	barrierCount := 2
+	if r.autoDone != nil {
+		barrierCount++
+	}
+	barriers := make(chan error, barrierCount)
 	go func() { barriers <- r.terminals.Wait() }()
 	go func() { barriers <- r.server.Wait() }()
-	for range 2 {
+	if r.autoDone != nil {
+		go func() {
+			<-r.autoDone
+			barriers <- nil
+		}()
+	}
+	for range barrierCount {
 		if err := <-barriers; err != nil {
 			joined = append(joined, err)
 		}
@@ -314,6 +336,20 @@ func (r runtime) unwind(dependencies Dependencies) error {
 		r.passwords.Lock()
 	}
 	return errors.Join(joined...)
+}
+
+func (r *runtime) startAutoSync(parent context.Context) {
+	if r.autoSync == nil {
+		return
+	}
+	loop, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	r.autoCancel = cancel
+	r.autoDone = done
+	go func() {
+		defer close(done)
+		r.autoSync.Run(loop)
+	}()
 }
 
 // newOrigin は、このインストールの不透明な識別子を発行する。

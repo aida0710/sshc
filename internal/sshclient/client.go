@@ -58,7 +58,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 
 	client, closers, err := d.chain(ctx, target, prompt, trace)
 	if err != nil {
-		session.fail("sshc: " + err.Error())
+		session.fail(fmt.Errorf("sshc: %w", err))
 		return
 	}
 	closers = append(closers, client)
@@ -66,7 +66,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 
 	remote, err := client.NewSession()
 	if err != nil {
-		session.fail("sshc: " + err.Error())
+		session.fail(fmt.Errorf("sshc: %w", err))
 		closeAll(closers)
 		return
 	}
@@ -81,7 +81,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 	}
 
 	if err := d.start(remote, target, size, session); err != nil {
-		session.fail("sshc: " + err.Error())
+		session.fail(fmt.Errorf("sshc: %w", err))
 		closeAll(closers)
 		return
 	}

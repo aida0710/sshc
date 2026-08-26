@@ -110,6 +110,13 @@ type readinessPTY struct {
 
 func (p *readinessPTY) Ready() <-chan error { return p.connected }
 
+type forwardingReadinessPTY struct {
+	*readinessPTY
+	forwards []terminal.Forward
+}
+
+func (p *forwardingReadinessPTY) Forwards() []terminal.Forward { return p.forwards }
+
 func (s *scriptedStarter) Start(_ context.Context, command terminal.Command, _ terminal.Size) (terminal.Process, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -145,6 +152,8 @@ type terminalFixture struct {
 	// connected は、プロセス内 SSH に渡された alias である。
 	connected []string
 	ssh       []*scriptedPTY
+	sshReady  []*readinessPTY
+	asyncSSH  bool
 	recorded  []string
 }
 
@@ -154,6 +163,11 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 	f.connected = append(f.connected, alias)
 	process := newScriptedPTY()
 	f.ssh = append(f.ssh, process)
+	if f.asyncSSH {
+		ready := &readinessPTY{scriptedPTY: process, connected: make(chan error, 1)}
+		f.sshReady = append(f.sshReady, ready)
+		return ready
+	}
 	return process
 }
 
@@ -343,6 +357,38 @@ func TestStartupSnippetWaitsForEverySSHConnectionToBecomeReady(t *testing.T) {
 	}
 }
 
+func TestSSHSessionLifetimePreservesForwarderCapability(t *testing.T) {
+	underlying := &forwardingReadinessPTY{
+		readinessPTY: &readinessPTY{scriptedPTY: newScriptedPTY(), connected: make(chan error, 1)},
+		forwards:     []terminal.Forward{{Kind: terminal.ForwardLocal, Listen: "127.0.0.1:9000", To: "db:5432"}},
+	}
+	handlers := TerminalHandlers{
+		Connect: func(context.Context, string, terminal.Size) (terminal.Process, error) {
+			return underlying, nil
+		},
+	}
+	alias := "production"
+	spec, err := handlers.spec(terminal.KindSSH, &alias, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, err := spec.Open(context.Background(), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwarder, ok := process.(terminal.Forwarder)
+	if !ok {
+		t.Fatal("SSH lifetime wrapper dropped the Forwarder capability")
+	}
+	if forwards := forwarder.Forwards(); len(forwards) != 1 || forwards[0] != underlying.forwards[0] {
+		t.Fatalf("forwards = %#v, want %#v", forwards, underlying.forwards)
+	}
+	underlying.connected <- nil
+	close(underlying.connected)
+	underlying.exit(terminal.ExitInfo{})
+	_ = process.Close()
+}
+
 // 上限に達した状態で開こうとした要求は拒否する。暗黙に古いセッションを
 // 閉じることはしない。
 func TestOpeningPastTheLimitIsRefusedAndClosesNothing(t *testing.T) {
@@ -396,6 +442,40 @@ func TestASuccessfulSSHSessionIsRecordedAfterItCanBeStreamed(t *testing.T) {
 	if len(fixture.recorded) != 1 || fixture.recorded[0] != "bastion" {
 		t.Fatalf("recorded = %#v", fixture.recorded)
 	}
+}
+
+func TestAsynchronousSSHIsNotRecordedOrConnectedBeforeReady(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	fixture.asyncSSH = true
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	var opened api.OpenTerminalSessionResponse
+	if err := json.Unmarshal([]byte(body), &opened); err != nil {
+		t.Fatal(err)
+	}
+	if opened.Session.State != api.TerminalSessionState("connecting") {
+		t.Fatalf("initial state = %q, want connecting", opened.Session.State)
+	}
+	fixture.mutex.Lock()
+	if len(fixture.recorded) != 0 {
+		t.Fatalf("recorded before Ready = %#v", fixture.recorded)
+	}
+	ready := fixture.sshReady[0]
+	fixture.mutex.Unlock()
+
+	ready.connected <- nil
+	close(ready.connected)
+	waitUntil(t, func() bool {
+		fixture.mutex.Lock()
+		defer fixture.mutex.Unlock()
+		return len(fixture.recorded) == 1 && fixture.recorded[0] == "bastion"
+	})
+	waitUntil(t, func() bool {
+		session, ok := fixture.registry.Lookup(opened.Session.Id)
+		return ok && session.View().State == terminal.StateConnected
+	})
 }
 
 func TestExitedSSHSessionCanBeExplicitlyReconnectedInPlace(t *testing.T) {
