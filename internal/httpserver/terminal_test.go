@@ -757,7 +757,10 @@ func (f *terminalFixture) newTicket(t *testing.T, id string) string {
 
 func waitUntil(t *testing.T, condition func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	// CI の全 package race 実行では、プロセス終了を観測する goroutine が
+	// CPU 飽和中に数秒止まることがある。実時間ではなく状態を検査する helper
+	// なので、正常系を遅くせずに過負荷時だけ十分待てる上限にする。
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		if condition() {
 			return
