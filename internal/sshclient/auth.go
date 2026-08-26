@@ -80,6 +80,24 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 	// ひとつなのは、password と keyboard-interactive の両方を提示する
 	// サーバーへ、同じ間違った結果を二度送らないためである。
 	stored := a.storedPassword(target)
+	if _, nonInteractive := prompt.(nonInteractivePrompter); nonInteractive {
+		// 質問できない経路では、保存値がある場合だけ password 系の方式を
+		// 組み立てる。nil と同じ「何も提示できない」結果を保ちつつ、vault の
+		// 保存値まで捨てていた従来の分岐をなくす。
+		password, found := stored()
+		if !found {
+			prompt = nil
+		} else {
+			offered := false
+			stored = func() (string, bool) {
+				if offered {
+					return "", false
+				}
+				offered = true
+				return password, true
+			}
+		}
+	}
 	for _, kind := range target.Methods.Order() {
 		switch kind {
 		case "publickey":

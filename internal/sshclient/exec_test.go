@@ -114,3 +114,21 @@ func TestRunNeverAsksTheUser(t *testing.T) {
 		t.Fatalf("Run offered a credential %d time(s)", attempts)
 	}
 }
+
+func TestRunUsesAStoredPasswordWithoutAskingTheUser(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) {
+		return "hunter2", true
+	}}
+
+	output, err := dialerFor(t, server, auth).Run(
+		context.Background(), targetWith(server), "true", nil,
+	)
+
+	if err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	if output.ExitCode != 0 {
+		t.Fatalf("exit = %d, want 0", output.ExitCode)
+	}
+}
