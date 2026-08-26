@@ -492,6 +492,10 @@ func TestExitedSSHSessionCanBeExplicitlyReconnectedInPlace(t *testing.T) {
 	first := fixture.ssh[0]
 	fixture.mutex.Unlock()
 	first.feed("before manual reconnect\r\n")
+	waitUntil(t, func() bool {
+		session, ok := fixture.registry.Lookup(opened.Session.Id)
+		return ok && strings.Contains(string(session.Snapshot()), "before manual reconnect")
+	})
 	first.exit(terminal.ExitInfo{Code: 255})
 	waitUntil(t, func() bool {
 		session, ok := fixture.registry.Lookup(opened.Session.Id)
