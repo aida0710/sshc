@@ -67,20 +67,40 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   });
 
   await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
+  await expect(page.locator("[data-pane-toolbar]")).toHaveCount(2);
   await expect(navigation.getByRole("button", { name: "edge + database", exact: true })).toBeVisible();
   await expect(navigation.getByText("2 terminals", { exact: true })).toBeVisible();
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.0-live-workspace-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-live-workspace-desktop.png`, fullPage: true });
   }
+
+  await page.getByRole("button", { name: "Broadcast…" }).click();
+  const broadcast = page.getByRole("dialog", { name: "Broadcast to terminals" });
+  await expect(broadcast).toBeVisible();
+  await expect(broadcast.getByText(/Live keystrokes are never shared/)).toBeVisible();
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-broadcast-modal.png`, fullPage: true });
+  }
+  await broadcast.getByRole("button", { name: "Close broadcast" }).click();
+
+  const savedLayouts = page.locator("summary").filter({ hasText: "Saved layouts" });
+  await savedLayouts.click();
+  await expect(page.getByText(/Save connection targets and split ratios/)).toBeVisible();
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-saved-layouts.png`, fullPage: true });
+  }
+  await savedLayouts.click();
 
   await page.setViewportSize({ width: 360, height: 800 });
   await page.waitForTimeout(400);
   await expect(page.getByRole("navigation", { name: "Workspace terminals" })).toBeVisible();
   await expect(page.locator("[data-workspace-pane]")).toHaveCount(1);
+  await expect(page.locator("[data-pane-toolbar]")).toHaveCount(0);
+  await expect(page.locator("[data-desktop-workspace-controls]")).toBeHidden();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.0-live-workspace-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-live-workspace-mobile.png`, fullPage: true });
   }
 });

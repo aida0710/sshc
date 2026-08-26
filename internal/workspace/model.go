@@ -18,8 +18,8 @@ const (
 	PathRelative  = "sshc/workspaces.json"
 
 	MaxWorkspaces = 50
-	MaxPanes      = 50
-	MaxDepth      = 12
+	MaxPanes      = 4
+	MaxDepth      = 4
 	MaxIDRunes    = 64
 	MaxNameRunes  = 80
 
