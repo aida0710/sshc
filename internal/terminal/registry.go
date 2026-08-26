@@ -203,12 +203,14 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		reconnectError: spec.ReconnectError,
 		size:           size,
 		stopping:       make(chan struct{}),
-		state:          StateConnected,
+		state:          StateConnecting,
 		delay: func(attempt int) time.Duration {
 			return r.reconnectDelay(attempt, id)
 		},
 		attempts: r.reconnects,
+		now:      r.now,
 	}
+	session.observeProcess(StateConnecting, "")
 	r.mutex.Lock()
 	r.sessions = append(r.sessions, session)
 	r.prune()

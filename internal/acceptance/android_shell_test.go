@@ -114,7 +114,7 @@ func TestTheAndroidShellReadsTheFailureKindsFromGo(t *testing.T) {
 		t.Error("Android単一process内の重複起動をfatal errorとして再導入している")
 	}
 
-	for _, kind := range []string{"KindListenFailed", "KindStoppedEarly", "KindStorageUnavailable"} {
+	for _, kind := range []string{"KindListenFailed", "KindStoppedEarly", "KindStorageUnavailable", "KindEngineStartFailed"} {
 		if !strings.Contains(failure, "Mobile."+kind) {
 			t.Errorf("showFailure が Mobile.%s を読んでいない", kind)
 		}
@@ -122,5 +122,26 @@ func TestTheAndroidShellReadsTheFailureKindsFromGo(t *testing.T) {
 	// 生の数と比べていたら、Go 側を動かしても気づけない。
 	if regexp.MustCompile(`(?m)^\s*case\s+\d+\s*:`).MatchString(failure) {
 		t.Error("showFailure が番号を直に書いている。Mobile の定数を読むこと")
+	}
+}
+
+func TestTheAndroidFailureScreenUsesOnlySanitizedDiagnostics(t *testing.T) {
+	service := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "EngineService.java")
+	activity := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "MainActivity.java")
+	for _, required := range []string{
+		"Mobile.lastStartFailureCode()",
+		"Mobile.lastStartFailureDetail()",
+		"FailureReport.render(",
+		"ClipData.newPlainText",
+		"service.retry()",
+	} {
+		if !strings.Contains(service+activity, required) {
+			t.Errorf("Androidの診断導線に %q が無い", required)
+		}
+	}
+	if strings.Contains(service, "error.getMessage()") || strings.Contains(service, "Log.e(TAG, error") {
+		t.Error("伏せ字化前のJava例外を画面またはlogcatへ出している")
 	}
 }

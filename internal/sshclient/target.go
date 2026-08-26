@@ -184,10 +184,10 @@ type Resolver func(alias string) (effective.Values, error)
 
 // NewTarget は、解決済みの値から接続ひとつ分を組み立てる。
 func NewTarget(alias string, resolve Resolver, home string) (Target, error) {
-	return newTarget(alias, resolve, home, effective.MaxJumpDepth)
+	return newTarget(alias, resolve, home, effective.MaxJumpDepth, nil)
 }
 
-func newTarget(alias string, resolve Resolver, home string, depth int) (Target, error) {
+func newTarget(alias string, resolve Resolver, home string, depth int, override *effective.Hop) (Target, error) {
 	if depth <= 0 {
 		return Target{}, ErrJumpDepth
 	}
@@ -222,6 +222,18 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 	if target.HostName == "" {
 		return Target{}, ErrNoHostName
 	}
+	// ProxyJump のリストに明記された user と port は、そのホップ自身の設定に
+	// 勝つ。ProxyCommand と入れ子の ProxyJump はこの直後にトークンを展開する
+	// ため、値の上書きも展開より前に行う。展開後に Target のフィールドだけを
+	// 変えると、認証上の宛先と ProxyCommand が実際に開く宛先が食い違う。
+	if override != nil {
+		if override.UserExplicit {
+			target.User = override.User
+		}
+		if override.PortExplicit {
+			target.Port = override.Port
+		}
+	}
 
 	forwards, forwardNotices := parseForwards(values)
 	target.Forwards = forwards
@@ -251,17 +263,9 @@ func newTarget(alias string, resolve Resolver, home string, depth int) (Target, 
 	}
 	if !chain.Disabled {
 		for _, hop := range chain.Hops {
-			// リストに書かれた user と port は、そのホップ自身の設定に勝つ。
-			// OpenSSH がそう決めている。
-			stage, err := newTarget(hop.Host, resolve, home, depth-1)
+			stage, err := newTarget(hop.Host, resolve, home, depth-1, &hop)
 			if err != nil {
 				return Target{}, err
-			}
-			if hop.UserExplicit {
-				stage.User = hop.User
-			}
-			if hop.PortExplicit {
-				stage.Port = hop.Port
 			}
 			target.Jump = append(target.Jump, stage)
 			notices = append(notices, stage.Notices...)

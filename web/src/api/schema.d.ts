@@ -2895,7 +2895,9 @@ export interface operations {
     renewSession: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-SSHC-CSRF": string;
+            };
             path?: never;
             cookie?: never;
         };

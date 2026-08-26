@@ -42,6 +42,12 @@ type Forward struct {
 // Forwarder は、そのセッションが開いている転送を報告する。
 type Forwarder interface{ Forwards() []Forward }
 
+// Readier reports when an asynchronously opened Process has completed the
+// connection work which makes it usable. A Process without this capability is
+// ready when Open returns; SSH sessions implement it because authentication
+// prompts must be streamed before the handshake has completed.
+type Readier interface{ Ready() <-chan error }
+
 // Size は端末の桁数と行数である。
 type Size struct {
 	Cols uint16
