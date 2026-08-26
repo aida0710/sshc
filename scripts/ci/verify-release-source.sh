@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Release tagが保護対象のmain履歴にあり、同じcommitの完全なCIが成功済みかを検証する。
+# push webhookが欠落した障害時も、mainを明示して起動した同一workflowを同等に扱う。
 set -euo pipefail
 
 : "${GH_TOKEN:?GH_TOKEN is required}"
@@ -32,11 +33,11 @@ if ! printf '%s' "$runs" | jq -e --arg sha "$RELEASE_SHA" '
   any(.workflow_runs[];
     .head_sha == $sha and
     .head_branch == "main" and
-    .event == "push" and
+    (.event == "push" or .event == "workflow_dispatch") and
     .conclusion == "success"
   )
 ' >/dev/null; then
-  echo "the exact release SHA has no successful completed main push CI workflow" >&2
+  echo "the exact release SHA has no successful completed main CI workflow" >&2
   exit 1
 fi
 
