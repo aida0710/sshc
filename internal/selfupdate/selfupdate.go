@@ -1,8 +1,8 @@
 // Package selfupdate は、プロジェクトの GitHub リリースを調べ、より新しいものが
 // あるかを伝える。
 //
-// 新しいバージョンとリリース情報の URL のみを返す。更新のダウンロードや
-// バイナリの置換は行わない。定期実行せず、要求されたときだけ GitHub へ接続する。
+// 新しいバージョンとリリース情報の URL のみを返す。このpackage自身は更新の
+// downloadやbinary置換を行わず、呼び出し側が既存のinstall managerへ委ねる。
 package selfupdate
 
 import (
@@ -12,8 +12,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
 // ErrNoRelease は、プロジェクトがまだ何も公開していないことを報告する。
@@ -78,40 +79,38 @@ func (c Checker) Latest(ctx context.Context) (Release, error) {
 
 // Newer は、candidate が current より後のバージョンかを報告する。
 //
-// バージョンはフィールドごとに数値として比較するので、0.10.0 は 0.9.0 より新しい
-// 文字列比較ではこれを取り違え、ここで取り違えれば、後戻りする更新を提示する
-// ことになる。解析できないものは「より新しい」ではなく「異なる」として比較する。
-// リリースでないビルド（"dev"）には、リリースがあることは伝えるべきだが、どれだけ
-// 遅れているかを伝えてはならない。
+// candidate はネットワークから来る値なので、SemVerでない値を更新として扱わない。
+// リリースでないローカルビルド（"dev"など）には、正規のリリースがあることだけを
+// 伝える。SemVerのpre-release順序も比較し、安定版から古いpre-releaseへ戻さない。
 func Newer(current, candidate string) bool {
 	if current == candidate {
 		return false
 	}
-	currentParts, currentOK := parseVersion(current)
-	candidateParts, candidateOK := parseVersion(candidate)
-	if !currentOK || !candidateOK {
+	candidateVersion, candidateOK := semanticVersion(candidate)
+	if !candidateOK {
+		return false
+	}
+	currentVersion, currentOK := semanticVersion(current)
+	if !currentOK {
 		return true
 	}
-	for index := range currentParts {
-		if candidateParts[index] != currentParts[index] {
-			return candidateParts[index] > currentParts[index]
-		}
-	}
-	return false
+	return semver.Compare(candidateVersion, currentVersion) > 0
 }
 
-func parseVersion(value string) ([3]int, bool) {
-	var parts [3]int
-	fields := strings.Split(strings.TrimPrefix(strings.TrimSpace(value), "v"), ".")
-	if len(fields) != 3 {
-		return parts, false
+// StableTag は、GitHub Releaseとinstallerへ渡してよい正規の安定版tagを返す。
+// update処理はこの検査を通らないtagからURLや環境変数を組み立てない。
+func StableTag(value string) (string, bool) {
+	parsed, ok := semanticVersion(value)
+	if !ok || semver.Prerelease(parsed) != "" || semver.Build(parsed) != "" {
+		return "", false
 	}
-	for index, field := range fields {
-		number, err := strconv.Atoi(field)
-		if err != nil || number < 0 {
-			return parts, false
-		}
-		parts[index] = number
+	return parsed, true
+}
+
+func semanticVersion(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "v") {
+		value = "v" + value
 	}
-	return parts, true
+	return value, semver.IsValid(value)
 }

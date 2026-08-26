@@ -143,16 +143,25 @@ func runEngineApp(
 	}()
 
 	parts := newPlatformParts()
+	updates := &selfupdate.Checker{
+		API:  latestReleaseAPI,
+		HTTP: &http.Client{Timeout: 3 * time.Second},
+	}
+	announce := announceReadiness(stdout)
 	dependencyValues := app.Dependencies{
-		Random:   rand.Reader,
-		Port:     options.Port,
-		Announce: announceReadiness(stdout),
-		// このアプリケーションが自分自身以外のホストに接触する唯一の場所であり、
-		// 誰かが求めたときにだけ行う。何も取得せず、何も置き換えない。
-		Updates: &selfupdate.Checker{
-			API:  "https://api.github.com/repos/aida0710/sshc/releases/latest",
-			HTTP: &http.Client{Timeout: 30 * time.Second},
+		Random: rand.Reader,
+		Port:   options.Port,
+		Announce: func(readiness app.Readiness) error {
+			// HTTP受付開始を先に知らせる。最新版確認が遅い／失敗する場合もengineは
+			// 既に利用でき、その失敗で停止させない。
+			if err := announce(readiness); err != nil {
+				return err
+			}
+			reportAvailableUpdate(runCtx, updates, version, stdout, logger)
+			return nil
 		},
+		// 起動通知とWeb UIの手動確認は同じrelease判定を使用する。
+		Updates:         updates,
 		Listen:          net.Listen,
 		UI:              assets,
 		Logger:          logger,
@@ -173,6 +182,26 @@ func runEngineApp(
 		return 1
 	}
 	return exitForCause(cause, logger)
+}
+
+// reportAvailableUpdate はengineが受付を始めた直後に一度だけ確認し、新版がある
+// 場合だけ通知する。ネットワーク障害や出力失敗はengineの成否へ影響させない。
+func reportAvailableUpdate(ctx context.Context, checker *selfupdate.Checker, current string, out io.Writer, logger *slog.Logger) {
+	checkCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	latest, err := checker.Latest(checkCtx)
+	if err != nil {
+		if logger != nil {
+			logger.Debug("check for an sshc update", "error", err)
+		}
+		return
+	}
+	if !selfupdate.Newer(current, latest.Version) || checkCtx.Err() != nil {
+		return
+	}
+	if _, err := fmt.Fprintf(out, "sshc: %s is available; run `sshc update`\n", latest.Version); err != nil && logger != nil {
+		logger.Debug("announce an sshc update", "error", err)
+	}
 }
 
 // exitForCause は、走行が終わった理由ひとつを終了コードへ写す。

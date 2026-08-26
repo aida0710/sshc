@@ -14,6 +14,7 @@ require (
 	github.com/labstack/echo/v5 v5.3.1
 	github.com/pkg/sftp v1.13.11
 	golang.org/x/crypto v0.54.0
+	golang.org/x/mod v0.39.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -42,7 +43,6 @@ require (
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mobile v0.0.0-20260813181013-1960c775504c // indirect
-	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
 	golang.org/x/text v0.40.0 // indirect

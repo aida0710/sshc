@@ -19,6 +19,7 @@ const (
 	invocationOpen
 	invocationStatus
 	invocationVault
+	invocationUpdate
 	invocationHelp
 	invocationVersion
 )
@@ -40,6 +41,7 @@ const (
 	runSubcommand     = "run"
 	helpSubcommand    = "help"
 	versionSubcommand = "version"
+	updateSubcommand  = "update"
 	StatusSubcommand  = "status"
 )
 
@@ -84,6 +86,8 @@ func parseInvocation(argv []string) (invocation, error) {
 			return invocation{Kind: invocationStatus, JSON: true}, nil
 		}
 		return noArguments(invocationStatus, word, args)
+	case updateSubcommand:
+		return noArguments(invocationUpdate, word, args)
 	case vaultSubcommand:
 		if len(args) != 1 {
 			return invalidInvocation("vault requires one action")
@@ -169,6 +173,7 @@ func usage(out io.Writer) {
   sshc open            print a one-time UI URL
   sshc status          print what the running engine is doing
                        --json      print it as JSON, for the shell
+  sshc update          update an installation managed by Homebrew or install.sh
   sshc vault status    describe the running engine and vault
   sshc vault create    create and unlock a new vault
   sshc vault unlock    unlock the vault in the running engine

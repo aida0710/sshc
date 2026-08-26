@@ -43,6 +43,10 @@ var allowedToStartPrograms = []string{
 	// loopback の URL ひとつだけである。開けなくても失敗ではない。URL は
 	// 標準出力にも出ているので、貼れる表記はユーザーの手元に残る。
 	"cmd/sshc/browser.go",
+	// updateは任意のinstallerを選ばない。実行中binaryとSameFileで結び付けたHomebrew
+	// だけを固定argvで呼ぶか、digest付きreceiptが一致したinstall.sh版だけを公開済み
+	// tagのscriptへ委ねる。どちらにも該当しない実行ファイルからは起動しない。
+	"cmd/sshc/update.go",
 	// ローカルシェルには擬似端末が要る。インターフェースは出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",

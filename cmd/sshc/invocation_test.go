@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"runtime"
 	"strings"
 	"testing"
@@ -152,5 +153,24 @@ func TestUsageNamesTheVersionCommand(t *testing.T) {
 	usage(&out)
 	if !strings.Contains(out.String(), "sshc version") {
 		t.Error("usage does not mention the version command")
+	}
+}
+
+func TestUpdateIsReservedAndTakesNoArguments(t *testing.T) {
+	called, err := parseInvocation([]string{"sshc", "update"})
+	if err != nil {
+		t.Fatalf("parse update = %v", err)
+	}
+	if called.Kind != invocationUpdate {
+		t.Fatalf("update kind = %v, want invocationUpdate", called.Kind)
+	}
+	if _, err := parseInvocation([]string{"sshc", "update", "later"}); err == nil {
+		t.Fatal("update accepted an argument")
+	}
+
+	var out bytes.Buffer
+	usage(&out)
+	if !strings.Contains(out.String(), "sshc update") {
+		t.Error("usage does not mention the update command")
 	}
 }
