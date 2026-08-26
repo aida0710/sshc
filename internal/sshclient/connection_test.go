@@ -38,6 +38,24 @@ func TestSubsystemConnectionRefusesAnUnknownHostWithoutPersistingIt(t *testing.T
 	}
 }
 
+func TestSubsystemConnectionUsesAStoredPasswordWithoutPrompting(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) {
+		return "hunter2", true
+	}}
+
+	connection, err := dialerFor(t, server, auth).Connect(
+		context.Background(), targetWith(server),
+	)
+
+	if err != nil {
+		t.Fatalf("Connect = %v", err)
+	}
+	if err := connection.Close(); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+}
+
 func TestSubsystemConnectionRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
 	path, contents, public := keyPair(t)
 	inner := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})

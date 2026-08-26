@@ -44,6 +44,22 @@ func TestProbeNeverAsksTheUser(t *testing.T) {
 	}
 }
 
+func TestProbeUsesAStoredPasswordWithoutAskingTheUser(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) {
+		return "hunter2", true
+	}}
+
+	probe, err := dialerFor(t, server, auth).Probe(context.Background(), targetWith(server))
+
+	if err != nil {
+		t.Fatalf("Probe = %v", err)
+	}
+	if probe.Method != "password" {
+		t.Fatalf("method = %q, want password", probe.Method)
+	}
+}
+
 func TestProbeReportsAuthenticationThatDidNotPass(t *testing.T) {
 	path, contents, _ := keyPair(t)
 	// サーバーは別の鍵しか受け付けない。

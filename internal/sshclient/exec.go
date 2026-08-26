@@ -31,8 +31,8 @@ type Output struct {
 // 文字列として受け取る。これは OpenSSH の `ssh host 'command'` と同じであり、
 // 呼び出し側が組み立てるのは自分が書いた定数だけである。
 //
-// 何も尋ねない。Prompter を渡さないので、保存済みの資格情報で通らない
-// 接続はそこで失敗する。非対話処理ではユーザー入力を待たない。
+// 保存済み資格情報は対話接続と同じ認証経路で使用するが、追加質問は拒否する。
+// 保存済みの結果で通らない接続はそこで失敗し、ユーザー入力を待たない。
 //
 // 制限時間内で終わる管理操作を対象とするため keepalive は送らない。結果の解析が
 // ロケールに依存しないよう、ssh_config の SetEnv も送らない。
@@ -50,7 +50,7 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	client, closers, err := d.chain(ctx, strict, nil, nil)
+	client, closers, err := d.chain(ctx, strict, noPrompt, nil)
 	if err != nil {
 		return Output{Elapsed: time.Since(started)}, err
 	}

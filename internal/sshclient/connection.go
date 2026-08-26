@@ -28,7 +28,7 @@ func (d Dialer) Connect(ctx context.Context, target Target) (*Connection, error)
 	// confirmation. Applying this only to the final host leaves ProxyJump hops
 	// able to auto-register an unknown key before the subsystem reaches it.
 	strict := requireKnownHosts(target)
-	client, closers, err := d.chain(ctx, strict, nil, nil)
+	client, closers, err := d.chain(ctx, strict, noPrompt, nil)
 	if err != nil {
 		return nil, err
 	}

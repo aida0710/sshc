@@ -203,6 +203,109 @@ func TestStreamForwardsStandardInputToTheCommand(t *testing.T) {
 	}
 }
 
+// 非対話であることは、vault に保存済みの資格情報まで使わないという意味では
+// ない。追加質問は拒否しつつ、対話接続と同じ password 認証を通す。
+func TestStreamUsesAStoredPasswordWithoutConsumingCommandInput(t *testing.T) {
+	received := make(chan string, 1)
+	server := newTestServer(t, serverOptions{
+		Password: "hunter2",
+		OnShell: func(channel ssh.Channel) {
+			contents, _ := io.ReadAll(channel)
+			received <- string(contents)
+		},
+	})
+	auth := sshclient.Auth{Password: func(target sshclient.Target) (string, bool) {
+		return "hunter2", target.Alias == "bastion"
+	}}
+	dialer := dialerFor(t, server, auth)
+
+	code, err := dialer.Stream(context.Background(), targetWith(server), "cat", sshclient.Streams{
+		In: strings.NewReader("command input"), Out: io.Discard, Err: io.Discard,
+	})
+
+	if err != nil {
+		t.Fatalf("Stream = %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	select {
+	case got := <-received:
+		if got != "command input" {
+			t.Fatalf("command input = %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the remote command never received its standard input")
+	}
+}
+
+// Ubuntu などが password を keyboard-interactive の単一の非表示質問として
+// 提示する場合にも、保存済み結果だけで非対話接続できる。
+func TestStreamUsesAStoredPasswordForOneHiddenQuestion(t *testing.T) {
+	server := newTestServer(t, serverOptions{
+		Keyboard: map[string]string{"Password: ": "hunter2"},
+	})
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) {
+		return "hunter2", true
+	}}
+
+	code, err := dialerFor(t, server, auth).Stream(
+		context.Background(), targetWith(server), "true",
+		sshclient.Streams{Out: io.Discard, Err: io.Discard},
+	)
+
+	if err != nil {
+		t.Fatalf("Stream = %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+}
+
+func TestStreamDoesNotPromptAfterAStoredPasswordIsRejected(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) {
+		return "stale password", true
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err := dialerFor(t, server, auth).Stream(
+		ctx, targetWith(server), "true",
+		sshclient.Streams{Out: io.Discard, Err: io.Discard},
+	)
+
+	if err == nil {
+		t.Fatal("Stream authenticated with a rejected stored password")
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stream waited for input instead of rejecting the stale password: %v", err)
+	}
+}
+
+func TestStreamDoesNotAnswerMultipleInteractiveQuestions(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{
+		"Password: ": "hunter2", "Verification code: ": "123456",
+	}})
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) {
+		return "hunter2", true
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err := dialerFor(t, server, auth).Stream(
+		ctx, targetWith(server), "true",
+		sshclient.Streams{Out: io.Discard, Err: io.Discard},
+	)
+
+	if err == nil {
+		t.Fatal("Stream answered a multi-question challenge without a user")
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stream waited for answers to a multi-question challenge: %v", err)
+	}
+}
+
 // 設定した ServerAliveInterval は、この入口でも効く。対話セッションだけが
 // 尊重していて、長く暗黙に走るコマンドの側が無視していた。途中の機器に接続を
 // 捨てられて困るのは、むしろこちらである。
