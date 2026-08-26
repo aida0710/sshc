@@ -84,6 +84,8 @@ export type IntegrationsApi = {
   passwordVault(): Promise<PasswordVaultStatus>;
   initialiseVault(passphrase: string): Promise<PasswordVaultStatus>;
   unlockVault(passphrase: string): Promise<PasswordVaultStatus>;
+  recoverCompatibleVault(passphrase: string): Promise<PasswordVaultStatus>;
+  resetUnsupportedVault(passphrase: string): Promise<PasswordVaultStatus>;
   lockVault(): Promise<PasswordVaultStatus>;
   changeMasterPassword(current: string, next: string): Promise<ChangeMasterPasswordResult>;
   updateStatus(): Promise<UpdateStatus>;
@@ -651,6 +653,15 @@ export const integrationsApi: IntegrationsApi = {
   },
   async unlockVault(passphrase) {
     return validateVaultStatus(await postJSON<unknown>("/api/v1/passwords/unlock", { passphrase }));
+  },
+  async recoverCompatibleVault(passphrase) {
+    return validateVaultStatus(await postJSON<unknown>("/api/v1/passwords/recover-compatible-backup", { passphrase }));
+  },
+  async resetUnsupportedVault(passphrase) {
+    return validateVaultStatus(await postJSON<unknown>("/api/v1/passwords/reset-unsupported", {
+      passphrase,
+      acknowledged: true,
+    }));
   },
   async lockVault() {
     return validateVaultStatus(await postJSON<unknown>("/api/v1/passwords/lock", {}));

@@ -688,3 +688,47 @@ func TestPasswordProblemClassifiesStorageFailuresWithoutExposingPaths(t *testing
 		})
 	}
 }
+
+func TestPasswordProblemReportsTheExactVaultSchemaDirection(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		found int
+		code  string
+	}{
+		{name: "older", found: 3, code: "vault_schema_older"},
+		{name: "newer", found: 5, code: "vault_schema_newer"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			engine := echo.New()
+			engine.GET("/", func(c *echo.Context) error {
+				return passwordProblem(c, &secret.SchemaVersionError{Found: test.found, Supported: 4})
+			})
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+			if recorder.Code != http.StatusConflict {
+				t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+			}
+			var answer api.Problem
+			if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+				t.Fatal(err)
+			}
+			if answer.Code != test.code || answer.CurrentVersion == nil || *answer.CurrentVersion != test.found ||
+				answer.RequiredVersion == nil || *answer.RequiredVersion != 4 {
+				t.Fatalf("problem = %#v", answer)
+			}
+		})
+	}
+}
+
+func TestResetUnsupportedVaultRequiresAnExplicitAcknowledgement(t *testing.T) {
+	engine, _ := passwordEngine(t)
+	for _, body := range []string{
+		`{"passphrase":"` + testPassphrase + `"}`,
+		`{"passphrase":"` + testPassphrase + `","acknowledged":false}`,
+	} {
+		response := send(t, engine, http.MethodPost, "/api/v1/passwords/reset-unsupported", body, nil)
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "vault_reset_acknowledgement_required") {
+			t.Fatalf("reset without acknowledgement = %d: %s", response.Code, response.Body.String())
+		}
+	}
+}

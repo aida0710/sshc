@@ -391,8 +391,15 @@ func TestUnsupportedVaultDocumentsAreRefused(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := secret.Open(sealed, passphrase); !errors.Is(err, secret.ErrUnsupportedVersion) {
-			t.Fatalf("Open(%s) error = %v, want ErrUnsupportedVersion", name, err)
+		_, openErr := secret.Open(sealed, passphrase)
+		if !errors.Is(openErr, secret.ErrUnsupportedVersion) {
+			t.Fatalf("Open(%s) error = %v, want ErrUnsupportedVersion", name, openErr)
+		}
+		if name == "future" && !errors.Is(openErr, secret.ErrNewerSchema) {
+			t.Fatalf("Open(%s) error = %v, want ErrNewerSchema", name, openErr)
+		}
+		if name != "future" && !errors.Is(openErr, secret.ErrOlderSchema) {
+			t.Fatalf("Open(%s) error = %v, want ErrOlderSchema", name, openErr)
 		}
 	}
 }

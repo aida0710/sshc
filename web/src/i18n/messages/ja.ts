@@ -430,6 +430,18 @@ export const ja = {
   "lock.storageReadOnly": "アプリ専用ストレージが読み取り専用です。端末を再起動してから再試行してください。",
   "lock.storageBusy": "別の vault 更新が完了していません。少し待ってから再試行してください。",
   "lock.storageIO": "Android がアプリ専用ストレージへの入出力エラーを報告しました。",
+  "lock.schemaOlder": "vault のバージョンが古いです（必要なバージョン: {required}、現在: {current}）。",
+  "lock.schemaNewer": "vault のバージョンがこの sshc より新しいです（対応バージョン: {required}、現在: {current}）。",
+  "lock.envelopeUnsupported": "暗号化 vault の外枠が未対応の形式です。診断情報を開いて共有してください。",
+  "lock.schemaRecoveryHint":
+    "まず互換性のある最新のローカルバックアップを復元できます。見つからない場合は、SSH 設定と鍵ファイルを残して空の vault を作成できます。",
+  "lock.restoreCompatibleBackup": "互換性のある vault を復元",
+  "lock.noCompatibleBackup": "互換性のあるローカルバックアップは見つかりませんでした。何も変更していません。",
+  "lock.recoveryFailed": "互換性のある vault を復元できませんでした。",
+  "lock.resetUnsupportedAcknowledge":
+    "保存済みパスワード、保存済み鍵パスフレーズ、同期設定が初期化されることを確認しました。SSH 設定と鍵ファイルは残ります。",
+  "lock.resetUnsupported": "空の vault を作成",
+  "lock.resetFailed": "未対応の vault を安全に置き換えられませんでした。",
   "lock.failed": "vault を開けませんでした。",
   "section.sync": "同期",
   "section.history": "履歴",

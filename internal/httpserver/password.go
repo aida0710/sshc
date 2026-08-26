@@ -3,6 +3,7 @@ package httpserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"sort"
@@ -76,6 +77,24 @@ func (v *vaultOperations) Unlock(passphrase string) error {
 	return v.service.Unlock(passphrase)
 }
 
+func (v *vaultOperations) RecoverCompatibleBackup(passphrase string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.service == nil {
+		return errVaultUnavailable
+	}
+	return v.service.RecoverCompatibleBackup(passphrase)
+}
+
+func (v *vaultOperations) ResetUnsupported(passphrase string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.service == nil {
+		return errVaultUnavailable
+	}
+	return v.service.ResetUnsupported(passphrase)
+}
+
 func (v *vaultOperations) Lock() error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -116,6 +135,8 @@ func registerPasswordRoutes(engine *echo.Echo, handlers PasswordHandlers) {
 	engine.GET("/api/v1/passwords", handlers.Status)
 	engine.POST("/api/v1/passwords/initialise", handlers.Initialise)
 	engine.POST("/api/v1/passwords/unlock", handlers.Unlock)
+	engine.POST("/api/v1/passwords/recover-compatible-backup", handlers.RecoverCompatibleBackup)
+	engine.POST("/api/v1/passwords/reset-unsupported", handlers.ResetUnsupported)
 	engine.POST("/api/v1/passwords/change", handlers.Change)
 	engine.POST("/api/v1/passwords/lock", handlers.Lock)
 	engine.GET("/api/v1/passwords/:alias/eligibility", handlers.Eligible)
@@ -172,6 +193,28 @@ func (h PasswordHandlers) Unlock(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	if err := h.vault.Unlock(request.Passphrase); err != nil {
+		return passwordProblem(c, err)
+	}
+	return h.status(c)
+}
+
+func (h PasswordHandlers) RecoverCompatibleBackup(c *echo.Context) error {
+	var request api.PassphraseRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if err := h.vault.RecoverCompatibleBackup(request.Passphrase); err != nil {
+		return passwordProblem(c, err)
+	}
+	return h.status(c)
+}
+
+func (h PasswordHandlers) ResetUnsupported(c *echo.Context) error {
+	var request api.ResetUnsupportedVaultRequest
+	if err := decodeJSON(c, &request); err != nil || !request.Acknowledged {
+		return problem(c, http.StatusBadRequest, "vault_reset_acknowledgement_required")
+	}
+	if err := h.vault.ResetUnsupported(request.Passphrase); err != nil {
 		return passwordProblem(c, err)
 	}
 	return h.status(c)
@@ -523,6 +566,7 @@ func (h PasswordHandlers) Forget(c *echo.Context) error {
 }
 
 func passwordProblem(c *echo.Context, err error) error {
+	var schema *secret.SchemaVersionError
 	switch {
 	case errors.Is(err, secret.ErrLocked):
 		return problem(c, http.StatusConflict, "vault_locked")
@@ -532,8 +576,23 @@ func passwordProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusNotFound, "vault_missing")
 	case errors.Is(err, secret.ErrWrongPassphrase):
 		return problem(c, http.StatusForbidden, "wrong_passphrase")
+	case errors.As(err, &schema) && errors.Is(err, secret.ErrOlderSchema):
+		return problemWith(c, http.StatusConflict, problemPayload{
+			Code: "vault_schema_older", Detail: fmt.Sprintf("vault schema %d is older than supported schema %d", schema.Found, schema.Supported),
+			CurrentVersion: &schema.Found, RequiredVersion: &schema.Supported,
+		})
+	case errors.As(err, &schema) && errors.Is(err, secret.ErrNewerSchema):
+		return problemWith(c, http.StatusConflict, problemPayload{
+			Code: "vault_schema_newer", Detail: fmt.Sprintf("vault schema %d is newer than supported schema %d", schema.Found, schema.Supported),
+			CurrentVersion: &schema.Found, RequiredVersion: &schema.Supported,
+		})
 	case errors.Is(err, secret.ErrUnsupportedVersion):
-		return problem(c, http.StatusConflict, "vault_too_new")
+		return problemDetail(c, http.StatusConflict, "vault_envelope_unsupported",
+			"the encrypted vault envelope version is not supported")
+	case errors.Is(err, secret.ErrNoCompatibleBackup):
+		return problem(c, http.StatusNotFound, "vault_compatible_backup_missing")
+	case errors.Is(err, secret.ErrRecoveryNotNeeded):
+		return problem(c, http.StatusConflict, "vault_recovery_not_needed")
 	case errors.Is(err, secret.ErrCostRefused):
 		return problem(c, http.StatusConflict, "vault_cost_refused")
 	case errors.Is(err, secret.ErrWeakPassphrase):
