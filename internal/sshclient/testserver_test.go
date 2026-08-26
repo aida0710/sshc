@@ -66,6 +66,8 @@ type serverOptions struct {
 	Keyboard map[string]string
 	// ExitCode はシェルの終了コード。
 	ExitCode int
+	// OmitExitStatus は、transport が終了状態を残さず切れた場合を再現する。
+	OmitExitStatus bool
 	// AllowDirectTCPIP は direct-tcpip チャンネルを通すか。ProxyJump の手前側で要る。
 	AllowDirectTCPIP bool
 	// Reached は、direct-tcpip の行き先ごとに返す接続である。
@@ -377,8 +379,10 @@ func (s *testServer) run(channel ssh.Channel) {
 	if s.OnShell != nil {
 		s.OnShell(channel)
 	}
-	status := struct{ Status uint32 }{Status: uint32(s.ExitCode)}
-	_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(&status))
+	if !s.options.OmitExitStatus {
+		status := struct{ Status uint32 }{Status: uint32(s.ExitCode)}
+		_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(&status))
+	}
 	_ = channel.Close()
 }
 

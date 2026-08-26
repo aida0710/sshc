@@ -62,6 +62,11 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 		return
 	}
 	closers = append(closers, client)
+	// handshake が通った時点で輸送の所有権を Session へ渡す。NewSession の
+	// 応答を待っている隙に Close されても、client と ProxyJump を残さない。
+	if _, attached := session.attach(nil, closers); !attached {
+		return
+	}
 	trace.say(Brief, "認証できました。セッションを開きます。")
 
 	remote, err := client.NewSession()
@@ -71,7 +76,10 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 		return
 	}
 
-	size := session.attach(remote, closers)
+	size, attached := session.attach(remote, closers)
+	if !attached {
+		return
+	}
 
 	// 転送はチャンネルを開いたあと、シェルを起動する前に開く。開いていることを
 	// 端末の一行目に書くためであり、失敗しても接続は続ける。
@@ -189,22 +197,14 @@ func (d Dialer) connectOne(
 		HostKeyAlgorithms: d.HostKeys.Algorithms(target),
 		Timeout:           timeout,
 	}
-	// 握手そのものにも締め切りを掛ける。応答を返さないまま繋いだままの相手が、
-	// この goroutine を保持し続けないようにするためである。
-	if deadline, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(deadline)
-	}
 	if trace.enabled(Detailed) {
 		trace.say(Detailed, "試せる認証は %d 通りです。", len(config.Auth))
 	}
-	connection, channels, requests, err := ssh.NewClientConn(conn, target.Address(), config)
+	connection, channels, requests, err := newClientConn(ctx, conn, target.Address(), config)
 	if err != nil {
-		err = withComplaints(err, conn)
-		_ = conn.Close()
 		trace.say(Brief, "握手が通りませんでした: %v", err)
 		return nil, err
 	}
-	_ = conn.SetDeadline(time.Time{})
 	trace.say(Full, "相手が名乗った版は %s です。", connection.ServerVersion())
 	trace.say(Detailed, "握手が通りました（%s）。", trace.since(started).Round(time.Millisecond))
 	return ssh.NewClient(connection, channels, requests), nil
@@ -215,6 +215,9 @@ func (d Dialer) connectOne(
 // 輸送を選ぶのはここだけである。手前のホップの上か、ProxyCommand の
 // 標準入出力か、素の TCP か。
 func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, trace *tracer) (net.Conn, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if target.ProxyCommand != "" {
 		// そのプログラムはこの機械で走る。手前のホップの中ではない。
 		// 踏み台の向こうのホップに書かれていたら、走らせても設定が言っている
@@ -232,6 +235,43 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 		return d.Dial(ctx, "tcp", target.Address())
 	}
 	return (&net.Dialer{}).DialContext(ctx, "tcp", target.Address())
+}
+
+// newClientConn は SSH handshake を ctx の所有下で行う。
+//
+// net.Conn の deadline だけでは、親 context の途中 cancel は期限まで反映されない。
+// handshake がまだ raw transport を所有している間は、cancel 時にそれを閉じて
+// NewClientConn を直ちに解く。
+func newClientConn(
+	ctx context.Context, conn net.Conn, address string, config *ssh.ClientConfig,
+) (ssh.Conn, <-chan ssh.NewChannel, <-chan *ssh.Request, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+	}
+	cancelled := make(chan struct{})
+	stopClose := context.AfterFunc(ctx, func() {
+		_ = conn.Close()
+		close(cancelled)
+	})
+
+	connection, channels, requests, err := ssh.NewClientConn(conn, address, config)
+	if !stopClose() {
+		<-cancelled
+	}
+	if err != nil {
+		err = withComplaints(err, conn)
+		_ = conn.Close()
+		if cause := ctx.Err(); cause != nil {
+			return nil, nil, nil, cause
+		}
+		return nil, nil, nil, err
+	}
+	if cause := ctx.Err(); cause != nil {
+		_ = connection.Close()
+		return nil, nil, nil, cause
+	}
+	_ = conn.SetDeadline(time.Time{})
+	return connection, channels, requests, nil
 }
 
 // withComplaints は、プログラムが標準エラーへ書いたものを理由に足す。

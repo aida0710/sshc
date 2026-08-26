@@ -35,8 +35,7 @@ func (d Dialer) Probe(ctx context.Context, target Target) (Probe, error) {
 
 	// 未知のホストを暗黙に受け入れない。StrictHostKeyChecking=yes 相当である。
 	// 検査のために信頼を増やしてはならない。
-	strict := target
-	strict.Strict = "yes"
+	strict := requireKnownHosts(target)
 
 	recorder := &methodRecorder{}
 	auth := d.Auth
@@ -100,11 +99,7 @@ func (d Dialer) probeChain(
 		}
 		return nil, nil, err
 	}
-	if deadline, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(deadline)
-	}
-
-	connection, channels, requests, err := ssh.NewClientConn(conn, target.Address(), &ssh.ClientConfig{
+	connection, channels, requests, err := newClientConn(ctx, conn, target.Address(), &ssh.ClientConfig{
 		User:            target.User,
 		Auth:            auth,
 		HostKeyCallback: d.HostKeys.Callback(target, nil),
@@ -117,13 +112,11 @@ func (d Dialer) probeChain(
 		Timeout:           timeout,
 	})
 	if err != nil {
-		_ = conn.Close()
 		for _, existing := range opened {
 			_ = existing.Close()
 		}
 		return nil, nil, err
 	}
-	_ = conn.SetDeadline(time.Time{})
 	return ssh.NewClient(connection, channels, requests), opened, nil
 }
 

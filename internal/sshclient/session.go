@@ -40,6 +40,7 @@ type Session struct {
 	cancel context.CancelFunc
 
 	mutex   sync.Mutex
+	closed  bool
 	remote  *ssh.Session
 	size    terminal.Size
 	closers []io.Closer
@@ -57,8 +58,10 @@ type Session struct {
 
 func newSession(size terminal.Size, cancel context.CancelFunc) *Session {
 	reader, writer := io.Pipe()
+	input := NewInputBuffer()
+	input.enablePromptGate()
 	return &Session{
-		input: NewInputBuffer(), reader: reader, writer: writer,
+		input: input, reader: reader, writer: writer,
 		size: size, cancel: cancel, done: make(chan struct{}), ready: make(chan error, 1),
 	}
 }
@@ -68,8 +71,16 @@ func (s *Session) Forwards() []terminal.Forward { return s.forwarded.list() }
 
 // Prompter は、この端末のストリームへ問いを出す。
 func (s *Session) Prompter() Prompter {
-	return StreamPrompter{Out: s.writer, In: s.input}
+	return StreamPrompter{
+		Out: s.writer, In: s.input,
+		begin: s.input.beginPrompt,
+		end:   s.input.endPrompt,
+	}
 }
+
+// AwaitingPrompt reports whether Ready前の入力が、いま表示した認証promptへの
+// 回答として受理される。terminal registryはそれ以外の先行入力を捨てる。
+func (s *Session) AwaitingPrompt() bool { return s.input.awaitingPrompt() }
 
 // Ready reports when authentication and remote shell startup have completed.
 // Startup automation waits here so its bytes cannot answer an authentication prompt.
@@ -77,6 +88,9 @@ func (s *Session) Ready() <-chan error { return s.ready }
 
 func (s *Session) markReady(err error) {
 	s.readyOnce.Do(func() {
+		if err == nil {
+			s.input.markUsable()
+		}
 		s.ready <- err
 		close(s.ready)
 	})
@@ -132,6 +146,7 @@ func (s *Session) Close() error {
 			s.cancel()
 		}
 		s.mutex.Lock()
+		s.closed = true
 		remote, closers := s.remote, s.closers
 		s.mutex.Unlock()
 		s.forwarded.close()
@@ -197,13 +212,23 @@ func (s *Session) fail(reason error) {
 	}
 }
 
-// attach は、開いたチャンネルをこのセッションへ結び付ける。
-func (s *Session) attach(remote *ssh.Session, closers []io.Closer) terminal.Size {
+// attach は、開いた輸送と、用意できていればチャンネルをこのセッションへ結び付ける。
+func (s *Session) attach(remote *ssh.Session, closers []io.Closer) (terminal.Size, bool) {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	if s.closed {
+		size := s.size
+		s.mutex.Unlock()
+		if remote != nil {
+			_ = remote.Close()
+		}
+		closeAll(closers)
+		return size, false
+	}
 	s.remote = remote
 	s.closers = closers
-	return s.size
+	size := s.size
+	s.mutex.Unlock()
+	return size, true
 }
 
 // run は、シェルが終わるまで待ち、その理由を記録する。

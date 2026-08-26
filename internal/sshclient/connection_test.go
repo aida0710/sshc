@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -89,5 +90,35 @@ func TestSubsystemConnectionRefusesAnUnknownProxyJumpWithoutPersistingIt(t *test
 	}
 	if written != 0 {
 		t.Fatal("a non-interactive subsystem persisted an unknown ProxyJump host key")
+	}
+}
+
+func TestSubsystemConnectionSendsConfiguredKeepAlivesUntilClose(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	target := targetWith(server, path)
+	target.KeepAlive = 25 * time.Millisecond
+	target.KeepAliveMax = 100
+
+	connection, err := dialerFor(t, server, auth).Connect(context.Background(), target)
+	if err != nil {
+		t.Fatalf("Connect = %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && server.KeepAlives() < 3 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := server.KeepAlives(); got < 3 {
+		_ = connection.Close()
+		t.Fatalf("the server saw %d keepalives", got)
+	}
+	if err := connection.Close(); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+	afterClose := server.KeepAlives()
+	time.Sleep(100 * time.Millisecond)
+	if got := server.KeepAlives(); got != afterClose {
+		t.Fatalf("keepalives continued after Close: %d -> %d", afterClose, got)
 	}
 }

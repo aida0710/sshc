@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -29,6 +30,41 @@ func TestStartReturnsAnEntranceThatIsAlreadyServing(t *testing.T) {
 	}
 	if !strings.Contains(url, "/#bootstrap=") {
 		t.Errorf("URL = %q, want a one-time bootstrap fragment", url)
+	}
+}
+
+func TestStartPrefersAnImmediateRunFailureOverAnAnnouncedEntrance(t *testing.T) {
+	runFailure := errors.New("accept failed immediately")
+	probeFailure := errors.New("the announced entrance is already closed")
+	probeStarted := make(chan struct{})
+	runReturned := make(chan struct{})
+	url, err := startWith(t.TempDir(), t.TempDir(),
+		func(_ context.Context, dependencies app.Dependencies, _ string) error {
+			defer close(runReturned)
+			if announceErr := dependencies.Announce(app.Readiness{
+				Entrance: "http://127.0.0.1:43123/#bootstrap=test",
+			}); announceErr != nil {
+				return announceErr
+			}
+			// Startがentrance側を選びprobeを開始するまで、Runを終了させない。
+			// これでselectの乱数に依存せずAnnounce→Serve失敗の順序を再現する。
+			<-probeStarted
+			return runFailure
+		},
+		func(context.Context, string) error {
+			close(probeStarted)
+			<-runReturned
+			return probeFailure
+		},
+	)
+	if url != "" {
+		t.Fatalf("Start returned a dead entrance %q", url)
+	}
+	if !errors.Is(err, runFailure) || !errors.Is(err, probeFailure) {
+		t.Fatalf("Start error = %v, want run and probe failures", err)
+	}
+	if got := LastStartFailureKind(); got != KindEngineStartFailed {
+		t.Fatalf("LastStartFailureKind = %d, want %d", got, KindEngineStartFailed)
 	}
 }
 

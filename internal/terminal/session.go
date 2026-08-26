@@ -209,14 +209,20 @@ func (s *Session) Detach(stream *Stream) {
 // Write は打鍵を PTY へ渡す。
 func (s *Session) Write(p []byte) (int, error) {
 	s.mutex.Lock()
-	process, exited, reopening := s.process, s.exited, s.reopen != nil
+	process, exited, state := s.process, s.exited, s.state
 	s.mutex.Unlock()
-	if exited == nil && process == nil && reopening {
-		// 繋ぎ直しのあいだの打鍵は捨てる。溜めない。
-		return len(p), nil
-	}
 	if exited != nil || process == nil {
+		if exited == nil && (state == StateConnecting || state == StateReconnecting) {
+			return len(p), nil
+		}
 		return 0, ErrExited
+	}
+	if state == StateConnecting || state == StateReconnecting {
+		prompting, ok := process.(Prompting)
+		if !ok || !prompting.AwaitingPrompt() {
+			// Ready前の通常入力を溜めない。明示的な認証promptだけが例外である。
+			return len(p), nil
+		}
 	}
 	return process.Write(p)
 }

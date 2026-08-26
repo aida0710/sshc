@@ -109,7 +109,10 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 				return snippets.Resolution{}, err
 			}
 			return snippets.Resolution{
-				Target: snippets.Target{Alias: target.Alias, HostName: target.HostName, User: target.User, Port: target.Port},
+				Target: snippets.Target{
+					Alias: target.Alias, HostName: target.HostName, User: target.User, Port: target.Port,
+					Route: snippetRoute(target),
+				},
 				Run: func(ctx context.Context, command string) (snippets.CommandOutput, error) {
 					output, err := remoteRun(ctx, target, command, nil)
 					return snippets.CommandOutput{
@@ -141,6 +144,20 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	return services, nil
 }
 
+func snippetRoute(target sshclient.Target) []snippets.RouteHop {
+	route := make([]snippets.RouteHop, 0, len(target.Jump)+1)
+	for _, hop := range target.Jump {
+		route = append(route, snippetRoute(hop)...)
+	}
+	return append(route, snippets.RouteHop{
+		Alias: target.Alias, HostName: target.HostName, User: target.User, Port: target.Port,
+		ProxyCommand: target.ProxyCommand, StrictHostKey: target.Strict,
+		Authentication: append([]string(nil), target.Methods.Order()...),
+		IdentityFiles:  append([]string(nil), target.Identities...), IdentitiesOnly: target.IdentitiesOnly,
+		HostKeyAlgorithms: append([]string(nil), target.HostKeyAlgorithms...),
+	})
+}
+
 // buildSync は、リモートのスナップショットへ出入りする経路を組む。
 func buildSync(
 	workspace *storage.Workspace,
@@ -164,6 +181,11 @@ func buildSync(
 	syncService.OpenVault = passwordService.TravelDocument
 	syncService.SealVault = passwordService.AdoptTravelDocument
 	syncService.VaultAdopted = passwordService.Reload
+	syncService.StableSnapshot = func(snapshot func() error) error {
+		return passwordService.WithStableSnapshot(func() error {
+			return transactions.WithSnapshot(snapshot)
+		})
+	}
 
 	autoSync := remotesync.NewAuto(syncService, remotesync.AutoInterval,
 		func() string { return time.Now().UTC().Format(time.RFC3339) })

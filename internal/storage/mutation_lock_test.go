@@ -3,6 +3,7 @@ package storage
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,84 @@ import (
 	"testing"
 	"time"
 )
+
+func TestWithSnapshotExcludesWorkspaceCommits(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	manager := NewManager(workspace, time.Now, rand.Reader)
+	target := filepath.Join(workspace.Root(), "config")
+	if err := workspace.EnsureDirectory(workspace.Root()); err != nil {
+		t.Fatal(err)
+	}
+
+	started := make(chan struct{})
+	finished := make(chan error, 1)
+	if err := manager.WithSnapshot(func() error {
+		go func() {
+			close(started)
+			_, err := manager.Commit(Request{Operation: "snapshot-exclusion", Changes: []Change{{Path: target, Contents: []byte("new")}}})
+			finished <- err
+		}()
+		<-started
+		select {
+		case err := <-finished:
+			return fmt.Errorf("commit crossed snapshot barrier: %w", err)
+		case <-time.After(100 * time.Millisecond):
+			return nil
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-finished:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("commit did not resume after snapshot barrier")
+	}
+}
+
+func TestDiscardBackupPublishRunsBeforeMutationBarrierRelease(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	manager := NewManager(workspace, time.Now, rand.Reader)
+	if err := workspace.EnsureDirectory(workspace.Root()); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(workspace.Root(), "vault")
+	entered := make(chan struct{})
+	finished := make(chan error, 1)
+	crossed := false
+	_, err := manager.CommitAtomicDiscardBackupsAndPublish(Request{
+		Operation: "publish-generation",
+		Changes:   []Change{{Path: target, Contents: []byte("new-generation")}},
+	}, func() {
+		go func() {
+			finished <- manager.WithSnapshot(func() error {
+				close(entered)
+				return nil
+			})
+		}()
+		select {
+		case <-entered:
+			crossed = true
+		case <-time.After(100 * time.Millisecond):
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if crossed {
+		t.Fatal("a new workspace generation started before in-memory publication finished")
+	}
+	select {
+	case err := <-finished:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("waiting workspace generation did not resume")
+	}
+}
 
 const mutationLockHelperEnvironment = "SSHC_STORAGE_MUTATION_LOCK_HELPER"
 

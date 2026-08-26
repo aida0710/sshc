@@ -15,6 +15,7 @@ import (
 type Connection struct {
 	client  *ssh.Client
 	closers []io.Closer
+	done    chan struct{}
 	once    sync.Once
 	err     error
 }
@@ -32,7 +33,13 @@ func (d Dialer) Connect(ctx context.Context, target Target) (*Connection, error)
 	if err != nil {
 		return nil, err
 	}
-	return &Connection{client: client, closers: append(closers, client)}, nil
+	connection := &Connection{
+		client: client, closers: append(closers, client), done: make(chan struct{}),
+	}
+	if keepAlive := keepAliveLoop(client, strict.KeepAlive, strict.KeepAliveMax, connection.done); keepAlive != nil {
+		go keepAlive()
+	}
+	return connection, nil
 }
 
 func requireKnownHosts(target Target) Target {
@@ -50,6 +57,7 @@ func (c *Connection) Client() *ssh.Client { return c.client }
 // Close releases the final transport and every ProxyJump hop, deepest first.
 func (c *Connection) Close() error {
 	c.once.Do(func() {
+		close(c.done)
 		for index := len(c.closers) - 1; index >= 0; index-- {
 			if err := c.closers[index].Close(); err != nil && c.err == nil {
 				c.err = err

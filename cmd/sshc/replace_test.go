@@ -2,6 +2,10 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -53,7 +57,11 @@ func TestReplacingIsNotOfferedWhereNobodyCanAnswer(t *testing.T) {
 	var out bytes.Buffer
 
 	// 端末ではない stdin。結果は No で、問いも出ない。
-	if askToReplace(found, 0, false, strings.NewReader("y\n"), &out) {
+	got, err := askToReplace(context.Background(), found, 0, false, strings.NewReader("y\n"), &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got {
 		t.Error("it asked a reader that is not a terminal")
 	}
 	if out.Len() != 0 {
@@ -64,10 +72,45 @@ func TestReplacingIsNotOfferedWhereNobodyCanAnswer(t *testing.T) {
 // 旗を書いたユーザーには従う。端末かどうかは関係ない。先に結果を決めてある。
 func TestReplacingObeysTheFlagWithoutAsking(t *testing.T) {
 	var out bytes.Buffer
-	if !askToReplace(handoff.Handoff{PID: 1}, 3, true, strings.NewReader(""), &out) {
+	got, err := askToReplace(context.Background(), handoff.Handoff{PID: 1}, 3, true, strings.NewReader(""), &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got {
 		t.Error("--replace was not obeyed")
 	}
 	if out.Len() != 0 {
 		t.Errorf("it asked anyway: %q", out.String())
+	}
+}
+
+func TestReplacingStopsWaitingForTheEngineLockWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	acquires := 0
+	err := stopRunningEngine(ctx, t.TempDir(), handoff.Handoff{URL: server.URL, Secret: "test"}, server.Client(),
+		func(string) (func() error, error) {
+			acquires++
+			cancel()
+			return nil, errEngineRunning
+		})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("stopRunningEngine = %v, want context.Canceled", err)
+	}
+	if acquires != 1 {
+		t.Fatalf("acquire calls = %d, want 1", acquires)
+	}
+}
+
+func TestReplaceFlagDoesNotOverrideCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	got, err := askToReplace(ctx, handoff.Handoff{PID: 1}, 0, true, strings.NewReader(""), &bytes.Buffer{})
+	if got || !errors.Is(err, context.Canceled) {
+		t.Fatalf("askToReplace = %v, %v; want false, context.Canceled", got, err)
 	}
 }

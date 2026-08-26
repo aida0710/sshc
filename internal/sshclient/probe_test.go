@@ -3,6 +3,8 @@ package sshclient_test
 import (
 	"context"
 	"errors"
+	"runtime"
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -101,6 +103,53 @@ func TestProbeRefusesAnUnknownHostEvenWhenTheConfigurationWouldNot(t *testing.T)
 	}
 	if written != 0 {
 		t.Fatal("a probe wrote a host key into known_hosts")
+	}
+}
+
+func TestProbeRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
+	path, contents, public := keyPair(t)
+	inner := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
+	edge := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public}, AllowDirectTCPIP: true,
+	})
+	edge.allow(inner.Address())
+	written := 0
+	dialer := sshclient.Dialer{
+		Auth: sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
+		HostKeys: sshclient.HostKeys{
+			Read: func() ([]byte, error) {
+				return []byte(knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())), nil
+			},
+			Add: func(knownhosts.Candidate) error { written++; return nil },
+		},
+	}
+	target := targetWith(inner, path)
+	jump := targetWith(edge, path)
+	jump.Strict = "no"
+	target.Jump = []sshclient.Target{jump}
+
+	_, err := dialer.Probe(context.Background(), target)
+	if !errors.Is(err, sshclient.ErrHostKeyUnknown) {
+		t.Fatalf("Probe = %v, want ErrHostKeyUnknown", err)
+	}
+	if written != 0 {
+		t.Fatal("Probe persisted an unknown ProxyJump host key")
+	}
+}
+
+func TestProbeIncludesAProxyCommandsComplaint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fixture uses a POSIX shell command")
+	}
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
+	target := targetWith(server, path)
+	target.ProxyCommand = "echo zzz-probe-route-failed >&2; exit 1"
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	_, err := dialerFor(t, server, auth).Probe(context.Background(), target)
+	if err == nil || !strings.Contains(err.Error(), "zzz-probe-route-failed") {
+		t.Fatalf("Probe = %v, want ProxyCommand complaint", err)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
 )
 
@@ -54,6 +55,20 @@ func TestStreamKeepsTheTwoOutputsApart(t *testing.T) {
 	}
 	if errOut.String() != "this is the diagnosis\n" {
 		t.Errorf("stderr = %q", errOut.String())
+	}
+}
+
+func TestStreamAnnouncesTheLocalProxyCommandOnStderr(t *testing.T) {
+	server, dialer, target := streamSetup(t, serverOptions{})
+	target.ProxyCommand = relayCommand(t, server.Address())
+	var errOut bytes.Buffer
+	if _, err := dialer.Stream(context.Background(), target, "true", sshclient.Streams{
+		Out: io.Discard, Err: &errOut,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(errOut.String(), "ProxyCommand") || !strings.Contains(errOut.String(), target.ProxyCommand) {
+		t.Fatalf("stderr did not announce local ProxyCommand: %q", errOut.String())
 	}
 }
 
@@ -118,6 +133,38 @@ func TestStreamRefusesAnUnknownHostInsteadOfTrustingIt(t *testing.T) {
 
 	if !errors.Is(err, sshclient.ErrHostKeyUnknown) {
 		t.Fatalf("err = %v, want ErrHostKeyUnknown", err)
+	}
+}
+
+func TestStreamRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
+	path, contents, public := keyPair(t)
+	inner := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
+	edge := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public}, AllowDirectTCPIP: true,
+	})
+	edge.allow(inner.Address())
+	written := 0
+	dialer := sshclient.Dialer{
+		Auth: sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
+		HostKeys: sshclient.HostKeys{
+			Read: func() ([]byte, error) {
+				return []byte(knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())), nil
+			},
+			Add: func(knownhosts.Candidate) error { written++; return nil },
+		},
+	}
+	target := targetWith(inner, path)
+	jump := targetWith(edge, path)
+	jump.Strict = "no"
+	target.Jump = []sshclient.Target{jump}
+
+	_, err := dialer.Stream(context.Background(), target, "true",
+		sshclient.Streams{Out: io.Discard, Err: io.Discard})
+	if !errors.Is(err, sshclient.ErrHostKeyUnknown) {
+		t.Fatalf("Stream = %v, want ErrHostKeyUnknown", err)
+	}
+	if written != 0 {
+		t.Fatal("Stream persisted an unknown ProxyJump host key")
 	}
 }
 
@@ -236,6 +283,30 @@ func TestStreamUsesAStoredPasswordWithoutConsumingCommandInput(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the remote command never received its standard input")
+	}
+}
+
+func TestStreamDoesNotReadAStoredPasswordWhenPublicKeySucceeds(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
+	passwordReads := 0
+	auth := sshclient.Auth{
+		ReadFile: func(string) ([]byte, error) { return contents, nil },
+		Password: func(sshclient.Target) (string, bool) {
+			passwordReads++
+			return "unused", true
+		},
+	}
+
+	code, err := dialerFor(t, server, auth).Stream(
+		context.Background(), targetWith(server, path), "true",
+		sshclient.Streams{Out: io.Discard, Err: io.Discard},
+	)
+	if err != nil || code != 0 {
+		t.Fatalf("Stream = %d, %v", code, err)
+	}
+	if passwordReads != 0 {
+		t.Fatalf("stored password was read %d time(s) after publickey succeeded", passwordReads)
 	}
 }
 

@@ -240,6 +240,42 @@ func TestPreviewEvidenceDetectsSnippetAndTargetChanges(t *testing.T) {
 	}
 }
 
+func TestPreviewEvidenceDetectsProxyCommandRouteChanges(t *testing.T) {
+	repository := &memoryRepository{}
+	var proxyCommand atomic.Value
+	proxyCommand.Store("proxy-before --stdio")
+	service := NewService(Options{
+		Repository: repository,
+		Resolve: func(alias string) (Resolution, error) {
+			return Resolution{
+				Target: Target{
+					Alias: alias, HostName: "unchanged.example", User: "aida", Port: "22",
+					Route: []RouteHop{{
+						Alias: alias, HostName: "unchanged.example", User: "aida", Port: "22",
+						ProxyCommand: proxyCommand.Load().(string), StrictHostKey: "yes",
+						Authentication: []string{"publickey"},
+					}},
+				},
+				Run: func(context.Context, string) (CommandOutput, error) { return CommandOutput{}, nil },
+			}, nil
+		},
+		Now: time.Now, Random: strings.NewReader(strings.Repeat("r", 256)),
+	})
+	snippet := createSnippet(t, service, Draft{Name: "Check", Command: "uptime"})
+	request := PreviewRequest{SnippetID: snippet.ID, Aliases: []string{"bastion"}}
+	preview, err := service.Preview(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := preview.Targets[0].Target.Route[0].ProxyCommand; got != "proxy-before --stdio" {
+		t.Fatalf("preview ProxyCommand = %q", got)
+	}
+	proxyCommand.Store("proxy-after --stdio")
+	if _, err := service.Start(context.Background(), ExecuteRequest{PreviewRequest: request, Evidence: preview.Evidence}); !errors.Is(err, ErrPreviewChanged) {
+		t.Fatalf("Start after ProxyCommand change = %v, want ErrPreviewChanged", err)
+	}
+}
+
 func TestAdHocCommandPreviewAndExecution(t *testing.T) {
 	service := testService(&memoryRepository{}, func(ctx context.Context, alias, command string) (CommandOutput, error) {
 		return CommandOutput{Stdout: []byte(alias + ":" + command)}, nil
