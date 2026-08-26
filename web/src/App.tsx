@@ -422,6 +422,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     return (
       <LockScreen
         exists={vaultExists}
+        version={version}
+        onExists={() => setVaultExists(true)}
         onOpen={() => {
           setVaultExists(true);
           setState("ready");

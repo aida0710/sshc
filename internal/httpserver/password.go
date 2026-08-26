@@ -3,9 +3,11 @@ package httpserver
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"net/http"
 	"sort"
 	"sync"
+	"syscall"
 
 	"github.com/labstack/echo/v5"
 
@@ -540,7 +542,17 @@ func passwordProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "password_empty")
 	case errors.Is(err, secret.ErrUnsafeName):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
+	case errors.Is(err, secret.ErrStorageBusy):
+		return problemDetail(c, http.StatusConflict, "vault_storage_busy", "another workspace mutation did not finish within 30 seconds")
+	case errors.Is(err, fs.ErrPermission), errors.Is(err, syscall.EACCES), errors.Is(err, syscall.EPERM):
+		return problemDetail(c, http.StatusInternalServerError, "vault_storage_permission_denied", "the operating system denied access to the app's private storage")
+	case errors.Is(err, syscall.ENOSPC):
+		return problemDetail(c, http.StatusInsufficientStorage, "vault_storage_full", "the app's private storage does not have enough free space")
+	case errors.Is(err, syscall.EROFS):
+		return problemDetail(c, http.StatusInternalServerError, "vault_storage_read_only", "the app's private storage is read-only")
+	case errors.Is(err, syscall.EIO):
+		return problemDetail(c, http.StatusInternalServerError, "vault_storage_io_failed", "the operating system reported an input/output failure while accessing private storage")
 	default:
-		return problem(c, http.StatusInternalServerError, "vault_write_failed")
+		return problemDetail(c, http.StatusInternalServerError, "vault_write_failed", "the encrypted vault could not be committed to app storage")
 	}
 }

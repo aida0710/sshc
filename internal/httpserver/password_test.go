@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -650,5 +651,40 @@ func TestChangingTheMasterPasswordReturnsTheLocalVaultState(t *testing.T) {
 	if code := send(t, engine, http.MethodPost, "/api/v1/passwords/unlock",
 		`{"passphrase":"a different master password"}`, nil).Code; code != http.StatusOK {
 		t.Error("the new master password does not unlock")
+	}
+}
+
+func TestPasswordProblemClassifiesStorageFailuresWithoutExposingPaths(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{name: "permission", err: &os.PathError{Op: "open", Path: "/data/user/0/private", Err: syscall.EACCES}, status: http.StatusInternalServerError, code: "vault_storage_permission_denied"},
+		{name: "full", err: &os.PathError{Op: "write", Path: "/data/user/0/private", Err: syscall.ENOSPC}, status: http.StatusInsufficientStorage, code: "vault_storage_full"},
+		{name: "read-only", err: &os.PathError{Op: "rename", Path: "/data/user/0/private", Err: syscall.EROFS}, status: http.StatusInternalServerError, code: "vault_storage_read_only"},
+		{name: "busy", err: secret.ErrStorageBusy, status: http.StatusConflict, code: "vault_storage_busy"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine := echo.New()
+			engine.GET("/", func(c *echo.Context) error { return passwordProblem(c, test.err) })
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, test.status, recorder.Body.String())
+			}
+			var answer api.Problem
+			if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+				t.Fatal(err)
+			}
+			if answer.Code != test.code {
+				t.Errorf("code = %q, want %q", answer.Code, test.code)
+			}
+			if strings.Contains(recorder.Body.String(), "/data/user") {
+				t.Errorf("response exposed a private path: %s", recorder.Body.String())
+			}
+		})
 	}
 }
