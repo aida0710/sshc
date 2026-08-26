@@ -275,7 +275,7 @@ func (h SFTPHandlers) SaveText(c *echo.Context) error {
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	file, err := h.Service.SaveText(c.Request().Context(), c.Param("alias"), c.QueryParam("path"), body.Contents, body.ExpectedRevision)
+	file, err := h.Transfers.SaveText(c.Request().Context(), c.Param("alias"), c.QueryParam("path"), body.Contents, body.ExpectedRevision)
 	if err != nil {
 		return sftpProblem(c, err)
 	}

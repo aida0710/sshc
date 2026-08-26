@@ -378,6 +378,9 @@ func (m *TransferManager) MaxConcurrent() int {
 }
 
 func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error) {
+	if m.isClosed() {
+		return TransferJob{}, ErrUnavailable
+	}
 	m.sweepPreparedDownloads()
 	if !transferIDPattern.MatchString(input.ID) || !transferIDPattern.MatchString(input.BatchID) ||
 		strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 255 || input.TotalBytes < -1 ||
@@ -532,12 +535,18 @@ func (m *TransferManager) ListJobs() []TransferJob {
 }
 
 func (m *TransferManager) UpdateJob(id string, update UpdateTransferJob) (TransferJob, error) {
+	if m.isClosed() {
+		return TransferJob{}, ErrUnavailable
+	}
 	return m.updateJob(id, update, transferUpdateInternal)
 }
 
 // UpdateJobFromClient accepts queue controls but reserves upload progress and
 // terminal publication state for the owned data-plane endpoints.
 func (m *TransferManager) UpdateJobFromClient(id string, update UpdateTransferJob) (TransferJob, error) {
+	if m.isClosed() {
+		return TransferJob{}, ErrUnavailable
+	}
 	// The same operation lock is held by upload publication. A pause/fail cannot
 	// change the queue state between the atomic rename and its terminal commit.
 	unlock := m.lock("", "\x00job-owner:"+id)

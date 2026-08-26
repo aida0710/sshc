@@ -379,6 +379,22 @@ func TestBuildReturnsAServerAndAOneTimeBootstrapToken(t *testing.T) {
 	}
 }
 
+func TestBuildMarksLoopbackListenerFailures(t *testing.T) {
+	denied := errors.New("socket denied")
+	_, _, err := Build(Dependencies{
+		Home:   t.TempDir(),
+		Random: bytes.NewReader(bytes.Repeat([]byte{0x26}, 512)),
+		Listen: func(string, string) (net.Listener, error) { return nil, denied },
+		UI:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Owner:  handoff.OwnerEngine,
+		PID:    4242,
+	}, "build-test")
+	if !errors.Is(err, ErrListen) {
+		t.Fatalf("Build() = %v, want ErrListen", err)
+	}
+}
+
 func TestBuildWritesAVersionedOwnedHandoff(t *testing.T) {
 	home := t.TempDir()
 	server, _, err := Build(Dependencies{

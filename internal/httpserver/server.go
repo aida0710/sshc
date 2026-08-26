@@ -99,10 +99,11 @@ type Options struct {
 var ErrNonLoopbackListener = errors.New("listener must use 127.0.0.1")
 
 type Server struct {
-	listener net.Listener
-	http     *http.Server
-	url      string
-	engine   *echo.Echo
+	listener  net.Listener
+	http      *http.Server
+	url       string
+	engine    *echo.Echo
+	transfers interface{ Close() error }
 
 	// baseCancel は、停止開始時に全リクエストと WebSocket の context を取り消す。
 	baseCancel context.CancelFunc
@@ -211,6 +212,23 @@ func (s *Server) Wait() error {
 	// 締切とちょうど同時に最後の要求が退場したときに壁が消える。
 	for s.outstanding > 0 || s.inFlight > 0 {
 		s.condition().Wait()
+	}
+	transfers := s.transfers
+	if transfers != nil {
+		// A remote Close may block in transport code. Do not hold the server
+		// condition mutex across it: a concurrent force request and other Wait
+		// callers still need to observe the in-progress join.
+		s.mutex.Unlock()
+		transferErr := transfers.Close()
+		s.mutex.Lock()
+		if transferErr != nil {
+			s.joined = append(s.joined, transferErr)
+		}
+		// ForceClose may have registered work while the mutex was released for
+		// transport cleanup. Preserve the original Wait contract and join it too.
+		for s.outstanding > 0 || s.inFlight > 0 {
+			s.condition().Wait()
+		}
 	}
 	s.waitErr = errors.Join(s.joined...)
 	s.waited = true
@@ -339,8 +357,10 @@ func New(options Options) (*Server, error) {
 		})
 	}
 	if options.SFTP != nil {
+		transfers := sshcSFTP.NewTransferManager(options.SFTP)
+		server.transfers = transfers
 		registerSFTPRoutes(e, SFTPHandlers{
-			Service: options.SFTP, Transfers: sshcSFTP.NewTransferManager(options.SFTP), Actions: actions,
+			Service: options.SFTP, Transfers: transfers, Actions: actions,
 		})
 	}
 	if options.Workspaces != nil {

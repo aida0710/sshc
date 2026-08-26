@@ -81,6 +81,69 @@ func TestPreparedDownloadSpoolIsReusedForTheOwningJob(t *testing.T) {
 	}
 }
 
+func TestTransferManagerCloseReleasesRetainedRemoteAndRejectsNewWork(t *testing.T) {
+	remote := remoteWith(nil)
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+		return remote, nil
+	}})
+	if _, err := manager.Start(t.Context(), "edge", "transfer_close01", "/target.bin", sftp.StartUploadOptions{Size: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if remote.closed {
+		t.Fatal("retained remote was closed before manager shutdown")
+	}
+	if err := manager.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !remote.closed {
+		t.Fatal("manager shutdown did not close the retained remote")
+	}
+	if _, err := manager.Start(t.Context(), "edge", "transfer_close02", "/other.bin", sftp.StartUploadOptions{Size: 1}); !errors.Is(err, sftp.ErrUnavailable) {
+		t.Fatalf("Start after Close = %v, want ErrUnavailable", err)
+	}
+	if err := manager.Close(); err != nil {
+		t.Fatalf("second Close = %v", err)
+	}
+}
+
+func TestManagerSerializesTextPublicationsForTheSameTarget(t *testing.T) {
+	remote := remoteWith(map[string]node{"/note.txt": file("note.txt", "before", 0o600)})
+	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	manager := sftp.NewTransferManager(service)
+	original, err := service.ReadText(t.Context(), "edge", "/note.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var creates atomic.Int32
+	remote.createHook = func() {
+		if creates.Add(1) == 1 {
+			close(entered)
+		}
+		<-release
+	}
+	results := make(chan error, 2)
+	go func() {
+		_, saveErr := manager.SaveText(t.Context(), "edge", "/note.txt", "first", original.Revision)
+		results <- saveErr
+	}()
+	<-entered
+	go func() {
+		_, saveErr := manager.SaveText(t.Context(), "edge", "/note.txt", "second", original.Revision)
+		results <- saveErr
+	}()
+	time.Sleep(20 * time.Millisecond)
+	if got := creates.Load(); got != 1 {
+		t.Fatalf("concurrent temporary files = %d, want 1", got)
+	}
+	close(release)
+	firstErr, secondErr := <-results, <-results
+	if (firstErr == nil) == (secondErr == nil) || (!errors.Is(firstErr, sftp.ErrConflict) && !errors.Is(secondErr, sftp.ErrConflict)) {
+		t.Fatalf("SaveText results = %v, %v; want one success and one conflict", firstErr, secondErr)
+	}
+}
+
 func TestPreparedDownloadSpoolBuildIsSingleflightPerJob(t *testing.T) {
 	remote := remoteWith(map[string]node{"/large.bin": file("large.bin", "abcdefgh", 0o600)})
 	opened := make(chan struct{})

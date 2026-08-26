@@ -23,6 +23,39 @@ func (listener fakeListener) Accept() (net.Conn, error) { return nil, errors.New
 func (listener fakeListener) Close() error              { return nil }
 func (listener fakeListener) Addr() net.Addr            { return listener.address }
 
+type blockingCloser struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (closer blockingCloser) Close() error {
+	close(closer.entered)
+	<-closer.release
+	return nil
+}
+
+func TestWaitJoinsWorkRegisteredWhileClosingOwnedResources(t *testing.T) {
+	closer := blockingCloser{entered: make(chan struct{}), release: make(chan struct{})}
+	server := &Server{transfers: closer}
+	waited := make(chan error, 1)
+	go func() { waited <- server.Wait() }()
+	<-closer.entered
+
+	server.mutex.Lock()
+	server.outstanding++
+	server.mutex.Unlock()
+	close(closer.release)
+	select {
+	case err := <-waited:
+		t.Fatalf("Wait returned before late work joined: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	server.record(func() error { return nil })
+	if err := <-waited; err != nil {
+		t.Fatalf("Wait = %v", err)
+	}
+}
+
 func TestNewRejectsNonLoopbackListeners(t *testing.T) {
 	tests := []struct {
 		name    string

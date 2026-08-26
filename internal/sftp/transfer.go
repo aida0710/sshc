@@ -32,6 +32,9 @@ type TransferManager struct {
 	remotes   map[string]Remote
 	downloads map[string]preparedDownloadCache
 	spoolDir  string
+	closed    bool
+	closeOnce sync.Once
+	closeErr  error
 
 	jobsMutex     sync.Mutex
 	jobs          map[string]*transferJobRecord
@@ -148,6 +151,49 @@ func NewTransferManager(service *Service) *TransferManager {
 	manager := &TransferManager{Service: service, locks: make(map[string]*transferLock), remotes: make(map[string]Remote), downloads: make(map[string]preparedDownloadCache), spoolDir: downloadSpoolDirectory()}
 	manager.ConfigureJobs(DefaultTransferConcurrency, time.Now)
 	return manager
+}
+
+// Close releases resources intentionally retained between transfer requests.
+// The HTTP server calls it only after its admission barrier has drained every
+// request, so no data-plane operation can still be using these handles.
+func (m *TransferManager) Close() error {
+	if m == nil {
+		return nil
+	}
+	m.closeOnce.Do(func() {
+		m.mutex.Lock()
+		m.closed = true
+		remotes := make([]Remote, 0, len(m.remotes))
+		for key, remote := range m.remotes {
+			delete(m.remotes, key)
+			remotes = append(remotes, remote)
+		}
+		downloads := make([]*PreparedDownload, 0, len(m.downloads))
+		for id, cached := range m.downloads {
+			delete(m.downloads, id)
+			downloads = append(downloads, cached.download)
+		}
+		m.mutex.Unlock()
+		var joined []error
+		for _, remote := range remotes {
+			if err := remote.Close(); err != nil {
+				joined = append(joined, err)
+			}
+		}
+		for _, download := range downloads {
+			if err := download.Close(); err != nil {
+				joined = append(joined, err)
+			}
+		}
+		m.closeErr = errors.Join(joined...)
+	})
+	return m.closeErr
+}
+
+func (m *TransferManager) isClosed() bool {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return m.closed
 }
 
 func downloadSpoolDirectory() string {
@@ -297,6 +343,9 @@ func (m *TransferManager) PrepareOwnedArchive(ctx context.Context, id, alias, re
 }
 
 func (m *TransferManager) prepareOwnedSpool(id string, build func() (*PreparedDownload, int64, error)) (*PreparedDownload, error) {
+	if m.isClosed() {
+		return nil, ErrUnavailable
+	}
 	if m.spoolDir == "" {
 		// Never fall back to the system temp directory when the private spool
 		// could not be initialized; that would bypass crash cleanup and quota.
@@ -322,6 +371,12 @@ func (m *TransferManager) prepareOwnedSpool(id string, build func() (*PreparedDo
 		return nil, ErrTransferState
 	}
 	m.mutex.Lock()
+	if m.closed {
+		m.mutex.Unlock()
+		_ = prepared.Close()
+		releaseProcessSpool(reserved)
+		return nil, ErrUnavailable
+	}
 	lease := &preparedSpoolLease{path: prepared.name, reserved: reserved, refs: 1}
 	prepared.remove, prepared.lease = false, lease
 	m.downloads[id] = preparedDownloadCache{download: prepared, created: time.Now()}
@@ -541,6 +596,9 @@ func (m *TransferManager) CancelOwned(ctx context.Context, alias, id, remotePath
 }
 
 func (m *TransferManager) Start(ctx context.Context, alias, id, remotePath string, options StartUploadOptions) (ResumableUpload, error) {
+	if m.isClosed() {
+		return ResumableUpload{}, ErrUnavailable
+	}
 	cleaned, err := resumablePath(id, remotePath)
 	if err != nil || options.Size < 0 {
 		return ResumableUpload{}, ErrInvalidTransfer
@@ -588,6 +646,9 @@ func (m *TransferManager) Start(ctx context.Context, alias, id, remotePath strin
 }
 
 func (m *TransferManager) Append(ctx context.Context, alias, id, remotePath string, offset, total int64, contents []byte) (ResumableUpload, error) {
+	if m.isClosed() {
+		return ResumableUpload{}, ErrUnavailable
+	}
 	cleaned, err := resumablePath(id, remotePath)
 	if err != nil || offset < 0 || total < 0 || int64(len(contents)) > total-offset {
 		return ResumableUpload{}, ErrOffsetMismatch
@@ -645,6 +706,9 @@ func (m *TransferManager) Append(ctx context.Context, alias, id, remotePath stri
 }
 
 func (m *TransferManager) Complete(ctx context.Context, alias, id, remotePath string, total int64, expectedRevision, sourceFingerprint string) (Transfer, error) {
+	if m.isClosed() {
+		return Transfer{}, ErrUnavailable
+	}
 	cleaned, err := resumablePath(id, remotePath)
 	if err != nil || total < 0 || expectedRevision == "" || sourceFingerprint == "" {
 		return Transfer{}, ErrInvalidTransfer
@@ -745,6 +809,9 @@ func SourceFingerprint(ctx context.Context, source io.Reader, size int64) (strin
 }
 
 func (m *TransferManager) Cancel(ctx context.Context, alias, id, remotePath string) error {
+	if m.isClosed() {
+		return ErrUnavailable
+	}
 	cleaned, err := resumablePath(id, remotePath)
 	if err != nil {
 		return err
@@ -889,6 +956,10 @@ func transferRemoteKey(alias, id, target string) string {
 func (m *TransferManager) transferRemote(ctx context.Context, alias, id, target string) (Remote, error) {
 	key := transferRemoteKey(alias, id, target)
 	m.mutex.Lock()
+	if m.closed {
+		m.mutex.Unlock()
+		return nil, ErrUnavailable
+	}
 	remote := m.remotes[key]
 	m.mutex.Unlock()
 	if remote != nil {
@@ -899,6 +970,11 @@ func (m *TransferManager) transferRemote(ctx context.Context, alias, id, target 
 		return nil, err
 	}
 	m.mutex.Lock()
+	if m.closed {
+		m.mutex.Unlock()
+		_ = remote.Close()
+		return nil, ErrUnavailable
+	}
 	if existing := m.remotes[key]; existing != nil {
 		m.mutex.Unlock()
 		_ = remote.Close()
@@ -907,6 +983,21 @@ func (m *TransferManager) transferRemote(ctx context.Context, alias, id, target 
 	m.remotes[key] = remote
 	m.mutex.Unlock()
 	return remote, nil
+}
+
+// SaveText serializes editor publication with resumable upload publication
+// for the same alias and target in this engine generation.
+func (m *TransferManager) SaveText(ctx context.Context, alias, remotePath, contents, expectedRevision string) (TextFile, error) {
+	if m == nil || m.Service == nil || m.isClosed() {
+		return TextFile{}, ErrUnavailable
+	}
+	cleaned, err := cleanPath(remotePath, false)
+	if err != nil {
+		return TextFile{}, err
+	}
+	unlock := m.lock(alias, cleaned)
+	defer unlock()
+	return m.Service.SaveText(ctx, alias, cleaned, contents, expectedRevision)
 }
 
 func (m *TransferManager) releaseRemote(alias, id, target string) {

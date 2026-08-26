@@ -226,6 +226,33 @@ func TestAJumpListOverridesTheHopOwnUserAndPort(t *testing.T) {
 	}
 }
 
+// リスト側の上書きは ProxyCommand のトークンを展開する前に確定しなければならない。
+// Target だけを後から書き換えると、ホスト鍵と認証は 2022 を対象にする一方で、実際の
+// transport は ProxyCommand に残った 2200 を開く。
+func TestAJumpListOverrideAlsoReachesTheHopProxyCommandTokens(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"target": {"hostname": {"10.0.0.9"}, "proxyjump": {"someone@edge:2022"}},
+		"edge": {
+			"hostname":     {"198.51.100.1"},
+			"user":         {"gate"},
+			"port":         {"2200"},
+			"proxycommand": {"/usr/bin/nc %h %p --user %r"},
+		},
+	})
+
+	target, err := sshclient.NewTarget("target", resolve, testHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hop := target.Jump[0]
+	if hop.User != "someone" || hop.Port != "2022" {
+		t.Fatalf("hop = %+v, want the list's user and port", hop)
+	}
+	if hop.ProxyCommand != "/usr/bin/nc 198.51.100.1 2022 --user someone" {
+		t.Errorf("ProxyCommand = %q, want the overridden hop identity", hop.ProxyCommand)
+	}
+}
+
 // ProxyJump のトークンは、繋ぐ側が展開する。
 //
 // `ssh -G` は生のまま報告する。OpenSSH がこれを展開するのは繋ぐ瞬間だから

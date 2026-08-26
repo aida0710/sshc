@@ -43,6 +43,8 @@ public final class EngineService extends Service {
     private final LocalBinder binder = new LocalBinder();
     private String entrance;
     private long failure;
+    private String failureCode = "none";
+    private String failureDetail = "";
     private Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final EngineShutdown shutdown = new EngineShutdown(ENGINE, this::stopEngine);
@@ -68,6 +70,28 @@ public final class EngineService extends Service {
     /** 直前の起動が失敗した理由。成功していれば {@link Mobile#KindNone}。 */
     long failure() {
         return failure;
+    }
+
+    /** 利用者がissueへ貼れる安定した失敗code。 */
+    String failureCode() {
+        return failureCode;
+    }
+
+    /** Go側でcredentialを伏せ字化し、長さを制限した診断文。 */
+    String failureDetail() {
+        return failureDetail;
+    }
+
+    /** 失敗した同じService世代でengineをもう一度起動する。 */
+    boolean retry() {
+        if (failure == Mobile.KindNone || lease.isStopping()) return false;
+        failure = Mobile.KindNone;
+        failureCode = "none";
+        failureDetail = "";
+        // 失敗時に外したforegroundを、次のGo呼び出しより先に復帰させる。
+        startForeground(NOTIFICATION_ID, notification());
+        ENGINE.execute(this::startEngine);
+        return true;
     }
 
     /** Activity の生存中だけ停止通知先を保持する。 */
@@ -155,14 +179,21 @@ public final class EngineService extends Service {
                 if (lease.isStopping()) return;
                 entrance = startedEntrance;
                 failure = Mobile.KindNone;
+                failureCode = "none";
+                failureDetail = "";
                 if (listener != null) listener.engineReady();
             });
         } catch (Exception error) {
             long reason = Mobile.lastStartFailureKind();
+            String code = Mobile.lastStartFailureCode();
+            String detail = Mobile.lastStartFailureDetail();
             main.post(() -> {
                 if (lease.isStopping()) return;
                 failure = reason;
-                Log.e(TAG, "the engine did not start; reason " + failure);
+                failureCode = code;
+                failureDetail = detail;
+                Log.e(TAG, "engine start failed; code=" + failureCode
+                        + "; detail=" + failureDetail);
                 if (listener != null) listener.engineReady();
                 stopForeground(STOP_FOREGROUND_REMOVE);
                 stopSelf();

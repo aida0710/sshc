@@ -9,7 +9,7 @@
 
 - HTTP サーバーは IPv4 の `127.0.0.1` だけに bind します。LAN、Tailnet、コンテナ外部など、ネットワークへ公開して安全な設計ではありません。
 - このアプリケーションは利用者の `~/.ssh` を読み書きし、鍵を生成し、埋め込みターミナルからリモートホストへ接続します。それぞれの境界は以下の各節で説明します。
-- cookie 単体ではリクエスト元を検証できません。cookie はポートを区別せず、`SameSite` の site 判定にもポートは含まれないため、同じブラウザで `http://127.0.0.1:<別ポート>` を開くと session cookie は別ポートにも送信されます。そのため、読み取りを含むすべての API リクエストに `X-SSHC-CSRF` を要求します。このトークンはページのメモリだけに保持され、別ポートには送信されません。例外は 3 つです。`POST /api/v1/session/bootstrap` は最初のトークンを発行するため、代わりに `Origin` の完全一致を要求します。`POST /api/v1/session/renew` はリロード直後にトークンを再取得するため、トークンなしで受け付けます。`GET /api/v1/health` も例外です。
+- cookie 単体ではリクエスト元を検証できません。cookie はポートを区別せず、`SameSite` の site 判定にもポートは含まれないため、同じブラウザで `http://127.0.0.1:<別ポート>` を開くと session cookie は別ポートにも送信されます。そのため、読み取りを含むすべての API リクエストに `X-SSHC-CSRF` を要求します。このトークンは port を含む origin ごとの `sessionStorage` に保持され、別ポートには送信されません。例外は 2 つです。`POST /api/v1/session/bootstrap` は最初のトークンを発行するため、代わりに `Origin` の完全一致を要求します。`GET /api/v1/health` も例外です。`POST /api/v1/session/renew` は `sessionStorage` に残った現在のトークンを検証してから新しいトークンを発行します。
 - bootstrap、session、CSRF の値をログへ出してはいけません。bootstrap は URL fragment に置き、ブラウザが直ちに履歴から除去します。
 - 同一マシン上の悪意あるプロセス、侵害されたブラウザ、ブラウザ拡張から秘密を完全には保護できません。将来の秘密鍵 reveal/copy 機能でも、ブラウザ拡張やローカルのクリップボード監視・履歴ツールに対して秘密は脆弱です。
 - UI は埋め込みファイルシステムからのみ配信し、URL を OS ファイルパスへ変換しません。存在しない API は SPA へフォールバックしません。
@@ -55,14 +55,14 @@
   | ループバックの TCP listener | 他の機械から届くこと | 画面と CLI が別経路になったとき |
   | bootstrap トークン | 最初のセッションを、残る場所に置かずに画面へ渡す | 残ります |
   | セッション cookie | どのウィンドウからの要求かを言えないこと | 残ります |
-  | CSRF ヘッダー | **cookie がポートに紐づかないこと。** `127.0.0.1` はそれ自体が site なので、同じアドレスの別のポートで動くサーバーがこの cookie を受け取ります。token はページのメモリにあってそこへは渡らないので、漏れた cookie 単体を無価値にします | 画面が自分のものだけになり、そこから他の `127.0.0.1` へ移動できないと言い切れるとき |
+  | CSRF ヘッダー | **cookie がポートに紐づかないこと。** `127.0.0.1` はそれ自体が site なので、同じアドレスの別のポートで動くサーバーがこの cookie を受け取ります。token は port-origin ごとの `sessionStorage` にあってそこへは渡らないので、漏れた cookie 単体を無価値にします | 画面が自分のものだけになり、そこから他の `127.0.0.1` へ移動できないと言い切れるとき |
   | handoff の秘密 | `/cli/connect` に誰でも来られること | CLI が別経路になったとき |
   | ストリームのチケット | WebSocket のアップグレードにヘッダを付けられないこと | 残ります |
   | 一回限りの action token | 確認から実行までの間に対象が変わること | 残ります |
 
   条件が変わった場合は、対応するセキュリティ機構の必要性を再評価します。
 
-- API は同一オリジンのみです。CORS は有効化せず、**全ての `/api/` 要求が**（読み取りも含めて）`X-SSHC-CSRF` header を要求し、`/api/` 応答は `Cache-Control: no-store` を返します。エラー応答は安定コードと位置情報のみを含み、設定本文は返しません（利用者が解決すべき競合差分を除く）。
+- API は同一オリジンのみです。CORS は有効化せず、bootstrap と health を除く**全ての登録済み `/api/` 要求が**（読み取りと session renew も含めて）`X-SSHC-CSRF` header を要求し、`/api/` 応答は `Cache-Control: no-store` を返します。エラー応答は安定コードと位置情報のみを含み、設定本文は返しません（利用者が解決すべき競合差分を除く）。
 
 ## 見た目の境界
 
@@ -172,7 +172,7 @@
 - `sshc` は URL を標準出力に表示した後、GUI が利用できる場合は既定のブラウザで開きます。GUI がない場合も URL の表示には成功します。`sshc open` はブラウザを起動せず URL だけを表示し、スクリプトや文書化した手順から利用できます。
 - 設定画面の「開いている接続」から、すべてのコンソール、ポート転送、リモートへ転送した agent を終了できます。engine 自体は停止しません。再接続できる操作のため、確認ダイアログは表示しません。
 - engine は実行中の端末から Ctrl-C または SIGTERM で停止します。開いているコンソール、転送、vault を終了した後に lock を解放します。
-- **cookie はポートに紐づきません。** 同じ `127.0.0.1` の別ポートに居るサーバーがこの session の cookie を受け取りうるので、読み取りにも CSRF トークンを要求します。トークンはページのメモリにあり、そこへは渡りません。
+- **cookie はポートに紐づきません。** 同じ `127.0.0.1` の別ポートに居るサーバーがこの session の cookie を受け取りうるので、読み取りにも CSRF トークンを要求します。トークンは port-origin ごとの `sessionStorage` にあり、そこへは渡りません。
 - デスクトップパッケージは廃止し、`sshc-<OS>-<アーキ>` 形式の CLI バイナリだけを配布します。署名、公証、インストーラは使用しません。`curl` で取得し、`chmod +x` を設定して実行できます。Homebrew formula はソースからビルドします。
 - GUI アプリケーションとして配布するのは Android 版だけです。Android ではストア配布と WebView へのアクセス URL の受け渡しが必要です。iOS 版はラッパー、CI、検査がない状態で `ios-bind` target だけが残っていたため廃止しました。engine 側の `mobile` は gomobile のビルド対象として iOS を扱えますが、iOS 版の配布は保証しません。
 - Android版のengine ownerは同一packageの単一app processです。desktop／CLI用のOS file lockは使わず、Go側のprocess内mutexでstart／stopを直列化します。Service再生成などで`Start`が重複した場合は二重起動エラーにせず、以前のengineを停止して新しいengineへ置き換えます。desktop／CLIは別processを起動できるため、引き続き`engine.lock`を保持します。
@@ -242,6 +242,7 @@
 - uploadはfile/folder pickerとDrag & Dropを同じ経路へ集約し、relative pathを検査して親directoryを浅い順に作成します。各fileは1 MiB以下のchunkとして送ります。remote側では対象と同じdirectoryの予約part fileへ期待offsetが一致する場合だけ追記し、完了時にtarget revisionを再検証してatomic renameします。pauseはpartを維持し、cancelはpartを削除します。既存ファイルは409を受けた時点で個別に上書き確認し、暗黙には置換しません。file downloadは受信済みbytesを保持してHTTP Rangeで自動再試行します。directory downloadは共通queueへ入るもののresume対象外のsymlink非追跡ZIP streamで、retry時は先頭からやり直します。symlinkはextract先を脱出できないようlink targetを内容とする通常ファイルへ変換します。chmodは現在のmetadata revisionと単回action tokenを必要とし、symlinkには適用しません。SFTP favoriteは持ちません。
 - SFTP は左ナビの Start 内で Terminal の直前に置きます。画面を開いただけでは接続せず、利用者が host を選んだ後に初めて一覧を取得します。SFTP、鍵、`known_hosts` の表は操作列を除く各データ列をクライアント側で安定ソートし、現在の方向を `aria-sort` でも公開します。
 - Monaco Editor は SFTP 画面を開いたときだけ読み込みます。editor worker は build に同梱して同一 origin から読み込み、blob URL や CDN は使用しません。従来の `script-src 'self'` と Trusted Types の方針は維持します。
+- 同じ engine 内の Monaco Editor 保存と upload 公開は、SSH alias と正規化済みtarget pathの組ごとに直列化します。これにより両操作が同じrevisionを同時に検証して互いを上書きすることはありません。ただし一般的な SFTP v3 には「revision が一致するときだけ rename」を行うatomic CASがないため、別のSSH clientやremote processが検証とrenameの間に書き換える競合の検出はbest-effortです。
 - Workspace は alias、分割木、比率、focus だけを `~/.ssh/sshc/workspaces.json` に保存します。split separatorはpointerまたはkeyboardで10〜90%へ変更し、その比率を保存します。Focus Modeは保存木を変更せず単一paneだけを一時表示し、Escで元layoutへ戻します。terminal session ID、scrollback、remote process は保存せず、再オープンは各 alias への新しい接続になります。Homeは名前、pane数、更新時刻の一覧だけを読み、明示的な「ワークスペースを開く」でrestore要求を1回だけTerminalへ渡します。一部paneの接続失敗は他paneを閉じません。このファイルは端末固有で、世代 backup と remote snapshot の対象外です。Broadcast Input は明示的な toggle が有効な間、キー入力を workspace 内の全 pane へ同じ byte 列で送ります。pane移動はterminal本体ではなく専用handleから開始し、drop先paneとruntime node全体を交換します。alias、session ID、接続状態はpaneに追従し、split方向、比率、focus pane IDは変えません。handleを2つ順に選んでも同じ交換を行えます。Command Centerはlayout内のpane IDとaliasから実行対象を作り、既定では同じaliasをhostごとに1回へまとめ、opt-inでpaneごとにも実行します。新規分割とBroadcast Inputはdesktop向けの操作とし、モバイルでは表示しません。保存済みWorkspaceとdesktopで作成したlayout自体は変更しません。
 - Terminal内検索はxtermのメモリ上のscrollbackを大文字小文字を区別せず走査し、前後の一致を選択表示します。入力履歴もlive sessionのメモリ内だけに最大200件保持し、Workspace、snapshot、diskには保存しません。command候補はprefix一致を頻度と新しさで並べます。remote path候補はterminalのcwdを推測せず、SSH aliasがある場合にabsolute pathの親directoryだけをSFTPで列挙します。
 - Snippet library と startup binding は `~/.ssh/sshc/snippets.json` に保存し、暗号化された remote snapshot の対象です。command には `{{name}}` 形式の変数を使用できます。secret 型の入力値は保存も応答もせず、結果表示では伏せます。command 本文へ直接書かれた秘密までは識別できないため、本文に秘密を保存してはいけません。

@@ -9,8 +9,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"sshc/internal/app"
 	"sshc/internal/storage"
@@ -28,8 +32,17 @@ var (
 	ErrNotStarted = errors.New("no engine is running in this process")
 
 	errListenFailed       = errors.New("the engine could not take a loopback port")
+	errEngineStartFailed  = errors.New("the engine could not initialize")
 	errEngineStoppedEarly = errors.New("the engine stopped before it announced an entrance")
 	errPrivateState       = errors.New("the Android private storage path is unavailable")
+)
+
+const maxFailureDetailBytes = 1024
+
+var (
+	credentialParameter = regexp.MustCompile(`(?i)\b(bootstrap|token|secret[_-]?access[_-]?key|access[_-]?key(?:[_-]?id)?|secret|password|passphrase|authorization)\s*[=:]\s*([^\s&#]+)`)
+	bearerCredential    = regexp.MustCompile(`(?i)\b(bearer)\s+([A-Za-z0-9._~+/=-]+)`)
+	urlUserInfo         = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)[^/@\s]+@`)
 )
 
 // running は、このプロセスで唯一の engine の状態を保持する。
@@ -39,7 +52,8 @@ var running struct {
 	done   chan struct{}
 	// lastKind は、gomobile の error 変換で型情報が失われないよう、直前の
 	// Start の失敗理由を数値で保持する。
-	lastKind int
+	lastKind   int
+	lastDetail string
 }
 
 // Start は engine を起動し、入口の URL を返す。
@@ -91,21 +105,36 @@ func Start(home, cache string) (string, error) {
 	case url := <-entrance:
 		running.cancel, running.done = cancel, done
 		running.lastKind = KindNone
+		running.lastDetail = ""
 		return url, nil
 	case err := <-failed:
 		cancel()
 		<-done
-		kind := KindListenFailed
-		reason := errListenFailed
-		if errors.Is(err, storage.ErrSymlinkPath) || errors.Is(err, storage.ErrNotDirectory) ||
-			errors.Is(err, storage.ErrOutsideWorkspace) || errors.Is(err, storage.ErrInvalidHome) {
-			kind = KindStorageUnavailable
-			reason = errPrivateState
-		}
+		kind, reason := classifyStartFailure(err)
 		return "", fail(kind, errors.Join(reason, err))
 	case <-done:
 		cancel()
+		// app.Runは具体的な失敗をfailedへ送ってからdoneを閉じる。selectがdoneを
+		// 先に選んでも、既に届いている理由をStoppedEarlyへ潰さない。
+		select {
+		case err := <-failed:
+			kind, reason := classifyStartFailure(err)
+			return "", fail(kind, errors.Join(reason, err))
+		default:
+		}
 		return "", fail(KindStoppedEarly, errEngineStoppedEarly)
+	}
+}
+
+func classifyStartFailure(err error) (int, error) {
+	switch {
+	case errors.Is(err, storage.ErrSymlinkPath), errors.Is(err, storage.ErrNotDirectory),
+		errors.Is(err, storage.ErrOutsideWorkspace), errors.Is(err, storage.ErrInvalidHome):
+		return KindStorageUnavailable, errPrivateState
+	case errors.Is(err, app.ErrListen):
+		return KindListenFailed, errListenFailed
+	default:
+		return KindEngineStartFailed, errEngineStartFailed
 	}
 }
 
@@ -156,12 +185,40 @@ const (
 	KindListenFailed
 	KindStoppedEarly
 	KindStorageUnavailable
+	KindEngineStartFailed
 )
 
 // fail は running の mutex を保持した状態で失敗理由を記録する。
 func fail(kind int, err error) error {
 	running.lastKind = kind
+	running.lastDetail = safeFailureDetail(err)
 	return err
+}
+
+// safeFailureDetail は画面、clipboard、logcatへ渡せる診断文へ縮約する。
+// 入口資格情報、一般的なcredential parameter、URL userinfo、制御文字を除去する。
+func safeFailureDetail(err error) string {
+	if err == nil {
+		return ""
+	}
+	detail := credentialParameter.ReplaceAllString(err.Error(), `${1}=[redacted]`)
+	detail = bearerCredential.ReplaceAllString(detail, `${1} [redacted]`)
+	detail = urlUserInfo.ReplaceAllString(detail, `${1}[redacted]@`)
+	detail = strings.Map(func(character rune) rune {
+		if unicode.IsControl(character) {
+			return ' '
+		}
+		return character
+	}, detail)
+	detail = strings.Join(strings.Fields(detail), " ")
+	if len(detail) <= maxFailureDetailBytes {
+		return detail
+	}
+	cut := maxFailureDetailBytes - len("…")
+	for cut > 0 && !utf8.RuneStart(detail[cut]) {
+		cut--
+	}
+	return detail[:cut] + "…"
 }
 
 // LastStartFailureKind は直前の Start の失敗理由を返す。エラー文に含まれ得る
@@ -170,4 +227,31 @@ func LastStartFailureKind() int {
 	running.Lock()
 	defer running.Unlock()
 	return running.lastKind
+}
+
+// LastStartFailureCode は利用者が共有できる安定した診断codeを返す。
+func LastStartFailureCode() string {
+	running.Lock()
+	defer running.Unlock()
+	switch running.lastKind {
+	case KindNone:
+		return "none"
+	case KindListenFailed:
+		return "port_unavailable"
+	case KindStoppedEarly:
+		return "engine_stopped_early"
+	case KindStorageUnavailable:
+		return "storage_unavailable"
+	case KindEngineStartFailed:
+		return "engine_start_failed"
+	default:
+		return "unknown"
+	}
+}
+
+// LastStartFailureDetail は伏せ字化・長さ制限済みの診断文を返す。
+func LastStartFailureDetail() string {
+	running.Lock()
+	defer running.Unlock()
+	return running.lastDetail
 }

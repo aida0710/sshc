@@ -119,6 +119,41 @@ func TestUnwindContinuesAfterAFailedHandoffRemoval(t *testing.T) {
 	}
 }
 
+func TestUnwindCancelsAndJoinsAutoSyncBeforeReturning(t *testing.T) {
+	dependencies := testDependencies(t)
+	built, err := build(dependencies, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	served := make(chan error, 1)
+	go func() { served <- built.server.Serve() }()
+
+	autoContext, cancel := context.WithCancel(context.Background())
+	built.autoCancel = cancel
+	built.autoDone = make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		<-autoContext.Done()
+		<-release
+		close(built.autoDone)
+	}()
+
+	unwound := make(chan error, 1)
+	go func() { unwound <- built.unwind(dependencies) }()
+	select {
+	case err := <-unwound:
+		t.Fatalf("unwind returned before AutoSync joined: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	if err := <-unwound; err != nil {
+		t.Fatalf("unwind = %v", err)
+	}
+	if err := <-served; err != nil {
+		t.Fatalf("Serve = %v", err)
+	}
+}
+
 func TestStoppingRefusesValidMutationsAfterSecurityHasAcceptedThem(t *testing.T) {
 	dependencies := testDependencies(t)
 	built, err := build(dependencies, "test")

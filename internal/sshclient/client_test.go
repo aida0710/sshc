@@ -3,6 +3,7 @@ package sshclient_test
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"io"
 	"net"
 	"strings"
@@ -327,6 +328,13 @@ func TestAChangedHostKeyStopsTheConnectionBeforeAuthentication(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = process.Close() }()
+	readier, ok := process.(terminal.Readier)
+	if !ok {
+		t.Fatal("SSH process does not expose asynchronous readiness")
+	}
+	if readyErr := <-readier.Ready(); !errors.Is(readyErr, sshclient.ErrHostKeyChanged) {
+		t.Fatalf("Ready error = %v, want ErrHostKeyChanged", readyErr)
+	}
 
 	seen := readUntil(t, process, "sshc:")
 	if !strings.Contains(seen, sshclient.ErrHostKeyChanged.Error()) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -170,7 +171,8 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
 	}
 	if kind == terminal.KindSSH && h.Connected != nil {
-		h.Connected(*request.Alias)
+		alias := *request.Alias
+		session.WhenConnected(func() { h.Connected(alias) })
 	}
 	return c.JSON(http.StatusCreated, api.OpenTerminalSessionResponse{
 		Session: describeSession(session.View()), StreamTicket: ticket,
@@ -228,19 +230,26 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 				return nil, err
 			}
 			lifetime := &sessionLifetime{Process: process, cancel: cancel}
+			var owned terminal.Process = lifetime
+			underlyingReady, asynchronous := process.(terminal.Readier)
+			var readier terminal.Readier
+			if asynchronous {
+				readyLifetime := newReadySessionLifetime(lifetime, underlyingReady)
+				owned, readier = readyLifetime, readyLifetime
+			}
 			// Open is also called by the registry when a disconnected transport is
 			// re-established. Resolve and inject the startup snippet here so every
 			// successful connection gets the same explicit startup automation.
 			if h.Startup != nil {
 				if command, ok := h.Startup(target); ok && command != "" {
 					go func() {
-						if err := <-lifetime.Ready(); err == nil {
+						if !asynchronous || receiveReady(readier.Ready()) == nil {
 							_, _ = lifetime.Write([]byte(command + "\r"))
 						}
 					}()
 				}
 			}
-			return lifetime, nil
+			return owned, nil
 		},
 		ReconnectError: func(err error) (bool, string) {
 			if code, requiresAction := connectProblem(err); requiresAction {
@@ -258,14 +267,54 @@ type sessionLifetime struct {
 	cancel context.CancelFunc
 }
 
-func (s *sessionLifetime) Ready() <-chan error {
-	if ready, ok := s.Process.(interface{ Ready() <-chan error }); ok {
-		return ready.Ready()
-	}
+type readySessionLifetime struct {
+	*sessionLifetime
+	done  chan struct{}
+	mutex sync.Mutex
+	err   error
+}
+
+func newReadySessionLifetime(lifetime *sessionLifetime, underlying terminal.Readier) *readySessionLifetime {
+	ready := &readySessionLifetime{sessionLifetime: lifetime, done: make(chan struct{})}
+	go func() {
+		err, _ := <-underlying.Ready()
+		ready.mutex.Lock()
+		ready.err = err
+		ready.mutex.Unlock()
+		close(ready.done)
+	}()
+	return ready
+}
+
+// Ready gives every observer its own one-result channel. The underlying SSH
+// session emits one value, while both the registry and startup automation need
+// to observe it without racing to consume that single value.
+func (s *readySessionLifetime) Ready() <-chan error {
 	result := make(chan error, 1)
-	result <- nil
-	close(result)
+	go func() {
+		<-s.done
+		s.mutex.Lock()
+		err := s.err
+		s.mutex.Unlock()
+		result <- err
+		close(result)
+	}()
 	return result
+}
+
+func receiveReady(ready <-chan error) error {
+	err, _ := <-ready
+	return err
+}
+
+// Forwards preserves the optional Process capability across the lifetime
+// wrapper. Without this adapter an active SSH forward disappears from the
+// terminal session API even though the underlying listener remains open.
+func (s *sessionLifetime) Forwards() []terminal.Forward {
+	if forwarder, ok := s.Process.(terminal.Forwarder); ok {
+		return forwarder.Forwards()
+	}
+	return nil
 }
 
 func (s *sessionLifetime) Close() error {
