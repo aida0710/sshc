@@ -141,7 +141,6 @@ export const ja = {
   "workspace.detachPane": "ワークスペースから外す",
   "workspace.live": "ライブワークスペース",
   "workspace.mobilePaneSwitcher": "ワークスペースのターミナル",
-  "workspace.sshOnly": "SSHターミナルだけをワークスペースへ追加できます。",
   "workspace.oneLiveOnly": "現在のライブワークスペースを解除してから、別のワークスペースを作成してください。",
   "workspace.dock.left": "左に配置",
   "workspace.dock.right": "右に配置",

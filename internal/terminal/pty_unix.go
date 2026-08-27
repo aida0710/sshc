@@ -45,6 +45,9 @@ type unixProcess struct {
 
 func (p *unixProcess) Read(b []byte) (int, error)  { return p.file.Read(b) }
 func (p *unixProcess) Write(b []byte) (int, error) { return p.file.Write(b) }
+func (p *unixProcess) WriteExact(ctx context.Context, b []byte) error {
+	return writeExact(ctx, p.file, b)
+}
 
 func (p *unixProcess) Resize(size Size) error {
 	return pty.Setsize(p.file, &pty.Winsize{Cols: size.Cols, Rows: size.Rows})

@@ -91,6 +91,7 @@ func (h TerminalHandlers) commandPlan(request terminalCommandPreviewRequest) (te
 			SessionID  string `json:"sessionId"`
 			Alias      string `json:"alias"`
 			Title      string `json:"title"`
+			Kind       string `json:"kind"`
 			Generation uint64 `json:"generation"`
 		} `json:"targets"`
 	}{CommandEvidence: command.Evidence}
@@ -100,10 +101,11 @@ func (h TerminalHandlers) commandPlan(request terminalCommandPreviewRequest) (te
 			SessionID  string `json:"sessionId"`
 			Alias      string `json:"alias"`
 			Title      string `json:"title"`
+			Kind       string `json:"kind"`
 			Generation uint64 `json:"generation"`
 		}{
 			TargetID: target.request.TargetId, SessionID: target.target.ID, Alias: target.target.Alias,
-			Title: target.target.Title, Generation: target.target.Generation,
+			Title: target.target.Title, Kind: string(target.target.Kind), Generation: target.target.Generation,
 		})
 	}
 	encoded, err := json.Marshal(payload)
@@ -128,8 +130,6 @@ func terminalCommandProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "invalid_terminal_command")
 	case errors.Is(err, terminal.ErrNotFound):
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
-	case errors.Is(err, terminal.ErrWrongKind):
-		return problem(c, http.StatusConflict, "terminal_command_ssh_only")
 	case errors.Is(err, terminal.ErrNotConnected), errors.Is(err, terminal.ErrGenerationChanged),
 		errors.Is(err, terminal.ErrExactInputUnavailable):
 		return problem(c, http.StatusConflict, "terminal_command_target_unavailable")
@@ -194,8 +194,6 @@ func (h TerminalHandlers) DispatchCommand(c *echo.Context) error {
 			switch {
 			case errors.Is(err, terminal.ErrNotFound):
 				result.Problem = stringPointer("terminal_session_not_found")
-			case errors.Is(err, terminal.ErrWrongKind):
-				result.Problem = stringPointer("terminal_command_ssh_only")
 			case errors.Is(err, terminal.ErrNotConnected), errors.Is(err, terminal.ErrGenerationChanged):
 				result.Problem = stringPointer("terminal_command_target_changed")
 			default:

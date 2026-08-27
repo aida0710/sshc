@@ -215,11 +215,21 @@ func TestCommandWritesToThePreviewedSSHProcessWithoutOpeningAnother(t *testing.T
 	}
 }
 
-func TestCommandRefusesLocalAndChangedSessions(t *testing.T) {
-	registry, _ := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+func TestCommandSupportsLocalAndRefusesChangedSessions(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
 	local := openShell(t, registry)
-	if _, err := registry.CommandTarget(local.ID()); !errors.Is(err, terminal.ErrWrongKind) {
-		t.Fatalf("local CommandTarget = %v, want ErrWrongKind", err)
+	localTarget, err := registry.CommandTarget(local.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if localTarget.Kind != terminal.KindShell || localTarget.Alias != "localhost" {
+		t.Fatalf("local target = %#v", localTarget)
+	}
+	if err := registry.WriteCommand(context.Background(), localTarget, "pwd"); err != nil {
+		t.Fatal(err)
+	}
+	if got := starter.last().keystrokes(); got != "pwd\r" {
+		t.Fatalf("local process input = %q", got)
 	}
 
 	var processes []*fakeProcess
