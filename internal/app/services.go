@@ -139,7 +139,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
 		sftp: sftpService, workspaces: workspaceService, snippets: snippetService, ssh: ssh,
 	}
-	services.sync, services.autoSync = buildSync(workspace, transactions, configService, passwordService, dependencies)
+	services.sync, services.autoSync = buildSync(workspace, transactions, passwordService, dependencies)
 	services.terminals = buildTerminals(configService, dependencies)
 	return services, nil
 }
@@ -162,19 +162,10 @@ func snippetRoute(target sshclient.Target) []snippets.RouteHop {
 func buildSync(
 	workspace *storage.Workspace,
 	transactions *storage.Manager,
-	configService *application.Service,
 	passwordService *secret.Service,
 	dependencies Dependencies,
 ) (*remotesync.Service, *remotesync.Auto) {
-	// スナップショットは、どのファイルが設定なのかを知る必要がある。それは Include
 	syncService := remotesync.NewService(workspace, transactions,
-		func() ([]string, error) {
-			files, err := configService.WorkspaceFiles()
-			if err != nil {
-				return nil, err
-			}
-			return append(files, snippets.PathRelative), nil
-		},
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
 		newOrigin(dependencies.Random),
 	)
