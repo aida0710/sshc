@@ -120,7 +120,7 @@ export function ManageConnection({
           {t("host.saveComment")}
         </Button>
 
-        <div className="grid gap-4 border-t border-line pt-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="grid gap-4 border-t border-line pt-5">
           <div className="flex flex-col gap-2">
             <h4 className={sectionHeading}>{t("conn.moveToFile")}</h4>
             <p className={hintText}>{t("conn.storageFileNote")}</p>
@@ -141,7 +141,7 @@ export function ManageConnection({
             <Button disabled={file === ""} onClick={() => onMoveToFile(file)}>{t("conn.move")}</Button>
             </div>
           </div>
-          <Button className="self-start lg:self-end" onClick={onDuplicate}>{t("conn.duplicate")}</Button>
+          <Button className="self-start" onClick={onDuplicate}>{t("conn.duplicate")}</Button>
         </div>
 
         <div className="border-t border-danger/30 pt-5">

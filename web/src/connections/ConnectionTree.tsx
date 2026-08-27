@@ -1,7 +1,8 @@
-import { Fragment, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import type { HostEntry, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
+import { Icon } from "../ui/icons";
 import { Segmented } from "../ui/surface";
 import { duplicateAliasesOf, identityKey } from "./connectionBrowser";
 import { canDrop, dragMimeType, type DragPayload } from "./dragdrop";
@@ -15,6 +16,7 @@ type DecoratedHost = {
   favourite: boolean;
   colour: string;
   order: number;
+  sourceOrder: number;
   duplicateAlias: boolean;
 };
 
@@ -24,7 +26,7 @@ type GroupNode = {
   hidden: boolean;
   order: number;
   sourceOrder: number;
-  items: DecoratedHost[];
+  descendantCount: number;
   children: GroupNode[];
 };
 
@@ -38,6 +40,12 @@ type ConnectionTreeProps = {
 };
 
 type Grouping = "groups" | "files";
+type SortOrder = "configured" | "name" | "group";
+type Scope =
+  | { kind: "all" }
+  | { kind: "group"; name: string }
+  | { kind: "ungrouped" }
+  | { kind: "file"; absolute: string };
 
 function labelFor(host: HostEntry): string {
   return host.identity.alias === "" ? `Host ${host.patterns.join(" ")}` : host.identity.alias;
@@ -46,10 +54,13 @@ function labelFor(host: HostEntry): string {
 function hostMatches(item: DecoratedHost, rawQuery: string): boolean {
   const query = rawQuery.trim().toLocaleLowerCase();
   if (query === "") return true;
-  return item.host.identity.alias.toLocaleLowerCase().includes(query) ||
-    item.host.patterns.some((pattern) => pattern.toLocaleLowerCase().includes(query)) ||
+  const host = item.host;
+  return host.identity.alias.toLocaleLowerCase().includes(query) ||
+    host.patterns.some((pattern) => pattern.toLocaleLowerCase().includes(query)) ||
     item.group.toLocaleLowerCase().includes(query) ||
-    item.tags.some((tag) => tag.toLocaleLowerCase().includes(query));
+    item.tags.some((tag) => tag.toLocaleLowerCase().includes(query)) ||
+    (host.hostName ?? "").toLocaleLowerCase().includes(query) ||
+    (host.user ?? "").toLocaleLowerCase().includes(query);
 }
 
 function nearestParent(name: string, declared: ReadonlySet<string>): string {
@@ -62,6 +73,17 @@ function nearestParent(name: string, declared: ReadonlySet<string>): string {
   }
 }
 
+function belongsToGroup(item: DecoratedHost, group: string): boolean {
+  return item.group === group || item.group.startsWith(`${group}/`);
+}
+
+function targetFor(host: HostEntry): string {
+  if ((host.hostName ?? "") === "") return host.file.path ?? host.file.absolute;
+  const account = (host.user ?? "") === "" ? "" : `${host.user}@`;
+  const port = (host.port ?? "") === "" || host.port === "22" ? "" : `:${host.port}`;
+  return `${account}${host.hostName}${port}`;
+}
+
 export function ConnectionTree({
   overview,
   selected,
@@ -72,8 +94,10 @@ export function ConnectionTree({
 }: ConnectionTreeProps) {
   const t = useTranslate();
   const [grouping, setGrouping] = useState<Grouping>("groups");
+  const [scope, setScope] = useState<Scope>({ kind: "all" });
   const [query, setQuery] = useState("");
   const [favouritesOnly, setFavouritesOnly] = useState(false);
+  const [sortOrder, setSortOrder] = useState<SortOrder>("configured");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [dragging, setDragging] = useState<DragPayload | null>(null);
 
@@ -83,27 +107,20 @@ export function ConnectionTree({
       (overview.metadata.hosts ?? []).map((entry) => [identityKey(entry.identity), entry]),
     );
     const duplicates = duplicateAliasesOf(overview.hosts);
-    return overview.hosts
-      .map((host, sourceOrder) => {
-        const display = metadata.get(identityKey(host.identity));
-        return {
-          host,
-          group: host.group ?? "",
-          tags: display?.tags ?? [],
-          favourite: display?.favourite === true,
-          colour: display?.colour ?? "",
-          order: display?.order ?? 0,
-          duplicateAlias: duplicates.has(host.identity.alias),
-          sourceOrder,
-        };
-      })
-      .sort((left, right) => left.order - right.order || left.sourceOrder - right.sourceOrder)
-      .map(({ sourceOrder: _sourceOrder, ...item }) => item);
+    return overview.hosts.map((host, sourceOrder) => {
+      const display = metadata.get(identityKey(host.identity));
+      return {
+        host,
+        group: host.group ?? "",
+        tags: display?.tags ?? [],
+        favourite: display?.favourite === true,
+        colour: display?.colour ?? "",
+        order: display?.order ?? 0,
+        sourceOrder,
+        duplicateAlias: duplicates.has(host.identity.alias),
+      };
+    });
   }, [overview.hosts, overview.metadata.hosts]);
-
-  const visible = decorated.filter(
-    (item) => (!favouritesOnly || item.favourite) && hostMatches(item, query),
-  );
 
   const groupTree = useMemo(() => {
     const declared = new Set(overview.groups.map((group) => group.name));
@@ -117,7 +134,7 @@ export function ConnectionTree({
         hidden: display?.hidden === true,
         order: display?.order ?? group.order ?? 0,
         sourceOrder,
-        items: visible.filter((item) => item.group === group.name),
+        descendantCount: decorated.filter((item) => belongsToGroup(item, group.name)).length,
         children: [],
       });
     });
@@ -134,16 +151,31 @@ export function ConnectionTree({
     };
     sort(roots);
     return roots;
-  }, [overview.groups, overview.metadata.groups, visible]);
+  }, [decorated, overview.groups, overview.metadata.groups]);
 
-  const fileSections = useMemo(
-    () => overview.files.map((file) => ({
-      title: file.file.path ?? file.file.absolute,
-      items: visible.filter((item) => item.host.file.absolute === file.file.absolute),
-    })),
-    [overview.files, visible],
-  );
-  const ungrouped = visible.filter((item) => item.group === "");
+  const visible = useMemo(() => {
+    const scoped = decorated.filter((item) => {
+      if (favouritesOnly && !item.favourite) return false;
+      if (!hostMatches(item, query)) return false;
+      if (scope.kind === "all") return true;
+      if (scope.kind === "ungrouped") return item.group === "";
+      if (scope.kind === "group") return belongsToGroup(item, scope.name);
+      return item.host.file.absolute === scope.absolute;
+    });
+    return scoped.sort((left, right) => {
+      if (sortOrder === "name") return labelFor(left.host).localeCompare(labelFor(right.host), "ja");
+      if (sortOrder === "group") {
+        return left.group.localeCompare(right.group, "ja") || labelFor(left.host).localeCompare(labelFor(right.host), "ja");
+      }
+      return left.order - right.order || left.sourceOrder - right.sourceOrder;
+    });
+  }, [decorated, favouritesOnly, query, scope, sortOrder]);
+
+  function switchGrouping(next: Grouping) {
+    setGrouping(next);
+    setScope({ kind: "all" });
+    setDragging(null);
+  }
 
   function startDrag(event: DragEvent, payload: DragPayload) {
     if (movesDisabled || grouping !== "groups") return;
@@ -153,8 +185,7 @@ export function ConnectionTree({
   }
 
   function accepts(target: string): boolean {
-    return !movesDisabled && grouping === "groups" && dragging !== null &&
-      canDrop(dragging, target, groupNames);
+    return !movesDisabled && grouping === "groups" && dragging !== null && canDrop(dragging, target, groupNames);
   }
 
   function dropHandlers(target: string) {
@@ -175,109 +206,29 @@ export function ConnectionTree({
     };
   }
 
-  function renderItems(items: DecoratedHost[]): ReactNode {
-    return (
-      <ul className="flex flex-col gap-1.5">
-        {items.map((item) => {
-          const host = item.host;
-          const active = selected?.path === host.identity.path && selected.alias === host.identity.alias;
-          const descriptionId = `connection-${host.file.absolute}-${host.line}`;
-          if (host.identity.alias === "") {
-            return (
-              <li key={`${host.file.absolute}:${host.line}`}>
-                {host.file.path === undefined ? (
-                  <p aria-describedby={descriptionId} className="rounded px-2 py-1 text-sm text-ink-muted">
-                    <span className="block">{labelFor(host)}</span>
-                    <span className="block text-xs text-ink-faint">
-                      {t("tree.patternRuleExternal", { path: host.file.absolute })}
-                    </span>
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    aria-describedby={descriptionId}
-                    onClick={() => onOpenPatternRule(host.file.path ?? "", host.line)}
-                    className="min-h-10 w-full rounded px-2 py-1 text-left text-sm hover:bg-select-fill md:min-h-0"
-                  >
-                    <span className="block">{labelFor(host)}</span>
-                    <span className="block text-xs text-ink-faint">
-                      {t("tree.patternRuleOpen", { path: host.file.path, line: host.line })}
-                    </span>
-                  </button>
-                )}
-                <span id={descriptionId} className="sr-only">{t("tree.patternRule")}</span>
-              </li>
-            );
-          }
-          return (
-            <li key={`${host.file.absolute}:${host.line}`}>
-              <button
-                type="button"
-                aria-label={host.identity.alias}
-                aria-current={active ? "true" : undefined}
-                aria-describedby={descriptionId}
-                draggable={grouping === "groups" && !movesDisabled}
-                onClick={() => onSelect(host)}
-                onDragStart={(event) => startDrag(event, {
-                  kind: "connection",
-                  path: host.identity.path,
-                  alias: host.identity.alias,
-                  group: item.group,
-                })}
-                onDragEnd={() => setDragging(null)}
-                className={`w-full rounded-lg px-3 py-2.5 text-left text-sm transition-all ${
-                  active
-                    ? "bg-select-fill text-ink shadow-sm"
-                    : "text-ink-muted hover:bg-surface hover:text-ink"
-                }`}
-              >
-                <span className="flex min-w-0 items-center gap-1.5">
-                  {item.colour === "" ? null : (
-                    <span aria-hidden="true" className="inline-block size-2 shrink-0 rounded-full" style={{ backgroundColor: item.colour }} />
-                  )}
-                  {item.favourite ? <span aria-hidden="true" className="text-notice-ink">★</span> : null}
-                  <span className={`truncate ${active ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
-                  {item.duplicateAlias ? <span aria-hidden="true" className="text-notice-ink">⧉</span> : null}
-                </span>
-                <span className="mt-1 block truncate font-mono text-[0.68rem] leading-4 text-ink-faint">
-                  {host.file.path ?? host.file.absolute}
-                </span>
-                {item.tags.length === 0 ? null : (
-                  <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">
-                    {item.tags.map((tag) => (
-                      <span key={tag} className="rounded bg-select-fill px-1 text-[0.65rem] text-ink-muted">{tag}</span>
-                    ))}
-                  </span>
-                )}
-              </button>
-              <span id={descriptionId} className="sr-only">
-                {[
-                  item.favourite ? t("tree.favourite") : "",
-                  item.duplicateAlias ? t("tree.duplicateAlias") : "",
-                  host.file.path ?? host.file.absolute,
-                ].filter(Boolean).join(", ")}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    );
+  function facetClass(active: boolean): string {
+    return `flex min-h-10 w-auto items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors md:min-h-0 md:w-full ${
+      active ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-surface hover:text-ink"
+    }`;
   }
 
-  function renderGroup(node: GroupNode): ReactNode {
-    if (node.hidden && node.items.length === 0) {
-      return <Fragment key={node.name}>{node.children.map(renderGroup)}</Fragment>;
+  function renderGroupFacet(node: GroupNode, depth = 0): ReactNode {
+    if (node.hidden && node.descendantCount === 0) {
+      return <Fragment key={node.name}>{node.children.map((child) => renderGroupFacet(child, depth))}</Fragment>;
     }
     const shut = collapsed.has(node.name);
+    const active = scope.kind === "group" && scope.name === node.name;
+    const padding = { "--sshc-facet-depth": depth } as CSSProperties;
     return (
-      <section
-        key={node.name}
-        aria-label={node.name}
-        {...dropHandlers(node.name)}
-      className={`flex flex-col gap-1 rounded-lg ${accepts(node.name) ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
-      >
-        <div className="flex items-center gap-1">
-          {node.children.length === 0 ? null : (
+      <div key={node.name} className="min-w-max md:min-w-0">
+        <div
+          className={`flex items-center rounded-md ${accepts(node.name) ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
+          style={padding}
+          {...dropHandlers(node.name)}
+        >
+          {node.children.length === 0 ? (
+            <span aria-hidden="true" className="w-5 shrink-0 md:ms-[calc(var(--sshc-facet-depth)*0.65rem)]" />
+          ) : (
             <button
               type="button"
               aria-label={t(shut ? "tree.expand" : "tree.collapse", { name: node.name })}
@@ -288,104 +239,204 @@ export function ConnectionTree({
                 else next.add(node.name);
                 return next;
               })}
-              className="rounded px-1 text-xs text-ink-faint hover:text-ink"
+              className="ms-0 flex size-8 shrink-0 items-center justify-center rounded text-ink-faint hover:text-ink md:ms-[calc(var(--sshc-facet-depth)*0.65rem)] md:size-5"
             >
               <span aria-hidden="true">{shut ? "▸" : "▾"}</span>
             </button>
           )}
-          <h2
+          <button
+            type="button"
+            aria-label={node.name}
+            aria-pressed={active}
             draggable={!movesDisabled}
             onDragStart={(event) => startDrag(event, { kind: "group", name: node.name })}
             onDragEnd={() => setDragging(null)}
-            className={`${movesDisabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"} rounded px-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint`}
+            onClick={() => setScope({ kind: "group", name: node.name })}
+            className={`${facetClass(active)} min-w-0 flex-1 px-1.5`}
           >
-            <span aria-hidden="true" className="me-1 font-normal tracking-tighter">⋮⋮</span>
-            {node.label}
-          </h2>
+            <Icon name="groups" className="size-4" />
+            <span className="min-w-0 flex-1 truncate">{node.label}</span>
+            <span className="shrink-0 text-[0.68rem] text-ink-faint">{node.descendantCount}</span>
+          </button>
         </div>
-        {shut ? null : (
-          <>
-            {node.items.length > 0
-              ? renderItems(node.items)
-              : node.children.length === 0
-                ? <p className="px-2 py-1 text-xs text-ink-faint">{t("tree.groupEmpty")}</p>
-                : null}
-            {node.children.length === 0 ? null : (
-              <div className="ms-2 flex flex-col gap-1 border-s border-line ps-2">
-                {node.children.map(renderGroup)}
-              </div>
+        {shut ? null : node.children.map((child) => renderGroupFacet(child, depth + 1))}
+      </div>
+    );
+  }
+
+  function renderFacets() {
+    const allActive = scope.kind === "all";
+    if (grouping === "files") {
+      return (
+        <>
+          <button type="button" aria-label={t("tree.allConnections")} aria-pressed={allActive} onClick={() => setScope({ kind: "all" })} className={facetClass(allActive)}>
+            <Icon name="config" className="size-4" />
+            <span className="min-w-0 flex-1 truncate">{t("tree.allConnections")}</span>
+            <span className="text-[0.68rem] text-ink-faint">{decorated.length}</span>
+          </button>
+          {overview.files.map((file) => {
+            const active = scope.kind === "file" && scope.absolute === file.file.absolute;
+            const count = decorated.filter((item) => item.host.file.absolute === file.file.absolute).length;
+            return (
+              <button
+                type="button"
+                key={file.file.absolute}
+                aria-label={file.file.path ?? file.file.absolute}
+                aria-pressed={active}
+                onClick={() => setScope({ kind: "file", absolute: file.file.absolute })}
+                className={`${facetClass(active)} min-w-max md:min-w-0`}
+              >
+                <Icon name="config" className="size-4" />
+                <span className="min-w-0 flex-1 truncate">{file.file.path ?? file.file.absolute}</span>
+                <span className="text-[0.68rem] text-ink-faint">{count}</span>
+              </button>
+            );
+          })}
+        </>
+      );
+    }
+    const ungroupedActive = scope.kind === "ungrouped";
+    const ungroupedCount = decorated.filter((item) => item.group === "").length;
+    return (
+      <>
+        <button type="button" aria-label={t("tree.allConnections")} aria-pressed={allActive} onClick={() => setScope({ kind: "all" })} className={facetClass(allActive)}>
+          <Icon name="groups" className="size-4" />
+          <span className="min-w-0 flex-1 truncate">{t("tree.allConnections")}</span>
+          <span className="text-[0.68rem] text-ink-faint">{decorated.length}</span>
+        </button>
+        {groupTree.map((node) => renderGroupFacet(node))}
+        <div {...dropHandlers("")} className={accepts("") ? "rounded-md outline outline-1 outline-accent" : ""}>
+          <button type="button" aria-label={t("tree.ungrouped")} aria-pressed={ungroupedActive} onClick={() => setScope({ kind: "ungrouped" })} className={`${facetClass(ungroupedActive)} min-w-max md:min-w-0`}>
+            <Icon name="groups" className="size-4" />
+            <span className="min-w-0 flex-1 truncate">{t("tree.ungrouped")}</span>
+            <span className="text-[0.68rem] text-ink-faint">{ungroupedCount}</span>
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  function renderItem(item: DecoratedHost) {
+    const host = item.host;
+    const active = selected?.path === host.identity.path && selected.alias === host.identity.alias;
+    const descriptionId = `connection-${host.file.absolute}-${host.line}`;
+    if (host.identity.alias === "") {
+      const content = (
+        <>
+          <span className="block truncate font-medium text-ink">{labelFor(host)}</span>
+          <span className="mt-0.5 block truncate font-mono text-[0.68rem] text-ink-faint">{host.file.path ?? host.file.absolute}</span>
+        </>
+      );
+      return (
+        <li key={`${host.file.absolute}:${host.line}`} className="border-b border-hairline last:border-b-0">
+          {host.file.path === undefined ? (
+            <p aria-describedby={descriptionId} className="px-4 py-3 text-sm">{content}</p>
+          ) : (
+            <button type="button" aria-describedby={descriptionId} onClick={() => onOpenPatternRule(host.file.path ?? "", host.line)} className="min-h-12 w-full px-4 py-2.5 text-left text-sm hover:bg-select-fill">
+              {content}
+            </button>
+          )}
+          <span id={descriptionId} className="sr-only">{t("tree.patternRule")}</span>
+        </li>
+      );
+    }
+    return (
+      <li key={`${host.file.absolute}:${host.line}`} className="border-b border-hairline last:border-b-0">
+        <button
+          type="button"
+          aria-label={host.identity.alias}
+          aria-current={active ? "true" : undefined}
+          aria-describedby={descriptionId}
+          draggable={grouping === "groups" && !movesDisabled}
+          onClick={() => onSelect(host)}
+          onDragStart={(event) => startDrag(event, { kind: "connection", path: host.identity.path, alias: host.identity.alias, group: item.group })}
+          onDragEnd={() => setDragging(null)}
+          className={`min-h-14 w-full px-4 py-2.5 text-left text-sm transition-colors ${active ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-surface hover:text-ink"}`}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {item.colour === "" ? (
+              <Icon name="terminal" className="size-4 text-ink-faint" />
+            ) : (
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: item.colour }} />
             )}
-          </>
-        )}
-      </section>
+            <span className="min-w-0 flex-1">
+              <span className="flex min-w-0 items-center gap-1.5">
+                {item.favourite ? <span aria-hidden="true" className="shrink-0 text-notice-ink">★</span> : null}
+                <span className={`truncate ${active ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
+                {item.duplicateAlias ? <span aria-hidden="true" className="shrink-0 text-notice-ink">⧉</span> : null}
+                <span className="ml-auto max-w-[38%] shrink-0 truncate text-[0.68rem] text-ink-faint">{item.group || t("tree.ungrouped")}</span>
+              </span>
+              <span className="mt-0.5 block truncate font-mono text-[0.68rem] leading-4 text-ink-faint">{targetFor(host)}</span>
+              {item.tags.length === 0 ? null : (
+                <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">
+                  {item.tags.map((tag) => <span key={tag} className="rounded bg-select-fill px-1 text-[0.65rem] text-ink-muted">{tag}</span>)}
+                </span>
+              )}
+            </span>
+          </span>
+        </button>
+        <span id={descriptionId} className="sr-only">
+          {[item.favourite ? t("tree.favourite") : "", item.duplicateAlias ? t("tree.duplicateAlias") : "", targetFor(host), host.file.path ?? host.file.absolute].filter(Boolean).join(", ")}
+        </span>
+      </li>
     );
   }
 
   return (
-    <nav aria-label={t("tree.navLabel")} className="flex h-full flex-col gap-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="[&_button]:min-h-10 md:[&_button]:min-h-0">
-          <Segmented
-            label={t("tree.arrangeBy")}
-            value={grouping}
-            options={[
-              { value: "groups", label: t("tree.byGroups") },
-              { value: "files", label: t("tree.byFiles") },
-            ]}
-            onChange={setGrouping}
-          />
+    <nav aria-label={t("tree.navLabel")} className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[10rem_minmax(0,1fr)] md:grid-rows-1">
+      <aside className="flex min-h-0 flex-col border-b border-line bg-tree md:border-b-0 md:border-r">
+        <div className="shrink-0 p-3 pb-2">
+          <div className="[&>div]:w-full [&_button]:min-h-10 [&_button]:flex-1 md:[&_button]:min-h-0">
+            <Segmented
+              label={t("tree.arrangeBy")}
+              value={grouping}
+              options={[{ value: "groups", label: t("tree.byGroups") }, { value: "files", label: t("tree.byFiles") }]}
+              onChange={switchGrouping}
+            />
+          </div>
         </div>
-        <button
-          type="button"
-          aria-pressed={favouritesOnly}
-          onClick={() => setFavouritesOnly((current) => !current)}
-          className={`min-h-10 rounded-md border px-2.5 py-1 text-xs md:min-h-0 ${
-            favouritesOnly
-              ? "border-notice-line bg-notice text-notice-ink"
-              : "border-control-line bg-card text-ink-muted hover:text-ink"
-          }`}
-        >
-          <span aria-hidden="true" className="me-1 text-notice-ink">★</span>
-          {t("tree.favouritesOnly")}
-        </button>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint" htmlFor="connection-filter">{t("tree.filter")}</label>
-        <input
-          id="connection-filter"
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          placeholder={t("tree.filterPlaceholder")}
-          className={`${control} min-h-10 rounded-lg bg-card px-3 py-2 md:min-h-0`}
-        />
-        {grouping === "groups" && groupTree.length > 0 && !movesDisabled ? (
-          <p className="text-xs text-ink-faint">{t("tree.dragGroupHint")}</p>
-        ) : null}
-      </div>
-      {visible.length === 0 ? <p role="status" className="text-sm text-ink-muted">{t("tree.noMatch")}</p> : null}
-      {grouping === "files" ? (
-        fileSections.map((section) => section.items.length === 0 ? null : (
-          <section key={section.title} className="flex flex-col gap-1">
-            <h2 className="rounded px-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">{section.title}</h2>
-            {renderItems(section.items)}
-          </section>
-        ))
-      ) : (
-        <>
-          {groupTree.map(renderGroup)}
-          <section
-            aria-label={t("tree.ungrouped")}
-            {...dropHandlers("")}
-            className={`flex flex-col gap-1 rounded-lg ${accepts("") ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
-          >
-            <h2 className="rounded px-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">{t("tree.ungrouped")}</h2>
-            {ungrouped.length === 0
-              ? <p className="px-2 py-1 text-xs text-ink-faint">{t("tree.groupEmpty")}</p>
-              : renderItems(ungrouped)}
-          </section>
-        </>
-      )}
+        <p className="hidden shrink-0 px-3 pb-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint md:block">
+          {grouping === "groups" ? t("tree.byGroups") : t("tree.byFiles")}
+        </p>
+        <div data-connection-facets className="flex min-w-0 gap-1 overflow-x-auto px-3 pb-3 md:min-h-0 md:flex-1 md:flex-col md:overflow-x-hidden md:overflow-y-auto">
+          {renderFacets()}
+        </div>
+      </aside>
+
+      <section className="flex min-h-0 flex-col bg-page" aria-label={t("tree.resultsLabel")}>
+        <header className="shrink-0 border-b border-line bg-card p-3">
+          <div className="flex items-center gap-2">
+            <label className="relative min-w-0 flex-1" htmlFor="connection-filter">
+              <span className="sr-only">{t("tree.filter")}</span>
+              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
+              <input id="connection-filter" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("tree.filterPlaceholderExpanded")} className={`${control} min-h-10 rounded-lg bg-control py-2 pl-9 pr-3 md:min-h-0`} />
+            </label>
+            <button
+              type="button"
+              aria-pressed={favouritesOnly}
+              aria-label={t("tree.favouritesOnlyAction")}
+              onClick={() => setFavouritesOnly((current) => !current)}
+              className={`flex min-h-10 min-w-10 items-center justify-center rounded-md border px-2.5 py-1 text-xs md:min-h-0 md:min-w-0 ${favouritesOnly ? "border-notice-line bg-notice text-notice-ink" : "border-control-line bg-card text-ink-muted hover:text-ink"}`}
+            >
+              <span aria-hidden="true" className="text-notice-ink">★</span>
+              <span className="sr-only 2xl:not-sr-only 2xl:ms-1">{t("tree.favouritesOnly")}</span>
+            </button>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-ink-faint">
+            <span role="status">{t("tree.resultCount", { visible: visible.length, total: decorated.length })}</span>
+            <label className="flex items-center gap-2">
+              <span className="sr-only">{t("tree.sortLabel")}</span>
+              <select value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value as SortOrder)} className="rounded border-0 bg-transparent py-0.5 text-xs text-ink-muted">
+                <option value="configured">{t("tree.sortConfigured")}</option>
+                <option value="name">{t("tree.sortName")}</option>
+                <option value="group">{t("tree.sortGroup")}</option>
+              </select>
+            </label>
+          </div>
+          {grouping === "groups" && !movesDisabled ? <p className="mt-1 hidden text-[0.68rem] text-ink-faint md:block">{t("tree.dragGroupHint")}</p> : null}
+        </header>
+        {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t("tree.noMatch")}</p> : <ul data-connection-results className="min-h-0 flex-1 overflow-y-auto">{visible.map(renderItem)}</ul>}
+      </section>
     </nav>
   );
 }

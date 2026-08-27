@@ -84,7 +84,10 @@ export function ConnectionSummary({
         </span>
       </header>
 
-      <dl className="grid gap-px border-y border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
+      <dl
+        className="grid gap-px border-y border-line bg-line"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(10.5rem, 100%), 1fr))" }}
+      >
         <div className="min-w-0 bg-card px-4 py-3">
           <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint">{t("conn.summaryGroup")}</dt>
           <dd className="mt-1 truncate text-sm text-ink">{summary.group || t("conn.summaryNoGroup")}</dd>
@@ -107,7 +110,7 @@ export function ConnectionSummary({
             <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-notice-ink">{t("conn.summaryAccountPassword")}</dt>
             <dd className="mt-1 text-sm text-notice-ink">{t("conn.summaryPasswordCleanup")}</dd>
           </div>
-        ) : <div aria-hidden="true" className="hidden bg-card lg:block" />}
+        ) : null}
       </dl>
 
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">

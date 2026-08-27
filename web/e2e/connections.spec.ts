@@ -11,6 +11,54 @@ async function openBastion(page: Page, url: string) {
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
 }
 
+test("separates classification, filtered results, and connection detail without losing management controls", async ({
+  page,
+  installation,
+}) => {
+  const entry = await installation.read("config");
+  const nas = await installation.read("conf.d/10-home.conf");
+  await installation.write(
+    "config",
+    "# >>> sshc groups (generated). Child groups first: OpenSSH keeps the first value it reads.\n" +
+      "# Edit through the UI; lines between these markers are replaced on the next save.\n" +
+      "Include connections/home/*.conf\n" +
+      "Include connections/work/*.conf\n" +
+      "Include groups.sshc.conf\n" +
+      "# <<< sshc groups\n" + entry,
+  );
+  await installation.write("connections/home/nas.conf", nas);
+  await installation.write("conf.d/10-home.conf", "");
+  await openApplication(page, installation);
+  await openSection(page, "Connections");
+  const browser = page.getByRole("navigation", { name: "Connections" });
+  const results = page.getByRole("region", { name: "Connection results" });
+
+  await expect(browser.getByRole("group", { name: "Arrange connections by" })).toBeVisible();
+  await expect(results.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
+  await expect(results.getByText("aida@198.51.100.20", { exact: true })).toBeVisible();
+
+  await browser.getByRole("button", { name: "Files", exact: true }).click();
+  await browser.getByRole("button", { name: "config", exact: true }).click();
+  await expect(results.getByRole("button", { name: "bastion" })).toBeVisible();
+  await expect(results.getByRole("button", { name: "nas" })).toHaveCount(0);
+
+  await browser.getByRole("button", { name: "All", exact: true }).click();
+  await browser.getByRole("searchbox", { name: "Filter connections" }).fill("198.51.100.20");
+  await expect(results.getByRole("button", { name: "nas" })).toBeVisible();
+  await browser.getByRole("searchbox", { name: "Filter connections" }).fill("");
+  await results.getByRole("button", { name: "bastion" }).click();
+  await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
+  await expect(browser).toBeVisible();
+  await browser.getByRole("button", { name: "Groups", exact: true }).click();
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-management-desktop.png`,
+      fullPage: true,
+    });
+  }
+});
+
 test("keeps the selected connection open when its tree item is clicked again", async ({
   page,
   installation,
@@ -154,13 +202,14 @@ test("keeps the committed summary stable while a Basic draft crosses editor area
   installation,
 }) => {
   await openBastion(page, installation.url);
+  const summary = page.locator("[data-connection-summary]");
 
   await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
-  await expect(page.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
+  await expect(summary.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2222");
 
   await page.getByLabel("Port", { exact: true }).fill("2244");
-  await expect(page.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
+  await expect(summary.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
   await expect(page.getByText("Unsaved changes", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Check reachability" })).toBeDisabled();
@@ -171,7 +220,7 @@ test("keeps the committed summary stable while a Basic draft crosses editor area
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
-  await expect(page.getByText("ops@203.0.113.10:2244", { exact: true })).toBeVisible();
+  await expect(summary.getByText("ops@203.0.113.10:2244", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
   await expect(page.getByRole("button", { name: "Check reachability" })).toBeEnabled();
 });
@@ -424,7 +473,7 @@ test("edits the display order it stores, and shows a favourite in the tree", asy
   expect(ordered.status()).toBe(200);
   expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].order).toBe(-1);
 
-  await page.getByLabel("Favourite").click();
+  await page.getByLabel("Favourite", { exact: true }).click();
   const row = page
     .getByRole("navigation", { name: "Connections" })
     .getByRole("button", { name: /bastion/ });
@@ -558,7 +607,7 @@ test("shows an empty group in the management tree and moves an ungrouped connect
 
   await openSection(page, "Connections");
   const browser = page.getByRole("navigation", { name: "Connections" });
-  await expect(browser.getByRole("heading", { name: "work", exact: true })).toBeVisible();
+  await expect(browser.getByRole("button", { name: "work", exact: true })).toBeVisible();
 
   await browser.getByRole("button", { name: "bastion" }).click();
   await page.getByRole("button", { name: "More connection actions" }).click();
@@ -570,7 +619,7 @@ test("shows an empty group in the management tree and moves an ungrouped connect
   }).toPass();
   expect(await installation.read("config")).not.toContain("Host bastion\n");
 
-  await expect(browser.getByRole("heading", { name: "work", exact: true })).toBeVisible();
+  await expect(browser.getByRole("button", { name: "work", exact: true })).toBeVisible();
   await expect(browser.getByRole("button", { name: "bastion" })).toHaveAttribute("aria-current", "true");
 });
 
