@@ -16,6 +16,9 @@ const overview = {
       patterns: ["database"],
       editable: true,
       group: "work",
+      hostName: "db.example.com",
+      user: "deploy",
+      port: "2202",
     },
     {
       identity: { path: "config", alias: "bastion" },
@@ -23,6 +26,9 @@ const overview = {
       line: 4,
       patterns: ["bastion"],
       editable: true,
+      hostName: "203.0.113.10",
+      user: "ops",
+      port: "22",
     },
     {
       identity: { path: "config", alias: "" },
@@ -75,16 +81,24 @@ describe("OverviewPanel", () => {
     expect(quickConnect.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(within(metrics).getByText("2")).toBeInTheDocument();
     expect(within(metrics).getAllByText("1")).toHaveLength(2);
-    expect(screen.getByText("Favourite · 1")).toBeInTheDocument();
+    expect(screen.getByText("Recently used hosts stay first; unused hosts follow in name order.")).toBeInTheDocument();
   });
 
-  it("puts favourites first, searches groups and launches only from the explicit action", async () => {
+  it("puts recent connections first, searches groups and launches only from the explicit action", async () => {
     const launch = vi.fn().mockResolvedValue({ launched: true });
     render(
       <OverviewPanel
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
-        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
+        loadRecent={vi.fn().mockResolvedValue({
+          connections: [{
+            alias: "database",
+            hostName: "old-db.example.com",
+            user: "previous-user",
+            port: "22",
+            lastConnectedAt: "2026-08-24T15:30:00Z",
+          }],
+        })}
         launch={launch}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
@@ -189,7 +203,7 @@ describe("OverviewPanel", () => {
     expect(navigate).toHaveBeenCalledWith("History");
   });
 
-  it("shows current targets for recent connections and reconnects from the primary action", async () => {
+  it("shows current targets for recent connections and reconnects from the action menu", async () => {
     const launch = vi.fn().mockResolvedValue({ session: { id: "session-1" } });
     render(
       <OverviewPanel
@@ -198,9 +212,9 @@ describe("OverviewPanel", () => {
         loadRecent={vi.fn().mockResolvedValue({
           connections: [{
             alias: "database",
-            hostName: "db.example.com",
-            user: "deploy",
-            port: "2202",
+            hostName: "old-db.example.com",
+            user: "previous-user",
+            port: "22",
             lastConnectedAt: "2026-08-24T15:30:00Z",
           }],
         })}
@@ -210,11 +224,14 @@ describe("OverviewPanel", () => {
       />,
     );
 
-    const recentList = await screen.findByRole("list", { name: "Recently used connections" });
-    expect(within(recentList).getByText("database")).toBeInTheDocument();
-    expect(within(recentList).getByText("deploy@db.example.com:2202")).toBeInTheDocument();
-    expect(within(recentList).getByText("database").closest("li")).toHaveTextContent("work · Last connected");
-    await userEvent.click(within(recentList).getByRole("button", { name: "Connect" }));
+    const launcher = await screen.findByRole("list", { name: "Available connections" });
+    const card = within(launcher).getByText("database").closest("li");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByText("deploy@db.example.com:2202")).toBeInTheDocument();
+    expect(card).toHaveTextContent("work");
+    expect(card).toHaveTextContent("Last connected");
+    await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
+    await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Connect" }));
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
   });
 

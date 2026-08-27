@@ -399,11 +399,28 @@ test("keeps every section inside 360 pixels", async ({ page, installation }) => 
   await expect(page.getByRole("heading", { name: "Your connections", exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page, "Home");
   await expectNothingCutOff(page, "Home");
+  const layout = page.getByRole("group", { name: "Connection layout" });
   await expectFullyInsideViewport(
     page,
-    page.getByRole("list", { name: "Recently used connections" }).getByRole("button", { name: "Connect" }),
-    "Recent connection",
+    layout.getByRole("button", { name: "Panels" }),
+    "Panel layout option",
   );
+  await expectFullyInsideViewport(
+    page,
+    layout.getByRole("button", { name: "List" }),
+    "List layout option",
+  );
+  await expectFullyInsideViewport(
+    page,
+    page.getByRole("button", { name: "Actions for bastion" }),
+    "Recent connection actions",
+  );
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-home-quick-access-mobile.png`,
+      fullPage: true,
+    });
+  }
 
   for (const section of sections) {
     await openSectionThroughDrawer(page, section.navigation, section.heading);

@@ -1,6 +1,11 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Overview } from "../api/config";
-import { buildConnectionBrowserIndex, identityKey, projectConnectionBrowser, type BrowserGroup, type BrowserServer, type ConnectionBrowserLocation } from "../connections/connectionBrowser";
+import type { RecentConnection } from "../api/integrations";
+import {
+  buildConnectionBrowserIndex,
+  identityKey,
+  type BrowserServer,
+} from "../connections/connectionBrowser";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
@@ -8,258 +13,254 @@ import { ConnectionActions } from "./ConnectionActions";
 
 type QuickConnectBrowserProps = {
   overview: Overview;
+  recent?: RecentConnection[];
   launching: string;
   onConnect: (alias: string) => void;
   onOpenSettings: (location: string) => void;
 };
 
+type QuickConnectView = "panel" | "list";
+
+const viewStorageKey = "sshc.home.quick-connect-view";
+
+function storedView(): QuickConnectView {
+  try {
+    return window.localStorage.getItem(viewStorageKey) === "list" ? "list" : "panel";
+  } catch {
+    return "panel";
+  }
+}
+
+function rememberView(view: QuickConnectView) {
+  try {
+    window.localStorage.setItem(viewStorageKey, view);
+  } catch {
+    // The launcher still works when storage is unavailable.
+  }
+}
+
+function destination(hostName: string, user: string, port: string): string {
+  const host = hostName.includes(":") && !hostName.startsWith("[") ? `[${hostName}]` : hostName;
+  if (host === "") return "";
+  return `${user === "" ? "" : `${user}@`}${host}${port === "" ? "" : `:${port}`}`;
+}
+
+function connectionDestination(server: BrowserServer): string {
+  return destination(server.host.hostName ?? server.identity.alias, server.host.user ?? "", server.host.port ?? "22");
+}
+
+function includesQuery(server: BrowserServer, query: string): boolean {
+  const needle = query.trim().toLocaleLowerCase();
+  if (needle === "") return true;
+  return [
+    server.identity.alias,
+    server.identity.path,
+    server.group,
+    connectionDestination(server),
+    ...server.host.patterns,
+    ...server.tags,
+  ].some((candidate) => candidate.toLocaleLowerCase().includes(needle));
+}
+
+function belongsToGroup(server: BrowserServer, group: string): boolean {
+  return group === "" || server.group === group || server.group.startsWith(`${group}/`);
+}
+
 export function QuickConnectBrowser({
   overview,
+  recent = [],
   launching,
   onConnect,
   onOpenSettings,
 }: QuickConnectBrowserProps) {
   const t = useTranslate();
-  const [browser, setBrowser] = useState<ConnectionBrowserLocation>({ view: "servers" });
   const [query, setQuery] = useState("");
-  const [favouritesOnly, setFavouritesOnly] = useState(false);
+  const [group, setGroup] = useState("");
+  const [view, setView] = useState<QuickConnectView>(storedView);
+  const [selectedAlias, setSelectedAlias] = useState("");
+  const pointerType = useRef("keyboard");
   const index = useMemo(() => buildConnectionBrowserIndex(overview), [overview]);
-  const projection = projectConnectionBrowser(index, browser, query, favouritesOnly);
+  const recentByAlias = useMemo(
+    () => new Map(recent.map((connection, position) => [connection.alias, { connection, position }])),
+    [recent],
+  );
+  const collator = useMemo(
+    () => new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }),
+    [],
+  );
 
-  function countLabel(count: number) {
-    return count === 1
-      ? t("browser.groupCountOne")
-      : t("browser.groupCountMany", { count });
+  useEffect(() => {
+    if (group === "" || index.groupByName.has(group)) return;
+    setGroup("");
+  }, [group, index.groupByName]);
+
+  const servers = useMemo(
+    () => index.servers
+      .filter((server) => belongsToGroup(server, group) && includesQuery(server, query))
+      .sort((left, right) => {
+        const leftRecent = recentByAlias.get(left.identity.alias)?.position;
+        const rightRecent = recentByAlias.get(right.identity.alias)?.position;
+        if (leftRecent !== undefined && rightRecent !== undefined) return leftRecent - rightRecent;
+        if (leftRecent !== undefined) return -1;
+        if (rightRecent !== undefined) return 1;
+        return collator.compare(left.identity.alias, right.identity.alias);
+      }),
+    [collator, group, index.servers, query, recentByAlias],
+  );
+
+  function changeView(next: QuickConnectView) {
+    setView(next);
+    rememberView(next);
   }
 
-  function renderServers(source: BrowserServer[]): ReactNode {
-    const servers = [...source].sort((left, right) => Number(right.favourite) - Number(left.favourite));
-    if (servers.length === 0) return null;
+  function renderServer(server: BrowserServer) {
+    const alias = server.identity.alias;
+    const recentConnection = recentByAlias.get(alias)?.connection;
+    const target = connectionDestination(server);
+    const location = server.group === "" ? t("home.ungrouped") : server.group;
+    const lastConnected = recentConnection === undefined
+      ? t("home.neverConnected")
+      : t("home.lastConnected", { at: formatConnectedAt(recentConnection.lastConnectedAt) });
+    const selected = selectedAlias === alias;
+    const panel = view === "panel";
+
     return (
-      <ul aria-label={t("home.connectionList")} className="divide-y divide-line border-y border-line">
-        {servers.map((server) => (
-          <li
-            key={identityKey(server.identity)}
-            className="flex min-w-0 flex-col gap-2 px-3 py-2.5"
-          >
-            <div className="flex min-w-0 items-start gap-2">
-              <div className="min-w-0 grow">
-                <p className="flex min-w-0 items-center gap-1 truncate font-medium text-ink">
-                  {server.colour === "" ? null : (
-                    <span
-                      aria-hidden="true"
-                      className="inline-block size-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: server.colour }}
-                    />
-                  )}
-                  {server.favourite ? (
-                    <span aria-label={t("home.favourite")} className="text-notice-ink">★</span>
-                  ) : null}
-                  <span className="truncate">{server.identity.alias}</span>
-                  {server.duplicateAlias ? (
-                    <span aria-label={t("browser.duplicateAlias")} className="text-notice-ink">⧉</span>
-                  ) : null}
-                </p>
-                <p className="truncate text-xs text-ink-muted">
-                  {server.group === "" ? t("home.ungrouped") : server.group}
-                </p>
-                {server.duplicateAlias ? (
-                  <p className="truncate text-xs text-ink-faint">{server.identity.path}</p>
-                ) : null}
-              </div>
-              <ConnectionActions
-                alias={server.identity.alias}
-                path={server.identity.path}
-                busy={launching !== ""}
-                opening={launching === server.identity.alias}
-                onOpenSettings={onOpenSettings}
-                onConnect={() => onConnect(server.identity.alias)}
-              />
-            </div>
-            {server.tags.length === 0 ? null : (
-              <ul aria-label={t("home.tagsFor", { alias: server.identity.alias })} className="flex flex-wrap gap-1">
-                {server.tags.map((tag) => (
-                  <li key={tag} className="rounded bg-select-fill px-2 py-0.5 text-xs text-ink-muted">{tag}</li>
-                ))}
-              </ul>
+      <li
+        key={identityKey(server.identity)}
+        className={`relative min-w-0 border border-line bg-card transition-colors hover:bg-select-fill ${
+          panel ? "rounded-md" : "rounded-sm"
+        } ${selected ? "bg-select-fill" : ""}`}
+      >
+        <button
+          type="button"
+          aria-label={t("home.connectGesture", { alias })}
+          disabled={launching !== ""}
+          onPointerDown={(event) => { pointerType.current = event.pointerType; }}
+          onClick={() => {
+            if (pointerType.current === "mouse") {
+              setSelectedAlias(alias);
+              return;
+            }
+            onConnect(alias);
+          }}
+          onDoubleClick={() => {
+            if (pointerType.current === "mouse") onConnect(alias);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            onConnect(alias);
+          }}
+          className={`block min-h-24 w-full min-w-0 pr-12 text-left disabled:cursor-wait disabled:text-ink-muted ${
+            panel ? "px-3 py-2.5" : "px-3 py-2"
+          }`}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {server.colour === "" ? (
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-live" />
+            ) : (
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: server.colour }} />
             )}
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
-  function renderGroup(group: BrowserGroup) {
-    return (
-      <li key={group.name}>
-        <button
-          type="button"
-          aria-label={`${group.label}, ${countLabel(group.descendantCount)}`}
-          onClick={() => setBrowser({ view: "groups", scope: "named", group: group.name })}
-          className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-select-fill"
-        >
-          {group.colour === "" ? null : (
-            <span
-              aria-hidden="true"
-              className="size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: group.colour }}
-            />
-          )}
-          <span className="min-w-0 flex-1 truncate font-medium">{group.label}</span>
-          <span className="shrink-0 text-xs text-ink-faint">{countLabel(group.descendantCount)}</span>
-          <span aria-hidden="true" className="text-ink-faint">›</span>
+            <span className="truncate text-sm font-semibold text-ink">{alias}</span>
+            {server.duplicateAlias ? <span aria-label={t("browser.duplicateAlias")} className="text-notice-ink">⧉</span> : null}
+          </span>
+          <span className="mt-1 block truncate text-xs text-ink-muted">{location}</span>
+          <span className="mt-0.5 block truncate font-mono text-xs text-ink">{target}</span>
+          <span className="mt-1 block truncate text-xs text-ink-faint">
+            {launching === alias ? t("home.opening") : lastConnected}
+          </span>
         </button>
-      </li>
-    );
-  }
-
-  function groupAncestors(group: string): BrowserGroup[] {
-    const result: BrowserGroup[] = [];
-    let current = index.groupByName.get(group);
-    while (current !== undefined) {
-      result.unshift(current);
-      current = current.parent === "" ? undefined : index.groupByName.get(current.parent);
-    }
-    return result;
-  }
-
-  function renderBreadcrumbs() {
-    if (browser.view !== "groups" || browser.scope === "root") return null;
-    const ancestors = browser.scope === "named" ? groupAncestors(browser.group) : [];
-    return (
-      <nav aria-label={t("browser.groupPath")} className="flex flex-wrap items-center gap-1 text-sm text-ink-muted">
-        <button
-          type="button"
-          onClick={() => setBrowser({ view: "groups", scope: "root" })}
-          className="rounded px-1.5 py-1 hover:bg-select-fill"
-        >
-          {t("browser.groups")}
-        </button>
-        {browser.scope === "ungrouped" ? (
-          <>
-            <span aria-hidden="true">/</span>
-            <span aria-current="page">{t("browser.ungrouped")}</span>
-          </>
-        ) : (
-          ancestors.map((group, indexInPath) => {
-            const current = indexInPath === ancestors.length - 1;
-            return (
-              <span key={group.name} className="contents">
-                <span aria-hidden="true">/</span>
-                {current ? (
-                  <span aria-current="page">{group.label}</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setBrowser({ view: "groups", scope: "named", group: group.name })}
-                    className="rounded px-1.5 py-1 hover:bg-select-fill"
-                  >
-                    {group.label}
-                  </button>
-                )}
-              </span>
-            );
-          })
-        )}
-      </nav>
-    );
-  }
-
-  function renderProjection() {
-    if (projection.kind === "missing-group") {
-      return (
-        <div className="border-y border-line bg-surface-subtle p-4 text-sm">
-          <p className="font-medium">{t("browser.groupMissing")}</p>
-          <p className="mt-1 text-ink-muted">{t("home.groupMissingDetail", { name: projection.group })}</p>
-          <button
-            type="button"
-            onClick={() => setBrowser({ view: "groups", scope: "root" })}
-            className="mt-2 rounded px-2 py-1 text-accent hover:bg-select-fill"
-          >
-            {t("browser.backToGroupRoot")}
-          </button>
+        <div className="absolute right-1.5 top-1.5">
+          <ConnectionActions
+            alias={alias}
+            path={server.identity.path}
+            busy={launching !== ""}
+            opening={launching === alias}
+            onOpenSettings={onOpenSettings}
+            onConnect={() => onConnect(alias)}
+          />
         </div>
-      );
-    }
-    if (projection.kind === "servers" || projection.kind === "search-results") {
-      if (projection.servers.length > 0) return renderServers(projection.servers);
-      const empty = index.servers.length === 0 ? t("home.noConnections") : t("home.noMatches");
-      return <p className="border-y border-line bg-surface-subtle p-4 text-sm text-ink-muted">{empty}</p>;
-    }
-
-    const atRoot = browser.view === "groups" && browser.scope === "root";
-    const showUngrouped = atRoot && projection.ungroupedCount > 0;
-    if (projection.groups.length === 0 && projection.servers.length === 0 && !showUngrouped) {
-      const empty = favouritesOnly
-        ? t("browser.noMatches")
-        : atRoot
-          ? t("browser.emptyGroups")
-          : t("browser.emptyGroup");
-      return <p className="border-y border-line bg-surface-subtle p-4 text-sm text-ink-muted">{empty}</p>;
-    }
-    return (
-      <div className="flex flex-col gap-2">
-        {projection.groups.length === 0 && !showUngrouped ? null : (
-          <ul aria-label={t("browser.groups")} className="divide-y divide-line border-y border-line">
-            {projection.groups.map(renderGroup)}
-            {showUngrouped ? (
-              <li>
-                <button
-                  type="button"
-                  aria-label={`${t("browser.ungrouped")}, ${countLabel(projection.ungroupedCount)}`}
-                  onClick={() => setBrowser({ view: "groups", scope: "ungrouped" })}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-select-fill"
-                >
-                  <span className="min-w-0 flex-1 font-medium">{t("browser.ungrouped")}</span>
-                  <span className="shrink-0 text-xs text-ink-faint">{countLabel(projection.ungroupedCount)}</span>
-                  <span aria-hidden="true" className="text-ink-faint">›</span>
-                </button>
-              </li>
-            ) : null}
-          </ul>
-        )}
-        {renderServers(projection.servers)}
-      </div>
+      </li>
     );
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="[&_button]:min-h-10 md:[&_button]:min-h-0">
-          <Segmented
-            label={t("browser.modeLabel")}
-            value={browser.view}
-            options={[
-              { value: "servers", label: t("browser.servers") },
-              { value: "groups", label: t("browser.groups") },
-            ]}
-            onChange={(view) => setBrowser(view === "servers" ? { view: "servers" } : { view: "groups", scope: "root" })}
-          />
-        </div>
-        <label className="w-full sm:w-72">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <label className="min-w-0">
           <span className="sr-only">{t("home.search")}</span>
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder={t("home.searchPlaceholder")}
-            className={`${control} min-h-10 md:min-h-0`}
+            className={`${control} min-h-10 w-full md:min-h-0`}
           />
         </label>
+        <div className="[&_button]:min-h-10 md:[&_button]:min-h-0">
+          <Segmented
+            label={t("home.viewMode")}
+            value={view}
+            options={[
+              { value: "panel", label: t("home.panelView") },
+              { value: "list", label: t("home.listView") },
+            ]}
+            onChange={changeView}
+          />
+        </div>
       </div>
-      <button
-        type="button"
-        aria-pressed={favouritesOnly}
-        onClick={() => setFavouritesOnly((current) => !current)}
-        className={`min-h-10 self-start rounded px-2 py-1 text-xs md:min-h-0 ${
-          favouritesOnly ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-card"
-        }`}
-      >
-        {t("browser.favouritesOnly")}
-      </button>
-      {renderBreadcrumbs()}
-      {renderProjection()}
+
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0 text-xs text-ink-muted">{t("browser.groups")}</span>
+        <div role="group" aria-label={t("home.groupFilter")} className="flex min-w-0 gap-1 overflow-x-auto pb-1">
+          <button
+            type="button"
+            aria-pressed={group === ""}
+            onClick={() => setGroup("")}
+            className={`min-h-10 shrink-0 rounded-md px-2.5 py-1 text-xs md:min-h-0 ${group === "" ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-card"}`}
+          >
+            {t("home.allGroups")}
+          </button>
+          {index.groups.filter((candidate) => !candidate.hidden).map((candidate) => (
+            <button
+              key={candidate.name}
+              type="button"
+              aria-pressed={group === candidate.name}
+              onClick={() => setGroup(candidate.name)}
+              className={`min-h-10 shrink-0 rounded-md px-2.5 py-1 text-xs md:min-h-0 ${group === candidate.name ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-card"}`}
+            >
+              {candidate.name} · {candidate.descendantCount}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 text-xs text-ink-faint">
+        <span>{t("home.connectionCount", { count: servers.length })}</span>
+        <span className="hidden text-right md:inline">{t("home.pointerHint")}</span>
+        <span className="text-right md:hidden">{t("home.touchHint")}</span>
+      </div>
+
+      {servers.length === 0 ? (
+        <p className="border-y border-line bg-surface-subtle p-4 text-sm text-ink-muted">
+          {index.servers.length === 0 ? t("home.noConnections") : t("home.noMatches")}
+        </p>
+      ) : (
+        <ul
+          aria-label={t("home.connectionList")}
+          className={view === "panel"
+            ? "grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+            : "flex flex-col gap-1"}
+        >
+          {servers.map(renderServer)}
+        </ul>
+      )}
     </div>
   );
+}
+
+function formatConnectedAt(value: string): string {
+  const connectedAt = new Date(value);
+  if (Number.isNaN(connectedAt.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(connectedAt);
 }

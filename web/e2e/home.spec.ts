@@ -37,11 +37,12 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
 
   await expect(page.getByRole("heading", { name: "Your connections" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("list", { name: "Available connections" }).getByText(/bastion/)).toBeVisible();
+  const launcher = page.getByRole("list", { name: "Available connections" });
+  const bastion = launcher.getByRole("listitem").filter({ hasText: "bastion" });
+  await expect(bastion).toBeVisible();
+  await expect(bastion.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
+  await expect(bastion).toContainText("Last connected");
   await expect(page.getByText("nas", { exact: true })).toBeVisible();
-  const recent = page.getByRole("list", { name: "Recently used connections" });
-  await expect(recent.getByText("bastion", { exact: true })).toBeVisible();
-  await expect(recent.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
   expect(terminalRequests).toEqual([]);
 
   await page.getByRole("searchbox", { name: "Search connections" }).fill("production");
@@ -51,6 +52,26 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
 
   await page.getByRole("button", { name: "Manage connections" }).click();
   await expect(page.getByRole("navigation", { name: "Connections" })).toBeVisible();
+});
+
+test("requires a double click for a mouse", async ({
+  page,
+  installation,
+}) => {
+  const opened: unknown[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/v1/terminal/sessions" && request.method() === "POST") {
+      opened.push(request.postDataJSON());
+    }
+  });
+  await openApplication(page, installation);
+
+  const bastion = page.getByRole("button", { name: /^Connect to bastion\./ });
+  await bastion.click();
+  expect(opened).toEqual([]);
+  await bastion.dblclick();
+  await expect.poll(() => opened).toEqual([{ kind: "ssh", alias: "bastion" }]);
 });
 
 test("opens the action menu without connecting, then keeps settings and connect distinct", async ({
