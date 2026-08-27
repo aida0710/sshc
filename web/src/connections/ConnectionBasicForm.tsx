@@ -804,7 +804,7 @@ export function ConnectionBasicForm({
         </Card>
       </section>
 
-      <div className="flex items-center gap-3 border-t border-line bg-canvas py-3">
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line bg-canvas py-3">
         {!dirty ? <p className={`grow ${hintText}`}>{t("conn.basicNothingChanged")}</p> :
           (changesPassword && !passwordResourcesReady) || (hasKeyPassphraseDraft && !keyPassphraseResourcesReady) ?
             <p className={`grow ${hintText}`}>{t("conn.basicNeedVault")}</p> :

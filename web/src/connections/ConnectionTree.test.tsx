@@ -13,6 +13,7 @@ function host(path: string, alias: string, group?: string): HostEntry {
     patterns: alias === "" ? ["*"] : [alias],
     ...(alias === "" ? { wildcard: true } : {}),
     editable: true,
+    ...(alias === "" ? {} : { hostName: `${alias}.example`, user: "tester", port: "22" }),
     ...(group === undefined ? {} : { group }),
   };
 }
@@ -64,10 +65,10 @@ describe("ConnectionTree", () => {
     const tree = screen.getByRole("navigation", { name: "Connections" });
     expect(within(tree).getByRole("group", { name: "Arrange connections by" })).toHaveClass("rounded-md", "overflow-hidden");
     expect(within(tree).queryByRole("group", { name: "Browse connections by" })).not.toBeInTheDocument();
-    expect(within(tree).getByRole("heading", { name: "home" })).toBeInTheDocument();
-    expect(within(tree).getByRole("heading", { name: "eu" })).toBeInTheDocument();
-    expect(within(tree).getByRole("heading", { name: "empty" })).toBeInTheDocument();
-    expect(within(tree).getByRole("heading", { name: "Ungrouped" })).toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "home" })).toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "home/eu" })).toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "empty" })).toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "Ungrouped" })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: /nas/ })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: /eu-api/ })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: /bastion/ })).toBeInTheDocument();
@@ -99,9 +100,32 @@ describe("ConnectionTree", () => {
     expect(screen.queryByRole("button", { name: /nas/ })).not.toBeInTheDocument();
 
     await userEvent.clear(screen.getByRole("searchbox", { name: "Filter connections" }));
-    await userEvent.click(screen.getByRole("button", { name: "Favourites" }));
+    await userEvent.click(screen.getByRole("button", { name: "Show favourites only" }));
     expect(screen.getByRole("button", { name: /nas/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /bastion/ })).not.toBeInTheDocument();
+  });
+
+  it("filters the dense result list by group, file, and resolved destination", async () => {
+    const user = userEvent.setup();
+    render(
+      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onOpenPatternRule={vi.fn()} onDrop={vi.fn()} />,
+    );
+
+    expect(screen.getByText("tester@nas.example")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "home" }));
+    expect(screen.getByRole("button", { name: "nas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "eu-api" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "bastion" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    await user.click(screen.getByRole("button", { name: "config" }));
+    expect(screen.getByRole("button", { name: "bastion" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "nas" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "All" }));
+    await user.type(screen.getByRole("searchbox", { name: "Filter connections" }), "nas.example");
+    expect(screen.getByRole("button", { name: "nas" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "bastion" })).not.toBeInTheDocument();
   });
 
   it("allows management drops only when saved state is stable", () => {
@@ -116,7 +140,7 @@ describe("ConnectionTree", () => {
       <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onOpenPatternRule={vi.fn()} onDrop={onDrop} />,
     );
     const source = screen.getByRole("button", { name: /nas/ });
-    const target = screen.getByRole("heading", { name: "empty" });
+    const target = screen.getByRole("button", { name: "empty" });
     const dataTransfer = transfer(payload);
     fireEvent.dragStart(source, { dataTransfer });
     fireEvent.dragOver(target, { dataTransfer });
@@ -130,7 +154,7 @@ describe("ConnectionTree", () => {
     const disabledSource = screen.getByRole("button", { name: /nas/ });
     expect(disabledSource).not.toHaveAttribute("draggable", "true");
     fireEvent.dragStart(disabledSource, { dataTransfer });
-    fireEvent.drop(screen.getByRole("heading", { name: "empty" }), { dataTransfer });
+    fireEvent.drop(screen.getByRole("button", { name: "empty" }), { dataTransfer });
     expect(onDrop).not.toHaveBeenCalled();
   });
 });

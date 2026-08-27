@@ -743,28 +743,38 @@ export function ConnectionsPage({
 
   return (
     <>
-
-    <div className="grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[21rem_minmax(0,1fr)]">
-      <ConnectionListPane
-        overview={overview}
-        selection={selection}
-        invalidLocation={invalidLocation}
-        onDismissInvalidLocation={() => {
-          if (emitLocation(connectionLocation(null), { replace: true })) {
-            setInvalidLocation(false);
-          }
-        }}
-        onBeginCreation={beginCreation}
-        onSelect={onSelect}
-        onOpenPatternRule={onOpenFile}
-        onDrop={(payload, target) => void onTreeDrop(payload, target)}
-        movesDisabled={editorDirty || refreshState !== "idle"}
-      />
-      <div
-        className={`min-h-0 flex-col gap-5 overflow-y-auto p-4 md:flex md:p-6 ${
-          selection === null ? "hidden" : "flex"
-        }`}
-      >
+    <div className="flex h-full min-h-0 flex-col bg-page">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line bg-card px-4 py-3 md:px-5">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold tracking-tight text-ink">{t("conn.heading")}</h1>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            {t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
+          </p>
+        </div>
+        <Button kind="primary" className="min-h-10 shrink-0 md:min-h-0" onClick={beginCreation}>
+          {t("conn.new")}
+        </Button>
+      </header>
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(22rem,0.85fr)_minmax(0,1.15fr)]">
+        <ConnectionListPane
+          overview={overview}
+          selection={selection}
+          invalidLocation={invalidLocation}
+          onDismissInvalidLocation={() => {
+            if (emitLocation(connectionLocation(null), { replace: true })) {
+              setInvalidLocation(false);
+            }
+          }}
+          onSelect={onSelect}
+          onOpenPatternRule={onOpenFile}
+          onDrop={(payload, target) => void onTreeDrop(payload, target)}
+          movesDisabled={editorDirty || refreshState !== "idle"}
+        />
+        <div
+          className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 md:flex ${
+            selection === null ? "hidden" : "flex"
+          }`}
+        >
 
         <Button className="w-fit md:hidden" onClick={() => clearTarget()}>
           {t("conn.allConnections")}
@@ -841,6 +851,7 @@ export function ConnectionsPage({
             />
           </>
         )}
+        </div>
       </div>
     </div>
     {creating ? (

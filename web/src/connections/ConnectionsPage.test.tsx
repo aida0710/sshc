@@ -256,10 +256,10 @@ describe("ConnectionsPage", () => {
     expect(configApi.host).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "Files" }));
-    expect(screen.getByRole("heading", { name: "config" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "config" })).toBeInTheDocument();
     expect(onNavigateLocation).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Groups" }));
-    expect(screen.getByRole("heading", { name: "home" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "home" })).toBeInTheDocument();
     expect(configApi.host).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });
@@ -1032,7 +1032,7 @@ describe("dropping in the tree", () => {
     render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     const row = await screen.findByRole("button", { name: /nas/ });
 
-    drag(row, screen.getByRole("heading", { name: "eu" }), {
+    drag(row, screen.getByRole("button", { name: "home/eu" }), {
       kind: "connection", path: "connections/home/nas.conf", alias: "nas", group: "home",
     });
 
@@ -1071,7 +1071,7 @@ describe("dropping in the tree", () => {
     );
     const row = await screen.findByRole("button", { name: /nas/ });
     await user.click(row);
-    drag(screen.getByRole("button", { name: /nas/ }), screen.getByRole("heading", { name: "eu" }), {
+    drag(screen.getByRole("button", { name: /nas/ }), screen.getByRole("button", { name: "home/eu" }), {
       kind: "connection", path: "connections/home/nas.conf", alias: "nas", group: "home",
     });
 
@@ -1085,7 +1085,7 @@ describe("dropping in the tree", () => {
     render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     const row = await screen.findByRole("button", { name: /nas/ });
 
-    drag(row, screen.getByRole("heading", { name: "Ungrouped" }), {
+    drag(row, screen.getByRole("button", { name: "Ungrouped" }), {
       kind: "connection", path: "connections/home/nas.conf", alias: "nas", group: "home",
     });
 
@@ -1102,9 +1102,9 @@ describe("dropping in the tree", () => {
     } as never);
     render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
-    const source = screen.getByRole("heading", { name: "work" });
+    const source = screen.getByRole("button", { name: "work" });
 
-    drag(source, screen.getByRole("heading", { name: "home" }), { kind: "group", name: "work" });
+    drag(source, screen.getByRole("button", { name: "home" }), { kind: "group", name: "work" });
 
     await waitFor(() => expect(configApi.renameGroup).toHaveBeenCalledWith("work", "home/work"));
   });
@@ -1157,8 +1157,8 @@ describe("dropping in the tree", () => {
     );
     await user.click(await screen.findByRole("button", { name: /nas/ }));
     drag(
-      screen.getByRole("heading", { name: "home" }),
-      screen.getByRole("heading", { name: "work" }),
+      screen.getByRole("button", { name: "home" }),
+      screen.getByRole("button", { name: "work" }),
       { kind: "group", name: "home" },
     );
 
@@ -1174,11 +1174,11 @@ describe("dropping in the tree", () => {
     } as never);
     render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
-    const source = screen.getByRole("heading", { name: "eu" });
+    const source = screen.getByRole("button", { name: "home/eu" });
 
     drag(
       source,
-      screen.getByRole("heading", { name: "Ungrouped" }),
+      screen.getByRole("button", { name: "Ungrouped" }),
       { kind: "group", name: "home/eu" },
     );
 

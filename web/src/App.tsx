@@ -591,7 +591,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           }}
         />
 
-        <main className="relative flex min-h-0 flex-col overflow-hidden">
+        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
           {vaultMigration === null ? null : (
             <div role="status" className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink">
               <p className="min-w-0 grow">
