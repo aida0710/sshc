@@ -24,6 +24,7 @@ type fakeProcess struct {
 	written    bytes.Buffer
 	sizes      []terminal.Size
 	hangups    int
+	forces     int
 	closed     bool
 	failResize error
 }
@@ -106,6 +107,14 @@ func (p *fakeProcess) Hangup() error {
 	return nil
 }
 
+func (p *fakeProcess) ForceClose() error {
+	p.mutex.Lock()
+	p.forces++
+	p.mutex.Unlock()
+	p.exit(terminal.ExitInfo{Signal: "killed"})
+	return nil
+}
+
 func (p *fakeProcess) Wait() terminal.ExitInfo {
 	<-p.done
 	p.mutex.Lock()
@@ -115,10 +124,10 @@ func (p *fakeProcess) Wait() terminal.ExitInfo {
 
 func (p *fakeProcess) Close() error { return nil }
 
-func (p *fakeProcess) hangupCount() int {
+func (p *fakeProcess) forceCount() int {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	return p.hangups
+	return p.forces
 }
 
 func (p *fakeProcess) keystrokes() string {
@@ -309,7 +318,9 @@ func TestOpenRefusesOnceTheLiveLimitIsReached(t *testing.T) {
 	if err := registry.Close(first.ID()); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, exited(registry, first.ID()))
+	if _, ok := registry.Lookup(first.ID()); ok {
+		t.Fatal("the force-stopped session still occupies the live limit")
+	}
 	if _, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindShell, Command: terminal.Command{Path: "/bin/zsh"},
 	}); err != nil {
@@ -656,7 +667,7 @@ func TestAFailedStartCreatesNoSessionAndRunsTheCleanup(t *testing.T) {
 	}
 }
 
-func TestCloseHangsUpTheLiveSessionAndForgetsTheExitedOne(t *testing.T) {
+func TestCloseForceStopsAndImmediatelyForgetsTheLiveSession(t *testing.T) {
 	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
 	session := openShell(t, registry)
 	process := starter.last()
@@ -664,18 +675,11 @@ func TestCloseHangsUpTheLiveSessionAndForgetsTheExitedOne(t *testing.T) {
 	if err := registry.Close(session.ID()); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, exited(registry, session.ID()))
-	if process.hangupCount() != 1 {
-		t.Fatalf("hangups = %d, want 1", process.hangupCount())
-	}
-	if _, ok := registry.Lookup(session.ID()); !ok {
-		t.Fatal("the exited session left the list on the first close")
-	}
-	if err := registry.Close(session.ID()); err != nil {
-		t.Fatal(err)
+	if process.forceCount() != 1 {
+		t.Fatalf("forces = %d, want 1", process.forceCount())
 	}
 	if _, ok := registry.Lookup(session.ID()); ok {
-		t.Fatal("the second close did not remove the session")
+		t.Fatal("the force-stopped session remained in the list")
 	}
 	if err := registry.Close(session.ID()); !errors.Is(err, terminal.ErrNotFound) {
 		t.Fatalf("Close() of a missing session = %v, want ErrNotFound", err)

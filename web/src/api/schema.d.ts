@@ -334,6 +334,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /** @description Force-stops a live SSH or local process and removes the session from the returned list in one request. */
         delete: operations["closeTerminalSession"];
         options?: never;
         head?: never;
@@ -3668,6 +3669,7 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
         };
     };
     renameTerminalSession: {

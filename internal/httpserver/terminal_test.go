@@ -558,7 +558,7 @@ func TestExplicitReconnectRefusesALocalShell(t *testing.T) {
 	}
 }
 
-func TestClosingHangsUpAndThenForgets(t *testing.T) {
+func TestClosingForceStopsAndForgetsInOneRequest(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
 	id, _ := fixture.openShell(t)
 	session, ok := fixture.registry.Lookup(id)
@@ -570,25 +570,20 @@ func TestClosingHangsUpAndThenForgets(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("close = %d: %s", response.StatusCode, body)
 	}
-	// 終了は非同期に観測される。実時間のpollingではなく、このprocess世代のpump完了を
-	// 待つ。全package race実行のCPU飽和を製品の失敗と取り違えないためである。
+	if _, ok := fixture.registry.Lookup(id); ok {
+		t.Fatal("the closed session remained in the list")
+	}
+	// 強制停止後のpump回収まで確認し、一覧だけを先に消してprocessを漏らしていない
+	// ことを保証する。
 	select {
 	case <-session.Done():
 	case <-time.After(30 * time.Second):
-		t.Fatal("the session pump did not finish after hangup")
+		t.Fatal("the session pump did not finish after force close")
 	}
 	if session.Exit() == nil {
 		t.Fatal("the finished session has no exit status")
 	}
 
-	// 二度目が一覧から消す。終了済みを残すのは、最後の出力を読めるようにするためで、
-	// 消すのはユーザーが明示的にそう言ったときだけである。
-	if response, body := fixture.do(t, http.MethodDelete, "/api/v1/terminal/sessions/"+id, ""); response.StatusCode != http.StatusOK {
-		t.Fatalf("second close = %d: %s", response.StatusCode, body)
-	}
-	if _, ok := fixture.registry.Lookup(id); ok {
-		t.Fatal("the second close left the session in the list")
-	}
 	if response, _ := fixture.do(t, http.MethodDelete, "/api/v1/terminal/sessions/"+id, ""); response.StatusCode != http.StatusNotFound {
 		t.Fatalf("closing a missing session = %d, want 404", response.StatusCode)
 	}

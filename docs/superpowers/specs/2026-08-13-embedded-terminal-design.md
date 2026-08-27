@@ -151,7 +151,7 @@ CSP の `connect-src 'self'` は同一オリジンの `ws://` を許すので、
 | --- | --- | --- |
 | `GET` | `/api/v1/terminal/sessions` | 一覧。生存と終了済みの両方 |
 | `POST` | `/api/v1/terminal/sessions` | 開く。body は `{"kind":"ssh","alias":"..."}` または `{"kind":"shell"}`。応答に `id` と `streamTicket` |
-| `DELETE` | `/api/v1/terminal/sessions/{id}` | 閉じる。生存中なら子プロセスに SIGHUP、終了済みなら一覧から消す |
+| `DELETE` | `/api/v1/terminal/sessions/{id}` | 閉じる。生存中なら強制停止し、終了状態を待たず一覧から一度で消す |
 | `GET` | `/terminal/stream?ticket=` | WebSocket。`/api/` の外 |
 
 `api/openapi.yaml` は WebSocket のルートを記述しない。契約テスト

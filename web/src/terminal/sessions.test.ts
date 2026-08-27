@@ -170,7 +170,7 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("terminal.openFailed");
   });
 
-  it("closes each session again once it is no longer live", async () => {
+  it("closes every session once", async () => {
     const server = [
       { id: "a", live: true },
       { id: "b", live: true },
@@ -182,8 +182,7 @@ describe("useTerminalSessions", () => {
     const closeTerminalSession = vi.fn(async (id: string) => {
       const found = server.find((session) => session.id === id);
       if (found === undefined) return listing();
-      if (found.live) found.live = false;
-      else server.splice(server.indexOf(found), 1);
+      server.splice(server.indexOf(found), 1);
       return listing();
     });
     const client = api({ terminalSessions: vi.fn(async () => listing()), closeTerminalSession });
@@ -194,7 +193,7 @@ describe("useTerminalSessions", () => {
       await result.current.closeAll();
     });
 
-    expect(closeTerminalSession).toHaveBeenCalledTimes(4);
+    expect(closeTerminalSession).toHaveBeenCalledTimes(2);
     expect(result.current.sessions).toEqual([]);
     expect(result.current.problem).toBe("");
   });

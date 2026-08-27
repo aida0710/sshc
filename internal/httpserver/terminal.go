@@ -490,7 +490,10 @@ func (h TerminalHandlers) Close(c *echo.Context) error {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	if err := h.Registry.Close(id); err != nil {
-		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+		if errors.Is(err, terminal.ErrNotFound) {
+			return problem(c, http.StatusNotFound, "terminal_session_not_found")
+		}
+		return problem(c, http.StatusInternalServerError, "terminal_close_failed")
 	}
 	// 使われなかったチケットを、もう閉じたセッションに向けたまま残さない。
 	h.Tickets.Forget(id)
