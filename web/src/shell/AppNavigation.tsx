@@ -43,6 +43,7 @@ export function AppNavigation({
   onDuplicateConsole,
   onReorderConsoles,
   onOpenShell,
+  onOpenCommandPalette,
 }: {
   navigationId: string;
   navigationOpen: boolean;
@@ -64,6 +65,7 @@ export function AppNavigation({
   onDuplicateConsole: (id: string) => void;
   onReorderConsoles: (order: string[]) => void;
   onOpenShell: () => void;
+  onOpenCommandPalette: () => void;
 }) {
   const t = useTranslate();
   const navigationLink = (name: Section) => (
@@ -87,6 +89,15 @@ export function AppNavigation({
         <BrandMark className="h-7 w-7" />
         <span className="font-mono text-sm font-semibold tracking-tight">{t("shell.title")}</span>
       </div>
+
+      <button
+        type="button"
+        onClick={onOpenCommandPalette}
+        className="mb-1 flex h-10 shrink-0 items-center gap-2 rounded border border-control-line bg-control px-2.5 text-sm text-ink-muted hover:text-ink md:hidden"
+      >
+        <Icon name="search" className="h-4 w-4" />
+        <span className="flex-1 text-left">{t("palette.open")}</span>
+      </button>
 
       <div className="shrink-0">
         {navGroups.slice(0, 1).map((group) => (

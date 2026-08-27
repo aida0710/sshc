@@ -7,6 +7,8 @@ import { locales, type Locale } from "../i18n/locale";
 import { themes, type Theme } from "../theme/theme";
 import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
+import { useSyncExternalStore } from "react";
+import { sftpTransferManager } from "../sftp/transferManager";
 
 export function AppHeader({
   route,
@@ -25,6 +27,8 @@ export function AppHeader({
   localeLabels,
   theme,
   onThemeChange,
+  onOpenCommandPalette,
+  onOpenTransfers,
 }: {
   route: { kind: string; section?: Section };
   version: string;
@@ -42,8 +46,12 @@ export function AppHeader({
   localeLabels: Record<Locale, MessageKey>;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
+  onOpenCommandPalette: () => void;
+  onOpenTransfers: () => void;
 }) {
   const { t, locale, setLocale } = useLanguage();
+  const transfers = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
+  const activeTransfers = transfers.filter((job) => ["queued", "running", "paused", "reattach", "needs_overwrite"].includes(job.status)).length;
   return (
     <header className="relative z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:gap-3 md:px-3">
       <div className="flex min-w-0 flex-1 items-center gap-2 md:contents">
@@ -110,6 +118,26 @@ export function AppHeader({
       </div>
 
       <div className="hidden shrink-0 items-center gap-1 border-l border-line pl-2 md:flex">
+        <button
+          type="button"
+          aria-label={t("palette.open")}
+          onClick={onOpenCommandPalette}
+          className="mr-1 flex h-8 min-w-44 items-center gap-2 rounded border border-control-line bg-control px-2.5 text-xs text-ink-muted hover:border-control-line-strong hover:text-ink"
+        >
+          <Icon name="search" className="h-3.5 w-3.5" />
+          <span className="flex-1 text-left">{t("palette.open")}</span>
+          <kbd className="font-mono text-[10px] text-ink-subtle">Ctrl K</kbd>
+        </button>
+        {activeTransfers > 0 ? (
+          <button
+            type="button"
+            onClick={onOpenTransfers}
+            className="mr-1 flex h-8 items-center gap-1.5 border-l border-line px-2 text-xs text-ink-muted hover:text-ink"
+          >
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-notice-ink" />
+            {t("sftp.activeTransfers", { count: activeTransfers })}
+          </button>
+        ) : null}
         <label htmlFor="appearance" className="sr-only">
           {t("shell.theme")}
         </label>

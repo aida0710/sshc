@@ -125,6 +125,16 @@ export function TerminalWorkspace({
     }];
   }, [active, sessionByID, visibleLayout]);
   const connectedCommandTargets = commandTargets.filter((target) => target.connected).length;
+  const workspacePaneCount = visibleLayout === null ? (active === null ? 0 : 1) : paneIDs(visibleLayout.root).length;
+  const workspaceDisplayName = useMemo(() => {
+    if (visibleLayout === null) return active?.title ?? t("workspace.live");
+    const selectedName = saved.find((item) => item.id === selectedWorkspace)?.name.trim() ?? "";
+    if (selectedName !== "") return selectedName;
+    const aliases: string[] = [];
+    visit(storeLayout(visibleLayout).layout, (_id, alias) => aliases.push(alias));
+    const uniqueAliases = [...new Set(aliases)];
+    return uniqueAliases.slice(0, 2).join(" + ") + (uniqueAliases.length > 2 ? ` +${uniqueAliases.length - 2}` : "") || t("workspace.live");
+  }, [active?.title, saved, selectedWorkspace, t, visibleLayout]);
 
   useEffect(() => { void workspaceApi.list().then(setSaved).catch(() => undefined); }, []);
   useEffect(() => {
@@ -469,6 +479,12 @@ export function TerminalWorkspace({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div data-desktop-workspace-controls className="hidden shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2 md:flex">
+        {workspacePaneCount > 0 ? (
+          <div className="mr-2 flex min-w-0 items-center gap-2 border-r border-line pr-4">
+            <span className="max-w-52 truncate text-xs font-semibold text-ink">{workspaceDisplayName}</span>
+            <span className="whitespace-nowrap text-[11px] text-ink-subtle">{t("workspace.groupCount", { count: String(workspacePaneCount) })}</span>
+          </div>
+        ) : null}
         <Button disabled={connectedCommandTargets === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
         {focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}
         <details className="group relative ml-auto">

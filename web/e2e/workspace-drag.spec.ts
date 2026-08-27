@@ -73,7 +73,7 @@ test("docks connected terminals into a live workspace", async ({ page, installat
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-live-workspace-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-live-workspace-desktop.png`, fullPage: true });
   }
 
   await page.getByRole("button", { name: "Send command…" }).click();
@@ -81,7 +81,7 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   await expect(broadcast).toBeVisible();
   await expect(broadcast.getByText(/working directory, environment, and shell state/)).toBeVisible();
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-broadcast-modal.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-broadcast-modal.png`, fullPage: true });
   }
   await broadcast.getByRole("button", { name: "Close command delivery" }).click();
 
@@ -89,7 +89,7 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   await savedLayouts.click();
   await expect(page.getByText(/Save connection targets and split ratios/)).toBeVisible();
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-saved-layouts.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-saved-layouts.png`, fullPage: true });
   }
   await savedLayouts.click();
 
@@ -101,6 +101,6 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   await expect(page.locator("[data-desktop-workspace-controls]")).toBeHidden();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-live-workspace-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-live-workspace-mobile.png`, fullPage: true });
   }
 });
