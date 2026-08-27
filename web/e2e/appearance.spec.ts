@@ -109,6 +109,42 @@ for (const appearance of ["light", "dark"] as const) {
       });
     }
 
+    await page.getByRole("tab", { name: "Advanced settings" }).click();
+    await expect(page.getByRole("tabpanel", { name: "Advanced settings" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Advanced settings" })).toHaveAttribute("aria-selected", "true");
+    await page.waitForTimeout(250);
+    if (process.env.SSHC_VISUAL_DIR !== undefined) {
+      await page.screenshot({
+        path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-connection-advanced-jump-${appearance}.png`,
+        fullPage: true,
+      });
+    }
+    for (const subview of ["Directives", "Raw"] as const) {
+      await page.getByRole("tab", { name: subview }).click();
+      await expect(page.getByRole("tab", { name: subview })).toHaveAttribute("aria-selected", "true");
+      await page.waitForTimeout(250);
+      if (process.env.SSHC_VISUAL_DIR !== undefined) {
+        await page.screenshot({
+          path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-connection-advanced-${subview.toLowerCase()}-${appearance}.png`,
+          fullPage: true,
+        });
+      }
+    }
+
+    await openSection(page, "Ad hoc checks");
+    const diagnosticCards = page.locator("main .sshc-card");
+    await expect(diagnosticCards).toHaveCount(2);
+    for (const card of await diagnosticCards.all()) {
+      await expect(card).toHaveCSS("border-left-width", "1px");
+      await expect(card).toHaveCSS("border-right-width", "1px");
+    }
+    if (process.env.SSHC_VISUAL_DIR !== undefined) {
+      await page.screenshot({
+        path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-diagnostics-${appearance}.png`,
+        fullPage: true,
+      });
+    }
+
     await openSection(page, "Config");
     const explorer = page.locator("[data-config-explorer]");
     await expect(explorer).toHaveCSS("border-left-width", "1px");
