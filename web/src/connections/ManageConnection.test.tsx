@@ -19,7 +19,7 @@ const detail: HostDetail = {
     comment: "production edge",
     commentLines: 1,
   },
-  metadata: { identity: { path: "connections/work/bastion.conf", alias: "bastion" }, favourite: false },
+  metadata: { identity: { path: "connections/work/bastion.conf", alias: "bastion" } },
   effective: { alias: "bastion", entries: [] },
   file: {
     file: { path: "connections/work/bastion.conf", absolute: "/home/tester/.ssh/connections/work/bastion.conf" },

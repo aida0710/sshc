@@ -455,7 +455,7 @@ test("shows where each value comes from without a confirmation", async ({ page, 
   await expect(page.getByRole("table", { name: "Configuration lines read by OpenSSH" })).toBeVisible();
 });
 
-test("edits the display order it stores, and shows a favourite in the tree", async ({
+test("edits the display order it stores", async ({
   page,
   installation,
 }) => {
@@ -472,12 +472,6 @@ test("edits the display order it stores, and shows a favourite in the tree", asy
   ]);
   expect(ordered.status()).toBe(200);
   expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].order).toBe(-1);
-
-  await page.getByLabel("Favourite", { exact: true }).click();
-  const row = page
-    .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: /bastion/ });
-  await expect(row.getByText("\u2605")).toBeVisible();
 });
 
 test("re-associates a note whose connection is gone, without guessing", async ({

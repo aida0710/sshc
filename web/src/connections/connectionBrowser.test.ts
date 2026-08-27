@@ -100,12 +100,11 @@ const overview: Overview = {
       {
         identity: homeNas.identity,
         order: -2,
-        favourite: true,
         tags: ["storage", "lan"],
         colour: "#f97316",
       },
       { identity: workNas.identity, order: -1 },
-      { identity: euApi.identity, favourite: true, tags: ["production"] },
+      { identity: euApi.identity, tags: ["production"] },
     ],
   },
   diagnostics: [],
@@ -128,7 +127,6 @@ describe("connection browser index", () => {
     expect(index.servers[0]).toMatchObject({
       group: "home",
       tags: ["storage", "lan"],
-      favourite: true,
       colour: "#f97316",
       duplicateAlias: true,
     });
@@ -138,18 +136,16 @@ describe("connection browser index", () => {
 
   it("projects one declared group level at a time and preserves empty groups", () => {
     const index = buildConnectionBrowserIndex(overview);
-    const root = projectConnectionBrowser(index, { view: "groups", scope: "root" }, "", false);
+    const root = projectConnectionBrowser(index, { view: "groups", scope: "root" }, "");
     const home = projectConnectionBrowser(
       index,
       { view: "groups", scope: "named", group: "home" },
       "",
-      false,
     );
     const eu = projectConnectionBrowser(
       index,
       { view: "groups", scope: "named", group: "home/eu" },
       "",
-      false,
     );
 
     expect(root).toMatchObject({
@@ -188,7 +184,6 @@ describe("connection browser index", () => {
       index,
       { view: "groups", scope: "named", group: "metadata-only" },
       "",
-      false,
     )).toEqual({ kind: "missing-group", group: "metadata-only" });
   });
 
@@ -199,7 +194,6 @@ describe("connection browser index", () => {
       index,
       { view: "groups", scope: "named", group: "home" },
       "eu-api",
-      false,
     )).toMatchObject({
       kind: "search-results",
       scope: "home",
@@ -209,7 +203,6 @@ describe("connection browser index", () => {
       index,
       { view: "groups", scope: "root" },
       "home/eu",
-      false,
     )).toMatchObject({
       kind: "search-results",
       scope: null,
@@ -217,33 +210,10 @@ describe("connection browser index", () => {
     });
   });
 
-  it("filters direct servers and group cards by favourite descendants", () => {
-    const index = buildConnectionBrowserIndex(overview);
-    const root = projectConnectionBrowser(index, { view: "groups", scope: "root" }, "", true);
-    const home = projectConnectionBrowser(
-      index,
-      { view: "groups", scope: "named", group: "home" },
-      "",
-      true,
-    );
-
-    expect(root).toMatchObject({
-      kind: "group-level",
-      groups: [{ name: "home", favouriteDescendantCount: 2 }],
-      servers: [],
-      ungroupedCount: 0,
-    });
-    expect(home).toMatchObject({
-      kind: "group-level",
-      groups: [{ name: "home/eu", favouriteDescendantCount: 1 }],
-      servers: [{ identity: { alias: "nas" } }],
-    });
-  });
-
   it("keeps a filtered zero-result projection distinct from missing data", () => {
     const index = buildConnectionBrowserIndex(overview);
 
-    expect(projectConnectionBrowser(index, { view: "servers" }, "no-such-server", false)).toEqual({
+    expect(projectConnectionBrowser(index, { view: "servers" }, "no-such-server")).toEqual({
       kind: "servers",
       servers: [],
     });

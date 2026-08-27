@@ -1,5 +1,5 @@
 import type { HostDetail, HostMetadata } from "../api/config";
-import { CheckboxField, Field, control, fieldLabel, hintText } from "../ui/form";
+import { Field, control, fieldLabel, hintText } from "../ui/form";
 import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { NoticeList } from "./SavePreview";
@@ -39,12 +39,6 @@ export function HostInspector({
         </div>
 
         <div className="flex flex-col gap-4 rounded-md bg-tree p-4">
-        <CheckboxField
-          label={t("host.favourite")}
-          checked={detail.metadata.favourite === true}
-          onChange={(checked) => onMetadata({ ...detail.metadata, favourite: checked })}
-        />
-
         <div className="flex flex-col gap-2">
           <Field label={t("host.colour")}>
             <input

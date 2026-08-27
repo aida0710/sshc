@@ -88,7 +88,6 @@ function detailWithIdentityFile(): HostDetail {
     },
     metadata: {
       identity: { path: "connections/work/edge.conf", alias: "edge" },
-      favourite: false,
     },
     effective: {
       alias: "edge",

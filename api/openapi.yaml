@@ -3378,7 +3378,6 @@ components:
         tags: { type: array, items: { type: string } }
         colour: { type: string }
         note: { type: string }
-        favourite: { type: boolean }
         order: { type: integer }
         orphan: { type: boolean }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }

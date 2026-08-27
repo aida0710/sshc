@@ -70,7 +70,7 @@ func TestClearHostNoteKeepsEveryOtherFieldAndEntry(t *testing.T) {
 	metadata := Metadata{
 		SchemaVersion: MetadataSchemaVersion,
 		Hosts: []HostMetadata{
-			{Identity: target, Note: "gone", Colour: "#f97316", Favourite: true},
+			{Identity: target, Note: "gone", Colour: "#f97316"},
 			{Identity: HostIdentity{Path: "config", Alias: "nas"}, Note: "kept"},
 		},
 	}
@@ -80,7 +80,7 @@ func TestClearHostNoteKeepsEveryOtherFieldAndEntry(t *testing.T) {
 	if len(cleared.Hosts) != 2 {
 		t.Fatalf("hosts = %#v", cleared.Hosts)
 	}
-	if cleared.Hosts[0].Note != "" || cleared.Hosts[0].Colour != "#f97316" || !cleared.Hosts[0].Favourite {
+	if cleared.Hosts[0].Note != "" || cleared.Hosts[0].Colour != "#f97316" {
 		t.Fatalf("the target entry lost more than its note: %#v", cleared.Hosts[0])
 	}
 	if cleared.Hosts[1].Note != "kept" {

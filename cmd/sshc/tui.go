@@ -18,12 +18,11 @@ const ConnectSubcommand = "connect"
 var errTUIClosed = errors.New("connection picker closed")
 
 type tuiHost struct {
-	Alias     string
-	Hostname  string
-	User      string
-	Port      string
-	Tags      []string
-	Favourite bool
+	Alias    string
+	Hostname string
+	User     string
+	Port     string
+	Tags     []string
 }
 
 func loadTUIHosts(home string) ([]tuiHost, error) {
@@ -31,14 +30,10 @@ func loadTUIHosts(home string) ([]tuiHost, error) {
 	if err != nil {
 		return nil, err
 	}
-	favourites := map[string]bool{}
 	tags := map[string][]string{}
-	// 印が読めなくても一覧は出す。お気に入りが付かないだけである。
+	// 表示用metadataが読めなくても接続一覧そのものは出す。
 	if metadata, metadataErr := app.ReadWorkspaceMetadata(home); metadataErr == nil {
 		for _, host := range metadata.Hosts {
-			if host.Favourite {
-				favourites[host.Identity.Alias] = true
-			}
 			if len(host.Tags) != 0 {
 				tags[host.Identity.Alias] = host.Tags
 			}
@@ -47,18 +42,14 @@ func loadTUIHosts(home string) ([]tuiHost, error) {
 	hosts := make([]tuiHost, 0, len(connections))
 	for _, connection := range connections {
 		hosts = append(hosts, tuiHost{
-			Alias:     connection.Alias,
-			Hostname:  connection.HostName,
-			User:      connection.User,
-			Port:      connection.Port,
-			Tags:      tags[connection.Alias],
-			Favourite: favourites[connection.Alias],
+			Alias:    connection.Alias,
+			Hostname: connection.HostName,
+			User:     connection.User,
+			Port:     connection.Port,
+			Tags:     tags[connection.Alias],
 		})
 	}
 	sort.SliceStable(hosts, func(i, j int) bool {
-		if hosts[i].Favourite != hosts[j].Favourite {
-			return hosts[i].Favourite
-		}
 		return strings.ToLower(hosts[i].Alias) < strings.ToLower(hosts[j].Alias)
 	})
 	return hosts, nil
@@ -260,9 +251,6 @@ func renderTUI(output io.Writer, model *tuiModel, width, height int) {
 	}
 	for index, host := range visible {
 		line := fmt.Sprintf("  %-26s", host.Alias)
-		if host.Favourite {
-			line = "★ " + line[2:]
-		}
 		line += " " + host.destination()
 		if len(host.Tags) != 0 {
 			line += " [" + strings.Join(host.Tags, " ") + "]"
