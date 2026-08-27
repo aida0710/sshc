@@ -29,7 +29,7 @@ test("keeps the search box scoped to the file it is showing", async ({ page, ins
   await openSection(page, "Known Hosts");
   await expect(page.getByRole("row").filter({ hasText: "203.0.113.10" })).toBeVisible();
 
-  await page.getByLabel("Search").fill("no-such-host-anywhere");
+  await page.getByLabel("Search", { exact: true }).fill("no-such-host-anywhere");
   await expect(page.getByRole("row").filter({ hasText: "203.0.113.10" })).toHaveCount(0);
 
   expect(await installation.read("known_hosts")).toContain("203.0.113.10");

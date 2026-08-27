@@ -15,7 +15,7 @@ function variablesFor(command: string, previous: SnippetVariable[]): SnippetVari
 
 const blank: SnippetDraft = { name: "", description: "", command: "", variables: [] };
 
-export function SnippetsPanel({ aliases }: { aliases: string[] }) {
+export function SnippetsPanel({ aliases, selectedSnippetId = null }: { aliases: string[]; selectedSnippetId?: string | null }) {
   const t = useTranslate();
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -35,6 +35,12 @@ export function SnippetsPanel({ aliases }: { aliases: string[] }) {
   }
 
   useEffect(() => { void reload().catch((error: unknown) => setProblem(failureCode(error) || "snippet_failed")); }, []);
+
+  useEffect(() => {
+    if (selectedSnippetId === null) return;
+    const snippet = snippets.find((candidate) => candidate.id === selectedSnippetId);
+    if (snippet !== undefined && selected !== snippet.id) edit(snippet);
+  }, [selected, selectedSnippetId, snippets]);
 
   useEffect(() => {
     if (job?.status !== "running") return;

@@ -30,6 +30,7 @@
 ## Connections UI とグループの境界
 
 - 起動直後の Home はホスト中心のランチャーです。具体的な alias を検索し、お気に入り、グループ、タグを見ながらコンソールを開けます。Home を表示しただけでは DNS、TCP、SSH のどれも開始せず、「接続」を選んだときだけ埋め込みターミナルが開きます。
+- Command Paletteはdesktop toolbarまたは`Ctrl/Cmd+K`から開き、現在読み込まれているhostとSSH設定file、保存済みsnippet、設定sectionを一時的なqueryで横断検索します。queryはURL、localStorage、snapshotへ保存しません。hostだけは選択時に接続を開始し、file、snippet、設定は該当画面へ移動します。mobileの入口は常設footerではなくdrawer内に置きます。
 - Home は設定上の警告、中断した変更、同期状態を要約しますが、それらの編集機能は持ちません。詳細操作は Connections、Diagnostics、History、Sync の各専用画面で行います。
 
 - フォーム編集、任意キー・値編集、ブロック Raw 編集、ファイル全体 Raw 編集は、すべて `~/.ssh/config` と `Include` 先から構築した同じ lossless 構文木を更新します。変更していない行は 1 バイトも書き換えません。

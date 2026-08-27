@@ -20,7 +20,7 @@ import {
 } from "./api/client";
 import { integrationsApi, type PasswordVaultStatus, type TerminalAppearance, type TerminalSettings } from "./api/integrations";
 import { resolveAppearance } from "./terminal/appearance";
-import { configApi } from "./api/config";
+import { configApi, type FileNode } from "./api/config";
 import type { SessionState } from "./session/bootstrap";
 import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/CreateConnectionModal";
 import type { FileTarget } from "./explorer/ConfigExplorer";
@@ -57,6 +57,7 @@ import type { LiveWorkspaceSummary } from "./features/workspaces/live";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
+import { CommandPalette } from "./shell/CommandPalette";
 
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -176,6 +177,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const [groups, setGroups] = useState<string[]>([]);
   const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
+  const [configFiles, setConfigFiles] = useState<FileNode[]>([]);
   const [connectionDraft, setConnectionDraft] = useState<CreateConnectionDraft | null>(null);
   const [preferredConnectionKey, setPreferredConnectionKey] = useState<GeneratedPrivateKeyHandoff | null>(null);
   const [preferredPublicKey, setPreferredPublicKey] = useState<GeneratedPublicKeyHandoff | null>(null);
@@ -186,6 +188,21 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const [desktopNavigationWidth, setDesktopNavigationWidth] = useState(detectNavigationWidth);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    if (state !== "ready") {
+      setCommandPaletteOpen(false);
+      return;
+    }
+    function togglePalette(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLocaleLowerCase() !== "k") return;
+      event.preventDefault();
+      setCommandPaletteOpen((open) => !open);
+    }
+    document.addEventListener("keydown", togglePalette);
+    return () => document.removeEventListener("keydown", togglePalette);
+  }, [state]);
 
   useEffect(() => {
     if (!navigationOpen) return;
@@ -414,6 +431,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           ),
         );
         setKnownAliases([...new Set(overview.hosts.map((host) => host.identity.alias).filter((alias) => alias !== ""))]);
+        setConfigFiles(overview.files);
       })
       .catch(() => undefined);
     return () => {
@@ -510,6 +528,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         localeLabels={localeLabels}
         theme={theme}
         onThemeChange={setTheme}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        onOpenTransfers={() => navigate("Files")}
       />
       {requestFailure === null ? null : (
         <ErrorDiagnosticNotice
@@ -565,6 +585,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           onDuplicateConsole={(id) => void duplicateConsole(id)}
           onReorderConsoles={setConsoleOrder}
           onOpenShell={() => void openLocalShell()}
+          onOpenCommandPalette={() => {
+            setNavigationOpen(false);
+            setCommandPaletteOpen(true);
+          }}
         />
 
         <main className="relative flex min-h-0 flex-col overflow-hidden">
@@ -670,6 +694,22 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         ) : null}
       </div>
       {state === "ready" ? <TransferNotifications /> : null}
+      {state === "ready" ? (
+        <CommandPalette
+          open={commandPaletteOpen}
+          aliases={knownAliases}
+          files={configFiles}
+          sectionLabels={sectionLabels}
+          onClose={() => setCommandPaletteOpen(false)}
+          onConnect={async (alias) => {
+            const opened = await consoles.open({ kind: "ssh", alias });
+            if (opened !== null) showConsole(opened.id);
+          }}
+          onOpenFile={(path) => openFile(path, 1)}
+          onNavigate={navigate}
+          onOpenSnippet={(id) => navigateLocation(`${sectionPath("Snippets")}?snippet=${encodeURIComponent(id)}`)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -756,7 +796,7 @@ function PaddedSection({ section, navigation, handoff, shell, declared }: Sectio
     return <SFTPPanel aliases={declared.knownAliases} />;
   }
   if (section === "Snippets") {
-    return <SnippetsPanel aliases={declared.knownAliases} />;
+    return <SnippetsPanel aliases={declared.knownAliases} selectedSnippetId={new URLSearchParams(navigation.location.search).get("snippet")} />;
   }
   if (section === "Groups") {
     return <GroupsPanel onInspector={onInspector} />;
