@@ -133,7 +133,7 @@ export function AppNavigation({
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+      <div data-navigation-scroll className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         {currentFace === "terminal" ? (
           <ConsoleList
             sessions={orderedConsoles}

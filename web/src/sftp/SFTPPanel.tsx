@@ -30,6 +30,10 @@ function join(parent: string, name: string): string {
   return `${parent === "/" ? "" : parent}/${name}`;
 }
 
+function compactSFTPViewport(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(max-width: 767px)").matches;
+}
+
 type SFTPSort = "name" | "type" | "size" | "modified" | "mode";
 
 type DroppedEntry = {
@@ -85,12 +89,22 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
   const [problem, setProblem] = useState("");
   const [deleting, setDeleting] = useState<RemoteEntry | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [compactViewport, setCompactViewport] = useState(compactSFTPViewport);
   const [sort, setSort] = useState<{ key: SFTPSort; direction: SortDirection }>({
     key: "name",
     direction: "ascending",
   });
   const upload = useRef<HTMLInputElement>(null);
   const folderUpload = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setCompactViewport(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const transferJobs = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   const refreshedUploads = useRef(new Set<string>());
   const dirty = opened !== null && contents !== opened.contents;
@@ -374,6 +388,35 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
           </div>
           <TransferManagerList />
           <div className="min-h-0 min-w-0 overflow-auto">
+            {compactViewport ? (
+              <ul aria-label={t("sftp.entries")} className="divide-y divide-line">
+                {displayedEntries.map((entry) => (
+                  <li key={entry.path} className="p-3">
+                    <button
+                      type="button"
+                      className="block min-h-10 w-full text-left"
+                      onClick={() => entry.type === "directory" ? void load(entry.path) : void openText(entry)}
+                    >
+                      <span className="block truncate font-mono text-sm font-medium text-ink">
+                        {entry.type === "directory" ? "▸ " : ""}{entry.name}
+                      </span>
+                      <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-muted">
+                        <span>{t(`sftp.type.${entry.type}`)}</span>
+                        <span>{entry.type === "file" ? entry.size.toLocaleString() : "—"}</span>
+                        <span className="font-mono">{entry.mode}</span>
+                        <time dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
+                      </span>
+                    </button>
+                    <div className="mt-2 grid grid-cols-2 gap-1 border-t border-hairline pt-2">
+                      {entry.type === "file" || entry.type === "directory" ? <button className="min-h-10 rounded px-2 text-left text-xs text-accent" onClick={() => void download(entry)}>{t("sftp.download")}</button> : null}
+                      {entry.type === "file" || entry.type === "directory" ? <button className="min-h-10 rounded px-2 text-left text-xs text-accent" onClick={() => void chmod(entry)}>{t("sftp.chmod")}</button> : null}
+                      <button className="min-h-10 rounded px-2 text-left text-xs text-accent" onClick={() => void rename(entry)}>{t("sftp.rename")}</button>
+                      <button className="min-h-10 rounded px-2 text-left text-xs text-danger" onClick={() => setDeleting(entry)}>{t("sftp.delete")}</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
             <table className="w-full min-w-[52rem] text-left text-sm">
               <thead className="sticky top-0 bg-toolbar text-xs text-ink-muted"><tr>
                 <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2">{t("sftp.name")}</SortableTableHeader>
@@ -381,32 +424,32 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
                 <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2 text-right" buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
                 <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2">{t("sftp.modified")}</SortableTableHeader>
                 <SortableTableHeader column="mode" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2">{t("sftp.permissions")}</SortableTableHeader>
-                <th><span className="sr-only">{t("sftp.actions")}</span></th>
               </tr></thead>
               <tbody>
                 {displayedEntries.map((entry) => (
-                  <tr key={entry.path} className="border-t border-line hover:bg-select-fill">
+                  <tr key={entry.path} className="border-t border-line">
                     <td className="max-w-48 px-3 py-2">
                       <button type="button" className="block w-full truncate text-left font-mono hover:text-accent" onClick={() => entry.type === "directory" ? void load(entry.path) : void openText(entry)}>{entry.type === "directory" ? "▸ " : ""}{entry.name}</button>
+                      <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1">
+                        {entry.type === "file" || entry.type === "directory" ? <button className="text-xs text-accent" onClick={() => void download(entry)}>{t("sftp.download")}</button> : null}
+                        {entry.type === "file" || entry.type === "directory" ? <button className="text-xs text-accent" onClick={() => void chmod(entry)}>{t("sftp.chmod")}</button> : null}
+                        <button className="text-xs text-accent" onClick={() => void rename(entry)}>{t("sftp.rename")}</button>
+                        <button className="text-xs text-danger" onClick={() => setDeleting(entry)}>{t("sftp.delete")}</button>
+                      </div>
                     </td>
                     <td className="w-24 whitespace-nowrap px-3 py-2 text-xs text-ink-muted">{t(`sftp.type.${entry.type}`)}</td>
                     <td className="px-3 py-2 text-right text-xs text-ink-muted">{entry.type === "file" ? entry.size.toLocaleString() : "—"}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-muted">{new Date(entry.modifiedAt).toLocaleString()}</td>
                     <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-ink-muted">{entry.mode}</td>
-                    <td className="whitespace-nowrap px-2 py-1 text-right">
-                      {entry.type === "file" || entry.type === "directory" ? <button className="px-1 text-xs text-accent" onClick={() => void download(entry)}>{t("sftp.download")}</button> : null}
-                      {entry.type === "file" || entry.type === "directory" ? <button className="px-1 text-xs text-accent" onClick={() => void chmod(entry)}>{t("sftp.chmod")}</button> : null}
-                      <button className="px-1 text-xs text-accent" onClick={() => void rename(entry)}>{t("sftp.rename")}</button>
-                      <button className="px-1 text-xs text-danger" onClick={() => setDeleting(entry)}>{t("sftp.delete")}</button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            )}
           </div>
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded border border-line bg-card">
+        {compactViewport && opened === null ? null : <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded border border-line bg-card">
           {opened === null ? (
             <div className="grid h-full min-h-64 place-items-center p-6 text-sm text-ink-muted">{t("sftp.editorEmpty")}</div>
           ) : (
@@ -424,7 +467,7 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
               </div>
             </>
           )}
-        </div>
+        </div>}
       </div>
 
       {deleting === null ? null : (

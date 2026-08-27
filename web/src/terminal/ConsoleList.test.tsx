@@ -132,6 +132,20 @@ describe("ConsoleList", () => {
     expect(screen.getByRole("menuitem", { name: "Move down" })).toBeEnabled();
   });
 
+  it("opens the row menu upward when the navigation has no room below", async () => {
+    const user = userEvent.setup();
+    renderList();
+    document.body.setAttribute("data-navigation-scroll", "");
+    const trigger = screen.getByRole("button", { name: "Actions for db-primary" });
+    vi.spyOn(document.body, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 220 } as DOMRect);
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({ top: 180, bottom: 200 } as DOMRect);
+
+    await user.click(trigger);
+
+    expect(screen.getByRole("menu")).toHaveClass("bottom-full", "mb-0.5");
+    document.body.removeAttribute("data-navigation-scroll");
+  });
+
   it("reports selection and closing separately", async () => {
     const user = userEvent.setup();
     const props = renderList();
