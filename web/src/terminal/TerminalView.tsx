@@ -35,7 +35,6 @@ type TerminalViewProps = {
   background?: string;
   tint?: number;
   font?: string;
-  showToolbar?: boolean;
 };
 
 type Link =
@@ -62,7 +61,6 @@ export function TerminalView({
   font,
   background,
   tint,
-  showToolbar = true,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
@@ -382,7 +380,7 @@ export function TerminalView({
 
   return (
     <section aria-label={t("terminal.screenLabel", { title: session.title })} className="relative flex min-h-0 flex-1 flex-col">
-      {showToolbar ? <div className="flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
+      <div className="flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
         <span
           aria-hidden="true"
           className={`size-2 shrink-0 rounded-full ${
@@ -400,7 +398,7 @@ export function TerminalView({
           </span>
         )}
         <button type="button" className="ml-auto rounded border border-control-line px-2 py-0.5 text-xs text-ink-muted hover:bg-select-fill" onClick={() => setSearchOpen((current) => !current)}>{t("terminal.search")}</button>
-      </div> : null}
+      </div>
       {searchOpen ? <div className="flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-1.5"><input autoFocus aria-label={t("terminal.searchInput")} value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setSearchResult({ index: -1, total: 0 }); }} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); else if (event.key === "Enter") searchStep.current(event.shiftKey ? -1 : 1); }} className="min-w-0 flex-1 rounded border border-control-line bg-control px-2 py-1 text-xs" placeholder={t("terminal.searchPlaceholder")} /><span className="w-16 text-center text-xs text-ink-muted">{searchResult.total === 0 ? t("terminal.searchNoResults") : `${searchResult.index + 1}/${searchResult.total}`}</span><button type="button" aria-label={t("terminal.searchPrevious")} className="rounded border border-control-line px-2 text-sm" onClick={() => searchStep.current(-1)}>↑</button><button type="button" aria-label={t("terminal.searchNext")} className="rounded border border-control-line px-2 text-sm" onClick={() => searchStep.current(1)}>↓</button><button type="button" aria-label={t("terminal.searchClose")} className="rounded px-2 text-sm" onClick={() => setSearchOpen(false)}>×</button></div> : null}
       {problem === "" ? null : (
         <p role="status" className="shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
