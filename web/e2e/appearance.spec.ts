@@ -84,6 +84,44 @@ for (const appearance of ["light", "dark"] as const) {
     expect(contrast.controlBorder).toBeGreaterThanOrEqual(3);
     expect(contrast.faintOnCard).toBeGreaterThanOrEqual(4.5);
     expect(contrast.faintOnSidebar).toBeGreaterThanOrEqual(4.5);
+
+    await openSection(page, "Connections");
+    await page
+      .getByRole("navigation", { name: "Connections" })
+      .getByRole("button", { name: "bastion", exact: true })
+      .click();
+    const summary = page.locator("[data-connection-summary]");
+    await expect(summary).toHaveCSS("border-left-width", "1px");
+    await expect(summary).toHaveCSS("border-right-width", "1px");
+    if (process.env.SSHC_VISUAL_DIR !== undefined) {
+      await page.screenshot({
+        path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-connection-summary-${appearance}.png`,
+        fullPage: true,
+      });
+    }
+
+    await page.getByRole("tab", { name: "Settings analysis" }).click();
+    await expect(page.getByRole("tabpanel", { name: "Settings analysis" })).toBeVisible();
+    if (process.env.SSHC_VISUAL_DIR !== undefined) {
+      await page.screenshot({
+        path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-connection-analysis-${appearance}.png`,
+        fullPage: true,
+      });
+    }
+
+    await openSection(page, "Config");
+    const explorer = page.locator("[data-config-explorer]");
+    await expect(explorer).toHaveCSS("border-left-width", "1px");
+    await expect(explorer).toHaveCSS("border-right-width", "1px");
+    const treeHeader = await page.locator('[data-explorer-header="tree"]').boundingBox();
+    const fileHeader = await page.locator('[data-explorer-header="file"]').boundingBox();
+    expect(treeHeader?.height).toBe(fileHeader?.height);
+    if (process.env.SSHC_VISUAL_DIR !== undefined) {
+      await page.screenshot({
+        path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-config-explorer-${appearance}.png`,
+        fullPage: true,
+      });
+    }
   });
 }
 
