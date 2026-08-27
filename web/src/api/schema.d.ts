@@ -2542,6 +2542,12 @@ export interface components {
             duplicate?: boolean;
             editable: boolean;
             group?: string;
+            /** @description Resolved SSH destination hostname used by this alias. */
+            hostName?: string;
+            /** @description Resolved remote account used by this alias. */
+            user?: string;
+            /** @description Resolved SSH port used by this alias. */
+            port?: string;
         };
         IncludeReference: {
             line: number;
