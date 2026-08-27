@@ -37,6 +37,7 @@ type Session struct {
 	started time.Time
 
 	mutex         sync.Mutex
+	inputMutex    sync.Mutex
 	buffer        *Ring
 	streams       map[*Stream]bool
 	process       Process
@@ -88,6 +89,16 @@ type View struct {
 	Reconnect *ReconnectView
 	// Forwards は、このセッションが開いている転送である。
 	Forwards []Forward
+}
+
+// CommandTarget is the server-derived identity of one live terminal at
+// confirmation time. Generation changes whenever a reconnect installs a new
+// Process, even though the public session ID remains the same.
+type CommandTarget struct {
+	ID         string
+	Alias      string
+	Title      string
+	Generation uint64
 }
 
 func (s *Session) ID() string { return s.id }
@@ -217,6 +228,8 @@ func (s *Session) Detach(stream *Stream) {
 
 // Write は打鍵を PTY へ渡す。
 func (s *Session) Write(p []byte) (int, error) {
+	s.inputMutex.Lock()
+	defer s.inputMutex.Unlock()
 	s.mutex.Lock()
 	process, exited, state := s.process, s.exited, s.state
 	s.mutex.Unlock()
@@ -234,6 +247,58 @@ func (s *Session) Write(p []byte) (int, error) {
 		}
 	}
 	return process.Write(p)
+}
+
+// CommandTarget returns a binding only for a connected SSH Process capable of
+// exact input. Broadcast preview uses this instead of an alias so it can never
+// open a replacement connection implicitly.
+func (s *Session) CommandTarget() (CommandTarget, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.kind != KindSSH {
+		return CommandTarget{}, ErrWrongKind
+	}
+	if s.exited != nil || s.process == nil || s.state != StateConnected {
+		return CommandTarget{}, ErrNotConnected
+	}
+	if _, ok := s.process.(ExactInput); !ok {
+		return CommandTarget{}, ErrExactInputUnavailable
+	}
+	return CommandTarget{ID: s.id, Alias: s.alias, Title: s.title, Generation: s.generation}, nil
+}
+
+// WriteCommand sends a command and Enter to the exact Process generation which
+// was previewed. It shares inputMutex with WebSocket keystrokes, so bytes from
+// the two sources cannot interleave inside this frame.
+func (s *Session) WriteCommand(ctx context.Context, generation uint64, command string) error {
+	if len(command) == 0 || len(command) > MaxCommandBytes {
+		return ErrCommandTooLarge
+	}
+	payload := make([]byte, len(command)+1)
+	copy(payload, command)
+	payload[len(command)] = '\r'
+
+	s.inputMutex.Lock()
+	defer s.inputMutex.Unlock()
+	s.mutex.Lock()
+	if s.kind != KindSSH {
+		s.mutex.Unlock()
+		return ErrWrongKind
+	}
+	if s.generation != generation {
+		s.mutex.Unlock()
+		return ErrGenerationChanged
+	}
+	process, exited, state := s.process, s.exited, s.state
+	s.mutex.Unlock()
+	if exited != nil || process == nil || state != StateConnected {
+		return ErrNotConnected
+	}
+	writer, ok := process.(ExactInput)
+	if !ok {
+		return ErrExactInputUnavailable
+	}
+	return writer.WriteExact(ctx, payload)
 }
 
 // Resize は TIOCSWINSZ を発行する。

@@ -52,6 +52,14 @@ type Readier interface{ Ready() <-chan error }
 // Processである。これを実装しない非同期Processへの先行入力は捨てる。
 type Prompting interface{ AwaitingPrompt() bool }
 
+// ExactInput accepts one complete input frame or returns an error without
+// silently dropping bytes. Interactive SSH implements this separately from
+// Process.Write, whose keystroke-oriented contract intentionally tolerates a
+// full input buffer.
+type ExactInput interface {
+	WriteExact(context.Context, []byte) error
+}
+
 // Size は端末の桁数と行数である。
 type Size struct {
 	Cols uint16
@@ -152,9 +160,19 @@ var (
 	// ErrInvalidSize は、TIOCSWINSZ へ渡せない大きさを拒否する。
 	ErrInvalidSize = errors.New("the terminal size is out of range")
 	// ErrInvalidTitle は、一覧に出せない名前を拒否する。
-	ErrInvalidTitle = errors.New("that is not a usable session name")
-	ErrShuttingDown = errors.New("the terminal registry is shutting down")
+	ErrInvalidTitle          = errors.New("that is not a usable session name")
+	ErrNotConnected          = errors.New("the terminal session is not connected")
+	ErrWrongKind             = errors.New("the terminal session is not an SSH session")
+	ErrGenerationChanged     = errors.New("the terminal session changed after preview")
+	ErrExactInputUnavailable = errors.New("the terminal process cannot accept exact input")
+	ErrCommandTooLarge       = errors.New("the terminal command is too large")
+	ErrShuttingDown          = errors.New("the terminal registry is shutting down")
 )
+
+// MaxCommandBytes leaves one byte for the carriage return which executes the
+// command. It matches the bounded SSH input queue, allowing the whole frame to
+// be enqueued atomically after any preceding keystrokes have drained.
+const MaxCommandBytes = (4 << 10) - 1
 
 // MaxTitle は、一覧に出す名前の長さの上限である。
 const MaxTitle = 64

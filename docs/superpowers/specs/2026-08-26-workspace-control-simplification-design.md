@@ -26,8 +26,8 @@
 ## 一括実行
 
 - live keystrokeの複製は廃止する。
-- 「一括実行…」でmodalを開き、直接commandまたはSnippet、hostごと／paneごとの対象、previewを順に選択する。
-- 実行は既存の独立SSH execution APIを使う。表示中terminalのcwd、環境変数、shell状態は継承しない。
+- 「コマンドを一括送信…」でmodalを開き、直接commandまたはSnippetと、接続中の各terminal sessionへ送る内容をpreviewする。
+- 送信は独立SSH executionを作らず、previewした各sessionの現在のPTY入力へcommandとEnterを送る。表示中terminalのcwd、環境変数、shell状態をそのまま使い、未接続paneをaliasから開き直さない。
 - modalは`role=dialog`、`aria-modal=true`とし、Escape、閉じるbutton、backdropで閉じられる。
 
 ## 検証

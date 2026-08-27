@@ -81,6 +81,11 @@ func (p *scriptedPTY) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+func (p *scriptedPTY) WriteExact(_ context.Context, b []byte) error {
+	_, err := p.Write(b)
+	return err
+}
+
 func (p *scriptedPTY) keystrokes() string {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()

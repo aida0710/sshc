@@ -105,6 +105,12 @@ func (s *Session) Read(b []byte) (int, error) { return s.reader.Read(b) }
 // 読み手が止まると、その接続全体が固まる。
 func (s *Session) Write(b []byte) (int, error) { return s.input.Write(b) }
 
+// WriteExact enqueues a complete broadcast frame without the silent overflow
+// semantics used for ordinary keystrokes.
+func (s *Session) WriteExact(ctx context.Context, b []byte) error {
+	return s.input.WriteExact(ctx, b)
+}
+
 // Resize は window-change を送る。まだチャンネルが無ければ、要求された大きさを
 // 覚えておいて pty-req に使う。
 func (s *Session) Resize(size terminal.Size) error {

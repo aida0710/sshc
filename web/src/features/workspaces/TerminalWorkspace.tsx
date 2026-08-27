@@ -5,9 +5,9 @@ import { useTranslate, type Translate } from "../../i18n/context";
 import { Button } from "../../ui/surface";
 import { BrandMark } from "../../ui/BrandMark";
 import { Icon } from "../../ui/icons";
-import { executionTargets, MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type DockEdge, type ExecutionTarget, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane, type SplitDirection, type StoredNode } from "./layout";
+import { MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type DockEdge, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane, type SplitDirection, type StoredNode } from "./layout";
 import { workspaceApi, type SavedWorkspace } from "./api";
-import { WorkspaceCommandCenter } from "./WorkspaceCommandCenter";
+import { WorkspaceCommandCenter, type WorkspaceCommandTarget } from "./WorkspaceCommandCenter";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
 
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
@@ -93,16 +93,39 @@ export function TerminalWorkspace({
   const consumedRestore = useRef(0);
   const liveWorkspaceID = useRef(paneID());
   const active = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const sessionByID = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
   const layoutSessionIDs = useMemo(() => layout === null ? [] : paneSessionIDs(layout.root), [layout]);
   const showingWorkspace = layout !== null && (activeSessionId === null || layoutSessionIDs.includes(activeSessionId));
   const visibleLayout = showingWorkspace ? layout : null;
-  const commandTargets = useMemo<ExecutionTarget[]>(() => {
-    if (visibleLayout !== null) return executionTargets(visibleLayout.root, "pane");
+  const commandTargets = useMemo<WorkspaceCommandTarget[]>(() => {
+    if (visibleLayout !== null) return paneIDs(visibleLayout.root).map((id, index) => {
+      const pane = findPane(visibleLayout.root, id);
+      if (pane === null) throw new Error("workspace pane disappeared");
+      const session = pane.sessionId === undefined ? undefined : sessionByID.get(pane.sessionId);
+      const connected = session?.kind === "ssh" && session.state === "connected";
+      return {
+        targetId: pane.id,
+        ...(session?.kind === "ssh" ? { sessionId: session.id } : {}),
+        alias: pane.alias,
+        title: session?.title ?? pane.alias,
+        paneNumber: index + 1,
+        connected,
+        state: session?.state ?? pane.state,
+      };
+    });
     if (active?.kind !== "ssh" || active.alias === undefined) return [];
-    return [{ targetId: active.id, alias: active.alias, state: "connected" }];
-  }, [active, visibleLayout]);
+    return [{
+      targetId: active.id,
+      sessionId: active.id,
+      alias: active.alias,
+      title: active.title,
+      paneNumber: 1,
+      connected: active.state === "connected",
+      state: active.state,
+    }];
+  }, [active, sessionByID, visibleLayout]);
+  const connectedCommandTargets = commandTargets.filter((target) => target.connected).length;
 
-  const sessionByID = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
   useEffect(() => { void workspaceApi.list().then(setSaved).catch(() => undefined); }, []);
   useEffect(() => {
     if (movingPaneId === null) return;
@@ -446,7 +469,7 @@ export function TerminalWorkspace({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div data-desktop-workspace-controls className="hidden shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2 md:flex">
-        <Button disabled={commandTargets.length === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
+        <Button disabled={connectedCommandTargets === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
         {focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}
         <details className="group relative ml-auto">
           <summary className="cursor-pointer list-none rounded-md border border-control-line bg-control px-3 py-1.5 text-xs text-ink marker:hidden hover:bg-select-fill">{t("workspace.savedLayouts")}</summary>

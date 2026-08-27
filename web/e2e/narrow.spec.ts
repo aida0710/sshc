@@ -250,7 +250,7 @@ test("keeps workspace management out of the mobile terminal", async ({ page, ins
   await expect(page.getByRole("button", { name: "Split right" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Split down" })).toHaveCount(0);
   await expect(page.locator("[data-desktop-workspace-controls]")).toBeHidden();
-  await expect(page.getByRole("button", { name: "Broadcast…" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Send command…" })).toBeHidden();
   await expect(page.locator("summary").filter({ hasText: "Saved layouts" })).toBeHidden();
   await expect(page.getByRole("navigation", { name: "Primary" })).toHaveClass(/shadow-none/);
 });

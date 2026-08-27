@@ -330,6 +330,25 @@ func (r *Registry) Lookup(id string) (*Session, bool) {
 	return nil, false
 }
 
+// CommandTarget resolves only an existing live session. It never treats the ID
+// as an SSH alias and therefore cannot create a new connection as a fallback.
+func (r *Registry) CommandTarget(id string) (CommandTarget, error) {
+	session, ok := r.Lookup(id)
+	if !ok {
+		return CommandTarget{}, ErrNotFound
+	}
+	return session.CommandTarget()
+}
+
+// WriteCommand writes to the exact generation captured by CommandTarget.
+func (r *Registry) WriteCommand(ctx context.Context, target CommandTarget, command string) error {
+	session, ok := r.Lookup(target.ID)
+	if !ok {
+		return ErrNotFound
+	}
+	return session.WriteCommand(ctx, target.Generation, command)
+}
+
 // Reconnect は終了済みのSSHセッションを同じIDとscrollbackのまま開き直す。
 // 新規Openと同じ上限に数え、closeやengine停止が先行したProcessは公開しない。
 func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {

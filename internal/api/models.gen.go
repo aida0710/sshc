@@ -10,22 +10,22 @@ import (
 
 // Defines values for AutoSyncPhase.
 const (
-	Blocked AutoSyncPhase = "blocked"
-	Failed  AutoSyncPhase = "failed"
-	Idle    AutoSyncPhase = "idle"
-	Running AutoSyncPhase = "running"
+	AutoSyncPhaseBlocked AutoSyncPhase = "blocked"
+	AutoSyncPhaseFailed  AutoSyncPhase = "failed"
+	AutoSyncPhaseIdle    AutoSyncPhase = "idle"
+	AutoSyncPhaseRunning AutoSyncPhase = "running"
 )
 
 // Valid indicates whether the value is a known member of the AutoSyncPhase enum.
 func (e AutoSyncPhase) Valid() bool {
 	switch e {
-	case Blocked:
+	case AutoSyncPhaseBlocked:
 		return true
-	case Failed:
+	case AutoSyncPhaseFailed:
 		return true
-	case Idle:
+	case AutoSyncPhaseIdle:
 		return true
-	case Running:
+	case AutoSyncPhaseRunning:
 		return true
 	default:
 		return false
@@ -143,6 +143,24 @@ func (e SyncSetupTargetState) Valid() bool {
 	case Existing:
 		return true
 	case Incomplete:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TerminalCommandResultStatus.
+const (
+	TerminalCommandResultStatusDelivered TerminalCommandResultStatus = "delivered"
+	TerminalCommandResultStatusFailed    TerminalCommandResultStatus = "failed"
+)
+
+// Valid indicates whether the value is a known member of the TerminalCommandResultStatus enum.
+func (e TerminalCommandResultStatus) Valid() bool {
+	switch e {
+	case TerminalCommandResultStatusDelivered:
+		return true
+	case TerminalCommandResultStatusFailed:
 		return true
 	default:
 		return false
@@ -1176,6 +1194,65 @@ type TerminalAppearance struct {
 	BackgroundTint *int    `json:"backgroundTint,omitempty"`
 	Font           *string `json:"font,omitempty"`
 	Palette        *string `json:"palette,omitempty"`
+}
+
+// TerminalCommandDispatchRequest defines model for TerminalCommandDispatchRequest.
+type TerminalCommandDispatchRequest struct {
+	Command   *string                        `json:"command,omitempty"`
+	Evidence  string                         `json:"evidence"`
+	Inputs    map[string]string              `json:"inputs"`
+	SnippetId *string                        `json:"snippetId,omitempty"`
+	Targets   []TerminalCommandTargetRequest `json:"targets"`
+}
+
+// TerminalCommandDispatchResponse defines model for TerminalCommandDispatchResponse.
+type TerminalCommandDispatchResponse struct {
+	Results []TerminalCommandResult `json:"results"`
+}
+
+// TerminalCommandPreview defines model for TerminalCommandPreview.
+type TerminalCommandPreview struct {
+	ActionExpiresAt string                         `json:"actionExpiresAt"`
+	ActionToken     string                         `json:"actionToken"`
+	Evidence        string                         `json:"evidence"`
+	SnippetId       string                         `json:"snippetId"`
+	Targets         []TerminalCommandPreviewTarget `json:"targets"`
+}
+
+// TerminalCommandPreviewRequest defines model for TerminalCommandPreviewRequest.
+type TerminalCommandPreviewRequest struct {
+	Command   *string                        `json:"command,omitempty"`
+	Inputs    map[string]string              `json:"inputs"`
+	SnippetId *string                        `json:"snippetId,omitempty"`
+	Targets   []TerminalCommandTargetRequest `json:"targets"`
+}
+
+// TerminalCommandPreviewTarget defines model for TerminalCommandPreviewTarget.
+type TerminalCommandPreviewTarget struct {
+	Alias     string `json:"alias"`
+	Command   string `json:"command"`
+	SessionId string `json:"sessionId"`
+	TargetId  string `json:"targetId"`
+	Title     string `json:"title"`
+}
+
+// TerminalCommandResult defines model for TerminalCommandResult.
+type TerminalCommandResult struct {
+	Alias     string                      `json:"alias"`
+	Problem   *string                     `json:"problem,omitempty"`
+	SessionId string                      `json:"sessionId"`
+	Status    TerminalCommandResultStatus `json:"status"`
+	TargetId  string                      `json:"targetId"`
+	Title     string                      `json:"title"`
+}
+
+// TerminalCommandResultStatus defines model for TerminalCommandResult.Status.
+type TerminalCommandResultStatus string
+
+// TerminalCommandTargetRequest defines model for TerminalCommandTargetRequest.
+type TerminalCommandTargetRequest struct {
+	SessionId string `json:"sessionId"`
+	TargetId  string `json:"targetId"`
 }
 
 // TerminalExit defines model for TerminalExit.

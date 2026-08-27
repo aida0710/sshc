@@ -1,6 +1,7 @@
 package sshclient
 
 import (
+	"context"
 	"errors"
 	"io"
 	"strings"
@@ -211,6 +212,39 @@ func (b *InputBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// WriteExact waits until one complete frame fits and then enqueues it in a
+// single critical section. Broadcast commands use this path because the normal
+// keystroke writer deliberately reports overflow as consumed.
+func (b *InputBuffer) WriteExact(ctx context.Context, p []byte) error {
+	if len(p) == 0 {
+		return nil
+	}
+	if len(p) > MaxBufferedInput {
+		return errors.New("ssh input frame exceeds the exact-input buffer")
+	}
+	stop := context.AfterFunc(ctx, func() {
+		b.mutex.Lock()
+		b.ready.Broadcast()
+		b.mutex.Unlock()
+	})
+	defer stop()
+
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	for MaxBufferedInput-len(b.data) < len(p) && !b.closed && ctx.Err() == nil {
+		b.ready.Wait()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if b.closed {
+		return io.ErrClosedPipe
+	}
+	b.data = append(b.data, p...)
+	b.ready.Broadcast()
+	return nil
+}
+
 // enablePromptGateは、このbufferを非同期SSH handshake用にする。
 func (b *InputBuffer) enablePromptGate() {
 	b.mutex.Lock()
@@ -257,6 +291,7 @@ func (b *InputBuffer) Read(p []byte) (int, error) {
 	}
 	read := copy(p, b.data)
 	b.data = b.data[read:]
+	b.ready.Broadcast()
 	return read, nil
 }
 

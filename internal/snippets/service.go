@@ -209,6 +209,41 @@ func (s *Service) Preview(request PreviewRequest) (Preview, error) {
 	return preview, err
 }
 
+// PrepareTerminalCommand expands one command without resolving an SSH alias.
+// A terminal broadcast writes into a live PTY and therefore must preserve that
+// session's cwd and shell state. Resolving the alias here would recreate the
+// detached-command behaviour this path is meant to avoid.
+func (s *Service) PrepareTerminalCommand(request CommandRequest) (PreparedCommand, error) {
+	source, expanded, secrets, err := s.planSource(PreviewRequest{
+		SnippetID: request.SnippetID,
+		Command:   request.Command,
+		Inputs:    request.Inputs,
+	})
+	if err != nil {
+		return PreparedCommand{}, err
+	}
+	if source.hasSecrets || len(secrets) > 0 {
+		return PreparedCommand{}, ErrSecretTerminal
+	}
+	payload := struct {
+		Kind      string    `json:"kind"`
+		SnippetID string    `json:"snippetId,omitempty"`
+		UpdatedAt time.Time `json:"updatedAt,omitempty"`
+		Command   string    `json:"command"`
+	}{Kind: source.kind, SnippetID: source.snippetID, UpdatedAt: source.updatedAt, Command: expanded.command}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return PreparedCommand{}, err
+	}
+	digest := sha256.Sum256(encoded)
+	return PreparedCommand{
+		SnippetID: source.snippetID,
+		Command:   expanded.command,
+		Display:   expanded.display,
+		Evidence:  hex.EncodeToString(digest[:]),
+	}, nil
+}
+
 func (s *Service) PreviewStartup(alias string) (Preview, error) {
 	s.mutation.Lock()
 	library, err := s.load()
@@ -235,10 +270,11 @@ type plannedTarget struct {
 }
 
 type planSource struct {
-	kind      string
-	snippetID string
-	updatedAt time.Time
-	command   string
+	kind       string
+	snippetID  string
+	updatedAt  time.Time
+	command    string
+	hasSecrets bool
 }
 
 func (s *Service) plan(request PreviewRequest) (Preview, []plannedTarget, error) {
@@ -310,7 +346,14 @@ func (s *Service) planSource(request PreviewRequest) (planSource, expansion, []s
 	if err != nil {
 		return planSource{}, expansion{}, nil, err
 	}
-	return planSource{kind: "snippet", snippetID: snippet.ID, updatedAt: snippet.UpdatedAt}, expanded, secretValues(snippet.Variables, request.Inputs), nil
+	hasSecrets := false
+	for _, variable := range snippet.Variables {
+		if variable.Type == VariableSecret {
+			hasSecrets = true
+			break
+		}
+	}
+	return planSource{kind: "snippet", snippetID: snippet.ID, updatedAt: snippet.UpdatedAt, hasSecrets: hasSecrets}, expanded, secretValues(snippet.Variables, request.Inputs), nil
 }
 
 func normaliseTargets(request PreviewRequest) ([]RequestedTarget, error) {
