@@ -124,6 +124,25 @@ describe("TerminalWorkspace pane movement", () => {
     expect(screen.queryByRole("button", { name: "Split right" })).toBeNull();
   });
 
+  it("does not show workspace management for one terminal", () => {
+    const { container } = render(
+      <TerminalWorkspace
+        sessions={[localPrimary]}
+        activeSessionId={localPrimary.id}
+        onActive={() => undefined}
+        onOpenAlias={vi.fn()}
+        onOpenShell={vi.fn()}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />,
+    );
+
+    expect(screen.getByText("zsh")).toBeVisible();
+    expect(container.querySelector("[data-desktop-workspace-controls]")).toBeNull();
+    expect(screen.queryByText("1 terminal")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send command…" })).toBeNull();
+    expect(screen.queryByText("Saved layouts")).toBeNull();
+  });
+
   it("swaps panes by drag and drop and exposes the same operation to keyboard users", async () => {
     const user = userEvent.setup();
     const { container } = render(<Harness />);
@@ -418,7 +437,38 @@ describe("TerminalWorkspace pane movement", () => {
     ]);
   });
 
-  it("does not enable command delivery for a reconnecting SSH session", () => {
+  it("targets local and SSH panes through the same command center", async () => {
+    commandCenter.targets.mockClear();
+    function MixedCommandHarness() {
+      const [active, setActive] = useState(primary.id);
+      return <TerminalWorkspace
+        sessions={[primary, localPrimary]}
+        activeSessionId={active}
+        onActive={setActive}
+        onOpenAlias={vi.fn()}
+        onOpenShell={vi.fn()}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+    const user = userEvent.setup();
+    const { container } = render(<MixedCommandHarness />);
+    dockConnectedSession(container, localPrimary.id);
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+
+    await user.click(screen.getByRole("button", { name: "Send command…" }));
+    expect(commandCenter.targets).toHaveBeenCalledWith([
+      {
+        targetId: expect.any(String), sessionId: primary.id, alias: "edge", title: "Primary terminal",
+        paneNumber: 1, connected: true, state: "connected",
+      },
+      {
+        targetId: expect.any(String), sessionId: localPrimary.id, alias: "localhost", title: "zsh",
+        paneNumber: 2, connected: true, state: "connected",
+      },
+    ]);
+  });
+
+  it("does not show workspace command delivery for one reconnecting session", () => {
     render(<TerminalWorkspace
       sessions={[{ ...primary, state: "reconnecting" }]}
       activeSessionId={primary.id}
@@ -428,7 +478,7 @@ describe("TerminalWorkspace pane movement", () => {
       renderTerminal={() => null}
     />);
 
-    expect(screen.getByRole("button", { name: "Send command…" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Send command…" })).toBeNull();
   });
 
   it("consumes a Home restore request once and leaves only the failed pane unavailable", async () => {

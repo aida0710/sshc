@@ -87,7 +87,7 @@ export function TerminalWorkspace({
   onActive: (id: string) => void;
   onOpenAlias: (alias: string) => Promise<TerminalSession | null>;
   onOpenShell: () => Promise<TerminalSession | null>;
-  renderTerminal: (session: TerminalSession) => ReactNode;
+  renderTerminal: (session: TerminalSession, options: { showToolbar: boolean }) => ReactNode;
   restoreRequest?: WorkspaceRestoreRequest | null;
   onRestoreConsumed?: (sequence: number) => void;
   onLiveWorkspaceChange?: (workspace: LiveWorkspaceSummary | null) => void;
@@ -114,10 +114,10 @@ export function TerminalWorkspace({
       const pane = findPane(visibleLayout.root, id);
       if (pane === null) throw new Error("workspace pane disappeared");
       const session = pane.sessionId === undefined ? undefined : sessionByID.get(pane.sessionId);
-      const connected = session?.kind === "ssh" && session.state === "connected";
+      const connected = session?.state === "connected";
       return {
         targetId: pane.id,
-        ...(session?.kind === "ssh" ? { sessionId: session.id } : {}),
+        ...(session === undefined ? {} : { sessionId: session.id }),
         alias: pane.alias,
         title: session?.title ?? pane.alias,
         paneNumber: index + 1,
@@ -125,11 +125,11 @@ export function TerminalWorkspace({
         state: session?.state ?? pane.state,
       };
     });
-    if (active?.kind !== "ssh" || active.alias === undefined) return [];
+    if (active === null) return [];
     return [{
       targetId: active.id,
       sessionId: active.id,
-      alias: active.alias,
+      alias: active.kind === "ssh" ? active.alias ?? active.title : "localhost",
       title: active.title,
       paneNumber: 1,
       connected: active.state === "connected",
@@ -409,7 +409,7 @@ export function TerminalWorkspace({
     void restoreWorkspace(restoreRequest.id);
   }, [onRestoreConsumed, restoreRequest, restoreWorkspace]);
 
-  function terminal(session: TerminalSession) { return renderTerminal(session); }
+  function terminal(session: TerminalSession) { return renderTerminal(session, { showToolbar: workspacePaneCount > 1 }); }
 
   function singleTerminal(session: TerminalSession) {
     const docking = dockTarget?.paneId === session.id;
@@ -485,7 +485,7 @@ export function TerminalWorkspace({
   const compactPanes = visibleLayout === null ? [] : paneIDs(visibleLayout.root).map((id) => findPane(visibleLayout.root, id)).filter((pane): pane is RuntimePane => pane !== null);
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div data-desktop-workspace-controls className="hidden shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2 md:flex">
+      {workspacePaneCount !== 1 ? <div data-desktop-workspace-controls className="hidden shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2 md:flex">
         {workspacePaneCount > 0 ? (
           <div className="mr-2 flex min-w-0 items-center gap-2 border-r border-line pr-4">
             <span className="max-w-52 truncate text-xs font-semibold text-ink">{workspaceDisplayName}</span>
@@ -513,7 +513,7 @@ export function TerminalWorkspace({
             </div>
           </div>
         </details>
-      </div>
+      </div> : null}
       {commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}
       {problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}
       {compactViewport && compactPanes.length > 1 ? (

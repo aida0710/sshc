@@ -124,6 +124,49 @@ func TestTerminalCommandPreviewAndDispatchUseTheExistingPTY(t *testing.T) {
 	}
 }
 
+func TestTerminalCommandPreviewAndDispatchIncludeLocalShells(t *testing.T) {
+	engine, credentials, registry, sshProcess, _ := newTerminalCommandServer(t)
+	localProcess := newScriptedPTY()
+	local, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindShell, Title: "zsh",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) { return localProcess, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshID := registry.Sessions()[0].ID
+	request := terminalCommandPreviewRequest{
+		Command: stringPointer("pwd"), Inputs: map[string]string{},
+		Targets: []terminalCommandTargetRequest{
+			{TargetId: "remote-pane", SessionId: sshID},
+			{TargetId: "local-pane", SessionId: local.ID()},
+		},
+	}
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost,
+		"/api/v1/terminal/commands/preview", mustMarshal(t, request), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("preview = %d: %s", response.Code, response.Body.String())
+	}
+	var preview terminalCommandPreviewResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Targets) != 2 || preview.Targets[1].Alias != "localhost" || preview.Targets[1].Title != "zsh" {
+		t.Fatalf("preview targets = %#v", preview.Targets)
+	}
+	dispatch := terminalCommandDispatchRequest{
+		Command: request.Command, Inputs: request.Inputs, Targets: request.Targets, Evidence: preview.Evidence,
+	}
+	dispatched := sendKeyRequest(t, engine, credentials, http.MethodPost,
+		"/api/v1/terminal/commands", mustMarshal(t, dispatch), preview.ActionToken)
+	if dispatched.Code != http.StatusOK {
+		t.Fatalf("dispatch = %d: %s", dispatched.Code, dispatched.Body.String())
+	}
+	if sshProcess.keystrokes() != "pwd\r" || localProcess.keystrokes() != "pwd\r" {
+		t.Fatalf("inputs: ssh=%q local=%q", sshProcess.keystrokes(), localProcess.keystrokes())
+	}
+}
+
 func TestTerminalCommandRefusesChangedPreviewAndSecretSnippet(t *testing.T) {
 	engine, credentials, registry, process, service := newTerminalCommandServer(t)
 	sessionID := registry.Sessions()[0].ID

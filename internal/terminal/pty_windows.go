@@ -254,6 +254,9 @@ func (p *windowsProcess) wasForced() bool {
 
 func (p *windowsProcess) Read(b []byte) (int, error)  { return p.output.Read(b) }
 func (p *windowsProcess) Write(b []byte) (int, error) { return p.input.Write(b) }
+func (p *windowsProcess) WriteExact(ctx context.Context, b []byte) error {
+	return writeExact(ctx, p.input, b)
+}
 
 // Resize は解放前のコンソールだけを変更する。
 func (p *windowsProcess) Resize(size Size) error {

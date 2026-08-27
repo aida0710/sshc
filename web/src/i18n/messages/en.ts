@@ -139,7 +139,6 @@ export const en = {
   "workspace.detachPane": "Remove from workspace",
   "workspace.live": "Live workspace",
   "workspace.mobilePaneSwitcher": "Workspace terminals",
-  "workspace.sshOnly": "Only SSH terminals can be added to a workspace.",
   "workspace.oneLiveOnly": "Finish or dissolve the current live workspace before creating another one.",
   "workspace.dock.left": "Place on the left",
   "workspace.dock.right": "Place on the right",

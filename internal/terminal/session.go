@@ -96,6 +96,7 @@ type View struct {
 // Process, even though the public session ID remains the same.
 type CommandTarget struct {
 	ID         string
+	Kind       Kind
 	Alias      string
 	Title      string
 	Generation uint64
@@ -249,22 +250,23 @@ func (s *Session) Write(p []byte) (int, error) {
 	return process.Write(p)
 }
 
-// CommandTarget returns a binding only for a connected SSH Process capable of
-// exact input. Broadcast preview uses this instead of an alias so it can never
-// open a replacement connection implicitly.
+// CommandTarget returns a binding only for a connected Process capable of exact
+// input. Broadcast preview uses this instead of a destination name so it can
+// never open a replacement terminal implicitly.
 func (s *Session) CommandTarget() (CommandTarget, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	if s.kind != KindSSH {
-		return CommandTarget{}, ErrWrongKind
-	}
 	if s.exited != nil || s.process == nil || s.state != StateConnected {
 		return CommandTarget{}, ErrNotConnected
 	}
 	if _, ok := s.process.(ExactInput); !ok {
 		return CommandTarget{}, ErrExactInputUnavailable
 	}
-	return CommandTarget{ID: s.id, Alias: s.alias, Title: s.title, Generation: s.generation}, nil
+	alias := s.alias
+	if alias == "" && s.kind == KindShell {
+		alias = "localhost"
+	}
+	return CommandTarget{ID: s.id, Kind: s.kind, Alias: alias, Title: s.title, Generation: s.generation}, nil
 }
 
 // WriteCommand sends a command and Enter to the exact Process generation which
@@ -281,10 +283,6 @@ func (s *Session) WriteCommand(ctx context.Context, generation uint64, command s
 	s.inputMutex.Lock()
 	defer s.inputMutex.Unlock()
 	s.mutex.Lock()
-	if s.kind != KindSSH {
-		s.mutex.Unlock()
-		return ErrWrongKind
-	}
 	if s.generation != generation {
 		s.mutex.Unlock()
 		return ErrGenerationChanged
