@@ -27,6 +27,16 @@
 - ディレクトリ構成要素の入れ替えに対する time-of-check/time-of-use 競合は best-effort でしか防げません。`O_NOFOLLOW` と構成要素ごとの検査を行いますが、同一ユーザー権限で動作する悪意あるプロセスからは完全には保護できません。
 - このエンジンは `/api/v1/config/*` として同一オリジンの HTTP API に公開済みです。境界は次節を参照してください。
 
+## Serial／Telnet CLI の境界
+
+- SerialとTelnetはOpenSSH configへ保存せず、一回限りのCLI接続として扱います。独自の保存接続先model、vault、engine、Web API、同期snapshotへは加えません。
+- 対話接続はローカル端末とbyte streamを直接結び、`Ctrl+]`を必ずローカル切断として消費します。SerialはOSのdeviceを排他的に開き、context取消と終了の両方で閉じます。TelnetはIACをapplication dataから除き、BINARY、ECHO、Suppress Go Ahead、Terminal Type、NAWSだけを交渉し、未知optionは拒否します。BINARY成立前はNVTのCR LF／CR NUL規則を適用し、成立後だけbyte列をそのまま渡します。
+- `run serial`と`run telnet`にはremote processの終了statusがありません。終了条件はRE2による`expect`または明示した`readFor`であり、timeout、step数、pattern、送信、transcript、subnegotiationを固定上限で制限します。送信と受信がblockしてもcontextまたはtimeoutで呼び出し元へ制御を返し、streamを閉じます。
+- AIなどの呼び出し元はversion付きJSON script／結果を利用できます。invalid UTF-8はbase64で返し、環境変数から送ったsecretは完全一致byte列をtranscriptからmaskします。引数やscriptのliteralへ秘密を書いた場合は保護できません。
+- Telnetは平文でserver認証もないため、SSHと同じ安全性を示しません。接続時の警告はこの性質を変えず、信頼できないnetworkで資格情報を送る用途は対象外です。
+- desktopのSerial backendはLinux、macOS、Windowsを対象とします。採用driverがflow control設定を公開しないため現時点ではnoneだけを実装し、RTS/CTSとXON/XOFFは黙って無視せず拒否します。Android USB serialはUSB Host permissionとnative driverが必要なため対象外です。
+- 自動検査ではLinux PTYを本番Serial driverで開く仮想routerと、loopback TCP上でIAC交渉する仮想Telnet serverを使います。parserからtransportまでの高速testに加え、build済み`sshc` processのargv、標準出力、終了codeをintegration testで通します。PTYは電気的baud、USB descriptor、DTR／RTS／Break、物理抜線を再現しないため、これらは実機acceptanceから外しません。
+
 ## Connections UI とグループの境界
 
 - 起動直後の Home はホスト中心のランチャーです。具体的な alias を検索し、お気に入り、グループ、タグを見ながらコンソールを開けます。Home を表示しただけでは DNS、TCP、SSH のどれも開始せず、「接続」を選んだときだけ埋め込みターミナルが開きます。

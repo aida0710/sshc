@@ -22,6 +22,8 @@ const (
 	invocationUpdate
 	invocationHelp
 	invocationVersion
+	invocationTransport
+	invocationRunTransport
 )
 
 type invocation struct {
@@ -32,7 +34,8 @@ type invocation struct {
 	// Replace は既存の engine を確認なしで停止して置き換える。
 	Replace bool
 	// JSON は `sshc status --json` の機械可読出力を選択する。
-	JSON bool
+	JSON      bool
+	Transport *transportInvocation
 }
 
 const (
@@ -43,6 +46,9 @@ const (
 	versionSubcommand = "version"
 	updateSubcommand  = "update"
 	StatusSubcommand  = "status"
+	serialSubcommand  = "serial"
+	telnetSubcommand  = "telnet"
+	sshSubcommand     = "ssh"
 )
 
 // parseInvocation は、コマンドが誰の責務を求めるかを副作用なしに決める。
@@ -72,11 +78,32 @@ func parseInvocation(argv []string) (invocation, error) {
 		}
 		return invocation{Kind: invocationChoose, Args: copyInvocationArgs(args)}, nil
 	case runSubcommand:
+		if len(args) > 0 && args[0] == serialSubcommand {
+			return parseTransportInvocation(transportSerial, args[1:], true)
+		}
+		if len(args) > 0 && args[0] == telnetSubcommand {
+			return parseTransportInvocation(transportTelnet, args[1:], true)
+		}
+		if len(args) > 0 && args[0] == sshSubcommand {
+			if len(args) < 4 || args[2] != "--" {
+				return invalidInvocation("run ssh requires an alias, --, and a command")
+			}
+			return invocation{Kind: invocationRun, Args: append([]string{args[1]}, args[3:]...)}, nil
+		}
 		// 先頭引数を接続先、残りをリモートコマンドとして扱う。
 		if len(args) < 2 {
 			return invalidInvocation("run requires an alias and a command")
 		}
 		return invocation{Kind: invocationRun, Args: copyInvocationArgs(args)}, nil
+	case serialSubcommand:
+		return parseTransportInvocation(transportSerial, args, false)
+	case telnetSubcommand:
+		return parseTransportInvocation(transportTelnet, args, false)
+	case sshSubcommand:
+		if len(args) != 1 {
+			return invalidInvocation("ssh requires one alias")
+		}
+		return invocation{Kind: invocationConnect, Args: copyInvocationArgs(args)}, nil
 	case ListSubcommand:
 		return noArguments(invocationList, word, args)
 	case OpenSubcommand:
@@ -168,6 +195,24 @@ func usage(out io.Writer) {
                        --replace   stop the running engine first, without asking
   sshc <alias>         connect to a host from ~/.ssh/config in this terminal
   sshc run <alias> ... run a non-interactive command on a host
+  sshc ssh <alias>     connect to an alias named like a reserved command
+  sshc run ssh <alias> -- ...
+                       explicitly run an SSH command
+  sshc serial list [--json]
+                       list serial devices
+  sshc serial <device> [options]
+                       connect interactively to a serial device
+                       options: --baud N --data-bits 5..8 --parity none|odd|even|mark|space
+                                --stop-bits 1|1.5|2 --flow none|rtscts|xonxoff
+                                --dtr on|off --rts on|off --break D
+  sshc telnet <host>[:port] [options]
+                       connect interactively with unencrypted Telnet
+                       options: --connect-timeout D --terminal-type TYPE
+  sshc run serial <device> [options] -- <text>
+  sshc run telnet <host>[:port] [options] -- <text>
+                       send text and wait for --expect or --read-for
+                       automation: --expect REGEX | --read-for D | --script FILE|-
+                                   --timeout D --settle D --max-bytes N --line-ending MODE --json
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
   sshc open            print a one-time UI URL
