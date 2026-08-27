@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { ApiError, type RequestFailureDiagnostic } from "../api/client";
 import { integrationsApi, type IntegrationsApi, type PasswordVaultStatus } from "../api/integrations";
-import { useTranslate } from "../i18n/context";
+import { useLanguage } from "../i18n/context";
+import { locales, type Locale } from "../i18n/locale";
+import type { MessageKey } from "../i18n/messages";
+import { useTheme } from "../theme/context";
+import { themes, type Theme } from "../theme/theme";
+import { autoControl } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { ErrorDiagnosticNotice } from "../shell/ErrorDiagnosticNotice";
@@ -14,6 +19,12 @@ type LockScreenProps = {
   api?: IntegrationsApi;
 };
 
+const themeLabels: Record<Theme, MessageKey> = {
+  system: "shell.themeSystem",
+  light: "shell.themeLight",
+  dark: "shell.themeDark",
+};
+
 export function LockScreen({
   exists,
   onOpen,
@@ -21,7 +32,8 @@ export function LockScreen({
   version = "",
   api = integrationsApi,
 }: LockScreenProps) {
-  const t = useTranslate();
+  const { locale, setLocale, t } = useLanguage();
+  const { theme, setTheme } = useTheme();
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
@@ -167,13 +179,41 @@ export function LockScreen({
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas p-6">
-      <section className="sshc-card w-full max-w-3xl overflow-hidden rounded-lg bg-card">
+    <main className="flex min-h-screen items-center justify-center bg-canvas p-4 md:p-6">
+      <section className="w-full max-w-3xl overflow-hidden rounded-lg border border-control-line bg-card shadow-2xl">
+        <header className="flex flex-wrap items-center justify-end gap-3 border-b border-control-line bg-toolbar px-4 py-3">
+          <label className="flex items-center gap-2 text-xs font-medium text-ink-muted">
+            <span>{t("shell.theme")}</span>
+            <select
+              aria-label={t("shell.themeMenu")}
+              value={theme}
+              onChange={(event) => setTheme(event.target.value as Theme)}
+              className={`${autoControl} min-h-9`}
+            >
+              {themes.map((candidate) => (
+                <option key={candidate} value={candidate}>{t(themeLabels[candidate])}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-ink-muted">
+            <span>{t("shell.language")}</span>
+            <select
+              aria-label={t("shell.languageMenu")}
+              value={locale}
+              onChange={(event) => setLocale(event.target.value as Locale)}
+              className={`${autoControl} min-h-9`}
+            >
+              {locales.map((candidate) => (
+                <option key={candidate} value={candidate}>{candidate === "en" ? "English" : "日本語"}</option>
+              ))}
+            </select>
+          </label>
+        </header>
         {diagnostic === null ? null : (
           <ErrorDiagnosticNotice diagnostic={diagnostic} version={version} onClose={() => setDiagnostic(null)} />
         )}
         <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(20rem,1.1fr)]">
-          <div className="flex min-h-60 flex-col justify-center gap-8 bg-toolbar p-7 md:p-10">
+          <div className="flex min-h-60 flex-col justify-center gap-8 border-b border-control-line bg-toolbar p-7 md:border-b-0 md:border-r md:p-10">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-ink">{t("shell.title")}</h1>
               <p className="mt-2 text-sm leading-6 text-ink-muted">

@@ -5,7 +5,7 @@ import { useTranslate, type Translate } from "../../i18n/context";
 import { Button } from "../../ui/surface";
 import { BrandMark } from "../../ui/BrandMark";
 import { Icon } from "../../ui/icons";
-import { MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type DockEdge, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane, type SplitDirection, type StoredNode } from "./layout";
+import { MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type DockEdge, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane, type SplitDirection, type StoredNode, type StoredPane } from "./layout";
 import { workspaceApi, type SavedWorkspace } from "./api";
 import { WorkspaceCommandCenter, type WorkspaceCommandTarget } from "./WorkspaceCommandCenter";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
@@ -18,9 +18,20 @@ function paneID(): string {
   return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-function visit(root: StoredNode, callback: (id: string, alias: string) => void) {
-  if (root.pane !== undefined) { callback(root.pane.id, root.pane.alias); return; }
+function visit(root: StoredNode, callback: (pane: StoredPane) => void) {
+  if (root.pane !== undefined) { callback(root.pane); return; }
   visit(root.split.first, callback); visit(root.split.second, callback);
+}
+
+function paneForSession(session: TerminalSession, id = paneID()): RuntimePane {
+  return {
+    id,
+    alias: session.kind === "ssh" ? session.alias ?? session.title : "localhost",
+    ...(session.kind === "shell" ? { kind: "shell" as const } : {}),
+    state: session.state === "connected" ? "connected" : session.state === "exited" ? "failed" : "connecting",
+    sessionId: session.id,
+    ...(session.problem === "" ? {} : { problem: session.problem }),
+  };
 }
 
 function findPane(root: RuntimeNode, id: string): RuntimePane | null {
@@ -68,13 +79,14 @@ function compactWorkspaceViewport(): boolean {
 }
 
 export function TerminalWorkspace({
-  sessions, activeSessionId, onActive, onOpenAlias, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
+  sessions, activeSessionId, onActive, onOpenAlias, onOpenShell, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
   onLiveWorkspaceChange = () => undefined,
 }: {
   sessions: TerminalSession[];
   activeSessionId: string | null;
   onActive: (id: string) => void;
   onOpenAlias: (alias: string) => Promise<TerminalSession | null>;
+  onOpenShell: () => Promise<TerminalSession | null>;
   renderTerminal: (session: TerminalSession) => ReactNode;
   restoreRequest?: WorkspaceRestoreRequest | null;
   onRestoreConsumed?: (sequence: number) => void;
@@ -131,7 +143,7 @@ export function TerminalWorkspace({
     const selectedName = saved.find((item) => item.id === selectedWorkspace)?.name.trim() ?? "";
     if (selectedName !== "") return selectedName;
     const aliases: string[] = [];
-    visit(storeLayout(visibleLayout).layout, (_id, alias) => aliases.push(alias));
+    visit(storeLayout(visibleLayout).layout, (pane) => aliases.push(pane.alias));
     const uniqueAliases = [...new Set(aliases)];
     return uniqueAliases.slice(0, 2).join(" + ") + (uniqueAliases.length > 2 ? ` +${uniqueAliases.length - 2}` : "") || t("workspace.live");
   }, [active?.title, saved, selectedWorkspace, t, visibleLayout]);
@@ -158,7 +170,7 @@ export function TerminalWorkspace({
       return;
     }
     const aliases: string[] = [];
-    visit(storeLayout(layout).layout, (_id, alias) => aliases.push(alias));
+    visit(storeLayout(layout).layout, (pane) => aliases.push(pane.alias));
     const selectedName = saved.find((item) => item.id === selectedWorkspace)?.name.trim() ?? "";
     const uniqueAliases = [...new Set(aliases)];
     const automaticName = uniqueAliases.slice(0, 2).join(" + ") + (uniqueAliases.length > 2 ? ` +${uniqueAliases.length - 2}` : "");
@@ -239,24 +251,26 @@ export function TerminalWorkspace({
 
   function dockSession(sourceSessionId: string, targetPaneId: string, edge: DockEdge, targetSession?: TerminalSession) {
     const source = sessionByID.get(sourceSessionId);
-    if (source?.kind !== "ssh" || source.alias === undefined) {
-      setProblem(t("workspace.sshOnly"));
-      return;
-    }
+    if (source === undefined) return;
     if (targetSession !== undefined) {
-      if (targetSession.kind !== "ssh" || targetSession.alias === undefined || targetSession.id === source.id) return;
+      if (targetSession.id === source.id) return;
       if (layout !== null) {
         setProblem(t("workspace.oneLiveOnly"));
         return;
       }
       const targetPaneId = paneID();
-      let next = restoreLayout({ pane: { id: targetPaneId, alias: targetSession.alias } }, targetPaneId);
+      const targetPane = paneForSession(targetSession, targetPaneId);
+      let next = restoreLayout({ pane: {
+        id: targetPane.id,
+        alias: targetPane.alias,
+        ...(targetPane.kind === undefined ? {} : { kind: targetPane.kind }),
+      } }, targetPaneId);
       next = reduceLayout(next, { type: "connection-started", paneId: targetPaneId, sessionId: targetSession.id });
       next = reduceLayout(next, {
         type: "dock-pane",
         targetPaneId,
         edge,
-        pane: { id: paneID(), alias: source.alias, state: source.state === "connected" ? "connected" : "connecting", sessionId: source.id },
+        pane: paneForSession(source),
       });
       setLayout(next);
       setProblem("");
@@ -269,12 +283,7 @@ export function TerminalWorkspace({
       setProblem(t("workspace.maxPanes", { count: MAX_WORKSPACE_PANES }));
       return;
     }
-    const pane: RuntimePane = existing ?? {
-      id: paneID(), alias: source.alias,
-      state: source.state === "connected" ? "connected" : source.state === "exited" ? "failed" : "connecting",
-      sessionId: source.id,
-      ...(source.problem === "" ? {} : { problem: source.problem }),
-    };
+    const pane: RuntimePane = existing ?? paneForSession(source);
     setLayout((current) => current === null ? current : reduceLayout(current, { type: "dock-pane", targetPaneId, edge, pane }));
     setProblem("");
     onActive(source.id);
@@ -344,9 +353,14 @@ export function TerminalWorkspace({
 
   async function saveWorkspace() {
     let effective = visibleLayout;
-    if (effective === null && active?.kind === "ssh" && active.alias !== undefined) {
+    if (effective === null && active !== null) {
       const id = paneID();
-      effective = reduceLayout(restoreLayout({ pane: { id, alias: active.alias } }, id), { type: "connection-started", paneId: id, sessionId: active.id });
+      const pane = paneForSession(active, id);
+      effective = reduceLayout(restoreLayout({ pane: {
+        id: pane.id,
+        alias: pane.alias,
+        ...(pane.kind === undefined ? {} : { kind: pane.kind }),
+      } }, id), { type: "connection-started", paneId: id, sessionId: active.id });
     }
     if (effective === null) return;
     const name = window.prompt(t("workspace.namePrompt"), saved.find((item) => item.id === selectedWorkspace)?.name ?? "")?.trim() ?? "";
@@ -365,14 +379,14 @@ export function TerminalWorkspace({
       setSelectedWorkspace(id);
       setFocusModePaneId(null);
       let restored = restoreLayout(stored.layout, stored.focusedPaneId);
-      const panes: { id: string; alias: string }[] = [];
-      visit(stored.layout, (paneId, alias) => {
-        panes.push({ id: paneId, alias });
-        restored = reduceLayout(restored, { type: "connection-starting", paneId });
+      const panes: { id: string; alias: string; kind?: "shell" }[] = [];
+      visit(stored.layout, (pane) => {
+        panes.push(pane);
+        restored = reduceLayout(restored, { type: "connection-starting", paneId: pane.id });
       });
       setLayout(restored);
       await Promise.all(panes.map(async (pane) => {
-        const session = await onOpenAlias(pane.alias);
+        const session = pane.kind === "shell" ? await onOpenShell() : await onOpenAlias(pane.alias);
         if (session === null) {
           setLayout((current) => current === null ? current : reduceLayout(current, {
             type: "connection-failed", paneId: pane.id, problem: "open_failed",
@@ -386,7 +400,7 @@ export function TerminalWorkspace({
       }));
       setProblem("");
     } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
-  }, [onActive, onOpenAlias]);
+  }, [onActive, onOpenAlias, onOpenShell]);
 
   useEffect(() => {
     if (restoreRequest === null || restoreRequest.sequence <= consumedRestore.current) return;
@@ -398,7 +412,6 @@ export function TerminalWorkspace({
   function terminal(session: TerminalSession) { return renderTerminal(session); }
 
   function singleTerminal(session: TerminalSession) {
-    if (session.kind !== "ssh") return terminal(session);
     const docking = dockTarget?.paneId === session.id;
     return <div
       data-single-terminal-drop-target={session.id}
@@ -425,6 +438,7 @@ export function TerminalWorkspace({
   function renderNode(node: RuntimeNode, path: ("first" | "second")[] = []): ReactNode {
     if (node.pane !== undefined) {
       const session = node.pane.sessionId === undefined ? undefined : sessionByID.get(node.pane.sessionId);
+      const paneLabel = node.pane.kind === "shell" ? session?.title ?? node.pane.alias : node.pane.alias;
       const multiple = layout !== null && paneIDs(layout.root).length > 1;
       const moving = movingPaneId === node.pane.id;
       const docking = dockTarget?.paneId === node.pane.id && !moving;
@@ -441,9 +455,9 @@ export function TerminalWorkspace({
           onDrop={(event) => dropPane(event, node.pane.id)}
         >
           {multiple && !compactViewport ? <div data-pane-toolbar className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-toolbar px-1.5">
-            <button type="button" draggable aria-pressed={moving} aria-label={t(moving ? "workspace.movePanePicked" : "workspace.movePane", { alias: node.pane.alias })} title={t("workspace.movePane", { alias: node.pane.alias })} className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill active:cursor-grabbing" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); choosePaneMove(node.pane.id); }} onDragStart={(event) => beginPaneDrag(event, node.pane.id)} onDragEnd={() => setMovingPaneId(null)} onKeyDown={(event) => { if (event.key === "Escape") setMovingPaneId(null); }}><Icon name="movePane" className="size-3.5" /></button>
-            <span className="min-w-0 grow truncate text-xs font-medium text-ink-muted">{node.pane.alias}</span>
-            <button type="button" aria-pressed={focusModePaneId === node.pane.id} aria-label={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: node.pane.alias })} title={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: node.pane.alias })} className="flex size-6 shrink-0 items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setFocusModePaneId((current) => current === node.pane.id ? null : node.pane.id); }}><Icon name="focus" className="size-3.5" /></button>
+            <button type="button" draggable aria-pressed={moving} aria-label={t(moving ? "workspace.movePanePicked" : "workspace.movePane", { alias: paneLabel })} title={t("workspace.movePane", { alias: paneLabel })} className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill active:cursor-grabbing" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); choosePaneMove(node.pane.id); }} onDragStart={(event) => beginPaneDrag(event, node.pane.id)} onDragEnd={() => setMovingPaneId(null)} onKeyDown={(event) => { if (event.key === "Escape") setMovingPaneId(null); }}><Icon name="movePane" className="size-3.5" /></button>
+            <span className="min-w-0 grow truncate text-xs font-medium text-ink-muted">{paneLabel}</span>
+            <button type="button" aria-pressed={focusModePaneId === node.pane.id} aria-label={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: paneLabel })} title={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: paneLabel })} className="flex size-6 shrink-0 items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setFocusModePaneId((current) => current === node.pane.id ? null : node.pane.id); }}><Icon name="focus" className="size-3.5" /></button>
             <button type="button" aria-label={t("workspace.detachPane")} title={t("workspace.detachPane")} className="flex size-6 shrink-0 items-center justify-center rounded text-sm text-ink-muted hover:bg-select-fill" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); detachPane(node.pane.id); }}><Icon name="close" className="size-3.5" /></button>
           </div> : null}
           <div className="flex min-h-0 flex-1 flex-col">{session === undefined ? <div className="grid h-full min-h-40 place-items-center text-sm text-ink-muted">{node.pane.state === "failed" ? node.pane.problem : t("workspace.reconnecting")}</div> : terminal(session)}</div>
@@ -460,13 +474,6 @@ export function TerminalWorkspace({
       update({ type: "resize-split", path, ratio: node.split.ratio + (decrease ? -5 : 5) });
     };
     return <div className={`flex h-full min-h-0 min-w-0 flex-1 ${row ? "flex-row" : "flex-col"}`}><div style={{ flexBasis: `${node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.first, [...path, "first"])}</div><div role="separator" tabIndex={0} aria-label={t("workspace.resizeSplit")} aria-orientation={row ? "vertical" : "horizontal"} aria-valuemin={10} aria-valuemax={90} aria-valuenow={node.split.ratio} onPointerDown={(event) => beginResize(event, path, node.split.direction)} onKeyDown={resizeStep} className={`shrink-0 touch-none bg-line transition-colors hover:bg-accent focus:bg-accent focus:outline-none ${row ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"}`} /><div style={{ flexBasis: `${100 - node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.second, [...path, "second"])}</div></div>;
-  }
-
-  // A local shell does not participate in an SSH workspace. Keep its terminal
-  // surface identical to the single-console path so fitting and selection are
-  // unaffected by controls that cannot apply to it.
-  if (layout === null && active?.kind === "shell") {
-    return <div className="flex h-full min-h-0 flex-col">{terminal(active)}</div>;
   }
 
   const empty = active === null && visibleLayout === null;
@@ -497,7 +504,7 @@ export function TerminalWorkspace({
               {saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button disabled={visibleLayout === null && active?.kind !== "ssh"} onClick={() => void saveWorkspace()}>{t("workspace.save")}</Button>
+              <Button disabled={visibleLayout === null && active === null} onClick={() => void saveWorkspace()}>{t("workspace.save")}</Button>
               <Button disabled={selectedWorkspace === ""} onClick={() => void restoreWorkspace(selectedWorkspace)}>{t("workspace.reopen")}</Button>
               <button disabled={selectedWorkspace === ""} className="px-2 text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button>
             </div>
@@ -509,7 +516,7 @@ export function TerminalWorkspace({
       {compactViewport && compactPanes.length > 1 ? (
         <nav aria-label={t("workspace.mobilePaneSwitcher")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-toolbar px-2 py-1">
           {compactPanes.map((pane) => (
-            <button key={pane.id} type="button" aria-current={pane.id === visibleLayout?.focusedPaneId ? "page" : undefined} className={`max-w-40 shrink-0 truncate rounded px-3 py-1.5 text-xs ${pane.id === visibleLayout?.focusedPaneId ? "bg-select-fill text-ink" : "text-ink-muted"}`} onClick={() => { update({ type: "focus", paneId: pane.id }); if (pane.sessionId !== undefined) onActive(pane.sessionId); }}>{pane.alias}</button>
+            <button key={pane.id} type="button" aria-current={pane.id === visibleLayout?.focusedPaneId ? "page" : undefined} className={`max-w-40 shrink-0 truncate rounded px-3 py-1.5 text-xs ${pane.id === visibleLayout?.focusedPaneId ? "bg-select-fill text-ink" : "text-ink-muted"}`} onClick={() => { update({ type: "focus", paneId: pane.id }); if (pane.sessionId !== undefined) onActive(pane.sessionId); }}>{pane.kind === "shell" && pane.sessionId !== undefined ? sessionByID.get(pane.sessionId)?.title ?? pane.alias : pane.alias}</button>
           ))}
         </nav>
       ) : null}

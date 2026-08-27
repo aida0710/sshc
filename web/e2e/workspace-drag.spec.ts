@@ -87,7 +87,7 @@ test("docks connected terminals into a live workspace", async ({ page, installat
 
   const savedLayouts = page.locator("summary").filter({ hasText: "Saved layouts" });
   await savedLayouts.click();
-  await expect(page.getByText(/Save connection targets and split ratios/)).toBeVisible();
+  await expect(page.getByText(/Save SSH targets, local shells, and split ratios/)).toBeVisible();
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-saved-layouts.png`, fullPage: true });
   }
@@ -102,5 +102,75 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-live-workspace-mobile.png`, fullPage: true });
+  }
+});
+
+test("selects the whole local console row and docks local shells", async ({ page, installation }) => {
+  const localSessions = [
+    {
+      id: "local-zsh",
+      kind: "shell",
+      title: "zsh",
+      startedAt: "2026-08-27T03:00:00Z",
+      state: "connected",
+      problem: "",
+      forwards: [],
+    },
+    {
+      id: "local-bash",
+      kind: "shell",
+      title: "bash",
+      startedAt: "2026-08-27T03:01:00Z",
+      state: "connected",
+      problem: "",
+      forwards: [],
+    },
+  ];
+  let ticket = 0;
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/stream")) {
+      ticket += 1;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ streamTicket: `local-${ticket}` }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ sessions: localSessions, maxSessions: 12 }),
+    });
+  });
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => {
+    socket.send(Buffer.from("local shell\r\n$ "));
+  });
+
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("tab", { name: "Terminals" }).click();
+  const consoleList = navigation.getByRole("list", { name: "Open consoles" });
+  const zshRow = consoleList.getByRole("listitem").filter({ hasText: "zsh" });
+  await zshRow.getByText("connected · localhost").click();
+
+  const target = page.locator("[data-single-terminal-drop-target='local-zsh']");
+  await expect(target).toBeVisible();
+  const bashRow = consoleList.getByRole("listitem").filter({ hasText: "bash" });
+  const targetBox = await target.boundingBox();
+  expect(targetBox).not.toBeNull();
+  await bashRow.dragTo(target, {
+    targetPosition: { x: Math.max(1, targetBox!.width - 8), y: targetBox!.height / 2 },
+  });
+
+  await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
+  await expect(page.locator("[data-pane-toolbar]")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Send command…" })).toBeDisabled();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.1-local-shell-workspace.png`,
+      fullPage: true,
+    });
   }
 });

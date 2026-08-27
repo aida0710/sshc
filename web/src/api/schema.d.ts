@@ -2900,6 +2900,11 @@ export interface components {
         WorkspacePane: {
             id: string;
             alias: string;
+            /**
+             * @description Omitted by legacy SSH-only workspaces and interpreted as ssh.
+             * @enum {string}
+             */
+            kind?: "ssh" | "shell";
         };
         WorkspaceSplit: {
             /** @enum {string} */
@@ -2930,6 +2935,8 @@ export interface components {
         WorkspaceReconnectPane: {
             paneId: string;
             alias: string;
+            /** @enum {string} */
+            kind: "ssh" | "shell";
             /** @enum {string} */
             state: "reconnect_required";
         };

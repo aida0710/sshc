@@ -108,6 +108,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [pushDraft, setPushDraft] = useState<SyncPushDraft | null>(null);
   const [pushMessage, setPushMessage] = useState("");
   const pushMessageDirty = useRef(false);
@@ -122,6 +123,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     setSecretAccessKey("");
     setSetupCheck(null);
     setEditingSettings(true);
+    setSettingsOpen(true);
   }
 
   const setupInput = { endpoint, bucket, path, region, accessKeyId, secretAccessKey };
@@ -422,15 +424,27 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         </section>
       ) : null}
 
-      <details open={!status.configured || editingSettings} className="group">
+      <details
+        open={!status.configured || settingsOpen}
+        onToggle={(event) => {
+          if (status.configured) setSettingsOpen(event.currentTarget.open);
+        }}
+        className={status.configured ? "group overflow-hidden rounded-md border border-control-line bg-card" : "group"}
+      >
         {status.configured ? (
-          <summary className="cursor-pointer list-none rounded-md border border-line bg-toolbar px-4 py-3 text-sm font-medium text-ink marker:hidden">
-            {t("sync.manageSettings")}
+          <summary className="flex cursor-pointer list-none items-center gap-3 bg-toolbar px-4 py-3 text-sm font-medium text-ink marker:hidden hover:bg-select-fill">
+            <span
+              aria-hidden="true"
+              className="inline-flex size-5 shrink-0 items-center justify-center text-base text-ink-muted transition-transform group-open:rotate-90"
+            >
+              ›
+            </span>
+            <span>{t("sync.manageSettings")}</span>
           </summary>
         ) : null}
-        <div className={status.configured ? "mt-4 flex flex-col gap-6" : "flex flex-col gap-6"}>
+        <div className={status.configured ? "flex flex-col gap-4 border-t border-line bg-surface-subtle p-4" : "flex flex-col gap-6"}>
 
-      <section className="sshc-card overflow-hidden rounded-md bg-card">
+      <section className="overflow-hidden rounded-md border border-line bg-card">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
           <div className="flex items-center gap-2">
             <Icon name="remoteKeys" className="h-4 w-4 text-ink-muted" />
@@ -549,6 +563,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                     setSecretAccessKey("");
                     setSetupCheck(null);
                     setEditingSettings(false);
+                    setSettingsOpen(false);
                     setNotice(next.generatedKey === undefined ? t("sync.setup.saved") : t("sync.keyShownOnce"));
                   },
                   t("sync.configureFailed"),
@@ -582,7 +597,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       </section>
 
       {status.configured ? (
-      <section className="sshc-card overflow-hidden rounded-md bg-card">
+      <section className="overflow-hidden rounded-md border border-line bg-card">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
           <div className="flex items-center gap-2">
             <Icon name="sync" className="h-4 w-4 text-ink-muted" />

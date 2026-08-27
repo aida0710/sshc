@@ -273,10 +273,20 @@ describe("SyncPanel", () => {
   });
 
   it("keeps configured credentials collapsed until they need editing", async () => {
-    render(<SyncPanel api={buildApi(configured, nothingToDo)} />);
+    const { container } = render(<SyncPanel api={buildApi(configured, nothingToDo)} />);
 
-    expect(await screen.findByText("https://acc.r2.cloudflarestorage.com/sshc")).toBeInTheDocument();
+    await screen.findByText("Manage sync settings");
+    const summary = container.querySelector("summary") as HTMLElement;
+    expect(summary).not.toBeNull();
+    const settings = summary.closest("details");
+    expect(settings).not.toHaveAttribute("open");
+    expect(summary.querySelector("[aria-hidden='true']")).toHaveTextContent("›");
     expect(screen.queryByLabelText("Secret access key")).not.toBeInTheDocument();
+    await userEvent.click(summary);
+    expect(settings).toHaveAttribute("open");
+    expect(settings).toContainElement(screen.getByRole("heading", { name: "Bucket" }));
+    expect(settings).toContainElement(screen.getByRole("heading", { name: "Snapshot" }));
+    expect(screen.getByText("https://acc.r2.cloudflarestorage.com/sshc")).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "Edit bucket settings" }));
     expect(screen.getByLabelText("Endpoint")).toHaveValue("https://acc.r2.cloudflarestorage.com");
     expect(screen.getByLabelText("Bucket name")).toHaveValue("sshc");

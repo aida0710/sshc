@@ -241,7 +241,14 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await openSection(page, "Sync");
   await expect(page.getByRole("button", { name: "Sync now" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Receive from remote" })).toBeVisible();
+  const visualDirectory = process.env.SSHC_VISUAL_DIR;
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sync-settings-collapsed.png`, fullPage: true });
+  }
   await page.getByText("Manage sync settings").click();
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sync-settings-expanded.png`, fullPage: true });
+  }
   await expect(page.getByText("Dated history · 1")).toBeVisible();
   await expect(page.getByText("The remote generation differs")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Encrypted revision history" })).toBeVisible();
@@ -249,7 +256,6 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await page.getByRole("button", { name: /aaaaaaaaaaaa.*ancestor/i }).click();
   await expect(page.getByText("Modified · 1")).toBeVisible();
 
-  const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.15.0-sync-desktop.png`, fullPage: true });
     await page.getByRole("heading", { name: "Bucket status" }).scrollIntoViewIfNeeded();

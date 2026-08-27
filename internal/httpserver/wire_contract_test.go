@@ -463,6 +463,7 @@ var wireEnumValues = map[reflect.Type][]string{
 	},
 	reflect.TypeOf(sftpMkdirType("")):            {string(sftpMkdirDirectory)},
 	reflect.TypeOf(workspace.Direction("")):      {string(workspace.Horizontal), string(workspace.Vertical)},
+	reflect.TypeOf(workspace.PaneKind("")):       {string(workspace.PaneSSH), string(workspace.PaneShell)},
 	reflect.TypeOf(workspace.ReconnectState("")): {string(workspace.ReconnectRequired)},
 	reflect.TypeOf(snippets.VariableType("")): {
 		string(snippets.VariableString), string(snippets.VariableInteger), string(snippets.VariableBoolean), string(snippets.VariableSecret),

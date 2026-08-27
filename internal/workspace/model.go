@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	SchemaVersion = 1
+	SchemaVersion = 2
 	PathRelative  = "sshc/workspaces.json"
 
 	MaxWorkspaces = 50
@@ -46,10 +46,26 @@ func (direction Direction) valid() bool {
 	return direction == Horizontal || direction == Vertical
 }
 
-// Pane は、レイアウト内の表示場所とそこへ接続する ssh_config alias を表す。
+type PaneKind string
+
+const (
+	PaneSSH   PaneKind = "ssh"
+	PaneShell PaneKind = "shell"
+)
+
+// Pane は、レイアウト内の表示場所と、SSH aliasまたはローカルシェルを表す。
 type Pane struct {
-	ID    string `json:"id"`
-	Alias string `json:"alias"`
+	ID    string   `json:"id"`
+	Alias string   `json:"alias"`
+	Kind  PaneKind `json:"kind,omitempty"`
+}
+
+// EffectiveKind はkindを持たない旧形式のpaneをSSHとして扱う。
+func (pane Pane) EffectiveKind() PaneKind {
+	if pane.Kind == "" {
+		return PaneSSH
+	}
+	return pane.Kind
 }
 
 // Split は、ふたつの子を並べる向きと先頭側の割合を表す。
@@ -81,6 +97,9 @@ func (workspace Workspace) Aliases() []string {
 	aliases := make([]string, 0)
 	seen := map[string]bool{}
 	walkPanes(workspace.Layout, func(pane Pane) {
+		if pane.EffectiveKind() != PaneSSH {
+			return
+		}
 		if !seen[pane.Alias] {
 			seen[pane.Alias] = true
 			aliases = append(aliases, pane.Alias)
@@ -110,7 +129,14 @@ func validateNode(node Node, depth int, seen map[string]bool, panes *int) error 
 		return ErrInvalidWorkspace
 	}
 	if node.Pane != nil {
-		if !validText(node.Pane.ID, MaxIDRunes) || validator.Alias(node.Pane.Alias) != nil || seen[node.Pane.ID] {
+		validTarget := false
+		switch node.Pane.EffectiveKind() {
+		case PaneSSH:
+			validTarget = validator.Alias(node.Pane.Alias) == nil
+		case PaneShell:
+			validTarget = node.Pane.Alias == "localhost"
+		}
+		if !validText(node.Pane.ID, MaxIDRunes) || !validTarget || seen[node.Pane.ID] {
 			return ErrInvalidWorkspace
 		}
 		seen[node.Pane.ID] = true

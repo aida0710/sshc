@@ -45,6 +45,16 @@ describe("ConsoleList", () => {
     expect(rows[2]).toHaveTextContent("exited 255 · db-primary");
   });
 
+  it("selects a console from anywhere in its main row content", async () => {
+    const props = renderList();
+    const detail = screen.getByText("connected · bastion");
+
+    await userEvent.click(detail);
+
+    expect(props.onSelect).toHaveBeenCalledWith(live.id);
+    expect(detail.closest("button")).toHaveAttribute("aria-label", live.title);
+  });
+
   it("collapses split terminals into one live workspace entry", async () => {
     const user = userEvent.setup();
     const props = renderList({

@@ -1,6 +1,7 @@
 package workspace_test
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -51,12 +52,44 @@ func TestStorePersistsPrivateStateAndLeavesNoTemporaryFile(t *testing.T) {
 	}
 }
 
+func TestStoreReadsVersionOneAndWritesVersionTwoOnTheNextChange(t *testing.T) {
+	store := newStore(t)
+	now := time.Date(2026, 8, 24, 7, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	legacy := []byte(`{"schemaVersion":1,"workspaces":[{"id":"legacy","name":"Legacy","layout":{"pane":{"id":"one","alias":"web"}},"focusedPaneId":"one","createdAt":"` + now + `","updatedAt":"` + now + `"}]}`)
+	acltest.WritePrivateFile(t, store.Path(), legacy)
+
+	loaded, err := store.Get("legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Layout.Pane.EffectiveKind() != workspace.PaneSSH {
+		t.Fatalf("legacy pane kind = %q", loaded.Layout.Pane.EffectiveKind())
+	}
+	loaded.Name = "Migrated"
+	if err := store.Save(loaded); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(store.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var header struct {
+		SchemaVersion int `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal(contents, &header); err != nil {
+		t.Fatal(err)
+	}
+	if header.SchemaVersion != workspace.SchemaVersion {
+		t.Fatalf("schemaVersion = %d, want %d", header.SchemaVersion, workspace.SchemaVersion)
+	}
+}
+
 func TestInvalidOrNewerDocumentsAreNotOverwritten(t *testing.T) {
 	cases := map[string]struct {
 		contents []byte
 		want     error
 	}{
-		"newer":   {[]byte(`{"schemaVersion":2,"workspaces":[]}`), workspace.ErrUnsupportedSchema},
+		"newer":   {[]byte(`{"schemaVersion":3,"workspaces":[]}`), workspace.ErrUnsupportedSchema},
 		"unknown": {[]byte(`{"schemaVersion":1,"workspaces":[],"surprise":true}`), workspace.ErrInvalidDocument},
 		"invalid": {[]byte(`{"schemaVersion":1,"workspaces":[{"id":"bad"}]}`), workspace.ErrInvalidDocument},
 	}
