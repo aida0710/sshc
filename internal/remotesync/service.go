@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -274,14 +273,6 @@ type state struct {
 	LastOperation *SyncOperation `json:"lastOperation"`
 }
 
-// FileSource は、スナップショットに含めるべきワークスペース相対のパスを列挙する。
-//
-// これを注入するのは、「どのファイルが設定の一部なのか」が Include グラフの返す
-// 問いであり、このパッケージからはそれが見えないからだ。結果を渡す形にすることで
-// 依存の向きが正しく保たれる。ここにあるものは、設定サービスを何ひとつ import
-// しない。
-type FileSource func() ([]string, error)
-
 // KeyProvider returns the current synchronization key while operationMu is
 // held. Callers must not snapshot a key before waiting for another stateful
 // operation, because a completed rotation changes both the key and live ETag.
@@ -317,7 +308,6 @@ func stateMatchesTarget(current state, config Config) bool {
 type Service struct {
 	workspace    *storage.Workspace
 	transactions *storage.Manager
-	files        FileSource
 	now          func() string
 	newOrigin    func() (string, error)
 	historySeq   uint64
@@ -348,11 +338,10 @@ type Service struct {
 }
 
 // NewService は、未設定のサービスを返す。
-func NewService(workspace *storage.Workspace, transactions *storage.Manager, files FileSource,
+func NewService(workspace *storage.Workspace, transactions *storage.Manager,
 	now func() string, newOrigin func() (string, error)) *Service {
 	return &Service{
-		workspace: workspace, transactions: transactions, files: files,
-		now: now, newOrigin: newOrigin,
+		workspace: workspace, transactions: transactions, now: now, newOrigin: newOrigin,
 	}
 }
 
@@ -489,7 +478,7 @@ func (s *Service) Direction() Direction {
 	return s.binding.config.Direction
 }
 
-// neverTravels は、Include グラフに現れても同期対象から除外するファイル。
+// neverTravels は、ワークスペースに存在しても同期対象から除外するファイル。
 // オブジェクトストア資格情報や端末固有の状態をスナップショットへ含めない。
 var neverTravels = []string{
 	// オブジェクトストアの資格情報。暗号化されてはいるが、自分のバケットへの鍵を運ぶ
@@ -514,6 +503,10 @@ var neverTravels = []string{
 	// it would make every serialized local mutation look like a user edit and
 	// can also surface a meaningless lock file on another machine.
 	"sshc/mutation.lock",
+	// vault の暗号文は端末固有のマスターパスワードで封印される。同期では復号済み文書を
+	// スナップショット全体の暗号化内に一度だけ載せ、受信側で再封印する。
+	VaultPath,
+	TravelPath,
 	StatePath,
 	KeyRecoveryPath,
 }
@@ -523,8 +516,15 @@ var neverTravels = []string{
 const SettingsPathRelative = "sshc/sync-settings"
 
 func excluded(relative string) bool {
+	for _, segment := range strings.Split(relative, "/") {
+		// storage transaction の一時ファイル。クラッシュ後に残っても別端末へ運ばない。
+		if strings.HasPrefix(strings.ToLower(segment), ".sshc-") {
+			return true
+		}
+	}
 	for _, name := range neverTravels {
-		if relative == name || strings.HasPrefix(relative, name+"/") {
+		if strings.EqualFold(relative, name) ||
+			(len(relative) > len(name) && relative[len(name)] == '/' && strings.EqualFold(relative[:len(name)], name)) {
 			return true
 		}
 	}
@@ -533,11 +533,9 @@ func excluded(relative string) bool {
 
 // Collect は、スナップショットに含めるべきすべてのファイルを読む。
 //
-// すなわち、FileSource が指定するもの、エントリファイルと、Include グラフが
-// ワークスペース内で到達するすべてに加えて、metadata.json、パスワードの vault、
-// そしてすべての鍵である。ソースが指定するのに存在しないファイルは、失敗させず
-// にスキップする。Include はまだ存在しないファイルを指しうるし、それは診断であって
-// 同期を拒む理由ではない。
+// すなわち、~/.ssh 配下の通常ファイルすべてと、パスワードの vault 文書である。
+// 同期資格情報、端末固有の状態、処理中の一時ファイルは除外し、symlink と socket、
+// FIFO、device はたどらず運ばない。
 func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 	var manifest Manifest
 	var contents map[string][]byte
@@ -560,34 +558,20 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 	if s.OpenVault == nil {
 		return Manifest{}, nil, ErrVaultCodec
 	}
-	relatives, err := s.files()
+	relatives, err := s.walkWorkspace()
 	if err != nil {
 		return Manifest{}, nil, err
 	}
-	keys, err := s.walkKeys()
-	if err != nil {
-		return Manifest{}, nil, err
-	}
-	relatives = append(relatives, keys...)
-	backgrounds, err := s.walkUnder("sshc/backgrounds")
-	if err != nil {
-		return Manifest{}, nil, err
-	}
-	// metadata が参照する背景画像も同期する。Android はサンドボックス外の
-	// ファイルを直接選択できないため、同期経由で画像本体を受け取る。
-	relatives = append(relatives, backgrounds...)
-	relatives = append(relatives, "sshc/metadata.json")
 	seen := map[string]bool{}
 	contents := map[string][]byte{}
 	var entries []Entry
 	for _, relative := range relatives {
 		relative = filepath.ToSlash(relative)
-		if seen[relative] || checkPath(relative) != nil || excluded(relative) {
+		if seen[relative] || excluded(relative) {
 			continue
 		}
-		// Include グラフから渡された場合も、端末固有の鍵で暗号化された vault は除外する。
-		if relative == VaultPath {
-			continue
+		if err := checkPath(relative); err != nil {
+			return Manifest{}, nil, err
 		}
 		seen[relative] = true
 
@@ -600,7 +584,7 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 			return Manifest{}, nil, err
 		}
 		mode := "0600"
-		if info, err := os.Stat(absolute); err == nil && info.Mode().Perm() == 0o700 {
+		if info, err := s.workspace.FileSystem().Lstat(absolute); err == nil && info.Mode().Perm() == 0o700 {
 			mode = "0700"
 		}
 		contents[relative] = body
@@ -618,6 +602,9 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 			Path: TravelPath, SHA256: Digest(document), Mode: "0600",
 		})
 	}
+	if len(entries) > MaxEntries {
+		return Manifest{}, nil, ErrSnapshotTooLarge
+	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 
 	current, err := s.readState()
@@ -632,35 +619,56 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 	}, contents, nil
 }
 
-func (s *Service) walkKeys() ([]string, error) {
-	return s.walkUnder("keys")
-}
-
-// walkUnder は、ワークスペース相対のディレクトリ 1 つの下にある通常ファイルを
-// 集める。無ければ何も返さない。同期を拒む理由ではない。
-func (s *Service) walkUnder(directory string) ([]string, error) {
-	root := filepath.Join(s.workspace.Root(), filepath.FromSlash(directory))
+// walkWorkspace は ~/.ssh を root として再帰的に通常ファイルだけを集める。
+// Lstat を使うため symlink はディレクトリであっても追跡しない。
+func (s *Service) walkWorkspace() ([]string, error) {
+	root := s.workspace.Root()
 	var found []string
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	var walk func(string, string) error
+	walk = func(absolute, relativeDirectory string) error {
+		entries, err := s.workspace.FileSystem().ReadDir(absolute)
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return nil
+			return err
+		}
+		for _, entry := range entries {
+			relative := entry.Name()
+			if relativeDirectory != "" {
+				relative = relativeDirectory + "/" + entry.Name()
 			}
-			return err
+			if err := checkPath(relative); err != nil {
+				return err
+			}
+			if excluded(relative) {
+				continue
+			}
+			path := filepath.Join(absolute, entry.Name())
+			info, err := s.workspace.FileSystem().Lstat(path)
+			if err != nil {
+				return err
+			}
+			if info.Mode()&fs.ModeSymlink != 0 {
+				continue
+			}
+			if info.IsDir() {
+				if err := walk(path, relative); err != nil {
+					return err
+				}
+				continue
+			}
+			if !info.Mode().IsRegular() {
+				continue
+			}
+			found = append(found, relative)
+			if len(found) > MaxEntries {
+				return ErrSnapshotTooLarge
+			}
 		}
-		if entry.IsDir() || !entry.Type().IsRegular() {
-			return nil
-		}
-		relative, err := filepath.Rel(s.workspace.Root(), path)
-		if err != nil {
-			return err
-		}
-		found = append(found, filepath.ToSlash(relative))
 		return nil
-	})
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	}
+	if err := walk(root, ""); err != nil {
 		return nil, err
 	}
+	sort.Strings(found)
 	return found, nil
 }
 

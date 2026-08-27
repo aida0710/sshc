@@ -36,7 +36,6 @@ func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 	}
 	service := remotesync.NewService(workspace,
 		storage.NewManager(workspace, time.Now, rand.Reader),
-		func() ([]string, error) { return []string{"config"}, nil },
 		func() string { return "2026-08-05T00:00:00Z" },
 		func() (string, error) { return "origin-test", nil },
 	)
@@ -80,7 +79,6 @@ func syncEngineWithVault(t *testing.T) (*echo.Echo, *remotesync.Service, *secret
 	}
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
 	service := remotesync.NewService(workspace, manager,
-		func() ([]string, error) { return []string{"config"}, nil },
 		func() string { return "2026-08-05T00:00:00Z" },
 		func() (string, error) { return "origin-test", nil },
 	)
@@ -191,7 +189,6 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	paths := make([]string, 0, len(files))
 	for name, contents := range files {
 		absolute := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(absolute), 0o700); err != nil {
@@ -200,7 +197,6 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 		if err := os.WriteFile(absolute, []byte(contents), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		paths = append(paths, name)
 	}
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {
@@ -209,7 +205,6 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 	service := remotesync.NewService(
 		workspace,
 		storage.NewManager(workspace, time.Now, rand.Reader),
-		func() ([]string, error) { return paths, nil },
 		func() string { return "2026-08-12T01:02:03Z" },
 		func() (string, error) { return "origin-api-test", nil },
 	)
@@ -776,7 +771,6 @@ func TestSettingsThatCannotReachTheBucketAreNotStored(t *testing.T) {
 	}
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
 	service := remotesync.NewService(workspace, manager,
-		func() ([]string, error) { return []string{"config"}, nil },
 		func() string { return "2026-08-05T00:00:00Z" },
 		func() (string, error) { return "origin-test", nil })
 	secrets := secret.NewService(workspace, manager, time.Now)

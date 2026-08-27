@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -101,34 +100,10 @@ func realInstallationAt(t *testing.T, objectPath string, files map[string]string
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := func() ([]string, error) {
-		var paths []string
-		err := filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() {
-				return nil
-			}
-			relative, err := filepath.Rel(root, name)
-			if err != nil {
-				return err
-			}
-			relative = filepath.ToSlash(relative)
-			// Collect自身が鍵と背景を歩く。それ以外は、本番のInclude graphと
-			// 同じく、その時点でworkspaceに存在するファイルを返す。
-			if strings.HasPrefix(relative, "keys/") || strings.HasPrefix(relative, "sshc/backgrounds/") {
-				return nil
-			}
-			paths = append(paths, relative)
-			return nil
-		})
-		return paths, err
-	}
 	counter := 0
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
 	service := remotesync.NewService(workspace,
-		manager, source,
+		manager,
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
 		func() (string, error) { counter++; return "origin-integration", nil })
 	service.OpenVault = func() ([]byte, error) { return nil, nil }

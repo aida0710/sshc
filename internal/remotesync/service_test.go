@@ -324,44 +324,8 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 	}
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
 
-	// ファイルソースは Include グラフが返すものであり、本物のそれは、グラフが到達
-	// するワークスペース内のすべてのファイルを、種類を問わず、返す。以前はここで
-	// sshc/ を落としていたので、除外のテストは、それらのファイルへ到達する唯一の
-	// 経路、すなわちそれを指定する Include 行を、見ることが
-	// できなかった。
-	// いま在るものを返す。与えられた map を返していたころは、pull が
-	// 置いたファイルをこのソースが知らないままだった。巡回はそれを「こちらには
-	// 無いもの」と数え、受け取った直後に空のスナップショットを押し返していた。
-	// 本物のソースは Include グラフであり、あちらも到達したものをその都度返す。
-	source := func() ([]string, error) {
-		var paths []string
-		err := filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() {
-				return nil
-			}
-			relative, err := filepath.Rel(root, name)
-			if err != nil {
-				return err
-			}
-			relative = filepath.ToSlash(relative)
-			// Include グラフが到達しないものは、ここでも返さない。鍵も
-			// 背景も、指定する Include 行を持たない。それぞれ Collect が
-			// 自分で歩いて集める。ここで返してしまうと、その巡回が消えても
-			// テストは緑のままになる。実際に一度そうなった。
-			if strings.HasPrefix(relative, "keys/") || strings.HasPrefix(relative, "sshc/backgrounds/") {
-				return nil
-			}
-			paths = append(paths, relative)
-			return nil
-		})
-		return paths, err
-	}
-
 	counter := 0
-	service := remotesync.NewService(workspace, manager, source,
+	service := remotesync.NewService(workspace, manager,
 		func() string { return "2026-08-05T00:00:00Z" },
 		func() (string, error) { counter++; return "origin-" + string(rune('A'+counter)), nil })
 	service.OpenVault = func() ([]byte, error) { return nil, nil }
@@ -528,9 +492,12 @@ func TestCollectRunsInsideStableSnapshotHook(t *testing.T) {
 func TestASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{
-		"config":               "Host bastion\r\n\tPort 2222   \n",
-		"keys/work/id_ed25519": "-----BEGIN OPENSSH PRIVATE KEY-----\n",
-		"sshc/metadata.json":   `{"schemaVersion":3}`,
+		"config":                  "Host bastion\r\n\tIdentityFile ~/.ssh/id_ed25519_server\n\tPort 2222   \n",
+		"id_ed25519_server":       "-----BEGIN OPENSSH PRIVATE KEY-----\nroot key\n",
+		"id_ed25519_server.pub":   "ssh-ed25519 public-key server\n",
+		"keys/work/id_ed25519":    "-----BEGIN OPENSSH PRIVATE KEY-----\nnested key\n",
+		"custom/nested/arbitrary": "not referenced by the Include graph\n",
+		"sshc/metadata.json":      `{"schemaVersion":3}`,
 	})
 	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatalf("Push = %v", err)
@@ -549,11 +516,50 @@ func TestASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	}
 
 	// CRLF と末尾の空白も含め、1 バイト違わない。
-	if got := second.read(t, "config"); got != "Host bastion\r\n\tPort 2222   \n" {
+	if got := second.read(t, "config"); got != "Host bastion\r\n\tIdentityFile ~/.ssh/id_ed25519_server\n\tPort 2222   \n" {
 		t.Errorf("config = %q", got)
 	}
-	if got := second.read(t, "keys/work/id_ed25519"); !strings.HasPrefix(got, "-----BEGIN") {
-		t.Errorf("the private key did not arrive: %q", got)
+	for path, want := range map[string]string{
+		"id_ed25519_server":       "-----BEGIN OPENSSH PRIVATE KEY-----\nroot key\n",
+		"id_ed25519_server.pub":   "ssh-ed25519 public-key server\n",
+		"keys/work/id_ed25519":    "-----BEGIN OPENSSH PRIVATE KEY-----\nnested key\n",
+		"custom/nested/arbitrary": "not referenced by the Include graph\n",
+	} {
+		if got := second.read(t, path); got != want {
+			t.Errorf("%s = %q, want %q", path, got, want)
+		}
+	}
+}
+
+func TestCollectDoesNotFollowSymbolicLinks(t *testing.T) {
+	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host bastion\n"})
+	outsideDirectory := t.TempDir()
+	outside := filepath.Join(outsideDirectory, "outside-private-key")
+	if err := os.WriteFile(outside, []byte("must not travel"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(installation.home, ".ssh", "linked-private-key")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symbolic links are not available: %v", err)
+	}
+	linkedDirectory := filepath.Join(installation.home, ".ssh", "linked-directory")
+	if err := os.Symlink(outsideDirectory, linkedDirectory); err != nil {
+		t.Fatal(err)
+	}
+	manifest, contents, err := installation.service.Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range manifest.Files {
+		if entry.Path == "linked-private-key" || strings.HasPrefix(entry.Path, "linked-directory/") {
+			t.Fatal("a symbolic link was added to the snapshot")
+		}
+	}
+	if _, ok := contents["linked-private-key"]; ok {
+		t.Fatal("a symbolic link target was read into the snapshot")
+	}
+	if _, ok := contents["linked-directory/outside-private-key"]; ok {
+		t.Fatal("a symbolic directory target was read into the snapshot")
 	}
 }
 
@@ -788,7 +794,6 @@ func TestAnUnconfiguredServiceRefusesRatherThanPanicking(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := remotesync.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader),
-		func() ([]string, error) { return nil, nil },
 		func() string { return "" }, func() (string, error) { return "o", nil })
 
 	if service.Configured() {
@@ -1021,19 +1026,23 @@ func TestDirectionAcceptsOnlyTheThreeCurrentValues(t *testing.T) {
 //
 // 暗号化された設定は、まさにこのバケットのアクセスキーを保持している。したがって、
 // それを運ぶスナップショットは、スナップショットをひとつ入手した者が以後のすべてを
-// 取得できることを意味する。これらは構造上除外されている、Collect は自分が取るものを
-// 列挙する、し、その一覧にワイルドカードが生えたら気づくのがこのテストである。
+// 取得できることを意味する。Collect は ~/.ssh 全体を歩くため、除外契約に漏れが
+// 生じたら気づくのがこのテストである。
 func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{
-		// エントリファイル自身が、暗号化された設定を指定している。これが、除外が
-		// この場合も除外されなければならない。ファイルソースは Include グラフであり、
-		// グラフは設定が指すものを取ってくるからだ。
 		"config":                       "Include sshc/sync-settings\nHost bastion\n",
 		"sshc/secrets":                 "sealed vault bytes",
 		"sshc/sync-settings":           "sealed access key",
+		"SSHC/SYNC-SETTINGS":           "case-variant sealed access key",
 		"sshc/cli":                     `{"url":"http://127.0.0.1:1","secret":"s"}`,
+		"sshc/journal/entry":           "machine-local journal",
+		"sshc/backups/entry":           "machine-local backup",
+		"sshc/history/entry":           "machine-local history",
+		"sshc/trash/entry":             "machine-local trash",
 		"sshc/recent-connections.json": `{"schemaVersion":1,"entries":[]}`,
+		"sshc/workspaces.json":         `{"schemaVersion":1}`,
 		"sshc/mutation.lock":           "runtime lock state",
+		"connections/.sshc-staged":     "transaction temporary file",
 	})
 
 	installation.service.OpenVault = func() ([]byte, error) { return []byte(`{"schemaVersion":4}`), nil }
@@ -1056,9 +1065,16 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	}
 	for _, excluded := range []string{
 		secret.SettingsPath,
+		"SSHC/SYNC-SETTINGS",
 		"sshc/cli",
+		"sshc/journal/entry",
+		"sshc/backups/entry",
+		"sshc/history/entry",
+		"sshc/trash/entry",
 		"sshc/recent-connections.json",
+		"sshc/workspaces.json",
 		"sshc/mutation.lock",
+		"connections/.sshc-staged",
 	} {
 		if packed[excluded] {
 			t.Errorf("the snapshot carries %s: %v", excluded, packed)
@@ -1116,7 +1132,7 @@ func TestCheckRefusesABucketThatWillNotAnswer(t *testing.T) {
 }
 
 func TestCheckSaysWhenNothingIsConfigured(t *testing.T) {
-	service := remotesync.NewService(nil, nil, nil, nil, nil)
+	service := remotesync.NewService(nil, nil, nil, nil)
 	if err := service.Check(context.Background()); !errors.Is(err, remotesync.ErrNotConfigured) {
 		t.Errorf("Check with no configuration = %v, want ErrNotConfigured", err)
 	}
@@ -2002,7 +2018,7 @@ func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 	releaseFirst := make(chan struct{})
 	var calls int
 	var callsMu sync.Mutex
-	files := func() ([]string, error) {
+	stableSnapshot := func(snapshot func() error) error {
 		callsMu.Lock()
 		calls++
 		call := calls
@@ -2014,13 +2030,14 @@ func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 		case 2:
 			close(secondEntered)
 		}
-		return nil, nil
+		return snapshot()
 	}
-	service := remotesync.NewService(machine.workspace, machine.manager, files,
+	service := remotesync.NewService(machine.workspace, machine.manager,
 		func() string { return "2026-08-25T02:00:00Z" },
 		func() (string, error) { return "serialized-origin", nil })
 	service.OpenVault = func() ([]byte, error) { return nil, nil }
 	service.SealVault = func(document []byte) ([]byte, error) { return document, nil }
+	service.StableSnapshot = stableSnapshot
 	if err := service.Configure(machine.config, machine.creds, machine.client); err != nil {
 		t.Fatal(err)
 	}
@@ -2067,16 +2084,17 @@ func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
 	collecting := make(chan struct{})
 	resume := make(chan struct{})
 	var once sync.Once
-	files := func() ([]string, error) {
+	stableSnapshot := func(snapshot func() error) error {
 		once.Do(func() { close(collecting) })
 		<-resume
-		return nil, nil
+		return snapshot()
 	}
-	service := remotesync.NewService(workspace, manager, files,
+	service := remotesync.NewService(workspace, manager,
 		func() string { return "2026-08-05T00:00:00Z" },
 		func() (string, error) { return "origin-A", nil })
 	service.OpenVault = func() ([]byte, error) { return nil, nil }
 	service.SealVault = func(document []byte) ([]byte, error) { return document, nil }
+	service.StableSnapshot = stableSnapshot
 
 	oldBucket, newBucket := &fakeBucket{}, &fakeBucket{}
 	oldServer := httptest.NewTLSServer(oldBucket.handler())

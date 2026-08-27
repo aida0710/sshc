@@ -347,7 +347,7 @@ func newUnconfiguredSyncVaultServer(
 	if err := passwords.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	syncService := remotesync.NewService(workspace, manager, nil, nil, nil)
+	syncService := remotesync.NewService(workspace, manager, nil, nil)
 	sessions, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x68}, 96)))
 	if err != nil {
 		t.Fatal(err)
