@@ -218,6 +218,9 @@ test("draws one separator above the version in the mobile drawer", async ({ page
     });
   });
   await openApplication(page, installation);
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-mobile-home-dark.png`, fullPage: true });
+  }
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
 
   const navigation = page.getByRole("navigation", { name: "Primary" });
@@ -246,6 +249,9 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   expect(terminalBox).not.toBeNull();
   if (homeBox !== null && terminalBox !== null) {
     expect(terminalBox.y + terminalBox.height - homeBox.y).toBeLessThanOrEqual(164);
+  }
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-mobile-drawer-dark.png`, fullPage: true });
   }
 });
 

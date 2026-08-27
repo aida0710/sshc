@@ -227,8 +227,8 @@ export function ConnectionTree({
                 onDragEnd={() => setDragging(null)}
                 className={`w-full rounded-lg px-3 py-2.5 text-left text-sm transition-all ${
                   active
-                    ? "bg-card text-ink shadow-sm ring-1 ring-control-line"
-                    : "text-ink-muted hover:bg-card hover:text-ink"
+                    ? "bg-select-fill text-ink shadow-sm"
+                    : "text-ink-muted hover:bg-surface hover:text-ink"
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-1.5">
