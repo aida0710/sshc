@@ -734,6 +734,12 @@ func TestReattachingReplaysTheScrollbackAndKeepsTheSessionAlive(t *testing.T) {
 	if !ok || !session.Live() {
 		t.Fatal("closing the socket killed the session")
 	}
+	// feed は擬似 PTY の読み取り待ちへ出力を渡すだけなので、pump がそれを
+	// scrollback へ格納する前に再接続するとライブ出力として次のフレームへ届く。
+	// このテストは「切断中に蓄えた scrollback の再生」を検査するため、格納を待つ。
+	waitUntil(t, func() bool {
+		return strings.Contains(string(session.Snapshot()), "while detached")
+	})
 
 	// 新しいチケットで繋ぎ直す。リロードしたページにはチケットが残っていない。
 	fresh := fixture.newTicket(t, id)
