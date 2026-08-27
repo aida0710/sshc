@@ -364,7 +364,9 @@ func (s *Session) forceClose() error {
 	}
 	forcer, ok := process.(forceCloser)
 	if !ok {
-		return nil
+		// 外部実装との互換用fallbackである。sshcが生成するProcessはすべて
+		// ForceCloseを持つため、実運用ではこの経路へ入らない。
+		return process.Hangup()
 	}
 	return forcer.ForceClose()
 }

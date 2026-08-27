@@ -387,6 +387,7 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
     delete:
       operationId: closeTerminalSession
+      description: Force-stops a live SSH or local process and removes the session from the returned list in one request.
       parameters:
         - name: id
           in: path
@@ -400,6 +401,7 @@ paths:
               schema: { $ref: "#/components/schemas/TerminalSessionList" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/sync:
     get:
       operationId: getSyncStatus
