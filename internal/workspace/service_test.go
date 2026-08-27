@@ -23,7 +23,9 @@ func TestServiceCreatesUpdatesRestoresAndDeletesAWorkspace(t *testing.T) {
 
 	created, err := service.Create(workspace.Definition{
 		Name: "Production", Layout: split(workspace.Horizontal,
-			pane("web-pane", "web"), pane("db-pane", "database")),
+			pane("web-pane", "web"), workspace.Node{Pane: &workspace.Pane{
+				ID: "local-pane", Alias: "localhost", Kind: workspace.PaneShell,
+			}}),
 		FocusedPaneID: "web-pane",
 	})
 	if err != nil {
@@ -37,7 +39,7 @@ func TestServiceCreatesUpdatesRestoresAndDeletesAWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Panes) != 2 || plan.Panes[0].Alias != "web" || plan.Panes[1].Alias != "database" {
+	if len(plan.Panes) != 2 || plan.Panes[0].Alias != "web" || plan.Panes[0].Kind != workspace.PaneSSH || plan.Panes[1].Alias != "localhost" || plan.Panes[1].Kind != workspace.PaneShell {
 		t.Fatalf("restore panes = %#v", plan.Panes)
 	}
 	for _, reconnect := range plan.Panes {

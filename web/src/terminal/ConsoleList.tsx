@@ -159,6 +159,31 @@ export function ConsoleList({
               : running
                 ? t(session.state === "connecting" ? "terminal.connecting" : "terminal.running")
               : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
+            const marker = (
+              <span
+                aria-hidden="true"
+                className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
+                  session.state === "reconnecting" || session.state === "connecting"
+                    ? "bg-notice-ink"
+                    : running ? "bg-live" : "bg-ink-faint"
+                }`}
+              />
+            );
+            const details = (
+              <>
+                <p className="truncate text-xs text-ink-faint">
+                  {t("terminal.rowDetail", { status, destination })}
+                </p>
+                {(session.forwards ?? []).map((forward) => (
+                  <p
+                    key={`${forward.kind}:${forward.listen}:${forward.to}`}
+                    className={`truncate text-xs ${forward.problem === "" ? "text-ink-faint" : "text-notice-ink"}`}
+                  >
+                    {forward.problem === "" ? describeForward(t, forward) : forward.problem}
+                  </p>
+                ))}
+              </>
+            );
             return (
               <li
                 key={session.id}
@@ -192,16 +217,10 @@ export function ConsoleList({
                   }`}
                 >
 
-                  <span
-                    aria-hidden="true"
-                    className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
-                      session.state === "reconnecting" || session.state === "connecting"
-                        ? "bg-notice-ink"
-                        : running ? "bg-live" : "bg-ink-faint"
-                    }`}
-                  />
-                  <div className="min-w-0 grow">
-                    {renaming === session.id ? (
+                  {renaming === session.id ? (
+                    <>
+                      {marker}
+                      <div className="min-w-0 grow">
                       <input
                         autoFocus
                         aria-label={t("terminal.renameLabel", { title: session.title })}
@@ -214,29 +233,24 @@ export function ConsoleList({
                         }}
                         className="w-full rounded border border-accent bg-card px-1 py-0.5 text-sm text-ink"
                       />
-                    ) : (
-                      <button
-                        type="button"
-                        aria-current={session.id === selected ? "true" : undefined}
-                        onClick={() => onSelect(session.id)}
-                        className="block w-full truncate text-left text-sm text-ink"
-                      >
-                        {session.title}
-                      </button>
-                    )}
-                    <p className="truncate text-xs text-ink-faint">
-                      {t("terminal.rowDetail", { status, destination })}
-                    </p>
-
-                    {(session.forwards ?? []).map((forward) => (
-                      <p
-                        key={`${forward.kind}:${forward.listen}:${forward.to}`}
-                        className={`truncate text-xs ${forward.problem === "" ? "text-ink-faint" : "text-notice-ink"}`}
-                      >
-                        {forward.problem === "" ? describeForward(t, forward) : forward.problem}
-                      </p>
-                    ))}
-                  </div>
+                        {details}
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={session.title}
+                      aria-current={session.id === selected ? "true" : undefined}
+                      onClick={() => onSelect(session.id)}
+                      className="flex min-w-0 grow items-start gap-2 text-left"
+                    >
+                      {marker}
+                      <span className="min-w-0 grow">
+                        <span className="block truncate text-sm text-ink">{session.title}</span>
+                        {details}
+                      </span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     aria-label={t("terminal.rowMenu", { title: session.title })}

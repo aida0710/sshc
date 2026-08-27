@@ -60,11 +60,39 @@ func TestStoreRejectsMalformedPaneTrees(t *testing.T) {
 func TestAliasesFollowTheLayoutAndRemoveDuplicates(t *testing.T) {
 	stored := workspace.Workspace{Layout: split(workspace.Horizontal,
 		pane("one", "bastion"),
-		split(workspace.Vertical, pane("two", "database"), pane("three", "bastion")),
+		split(workspace.Vertical, pane("two", "database"), workspace.Node{Pane: &workspace.Pane{ID: "three", Alias: "localhost", Kind: workspace.PaneShell}}),
 	)}
 	aliases := stored.Aliases()
 	if len(aliases) != 2 || aliases[0] != "bastion" || aliases[1] != "database" {
 		t.Fatalf("Aliases = %#v", aliases)
+	}
+}
+
+func TestStoreAcceptsLocalShellPaneAndRejectsItsInvalidForms(t *testing.T) {
+	store := newStore(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	valid := workspace.Workspace{
+		ID: "workspace-local", Name: "Local", Layout: workspace.Node{Pane: &workspace.Pane{
+			ID: "local-pane", Alias: "localhost", Kind: workspace.PaneShell,
+		}}, FocusedPaneID: "local-pane", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := store.Save(valid); err != nil {
+		t.Fatalf("Save local pane = %v", err)
+	}
+
+	for name, test := range map[string]struct {
+		kind  workspace.PaneKind
+		alias string
+	}{
+		"unknown kind":           {kind: "serial", alias: "localhost"},
+		"remote alias for shell": {kind: workspace.PaneShell, alias: "bastion"},
+	} {
+		candidate := valid
+		candidate.ID = name
+		candidate.Layout = workspace.Node{Pane: &workspace.Pane{ID: "local-pane", Alias: test.alias, Kind: test.kind}}
+		if err := store.Save(candidate); !errors.Is(err, workspace.ErrInvalidWorkspace) {
+			t.Fatalf("Save(%s) = %v, want ErrInvalidWorkspace", name, err)
+		}
 	}
 }
 

@@ -23,6 +23,7 @@ const ReconnectRequired ReconnectState = "reconnect_required"
 type PaneReconnect struct {
 	PaneID string         `json:"paneId"`
 	Alias  string         `json:"alias"`
+	Kind   PaneKind       `json:"kind"`
 	State  ReconnectState `json:"state"`
 }
 
@@ -103,7 +104,7 @@ func (service *Service) Restore(id string) (RestorePlan, error) {
 	plan := RestorePlan{Workspace: stored}
 	walkPanes(stored.Layout, func(pane Pane) {
 		plan.Panes = append(plan.Panes, PaneReconnect{
-			PaneID: pane.ID, Alias: pane.Alias, State: ReconnectRequired,
+			PaneID: pane.ID, Alias: pane.Alias, Kind: pane.EffectiveKind(), State: ReconnectRequired,
 		})
 	})
 	return plan, nil

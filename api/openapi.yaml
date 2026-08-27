@@ -3838,7 +3838,10 @@ components:
       type: object
       additionalProperties: false
       required: [id, alias]
-      properties: { id: { type: string }, alias: { type: string } }
+      properties:
+        id: { type: string }
+        alias: { type: string }
+        kind: { type: string, enum: [ssh, shell], description: Omitted by legacy SSH-only workspaces and interpreted as ssh. }
     WorkspaceSplit:
       type: object
       additionalProperties: false
@@ -3879,10 +3882,11 @@ components:
     WorkspaceReconnectPane:
       type: object
       additionalProperties: false
-      required: [paneId, alias, state]
+      required: [paneId, alias, kind, state]
       properties:
         paneId: { type: string }
         alias: { type: string }
+        kind: { type: string, enum: [ssh, shell] }
         state: { type: string, enum: [reconnect_required] }
     WorkspaceRestorePlan:
       type: object

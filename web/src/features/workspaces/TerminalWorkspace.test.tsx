@@ -8,6 +8,9 @@ import { TerminalWorkspace } from "./TerminalWorkspace";
 const workspace = vi.hoisted(() => ({
   list: vi.fn().mockResolvedValue([]),
   restore: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
 }));
 const commandCenter = vi.hoisted(() => ({ targets: vi.fn() }));
 vi.mock("./api", () => ({ workspaceApi: workspace }));
@@ -33,6 +36,19 @@ const secondary: TerminalSession = {
   alias: "database",
   title: "Database terminal",
 };
+const localPrimary: TerminalSession = {
+  id: "local-primary",
+  kind: "shell",
+  title: "zsh",
+  startedAt: "2026-08-24T09:02:00Z",
+  state: "connected",
+  problem: "",
+};
+const localSecondary: TerminalSession = {
+  ...localPrimary,
+  id: "local-secondary",
+  title: "bash",
+};
 
 function Harness() {
   const [sessions, setSessions] = useState<TerminalSession[]>([primary, secondary]);
@@ -54,6 +70,7 @@ function Harness() {
       setSessions((current) => current.some((session) => session.id === duplicate.id) ? current : [...current, duplicate]);
       return duplicate;
     }}
+    onOpenShell={vi.fn()}
     renderTerminal={(session) => <div>{session.title}</div>}
   />;
 }
@@ -96,6 +113,7 @@ describe("TerminalWorkspace pane movement", () => {
         activeSessionId={null}
         onActive={() => undefined}
         onOpenAlias={vi.fn()}
+        onOpenShell={vi.fn()}
         renderTerminal={() => null}
       />,
     );
@@ -150,6 +168,7 @@ describe("TerminalWorkspace pane movement", () => {
         activeSessionId={active}
         onActive={setActive}
         onOpenAlias={vi.fn()}
+        onOpenShell={vi.fn()}
         onLiveWorkspaceChange={changed}
         renderTerminal={(session) => <div>{session.title}</div>}
       />;
@@ -180,6 +199,49 @@ describe("TerminalWorkspace pane movement", () => {
     })));
   });
 
+  it("splits local shells and saves them as restorable workspace panes", async () => {
+    workspace.create.mockResolvedValue({
+      id: "local-workspace",
+      name: "Local pair",
+      layout: { pane: { id: "saved", alias: "localhost", kind: "shell" } },
+      focusedPaneId: "saved",
+      createdAt: "2026-08-24T10:00:00Z",
+      updatedAt: "2026-08-24T10:00:00Z",
+    });
+    workspace.list.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    vi.spyOn(window, "prompt").mockReturnValue("Local pair");
+
+    function LocalHarness() {
+      const [active, setActive] = useState(localPrimary.id);
+      return <TerminalWorkspace
+        sessions={[localPrimary, localSecondary]}
+        activeSessionId={active}
+        onActive={setActive}
+        onOpenAlias={vi.fn()}
+        onOpenShell={vi.fn()}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+
+    const { container } = render(<LocalHarness />);
+    dockConnectedSession(container, localSecondary.id);
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+    expect(screen.getAllByText("zsh")).not.toHaveLength(0);
+    expect(screen.getAllByText("bash")).not.toHaveLength(0);
+
+    await userEvent.click(screen.getByText("Saved layouts", { selector: "summary" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save with a name" }));
+    await waitFor(() => expect(workspace.create).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Local pair",
+      layout: expect.objectContaining({
+        split: expect.objectContaining({
+          first: { pane: expect.objectContaining({ alias: "localhost", kind: "shell" }) },
+          second: { pane: expect.objectContaining({ alias: "localhost", kind: "shell" }) },
+        }),
+      }),
+    })));
+  });
+
   it("rejects a fifth terminal while keeping the four-pane layout", async () => {
     const extra = [
       { ...primary, id: "logs-session", alias: "logs", title: "Logs terminal" },
@@ -193,6 +255,7 @@ describe("TerminalWorkspace pane movement", () => {
         activeSessionId={active}
         onActive={setActive}
         onOpenAlias={vi.fn()}
+        onOpenShell={vi.fn()}
         renderTerminal={(session) => <div>{session.title}</div>}
       />;
     }
@@ -235,6 +298,7 @@ describe("TerminalWorkspace pane movement", () => {
           activeSessionId={active}
           onActive={setActive}
           onOpenAlias={vi.fn()}
+          onOpenShell={vi.fn()}
           renderTerminal={(session) => <div>{session.title}</div>}
         />;
       }
@@ -275,6 +339,7 @@ describe("TerminalWorkspace pane movement", () => {
         activeSessionId={active}
         onActive={setActive}
         onOpenAlias={vi.fn()}
+        onOpenShell={vi.fn()}
         renderTerminal={(session) => <div>{session.title}</div>}
       />;
     }
@@ -328,6 +393,7 @@ describe("TerminalWorkspace pane movement", () => {
         activeSessionId={active}
         onActive={setActive}
         onOpenAlias={vi.fn()}
+        onOpenShell={vi.fn()}
         renderTerminal={(session) => <div>{session.title}</div>}
       />;
     }
@@ -358,6 +424,7 @@ describe("TerminalWorkspace pane movement", () => {
       activeSessionId={primary.id}
       onActive={() => undefined}
       onOpenAlias={vi.fn()}
+      onOpenShell={vi.fn()}
       renderTerminal={() => null}
     />);
 
@@ -395,6 +462,7 @@ describe("TerminalWorkspace pane movement", () => {
           if (session !== null) setSessions((current) => [...current, session]);
           return session;
         }}
+        onOpenShell={vi.fn()}
         restoreRequest={{ id: "workspace-1", sequence }}
         renderTerminal={(session) => <div>{session.title}</div>}
       />;
@@ -411,5 +479,39 @@ describe("TerminalWorkspace pane movement", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     expect(workspace.restore).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("recreates local panes through the local shell entry point", async () => {
+    workspace.restore.mockResolvedValue({
+      id: "local-workspace",
+      name: "Local pair",
+      layout: {
+        split: {
+          direction: "horizontal",
+          ratio: 50,
+          first: { pane: { id: "local-a", alias: "localhost", kind: "shell" } },
+          second: { pane: { id: "local-b", alias: "localhost", kind: "shell" } },
+        },
+      },
+      focusedPaneId: "local-a",
+      createdAt: "2026-08-24T10:00:00Z",
+      updatedAt: "2026-08-24T11:00:00Z",
+    });
+    const onOpenAlias = vi.fn();
+    const opened = [localPrimary, localSecondary];
+    const onOpenShell = vi.fn(async () => opened.shift() ?? null);
+
+    render(<TerminalWorkspace
+      sessions={[]}
+      activeSessionId={null}
+      onActive={vi.fn()}
+      onOpenAlias={onOpenAlias}
+      onOpenShell={onOpenShell}
+      restoreRequest={{ id: "local-workspace", sequence: 1 }}
+      renderTerminal={() => null}
+    />);
+
+    await waitFor(() => expect(onOpenShell).toHaveBeenCalledTimes(2));
+    expect(onOpenAlias).not.toHaveBeenCalled();
   });
 });

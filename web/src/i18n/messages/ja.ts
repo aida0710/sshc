@@ -158,7 +158,7 @@ export const ja = {
   "workspace.maxPanes": "1つの画面に配置できるターミナルは最大{count}台です。",
   "workspace.namePrompt": "保存レイアウト名",
   "workspace.savedLayouts": "保存レイアウト",
-  "workspace.savedDescription": "接続先と分割比率を名前付きで保存し、後から新しいSSH接続として再現します。1つのレイアウトは最大{count}台です。",
+  "workspace.savedDescription": "SSH接続先・ローカルシェル・分割比率を名前付きで保存し、後から新しいセッションとして再現します。1つのレイアウトは最大{count}台です。",
   "workspace.broadcastCommand": "コマンドを一括送信…",
   "workspace.broadcastHeading": "接続中のターミナルへ送信",
   "workspace.broadcastDescription": "コマンドまたはスニペットを確認してから、接続中の各ターミナルの現在の入力先へ送信します。",

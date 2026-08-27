@@ -6,6 +6,7 @@ export const MAX_WORKSPACE_PANES = 4;
 export type StoredPane = {
   id: string;
   alias: string;
+  kind?: "shell";
 };
 
 export type StoredNode =
@@ -73,7 +74,7 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
     case "focus":
       return paneIDs(state.root).includes(action.paneId) ? { ...state, focusedPaneId: action.paneId } : state;
     case "split": {
-      if (paneIDs(state.root).length >= MAX_WORKSPACE_PANES || paneIDs(state.root).includes(action.pane.id) || action.pane.id === "" || action.pane.alias === "") return state;
+      if (paneIDs(state.root).length >= MAX_WORKSPACE_PANES || paneIDs(state.root).includes(action.pane.id) || !validPane(action.pane)) return state;
       const root = replacePane(state.root, action.paneId, (current) => ({
         split: {
           direction: action.direction,
@@ -86,7 +87,7 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
       return { root, focusedPaneId: action.pane.id };
     }
     case "dock-pane": {
-      if (action.pane.id === "" || action.pane.alias === "" || action.pane.id === action.targetPaneId) return state;
+      if (!validPane(action.pane) || action.pane.id === action.targetPaneId) return state;
       const existing = runtimePane(state.root, action.pane.id);
       if (existing === undefined && paneIDs(state.root).length >= MAX_WORKSPACE_PANES) return state;
       const withoutSource = existing === undefined ? state.root : removePane(state.root, action.pane.id);
@@ -136,12 +137,13 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
       };
     }
     case "connection-starting":
-      return updatePaneState(state, action.paneId, (pane) => ({ id: pane.id, alias: pane.alias, state: "connecting" }));
+      return updatePaneState(state, action.paneId, (pane) => ({ id: pane.id, alias: pane.alias, ...(pane.kind === undefined ? {} : { kind: pane.kind }), state: "connecting" }));
     case "connection-started":
       if (action.sessionId === "") return state;
       return updatePaneState(state, action.paneId, (pane) => ({
         id: pane.id,
         alias: pane.alias,
+        ...(pane.kind === undefined ? {} : { kind: pane.kind }),
         state: "connected",
         sessionId: action.sessionId,
       }));
@@ -149,13 +151,14 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
       return updatePaneState(state, action.paneId, (pane) => ({
         id: pane.id,
         alias: pane.alias,
+        ...(pane.kind === undefined ? {} : { kind: pane.kind }),
         state: "failed",
         problem: action.problem,
       }));
     case "engine-restarted":
       return {
         ...state,
-        root: mapRuntimePanes(state.root, (pane) => ({ id: pane.id, alias: pane.alias, state: "reconnect_required" })),
+        root: mapRuntimePanes(state.root, (pane) => ({ id: pane.id, alias: pane.alias, ...(pane.kind === undefined ? {} : { kind: pane.kind }), state: "reconnect_required" })),
       };
   }
 }
@@ -230,7 +233,7 @@ function hydrateNode(root: StoredNode): RuntimeNode {
 }
 
 function stripRuntime(root: RuntimeNode): StoredNode {
-  if (root.pane !== undefined) return { pane: { id: root.pane.id, alias: root.pane.alias } };
+  if (root.pane !== undefined) return { pane: { id: root.pane.id, alias: root.pane.alias, ...(root.pane.kind === undefined ? {} : { kind: root.pane.kind }) } };
   return {
     split: {
       direction: root.split.direction,
@@ -239,6 +242,10 @@ function stripRuntime(root: RuntimeNode): StoredNode {
       second: stripRuntime(root.split.second),
     },
   };
+}
+
+function validPane(pane: StoredPane): boolean {
+  return pane.id !== "" && pane.alias !== "" && (pane.kind === undefined || pane.kind === "shell");
 }
 
 function mapRuntimePanes(root: RuntimeNode, map: (pane: RuntimePane) => RuntimePane): RuntimeNode {
