@@ -409,7 +409,7 @@ func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {
 	return session, nil
 }
 
-// Close は、生存中なら子プロセスに SIGHUP を送り、終了済みなら一覧から消す。
+// Rename はセッションの表示名を変える。
 func (r *Registry) Rename(id, title string) error {
 	session, ok := r.Lookup(id)
 	if !ok {
@@ -418,14 +418,18 @@ func (r *Registry) Rename(id, title string) error {
 	return session.Rename(title)
 }
 
+// Close は、利用者が閉じると決めたセッションを強制停止し、一覧から消す。
 func (r *Registry) Close(id string) error {
 	session, ok := r.Lookup(id)
 	if !ok {
 		return ErrNotFound
 	}
+	session.Discard()
+	session.closeStreams()
 	if session.Live() {
-		session.Discard()
-		return session.Hangup()
+		if err := session.forceClose(); err != nil {
+			return err
+		}
 	}
 	r.mutex.Lock()
 	defer r.mutex.Unlock()

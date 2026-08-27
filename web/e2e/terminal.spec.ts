@@ -354,6 +354,25 @@ test("closes every open connection from the settings screen", async ({ page, ins
   await expect(rows).toHaveCount(0);
 });
 
+test("force closes a live local shell with one confirmation", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  await expect(rows).toHaveCount(1);
+
+  await panel.getByRole("button", { name: /^Close / }).click();
+  const closeResponse = page.waitForResponse((response) => {
+    const request = response.request();
+    return request.method() === "DELETE" && /\/api\/v1\/terminal\/sessions\/[^/]+$/.test(new URL(response.url()).pathname);
+  });
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  expect((await closeResponse).ok()).toBe(true);
+
+  await expect(rows).toHaveCount(0);
+});
+
 test("moves to its own screen and leaves the connection detail alone", async ({ page, installation }) => {
   await installation.write("conf.d/20-detail.conf", ["Host detail-host", "\tHostName 127.0.0.1", ""].join("\n"));
   await openApplication(page, installation);
