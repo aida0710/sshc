@@ -62,7 +62,7 @@ describe("ConnectionTree", () => {
     );
 
     const tree = screen.getByRole("navigation", { name: "Connections" });
-    expect(within(tree).getByRole("group", { name: "Arrange connections by" })).toBeInTheDocument();
+    expect(within(tree).getByRole("group", { name: "Arrange connections by" })).toHaveClass("rounded-md", "overflow-hidden");
     expect(within(tree).queryByRole("group", { name: "Browse connections by" })).not.toBeInTheDocument();
     expect(within(tree).getByRole("heading", { name: "home" })).toBeInTheDocument();
     expect(within(tree).getByRole("heading", { name: "eu" })).toBeInTheDocument();
