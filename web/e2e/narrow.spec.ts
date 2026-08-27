@@ -71,6 +71,40 @@ async function expectNoHorizontalOverflow(page: import("@playwright/test").Page,
   ).toBeLessThanOrEqual(0);
 }
 
+test("moves from the compact connection browser to detail at 360 pixels", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, installation);
+  await openSectionThroughDrawer(page, "Connections");
+  const browser = page.getByRole("navigation", { name: "Connections" });
+  await expect(browser.getByRole("group", { name: "Arrange connections by" })).toBeVisible();
+  await expectNoHorizontalOverflow(page, "Connections browser");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.waitForTimeout(350);
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-management-mobile-list.png`,
+      fullPage: true,
+    });
+  }
+
+  await browser.getByRole("button", { name: "bastion" }).click();
+  await expect(browser).toBeHidden();
+  await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "All connections" })).toBeVisible();
+  await expectNoHorizontalOverflow(page, "Connection detail");
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-management-mobile-detail.png`,
+      fullPage: true,
+    });
+  }
+
+  await page.getByRole("button", { name: "All connections" }).click();
+  await expect(browser).toBeVisible();
+});
+
 test("keeps password setup inside 360 pixels without a decorative icon", async ({
   page,
   installation,
