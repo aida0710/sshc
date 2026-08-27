@@ -9,14 +9,14 @@
   --ui-card: #f7f8f9;
   --ui-surface: #e2e7ea;
   --ui-surface-subtle: #eef1f3;
-  --ui-line: #c8cfd4;
+  --ui-line: #aeb8bf;
   --ui-hairline: #d9dee2;
   --ui-control: #f8f9fa;
-  --ui-control-line: #aeb8bf;
+  --ui-control-line: #737f87;
   --ui-select-fill: #dbe1e5;
   --ui-ink: #20262c;
-  --ui-ink-muted: #5e6971;
-  --ui-ink-faint: #808b93;
+  --ui-ink-muted: #4f5960;
+  --ui-ink-faint: #5e6971;
   --ui-accent: #596671;
   --ui-accent-ink: #f7f8f9;
   --ui-notice: #fff6df;
@@ -66,14 +66,14 @@
   --ui-card: #171b1f;
   --ui-surface: #1c2227;
   --ui-surface-subtle: #111518;
-  --ui-line: #2c3338;
+  --ui-line: #424b51;
   --ui-hairline: #22282d;
   --ui-control: #101417;
-  --ui-control-line: #424b51;
+  --ui-control-line: #68747d;
   --ui-select-fill: #273039;
   --ui-ink: #d8dfe4;
   --ui-ink-muted: #9ca7af;
-  --ui-ink-faint: #687680;
+  --ui-ink-faint: #78868f;
   --ui-accent: #a8b4bd;
   --ui-accent-ink: #101417;
   --ui-notice: rgb(255 159 10 / 0.13);
@@ -149,7 +149,7 @@
 }
 
 .sshc-card {
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  box-shadow: inset 0 0 0 1px var(--ui-control-line);
 }
 
 .sshc-skeleton {

@@ -43,6 +43,47 @@ for (const appearance of ["light", "dark"] as const) {
       expect(painted?.colour).not.toBe(painted?.background);
       expect(painted?.colour).not.toBe("rgba(0, 0, 0, 0)");
     }
+
+    if (process.env.SSHC_VISUAL_DIR !== undefined) {
+      await page.screenshot({
+        path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.1-appearance-${appearance}.png`,
+        fullPage: true,
+      });
+    }
+  });
+
+  test(`structural borders and small supporting text keep their contrast in ${appearance}`, async ({ page, installation }) => {
+    await openApplication(page, installation);
+    await page.getByLabel("Appearance").selectOption(appearance);
+
+    const contrast = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const rgb = (name: string) => {
+        const value = root.getPropertyValue(name).trim();
+        const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value);
+        if (match === null) throw new Error(`unexpected colour ${name}: ${value}`);
+        return match.slice(1).map((part) => Number.parseInt(part, 16) / 255);
+      };
+      const luminance = (colour: number[]) => {
+        const linear = colour.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+        return 0.2126 * linear[0]! + 0.7152 * linear[1]! + 0.0722 * linear[2]!;
+      };
+      const ratio = (left: string, right: string) => {
+        const values = [luminance(rgb(left)), luminance(rgb(right))].sort((a, b) => b - a);
+        return (values[0]! + 0.05) / (values[1]! + 0.05);
+      };
+      return {
+        cardBorder: ratio("--ui-control-line", "--ui-card"),
+        controlBorder: ratio("--ui-control-line", "--ui-control"),
+        faintOnCard: ratio("--ui-ink-faint", "--ui-card"),
+        faintOnSidebar: ratio("--ui-ink-faint", "--ui-sidebar"),
+      };
+    });
+
+    expect(contrast.cardBorder).toBeGreaterThanOrEqual(3);
+    expect(contrast.controlBorder).toBeGreaterThanOrEqual(3);
+    expect(contrast.faintOnCard).toBeGreaterThanOrEqual(4.5);
+    expect(contrast.faintOnSidebar).toBeGreaterThanOrEqual(4.5);
   });
 }
 

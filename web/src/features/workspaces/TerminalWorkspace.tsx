@@ -495,7 +495,10 @@ export function TerminalWorkspace({
         <Button disabled={connectedCommandTargets === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
         {focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}
         <details className="group relative ml-auto">
-          <summary className="cursor-pointer list-none rounded-md border border-control-line bg-control px-3 py-1.5 text-xs text-ink marker:hidden hover:bg-select-fill">{t("workspace.savedLayouts")}</summary>
+          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-xs text-ink marker:hidden hover:bg-select-fill">
+            <span aria-hidden="true" className="text-ink-faint group-open:rotate-90">›</span>
+            {t("workspace.savedLayouts")}
+          </summary>
           <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-80 rounded border border-control-line bg-card p-3 shadow-xl">
             <h2 className="text-sm font-semibold text-ink">{t("workspace.savedLayouts")}</h2>
             <p className="mt-1 text-xs leading-5 text-ink-muted">{t("workspace.savedDescription", { count: MAX_WORKSPACE_PANES })}</p>

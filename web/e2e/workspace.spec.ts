@@ -56,7 +56,7 @@ test("moves workspace panes by drag and drop and saves the new placement", async
 
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  await page.getByText("Saved layouts", { exact: true }).first().click();
+  await page.locator("summary").filter({ hasText: "Saved layouts" }).click();
   await page.getByLabel("Choose a saved layout").selectOption("production");
   await page.getByRole("button", { name: "Open this layout" }).click();
 

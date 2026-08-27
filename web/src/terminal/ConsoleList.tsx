@@ -48,6 +48,7 @@ export function ConsoleList({
 }: ConsoleListProps) {
   const t = useTranslate();
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [menuPlacement, setMenuPlacement] = useState<"up" | "down">("down");
   const [closing, setClosing] = useState<TerminalSession | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -255,7 +256,20 @@ export function ConsoleList({
                     type="button"
                     aria-label={t("terminal.rowMenu", { title: session.title })}
                     aria-expanded={menuFor === session.id}
-                    onClick={() => setMenuFor(menuFor === session.id ? null : session.id)}
+                    onClick={(event) => {
+                      if (menuFor === session.id) {
+                        setMenuFor(null);
+                        return;
+                      }
+                      const trigger = event.currentTarget.getBoundingClientRect();
+                      const scroll = event.currentTarget.closest("[data-navigation-scroll]")?.getBoundingClientRect();
+                      const lowerEdge = scroll?.bottom ?? window.innerHeight;
+                      const upperEdge = scroll?.top ?? 0;
+                      const spaceBelow = lowerEdge - trigger.bottom;
+                      const spaceAbove = trigger.top - upperEdge;
+                      setMenuPlacement(spaceBelow < 132 && spaceAbove > spaceBelow ? "up" : "down");
+                      setMenuFor(session.id);
+                    }}
                     className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill"
                   >
                     <Icon name="moreHorizontal" className="size-3.5" />
@@ -276,7 +290,7 @@ export function ConsoleList({
                     ref={menuRef}
                     role="menu"
                     aria-label={t("terminal.rowMenu", { title: session.title })}
-                    className="absolute right-1 z-10 mt-0.5 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg"
+                    className={`absolute right-1 z-10 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg ${menuPlacement === "up" ? "bottom-full mb-0.5" : "mt-0.5"}`}
                   >
                     <button
                       type="button"
