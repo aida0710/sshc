@@ -36,11 +36,11 @@ export function QuickConnectBrowser({
     const servers = [...source].sort((left, right) => Number(right.favourite) - Number(left.favourite));
     if (servers.length === 0) return null;
     return (
-      <ul aria-label={t("home.connectionList")} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <ul aria-label={t("home.connectionList")} className="divide-y divide-line border-y border-line">
         {servers.map((server) => (
           <li
             key={identityKey(server.identity)}
-            className="flex min-w-0 flex-col gap-3 rounded-xl border border-line bg-card p-4"
+            className="flex min-w-0 flex-col gap-2 px-3 py-2.5 hover:bg-select-fill"
           >
             <div className="flex min-w-0 items-start gap-2">
               <div className="min-w-0 grow">
@@ -96,7 +96,7 @@ export function QuickConnectBrowser({
           type="button"
           aria-label={`${group.label}, ${countLabel(group.descendantCount)}`}
           onClick={() => setBrowser({ view: "groups", scope: "named", group: group.name })}
-          className="flex w-full items-center gap-3 rounded-xl border border-line bg-card p-4 text-left hover:bg-select-fill"
+          className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-select-fill"
         >
           {group.colour === "" ? null : (
             <span
@@ -168,7 +168,7 @@ export function QuickConnectBrowser({
   function renderProjection() {
     if (projection.kind === "missing-group") {
       return (
-        <div className="rounded-xl border border-line bg-card p-5 text-sm">
+        <div className="border-y border-line bg-surface-subtle p-4 text-sm">
           <p className="font-medium">{t("browser.groupMissing")}</p>
           <p className="mt-1 text-ink-muted">{t("home.groupMissingDetail", { name: projection.group })}</p>
           <button
@@ -184,7 +184,7 @@ export function QuickConnectBrowser({
     if (projection.kind === "servers" || projection.kind === "search-results") {
       if (projection.servers.length > 0) return renderServers(projection.servers);
       const empty = index.servers.length === 0 ? t("home.noConnections") : t("home.noMatches");
-      return <p className="rounded-xl border border-line bg-card p-5 text-sm text-ink-muted">{empty}</p>;
+      return <p className="border-y border-line bg-surface-subtle p-4 text-sm text-ink-muted">{empty}</p>;
     }
 
     const atRoot = browser.view === "groups" && browser.scope === "root";
@@ -195,12 +195,12 @@ export function QuickConnectBrowser({
         : atRoot
           ? t("browser.emptyGroups")
           : t("browser.emptyGroup");
-      return <p className="rounded-xl border border-line bg-card p-5 text-sm text-ink-muted">{empty}</p>;
+      return <p className="border-y border-line bg-surface-subtle p-4 text-sm text-ink-muted">{empty}</p>;
     }
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         {projection.groups.length === 0 && !showUngrouped ? null : (
-          <ul aria-label={t("browser.groups")} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <ul aria-label={t("browser.groups")} className="divide-y divide-line border-y border-line">
             {projection.groups.map(renderGroup)}
             {showUngrouped ? (
               <li>
@@ -208,7 +208,7 @@ export function QuickConnectBrowser({
                   type="button"
                   aria-label={`${t("browser.ungrouped")}, ${countLabel(projection.ungroupedCount)}`}
                   onClick={() => setBrowser({ view: "groups", scope: "ungrouped" })}
-                  className="flex w-full items-center gap-3 rounded-xl border border-line bg-card p-4 text-left hover:bg-select-fill"
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-select-fill"
                 >
                   <span className="min-w-0 flex-1 font-medium">{t("browser.ungrouped")}</span>
                   <span className="shrink-0 text-xs text-ink-faint">{countLabel(projection.ungroupedCount)}</span>

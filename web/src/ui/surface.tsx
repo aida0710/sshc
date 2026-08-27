@@ -4,7 +4,7 @@ import { dangerAction, hintText, primaryAction, secondaryAction } from "./form";
 export function Card({ children, padded = false }: { children: ReactNode; padded?: boolean }) {
   return (
     <div
-      className={`sshc-card overflow-hidden rounded-xl bg-card ${
+      className={`sshc-card overflow-hidden rounded bg-card ${
         padded ? "flex flex-col gap-3 p-3" : ""
       }`}
     >
@@ -60,8 +60,8 @@ export function Notice({ children, tone = "notice" }: { children: ReactNode; ton
       role={danger ? "alert" : "status"}
       className={
         danger
-          ? "flex items-center gap-2 rounded-lg border border-control-line px-3 py-2 text-sm text-danger"
-          : "flex items-center gap-2 rounded-lg border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink"
+          ? "flex items-center gap-2 rounded border border-control-line px-3 py-2 text-sm text-danger"
+          : "flex items-center gap-2 rounded border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink"
       }
     >
       {children}
@@ -81,15 +81,15 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex gap-0.5 rounded-lg bg-select-fill p-0.5">
+    <div role="group" aria-label={label} className="flex border border-control-line bg-control">
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
-          className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
-            value === option.value ? "bg-card text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+          className={`border-r border-control-line px-2.5 py-1 text-xs transition-colors last:border-r-0 ${
+            value === option.value ? "bg-select-fill text-ink" : "text-ink-muted hover:text-ink"
           }`}
         >
           {option.label}

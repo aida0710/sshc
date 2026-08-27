@@ -213,7 +213,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <PageHeader title={t("explorer.pageTitle")} description={t("explorer.pageDescription")} />
-      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-xl bg-toolbar">
+      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-md bg-toolbar">
         {[
           [t("explorer.metricFiles"), overview.files.length, false],
           [t("explorer.metricEditable"), editableFiles, false],
@@ -228,7 +228,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
 
       {jump === "" ? null : <p aria-live="polite" className={hintText}>{jump}</p>}
 
-      <div className="sshc-card grid min-h-0 grid-cols-1 overflow-hidden rounded-xl bg-card lg:grid-cols-[19rem_minmax(0,1fr)]">
+      <div className="sshc-card grid min-h-0 grid-cols-1 overflow-hidden rounded-md bg-card lg:grid-cols-[19rem_minmax(0,1fr)]">
         <section aria-labelledby="explorer-heading" className="flex min-h-0 flex-col bg-tree lg:border-r lg:border-line">
           <div className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
             <div className="flex min-w-0 items-center gap-2">
@@ -331,7 +331,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
         <section className="flex min-w-0 flex-col border-t border-line lg:border-t-0">
           {file === null ? (
             <div role="status" className="flex min-h-96 flex-1 flex-col items-center justify-center gap-2 bg-surface-subtle p-8 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface text-ink-faint">
+              <span className="flex h-12 w-12 items-center justify-center rounded-md bg-surface text-ink-faint">
                 <Icon name="config" className="h-6 w-6" />
               </span>
               <h3 className={sectionHeading}>{t("explorer.emptyHeading")}</h3>

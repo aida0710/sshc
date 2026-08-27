@@ -475,7 +475,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   if (state === "session-ended") {
     return (
       <main className="grid min-h-screen place-items-center bg-canvas p-6 text-ink">
-        <section className="sshc-card flex w-full max-w-md flex-col items-start gap-4 rounded-2xl bg-card p-6 sm:p-8">
+        <section className="sshc-card flex w-full max-w-md flex-col items-start gap-4 rounded-lg bg-card p-6 sm:p-8">
           <h1 className="text-lg font-semibold">{t("shell.sessionEndedHeading")}</h1>
           <p role="alert" className="text-sm leading-6 text-ink-muted">{t("shell.sessionEnded")}</p>
           <Button
@@ -645,7 +645,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                   />
                 </Suspense>
               ) : (
-                <div className="h-full overflow-y-auto p-6">
+                <div className="h-full overflow-y-auto p-4 md:p-5">
                   <section aria-labelledby="not-found-heading" className="flex max-w-2xl flex-col gap-3">
                     <h2 id="not-found-heading" className="font-medium">{t("shell.pageNotFound")}</h2>
                     <p className="text-sm text-ink-muted">{t("shell.pageNotFoundDescription")}</p>
@@ -704,7 +704,7 @@ function SectionView(props: SectionViewProps) {
       />
     );
   }
-  return <div className="h-full overflow-y-auto p-6">{<PaddedSection {...props} />}</div>;
+  return <div className="h-full overflow-y-auto p-4 md:p-5">{<PaddedSection {...props} />}</div>;
 }
 
 function TerminalScreen({

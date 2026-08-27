@@ -36,18 +36,18 @@ function Probe() {
 }
 
 describe("ThemeProvider", () => {
-  it("follows the system when nothing was chosen", () => {
+  it("starts in the dark product theme when nothing was chosen", () => {
     render(<ThemeProvider><Probe /></ThemeProvider>);
 
-    expect(screen.getByText("choice system resolved light")).toBeInTheDocument();
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(screen.getByText("choice dark resolved dark")).toBeInTheDocument();
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
-  it("resolves system to dark when the system says dark", () => {
+  it("keeps the dark default when the system says dark", () => {
     prefersDark = true;
     render(<ThemeProvider><Probe /></ThemeProvider>);
 
-    expect(screen.getByText("choice system resolved dark")).toBeInTheDocument();
+    expect(screen.getByText("choice dark resolved dark")).toBeInTheDocument();
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 

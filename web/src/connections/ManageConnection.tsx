@@ -59,7 +59,7 @@ export function ManageConnection({
     <section
       aria-label={t("conn.manageLabel")}
       aria-disabled={disabled}
-      className="sshc-card flex shrink-0 flex-col gap-5 overflow-hidden rounded-xl bg-card p-5"
+      className="sshc-card flex shrink-0 flex-col gap-5 overflow-hidden rounded-md bg-card p-5"
     >
       <div>
         <h3 className="text-base font-semibold tracking-tight text-ink">{t("conn.manageLabel")}</h3>

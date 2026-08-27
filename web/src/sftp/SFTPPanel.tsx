@@ -304,8 +304,8 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
   }
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-col gap-3" aria-labelledby="sftp-heading">
-      <div className="flex flex-wrap items-center gap-2">
+    <section className="flex h-full min-h-0 min-w-0 flex-col gap-2" aria-labelledby="sftp-heading">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line pb-2">
         <h2 id="sftp-heading" className="mr-auto font-medium">{t("sftp.heading")}</h2>
         <select
           aria-label={t("sftp.host")}
@@ -328,16 +328,16 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
 
       {problem === "" ? null : <p role="alert" className="rounded-md border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink">{problem}</p>}
 
-      <div className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(18rem,0.7fr)_minmax(24rem,1.3fr)]">
+      <div className="grid min-h-0 min-w-0 flex-1 gap-2 lg:grid-cols-[minmax(18rem,0.7fr)_minmax(24rem,1.3fr)]">
         <div
           aria-label={t("sftp.dropZone")}
-          className={`flex min-h-0 min-w-0 flex-col rounded-lg border bg-card transition-shadow ${dragging ? "border-accent ring-2 ring-accent/40" : "border-line"}`}
+          className={`flex min-h-0 min-w-0 flex-col rounded border bg-card transition-shadow ${dragging ? "border-accent ring-1 ring-accent" : "border-line"}`}
           onDragEnter={(event) => { event.preventDefault(); if (!busy && alias !== "") setDragging(true); }}
           onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
           onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
           onDrop={(event) => { void acceptDrop(event); }}
         >
-          <div className="flex flex-wrap gap-2 border-b border-line p-2">
+          <div className="flex flex-wrap gap-2 border-b border-line bg-toolbar p-2">
             <Button disabled={busy || dirty || path === "/"} onClick={() => void load(parentOf(path))}>{t("sftp.up")}</Button>
             <Button disabled={busy || alias === ""} onClick={() => void makeDirectory()}>{t("sftp.newFolder")}</Button>
             <Button disabled={busy || alias === ""} onClick={() => upload.current?.click()}>{t("sftp.upload")}</Button>
@@ -375,7 +375,7 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
           <TransferManagerList />
           <div className="min-h-0 min-w-0 overflow-auto">
             <table className="w-full min-w-[52rem] text-left text-sm">
-              <thead className="sticky top-0 bg-card text-xs text-ink-muted"><tr>
+              <thead className="sticky top-0 bg-toolbar text-xs text-ink-muted"><tr>
                 <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2">{t("sftp.name")}</SortableTableHeader>
                 <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="w-24 whitespace-nowrap px-3 py-2">{t("sftp.type")}</SortableTableHeader>
                 <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-3 py-2 text-right" buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
@@ -385,7 +385,7 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
               </tr></thead>
               <tbody>
                 {displayedEntries.map((entry) => (
-                  <tr key={entry.path} className="border-t border-line">
+                  <tr key={entry.path} className="border-t border-line hover:bg-select-fill">
                     <td className="max-w-48 px-3 py-2">
                       <button type="button" className="block w-full truncate text-left font-mono hover:text-accent" onClick={() => entry.type === "directory" ? void load(entry.path) : void openText(entry)}>{entry.type === "directory" ? "▸ " : ""}{entry.name}</button>
                     </td>
@@ -406,12 +406,12 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
           </div>
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-card">
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded border border-line bg-card">
           {opened === null ? (
             <div className="grid h-full min-h-64 place-items-center p-6 text-sm text-ink-muted">{t("sftp.editorEmpty")}</div>
           ) : (
             <>
-              <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+              <div className="flex items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
                 <code className="min-w-0 grow truncate text-xs">{opened.entry.path}</code>
                 {dirty ? <span className="text-xs text-notice-ink">{t("sftp.unsaved")}</span> : null}
                 <Button disabled={busy || !dirty} onClick={() => void save()}>{t("sftp.save")}</Button>

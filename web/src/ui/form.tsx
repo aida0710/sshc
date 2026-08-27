@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export const control =
-  "w-full rounded-md border border-control-line bg-control px-2 py-1.5 text-sm text-ink " +
+  "w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink " +
   "placeholder:text-ink-faint focus:border-accent focus:outline-none " +
   "disabled:border-line disabled:text-ink-faint";
 
@@ -10,20 +10,20 @@ export const narrowControl = control.replace("w-full", "w-40");
 export const autoControl = control.replace("w-full", "w-auto");
 
 export const primaryAction =
-  "whitespace-nowrap rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink " +
+  "whitespace-nowrap rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink " +
   "hover:brightness-110 disabled:bg-line disabled:text-ink-faint";
 
 export const secondaryAction =
-  "whitespace-nowrap rounded-md border border-control-line bg-card px-3 py-1.5 text-sm text-ink " +
+  "whitespace-nowrap rounded border border-control-line bg-card px-3 py-1.5 text-sm text-ink " +
   "hover:bg-select-fill disabled:text-ink-faint";
 
 export const dangerAction =
-  "whitespace-nowrap rounded-md border border-control-line px-3 py-1.5 text-sm text-danger " +
+  "whitespace-nowrap rounded border border-control-line px-3 py-1.5 text-sm text-danger " +
   "hover:bg-select-fill";
 
 export const fieldLabel = "text-xs font-medium tracking-wide text-ink-muted";
 export const hintText = "text-xs text-ink-muted";
-export const sectionCard = "flex flex-col gap-4 rounded-xl border border-line bg-card p-4";
+export const sectionCard = "flex flex-col gap-4 rounded border border-line bg-card p-4";
 export const sectionHeading = "text-sm font-medium text-ink";
 
 export const tableHeadRow = "border-b border-line text-xs uppercase tracking-wide text-ink-muted";

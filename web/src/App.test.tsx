@@ -262,7 +262,7 @@ describe("App", () => {
     );
 
     const control = await screen.findByLabelText("Appearance");
-    expect(control).toHaveValue("system");
+    expect(control).toHaveValue("dark");
 
     await user.selectOptions(control, "dark");
 

@@ -74,7 +74,7 @@ export function HistoryPanel() {
   return (
     <div className={`mx-auto flex w-full max-w-6xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader title={t("history.pageTitle")} description={t("history.pageDescription")} />
-      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-xl bg-toolbar">
+      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-md bg-toolbar">
         {[
           [t("history.metricChanges"), entries.length, false],
           [t("history.metricInterrupted"), pending.length, pending.length > 0],
@@ -92,7 +92,7 @@ export function HistoryPanel() {
       {message === "" ? null : <p role="status" className="text-sm text-live">{message}</p>}
 
       {pending.length === 0 ? null : (
-        <section aria-labelledby="pending-heading" className="sshc-card overflow-hidden rounded-xl bg-notice">
+        <section aria-labelledby="pending-heading" className="sshc-card overflow-hidden rounded-md bg-notice">
           <header className="flex items-center gap-2 border-b border-notice-line px-4 py-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-card text-notice-ink">
               <Icon name="history" className="h-4 w-4" />
@@ -129,7 +129,7 @@ export function HistoryPanel() {
         </section>
       )}
 
-      <section aria-labelledby="history-heading" className="sshc-card overflow-hidden rounded-xl bg-card">
+      <section aria-labelledby="history-heading" className="sshc-card overflow-hidden rounded-md bg-card">
         <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
           <div className="flex items-center gap-2">
             <Icon name="history" className="h-4 w-4 text-ink-muted" />

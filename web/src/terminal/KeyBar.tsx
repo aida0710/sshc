@@ -27,7 +27,7 @@ export function encodeKey(label: string, ctrl: boolean, alt: boolean): string {
 const keys = ["Esc", "Tab", "↑", "↓", "←", "→", "|", "-", "~", "/"];
 
 const keyShape =
-  "min-h-11 min-w-11 shrink-0 rounded-md border border-control-line px-3 text-sm text-ink";
+  "min-h-11 min-w-11 shrink-0 rounded border border-control-line px-3 font-mono text-sm text-ink";
 
 function keepFocus(event: { preventDefault(): void }) {
   event.preventDefault();

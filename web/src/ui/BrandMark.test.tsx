@@ -15,16 +15,11 @@ describe("BrandMark", () => {
     expect(mark).not.toHaveTextContent(">_");
   });
 
-  it("gives each rendered mark its own gradient definition", () => {
-    const { container } = render(
-      <>
-        <BrandMark />
-        <BrandMark />
-      </>,
-    );
-    const gradients = [...container.querySelectorAll("linearGradient")];
+  it("uses one quiet monochrome stroke instead of a decorative gradient", () => {
+    const { container } = render(<BrandMark />);
+    const mark = container.querySelector("[data-sshc-brand-mark]");
 
-    expect(gradients).toHaveLength(2);
-    expect(gradients[0]?.id).not.toBe(gradients[1]?.id);
+    expect(mark?.querySelector("linearGradient")).toBeNull();
+    expect(mark?.querySelector('path[stroke="var(--ui-brand-mark)"]')).not.toBeNull();
   });
 });

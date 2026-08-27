@@ -258,7 +258,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("groups.pageTitle")} description={t("groups.pageDescription")} />
-      <div className="sshc-card grid overflow-hidden rounded-xl bg-card sm:grid-cols-3">
+      <div className="sshc-card grid overflow-hidden rounded-md bg-card sm:grid-cols-3">
         {[
           [t("groups.metricGroups"), groups.length],
           [t("groups.metricConnections"), hosts.filter((host) => host.identity.alias !== "").length],
@@ -286,7 +286,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
 
       <NoticeList notices={groupNotices} />
 
-      <section className="sshc-card overflow-hidden rounded-xl bg-card">
+      <section className="sshc-card overflow-hidden rounded-md bg-card">
         <div className="border-b border-line bg-surface-subtle px-4 py-3">
           <h3 className={sectionHeading}>{t("groups.addHeading")}</h3>
           <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -470,7 +470,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
 
 
       {selected === "" ? null : (
-      <section className="sshc-card flex flex-col gap-4 rounded-xl bg-card p-4">
+      <section className="sshc-card flex flex-col gap-4 rounded-md bg-card p-4">
         <h3 className={sectionHeading}>{t("groups.settingHeadingFor", { name: selected })}</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("groups.directive")}>
@@ -502,7 +502,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       {unsaved ? (
         <section
           aria-label={t("groups.unsavedBarLabel")}
-          className="z-10 flex flex-wrap items-center gap-3 rounded-xl border border-notice-line bg-notice p-3 shadow-lg sm:sticky sm:bottom-0"
+          className="z-10 flex flex-wrap items-center gap-3 rounded-md border border-notice-line bg-notice p-3 shadow-lg sm:sticky sm:bottom-0"
         >
           <p className="min-w-0 grow text-sm text-notice-ink">{t("groups.unsavedBarNote")}</p>
           <Button onClick={() => void run("preview")}>

@@ -185,7 +185,7 @@ export function AdvancedSettings({
           </Card>
         )}
 
-        <div hidden={area !== "Directives"} className="sshc-card flex flex-col gap-3 rounded-xl bg-card p-4">
+        <div hidden={area !== "Directives"} className="sshc-card flex flex-col gap-3 rounded-md bg-card p-4">
           <label htmlFor="new-directive" className="text-xs text-ink-muted">{t("host.newDirective")}</label>
           <input
             id="new-directive"

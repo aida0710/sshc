@@ -45,7 +45,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
           <h3 className={sectionHeading}>{t("conn.analysisExplained")}</h3>
           <p className={`mt-1 ${hintText}`}>{t("conn.analysisExplainedHint")}</p>
         </div>
-        <ul className="sshc-card overflow-hidden rounded-xl bg-card">
+        <ul className="sshc-card overflow-hidden rounded-md bg-card">
           {detail.effective.entries.map((entry, index) => (
             <li key={`${entry.keyword}-${index}`} className="grid gap-1 border-t border-hairline px-4 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.7fr)] sm:items-baseline">
               <p className="font-mono text-xs text-ink">{`${entry.keyword} ${entry.values.join(" ")}`}</p>
@@ -90,7 +90,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
         ) : null}
 
         {effective !== null && effective.sources.length > 0 ? (
-          <div className="sshc-card overflow-x-auto rounded-xl bg-card px-4 py-2">
+          <div className="sshc-card overflow-x-auto rounded-md bg-card px-4 py-2">
             <table aria-label={t("conn.analysisSources")} className="w-full text-sm">
               <thead>
                 <tr className={tableHeadRow}>

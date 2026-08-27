@@ -85,7 +85,7 @@ function TerminalPreview({
   } as CSSProperties;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-control-line bg-term-bg shadow-sm" aria-hidden="true">
+    <div className="overflow-hidden rounded-md border border-control-line bg-term-bg shadow-sm" aria-hidden="true">
       <div className="flex items-center gap-1.5 border-b border-white/10 bg-black/20 px-3 py-2">
         <span className="h-2 w-2 rounded-full bg-danger" />
         <span className="h-2 w-2 rounded-full bg-notice-ink" />
@@ -308,7 +308,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         </a>
       </nav>
 
-      <div className="sshc-card overflow-hidden rounded-xl bg-card">
+      <div className="sshc-card overflow-hidden rounded-md bg-card">
         <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings">
           <div className="max-w-2xl">
             <Field label={t("engine.portLabel")} hint={t("engine.portHint")}>

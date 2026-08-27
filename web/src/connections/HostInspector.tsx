@@ -38,7 +38,7 @@ export function HostInspector({
           <p className={`mt-1 ${hintText}`}>{t("inspector.hostSavesImmediately")}</p>
         </div>
 
-        <div className="flex flex-col gap-4 rounded-xl bg-tree p-4">
+        <div className="flex flex-col gap-4 rounded-md bg-tree p-4">
         <CheckboxField
           label={t("host.favourite")}
           checked={detail.metadata.favourite === true}

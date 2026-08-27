@@ -24,8 +24,8 @@ describe("isTheme", () => {
 });
 
 describe("detectTheme", () => {
-  it("is system when nothing has been chosen", () => {
-    expect(detectTheme()).toBe("system");
+  it("starts in the dark product theme when nothing has been chosen", () => {
+    expect(detectTheme()).toBe("dark");
   });
 
   it("reads a remembered choice", () => {
@@ -34,9 +34,9 @@ describe("detectTheme", () => {
     expect(detectTheme()).toBe("light");
   });
 
-  it("falls back to system when the stored value is not a theme", () => {
+  it("falls back to dark when the stored value is not a theme", () => {
     window.localStorage.setItem(themeStorageKey, "solarized");
-    expect(detectTheme()).toBe("system");
+    expect(detectTheme()).toBe("dark");
   });
 });
 
