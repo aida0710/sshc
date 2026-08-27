@@ -190,7 +190,7 @@ test("broadcasts one command to two live local shells", async ({ page, installat
   const openShell = navigation.getByRole("button", { name: "Local shell" });
   await openShell.click();
   await expect(page.locator("[data-desktop-workspace-controls]")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Find" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Find" })).toBeVisible();
   await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({

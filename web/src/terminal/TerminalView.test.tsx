@@ -47,12 +47,12 @@ afterEach(() => {
 });
 
 describe("TerminalView", () => {
-  it("can hide its title and search toolbar in a single-terminal view", () => {
-    render(<TerminalView session={session} showToolbar={false} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+  it("keeps its title and search toolbar visible", () => {
+    render(<TerminalView session={session} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
 
     expect(screen.getByRole("region", { name: "Console for zsh" })).toBeVisible();
-    expect(screen.queryByText("zsh", { exact: true })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Find" })).toBeNull();
+    expect(screen.getByText("zsh", { exact: true })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Find" })).toBeVisible();
   });
 
   it("says that it is retrying, counts down and reattaches on its own", async () => {

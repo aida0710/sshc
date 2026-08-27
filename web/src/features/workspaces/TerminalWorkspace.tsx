@@ -87,7 +87,7 @@ export function TerminalWorkspace({
   onActive: (id: string) => void;
   onOpenAlias: (alias: string) => Promise<TerminalSession | null>;
   onOpenShell: () => Promise<TerminalSession | null>;
-  renderTerminal: (session: TerminalSession, options: { showToolbar: boolean }) => ReactNode;
+  renderTerminal: (session: TerminalSession) => ReactNode;
   restoreRequest?: WorkspaceRestoreRequest | null;
   onRestoreConsumed?: (sequence: number) => void;
   onLiveWorkspaceChange?: (workspace: LiveWorkspaceSummary | null) => void;
@@ -409,7 +409,7 @@ export function TerminalWorkspace({
     void restoreWorkspace(restoreRequest.id);
   }, [onRestoreConsumed, restoreRequest, restoreWorkspace]);
 
-  function terminal(session: TerminalSession) { return renderTerminal(session, { showToolbar: workspacePaneCount > 1 }); }
+  function terminal(session: TerminalSession) { return renderTerminal(session); }
 
   function singleTerminal(session: TerminalSession) {
     const docking = dockTarget?.paneId === session.id;
