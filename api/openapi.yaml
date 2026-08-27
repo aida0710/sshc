@@ -3334,6 +3334,15 @@ components:
         duplicate: { type: boolean }
         editable: { type: boolean }
         group: { type: string }
+        hostName:
+          type: string
+          description: Resolved SSH destination hostname used by this alias.
+        user:
+          type: string
+          description: Resolved remote account used by this alias.
+        port:
+          type: string
+          description: Resolved SSH port used by this alias.
     IncludeReference:
       type: object
       additionalProperties: false

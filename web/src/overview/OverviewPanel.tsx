@@ -57,7 +57,7 @@ export function OverviewPanel({
       if (workspace.status === "fulfilled") setOverview(workspace.value);
       else setProblem(t("home.loadFailed"));
       if (remote.status === "fulfilled") setSync(remote.value);
-      if (history.status === "fulfilled") setRecent(history.value.connections.slice(0, 5));
+      if (history.status === "fulfilled") setRecent(history.value.connections);
       if (saved.status === "fulfilled") setWorkspaces(saved.value);
       setLoading(false);
     });
@@ -90,7 +90,6 @@ export function OverviewPanel({
   const recoveryAttention = overview?.pending?.length ?? 0;
   const attention = configurationAttention + recoveryAttention;
   const connectionCount = overview?.hosts.filter((host) => host.identity.alias !== "").length ?? 0;
-  const favouriteCount = overview?.metadata.hosts?.filter((host) => host.favourite === true).length ?? 0;
 
   return (
     <section aria-labelledby="home-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-4">
@@ -126,10 +125,6 @@ export function OverviewPanel({
                 <p className="mt-0.5 text-xs text-ink-muted">{t("home.quickConnectHint")}</p>
               </div>
             </div>
-            <p className="px-1 py-1 text-xs text-ink-muted">
-              <span aria-hidden="true" className="mr-1.5 text-connect-star">★</span>
-              {t("home.favourite")} · {overview === null ? "—" : favouriteCount}
-            </p>
           </div>
         </div>
 
@@ -139,6 +134,7 @@ export function OverviewPanel({
           ) : overview === null ? null : (
             <QuickConnectBrowser
               overview={overview}
+              recent={recent}
               launching={launching}
               onConnect={(alias) => void connect(alias)}
               onOpenSettings={onNavigateLocation}
@@ -146,43 +142,6 @@ export function OverviewPanel({
           )}
         </div>
       </section>
-
-      {recent.length === 0 ? null : (
-        <section aria-labelledby="recent-connections-heading" className="sshc-card overflow-hidden rounded bg-card">
-          <div className="border-b border-line px-4 py-3 sm:px-5">
-            <h3 id="recent-connections-heading" className="font-semibold">{t("home.recentConnections")}</h3>
-            <p className="mt-0.5 text-xs text-ink-muted">{t("home.recentConnectionsHint")}</p>
-          </div>
-          <ul aria-label={t("home.recentConnectionList")} className="divide-y divide-line">
-            {recent.map((connection) => {
-              const host = connection.hostName.includes(":") ? `[${connection.hostName}]` : connection.hostName;
-              const destination = `${connection.user === "" ? "" : `${connection.user}@`}${host}:${connection.port}`;
-              const connectedAt = formatConnectedAt(connection.lastConnectedAt);
-              const group = overview?.hosts.find((candidate) => candidate.identity.alias === connection.alias)?.group ?? "";
-              return (
-                <li key={connection.alias} className="flex min-w-0 flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-mono text-sm font-semibold text-ink">{connection.alias}</p>
-                    <p className="truncate font-mono text-xs text-ink-muted">{destination}</p>
-                    <p className="mt-0.5 truncate text-xs text-ink-faint">
-                      {group === "" ? null : <span>{group} · </span>}
-                      <time dateTime={connection.lastConnectedAt}>{t("home.lastConnected", { at: connectedAt })}</time>
-                    </p>
-                  </div>
-                  <Button
-                    kind="primary"
-                    className="min-h-10 w-full shrink-0 sm:w-auto md:min-h-0"
-                    disabled={launching !== ""}
-                    onClick={() => void connect(connection.alias)}
-                  >
-                    {launching === connection.alias ? t("home.opening") : t("home.connect")}
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
 
       {workspaces.length === 0 ? null : (
         <section aria-labelledby="saved-workspaces-heading" className="sshc-card overflow-hidden rounded bg-card">

@@ -230,6 +230,20 @@ func (s *Service) Overview() (Overview, error) {
 	}
 	root := s.workspace.Root()
 	hosts, notices := ProjectHosts(graph, root)
+	facts := s.localFacts()
+	for index := range hosts {
+		alias := hosts[index].Identity.Alias
+		if alias == "" {
+			continue
+		}
+		resolution := effective.Resolve(graph, alias, facts)
+		if len(resolution.Refusals) != 0 {
+			continue
+		}
+		hosts[index].HostName = resolution.Values.First("hostname")
+		hosts[index].User = resolution.Values.First("user")
+		hosts[index].Port = resolution.Values.First("port")
+	}
 
 	stored, _, err := s.metadata.Load()
 	if err != nil {

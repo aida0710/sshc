@@ -87,6 +87,9 @@ type HostEntry struct {
 	Duplicate bool         `json:"duplicate,omitempty"`
 	Editable  bool         `json:"editable"`
 	Group     string       `json:"group,omitempty"`
+	HostName  string       `json:"hostName,omitempty"`
+	User      string       `json:"user,omitempty"`
+	Port      string       `json:"port,omitempty"`
 }
 
 // HostForm は、detail editor のために射影された 1 個の Host

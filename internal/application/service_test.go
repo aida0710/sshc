@@ -125,6 +125,12 @@ func TestOverviewListsIncludeTreeHostsAndDiagnostics(t *testing.T) {
 	if len(aliases) != 3 || aliases[0] != "nas" || aliases[1] != "bastion" || aliases[2] != "" {
 		t.Fatalf("aliases = %#v", aliases)
 	}
+	if overview.Hosts[0].HostName != "nas" || overview.Hosts[0].User == "" || overview.Hosts[0].Port != "22" {
+		t.Fatalf("resolved nas target = %#v", overview.Hosts[0])
+	}
+	if overview.Hosts[1].HostName != "203.0.113.10" || overview.Hosts[1].User != "ops" || overview.Hosts[1].Port != "22" {
+		t.Fatalf("resolved bastion target = %#v", overview.Hosts[1])
+	}
 	if overview.Metadata.SchemaVersion != MetadataSchemaVersion {
 		t.Fatalf("metadata = %#v", overview.Metadata)
 	}
