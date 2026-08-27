@@ -190,7 +190,7 @@ export function RemoteKeyPanel({
       ) : null}
 
 
-      <section className="sshc-card overflow-hidden rounded-xl bg-card">
+      <section className="sshc-card overflow-hidden rounded-md bg-card">
         <div className="grid lg:grid-cols-2">
           <div className="border-b border-line p-5 lg:border-b-0 lg:border-r">
             <div className="mb-4 flex items-center gap-3">
@@ -269,7 +269,7 @@ export function RemoteKeyPanel({
       </section>
 
       {plan ? (
-        <section aria-labelledby="remote-key-plan-heading" className="sshc-card overflow-hidden rounded-xl bg-card text-sm">
+        <section aria-labelledby="remote-key-plan-heading" className="sshc-card overflow-hidden rounded-md bg-card text-sm">
           <div className="flex items-center gap-3 border-b border-line bg-surface-subtle px-5 py-4">
             <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-full bg-live text-xs font-semibold text-accent-ink">3</span>
             <h3 id="remote-key-plan-heading" className="font-semibold">{t("rk.confirmHeading")}</h3>
@@ -365,7 +365,7 @@ export function RemoteKeyPanel({
       ) : null}
 
       {result ? (
-        <div className="sshc-card rounded-xl bg-card p-4 text-sm">
+        <div className="sshc-card rounded-md bg-card p-4 text-sm">
           <h3 className="font-semibold text-live">{t("rk.result")}</h3>
           <p>{result.outcome in outcomeLabels ? t(outcomeLabels[result.outcome]!) : result.outcome}</p>
           {result.stderr ? (

@@ -168,7 +168,7 @@ export function LockScreen({
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-canvas p-6">
-      <section className="sshc-card w-full max-w-3xl overflow-hidden rounded-2xl bg-card">
+      <section className="sshc-card w-full max-w-3xl overflow-hidden rounded-lg bg-card">
         {diagnostic === null ? null : (
           <ErrorDiagnosticNotice diagnostic={diagnostic} version={version} onClose={() => setDiagnostic(null)} />
         )}
@@ -194,7 +194,7 @@ export function LockScreen({
             )}
             {error === "" ? null : <Notice tone="danger">{error}</Notice>}
             {versionMismatch === null ? null : (
-              <div className="flex flex-col gap-3 rounded-xl border border-control-line bg-toolbar p-4">
+              <div className="flex flex-col gap-3 rounded-md border border-control-line bg-toolbar p-4">
                 <p className="text-sm leading-6 text-ink-muted">{t("lock.schemaRecoveryHint")}</p>
                 <Button type="button" disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
                   {t("lock.restoreCompatibleBackup")}

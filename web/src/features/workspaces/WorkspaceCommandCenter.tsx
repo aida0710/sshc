@@ -125,7 +125,7 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="workspace-command-heading" className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-xl border border-control-line bg-card p-4 shadow-2xl">
+      <section role="dialog" aria-modal="true" aria-labelledby="workspace-command-heading" className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-md border border-control-line bg-card p-4 shadow-2xl">
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <div className="grow"><h2 id="workspace-command-heading" className="text-base font-semibold">{t("workspace.broadcastHeading")}</h2><p className="mt-1 text-xs text-ink-muted">{t("workspace.broadcastDescription")}</p></div>

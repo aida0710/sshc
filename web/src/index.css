@@ -2,43 +2,38 @@
 :root {
   color-scheme: light;
 
-  --ui-canvas: #f3f7fa;
-  --ui-sidebar: #eaf1f6;
-  --ui-tree: #f7fafc;
-  --ui-toolbar: #f9fbfd;
-  --ui-card: #ffffff;
-  --ui-surface: #edf3f7;
-  --ui-surface-subtle: #f7fafc;
-  --ui-line: #d9e3eb;
-  --ui-hairline: #eaf0f4;
-  --ui-control: #fbfdff;
-  --ui-control-line: #c5d3df;
-  --ui-select-fill: rgb(17 54 82 / 0.08);
-  --ui-ink: #12283b;
-  --ui-ink-muted: #5c7182;
-  --ui-ink-faint: #8899a7;
-  --ui-accent: #086fd6;
-  --ui-accent-ink: #ffffff;
+  --ui-canvas: #edf0f2;
+  --ui-sidebar: #e5e9ec;
+  --ui-tree: #eef1f3;
+  --ui-toolbar: #e9edef;
+  --ui-card: #f7f8f9;
+  --ui-surface: #e2e7ea;
+  --ui-surface-subtle: #eef1f3;
+  --ui-line: #c8cfd4;
+  --ui-hairline: #d9dee2;
+  --ui-control: #f8f9fa;
+  --ui-control-line: #aeb8bf;
+  --ui-select-fill: #dbe1e5;
+  --ui-ink: #20262c;
+  --ui-ink-muted: #5e6971;
+  --ui-ink-faint: #808b93;
+  --ui-accent: #596671;
+  --ui-accent-ink: #f7f8f9;
   --ui-notice: #fff6df;
   --ui-notice-line: #efd08b;
   --ui-notice-ink: #71500a;
   --ui-danger: #c92b3a;
-  --ui-live: #087d63;
-  --ui-code-bg: #111827;
-  --ui-code-fg: #f8fafc;
-  --ui-connect-hero-start: #111827;
-  --ui-connect-hero-middle: #172554;
-  --ui-connect-hero-end: #164e63;
-  --ui-connect-mark: #a5f3fc;
-  --ui-connect-star: #fcd34d;
-  --ui-brand-background: #09111f;
-  --ui-brand-gradient-start: #38bdf8;
-  --ui-brand-gradient-middle: #667eea;
-  --ui-brand-gradient-end: #8b5cf6;
-  --ui-brand-cursor: #eaf2ff;
-  --ui-card-shadow: 0 1px 2px rgb(18 40 59 / 0.05), 0 12px 32px rgb(18 40 59 / 0.035);
-  --ui-skeleton: #e4ebf1;
-  --ui-skeleton-highlight: #f5f8fa;
+  --ui-live: #198361;
+  --ui-code-bg: #080b0d;
+  --ui-code-fg: #d8dfe4;
+  --ui-connect-mark: #596671;
+  --ui-connect-star: #8b6a19;
+  --ui-brand-background: #20262b;
+  --ui-brand-mark: #dce2e6;
+  --ui-brand-cursor: #9da8b0;
+  --ui-card-shadow: none;
+  --ui-skeleton: #dbe0e4;
+  --ui-skeleton-highlight: #f2f4f5;
   --ui-term-bg: #ffffff;
   --ui-term-fg: #1d1d1f;
   --ui-term-cursor: #1d1d1f;
@@ -64,39 +59,42 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --ui-canvas: #0a141f;
-  --ui-sidebar: #0e1c29;
-  --ui-tree: #0f1b27;
-  --ui-toolbar: #0d1925;
-  --ui-card: #142433;
-  --ui-surface: #192b3b;
-  --ui-surface-subtle: #11202d;
-  --ui-line: #263b4d;
-  --ui-hairline: #1d3040;
-  --ui-control: #101e2b;
-  --ui-control-line: #385166;
-  --ui-select-fill: rgb(119 166 200 / 0.17);
-  --ui-ink: #edf6ff;
-  --ui-ink-muted: #a0b4c4;
-  --ui-ink-faint: #71879a;
-  --ui-accent: #4ca8ff;
-  --ui-accent-ink: #07131e;
+  --ui-canvas: #0b0e10;
+  --ui-sidebar: #121619;
+  --ui-tree: #0f1316;
+  --ui-toolbar: #15191c;
+  --ui-card: #171b1f;
+  --ui-surface: #1c2227;
+  --ui-surface-subtle: #111518;
+  --ui-line: #2c3338;
+  --ui-hairline: #22282d;
+  --ui-control: #101417;
+  --ui-control-line: #424b51;
+  --ui-select-fill: #273039;
+  --ui-ink: #d8dfe4;
+  --ui-ink-muted: #9ca7af;
+  --ui-ink-faint: #687680;
+  --ui-accent: #a8b4bd;
+  --ui-accent-ink: #101417;
   --ui-notice: rgb(255 159 10 / 0.13);
   --ui-notice-line: rgb(255 159 10 / 0.32);
   --ui-notice-ink: #f0b429;
-  --ui-danger: #ff7a82;
-  --ui-live: #5adab2;
-  --ui-code-bg: #070d14;
-  --ui-code-fg: #edf6ff;
-  --ui-card-shadow: 0 1px 2px rgb(0 0 0 / 0.25), 0 16px 40px rgb(0 0 0 / 0.14);
-  --ui-skeleton: #1b3041;
-  --ui-skeleton-highlight: #263e50;
+  --ui-danger: #ff858d;
+  --ui-live: #2aa374;
+  --ui-code-bg: #080b0d;
+  --ui-code-fg: #d8dfe4;
+  --ui-brand-background: #dce2e6;
+  --ui-brand-mark: #2d3740;
+  --ui-brand-cursor: #76838d;
+  --ui-card-shadow: none;
+  --ui-skeleton: #1d2429;
+  --ui-skeleton-highlight: #30383e;
 
-  --ui-term-bg: #1c1c1e;
-  --ui-term-fg: #f5f5f7;
-  --ui-term-cursor: #f5f5f7;
-  --ui-term-selection: rgb(10 132 255 / 0.36);
-  --ui-term-black: #3a3a3c;
+  --ui-term-bg: #080b0d;
+  --ui-term-fg: #d8dfe4;
+  --ui-term-cursor: #dce2e6;
+  --ui-term-selection: rgb(168 180 189 / 0.28);
+  --ui-term-black: #30373d;
   --ui-term-red: #ff6961;
   --ui-term-green: #5fd88a;
   --ui-term-yellow: #f0b429;
@@ -151,16 +149,7 @@
 }
 
 .sshc-card {
-  box-shadow: 0 0 0 1px var(--ui-line), var(--ui-card-shadow);
-}
-
-.sshc-connect-hero {
-  background: linear-gradient(
-    135deg,
-    var(--ui-connect-hero-start) 0%,
-    var(--ui-connect-hero-middle) 56%,
-    var(--ui-connect-hero-end) 100%
-  );
+  box-shadow: inset 0 0 0 1px var(--ui-line);
 }
 
 .sshc-skeleton {

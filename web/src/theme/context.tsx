@@ -44,7 +44,7 @@ export function ThemeProvider({ children, initial }: { children: ReactNode; init
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
-const fallback: ThemeState = { theme: "system", setTheme: () => undefined, resolved: "light" };
+const fallback: ThemeState = { theme: "dark", setTheme: () => undefined, resolved: "dark" };
 
 export function useTheme(): ThemeState {
   return useContext(ThemeContext) ?? fallback;

@@ -142,9 +142,9 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
     return (
       <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
         <PageHeader title={t("secrets.heading")} description={t("secrets.pageDescription")} />
-        <section aria-label={t("secrets.heading")} className="sshc-card grid overflow-hidden rounded-xl bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
+        <section aria-label={t("secrets.heading")} className="sshc-card grid overflow-hidden rounded-md bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
           <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-select-fill text-accent">
+            <span className="flex h-12 w-12 items-center justify-center rounded-md bg-select-fill text-accent">
               <Icon name="secrets" className="h-6 w-6" />
             </span>
             <div>
@@ -187,7 +187,7 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
         description={t("secrets.pageDescription")}
         actions={<Button onClick={() => void api.lockVault().then(() => onLock?.())}>{t("secrets.lock")}</Button>}
       />
-      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-xl bg-toolbar">
+      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-md bg-toolbar">
         {[
           [t("secrets.metricPasswords"), passwordCount],
           [t("secrets.metricPassphrases"), passphraseCount],
@@ -207,7 +207,7 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
         const mine = credentials.filter((credential) => credential.kind === group.kind);
         const dedicated = group.kind === "key_passphrase" ? dedicatedKeyPassphrases : [];
         return (
-          <section key={group.kind} aria-label={t(group.heading)} className="sshc-card overflow-hidden rounded-xl bg-card">
+          <section key={group.kind} aria-label={t(group.heading)} className="sshc-card overflow-hidden rounded-md bg-card">
             <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
               <div className="flex items-center gap-2">
                 <Icon name={group.kind === "password" ? "connections" : "keys"} className="h-4 w-4 text-ink-muted" />

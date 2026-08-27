@@ -473,7 +473,7 @@ export function TerminalWorkspace({
         {focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}
         <details className="group relative ml-auto">
           <summary className="cursor-pointer list-none rounded-md border border-control-line bg-control px-3 py-1.5 text-xs text-ink marker:hidden hover:bg-select-fill">{t("workspace.savedLayouts")}</summary>
-          <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-80 rounded-lg border border-control-line bg-card p-3 shadow-xl">
+          <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-80 rounded border border-control-line bg-card p-3 shadow-xl">
             <h2 className="text-sm font-semibold text-ink">{t("workspace.savedLayouts")}</h2>
             <p className="mt-1 text-xs leading-5 text-ink-muted">{t("workspace.savedDescription", { count: MAX_WORKSPACE_PANES })}</p>
             <select aria-label={t("workspace.saved")} value={selectedWorkspace} onChange={(event) => setSelectedWorkspace(event.target.value)} className="mt-3 w-full rounded border border-control-line bg-control px-2 py-1.5 text-xs">
@@ -500,11 +500,11 @@ export function TerminalWorkspace({
       <div className="flex min-h-0 flex-1 flex-col">
         {empty ? (
           <div className="flex h-full items-center justify-center p-6">
-            <section className="sshc-card w-full max-w-md rounded-2xl bg-card p-8 text-center" role="status">
-              <BrandMark className="mx-auto size-12 drop-shadow-sm" />
-              <h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2>
+            <section className="w-full max-w-md border-y border-line bg-surface-subtle p-6 text-center" role="status">
+              <BrandMark className="mx-auto size-10" />
+              <h2 className="mt-4 text-lg font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2>
               <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p>
-              <div aria-hidden="true" className="mx-auto mt-5 max-w-xs rounded-lg bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink shadow-inner"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div>
+              <div aria-hidden="true" className="mx-auto mt-4 max-w-xs rounded bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div>
             </section>
           </div>
         ) : visibleLayout === null ? (active === null ? null : singleTerminal(active)) : displayedNode === null ? null : renderNode(displayedNode)}

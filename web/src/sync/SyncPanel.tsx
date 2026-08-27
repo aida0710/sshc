@@ -264,9 +264,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
         <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
         {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-        <section className="sshc-card grid overflow-hidden rounded-xl bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
+        <section className="sshc-card grid overflow-hidden rounded-md bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
           <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-select-fill text-accent">
+            <span className="flex h-12 w-12 items-center justify-center rounded-md bg-select-fill text-accent">
               <Icon name="sync" className="h-6 w-6" />
             </span>
             <div>
@@ -312,7 +312,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   return (
     <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
-      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-xl bg-toolbar">
+      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-md bg-toolbar">
         {[
           [t("sync.metricConfiguration"), t(status.configured ? "sync.stateConfigured" : "sync.stateNotConfigured")],
           [t("sync.metricDirection"), t(`sync.direction.${status.direction}`)],
@@ -325,7 +325,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         ))}
       </dl>
 
-      {status.configured ? null : <ol aria-label={t("sync.flowHeading")} className="grid overflow-hidden rounded-xl border border-line bg-toolbar sm:grid-cols-3">
+      {status.configured ? null : <ol aria-label={t("sync.flowHeading")} className="grid overflow-hidden rounded-md border border-line bg-toolbar sm:grid-cols-3">
         {["sync.flowBucket", "sync.flowKey", "sync.flowOperate"].map((key, index) => (
           <li key={key} className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-xs font-semibold text-accent">
@@ -347,7 +347,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       )}
 
       {status.configured ? (
-        <section className="sshc-card overflow-hidden rounded-xl bg-card">
+        <section className="sshc-card overflow-hidden rounded-md bg-card">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
             <div>
               <h3 className={sectionHeading}>{t("sync.overviewHeading")}</h3>
@@ -424,13 +424,13 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
 
       <details open={!status.configured || editingSettings} className="group">
         {status.configured ? (
-          <summary className="cursor-pointer list-none rounded-xl border border-line bg-toolbar px-4 py-3 text-sm font-medium text-ink marker:hidden">
+          <summary className="cursor-pointer list-none rounded-md border border-line bg-toolbar px-4 py-3 text-sm font-medium text-ink marker:hidden">
             {t("sync.manageSettings")}
           </summary>
         ) : null}
         <div className={status.configured ? "mt-4 flex flex-col gap-6" : "flex flex-col gap-6"}>
 
-      <section className="sshc-card overflow-hidden rounded-xl bg-card">
+      <section className="sshc-card overflow-hidden rounded-md bg-card">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
           <div className="flex items-center gap-2">
             <Icon name="remoteKeys" className="h-4 w-4 text-ink-muted" />
@@ -582,7 +582,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       </section>
 
       {status.configured ? (
-      <section className="sshc-card overflow-hidden rounded-xl bg-card">
+      <section className="sshc-card overflow-hidden rounded-md bg-card">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
           <div className="flex items-center gap-2">
             <Icon name="sync" className="h-4 w-4 text-ink-muted" />
@@ -970,7 +970,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       )}
 
       {preview === null ? null : (
-        <section className="sshc-card overflow-hidden rounded-xl bg-card">
+        <section className="sshc-card overflow-hidden rounded-md bg-card">
           <header className="flex items-center gap-2 border-b border-line bg-toolbar px-4 py-3">
             <Icon name="config" className="h-4 w-4 text-ink-muted" />
             <h3 className={sectionHeading}>{t("sync.previewHeading")}</h3>

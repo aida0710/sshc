@@ -79,13 +79,13 @@ export function AppNavigation({
     <nav
       id={navigationId}
       aria-label={t("shell.primaryNavigation")}
-      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:translate-x-0 md:p-3 md:shadow-none ${
+      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
         navigationOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full shadow-none"
       } ${desktopVisible ? "md:flex" : "md:hidden"}`}
     >
-      <div className="mb-2 flex shrink-0 items-center gap-2 border-b border-line px-1 pb-2 md:hidden">
-        <BrandMark className="h-8 w-8" />
-        <span className="text-sm font-bold tracking-tight">{t("shell.title")}</span>
+      <div className="mb-1 flex h-10 shrink-0 items-center gap-2 border-b border-line px-1 md:hidden">
+        <BrandMark className="h-7 w-7" />
+        <span className="font-mono text-sm font-semibold tracking-tight">{t("shell.title")}</span>
       </div>
 
       <div className="shrink-0">
@@ -101,7 +101,7 @@ export function AppNavigation({
       <div
         role="tablist"
         aria-label={t("shell.navFaces")}
-        className="my-1.5 grid shrink-0 grid-cols-2 gap-1 rounded-xl border border-control-line bg-control p-1 md:my-2"
+        className="my-1.5 grid shrink-0 grid-cols-2 border-y border-line md:my-2"
       >
         {(["settings", "terminal"] as NavFace[]).map((face) => (
           <button
@@ -110,10 +110,10 @@ export function AppNavigation({
             role="tab"
             aria-selected={face === currentFace}
             onClick={() => onFaceChange(face)}
-            className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
+            className={`flex items-center justify-center gap-1.5 border-b-2 px-2 py-2 text-xs font-medium transition-colors ${
               face === currentFace
-                ? "bg-card text-ink shadow-sm"
-                : "text-ink-muted hover:bg-card/60 hover:text-ink"
+                ? "border-accent text-ink"
+                : "border-transparent text-ink-muted hover:bg-select-fill hover:text-ink"
             }`}
           >
             <Icon name={face === "settings" ? "settings" : "terminal"} className="h-3.5 w-3.5" />
@@ -277,17 +277,17 @@ function NavigationLink({
       onClick={(event) => {
         onNavigate(event, name);
       }}
-      className={`group relative flex min-h-10 w-full items-center gap-2 overflow-hidden rounded-lg px-2 py-1 text-left text-sm transition-colors md:my-0.5 md:min-h-0 md:gap-2.5 md:py-0.5 ${
+      className={`group relative flex min-h-10 w-full items-center gap-2 overflow-hidden rounded-sm px-2 py-1 text-left text-sm transition-colors md:my-px md:min-h-8 md:gap-2.5 md:py-0.5 ${
         active
-          ? "bg-card font-semibold text-ink shadow-sm"
+          ? "bg-select-fill font-semibold text-ink"
           : "font-medium text-ink-muted hover:bg-select-fill hover:text-ink"
       }`}
     >
-      {active ? <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-accent" /> : null}
+      {active ? <span aria-hidden="true" className="absolute inset-y-1 left-0 w-0.5 bg-accent" /> : null}
       <span
         aria-hidden="true"
-        className={`grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors md:h-5 md:w-5 ${
-          active ? "bg-accent text-accent-ink" : "bg-control text-ink-muted group-hover:text-ink"
+        className={`grid h-6 w-6 shrink-0 place-items-center transition-colors md:h-5 md:w-5 ${
+          active ? "text-ink" : "text-ink-muted group-hover:text-ink"
         }`}
       >
         <Icon name={sectionIcons[name]} className="h-4 w-4" />
@@ -299,7 +299,7 @@ function NavigationLink({
 
 function NavigationGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="mb-1.5 md:mb-2">
+    <div className="mb-1 md:mb-1.5">
       <span
         aria-hidden="true"
         className="block px-2 pb-0.5 pt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint"

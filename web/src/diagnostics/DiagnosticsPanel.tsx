@@ -112,7 +112,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
         <Notice tone="danger">{error}</Notice>
       ) : null}
 
-      <section className="sshc-card overflow-hidden rounded-xl bg-card" aria-label={t("diag.heading")}>
+      <section className="sshc-card overflow-hidden rounded-md bg-card" aria-label={t("diag.heading")}>
         <div className="flex flex-col gap-4 bg-toolbar px-4 py-4 sm:px-5">
           <div className="flex flex-wrap items-end gap-3">
             {embedded ? (
@@ -157,7 +157,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
       </section>
 
       {config ? (
-        <section className="sshc-card overflow-hidden rounded-xl bg-card">
+        <section className="sshc-card overflow-hidden rounded-md bg-card">
           <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
             <div className="flex items-center gap-2">
               <Icon name="config" className="h-4 w-4 text-ink-muted" />
@@ -195,7 +195,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
         </section>
       ) : null}
 
-      {hasResults ? <div className="sshc-card overflow-hidden rounded-xl bg-card">
+      {hasResults ? <div className="sshc-card overflow-hidden rounded-md bg-card">
       {directives.length > 0 ? (
         <section className="border-b border-notice-line bg-notice px-4 py-4 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.canRunCommand")}</h3>
