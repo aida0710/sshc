@@ -299,7 +299,8 @@ test("keeps mobile navigation and display controls behind header menus", async (
 
   const primaryNavigation = page.getByRole("navigation", { name: "Primary" });
   await expect(primaryNavigation).not.toBeInViewport();
-  await expect(page.locator("header")).toHaveCSS("height", "48px");
+  await expect(page.locator("[data-app-header]")).toHaveCSS("height", "48px");
+  await expect(page.locator("[data-app-header]")).toHaveCSS("position", "sticky");
 
   await page.getByLabel("Display menu").click();
   await expect(page.getByLabel("Theme menu")).toBeVisible();
@@ -312,6 +313,62 @@ test("keeps mobile navigation and display controls behind header menus", async (
   await expect(page.getByRole("dialog", { name: "Search hosts, files, snippets and settings" })).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.0-command-palette-mobile.png`, fullPage: true });
+  }
+});
+
+test("rounds the connection view switch and keeps Config structure aligned while scrolling on mobile", async ({ page, installation }) => {
+  await installation.write("conf.d/20-lab.conf", hosts);
+  await openApplication(page, installation);
+
+  await openSectionThroughDrawer(page, "Connections", "Connections");
+  await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+  await page.reload();
+  const arrangement = page.getByRole("group", { name: "接続の並べ方" });
+  await expect(arrangement).toHaveCSS("border-radius", "8px");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-mobile-rounded-switch.png`, fullPage: true });
+  }
+
+  await page.goto(new URL("/config", page.url()).href);
+  await expect(page.getByRole("heading", { name: "設定ファイル", exact: true }).first()).toBeVisible();
+
+  const metrics = page.locator("[data-config-metrics]");
+  await expect(metrics.locator(":scope > div")).toHaveCount(3);
+  const boundaries = await metrics.locator(":scope > div").evaluateAll((cells) => cells.slice(0, -1).map((cell, index) => {
+    const next = cells[index + 1]!;
+    return Number.parseFloat(getComputedStyle(cell).borderRightWidth) +
+      Number.parseFloat(getComputedStyle(next).borderLeftWidth);
+  }));
+  expect(boundaries.every((width) => width >= 1)).toBe(true);
+
+  const alignment = await page.getByRole("button", { name: "conf.d/20-lab.conf" }).evaluate((button) => {
+    const row = button.closest("li")?.firstElementChild;
+    const icon = row?.querySelector("[data-config-node-icon]");
+    const content = icon?.nextElementSibling;
+    if (icon === null || icon === undefined || content === null || content === undefined) return null;
+    const iconBox = icon.getBoundingClientRect();
+    const contentBox = content.getBoundingClientRect();
+    return Math.abs((iconBox.top + iconBox.height / 2) - (contentBox.top + contentBox.height / 2));
+  });
+  expect(alignment).not.toBeNull();
+  expect(alignment!).toBeLessThanOrEqual(2);
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-config-mobile-metrics.png`, fullPage: true });
+  }
+
+  const appHeader = page.locator("[data-app-header]");
+  await expect(appHeader).toHaveCSS("position", "sticky");
+  const before = await appHeader.boundingBox();
+  await metrics.evaluate((element) => {
+    let ancestor = element.parentElement;
+    while (ancestor !== null && getComputedStyle(ancestor).overflowY !== "auto") ancestor = ancestor.parentElement;
+    if (ancestor !== null) ancestor.scrollTop = ancestor.scrollHeight;
+  });
+  await expect.poll(async () => (await appHeader.boundingBox())?.y).toBe(before?.y);
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-config-mobile-sticky.png`, fullPage: true });
   }
 });
 

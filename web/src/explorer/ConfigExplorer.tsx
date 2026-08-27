@@ -213,14 +213,14 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <PageHeader title={t("explorer.pageTitle")} description={t("explorer.pageDescription")} />
-      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-md bg-toolbar">
+      <dl data-config-metrics className="sshc-card grid grid-cols-3 divide-x divide-hairline overflow-hidden rounded-md bg-toolbar">
         {[
           [t("explorer.metricFiles"), overview.files.length, false],
           [t("explorer.metricEditable"), editableFiles, false],
           [t("explorer.metricDiagnostics"), overview.diagnostics.length, overview.diagnostics.length > 0],
         ].map(([label, value, attention]) => (
-          <div key={String(label)} className="flex min-w-36 flex-1 items-center justify-between gap-4 border-r border-hairline px-4 py-2.5 last:border-r-0">
-            <dt className={`text-xs font-medium ${attention ? "text-notice-ink" : "text-ink-muted"}`}>{label}</dt>
+          <div key={String(label)} className="flex min-w-0 flex-col items-start gap-1 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-4">
+            <dt className={`min-w-0 break-words text-xs font-medium ${attention ? "text-notice-ink" : "text-ink-muted"}`}>{label}</dt>
             <dd className={`font-mono text-sm font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</dd>
           </div>
         ))}
@@ -249,7 +249,9 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
               return (
                 <li key={node.file.absolute} className={`rounded-lg ${current ? "bg-select-fill" : "hover:bg-surface-subtle"}`}>
                   <div className="flex items-start gap-2.5 px-2.5 py-2">
-                    <Icon name="config" className={`mt-0.5 h-4 w-4 ${current ? "text-accent" : "text-ink-faint"}`} />
+                    <span data-config-node-icon aria-hidden="true" className={`mt-5 shrink-0 md:mt-2.5 ${current ? "text-accent" : "text-ink-faint"}`}>
+                      <Icon name="config" className="h-4 w-4" />
+                    </span>
                     <div className="min-w-0 flex-1">
                       {node.file.path === undefined ? (
                         <p className="text-sm text-ink-muted">

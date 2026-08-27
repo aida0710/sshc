@@ -53,7 +53,7 @@ export function AppHeader({
   const transfers = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   const activeTransfers = transfers.filter((job) => ["queued", "running", "paused", "reattach", "needs_overwrite"].includes(job.status)).length;
   return (
-    <header className="relative z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:gap-3 md:px-3">
+    <header data-app-header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:gap-3 md:px-3">
       <div className="flex min-w-0 flex-1 items-center gap-2 md:contents">
         <button
           type="button"

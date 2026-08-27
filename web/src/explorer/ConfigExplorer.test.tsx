@@ -101,6 +101,17 @@ describe("ConfigExplorer", () => {
     expect(screen.getByText(/include_no_match/)).toBeInTheDocument();
   });
 
+  it("keeps three metric columns divided on narrow screens and centers file icons on their labels", async () => {
+    render(<ConfigExplorer />);
+
+    const metrics = (await screen.findByText("Loaded files")).closest("dl");
+    expect(metrics).toHaveClass("grid", "grid-cols-3", "divide-x");
+    expect(metrics?.children).toHaveLength(3);
+
+    const file = screen.getByRole("button", { name: "conf.d/10-home.conf" }).closest("li");
+    expect(file?.querySelector("[data-config-node-icon]")).toHaveClass("mt-5", "md:mt-2.5");
+  });
+
   it("wraps long Include paths and conditions inside the hierarchy card", async () => {
     render(<ConfigExplorer />);
 
