@@ -106,7 +106,7 @@ export function HostDetailPanel({
     <section className="flex flex-col gap-5">
       <NoticeList notices={detail.form.notices ?? []} />
 
-      <div data-connection-editor className="sshc-card overflow-hidden rounded bg-card">
+      <div data-connection-editor className="sshc-card overflow-hidden rounded-lg bg-card">
         <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 flex gap-1 border-b border-line bg-select-fill p-1">
           {areas.map((item) => (
             <button

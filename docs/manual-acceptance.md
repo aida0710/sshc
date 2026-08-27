@@ -136,7 +136,7 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 1. 保存済み接続のsummary中央行とConfigのInclude階層／editorで、カード外枠の左右線が途中で消えないことをライト／ダーク双方で確認する。
 2. Basic、設定解析、詳細設定を切り替え、tablistと内容が同じ外枠内にあり、選択中の内容が一段内側に表示されることを確認する。
 3. Configの「Include階層」headerと「config・編集可能」headerの上端、下端、高さが一致することを確認する。
-4. 通常のカード、control、menu、dialog、選択行の角が4pxで揃い、状態badgeだけpillになっていることを確認する。
+4. 大きなsurfaceとdialogが12px、inputとbuttonが8px、小さな補助要素が6pxを基準に揃い、表内部は角なし、状態badgeだけpillになっていることを確認する。
 
 ## 記録
 

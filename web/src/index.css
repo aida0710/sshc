@@ -2,23 +2,23 @@
 :root {
   color-scheme: light;
 
-  --ui-canvas: #edf0f2;
-  --ui-sidebar: #e5e9ec;
-  --ui-tree: #eef1f3;
-  --ui-toolbar: #e9edef;
-  --ui-card: #f7f8f9;
-  --ui-surface: #e2e7ea;
-  --ui-surface-subtle: #eef1f3;
-  --ui-line: #aeb8bf;
-  --ui-hairline: #d9dee2;
-  --ui-control: #f8f9fa;
-  --ui-control-line: #737f87;
-  --ui-select-fill: #dbe1e5;
-  --ui-ink: #20262c;
-  --ui-ink-muted: #4f5960;
-  --ui-ink-faint: #5e6971;
-  --ui-accent: #596671;
-  --ui-accent-ink: #f7f8f9;
+  --ui-canvas: #f2f2f1;
+  --ui-sidebar: #e9e9e7;
+  --ui-tree: #f0f0ef;
+  --ui-toolbar: #ececeb;
+  --ui-card: #fafafa;
+  --ui-surface: #e7e7e5;
+  --ui-surface-subtle: #f1f1ef;
+  --ui-line: #c7c9c8;
+  --ui-hairline: #e3e4e3;
+  --ui-control: #fcfcfc;
+  --ui-control-line: #878b89;
+  --ui-select-fill: #dfdfdd;
+  --ui-ink: #202223;
+  --ui-ink-muted: #555a5c;
+  --ui-ink-faint: #626769;
+  --ui-accent: #5e6467;
+  --ui-accent-ink: #fafafa;
   --ui-notice: #fff6df;
   --ui-notice-line: #efd08b;
   --ui-notice-ink: #71500a;
@@ -28,12 +28,12 @@
   --ui-code-fg: #d8dfe4;
   --ui-connect-mark: #596671;
   --ui-connect-star: #8b6a19;
-  --ui-brand-background: #20262b;
-  --ui-brand-mark: #dce2e6;
-  --ui-brand-cursor: #9da8b0;
-  --ui-card-shadow: none;
-  --ui-skeleton: #dbe0e4;
-  --ui-skeleton-highlight: #f2f4f5;
+  --ui-brand-background: #252829;
+  --ui-brand-mark: #e3e5e5;
+  --ui-brand-cursor: #a4aaac;
+  --ui-card-shadow: 0 1px 2px rgb(20 24 27 / 0.06);
+  --ui-skeleton: #dedfdd;
+  --ui-skeleton-highlight: #f4f4f3;
   --ui-term-bg: #ffffff;
   --ui-term-fg: #1d1d1f;
   --ui-term-cursor: #1d1d1f;
@@ -59,36 +59,36 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --ui-canvas: #0b0e10;
-  --ui-sidebar: #121619;
-  --ui-tree: #0f1316;
-  --ui-toolbar: #15191c;
-  --ui-card: #171b1f;
-  --ui-surface: #1c2227;
-  --ui-surface-subtle: #111518;
-  --ui-line: #424b51;
-  --ui-hairline: #22282d;
-  --ui-control: #101417;
-  --ui-control-line: #68747d;
-  --ui-select-fill: #273039;
-  --ui-ink: #d8dfe4;
-  --ui-ink-muted: #9ca7af;
-  --ui-ink-faint: #78868f;
-  --ui-accent: #a8b4bd;
-  --ui-accent-ink: #101417;
+  --ui-canvas: #111315;
+  --ui-sidebar: #1b1d1f;
+  --ui-tree: #181a1c;
+  --ui-toolbar: #1b1d1f;
+  --ui-card: #202224;
+  --ui-surface: #292c2f;
+  --ui-surface-subtle: #181a1c;
+  --ui-line: #3b3e41;
+  --ui-hairline: #2b2e31;
+  --ui-control: #181a1c;
+  --ui-control-line: #666b70;
+  --ui-select-fill: #303438;
+  --ui-ink: #e2e3e4;
+  --ui-ink-muted: #aeb2b6;
+  --ui-ink-faint: #92989e;
+  --ui-accent: #c5c8ca;
+  --ui-accent-ink: #16181a;
   --ui-notice: rgb(255 159 10 / 0.13);
   --ui-notice-line: rgb(255 159 10 / 0.32);
   --ui-notice-ink: #f0b429;
   --ui-danger: #ff858d;
   --ui-live: #2aa374;
-  --ui-code-bg: #080b0d;
-  --ui-code-fg: #d8dfe4;
-  --ui-brand-background: #dce2e6;
-  --ui-brand-mark: #2d3740;
-  --ui-brand-cursor: #76838d;
-  --ui-card-shadow: none;
-  --ui-skeleton: #1d2429;
-  --ui-skeleton-highlight: #30383e;
+  --ui-code-bg: #0d0f10;
+  --ui-code-fg: #e2e3e4;
+  --ui-brand-background: #292c2f;
+  --ui-brand-mark: #e1e3e4;
+  --ui-brand-cursor: #92989e;
+  --ui-card-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+  --ui-skeleton: #292c2f;
+  --ui-skeleton-highlight: #3a3e42;
 
   --ui-term-bg: #080b0d;
   --ui-term-fg: #d8dfe4;
@@ -140,9 +140,9 @@
   --color-connect-mark: var(--ui-connect-mark);
   --color-connect-star: var(--ui-connect-star);
   --color-term-bg: var(--ui-term-bg);
-  --radius-sm: 0.25rem;
-  --radius-md: 0.25rem;
-  --radius-lg: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
 }
 
 :root {
@@ -152,7 +152,9 @@
 }
 
 .sshc-card {
-  border: 1px solid var(--ui-control-line);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--ui-card-shadow);
 }
 
 .sshc-skeleton {
