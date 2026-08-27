@@ -44,7 +44,7 @@ const overview = {
   metadata: {
     schemaVersion: 1,
     hosts: [
-      { identity: { path: "connections/work.conf", alias: "database" }, tags: ["production"], favourite: true },
+      { identity: { path: "connections/work.conf", alias: "database" }, tags: ["production"] },
     ],
   },
   diagnostics: [{ severity: "warning", code: "duplicate_alias" }],

@@ -46,13 +46,12 @@ type Setting struct {
 
 // HostMetadata は 1 個のホストに付随する、UI 専用の情報である。
 type HostMetadata struct {
-	Identity  HostIdentity `json:"identity"`
-	Tags      []string     `json:"tags,omitempty"`
-	Colour    string       `json:"colour,omitempty"`
-	Note      string       `json:"note,omitempty"`
-	Favourite bool         `json:"favourite,omitempty"`
-	Order     int          `json:"order,omitempty"`
-	Orphan    bool         `json:"orphan,omitempty"`
+	Identity HostIdentity `json:"identity"`
+	Tags     []string     `json:"tags,omitempty"`
+	Colour   string       `json:"colour,omitempty"`
+	Note     string       `json:"note,omitempty"`
+	Order    int          `json:"order,omitempty"`
+	Orphan   bool         `json:"orphan,omitempty"`
 	// Appearance は、この接続を開いたときの端末の見た目である。
 	Appearance *TerminalAppearance `json:"appearance,omitempty"`
 }

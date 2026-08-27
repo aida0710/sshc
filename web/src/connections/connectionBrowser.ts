@@ -11,7 +11,6 @@ export type BrowserServer = {
   identity: HostEntry["identity"];
   group: string;
   tags: string[];
-  favourite: boolean;
   colour: string;
   order: number;
   duplicateAlias: boolean;
@@ -25,7 +24,6 @@ export type BrowserGroup = {
   colour: string;
   order: number;
   descendantCount: number;
-  favouriteDescendantCount: number;
 };
 
 export type ConnectionBrowserIndex = {
@@ -102,7 +100,6 @@ export function buildConnectionBrowserIndex(overview: Overview): ConnectionBrows
         identity: host.identity,
         group: host.group ?? "",
         tags: metadata?.tags ?? [],
-        favourite: metadata?.favourite === true,
         colour: metadata?.colour ?? "",
         order: metadata?.order ?? 0,
         duplicateAlias: duplicateAliases.has(host.identity.alias),
@@ -130,7 +127,6 @@ export function buildConnectionBrowserIndex(overview: Overview): ConnectionBrows
         colour: metadata?.colour ?? group.colour ?? "",
         order: metadata?.order ?? group.order ?? 0,
         descendantCount: descendants.length,
-        favouriteDescendantCount: descendants.filter((server) => server.favourite).length,
         sourceOrder,
       };
     })
@@ -177,20 +173,17 @@ export function buildConnectionBrowserIndex(overview: Overview): ConnectionBrows
   };
 }
 
-function filteredServers(servers: BrowserServer[], query: string, favouritesOnly: boolean) {
-  return servers.filter(
-    (server) => (!favouritesOnly || server.favourite) && matches(server, query),
-  );
+function filteredServers(servers: BrowserServer[], query: string) {
+  return servers.filter((server) => matches(server, query));
 }
 
 export function projectConnectionBrowser(
   index: ConnectionBrowserIndex,
   browser: ConnectionBrowserLocation,
   query: string,
-  favouritesOnly: boolean,
 ): BrowserProjection {
   if (browser.view === "servers") {
-    return { kind: "servers", servers: filteredServers(index.servers, query, favouritesOnly) };
+    return { kind: "servers", servers: filteredServers(index.servers, query) };
   }
   if (browser.scope === "named" && !index.groupByName.has(browser.group)) {
     return { kind: "missing-group", group: browser.group };
@@ -208,12 +201,12 @@ export function projectConnectionBrowser(
     return {
       kind: "search-results",
       scope,
-      servers: filteredServers(candidates, trimmedQuery, favouritesOnly),
+      servers: filteredServers(candidates, trimmedQuery),
     };
   }
 
   if (browser.scope === "ungrouped") {
-    const servers = filteredServers(index.directServersByGroup.get("") ?? [], "", favouritesOnly);
+    const servers = filteredServers(index.directServersByGroup.get("") ?? [], "");
     return {
       kind: "group-level",
       group: null,
@@ -224,21 +217,17 @@ export function projectConnectionBrowser(
   }
 
   const group = browser.scope === "named" ? browser.group : "";
-  const groups = (index.visibleChildrenByParent.get(group) ?? []).filter(
-    (child) => !favouritesOnly || child.favouriteDescendantCount > 0,
-  );
+  const groups = index.visibleChildrenByParent.get(group) ?? [];
   const servers =
     browser.scope === "root"
       ? []
-      : filteredServers(index.directServersByGroup.get(group) ?? [], "", favouritesOnly);
+      : filteredServers(index.directServersByGroup.get(group) ?? [], "");
   const ungrouped = index.directServersByGroup.get("") ?? [];
   return {
     kind: "group-level",
     group: browser.scope === "root" ? null : group,
     groups,
     servers,
-    ungroupedCount: favouritesOnly
-      ? ungrouped.filter((server) => server.favourite).length
-      : ungrouped.length,
+    ungroupedCount: ungrouped.length,
   };
 }

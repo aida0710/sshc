@@ -39,14 +39,14 @@
 
 ## Connections UI とグループの境界
 
-- 起動直後の Home はホスト中心のランチャーです。具体的な alias を検索し、お気に入り、グループ、タグを見ながらコンソールを開けます。Home を表示しただけでは DNS、TCP、SSH のどれも開始せず、「接続」を選んだときだけ埋め込みターミナルが開きます。
+- 起動直後の Home はホスト中心のランチャーです。具体的な alias を検索し、グループ、タグ、最近の接続順を見ながらコンソールを開けます。Home を表示しただけでは DNS、TCP、SSH のどれも開始せず、「接続」を選んだときだけ埋め込みターミナルが開きます。
 - Command Paletteはdesktop toolbarまたは`Ctrl/Cmd+K`から開き、現在読み込まれているhostとSSH設定file、保存済みsnippet、設定sectionを一時的なqueryで横断検索します。queryはURL、localStorage、snapshotへ保存しません。hostだけは選択時に接続を開始し、file、snippet、設定は該当画面へ移動します。mobileの入口は常設footerではなくdrawer内に置きます。
 - Home は設定上の警告、中断した変更、同期状態を要約しますが、それらの編集機能は持ちません。詳細操作は Connections、Diagnostics、History、Sync の各専用画面で行います。
 
 - フォーム編集、任意キー・値編集、ブロック Raw 編集、ファイル全体 Raw 編集は、すべて `~/.ssh/config` と `Include` 先から構築した同じ lossless 構文木を更新します。変更していない行は 1 バイトも書き換えません。
 - 保存は必ず「読み込んだ内容」を base として送り、その SHA-256 を precondition にします。外部変更があった場合は書き込まず、三者差分を表示します。
 - 保存前に再パースと Include グラフの再解決を行い、新しい構文エラーや Include エラーを生じる変更は拒否します。既存の問題だけで保存を拒否することはありません。
-- UI 専用情報は `~/.ssh/sshc/metadata.json` に保存します。対象はスキーマバージョン、グループの表示情報（色、メモ、表示順、共通設定）、タグ、色、お気に入り、表示順です。鍵本文とパスフレーズは保存しません。Host とグループの対応は metadata ではなくディレクトリ構造で管理します。
+- UI 専用情報は `~/.ssh/sshc/metadata.json` に保存します。対象はスキーマバージョン、グループの表示情報（色、メモ、表示順、共通設定）、タグ、色、表示順です。鍵本文とパスフレーズは保存しません。Host とグループの対応は metadata ではなくディレクトリ構造で管理します。
 - Host のコメントは metadata ではなく `Host` 行の直上のコメント行として設定ファイルに書きます。sshc を使わずにファイルを読む人にも残るためです。付随するコメントは `Host` 行の直上に連続するコメント行だけで、空行・ディレクティブ・ファイル先頭で切れます。空行で切るのは、ファイル冒頭の見出しコメントが最初の Host ブロックに取り込まれないようにするためです。
 - 旧来の metadata の `note` は廃止しました。コメントが未設定のブロックでは編集欄の初期値として表示され、保存すると設定ファイルへ書き出されて metadata からは消えます。
 - Host の識別は「正規化した相対パス + 具体的な主 alias」です。改名は config と metadata を同一トランザクションで更新し、対応先が消えた metadata は推測で付け替えず orphan として再関連付けを求めます。グループはディレクトリなので、グループを変えるとパスが変わり、識別も変わります。移動は config と metadata を同一トランザクションで更新するため、識別が変わっても orphan にはなりません。
@@ -90,7 +90,7 @@
 - 開いているコンソールは左側のナビゲーションに表示します。`Home`、`Connections`、`SFTP`、`Terminal` を上部に固定し、その下の領域を「設定」と「ターミナル」で切り替えます。端末は接続一覧の隣ではなく、専用画面に表示します。「設定」側には従来のセクション一覧を表示します。既定はターミナル側ですが、セッションが 0 件の場合は設定側から開始します。セッションはプロセス終了時に失われるため、常にターミナル側から開始すると起動直後に空の一覧を表示することになるためです。切り替え状態は保存せず、起動時にこの規則で決定します。モバイルdrawerは40pxの操作行を維持しつつ、外周、group間、見出しの余白をdesktopより小さくして、800px高で保守項目まで到達しやすくします。
 - コンソール一覧は状態別にグループ化しません。各項目は 2 行で、1 行目に名前、2 行目に「状態 · 接続先」を表示します。種類（SSH / シェル）は、接続先が `localhost` かどうかで判別できるため表示しません。終了した項目も元の位置に残し、接続失敗の詳細を見つけやすくします。
 - 各項目の `···` メニューから、名前変更、同じ接続先への新規接続、上下移動を実行できます。ドラッグによる並べ替えに加え、キーボード操作を可能にするためメニューにも上下移動を用意します。名前と並び順はセッション固有であり、`metadata.json` には保存しません。
-- 右側のインスペクタは Connections と Groups の 2 画面で使用します。Connections では `~/.ssh/config` に保存するグループ、コメント、alias を主画面に置き、`metadata.json` にだけ保存する色、タグ、お気に入り、表示順と、警告・継承元をインスペクタに置きます。Groups でも同様に、色、表示順、Connections での表示設定をインスペクタに置き、改名、削除、子グループ追加、共通設定を主画面に置きます。行を選択すると対象をインスペクタに表示します。他の 8 画面ではインスペクタを使用しないため、開閉ボタンも表示しません。
+- 右側のインスペクタは Connections と Groups の 2 画面で使用します。Connections では `~/.ssh/config` に保存するグループ、コメント、alias を主画面に置き、`metadata.json` にだけ保存する色、タグ、表示順と、警告・継承元をインスペクタに置きます。Groups でも同様に、色、表示順、Connections での表示設定をインスペクタに置き、改名、削除、子グループ追加、共通設定を主画面に置きます。行を選択すると対象をインスペクタに表示します。他の 8 画面ではインスペクタを使用しないため、開閉ボタンも表示しません。
 - インスペクタは既定で閉じており、開閉状態はセクションをまたいで保持します。中身に注意がある時だけ開閉ボタンに琥珀の印が付き、その印は読み上げにも「確認が必要な項目があります」として届きます。印が無ければ開ける価値が無いことを意味します。
 - インスペクタにキーボードショートカットはありません。macOS の慣習は ⌥⌘I ですが、⌥⌘I は Chromium が開発者ツールとして先に取ります。
 - 主ナビゲーションのグループ見出しは見出し要素ではなく `aria-label` 付きのリストです。Playwright はアクセシブル名を既定で部分一致させるため、`鍵とホスト` という見出しがあると `鍵` を指す既存の検索が 2 件に一致して落ちます。見出しの名前空間はパネルのものです。
@@ -208,7 +208,7 @@
 
   現在、常駐対象は `sshc engine` の foreground process です。OS のログイン項目ではなく process supervisor に登録します。引数なしの `sshc` は engine を起動しないため、常駐設定には使用しません。
 - `sshc list` は `~/.ssh/config` と到達可能な `Include` を読み、具体的な接続先 alias を辞書順で 1 行ずつ表示します。`Host *`、ワイルドカード、否定パターンは接続先名ではないため表示せず、重複 alias は 1 回だけ表示します。設定の読み取り時に `ssh` や `Match exec` は実行しません。
-- `sshc connect` は現在のターミナルに検索 TUI を表示します。alias、設定から計算した `HostName`・`User`・`Port`、metadata のタグで絞り込み、お気に入りを先に表示します。上下キーで選択し、Enter で同じ端末から接続します。Web UI は起動せず、`sshc <接続先>` と同じ保存済み鍵パスフレーズの経路を使用します。設定ファイルが存在するが読み取れない場合は、接続先 0 件として扱わず読み取りエラーを表示します。
+- `sshc connect` は現在のターミナルに検索 TUI を表示します。alias、設定から計算した `HostName`・`User`・`Port`、metadata のタグで絞り込み、alias順に表示します。上下キーで選択し、Enter で同じ端末から接続します。Web UI は起動せず、`sshc <接続先>` と同じ保存済み鍵パスフレーズの経路を使用します。設定ファイルが存在するが読み取れない場合は、接続先 0 件として扱わず読み取りエラーを表示します。
 - TUI の入力は端末からの read 単位で解釈します。`Esc` は単独キーであると同時に矢印キー列の先頭でもあるため、read の末尾にある場合だけ単独キーとして扱います。未対応の escape sequence は終端まで読み捨て、`Delete` や `Ctrl-矢印` の後続バイトが検索文字列に入らないようにします。行は端末幅で切り、表示できない件数を `N more` として表示します。
 - サブコマンドの一覧は `sshc -h` と `sshc connect --help` に出ます。`open`、`list`、`connect`、`status`、`update`、`help` は alias より先に読まれるので、その名前のホストへはこのコマンドからは繋げません。それが usage に書いてある理由です。
 - `sshc <接続先>` は外部の `ssh` を起動せず、現在のターミナルからプロセス内 SSH client で接続します。engine は `~/.ssh/sshc/cli`（0600）に URL と起動ごとの秘密を保存し、CLI はこの情報を使って保存済み資格情報を取得します。応答には単回トークンではなく、その接続に必要な資格情報を直接含めます。engine は ProxyJump の接続チェーンを解決し、各 alias が使用する鍵パスフレーズとアカウントパスワードだけを返します。`Match exec` や `CanonicalizeHostname` により外部実行または DNS なしでは鍵を決定できない場合は返しません。接続チェーンに含まれない資格情報も返しません。2FA など保存値で処理できないプロンプトは端末に表示します。アカウントパスワードを追加しても、このファイルを読み取れる主体は既に vault 暗号文、秘密鍵、任意 alias の保存済みパスフレーズへアクセスできるため、信頼境界は変わりません。強制終了後にファイルが残っても参照先ポートには接続できず、秘密は次回起動時に再生成されます。
@@ -253,7 +253,7 @@
 - SFTP はターミナル channel と同じ接続設定、vault、`known_hosts`、`ProxyJump` chain を使いますが、現在の対話ターミナルの transport 自体は共有しません。各 API 操作に専用の非対話 SSH transport と SFTP subsystem を開き、処理後に全 hop を閉じます。未知のホスト鍵は常に拒否するため、最初の確認はターミナル接続で行う必要があります。
 - リモート editor は UTF-8 の通常ファイルだけを扱い、上限は 2 MiB です。バイナリまたは大きなファイルは download を使用します。save は読み込み時の revision と現在の stat を比較して外部変更を検出し、同じ directory の一時ファイルを書いて rename します。既存 mode は維持します。delete は表示した stat に紐づく単回 action token が必要で、directory の再帰削除と symlink の追跡はしません。
 - upload／downloadはOpenAPIで定義した共通Transfer Job APIと、Web全体で生存するTransfer Managerへ集約します。jobはdirection、file／folder、batch、attempt、status、bytes、速度、残り時間を持ち、状態遷移と同時2件の上限をbackendでも検査します。folder uploadはfile子jobへ展開し、同じbatchの成功済みfileを保ったまま失敗fileだけretryできます。画面移動中もqueueとApp内通知は生存します。browser reload後のuploadは同じname・size・lastModifiedのfileを再選択した場合だけ再開し、downloadの受信chunkはreloadをまたいで保持しません。
-- uploadはfile/folder pickerとDrag & Dropを同じ経路へ集約し、relative pathを検査して親directoryを浅い順に作成します。各fileは1 MiB以下のchunkとして送ります。remote側では対象と同じdirectoryの予約part fileへ期待offsetが一致する場合だけ追記し、完了時にtarget revisionを再検証してatomic renameします。pauseはpartを維持し、cancelはpartを削除します。既存ファイルは409を受けた時点で個別に上書き確認し、暗黙には置換しません。file downloadは受信済みbytesを保持してHTTP Rangeで自動再試行します。directory downloadは共通queueへ入るもののresume対象外のsymlink非追跡ZIP streamで、retry時は先頭からやり直します。symlinkはextract先を脱出できないようlink targetを内容とする通常ファイルへ変換します。chmodは現在のmetadata revisionと単回action tokenを必要とし、symlinkには適用しません。SFTP favoriteは持ちません。
+- uploadはfile/folder pickerとDrag & Dropを同じ経路へ集約し、relative pathを検査して親directoryを浅い順に作成します。各fileは1 MiB以下のchunkとして送ります。remote側では対象と同じdirectoryの予約part fileへ期待offsetが一致する場合だけ追記し、完了時にtarget revisionを再検証してatomic renameします。pauseはpartを維持し、cancelはpartを削除します。既存ファイルは409を受けた時点で個別に上書き確認し、暗黙には置換しません。file downloadは受信済みbytesを保持してHTTP Rangeで自動再試行します。directory downloadは共通queueへ入るもののresume対象外のsymlink非追跡ZIP streamで、retry時は先頭からやり直します。symlinkはextract先を脱出できないようlink targetを内容とする通常ファイルへ変換します。chmodは現在のmetadata revisionと単回action tokenを必要とし、symlinkには適用しません。
 - SFTP は左ナビの Start 内で Terminal の直前に置きます。画面を開いただけでは接続せず、利用者が host を選んだ後に初めて一覧を取得します。SFTP、鍵、`known_hosts` の表は操作列を除く各データ列をクライアント側で安定ソートし、現在の方向を `aria-sort` でも公開します。
 - Monaco Editor は SFTP 画面を開いたときだけ読み込みます。editor worker は build に同梱して同一 origin から読み込み、blob URL や CDN は使用しません。従来の `script-src 'self'` と Trusted Types の方針は維持します。
 - 同じ engine 内の Monaco Editor 保存と upload 公開は、SSH alias と正規化済みtarget pathの組ごとに直列化します。これにより両操作が同じrevisionを同時に検証して互いを上書きすることはありません。ただし一般的な SFTP v3 には「revision が一致するときだけ rename」を行うatomic CASがないため、別のSSH clientやremote processが検証とrenameの間に書き換える競合の検出はbest-effortです。

@@ -65,7 +65,7 @@ function buildDetail(fields: HostDetail["form"]["fields"] = []): HostDetail {
       comment: "",
       commentLines: 0,
     },
-    metadata: { identity: { path: "connections/work/edge.conf", alias: "edge" }, favourite: false },
+    metadata: { identity: { path: "connections/work/edge.conf", alias: "edge" } },
     effective: {
       alias: "edge",
 

@@ -17,7 +17,7 @@ function detail(fields: HostDetail["form"]["fields"], entries: HostDetail["effec
       comment: "",
       commentLines: 0,
     },
-    metadata: { identity: { path: "config", alias: "edge" }, favourite: false },
+    metadata: { identity: { path: "config", alias: "edge" } },
     effective: { alias: "edge", entries },
     file: {
       file: { path: "config", absolute: "/home/tester/.ssh/config" },

@@ -24,7 +24,7 @@ function build(): HostDetail {
       commentLines: 0,
       notices: [],
     },
-    metadata: { identity: { path: "connections/work/bastion.conf", alias: "bastion" }, favourite: false },
+    metadata: { identity: { path: "connections/work/bastion.conf", alias: "bastion" } },
     effective: { alias: "bastion", entries: [], notices: [] },
     file: {
       file: {
@@ -58,16 +58,11 @@ describe("hostNeedsAttention", () => {
 });
 
 describe("HostInspector", () => {
-  it("edits the four things that live only in metadata", async () => {
+  it("edits the display settings that live only in metadata", () => {
     const onMetadata = vi.fn();
-    const user = userEvent.setup();
     render(<HostInspector detail={build()} onMetadata={onMetadata} />);
 
     expect(screen.getByText(/saved immediately/)).toBeInTheDocument();
-
-    await user.click(screen.getByLabelText("Favourite"));
-
-    expect(onMetadata).toHaveBeenCalledWith(expect.objectContaining({ favourite: true }));
     expect(screen.getByLabelText(/^Tags/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Display order/)).toBeInTheDocument();
     expect(screen.getByLabelText("Colour")).toBeInTheDocument();

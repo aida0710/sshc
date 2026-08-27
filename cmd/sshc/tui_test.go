@@ -123,7 +123,7 @@ func TestTUIBackspaceRemovesAWholeCharacter(t *testing.T) {
 	}
 }
 
-func TestTUILoadsConcreteHostsAndPutsFavouritesFirst(t *testing.T) {
+func TestTUILoadsConcreteHostsAndSortsByAlias(t *testing.T) {
 	home := t.TempDir()
 	ssh := filepath.Join(home, ".ssh")
 	if err := os.MkdirAll(ssh, 0o700); err != nil {
@@ -135,20 +135,20 @@ func TestTUILoadsConcreteHostsAndPutsFavouritesFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadata := `{"schemaVersion":3,"hosts":[` +
-		`{"identity":{"path":"config","alias":"bastion"},"favourite":true,"tags":["eu"]}]}`
+		`{"identity":{"path":"config","alias":"bastion"},"tags":["eu"]}]}`
 	acltest.WritePrivateFile(t, filepath.Join(ssh, "sshc", "metadata.json"), []byte(metadata))
 	hosts, err := loadTUIHosts(home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hosts) != 2 || hosts[0].Alias != "bastion" || !hosts[0].Favourite {
+	if len(hosts) != 2 || hosts[0].Alias != "alpha" || hosts[1].Alias != "bastion" {
 		t.Fatalf("hosts = %#v", hosts)
 	}
-	if hosts[0].Hostname != "203.0.113.10" || hosts[0].User != "ops" || hosts[0].Port != "2222" {
-		t.Errorf("bastion = %#v", hosts[0])
+	if hosts[1].Hostname != "203.0.113.10" || hosts[1].User != "ops" || hosts[1].Port != "2222" {
+		t.Errorf("bastion = %#v", hosts[1])
 	}
-	if len(hosts[0].Tags) != 1 || hosts[0].Tags[0] != "eu" {
-		t.Errorf("tags = %#v", hosts[0].Tags)
+	if len(hosts[1].Tags) != 1 || hosts[1].Tags[0] != "eu" {
+		t.Errorf("tags = %#v", hosts[1].Tags)
 	}
 }
 

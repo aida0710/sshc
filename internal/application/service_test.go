@@ -854,11 +854,10 @@ func TestMoveHostIntoAGroupUpdatesTheMetadataIdentityInTheSameTransaction(t *tes
 	metadata := NewMetadata()
 	metadata.Groups = []GroupMetadata{{Name: "work"}}
 	metadata.Hosts = []HostMetadata{{
-		Identity:  HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"},
-		Tags:      []string{"personal"},
-		Colour:    "#22d3ee",
-		Favourite: true,
-		Order:     3,
+		Identity: HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"},
+		Tags:     []string{"personal"},
+		Colour:   "#22d3ee",
+		Order:    3,
 	}}
 	if _, err := service.Save(EditRequest{Kind: EditMetadata, Metadata: &metadata}); err != nil {
 		t.Fatal(err)
@@ -885,7 +884,7 @@ func TestMoveHostIntoAGroupUpdatesTheMetadataIdentityInTheSameTransaction(t *tes
 	if host.Identity.Path != "connections/work/10-home.conf" || host.Orphan {
 		t.Errorf("identity = %#v", host)
 	}
-	if host.Colour != "#22d3ee" || !host.Favourite || host.Order != 3 || len(host.Tags) != 1 {
+	if host.Colour != "#22d3ee" || host.Order != 3 || len(host.Tags) != 1 {
 		t.Errorf("the entry lost presentation on the way: %#v", host)
 	}
 
