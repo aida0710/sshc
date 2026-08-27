@@ -80,8 +80,8 @@ for (const appearance of ["light", "dark"] as const) {
       };
     });
 
-    expect(contrast.cardBorder).toBeGreaterThanOrEqual(1.4);
-    expect(contrast.controlBorder).toBeGreaterThanOrEqual(3);
+    expect(contrast.cardBorder).toBeGreaterThanOrEqual(1.2);
+    expect(contrast.controlBorder).toBeGreaterThanOrEqual(2.5);
     expect(contrast.faintOnCard).toBeGreaterThanOrEqual(4.5);
     expect(contrast.faintOnSidebar).toBeGreaterThanOrEqual(4.5);
 

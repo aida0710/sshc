@@ -9,10 +9,10 @@
   --ui-card: #fafafa;
   --ui-surface: #e7e7e5;
   --ui-surface-subtle: #f1f1ef;
-  --ui-line: #c7c9c8;
-  --ui-hairline: #e3e4e3;
+  --ui-line: #d9dad8;
+  --ui-hairline: #ebebe9;
   --ui-control: #fcfcfc;
-  --ui-control-line: #878b89;
+  --ui-control-line: #9ca09e;
   --ui-select-fill: #dfdfdd;
   --ui-ink: #202223;
   --ui-ink-muted: #555a5c;
@@ -66,10 +66,10 @@
   --ui-card: #202224;
   --ui-surface: #292c2f;
   --ui-surface-subtle: #181a1c;
-  --ui-line: #3b3e41;
-  --ui-hairline: #2b2e31;
+  --ui-line: #303336;
+  --ui-hairline: #272a2d;
   --ui-control: #181a1c;
-  --ui-control-line: #666b70;
+  --ui-control-line: #595e62;
   --ui-select-fill: #303438;
   --ui-ink: #e2e3e4;
   --ui-ink-muted: #aeb2b6;
