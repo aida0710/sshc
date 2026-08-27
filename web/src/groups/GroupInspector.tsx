@@ -20,7 +20,7 @@ export function GroupInspector({
       <h3 className={fieldLabel}>{t("inspector.appOnly")}</h3>
       <p className={hintText}>{t("inspector.groupChangesStaged")}</p>
 
-      <div className="overflow-hidden rounded-xl border border-line bg-surface-subtle">
+      <div className="overflow-hidden rounded-md border border-line bg-surface-subtle">
         <div className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_7rem]">
           <Field label={t("groups.colour")}>
             <div className="flex items-center gap-2">

@@ -262,6 +262,21 @@ test("removes the session status badge from the mobile header", async ({ page, i
   await expect(page.locator("[data-session-status-badge]")).toBeHidden();
 });
 
+test("keeps mobile navigation and display controls behind header menus", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const primaryNavigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(primaryNavigation).not.toBeInViewport();
+  await expect(page.locator("header")).toHaveCSS("height", "48px");
+
+  await page.getByLabel("Display menu").click();
+  await expect(page.getByLabel("Theme menu")).toBeVisible();
+  await expect(page.getByLabel("Locale menu")).toBeVisible();
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await expect(primaryNavigation).toBeInViewport();
+});
+
 test("keeps every section inside 360 pixels", async ({ page, installation }) => {
   await installation.write("conf.d/20-lab.conf", hosts);
   await installation.write(

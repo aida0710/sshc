@@ -102,7 +102,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
       );
 
   return (
-    <section aria-label={heading} className="sshc-card overflow-hidden rounded-xl bg-card">
+    <section aria-label={heading} className="sshc-card overflow-hidden rounded-md bg-card">
       <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
         <div className="flex items-center gap-2">
           <Icon name="sync" className="h-4 w-4 text-ink-muted" />

@@ -540,7 +540,7 @@ export function KeysScreen({
           </a>
         }
       />
-      <dl className="sshc-card grid overflow-hidden rounded-xl bg-card sm:grid-cols-3 sm:divide-x sm:divide-line">
+      <dl className="sshc-card grid overflow-hidden rounded-md bg-card sm:grid-cols-3 sm:divide-x sm:divide-line">
         <div className="flex items-center gap-3 border-b border-line px-4 py-3 sm:border-b-0">
           <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-accent">
             <Icon name="keys" className="h-5 w-5" />
@@ -641,7 +641,7 @@ export function KeysScreen({
             </label>
           </div>
         </div>
-        <div className="sshc-card overflow-hidden rounded-xl bg-card">
+        <div className="sshc-card overflow-hidden rounded-md bg-card">
           <div className="flex flex-col md:flex-row">
             <FolderPane
               rows={rows}

@@ -299,7 +299,7 @@ export function CreateConnectionModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-connection-heading"
-        className="sshc-card flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-card shadow-xl"
+        className="sshc-card flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-card shadow-xl"
       >
         <div className="border-b border-line px-5 py-5">
           <div className="flex items-start gap-3">

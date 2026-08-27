@@ -93,10 +93,10 @@ export function OverviewPanel({
   const favouriteCount = overview?.metadata.hosts?.filter((host) => host.favourite === true).length ?? 0;
 
   return (
-    <section aria-labelledby="home-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <section aria-labelledby="home-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <div>
-          <h2 id="home-heading" className="text-2xl font-semibold tracking-tight">{t("home.heading")}</h2>
+          <h2 id="home-heading" className="text-xl font-semibold tracking-tight">{t("home.heading")}</h2>
           <p className="mt-1 text-sm text-ink-muted">{t("home.intro")}</p>
         </div>
         <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Connections")}>
@@ -108,34 +108,32 @@ export function OverviewPanel({
 
       <section
         aria-labelledby="quick-connect-heading"
-        className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_18px_50px_-38px_rgba(15,23,42,0.7)]"
+        className="overflow-hidden rounded border border-line bg-card"
       >
-        <div className="sshc-connect-hero relative overflow-hidden px-5 py-5 text-white sm:px-6">
-          <div aria-hidden="true" className="absolute -right-10 -top-16 size-44 rounded-full border border-white/10" />
-          <div aria-hidden="true" className="absolute -right-2 -top-4 size-24 rounded-full border border-white/10" />
-          <div className="relative flex flex-wrap items-start justify-between gap-4">
+        <div className="border-b border-line bg-toolbar px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
               <span
                 aria-hidden="true"
-                className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg border border-white/15 bg-white/10 font-mono text-sm text-connect-mark"
+                className="mt-0.5 grid size-8 shrink-0 place-items-center rounded border border-control-line bg-control font-mono text-xs text-connect-mark"
               >
                 &gt;_
               </span>
               <div>
-                <h3 id="quick-connect-heading" className="text-base font-semibold tracking-tight">
+                <h3 id="quick-connect-heading" className="text-sm font-semibold tracking-tight text-ink">
                   {t("home.quickConnect")}
                 </h3>
-                <p className="mt-1 text-sm text-white/70">{t("home.quickConnectHint")}</p>
+                <p className="mt-0.5 text-xs text-ink-muted">{t("home.quickConnectHint")}</p>
               </div>
             </div>
-            <p className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs text-white/80">
+            <p className="px-1 py-1 text-xs text-ink-muted">
               <span aria-hidden="true" className="mr-1.5 text-connect-star">★</span>
               {t("home.favourite")} · {overview === null ? "—" : favouriteCount}
             </p>
           </div>
         </div>
 
-        <div className="p-4 sm:p-5">
+        <div className="p-3 sm:p-4">
           {loading ? (
             <p aria-live="polite" className={hintText}>{t("home.loading")}</p>
           ) : overview === null ? null : (
@@ -150,7 +148,7 @@ export function OverviewPanel({
       </section>
 
       {recent.length === 0 ? null : (
-        <section aria-labelledby="recent-connections-heading" className="sshc-card overflow-hidden rounded-xl bg-card">
+        <section aria-labelledby="recent-connections-heading" className="sshc-card overflow-hidden rounded bg-card">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h3 id="recent-connections-heading" className="font-semibold">{t("home.recentConnections")}</h3>
             <p className="mt-0.5 text-xs text-ink-muted">{t("home.recentConnectionsHint")}</p>
@@ -187,7 +185,7 @@ export function OverviewPanel({
       )}
 
       {workspaces.length === 0 ? null : (
-        <section aria-labelledby="saved-workspaces-heading" className="sshc-card overflow-hidden rounded-xl bg-card">
+        <section aria-labelledby="saved-workspaces-heading" className="sshc-card overflow-hidden rounded bg-card">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h3 id="saved-workspaces-heading" className="font-semibold">{t("home.savedWorkspaces")}</h3>
             <p className="mt-0.5 text-xs text-ink-muted">{t("home.savedWorkspacesHint")}</p>
@@ -219,7 +217,7 @@ export function OverviewPanel({
       <dl
         role="group"
         aria-label={`${t("home.connections")}, ${t("home.groups")}, ${t("home.attention")}`}
-        className="grid overflow-hidden rounded-xl border border-line bg-toolbar sm:grid-cols-3"
+        className="grid overflow-hidden rounded border border-line bg-toolbar sm:grid-cols-3"
       >
         <Summary label={t("home.connections")} value={overview === null ? "—" : connectionCount} />
         <Summary label={t("home.groups")} value={overview === null ? "—" : overview.groups.length} />
@@ -227,7 +225,7 @@ export function OverviewPanel({
       </dl>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <section className="sshc-card rounded-xl bg-card p-4">
+        <section className="rounded border border-line bg-card p-4">
           <div className="flex items-start gap-3">
             <span
               aria-hidden="true"
@@ -253,7 +251,7 @@ export function OverviewPanel({
             </div>
           </div>
         </section>
-        <section className="sshc-card rounded-xl bg-card p-4">
+        <section className="rounded border border-line bg-card p-4">
           <div className="flex items-start gap-3">
             <span aria-hidden="true" className="mt-1 font-mono text-xs text-accent">↕</span>
             <div className="min-w-0 flex-1">

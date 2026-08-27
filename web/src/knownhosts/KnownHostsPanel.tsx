@@ -173,7 +173,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
   return (
     <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("kh.heading")} description={t("kh.pageDescription")} />
-      <div className="sshc-card flex flex-wrap divide-x divide-line overflow-hidden rounded-xl bg-card">
+      <div className="sshc-card flex flex-wrap divide-x divide-line overflow-hidden rounded-md bg-card">
         {[
           [t("kh.metricEntries"), listing?.entries.length ?? 0],
           [t("kh.metricHashed"), listing?.entries.filter((entry) => entry.hashed).length ?? 0],
@@ -194,7 +194,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
       ) : null}
 
 
-      <section className="sshc-card overflow-hidden rounded-xl bg-card" aria-labelledby="known-hosts-scan-heading">
+      <section className="sshc-card overflow-hidden rounded-md bg-card" aria-labelledby="known-hosts-scan-heading">
         <div className="flex flex-wrap items-end justify-between gap-4 bg-surface-subtle px-4 py-4">
           <div>
             <h3 id="known-hosts-scan-heading" className={sectionHeading}>
@@ -290,7 +290,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
         ) : null}
       </section>
 
-      <section className="sshc-card overflow-hidden rounded-xl bg-card" aria-labelledby="known-hosts-trusted-heading">
+      <section className="sshc-card overflow-hidden rounded-md bg-card" aria-labelledby="known-hosts-trusted-heading">
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line px-4 py-4">
           <div>
             <h3 id="known-hosts-trusted-heading" className={sectionHeading}>

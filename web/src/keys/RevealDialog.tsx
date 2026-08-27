@@ -40,7 +40,7 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
       role="dialog"
       aria-modal="true"
       aria-labelledby="reveal-heading"
-      className="mt-6 rounded-xl border border-notice-line bg-control p-6"
+      className="mt-6 rounded-md border border-notice-line bg-control p-6"
     >
       <h3 id="reveal-heading" className="font-medium">
         {t("reveal.heading", { path: relativePath })}
