@@ -65,7 +65,7 @@ export function ConnectionSummary({
   }
 
   return (
-    <section aria-labelledby="connection-summary-heading" className="sshc-card shrink-0 overflow-hidden rounded-md bg-card">
+    <section data-connection-summary aria-labelledby="connection-summary-heading" className="sshc-card shrink-0 overflow-hidden rounded-md bg-card">
       <header className="flex flex-wrap items-start justify-between gap-4 px-5 py-5">
         <div className="flex min-w-0 items-start gap-3">
           <span aria-hidden="true" className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">

@@ -106,61 +106,83 @@ export function HostDetailPanel({
     <section className="flex flex-col gap-5">
       <NoticeList notices={detail.form.notices ?? []} />
 
-      <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 flex gap-1 rounded-lg bg-select-fill p-1 shadow-sm">
-        {areas.map((item) => (
-          <button
-            key={item.area}
-            type="button"
-            role="tab"
-            aria-selected={panel === item.area}
-            onClick={() => selectArea(item.area)}
-            className={`flex-1 rounded-md px-3 py-2 text-sm transition-colors ${panel === item.area ? "bg-card font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"}`}
+      <div data-connection-editor className="sshc-card overflow-hidden rounded bg-card">
+        <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 flex gap-1 border-b border-line bg-select-fill p-1">
+          {areas.map((item) => (
+            <button
+              key={item.area}
+              id={`connection-area-${item.area.toLowerCase()}-tab`}
+              type="button"
+              role="tab"
+              aria-selected={panel === item.area}
+              aria-controls={`connection-area-${item.area.toLowerCase()}-panel`}
+              onClick={() => selectArea(item.area)}
+              className={`flex-1 rounded px-3 py-2 text-sm transition-colors ${panel === item.area ? "bg-card font-medium text-ink" : "text-ink-muted hover:text-ink"}`}
+            >
+              {t(item.label)}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-4 md:p-5">
+          <div
+            id="connection-area-basic-panel"
+            role="tabpanel"
+            aria-labelledby="connection-area-basic-tab"
+            hidden={panel !== "Basic"}
+            className="flex flex-col gap-5"
           >
-            {t(item.label)}
-          </button>
-        ))}
-      </div>
+            {identity.alias === "" ? (
+              <p className="text-sm text-ink-muted">{t("host.noDestination")}</p>
+            ) : (
+              <ConnectionChecks
+                alias={identity.alias}
+                api={integrations}
+                disabled={disabled || dirty}
+                resetKey={resetKey}
+              />
+            )}
+            <ConnectionBasicForm
+              detail={detail}
+              savedState={savedState}
+              problem={problem}
+              onSave={onBasicSave}
+              secrets={integrations}
+              preferredKey={preferredKey}
+              onPreferredKeyApplied={onPreferredKeyApplied}
+              onDirtyChange={handleBasicDirty}
+              onDiscardReady={onBasicDiscardReady}
+              onRequestRefresh={onRequestRefresh}
+              disabled={disabled || advancedDirty}
+            />
+          </div>
 
-      <div hidden={panel !== "Basic"} className="flex flex-col gap-5">
-        {identity.alias === "" ? (
-          <p className="text-sm text-ink-muted">{t("host.noDestination")}</p>
-        ) : (
-          <ConnectionChecks
-            alias={identity.alias}
-            api={integrations}
-            disabled={disabled || dirty}
-            resetKey={resetKey}
-          />
-        )}
-        <ConnectionBasicForm
-          detail={detail}
-          savedState={savedState}
-          problem={problem}
-          onSave={onBasicSave}
-          secrets={integrations}
-          preferredKey={preferredKey}
-          onPreferredKeyApplied={onPreferredKeyApplied}
-          onDirtyChange={handleBasicDirty}
-          onDiscardReady={onBasicDiscardReady}
-          onRequestRefresh={onRequestRefresh}
-          disabled={disabled || advancedDirty}
-        />
-      </div>
+          <div
+            id="connection-area-analysis-panel"
+            role="tabpanel"
+            aria-labelledby="connection-area-analysis-tab"
+            hidden={panel !== "Analysis"}
+          >
+            <ConnectionAnalysis detail={detail} alias={identity.alias} api={integrations} disabled={disabled || dirty} />
+          </div>
 
-      <div hidden={panel !== "Analysis"}>
-        <ConnectionAnalysis detail={detail} alias={identity.alias} api={integrations} disabled={disabled || dirty} />
-      </div>
-
-      <div hidden={panel !== "Advanced"}>
-        <AdvancedSettings
-          detail={detail}
-          area={advancedArea}
-          onAreaChange={selectAdvanced}
-          onFieldEdits={onFieldEdits}
-          onBlockRaw={onBlockRaw}
-          disabled={disabled || basicDirty}
-          onDirtyChange={handleAdvancedDirty}
-        />
+          <div
+            id="connection-area-advanced-panel"
+            role="tabpanel"
+            aria-labelledby="connection-area-advanced-tab"
+            hidden={panel !== "Advanced"}
+          >
+            <AdvancedSettings
+              detail={detail}
+              area={advancedArea}
+              onAreaChange={selectAdvanced}
+              onFieldEdits={onFieldEdits}
+              onBlockRaw={onBlockRaw}
+              disabled={disabled || basicDirty}
+              onDirtyChange={handleAdvancedDirty}
+            />
+          </div>
+        </div>
       </div>
 
       <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />

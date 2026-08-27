@@ -93,6 +93,8 @@ describe("HostDetailPanel", () => {
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
     expect(within(areaTabs).getAllByRole("tab")).toHaveLength(3);
     expect(within(areaTabs).getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Basic" })).toBeVisible();
+    expect(screen.getByRole("tabpanel", { name: "Basic" }).closest("[data-connection-editor]")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Check reachability" })).toBeEnabled();
     expect(harness.props.integrations.reachability).not.toHaveBeenCalled();
 

@@ -228,9 +228,9 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
 
       {jump === "" ? null : <p aria-live="polite" className={hintText}>{jump}</p>}
 
-      <div className="sshc-card grid min-h-0 grid-cols-1 overflow-hidden rounded-md bg-card lg:grid-cols-[19rem_minmax(0,1fr)]">
+      <div data-config-explorer className="sshc-card grid min-h-0 grid-cols-1 overflow-hidden rounded-md bg-card lg:grid-cols-[19rem_minmax(0,1fr)]">
         <section aria-labelledby="explorer-heading" className="flex min-h-0 flex-col bg-tree lg:border-r lg:border-line">
-          <div className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+          <div data-explorer-header="tree" className="flex min-h-12 items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-2">
             <div className="flex min-w-0 items-center gap-2">
               <Icon name="config" className="h-4 w-4 text-ink-muted" />
               <h3 id="explorer-heading" className={sectionHeading}>{t("explorer.hierarchy")}</h3>
@@ -339,14 +339,14 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+              <div data-explorer-header="file" className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className={`h-2 w-2 shrink-0 rounded-full ${modified ? "bg-notice-ink" : file.editable ? "bg-live" : "bg-ink-faint"}`} />
                   <span className="truncate font-mono text-sm font-semibold text-ink">{file.file.path ?? file.file.absolute}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-surface px-2 py-1 text-xs text-ink-muted">{file.editable ? t("explorer.editable") : t("explorer.readOnly")}</span>
-                  {modified ? <span className="rounded-md bg-notice px-2 py-1 text-xs font-medium text-notice-ink">{t("explorer.unsaved")}</span> : null}
+                  <span className="rounded bg-surface px-2 py-0.5 text-xs text-ink-muted">{file.editable ? t("explorer.editable") : t("explorer.readOnly")}</span>
+                  {modified ? <span className="rounded bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("explorer.unsaved")}</span> : null}
                 </div>
               </div>
               <label htmlFor="file-raw" className="sr-only">{t("explorer.fileText", { path: file.file.path ?? file.file.absolute })}</label>
