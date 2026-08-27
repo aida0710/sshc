@@ -66,6 +66,50 @@ sshc status                   # エンジンの状態を表示（--json に対�
 sshc update                   # Homebrew／install.sh経由の導入を更新
 ```
 
+Serial と Telnet は `~/.ssh/config` へ保存せず、その接続だけの指定として利用できます。どちらもエンジンの起動は不要です。対話接続は `Ctrl+]` で切断します。
+
+```sh
+sshc serial list
+sshc serial /dev/ttyUSB0 --baud 9600 --data-bits 8 --parity none --stop-bits 1
+sshc telnet console.example:23 --connect-timeout 5s
+
+# textを送り、正規表現に一致する応答まで待つ
+sshc run serial /dev/ttyUSB0 --expect 'router# ' --timeout 10s --json -- 'show version'
+
+# 終了状態を返さない機器では、明示した時間だけ読み取ることもできる
+sshc run telnet console.example --read-for 2s --max-bytes 1048576 -- 'show status'
+```
+
+Serial の既定値は、既存の`serialctl`と同じ9600 8-N-1、改行はCRです。parityはnone／odd／even／mark／space、stop bitsは1／1.5／2を指定できます。bootloaderやMCUでは`--dtr on|off`、`--rts on|off`、`--break 500ms`も接続直後に適用できます。Telnet の既定ポートは 23、改行は CRLF です。`--line-ending none|cr|lf|crlf`でautomation時の送信終端を変更できます。現行のSerial backendはflow controlなしだけに対応し、`--flow rtscts`と`--flow xonxoff`は無視せずエラーにします。AndroidではUSB Host API用driverを同梱していないため、Serial CLI backendは利用できません。
+
+複数段階の操作には、version 1のJSON scriptを使用できます。`sendEnv`は環境変数を実行時にだけ読み、受信した同じbyte列をtranscriptから`[REDACTED]`へ置換します。秘密値を`send`やコマンド引数へ直接書くとshell履歴やプロセス一覧に残り得るため、秘密には`sendEnv`を使用してください。
+
+```json
+{
+  "version": 1,
+  "steps": [
+    { "expect": "login: " },
+    { "send": "admin" },
+    { "expect": "Password: " },
+    { "sendEnv": "CONSOLE_PASSWORD" },
+    { "expect": "router# ", "timeout": "15s" },
+    { "send": "show version", "lineEnding": "cr" },
+    { "readFor": "2s" }
+  ]
+}
+```
+
+```sh
+# CIのsecret storeなどでCONSOLE_PASSWORDを設定した状態で実行する
+sshc run serial /dev/ttyUSB0 --script ./console.json --json
+```
+
+`expect`はGoのRE2正規表現です。送信前の残留inputは破棄し、pattern一致後も既定120ms（`--settle`で変更）の静穏を確認するため、古いpromptや長い出力内のprompt風文字列を成功と誤認しにくくしています。scriptは最大1 MiB／128 step、patternは4 KiB、1回の送信は64 KiB、transcriptは既定1 MiB（最大16 MiB）に制限されます。`--timeout`は接続後のscript全体を制限し、既定10秒、最大5分です。stepの`timeout`はそのstepをさらに短く制限します。`readFor`はscriptの最終stepだけで使用でき、その時間より短い全体／step timeoutが先に来ればtimeoutになります。JSON出力はUTF-8でないtranscriptをbase64として返します。終了codeは成功0、接続・I/O・上限超過1、入力またはscript不正2、timeout 124、割込み130です。同一ユーザー権限の別processから環境変数を保護する機能はないため、値をshell commandへ直接書かず、CIのsecret storeや履歴に残らない入力方法で設定してください。
+
+Telnetは暗号化もserver認証もしません。sshcは接続のたびに警告を表示しますが、通信を保護する機能は追加しません。資格情報を送る場合は、信頼できる隔離networkなど別の保護境界が必要です。
+
+`serial`、`telnet`という名前のSSH aliasへ接続する場合は、予約語との衝突を避けるため`sshc ssh serial`、`sshc run ssh telnet -- <コマンド>`のようにSSHを明示できます。既存の`sshc run <alias> ...`の引数解釈は変更していません。
+
 引数なしの `sshc` はエンジンを起動しません。実行中のエンジンを置き換えるには `sshc engine --replace` を使用します。
 
 ## 主な機能

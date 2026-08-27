@@ -138,6 +138,18 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 3. Configの「Include階層」headerと「config・編集可能」headerの上端、下端、高さが一致することを確認する。
 4. 大きなsurfaceとdialogが12px、inputとbuttonが8px、小さな補助要素が6pxを基準に揃い、表内部は角なし、状態badgeだけpillになっていることを確認する。
 
+## M12. 実Serial／Telnet endpoint
+
+CIではLinux PTYの仮想Serial routerとlocalhostの仮想Telnet serverを用い、build済み`sshc` processまでの疎通を確認します。以下はその代替ではなく、PTY／loopbackで再現できないUSB列挙、電気的通信条件、modem line、物理抜線、実Telnet実装差を確認する実機項目です。
+
+1. 検証用Serial deviceを接続し、`sshc serial list`と`sshc serial list --json`の双方へ同じdeviceが現れることを確認する。Linuxでは利用者がdeviceを開く権限も確認する。
+2. deviceに合うbaud、data bits、parity、stop bitsを指定して対話接続し、双方向に操作でき、`Ctrl+]`で直ちに切断して別processからdeviceを再度openできることを確認する。
+3. `sshc run serial ... --expect ... --json -- <text>`を実行し、送信終端、受信transcript、matched、stepsCompleted、終了code 0を確認する。一致しないpatternでは指定timeout後にcode 124となることを確認する。
+4. 16 MiBを越えて出力し続ける検証endpointでは、`--max-bytes`到達時にcode 1で停止し、deviceが解放されることを確認する。
+5. 自分で管理するTelnet serverへ接続し、平文警告、IAC option交渉、端末size、literal 0xffの送受信、`Ctrl+]`切断を確認する。packet captureでも内容が暗号化されないことを確認し、実資格情報は使用しない。
+6. `sendEnv`を含むscriptでserverが秘密値をechoする構成を試し、text／JSON transcriptの双方に値が残らず`[REDACTED]`になることを確認する。command引数とscript fileには秘密を書かない。
+7. WindowsのCOM portとmacOS／Linuxのdevice pathでそれぞれ少なくとも一度確認する。Androidはunsupported errorとなり、Linuxの`/dev`を探索しないことを確認する。
+
 ## 記録
 
 未実施は空欄のままにせず「未実施」と書きます。空欄は「実施したが記録し忘れた」と区別がつきません。
@@ -154,6 +166,7 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 | 未記録 | M8 | 未記録 | 未記録 | 未実施 | 複数paneで接続できる検証用ホストが必要 |
 | 未記録 | M9 | 未記録 | 未記録 | 未実施 | 複数paneで接続できる検証用ホストが必要 |
 | 未記録 | M10 | 未記録 | 未記録 | 未実施 | 長い出力とSFTP可能な検証用ホストが必要 |
+| 未記録 | M12 | 未記録 | 対象外 | 未実施 | 検証用Serial deviceとTelnet serverが必要 |
 
 ## Android エミュレータで WebView を調査する
 

@@ -35,6 +35,15 @@ func main() {
 		printVersion(os.Stdout)
 		os.Exit(0)
 	}
+	if called.Kind == invocationTransport || called.Kind == invocationRunTransport {
+		ctx, stopSignals := notifySignals(context.Background())
+		defer stopSignals()
+		code := runTransportInvocation(ctx, *called.Transport, os.Stdin, os.Stdout, os.Stderr)
+		if code == transportInterruptedExit && errors.Is(context.Cause(ctx), errEngineTerminated) {
+			code = 0
+		}
+		os.Exit(code)
+	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
