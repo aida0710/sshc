@@ -318,6 +318,38 @@ describe("integrationsApi.credentials", () => {
 
     await expect(integrationsApi.credentials()).rejects.toThrow("invalid_response");
   });
+
+  it("uses a one-time token to reveal one explicitly edited credential", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ token: actionToken, expiresAt: "2026-08-05T09:02:00Z" }, 201))
+      .mockResolvedValueOnce(jsonResponse({ kind: "password", name: "office vm", secret: "saved-value" }));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.revealCredential("password", "office vm")).resolves.toEqual({
+      kind: "password", name: "office vm", secret: "saved-value",
+    });
+    const [, actionInit] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(sentJson(actionInit)).toEqual({
+      kind: "credential.reveal", target: "password\noffice vm",
+    });
+    const [path, init] = fetcher.mock.calls[1] as [string, RequestInit];
+    expect(path).toBe("/api/v1/credentials/password/office%20vm/reveal");
+    expect(new Headers(init.headers).get("X-SSHC-Action")).toBe(actionToken);
+  });
+
+  it("patches the old name with the edited name and value", async () => {
+    const response = { credentials: [], dedicatedKeyPassphrases: [], keyHostUsageComplete: true };
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse(response));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.updateCredential("key_passphrase", "old name", "new name", "new phrase"))
+      .resolves.toEqual(response);
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/credentials/key_passphrase/old%20name");
+    expect(init.method).toBe("PATCH");
+    expect(sentJson(init)).toEqual({ name: "new name", secret: "new phrase" });
+  });
 });
 
 describe("integrationsApi remote sync measurements", () => {

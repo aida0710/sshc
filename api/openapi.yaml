@@ -886,6 +886,27 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateCredential
+      parameters:
+        - { name: kind, in: path, required: true, schema: { type: string } }
+        - { name: name, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCredentialRequest" }
+      responses:
+        "200":
+          description: The credential lists after atomically updating its name and value
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CredentialList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteCredential
       parameters:
@@ -901,6 +922,29 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/credentials/{kind}/{name}/reveal:
+    post:
+      operationId: revealCredential
+      parameters:
+        - { name: kind, in: path, required: true, schema: { type: string } }
+        - { name: name, in: path, required: true, schema: { type: string } }
+        - name: X-SSHC-Action
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
+      responses:
+        "200":
+          description: One named credential value for an explicit edit action; never cached
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RevealCredentialResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /api/v1/keys:
     get:
       operationId: listKeys
@@ -1942,6 +1986,21 @@ components:
       required: [secret]
       properties:
         secret: { type: string, minLength: 1, maxLength: 1024 }
+    UpdateCredentialRequest:
+      type: object
+      additionalProperties: false
+      required: [name, secret]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        secret: { type: string, minLength: 1, maxLength: 1024 }
+    RevealCredentialResponse:
+      type: object
+      additionalProperties: false
+      required: [kind, name, secret]
+      properties:
+        kind: { type: string }
+        name: { type: string }
+        secret: { type: string }
     AssignCredentialRequest:
       type: object
       additionalProperties: false

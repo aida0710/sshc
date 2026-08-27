@@ -9,11 +9,12 @@ type PasswordFieldProps = {
   hint?: string;
   autoFocus?: boolean;
   disabled?: boolean;
+  initialShown?: boolean;
 };
 
-export function PasswordField({ label, value, onChange, hint, autoFocus, disabled = false }: PasswordFieldProps): ReactNode {
+export function PasswordField({ label, value, onChange, hint, autoFocus, disabled = false, initialShown = false }: PasswordFieldProps): ReactNode {
   const t = useTranslate();
-  const [shown, setShown] = useState(false);
+  const [shown, setShown] = useState(initialShown);
   return (
     <div className="flex items-end gap-2">
       <div className="grow">

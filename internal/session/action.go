@@ -24,6 +24,7 @@ const (
 	ActionKnownHostsAdd     = "known_hosts.add"
 	ActionRemoteKeyRegister = "remote_key.register"
 	ActionRevealPrivateKey  = "private_key.reveal"
+	ActionRevealCredential  = "credential.reveal"
 	ActionPurgeTrashEntry   = "trash.purge"
 	ActionSFTPDelete        = "sftp.delete"
 	ActionSFTPChmod         = "sftp.chmod"
@@ -47,6 +48,7 @@ var knownActionKinds = map[string]bool{
 	ActionKnownHostsAdd:     true,
 	ActionRemoteKeyRegister: true,
 	ActionRevealPrivateKey:  true,
+	ActionRevealCredential:  true,
 	ActionPurgeTrashEntry:   true,
 	ActionSFTPDelete:        true,
 	ActionSFTPChmod:         true,

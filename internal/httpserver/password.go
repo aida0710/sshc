@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -15,6 +16,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/secret"
+	"sshc/internal/session"
 	"sshc/internal/validate"
 )
 
@@ -22,6 +24,7 @@ import (
 type PasswordHandlers struct {
 	Service *secret.Service
 	vault   *vaultOperations
+	Actions ActionHandlers
 	// KeyHosts projects saved key subjects through the current SSH configuration.
 	// It returns relationships only; the vault values never cross this boundary.
 	KeyHosts func(relativePaths []string) (map[string][]string, error)
@@ -146,6 +149,8 @@ func registerPasswordRoutes(engine *echo.Echo, handlers PasswordHandlers) {
 	engine.PUT("/api/v1/credentials/:kind/assign", handlers.AssignCredential)
 	engine.DELETE("/api/v1/credentials/:kind/assign/:subject", handlers.UnassignCredential)
 	engine.PUT("/api/v1/credentials/:kind/:name", handlers.SetCredential)
+	engine.PATCH("/api/v1/credentials/:kind/:name", handlers.UpdateCredential)
+	engine.POST("/api/v1/credentials/:kind/:name/reveal", handlers.RevealCredential)
 	engine.DELETE("/api/v1/credentials/:kind/:name", handlers.DeleteCredential)
 }
 
@@ -342,6 +347,8 @@ func credentialProblem(c *echo.Context, err error, uses []string) error {
 		return problemWith(c, http.StatusConflict, problemPayload{Code: "credential_in_use", Blockers: uses})
 	case errors.Is(err, secret.ErrUnknownCredential):
 		return problem(c, http.StatusNotFound, "unknown_credential")
+	case errors.Is(err, secret.ErrCredentialAlreadyExists):
+		return problem(c, http.StatusConflict, "credential_already_exists")
 	case errors.Is(err, secret.ErrUnsafeName), errors.Is(err, secret.ErrEmptySecret),
 		errors.Is(err, secret.ErrUnknownKind):
 		return problem(c, http.StatusBadRequest, "invalid_request")
@@ -450,6 +457,58 @@ func (h PasswordHandlers) SetCredential(c *echo.Context) error {
 		return credentialProblem(c, err, nil)
 	}
 	return h.listCredentials(c)
+}
+
+func (h PasswordHandlers) UpdateCredential(c *echo.Context) error {
+	kind, ok := kindOf(c)
+	if !ok {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	var request api.UpdateCredentialRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if err := h.Service.UpdateCredential(kind, c.Param("name"), request.Name, request.Secret); err != nil {
+		return credentialProblem(c, err, nil)
+	}
+	return h.listCredentials(c)
+}
+
+func (h PasswordHandlers) RevealCredential(c *echo.Context) error {
+	kind, ok := kindOf(c)
+	if !ok {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	name := c.Param("name")
+	if allowed, response := h.Actions.consume(c, session.ActionRevealCredential, credentialActionTarget(kind, name)); !allowed {
+		return response
+	}
+	value, err := h.Service.Credential(kind, name)
+	if err != nil {
+		return credentialProblem(c, err, nil)
+	}
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.JSON(http.StatusOK, api.RevealCredentialResponse{
+		Kind: string(kind), Name: name, Secret: value,
+	})
+}
+
+func credentialActionTarget(kind secret.Kind, name string) string {
+	return string(kind) + "\n" + name
+}
+
+func addCredentialActions(registry actionRegistry, service *secret.Service) {
+	registry[session.ActionRevealCredential] = actionKind{
+		evidence: func(_ context.Context, target string) (string, error) {
+			kindText, name, ok := strings.Cut(target, "\n")
+			kind := secret.Kind(kindText)
+			if !ok || !secret.ValidKind(kind) || name == "" {
+				return "", secret.ErrUnknownCredential
+			}
+			return service.CredentialEvidence(kind, name)
+		},
+		fail: func(c *echo.Context, err error) error { return credentialProblem(c, err, nil) },
+	}
 }
 
 func (h PasswordHandlers) DeleteCredential(c *echo.Context) error {

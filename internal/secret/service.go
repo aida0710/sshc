@@ -1,7 +1,9 @@
 package secret
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -678,6 +680,82 @@ func (s *Service) SetCredential(kind Kind, name, value string) error {
 	}
 	s.mu.Unlock()
 	return s.write()
+}
+
+// Credential は、明示的な表示・編集操作に限って名前付き資格情報の値を返す。
+// 一覧や割り当て確認は Credentials を使い、この境界を通らない。
+func (s *Service) Credential(kind Kind, name string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.use()
+	if vault == nil {
+		return "", ErrLocked
+	}
+	if !ValidKind(kind) {
+		return "", ErrUnknownKind
+	}
+	value, ok := vault.Secret(kind, name)
+	if !ok {
+		return "", ErrUnknownCredential
+	}
+	return value, nil
+}
+
+// CredentialEvidence は、一度限りの表示確認を現在の資格情報へ結び付ける。
+// 値そのものを session manager に保持せず、名前・種別・現在値のダイジェストだけを渡す。
+func (s *Service) CredentialEvidence(kind Kind, name string) (string, error) {
+	value, err := s.Credential(kind, name)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256([]byte(string(kind) + "\x00" + name + "\x00" + value))
+	return hex.EncodeToString(digest[:]), nil
+}
+
+// UpdateCredential は、名前と値を一つの vault 置換として更新する。
+// 名前を参照している host / key は同じ commit 内で新しい名前へ追従する。
+func (s *Service) UpdateCredential(kind Kind, currentName, nextName, value string) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	s.mu.Lock()
+	vault := s.use()
+	if vault == nil {
+		s.mu.Unlock()
+		return ErrLocked
+	}
+	clone := vault.clone()
+	baseline := slices.Clone(s.baseline)
+	s.mu.Unlock()
+
+	if err := clone.RenameCredential(kind, currentName, nextName); err != nil {
+		return err
+	}
+	if err := clone.Set(kind, nextName, value); err != nil {
+		return err
+	}
+	if len(baseline) == 0 {
+		return ErrNoVault
+	}
+	sealed, err := clone.Seal()
+	if err != nil {
+		return err
+	}
+	_, err = s.transactions.Commit(storage.Request{
+		Operation: "secret.credential.update",
+		Changes: []storage.Change{{
+			Path: s.path(), Contents: sealed,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(baseline)},
+		}},
+	})
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.vault = clone
+	s.baseline = slices.Clone(sealed)
+	s.mu.Unlock()
+	return nil
 }
 
 // DeleteCredential は資格情報を忘れる。何かがそれを指しているあいだは拒否する。
