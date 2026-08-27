@@ -81,7 +81,7 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex border border-control-line bg-control">
+    <div role="group" aria-label={label} className="flex overflow-hidden rounded-md border border-control-line bg-control">
       {options.map((option) => (
         <button
           key={option.value}
