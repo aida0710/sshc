@@ -31,6 +31,7 @@ export type PasswordVaultStatus = components["schemas"]["PasswordVaultStatus"];
 export type PasswordEligibility = components["schemas"]["PasswordEligibility"];
 export type Credential = components["schemas"]["Credential"];
 export type CredentialList = components["schemas"]["CredentialList"];
+export type RevealCredentialResponse = components["schemas"]["RevealCredentialResponse"];
 export type CredentialKind = "password" | "key_passphrase";
 export type SyncStatus = components["schemas"]["SyncStatus"];
 export type SyncKeyResponse = components["schemas"]["SyncKeyResponse"];
@@ -58,6 +59,7 @@ export const KNOWN_HOSTS_SCAN_ACTION_KIND = "known_hosts.scan";
 export const KNOWN_HOSTS_ADD_ACTION_KIND = "known_hosts.add";
 export const SYNC_FORCE_PUSH_ACTION_KIND = "sync.force_push";
 export const SYNC_FORCE_PUSH_TARGET = "remote-workspace";
+export const CREDENTIAL_REVEAL_ACTION_KIND = "credential.reveal";
 
 export type KnownHostAddition = Pick<KnownHostCandidate, "host" | "port" | "keyType" | "key">;
 
@@ -99,6 +101,8 @@ export type IntegrationsApi = {
   passwordEligibility(alias: string): Promise<PasswordEligibility>;
   credentials(): Promise<CredentialList>;
   storeCredential(kind: CredentialKind, name: string, secret: string): Promise<CredentialList>;
+  revealCredential(kind: CredentialKind, name: string): Promise<RevealCredentialResponse>;
+  updateCredential(kind: CredentialKind, currentName: string, name: string, secret: string): Promise<CredentialList>;
   deleteCredential(kind: CredentialKind, name: string): Promise<CredentialList>;
   assignCredential(kind: CredentialKind, subject: string, name: string): Promise<CredentialList>;
   unassignCredential(kind: CredentialKind, subject: string): Promise<CredentialList>;
@@ -389,6 +393,14 @@ function validateCredentialList(value: unknown): CredentialList {
   }
   asBoolean(record.keyHostUsageComplete);
   return record as unknown as CredentialList;
+}
+
+function validateRevealCredential(value: unknown): RevealCredentialResponse {
+	const record = asRecord(value);
+	asString(record.kind);
+	asString(record.name);
+	asString(record.secret);
+	return record as unknown as RevealCredentialResponse;
 }
 
 function validatePasswordEligibility(value: unknown): PasswordEligibility {
@@ -768,6 +780,24 @@ export const integrationsApi: IntegrationsApi = {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secret }),
+      }),
+    );
+  },
+  async revealCredential(kind, name) {
+    const token = await issueAction(CREDENTIAL_REVEAL_ACTION_KIND, `${kind}\n${name}`);
+    return validateRevealCredential(
+      await apiClient.mutate<unknown>(`${credentialPath(kind, name)}/reveal`, {
+        method: "POST",
+        headers: { "X-SSHC-Action": token },
+      }),
+    );
+  },
+  async updateCredential(kind, currentName, name, secret) {
+    return validateCredentialList(
+      await apiClient.mutate<unknown>(credentialPath(kind, currentName), {
+        method: "PATCH",
+        headers: jsonHeaders,
+        body: JSON.stringify({ name, secret }),
       }),
     );
   },

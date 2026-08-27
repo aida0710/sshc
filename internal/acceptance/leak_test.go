@@ -49,6 +49,19 @@ func fixedPath(path string) func(string) string {
 	return func(string) string { return path }
 }
 
+func (f *fixture) editableCredentialTarget(t testing.TB) string {
+	t.Helper()
+	response := f.do(http.MethodPut, "/api/v1/credentials/password/acceptance-edit", mustJSON(t, map[string]any{
+		"secret": "acceptance-edit-secret",
+	}))
+	status := response.StatusCode
+	body := readBody(t, response)
+	if status != http.StatusOK {
+		t.Fatalf("store editable credential = %d: %s", status, body)
+	}
+	return "password\nacceptance-edit"
+}
+
 func guardedRoutes(f *fixture) []guardedRoute {
 	keyID := f.keyID()
 	knownHostsPath := f.knownHostsPath()
@@ -100,6 +113,11 @@ func guardedRoutes(f *fixture) []guardedRoute {
 		{http.MethodPost, "/api/v1/keys/:keyId/reveal", session.ActionRevealPrivateKey,
 			constantTarget(keyID),
 			func(target string) string { return "/api/v1/keys/" + target + "/reveal" }, nil, nil},
+		{http.MethodPost, "/api/v1/credentials/:kind/:name/reveal", session.ActionRevealCredential,
+			f.editableCredentialTarget,
+			func(target string) string {
+				return "/api/v1/credentials/password/" + strings.TrimPrefix(target, "password\n") + "/reveal"
+			}, nil, nil},
 		{http.MethodDelete, "/api/v1/trash/:entryId", session.ActionPurgeTrashEntry,
 			func(t testing.TB) string { return f.newTrashEntry(t) },
 			func(target string) string { return "/api/v1/trash/" + target }, nil, nil},
@@ -284,6 +302,12 @@ var keyMaterialRoutes = map[string]string{
 	"POST /api/v1/keys/:keyId/reveal": "the separated reveal API, behind a one-time action token",
 }
 
+const credentialCanary = "saved-credential-canary-7d5e4a"
+
+var credentialMaterialRoutes = map[string]string{
+	"POST /api/v1/credentials/password/:name/reveal": "the explicit credential edit API, behind a one-time action token",
+}
+
 func TestNoResponseCarriesASecretItIsNotEntitledTo(t *testing.T) {
 	f := newFixture(t)
 
@@ -309,6 +333,17 @@ func TestNoResponseCarriesASecretItIsNotEntitledTo(t *testing.T) {
 	keyID := f.keyID()
 	revealToken := f.actionToken(t, session.ActionRevealPrivateKey, keyID)
 	record(http.MethodPost, "/api/v1/keys/"+keyID+"/reveal", nil, withAction(revealToken))
+	stored := f.do(http.MethodPut, "/api/v1/credentials/password/acceptance-secret", mustJSON(t, map[string]any{
+		"secret": credentialCanary,
+	}))
+	if status := stored.StatusCode; status != http.StatusOK {
+		t.Fatalf("store credential canary = %d: %s", status, readBody(t, stored))
+	} else {
+		_ = readBody(t, stored)
+	}
+	credentialTarget := "password\nacceptance-secret"
+	credentialToken := f.actionToken(t, session.ActionRevealCredential, credentialTarget)
+	record(http.MethodPost, "/api/v1/credentials/password/acceptance-secret/reveal", nil, withAction(credentialToken))
 
 	// Phase one: 登録済みの route をすべて触る。そうすれば、後から追加された route も、
 	// 誰も意味のあるリクエストを書いていなくても掃かれる。ここでは 400 の応答でよい。
@@ -340,6 +375,7 @@ func TestNoResponseCarriesASecretItIsNotEntitledTo(t *testing.T) {
 
 	sawFileContents := map[string]bool{}
 	sawKeyMaterial := map[string]bool{}
+	sawCredentialMaterial := map[string]bool{}
 	for _, entry := range observed {
 		normalised := normaliseObservationKey(entry.key, keyID)
 
@@ -361,6 +397,12 @@ func TestNoResponseCarriesASecretItIsNotEntitledTo(t *testing.T) {
 				t.Errorf("%s returned private key material and is not the separated reveal API", entry.key)
 			}
 		}
+		if strings.Contains(entry.body, credentialCanary) {
+			sawCredentialMaterial[normalised] = true
+			if _, allowed := credentialMaterialRoutes[normalised]; !allowed {
+				t.Errorf("%s returned a saved credential outside the explicit edit API", entry.key)
+			}
+		}
 		if strings.Contains(entry.body, "Managed by hand since 2019") {
 			sawFileContents[normalised] = true
 			if _, allowed := contentBearingRoutes[normalised]; !allowed {
@@ -372,6 +414,11 @@ func TestNoResponseCarriesASecretItIsNotEntitledTo(t *testing.T) {
 	for route := range keyMaterialRoutes {
 		if !sawKeyMaterial[route] {
 			t.Errorf("%s is allowlisted for key material but returned none; the sweep is not reaching it", route)
+		}
+	}
+	for route := range credentialMaterialRoutes {
+		if !sawCredentialMaterial[route] {
+			t.Errorf("%s is allowlisted for a saved credential but returned none; the sweep is not reaching it", route)
 		}
 	}
 	if len(sawFileContents) == 0 {
@@ -386,6 +433,7 @@ func normaliseObservationKey(key, keyID string) string {
 	if keyID != "" {
 		normalised = strings.ReplaceAll(normalised, "/"+keyID, "/:keyId")
 	}
+	normalised = strings.ReplaceAll(normalised, "/acceptance-secret/reveal", "/:name/reveal")
 	return strings.ReplaceAll(normalised, "/acceptance-placeholder", "/:entryId")
 }
 
@@ -397,6 +445,12 @@ func TestNoLogLineCarriesASecret(t *testing.T) {
 	keyID := f.keyID()
 	revealToken := f.actionToken(t, session.ActionRevealPrivateKey, keyID)
 	readBody(t, f.do(http.MethodPost, "/api/v1/keys/"+keyID+"/reveal", nil, withAction(revealToken)))
+	stored := f.do(http.MethodPut, "/api/v1/credentials/password/acceptance-secret", mustJSON(t, map[string]any{
+		"secret": credentialCanary,
+	}))
+	readBody(t, stored)
+	credentialToken := f.actionToken(t, session.ActionRevealCredential, "password\nacceptance-secret")
+	readBody(t, f.do(http.MethodPost, "/api/v1/credentials/password/acceptance-secret/reveal", nil, withAction(credentialToken)))
 
 	// すべての route を動かし、ログに何かが残るようにする。拒否も
 	// 含めてであり、それは拒絶されたものを反響させる可能性が最も高い行だからである。
@@ -420,6 +474,7 @@ func TestNoLogLineCarriesASecret(t *testing.T) {
 		"private key material":     f.canaries.PrivateKeyLine,
 		"a file outside ~/.ssh":    f.canaries.Outside,
 		"configuration file bytes": "Managed by hand since 2019",
+		"a saved credential":       credentialCanary,
 	} {
 		if secret != "" && strings.Contains(logged, secret) {
 			t.Errorf("the log contains %s", name)

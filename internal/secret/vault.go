@@ -493,6 +493,35 @@ func (v *Vault) Set(kind Kind, name, value string) error {
 	return nil
 }
 
+// RenameCredential は名前付き資格情報そのものを改名し、すべての参照を追従させる。
+// subject の Rename とは別の操作であり、既存の別資格情報を暗黙に上書きしない。
+func (v *Vault) RenameCredential(kind Kind, from, to string) error {
+	if !ValidKind(kind) {
+		return ErrUnknownKind
+	}
+	if !validCredentialName(from) || !validCredentialName(to) {
+		return ErrUnsafeName
+	}
+	value, ok := v.secrets[kind][from]
+	if !ok {
+		return ErrUnknownCredential
+	}
+	if from == to {
+		return nil
+	}
+	if _, exists := v.secrets[kind][to]; exists {
+		return ErrCredentialAlreadyExists
+	}
+	delete(v.secrets[kind], from)
+	v.secrets[kind][to] = value
+	for subject, name := range v.subjects[kind] {
+		if name == from {
+			v.subjects[kind][subject] = to
+		}
+	}
+	return nil
+}
+
 // Delete は資格情報を忘れる。まだ何かが指しているあいだは拒否する。
 //
 // 秘密に名前を付ける意味は、多くの subject がひとつのエントリを共有することにある。

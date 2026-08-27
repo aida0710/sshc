@@ -338,6 +338,9 @@ func New(options Options) (*Server, error) {
 	if options.Sync != nil {
 		addSyncActions(registry, options.Sync)
 	}
+	if options.Passwords != nil {
+		addCredentialActions(registry, options.Passwords)
+	}
 	actions := ActionHandlers{Sessions: options.Sessions, Kinds: registry}
 
 	if options.Keys != nil {
@@ -388,6 +391,7 @@ func New(options Options) (*Server, error) {
 		registerPasswordRoutes(e, PasswordHandlers{
 			Service:     options.Passwords,
 			vault:       vault,
+			Actions:     actions,
 			KeyHosts:    keyHosts,
 			Eligibility: eligibility,
 			Binding:     passwordBinding,
