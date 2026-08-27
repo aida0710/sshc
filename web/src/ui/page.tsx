@@ -48,7 +48,7 @@ export function MetricCard({
 
 export function MetricGrid({ children }: { children: ReactNode }) {
   return (
-    <div className="sshc-card grid gap-px overflow-hidden rounded bg-line sm:grid-cols-2 lg:grid-cols-3">
+    <div className="sshc-card grid gap-px overflow-hidden rounded-lg bg-line sm:grid-cols-2 lg:grid-cols-3">
       {children}
     </div>
   );

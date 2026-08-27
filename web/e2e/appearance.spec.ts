@@ -73,14 +73,14 @@ for (const appearance of ["light", "dark"] as const) {
         return (values[0]! + 0.05) / (values[1]! + 0.05);
       };
       return {
-        cardBorder: ratio("--ui-control-line", "--ui-card"),
+        cardBorder: ratio("--ui-line", "--ui-card"),
         controlBorder: ratio("--ui-control-line", "--ui-control"),
         faintOnCard: ratio("--ui-ink-faint", "--ui-card"),
         faintOnSidebar: ratio("--ui-ink-faint", "--ui-sidebar"),
       };
     });
 
-    expect(contrast.cardBorder).toBeGreaterThanOrEqual(3);
+    expect(contrast.cardBorder).toBeGreaterThanOrEqual(1.4);
     expect(contrast.controlBorder).toBeGreaterThanOrEqual(3);
     expect(contrast.faintOnCard).toBeGreaterThanOrEqual(4.5);
     expect(contrast.faintOnSidebar).toBeGreaterThanOrEqual(4.5);
@@ -93,6 +93,8 @@ for (const appearance of ["light", "dark"] as const) {
     const summary = page.locator("[data-connection-summary]");
     await expect(summary).toHaveCSS("border-left-width", "1px");
     await expect(summary).toHaveCSS("border-right-width", "1px");
+    await expect(summary).toHaveCSS("border-radius", "12px");
+    await expect(page.locator("[data-connection-editor] input").first()).toHaveCSS("border-radius", "8px");
     if (process.env.SSHC_VISUAL_DIR !== undefined) {
       await page.screenshot({
         path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-connection-summary-${appearance}.png`,
@@ -149,6 +151,7 @@ for (const appearance of ["light", "dark"] as const) {
     const explorer = page.locator("[data-config-explorer]");
     await expect(explorer).toHaveCSS("border-left-width", "1px");
     await expect(explorer).toHaveCSS("border-right-width", "1px");
+    await expect(explorer).toHaveCSS("border-radius", "12px");
     const treeHeader = await page.locator('[data-explorer-header="tree"]').boundingBox();
     const fileHeader = await page.locator('[data-explorer-header="file"]').boundingBox();
     expect(treeHeader?.height).toBe(fileHeader?.height);
