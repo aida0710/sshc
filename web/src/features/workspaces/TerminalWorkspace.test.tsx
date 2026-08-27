@@ -9,7 +9,14 @@ const workspace = vi.hoisted(() => ({
   list: vi.fn().mockResolvedValue([]),
   restore: vi.fn(),
 }));
+const commandCenter = vi.hoisted(() => ({ targets: vi.fn() }));
 vi.mock("./api", () => ({ workspaceApi: workspace }));
+vi.mock("./WorkspaceCommandCenter", () => ({
+  WorkspaceCommandCenter: ({ paneTargets }: { paneTargets: unknown[] }) => {
+    commandCenter.targets(paneTargets);
+    return <div>Command center open</div>;
+  },
+}));
 
 const primary: TerminalSession = {
   id: "primary-session",
@@ -309,6 +316,52 @@ describe("TerminalWorkspace pane movement", () => {
     expect(screen.getAllByRole("button", { name: "Exit focus mode" })).toHaveLength(2);
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+  });
+
+  it("targets every connected live session even when duplicate aliases are focused away", async () => {
+    commandCenter.targets.mockClear();
+    const duplicate: TerminalSession = { ...secondary, alias: "edge", title: "Second edge terminal" };
+    function CommandHarness() {
+      const [active, setActive] = useState(primary.id);
+      return <TerminalWorkspace
+        sessions={[primary, duplicate]}
+        activeSessionId={active}
+        onActive={setActive}
+        onOpenAlias={vi.fn()}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+    const user = userEvent.setup();
+    const { container } = render(<CommandHarness />);
+    dockConnectedSession(container, duplicate.id);
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+
+    await user.click(screen.getAllByRole("button", { name: "Focus edge" })[0] as HTMLElement);
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(1));
+    await user.click(screen.getByRole("button", { name: "Send command…" }));
+
+    expect(commandCenter.targets).toHaveBeenCalledWith([
+      {
+        targetId: expect.any(String), sessionId: primary.id, alias: "edge", title: "Primary terminal",
+        paneNumber: 1, connected: true, state: "connected",
+      },
+      {
+        targetId: expect.any(String), sessionId: duplicate.id, alias: "edge", title: "Second edge terminal",
+        paneNumber: 2, connected: true, state: "connected",
+      },
+    ]);
+  });
+
+  it("does not enable command delivery for a reconnecting SSH session", () => {
+    render(<TerminalWorkspace
+      sessions={[{ ...primary, state: "reconnecting" }]}
+      activeSessionId={primary.id}
+      onActive={() => undefined}
+      onOpenAlias={vi.fn()}
+      renderTerminal={() => null}
+    />);
+
+    expect(screen.getByRole("button", { name: "Send command…" })).toBeDisabled();
   });
 
   it("consumes a Home restore request once and leaves only the failed pane unavailable", async () => {

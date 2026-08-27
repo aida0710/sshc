@@ -244,6 +244,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminal/commands/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["previewTerminalCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["dispatchTerminalCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/connections/recent": {
         parameters: {
             query?: never;
@@ -1950,6 +1982,53 @@ export interface components {
         TerminalStreamTicket: {
             streamTicket: string;
         };
+        TerminalCommandTargetRequest: {
+            targetId: string;
+            sessionId: string;
+        };
+        TerminalCommandPreviewRequest: {
+            snippetId?: string;
+            command?: string;
+            inputs: {
+                [key: string]: string;
+            };
+            targets: components["schemas"]["TerminalCommandTargetRequest"][];
+        };
+        TerminalCommandDispatchRequest: {
+            snippetId?: string;
+            command?: string;
+            inputs: {
+                [key: string]: string;
+            };
+            targets: components["schemas"]["TerminalCommandTargetRequest"][];
+            evidence: string;
+        };
+        TerminalCommandPreviewTarget: {
+            targetId: string;
+            sessionId: string;
+            alias: string;
+            title: string;
+            command: string;
+        };
+        TerminalCommandPreview: {
+            snippetId: string;
+            evidence: string;
+            actionToken: string;
+            actionExpiresAt: string;
+            targets: components["schemas"]["TerminalCommandPreviewTarget"][];
+        };
+        TerminalCommandResult: {
+            targetId: string;
+            sessionId: string;
+            alias: string;
+            title: string;
+            /** @enum {string} */
+            status: "delivered" | "failed";
+            problem?: string;
+        };
+        TerminalCommandDispatchResponse: {
+            results: components["schemas"]["TerminalCommandResult"][];
+        };
         OpenTerminalSessionResponse: {
             session: components["schemas"]["TerminalSession"];
             streamTicket: string;
@@ -3395,6 +3474,67 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    previewTerminalCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalCommandPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact live terminal sessions and expanded command awaiting confirmation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalCommandPreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    dispatchTerminalCommand: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalCommandDispatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-session PTY delivery results; command output remains in each terminal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalCommandDispatchResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
         };

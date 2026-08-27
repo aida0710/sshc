@@ -5,8 +5,6 @@ export type SnippetVariable = { name: string; type: "string" | "integer" | "bool
 export type Snippet = { id: string; name: string; description?: string; command: string; variables: SnippetVariable[]; createdAt: string; updatedAt: string };
 export type Startup = { alias: string; snippetId: string; inputs?: Record<string, string> };
 export type SnippetDraft = Pick<Snippet, "name" | "command"> & { description: string; variables: SnippetVariable[] };
-export type ExecutionTarget = { targetId: string; alias: string };
-export type ExecutionPreviewRequest = { snippetId?: string; command?: string; targets: ExecutionTarget[]; inputs: Record<string, string> };
 export type RouteHop = { alias: string; hostName: string; user: string; port: string; proxyCommand: string; strictHostKey: string; authentication: string[]; identityFiles: string[]; identitiesOnly: boolean; hostKeyAlgorithms: string[] };
 export type Preview = { snippetId: string; evidence: string; actionToken: string; actionExpiresAt: string; targets: { targetId: string; target: { alias: string; hostName: string; user: string; port: string; route: RouteHop[] }; command: string }[] };
 export type Job = { id: string; status: "running" | "completed" | "cancelled"; startedAt: string; finishedAt?: string; results: { targetId: string; alias: string; status: string; exitCode?: number; stdout?: string; stderr?: string; truncated?: boolean; problem?: string }[] };
@@ -46,8 +44,6 @@ export const snippetsApi = {
   async setStartup(alias: string, snippetId: string, inputs: Record<string, string>): Promise<void> { await apiClient.mutate(`/api/v1/snippets/startup/${encodeURIComponent(alias)}`, { method: "PUT", headers: jsonHeaders, body: JSON.stringify({ snippetId, inputs }) }); },
   async preview(snippetId: string, aliases: string[], inputs: Record<string, string>): Promise<Preview> { return parsePreview(await apiClient.mutate<unknown>("/api/v1/snippets/preview", { method: "POST", headers: jsonHeaders, body: JSON.stringify({ snippetId, aliases, inputs }) })); },
   async start(preview: Preview, aliases: string[], inputs: Record<string, string>, concurrency = 4): Promise<Job> { return job(await apiClient.mutate<unknown>("/api/v1/snippets/jobs", { method: "POST", headers: { ...jsonHeaders, "X-SSHC-Action": preview.actionToken }, body: JSON.stringify({ snippetId: preview.snippetId, aliases, inputs, evidence: preview.evidence, concurrency }) })); },
-  async previewExecution(request: ExecutionPreviewRequest): Promise<Preview> { return parsePreview(await apiClient.mutate<unknown>("/api/v1/snippets/preview", { method: "POST", headers: jsonHeaders, body: JSON.stringify(request) })); },
-  async startExecution(preview: Preview, request: ExecutionPreviewRequest, concurrency = 4): Promise<Job> { return job(await apiClient.mutate<unknown>("/api/v1/snippets/jobs", { method: "POST", headers: { ...jsonHeaders, "X-SSHC-Action": preview.actionToken }, body: JSON.stringify({ ...request, evidence: preview.evidence, concurrency }) })); },
   async job(id: string): Promise<Job> { return job(await apiClient.read(`/api/v1/snippets/jobs/${encodeURIComponent(id)}`)); },
   async cancel(id: string): Promise<Job> { return job(await apiClient.mutate<unknown>(`/api/v1/snippets/jobs/${encodeURIComponent(id)}`, { method: "DELETE" })); },
 };

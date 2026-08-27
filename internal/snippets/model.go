@@ -39,6 +39,7 @@ var (
 	ErrInvalidDocument    = errors.New("snippets document is invalid")
 	ErrUnsupportedVersion = errors.New("snippets were written by a newer version of sshc")
 	ErrSecretStartup      = errors.New("startup snippets cannot persist secret variable values")
+	ErrSecretTerminal     = errors.New("terminal commands cannot contain secret variables")
 	ErrUnknownJob         = errors.New("snippet execution job does not exist")
 	ErrJobFinished        = errors.New("snippet execution job has already finished")
 	ErrTooManyJobs        = errors.New("too many snippet execution jobs are active")
@@ -153,6 +154,25 @@ type PreviewRequest struct {
 	Aliases   []string          `json:"aliases,omitempty"`
 	Targets   []RequestedTarget `json:"targets,omitempty"`
 	Inputs    map[string]string `json:"inputs"`
+}
+
+// CommandRequest identifies one ad-hoc command or saved snippet without an SSH
+// destination. Terminal broadcast uses it because the destination is an
+// already-open terminal session, not an alias which should be resolved and
+// dialled again.
+type CommandRequest struct {
+	SnippetID string            `json:"snippetId,omitempty"`
+	Command   string            `json:"command,omitempty"`
+	Inputs    map[string]string `json:"inputs"`
+}
+
+// PreparedCommand is an expanded command for an existing terminal. Command is
+// intentionally an internal Go field: HTTP previews expose Display only.
+type PreparedCommand struct {
+	SnippetID string
+	Command   string
+	Display   string
+	Evidence  string
 }
 
 type TargetPreview struct {

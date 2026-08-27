@@ -158,6 +158,41 @@ func TestExpansionIsTypedStrictAndRedactsSecrets(t *testing.T) {
 	}
 }
 
+func TestTerminalCommandExpandsWithoutResolvingOrDiallingAnAlias(t *testing.T) {
+	repository := &memoryRepository{}
+	service := NewService(Options{Repository: repository, Now: time.Now})
+	snippet := createSnippet(t, service, Draft{
+		Name: "Directory", Command: "printf '%s\\n' {{path}}",
+		Variables: []Variable{{Name: "path", Type: VariableString, Required: true}},
+	})
+	prepared, err := service.PrepareTerminalCommand(CommandRequest{
+		SnippetID: snippet.ID, Inputs: map[string]string{"path": "/srv/app"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.Command != "printf '%s\\n' /srv/app" || prepared.Display != prepared.Command || prepared.Evidence == "" {
+		t.Fatalf("prepared = %#v", prepared)
+	}
+}
+
+func TestTerminalCommandRefusesSecretVariablesBeforeExposingOrWritingThem(t *testing.T) {
+	service := testService(&memoryRepository{}, nil)
+	snippet := createSnippet(t, service, Draft{
+		Name: "Secret", Command: "deploy --token={{token}}",
+		Variables: []Variable{{Name: "token", Type: VariableSecret, Required: true}},
+	})
+	prepared, err := service.PrepareTerminalCommand(CommandRequest{
+		SnippetID: snippet.ID, Inputs: map[string]string{"token": "top-secret"},
+	})
+	if !errors.Is(err, ErrSecretTerminal) {
+		t.Fatalf("PrepareTerminalCommand = %#v, %v, want ErrSecretTerminal", prepared, err)
+	}
+	if strings.Contains(prepared.Command+prepared.Display+prepared.Evidence, "top-secret") {
+		t.Fatal("secret escaped in the rejected terminal command")
+	}
+}
+
 func TestMalformedAndUnusedPlaceholdersAreRejectedAtCreate(t *testing.T) {
 	for _, draft := range []Draft{
 		{Name: "Malformed", Command: "echo {{name", Variables: []Variable{{Name: "name", Type: VariableString}}},

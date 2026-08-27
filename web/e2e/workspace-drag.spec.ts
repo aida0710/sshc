@@ -76,14 +76,14 @@ test("docks connected terminals into a live workspace", async ({ page, installat
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-live-workspace-desktop.png`, fullPage: true });
   }
 
-  await page.getByRole("button", { name: "Broadcast…" }).click();
-  const broadcast = page.getByRole("dialog", { name: "Broadcast to terminals" });
+  await page.getByRole("button", { name: "Send command…" }).click();
+  const broadcast = page.getByRole("dialog", { name: "Send to connected terminals" });
   await expect(broadcast).toBeVisible();
-  await expect(broadcast.getByText(/Live keystrokes are never shared/)).toBeVisible();
+  await expect(broadcast.getByText(/working directory, environment, and shell state/)).toBeVisible();
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.14.1-broadcast-modal.png`, fullPage: true });
   }
-  await broadcast.getByRole("button", { name: "Close broadcast" }).click();
+  await broadcast.getByRole("button", { name: "Close command delivery" }).click();
 
   const savedLayouts = page.locator("summary").filter({ hasText: "Saved layouts" });
   await savedLayouts.click();

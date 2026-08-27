@@ -28,6 +28,7 @@ const (
 	ActionSFTPDelete        = "sftp.delete"
 	ActionSFTPChmod         = "sftp.chmod"
 	ActionSnippetExecute    = "snippet.execute"
+	ActionTerminalCommand   = "terminal.command.broadcast"
 	ActionSyncForcePush     = "sync.force_push"
 )
 
@@ -50,6 +51,7 @@ var knownActionKinds = map[string]bool{
 	ActionSFTPDelete:        true,
 	ActionSFTPChmod:         true,
 	ActionSnippetExecute:    true,
+	ActionTerminalCommand:   true,
 	ActionSyncForcePush:     true,
 }
 

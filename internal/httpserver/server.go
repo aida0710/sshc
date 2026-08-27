@@ -439,6 +439,8 @@ func New(options Options) (*Server, error) {
 		registerTerminalRoutes(e, TerminalHandlers{
 			Registry:       options.Terminals,
 			Tickets:        &terminal.Tickets{},
+			Snippets:       options.Snippets,
+			Actions:        actions,
 			Connect:        options.Connect,
 			Shell:          options.LoginShell,
 			Environment:    options.TerminalEnvironment,

@@ -13,8 +13,8 @@ Homebrew formula はソースからビルドするため、Go toolchain も Home
 ## インストールスクリプト（macOS / Linux）
 
 ```sh
-SSHC_VERSION=v0.15.3 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.15.3/install.sh | sh'
+SSHC_VERSION=v0.15.4 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.15.4/install.sh | sh'
 ```
 
 URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、pipeで直接実行しません。新しい版へ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。
@@ -93,8 +93,8 @@ vault は 12 時間操作がない場合に自動的にロックされます。
 workflow内の検査だけでは、公開後のasset変更や管理者資格情報の侵害を止められません。リポジトリ設定で次を維持します。
 
 - GitHub Immutable Releasesを有効にし、公開済みReleaseのassetと本文を変更不能にする
-- `release` environmentにrequired reviewerを設定し、self reviewとadministrator bypassを無効にする
-- `main`のbranch protectionをadministratorにも適用し、required CIとreviewを迂回させない
+- `release` environmentにrequired reviewerを設定し、administrator bypassを無効にする。単独管理者の間は公開不能を避けるためself reviewを許可するが、公開ごとの明示承認は必須とする。別の管理者を置ける場合はself reviewも無効にする
+- `main`はstrictなrequired CI 9件、review、linear history、conversation resolutionを要求し、force pushと削除を禁止する。単独管理者の間は直接push後の同一SHA CIをrelease source gateで必ず検証し、別の管理者を置ける場合はadministrator enforcementも有効にする
 - `v*` tagの更新と削除を禁止し、bypass actorを設定しない
 
 これらはrepository外の設定であり、workflowのcommitだけでは有効になりません。公開前監査ではGitHub APIまたはSettings画面で現在値を確認します。
