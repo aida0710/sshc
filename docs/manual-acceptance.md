@@ -131,6 +131,13 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 3. SSH terminalでabsolute remote pathを入力し、SFTPで読める親directoryの候補が表示されることを確認する。relative pathではcwdを推測した候補が出ないことを確認する。
 4. terminalを閉じて開き直し、以前のcommand履歴がdiskやWorkspaceから復元されないことを確認する。
 
+## M11. UI外枠とタブ階層
+
+1. 保存済み接続のsummary中央行とConfigのInclude階層／editorで、カード外枠の左右線が途中で消えないことをライト／ダーク双方で確認する。
+2. Basic、設定解析、詳細設定を切り替え、tablistと内容が同じ外枠内にあり、選択中の内容が一段内側に表示されることを確認する。
+3. Configの「Include階層」headerと「config・編集可能」headerの上端、下端、高さが一致することを確認する。
+4. 通常のカード、control、menu、dialog、選択行の角が4pxで揃い、状態badgeだけpillになっていることを確認する。
+
 ## 記録
 
 未実施は空欄のままにせず「未実施」と書きます。空欄は「実施したが記録し忘れた」と区別がつきません。
