@@ -275,6 +275,12 @@ test("keeps mobile navigation and display controls behind header menus", async (
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   await expect(primaryNavigation).toBeInViewport();
+  await expect(primaryNavigation.getByRole("button", { name: "Search everything" })).toBeVisible();
+  await primaryNavigation.getByRole("button", { name: "Search everything" }).click();
+  await expect(page.getByRole("dialog", { name: "Search hosts, files, snippets and settings" })).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.0-command-palette-mobile.png`, fullPage: true });
+  }
 });
 
 test("keeps every section inside 360 pixels", async ({ page, installation }) => {
