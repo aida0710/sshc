@@ -12,6 +12,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/platform"
+	"sshc/internal/snippets"
 	"sshc/internal/terminal"
 	"sshc/internal/validate"
 )
@@ -30,6 +31,8 @@ const StreamPath = "/terminal/stream"
 type TerminalHandlers struct {
 	Registry *terminal.Registry
 	Tickets  *terminal.Tickets
+	Snippets *snippets.Service
+	Actions  ActionHandlers
 	// Connect は、alias ひとつ分の対話セッションを開く。
 	//
 	// 外部の ssh は起動しない。プロセス内で SSH 接続を行うため、確保する
@@ -63,6 +66,10 @@ type TerminalHandlers struct {
 func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.GET("/api/v1/terminal/sessions", handlers.List)
 	engine.POST("/api/v1/terminal/sessions", handlers.Open)
+	if handlers.Snippets != nil && handlers.Actions.Sessions != nil {
+		engine.POST("/api/v1/terminal/commands/preview", handlers.PreviewCommand)
+		engine.POST("/api/v1/terminal/commands", handlers.DispatchCommand)
+	}
 	engine.POST("/api/v1/terminal/sessions/:id/stream", handlers.Ticket)
 	engine.POST("/api/v1/terminal/sessions/:id/reconnect", handlers.Reconnect)
 	engine.PATCH("/api/v1/terminal/sessions/:id", handlers.Rename)
@@ -272,6 +279,17 @@ type readySessionLifetime struct {
 	done  chan struct{}
 	mutex sync.Mutex
 	err   error
+}
+
+// WriteExact preserves the lossless input capability of the in-process SSH
+// session through the lifetime wrapper. Broadcast must fail closed when the
+// underlying Process does not provide it.
+func (s *sessionLifetime) WriteExact(ctx context.Context, input []byte) error {
+	writer, ok := s.Process.(terminal.ExactInput)
+	if !ok {
+		return terminal.ErrExactInputUnavailable
+	}
+	return writer.WriteExact(ctx, input)
 }
 
 func newReadySessionLifetime(lifetime *sessionLifetime, underlying terminal.Readier) *readySessionLifetime {

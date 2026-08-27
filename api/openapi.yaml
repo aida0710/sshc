@@ -268,6 +268,50 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/commands/preview:
+    post:
+      operationId: previewTerminalCommand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalCommandPreviewRequest" }
+      responses:
+        "200":
+          description: Exact live terminal sessions and expanded command awaiting confirmation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalCommandPreview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/commands:
+    post:
+      operationId: dispatchTerminalCommand
+      parameters:
+        - name: X-SSHC-Action
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalCommandDispatchRequest" }
+      responses:
+        "200":
+          description: Per-session PTY delivery results; command output remains in each terminal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalCommandDispatchResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/connections/recent:
     get:
       operationId: listRecentConnections
@@ -2367,6 +2411,85 @@ components:
       required: [streamTicket]
       properties:
         streamTicket: { type: string }
+    TerminalCommandTargetRequest:
+      type: object
+      additionalProperties: false
+      required: [targetId, sessionId]
+      properties:
+        targetId: { type: string, minLength: 1, maxLength: 255 }
+        sessionId: { type: string, minLength: 1, maxLength: 64 }
+    TerminalCommandPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [inputs, targets]
+      properties:
+        snippetId: { type: string }
+        command: { type: string, minLength: 1, maxLength: 4095 }
+        inputs:
+          type: object
+          additionalProperties: { type: string }
+        targets:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: { $ref: "#/components/schemas/TerminalCommandTargetRequest" }
+    TerminalCommandDispatchRequest:
+      type: object
+      additionalProperties: false
+      required: [inputs, targets, evidence]
+      properties:
+        snippetId: { type: string }
+        command: { type: string, minLength: 1, maxLength: 4095 }
+        inputs:
+          type: object
+          additionalProperties: { type: string }
+        targets:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: { $ref: "#/components/schemas/TerminalCommandTargetRequest" }
+        evidence: { type: string, minLength: 64, maxLength: 64 }
+    TerminalCommandPreviewTarget:
+      type: object
+      additionalProperties: false
+      required: [targetId, sessionId, alias, title, command]
+      properties:
+        targetId: { type: string }
+        sessionId: { type: string }
+        alias: { type: string }
+        title: { type: string }
+        command: { type: string }
+    TerminalCommandPreview:
+      type: object
+      additionalProperties: false
+      required: [snippetId, evidence, actionToken, actionExpiresAt, targets]
+      properties:
+        snippetId: { type: string }
+        evidence: { type: string }
+        actionToken: { type: string }
+        actionExpiresAt: { type: string }
+        targets:
+          type: array
+          items: { $ref: "#/components/schemas/TerminalCommandPreviewTarget" }
+    TerminalCommandResult:
+      type: object
+      additionalProperties: false
+      required: [targetId, sessionId, alias, title, status]
+      properties:
+        targetId: { type: string }
+        sessionId: { type: string }
+        alias: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [delivered, failed] }
+        problem: { type: string }
+    TerminalCommandDispatchResponse:
+      type: object
+      additionalProperties: false
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/TerminalCommandResult" }
     OpenTerminalSessionResponse:
       type: object
       additionalProperties: false

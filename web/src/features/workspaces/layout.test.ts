@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { executionTargets, paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type StoredNode } from "./layout";
+import { paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type StoredNode } from "./layout";
 
 const stored: StoredNode = {
   split: {
@@ -76,24 +76,6 @@ describe("workspace layout", () => {
     const state = restoreLayout(stored, "web");
     expect(reduceLayout(state, { type: "resize-split", path: [], ratio: 2 }).root.split?.ratio).toBe(10);
     expect(reduceLayout(state, { type: "resize-split", path: [], ratio: 98 }).root.split?.ratio).toBe(90);
-  });
-
-  it("builds one execution target per host by default", () => {
-    const duplicate: StoredNode = {
-      split: {
-        direction: "horizontal",
-        ratio: 50,
-        first: { pane: { id: "first", alias: "web-prod" } },
-        second: { pane: { id: "second", alias: "web-prod" } },
-      },
-    };
-    expect(executionTargets(restoreLayout(duplicate, "first").root, "host")).toEqual([
-      { targetId: "first", alias: "web-prod", state: "reconnect_required" },
-    ]);
-    expect(executionTargets(restoreLayout(duplicate, "first").root, "pane")).toEqual([
-      { targetId: "first", alias: "web-prod", state: "reconnect_required" },
-      { targetId: "second", alias: "web-prod", state: "reconnect_required" },
-    ]);
   });
 
   it("swaps pane placement while keeping runtime state with each pane", () => {

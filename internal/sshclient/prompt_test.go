@@ -1,11 +1,14 @@
 package sshclient_test
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"io"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"sshc/internal/sshclient"
 )
@@ -165,6 +168,57 @@ func TestTheInputBufferWakesItsReaderWhenBytesArrive(t *testing.T) {
 	wait.Wait()
 	if answer != "ops" {
 		t.Fatalf("answer = %q", answer)
+	}
+}
+
+func TestExactInputWaitsForTheWholeFrameInsteadOfDroppingItsTail(t *testing.T) {
+	buffer := sshclient.NewInputBuffer()
+	prefix := bytes.Repeat([]byte("x"), sshclient.MaxBufferedInput-2)
+	if _, err := buffer.Write(prefix); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- buffer.WriteExact(context.Background(), []byte("pwd\r")) }()
+	select {
+	case err := <-done:
+		t.Fatalf("WriteExact returned before the complete frame fit: %v", err)
+	case <-time.After(10 * time.Millisecond):
+	}
+	drained := make([]byte, len(prefix))
+	if _, err := io.ReadFull(buffer, drained); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	frame := make([]byte, 4)
+	if _, err := io.ReadFull(buffer, frame); err != nil {
+		t.Fatal(err)
+	}
+	if string(frame) != "pwd\r" {
+		t.Fatalf("exact frame = %q", frame)
+	}
+}
+
+func TestExactInputCancellationLeavesNoPartialFrame(t *testing.T) {
+	buffer := sshclient.NewInputBuffer()
+	full := bytes.Repeat([]byte("x"), sshclient.MaxBufferedInput)
+	if _, err := buffer.Write(full); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- buffer.WriteExact(ctx, []byte("pwd\r")) }()
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("WriteExact = %v, want context.Canceled", err)
+	}
+	drained := make([]byte, len(full))
+	if _, err := io.ReadFull(buffer, drained); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(drained, full) {
+		t.Fatal("cancelled exact write changed buffered keystrokes")
 	}
 }
 

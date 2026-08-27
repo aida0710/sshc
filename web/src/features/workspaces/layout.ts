@@ -55,12 +55,6 @@ export type LayoutAction =
   | { type: "connection-failed"; paneId: string; problem: string }
   | { type: "engine-restarted" };
 
-export type ExecutionTarget = {
-  targetId: string;
-  alias: string;
-  state: ReconnectState;
-};
-
 export function restoreLayout(root: StoredNode, focusedPaneId: string): LayoutState {
   const hydrated = hydrateNode(root);
   const panes = paneIDs(hydrated);
@@ -181,17 +175,6 @@ export function paneSessionIDs(root: RuntimeNode): string[] {
 export function storedPaneCount(root: StoredNode): number {
   if (root.pane !== undefined) return 1;
   return storedPaneCount(root.split.first) + storedPaneCount(root.split.second);
-}
-
-export function executionTargets(root: RuntimeNode, mode: "host" | "pane"): ExecutionTarget[] {
-  const targets: ExecutionTarget[] = [];
-  const seen = new Set<string>();
-  visitPanes(root, (pane) => {
-    if (mode === "host" && seen.has(pane.alias)) return;
-    seen.add(pane.alias);
-    targets.push({ targetId: pane.id, alias: pane.alias, state: pane.state });
-  });
-  return targets;
 }
 
 function updatePaneState(

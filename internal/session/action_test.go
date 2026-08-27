@@ -245,7 +245,7 @@ func TestKnownActionKindListsEveryConfirmedOperation(t *testing.T) {
 		ActionReachability, ActionAuthentication, ActionKnownHostsScan,
 		ActionKnownHostsDelete, ActionKnownHostsScan, ActionKnownHostsAdd, ActionRemoteKeyRegister,
 		ActionRevealPrivateKey, ActionPurgeTrashEntry,
-		ActionSFTPDelete, ActionSFTPChmod, ActionSnippetExecute,
+		ActionSFTPDelete, ActionSFTPChmod, ActionSnippetExecute, ActionTerminalCommand,
 	} {
 		if !KnownActionKind(kind) {
 			t.Errorf("KnownActionKind(%q) = false", kind)

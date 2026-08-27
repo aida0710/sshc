@@ -78,6 +78,11 @@ func (p *fakeProcess) Write(b []byte) (int, error) {
 	return p.written.Write(b)
 }
 
+func (p *fakeProcess) WriteExact(_ context.Context, b []byte) error {
+	_, err := p.Write(b)
+	return err
+}
+
 func (p *fakeProcess) Resize(size terminal.Size) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -181,6 +186,87 @@ func openShell(t testing.TB, registry *terminal.Registry) *terminal.Session {
 		t.Fatalf("Open() = %v", err)
 	}
 	return session
+}
+
+func TestCommandWritesToThePreviewedSSHProcessWithoutOpeningAnother(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "production", Title: "production",
+		Command: terminal.Command{Path: "/unused"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := registry.CommandTarget(session.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Alias != "production" || target.Generation == 0 {
+		t.Fatalf("target = %#v", target)
+	}
+	if err := registry.WriteCommand(context.Background(), target, "pwd"); err != nil {
+		t.Fatal(err)
+	}
+	if got := starter.last().keystrokes(); got != "pwd\r" {
+		t.Fatalf("process input = %q", got)
+	}
+	if starter.count() != 1 {
+		t.Fatalf("broadcast opened %d extra process(es)", starter.count()-1)
+	}
+}
+
+func TestCommandRefusesLocalAndChangedSessions(t *testing.T) {
+	registry, _ := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	local := openShell(t, registry)
+	if _, err := registry.CommandTarget(local.ID()); !errors.Is(err, terminal.ErrWrongKind) {
+		t.Fatalf("local CommandTarget = %v, want ErrWrongKind", err)
+	}
+
+	var processes []*fakeProcess
+	var processesMutex sync.Mutex
+	processAt := func(index int) *fakeProcess {
+		processesMutex.Lock()
+		defer processesMutex.Unlock()
+		if index >= len(processes) {
+			return nil
+		}
+		return processes[index]
+	}
+	processCount := func() int {
+		processesMutex.Lock()
+		defer processesMutex.Unlock()
+		return len(processes)
+	}
+	registry.ReconnectDelay = func(int) time.Duration { return 0 }
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "production", Title: "production",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) {
+			process := newFakeProcess()
+			processesMutex.Lock()
+			processes = append(processes, process)
+			processesMutex.Unlock()
+			return process, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	previewed, err := registry.CommandTarget(session.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	processAt(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	waitFor(t, func() bool { return processCount() == 2 })
+	waitFor(t, func() bool {
+		current, targetErr := registry.CommandTarget(session.ID())
+		return targetErr == nil && current.Generation != previewed.Generation
+	})
+	if err := registry.WriteCommand(context.Background(), previewed, "whoami"); !errors.Is(err, terminal.ErrGenerationChanged) {
+		t.Fatalf("WriteCommand after reconnect = %v, want ErrGenerationChanged", err)
+	}
+	if got := processAt(1).keystrokes(); got != "" {
+		t.Fatalf("replacement process received stale command %q", got)
+	}
 }
 
 func waitFor(t testing.TB, condition func() bool) {
