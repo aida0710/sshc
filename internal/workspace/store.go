@@ -137,7 +137,7 @@ func (store *Store) load() ([]Workspace, error) {
 	if stored.SchemaVersion > SchemaVersion {
 		return nil, ErrUnsupportedSchema
 	}
-	if stored.SchemaVersion != SchemaVersion || len(stored.Workspaces) > MaxWorkspaces {
+	if (stored.SchemaVersion != 1 && stored.SchemaVersion != SchemaVersion) || len(stored.Workspaces) > MaxWorkspaces {
 		return nil, ErrInvalidDocument
 	}
 	seen := make(map[string]bool, len(stored.Workspaces))

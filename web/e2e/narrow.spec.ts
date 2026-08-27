@@ -79,12 +79,38 @@ test("keeps password setup inside 360 pixels without a decorative icon", async (
 
   await expect(page.getByText(/cannot be recovered/i)).toBeVisible();
   await expect(page.locator('use[href="#icon-secrets"]')).toHaveCount(0);
+  await expect(page.getByLabel("Theme menu")).toBeVisible();
+  await expect(page.getByLabel("Locale menu")).toBeVisible();
   await expectNoHorizontalOverflow(page, "First-run password setup");
   await expectFullyInsideViewport(
     page,
     page.getByRole("button", { name: "Create the vault" }),
     "Create the vault",
   );
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.1-vault-create-dark-mobile.png`,
+      fullPage: true,
+    });
+    await page.getByLabel("Theme menu").selectOption("light");
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.1-vault-create-light-mobile.png`,
+      fullPage: true,
+    });
+    await page.getByLabel("Theme menu").selectOption("dark");
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.1-vault-create-dark-desktop.png`,
+      fullPage: true,
+    });
+    await page.getByLabel("Theme menu").selectOption("light");
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.1-vault-create-light-desktop.png`,
+      fullPage: true,
+    });
+    await page.getByLabel("Theme menu").selectOption("dark");
+    await page.setViewportSize({ width: 360, height: 800 });
+  }
 
   await page.getByLabel("Master password", { exact: true }).fill(masterPassword);
   await page.getByLabel("Confirm master password", { exact: true }).fill(masterPassword);

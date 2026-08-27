@@ -17,7 +17,13 @@ function node(value: unknown): StoredNode {
   const item = asRecord(value);
   if (item.pane !== undefined) {
     const pane = asRecord(item.pane);
-    return { pane: { id: asString(pane.id), alias: asString(pane.alias) } };
+    const kind = pane.kind === undefined ? undefined : asString(pane.kind);
+    if (kind !== undefined && kind !== "ssh" && kind !== "shell") throw new Error("invalid_response");
+    return { pane: {
+      id: asString(pane.id),
+      alias: asString(pane.alias),
+      ...(kind === "shell" ? { kind } : {}),
+    } };
   }
   const split = asRecord(item.split);
   const direction = asString(split.direction);

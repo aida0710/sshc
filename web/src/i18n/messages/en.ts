@@ -156,7 +156,7 @@ export const en = {
   "workspace.maxPanes": "A screen can contain up to {count} terminals.",
   "workspace.namePrompt": "Saved layout name",
   "workspace.savedLayouts": "Saved layouts",
-  "workspace.savedDescription": "Save connection targets and split ratios with a name, then recreate them later as new SSH connections. Each layout supports up to {count} terminals.",
+  "workspace.savedDescription": "Save SSH targets, local shells, and split ratios with a name, then recreate them later as new sessions. Each layout supports up to {count} terminals.",
   "workspace.broadcastCommand": "Send command…",
   "workspace.broadcastHeading": "Send to connected terminals",
   "workspace.broadcastDescription": "Review a command or snippet, then send it to each connected terminal's current input.",

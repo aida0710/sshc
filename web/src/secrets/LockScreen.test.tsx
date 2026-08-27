@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import { LanguageProvider } from "../i18n/context";
+import { ThemeProvider } from "../theme/context";
 import { LockScreen } from "./LockScreen";
 import type { IntegrationsApi } from "../api/integrations";
 
@@ -15,6 +16,22 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
 }
 
 describe("LockScreen", () => {
+  it("offers appearance and language controls before creating or opening the vault", async () => {
+    render(
+      <ThemeProvider initial="dark">
+        <LanguageProvider initial="en">
+          <LockScreen exists={false} onOpen={vi.fn()} api={buildApi()} />
+        </LanguageProvider>
+      </ThemeProvider>,
+    );
+
+    await userEvent.selectOptions(screen.getByLabelText("Theme menu"), "light");
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", "light"));
+    await userEvent.selectOptions(screen.getByLabelText("Locale menu"), "ja");
+    expect(screen.getByLabelText("テーマメニュー")).toHaveValue("light");
+    expect(screen.getByRole("button", { name: "vault を作成" })).toBeInTheDocument();
+  });
+
   it("says a new master password cannot be recovered, and asks for it twice", async () => {
     const api = buildApi();
     const onOpen = vi.fn();
