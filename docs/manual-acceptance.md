@@ -104,9 +104,10 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 
 ## M8. Workspace Command Center
 
-1. 同じaliasを2つ含み、別aliasを1つ含む3 paneのWorkspaceを開く。
-2. 各paneの対話shellで別々のdirectoryへ移動し、直接入力した`pwd`のpreviewが同じaliasを含む3 sessionすべてを表示することを確認する。
-3. 送信後、別SSH接続の結果欄ではなく各paneにそのpane自身のcwdが表示されることを確認する。
+1. SSHを2つ、ローカルシェルを1つ含む3 paneのWorkspaceを開く。SSHの2つは同じaliasでもよい。
+2. 各paneの対話shellで別々のdirectoryへ移動し、直接入力した`pwd`のpreviewがkindに関係なく3 sessionすべてを表示することを確認する。
+3. 送信後、別接続の結果欄ではなく各paneにそのpane自身のcwdが表示されることを確認する。
+4. 単一terminalへ戻すと、Workspace名・台数・一括送信・保存レイアウト管理・重複するtitle／検索toolbarが表示されないことを確認する。`Ctrl/Cmd+F`では検索欄が開き、0台では保存済みレイアウトを開く入口が残る。
 4. 1 paneを再接続中にして開き直し、未接続paneが送信対象外と表示され、aliasを使った代替接続が作られないことを確認する。
 5. preview後に対象paneを再接続してから送信し、preview変更として拒否され、新しいshellへ古いcommandが届かないことを確認する。
 6. 通常変数を持つSnippetは展開後commandをpreviewして送信でき、secret変数を持つSnippetはterminal表示とshell履歴への漏洩防止のため送信できないことを確認する。

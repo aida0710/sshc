@@ -158,6 +158,9 @@ test("selects the whole local console row and docks local shells", async ({ page
 
   const target = page.locator("[data-single-terminal-drop-target='local-zsh']");
   await expect(target).toBeVisible();
+  await expect(page.locator("[data-desktop-workspace-controls]")).toHaveCount(0);
+  await expect(page.getByText("1 terminal", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Saved layouts", { exact: true })).toHaveCount(0);
   const bashRow = consoleList.getByRole("listitem").filter({ hasText: "bash" });
   const targetBox = await target.boundingBox();
   expect(targetBox).not.toBeNull();
@@ -167,11 +170,58 @@ test("selects the whole local console row and docks local shells", async ({ page
 
   await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
   await expect(page.locator("[data-pane-toolbar]")).toHaveCount(2);
-  await expect(page.getByRole("button", { name: "Send command…" })).toBeDisabled();
+  await page.getByRole("button", { name: "Send command…" }).click();
+  const broadcast = page.getByRole("dialog", { name: "Send to connected terminals" });
+  await expect(broadcast).toContainText("localhost");
+  await expect(broadcast.getByText("2 targets", { exact: true })).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
-      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.1-local-shell-workspace.png`,
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-local-shell-broadcast.png`,
       fullPage: true,
     });
   }
+});
+
+test("broadcasts one command to two live local shells", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("tab", { name: "Terminals" }).click();
+  const openShell = navigation.getByRole("button", { name: "Local shell" });
+  await openShell.click();
+  await expect(page.locator("[data-desktop-workspace-controls]")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Find" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-single-local-terminal.png`,
+      fullPage: true,
+    });
+  }
+  await openShell.click();
+
+  const consoleList = navigation.getByRole("list", { name: "Open consoles" });
+  const rows = consoleList.getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  const target = page.locator("[data-single-terminal-drop-target]");
+  await expect(target).toBeVisible();
+  const targetBox = await target.boundingBox();
+  expect(targetBox).not.toBeNull();
+  await rows.nth(0).dragTo(target, {
+    targetPosition: { x: Math.max(1, targetBox!.width - 8), y: targetBox!.height / 2 },
+  });
+  await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Send command…" }).click();
+  const broadcast = page.getByRole("dialog", { name: "Send to connected terminals" });
+  await broadcast.getByRole("textbox", { name: "Command", exact: true }).fill("echo local-broadcast-canary");
+  await broadcast.getByRole("button", { name: "Preview execution" }).click();
+  await broadcast.getByRole("button", { name: "Send to 2 terminals" }).click();
+  await expect(broadcast.getByText(/Pane \d · Sent$/)).toHaveCount(2);
+  await broadcast.getByRole("button", { name: "Close command delivery" }).click();
+
+  const terminalRegions = page.getByRole("region", { name: /^Console for / });
+  await expect(terminalRegions).toHaveCount(2);
+  await expect(terminalRegions.nth(0)).toContainText("local-broadcast-canary", { timeout: 20_000 });
+  await expect(terminalRegions.nth(1)).toContainText("local-broadcast-canary", { timeout: 20_000 });
 });

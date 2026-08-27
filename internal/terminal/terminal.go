@@ -162,16 +162,33 @@ var (
 	// ErrInvalidTitle は、一覧に出せない名前を拒否する。
 	ErrInvalidTitle          = errors.New("that is not a usable session name")
 	ErrNotConnected          = errors.New("the terminal session is not connected")
-	ErrWrongKind             = errors.New("the terminal session is not an SSH session")
 	ErrGenerationChanged     = errors.New("the terminal session changed after preview")
 	ErrExactInputUnavailable = errors.New("the terminal process cannot accept exact input")
 	ErrCommandTooLarge       = errors.New("the terminal command is too large")
 	ErrShuttingDown          = errors.New("the terminal registry is shutting down")
 )
 
+func writeExact(ctx context.Context, writer io.Writer, input []byte) error {
+	for len(input) > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		written, err := writer.Write(input)
+		if written > 0 {
+			input = input[written:]
+		}
+		if err != nil {
+			return err
+		}
+		if written == 0 {
+			return io.ErrShortWrite
+		}
+	}
+	return nil
+}
+
 // MaxCommandBytes leaves one byte for the carriage return which executes the
-// command. It matches the bounded SSH input queue, allowing the whole frame to
-// be enqueued atomically after any preceding keystrokes have drained.
+// command. It fits the bounded SSH input queue and a small local PTY frame.
 const MaxCommandBytes = (4 << 10) - 1
 
 // MaxTitle は、一覧に出す名前の長さの上限である。
