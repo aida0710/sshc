@@ -314,15 +314,15 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   return (
     <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
-      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-md bg-toolbar">
+      <dl className="sshc-card grid overflow-hidden rounded-md bg-toolbar sm:grid-cols-3">
         {[
           [t("sync.metricConfiguration"), t(status.configured ? "sync.stateConfigured" : "sync.stateNotConfigured")],
           [t("sync.metricDirection"), t(`sync.direction.${status.direction}`)],
           [t("sync.metricSnapshot"), status.synced ? status.fileCount ?? 0 : "—"],
         ].map(([label, value]) => (
-          <div key={String(label)} className="flex min-w-40 flex-1 items-center justify-between gap-4 border-r border-hairline px-4 py-2.5 last:border-r-0">
+          <div key={String(label)} className="flex min-w-0 items-center justify-between gap-4 border-t border-hairline px-4 py-2.5 first:border-t-0 sm:border-l sm:border-t-0 sm:first:border-l-0">
             <dt className="text-xs font-medium text-ink-muted">{label}</dt>
-            <dd className="font-mono text-sm font-semibold text-ink">{value}</dd>
+            <dd className="min-w-0 text-right font-mono text-sm font-semibold text-ink">{value}</dd>
           </div>
         ))}
       </dl>

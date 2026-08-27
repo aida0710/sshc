@@ -263,9 +263,17 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
     await page.setViewportSize({ width: 360, height: 800 });
     await page.getByRole("heading", { name: "Remote sync" }).scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.15.0-sync-mobile.png`, fullPage: true });
+    const metrics = page.locator("main dl").first().locator(":scope > div");
+    await expect(metrics).toHaveCount(3);
+    const metricBoxes = await metrics.evaluateAll((items) => items.map((item) => {
+      const box = item.getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom };
+    }));
+    expect(metricBoxes[1]!.top).toBeGreaterThanOrEqual(metricBoxes[0]!.bottom);
+    expect(metricBoxes[2]!.top).toBeGreaterThanOrEqual(metricBoxes[1]!.bottom);
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sync-mobile.png`, fullPage: true });
     await page.getByRole("heading", { name: "Encrypted revision history" }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.15.0-sync-history-mobile.png`, fullPage: true });
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sync-history-mobile.png`, fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
   }
   await page.getByRole("button", { name: "Push this workspace" }).click();

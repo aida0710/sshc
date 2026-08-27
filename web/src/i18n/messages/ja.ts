@@ -112,6 +112,7 @@ export const ja = {
   "sftp.modified": "更新日時",
   "sftp.permissions": "権限",
   "sftp.actions": "操作",
+  "sftp.entries": "リモート項目",
   "sftp.rename": "名前変更",
   "sftp.delete": "削除",
   "sftp.chmod": "権限変更",

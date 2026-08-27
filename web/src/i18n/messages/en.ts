@@ -110,6 +110,7 @@ export const en = {
   "sftp.modified": "Modified",
   "sftp.permissions": "Permissions",
   "sftp.actions": "Actions",
+  "sftp.entries": "Remote entries",
   "sftp.rename": "Rename",
   "sftp.delete": "Delete",
   "sftp.chmod": "Change permissions",

@@ -89,7 +89,8 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   await savedLayouts.click();
   await expect(page.getByText(/Save SSH targets, local shells, and split ratios/)).toBeVisible();
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-saved-layouts.png`, fullPage: true });
+    await expect(savedLayouts.locator("[aria-hidden='true']")).toHaveText("›");
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-saved-layouts.png`, fullPage: true });
   }
   await savedLayouts.click();
 

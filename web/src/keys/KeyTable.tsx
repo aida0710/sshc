@@ -119,7 +119,7 @@ export function KeyTable({
             <tr
               key={item.id}
               data-key-related-to={relatedTo ?? undefined}
-              className={`grid grid-cols-[2.25rem_minmax(0,1fr)] border-b border-hairline align-top transition-colors last:border-b-0 hover:bg-select-fill md:table-row ${
+              className={`grid grid-cols-[2.25rem_minmax(0,1fr)] border-b border-hairline align-top transition-colors last:border-b-0 md:table-row ${
                 isSelected ? "bg-select-fill" : ""
               } ${relatedTo === null ? "" : "bg-surface-subtle"}`}
             >
