@@ -19,6 +19,7 @@ import {
 import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
+import { CredentialEditDialog } from "./CredentialEditDialog";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -100,6 +101,7 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
   const [master, setMaster] = useState("");
   const [drafts, setDrafts] = useState<Record<string, { name: string; secret: string }>>({});
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState<{ kind: CredentialKind; name: string } | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -254,17 +256,22 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
                         </div>
                       )}
                       </div>
-                      <Button
-                        kind="danger"
-                        onClick={() =>
-                          void run(
-                            () => api.deleteCredential(group.kind, credential.name),
-                            t("secrets.deleteFailed"),
-                          )
-                        }
-                      >
-                        {t("secrets.delete", { name: credential.name })}
-                      </Button>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button onClick={() => setEditing({ kind: group.kind, name: credential.name })}>
+                          {t("secrets.edit", { name: credential.name })}
+                        </Button>
+                        <Button
+                          kind="danger"
+                          onClick={() =>
+                            void run(
+                              () => api.deleteCredential(group.kind, credential.name),
+                              t("secrets.deleteFailed"),
+                            )
+                          }
+                        >
+                          {t("secrets.delete", { name: credential.name })}
+                        </Button>
+                      </div>
                     </article>
                   </li>
                 ))}
@@ -351,6 +358,20 @@ export function SecretsPanel({ api = integrationsApi, onLock }: SecretsPanelProp
           </section>
         );
       })}
+
+      {editing === null ? null : (
+        <CredentialEditDialog
+          kind={editing.kind}
+          name={editing.name}
+          api={api}
+          onSaved={(list) => {
+            setCredentialList(list);
+            setError("");
+            setEditing(null);
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
 
     </div>
   );

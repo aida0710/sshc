@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/secret"
+	"sshc/internal/session"
 	"sshc/internal/storage"
 )
 
@@ -382,6 +384,89 @@ func TestCredentialsListNamesAndUses(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("list does not carry %q: %s", want, body)
 		}
+	}
+}
+
+func credentialServer(t *testing.T) (*echo.Echo, *secret.Service, session.Credentials) {
+	t.Helper()
+	_, service := passwordEngine(t)
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x63}, 4096)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, err := manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked}).Middleware)
+	registry := actionRegistry{}
+	addCredentialActions(registry, service)
+	actions := ActionHandlers{Sessions: manager, Kinds: registry}
+	registerActionRoutes(engine, actions)
+	registerPasswordRoutes(engine, PasswordHandlers{
+		Service: service, Binding: fixedPasswordBinding, Actions: actions,
+	})
+	return engine, service, credentials
+}
+
+func TestCredentialRevealRequiresAOneTimeTokenAndIsNeverCached(t *testing.T) {
+	engine, service, credentials := credentialServer(t)
+	if err := service.SetCredential(secret.KindPassword, "office", "saved-password"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "other", "other-password"); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/credentials/password/office/reveal"
+	if got := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, "").Code; got != http.StatusForbidden {
+		t.Fatalf("reveal without token = %d", got)
+	}
+	otherToken := issueToken(t, engine, credentials, session.ActionRevealCredential, credentialActionTarget(secret.KindPassword, "other"))
+	if got := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, otherToken).Code; got != http.StatusForbidden {
+		t.Fatalf("reveal with another credential token = %d", got)
+	}
+	token := issueToken(t, engine, credentials, session.ActionRevealCredential, credentialActionTarget(secret.KindPassword, "office"))
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("reveal = %d: %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+	var revealed api.RevealCredentialResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &revealed); err != nil {
+		t.Fatal(err)
+	}
+	if revealed.Kind != "password" || revealed.Name != "office" || revealed.Secret != "saved-password" {
+		t.Fatalf("revealed = %#v", revealed)
+	}
+	if got := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, token).Code; got != http.StatusForbidden {
+		t.Fatalf("replayed token = %d", got)
+	}
+}
+
+func TestCredentialEditUpdatesNameAndValueWithoutReturningTheSecret(t *testing.T) {
+	engine, service, credentials := credentialServer(t)
+	if err := service.SetCredential(secret.KindPassword, "office", "saved-password"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignPasswordCredential("web-1", "office", testPasswordBinding); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte(`{"name":"shared-office","secret":"rotated-password"}`)
+	response := sendKeyRequest(t, engine, credentials, http.MethodPatch, "/api/v1/credentials/password/office", body, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("edit = %d: %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "saved-password") || strings.Contains(response.Body.String(), "rotated-password") {
+		t.Fatalf("edit response leaked a secret: %s", response.Body.String())
+	}
+	if got := service.BoundPasswordFor("web-1", testPasswordBinding); got != "rotated-password" {
+		t.Fatalf("assigned password = %q", got)
 	}
 }
 

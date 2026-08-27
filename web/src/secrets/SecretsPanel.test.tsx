@@ -25,6 +25,14 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
       keyHostUsageComplete: true,
     }),
     storeCredential: vi.fn().mockResolvedValue({ credentials: [] }),
+    revealCredential: vi.fn().mockImplementation(async (kind: string, name: string) => ({
+      kind,
+      name,
+      secret: kind === "password" ? "original-password" : "original-passphrase",
+    })),
+    updateCredential: vi.fn().mockResolvedValue({
+      credentials: [], dedicatedKeyPassphrases: [], keyHostUsageComplete: true,
+    }),
     deleteCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     assignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     unassignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
@@ -146,6 +154,46 @@ describe("SecretsPanel", () => {
     await waitFor(() =>
       expect(api.storeCredential).toHaveBeenCalledWith("key_passphrase", "build", "phrase"),
     );
+  });
+
+  it("shows the saved account password and updates its name and value together", async () => {
+    const user = userEvent.setup();
+    const api = buildApi();
+    render(<SecretsPanel api={api} />);
+
+    const passwords = await screen.findByRole("region", { name: "Account passwords" });
+    await user.click(within(passwords).getByRole("button", { name: "Edit office-vm" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Edit account password" });
+    const name = within(dialog).getByLabelText("Name");
+    const value = within(dialog).getByLabelText("Password");
+    expect(name).toHaveValue("office-vm");
+    expect(value).toHaveValue("original-password");
+    expect(value).toHaveAttribute("type", "text");
+
+    await user.clear(name);
+    await user.type(name, "office-shared");
+    await user.clear(value);
+    await user.type(value, "rotated-password");
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.updateCredential).toHaveBeenCalledWith(
+      "password", "office-vm", "office-shared", "rotated-password",
+    ));
+  });
+
+  it("uses the same prefilled edit flow for a named key passphrase", async () => {
+    const user = userEvent.setup();
+    const api = buildApi();
+    render(<SecretsPanel api={api} />);
+
+    const phrases = await screen.findByRole("region", { name: "Key passphrases" });
+    await user.click(within(phrases).getByRole("button", { name: "Edit build-key" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Edit key passphrase" });
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("build-key");
+    expect(within(dialog).getByLabelText("Key passphrase")).toHaveValue("original-passphrase");
+    expect(api.revealCredential).toHaveBeenCalledWith("key_passphrase", "build-key");
   });
 
   it("says what still uses a credential the server refused to delete", async () => {

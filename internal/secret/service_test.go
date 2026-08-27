@@ -662,6 +662,77 @@ func TestCredentialsThroughTheService(t *testing.T) {
 	}
 }
 
+func TestUpdateCredentialRenamesAndReplacesAccountPasswordWithoutLosingAssignments(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "first-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := assignTestPasswordCredential(service, "web-1", "office"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.UpdateCredential(secret.KindPassword, "office", "shared-office", "second-secret"); err != nil {
+		t.Fatalf("UpdateCredential = %v", err)
+	}
+	if _, err := service.Credential(secret.KindPassword, "office"); !errors.Is(err, secret.ErrUnknownCredential) {
+		t.Fatalf("old Credential = %v, want ErrUnknownCredential", err)
+	}
+	if got, err := service.Credential(secret.KindPassword, "shared-office"); err != nil || got != "second-secret" {
+		t.Fatalf("new Credential = %q, %v", got, err)
+	}
+	if got := service.BoundPasswordFor("web-1", testAuthenticationBinding); got != "second-secret" {
+		t.Fatalf("assigned password = %q", got)
+	}
+
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := reopened.Unlock(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := reopened.Credential(secret.KindPassword, "shared-office"); err != nil || got != "second-secret" {
+		t.Fatalf("persisted Credential = %q, %v", got, err)
+	}
+}
+
+func TestUpdateCredentialRenamesAKeyPassphraseAndRefusesToOverwriteAnotherName(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "team", "first-phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindKeyPassphrase, "existing", "must-survive"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignCredential(secret.KindKeyPassphrase, "keys/id_team", "team"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.UpdateCredential(secret.KindKeyPassphrase, "team", "existing", "replacement"); !errors.Is(err, secret.ErrCredentialAlreadyExists) {
+		t.Fatalf("colliding UpdateCredential = %v", err)
+	}
+	if got, _ := service.Credential(secret.KindKeyPassphrase, "team"); got != "first-phrase" {
+		t.Fatalf("source changed after refusal: %q", got)
+	}
+	if got, _ := service.Credential(secret.KindKeyPassphrase, "existing"); got != "must-survive" {
+		t.Fatalf("destination changed after refusal: %q", got)
+	}
+
+	if err := service.UpdateCredential(secret.KindKeyPassphrase, "team", "build", "second-phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := service.KeyPassphraseFor("keys/id_team"); !ok || got != "second-phrase" {
+		t.Fatalf("assigned key passphrase = %q, %t", got, ok)
+	}
+}
+
 // 分離を、今度はサービスで確かめる。ルートが到達するのは vault 直接ではなく
 // ここだからである。
 func TestTheServiceWillNotCrossTheNamespaces(t *testing.T) {

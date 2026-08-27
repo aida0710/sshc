@@ -71,6 +71,41 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
   await expect(panel.getByRole("option", { name: "build-key" })).toHaveCount(0);
 });
 
+test("edits a named password from its current visible value", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Secrets");
+
+  const passwords = page.getByRole("region", { name: "Account passwords" });
+  await passwords.getByLabel("New account password name").fill("office-vm");
+  await passwords.getByLabel("New account password value").fill("original-test-password");
+  await passwords.getByRole("button", { name: "Store account password" }).click();
+  await passwords.getByRole("button", { name: "Edit office-vm" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Edit account password" });
+  await expect(dialog.getByLabel("Name")).toHaveValue("office-vm");
+  await expect(dialog.getByRole("textbox", { name: "Password", exact: true })).toHaveValue("original-test-password");
+  await expect(dialog.getByRole("textbox", { name: "Password", exact: true })).toHaveAttribute("type", "text");
+
+  const visualDirectory = process.env.SSHC_VISUAL_DIR;
+  if (visualDirectory !== undefined) {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.screenshot({ path: `${visualDirectory}/sshc-credential-edit-desktop.png`, fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const navigation = page.getByRole("button", { name: "Navigation" });
+    if (await navigation.getAttribute("aria-expanded") === "true") await navigation.click();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${visualDirectory}/sshc-credential-edit-mobile.png`, fullPage: true });
+  }
+
+  await dialog.getByLabel("Name").fill("office-shared");
+  await dialog.getByRole("textbox", { name: "Password", exact: true }).fill("rotated-test-password");
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(page.getByRole("article", { name: "office-shared" })).toBeVisible();
+  await expect(page.getByRole("article", { name: "office-vm" })).toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText("rotated-test-password");
+});
+
 test("keeps application controls in Settings and changes the master password there", async ({
   page,
   installation,

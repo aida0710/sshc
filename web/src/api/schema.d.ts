@@ -769,6 +769,22 @@ export interface paths {
         delete: operations["deleteCredential"];
         options?: never;
         head?: never;
+        patch: operations["updateCredential"];
+        trace?: never;
+    };
+    "/api/v1/credentials/{kind}/{name}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revealCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -1685,6 +1701,15 @@ export interface components {
             vault: components["schemas"]["PasswordVaultStatus"];
         };
         StoreCredentialRequest: {
+            secret: string;
+        };
+        UpdateCredentialRequest: {
+            name: string;
+            secret: string;
+        };
+        RevealCredentialResponse: {
+            kind: string;
+            name: string;
             secret: string;
         };
         AssignCredentialRequest: {
@@ -4471,6 +4496,68 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    updateCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description The credential lists after atomically updating its name and value */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    revealCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                kind: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One named credential value for an explicit edit action; never cached */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevealCredentialResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
         };
     };
     listKeys: {

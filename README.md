@@ -15,8 +15,8 @@ brew install aida0710/tap/sshc
 または、取得するスクリプトとバイナリを同じリリースへ固定して実行します。
 
 ```sh
-SSHC_VERSION=v0.16.3 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.16.3/install.sh | sh'
+SSHC_VERSION=v0.16.4 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.16.4/install.sh | sh'
 ```
 
 `main` 上の可変なスクリプトを直接実行せず、導入したい[リリース](https://github.com/aida0710/sshc/releases)のタグをURLと`SSHC_VERSION`の両方へ指定してください。
@@ -79,7 +79,7 @@ sshc update                   # Homebrew／install.sh経由の導入を更新
 - 接続ログ: `ssh -v` 相当の情報を、4 段階の詳細度でターミナルに表示します。
 - 表示設定: 6 種類のカラーパレット、同梱の JetBrains Mono、背景画像を全体または接続ごとに設定できます。
 - SSH 鍵管理: 鍵の生成、パスフレーズ変更、ssh-agent への登録、リモートの `authorized_keys` への公開鍵追加に対応します。
-- 資格情報 vault: パスワードと鍵パスフレーズをマスターパスワードで暗号化します。12 時間操作がない場合は自動的にロックされます。ブラウザ向け API は保存値を返しません。CLI で接続するときは、その接続経路に必要な資格情報だけを、ローカルの handoff secret で認証した経路から CLI へ渡します。
+- 資格情報 vault: パスワードと鍵パスフレーズをマスターパスワードで暗号化します。12 時間操作がない場合は自動的にロックされます。通常の一覧 API は保存値を返しません。名前や値を編集するときだけ、セッションと CSRF に加えて現在値へ結び付いた一度限りの確認トークンを要求する専用 API が 1 件を返し、応答はキャッシュしません。CLI で接続するときは、その接続経路に必要な資格情報だけを、ローカルの handoff secret で認証した経路から CLI へ渡します。
 - S3 互換バックアップ: 暗号化したスナップショットを保存し、別の端末で復元できます。
 
 Workspace の layout はプロセス状態や session ID を保存せず、この端末だけの `~/.ssh/sshc/workspaces.json` に置かれます。Snippets は資格情報と同じ暗号化 snapshot の対象ですが、secret 型の入力値は保存されず、startup automation にも使用できません。SFTP や複数ホスト実行は対話プロンプトを出さないため、vault の保存済み資格情報と既知のホスト鍵が必要です。

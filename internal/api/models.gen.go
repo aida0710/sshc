@@ -972,6 +972,13 @@ type RestoreTrashResponse struct {
 	TransactionId string   `json:"transactionId"`
 }
 
+// RevealCredentialResponse defines model for RevealCredentialResponse.
+type RevealCredentialResponse struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Secret string `json:"secret"`
+}
+
 // RevealPrivateKeyResponse defines model for RevealPrivateKeyResponse.
 type RevealPrivateKeyResponse struct {
 	Encrypted     bool   `json:"encrypted"`
@@ -1387,6 +1394,12 @@ type UpdateConnectionRequest struct {
 	Password      UpdateConnectionPassword      `json:"password"`
 	Port          *ConnectionPortChange         `json:"port,omitempty"`
 	User          *ConnectionStringChange       `json:"user,omitempty"`
+}
+
+// UpdateCredentialRequest defines model for UpdateCredentialRequest.
+type UpdateCredentialRequest struct {
+	Name   string `json:"name"`
+	Secret string `json:"secret"`
 }
 
 // UpdatePasswordRemove defines model for UpdatePasswordRemove.
