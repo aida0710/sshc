@@ -191,12 +191,11 @@ func TestMetadataStoreRoundTripsThroughOneTransaction(t *testing.T) {
 	}
 	loaded.Groups = []GroupMetadata{{Name: "home", Settings: []Setting{{Keyword: "User", Values: []string{"aida"}}}}}
 	loaded.Hosts = []HostMetadata{{
-		Identity:  HostIdentity{Path: "config", Alias: "bastion"},
-		Tags:      []string{"personal"},
-		Colour:    "#22d3ee",
-		Note:      "office jump host",
-		Favourite: true,
-		Order:     1,
+		Identity: HostIdentity{Path: "config", Alias: "bastion"},
+		Tags:     []string{"personal"},
+		Colour:   "#22d3ee",
+		Note:     "office jump host",
+		Order:    1,
 	}}
 
 	change, err := store.Change(loaded, precondition)
@@ -218,7 +217,7 @@ func TestMetadataStoreRoundTripsThroughOneTransaction(t *testing.T) {
 	if !reloadedPrecondition.Exists || reloadedPrecondition.Digest != storage.Digest(change.Contents) {
 		t.Fatalf("reloaded precondition = %#v", reloadedPrecondition)
 	}
-	if len(reloaded.Hosts) != 1 || reloaded.Hosts[0].Alias() != "bastion" || !reloaded.Hosts[0].Favourite {
+	if len(reloaded.Hosts) != 1 || reloaded.Hosts[0].Alias() != "bastion" || reloaded.Hosts[0].Colour != "#22d3ee" {
 		t.Fatalf("reloaded hosts = %#v", reloaded.Hosts)
 	}
 	if got := string(change.Contents); !strings.HasSuffix(got, "\n") {
@@ -226,6 +225,32 @@ func TestMetadataStoreRoundTripsThroughOneTransaction(t *testing.T) {
 	}
 	if store.Path() != filepath.Join(workspace.StateDir(), MetadataFileName) {
 		t.Fatalf("store path = %q", store.Path())
+	}
+}
+
+func TestMetadataStoreDropsTheRetiredFavouriteFieldOnTheNextWrite(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	store := NewMetadataStore(workspace)
+	if err := store.EnsureDirectory(); err != nil {
+		t.Fatal(err)
+	}
+	acltest.WritePrivateFile(t, store.Path(), []byte(
+		`{"schemaVersion":3,"hosts":[{"identity":{"path":"config","alias":"bastion"},"favourite":true,"tags":["prod"]}]}`,
+	))
+
+	loaded, precondition, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Hosts) != 1 || len(loaded.Hosts[0].Tags) != 1 {
+		t.Fatalf("loaded hosts = %#v", loaded.Hosts)
+	}
+	change, err := store.Change(loaded, precondition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(change.Contents), "favourite") {
+		t.Fatalf("retired field survived: %s", change.Contents)
 	}
 }
 

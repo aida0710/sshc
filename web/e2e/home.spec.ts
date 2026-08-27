@@ -12,7 +12,6 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
         {
           identity: { path: "config", alias: "bastion" },
           tags: ["production"],
-          favourite: true,
         },
       ],
     }),

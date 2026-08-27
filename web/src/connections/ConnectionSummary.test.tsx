@@ -25,7 +25,7 @@ const state: ConnectionSavedState = {
       comment: "",
       commentLines: 0,
     },
-    metadata: { identity: { path: "config", alias: "bastion" }, favourite: false },
+    metadata: { identity: { path: "config", alias: "bastion" } },
     effective: { alias: "bastion", entries: [] },
     file: {
       file: { path: "config", absolute: "/home/tester/.ssh/config" },

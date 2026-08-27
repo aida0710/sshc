@@ -39,7 +39,7 @@ const overview: Overview = {
   metadata: {
     schemaVersion: 2,
     groups: [{ name: "home", order: 1 }, { name: "empty", order: 2 }, { name: "home/eu", order: 1 }],
-    hosts: [{ identity: homeNas.identity, favourite: true, colour: "#f97316", tags: ["storage"] }],
+    hosts: [{ identity: homeNas.identity, colour: "#f97316", tags: ["storage"] }],
   },
   diagnostics: [],
   notices: [],
@@ -86,23 +86,17 @@ describe("ConnectionTree", () => {
     expect(onOpenPatternRule).toHaveBeenCalledWith("config", 20);
   });
 
-  it("keeps filtering, visible metadata, and favourite-only browsing", async () => {
+  it("keeps filtering and visible metadata", async () => {
     render(
       <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onOpenPatternRule={vi.fn()} onDrop={vi.fn()} />,
     );
 
     const nas = screen.getByRole("button", { name: /nas/ });
-    expect(within(nas).getByText("★")).toBeInTheDocument();
     expect(within(nas).getByText("storage")).toBeInTheDocument();
 
     await userEvent.type(screen.getByRole("searchbox", { name: "Filter connections" }), "bast");
     expect(screen.getByRole("button", { name: /bastion/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /nas/ })).not.toBeInTheDocument();
-
-    await userEvent.clear(screen.getByRole("searchbox", { name: "Filter connections" }));
-    await userEvent.click(screen.getByRole("button", { name: "Show favourites only" }));
-    expect(screen.getByRole("button", { name: /nas/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /bastion/ })).not.toBeInTheDocument();
   });
 
   it("filters the dense result list by group, file, and resolved destination", async () => {

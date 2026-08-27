@@ -43,7 +43,7 @@ func ReadConnections(home string) ([]Connection, error) {
 	return listed, nil
 }
 
-// ReadWorkspaceMetadata は、接続先に付いた印（お気に入り・タグ）を返す。
+// ReadWorkspaceMetadata は、接続先に付いた表示用metadataを返す。
 func ReadWorkspaceMetadata(home string) (application.Metadata, error) {
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {

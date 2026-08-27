@@ -74,9 +74,8 @@ func TestGroupRenameCarriesTheMetadataIdentityAndPresentation(t *testing.T) {
 		{Name: "work/eu"},
 	}
 	metadata.Hosts = []HostMetadata{{
-		Identity:  HostIdentity{Path: "connections/work/web.conf", Alias: "web-1"},
-		Colour:    "#22d3ee",
-		Favourite: true,
+		Identity: HostIdentity{Path: "connections/work/web.conf", Alias: "web-1"},
+		Colour:   "#22d3ee",
 	}}
 	if _, err := service.Save(EditRequest{Kind: EditMetadata, Metadata: &metadata}); err != nil {
 		t.Fatal(err)
@@ -106,7 +105,7 @@ func TestGroupRenameCarriesTheMetadataIdentityAndPresentation(t *testing.T) {
 	if stored.Hosts[0].Identity.Path != "connections/client-a/web.conf" || stored.Hosts[0].Orphan {
 		t.Errorf("identity = %#v", stored.Hosts[0])
 	}
-	if !stored.Hosts[0].Favourite || stored.Hosts[0].Colour != "#22d3ee" {
+	if stored.Hosts[0].Colour != "#22d3ee" {
 		t.Errorf("presentation lost on the way: %#v", stored.Hosts[0])
 	}
 }

@@ -13,7 +13,6 @@ type DecoratedHost = {
   host: HostEntry;
   group: string;
   tags: string[];
-  favourite: boolean;
   colour: string;
   order: number;
   sourceOrder: number;
@@ -96,7 +95,6 @@ export function ConnectionTree({
   const [grouping, setGrouping] = useState<Grouping>("groups");
   const [scope, setScope] = useState<Scope>({ kind: "all" });
   const [query, setQuery] = useState("");
-  const [favouritesOnly, setFavouritesOnly] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>("configured");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [dragging, setDragging] = useState<DragPayload | null>(null);
@@ -113,7 +111,6 @@ export function ConnectionTree({
         host,
         group: host.group ?? "",
         tags: display?.tags ?? [],
-        favourite: display?.favourite === true,
         colour: display?.colour ?? "",
         order: display?.order ?? 0,
         sourceOrder,
@@ -155,7 +152,6 @@ export function ConnectionTree({
 
   const visible = useMemo(() => {
     const scoped = decorated.filter((item) => {
-      if (favouritesOnly && !item.favourite) return false;
       if (!hostMatches(item, query)) return false;
       if (scope.kind === "all") return true;
       if (scope.kind === "ungrouped") return item.group === "";
@@ -169,7 +165,7 @@ export function ConnectionTree({
       }
       return left.order - right.order || left.sourceOrder - right.sourceOrder;
     });
-  }, [decorated, favouritesOnly, query, scope, sortOrder]);
+  }, [decorated, query, scope, sortOrder]);
 
   function switchGrouping(next: Grouping) {
     setGrouping(next);
@@ -361,7 +357,6 @@ export function ConnectionTree({
             )}
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5">
-                {item.favourite ? <span aria-hidden="true" className="shrink-0 text-notice-ink">★</span> : null}
                 <span className={`truncate ${active ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
                 {item.duplicateAlias ? <span aria-hidden="true" className="shrink-0 text-notice-ink">⧉</span> : null}
                 <span className="ml-auto max-w-[38%] shrink-0 truncate text-[0.68rem] text-ink-faint">{item.group || t("tree.ungrouped")}</span>
@@ -376,7 +371,7 @@ export function ConnectionTree({
           </span>
         </button>
         <span id={descriptionId} className="sr-only">
-          {[item.favourite ? t("tree.favourite") : "", item.duplicateAlias ? t("tree.duplicateAlias") : "", targetFor(host), host.file.path ?? host.file.absolute].filter(Boolean).join(", ")}
+          {[item.duplicateAlias ? t("tree.duplicateAlias") : "", targetFor(host), host.file.path ?? host.file.absolute].filter(Boolean).join(", ")}
         </span>
       </li>
     );
@@ -405,22 +400,12 @@ export function ConnectionTree({
 
       <section className="flex min-h-0 flex-col bg-page" aria-label={t("tree.resultsLabel")}>
         <header className="shrink-0 border-b border-line bg-card p-3">
-          <div className="flex items-center gap-2">
-            <label className="relative min-w-0 flex-1" htmlFor="connection-filter">
+          <div>
+            <label className="relative block min-w-0" htmlFor="connection-filter">
               <span className="sr-only">{t("tree.filter")}</span>
               <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
               <input id="connection-filter" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("tree.filterPlaceholderExpanded")} className={`${control} min-h-10 rounded-lg bg-control py-2 pl-9 pr-3 md:min-h-0`} />
             </label>
-            <button
-              type="button"
-              aria-pressed={favouritesOnly}
-              aria-label={t("tree.favouritesOnlyAction")}
-              onClick={() => setFavouritesOnly((current) => !current)}
-              className={`flex min-h-10 min-w-10 items-center justify-center rounded-md border px-2.5 py-1 text-xs md:min-h-0 md:min-w-0 ${favouritesOnly ? "border-notice-line bg-notice text-notice-ink" : "border-control-line bg-card text-ink-muted hover:text-ink"}`}
-            >
-              <span aria-hidden="true" className="text-notice-ink">★</span>
-              <span className="sr-only 2xl:not-sr-only 2xl:ms-1">{t("tree.favouritesOnly")}</span>
-            </button>
           </div>
           <div className="mt-2 flex items-center justify-between gap-3 text-xs text-ink-faint">
             <span role="status">{t("tree.resultCount", { visible: visible.length, total: decorated.length })}</span>

@@ -24,7 +24,7 @@ const detail: HostDetail = {
     comment: "",
     commentLines: 0,
   },
-  metadata: { identity: { path: "config", alias: "bastion" }, favourite: false },
+  metadata: { identity: { path: "config", alias: "bastion" } },
   effective: {
     alias: "bastion",
 

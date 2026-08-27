@@ -2571,7 +2571,6 @@ export interface components {
             tags?: string[];
             colour?: string;
             note?: string;
-            favourite?: boolean;
             order?: number;
             orphan?: boolean;
             appearance?: components["schemas"]["TerminalAppearance"];
