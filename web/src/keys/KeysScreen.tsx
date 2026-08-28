@@ -144,7 +144,7 @@ export function KeysScreen({
     storedPhraseSecret, setStoredPhraseSecret,
     close: closeStoredPassphraseForm,
   } = storedPassphraseForm;
-  const [publicKeyView, setPublicKeyView] = useState<{ relativePath: string; text: string } | null>(null);
+  const [publicKeyView, setPublicKeyView] = useState<{ id: string; relativePath: string; text: string } | null>(null);
   const [relocated, setRelocated] = useState<RelocateKeyResponse | null>(null);
   const relocateForm = useRelocateForm();
   const {
@@ -173,7 +173,7 @@ export function KeysScreen({
     moveTarget, setMoveTarget,
     listFilter, setListFilter,
     keyQuery, setKeyQuery,
-    moreActionsFor, setMoreActionsFor,
+    detailsFor, setDetailsFor,
     selectedKey, setSelectedKey,
   } = useOrganiser();
   const [generated, setGenerated] = useState<{
@@ -221,7 +221,10 @@ export function KeysScreen({
     },
     onBeginDrag: beginDrag,
     onEndDrag: () => setDragging(false),
-    onReveal: (item) => setRevealing(item),
+    onReveal: (item) => {
+      setPublicKeyView(null);
+      setRevealing(item);
+    },
     onShowPublicKey: (item) => void showPublicKey(item),
     onManageStoredPassphrase: (item) => {
       closeAllForms();
@@ -237,14 +240,18 @@ export function KeysScreen({
       closeAllForms();
       void removeFromAgent(item.id);
     },
-    onToggleMoreActions: (item) => setMoreActionsFor((current) => (current === item.id ? "" : item.id)),
+    onToggleDetails: (item) => {
+      const closing = detailsFor === item.id;
+      setDetailsFor(closing ? "" : item.id);
+      setRevealing(null);
+      setPublicKeyView(null);
+      closeAllForms();
+    },
     onChangePassphrase: (item) => {
-      setMoreActionsFor("");
       closeAllForms();
       setChangingPassphrase(item);
     },
     onRelocate: (item) => {
-      setMoreActionsFor("");
       closeAllForms();
       setRelocated(null);
       setNewName(relocateStem(item));
@@ -252,7 +259,6 @@ export function KeysScreen({
       setRelocating(item);
     },
     onMoveToTrash: (item) => {
-      setMoreActionsFor("");
       closeAllForms();
       setPendingTrash(item);
     },
@@ -412,9 +418,11 @@ export function KeysScreen({
 
   async function showPublicKey(item: KeyItem) {
     setFailure("");
+    setRevealing(null);
+    setPublicKeyView(null);
     try {
       const response = await api.publicKey(item.id);
-      setPublicKeyView({ relativePath: response.relativePath, text: response.publicKey.trimEnd() });
+      setPublicKeyView({ id: item.id, relativePath: response.relativePath, text: response.publicKey.trimEnd() });
     } catch {
       setPublicKeyView(null);
       setFailure(t("keys.publicKeyFailed"));
@@ -528,6 +536,39 @@ export function KeysScreen({
     inventory.unreadable.length +
     inventory.unresolvedReferences.length +
     inventory.items.filter((item) => item.permissionRisk).length;
+  const inlineKeyPanel = revealing !== null
+    ? {
+        itemId: revealing.id,
+        content: (
+          <RevealDialog
+            keyId={revealing.id}
+            relativePath={revealing.relativePath}
+            api={api}
+            onClose={() => setRevealing(null)}
+          />
+        ),
+      }
+    : publicKeyView !== null
+      ? {
+          itemId: publicKeyView.id,
+          content: (
+            <section aria-labelledby="public-key-heading" className="flex flex-col gap-3 rounded-md border border-line bg-surface-subtle p-3 sm:p-4">
+              <h3 id="public-key-heading" className={sectionHeading}>
+                {t("keys.publicKeyHeading", { path: publicKeyView.relativePath })}
+              </h3>
+              <pre aria-label={t("keys.publicKeyLabel")} className="overflow-x-auto rounded-md bg-canvas p-4 text-xs">
+                {publicKeyView.text}
+              </pre>
+              <div className="flex flex-wrap gap-2">
+                <CopyButton value={publicKeyView.text} label="copy.publicKey" />
+                <Button onClick={() => setPublicKeyView(null)}>
+                  {t("keys.close")}
+                </Button>
+              </div>
+            </section>
+          ),
+        }
+      : null;
 
   return (
     <section className="mx-auto flex w-full max-w-7xl flex-col gap-7 [&_button]:min-h-10 sm:[&_button]:min-h-0">
@@ -659,9 +700,10 @@ export function KeysScreen({
                 inventory={inventory}
                 chosen={chosen}
                 selected={selectedKey}
-                moreActionsFor={moreActionsFor}
+                detailsFor={detailsFor}
                 now={now}
                 revealRelated={query !== ""}
+                inlinePanel={inlineKeyPanel}
                 actions={rowActions}
               />
             </div>
@@ -754,24 +796,6 @@ export function KeysScreen({
         onConfirm={(id) => void moveToTrash(id)}
         onCancel={() => setPendingTrash(null)}
       />
-
-      {publicKeyView !== null && (
-        <section aria-labelledby="public-key-heading" className={sectionCard}>
-          <h3 id="public-key-heading" className={sectionHeading}>
-            {t("keys.publicKeyHeading", { path: publicKeyView.relativePath })}
-          </h3>
-          <pre aria-label={t("keys.publicKeyLabel")} className="overflow-x-auto rounded-md bg-canvas p-4 text-xs">
-            {publicKeyView.text}
-          </pre>
-          <div className="flex gap-2">
-            <CopyButton value={publicKeyView.text} label="copy.publicKey" />
-            <Button onClick={() => setPublicKeyView(null)}>
-              {t("keys.close")}
-            </Button>
-          </div>
-        </section>
-      )}
-
 
       {inventory.unreadable.length > 0 && (
         <section aria-labelledby="unreadable-heading" className="flex flex-col gap-2">
@@ -880,15 +904,6 @@ export function KeysScreen({
 
 
       <RelocateResult result={relocated} onClose={() => setRelocated(null)} />
-
-      {revealing !== null && (
-        <RevealDialog
-          keyId={revealing.id}
-          relativePath={revealing.relativePath}
-          api={api}
-          onClose={() => setRevealing(null)}
-        />
-      )}
 
       <PassphraseForm form={passphraseForm} onSubmit={(item) => void submitPassphrase(item)} />
 

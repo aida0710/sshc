@@ -194,6 +194,23 @@ describe("apiClient", () => {
     });
   });
 
+  it("leaves SFTP connection failures to the SFTP panel", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: "sftp_failed", message: "request rejected" }),
+      { status: 502, headers: { "Content-Type": "application/problem+json" } },
+    )));
+    apiClient.setCSRF("c".repeat(43));
+
+    await expect(apiClient.read("/api/v1/sftp/miyabi/entries?path=%2F", {
+      locallyHandledCodes: ["sftp_failed"],
+    }))
+      .rejects.toMatchObject({ code: "sftp_failed" });
+
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
   it("reports network failure using fixed safe diagnostics", async () => {
     const diagnostic = vi.fn();
     whenRequestFailed(diagnostic);

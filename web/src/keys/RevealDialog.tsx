@@ -38,19 +38,18 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
   return (
     <div
       role="dialog"
-      aria-modal="true"
       aria-labelledby="reveal-heading"
-      className="mt-6 rounded-md border border-notice-line bg-control p-6"
+      className="rounded-md border border-line bg-surface-subtle p-4 sm:p-5"
     >
       <h3 id="reveal-heading" className="font-medium">
         {t("reveal.heading", { path: relativePath })}
       </h3>
       {state === "confirm" && (
         <>
-          <p className="mt-2 text-sm text-ink-muted">{t("reveal.warning")}</p>
+          <p className="mt-3 rounded-md bg-notice px-3 py-2 text-sm text-notice-ink">{t("reveal.warning")}</p>
           <button
             type="button"
-            className="mt-4 rounded-md border border-notice-line px-3 py-2"
+            className="mt-4 rounded-md border border-control-line bg-card px-3 py-2 text-sm font-medium hover:bg-select-fill"
             onClick={() => void confirm()}
           >
             {t("reveal.show")}

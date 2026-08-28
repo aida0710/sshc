@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiClient } from "../api/client";
+import { apiClient, whenRequestFailed } from "../api/client";
 import { sftpApi } from "./api";
 
 describe("sftpApi resumable download", () => {
@@ -12,7 +12,20 @@ describe("sftpApi resumable download", () => {
 
   afterEach(() => {
     apiClient.clear();
+    whenRequestFailed(null);
     vi.restoreAllMocks();
+  });
+
+  it("leaves directory-list connection failures to the SFTP panel", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
+      JSON.stringify({ code: "sftp_failed", message: "request rejected" }),
+      { status: 502, headers: { "Content-Type": "application/problem+json" } },
+    ));
+
+    await expect(sftpApi.list("miyabi", "/")).rejects.toMatchObject({ code: "sftp_failed" });
+    expect(diagnostic).not.toHaveBeenCalled();
   });
 
   it("streams a resumed file with Range and If-Range", async () => {

@@ -87,9 +87,12 @@ test("lists generated keys and reveals one only after an explicit confirmation",
 
   await expect(page.locator("body")).not.toContainText("BEGIN OPENSSH PRIVATE KEY");
 
-  await row.getByRole("button", { name: "Show private key" }).click();
+  await row.getByRole("button", { name: "Show details" }).click();
+  await page.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Show private key" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+  await expect(dialog.locator("xpath=ancestor::tr[@data-key-detail-for]")).toHaveCount(1);
+  await expect(dialog.locator("xpath=ancestor::table")).toHaveCount(1);
   await expect(dialog.locator('pre[aria-label="Private key"]')).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("BEGIN OPENSSH PRIVATE KEY");
 
@@ -119,7 +122,8 @@ test("stores an encrypted key passphrase from the key row and shows only its nam
 
   const row = page.getByRole("row", { name: /id_saved_phrase\b/ }).first();
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "Save passphrase" }).click();
+  await row.getByRole("button", { name: "Show details" }).click();
+  await page.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Save passphrase" }).click();
   await page.getByLabel("Passphrase name").fill("saved-e2e-key");
   await page.getByLabel("Passphrase value").fill(passphrase);
   const assigned = page.waitForResponse(
@@ -140,8 +144,8 @@ test("stores an encrypted key passphrase from the key row and shows only its nam
 
   await openSection(page, "Keys");
   const assignedRow = page.getByRole("row", { name: /id_saved_phrase\b/ }).first();
-  await assignedRow.getByRole("button", { name: "More actions" }).click();
-  await assignedRow.getByRole("button", { name: "Rename or move" }).click();
+  await assignedRow.getByRole("button", { name: "Show details" }).click();
+  await page.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Rename or move" }).click();
   await page.getByLabel("Name", { exact: true }).fill("id_saved_phrase_renamed");
   expect(await clickAndAwait(page, "Rename or move the key", "/api/v1/keys/")).toBe(200);
 
@@ -164,7 +168,8 @@ test("offers agent registration and refuses it honestly when no agent is reachab
   const row = page.getByRole("row", { name: /id_agent\b/ }).first();
   await expect(row).toBeVisible();
 
-  const register = row.getByRole("button", { name: "Add to ssh-agent" });
+  await row.getByRole("button", { name: "Show details" }).click();
+  const register = page.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Add to ssh-agent" });
   await expect(register).toBeVisible();
   await expect(register).toBeDisabled();
   await expect(page.getByText(/This process cannot connect to ssh-agent/)).toBeVisible();
@@ -183,8 +188,8 @@ test("renames a key and carries every directive that named it", async ({ page, i
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
 
   const row = page.getByRole("row", { name: /id_rename\b/ }).first();
-  await row.getByRole("button", { name: "More actions" }).click();
-  await row.getByRole("button", { name: "Rename or move" }).click();
+  await row.getByRole("button", { name: "Show details" }).click();
+  await page.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Rename or move" }).click();
   await page.getByLabel("Name", { exact: true }).fill("id_renamed");
   expect(await clickAndAwait(page, "Rename or move the key", "/api/v1/keys/")).toBe(200);
 
@@ -212,8 +217,8 @@ test("refuses a rename whose destination is taken, and writes nothing", async ({
 
   const before = await installation.read("id_first");
   const row = page.getByRole("row", { name: /id_first\b/ }).first();
-  await row.getByRole("button", { name: "More actions" }).click();
-  await row.getByRole("button", { name: "Rename or move" }).click();
+  await row.getByRole("button", { name: "Show details" }).click();
+  await page.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Rename or move" }).click();
   await page.getByLabel("Name", { exact: true }).fill("id_second");
   expect(await clickAndAwait(page, "Rename or move the key", "/api/v1/keys/")).toBe(409);
 

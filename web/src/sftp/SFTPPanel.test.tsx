@@ -88,6 +88,16 @@ describe("SFTPPanel uploads", () => {
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/"));
   });
 
+  it("shows a friendly inline message when SFTP cannot connect", async () => {
+    api.list.mockRejectedValueOnce(new ApiError("sftp_failed", 502, null));
+    render(<SFTPPanel aliases={["miyabi"]} />);
+
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "miyabi");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not connect.");
+    expect(screen.queryByText("sftp_failed")).not.toBeInTheDocument();
+  });
+
   it("sorts remote entries by every data column", async () => {
     api.list.mockResolvedValue({
       path: "/remote",

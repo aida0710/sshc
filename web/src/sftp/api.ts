@@ -97,7 +97,11 @@ export const sftpApi = {
     if (response.status !== 204) throw new Error("download_changed");
   },
   async list(alias: string, remotePath: string): Promise<{ path: string; entries: RemoteEntry[] }> {
-    const value = asRecord(await apiClient.read(pathFor(alias, "entries", remotePath)));
+    // Directory listing also establishes the SFTP connection. An unavailable host is
+    // an expected result handled inline by SFTPPanel, not an application-wide failure.
+    const value = asRecord(await apiClient.read(pathFor(alias, "entries", remotePath), {
+      locallyHandledCodes: ["sftp_failed"],
+    }));
     return { path: asString(value.path), entries: asArray(value.entries).map(entry) };
   },
   async readText(alias: string, remotePath: string): Promise<RemoteTextFile> {
