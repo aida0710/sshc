@@ -36,6 +36,7 @@ export const ja = {
   "palette.empty": "一致する項目がありません",
   "palette.hint": "↑↓ 選択 · Enter 開く · Esc 閉じる",
   "palette.connectHost": "{alias}へ接続",
+  "palette.openHostSettings": "{alias} の接続設定を開く",
   "palette.openSection": "セクションを開く",
   "palette.kind.host": "ホスト",
   "palette.kind.file": "ファイル",
@@ -629,6 +630,7 @@ export const ja = {
   "refusal.group_is_declared":
     "{detail} は宣言済みのグループです。グループ画面で名前を変更または削除してください。関連する接続、共通設定、鍵も同時に移動されます。",
   "refusal.destination_exists": "移動先には同名のファイルまたはディレクトリがあります。",
+  "refusal.alias_already_declared": "同名の接続設定が既にあるため保存できません。別の名前を使用してください。",
   "refusal.region_damaged":
     "~/.ssh/config にある sshc 生成ブロックのマーカーが片方しかありません。生成範囲を特定できないため、何も書き込んでいません。",
   "notice.group_not_declared":
@@ -1244,6 +1246,7 @@ export const ja = {
   "conn.creating": "作成しています…",
   "conn.createFailed": "接続を作成できませんでした。",
   "conn.createAliasTaken": "別の接続がすでにその名前を使っています。",
+  "conn.duplicateAliasTaken": "{alias} は既に存在するため複製できません。",
   "conn.createGroupMissing": "そのグループは宣言されていません。再読み込みして別のグループを選んでください。",
   "conn.createKeyInvalid": "その秘密鍵は利用できなくなりました。再読み込みして別の鍵を選んでください。",
   "conn.createCredentialMissing": "その保存済みパスワードは利用できなくなりました。再読み込みして別のものを選んでください。",

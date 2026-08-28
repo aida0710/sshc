@@ -20,7 +20,7 @@ import {
 } from "./api/client";
 import { integrationsApi, type PasswordVaultStatus, type TerminalAppearance, type TerminalSettings } from "./api/integrations";
 import { resolveAppearance } from "./terminal/appearance";
-import { configApi, type FileNode } from "./api/config";
+import { configApi, type FileNode, type HostEntry } from "./api/config";
 import type { SessionState } from "./session/bootstrap";
 import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/CreateConnectionModal";
 import type { FileTarget } from "./explorer/ConfigExplorer";
@@ -37,6 +37,7 @@ import type { MessageKey } from "./i18n/messages";
 import { Button } from "./ui/surface";
 import { RouteSkeleton } from "./ui/RouteSkeleton";
 import { sectionPath, type Section } from "./routing/sectionRoute";
+import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation, type NavFace } from "./shell/AppNavigation";
 import {
@@ -177,6 +178,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const [groups, setGroups] = useState<string[]>([]);
   const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
+  const [paletteHosts, setPaletteHosts] = useState<HostEntry[]>([]);
   const [configFiles, setConfigFiles] = useState<FileNode[]>([]);
   const [connectionDraft, setConnectionDraft] = useState<CreateConnectionDraft | null>(null);
   const [preferredConnectionKey, setPreferredConnectionKey] = useState<GeneratedPrivateKeyHandoff | null>(null);
@@ -431,6 +433,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           ),
         );
         setKnownAliases([...new Set(overview.hosts.map((host) => host.identity.alias).filter((alias) => alias !== ""))]);
+        setPaletteHosts(overview.hosts.filter((host) => host.identity.alias !== ""));
         setConfigFiles(overview.files);
       })
       .catch(() => undefined);
@@ -698,7 +701,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       {state === "ready" ? (
         <CommandPalette
           open={commandPaletteOpen}
-          aliases={knownAliases}
+          hosts={paletteHosts}
           files={configFiles}
           sectionLabels={sectionLabels}
           onClose={() => setCommandPaletteOpen(false)}
@@ -706,6 +709,12 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
             const opened = await consoles.open({ kind: "ssh", alias });
             if (opened !== null) showConsole(opened.id);
           }}
+          onOpenHostSettings={(identity) => navigateLocation(connectionLocation({
+            path: identity.path,
+            alias: identity.alias,
+            panel: "Basic",
+            advanced: "Jump",
+          }))}
           onOpenFile={(path) => openFile(path, 1)}
           onNavigate={navigate}
           onOpenSnippet={(id) => navigateLocation(`${sectionPath("Snippets")}?snippet=${encodeURIComponent(id)}`)}

@@ -425,7 +425,7 @@ func TestSaveRejectsAnUnknownJSONFieldAndAnOversizedBody(t *testing.T) {
 func TestEveryEditKindTheApplicationAcceptsPassesValidation(t *testing.T) {
 	for _, kind := range []application.EditKind{
 		application.EditHostFields, application.EditBlockRaw, application.EditFileRaw,
-		application.EditRename, application.EditMove, application.EditComment,
+		application.EditRename, application.EditDuplicate, application.EditMove, application.EditComment,
 		application.EditFileRename, application.EditFileDelete,
 		application.EditDirectoryCreate, application.EditDirectoryDelete,
 		application.EditGroups, application.EditMetadata,
@@ -441,7 +441,7 @@ func TestEveryEditKindTheApplicationAcceptsPassesValidation(t *testing.T) {
 			}}
 		case application.EditBlockRaw, application.EditFileRaw:
 			request.Alias, request.Raw = "nas", "Host nas\n"
-		case application.EditRename:
+		case application.EditRename, application.EditDuplicate:
 			request.Alias, request.NewAlias = "nas", "nas2"
 		case application.EditMove:
 			request.Alias, request.DestinationGroup = "nas", "work"
@@ -456,5 +456,53 @@ func TestEveryEditKindTheApplicationAcceptsPassesValidation(t *testing.T) {
 		if err := validateEditRequest(request); err != nil {
 			t.Errorf("validateEditRequest(%q) = %v, so no request of that kind can reach the application", kind, err)
 		}
+	}
+}
+
+func TestDuplicateAliasConflictHasAStableProblemCode(t *testing.T) {
+	harness := newConfigHarness(t)
+	response := harness.call(t, http.MethodPost, "/api/v1/config/save", application.EditRequest{
+		Kind: application.EditDuplicate, Path: "config", Base: handlerConfig,
+		Alias: "bastion", NewAlias: "bastion",
+	}, true, true)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body %s", response.Code, response.Body.String())
+	}
+	var payload problemPayload
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Code != "alias_already_declared" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestMoveAliasConflictHasTheSameStableProblemCode(t *testing.T) {
+	harness := newConfigHarness(t)
+	const source = "Include conf.d/*.conf\nHost bastion\n\tHostName 203.0.113.10\n"
+	const destination = "Host bastion\n\tHostName 192.0.2.10\n"
+	if err := os.MkdirAll(filepath.Join(harness.root, "conf.d"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(harness.root, "config"), []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(harness.root, "conf.d", "target.conf"), []byte(destination), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	response := harness.call(t, http.MethodPost, "/api/v1/config/save", application.EditRequest{
+		Kind: application.EditMove, Path: "config", Base: source, Alias: "bastion",
+		DestinationPath: "conf.d/target.conf", DestinationBase: destination,
+	}, true, true)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body %s", response.Code, response.Body.String())
+	}
+	var payload problemPayload
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Code != "alias_already_declared" {
+		t.Fatalf("payload = %#v", payload)
 	}
 }
