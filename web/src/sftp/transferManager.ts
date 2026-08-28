@@ -1,4 +1,5 @@
 import { failureCode } from "../api/client";
+import { notifyAndroidTransfer } from "../android/native";
 import {
   sftpApi,
   type CreateTransferJob,
@@ -56,7 +57,7 @@ type ManagerAPI = {
   completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string, sourceFingerprint: string): Promise<void>;
   cancelUpload(alias: string, id: string, remotePath: string): Promise<void>;
   streamDownload(alias: string, jobId: string, remotePath: string, directory: boolean, offset: number, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }>;
-  saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): void;
+  saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): Promise<void> | void;
 };
 
 type DownloadSink = {
@@ -616,10 +617,10 @@ export class SFTPTransferManager {
     if (sink !== null) {
       await sink.writer.close();
       this.downloadSinks.delete(id);
-      this.api.saveDownload(job.remotePath, job.kind === "folder", [await sink.handle.getFile()]);
+      await this.api.saveDownload(job.remotePath, job.kind === "folder", [await sink.handle.getFile()]);
       globalThis.setTimeout(() => { void sink.root.removeEntry(sink.name).catch(() => undefined); }, 30_000);
     } else {
-      this.api.saveDownload(job.remotePath, job.kind === "folder", chunks.map((chunk) => new Uint8Array(chunk)));
+      await this.api.saveDownload(job.remotePath, job.kind === "folder", chunks.map((chunk) => new Uint8Array(chunk)));
       if (job.downloadRevision === "") throw new Error("download_revision_missing");
       const acknowledged = await this.api.checkpointDownload(id, bufferedBytes, job.downloadRevision);
       this.recordProgress(id, bufferedBytes, acknowledged.totalBytes >= 0 ? acknowledged.totalBytes : bufferedBytes);
@@ -736,6 +737,7 @@ export class SFTPTransferManager {
     };
     if (this.notices.some((current) => current.id === notice.id)) return;
     this.notices = [...this.notices.slice(-7), notice];
+    notifyAndroidTransfer(job.status);
     for (const listener of this.noticeListeners) listener();
   }
 

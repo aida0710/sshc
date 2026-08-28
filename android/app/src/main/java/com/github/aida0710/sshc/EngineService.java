@@ -23,6 +23,9 @@ public final class EngineService extends Service {
     private static final String TAG = "sshc";
     private static final String CHANNEL = "engine";
     private static final int NOTIFICATION_ID = 1;
+    static final String RUNTIME_PREFERENCES = "runtime_notices";
+    static final String LAST_STOP_REASON = "last_stop_reason";
+    static final String STOP_REASON_DATA_SYNC_TIMEOUT = "data_sync_timeout";
     // Mobile.StartとMobile.StopはGo process-global lifecycleを共有する。一つのworkerで
     // Service世代をまたいで直列化し、前世代の停止中に開き直してもmain looperを塞がない。
     private static final ExecutorService ENGINE = Executors.newSingleThreadExecutor(command -> {
@@ -130,6 +133,9 @@ public final class EngineService extends Service {
     @Override
     public void onTimeout(int startId, int foregroundServiceType) {
         Log.w(TAG, "the foreground engine reached the dataSync time limit");
+        getSharedPreferences(RUNTIME_PREFERENCES, MODE_PRIVATE).edit()
+                .putString(LAST_STOP_REASON, STOP_REASON_DATA_SYNC_TIMEOUT)
+                .apply();
         stopServiceAndEngine(startId);
     }
 

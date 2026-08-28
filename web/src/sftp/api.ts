@@ -1,6 +1,7 @@
 import { apiClient } from "../api/client";
 import { asArray, asNumber, asRecord, asString, issueAction, jsonHeaders } from "../api/guards";
 import type { components } from "../api/schema";
+import { saveWithAndroid } from "../android/native";
 
 export type RemoteEntry = components["schemas"]["SFTPEntry"];
 export type RemoteTextFile = components["schemas"]["SFTPTextFile"];
@@ -200,13 +201,15 @@ export const sftpApi = {
     }
     return { bytes, total };
   },
-  saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): void {
+  async saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): Promise<void> {
     const blob = new Blob(chunks, { type: directory ? "application/zip" : "application/octet-stream" });
+    const components = remotePath.split("/").filter(Boolean);
+    const name = `${components[components.length - 1] ?? "download"}${directory ? ".zip" : ""}`;
+    if (await saveWithAndroid(blob, name)) return;
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    const components = remotePath.split("/").filter(Boolean);
-    anchor.download = `${components[components.length - 1] ?? "download"}${directory ? ".zip" : ""}`;
+    anchor.download = name;
     anchor.click();
     // WebView/Safari may consume the object URL after click() returns.
     globalThis.setTimeout(() => URL.revokeObjectURL(url), 30_000);
