@@ -202,7 +202,7 @@ func TestOpenAsksForThePasswordAndRunsAShell(t *testing.T) {
 	}
 	defer func() { _ = process.Close() }()
 
-	readUntil(t, process, "Password: ")
+	readUntil(t, process, "Password for ")
 	if _, err := io.WriteString(process, remote.password+"\n"); err != nil {
 		t.Fatalf("answering the password prompt: %v", err)
 	}
