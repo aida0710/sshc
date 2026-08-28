@@ -100,6 +100,17 @@ describe("RevealDialog", () => {
     expect(await screen.findByLabelText("Private key")).toBeInTheDocument();
     expect(reveal).toHaveBeenCalledTimes(2);
   });
+
+  it("Escapeで秘密鍵を消して閉じる", async () => {
+    const onClose = vi.fn();
+    render(<RevealDialog keyId="key-one" relativePath="id_work" api={{ reveal: revealing() }} onClose={onClose} />);
+    await userEvent.click(screen.getByRole("button", { name: "Show private key" }));
+    await screen.findByLabelText("Private key");
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByLabelText("Private key")).toBeNull();
+  });
+
   it("copies exactly the key it showed, and offers no copy before the reveal", async () => {
     const user = userEvent.setup();
     const reveal = revealing();

@@ -158,7 +158,9 @@ func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T
 		"registerOnBackInvokedCallback(",
 		"OnBackInvokedDispatcher.PRIORITY_DEFAULT",
 		"webView.evaluateJavascript(",
-		`location.pathname === '/'`,
+		"sshc-android-back",
+		"[role=dialog]",
+		`location.pathname==='/'`,
 		"history.back()",
 		"webView.canGoBack()",
 		"webView.goBack()",
@@ -167,5 +169,38 @@ func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T
 		if !strings.Contains(manifest+activity, required) {
 			t.Errorf("Androidの戻る導線に %q が無い", required)
 		}
+	}
+}
+
+// WebViewの既定実装ではfile inputをキャンセルするため、Android shellが
+// 選択・保存・renderer異常・通知permissionを明示的に仲介する形を固定する。
+func TestTheAndroidShellBridgesDeviceSpecificWebFeatures(t *testing.T) {
+	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
+	activity := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "MainActivity.java")
+	bridge := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "NativeBridge.java")
+	web := readRepoFile(t, "web", "src", "android", "native.ts")
+
+	for _, required := range []string{
+		"onShowFileChooser(",
+		"FileChooserParams.parseResult(",
+		"Intent.ACTION_CREATE_DOCUMENT",
+		`addJavascriptInterface(nativeBridge, "sshcAndroid")`,
+		"onRenderProcessGone(",
+		"POST_NOTIFICATIONS",
+		"requestPermissions(",
+		"Intent.ACTION_VIEW",
+		"engineOrigin.getPort() == target.getPort()",
+		"setSystemBarsAppearance(",
+		"saveWithAndroid(",
+		"notifyAndroidTransfer(",
+	} {
+		if !strings.Contains(manifest+activity+bridge+web, required) {
+			t.Errorf("Android固有機能のbridgeに %q が無い", required)
+		}
+	}
+	if strings.Contains(activity, "Log.e(TAG, entrance") {
+		t.Error("資格情報を含み得るentrance URLをlogcatへ出している")
 	}
 }

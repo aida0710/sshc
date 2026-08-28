@@ -3,6 +3,7 @@
     <string name="app_name">sshc</string>
     <string name="engine_running">sshc を実行中</string>
     <string name="engine_stop">停止</string>
+    <string name="engine_data_sync_timeout">Android のバックグラウンド動作時間の上限により、エンジンが停止しました。必要な接続を開き直してください。</string>
     <string name="failure_listen">sshc はこの端末のローカルポートを確保できませんでした。</string>
     <string name="failure_stopped_early">sshc エンジンは起動完了前に停止しました。</string>
     <string name="failure_storage">sshc のアプリ専用ストレージを開けませんでした。端末を再起動してから、もう一度お試しください。</string>
@@ -13,4 +14,11 @@
     <string name="failure_copied">診断情報をコピーしました</string>
     <string name="failure_retry">もう一度試す</string>
     <string name="failure_retrying">起動中…</string>
+    <string name="file_picker_unavailable">この端末でファイル選択画面を開けません。</string>
+    <string name="transfer_channel">SFTP 転送</string>
+    <string name="transfer_completed">SFTP 転送が完了しました。</string>
+    <string name="transfer_failed">SFTP 転送に失敗しました。詳細は sshc を開いて確認してください。</string>
+    <string name="webview_recovery_title">sshc の画面が停止しました。</string>
+    <string name="webview_recovery_body">エンジンとターミナル接続は動作を続けています。画面を再読み込みして続けてください。</string>
+    <string name="webview_recovery_reload">画面を再読み込み</string>
 </resources>

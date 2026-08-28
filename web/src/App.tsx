@@ -59,6 +59,7 @@ import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 import { CommandPalette } from "./shell/CommandPalette";
+import { setAndroidAppearance } from "./android/native";
 
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -164,7 +165,7 @@ const navigationId = "primary-navigation";
 
 export function App({ bootstrap, health, vault = integrationsApi.passwordVault }: AppProps) {
   const { t } = useLanguage();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolved: resolvedTheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker } = useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
@@ -193,6 +194,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   useEffect(() => {
+    setAndroidAppearance(resolvedTheme);
+  }, [resolvedTheme]);
+
+  useEffect(() => {
     if (state !== "ready") {
       setCommandPaletteOpen(false);
       return;
@@ -214,6 +219,23 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     document.addEventListener("keydown", close);
     return () => document.removeEventListener("keydown", close);
   }, [navigationOpen]);
+
+  useEffect(() => {
+    function closeTransientUi(event: Event) {
+      if (commandPaletteOpen) {
+        event.preventDefault();
+        setCommandPaletteOpen(false);
+      } else if (navigationOpen) {
+        event.preventDefault();
+        setNavigationOpen(false);
+      } else if (inspectorOpen) {
+        event.preventDefault();
+        setInspectorOpen(false);
+      }
+    }
+    window.addEventListener("sshc-android-back", closeTransientUi);
+    return () => window.removeEventListener("sshc-android-back", closeTransientUi);
+  }, [commandPaletteOpen, inspectorOpen, navigationOpen]);
 
   function toggleDesktopNavigation() {
     setDesktopNavigationVisible((visible) => {
