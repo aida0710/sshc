@@ -18,7 +18,7 @@ test("records a change in history and restores the previous bytes", async ({
 
   await openSection(page, "History");
   await expect(page.getByRole("heading", { name: "Completed changes" })).toBeVisible();
-  await expect(page.getByText("connection.update")).toBeVisible();
+  await expect(page.getByText("Connection change", { exact: true })).toBeVisible();
 
   expect(await clickAndAwait(page, "Restore config", "/api/v1/history/restore")).toBe(200);
 
