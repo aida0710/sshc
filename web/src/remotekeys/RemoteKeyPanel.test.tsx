@@ -122,6 +122,50 @@ async function fetchPlan(api: RemoteKeysApi) {
 }
 
 describe("RemoteKeyPanel", () => {
+  it("filters saved connections and registers the key on multiple selected hosts", async () => {
+    const user = userEvent.setup();
+    const api = buildApi({
+      plan: vi.fn().mockImplementation(async (input) => ({
+        ...plan,
+        alias: input.alias,
+        hostname: `${input.alias}.example.com`,
+        actionToken: input.alias.padEnd(43, "x").slice(0, 43),
+      })),
+    });
+    render(
+      <RemoteKeyPanel
+        api={api}
+        keys={buildKeys()}
+        hosts={["zeta", "db-prod", "alpha", "db-stage"]}
+      />,
+    );
+
+    const search = screen.getByRole("searchbox", { name: "Host alias" });
+    await user.type(search, "db");
+    expect(screen.getByRole("checkbox", { name: "db-prod" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "db-stage" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "alpha" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Select matches" }));
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    await user.clear(search);
+    expect(screen.getByRole("checkbox", { name: "db-prod" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "db-stage" })).toBeChecked();
+
+    await user.type(screen.getByLabelText("Public key file"), "~/.ssh/id_ed25519.pub");
+    await user.type(screen.getByLabelText("Public key line"), publicKey);
+    await user.click(screen.getByRole("button", { name: "Show what this would do" }));
+
+    await waitFor(() => expect(api.plan).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("region", { name: "Confirm registration on 2 hosts" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Register on 2 hosts" }));
+    await waitFor(() => expect(api.register).toHaveBeenCalledTimes(2));
+    expect(api.register).toHaveBeenCalledWith(expect.objectContaining({ alias: "db-prod" }));
+    expect(api.register).toHaveBeenCalledWith(expect.objectContaining({ alias: "db-stage" }));
+    expect(screen.getByText("db-prod", { selector: "li span" })).toBeInTheDocument();
+    expect(screen.getByText("db-stage", { selector: "li span" })).toBeInTheDocument();
+  });
+
   it("preloads a handed-off public key from fresh inventory without planning or registering", async () => {
     const api = buildApi();
     const keys = buildKeys();
