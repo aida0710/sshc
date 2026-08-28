@@ -3,7 +3,6 @@ import type { HostEntry, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
-import { Segmented } from "../ui/surface";
 import { duplicateAliasesOf, identityKey } from "./connectionBrowser";
 import { canDrop, dragMimeType, type DragPayload } from "./dragdrop";
 
@@ -29,22 +28,24 @@ type GroupNode = {
   children: GroupNode[];
 };
 
+type ResultSection = {
+  name: string;
+  items: DecoratedHost[];
+};
+
 type ConnectionTreeProps = {
   overview: Overview;
   selected: HostSelection | null;
   onSelect: (host: HostEntry) => void;
-  onOpenPatternRule: (path: string, line: number) => void;
   onDrop: (payload: DragPayload, target: string) => void;
   movesDisabled?: boolean;
 };
 
-type Grouping = "groups" | "files";
-type SortOrder = "configured" | "name" | "group";
+type SortOrder = "configured" | "name";
 type Scope =
   | { kind: "all" }
   | { kind: "group"; name: string }
-  | { kind: "ungrouped" }
-  | { kind: "file"; absolute: string };
+  | { kind: "ungrouped" };
 
 function labelFor(host: HostEntry): string {
   return host.identity.alias === "" ? `Host ${host.patterns.join(" ")}` : host.identity.alias;
@@ -87,12 +88,10 @@ export function ConnectionTree({
   overview,
   selected,
   onSelect,
-  onOpenPatternRule,
   onDrop,
   movesDisabled = false,
 }: ConnectionTreeProps) {
   const t = useTranslate();
-  const [grouping, setGrouping] = useState<Grouping>("groups");
   const [scope, setScope] = useState<Scope>({ kind: "all" });
   const [query, setQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("configured");
@@ -105,7 +104,7 @@ export function ConnectionTree({
       (overview.metadata.hosts ?? []).map((entry) => [identityKey(entry.identity), entry]),
     );
     const duplicates = duplicateAliasesOf(overview.hosts);
-    return overview.hosts.map((host, sourceOrder) => {
+    return overview.hosts.filter((host) => host.identity.alias !== "").map((host, sourceOrder) => {
       const display = metadata.get(identityKey(host.identity));
       return {
         host,
@@ -150,38 +149,73 @@ export function ConnectionTree({
     return roots;
   }, [decorated, overview.groups, overview.metadata.groups]);
 
+  const orderedGroups = useMemo(() => {
+    const ordered: GroupNode[] = [];
+    const visit = (node: GroupNode) => {
+      if (!(node.hidden && node.descendantCount === 0)) ordered.push(node);
+      node.children.forEach(visit);
+    };
+    groupTree.forEach(visit);
+    return ordered;
+  }, [groupTree]);
+
   const visible = useMemo(() => {
     const scoped = decorated.filter((item) => {
       if (!hostMatches(item, query)) return false;
       if (scope.kind === "all") return true;
       if (scope.kind === "ungrouped") return item.group === "";
-      if (scope.kind === "group") return belongsToGroup(item, scope.name);
-      return item.host.file.absolute === scope.absolute;
+      return belongsToGroup(item, scope.name);
     });
     return scoped.sort((left, right) => {
       if (sortOrder === "name") return labelFor(left.host).localeCompare(labelFor(right.host), "ja");
-      if (sortOrder === "group") {
-        return left.group.localeCompare(right.group, "ja") || labelFor(left.host).localeCompare(labelFor(right.host), "ja");
-      }
       return left.order - right.order || left.sourceOrder - right.sourceOrder;
     });
   }, [decorated, query, scope, sortOrder]);
 
-  function switchGrouping(next: Grouping) {
-    setGrouping(next);
-    setScope({ kind: "all" });
+  const resultSections = useMemo<ResultSection[]>(() => {
+    const exact = new Map<string, DecoratedHost[]>();
+    for (const item of visible) {
+      const items = exact.get(item.group) ?? [];
+      items.push(item);
+      exact.set(item.group, items);
+    }
+    if (scope.kind === "ungrouped") {
+      return [{ name: "", items: exact.get("") ?? [] }];
+    }
+
+    const declared = new Set(orderedGroups.map((group) => group.name));
+    const sections = orderedGroups
+      .filter((group) => scope.kind === "all" || group.name === scope.name || group.name.startsWith(`${scope.name}/`))
+      .filter((group) => visible.some((item) => belongsToGroup(item, group.name)))
+      .map((group) => ({ name: group.name, items: exact.get(group.name) ?? [] }));
+    const undeclared = [...exact.keys()]
+      .filter((name) => name !== "" && !declared.has(name))
+      .sort((left, right) => left.localeCompare(right, "ja"));
+    sections.push(...undeclared.map((name) => ({ name, items: exact.get(name) ?? [] })));
+    if (scope.kind === "all" && exact.has("")) {
+      sections.push({ name: "", items: exact.get("") ?? [] });
+    }
+    return sections;
+  }, [orderedGroups, scope, visible]);
+
+  const scopeValue = scope.kind === "all" ? "all" : scope.kind === "ungrouped" ? "ungrouped" : `group:${scope.name}`;
+
+  function selectScope(value: string) {
+    if (value === "all") setScope({ kind: "all" });
+    else if (value === "ungrouped") setScope({ kind: "ungrouped" });
+    else setScope({ kind: "group", name: value.slice("group:".length) });
     setDragging(null);
   }
 
   function startDrag(event: DragEvent, payload: DragPayload) {
-    if (movesDisabled || grouping !== "groups") return;
+    if (movesDisabled) return;
     event.dataTransfer.setData(dragMimeType, JSON.stringify(payload));
     event.dataTransfer.effectAllowed = "move";
     setDragging(payload);
   }
 
   function accepts(target: string): boolean {
-    return !movesDisabled && grouping === "groups" && dragging !== null && canDrop(dragging, target, groupNames);
+    return !movesDisabled && dragging !== null && canDrop(dragging, target, groupNames);
   }
 
   function dropHandlers(target: string) {
@@ -262,35 +296,6 @@ export function ConnectionTree({
 
   function renderFacets() {
     const allActive = scope.kind === "all";
-    if (grouping === "files") {
-      return (
-        <>
-          <button type="button" aria-label={t("tree.allConnections")} aria-pressed={allActive} onClick={() => setScope({ kind: "all" })} className={facetClass(allActive)}>
-            <Icon name="config" className="size-4" />
-            <span className="min-w-0 flex-1 truncate">{t("tree.allConnections")}</span>
-            <span className="text-[0.68rem] text-ink-faint">{decorated.length}</span>
-          </button>
-          {overview.files.map((file) => {
-            const active = scope.kind === "file" && scope.absolute === file.file.absolute;
-            const count = decorated.filter((item) => item.host.file.absolute === file.file.absolute).length;
-            return (
-              <button
-                type="button"
-                key={file.file.absolute}
-                aria-label={file.file.path ?? file.file.absolute}
-                aria-pressed={active}
-                onClick={() => setScope({ kind: "file", absolute: file.file.absolute })}
-                className={`${facetClass(active)} min-w-max md:min-w-0`}
-              >
-                <Icon name="config" className="size-4" />
-                <span className="min-w-0 flex-1 truncate">{file.file.path ?? file.file.absolute}</span>
-                <span className="text-[0.68rem] text-ink-faint">{count}</span>
-              </button>
-            );
-          })}
-        </>
-      );
-    }
     const ungroupedActive = scope.kind === "ungrouped";
     const ungroupedCount = decorated.filter((item) => item.group === "").length;
     return (
@@ -316,26 +321,6 @@ export function ConnectionTree({
     const host = item.host;
     const active = selected?.path === host.identity.path && selected.alias === host.identity.alias;
     const descriptionId = `connection-${host.file.absolute}-${host.line}`;
-    if (host.identity.alias === "") {
-      const content = (
-        <>
-          <span className="block truncate font-medium text-ink">{labelFor(host)}</span>
-          <span className="mt-0.5 block truncate font-mono text-[0.68rem] text-ink-faint">{host.file.path ?? host.file.absolute}</span>
-        </>
-      );
-      return (
-        <li key={`${host.file.absolute}:${host.line}`} className="border-b border-hairline last:border-b-0">
-          {host.file.path === undefined ? (
-            <p aria-describedby={descriptionId} className="px-4 py-3 text-sm">{content}</p>
-          ) : (
-            <button type="button" aria-describedby={descriptionId} onClick={() => onOpenPatternRule(host.file.path ?? "", host.line)} className="min-h-12 w-full px-4 py-2.5 text-left text-sm hover:bg-select-fill">
-              {content}
-            </button>
-          )}
-          <span id={descriptionId} className="sr-only">{t("tree.patternRule")}</span>
-        </li>
-      );
-    }
     return (
       <li key={`${host.file.absolute}:${host.line}`} className="border-b border-hairline last:border-b-0">
         <button
@@ -343,7 +328,7 @@ export function ConnectionTree({
           aria-label={host.identity.alias}
           aria-current={active ? "true" : undefined}
           aria-describedby={descriptionId}
-          draggable={grouping === "groups" && !movesDisabled}
+          draggable={!movesDisabled}
           onClick={() => onSelect(host)}
           onDragStart={(event) => startDrag(event, { kind: "connection", path: host.identity.path, alias: host.identity.alias, group: item.group })}
           onDragEnd={() => setDragging(null)}
@@ -359,7 +344,6 @@ export function ConnectionTree({
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className={`truncate ${active ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
                 {item.duplicateAlias ? <span aria-hidden="true" className="shrink-0 text-notice-ink">⧉</span> : null}
-                <span className="ml-auto max-w-[38%] shrink-0 truncate text-[0.68rem] text-ink-faint">{item.group || t("tree.ungrouped")}</span>
               </span>
               <span className="mt-0.5 block truncate font-mono text-[0.68rem] leading-4 text-ink-faint">{targetFor(host)}</span>
               {item.tags.length === 0 ? null : (
@@ -377,29 +361,48 @@ export function ConnectionTree({
     );
   }
 
+  function renderResultSection(section: ResultSection) {
+    const name = section.name === "" ? t("tree.ungrouped") : section.name;
+    return (
+      <section key={section.name || "ungrouped"} data-connection-group={section.name || "ungrouped"} aria-label={t("tree.groupSection", { name, count: section.items.length })}>
+        <header className="sticky top-0 z-[1] flex min-h-7 items-center gap-2 border-y border-hairline bg-tree px-3 py-1 text-[0.68rem] text-ink-muted">
+          <Icon name="groups" className="size-3.5 shrink-0 text-ink-faint" />
+          <h3 className="min-w-0 flex-1 truncate font-medium">{name}</h3>
+          <span className="shrink-0 font-mono tabular-nums text-ink-faint">{section.items.length}</span>
+        </header>
+        {section.items.length === 0 ? null : <ul>{section.items.map(renderItem)}</ul>}
+      </section>
+    );
+  }
+
   return (
-    <nav aria-label={t("tree.navLabel")} className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[10rem_minmax(0,1fr)] md:grid-rows-1">
-      <aside className="flex min-h-0 flex-col border-b border-line bg-tree md:border-b-0 md:border-r">
-        <div className="shrink-0 p-3 pb-2">
-          <div className="[&>div]:w-full [&_button]:min-h-10 [&_button]:flex-1 md:[&_button]:min-h-0">
-            <Segmented
-              label={t("tree.arrangeBy")}
-              value={grouping}
-              options={[{ value: "groups", label: t("tree.byGroups") }, { value: "files", label: t("tree.byFiles") }]}
-              onChange={switchGrouping}
-            />
-          </div>
-        </div>
-        <p className="hidden shrink-0 px-3 pb-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint md:block">
-          {grouping === "groups" ? t("tree.byGroups") : t("tree.byFiles")}
+    <nav aria-label={t("tree.navLabel")} className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] md:grid-rows-1">
+      <aside className="hidden min-h-0 flex-col border-r border-line bg-tree md:flex">
+        <p className="shrink-0 px-3 pb-1 pt-3 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">
+          {t("tree.byGroups")}
         </p>
-        <div data-connection-facets className="flex min-w-0 gap-1 overflow-x-auto px-3 pb-3 md:min-h-0 md:flex-1 md:flex-col md:overflow-x-hidden md:overflow-y-auto">
+        <div data-connection-facets className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto px-3 pb-3">
           {renderFacets()}
         </div>
       </aside>
 
       <section className="flex min-h-0 flex-col bg-page" aria-label={t("tree.resultsLabel")}>
         <header className="shrink-0 border-b border-line bg-card p-3">
+          <label className="mb-2 flex min-w-0 items-center gap-2 md:hidden">
+            <span className="shrink-0 text-xs font-medium text-ink-muted">{t("tree.byGroups")}</span>
+            <select
+              aria-label={t("tree.groupFilter")}
+              value={scopeValue}
+              onChange={(event) => selectScope(event.currentTarget.value)}
+              className={`${control} min-h-10 min-w-0 flex-1 py-2`}
+            >
+              <option value="all">{t("tree.allConnections")} · {decorated.length}</option>
+              {orderedGroups.map((group) => (
+                <option key={group.name} value={`group:${group.name}`}>{group.name} · {group.descendantCount}</option>
+              ))}
+              <option value="ungrouped">{t("tree.ungrouped")} · {decorated.filter((item) => item.group === "").length}</option>
+            </select>
+          </label>
           <div>
             <label className="relative block min-w-0" htmlFor="connection-filter">
               <span className="sr-only">{t("tree.filter")}</span>
@@ -414,13 +417,12 @@ export function ConnectionTree({
               <select value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value as SortOrder)} className="rounded border-0 bg-transparent py-0.5 text-xs text-ink-muted">
                 <option value="configured">{t("tree.sortConfigured")}</option>
                 <option value="name">{t("tree.sortName")}</option>
-                <option value="group">{t("tree.sortGroup")}</option>
               </select>
             </label>
           </div>
-          {grouping === "groups" && !movesDisabled ? <p className="mt-1 hidden text-[0.68rem] text-ink-faint md:block">{t("tree.dragGroupHint")}</p> : null}
+          {!movesDisabled ? <p className="mt-1 hidden text-[0.68rem] text-ink-faint md:block">{t("tree.dragGroupHint")}</p> : null}
         </header>
-        {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t("tree.noMatch")}</p> : <ul data-connection-results className="min-h-0 flex-1 overflow-y-auto">{visible.map(renderItem)}</ul>}
+        {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t("tree.noMatch")}</p> : <div data-connection-results className="min-h-0 flex-1 overflow-y-auto">{resultSections.map(renderResultSection)}</div>}
       </section>
     </nav>
   );

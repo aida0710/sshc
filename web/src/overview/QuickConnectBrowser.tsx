@@ -75,7 +75,7 @@ export function QuickConnectBrowser({
 }: QuickConnectBrowserProps) {
   const t = useTranslate();
   const [query, setQuery] = useState("");
-  const [group, setGroup] = useState("");
+  const [groupTrail, setGroupTrail] = useState<string[]>([]);
   const [view, setView] = useState<QuickConnectView>(storedView);
   const [selectedAlias, setSelectedAlias] = useState("");
   const pointerType = useRef("keyboard");
@@ -88,11 +88,13 @@ export function QuickConnectBrowser({
     () => new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }),
     [],
   );
+  const group = groupTrail.at(-1) ?? "";
+  const visibleGroups = index.visibleChildrenByParent.get(group) ?? [];
 
   useEffect(() => {
-    if (group === "" || index.groupByName.has(group)) return;
-    setGroup("");
-  }, [group, index.groupByName]);
+    if (groupTrail.every((name) => index.groupByName.has(name))) return;
+    setGroupTrail([]);
+  }, [groupTrail, index.groupByName]);
 
   const servers = useMemo(
     () => index.servers
@@ -210,35 +212,69 @@ export function QuickConnectBrowser({
         </div>
       </div>
 
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="shrink-0 text-xs text-ink-muted">{t("browser.groups")}</span>
-        <div role="group" aria-label={t("home.groupFilter")} className="flex min-w-0 gap-1 overflow-x-auto pb-1">
-          <button
-            type="button"
-            aria-pressed={group === ""}
-            onClick={() => setGroup("")}
-            className={`min-h-10 shrink-0 rounded-md px-2.5 py-1 text-xs md:min-h-0 ${group === "" ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-card"}`}
-          >
-            {t("home.allGroups")}
-          </button>
-          {index.groups.filter((candidate) => !candidate.hidden).map((candidate) => (
-            <button
-              key={candidate.name}
-              type="button"
-              aria-pressed={group === candidate.name}
-              onClick={() => setGroup(candidate.name)}
-              className={`min-h-10 shrink-0 rounded-md px-2.5 py-1 text-xs md:min-h-0 ${group === candidate.name ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-card"}`}
-            >
-              {candidate.name} · {candidate.descendantCount}
-            </button>
-          ))}
+      <section aria-labelledby="quick-connect-groups-heading" className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <h4 id="quick-connect-groups-heading" className="text-xs font-semibold text-ink">
+            {t("home.groupCount", { count: visibleGroups.length })}
+          </h4>
+          {groupTrail.length === 0 ? null : (
+            <nav aria-label={t("home.groupBreadcrumb")} className="flex min-w-0 items-center gap-1 text-xs text-ink-muted">
+              <button type="button" onClick={() => setGroupTrail([])} className="shrink-0 rounded px-1 py-0.5 hover:bg-card hover:text-ink">
+                {t("home.allGroups")}
+              </button>
+              {groupTrail.map((name, position) => {
+                const selected = position === groupTrail.length - 1;
+                return (
+                  <span key={name} className="flex min-w-0 items-center gap-1">
+                    <span aria-hidden="true" className="text-ink-faint">/</span>
+                    <button
+                      type="button"
+                      aria-current={selected ? "page" : undefined}
+                      onClick={() => setGroupTrail(groupTrail.slice(0, position + 1))}
+                      className={`truncate rounded px-1 py-0.5 hover:bg-card hover:text-ink ${selected ? "font-medium text-ink" : ""}`}
+                    >
+                      {index.groupByName.get(name)?.label ?? name}
+                    </button>
+                  </span>
+                );
+              })}
+            </nav>
+          )}
         </div>
-      </div>
+        {visibleGroups.length === 0 ? (
+          <p className="text-xs text-ink-faint">{t("home.noChildGroups")}</p>
+        ) : (
+          <div role="group" aria-label={t("home.groupFilter")} className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {visibleGroups.map((candidate) => {
+              const childCount = index.visibleChildrenByParent.get(candidate.name)?.length ?? 0;
+              return (
+                <button
+                  key={candidate.name}
+                  type="button"
+                  title={candidate.name}
+                  aria-label={t("home.openGroup", { name: candidate.name, count: candidate.descendantCount })}
+                  onClick={() => setGroupTrail([...groupTrail, candidate.name])}
+                  className="flex min-h-12 min-w-0 items-center gap-2 rounded-md border border-line bg-surface-subtle px-3 py-2 text-left transition-colors hover:bg-select-fill focus-visible:bg-select-fill"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`size-2 shrink-0 rounded-full ${candidate.colour === "" ? "bg-accent" : ""}`}
+                    style={candidate.colour === "" ? undefined : { backgroundColor: candidate.colour }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">{candidate.label}</span>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-ink-muted">{candidate.descendantCount}</span>
+                  {childCount === 0 ? null : <span aria-hidden="true" className="shrink-0 text-ink-faint">›</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-      <div className="flex items-center justify-between gap-3 text-xs text-ink-faint">
-        <span>{t("home.connectionCount", { count: servers.length })}</span>
-        <span className="hidden text-right md:inline">{t("home.pointerHint")}</span>
-        <span className="text-right md:hidden">{t("home.touchHint")}</span>
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-xs font-semibold text-ink">{t("home.connectionCount", { count: servers.length })}</h4>
+        <span className="hidden text-right text-xs text-ink-faint md:inline">{t("home.pointerHint")}</span>
+        <span className="text-right text-xs text-ink-faint md:hidden">{t("home.touchHint")}</span>
       </div>
 
       {servers.length === 0 ? (

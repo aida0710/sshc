@@ -10,7 +10,6 @@ export function ConnectionListPane({
   invalidLocation,
   onDismissInvalidLocation,
   onSelect,
-  onOpenPatternRule,
   onDrop,
   movesDisabled,
 }: {
@@ -19,7 +18,6 @@ export function ConnectionListPane({
   invalidLocation: boolean;
   onDismissInvalidLocation: () => void;
   onSelect: (host: HostEntry) => void;
-  onOpenPatternRule: (path: string, line: number) => void;
   onDrop: (payload: DragPayload, target: string) => void;
   movesDisabled: boolean;
 }) {
@@ -47,7 +45,6 @@ export function ConnectionListPane({
           overview={overview}
           selected={selection}
           onSelect={onSelect}
-          onOpenPatternRule={onOpenPatternRule}
           onDrop={onDrop}
           movesDisabled={movesDisabled}
         />

@@ -68,7 +68,6 @@ const selectionNoticeCodes = new Set([
 
 
 type ConnectionsPageProps = {
-  onOpenFile?: (path: string, line: number) => void;
   onInspector: (content: InspectorContent) => void;
   creationDraft?: CreateConnectionDraft | null;
   onCreationDraftChange?: (draft: CreateConnectionDraft | null) => void;
@@ -87,7 +86,6 @@ type SaveAttempt =
   | { saved: true; overview: Overview | null };
 
 export function ConnectionsPage({
-  onOpenFile = () => undefined,
   onInspector,
   creationDraft = null,
   onCreationDraftChange,
@@ -766,7 +764,6 @@ export function ConnectionsPage({
             }
           }}
           onSelect={onSelect}
-          onOpenPatternRule={onOpenFile}
           onDrop={(payload, target) => void onTreeDrop(payload, target)}
           movesDisabled={editorDirty || refreshState !== "idle"}
         />

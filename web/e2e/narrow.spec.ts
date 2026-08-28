@@ -75,10 +75,26 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
   page,
   installation,
 }) => {
+  const entry = await installation.read("config");
+  const nas = await installation.read("conf.d/10-home.conf");
+  await installation.write(
+    "config",
+    "# >>> sshc groups (generated). Child groups first: OpenSSH keeps the first value it reads.\n" +
+      "# Edit through the UI; lines between these markers are replaced on the next save.\n" +
+      "Include connections/home/eu/*.conf\n" +
+      "Include connections/home/*.conf\n" +
+      "Include groups.sshc.conf\n" +
+      "# <<< sshc groups\n" + entry,
+  );
+  await installation.write("connections/home/nas.conf", nas);
+  await installation.write("connections/home/eu/api.conf", "Host eu-api\n\tHostName 198.51.100.21\n\tUser aida\n");
+  await installation.write("conf.d/10-home.conf", "");
   await openApplication(page, installation);
   await openSectionThroughDrawer(page, "Connections");
   const browser = page.getByRole("navigation", { name: "Connections" });
-  await expect(browser.getByRole("group", { name: "Arrange connections by" })).toBeVisible();
+  await expect(browser.getByRole("combobox", { name: "Filter by group" })).toBeVisible();
+  await expect(browser.getByRole("group", { name: "Arrange connections by" })).toHaveCount(0);
+  await expect(browser.getByRole("region", { name: "home/eu group, 1 connections" })).toBeVisible();
   await expectNoHorizontalOverflow(page, "Connections browser");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.waitForTimeout(350);
@@ -95,6 +111,7 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
   await expectNoHorizontalOverflow(page, "Connection detail");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.waitForTimeout(350);
     await page.screenshot({
       path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-management-mobile-detail.png`,
       fullPage: true,
