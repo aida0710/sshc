@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ConsoleList } from "./ConsoleList";
@@ -166,6 +166,31 @@ describe("ConsoleList", () => {
 
     expect(props.onClose).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("closes immediately without a warning while Shift is held", () => {
+    const props = renderList();
+
+    fireEvent.keyDown(window, { key: "Shift" });
+    fireEvent.click(screen.getByRole("button", { name: "Close bastion" }), { shiftKey: true });
+
+    expect(props.onClose).toHaveBeenCalledWith("a");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("tints connection rows only while Shift is held and clears a missed keyup on blur", () => {
+    renderList();
+    const row = screen.getByRole("button", { name: "bastion" }).parentElement;
+
+    expect(row).not.toHaveClass("bg-danger/10");
+    fireEvent.keyDown(window, { key: "Shift" });
+    expect(row).toHaveClass("bg-danger/10");
+    fireEvent.keyUp(window, { key: "Shift" });
+    expect(row).not.toHaveClass("bg-danger/10");
+
+    fireEvent.keyDown(window, { key: "Shift" });
+    fireEvent.blur(window);
+    expect(row).not.toHaveClass("bg-danger/10");
   });
 
   it("says what ending the connection costs", async () => {

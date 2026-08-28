@@ -373,6 +373,34 @@ test("force closes a live local shell with one confirmation", async ({ page, ins
   await expect(rows).toHaveCount(0);
 });
 
+test("previews and closes a live connection immediately while Shift is held", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  await expect(rows).toHaveCount(1);
+
+  const row = rows.first();
+  const card = row.locator(":scope > div").first();
+  await page.keyboard.down("Shift");
+  await expect(card).toHaveClass(/bg-danger\/10/);
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-shift-close.png` });
+  }
+
+  const closeResponse = page.waitForResponse((response) => {
+    const request = response.request();
+    return request.method() === "DELETE" && /\/api\/v1\/terminal\/sessions\/[^/]+$/.test(new URL(response.url()).pathname);
+  });
+  await row.getByRole("button", { name: /^Close / }).click();
+  expect((await closeResponse).ok()).toBe(true);
+  await page.keyboard.up("Shift");
+
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(rows).toHaveCount(0);
+});
+
 test("moves to its own screen and leaves the connection detail alone", async ({ page, installation }) => {
   await installation.write("conf.d/20-detail.conf", ["Host detail-host", "\tHostName 127.0.0.1", ""].join("\n"));
   await openApplication(page, installation);

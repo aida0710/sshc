@@ -55,6 +55,7 @@ export function ConsoleList({
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropBefore, setDropBefore] = useState<string | null>(null);
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
+  const [shiftPressed, setShiftPressed] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const live = sessions.filter((session) => session.exited === undefined).length;
@@ -79,6 +80,31 @@ export function ConsoleList({
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [menuFor]);
+
+  useEffect(() => {
+    function keyDown(event: KeyboardEvent) {
+      if (event.key === "Shift") setShiftPressed(true);
+    }
+    function keyUp(event: KeyboardEvent) {
+      if (event.key === "Shift") setShiftPressed(false);
+    }
+    function clearShift() {
+      setShiftPressed(false);
+    }
+    function clearHiddenShift() {
+      if (document.hidden) clearShift();
+    }
+    window.addEventListener("keydown", keyDown);
+    window.addEventListener("keyup", keyUp);
+    window.addEventListener("blur", clearShift);
+    document.addEventListener("visibilitychange", clearHiddenShift);
+    return () => {
+      window.removeEventListener("keydown", keyDown);
+      window.removeEventListener("keyup", keyUp);
+      window.removeEventListener("blur", clearShift);
+      document.removeEventListener("visibilitychange", clearHiddenShift);
+    };
+  }, []);
 
   function move(id: string, delta: number) {
     const order = sessions.map((session) => session.id);
@@ -213,8 +239,10 @@ export function ConsoleList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`flex items-start gap-2 rounded-md px-2 py-1.5 ${
-                    session.id === selected ? "bg-select-fill" : "hover:bg-select-fill"
+                  className={`flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors ${
+                    shiftPressed
+                      ? "bg-danger/10 hover:bg-danger/10"
+                      : session.id === selected ? "bg-select-fill" : "hover:bg-select-fill"
                   }`}
                 >
 
@@ -277,9 +305,13 @@ export function ConsoleList({
                   <button
                     type="button"
                     aria-label={t("terminal.closeSession", { title: session.title })}
-                    onClick={() =>
-                      session.exited === undefined ? setClosing(session) : onClose(session.id)
-                    }
+                    onClick={(event) => {
+                      if (session.exited !== undefined || event.shiftKey || shiftPressed) {
+                        onClose(session.id);
+                        return;
+                      }
+                      setClosing(session);
+                    }}
                     className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill"
                   >
                     <Icon name="close" className="size-3.5" />
