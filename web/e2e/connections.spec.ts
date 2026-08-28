@@ -674,6 +674,7 @@ test("keeps sshc-only settings in the connection editor instead of a side inspec
 }) => {
   await openBastion(page, installation.url);
   await expect(page.getByRole("button", { name: "Show Display and classification" })).toHaveCount(0);
+  await expect(page.getByRole("tablist", { name: "Connection editor" })).toHaveCSS("position", "static");
   await page.getByRole("tab", { name: "sshc" }).click();
 
   await expect(page.getByRole("tabpanel", { name: "sshc" })).toBeVisible();

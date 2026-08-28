@@ -120,7 +120,7 @@ export function HostDetailPanel({
       ) : null}
 
       <div data-connection-editor className="min-w-0">
-        <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 grid grid-cols-4 border-b border-line bg-canvas/95 backdrop-blur-sm">
+        <div role="tablist" aria-label={t("conn.editorLabel")} className="grid grid-cols-4 border-b border-line">
           {areas.map((item) => (
             <button
               key={item.area}
