@@ -840,6 +840,7 @@ function PaddedSection({ section, navigation, handoff, shell, declared }: Sectio
   if (section === "Remote Keys") {
     return (
       <RemoteKeyPanel
+        hosts={declared.knownAliases}
         preferredPublicKeyPath={handoff.publicKey?.publicRelativePath ?? null}
         onPreferredPublicKeyHandled={handoff.onPublicKeyHandled}
       />
