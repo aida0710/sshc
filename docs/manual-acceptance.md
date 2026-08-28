@@ -142,15 +142,17 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 
 CIではLinux PTYの仮想Serial routerとlocalhostの仮想Telnet serverを用い、build済み`sshc` processまでの疎通を確認します。以下はその代替ではなく、PTY／loopbackで再現できないUSB列挙、電気的通信条件、modem line、物理抜線、実Telnet実装差を確認する実機項目です。
 
-1. 検証用Serial deviceを接続し、`sshc serial list`と`sshc serial list --json`の双方へ同じdeviceが現れることを確認する。Linuxでは利用者がdeviceを開く権限も確認する。
+1. 検証用Serial deviceを接続し、`sshc serial`と`sshc serial --json`の双方へ同じdeviceが現れることを確認する。Linuxでは利用者がdeviceを開く権限も確認する。
 2. deviceに合うbaud、data bits、parity、stop bitsを指定して対話接続し、双方向に操作でき、`Ctrl+]`で直ちに切断して別processからdeviceを再度openできることを確認する。
-3. `sshc run serial ... --expect ... --json -- <text>`を実行し、送信終端、受信transcript、matched、stepsCompleted、終了code 0を確認する。一致しないpatternでは指定timeout後にcode 124となることを確認する。
-4. 16 MiBを越えて出力し続ける検証endpointでは、`--max-bytes`到達時にcode 1で停止し、deviceが解放されることを確認する。
-5. 自分で管理するTelnet serverへ接続し、平文警告、IAC option交渉、端末size、literal 0xffの送受信、`Ctrl+]`切断を確認する。packet captureでも内容が暗号化されないことを確認し、実資格情報は使用しない。
-6. `sendEnv`を含むscriptでserverが秘密値をechoする構成を試し、text／JSON transcriptの双方に値が残らず`[REDACTED]`になることを確認する。command引数とscript fileには秘密を書かない。
-7. Shift_JISの検証endpointへ`--encoding shift_jis`で接続し、対話表示、送信、`--expect`、UTF-8のJSON transcriptがすべて正しく、TelnetのIAC交渉にも文字コード変換が混ざらないことを確認する。EUC-JPとISO-2022-JPも同様に確認する。
-8. SSH接続詳細で文字コードを保存し、ブラウザのターミナル、`sshc <alias>`、`sshc ssh <alias>`、`sshc run <alias>`が同じ設定を使うことを確認する。
-9. WindowsのCOM portとmacOS／Linuxのdevice pathでそれぞれ少なくとも一度確認する。Androidはunsupported errorとなり、Linuxの`/dev`を探索しないことを確認する。
+3. `sshc serial ... --non-interactive --expect ... --json -- <text>`を実行し、送信終端、受信transcript、matched、stepsCompleted、`bytesReceived`、終了code 0を確認する。一致しないpatternでは指定timeout後にcode 124となることを確認する。
+4. 応答しない検証endpointへ`--non-interactive --require-output --read-for 500ms --json`で送信し、終了code 1、`failure.kind`が`no_output`、`bytesReceived`が0になることを確認する。
+5. timeoutするscriptに、対象装置で安全と確認した復旧文字を`onFailure`で指定する。失敗時だけそのbyte列が送信され、JSONの`failureCleanup.attempted`と`success`がtrueになること、main step成功時には復旧文字も`failureCleanup`も現れないことを確認する。
+6. 16 MiBを越えて出力し続ける検証endpointでは、`--max-bytes`到達時にcode 1で停止し、deviceが解放されることを確認する。
+7. 自分で管理するTelnet serverへ接続し、平文警告、IAC option交渉、端末size、literal 0xffの送受信、`Ctrl+]`切断を確認する。packet captureでも内容が暗号化されないことを確認し、実資格情報は使用しない。
+8. `sendEnv`を含むscriptでserverが秘密値をechoする構成を試し、text／JSON transcriptの双方に値が残らず`[REDACTED]`になることを確認する。command引数とscript fileには秘密を書かない。
+9. Shift_JISの検証endpointへ`--encoding shift_jis`で接続し、対話表示、送信、`--expect`、UTF-8のJSON transcriptがすべて正しく、TelnetのIAC交渉にも文字コード変換が混ざらないことを確認する。EUC-JPとISO-2022-JPも同様に確認する。
+10. SSH接続詳細で文字コードを保存し、ブラウザのターミナル、`sshc ssh <alias>`、`sshc ssh <alias> --non-interactive -- <command>`が同じ設定を使うことを確認する。
+11. WindowsのCOM portとmacOS／Linuxのdevice pathでそれぞれ少なくとも一度確認する。Androidはunsupported errorとなり、Linuxの`/dev`を探索しないことを確認する。
 
 ## 記録
 

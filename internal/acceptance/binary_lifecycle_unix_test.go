@@ -109,7 +109,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 		}
 	}
 
-	// アクセス URLは名簿から読む。それが `sshc <alias>` の通る道であり、engine が
+	// アクセス URLは名簿から読む。それが `sshc ssh <alias>` の通る道であり、engine が
 	// 実際に受け付けていることの公開された証拠である。
 	var document handoff.Handoff
 	deadline := time.Now().Add(15 * time.Second)
@@ -154,7 +154,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	assertBoundToLoopbackOnly(t, host)
 
 	// engine はブートストラップを出力しない。資格情報は名簿にあり、それを
-	// 持つのは `sshc <alias>` である。ここではその公開された経路を通す。
+	// 持つのは `sshc ssh <alias>` である。ここではその公開された経路を通す。
 	status, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+httpserver.StatusPath, nil)
 	if err != nil {
 		t.Fatal(err)

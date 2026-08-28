@@ -41,7 +41,6 @@ type invocation struct {
 const (
 	engineSubcommand  = "engine"
 	vaultSubcommand   = "vault"
-	runSubcommand     = "run"
 	helpSubcommand    = "help"
 	versionSubcommand = "version"
 	updateSubcommand  = "update"
@@ -69,43 +68,18 @@ func parseInvocation(argv []string) (invocation, error) {
 	switch word {
 	case engineSubcommand:
 		return parseEngineFlags(args)
-	case ConnectSubcommand:
-		if len(args) > 1 {
-			return invalidInvocation("connect takes at most one search term")
-		}
+	case serialSubcommand:
 		if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
 			return invocation{Kind: invocationHelp}, nil
 		}
-		return invocation{Kind: invocationChoose, Args: copyInvocationArgs(args)}, nil
-	case runSubcommand:
-		if len(args) > 0 && args[0] == serialSubcommand {
-			return parseTransportInvocation(transportSerial, args[1:], true)
-		}
-		if len(args) > 0 && args[0] == telnetSubcommand {
-			return parseTransportInvocation(transportTelnet, args[1:], true)
-		}
-		if len(args) > 0 && args[0] == sshSubcommand {
-			if len(args) < 4 || args[2] != "--" {
-				return invalidInvocation("run ssh requires an alias, --, and a command")
-			}
-			return invocation{Kind: invocationRun, Args: append([]string{args[1]}, args[3:]...)}, nil
-		}
-		// 先頭引数を接続先、残りをリモートコマンドとして扱う。
-		if len(args) < 2 {
-			return invalidInvocation("run requires an alias and a command")
-		}
-		return invocation{Kind: invocationRun, Args: copyInvocationArgs(args)}, nil
-	case serialSubcommand:
-		return parseTransportInvocation(transportSerial, args, false)
+		return parseTransportInvocation(transportSerial, args)
 	case telnetSubcommand:
-		return parseTransportInvocation(transportTelnet, args, false)
-	case sshSubcommand:
-		if len(args) != 1 {
-			return invalidInvocation("ssh requires one alias")
+		if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
+			return invocation{Kind: invocationHelp}, nil
 		}
-		return invocation{Kind: invocationConnect, Args: copyInvocationArgs(args)}, nil
-	case ListSubcommand:
-		return noArguments(invocationList, word, args)
+		return parseTransportInvocation(transportTelnet, args)
+	case sshSubcommand:
+		return parseSSHInvocation(args)
 	case OpenSubcommand:
 		return noArguments(invocationOpen, word, args)
 	case StatusSubcommand:
@@ -134,13 +108,34 @@ func parseInvocation(argv []string) (invocation, error) {
 		return noArguments(invocationVersion, word, args)
 	}
 
-	if word == "" || word[0] == '-' {
-		return invalidInvocation(fmt.Sprintf("unknown command %q", word))
+	return invalidInvocation(fmt.Sprintf("unknown command %q", word))
+}
+
+// parseSSHInvocation は alias を ssh namespace の内側だけで解釈する。
+// transport や将来の top-level command と同名でも、alias の意味は変わらない。
+func parseSSHInvocation(args []string) (invocation, error) {
+	if len(args) == 0 {
+		return invocation{Kind: invocationChoose}, nil
 	}
-	if len(args) != 0 {
-		return invalidInvocation("an SSH alias takes no extra arguments")
+	if len(args) == 1 {
+		switch args[0] {
+		case "--list":
+			return invocation{Kind: invocationList}, nil
+		case "-h", "--help":
+			return invocation{Kind: invocationHelp}, nil
+		}
+		if args[0] == "" || args[0][0] == '-' {
+			return invalidInvocation("ssh requires an alias")
+		}
+		return invocation{Kind: invocationConnect, Args: copyInvocationArgs(args)}, nil
 	}
-	return invocation{Kind: invocationConnect, Args: []string{word}}, nil
+	if args[0] == "" || args[0][0] == '-' {
+		return invalidInvocation("non-interactive SSH requires an alias before --non-interactive")
+	}
+	if len(args) < 4 || args[1] != "--non-interactive" || args[2] != "--" {
+		return invalidInvocation("non-interactive SSH requires an alias, --non-interactive, --, and a command")
+	}
+	return invocation{Kind: invocationRun, Args: append([]string{args[0]}, args[3:]...)}, nil
 }
 
 // parseEngineFlags は `sshc engine` のオプションを解析する。
@@ -193,12 +188,11 @@ func usage(out io.Writer) {
   sshc engine          start the engine in the foreground
                        --port <n>  listen there instead of a random port
                        --replace   stop the running engine first, without asking
-  sshc <alias>         connect to a host from ~/.ssh/config in this terminal
-  sshc run <alias> ... run a non-interactive command on a host
-  sshc ssh <alias>     connect to an alias named like a reserved command
-  sshc run ssh <alias> -- ...
-                       explicitly run an SSH command
-  sshc serial list [--json]
+  sshc ssh [<alias>]   choose a host, or connect to one from ~/.ssh/config
+                       --list      print every concrete Host alias
+  sshc ssh <alias> --non-interactive -- <command>
+                       run an SSH command without an interactive terminal
+  sshc serial [--json]
                        list serial devices
   sshc serial <device> [options]
                        connect interactively to a serial device
@@ -208,14 +202,13 @@ func usage(out io.Writer) {
   sshc telnet <host>[:port] [options]
                        connect interactively with unencrypted Telnet
                        options: --connect-timeout D --terminal-type TYPE --encoding NAME
-  sshc run serial <device> [options] -- <text>
-  sshc run telnet <host>[:port] [options] -- <text>
+  sshc serial <device> [options] --non-interactive [automation] -- <text>
+  sshc telnet <host>[:port] [options] --non-interactive [automation] -- <text>
                        send text and wait for --expect or --read-for
                        automation: --expect REGEX | --read-for D | --script FILE|-
-                                   --timeout D --settle D --max-bytes N --line-ending MODE --json
+                                   --timeout D --settle D --max-bytes N --line-ending MODE
+                                   --require-output --json
                        encodings: utf-8, shift_jis, euc-jp, iso-2022-jp
-  sshc connect [text]  choose a host in this terminal, then connect
-  sshc list            print every concrete Host alias, one per line
   sshc open            print a one-time UI URL
   sshc status          print what the running engine is doing
                        --json      print it as JSON, for the shell

@@ -7,8 +7,9 @@
 ```sh
 sshc engine                       # Ctrl+C で終了コード 130、SIGTERM で 0
 sshc vault unlock                 # 別のターミナルから実行
-sshc <接続先>                     # 保存済みの資格情報を利用して接続
-sshc run <接続先> <コマンド...>  # ターミナルを開かずにコマンドを実行
+sshc ssh <接続先>                 # 保存済みの資格情報を利用して接続
+sshc ssh <接続先> --non-interactive -- <コマンド...>
+                                  # ターミナルを開かずにコマンドを実行
 ```
 
 ## systemd（ユーザーサービス）
@@ -65,7 +66,7 @@ ENTRYPOINT ["sshc", "engine"]
 ```sh
 docker run -d --name sshc -v sshc-home:/home/sshc sshc
 docker exec -it sshc sshc vault unlock
-docker exec -it sshc sshc <接続先>
+docker exec -it sshc sshc ssh <接続先>
 ```
 
 vault のロック解除には対話端末が必要なので、`docker exec` に `-it` を指定します。マスターパスワードを `docker run -e` で渡す機能はありません。

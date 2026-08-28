@@ -211,7 +211,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Version:         version,
 		ProtocolVersion: handoff.ProtocolVersion,
 	}
-	// handoff を書けないことは致命である。 書けなかった常駐は、`sshc <alias>`
+	// handoff を書けないことは致命である。書けなかった常駐は、`sshc ssh <alias>`
 	if err := handoff.Write(HandoffDir(dependencies.Home), document); err != nil {
 		if removeErr := handoff.Remove(HandoffDir(dependencies.Home), document.Secret); removeErr != nil {
 			err = errors.Join(err, fmt.Errorf("remove the possibly published handoff: %w", removeErr))

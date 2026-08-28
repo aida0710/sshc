@@ -23,6 +23,7 @@ type transportInvocation struct {
 	List           bool
 	JSON           bool
 	Run            bool
+	RequireOutput  bool
 	Command        []string
 	Script         string
 	Expect         string
@@ -69,26 +70,22 @@ func defaultTransportInvocation(kind transportKind, run bool) transportInvocatio
 	return called
 }
 
-func parseTransportInvocation(kind transportKind, args []string, run bool) (invocation, error) {
-	called := defaultTransportInvocation(kind, run)
-	if kind == transportSerial && !run && len(args) > 0 && args[0] == "list" {
+func parseTransportInvocation(kind transportKind, args []string) (invocation, error) {
+	called := defaultTransportInvocation(kind, false)
+	if kind == transportSerial && (len(args) == 0 || len(args) == 1 && args[0] == "--json") {
 		called.List = true
-		seenJSON := false
-		for _, argument := range args[1:] {
-			if argument != "--json" || seenJSON {
-				return invalidInvocation("serial list only accepts --json")
-			}
-			seenJSON = true
-			called.JSON = true
-		}
+		called.JSON = len(args) == 1
 		return invocation{Kind: invocationTransport, Transport: &called}, nil
+	}
+	if kind == transportSerial && len(args) > 0 && args[0] == "list" {
+		return invalidInvocation("serial no longer takes list; use sshc serial or sshc serial --json")
 	}
 
 	delimited := false
 	seenOptions := make(map[string]struct{})
 	for index := 0; index < len(args); index++ {
 		argument := args[index]
-		if run && argument == "--" {
+		if called.Run && argument == "--" {
 			delimited = true
 			called.Command = copyInvocationArgs(args[index+1:])
 			break
@@ -110,6 +107,19 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 				return args[index], nil
 			}
 			switch name {
+			case "--non-interactive":
+				if hasInline {
+					return invalidInvocation("--non-interactive does not take a value")
+				}
+				called.Run = true
+			case "--require-output":
+				if hasInline {
+					return invalidInvocation("--require-output does not take a value")
+				}
+				if !called.Run {
+					return invalidInvocation("--require-output requires --non-interactive")
+				}
+				called.RequireOutput = true
 			case "--json":
 				if hasInline {
 					return invalidInvocation("--json does not take a value")
@@ -238,8 +248,8 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 					return invalidInvocation(err.Error())
 				}
 			case "--expect":
-				if !run {
-					return invalidInvocation("--expect requires sshc run")
+				if !called.Run {
+					return invalidInvocation("--expect requires --non-interactive")
 				}
 				value, err := takeValue()
 				if err != nil {
@@ -247,8 +257,8 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 				}
 				called.Expect = value
 			case "--read-for":
-				if !run {
-					return invalidInvocation("--read-for requires sshc run")
+				if !called.Run {
+					return invalidInvocation("--read-for requires --non-interactive")
 				}
 				value, err := takeValue()
 				if err != nil {
@@ -259,8 +269,8 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 					return invalidInvocation(err.Error())
 				}
 			case "--timeout":
-				if !run {
-					return invalidInvocation("--timeout requires sshc run")
+				if !called.Run {
+					return invalidInvocation("--timeout requires --non-interactive")
 				}
 				value, err := takeValue()
 				if err != nil {
@@ -271,8 +281,8 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 					return invalidInvocation(err.Error())
 				}
 			case "--settle":
-				if !run {
-					return invalidInvocation("--settle requires sshc run")
+				if !called.Run {
+					return invalidInvocation("--settle requires --non-interactive")
 				}
 				value, err := takeValue()
 				if err != nil {
@@ -283,8 +293,8 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 					return invalidInvocation(fmt.Sprintf("--settle takes a duration between 0 and %s", streamrun.MaxSettle))
 				}
 			case "--max-bytes":
-				if !run {
-					return invalidInvocation("--max-bytes requires sshc run")
+				if !called.Run {
+					return invalidInvocation("--max-bytes requires --non-interactive")
 				}
 				value, err := takeValue()
 				if err != nil {
@@ -295,8 +305,8 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 					return invalidInvocation(fmt.Sprintf("--max-bytes takes a number between 1 and %d", streamrun.MaxMaxBytes))
 				}
 			case "--line-ending":
-				if !run {
-					return invalidInvocation("--line-ending requires sshc run")
+				if !called.Run {
+					return invalidInvocation("--line-ending requires --non-interactive")
 				}
 				value, err := takeValue()
 				if err != nil {
@@ -308,8 +318,8 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 				}
 				called.LineEnding = ending
 			case "--script":
-				if !run {
-					return invalidInvocation("--script requires sshc run")
+				if !called.Run {
+					return invalidInvocation("--script requires --non-interactive")
 				}
 				value, err := takeValue()
 				if err != nil {
@@ -336,9 +346,9 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 	if called.Target[0] == '-' {
 		return invalidInvocation(string(kind) + " target must not start with -")
 	}
-	if !run {
+	if !called.Run {
 		if called.JSON || called.Expect != "" || called.ReadFor != 0 || called.Script != "" {
-			return invalidInvocation("automation options require sshc run")
+			return invalidInvocation("automation options require --non-interactive")
 		}
 		return invocation{Kind: invocationTransport, Transport: &called}, nil
 	}
@@ -348,10 +358,10 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 		}
 	} else {
 		if !delimited || len(called.Command) == 0 {
-			return invalidInvocation("run transport requires -- followed by text, or --script")
+			return invalidInvocation("non-interactive transport requires -- followed by text, or --script")
 		}
 		if (called.Expect == "") == (called.ReadFor == 0) {
-			return invalidInvocation("run transport requires exactly one of --expect or --read-for")
+			return invalidInvocation("non-interactive transport requires exactly one of --expect or --read-for")
 		}
 		if len(strings.Join(called.Command, " ")) > streamrun.MaxSendBytes {
 			return invalidInvocation(fmt.Sprintf("command exceeds %d bytes", streamrun.MaxSendBytes))

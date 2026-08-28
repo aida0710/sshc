@@ -7,9 +7,6 @@ import (
 	"sshc/internal/app"
 )
 
-// ListSubcommand は、OpenSSH が config と Include から読み取る具体的な接続名を列挙する。
-const ListSubcommand = "list"
-
 func runList(home string, stdout, stderr io.Writer) int {
 	connections, err := app.ReadConnections(home)
 	if err != nil {

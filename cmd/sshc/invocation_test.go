@@ -7,19 +7,20 @@ import (
 	"testing"
 )
 
-// 接続先とコマンドは別の引数である。ひとつの語に兼ねさせると、どこまでが
-// 接続先でどこからがコマンドかを推測することになる。
-func TestRunTakesAnAliasAndACommand(t *testing.T) {
+// 非対話SSHは mode flag と delimiter を要求する。これを緩めると接続optionと
+// remote commandの境界が、引数の内容によって変わってしまう。
+func TestSSHNonInteractiveTakesAnAliasDelimiterAndCommand(t *testing.T) {
 	for _, argv := range [][]string{
-		{"sshc", "run"},
-		{"sshc", "run", "win"},
+		{"sshc", "ssh", "win", "--non-interactive"},
+		{"sshc", "ssh", "win", "--non-interactive", "--"},
+		{"sshc", "ssh", "--non-interactive", "--", "hostname"},
 	} {
 		if _, err := parseInvocation(argv); err == nil {
-			t.Errorf("%v was accepted; run needs an alias and a command", argv)
+			t.Errorf("%v was accepted; non-interactive SSH needs an alias, --, and a command", argv)
 		}
 	}
 
-	called, err := parseInvocation([]string{"sshc", "run", "win", "go", "test", "./..."})
+	called, err := parseInvocation([]string{"sshc", "ssh", "win", "--non-interactive", "--", "go", "test", "./..."})
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -48,13 +49,11 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 	}{
 		{[]string{"sshc"}, invocationDesktop, nil},
 		{[]string{"sshc", "engine"}, invocationEngine, nil},
-		// headless はもう予約語ではない。engine を持つ道が 1 つになったので、
-		// この表記は他と同じただの接続先として読まれる。
-		{[]string{"sshc", "headless"}, invocationConnect, []string{"headless"}},
-		{[]string{"sshc", "server-a"}, invocationConnect, []string{"server-a"}},
-		{[]string{"sshc", "connect"}, invocationChoose, nil},
-		{[]string{"sshc", "connect", "prod"}, invocationChoose, []string{"prod"}},
-		{[]string{"sshc", "list"}, invocationList, nil},
+		{[]string{"sshc", "ssh"}, invocationChoose, nil},
+		{[]string{"sshc", "ssh", "headless"}, invocationConnect, []string{"headless"}},
+		{[]string{"sshc", "ssh", "server-a"}, invocationConnect, []string{"server-a"}},
+		{[]string{"sshc", "ssh", "--list"}, invocationList, nil},
+		{[]string{"sshc", "ssh", "--help"}, invocationHelp, nil},
 		{[]string{"sshc", "open"}, invocationOpen, nil},
 		{[]string{"sshc", "status"}, invocationStatus, nil},
 		{[]string{"sshc", "vault", "status"}, invocationVault, []string{"status"}},
@@ -84,12 +83,46 @@ func TestUsageNamesEveryVaultAction(t *testing.T) {
 	}
 }
 
+// help が旧構文を残すと、parserが意図的に拒否する入口へ利用者を誘導する。
+func TestUsageDocumentsOnlyExplicitTransportCommands(t *testing.T) {
+	var output strings.Builder
+	usage(&output)
+	text := output.String()
+	for _, want := range []string{
+		"sshc ssh [<alias>]",
+		"sshc ssh <alias> --non-interactive -- <command>",
+		"sshc serial [--json]",
+		"sshc serial <device>",
+		"sshc telnet <host>[:port]",
+		"--non-interactive",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("usage does not contain %q:\n%s", want, text)
+		}
+	}
+	for _, obsolete := range []string{
+		"sshc <alias>",
+		"sshc run",
+		"sshc connect",
+		"sshc list",
+		"sshc serial list",
+	} {
+		if strings.Contains(text, obsolete) {
+			t.Errorf("usage still contains obsolete syntax %q:\n%s", obsolete, text)
+		}
+	}
+}
+
 func TestParseInvocationRejectsArgumentsThatDoNotNameACommand(t *testing.T) {
 	tests := [][]string{
 		{"sshc", "--own-engine"},
 		{"sshc", "engine", "extra"},
 		{"sshc", "vault", "rotate"},
+		{"sshc", "server-a"},
 		{"sshc", "server-a", "extra"},
+		{"sshc", "connect"},
+		{"sshc", "list"},
+		{"sshc", "run", "server-a", "hostname"},
 	}
 	for _, argv := range tests {
 		if got, err := parseInvocation(argv); err == nil || got.Kind != invocationInvalid {

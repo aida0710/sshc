@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"sshc/internal/serialtransport"
+	"sshc/internal/streamrun"
 	"sshc/internal/telnet"
 	"sshc/internal/textencoding"
 )
@@ -18,6 +19,15 @@ import (
 type failingOutput struct{}
 
 func (failingOutput) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+type blockingWriter struct {
+	release <-chan struct{}
+}
+
+func (writer blockingWriter) Write(buffer []byte) (int, error) {
+	<-writer.release
+	return len(buffer), nil
+}
 
 type fakeDuplex struct {
 	reader io.Reader
@@ -178,6 +188,91 @@ func TestRunTransportAutomationRedactsEnvironmentSecret(t *testing.T) {
 	}
 }
 
+func TestRunTransportAutomationSendsExplicitFailureCleanup(t *testing.T) {
+	called := defaultTransportInvocation(transportSerial, true)
+	called.Target = "/dev/ttyUSB0"
+	called.Script = "-"
+	called.JSON = true
+	reader, writer := io.Pipe()
+	t.Cleanup(func() { _ = writer.Close() })
+	stream := &fakeDuplex{reader: reader, close: reader.Close}
+	dependencies := transportDependencies{
+		openSerial: func(context.Context, serialtransport.Config) (duplexStream, error) { return stream, nil },
+	}
+	document := `{
+		"version": 1,
+		"steps": [
+			{"send": "show version"},
+			{"expect": "router#", "timeout": "10ms"}
+		],
+		"onFailure": {"send": "\u0003", "lineEnding": "none", "timeout": "100ms"}
+	}`
+	var stdout, stderr bytes.Buffer
+	code := runTransportAutomation(context.Background(), called, nil, strings.NewReader(document), &stdout, &stderr, dependencies)
+	var report struct {
+		Success        bool `json:"success"`
+		FailureCleanup *struct {
+			Attempted bool `json:"attempted"`
+			Success   bool `json:"success"`
+		} `json:"failureCleanup"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if code != transportTimeoutExit || stderr.Len() != 0 || report.Success || report.FailureCleanup == nil || !report.FailureCleanup.Attempted || !report.FailureCleanup.Success {
+		t.Fatalf("code = %d, stderr = %q, report = %#v", code, stderr.String(), report)
+	}
+	if got := stream.written(); got != "show version\r\x03" {
+		t.Fatalf("written = %q", got)
+	}
+}
+
+func TestRunTransportAutomationSkipsFailureCleanupOnSuccess(t *testing.T) {
+	called := defaultTransportInvocation(transportSerial, true)
+	called.Target = "/dev/ttyUSB0"
+	called.Script = "-"
+	called.JSON = true
+	called.Settle = 0
+	stream := &fakeDuplex{reader: strings.NewReader("router#")}
+	dependencies := transportDependencies{
+		openSerial: func(context.Context, serialtransport.Config) (duplexStream, error) { return stream, nil },
+	}
+	document := `{
+		"version": 1,
+		"steps": [
+			{"send": "show version"},
+			{"expect": "router#"}
+		],
+		"onFailure": {"send": "\u0003", "lineEnding": "none", "timeout": "100ms"}
+	}`
+	var stdout, stderr bytes.Buffer
+	code := runTransportAutomation(context.Background(), called, nil, strings.NewReader(document), &stdout, &stderr, dependencies)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+	}
+	if got := stream.written(); got != "show version\r" {
+		t.Fatalf("written = %q", got)
+	}
+	if strings.Contains(stdout.String(), "failureCleanup") {
+		t.Fatalf("success report contains failure cleanup: %s", stdout.String())
+	}
+}
+
+func TestRunTransportFailureCleanupIsBounded(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	started := time.Now()
+	report := runTransportFailureCleanup(context.Background(), blockingWriter{release: release}, transportFailureCleanup{
+		Send: "q", LineEnding: streamrun.EndingNone, Timeout: 10 * time.Millisecond,
+	})
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("cleanup took %s", elapsed)
+	}
+	if !report.Attempted || report.Success || report.Error != "cleanup write timed out" {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
 func TestRunTransportAutomationEncodesInvalidUTF8(t *testing.T) {
 	called := defaultTransportInvocation(transportTelnet, true)
 	called.Target = "console.example"
@@ -221,6 +316,73 @@ func TestRunTransportAutomationReturnsTimeoutCodeForReadFor(t *testing.T) {
 	}
 }
 
+func TestRequireOutputRejectsSilentReadFor(t *testing.T) {
+	called, err := parseInvocation([]string{
+		"sshc", "serial", "/dev/ttyUSB0", "--non-interactive",
+		"--require-output", "--read-for", "10ms", "--json", "--", "show", "clock",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	t.Cleanup(func() { _ = writer.Close() })
+	stream := &fakeDuplex{reader: reader, close: reader.Close}
+	dependencies := transportDependencies{
+		openSerial: func(context.Context, serialtransport.Config) (duplexStream, error) { return stream, nil },
+	}
+	var stdout, stderr bytes.Buffer
+	code := runTransportAutomation(context.Background(), *called.Transport, nil, strings.NewReader(""), &stdout, &stderr, dependencies)
+	var report struct {
+		Success       bool `json:"success"`
+		BytesReceived int  `json:"bytesReceived"`
+		Failure       *struct {
+			Kind string `json:"kind"`
+		} `json:"failure"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if code != transportFailureExit || stderr.Len() != 0 || report.Success || report.BytesReceived != 0 || report.Failure == nil || report.Failure.Kind != "no_output" {
+		t.Fatalf("code = %d, stderr = %q, report = %#v", code, stderr.String(), report)
+	}
+}
+
+func TestRequireOutputAcceptsReadForResponse(t *testing.T) {
+	called, err := parseInvocation([]string{
+		"sshc", "serial", "/dev/ttyUSB0", "--non-interactive",
+		"--require-output", "--read-for", "20ms", "--json", "--", "show", "clock",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	t.Cleanup(func() { _ = writer.Close() })
+	stream := &fakeDuplex{reader: reader, close: reader.Close}
+	dependencies := transportDependencies{
+		openSerial: func(context.Context, serialtransport.Config) (duplexStream, error) { return stream, nil },
+	}
+	written := make(chan error, 1)
+	go func() {
+		_, err := writer.Write([]byte("ready"))
+		written <- err
+	}()
+	var stdout, stderr bytes.Buffer
+	code := runTransportAutomation(context.Background(), *called.Transport, nil, strings.NewReader(""), &stdout, &stderr, dependencies)
+	if err := <-written; err != nil {
+		t.Fatal(err)
+	}
+	var report struct {
+		Success       bool `json:"success"`
+		BytesReceived int  `json:"bytesReceived"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if code != 0 || stderr.Len() != 0 || !report.Success || report.BytesReceived != len("ready") {
+		t.Fatalf("code = %d, stderr = %q, report = %#v", code, stderr.String(), report)
+	}
+}
+
 func TestRunSerialListJSONIsStable(t *testing.T) {
 	dependencies := transportDependencies{
 		listSerial: func(context.Context) ([]serialtransport.Device, error) {
@@ -230,6 +392,28 @@ func TestRunSerialListJSONIsStable(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runSerialList(context.Background(), true, &stdout, &stderr, dependencies)
 	if code != 0 || stderr.Len() != 0 || stdout.String() != "{\"schemaVersion\":1,\"devices\":[{\"name\":\"COM3\",\"isUsb\":false},{\"name\":\"COM8\",\"isUsb\":false}]}\n" {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestRunSerialListHumanOutputIdentifiesUSBDevices(t *testing.T) {
+	dependencies := transportDependencies{
+		listSerial: func(context.Context) ([]serialtransport.Device, error) {
+			return []serialtransport.Device{
+				{Name: "/dev/cu.debug-console"},
+				{
+					Name: "/dev/cu.usbserial-A5069RR4", USB: true,
+					VID: "0403", PID: "6001", SerialNumber: "A5069RR4",
+					Product: "FT232R USB UART", Manufacturer: "FTDI",
+				},
+			}, nil
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	code := runSerialList(context.Background(), false, &stdout, &stderr, dependencies)
+	want := "/dev/cu.debug-console\n" +
+		"/dev/cu.usbserial-A5069RR4  [USB 0403:6001]  FTDI / FT232R USB UART  [serial A5069RR4]\n"
+	if code != 0 || stderr.Len() != 0 || stdout.String() != want {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
 	}
 }

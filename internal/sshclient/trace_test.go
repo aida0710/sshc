@@ -62,7 +62,7 @@ func TestEveryTracedLineEndsTheWayATerminalNeeds(t *testing.T) {
 	}
 }
 
-// nil の tracer でも落ちない。途中経過を出さない道（`sshc run` や到達確認）は
+// nil の tracer でも落ちない。途中経過を出さない道（`--non-interactive` や到達確認）は
 // tracer を持たないまま同じ関数を通る。
 func TestANilTracerIsSafeToUse(t *testing.T) {
 	var trace *tracer

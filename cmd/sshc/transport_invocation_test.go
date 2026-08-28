@@ -10,7 +10,7 @@ import (
 )
 
 func TestParseSerialListJSON(t *testing.T) {
-	called, err := parseInvocation([]string{"sshc", "serial", "list", "--json"})
+	called, err := parseInvocation([]string{"sshc", "serial", "--json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,8 +64,8 @@ func TestParseTransportEncodingCanonicalisesCommonNames(t *testing.T) {
 	}
 }
 
-func TestParseRunSerialKeepsTextAfterDelimiter(t *testing.T) {
-	called, err := parseInvocation([]string{"sshc", "run", "serial", "COM3", "--expect", `router# $`, "--line-ending", "crlf", "--", "show", "version"})
+func TestParseNonInteractiveSerialKeepsTextAfterDelimiter(t *testing.T) {
+	called, err := parseInvocation([]string{"sshc", "serial", "COM3", "--non-interactive", "--expect", `router# $`, "--line-ending", "crlf", "--", "show", "version"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +75,8 @@ func TestParseRunSerialKeepsTextAfterDelimiter(t *testing.T) {
 	}
 }
 
-func TestParseRunTelnetScript(t *testing.T) {
-	called, err := parseInvocation([]string{"sshc", "run", "telnet", "router", "--script", "-", "--json"})
+func TestParseNonInteractiveTelnetScript(t *testing.T) {
+	called, err := parseInvocation([]string{"sshc", "telnet", "router", "--non-interactive", "--script", "-", "--json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,37 +85,35 @@ func TestParseRunTelnetScript(t *testing.T) {
 	}
 }
 
-func TestParseExplicitSSHAndPreserveLegacyRunDelimiter(t *testing.T) {
-	explicit, err := parseInvocation([]string{"sshc", "run", "ssh", "serial", "--", "uname", "-a"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if explicit.Kind != invocationRun || !reflect.DeepEqual(explicit.Args, []string{"serial", "uname", "-a"}) {
-		t.Fatalf("explicit = %#v", explicit)
-	}
-	legacy, err := parseInvocation([]string{"sshc", "run", "production", "--", "uname", "-a"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(legacy.Args, []string{"production", "--", "uname", "-a"}) {
-		t.Fatalf("legacy = %#v", legacy)
-	}
+func TestParseExplicitSSHAllowsTransportNamesAsAliases(t *testing.T) {
 	interactive, err := parseInvocation([]string{"sshc", "ssh", "telnet"})
-	if err != nil || interactive.Kind != invocationConnect || !reflect.DeepEqual(interactive.Args, []string{"telnet"}) {
-		t.Fatalf("interactive = %#v, %v", interactive, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if interactive.Kind != invocationConnect || !reflect.DeepEqual(interactive.Args, []string{"telnet"}) {
+		t.Fatalf("interactive = %#v", interactive)
+	}
+	nonInteractive, err := parseInvocation([]string{"sshc", "ssh", "serial", "--non-interactive", "--", "uname", "-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nonInteractive.Kind != invocationRun || !reflect.DeepEqual(nonInteractive.Args, []string{"serial", "uname", "-a"}) {
+		t.Fatalf("non-interactive = %#v", nonInteractive)
 	}
 }
 
 func TestTransportParserRejectsAmbiguousOrUnsafeShapes(t *testing.T) {
 	cases := [][]string{
-		{"sshc", "serial"},
 		{"sshc", "telnet"},
-		{"sshc", "run", "serial", "COM3", "--", "show"},
-		{"sshc", "run", "telnet", "router", "--expect", "#", "--read-for", "1s", "--", "show"},
-		{"sshc", "run", "serial", "COM3", "--expect", "#", "--expect", ">", "--", "show"},
+		{"sshc", "serial", "list"},
+		{"sshc", "serial", "COM3", "--expect", "#", "--", "show"},
+		{"sshc", "serial", "COM3", "--non-interactive", "--", "show"},
+		{"sshc", "telnet", "router", "--non-interactive", "--expect", "#", "--read-for", "1s", "--", "show"},
+		{"sshc", "serial", "COM3", "--non-interactive", "--expect", "#", "--expect", ">", "--", "show"},
 		{"sshc", "telnet", "router", "--baud", "9600"},
 		{"sshc", "serial", "COM3", "--line-ending", "lf"},
-		{"sshc", "run", "ssh", "host", "uname"},
+		{"sshc", "ssh", "host", "--", "uname"},
+		{"sshc", "run", "ssh", "host", "--", "uname"},
 	}
 	for _, argv := range cases {
 		if _, err := parseInvocation(argv); err == nil {
