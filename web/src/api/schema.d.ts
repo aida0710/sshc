@@ -1976,8 +1976,18 @@ export interface components {
             state: "connecting" | "connected" | "reconnecting" | "exited";
             problem: string;
             reconnect?: components["schemas"]["TerminalReconnect"];
+            progress?: components["schemas"]["TerminalConnectionProgress"];
             exited?: components["schemas"]["TerminalExit"];
             forwards?: components["schemas"]["TerminalForward"][];
+        };
+        TerminalConnectionProgress: {
+            /** @enum {string} */
+            phase: "dialing" | "host_key" | "authenticating" | "authenticated" | "opening_session";
+            alias: string;
+            hostName: string;
+            user: string;
+            hop: number;
+            hops: number;
         };
         TerminalReconnect: {
             attempt: number;

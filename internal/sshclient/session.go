@@ -39,11 +39,12 @@ type Session struct {
 	// タイムアウトまで goroutine とソケットを保持する。
 	cancel context.CancelFunc
 
-	mutex   sync.Mutex
-	closed  bool
-	remote  *ssh.Session
-	size    terminal.Size
-	closers []io.Closer
+	mutex    sync.Mutex
+	closed   bool
+	remote   *ssh.Session
+	size     terminal.Size
+	closers  []io.Closer
+	progress terminal.ConnectionProgress
 
 	// forwarded は、この接続上の転送。セッション終了時にまとめて閉じる。
 	forwarded forwards
@@ -81,6 +82,21 @@ func (s *Session) Prompter() Prompter {
 // AwaitingPrompt reports whether Ready前の入力が、いま表示した認証promptへの
 // 回答として受理される。terminal registryはそれ以外の先行入力を捨てる。
 func (s *Session) AwaitingPrompt() bool { return s.input.awaitingPrompt() }
+
+// ConnectionProgress returns a snapshot of the current SSH connection step.
+// The terminal registry polls this while the asynchronous handshake is still
+// running, so ProxyJump failures can be attributed to the correct hop.
+func (s *Session) ConnectionProgress() terminal.ConnectionProgress {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.progress
+}
+
+func (s *Session) setProgress(progress terminal.ConnectionProgress) {
+	s.mutex.Lock()
+	s.progress = progress
+	s.mutex.Unlock()
+}
 
 // Ready reports when authentication and remote shell startup have completed.
 // Startup automation waits here so its bytes cannot answer an authentication prompt.

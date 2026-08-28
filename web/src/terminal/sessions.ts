@@ -65,13 +65,19 @@ export function useTerminalSessions(
     };
   }, [refresh]);
 
+  const connectionInProgress = sessions.some(
+    (session) => session.state === "connecting" || session.state === "reconnecting",
+  );
+
   useEffect(() => {
     if (!enabled || sessions.length === 0) return;
+    // 接続中だけ細かく確認する。通常稼働中の一覧は従来どおり低頻度に保ち、
+    // ProxyJumpのホップや認証待ちだけを人が追える速さで更新する。
     const timer = window.setInterval(() => {
       if (!document.hidden) void refresh();
-    }, 2_000);
+    }, connectionInProgress ? 500 : 2_000);
     return () => window.clearInterval(timer);
-  }, [enabled, refresh, sessions.length]);
+  }, [connectionInProgress, enabled, refresh, sessions.length]);
 
   const open = useCallback(
     async (request: OpenTerminalSessionRequest): Promise<TerminalSession | null> => {

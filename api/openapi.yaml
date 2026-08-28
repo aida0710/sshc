@@ -2419,9 +2419,23 @@ components:
         # 画面が翻訳する固定コード。raw transport error は返さない。
         problem: { type: string }
         reconnect: { $ref: "#/components/schemas/TerminalReconnect" }
+        progress: { $ref: "#/components/schemas/TerminalConnectionProgress" }
         exited: { $ref: "#/components/schemas/TerminalExit" }
         # 現在開いている転送。
         forwards: { type: array, items: { $ref: "#/components/schemas/TerminalForward" } }
+    TerminalConnectionProgress:
+      type: object
+      additionalProperties: false
+      required: [phase, alias, hostName, user, hop, hops]
+      properties:
+        phase:
+          type: string
+          enum: [dialing, host_key, authenticating, authenticated, opening_session]
+        alias: { type: string }
+        hostName: { type: string }
+        user: { type: string }
+        hop: { type: integer, minimum: 1 }
+        hops: { type: integer, minimum: 1 }
     TerminalReconnect:
       type: object
       additionalProperties: false

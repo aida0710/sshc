@@ -120,6 +120,8 @@ describe("integrationsApi terminal sessions", () => {
     { sessions: [{ ...session, id: 3 }], maxSessions: 50 },
     { sessions: [{ ...session, state: "lost" }], maxSessions: 50 },
     { sessions: [{ ...session, problem: 3 }], maxSessions: 50 },
+    { sessions: [{ ...session, progress: { phase: "waiting", alias: "edge", hostName: "edge", user: "ops", hop: 1, hops: 2 } }], maxSessions: 50 },
+    { sessions: [{ ...session, progress: { phase: "authenticating", alias: "edge", hostName: "edge", user: "ops", hop: 3, hops: 2 } }], maxSessions: 50 },
     { sessions: [{ ...session, state: "reconnecting", reconnect: { attempt: 0, limit: 5, retryAt: "x", problem: "" } }], maxSessions: 50 },
     { sessions: [{ ...session, exited: { code: "0", signal: "", at: "" } }], maxSessions: 50 },
     { sessions: [], maxSessions: -1 },
