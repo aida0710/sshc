@@ -42,12 +42,7 @@ type Executable struct {
 	Overridable bool
 }
 
-// Report は、設定から到達できる実行を伴うディレクティブをすべて列挙する。
-//
-// 走査をひとつの alias に絞らないのは意図的である。OpenSSH はファイルを読みながら
-// Match 行を評価するので、グラフのどこにある Match exec も、どの alias の評価中で
-// あっても実行されうる。読み手には、絞り込まれた部分集合ではなく、そのファイルが
-// 起動しうるコマンドをすべて見る資格がある。
+// Report は、設定から到達できる実行を伴うディレクティブを列挙する。
 type Report struct {
 	Directives []Executable
 }
@@ -61,6 +56,23 @@ var executableDirectives = map[string]Executable{
 
 // Scan は、グラフ内のすべてのファイルから実行を伴うディレクティブを集める。
 func Scan(graph *config.Graph) Report {
+	return scanAll(graph)
+}
+
+// ScanForAlias は、その alias の接続時に適用されうる実行可能ディレクティブを集める。
+// 別の Host ブロックにだけある ProxyCommand などを警告へ混ぜない。一方、Match exec
+// は設定を読む過程で評価されうるため、Match ブロックは保守的に残す。
+func ScanForAlias(graph *config.Graph, alias string) Report {
+	report := Report{}
+	if graph == nil {
+		return report
+	}
+	seen := make(map[string]bool)
+	scanAliasFile(graph, graph.Root, alias, true, "", map[string]bool{}, seen, &report)
+	return report
+}
+
+func scanAll(graph *config.Graph) Report {
 	report := Report{}
 	if graph == nil {
 		return report
@@ -108,6 +120,94 @@ func Scan(graph *config.Graph) Report {
 		}
 	}
 	return report
+}
+
+// scanAliasFile は Include を、その行が置かれた Host / Match の適用状態ごと
+// 引き継いで読む。ファイル先頭の「グローバル」ブロックは、Include 元では実際には
+// 独立したグローバル設定ではない。たとえば Host pcluster-head の中から読み込まれた
+// ファイルの先頭に ProxyCommand があれば、そのコマンドは pcluster-head にだけ
+// 適用される。この状態を渡さず graph.Order を走査すると、別ホストの警告へ漏れる。
+func scanAliasFile(
+	graph *config.Graph,
+	filePath string,
+	alias string,
+	inheritedApplies bool,
+	inheritedCondition string,
+	chain map[string]bool,
+	seen map[string]bool,
+	report *Report,
+) {
+	node := graph.Nodes[filePath]
+	if node == nil || node.File == nil || chain[filePath] {
+		return
+	}
+	chain[filePath] = true
+	defer delete(chain, filePath)
+
+	blocks := node.File.Blocks()
+	position := 0
+	applies := inheritedApplies
+	condition := inheritedCondition
+
+	for index, line := range node.File.Lines {
+		if position+1 < len(blocks) && blocks[position+1].Header == index {
+			position++
+			block := blocks[position]
+			condition = node.File.Condition(block)
+			switch block.Kind {
+			case config.BlockHost:
+				_, applies = blockApplies(block, alias)
+			case config.BlockMatch:
+				// Match は接続時の user / address や exec に依存しうる。ここで
+				// 実行して判定せず、到達した Match は保守的に警告へ残す。
+				applies = true
+				for _, criterion := range block.Criteria {
+					if criterion.Keyword != "exec" {
+						continue
+					}
+					appendExecutable(report, seen, Executable{
+						Keyword: "Match exec", Command: criterion.Argument,
+						Path: filePath, Line: block.Header + 1, Condition: condition,
+						OnEvaluate: true, OnConnect: true,
+					})
+				}
+			}
+			continue
+		}
+		if line.Kind != config.LineDirective || !applies {
+			continue
+		}
+		if config.EqualKeyword(line.Keyword, "Include") {
+			for _, edge := range node.Includes {
+				if edge.Line != index+1 {
+					continue
+				}
+				for _, match := range edge.Matches {
+					scanAliasFile(graph, match, alias, applies, condition, chain, seen, report)
+				}
+			}
+			continue
+		}
+		template, ok := executableDirectives[strings.ToLower(line.Keyword)]
+		if !ok {
+			continue
+		}
+		directive := template
+		directive.Command = argumentText(line)
+		directive.Path = filePath
+		directive.Line = index + 1
+		directive.Condition = condition
+		appendExecutable(report, seen, directive)
+	}
+}
+
+func appendExecutable(report *Report, seen map[string]bool, directive Executable) {
+	key := fmt.Sprintf("%s\x00%d\x00%s\x00%s", directive.Path, directive.Line, directive.Keyword, directive.Command)
+	if seen[key] {
+		return
+	}
+	seen[key] = true
+	report.Directives = append(report.Directives, directive)
 }
 
 // Unavoidable は、どのコマンドラインオプションでも無効にできないディレクティブを

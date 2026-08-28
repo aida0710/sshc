@@ -160,16 +160,33 @@ func TestRemoteKeyPlanDescribesTheChangeWithoutContactingAnything(t *testing.T) 
 	if len(payload.Manual) == 0 {
 		t.Error("the plan must offer manual instructions")
 	}
-	// plan は設定が持つ ProxyCommand を表示する。鍵を登録するために
-	// 接続すれば、それが実行されてしまうからだ。
-	if len(payload.ExecutableDirectives) != 1 {
-		t.Errorf("executable directives = %#v", payload.ExecutableDirectives)
+	// Host risky だけにある ProxyCommand は bastion への接続では実行されない。
+	if len(payload.ExecutableDirectives) != 0 {
+		t.Errorf("the bastion plan included another host's directives: %#v", payload.ExecutableDirectives)
 	}
 	if payload.ActionToken == "" || payload.ActionExpiresAt == "" {
 		t.Fatal("the displayed plan must carry its own confirmation")
 	}
 	if len(runner.commands) != 0 {
 		t.Fatal("planning started a process")
+	}
+}
+
+func TestRemoteKeyPlanKeepsExecutableDirectivesForTheSelectedAlias(t *testing.T) {
+	engine, credentials, _, _ := newRemoteKeyServer(t, nil)
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/plan",
+		mustMarshal(t, api.RemoteKeyPlanRequest{
+			Alias: "risky", KeyPath: "~/.ssh/id_ed25519.pub", PublicKey: remoteKeyLine,
+		}), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("plan = %d: %s", response.Code, response.Body.String())
+	}
+	var payload api.RemoteKeyPlan
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.ExecutableDirectives) != 1 || payload.ExecutableDirectives[0].Keyword != "ProxyCommand" {
+		t.Fatalf("selected host directives = %#v", payload.ExecutableDirectives)
 	}
 }
 
@@ -229,11 +246,11 @@ func TestRemoteKeyRegisterRefusesAnUnacknowledgedExecutableDirective(t *testing.
 	})
 
 	token := remoteKeyPlanToken(t, engine, credentials, api.RemoteKeyPlanRequest{
-		Alias: "bastion", KeyPath: "x", PublicKey: remoteKeyLine,
+		Alias: "risky", KeyPath: "x", PublicKey: remoteKeyLine,
 	})
 	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/register",
 		mustMarshal(t, api.RemoteKeyRegisterRequest{
-			Alias: "bastion", KeyPath: "x", PublicKey: remoteKeyLine, AcknowledgeExecutable: false,
+			Alias: "risky", KeyPath: "x", PublicKey: remoteKeyLine, AcknowledgeExecutable: false,
 		}), token)
 	if response.Code != http.StatusConflict {
 		t.Fatalf("unacknowledged directive = %d, want 409: %s", response.Code, response.Body.String())

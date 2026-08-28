@@ -112,6 +112,59 @@ func TestScanFindsEveryExecutableDirectiveWithItsExactText(t *testing.T) {
 	}
 }
 
+func TestScanForAliasExcludesCommandsOwnedByOtherHostBlocks(t *testing.T) {
+	graph := graphFor(t, map[string]string{
+		testConfig: "Host pcluster-head\n" +
+			"\tProxyCommand helper %h %p\n" +
+			"Host ordinary\n" +
+			"\tLocalCommand echo ordinary\n" +
+			"Host *\n" +
+			"\tKnownHostsCommand known-hosts %H\n",
+	})
+
+	ordinary := effective.ScanForAlias(graph, "ordinary")
+	if len(ordinary.Directives) != 2 {
+		t.Fatalf("ordinary directives = %#v", ordinary.Directives)
+	}
+	for _, directive := range ordinary.Directives {
+		if directive.Keyword == "ProxyCommand" {
+			t.Fatalf("ordinary inherited pcluster-head ProxyCommand: %#v", ordinary.Directives)
+		}
+	}
+
+	pcluster := effective.ScanForAlias(graph, "pcluster-head")
+	if len(pcluster.Directives) != 2 {
+		t.Fatalf("pcluster-head directives = %#v", pcluster.Directives)
+	}
+	foundProxy := false
+	for _, directive := range pcluster.Directives {
+		foundProxy = foundProxy || directive.Keyword == "ProxyCommand"
+	}
+	if !foundProxy {
+		t.Fatalf("pcluster-head lost its ProxyCommand: %#v", pcluster.Directives)
+	}
+}
+
+func TestScanForAliasPreservesTheConditionOfAnInclude(t *testing.T) {
+	graph := graphFor(t, map[string]string{
+		testConfig:                               "Host pcluster-head\n\tInclude pcluster.conf\n\nHost ordinary\n\tHostName ordinary.example\n",
+		filepath.Join(testRoot, "pcluster.conf"): "ProxyCommand ssh gateway nc %h %p\n",
+	})
+
+	ordinary := effective.ScanForAlias(graph, "ordinary")
+	if len(ordinary.Directives) != 0 {
+		t.Fatalf("ordinary directives = %#v, want none from conditional Include", ordinary.Directives)
+	}
+
+	pcluster := effective.ScanForAlias(graph, "pcluster-head")
+	if len(pcluster.Directives) != 1 || pcluster.Directives[0].Keyword != "ProxyCommand" {
+		t.Fatalf("pcluster directives = %#v, want its included ProxyCommand", pcluster.Directives)
+	}
+	if pcluster.Directives[0].Condition != "Host pcluster-head" {
+		t.Fatalf("condition = %q, want inherited Host condition", pcluster.Directives[0].Condition)
+	}
+}
+
 func TestEvidenceChangesWhenTheDisplayedCommandChanges(t *testing.T) {
 	first := effective.Scan(graphFor(t, map[string]string{
 		testConfig: "Host jump\n\tProxyCommand /usr/bin/nc %h %p\n",

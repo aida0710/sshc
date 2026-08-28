@@ -122,7 +122,7 @@ func (s *Service) ConnectionSnapshot(alias string) (ConnectionSnapshot, error) {
 	snapshot := ConnectionSnapshot{
 		Hostname: alias,
 		Port:     "22",
-		Report:   effective.Scan(graph),
+		Report:   effective.ScanForAlias(graph, alias),
 		Config:   flattened,
 	}
 	if found := resolution.Values.First("hostname"); found != "" {
@@ -174,7 +174,7 @@ func (s *Service) Inspect(alias string) (Inspection, error) {
 		return Inspection{}, err
 	}
 
-	inspection := Inspection{Alias: alias, Report: effective.Scan(graph)}
+	inspection := Inspection{Alias: alias, Report: effective.ScanForAlias(graph, alias)}
 	inspection.Projection = effective.Project(graph, alias)
 	inspection.Route, inspection.RouteComplexities = effective.ExpandRoute(graph, alias, s.Facts)
 	return inspection, nil
@@ -231,10 +231,14 @@ func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, 
 // 書き換える。冗長な OpenSSH の出力は、読んだファイルをすべて絶対パスで指定する
 // ため、そうしないとアカウント名がレスポンスの本文へ運ばれてしまう。
 func (s *Service) Authenticate(ctx context.Context, alias string, acknowledged bool) (AuthenticationResult, error) {
-	report, err := s.Safety()
+	if err := validate.Alias(alias); err != nil {
+		return AuthenticationResult{}, err
+	}
+	graph, err := s.graph()
 	if err != nil {
 		return AuthenticationResult{}, err
 	}
+	report := effective.ScanForAlias(graph, alias)
 	result, err := s.Authentication.Test(ctx, report, alias, acknowledged)
 	if err != nil {
 		return AuthenticationResult{}, err
