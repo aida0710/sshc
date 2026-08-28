@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { KeyInspector } from "./KeyInspector";
 import type { KeyItem } from "./api";
+import { LanguageProvider } from "../i18n/context";
 
 const item: KeyItem = {
   id: "1",
@@ -38,6 +39,15 @@ describe("KeyInspector", () => {
     expect(screen.getByText("ed25519 · 256")).toBeInTheDocument();
     expect(screen.getByText("0600")).toBeInTheDocument();
     expect(screen.getByText("build-*")).toBeInTheDocument();
+    expect(screen.getByText("Private key")).toBeInTheDocument();
+    expect(screen.queryByText("private_key")).not.toBeInTheDocument();
+  });
+
+  it("uses the Japanese label instead of exposing the key kind code", () => {
+    render(<LanguageProvider initial="ja"><KeyInspector item={item} now={0} /></LanguageProvider>);
+
+    expect(screen.getByText("秘密鍵")).toBeInTheDocument();
+    expect(screen.queryByText("private_key")).not.toBeInTheDocument();
   });
 
   it("says so when nothing names the key", () => {

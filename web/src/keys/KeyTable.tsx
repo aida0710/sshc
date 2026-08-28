@@ -2,7 +2,7 @@ import { useState, type DragEvent } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
-import { noteLabels, rowAction, rowDanger, rowPrimary } from "./labels";
+import { describeKeyKind, noteLabels, rowAction, rowDanger, rowPrimary } from "./labels";
 import { keyItemGroups } from "./organizer";
 import {
   compareText,
@@ -179,7 +179,7 @@ export function KeyTable({
               </td>
               <td className="col-start-2 min-w-0 pb-3 pr-3 md:table-cell md:py-3 md:pr-4">
                 <span className="inline-flex rounded-md bg-surface px-2 py-1 text-xs text-ink-muted">
-                  {item.kind}
+                  {describeKeyKind(item.kind, t)}
                 </span>
                 {item.algorithm === "" ? null : (
                   <p className="mt-2 font-mono text-xs font-medium text-ink">

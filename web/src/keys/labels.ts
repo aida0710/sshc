@@ -16,6 +16,18 @@ export const noteLabels: Record<string, MessageKey> = {
   comment_not_preserved: "keys.noteCommentNotPreserved",
 };
 
+const keyKindLabels: Record<string, MessageKey> = {
+  private_key: "keys.kind.privateKey",
+  public_key: "keys.kind.publicKey",
+  certificate: "keys.kind.certificate",
+  other: "keys.kind.other",
+  unreadable: "keys.kind.unreadable",
+};
+
+export function describeKeyKind(kind: string, t: Translate): string {
+  return t(keyKindLabels[kind] ?? "keys.kind.other");
+}
+
 const blockerLabels: Record<string, MessageKey> = {
   key_destination_occupied: "keys.blockerTargetOccupied",
   key_reference_unresolved: "keys.blockerUnresolved",

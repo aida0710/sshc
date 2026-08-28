@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">sshc</string>
+    <string name="engine_running">sshc を実行中</string>
+    <string name="engine_stop">停止</string>
+    <string name="failure_listen">sshc はこの端末のローカルポートを確保できませんでした。</string>
+    <string name="failure_stopped_early">sshc エンジンは起動完了前に停止しました。</string>
+    <string name="failure_storage">sshc のアプリ専用ストレージを開けませんでした。端末を再起動してから、もう一度お試しください。</string>
+    <string name="failure_engine_start">sshc エンジンを初期化できませんでした。</string>
+    <string name="failure_unknown">sshc を起動できませんでした。</string>
+    <string name="failure_explanation">問題を報告するときは、安全な診断情報をコピーして添付してください。エンジンをもう一度起動することもできます。</string>
+    <string name="failure_copy">診断情報をコピー</string>
+    <string name="failure_copied">診断情報をコピーしました</string>
+    <string name="failure_retry">もう一度試す</string>
+    <string name="failure_retrying">起動中…</string>
+</resources>
