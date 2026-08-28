@@ -492,8 +492,7 @@ test("edits the display order it stores", async ({
   installation,
 }) => {
   await openBastion(page, installation.url);
-
-  await page.getByRole("button", { name: "Show Display and classification" }).click();
+  await page.getByRole("tab", { name: "sshc" }).click();
 
   const [ordered] = await Promise.all([
     page.waitForResponse(
@@ -511,7 +510,7 @@ test("keeps the saved SSH encoding selected after metadata refresh", async ({
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("button", { name: "Show Display and classification" }).click();
+  await page.getByRole("tab", { name: "sshc" }).click();
 
   const encoding = page.getByLabel("Remote text encoding");
   const [saved] = await Promise.all([
@@ -669,30 +668,23 @@ test("shows an empty group in the management tree and moves an ungrouped connect
   await expect(browser.getByRole("button", { name: "bastion" })).toHaveAttribute("aria-current", "true");
 });
 
-test("opening the inspector narrows the detail rather than hiding it under the pane", async ({
+test("keeps sshc-only settings in the connection editor instead of a side inspector", async ({
   page,
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("button", { name: "Show Display and classification" }).click();
-  await page.getByRole("button", { name: "More connection actions" }).click();
+  await expect(page.getByRole("button", { name: "Show Display and classification" })).toHaveCount(0);
+  await page.getByRole("tab", { name: "sshc" }).click();
 
-  const pane = page.getByRole("complementary", { name: "Display and classification" });
-  await expect(pane).toBeVisible();
-  await page.getByLabel("Port", { exact: true }).fill("2223");
-  await expect(page.getByRole("button", { name: "Save Basic settings", exact: true })).toBeVisible();
-
-  const paneLeft = (await pane.boundingBox())?.x ?? 0;
-  expect(paneLeft).toBeGreaterThan(0);
-
-  for (const name of [
-    "Duplicate connection",
-    "Change storage file",
-    "Delete connection",
-    "Save Basic settings",
-  ]) {
-    const box = await page.getByRole("button", { name, exact: true }).boundingBox();
-    expect(box, `${name} has no box`).not.toBeNull();
-    expect(box!.x + box!.width, `${name} runs under the inspector`).toBeLessThanOrEqual(paneLeft);
+  await expect(page.getByRole("tabpanel", { name: "sshc" })).toBeVisible();
+  await expect(page.getByLabel("Remote text encoding")).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Display and classification" })).toHaveCount(0);
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForTimeout(350);
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-editor-desktop-sshc.png`,
+      fullPage: true,
+    });
   }
 });

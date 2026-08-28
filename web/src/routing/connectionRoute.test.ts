@@ -40,6 +40,23 @@ describe("connection routes", () => {
     expect(connectionLocation(null)).toBe("/connections/servers");
   });
 
+  it("round-trips the sshc-only connection settings", () => {
+    const location = connectionLocation({
+      path: "config",
+      alias: "bastion",
+      panel: "Sshc",
+      advanced: "Jump",
+    });
+    expect(location).toBe("/connections/servers?path=config&host=bastion&panel=sshc");
+    expect(parseConnectionLocation({
+      pathname: "/connections/servers",
+      search: "?path=config&host=bastion&panel=sshc",
+    })).toEqual({
+      kind: "valid",
+      target: { path: "config", alias: "bastion", panel: "Sshc", advanced: "Jump" },
+    });
+  });
+
   it.each([
     ["/connections/files", ""],
     ["/connections/groups", ""],
