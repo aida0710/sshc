@@ -50,3 +50,33 @@ test("refuses a public key that is not one valid line", async ({ page, installat
     page.getByRole("region", { name: "Confirm remote registration" }),
   ).toHaveCount(0);
 });
+
+test("filters and reviews multiple saved connections together", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Install Key on Server");
+
+  const search = page.getByRole("searchbox", { name: "Host alias" });
+  await search.fill("nas");
+  await expect(page.getByRole("checkbox", { name: "nas" })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "bastion" })).toHaveCount(0);
+  await page.getByRole("checkbox", { name: "nas" }).check();
+  await search.fill("bastion");
+  await page.getByRole("checkbox", { name: "bastion" }).check();
+  await expect(page.getByText("2 selected")).toBeVisible();
+
+  await page.getByLabel("Public key file").fill("id_ed25519.pub");
+  await page.getByLabel("Public key line").fill(publicKey);
+  await page.getByRole("button", { name: "Show what this would do" }).click();
+
+  const plan = page.getByRole("region", { name: "Confirm registration on 2 hosts" });
+  await expect(plan).toBeVisible();
+  await expect(plan.getByRole("article", { name: "Registration plan for bastion" })).toBeVisible();
+  await expect(plan.getByRole("article", { name: "Registration plan for nas" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Register on 2 hosts" })).toBeEnabled();
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/remote-keys-multi-select.png`, fullPage: true });
+    await plan.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/remote-keys-multi-plan.png`, fullPage: true });
+  }
+});
