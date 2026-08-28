@@ -116,7 +116,7 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 			return planned{}, err
 		}
 		alias := request.Alias
-		if request.Kind == EditRename {
+		if request.Kind == EditRename || request.Kind == EditDuplicate {
 			alias = request.NewAlias
 		}
 		prepared.preview.Effective = []EffectiveDiff{DiffEffective(

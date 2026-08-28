@@ -149,7 +149,7 @@ func validateEditRequest(request application.EditRequest) error {
 	}
 	switch request.Kind {
 	case application.EditHostFields, application.EditBlockRaw, application.EditFileRaw,
-		application.EditRename, application.EditMove, application.EditComment,
+		application.EditRename, application.EditDuplicate, application.EditMove, application.EditComment,
 		application.EditFileRename, application.EditFileDelete,
 		application.EditDirectoryCreate, application.EditDirectoryDelete:
 		if err := validatePathParameter(request.Path); err != nil {
@@ -196,7 +196,7 @@ func validateEditRequest(request application.EditRequest) error {
 		// 空のファイルは、最後のブロックを削除した結果として正当にあり得る。
 		// 既存のファイルを誤った空書き込みから守るのは、長さのチェックではなく
 		// base digest の事前条件である。
-	case application.EditRename:
+	case application.EditRename, application.EditDuplicate:
 		if err := validateAliasParameter(request.Alias); err != nil {
 			return err
 		}
@@ -350,10 +350,10 @@ func serviceProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrInvalidAlias), errors.Is(err, application.ErrRawBlockHeader),
 		errors.Is(err, application.ErrRawBlockStructure), errors.Is(err, application.ErrEditLineOutsideBlock),
 		errors.Is(err, application.ErrEditLineNotDirective), errors.Is(err, application.ErrDuplicateEditLine),
-		errors.Is(err, application.ErrUnknownEditAction),
-		errors.Is(err, application.ErrDuplicateDestinationAlias):
+		errors.Is(err, application.ErrUnknownEditAction):
 		return problemWith(c, http.StatusUnprocessableEntity, problemPayload{Code: "invalid_edit"})
-	case errors.Is(err, application.ErrAliasAlreadyDeclared):
+	case errors.Is(err, application.ErrAliasAlreadyDeclared),
+		errors.Is(err, application.ErrDuplicateDestinationAlias):
 		// invalid_edit ではなく専用の code である。リクエストの形式に問題はなく、
 		// ユーザーに伝えるべきは編集が不正だったことではなく、
 		// 名前がすでに使われているということだからだ。

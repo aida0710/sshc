@@ -94,7 +94,7 @@ export function ConnectionTree({
   const t = useTranslate();
   const [scope, setScope] = useState<Scope>({ kind: "all" });
   const [query, setQuery] = useState("");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("configured");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("name");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [dragging, setDragging] = useState<DragPayload | null>(null);
 

@@ -53,6 +53,12 @@ func TestValidateEditRequestEnforcesEveryKindsRequirements(t *testing.T) {
 		{"valid rename", application.EditRequest{
 			Kind: application.EditRename, Path: "config", Base: "Host a\n", Alias: "a", NewAlias: "b",
 		}, false},
+		{"duplicate with a pattern alias", application.EditRequest{
+			Kind: application.EditDuplicate, Path: "config", Base: "Host a\n", Alias: "a", NewAlias: "b*",
+		}, true},
+		{"valid duplicate", application.EditRequest{
+			Kind: application.EditDuplicate, Path: "config", Base: "Host a\n", Alias: "a", NewAlias: "b",
+		}, false},
 		{"raw edit without a path", application.EditRequest{Kind: application.EditFileRaw, Raw: "Host a\n"}, true},
 		{"emptying a file is allowed", application.EditRequest{
 			Kind: application.EditFileRaw, Path: "config", Base: "Host a\n", Raw: "",

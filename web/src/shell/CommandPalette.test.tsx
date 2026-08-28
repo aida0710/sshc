@@ -32,11 +32,15 @@ const labels = {
 function renderPalette(overrides: Partial<ComponentProps<typeof CommandPalette>> = {}) {
   const props: ComponentProps<typeof CommandPalette> = {
     open: true,
-    aliases: ["r540", "nas"],
+    hosts: [
+      { identity: { path: "conf.d/lab.conf", alias: "r540" }, file: { path: "conf.d/lab.conf", absolute: "/home/tester/.ssh/conf.d/lab.conf" }, line: 1, patterns: ["r540"], editable: true },
+      { identity: { path: "config", alias: "nas" }, file: { path: "config", absolute: "/home/tester/.ssh/config" }, line: 1, patterns: ["nas"], editable: true },
+    ],
     files: [{ file: { path: "config", absolute: "/home/tester/.ssh/config" }, editable: true, loads: 1 }],
     sectionLabels: labels,
     onClose: vi.fn(),
     onConnect: vi.fn(),
+    onOpenHostSettings: vi.fn(),
     onOpenFile: vi.fn(),
     onNavigate: vi.fn(),
     onOpenSnippet: vi.fn(),
@@ -85,6 +89,20 @@ describe("CommandPalette", () => {
 
     expect(onClose).toHaveBeenCalledOnce();
     expect(onConnect).toHaveBeenCalledWith("r540");
+  });
+
+  it("opens host settings from the trailing action without connecting", async () => {
+    const user = userEvent.setup();
+    const onConnect = vi.fn();
+    const onOpenHostSettings = vi.fn();
+    const onClose = vi.fn();
+    renderPalette({ onConnect, onOpenHostSettings, onClose });
+
+    await user.click(screen.getByRole("button", { name: "Open connection settings for r540" }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onOpenHostSettings).toHaveBeenCalledWith({ path: "conf.d/lab.conf", alias: "r540" });
+    expect(onConnect).not.toHaveBeenCalled();
   });
 
   it("matches every query token irrespective of case", () => {

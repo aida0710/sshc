@@ -68,6 +68,7 @@ function FileDiffView({ diff }: { diff: FileDiff }) {
 }
 
 const refusalKeys: Record<string, MessageKey> = {
+  alias_already_declared: "refusal.alias_already_declared",
   directory_not_empty: "refusal.directory_not_empty",
   not_a_directory: "refusal.not_a_directory",
   group_is_declared: "refusal.group_is_declared",

@@ -28,7 +28,7 @@ import { OrphanPanel } from "./OrphanPanel";
 import { useTranslate } from "../i18n/context";
 import type { InspectorContent } from "../ui/Inspector";
 import { Button, Notice } from "../ui/surface";
-import { duplicateHostBlock, removeHostBlock } from "./blocks";
+import { removeHostBlock } from "./blocks";
 import { integrationsApi } from "../api/integrations";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type {
@@ -361,7 +361,13 @@ export function ConnectionsPage({
       result = await configApi.save(request);
     } catch (error) {
       setPreview(null);
-      setProblem(toProblem(error));
+      const rejected = toProblem(error);
+      if (request.kind === "duplicate" && rejected.code === "alias_already_declared") {
+        setProblem(null);
+        setLocalError(t("conn.duplicateAliasTaken", { alias: request.newAlias ?? "" }));
+      } else {
+        setProblem(rejected);
+      }
       return { saved: false, overview: null };
     }
 
@@ -489,6 +495,7 @@ export function ConnectionsPage({
 
   function onRename(newName: string) {
     if (detail === null || selection === null) return;
+    setLocalError("");
     void submit({
       kind: "rename",
       path: selection.path,
@@ -659,24 +666,14 @@ export function ConnectionsPage({
 
   function duplicateHost() {
     if (detail === null || selection === null) return;
-    try {
-      void submit({
-        kind: "file_raw",
-        path: selection.path,
-        base: detail.file.contents,
-        raw: duplicateHostBlock(
-          detail.file.contents,
-          detail.form.raw,
-          selection.alias,
-          `${selection.alias}-copy`,
-          detail.form.entry.line,
-          detail.form.commentLines,
-        ),
-      });
-      setLocalError("");
-    } catch {
-      setLocalError(t("conn.blockMoved"));
-    }
+    setLocalError("");
+    void submit({
+      kind: "duplicate",
+      path: selection.path,
+      base: detail.file.contents,
+      alias: selection.alias,
+      newAlias: `${selection.alias}-copy`,
+    });
   }
 
   async function moveHost(target: string) {

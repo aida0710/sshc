@@ -38,6 +38,7 @@ const (
 	EditBlockRaw        EditKind = "block_raw"
 	EditFileRaw         EditKind = "file_raw"
 	EditRename          EditKind = "rename"
+	EditDuplicate       EditKind = "duplicate"
 	EditGroups          EditKind = "groups"
 	EditMetadata        EditKind = "metadata"
 	EditMove            EditKind = "move"
@@ -484,7 +485,7 @@ func (s *Service) Save(request EditRequest) (SaveResult, error) {
 	return SaveResult{TransactionID: result.ID, Written: written, Preview: prepared.preview}, nil
 }
 
-// hostBlockMutations は、Host ブロックひとつを書き換える 4 つの種別である。
+// hostBlockMutations は、Host ブロックひとつを書き換える種別である。
 var hostBlockMutations = map[EditKind]func(*config.Graph, *config.File, config.Block, EditRequest) error{
 	EditHostFields: func(_ *config.Graph, file *config.File, block config.Block, request EditRequest) error {
 		return ApplyFieldEdits(file, block, request.Fields)
@@ -501,6 +502,12 @@ var hostBlockMutations = map[EditKind]func(*config.Graph, *config.File, config.B
 		}
 		return RenameHostAlias(file, block, request.Alias, request.NewAlias)
 	},
+	EditDuplicate: func(graph *config.Graph, file *config.File, _ config.Block, request EditRequest) error {
+		if err := refuseTakenAlias(graph, "", request.NewAlias); err != nil {
+			return err
+		}
+		return DuplicateHostBlock(file, request.Alias, request.NewAlias)
+	},
 }
 
 func (s *Service) plan(request EditRequest) (planned, error) {
@@ -509,7 +516,7 @@ func (s *Service) plan(request EditRequest) (planned, error) {
 		return planned{}, err
 	}
 	switch request.Kind {
-	case EditHostFields, EditBlockRaw, EditRename, EditFileRaw, EditComment:
+	case EditHostFields, EditBlockRaw, EditRename, EditDuplicate, EditFileRaw, EditComment:
 		return s.planFileEdit(graph, request)
 	case EditGroups, EditMetadata:
 		return s.planMetadataEdit(graph, request)

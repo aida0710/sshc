@@ -85,6 +85,24 @@ describe("ConnectionTree", () => {
     expect(screen.queryByRole("button", { name: "Files" })).not.toBeInTheDocument();
   });
 
+  it("sorts connections by name by default", async () => {
+    const zeta = host("config", "zeta");
+    const alpha = host("config", "alpha");
+    const orderOverview = { ...overview, hosts: [zeta, alpha], groups: [], metadata: { schemaVersion: 2 } };
+    const user = userEvent.setup();
+    render(
+      <ConnectionTree overview={orderOverview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+    );
+
+    const order = screen.getByRole("combobox", { name: "Connection order" });
+    expect(order).toHaveValue("name");
+    const section = screen.getByRole("region", { name: "Ungrouped group, 2 connections" });
+    expect(within(section).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["alpha", "zeta"]);
+
+    await user.selectOptions(order, "configured");
+    expect(within(section).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["zeta", "alpha"]);
+  });
+
   it("keeps filtering and visible metadata", async () => {
     render(
       <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,

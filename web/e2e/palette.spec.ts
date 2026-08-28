@@ -24,7 +24,15 @@ test("searches hosts, config files and settings from the keyboard", async ({ pag
   const search = palette.getByRole("searchbox");
   await search.fill("r540");
   await expect(palette.getByRole("option", { name: /Connect to r540/ })).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/command-palette-host-settings.png`, fullPage: true });
+  }
+  await palette.getByRole("button", { name: "Open connection settings for r540" }).click();
+  await expect(page).toHaveURL(/\/connections\/servers\?path=conf\.d%2F20-lab\.conf&host=r540&panel=basic$/);
+  await expect(page.getByRole("heading", { name: "r540", exact: true })).toBeVisible();
+  await expect(palette).toBeHidden();
 
+  await page.keyboard.press("Control+k");
   await search.fill("config");
   await expect(palette.getByRole("option", { name: /conf\.d\/20-lab\.conf/ })).toBeVisible();
 

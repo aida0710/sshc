@@ -676,6 +676,46 @@ describe("ConnectionsPage", () => {
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });
 
+  it("shows why a connection cannot be renamed to an existing alias", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockRejectedValue(new ApiError("alias_already_declared", 409, {
+      code: "alias_already_declared",
+      message: "request rejected",
+    }));
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
+    await user.clear(screen.getByLabelText("Rename alias"));
+    await user.type(screen.getByLabelText("Rename alias"), "nas");
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+
+    await waitFor(() => expect(configApi.save).toHaveBeenCalled());
+    expect(await screen.findByRole("alert")).toHaveTextContent(/name already exists.*cannot be saved/i);
+  });
+
+  it("uses the duplicate operation and explains an alias collision", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockRejectedValue(new ApiError("alias_already_declared", 409, {
+      code: "alias_already_declared",
+      message: "request rejected",
+    }));
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(screen.getByRole("button", { name: "More connection actions" }));
+    await user.click(screen.getByRole("button", { name: "Duplicate connection" }));
+
+    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
+      kind: "duplicate",
+      path: "config",
+      base: "Host bastion\n\tPort 22\n",
+      alias: "bastion",
+      newAlias: "bastion-copy",
+    }));
+    expect(await screen.findByText(/bastion-copy already exists.*cannot be duplicated/i)).toBeInTheDocument();
+  });
+
   it("creates a complete connection, refreshes the tree, and opens its Basic detail without launching a terminal", async () => {
     const user = userEvent.setup();
     const onNavigateLocation = vi.fn();
