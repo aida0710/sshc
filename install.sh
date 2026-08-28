@@ -1,8 +1,8 @@
 #!/bin/sh
 # sshc の CLI を入れる。
 #
-#   SSHC_VERSION=v0.17.5 sh -c \
-#     'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.17.5/install.sh | sh'
+#   SSHC_VERSION=v0.18.0 sh -c \
+#     'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.18.0/install.sh | sh'
 #
 # 配布物は UI を埋め込んだ単一の CLI バイナリである。
 # インストール前の検証内容と変更内容は標準出力へ表示する:
@@ -185,7 +185,8 @@ case ":$PATH:" in
 esac
 say ""
 say "sshc: $dir is not on your PATH, so typing sshc will not find it yet"
-case "${SHELL##*/}" in
+shell_name=${SHELL:-}
+case "${shell_name##*/}" in
   zsh) rc="$HOME/.zshrc" ;;
   bash) rc="$HOME/.bashrc" ;;
   fish) note "fish_add_path $dir"; exit 0 ;;

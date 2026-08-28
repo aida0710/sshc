@@ -71,7 +71,14 @@ esac
 		t.Fatal(err)
 	}
 	command := exec.Command("sh", script)
-	command.Env = append(os.Environ(),
+	environment := make([]string, 0, len(os.Environ())+5)
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "SHELL=") {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	command.Env = append(environment,
 		"PATH="+commands+":/usr/bin:/bin",
 		"HOME="+filepath.Join(root, "home"),
 		"SSHC_VERSION=v9.8.7",
