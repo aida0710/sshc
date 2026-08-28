@@ -34,12 +34,13 @@ describe("UpdateBadge", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("shows nothing at all when the check cannot run", async () => {
+  it("keeps the engine version visible when the remote check cannot run", async () => {
     const api = buildApi({ current: "0.1.0", available: false }, {
       updateStatus: vi.fn().mockRejectedValue(new Error("update_check_failed")),
     });
-    const { container } = render(<UpdateBadge api={api} />);
+    render(<UpdateBadge api={api} current="0.1.0" />);
     await waitFor(() => expect(api.updateStatus).toHaveBeenCalled());
-    expect(container.textContent).toBe("");
+    expect(screen.getByText("Version 0.1.0")).toBeVisible();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });
