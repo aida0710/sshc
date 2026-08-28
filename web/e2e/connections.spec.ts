@@ -506,6 +506,26 @@ test("edits the display order it stores", async ({
   expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].order).toBe(-1);
 });
 
+test("keeps the saved SSH encoding selected after metadata refresh", async ({
+  page,
+  installation,
+}) => {
+  await openBastion(page, installation.url);
+  await page.getByRole("button", { name: "Show Display and classification" }).click();
+
+  const encoding = page.getByLabel("Remote text encoding");
+  const [saved] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/v1/config/save") && response.request().method() === "POST",
+    ),
+    encoding.selectOption("shift_jis"),
+  ]);
+  expect(saved.status()).toBe(200);
+  await expect(encoding).toHaveValue("shift_jis");
+  expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].encoding).toBe("shift_jis");
+});
+
 test("re-associates a note whose connection is gone, without guessing", async ({
   page,
   installation,
