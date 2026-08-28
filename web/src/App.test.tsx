@@ -249,6 +249,26 @@ describe("App", () => {
     expect(screen.getByRole("complementary", { name: "Display and classification" })).toBeInTheDocument();
   });
 
+  it("Androidの戻る操作では画面遷移より先に一時UIを閉じる", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+    await user.click(await screen.findByRole("link", { name: "Connections" }));
+    await user.click(await screen.findByRole("button", { name: "offer inspector" }));
+    await user.click(screen.getByRole("button", { name: "Show Display and classification Needs attention" }));
+    expect(screen.getByRole("complementary", { name: "Display and classification" })).toBeInTheDocument();
+
+    const back = new Event("sshc-android-back", { cancelable: true });
+    act(() => { window.dispatchEvent(back); });
+    expect(back.defaultPrevented).toBe(true);
+    expect(screen.queryByRole("complementary", { name: "Display and classification" })).toBeNull();
+  });
+
   it("offers the three appearances and remembers the chosen one", async () => {
     const user = userEvent.setup();
     render(

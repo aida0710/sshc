@@ -4,6 +4,7 @@
     <string name="engine_running">sshc is running</string>
     <!-- 通知から engine を停止する操作。 -->
     <string name="engine_stop">Stop</string>
+    <string name="engine_data_sync_timeout">Android stopped the background engine after its system time limit. Reopen any required connections.</string>
     <!-- Go側で詳細からcredentialと制御文字を除去し、共有可能な長さに制限する。 -->
     <string name="failure_listen">sshc could not take a local port on this device.</string>
     <string name="failure_stopped_early">The sshc engine stopped before it could open.</string>
@@ -15,4 +16,11 @@
     <string name="failure_copied">Diagnostic details copied</string>
     <string name="failure_retry">Try again</string>
     <string name="failure_retrying">Starting…</string>
+    <string name="file_picker_unavailable">No file picker is available on this device.</string>
+    <string name="transfer_channel">SFTP transfers</string>
+    <string name="transfer_completed">SFTP transfer completed.</string>
+    <string name="transfer_failed">SFTP transfer failed. Open sshc for details.</string>
+    <string name="webview_recovery_title">The sshc screen stopped responding.</string>
+    <string name="webview_recovery_body">The engine and terminal sessions are still running. Reload the screen to continue.</string>
+    <string name="webview_recovery_reload">Reload the screen</string>
 </resources>

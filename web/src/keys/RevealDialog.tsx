@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CopyButton } from "../ui/CopyButton";
 import { useTranslate } from "../i18n/context";
 import type { KeysApi } from "./api";
@@ -22,6 +22,14 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
     setState("confirm");
     onClose();
   }
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") close();
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  });
 
   async function confirm() {
     setState("loading");
