@@ -18,7 +18,8 @@ func TestBuildTransportScriptAcceptsStrictVersionedDocument(t *testing.T) {
 			{"sendEnv": "CONSOLE_USER", "lineEnding": "lf"},
 			{"send": "", "lineEnding": "crlf"},
 			{"readFor": "50ms"}
-		]
+		],
+		"onFailure": {"send": "\u0003", "lineEnding": "none", "timeout": "250ms"}
 	}`))
 	if err != nil {
 		t.Fatal(err)
@@ -35,6 +36,9 @@ func TestBuildTransportScriptAcceptsStrictVersionedDocument(t *testing.T) {
 	if script.Steps[3].ReadFor != 50*time.Millisecond || script.Steps[3].LineEnding != streamrun.EndingNone {
 		t.Fatalf("readFor step = %#v", script.Steps[3])
 	}
+	if script.OnFailure == nil || script.OnFailure.Send != "\x03" || script.OnFailure.LineEnding != streamrun.EndingNone || script.OnFailure.Timeout != 250*time.Millisecond {
+		t.Fatalf("onFailure = %#v", script.OnFailure)
+	}
 }
 
 func TestBuildTransportScriptRejectsUnknownFieldsAndTrailingDocuments(t *testing.T) {
@@ -42,11 +46,19 @@ func TestBuildTransportScriptRejectsUnknownFieldsAndTrailingDocuments(t *testing
 	called.Script = "-"
 	for _, document := range []string{
 		`{"version":1,"steps":[],"unexpected":true}`,
+		`{"version":1,"steps":[{"send":"show"}],"onFailure":{"send":"q","unexpected":true}}`,
 		`{"version":1,"steps":[]} {"version":1,"steps":[]}`,
 		`{"version":2,"steps":[]}`,
+		`{"version":1,"steps":[{"send":"show"}],"onFailure":{}}`,
+		`{"version":1,"steps":[{"send":"show"}],"onFailure":{"send":"q","lineEnding":"invalid"}}`,
+		`{"version":1,"steps":[{"send":"show"}],"onFailure":{"send":"q","timeout":"6s"}}`,
 	} {
 		if _, err := buildTransportScript(called, strings.NewReader(document)); err == nil {
 			t.Fatalf("accepted %s", document)
 		}
+	}
+	document := `{"version":1,"steps":[{"send":"show"}],"onFailure":{"send":"` + strings.Repeat("x", streamrun.MaxSendBytes+1) + `"}}`
+	if _, err := buildTransportScript(called, strings.NewReader(document)); err == nil {
+		t.Fatal("accepted oversized onFailure.send")
 	}
 }

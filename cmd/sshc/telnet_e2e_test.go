@@ -37,7 +37,7 @@ func TestRunTelnetEndToEnd(t *testing.T) {
 
 	address := listener.Addr().String()
 	called, err := parseInvocation([]string{
-		"sshc", "run", "telnet", address,
+		"sshc", "telnet", address, "--non-interactive",
 		"--connect-timeout", "2s",
 		"--timeout", "2s",
 		"--settle", "0",
@@ -130,7 +130,7 @@ func TestRunTelnetEndToEndTimesOutWhenPeerStopsResponding(t *testing.T) {
 
 	address := listener.Addr().String()
 	called, err := parseInvocation([]string{
-		"sshc", "run", "telnet", address,
+		"sshc", "telnet", address, "--non-interactive",
 		"--connect-timeout", "2s",
 		"--timeout", "200ms",
 		"--settle", "0",

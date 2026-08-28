@@ -24,15 +24,15 @@ func TestBuiltBinaryRunsAgainstVirtualTelnetServer(t *testing.T) {
 	go func() { serverDone <- serveIntegrationTelnet(listener) }()
 
 	process := start(t, isolatedHome(t),
-		"run", "telnet", listener.Addr().String(),
+		"telnet", listener.Addr().String(), "--non-interactive",
 		"--connect-timeout", "2s", "--timeout", "3s", "--settle", "0",
 		"--expect", `virtual# $`, "--json", "--", "show", "version",
 	)
 	if code := process.wait(t, 5*time.Second); code != 0 {
-		t.Fatalf("sshc run telnet exit = %d\nstdout: %s\nstderr: %s", code, process.Stdout.String(), process.Stderr.String())
+		t.Fatalf("sshc telnet --non-interactive exit = %d\nstdout: %s\nstderr: %s", code, process.Stdout.String(), process.Stderr.String())
 	}
 	if process.Stderr.String() != "" {
-		t.Fatalf("sshc run telnet stderr = %q", process.Stderr.String())
+		t.Fatalf("sshc telnet --non-interactive stderr = %q", process.Stderr.String())
 	}
 	var report struct {
 		Transport  string   `json:"transport"`
@@ -43,13 +43,13 @@ func TestBuiltBinaryRunsAgainstVirtualTelnetServer(t *testing.T) {
 		Warnings   []string `json:"warnings"`
 	}
 	if err := json.Unmarshal([]byte(process.Stdout.String()), &report); err != nil {
-		t.Fatalf("decode sshc run telnet JSON: %v\n%s", err, process.Stdout.String())
+		t.Fatalf("decode sshc telnet --non-interactive JSON: %v\n%s", err, process.Stdout.String())
 	}
 	if report.Transport != "telnet" || report.Target != listener.Addr().String() || !report.Success || !report.Matched {
-		t.Fatalf("sshc run telnet report = %#v", report)
+		t.Fatalf("sshc telnet --non-interactive report = %#v", report)
 	}
 	if report.Transcript != "virtual telnet version 1\r\nvirtual# " || len(report.Warnings) != 1 {
-		t.Fatalf("sshc run telnet output = %#v", report)
+		t.Fatalf("sshc telnet --non-interactive output = %#v", report)
 	}
 	select {
 	case err := <-serverDone:

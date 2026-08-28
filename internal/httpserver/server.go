@@ -34,7 +34,7 @@ import (
 )
 
 type Options struct {
-	// CLISecret は `sshc <alias>` が提示すべきものである。実行のたびに
+	// CLISecret は `sshc ssh <alias>` が提示すべきものである。実行のたびに
 	// 発行して state directory に書き込むため、kill されたプロセスが
 	// 残した handoff は、誰にも受け付けられない secret を運ぶことになる。
 	CLISecret string
@@ -397,7 +397,7 @@ func New(options Options) (*Server, error) {
 			Binding:     passwordBinding,
 		})
 	}
-	// `sshc <alias>` は、1 つの接続に必要なものをここに求める。secret は
+	// `sshc ssh <alias>` は、1 つの接続に必要なものをここに求める。secret は
 	// 呼び出し元が state directory から読み出しているはずのものであり、
 	// それがなければこのルートはすべてを拒否する。
 	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})

@@ -27,15 +27,15 @@ func TestBuiltBinaryRunsAgainstVirtualSerialRouter(t *testing.T) {
 		t.Fatal(err)
 	}
 	process := start(t, isolatedHome(t),
-		"run", "serial", device,
+		"serial", device, "--non-interactive",
 		"--timeout", "3s", "--settle", "20ms", "--expect", `virtual# `,
 		"--json", "--", "show", "version",
 	)
 	if code := process.wait(t, 5*time.Second); code != 0 {
-		t.Fatalf("sshc run serial exit = %d\nstdout: %s\nstderr: %s", code, process.Stdout.String(), process.Stderr.String())
+		t.Fatalf("sshc serial --non-interactive exit = %d\nstdout: %s\nstderr: %s", code, process.Stdout.String(), process.Stderr.String())
 	}
 	if process.Stderr.String() != "" {
-		t.Fatalf("sshc run serial stderr = %q", process.Stderr.String())
+		t.Fatalf("sshc serial --non-interactive stderr = %q", process.Stderr.String())
 	}
 	select {
 	case result := <-routerDone:
@@ -53,13 +53,13 @@ func TestBuiltBinaryRunsAgainstVirtualSerialRouter(t *testing.T) {
 		Transcript string `json:"transcript"`
 	}
 	if err := json.Unmarshal([]byte(process.Stdout.String()), &report); err != nil {
-		t.Fatalf("decode sshc run serial JSON: %v\n%s", err, process.Stdout.String())
+		t.Fatalf("decode sshc serial --non-interactive JSON: %v\n%s", err, process.Stdout.String())
 	}
 	if report.Transport != "serial" || report.Target != device || !report.Success || !report.Matched {
-		t.Fatalf("sshc run serial report = %#v", report)
+		t.Fatalf("sshc serial --non-interactive report = %#v", report)
 	}
 	if strings.Contains(report.Transcript, "stale") || !strings.Contains(report.Transcript, "virtual serial version 1") {
-		t.Fatalf("sshc run serial transcript = %q", report.Transcript)
+		t.Fatalf("sshc serial --non-interactive transcript = %q", report.Transcript)
 	}
 
 	// The keep-open slave prevents master-side EIO before sshc opens the device.

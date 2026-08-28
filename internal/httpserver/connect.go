@@ -26,7 +26,7 @@ const ConnectPath = "/cli/connect"
 // maxConnectBody はリクエストを制限する。alias は 1 語である。
 const maxConnectBody = 4 << 10
 
-// ConnectHandlers は `sshc <alias>` に応答する。
+// ConnectHandlers は `sshc ssh <alias>` に応答する。
 type ConnectHandlers struct {
 	// Secret は呼び出し側が提示すべきものである。空であればすべての
 	// リクエストを拒否する。handoff を書けなかったサーバーは受け付けてはならない。

@@ -261,7 +261,7 @@ install: build
 		INSTALL_SOURCE="$(CURDIR)/bin/sshc" INSTALL_DIR="$(INSTALL_DIR)"
 	@case ":$$PATH:" in \
 		*":$(INSTALL_DIR):"*) ;; \
-		*) echo "note: $(INSTALL_DIR) is not on PATH; add it to run 'sshc <alias>' by name" ;; \
+		*) echo "note: $(INSTALL_DIR) is not on PATH; add it to run 'sshc ssh <alias>' by name" ;; \
 	esac
 
 # build済みバイナリを同じdirectory内へstageしてからrenameする。実行中の古いinodeを

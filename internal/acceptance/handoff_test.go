@@ -11,7 +11,7 @@ import (
 )
 
 // 実行中のアプリケーションは handoff を残し、それを読むのが
-// `sshc <alias>` である。これはそのコマンドと同じリクエストを駆動する。
+// `sshc ssh <alias>` である。これはそのコマンドと同じリクエストを駆動する。
 func TestTheHandoffLetsTheCommandLineAskForOneConnection(t *testing.T) {
 	f := newFixture(t)
 

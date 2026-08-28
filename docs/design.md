@@ -31,8 +31,8 @@
 
 - SerialとTelnetはOpenSSH configへ保存せず、一回限りのCLI接続として扱います。独自の保存接続先model、vault、engine、Web API、同期snapshotへは加えません。
 - 対話接続はローカル端末とbyte streamを直接結び、`Ctrl+]`を必ずローカル切断として消費します。SerialはOSのdeviceを排他的に開き、context取消と終了の両方で閉じます。TelnetはIACをapplication dataから除き、BINARY、ECHO、Suppress Go Ahead、Terminal Type、NAWSだけを交渉し、未知optionは拒否します。BINARY成立前はNVTのCR LF／CR NUL規則を適用し、成立後だけbyte列をそのまま渡します。
-- `run serial`と`run telnet`にはremote processの終了statusがありません。終了条件はRE2による`expect`または明示した`readFor`であり、timeout、step数、pattern、送信、transcript、subnegotiationを固定上限で制限します。送信と受信がblockしてもcontextまたはtimeoutで呼び出し元へ制御を返し、streamを閉じます。
-- AIなどの呼び出し元はversion付きJSON script／結果を利用できます。invalid UTF-8はbase64で返し、環境変数から送ったsecretは完全一致byte列をtranscriptからmaskします。引数やscriptのliteralへ秘密を書いた場合は保護できません。
+- SerialとTelnetの`--non-interactive`にはremote processの終了statusがありません。終了条件はRE2による`expect`または明示した`readFor`であり、timeout、step数、pattern、送信、transcript、subnegotiationを固定上限で制限します。`readFor`の0 byte成功を許容しつつ、応答必須の呼出元は`--require-output`で`no_output`失敗にできます。送信と受信がblockしてもcontextまたはtimeoutで呼び出し元へ制御を返し、streamを閉じます。
+- AIなどの呼び出し元はversion付きJSON script／結果を利用できます。invalid UTF-8はbase64で返し、環境変数から送ったsecretは完全一致byte列をtranscriptからmaskします。引数やscriptのliteralへ秘密を書いた場合は保護できません。scriptの`onFailure`は明示された送信だけをmain failure後に独立した最大5秒のtimeoutで試み、成功時には送信しません。装置非依存のCtrl+Cやpager解除は定義できないため自動推測せず、結果には送信内容を含めずattempt成否だけを返します。
 - Telnetは平文でserver認証もないため、SSHと同じ安全性を示しません。接続時の警告はこの性質を変えず、信頼できないnetworkで資格情報を送る用途は対象外です。
 - desktopのSerial backendはLinux、macOS、Windowsを対象とします。採用driverがflow control設定を公開しないため現時点ではnoneだけを実装し、RTS/CTSとXON/XOFFは黙って無視せず拒否します。Android USB serialはUSB Host permissionとnative driverが必要なため対象外です。
 - 自動検査ではLinux PTYを本番Serial driverで開く仮想routerと、loopback TCP上でIAC交渉する仮想Telnet serverを使います。parserからtransportまでの高速testに加え、build済み`sshc` processのargv、標準出力、終了codeをintegration testで通します。PTYは電気的baud、USB descriptor、DTR／RTS／Break、物理抜線を再現しないため、これらは実機acceptanceから外しません。
@@ -141,7 +141,7 @@
 ## SSH 実行の境界
 
 - 埋め込みターミナルの SSH 接続はプロセス内で実装します。外部の `ssh` と PTY は使用せず、SSH channel を端末入出力として使用します。接続値はこのアプリケーションの解決器から取得し、設定ファイルを一時保存して `ssh -F` で再解決することはありません。`creack/pty` はローカルシェルだけで使用します。
-- 埋め込みターミナル、`sshc <接続先>`、認証テスト、公開鍵のリモート登録、ホスト鍵の取得は、外部の `ssh` を起動せずプロセス内で実行します。例外として、利用者が設定した `ProxyCommand` は実行します。プロセス内実装への移行に伴い、`SSH_ASKPASS` ヘルパー、`/askpass` endpoint、ワンタイムトークン、プロンプト文字列照合、関連する 5 個の環境変数除去処理を削除しました。
+- 埋め込みターミナル、`sshc ssh <接続先>`、認証テスト、公開鍵のリモート登録、ホスト鍵の取得は、外部の `ssh` を起動せずプロセス内で実行します。例外として、利用者が設定した `ProxyCommand` は実行します。プロセス内実装への移行に伴い、`SSH_ASKPASS` ヘルパー、`/askpass` endpoint、ワンタイムトークン、プロンプト文字列照合、関連する 5 個の環境変数除去処理を削除しました。
 - `ProxyCommand` は接続経路の一部として実行します。この方針は、当初の「外部コマンドを実行しない」という判断を変更したものです。
 
   当初は `ProxyCommand` を拒否し、必要な場合は端末から `ssh` を利用する方針でした。
@@ -207,13 +207,13 @@
   以前は、アプリケーションが `~/Library/LaunchAgents/com.github.aida0710.sshc.plist` と `~/.config/systemd/user/sshc.service` を作成し、`sshc service refresh` / `disable` で管理する方式と、デスクトップアプリケーションを OS のログイン項目に登録して engine を子プロセスとして起動する方式がありました。どちらも削除しました。
 
   現在、常駐対象は `sshc engine` の foreground process です。OS のログイン項目ではなく process supervisor に登録します。引数なしの `sshc` は engine を起動しないため、常駐設定には使用しません。
-- `sshc list` は `~/.ssh/config` と到達可能な `Include` を読み、具体的な接続先 alias を辞書順で 1 行ずつ表示します。`Host *`、ワイルドカード、否定パターンは接続先名ではないため表示せず、重複 alias は 1 回だけ表示します。設定の読み取り時に `ssh` や `Match exec` は実行しません。
-- `sshc connect` は現在のターミナルに検索 TUI を表示します。alias、設定から計算した `HostName`・`User`・`Port`、metadata のタグで絞り込み、alias順に表示します。上下キーで選択し、Enter で同じ端末から接続します。Web UI は起動せず、`sshc <接続先>` と同じ保存済み鍵パスフレーズの経路を使用します。設定ファイルが存在するが読み取れない場合は、接続先 0 件として扱わず読み取りエラーを表示します。
+- `sshc ssh --list` は `~/.ssh/config` と到達可能な `Include` を読み、具体的な接続先 alias を辞書順で 1 行ずつ表示します。`Host *`、ワイルドカード、否定パターンは接続先名ではないため表示せず、重複 alias は 1 回だけ表示します。設定の読み取り時に `ssh` や `Match exec` は実行しません。
+- 引数なしの `sshc ssh` は現在のターミナルに検索 TUI を表示します。alias、設定から計算した `HostName`・`User`・`Port`、metadata のタグで絞り込み、alias順に表示します。上下キーで選択し、Enter で同じ端末から接続します。Web UI は起動せず、`sshc ssh <接続先>` と同じ保存済み鍵パスフレーズの経路を使用します。設定ファイルが存在するが読み取れない場合は、接続先 0 件として扱わず読み取りエラーを表示します。
 - TUI の入力は端末からの read 単位で解釈します。`Esc` は単独キーであると同時に矢印キー列の先頭でもあるため、read の末尾にある場合だけ単独キーとして扱います。未対応の escape sequence は終端まで読み捨て、`Delete` や `Ctrl-矢印` の後続バイトが検索文字列に入らないようにします。行は端末幅で切り、表示できない件数を `N more` として表示します。
-- サブコマンドの一覧は `sshc -h` と `sshc connect --help` に出ます。`open`、`list`、`connect`、`status`、`update`、`help` は alias より先に読まれるので、その名前のホストへはこのコマンドからは繋げません。それが usage に書いてある理由です。
-- `sshc <接続先>` は外部の `ssh` を起動せず、現在のターミナルからプロセス内 SSH client で接続します。engine は `~/.ssh/sshc/cli`（0600）に URL と起動ごとの秘密を保存し、CLI はこの情報を使って保存済み資格情報を取得します。応答には単回トークンではなく、その接続に必要な資格情報を直接含めます。engine は ProxyJump の接続チェーンを解決し、各 alias が使用する鍵パスフレーズとアカウントパスワードだけを返します。`Match exec` や `CanonicalizeHostname` により外部実行または DNS なしでは鍵を決定できない場合は返しません。接続チェーンに含まれない資格情報も返しません。2FA など保存値で処理できないプロンプトは端末に表示します。アカウントパスワードを追加しても、このファイルを読み取れる主体は既に vault 暗号文、秘密鍵、任意 alias の保存済みパスフレーズへアクセスできるため、信頼境界は変わりません。強制終了後にファイルが残っても参照先ポートには接続できず、秘密は次回起動時に再生成されます。
+- サブコマンドの一覧は `sshc -h`、`sshc ssh --help`、`sshc serial --help`、`sshc telnet --help` に出ます。SSH alias は必ず `sshc ssh` の後で解釈するため、`serial`、`telnet`、`status` などのトップレベルコマンド名と同じaliasにも接続できます。transportを省略した `sshc <alias>` は受け付けません。
+- `sshc ssh <接続先>` は外部の `ssh` を起動せず、現在のターミナルからプロセス内 SSH client で接続します。engine は `~/.ssh/sshc/cli`（0600）に URL と起動ごとの秘密を保存し、CLI はこの情報を使って保存済み資格情報を取得します。応答には単回トークンではなく、その接続に必要な資格情報を直接含めます。engine は ProxyJump の接続チェーンを解決し、各 alias が使用する鍵パスフレーズとアカウントパスワードだけを返します。`Match exec` や `CanonicalizeHostname` により外部実行または DNS なしでは鍵を決定できない場合は返しません。接続チェーンに含まれない資格情報も返しません。2FA など保存値で処理できないプロンプトは端末に表示します。アカウントパスワードを追加しても、このファイルを読み取れる主体は既に vault 暗号文、秘密鍵、任意 alias の保存済みパスフレーズへアクセスできるため、信頼境界は変わりません。強制終了後にファイルが残っても参照先ポートには接続できず、秘密は次回起動時に再生成されます。
 - engine が動作していない場合は `sshc engine` の起動方法を表示して終了します。CLI 自身は engine を起動しません。保存済み資格情報を使わずに接続する場合は、`ssh <接続先>` を利用できます。
-- vault が施錠中の場合、`sshc <接続先>` は解錠を待ちます。UI または別端末の `sshc vault unlock` で同じ engine を解錠すると、待機中の接続が続行します。この接続コマンド自体はマスターパスワードを要求しません。以前使用していた `/cli/unlock` route は削除済みで、`TestLegacyCLIUnlockRouteIsNotRegistered` が 404 を検査します。desktop は UI を 1 回 foreground にして無期限に待機し、headless は待機しません。
+- vault が施錠中の場合、対話式の `sshc ssh <接続先>` は解錠を待ちます。UI または別端末の `sshc vault unlock` で同じ engine を解錠すると、待機中の接続が続行します。この接続コマンド自体はマスターパスワードを要求しません。`--non-interactive` は待機せずエラーを返します。以前使用していた `/cli/unlock` route は削除済みで、`TestLegacyCLIUnlockRouteIsNotRegistered` が 404 を検査します。desktop は UI を 1 回 foreground にして無期限に待機し、headless は待機しません。
 - UI の「接続」は外部ターミナルを起動せず、engine 内の SSH client を使用します。入出力のバイト列を WebSocket で UI へ送り、xterm.js で描画します。ローカルシェルは PTY を確保し、同じ WebSocket 経路を使用します。
 - 埋め込みターミナルへの移行により、macOS では Terminal.app、iTerm2、kitty、Ghostty、WezTerm など利用者のターミナル設定をそのまま利用できなくなりました。外部ターミナルを選択する設定と `internal/platform/macos/terminal.go` の AppleScript・bundle ID 一覧は削除しました。一方、外部ターミナル起動に対応していなかった Linux でも UI 内から接続でき、接続直後のエラーを終了済みコンソールで確認できます。
 - 埋め込みターミナルは、解錠済みページを侵害した攻撃者に任意コマンド実行を許すリスクがあります。以前はターミナル起動に単回 action token を要求していましたが、埋め込みターミナルでは要求しません。vault の解錠だけが条件です。したがって、解錠中のページを制御できる主体は確認ダイアログなしで複数の shell を起動できます。ターミナルを開くたびに確認を求める操作性とのトレードオフとして、既存の action token を削除しました。
@@ -238,10 +238,10 @@
 - scrollback はメモリにだけ保持し、ディスクには保存しません。世代バックアップ、journal、history、remote snapshot の対象外です。`TestTheScrollbackNeverReachesTheStateDirectory` は `~/.ssh` 全体を走査して検査します。1 セッションの既定上限は 256 KiB（設定範囲 16 KiB〜4 MiB）、同時セッション数の既定上限は 50（設定範囲 1〜200）です。設定画面の「ターミナル」から変更し、`metadata.json` の `embeddedTerminal` に保存します。未設定は既定値を使用する状態であり、既定値と同じ値を明示的には保存しません。上限到達時は `terminal_session_limit` で新規作成を拒否し、既存セッションを自動終了しません。
 - WebSocket endpoint は `/api/` の外にある `/terminal/stream` です。ブラウザは WebSocket handshake にカスタム header を付けられないため、`X-SSHC-CSRF` を必須とする `/api/` 配下には配置できません。代わりに、CSRF 検証済みの `POST /api/v1/terminal/sessions` が単回 ticket を発行します。ticket は 1 個の session ID に紐付き、10 秒で失効し、1 回だけ使用できます。無効、期限切れ、使用済みの場合は upgrade せず 403 を返します。upgrade 時には `Origin` の完全一致も確認します。
 - CSP では xterm.js に必要な `style-src` だけを緩和します。xterm.js は文字寸法の計測後に `<style>` 要素を追加し、DOM renderer は各 cell に `style` 属性を設定します。nonce を渡す API がないため、`style-src 'self' 'unsafe-inline'` を使用します。`script-src 'self'` と `require-trusted-types-for 'script'` は変更しません。xterm.js 5.5.0 と 6.0.0 の配布物では、`innerHTML`、`insertAdjacentHTML`、`document.write`、`new Function`、`eval`、Worker、blob URL の使用が 0 件であることを確認しました。この変更により HTML injection が可能な場合は CSS injection も可能になりますが、React は文字列を escape し、`dangerouslySetInnerHTML` も使用していません。`connect-src 'self'` は同一 origin の `ws://` を許可するため変更しません。E2E テストは CSP violation が 0 件であることを確認します。
-- プロセス内 SSH client の依存関係は `internal/app` で一度だけ構築します。埋め込みターミナル、`sshc <接続先>`、認証テスト、公開鍵のリモート登録は、同じ鍵、`known_hosts`、設定解決器を使用します。
+- プロセス内 SSH client の依存関係は `internal/app` で一度だけ構築します。埋め込みターミナル、`sshc ssh <接続先>`、認証テスト、公開鍵のリモート登録は、同じ鍵、`known_hosts`、設定解決器を使用します。
 - ローカルシェルは SSH 接続ではないため、`localhost` を Home の接続一覧には表示しません。左ナビのターミナルにある「ローカルシェル」から起動します。シェルは、絶対パスで存在し実行可能な `$SHELL`、`/bin/zsh`、`/bin/bash`、`/bin/sh` の順に選択します。`PATH` は検索しません。argv[0] の先頭にハイフンを付け、login shell として起動します。
-- 埋め込みターミナルは安全な文字集合の alias に限ります。それ以外は `unsafe_alias` として拒否します。`sshc <alias>` で繋ごうとした場合も、拒否される理由を先に一言添えます。
-- 外部ターミナルへ貼り付けるコマンドを生成する機能はありません。以前の `POST /api/v1/terminal/command` は削除し、CLI 接続には `sshc <alias>` を使用します。
+- 埋め込みターミナルは安全な文字集合の alias に限ります。それ以外は `unsafe_alias` として拒否します。`sshc ssh <alias>` で繋ごうとした場合も、拒否される理由を先に一言添えます。
+- 外部ターミナルへ貼り付けるコマンドを生成する機能はありません。以前の `POST /api/v1/terminal/command` は削除し、CLI 接続には `sshc ssh <alias>` を使用します。
 - ホスト鍵の取得結果は本人性を証明しません。常に「未検証」と表示し、別経路で取得した fingerprint の一致か、明示的な承認がある場合だけ追加します。
 - `known_hosts` の変更は `storage.Manager` を通し、journal と世代バックアップを残します。削除は表示していた行の digest を伴い、ファイルが変化していれば衝突として拒否します。解析は無損失なので、指定された行以外は 1 バイトも変わりません。
 - 公開鍵のリモート登録は POSIX shell を持つ環境に限定し、固定のリモート処理へ公開鍵を標準入力で渡します。ユーザー入力をリモートシェル文字列へ補間しません。対応外環境では手順の表示だけを行います。
