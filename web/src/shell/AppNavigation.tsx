@@ -24,6 +24,7 @@ import {
 
 export function AppNavigation({
   navigationId,
+  version,
   navigationOpen,
   desktopVisible,
   desktopWidth,
@@ -46,6 +47,7 @@ export function AppNavigation({
   onOpenCommandPalette,
 }: {
   navigationId: string;
+  version: string;
   navigationOpen: boolean;
   desktopVisible: boolean;
   desktopWidth: number;
@@ -161,7 +163,7 @@ export function AppNavigation({
       </div>
 
       <div className="shrink-0 pt-1 md:pt-2">
-        <UpdateBadge />
+        <UpdateBadge current={version} />
       </div>
 
       <NavigationResizeHandle width={desktopWidth} onWidthChange={onDesktopWidthChange} />
