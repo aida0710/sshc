@@ -6,7 +6,6 @@ import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
 import { dragMimeType, type DragPayload } from "./dragdrop";
 import { integrationsApi } from "../api/integrations";
-import type { InspectorContent } from "../ui/Inspector";
 import { keysApi } from "../keys/api";
 
 vi.mock("../api/config", async () => {
@@ -61,19 +60,6 @@ const detail = {
     contents: "Host bastion\n\tPort 22\n", digest: "digest", editable: true, exists: true,
   },
 };
-
-function inspectorText(inspector: ReturnType<typeof vi.fn>): string {
-  const calls = inspector.mock.calls as [InspectorContent][];
-  for (let index = calls.length - 1; index >= 0; index -= 1) {
-    const content = calls[index]?.[0];
-    if (content === null || content === undefined) continue;
-    const { container, unmount } = render(<>{content.body}</>);
-    const text = container.textContent ?? "";
-    unmount();
-    if (text !== "") return text;
-  }
-  return "";
-}
 
 const consoleProps = {
   consoles: {
@@ -517,7 +503,7 @@ describe("ConnectionsPage", () => {
     await waitFor(() => expect(onShowConsole).toHaveBeenCalledWith("console-1"));
   });
 
-  it("offers the display settings to the pane, and nothing at all until a connection is open", async () => {
+  it("keeps connection-specific display settings in the fourth editor tab", async () => {
     const user = userEvent.setup();
     const inspector = vi.fn();
     render(<ConnectionsPage {...consoleProps} onInspector={inspector} />);
@@ -526,9 +512,11 @@ describe("ConnectionsPage", () => {
     expect(inspector.mock.calls.every(([content]) => content === null)).toBe(true);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(await screen.findByRole("tab", { name: "sshc" }));
 
-    await waitFor(() => expect(inspectorText(inspector)).toMatch(/sshc-only settings/));
-    expect(inspectorText(inspector)).not.toMatch(/Local shell/);
+    expect(screen.getByRole("tabpanel", { name: "sshc" })).toBeVisible();
+    expect(screen.getByLabelText("Remote text encoding")).toBeVisible();
+    expect(inspector.mock.calls.every(([content]) => content === null)).toBe(true);
   });
 
   it("keeps global terminal editing out of connection detail", async () => {
