@@ -166,7 +166,7 @@ describe("ConnectionBasicForm", () => {
     expect(await screen.findByLabelText("Host name or IP address")).toBeDisabled();
     expect(screen.getByLabelText("User")).toBeDisabled();
     expect(screen.getByLabelText("Port")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
   });
 
   it("stages a freshly generated key from a fresh inventory and applies it only on Save", async () => {
@@ -235,7 +235,7 @@ describe("ConnectionBasicForm", () => {
     expect(screen.getByText(/Inherited from config:8/)).toBeInTheDocument();
     expect(screen.getByText(/SSH default/)).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
   });
 
   it("emits semantic set and inherit changes in one request", async () => {
@@ -440,7 +440,7 @@ describe("ConnectionBasicForm", () => {
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
 
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("inherited.example");
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
   });
 
   it("requires explicit confirmation before removing an assigned password", async () => {
@@ -459,8 +459,9 @@ describe("ConnectionBasicForm", () => {
 
     expect(screen.getByText("Assigned: office")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Stored password action"), "remove");
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Confirm stored password removal" }));
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({

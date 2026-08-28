@@ -34,6 +34,10 @@ describe("the catalogue", () => {
     });
     expect(untranslated.sort()).toEqual(
       [
+        "conn.advancedDirectives",
+        "conn.areaAdvanced",
+        "conn.areaAnalysis",
+        "conn.areaBasic",
         "conn.heading",
         "diag.hostAlias",
         "explorer.fileState",
@@ -42,6 +46,7 @@ describe("the catalogue", () => {
         "groups.pageTitle",
         "history.pageTitle",
         "home.connections",
+        "host.tabJump",
         "host.tabRaw",
         "keys.agentHeading",
         "keys.blockerOther",

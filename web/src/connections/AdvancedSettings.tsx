@@ -130,7 +130,19 @@ export function AdvancedSettings({
 
   return (
     <section aria-label={t("conn.advancedLabel")} className="flex flex-col gap-4">
-      <div role="tablist" aria-label={t("conn.advancedViews")} className="flex gap-1 rounded-lg bg-select-fill p-1">
+      <label className="flex items-center gap-3 md:hidden">
+        <span className="shrink-0 text-xs font-medium text-ink-muted">{t("conn.advancedViewLabel")}</span>
+        <select
+          aria-label={t("conn.advancedViews")}
+          value={area}
+          onChange={(event) => onAreaChange(event.currentTarget.value as AdvancedArea)}
+          className={`${control} min-h-11 min-w-0 flex-1 py-2`}
+        >
+          {tabs.map((tab) => <option key={tab.area} value={tab.area}>{t(tab.label)}</option>)}
+        </select>
+      </label>
+
+      <div role="tablist" aria-label={t("conn.advancedViews")} className="hidden border-b border-line md:flex">
         {tabs.map((tab) => (
           <button
             key={tab.area}
@@ -138,7 +150,7 @@ export function AdvancedSettings({
             role="tab"
             aria-selected={area === tab.area}
             onClick={() => onAreaChange(tab.area)}
-            className={`flex-1 rounded-md px-3 py-2 text-sm transition-colors ${area === tab.area ? "bg-card font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"}`}
+            className={`min-h-10 border-b-2 px-5 py-2 text-sm transition-colors ${area === tab.area ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:bg-select-fill/50 hover:text-ink"}`}
           >
             {t(tab.label)}
           </button>
@@ -207,12 +219,12 @@ export function AdvancedSettings({
           </Button>
         </div>
 
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-line bg-canvas/95 py-3">
+        {fieldDirty ? <div className="flex items-center justify-end gap-2 border-t border-line py-3">
           <Button disabled={!fieldDirty} onClick={discard}>{t("conn.discardChanges")}</Button>
           <Button kind="primary" disabled={!fieldDirty || fieldsDisabled} onClick={submitFieldEdits}>
             {t("host.saveChanges")}
           </Button>
-        </div>
+        </div> : null}
       </div>
 
       <div hidden={area !== "Raw"} className="flex flex-col gap-2">
@@ -228,12 +240,12 @@ export function AdvancedSettings({
           spellCheck={false}
           className="min-h-80 rounded-lg border border-control-line bg-tree p-4 font-mono text-xs leading-5 text-ink focus:border-accent focus:outline-none"
         />
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-line bg-canvas/95 py-3">
+        {rawDirty ? <div className="flex items-center justify-end gap-2 border-t border-line py-3">
           <Button disabled={!rawDirty} onClick={discard}>{t("conn.discardChanges")}</Button>
           <Button kind="primary" disabled={!rawDirty || rawDisabled} onClick={() => onBlockRaw(blockRaw)}>
             {t("host.saveBlock")}
           </Button>
-        </div>
+        </div> : null}
       </div>
     </section>
   );
