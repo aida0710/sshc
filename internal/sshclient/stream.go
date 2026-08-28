@@ -65,9 +65,13 @@ func (d Dialer) Stream(
 	}
 	defer func() { _ = session.Close() }()
 
-	session.Stdin = streams.In
-	session.Stdout = streams.Out
-	session.Stderr = streams.Err
+	encoded, closeEncoding, err := encodeStreams(streams, strict.Encoding)
+	if err != nil {
+		return RemoteFailureExit, err
+	}
+	session.Stdin = encoded.In
+	session.Stdout = encoded.Out
+	session.Stderr = encoded.Err
 	for _, variable := range strict.SetEnv {
 		// 拒否されても続ける。サーバーが AcceptEnv を絞っているのは普通のことで、
 		// それを理由に諦める必要はない。
@@ -95,8 +99,12 @@ func (d Dialer) Stream(
 	}()
 
 	runErr := session.Run(command)
+	encodingErr := closeEncoding()
 	if cause := ctx.Err(); cause != nil {
 		return RemoteFailureExit, cause
+	}
+	if runErr == nil && encodingErr != nil {
+		return RemoteFailureExit, encodingErr
 	}
 	var exit *ssh.ExitError
 	switch {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sshc/internal/streamrun"
+	"sshc/internal/textencoding"
 )
 
 func TestParseSerialListJSON(t *testing.T) {
@@ -47,6 +48,19 @@ func TestParseTelnetUsesOneShotDefaults(t *testing.T) {
 	got := called.Transport
 	if got == nil || got.Transport != transportTelnet || got.Target != "switch.example:2323" || got.ConnectTimeout != 3*time.Second || got.TerminalType != "xterm-256color" {
 		t.Fatalf("transport = %#v", got)
+	}
+}
+
+func TestParseTransportEncodingCanonicalisesCommonNames(t *testing.T) {
+	called, err := parseInvocation([]string{"sshc", "telnet", "legacy.example", "--encoding", "sjis"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := called.Transport; got == nil || got.Encoding != textencoding.ShiftJIS {
+		t.Fatalf("transport = %#v", got)
+	}
+	if _, err := parseInvocation([]string{"sshc", "serial", "COM3", "--encoding", "unknown"}); err == nil {
+		t.Fatal("unsupported encoding was accepted")
 	}
 }
 

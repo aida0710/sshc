@@ -13,6 +13,7 @@ import (
 
 	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
+	"sshc/internal/textencoding"
 )
 
 // streamSetup は、この検査が繰り返す組み立てをひとつにまとめる。
@@ -55,6 +56,31 @@ func TestStreamKeepsTheTwoOutputsApart(t *testing.T) {
 	}
 	if errOut.String() != "this is the diagnosis\n" {
 		t.Errorf("stderr = %q", errOut.String())
+	}
+}
+
+func TestStreamConvertsTheSavedEncodingInsideSSH(t *testing.T) {
+	var received []byte
+	_, dialer, target := streamSetup(t, serverOptions{
+		OnShell: func(channel ssh.Channel) {
+			received, _ = io.ReadAll(channel)
+			_, _ = channel.Write([]byte{0x8e, 0xf3, 0x90, 0x4d})
+		},
+	})
+	target.Encoding = textencoding.ShiftJIS
+	var output bytes.Buffer
+
+	code, err := dialer.Stream(context.Background(), target, "legacy",
+		sshclient.Streams{In: strings.NewReader("送信"), Out: &output, Err: io.Discard})
+	if err != nil || code != 0 {
+		t.Fatalf("Stream = %d, %v", code, err)
+	}
+	wantInput := []byte{0x91, 0x97, 0x90, 0x4d}
+	if !bytes.Equal(received, wantInput) {
+		t.Fatalf("wire input = %x, want %x", received, wantInput)
+	}
+	if got := output.String(); got != "受信" {
+		t.Fatalf("local output = %q", got)
 	}
 }
 

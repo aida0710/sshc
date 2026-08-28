@@ -68,11 +68,17 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 	defer func() { _ = session.Close() }()
 
 	var stdout, stderr cappedBuffer
-	session.Stdout = &stdout
-	session.Stderr = &stderr
+	streams := Streams{Out: &stdout, Err: &stderr}
 	if len(stdin) > 0 {
-		session.Stdin = bytes.NewReader(stdin)
+		streams.In = bytes.NewReader(stdin)
 	}
+	encoded, closeEncoding, err := encodeStreams(streams, strict.Encoding)
+	if err != nil {
+		return failed(), err
+	}
+	session.Stdin = encoded.In
+	session.Stdout = encoded.Out
+	session.Stderr = encoded.Err
 
 	// Run は session.Run の最中にも ctx の所有下にある。チャンネルだけでなく
 	// 輸送も閉じるのは、応答しない相手の Close を待たずに解除するためである。
@@ -90,11 +96,15 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 
 	output := Output{ExitCode: RemoteFailureExit}
 	runErr := session.Run(command)
+	encodingErr := closeEncoding()
 	output.Stdout, output.Stderr = stdout.Bytes(), stderr.Bytes()
 	output.Truncated = stdout.truncated || stderr.truncated
 	output.Elapsed = time.Since(started)
 	if cause := ctx.Err(); cause != nil {
 		return output, cause
+	}
+	if runErr == nil && encodingErr != nil {
+		return output, encodingErr
 	}
 
 	var exit *ssh.ExitError

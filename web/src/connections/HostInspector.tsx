@@ -87,6 +87,28 @@ export function HostInspector({
           />
         </Field>
 
+        <Field label={t("connection.encodingLabel")} hint={t("connection.encodingHint")}>
+          <select
+            value={detail.metadata.encoding ?? ""}
+            onChange={(event) => {
+              const metadata = { ...detail.metadata };
+              const encoding = event.target.value as NonNullable<HostMetadata["encoding"]> | "";
+              if (encoding === "") {
+                delete metadata.encoding;
+              } else {
+                metadata.encoding = encoding;
+              }
+              onMetadata(metadata);
+            }}
+            className={control}
+          >
+            <option value="">{t("connection.encodingUTF8")}</option>
+            <option value="shift_jis">{t("connection.encodingShiftJIS")}</option>
+            <option value="euc-jp">{t("connection.encodingEUCJP")}</option>
+            <option value="iso-2022-jp">{t("connection.encodingISO2022JP")}</option>
+          </select>
+        </Field>
+
         <Field label={t("host.tags")}>
           <input
             value={(detail.metadata.tags ?? []).join(", ")}

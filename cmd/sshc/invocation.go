@@ -204,15 +204,16 @@ func usage(out io.Writer) {
                        connect interactively to a serial device
                        options: --baud N --data-bits 5..8 --parity none|odd|even|mark|space
                                 --stop-bits 1|1.5|2 --flow none|rtscts|xonxoff
-                                --dtr on|off --rts on|off --break D
+                                --dtr on|off --rts on|off --break D --encoding NAME
   sshc telnet <host>[:port] [options]
                        connect interactively with unencrypted Telnet
-                       options: --connect-timeout D --terminal-type TYPE
+                       options: --connect-timeout D --terminal-type TYPE --encoding NAME
   sshc run serial <device> [options] -- <text>
   sshc run telnet <host>[:port] [options] -- <text>
                        send text and wait for --expect or --read-for
                        automation: --expect REGEX | --read-for D | --script FILE|-
                                    --timeout D --settle D --max-bytes N --line-ending MODE --json
+                       encodings: utf-8, shift_jis, euc-jp, iso-2022-jp
   sshc connect [text]  choose a host in this terminal, then connect
   sshc list            print every concrete Host alias, one per line
   sshc open            print a one-time UI URL
