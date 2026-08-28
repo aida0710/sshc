@@ -1,7 +1,34 @@
 import { Component, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
-
+import { detectLocale, type Locale } from "../i18n/locale";
 
 type State = { message: string; stack: string };
+
+type CrashCopy = {
+  heading: string;
+  note: string;
+  reload: string;
+};
+
+const crashCopy: Record<Locale, CrashCopy> = {
+  en: {
+    heading: "sshc stopped rendering",
+    note: "This is a defect. Copy the lines below into a report. They contain only the failure details.",
+    reload: "Reload",
+  },
+  ja: {
+    heading: "sshc の画面を表示できませんでした",
+    note: "アプリの不具合です。下の内容にはエラー情報だけが含まれています。コピーして不具合報告に添えてください。",
+    reload: "再読み込み",
+  },
+};
+
+function currentCrashCopy(): CrashCopy {
+  try {
+    return crashCopy[detectLocale()];
+  } catch {
+    return crashCopy.en;
+  }
+}
 
 export class CrashBoundary extends Component<{ children: ReactNode }, State> {
   state: State = { message: "", stack: "" };
@@ -20,12 +47,11 @@ export class CrashBoundary extends Component<{ children: ReactNode }, State> {
 
   render() {
     if (this.state.message === "") return this.props.children;
+    const copy = currentCrashCopy();
     return (
       <main style={crashPage}>
-        <h1 style={heading}>sshc stopped rendering</h1>
-        <p style={note}>
-          This is a defect. Copy the lines below into a report. They contain only the failure details.
-        </p>
+        <h1 style={heading}>{copy.heading}</h1>
+        <p style={note}>{copy.note}</p>
         <pre style={block}>{this.state.message}</pre>
         {this.state.stack === "" ? null : <pre style={block}>{this.state.stack}</pre>}
         <button
@@ -33,7 +59,7 @@ export class CrashBoundary extends Component<{ children: ReactNode }, State> {
           style={action}
           onClick={() => window.location.replace(window.location.pathname + window.location.search)}
         >
-          Reload
+          {copy.reload}
         </button>
       </main>
     );

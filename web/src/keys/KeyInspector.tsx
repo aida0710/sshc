@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useTranslate } from "../i18n/context";
-import { noteLabels } from "./labels";
+import { describeKeyKind, noteLabels } from "./labels";
 import { certificateLines } from "./KeyTable";
 import type { KeyItem } from "./api";
 
@@ -13,7 +13,7 @@ export function KeyInspector({ item, now }: { item: KeyItem; now: number }) {
       <header className="rounded-lg bg-surface-subtle p-3">
         <p className="break-all font-mono text-sm font-semibold text-ink">{item.relativePath}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-          <span className="rounded-md bg-surface px-2 py-1">{item.kind}</span>
+          <span className="rounded-md bg-surface px-2 py-1">{describeKeyKind(item.kind, t)}</span>
           <span className="font-mono">
             {item.bits > 0 ? `${item.algorithm} · ${item.bits}` : item.algorithm}
           </span>

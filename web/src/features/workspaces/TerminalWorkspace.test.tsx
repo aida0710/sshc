@@ -523,7 +523,8 @@ describe("TerminalWorkspace pane movement", () => {
     expect(workspace.restore).toHaveBeenCalledTimes(1);
     expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2);
     expect(screen.getByText("Restored web-a")).toBeInTheDocument();
-    expect(screen.getByText("open_failed")).toBeInTheDocument();
+    expect(screen.getByText("The console could not be opened.")).toBeInTheDocument();
+    expect(screen.queryByText("open_failed")).not.toBeInTheDocument();
 
     rerender(<RestoreHarness sequence={1} />);
     await new Promise((resolve) => window.setTimeout(resolve, 0));
