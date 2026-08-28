@@ -502,7 +502,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       {unsaved ? (
         <section
           aria-label={t("groups.unsavedBarLabel")}
-          className="z-10 flex flex-wrap items-center gap-3 rounded-md border border-notice-line bg-notice p-3 shadow-lg sm:sticky sm:bottom-0"
+          className="flex flex-wrap items-center gap-3 rounded-md border border-notice-line bg-notice p-3"
         >
           <p className="min-w-0 grow text-sm text-notice-ink">{t("groups.unsavedBarNote")}</p>
           <Button onClick={() => void run("preview")}>
