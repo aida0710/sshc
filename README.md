@@ -66,12 +66,15 @@ sshc status                   # エンジンの状態を表示（--json に対�
 sshc update                   # Homebrew／install.sh経由の導入を更新
 ```
 
+SSH接続の文字コードは接続詳細で保存できます。UTF-8、Shift_JIS、EUC-JP、ISO-2022-JPに対応し、ブラウザのターミナル、`sshc <接続先>`、`sshc ssh <接続先>`、`sshc run`で同じ設定を使用します。
+
 Serial と Telnet は `~/.ssh/config` へ保存せず、その接続だけの指定として利用できます。どちらもエンジンの起動は不要です。対話接続は `Ctrl+]` で切断します。
 
 ```sh
 sshc serial list
 sshc serial /dev/ttyUSB0 --baud 9600 --data-bits 8 --parity none --stop-bits 1
 sshc telnet console.example:23 --connect-timeout 5s
+sshc telnet legacy.example:23 --encoding shift_jis
 
 # textを送り、正規表現に一致する応答まで待つ
 sshc run serial /dev/ttyUSB0 --expect 'router# ' --timeout 10s --json -- 'show version'

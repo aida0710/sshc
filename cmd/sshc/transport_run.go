@@ -12,6 +12,7 @@ import (
 	"sshc/internal/serialtransport"
 	"sshc/internal/streamrun"
 	"sshc/internal/telnet"
+	"sshc/internal/textencoding"
 )
 
 const (
@@ -192,9 +193,11 @@ func reportTransportSetupFailure(called transportInvocation, warnings []string, 
 }
 
 func openTransport(ctx context.Context, called transportInvocation, dependencies transportDependencies) (duplexStream, error) {
+	var stream duplexStream
+	var err error
 	switch called.Transport {
 	case transportSerial:
-		stream, err := dependencies.openSerial(ctx, serialtransport.Config{
+		stream, err = dependencies.openSerial(ctx, serialtransport.Config{
 			Device: called.Target, BaudRate: called.Baud, DataBits: called.DataBits,
 			Parity: serialtransport.Parity(called.Parity), StopBits: serialtransport.StopBits(called.StopBits),
 			FlowControl: serialtransport.FlowControl(called.Flow),
@@ -206,14 +209,22 @@ func openTransport(ctx context.Context, called transportInvocation, dependencies
 			_ = stream.Close()
 			return nil, err
 		}
-		return stream, nil
 	case transportTelnet:
-		return dependencies.dialTelnet(ctx, telnet.Config{
+		stream, err = dependencies.dialTelnet(ctx, telnet.Config{
 			Address: called.Target, DialTimeout: called.ConnectTimeout, TerminalType: called.TerminalType,
 		})
 	default:
 		return nil, errors.New("unknown transport")
 	}
+	if err != nil {
+		return nil, err
+	}
+	converted, err := textencoding.Wrap(stream, called.Encoding)
+	if err != nil {
+		_ = stream.Close()
+		return nil, err
+	}
+	return converted, nil
 }
 
 func applySerialControls(stream duplexStream, called transportInvocation) error {
@@ -248,6 +259,9 @@ func applySerialControls(stream duplexStream, called transportInvocation) error 
 }
 
 func safeTransportError(called transportInvocation, err error) error {
+	if errors.Is(err, textencoding.ErrUnsupported) {
+		return errors.New("the selected text encoding is not supported")
+	}
 	if errors.Is(err, serialtransport.ErrUnsupportedFlowControl) {
 		return errors.New("this build only supports --flow none")
 	}

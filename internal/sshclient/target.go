@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"sshc/internal/effective"
+	"sshc/internal/textencoding"
 )
 
 // 接続を組み立てられない理由。
@@ -98,6 +99,9 @@ type Target struct {
 	HostName string
 	Port     string
 	User     string
+	// Encoding is applied only to terminal and command payload bytes after the
+	// SSH protocol has been decoded. Empty and UTF8 both mean UTF-8.
+	Encoding textencoding.Name
 
 	// Identities は解決済みの絶対パス。~ とトークンの展開は
 	// internal/effective が済ませている。同じ展開を二度書かない。

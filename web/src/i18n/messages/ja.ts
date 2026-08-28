@@ -341,6 +341,12 @@ export const ja = {
   "terminal.paletteFollowsOverall": "全体の設定に従う",
   "connection.paletteLabel": "ターミナルの配色",
   "connection.paletteHint": "この接続のターミナルにだけ適用されます。",
+  "connection.encodingLabel": "接続先の文字コード",
+  "connection.encodingHint": "ブラウザのターミナルとコマンドラインの sshc の両方で、この接続に使用します。",
+  "connection.encodingUTF8": "UTF-8（既定）",
+  "connection.encodingShiftJIS": "Shift_JIS（日本語）",
+  "connection.encodingEUCJP": "EUC-JP（日本語）",
+  "connection.encodingISO2022JP": "ISO-2022-JP（日本語）",
   "terminal.fontSizeHint":
     "ピクセル単位で指定します。空欄の場合は、狭い画面で 15、それ以外で 13 になります。",
   "terminal.copyOnSelectLabel": "選択した文字列を自動的にコピーする",
