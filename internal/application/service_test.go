@@ -1051,6 +1051,46 @@ func TestRenameToAFreeAliasStillWorks(t *testing.T) {
 	}
 }
 
+func TestDuplicateOntoAnExistingAliasIsRefusedWithoutWriting(t *testing.T) {
+	service, workspace := newTestService(t)
+	before := readFile(t, workspace, "config")
+
+	_, err := service.Save(EditRequest{
+		Kind: EditDuplicate, Path: "config", Base: before,
+		Alias: "bastion", NewAlias: "nas",
+	})
+	if !errors.Is(err, ErrAliasAlreadyDeclared) {
+		t.Fatalf("Save error = %v, want ErrAliasAlreadyDeclared", err)
+	}
+	if got := readFile(t, workspace, "config"); got != before {
+		t.Error("a refused duplicate changed the file")
+	}
+}
+
+func TestDuplicateToAFreeAliasCopiesTheBlockAndItsComment(t *testing.T) {
+	service, workspace := newTestService(t)
+	const source = "# production gateway\nHost bastion\n\tHostName 203.0.113.10\n"
+	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := service.Save(EditRequest{
+		Kind: EditDuplicate, Path: "config", Base: source,
+		Alias: "bastion", NewAlias: "bastion-copy",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Preview.Operation != "config.duplicate" {
+		t.Fatalf("operation = %q", result.Preview.Operation)
+	}
+	got := readFile(t, workspace, "config")
+	if strings.Count(got, "# production gateway") != 2 ||
+		!strings.Contains(got, "Host bastion-copy\n\tHostName 203.0.113.10\n") {
+		t.Fatalf("duplicated config = %q", got)
+	}
+}
+
 func TestOverviewReportsAConnectionFileNothingIncludes(t *testing.T) {
 	service, workspace := newTestService(t)
 	if err := workspace.EnsureDirectory(filepath.Join(workspace.Root(), "connections")); err != nil {

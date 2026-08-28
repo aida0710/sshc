@@ -1,16 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { duplicateHostBlock, removeHostBlock } from "./blocks";
+import { removeHostBlock } from "./blocks";
 
 const contents = "# top\nHost bastion\n\tUser ops\n\nHost nas\n\tUser aida\n";
-
-describe("duplicateHostBlock", () => {
-  it("copies a block and renames only the alias on the header line", () => {
-    const raw = "Host bastion jump.example.com\n\tUser bastion\n";
-    expect(duplicateHostBlock(contents, raw, "bastion", "bastion-copy")).toBe(
-      `${contents}\nHost bastion-copy jump.example.com\n\tUser bastion\n`,
-    );
-  });
-});
 
 describe("removeHostBlock", () => {
   it("removes exactly the block that starts at the given line", () => {
@@ -43,13 +34,6 @@ describe("a block's attached comment", () => {
   it("is left alone when the block has none", () => {
     const plain = "Host bastion\n\tPort 2222\nHost nas\n";
     expect(removeHostBlock(plain, 1, "Host bastion\n\tPort 2222\n", 0)).toBe("Host nas\n");
-  });
-
-  it("is copied with a duplicate, so the copy is explained too", () => {
-    const after = duplicateHostBlock(contents, "Host bastion\n\tPort 2222\n", "bastion", "bastion-copy", 3, 2);
-
-    expect(after).toContain("# the production bastion\n# ask infra first\nHost bastion-copy\n\tPort 2222\n");
-    expect(after.match(/the production bastion/g)).toHaveLength(2);
   });
 
   it("removes a block that starts the file together with its comment", () => {

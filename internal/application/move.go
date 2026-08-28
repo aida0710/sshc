@@ -48,6 +48,27 @@ func AppendHostBlock(file *config.File, lines []config.Line) {
 	file.Lines = append(file.Lines, lines...)
 }
 
+// DuplicateHostBlock は、接続に付随するコメントを含めて同じファイルの末尾へ複製し、
+// 複製側の concrete alias だけを置き換える。呼び出し側は Include graph 全体で
+// newAlias が未使用であることを確認してから呼ぶ。
+func DuplicateHostBlock(file *config.File, alias, newAlias string) error {
+	copyForExtraction := &config.File{Lines: append([]config.Line(nil), file.Lines...)}
+	lines, err := ExtractHostBlock(copyForExtraction, alias)
+	if err != nil {
+		return err
+	}
+	duplicate := &config.File{Lines: lines}
+	block, ok := FindHostBlock(duplicate, alias)
+	if !ok {
+		return ErrHostNotFound
+	}
+	if err := RenameHostAlias(duplicate, block, alias, newAlias); err != nil {
+		return err
+	}
+	AppendHostBlock(file, duplicate.Lines)
+	return nil
+}
+
 // MoveHostBlock は 1 個のホストブロックを source から destination へ移動する。
 func MoveHostBlock(source, destination *config.File, alias string) ([]config.Line, error) {
 	if _, exists := FindHostBlock(destination, alias); exists {

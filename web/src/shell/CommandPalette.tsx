@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { FileNode } from "../api/config";
+import type { FileNode, HostEntry, HostIdentity } from "../api/config";
 import { snippetsApi, type Snippet } from "../snippets/api";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -13,6 +13,7 @@ type PaletteItem = {
   detail: string;
   search: string;
   action: () => void | Promise<void>;
+  host?: HostIdentity;
 };
 
 const searchableSections: Section[] = [
@@ -29,21 +30,23 @@ function matches(item: PaletteItem, query: string): boolean {
 
 export function CommandPalette({
   open,
-  aliases,
+  hosts,
   files,
   sectionLabels,
   onClose,
   onConnect,
+  onOpenHostSettings,
   onOpenFile,
   onNavigate,
   onOpenSnippet,
 }: {
   open: boolean;
-  aliases: string[];
+  hosts: HostEntry[];
   files: FileNode[];
   sectionLabels: Record<Section, MessageKey>;
   onClose: () => void;
   onConnect: (alias: string) => Promise<void> | void;
+  onOpenHostSettings: (identity: HostIdentity) => void;
   onOpenFile: (path: string) => void;
   onNavigate: (section: Section) => void;
   onOpenSnippet: (id: string) => void;
@@ -87,13 +90,14 @@ export function CommandPalette({
   }, [onClose, open]);
 
   const items = useMemo<PaletteItem[]>(() => [
-    ...aliases.map((alias) => ({
-      id: `host:${alias}`,
+    ...hosts.map((host) => ({
+      id: `host:${host.identity.path}:${host.identity.alias}`,
       kind: "host" as const,
-      label: t("palette.connectHost", { alias }),
-      detail: alias,
-      search: `${alias} host connect ssh 接続 ホスト`,
-      action: () => onConnect(alias),
+      label: t("palette.connectHost", { alias: host.identity.alias }),
+      detail: host.file.path ?? host.file.absolute,
+      search: `${host.identity.alias} ${host.identity.path} host connect ssh 接続 ホスト`,
+      action: () => onConnect(host.identity.alias),
+      host: host.identity,
     })),
     ...files.map((node) => ({
       id: `file:${node.file.path ?? node.file.absolute}`,
@@ -119,7 +123,7 @@ export function CommandPalette({
       search: `${section} settings setting 設定`,
       action: () => onNavigate(section),
     })),
-  ], [aliases, files, onConnect, onNavigate, onOpenFile, onOpenSnippet, sectionLabels, snippets, t]);
+  ], [files, hosts, onConnect, onNavigate, onOpenFile, onOpenSnippet, sectionLabels, snippets, t]);
 
   const visible = useMemo(() => items.filter((item) => matches(item, query)).slice(0, 40), [items, query]);
 
@@ -178,20 +182,38 @@ export function CommandPalette({
         </label>
         <div id="command-palette-results" role="listbox" aria-label={t("palette.results")} className="min-h-0 overflow-y-auto p-1.5">
           {visible.map((item, index) => (
-            <button
-              key={item.id}
-              id={`command-palette-option-${index}`}
-              type="button"
-              role="option"
-              aria-selected={selected === index}
-              onMouseEnter={() => setSelected(index)}
-              onClick={() => void choose(item)}
-              className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${selected === index ? "bg-select-fill" : "hover:bg-select-fill"}`}
-            >
-              <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-subtle">{t(`palette.kind.${item.kind}` as MessageKey)}</span>
-              <span className="truncate font-medium text-ink">{item.label}</span>
-              <span className="truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>
-            </button>
+            <div key={item.id} className="relative">
+              <button
+                id={`command-palette-option-${index}`}
+                type="button"
+                role="option"
+                aria-selected={selected === index}
+                onMouseEnter={() => setSelected(index)}
+                onClick={() => void choose(item)}
+                className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-select-fill"}`}
+              >
+                <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-subtle">{t(`palette.kind.${item.kind}` as MessageKey)}</span>
+                <span className="truncate font-medium text-ink">{item.label}</span>
+                <span className="truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>
+              </button>
+              {item.host === undefined ? null : (
+                <button
+                  type="button"
+                  aria-label={t("palette.openHostSettings", { alias: item.host.alias })}
+                  title={t("home.openConnectionSettings")}
+                  onMouseEnter={() => setSelected(index)}
+                  onClick={() => {
+                    const host = item.host;
+                    if (host === undefined) return;
+                    onClose();
+                    onOpenHostSettings(host);
+                  }}
+                  className="absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded text-ink-muted hover:bg-surface hover:text-ink"
+                >
+                  <Icon name="moreHorizontal" className="size-4" />
+                </button>
+              )}
+            </div>
           ))}
           {visible.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-ink-muted">{loading ? t("palette.loading") : t("palette.empty")}</p>

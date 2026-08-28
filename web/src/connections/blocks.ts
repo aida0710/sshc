@@ -9,31 +9,6 @@ function offsetOfLine(contents: string, line: number): number {
   return offset;
 }
 
-export function duplicateHostBlock(
-  contents: string,
-  raw: string,
-  alias: string,
-  newAlias: string,
-  line = 0,
-  commentLines = 0,
-): string {
-  const lineBreak = raw.indexOf("\n");
-  const header = lineBreak < 0 ? raw : raw.slice(0, lineBreak);
-  const rest = lineBreak < 0 ? "" : raw.slice(lineBreak);
-  const tokens = header.split(" ");
-  const aliasIndex = tokens.indexOf(alias);
-  if (aliasIndex < 0) throw new Error("block_moved");
-  tokens[aliasIndex] = newAlias;
-  const copied = `${tokens.join(" ")}${rest}`;
-  let comment = "";
-  if (commentLines > 0 && line > 0) {
-    const offset = offsetOfLine(contents, line);
-    comment = contents.slice(commentOffset(contents, offset, commentLines), offset);
-  }
-  const terminated = contents.endsWith("\n") ? contents : `${contents}\n`;
-  return `${terminated}\n${comment}${copied.endsWith("\n") ? copied : `${copied}\n`}`;
-}
-
 function commentOffset(contents: string, offset: number, commentLines: number): number {
   let start = offset;
   for (let remaining = commentLines; remaining > 0; remaining--) {
