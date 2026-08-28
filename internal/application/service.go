@@ -810,30 +810,3 @@ func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 		},
 	}, nil
 }
-
-func (s *Service) WorkspaceFiles() ([]string, error) {
-	graph, err := s.resolver.Resolve(s.entryPath)
-	if err != nil {
-		return nil, err
-	}
-	root := s.workspace.Root()
-	seen := map[string]bool{}
-	var relatives []string
-	for _, path := range graph.Order {
-		if !s.workspace.Contains(path) {
-			continue
-		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			continue
-		}
-		relative = filepath.ToSlash(relative)
-		if seen[relative] {
-			continue
-		}
-		seen[relative] = true
-		relatives = append(relatives, relative)
-	}
-	sort.Strings(relatives)
-	return relatives, nil
-}
