@@ -91,8 +91,8 @@ func TestConnectionSnapshotDerivesEverythingFromOneGraphRead(t *testing.T) {
 	if string(snapshot.Config) != serviceConfig {
 		t.Fatalf("config snapshot = %q", snapshot.Config)
 	}
-	if len(snapshot.Report.Directives) != 1 {
-		t.Fatalf("report = %#v", snapshot.Report)
+	if len(snapshot.Report.Directives) != 0 {
+		t.Fatalf("the bastion snapshot included a directive from Host risky: %#v", snapshot.Report)
 	}
 }
 

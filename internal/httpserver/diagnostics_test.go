@@ -133,14 +133,26 @@ func TestEffectiveEndpointAnswersWithoutStartingAnything(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if len(payload.ExecutableDirectives) != 1 || payload.ExecutableDirectives[0].Command != "/usr/bin/nc %h %p" {
-		t.Errorf("executable directives = %#v", payload.ExecutableDirectives)
+	if len(payload.ExecutableDirectives) != 0 {
+		t.Errorf("bastion included another host's executable directives = %#v", payload.ExecutableDirectives)
 	}
 	if payload.TokenWarning == "" {
 		t.Error("the response must carry the token-escaping warning")
 	}
 	if len(payload.Sources) == 0 || payload.Sources[0].Path == "" {
 		t.Errorf("sources = %#v", payload.Sources)
+	}
+
+	risky := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/diagnostics/effective",
+		mustMarshal(t, api.AliasRequest{Alias: "risky"}), "")
+	if risky.Code != http.StatusOK {
+		t.Fatalf("risky effective = %d: %s", risky.Code, risky.Body.String())
+	}
+	if err := json.Unmarshal(risky.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.ExecutableDirectives) != 1 || payload.ExecutableDirectives[0].Command != "/usr/bin/nc %h %p" {
+		t.Errorf("risky executable directives = %#v", payload.ExecutableDirectives)
 	}
 }
 
