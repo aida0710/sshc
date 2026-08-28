@@ -1,8 +1,8 @@
 #!/bin/sh
 # sshc の CLI を入れる。
 #
-#   SSHC_VERSION=v0.17.3 sh -c \
-#     'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.17.3/install.sh | sh'
+#   SSHC_VERSION=v0.17.4 sh -c \
+#     'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.17.4/install.sh | sh'
 #
 # 配布物は UI を埋め込んだ単一の CLI バイナリである。
 # インストール前の検証内容と変更内容は標準出力へ表示する:
