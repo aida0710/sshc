@@ -7,6 +7,7 @@ import { integrationsApi, type IntegrationsApi, type TerminalSession } from "../
 import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
+import { connectionProgressText } from "./progress";
 import { fontStack } from "./fonts";
 import { defaultTint } from "./appearance";
 import { useBackgroundImage } from "./backgroundImage";
@@ -378,6 +379,12 @@ export function TerminalView({
     refit.current?.();
   }, [font]);
 
+  const connectionStatus = session.state === "connecting" || session.state === "reconnecting"
+    ? connectionProgressText(t, session)
+    : session.state === "connected"
+      ? t("terminal.connected")
+      : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
+
   return (
     <section aria-label={t("terminal.screenLabel", { title: session.title })} className="relative flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
@@ -397,6 +404,7 @@ export function TerminalView({
             {session.alias}
           </span>
         )}
+        <span role="status" className="min-w-0 truncate text-[11px] text-ink-muted">{connectionStatus}</span>
         <button type="button" className="ml-auto rounded border border-control-line px-2 py-0.5 text-xs text-ink-muted hover:bg-select-fill" onClick={() => setSearchOpen((current) => !current)}>{t("terminal.search")}</button>
       </div>
       {searchOpen ? <div className="flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-1.5"><input autoFocus aria-label={t("terminal.searchInput")} value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setSearchResult({ index: -1, total: 0 }); }} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); else if (event.key === "Enter") searchStep.current(event.shiftKey ? -1 : 1); }} className="min-w-0 flex-1 rounded border border-control-line bg-control px-2 py-1 text-xs" placeholder={t("terminal.searchPlaceholder")} /><span className="w-16 text-center text-xs text-ink-muted">{searchResult.total === 0 ? t("terminal.searchNoResults") : `${searchResult.index + 1}/${searchResult.total}`}</span><button type="button" aria-label={t("terminal.searchPrevious")} className="rounded border border-control-line px-2 text-sm" onClick={() => searchStep.current(-1)}>↑</button><button type="button" aria-label={t("terminal.searchNext")} className="rounded border border-control-line px-2 text-sm" onClick={() => searchStep.current(1)}>↓</button><button type="button" aria-label={t("terminal.searchClose")} className="rounded px-2 text-sm" onClick={() => setSearchOpen(false)}>×</button></div> : null}

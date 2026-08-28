@@ -54,6 +54,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 		level = d.Verbosity()
 	}
 	trace := newTracer(level, session.writer)
+	trace.progress = session.setProgress
 	started := trace.now()
 
 	client, closers, err := d.chain(ctx, target, prompt, trace)
@@ -67,6 +68,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 	if _, attached := session.attach(nil, closers); !attached {
 		return
 	}
+	trace.stage(terminal.ConnectionOpeningSession, target, len(target.Jump)+1, len(target.Jump)+1)
 	trace.say(Brief, "認証できました。セッションを開きます。")
 
 	remote, err := client.NewSession()
@@ -147,8 +149,9 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 		trace.say(Detailed, "経由地 %d か所: %s", len(hops), strings.Join(hops, " → "))
 	}
 
-	for _, hop := range target.Jump {
-		client, err := d.connectOne(ctx, hop, through, prompt, trace)
+	hops := len(target.Jump) + 1
+	for index, hop := range target.Jump {
+		client, err := d.connectOne(ctx, hop, through, prompt, trace, index+1, hops)
 		if err != nil {
 			closeAll(closers)
 			return nil, nil, err
@@ -157,7 +160,7 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 		through = client
 	}
 
-	client, err := d.connectOne(ctx, target, through, prompt, trace)
+	client, err := d.connectOne(ctx, target, through, prompt, trace, hops, hops)
 	if err != nil {
 		closeAll(closers)
 		return nil, nil, err
@@ -168,6 +171,7 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 // connectOne は、ホップひとつへ繋ぐ。through が非 nil なら、その接続の上を通る。
 func (d Dialer) connectOne(
 	ctx context.Context, target Target, through *ssh.Client, prompt Prompter, trace *tracer,
+	hop, hops int,
 ) (*ssh.Client, error) {
 	started := trace.now()
 	timeout := target.Timeout
@@ -184,6 +188,7 @@ func (d Dialer) connectOne(
 	}
 	trace.say(Detailed, "上限は %s です。", timeout)
 
+	trace.stage(terminal.ConnectionDialing, target, hop, hops)
 	conn, err := d.open(ctx, target, through, trace)
 	if err != nil {
 		trace.say(Brief, "繋がりませんでした: %v", err)
@@ -193,10 +198,18 @@ func (d Dialer) connectOne(
 
 	authMethods, closeAuth := d.Auth.methodsWithCleanup(target, prompt)
 	defer closeAuth()
+	verifyHostKey := d.HostKeys.Callback(target, prompt)
 	config := &ssh.ClientConfig{
-		User:            target.User,
-		Auth:            authMethods,
-		HostKeyCallback: d.HostKeys.Callback(target, prompt),
+		User: target.User,
+		Auth: authMethods,
+		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			trace.stage(terminal.ConnectionHostKey, target, hop, hops)
+			err := verifyHostKey(hostname, remote, key)
+			if err == nil {
+				trace.stage(terminal.ConnectionAuthenticating, target, hop, hops)
+			}
+			return err
+		},
 		// すでに持っている鍵の種類を先に名乗る。既定の順序に任せると、
 		// 三種類の鍵を持つホストが known_hosts にある 1 行とは違う種類を出し、
 		// 正しい鍵が「一致しない鍵」として現れる。
@@ -213,6 +226,7 @@ func (d Dialer) connectOne(
 	}
 	trace.say(Full, "相手が名乗った版は %s です。", connection.ServerVersion())
 	trace.say(Detailed, "握手が通りました（%s）。", trace.since(started).Round(time.Millisecond))
+	trace.stage(terminal.ConnectionAuthenticated, target, hop, hops)
 	return ssh.NewClient(connection, channels, requests), nil
 }
 

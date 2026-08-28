@@ -167,6 +167,33 @@ func (e TerminalCommandResultStatus) Valid() bool {
 	}
 }
 
+// Defines values for TerminalConnectionProgressPhase.
+const (
+	Authenticated  TerminalConnectionProgressPhase = "authenticated"
+	Authenticating TerminalConnectionProgressPhase = "authenticating"
+	Dialing        TerminalConnectionProgressPhase = "dialing"
+	HostKey        TerminalConnectionProgressPhase = "host_key"
+	OpeningSession TerminalConnectionProgressPhase = "opening_session"
+)
+
+// Valid indicates whether the value is a known member of the TerminalConnectionProgressPhase enum.
+func (e TerminalConnectionProgressPhase) Valid() bool {
+	switch e {
+	case Authenticated:
+		return true
+	case Authenticating:
+		return true
+	case Dialing:
+		return true
+	case HostKey:
+		return true
+	case OpeningSession:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TerminalSessionKind.
 const (
 	TerminalSessionKindShell TerminalSessionKind = "shell"
@@ -1262,6 +1289,19 @@ type TerminalCommandTargetRequest struct {
 	TargetId  string `json:"targetId"`
 }
 
+// TerminalConnectionProgress defines model for TerminalConnectionProgress.
+type TerminalConnectionProgress struct {
+	Alias    string                          `json:"alias"`
+	Hop      int                             `json:"hop"`
+	Hops     int                             `json:"hops"`
+	HostName string                          `json:"hostName"`
+	Phase    TerminalConnectionProgressPhase `json:"phase"`
+	User     string                          `json:"user"`
+}
+
+// TerminalConnectionProgressPhase defines model for TerminalConnectionProgress.Phase.
+type TerminalConnectionProgressPhase string
+
 // TerminalExit defines model for TerminalExit.
 type TerminalExit struct {
 	At     string `json:"at"`
@@ -1287,16 +1327,17 @@ type TerminalReconnect struct {
 
 // TerminalSession defines model for TerminalSession.
 type TerminalSession struct {
-	Alias     *string              `json:"alias,omitempty"`
-	Exited    *TerminalExit        `json:"exited,omitempty"`
-	Forwards  *[]TerminalForward   `json:"forwards,omitempty"`
-	Id        string               `json:"id"`
-	Kind      TerminalSessionKind  `json:"kind"`
-	Problem   string               `json:"problem"`
-	Reconnect *TerminalReconnect   `json:"reconnect,omitempty"`
-	StartedAt string               `json:"startedAt"`
-	State     TerminalSessionState `json:"state"`
-	Title     string               `json:"title"`
+	Alias     *string                     `json:"alias,omitempty"`
+	Exited    *TerminalExit               `json:"exited,omitempty"`
+	Forwards  *[]TerminalForward          `json:"forwards,omitempty"`
+	Id        string                      `json:"id"`
+	Kind      TerminalSessionKind         `json:"kind"`
+	Problem   string                      `json:"problem"`
+	Progress  *TerminalConnectionProgress `json:"progress,omitempty"`
+	Reconnect *TerminalReconnect          `json:"reconnect,omitempty"`
+	StartedAt string                      `json:"startedAt"`
+	State     TerminalSessionState        `json:"state"`
+	Title     string                      `json:"title"`
 }
 
 // TerminalSessionKind defines model for TerminalSession.Kind.

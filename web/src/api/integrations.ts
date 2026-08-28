@@ -253,6 +253,19 @@ function validateTerminalSession(value: unknown): TerminalSession {
     throw new Error("invalid_response");
   }
   asString(record.problem);
+  if (record.progress !== undefined) {
+    const progress = asRecord(record.progress);
+    const phase = asString(progress.phase);
+    if (!["dialing", "host_key", "authenticating", "authenticated", "opening_session"].includes(phase)) {
+      throw new Error("invalid_response");
+    }
+    asString(progress.alias);
+    asString(progress.hostName);
+    asString(progress.user);
+    const hop = asNonnegativeInteger(progress.hop);
+    const hops = asNonnegativeInteger(progress.hops);
+    if (hop < 1 || hops < 1 || hop > hops) throw new Error("invalid_response");
+  }
   if (record.reconnect !== undefined) {
     const reconnect = asRecord(record.reconnect);
     const attempt = asNonnegativeInteger(reconnect.attempt);

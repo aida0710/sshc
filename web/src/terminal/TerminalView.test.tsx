@@ -53,6 +53,18 @@ describe("TerminalView", () => {
     expect(screen.getByRole("region", { name: "Console for zsh" })).toBeVisible();
     expect(screen.getByText("zsh", { exact: true })).toBeVisible();
     expect(screen.getByRole("button", { name: "Find" })).toBeVisible();
+    expect(screen.getByText("connected", { exact: true })).toBeVisible();
+  });
+
+  it("shows the current SSH hop and connection phase in the header", () => {
+    render(<TerminalView session={{
+      ...session, kind: "ssh", alias: "destination", title: "destination", state: "connecting",
+      progress: {
+        phase: "host_key", alias: "bastion", hostName: "192.0.2.10", user: "ops", hop: 1, hops: 2,
+      },
+    }} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+
+    expect(screen.getByText("checking the host key for bastion · 1/2")).toBeVisible();
   });
 
   it("says that it is retrying, counts down and reattaches on its own", async () => {

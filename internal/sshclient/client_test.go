@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -184,7 +185,7 @@ func TestOnlyAnExplicitAuthenticationPromptAcceptsInputBeforeReady(t *testing.T)
 	if _, ok := process.(terminal.Prompting); !ok {
 		t.Fatal("SSH process does not expose its prompt state")
 	}
-	readUntil(t, process, "Password: ")
+	readUntil(t, process, "Password for ")
 	prompting := process.(terminal.Prompting)
 	if !prompting.AwaitingPrompt() {
 		t.Fatal("password prompt was not marked as awaiting input")
@@ -218,7 +219,7 @@ func TestInputTypedAfterAPasswordAnswerReachesTheNewShell(t *testing.T) {
 	}
 	defer func() { _ = process.Close() }()
 
-	readUntil(t, process, "Password: ")
+	readUntil(t, process, "Password for ")
 	if _, err := process.Write([]byte("hunter2\recho after-auth\r")); err != nil {
 		t.Fatal(err)
 	}
@@ -351,6 +352,84 @@ func TestProxyJumpReachesTheFinalHostThroughTheFirst(t *testing.T) {
 	readUntil(t, process, "the far side")
 	if dialed := edge.Dialed(); len(dialed) != 1 || dialed[0] != inner.Address() {
 		t.Fatalf("the first hop dialed %#v", dialed)
+	}
+}
+
+func TestProxyJumpPasswordPromptAndProgressIdentifyTheHop(t *testing.T) {
+	inner := newTestServer(t, serverOptions{Password: "far-password"})
+	edge := newTestServer(t, serverOptions{
+		Password: "edge-password", AllowDirectTCPIP: true,
+		Reached: map[string]func() net.Conn{inner.Address(): func() net.Conn { return inner.Dial() }},
+	})
+	known := knownHostsLine("["+edge.Host()+"]:"+edge.Port(), edge.HostKey.PublicKey()) +
+		knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())
+	dialer := sshclient.Dialer{HostKeys: sshclient.HostKeys{
+		Read: func() ([]byte, error) { return []byte(known), nil },
+	}}
+	target := targetWith(inner)
+	target.Alias = "destination"
+	jump := targetWith(edge)
+	jump.Alias = "mdx-jamstec-1"
+	target.Jump = []sshclient.Target{jump}
+
+	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "Password for ops@"+edge.Address()+" (mdx-jamstec-1): ")
+	progressing, ok := process.(terminal.Progressing)
+	if !ok {
+		t.Fatal("an SSH session did not expose connection progress")
+	}
+	progress := progressing.ConnectionProgress()
+	if progress.Phase != terminal.ConnectionAuthenticating || progress.Alias != "mdx-jamstec-1" ||
+		progress.Hop != 1 || progress.Hops != 2 {
+		t.Fatalf("progress = %+v, want authentication at the first of two hops", progress)
+	}
+}
+
+func TestProxyJumpUsesTheSavedPasswordForEachAlias(t *testing.T) {
+	inner := newTestServer(t, serverOptions{
+		Password: "far-password",
+		OnShell:  func(channel ssh.Channel) { _, _ = io.WriteString(channel, "ready\r\n") },
+	})
+	edge := newTestServer(t, serverOptions{
+		Password: "edge-password", AllowDirectTCPIP: true,
+		Reached: map[string]func() net.Conn{inner.Address(): func() net.Conn { return inner.Dial() }},
+	})
+	known := knownHostsLine("["+edge.Host()+"]:"+edge.Port(), edge.HostKey.PublicKey()) +
+		knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())
+	var requested []string
+	dialer := sshclient.Dialer{
+		Auth: sshclient.Auth{Password: func(target sshclient.Target) (string, bool) {
+			requested = append(requested, target.Alias)
+			switch target.Alias {
+			case "mdx-jamstec-1":
+				return "edge-password", true
+			case "destination":
+				return "far-password", true
+			default:
+				return "", false
+			}
+		}},
+		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+	}
+	target := targetWith(inner)
+	target.Alias = "destination"
+	jump := targetWith(edge)
+	jump.Alias = "mdx-jamstec-1"
+	target.Jump = []sshclient.Target{jump}
+
+	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+	readUntil(t, process, "ready")
+	if !slices.Equal(requested, []string{"mdx-jamstec-1", "destination"}) {
+		t.Fatalf("passwords requested for %#v", requested)
 	}
 }
 

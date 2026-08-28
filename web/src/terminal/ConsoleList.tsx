@@ -5,6 +5,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Icon } from "../ui/icons";
 import { terminalProblemKey } from "./sessions";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "../features/workspaces/live";
+import { connectionProgressText } from "./progress";
 
 type ConsoleListProps = {
   sessions: TerminalSession[];
@@ -184,8 +185,10 @@ export function ConsoleList({
                   limit: String(session.reconnect?.limit ?? 1),
                 })
               : running
-                ? t(session.state === "connecting" ? "terminal.connecting" : "terminal.running")
-              : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
+                ? session.state === "connecting"
+                  ? connectionProgressText(t, session)
+                  : t("terminal.connected")
+                : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
             const marker = (
               <span
                 aria-hidden="true"

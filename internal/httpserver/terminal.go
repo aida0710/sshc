@@ -97,6 +97,13 @@ func describeSession(view terminal.View) api.TerminalSession {
 			Problem: view.Reconnect.Problem,
 		}
 	}
+	if view.Progress != nil {
+		described.Progress = &api.TerminalConnectionProgress{
+			Phase: api.TerminalConnectionProgressPhase(view.Progress.Phase),
+			Alias: view.Progress.Alias, HostName: view.Progress.HostName,
+			User: view.Progress.User, Hop: view.Progress.Hop, Hops: view.Progress.Hops,
+		}
+	}
 	if view.Alias != "" {
 		alias := view.Alias
 		described.Alias = &alias

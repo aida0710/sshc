@@ -45,6 +45,19 @@ describe("ConsoleList", () => {
     expect(rows[2]).toHaveTextContent("exited 255 · db-primary");
   });
 
+  it("names the ProxyJump hop and authentication phase while connecting", () => {
+    renderList({ sessions: [{
+      ...live,
+      state: "connecting",
+      progress: {
+        phase: "authenticating", alias: "mdx-jamstec-1", hostName: "192.0.2.10",
+        user: "ops", hop: 1, hops: 2,
+      },
+    }] });
+
+    expect(screen.getByText("authenticating with mdx-jamstec-1 · 1/2 · bastion")).toBeVisible();
+  });
+
   it("selects a console from anywhere in its main row content", async () => {
     const props = renderList();
     const detail = screen.getByText("connected · bastion");

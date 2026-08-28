@@ -483,6 +483,21 @@ func TestAsynchronousSSHIsNotRecordedOrConnectedBeforeReady(t *testing.T) {
 	})
 }
 
+func TestDescribeSessionIncludesSSHConnectionProgress(t *testing.T) {
+	described := describeSession(terminal.View{
+		ID: "one", Kind: terminal.KindSSH, Alias: "destination", Title: "destination",
+		Started: time.Now(), State: terminal.StateConnecting,
+		Progress: &terminal.ConnectionProgress{
+			Phase: terminal.ConnectionAuthenticating, Alias: "bastion", HostName: "192.0.2.10",
+			User: "ops", Hop: 1, Hops: 2,
+		},
+	})
+	if described.Progress == nil || described.Progress.Phase != api.Authenticating ||
+		described.Progress.Alias != "bastion" || described.Progress.Hop != 1 || described.Progress.Hops != 2 {
+		t.Fatalf("progress = %+v", described.Progress)
+	}
+}
+
 func TestExitedSSHSessionCanBeExplicitlyReconnectedInPlace(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
 	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
