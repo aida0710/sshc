@@ -133,6 +133,19 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
     });
   }
 
+  await page.getByRole("tab", { name: "sshc" }).click();
+  await expect(page.getByRole("tabpanel", { name: "sshc" })).toBeVisible();
+  await expect(page.getByLabel("Remote text encoding")).toBeVisible();
+  await expectNoHorizontalOverflow(page, "sshc connection editor");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.getByLabel("Remote text encoding").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(350);
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-editor-mobile-sshc.png`,
+      fullPage: true,
+    });
+  }
+
   await page.getByRole("button", { name: "All connections" }).click();
   await expect(browser).toBeVisible();
 });

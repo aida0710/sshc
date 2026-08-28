@@ -1,6 +1,6 @@
 export type AdvancedArea = "Jump" | "Directives" | "Raw";
 
-export type ConnectionPanel = "Basic" | "Analysis" | "Advanced";
+export type ConnectionPanel = "Basic" | "Analysis" | "Advanced" | "Sshc";
 
 export type ConnectionTarget = {
   path: string;
@@ -31,6 +31,7 @@ const panelSlugs: Record<ConnectionPanel, string> = {
   Basic: "basic",
   Analysis: "analysis",
   Advanced: "advanced",
+  Sshc: "sshc",
 };
 
 const panelsBySlug = new Map(

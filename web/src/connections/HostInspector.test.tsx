@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { HostInspector, hostNeedsAttention } from "./HostInspector";
+import { HostInspector } from "./HostInspector";
 import type { HostDetail } from "../api/config";
 
 function build(): HostDetail {
@@ -38,24 +38,6 @@ function build(): HostDetail {
     },
   } as HostDetail;
 }
-
-describe("hostNeedsAttention", () => {
-  it("is false when nothing is reported", () => {
-    expect(hostNeedsAttention(build())).toBe(false);
-  });
-
-  it("is true when the block has a notice", () => {
-    const detail = build();
-    detail.form.notices = [{ code: "duplicate_alias", path: "config", line: 41 }];
-    expect(hostNeedsAttention(detail)).toBe(true);
-  });
-
-  it("is true when the resolved values carry one", () => {
-    const detail = build();
-    detail.effective.notices = [{ code: "complex_external_rule" }];
-    expect(hostNeedsAttention(detail)).toBe(true);
-  });
-});
 
 describe("HostInspector", () => {
   it("edits the display settings that live only in metadata", () => {

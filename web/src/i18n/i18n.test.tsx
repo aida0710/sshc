@@ -38,6 +38,7 @@ describe("the catalogue", () => {
         "conn.areaAdvanced",
         "conn.areaAnalysis",
         "conn.areaBasic",
+        "conn.areaSshc",
         "conn.heading",
         "diag.hostAlias",
         "explorer.fileState",

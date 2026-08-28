@@ -9,10 +9,6 @@ import { chooseAppearance } from "../terminal/appearance";
 import { fonts } from "../terminal/fonts";
 import { palettes } from "../terminal/palettes";
 
-export function hostNeedsAttention(detail: HostDetail): boolean {
-  return (detail.form.notices ?? []).length > 0 || (detail.effective.notices ?? []).length > 0;
-}
-
 function inherited(detail: HostDetail) {
   const own = detail.form.entry.file.path ?? detail.form.entry.file.absolute;
   return detail.effective.entries.filter((entry) => (entry.source.path ?? entry.source.absolute) !== own);

@@ -27,7 +27,6 @@ import { NoticeList } from "./SavePreview";
 import { OrphanPanel } from "./OrphanPanel";
 import { useTranslate } from "../i18n/context";
 import type { InspectorContent } from "../ui/Inspector";
-import { HostInspector, hostNeedsAttention } from "./HostInspector";
 import { Button, Notice } from "../ui/surface";
 import { duplicateHostBlock, removeHostBlock } from "./blocks";
 import { integrationsApi } from "../api/integrations";
@@ -319,17 +318,9 @@ export function ConnectionsPage({
 
 
   useEffect(() => {
-    if (detail === null || overview === null) {
-      onInspector(null);
-      return;
-    }
-    onInspector({
-      label: t("inspector.hostLabel"),
-      attention: hostNeedsAttention(detail),
-      body: <HostInspector detail={detail} onMetadata={onMetadata} />,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail, overview, onInspector]);
+    onInspector(null);
+    return () => onInspector(null);
+  }, [onInspector]);
 
   const selectedPath = selection === null ? "" : selection.path;
   const selectedAlias = selection === null ? "" : selection.alias;
@@ -830,6 +821,7 @@ export function ConnectionsPage({
               onFieldEdits={onFieldEdits}
               onBlockRaw={onBlockRaw}
               onBasicSave={onBasicSave}
+              onMetadata={onMetadata}
               integrations={integrationsApi}
               panel={activePanel}
               advanced={activeAdvanced}

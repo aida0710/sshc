@@ -76,6 +76,7 @@ function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> =
     onFieldEdits: vi.fn(),
     onBlockRaw: vi.fn(),
     onBasicSave: vi.fn().mockResolvedValue(undefined),
+    onMetadata: vi.fn(),
     integrations: integrations(),
     onDirtyChange: vi.fn(),
     ...overrides,
@@ -85,13 +86,13 @@ function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> =
 }
 
 describe("HostDetailPanel", () => {
-  it("uses the three direct route panels without running checks", async () => {
+  it("uses the four direct route panels without running checks", async () => {
     const user = userEvent.setup();
     const onLocationChange = vi.fn();
     const harness = renderPanel({ panel: "Basic", advanced: "Jump", onLocationChange });
 
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
-    expect(within(areaTabs).getAllByRole("tab")).toHaveLength(3);
+    expect(within(areaTabs).getAllByRole("tab")).toHaveLength(4);
     expect(within(areaTabs).getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
     expect(within(areaTabs).getByRole("tab", { name: "Basic" })).toHaveClass("border-accent");
     expect(screen.getByRole("tabpanel", { name: "Basic" })).toBeVisible();
@@ -106,6 +107,16 @@ describe("HostDetailPanel", () => {
 
     await user.click(within(areaTabs).getByRole("tab", { name: "Analysis" }));
     expect(onLocationChange).toHaveBeenCalledWith("Analysis", "Jump");
+
+    await user.click(within(areaTabs).getByRole("tab", { name: "sshc" }));
+    expect(onLocationChange).toHaveBeenCalledWith("Sshc", "Jump");
+  });
+
+  it("shows connection-specific app settings in the sshc panel", () => {
+    renderPanel({ panel: "Sshc", advanced: "Jump" });
+
+    expect(screen.getByRole("tabpanel", { name: "sshc" })).toBeVisible();
+    expect(screen.getByLabelText("Remote text encoding")).toBeVisible();
   });
 
   it("keeps a Basic draft mounted across areas and blocks connection checks", async () => {

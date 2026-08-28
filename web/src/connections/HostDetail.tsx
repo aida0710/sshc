@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { FieldEdit, HostDetail, SavePreview, UpdateConnectionRequest } from "../api/config";
+import type { FieldEdit, HostDetail, HostMetadata, SavePreview, UpdateConnectionRequest } from "../api/config";
 import type { Problem } from "../api/client";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
@@ -15,6 +15,7 @@ import { ConnectionChecks } from "./ConnectionChecks";
 import type { ConnectionSavedState } from "./connectionSavedState";
 import { NoticeList, SavePreviewPanel } from "./SavePreview";
 import { identityKey } from "./connectionBrowser";
+import { HostInspector } from "./HostInspector";
 
 type HostDetailPanelProps = {
   detail: HostDetail;
@@ -24,6 +25,7 @@ type HostDetailPanelProps = {
   onFieldEdits: (edits: FieldEdit[]) => void;
   onBlockRaw: (raw: string) => void;
   onBasicSave: (request: UpdateConnectionRequest) => Promise<void>;
+  onMetadata: (metadata: HostMetadata) => void;
   integrations?: IntegrationsApi;
   panel?: ConnectionPanel;
   advanced?: AdvancedArea;
@@ -37,10 +39,11 @@ type HostDetailPanelProps = {
   savedRevision?: number | undefined;
 };
 
-const areas: { area: ConnectionPanel; label: "conn.areaBasic" | "conn.areaAnalysis" | "conn.areaAdvanced" }[] = [
+const areas: { area: ConnectionPanel; label: "conn.areaBasic" | "conn.areaAnalysis" | "conn.areaAdvanced" | "conn.areaSshc" }[] = [
   { area: "Basic", label: "conn.areaBasic" },
   { area: "Analysis", label: "conn.areaAnalysis" },
   { area: "Advanced", label: "conn.areaAdvanced" },
+  { area: "Sshc", label: "conn.areaSshc" },
 ];
 
 export function HostDetailPanel({
@@ -51,6 +54,7 @@ export function HostDetailPanel({
   onFieldEdits,
   onBlockRaw,
   onBasicSave,
+  onMetadata,
   integrations = integrationsApi,
   panel: controlledPanel,
   advanced: controlledAdvanced,
@@ -116,7 +120,7 @@ export function HostDetailPanel({
       ) : null}
 
       <div data-connection-editor className="min-w-0">
-        <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 grid grid-cols-3 border-b border-line bg-canvas/95 backdrop-blur-sm">
+        <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 grid grid-cols-4 border-b border-line bg-canvas/95 backdrop-blur-sm">
           {areas.map((item) => (
             <button
               key={item.area}
@@ -181,6 +185,15 @@ export function HostDetailPanel({
               disabled={disabled || basicDirty}
               onDirtyChange={handleAdvancedDirty}
             />
+          </div>
+
+          <div
+            id="connection-area-sshc-panel"
+            role="tabpanel"
+            aria-labelledby="connection-area-sshc-tab"
+            hidden={panel !== "Sshc"}
+          >
+            <HostInspector detail={detail} onMetadata={onMetadata} />
           </div>
         </div>
       </div>
