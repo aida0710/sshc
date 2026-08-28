@@ -64,7 +64,7 @@ func runRemote(
 func runAdvice(err error) error {
 	switch {
 	case errors.Is(err, sshclient.ErrHostKeyUnknown):
-		return fmt.Errorf("%w; connect once with sshc %s to decide about its host key", err, "<alias>")
+		return fmt.Errorf("%w; connect once with sshc ssh %s to decide about its host key", err, "<alias>")
 	case errors.Is(err, sshclient.ErrProxyCommandWithJump):
 		return fmt.Errorf("%w; keep whichever one you meant", err)
 	}

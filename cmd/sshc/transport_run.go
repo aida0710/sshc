@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"sshc/internal/serialtransport"
@@ -23,6 +24,7 @@ const (
 )
 
 var telnetPlaintextWarning = "Telnet is unencrypted and does not authenticate the server; do not send secrets unless the surrounding network is trusted"
+var errNoTransportOutput = errors.New("no output was received")
 
 func runTransportInvocation(ctx context.Context, called transportInvocation, stdin *os.File, stdout, stderr io.Writer) int {
 	return runTransportInvocationWithDependencies(ctx, called, stdin, stdout, stderr, defaultTransportDependencies())
@@ -119,12 +121,36 @@ func runSerialList(ctx context.Context, asJSON bool, stdout, stderr io.Writer, d
 		return 0
 	}
 	for _, device := range devices {
-		if _, err := fmt.Fprintln(stdout, device.Name); err != nil {
+		if _, err := fmt.Fprintln(stdout, describeSerialDevice(device)); err != nil {
 			fmt.Fprintln(stderr, "sshc: could not write serial device list")
 			return transportFailureExit
 		}
 	}
 	return 0
+}
+
+func describeSerialDevice(device serialtransport.Device) string {
+	parts := []string{device.Name}
+	if device.USB {
+		usb := "USB"
+		switch {
+		case device.VID != "" && device.PID != "":
+			usb += " " + device.VID + ":" + device.PID
+		case device.VID != "":
+			usb += " VID " + device.VID
+		case device.PID != "":
+			usb += " PID " + device.PID
+		}
+		parts = append(parts, "["+usb+"]")
+	}
+	identity := strings.Trim(strings.Join([]string{device.Manufacturer, device.Product}, " / "), " / ")
+	if identity != "" {
+		parts = append(parts, identity)
+	}
+	if device.SerialNumber != "" {
+		parts = append(parts, "[serial "+device.SerialNumber+"]")
+	}
+	return strings.Join(parts, "  ")
 }
 
 func runTransportAutomation(ctx context.Context, called transportInvocation, warnings []string, stdin io.Reader, stdout, stderr io.Writer, dependencies transportDependencies) int {
@@ -135,7 +161,7 @@ func runTransportAutomation(ctx context.Context, called transportInvocation, war
 	options := streamrun.Options{
 		Timeout: called.Timeout, MaxBytes: called.MaxBytes, LookupEnv: os.LookupEnv, Settle: called.Settle,
 	}
-	if err := streamrun.Validate(script, options); err != nil {
+	if err := streamrun.Validate(script.Script, options); err != nil {
 		return reportTransportSetupFailure(called, warnings, "invalid_script", safeStreamRunError(err), transportUsageExit, stdout, stderr)
 	}
 	stream, err := openTransport(ctx, called, dependencies)
@@ -143,10 +169,17 @@ func runTransportAutomation(ctx context.Context, called transportInvocation, war
 		return reportTransportSetupFailure(called, warnings, "open_failed", safeTransportError(called, err), transportFailureExit, stdout, stderr)
 	}
 	defer stream.Close()
-	result, runErr := streamrun.Run(ctx, stream, script, options)
+	result, runErr := streamrun.Run(ctx, stream, script.Script, options)
+	if runErr == nil && called.RequireOutput && len(result.Transcript) == 0 {
+		runErr = errNoTransportOutput
+	}
+	var cleanupReport *transportFailureCleanupReport
+	if runErr != nil && script.OnFailure != nil {
+		cleanupReport = runTransportFailureCleanup(ctx, stream, *script.OnFailure)
+	}
 	transcript := streamrun.Redact(result.Transcript, result.Secrets)
 	if called.JSON {
-		report := newTransportRunReport(called, result, runErr, warnings)
+		report := newTransportRunReport(called, result, runErr, warnings, cleanupReport)
 		if err := writeTransportReport(stdout, report); err != nil {
 			fmt.Fprintln(stderr, "sshc: could not write JSON result")
 			return transportFailureExit
@@ -161,6 +194,9 @@ func runTransportAutomation(ctx context.Context, called transportInvocation, war
 		if runErr != nil {
 			fmt.Fprintf(stderr, "sshc: %v\n", safeStreamRunError(runErr))
 		}
+		if cleanupReport != nil && !cleanupReport.Success {
+			fmt.Fprintf(stderr, "sshc: failure cleanup: %s\n", cleanupReport.Error)
+		}
 	}
 	if runErr == nil {
 		return 0
@@ -173,6 +209,46 @@ func runTransportAutomation(ctx context.Context, called transportInvocation, war
 		return transportInterruptedExit
 	}
 	return transportFailureExit
+}
+
+func runTransportFailureCleanup(ctx context.Context, stream io.Writer, cleanup transportFailureCleanup) *transportFailureCleanupReport {
+	report := &transportFailureCleanupReport{Attempted: true}
+	ending, _ := transportLineEndingBytes(cleanup.LineEnding)
+	payload := make([]byte, 0, len(cleanup.Send)+len(ending))
+	payload = append(payload, cleanup.Send...)
+	payload = append(payload, ending...)
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanup.Timeout)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		for len(payload) > 0 {
+			written, err := stream.Write(payload)
+			if err != nil {
+				done <- errors.New("cleanup write failed")
+				return
+			}
+			if written <= 0 {
+				done <- errors.New("cleanup write made no progress")
+				return
+			}
+			if written > len(payload) {
+				done <- errors.New("cleanup write returned an invalid byte count")
+				return
+			}
+			payload = payload[written:]
+		}
+		done <- nil
+	}()
+	select {
+	case err := <-done:
+		report.Success = err == nil
+		if err != nil {
+			report.Error = err.Error()
+		}
+	case <-cleanupCtx.Done():
+		report.Error = "cleanup write timed out"
+	}
+	return report
 }
 
 func reportTransportSetupFailure(called transportInvocation, warnings []string, kind string, err error, code int, stdout, stderr io.Writer) int {

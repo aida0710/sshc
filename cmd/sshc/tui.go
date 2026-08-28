@@ -13,8 +13,6 @@ import (
 	"golang.org/x/term"
 )
 
-const ConnectSubcommand = "connect"
-
 var errTUIClosed = errors.New("connection picker closed")
 
 type tuiHost struct {
@@ -244,7 +242,7 @@ func renderTUI(output io.Writer, model *tuiModel, width, height int) {
 		visible = visible[start : start+limit]
 	}
 	fmt.Fprint(&screen, "\x1b[H\x1b[2J")
-	fmt.Fprintf(&screen, "\x1b[1m%s\x1b[0m\n", truncate("sshc connect", width))
+	fmt.Fprintf(&screen, "\x1b[1m%s\x1b[0m\n", truncate("sshc ssh", width))
 	fmt.Fprintf(&screen, "\nSearch: \x1b[36m%s\x1b[0m\n\n", truncate(model.query, width-8))
 	if len(visible) == 0 {
 		fmt.Fprintln(&screen, truncate("  No matching hosts", width))
@@ -273,7 +271,7 @@ func renderTUI(output io.Writer, model *tuiModel, width, height int) {
 
 func chooseTUIHost(home, initialQuery string, input, output *os.File, stderr io.Writer) (string, error) {
 	if !term.IsTerminal(int(input.Fd())) || !term.IsTerminal(int(output.Fd())) {
-		return "", errors.New("sshc connect requires an interactive terminal")
+		return "", errors.New("sshc ssh requires an interactive terminal")
 	}
 	hosts, err := loadTUIHosts(home)
 	if err != nil {

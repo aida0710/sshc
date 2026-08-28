@@ -35,7 +35,7 @@ func TestALockedVaultRefusesPromptlyWithTheVaultCommand(t *testing.T) {
 	writeAliasConfig(t, home, "waiting-host")
 	createLockedVault(t, home)
 
-	connect := startOnTerminal(t, home, "waiting-host")
+	connect := startOnTerminal(t, home, "ssh", "waiting-host")
 
 	if code := connect.wait(t, 20*time.Second); code != 1 {
 		t.Errorf("exit = %d, want 1\n%s", code, connect.output.String())
@@ -51,7 +51,7 @@ func TestConnectingWithoutAnEngineSaysHowToStartOne(t *testing.T) {
 	home := t.TempDir()
 	writeAliasConfig(t, home, "waiting-host")
 
-	connect := startOnTerminal(t, home, "waiting-host")
+	connect := startOnTerminal(t, home, "ssh", "waiting-host")
 
 	if code := connect.wait(t, 20*time.Second); code != 1 {
 		t.Errorf("exit = %d, want 1\n%s", code, connect.output.String())

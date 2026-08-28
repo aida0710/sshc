@@ -47,7 +47,7 @@ func TestRunSerialPTYEndToEnd(t *testing.T) {
 	}
 
 	parsed, err := parseInvocation([]string{
-		"sshc", "run", "serial", device,
+		"sshc", "serial", device, "--non-interactive",
 		"--expect", `Router# `,
 		"--timeout", "3s",
 		"--settle", "20ms",
@@ -55,7 +55,7 @@ func TestRunSerialPTYEndToEnd(t *testing.T) {
 		"--", "show", "version",
 	})
 	if err != nil {
-		t.Fatalf("parse run serial invocation: %v", err)
+		t.Fatalf("parse non-interactive serial invocation: %v", err)
 	}
 	if parsed.Kind != invocationRunTransport || parsed.Transport == nil {
 		t.Fatalf("parsed invocation = %#v", parsed)
