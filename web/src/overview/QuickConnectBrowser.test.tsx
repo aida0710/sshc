@@ -86,6 +86,12 @@ describe("QuickConnectBrowser", () => {
   it("orders recent connections first and shows the resolved destination", () => {
     renderBrowser();
 
+    const groupGrid = screen.getByRole("group", { name: "Filter connections by group" });
+    expect(groupGrid).toHaveClass("grid", "grid-cols-2", "md:grid-cols-4");
+    expect(within(groupGrid).getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Groups 1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Connections 3" })).toBeInTheDocument();
+
     const list = screen.getByRole("list", { name: "Available connections" });
     const cards = within(list).getAllByRole("listitem");
     expect(cards[0]).toHaveTextContent("nas");
@@ -95,13 +101,36 @@ describe("QuickConnectBrowser", () => {
     expect(list).toHaveClass("grid-cols-1", "sm:grid-cols-2", "md:grid-cols-3", "lg:grid-cols-4");
   });
 
-  it("filters by a group and searches the current group", async () => {
+  it("drills into direct child groups and aggregates every descendant connection", async () => {
     renderBrowser();
 
-    await userEvent.click(screen.getByRole("button", { name: "home · 2" }));
+    expect(screen.queryByRole("button", { name: "Open home/lab, 1 connections" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Open home, 2 connections" }));
+
+    expect(screen.getByRole("navigation", { name: "Selected group" })).toHaveTextContent("All/home");
+    expect(screen.getByRole("heading", { name: "Groups 1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Connections 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open home/lab, 1 connections" })).toBeInTheDocument();
     expect(screen.getByText("nas")).toBeInTheDocument();
     expect(screen.getByText("eu-api")).toBeInTheDocument();
     expect(screen.queryByText("bastion")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Open home/lab, 1 connections" }));
+    expect(screen.getByRole("heading", { name: "Groups 0" })).toBeInTheDocument();
+    expect(screen.getByText("No groups at this level.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Connections 1" })).toBeInTheDocument();
+    expect(screen.queryByText("nas")).toBeNull();
+    expect(screen.getByText("eu-api")).toBeInTheDocument();
+
+    await userEvent.click(within(screen.getByRole("navigation", { name: "Selected group" })).getByRole("button", { name: "All" }));
+    expect(screen.getByRole("heading", { name: "Connections 3" })).toBeInTheDocument();
+    expect(screen.getByText("bastion")).toBeInTheDocument();
+  });
+
+  it("searches only inside the selected group subtree", async () => {
+    renderBrowser();
+
+    await userEvent.click(screen.getByRole("button", { name: "Open home, 2 connections" }));
 
     await userEvent.type(screen.getByRole("searchbox", { name: "Search connections" }), "production");
     expect(screen.queryByText("nas")).toBeNull();

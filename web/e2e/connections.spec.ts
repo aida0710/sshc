@@ -19,27 +19,38 @@ test("separates classification, filtered results, and connection detail without 
   const nas = await installation.read("conf.d/10-home.conf");
   await installation.write(
     "config",
-    "# >>> sshc groups (generated). Child groups first: OpenSSH keeps the first value it reads.\n" +
+      "# >>> sshc groups (generated). Child groups first: OpenSSH keeps the first value it reads.\n" +
       "# Edit through the UI; lines between these markers are replaced on the next save.\n" +
+      "Include connections/home/eu/*.conf\n" +
       "Include connections/home/*.conf\n" +
       "Include connections/work/*.conf\n" +
       "Include groups.sshc.conf\n" +
       "# <<< sshc groups\n" + entry,
   );
   await installation.write("connections/home/nas.conf", nas);
+  await installation.write(
+    "connections/home/eu/api.conf",
+    "Host eu-api\n\tHostName 198.51.100.21\n\tUser aida\n",
+  );
   await installation.write("conf.d/10-home.conf", "");
   await openApplication(page, installation);
   await openSection(page, "Connections");
   const browser = page.getByRole("navigation", { name: "Connections" });
   const results = page.getByRole("region", { name: "Connection results" });
 
-  await expect(browser.getByRole("group", { name: "Arrange connections by" })).toBeVisible();
+  await expect(browser.getByRole("group", { name: "Arrange connections by" })).toHaveCount(0);
   await expect(results.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
   await expect(results.getByText("aida@198.51.100.20", { exact: true })).toBeVisible();
+  await expect(results.getByRole("region", { name: "home group, 1 connections" })).toBeVisible();
+  await expect(results.getByRole("region", { name: "home/eu group, 1 connections" })).toBeVisible();
+  await expect(results.getByRole("region", { name: "Ungrouped group, 1 connections" })).toBeVisible();
 
-  await browser.getByRole("button", { name: "Files", exact: true }).click();
-  await browser.getByRole("button", { name: "config", exact: true }).click();
-  await expect(results.getByRole("button", { name: "bastion" })).toBeVisible();
+  await browser.getByRole("button", { name: "home", exact: true }).click();
+  await expect(results.getByRole("button", { name: "nas" })).toBeVisible();
+  await expect(results.getByRole("button", { name: "eu-api" })).toBeVisible();
+  await expect(results.getByRole("button", { name: "bastion" })).toHaveCount(0);
+  await browser.getByRole("button", { name: "home/eu", exact: true }).click();
+  await expect(results.getByRole("region", { name: "home/eu group, 1 connections" })).toBeVisible();
   await expect(results.getByRole("button", { name: "nas" })).toHaveCount(0);
 
   await browser.getByRole("button", { name: "All", exact: true }).click();
@@ -49,7 +60,6 @@ test("separates classification, filtered results, and connection detail without 
   await results.getByRole("button", { name: "bastion" }).click();
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
   await expect(browser).toBeVisible();
-  await browser.getByRole("button", { name: "Groups", exact: true }).click();
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
@@ -86,6 +96,11 @@ test("keeps the Basic save actions in the form instead of pinning them to the vi
   await expect(save).not.toBeInViewport();
   await save.scrollIntoViewIfNeeded();
   await expect(save).toBeInViewport();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-basic-save-area.png`,
+    });
+  }
 });
 
 test("creates a key-authenticated connection in an empty nested declared group", async ({
@@ -225,7 +240,7 @@ test("keeps the committed summary stable while a Basic draft crosses editor area
   await expect(page.getByRole("button", { name: "Check reachability" })).toBeEnabled();
 });
 
-test("keeps a Basic draft while rearranging the management tree and asks before a connection switch", async ({
+test("keeps a Basic draft while changing group scope and asks before a connection switch", async ({
   page,
   installation,
 }) => {
@@ -233,11 +248,10 @@ test("keeps a Basic draft while rearranging the management tree and asks before 
   await page.getByLabel("Port", { exact: true }).fill("2244");
   const browser = page.getByRole("navigation", { name: "Connections" });
 
-  const arrangement = browser.getByRole("group", { name: "Arrange connections by" });
-  await arrangement.getByRole("button", { name: "Files", exact: true }).click();
+  await browser.getByRole("button", { name: "Ungrouped", exact: true }).click();
   expect(new URL(page.url()).pathname).toBe("/connections/servers");
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
-  await arrangement.getByRole("button", { name: "Groups", exact: true }).click();
+  await browser.getByRole("button", { name: "All", exact: true }).click();
   expect(new URL(page.url()).pathname).toBe("/connections/servers");
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 

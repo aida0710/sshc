@@ -94,8 +94,12 @@ describe("HostDetailPanel", () => {
     expect(within(areaTabs).getAllByRole("tab")).toHaveLength(3);
     expect(within(areaTabs).getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel", { name: "Basic" })).toBeVisible();
-    expect(screen.getByRole("tabpanel", { name: "Basic" }).closest("[data-connection-editor]")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Check reachability" })).toBeEnabled();
+    const editor = screen.getByRole("tabpanel", { name: "Basic" }).closest("[data-connection-editor]");
+    const reachability = screen.getByRole("button", { name: "Check reachability" });
+    expect(editor).not.toBeNull();
+    expect(editor).not.toContainElement(reachability);
+    expect(reachability.closest("section")).toHaveClass("bg-card");
+    expect(reachability).toBeEnabled();
     expect(harness.props.integrations.reachability).not.toHaveBeenCalled();
 
     await user.click(within(areaTabs).getByRole("tab", { name: "Settings analysis" }));
