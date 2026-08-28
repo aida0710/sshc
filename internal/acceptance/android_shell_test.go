@@ -145,3 +145,27 @@ func TestTheAndroidFailureScreenUsesOnlySanitizedDiagnostics(t *testing.T) {
 		t.Error("伏せ字化前のJava例外を画面またはlogcatへ出している")
 	}
 }
+
+// Android 13以降はKEYCODE_BACKでは戻るジェスチャーを受け取れない。
+// WebViewの履歴をroute履歴として使い、ホームでだけtaskを背面へ送る形を固定する。
+func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T) {
+	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
+	activity := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "MainActivity.java")
+
+	for _, required := range []string{
+		`android:enableOnBackInvokedCallback="true"`,
+		"registerOnBackInvokedCallback(",
+		"OnBackInvokedDispatcher.PRIORITY_DEFAULT",
+		"webView.evaluateJavascript(",
+		`location.pathname === '/'`,
+		"history.back()",
+		"webView.canGoBack()",
+		"webView.goBack()",
+		"moveTaskToBack(true)",
+	} {
+		if !strings.Contains(manifest+activity, required) {
+			t.Errorf("Androidの戻る導線に %q が無い", required)
+		}
+	}
+}
