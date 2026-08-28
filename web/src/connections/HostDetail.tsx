@@ -115,8 +115,8 @@ export function HostDetailPanel({
         />
       ) : null}
 
-      <div data-connection-editor className="sshc-card overflow-hidden rounded-lg bg-card">
-        <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 flex gap-1 border-b border-line bg-select-fill p-1">
+      <div data-connection-editor className="min-w-0">
+        <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 grid grid-cols-3 border-b border-line bg-canvas/95 backdrop-blur-sm">
           {areas.map((item) => (
             <button
               key={item.area}
@@ -126,14 +126,14 @@ export function HostDetailPanel({
               aria-selected={panel === item.area}
               aria-controls={`connection-area-${item.area.toLowerCase()}-panel`}
               onClick={() => selectArea(item.area)}
-              className={`flex-1 rounded px-3 py-2 text-sm transition-colors ${panel === item.area ? "bg-card font-medium text-ink" : "text-ink-muted hover:text-ink"}`}
+              className={`min-h-11 whitespace-nowrap border-b-2 px-2 py-2.5 text-sm transition-colors ${panel === item.area ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:bg-select-fill/50 hover:text-ink"}`}
             >
               {t(item.label)}
             </button>
           ))}
         </div>
 
-        <div className="p-4 md:p-5">
+        <div className="pt-5">
           <div
             id="connection-area-basic-panel"
             role="tabpanel"

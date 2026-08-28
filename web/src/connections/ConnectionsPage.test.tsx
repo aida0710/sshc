@@ -169,7 +169,7 @@ describe("ConnectionsPage", () => {
     );
 
     await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "bastion"));
-    expect(await screen.findByRole("tab", { name: "Advanced settings" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Directives" })).toHaveAttribute("aria-selected", "true");
   });
 
@@ -213,7 +213,7 @@ describe("ConnectionsPage", () => {
       "/connections/servers?path=config&host=bastion&panel=basic",
     );
 
-    await user.click(await screen.findByRole("tab", { name: "Settings analysis" }));
+    await user.click(await screen.findByRole("tab", { name: "Analysis" }));
     expect(onNavigateLocation).toHaveBeenLastCalledWith(
       "/connections/servers?path=config&host=bastion&panel=analysis",
     );
@@ -364,7 +364,7 @@ describe("ConnectionsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "More connection actions" }));
     expect(screen.getByRole("region", { name: "Manage connection" })).toHaveAttribute("aria-disabled", "true");
-    await user.click(screen.getByRole("tab", { name: "Settings analysis" }));
+    await user.click(screen.getByRole("tab", { name: "Analysis" }));
     await user.click(screen.getByRole("tab", { name: "Basic" }));
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });

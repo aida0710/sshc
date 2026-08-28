@@ -804,9 +804,8 @@ export function ConnectionBasicForm({
         </Card>
       </section>
 
-      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line bg-card py-3">
-        {!dirty ? <p className={`grow ${hintText}`}>{t("conn.basicNothingChanged")}</p> :
-          (changesPassword && !passwordResourcesReady) || (hasKeyPassphraseDraft && !keyPassphraseResourcesReady) ?
+      {dirty ? <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line py-3">
+        {(changesPassword && !passwordResourcesReady) || (hasKeyPassphraseDraft && !keyPassphraseResourcesReady) ?
             <p className={`grow ${hintText}`}>{t("conn.basicNeedVault")}</p> :
             !passwordAllowed ? <p className={`grow ${hintText}`}>{t("conn.basicPasswordBlocked")}</p> : <span className="grow" />}
         <Button type="button" disabled={!dirty || busy} onClick={discardDraft}>
@@ -815,7 +814,7 @@ export function ConnectionBasicForm({
         <Button type="submit" kind="primary" disabled={!canSave}>
           {busy ? t("conn.basicSaving") : t("conn.basicSave")}
         </Button>
-      </div>
+      </div> : null}
       </fieldset>
     </form>
   );

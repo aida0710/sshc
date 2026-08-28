@@ -102,8 +102,8 @@ for (const appearance of ["light", "dark"] as const) {
       });
     }
 
-    await page.getByRole("tab", { name: "Settings analysis" }).click();
-    await expect(page.getByRole("tabpanel", { name: "Settings analysis" })).toBeVisible();
+    await page.getByRole("tab", { name: "Analysis" }).click();
+    await expect(page.getByRole("tabpanel", { name: "Analysis" })).toBeVisible();
     if (process.env.SSHC_VISUAL_DIR !== undefined) {
       await page.screenshot({
         path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-connection-analysis-${appearance}.png`,
@@ -111,9 +111,9 @@ for (const appearance of ["light", "dark"] as const) {
       });
     }
 
-    await page.getByRole("tab", { name: "Advanced settings" }).click();
-    await expect(page.getByRole("tabpanel", { name: "Advanced settings" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Advanced settings" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Advanced" }).click();
+    await expect(page.getByRole("tabpanel", { name: "Advanced" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
     await page.waitForTimeout(250);
     if (process.env.SSHC_VISUAL_DIR !== undefined) {
       await page.screenshot({

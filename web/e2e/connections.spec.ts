@@ -67,6 +67,21 @@ test("separates classification, filtered results, and connection detail without 
       fullPage: true,
     });
   }
+
+  const advancedTab = page.getByRole("tab", { name: "Advanced" });
+  await advancedTab.click();
+  await expect(advancedTab).toHaveAttribute("aria-selected", "true");
+  await expect(advancedTab).toHaveCSS("border-bottom-color", "rgb(197, 200, 202)");
+  const advancedViews = page.getByRole("tablist", { name: "Advanced setting views" });
+  await expect(advancedViews).toBeVisible();
+  await expect(advancedViews.getByRole("tab", { name: "Jump Host" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Discard changes" })).toHaveCount(0);
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-editor-desktop-advanced.png`,
+      fullPage: true,
+    });
+  }
 });
 
 test("keeps the selected connection open when its tree item is clicked again", async ({
@@ -86,13 +101,16 @@ test("keeps the selected connection open when its tree item is clicked again", a
   expect(page.url()).toBe(connectionURL);
 });
 
-test("keeps the Basic save actions in the form instead of pinning them to the viewport", async ({
+test("shows Basic save actions only after a change and keeps them in the form", async ({
   page,
   installation,
 }) => {
   await openBastion(page, installation.url);
   const save = page.getByRole("button", { name: "Save Basic settings" });
 
+  await expect(save).toHaveCount(0);
+  await page.getByLabel("Port", { exact: true }).fill("2223");
+  await expect(save).toBeVisible();
   await expect(save).not.toBeInViewport();
   await save.scrollIntoViewIfNeeded();
   await expect(save).toBeInViewport();
@@ -230,7 +248,7 @@ test("keeps the committed summary stable while a Basic draft crosses editor area
   await expect(page.getByRole("button", { name: "Check reachability" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Check authentication with saved settings" })).toBeDisabled();
 
-  await page.getByRole("tab", { name: "Settings analysis" }).click();
+  await page.getByRole("tab", { name: "Analysis" }).click();
   await page.getByRole("tab", { name: "Basic" }).click();
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
@@ -385,7 +403,7 @@ test("edits the same host through Raw and keeps every other byte", async ({
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "Advanced settings" }).click();
+  await page.getByRole("tab", { name: "Advanced" }).click();
   await page.getByRole("tab", { name: "Raw" }).click();
 
   const editor = page.getByLabel(/Block text/);
@@ -459,7 +477,7 @@ test("shows connection checks on Basic and starts nothing unasked", async ({
 
 test("shows where each value comes from without a confirmation", async ({ page, installation }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "Settings analysis" }).click();
+  await page.getByRole("tab", { name: "Analysis" }).click();
 
   await expect(page.getByRole("region", { name: "Settings analysis" })).toBeVisible();
   const show = page.getByRole("button", { name: "Show the sources" });

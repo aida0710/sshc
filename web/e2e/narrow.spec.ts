@@ -118,6 +118,21 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
     });
   }
 
+  await page.getByRole("tab", { name: "Advanced" }).click();
+  const advancedViews = page.getByRole("combobox", { name: "Advanced setting views" });
+  await expect(advancedViews).toBeVisible();
+  await expect(advancedViews).toHaveValue("Jump");
+  await expect(page.getByRole("tablist", { name: "Advanced setting views" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Discard changes" })).toHaveCount(0);
+  await expectNoHorizontalOverflow(page, "Advanced connection editor");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.waitForTimeout(350);
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-editor-mobile-advanced.png`,
+      fullPage: true,
+    });
+  }
+
   await page.getByRole("button", { name: "All connections" }).click();
   await expect(browser).toBeVisible();
 });
@@ -131,7 +146,7 @@ test("keeps password setup inside 360 pixels without a decorative icon", async (
   await expect(page.getByText(/cannot be recovered/i)).toBeVisible();
   await expect(page.locator('use[href="#icon-secrets"]')).toHaveCount(0);
   await expect(page.getByLabel("Theme menu")).toBeVisible();
-  await expect(page.getByLabel("Locale menu")).toBeVisible();
+  await expect(page.getByLabel("Lang menu")).toBeVisible();
   await expectNoHorizontalOverflow(page, "First-run password setup");
   await expectFullyInsideViewport(
     page,
@@ -409,7 +424,7 @@ test("keeps mobile navigation and display controls behind header menus", async (
 
   await page.getByLabel("Display menu").click();
   await expect(page.getByLabel("Theme menu")).toBeVisible();
-  await expect(page.getByLabel("Locale menu")).toBeVisible();
+  await expect(page.getByLabel("Lang menu")).toBeVisible();
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   await expect(primaryNavigation).toBeInViewport();
@@ -421,17 +436,16 @@ test("keeps mobile navigation and display controls behind header menus", async (
   }
 });
 
-test("rounds the connection view switch and keeps Config structure aligned while scrolling on mobile", async ({ page, installation }) => {
+test("keeps the removed connection view switch absent and Config structure aligned while scrolling on mobile", async ({ page, installation }) => {
   await installation.write("conf.d/20-lab.conf", hosts);
   await openApplication(page, installation);
 
   await openSectionThroughDrawer(page, "Connections", "Connections");
   await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
   await page.reload();
-  const arrangement = page.getByRole("group", { name: "接続の並べ方" });
-  await expect(arrangement).toHaveCSS("border-radius", "8px");
+  await expect(page.getByRole("group", { name: "接続の並べ方" })).toHaveCount(0);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
-    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-mobile-rounded-switch.png`, fullPage: true });
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-connections-mobile-groups-only.png`, fullPage: true });
   }
 
   await page.goto(new URL("/config", page.url()).href);
