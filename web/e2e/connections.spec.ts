@@ -659,6 +659,8 @@ test("opening the inspector narrows the detail rather than hiding it under the p
 
   const pane = page.getByRole("complementary", { name: "Display and classification" });
   await expect(pane).toBeVisible();
+  await page.getByLabel("Port", { exact: true }).fill("2223");
+  await expect(page.getByRole("button", { name: "Save Basic settings", exact: true })).toBeVisible();
 
   const paneLeft = (await pane.boundingBox())?.x ?? 0;
   expect(paneLeft).toBeGreaterThan(0);

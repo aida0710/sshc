@@ -120,27 +120,23 @@ test("quick connect drills into a nested group and promotes it when its containe
 
   await openSection(page, "Home");
   let browser = page.getByRole("region", { name: "Quick connect" });
-  let modes = browser.getByRole("group", { name: "Browse connections by" });
-  await expect(modes.getByRole("button", { name: "Servers", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await modes.getByRole("button", { name: "Groups", exact: true }).click();
   expect(new URL(page.url()).pathname).toBe("/");
 
-  await expect(browser.getByRole("button", { name: "work, 0 servers" })).toBeVisible();
-  await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toHaveCount(0);
-  await browser.getByRole("button", { name: "work, 0 servers" }).click();
+  await expect(browser.getByRole("button", { name: "Open work, 0 connections" })).toBeVisible();
+  await expect(browser.getByRole("button", { name: "Open work/eu, 0 connections" })).toHaveCount(0);
+  await browser.getByRole("button", { name: "Open work, 0 connections" }).click();
   expect(new URL(page.url()).pathname).toBe("/");
-  await expect(browser.getByRole("button", { name: "eu, 0 servers" })).toBeVisible();
-  await browser.getByRole("button", { name: "eu, 0 servers" }).click();
+  await expect(browser.getByRole("button", { name: "Open work/eu, 0 connections" })).toBeVisible();
+  await browser.getByRole("button", { name: "Open work/eu, 0 connections" }).click();
   expect(new URL(page.url()).pathname).toBe("/");
   await expect(
-    browser.getByRole("navigation", { name: "Group path" }).getByText("eu", { exact: true }),
+    browser.getByRole("navigation", { name: "Selected group" }).getByText("eu", { exact: true }),
   ).toHaveAttribute("aria-current", "page");
   expect(terminalRequests).toEqual([]);
 
   await page.reload();
   browser = page.getByRole("region", { name: "Quick connect" });
-  modes = browser.getByRole("group", { name: "Browse connections by" });
-  await expect(modes.getByRole("button", { name: "Servers", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(browser.getByRole("button", { name: "Open work, 0 connections" })).toBeVisible();
 
   await openSection(page, "Groups");
   await page.getByRole("listitem").filter({ hasText: "work" }).first().click();
@@ -152,10 +148,8 @@ test("quick connect drills into a nested group and promotes it when its containe
 
   await openSection(page, "Home");
   browser = page.getByRole("region", { name: "Quick connect" });
-  modes = browser.getByRole("group", { name: "Browse connections by" });
-  await modes.getByRole("button", { name: "Groups", exact: true }).click();
-  await expect(browser.getByRole("button", { name: "work, 0 servers" })).toHaveCount(0);
-  const promoted = browser.getByRole("button", { name: "eu, 0 servers" });
+  await expect(browser.getByRole("button", { name: "Open work, 0 connections" })).toHaveCount(0);
+  const promoted = browser.getByRole("button", { name: "Open work/eu, 0 connections" });
   await expect(promoted).toBeVisible();
   await promoted.click();
   expect(new URL(page.url()).pathname).toBe("/");
