@@ -87,7 +87,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   const blocked = disabled || busy !== null;
 
   return (
-    <section aria-label={t("conn.checksLabel")} className="flex flex-col gap-3 rounded-lg bg-tree px-4 py-3">
+    <section aria-label={t("conn.checksLabel")} className="sshc-card flex flex-col gap-3 rounded-lg bg-card px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button disabled={blocked} onClick={() => void checkReachability()}>
           {busy === "reachability" ? t("conn.checking") : t("conn.checkReachability")}

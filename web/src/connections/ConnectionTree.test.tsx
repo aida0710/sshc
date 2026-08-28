@@ -59,12 +59,11 @@ function transfer(payload: DragPayload) {
 describe("ConnectionTree", () => {
   it("shows the complete declared hierarchy and ungrouped connections at once", () => {
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onOpenPatternRule={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
     );
 
     const tree = screen.getByRole("navigation", { name: "Connections" });
-    expect(within(tree).getByRole("group", { name: "Arrange connections by" })).toHaveClass("rounded-md", "overflow-hidden");
-    expect(within(tree).queryByRole("group", { name: "Browse connections by" })).not.toBeInTheDocument();
+    expect(within(tree).queryByRole("group", { name: "Arrange connections by" })).not.toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: "home" })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: "home/eu" })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: "empty" })).toBeInTheDocument();
@@ -72,23 +71,23 @@ describe("ConnectionTree", () => {
     expect(within(tree).getByRole("button", { name: /nas/ })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: /eu-api/ })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: /bastion/ })).toBeInTheDocument();
+    expect(within(tree).getByRole("region", { name: "home group, 1 connections" })).toBeInTheDocument();
+    expect(within(tree).getByRole("region", { name: "home/eu group, 1 connections" })).toBeInTheDocument();
+    expect(within(tree).getByRole("region", { name: "Ungrouped group, 1 connections" })).toBeInTheDocument();
   });
 
-  it("opens pattern rules from the file arrangement instead of treating them as servers", async () => {
-    const onOpenPatternRule = vi.fn();
+  it("keeps pattern rules out of Connections", () => {
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onOpenPatternRule={onOpenPatternRule} onDrop={vi.fn()} />,
+      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Files" }));
-    await userEvent.click(screen.getByRole("button", { name: /Host \*/ }));
-
-    expect(onOpenPatternRule).toHaveBeenCalledWith("config", 20);
+    expect(screen.queryByRole("button", { name: /Host \*/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Files" })).not.toBeInTheDocument();
   });
 
   it("keeps filtering and visible metadata", async () => {
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onOpenPatternRule={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
     );
 
     const nas = screen.getByRole("button", { name: /nas/ });
@@ -99,10 +98,10 @@ describe("ConnectionTree", () => {
     expect(screen.queryByRole("button", { name: /nas/ })).not.toBeInTheDocument();
   });
 
-  it("filters the dense result list by group, file, and resolved destination", async () => {
+  it("filters grouped results by subtree, exact group, and resolved destination", async () => {
     const user = userEvent.setup();
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onOpenPatternRule={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
     );
 
     expect(screen.getByText("tester@nas.example")).toBeInTheDocument();
@@ -110,13 +109,16 @@ describe("ConnectionTree", () => {
     expect(screen.getByRole("button", { name: "nas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "eu-api" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "bastion" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "home group, 1 connections" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "home/eu group, 1 connections" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Files" }));
-    await user.click(screen.getByRole("button", { name: "config" }));
-    expect(screen.getByRole("button", { name: "bastion" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "home/eu" }));
+    expect(screen.getByRole("button", { name: "eu-api" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "nas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /^home group/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "home/eu group, 1 connections" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "All" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "all");
     await user.type(screen.getByRole("searchbox", { name: "Filter connections" }), "nas.example");
     expect(screen.getByRole("button", { name: "nas" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "bastion" })).not.toBeInTheDocument();
@@ -131,7 +133,7 @@ describe("ConnectionTree", () => {
       group: "home",
     };
     const harness = render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onOpenPatternRule={vi.fn()} onDrop={onDrop} />,
+      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={onDrop} />,
     );
     const source = screen.getByRole("button", { name: /nas/ });
     const target = screen.getByRole("button", { name: "empty" });
@@ -143,7 +145,7 @@ describe("ConnectionTree", () => {
 
     onDrop.mockClear();
     harness.rerender(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onOpenPatternRule={vi.fn()} onDrop={onDrop} movesDisabled />,
+      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={onDrop} movesDisabled />,
     );
     const disabledSource = screen.getByRole("button", { name: /nas/ });
     expect(disabledSource).not.toHaveAttribute("draggable", "true");

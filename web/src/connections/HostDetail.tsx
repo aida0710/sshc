@@ -106,6 +106,15 @@ export function HostDetailPanel({
     <section className="flex flex-col gap-5">
       <NoticeList notices={detail.form.notices ?? []} />
 
+      {panel === "Basic" && identity.alias !== "" ? (
+        <ConnectionChecks
+          alias={identity.alias}
+          api={integrations}
+          disabled={disabled || dirty}
+          resetKey={resetKey}
+        />
+      ) : null}
+
       <div data-connection-editor className="sshc-card overflow-hidden rounded-lg bg-card">
         <div role="tablist" aria-label={t("conn.editorLabel")} className="sticky top-0 z-10 flex gap-1 border-b border-line bg-select-fill p-1">
           {areas.map((item) => (
@@ -132,16 +141,7 @@ export function HostDetailPanel({
             hidden={panel !== "Basic"}
             className="flex flex-col gap-5"
           >
-            {identity.alias === "" ? (
-              <p className="text-sm text-ink-muted">{t("host.noDestination")}</p>
-            ) : (
-              <ConnectionChecks
-                alias={identity.alias}
-                api={integrations}
-                disabled={disabled || dirty}
-                resetKey={resetKey}
-              />
-            )}
+            {identity.alias === "" ? <p className="text-sm text-ink-muted">{t("host.noDestination")}</p> : null}
             <ConnectionBasicForm
               detail={detail}
               savedState={savedState}

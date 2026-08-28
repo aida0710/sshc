@@ -110,7 +110,6 @@ beforeEach(() => {
 
 describe("ConnectionsPage", () => {
   it("uses the expanded management tree instead of the quick-connect browser", async () => {
-    const onOpenFile = vi.fn();
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
       hosts: [
@@ -128,18 +127,16 @@ describe("ConnectionsPage", () => {
     render(
       <ConnectionsPage
         {...consoleProps}
-        onOpenFile={onOpenFile}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "" }}
       />,
     );
 
     const tree = await screen.findByRole("navigation", { name: "Connections" });
-    expect(within(tree).getByRole("group", { name: "Arrange connections by" })).toBeInTheDocument();
-    expect(within(tree).queryByRole("group", { name: "Browse connections by" })).not.toBeInTheDocument();
-
-    await userEvent.click(within(tree).getByRole("button", { name: /Host \*/ }));
-    expect(onOpenFile).toHaveBeenCalledWith("config", 9);
+    expect(within(tree).queryByRole("group", { name: "Arrange connections by" })).not.toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "bastion" })).toBeInTheDocument();
+    expect(within(tree).queryByRole("button", { name: /Host \*/ })).not.toBeInTheDocument();
+    expect(within(tree).queryByRole("button", { name: "Files" })).not.toBeInTheDocument();
   });
 
   it("replaces the bare section URL with the default server browser and discards old query state", async () => {
@@ -222,7 +219,7 @@ describe("ConnectionsPage", () => {
     );
   });
 
-  it("changes the management arrangement without refetching or losing the selected draft", async () => {
+  it("changes the group scope without refetching or losing the selected draft", async () => {
     const user = userEvent.setup();
     const onNavigateLocation = vi.fn();
     vi.mocked(configApi.overview).mockResolvedValue({
@@ -255,11 +252,9 @@ describe("ConnectionsPage", () => {
     await user.type(port, "2222");
     expect(configApi.host).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "Files" }));
-    expect(screen.getByRole("button", { name: "config" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "home" }));
+    expect(screen.getByRole("region", { name: "home group, 1 connections" })).toBeInTheDocument();
     expect(onNavigateLocation).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Groups" }));
-    expect(screen.getByRole("button", { name: "home" })).toBeInTheDocument();
     expect(configApi.host).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });
@@ -646,8 +641,7 @@ describe("ConnectionsPage", () => {
     expect(screen.getByRole("heading", { name: "Choose a connection" })).toBeInTheDocument();
   });
 
-  it("opens a pattern rule in Config and never asks for its host detail", async () => {
-    const onOpenFile = vi.fn();
+  it("keeps pattern rules in Config and never asks for their host detail", async () => {
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
       hosts: [
@@ -660,11 +654,10 @@ describe("ConnectionsPage", () => {
       ],
     } as never);
 
-    render(<ConnectionsPage {...consoleProps} onOpenFile={onOpenFile} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
 
     expect(await screen.findByRole("button", { name: "bastion" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Host \*/ }));
-    expect(onOpenFile).toHaveBeenCalledWith("config", 9);
+    expect(screen.queryByRole("button", { name: /Host \*/ })).not.toBeInTheDocument();
     expect(configApi.host).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "Choose a connection" })).toBeInTheDocument();
   });
