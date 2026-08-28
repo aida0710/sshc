@@ -42,6 +42,23 @@ test("draws one separator above the desktop navigation version", async ({ page, 
   await expect.poll(() => navigationFooterTopBorders(page)).toBe(1);
 });
 
+test("keeps the engine version visible when the release check fails", async ({ page, installation }) => {
+  await page.route("**/api/v1/update", async (route) => {
+    await route.fulfill({
+      status: 502,
+      contentType: "application/problem+json",
+      body: JSON.stringify({ code: "update_check_failed", message: "request rejected" }),
+    });
+  });
+  await openApplication(page, installation);
+
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(navigation.getByText(/^Version /)).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/version-with-update-failure.png` });
+  }
+});
+
 test("shows safe diagnostics for a failed operation", async ({ page, installation }) => {
   await stubUpdateStatus(page);
   await page.route("**/api/v1/config/overview", async (route) => {

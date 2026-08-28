@@ -566,6 +566,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         ) : null}
         <AppNavigation
           navigationId={navigationId}
+          version={version}
           navigationOpen={navigationOpen}
           desktopVisible={desktopNavigationVisible}
           desktopWidth={desktopNavigationWidth}
