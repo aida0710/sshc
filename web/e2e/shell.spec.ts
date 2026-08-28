@@ -79,15 +79,11 @@ test("keeps the header and the primary navigation still while a panel scrolls", 
   ).toBeVisible();
 
   const header = page.getByRole("banner");
-  const tree = page.getByRole("navigation", { name: "Connections" });
+  const results = page.locator("[data-connection-results]");
   const resting = await header.boundingBox();
   expect(resting).not.toBeNull();
 
-  const overflow = await tree.evaluate((element) => {
-    const scroller = element.parentElement;
-    if (scroller === null) return 0;
-    return scroller.scrollHeight - scroller.clientHeight;
-  });
+  const overflow = await results.evaluate((element) => element.scrollHeight - element.clientHeight);
   expect(overflow, "the fixture is not tall enough to scroll the list").toBeGreaterThan(0);
 
   const documentOverflow = await page.evaluate(() => {
@@ -102,15 +98,15 @@ test("keeps the header and the primary navigation still while a panel scrolls", 
   });
   expect(windowOffset).toBe(0);
 
-  await tree.evaluate((element) => element.parentElement?.scrollTo(0, element.parentElement.scrollHeight));
-  expect(await tree.evaluate((element) => element.parentElement?.scrollTop ?? 0)).toBeGreaterThan(0);
+  await results.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+  expect(await results.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
   expect(await header.boundingBox()).toEqual(resting);
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeInViewport();
   await expect(page.getByRole("link", { name: "History", exact: true })).toBeInViewport();
 
   await expect(
-    page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "lab-39" }),
+    page.getByRole("region", { name: "Connection results" }).getByRole("button", { name: "lab-39" }),
   ).toBeInViewport();
 });
 
