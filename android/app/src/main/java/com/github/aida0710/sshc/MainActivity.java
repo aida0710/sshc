@@ -1,6 +1,7 @@
 package com.github.aida0710.sshc;
 
 import android.app.Activity;
+import android.annotation.TargetApi;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ComponentName;
@@ -30,6 +31,7 @@ import android.widget.TextView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Toast;
+import android.window.OnBackInvokedDispatcher;
 
 import java.util.Arrays;
 
@@ -88,6 +90,9 @@ public final class MainActivity extends Activity {
         // WindowInsets を子 View の listener で処理する。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerBackCallback();
         }
         Intent intent = new Intent(this, EngineService.class);
         startForegroundService(intent);
@@ -301,11 +306,36 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** 戻るキーで WebView の履歴を移動する。androidx.activity への依存は追加しない。 */
+    /** Android 13 以降のボタン・ジェスチャーによる戻る操作を受け取る。 */
+    @TargetApi(Build.VERSION_CODES.TIRAMISU)
+    private void registerBackCallback() {
+        getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::navigateBack);
+    }
+
+    /** Web画面の履歴を優先し、ホームならアプリをバックグラウンドへ戻す。 */
+    private void navigateBack() {
+        if (webView == null) {
+            moveTaskToBack(true);
+            return;
+        }
+        // sshcのrouteはページ読込ではなくhistory.pushStateで積まれるため、
+        // WebView.canGoBack()だけでは履歴を検出できない。ページ自身に戻らせる。
+        webView.evaluateJavascript(
+                "(() => { if (location.pathname === '/' && !location.search) return false; history.back(); return true; })()",
+                consumed -> {
+                    if ("true".equals(consumed)) return;
+                    // 将来、同一originの実ページ遷移を使う場合も通常のWebView履歴を失わない。
+                    if (webView.canGoBack()) webView.goBack();
+                    else moveTaskToBack(true);
+                });
+    }
+
+    /** Android 12 以前とハードウェアキーでも同じ戻る動作を行う。 */
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK && webView != null && webView.canGoBack()) {
-            webView.goBack();
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            navigateBack();
             return true;
         }
         return super.onKeyDown(keyCode, event);
