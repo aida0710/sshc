@@ -160,12 +160,9 @@ func TestRunTransportAutomationEncodesInvalidUTF8(t *testing.T) {
 	called := defaultTransportInvocation(transportTelnet, true)
 	called.Target = "console.example"
 	called.Command = []string{"show"}
-	called.ReadFor = time.Millisecond
+	called.Expect = `(?s)..`
 	called.JSON = true
-	reader, writer := io.Pipe()
-	t.Cleanup(func() { _ = writer.Close() })
-	go func() { _, _ = writer.Write([]byte{0xff, 0x00}) }()
-	stream := &fakeDuplex{reader: reader, close: reader.Close}
+	stream := &fakeDuplex{reader: bytes.NewReader([]byte{0xff, 0x00})}
 	dependencies := transportDependencies{
 		dialTelnet: func(context.Context, telnet.Config) (duplexStream, error) { return stream, nil },
 	}
