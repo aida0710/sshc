@@ -93,16 +93,18 @@ describe("HostDetailPanel", () => {
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
     expect(within(areaTabs).getAllByRole("tab")).toHaveLength(3);
     expect(within(areaTabs).getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
+    expect(within(areaTabs).getByRole("tab", { name: "Basic" })).toHaveClass("border-accent");
     expect(screen.getByRole("tabpanel", { name: "Basic" })).toBeVisible();
     const editor = screen.getByRole("tabpanel", { name: "Basic" }).closest("[data-connection-editor]");
     const reachability = screen.getByRole("button", { name: "Check reachability" });
     expect(editor).not.toBeNull();
+    expect(editor).not.toHaveClass("sshc-card", "rounded-lg");
     expect(editor).not.toContainElement(reachability);
     expect(reachability.closest("section")).toHaveClass("bg-card");
     expect(reachability).toBeEnabled();
     expect(harness.props.integrations.reachability).not.toHaveBeenCalled();
 
-    await user.click(within(areaTabs).getByRole("tab", { name: "Settings analysis" }));
+    await user.click(within(areaTabs).getByRole("tab", { name: "Analysis" }));
     expect(onLocationChange).toHaveBeenCalledWith("Analysis", "Jump");
   });
 
@@ -126,9 +128,8 @@ describe("HostDetailPanel", () => {
     renderPanel({ panel: "Advanced", advanced: "Raw" });
 
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
-    expect(within(areaTabs).getByRole("tab", { name: "Advanced settings" })).toHaveAttribute("aria-selected", "true");
-    const advancedTabs = screen.getByRole("tablist", { name: "Advanced setting views" });
-    expect(within(advancedTabs).getByRole("tab", { name: "Raw" })).toHaveAttribute("aria-selected", "true");
+    expect(within(areaTabs).getByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("combobox", { name: "Advanced setting views" })).toHaveValue("Raw");
   });
 
   it("reports an advanced subview as a direct canonical location", async () => {
@@ -136,7 +137,7 @@ describe("HostDetailPanel", () => {
     const onLocationChange = vi.fn();
     renderPanel({ panel: "Advanced", advanced: "Jump", onLocationChange });
 
-    await user.click(screen.getByRole("tab", { name: "Directives" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Advanced setting views" }), "Directives");
     expect(onLocationChange).toHaveBeenCalledWith("Advanced", "Directives");
   });
 });

@@ -54,7 +54,7 @@ test("restores a selected connection and editor tab from its URL", async ({
     panel: "basic",
   });
 
-  await page.getByRole("tab", { name: "Advanced settings" }).click();
+  await page.getByRole("tab", { name: "Advanced" }).click();
   await page.getByRole("tab", { name: "Directives" }).click();
   current = new URL(page.url());
   expect(Object.fromEntries(current.searchParams)).toEqual({
@@ -66,14 +66,14 @@ test("restores a selected connection and editor tab from its URL", async ({
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Advanced settings" })).toHaveAttribute(
+  await expect(page.getByRole("tab", { name: "Advanced" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
   await expect(page.getByRole("tab", { name: "Directives" })).toHaveAttribute("aria-selected", "true");
 
   await page.goBack();
-  await expect(page.getByRole("tab", { name: "Jump" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Jump Host" })).toHaveAttribute("aria-selected", "true");
   expect(new URL(page.url()).searchParams.get("advanced")).toBe("jump");
   await page.goBack();
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
@@ -96,10 +96,10 @@ test("opens every canonical connection panel URL without starting an operation",
 
   const cases = [
     { panel: "basic", area: "Basic" },
-    { panel: "analysis", area: "Settings analysis" },
-    { panel: "advanced", area: "Advanced settings", advanced: "jump", label: "Jump" },
-    { panel: "advanced", area: "Advanced settings", advanced: "directives", label: "Directives" },
-    { panel: "advanced", area: "Advanced settings", advanced: "raw", label: "Raw" },
+    { panel: "analysis", area: "Analysis" },
+    { panel: "advanced", area: "Advanced", advanced: "jump", label: "Jump Host" },
+    { panel: "advanced", area: "Advanced", advanced: "directives", label: "Directives" },
+    { panel: "advanced", area: "Advanced", advanced: "raw", label: "Raw" },
   ];
 
   for (const item of cases) {
