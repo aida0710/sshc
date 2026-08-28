@@ -339,6 +339,12 @@ export const en = {
   "terminal.paletteFollowsOverall": "Use the overall setting",
   "connection.paletteLabel": "Console colour scheme",
   "connection.paletteHint": "Only this connection's consoles use it.",
+  "connection.encodingLabel": "Remote text encoding",
+  "connection.encodingHint": "Used by this connection in the browser terminal and by sshc on the command line.",
+  "connection.encodingUTF8": "UTF-8 (default)",
+  "connection.encodingShiftJIS": "Shift_JIS (Japanese)",
+  "connection.encodingEUCJP": "EUC-JP (Japanese)",
+  "connection.encodingISO2022JP": "ISO-2022-JP (Japanese)",
   "terminal.fontSizeHint":
     "Pixels. Empty follows the screen — 15 on a narrow one, 13 otherwise.",
   "terminal.copyOnSelectLabel": "Copy selected text automatically",

@@ -3381,6 +3381,10 @@ components:
         order: { type: integer }
         orphan: { type: boolean }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
+        encoding:
+          type: string
+          enum: [utf-8, shift_jis, euc-jp, iso-2022-jp]
+          description: Text encoding used by this SSH terminal. Omitted means UTF-8.
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
     # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:

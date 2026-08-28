@@ -78,6 +78,22 @@ describe("HostInspector", () => {
     expect(onMetadata).toHaveBeenLastCalledWith(expect.objectContaining({ order: 7 }));
   });
 
+  it("saves the remote encoding per connection and can return to UTF-8", async () => {
+    const onMetadata = vi.fn();
+    const user = userEvent.setup();
+    const detail = build();
+    const { rerender } = render(<HostInspector detail={detail} onMetadata={onMetadata} />);
+
+    const encoding = screen.getByLabelText("Remote text encoding");
+    await user.selectOptions(encoding, "shift_jis");
+    expect(onMetadata).toHaveBeenLastCalledWith(expect.objectContaining({ encoding: "shift_jis" }));
+
+    detail.metadata = { ...detail.metadata, encoding: "shift_jis" };
+    rerender(<HostInspector detail={detail} onMetadata={onMetadata} />);
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "");
+    expect(onMetadata).toHaveBeenLastCalledWith(expect.not.objectContaining({ encoding: expect.anything() }));
+  });
+
   it("clears a colour rather than leaving the picker's fallback as a real value", async () => {
     const onMetadata = vi.fn();
     const user = userEvent.setup();

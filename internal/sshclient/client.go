@@ -101,11 +101,17 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 
 // start は、チャンネルの上で端末を要求し、シェルかコマンドを起動する。
 func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, session *Session) error {
-	remote.Stdin = session.input
-	remote.Stdout = session.writer
+	streams, _, err := encodeStreams(Streams{
+		In: session.input, Out: session.writer, Err: session.writer,
+	}, target.Encoding)
+	if err != nil {
+		return err
+	}
+	remote.Stdin = streams.In
+	remote.Stdout = streams.Out
 	// stderr を同じ道へ流すのは、端末がひとつだからである。分けて運んでも
 	// 出す場所が無い。
-	remote.Stderr = session.writer
+	remote.Stderr = streams.Err
 
 	for _, variable := range target.SetEnv {
 		// 拒否されても続ける。サーバーが AcceptEnv を絞っているのは普通のことで、

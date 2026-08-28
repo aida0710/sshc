@@ -20,6 +20,7 @@ import (
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	"sshc/internal/textencoding"
 )
 
 // errNoConfiguration は、設定を読む手段が配線されていないことを報告する。
@@ -27,9 +28,10 @@ var errNoConfiguration = errors.New("no configuration service is available")
 
 // sshParts は、プロセス内 SSH クライアントに必要な依存関係を保持する。
 type sshParts struct {
-	dialer  sshclient.Dialer
-	resolve sshclient.Resolver
-	home    string
+	dialer   sshclient.Dialer
+	resolve  sshclient.Resolver
+	encoding func(string) (textencoding.Name, error)
+	home     string
 }
 
 // newSSHParts は、プロセス内 SSH の部品一式を組む。
@@ -62,13 +64,28 @@ func newSSHParts(
 			}
 			return config.ResolveConnection(alias)
 		},
+		encoding: func(alias string) (textencoding.Name, error) {
+			if config == nil {
+				return "", errNoConfiguration
+			}
+			return config.ConnectionEncoding(alias)
+		},
 		home: home,
 	}
 }
 
 // target は、alias ひとつ分の接続を組み立てる。
 func (p sshParts) target(alias string) (sshclient.Target, error) {
-	return sshclient.NewTarget(alias, p.resolve, p.home)
+	target, err := sshclient.NewTarget(alias, p.resolve, p.home)
+	if err != nil {
+		return sshclient.Target{}, err
+	}
+	encoding, err := p.encoding(alias)
+	if err != nil {
+		return sshclient.Target{}, err
+	}
+	target.Encoding = encoding
+	return target, nil
 }
 
 // connector は、埋め込みターミナルが開く対話セッションである。

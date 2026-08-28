@@ -12,6 +12,7 @@ import (
 
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	"sshc/internal/textencoding"
 )
 
 const (
@@ -27,6 +28,7 @@ var (
 	ErrMetadataPath     = errors.New("metadata host path must be relative to the ssh directory")
 	ErrMetadataGroup    = errors.New("metadata group definition is invalid")
 	ErrMetadataTerminal = errors.New("metadata terminal settings are invalid")
+	ErrMetadataEncoding = errors.New("metadata terminal encoding is invalid")
 )
 
 var secretMarkers = []string{"-----BEGIN", "PRIVATE KEY", "ssh-rsa ", "ssh-ed25519 ", "ecdsa-sha2-"}
@@ -54,6 +56,8 @@ type HostMetadata struct {
 	Orphan   bool         `json:"orphan,omitempty"`
 	// Appearance は、この接続を開いたときの端末の見た目である。
 	Appearance *TerminalAppearance `json:"appearance,omitempty"`
+	// Encoding は、接続先との間で使う文字コード。空はUTF-8である。
+	Encoding string `json:"encoding,omitempty"`
 }
 
 // EngineSettings は、engine そのものの設定である。
@@ -231,6 +235,12 @@ func ValidateMetadata(metadata Metadata) error {
 		}
 		if host.Identity.Alias == "" {
 			return ErrMetadataPath
+		}
+		if host.Encoding != "" {
+			canonical, err := textencoding.Parse(host.Encoding)
+			if err != nil || string(canonical) != host.Encoding {
+				return ErrMetadataEncoding
+			}
 		}
 		for _, text := range append([]string{host.Note, host.Colour}, host.Tags...) {
 			if containsSecretMarker(text) {

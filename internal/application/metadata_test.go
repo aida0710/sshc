@@ -155,6 +155,27 @@ func TestValidateMetadataRefusesKeyMaterialAndUnknownPaths(t *testing.T) {
 	}
 }
 
+func TestMetadataAcceptsOnlyCanonicalTerminalEncodings(t *testing.T) {
+	for _, encoding := range []string{"", "utf-8", "shift_jis", "euc-jp", "iso-2022-jp"} {
+		metadata := NewMetadata()
+		metadata.Hosts = []HostMetadata{{
+			Identity: HostIdentity{Path: "config", Alias: "legacy"}, Encoding: encoding,
+		}}
+		if _, err := EncodeMetadata(metadata); err != nil {
+			t.Errorf("encoding %q = %v", encoding, err)
+		}
+	}
+	for _, encoding := range []string{"sjis", "UTF-8", "guess"} {
+		metadata := NewMetadata()
+		metadata.Hosts = []HostMetadata{{
+			Identity: HostIdentity{Path: "config", Alias: "legacy"}, Encoding: encoding,
+		}}
+		if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataEncoding) {
+			t.Errorf("encoding %q = %v, want ErrMetadataEncoding", encoding, err)
+		}
+	}
+}
+
 func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 	metadata := NewMetadata()
 	metadata.Groups = []GroupMetadata{{Name: "work", Colour: "#f97316", Note: "the office", Order: 2}}

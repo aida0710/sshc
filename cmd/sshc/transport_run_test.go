@@ -12,6 +12,7 @@ import (
 
 	"sshc/internal/serialtransport"
 	"sshc/internal/telnet"
+	"sshc/internal/textencoding"
 )
 
 type failingOutput struct{}
@@ -86,6 +87,27 @@ func TestRunTransportAutomationWritesCommandAndReportsMatch(t *testing.T) {
 	}
 	if !report.Success || !report.Matched || report.Transcript != "version 1\nrouter# " || report.TranscriptEncoding != "utf-8" {
 		t.Fatalf("report = %#v", report)
+	}
+}
+
+func TestRunTransportAutomationConvertsLegacyEncodingAtTheStreamBoundary(t *testing.T) {
+	called := defaultTransportInvocation(transportSerial, true)
+	called.Target = "/dev/ttyUSB0"
+	called.Encoding = textencoding.ShiftJIS
+	called.Command = []string{"送信"}
+	called.Expect = `受信# `
+	stream := &fakeDuplex{reader: bytes.NewReader([]byte{0x8e, 0xf3, 0x90, 0x4d, '#', ' '})}
+	dependencies := transportDependencies{
+		openSerial: func(context.Context, serialtransport.Config) (duplexStream, error) { return stream, nil },
+	}
+	var stdout, stderr bytes.Buffer
+	code := runTransportAutomation(context.Background(), called, nil, strings.NewReader(""), &stdout, &stderr, dependencies)
+	if code != 0 || stderr.Len() != 0 || stdout.String() != "受信# " {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+	}
+	want := []byte{0x91, 0x97, 0x90, 0x4d, '\r'}
+	if got := []byte(stream.written()); !bytes.Equal(got, want) {
+		t.Fatalf("wire output = %x, want %x", got, want)
 	}
 }
 

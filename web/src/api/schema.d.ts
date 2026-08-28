@@ -2574,6 +2574,11 @@ export interface components {
             order?: number;
             orphan?: boolean;
             appearance?: components["schemas"]["TerminalAppearance"];
+            /**
+             * @description Text encoding used by this SSH terminal. Omitted means UTF-8.
+             * @enum {string}
+             */
+            encoding?: "utf-8" | "shift_jis" | "euc-jp" | "iso-2022-jp";
         };
         TerminalAppearance: {
             palette?: string;

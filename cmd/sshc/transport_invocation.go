@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sshc/internal/streamrun"
+	"sshc/internal/textencoding"
 )
 
 type transportKind string
@@ -41,6 +42,7 @@ type transportInvocation struct {
 	RTS          *bool
 	Break        time.Duration
 	TerminalType string
+	Encoding     textencoding.Name
 }
 
 func defaultTransportInvocation(kind transportKind, run bool) transportInvocation {
@@ -56,6 +58,7 @@ func defaultTransportInvocation(kind transportKind, run bool) transportInvocatio
 		StopBits:       "1",
 		Flow:           "none",
 		TerminalType:   "xterm-256color",
+		Encoding:       textencoding.UTF8,
 		Settle:         120 * time.Millisecond,
 	}
 	if kind == transportSerial {
@@ -112,6 +115,15 @@ func parseTransportInvocation(kind transportKind, args []string, run bool) (invo
 					return invalidInvocation("--json does not take a value")
 				}
 				called.JSON = true
+			case "--encoding":
+				value, err := takeValue()
+				if err != nil {
+					return invalidInvocation(err.Error())
+				}
+				called.Encoding, err = textencoding.Parse(value)
+				if err != nil {
+					return invalidInvocation("--encoding takes utf-8, shift_jis, euc-jp, or iso-2022-jp")
+				}
 			case "--baud":
 				if kind != transportSerial {
 					return invalidInvocation("--baud can only be used with serial")
