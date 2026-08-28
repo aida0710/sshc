@@ -82,6 +82,8 @@ describe("OverviewPanel", () => {
     expect(within(metrics).getByText("2")).toBeInTheDocument();
     expect(within(metrics).getAllByText("1")).toHaveLength(2);
     expect(screen.getByText("Recently used hosts stay first; unused hosts follow in name order.")).toBeInTheDocument();
+    expect(document.querySelector('[data-sshc-brand-mark="true"]')).not.toBeNull();
+    expect(screen.queryByText(">_")).toBeNull();
   });
 
   it("puts recent connections first, searches groups and launches only from the explicit action", async () => {

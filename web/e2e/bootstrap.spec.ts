@@ -99,7 +99,7 @@ test("keeps only the origin-scoped CSRF token in session storage", async ({ page
     /^[A-Za-z0-9_-]{43}$/,
   );
 
-  await page.getByLabel("Language").selectOption("ja");
+  await page.getByLabel("Lang", { exact: true }).selectOption("ja");
 
   const stored = await page.evaluate(() => ({
     keys: Object.keys(window.localStorage).sort(),
@@ -124,7 +124,7 @@ test("keeps the chosen appearance, and writes nothing else", async ({ page, inst
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await page.getByLabel("Appearance").selectOption("system");
-  await page.getByLabel("Language").selectOption("ja");
+  await page.getByLabel("Lang", { exact: true }).selectOption("ja");
 
   const stored = await page.evaluate(() => ({
     keys: Object.keys(window.localStorage).sort(),
@@ -141,15 +141,15 @@ test("keeps the chosen language across a reload, and translates the panels", asy
   await openApplication(page, installation);
   await expect(sessionStatus(page)).toContainText("Local session active");
 
-  await page.getByLabel("Language").selectOption("ja");
-  await expect(page.getByRole("link", { name: "鍵", exact: true })).toBeVisible();
+  await page.getByLabel("Lang", { exact: true }).selectOption("ja");
+  await expect(page.getByRole("link", { name: "SSH Keys", exact: true })).toBeVisible();
 
-  await page.getByRole("link", { name: "鍵", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "鍵", level: 2 })).toBeVisible();
+  await page.getByRole("link", { name: "SSH Keys", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "SSH Keys", level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "鍵を作成" })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("link", { name: "鍵", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: "SSH Keys", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("button", { name: "鍵を作成" })).toBeVisible();
   expect(await page.evaluate(() => Object.keys(window.localStorage).sort())).toEqual(["sshc.language"]);
 });

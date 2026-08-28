@@ -190,9 +190,9 @@ test("explains an older vault with both schema versions on mobile", async ({ pag
   await page.getByRole("button", { name: "開く" }).click();
 
   await expect(page.getByRole("alert")).toContainText(
-    "vault のバージョンが古いです（必要なバージョン: 4、現在: 3）。",
+    "Vault のバージョンが古いです（必要なバージョン: 4、現在: 3）。",
   );
-  await expect(page.getByRole("button", { name: "互換性のある vault を復元" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "互換性のある Vault を復元" })).toBeVisible();
   await expectNoHorizontalOverflow(page, "古い vault の復旧画面");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -208,7 +208,7 @@ test("reports a completed vault migration with both versions on mobile", async (
   await page.goto(installation.url);
   await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
   await page.getByLabel("マスターパスワード（確認）", { exact: true }).fill(masterPassword);
-  await page.getByRole("button", { name: "vault を作成" }).click();
+  await page.getByRole("button", { name: "Vault を作成" }).click();
   await expect(page.getByText(/ローカルセッション有効/).first()).toBeAttached();
 
   await page.goto(new URL("/secrets", installation.url).toString());
@@ -234,7 +234,7 @@ test("reports a completed vault migration with both versions on mobile", async (
   await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
   await page.getByRole("button", { name: "開く" }).click();
 
-  await expect(page.getByText("vault をバージョン 4 から 5 へ安全に更新しました。")).toBeVisible();
+  await expect(page.getByText("Vault をバージョン 4 から 5 へ安全に更新しました。")).toBeVisible();
   await expectNoHorizontalOverflow(page, "vault migration notice");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
@@ -286,6 +286,60 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   }
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-mobile-drawer-dark.png`, fullPage: true });
+  }
+});
+
+test("uses established product names in the Japanese navigation", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+  await page.reload();
+  await expect(sessionStatus(page)).toContainText("ローカルセッション有効");
+
+  const quickConnect = page.locator('section[aria-labelledby="quick-connect-heading"]');
+  await expect(quickConnect.locator('[data-sshc-brand-mark="true"]')).toHaveCount(1);
+  await expect(quickConnect).not.toContainText(">_");
+
+  await page.getByRole("button", { name: "ナビゲーション", exact: true }).click();
+  const navigation = page.getByRole("navigation", { name: "メインナビゲーション" });
+
+  for (const group of ["Main", "Configuration", "Security", "Tools"]) {
+    await expect(navigation.locator(`ul[aria-label="${group}"]`)).toBeVisible();
+  }
+  for (const section of [
+    "Home",
+    "Connections",
+    "Terminal",
+    "SFTP",
+    "SSH Config",
+    "Groups",
+    "SSH Keys",
+    "Known Hosts",
+    "Remote Keys",
+    "Diagnostics",
+    "Vault",
+    "Snippets",
+    "Settings",
+    "Sync",
+    "History",
+  ]) {
+    await expect(navigation.getByRole("link", { name: section, exact: true })).toBeVisible();
+  }
+  await expect(navigation.getByRole("tab", { name: "Menu", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(navigation.getByRole("tab", { name: "Sessions", exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page, "Japanese navigation");
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-japanese-navigation-mobile.png`,
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect(navigation).toBeVisible();
+    await expectNoHorizontalOverflow(page, "Japanese desktop navigation");
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/sshc-japanese-navigation-desktop.png`,
+      fullPage: true,
+    });
   }
 });
 
@@ -364,7 +418,7 @@ test("rounds the connection view switch and keeps Config structure aligned while
   }
 
   await page.goto(new URL("/config", page.url()).href);
-  await expect(page.getByRole("heading", { name: "設定ファイル", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "SSH Config", exact: true }).first()).toBeVisible();
 
   const metrics = page.locator("[data-config-metrics]");
   await expect(metrics.locator(":scope > div")).toHaveCount(3);

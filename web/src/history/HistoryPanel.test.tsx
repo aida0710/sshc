@@ -44,7 +44,10 @@ describe("HistoryPanel", () => {
 
     render(<HistoryPanel />);
 
-    expect(await screen.findByText("config.host_fields")).toBeInTheDocument();
+    expect((await screen.findAllByText("Configuration change")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.queryByText("config.host_fields")).not.toBeInTheDocument();
+    expect(screen.queryByText("completed")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Restore config" }));
 
     await waitFor(() => expect(configApi.restore).toHaveBeenCalledWith("20260805T120000.000-abcd", "config"));
@@ -77,7 +80,7 @@ describe("HistoryPanel", () => {
 
     render(<HistoryPanel />);
 
-    expect(await screen.findByText("config.host_fields")).toBeInTheDocument();
+    expect((await screen.findAllByText("Configuration change")).length).toBeGreaterThan(0);
     expect(screen.getByText("The request was rejected (overview_unavailable)."))
       .toBeInTheDocument();
     expect(screen.queryByText("Loading history…")).not.toBeInTheDocument();

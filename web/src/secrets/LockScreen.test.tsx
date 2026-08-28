@@ -27,9 +27,9 @@ describe("LockScreen", () => {
 
     await userEvent.selectOptions(screen.getByLabelText("Theme menu"), "light");
     await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", "light"));
-    await userEvent.selectOptions(screen.getByLabelText("Locale menu"), "ja");
+    await userEvent.selectOptions(screen.getByLabelText("Lang menu"), "ja");
     expect(screen.getByLabelText("テーマメニュー")).toHaveValue("light");
-    expect(screen.getByRole("button", { name: "vault を作成" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Vault を作成" })).toBeInTheDocument();
   });
 
   it("says a new master password cannot be recovered, and asks for it twice", async () => {
@@ -127,9 +127,9 @@ describe("LockScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "開く" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "vault のバージョンが古いです（必要なバージョン: 4、現在: 3）。",
+      "Vault のバージョンが古いです（必要なバージョン: 4、現在: 3）。",
     );
-    await userEvent.click(screen.getByRole("button", { name: "互換性のある vault を復元" }));
+    await userEvent.click(screen.getByRole("button", { name: "互換性のある Vault を復元" }));
     await waitFor(() => expect(api.recoverCompatibleVault).toHaveBeenCalledWith("a long enough password"));
     expect(onOpen).toHaveBeenCalled();
   });
@@ -183,7 +183,7 @@ describe("LockScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "開く" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "vault をバージョン 4 から 5 へ更新できませんでした。元の vault は変更していません。",
+      "Vault をバージョン 4 から 5 へ更新できませんでした。元の Vault は変更していません。",
     );
   });
 

@@ -802,7 +802,7 @@ describe("App", () => {
     await user.click(await screen.findByRole("link", { name: "History" }));
     expect(screen.getByText("history panel")).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Language"), "ja");
+    await user.selectOptions(screen.getByLabelText("Lang"), "ja");
 
     expect(screen.getByRole("link", { name: ja["section.history"] })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("history panel")).toBeInTheDocument();

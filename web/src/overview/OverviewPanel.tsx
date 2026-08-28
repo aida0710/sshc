@@ -3,6 +3,7 @@ import { failureCode } from "../api/client";
 import { configApi, type Overview } from "../api/config";
 import { integrationsApi, type RecentConnectionList, type SyncStatus } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
+import { BrandMark } from "../ui/BrandMark";
 import { hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
@@ -112,12 +113,7 @@ export function OverviewPanel({
         <div className="border-b border-line bg-toolbar px-4 py-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
-              <span
-                aria-hidden="true"
-                className="mt-0.5 grid size-8 shrink-0 place-items-center rounded border border-control-line bg-control font-mono text-xs text-connect-mark"
-              >
-                &gt;_
-              </span>
+              <BrandMark className="mt-0.5 size-8" />
               <div>
                 <h3 id="quick-connect-heading" className="text-sm font-semibold tracking-tight text-ink">
                   {t("home.quickConnect")}

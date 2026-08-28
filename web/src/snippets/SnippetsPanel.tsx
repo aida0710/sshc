@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { Button } from "../ui/surface";
 import { snippetsApi, type Job, type Preview, type Snippet, type SnippetDraft, type SnippetVariable } from "./api";
 
@@ -11,6 +12,28 @@ function placeholders(command: string): string[] {
 function variablesFor(command: string, previous: SnippetVariable[]): SnippetVariable[] {
   const byName = new Map(previous.map((variable) => [variable.name, variable]));
   return placeholders(command).map((name) => byName.get(name) ?? { name, type: "string", required: true });
+}
+
+export function snippetVariableTypeLabelKey(type: string): MessageKey {
+  switch (type) {
+    case "string": return "snippets.variableType.string";
+    case "integer": return "snippets.variableType.integer";
+    case "boolean": return "snippets.variableType.boolean";
+    case "secret": return "snippets.variableType.secret";
+    default: return "snippets.variableType.unknown";
+  }
+}
+
+export function snippetStatusLabelKey(status: string): MessageKey {
+  switch (status) {
+    case "running": return "snippets.status.running";
+    case "completed": return "snippets.status.completed";
+    case "cancelled": return "snippets.status.cancelled";
+    case "queued": return "snippets.status.queued";
+    case "succeeded": return "snippets.status.succeeded";
+    case "failed": return "snippets.status.failed";
+    default: return "snippets.status.unknown";
+  }
 }
 
 const blank: SnippetDraft = { name: "", description: "", command: "", variables: [] };
@@ -127,7 +150,7 @@ export function SnippetsPanel({ aliases, selectedSnippetId = null }: { aliases: 
         <p className="text-xs text-ink-muted">{t("snippets.variableHint")}</p>
         {variablesFor(draft.command, draft.variables).map((variable) => (
           <div key={variable.name} className="grid grid-cols-[8rem_minmax(0,1fr)] gap-2">
-            <label className="text-xs text-ink-muted"><code>{`{{${variable.name}}}`}</code><select aria-label={t("snippets.variableType")} value={variable.type} onChange={(event) => updateVariable(variable.name, { type: event.target.value as SnippetVariable["type"] })} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"><option value="string">string</option><option value="integer">integer</option><option value="boolean">boolean</option><option value="secret">secret</option></select></label>
+            <label className="text-xs text-ink-muted"><code>{`{{${variable.name}}}`}</code><select aria-label={t("snippets.variableType")} value={variable.type} onChange={(event) => updateVariable(variable.name, { type: event.target.value as SnippetVariable["type"] })} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm">{(["string", "integer", "boolean", "secret"] as const).map((type) => <option key={type} value={type}>{t(snippetVariableTypeLabelKey(type))}</option>)}</select></label>
             <label className="text-xs text-ink-muted">{t("snippets.value")}{variable.type === "boolean" ? <select value={inputs[variable.name] ?? ""} onChange={(event) => { setInputs({ ...inputs, [variable.name]: event.target.value }); setPreview(null); }} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"><option value="" /><option value="true">true</option><option value="false">false</option></select> : <input type={variable.type === "secret" ? "password" : variable.type === "integer" ? "number" : "text"} value={inputs[variable.name] ?? ""} onChange={(event) => { setInputs({ ...inputs, [variable.name]: event.target.value }); setPreview(null); }} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm" />}</label>
           </div>
         ))}
@@ -137,7 +160,7 @@ export function SnippetsPanel({ aliases, selectedSnippetId = null }: { aliases: 
       <div className="flex min-w-0 flex-col gap-3">
         <section className="rounded-lg border border-line bg-card p-4"><h3 className="text-sm font-medium">{t("snippets.targets")}</h3><div className="mt-2 grid max-h-40 grid-cols-2 gap-1 overflow-auto">{aliases.map((alias) => <label key={alias} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={targets.includes(alias)} onChange={(event) => { setTargets(event.target.checked ? [...targets, alias] : targets.filter((value) => value !== alias)); setPreview(null); }} />{alias}</label>)}</div><Button className="mt-3" disabled={busy || selected === null || targets.length === 0} onClick={() => void makePreview()}>{t("snippets.preview")}</Button></section>
         {preview === null ? null : <section className="rounded-lg border border-notice-line bg-notice p-4"><h3 className="text-sm font-medium">{t("snippets.confirm")}</h3>{preview.targets.map((target) => <div key={target.targetId} className="mt-2"><p className="text-xs font-medium">{target.target.alias} · {target.target.user}@{target.target.hostName}:{target.target.port}</p>{(target.target.route ?? []).map((hop, index) => <p key={`${hop.alias}-${index}`} className="mt-1 break-all text-xs text-muted">{index + 1}. {hop.user}@{hop.hostName}:{hop.port}{hop.proxyCommand === "" ? "" : ` · ProxyCommand: ${hop.proxyCommand}`}</p>)}<pre className="mt-1 overflow-auto rounded bg-code-bg p-2 text-code-fg text-xs">{target.command}</pre></div>)}<Button kind="primary" className="mt-3" onClick={() => void run()}>{t("snippets.run")}</Button></section>}
-        {job === null ? null : <section className="rounded-lg border border-line bg-card p-4"><div className="flex items-center"><h3 className="grow text-sm font-medium">{t("snippets.results")} · {job.status}</h3>{job.status === "running" ? <Button onClick={() => void snippetsApi.cancel(job.id).then(setJob)}>{t("snippets.cancel")}</Button> : null}</div>{job.results.map((result) => <div key={result.targetId} className="mt-3"><p className="text-xs font-medium">{result.alias} · {result.status}{result.exitCode === undefined ? "" : ` (${result.exitCode})`}</p>{result.stdout ? <pre className="mt-1 max-h-40 overflow-auto rounded bg-code-bg p-2 text-code-fg text-xs">{result.stdout}</pre> : null}{result.stderr ? <pre className="mt-1 max-h-40 overflow-auto rounded bg-danger/10 p-2 text-xs text-danger">{result.stderr}</pre> : null}</div>)}</section>}
+        {job === null ? null : <section className="rounded-lg border border-line bg-card p-4"><div className="flex items-center"><h3 className="grow text-sm font-medium">{t("snippets.results")} · {t(snippetStatusLabelKey(job.status))}</h3>{job.status === "running" ? <Button onClick={() => void snippetsApi.cancel(job.id).then(setJob)}>{t("snippets.cancel")}</Button> : null}</div>{job.results.map((result) => <div key={result.targetId} className="mt-3"><p className="text-xs font-medium">{result.alias} · {t(snippetStatusLabelKey(result.status))}{result.exitCode === undefined ? "" : ` (${result.exitCode})`}</p>{result.stdout ? <pre className="mt-1 max-h-40 overflow-auto rounded bg-code-bg p-2 text-code-fg text-xs">{result.stdout}</pre> : null}{result.stderr ? <pre className="mt-1 max-h-40 overflow-auto rounded bg-danger/10 p-2 text-xs text-danger">{result.stderr}</pre> : null}</div>)}</section>}
         <section className="rounded-lg border border-line bg-card p-4"><h3 className="text-sm font-medium">{t("snippets.startup")}</h3><p className="mt-1 text-xs text-ink-muted">{t("snippets.startupHint")}</p><select value={startupAlias} onChange={(event) => setStartupAlias(event.target.value)} className="mt-2 w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm">{aliases.map((alias) => <option key={alias}>{alias}</option>)}</select><Button className="mt-2" disabled={busy || selected === null || startupAlias === ""} onClick={() => selected === null ? undefined : void updateStartup(selected)}>{t("snippets.setStartup")}</Button><button disabled={busy || startupAlias === ""} className="ml-2 text-xs text-ink-muted disabled:opacity-50" onClick={() => void updateStartup("")}>{t("snippets.clearStartup")}</button></section>
       </div>
     </section>

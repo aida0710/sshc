@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toProblem } from "../api/guards";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import type { Problem } from "../api/client";
 import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
 import { Button, Notice } from "../ui/surface";
@@ -8,6 +9,30 @@ import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
+
+export function historyOperationLabelKey(operation: string): MessageKey {
+  if (operation.startsWith("connection.")) return "history.operation.connection";
+  if (operation.startsWith("key.")) return "history.operation.key";
+  if (operation.startsWith("terminal.")) return "history.operation.terminal";
+  if (operation.startsWith("engine.")) return "history.operation.engine";
+  if (operation.startsWith("secret.")) return "history.operation.vault";
+  if (operation.startsWith("sync.")) return "history.operation.sync";
+  if (operation.startsWith("config.") || operation.startsWith("directory.") || operation.startsWith("group.")) {
+    return "history.operation.configuration";
+  }
+  return "history.operation.other";
+}
+
+export function historyStatusLabelKey(status: string): MessageKey {
+  switch (status) {
+    case "staging": return "history.status.staging";
+    case "staged": return "history.status.staged";
+    case "applied": return "history.status.applied";
+    case "completed": return "history.status.completed";
+    case "rolled_back": return "history.status.rolledBack";
+    default: return "history.status.unknown";
+  }
+}
 
 export function HistoryPanel() {
   const t = useTranslate();
@@ -103,10 +128,10 @@ export function HistoryPanel() {
             {pending.map((item) => (
               <article key={item.id} className="grid gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">{item.operation}</p>
+                  <p className="text-sm font-medium text-ink">{t(historyOperationLabelKey(item.operation))}</p>
                   <p className="mt-1 text-xs text-ink-muted">
                     {t("history.interruptedDetail", {
-                      operation: item.operation,
+                      operation: t(historyOperationLabelKey(item.operation)),
                       startedAt: item.startedAt,
                       committed: item.committed,
                       total: item.paths.length,
@@ -146,8 +171,8 @@ export function HistoryPanel() {
                 <time dateTime={entry.startedAt} className="font-mono text-xs text-ink-muted">{entry.startedAt}</time>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium text-ink">{entry.operation}</p>
-                    <span className="rounded-md bg-select-fill px-2 py-0.5 text-[11px] text-ink-muted">{entry.status}</span>
+                    <p className="font-medium text-ink">{t(historyOperationLabelKey(entry.operation))}</p>
+                    <span className="rounded-md bg-select-fill px-2 py-0.5 text-[11px] text-ink-muted">{t(historyStatusLabelKey(entry.status))}</span>
                   </div>
                   <p className="mt-1 truncate font-mono text-xs text-ink-faint">{entry.paths.join(", ")}</p>
                 </div>
