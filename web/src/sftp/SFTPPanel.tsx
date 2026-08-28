@@ -140,7 +140,8 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
         setContents("");
       }
     } catch (error) {
-      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
+      const code = failureCode(error);
+      setProblem(code === "sftp_failed" ? t("sftp.connectionFailed") : code || (error instanceof Error ? error.message : t("sftp.connectionFailed")));
     } finally {
       setBusy(false);
     }

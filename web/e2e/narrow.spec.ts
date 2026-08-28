@@ -1,4 +1,4 @@
-import { expect, masterPassword, test, openApplication, sessionStatus } from "./support/environment";
+import { clickAndAwait, expect, masterPassword, test, openApplication, sessionStatus } from "./support/environment";
 import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard } from "./support/terminal";
 
 
@@ -625,6 +625,45 @@ test("navigates through the drawer and closes it behind itself", async ({ page, 
   await expect
     .poll(() => drawer.evaluate((element) => element.getBoundingClientRect().left))
     .toBeLessThan(0);
+});
+
+test("keeps key material and management actions inside the key list", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSectionThroughDrawer(page, "Keys");
+  await page.getByLabel("File name").fill("id_keys_layout");
+  await page.getByLabel(/Create without a passphrase/).check();
+  expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+
+  const table = page.getByRole("table", { name: "Files classified by content and permissions" });
+  const privateRow = table.getByRole("row", { name: /id_keys_layout\b/ }).first();
+  await privateRow.getByRole("button", { name: "Show details" }).click();
+  const management = table.getByRole("group", { name: "Key actions" });
+  await expect(management).toBeVisible();
+  await expect(management.locator("xpath=ancestor::tr[@data-key-detail-for]")).toHaveCount(1);
+  await expectFullyInsideViewport(page, management, "Key management actions");
+
+  await management.getByRole("button", { name: "Show private key" }).click();
+  const confirmation = page.getByRole("dialog");
+  await expect(confirmation.locator("xpath=ancestor::table")).toHaveCount(1);
+  await expectNoHorizontalOverflow(page, "Private-key confirmation");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await table.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-keys-private-inline-mobile.png` });
+  }
+  await confirmation.getByRole("button", { name: "Close" }).click();
+
+  await privateRow.getByRole("button", { name: "Public key files (1)" }).click();
+  const publicRow = table.getByRole("row", { name: /id_keys_layout\.pub/ });
+  await publicRow.getByRole("button", { name: "Show details" }).click();
+  await table.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Show public key" }).click();
+  const publicKey = page.getByLabel("Public key");
+  await expect(publicKey.locator("xpath=ancestor::table")).toHaveCount(1);
+  await expectNoHorizontalOverflow(page, "Public-key content");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await table.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-keys-public-inline-mobile.png` });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await expect(table).toBeVisible();
+    await table.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-keys-inline-desktop.png` });
+  }
 });
 
 test("lets the connection detail replace the list and hands back a way out", async ({

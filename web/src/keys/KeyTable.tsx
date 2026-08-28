@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from "react";
+import { Fragment, useState, type DragEvent, type ReactNode } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
@@ -24,7 +24,7 @@ export type KeyRowActions = {
   onManageStoredPassphrase: (item: KeyItem) => void;
   onAddToAgent: (item: KeyItem) => void;
   onRemoveFromAgent: (item: KeyItem) => void;
-  onToggleMoreActions: (item: KeyItem) => void;
+  onToggleDetails: (item: KeyItem) => void;
   onChangePassphrase: (item: KeyItem) => void;
   onRelocate: (item: KeyItem) => void;
   onMoveToTrash: (item: KeyItem) => void;
@@ -35,18 +35,20 @@ export function KeyTable({
   inventory,
   chosen,
   selected,
-  moreActionsFor,
+  detailsFor,
   now,
   revealRelated = false,
+  inlinePanel,
   actions,
 }: {
   items: KeyItem[];
   inventory: KeyInventoryResponse;
   chosen: ReadonlySet<string>;
   selected: string | null;
-  moreActionsFor: string;
+  detailsFor: string;
   now: number;
   revealRelated?: boolean;
+  inlinePanel: { itemId: string; content: ReactNode } | null;
   actions: KeyRowActions;
 }) {
   const t = useTranslate();
@@ -115,9 +117,10 @@ export function KeyTable({
         {displayed.map(({ item, relatedCount, relatedExpanded, relatedTo }) => {
           const heldByAgent = agentHolds(inventory, item);
           const isSelected = selected === item.id;
+          const detailsExpanded = detailsFor === item.id;
           return (
+            <Fragment key={item.id}>
             <tr
-              key={item.id}
               data-key-related-to={relatedTo ?? undefined}
               className={`grid grid-cols-[2.25rem_minmax(0,1fr)] border-b border-hairline align-top transition-colors last:border-b-0 md:table-row ${
                 isSelected ? "bg-select-fill" : ""
@@ -222,53 +225,61 @@ export function KeyTable({
                 </span>
               </td>
               <td className="col-span-2 border-t border-hairline p-3 md:table-cell md:border-t-0 md:py-3 md:pr-3 md:pl-0">
-                <div className="flex flex-wrap justify-start gap-2 md:justify-end md:gap-1 [&>button]:min-h-10 md:[&>button]:min-h-0">
-                  {(item.kind === "public_key" || item.kind === "certificate") && (
-                    <button type="button" className={rowPrimary} onClick={() => actions.onShowPublicKey(item)}>
-                      {t("keys.showPublicKey")}
-                    </button>
-                  )}
-                  {item.kind === "private_key" && (
-                    <>
-                      <button type="button" className={rowAction} onClick={() => actions.onReveal(item)}>
-                        {t("keys.showPrivateKey")}
-                      </button>
-                      {item.encrypted ? (
-                        <button
-                          type="button"
-                          className={rowAction}
-                          onClick={() => actions.onManageStoredPassphrase(item)}
-                        >
-                          {t("keys.manageStoredPassphrase")}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className={heldByAgent ? rowAction : rowPrimary}
-                        disabled={!inventory.agentAvailable}
-                        onClick={() => actions.onAddToAgent(item)}
-                      >
-                        {t("keys.addToAgent")}
-                      </button>
-                      {heldByAgent && (
-                        <button
-                          type="button"
-                          className={rowAction}
-                          onClick={() => actions.onRemoveFromAgent(item)}
-                        >
-                          {t("keys.removeFromAgent")}
+                <button
+                  type="button"
+                  className={`${rowAction} ml-auto`}
+                  aria-expanded={detailsExpanded}
+                  onClick={() => actions.onToggleDetails(item)}
+                >
+                  <span aria-hidden="true" className="mr-1 font-mono text-ink-faint">
+                    {detailsExpanded ? "▾" : "▸"}
+                  </span>
+                  {t(detailsExpanded ? "keys.hideDetails" : "keys.showDetails")}
+                </button>
+              </td>
+            </tr>
+            {detailsExpanded ? (
+              <tr
+                data-key-detail-for={item.id}
+                className="block border-b border-line bg-card md:table-row"
+              >
+                <td colSpan={5} className="block p-3 pt-0 md:table-cell md:p-4 md:pt-1">
+                  <section
+                    aria-label={t("keys.actionsHeading", { path: item.relativePath })}
+                    className="rounded-md border border-line bg-surface-subtle p-3 sm:p-4"
+                  >
+                    <div
+                      role="group"
+                      aria-label={t("keys.keyActions")}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      {(item.kind === "public_key" || item.kind === "certificate") && (
+                        <button type="button" className={rowPrimary} onClick={() => actions.onShowPublicKey(item)}>
+                          {t("keys.showPublicKey")}
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className={rowAction}
-                        aria-expanded={moreActionsFor === item.id}
-                        onClick={() => actions.onToggleMoreActions(item)}
-                      >
-                        {t("keys.moreActions")}
-                      </button>
-                      {moreActionsFor === item.id ? (
-                        <div className="mt-1 flex basis-full flex-wrap justify-start gap-2 rounded-lg bg-surface-subtle p-1.5 md:justify-end md:gap-1 [&>button]:min-h-10 md:[&>button]:min-h-0">
+                      {item.kind === "private_key" && (
+                        <>
+                          <button type="button" className={rowAction} onClick={() => actions.onReveal(item)}>
+                            {t("keys.showPrivateKey")}
+                          </button>
+                          <button
+                            type="button"
+                            className={heldByAgent ? rowAction : rowPrimary}
+                            disabled={!inventory.agentAvailable}
+                            onClick={() => heldByAgent ? actions.onRemoveFromAgent(item) : actions.onAddToAgent(item)}
+                          >
+                            {t(heldByAgent ? "keys.removeFromAgent" : "keys.addToAgent")}
+                          </button>
+                          {item.encrypted ? (
+                            <button
+                              type="button"
+                              className={rowAction}
+                              onClick={() => actions.onManageStoredPassphrase(item)}
+                            >
+                              {t("keys.manageStoredPassphrase")}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className={rowAction}
@@ -276,38 +287,37 @@ export function KeyTable({
                           >
                             {t("keys.changePassphrase")}
                           </button>
-                          {renameable(item, inventory.items) ? (
-                            <button
-                              type="button"
-                              className={rowAction}
-                              onClick={() => actions.onRelocate(item)}
-                            >
-                              {t("keys.relocate")}
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className={rowDanger}
-                            onClick={() => actions.onMoveToTrash(item)}
-                          >
-                            {t("keys.moveToTrash")}
-                          </button>
-                        </div>
+                        </>
+                      )}
+                      {renameable(item, inventory.items) ? (
+                        <button
+                          type="button"
+                          className={rowAction}
+                          onClick={() => actions.onRelocate(item)}
+                        >
+                          {t("keys.relocate")}
+                        </button>
                       ) : null}
-                    </>
-                  )}
-                  {item.kind !== "private_key" && renameable(item, inventory.items) && (
-                    <button
-                      type="button"
-                      className={rowAction}
-                      onClick={() => actions.onRelocate(item)}
-                    >
-                      {t("keys.relocate")}
-                    </button>
-                  )}
-                </div>
-              </td>
-            </tr>
+                      {item.kind === "private_key" ? (
+                        <button
+                          type="button"
+                          className={`${rowDanger} sm:ml-auto`}
+                          onClick={() => actions.onMoveToTrash(item)}
+                        >
+                          {t("keys.moveToTrash")}
+                        </button>
+                      ) : null}
+                    </div>
+                    {inlinePanel?.itemId === item.id ? (
+                      <div className="mt-3 border-t border-line pt-3">
+                        {inlinePanel.content}
+                      </div>
+                    ) : null}
+                  </section>
+                </td>
+              </tr>
+            ) : null}
+            </Fragment>
           );
         })}
         {displayed.length === 0 && (

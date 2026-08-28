@@ -12,6 +12,10 @@ export type RequestFailureDiagnostic = Readonly<{
   detail?: string;
 }>;
 
+type RequestFailureOptions = Readonly<{
+  locallyHandledCodes?: readonly string[];
+}>;
+
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -100,11 +104,18 @@ function notifyResponseFailure(
   });
 }
 
-async function failure(response: Response, method: string, path: string): Promise<ApiError> {
+async function failure(
+  response: Response,
+  method: string,
+  path: string,
+  options: RequestFailureOptions = {},
+): Promise<ApiError> {
   const problem = await readProblem(response);
   const code = problem?.code ?? "request_failed";
   if (code === "vault_locked") onLocked?.();
-  notifyResponseFailure(response, problem, method, path);
+  if (!options.locallyHandledCodes?.includes(code)) {
+    notifyResponseFailure(response, problem, method, path);
+  }
   return new ApiError(code, response.status, problem);
 }
 
@@ -228,7 +239,7 @@ export const apiClient = {
     if (!response.ok) throw await failure(response, "GET", "/api/v1/health");
     return validateHealth(await response.json());
   },
-  async read(path: string): Promise<unknown> {
+  async read(path: string, options: RequestFailureOptions = {}): Promise<unknown> {
     if (!csrfToken) throw new Error("csrf_unavailable");
     let response: Response;
     try {
@@ -237,7 +248,7 @@ export const apiClient = {
       notifyNetworkFailure("GET", path);
       throw error;
     }
-    if (!response.ok) throw await failure(response, "GET", path);
+    if (!response.ok) throw await failure(response, "GET", path, options);
     return response.json() as Promise<unknown>;
   },
   async send(path: string, init: RequestInit): Promise<Response> {
