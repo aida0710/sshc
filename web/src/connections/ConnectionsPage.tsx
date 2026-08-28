@@ -387,7 +387,7 @@ export function ConnectionsPage({
     if (renamedSelection !== null) followCommittedIdentity(renamedSelection);
 
     const nextOverview = await reload();
-    if (reselect && selectedBeforeSave !== null && renamedSelection === null && request.kind !== "metadata") {
+    if (reselect && selectedBeforeSave !== null && renamedSelection === null) {
       try {
         const loaded = await configApi.host(selectedBeforeSave.path, selectedBeforeSave.alias);
         const saved = await loadConnectionSavedState(loaded, keysApi, integrationsApi);
