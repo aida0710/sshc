@@ -9,6 +9,7 @@ test("declares a group in the entry file and moves a connection into it", async 
 
   await page.getByLabel("New group name").fill("work");
   await page.getByRole("button", { name: "Add group" }).click();
+  await expect(page.getByRole("region", { name: "Unsaved group changes" })).toHaveCSS("position", "static");
   expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
 
   const entry = await installation.read("config");

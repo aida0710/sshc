@@ -93,6 +93,7 @@ describe("HostDetailPanel", () => {
 
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
     expect(within(areaTabs).getAllByRole("tab")).toHaveLength(4);
+    expect(areaTabs).not.toHaveClass("sticky");
     expect(within(areaTabs).getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
     expect(within(areaTabs).getByRole("tab", { name: "Basic" })).toHaveClass("border-accent");
     expect(screen.getByRole("tabpanel", { name: "Basic" })).toBeVisible();
