@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"sshc/internal/terminal"
 )
 
 // 接続の途中経過を、端末そのものへ書く。
@@ -35,7 +37,8 @@ type tracer struct {
 	level  Verbosity
 	writer io.Writer
 	// clock は掛かった時間を測る。テストが時計を止められるようにしてある。
-	clock func() time.Time
+	clock    func() time.Time
+	progress func(terminal.ConnectionProgress)
 }
 
 // now は現在時刻を返す。nil の tracer でも呼び出せる。
@@ -75,4 +78,14 @@ func (t *tracer) since(start time.Time) time.Duration { return t.now().Sub(start
 // enabled は、この level の診断が有効かを返す。
 func (t *tracer) enabled(level Verbosity) bool {
 	return t != nil && t.writer != nil && level <= t.level
+}
+
+func (t *tracer) stage(phase string, target Target, hop, hops int) {
+	if t == nil || t.progress == nil {
+		return
+	}
+	t.progress(terminal.ConnectionProgress{
+		Phase: phase, Alias: target.Alias, HostName: target.HostName,
+		User: target.User, Hop: hop, Hops: hops,
+	})
 }

@@ -52,6 +52,32 @@ type Readier interface{ Ready() <-chan error }
 // Processである。これを実装しない非同期Processへの先行入力は捨てる。
 type Prompting interface{ AwaitingPrompt() bool }
 
+// ConnectionProgress reports the current step of an asynchronously opened SSH
+// connection. It is deliberately separate from State: State describes whether
+// the terminal can be used, while this value explains what a connecting SSH
+// transport is doing right now.
+type ConnectionProgress struct {
+	Phase    string
+	Alias    string
+	HostName string
+	User     string
+	Hop      int
+	Hops     int
+}
+
+const (
+	ConnectionDialing        = "dialing"
+	ConnectionHostKey        = "host_key"
+	ConnectionAuthenticating = "authenticating"
+	ConnectionAuthenticated  = "authenticated"
+	ConnectionOpeningSession = "opening_session"
+)
+
+// Progressing is implemented by SSH processes which can explain their current
+// connection step. Local shells become connected synchronously and do not need
+// this additional state.
+type Progressing interface{ ConnectionProgress() ConnectionProgress }
+
 // ExactInput accepts one complete input frame or returns an error without
 // silently dropping bytes. Interactive SSH implements this separately from
 // Process.Write, whose keystroke-oriented contract intentionally tolerates a

@@ -98,12 +98,12 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 		case "keyboard-interactive":
 			if prompt != nil {
 				methods = append(methods, ssh.RetryableAuthMethod(
-					ssh.KeyboardInteractive(a.keyboard(prompt, stored)), maxPasswordAttempts))
+					ssh.KeyboardInteractive(a.keyboard(target, prompt, stored)), maxPasswordAttempts))
 			}
 		case "password":
 			if prompt != nil {
 				methods = append(methods, ssh.RetryableAuthMethod(
-					ssh.PasswordCallback(a.password(prompt, stored)), maxPasswordAttempts))
+					ssh.PasswordCallback(a.password(target, prompt, stored)), maxPasswordAttempts))
 			}
 		}
 	}
@@ -129,13 +129,13 @@ func (a Auth) storedPassword(target Target) func() (string, bool) {
 //
 // 保存されているなら、それを出す。保管庫に置いてあるのに毎回尋ねるなら、
 // 置く意味が無い。
-func (a Auth) password(prompt Prompter, stored func() (string, bool)) func() (string, error) {
+func (a Auth) password(target Target, prompt Prompter, stored func() (string, bool)) func() (string, error) {
 	return func() (string, error) {
 		a.observe("password")
 		if password, found := stored(); found {
 			return password, nil
 		}
-		return prompt.Secret("Password: ")
+		return prompt.Secret("Password for " + authenticationTarget(target) + ": ")
 	}
 }
 
@@ -145,8 +145,8 @@ func (a Auth) password(prompt Prompter, stored func() (string, bool)) func() (st
 // である。それがパスワードを聞かれている形であり、普通の Linux はパスワードを
 // この方式で聞いてくる。問いが複数あるもの（2FA）や、結果を画面に出す問いに
 // パスワードを差し出す意味は無く、差し出せばそれは間違った結果になる。
-func (a Auth) keyboard(prompt Prompter, stored func() (string, bool)) ssh.KeyboardInteractiveChallenge {
-	ask := keyboardChallenge(prompt)
+func (a Auth) keyboard(target Target, prompt Prompter, stored func() (string, bool)) ssh.KeyboardInteractiveChallenge {
+	ask := keyboardChallenge(prompt, "Authentication for "+authenticationTarget(target))
 	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		a.observe("keyboard-interactive")
 		if len(questions) == 1 && len(echos) == 1 && !echos[0] {
@@ -281,12 +281,13 @@ func (a Auth) read(path string) ([]byte, error) {
 //
 // 質問文を作るのはサーバーである。こちらが言い換えると、2FA の指示が
 // 変わってしまう。
-func keyboardChallenge(prompt Prompter) ssh.KeyboardInteractiveChallenge {
+func keyboardChallenge(prompt Prompter, context string) ssh.KeyboardInteractiveChallenge {
 	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		answers := make([]string, 0, len(questions))
 		// name と instruction は、サーバーがユーザーへ向けて書いた文である。捨てると
 		// 「何を応答すればよいか」がそのユーザーに届かない。最初の問いの前に置く。
-		preamble := strings.TrimSpace(strings.TrimSpace(name) + "\r\n" + strings.TrimSpace(instruction))
+		preamble := strings.TrimSpace(strings.TrimSpace(context) + "\r\n" +
+			strings.TrimSpace(name) + "\r\n" + strings.TrimSpace(instruction))
 		for index, question := range questions {
 			ask := prompt.Secret
 			if index < len(echos) && echos[index] {
@@ -303,4 +304,12 @@ func keyboardChallenge(prompt Prompter) ssh.KeyboardInteractiveChallenge {
 		}
 		return answers, nil
 	}
+}
+
+func authenticationTarget(target Target) string {
+	where := target.User + "@" + target.Address()
+	if target.Alias != "" && target.Alias != target.HostName {
+		where += " (" + target.Alias + ")"
+	}
+	return where
 }

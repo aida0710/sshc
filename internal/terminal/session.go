@@ -87,6 +87,8 @@ type View struct {
 	State     State
 	Problem   string
 	Reconnect *ReconnectView
+	// Progress is present while an SSH process is connecting or reconnecting.
+	Progress *ConnectionProgress
 	// Forwards は、このセッションが開いている転送である。
 	Forwards []Forward
 }
@@ -191,6 +193,13 @@ func (s *Session) View() View {
 	}
 	if forwarder, ok := s.process.(Forwarder); ok {
 		view.Forwards = forwarder.Forwards()
+	}
+	if progressing, ok := s.process.(Progressing); ok &&
+		(s.state == StateConnecting || s.state == StateReconnecting) {
+		progress := progressing.ConnectionProgress()
+		if progress.Phase != "" {
+			view.Progress = &progress
+		}
 	}
 	return view
 }

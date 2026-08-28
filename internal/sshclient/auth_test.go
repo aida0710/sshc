@@ -189,6 +189,10 @@ func TestPasswordAuthenticationAsksTheUser(t *testing.T) {
 	if len(prompt.secretly) != 1 {
 		t.Fatalf("the password was not asked in secret: %#v", prompt.asked)
 	}
+	if !strings.Contains(prompt.secretly[0], "ops@"+server.Address()) ||
+		!strings.Contains(prompt.secretly[0], "bastion") {
+		t.Fatalf("the password prompt did not identify its SSH hop: %q", prompt.secretly[0])
+	}
 }
 
 func TestKeyboardInteractiveCarriesTheServerQuestions(t *testing.T) {
