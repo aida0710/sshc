@@ -232,3 +232,41 @@ func TestReleaseFailsWhenTheHomebrewDeployKeyIsMissing(t *testing.T) {
 		t.Error("a missing Homebrew deploy key still reports release success")
 	}
 }
+
+func TestOperatorReleaseScriptPreservesTheReleaseGates(t *testing.T) {
+	script := readContractFile(t, "scripts", "release", "publish.sh")
+	for _, required := range []string{
+		`[ -z "$(git status --porcelain)" ]`,
+		`[ "$head_sha" = "$remote_main" ]`,
+		`actions/workflows/ci.yml/runs`,
+		`.head_sha == $sha and .head_branch == "main"`,
+		`git tag -a "$tag" "$head_sha"`,
+		`git push origin "refs/tags/$tag"`,
+		`.environment.name == "release"`,
+		`state=approved`,
+		`.immutable == true`,
+		`gh attestation verify "$artifact"`,
+		`verify_checksum_file`,
+		`Homebrew source checksum does not match`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("operator release script lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{"git push --force", "git tag -f", "git push -f"} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("operator release script can rewrite protected history with %q", forbidden)
+		}
+	}
+
+	documentation := readContractFile(t, "docs", "releasing.md")
+	for _, required := range []string{
+		"scripts/release/publish.sh v0.18.0",
+		"scripts/release/publish.sh --verify-only v0.17.3",
+		"tagを動かしたり削除したりせず終了",
+	} {
+		if !strings.Contains(documentation, required) {
+			t.Errorf("release operator documentation lacks %q", required)
+		}
+	}
+}
