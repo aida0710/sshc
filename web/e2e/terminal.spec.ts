@@ -46,9 +46,18 @@ async function typeIntoConsole(page: import("@playwright/test").Page, line: stri
 
 async function openConsolePanel(page: import("@playwright/test").Page) {
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("tab", { name: "Terminals" }).click();
   await expect(nav.getByRole("button", { name: "Local shell" })).toBeVisible();
   return nav;
+}
+
+async function reopenFirstConsole(panel: Locator) {
+  await panel
+    .getByRole("list", { name: "Open consoles" })
+    .getByRole("listitem")
+    .first()
+    .getByRole("button")
+    .first()
+    .click();
 }
 
 async function seedTerminalSettings(installation: Installation) {
@@ -87,7 +96,6 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
   const violations = watchForPolicyViolations(page);
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-
   const emptyState = page.getByRole("heading", { name: "No console is open" }).locator("..");
   await expect(emptyState.locator("[data-sshc-brand-mark]")).toBeVisible();
   await expect(emptyState).not.toContainText(">_");
@@ -315,12 +323,11 @@ test("can turn automatic selection copy off for an already open console", async 
   const screen = await typeIntoConsole(page, "echo copy-setting-canary");
   await expect(screen).toContainText("copy-setting-canary", { timeout: 20_000 });
 
-  await panel.getByRole("tab", { name: "Settings" }).click();
   const settings = await openLoadedTerminalSettings(page);
   await settings.getByRole("checkbox", { name: "Copy selected text automatically" }).uncheck();
   await saveTerminalSettings(page, settings);
 
-  await openSection(page, "Terminal");
+  await reopenFirstConsole(panel);
   await page.evaluate(() => navigator.clipboard.writeText("clipboard-sentinel"));
   const rows = drawnRows(page);
   const box = await rows.boundingBox();
@@ -392,7 +399,6 @@ test("closes every open connection from the settings screen", async ({ page, ins
   await panel.getByRole("button", { name: "Local shell" }).click();
   await expect(rows).toHaveCount(2);
 
-  await panel.getByRole("tab", { name: "Settings" }).click();
   await openSection(page, "Settings");
   const region = page.getByRole("region", { name: "Open connections" });
   await expect(region.getByText("2 open")).toBeVisible();
@@ -516,7 +522,6 @@ test("keeps the same terminal alive while another screen is shown", async ({ pag
   const sameTerminal = await markTerminal(page, "1");
   await typeIntoConsole(page, shellSays.lateEcho("late-42"));
 
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("tab", { name: "Settings" }).click();
   await openSection(page, "Settings");
   await expect(screen).toBeHidden();
 
@@ -563,12 +568,11 @@ test("paints the console in the colour scheme that was chosen", async ({ page, i
   const beforeSurface = await surface();
   const beforeRed = await drawnRed();
 
-  await panel.getByRole("tab", { name: "Settings" }).click();
   const settings = await openLoadedTerminalSettings(page);
   await settings.getByLabel("Colour scheme").selectOption("dracula");
   await saveTerminalSettings(page, settings);
 
-  await openSection(page, "Terminal");
+  await reopenFirstConsole(panel);
   await expect.poll(surface).toBe("#282a36");
   await expect.poll(drawnRed).toBe("rgb(255, 85, 85)");
   expect(beforeSurface).not.toBe("#282a36");
@@ -586,12 +590,11 @@ test("loads the font it ships and hands it to the console", async ({ page, insta
   const family = async () => (await drawnRowFont(page)).fontFamily;
   expect(await family()).not.toContain("JetBrains Mono");
 
-  await panel.getByRole("tab", { name: "Settings" }).click();
   const settings = await openLoadedTerminalSettings(page);
   await settings.getByLabel("Font family").selectOption("jetbrains-mono");
   await saveTerminalSettings(page, settings);
 
-  await openSection(page, "Terminal");
+  await reopenFirstConsole(panel);
   await expect.poll(family).toContain("JetBrains Mono");
   await expect
     .poll(async () => page.evaluate(() => document.fonts.check('13px "JetBrains Mono"')))
@@ -616,7 +619,6 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
     return canvas.toDataURL("image/png");
   });
 
-  await panel.getByRole("tab", { name: "Settings" }).click();
   const settings = await openLoadedTerminalSettings(page);
   await settings.locator('input[type="file"]').setInputFiles({
     name: "Canary Wall.png",
@@ -628,7 +630,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   await expect.poll(async () => thumbnail.evaluate((node) => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   await saveTerminalSettings(page, settings);
 
-  await openSection(page, "Terminal");
+  await reopenFirstConsole(panel);
   const wiring = {
     image: await surfaceBackgroundImage(page),
     viewport: await viewportBackground(page),

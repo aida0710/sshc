@@ -237,10 +237,24 @@ export function sessionStatus(page: Page) {
 
 export async function openSection(page: Page, name: string): Promise<void> {
   await expect(sessionStatus(page)).toContainText("Local session active");
-  await page
-    .getByRole("navigation", { name: "Primary" })
-    .getByRole("link", { name, exact: true })
-    .click();
+  if (name === "Terminal") {
+    // Terminal no longer has a product-menu entry. Most tests reach it by
+    // selecting or creating a session; the few empty-state/workspace tests
+    // still need to exercise the routable screen directly.
+    await page.evaluate(() => {
+      window.history.pushState(null, "", "/terminal");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    return;
+  }
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  if (["Home", "Connections", "SFTP"].includes(name)) {
+    await navigation.getByRole("link", { name, exact: true }).click();
+    return;
+  }
+  await navigation.getByRole("link", { name: "Menu", exact: true }).click();
+  if (name === "Menu") return;
+  await page.getByRole("link", { name: `Open ${name}`, exact: true }).click();
 }
 
 export async function clickAndAwait(

@@ -23,6 +23,7 @@ export const iconNames = [
   "plus",
   "menu",
   "search",
+  "chevronRight",
 ] as const;
 
 export type IconName = (typeof iconNames)[number];
@@ -138,6 +139,7 @@ const shapes: Record<IconName, ReactNode> = {
       <path d="M16 16l4 4" />
     </>
   ),
+  chevronRight: <path d="M9 5l7 7-7 7" />,
 };
 
 export function IconSprite() {

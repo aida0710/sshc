@@ -1,4 +1,4 @@
-import { expect, openApplication, openSection, test } from "./support/environment";
+import { expect, openApplication, test } from "./support/environment";
 
 const sessions = [
   {
@@ -49,9 +49,7 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   });
 
   await openApplication(page, installation);
-  await openSection(page, "Terminal");
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  await navigation.getByRole("tab", { name: "Terminals" }).click();
   await navigation.getByRole("button", { name: "edge", exact: true }).click();
 
   const target = page.locator("[data-single-terminal-drop-target='workspace-edge']");
@@ -149,9 +147,7 @@ test("selects the whole local console row and docks local shells", async ({ page
   });
 
   await openApplication(page, installation);
-  await openSection(page, "Terminal");
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  await navigation.getByRole("tab", { name: "Terminals" }).click();
   const consoleList = navigation.getByRole("list", { name: "Open consoles" });
   const zshRow = consoleList.getByRole("listitem").filter({ hasText: "zsh" });
   await zshRow.getByText("connected · localhost").click();
@@ -184,9 +180,7 @@ test("selects the whole local console row and docks local shells", async ({ page
 
 test("broadcasts one command to two live local shells", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSection(page, "Terminal");
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  await navigation.getByRole("tab", { name: "Terminals" }).click();
   const openShell = navigation.getByRole("button", { name: "Local shell" });
   await openShell.click();
   await expect(page.locator("[data-desktop-workspace-controls]")).toHaveCount(0);
