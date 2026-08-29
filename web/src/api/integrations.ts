@@ -398,10 +398,19 @@ function validateScan(value: unknown): KnownHostsScanResponse {
 
 
 
-async function postJSON<T>(path: string, body: unknown, actionToken?: string): Promise<T> {
+async function postJSON<T>(
+  path: string,
+  body: unknown,
+  actionToken?: string,
+  locallyHandledCodes?: readonly string[],
+): Promise<T> {
   const headers: Record<string, string> = { ...jsonHeaders };
   if (actionToken) headers["X-SSHC-Action"] = actionToken;
-  return apiClient.mutate<T>(path, { method: "POST", headers, body: JSON.stringify(body) });
+  return apiClient.mutate<T>(
+    path,
+    { method: "POST", headers, body: JSON.stringify(body) },
+    locallyHandledCodes === undefined ? {} : { locallyHandledCodes },
+  );
 }
 
 function validateVaultStatus(value: unknown): PasswordVaultStatus {
@@ -930,7 +939,12 @@ export const integrationsApi: IntegrationsApi = {
         : { expectedETag: expected.remoteETag, expectedRevision: expected.remoteRevision }),
     };
     return validatePullResponse(
-      await postJSON<unknown>("/api/v1/sync/pull", request),
+      await postJSON<unknown>(
+        "/api/v1/sync/pull",
+        request,
+        undefined,
+        ["bucket_refused", "sync_failed", "sync_local_changed", "sync_workspace_busy"],
+      ),
     );
   },
   async setSyncKey(key, confirmHistoryLoss) {

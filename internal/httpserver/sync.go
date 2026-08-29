@@ -809,6 +809,10 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "snapshot_rejected")
 	case errors.Is(err, remotesync.ErrRefused), errors.Is(err, remotesync.ErrInsecureEndpoint):
 		return problem(c, http.StatusBadGateway, "bucket_refused")
+	case remotesync.IsLocalChange(err):
+		return problem(c, http.StatusConflict, "sync_local_changed")
+	case errors.Is(err, remotesync.ErrWorkspaceBusy):
+		return problem(c, http.StatusConflict, "sync_workspace_busy")
 	default:
 		return problem(c, http.StatusBadGateway, "sync_failed")
 	}
