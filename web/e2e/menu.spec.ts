@@ -28,8 +28,10 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: `${visualDirectory}/sshc-menu-page-desktop.png`, fullPage: true });
-    await page.setViewportSize({ width: 360, height: 800 });
-    await expect(navigation).not.toBeInViewport();
+  }
+  await page.setViewportSize({ width: 360, height: 800 });
+  await expect(navigation).not.toBeInViewport();
+  if (visualDirectory !== undefined) {
     await page.screenshot({ path: `${visualDirectory}/sshc-menu-page-mobile.png`, fullPage: true });
   }
 

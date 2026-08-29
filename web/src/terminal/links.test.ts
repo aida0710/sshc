@@ -22,4 +22,3 @@ describe("findTerminalLinks", () => {
     expect(findTerminalLinks("/etc/hosts", false)).toEqual([]);
   });
 });
-

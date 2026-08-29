@@ -289,7 +289,7 @@ test("pastes a desktop keyboard shortcut into the console only once", async ({ p
   await expect(screen).toContainText("keyboard-paste-count=1", { timeout: 20_000 });
 });
 
-test("refits terminal drawing after opening and closing scrollback search", async ({ page, installation }) => {
+test("keeps terminal drawing stable while scrollback search overlays it", async ({ page, installation }) => {
   await openApplication(page, installation);
 
   const panel = await openConsolePanel(page);
@@ -301,12 +301,13 @@ test("refits terminal drawing after opening and closing scrollback search", asyn
   await console.getByRole("button", { name: "Find" }).click();
   await expect(console.getByRole("textbox", { name: "Search terminal output" })).toBeVisible();
   const opened = await terminalFitRects(page);
-  expect(opened.root.height).toBeLessThan(before.root.height);
+  expect(Math.abs(opened.root.y - before.root.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(opened.root.height - before.root.height)).toBeLessThanOrEqual(1);
   expect(opened.root.y + opened.root.height).toBeLessThanOrEqual(opened.host.y + opened.host.height + 1);
 
   await console.getByRole("button", { name: "Close search" }).click();
   await expect(console.getByRole("textbox", { name: "Search terminal output" })).toHaveCount(0);
-  await expect.poll(async () => (await terminalFitRects(page)).root.height).toBeGreaterThan(opened.root.height);
+  await expect.poll(async () => Math.abs((await terminalFitRects(page)).root.height - before.root.height)).toBeLessThanOrEqual(1);
 });
 
 test("can turn automatic selection copy off for an already open console", async ({
