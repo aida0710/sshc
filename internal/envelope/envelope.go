@@ -109,7 +109,7 @@ var Accepted = Limits{Time: maxKDFTime, MemoryKiB: maxKDFMemoryKiB, Threads: max
 
 // AcceptedFromRemote は、ネットワーク越しに届いた envelope が要求してよい値。
 // Derive が書く値を少し上回るところまでで、それ以上はない。
-var AcceptedFromRemote = Limits{Time: 8, MemoryKiB: 256 << 10, Threads: 8}
+var AcceptedFromRemote = Limits{Time: defaultTime, MemoryKiB: defaultMemoryKiB, Threads: defaultThreads}
 
 var magic = [magicLength]byte{'s', 's', 'h', '-', 'u', 'i', '-', 'e', 'n', 'v', 'e', 'l', 'o', 'p', 'e', 0}
 
@@ -128,6 +128,32 @@ type Key struct {
 	params   Params
 }
 
+// Clone returns an independently owned copy of the derived key. Callers which
+// keep two key generations alive at once must not share the backing material:
+// destroying a discarded candidate must never erase the live generation.
+func (k Key) Clone() Key {
+	return Key{
+		material: slices.Clone(k.material),
+		params: Params{
+			Time: k.params.Time, Memory: k.params.Memory, Threads: k.params.Threads,
+			Salt: slices.Clone(k.params.Salt),
+		},
+	}
+}
+
+// Destroy best-effort overwrites derived key material before releasing it.
+// Go may have copied the bytes elsewhere, so this is not a perfect erasure
+// guarantee; it still narrows the window in which a post-lock memory capture
+// can recover the deliberately discarded key.
+func (k *Key) Destroy() {
+	if k == nil {
+		return
+	}
+	clear(k.material)
+	k.material = nil
+	k.params = Params{}
+}
+
 // Derive は、新しいパラメータで passphrase を伸ばして鍵にする。
 func Derive(passphrase string) (Key, error) {
 	if len([]rune(passphrase)) < MinPassphraseLength {
@@ -141,16 +167,21 @@ func Derive(passphrase string) (Key, error) {
 	return Key{material: derive(passphrase, params), params: params}, nil
 }
 
-// MaxConcurrentDerivations は、同時に走ってよい鍵導出の数。
+// MaxConcurrentDerivations は、同時に走ってよい鍵導出の総数。
 //
 // 鍵導出は意図的に高価であり（数十メガバイトと複数スレッド）アンロック、push、
 // pull のいずれもが一回ずつ行う。上限がなければ、タブがいくつか開いたページが
-// 一度に何十個も要求し、プロセスは理由もなくギガバイト単位を確保する。2 なら、
-// 待っているユーザーが気づくことはない。これは単一ユーザーが操作するローカルのインターフェース
-// だからである。
+// 一度に何十個も要求し、プロセスは理由もなくギガバイト単位を確保する。remote
+// envelope だけはさらに厳しい上限を持つ。ローカルの鍵変更まで、攻撃者が
+// 用意した遅い remote envelope の終了待ちにしないため、総数は2件を維持する。
 const MaxConcurrentDerivations = 2
 
+// MaxConcurrentRemoteDerivations は、認証前の remote envelope に同時に費やしてよい
+// 鍵導出の数。1件あたりは現在の書き込み値である64 MiBまでに制限される。
+const MaxConcurrentRemoteDerivations = 1
+
 var derivations = make(chan struct{}, MaxConcurrentDerivations)
+var remoteDerivations = make(chan struct{}, MaxConcurrentRemoteDerivations)
 
 // OnDerive は各導出を包む。同時に何個走っているかを数えるテストのためにあり、
 // それ以外の場所では nil である。
@@ -245,7 +276,19 @@ func OpenWithin(sealed []byte, passphrase string, limits Limits) ([]byte, Key, e
 	}
 	nonce, ciphertext := rest[:nonceLength], rest[nonceLength:]
 
+	// AcceptedFromRemote は認証前のネットワーク入力に使う上限であり、同じ入力を
+	// 並列に投げられても低メモリ端末の使用量が線形に増えないよう直列化する。
+	if limits == AcceptedFromRemote {
+		remoteDerivations <- struct{}{}
+		defer func() { <-remoteDerivations }()
+	}
 	material := derive(passphrase, params)
+	published := false
+	defer func() {
+		if !published {
+			clear(material)
+		}
+	}()
 	gcm, err := newGCM(material)
 	if err != nil {
 		return nil, Key{}, err
@@ -254,6 +297,7 @@ func OpenWithin(sealed []byte, passphrase string, limits Limits) ([]byte, Key, e
 	if err != nil {
 		return nil, Key{}, ErrWrongPassphrase
 	}
+	published = true
 	return plaintext, Key{material: material, params: params}, nil
 }
 

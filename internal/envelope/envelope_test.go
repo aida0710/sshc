@@ -3,7 +3,9 @@ package envelope_test
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"sshc/internal/envelope"
 )
@@ -47,6 +49,25 @@ func TestAnotherKeyCannotOpenIt(t *testing.T) {
 
 	if _, err := theirs.Open(sealed); !errors.Is(err, envelope.ErrWrongPassphrase) {
 		t.Errorf("Open with another key = %v, want ErrWrongPassphrase", err)
+	}
+}
+
+func TestDestroyClearsOnlyTheOwnedKeyCopy(t *testing.T) {
+	key, err := envelope.Derive("correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy := key.Clone()
+	copy.Destroy()
+	if _, err := copy.Seal([]byte("discarded")); !errors.Is(err, envelope.ErrNotAnEnvelope) {
+		t.Fatalf("destroyed clone Seal = %v, want ErrNotAnEnvelope", err)
+	}
+	if _, err := key.Seal([]byte("still live")); err != nil {
+		t.Fatalf("destroying a clone erased the live key: %v", err)
+	}
+	key.Destroy()
+	if _, err := key.Seal([]byte("discarded")); !errors.Is(err, envelope.ErrNotAnEnvelope) {
+		t.Fatalf("destroyed key Seal = %v, want ErrNotAnEnvelope", err)
 	}
 }
 
@@ -147,5 +168,66 @@ func TestARemoteEnvelopeMayNotAskForWhatALocalOneMay(t *testing.T) {
 	tiny := envelope.Limits{Time: 1, MemoryKiB: 1024, Threads: 1}
 	if _, _, err := envelope.OpenWithin(sealed, "a passphrase long enough", tiny); !errors.Is(err, envelope.ErrCostRefused) {
 		t.Errorf("OpenWithin under a tiny ceiling = %v, want ErrCostRefused", err)
+	}
+}
+
+func TestRemoteDerivationsAreSerializedWithoutBlockingALocalDerivation(t *testing.T) {
+	key, err := envelope.Derive("a passphrase long enough")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := key.Seal([]byte("a snapshot"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstStarted := make(chan struct{})
+	localStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var calls atomic.Int64
+	envelope.OnDerive = func(step func()) {
+		switch calls.Add(1) {
+		case 1:
+			close(firstStarted)
+			<-releaseFirst
+		case 2:
+			close(localStarted)
+		}
+		step()
+	}
+	t.Cleanup(func() { envelope.OnDerive = nil })
+
+	open := func(done chan<- error) {
+		_, _, err := envelope.OpenWithin(sealed, "a passphrase long enough", envelope.AcceptedFromRemote)
+		done <- err
+	}
+	remoteDone := make(chan error, 2)
+	go open(remoteDone)
+	<-firstStarted
+	go open(remoteDone)
+
+	localDone := make(chan error, 1)
+	go func() {
+		_, err := envelope.Derive("another passphrase long enough")
+		localDone <- err
+	}()
+	select {
+	case <-localStarted:
+	case <-time.After(2 * time.Second):
+		close(releaseFirst)
+		t.Fatal("a remote derivation blocked an independent local derivation")
+	}
+	if got := calls.Load(); got != 2 {
+		close(releaseFirst)
+		t.Fatalf("%d derivations started while one remote derivation was blocked, want 2", got)
+	}
+	close(releaseFirst)
+	for range 2 {
+		if err := <-remoteDone; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := <-localDone; err != nil {
+		t.Fatal(err)
 	}
 }

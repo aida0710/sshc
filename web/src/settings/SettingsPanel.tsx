@@ -1,6 +1,11 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { failureCode } from "../api/client";
-import { integrationsApi, type IntegrationsApi, type TerminalSettings } from "../api/integrations";
+import {
+  integrationsApi,
+  type IntegrationsApi,
+  type LocalShellProfile,
+  type TerminalSettings,
+} from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { AppearancePicker } from "../terminal/AppearancePicker";
 import { BackgroundPicker } from "../terminal/BackgroundPicker";
@@ -147,6 +152,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [startDirectory, setStartDirectory] = useState("");
   const [maxSessions, setMaxSessions] = useState("");
   const [scrollback, setScrollback] = useState("");
+  const [browserScrollbackLines, setBrowserScrollbackLines] = useState("");
   const [fontSize, setFontSize] = useState("");
   const [port, setPort] = useState("");
   const [portBusy, setPortBusy] = useState(false);
@@ -160,6 +166,10 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [tint, setTint] = useState<number | undefined>(undefined);
   const [copyOnSelect, setCopyOnSelect] = useState(true);
   const [rightClickPaste, setRightClickPaste] = useState(true);
+  const [osc52, setOsc52] = useState(false);
+  const [jisYenBackslash, setJisYenBackslash] = useState(false);
+  const [localShellProfile, setLocalShellProfile] = useState("");
+  const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfile[]>([]);
   const [terminalBusy, setTerminalBusy] = useState(false);
   const [terminalLoaded, setTerminalLoaded] = useState(false);
   const [terminalError, setTerminalError] = useState("");
@@ -186,6 +196,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setStartDirectory(settings.startDirectory ?? "");
         setMaxSessions(settings.maxSessions === undefined ? "" : String(settings.maxSessions));
         setScrollback(settings.scrollbackBytes === undefined ? "" : String(settings.scrollbackBytes));
+        setBrowserScrollbackLines(settings.browserScrollbackLines === undefined
+          ? ""
+          : String(settings.browserScrollbackLines));
         setFontSize(settings.fontSize === undefined ? "" : String(settings.fontSize));
         setVerbosity(String(settings.verbosity ?? 0));
         setReconnect(settings.reconnect === undefined ? "" : String(settings.reconnect));
@@ -195,6 +208,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         setTint(settings.appearance?.backgroundTint);
         setCopyOnSelect(settings.copyOnSelect ?? true);
         setRightClickPaste(settings.rightClickPaste ?? true);
+        setOsc52(settings.osc52 ?? false);
+        setJisYenBackslash(settings.jisYenBackslash ?? false);
+        setLocalShellProfile(settings.localShellProfile ?? "");
       })
       .catch(() => undefined)
       .finally(() => {
@@ -206,6 +222,13 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         if (active) setPort(settings.port === undefined ? "" : String(settings.port));
       })
       .catch(() => undefined);
+    if (api.localShellProfiles !== undefined) {
+      void api.localShellProfiles()
+        .then((answer) => {
+          if (active) setLocalShellProfiles(answer.profiles);
+        })
+        .catch(() => undefined);
+    }
     return () => {
       active = false;
     };
@@ -269,8 +292,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
     };
     const sessions = numberOr(maxSessions);
     const bytes = numberOr(scrollback);
+    const lines = numberOr(browserScrollbackLines);
     const size = numberOr(fontSize);
-    if (Number.isNaN(sessions) || Number.isNaN(bytes) || Number.isNaN(size)) {
+    if (Number.isNaN(sessions) || Number.isNaN(bytes) || Number.isNaN(lines) || Number.isNaN(size)) {
       setTerminalError(t("terminal.limitsOutOfRange"));
       setTerminalSaved(false);
       return;
@@ -285,11 +309,15 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         ...(directory === "" ? {} : { startDirectory: directory }),
         ...(sessions === undefined ? {} : { maxSessions: sessions }),
         ...(bytes === undefined ? {} : { scrollbackBytes: bytes }),
+        ...(lines === undefined ? {} : { browserScrollbackLines: lines }),
         ...(size === undefined ? {} : { fontSize: size }),
         ...(verbosity === "0" ? {} : { verbosity: Number(verbosity) }),
         ...(reconnect === "" ? {} : { reconnect: Number(reconnect) }),
         ...(copyOnSelect ? {} : { copyOnSelect: false }),
         ...(rightClickPaste ? {} : { rightClickPaste: false }),
+        ...(osc52 ? { osc52: true } : {}),
+        ...(jisYenBackslash ? { jisYenBackslash: true } : {}),
+        ...(localShellProfile === "" ? {} : { localShellProfile }),
         ...(appearanceOf({ palette, font, background, tint })),
       };
       await api.setTerminalSettings(next);
@@ -415,6 +443,24 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
                   />
                 </Field>
               </div>
+              <div className="sm:col-span-2">
+                <Field label={t("terminal.localShellProfileLabel")} hint={t("terminal.localShellProfileHint")}>
+                  <select
+                    className={control}
+                    value={localShellProfile}
+                    disabled={terminalBusy || localShellProfiles.length === 0}
+                    onChange={(event) => {
+                      setLocalShellProfile(event.target.value);
+                      setTerminalSaved(false);
+                    }}
+                  >
+                    <option value="">{t("terminal.localShellProfileSystem")}</option>
+                    {localShellProfiles.filter((profile) => profile.id !== "default").map((profile) => (
+                      <option key={profile.id} value={profile.id}>{profile.label} — {profile.path}</option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
               <Field label={t("terminal.maxSessionsLabel")} hint={t("terminal.maxSessionsHint")}>
                 <input
                   type="number"
@@ -441,6 +487,21 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
                   disabled={terminalBusy}
                   onChange={(event) => {
                     setScrollback(event.target.value);
+                    setTerminalSaved(false);
+                  }}
+                />
+              </Field>
+              <Field label={t("terminal.browserScrollbackLabel")} hint={t("terminal.browserScrollbackHint")}>
+                <input
+                  type="number"
+                  min={1000}
+                  max={100000}
+                  className={control}
+                  value={browserScrollbackLines}
+                  placeholder="5000"
+                  disabled={terminalBusy}
+                  onChange={(event) => {
+                    setBrowserScrollbackLines(event.target.value);
                     setTerminalSaved(false);
                   }}
                 />
@@ -544,6 +605,30 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
                   }}
                 />
                 <p className={hintText}>{t("terminal.copyOnSelectHint")}</p>
+              </div>
+              <div className="flex flex-col gap-1 rounded-lg bg-select-fill p-3">
+                <CheckboxField
+                  label={t("terminal.osc52DefaultLabel")}
+                  checked={osc52}
+                  disabled={terminalBusy}
+                  onChange={(checked) => {
+                    setOsc52(checked);
+                    setTerminalSaved(false);
+                  }}
+                />
+                <p className={hintText}>{t("terminal.osc52DefaultHint")}</p>
+              </div>
+              <div className="flex flex-col gap-1 rounded-lg bg-select-fill p-3">
+                <CheckboxField
+                  label={t("terminal.jisYenBackslashLabel")}
+                  checked={jisYenBackslash}
+                  disabled={terminalBusy}
+                  onChange={(checked) => {
+                    setJisYenBackslash(checked);
+                    setTerminalSaved(false);
+                  }}
+                />
+                <p className={hintText}>{t("terminal.jisYenBackslashHint")}</p>
               </div>
               <div className="flex flex-col gap-1 rounded-lg bg-select-fill p-3">
                 <CheckboxField

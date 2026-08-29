@@ -48,6 +48,27 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsUnsupportedSchemas(t *testin
 	}
 }
 
+func TestMetadataMigratesVersionThreeAndRoundTripsVersionFour(t *testing.T) {
+	migrated, err := DecodeMetadata([]byte(`{"schemaVersion":3,"embeddedTerminal":{"scrollbackBytes":32768},"hosts":[{"identity":{"path":"config","alias":"host"}}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migrated.SchemaVersion != 4 || migrated.EmbeddedTerminal == nil || migrated.EmbeddedTerminal.ScrollbackBytes != 32768 {
+		t.Fatalf("migrated = %#v", migrated)
+	}
+	encoded, err := EncodeMetadata(migrated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"schemaVersion": 4`) {
+		t.Fatalf("encoded migration = %s", encoded)
+	}
+	decoded, err := DecodeMetadata(encoded)
+	if err != nil || decoded.SchemaVersion != 4 {
+		t.Fatalf("v4 round trip = %#v, %v", decoded, err)
+	}
+}
+
 func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
 	for name, document := range map[string]string{
 		"zero":        `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":0}}`,
@@ -112,6 +133,21 @@ func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
 	}
 	if limits := decoded.TerminalLimits(); limits.MaxSessions != 8 || limits.Scrollback != 32768 {
 		t.Fatalf("round trip = %#v", limits)
+	}
+}
+
+func TestMetadataAcceptsOnlyExplicitOSC52HostPolicies(t *testing.T) {
+	for _, policy := range []string{"", "allow", "deny"} {
+		metadata := NewMetadata()
+		metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "host"}, OSC52: policy}}
+		if _, err := EncodeMetadata(metadata); err != nil {
+			t.Errorf("policy %q = %v", policy, err)
+		}
+	}
+	metadata := NewMetadata()
+	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "host"}, OSC52: "yes"}}
+	if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataOSC52) {
+		t.Fatalf("invalid policy = %v, want ErrMetadataOSC52", err)
 	}
 }
 
@@ -194,8 +230,8 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 			t.Errorf("encoded metadata still carries %s:\n%s", absent, encoded)
 		}
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 3`) {
-		t.Errorf("encoded metadata is not version 3:\n%s", encoded)
+	if !strings.Contains(string(encoded), `"schemaVersion": 4`) {
+		t.Errorf("encoded metadata is not version 4:\n%s", encoded)
 	}
 }
 

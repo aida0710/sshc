@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -267,6 +268,38 @@ func TestAnOversizedObjectIsRefusedBeforeItIsSent(t *testing.T) {
 	}
 	if reached {
 		t.Error("an oversized body was sent anyway")
+	}
+}
+
+func TestAnOversizedAdvertisedDownloadIsRefusedWithoutReadingItsBody(t *testing.T) {
+	body := &observedBody{}
+	client := objectstore.Client{
+		HTTP: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Etag":           []string{`"large"`},
+					"Content-Length": []string{strconv.FormatInt(objectstore.MaxObjectBytes+1, 10)},
+				},
+				Body:          body,
+				ContentLength: objectstore.MaxObjectBytes + 1,
+				Request:       request,
+			}, nil
+		})},
+		Endpoint: "http://127.0.0.1",
+		Bucket:   "sshc",
+		Region:   "auto",
+		Creds:    suiteCredentials(),
+	}
+
+	if _, err := client.Get(context.Background(), "k"); !errors.Is(err, objectstore.ErrObjectTooLarge) {
+		t.Fatalf("Get = %v, want ErrObjectTooLarge", err)
+	}
+	if got := body.reads.Load(); got != 0 {
+		t.Fatalf("oversized response body was read %d times", got)
+	}
+	if !body.closed.Load() {
+		t.Fatal("oversized response body was not closed")
 	}
 }
 

@@ -70,6 +70,41 @@ func LoginArgv0(shell string) string { return "-" + filepath.Base(shell) }
 // 渡すべき引数が無い。
 func LoginArguments(string) []string { return nil }
 
+// ShellProfiles returns only executable, absolute candidates. A stable ID is
+// stored instead of a command string so synced settings cannot inject argv.
+func ShellProfiles(lookup func(string) (string, bool)) []ShellProfile {
+	login, err := LoginShell(lookup)
+	if err != nil {
+		return nil
+	}
+	profiles := []ShellProfile{{
+		ID: "default", Label: filepath.Base(login) + " (default)", Path: login,
+		Argv0: LoginArgv0(login), Arguments: LoginArguments(login),
+	}}
+	candidates := []struct {
+		id, label string
+		paths     []string
+	}{
+		{"zsh", "zsh", []string{"/bin/zsh", "/usr/bin/zsh", "/usr/local/bin/zsh", "/opt/homebrew/bin/zsh"}},
+		{"fish", "fish", []string{"/bin/fish", "/usr/bin/fish", "/usr/local/bin/fish", "/opt/homebrew/bin/fish"}},
+		{"bash", "bash", []string{"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash", "/opt/homebrew/bin/bash"}},
+		{"sh", "sh", []string{"/bin/sh", "/system/bin/sh"}},
+	}
+	for _, candidate := range candidates {
+		for _, path := range candidate.paths {
+			if !executable(path) {
+				continue
+			}
+			profiles = append(profiles, ShellProfile{
+				ID: candidate.id, Label: candidate.label, Path: path,
+				Argv0: LoginArgv0(path), Arguments: LoginArguments(path),
+			})
+			break
+		}
+	}
+	return profiles
+}
+
 func executable(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir() && info.Mode().Perm()&0o111 != 0

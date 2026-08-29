@@ -215,9 +215,13 @@ describe("integrationsApi terminal settings", () => {
         startDirectory: "~/work",
         maxSessions: 4,
         scrollbackBytes: 65536,
+        browserScrollbackLines: 12000,
         fontSize: 18,
         copyOnSelect: false,
         rightClickPaste: false,
+        osc52: true,
+        jisYenBackslash: true,
+        localShellProfile: "fish",
       },
     })));
 
@@ -225,9 +229,23 @@ describe("integrationsApi terminal settings", () => {
       startDirectory: "~/work",
       maxSessions: 4,
       scrollbackBytes: 65536,
+      browserScrollbackLines: 12000,
       fontSize: 18,
       copyOnSelect: false,
       rightClickPaste: false,
+      osc52: true,
+      jisYenBackslash: true,
+      localShellProfile: "fish",
+    });
+  });
+
+  it("validates detected local shell profiles", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      profiles: [{ id: "fish", label: "fish", path: "/usr/bin/fish", arguments: [], default: true }],
+    })));
+
+    await expect(integrationsApi.localShellProfiles?.()).resolves.toEqual({
+      profiles: [{ id: "fish", label: "fish", path: "/usr/bin/fish", arguments: [], default: true }],
     });
   });
 });

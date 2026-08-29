@@ -67,3 +67,7 @@ func existingProgram(path string) error {
 	}
 	return nil
 }
+
+// ExistingProgram exposes the same regular-file check to the parent platform
+// package when it builds the fixed local-shell profile list.
+func ExistingProgram(path string) bool { return existingProgram(path) == nil }

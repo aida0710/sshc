@@ -18,13 +18,20 @@ import {
   type HealthResponse,
   type RequestFailureDiagnostic,
 } from "./api/client";
-import { integrationsApi, type PasswordVaultStatus, type TerminalAppearance, type TerminalSettings } from "./api/integrations";
+import {
+  integrationsApi,
+  type LocalShellProfile,
+  type PasswordVaultStatus,
+  type TerminalAppearance,
+  type TerminalSettings,
+} from "./api/integrations";
 import { resolveAppearance } from "./terminal/appearance";
 import { configApi, type FileNode, type HostEntry } from "./api/config";
 import type { SessionState } from "./session/bootstrap";
 import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/CreateConnectionModal";
 import type { FileTarget } from "./explorer/ConfigExplorer";
 import { LockScreen } from "./secrets/LockScreen";
+import { announceVaultLocked, observeVaultLocked } from "./secrets/vaultLockSignal";
 import { OverviewPanel } from "./overview/OverviewPanel";
 import { useLanguage } from "./i18n/context";
 import type { Locale } from "./i18n/locale";
@@ -156,6 +163,10 @@ const sectionIcons: Record<Section, IconName> = {
 
 const startSections: Section[] = ["Home", "Connections", "Files"];
 
+export function resolveOSC52(policy: "allow" | "deny" | undefined, fallback: boolean): boolean {
+  return policy === undefined ? fallback : policy === "allow";
+}
+
 const navGroups: { label: MessageKey; sections: Section[] }[] = [
   { label: "shell.navStart", sections: startSections },
   { label: "shell.navConnections", sections: ["Config", "Groups"] },
@@ -171,6 +182,7 @@ const themeLabels: Record<Theme, MessageKey> = {
 };
 
 const navigationId = "primary-navigation";
+export const vaultStatePollIntervalMs = 15_000;
 
 export function App({ bootstrap, health, vault = integrationsApi.passwordVault }: AppProps) {
   const { t } = useLanguage();
@@ -179,6 +191,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
   const [state, setState] = useState<"starting" | "locked" | "ready" | "session-ended" | "error">("starting");
+  const [vaultRecheck, setVaultRecheck] = useState<"idle" | "checking" | "retrying">("idle");
   const [failure, setFailure] = useState("");
   const [vaultExists, setVaultExists] = useState(false);
   const [version, setVersion] = useState("");
@@ -189,6 +202,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const sftpTargetSequence = useRef(0);
   const [groups, setGroups] = useState<string[]>([]);
   const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
+  const [hostOSC52, setHostOSC52] = useState<Map<string, "allow" | "deny">>(new Map());
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
   const [paletteHosts, setPaletteHosts] = useState<HostEntry[]>([]);
   const [configFiles, setConfigFiles] = useState<FileNode[]>([]);
@@ -262,6 +276,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   }
   const consoles = useTerminalSessions(integrationsApi, t, state === "ready");
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>({});
+  const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfile[]>([]);
   const [activeConsole, setActiveConsole] = useState<string | null>(null);
   const [liveWorkspace, setLiveWorkspace] = useState<LiveWorkspaceSummary | null>(null);
   const [workspaceRestoreRequest, setWorkspaceRestoreRequest] = useState<WorkspaceRestoreRequest | null>(null);
@@ -275,6 +290,13 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         if (active) setTerminalSettings(settings);
       })
       .catch(() => undefined);
+    if (integrationsApi.localShellProfiles !== undefined) {
+      void integrationsApi.localShellProfiles()
+        .then((answer) => {
+          if (active) setLocalShellProfiles(answer.profiles);
+        })
+        .catch(() => undefined);
+    }
     return () => {
       active = false;
     };
@@ -328,8 +350,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       .map((entry) => entry.session);
   }, [consoles.sessions, consoleOrder]);
 
-  const openLocalShell = useCallback(async () => {
-    const opened = await consoles.open({ kind: "shell" });
+  const openLocalShell = useCallback(async (profileId?: string) => {
+    const opened = await consoles.open({ kind: "shell", ...(profileId === undefined ? {} : { profileId }) });
     if (opened !== null) showConsole(opened.id);
   }, [consoles, showConsole]);
 
@@ -437,9 +459,64 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     whenLocked(() => {
       setVaultExists(true);
       setState("locked");
+      announceVaultLocked();
     });
-    return () => whenLocked(null);
+    const stopObserving = observeVaultLocked(() => {
+      setVaultExists(true);
+      setState("locked");
+    });
+    return () => {
+      whenLocked(null);
+      stopObserving();
+    };
   }, []);
+
+  useEffect(() => {
+    if (state !== "ready") return;
+    let active = true;
+    let checking = false;
+    let concealUntilChecked = false;
+    const checkVaultState = async (failClosed = false) => {
+      if (failClosed) {
+        concealUntilChecked = true;
+        setVaultRecheck("checking");
+      }
+      if (checking) return;
+      checking = true;
+      try {
+        const status = await vault();
+        if (!active) return;
+        if (!status.unlocked) {
+          setVaultExists(status.exists);
+          setState("locked");
+          announceVaultLocked();
+          return;
+        }
+        if (concealUntilChecked) {
+          concealUntilChecked = false;
+          setVaultRecheck("idle");
+        }
+      } catch {
+        // Request handling reports actionable failures. A resume check stays
+        // fail-closed and the interval retries without restoring protected UI.
+        if (active && concealUntilChecked) setVaultRecheck("retrying");
+      } finally {
+        checking = false;
+      }
+    };
+    const interval = window.setInterval(() => void checkVaultState(), vaultStatePollIntervalMs);
+    const checkWhenVisible = () => {
+      if (document.visibilityState === "visible") void checkVaultState(true);
+    };
+    document.addEventListener("visibilitychange", checkWhenVisible);
+    window.addEventListener("focus", checkWhenVisible);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", checkWhenVisible);
+      window.removeEventListener("focus", checkWhenVisible);
+    };
+  }, [state, vault]);
 
   useEffect(() => {
     whenSessionEnded(() => setState("session-ended"));
@@ -468,6 +545,13 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
             ),
           ),
         );
+        setHostOSC52(new Map(
+          (overview.metadata.hosts ?? []).flatMap((host) =>
+            host.osc52 === undefined || host.identity.alias === ""
+              ? []
+              : [[host.identity.alias, host.osc52] as const],
+          ),
+        ));
         setKnownAliases([...new Set(overview.hosts.map((host) => host.identity.alias).filter((alias) => alias !== ""))]);
         setPaletteHosts(overview.hosts.filter((host) => host.identity.alias !== ""));
         setConfigFiles(overview.files);
@@ -492,6 +576,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
             setVaultMigration({ from: status.migratedFromVersion, to: status.migratedToVersion });
           }
           setVaultExists(true);
+          setVaultRecheck("idle");
           setState("ready");
         }}
       />
@@ -543,6 +628,29 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           </Button>
         </section>
       </main>
+    );
+  }
+
+  if (state === "ready" && vaultRecheck !== "idle") {
+    return (
+      <div className="min-h-screen bg-canvas text-ink">
+        <IconSprite />
+        {requestFailure === null ? null : (
+          <ErrorDiagnosticNotice
+            diagnostic={requestFailure}
+            version={version}
+            onClose={() => setRequestFailure(null)}
+          />
+        )}
+        <main className="grid min-h-screen place-items-center p-6">
+          <section role="status" className="sshc-card w-full max-w-md rounded-lg bg-card p-6 sm:p-8">
+            <h1 className="text-lg font-semibold">{t("shell.title")}</h1>
+            <p className="mt-3 text-sm leading-6 text-ink-muted">
+              {t(vaultRecheck === "checking" ? "shell.vaultChecking" : "shell.vaultCheckRetrying")}
+            </p>
+          </section>
+        </main>
+      </div>
     );
   }
 
@@ -624,7 +732,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           onShowConsole={showConsole}
           onDuplicateConsole={(id) => void duplicateConsole(id)}
           onReorderConsoles={setConsoleOrder}
-          onOpenShell={() => void openLocalShell()}
+          localShellProfiles={localShellProfiles}
+          onOpenShell={(profileId) => void openLocalShell(profileId)}
           onOpenCommandPalette={() => {
             setNavigationOpen(false);
             setCommandPaletteOpen(true);
@@ -662,10 +771,39 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     activeConsole={activeConsole}
                     settings={terminalSettings}
                     hostAppearance={hostAppearance}
+                    hostOSC52={hostOSC52}
                     onActive={showConsole}
                     onLiveWorkspaceChange={setLiveWorkspace}
                     onOpenAlias={(alias) => consoles.open({ kind: "ssh", alias })}
                     onOpenShell={() => consoles.open({ kind: "shell" })}
+                    onOSC52Change={async (session, enabled) => {
+                      if (session.kind !== "ssh" || session.alias === undefined) {
+                        const next = { ...terminalSettings };
+                        if (enabled) next.osc52 = true;
+                        else delete next.osc52;
+                        await integrationsApi.setTerminalSettings(next);
+                        setTerminalSettings(next);
+                        return;
+                      }
+                      const overview = await configApi.overview();
+                      const identity = overview.hosts.find((host) =>
+                        host.identity.alias === session.alias
+                      )?.identity;
+                      if (identity === undefined) throw new Error("host_not_found");
+                      const hosts = [...(overview.metadata.hosts ?? [])];
+                      const index = hosts.findIndex((host) =>
+                        host.identity.path === identity.path && host.identity.alias === identity.alias
+                      );
+                      const updated = {
+                        ...(index < 0 ? {} : hosts[index]),
+                        identity,
+                        osc52: enabled ? "allow" as const : "deny" as const,
+                      };
+                      if (index < 0) hosts.push(updated);
+                      else hosts[index] = updated;
+                      await configApi.save({ kind: "metadata", metadata: { ...overview.metadata, hosts } });
+                      setHostOSC52((current) => new Map(current).set(session.alias!, updated.osc52));
+                    }}
                     onOpenRemotePath={openRemotePath}
                     restoreRequest={workspaceRestoreRequest}
                     onRestoreConsumed={consumeWorkspaceRestore}
@@ -697,7 +835,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                       onConnectionDraftChange: setConnectionDraft,
                     }}
                     shell={{
-                      onLock: () => setState("locked"),
+                      onLock: () => {
+                        setVaultExists(true);
+                        setState("locked");
+                        announceVaultLocked();
+                      },
                       onInspector: setInspector,
                       consoles,
                       onShowConsole: showConsole,
@@ -806,6 +948,7 @@ function TerminalScreen({
   activeConsole,
   settings,
   hostAppearance,
+  hostOSC52,
   onActive,
   onLiveWorkspaceChange,
   onOpenAlias,
@@ -813,11 +956,13 @@ function TerminalScreen({
   restoreRequest,
   onRestoreConsumed,
   onOpenRemotePath,
+  onOSC52Change,
 }: {
   consoles: TerminalSessionsState;
   activeConsole: string | null;
   settings: TerminalSettings;
   hostAppearance: Map<string, TerminalAppearance>;
+  hostOSC52: Map<string, "allow" | "deny">;
   onActive: (id: string) => void;
   onLiveWorkspaceChange: (workspace: LiveWorkspaceSummary | null) => void;
   onOpenAlias: (alias: string) => Promise<import("./api/integrations").TerminalSession | null>;
@@ -825,11 +970,14 @@ function TerminalScreen({
   restoreRequest: WorkspaceRestoreRequest | null;
   onRestoreConsumed: (sequence: number) => void;
   onOpenRemotePath: (alias: string, path: string, action: RemotePathAction) => void;
+  onOSC52Change: (session: import("./api/integrations").TerminalSession, enabled: boolean) => Promise<void>;
 }) {
   return (
     <TerminalWorkspace sessions={consoles.sessions} sessionsLoaded={consoles.loaded} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} onOpenShell={onOpenShell} restoreRequest={restoreRequest} onRestoreConsumed={onRestoreConsumed} onLiveWorkspaceChange={onLiveWorkspaceChange} renderTerminal={(session) => {
       const appearance = resolveAppearance(session.alias === undefined ? undefined : hostAppearance.get(session.alias), settings.appearance);
-      return <Suspense fallback={<RouteSkeleton kind="terminal" />}><TerminalView key={session.id} session={session} {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })} {...(appearance.palette === "" ? {} : { palette: appearance.palette })} {...(appearance.font === "" ? {} : { font: appearance.font })} {...(appearance.background === "" ? {} : { background: appearance.background })} {...(appearance.tint === undefined ? {} : { tint: appearance.tint })} copyOnSelect={settings.copyOnSelect ?? true} rightClickPaste={settings.rightClickPaste ?? true} onExit={() => consoles.markExited(session.id)} onReconnect={() => consoles.reconnect(session.id)} onResumeAgent={async (placement) => {
+      const hostPolicy = session.alias === undefined ? undefined : hostOSC52.get(session.alias);
+      const osc52Enabled = resolveOSC52(hostPolicy, settings.osc52 ?? false);
+      return <Suspense fallback={<RouteSkeleton kind="terminal" />}><TerminalView key={session.id} session={session} {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })} {...(settings.browserScrollbackLines === undefined ? {} : { scrollbackLines: settings.browserScrollbackLines })} osc52Enabled={osc52Enabled} jisYenBackslash={settings.jisYenBackslash ?? false} onOsc52Change={(enabled) => void onOSC52Change(session, enabled)} {...(appearance.palette === "" ? {} : { palette: appearance.palette })} {...(appearance.font === "" ? {} : { font: appearance.font })} {...(appearance.background === "" ? {} : { background: appearance.background })} {...(appearance.tint === undefined ? {} : { tint: appearance.tint })} copyOnSelect={settings.copyOnSelect ?? true} rightClickPaste={settings.rightClickPaste ?? true} onExit={() => consoles.markExited(session.id)} onReconnect={() => consoles.reconnect(session.id)} onResumeAgent={async (placement) => {
         const resumed = await consoles.resumeAgent?.(session.id, session.agent?.observationVersion ?? 0, placement) ?? null;
         if (resumed === null) return false;
         if (placement === "new-pane") onActive(resumed.id);

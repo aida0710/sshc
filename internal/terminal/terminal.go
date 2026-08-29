@@ -252,9 +252,12 @@ const (
 	MinMaxSessions     = 1
 	MaxMaxSessions     = 200
 
-	DefaultScrollback = 256 << 10
-	MinScrollback     = 16 << 10
-	MaxScrollback     = 4 << 20
+	DefaultScrollback             = 256 << 10
+	MinScrollback                 = 16 << 10
+	MaxScrollback                 = 4 << 20
+	MinBrowserScrollbackLines     = 1000
+	MaxBrowserScrollbackLines     = 100000
+	DefaultBrowserScrollbackLines = 5000
 
 	// 字の大きさは、このプロセスが何かに使う値ではない。PTY は px を知らない。
 	MinFontSize = 8

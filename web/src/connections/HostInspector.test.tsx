@@ -76,6 +76,21 @@ describe("HostInspector", () => {
     expect(onMetadata).toHaveBeenLastCalledWith(expect.not.objectContaining({ encoding: expect.anything() }));
   });
 
+  it("stores an OSC 52 override per SSH connection and can inherit again", async () => {
+    const onMetadata = vi.fn();
+    const user = userEvent.setup();
+    const detail = build();
+    const { rerender } = render(<HostInspector detail={detail} onMetadata={onMetadata} />);
+
+    await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "deny");
+    expect(onMetadata).toHaveBeenLastCalledWith(expect.objectContaining({ osc52: "deny" }));
+
+    detail.metadata = { ...detail.metadata, osc52: "deny" };
+    rerender(<HostInspector detail={detail} onMetadata={onMetadata} />);
+    await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "");
+    expect(onMetadata).toHaveBeenLastCalledWith(expect.not.objectContaining({ osc52: expect.anything() }));
+  });
+
   it("clears a colour rather than leaving the picker's fallback as a real value", async () => {
     const onMetadata = vi.fn();
     const user = userEvent.setup();

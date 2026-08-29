@@ -21,6 +21,13 @@ type expansion struct {
 	display string
 }
 
+type resolvedPlaceholder struct {
+	start   int
+	end     int
+	value   string
+	display string
+}
+
 func expand(command string, variables []Variable, inputs map[string]string) (expansion, error) {
 	if len(command) == 0 || len(command) > MaxCommandBytes || strings.IndexByte(command, 0) >= 0 {
 		return expansion{}, ErrInvalidSnippet
@@ -49,7 +56,8 @@ func expand(command string, variables []Variable, inputs map[string]string) (exp
 		return expansion{}, ErrMalformedTemplate
 	}
 	used := make(map[string]bool, len(matches))
-	var real, display strings.Builder
+	resolved := make([]resolvedPlaceholder, 0, len(matches))
+	realLength, displayLength := 0, 0
 	last := 0
 	for _, match := range matches {
 		name := command[match[2]:match[3]]
@@ -62,24 +70,51 @@ func expand(command string, variables []Variable, inputs map[string]string) (exp
 		if err != nil {
 			return expansion{}, err
 		}
-		real.WriteString(command[last:match[0]])
-		real.WriteString(value)
-		display.WriteString(command[last:match[0]])
+		shown := value
 		if variable.Type == VariableSecret {
-			display.WriteString(secretRedaction)
-		} else {
-			display.WriteString(value)
+			shown = secretRedaction
 		}
+		literalLength := match[0] - last
+		if !boundedExpansionLength(&realLength, literalLength, len(value)) ||
+			!boundedExpansionLength(&displayLength, literalLength, len(shown)) {
+			return expansion{}, ErrInvalidSnippet
+		}
+		resolved = append(resolved, resolvedPlaceholder{start: match[0], end: match[1], value: value, display: shown})
 		last = match[1]
 	}
-	real.WriteString(command[last:])
-	display.WriteString(command[last:])
+	if !boundedExpansionLength(&realLength, len(command)-last) ||
+		!boundedExpansionLength(&displayLength, len(command)-last) {
+		return expansion{}, ErrInvalidSnippet
+	}
 	for name := range definitions {
 		if !used[name] {
 			return expansion{}, fmt.Errorf("%w: unused %s", ErrInvalidVariable, name)
 		}
 	}
+	var real, display strings.Builder
+	real.Grow(realLength)
+	display.Grow(displayLength)
+	last = 0
+	for _, placeholder := range resolved {
+		real.WriteString(command[last:placeholder.start])
+		real.WriteString(placeholder.value)
+		display.WriteString(command[last:placeholder.start])
+		display.WriteString(placeholder.display)
+		last = placeholder.end
+	}
+	real.WriteString(command[last:])
+	display.WriteString(command[last:])
 	return expansion{command: real.String(), display: display.String()}, nil
+}
+
+func boundedExpansionLength(total *int, lengths ...int) bool {
+	for _, length := range lengths {
+		if length < 0 || *total > MaxCommandBytes-length {
+			return false
+		}
+		*total += length
+	}
+	return true
 }
 
 func validateVariable(variable Variable) error {

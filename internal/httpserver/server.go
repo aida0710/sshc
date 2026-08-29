@@ -21,6 +21,7 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/handoff"
 	"sshc/internal/knownhosts"
+	"sshc/internal/platform"
 	"sshc/internal/recent"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
@@ -93,6 +94,10 @@ type Options struct {
 	// LoginShell は、PTY の中で起動するローカルシェルを解決する。
 	// PATH を見ず、絶対パスかエラーを返す。
 	LoginShell func() (string, error)
+	// LocalShellProfiles are detected executable/argv pairs; the browser receives
+	// IDs only and can never provide an arbitrary command line.
+	LocalShellProfiles        func() []platform.ShellProfile
+	TerminalLocalShellProfile func() string
 	// TerminalEnvironment は、端末セッションが継ぐ環境である。これは利用者が
 	// 自分で行ったであろう接続なので、検査が使う最小環境ではなくユーザー本人の環境を継ぐ。
 	TerminalEnvironment func() []string
@@ -443,17 +448,19 @@ func New(options Options) (*Server, error) {
 	}
 	if options.Terminals != nil {
 		registerTerminalRoutes(e, TerminalHandlers{
-			Registry:          options.Terminals,
-			Tickets:           &terminal.Tickets{},
-			Snippets:          options.Snippets,
-			Actions:           actions,
-			Connect:           options.Connect,
-			ConnectAgent:      options.ConnectAgent,
-			ConnectionBinding: options.ConnectionBinding,
-			Shell:             options.LoginShell,
-			Environment:       options.TerminalEnvironment,
-			StartDirectory:    options.TerminalStartDirectory,
-			Connected:         options.ConnectionOpened,
+			Registry:            options.Terminals,
+			Tickets:             &terminal.Tickets{},
+			Snippets:            options.Snippets,
+			Actions:             actions,
+			Connect:             options.Connect,
+			ConnectAgent:        options.ConnectAgent,
+			ConnectionBinding:   options.ConnectionBinding,
+			Shell:               options.LoginShell,
+			ShellProfiles:       options.LocalShellProfiles,
+			DefaultShellProfile: options.TerminalLocalShellProfile,
+			Environment:         options.TerminalEnvironment,
+			StartDirectory:      options.TerminalStartDirectory,
+			Connected:           options.ConnectionOpened,
 			Startup: func(alias string) (string, bool) {
 				if options.Snippets == nil {
 					return "", false

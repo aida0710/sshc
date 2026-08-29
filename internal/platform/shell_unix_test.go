@@ -3,6 +3,8 @@
 package platform
 
 import (
+	"errors"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"testing"
@@ -23,6 +25,35 @@ func TestTheLoginShellIsTheOneTheUserChose(t *testing.T) {
 	}
 	if shell != "/bin/sh" {
 		t.Errorf("LoginShell() = %q, want /bin/sh", shell)
+	}
+}
+
+func TestShellProfilesContainOnlyDetectedFixedExecutables(t *testing.T) {
+	profiles := ShellProfiles(func(name string) (string, bool) {
+		return "/bin/sh", name == "SHELL"
+	})
+	if len(profiles) == 0 || profiles[0].ID != "default" || profiles[0].Path != "/bin/sh" {
+		t.Fatalf("profiles = %#v", profiles)
+	}
+	for _, profile := range profiles {
+		if !filepath.IsAbs(profile.Path) || !executable(profile.Path) {
+			t.Fatalf("unverified profile = %#v", profile)
+		}
+		if profile.Argv0 == "" || profile.Argv0[0] != '-' {
+			t.Fatalf("profile is not a login shell = %#v", profile)
+		}
+	}
+}
+
+func TestResolveShellProfileRejectsPathsAndUnknownIDs(t *testing.T) {
+	profiles := []ShellProfile{{ID: "fish", Path: "/usr/bin/fish"}}
+	if got, err := ResolveShellProfile(profiles, "fish"); err != nil || got.Path != "/usr/bin/fish" {
+		t.Fatalf("resolved = %#v, %v", got, err)
+	}
+	for _, id := range []string{"/bin/sh", "fish -c id", "missing"} {
+		if _, err := ResolveShellProfile(profiles, id); !errors.Is(err, ErrUnknownShellProfile) {
+			t.Fatalf("ResolveShellProfile(%q) = %v", id, err)
+		}
 	}
 }
 

@@ -56,8 +56,12 @@ type Session struct {
 	agentObservationVersion uint64
 	agentSignalVersion      uint64
 	agentLastSignal         *AgentSignal
-	userInputGeneration     uint64
-	replacementBusy         bool
+	// agentEndedGeneration records only an explicit managed-agent "ended"
+	// event. It is generation-bound so reconnecting the pane cannot make an old
+	// agent look ended in the replacement shell.
+	agentEndedGeneration uint64
+	userInputGeneration  uint64
+	replacementBusy      bool
 
 	connectedCallback func()
 	connectedOnce     sync.Once
@@ -336,13 +340,6 @@ func (s *Session) CommandTarget() (CommandTarget, error) {
 		alias = "localhost"
 	}
 	return CommandTarget{ID: s.id, Kind: s.kind, Alias: alias, Title: s.title, Generation: s.generation}, nil
-}
-
-// WriteCommand sends a command and Enter to the exact Process generation which
-// was previewed. It shares inputMutex with WebSocket keystrokes, so bytes from
-// the two sources cannot interleave inside this frame.
-func (s *Session) WriteCommand(ctx context.Context, generation uint64, command string) error {
-	return s.WriteCommandInput(ctx, generation, command, true)
 }
 
 // WriteCommandInput writes to the exact Process generation captured by a
@@ -633,10 +630,12 @@ func (s *Session) acceptAgentEvent(generation uint64, event agentEvent, observed
 			s.agentCandidate = &agentCandidate{kind: event.Agent, reference: reference, name: name, generation: generation, observedAt: observedAt}
 		}
 		s.agent = nil
+		s.agentEndedGeneration = generation
 		s.agentObservationVersion++
 		s.recomputeTitleLocked()
 		return
 	}
+	s.agentEndedGeneration = 0
 	previousState := AgentUnknown
 	workingAt := time.Time{}
 	lastAttention := time.Time{}

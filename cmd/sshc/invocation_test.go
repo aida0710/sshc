@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 非対話SSHは mode flag と delimiter を要求する。これを緩めると接続optionと
@@ -113,6 +114,74 @@ func TestParseInfoAndSyncInvocations(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseTerminalInvocations(t *testing.T) {
+	const id = "01234567"
+	tests := []struct {
+		argv   []string
+		action terminalAction
+		check  func(*testing.T, terminalInvocation)
+	}{
+		{[]string{"sshc", "terminal", "list", "--json"}, terminalList, nil},
+		{[]string{"sshc", "terminal", "show", id}, terminalShow, nil},
+		{[]string{"sshc", "terminal", "read", id, "--cursor", "9", "--limit", "1024", "--json"}, terminalRead,
+			func(t *testing.T, got terminalInvocation) {
+				if got.Cursor != 9 || got.Limit != 1024 || !got.JSON {
+					t.Fatalf("read = %#v", got)
+				}
+			}},
+		{[]string{"sshc", "terminal", "send", id, "--text", "uptime", "--no-enter"}, terminalSend,
+			func(t *testing.T, got terminalInvocation) {
+				if got.Text != "uptime" || got.Submit {
+					t.Fatalf("send = %#v", got)
+				}
+			}},
+		{[]string{"sshc", "terminal", "wait", id, "--for", "agent-ready", "--timeout", "30s"}, terminalWait,
+			func(t *testing.T, got terminalInvocation) {
+				if got.WaitFor != "agent-ready" || got.Timeout != 30*time.Second {
+					t.Fatalf("wait = %#v", got)
+				}
+			}},
+		{[]string{"sshc", "terminal", "create", "shell"}, terminalCreate, nil},
+		{[]string{"sshc", "terminal", "create", "ssh", "bastion", "--json"}, terminalCreate,
+			func(t *testing.T, got terminalInvocation) {
+				if got.Kind != "ssh" || got.Alias != "bastion" || !got.JSON {
+					t.Fatalf("create = %#v", got)
+				}
+			}},
+		{[]string{"sshc", "terminal", "rename", id, "deploy"}, terminalRename, nil},
+		{[]string{"sshc", "terminal", "close", id}, terminalClose, nil},
+	}
+	for _, test := range tests {
+		t.Run(strings.Join(test.argv[2:], "_"), func(t *testing.T) {
+			called, err := parseInvocation(test.argv)
+			if err != nil || called.Kind != invocationTerminal || called.Terminal == nil || called.Terminal.Action != test.action {
+				t.Fatalf("parseInvocation(%q) = %#v, %v", test.argv, called, err)
+			}
+			if test.check != nil {
+				test.check(t, *called.Terminal)
+			}
+		})
+	}
+}
+
+func TestTerminalInvocationRejectsUnstableSelectorsAndHeuristicWaits(t *testing.T) {
+	for _, argv := range [][]string{
+		{"sshc", "terminal"},
+		{"sshc", "terminal", "show", "title"},
+		{"sshc", "terminal", "show", "0123"},
+		{"sshc", "terminal", "send", "01234567"},
+		{"sshc", "terminal", "send", "01234567", "--text", ""},
+		{"sshc", "terminal", "wait", "01234567", "--for", "prompt-visible"},
+		{"sshc", "terminal", "wait", "01234567", "--for", "connected", "--timeout", "0s"},
+		{"sshc", "terminal", "read", "01234567", "--limit", "65537"},
+		{"sshc", "terminal", "create", "ssh"},
+	} {
+		if got, err := parseInvocation(argv); err == nil || got.Kind != invocationInvalid {
+			t.Errorf("parseInvocation(%q) = %#v, %v; want usage error", argv, got, err)
+		}
 	}
 }
 

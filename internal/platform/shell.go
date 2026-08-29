@@ -7,6 +7,31 @@ import (
 
 // ErrNoLoginShell は、起動できるシェルがこのマシンに見つからないことを報告する。
 var ErrNoLoginShell = errors.New("no login shell was found")
+var ErrUnknownShellProfile = errors.New("local shell profile is not available")
+
+// ShellProfile is a detected executable with fixed arguments. ID is persisted;
+// command lines from HTTP or metadata are never interpreted by a shell.
+type ShellProfile struct {
+	ID        string
+	Label     string
+	Path      string
+	Argv0     string
+	Arguments []string
+}
+
+// ResolveShellProfile resolves a stored or one-shot ID only against profiles
+// detected on this machine. An empty ID selects the machine's login shell.
+func ResolveShellProfile(profiles []ShellProfile, id string) (ShellProfile, error) {
+	if id == "" {
+		id = "default"
+	}
+	for _, profile := range profiles {
+		if profile.ID == id {
+			return profile, nil
+		}
+	}
+	return ShellProfile{}, ErrUnknownShellProfile
+}
 
 // シェルをどこから選び、どう起動するかは OS ごとに違う。同じ規則で書けるふりを
 // しない。Unix のログインシェルは SHELL と `/bin` の下の絶対パスにあり、

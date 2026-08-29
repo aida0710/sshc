@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
-import type { TerminalLinkMatch } from "./links";
+import { isSafeHttpURL, type TerminalLinkMatch } from "./links";
 
 export type RemotePathAction = "browse" | "edit" | "download";
 
@@ -11,6 +11,14 @@ export type TerminalLinkSelection = {
   x: number;
   y: number;
 };
+
+export function openTerminalURL(target: string): boolean {
+  if (!isSafeHttpURL(target)) return false;
+  const parsed = new URL(target);
+  const opened = window.open(parsed.href, "_blank", "noopener,noreferrer");
+  if (opened !== null) opened.opener = null;
+  return opened !== null;
+}
 
 export function TerminalLinkPopover({
   selection,
@@ -45,15 +53,7 @@ export function TerminalLinkPopover({
 
   function openURL() {
     if (selection.link.kind !== "url") return;
-    let parsed: URL;
-    try {
-      parsed = new URL(selection.link.target);
-    } catch {
-      return;
-    }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
-    const opened = window.open(parsed.href, "_blank", "noopener,noreferrer");
-    if (opened !== null) opened.opener = null;
+    openTerminalURL(selection.link.target);
     onClose();
   }
 

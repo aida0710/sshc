@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import type { TerminalForward, TerminalSession } from "../api/integrations";
+import type { LocalShellProfile, TerminalForward, TerminalSession } from "../api/integrations";
 import { useTranslate, type Translate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Icon } from "../ui/icons";
@@ -23,7 +23,8 @@ type ConsoleListProps = {
   onUnpinTitle: (id: string) => Promise<boolean>;
   onDuplicate: (id: string) => void;
   onReorder: (order: string[]) => void;
-  onOpenShell: () => void;
+  localShellProfiles?: LocalShellProfile[];
+  onOpenShell: (profileId?: string) => void;
 };
 
 function describeForward(t: Translate, forward: TerminalForward): string {
@@ -51,6 +52,7 @@ export function ConsoleList({
   onUnpinTitle,
   onDuplicate,
   onReorder,
+  localShellProfiles = [],
   onOpenShell,
 }: ConsoleListProps) {
   const t = useTranslate();
@@ -410,15 +412,33 @@ export function ConsoleList({
           })}
         </ul>
       )}
-      <button
-        type="button"
-        disabled={busy || full}
-        onClick={onOpenShell}
-        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-select-fill disabled:text-ink-faint"
-      >
-        <Icon name="plus" className="size-3.5" aria-hidden="true" />
-        {t("terminal.openShell")}
-      </button>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          disabled={busy || full}
+          onClick={() => onOpenShell()}
+          className="flex min-w-0 grow items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-select-fill disabled:text-ink-faint"
+        >
+          <Icon name="plus" className="size-3.5" aria-hidden="true" />
+          {t("terminal.openShell")}
+        </button>
+        {localShellProfiles.filter((profile) => profile.id !== "default").length === 0 ? null : (
+          <select
+            aria-label={t("terminal.openShellOnce")}
+            value=""
+            disabled={busy || full}
+            onChange={(event) => {
+              if (event.target.value !== "") onOpenShell(event.target.value);
+            }}
+            className="h-8 w-10 cursor-pointer rounded-md border-0 bg-transparent px-1 text-xs text-ink-muted hover:bg-select-fill disabled:cursor-default"
+          >
+            <option value="">…</option>
+            {localShellProfiles.filter((profile) => profile.id !== "default").map((profile) => (
+              <option key={profile.id} value={profile.id}>{profile.label}</option>
+            ))}
+          </select>
+        )}
+      </div>
       {full ? <p className="px-2 text-xs text-ink-muted">{t("terminal.limitReached", { max: maxSessions })}</p> : null}
       {closing === null ? null : (
         <CloseConfirmation

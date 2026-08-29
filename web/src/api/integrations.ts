@@ -7,6 +7,8 @@ export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
 export type ReachabilityResponse = components["schemas"]["ReachabilityResponse"];
 export type AuthenticationResponse = components["schemas"]["AuthenticationResponse"];
 export type TerminalSettings = components["schemas"]["TerminalSettings"];
+export type LocalShellProfile = components["schemas"]["LocalShellProfile"];
+export type LocalShellProfileList = components["schemas"]["LocalShellProfileList"];
 export type EngineSettings = components["schemas"]["EngineSettings"];
 export type TerminalForward = components["schemas"]["TerminalForward"];
 export type TerminalSession = components["schemas"]["TerminalSession"];
@@ -94,6 +96,7 @@ export type IntegrationsApi = {
   changeMasterPassword(current: string, next: string): Promise<ChangeMasterPasswordResult>;
   updateStatus(): Promise<UpdateStatus>;
   terminalSettings(): Promise<TerminalSettings>;
+  localShellProfiles?(): Promise<LocalShellProfileList>;
   engineSettings(): Promise<EngineSettings>;
   setEngineSettings(settings: EngineSettings): Promise<void>;
   terminalBackgrounds(): Promise<TerminalBackgroundList>;
@@ -349,6 +352,21 @@ function validateOpenTerminalSession(value: unknown): OpenTerminalSessionRespons
   validateTerminalSession(record.session);
   asString(record.streamTicket);
   return record as unknown as OpenTerminalSessionResponse;
+}
+
+function validateLocalShellProfiles(value: unknown): LocalShellProfileList {
+  const record = asRecord(value);
+  const profiles = asArray(record.profiles).map((value) => {
+    const profile = asRecord(value);
+    return {
+      id: asString(profile.id),
+      label: asString(profile.label),
+      path: asString(profile.path),
+      arguments: asArray(profile.arguments).map(asString),
+      default: asBoolean(profile.default),
+    };
+  });
+  return { profiles };
 }
 
 function validateStreamTicket(value: unknown): TerminalStreamTicket {
@@ -751,6 +769,10 @@ export const integrationsApi: IntegrationsApi = {
       ...(typeof terminal.scrollbackBytes === "number"
         ? { scrollbackBytes: terminal.scrollbackBytes }
         : {}),
+      ...(typeof terminal.browserScrollbackLines === "number" &&
+          terminal.browserScrollbackLines >= 1000 && terminal.browserScrollbackLines <= 100000
+        ? { browserScrollbackLines: terminal.browserScrollbackLines }
+        : {}),
       ...(typeof terminal.fontSize === "number" ? { fontSize: terminal.fontSize } : {}),
       ...(typeof terminal.verbosity === "number" ? { verbosity: terminal.verbosity } : {}),
       ...(typeof terminal.reconnect === "number" ? { reconnect: terminal.reconnect } : {}),
@@ -758,8 +780,18 @@ export const integrationsApi: IntegrationsApi = {
       ...(typeof terminal.rightClickPaste === "boolean"
         ? { rightClickPaste: terminal.rightClickPaste }
         : {}),
+      ...(typeof terminal.osc52 === "boolean" ? { osc52: terminal.osc52 } : {}),
+      ...(typeof terminal.jisYenBackslash === "boolean"
+        ? { jisYenBackslash: terminal.jisYenBackslash }
+        : {}),
+      ...(typeof terminal.localShellProfile === "string" && /^[a-z0-9-]{1,64}$/.test(terminal.localShellProfile)
+        ? { localShellProfile: terminal.localShellProfile }
+        : {}),
       ...(terminal.appearance === undefined ? {} : { appearance: readAppearance(terminal.appearance) }),
     };
+  },
+  async localShellProfiles() {
+    return validateLocalShellProfiles(await apiClient.read("/api/v1/terminal/shell-profiles"));
   },
   async engineSettings() {
     const metadata = asRecord(await apiClient.read("/api/v1/metadata"));

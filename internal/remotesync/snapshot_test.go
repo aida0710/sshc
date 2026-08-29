@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"sshc/internal/remotesync"
+	"sshc/internal/storage"
 )
 
 func entry(path, contents string) remotesync.Entry {
@@ -188,6 +189,67 @@ func TestReadRefusesAPathThatEscapesTheWorkspace(t *testing.T) {
 				t.Fatalf("Read = %v, want ErrUnsafePath", err)
 			}
 		})
+	}
+}
+
+func TestReadRefusesDeviceLocalAndRawVaultPaths(t *testing.T) {
+	for _, name := range []string{
+		"sshc/secrets",
+		"sshc/sync-settings",
+		"sshc/sync-state.json",
+		"sshc/sync-key-recovery.json",
+		"sshc/cli/request.json",
+		"sshc/journal/20260830T000000.000000000Z-aaaaaaaaaaaaaaaa.json",
+		"sshc/backups/foreign/config",
+		"sshc/history/entry.json",
+		"sshc/trash/deleted.conf",
+		"sshc/recent-connections.json",
+		"sshc/workspaces.json",
+		"sshc/mutation.lock",
+		"connections/.sshc-apply-temporary",
+		remotesync.TravelPath + "/child",
+		"SSHC/SNIPPETS.JSON",
+	} {
+		t.Run(name, func(t *testing.T) {
+			archive := handBuilt(t, map[string]string{name: "attacker controlled"}, remotesync.Manifest{
+				SchemaVersion: remotesync.SchemaVersion,
+				CreatedAt:     "2026-08-30T00:00:00Z", Origin: "attacker", Message: "Reserved path",
+				Files: []remotesync.Entry{entry(name, "attacker controlled")},
+			})
+			if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrUnsafePath) {
+				t.Fatalf("Read = %v, want ErrUnsafePath", err)
+			}
+		})
+	}
+}
+
+func TestReadAllowsOnlyBoundedLogicalProtectedDocuments(t *testing.T) {
+	for _, name := range []string{remotesync.TravelPath, remotesync.SnippetsPath} {
+		t.Run(name, func(t *testing.T) {
+			body := "logical document"
+			manifest := remotesync.Manifest{
+				SchemaVersion: remotesync.SchemaVersion,
+				CreatedAt:     "2026-08-30T00:00:00Z", Origin: "peer", Message: "Logical document",
+				Files: []remotesync.Entry{entry(name, body)},
+			}
+			if err := remotesync.FinalizeManifest(&manifest, ""); err != nil {
+				t.Fatal(err)
+			}
+			archive := handBuilt(t, map[string]string{name: body}, manifest)
+			if _, _, err := remotesync.Read(archive); err != nil {
+				t.Fatalf("Read = %v", err)
+			}
+		})
+	}
+
+	oversized := strings.Repeat("x", storage.MaxFileSize+1)
+	archive := handBuilt(t, map[string]string{"oversized.conf": oversized}, remotesync.Manifest{
+		SchemaVersion: remotesync.SchemaVersion,
+		CreatedAt:     "2026-08-30T00:00:00Z", Origin: "peer", Message: "Oversized entry",
+		Files: []remotesync.Entry{entry("oversized.conf", oversized)},
+	})
+	if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrSnapshotTooLarge) {
+		t.Fatalf("Read oversized entry = %v, want ErrSnapshotTooLarge", err)
 	}
 }
 

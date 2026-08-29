@@ -210,7 +210,7 @@ func OpenWith(sealed []byte, key envelope.Key) (*Vault, error) {
 	if err != nil {
 		return nil, err
 	}
-	return openDocument(plaintext, key)
+	return openDocument(plaintext, key.Clone())
 }
 
 func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
@@ -223,6 +223,15 @@ func openDocumentWithMigrations(
 	key envelope.Key,
 	migrations migrationRegistry,
 ) (*Vault, Migration, error) {
+	// key is transferred into this function. Keep it only when a Vault is
+	// successfully returned; malformed or unsupported documents must not leave
+	// their derived key material waiting for the garbage collector.
+	published := false
+	defer func() {
+		if !published {
+			key.Destroy()
+		}
+	}()
 	plaintext, migration, err := migrateDocument(plaintext, migrations)
 	if err != nil {
 		return nil, Migration{}, err
@@ -270,12 +279,14 @@ func openDocumentWithMigrations(
 	if dedicatedKeyPassphrases == nil {
 		dedicatedKeyPassphrases = map[string]string{}
 	}
-	return &Vault{
+	opened := &Vault{
 		key: key, secrets: secrets, subjects: subjects,
 		dedicatedPasswords:      dedicatedPasswords,
 		passwordBindings:        maps.Clone(parsed.PasswordBindings),
 		dedicatedKeyPassphrases: dedicatedKeyPassphrases,
-	}, migration, nil
+	}
+	published = true
+	return opened, migration, nil
 }
 
 // SealSettings は、オブジェクトストアの設定を vault 自身の鍵で暗号化する。隣に置く
@@ -471,11 +482,21 @@ func (v *Vault) clone() *Vault {
 		subjects[kind] = maps.Clone(v.subjects[kind])
 	}
 	return &Vault{
-		key: v.key, secrets: secrets, subjects: subjects,
+		key: v.key.Clone(), secrets: secrets, subjects: subjects,
 		dedicatedPasswords:      maps.Clone(v.dedicatedPasswords),
 		passwordBindings:        maps.Clone(v.passwordBindings),
 		dedicatedKeyPassphrases: maps.Clone(v.dedicatedKeyPassphrases),
 	}
+}
+
+// Destroy best-effort clears the independently owned derived key. Secret
+// values are Go strings and cannot be reliably overwritten in place; dropping
+// the Vault still releases those references as before.
+func (v *Vault) Destroy() {
+	if v == nil {
+		return
+	}
+	v.key.Destroy()
 }
 
 // Set は、名前の下に資格情報を保存する。新規作成か、値の置き換えである。

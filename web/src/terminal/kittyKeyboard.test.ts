@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { attachKittyKeyboardProtocol } from "./kittyKeyboard";
+import { attachKittyKeyboardProtocol, encodeIntlYen } from "./kittyKeyboard";
 
 function harness() {
   const handlers = new Map<string, (parameters: (number | number[])[]) => boolean>();
@@ -33,5 +33,26 @@ describe("kitty keyboard protocol", () => {
     expect(protocol.encode(shiftEnter)).toBe("\u001b[13;2u");
     protocol.reset();
     expect(protocol.encode(shiftEnter)).toBeNull();
+  });
+
+  it("encodes modified navigation, tab and printable keys after negotiation", () => {
+    const { handlers, protocol } = harness();
+    handlers.get(">")?.([1]);
+
+    expect(protocol.encode(new KeyboardEvent("keydown", { key: "ArrowUp", ctrlKey: true }))).toBe("\u001b[1;5A");
+    expect(protocol.encode(new KeyboardEvent("keydown", { key: "PageDown", shiftKey: true }))).toBe("\u001b[6;2~");
+    expect(protocol.encode(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true }))).toBe("\u001b[9;2u");
+    expect(protocol.encode(new KeyboardEvent("keydown", { key: " ", ctrlKey: true }))).toBe("\u001b[32;5u");
+    expect(protocol.encode(new KeyboardEvent("keydown", { key: "ArrowUp" }))).toBeNull();
+  });
+});
+
+describe("JIS yen key", () => {
+  it("maps IntlYen only when explicitly enabled and outside IME composition", () => {
+    const yen = new KeyboardEvent("keydown", { code: "IntlYen", key: "¥" });
+    expect(encodeIntlYen(yen, false)).toBeNull();
+    expect(encodeIntlYen(yen, true)).toBe("\\");
+    expect(encodeIntlYen(new KeyboardEvent("keydown", { code: "IntlYen", key: "|", shiftKey: true }), true)).toBe("|");
+    expect(encodeIntlYen(new KeyboardEvent("keydown", { code: "IntlYen", key: "¥", ctrlKey: true }), true)).toBeNull();
   });
 });

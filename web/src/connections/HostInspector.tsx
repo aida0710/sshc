@@ -105,6 +105,24 @@ export function HostInspector({
           </select>
         </Field>
 
+        <Field label={t("connection.osc52Label")} hint={t("connection.osc52Hint")}>
+          <select
+            value={detail.metadata.osc52 ?? ""}
+            onChange={(event) => {
+              const metadata = { ...detail.metadata };
+              const policy = event.target.value as NonNullable<HostMetadata["osc52"]> | "";
+              if (policy === "") delete metadata.osc52;
+              else metadata.osc52 = policy;
+              onMetadata(metadata);
+            }}
+            className={control}
+          >
+            <option value="">{t("connection.osc52Inherit")}</option>
+            <option value="allow">{t("connection.osc52Allow")}</option>
+            <option value="deny">{t("connection.osc52Deny")}</option>
+          </select>
+        </Field>
+
         <Field label={t("host.tags")}>
           <input
             value={(detail.metadata.tags ?? []).join(", ")}

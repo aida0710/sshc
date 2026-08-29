@@ -13,6 +13,10 @@ import (
 const (
 	maxHistoryGraphRevisions = 50
 	maxHistoryGraphBytes     = 128 << 20
+	// maxLiveLineageOpenAttempts bounds attacker-controlled Argon2 work during
+	// automatic ancestry proof. Repeated copies of the same ciphertext are
+	// decoded once and do not consume this budget again.
+	maxLiveLineageOpenAttempts = 8
 )
 
 var ErrHistoryTarget = errors.New("the history snapshot target is not valid")
@@ -142,10 +146,11 @@ func (s *Service) validateHistoryRead(ctx context.Context, captured historyReadS
 }
 
 func openSnapshotObject(object objectstore.Object, passphrase string) (Manifest, map[string][]byte, error) {
-	archive, _, err := envelope.OpenWithin(object.Body, passphrase, envelope.AcceptedFromRemote)
+	archive, key, err := envelope.OpenWithin(object.Body, passphrase, envelope.AcceptedFromRemote)
 	if err != nil {
 		return Manifest{}, nil, err
 	}
+	defer key.Destroy()
 	return Read(archive)
 }
 

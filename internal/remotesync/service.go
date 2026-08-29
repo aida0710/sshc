@@ -321,6 +321,10 @@ type Service struct {
 	// secret パッケージへの依存を避けるため、関数として注入する。
 	OpenVault func() ([]byte, error)
 	SealVault func(document []byte) ([]byte, error)
+	// EmptyVaultDocument returns the canonical logical empty vault. It is then
+	// passed through SealVault so the receiving installation keeps its own
+	// master-key generation while adopting a credential tombstone.
+	EmptyVaultDocument func() ([]byte, error)
 	// VaultAdopted は、vault の置換後にメモリ上の状態を再読込する通知。
 	VaultAdopted func() error
 	OpenSnippets func() ([]byte, error)
@@ -542,6 +546,16 @@ func excluded(relative string) bool {
 	return false
 }
 
+// inboundReserved applies the device-local outbound denylist to untrusted
+// snapshots as well. The two logical documents are the only exceptions: they
+// are validated and re-sealed by their owning services before commit.
+func inboundReserved(relative string) bool {
+	if relative == TravelPath || relative == SnippetsPath {
+		return false
+	}
+	return excluded(relative)
+}
+
 // Collect は、スナップショットに含めるべきすべてのファイルを読む。
 //
 // すなわち、~/.ssh 配下の通常ファイルすべてと、パスワードの vault 文書である。
@@ -601,13 +615,21 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 		contents[relative] = body
 		entries = append(entries, Entry{Path: relative, SHA256: Digest(body), Mode: mode})
 	}
+	current, err := s.readState()
+	if err != nil {
+		return Manifest{}, nil, err
+	}
 	// 保管庫は中身として載る。ディスク上のどのファイルとも対応しないので、
 	// ここだけは読むのではなく尋ねる。
 	document, err := s.OpenVault()
 	if err != nil {
 		return Manifest{}, nil, err
 	}
-	if document != nil {
+	if document != nil || manifestContains(current.Base, TravelPath) {
+		// A zero-length logical document is an authenticated tombstone only after
+		// this installation has previously acknowledged a vault entry. A pristine
+		// empty vault stays absent so a new installation does not manufacture an
+		// edit or conflict merely by joining the target.
 		contents[TravelPath] = document
 		entries = append(entries, Entry{
 			Path: TravelPath, SHA256: Digest(document), Mode: "0600",
@@ -628,10 +650,6 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 
-	current, err := s.readState()
-	if err != nil {
-		return Manifest{}, nil, err
-	}
 	return Manifest{
 		SchemaVersion: SchemaVersion,
 		CreatedAt:     s.now(),
@@ -1172,6 +1190,96 @@ func (s *Service) PushDraft() (PushDraft, error) {
 	return draftFor(base, manifest), nil
 }
 
+func (s *Service) liveSnapshotFollows(
+	ctx context.Context,
+	binding remoteBinding,
+	passphrase string,
+	base *Manifest,
+	incoming Manifest,
+	incomingCiphertextDigest string,
+) (bool, error) {
+	if base == nil {
+		return true, nil
+	}
+	if incoming.Revision == base.Revision || incoming.ParentRevision == base.Revision {
+		return true, nil
+	}
+	infos, _, err := binding.client.ListNewest(
+		ctx, joinKey(binding.config.Path, SnapshotPrefix), maxHistoryGraphRevisions,
+	)
+	if err != nil {
+		return false, err
+	}
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].LastModified.Equal(infos[j].LastModified) {
+			return infos[i].Key > infos[j].Key
+		}
+		return infos[i].LastModified.After(infos[j].LastModified)
+	})
+	manifests := make(map[string]Manifest, len(infos))
+	type cachedOpen struct {
+		manifest Manifest
+		valid    bool
+	}
+	opened := make(map[string]cachedOpen, len(infos)+1)
+	// Push publishes the exact same sealed bytes to the dated and live keys.
+	// Seed the cache with the live object which pull already authenticated, so
+	// encountering its immutable copy does not spend a second KDF attempt.
+	opened[incomingCiphertextDigest] = cachedOpen{manifest: incoming, valid: true}
+	openAttempts := 0
+	var downloaded int64
+	for _, info := range infos {
+		if info.Size <= 0 || downloaded+info.Size > maxHistoryGraphBytes {
+			return false, nil
+		}
+		object, err := binding.client.Get(ctx, info.Key)
+		if err != nil {
+			return false, err
+		}
+		if info.ETag == "" || object.ETag != info.ETag {
+			return false, ErrRemoteMoved
+		}
+		downloaded += int64(len(object.Body))
+		ciphertextDigest := Digest(object.Body)
+		cached, seen := opened[ciphertextDigest]
+		if !seen {
+			if openAttempts >= maxLiveLineageOpenAttempts {
+				return false, nil
+			}
+			openAttempts++
+			manifest, _, openErr := openSnapshotObject(object, passphrase)
+			cached = cachedOpen{manifest: manifest, valid: openErr == nil}
+			opened[ciphertextDigest] = cached
+		}
+		if !cached.valid {
+			// A missing or unreadable link cannot prove ancestry. Fail closed rather
+			// than treating a partial graph as permission to apply the live object.
+			continue
+		}
+		manifests[cached.manifest.Revision] = cached.manifest
+		if lineageReaches(manifests, incoming.ParentRevision, base.Revision) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func lineageReaches(manifests map[string]Manifest, revision, wanted string) bool {
+	seen := map[string]bool{}
+	for revision != "" && !seen[revision] {
+		if revision == wanted {
+			return true
+		}
+		seen[revision] = true
+		ancestor, ok := manifests[revision]
+		if !ok {
+			return false
+		}
+		revision = ancestor.ParentRevision
+	}
+	return false
+}
+
 // BucketObjectView is non-secret object metadata shown on the sync screen.
 type BucketObjectView struct {
 	Key          string `json:"key"`
@@ -1381,6 +1489,19 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 	base := current.Base
 	if !stateMatchesTarget(current, binding.config) {
 		base = nil
+	}
+	// A bucket writer who does not know the synchronization key can still replay
+	// an older, authentic ciphertext. Prove that a changed live head descends
+	// from the locally acknowledged revision before treating it as an ordinary
+	// pull. PullHistory remains the explicit rollback path.
+	if historyKey == "" {
+		follows, lineageErr := s.liveSnapshotFollows(ctx, binding, passphrase, base, manifest, Digest(object.Body))
+		if lineageErr != nil {
+			return PullResult{}, lineageErr
+		}
+		if !follows {
+			return PullResult{}, ErrRemoteMoved
+		}
 	}
 	var local map[string]string
 	readLocal := func() error {
@@ -1687,7 +1808,7 @@ func (s *Service) localDigests(remote Manifest, base *Manifest) (map[string]stri
 			if err != nil {
 				return nil, err
 			}
-			if document != nil {
+			if document != nil || manifestContains(base, TravelPath) {
 				digests[path] = Digest(document)
 			}
 			continue
@@ -1712,6 +1833,18 @@ func (s *Service) localDigests(remote Manifest, base *Manifest) (map[string]stri
 		digests[path] = Digest(body)
 	}
 	return digests, nil
+}
+
+func manifestContains(manifest *Manifest, wanted string) bool {
+	if manifest == nil {
+		return false
+	}
+	for _, entry := range manifest.Files {
+		if entry.Path == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) statePath() string {
@@ -1916,9 +2049,15 @@ func (s *Service) stageVault(request *storage.Request) error {
 			request.Changes[index].Path = local
 		}
 	}
-	request.Removals = slices.DeleteFunc(request.Removals, func(removal storage.Removal) bool {
-		return removal.Path == travelled
-	})
+	for _, removal := range request.Removals {
+		if removal.Path == travelled {
+			request.Changes = append(request.Changes, storage.Change{
+				Path: local, Contents: nil, Precondition: removal.Precondition,
+			})
+		}
+	}
+	request.Removals = slices.DeleteFunc(request.Removals, func(removal storage.Removal) bool { return removal.Path == travelled })
+	sort.Slice(request.Changes, func(i, j int) bool { return request.Changes[i].Path < request.Changes[j].Path })
 	return nil
 }
 
@@ -1936,7 +2075,20 @@ func (s *Service) exchangeVault(request *storage.Request) error {
 		if err := s.requireVaultPrecondition(local, request.Changes[index].Precondition); err != nil {
 			return err
 		}
-		sealed, err := s.SealVault(request.Changes[index].Contents)
+		var sealed []byte
+		var err error
+		if len(request.Changes[index].Contents) == 0 {
+			if s.EmptyVaultDocument == nil {
+				return ErrVaultCodec
+			}
+			var empty []byte
+			empty, err = s.EmptyVaultDocument()
+			if err == nil {
+				sealed, err = s.SealVault(empty)
+			}
+		} else {
+			sealed, err = s.SealVault(request.Changes[index].Contents)
+		}
 		if err != nil {
 			return err
 		}
@@ -1961,11 +2113,8 @@ func (s *Service) requireVaultPrecondition(path string, expected storage.Precond
 	if err != nil {
 		return err
 	}
-	actual := ""
-	if document != nil {
-		actual = Digest(document)
-	}
-	if expected.Exists == (document != nil) && (!expected.Exists || expected.Digest == actual) {
+	actual := Digest(document)
+	if (!expected.Exists && document == nil) || (expected.Exists && expected.Digest == actual) {
 		return nil
 	}
 	return &storage.ConflictError{Path: path, Expected: expected.Digest, Actual: actual}

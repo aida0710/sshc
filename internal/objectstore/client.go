@@ -55,7 +55,10 @@ var (
 // キロバイト単位であり、この上限に近づくというのは、誰かの設定が大きいという
 // ことではなく、何かがおかしいということだからだ。
 const (
-	MaxObjectBytes        = 256 << 20
+	// A snapshot expands to at most 64 MiB. Allow room for tar headers, gzip
+	// framing, and the authenticated envelope without accepting a 256 MiB body
+	// which would be retained beside the KDF and AEAD working sets.
+	MaxObjectBytes        = 72 << 20
 	defaultRequestTimeout = 60 * time.Second
 )
 
@@ -239,6 +242,9 @@ func (c Client) Get(ctx context.Context, key string) (Object, error) {
 		return Object{}, classify(err)
 	}
 	defer func() { _ = output.Body.Close() }()
+	if output.ContentLength != nil && *output.ContentLength > MaxObjectBytes {
+		return Object{}, ErrObjectTooLarge
+	}
 
 	body, err := io.ReadAll(io.LimitReader(output.Body, MaxObjectBytes+1))
 	if err != nil {

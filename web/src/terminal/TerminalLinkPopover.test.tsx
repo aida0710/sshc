@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../i18n/context";
 import { TerminalLinkPopover } from "./TerminalLinkPopover";
 
+const writeText = vi.hoisted(() => vi.fn());
+vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText } }));
+
 describe("TerminalLinkPopover", () => {
   it("passes a remote file action to SFTP", async () => {
     const onRemotePath = vi.fn();
@@ -49,5 +52,24 @@ describe("TerminalLinkPopover", () => {
     expect(open).toHaveBeenCalledWith("https://example.com/docs", "_blank", "noopener,noreferrer");
     expect(opened.opener).toBeNull();
     open.mockRestore();
+  });
+
+  it("copies the hidden destination rather than the visible OSC 8 label", async () => {
+    writeText.mockResolvedValue(undefined);
+    render(
+      <LanguageProvider>
+        <TerminalLinkPopover
+          selection={{
+            link: { kind: "url", text: "documentation", target: "https://example.com/actual", start: 0, end: 13 },
+            x: 20,
+            y: 30,
+          }}
+          onClose={() => undefined}
+        />
+      </LanguageProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith("https://example.com/actual");
   });
 });

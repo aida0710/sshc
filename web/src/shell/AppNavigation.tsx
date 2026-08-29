@@ -14,7 +14,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import type { TerminalSessionsState } from "../terminal/sessions";
-import type { TerminalSession } from "../api/integrations";
+import type { LocalShellProfile, TerminalSession } from "../api/integrations";
 import type { LiveWorkspaceSummary } from "../features/workspaces/live";
 import type { AgentUnreadBySession } from "../terminal/agentNotifications";
 import {
@@ -43,6 +43,7 @@ export function AppNavigation({
   onShowConsole,
   onDuplicateConsole,
   onReorderConsoles,
+  localShellProfiles = [],
   onOpenShell,
   onOpenCommandPalette,
 }: {
@@ -65,7 +66,8 @@ export function AppNavigation({
   onShowConsole: (id: string) => void;
   onDuplicateConsole: (id: string) => void;
   onReorderConsoles: (order: string[]) => void;
-  onOpenShell: () => void;
+  localShellProfiles?: LocalShellProfile[];
+  onOpenShell: (profileId?: string) => void;
   onOpenCommandPalette: () => void;
 }) {
   const t = useTranslate();
@@ -133,6 +135,7 @@ export function AppNavigation({
           onUnpinTitle={(id) => consoles.unpinTitle?.(id) ?? Promise.resolve(false)}
           onDuplicate={onDuplicateConsole}
           onReorder={onReorderConsoles}
+          localShellProfiles={localShellProfiles}
           onOpenShell={onOpenShell}
         />
       </div>

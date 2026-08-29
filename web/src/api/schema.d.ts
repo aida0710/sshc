@@ -244,6 +244,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminal/shell-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listLocalShellProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/commands/preview": {
         parameters: {
             query?: never;
@@ -302,6 +318,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["issueTerminalStreamTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/sessions/{id}/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["controlTerminalSession"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2064,12 +2096,47 @@ export interface components {
             sessions: components["schemas"]["TerminalSession"][];
             maxSessions: number;
         };
+        TerminalControlCursor: {
+            /** Format: uint64 */
+            requested: number;
+            /** Format: uint64 */
+            start: number;
+            /** Format: uint64 */
+            next: number;
+            /**
+             * Format: uint64
+             * @description Monotonic end of the raw transcript; greater than next means unread bytes remain.
+             */
+            end: number;
+            truncated: boolean;
+        };
+        TerminalControlResponse: {
+            session: components["schemas"]["TerminalSession"];
+            /** Format: uint64 */
+            generation: number;
+            /** @enum {string} */
+            state: "connecting" | "connected" | "reconnecting" | "exited" | "agent-working" | "agent-attention" | "agent-ready" | "agent-ended";
+            cursor: components["schemas"]["TerminalControlCursor"];
+            /** @description Bounded transcript with terminal escape and control sequences removed. */
+            output: string;
+        };
         OpenTerminalSessionRequest: {
             /** @enum {string} */
             kind: "ssh" | "shell";
             alias?: string;
             cols?: number;
             rows?: number;
+            profileId?: string;
+        };
+        LocalShellProfile: {
+            id: string;
+            label: string;
+            path: string;
+            arguments: string[];
+            default: boolean;
+        };
+        LocalShellProfileList: {
+            profiles: components["schemas"]["LocalShellProfile"][];
         };
         RenameTerminalSessionRequest: {
             title: string;
@@ -2668,6 +2735,11 @@ export interface components {
              * @enum {string}
              */
             encoding?: "utf-8" | "shift_jis" | "euc-jp" | "iso-2022-jp";
+            /**
+             * @description Per-connection OSC 52 override. Omitted inherits the terminal default.
+             * @enum {string}
+             */
+            osc52?: "allow" | "deny";
         };
         TerminalAppearance: {
             palette?: string;
@@ -2694,11 +2766,15 @@ export interface components {
         EmbeddedTerminal: {
             maxSessions?: number;
             scrollbackBytes?: number;
+            browserScrollbackLines?: number;
             fontSize?: number;
             verbosity?: number;
             reconnect?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
+            osc52?: boolean;
+            jisYenBackslash?: boolean;
+            localShellProfile?: string;
             startDirectory?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
         };
@@ -2706,11 +2782,15 @@ export interface components {
             startDirectory?: string;
             maxSessions?: number;
             scrollbackBytes?: number;
+            browserScrollbackLines?: number;
             fontSize?: number;
             verbosity?: number;
             reconnect?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
+            osc52?: boolean;
+            jisYenBackslash?: boolean;
+            localShellProfile?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
         };
         EngineSettings: {
@@ -3610,6 +3690,27 @@ export interface operations {
             500: components["responses"]["Problem"];
         };
     };
+    listLocalShellProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Local shells detected and validated on this machine */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalShellProfileList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+        };
+    };
     previewTerminalCommand: {
         parameters: {
             query?: never;
@@ -3716,6 +3817,35 @@ export interface operations {
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
+        };
+    };
+    controlTerminalSession: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Explicit terminal state and a bounded plain-text transcript fragment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalControlResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     reconnectTerminalSession: {
