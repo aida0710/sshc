@@ -127,7 +127,7 @@ describe("LockScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "開く" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Vault のバージョンが古いです（必要なバージョン: 4、現在: 3）。",
+      "Vault のバージョンが古いです（必要なバージョン：4、現在：3）。",
     );
     await userEvent.click(screen.getByRole("button", { name: "互換性のある Vault を復元" }));
     await waitFor(() => expect(api.recoverCompatibleVault).toHaveBeenCalledWith("a long enough password"));

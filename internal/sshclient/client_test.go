@@ -487,8 +487,8 @@ func TestProxyJumpUsesTheSavedPasswordForEachAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = process.Close() }()
-	readUntil(t, process, "mdx-jamstec-1 の接続完了（1/2）")
-	readUntil(t, process, "destination の接続完了（2/2）")
+	readUntil(t, process, "mdx-jamstec-1 に接続しました（1/2）")
+	readUntil(t, process, "destination に接続しました（2/2）")
 	readUntil(t, process, "ready")
 	if !slices.Equal(requested, []string{"mdx-jamstec-1", "destination"}) {
 		t.Fatalf("passwords requested for %#v", requested)
@@ -701,9 +701,9 @@ func TestTheConnectionLogReachesTheTerminalWhenItIsAsked(t *testing.T) {
 	}
 	defer func() { _ = process.Close() }()
 
-	// 深さ 2 が言うのは、繋ぎ先と、握手が通ったことである。
-	readUntil(t, process, "へ繋ぎます")
-	readUntil(t, process, "握手が通りました")
+	// 深さ 2 では、接続先とSSHハンドシェイクの完了を表示する。
+	readUntil(t, process, "へ接続します")
+	readUntil(t, process, "SSH ハンドシェイクが完了しました")
 	readUntil(t, process, "ready")
 }
 

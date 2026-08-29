@@ -1,11 +1,32 @@
 package sshclient
 
 import (
+	"context"
+	"errors"
 	"os"
 	"runtime"
 	"testing"
 	"time"
 )
+
+func TestConnectionFailureMessageTranslatesCommonContextErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, want: "SSH ハンドシェイクがタイムアウトしました。"},
+		{name: "cancelled", err: context.Canceled, want: "SSH ハンドシェイクをキャンセルしました。"},
+		{name: "detail", err: errors.New("connection reset"), want: "SSH ハンドシェイクに失敗しました：connection reset"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := connectionFailureMessage("SSH ハンドシェイク", test.err); got != test.want {
+				t.Fatalf("connectionFailureMessage() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
 
 // 接続が終われば、プログラムも終わる。
 //

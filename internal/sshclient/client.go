@@ -2,6 +2,7 @@ package sshclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -70,7 +71,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 	}
 	hops := len(target.JumpRoute()) + 1
 	trace.stage(terminal.ConnectionOpeningSession, target, hops, hops)
-	trace.say(Brief, "認証できました。セッションを開きます。")
+	trace.say(Brief, "認証に成功しました。セッションを開始します。")
 
 	remote, err := client.NewSession()
 	if err != nil {
@@ -97,8 +98,8 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 		return
 	}
 	session.markReady(nil)
-	trace.say(Brief, "開きました。")
-	trace.say(Full, "ここまで %s。", trace.since(started).Round(time.Millisecond))
+	trace.say(Brief, "セッションを開始しました。")
+	trace.say(Full, "接続完了まで %s かかりました。", trace.since(started).Round(time.Millisecond))
 	session.run(remote, keepAliveLoop(client, target.KeepAlive, target.KeepAliveMax, session.done))
 }
 
@@ -148,7 +149,7 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 		for _, hop := range route {
 			hops = append(hops, hop.Address())
 		}
-		trace.say(Detailed, "経由地 %d か所: %s", len(hops), strings.Join(hops, " → "))
+		trace.say(Detailed, "ProxyJump：%d ホップ（%s）", len(hops), strings.Join(hops, " → "))
 	}
 
 	hops := len(route) + 1
@@ -184,19 +185,19 @@ func (d Dialer) connectOne(
 	defer cancel()
 
 	if through != nil {
-		trace.say(Brief, "%s へ、%s を経由して繋ぎます。", target.Address(), "手前のホップ")
+		trace.say(Brief, "%s へ ProxyJump 経由で接続します。", target.Address())
 	} else {
-		trace.say(Brief, "%s へ繋ぎます（利用者 %s）。", target.Address(), target.User)
+		trace.say(Brief, "%s へ接続します（ユーザー：%s）。", target.Address(), target.User)
 	}
-	trace.say(Detailed, "上限は %s です。", timeout)
+	trace.say(Detailed, "接続タイムアウト：%s", timeout)
 
 	trace.stage(terminal.ConnectionDialing, target, hop, hops)
 	conn, err := d.open(ctx, target, through, trace)
 	if err != nil {
-		trace.say(Brief, "繋がりませんでした: %v", err)
+		trace.say(Brief, "%s", connectionFailureMessage("接続", err))
 		return nil, err
 	}
-	trace.say(Detailed, "TCP が開きました（%s）。", trace.since(started).Round(time.Millisecond))
+	trace.say(Detailed, "TCP 接続を確立しました（%s）。", trace.since(started).Round(time.Millisecond))
 
 	authMethods, closeAuth := d.Auth.methodsWithCleanup(target, prompt)
 	defer closeAuth()
@@ -219,16 +220,16 @@ func (d Dialer) connectOne(
 		Timeout:           timeout,
 	}
 	if trace.enabled(Detailed) {
-		trace.say(Detailed, "試せる認証は %d 通りです。", len(config.Auth))
+		trace.say(Detailed, "利用可能な認証方式：%d 件", len(config.Auth))
 	}
 	connection, channels, requests, err := newClientConn(ctx, conn, target.Address(), config)
 	if err != nil {
-		trace.say(Brief, "握手が通りませんでした: %v", err)
+		trace.say(Brief, "%s", connectionFailureMessage("SSH ハンドシェイク", err))
 		return nil, err
 	}
-	trace.say(Full, "相手が名乗った版は %s です。", connection.ServerVersion())
-	trace.say(Detailed, "握手が通りました（%s）。", trace.since(started).Round(time.Millisecond))
-	trace.say(Brief, "%s の接続完了（%d/%d）。", connectionTarget(target), hop, hops)
+	trace.say(Full, "サーバーの SSH バージョン：%s", connection.ServerVersion())
+	trace.say(Detailed, "SSH ハンドシェイクが完了しました（%s）。", trace.since(started).Round(time.Millisecond))
+	trace.say(Brief, "%s に接続しました（%d/%d）。", connectionTarget(target), hop, hops)
 	trace.stage(terminal.ConnectionAuthenticated, target, hop, hops)
 	return ssh.NewClient(connection, channels, requests), nil
 }
@@ -255,7 +256,7 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 		if through != nil {
 			return nil, ErrProxyCommandThroughJump
 		}
-		trace.announce("ProxyCommand を起こします: %s", target.ProxyCommand)
+		trace.announce("ProxyCommand を実行します：%s", target.ProxyCommand)
 		return startProxyCommand(target.ProxyCommand)
 	}
 	if through != nil {
@@ -265,6 +266,20 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 		return d.Dial(ctx, "tcp", target.Address())
 	}
 	return (&net.Dialer{}).DialContext(ctx, "tcp", target.Address())
+}
+
+func connectionFailureMessage(action string, err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return action + "がタイムアウトしました。"
+	}
+	if errors.Is(err, context.Canceled) {
+		return action + "をキャンセルしました。"
+	}
+	var timeout interface{ Timeout() bool }
+	if errors.As(err, &timeout) && timeout.Timeout() {
+		return action + "がタイムアウトしました。"
+	}
+	return fmt.Sprintf("%sに失敗しました：%v", action, err)
 }
 
 // newClientConn は SSH handshake を ctx の所有下で行う。

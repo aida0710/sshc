@@ -149,7 +149,7 @@ func TestTheProxyCommandIsAnnouncedEvenWhenQuiet(t *testing.T) {
 	}
 	defer func() { _ = process.Close() }()
 
-	readUntil(t, process, "ProxyCommand を起こします")
+	readUntil(t, process, "ProxyCommand を実行します")
 }
 
 // 繋がらなかった理由は、たいていプログラムの標準エラーにしかない。

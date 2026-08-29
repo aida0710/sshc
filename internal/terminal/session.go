@@ -770,7 +770,7 @@ func (s *Session) prepareAgentResume(version uint64) (
 
 func (s *Session) completeAgentResume(process Process, candidate agentCandidate, started time.Time) bool {
 	if !s.completeProcessReplacement(process, started,
-		"\r\n[sshc] Coding Agent sessionを再開しました。前の画面より上は、再開前の記録です。\r\n") {
+		"\r\n[sshc] Coding Agent セッションを再開しました。これより前の表示は再開前の記録です。\r\n") {
 		return false
 	}
 	s.seedAgentCandidate(candidate)
@@ -844,7 +844,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 				s.mutex.Lock()
 				s.problem = "reconnect_exhausted"
 				s.mutex.Unlock()
-				s.publish([]byte("\r\n[sshc] 再接続の試行上限に達しました。\r\n"))
+				s.publish([]byte("\r\n[sshc] 再接続できる回数の上限に達しました。\r\n"))
 			}
 			return false
 		}
@@ -861,7 +861,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		s.mutex.Unlock()
 		seconds := int((wait + time.Second - 1) / time.Second)
 		s.publish([]byte(fmt.Sprintf(
-			"\r\n[sshc] 接続が切れました。%d 秒後に繋ぎ直します（%d/%d）。\r\n",
+			"\r\n[sshc] SSH 接続が切れました。%d 秒後に再接続します（%d/%d）。\r\n",
 			seconds, attempt+1, limit)))
 
 		timer := time.NewTimer(wait)
@@ -951,7 +951,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		// Ready が成功するまでは reconnecting のままである。これは新しい
 		// shellなので、成功後にだけ前の続きではないことを伝える。
 		s.observeProcess(StateReconnecting,
-			"\r\n[sshc] 繋ぎ直しました。新しいシェルです。前の画面より上は、切れる前の記録です。\r\n")
+			"\r\n[sshc] 再接続しました。新しいシェルを開始しました。これより前の表示は切断前の記録です。\r\n")
 		return true
 	}
 }
@@ -1055,7 +1055,7 @@ func (s *Session) failManualReconnect(previous ExitInfo, problem string) {
 // 同じsessionへ公開する。
 func (s *Session) completeManualReconnect(process Process, started time.Time) bool {
 	return s.completeProcessReplacement(process, started,
-		"\r\n[sshc] 手動で繋ぎ直しました。新しいシェルです。前の画面より上は、切れる前の記録です。\r\n")
+		"\r\n[sshc] 手動で再接続しました。新しいシェルを開始しました。これより前の表示は切断前の記録です。\r\n")
 }
 
 func (s *Session) completeProcessReplacement(process Process, started time.Time, successMessage string) bool {
