@@ -24,7 +24,28 @@ const (
 	invocationVersion
 	invocationTransport
 	invocationRunTransport
+	invocationInfo
+	invocationSync
 )
+
+type syncAction uint8
+
+const (
+	syncInvalid syncAction = iota
+	syncStatus
+	syncSetup
+	syncPush
+	syncPull
+	syncNow
+	syncAuto
+)
+
+type syncInvocation struct {
+	Action  syncAction
+	Force   bool
+	JSON    bool
+	Enabled bool
+}
 
 type invocation struct {
 	Kind invocationKind
@@ -36,6 +57,7 @@ type invocation struct {
 	// JSON は `sshc status --json` の機械可読出力を選択する。
 	JSON      bool
 	Transport *transportInvocation
+	Sync      *syncInvocation
 }
 
 const (
@@ -44,6 +66,8 @@ const (
 	helpSubcommand    = "help"
 	versionSubcommand = "version"
 	updateSubcommand  = "update"
+	infoSubcommand    = "info"
+	syncSubcommand    = "sync"
 	StatusSubcommand  = "status"
 	serialSubcommand  = "serial"
 	telnetSubcommand  = "telnet"
@@ -80,6 +104,10 @@ func parseInvocation(argv []string) (invocation, error) {
 		return parseTransportInvocation(transportTelnet, args)
 	case sshSubcommand:
 		return parseSSHInvocation(args)
+	case infoSubcommand:
+		return parseInfoInvocation(args)
+	case syncSubcommand:
+		return parseSyncInvocation(args)
 	case OpenSubcommand:
 		return noArguments(invocationOpen, word, args)
 	case StatusSubcommand:
@@ -109,6 +137,100 @@ func parseInvocation(argv []string) (invocation, error) {
 	}
 
 	return invalidInvocation(fmt.Sprintf("unknown command %q", word))
+}
+
+func parseInfoInvocation(args []string) (invocation, error) {
+	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
+		return invocation{Kind: invocationHelp}, nil
+	}
+	if len(args) < 1 || len(args) > 2 || args[0] == "" || args[0][0] == '-' {
+		return invalidInvocation("info requires one alias followed by optional --json")
+	}
+	called := invocation{Kind: invocationInfo, Args: []string{args[0]}}
+	if len(args) == 2 {
+		if args[1] != "--json" {
+			return invalidInvocation("info only accepts --json after the alias")
+		}
+		called.JSON = true
+	}
+	return called, nil
+}
+
+func parseSyncInvocation(args []string) (invocation, error) {
+	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
+		return invocation{Kind: invocationHelp}, nil
+	}
+	if len(args) == 0 {
+		return newSyncInvocation(syncInvocation{Action: syncStatus}), nil
+	}
+	if len(args) == 1 && args[0] == "--json" {
+		return newSyncInvocation(syncInvocation{Action: syncStatus, JSON: true}), nil
+	}
+
+	action := args[0]
+	rest := args[1:]
+	switch action {
+	case "setup":
+		if len(rest) != 0 {
+			return invalidInvocation("sync setup takes no flags")
+		}
+		return newSyncInvocation(syncInvocation{Action: syncSetup}), nil
+	case "push", "pull":
+		parsed := syncInvocation{Action: syncPush}
+		if action == "pull" {
+			parsed.Action = syncPull
+		}
+		for _, flag := range rest {
+			switch flag {
+			case "--force":
+				if parsed.Force {
+					return invalidInvocation("sync accepts --force only once")
+				}
+				parsed.Force = true
+			case "--json":
+				if parsed.JSON {
+					return invalidInvocation("sync accepts --json only once")
+				}
+				parsed.JSON = true
+			default:
+				return invalidInvocation("sync " + action + " does not take " + flag)
+			}
+		}
+		return newSyncInvocation(parsed), nil
+	case "now":
+		asJSON, err := parseOptionalJSON(rest, "sync now")
+		if err != nil {
+			return invocation{Kind: invocationInvalid}, err
+		}
+		return newSyncInvocation(syncInvocation{Action: syncNow, JSON: asJSON}), nil
+	case "auto":
+		if len(rest) < 1 || (rest[0] != "on" && rest[0] != "off") {
+			return invalidInvocation("sync auto requires on or off")
+		}
+		asJSON, err := parseOptionalJSON(rest[1:], "sync auto")
+		if err != nil {
+			return invocation{Kind: invocationInvalid}, err
+		}
+		return newSyncInvocation(syncInvocation{
+			Action: syncAuto, Enabled: rest[0] == "on", JSON: asJSON,
+		}), nil
+	default:
+		return invalidInvocation(fmt.Sprintf("unknown sync action %q", action))
+	}
+}
+
+func parseOptionalJSON(args []string, command string) (bool, error) {
+	if len(args) == 0 {
+		return false, nil
+	}
+	if len(args) == 1 && args[0] == "--json" {
+		return true, nil
+	}
+	return false, fmt.Errorf("usage: %s only accepts one --json", command)
+}
+
+func newSyncInvocation(sync syncInvocation) invocation {
+	return invocation{Kind: invocationSync, JSON: sync.JSON, Sync: &sync}
 }
 
 // parseSSHInvocation は alias を ssh namespace の内側だけで解釈する。
@@ -192,6 +314,15 @@ func usage(out io.Writer) {
                        --list      print every concrete Host alias
   sshc ssh <alias> --non-interactive -- <command>
                        run an SSH command without an interactive terminal
+  sshc info <alias> [--json]
+                       print the resolved SSH target without connecting
+  sshc sync [--json]   print synchronization status from the running engine
+  sshc sync setup      configure synchronization in an interactive terminal
+  sshc sync push [--force] [--json]
+  sshc sync pull [--force] [--json]
+  sshc sync now [--json]
+  sshc sync auto on|off [--json]
+                       run or configure synchronization through the engine
   sshc serial [--json]
                        list serial devices
   sshc serial <device> [options]

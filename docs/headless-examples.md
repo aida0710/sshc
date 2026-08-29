@@ -12,6 +12,38 @@ sshc ssh <接続先> --non-interactive -- <コマンド...>
                                   # ターミナルを開かずにコマンドを実行
 ```
 
+## 画面なし環境で同期する
+
+同期の owner は常駐中の engine です。先に engine を起動し、別の対話端末で vault を解錠します。`sshc sync` を含むすべての同期コマンドは、engine 停止中、vault 未作成、vault ロック中をそれぞれ拒否して復旧コマンドを表示します。
+
+```sh
+sshc vault unlock
+sshc sync setup
+sshc sync
+sshc sync push
+sshc sync pull
+sshc sync now
+sshc sync auto on
+```
+
+`sshc sync setup` は stdin と prompt 出力の両方に対話端末を要求します。object storage の access key ID、secret access key、既存の sync key は no-echo で読み取り、argv、環境変数、設定ファイルから渡す option はありません。空の同期先で生成された sync key は同じ端末へ一度だけ表示されるため、別端末の復元に備えて安全に保管してください。systemd の unit や `tmux send-keys` に資格情報を書かないでください。
+
+通常の `push` は engine が作った draft を条件付きで保存し、remote が変われば失敗します。`push --force` も確認時の exact remote ETag だけを対象とし、競合時に自動再試行しません。通常の `pull` は conflict または removal が一件でもあれば preview だけで止まり、`pull --force` はその exact preview を remote authoritative として適用します。preview 後に ETag／revision が変われば force でも拒否されます。
+
+mutation の送信後に通信が切れたり、成功応答を最後まで読めなかったりした場合、CLI は `outcome_unknown` を返します。この failure は再試行不可です。同じ操作を直ちに繰り返さず、`sshc sync` と object storage の状態を確認してから復旧してください。
+
+自動処理で結果を読む場合は、対応する操作へ `--json` を付けます。stdout には一つの JSON object だけが出ます。`setup` は秘密入力を伴うため JSON mode を持ちません。
+
+```sh
+sshc sync --json
+sshc sync push --json
+sshc sync pull --force --json
+sshc sync now --json
+sshc sync auto off --json
+```
+
+接続設定だけを調べる `sshc info <alias> [--json]` は engine を必要としません。実接続と同じ `Include`／`Match`／`ProxyJump` 解決を使いますが、保存済み資格情報、`SetEnv` の値、`ProxyCommand` の本文は表示しません。
+
 ## systemd（ユーザーサービス）
 
 `~/.config/systemd/user/sshc.service`:
