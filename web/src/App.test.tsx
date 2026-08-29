@@ -142,6 +142,12 @@ vi.mock("./secrets/LockScreen", () => ({
 
 const csrfToken = "c".repeat(43);
 
+async function openFromMenu(user: ReturnType<typeof userEvent.setup>, label: string) {
+  await user.click(screen.getByRole("link", { name: "Menu" }));
+  const menu = await screen.findByRole("region", { name: "Menu" });
+  await user.click(within(menu).getByRole("link", { name: `Open ${label}` }));
+}
+
 afterEach(() => {
   apiClient.clear();
   vi.unstubAllGlobals();
@@ -151,7 +157,8 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  it("groups the navigation without adding headings to it", async () => {
+  it("keeps the sidebar compact and moves grouped destinations into Menu", async () => {
+    const user = userEvent.setup();
     render(
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
@@ -162,19 +169,19 @@ describe("App", () => {
 
     await screen.findByRole("heading", { name: "sshc" });
 
-    expect(screen.getByRole("list", { name: "Keys and hosts" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Keys and hosts" })).toBeNull();
     expect(within(screen.getByRole("list", { name: "Start" })).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Home",
       "Connections",
       "SFTP",
-      "Terminal",
     ]);
+    expect(screen.getByRole("link", { name: "Menu" })).toHaveAttribute("href", "/menu");
+    expect(screen.getByText("Sessions", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Terminal" })).toBeNull();
+
+    await user.click(screen.getByRole("link", { name: "Menu" }));
+    const menu = await screen.findByRole("region", { name: "Menu" });
 
     for (const label of [
-      "Home",
-      "Connections",
-      "SFTP",
       "Config",
       "Groups",
       "Keys",
@@ -186,10 +193,11 @@ describe("App", () => {
       "Sync",
       "History",
     ]) {
-      expect(screen.getByRole("link", { name: label })).toHaveAttribute("href");
+      expect(within(menu).getByRole("link", { name: `Open ${label}` })).toHaveAttribute("href");
     }
-    const maintenance = screen.getByRole("list", { name: "Maintenance" });
-    const settings = within(maintenance).getByRole("link", { name: "Settings" });
+    const maintenance = within(menu).getByRole("region", { name: "Maintenance" });
+    expect(within(maintenance).queryByRole("heading", { name: "Maintenance" })).not.toBeNull();
+    const settings = within(maintenance).getByRole("link", { name: "Open Settings" });
     expect(settings).toHaveAttribute("href", "/settings");
     expect(settings.querySelector("use")).toHaveAttribute("href", "#icon-settings");
   });
@@ -242,7 +250,7 @@ describe("App", () => {
 
     expect(screen.getByRole("complementary", { name: "Display and classification" })).toHaveTextContent("inspector body");
 
-    await user.click(screen.getByRole("link", { name: "Keys" }));
+    await openFromMenu(user, "Keys");
     await user.click(screen.getByRole("link", { name: "Connections" }));
     await user.click(screen.getByRole("button", { name: "offer inspector" }));
 
@@ -308,18 +316,7 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "sshc" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Local session active · 0.1.0");
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
-    for (const label of [
-      "Home",
-      "Connections",
-      "Config",
-      "Groups",
-      "Keys",
-      "Known Hosts",
-      "Install Key on Server",
-      "Ad hoc checks",
-      "Settings",
-      "History",
-    ]) {
+    for (const label of ["Home", "Connections", "SFTP", "Menu"]) {
       expect(screen.getByRole("link", { name: label })).toHaveAttribute("href");
     }
     expect(document.body).not.toHaveTextContent(csrfToken);
@@ -336,7 +333,7 @@ describe("App", () => {
     );
 
     expect(await screen.findByText("keys panel")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Keys" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Menu" })).toHaveAttribute("href", "/menu");
     expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute("href", "/connections");
   });
 
@@ -350,10 +347,7 @@ describe("App", () => {
       />,
     );
 
-    expect(await screen.findByRole("link", { name: "Keys" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(await screen.findByRole("link", { name: "Menu" })).toHaveAttribute("href", "/menu");
     expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
     expect(await screen.findByText("keys panel")).toBeInTheDocument();
   });
@@ -387,7 +381,7 @@ describe("App", () => {
     );
 
     expect(await screen.findByText("settings panel")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+    expect(window.location.pathname).toBe("/settings");
 
     act(() => {
       window.history.pushState(null, "", "/history");
@@ -418,7 +412,7 @@ describe("App", () => {
     expect(configScroller).not.toBeNull();
     configScroller!.scrollTop = 320;
 
-    await user.click(screen.getByRole("link", { name: "Keys" }));
+    await openFromMenu(user, "Keys");
 
     const keys = await screen.findByText("keys panel");
     const keysScroller = keys.parentElement;
@@ -462,13 +456,13 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "consume connection key" }));
     expect(screen.getByText("preferred connection key none")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("link", { name: "Keys" }));
+    await openFromMenu(user, "Keys");
     await user.click(await screen.findByRole("button", { name: "hand key to server" }));
     expect(await screen.findByText("remote keys panel id_new.pub")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/install-key");
     await user.click(screen.getByRole("button", { name: "consume public key" }));
-    await user.click(screen.getByRole("link", { name: "Keys" }));
-    await user.click(screen.getByRole("link", { name: "Install Key on Server" }));
+    await openFromMenu(user, "Keys");
+    await openFromMenu(user, "Install Key on Server");
     expect(await screen.findByText("remote keys panel no key")).toBeInTheDocument();
   });
 
@@ -507,12 +501,12 @@ describe("App", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "block connection navigation" }));
-    await user.click(screen.getByRole("link", { name: "Keys" }));
+    await user.click(screen.getByRole("link", { name: "Menu" }));
     expect(window.location.pathname).toBe("/connections/servers");
     expect(screen.getByText("connections panel")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "allow connection navigation" }));
-    await user.click(screen.getByRole("link", { name: "Keys" }));
+    await openFromMenu(user, "Keys");
     expect(window.location.pathname).toBe("/keys");
     expect(screen.getByText("keys panel")).toBeInTheDocument();
   });
@@ -534,7 +528,7 @@ describe("App", () => {
     });
 
     expect(screen.getByText("history panel")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "History" })).toHaveAttribute("aria-current", "page");
+    expect(window.location.pathname).toBe("/history");
   });
 
   it("keeps a requested section while the vault is locked", async () => {
@@ -590,7 +584,7 @@ describe("App", () => {
 
     expect(await screen.findByText("new vault fixture")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "unlock fixture" }));
-    await user.click(await screen.findByRole("link", { name: "Secrets" }));
+    await openFromMenu(user, "Secrets");
     await user.click(await screen.findByRole("button", { name: "lock fixture" }));
 
     expect(screen.getByText("existing vault fixture")).toBeInTheDocument();
@@ -643,7 +637,7 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("link", { name: "Keys" }));
+    await openFromMenu(user, "Keys");
 
     expect(screen.getByText("keys panel")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
@@ -680,11 +674,11 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("link", { name: "Known Hosts" }));
+    await openFromMenu(user, "Known Hosts");
     expect(await screen.findByText("known hosts panel")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
 
-    await user.click(screen.getByRole("link", { name: "Ad hoc checks" }));
+    await openFromMenu(user, "Ad hoc checks");
     expect(await screen.findByText("diagnostics panel")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
@@ -699,7 +693,7 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("link", { name: "Install Key on Server" }));
+    await openFromMenu(user, "Install Key on Server");
 
     expect(screen.getByText(/remote keys panel/)).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(1);
@@ -715,7 +709,7 @@ describe("App", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("link", { name: "History" }));
+    await openFromMenu(user, "History");
 
     expect(screen.getByText("history panel")).toBeInTheDocument();
   });
@@ -800,9 +794,9 @@ describe("App", () => {
     );
 
     expect(await screen.findByRole("status")).toHaveTextContent(ja["shell.active"].replace("{version}", "0.1.0"));
-    expect(screen.getByRole("link", { name: ja["section.keys"] })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("link", { name: ja["section.keys"] }));
+    await user.click(screen.getByRole("link", { name: ja["section.menu"] }));
+    const menu = await screen.findByRole("region", { name: ja["section.menu"] });
+    await user.click(within(menu).getByRole("link", { name: `${ja["section.keys"]}を開く` }));
     expect(screen.getByText("keys panel")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: ja["shell.primaryNavigation"] })).toBeInTheDocument();
   });
@@ -819,12 +813,12 @@ describe("App", () => {
       </LanguageProvider>,
     );
 
-    await user.click(await screen.findByRole("link", { name: "History" }));
+    await openFromMenu(user, "History");
     expect(screen.getByText("history panel")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Lang"), "ja");
 
-    expect(screen.getByRole("link", { name: ja["section.history"] })).toHaveAttribute("aria-current", "page");
+    expect(window.location.pathname).toBe("/history");
     expect(screen.getByText("history panel")).toBeInTheDocument();
   });
 });
