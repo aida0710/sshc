@@ -121,6 +121,36 @@ func TestActionTokenExpiresAndIsScopedToOneSession(t *testing.T) {
 	}
 }
 
+func TestExpiredSessionCannotIssueOrConsumeActions(t *testing.T) {
+	manager, _, err := NewManager(&distinctReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0).UTC()
+	manager.Now = func() time.Time { return now }
+	issuer, err := manager.IssueExpiring(time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumer, err := manager.IssueExpiring(time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := ActionRequest{Kind: ActionReachability, Target: "bastion", Evidence: "digest"}
+	token, err := manager.IssueAction(consumer.SessionID, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now = now.Add(time.Minute)
+	if _, err := manager.IssueAction(issuer.SessionID, request); !errors.Is(err, ErrUnknownSession) {
+		t.Fatalf("IssueAction for expired session = %v, want ErrUnknownSession", err)
+	}
+	if err := manager.ConsumeAction(consumer.SessionID, token, request); !errors.Is(err, ErrUnknownSession) {
+		t.Fatalf("ConsumeAction for expired session = %v, want ErrUnknownSession", err)
+	}
+}
+
 func TestActionTokenCannotBeConsumedByAnotherSession(t *testing.T) {
 	manager, sessionID := newTestManager(t)
 	const otherSessionID = "another-authenticated-session"
