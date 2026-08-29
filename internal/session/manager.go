@@ -13,6 +13,7 @@ import (
 var (
 	ErrInvalidBootstrap = errors.New("invalid bootstrap token")
 	ErrBootstrapUsed    = errors.New("bootstrap token already used")
+	ErrInvalidLifetime  = errors.New("session lifetime must be positive")
 )
 
 type Credentials struct {
@@ -30,6 +31,9 @@ type Session struct {
 	// Session 値のすべてのコピーで共有されており、それによってアクション用のヘルパー
 	// は、もう一度検索することなくここへ到達できる。
 	actions map[[sha256.Size]byte]actionRecord
+	// expiresAt がゼロ値なら、ブラウザ用の通常セッションとして期限を設けない。
+	// CLI 用セッションだけが絶対時刻の期限を持つ。
+	expiresAt time.Time
 }
 
 // MaxCSRFTokensPerSession bounds memory and the lifetime of an abandoned tab
@@ -43,8 +47,8 @@ type Manager struct {
 	bootstrapUsed bool
 	sessions      map[[sha256.Size]byte]Session
 
-	// Now は、アクショントークンの失効に使う時計。本番では nil で time.Now が使われる。
-	// テストは、マネージャが共有される前に一度だけこれを設定する。
+	// Now は、セッションとアクショントークンの失効に使う時計。本番では nil で
+	// time.Now が使われる。テストは、マネージャが共有される前に一度だけこれを設定する。
 	Now func() time.Time
 }
 
@@ -104,6 +108,27 @@ func (m *Manager) Bootstrap(presented string) (Credentials, error) {
 		return Credentials{}, ErrInvalidBootstrap
 	}
 
+	credentials, err := m.issueLocked(time.Time{})
+	if err != nil {
+		return Credentials{}, err
+	}
+
+	m.bootstrapUsed = true
+	return credentials, nil
+}
+
+// IssueExpiring は、ブラウザ用 bootstrap を消費せず、指定した期間だけ有効な
+// セッションを発行する。CLI の一回の実行にだけ通常 API の権限を貸す用途である。
+func (m *Manager) IssueExpiring(lifetime time.Duration) (Credentials, error) {
+	if lifetime <= 0 {
+		return Credentials{}, ErrInvalidLifetime
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.issueLocked(m.clock().Add(lifetime))
+}
+
+func (m *Manager) issueLocked(expiresAt time.Time) (Credentials, error) {
 	sessionID, err := token(m.random)
 	if err != nil {
 		return Credentials{}, err
@@ -113,12 +138,40 @@ func (m *Manager) Bootstrap(presented string) (Credentials, error) {
 		return Credentials{}, err
 	}
 
-	m.bootstrapUsed = true
 	m.sessions[sha256.Sum256([]byte(sessionID))] = Session{
 		csrfHashes: [][sha256.Size]byte{sha256.Sum256([]byte(csrf))},
 		actions:    make(map[[sha256.Size]byte]actionRecord),
+		expiresAt:  expiresAt,
 	}
 	return Credentials{SessionID: sessionID, CSRFToken: csrf}, nil
+}
+
+// Revoke はセッションを直ちに削除し、実際に存在したときだけ true を返す。
+func (m *Manager) Revoke(sessionID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := sha256.Sum256([]byte(sessionID))
+	if _, ok := m.sessions[key]; !ok {
+		return false
+	}
+	delete(m.sessions, key)
+	return true
+}
+
+// sessionLocked は有効なセッションを返す。呼び出し側は m.mu の書き込みロックを
+// 保持しなければならない。期限に達した CLI セッションは検索時に削除する。
+func (m *Manager) sessionLocked(sessionID string) (Session, bool) {
+	key := sha256.Sum256([]byte(sessionID))
+	sessionValue, ok := m.sessions[key]
+	if !ok {
+		return Session{}, false
+	}
+	if !sessionValue.expiresAt.IsZero() && !m.clock().Before(sessionValue.expiresAt) {
+		delete(m.sessions, key)
+		return Session{}, false
+	}
+	return sessionValue, true
 }
 
 // RenewCSRF は、有効な現在のtokenを持つpageへ新しいCSRF tokenを発行する。
@@ -131,7 +184,7 @@ func (m *Manager) RenewCSRF(sessionID, presented string) (string, bool) {
 	defer m.mu.Unlock()
 
 	key := sha256.Sum256([]byte(sessionID))
-	existing, ok := m.sessions[key]
+	existing, ok := m.sessionLocked(sessionID)
 	if !ok {
 		return "", false
 	}
@@ -158,18 +211,18 @@ func (m *Manager) RenewCSRF(sessionID, presented string) (string, bool) {
 // Session 内の actions マップは Manager のロックで保護する必要があるため、呼び出し側へ
 // Session 自体は公開しない。
 func (m *Manager) Authenticate(sessionID string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	_, ok := m.sessions[sha256.Sum256([]byte(sessionID))]
+	_, ok := m.sessionLocked(sessionID)
 	return ok
 }
 
 func (m *Manager) VerifyCSRF(sessionID, csrf string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	sessionValue, ok := m.sessions[sha256.Sum256([]byte(sessionID))]
+	sessionValue, ok := m.sessionLocked(sessionID)
 	if !ok {
 		return false
 	}
