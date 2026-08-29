@@ -16,6 +16,7 @@ import {
   selectionMarks,
   surfaceBackgroundImage,
   surfaceToken,
+  terminalFitRects,
   terminalKeyboard,
   terminalScreen,
   viewportBackground,
@@ -249,6 +250,55 @@ test("pastes the clipboard into the console with right click", async ({ page, co
   await page.keyboard.press("Enter");
 
   await expect(screen).toContainText("right-click-paste-canary", { timeout: 20_000 });
+});
+
+test("pastes a desktop keyboard shortcut into the console only once", async ({ page, context, installation }) => {
+  const inputFrames: string[] = [];
+  page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
+    inputFrames.push(typeof payload === "string" ? payload : payload.toString("utf8"));
+  }));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = page.getByRole("region", { name: /^Console for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await typeIntoConsole(page, 'rm -f "$HOME/keyboard-paste-data"');
+  await page.evaluate(() => navigator.clipboard.writeText('printf x >> "$HOME/keyboard-paste-data"; '));
+
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Control+Shift+V");
+  await page.keyboard.press("Enter");
+  const pastedFrames = inputFrames.filter((frame) => frame.includes("keyboard-paste-data"));
+  expect(pastedFrames, JSON.stringify(inputFrames)).toHaveLength(1);
+  expect(
+    pastedFrames[0]!.split("keyboard-paste-data").length - 1,
+    JSON.stringify(pastedFrames[0]),
+  ).toBe(1);
+  await typeIntoConsole(page, 'echo keyboard-paste-count=$(wc -c < "$HOME/keyboard-paste-data")');
+
+  await expect(screen).toContainText("keyboard-paste-count=1", { timeout: 20_000 });
+});
+
+test("refits terminal drawing after opening and closing scrollback search", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const console = page.getByRole("region", { name: /^Console for / });
+  await expect(console).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const before = await terminalFitRects(page);
+
+  await console.getByRole("button", { name: "Find" }).click();
+  await expect(console.getByRole("textbox", { name: "Search terminal output" })).toBeVisible();
+  const opened = await terminalFitRects(page);
+  expect(opened.root.height).toBeLessThan(before.root.height);
+  expect(opened.root.y + opened.root.height).toBeLessThanOrEqual(opened.host.y + opened.host.height + 1);
+
+  await console.getByRole("button", { name: "Close search" }).click();
+  await expect(console.getByRole("textbox", { name: "Search terminal output" })).toHaveCount(0);
+  await expect.poll(async () => (await terminalFitRects(page)).root.height).toBeGreaterThan(opened.root.height);
 });
 
 test("can turn automatic selection copy off for an already open console", async ({

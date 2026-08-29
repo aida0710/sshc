@@ -48,6 +48,18 @@ export function screenRect(page: Page): Promise<{ x: number; y: number; width: n
     return { x: box.x, y: box.y, width: box.width, height: box.height };
   });
 }
+export function terminalFitRects(page: Page): Promise<{
+  root: { x: number; y: number; width: number; height: number };
+  host: { x: number; y: number; width: number; height: number };
+}> {
+  return page.locator(ROOT).evaluate((node) => {
+    const rectangle = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height };
+    };
+    return { root: rectangle(node), host: rectangle(node.parentElement!) };
+  });
+}
 export function viewportBackground(page: Page): Promise<string> {
   return page.locator(VIEWPORT).evaluate((node) => getComputedStyle(node as HTMLElement).backgroundColor);
 }

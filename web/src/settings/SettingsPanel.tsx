@@ -8,6 +8,12 @@ import { appearanceOf, defaultTint } from "../terminal/appearance";
 import { useBackgroundImage } from "../terminal/backgroundImage";
 import { fontStack, fonts } from "../terminal/fonts";
 import { palettes } from "../terminal/palettes";
+import {
+  browserNotificationPermission,
+  requestBrowserNotificationPermission,
+  showBrowserNotification,
+  type BrowserNotificationPermission,
+} from "../terminal/agentNotifications";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PasswordField } from "../ui/PasswordField";
@@ -153,6 +159,11 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [terminalLoaded, setTerminalLoaded] = useState(false);
   const [terminalError, setTerminalError] = useState("");
   const [terminalSaved, setTerminalSaved] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<BrowserNotificationPermission>(() =>
+    browserNotificationPermission()
+  );
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -186,6 +197,34 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
       active = false;
     };
   }, [api]);
+
+  useEffect(() => {
+    const refreshPermission = () => setNotificationPermission(browserNotificationPermission());
+    window.addEventListener("focus", refreshPermission);
+    return () => window.removeEventListener("focus", refreshPermission);
+  }, []);
+
+  async function enableOrTestNotifications() {
+    setNotificationBusy(true);
+    setNotificationError("");
+    try {
+      const permission = await requestBrowserNotificationPermission();
+      setNotificationPermission(permission);
+      if (permission === "granted") {
+        const delivered = showBrowserNotification({
+          title: "sshc",
+          body: t("terminal.browserNotificationsReady"),
+          tag: "sshc-notification-permission",
+        });
+        if (!delivered) setNotificationError(t("terminal.browserNotificationsDeliveryFailed"));
+      }
+    } catch {
+      setNotificationPermission(browserNotificationPermission());
+      setNotificationError(t("terminal.browserNotificationsRequestFailed"));
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
 
   async function savePort() {
     const trimmed = port.trim();
@@ -297,6 +336,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
         </a>
         <a href="#settings-terminal" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
           {t("terminal.settingsHeading")}
+        </a>
+        <a href="#settings-notifications" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
+          {t("terminal.browserNotificationsHeading")}
         </a>
         {consoles === undefined ? null : (
           <a href="#settings-connections" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
@@ -526,6 +568,47 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
             </Button>
           </ActionArea>
           </fieldset>
+        </SettingsSection>
+
+        <SettingsSection
+          id="settings-notifications"
+          label={t("terminal.browserNotificationsHeading")}
+          icon="notification"
+        >
+          <div className="max-w-2xl">
+            <p className="text-sm leading-6 text-ink-muted">
+              {t(
+                notificationPermission === "granted"
+                  ? "terminal.browserNotificationsGranted"
+                  : notificationPermission === "denied"
+                    ? "terminal.browserNotificationsDenied"
+                    : notificationPermission === "unsupported"
+                      ? "terminal.browserNotificationsUnsupported"
+                      : "terminal.browserNotificationsDefault",
+              )}
+            </p>
+            {notificationPermission === "default" || notificationPermission === "granted" ||
+                notificationError !== "" ? (
+              <ActionArea status={notificationError === ""
+                ? (notificationPermission === "granted"
+                    ? <p role="status" className="text-sm text-live">{t("terminal.browserNotificationsEnabled")}</p>
+                    : undefined)
+                : <Notice tone="danger">{notificationError}</Notice>}
+              >
+                {notificationPermission === "default" || notificationPermission === "granted" ? (
+                  <Button
+                    kind={notificationPermission === "default" ? "primary" : "secondary"}
+                    disabled={notificationBusy}
+                    onClick={() => void enableOrTestNotifications()}
+                  >
+                    {t(notificationPermission === "granted"
+                      ? "terminal.browserNotificationsTest"
+                      : "terminal.browserNotificationsEnable")}
+                  </Button>
+                ) : null}
+              </ActionArea>
+            ) : null}
+          </div>
         </SettingsSection>
 
         {consoles === undefined ? null : (

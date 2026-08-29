@@ -1,8 +1,11 @@
 package remotesync
 
 import (
+	"errors"
+
 	"sshc/internal/envelope"
 	"sshc/internal/objectstore"
+	"sshc/internal/storage"
 )
 
 // 同期先と暗号化のエラーは、このパッケージの語彙として公開する。
@@ -27,7 +30,16 @@ var (
 	ErrCostRefused = envelope.ErrCostRefused
 	// ErrUnsupportedEnvelopeVersion は、この版で復号できない形式を報告する。
 	ErrUnsupportedEnvelopeVersion = envelope.ErrUnsupportedVersion
+	// ErrWorkspaceBusy は、別の処理が同じワークスペースを更新中であることを報告する。
+	ErrWorkspaceBusy = storage.ErrWorkspaceBusy
 )
+
+// IsLocalChange reports that files changed between the pull preview and its
+// transactional apply. HTTP callers need the distinction, but not the storage type.
+func IsLocalChange(err error) bool {
+	var conflict *storage.ConflictError
+	return errors.As(err, &conflict)
+}
 
 // NewClient は、この設定で通信する相手を組む。
 //

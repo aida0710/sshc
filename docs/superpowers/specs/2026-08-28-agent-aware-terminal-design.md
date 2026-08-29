@@ -28,7 +28,7 @@ event protocol、再接続処理、UIは三製品で共有し、製品差は小�
 - Claude Code／Codex／OpenCodeのreference検証と固定resume argv
 - same-pane／new-paneの明示resume、同一paneへの入力後の置換拒否、接続identity再検証
 - 動的title、利用者titleの固定／解除、作業名とaliasだけのcompact header
-- background時だけのattention／completed通知音と、既に許可済みの場合だけのsystem notification
+- background時だけのattention／completed通知音と、Settingsから明示的に許可するbrowser notification
 - APIからopaque referenceを除外する契約とGo／Webの回帰test
 
 連携コードはsshc本体と分離した公開リポジトリ`aida0710/sshc-agent-bridge`に実装済みである。
@@ -199,6 +199,12 @@ browser reload時は現在versionをbaselineにして古い完了音を再生し
 利用者が許可した場合だけNotifications APIを使う。browserの通知／音声permissionがない場合も
 headerとunread badgeは必ず動作する。
 
+browserのpermission promptは初回起動時に自動表示しない。Settingsの「通知を有効にする」を
+利用者が押した時だけ`Notification.requestPermission()`を呼び、許可後は確認通知を一度表示する。
+許可済みなら同じ場所からtest notificationを送信できる。拒否済みの場合は再要求を繰り返さず、
+browserのsite settingsで許可するよう案内する。非対応browserではその状態を表示し、Terminalの
+動作は変えない。
+
 初期設定は次を個別に変更できるようにする。
 
 - 入力待ち: OS通知、音、focus中も鳴らすか
@@ -304,7 +310,8 @@ payload は version 1 の小さい allowlist JSON とする。
 - cwd と表示値から control character を除き、長さを制限
 - prompt、tool input、tool output、transcript path、permission 内容、secret は送らない
 - 同一 agent session の `seq` は単調増加し、古い event は捨てる
-- event が一定時間更新されない場合は `unknown` へ落とす
+- `working`／`attention` が一定時間更新されない場合だけ `unknown` へ落とす。正常終了後の
+  `ready` は次のevent、`ended`、process終了まで維持する
 
 ### Parsing boundary
 
@@ -409,7 +416,8 @@ OpenCodeには既存backendへ`attach`する経路もあるが、これはagent 
 強いprocess／server continuityである。初期版では他製品と同じsession resumeだけを扱い、
 `opencode attach`はRemote PTY persistence側の後続検討へ分ける。
 
-event coverageが完全でない場合は誤った断定を続けず、TTL後に`unknown`へ移す。
+event coverageが完全でない場合は進行中の`working`／`attention`をTTL後に`unknown`へ移す。
+`ready`後にeventがないのは正常なので、時間経過だけでは`unknown`へ移さない。
 `ended`は公開stateではなく、現在agentを消して最後の有効なsession identityをresume
 candidateへ移すlifecycle eventである。
 
@@ -602,7 +610,8 @@ SSH channelに束縛したauthenticated side channelまたはremote helperを別
 
 - Integrationなし: connection headerだけを表示し、通常Terminalとして動く
 - Integrationが古い: unknown versionを無視し、Terminal outputは壊さない
-- Agent eventが止まる: agent stateを`unknown`にする。sessionは閉じない
+- Agent eventが`working`／`attention`で止まる: TTL後に`unknown`にする。`ready`は維持し、
+  sessionは閉じない
 - OSC parser failure: 対象messageだけを捨て、PTY streamを継続する
 - agent executableなし: resume processの終了を通常のterminal errorとして表示する
 - session not found: agentのmessageをそのままterminalへ表示し、候補を消費してshell再接続を提示する
@@ -618,7 +627,7 @@ SSH channelに束縛したauthenticated side channelまたはremote helperを別
 - 対象OSC以外のbyte-for-byte preservation
 - control payloadがring、stream、diagnosticへ到達しないこと
 - process generationを跨ぐ遅延eventの拒否
-- sequence逆転とTTLのstate transition
+- sequence逆転と、`working`／`attention`だけに適用するTTLのstate transition
 - `working`時間、signal version、attention cooldownのtransition table
 - resume candidateのconnection／host key binding
 - user input後のsame-pane replacement拒否

@@ -231,6 +231,17 @@ export const ja = {
   "terminal.agentUnknown": "状態不明",
   "terminal.agentNotificationAttention": "{subject}が入力を待っています",
   "terminal.agentNotificationCompleted": "{subject}が完了しました",
+  "terminal.browserNotificationsHeading": "通知",
+  "terminal.browserNotificationsDefault": "このタブがバックグラウンドにあるとき、Agentの完了や入力待ちをsshcから通知できます。",
+  "terminal.browserNotificationsGranted": "ブラウザ通知は許可されています。このタブがバックグラウンドにあるときだけ通知します。",
+  "terminal.browserNotificationsDenied": "sshcの通知がブロックされています。Agent通知を使うには、ブラウザのサイト設定で通知を許可してください。",
+  "terminal.browserNotificationsUnsupported": "このブラウザはWeb通知に対応していません。",
+  "terminal.browserNotificationsEnable": "通知を有効にする",
+  "terminal.browserNotificationsTest": "テスト通知を送る",
+  "terminal.browserNotificationsEnabled": "通知は有効です",
+  "terminal.browserNotificationsReady": "Agent通知を利用できます。",
+  "terminal.browserNotificationsRequestFailed": "通知の許可をリクエストできませんでした。",
+  "terminal.browserNotificationsDeliveryFailed": "通知は許可されていますが、ブラウザで表示できませんでした。",
   "terminal.agentResumeAvailable": "{agent} のセッションを再開できます。",
   "terminal.agentResumeSamePane": "このpaneで再開",
   "terminal.agentResumeNewPane": "新しいpaneで再開",
@@ -305,9 +316,6 @@ export const ja = {
   "terminal.searchPrevious": "前の一致",
   "terminal.searchNext": "次の一致",
   "terminal.searchClose": "検索を閉じる",
-  "terminal.completions": "コマンドとリモートパスの候補",
-  "terminal.commandSuggestion": "コマンド",
-  "terminal.pathSuggestion": "パス",
   "terminal.settingsHeading": "ターミナル",
   "terminal.settingsSaved": "保存しました。クリップボード設定はすぐに反映され、その他はこれから開くターミナルが使います。",
   "terminal.settingsLoading": "ターミナル設定を読み込んでいます…",
@@ -817,6 +825,12 @@ export const ja = {
   "sync.wrongMaster": "このマシンのマスターパスワードと違います。",
   "sync.unreachable":
     "そのバケットは応答しませんでした。何も保存していません。エンドポイント、バケット名、キーを確認してください。",
+  "sync.failed":
+    "同期できませんでした。何も上書きしていません。接続を確認してから、もう一度お試しください。",
+  "sync.localChanged":
+    "確認後にこのマシンの設定が変更されました。上書きせずに停止しました。もう一度「変更を確認」からやり直してください。",
+  "sync.workspaceBusy":
+    "別の処理がこのマシンの設定を更新しています。完了してから、もう一度お試しください。",
   "sync.endpointPath":
     "エンドポイントはアカウントのアドレスだけです。バケット名やパスは含めません。バケット名は下の欄に入れてください。",
   "sync.auto": "自動同期",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -19,9 +19,8 @@ import { cellHeight } from "./metrics";
 import { newTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
-import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
-import { sftpApi } from "../sftp/api";
-import { absolutePathDraft, findBufferMatches, frequentCommandSuggestions, updateCommandDraft } from "./productivity";
+import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
+import { findBufferMatches } from "./search";
 import { terminalProblemKey } from "./sessions";
 import { agentName, agentStatusLabel, terminalDisplayTitle, terminalSubtitle } from "./agentPresentation";
 
@@ -49,8 +48,6 @@ type Link =
 const backoff = [1, 2, 4, 8, 15];
 
 const settled = 10_000;
-
-type Completion = { kind: "command" | "path"; value: string; prefix: string };
 
 export function TerminalView({
   session,
@@ -84,24 +81,12 @@ export function TerminalView({
   const searchQueryRef = useRef("");
   searchQueryRef.current = searchQuery;
   const searchStep = useRef<(direction: 1 | -1) => void>(() => {});
-  const [commandDraft, setCommandDraft] = useState("");
-  const commandDraftRef = useRef("");
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [pathSuggestions, setPathSuggestions] = useState<string[]>([]);
   const control = useRef<{ now: () => void; stop: () => void }>({ now: () => {}, stop: () => {} });
 
   const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
   const armed = useRef<Modifiers>(modifiers);
   armed.current = modifiers;
   const send = useRef<(label: string) => void>(() => {});
-  const acceptCompletion = useRef<(completion: Completion) => void>(() => {});
-  const commandSuggestions = useMemo(() => frequentCommandSuggestions(commandHistory, commandDraft), [commandDraft, commandHistory]);
-  const completionItems = useMemo<Completion[]>(() => [
-    ...commandSuggestions.map((value) => ({ kind: "command" as const, value, prefix: commandDraft.trimStart() })),
-    ...pathSuggestions.map((value) => ({ kind: "path" as const, value, prefix: absolutePathDraft(commandDraft)?.token ?? "" })),
-  ].slice(0, 6), [commandDraft, commandSuggestions, pathSuggestions]);
-  const completionItemsRef = useRef<Completion[]>([]);
-  completionItemsRef.current = completionItems;
 
   async function reconnectExitedSession() {
     if (onReconnect === undefined || manualReconnectBusy) return;
@@ -132,26 +117,6 @@ export function TerminalView({
       setManualReconnectBusy(false);
     }
   }
-
-  useEffect(() => {
-    const parsed = absolutePathDraft(commandDraft);
-    if (session.alias === undefined || parsed === null) {
-      setPathSuggestions([]);
-      return;
-    }
-    let active = true;
-    const timer = window.setTimeout(() => {
-      void sftpApi.list(session.alias ?? "", parsed.parent).then(({ entries }) => {
-        if (!active) return;
-        const base = parsed.parent === "/" ? "/" : `${parsed.parent}/`;
-        setPathSuggestions(entries
-          .filter((entry) => entry.name.startsWith(parsed.basename))
-          .slice(0, 5)
-          .map((entry) => `${base}${entry.name}${entry.type === "directory" ? "/" : ""}`));
-      }).catch(() => { if (active) setPathSuggestions([]); });
-    }, 180);
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [commandDraft, session.alias]);
 
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
@@ -201,18 +166,22 @@ export function TerminalView({
       stream.resize(view.cols, view.rows);
     };
 
-    const measure = () => {
+    const fitAndSync = () => {
       if (container.clientWidth === 0 || container.clientHeight === 0) return;
-      if (selectionHeldIn(container)) return;
       try {
         fit.fit();
       } catch {
         return;
       }
       syncSize();
+      view.refresh(0, Math.max(0, view.rows - 1));
+    };
+    const measure = () => {
+      if (selectionHeldIn(container)) return;
+      fitAndSync();
     };
     measure();
-    refit.current = measure;
+    refit.current = fitAndSync;
 
     const scroll = newTouchScroll(view, () => cellHeight(view, container));
     const single = (event: TouchEvent): Touch | null =>
@@ -235,41 +204,18 @@ export function TerminalView({
 
     const detachOverlay = coarse ? attachSelectionOverlay(container, view) : () => {};
 
-    const rememberInput = (data: string) => {
-      const next = updateCommandDraft(commandDraftRef.current, data);
-      commandDraftRef.current = next.draft;
-      setCommandDraft(next.draft);
-      if (next.completed.length > 0) setCommandHistory((current) => [...current, ...next.completed].slice(-200));
-    };
     const typed = (data: string) => {
       const { ctrl, alt } = armed.current;
       const encoded = applyModifiers(data, ctrl, alt);
       stream?.send(encoded);
-      rememberInput(encoded);
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
     send.current = (label: string) => {
       const { ctrl, alt } = armed.current;
       const encoded = encodeKey(label, ctrl, alt);
       stream?.send(encoded);
-      rememberInput(encoded);
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
-    acceptCompletion.current = (completion) => {
-      if (completion.prefix === "" || !completion.value.startsWith(completion.prefix)) return;
-      const suffix = completion.value.slice(completion.prefix.length);
-      stream?.send(suffix);
-      rememberInput(suffix);
-      view.focus();
-    };
-    view.attachCustomKeyEventHandler((event) => {
-      if (event.type !== "keydown" || event.key !== "Tab") return true;
-      const suggestion = completionItemsRef.current[0];
-      if (suggestion === undefined) return true;
-      event.preventDefault();
-      acceptCompletion.current(suggestion);
-      return false;
-    });
     view.onData(typed);
 
     let searchIndex = -1;
@@ -359,6 +305,7 @@ export function TerminalView({
     const detachClipboard = attachTerminalClipboard({
       container,
       terminal: view,
+      paste: (text) => stream?.send(prepareTerminalPaste(text, view.modes.bracketedPasteMode)),
       clipboard,
       coarsePointer: () => coarse,
       settings: () => clipboardSettings.current,
@@ -380,11 +327,15 @@ export function TerminalView({
       stream?.close();
       view.dispose();
       terminal.current = null;
-      acceptCompletion.current = () => {};
       searchStep.current = () => {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, api]);
+
+  useLayoutEffect(() => {
+    const frame = window.requestAnimationFrame(() => refit.current?.());
+    return () => window.cancelAnimationFrame(frame);
+  }, [searchOpen]);
 
   useEffect(() => {
     if (terminal.current === null || host.current === null) return;
@@ -552,7 +503,6 @@ export function TerminalView({
         }
         className="relative min-h-0 flex-1 bg-term-bg p-2"
       />
-      {completionItems.length === 0 ? null : <div role="listbox" aria-label={t("terminal.completions")} className="flex shrink-0 gap-1 overflow-x-auto border-t border-line bg-toolbar px-2 py-1">{completionItems.map((item) => <button key={`${item.kind}:${item.value}`} type="button" role="option" aria-selected="false" title={item.value} className="max-w-64 truncate rounded bg-select-fill px-2 py-1 font-mono text-xs text-ink hover:bg-accent/20" onClick={() => acceptCompletion.current(item)}><span className="mr-1 text-ink-muted">{item.kind === "command" ? t("terminal.commandSuggestion") : t("terminal.pathSuggestion")}</span>{item.value}</button>)}</div>}
       <KeyBar
         modifiers={modifiers}
         onToggle={(name) => setModifiers((current) => ({ ...current, [name]: !current[name] }))}

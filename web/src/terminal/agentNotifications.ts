@@ -9,6 +9,45 @@ export type AgentNotification = {
   body: string;
 };
 
+export type BrowserNotificationPermission = NotificationPermission | "unsupported";
+
+type NotificationWindow = Window & { Notification?: typeof Notification };
+
+function notificationAPI(target: Window): typeof Notification | null {
+  const candidate = (target as NotificationWindow).Notification;
+  return typeof candidate === "function" && typeof candidate.requestPermission === "function"
+    ? candidate
+    : null;
+}
+
+export function browserNotificationPermission(target: Window = window): BrowserNotificationPermission {
+  return notificationAPI(target)?.permission ?? "unsupported";
+}
+
+export async function requestBrowserNotificationPermission(
+  target: Window = window,
+): Promise<BrowserNotificationPermission> {
+  const api = notificationAPI(target);
+  if (api === null) return "unsupported";
+  if (api.permission !== "default") return api.permission;
+  return api.requestPermission();
+}
+
+export function showBrowserNotification(
+  notification: Pick<AgentNotification, "title" | "body"> & { tag: string },
+  target: Window = window,
+): boolean {
+  const api = notificationAPI(target);
+  if (api === null || api.permission !== "granted") return false;
+  try {
+    new api(notification.title, { body: notification.body, tag: notification.tag });
+    return true;
+  } catch {
+    // Native wrappers and browsers can revoke delivery between checks.
+    return false;
+  }
+}
+
 export function nextAgentNotification(
   t: Translate,
   session: TerminalSession,
@@ -66,13 +105,11 @@ export function useAgentNotifications(sessions: TerminalSession[], t: Translate)
       const notification = nextAgentNotification(t, session, previous);
       if (notification === null) continue;
       chime(notification.kind);
-      if ("Notification" in window && Notification.permission === "granted") {
-        try {
-          new Notification(notification.title, { body: notification.body, tag: `sshc-agent-${session.id}` });
-        } catch {
-          // Native wrappers and browsers can revoke delivery between polls.
-        }
-      }
+      showBrowserNotification({
+        title: notification.title,
+        body: notification.body,
+        tag: `sshc-agent-${session.id}`,
+      });
     }
   }, [sessions, t]);
 }

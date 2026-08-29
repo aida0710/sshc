@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"sshc/internal/api"
 	"sshc/internal/objectstore"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
@@ -428,6 +430,71 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	if statusBody.LastOperation == nil || statusBody.LastOperation.Kind != remotesync.OperationApply ||
 		statusBody.LastOperation.DownloadedBytes != int64(bucket.liveBytes()) || statusBody.LastOperation.Written != 1 {
 		t.Errorf("applied operation = %+v", statusBody.LastOperation)
+	}
+}
+
+func TestPullCanPreviewAndApplyRemoteWinsForAConflictingWorkspace(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host remote\n"})
+	if _, err := producer.Push(context.Background(), measuredSyncKey, "Remote workspace"); err != nil {
+		t.Fatal(err)
+	}
+	engine, _, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host local\n"})
+
+	conflicted := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"apply":false}`)
+	if conflicted.Code != http.StatusOK || !strings.Contains(conflicted.Body.String(), `"path":"config"`) {
+		t.Fatalf("conflict preview = %d: %s", conflicted.Code, conflicted.Body.String())
+	}
+
+	preview := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"apply":false,"resolve":"remote"}`)
+	if preview.Code != http.StatusOK {
+		t.Fatalf("remote-wins preview = %d: %s", preview.Code, preview.Body.String())
+	}
+	var generation struct {
+		Conflicts      []api.SyncConflict `json:"conflicts"`
+		Written        []string           `json:"written"`
+		RemoteETag     string             `json:"remoteETag"`
+		RemoteRevision string             `json:"remoteRevision"`
+	}
+	if err := json.Unmarshal(preview.Body.Bytes(), &generation); err != nil {
+		t.Fatal(err)
+	}
+	if len(generation.Conflicts) != 0 || !slices.Contains(generation.Written, "config") {
+		t.Fatalf("remote-wins preview = %+v", generation)
+	}
+
+	request, err := json.Marshal(map[string]any{
+		"apply": true, "resolve": "remote",
+		"expectedETag": generation.RemoteETag, "expectedRevision": generation.RemoteRevision,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", string(request))
+	if applied.Code != http.StatusOK || !strings.Contains(applied.Body.String(), `"applied":true`) {
+		t.Fatalf("remote-wins apply = %d: %s", applied.Code, applied.Body.String())
+	}
+}
+
+func TestSyncProblemClassifiesLocalWorkspaceRaces(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		code string
+	}{
+		{name: "changed", err: &storage.ConflictError{Path: "config"}, code: "sync_local_changed"},
+		{name: "busy", err: storage.ErrWorkspaceBusy, code: "sync_workspace_busy"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine := echo.New()
+			engine.GET("/problem", func(c *echo.Context) error { return syncProblem(c, test.err) })
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/problem", nil))
+			if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"code":"`+test.code+`"`) {
+				t.Fatalf("problem = %d: %s", recorder.Code, recorder.Body.String())
+			}
+		})
 	}
 }
 
