@@ -289,6 +289,13 @@ func NewCLIConnection(
 	return CLIConnection{parts: parts}, nil
 }
 
+// Resolve は Open と Run が接続に使う target を、接続を始めずに返す。
+// 設定の診断用に別の解決経路を作ると、表示と実接続が分岐するため、同じ parts.target
+// だけを公開する。
+func (c CLIConnection) Resolve(alias string) (sshclient.Target, error) {
+	return c.parts.target(alias)
+}
+
 // Open は、この alias のセッションをひとつ開く。
 func (c CLIConnection) Open(ctx context.Context, alias string, size terminal.Size) (terminal.Process, error) {
 	target, err := c.parts.target(alias)

@@ -102,7 +102,7 @@ func (m *Manager) IssueAction(sessionID string, request ActionRequest) (string, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	sessionValue, ok := m.sessions[sha256.Sum256([]byte(sessionID))]
+	sessionValue, ok := m.sessionLocked(sessionID)
 	if !ok {
 		return "", ErrUnknownSession
 	}
@@ -137,7 +137,7 @@ func (m *Manager) ConsumeAction(sessionID, presented string, request ActionReque
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	sessionValue, ok := m.sessions[sha256.Sum256([]byte(sessionID))]
+	sessionValue, ok := m.sessionLocked(sessionID)
 	if !ok {
 		return ErrUnknownSession
 	}

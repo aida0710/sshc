@@ -42,7 +42,37 @@ say "$version_line"
 	exit 1
 }
 
-# ② engine が停止中の場合に復旧手順が表示されることを確認する。
+# 実環境を変更せず、info と engine が同じ一時 HOME だけを見るようにする。
+home=$(mktemp -d)
+export HOME="$home"
+mkdir -p "$home/.ssh"
+cat >"$home/.ssh/config" <<'EOF'
+Host smoke-info
+  HostName 192.0.2.10
+  User smoke-user
+  Port 22
+EOF
+enginePID=""
+cleanup() {
+	if [ -n "$enginePID" ]; then
+		kill "$enginePID" 2>/dev/null || true
+	fi
+	rm -rf -- "$home"
+}
+trap cleanup EXIT
+
+# ② info が engine なしで実効接続先を安定した JSON として返すことを確認する。
+info=$("$binary" info smoke-info --json)
+printf '%s\n' "$info" | jq -e '
+  .schemaVersion == 1 and
+  .alias == "smoke-info" and
+  .destination.hostName == "192.0.2.10" and
+  .destination.user == "smoke-user" and
+  .destination.port == "22"
+' >/dev/null
+say "info resolved smoke-info without an engine"
+
+# ③ engine が停止中の場合に復旧手順が表示されることを確認する。
 set +e
 absent=$("$binary" status 2>&1)
 absent_code=$?
@@ -53,14 +83,9 @@ case "$absent" in
 	*) echo "the no-engine message does not say what to do: $absent" >&2; exit 1 ;;
 esac
 
-# ③ 起動、応答、正常終了を確認する。
-home=$(mktemp -d)
-export HOME="$home"
-mkdir -p "$home/.ssh"
-
+# ④ 起動、応答、正常終了を確認する。
 "$binary" engine >"$home/engine.log" 2>&1 &
 enginePID=$!
-trap 'kill "$enginePID" 2>/dev/null || true; rm -rf "$home"' EXIT
 
 handoff="$home/.ssh/sshc/cli"
 for _ in $(seq 1 100); do
@@ -76,7 +101,7 @@ case "$status" in
 	*) echo "status did not report a running engine: $status" >&2; exit 1 ;;
 esac
 
-# ④ 埋め込み UI を HTTP 経由で取得できることを確認する。
+# ⑤ 埋め込み UI を HTTP 経由で取得できることを確認する。
 entrance=$("$binary" open)
 page=$(curl --silent --show-error --fail --max-time 10 "$entrance")
 case "$page" in
@@ -86,4 +111,5 @@ esac
 
 kill "$enginePID"
 wait "$enginePID" 2>/dev/null || true
+enginePID=""
 echo "cli-smoke: ok"

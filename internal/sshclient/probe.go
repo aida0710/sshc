@@ -73,7 +73,7 @@ func (d Dialer) probeChain(
 ) (*ssh.Client, []ssh.Conn, error) {
 	var through *ssh.Client
 	var opened []ssh.Conn
-	for _, hop := range target.Jump {
+	for _, hop := range target.JumpRoute() {
 		client, err := d.connectOne(ctx, hop, through, noPrompt, nil, 1, 1)
 		if err != nil {
 			for _, conn := range opened {
