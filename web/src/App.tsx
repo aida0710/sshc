@@ -1006,7 +1006,7 @@ function PaddedSection({ section, navigation, handoff, shell, declared, sftpTarg
         groups={navGroups.slice(1)}
         sectionIcons={sectionIcons}
         sectionLabels={sectionLabels}
-        onNavigate={onNavigate}
+        onNavigate={(target) => onNavigateLocation(sectionPath(target), { replace: true })}
       />
     );
   }
