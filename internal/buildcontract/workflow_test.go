@@ -464,7 +464,14 @@ func validateSeparatedRunShells(id string, job workflowJob) []string {
 				problems = append(problems, fmt.Sprintf("%s step %q must use bash for its Unix-only command", id, step.Name))
 			}
 		case "${{ runner.os == 'Windows' }}":
-			if step.Shell != "pwsh" {
+			// The public installer explicitly supports the inbox Windows PowerShell
+			// 5.1. Its syntax check must use that executable; every build/test step
+			// continues to use the pinned pwsh runtime on the runner.
+			if step.Name == "Windows PowerShell installer syntax" {
+				if step.Shell != "powershell" {
+					problems = append(problems, fmt.Sprintf("%s step %q must use Windows PowerShell 5.1", id, step.Name))
+				}
+			} else if step.Shell != "pwsh" {
 				problems = append(problems, fmt.Sprintf("%s step %q must use pwsh for its Windows-only command", id, step.Name))
 			}
 		default:

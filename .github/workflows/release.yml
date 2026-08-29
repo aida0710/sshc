@@ -221,6 +221,12 @@ jobs:
       - name: Smoke the built CLI
         run: ./scripts/ci/cli-smoke.ps1 -DistDir dist -ExpectedVersion "$env:RELEASE_TAG"
 
+      # 公開するinstall.ps1そのものに、実際の成果物の選択、checksum検証、
+      # 安全な置換を通させる。テスト中はPATHを変更しない。
+      - name: Smoke the Windows installer
+        shell: powershell
+        run: ./scripts/ci/install-windows-smoke.ps1 -DistDir dist -ExpectedVersion "$env:RELEASE_TAG"
+
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: release-windows
@@ -376,17 +382,19 @@ jobs:
             echo "expected exactly 7 release artifacts, found $count" >&2
             exit 1
           }
+          cp install.ps1 dist/install.ps1
           ls -la dist
 
       # 手動ダウンロード用の SHA-256 チェックサムを生成する。
       - name: Package
-        run: cd dist && sha256sum sshc-* > checksums.txt
+        run: cd dist && sha256sum sshc-* install.ps1 > checksums.txt
 
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist/sshc-*
+            dist/install.ps1
             dist/checksums.txt
 
       # Immutable Releasesでは公開後にassetを追加できない。先にdraftへ全assetを置き、
@@ -449,7 +457,7 @@ jobs:
             $prerelease_args \
             --title "$RELEASE_TAG" \
             --notes-file "$notes_file" \
-            dist/sshc-* dist/checksums.txt
+            dist/sshc-* dist/install.ps1 dist/checksums.txt
           matches=$(matching_releases)
           [ "$(printf '%s' "$matches" | jq 'length')" -eq 1 ] || {
             echo "the release draft for $RELEASE_TAG is not unique" >&2
@@ -463,6 +471,7 @@ jobs:
             .prerelease == $expected_prerelease and
             ([.assets[].name] | sort) == ([
               "checksums.txt",
+              "install.ps1",
               ("sshc-android-" + $tag + ".apk"),
               "sshc-darwin-amd64",
               "sshc-darwin-arm64",
