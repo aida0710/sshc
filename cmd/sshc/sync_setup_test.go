@@ -260,6 +260,27 @@ func TestSyncSetupPromptsWithoutEchoingSecrets(t *testing.T) {
 	}
 }
 
+func TestSyncSetupAcceptsWindowsCRLFWithoutSkippingPrompts(t *testing.T) {
+	script, server, stateDir := newSyncSetupServer(t, api.Existing)
+	defer server.Close()
+	visible := strings.ReplaceAll(standardVisibleSetup(), "\n", "\r\n")
+	result := runSetupFixture(t, stateDir, server.Client(), visible,
+		&setupPasswordTerminal{answers: standardHiddenSetup(true)})
+	if result.code != 0 || len(script.checkBodies) != 1 {
+		t.Fatalf("code=%d checks=%d stdout=%q prompt=%q",
+			result.code, len(script.checkBodies), result.stdout, result.prompt)
+	}
+	var check api.SyncSetupCheckRequest
+	if err := json.Unmarshal(script.checkBodies[0], &check); err != nil {
+		t.Fatal(err)
+	}
+	if check.Endpoint != "https://objects.example.test" || check.Bucket != "ssh-config" ||
+		check.Path == nil || *check.Path != "team/hosts" || check.Region == nil ||
+		*check.Region != "ap-northeast-1" {
+		t.Fatalf("CRLF input shifted setup answers: %+v", check)
+	}
+}
+
 func TestSyncSetupChecksBeforeSavingExistingTarget(t *testing.T) {
 	script, server, stateDir := newSyncSetupServer(t, api.Existing)
 	defer server.Close()

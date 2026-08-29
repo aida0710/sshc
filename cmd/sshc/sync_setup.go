@@ -219,12 +219,16 @@ func readBoundedVisibleLine(ctx context.Context, input *os.File) ([]byte, error)
 		count, err := input.Read(one[:])
 		if count > 0 {
 			switch one[0] {
-			case '\n', '\r':
+			case '\n':
 				if !utf8.Valid(line) {
 					zeroBytes(line)
 					return nil, errSyncSetupInput
 				}
 				return line, nil
+			case '\r':
+				// Canonical Unix terminals normally deliver Enter as LF, while
+				// Windows consoles can deliver CRLF. Ignore CR so its following
+				// LF is consumed by this prompt instead of the next one.
 			case 0x03:
 				zeroBytes(line)
 				return nil, context.Canceled

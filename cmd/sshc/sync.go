@@ -390,7 +390,7 @@ func writeSyncRows(out io.Writer, rows [][2]string) {
 		}
 	}
 	for _, row := range rows {
-		fmt.Fprintf(out, "%-*s  %s\n", width, row[0], row[1])
+		fmt.Fprintf(out, "%-*s  %s\n", width, safeTerminalCell(row[0]), safeTerminalCell(row[1]))
 	}
 }
 
