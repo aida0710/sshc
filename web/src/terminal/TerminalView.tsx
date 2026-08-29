@@ -569,14 +569,15 @@ export function TerminalView({
               setQuickCommandsOpen(true);
             }}
             onCopyContext={() => copyContext.current()}
-            onToggleOsc52={() => {
-              const previous = osc52Enabled;
+            onToggleOsc52={async () => {
               const next = !osc52Enabled;
-              setOsc52Enabled(next);
-              setTerminalNotice(t(next ? "terminal.osc52Enabled" : "terminal.osc52Disabled"));
-              void Promise.resolve()
-                .then(() => onOsc52Change?.(next))
-                .catch(() => setOsc52Enabled(previous));
+              try {
+                await onOsc52Change?.(next);
+                setOsc52Enabled(next);
+                setTerminalNotice(t(next ? "terminal.osc52Enabled" : "terminal.osc52Disabled"));
+              } catch {
+                setTerminalNotice(t("terminal.settingsSaveFailed"));
+              }
             }}
             onClose={() => setOverflowOpen(false)}
           />
