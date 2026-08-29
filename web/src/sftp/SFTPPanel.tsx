@@ -84,7 +84,15 @@ async function droppedFiles(transfer: DataTransfer): Promise<{ files: LocalTrans
   }), directories: [] };
 }
 
-export function SFTPPanel({ aliases, target = null }: { aliases: string[]; target?: SFTPTarget | null }) {
+export function SFTPPanel({
+  aliases,
+  target = null,
+  onTargetHandled = () => undefined,
+}: {
+  aliases: string[];
+  target?: SFTPTarget | null;
+  onTargetHandled?: (request: number) => void;
+}) {
   const t = useTranslate();
   const [alias, setAlias] = useState("");
   const [path, setPath] = useState("/");
@@ -161,6 +169,7 @@ export function SFTPPanel({ aliases, target = null }: { aliases: string[]; targe
   useEffect(() => {
     if (target === null || target.request === handledTarget.current) return;
     handledTarget.current = target.request;
+    onTargetHandled(target.request);
     if (!aliases.includes(target.alias) || !target.path.startsWith("/") || target.path.length > 4096 || /[\x00\r\n]/u.test(target.path)) {
       setProblem(t("sftp.linkTargetInvalid"));
       return;
@@ -169,8 +178,12 @@ export function SFTPPanel({ aliases, target = null }: { aliases: string[]; targe
     setAlias(target.alias);
     const directory = parentOf(target.path);
     void load(directory, target.alias).then(async (loaded) => {
-      if (loaded === null || target.action === "browse") return;
+      if (loaded === null) return;
       const entry = loaded.find((candidate) => candidate.path === target.path);
+      if (target.action === "browse") {
+        if (entry?.type === "directory") await load(entry.path, target.alias);
+        return;
+      }
       if (entry === undefined) {
         setProblem(t("sftp.linkTargetNotFound"));
         return;

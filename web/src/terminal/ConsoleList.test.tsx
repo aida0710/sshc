@@ -46,6 +46,16 @@ describe("ConsoleList", () => {
     expect(rows[2]).toHaveTextContent("exited 255 · db-primary");
   });
 
+  it("shows unread Agent activity without changing the session order", () => {
+    renderList({ unreadBySession: new Map([["b", "completed"], ["a", "attention"]]) });
+
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("bastion");
+    expect(rows[1]).toHaveTextContent("zsh");
+    expect(screen.getByLabelText("Unread: input needed")).toBeVisible();
+    expect(screen.getByLabelText("Unread: completed")).toBeVisible();
+  });
+
   it("names the ProxyJump hop and authentication phase while connecting", () => {
     renderList({ sessions: [{
       ...live,

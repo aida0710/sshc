@@ -5,10 +5,13 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
 import { Icon } from "../ui/icons";
+import type { TerminalSession } from "../api/integrations";
+import { agentStatusLabel, terminalDisplayTitle } from "../terminal/agentPresentation";
+import type { AgentUnreadBySession } from "../terminal/agentNotifications";
 
 type PaletteItem = {
   id: string;
-  kind: "host" | "file" | "snippet" | "setting";
+  kind: "session" | "host" | "file" | "snippet" | "setting";
   label: string;
   detail: string;
   search: string;
@@ -32,6 +35,8 @@ export function CommandPalette({
   open,
   hosts,
   files,
+  sessions,
+  unreadBySession,
   sectionLabels,
   onClose,
   onConnect,
@@ -39,10 +44,13 @@ export function CommandPalette({
   onOpenFile,
   onNavigate,
   onOpenSnippet,
+  onOpenSession,
 }: {
   open: boolean;
   hosts: HostEntry[];
   files: FileNode[];
+  sessions: TerminalSession[];
+  unreadBySession: AgentUnreadBySession;
   sectionLabels: Record<Section, MessageKey>;
   onClose: () => void;
   onConnect: (alias: string) => Promise<void> | void;
@@ -50,6 +58,7 @@ export function CommandPalette({
   onOpenFile: (path: string) => void;
   onNavigate: (section: Section) => void;
   onOpenSnippet: (id: string) => void;
+  onOpenSession: (id: string) => void;
 }) {
   const t = useTranslate();
   const input = useRef<HTMLInputElement>(null);
@@ -90,6 +99,19 @@ export function CommandPalette({
   }, [onClose, open]);
 
   const items = useMemo<PaletteItem[]>(() => [
+    ...sessions.filter((session) => session.exited === undefined).map((session) => {
+      const unread = unreadBySession.get(session.id);
+      const status = session.agent === undefined ? t("terminal.connected") : agentStatusLabel(t, session);
+      const destination = session.kind === "ssh" ? session.alias ?? "" : t("terminal.localhost");
+      return {
+        id: `session:${session.id}`,
+        kind: "session" as const,
+        label: terminalDisplayTitle(session),
+        detail: t("terminal.rowDetail", { status, destination }),
+        search: `session terminal console pane セッション ターミナル ${unread === "attention" ? "@attention attention input 入力待ち" : ""} ${unread === "completed" ? "@completed completed unread 完了 未読" : ""}`,
+        action: () => onOpenSession(session.id),
+      };
+    }),
     ...hosts.map((host) => ({
       id: `host:${host.identity.path}:${host.identity.alias}`,
       kind: "host" as const,
@@ -123,7 +145,7 @@ export function CommandPalette({
       search: `${section} settings setting 設定`,
       action: () => onNavigate(section),
     })),
-  ], [files, hosts, onConnect, onNavigate, onOpenFile, onOpenSnippet, sectionLabels, snippets, t]);
+  ], [files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessions, snippets, t, unreadBySession]);
 
   const visible = useMemo(() => items.filter((item) => matches(item, query)).slice(0, 40), [items, query]);
 

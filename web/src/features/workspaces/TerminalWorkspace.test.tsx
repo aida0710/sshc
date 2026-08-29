@@ -145,6 +145,40 @@ describe("TerminalWorkspace pane movement", () => {
     expect(active).toHaveBeenCalledWith(secondary.id);
   });
 
+  it("waits for the engine session listing before reconciling the live snapshot", async () => {
+    window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
+      version: 1,
+      root: {
+        split: {
+          direction: "horizontal",
+          ratio: 50,
+          first: { pane: { id: "pane-primary", sessionId: primary.id } },
+          second: { pane: { id: "pane-secondary", sessionId: secondary.id } },
+        },
+      },
+      focusedPaneId: "pane-secondary",
+      focusModePaneId: null,
+    }));
+    const active = vi.fn();
+    const properties = {
+      sessions: [primary, secondary],
+      activeSessionId: primary.id,
+      onActive: active,
+      onOpenAlias: vi.fn(),
+      onOpenShell: vi.fn(),
+      renderTerminal: (session: TerminalSession) => <div>{session.title}</div>,
+    };
+
+    const { container, rerender } = render(<TerminalWorkspace {...properties} sessionsLoaded={false} />);
+    expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(0);
+    expect(screen.getByText("Primary terminal")).toBeVisible();
+    expect(window.sessionStorage.getItem(liveWorkspaceStorageKey)).not.toBeNull();
+
+    rerender(<TerminalWorkspace {...properties} sessionsLoaded />);
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+    expect(active).toHaveBeenCalledWith(secondary.id);
+  });
+
   it("restores Focus Mode for a surviving pane", async () => {
     window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
       version: 1,

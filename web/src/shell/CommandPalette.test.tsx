@@ -38,6 +38,8 @@ function renderPalette(overrides: Partial<ComponentProps<typeof CommandPalette>>
       { identity: { path: "config", alias: "nas" }, file: { path: "config", absolute: "/home/tester/.ssh/config" }, line: 1, patterns: ["nas"], editable: true },
     ],
     files: [{ file: { path: "config", absolute: "/home/tester/.ssh/config" }, editable: true, loads: 1 }],
+    sessions: [],
+    unreadBySession: new Map(),
     sectionLabels: labels,
     onClose: vi.fn(),
     onConnect: vi.fn(),
@@ -45,6 +47,7 @@ function renderPalette(overrides: Partial<ComponentProps<typeof CommandPalette>>
     onOpenFile: vi.fn(),
     onNavigate: vi.fn(),
     onOpenSnippet: vi.fn(),
+    onOpenSession: vi.fn(),
     ...overrides,
   };
   render(<LanguageProvider><CommandPalette {...props} /></LanguageProvider>);
@@ -70,7 +73,7 @@ describe("CommandPalette", () => {
     const user = userEvent.setup();
     renderPalette();
 
-    const search = screen.getByRole("searchbox", { name: "Search hosts, files, snippets and settings" });
+    const search = screen.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" });
     expect(screen.getByRole("option", { name: /Connect to r540/ })).toBeInTheDocument();
 
     await user.type(search, "apt update");
@@ -85,7 +88,7 @@ describe("CommandPalette", () => {
     const onClose = vi.fn();
     renderPalette({ onConnect, onClose });
 
-    const search = screen.getByRole("searchbox", { name: "Search hosts, files, snippets and settings" });
+    const search = screen.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" });
     await user.type(search, "r540{Enter}");
 
     expect(onClose).toHaveBeenCalledOnce();
@@ -104,6 +107,26 @@ describe("CommandPalette", () => {
     expect(onClose).toHaveBeenCalledOnce();
     expect(onOpenHostSettings).toHaveBeenCalledWith({ path: "conf.d/lab.conf", alias: "r540" });
     expect(onConnect).not.toHaveBeenCalled();
+  });
+
+  it("jumps to a live session and filters unread attention without changing its order", async () => {
+    const user = userEvent.setup();
+    const onOpenSession = vi.fn();
+    renderPalette({
+      sessions: [
+        { id: "first", kind: "ssh", alias: "osaka", title: "First", startedAt: "2026-08-29T00:00:00Z", state: "connected", problem: "" },
+        { id: "second", kind: "ssh", alias: "tokyo", title: "Fix login", startedAt: "2026-08-29T00:01:00Z", state: "connected", problem: "", agent: { kind: "codex", state: "attention", resumable: true, observationVersion: 2, signalVersion: 1, lastSignal: { kind: "attention", occurredAt: "2026-08-29T00:02:00Z" } } },
+      ],
+      unreadBySession: new Map([["second", "attention"]]),
+      onOpenSession,
+    });
+
+    const options = screen.getAllByRole("option");
+    expect(options[0]).toHaveTextContent("First");
+    expect(options[1]).toHaveTextContent("Fix login");
+    await user.type(screen.getByRole("searchbox"), "@attention{Enter}");
+
+    expect(onOpenSession).toHaveBeenCalledWith("second");
   });
 
   it("matches every query token irrespective of case", () => {

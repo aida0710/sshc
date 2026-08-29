@@ -10,8 +10,13 @@ import { fontStack, fonts } from "../terminal/fonts";
 import { palettes } from "../terminal/palettes";
 import {
   browserNotificationPermission,
+  agentSoundPresets,
+  loadAgentSoundPreferences,
+  playAgentSound,
   requestBrowserNotificationPermission,
+  saveAgentSoundPreferences,
   showBrowserNotification,
+  type AgentSoundPreferences,
   type BrowserNotificationPermission,
 } from "../terminal/agentNotifications";
 import type { TerminalSessionsState } from "../terminal/sessions";
@@ -164,6 +169,14 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   );
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationError, setNotificationError] = useState("");
+  const [notificationSounds, setNotificationSounds] = useState<AgentSoundPreferences>(() =>
+    loadAgentSoundPreferences()
+  );
+
+  function changeNotificationSounds(next: AgentSoundPreferences) {
+    setNotificationSounds(next);
+    saveAgentSoundPreferences(next);
+  }
 
   useEffect(() => {
     let active = true;
@@ -575,7 +588,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
           label={t("terminal.browserNotificationsHeading")}
           icon="notification"
         >
-          <div className="max-w-2xl">
+          <div className="grid max-w-2xl gap-5">
             <p className="text-sm leading-6 text-ink-muted">
               {t(
                 notificationPermission === "granted"
@@ -608,6 +621,70 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
                 ) : null}
               </ActionArea>
             ) : null}
+            <div className="grid gap-4 border-t border-line pt-5 sm:grid-cols-2">
+              <Field label={t("terminal.notificationAttentionSound")} hint={t("terminal.notificationSoundHint")}>
+                <div className="flex gap-2">
+                  <select
+                    className={control}
+                    value={notificationSounds.attention}
+                    onChange={(event) => changeNotificationSounds({
+                      ...notificationSounds,
+                      attention: event.target.value as AgentSoundPreferences["attention"],
+                    })}
+                  >
+                    {agentSoundPresets.map((preset) => (
+                      <option key={preset} value={preset}>{t(`terminal.notificationSound.${preset}`)}</option>
+                    ))}
+                  </select>
+                  <Button
+                    aria-label={t("terminal.notificationPreviewAttention")}
+                    onClick={() => playAgentSound("attention", notificationSounds)}
+                  >
+                    {t("terminal.notificationPreview")}
+                  </Button>
+                </div>
+              </Field>
+              <Field label={t("terminal.notificationCompletedSound")} hint={t("terminal.notificationSoundHint")}>
+                <div className="flex gap-2">
+                  <select
+                    className={control}
+                    value={notificationSounds.completed}
+                    onChange={(event) => changeNotificationSounds({
+                      ...notificationSounds,
+                      completed: event.target.value as AgentSoundPreferences["completed"],
+                    })}
+                  >
+                    {agentSoundPresets.map((preset) => (
+                      <option key={preset} value={preset}>{t(`terminal.notificationSound.${preset}`)}</option>
+                    ))}
+                  </select>
+                  <Button
+                    aria-label={t("terminal.notificationPreviewCompleted")}
+                    onClick={() => playAgentSound("completed", notificationSounds)}
+                  >
+                    {t("terminal.notificationPreview")}
+                  </Button>
+                </div>
+              </Field>
+              <Field
+                label={t("terminal.notificationVolume")}
+                hint={t("terminal.notificationVolumeHint", { volume: String(notificationSounds.volume) })}
+              >
+                <input
+                  aria-label={t("terminal.notificationVolume")}
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={notificationSounds.volume}
+                  onChange={(event) => changeNotificationSounds({
+                    ...notificationSounds,
+                    volume: Number(event.target.value),
+                  })}
+                  className="h-9 w-full accent-accent"
+                />
+              </Field>
+            </div>
           </div>
         </SettingsSection>
 

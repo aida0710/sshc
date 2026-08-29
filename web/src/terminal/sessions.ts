@@ -7,7 +7,6 @@ import {
 } from "../api/integrations";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { useAgentNotifications } from "./agentNotifications";
 
 export type TerminalSessionsApi = Pick<
   IntegrationsApi,
@@ -46,7 +45,6 @@ export function useTerminalSessions(
   const [problem, setProblem] = useState("");
   const [loaded, setLoaded] = useState(false);
   const refreshGeneration = useRef(0);
-  useAgentNotifications(sessions, translate);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;

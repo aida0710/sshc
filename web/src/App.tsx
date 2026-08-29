@@ -62,6 +62,9 @@ import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 import { CommandPalette } from "./shell/CommandPalette";
 import { setAndroidAppearance } from "./android/native";
 import { MobileNavigationSwipeEdge } from "./shell/mobileNavigationSwipe";
+import { useAgentNotifications } from "./terminal/agentNotifications";
+import type { RemotePathAction } from "./terminal/TerminalLinkPopover";
+import type { SFTPTarget } from "./sftp/SFTPPanel";
 
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -182,6 +185,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const [requestFailure, setRequestFailure] = useState<RequestFailureDiagnostic | null>(null);
   const [vaultMigration, setVaultMigration] = useState<{ from: number; to: number } | null>(null);
   const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
+  const [sftpTarget, setSftpTarget] = useState<SFTPTarget | null>(null);
+  const sftpTargetSequence = useRef(0);
   const [groups, setGroups] = useState<string[]>([]);
   const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
@@ -298,6 +303,12 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     },
     [navigate, consoles],
   );
+  const unreadAgentSessions = useAgentNotifications(
+    consoles.sessions,
+    terminalFace ? activeConsole : null,
+    t,
+    showConsole,
+  );
 
   const openWorkspace = useCallback((id: string) => {
     workspaceRestoreSequence.current += 1;
@@ -344,6 +355,12 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   function openFile(path: string, line: number) {
     setFileTarget({ path, line });
     navigate("Config");
+  }
+
+  function openRemotePath(alias: string, path: string, action: RemotePathAction) {
+    sftpTargetSequence.current += 1;
+    setSftpTarget({ alias, path, action, request: sftpTargetSequence.current });
+    navigate("Files");
   }
 
   function assignGeneratedKey(key: GeneratedPrivateKeyHandoff) {
@@ -603,6 +620,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           orderedConsoles={orderedConsoles}
           activeConsole={activeConsole}
           liveWorkspace={liveWorkspace}
+          unreadBySession={unreadAgentSessions}
           onShowConsole={showConsole}
           onDuplicateConsole={(id) => void duplicateConsole(id)}
           onReorderConsoles={setConsoleOrder}
@@ -648,6 +666,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                     onLiveWorkspaceChange={setLiveWorkspace}
                     onOpenAlias={(alias) => consoles.open({ kind: "ssh", alias })}
                     onOpenShell={() => consoles.open({ kind: "shell" })}
+                    onOpenRemotePath={openRemotePath}
                     restoreRequest={workspaceRestoreRequest}
                     onRestoreConsumed={consumeWorkspaceRestore}
                   />
@@ -689,6 +708,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
                       },
                     }}
                     declared={{ groups, knownAliases }}
+                    sftpTarget={sftpTarget}
+                    onSftpTargetHandled={(request) => setSftpTarget((current) => current?.request === request ? null : current)}
                   />
                 </Suspense>
               ) : (
@@ -722,6 +743,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           open={commandPaletteOpen}
           hosts={paletteHosts}
           files={configFiles}
+          sessions={orderedConsoles}
+          unreadBySession={unreadAgentSessions}
           sectionLabels={sectionLabels}
           onClose={() => setCommandPaletteOpen(false)}
           onConnect={async (alias) => {
@@ -737,6 +760,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           onOpenFile={(path) => openFile(path, 1)}
           onNavigate={navigate}
           onOpenSnippet={(id) => navigateLocation(`${sectionPath("Snippets")}?snippet=${encodeURIComponent(id)}`)}
+          onOpenSession={showConsole}
         />
       ) : null}
     </div>
@@ -749,6 +773,8 @@ type SectionViewProps = {
   handoff: Handoff;
   shell: Shell;
   declared: Declared;
+  sftpTarget: SFTPTarget | null;
+  onSftpTargetHandled: (request: number) => void;
 };
 
 function SectionView(props: SectionViewProps) {
@@ -786,6 +812,7 @@ function TerminalScreen({
   onOpenShell,
   restoreRequest,
   onRestoreConsumed,
+  onOpenRemotePath,
 }: {
   consoles: TerminalSessionsState;
   activeConsole: string | null;
@@ -797,21 +824,22 @@ function TerminalScreen({
   onOpenShell: () => Promise<import("./api/integrations").TerminalSession | null>;
   restoreRequest: WorkspaceRestoreRequest | null;
   onRestoreConsumed: (sequence: number) => void;
+  onOpenRemotePath: (alias: string, path: string, action: RemotePathAction) => void;
 }) {
   return (
-    <TerminalWorkspace sessions={consoles.sessions} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} onOpenShell={onOpenShell} restoreRequest={restoreRequest} onRestoreConsumed={onRestoreConsumed} onLiveWorkspaceChange={onLiveWorkspaceChange} renderTerminal={(session) => {
+    <TerminalWorkspace sessions={consoles.sessions} sessionsLoaded={consoles.loaded} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} onOpenShell={onOpenShell} restoreRequest={restoreRequest} onRestoreConsumed={onRestoreConsumed} onLiveWorkspaceChange={onLiveWorkspaceChange} renderTerminal={(session) => {
       const appearance = resolveAppearance(session.alias === undefined ? undefined : hostAppearance.get(session.alias), settings.appearance);
       return <Suspense fallback={<RouteSkeleton kind="terminal" />}><TerminalView key={session.id} session={session} {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })} {...(appearance.palette === "" ? {} : { palette: appearance.palette })} {...(appearance.font === "" ? {} : { font: appearance.font })} {...(appearance.background === "" ? {} : { background: appearance.background })} {...(appearance.tint === undefined ? {} : { tint: appearance.tint })} copyOnSelect={settings.copyOnSelect ?? true} rightClickPaste={settings.rightClickPaste ?? true} onExit={() => consoles.markExited(session.id)} onReconnect={() => consoles.reconnect(session.id)} onResumeAgent={async (placement) => {
         const resumed = await consoles.resumeAgent?.(session.id, session.agent?.observationVersion ?? 0, placement) ?? null;
         if (resumed === null) return false;
         if (placement === "new-pane") onActive(resumed.id);
         return true;
-      }} /></Suspense>;
+      }} onOpenRemotePath={onOpenRemotePath} /></Suspense>;
     }} />
   );
 }
 
-function PaddedSection({ section, navigation, handoff, shell, declared }: SectionViewProps) {
+function PaddedSection({ section, navigation, handoff, shell, declared, sftpTarget, onSftpTargetHandled }: SectionViewProps) {
   const { fileTarget, onNavigate, onNavigateLocation } = navigation;
   const { onLock, onInspector, consoles, onShowConsole, onOpenWorkspace, onTerminalSettingsChange } = shell;
   if (section === "Home") {
@@ -838,7 +866,13 @@ function PaddedSection({ section, navigation, handoff, shell, declared }: Sectio
     return <ConfigExplorer target={fileTarget} />;
   }
   if (section === "Files") {
-    return <SFTPPanel aliases={declared.knownAliases} />;
+    return (
+      <SFTPPanel
+        aliases={declared.knownAliases}
+        target={sftpTarget}
+        onTargetHandled={onSftpTargetHandled}
+      />
+    );
   }
   if (section === "Snippets") {
     return <SnippetsPanel aliases={declared.knownAliases} selectedSnippetId={new URLSearchParams(navigation.location.search).get("snippet")} />;
