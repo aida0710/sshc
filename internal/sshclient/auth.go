@@ -54,6 +54,28 @@ type Auth struct {
 	registerAgent func(io.Closer)
 }
 
+// passwordOffer makes a saved account password single-use across password and
+// keyboard-interactive while retaining whether a secret was actually offered.
+// A second callback means the server rejected that offer.
+type passwordOffer struct {
+	target   Target
+	provider func(target Target) (string, bool)
+	checked  bool
+	offered  bool
+}
+
+func (offer *passwordOffer) take() (string, bool) {
+	if offer == nil || offer.checked || offer.provider == nil || offer.target.Alias == "" {
+		return "", false
+	}
+	offer.checked = true
+	password, found := offer.provider(offer.target)
+	offer.offered = found
+	return password, found
+}
+
+func (offer *passwordOffer) wasOffered() bool { return offer != nil && offer.offered }
+
 func (a Auth) methodsWithCleanup(target Target, prompt Prompter) ([]ssh.AuthMethod, func()) {
 	var closers []io.Closer
 	a.registerAgent = func(closer io.Closer) { closers = append(closers, closer) }
@@ -111,31 +133,25 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 }
 
 // storedPassword は保存済みパスワードを最初の 1 回だけ返し、以後は対話入力へ切り替える。
-func (a Auth) storedPassword(target Target) func() (string, bool) {
-	if a.Password == nil || target.Alias == "" {
-		return func() (string, bool) { return "", false }
-	}
-	offered := false
-	return func() (string, bool) {
-		if offered {
-			return "", false
-		}
-		offered = true
-		return a.Password(target)
-	}
+func (a Auth) storedPassword(target Target) *passwordOffer {
+	return &passwordOffer{target: target, provider: a.Password}
 }
 
 // password は、パスワード方式の結果を作る。
 //
 // 保存されているなら、それを出す。保管庫に置いてあるのに毎回尋ねるなら、
 // 置く意味が無い。
-func (a Auth) password(target Target, prompt Prompter, stored func() (string, bool)) func() (string, error) {
+func (a Auth) password(target Target, prompt Prompter, stored *passwordOffer) func() (string, error) {
 	return func() (string, error) {
 		a.observe("password")
-		if password, found := stored(); found {
+		if password, found := stored.take(); found {
 			return password, nil
 		}
-		return prompt.Secret("Password for " + authenticationTarget(target) + ": ")
+		prefix := ""
+		if stored.wasOffered() {
+			prefix = "Saved password was rejected. "
+		}
+		return prompt.Secret(prefix + "Password for " + authenticationTarget(target) + ": ")
 	}
 }
 
@@ -145,15 +161,19 @@ func (a Auth) password(target Target, prompt Prompter, stored func() (string, bo
 // である。それがパスワードを聞かれている形であり、普通の Linux はパスワードを
 // この方式で聞いてくる。問いが複数あるもの（2FA）や、結果を画面に出す問いに
 // パスワードを差し出す意味は無く、差し出せばそれは間違った結果になる。
-func (a Auth) keyboard(target Target, prompt Prompter, stored func() (string, bool)) ssh.KeyboardInteractiveChallenge {
-	ask := keyboardChallenge(prompt, "Authentication for "+authenticationTarget(target))
+func (a Auth) keyboard(target Target, prompt Prompter, stored *passwordOffer) ssh.KeyboardInteractiveChallenge {
 	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		a.observe("keyboard-interactive")
 		if len(questions) == 1 && len(echos) == 1 && !echos[0] {
-			if password, found := stored(); found {
+			if password, found := stored.take(); found {
 				return []string{password}, nil
 			}
 		}
+		context := "Authentication for " + authenticationTarget(target)
+		if stored.wasOffered() {
+			context = "Saved password was rejected.\r\n" + context
+		}
+		ask := keyboardChallenge(prompt, context)
 		return ask(name, instruction, questions, echos)
 	}
 }

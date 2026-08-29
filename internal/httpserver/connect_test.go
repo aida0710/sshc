@@ -88,6 +88,9 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	if len(after.Passwords) != 0 || len(after.PasswordBindings) != 0 {
 		t.Fatalf("retargeted connection received a saved password: %+v", after)
 	}
+	if len(after.StalePasswords) != 1 || after.StalePasswords[0] != "bastion" {
+		t.Fatalf("retargeted connection did not explain the held password: %+v", after)
+	}
 }
 
 // 保存済みアカウントパスワードだけを持つ alias は、鍵についての結果を持たない。
