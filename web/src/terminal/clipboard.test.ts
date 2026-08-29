@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipboard";
+import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 
 function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, rightClickPaste: true }) {
   const container = document.createElement("div");
@@ -49,6 +49,10 @@ function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, righ
 }
 
 describe("terminal clipboard interactions", () => {
+  it("normalizes and brackets paste text before sending it to a terminal", () => {
+    expect(prepareTerminalPaste("one\ntwo\r\nthree", false)).toBe("one\rtwo\rthree");
+    expect(prepareTerminalPaste("one\ntwo", true)).toBe("\u001b[200~one\rtwo\u001b[201~");
+  });
   it("copies once when xterm reports that selection is finished", () => {
     const subject = harness();
 
@@ -80,14 +84,38 @@ describe("terminal clipboard interactions", () => {
     await vi.waitFor(() => expect(subject.terminal.paste).toHaveBeenCalledWith("pasted text"));
   });
 
-  it("uses xterm paste for the keyboard shortcut and observes settings changes without reattaching", async () => {
+  it("leaves keyboard paste to the browser paste event", () => {
     const subject = harness();
     subject.setSettings({ copyOnSelect: false, rightClickPaste: false });
 
-    expect(subject.key(new KeyboardEvent("keydown", { key: "v", metaKey: true }))).toBe(false);
-    await vi.waitFor(() => expect(subject.terminal.paste).toHaveBeenCalledWith("pasted text"));
+    const shortcut = new KeyboardEvent("keydown", {
+      key: "v",
+      ctrlKey: true,
+      shiftKey: true,
+      cancelable: true,
+    });
+    expect(subject.key(shortcut)).toBe(false);
+    expect(shortcut.defaultPrevented).toBe(false);
+    expect(subject.clipboard.readText).not.toHaveBeenCalled();
+    expect(subject.terminal.paste).not.toHaveBeenCalled();
     subject.finishSelection();
     expect(subject.clipboard.writeText).not.toHaveBeenCalled();
+  });
+
+  it("owns a bubbling browser paste once before xterm's nested listeners", () => {
+    const subject = harness();
+    const textarea = document.createElement("textarea");
+    subject.container.append(textarea);
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", {
+      value: { getData: (format: string) => format === "text/plain" ? "one paste" : "" },
+    });
+
+    textarea.dispatchEvent(paste);
+
+    expect(paste.defaultPrevented).toBe(true);
+    expect(subject.terminal.paste).toHaveBeenCalledTimes(1);
+    expect(subject.terminal.paste).toHaveBeenCalledWith("one paste");
   });
 
   it("removes DOM handlers when the terminal is disposed", () => {

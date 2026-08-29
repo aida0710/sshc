@@ -251,7 +251,7 @@ export const apiClient = {
     if (!response.ok) throw await failure(response, "GET", path, options);
     return response.json() as Promise<unknown>;
   },
-  async send(path: string, init: RequestInit): Promise<Response> {
+  async send(path: string, init: RequestInit, options: RequestFailureOptions = {}): Promise<Response> {
     const target = new URL(path, window.location.origin);
     if (target.origin !== window.location.origin) {
       throw new Error("cross_origin_api_mutation");
@@ -267,14 +267,17 @@ export const apiClient = {
       throw error;
     }
     if (!response.ok) {
-      notifyResponseFailure(response, await readProblem(response.clone()), method, path);
+      const problem = await readProblem(response.clone());
+      if (!options.locallyHandledCodes?.includes(problem?.code ?? "request_failed")) {
+        notifyResponseFailure(response, problem, method, path);
+      }
     }
     return response;
   },
-  async mutate<T>(path: string, init: RequestInit): Promise<T> {
+  async mutate<T>(path: string, init: RequestInit, options: RequestFailureOptions = {}): Promise<T> {
     const method = init.method ?? "POST";
-    const response = await this.send(path, init);
-    if (!response.ok) throw await failure(response, method, path);
+    const response = await this.send(path, init, options);
+    if (!response.ok) throw await failure(response, method, path, options);
     return response.json() as Promise<T>;
   },
 };
