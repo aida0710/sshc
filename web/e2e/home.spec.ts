@@ -1,4 +1,4 @@
-import { expect, openApplication, test } from "./support/environment";
+import { expect, openApplication, openSection, test } from "./support/environment";
 
 test("starts with a searchable host launcher and contacts nothing unasked", async ({
   page,
@@ -93,7 +93,7 @@ test("opens the action menu without connecting, then keeps settings and connect 
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
   expect(opened).toEqual([]);
 
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home" }).click();
+  await openSection(page, "Home");
   await page.getByRole("button", { name: "Actions for bastion" }).click();
   await page.getByRole("menuitem", { name: "Connect", exact: true }).click();
   await expect.poll(() => opened).toEqual([{ kind: "ssh", alias: "bastion" }]);

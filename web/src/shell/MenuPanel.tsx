@@ -1,0 +1,84 @@
+import type { MouseEvent } from "react";
+import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
+import { sectionPath, type Section } from "../routing/sectionRoute";
+import { Icon, type IconName } from "../ui/icons";
+
+export type MenuGroup = {
+  label: MessageKey;
+  sections: Section[];
+};
+
+export function MenuPanel({
+  groups,
+  sectionIcons,
+  sectionLabels,
+  onNavigate,
+}: {
+  groups: MenuGroup[];
+  sectionIcons: Record<Section, IconName>;
+  sectionLabels: Record<Section, MessageKey>;
+  onNavigate: (section: Section) => void;
+}) {
+  const t = useTranslate();
+
+  function follow(event: MouseEvent<HTMLAnchorElement>, section: Section) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    onNavigate(section);
+  }
+
+  return (
+    <section aria-labelledby="menu-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+      <div className="border-b border-line pb-5">
+        <h2 id="menu-heading" className="text-xl font-semibold tracking-tight text-ink">
+          {t("section.menu")}
+        </h2>
+        <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">{t("menu.description")}</p>
+      </div>
+
+      <div className="grid items-start gap-x-8 gap-y-7 lg:grid-cols-2">
+        {groups.map((group) => (
+          <section key={group.label} aria-labelledby={`menu-${group.label}`}>
+            <h3
+              id={`menu-${group.label}`}
+              className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint"
+            >
+              {t(group.label)}
+            </h3>
+            <ul className="mt-2 overflow-hidden rounded border border-line bg-card">
+              {group.sections.map((section, index) => {
+                const label = t(sectionLabels[section]);
+                return (
+                  <li key={section} className={index === 0 ? "" : "border-t border-line"}>
+                    <a
+                      href={sectionPath(section)}
+                      aria-label={t("menu.open", { section: label })}
+                      onClick={(event) => follow(event, section)}
+                      className="group flex min-h-14 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-select-fill"
+                    >
+                      <span className="grid size-8 shrink-0 place-items-center rounded bg-control text-ink-muted group-hover:text-ink">
+                        <Icon name={sectionIcons[section]} className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{label}</span>
+                      <Icon name="chevronRight" className="size-4 shrink-0 text-ink-faint group-hover:text-ink-muted" />
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}

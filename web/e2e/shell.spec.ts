@@ -120,14 +120,14 @@ test("keeps the header and the primary navigation still while a panel scrolls", 
 
   expect(await header.boundingBox()).toEqual(resting);
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeInViewport();
-  await expect(page.getByRole("link", { name: "History", exact: true })).toBeInViewport();
+  await expect(page.getByRole("link", { name: "Menu", exact: true })).toBeInViewport();
 
   await expect(
     page.getByRole("region", { name: "Connection results" }).getByRole("button", { name: "lab-39" }),
   ).toBeInViewport();
 });
 
-test("scrolls the primary navigation on its own when the viewport is short", async ({
+test("keeps start links fixed and sessions reachable when the viewport is short", async ({
   page,
   installation,
 }) => {
@@ -138,14 +138,12 @@ test("scrolls the primary navigation on its own when the viewport is short", asy
   const navigation = page.getByRole("navigation", { name: "Primary" });
   const sections = navigation.locator("div.overflow-y-auto");
   const overflow = await sections.evaluate((element) => element.scrollHeight - element.clientHeight);
-  expect(overflow, "the section list is not taller than the short viewport").toBeGreaterThan(0);
+  expect(overflow).toBeGreaterThan(0);
 
-  const history = page.getByRole("link", { name: "History", exact: true });
-
-  await expect(async () => {
-    await history.scrollIntoViewIfNeeded();
-    await expect(history).toBeInViewport();
-  }).toPass();
+  await expect(navigation.getByRole("link", { name: "Home", exact: true })).toBeInViewport();
+  await expect(navigation.getByRole("link", { name: "Menu", exact: true })).toBeInViewport();
+  await sections.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+  await expect(navigation.getByRole("button", { name: "Local shell", exact: true })).toBeInViewport();
   await expect(page.getByRole("banner")).toBeInViewport();
   expect(await sections.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });

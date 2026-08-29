@@ -3,6 +3,7 @@ import { parseSectionPath, sectionPath, sections } from "./sectionRoute";
 
 const routes = [
   ["Home", "/"],
+  ["Menu", "/menu"],
   ["Connections", "/connections"],
   ["Terminal", "/terminal"],
   ["Files", "/files"],
