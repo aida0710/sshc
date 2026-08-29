@@ -40,6 +40,14 @@ func runSync(
 	if err := ctx.Err(); err != nil {
 		return finishSyncFailure(called.JSON, err, stdout, stderr)
 	}
+	var setupPrompt *os.File
+	if called.Action == syncSetup {
+		var err error
+		setupPrompt, err = requireSyncSetupTerminal(stdin, stderr, terminal)
+		if err != nil {
+			return finishSyncFailure(called.JSON, err, stdout, stderr)
+		}
+	}
 	engine, err := openEngineAPI(ctx, stateDir, client)
 	if err != nil {
 		return finishSyncFailure(called.JSON, err, stdout, stderr)
@@ -47,6 +55,11 @@ func runSync(
 	defer func() { _ = engine.Close() }()
 
 	switch called.Action {
+	case syncSetup:
+		if err := runSyncSetup(ctx, engine, stdin, stdout, setupPrompt, terminal); err != nil {
+			return finishSyncFailure(false, err, stdout, stderr)
+		}
+		return 0
 	case syncStatus:
 		var status api.SyncStatus
 		if err := engine.getJSON(ctx, "/api/v1/sync", &status); err != nil {
@@ -101,6 +114,12 @@ func classifyCommandFailure(err error) commandFailure {
 		return commandFailure{Kind: "vault_missing", Retryable: false}
 	case errors.Is(err, errEngineVaultLocked):
 		return commandFailure{Kind: "vault_locked", Retryable: false}
+	case errors.Is(err, errSyncSetupTTY):
+		return commandFailure{Kind: "interactive_terminal_required", Retryable: false}
+	case errors.Is(err, errSyncSetupInput):
+		return commandFailure{Kind: "invalid_setup_input", Retryable: false}
+	case errors.Is(err, errSyncSetupIncomplete):
+		return commandFailure{Kind: "sync_setup_target_incomplete", Retryable: false}
 	case errors.Is(err, errEngineInvalidResponse), errors.Is(err, errEngineResponseTooLarge):
 		return commandFailure{Kind: "invalid_engine_response", Retryable: false}
 	}
@@ -128,6 +147,12 @@ func writeHumanSyncFailure(stderr io.Writer, failure commandFailure) {
 		fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
 	case "vault_locked":
 		fmt.Fprintln(stderr, "sshc: the vault is locked; run sshc vault unlock")
+	case "interactive_terminal_required":
+		fmt.Fprintln(stderr, "sshc: sync setup requires interactive terminal input and prompt output")
+	case "invalid_setup_input":
+		fmt.Fprintln(stderr, "sshc: sync setup input is invalid; check the endpoint, bucket, path, region, direction, and credential lengths")
+	case "sync_setup_target_incomplete":
+		fmt.Fprintln(stderr, "sshc: the sync target contains an incomplete snapshot; inspect or repair the target before setup")
 	case "sync_not_configured":
 		fmt.Fprintln(stderr, "sshc: sync is not configured; run sshc sync setup")
 	case "sync_remote_moved", "sync_remote_deleted", "preview_stale", "sync_setup_target_changed":
