@@ -36,6 +36,13 @@ function compactSFTPViewport(): boolean {
 
 type SFTPSort = "name" | "type" | "size" | "modified" | "mode";
 
+export type SFTPTarget = {
+  alias: string;
+  path: string;
+  action: "browse" | "edit" | "download";
+  request: number;
+};
+
 type DroppedEntry = {
   isFile: boolean;
   isDirectory: boolean;
@@ -77,7 +84,7 @@ async function droppedFiles(transfer: DataTransfer): Promise<{ files: LocalTrans
   }), directories: [] };
 }
 
-export function SFTPPanel({ aliases }: { aliases: string[] }) {
+export function SFTPPanel({ aliases, target = null }: { aliases: string[]; target?: SFTPTarget | null }) {
   const t = useTranslate();
   const [alias, setAlias] = useState("");
   const [path, setPath] = useState("/");
@@ -96,6 +103,8 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
   });
   const upload = useRef<HTMLInputElement>(null);
   const folderUpload = useRef<HTMLInputElement>(null);
+  const openingTarget = useRef(false);
+  const handledTarget = useRef(0);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -126,8 +135,8 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
     setSort((current) => nextSort(current.key, current.direction, key));
   }
 
-  async function load(nextPath = path, nextAlias = alias, preserveEditor = false) {
-    if (nextAlias === "") return;
+  async function load(nextPath = path, nextAlias = alias, preserveEditor = false): Promise<RemoteEntry[] | null> {
+    if (nextAlias === "") return null;
     setBusy(true);
     setProblem("");
     try {
@@ -139,16 +148,49 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
         setOpened(null);
         setContents("");
       }
+      return listing.entries;
     } catch (error) {
       const code = failureCode(error);
       setProblem(code === "sftp_failed" ? t("sftp.connectionFailed") : code || (error instanceof Error ? error.message : t("sftp.connectionFailed")));
+      return null;
     } finally {
       setBusy(false);
     }
   }
 
   useEffect(() => {
-    if (alias !== "") void load("/", alias);
+    if (target === null || target.request === handledTarget.current) return;
+    handledTarget.current = target.request;
+    if (!aliases.includes(target.alias) || !target.path.startsWith("/") || target.path.length > 4096 || /[\x00\r\n]/u.test(target.path)) {
+      setProblem(t("sftp.linkTargetInvalid"));
+      return;
+    }
+    openingTarget.current = true;
+    setAlias(target.alias);
+    const directory = parentOf(target.path);
+    void load(directory, target.alias).then(async (loaded) => {
+      if (loaded === null || target.action === "browse") return;
+      const entry = loaded.find((candidate) => candidate.path === target.path);
+      if (entry === undefined) {
+        setProblem(t("sftp.linkTargetNotFound"));
+        return;
+      }
+      if (target.action === "edit") {
+        if (entry.type !== "file") {
+          setProblem(t("sftp.linkTargetNotFile"));
+          return;
+        }
+        await openText(entry, target.alias);
+        return;
+      }
+      await download(entry, target.alias);
+    }).finally(() => { openingTarget.current = false; });
+    // The request number makes an intentional repeat actionable while preventing route rerenders from reopening it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.request]);
+
+  useEffect(() => {
+    if (alias !== "" && !openingTarget.current) void load("/", alias);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alias]);
 
@@ -161,7 +203,7 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferJobs, alias, path]);
 
-  async function openText(entry: RemoteEntry) {
+  async function openText(entry: RemoteEntry, targetAlias = alias) {
     if (dirty) {
       setProblem(t("sftp.unsavedBlocked"));
       return;
@@ -169,7 +211,7 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
     setBusy(true);
     setProblem("");
     try {
-      const file = await sftpApi.readText(alias, entry.path);
+      const file = await sftpApi.readText(targetAlias, entry.path);
       setOpened(file);
       setContents(file.contents);
     } catch (error) {
@@ -294,11 +336,11 @@ export function SFTPPanel({ aliases }: { aliases: string[] }) {
     await uploadFiles(selection.files, selection.directories);
   }
 
-  async function download(entry: RemoteEntry) {
+  async function download(entry: RemoteEntry, targetAlias = alias) {
     if (busy) return;
     setProblem("");
     try {
-      sftpTransferManager.addDownload(alias, entry.path, entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1);
+      sftpTransferManager.addDownload(targetAlias, entry.path, entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1);
     } catch (error) {
       setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
     }

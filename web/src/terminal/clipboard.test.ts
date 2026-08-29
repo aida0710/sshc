@@ -118,6 +118,30 @@ describe("terminal clipboard interactions", () => {
     expect(subject.terminal.paste).toHaveBeenCalledWith("one paste");
   });
 
+  it("sends an application-enabled enhanced key once instead of xterm input", () => {
+    const container = document.createElement("div");
+    let keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
+    const sendEnhancedKey = vi.fn();
+    attachTerminalClipboard({
+      container,
+      terminal: {
+        attachCustomKeyEventHandler: (handler) => { keyHandler = handler; },
+        onSelectionChange: () => ({ dispose: () => {} }),
+        hasSelection: () => false,
+        getSelection: () => "",
+        paste: vi.fn(),
+      },
+      clipboard: { readText: vi.fn(), writeText: vi.fn() },
+      settings: () => ({ copyOnSelect: false, rightClickPaste: false }),
+      refuse: vi.fn(),
+      enhancedKey: () => "\u001b[13;2u",
+      sendEnhancedKey,
+    });
+    const event = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true });
+    expect(keyHandler?.(event)).toBe(false);
+    expect(sendEnhancedKey).toHaveBeenCalledWith("\u001b[13;2u");
+  });
+
   it("removes DOM handlers when the terminal is disposed", () => {
     const subject = harness();
     subject.detach();
