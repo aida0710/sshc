@@ -320,11 +320,10 @@ func writeUncertainVaultResult(path string, stderr io.Writer) {
 func fetchVaultStatus(
 	ctx context.Context, found handoff.Handoff, client *http.Client,
 ) (statusAnswer, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, found.URL+httpserver.VaultStatusPath, nil)
+	request, err := newHandoffRequest(ctx, found, http.MethodGet, httpserver.VaultStatusPath, nil)
 	if err != nil {
 		return statusAnswer{}, err
 	}
-	request.Header.Set(handoff.HeaderName, found.Secret)
 	response, err := vaultClient(client).Do(request)
 	if err != nil {
 		if response != nil {
@@ -361,7 +360,7 @@ func fetchVaultStatus(
 }
 
 // sendVaultPOST は payload の所有権を受け取り、Do が戻るすべての経路で消去する。
-// oneShotVaultPayload は Seek/GetBody を持たず、redirect に秘密を再送できない。
+// oneShotSecretPayload は Seek/GetBody を持たず、redirect に秘密を再送できない。
 func sendVaultPOST(
 	ctx context.Context,
 	client *http.Client,
@@ -370,12 +369,11 @@ func sendVaultPOST(
 	payload []byte,
 ) (*http.Response, error) {
 	defer zeroBytes(payload)
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, found.URL+path, &oneShotVaultPayload{body: payload})
+	request, err := newHandoffRequest(ctx, found, http.MethodPost, path, &oneShotSecretPayload{body: payload})
 	if err != nil {
 		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(handoff.HeaderName, found.Secret)
 	response, err := vaultClient(client).Do(request)
 	if err != nil && response != nil {
 		discardAndCloseVaultResponse(response)
@@ -383,27 +381,8 @@ func sendVaultPOST(
 	return response, err
 }
 
-type oneShotVaultPayload struct {
-	body   []byte
-	offset int
-}
-
-func (r *oneShotVaultPayload) Read(destination []byte) (int, error) {
-	if r.offset >= len(r.body) {
-		return 0, io.EOF
-	}
-	written := copy(destination, r.body[r.offset:])
-	r.offset += written
-	return written, nil
-}
-
 func vaultClient(client *http.Client) *http.Client {
-	if client == nil {
-		client = http.DefaultClient
-	}
-	cloned := *client
-	cloned.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &cloned
+	return noRedirectClient(client)
 }
 
 // vaultCommandClient は対話的な Vault 操作を短い接続確認タイムアウトから分離する。
