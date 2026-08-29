@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sshc/internal/platform/windowsacl/acltest"
 )
 
 func writeInfoFixture(t *testing.T) string {
@@ -59,9 +61,7 @@ Host secret-route
   }]
 }
 `
-	if err := os.WriteFile(filepath.Join(root, "sshc", "metadata.json"), []byte(metadata), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, filepath.Join(root, "sshc", "metadata.json"), []byte(metadata))
 	return home
 }
 
