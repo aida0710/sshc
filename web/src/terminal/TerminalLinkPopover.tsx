@@ -88,4 +88,3 @@ export function TerminalLinkPopover({
     document.body,
   );
 }
-

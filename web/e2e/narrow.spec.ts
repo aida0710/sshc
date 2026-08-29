@@ -247,7 +247,7 @@ test("explains an older vault with both schema versions on mobile", async ({ pag
   await page.getByRole("button", { name: "開く" }).click();
 
   await expect(page.getByRole("alert")).toContainText(
-    "Vault のバージョンが古いです（必要なバージョン: 4、現在: 3）。",
+    "Vault のバージョンが古いです（必要なバージョン：4、現在：3）。",
   );
   await expect(page.getByRole("button", { name: "互換性のある Vault を復元" })).toBeVisible();
   await expectNoHorizontalOverflow(page, "古い vault の復旧画面");
@@ -266,7 +266,7 @@ test("reports a completed vault migration with both versions on mobile", async (
   await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
   await page.getByLabel("マスターパスワード（確認）", { exact: true }).fill(masterPassword);
   await page.getByRole("button", { name: "Vault を作成" }).click();
-  await expect(page.getByText(/ローカルセッション有効/).first()).toBeAttached();
+  await expect(page.getByText(/ローカルセッション稼働中/).first()).toBeAttached();
 
   await page.goto(new URL("/secrets", installation.url).toString());
   await page.getByRole("button", { name: "sshc をロック" }).click();
@@ -460,7 +460,7 @@ test("keeps mobile navigation and display controls behind header menus", async (
   await expect(primaryNavigation).toBeInViewport();
   await expect(primaryNavigation.getByRole("button", { name: "Search everything" })).toBeVisible();
   await primaryNavigation.getByRole("button", { name: "Search everything" }).click();
-  await expect(page.getByRole("dialog", { name: "Search hosts, files, snippets and settings" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" })).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.0-command-palette-mobile.png`, fullPage: true });
   }
@@ -635,10 +635,13 @@ test("navigates through the drawer and closes it behind itself", async ({ page, 
 
   await hamburger.click();
   await expect(hamburger).toHaveAttribute("aria-expanded", "true");
-  await drawer.getByRole("link", { name: "Keys", exact: true }).click();
+  await drawer.getByRole("link", { name: "Menu", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
+  await expect(hamburger).toHaveAttribute("aria-expanded", "false");
+  await page.getByRole("link", { name: "Open Keys", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "Keys", exact: true })).toBeVisible();
-  await expect(hamburger).toHaveAttribute("aria-expanded", "false");
   await expect
     .poll(() => drawer.evaluate((element) => element.getBoundingClientRect().left))
     .toBeLessThan(0);
