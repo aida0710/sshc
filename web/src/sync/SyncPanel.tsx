@@ -64,7 +64,7 @@ const refusals: Record<string, MessageKey> = {
   sync_key_missing: "sync.keyMissing",
   passphrase_too_short: "sync.keyTooShort",
   bucket_refused: "sync.unreachable",
-  sync_failed: "sync.unreachable",
+  sync_failed: "sync.failed",
   endpoint_must_have_no_path: "sync.endpointPath",
   sync_remote_moved: "sync.remoteMoved",
   sync_remote_deleted: "sync.remoteDeleted",
@@ -76,6 +76,8 @@ const refusals: Record<string, MessageKey> = {
   sync_commit_message_invalid: "sync.commitMessageInvalid",
   sync_setup_target_changed: "sync.setup.changed",
   sync_setup_target_incomplete: "sync.setup.incomplete",
+  sync_local_changed: "sync.localChanged",
+  sync_workspace_busy: "sync.workspaceBusy",
 };
 
 export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
