@@ -73,6 +73,93 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 	}
 }
 
+func TestParseInfoAndSyncInvocations(t *testing.T) {
+	tests := []struct {
+		argv    []string
+		kind    invocationKind
+		alias   string
+		action  syncAction
+		force   bool
+		asJSON  bool
+		enabled bool
+	}{
+		{argv: []string{"sshc", "info", "edge"}, kind: invocationInfo, alias: "edge"},
+		{argv: []string{"sshc", "info", "edge", "--json"}, kind: invocationInfo, alias: "edge", asJSON: true},
+		{argv: []string{"sshc", "sync"}, kind: invocationSync, action: syncStatus},
+		{argv: []string{"sshc", "sync", "--json"}, kind: invocationSync, action: syncStatus, asJSON: true},
+		{argv: []string{"sshc", "sync", "setup"}, kind: invocationSync, action: syncSetup},
+		{argv: []string{"sshc", "sync", "push", "--force", "--json"}, kind: invocationSync, action: syncPush, force: true, asJSON: true},
+		{argv: []string{"sshc", "sync", "pull", "--force"}, kind: invocationSync, action: syncPull, force: true},
+		{argv: []string{"sshc", "sync", "now", "--json"}, kind: invocationSync, action: syncNow, asJSON: true},
+		{argv: []string{"sshc", "sync", "auto", "on"}, kind: invocationSync, action: syncAuto, enabled: true},
+		{argv: []string{"sshc", "sync", "auto", "off", "--json"}, kind: invocationSync, action: syncAuto, asJSON: true},
+	}
+	for _, test := range tests {
+		t.Run(strings.Join(test.argv[1:], "_"), func(t *testing.T) {
+			got, err := parseInvocation(test.argv)
+			if err != nil {
+				t.Fatalf("parseInvocation(%q): %v", test.argv, err)
+			}
+			if got.Kind != test.kind || got.JSON != test.asJSON {
+				t.Fatalf("parseInvocation(%q) = %#v", test.argv, got)
+			}
+			if test.alias != "" && (len(got.Args) != 1 || got.Args[0] != test.alias) {
+				t.Fatalf("parseInvocation(%q) args = %q, want %q", test.argv, got.Args, test.alias)
+			}
+			if test.kind == invocationSync {
+				if got.Sync == nil || got.Sync.Action != test.action || got.Sync.Force != test.force ||
+					got.Sync.JSON != test.asJSON || got.Sync.Enabled != test.enabled {
+					t.Fatalf("parseInvocation(%q) sync = %#v", test.argv, got.Sync)
+				}
+			}
+		})
+	}
+}
+
+func TestInfoAndSyncRejectAmbiguousArguments(t *testing.T) {
+	for _, argv := range [][]string{
+		{"sshc", "info"},
+		{"sshc", "info", "--json", "edge"},
+		{"sshc", "info", "edge", "--json", "--json"},
+		{"sshc", "info", "edge", "extra"},
+		{"sshc", "sync", "setup", "--json"},
+		{"sshc", "sync", "setup", "--force"},
+		{"sshc", "sync", "push", "--force", "--force"},
+		{"sshc", "sync", "now", "--force"},
+		{"sshc", "sync", "auto"},
+		{"sshc", "sync", "auto", "maybe"},
+		{"sshc", "sync", "auto", "on", "--force"},
+		{"sshc", "sync", "unknown"},
+		{"sshc", "sync", "pull", "extra"},
+	} {
+		if got, err := parseInvocation(argv); err == nil || got.Kind != invocationInvalid {
+			t.Errorf("parseInvocation(%q) = %#v, %v; want usage error", argv, got, err)
+		}
+	}
+}
+
+func TestUsageNamesInfoAndSync(t *testing.T) {
+	var output strings.Builder
+	usage(&output)
+	text := output.String()
+	for _, want := range []string{
+		"sshc info <alias> [--json]",
+		"sshc sync [--json]",
+		"sshc sync setup",
+		"sshc sync push [--force] [--json]",
+		"sshc sync pull [--force] [--json]",
+		"sshc sync now [--json]",
+		"sshc sync auto on|off [--json]",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("usage does not contain %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "sshc connect") {
+		t.Errorf("usage restored the retired connect command:\n%s", text)
+	}
+}
+
 func TestUsageNamesEveryVaultAction(t *testing.T) {
 	var output strings.Builder
 	usage(&output)
