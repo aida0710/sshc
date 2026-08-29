@@ -149,16 +149,25 @@ S3_KEY     ?= SSHUITESTKEY
 S3_SECRET  ?= sshuitestsecret
 SSH_USER   ?= tester
 SSH_PASS   ?= integration-only-password
+SSH_DEST_USER ?= destination
+SSH_DEST_PASS ?= integration-destination-password
 SSH_KEY_PASSPHRASE ?= integration-key-passphrase
+INTEGRATION_NETWORK ?= sshc-integration
 
 integration-up:
 	@printf '{"identities":[{"name":"sshc","credentials":[{"accessKey":"$(S3_KEY)","secretKey":"$(S3_SECRET)"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' > .integration-s3.json
-	docker rm -f sshc-s3 sshc-sshd >/dev/null 2>&1 || true
+	docker rm -f sshc-s3 sshc-sshd sshc-sshd-destination >/dev/null 2>&1 || true
+	docker network rm $(INTEGRATION_NETWORK) >/dev/null 2>&1 || true
+	docker network create $(INTEGRATION_NETWORK) >/dev/null
 	docker run -d --name sshc-s3 -p 127.0.0.1:$(S3_PORT):8333 \
 		-v "$(PWD)/.integration-s3.json:/etc/seaweedfs/s3.json:ro" $(S3_IMAGE) \
 		server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -dir=/data
-	docker run -d --name sshc-sshd -p 127.0.0.1:$(SSHD_PORT):2222 \
+	docker run -d --name sshc-sshd --network $(INTEGRATION_NETWORK) \
+		-p 127.0.0.1:$(SSHD_PORT):2222 \
 		-e PASSWORD_ACCESS=true -e USER_NAME=$(SSH_USER) -e USER_PASSWORD=$(SSH_PASS) \
+		$(SSHD_IMAGE)
+	docker run -d --name sshc-sshd-destination --network $(INTEGRATION_NETWORK) \
+		-e PASSWORD_ACCESS=true -e USER_NAME=$(SSH_DEST_USER) -e USER_PASSWORD=$(SSH_DEST_PASS) \
 		$(SSHD_IMAGE)
 	@rm -f .integration-key/id_integration .integration-key/id_integration.pub
 	@mkdir -p .integration-key
@@ -183,6 +192,15 @@ integration-up:
 		docker logs sshc-sshd 2>&1 | tail -100 >&2 || true; \
 		exit 1; \
 	fi
+	@ready=0; for i in $$(seq 1 60); do \
+		if docker exec sshc-sshd ssh-keyscan -p 2222 sshc-sshd-destination 2>/dev/null | grep -q .; then ready=1; break; fi; \
+		sleep 1; \
+	done; \
+	if [ "$$ready" != 1 ]; then \
+		echo "the destination sshd did not answer through the integration network within 60s" >&2; \
+		docker logs sshc-sshd-destination 2>&1 | tail -100 >&2 || true; \
+		exit 1; \
+	fi
 	@$(MAKE) --no-print-directory integration-sshd-relax
 	@docker exec -i sshc-sshd sh -c ' \
 		umask 077; \
@@ -190,6 +208,9 @@ integration-up:
 		touch /config/.ssh/authorized_keys; \
 		chmod 600 /config/.ssh/authorized_keys; \
 		cat >> /config/.ssh/authorized_keys' < .integration-key/id_integration.pub
+	@ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null > .integration-proxy-known-hosts
+	@docker exec sshc-sshd ssh-keyscan -p 2222 sshc-sshd-destination \
+		2>/dev/null >> .integration-proxy-known-hosts
 
 # OpenSSH 10 の PerSourcePenalties は、短時間に同一アドレスから接続を繰り返す
 # 統合テストを途中で拒否する。テスト用コンテナ内だけで無効にし、連続接続で
@@ -205,8 +226,9 @@ integration-sshd-relax:
 		for configuration in $$found; do \
 			grep -q "^PerSourcePenalties" "$$configuration" || \
 				printf "\nPerSourcePenalties no\n" >> "$$configuration"; \
+			sed -i "s/^AllowTcpForwarding no$$/AllowTcpForwarding yes/" "$$configuration"; \
 		done; \
-		echo "PerSourcePenalties no ->" $$found'
+		echo "PerSourcePenalties no; AllowTcpForwarding yes ->" $$found'
 	docker restart sshc-sshd
 	@ready=0; for i in $$(seq 1 60); do \
 		if ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q .; then ready=1; break; fi; \
@@ -228,8 +250,10 @@ integration-sshd-relax:
 
 # 統合テスト用の資格情報と鍵は実行時に生成し、終了時に削除する。
 integration-down:
-	docker rm -f sshc-s3 sshc-sshd >/dev/null 2>&1 || true
+	docker rm -f sshc-s3 sshc-sshd sshc-sshd-destination >/dev/null 2>&1 || true
+	docker network rm $(INTEGRATION_NETWORK) >/dev/null 2>&1 || true
 	rm -f .integration-s3.json
+	rm -f .integration-proxy-known-hosts
 	rm -f .integration-key/id_integration .integration-key/id_integration.pub
 	rmdir .integration-key 2>/dev/null || true
 
@@ -247,6 +271,14 @@ integration: build
 	SSHC_TEST_SSH_KEY="$(CURDIR)/.integration-key/id_integration" \
 	SSHC_TEST_SSH_KEY_PASSPHRASE="$(SSH_KEY_PASSPHRASE)" \
 	go test ./internal/objectstore ./internal/remotesync ./internal/sftp ./internal/sshdconformance -count=1 -v
+	SSHC_TEST_PROXY_JUMP_ADDR=127.0.0.1:$(SSHD_PORT) \
+	SSHC_TEST_PROXY_JUMP_USER=$(SSH_USER) \
+	SSHC_TEST_PROXY_JUMP_PASSWORD=$(SSH_PASS) \
+	SSHC_TEST_PROXY_DEST_ADDR=sshc-sshd-destination:2222 \
+	SSHC_TEST_PROXY_DEST_USER=$(SSH_DEST_USER) \
+	SSHC_TEST_PROXY_DEST_PASSWORD=$(SSH_DEST_PASS) \
+	SSHC_TEST_PROXY_KNOWN_HOSTS="$(CURDIR)/.integration-proxy-known-hosts" \
+	go test ./integration -run '^TestCLIUsesVaultPasswordsAcrossARealProxyJump$$' -count=1 -v
 
 # バイナリは安定したパスへ置く。デスクトップ側はここへ symlink を張り、CLI と UI が
 # 同じバイナリを使用する。別の場所でビルドし直すと

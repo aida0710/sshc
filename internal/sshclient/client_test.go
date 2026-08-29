@@ -473,7 +473,8 @@ func TestProxyJumpUsesTheSavedPasswordForEachAlias(t *testing.T) {
 				return "", false
 			}
 		}},
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		HostKeys:  sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		Verbosity: func() sshclient.Verbosity { return sshclient.Brief },
 	}
 	target := targetWith(inner)
 	target.Alias = "destination"
@@ -486,6 +487,8 @@ func TestProxyJumpUsesTheSavedPasswordForEachAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = process.Close() }()
+	readUntil(t, process, "mdx-jamstec-1 の接続完了（1/2）")
+	readUntil(t, process, "destination の接続完了（2/2）")
 	readUntil(t, process, "ready")
 	if !slices.Equal(requested, []string{"mdx-jamstec-1", "destination"}) {
 		t.Fatalf("passwords requested for %#v", requested)
