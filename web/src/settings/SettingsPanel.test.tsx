@@ -1,11 +1,14 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { IntegrationsApi } from "../api/integrations";
 import { SettingsPanel } from "./SettingsPanel";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  window.localStorage.clear();
+});
 
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
@@ -75,7 +78,20 @@ describe("SettingsPanel", () => {
 
     const region = screen.getByRole("region", { name: "Notifications" });
     expect(within(region).getByText(/blocked for sshc/i)).toBeVisible();
-    expect(within(region).queryByRole("button")).toBeNull();
+    expect(within(region).queryByRole("button", { name: "Enable notifications" })).toBeNull();
+  });
+
+  it("stores separate Agent sounds and volume only in this browser", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPanel api={buildApi()} />);
+    const region = screen.getByRole("region", { name: "Notifications" });
+
+    await user.selectOptions(within(region).getByLabelText("Input-needed sound"), "pulse");
+    await user.selectOptions(within(region).getByLabelText("Completion sound"), "none");
+    fireEvent.change(within(region).getByLabelText("Notification volume"), { target: { value: "35" } });
+
+    const stored = JSON.parse(window.localStorage.getItem("sshc.agent-notification-sounds.v1") ?? "null");
+    expect(stored).toEqual({ attention: "pulse", completed: "none", volume: 35 });
   });
 
   it("does not accept terminal edits before initial settings finish loading", async () => {

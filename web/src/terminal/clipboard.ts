@@ -59,6 +59,11 @@ export function attachTerminalClipboard({
 
   terminal.attachCustomKeyEventHandler((event) => {
     if (event.type !== "keydown") return true;
+    const sequence = enhancedKey?.(event) ?? null;
+    if (sequence !== null) {
+      sendEnhancedKey?.(sequence);
+      return false;
+    }
     if (!event.metaKey && !(event.ctrlKey && event.shiftKey)) return true;
     const key = event.key.toLowerCase();
     if (key === "c" && terminal.hasSelection()) {
@@ -69,11 +74,6 @@ export function attachTerminalClipboard({
       // Let the browser emit its normal paste event. The capture handler below
       // owns that event before xterm's nested listeners see it. Returning false
       // keeps xterm from also translating Ctrl+V into terminal input.
-      return false;
-    }
-    const sequence = enhancedKey?.(event) ?? null;
-    if (sequence !== null) {
-      sendEnhancedKey?.(sequence);
       return false;
     }
     return true;

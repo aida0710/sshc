@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamHandlers, TerminalStream } from "./stream";
@@ -12,6 +12,11 @@ vi.mock("./stream", () => ({
     streams.push({ handlers, stream });
     return stream;
   },
+}));
+vi.mock("./TerminalQuickCommands", () => ({
+  TerminalQuickCommands: ({ onSend }: { onSend: (command: string, submit: boolean) => void }) => (
+    <button type="button" onClick={() => onSend("echo quick-command", true)}>Send prepared command</button>
+  ),
 }));
 
 const { TerminalView } = await import("./TerminalView");
@@ -54,6 +59,42 @@ describe("TerminalView", () => {
     expect(screen.getByText("zsh", { exact: true })).toBeVisible();
     expect(screen.getByRole("button", { name: "Find" })).toBeVisible();
     expect(screen.getByText("connected", { exact: true })).toBeVisible();
+  });
+
+  it("opens search as an overlay with match-case, regex and invalid-pattern feedback", async () => {
+    renderView();
+    await userEvent.click(screen.getByRole("button", { name: "Find" }));
+
+    const input = screen.getByRole("textbox", { name: "Search terminal output" });
+    expect(input.parentElement).toHaveClass("absolute");
+    const matchCase = screen.getByRole("button", { name: "Match case" });
+    const regex = screen.getByRole("button", { name: "Use regular expression" });
+    expect(matchCase).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(matchCase);
+    await userEvent.click(regex);
+    expect(matchCase).toHaveAttribute("aria-pressed", "true");
+    expect(regex).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(input, { target: { value: "[" } });
+    expect(await screen.findByText("Invalid")).toBeVisible();
+  });
+
+  it("requires explicit per-session opt-in before accepting OSC 52", async () => {
+    renderView();
+    const toggle = screen.getByRole("button", { name: "OSC 52" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/OSC 52 clipboard writes are allowed/)).toBeVisible();
+  });
+
+  it("runs a Quick Command in the current terminal stream", async () => {
+    renderView();
+    await waitFor(() => expect(streams).toHaveLength(1));
+
+    await userEvent.click(screen.getByRole("button", { name: "Quick Commands" }));
+    await userEvent.click(screen.getByRole("button", { name: "Send prepared command" }));
+
+    expect(streams[0]?.stream.send).toHaveBeenCalledWith("echo quick-command\r");
   });
 
   it("shows the current SSH hop and connection phase in the header", () => {
