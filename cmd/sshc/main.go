@@ -90,6 +90,8 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		return runConnect(ctx, alias, home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
 	case invocationList:
 		return runList(home, os.Stdout, os.Stderr)
+	case invocationInfo:
+		return runInfo(called.Args[0], home, called.JSON, os.Stdout, os.Stderr)
 	case invocationOpen:
 		return runOpen(ctx, app.HandoffDir(home), client, os.Stdout, os.Stderr, false)
 	case invocationStatus:
