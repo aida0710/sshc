@@ -88,6 +88,14 @@ describe("SFTPPanel uploads", () => {
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/"));
   });
 
+  it("opens the parent directory requested by a terminal path action", async () => {
+    render(<SFTPPanel aliases={["edge"]} target={{ alias: "edge", path: "/var/log/app.log", action: "browse", request: 1 }} />);
+
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
+    expect(screen.getByLabelText("Host")).toHaveValue("edge");
+    expect(screen.getByLabelText("Remote path")).toHaveValue("/remote");
+  });
+
   it("shows a friendly inline message when SFTP cannot connect", async () => {
     api.list.mockRejectedValueOnce(new ApiError("sftp_failed", 502, null));
     render(<SFTPPanel aliases={["miyabi"]} />);

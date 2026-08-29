@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { viewportText, type ViewportBuffer } from "./buffer";
+import { recentBufferText, viewportText, type ViewportBuffer } from "./buffer";
 
 function bufferOf(lines: string[], viewportY = 0): ViewportBuffer {
   return {
@@ -38,5 +38,30 @@ describe("viewportText", () => {
 
   it("answers with a blank line for a row the buffer does not have", () => {
     expect(viewportText(bufferOf(["only"]), 3, 40)).toBe("only\n\n");
+  });
+});
+
+describe("recentBufferText", () => {
+  it("copies a bounded tail without terminal control characters", () => {
+    const buffer = bufferOf(["old", "prompt\u001b[31m", "result\u0007", ""]);
+    expect(recentBufferText(buffer, 3)).toBe("prompt[31m\nresult");
+  });
+
+  it("joins wrapped physical rows and clips the returned text", () => {
+    const lines = ["first", "long ", "line"];
+    const buffer: ViewportBuffer = {
+      viewportY: 0,
+      length: lines.length,
+      getLine: (index) => {
+        const line = lines[index];
+        if (line === undefined) return undefined;
+        return {
+          isWrapped: index === 2,
+          translateToString: () => line,
+        };
+      },
+    };
+    expect(recentBufferText(buffer)).toBe("first\nlong line");
+    expect(recentBufferText(buffer, 200, 4)).toBe("line");
   });
 });

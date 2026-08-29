@@ -1,5 +1,20 @@
 export type BufferMatch = { row: number; column: number; length: number };
 
+export type TerminalSearchSettings = {
+  caseSensitive: boolean;
+  regex: boolean;
+};
+
+export function validSearchPattern(query: string, settings: TerminalSearchSettings): boolean {
+  if (!settings.regex || query === "") return true;
+  try {
+    new RegExp(query, settings.caseSensitive ? "g" : "gi");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function findBufferMatches(lines: string[], query: string): BufferMatch[] {
   if (query === "") return [];
   const needle = query.toLocaleLowerCase();

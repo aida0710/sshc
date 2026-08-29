@@ -21,6 +21,8 @@ type TerminalClipboardOptions = {
   coarsePointer?: () => boolean;
   settings: () => TerminalClipboardSettings;
   refuse: () => void;
+  enhancedKey?: (event: KeyboardEvent) => string | null;
+  sendEnhancedKey?: (sequence: string) => void;
 };
 
 export function prepareTerminalPaste(text: string, bracketed: boolean): string {
@@ -36,6 +38,8 @@ export function attachTerminalClipboard({
   coarsePointer = () => false,
   settings,
   refuse,
+  enhancedKey,
+  sendEnhancedKey,
 }: TerminalClipboardOptions): () => void {
   const copySelection = () => {
     if (!terminal.hasSelection()) return;
@@ -65,6 +69,11 @@ export function attachTerminalClipboard({
       // Let the browser emit its normal paste event. The capture handler below
       // owns that event before xterm's nested listeners see it. Returning false
       // keeps xterm from also translating Ctrl+V into terminal input.
+      return false;
+    }
+    const sequence = enhancedKey?.(event) ?? null;
+    if (sequence !== null) {
+      sendEnhancedKey?.(sequence);
       return false;
     }
     return true;
