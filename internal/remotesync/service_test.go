@@ -330,6 +330,7 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 		func() (string, error) { counter++; return "origin-" + string(rune('A'+counter)), nil })
 	service.OpenVault = func() ([]byte, error) { return nil, nil }
 	service.SealVault = func(document []byte) ([]byte, error) { return document, nil }
+	service.EmptyVaultDocument = func() ([]byte, error) { return []byte("empty-vault"), nil }
 
 	server := httptest.NewTLSServer(bucket.handler())
 	t.Cleanup(server.Close)
@@ -1506,7 +1507,7 @@ func TestHistoryRejectsAnObjectChangedAfterListing(t *testing.T) {
 	}
 }
 
-func TestHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleGraph(t *testing.T) {
+func TestHistorySerializesRemoteDerivationAndDiscardsItsStaleGraph(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
 	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
@@ -1547,12 +1548,12 @@ func TestHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleGraph(t *testing.T)
 			context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error { return nil },
 		)
 	}()
+	releaseHistory()
 	select {
 	case <-replacementStarted:
 	case <-time.After(2 * time.Second):
-		t.Fatal("History held operationMu while deriving and blocked ReplaceKey")
+		t.Fatal("ReplaceKey did not continue after the bounded remote derivation finished")
 	}
-	releaseHistory()
 	if err := <-rotationDone; err != nil {
 		t.Fatalf("ReplaceKey while History derives = %v", err)
 	}
@@ -1561,7 +1562,7 @@ func TestHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleGraph(t *testing.T)
 	}
 }
 
-func TestDiffHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleDiff(t *testing.T) {
+func TestDiffHistorySerializesRemoteDerivationAndDiscardsItsStaleDiff(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
 	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
@@ -1607,12 +1608,12 @@ func TestDiffHistoryDoesNotBlockKeyReplacementAndDiscardsItsStaleDiff(t *testing
 			context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error { return nil },
 		)
 	}()
+	releaseDiff()
 	select {
 	case <-replacementStarted:
 	case <-time.After(2 * time.Second):
-		t.Fatal("DiffHistory held operationMu while deriving and blocked ReplaceKey")
+		t.Fatal("ReplaceKey did not continue after the bounded remote derivation finished")
 	}
-	releaseDiff()
 	if err := <-rotationDone; err != nil {
 		t.Fatalf("ReplaceKey while DiffHistory derives = %v", err)
 	}
@@ -2073,7 +2074,13 @@ func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
 		t.Fatalf("ForcePush = %v", err)
 	}
 
-	pulled, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote)
+	// The old installation must not silently accept the unrelated force-pushed
+	// generation. A fresh installation can still adopt that confirmed head.
+	if _, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("Pull after unrelated ForcePush = %v, want ErrRemoteMoved", err)
+	}
+	reader := newInstallation(t, bucket, map[string]string{})
+	pulled, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2671,6 +2678,7 @@ func withVault(t *testing.T, machine installation, master string) *secret.Servic
 	}
 	machine.service.OpenVault = secrets.TravelDocument
 	machine.service.SealVault = secrets.AdoptTravelDocument
+	machine.service.EmptyVaultDocument = secrets.EmptyTravelDocument
 	machine.service.VaultAdopted = secrets.Reload
 	return secrets
 }
@@ -2736,6 +2744,72 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	}
 	if got := receiver.BoundPasswordFor("bastion", binding); got != "the password for bastion" {
 		t.Fatalf("after unlocking with its own master password: %q", got)
+	}
+}
+
+func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T) {
+	bucket := &fakeBucket{}
+	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	sender := withVault(t, first, "the first machine's master")
+	const binding = "abababababababababababababababababababababababababababababababab"
+	if err := sender.SetBound("bastion", "password to revoke", binding); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.service.Push(context.Background(), syncPassphrase, "Store credential"); err != nil {
+		t.Fatal(err)
+	}
+
+	second := newInstallation(t, bucket, map[string]string{})
+	receiver := withVault(t, second, "the second machine's master")
+	initial, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := second.service.Apply(initial); err != nil {
+		t.Fatal(err)
+	}
+	if got := receiver.BoundPasswordFor("bastion", binding); got != "password to revoke" {
+		t.Fatalf("initial password = %q", got)
+	}
+
+	if err := sender.Remove("bastion"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.service.Push(context.Background(), syncPassphrase, "Remove all credentials"); err != nil {
+		t.Fatal(err)
+	}
+	archive, _, err := envelope.OpenWithin(bucket.object(remotesync.ObjectName), syncPassphrase, envelope.AcceptedFromRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, contents, err := remotesync.Read(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logical, present := contents[remotesync.TravelPath]
+	if !present || len(logical) != 0 {
+		t.Fatalf("empty vault tombstone = %q, present %v", logical, present)
+	}
+
+	removal, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removal.Conflicts) != 0 || len(removal.Request.Removals) != 0 {
+		t.Fatalf("empty vault preview = conflicts %+v, removals %+v", removal.Conflicts, removal.Request.Removals)
+	}
+	if err := second.service.Apply(removal); err != nil {
+		t.Fatal(err)
+	}
+	if got := receiver.BoundPasswordFor("bastion", binding); got != "" {
+		t.Fatalf("revoked password survived remote tombstone: %q", got)
+	}
+	receiver.Lock()
+	if err := receiver.Unlock("the second machine's master"); err != nil {
+		t.Fatal(err)
+	}
+	if got := receiver.BoundPasswordFor("bastion", binding); got != "" {
+		t.Fatalf("revoked password returned after unlock: %q", got)
 	}
 }
 

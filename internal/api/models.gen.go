@@ -275,6 +275,42 @@ func (e TerminalConnectionProgressPhase) Valid() bool {
 	}
 }
 
+// Defines values for TerminalControlResponseState.
+const (
+	TerminalControlResponseStateAgentAttention TerminalControlResponseState = "agent-attention"
+	TerminalControlResponseStateAgentEnded     TerminalControlResponseState = "agent-ended"
+	TerminalControlResponseStateAgentReady     TerminalControlResponseState = "agent-ready"
+	TerminalControlResponseStateAgentWorking   TerminalControlResponseState = "agent-working"
+	TerminalControlResponseStateConnected      TerminalControlResponseState = "connected"
+	TerminalControlResponseStateConnecting     TerminalControlResponseState = "connecting"
+	TerminalControlResponseStateExited         TerminalControlResponseState = "exited"
+	TerminalControlResponseStateReconnecting   TerminalControlResponseState = "reconnecting"
+)
+
+// Valid indicates whether the value is a known member of the TerminalControlResponseState enum.
+func (e TerminalControlResponseState) Valid() bool {
+	switch e {
+	case TerminalControlResponseStateAgentAttention:
+		return true
+	case TerminalControlResponseStateAgentEnded:
+		return true
+	case TerminalControlResponseStateAgentReady:
+		return true
+	case TerminalControlResponseStateAgentWorking:
+		return true
+	case TerminalControlResponseStateConnected:
+		return true
+	case TerminalControlResponseStateConnecting:
+		return true
+	case TerminalControlResponseStateExited:
+		return true
+	case TerminalControlResponseStateReconnecting:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TerminalPresentationTitleSource.
 const (
 	Agent      TerminalPresentationTitleSource = "agent"
@@ -322,22 +358,22 @@ func (e TerminalSessionKind) Valid() bool {
 
 // Defines values for TerminalSessionState.
 const (
-	Connected    TerminalSessionState = "connected"
-	Connecting   TerminalSessionState = "connecting"
-	Exited       TerminalSessionState = "exited"
-	Reconnecting TerminalSessionState = "reconnecting"
+	TerminalSessionStateConnected    TerminalSessionState = "connected"
+	TerminalSessionStateConnecting   TerminalSessionState = "connecting"
+	TerminalSessionStateExited       TerminalSessionState = "exited"
+	TerminalSessionStateReconnecting TerminalSessionState = "reconnecting"
 )
 
 // Valid indicates whether the value is a known member of the TerminalSessionState enum.
 func (e TerminalSessionState) Valid() bool {
 	switch e {
-	case Connected:
+	case TerminalSessionStateConnected:
 		return true
-	case Connecting:
+	case TerminalSessionStateConnecting:
 		return true
-	case Exited:
+	case TerminalSessionStateExited:
 		return true
-	case Reconnecting:
+	case TerminalSessionStateReconnecting:
 		return true
 	default:
 		return false
@@ -844,6 +880,20 @@ type KnownHostsScanResponse struct {
 	Notice     string               `json:"notice"`
 }
 
+// LocalShellProfile defines model for LocalShellProfile.
+type LocalShellProfile struct {
+	Arguments []string `json:"arguments"`
+	Default   bool     `json:"default"`
+	Id        string   `json:"id"`
+	Label     string   `json:"label"`
+	Path      string   `json:"path"`
+}
+
+// LocalShellProfileList defines model for LocalShellProfileList.
+type LocalShellProfileList struct {
+	Profiles []LocalShellProfile `json:"profiles"`
+}
+
 // Notice defines model for Notice.
 type Notice struct {
 	Code   string  `json:"code"`
@@ -854,10 +904,11 @@ type Notice struct {
 
 // OpenTerminalSessionRequest defines model for OpenTerminalSessionRequest.
 type OpenTerminalSessionRequest struct {
-	Alias *string                        `json:"alias,omitempty"`
-	Cols  *int                           `json:"cols,omitempty"`
-	Kind  OpenTerminalSessionRequestKind `json:"kind"`
-	Rows  *int                           `json:"rows,omitempty"`
+	Alias     *string                        `json:"alias,omitempty"`
+	Cols      *int                           `json:"cols,omitempty"`
+	Kind      OpenTerminalSessionRequestKind `json:"kind"`
+	ProfileId *string                        `json:"profileId,omitempty"`
+	Rows      *int                           `json:"rows,omitempty"`
 }
 
 // OpenTerminalSessionRequestKind defines model for OpenTerminalSessionRequest.Kind.
@@ -1470,6 +1521,30 @@ type TerminalConnectionProgress struct {
 // TerminalConnectionProgressPhase defines model for TerminalConnectionProgress.Phase.
 type TerminalConnectionProgressPhase string
 
+// TerminalControlCursor defines model for TerminalControlCursor.
+type TerminalControlCursor struct {
+	// End Monotonic end of the raw transcript; greater than next means unread bytes remain.
+	End       uint64 `json:"end"`
+	Next      uint64 `json:"next"`
+	Requested uint64 `json:"requested"`
+	Start     uint64 `json:"start"`
+	Truncated bool   `json:"truncated"`
+}
+
+// TerminalControlResponse defines model for TerminalControlResponse.
+type TerminalControlResponse struct {
+	Cursor     TerminalControlCursor `json:"cursor"`
+	Generation uint64                `json:"generation"`
+
+	// Output Bounded transcript with terminal escape and control sequences removed.
+	Output  string                       `json:"output"`
+	Session TerminalSession              `json:"session"`
+	State   TerminalControlResponseState `json:"state"`
+}
+
+// TerminalControlResponseState defines model for TerminalControlResponse.State.
+type TerminalControlResponseState string
+
 // TerminalExit defines model for TerminalExit.
 type TerminalExit struct {
 	At     string `json:"at"`
@@ -1534,15 +1609,19 @@ type TerminalSessionList struct {
 
 // TerminalSettings defines model for TerminalSettings.
 type TerminalSettings struct {
-	Appearance      *TerminalAppearance `json:"appearance,omitempty"`
-	CopyOnSelect    *bool               `json:"copyOnSelect,omitempty"`
-	FontSize        *int                `json:"fontSize,omitempty"`
-	MaxSessions     *int                `json:"maxSessions,omitempty"`
-	Reconnect       *int                `json:"reconnect,omitempty"`
-	RightClickPaste *bool               `json:"rightClickPaste,omitempty"`
-	ScrollbackBytes *int                `json:"scrollbackBytes,omitempty"`
-	StartDirectory  *string             `json:"startDirectory,omitempty"`
-	Verbosity       *int                `json:"verbosity,omitempty"`
+	Appearance             *TerminalAppearance `json:"appearance,omitempty"`
+	BrowserScrollbackLines *int                `json:"browserScrollbackLines,omitempty"`
+	CopyOnSelect           *bool               `json:"copyOnSelect,omitempty"`
+	FontSize               *int                `json:"fontSize,omitempty"`
+	JisYenBackslash        *bool               `json:"jisYenBackslash,omitempty"`
+	LocalShellProfile      *string             `json:"localShellProfile,omitempty"`
+	MaxSessions            *int                `json:"maxSessions,omitempty"`
+	Osc52                  *bool               `json:"osc52,omitempty"`
+	Reconnect              *int                `json:"reconnect,omitempty"`
+	RightClickPaste        *bool               `json:"rightClickPaste,omitempty"`
+	ScrollbackBytes        *int                `json:"scrollbackBytes,omitempty"`
+	StartDirectory         *string             `json:"startDirectory,omitempty"`
+	Verbosity              *int                `json:"verbosity,omitempty"`
 }
 
 // TerminalStreamTicket defines model for TerminalStreamTicket.

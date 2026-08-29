@@ -3,6 +3,9 @@
 package platform
 
 import (
+	"path/filepath"
+	"strings"
+
 	"golang.org/x/sys/windows"
 
 	trusted "sshc/internal/platform/windows"
@@ -34,6 +37,38 @@ func LoginArgv0(string) string { return "" }
 
 // LoginArguments は、そのシェルをログインシェルとして起動するための引数である。
 func LoginArguments(shell string) []string { return trusted.LoginArguments(shell) }
+
+// ShellProfiles uses only Windows-owned directories and verified executable
+// files. It never parses a user-provided command line.
+func ShellProfiles(lookup func(string) (string, bool)) []ShellProfile {
+	lookup = systemLookup(lookup)
+	login, err := trusted.LoginShell(lookup, nil)
+	if err != nil {
+		return nil
+	}
+	profiles := []ShellProfile{{
+		ID: "default", Label: filepath.Base(login) + " (default)", Path: login,
+		Arguments: trusted.LoginArguments(login),
+	}}
+	add := func(id, label, path string, args []string) {
+		if path == "" || !trusted.ExistingProgram(path) {
+			return
+		}
+		profiles = append(profiles, ShellProfile{ID: id, Label: label, Path: path, Arguments: args})
+	}
+	if programFiles, ok := lookup("ProgramFiles"); ok {
+		add("powershell", "PowerShell 7", filepath.Join(programFiles, "PowerShell", "7", "pwsh.exe"), []string{"-NoLogo"})
+		add("git-bash", "Git Bash", filepath.Join(programFiles, "Git", "bin", "bash.exe"), []string{"--login"})
+	}
+	if windowsDirectory, ok := lookup("WINDIR"); ok {
+		add("windows-powershell", "Windows PowerShell", filepath.Join(windowsDirectory, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), []string{"-NoLogo"})
+		add("wsl", "WSL", filepath.Join(windowsDirectory, "System32", "wsl.exe"), nil)
+	}
+	if comSpec, ok := lookup("ComSpec"); ok && strings.EqualFold(filepath.Base(comSpec), "cmd.exe") {
+		add("cmd", "Command Prompt", comSpec, nil)
+	}
+	return profiles
+}
 
 // systemLookup は、シェルの在り処を Windows 自身に尋ねる。
 //

@@ -148,14 +148,35 @@ func TestTheClipboardChoicesRoundTripAndCanBeCleared(t *testing.T) {
 	}
 }
 
+func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
+	service, _ := newTerminalService(t)
+	want := TerminalSettings{
+		BrowserScrollbackLines: 12000,
+		OSC52:                  true,
+		JISYenBackslash:        true,
+		LocalShellProfile:      "fish",
+	}
+	if _, err := service.SetTerminalSettings(want); err != nil {
+		t.Fatal(err)
+	}
+	got := service.TerminalSettings()
+	if got.BrowserScrollbackLines != want.BrowserScrollbackLines || got.OSC52 != want.OSC52 ||
+		got.JISYenBackslash != want.JISYenBackslash || got.LocalShellProfile != want.LocalShellProfile {
+		t.Fatalf("settings = %#v, want %#v", got, want)
+	}
+}
+
 func TestTheLimitsAreRefusedOutsideTheirRange(t *testing.T) {
 	service, _ := newTerminalService(t)
 
 	for name, settings := range map[string]TerminalSettings{
-		"too many sessions":    {MaxSessions: 9999},
-		"negative sessions":    {MaxSessions: -1},
-		"scrollback too small": {ScrollbackBytes: 1},
-		"scrollback too large": {ScrollbackBytes: 99 << 20},
+		"too many sessions":       {MaxSessions: 9999},
+		"negative sessions":       {MaxSessions: -1},
+		"scrollback too small":    {ScrollbackBytes: 1},
+		"scrollback too large":    {ScrollbackBytes: 99 << 20},
+		"browser lines too small": {BrowserScrollbackLines: 999},
+		"browser lines too large": {BrowserScrollbackLines: 100001},
+		"invalid shell profile":   {LocalShellProfile: "../../bin/sh"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := service.SetTerminalSettings(settings); !errors.Is(err, ErrMetadataTerminal) {

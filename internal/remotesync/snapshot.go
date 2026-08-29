@@ -27,6 +27,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"sshc/internal/storage"
 )
 
 // ManifestName は、すべてのスナップショットの最初のエントリ。
@@ -212,8 +214,14 @@ func Build(manifest Manifest, contents map[string][]byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(document) > storage.MaxFileSize {
+		return nil, ErrSnapshotTooLarge
+	}
 	total := int64(len(document))
 	for _, entry := range manifest.Files {
+		if len(contents[entry.Path]) > storage.MaxFileSize {
+			return nil, ErrSnapshotTooLarge
+		}
 		total += int64(len(contents[entry.Path]))
 		if total > MaxSnapshotBytes {
 			return nil, ErrSnapshotTooLarge
@@ -271,15 +279,21 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 			// 何の意味も持たず、好意的に解釈すべきものでもない。
 			return Manifest{}, nil, ErrUnsafePath
 		}
+		if header.Size < 0 || header.Size > storage.MaxFileSize {
+			return Manifest{}, nil, ErrSnapshotTooLarge
+		}
 		if len(contents) >= MaxEntries {
 			return Manifest{}, nil, ErrSnapshotTooLarge
 		}
-		body, err := io.ReadAll(io.LimitReader(reader, MaxSnapshotBytes+1))
+		body, err := io.ReadAll(io.LimitReader(reader, storage.MaxFileSize+1))
 		if err != nil {
 			return Manifest{}, nil, ErrNotASnapshot
 		}
 		total += len(body)
 		if total > MaxSnapshotBytes {
+			return Manifest{}, nil, ErrSnapshotTooLarge
+		}
+		if len(body) > storage.MaxFileSize {
 			return Manifest{}, nil, ErrSnapshotTooLarge
 		}
 
@@ -304,6 +318,9 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 		if err := checkPath(header.Name); err != nil {
 			return Manifest{}, nil, err
 		}
+		if inboundReserved(header.Name) {
+			return Manifest{}, nil, ErrUnsafePath
+		}
 		contents[header.Name] = body
 	}
 
@@ -320,6 +337,9 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 	for _, entry := range manifest.Files {
 		if err := checkPath(entry.Path); err != nil {
 			return Manifest{}, nil, err
+		}
+		if inboundReserved(entry.Path) {
+			return Manifest{}, nil, ErrUnsafePath
 		}
 		if err := checkMode(entry.Mode); err != nil {
 			return Manifest{}, nil, err

@@ -14,6 +14,33 @@ export type KittyKeyboard = {
   dispose(): void;
 };
 
+const functionalKeys: Readonly<Record<string, { final?: string; code?: number; prefix?: number }>> = {
+  ArrowUp: { final: "A" },
+  ArrowDown: { final: "B" },
+  ArrowRight: { final: "C" },
+  ArrowLeft: { final: "D" },
+  Home: { final: "H" },
+  End: { final: "F" },
+  Insert: { final: "~", prefix: 2 },
+  Delete: { final: "~", prefix: 3 },
+  PageUp: { final: "~", prefix: 5 },
+  PageDown: { final: "~", prefix: 6 },
+  Enter: { code: 13 },
+  Tab: { code: 9 },
+  Backspace: { code: 127 },
+  Escape: { code: 27 },
+};
+
+function modifierParameter(event: KeyboardEvent): number {
+  return 1 + (event.shiftKey ? 1 : 0) + (event.altKey ? 2 : 0) + (event.ctrlKey ? 4 : 0);
+}
+
+export function encodeIntlYen(event: KeyboardEvent, enabled: boolean): string | null {
+  if (!enabled || event.type !== "keydown" || event.isComposing || event.code !== "IntlYen") return null;
+  if (event.ctrlKey || event.altKey || event.metaKey) return null;
+  return event.shiftKey ? "|" : "\\";
+}
+
 function firstParameter(parameters: Parameters, fallback: number): number | null {
   const value = parameters[0] ?? fallback;
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -44,11 +71,18 @@ export function attachKittyKeyboardProtocol(parser: KittyParser): KittyKeyboard 
 
   return {
     encode(event) {
-      if (flags === 0 || event.type !== "keydown" || event.isComposing || event.key !== "Enter") return null;
-      if (!event.shiftKey && !event.ctrlKey) return null;
+      if (flags === 0 || event.type !== "keydown" || event.isComposing) return null;
       if (event.metaKey) return null;
-      const modifiers = 1 + (event.shiftKey ? 1 : 0) + (event.altKey ? 2 : 0) + (event.ctrlKey ? 4 : 0);
-      return `\u001b[13;${modifiers}u`;
+      const key = functionalKeys[event.key];
+      if (key === undefined) {
+        if (!(event.ctrlKey || event.altKey) || event.key.length !== 1) return null;
+        const codePoint = event.key.codePointAt(0);
+        return codePoint === undefined ? null : `\u001b[${codePoint};${modifierParameter(event)}u`;
+      }
+      if (!event.shiftKey && !event.altKey && !event.ctrlKey) return null;
+      const modifiers = modifierParameter(event);
+      if (key.code !== undefined) return `\u001b[${key.code};${modifiers}u`;
+      return `\u001b[${key.prefix ?? 1};${modifiers}${key.final}`;
     },
     reset() {
       flags = 0;

@@ -1,10 +1,15 @@
 package remotesync_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"sshc/internal/envelope"
 	"sshc/internal/remotesync"
 )
 
@@ -135,6 +140,169 @@ func TestAutoAppliesWhatAnotherMachinePushed(t *testing.T) {
 	}
 	if got := consumer.read(t, "config"); got != "Host bastion\n" {
 		t.Fatalf("config = %q", got)
+	}
+}
+
+func TestLiveReplayIsBlockedButExplicitHistoryRestoreRemainsAvailable(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "First"); err != nil {
+		t.Fatal(err)
+	}
+	firstCiphertext := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
+
+	consumer := newInstallation(t, bucket, map[string]string{})
+	auto := autoFor(t, consumer, true)
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("initial receive = %+v", view)
+	}
+
+	producer.write(t, "config", "Host second\n")
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "Second"); err != nil {
+		t.Fatal(err)
+	}
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("descendant receive = %+v", view)
+	}
+	if got := consumer.read(t, "config"); got != "Host second\n" {
+		t.Fatalf("config before replay = %q", got)
+	}
+
+	// A bucket writer can replay observed ciphertext without knowing the key.
+	bucket.putObject(remotesync.ObjectName, firstCiphertext, `"replayed"`)
+	if _, err := consumer.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("Pull replay = %v, want ErrRemoteMoved", err)
+	}
+	if view := once(t, auto); view.Phase != remotesync.AutoBlocked || view.Detail != "remote_moved" {
+		t.Fatalf("auto replay = %+v, want blocked remote_moved", view)
+	}
+	if got := consumer.read(t, "config"); got != "Host second\n" {
+		t.Fatalf("replay changed config to %q", got)
+	}
+
+	var firstHistoryKey string
+	for _, key := range bucket.keys() {
+		if strings.Contains(key, remotesync.SnapshotPrefix) && bytes.Equal(bucket.object(key), firstCiphertext) {
+			firstHistoryKey = key
+			break
+		}
+	}
+	if firstHistoryKey == "" {
+		t.Fatal("first immutable history snapshot was not found")
+	}
+	preview, err := consumer.service.PullHistory(
+		context.Background(), syncPassphrase, firstHistoryKey, remotesync.ResolveRemote,
+	)
+	if err != nil {
+		t.Fatalf("PullHistory = %v", err)
+	}
+	if err := consumer.service.Apply(preview); err != nil {
+		t.Fatalf("Apply explicit history = %v", err)
+	}
+	if got := consumer.read(t, "config"); got != "Host first\n" {
+		t.Fatalf("explicit history restored %q", got)
+	}
+}
+
+func TestAutoAcceptsAProvenMultiGenerationDescendant(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "First"); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{})
+	auto := autoFor(t, consumer, true)
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("initial receive = %+v", view)
+	}
+
+	for _, value := range []string{"Host second\n", "Host third\n"} {
+		producer.write(t, "config", value)
+		if _, err := producer.service.Push(context.Background(), syncPassphrase, strings.TrimSpace(value)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// More than the graph window may exist in the bucket. Truncation alone is
+	// not a reason to block when every required link is still among the newest
+	// 50 authenticated objects.
+	for index := range 51 {
+		bucket.putObject(
+			fmt.Sprintf("%s0000-older-%02d", remotesync.SnapshotPrefix, index),
+			[]byte("not an envelope"), fmt.Sprintf(`"older-%02d"`, index),
+		)
+	}
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("multi-generation receive = %+v", view)
+	}
+	if got := consumer.read(t, "config"); got != "Host third\n" {
+		t.Fatalf("config = %q", got)
+	}
+}
+
+func TestAutoLineageProofDecodesRepeatedCiphertextOnlyOnce(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "First"); err != nil {
+		t.Fatal(err)
+	}
+	firstCiphertext := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
+	consumer := newInstallation(t, bucket, map[string]string{})
+	auto := autoFor(t, consumer, true)
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("initial receive = %+v", view)
+	}
+	for _, value := range []string{"Host second\n", "Host third\n"} {
+		producer.write(t, "config", value)
+		if _, err := producer.service.Push(context.Background(), syncPassphrase, strings.TrimSpace(value)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for index := range 12 {
+		bucket.putObject(fmt.Sprintf("%szz-duplicate-%02d", remotesync.SnapshotPrefix, index), firstCiphertext, fmt.Sprintf(`"duplicate-%02d"`, index))
+	}
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("receive behind repeated ciphertext = %+v", view)
+	}
+	if got := consumer.read(t, "config"); got != "Host third\n" {
+		t.Fatalf("config = %q", got)
+	}
+}
+
+func TestAutoLineageProofFailsClosedAfterItsDistinctCiphertextBudget(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "First"); err != nil {
+		t.Fatal(err)
+	}
+	firstCiphertext := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
+	consumer := newInstallation(t, bucket, map[string]string{})
+	auto := autoFor(t, consumer, true)
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("initial receive = %+v", view)
+	}
+	for _, value := range []string{"Host second\n", "Host third\n"} {
+		producer.write(t, "config", value)
+		if _, err := producer.service.Push(context.Background(), syncPassphrase, strings.TrimSpace(value)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	archive, key, err := envelope.OpenWithin(firstCiphertext, syncPassphrase, envelope.AcceptedFromRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer key.Destroy()
+	for index := range 9 {
+		resealed, sealErr := key.Seal(archive)
+		if sealErr != nil {
+			t.Fatal(sealErr)
+		}
+		bucket.putObject(fmt.Sprintf("%szz-distinct-%02d", remotesync.SnapshotPrefix, index), resealed, fmt.Sprintf(`"distinct-%02d"`, index))
+	}
+	if view := once(t, auto); view.Phase != remotesync.AutoBlocked || view.Detail != "remote_moved" {
+		t.Fatalf("receive beyond lineage budget = %+v, want blocked remote_moved", view)
+	}
+	if got := consumer.read(t, "config"); got != "Host first\n" {
+		t.Fatalf("blocked lineage changed config to %q", got)
 	}
 }
 

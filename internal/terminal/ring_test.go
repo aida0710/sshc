@@ -56,3 +56,24 @@ func TestRingSnapshotDoesNotAliasTheBuffer(t *testing.T) {
 		t.Fatalf("Snapshot() = %q", got)
 	}
 }
+
+func TestRingReadUsesAMonotonicCursorAcrossWraps(t *testing.T) {
+	ring := terminal.NewRing(5)
+	_, _ = ring.Write([]byte("abcd"))
+	first, ok := ring.ReadFrom(0, 3)
+	if !ok || string(first.Data) != "abc" || first.Start != 0 || first.Next != 3 || first.End != 4 || first.Truncated {
+		t.Fatalf("first read = %#v, %v", first, ok)
+	}
+	_, _ = ring.Write([]byte("efgh"))
+	second, ok := ring.ReadFrom(first.Next, 10)
+	if !ok || string(second.Data) != "defgh" || second.Start != 3 || second.Next != 8 || second.End != 8 || second.Truncated {
+		t.Fatalf("second read = %#v, %v", second, ok)
+	}
+	old, ok := ring.ReadFrom(0, 2)
+	if !ok || string(old.Data) != "de" || old.Start != 3 || old.Next != 5 || !old.Truncated {
+		t.Fatalf("truncated read = %#v, %v", old, ok)
+	}
+	if _, ok := ring.ReadFrom(9, 1); ok {
+		t.Fatal("a cursor beyond the end was accepted")
+	}
+}

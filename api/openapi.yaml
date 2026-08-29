@@ -268,6 +268,16 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/shell-profiles:
+    get:
+      operationId: listLocalShellProfiles
+      responses:
+        "200":
+          description: Local shells detected and validated on this machine
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LocalShellProfileList" }
+        "401": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/commands/preview:
     post:
       operationId: previewTerminalCommand
@@ -343,6 +353,34 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  # CLI やautomationは画面描画用のraw streamへ接続せず、明示的なlife-cycle
+  # stateと、cursorで範囲を指定したplain text transcriptだけを読む。
+  /api/v1/terminal/sessions/{id}/control:
+    get:
+      operationId: controlTerminalSession
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: integer, format: uint64, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, maximum: 65536, default: 32768 }
+      responses:
+        "200":
+          description: Explicit terminal state and a bounded plain-text transcript fragment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalControlResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/sessions/{id}/reconnect:
     post:
       operationId: reconnectTerminalSession
@@ -2437,8 +2475,9 @@ components:
         key: { type: string, minLength: 1, maxLength: 4096 }
         expectedFingerprint: { type: string, maxLength: 128 }
         acknowledged: { type: boolean }
-    # 開いている端末セッションひとつ。スクロールバックは決してここに現れない。
-    # 中身が出ていくのは WebSocket だけである。
+    # 開いている端末セッションひとつ。この一覧にはスクロールバックを含めない。
+    # 画面描画用のraw bytesはWebSocketだけが運び、control APIはescape sequenceを
+    # 除いたbounded plain textをautomation向けに別契約で返す。
     TerminalForward:
       type: object
       additionalProperties: false
@@ -2537,6 +2576,34 @@ components:
       properties:
         sessions: { type: array, items: { $ref: "#/components/schemas/TerminalSession" } }
         maxSessions: { type: integer }
+    TerminalControlCursor:
+      type: object
+      additionalProperties: false
+      required: [requested, start, next, end, truncated]
+      properties:
+        requested: { type: integer, format: uint64, minimum: 0 }
+        start: { type: integer, format: uint64, minimum: 0 }
+        next: { type: integer, format: uint64, minimum: 0 }
+        end:
+          type: integer
+          format: uint64
+          minimum: 0
+          description: Monotonic end of the raw transcript; greater than next means unread bytes remain.
+        truncated: { type: boolean }
+    TerminalControlResponse:
+      type: object
+      additionalProperties: false
+      required: [session, generation, state, cursor, output]
+      properties:
+        session: { $ref: "#/components/schemas/TerminalSession" }
+        generation: { type: integer, format: uint64, minimum: 1 }
+        state:
+          type: string
+          enum: [connecting, connected, reconnecting, exited, agent-working, agent-attention, agent-ready, agent-ended]
+        cursor: { $ref: "#/components/schemas/TerminalControlCursor" }
+        output:
+          type: string
+          description: Bounded transcript with terminal escape and control sequences removed.
     OpenTerminalSessionRequest:
       type: object
       additionalProperties: false
@@ -2546,6 +2613,25 @@ components:
         alias: { type: string, minLength: 1, maxLength: 255 }
         cols: { type: integer }
         rows: { type: integer }
+        # shell kind only. Must match one of LocalShellProfileList; executable
+        # paths and command strings are never accepted from the caller.
+        profileId: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
+    LocalShellProfile:
+      type: object
+      additionalProperties: false
+      required: [id, label, path, arguments, default]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        path: { type: string }
+        arguments: { type: array, items: { type: string } }
+        default: { type: boolean }
+    LocalShellProfileList:
+      type: object
+      additionalProperties: false
+      required: [profiles]
+      properties:
+        profiles: { type: array, items: { $ref: "#/components/schemas/LocalShellProfile" } }
     # 名前は一覧の表示だけのものである。走っているプロセスにも ssh の相手にも
     # 触れず、metadata へも書かない。セッションと一緒に消える。
     RenameTerminalSessionRequest:
@@ -3513,6 +3599,10 @@ components:
           type: string
           enum: [utf-8, shift_jis, euc-jp, iso-2022-jp]
           description: Text encoding used by this SSH terminal. Omitted means UTF-8.
+        osc52:
+          type: string
+          enum: [allow, deny]
+          description: Per-connection OSC 52 override. Omitted inherits the terminal default.
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
     # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:
@@ -3559,6 +3649,7 @@ components:
       properties:
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
+        browserScrollbackLines: { type: integer, minimum: 1000, maximum: 100000 }
         fontSize: { type: integer, minimum: 8, maximum: 32 }
         # 無いときは on。false は利用者が明示的に止めた値なので、省略せず運ぶ。
         # 接続の途中経過をどこまで端末へ書くか。0 は無言、3 は `ssh -vvv` 相当。
@@ -3574,6 +3665,9 @@ components:
         reconnect: { type: integer, minimum: 0, maximum: 5 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
+        osc52: { type: boolean }
+        jisYenBackslash: { type: boolean }
+        localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         # ローカルシェルの開始ディレクトリ。`~` を維持し、空なら home を使う。
         startDirectory: { type: string, maxLength: 4096 }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
@@ -3588,6 +3682,7 @@ components:
         startDirectory: { type: string, maxLength: 4096 }
         maxSessions: { type: integer, minimum: 1, maximum: 200 }
         scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
+        browserScrollbackLines: { type: integer, minimum: 1000, maximum: 100000 }
         # 字の大きさは画面のものであって engine のものではない。PTY は px を
         # 知らない。ここに置くのは、端末ごとに読みやすい大きさが違うからで、
         # 指で持つ画面と机の上の画面では同じ数字が別の意味になる。
@@ -3605,6 +3700,9 @@ components:
         reconnect: { type: integer, minimum: 0, maximum: 5 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
+        osc52: { type: boolean }
+        jisYenBackslash: { type: boolean }
+        localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
     # engine の設定。
     #

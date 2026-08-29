@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"sshc/internal/envelope"
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
 )
@@ -106,6 +107,12 @@ func TestCompatibleBackupRecoveryReSealsProtectedDocumentsIntoTheRecoveredKeyGen
 	if err := service.Initialise(passphrase); err != nil {
 		t.Fatal(err)
 	}
+	if err := service.SetSyncSettings(secret.SyncSettings{Bucket: "previous"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetSyncSettings(secret.SyncSettings{Bucket: "current"}); err != nil {
+		t.Fatal(err)
+	}
 	protectedPath := filepath.Join(workspace.Root(), "sshc", "snippets.json")
 	plaintext := []byte(`{"schemaVersion":1,"snippets":[]}`)
 	if err := service.RegisterProtectedDocument(secret.ProtectedDocument{
@@ -119,16 +126,20 @@ func TestCompatibleBackupRecoveryReSealsProtectedDocumentsIntoTheRecoveredKeyGen
 	}); err != nil {
 		t.Fatal(err)
 	}
-	sealedDocument, err := service.SealDocument(plaintext)
+	// The protected document can legitimately belong to another salt generation:
+	// for example, a user may have restored only the vault from history. Recovery
+	// must use the supplied master password as a fallback instead of mistaking the
+	// different derived key for a legacy plaintext document.
+	documentGeneration, err := secret.Create(passphrase)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(protectedPath), 0o700); err != nil {
+	sealedDocument, err := documentGeneration.SealBytes(plaintext)
+	documentGeneration.Destroy()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(protectedPath, sealedDocument, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, protectedPath, sealedDocument)
 
 	candidate, err := secret.Create(passphrase)
 	if err != nil {
@@ -143,9 +154,7 @@ func TestCompatibleBackupRecoveryReSealsProtectedDocumentsIntoTheRecoveredKeyGen
 		t.Fatal(err)
 	}
 	vaultPath := filepath.Join(workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
-	if err := os.WriteFile(vaultPath, candidateSealed, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, vaultPath, candidateSealed)
 	if _, err := manager.Commit(storage.Request{
 		Operation: "test.install-unsupported-vault",
 		Changes: []storage.Change{{
@@ -156,6 +165,19 @@ func TestCompatibleBackupRecoveryReSealsProtectedDocumentsIntoTheRecoveredKeyGen
 		t.Fatal(err)
 	}
 	service.Lock()
+	backupRoot := filepath.Join(workspace.StateDir(), storage.BackupDirectoryName)
+	existingBackups := []string{}
+	if err := filepath.Walk(backupRoot, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info != nil && !info.IsDir() {
+			existingBackups = append(existingBackups, path)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := service.RecoverCompatibleBackup(passphrase); err != nil {
 		t.Fatal(err)
@@ -167,6 +189,28 @@ func TestCompatibleBackupRecoveryReSealsProtectedDocumentsIntoTheRecoveredKeyGen
 	opened, err := service.OpenDocument(resealed)
 	if err != nil || !bytes.Equal(opened, plaintext) {
 		t.Fatalf("protected document after recovery = %q, %v", opened, err)
+	}
+	settings, err := service.SyncSettings()
+	if err != nil || settings.Bucket != "current" {
+		t.Fatalf("sync settings after recovery = %#v, %v", settings, err)
+	}
+	for _, path := range existingBackups {
+		outer, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		inner, openErr := service.OpenBackup(outer)
+		if openErr != nil {
+			t.Errorf("existing backup %s was not moved to the recovered generation: %v", path, openErr)
+			continue
+		}
+		if strings.HasSuffix(filepath.Clean(path), filepath.FromSlash(secret.WorkspacePath)) ||
+			strings.HasSuffix(filepath.Clean(path), filepath.FromSlash(secret.SettingsPath)) ||
+			strings.HasSuffix(filepath.Clean(path), filepath.Join("sshc", "snippets.json")) {
+			if _, innerErr := service.OpenDocument(inner); innerErr != nil {
+				t.Errorf("existing key-bound backup %s retained its old inner key: %v", path, innerErr)
+			}
+		}
 	}
 }
 
@@ -197,26 +241,35 @@ func TestUnsupportedVaultCanBeResetWithoutRemovingSSHFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(protectedPath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(protectedPath, protectedSealed, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, protectedPath, protectedSealed)
 	if err := service.SetSyncSettings(secret.SyncSettings{
 		Endpoint: "https://objects.example", Bucket: "workspace", AccessKeyID: "id", SecretAccessKey: "secret",
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := service.SetSyncSettings(secret.SyncSettings{
+		Endpoint: "https://objects.example", Bucket: "workspace-new", AccessKeyID: "id", SecretAccessKey: "secret",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	configPath := filepath.Join(workspace.Root(), "config")
-	if err := os.WriteFile(configPath, []byte("Host bastion\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, configPath, []byte("Host bastion\n"))
 	vaultPath := filepath.Join(workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
-	if err := os.WriteFile(vaultPath, legacy, 0o600); err != nil {
+	acltest.WritePrivateFile(t, vaultPath, legacy)
+	service.Lock()
+	backupRoot := filepath.Join(workspace.StateDir(), storage.BackupDirectoryName)
+	existingBackups := []string{}
+	if err := filepath.Walk(backupRoot, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info != nil && !info.IsDir() {
+			existingBackups = append(existingBackups, path)
+		}
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
-	service.Lock()
 
 	if err := service.ResetUnsupported(passphrase); err != nil {
 		t.Fatal(err)
@@ -242,6 +295,22 @@ func TestUnsupportedVaultCanBeResetWithoutRemovingSSHFiles(t *testing.T) {
 	if err != nil || !bytes.Equal(opened, protectedPlaintext) {
 		t.Fatalf("protected document after reset = %q, %v", opened, err)
 	}
+	for _, path := range existingBackups {
+		outer, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		inner, openErr := service.OpenBackup(outer)
+		if openErr != nil {
+			t.Errorf("existing backup %s was not moved to the reset generation: %v", path, openErr)
+			continue
+		}
+		if strings.HasSuffix(filepath.Clean(path), filepath.FromSlash(secret.SettingsPath)) {
+			if _, innerErr := service.OpenDocument(inner); innerErr != nil {
+				t.Errorf("existing settings backup %s retained its old inner key: %v", path, innerErr)
+			}
+		}
+	}
 	service.Lock()
 	if err := service.Unlock(passphrase); err != nil {
 		t.Fatalf("reset vault did not survive restart: %v", err)
@@ -256,6 +325,49 @@ func setTestPassword(service *secret.Service, alias, password string) error {
 
 func testPasswordFor(service *secret.Service, alias string) string {
 	return service.BoundPasswordFor(alias, testAuthenticationBinding)
+}
+
+func TestEmptyTravelDocumentUsesTheCurrentUnlockedKeyGeneration(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	empty, err := service.EmptyTravelDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(empty, []byte(`"schemaVersion":4`)) {
+		t.Fatalf("EmptyTravelDocument = %q", empty)
+	}
+	sealed, err := service.AdoptTravelDocument(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := service.OpenDocument(sealed)
+	if err != nil || !bytes.Equal(opened, empty) {
+		t.Fatalf("adopted empty document = %q, %v", opened, err)
+	}
+	service.Lock()
+	if _, err := service.EmptyTravelDocument(); !errors.Is(err, secret.ErrLocked) {
+		t.Fatalf("EmptyTravelDocument while locked = %v, want ErrLocked", err)
+	}
+}
+
+func TestAdoptTravelDocumentRefusesCiphertextItsBoundedReaderCannotReopen(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	prefix := `{"schemaVersion":4,"passwords":{},"dedicatedPasswords":{"host":"`
+	suffix := `"},"keyPassphrases":{},"hosts":{},"keys":{}}`
+	valueLength := storage.MaxFileSize - 1 - len(prefix) - len(suffix)
+	plain := []byte(prefix + strings.Repeat("x", valueLength) + suffix)
+	if len(plain) != storage.MaxFileSize-1 {
+		t.Fatalf("test document size = %d", len(plain))
+	}
+	if _, err := service.AdoptTravelDocument(plain); !errors.Is(err, storage.ErrFileTooLarge) {
+		t.Fatalf("AdoptTravelDocument = %v, want ErrFileTooLarge", err)
+	}
 }
 
 func assignTestPasswordCredential(service *secret.Service, subject, name string) error {
@@ -1127,6 +1239,12 @@ func TestChangingTheMasterPasswordReSealsTheVaultTheSettingsAndTheBackups(t *tes
 	if err := service.SetSyncSettings(secret.SyncSettings{Bucket: "b", AccessKeyID: "AKID"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := service.SetSyncSettings(secret.SyncSettings{Bucket: "b", AccessKeyID: "AKID-previous"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetSyncSettings(secret.SyncSettings{Bucket: "b", AccessKeyID: "AKID"}); err != nil {
+		t.Fatal(err)
+	}
 	// 二度目の書き込み。これにより、暗号化し直すべき vault の世代バックアップが存在する。
 	if err := service.SetCredential(secret.KindPassword, "office-vm", "hunter3"); err != nil {
 		t.Fatal(err)
@@ -1160,6 +1278,7 @@ func TestChangingTheMasterPasswordReSealsTheVaultTheSettingsAndTheBackups(t *tes
 	// そしてすべてのバックアップが新しいもので開く。
 	backups := filepath.Join(home, ".ssh", "sshc", "backups")
 	found := 0
+	keyBound := map[string]int{}
 	if err := filepath.Walk(backups, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil || info == nil || info.IsDir() {
 			return nil //nolint:nilerr // ディレクトリがなければ下のカウントで失敗する
@@ -1169,8 +1288,19 @@ func TestChangingTheMasterPasswordReSealsTheVaultTheSettingsAndTheBackups(t *tes
 		if readErr != nil {
 			return readErr
 		}
-		if _, openErr := reopened.OpenBackup(sealed); openErr != nil {
+		opened, openErr := reopened.OpenBackup(sealed)
+		if openErr != nil {
 			t.Errorf("%s cannot be opened with the new master password: %v", path, openErr)
+			return nil
+		}
+		for _, original := range []string{secret.WorkspacePath, secret.SettingsPath} {
+			if !strings.HasSuffix(filepath.Clean(path), filepath.FromSlash(original)) {
+				continue
+			}
+			keyBound[original]++
+			if _, innerErr := reopened.OpenDocument(opened); innerErr != nil {
+				t.Errorf("the nested %s backup still uses the old key generation: %v", original, innerErr)
+			}
 		}
 		return nil
 	}); err != nil {
@@ -1179,6 +1309,11 @@ func TestChangingTheMasterPasswordReSealsTheVaultTheSettingsAndTheBackups(t *tes
 	if found == 0 {
 		t.Error("no backup was there to re-seal, so this proved nothing")
 	}
+	for _, original := range []string{secret.WorkspacePath, secret.SettingsPath} {
+		if keyBound[original] == 0 {
+			t.Errorf("no nested %s backup was available to verify", original)
+		}
+	}
 }
 
 func TestChangingTheMasterPasswordAlsoSealsRegisteredApplicationDocuments(t *testing.T) {
@@ -1186,7 +1321,11 @@ func TestChangingTheMasterPasswordAlsoSealsRegisteredApplicationDocuments(t *tes
 	if err := service.Initialise(passphrase); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(home, ".ssh", "sshc", "snippets.json")
+	root, err := filepath.EvalSymlinks(filepath.Join(home, ".ssh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "sshc", "snippets.json")
 	plain := []byte(`{"schemaVersion":1,"snippets":[{"command":"deploy --token=top-secret"}]}`)
 	if err := service.RegisterProtectedDocument(secret.ProtectedDocument{
 		Path: path,
@@ -1200,10 +1339,8 @@ func TestChangingTheMasterPasswordAlsoSealsRegisteredApplicationDocuments(t *tes
 		t.Fatal(err)
 	}
 	// A legacy plaintext document can exist before its screen is first opened.
-	if err := os.WriteFile(path, plain, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	sealedPath := filepath.Join(home, ".ssh", "sshc", "snippets-secondary")
+	acltest.WritePrivateFile(t, path, plain)
+	sealedPath := filepath.Join(root, "sshc", "snippets-secondary")
 	if err := service.RegisterProtectedDocument(secret.ProtectedDocument{
 		Path: sealedPath, Validate: func(document []byte) error {
 			if !bytes.Equal(document, plain) {
@@ -1218,9 +1355,42 @@ func TestChangingTheMasterPasswordAlsoSealsRegisteredApplicationDocuments(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(sealedPath, oldSealed, 0o600); err != nil {
+	acltest.WritePrivateFile(t, sealedPath, oldSealed)
+	backupPath := filepath.Join(root, "sshc", "snippets-with-backup")
+	if err := service.RegisterProtectedDocument(secret.ProtectedDocument{
+		Path: backupPath, Validate: func(document []byte) error {
+			if !bytes.Contains(document, []byte(`"schemaVersion":1`)) {
+				return errors.New("invalid protected document")
+			}
+			return nil
+		},
+	}); err != nil {
 		t.Fatal(err)
 	}
+	acltest.WritePrivateFile(t, backupPath, oldSealed)
+	changedPlain := []byte(`{"schemaVersion":1,"snippets":[{"command":"deploy safely"}]}`)
+	changedSealed, err := service.SealDocument(changedPlain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	manager.Seal = service.SealBackup
+	manager.Unseal = service.OpenBackup
+	result, err := manager.Commit(storage.Request{
+		Operation: "test.update-protected-document",
+		Changes: []storage.Change{{
+			Path: backupPath, Contents: changedSealed,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(oldSealed)},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	protectedBackup := filepath.Join(result.BackupDir, "sshc", "snippets-with-backup")
 
 	const next = "a different master password"
 	if err := service.ChangeMasterPassword(passphrase, next); err != nil {
@@ -1248,6 +1418,18 @@ func TestChangingTheMasterPasswordAlsoSealsRegisteredApplicationDocuments(t *tes
 	opened, err = service.OpenDocument(resealed)
 	if err != nil || !bytes.Equal(opened, plain) {
 		t.Fatalf("OpenDocument(resealed) = %q, %v", opened, err)
+	}
+	backupOuter, err := os.ReadFile(protectedBackup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupInner, err := service.OpenBackup(backupOuter)
+	if err != nil {
+		t.Fatalf("OpenBackup(protected document) = %v", err)
+	}
+	opened, err = service.OpenDocument(backupInner)
+	if err != nil || !bytes.Equal(opened, plain) {
+		t.Fatalf("nested protected document backup was not rekeyed: %q, %v", opened, err)
 	}
 }
 

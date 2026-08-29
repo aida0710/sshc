@@ -108,6 +108,7 @@ func realInstallationAt(t *testing.T, objectPath string, files map[string]string
 		func() (string, error) { counter++; return "origin-integration", nil })
 	service.OpenVault = func() ([]byte, error) { return nil, nil }
 	service.SealVault = func(document []byte) ([]byte, error) { return document, nil }
+	service.EmptyVaultDocument = func() ([]byte, error) { return []byte("empty-vault"), nil }
 	config := remotesync.Config{
 		Endpoint: endpoint, Bucket: client.Bucket, Path: objectPath, Region: client.Region,
 		Direction: remotesync.DirectionBoth,

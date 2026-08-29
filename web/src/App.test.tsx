@@ -5,12 +5,55 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const openVault = () =>
   Promise.resolve({ exists: true, unlocked: true, aliases: [] as string[], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
-import { App } from "./App";
+import { App, resolveOSC52, vaultStatePollIntervalMs } from "./App";
 import type { InspectorContent } from "./ui/Inspector";
 import { LanguageProvider } from "./i18n/context";
 import { ThemeProvider } from "./theme/context";
 import { ja } from "./i18n/messages";
 import { ApiError, apiClient } from "./api/client";
+import { announceVaultLocked } from "./secrets/vaultLockSignal";
+
+type BroadcastListener = (event: MessageEvent<unknown>) => void;
+
+class FakeBroadcastChannel {
+  static channels: FakeBroadcastChannel[] = [];
+  readonly listeners = new Set<BroadcastListener>();
+  closed = false;
+
+  constructor(readonly name: string) {
+    FakeBroadcastChannel.channels.push(this);
+  }
+
+  postMessage(data: unknown) {
+    for (const channel of FakeBroadcastChannel.channels) {
+      if (channel !== this && channel.name === this.name && !channel.closed) {
+        for (const listener of channel.listeners) listener(new MessageEvent("message", { data }));
+      }
+    }
+  }
+
+  addEventListener(_type: "message", listener: BroadcastListener) {
+    this.listeners.add(listener);
+  }
+
+  removeEventListener(_type: "message", listener: BroadcastListener) {
+    this.listeners.delete(listener);
+  }
+
+  close() {
+    this.closed = true;
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((accept, decline) => {
+    resolve = accept;
+    reject = decline;
+  });
+  return { promise, resolve, reject };
+}
 
 vi.mock("./connections/ConnectionsPage", () => ({
   ConnectionsPage: ({
@@ -150,13 +193,162 @@ async function openFromMenu(user: ReturnType<typeof userEvent.setup>, label: str
 
 afterEach(() => {
   apiClient.clear();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  FakeBroadcastChannel.channels = [];
   window.history.replaceState(null, "", "/");
   window.localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
 });
 
 describe("App", () => {
+  it("resolves OSC 52 with an SSH host override before the terminal default", () => {
+    expect(resolveOSC52(undefined, true)).toBe(true);
+    expect(resolveOSC52("deny", true)).toBe(false);
+    expect(resolveOSC52("allow", false)).toBe(true);
+  });
+  it("unmounts the ready UI when vault-state polling observes a lock", async () => {
+    let poll: (() => void) | null = null;
+    const originalSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") {
+        poll = handler as () => void;
+      }
+      return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
+    });
+    const vault = vi.fn()
+      .mockResolvedValueOnce({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 })
+      .mockResolvedValueOnce({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
+
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vault}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "sshc" })).toBeInTheDocument();
+    await waitFor(() => expect(poll).not.toBeNull());
+    await act(async () => {
+      poll?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("existing vault fixture")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "sshc" })).toBeNull();
+  });
+
+  it("conceals the ready subtree on resume and coalesces overlapping focus checks", async () => {
+    let poll: (() => void) | null = null;
+    const originalSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler as () => void;
+      return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
+    });
+    const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const vault = vi.fn()
+      .mockImplementationOnce(openVault)
+      .mockReturnValueOnce(resumed.promise);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vault}
+      />,
+    );
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    await waitFor(() => expect(poll).not.toBeNull());
+
+    act(() => poll?.());
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(vault).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    expect(screen.getByText(/Checking that the vault is still unlocked/)).toBeVisible();
+
+    await act(async () => resumed.resolve(await openVault()));
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    expect(vault).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps protected UI hidden after a failed resume check until a retry succeeds", async () => {
+    let poll: (() => void) | null = null;
+    const originalSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler as () => void;
+      return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
+    });
+    const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const vault = vi.fn()
+      .mockImplementationOnce(openVault)
+      .mockReturnValueOnce(resumed.promise)
+      .mockImplementationOnce(openVault);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vault}
+      />,
+    );
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    await waitFor(() => expect(poll).not.toBeNull());
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await act(async () => resumed.reject(new Error("offline")));
+
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    expect(screen.getByText(/Protected content remains hidden while sshc retries/)).toBeVisible();
+
+    await act(async () => {
+      poll?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+  });
+
+  it("applies a broadcast lock, cleans up its observer, and ignores a late resume response", async () => {
+    vi.stubGlobal("BroadcastChannel", FakeBroadcastChannel);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const vault = vi.fn()
+      .mockImplementationOnce(openVault)
+      .mockReturnValueOnce(resumed.promise);
+    const view = render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vault}
+      />,
+    );
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    const observer = FakeBroadcastChannel.channels[0];
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    act(() => announceVaultLocked());
+    expect(await screen.findByText("existing vault fixture")).toBeInTheDocument();
+
+    await act(async () => resumed.resolve(await openVault()));
+    expect(screen.getByText("existing vault fixture")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+
+    view.unmount();
+    expect(observer?.closed).toBe(true);
+  });
+
   it("keeps the sidebar compact and moves grouped destinations into Menu", async () => {
     const user = userEvent.setup();
     render(

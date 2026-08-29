@@ -192,6 +192,7 @@ func buildSync(
 	)
 	syncService.OpenVault = passwordService.TravelDocument
 	syncService.SealVault = passwordService.AdoptTravelDocument
+	syncService.EmptyVaultDocument = passwordService.EmptyTravelDocument
 	syncService.VaultAdopted = passwordService.Reload
 	syncService.OpenSnippets = snippetStore.TravelDocument
 	syncService.SealSnippets = snippetStore.AdoptTravelDocument

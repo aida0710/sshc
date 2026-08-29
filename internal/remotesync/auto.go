@@ -219,6 +219,9 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 	switch {
 	case errors.Is(err, ErrNoSnapshot):
 		return AutoIdle, "", false
+	case errors.Is(err, ErrRemoteMoved):
+		a.rememberBlocked(generation.target, generation.etag, "remote_moved")
+		return AutoBlocked, "remote_moved", true
 	case err != nil && !errors.Is(err, ErrNothingToApply):
 		detail := failureDetail(err)
 		a.rememberFailed(generation, key, err, detail)

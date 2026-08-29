@@ -15,9 +15,11 @@ type Prepared = {
 export function TerminalQuickCommands({
   session,
   onClose,
+  initialCommand = "",
 }: {
   session: TerminalSession;
   onClose: () => void;
+  initialCommand?: string;
 }) {
   const t = useTranslate();
   const panel = useRef<HTMLDivElement>(null);
@@ -27,6 +29,9 @@ export function TerminalQuickCommands({
   const [prepared, setPrepared] = useState<Prepared | null>(null);
   const [busy, setBusy] = useState(true);
   const [problem, setProblem] = useState("");
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [terminalSelectionSaved, setTerminalSelectionSaved] = useState(false);
   const selected = useMemo(() => snippets.find((snippet) => snippet.id === selectedId) ?? null, [selectedId, snippets]);
 
   useEffect(() => {
@@ -65,6 +70,26 @@ export function TerminalQuickCommands({
     setInputs(nextInputs);
     setPrepared(null);
     setProblem("");
+  }
+
+  async function saveSelection() {
+    const name = saveName.trim();
+    const command = initialCommand;
+    if (name === "" || command.trim() === "" || busy) return;
+    setBusy(true);
+    setProblem("");
+    try {
+      const saved = await snippetsApi.create({ name, command, description: "", variables: [] });
+      setSnippets((current) => [saved, ...current]);
+      setSelectedId(saved.id);
+      setSaveOpen(false);
+      setSaveName("");
+      setTerminalSelectionSaved(true);
+    } catch (error) {
+      setProblem(failureCode(error) || "snippet_failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function prepare() {
@@ -185,6 +210,22 @@ export function TerminalQuickCommands({
         <button type="button" aria-label={t("terminal.quickCommandsClose")} className="rounded px-2 text-ink-muted hover:bg-select-fill" onClick={onClose}>×</button>
       </div>
       {problem === "" ? null : <p role="alert" className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink">{problem}</p>}
+      {terminalSelectionSaved ? <p role="status" className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink">{t("terminal.quickCommandSaved")}</p> : null}
+      {initialCommand.trim() === "" ? null : saveOpen ? (
+        <div className="grid gap-2 rounded border border-line p-2">
+          <label className="text-xs text-ink-muted">
+            {t("terminal.quickCommandName")}
+            <input autoFocus value={saveName} onChange={(event) => setSaveName(event.target.value)} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink" />
+          </label>
+          <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">{initialCommand}</pre>
+          <div className="flex gap-2">
+            <button type="button" disabled={busy || saveName.trim() === ""} onClick={() => void saveSelection()} className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50">{t("terminal.quickCommandSave")}</button>
+            <button type="button" onClick={() => setSaveOpen(false)} className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill">{t("snippets.cancel")}</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="min-h-8 self-start rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill" onClick={() => setSaveOpen(true)}>{t("terminal.quickCommandSaveSelection")}</button>
+      )}
       {busy && snippets.length === 0 ? <p className="text-xs text-ink-muted">{t("palette.loading")}</p> : snippets.length === 0 ? (
         <p className="text-xs text-ink-muted">{t("snippets.empty")}</p>
       ) : (
@@ -219,6 +260,7 @@ export function TerminalQuickCommands({
           ) : (
             <>
               <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">{prepared.command}</pre>
+              <p className="text-[11px] leading-4 text-ink-muted">{t("terminal.quickCommandContextWarning")}</p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={busy} onClick={() => void insertPrepared()} className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50">{t("terminal.quickCommandInsert")}</button>
                 <button type="button" disabled={busy} onClick={() => void runPrepared()} className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50">{t("terminal.quickCommandRun")}</button>

@@ -26,6 +26,7 @@ const (
 	invocationRunTransport
 	invocationInfo
 	invocationSync
+	invocationTerminal
 )
 
 type syncAction uint8
@@ -58,20 +59,22 @@ type invocation struct {
 	JSON      bool
 	Transport *transportInvocation
 	Sync      *syncInvocation
+	Terminal  *terminalInvocation
 }
 
 const (
-	engineSubcommand  = "engine"
-	vaultSubcommand   = "vault"
-	helpSubcommand    = "help"
-	versionSubcommand = "version"
-	updateSubcommand  = "update"
-	infoSubcommand    = "info"
-	syncSubcommand    = "sync"
-	StatusSubcommand  = "status"
-	serialSubcommand  = "serial"
-	telnetSubcommand  = "telnet"
-	sshSubcommand     = "ssh"
+	engineSubcommand   = "engine"
+	vaultSubcommand    = "vault"
+	helpSubcommand     = "help"
+	versionSubcommand  = "version"
+	updateSubcommand   = "update"
+	infoSubcommand     = "info"
+	syncSubcommand     = "sync"
+	terminalSubcommand = "terminal"
+	StatusSubcommand   = "status"
+	serialSubcommand   = "serial"
+	telnetSubcommand   = "telnet"
+	sshSubcommand      = "ssh"
 )
 
 // parseInvocation は、コマンドが誰の責務を求めるかを副作用なしに決める。
@@ -108,6 +111,8 @@ func parseInvocation(argv []string) (invocation, error) {
 		return parseInfoInvocation(args)
 	case syncSubcommand:
 		return parseSyncInvocation(args)
+	case terminalSubcommand:
+		return parseTerminalInvocation(args)
 	case OpenSubcommand:
 		return noArguments(invocationOpen, word, args)
 	case StatusSubcommand:
@@ -323,6 +328,18 @@ func usage(out io.Writer) {
   sshc sync now [--json]
   sshc sync auto on|off [--json]
                        run or configure synchronization through the engine
+  sshc terminal list [--json]
+  sshc terminal show <session-id> [--json]
+  sshc terminal read <session-id> [--cursor N] [--limit N] [--json]
+  sshc terminal send <session-id> --text <text> [--no-enter] [--json]
+  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]
+                       states: connecting, connected, reconnecting, exited,
+                               agent-working, agent-attention, agent-ready, agent-ended
+  sshc terminal create shell [--json]
+  sshc terminal create ssh <alias> [--json]
+  sshc terminal rename <session-id> <title> [--json]
+  sshc terminal close <session-id> [--json]
+                       inspect and control terminals owned by the running engine
   sshc serial [--json]
                        list serial devices
   sshc serial <device> [options]
