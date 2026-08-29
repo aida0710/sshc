@@ -64,4 +64,3 @@ describe("TerminalQuickCommands", () => {
     expect(mocks.writeText).toHaveBeenCalledWith("systemctl status sshd");
   });
 });
-

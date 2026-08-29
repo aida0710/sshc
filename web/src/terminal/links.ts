@@ -48,4 +48,3 @@ export function findTerminalLinks(line: string, remote: boolean): TerminalLinkMa
   }
   return matches.sort((left, right) => left.start - right.start || left.end - right.end);
 }
-
