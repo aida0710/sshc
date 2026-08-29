@@ -21,7 +21,15 @@ SSHC_VERSION=v0.18.0 sh -c \
 
 `main` 上の可変なスクリプトを直接実行せず、導入したい[リリース](https://github.com/aida0710/sshc/releases)のタグをURLと`SSHC_VERSION`の両方へ指定してください。
 
-Windows を含む各 OS 向けのバイナリと Android APK は、[GitHub Releases](https://github.com/aida0710/sshc/releases) からダウンロードできます。デスクトップアプリ、インストーラ、macOS の app bundle は配布していません。
+Windowsでは、GitHub Release上のPowerShellスクリプトを実行します。管理者権限は不要です。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/aida0710/sshc/releases/latest/download/install.ps1 | iex"
+```
+
+`%LOCALAPPDATA%\Programs\sshc`へインストールし、ユーザー`PATH`へ追加します。同じコマンドを再実行すると、公開済みの最新安定版へ更新します。
+
+各 OS 向けのバイナリと Android APK は、[GitHub Releases](https://github.com/aida0710/sshc/releases) から手動でもダウンロードできます。デスクトップアプリ、パッケージ形式のWindowsインストーラ、macOS の app bundle は配布していません。
 
 Homebrewまたはreceipt対応版の`install.sh`で導入したsshcは、同じ管理元へ処理を委ねて更新できます。手動配置やソースビルドは自動で置き換えません。
 

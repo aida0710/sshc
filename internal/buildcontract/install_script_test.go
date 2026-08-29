@@ -34,12 +34,10 @@ func TestTheInstallScriptKnowsEveryMachineTheReleaseBuilds(t *testing.T) {
 			t.Fatalf("RELEASE_TARGETS entry %q is not goos/goarch", target)
 		}
 		if goos == "windows" {
-			// Windows では standalone binary のファイル名と配置方法を案内する。
-			artifact := fmt.Sprintf("sshc-windows-%s.exe", goarch)
-			for _, required := range []string{artifact, "rename it to sshc.exe", "place it on PATH"} {
-				if !strings.Contains(script, required) {
-					t.Errorf("install.sh Windows instructions are missing %q", required)
-				}
+			// Windows は専用のPowerShell installerへ案内する。成果物名との一致は
+			// install.ps1の契約テストで検証する。
+			if !strings.Contains(script, "releases/latest/download/install.ps1") {
+				t.Error("install.sh does not direct Windows users to install.ps1")
 			}
 			if strings.Contains(script, "Windows has an installer") {
 				t.Error("install.sh advertises a Windows installer that is not released")
@@ -51,6 +49,58 @@ func TestTheInstallScriptKnowsEveryMachineTheReleaseBuilds(t *testing.T) {
 		}
 		if !strings.Contains(script, fmt.Sprintf("goarch=%s", goarch)) {
 			t.Errorf("install.sh does not map uname to %s, but the release builds it", goarch)
+		}
+	}
+}
+
+func readWindowsInstallScript(t *testing.T) string {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join("..", "..", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+func TestTheWindowsInstallerVerifiesAndSafelyPublishesEveryWindowsArtifact(t *testing.T) {
+	contract := readMakefileContract(t)
+	script := readWindowsInstallScript(t)
+	for _, target := range contract.variables["RELEASE_TARGETS"] {
+		platform, _, _ := strings.Cut(target, ":")
+		goos, goarch, ok := strings.Cut(platform, "/")
+		if ok && goos == "windows" && !strings.Contains(script, fmt.Sprintf("'%s'", goarch)) {
+			t.Errorf("install.ps1 does not recognize windows/%s", goarch)
+		}
+	}
+	for _, required := range []string{
+		"checksums.txt",
+		"Get-FileHash",
+		"SHA256",
+		"File]::Replace",
+		"previous executable was left unchanged",
+		"LocalApplicationData",
+		"SetEnvironmentVariable('Path'",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("install.ps1 contract lacks %q", required)
+		}
+	}
+	verify := strings.Index(script, "does not match its published checksum")
+	publish := strings.Index(script, "Publish-Executable $download $target")
+	if verify < 0 || publish < 0 || verify > publish {
+		t.Error("install.ps1 publishes before checking the download")
+	}
+}
+
+func TestTheDocumentedWindowsInstallerComesFromTheGitHubRelease(t *testing.T) {
+	for _, path := range []string{"README.md", filepath.Join("docs", "release-install.md"), "install.ps1"} {
+		body, err := os.ReadFile(filepath.Join("..", "..", path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(body)
+		if !strings.Contains(text, "https://github.com/aida0710/sshc/releases/latest/download/install.ps1") {
+			t.Errorf("%s lacks the GitHub Release installer URL", path)
 		}
 	}
 }

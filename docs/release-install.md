@@ -1,6 +1,6 @@
 # インストールとアップグレード
 
-sshc は、macOS、Linux、Windows 向けの CLI バイナリと Android APK を配布しています。デスクトップアプリ、macOS の app bundle、AppImage、Windows インストーラは配布していません。
+sshc は、macOS、Linux、Windows 向けの CLI バイナリと Android APK を配布しています。デスクトップアプリ、macOS の app bundle、AppImage、パッケージ形式のWindowsインストーラは配布していません。
 
 ## Homebrew（macOS / Linux）
 
@@ -50,15 +50,33 @@ sshc update
 
 - Homebrew版は、`brew --prefix --installed aida0710/tap/sshc`の`bin/sshc`と実行中ファイルが同一であることを確認し、`brew upgrade --formula --no-ask aida0710/tap/sshc`を実行します。
 - `install.sh`版はdigest付きreceiptを確認し、GitHubの最新安定版tagに固定したinstallerを実行します。installerは公開された`checksums.txt`でバイナリを検証し、同一ディレクトリ内のrenameで置換します。
-- Windows、手動配置、ソースビルド、判定不能な導入は変更せず、元の導入方法で更新するよう表示します。
+- `install.ps1`版は、インストール時と同じPowerShellコマンドを再実行して更新します。
+- その他のWindows手動配置、ソースビルド、判定不能な導入は変更せず、元の導入方法で更新するよう表示します。
 
 更新時にengineが動作していた場合、engineは旧バイナリのままです。更新後に停止し、新しい`sshc engine`を起動してください。
 
 ## Windows
 
-[GitHub Releases](https://github.com/aida0710/sshc/releases) から、x64 では `sshc-windows-amd64.exe`、Arm64 では `sshc-windows-arm64.exe` をダウンロードしてください。ファイル名を `sshc.exe` に変更し、`PATH` に含まれるディレクトリへ配置します。
+Windows PowerShellから、GitHub Releaseに添付されたスクリプトを実行します。
 
-sshc は Windows インストーラを提供せず、レジストリやシステムの `PATH` を変更しません。
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/aida0710/sshc/releases/latest/download/install.ps1 | iex"
+```
+
+スクリプトはx64／Arm64を判定し、対応するバイナリと`checksums.txt`を同じGitHub Releaseから取得します。SHA-256が一致し、バイナリ自身が想定したWindows版・CPU・バージョンを報告した場合だけ、`%LOCALAPPDATA%\Programs\sshc\sshc.exe`を置き換えます。管理者権限は要求せず、ユーザー`PATH`へ配置先を重複なく追加します。新しいターミナルから`sshc version`で確認できます。
+
+既存の`sshc.exe`を使用中で置換できない場合は、動作中のengineを停止してから同じコマンドを再実行してください。検証や置換に失敗した場合、既存の実行ファイルは変更しません。配置先は`SSHC_INSTALL_DIR`で変更でき、`SSHC_ADD_TO_PATH=0`なら`PATH`を変更しません。
+
+再現可能な導入では、スクリプトと成果物を同じタグへ固定します。
+
+```powershell
+$env:SSHC_VERSION = 'v0.18.0'
+irm https://github.com/aida0710/sshc/releases/download/v0.18.0/install.ps1 | iex
+```
+
+手動で配置する場合は、[GitHub Releases](https://github.com/aida0710/sshc/releases) からx64では`sshc-windows-amd64.exe`、Arm64では`sshc-windows-arm64.exe`を取得し、`checksums.txt`と照合してから`sshc.exe`へ名前を変更します。
+
+`install.ps1`はシステム領域やシステム`PATH`を変更しません。Windowsの「インストール済みアプリ」へ登録するMSI／MSIX／EXEインストーラではありません。
 
 ## Android
 
