@@ -355,6 +355,65 @@ func TestProxyJumpReachesTheFinalHostThroughTheFirst(t *testing.T) {
 	}
 }
 
+func TestNestedProxyJumpUsesTheSameFlattenedRouteAsTheResolvedTarget(t *testing.T) {
+	path, contents, public := keyPair(t)
+	final := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(channel ssh.Channel) { _, _ = io.WriteString(channel, "nested route ready\r\n") },
+	})
+	bastion := newTestServer(t, serverOptions{
+		AcceptKeys:       []ssh.PublicKey{public},
+		AllowDirectTCPIP: true,
+		Reached: map[string]func() net.Conn{
+			final.Address(): func() net.Conn { return final.Dial() },
+		},
+	})
+	gateway := newTestServer(t, serverOptions{
+		AcceptKeys:       []ssh.PublicKey{public},
+		AllowDirectTCPIP: true,
+		Reached: map[string]func() net.Conn{
+			bastion.Address(): func() net.Conn { return bastion.Dial() },
+		},
+	})
+
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	known := knownHostsLine("["+gateway.Host()+"]:"+gateway.Port(), gateway.HostKey.PublicKey()) +
+		knownHostsLine("["+bastion.Host()+"]:"+bastion.Port(), bastion.HostKey.PublicKey()) +
+		knownHostsLine("["+final.Host()+"]:"+final.Port(), final.HostKey.PublicKey())
+	dialer := sshclient.Dialer{
+		Auth:     auth,
+		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		Dial: func(_ context.Context, _, address string) (net.Conn, error) {
+			if address != gateway.Address() {
+				return nil, errors.New("the first TCP connection bypassed the gateway")
+			}
+			return gateway.Dial(), nil
+		},
+	}
+
+	target := targetWith(final, path)
+	bastionTarget := targetWith(bastion, path)
+	bastionTarget.Alias = "bastion"
+	gatewayTarget := targetWith(gateway, path)
+	gatewayTarget.Alias = "gateway"
+	bastionTarget.Jump = []sshclient.Target{gatewayTarget}
+	target.Jump = []sshclient.Target{bastionTarget}
+
+	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "nested route ready")
+	if dialed := gateway.Dialed(); len(dialed) != 1 || dialed[0] != bastion.Address() {
+		t.Fatalf("gateway dialed %#v", dialed)
+	}
+	if dialed := bastion.Dialed(); len(dialed) != 1 || dialed[0] != final.Address() {
+		t.Fatalf("bastion dialed %#v", dialed)
+	}
+}
+
 func TestProxyJumpPasswordPromptAndProgressIdentifyTheHop(t *testing.T) {
 	inner := newTestServer(t, serverOptions{Password: "far-password"})
 	edge := newTestServer(t, serverOptions{

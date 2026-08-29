@@ -125,7 +125,17 @@ func (m *Manager) IssueExpiring(lifetime time.Duration) (Credentials, error) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.issueLocked(m.clock().Add(lifetime))
+	now := m.clock()
+	m.pruneExpiredLocked(now)
+	return m.issueLocked(now.Add(lifetime))
+}
+
+func (m *Manager) pruneExpiredLocked(now time.Time) {
+	for key, sessionValue := range m.sessions {
+		if !sessionValue.expiresAt.IsZero() && !now.Before(sessionValue.expiresAt) {
+			delete(m.sessions, key)
+		}
+	}
 }
 
 func (m *Manager) issueLocked(expiresAt time.Time) (Credentials, error) {

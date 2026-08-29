@@ -105,6 +105,37 @@ func TestInfoJSONUsesTheConnectionTargetWithoutAnEngine(t *testing.T) {
 	}
 }
 
+func TestInfoProxyJumpOrderMatchesTheNestedConnectionRoute(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configuration := `Host gateway
+  HostName gateway.internal
+Host bastion
+  HostName bastion.internal
+  ProxyJump gateway
+Host nested
+  HostName nested.internal
+  ProxyJump bastion
+`
+	if err := os.WriteFile(filepath.Join(home, ".ssh", "config"), []byte(configuration), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr strings.Builder
+	if code := runInfo("nested", home, true, &stdout, &stderr); code != 0 {
+		t.Fatalf("runInfo = %d, stderr = %s", code, stderr.String())
+	}
+	var got infoDocument
+	if err := json.Unmarshal([]byte(stdout.String()), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.ProxyJump) != 2 || got.ProxyJump[0].Alias != "gateway" ||
+		got.ProxyJump[1].Alias != "bastion" {
+		t.Fatalf("proxy jump route = %+v", got.ProxyJump)
+	}
+}
+
 func TestInfoNeverPrintsSetEnvOrProxyCommandContents(t *testing.T) {
 	home := writeInfoFixture(t)
 	for _, asJSON := range []bool{false, true} {
@@ -120,6 +151,32 @@ func TestInfoNeverPrintsSetEnvOrProxyCommandContents(t *testing.T) {
 		}
 		if !strings.Contains(printed, "proxy") {
 			t.Fatalf("json=%v: configured proxy was omitted entirely:\n%s", asJSON, printed)
+		}
+	}
+}
+
+func TestInfoRedactsUserAuthoredNoticeDetails(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const secret = "NOTICE_SECRET_SENTINEL"
+	configuration := "Host noticed\n  HostName noticed.internal\n  LocalForward " + secret + "\x1b[31m\n"
+	if err := os.WriteFile(filepath.Join(home, ".ssh", "config"), []byte(configuration), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, asJSON := range []bool{false, true} {
+		var stdout, stderr strings.Builder
+		if code := runInfo("noticed", home, asJSON, &stdout, &stderr); code != 0 {
+			t.Fatalf("json=%v: runInfo = %d, stderr = %s", asJSON, code, stderr.String())
+		}
+		printed := stdout.String() + stderr.String()
+		if strings.Contains(printed, secret) || strings.Contains(printed, "\x1b") {
+			t.Fatalf("json=%v: notice leaked user-authored content: %q", asJSON, printed)
+		}
+		if !strings.Contains(printed, "localforward") || !strings.Contains(printed, "not applied exactly") {
+			t.Fatalf("json=%v: safe notice was lost: %q", asJSON, printed)
 		}
 	}
 }
