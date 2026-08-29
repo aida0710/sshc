@@ -14,9 +14,7 @@ vi.mock("./stream", () => ({
   },
 }));
 vi.mock("./TerminalQuickCommands", () => ({
-  TerminalQuickCommands: ({ onSend }: { onSend: (command: string, submit: boolean) => void }) => (
-    <button type="button" onClick={() => onSend("echo quick-command", true)}>Send prepared command</button>
-  ),
+  TerminalQuickCommands: () => <div role="dialog" aria-label="Quick Commands panel">Server-backed commands</div>,
 }));
 
 const { TerminalView } = await import("./TerminalView");
@@ -87,14 +85,13 @@ describe("TerminalView", () => {
     expect(screen.getByText(/OSC 52 clipboard writes are allowed/)).toBeVisible();
   });
 
-  it("runs a Quick Command in the current terminal stream", async () => {
+  it("opens server-backed Quick Commands without wiring the browser stream writer", async () => {
     renderView();
     await waitFor(() => expect(streams).toHaveLength(1));
 
     await userEvent.click(screen.getByRole("button", { name: "Quick Commands" }));
-    await userEvent.click(screen.getByRole("button", { name: "Send prepared command" }));
-
-    expect(streams[0]?.stream.send).toHaveBeenCalledWith("echo quick-command\r");
+    expect(screen.getByRole("dialog", { name: "Quick Commands panel" })).toBeVisible();
+    expect(streams[0]?.stream.send).not.toHaveBeenCalled();
   });
 
   it("shows the current SSH hop and connection phase in the header", () => {

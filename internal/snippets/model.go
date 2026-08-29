@@ -38,8 +38,8 @@ var (
 	ErrNoRepository       = errors.New("no snippet repository is available")
 	ErrInvalidDocument    = errors.New("snippets document is invalid")
 	ErrUnsupportedVersion = errors.New("snippets were written by a newer version of sshc")
-	ErrSecretStartup      = errors.New("startup snippets cannot persist secret variable values")
-	ErrSecretTerminal     = errors.New("terminal commands cannot contain secret variables")
+	ErrNoProtection       = errors.New("snippet encryption is not configured")
+	ErrNotEncrypted       = errors.New("snippet document is not encrypted")
 	ErrUnknownJob         = errors.New("snippet execution job does not exist")
 	ErrJobFinished        = errors.New("snippet execution job has already finished")
 	ErrTooManyJobs        = errors.New("too many snippet execution jobs are active")
@@ -84,8 +84,8 @@ type Draft struct {
 	Variables   []Variable
 }
 
-// Startup binds one host alias to one snippet. Inputs may contain only
-// non-secret variables. They travel with the snippet configuration.
+// Startup binds one host alias to one snippet. Inputs are part of the encrypted
+// snippet document and travel only inside the encrypted remote snapshot.
 type Startup struct {
 	Alias     string            `json:"alias"`
 	SnippetID string            `json:"snippetId"`
@@ -173,6 +173,9 @@ type PreparedCommand struct {
 	Command   string
 	Display   string
 	Evidence  string
+	// ActionEvidence binds the server-side one-time action to the actual
+	// expanded command. Evidence is the public digest of the redacted display.
+	ActionEvidence string
 }
 
 type TargetPreview struct {
@@ -182,9 +185,10 @@ type TargetPreview struct {
 }
 
 type Preview struct {
-	Evidence  string          `json:"evidence"`
-	SnippetID string          `json:"snippetId"`
-	Targets   []TargetPreview `json:"targets"`
+	Evidence       string          `json:"evidence"`
+	ActionEvidence string          `json:"-"`
+	SnippetID      string          `json:"snippetId"`
+	Targets        []TargetPreview `json:"targets"`
 }
 
 // ActionTarget binds the one-time confirmation token to the selected snippet

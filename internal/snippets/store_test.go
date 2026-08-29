@@ -1,6 +1,7 @@
 package snippets
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,7 +18,27 @@ func newFileStore(t *testing.T) (*Store, *storage.Workspace) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewStore(workspace), workspace
+	protection := Protection{
+		Seal: func(plain []byte) ([]byte, error) {
+			sealed := append([]byte("sealed\x00"), plain...)
+			for index := len("sealed\x00"); index < len(sealed); index++ {
+				sealed[index] ^= 0xaa
+			}
+			return sealed, nil
+		},
+		Open: func(sealed []byte) ([]byte, error) {
+			if !bytes.HasPrefix(sealed, []byte("sealed\x00")) {
+				return nil, ErrNotEncrypted
+			}
+			plain := append([]byte(nil), sealed[len("sealed\x00"):]...)
+			for index := range plain {
+				plain[index] ^= 0xaa
+			}
+			return plain, nil
+		},
+		WithMutation: func(mutation func() error) error { return mutation() },
+	}
+	return NewStore(workspace, protection), workspace
 }
 
 func validLibrary() Library {
@@ -44,6 +65,32 @@ func TestStoreRoundTripsAndAtomicallyReplacesOnePrivateDocument(t *testing.T) {
 		t.Fatalf("state directory = %#v", children)
 	}
 	assertSnippetDocumentPrivate(t, store.Path())
+	sealed, err := os.ReadFile(store.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(sealed, []byte("uptime")) || bytes.Contains(sealed, []byte("bastion")) {
+		t.Fatalf("encrypted document contains snippet plaintext: %q", sealed)
+	}
+}
+
+func TestStoreMigratesAValidLegacyPlaintextDocument(t *testing.T) {
+	store, _ := newFileStore(t)
+	plain, err := encodeDocument(validLibrary())
+	if err != nil {
+		t.Fatal(err)
+	}
+	acltest.WritePrivateFile(t, store.Path(), plain)
+	if _, err := store.Load(); err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := os.ReadFile(store.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(sealed, []byte("sealed\x00")) || bytes.Contains(sealed, []byte("uptime")) {
+		t.Fatalf("legacy document was not encrypted: %q", sealed)
+	}
 }
 
 func TestStoreDoesNotOverwriteAnInvalidOrNewerDocument(t *testing.T) {

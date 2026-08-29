@@ -22,6 +22,7 @@ const edge: WorkspaceCommandTarget = {
 const preview = {
   snippetId: "",
   evidence: "evidence",
+  reviewEvidence: "review-evidence",
   actionToken: "token",
   actionExpiresAt: "2026-08-27T10:00:00Z",
   targets: [
@@ -133,7 +134,7 @@ describe("WorkspaceCommandCenter", () => {
     expect(screen.queryByRole("button", { name: "Send to 1 terminals" })).toBeNull();
   });
 
-  it("does not offer live delivery for snippets containing secret variables", async () => {
+  it("previews secret snippets without exposing the value in the command preview", async () => {
     snippets.library.mockResolvedValue({
       snippets: [{ id: "secret", name: "Deploy", command: "deploy {{token}}", variables: [{ name: "token", type: "secret", required: true }], createdAt: "2026-08-27T00:00:00Z", updatedAt: "2026-08-27T00:00:00Z" }],
       startup: [],
@@ -141,8 +142,13 @@ describe("WorkspaceCommandCenter", () => {
     const user = userEvent.setup();
     render(<WorkspaceCommandCenter paneTargets={[edge]} onClose={() => undefined} />);
     await user.click(screen.getByRole("button", { name: "Saved snippet" }));
-    expect(await screen.findByText(/cannot be sent to a live terminal/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Preview execution" })).toBeDisabled();
-    expect(commands.preview).not.toHaveBeenCalled();
+    await user.type(await screen.findByLabelText(/token/), "top-secret");
+    await user.click(screen.getByRole("button", { name: "Preview execution" }));
+    expect(commands.preview).toHaveBeenCalledWith({
+      snippetId: "secret",
+      inputs: { token: "top-secret" },
+      targets: [{ targetId: "pane-a", sessionId: "session-a" }],
+    });
+    expect(await screen.findByText("uptime")).toBeVisible();
   });
 });

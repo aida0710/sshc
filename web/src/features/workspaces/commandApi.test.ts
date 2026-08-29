@@ -33,6 +33,7 @@ describe("terminalCommandApi", () => {
     const prepared = {
       snippetId: "",
       evidence: "evidence",
+      reviewEvidence: "review-evidence",
       actionToken,
       actionExpiresAt: "2026-08-27T10:00:00Z",
       targets: [
@@ -60,7 +61,7 @@ describe("terminalCommandApi", () => {
     const [dispatchPath, dispatchInit] = fetcher.mock.calls[1] as [string, RequestInit];
     expect(dispatchPath).toBe("/api/v1/terminal/commands");
     expect(new Headers(dispatchInit.headers).get("X-SSHC-Action")).toBe(actionToken);
-    expect(sentJson(dispatchInit)).toEqual({ ...request, evidence: "evidence" });
+    expect(sentJson(dispatchInit)).toEqual({ ...request, submit: true, evidence: "evidence" });
   });
 
   it("rejects an unknown delivery status", async () => {
@@ -69,7 +70,7 @@ describe("terminalCommandApi", () => {
     })));
     const request: TerminalCommandRequest = { command: "pwd", inputs: {}, targets: [{ targetId: "pane-a", sessionId: "session-a" }] };
     const preview = {
-      snippetId: "", evidence: "evidence", actionToken, actionExpiresAt: "2026-08-27T10:00:00Z", targets: [],
+      snippetId: "", evidence: "evidence", reviewEvidence: "review-evidence", actionToken, actionExpiresAt: "2026-08-27T10:00:00Z", targets: [],
     };
 
     await expect(terminalCommandApi.dispatch(preview, request)).rejects.toThrow("invalid_response");

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -100,7 +101,26 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		remoteRun = ssh.run()
 	}
 	remoteKeyService := &remotekey.Service{Resolve: ssh.target, Run: remoteRun}
-	snippetStore := snippets.NewStore(workspace)
+	snippetStore := snippets.NewStore(workspace, snippets.Protection{
+		Seal: passwordService.SealDocument,
+		Open: func(contents []byte) ([]byte, error) {
+			plaintext, err := passwordService.OpenDocument(contents)
+			if errors.Is(err, secret.ErrNotAVault) {
+				return nil, snippets.ErrNotEncrypted
+			}
+			return plaintext, err
+		},
+		WithMutation: func(mutation func() error) error {
+			return passwordService.WithStableSnapshot(func() error {
+				return transactions.WithSnapshot(mutation)
+			})
+		},
+	})
+	if err := passwordService.RegisterProtectedDocument(secret.ProtectedDocument{
+		Path: snippetStore.Path(), Validate: snippetStore.ValidateDocument,
+	}); err != nil {
+		return nil, err
+	}
 	snippetService := snippets.NewService(snippets.Options{
 		Repository: snippetStore,
 		Resolve: func(alias string) (snippets.Resolution, error) {
@@ -139,7 +159,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
 		sftp: sftpService, workspaces: workspaceService, snippets: snippetService, ssh: ssh,
 	}
-	services.sync, services.autoSync = buildSync(workspace, transactions, passwordService, dependencies)
+	services.sync, services.autoSync = buildSync(workspace, transactions, passwordService, snippetStore, dependencies)
 	services.terminals = buildTerminals(configService, dependencies)
 	return services, nil
 }
@@ -163,6 +183,7 @@ func buildSync(
 	workspace *storage.Workspace,
 	transactions *storage.Manager,
 	passwordService *secret.Service,
+	snippetStore *snippets.Store,
 	dependencies Dependencies,
 ) (*remotesync.Service, *remotesync.Auto) {
 	syncService := remotesync.NewService(workspace, transactions,
@@ -172,6 +193,9 @@ func buildSync(
 	syncService.OpenVault = passwordService.TravelDocument
 	syncService.SealVault = passwordService.AdoptTravelDocument
 	syncService.VaultAdopted = passwordService.Reload
+	syncService.OpenSnippets = snippetStore.TravelDocument
+	syncService.SealSnippets = snippetStore.AdoptTravelDocument
+	syncService.SecretMutation = passwordService.WithStableSnapshot
 	syncService.StableSnapshot = func(snapshot func() error) error {
 		return passwordService.WithStableSnapshot(func() error {
 			return transactions.WithSnapshot(snapshot)

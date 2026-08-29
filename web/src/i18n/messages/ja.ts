@@ -172,7 +172,6 @@ export const ja = {
   "workspace.command": "コマンド",
   "workspace.chooseSnippet": "スニペットを選択",
   "workspace.useDefault": "既定値を使用",
-  "workspace.secretSnippetRefused": "シークレット変数を含むスニペットは、値がターミナル表示やシェル履歴に残る可能性があるため送信できません。",
   "workspace.targetMode": "接続中のターミナル",
   "workspace.targetCount": "対象：{count} 件",
   "workspace.paneNumber": "ペイン {number}",
@@ -263,6 +262,8 @@ export const ja = {
   "terminal.quickCommandInsert": "ペインに挿入",
   "terminal.quickCommandRun": "実行",
   "terminal.quickCommandCopy": "コピー",
+  "terminal.quickCommandChanged": "スニペットまたはペインが変更されました。更新後のプレビューを確認してから続けてください。",
+  "terminal.quickCommandInsertUnsafe": "改行または制御文字を含むコマンドは、安全に挿入できません。実行またはコピーを使用してください。",
   "terminal.linkActions": "ターミナルリンクの操作",
   "terminal.linkOpenBrowser": "ブラウザで開く",
   "terminal.linkBrowseSFTP": "SFTPで表示",
@@ -475,7 +476,7 @@ export const ja = {
   "secrets.metricAssignments": "割り当て",
   "secrets.loading": "Vault を読み込んでいます…",
   "secrets.explainNew":
-    "1 つのマスターパスワードで、アカウントのパスワード、鍵のパスフレーズ、オブジェクトストレージの認証情報を暗号化します。マスターパスワードは保存されず、復旧もできません。紛失すると、これらの認証情報を復号できなくなります。OpenSSH が直接読み込むファイルには影響しません。",
+    "1 つのマスターパスワードで、アカウントのパスワード、鍵のパスフレーズ、オブジェクトストレージの認証情報、Snippet を暗号化します。マスターパスワードは保存されず、復旧もできません。紛失すると、これらの暗号化データを復号できなくなります。OpenSSH が直接読み込むファイルには影響しません。",
   "secrets.explainLocked": "Vault はロックされています。アクセスするにはマスターパスワードを入力してください。",
   "secrets.master": "マスターパスワード",
   "secrets.create": "Vault を作成",
@@ -528,7 +529,7 @@ export const ja = {
   "desktop.closeAll": "接続をすべて閉じる",
   "secrets.changeHeading": "マスターパスワード",
   "secrets.changeNote":
-    "変更すると、ローカルの Vault、同期設定、このマシンの全バックアップを新しいパスワードで再暗号化します。リモートスナップショットは別の同期鍵を使うため書き換えません。",
+    "変更すると、ローカルの Vault、Snippet、同期設定、このマシンの全バックアップを新しいパスワードで再暗号化します。リモートスナップショットは別の同期鍵を使うため書き換えません。",
   "secrets.currentMaster": "現在のマスターパスワード",
   "secrets.newMaster": "新しいマスターパスワード",
   "secrets.confirmMaster": "新しいマスターパスワード（確認）",
@@ -536,13 +537,13 @@ export const ja = {
   "secrets.wrongCurrent": "現在のマスターパスワードが違います。何も変更していません。",
   "secrets.changeFailed": "マスターパスワードを変更できませんでした。",
   "secrets.changedMasterLocally":
-    "マスターパスワードを変更しました。ローカルの Vault、同期設定、バックアップは新しいパスワードで暗号化されています。リモートスナップショットは書き換えていません。",
+    "マスターパスワードを変更しました。ローカルの Vault、Snippet、同期設定、バックアップは新しいパスワードで暗号化されています。リモートスナップショットは書き換えていません。",
   "section.secrets": "Vault",
   "lock.explainNew":
-    "マスターパスワードを設定してください。保存済みパスワード、鍵のパスフレーズ、同期設定、sshc が作成するすべてのバックアップを暗号化します。",
+    "マスターパスワードを設定してください。保存済みパスワード、鍵のパスフレーズ、Snippet、同期設定、sshc が作成するすべてのバックアップを暗号化します。",
   "lock.explainOpen": "sshc を開くにはマスターパスワードを入力してください。",
   "lock.noRecovery":
-    "マスターパスワードは復旧できません。紛失すると Vault と暗号化されたバックアップを開けなくなります。",
+    "マスターパスワードは復旧できません。紛失すると Vault、Snippet、暗号化されたバックアップを開けなくなります。",
   "lock.password": "マスターパスワード",
   "lock.confirm": "マスターパスワード（確認）",
   "lock.create": "Vault を作成",

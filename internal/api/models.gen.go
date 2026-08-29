@@ -1382,11 +1382,14 @@ type TerminalAppearance struct {
 
 // TerminalCommandDispatchRequest defines model for TerminalCommandDispatchRequest.
 type TerminalCommandDispatchRequest struct {
-	Command   *string                        `json:"command,omitempty"`
-	Evidence  string                         `json:"evidence"`
-	Inputs    map[string]string              `json:"inputs"`
-	SnippetId *string                        `json:"snippetId,omitempty"`
-	Targets   []TerminalCommandTargetRequest `json:"targets"`
+	Command   *string           `json:"command,omitempty"`
+	Evidence  string            `json:"evidence"`
+	Inputs    map[string]string `json:"inputs"`
+	SnippetId *string           `json:"snippetId,omitempty"`
+
+	// Submit Send Enter after the command. Defaults to true.
+	Submit  *bool                          `json:"submit,omitempty"`
+	Targets []TerminalCommandTargetRequest `json:"targets"`
 }
 
 // TerminalCommandDispatchResponse defines model for TerminalCommandDispatchResponse.
@@ -1396,19 +1399,34 @@ type TerminalCommandDispatchResponse struct {
 
 // TerminalCommandPreview defines model for TerminalCommandPreview.
 type TerminalCommandPreview struct {
-	ActionExpiresAt string                         `json:"actionExpiresAt"`
-	ActionToken     string                         `json:"actionToken"`
-	Evidence        string                         `json:"evidence"`
-	SnippetId       string                         `json:"snippetId"`
-	Targets         []TerminalCommandPreviewTarget `json:"targets"`
+	ActionExpiresAt string `json:"actionExpiresAt"`
+	ActionToken     string `json:"actionToken"`
+	Evidence        string `json:"evidence"`
+
+	// ReviewEvidence Stable evidence for the displayed redacted command and exact targets, independent of whether Enter will be sent.
+	ReviewEvidence string                         `json:"reviewEvidence"`
+	SnippetId      string                         `json:"snippetId"`
+	Targets        []TerminalCommandPreviewTarget `json:"targets"`
 }
 
 // TerminalCommandPreviewRequest defines model for TerminalCommandPreviewRequest.
 type TerminalCommandPreviewRequest struct {
-	Command   *string                        `json:"command,omitempty"`
-	Inputs    map[string]string              `json:"inputs"`
-	SnippetId *string                        `json:"snippetId,omitempty"`
-	Targets   []TerminalCommandTargetRequest `json:"targets"`
+	Command *string `json:"command,omitempty"`
+
+	// ExpectedReviewEvidence Refuse to issue an action if the redacted command or exact target changed since the displayed passive preview.
+	ExpectedReviewEvidence *string           `json:"expectedReviewEvidence,omitempty"`
+	Inputs                 map[string]string `json:"inputs"`
+
+	// IssueAction Issue a one-time execution token. Defaults to true for compatibility; passive previews should set false.
+	IssueAction *bool `json:"issueAction,omitempty"`
+
+	// RevealCommand Return the expanded command for an explicit insert, run, or copy action. Normal previews remain redacted.
+	RevealCommand *bool   `json:"revealCommand,omitempty"`
+	SnippetId     *string `json:"snippetId,omitempty"`
+
+	// Submit Bind the preview to sending Enter after the command. Defaults to true.
+	Submit  *bool                          `json:"submit,omitempty"`
+	Targets []TerminalCommandTargetRequest `json:"targets"`
 }
 
 // TerminalCommandPreviewTarget defines model for TerminalCommandPreviewTarget.

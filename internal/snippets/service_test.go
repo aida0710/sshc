@@ -32,6 +32,20 @@ func (r *memoryRepository) Save(library Library) error {
 	return nil
 }
 
+func (r *memoryRepository) Mutate(mutation func(*Library) error) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	if r.err != nil {
+		return r.err
+	}
+	library := cloneLibrary(r.library)
+	if err := mutation(&library); err != nil {
+		return err
+	}
+	r.library = cloneLibrary(library)
+	return nil
+}
+
 func testService(repository Repository, run func(context.Context, string, string) (CommandOutput, error)) *Service {
 	return NewService(Options{
 		Repository: repository,
@@ -176,7 +190,7 @@ func TestTerminalCommandExpandsWithoutResolvingOrDiallingAnAlias(t *testing.T) {
 	}
 }
 
-func TestTerminalCommandRefusesSecretVariablesBeforeExposingOrWritingThem(t *testing.T) {
+func TestTerminalCommandKeepsSecretOutOfDisplayAndEvidence(t *testing.T) {
 	service := testService(&memoryRepository{}, nil)
 	snippet := createSnippet(t, service, Draft{
 		Name: "Secret", Command: "deploy --token={{token}}",
@@ -185,11 +199,26 @@ func TestTerminalCommandRefusesSecretVariablesBeforeExposingOrWritingThem(t *tes
 	prepared, err := service.PrepareTerminalCommand(CommandRequest{
 		SnippetID: snippet.ID, Inputs: map[string]string{"token": "top-secret"},
 	})
-	if !errors.Is(err, ErrSecretTerminal) {
-		t.Fatalf("PrepareTerminalCommand = %#v, %v, want ErrSecretTerminal", prepared, err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(prepared.Command+prepared.Display+prepared.Evidence, "top-secret") {
-		t.Fatal("secret escaped in the rejected terminal command")
+	if prepared.Command != "deploy --token=top-secret" || !strings.Contains(prepared.Display, "[secret]") {
+		t.Fatalf("PrepareTerminalCommand = %#v", prepared)
+	}
+	if strings.Contains(prepared.Display+prepared.Evidence, "top-secret") {
+		t.Fatal("secret escaped in redacted terminal command metadata")
+	}
+	second, err := service.PrepareTerminalCommand(CommandRequest{
+		SnippetID: snippet.ID, Inputs: map[string]string{"token": "another-secret"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Evidence != prepared.Evidence {
+		t.Fatal("public evidence reveals which secret value was expanded")
+	}
+	if second.ActionEvidence == prepared.ActionEvidence {
+		t.Fatal("server action evidence is not bound to the actual secret value")
 	}
 }
 
@@ -206,14 +235,26 @@ func TestMalformedAndUnusedPlaceholdersAreRejectedAtCreate(t *testing.T) {
 	}
 }
 
-func TestStartupRejectsSecretsAndAnEditThatBreaksAnAssignment(t *testing.T) {
+func TestStartupStoresEncryptedSecretInputsAndAnEditCannotBreakAnAssignment(t *testing.T) {
 	service := testService(&memoryRepository{}, nil)
 	secret := createSnippet(t, service, Draft{
 		Name: "Secret", Command: "echo {{token}}",
 		Variables: []Variable{{Name: "token", Type: VariableSecret, Required: true}},
 	})
-	if err := service.SetStartup("bastion", secret.ID, map[string]string{"token": "hidden"}); !errors.Is(err, ErrSecretStartup) {
+	if err := service.SetStartup("bastion", secret.ID, map[string]string{"token": "hidden"}); err != nil {
 		t.Fatalf("SetStartup(secret) = %v", err)
+	}
+	secretPreview, err := service.PreviewStartup("bastion")
+	if err != nil || secretPreview.Targets[0].Command != "echo [secret]" {
+		t.Fatalf("PreviewStartup(secret) = %#v, %v", secretPreview, err)
+	}
+	preparedStartup, err := service.PrepareStartupCommand("bastion")
+	if err != nil || preparedStartup.Command != "echo hidden" || preparedStartup.Display != "echo [secret]" {
+		t.Fatalf("PrepareStartupCommand = %#v, %v", preparedStartup, err)
+	}
+	bindings, err := service.Startup()
+	if err != nil || len(bindings) != 1 || len(bindings[0].Inputs) != 0 {
+		t.Fatalf("public Startup exposed encrypted inputs: %#v, %v", bindings, err)
 	}
 
 	plain := createSnippet(t, service, Draft{Name: "Plain", Command: "echo ok"})
