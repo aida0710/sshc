@@ -171,6 +171,7 @@ export function TerminalView({
     const coarse = prefersNativeSelection((query) => window.matchMedia(query));
 
     const view = new Terminal({
+      allowProposedApi: true,
       cols: 80,
       rows: 24,
       convertEol: false,
