@@ -272,7 +272,21 @@ func NewCLIConnection(
 		return passphrase(filepath.ToSlash(relative))
 	}
 
-	return CLIConnection{parts: newSSHParts(config, hosts, workspace.Home(), stored, password)}, nil
+	parts := newSSHParts(config, hosts, workspace.Home(), stored, password)
+	configuredVerbosity := parts.dialer.Verbosity
+	// `sshc ssh` はブラウザの接続中表示を持たないため、最低限の接続段階を
+	// 常に端末へ残す。詳細度を上げた設定はそのまま尊重する。
+	parts.dialer.Verbosity = func() sshclient.Verbosity {
+		level := sshclient.Quiet
+		if configuredVerbosity != nil {
+			level = configuredVerbosity()
+		}
+		if level < sshclient.Brief {
+			return sshclient.Brief
+		}
+		return level
+	}
+	return CLIConnection{parts: parts}, nil
 }
 
 // Open は、この alias のセッションをひとつ開く。

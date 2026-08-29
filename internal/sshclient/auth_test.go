@@ -382,4 +382,7 @@ func TestAStaleStoredPasswordStillLetsTheUserAnswer(t *testing.T) {
 	if len(prompt.secretly) != 1 {
 		t.Fatalf("the user was never asked after the stored password was refused: %#v", prompt.secretly)
 	}
+	if !strings.Contains(prompt.secretly[0], "Saved password was rejected") {
+		t.Fatalf("the fallback prompt hid why it asked again: %q", prompt.secretly[0])
+	}
 }

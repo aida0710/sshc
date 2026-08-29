@@ -42,6 +42,36 @@ func TestCLIRechecksPasswordBindingAgainstItsResolvedTarget(t *testing.T) {
 	}
 }
 
+func TestCLIUsesPasswordsWhenTheProxyJumpRouteStillMatches(t *testing.T) {
+	jump := sshclient.Target{
+		Alias: "mdx-jamstec-1", HostName: "gateway.example", Port: "22", User: "u0199",
+		Methods: sshclient.DefaultMethods(),
+	}
+	target := sshclient.Target{
+		Alias: "jamstec-moon07-mdx01-tunnel", HostName: "localhost", Port: "2233", User: "u0199",
+		Jump: []sshclient.Target{jump}, Methods: sshclient.DefaultMethods(),
+	}
+	answer := connectAnswer{
+		Passwords: map[string]string{
+			jump.Alias:   "gateway-password",
+			target.Alias: "destination-password",
+		},
+		PasswordBindings: map[string]string{
+			jump.Alias:   jump.AuthenticationBinding(),
+			target.Alias: target.AuthenticationBinding(),
+		},
+	}
+	lookup := savedPasswordFor(answer)
+	for candidate, want := range map[string]sshclient.Target{
+		"gateway-password": jump, "destination-password": target,
+	} {
+		password, ok := lookup(want)
+		if !ok || password != candidate {
+			t.Fatalf("password for %s = %q, %v", want.Alias, password, ok)
+		}
+	}
+}
+
 func (probe *fakeProbe) Status(context.Context) (statusAnswer, error) {
 	probe.mutex.Lock()
 	defer probe.mutex.Unlock()
