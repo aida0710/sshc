@@ -11,7 +11,7 @@ export function TerminalOverflowMenu({
   osc52Enabled: boolean;
   onQuickCommands: () => void;
   onCopyContext: () => void;
-  onToggleOsc52: () => void;
+  onToggleOsc52: () => void | Promise<void>;
   onClose: () => void;
 }) {
   const t = useTranslate();
@@ -32,8 +32,8 @@ export function TerminalOverflowMenu({
     };
   }, [onClose]);
 
-  const action = (callback: () => void) => () => {
-    callback();
+  const action = (callback: () => void | Promise<void>) => () => {
+    void callback();
     onClose();
   };
 
