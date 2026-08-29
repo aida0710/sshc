@@ -97,6 +97,30 @@ func TestSyncStatusHumanOutputNamesSafeOperationalState(t *testing.T) {
 	}
 }
 
+func TestSyncStatusHumanOutputEscapesTerminalControls(t *testing.T) {
+	status := syncStatusFixture()
+	origin := "remote\x1b]52;c;payload\a\nnext"
+	status.Origin = &origin
+	body, err := json.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, stateDir := runSyncTestServer(t, http.StatusOK, string(body))
+	defer server.Close()
+
+	var stdout, stderr strings.Builder
+	code := runSync(context.Background(), syncInvocation{Action: syncStatus}, stateDir,
+		server.Client(), nil, &stdout, &stderr, nil)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	printed := stdout.String()
+	if strings.ContainsAny(printed, "\x1b\a") || !strings.Contains(printed, `\u001B`) ||
+		!strings.Contains(printed, `\u0007`) || !strings.Contains(printed, `\u000A`) {
+		t.Fatalf("terminal controls were not escaped: %q", printed)
+	}
+}
+
 func TestSyncStatusJSONUsesOneStableEnvelope(t *testing.T) {
 	status := syncStatusFixture()
 	body, err := json.Marshal(status)
