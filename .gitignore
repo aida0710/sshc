@@ -15,6 +15,7 @@
 
 /.superpowers/
 .integration-s3.json
+.integration-proxy-known-hosts
 .integration-key/
 
 # デスクトップの外殻。束は作るたびに変わるので追跡しない。

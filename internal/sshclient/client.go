@@ -226,8 +226,16 @@ func (d Dialer) connectOne(
 	}
 	trace.say(Full, "相手が名乗った版は %s です。", connection.ServerVersion())
 	trace.say(Detailed, "握手が通りました（%s）。", trace.since(started).Round(time.Millisecond))
+	trace.say(Brief, "%s の接続完了（%d/%d）。", connectionTarget(target), hop, hops)
 	trace.stage(terminal.ConnectionAuthenticated, target, hop, hops)
 	return ssh.NewClient(connection, channels, requests), nil
+}
+
+func connectionTarget(target Target) string {
+	if target.Alias != "" {
+		return target.Alias
+	}
+	return target.Address()
 }
 
 // open は、この接続先までの輸送をひとつ用意する。
