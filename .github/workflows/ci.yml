@@ -58,6 +58,26 @@ jobs:
         shell: pwsh
         run: ./scripts/ci/check-gofmt.ps1
 
+      # 利用者が実行するWindows PowerShell 5.1自身でinstallerを構文解析する。
+      # pwsh 7だけでは5.1固有の非互換を見落とすため、shellも明示する。
+      - name: Windows PowerShell installer syntax
+        if: ${{ runner.os == 'Windows' }}
+        shell: powershell
+        run: |
+          $errors = @()
+          foreach ($path in @('install.ps1', 'scripts/ci/install-windows-smoke.ps1')) {
+            $tokens = $null
+            $fileErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path), [ref]$tokens, [ref]$fileErrors
+            ) | Out-Null
+            $errors += @($fileErrors)
+          }
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+            exit 1
+          }
+
       - name: go vet (Unix)
         if: ${{ runner.os != 'Windows' }}
         shell: bash

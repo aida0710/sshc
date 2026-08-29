@@ -41,7 +41,7 @@ arch=$(uname -m)
 case "$os" in
   Linux) goos=linux ;;
   Darwin) goos=darwin ;;
-  *) die "$os is not one of the systems this script installs (Linux, macOS). On Windows, download sshc-windows-amd64.exe or sshc-windows-arm64.exe from https://github.com/$REPO/releases/latest, rename it to sshc.exe, and place it on PATH." ;;
+  *) die "$os is not one of the systems this script installs (Linux, macOS). On Windows, run: powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://github.com/$REPO/releases/latest/download/install.ps1 | iex\"" ;;
 esac
 case "$arch" in
   x86_64 | amd64) goarch=amd64 ;;

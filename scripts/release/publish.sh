@@ -98,6 +98,7 @@ verify_public_release() {
 
   expected_assets=$(printf '%s\n' \
     checksums.txt \
+    install.ps1 \
     "sshc-android-$tag.apk" \
     sshc-darwin-amd64 \
     sshc-darwin-arm64 \
