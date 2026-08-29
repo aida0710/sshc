@@ -703,12 +703,6 @@ export function TerminalView({
         <TerminalQuickCommands
           session={session}
           onClose={() => setQuickCommandsOpen(false)}
-          onSend={(command, submit) => {
-            const view = terminal.current;
-            const prepared = view === null ? command : prepareTerminalPaste(command, view.modes.bracketedPasteMode);
-            sendInput.current(`${prepared}${submit ? "\r" : ""}`);
-            view?.focus();
-          }}
         />
       ) : null}
       {linkSelection === null ? null : (

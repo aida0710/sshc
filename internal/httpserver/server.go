@@ -458,11 +458,11 @@ func New(options Options) (*Server, error) {
 				if options.Snippets == nil {
 					return "", false
 				}
-				preview, err := options.Snippets.PreviewStartup(alias)
-				if err != nil || len(preview.Targets) != 1 {
+				prepared, err := options.Snippets.PrepareStartupCommand(alias)
+				if err != nil {
 					return "", false
 				}
-				return preview.Targets[0].Command, true
+				return prepared.Command, true
 			},
 			// askpass はここに無い。この経路はもう外部の ssh を起動しない。
 			// パスフレーズは vault から直接読むか、端末で尋ねる。ヘルパーが

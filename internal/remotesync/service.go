@@ -62,6 +62,11 @@ const VaultPath = "sshc/secrets"
 // VaultPath と分けることで、受信時にローカルの鍵による再暗号化を必須にする。
 const TravelPath = "sshc/secrets.json"
 
+// SnippetsPath is both the legacy plaintext path and the logical path inside a
+// sync snapshot. On local disk its bytes are sealed with the device's master
+// key; only the outer sync envelope carries the validated plaintext document.
+const SnippetsPath = "sshc/snippets.json"
+
 // SnapshotPrefix は、ライブのオブジェクトの隣に、push ごとの日付付きコピーを保持する。
 //
 // 固定キーへの条件付き書き込みで同時更新を検出する。日付付きコピーは手動復旧用で、
@@ -318,6 +323,11 @@ type Service struct {
 	SealVault func(document []byte) ([]byte, error)
 	// VaultAdopted は、vault の置換後にメモリ上の状態を再読込する通知。
 	VaultAdopted func() error
+	OpenSnippets func() ([]byte, error)
+	SealSnippets func(document []byte) ([]byte, error)
+	// SecretMutation holds the master-key generation while logical protected
+	// documents are sealed and committed during pull.
+	SecretMutation func(func() error) error
 	// StableSnapshot runs Collect's complete local read while application-level
 	// secret and workspace mutation barriers are held. A nil hook preserves the
 	// standalone package behaviour used by tests and embedders that have no
@@ -507,6 +517,7 @@ var neverTravels = []string{
 	// スナップショット全体の暗号化内に一度だけ載せ、受信側で再封印する。
 	VaultPath,
 	TravelPath,
+	SnippetsPath,
 	StatePath,
 	KeyRecoveryPath,
 }
@@ -601,6 +612,16 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 		entries = append(entries, Entry{
 			Path: TravelPath, SHA256: Digest(document), Mode: "0600",
 		})
+	}
+	if s.OpenSnippets != nil {
+		document, err := s.OpenSnippets()
+		if err != nil {
+			return Manifest{}, nil, err
+		}
+		if document != nil {
+			contents[SnippetsPath] = document
+			entries = append(entries, Entry{Path: SnippetsPath, SHA256: Digest(document), Mode: "0600"})
+		}
 	}
 	if len(entries) > MaxEntries {
 		return Manifest{}, nil, ErrSnapshotTooLarge
@@ -1361,13 +1382,23 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 	if !stateMatchesTarget(current, binding.config) {
 		base = nil
 	}
-	local, err := s.localDigests(manifest, base)
+	var local map[string]string
+	readLocal := func() error {
+		var readErr error
+		local, readErr = s.localDigests(manifest, base)
+		return readErr
+	}
+	if s.StableSnapshot != nil {
+		err = s.StableSnapshot(readLocal)
+	} else {
+		err = readLocal()
+	}
 	if err != nil {
 		return PullResult{}, err
 	}
 
 	request, conflicts, err := Plan(s.workspace.Root(), base, local, manifest, contents, resolve)
-	if exchangeErr := s.exchangeVault(&request); exchangeErr != nil {
+	if exchangeErr := s.stageVault(&request); exchangeErr != nil {
 		return PullResult{}, exchangeErr
 	}
 	if err != nil && !errors.Is(err, ErrNothingToApply) {
@@ -1477,6 +1508,13 @@ func (s *Service) validatePullForApply(ctx context.Context, result PullResult) e
 }
 
 func (s *Service) apply(result PullResult) error {
+	if s.SecretMutation != nil {
+		return s.SecretMutation(func() error { return s.applyWithSecretGeneration(result) })
+	}
+	return s.applyWithSecretGeneration(result)
+}
+
+func (s *Service) applyWithSecretGeneration(result PullResult) error {
 	// direction は Pull ではなくここで検査する。プレビューは何も書かないので、
 	// 送信専用のマシンでも、どれだけ遅れているかは知ることができる。
 	// これが、別のマシンのバイト列をこのディスクへ置く呼び出しである。
@@ -1485,6 +1523,17 @@ func (s *Service) apply(result PullResult) error {
 	}
 	if len(result.Conflicts) > 0 {
 		return ErrConflicts
+	}
+	// PullResult is a reusable preview. Keep its logical plaintext request
+	// untouched and seal a private copy only at the final commit boundary.
+	result.Request.Changes = slices.Clone(result.Request.Changes)
+	result.Request.Removals = slices.Clone(result.Request.Removals)
+	result.Request.Directories = slices.Clone(result.Request.Directories)
+	if err := s.exchangeVault(&result.Request); err != nil {
+		return err
+	}
+	if err := s.exchangeSnippets(&result.Request); err != nil {
+		return err
 	}
 	if len(result.Request.Changes)+len(result.Request.Removals) > 0 {
 		// 別のマシンからのスナップショットは、このマシンにはないかもしれない
@@ -1530,6 +1579,75 @@ func (s *Service) apply(result PullResult) error {
 	})
 }
 
+// exchangeSnippets maps the logical plaintext snapshot entry onto the same
+// local path using this installation's master key. Previous ciphertext is not
+// retained as a generation backup: snippets had no history before encryption,
+// and keeping a nested old-key envelope would make password rotation unsafe.
+func (s *Service) exchangeSnippets(request *storage.Request) error {
+	local := filepath.Join(s.workspace.Root(), filepath.FromSlash(SnippetsPath))
+	for index := range request.Changes {
+		if request.Changes[index].Path != local {
+			continue
+		}
+		if s.SealSnippets == nil {
+			return ErrVaultCodec
+		}
+		if err := s.requireSnippetPrecondition(local, request.Changes[index].Precondition); err != nil {
+			return err
+		}
+		sealed, err := s.SealSnippets(request.Changes[index].Contents)
+		if err != nil {
+			return err
+		}
+		precondition := storage.Precondition{}
+		if body, err := s.workspace.FileSystem().ReadFile(local); err == nil {
+			precondition = storage.Precondition{Exists: true, Digest: storage.Digest(body)}
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		request.Changes[index] = storage.Change{
+			Path: local, Contents: sealed, Precondition: precondition, SkipBackup: true,
+		}
+	}
+	for index := range request.Removals {
+		if request.Removals[index].Path != local {
+			continue
+		}
+		if err := s.requireSnippetPrecondition(local, request.Removals[index].Precondition); err != nil {
+			return err
+		}
+		body, err := s.workspace.FileSystem().ReadFile(local)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		request.Removals[index] = storage.Removal{
+			Path: local, Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(body)},
+		}
+	}
+	return nil
+}
+
+func (s *Service) requireSnippetPrecondition(path string, expected storage.Precondition) error {
+	if s.OpenSnippets == nil {
+		return ErrVaultCodec
+	}
+	document, err := s.OpenSnippets()
+	if err != nil {
+		return err
+	}
+	actual := ""
+	if document != nil {
+		actual = Digest(document)
+	}
+	if expected.Exists == (document != nil) && (!expected.Exists || expected.Digest == actual) {
+		return nil
+	}
+	return &storage.ConflictError{Path: path, Expected: expected.Digest, Actual: actual}
+}
+
 // changeDirectories は、変更が着地する先のディレクトリを重複なく返す。
 //
 // 直接の親だけでよい。DirectoryCreate はルートより下で欠けている親も作るので、
@@ -1566,6 +1684,16 @@ func (s *Service) localDigests(remote Manifest, base *Manifest) (map[string]stri
 		// TravelPath はディスク上に存在しないため、復号済み vault 文書の digest を使う。
 		if path == TravelPath && s.OpenVault != nil {
 			document, err := s.OpenVault()
+			if err != nil {
+				return nil, err
+			}
+			if document != nil {
+				digests[path] = Digest(document)
+			}
+			continue
+		}
+		if path == SnippetsPath && s.OpenSnippets != nil {
+			document, err := s.OpenSnippets()
 			if err != nil {
 				return nil, err
 			}
@@ -1777,17 +1905,36 @@ func (s *Service) DisplayPath(absolute string) string {
 	return filepath.ToSlash(relative)
 }
 
-// exchangeVault は TravelPath の文書を受信側の鍵で再暗号化し、VaultPath へ置く。
-// 送信側に vault がない場合は、受信側の vault を削除しない。
+// stageVault maps the travelling logical path to the local vault path while
+// retaining plaintext and its logical precondition in the PullResult. Sealing
+// is deliberately deferred until apply holds SecretMutation.
+func (s *Service) stageVault(request *storage.Request) error {
+	travelled := filepath.Join(s.workspace.Root(), filepath.FromSlash(TravelPath))
+	local := filepath.Join(s.workspace.Root(), filepath.FromSlash(VaultPath))
+	for index := range request.Changes {
+		if request.Changes[index].Path == travelled {
+			request.Changes[index].Path = local
+		}
+	}
+	request.Removals = slices.DeleteFunc(request.Removals, func(removal storage.Removal) bool {
+		return removal.Path == travelled
+	})
+	return nil
+}
+
+// exchangeVault validates the logical preview against the current unlocked
+// vault, then seals it with the exact master-key generation held by apply.
 func (s *Service) exchangeVault(request *storage.Request) error {
 	if s.SealVault == nil {
 		return ErrVaultCodec
 	}
-	travelled := filepath.Join(s.workspace.Root(), filepath.FromSlash(TravelPath))
 	local := filepath.Join(s.workspace.Root(), filepath.FromSlash(VaultPath))
 	for index := range request.Changes {
-		if request.Changes[index].Path != travelled {
+		if request.Changes[index].Path != local {
 			continue
+		}
+		if err := s.requireVaultPrecondition(local, request.Changes[index].Precondition); err != nil {
+			return err
 		}
 		sealed, err := s.SealVault(request.Changes[index].Contents)
 		if err != nil {
@@ -1803,10 +1950,25 @@ func (s *Service) exchangeVault(request *storage.Request) error {
 			Path: local, Contents: sealed, Precondition: precondition,
 		}
 	}
-	request.Removals = slices.DeleteFunc(request.Removals, func(removal storage.Removal) bool {
-		return removal.Path == travelled
-	})
 	return nil
+}
+
+func (s *Service) requireVaultPrecondition(path string, expected storage.Precondition) error {
+	if s.OpenVault == nil {
+		return ErrVaultCodec
+	}
+	document, err := s.OpenVault()
+	if err != nil {
+		return err
+	}
+	actual := ""
+	if document != nil {
+		actual = Digest(document)
+	}
+	if expected.Exists == (document != nil) && (!expected.Exists || expected.Digest == actual) {
+		return nil
+	}
+	return &storage.ConflictError{Path: path, Expected: expected.Digest, Actual: actual}
 }
 
 // replacesVault は、このリクエストが保管庫のファイルを書き換えるかを返す。

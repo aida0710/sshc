@@ -2594,6 +2594,20 @@ components:
       properties:
         snippetId: { type: string }
         command: { type: string, minLength: 1, maxLength: 4095 }
+        revealCommand:
+          type: boolean
+          description: Return the expanded command for an explicit insert, run, or copy action. Normal previews remain redacted.
+        issueAction:
+          type: boolean
+          description: Issue a one-time execution token. Defaults to true for compatibility; passive previews should set false.
+        submit:
+          type: boolean
+          description: Bind the preview to sending Enter after the command. Defaults to true.
+        expectedReviewEvidence:
+          type: string
+          minLength: 64
+          maxLength: 64
+          description: Refuse to issue an action if the redacted command or exact target changed since the displayed passive preview.
         inputs:
           type: object
           additionalProperties: { type: string }
@@ -2609,6 +2623,9 @@ components:
       properties:
         snippetId: { type: string }
         command: { type: string, minLength: 1, maxLength: 4095 }
+        submit:
+          type: boolean
+          description: Send Enter after the command. Defaults to true.
         inputs:
           type: object
           additionalProperties: { type: string }
@@ -2631,10 +2648,13 @@ components:
     TerminalCommandPreview:
       type: object
       additionalProperties: false
-      required: [snippetId, evidence, actionToken, actionExpiresAt, targets]
+      required: [snippetId, evidence, reviewEvidence, actionToken, actionExpiresAt, targets]
       properties:
         snippetId: { type: string }
         evidence: { type: string }
+        reviewEvidence:
+          type: string
+          description: Stable evidence for the displayed redacted command and exact targets, independent of whether Enter will be sent.
         actionToken: { type: string }
         actionExpiresAt: { type: string }
         targets:

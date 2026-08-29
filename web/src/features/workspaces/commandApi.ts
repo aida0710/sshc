@@ -12,6 +12,7 @@ function preview(value: unknown): TerminalCommandPreview {
   return {
     snippetId: asString(item.snippetId),
     evidence: asString(item.evidence),
+    reviewEvidence: asString(item.reviewEvidence),
     actionToken: asString(item.actionToken),
     actionExpiresAt: asString(item.actionExpiresAt),
     targets: asArray(item.targets).map((raw) => {
@@ -55,11 +56,11 @@ export const terminalCommandApi = {
     }));
   },
 
-  async dispatch(prepared: TerminalCommandPreview, request: TerminalCommandRequest): Promise<TerminalCommandDispatch> {
+  async dispatch(prepared: TerminalCommandPreview, request: TerminalCommandRequest, submit = true): Promise<TerminalCommandDispatch> {
     return dispatch(await apiClient.mutate<unknown>("/api/v1/terminal/commands", {
       method: "POST",
       headers: { ...jsonHeaders, "X-SSHC-Action": prepared.actionToken },
-      body: JSON.stringify({ ...request, evidence: prepared.evidence }),
+      body: JSON.stringify({ ...request, submit, evidence: prepared.evidence }),
     }));
   },
 };

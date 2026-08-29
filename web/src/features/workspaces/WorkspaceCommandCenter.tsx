@@ -40,7 +40,6 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
   closeCallback.current = onClose;
 
   const selectedSnippet = useMemo(() => snippets.find((item) => item.id === snippetId) ?? null, [snippetId, snippets]);
-  const secretSnippet = selectedSnippet?.variables.some((variable) => variable.type === "secret") === true;
   const targets = useMemo(() => paneTargets.filter((target): target is WorkspaceCommandTarget & { sessionId: string } =>
     target.connected && target.sessionId !== undefined), [paneTargets]);
   const targetFingerprint = paneTargets.map((target) =>
@@ -82,7 +81,7 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
     const executionTargets = targets.map(({ targetId, sessionId }) => ({ targetId, sessionId }));
     if (executionTargets.length === 0) return null;
     if (source === "command") return command.trim() === "" ? null : { command, targets: executionTargets, inputs: {} };
-    return snippetId === "" || secretSnippet ? null : { snippetId, targets: executionTargets, inputs };
+    return snippetId === "" ? null : { snippetId, targets: executionTargets, inputs };
   }
 
   async function makePreview() {
@@ -141,7 +140,6 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
               <>
                 <label className="text-xs text-ink-muted">{t("workspace.savedSnippet")}<select value={snippetId} onChange={(event) => { setSnippetId(event.target.value); setInputs({}); invalidate(); }} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"><option value="">{t("workspace.chooseSnippet")}</option>{snippets.map((snippet) => <option key={snippet.id} value={snippet.id}>{snippet.name}</option>)}</select></label>
                 {selectedSnippet === null ? null : <code className="whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">{selectedSnippet.command}</code>}
-                {!secretSnippet ? null : <p role="status" className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink">{t("workspace.secretSnippetRefused")}</p>}
                 {selectedSnippet?.variables.map((variable) => <label key={variable.name} className="text-xs text-ink-muted"><code>{`{{${variable.name}}}`}</code>{variable.description ? ` · ${variable.description}` : ""}{variable.type === "boolean" ? <select value={inputs[variable.name] ?? ""} onChange={(event) => { const value = event.target.value; setInputs((current) => value === "" ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== variable.name)) : { ...current, [variable.name]: value }); invalidate(); }} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"><option value="">{variable.default === undefined ? "" : `${t("workspace.useDefault")} (${variable.default})`}</option><option value="true">true</option><option value="false">false</option></select> : <input type={variable.type === "secret" ? "password" : variable.type === "integer" ? "number" : "text"} value={inputs[variable.name] ?? ""} placeholder={variable.default === undefined ? "" : `${t("workspace.useDefault")}: ${variable.default}`} onChange={(event) => { setInputs((current) => ({ ...current, [variable.name]: event.target.value })); invalidate(); }} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm" />}</label>)}
               </>
             )}

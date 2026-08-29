@@ -6,13 +6,17 @@ import { snippetsApi, type Snippet } from "../snippets/api";
 import { clipboard } from "../ui/clipboard";
 import { terminalCommandApi } from "../features/workspaces/commandApi";
 
+type Prepared = {
+  command: string;
+  preview: Awaited<ReturnType<typeof terminalCommandApi.preview>>;
+  request: Parameters<typeof terminalCommandApi.preview>[0];
+};
+
 export function TerminalQuickCommands({
   session,
-  onSend,
   onClose,
 }: {
   session: TerminalSession;
-  onSend: (command: string, submit: boolean) => void;
   onClose: () => void;
 }) {
   const t = useTranslate();
@@ -20,11 +24,10 @@ export function TerminalQuickCommands({
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [inputs, setInputs] = useState<Record<string, string>>({});
-  const [prepared, setPrepared] = useState("");
+  const [prepared, setPrepared] = useState<Prepared | null>(null);
   const [busy, setBusy] = useState(true);
   const [problem, setProblem] = useState("");
   const selected = useMemo(() => snippets.find((snippet) => snippet.id === selectedId) ?? null, [selectedId, snippets]);
-  const hasSecret = selected?.variables.some((variable) => variable.type === "secret") === true;
 
   useEffect(() => {
     let active = true;
@@ -54,47 +57,125 @@ export function TerminalQuickCommands({
     };
   }, [onClose]);
 
+  useEffect(() => {
+    setPrepared(null);
+  }, [session.id, session.startedAt, session.state]);
+
   function invalidate(nextInputs = inputs) {
     setInputs(nextInputs);
-    setPrepared("");
+    setPrepared(null);
     setProblem("");
   }
 
   async function prepare() {
-    if (selected === null || hasSecret || busy) return;
+    if (selected === null || busy) return;
     setBusy(true);
     setProblem("");
     try {
-      const preview = await terminalCommandApi.preview({
+      const request = {
         snippetId: selected.id,
         inputs,
         targets: [{ targetId: session.id, sessionId: session.id }],
-      });
+      };
+      const preview = await terminalCommandApi.preview({ ...request, issueAction: false });
       const target = preview.targets.find((item) => item.sessionId === session.id) ?? preview.targets[0];
       if (target === undefined || target.command === "") throw new Error("invalid_response");
-      setPrepared(target.command);
+      setPrepared({ command: target.command, preview, request });
     } catch (error) {
       setProblem(failureCode(error) || (error instanceof Error ? error.message : "terminal_command_failed"));
-      setPrepared("");
+      setPrepared(null);
     } finally {
       setBusy(false);
     }
   }
 
   async function copyPrepared() {
-    if (prepared === "") return;
+    if (prepared === null) return;
+    const current = prepared;
+    setBusy(true);
     try {
-      await clipboard.writeText(prepared);
+      await clipboard.writeText(await revealPrepared());
       onClose();
-    } catch {
-      setProblem(t("terminal.clipboardRefused"));
+    } catch (error) {
+      if (failureCode(error) === "terminal_command_preview_changed") {
+        await handleActionFailure(error, current);
+      } else {
+        setProblem(t("terminal.clipboardRefused"));
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
-  function send(submit: boolean) {
-    if (prepared === "") return;
-    onSend(prepared, submit);
-    onClose();
+  async function revealPrepared(): Promise<string> {
+    if (prepared === null) throw new Error("invalid_response");
+    const revealed = await terminalCommandApi.preview({
+      ...prepared.request,
+      revealCommand: true,
+      issueAction: false,
+      expectedReviewEvidence: prepared.preview.reviewEvidence,
+    });
+    const target = revealed.targets.find((item) => item.sessionId === session.id) ?? revealed.targets[0];
+    if (target === undefined || target.command === "") throw new Error("invalid_response");
+    return target.command;
+  }
+
+  async function insertPrepared() {
+    if (prepared === null) return;
+    const current = prepared;
+    setBusy(true); setProblem("");
+    try {
+      const confirmed = await terminalCommandApi.preview({
+        ...current.request,
+        issueAction: true,
+        submit: false,
+        expectedReviewEvidence: current.preview.reviewEvidence,
+      });
+      await terminalCommandApi.dispatch(confirmed, current.request, false);
+      onClose();
+    } catch (error) {
+      await handleActionFailure(error, current);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runPrepared() {
+    if (prepared === null) return;
+    const current = prepared;
+    setBusy(true); setProblem("");
+    try {
+      const confirmed = await terminalCommandApi.preview({
+        ...current.request,
+        issueAction: true,
+        submit: true,
+        expectedReviewEvidence: current.preview.reviewEvidence,
+      });
+      await terminalCommandApi.dispatch(confirmed, current.request, true);
+      onClose();
+    } catch (error) {
+      await handleActionFailure(error, current);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleActionFailure(error: unknown, current: Prepared) {
+    const code = failureCode(error);
+    if (code !== "terminal_command_preview_changed") {
+      setProblem(code === "terminal_command_insert_unsafe" ? t("terminal.quickCommandInsertUnsafe") : code || "terminal_command_failed");
+      return;
+    }
+    try {
+      const preview = await terminalCommandApi.preview({ ...current.request, issueAction: false });
+      const target = preview.targets.find((item) => item.sessionId === session.id) ?? preview.targets[0];
+      if (target === undefined || target.command === "") throw new Error("invalid_response");
+      setPrepared({ command: target.command, preview, request: current.request });
+      setProblem(t("terminal.quickCommandChanged"));
+    } catch (refreshError) {
+      setPrepared(null);
+      setProblem(failureCode(refreshError) || "terminal_command_failed");
+    }
   }
 
   return (
@@ -133,16 +214,15 @@ export function TerminalQuickCommands({
               )}
             </label>
           ))}
-          {hasSecret ? <p className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink">{t("workspace.secretSnippetRefused")}</p> : null}
-          {prepared === "" ? (
-            <button type="button" disabled={busy || selected === null || hasSecret} onClick={() => void prepare()} className="min-h-8 self-start rounded border border-control-line bg-control px-3 py-1 text-sm font-medium hover:bg-select-fill disabled:opacity-50">{t("snippets.preview")}</button>
+          {prepared === null ? (
+            <button type="button" disabled={busy || selected === null} onClick={() => void prepare()} className="min-h-8 self-start rounded border border-control-line bg-control px-3 py-1 text-sm font-medium hover:bg-select-fill disabled:opacity-50">{t("snippets.preview")}</button>
           ) : (
             <>
-              <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">{prepared}</pre>
+              <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">{prepared.command}</pre>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => send(false)} className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill">{t("terminal.quickCommandInsert")}</button>
-                <button type="button" onClick={() => send(true)} className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast">{t("terminal.quickCommandRun")}</button>
-                <button type="button" onClick={() => void copyPrepared()} className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill">{t("terminal.quickCommandCopy")}</button>
+                <button type="button" disabled={busy} onClick={() => void insertPrepared()} className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50">{t("terminal.quickCommandInsert")}</button>
+                <button type="button" disabled={busy} onClick={() => void runPrepared()} className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50">{t("terminal.quickCommandRun")}</button>
+                <button type="button" disabled={busy} onClick={() => void copyPrepared()} className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50">{t("terminal.quickCommandCopy")}</button>
               </div>
             </>
           )}

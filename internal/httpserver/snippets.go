@@ -66,7 +66,7 @@ func snippetProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "snippet_job_finished")
 	case errors.Is(err, snippets.ErrInvalidSnippet), errors.Is(err, snippets.ErrInvalidVariable), errors.Is(err, snippets.ErrUnknownVariable),
 		errors.Is(err, snippets.ErrMissingVariable), errors.Is(err, snippets.ErrMalformedTemplate), errors.Is(err, snippets.ErrInvalidTarget),
-		errors.Is(err, snippets.ErrDuplicateTarget), errors.Is(err, snippets.ErrSecretStartup):
+		errors.Is(err, snippets.ErrDuplicateTarget):
 		return problem(c, http.StatusBadRequest, "invalid_snippet")
 	default:
 		return problem(c, http.StatusInternalServerError, "snippet_failed")
@@ -149,7 +149,7 @@ func (h SnippetHandlers) Preview(c *echo.Context) error {
 	if err != nil {
 		return snippetProblem(c, err)
 	}
-	issued, err := h.Actions.issueEvidence(c, session.ActionSnippetExecute, preview.ActionTarget(), preview.Evidence)
+	issued, err := h.Actions.issueEvidence(c, session.ActionSnippetExecute, preview.ActionTarget(), preview.ActionEvidence)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func (h SnippetHandlers) Start(c *echo.Context) error {
 	if err != nil {
 		return snippetProblem(c, err)
 	}
-	if allowed, response := h.Actions.consumeEvidence(c, session.ActionSnippetExecute, preview.ActionTarget(), preview.Evidence); !allowed {
+	if allowed, response := h.Actions.consumeEvidence(c, session.ActionSnippetExecute, preview.ActionTarget(), preview.ActionEvidence); !allowed {
 		return response
 	}
 	parent := h.BaseContext

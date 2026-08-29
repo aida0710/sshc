@@ -68,24 +68,24 @@ func (s *Service) Create(draft Draft) (Snippet, error) {
 	}
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
-	library, err := s.load()
+	var snippet Snippet
+	err := s.mutate(func(library *Library) error {
+		if len(library.Snippets) >= MaxSnippets {
+			return ErrInvalidDocument
+		}
+		id, err := s.newUniqueSnippetID(*library)
+		if err != nil {
+			return err
+		}
+		moment := s.now().UTC()
+		snippet = Snippet{
+			ID: id, Name: draft.Name, Description: draft.Description, Command: draft.Command,
+			Variables: append([]Variable(nil), draft.Variables...), CreatedAt: moment, UpdatedAt: moment,
+		}
+		library.Snippets = append(library.Snippets, snippet)
+		return nil
+	})
 	if err != nil {
-		return Snippet{}, err
-	}
-	if len(library.Snippets) >= MaxSnippets {
-		return Snippet{}, ErrInvalidDocument
-	}
-	id, err := s.newUniqueSnippetID(library)
-	if err != nil {
-		return Snippet{}, err
-	}
-	moment := s.now().UTC()
-	snippet := Snippet{
-		ID: id, Name: draft.Name, Description: draft.Description, Command: draft.Command,
-		Variables: append([]Variable(nil), draft.Variables...), CreatedAt: moment, UpdatedAt: moment,
-	}
-	library.Snippets = append(library.Snippets, snippet)
-	if err := s.save(library); err != nil {
 		return Snippet{}, err
 	}
 	return cloneSnippet(snippet), nil
@@ -97,34 +97,33 @@ func (s *Service) Update(id string, draft Draft) (Snippet, error) {
 	}
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
-	library, err := s.load()
-	if err != nil {
-		return Snippet{}, err
-	}
-	index := snippetIndex(library, id)
-	if index < 0 {
-		return Snippet{}, ErrUnknownSnippet
-	}
-	updated := library.Snippets[index]
-	updated.Name = draft.Name
-	updated.Description = draft.Description
-	updated.Command = draft.Command
-	updated.Variables = append([]Variable(nil), draft.Variables...)
-	updated.UpdatedAt = s.now().UTC()
-	if updated.UpdatedAt.Before(updated.CreatedAt) {
-		updated.UpdatedAt = updated.CreatedAt
-	}
-	// Existing startup bindings must remain executable after an edit. Refuse an
-	// incompatible edit instead of silently disabling connection automation.
-	for _, startup := range library.Startup {
-		if startup.SnippetID == id {
-			if err := validateStartup(updated, startup.Inputs); err != nil {
-				return Snippet{}, err
+	var updated Snippet
+	err := s.mutate(func(library *Library) error {
+		index := snippetIndex(*library, id)
+		if index < 0 {
+			return ErrUnknownSnippet
+		}
+		updated = library.Snippets[index]
+		updated.Name = draft.Name
+		updated.Description = draft.Description
+		updated.Command = draft.Command
+		updated.Variables = append([]Variable(nil), draft.Variables...)
+		updated.UpdatedAt = s.now().UTC()
+		if updated.UpdatedAt.Before(updated.CreatedAt) {
+			updated.UpdatedAt = updated.CreatedAt
+		}
+		// Existing startup bindings must remain executable after an edit.
+		for _, startup := range library.Startup {
+			if startup.SnippetID == id {
+				if err := validateStartup(updated, startup.Inputs); err != nil {
+					return err
+				}
 			}
 		}
-	}
-	library.Snippets[index] = updated
-	if err := s.save(library); err != nil {
+		library.Snippets[index] = updated
+		return nil
+	})
+	if err != nil {
 		return Snippet{}, err
 	}
 	return cloneSnippet(updated), nil
@@ -133,23 +132,21 @@ func (s *Service) Update(id string, draft Draft) (Snippet, error) {
 func (s *Service) Delete(id string) error {
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
-	library, err := s.load()
-	if err != nil {
-		return err
-	}
-	index := snippetIndex(library, id)
-	if index < 0 {
-		return ErrUnknownSnippet
-	}
-	library.Snippets = append(library.Snippets[:index], library.Snippets[index+1:]...)
-	startup := library.Startup[:0]
-	for _, binding := range library.Startup {
-		if binding.SnippetID != id {
-			startup = append(startup, binding)
+	return s.mutate(func(library *Library) error {
+		index := snippetIndex(*library, id)
+		if index < 0 {
+			return ErrUnknownSnippet
 		}
-	}
-	library.Startup = startup
-	return s.save(library)
+		library.Snippets = append(library.Snippets[:index], library.Snippets[index+1:]...)
+		startup := library.Startup[:0]
+		for _, binding := range library.Startup {
+			if binding.SnippetID != id {
+				startup = append(startup, binding)
+			}
+		}
+		library.Startup = startup
+		return nil
+	})
 }
 
 func (s *Service) Startup() ([]Startup, error) {
@@ -159,7 +156,14 @@ func (s *Service) Startup() ([]Startup, error) {
 	if err != nil {
 		return nil, err
 	}
-	return cloneLibrary(library).Startup, nil
+	startup := make([]Startup, len(library.Startup))
+	for index, binding := range library.Startup {
+		// Inputs may now contain secret values. The HTTP library response needs
+		// only the assignment identity; execution reads the encrypted repository
+		// directly through PreviewStartup.
+		startup[index] = Startup{Alias: binding.Alias, SnippetID: binding.SnippetID}
+	}
+	return startup, nil
 }
 
 // SetStartup assigns a snippet to an alias. An empty snippet ID removes the
@@ -169,39 +173,39 @@ func (s *Service) SetStartup(alias, snippetID string, inputs map[string]string) 
 	if err := validate.Alias(alias); err != nil || len(alias) > 255 {
 		return ErrInvalidTarget
 	}
-	s.mutation.Lock()
-	defer s.mutation.Unlock()
-	library, err := s.load()
-	if err != nil {
-		return err
-	}
-	filtered := library.Startup[:0]
-	for _, startup := range library.Startup {
-		if startup.Alias != alias {
-			filtered = append(filtered, startup)
+	if snippetID != "" {
+		if s.resolve == nil {
+			return ErrNoResolver
+		}
+		if _, err := s.resolve(alias); err != nil {
+			return err
 		}
 	}
-	library.Startup = filtered
-	if snippetID == "" {
-		return s.save(library)
-	}
-	if s.resolve == nil {
-		return ErrNoResolver
-	}
-	if _, err := s.resolve(alias); err != nil {
-		return err
-	}
-	index := snippetIndex(library, snippetID)
-	if index < 0 {
-		return ErrUnknownSnippet
-	}
-	if err := validateStartup(library.Snippets[index], inputs); err != nil {
-		return err
-	}
-	library.Startup = append(library.Startup, Startup{
-		Alias: alias, SnippetID: snippetID, Inputs: cloneInputs(inputs),
+	s.mutation.Lock()
+	defer s.mutation.Unlock()
+	return s.mutate(func(library *Library) error {
+		filtered := library.Startup[:0]
+		for _, startup := range library.Startup {
+			if startup.Alias != alias {
+				filtered = append(filtered, startup)
+			}
+		}
+		library.Startup = filtered
+		if snippetID == "" {
+			return nil
+		}
+		index := snippetIndex(*library, snippetID)
+		if index < 0 {
+			return ErrUnknownSnippet
+		}
+		if err := validateStartup(library.Snippets[index], inputs); err != nil {
+			return err
+		}
+		library.Startup = append(library.Startup, Startup{
+			Alias: alias, SnippetID: snippetID, Inputs: cloneInputs(inputs),
+		})
+		return nil
 	})
-	return s.save(library)
 }
 
 func (s *Service) Preview(request PreviewRequest) (Preview, error) {
@@ -214,7 +218,7 @@ func (s *Service) Preview(request PreviewRequest) (Preview, error) {
 // session's cwd and shell state. Resolving the alias here would recreate the
 // detached-command behaviour this path is meant to avoid.
 func (s *Service) PrepareTerminalCommand(request CommandRequest) (PreparedCommand, error) {
-	source, expanded, secrets, err := s.planSource(PreviewRequest{
+	source, expanded, _, err := s.planSource(PreviewRequest{
 		SnippetID: request.SnippetID,
 		Command:   request.Command,
 		Inputs:    request.Inputs,
@@ -222,43 +226,75 @@ func (s *Service) PrepareTerminalCommand(request CommandRequest) (PreparedComman
 	if err != nil {
 		return PreparedCommand{}, err
 	}
-	if source.hasSecrets || len(secrets) > 0 {
-		return PreparedCommand{}, ErrSecretTerminal
+	return prepareTerminalCommand(source, expanded)
+}
+
+func prepareTerminalCommand(source planSource, expanded expansion) (PreparedCommand, error) {
+	publicEvidence, err := terminalEvidence(source, expanded.display)
+	if err != nil {
+		return PreparedCommand{}, err
 	}
+	actionEvidence, err := terminalEvidence(source, expanded.command)
+	if err != nil {
+		return PreparedCommand{}, err
+	}
+	return PreparedCommand{
+		SnippetID:      source.snippetID,
+		Command:        expanded.command,
+		Display:        expanded.display,
+		Evidence:       publicEvidence,
+		ActionEvidence: actionEvidence,
+	}, nil
+}
+
+func terminalEvidence(source planSource, command string) (string, error) {
 	payload := struct {
 		Kind      string    `json:"kind"`
 		SnippetID string    `json:"snippetId,omitempty"`
 		UpdatedAt time.Time `json:"updatedAt,omitempty"`
 		Command   string    `json:"command"`
-	}{Kind: source.kind, SnippetID: source.snippetID, UpdatedAt: source.updatedAt, Command: expanded.command}
+	}{Kind: source.kind, SnippetID: source.snippetID, UpdatedAt: source.updatedAt, Command: command}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return PreparedCommand{}, err
+		return "", err
 	}
 	digest := sha256.Sum256(encoded)
-	return PreparedCommand{
-		SnippetID: source.snippetID,
-		Command:   expanded.command,
-		Display:   expanded.display,
-		Evidence:  hex.EncodeToString(digest[:]),
-	}, nil
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func (s *Service) PreviewStartup(alias string) (Preview, error) {
-	s.mutation.Lock()
-	library, err := s.load()
-	s.mutation.Unlock()
+	source, expanded, secrets, err := s.startupSource(alias)
 	if err != nil {
 		return Preview{}, err
 	}
+	preview, _, err := s.planExpanded(PreviewRequest{Aliases: []string{alias}}, source, expanded, secrets)
+	return preview, err
+}
+
+// PrepareStartupCommand returns the executable command for the terminal
+// injector. Public startup previews stay redacted; this internal path is the
+// only one that may hand the expanded value to the PTY writer.
+func (s *Service) PrepareStartupCommand(alias string) (PreparedCommand, error) {
+	source, expanded, _, err := s.startupSource(alias)
+	if err != nil {
+		return PreparedCommand{}, err
+	}
+	return prepareTerminalCommand(source, expanded)
+}
+
+func (s *Service) startupSource(alias string) (planSource, expansion, []string, error) {
+	s.mutation.Lock()
+	defer s.mutation.Unlock()
+	library, err := s.load()
+	if err != nil {
+		return planSource{}, expansion{}, nil, err
+	}
 	for _, startup := range library.Startup {
 		if startup.Alias == alias {
-			return s.Preview(PreviewRequest{
-				SnippetID: startup.SnippetID, Aliases: []string{alias}, Inputs: startup.Inputs,
-			})
+			return planSourceFromLibrary(library, startup.SnippetID, startup.Inputs)
 		}
 	}
-	return Preview{}, ErrNoStartup
+	return planSource{}, expansion{}, nil, ErrNoStartup
 }
 
 type plannedTarget struct {
@@ -270,24 +306,27 @@ type plannedTarget struct {
 }
 
 type planSource struct {
-	kind       string
-	snippetID  string
-	updatedAt  time.Time
-	command    string
-	hasSecrets bool
+	kind      string
+	snippetID string
+	updatedAt time.Time
+	command   string
 }
 
 func (s *Service) plan(request PreviewRequest) (Preview, []plannedTarget, error) {
+	source, expanded, secrets, err := s.planSource(request)
+	if err != nil {
+		return Preview{}, nil, err
+	}
+	return s.planExpanded(request, source, expanded, secrets)
+}
+
+func (s *Service) planExpanded(request PreviewRequest, source planSource, expanded expansion, secrets []string) (Preview, []plannedTarget, error) {
 	if s.resolve == nil {
 		return Preview{}, nil, ErrNoResolver
 	}
 	requested, err := normaliseTargets(request)
 	if err != nil {
 		return Preview{}, nil, ErrInvalidTarget
-	}
-	source, expanded, secrets, err := s.planSource(request)
-	if err != nil {
-		return Preview{}, nil, err
 	}
 	planned := make([]plannedTarget, 0, len(requested))
 	public := make([]TargetPreview, 0, len(requested))
@@ -310,11 +349,18 @@ func (s *Service) plan(request PreviewRequest) (Preview, []plannedTarget, error)
 		})
 		public = append(public, TargetPreview{TargetID: requestedTarget.TargetID, Target: target, Command: expanded.display})
 	}
-	evidence, err := planEvidence(source, planned)
+	publicEvidence, err := planEvidence(source, planned, false)
 	if err != nil {
 		return Preview{}, nil, err
 	}
-	return Preview{Evidence: evidence, SnippetID: source.snippetID, Targets: public}, planned, nil
+	actionEvidence, err := planEvidence(source, planned, true)
+	if err != nil {
+		return Preview{}, nil, err
+	}
+	return Preview{
+		Evidence: publicEvidence, ActionEvidence: actionEvidence,
+		SnippetID: source.snippetID, Targets: public,
+	}, planned, nil
 }
 
 func (s *Service) planSource(request PreviewRequest) (planSource, expansion, []string, error) {
@@ -337,23 +383,20 @@ func (s *Service) planSource(request PreviewRequest) (planSource, expansion, []s
 	if err != nil {
 		return planSource{}, expansion{}, nil, err
 	}
-	index := snippetIndex(library, request.SnippetID)
+	return planSourceFromLibrary(library, request.SnippetID, request.Inputs)
+}
+
+func planSourceFromLibrary(library Library, snippetID string, inputs map[string]string) (planSource, expansion, []string, error) {
+	index := snippetIndex(library, snippetID)
 	if index < 0 {
 		return planSource{}, expansion{}, nil, ErrUnknownSnippet
 	}
 	snippet := library.Snippets[index]
-	expanded, err := expand(snippet.Command, snippet.Variables, request.Inputs)
+	expanded, err := expand(snippet.Command, snippet.Variables, inputs)
 	if err != nil {
 		return planSource{}, expansion{}, nil, err
 	}
-	hasSecrets := false
-	for _, variable := range snippet.Variables {
-		if variable.Type == VariableSecret {
-			hasSecrets = true
-			break
-		}
-	}
-	return planSource{kind: "snippet", snippetID: snippet.ID, updatedAt: snippet.UpdatedAt, hasSecrets: hasSecrets}, expanded, secretValues(snippet.Variables, request.Inputs), nil
+	return planSource{kind: "snippet", snippetID: snippet.ID, updatedAt: snippet.UpdatedAt}, expanded, secretValues(snippet.Variables, inputs), nil
 }
 
 func normaliseTargets(request PreviewRequest) ([]RequestedTarget, error) {
@@ -383,7 +426,7 @@ func normaliseTargets(request PreviewRequest) ([]RequestedTarget, error) {
 	return requested, nil
 }
 
-func planEvidence(source planSource, planned []plannedTarget) (string, error) {
+func planEvidence(source planSource, planned []plannedTarget, actual bool) (string, error) {
 	type evidenceTarget struct {
 		TargetID string `json:"targetId"`
 		Target   Target `json:"target"`
@@ -397,7 +440,11 @@ func planEvidence(source planSource, planned []plannedTarget) (string, error) {
 		Targets   []evidenceTarget `json:"targets"`
 	}{Kind: source.kind, SnippetID: source.snippetID, UpdatedAt: source.updatedAt, Command: source.command}
 	for _, target := range planned {
-		payload.Targets = append(payload.Targets, evidenceTarget{TargetID: target.targetID, Target: target.target, Command: target.command})
+		command := redact(target.command, target.secrets)
+		if actual {
+			command = target.command
+		}
+		payload.Targets = append(payload.Targets, evidenceTarget{TargetID: target.targetID, Target: target.target, Command: command})
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -466,11 +513,11 @@ func (s *Service) load() (Library, error) {
 	return s.repository.Load()
 }
 
-func (s *Service) save(library Library) error {
+func (s *Service) mutate(mutation func(*Library) error) error {
 	if s.repository == nil {
 		return ErrNoRepository
 	}
-	return s.repository.Save(library)
+	return s.repository.Mutate(mutation)
 }
 
 func fixedProblem(err error) string {
