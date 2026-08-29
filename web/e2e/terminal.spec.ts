@@ -296,10 +296,16 @@ test("keeps terminal drawing stable while scrollback search overlays it", async 
   await panel.getByRole("button", { name: "Local shell" }).click();
   const console = page.getByRole("region", { name: /^Console for / });
   await expect(console).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await typeIntoConsole(page, "echo search-overlay-canary");
+  await expect(console).toContainText("search-overlay-canary", { timeout: 20_000 });
   const before = await terminalFitRects(page);
 
   await console.getByRole("button", { name: "Find" }).click();
-  await expect(console.getByRole("textbox", { name: "Search terminal output" })).toBeVisible();
+  const searchInput = console.getByRole("textbox", { name: "Search terminal output" });
+  await expect(searchInput).toBeVisible();
+  await console.getByRole("button", { name: "Use regular expression" }).click();
+  await searchInput.fill("search-overlay-(canary|missing)");
+  await expect(searchInput.locator("..").getByRole("status")).toHaveText(/\d+\/\d+/);
   const opened = await terminalFitRects(page);
   expect(Math.abs(opened.root.y - before.root.y)).toBeLessThanOrEqual(1);
   expect(Math.abs(opened.root.height - before.root.height)).toBeLessThanOrEqual(1);
