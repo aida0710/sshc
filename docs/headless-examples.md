@@ -30,6 +30,8 @@ sshc sync auto on
 
 通常の `push` は engine が作った draft を条件付きで保存し、remote が変われば失敗します。`push --force` も確認時の exact remote ETag だけを対象とし、競合時に自動再試行しません。通常の `pull` は conflict または removal が一件でもあれば preview だけで止まり、`pull --force` はその exact preview を remote authoritative として適用します。preview 後に ETag／revision が変われば force でも拒否されます。
 
+mutation の送信後に通信が切れたり、成功応答を最後まで読めなかったりした場合、CLI は `outcome_unknown` を返します。この failure は再試行不可です。同じ操作を直ちに繰り返さず、`sshc sync` と object storage の状態を確認してから復旧してください。
+
 自動処理で結果を読む場合は、対応する操作へ `--json` を付けます。stdout には一つの JSON object だけが出ます。`setup` は秘密入力を伴うため JSON mode を持ちません。
 
 ```sh

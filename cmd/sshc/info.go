@@ -13,6 +13,8 @@ import (
 
 const infoSchemaVersion = 1
 
+const safeInfoNoticeDetail = "this setting is recognized but not applied exactly; use an interactive connection for details"
+
 type infoDestination struct {
 	HostName string `json:"hostName"`
 	User     string `json:"user"`
@@ -99,26 +101,25 @@ func describeInfoTarget(target sshclient.Target) infoDocument {
 		AgentForward:               target.AgentForward,
 		Notices:                    make([]infoNotice, 0, len(target.Notices)),
 	}
-	for _, jump := range target.Jump {
-		document.ProxyJump = appendInfoJump(document.ProxyJump, jump)
+	for _, jump := range target.JumpRoute() {
+		document.ProxyJump = append(document.ProxyJump, infoHop{
+			Alias:                  jump.Alias,
+			Destination:            describeInfoDestination(jump),
+			IdentityFiles:          append([]string{}, jump.Identities...),
+			IdentitiesOnly:         jump.IdentitiesOnly,
+			ProxyCommandConfigured: jump.ProxyCommand != "",
+		})
 	}
 	for _, notice := range target.Notices {
-		document.Notices = append(document.Notices, infoNotice{Keyword: notice.Keyword, Detail: notice.Detail})
+		// Some connection-time notices quote a malformed forwarding value. info is
+		// an agent-safe allowlist, so retain the recognized keyword but never copy
+		// user-authored notice text into either output format.
+		document.Notices = append(document.Notices, infoNotice{
+			Keyword: notice.Keyword,
+			Detail:  safeInfoNoticeDetail,
+		})
 	}
 	return document
-}
-
-func appendInfoJump(destination []infoHop, target sshclient.Target) []infoHop {
-	for _, nested := range target.Jump {
-		destination = appendInfoJump(destination, nested)
-	}
-	return append(destination, infoHop{
-		Alias:                  target.Alias,
-		Destination:            describeInfoDestination(target),
-		IdentityFiles:          append([]string{}, target.Identities...),
-		IdentitiesOnly:         target.IdentitiesOnly,
-		ProxyCommandConfigured: target.ProxyCommand != "",
-	})
 }
 
 func describeInfoDestination(target sshclient.Target) infoDestination {
