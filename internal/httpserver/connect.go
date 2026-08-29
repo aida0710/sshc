@@ -103,7 +103,10 @@ type connectResponse struct {
 	// 混ぜれば、鍵を開くための秘密がそのままリモートへ送られる。
 	Passwords        map[string]string `json:"passwords,omitempty"`
 	PasswordBindings map[string]string `json:"passwordBindings,omitempty"`
-	Warnings         []string          `json:"warnings"`
+	// StalePasswords は、値は存在するが現在の認証経路には解放できなかった alias。
+	// 秘密そのものは含めず、CLI が突然の prompt の理由を説明するためだけに使う。
+	StalePasswords []string `json:"stalePasswords,omitempty"`
+	Warnings       []string `json:"warnings"`
 }
 
 // savedPassword は、その alias について保存されているアカウントパスワードを返す。
@@ -122,12 +125,13 @@ func savedPasswords(
 	passwords *secret.Service,
 	aliases []string,
 	binding func(alias string) (string, error),
-) (map[string]string, map[string]string) {
+) (map[string]string, map[string]string, []string) {
 	if passwords == nil || binding == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	found := map[string]string{}
 	bindings := map[string]string{}
+	var stale []string
 	for _, alias := range aliases {
 		current, err := binding(alias)
 		if err != nil {
@@ -136,12 +140,15 @@ func savedPasswords(
 		if password := passwords.BoundPasswordFor(alias, current); password != "" {
 			found[alias] = password
 			bindings[alias] = current
+		} else if passwords.HasPasswordFor(alias) {
+			stale = append(stale, alias)
 		}
 	}
 	if len(found) == 0 {
-		return nil, nil
+		found = nil
+		bindings = nil
 	}
-	return found, bindings
+	return found, bindings, stale
 }
 
 // connectionAliases は、この接続に現れる alias を返す。行き先と、ProxyJump の
@@ -357,6 +364,7 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 	// 鍵もパスワードも、同じ連鎖を見る。
 	aliases := h.connectionAliases(decoded.Alias)
 	answer.Passphrases = savedPassphrases(h.Passwords, aliases, h.WorkspaceKeys)
-	answer.Passwords, answer.PasswordBindings = savedPasswords(h.Passwords, aliases, h.PasswordBinding)
+	answer.Passwords, answer.PasswordBindings, answer.StalePasswords =
+		savedPasswords(h.Passwords, aliases, h.PasswordBinding)
 	return c.JSON(http.StatusOK, answer)
 }
