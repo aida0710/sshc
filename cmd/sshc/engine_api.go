@@ -210,6 +210,12 @@ func (engine *engineAPI) getJSON(ctx context.Context, path string, target any) e
 func (engine *engineAPI) sendJSON(
 	ctx context.Context, method, path string, value, target any,
 ) error {
+	return engine.sendJSONWithAction(ctx, method, path, "", value, target)
+}
+
+func (engine *engineAPI) sendJSONWithAction(
+	ctx context.Context, method, path, actionToken string, value, target any,
+) error {
 	var payload []byte
 	var err error
 	if value != nil {
@@ -218,7 +224,12 @@ func (engine *engineAPI) sendJSON(
 			return errEngineInvalidResponse
 		}
 	}
-	return engine.sendSecretJSON(ctx, method, path, payload, target)
+	defer zeroBytes(payload)
+	var body io.Reader
+	if payload != nil {
+		body = &oneShotSecretPayload{body: payload}
+	}
+	return engine.doAPIWithAction(ctx, method, path, actionToken, body, target)
 }
 
 // sendSecretJSON takes ownership of payload and zeroes it on every exit. The
@@ -237,6 +248,12 @@ func (engine *engineAPI) sendSecretJSON(
 func (engine *engineAPI) doAPI(
 	ctx context.Context, method, path string, body io.Reader, target any,
 ) error {
+	return engine.doAPIWithAction(ctx, method, path, "", body, target)
+}
+
+func (engine *engineAPI) doAPIWithAction(
+	ctx context.Context, method, path, actionToken string, body io.Reader, target any,
+) error {
 	request, err := http.NewRequestWithContext(ctx, method, engine.origin+path, body)
 	if err != nil {
 		return errEngineInvalidResponse
@@ -244,6 +261,9 @@ func (engine *engineAPI) doAPI(
 	request.AddCookie(&engine.cookie)
 	request.Header.Set(httpserver.CSRFHeader, engine.csrf)
 	request.Header.Set("Sec-Fetch-Site", "same-origin")
+	if actionToken != "" {
+		request.Header.Set(httpserver.ActionHeader, actionToken)
+	}
 	mutation := method != http.MethodGet && method != http.MethodHead
 	if mutation {
 		request.Header.Set("Origin", engine.origin)
