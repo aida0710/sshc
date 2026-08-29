@@ -7,6 +7,7 @@ import { sftpTransferManager } from "./transferManager";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
+  readText: vi.fn(),
   upload: vi.fn(),
   mkdir: vi.fn(),
   chmod: vi.fn(),
@@ -30,6 +31,11 @@ describe("SFTPPanel uploads", () => {
 	sftpTransferManager.clearFinished();
     vi.clearAllMocks();
     api.list.mockResolvedValue({ path: "/remote", entries: [] });
+    api.readText.mockResolvedValue({
+      entry: { name: "app.log", path: "/var/log/app.log", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" },
+      contents: "hello\n",
+      revision: "rev",
+    });
     api.mkdir.mockResolvedValue(undefined);
 	api.startUpload.mockImplementation(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "absent" }));
 	api.appendUpload.mockImplementation(async (_alias: string, id: string, path: string, _offset: number, total: number) => ({ id, path, offset: total, size: total, expectedRevision: "" }));
@@ -89,11 +95,55 @@ describe("SFTPPanel uploads", () => {
   });
 
   it("opens the parent directory requested by a terminal path action", async () => {
-    render(<SFTPPanel aliases={["edge"]} target={{ alias: "edge", path: "/var/log/app.log", action: "browse", request: 1 }} />);
+    const handled = vi.fn();
+    render(<SFTPPanel aliases={["edge"]} target={{ alias: "edge", path: "/var/log/app.log", action: "browse", request: 1 }} onTargetHandled={handled} />);
 
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
+    expect(handled).toHaveBeenCalledWith(1);
     expect(screen.getByLabelText("Host")).toHaveValue("edge");
     expect(screen.getByLabelText("Remote path")).toHaveValue("/remote");
+  });
+
+  it("opens a terminal-linked remote file in the editor", async () => {
+    api.list.mockResolvedValue({
+      path: "/var/log",
+      entries: [{ name: "app.log", path: "/var/log/app.log", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" }],
+    });
+
+    render(<SFTPPanel aliases={["edge"]} target={{ alias: "edge", path: "/var/log/app.log", action: "edit", request: 2 }} />);
+
+    await waitFor(() => expect(api.readText).toHaveBeenCalledWith("edge", "/var/log/app.log"));
+  });
+
+  it("enters a remote directory selected from a terminal link", async () => {
+    api.list.mockImplementation(async (_alias: string, path: string) => path === "/var"
+      ? { path, entries: [{ name: "log", path: "/var/log", type: "directory", size: 0, mode: "0755", modifiedAt: "", revision: "rev" }] }
+      : { path, entries: [] });
+
+    render(<SFTPPanel aliases={["edge"]} target={{ alias: "edge", path: "/var/log", action: "browse", request: 5 }} />);
+
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
+    expect(screen.getByLabelText("Remote path")).toHaveValue("/var/log");
+  });
+
+  it("queues a terminal-linked remote file for download", async () => {
+    api.list.mockResolvedValue({
+      path: "/var/log",
+      entries: [{ name: "app.log", path: "/var/log/app.log", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" }],
+    });
+    const addDownload = vi.spyOn(sftpTransferManager, "addDownload").mockReturnValue("download-one");
+
+    render(<SFTPPanel aliases={["edge"]} target={{ alias: "edge", path: "/var/log/app.log", action: "download", request: 3 }} />);
+
+    await waitFor(() => expect(addDownload).toHaveBeenCalledWith("edge", "/var/log/app.log", "file", 12));
+    addDownload.mockRestore();
+  });
+
+  it("rejects a terminal path action for an unknown host before connecting", async () => {
+    render(<SFTPPanel aliases={["edge"]} target={{ alias: "missing", path: "/etc/hosts", action: "browse", request: 4 }} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("This terminal link is no longer available.");
+    expect(api.list).not.toHaveBeenCalled();
   });
 
   it("shows a friendly inline message when SFTP cannot connect", async () => {

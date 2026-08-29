@@ -7,6 +7,7 @@ import { terminalProblemKey } from "./sessions";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "../features/workspaces/live";
 import { connectionProgressText } from "./progress";
 import { agentStatusLabel, terminalDisplayTitle } from "./agentPresentation";
+import type { AgentUnreadBySession } from "./agentNotifications";
 
 type ConsoleListProps = {
   sessions: TerminalSession[];
@@ -15,6 +16,7 @@ type ConsoleListProps = {
   busy: boolean;
   problem: string;
   workspace?: LiveWorkspaceSummary | null;
+  unreadBySession?: AgentUnreadBySession;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
@@ -42,6 +44,7 @@ export function ConsoleList({
   busy,
   problem,
   workspace = null,
+  unreadBySession = new Map(),
   onSelect,
   onClose,
   onRename,
@@ -170,7 +173,12 @@ export function ConsoleList({
                   <span aria-hidden="true" className="text-xs">{workspaceExpanded ? "▾" : "▸"}</span>
                 </button>
                 <button type="button" aria-label={workspace.name} onClick={() => onSelect(workspace.focusedSessionId)} className="min-w-0 grow px-1 py-1 text-left">
-                  <span className="block truncate text-sm font-medium text-ink">{workspace.name}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="block min-w-0 truncate text-sm font-medium text-ink">{workspace.name}</span>
+                    {groupedSessions.some((session) => unreadBySession.has(session.id)) ? (
+                      <span aria-label={t("terminal.unreadWorkspace")} className="size-2 shrink-0 rounded-full bg-accent" />
+                    ) : null}
+                  </span>
                   <span className="block text-xs text-ink-faint">{t("workspace.groupCount", { count: String(groupedSessions.length) })}</span>
                 </button>
               </div>
@@ -181,6 +189,7 @@ export function ConsoleList({
             const running = session.state !== "exited";
             const destination = session.kind === "ssh" ? session.alias ?? "" : t("terminal.localhost");
             const displayTitle = terminalDisplayTitle(session);
+            const unread = unreadBySession.get(session.id);
             const status = session.problem !== ""
               ? t(terminalProblemKey(session.problem))
               : session.state === "reconnecting"
@@ -286,6 +295,13 @@ export function ConsoleList({
                         {details}
                       </span>
                     </button>
+                  )}
+                  {unread === undefined ? null : (
+                    <span
+                      aria-label={t(unread === "attention" ? "terminal.unreadAttention" : "terminal.unreadCompleted")}
+                      title={t(unread === "attention" ? "terminal.unreadAttention" : "terminal.unreadCompleted")}
+                      className={`mt-2 size-2 shrink-0 rounded-full ${unread === "attention" ? "bg-notice-ink" : "bg-accent"}`}
+                    />
                   )}
                   <button
                     type="button"
