@@ -39,7 +39,8 @@ import { RouteSkeleton } from "./ui/RouteSkeleton";
 import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
-import { AppNavigation, type NavFace } from "./shell/AppNavigation";
+import { AppNavigation } from "./shell/AppNavigation";
+import { MenuPanel } from "./shell/MenuPanel";
 import {
   clampNavigationWidth,
   detectNavigationVisible,
@@ -109,6 +110,7 @@ type AppProps = {
 
 const sectionLabels: Record<Section, MessageKey> = {
   Home: "section.home",
+  Menu: "section.menu",
   Connections: "section.connections",
   Terminal: "section.terminal",
   Files: "section.files",
@@ -132,6 +134,7 @@ const localeLabels: Record<Locale, MessageKey> = {
 
 const sectionIcons: Record<Section, IconName> = {
   Home: "home",
+  Menu: "menu",
   Connections: "connections",
   Terminal: "terminal",
   Files: "config",
@@ -148,8 +151,10 @@ const sectionIcons: Record<Section, IconName> = {
   History: "history",
 };
 
+const startSections: Section[] = ["Home", "Connections", "Files"];
+
 const navGroups: { label: MessageKey; sections: Section[] }[] = [
-  { label: "shell.navStart", sections: ["Home", "Connections", "Files", "Terminal"] },
+  { label: "shell.navStart", sections: startSections },
   { label: "shell.navConnections", sections: ["Config", "Groups"] },
   { label: "shell.navKeysHosts", sections: ["Keys", "Known Hosts", "Remote Keys"] },
   { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Snippets", "Settings", "Sync", "History"] },
@@ -256,7 +261,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   const [liveWorkspace, setLiveWorkspace] = useState<LiveWorkspaceSummary | null>(null);
   const [workspaceRestoreRequest, setWorkspaceRestoreRequest] = useState<WorkspaceRestoreRequest | null>(null);
   const workspaceRestoreSequence = useRef(0);
-  const [navFace, setNavFace] = useState<NavFace | null>(null);
 
   useEffect(() => {
     if (state !== "ready") return;
@@ -274,11 +278,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   useEffect(() => {
     if (state === "ready") void sftpTransferManager.reconcile().catch(() => undefined);
   }, [state]);
-
-  useEffect(() => {
-    if (navFace !== null || !consoles.loaded) return;
-    setNavFace(consoles.sessions.length > 0 ? "terminal" : "settings");
-  }, [consoles.loaded, consoles.sessions.length, navFace]);
 
   useEffect(() => {
     if (activeConsole === null) return;
@@ -371,9 +370,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     event.preventDefault();
     navigate(target);
   }
-
-  const currentFace: NavFace = navFace ?? "settings";
-
 
   useEffect(() => {
     let active = true;
@@ -595,7 +591,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           desktopVisible={desktopNavigationVisible}
           desktopWidth={desktopNavigationWidth}
           onDesktopWidthChange={resizeDesktopNavigation}
-          navGroups={navGroups}
+          startSections={startSections}
           section={section}
           sectionIcons={sectionIcons}
           sectionLabels={sectionLabels}
@@ -603,8 +599,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
             setNavigationOpen(false);
             followSectionLink(event, name);
           }}
-          currentFace={currentFace}
-          onFaceChange={setNavFace}
           consoles={consoles}
           orderedConsoles={orderedConsoles}
           activeConsole={activeConsole}
@@ -827,6 +821,16 @@ function PaddedSection({ section, navigation, handoff, shell, declared }: Sectio
         onNavigateLocation={onNavigateLocation}
         onConsoleOpened={onShowConsole}
         onOpenWorkspace={onOpenWorkspace}
+      />
+    );
+  }
+  if (section === "Menu") {
+    return (
+      <MenuPanel
+        groups={navGroups.slice(1)}
+        sectionIcons={sectionIcons}
+        sectionLabels={sectionLabels}
+        onNavigate={onNavigate}
       />
     );
   }

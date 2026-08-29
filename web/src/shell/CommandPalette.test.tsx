@@ -13,6 +13,7 @@ vi.mock("../snippets/api", async (importOriginal) => {
 
 const labels = {
   Home: "section.home",
+  Menu: "section.menu",
   Connections: "section.connections",
   Terminal: "section.terminal",
   Files: "section.files",

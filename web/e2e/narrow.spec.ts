@@ -27,11 +27,23 @@ async function openSectionThroughDrawer(
   heading = name,
 ) {
   await expect(sessionStatus(page)).toContainText("Local session active");
+  if (name === "Terminal") {
+    await page.evaluate(() => {
+      window.history.pushState(null, "", "/terminal");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
+    return;
+  }
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
-  await page
-    .getByRole("navigation", { name: "Primary" })
-    .getByRole("link", { name, exact: true })
-    .click();
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  const direct = navigation.getByRole("link", { name, exact: true });
+  if (await direct.count()) {
+    await direct.click();
+  } else {
+    await navigation.getByRole("link", { name: "Menu", exact: true }).click();
+    await page.getByRole("link", { name: `Open ${name}`, exact: true }).click();
+  }
   await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
 }
 
@@ -321,13 +333,13 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   });
   expect(borders).toBe(1);
 
-  const home = navigation.getByRole("link", { name: "Home", exact: true });
-  const terminal = navigation.getByRole("link", { name: "Terminal", exact: true });
-  const [homeBox, terminalBox] = await Promise.all([home.boundingBox(), terminal.boundingBox()]);
-  expect(homeBox).not.toBeNull();
-  expect(terminalBox).not.toBeNull();
-  if (homeBox !== null && terminalBox !== null) {
-    expect(terminalBox.y + terminalBox.height - homeBox.y).toBeLessThanOrEqual(164);
+  const menu = navigation.getByRole("link", { name: "Menu", exact: true });
+  const localShell = navigation.getByRole("button", { name: "Local shell", exact: true });
+  const [menuBox, shellBox] = await Promise.all([menu.boundingBox(), localShell.boundingBox()]);
+  expect(menuBox).not.toBeNull();
+  expect(shellBox).not.toBeNull();
+  if (menuBox !== null && shellBox !== null) {
+    expect(shellBox.y + shellBox.height - menuBox.y).toBeLessThanOrEqual(132);
   }
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-mobile-drawer-dark.png`, fullPage: true });
@@ -338,7 +350,7 @@ test("uses established product names in the Japanese navigation", async ({ page,
   await openApplication(page, installation);
   await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
   await page.reload();
-  await expect(sessionStatus(page)).toContainText("ローカルセッション有効");
+  await expect(sessionStatus(page)).toContainText("ローカルセッション稼働中");
 
   const quickConnect = page.locator('section[aria-labelledby="quick-connect-heading"]');
   await expect(quickConnect.locator('[data-sshc-brand-mark="true"]')).toHaveCount(1);
@@ -347,14 +359,19 @@ test("uses established product names in the Japanese navigation", async ({ page,
   await page.getByRole("button", { name: "ナビゲーション", exact: true }).click();
   const navigation = page.getByRole("navigation", { name: "メインナビゲーション" });
 
-  for (const group of ["Main", "Configuration", "Security", "Tools"]) {
-    await expect(navigation.locator(`ul[aria-label="${group}"]`)).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Menu", exact: true })).toBeVisible();
+  for (const section of ["Home", "Connections", "SFTP"]) {
+    await expect(navigation.getByRole("link", { name: section, exact: true })).toBeVisible();
+  }
+  await expect(navigation.getByText("Sessions", { exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "ローカルシェル", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("tab")).toHaveCount(0);
+  await navigation.getByRole("link", { name: "Menu", exact: true }).click();
+
+  for (const group of ["Configuration", "Security", "Tools"]) {
+    await expect(page.getByRole("heading", { name: group, exact: true })).toBeVisible();
   }
   for (const section of [
-    "Home",
-    "Connections",
-    "Terminal",
-    "SFTP",
     "SSH Config",
     "Groups",
     "SSH Keys",
@@ -367,10 +384,10 @@ test("uses established product names in the Japanese navigation", async ({ page,
     "Sync",
     "History",
   ]) {
-    await expect(navigation.getByRole("link", { name: section, exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: `${section}を開く`, exact: true })).toBeVisible();
   }
-  await expect(navigation.getByRole("tab", { name: "Menu", exact: true })).toHaveAttribute("aria-selected", "true");
-  await expect(navigation.getByRole("tab", { name: "Sessions", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Homeを開く", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Terminalを開く", exact: true })).toHaveCount(0);
   await expectNoHorizontalOverflow(page, "Japanese navigation");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -732,7 +749,6 @@ test("sends a real control character from the on-screen keys", async ({ page, in
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("tab", { name: "Terminals" }).click();
   await nav.getByRole("button", { name: "Local shell" }).click();
 
   const screen = page.getByRole("region", { name: /^Console for / });
@@ -775,7 +791,6 @@ test("lays a selectable layer over the terminal, outside the element that blocks
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("tab", { name: "Terminals" }).click();
   await nav.getByRole("button", { name: "Local shell" }).click();
 
   const rows = drawnRows(page);
@@ -841,7 +856,6 @@ test("asks before closing a live console, in the middle of the screen and not in
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("tab", { name: "Terminals" }).click();
   await nav.getByRole("button", { name: "Local shell" }).click();
   await expect(drawnRows(page)).toContainText(/[$#%>]/, { timeout: 20_000 });
 
