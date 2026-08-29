@@ -211,6 +211,25 @@ describe("apiClient", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it("leaves locally handled mutation failures to the operation panel", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: "sync_failed", message: "request rejected" }),
+      { status: 502, headers: { "Content-Type": "application/problem+json" } },
+    )));
+    apiClient.setCSRF("c".repeat(43));
+
+    await expect(apiClient.mutate("/api/v1/sync/pull", {
+      method: "POST",
+      body: JSON.stringify({ apply: true, resolve: "remote" }),
+    }, {
+      locallyHandledCodes: ["sync_failed"],
+    })).rejects.toMatchObject({ code: "sync_failed" });
+
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
   it("reports network failure using fixed safe diagnostics", async () => {
     const diagnostic = vi.fn();
     whenRequestFailed(diagnostic);
