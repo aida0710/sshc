@@ -117,6 +117,30 @@ func (p sshParts) connector() httpserver.Connector {
 	}
 }
 
+func (p sshParts) agentConnector() httpserver.AgentConnector {
+	return func(ctx context.Context, alias string, kind terminal.AgentKind, reference string, size terminal.Size) (terminal.Process, error) {
+		command, err := terminal.AgentResumeCommand(kind, reference)
+		if err != nil {
+			return nil, err
+		}
+		target, err := p.target(alias)
+		if err != nil {
+			return nil, err
+		}
+		target.RemoteCommand = command
+		target.RequestTTY = "yes"
+		return p.dialer.Open(ctx, target, size)
+	}
+}
+
+func (p sshParts) connectionBinding(alias string) (string, error) {
+	target, err := p.target(alias)
+	if err != nil {
+		return "", err
+	}
+	return target.AuthenticationBinding(), nil
+}
+
 // probe は、認証テストである。何も尋ねない。
 func (p sshParts) probe() func(ctx context.Context, alias string) (sshclient.Probe, error) {
 	return func(ctx context.Context, alias string) (sshclient.Probe, error) {

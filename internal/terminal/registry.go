@@ -21,6 +21,12 @@ type Spec struct {
 	Size    Size
 	// Open は呼び出し側が Process を生成するコールバックである。
 	Open func(ctx context.Context, size Size) (Process, error)
+	// Reopen defaults to Open. Agent resume uses a one-shot Open while keeping
+	// the ordinary shell opener for later transport/manual reconnects.
+	Reopen func(ctx context.Context, size Size) (Process, error)
+	Resume func(ctx context.Context, size Size, kind AgentKind, reference string) (Process, error)
+	// ReplacementBusy marks startup automation which writes outside Session.Write.
+	ReplacementBusy bool
 	// ReconnectError は再接続失敗を分類する。retry=false なら即座に停止する。
 	// problem は公開用の固定コードであり、raw error を含めない。
 	ReconnectError func(error) (retry bool, problem string)
@@ -192,25 +198,36 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 
 	session := &Session{
 		id: id, kind: spec.Kind, alias: spec.Alias, title: spec.Title,
-		started: r.now(),
-		buffer:  NewRing(limits.Scrollback),
-		streams: map[*Stream]bool{},
-		process: process,
-		cleanup: spec.Cleanup,
-		done:    make(chan struct{}),
+		fallbackTitle: spec.Title,
+		started:       r.now(),
+		buffer:        NewRing(limits.Scrollback),
+		streams:       map[*Stream]bool{},
+		process:       process,
+		cleanup:       spec.Cleanup,
+		done:          make(chan struct{}),
 		// 繋ぎ直せるのは、開き方を知っているセッションだけである。
-		reopen:         spec.Open,
-		reconnectError: spec.ReconnectError,
-		size:           size,
-		stopping:       make(chan struct{}),
-		state:          StateConnecting,
+		reopen:          spec.Reopen,
+		resume:          spec.Resume,
+		replacementBusy: spec.ReplacementBusy,
+		reconnectError:  spec.ReconnectError,
+		size:            size,
+		stopping:        make(chan struct{}),
+		state:           StateConnecting,
 		delay: func(attempt int) time.Duration {
 			return r.reconnectDelay(attempt, id)
 		},
 		attempts: r.reconnects,
 		now:      r.now,
 	}
+	if spec.Alias != "" {
+		session.titleSource = TitleConnection
+	} else {
+		session.titleSource = TitleFallback
+	}
 	session.observeProcess(StateConnecting, "")
+	if spec.Reopen == nil {
+		session.reopen = spec.Open
+	}
 	r.mutex.Lock()
 	r.sessions = append(r.sessions, session)
 	r.prune()
@@ -409,6 +426,120 @@ func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {
 	return session, nil
 }
 
+type AgentResumePlacement string
+
+const (
+	AgentResumeSamePane AgentResumePlacement = "same-pane"
+	AgentResumeNewPane  AgentResumePlacement = "new-pane"
+)
+
+// ResumeAgent starts only the fixed program selected by the candidate's
+// adapter. The opaque reference remains inside terminal.Session/Registry.
+func (r *Registry) ResumeAgent(ctx context.Context, id string, version uint64, placement AgentResumePlacement) (*Session, error) {
+	source, ok := r.Lookup(id)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	plan, err := source.agentResumePlan(version)
+	if err != nil {
+		return nil, err
+	}
+	if placement == AgentResumeNewPane {
+		title := source.alias
+		if plan.candidate.name != "" {
+			title = plan.candidate.name
+		}
+		opened, openErr := r.Open(ctx, Spec{
+			Kind: source.kind, Alias: source.alias, Title: title, Size: plan.size,
+			Open: func(ctx context.Context, size Size) (Process, error) {
+				return plan.open(ctx, size, plan.candidate.kind, plan.candidate.reference)
+			},
+			Reopen:         source.reopen,
+			Resume:         source.resume,
+			ReconnectError: source.reconnectError,
+		})
+		if openErr != nil {
+			return nil, openErr
+		}
+		current, currentErr := source.agentResumePlan(version)
+		if currentErr != nil || current.candidate.kind != plan.candidate.kind || current.candidate.reference != plan.candidate.reference {
+			_ = r.Close(opened.ID())
+			return nil, ErrAgentResumeStale
+		}
+		opened.seedAgentCandidate(plan.candidate)
+		return opened, nil
+	}
+	if placement != AgentResumeSamePane {
+		return nil, ErrAgentResumeUnavailable
+	}
+	if plan.busy {
+		return nil, ErrAgentResumeSamePaneBusy
+	}
+	if plan.live {
+		done := source.Done()
+		if err := source.forceClose(); err != nil {
+			return nil, err
+		}
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		var err error
+		version, err = source.agentResumeVersionFor(plan.candidate)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return r.resumeAgentSamePane(ctx, source, version)
+}
+
+func (r *Registry) resumeAgentSamePane(ctx context.Context, session *Session, version uint64) (*Session, error) {
+	limits := r.limits()
+	r.mutex.Lock()
+	if r.closing {
+		r.mutex.Unlock()
+		return nil, ErrShuttingDown
+	}
+	if r.liveCount() >= limits.MaxSessions {
+		r.mutex.Unlock()
+		return nil, ErrSessionLimit
+	}
+	open, size, candidate, previous, err := session.prepareAgentResume(version)
+	if err != nil {
+		r.mutex.Unlock()
+		return nil, err
+	}
+	creation, cancel := context.WithCancel(ctx)
+	ticket := r.reserve(cancel)
+	r.pendingReconnects++
+	r.mutex.Unlock()
+
+	process, openErr := open(creation, size, candidate.kind, candidate.reference)
+	r.mutex.Lock()
+	delete(r.pending, ticket)
+	r.pendingReconnects--
+	r.condition().Broadcast()
+	lost := r.closing || creation.Err() != nil
+	r.mutex.Unlock()
+	cancel()
+
+	if openErr != nil {
+		session.failManualReconnect(previous, session.manualReconnectProblem(openErr))
+		return nil, openErr
+	}
+	if lost || !session.completeAgentResume(process, candidate, r.now()) {
+		r.discard(process, nil)
+		session.failManualReconnect(previous, "")
+		if lost {
+			return nil, ErrShuttingDown
+		}
+		return nil, ErrAgentResumeUnavailable
+	}
+	go session.pump(r.now)
+	return session, nil
+}
+
 // Rename はセッションの表示名を変える。
 func (r *Registry) Rename(id, title string) error {
 	session, ok := r.Lookup(id)
@@ -416,6 +547,17 @@ func (r *Registry) Rename(id, title string) error {
 		return ErrNotFound
 	}
 	return session.Rename(title)
+}
+
+// UnpinTitle lets the current agent name or connection fallback drive the
+// display title again.
+func (r *Registry) UnpinTitle(id string) error {
+	session, ok := r.Lookup(id)
+	if !ok {
+		return ErrNotFound
+	}
+	session.UnpinTitle()
+	return nil
 }
 
 // Close は、利用者が閉じると決めたセッションを強制停止し、一覧から消す。
