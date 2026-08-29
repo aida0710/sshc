@@ -18,7 +18,7 @@ test("searches hosts, config files and settings from the keyboard", async ({ pag
   await openApplication(page, installation);
 
   await page.keyboard.press("Control+k");
-  const palette = page.getByRole("dialog", { name: "Search hosts, files, snippets and settings" });
+  const palette = page.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" });
   await expect(palette).toBeVisible();
 
   const search = palette.getByRole("searchbox");
@@ -49,7 +49,7 @@ test("searches hosts, config files and settings from the keyboard", async ({ pag
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.keyboard.press("Control+k");
-    await expect(page.getByRole("dialog", { name: "Search hosts, files, snippets and settings" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" })).toBeVisible();
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.0-command-palette-desktop.png`, fullPage: true });
   }
 });
@@ -57,5 +57,5 @@ test("searches hosts, config files and settings from the keyboard", async ({ pag
 test("opens the palette from the desktop toolbar", async ({ page, installation }) => {
   await openApplication(page, installation);
   await page.getByRole("button", { name: "Search everything" }).click();
-  await expect(page.getByRole("dialog", { name: "Search hosts, files, snippets and settings" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" })).toBeVisible();
 });

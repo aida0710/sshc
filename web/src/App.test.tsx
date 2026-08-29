@@ -588,6 +588,25 @@ describe("App", () => {
     expect(screen.getByText("settings panel")).toBeInTheDocument();
   });
 
+  it("treats Menu as a transient navigation hub in browser history", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/settings");
+    const replaced = vi.spyOn(window.history, "replaceState");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    expect(await screen.findByText("settings panel")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Menu" }));
+    await user.click(await screen.findByRole("link", { name: "Open History" }));
+    expect(window.location.pathname).toBe("/history");
+    expect(replaced).toHaveBeenLastCalledWith(null, "", "/history");
+  });
+
   it("starts each section at the top of its own scroll surface", async () => {
     const user = userEvent.setup();
     window.history.replaceState(null, "", "/config");
