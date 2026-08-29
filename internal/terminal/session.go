@@ -30,29 +30,40 @@ func (s *Stream) close() { s.closed.Do(func() { close(s.output) }) }
 
 // Session は、開かれている端末ひとつである。
 type Session struct {
-	id      string
-	kind    Kind
-	alias   string
-	title   string
-	started time.Time
+	id            string
+	kind          Kind
+	alias         string
+	title         string
+	fallbackTitle string
+	titleSource   TitleSource
+	titlePinned   bool
+	started       time.Time
 
-	mutex         sync.Mutex
-	inputMutex    sync.Mutex
-	buffer        *Ring
-	streams       map[*Stream]bool
-	process       Process
-	exited        *ExitInfo
-	cleanup       func()
-	state         State
-	problem       string
-	reconnectView *ReconnectView
-	generation    uint64
-	ready         *processReadiness
+	mutex                   sync.Mutex
+	inputMutex              sync.Mutex
+	buffer                  *Ring
+	streams                 map[*Stream]bool
+	process                 Process
+	exited                  *ExitInfo
+	cleanup                 func()
+	state                   State
+	problem                 string
+	reconnectView           *ReconnectView
+	generation              uint64
+	ready                   *processReadiness
+	agent                   *agentObservation
+	agentCandidate          *agentCandidate
+	agentObservationVersion uint64
+	agentSignalVersion      uint64
+	agentLastSignal         *AgentSignal
+	userInputGeneration     uint64
+	replacementBusy         bool
 
 	connectedCallback func()
 	connectedOnce     sync.Once
 
 	reopen          func(ctx context.Context, size Size) (Process, error)
+	resume          func(ctx context.Context, size Size, kind AgentKind, reference string) (Process, error)
 	reconnectError  func(error) (retry bool, problem string)
 	size            Size
 	retries         int
@@ -68,6 +79,14 @@ type Session struct {
 
 	// done は pump が終わったことを示す。テストと停止処理だけが待つ。
 	done chan struct{}
+}
+
+type agentResumePlan struct {
+	open      func(context.Context, Size, AgentKind, string) (Process, error)
+	size      Size
+	candidate agentCandidate
+	live      bool
+	busy      bool
 }
 
 type processReadiness struct {
@@ -90,7 +109,9 @@ type View struct {
 	// Progress is present while an SSH process is connecting or reconnecting.
 	Progress *ConnectionProgress
 	// Forwards は、このセッションが開いている転送である。
-	Forwards []Forward
+	Forwards     []Forward
+	Presentation Presentation
+	Agent        *AgentView
 }
 
 // CommandTarget is the server-derived identity of one live terminal at
@@ -150,7 +171,18 @@ func (s *Session) Rename(title string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.title = cleaned
+	s.titleSource = TitleUser
+	s.titlePinned = true
 	return nil
+}
+
+// UnpinTitle returns the display title to the current agent, resume candidate,
+// or connection fallback without touching the running process.
+func (s *Session) UnpinTitle() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.titlePinned = false
+	s.recomputeTitleLocked()
 }
 
 // Exit は終了理由を返す。実行中の場合は nil を返す。
@@ -182,6 +214,31 @@ func (s *Session) View() View {
 	view := View{
 		ID: s.id, Kind: s.kind, Alias: s.alias, Title: s.title,
 		Started: s.started, State: s.state, Problem: s.problem,
+		Presentation: Presentation{DisplayTitle: s.title, TitleSource: s.titleSource, TitlePinned: s.titlePinned},
+	}
+	if s.agent != nil {
+		agent := s.agent.AgentView
+		if s.now != nil && s.now().Sub(s.agent.observedAt) > AgentObservationTTL {
+			agent.State = AgentUnknown
+		}
+		agent.Resumable = s.resume != nil && (s.agent.reference != "" || s.agentCandidate != nil)
+		agent.ObservationVersion = s.agentObservationVersion
+		agent.SignalVersion = s.agentSignalVersion
+		if s.agentLastSignal != nil {
+			signal := *s.agentLastSignal
+			agent.LastSignal = &signal
+		}
+		view.Agent = &agent
+	} else if s.agentCandidate != nil {
+		view.Agent = &AgentView{
+			Kind: s.agentCandidate.kind, State: AgentUnknown, SessionName: s.agentCandidate.name,
+			Resumable: s.resume != nil, ObservationVersion: s.agentObservationVersion,
+			SignalVersion: s.agentSignalVersion,
+		}
+		if s.agentLastSignal != nil {
+			signal := *s.agentLastSignal
+			view.Agent.LastSignal = &signal
+		}
 	}
 	if s.reconnectView != nil {
 		status := *s.reconnectView
@@ -242,6 +299,9 @@ func (s *Session) Write(p []byte) (int, error) {
 	defer s.inputMutex.Unlock()
 	s.mutex.Lock()
 	process, exited, state := s.process, s.exited, s.state
+	if len(p) > 0 && exited == nil && state == StateConnected {
+		s.userInputGeneration = s.generation
+	}
 	s.mutex.Unlock()
 	if exited != nil || process == nil {
 		if exited == nil && (state == StateConnecting || state == StateReconnecting) {
@@ -385,8 +445,12 @@ func (s *Session) forceClose() error {
 // capability retain the historical synchronous-Open contract.
 func (s *Session) observeProcess(pending State, successMessage string) {
 	s.mutex.Lock()
+	s.advanceAgentGenerationLocked()
 	s.generation++
 	generation := s.generation
+	if s.replacementBusy {
+		s.userInputGeneration = generation
+	}
 	readier, asynchronous := s.process.(Readier)
 	if !asynchronous {
 		s.ready = nil
@@ -474,15 +538,21 @@ func (s *Session) pump(now func() time.Time) {
 	connectedAt := s.started
 	for {
 		s.mutex.Lock()
-		process, ready := s.process, s.ready
+		process, ready, generation := s.process, s.ready, s.generation
 		s.mutex.Unlock()
+		decoder := newAgentDecoder(func(event agentEvent) { s.acceptAgentEvent(generation, event, now()) })
 		buffer := make([]byte, readChunk)
 		for {
 			read, err := process.Read(buffer)
 			if read > 0 {
-				s.publish(buffer[:read])
+				if visible := decoder.Write(buffer[:read]); len(visible) > 0 {
+					s.publish(visible)
+				}
 			}
 			if err != nil {
+				if visible := decoder.Flush(); len(visible) > 0 {
+					s.publish(visible)
+				}
 				break
 			}
 		}
@@ -514,6 +584,206 @@ func (s *Session) pump(now func() time.Time) {
 		}
 		connectedAt = now()
 	}
+}
+
+func (s *Session) acceptAgentEvent(generation uint64, event agentEvent, observedAt time.Time) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if generation != s.generation || s.exited != nil {
+		return
+	}
+	continuing := false
+	if s.agent != nil {
+		if s.agent.AgentView.Kind != event.Agent {
+			if event.Session == "" {
+				return
+			}
+		} else {
+			continuing = event.Session == "" || s.agent.reference == "" || event.Session == s.agent.reference
+			if continuing && event.Seq <= s.agent.seq {
+				return
+			}
+			if event.Event == "ended" && event.Session != "" && s.agent.reference != "" && event.Session != s.agent.reference {
+				return
+			}
+		}
+	}
+	reference := event.Session
+	if reference == "" && s.agent != nil && s.agent.AgentView.Kind == event.Agent {
+		reference = s.agent.reference
+	}
+	if event.Event == "ended" {
+		if reference != "" {
+			name := event.Name
+			if name == "" && s.agent != nil {
+				name = s.agent.SessionName
+			}
+			s.agentCandidate = &agentCandidate{kind: event.Agent, reference: reference, name: name, generation: generation, observedAt: observedAt}
+		}
+		s.agent = nil
+		s.agentObservationVersion++
+		s.recomputeTitleLocked()
+		return
+	}
+	previousState := AgentUnknown
+	workingAt := time.Time{}
+	lastAttention := time.Time{}
+	name := event.Name
+	cwd := event.CWD
+	model := event.Model
+	if s.agent != nil && s.agent.AgentView.Kind == event.Agent && continuing {
+		previousState = s.agent.State
+		workingAt = s.agent.workingAt
+		lastAttention = s.agent.lastAttention
+		if name == "" {
+			name = s.agent.SessionName
+		}
+		if cwd == "" {
+			cwd = s.agent.CWD
+		}
+		if model == "" {
+			model = s.agent.Model
+		}
+	}
+	state := AgentState(event.Event)
+	if state == AgentWorking && previousState != AgentWorking {
+		workingAt = observedAt
+	}
+	if state == AgentAttention && (lastAttention.IsZero() || observedAt.Sub(lastAttention) >= AgentAttentionCooldown) {
+		lastAttention = observedAt
+		s.recordAgentSignalLocked(AgentSignalAttention, observedAt)
+	}
+	if state == AgentReady && previousState == AgentWorking && !workingAt.IsZero() && observedAt.Sub(workingAt) >= AgentCompletionFloor {
+		s.recordAgentSignalLocked(AgentSignalCompleted, observedAt)
+	}
+	s.agentObservationVersion++
+	s.agent = &agentObservation{
+		AgentView: AgentView{Kind: event.Agent, State: state, CWD: cwd, Model: model, SessionName: name},
+		reference: reference, seq: event.Seq, observedAt: observedAt, generation: generation,
+		workingAt: workingAt, lastAttention: lastAttention,
+	}
+	if reference != "" {
+		s.agentCandidate = &agentCandidate{kind: event.Agent, reference: reference, name: name, generation: generation, observedAt: observedAt}
+	}
+	s.recomputeTitleLocked()
+}
+
+func (s *Session) recordAgentSignalLocked(kind AgentSignalKind, occurredAt time.Time) {
+	s.agentSignalVersion++
+	s.agentLastSignal = &AgentSignal{Kind: kind, OccurredAt: occurredAt}
+}
+
+func (s *Session) advanceAgentGenerationLocked() {
+	if s.generation == 0 || s.agent == nil {
+		return
+	}
+	if s.agent.reference != "" {
+		s.agentCandidate = &agentCandidate{
+			kind: s.agent.Kind, reference: s.agent.reference, name: s.agent.SessionName,
+			generation: s.agent.generation, observedAt: s.agent.observedAt,
+		}
+	}
+	s.agent = nil
+	s.agentObservationVersion++
+	s.recomputeTitleLocked()
+}
+
+func (s *Session) recomputeTitleLocked() {
+	if s.titlePinned {
+		s.titleSource = TitleUser
+		return
+	}
+	if s.agent != nil && s.agent.SessionName != "" {
+		s.title = s.agent.SessionName
+		s.titleSource = TitleAgent
+		return
+	}
+	if s.agentCandidate != nil && s.agentCandidate.name != "" {
+		s.title = s.agentCandidate.name
+		s.titleSource = TitleCandidate
+		return
+	}
+	s.title = s.fallbackTitle
+	if s.alias != "" {
+		s.titleSource = TitleConnection
+	} else {
+		s.titleSource = TitleFallback
+	}
+}
+
+func (s *Session) agentResumePlan(version uint64) (agentResumePlan, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.agentCandidate == nil || s.resume == nil || s.discarded {
+		return agentResumePlan{}, ErrAgentResumeUnavailable
+	}
+	if version != s.agentObservationVersion {
+		return agentResumePlan{}, ErrAgentResumeStale
+	}
+	candidate := *s.agentCandidate
+	return agentResumePlan{
+		open: s.resume, size: s.size, candidate: candidate, live: s.exited == nil,
+		busy: s.exited == nil && s.userInputGeneration == s.generation,
+	}, nil
+}
+
+// agentResumeVersionFor refreshes an in-flight same-pane request after that
+// request has intentionally stopped the old process. The process exit changes
+// the public observation from live to candidate and therefore increments its
+// version; the opaque candidate itself must still be exactly the one the user
+// confirmed before the replacement may continue.
+func (s *Session) agentResumeVersionFor(candidate agentCandidate) (uint64, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.agentCandidate == nil || s.resume == nil || s.discarded {
+		return 0, ErrAgentResumeUnavailable
+	}
+	if s.agentCandidate.kind != candidate.kind || s.agentCandidate.reference != candidate.reference {
+		return 0, ErrAgentResumeStale
+	}
+	return s.agentObservationVersion, nil
+}
+
+func (s *Session) prepareAgentResume(version uint64) (
+	func(context.Context, Size, AgentKind, string) (Process, error), Size, agentCandidate, ExitInfo, error,
+) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.exited == nil || s.resume == nil || s.agentCandidate == nil || s.discarded {
+		return nil, Size{}, agentCandidate{}, ExitInfo{}, ErrAgentResumeUnavailable
+	}
+	if version != s.agentObservationVersion {
+		return nil, Size{}, agentCandidate{}, ExitInfo{}, ErrAgentResumeStale
+	}
+	previous := *s.exited
+	candidate := *s.agentCandidate
+	s.process = nil
+	s.exited = nil
+	s.state = StateConnecting
+	s.problem = ""
+	s.reconnectView = nil
+	s.retries = 0
+	s.stopping = make(chan struct{})
+	s.done = make(chan struct{})
+	return s.resume, s.size, candidate, previous, nil
+}
+
+func (s *Session) completeAgentResume(process Process, candidate agentCandidate, started time.Time) bool {
+	if !s.completeProcessReplacement(process, started,
+		"\r\n[sshc] Coding Agent sessionを再開しました。前の画面より上は、再開前の記録です。\r\n") {
+		return false
+	}
+	s.seedAgentCandidate(candidate)
+	return true
+}
+
+func (s *Session) seedAgentCandidate(candidate agentCandidate) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	candidate.generation = s.generation
+	s.agentCandidate = &candidate
+	s.agentObservationVersion++
+	s.recomputeTitleLocked()
 }
 
 // reconnect は、落ちた輸送を繋ぎ直せたなら真を返す。
@@ -711,6 +981,10 @@ func (s *Session) finish(info ExitInfo) {
 	if s.exited != nil {
 		return
 	}
+	// A normally exiting agent is no longer a live observation. Preserve only
+	// its opaque resume candidate so the UI offers an explicit restart instead
+	// of continuing to claim that the old process is ready or working.
+	s.advanceAgentGenerationLocked()
 	s.exited = &info
 	s.state = StateExited
 	s.reconnectView = nil
@@ -780,6 +1054,11 @@ func (s *Session) failManualReconnect(previous ExitInfo, problem string) {
 // completeManualReconnect はcloseやshutdownが先行していなければ、新しいProcessを
 // 同じsessionへ公開する。
 func (s *Session) completeManualReconnect(process Process, started time.Time) bool {
+	return s.completeProcessReplacement(process, started,
+		"\r\n[sshc] 手動で繋ぎ直しました。新しいシェルです。前の画面より上は、切れる前の記録です。\r\n")
+}
+
+func (s *Session) completeProcessReplacement(process Process, started time.Time, successMessage string) bool {
 	s.mutex.Lock()
 	stopped := s.discarded
 	select {
@@ -796,7 +1075,6 @@ func (s *Session) completeManualReconnect(process Process, started time.Time) bo
 	s.problem = ""
 	s.reconnectView = nil
 	s.mutex.Unlock()
-	s.observeProcess(StateConnecting,
-		"\r\n[sshc] 手動で繋ぎ直しました。新しいシェルです。前の画面より上は、切れる前の記録です。\r\n")
+	s.observeProcess(StateConnecting, successMessage)
 	return true
 }

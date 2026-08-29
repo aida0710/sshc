@@ -7,10 +7,12 @@ import {
 } from "../api/integrations";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import { useAgentNotifications } from "./agentNotifications";
 
 export type TerminalSessionsApi = Pick<
   IntegrationsApi,
   "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "renameTerminalSession"
+  | "resumeTerminalAgent"
 >;
 
 export type TerminalSessionsState = {
@@ -20,8 +22,10 @@ export type TerminalSessionsState = {
   problem: string;
   loaded: boolean;
   rename: (id: string, title: string) => Promise<boolean>;
+  unpinTitle?: (id: string) => Promise<boolean>;
   open: (request: OpenTerminalSessionRequest) => Promise<TerminalSession | null>;
   reconnect: (id: string) => Promise<boolean>;
+  resumeAgent?: (id: string, observationVersion: number, placement: "same-pane" | "new-pane") => Promise<TerminalSession | null>;
   close: (id: string) => Promise<void>;
   closeAll: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -42,6 +46,7 @@ export function useTerminalSessions(
   const [problem, setProblem] = useState("");
   const [loaded, setLoaded] = useState(false);
   const refreshGeneration = useRef(0);
+  useAgentNotifications(sessions, translate);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
@@ -73,9 +78,10 @@ export function useTerminalSessions(
     if (!enabled || sessions.length === 0) return;
     // 接続中だけ細かく確認する。通常稼働中の一覧は従来どおり低頻度に保ち、
     // ProxyJumpのホップや認証待ちだけを人が追える速さで更新する。
-    const timer = window.setInterval(() => {
-      if (!document.hidden) void refresh();
-    }, connectionInProgress ? 500 : 2_000);
+    // Agent signals must still be observed while the app is in the background;
+    // that is precisely when notification delivery is useful. Keep the normal
+    // low-frequency poll hidden, while connection progress remains responsive.
+    const timer = window.setInterval(() => void refresh(), connectionInProgress ? 500 : 2_000);
     return () => window.clearInterval(timer);
   }, [connectionInProgress, enabled, refresh, sessions.length]);
 
@@ -133,6 +139,26 @@ export function useTerminalSessions(
     [api, refresh, translate],
   );
 
+  const resumeAgent = useCallback(
+    async (id: string, observationVersion: number, placement: "same-pane" | "new-pane"): Promise<TerminalSession | null> => {
+      setBusy(true);
+      setProblem("");
+      try {
+        if (api.resumeTerminalAgent === undefined) return null;
+        const resumed = await api.resumeTerminalAgent(id, { observationVersion, placement });
+        await refresh();
+        return resumed.session;
+      } catch (error) {
+        setProblem(translate(terminalProblemKey(failureCode(error))));
+        await refresh();
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [api, refresh, translate],
+  );
+
   const closeAll = useCallback(async () => {
     setBusy(true);
     let failed = false;
@@ -177,6 +203,21 @@ export function useTerminalSessions(
     [api, translate],
   );
 
+  const unpinTitle = useCallback(
+    async (id: string): Promise<boolean> => {
+      try {
+        const listed = await api.renameTerminalSession(id, null);
+        setSessions(listed.sessions);
+        setMaxSessions(listed.maxSessions);
+        return true;
+      } catch {
+        setProblem(translate("terminal.renameFailed"));
+        return false;
+      }
+    },
+    [api, translate],
+  );
+
   const markExited = useCallback((id: string) => {
     setSessions((current) =>
       current.map((session) =>
@@ -187,7 +228,7 @@ export function useTerminalSessions(
     );
   }, []);
 
-  return { sessions, maxSessions, busy, problem, loaded, rename, open, reconnect, close, closeAll, refresh, markExited };
+  return { sessions, maxSessions, busy, problem, loaded, rename, unpinTitle, open, reconnect, resumeAgent, close, closeAll, refresh, markExited };
 }
 
 export function terminalProblemKey(code: string): MessageKey {
@@ -218,6 +259,14 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.reconnectFailed";
     case "reconnect_exhausted":
       return "terminal.reconnectExhausted";
+    case "agent_resume_stale":
+      return "terminal.agentResumeStale";
+    case "agent_resume_same_pane_busy":
+      return "terminal.agentResumeSamePaneBusy";
+    case "agent_resume_unavailable":
+      return "terminal.agentResumeUnavailable";
+    case "agent_resume_identity_changed":
+      return "terminal.agentResumeIdentityChanged";
     default:
       return "terminal.openFailed";
   }

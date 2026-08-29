@@ -23,12 +23,14 @@ import { attachTerminalClipboard, type TerminalClipboardSettings } from "./clipb
 import { sftpApi } from "../sftp/api";
 import { absolutePathDraft, findBufferMatches, frequentCommandSuggestions, updateCommandDraft } from "./productivity";
 import { terminalProblemKey } from "./sessions";
+import { agentName, agentStatusLabel, terminalDisplayTitle, terminalSubtitle } from "./agentPresentation";
 
 type TerminalViewProps = {
   session: TerminalSession;
   api?: Pick<IntegrationsApi, "terminalStreamTicket">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
+  onResumeAgent?: (placement: "same-pane" | "new-pane") => Promise<boolean>;
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
@@ -55,6 +57,7 @@ export function TerminalView({
   api = integrationsApi,
   onExit,
   onReconnect,
+  onResumeAgent,
   copyOnSelect = true,
   fontSize,
   rightClickPaste = true,
@@ -110,6 +113,21 @@ export function TerminalView({
         return;
       }
       setProblem(t("terminal.manualReconnectFailed"));
+    } finally {
+      setManualReconnectBusy(false);
+    }
+  }
+
+  async function resumeAgent(placement: "same-pane" | "new-pane") {
+    if (onResumeAgent === undefined || manualReconnectBusy) return;
+    setManualReconnectBusy(true);
+    setProblem("");
+    try {
+      if (await onResumeAgent(placement)) {
+        if (placement === "same-pane") control.current.now();
+        return;
+      }
+      setProblem(t("terminal.agentResumeFailed"));
     } finally {
       setManualReconnectBusy(false);
     }
@@ -384,9 +402,12 @@ export function TerminalView({
     : session.state === "connected"
       ? t("terminal.connected")
       : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
+  const displayTitle = terminalDisplayTitle(session);
+  const subtitle = terminalSubtitle(session);
+  const agentStatus = agentStatusLabel(t, session);
 
   return (
-    <section aria-label={t("terminal.screenLabel", { title: session.title })} className="relative flex min-h-0 flex-1 flex-col">
+    <section aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
         <span
           aria-hidden="true"
@@ -398,13 +419,20 @@ export function TerminalView({
                 : "bg-live"
           }`}
         />
-        <p className="min-w-0 truncate font-mono text-xs font-semibold text-ink">{session.title}</p>
-        {session.alias === undefined || session.alias === session.title ? null : (
-          <span className="truncate rounded-md bg-surface px-2 py-0.5 font-mono text-[11px] text-ink-muted">
-            {session.alias}
-          </span>
-        )}
-        <span role="status" className="min-w-0 truncate text-[11px] text-ink-muted">{connectionStatus}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">{displayTitle}</p>
+            {agentStatus === "" ? null : (
+              <span role="status" className="shrink-0 truncate text-[11px] font-medium text-ink-muted">{agentStatus}</span>
+            )}
+          </div>
+          <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted">
+            <span className="min-w-0 truncate font-mono">{subtitle}</span>
+            {session.state === "connected" && agentStatus !== "" ? null : (
+              <span role="status" className="shrink-0">{connectionStatus}</span>
+            )}
+          </div>
+        </div>
         <button type="button" className="ml-auto rounded border border-control-line px-2 py-0.5 text-xs text-ink-muted hover:bg-select-fill" onClick={() => setSearchOpen((current) => !current)}>{t("terminal.search")}</button>
       </div>
       {searchOpen ? <div className="flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-1.5"><input autoFocus aria-label={t("terminal.searchInput")} value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setSearchResult({ index: -1, total: 0 }); }} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); else if (event.key === "Enter") searchStep.current(event.shiftKey ? -1 : 1); }} className="min-w-0 flex-1 rounded border border-control-line bg-control px-2 py-1 text-xs" placeholder={t("terminal.searchPlaceholder")} /><span className="w-16 text-center text-xs text-ink-muted">{searchResult.total === 0 ? t("terminal.searchNoResults") : `${searchResult.index + 1}/${searchResult.total}`}</span><button type="button" aria-label={t("terminal.searchPrevious")} className="rounded border border-control-line px-2 text-sm" onClick={() => searchStep.current(-1)}>↑</button><button type="button" aria-label={t("terminal.searchNext")} className="rounded border border-control-line px-2 text-sm" onClick={() => searchStep.current(1)}>↓</button><button type="button" aria-label={t("terminal.searchClose")} className="rounded px-2 text-sm" onClick={() => setSearchOpen(false)}>×</button></div> : null}
@@ -483,6 +511,28 @@ export function TerminalView({
               {t(manualReconnectBusy ? "terminal.manualReconnecting" : "terminal.manualReconnect")}
             </button>
           )}
+        </div>
+      )}
+
+      {session.agent?.resumable !== true || session.agent.state !== "unknown" || onResumeAgent === undefined ? null : (
+        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
+          <p className="min-w-0 grow">{t("terminal.agentResumeAvailable", { agent: agentName(session.agent.kind) })}</p>
+          <button
+            type="button"
+            disabled={manualReconnectBusy}
+            onClick={() => void resumeAgent("same-pane")}
+            className="min-h-8 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill disabled:opacity-50"
+          >
+            {t("terminal.agentResumeSamePane")}
+          </button>
+          <button
+            type="button"
+            disabled={manualReconnectBusy}
+            onClick={() => void resumeAgent("new-pane")}
+            className="min-h-8 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill disabled:opacity-50"
+          >
+            {t("terminal.agentResumeNewPane")}
+          </button>
         </div>
       )}
 

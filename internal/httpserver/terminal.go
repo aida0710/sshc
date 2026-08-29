@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"path/filepath"
@@ -38,6 +39,11 @@ type TerminalHandlers struct {
 	// 外部の ssh は起動しない。プロセス内で SSH 接続を行うため、確保する
 	// PTY も無い。nil なら SSH のセッションは開けない。
 	Connect Connector
+	// ConnectAgent starts an adapter-owned resume command on the same alias.
+	ConnectAgent AgentConnector
+	// ConnectionBinding detects alias retargeting before an opaque agent
+	// reference can be tried on a different SSH destination.
+	ConnectionBinding func(alias string) (string, error)
 	// Shell はローカルシェルの絶対パスを解決する。
 	Shell func() (string, error)
 	// Environment は、セッションが継ぐ環境である。これは利用者が自分で行った
@@ -72,7 +78,9 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	}
 	engine.POST("/api/v1/terminal/sessions/:id/stream", handlers.Ticket)
 	engine.POST("/api/v1/terminal/sessions/:id/reconnect", handlers.Reconnect)
+	engine.POST("/api/v1/terminal/sessions/:id/agent/resume", handlers.ResumeAgent)
 	engine.PATCH("/api/v1/terminal/sessions/:id", handlers.Rename)
+	engine.PUT("/api/v1/terminal/sessions/:id/title", handlers.SetTitle)
 	engine.DELETE("/api/v1/terminal/sessions/:id", handlers.Close)
 	engine.GET(StreamPath, handlers.Stream)
 }
@@ -88,6 +96,34 @@ func describeSession(view terminal.View) api.TerminalSession {
 		StartedAt: view.Started.UTC().Format(time.RFC3339),
 		State:     api.TerminalSessionState(view.State),
 		Problem:   view.Problem,
+		Presentation: &api.TerminalPresentation{
+			DisplayTitle: view.Presentation.DisplayTitle,
+			TitleSource:  api.TerminalPresentationTitleSource(view.Presentation.TitleSource),
+			TitlePinned:  view.Presentation.TitlePinned,
+		},
+	}
+	if view.Agent != nil {
+		agent := &api.TerminalAgent{
+			Kind: api.TerminalAgentKind(view.Agent.Kind), State: api.TerminalAgentState(view.Agent.State),
+			Resumable: view.Agent.Resumable, ObservationVersion: int(view.Agent.ObservationVersion),
+			SignalVersion: int(view.Agent.SignalVersion),
+		}
+		if view.Agent.CWD != "" {
+			agent.Cwd = &view.Agent.CWD
+		}
+		if view.Agent.Model != "" {
+			agent.Model = &view.Agent.Model
+		}
+		if view.Agent.SessionName != "" {
+			agent.SessionName = &view.Agent.SessionName
+		}
+		if view.Agent.LastSignal != nil {
+			agent.LastSignal = &api.TerminalAgentSignal{
+				Kind:       api.TerminalAgentSignalKind(view.Agent.LastSignal.Kind),
+				OccurredAt: view.Agent.LastSignal.OccurredAt.UTC(),
+			}
+		}
+		described.Agent = agent
 	}
 	if view.Reconnect != nil {
 		described.Reconnect = &api.TerminalReconnect{
@@ -193,6 +229,96 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 	})
 }
 
+// SetTitle pins a user-selected display title, or unpins it when title is null.
+// It changes only in-memory presentation state.
+func (h TerminalHandlers) SetTitle(c *echo.Context) error {
+	id := c.Param("id")
+	if id == "" || len(id) > maxSessionIdentifier {
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	}
+	var rawRequest struct {
+		Title json.RawMessage `json:"title"`
+	}
+	if err := decodeJSON(c, &rawRequest); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if len(rawRequest.Title) == 0 {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	request := api.SetTerminalSessionTitleRequest{}
+	if string(rawRequest.Title) != "null" {
+		var title string
+		if json.Unmarshal(rawRequest.Title, &title) != nil {
+			return problem(c, http.StatusBadRequest, "invalid_request")
+		}
+		request.Title = &title
+	}
+	var err error
+	if request.Title == nil {
+		err = h.Registry.UnpinTitle(id)
+	} else {
+		err = h.Registry.Rename(id, *request.Title)
+	}
+	switch {
+	case errors.Is(err, terminal.ErrNotFound):
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	case errors.Is(err, terminal.ErrInvalidTitle):
+		return problem(c, http.StatusBadRequest, "invalid_terminal_title")
+	case err != nil:
+		return problem(c, http.StatusInternalServerError, "terminal_rename_failed")
+	}
+	return c.JSON(http.StatusOK, h.list())
+}
+
+// ResumeAgent replaces the process or opens a new pane using only the adapter's
+// fixed argv. The browser supplies neither executable nor native reference.
+func (h TerminalHandlers) ResumeAgent(c *echo.Context) error {
+	id := c.Param("id")
+	if id == "" || len(id) > maxSessionIdentifier {
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	}
+	var request api.ResumeTerminalAgentRequest
+	if err := decodeJSON(c, &request); err != nil || request.ObservationVersion < 1 {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	placement := terminal.AgentResumePlacement(request.Placement)
+	if placement != terminal.AgentResumeSamePane && placement != terminal.AgentResumeNewPane {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	session, err := h.Registry.ResumeAgent(c.Request().Context(), id, uint64(request.ObservationVersion), placement)
+	switch {
+	case errors.Is(err, terminal.ErrNotFound):
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	case errors.Is(err, terminal.ErrAgentResumeStale):
+		return problem(c, http.StatusConflict, "agent_resume_stale")
+	case errors.Is(err, terminal.ErrAgentResumeSamePaneBusy):
+		return problem(c, http.StatusConflict, "agent_resume_same_pane_busy")
+	case errors.Is(err, terminal.ErrAgentResumeIdentityChanged):
+		return problem(c, http.StatusConflict, "agent_resume_identity_changed")
+	case errors.Is(err, terminal.ErrAgentResumeUnavailable), errors.Is(err, terminal.ErrReconnectUnavailable):
+		return problem(c, http.StatusConflict, "agent_resume_unavailable")
+	case errors.Is(err, terminal.ErrSessionLimit):
+		return problem(c, http.StatusConflict, "terminal_session_limit")
+	case errors.Is(err, terminal.ErrShuttingDown):
+		return problem(c, http.StatusServiceUnavailable, "terminal_start_failed")
+	case err != nil:
+		if code, named := connectProblem(err); named {
+			return problem(c, http.StatusUnprocessableEntity, code)
+		}
+		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
+	}
+	ticket, err := h.Tickets.Issue(session.ID())
+	if err != nil {
+		if placement == terminal.AgentResumeNewPane {
+			_ = h.Registry.Close(session.ID())
+		}
+		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
+	}
+	return c.JSON(http.StatusCreated, api.OpenTerminalSessionResponse{
+		Session: describeSession(session.View()), StreamTicket: ticket,
+	})
+}
+
 // spec は、開こうとしているセッションひとつ分の起動一式を組み立てる。
 func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.Size) (terminal.Spec, error) {
 	if kind == terminal.KindShell {
@@ -226,7 +352,7 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 	// 問題は接続画面が表示できるので、端末に理由を書く必要が無い。接続そのものの
 	// 出来事（届かない、認証が通らない）は、開いたセッションの中で語られる。
 	target := *alias
-	return terminal.Spec{
+	spec := terminal.Spec{
 		Kind: terminal.KindSSH, Alias: target, Title: target, Size: size,
 		Open: func(ctx context.Context, size terminal.Size) (terminal.Process, error) {
 			// 確保が取り消されたなら、繋ぎに行かない。
@@ -238,18 +364,11 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 			// 要求の context をそのまま渡すと、開いた HTTP ハンドラが返った瞬間に
 			// SSH セッションが終了する。取り消す権利は Process.Close が持つ。
 			sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-			process, err := h.Connect(sessionCtx, target, size)
+			owned, lifetime, readier, asynchronous, err := ownTerminalProcess(sessionCtx, cancel, func(ctx context.Context) (terminal.Process, error) {
+				return h.Connect(ctx, target, size)
+			})
 			if err != nil {
-				cancel()
 				return nil, err
-			}
-			lifetime := &sessionLifetime{Process: process, cancel: cancel}
-			var owned terminal.Process = lifetime
-			underlyingReady, asynchronous := process.(terminal.Readier)
-			var readier terminal.Readier
-			if asynchronous {
-				readyLifetime := newReadySessionLifetime(lifetime, underlyingReady)
-				owned, readier = readyLifetime, readyLifetime
 			}
 			// Open is also called by the registry when a disconnected transport is
 			// re-established. Resolve and inject the startup snippet here so every
@@ -271,7 +390,62 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 			}
 			return true, "reconnect_failed"
 		},
-	}, nil
+	}
+	if h.ConnectAgent != nil {
+		binding := ""
+		if h.ConnectionBinding != nil {
+			resolved, err := h.ConnectionBinding(target)
+			if err != nil {
+				return terminal.Spec{}, err
+			}
+			binding = resolved
+		}
+		spec.Resume = func(ctx context.Context, size terminal.Size, kind terminal.AgentKind, reference string) (terminal.Process, error) {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if h.ConnectionBinding != nil {
+				current, err := h.ConnectionBinding(target)
+				if err != nil {
+					return nil, err
+				}
+				if current != binding {
+					return nil, terminal.ErrAgentResumeIdentityChanged
+				}
+			}
+			sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+			owned, _, _, _, err := ownTerminalProcess(sessionCtx, cancel, func(ctx context.Context) (terminal.Process, error) {
+				return h.ConnectAgent(ctx, target, kind, reference, size)
+			})
+			return owned, err
+		}
+	}
+	if h.Startup != nil {
+		command, ok := h.Startup(target)
+		spec.ReplacementBusy = ok && command != ""
+	}
+	return spec, nil
+}
+
+func ownTerminalProcess(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	open func(context.Context) (terminal.Process, error),
+) (terminal.Process, *sessionLifetime, terminal.Readier, bool, error) {
+	process, err := open(ctx)
+	if err != nil {
+		cancel()
+		return nil, nil, nil, false, err
+	}
+	lifetime := &sessionLifetime{Process: process, cancel: cancel}
+	var owned terminal.Process = lifetime
+	underlyingReady, asynchronous := process.(terminal.Readier)
+	var readier terminal.Readier
+	if asynchronous {
+		readyLifetime := newReadySessionLifetime(lifetime, underlyingReady)
+		owned, readier = readyLifetime, readyLifetime
+	}
+	return owned, lifetime, readier, asynchronous, nil
 }
 
 // sessionLifetime は、セッションが実行中あいだだけ続く context を Process に
