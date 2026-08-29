@@ -9,6 +9,7 @@ import { MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, restoreLayo
 import { workspaceApi, type SavedWorkspace } from "./api";
 import { WorkspaceCommandCenter, type WorkspaceCommandTarget } from "./WorkspaceCommandCenter";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
+import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace, type LiveWorkspaceNode } from "./livePersistence";
 
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
 
@@ -42,6 +43,18 @@ function findPane(root: RuntimeNode, id: string): RuntimePane | null {
 function findPaneBySession(root: RuntimeNode, sessionId: string): RuntimePane | null {
   if (root.pane !== undefined) return root.pane.sessionId === sessionId ? root.pane : null;
   return findPaneBySession(root.split.first, sessionId) ?? findPaneBySession(root.split.second, sessionId);
+}
+
+function restoreLiveNode(root: LiveWorkspaceNode, sessions: ReadonlyMap<string, TerminalSession>): RuntimeNode | null {
+  if (root.pane !== undefined) {
+    const session = sessions.get(root.pane.sessionId);
+    return session === undefined ? null : { pane: paneForSession(session, root.pane.id) };
+  }
+  const first = restoreLiveNode(root.split.first, sessions);
+  const second = restoreLiveNode(root.split.second, sessions);
+  if (first === null) return second;
+  if (second === null) return first;
+  return { split: { ...root.split, first, second } };
 }
 
 function dockEdge(event: DragEvent<HTMLElement>): DockEdge {
@@ -80,7 +93,7 @@ function compactWorkspaceViewport(): boolean {
 
 export function TerminalWorkspace({
   sessions, activeSessionId, onActive, onOpenAlias, onOpenShell, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
-  onLiveWorkspaceChange = () => undefined,
+  onLiveWorkspaceChange = () => undefined, sessionsLoaded = true,
 }: {
   sessions: TerminalSession[];
   activeSessionId: string | null;
@@ -91,6 +104,7 @@ export function TerminalWorkspace({
   restoreRequest?: WorkspaceRestoreRequest | null;
   onRestoreConsumed?: (sequence: number) => void;
   onLiveWorkspaceChange?: (workspace: LiveWorkspaceSummary | null) => void;
+  sessionsLoaded?: boolean;
 }) {
   const t = useTranslate();
   const [layout, setLayout] = useState<LayoutState | null>(null);
@@ -102,8 +116,10 @@ export function TerminalWorkspace({
   const [dockTarget, setDockTarget] = useState<{ paneId: string; edge: DockEdge } | null>(null);
   const [compactViewport, setCompactViewport] = useState(compactWorkspaceViewport);
   const [problem, setProblem] = useState("");
+  const [liveRestoreReady, setLiveRestoreReady] = useState(false);
   const consumedRestore = useRef(0);
   const liveWorkspaceID = useRef(paneID());
+  const liveStorage = useMemo(() => browserSessionStorage(), []);
   const active = sessions.find((session) => session.id === activeSessionId) ?? null;
   const sessionByID = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
   const layoutSessionIDs = useMemo(() => layout === null ? [] : paneSessionIDs(layout.root), [layout]);
@@ -153,6 +169,32 @@ export function TerminalWorkspace({
     document.title = active === null ? "sshc" : `${active.presentation?.displayTitle ?? active.title} · sshc`;
     return () => { document.title = "sshc"; };
   }, [active]);
+  useEffect(() => {
+    if (!sessionsLoaded || liveRestoreReady) return;
+    if (restoreRequest !== null) {
+      setLiveRestoreReady(true);
+      return;
+    }
+    const restored = loadLiveWorkspace(liveStorage, new Set(sessionByID.keys()));
+    if (restored !== null) {
+      const root = restoreLiveNode(restored.root, sessionByID);
+      if (root !== null && paneIDs(root).length > 1) {
+        const focusedPaneId = paneIDs(root).includes(restored.focusedPaneId)
+          ? restored.focusedPaneId
+          : paneIDs(root)[0] ?? "";
+        const next = { root, focusedPaneId };
+        setLayout(next);
+        setFocusModePaneId(restored.focusModePaneId);
+        const focusedSessionId = findPane(root, focusedPaneId)?.sessionId;
+        if (focusedSessionId !== undefined) onActive(focusedSessionId);
+      }
+    }
+    setLiveRestoreReady(true);
+  }, [liveRestoreReady, liveStorage, onActive, restoreRequest, sessionByID, sessionsLoaded]);
+  useEffect(() => {
+    if (!sessionsLoaded || !liveRestoreReady) return;
+    saveLiveWorkspace(liveStorage, layout, focusModePaneId);
+  }, [focusModePaneId, layout, liveRestoreReady, liveStorage, sessionsLoaded]);
   useEffect(() => {
     if (movingPaneId === null) return;
     if (layout === null || !paneIDs(layout.root).includes(movingPaneId)) {

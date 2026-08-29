@@ -1,9 +1,12 @@
 import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../../api/integrations";
 import { TerminalWorkspace } from "./TerminalWorkspace";
+import { liveWorkspaceStorageKey } from "./livePersistence";
+
+beforeEach(() => window.sessionStorage.removeItem(liveWorkspaceStorageKey));
 
 const workspace = vi.hoisted(() => ({
   list: vi.fn().mockResolvedValue([]),
@@ -106,6 +109,73 @@ function dockConnectedSession(container: HTMLElement, sessionId = secondary.id) 
 }
 
 describe("TerminalWorkspace pane movement", () => {
+  it("reattaches a live split with its ratio and focused pane after remount", async () => {
+    window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
+      version: 1,
+      root: {
+        split: {
+          direction: "horizontal",
+          ratio: 65,
+          first: { pane: { id: "pane-primary", sessionId: primary.id } },
+          second: { pane: { id: "pane-secondary", sessionId: secondary.id } },
+        },
+      },
+      focusedPaneId: "pane-secondary",
+      focusModePaneId: null,
+    }));
+    const active = vi.fn();
+
+    const { container } = render(<TerminalWorkspace
+      sessions={[primary, secondary]}
+      sessionsLoaded
+      activeSessionId={primary.id}
+      onActive={active}
+      onOpenAlias={vi.fn()}
+      onOpenShell={vi.fn()}
+      renderTerminal={(session) => <div>{session.title}</div>}
+    />);
+
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+    expect(paneTitles(container)).toEqual(expect.arrayContaining([
+      expect.stringContaining("Primary terminal"),
+      expect.stringContaining("Database terminal"),
+    ]));
+    const separator = screen.getByRole("separator");
+    expect(separator.previousElementSibling).toHaveStyle({ flexBasis: "65%" });
+    expect(active).toHaveBeenCalledWith(secondary.id);
+  });
+
+  it("restores Focus Mode for a surviving pane", async () => {
+    window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
+      version: 1,
+      root: {
+        split: {
+          direction: "horizontal",
+          ratio: 50,
+          first: { pane: { id: "pane-primary", sessionId: primary.id } },
+          second: { pane: { id: "pane-secondary", sessionId: secondary.id } },
+        },
+      },
+      focusedPaneId: "pane-secondary",
+      focusModePaneId: "pane-secondary",
+    }));
+
+    const { container } = render(<TerminalWorkspace
+      sessions={[primary, secondary]}
+      sessionsLoaded
+      activeSessionId={secondary.id}
+      onActive={() => undefined}
+      onOpenAlias={vi.fn()}
+      onOpenShell={vi.fn()}
+      renderTerminal={(session) => <div>{session.title}</div>}
+    />);
+
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(1));
+    expect(screen.getByText("Database terminal")).toBeVisible();
+    expect(screen.queryByText("Primary terminal")).toBeNull();
+    expect(screen.getAllByRole("button", { name: /Exit focus mode/ }).length).toBeGreaterThan(0);
+  });
+
   it("shows the sshc command name when no console is open", async () => {
     const { container } = render(
       <TerminalWorkspace
