@@ -2,7 +2,9 @@ package httpserver
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -101,6 +103,10 @@ func (p *scriptedPTY) Wait() terminal.ExitInfo {
 	return p.info
 }
 func (p *scriptedPTY) Close() error { return nil }
+func (p *scriptedPTY) ForceClose() error {
+	p.exit(terminal.ExitInfo{Signal: "killed"})
+	return nil
+}
 
 type scriptedStarter struct {
 	mutex     sync.Mutex
@@ -160,6 +166,7 @@ type terminalFixture struct {
 	sshReady  []*readinessPTY
 	asyncSSH  bool
 	recorded  []string
+	resumed   []string
 }
 
 func (f *terminalFixture) connect(alias string) terminal.Process {
@@ -205,6 +212,12 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
 		// SSH はプロセス内で通信する。この検査は PTY の継ぎ目を見ているので、
 		// 開いたことだけを記録する接続で足りる。
 		Connect: func(_ context.Context, alias string, _ terminal.Size) (terminal.Process, error) {
+			return fixture.connect(alias), nil
+		},
+		ConnectAgent: func(_ context.Context, alias string, kind terminal.AgentKind, reference string, _ terminal.Size) (terminal.Process, error) {
+			fixture.mutex.Lock()
+			fixture.resumed = append(fixture.resumed, string(kind)+":"+reference)
+			fixture.mutex.Unlock()
 			return fixture.connect(alias), nil
 		},
 		Connected:      fixture.record,
@@ -840,5 +853,127 @@ func TestRenamingASessionChangesTheListedTitle(t *testing.T) {
 	response, _ = fixture.do(t, http.MethodPatch, "/api/v1/terminal/sessions/absent", `{"title":"x"}`)
 	if response.StatusCode != http.StatusNotFound {
 		t.Errorf("rename of an unknown session = %d, want 404", response.StatusCode)
+	}
+}
+
+func TestAgentOSCUpdatesPresentationWithoutExposingNativeReference(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"osaka"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	var opened api.OpenTerminalSessionResponse
+	if err := json.Unmarshal([]byte(body), &opened); err != nil {
+		t.Fatal(err)
+	}
+	nativeReference := "thread_private_123"
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"agent":"codex","event":"attention","session":"` + nativeReference + `","name":"API認証の修正","seq":1}`))
+	fixture.ssh[0].feed("before\x1b]6973;" + payload[:8])
+	fixture.ssh[0].feed(payload[8:] + "\x1b\\after")
+
+	var listed api.TerminalSessionList
+	waitUntil(t, func() bool {
+		_, current := fixture.do(t, http.MethodGet, "/api/v1/terminal/sessions", "")
+		if strings.Contains(current, nativeReference) {
+			t.Fatalf("native agent reference escaped into the API: %s", current)
+		}
+		if json.Unmarshal([]byte(current), &listed) != nil || len(listed.Sessions) != 1 {
+			return false
+		}
+		return listed.Sessions[0].Agent != nil
+	})
+	session := listed.Sessions[0]
+	if session.Title != "API認証の修正" || session.Presentation == nil || session.Presentation.TitleSource != api.Agent {
+		t.Fatalf("presentation=%+v title=%q", session.Presentation, session.Title)
+	}
+	if session.Agent == nil || session.Agent.Kind != api.Codex || session.Agent.State != api.TerminalAgentStateAttention {
+		t.Fatalf("agent=%+v", session.Agent)
+	}
+	core, ok := fixture.registry.Lookup(opened.Session.Id)
+	if !ok {
+		t.Fatal("opened session disappeared")
+	}
+	if snapshot := string(core.Snapshot()); snapshot != "beforeafter" {
+		t.Fatalf("control payload reached scrollback: %q", snapshot)
+	}
+}
+
+func TestTitleEndpointPinsAndUnpins(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	id, _ := fixture.openShell(t)
+	path := "/api/v1/terminal/sessions/" + id + "/title"
+	response, body := fixture.do(t, http.MethodPut, path, `{"title":"固定名"}`)
+	if response.StatusCode != http.StatusOK || !strings.Contains(body, `"titlePinned":true`) {
+		t.Fatalf("pin = %d: %s", response.StatusCode, body)
+	}
+	response, body = fixture.do(t, http.MethodPut, path, `{"title":null}`)
+	if response.StatusCode != http.StatusOK || strings.Contains(body, `"titlePinned":true`) || !strings.Contains(body, `"title":"zsh"`) {
+		t.Fatalf("unpin = %d: %s", response.StatusCode, body)
+	}
+	for _, invalid := range []string{`{}`, `{"title":false}`, `{"title":""}`, `{"unexpected":null}`} {
+		response, _ = fixture.do(t, http.MethodPut, path, invalid)
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("invalid %s = %d", invalid, response.StatusCode)
+		}
+	}
+}
+
+func TestAgentResumeReplacesProcessInSamePaneWithoutReceivingACommand(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"osaka"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	var opened api.OpenTerminalSessionResponse
+	if json.Unmarshal([]byte(body), &opened) != nil {
+		t.Fatal("invalid open response")
+	}
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"agent":"claude","event":"ready","session":"session-123","name":"修正作業","seq":1}`))
+	fixture.ssh[0].feed("\x1b]6973;" + payload + "\x1b\\")
+	var version int
+	waitUntil(t, func() bool {
+		_, current := fixture.do(t, http.MethodGet, "/api/v1/terminal/sessions", "")
+		var listed api.TerminalSessionList
+		if json.Unmarshal([]byte(current), &listed) != nil || len(listed.Sessions) != 1 || listed.Sessions[0].Agent == nil {
+			return false
+		}
+		version = listed.Sessions[0].Agent.ObservationVersion
+		return true
+	})
+	request := fmt.Sprintf(`{"observationVersion":%d,"placement":"same-pane"}`, version)
+	response, body = fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions/"+opened.Session.Id+"/agent/resume", request)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("resume = %d: %s", response.StatusCode, body)
+	}
+	var resumed api.OpenTerminalSessionResponse
+	if json.Unmarshal([]byte(body), &resumed) != nil || resumed.Session.Id != opened.Session.Id {
+		t.Fatalf("resume did not keep pane identity: %s", body)
+	}
+	fixture.mutex.Lock()
+	defer fixture.mutex.Unlock()
+	if len(fixture.resumed) != 1 || fixture.resumed[0] != "claude:session-123" {
+		t.Fatalf("resume adapter input=%v", fixture.resumed)
+	}
+}
+
+func TestAgentSamePaneResumeRefusesAfterUserInput(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"osaka"}`)
+	var opened api.OpenTerminalSessionResponse
+	if response.StatusCode != http.StatusCreated || json.Unmarshal([]byte(body), &opened) != nil {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"agent":"codex","event":"ready","session":"thread-123","seq":1}`))
+	fixture.ssh[0].feed("\x1b]6973;" + payload + "\a")
+	core, _ := fixture.registry.Lookup(opened.Session.Id)
+	waitUntil(t, func() bool { return core.View().Agent != nil })
+	if _, err := core.Write([]byte("pwd\r")); err != nil {
+		t.Fatal(err)
+	}
+	version := core.View().Agent.ObservationVersion
+	request := fmt.Sprintf(`{"observationVersion":%d,"placement":"same-pane"}`, version)
+	response, body = fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions/"+opened.Session.Id+"/agent/resume", request)
+	if response.StatusCode != http.StatusConflict || !strings.Contains(body, "agent_resume_same_pane_busy") {
+		t.Fatalf("busy resume = %d: %s", response.StatusCode, body)
 	}
 }

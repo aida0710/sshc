@@ -324,6 +324,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminal/sessions/{id}/agent/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeTerminalAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/sessions/{id}": {
         parameters: {
             query?: never;
@@ -339,6 +355,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["renameTerminalSession"];
+        trace?: never;
+    };
+    "/api/v1/terminal/sessions/{id}/title": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setTerminalSessionTitle"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/sync": {
@@ -1979,6 +2011,33 @@ export interface components {
             progress?: components["schemas"]["TerminalConnectionProgress"];
             exited?: components["schemas"]["TerminalExit"];
             forwards?: components["schemas"]["TerminalForward"][];
+            presentation?: components["schemas"]["TerminalPresentation"];
+            agent?: components["schemas"]["TerminalAgent"];
+        };
+        TerminalPresentation: {
+            displayTitle: string;
+            /** @enum {string} */
+            titleSource: "user" | "agent" | "candidate" | "connection" | "fallback";
+            titlePinned: boolean;
+        };
+        TerminalAgent: {
+            /** @enum {string} */
+            kind: "claude" | "codex" | "opencode";
+            /** @enum {string} */
+            state: "working" | "attention" | "ready" | "unknown";
+            cwd?: string;
+            model?: string;
+            sessionName?: string;
+            resumable: boolean;
+            observationVersion: number;
+            signalVersion: number;
+            lastSignal?: components["schemas"]["TerminalAgentSignal"];
+        };
+        TerminalAgentSignal: {
+            /** @enum {string} */
+            kind: "attention" | "completed";
+            /** Format: date-time */
+            occurredAt: string;
         };
         TerminalConnectionProgress: {
             /** @enum {string} */
@@ -2014,6 +2073,14 @@ export interface components {
         };
         RenameTerminalSessionRequest: {
             title: string;
+        };
+        SetTerminalSessionTitleRequest: {
+            title: string | null;
+        };
+        ResumeTerminalAgentRequest: {
+            observationVersion: number;
+            /** @enum {string} */
+            placement: "same-pane" | "new-pane";
         };
         TerminalStreamTicket: {
             streamTicket: string;
@@ -3667,6 +3734,39 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    resumeTerminalAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeTerminalAgentRequest"];
+            };
+        };
+        responses: {
+            /** @description The resumed agent session and a one-time stream ticket */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenTerminalSessionResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     closeTerminalSession: {
         parameters: {
             query?: never;
@@ -3708,6 +3808,32 @@ export interface operations {
         };
         responses: {
             /** @description The session list after the rename */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+        };
+    };
+    setTerminalSessionTitle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetTerminalSessionTitleRequest"];
+            };
+        };
+        responses: {
+            /** @description The session list after pinning or unpinning the display title */
             200: {
                 headers: {
                     [name: string]: unknown;

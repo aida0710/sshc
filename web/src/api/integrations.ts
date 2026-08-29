@@ -16,6 +16,7 @@ export type TerminalBackgroundList = components["schemas"]["TerminalBackgroundLi
 export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
 export type OpenTerminalSessionRequest = components["schemas"]["OpenTerminalSessionRequest"];
 export type OpenTerminalSessionResponse = components["schemas"]["OpenTerminalSessionResponse"];
+export type ResumeTerminalAgentRequest = components["schemas"]["ResumeTerminalAgentRequest"];
 export type TerminalStreamTicket = components["schemas"]["TerminalStreamTicket"];
 export type RecentConnection = components["schemas"]["RecentConnection"];
 export type RecentConnectionList = components["schemas"]["RecentConnectionList"];
@@ -73,7 +74,8 @@ export type IntegrationsApi = {
   openTerminalSession(request: OpenTerminalSessionRequest): Promise<OpenTerminalSessionResponse>;
   terminalStreamTicket(id: string): Promise<TerminalStreamTicket>;
   reconnectTerminalSession(id: string): Promise<TerminalSessionList>;
-  renameTerminalSession(id: string, title: string): Promise<TerminalSessionList>;
+  resumeTerminalAgent?(id: string, request: ResumeTerminalAgentRequest): Promise<OpenTerminalSessionResponse>;
+  renameTerminalSession(id: string, title: string | null): Promise<TerminalSessionList>;
   closeTerminalSession(id: string): Promise<TerminalSessionList>;
   knownHosts(query: string): Promise<KnownHostsResponse>;
   deleteKnownHosts(entries: { line: number; digest: string }[], path: string): Promise<KnownHostsChangeResponse>;
@@ -288,6 +290,33 @@ function validateTerminalSession(value: unknown): TerminalSession {
       asString(entry.listen);
       asString(entry.to);
       asString(entry.problem);
+    }
+  }
+  if (record.presentation !== undefined) {
+    const presentation = asRecord(record.presentation);
+    asString(presentation.displayTitle);
+    const source = asString(presentation.titleSource);
+    if (!["user", "agent", "candidate", "connection", "fallback"].includes(source)) {
+      throw new Error("invalid_response");
+    }
+    asBoolean(presentation.titlePinned);
+  }
+  if (record.agent !== undefined) {
+    const agent = asRecord(record.agent);
+    if (!["claude", "codex", "opencode"].includes(asString(agent.kind))) throw new Error("invalid_response");
+    if (!["working", "attention", "ready", "unknown"].includes(asString(agent.state))) {
+      throw new Error("invalid_response");
+    }
+    asBoolean(agent.resumable);
+    asNonnegativeInteger(agent.observationVersion);
+    asNonnegativeInteger(agent.signalVersion);
+    if (agent.cwd !== undefined) asString(agent.cwd);
+    if (agent.model !== undefined) asString(agent.model);
+    if (agent.sessionName !== undefined) asString(agent.sessionName);
+    if (agent.lastSignal !== undefined) {
+      const signal = asRecord(agent.lastSignal);
+      if (!["attention", "completed"].includes(asString(signal.kind))) throw new Error("invalid_response");
+      asString(signal.occurredAt);
     }
   }
   return record as unknown as TerminalSession;
@@ -656,10 +685,15 @@ export const integrationsApi: IntegrationsApi = {
       await postJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/reconnect`, {}),
     );
   },
+  async resumeTerminalAgent(id, request) {
+    return validateOpenTerminalSession(
+      await postJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/agent/resume`, request),
+    );
+  },
   async renameTerminalSession(id, title) {
     return validateTerminalSessionList(
-      await apiClient.mutate<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}`, {
-        method: "PATCH",
+      await apiClient.mutate<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/title`, {
+        method: "PUT",
         headers: { ...jsonHeaders },
         body: JSON.stringify({ title }),
       }),

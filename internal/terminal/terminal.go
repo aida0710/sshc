@@ -186,12 +186,16 @@ var (
 	// ErrInvalidSize は、TIOCSWINSZ へ渡せない大きさを拒否する。
 	ErrInvalidSize = errors.New("the terminal size is out of range")
 	// ErrInvalidTitle は、一覧に出せない名前を拒否する。
-	ErrInvalidTitle          = errors.New("that is not a usable session name")
-	ErrNotConnected          = errors.New("the terminal session is not connected")
-	ErrGenerationChanged     = errors.New("the terminal session changed after preview")
-	ErrExactInputUnavailable = errors.New("the terminal process cannot accept exact input")
-	ErrCommandTooLarge       = errors.New("the terminal command is too large")
-	ErrShuttingDown          = errors.New("the terminal registry is shutting down")
+	ErrInvalidTitle               = errors.New("that is not a usable session name")
+	ErrNotConnected               = errors.New("the terminal session is not connected")
+	ErrGenerationChanged          = errors.New("the terminal session changed after preview")
+	ErrExactInputUnavailable      = errors.New("the terminal process cannot accept exact input")
+	ErrCommandTooLarge            = errors.New("the terminal command is too large")
+	ErrShuttingDown               = errors.New("the terminal registry is shutting down")
+	ErrAgentResumeUnavailable     = errors.New("the agent session cannot be resumed")
+	ErrAgentResumeStale           = errors.New("the agent resume candidate has changed")
+	ErrAgentResumeSamePaneBusy    = errors.New("the current terminal process has received input")
+	ErrAgentResumeIdentityChanged = errors.New("the SSH destination changed after the agent was observed")
 )
 
 func writeExact(ctx context.Context, writer io.Writer, input []byte) error {

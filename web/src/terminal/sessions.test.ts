@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import { useTerminalSessions, type TerminalSessionsApi } from "./sessions";
 
@@ -17,6 +17,11 @@ function api(overrides: Partial<TerminalSessionsApi> = {}): TerminalSessionsApi 
 }
 
 const translate = ((key: string) => key) as never;
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("useTerminalSessions", () => {
   it("separates the session limit from a console that could not be opened", async () => {
@@ -64,6 +69,27 @@ describe("useTerminalSessions", () => {
 
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(terminalSessions).toHaveBeenCalled();
+  });
+
+  it("continues polling hidden sessions so background agent signals can be observed", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    const connected = {
+      id: "a", kind: "ssh", alias: "osaka", title: "osaka",
+      startedAt: "2026-08-29T01:00:00Z", state: "connected", problem: "",
+    } as const;
+    const terminalSessions = vi.fn().mockResolvedValue({ sessions: [connected], maxSessions: 50 });
+    const { result } = renderHook(() => useTerminalSessions(api({ terminalSessions }), translate));
+
+    await act(async () => {
+      vi.runAllTicks();
+      await Promise.resolve();
+    });
+    expect(result.current.sessions).toEqual([connected]);
+    const beforeInterval = terminalSessions.mock.calls.length;
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(terminalSessions.mock.calls.length).toBeGreaterThan(beforeInterval);
   });
 
   it("does not let an older refresh overwrite a newer session limit", async () => {

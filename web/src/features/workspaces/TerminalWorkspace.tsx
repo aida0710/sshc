@@ -150,6 +150,10 @@ export function TerminalWorkspace({
 
   useEffect(() => { void workspaceApi.list().then(setSaved).catch(() => undefined); }, []);
   useEffect(() => {
+    document.title = active === null ? "sshc" : `${active.presentation?.displayTitle ?? active.title} · sshc`;
+    return () => { document.title = "sshc"; };
+  }, [active]);
+  useEffect(() => {
     if (movingPaneId === null) return;
     if (layout === null || !paneIDs(layout.root).includes(movingPaneId)) {
       setMovingPaneId(null);

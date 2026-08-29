@@ -25,6 +25,7 @@ function renderList(overrides: Partial<Parameters<typeof ConsoleList>[0]> = {}) 
     onSelect: vi.fn(),
     onClose: vi.fn(),
     onRename: vi.fn(async () => true),
+    onUnpinTitle: vi.fn(async () => true),
     onDuplicate: vi.fn(),
     onReorder: vi.fn(),
     onOpenShell: vi.fn(),

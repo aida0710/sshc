@@ -61,10 +61,12 @@ type Options struct {
 	Config          *application.Service
 	Keys            KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
-	Connect     Connector
-	Diagnostics *diagnostics.Service
-	KnownHosts  *knownhosts.Service
-	RemoteKeys  *remotekey.Service
+	Connect           Connector
+	ConnectAgent      AgentConnector
+	ConnectionBinding func(alias string) (string, error)
+	Diagnostics       *diagnostics.Service
+	KnownHosts        *knownhosts.Service
+	RemoteKeys        *remotekey.Service
 	// Recent は、この端末で成功した接続を現在の設定へ解決する。
 	Recent     *recent.Service
 	SFTP       *sshcSFTP.Service
@@ -441,15 +443,17 @@ func New(options Options) (*Server, error) {
 	}
 	if options.Terminals != nil {
 		registerTerminalRoutes(e, TerminalHandlers{
-			Registry:       options.Terminals,
-			Tickets:        &terminal.Tickets{},
-			Snippets:       options.Snippets,
-			Actions:        actions,
-			Connect:        options.Connect,
-			Shell:          options.LoginShell,
-			Environment:    options.TerminalEnvironment,
-			StartDirectory: options.TerminalStartDirectory,
-			Connected:      options.ConnectionOpened,
+			Registry:          options.Terminals,
+			Tickets:           &terminal.Tickets{},
+			Snippets:          options.Snippets,
+			Actions:           actions,
+			Connect:           options.Connect,
+			ConnectAgent:      options.ConnectAgent,
+			ConnectionBinding: options.ConnectionBinding,
+			Shell:             options.LoginShell,
+			Environment:       options.TerminalEnvironment,
+			StartDirectory:    options.TerminalStartDirectory,
+			Connected:         options.ConnectionOpened,
 			Startup: func(alias string) (string, bool) {
 				if options.Snippets == nil {
 					return "", false

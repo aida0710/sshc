@@ -6,6 +6,7 @@ import { Icon } from "../ui/icons";
 import { terminalProblemKey } from "./sessions";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "../features/workspaces/live";
 import { connectionProgressText } from "./progress";
+import { agentStatusLabel, terminalDisplayTitle } from "./agentPresentation";
 
 type ConsoleListProps = {
   sessions: TerminalSession[];
@@ -17,6 +18,7 @@ type ConsoleListProps = {
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
+  onUnpinTitle: (id: string) => Promise<boolean>;
   onDuplicate: (id: string) => void;
   onReorder: (order: string[]) => void;
   onOpenShell: () => void;
@@ -43,6 +45,7 @@ export function ConsoleList({
   onSelect,
   onClose,
   onRename,
+  onUnpinTitle,
   onDuplicate,
   onReorder,
   onOpenShell,
@@ -177,6 +180,7 @@ export function ConsoleList({
             const index = sessions.findIndex((candidate) => candidate.id === session.id);
             const running = session.state !== "exited";
             const destination = session.kind === "ssh" ? session.alias ?? "" : t("terminal.localhost");
+            const displayTitle = terminalDisplayTitle(session);
             const status = session.problem !== ""
               ? t(terminalProblemKey(session.problem))
               : session.state === "reconnecting"
@@ -187,7 +191,7 @@ export function ConsoleList({
               : running
                 ? session.state === "connecting"
                   ? connectionProgressText(t, session)
-                  : t("terminal.connected")
+                  : session.agent === undefined ? t("terminal.connected") : agentStatusLabel(t, session)
                 : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
             const marker = (
               <span
@@ -271,14 +275,14 @@ export function ConsoleList({
                   ) : (
                     <button
                       type="button"
-                      aria-label={session.title}
+                      aria-label={displayTitle}
                       aria-current={session.id === selected ? "true" : undefined}
                       onClick={() => onSelect(session.id)}
                       className="flex min-w-0 grow items-start gap-2 text-left"
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        <span className="block truncate text-sm text-ink">{session.title}</span>
+                        <span className="block truncate text-sm text-ink">{displayTitle}</span>
                         {details}
                       </span>
                     </button>
@@ -339,6 +343,19 @@ export function ConsoleList({
                     >
                       {t("terminal.rename")}
                     </button>
+                    {session.presentation?.titlePinned !== true ? null : (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          void onUnpinTitle(session.id);
+                          setMenuFor(null);
+                        }}
+                        className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill"
+                      >
+                        {t("terminal.unpinTitle")}
+                      </button>
+                    )}
                     <button
                       type="button"
                       role="menuitem"

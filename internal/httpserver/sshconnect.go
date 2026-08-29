@@ -17,6 +17,10 @@ import (
 // 片方だけが vault を見る日が来る。
 type Connector func(ctx context.Context, alias string, size terminal.Size) (terminal.Process, error)
 
+// AgentConnector opens a fixed coding-agent resume program on the same SSH
+// destination. kind/reference are engine-owned values, never browser command text.
+type AgentConnector func(ctx context.Context, alias string, kind terminal.AgentKind, reference string, size terminal.Size) (terminal.Process, error)
+
 // connectProblem は、接続を組み立てられなかった理由を通信形式に変える。
 func connectProblem(err error) (string, bool) {
 	var unresolvable *application.ErrUnresolvable

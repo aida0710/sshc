@@ -147,6 +147,7 @@ export function AppNavigation({
             onSelect={onShowConsole}
             onClose={(id) => void consoles.close(id)}
             onRename={(id, title) => consoles.rename(id, title)}
+            onUnpinTitle={(id) => consoles.unpinTitle?.(id) ?? Promise.resolve(false)}
             onDuplicate={onDuplicateConsole}
             onReorder={onReorderConsoles}
             onOpenShell={onOpenShell}

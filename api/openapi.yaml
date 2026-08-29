@@ -363,6 +363,32 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/sessions/{id}/agent/resume:
+    post:
+      operationId: resumeTerminalAgent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResumeTerminalAgentRequest" }
+      responses:
+        "201":
+          description: The resumed agent session and a one-time stream ticket
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpenTerminalSessionResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/sessions/{id}:
     patch:
       operationId: renameTerminalSession
@@ -382,9 +408,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TerminalSessionList" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
+
     delete:
       operationId: closeTerminalSession
       description: Force-stops a live SSH or local process and removes the session from the returned list in one request.
@@ -402,6 +426,28 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/sessions/{id}/title:
+    put:
+      operationId: setTerminalSessionTitle
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetTerminalSessionTitleRequest" }
+      responses:
+        "200":
+          description: The session list after pinning or unpinning the display title
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /api/v1/sync:
     get:
       operationId: getSyncStatus
@@ -2423,6 +2469,37 @@ components:
         exited: { $ref: "#/components/schemas/TerminalExit" }
         # 現在開いている転送。
         forwards: { type: array, items: { $ref: "#/components/schemas/TerminalForward" } }
+        presentation: { $ref: "#/components/schemas/TerminalPresentation" }
+        agent: { $ref: "#/components/schemas/TerminalAgent" }
+    TerminalPresentation:
+      type: object
+      additionalProperties: false
+      required: [displayTitle, titleSource, titlePinned]
+      properties:
+        displayTitle: { type: string }
+        titleSource: { type: string, enum: [user, agent, candidate, connection, fallback] }
+        titlePinned: { type: boolean }
+    TerminalAgent:
+      type: object
+      additionalProperties: false
+      required: [kind, state, resumable, observationVersion, signalVersion]
+      properties:
+        kind: { type: string, enum: [claude, codex, opencode] }
+        state: { type: string, enum: [working, attention, ready, unknown] }
+        cwd: { type: string }
+        model: { type: string }
+        sessionName: { type: string }
+        resumable: { type: boolean }
+        observationVersion: { type: integer, minimum: 0 }
+        signalVersion: { type: integer, minimum: 0 }
+        lastSignal: { $ref: "#/components/schemas/TerminalAgentSignal" }
+    TerminalAgentSignal:
+      type: object
+      additionalProperties: false
+      required: [kind, occurredAt]
+      properties:
+        kind: { type: string, enum: [attention, completed] }
+        occurredAt: { type: string, format: date-time }
     TerminalConnectionProgress:
       type: object
       additionalProperties: false
@@ -2477,6 +2554,23 @@ components:
       required: [title]
       properties:
         title: { type: string, minLength: 1, maxLength: 64 }
+    SetTerminalSessionTitleRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 64
+    ResumeTerminalAgentRequest:
+      type: object
+      additionalProperties: false
+      required: [observationVersion, placement]
+      properties:
+        observationVersion: { type: integer, minimum: 1 }
+        placement: { type: string, enum: [same-pane, new-pane] }
     # streamTicket は使い捨てで、このセッション ID に束縛され、10 秒で失効する。
     # ブラウザは WebSocket のハンドシェイクにカスタムヘッダを付けられないので、
     # これがそのアップグレードを認可する唯一のものである。
