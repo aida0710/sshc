@@ -29,6 +29,10 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     ...devices["Desktop Chrome"],
+    // Most terminal E2E assertions inspect xterm's DOM rows and selection
+    // layer. Run the unsupported-WebGL fallback here; WebGL negotiation,
+    // loading, and context-loss fallback have focused unit coverage.
+    launchOptions: { args: ["--disable-webgl"] },
     // このスイートは英語のテキストで要素を選ぶ。アプリケー
     // ションはブラウザから言語を選ぶため、ロケールをランナー任せ
     // にせずここで固定する。そうしなければ、同じ spec が実行

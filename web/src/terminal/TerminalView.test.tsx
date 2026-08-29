@@ -95,14 +95,15 @@ describe("TerminalView", () => {
     expect(onOsc52Change).toHaveBeenCalledWith(false);
   });
 
-  it("restores the OSC 52 toggle when persistence fails", async () => {
+  it("keeps the OSC 52 toggle unchanged and reports persistence failure", async () => {
     const onOsc52Change = vi.fn(async () => Promise.reject(new Error("save failed")));
     render(<TerminalView session={session} osc52Enabled onOsc52Change={onOsc52Change} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
     await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
     await userEvent.click(screen.getByRole("menuitemcheckbox", { name: /OSC 52/ }));
     await waitFor(() => expect(onOsc52Change).toHaveBeenCalledWith(false));
+    expect(await screen.findByText("The terminal settings could not be saved.")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
-    await waitFor(() => expect(screen.getByRole("menuitemcheckbox", { name: /OSC 52/ })).toHaveAttribute("aria-checked", "true"));
+    expect(screen.getByRole("menuitemcheckbox", { name: /OSC 52/ })).toHaveAttribute("aria-checked", "true");
   });
 
   it("opens server-backed Quick Commands without wiring the browser stream writer", async () => {
