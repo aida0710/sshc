@@ -111,7 +111,7 @@ func TestALostTransportIsDialledAgain(t *testing.T) {
 	}
 
 	waitFor(t, func() bool {
-		return strings.Contains(string(session.Snapshot()), "繋ぎ直しました")
+		return strings.Contains(string(session.Snapshot()), "再接続しました")
 	})
 	if !strings.Contains(string(session.Snapshot()), "新しいシェル") {
 		t.Error("新しいシェルであることを言っていない: 前の続きだと思わせてはならない")
@@ -148,7 +148,7 @@ func TestGivingUpIsSaidOutLoud(t *testing.T) {
 	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
 
 	waitFor(t, func() bool { return !session.Live() }) // 諦めなかった
-	if !strings.Contains(string(session.Snapshot()), "試行上限に達しました") {
+	if !strings.Contains(string(session.Snapshot()), "再接続できる回数の上限に達しました") {
 		t.Error("諦めたことを言っていない")
 	}
 	view := session.View()
@@ -321,7 +321,7 @@ func TestKeystrokesDuringAReconnectAreDropped(t *testing.T) {
 	first.exit(terminal.ExitInfo{Code: terminal.TransportLost})
 
 	waitFor(t, func() bool {
-		return strings.Contains(string(session.Snapshot()), "繋ぎ直します")
+		return strings.Contains(string(session.Snapshot()), "再接続します")
 	})
 	if _, err := session.Write([]byte("rm -rf /tmp/half")); err != nil {
 		t.Fatalf("繋ぎ直しのあいだの打鍵が失敗した: %v", err)
@@ -329,7 +329,7 @@ func TestKeystrokesDuringAReconnectAreDropped(t *testing.T) {
 
 	waitFor(t, func() bool { return spy.count() >= 2 })
 	waitFor(t, func() bool {
-		return strings.Contains(string(session.Snapshot()), "繋ぎ直しました")
+		return strings.Contains(string(session.Snapshot()), "再接続しました")
 	})
 
 	if got := spy.at(1).keystrokes(); got != "" {

@@ -72,7 +72,6 @@ describe("the catalogue", () => {
         "shell.language",
         "shell.languageEnglish",
         "shell.languageJapanese",
-        "shell.languageMenu",
         "shell.title",
         "snippets.heading",
         "sync.historyRelation.head",
