@@ -108,6 +108,11 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		defer cancel()
 		return runVault(vaultCtx, called.Args[0], app.HandoffDir(home), vaultCommandClient(client),
 			os.Stdin, os.Stdout, os.Stderr, systemPasswordTerminal{})
+	case invocationSync:
+		syncCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+		defer cancel()
+		return runSync(syncCtx, *called.Sync, app.HandoffDir(home), client,
+			os.Stdin, os.Stdout, os.Stderr, systemPasswordTerminal{})
 	default:
 		fmt.Fprintln(os.Stderr, "sshc: invalid invocation")
 		return 2
