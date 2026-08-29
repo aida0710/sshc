@@ -3,8 +3,10 @@ package snippets
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +76,24 @@ func TestStoreRoundTripsAndAtomicallyReplacesOnePrivateDocument(t *testing.T) {
 	}
 }
 
+func TestStoreRefusesADocumentWhichItsBoundedReaderCannotOpen(t *testing.T) {
+	store, _ := newFileStore(t)
+	moment := time.Date(2026, 8, 30, 0, 0, 0, 0, time.UTC)
+	library := Library{Snippets: make([]Snippet, 17)}
+	for index := range library.Snippets {
+		library.Snippets[index] = Snippet{
+			ID: fmt.Sprintf("%032x", index+1), Name: fmt.Sprintf("large-%d", index),
+			Command: strings.Repeat("x", MaxCommandBytes), CreatedAt: moment, UpdatedAt: moment,
+		}
+	}
+	if err := store.Save(library); !errors.Is(err, storage.ErrFileTooLarge) {
+		t.Fatalf("Save = %v, want ErrFileTooLarge", err)
+	}
+	if _, err := os.Stat(store.Path()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("oversized document was published: %v", err)
+	}
+}
+
 func TestStoreMigratesAValidLegacyPlaintextDocument(t *testing.T) {
 	store, _ := newFileStore(t)
 	plain, err := encodeDocument(validLibrary())
@@ -90,6 +110,38 @@ func TestStoreMigratesAValidLegacyPlaintextDocument(t *testing.T) {
 	}
 	if !bytes.HasPrefix(sealed, []byte("sealed\x00")) || bytes.Contains(sealed, []byte("uptime")) {
 		t.Fatalf("legacy document was not encrypted: %q", sealed)
+	}
+}
+
+func TestTravelDocumentMigratesAValidLegacyPlaintextDocument(t *testing.T) {
+	store, _ := newFileStore(t)
+	plain, err := encodeDocument(validLibrary())
+	if err != nil {
+		t.Fatal(err)
+	}
+	acltest.WritePrivateFile(t, store.Path(), plain)
+	travelled, err := store.TravelDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(travelled, plain) {
+		t.Fatalf("TravelDocument = %q, want canonical legacy plaintext", travelled)
+	}
+	sealed, err := os.ReadFile(store.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(sealed, []byte("sealed\x00")) || bytes.Contains(sealed, []byte("uptime")) {
+		t.Fatalf("travel read left the legacy document in plaintext: %q", sealed)
+	}
+}
+
+func TestExpansionRejectsTheFinalSizeBeforeBuildingTheCommand(t *testing.T) {
+	value := strings.Repeat("x", MaxVariableValueBytes)
+	command := strings.Repeat("{{value}}", MaxCommandBytes/MaxVariableValueBytes+1)
+	_, err := expand(command, []Variable{{Name: "value", Type: VariableString, Required: true}}, map[string]string{"value": value})
+	if !errors.Is(err, ErrInvalidSnippet) {
+		t.Fatalf("expand oversized result = %v, want ErrInvalidSnippet", err)
 	}
 }
 

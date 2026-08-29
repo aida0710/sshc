@@ -30,8 +30,12 @@ type TerminalSettings struct {
 	// Reconnect は、輸送が落ちたときに繋ぎ直しを試みる回数である。
 	Reconnect *int
 	// nil は既定の on、false は明示的に止めた値である。
-	CopyOnSelect    *bool
-	RightClickPaste *bool
+	CopyOnSelect           *bool
+	RightClickPaste        *bool
+	BrowserScrollbackLines int
+	OSC52                  bool
+	JISYenBackslash        bool
+	LocalShellProfile      string
 	// Appearance は、どの接続にも選ばれていないときの見た目である。
 	Appearance TerminalAppearance
 }
@@ -43,15 +47,19 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		return TerminalSettings{}
 	}
 	return TerminalSettings{
-		StartDirectory:  stored.EmbeddedTerminal.StartDirectory,
-		MaxSessions:     stored.EmbeddedTerminal.MaxSessions,
-		ScrollbackBytes: stored.EmbeddedTerminal.ScrollbackBytes,
-		FontSize:        stored.EmbeddedTerminal.FontSize,
-		Verbosity:       stored.EmbeddedTerminal.Verbosity,
-		Reconnect:       stored.EmbeddedTerminal.Reconnect,
-		CopyOnSelect:    stored.EmbeddedTerminal.CopyOnSelect,
-		RightClickPaste: stored.EmbeddedTerminal.RightClickPaste,
-		Appearance:      appearanceOf(stored.EmbeddedTerminal.Appearance),
+		StartDirectory:         stored.EmbeddedTerminal.StartDirectory,
+		MaxSessions:            stored.EmbeddedTerminal.MaxSessions,
+		ScrollbackBytes:        stored.EmbeddedTerminal.ScrollbackBytes,
+		FontSize:               stored.EmbeddedTerminal.FontSize,
+		Verbosity:              stored.EmbeddedTerminal.Verbosity,
+		Reconnect:              stored.EmbeddedTerminal.Reconnect,
+		CopyOnSelect:           stored.EmbeddedTerminal.CopyOnSelect,
+		RightClickPaste:        stored.EmbeddedTerminal.RightClickPaste,
+		BrowserScrollbackLines: stored.EmbeddedTerminal.BrowserScrollbackLines,
+		OSC52:                  stored.EmbeddedTerminal.OSC52,
+		JISYenBackslash:        stored.EmbeddedTerminal.JISYenBackslash,
+		LocalShellProfile:      stored.EmbeddedTerminal.LocalShellProfile,
+		Appearance:             appearanceOf(stored.EmbeddedTerminal.Appearance),
 	}
 }
 
@@ -84,14 +92,18 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 		stored.EmbeddedTerminal = nil
 	} else {
 		stored.EmbeddedTerminal = &EmbeddedTerminal{
-			MaxSessions:     settings.MaxSessions,
-			ScrollbackBytes: settings.ScrollbackBytes,
-			FontSize:        settings.FontSize,
-			Verbosity:       settings.Verbosity,
-			Reconnect:       settings.Reconnect,
-			StartDirectory:  settings.StartDirectory,
-			CopyOnSelect:    settings.CopyOnSelect,
-			RightClickPaste: settings.RightClickPaste,
+			MaxSessions:            settings.MaxSessions,
+			ScrollbackBytes:        settings.ScrollbackBytes,
+			FontSize:               settings.FontSize,
+			Verbosity:              settings.Verbosity,
+			Reconnect:              settings.Reconnect,
+			StartDirectory:         settings.StartDirectory,
+			CopyOnSelect:           settings.CopyOnSelect,
+			RightClickPaste:        settings.RightClickPaste,
+			BrowserScrollbackLines: settings.BrowserScrollbackLines,
+			OSC52:                  settings.OSC52,
+			JISYenBackslash:        settings.JISYenBackslash,
+			LocalShellProfile:      settings.LocalShellProfile,
 			// 空の節は書かない。 残せば、次に読む者は何か選ばれていると思う。
 			Appearance: storedAppearance(settings.Appearance),
 		}
@@ -142,6 +154,11 @@ func (s *Service) TerminalStartDirectory() string {
 		return home
 	}
 	return resolved
+}
+
+// TerminalLocalShellProfile returns the persisted stable local profile ID.
+func (s *Service) TerminalLocalShellProfile() string {
+	return s.TerminalSettings().LocalShellProfile
 }
 
 // storedAppearance は、何も選ばれていない見た目を「書かれていない」に潰す。

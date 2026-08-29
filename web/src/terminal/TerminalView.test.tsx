@@ -78,20 +78,49 @@ describe("TerminalView", () => {
 
   it("requires explicit per-session opt-in before accepting OSC 52", async () => {
     renderView();
-    const toggle = screen.getByRole("button", { name: "OSC 52" });
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
+    const toggle = screen.getByRole("menuitemcheckbox", { name: /OSC 52/ });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
     await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(/OSC 52 clipboard writes are allowed/)).toBeVisible();
+  });
+
+  it("reports an OSC 52 preference change for connection-level persistence", async () => {
+    const onOsc52Change = vi.fn();
+    render(<TerminalView session={session} osc52Enabled onOsc52Change={onOsc52Change} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
+    const toggle = screen.getByRole("menuitemcheckbox", { name: /OSC 52/ });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(toggle);
+    expect(onOsc52Change).toHaveBeenCalledWith(false);
+  });
+
+  it("restores the OSC 52 toggle when persistence fails", async () => {
+    const onOsc52Change = vi.fn(async () => Promise.reject(new Error("save failed")));
+    render(<TerminalView session={session} osc52Enabled onOsc52Change={onOsc52Change} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
+    await userEvent.click(screen.getByRole("menuitemcheckbox", { name: /OSC 52/ }));
+    await waitFor(() => expect(onOsc52Change).toHaveBeenCalledWith(false));
+    await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
+    await waitFor(() => expect(screen.getByRole("menuitemcheckbox", { name: /OSC 52/ })).toHaveAttribute("aria-checked", "true"));
   });
 
   it("opens server-backed Quick Commands without wiring the browser stream writer", async () => {
     renderView();
     await waitFor(() => expect(streams).toHaveLength(1));
 
-    await userEvent.click(screen.getByRole("button", { name: "Quick Commands" }));
+    await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Quick Commands" }));
     expect(screen.getByRole("dialog", { name: "Quick Commands panel" })).toBeVisible();
     expect(streams[0]?.stream.send).not.toHaveBeenCalled();
+  });
+
+  it("keeps only search and overflow in the terminal header", () => {
+    renderView();
+    expect(screen.getByRole("button", { name: "Find" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "More terminal actions" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Quick Commands" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy recent terminal context" })).toBeNull();
   });
 
   it("shows the current SSH hop and connection phase in the header", () => {

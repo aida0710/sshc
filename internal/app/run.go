@@ -190,8 +190,10 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		AutoSync:  autoSync,
 		Terminals: terminals,
 		// SSH のプログラムはもう要らない。接続はこのプロセスの中で通信する。
-		TerminalStartDirectory: configService.TerminalStartDirectory,
-		LoginShell:             func() (string, error) { return platform.LoginShell(dependencies.Lookup) },
+		TerminalStartDirectory:    configService.TerminalStartDirectory,
+		LoginShell:                func() (string, error) { return platform.LoginShell(dependencies.Lookup) },
+		LocalShellProfiles:        func() []platform.ShellProfile { return platform.ShellProfiles(dependencies.Lookup) },
+		TerminalLocalShellProfile: configService.TerminalLocalShellProfile,
 		TerminalEnvironment: func() []string {
 			if dependencies.Environ == nil {
 				return nil

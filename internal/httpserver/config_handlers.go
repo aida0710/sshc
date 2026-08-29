@@ -198,6 +198,9 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if request.ScrollbackBytes != nil {
 		settings.ScrollbackBytes = *request.ScrollbackBytes
 	}
+	if request.BrowserScrollbackLines != nil {
+		settings.BrowserScrollbackLines = *request.BrowserScrollbackLines
+	}
 	if request.FontSize != nil {
 		settings.FontSize = *request.FontSize
 	}
@@ -209,6 +212,15 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	settings.Reconnect = request.Reconnect
 	settings.CopyOnSelect = request.CopyOnSelect
 	settings.RightClickPaste = request.RightClickPaste
+	if request.Osc52 != nil {
+		settings.OSC52 = *request.Osc52
+	}
+	if request.JisYenBackslash != nil {
+		settings.JISYenBackslash = *request.JisYenBackslash
+	}
+	if request.LocalShellProfile != nil {
+		settings.LocalShellProfile = *request.LocalShellProfile
+	}
 	if request.Appearance != nil {
 		// 未知の配色名は保存できるようにする。UI 側は未知の名前を既定値として扱うため、
 		// 配色名を変更しても設定画面を利用できる。

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
+	"sshc/internal/platform"
 	"sshc/internal/terminal"
 )
 
@@ -328,6 +330,37 @@ func TestOpeningASessionReturnsATicketAndListsIt(t *testing.T) {
 	// その端末の作業ディレクトリ、launchd から起こせば `/`。利用者はそのどれも選んでいない。
 	if opened[0].Dir != "/home/tester" {
 		t.Fatalf("the shell started in %q, want the home directory", opened[0].Dir)
+	}
+}
+
+func TestLocalShellProfileUsesStoredDefaultAndOneShotOverride(t *testing.T) {
+	handlers := TerminalHandlers{
+		ShellProfiles: func() []platform.ShellProfile {
+			return []platform.ShellProfile{
+				{ID: "default", Label: "sh", Path: "/bin/sh", Argv0: "-sh"},
+				{ID: "fish", Label: "fish", Path: "/usr/bin/fish", Argv0: "-fish"},
+				{ID: "zsh", Label: "zsh", Path: "/bin/zsh", Argv0: "-zsh"},
+			}
+		},
+		DefaultShellProfile: func() string { return "fish" },
+	}
+	stored, err := handlers.shellSpec(nil, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil || stored.Command.Path != "/usr/bin/fish" || stored.Command.Argv0 != "-fish" {
+		t.Fatalf("stored profile = %#v, %v", stored.Command, err)
+	}
+	oneShot := "zsh"
+	overridden, err := handlers.shellSpec(&oneShot, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil || overridden.Command.Path != "/bin/zsh" {
+		t.Fatalf("one-shot profile = %#v, %v", overridden.Command, err)
+	}
+	handlers.DefaultShellProfile = func() string { return "powershell" }
+	fallback, err := handlers.shellSpec(nil, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil || fallback.Command.Path != "/bin/sh" {
+		t.Fatalf("cross-platform fallback = %#v, %v", fallback.Command, err)
+	}
+	unsafe := "/bin/sh -c id"
+	if _, err := handlers.shellSpec(&unsafe, terminal.Size{}); !errors.Is(err, platform.ErrUnknownShellProfile) {
+		t.Fatalf("unsafe profile = %v", err)
 	}
 }
 

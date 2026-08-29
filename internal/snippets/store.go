@@ -90,7 +90,7 @@ func (s *Store) load(migrate bool) (Library, error) {
 		return Library{}, err
 	}
 	if migrate && legacy {
-		sealed, sealErr := s.protect.Seal(contents)
+		sealed, sealErr := s.sealDocument(contents)
 		if sealErr != nil {
 			return Library{}, sealErr
 		}
@@ -168,7 +168,7 @@ func (s *Store) Mutate(mutation func(*Library) error) error {
 }
 
 func (s *Store) saveLocked(contents []byte) error {
-	sealed, err := s.protect.Seal(contents)
+	sealed, err := s.sealDocument(contents)
 	if err != nil {
 		return err
 	}
@@ -213,6 +213,15 @@ func (s *Store) TravelDocument() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if errors.Is(openErr, ErrNotEncrypted) {
+		sealed, sealErr := s.sealDocument(plaintext)
+		if sealErr != nil {
+			return nil, sealErr
+		}
+		if writeErr := storage.WriteAtomicFile(s.workspace.FileSystem(), s.Path(), temporaryName, storage.FilePermission, sealed); writeErr != nil {
+			return nil, writeErr
+		}
+	}
 	if len(library.Snippets) == 0 && len(library.Startup) == 0 {
 		return nil, nil
 	}
@@ -222,10 +231,27 @@ func (s *Store) TravelDocument() ([]byte, error) {
 // AdoptTravelDocument validates a remote logical document and seals it with
 // this installation's master key. The caller commits the returned ciphertext.
 func (s *Store) AdoptTravelDocument(contents []byte) ([]byte, error) {
+	if len(contents) > storage.MaxFileSize {
+		return nil, storage.ErrFileTooLarge
+	}
 	if _, err := decodeDocument(contents); err != nil {
 		return nil, err
 	}
-	return s.protect.Seal(contents)
+	return s.sealDocument(contents)
+}
+
+func (s *Store) sealDocument(contents []byte) ([]byte, error) {
+	if len(contents) > storage.MaxFileSize {
+		return nil, storage.ErrFileTooLarge
+	}
+	sealed, err := s.protect.Seal(contents)
+	if err != nil {
+		return nil, err
+	}
+	if len(sealed) > storage.MaxFileSize {
+		return nil, storage.ErrFileTooLarge
+	}
+	return sealed, nil
 }
 
 // ValidateDocument is registered with the master-key rotation coordinator.

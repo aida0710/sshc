@@ -46,6 +46,10 @@ type TerminalHandlers struct {
 	ConnectionBinding func(alias string) (string, error)
 	// Shell はローカルシェルの絶対パスを解決する。
 	Shell func() (string, error)
+	// ShellProfiles returns only executables detected and validated on this machine.
+	ShellProfiles func() []platform.ShellProfile
+	// DefaultShellProfile returns the persisted stable ID. Empty means machine default.
+	DefaultShellProfile func() string
 	// Environment は、セッションが継ぐ環境である。これは利用者が自分で行った
 	// であろう接続なので、検査が使う最小環境ではなくユーザー本人の環境を継ぐ。
 	Environment func() []string
@@ -71,6 +75,7 @@ type TerminalHandlers struct {
 
 func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.GET("/api/v1/terminal/sessions", handlers.List)
+	engine.GET("/api/v1/terminal/shell-profiles", handlers.ListShellProfiles)
 	engine.POST("/api/v1/terminal/sessions", handlers.Open)
 	if handlers.Snippets != nil && handlers.Actions.Sessions != nil {
 		engine.POST("/api/v1/terminal/commands/preview", handlers.PreviewCommand)
@@ -79,6 +84,7 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.POST("/api/v1/terminal/sessions/:id/stream", handlers.Ticket)
 	engine.POST("/api/v1/terminal/sessions/:id/reconnect", handlers.Reconnect)
 	engine.POST("/api/v1/terminal/sessions/:id/agent/resume", handlers.ResumeAgent)
+	engine.GET("/api/v1/terminal/sessions/:id/control", handlers.Control)
 	engine.PATCH("/api/v1/terminal/sessions/:id", handlers.Rename)
 	engine.PUT("/api/v1/terminal/sessions/:id/title", handlers.SetTitle)
 	engine.DELETE("/api/v1/terminal/sessions/:id", handlers.Close)
@@ -206,6 +212,9 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 	}
 
 	spec, err := h.spec(kind, request.Alias, size)
+	if kind == terminal.KindShell && request.ProfileId != nil {
+		spec, err = h.shellSpec(request.ProfileId, size)
+	}
 	if err != nil {
 		return h.startProblem(c, err)
 	}
@@ -322,20 +331,7 @@ func (h TerminalHandlers) ResumeAgent(c *echo.Context) error {
 // spec は、開こうとしているセッションひとつ分の起動一式を組み立てる。
 func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.Size) (terminal.Spec, error) {
 	if kind == terminal.KindShell {
-		shell, err := h.resolveShell()
-		if err != nil {
-			return terminal.Spec{}, err
-		}
-		return terminal.Spec{
-			Kind: terminal.KindShell, Title: shellTitle(shell), Size: size,
-			Command: terminal.Command{
-				// ログインシェルとしての起動し方は OS ごとに違う。Unix は
-				// argv[0]、Windows は引数で伝える。ここはその区別を持たない。
-				Path: shell, Argv0: platform.LoginArgv0(shell),
-				Arguments: platform.LoginArguments(shell), Env: h.environment(),
-				Dir: h.startDirectory(),
-			},
-		}, nil
+		return h.shellSpec(nil, size)
 	}
 
 	if alias == nil {
@@ -425,6 +421,21 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 		spec.ReplacementBusy = ok && command != ""
 	}
 	return spec, nil
+}
+
+func (h TerminalHandlers) shellSpec(requested *string, size terminal.Size) (terminal.Spec, error) {
+	profile, err := h.resolveShellProfile(requested)
+	if err != nil {
+		return terminal.Spec{}, err
+	}
+	return terminal.Spec{
+		Kind: terminal.KindShell, Title: shellTitle(profile.Path), Size: size,
+		Command: terminal.Command{
+			Path: profile.Path, Argv0: profile.Argv0,
+			Arguments: append([]string(nil), profile.Arguments...), Env: h.environment(),
+			Dir: h.startDirectory(),
+		},
+	}, nil
 }
 
 func ownTerminalProcess(
@@ -561,6 +572,58 @@ func (h TerminalHandlers) resolveShell() (string, error) {
 	return h.Shell()
 }
 
+func (h TerminalHandlers) resolveShellProfile(requested *string) (platform.ShellProfile, error) {
+	if h.ShellProfiles == nil {
+		shell, err := h.resolveShell()
+		if err != nil {
+			return platform.ShellProfile{}, err
+		}
+		if requested != nil && *requested != "" && *requested != "default" {
+			return platform.ShellProfile{}, platform.ErrUnknownShellProfile
+		}
+		return platform.ShellProfile{
+			ID: "default", Label: shellTitle(shell), Path: shell,
+			Argv0: platform.LoginArgv0(shell), Arguments: platform.LoginArguments(shell),
+		}, nil
+	}
+	id := ""
+	if requested != nil {
+		id = *requested
+	} else if h.DefaultShellProfile != nil {
+		id = h.DefaultShellProfile()
+	}
+	profiles := h.ShellProfiles()
+	profile, err := platform.ResolveShellProfile(profiles, id)
+	if err != nil && requested == nil {
+		// Metadata may be synced from another OS. An unavailable stored default
+		// must not prevent the machine's verified login shell from opening.
+		return platform.ResolveShellProfile(profiles, "default")
+	}
+	return profile, err
+}
+
+func (h TerminalHandlers) ListShellProfiles(c *echo.Context) error {
+	profiles := []platform.ShellProfile(nil)
+	if h.ShellProfiles != nil {
+		profiles = h.ShellProfiles()
+	}
+	chosen := "default"
+	if h.DefaultShellProfile != nil && h.DefaultShellProfile() != "" {
+		chosen = h.DefaultShellProfile()
+	}
+	if _, err := platform.ResolveShellProfile(profiles, chosen); err != nil {
+		chosen = "default"
+	}
+	answer := api.LocalShellProfileList{Profiles: make([]api.LocalShellProfile, 0, len(profiles))}
+	for _, profile := range profiles {
+		answer.Profiles = append(answer.Profiles, api.LocalShellProfile{
+			Id: profile.ID, Label: profile.Label, Path: profile.Path,
+			Arguments: append([]string(nil), profile.Arguments...), Default: profile.ID == chosen,
+		})
+	}
+	return c.JSON(http.StatusOK, answer)
+}
+
 func (h TerminalHandlers) startDirectory() string {
 	if h.StartDirectory == nil {
 		return ""
@@ -583,6 +646,8 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "terminal_session_limit")
 	case errors.Is(err, validate.ErrUnsafeAlias), errors.Is(err, errMissingAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
+	case errors.Is(err, platform.ErrUnknownShellProfile):
+		return problem(c, http.StatusBadRequest, "local_shell_profile_unavailable")
 	}
 	// 設定により接続できない場合は、その理由を返す。
 	// 「開けませんでした」だけでは、次に何をすればよいか分からない。

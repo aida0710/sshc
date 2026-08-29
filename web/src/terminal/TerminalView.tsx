@@ -26,10 +26,13 @@ import { terminalProblemKey } from "./sessions";
 import { agentName, agentStatusLabel, terminalDisplayTitle, terminalSubtitle } from "./agentPresentation";
 import { recentBufferText } from "./buffer";
 import { attachOsc52Clipboard } from "./osc52";
-import { attachKittyKeyboardProtocol } from "./kittyKeyboard";
-import { findTerminalLinks } from "./links";
-import { TerminalLinkPopover, type RemotePathAction, type TerminalLinkSelection } from "./TerminalLinkPopover";
+import { attachKittyKeyboardProtocol, encodeIntlYen } from "./kittyKeyboard";
+import { findTerminalLinks, modifierOpensLink, osc8Link } from "./links";
+import { openTerminalURL, TerminalLinkPopover, type RemotePathAction, type TerminalLinkSelection } from "./TerminalLinkPopover";
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
+import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
+import { attachWebglRenderer } from "./webgl";
+import { Icon } from "../ui/icons";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -45,6 +48,10 @@ type TerminalViewProps = {
   tint?: number;
   font?: string;
   onOpenRemotePath?: (alias: string, path: string, action: RemotePathAction) => void;
+  osc52Enabled?: boolean;
+  scrollbackLines?: number;
+  onOsc52Change?: (enabled: boolean) => void | Promise<void>;
+  jisYenBackslash?: boolean;
 };
 
 type Link =
@@ -71,6 +78,10 @@ export function TerminalView({
   background,
   tint,
   onOpenRemotePath,
+  osc52Enabled: initialOsc52Enabled = false,
+  scrollbackLines = 5000,
+  onOsc52Change,
+  jisYenBackslash = false,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
@@ -98,11 +109,16 @@ export function TerminalView({
   const searchRefresh = useRef<() => void>(() => {});
   const searchClear = useRef<() => void>(() => {});
   const copyContext = useRef<() => void>(() => {});
-  const [osc52Enabled, setOsc52Enabled] = useState(false);
-  const osc52EnabledRef = useRef(false);
+  const [osc52Enabled, setOsc52Enabled] = useState(initialOsc52Enabled);
+  const osc52EnabledRef = useRef(initialOsc52Enabled);
   osc52EnabledRef.current = osc52Enabled;
+  const intlYenRef = useRef(jisYenBackslash);
+  intlYenRef.current = jisYenBackslash;
   const [terminalNotice, setTerminalNotice] = useState("");
+
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
+  const [quickCommandSelection, setQuickCommandSelection] = useState("");
+  const [overflowOpen, setOverflowOpen] = useState(false);
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
   const control = useRef<{ now: () => void; stop: () => void }>({ now: () => {}, stop: () => {} });
 
@@ -111,6 +127,10 @@ export function TerminalView({
   armed.current = modifiers;
   const send = useRef<(label: string) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
+
+  useEffect(() => {
+    setOsc52Enabled(initialOsc52Enabled);
+  }, [initialOsc52Enabled, session.id]);
 
   async function reconnectExitedSession() {
     if (onReconnect === undefined || manualReconnectBusy) return;
@@ -170,7 +190,8 @@ export function TerminalView({
 
     const coarse = prefersNativeSelection((query) => window.matchMedia(query));
 
-    const view = new Terminal({
+    let view: Terminal;
+    view = new Terminal({
       allowProposedApi: true,
       cols: 80,
       rows: 24,
@@ -179,13 +200,32 @@ export function TerminalView({
       fontFamily: fontStack(font ?? ""),
       fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
       theme: terminalTheme(container, hasBackground),
-      scrollback: 5000,
+      scrollback: scrollbackLines,
+      linkHandler: {
+        activate: (event, target, range) => {
+          const line = view.buffer.active.getLine(range.start.y - 1)?.translateToString(true) ?? "";
+          const visible = line.slice(range.start.x - 1, range.end.x);
+          const link = osc8Link(target, visible, range.start.x - 1, range.end.x);
+          if (link === null) return;
+          if (modifierOpensLink(event)) {
+            openTerminalURL(link.target);
+            return;
+          }
+          setLinkSelection({ link, x: event.clientX + 8, y: event.clientY + 8 });
+        },
+      },
     });
     const fit = new FitAddon();
     const search = new SearchAddon({ highlightLimit: 1000 });
     view.loadAddon(fit);
     view.loadAddon(search);
     view.open(container);
+    let webgl: { dispose(): void } | null = null;
+    let terminalDisposed = false;
+    void attachWebglRenderer(view).then((attached) => {
+      if (terminalDisposed) attached?.dispose();
+      else webgl = attached;
+    });
     terminal.current = view;
 
     const searchResultSubscription = search.onDidChangeResults((result) => {
@@ -265,11 +305,17 @@ export function TerminalView({
             start: { x: match.start + 1, y: bufferLineNumber },
             end: { x: match.end, y: bufferLineNumber },
           },
-          activate: (event: MouseEvent) => setLinkSelection({
-            link: match,
-            x: event.clientX + 8,
-            y: event.clientY + 8,
-          }),
+          activate: (event: MouseEvent) => {
+            if (match.kind === "url" && modifierOpensLink(event)) {
+              openTerminalURL(match.target);
+              return;
+            }
+            setLinkSelection({
+              link: match,
+              x: event.clientX + 8,
+              y: event.clientY + 8,
+            });
+          },
         })));
       },
     });
@@ -415,7 +461,7 @@ export function TerminalView({
       coarsePointer: () => coarse,
       settings: () => clipboardSettings.current,
       refuse: () => setProblem(t("terminal.clipboardRefused")),
-      enhancedKey: (event) => kittyKeyboard.encode(event),
+      enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current) ?? kittyKeyboard.encode(event),
       sendEnhancedKey: (sequence) => stream?.send(sequence),
     });
 
@@ -424,6 +470,7 @@ export function TerminalView({
 
     return () => {
       live = false;
+      terminalDisposed = true;
       clearInterval(timer);
       observer.disconnect();
       container.removeEventListener("touchstart", touchStart);
@@ -434,6 +481,7 @@ export function TerminalView({
       detachOsc52();
       kittyKeyboard.dispose();
       terminalLinks.dispose();
+      webgl?.dispose();
       searchResultSubscription.dispose();
       stream?.close();
       view.dispose();
@@ -470,7 +518,7 @@ export function TerminalView({
 
   return (
     <section aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
+      <div className="relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
         <span
           aria-hidden="true"
           className={`size-2 shrink-0 rounded-full ${
@@ -497,42 +545,42 @@ export function TerminalView({
         </div>
         <button
           type="button"
-          aria-label={t("terminal.quickCommands")}
-          title={t("terminal.quickCommands")}
-          className="rounded border border-control-line px-2 py-0.5 font-mono text-xs text-ink-muted hover:bg-select-fill"
-          onClick={() => setQuickCommandsOpen((current) => !current)}
-        >
-          &gt;_
-        </button>
-        <button
-          type="button"
-          aria-label={t("terminal.copyContext")}
-          title={t("terminal.copyContextHint")}
-          className="ml-auto rounded border border-control-line px-2 py-0.5 text-xs text-ink-muted hover:bg-select-fill"
-          onClick={() => copyContext.current()}
-        >
-          ⧉
-        </button>
-        <button
-          type="button"
-          aria-pressed={osc52Enabled}
-          title={t("terminal.osc52Hint")}
-          className={`rounded border px-2 py-0.5 text-[11px] font-medium ${osc52Enabled ? "border-live/50 bg-live/10 text-live" : "border-control-line text-ink-muted hover:bg-select-fill"}`}
-          onClick={() => {
-            const next = !osc52Enabled;
-            setOsc52Enabled(next);
-            setTerminalNotice(t(next ? "terminal.osc52Enabled" : "terminal.osc52Disabled"));
-          }}
-        >
-          OSC 52
-        </button>
-        <button
-          type="button"
-          className="rounded border border-control-line px-2 py-0.5 text-xs text-ink-muted hover:bg-select-fill"
+          aria-label={t("terminal.search")}
+          title={t("terminal.search")}
+          className="rounded border border-control-line px-2 py-1 text-xs text-ink-muted hover:bg-select-fill"
           onClick={() => setSearchOpen((current) => !current)}
         >
-          {t("terminal.search")}
+          <Icon name="search" className="size-3.5" />
         </button>
+        <button
+          type="button"
+          aria-label={t("terminal.moreActions")}
+          aria-expanded={overflowOpen}
+          className="rounded border border-control-line px-2 py-1 text-ink-muted hover:bg-select-fill"
+          onClick={() => setOverflowOpen((current) => !current)}
+        >
+          <Icon name="moreHorizontal" className="size-3.5" />
+        </button>
+        {overflowOpen ? (
+          <TerminalOverflowMenu
+            osc52Enabled={osc52Enabled}
+            onQuickCommands={() => {
+              setQuickCommandSelection(terminal.current?.getSelection() ?? "");
+              setQuickCommandsOpen(true);
+            }}
+            onCopyContext={() => copyContext.current()}
+            onToggleOsc52={() => {
+              const previous = osc52Enabled;
+              const next = !osc52Enabled;
+              setOsc52Enabled(next);
+              setTerminalNotice(t(next ? "terminal.osc52Enabled" : "terminal.osc52Disabled"));
+              void Promise.resolve()
+                .then(() => onOsc52Change?.(next))
+                .catch(() => setOsc52Enabled(previous));
+            }}
+            onClose={() => setOverflowOpen(false)}
+          />
+        ) : null}
       </div>
       {problem === "" ? null : (
         <p role="status" className="shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
@@ -702,6 +750,7 @@ export function TerminalView({
       {quickCommandsOpen ? (
         <TerminalQuickCommands
           session={session}
+          initialCommand={quickCommandSelection}
           onClose={() => setQuickCommandsOpen(false)}
         />
       ) : null}

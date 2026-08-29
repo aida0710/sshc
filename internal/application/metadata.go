@@ -17,7 +17,7 @@ import (
 
 const (
 	// MetadataSchemaVersion はこのビルドが書き込むバージョンである。
-	MetadataSchemaVersion = 3
+	MetadataSchemaVersion = 4
 	MetadataFileName      = "metadata.json"
 	DefaultGroupsFile     = "groups.sshc.conf"
 )
@@ -29,6 +29,7 @@ var (
 	ErrMetadataGroup    = errors.New("metadata group definition is invalid")
 	ErrMetadataTerminal = errors.New("metadata terminal settings are invalid")
 	ErrMetadataEncoding = errors.New("metadata terminal encoding is invalid")
+	ErrMetadataOSC52    = errors.New("metadata OSC 52 policy is invalid")
 )
 
 var secretMarkers = []string{"-----BEGIN", "PRIVATE KEY", "ssh-rsa ", "ssh-ed25519 ", "ecdsa-sha2-"}
@@ -58,6 +59,8 @@ type HostMetadata struct {
 	Appearance *TerminalAppearance `json:"appearance,omitempty"`
 	// Encoding は、接続先との間で使う文字コード。空はUTF-8である。
 	Encoding string `json:"encoding,omitempty"`
+	// OSC52 は、このSSH接続だけのclipboard policyである。空は全体設定を継ぐ。
+	OSC52 string `json:"osc52,omitempty"`
 }
 
 // EngineSettings は、engine そのものの設定である。
@@ -101,6 +104,15 @@ type EmbeddedTerminal struct {
 	Reconnect       *int  `json:"reconnect,omitempty"`
 	CopyOnSelect    *bool `json:"copyOnSelect,omitempty"`
 	RightClickPaste *bool `json:"rightClickPaste,omitempty"`
+	// BrowserScrollbackLines はbrowserのxtermが保持する表示行数である。
+	// ScrollbackBytesはengineが再接続時に再生するbyte ringで、用途が異なる。
+	BrowserScrollbackLines int `json:"browserScrollbackLines,omitempty"`
+	// OSC52は全接続の既定。HostMetadata.OSC52が設定されていればそちらを優先する。
+	OSC52 bool `json:"osc52,omitempty"`
+	// JISYenBackslashはJIS配列の¥キーをbackslashとして端末へ送る。
+	JISYenBackslash bool `json:"jisYenBackslash,omitempty"`
+	// LocalShellProfileは検出済みprofileの安定IDであり、command文字列ではない。
+	LocalShellProfile string `json:"localShellProfile,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。
 	StartDirectory string `json:"startDirectory,omitempty"`
 	// Appearance は、どの接続にも選ばれていないときの見た目である。
@@ -152,13 +164,22 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if len(strings.TrimSpace(string(contents))) == 0 {
 		return NewMetadata(), nil
 	}
+	var version struct {
+		SchemaVersion int `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal(contents, &version); err != nil {
+		return Metadata{}, err
+	}
+	if version.SchemaVersion != MetadataSchemaVersion && version.SchemaVersion != MetadataSchemaVersion-1 {
+		return Metadata{}, ErrMetadataVersion
+	}
 	var metadata Metadata
 	if err := json.Unmarshal(contents, &metadata); err != nil {
 		return Metadata{}, err
 	}
-	if metadata.SchemaVersion != MetadataSchemaVersion {
-		return Metadata{}, ErrMetadataVersion
-	}
+	// v3→v4は追加fieldだけの純粋なmigrationである。旧scrollbackBytesはengineの
+	// replay bufferとして意味を変えず、browser側は未設定の既定行数から始める。
+	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile
 	}
@@ -208,6 +229,14 @@ func ValidateMetadata(metadata Metadata) error {
 			(settings.FontSize < terminal.MinFontSize || settings.FontSize > terminal.MaxFontSize) {
 			return fmt.Errorf("%w: fontSize %d", ErrMetadataTerminal, settings.FontSize)
 		}
+		if settings.BrowserScrollbackLines != 0 &&
+			(settings.BrowserScrollbackLines < terminal.MinBrowserScrollbackLines ||
+				settings.BrowserScrollbackLines > terminal.MaxBrowserScrollbackLines) {
+			return fmt.Errorf("%w: browserScrollbackLines %d", ErrMetadataTerminal, settings.BrowserScrollbackLines)
+		}
+		if settings.LocalShellProfile != "" && !validShellProfileID(settings.LocalShellProfile) {
+			return fmt.Errorf("%w: localShellProfile", ErrMetadataTerminal)
+		}
 	}
 	if _, err := checkRelative(metadata.GroupsPath()); err != nil {
 		return err
@@ -242,6 +271,9 @@ func ValidateMetadata(metadata Metadata) error {
 				return ErrMetadataEncoding
 			}
 		}
+		if host.OSC52 != "" && host.OSC52 != "allow" && host.OSC52 != "deny" {
+			return ErrMetadataOSC52
+		}
 		for _, text := range append([]string{host.Note, host.Colour}, host.Tags...) {
 			if containsSecretMarker(text) {
 				return ErrMetadataSecret
@@ -249,6 +281,19 @@ func ValidateMetadata(metadata Metadata) error {
 		}
 	}
 	return nil
+}
+
+func validShellProfileID(value string) bool {
+	if len(value) > 64 {
+		return false
+	}
+	for _, character := range value {
+		if character >= 'a' && character <= 'z' || character >= '0' && character <= '9' || character == '-' {
+			continue
+		}
+		return false
+	}
+	return value != ""
 }
 
 func checkRelative(candidate string) (string, error) {

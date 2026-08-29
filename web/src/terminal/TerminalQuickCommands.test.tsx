@@ -7,6 +7,7 @@ import { TerminalQuickCommands } from "./TerminalQuickCommands";
 
 const mocks = vi.hoisted(() => ({
   library: vi.fn(),
+  create: vi.fn(),
   preview: vi.fn(),
   dispatch: vi.fn(),
   writeText: vi.fn(),
@@ -14,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../snippets/api", async () => {
   const actual = await vi.importActual<typeof import("../snippets/api")>("../snippets/api");
-  return { ...actual, snippetsApi: { ...actual.snippetsApi, library: mocks.library } };
+  return { ...actual, snippetsApi: { ...actual.snippetsApi, library: mocks.library, create: mocks.create } };
 });
 vi.mock("../features/workspaces/commandApi", () => ({ terminalCommandApi: { preview: mocks.preview, dispatch: mocks.dispatch } }));
 vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: mocks.writeText } }));
@@ -42,6 +43,7 @@ describe("TerminalQuickCommands", () => {
     });
     mocks.writeText.mockResolvedValue(undefined);
     mocks.dispatch.mockResolvedValue({ results: [] });
+    mocks.create.mockResolvedValue({ id: "saved", name: "Deploy", command: "deploy --dry-run", variables: [], createdAt: "", updatedAt: "" });
   });
 
   it("previews an expanded snippet and inserts it without submitting", async () => {
@@ -50,6 +52,7 @@ describe("TerminalQuickCommands", () => {
     await userEvent.type(screen.getByRole("textbox"), "sshd");
     await userEvent.click(screen.getByRole("button", { name: "Preview execution" }));
     expect(await screen.findByText("systemctl status sshd")).toBeVisible();
+    expect(screen.getByText(/a password or passphrase prompt/)).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Insert" }));
     expect(mocks.preview).toHaveBeenNthCalledWith(2, expect.objectContaining({
       snippetId: "one", issueAction: true, submit: false, expectedReviewEvidence: "r", inputs: { unit: "sshd" }, targets: [{ targetId: "session-one", sessionId: "session-one" }],
@@ -109,5 +112,16 @@ describe("TerminalQuickCommands", () => {
     expect(await screen.findByText("curl example.invalid")).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent("The snippet or pane changed");
     expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("saves selected terminal text as a reusable snippet", async () => {
+    render(<LanguageProvider><TerminalQuickCommands session={session} initialCommand="deploy --dry-run" onClose={() => undefined} /></LanguageProvider>);
+    await screen.findByRole("option", { name: "Status" });
+    await userEvent.click(screen.getByRole("button", { name: "Save selection as snippet" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Snippet name" }), "Deploy");
+    await userEvent.click(screen.getByRole("button", { name: "Save snippet" }));
+
+    expect(mocks.create).toHaveBeenCalledWith({ name: "Deploy", command: "deploy --dry-run", description: "", variables: [] });
+    expect(await screen.findByText("Snippet saved.")).toBeVisible();
   });
 });

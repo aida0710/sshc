@@ -13,6 +13,12 @@ afterEach(() => {
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
     terminalSettings: vi.fn().mockResolvedValue({}),
+    localShellProfiles: vi.fn().mockResolvedValue({
+      profiles: [
+        { id: "default", label: "bash (default)", path: "/bin/bash", arguments: [], default: true },
+        { id: "fish", label: "fish", path: "/usr/bin/fish", arguments: [], default: false },
+      ],
+    }),
     engineSettings: vi.fn().mockResolvedValue({}),
     setEngineSettings: vi.fn(),
     setTerminalSettings: vi.fn().mockResolvedValue(undefined),
@@ -225,6 +231,29 @@ describe("SettingsPanel", () => {
     expect(setTerminalSettings).toHaveBeenCalledWith({ maxSessions: 4 });
   });
 
+  it("saves both scrollback scopes, shell profile, OSC 52, and the JIS yen key", async () => {
+    const user = userEvent.setup();
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    await waitFor(() => expect(within(region).getByLabelText("Default local shell")).toBeEnabled());
+    await user.type(within(region).getByLabelText("Engine replay buffer (bytes)"), "65536");
+    await user.type(within(region).getByLabelText("Browser scrollback (lines)"), "12000");
+    await user.selectOptions(within(region).getByLabelText("Default local shell"), "fish");
+    await user.click(within(region).getByRole("checkbox", { name: /Allow OSC 52/ }));
+    await user.click(within(region).getByRole("checkbox", { name: /Send the JIS/ }));
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setTerminalSettings).toHaveBeenCalledWith({
+      scrollbackBytes: 65536,
+      browserScrollbackLines: 12000,
+      localShellProfile: "fish",
+      osc52: true,
+      jisYenBackslash: true,
+    });
+  });
+
   it("shows both clipboard conveniences on by default and saves each disabled choice", async () => {
     const user = userEvent.setup();
     const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
@@ -291,7 +320,7 @@ describe("SettingsPanel", () => {
 
     const region = await screen.findByRole("region", { name: "Terminal" });
     expect(await within(region).findByLabelText("Consoles open at once")).toHaveValue(4);
-    expect(within(region).getByLabelText("Scrollback per console (bytes)")).toHaveValue(null);
+    expect(within(region).getByLabelText("Engine replay buffer (bytes)")).toHaveValue(null);
     expect(within(region).getByLabelText("Starting directory")).toHaveValue("");
   });
 

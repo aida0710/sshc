@@ -278,6 +278,20 @@ describe("ConsoleList", () => {
     expect(props.onOpenShell).toHaveBeenCalledOnce();
   });
 
+  it("opens a detected shell profile once without changing the default", async () => {
+    const user = userEvent.setup();
+    const props = renderList({
+      localShellProfiles: [
+        { id: "default", label: "bash", path: "/bin/bash", arguments: [], default: true },
+        { id: "fish", label: "fish", path: "/usr/bin/fish", arguments: [], default: false },
+      ],
+    });
+
+    await user.selectOptions(screen.getByLabelText("Open another local shell once"), "fish");
+
+    expect(props.onOpenShell).toHaveBeenCalledWith("fish");
+  });
+
   it("stops offering a new shell once the live limit is reached", () => {
     renderList({ sessions: [live, shell], maxSessions: 2 });
 

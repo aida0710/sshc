@@ -6,6 +6,24 @@ export type TerminalLinkMatch = {
   end: number;
 };
 
+export function isSafeHttpURL(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function modifierOpensLink(event: Pick<MouseEvent, "ctrlKey" | "metaKey">): boolean {
+  return event.ctrlKey || event.metaKey;
+}
+
+export function osc8Link(target: string, visibleText: string, start: number, end: number): TerminalLinkMatch | null {
+  if (!isSafeHttpURL(target) || target.length > maxLinkLength) return null;
+  return { kind: "url", text: visibleText || target, target, start, end };
+}
+
 const maxLinkLength = 4096;
 const urlPattern = /https?:\/\/[^\s<>"'`]+/giu;
 const pathPattern = /(?:^|[\s([{=])((?:\/[A-Za-z0-9._~@%+,:=-]+)+(?::\d+(?::\d+)?)?)/gu;
