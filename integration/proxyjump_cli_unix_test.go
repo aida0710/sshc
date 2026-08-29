@@ -120,11 +120,11 @@ Host proxyjump-integration-destination
 	}
 
 	connection := startOnTerminal(t, home, "ssh", "proxyjump-integration-destination")
-	connection.expect(t, "proxyjump-integration-jump の接続完了（1/2）", 30*time.Second)
-	connection.expect(t, "proxyjump-integration-destination の接続完了（2/2）", 30*time.Second)
+	connection.expect(t, "proxyjump-integration-jump に接続しました（1/2）", 30*time.Second)
+	connection.expect(t, "proxyjump-integration-destination に接続しました（2/2）", 30*time.Second)
 	// 2/2 は最終SSH handshakeの完了であり、remote shellの開始完了ではない。
 	// ここより前の入力は認証回答への混入を防ぐため意図的に捨てられる。
-	connection.expect(t, "[sshc] 開きました。", 20*time.Second)
+	connection.expect(t, "[sshc] セッションを開始しました。", 20*time.Second)
 	connection.typeLine(t, "echo proxyjump-cli-e2e-ok; exit")
 	connection.expect(t, "proxyjump-cli-e2e-ok", 20*time.Second)
 	if code := connection.wait(t, 30*time.Second); code != 0 {
