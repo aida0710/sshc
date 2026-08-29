@@ -93,7 +93,7 @@ sshc sync auto on             # engine の自動同期設定を永続化（off �
 
 `sync setup` は stdin と prompt 出力の両方が対話端末の場合だけ動作し、access key、secret key、sync key を引数・環境変数・ファイルから受け取りません。空の同期先では生成された sync key をその端末に一度だけ表示します。別端末の復元に必要なので、安全な保管先へその場で保存してください。
 
-通常の push は remote が変化すると CAS で拒否されます。`push --force` も無条件上書きではなく、action token が確認時の exact ETag に結び付き、競合後の自動再確認・再試行をしません。通常の pull は conflict と removal を適用せず、`pull --force` も preview の ETag と revision が変化すれば拒否します。`--json` を持つ sync 操作は stdout に結果または安定した failure を一つだけ出します。
+通常の push は remote が変化すると CAS で拒否されます。`push --force` も無条件上書きではなく、action token が確認時の exact ETag に結び付き、競合後の自動再確認・再試行をしません。通常の pull は conflict と removal を適用せず、`pull --force` も preview の ETag と revision が変化すれば拒否します。`--json` を持つ sync 操作は stdout に結果または安定した failure を一つだけ出します。mutation 後の通信切断などで `outcome_unknown` になった場合は自動再実行せず、`sshc sync` と remote の状態を確認してください。
 
 SSH接続の文字コードは接続詳細で保存できます。UTF-8、Shift_JIS、EUC-JP、ISO-2022-JPに対応し、ブラウザのターミナル、`sshc ssh <接続先>`、`--non-interactive`で同じ設定を使用します。
 

@@ -173,6 +173,65 @@ func TestRunSyncCanceledReturns130(t *testing.T) {
 	}
 }
 
+func TestSyncUnknownMutationOutcomeIsNeverReportedAsRetryable(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		exit int
+	}{
+		{
+			name: "transport failure",
+			err: engineProblem{
+				Code: "transport_error", Retryable: true, OutcomeUnknown: true,
+			},
+			exit: 1,
+		},
+		{
+			name: "invalid successful response",
+			err: engineProblem{
+				Status: http.StatusOK, Code: "invalid_response", OutcomeUnknown: true,
+			},
+			exit: 1,
+		},
+		{
+			name: "canceled mutation",
+			err: engineProblem{
+				Code: "transport_error", Retryable: false, OutcomeUnknown: true,
+				cause: context.Canceled,
+			},
+			exit: 130,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for _, asJSON := range []bool{false, true} {
+				var stdout, stderr strings.Builder
+				if code := finishSyncFailure(asJSON, test.err, &stdout, &stderr); code != test.exit {
+					t.Fatalf("json=%v code=%d, want %d", asJSON, code, test.exit)
+				}
+				if asJSON {
+					if stderr.Len() != 0 {
+						t.Fatalf("JSON failure wrote stderr %q", stderr.String())
+					}
+					var envelope commandEnvelope
+					if err := json.Unmarshal([]byte(stdout.String()), &envelope); err != nil {
+						t.Fatal(err)
+					}
+					if envelope.Failure == nil || envelope.Failure.Kind != "outcome_unknown" ||
+						envelope.Failure.Retryable {
+						t.Fatalf("failure = %+v", envelope.Failure)
+					}
+					continue
+				}
+				if stdout.Len() != 0 || !strings.Contains(stderr.String(), "outcome is unknown") ||
+					!strings.Contains(stderr.String(), "do not rerun") || strings.Contains(stderr.String(), "try again") {
+					t.Fatalf("human failure stdout=%q stderr=%q", stdout.String(), stderr.String())
+				}
+			}
+		})
+	}
+}
+
 func TestSyncStatusFailureNeverPrintsEngineProblemMessage(t *testing.T) {
 	body := `{"code":"sync_failed","message":"` + syncOutputSecretCanary + `"}`
 	server, stateDir := runSyncTestServer(t, http.StatusBadGateway, body)

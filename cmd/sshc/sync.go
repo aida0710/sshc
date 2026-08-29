@@ -271,6 +271,10 @@ func finishSyncFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
 }
 
 func classifyCommandFailure(err error) commandFailure {
+	var problem engineProblem
+	if errors.As(err, &problem) && problem.OutcomeUnknown {
+		return commandFailure{Kind: "outcome_unknown", Retryable: false}
+	}
 	switch {
 	case errors.Is(err, context.Canceled):
 		return commandFailure{Kind: "canceled", Retryable: true}
@@ -295,7 +299,6 @@ func classifyCommandFailure(err error) commandFailure {
 	case errors.Is(err, errEngineInvalidResponse), errors.Is(err, errEngineResponseTooLarge):
 		return commandFailure{Kind: "invalid_engine_response", Retryable: false}
 	}
-	var problem engineProblem
 	if errors.As(err, &problem) {
 		retryable := problem.Retryable
 		switch problem.Code {
@@ -331,6 +334,8 @@ func writeHumanSyncFailure(stderr io.Writer, failure commandFailure) {
 		fmt.Fprintln(stderr, "sshc: sync is not configured; run sshc sync setup")
 	case "sync_remote_moved", "sync_remote_deleted", "preview_stale", "sync_setup_target_changed":
 		fmt.Fprintf(stderr, "sshc: remote sync state changed (%s); run the command again to inspect the new state\n", failure.Kind)
+	case "outcome_unknown":
+		fmt.Fprintln(stderr, "sshc: the sync operation outcome is unknown; do not rerun it until you inspect sshc sync status and the remote target")
 	case "transport_error", "sync_failed", "bucket_refused", "engine_unavailable":
 		fmt.Fprintln(stderr, "sshc: the engine or sync target is unavailable; check the engine and network, then try again")
 	case "invalid_engine_response", "response_too_large", "http_error":

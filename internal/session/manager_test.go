@@ -260,6 +260,38 @@ func TestIssueExpiringRejectsNonPositiveLifetime(t *testing.T) {
 	}
 }
 
+func TestIssueExpiringPrunesExpiredCommandSessionsWithoutRemovingBrowserSessions(t *testing.T) {
+	manager, bootstrap, err := NewManager(&countingReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0).UTC()
+	manager.Now = func() time.Time { return now }
+
+	if _, err := manager.IssueExpiring(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	browser, err := manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manager.sessions) != 2 {
+		t.Fatalf("sessions before deadline = %d, want 2", len(manager.sessions))
+	}
+
+	now = now.Add(time.Minute)
+	latest, err := manager.IssueExpiring(time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manager.sessions) != 2 {
+		t.Fatalf("sessions after sweep = %d, want browser plus latest CLI session", len(manager.sessions))
+	}
+	if !manager.Authenticate(browser.SessionID) || !manager.Authenticate(latest.SessionID) {
+		t.Fatal("sweep removed an active session")
+	}
+}
+
 func TestCommandSessionDoesNotConsumeBrowserBootstrap(t *testing.T) {
 	manager, bootstrap, err := NewManager(&countingReader{})
 	if err != nil {
