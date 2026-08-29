@@ -48,14 +48,17 @@ func TestATracerStopsAtTheDepthItWasGiven(t *testing.T) {
 	}
 }
 
-// 端末は CRLF を要る。生の \n だけを送ると、次の行が前の行の右端から始まる
-// PTY はここを通っていないので、誰も直してくれない。
+// 端末は行末にCRLFを要るが、行頭にも置くと連続する診断の間に空行が生まれる。
+// PTYはここを通っていないので、必要な改行を出力側が一つだけ置く。
 func TestEveryTracedLineEndsTheWayATerminalNeeds(t *testing.T) {
 	var out bytes.Buffer
-	newTracer(Brief, &out).say(Brief, "繋ぎます")
+	trace := newTracer(Brief, &out)
+	trace.say(Brief, "繋ぎます")
+	trace.say(Brief, "接続完了")
 	written := out.String()
-	if !strings.HasPrefix(written, "\r\n") || !strings.HasSuffix(written, "\r\n") {
-		t.Errorf("written = %q, want it wrapped in CRLF", written)
+	want := "[sshc] 繋ぎます\r\n[sshc] 接続完了\r\n"
+	if written != want {
+		t.Errorf("written = %q, want %q", written, want)
 	}
 	if strings.Contains(strings.ReplaceAll(written, "\r\n", ""), "\n") {
 		t.Errorf("written = %q, want no bare newline", written)

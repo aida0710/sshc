@@ -99,6 +99,10 @@ type Target struct {
 	HostName string
 	Port     string
 	User     string
+	// authenticationBindingOverride は、非対話処理がhost key方針だけを安全側へ
+	// 強制した場合に、利用者が確認した元の接続経路を保持する。接続先や経路を
+	// 変えたときに設定してはならない。
+	authenticationBindingOverride string
 	// Encoding is applied only to terminal and command payload bytes after the
 	// SSH protocol has been decoded. Empty and UTF8 both mean UTF-8.
 	Encoding textencoding.Name
@@ -174,6 +178,9 @@ func appendJumpRoute(route []Target, hop Target) []Target {
 // when this digest still matches the value recorded when the assignment was made.
 // Alias is deliberately absent: renaming an alias does not change its peer.
 func (t Target) AuthenticationBinding() string {
+	if t.authenticationBindingOverride != "" {
+		return t.authenticationBindingOverride
+	}
 	type destination struct {
 		HostName          string
 		Port              string

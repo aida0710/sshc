@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -350,6 +351,72 @@ func TestStreamUsesAStoredPasswordForOneHiddenQuestion(t *testing.T) {
 		context.Background(), targetWith(server), "true",
 		sshclient.Streams{Out: io.Discard, Err: io.Discard},
 	)
+
+	if err != nil {
+		t.Fatalf("Stream = %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+}
+
+// 非対話接続はhost key方針をyesへ強化するが、それは接続先の変更ではない。
+// 保存時のbindingがaccept-new等でも、既知hostへの保存passwordは使える必要がある。
+func TestStreamHostKeyHardeningDoesNotInvalidateAStoredPassword(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	target := targetWith(server)
+	target.Strict = "accept-new"
+	binding := target.AuthenticationBinding()
+	auth := sshclient.Auth{Password: func(candidate sshclient.Target) (string, bool) {
+		return "hunter2", candidate.AuthenticationBinding() == binding
+	}}
+
+	code, err := dialerFor(t, server, auth).Stream(
+		context.Background(), target, "true",
+		sshclient.Streams{Out: io.Discard, Err: io.Discard},
+	)
+
+	if err != nil {
+		t.Fatalf("Stream = %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+}
+
+func TestStreamKeepsStoredPasswordBindingsAcrossAProxyJump(t *testing.T) {
+	inner := newTestServer(t, serverOptions{Password: "far-password"})
+	edge := newTestServer(t, serverOptions{
+		Password: "edge-password", AllowDirectTCPIP: true,
+		Reached: map[string]func() net.Conn{inner.Address(): func() net.Conn { return inner.Dial() }},
+	})
+	target := targetWith(inner)
+	target.Alias = "destination"
+	target.Strict = "accept-new"
+	jump := targetWith(edge)
+	jump.Alias = "mdx-jamstec-1"
+	jump.Strict = "no"
+	target.Jump = []sshclient.Target{jump}
+	bindings := map[string]string{
+		target.Alias: target.AuthenticationBinding(),
+		jump.Alias:   jump.AuthenticationBinding(),
+	}
+	passwords := map[string]string{
+		target.Alias: "far-password",
+		jump.Alias:   "edge-password",
+	}
+	known := knownHostsLine("["+edge.Host()+"]:"+edge.Port(), edge.HostKey.PublicKey()) +
+		knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())
+	dialer := sshclient.Dialer{
+		Auth: sshclient.Auth{Password: func(candidate sshclient.Target) (string, bool) {
+			password, found := passwords[candidate.Alias]
+			return password, found && candidate.AuthenticationBinding() == bindings[candidate.Alias]
+		}},
+		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+	}
+
+	code, err := dialer.Stream(context.Background(), target, "hostname",
+		sshclient.Streams{Out: io.Discard, Err: io.Discard})
 
 	if err != nil {
 		t.Fatalf("Stream = %v", err)

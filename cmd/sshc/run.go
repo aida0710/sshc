@@ -41,9 +41,7 @@ func runRemote(
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return sshclient.RemoteFailureExit
 	}
-	for _, warning := range answer.Warnings {
-		fmt.Fprintf(stderr, "sshc: %s\n", warning)
-	}
+	writeConnectionNotices(stderr, answer)
 
 	connection, err := app.NewCLIConnection(home, savedPassphraseFor(answer), savedPasswordFor(answer))
 	if err != nil {
@@ -54,17 +52,19 @@ func runRemote(
 		In: stdin, Out: stdout, Err: stderr,
 	})
 	if err != nil {
-		fmt.Fprintf(stderr, "sshc: %v\n", runAdvice(err))
+		fmt.Fprintf(stderr, "sshc: %v\n", runAdvice(err, alias))
 		return code
 	}
 	return code
 }
 
 // runAdvice は非対話実行エラーに復旧手順を追加する。
-func runAdvice(err error) error {
+func runAdvice(err error, alias string) error {
 	switch {
 	case errors.Is(err, sshclient.ErrHostKeyUnknown):
-		return fmt.Errorf("%w; connect once with sshc ssh %s to decide about its host key", err, "<alias>")
+		return fmt.Errorf("%w; connect once with sshc ssh %s to decide about its host key", err, alias)
+	case errors.Is(err, sshclient.ErrPromptUnavailable):
+		return fmt.Errorf("%w; confirm a saved credential for %s in Connections, or use sshc ssh %s without --non-interactive to answer the prompt", err, alias, alias)
 	case errors.Is(err, sshclient.ErrProxyCommandWithJump):
 		return fmt.Errorf("%w; keep whichever one you meant", err)
 	}

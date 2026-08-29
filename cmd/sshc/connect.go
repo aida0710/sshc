@@ -114,12 +114,7 @@ func runConnect(
 		return 1
 	}
 
-	for _, warning := range answer.Warnings {
-		fmt.Fprintf(stderr, "sshc: %s\n", warning)
-	}
-	for _, stale := range answer.StalePasswords {
-		fmt.Fprintf(stderr, "sshc: saved password for %s was not used because its authentication route changed; select the password again in Connections to confirm the current route\n", stale)
-	}
+	writeConnectionNotices(stderr, answer)
 	// engine は ProxyJump を含む接続経路を解決済み。保存値が無い場合は端末で入力する。
 	connection, err := app.NewCLIConnection(home,
 		savedPassphraseFor(answer), savedPasswordFor(answer))
@@ -138,6 +133,16 @@ func runConnect(
 		return 1
 	}
 	return code
+}
+
+// writeConnectionNotices は対話接続と非対話実行に同じ接続診断を表示する。
+func writeConnectionNotices(stderr io.Writer, answer connectAnswer) {
+	for _, warning := range answer.Warnings {
+		fmt.Fprintf(stderr, "sshc: %s\n", warning)
+	}
+	for _, stale := range answer.StalePasswords {
+		fmt.Fprintf(stderr, "sshc: saved password for %s was not used because its authentication route changed; select the password again in Connections to confirm the current route\n", stale)
+	}
 }
 
 // connectAdvice は設定競合の解消方法をエラーに追加する。
