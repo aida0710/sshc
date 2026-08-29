@@ -41,6 +41,35 @@ func TestAgentObservationDrivesTitleAndSignalsWithoutExposingReference(t *testin
 	}
 }
 
+func TestOnlyTransientAgentObservationsExpire(t *testing.T) {
+	observedAt := time.Date(2026, 8, 29, 1, 0, 0, 0, time.UTC)
+	tests := []struct {
+		state AgentState
+		want  AgentState
+	}{
+		{state: AgentWorking, want: AgentUnknown},
+		{state: AgentAttention, want: AgentUnknown},
+		{state: AgentReady, want: AgentReady},
+	}
+	for _, test := range tests {
+		t.Run(string(test.state), func(t *testing.T) {
+			session := &Session{
+				kind: KindSSH, alias: "osaka", title: "osaka", fallbackTitle: "osaka",
+				titleSource: TitleConnection, generation: 1,
+				now: func() time.Time { return observedAt.Add(AgentObservationTTL + time.Second) },
+			}
+			session.acceptAgentEvent(1, agentEvent{
+				Version: 1, Agent: AgentCodex, Event: string(test.state), Session: "thread_123", Seq: 1,
+			}, observedAt)
+
+			view := session.View()
+			if view.Agent == nil || view.Agent.State != test.want {
+				t.Fatalf("agent=%+v, want state %q", view.Agent, test.want)
+			}
+		})
+	}
+}
+
 func TestPinnedTitleWinsAndUnpinRecomputes(t *testing.T) {
 	now := time.Date(2026, 8, 29, 1, 0, 0, 0, time.UTC)
 	session := &Session{kind: KindSSH, alias: "osaka", title: "osaka", fallbackTitle: "osaka", titleSource: TitleConnection, generation: 1, resume: agentResumeStub}

@@ -106,12 +106,19 @@ type agentCandidate struct {
 }
 
 const (
-	MaxAgentPayload        = 4096
-	MaxAgentDisplayRunes   = 160
+	MaxAgentPayload      = 4096
+	MaxAgentDisplayRunes = 160
+	// AgentObservationTTL prevents transient working or attention observations
+	// from remaining authoritative forever when a later hook is lost. Ready is
+	// a settled state and remains valid until another event or process exit.
 	AgentObservationTTL    = 5 * time.Minute
 	AgentCompletionFloor   = 3 * time.Second
 	AgentAttentionCooldown = 2 * time.Second
 )
+
+func agentObservationExpires(state AgentState) bool {
+	return state == AgentWorking || state == AgentAttention
+}
 
 var agentReference = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$`)
 

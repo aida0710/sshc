@@ -229,6 +229,17 @@ export const en = {
   "terminal.agentUnknown": "state unavailable",
   "terminal.agentNotificationAttention": "{subject} is waiting for input",
   "terminal.agentNotificationCompleted": "{subject} has finished",
+  "terminal.browserNotificationsHeading": "Notifications",
+  "terminal.browserNotificationsDefault": "Allow sshc to notify you when an Agent finishes or needs input while this tab is in the background.",
+  "terminal.browserNotificationsGranted": "Browser notifications are allowed. sshc only sends them while this tab is in the background.",
+  "terminal.browserNotificationsDenied": "Notifications are blocked for sshc. Allow them in this site's browser settings to enable Agent notifications.",
+  "terminal.browserNotificationsUnsupported": "This browser does not support web notifications.",
+  "terminal.browserNotificationsEnable": "Enable notifications",
+  "terminal.browserNotificationsTest": "Send test notification",
+  "terminal.browserNotificationsEnabled": "Notifications enabled",
+  "terminal.browserNotificationsReady": "Agent notifications are ready.",
+  "terminal.browserNotificationsRequestFailed": "Notification permission could not be requested.",
+  "terminal.browserNotificationsDeliveryFailed": "The browser allowed notifications but could not display one.",
   "terminal.agentResumeAvailable": "A {agent} session can be resumed.",
   "terminal.agentResumeSamePane": "Resume here",
   "terminal.agentResumeNewPane": "Resume in new pane",
@@ -303,9 +314,6 @@ export const en = {
   "terminal.searchPrevious": "Previous match",
   "terminal.searchNext": "Next match",
   "terminal.searchClose": "Close search",
-  "terminal.completions": "Command and remote path suggestions",
-  "terminal.commandSuggestion": "command",
-  "terminal.pathSuggestion": "path",
   "terminal.settingsHeading": "Terminal",
   "terminal.settingsSaved": "Saved. Clipboard choices apply now; new consoles use the other settings.",
   "terminal.settingsLoading": "Loading terminal settings…",
@@ -821,6 +829,12 @@ export const en = {
   "sync.wrongMaster": "The master password for this machine is incorrect.",
   "sync.unreachable":
     "The bucket did not respond. Nothing was saved. Check the endpoint, bucket name, and credentials.",
+  "sync.failed":
+    "Sync could not be completed. Nothing was overwritten. Check the connection and try again.",
+  "sync.localChanged":
+    "Settings on this machine changed after the preview. Nothing was overwritten. Check for changes again.",
+  "sync.workspaceBusy":
+    "Another operation is updating settings on this machine. Try again after it finishes.",
   "sync.endpointPath":
     "The endpoint is the account address only — no bucket name and no path. Put the bucket name in the field below.",
   "sync.auto": "Automatic sync",

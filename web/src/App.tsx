@@ -60,6 +60,7 @@ import { sftpTransferManager } from "./sftp/transferManager";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 import { CommandPalette } from "./shell/CommandPalette";
 import { setAndroidAppearance } from "./android/native";
+import { MobileNavigationSwipeEdge } from "./shell/mobileNavigationSwipe";
 
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -535,6 +536,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   return (
     <div className="flex h-screen flex-col bg-canvas text-ink">
       <IconSprite />
+      {navigationOpen ? null : <MobileNavigationSwipeEdge onOpen={() => setNavigationOpen(true)} />}
 
       <AppHeader
         route={route}

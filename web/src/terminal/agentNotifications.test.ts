@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../api/integrations";
 import { en, ja, type MessageKey } from "../i18n/messages";
 import type { Translate } from "../i18n/context";
-import { nextAgentNotification } from "./agentNotifications";
+import {
+  browserNotificationPermission,
+  nextAgentNotification,
+  requestBrowserNotificationPermission,
+  showBrowserNotification,
+} from "./agentNotifications";
 
 const session: TerminalSession = {
   id: "one", kind: "ssh", alias: "osaka", title: "API認証の修正",
@@ -34,5 +39,47 @@ describe("agent notification policy", () => {
     expect(notification?.body).toBe("API認証の修正（osaka）が入力を待っています");
     expect(notification?.body).not.toContain("thread");
     expect(nextAgentNotification(translator("ja"), session, 2)).toBeNull();
+  });
+});
+
+describe("browser notification permission", () => {
+  it("reports browsers without a usable Notification API as unsupported", async () => {
+    const target = {} as Window;
+    expect(browserNotificationPermission(target)).toBe("unsupported");
+    await expect(requestBrowserNotificationPermission(target)).resolves.toBe("unsupported");
+  });
+
+  it("requests permission only while it is undecided", async () => {
+    class FakeNotification {
+      static permission: NotificationPermission = "default";
+      static requestPermission = vi.fn(async () => {
+        FakeNotification.permission = "granted";
+        return "granted" as const;
+      });
+    }
+    const target = { Notification: FakeNotification } as unknown as Window;
+
+    await expect(requestBrowserNotificationPermission(target)).resolves.toBe("granted");
+    await expect(requestBrowserNotificationPermission(target)).resolves.toBe("granted");
+    expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it("delivers only after permission is granted", () => {
+    const delivered: Array<{ title: string; options: NotificationOptions | undefined }> = [];
+    class FakeNotification {
+      static permission: NotificationPermission = "denied";
+      static requestPermission = vi.fn();
+
+      constructor(title: string, options?: NotificationOptions) {
+        delivered.push({ title, options });
+      }
+    }
+    const target = { Notification: FakeNotification } as unknown as Window;
+    const message = { title: "sshc", body: "ready", tag: "test" };
+
+    expect(showBrowserNotification(message, target)).toBe(false);
+    FakeNotification.permission = "granted";
+    expect(showBrowserNotification(message, target)).toBe(true);
+    expect(delivered).toEqual([{ title: "sshc", options: { body: "ready", tag: "test" } }]);
   });
 });

@@ -1,9 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { IntegrationsApi } from "../api/integrations";
 import { SettingsPanel } from "./SettingsPanel";
+
+afterEach(() => vi.unstubAllGlobals());
 
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
@@ -31,6 +33,51 @@ async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("SettingsPanel", () => {
+  it("requests browser notification permission from an explicit click and confirms delivery", async () => {
+    const delivered: Array<{ title: string; options: NotificationOptions | undefined }> = [];
+    class FakeNotification {
+      static permission: NotificationPermission = "default";
+      static requestPermission = vi.fn(async () => {
+        FakeNotification.permission = "granted";
+        return "granted" as const;
+      });
+
+      constructor(title: string, options?: NotificationOptions) {
+        delivered.push({ title, options });
+      }
+    }
+    vi.stubGlobal("Notification", FakeNotification);
+    const user = userEvent.setup();
+    render(<SettingsPanel api={buildApi()} />);
+
+    const region = screen.getByRole("region", { name: "Notifications" });
+    await user.click(within(region).getByRole("button", { name: "Enable notifications" }));
+
+    await waitFor(() => expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1));
+    expect(await within(region).findByRole("status")).toHaveTextContent("Notifications enabled");
+    expect(within(region).getByRole("button", { name: "Send test notification" })).toBeVisible();
+    expect(delivered).toEqual([{
+      title: "sshc",
+      options: {
+        body: "Agent notifications are ready.",
+        tag: "sshc-notification-permission",
+      },
+    }]);
+  });
+
+  it("explains when browser notifications were blocked", () => {
+    class FakeNotification {
+      static permission: NotificationPermission = "denied";
+      static requestPermission = vi.fn();
+    }
+    vi.stubGlobal("Notification", FakeNotification);
+    render(<SettingsPanel api={buildApi()} />);
+
+    const region = screen.getByRole("region", { name: "Notifications" });
+    expect(within(region).getByText(/blocked for sshc/i)).toBeVisible();
+    expect(within(region).queryByRole("button")).toBeNull();
+  });
+
   it("does not accept terminal edits before initial settings finish loading", async () => {
     let finishLoading: (settings: { maxSessions: number }) => void = () => undefined;
     const terminalSettings = vi.fn(() => new Promise<{ maxSessions: number }>((resolve) => {

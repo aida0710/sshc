@@ -218,7 +218,7 @@ func (s *Session) View() View {
 	}
 	if s.agent != nil {
 		agent := s.agent.AgentView
-		if s.now != nil && s.now().Sub(s.agent.observedAt) > AgentObservationTTL {
+		if s.now != nil && agentObservationExpires(agent.State) && s.now().Sub(s.agent.observedAt) > AgentObservationTTL {
 			agent.State = AgentUnknown
 		}
 		agent.Resumable = s.resume != nil && (s.agent.reference != "" || s.agentCandidate != nil)
