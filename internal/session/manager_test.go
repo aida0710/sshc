@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 )
 
 func TestBootstrapCreatesAuthenticatedSessionOnce(t *testing.T) {
@@ -192,5 +193,126 @@ func TestReissueMintsAWayInWithoutDisturbingTheSessions(t *testing.T) {
 	// のためのアクセス URLであって、持っているものを終わらせる手段ではない。
 	if ok := manager.Authenticate(established.SessionID); !ok {
 		t.Error("an established session was lost")
+	}
+}
+
+func TestExpiringSessionStopsAuthenticatingAtItsDeadline(t *testing.T) {
+	manager, _, err := NewManager(&countingReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0).UTC()
+	manager.Now = func() time.Time { return now }
+
+	credentials, err := manager.IssueExpiring(10 * time.Minute)
+	if err != nil {
+		t.Fatalf("IssueExpiring = %v", err)
+	}
+	if !manager.Authenticate(credentials.SessionID) {
+		t.Fatal("new expiring session was not authenticated")
+	}
+	if !manager.VerifyCSRF(credentials.SessionID, credentials.CSRFToken) {
+		t.Fatal("new expiring session rejected its CSRF token")
+	}
+
+	now = now.Add(10 * time.Minute)
+	if manager.Authenticate(credentials.SessionID) {
+		t.Fatal("session remained authenticated at its deadline")
+	}
+	if manager.VerifyCSRF(credentials.SessionID, credentials.CSRFToken) {
+		t.Fatal("expired session still accepted its CSRF token")
+	}
+	if _, ok := manager.RenewCSRF(credentials.SessionID, credentials.CSRFToken); ok {
+		t.Fatal("expired session renewed its CSRF token")
+	}
+}
+
+func TestRevokingSessionWorksOnce(t *testing.T) {
+	manager, _, err := NewManager(&countingReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, err := manager.IssueExpiring(time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !manager.Revoke(credentials.SessionID) {
+		t.Fatal("first revoke did not find the session")
+	}
+	if manager.Revoke(credentials.SessionID) {
+		t.Fatal("second revoke found an already removed session")
+	}
+	if manager.Authenticate(credentials.SessionID) {
+		t.Fatal("revoked session remained authenticated")
+	}
+}
+
+func TestIssueExpiringRejectsNonPositiveLifetime(t *testing.T) {
+	manager, _, err := NewManager(&countingReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, lifetime := range []time.Duration{0, -time.Second} {
+		if _, err := manager.IssueExpiring(lifetime); !errors.Is(err, ErrInvalidLifetime) {
+			t.Errorf("IssueExpiring(%s) = %v, want ErrInvalidLifetime", lifetime, err)
+		}
+	}
+}
+
+func TestIssueExpiringPrunesExpiredCommandSessionsWithoutRemovingBrowserSessions(t *testing.T) {
+	manager, bootstrap, err := NewManager(&countingReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0).UTC()
+	manager.Now = func() time.Time { return now }
+
+	if _, err := manager.IssueExpiring(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	browser, err := manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manager.sessions) != 2 {
+		t.Fatalf("sessions before deadline = %d, want 2", len(manager.sessions))
+	}
+
+	now = now.Add(time.Minute)
+	latest, err := manager.IssueExpiring(time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manager.sessions) != 2 {
+		t.Fatalf("sessions after sweep = %d, want browser plus latest CLI session", len(manager.sessions))
+	}
+	if !manager.Authenticate(browser.SessionID) || !manager.Authenticate(latest.SessionID) {
+		t.Fatal("sweep removed an active session")
+	}
+}
+
+func TestCommandSessionDoesNotConsumeBrowserBootstrap(t *testing.T) {
+	manager, bootstrap, err := NewManager(&countingReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.IssueExpiring(time.Minute); err != nil {
+		t.Fatalf("IssueExpiring = %v", err)
+	}
+
+	browser, err := manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatalf("Bootstrap after IssueExpiring = %v", err)
+	}
+	if !manager.Authenticate(browser.SessionID) {
+		t.Fatal("browser session was not authenticated")
+	}
+
+	// Browser sessions deliberately have no deadline. The command-session clock
+	// must not silently impose one on established browser state.
+	manager.Now = func() time.Time { return time.Unix(4_000_000_000, 0).UTC() }
+	if !manager.Authenticate(browser.SessionID) {
+		t.Fatal("browser session unexpectedly expired")
 	}
 }

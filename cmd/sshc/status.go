@@ -79,14 +79,12 @@ func vaultState(answer statusAnswer) string {
 // requestStatus は取得済みの handoff が示す engine に状態を要求する。
 // 要求中の接続先変更を防ぐため handoff は読み直さない。
 func requestStatus(ctx context.Context, found handoff.Handoff, client *http.Client) (statusAnswer, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		found.URL+httpserver.StatusPath, nil)
+	request, err := newHandoffRequest(ctx, found, http.MethodGet, httpserver.StatusPath, nil)
 	if err != nil {
 		return statusAnswer{}, err
 	}
-	request.Header.Set(handoff.HeaderName, found.Secret)
 
-	response, err := client.Do(request)
+	response, err := noRedirectClient(client).Do(request)
 	if err != nil {
 		return statusAnswer{}, err
 	}

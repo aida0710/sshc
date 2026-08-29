@@ -258,6 +258,8 @@ func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	}
 	engine.POST(ConnectPath, handlers.Connect)
 	engine.POST(OpenPath, handlers.Open)
+	engine.POST(CLISessionPath, handlers.CLISession)
+	engine.DELETE(CLISessionPath, handlers.RevokeCLISession)
 	engine.GET(StatusPath, handlers.Status)
 	engine.POST(StopPath, handlers.Stop)
 	registerVaultCLIRoutes(engine, handlers)

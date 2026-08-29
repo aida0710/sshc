@@ -150,6 +150,25 @@ type Target struct {
 // Address は、dial する宛先である。
 func (t Target) Address() string { return net.JoinHostPort(t.HostName, t.Port) }
 
+// JumpRoute returns every ProxyJump hop in the order the TCP chain must open.
+// A hop may resolve another ProxyJump of its own, so the innermost prerequisite
+// comes before the hop which names it. Dialing and diagnostics share this route
+// to prevent the described path from diverging from the path actually used.
+func (t Target) JumpRoute() []Target {
+	var route []Target
+	for _, hop := range t.Jump {
+		route = appendJumpRoute(route, hop)
+	}
+	return route
+}
+
+func appendJumpRoute(route []Target, hop Target) []Target {
+	for _, prerequisite := range hop.Jump {
+		route = appendJumpRoute(route, prerequisite)
+	}
+	return append(route, hop)
+}
+
 // AuthenticationBinding returns a stable digest of the resolved destination and
 // the route used to authenticate it. Saved account passwords are released only
 // when this digest still matches the value recorded when the assignment was made.

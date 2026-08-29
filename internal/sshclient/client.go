@@ -68,7 +68,8 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 	if _, attached := session.attach(nil, closers); !attached {
 		return
 	}
-	trace.stage(terminal.ConnectionOpeningSession, target, len(target.Jump)+1, len(target.Jump)+1)
+	hops := len(target.JumpRoute()) + 1
+	trace.stage(terminal.ConnectionOpeningSession, target, hops, hops)
 	trace.say(Brief, "認証できました。セッションを開きます。")
 
 	remote, err := client.NewSession()
@@ -140,17 +141,18 @@ func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, se
 func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace *tracer) (*ssh.Client, []io.Closer, error) {
 	var closers []io.Closer
 	var through *ssh.Client
+	route := target.JumpRoute()
 
-	if len(target.Jump) > 0 && trace.enabled(Detailed) {
-		hops := make([]string, 0, len(target.Jump))
-		for _, hop := range target.Jump {
+	if len(route) > 0 && trace.enabled(Detailed) {
+		hops := make([]string, 0, len(route))
+		for _, hop := range route {
 			hops = append(hops, hop.Address())
 		}
 		trace.say(Detailed, "経由地 %d か所: %s", len(hops), strings.Join(hops, " → "))
 	}
 
-	hops := len(target.Jump) + 1
-	for index, hop := range target.Jump {
+	hops := len(route) + 1
+	for index, hop := range route {
 		client, err := d.connectOne(ctx, hop, through, prompt, trace, index+1, hops)
 		if err != nil {
 			closeAll(closers)

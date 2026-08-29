@@ -288,6 +288,8 @@ func TestServerReportsEveryRegisteredRoute(t *testing.T) {
 	want := map[string]bool{
 		"POST /api/v1/session/bootstrap": false,
 		"GET /api/v1/health":             false,
+		"POST /cli/session":              false,
+		"DELETE /cli/session":            false,
 	}
 	for _, route := range server.Routes() {
 		key := route.Method + " " + route.Path
