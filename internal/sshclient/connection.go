@@ -43,6 +43,11 @@ func (d Dialer) Connect(ctx context.Context, target Target) (*Connection, error)
 }
 
 func requireKnownHosts(target Target) Target {
+	// StrictHostKeyCheckingの強制は、非対話処理が資格情報を未知のhostへ送らないための
+	// 安全側の変更である。保存時に確認した接続経路そのものは変わっていないので、
+	// password bindingには強制前の値を使う。そうしないと、この関数自身が変更した
+	// Strictだけを理由に、正しい保存passwordを拒否してしまう。
+	target.authenticationBindingOverride = target.AuthenticationBinding()
 	target.Strict = "yes"
 	target.Jump = append([]Target(nil), target.Jump...)
 	for index := range target.Jump {

@@ -55,13 +55,13 @@ func newTracer(level Verbosity, writer io.Writer) *tracer {
 
 // say は、その level が求められていれば 1 行書く。
 //
-// 端末は CRLF を要る。生の \n だけを送ると、次の行が前の行の右端から
-// 始まる。PTY はここを通っていないので、誰も直してくれない。
+// 端末は行末にCRLFを要る。生の\nだけを送ると、次の行が前の行の右端から
+// 始まる。先頭にもCRLFを置くと、連続する診断の間が毎回空行になる。
 func (t *tracer) say(level Verbosity, format string, args ...any) {
 	if t == nil || t.writer == nil || level > t.level {
 		return
 	}
-	_, _ = io.WriteString(t.writer, "\r\n[sshc] "+fmt.Sprintf(format, args...)+"\r\n")
+	_, _ = io.WriteString(t.writer, "[sshc] "+fmt.Sprintf(format, args...)+"\r\n")
 }
 
 // announce は verbosity に関係なく ProxyCommand の実行を 1 行表示する。
@@ -69,7 +69,7 @@ func (t *tracer) announce(format string, args ...any) {
 	if t == nil || t.writer == nil {
 		return
 	}
-	_, _ = io.WriteString(t.writer, "\r\n[sshc] "+fmt.Sprintf(format, args...)+"\r\n")
+	_, _ = io.WriteString(t.writer, "[sshc] "+fmt.Sprintf(format, args...)+"\r\n")
 }
 
 // since は、始まりからの経過を返す。Full のときだけ意味を持つ。

@@ -72,6 +72,52 @@ func TestCLIUsesPasswordsWhenTheProxyJumpRouteStillMatches(t *testing.T) {
 	}
 }
 
+func TestConnectionNoticesIncludeStalePasswordsForEveryCLIMode(t *testing.T) {
+	var stderr bytes.Buffer
+	writeConnectionNotices(&stderr, connectAnswer{
+		Warnings:       []string{"configuration warning"},
+		StalePasswords: []string{"destination"},
+	})
+
+	output := stderr.String()
+	for _, want := range []string{
+		"sshc: configuration warning",
+		"saved password for destination was not used because its authentication route changed",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output = %q, want %q", output, want)
+		}
+	}
+}
+
+func TestRunAdviceNamesTheAliasAndNonInteractiveRecovery(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		want []string
+	}{
+		{
+			name: "unknown host key",
+			err:  sshclient.ErrHostKeyUnknown,
+			want: []string{"sshc ssh moon-tunnel", "host key"},
+		},
+		{
+			name: "authentication needs a prompt",
+			err:  sshclient.ErrPromptUnavailable,
+			want: []string{"moon-tunnel", "Connections", "without --non-interactive"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := runAdvice(test.err, "moon-tunnel").Error()
+			for _, want := range test.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("advice = %q, want %q", got, want)
+				}
+			}
+		})
+	}
+}
+
 func (probe *fakeProbe) Status(context.Context) (statusAnswer, error) {
 	probe.mutex.Lock()
 	defer probe.mutex.Unlock()
