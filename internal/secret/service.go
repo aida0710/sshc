@@ -853,6 +853,20 @@ func (s *Service) BoundPasswordFor(alias, binding string) string {
 	return value
 }
 
+// HasPasswordFor reports whether an unlocked vault has an account-password
+// assignment for alias without releasing the secret. Callers use this to tell
+// a missing assignment from one whose authentication binding became stale.
+func (s *Service) HasPasswordFor(alias string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.use()
+	if vault == nil {
+		return false
+	}
+	_, ok := vault.SecretFor(KindPassword, alias)
+	return ok
+}
+
 // KeyPassphraseFor は、鍵のワークスペース相対パスを、保存済みのパスフレーズへ
 // 解決する。鍵を二段階ではなく一度の操作でエージェントへ追加できるのはこれの
 // おかげであり、鍵 vault が import するのではなく、そこへ注入される。

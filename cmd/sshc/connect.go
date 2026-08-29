@@ -29,6 +29,7 @@ type connectAnswer struct {
 	// 行き先だけでなく ProxyJump の手前も含む。Passphrase とは別の名前空間である。
 	Passwords        map[string]string `json:"passwords"`
 	PasswordBindings map[string]string `json:"passwordBindings"`
+	StalePasswords   []string          `json:"stalePasswords"`
 	Warnings         []string          `json:"warnings"`
 }
 
@@ -115,6 +116,9 @@ func runConnect(
 
 	for _, warning := range answer.Warnings {
 		fmt.Fprintf(stderr, "sshc: %s\n", warning)
+	}
+	for _, stale := range answer.StalePasswords {
+		fmt.Fprintf(stderr, "sshc: saved password for %s was not used because its authentication route changed; select the password again in Connections to confirm the current route\n", stale)
 	}
 	// engine は ProxyJump を含む接続経路を解決済み。保存値が無い場合は端末で入力する。
 	connection, err := app.NewCLIConnection(home,
