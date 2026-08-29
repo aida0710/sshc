@@ -13,7 +13,7 @@
 ## 公開
 
 ```sh
-scripts/release/publish.sh v0.19.0
+scripts/release/publish.sh v0.20.0
 ```
 
 スクリプトは次を順番に行います。
@@ -22,7 +22,7 @@ scripts/release/publish.sh v0.19.0
 2. 注釈付きtagを作成してpush
 3. Release workflowを検出し、`release` environmentだけを承認
 4. workflowの全jobが成功するまで状態変化を表示
-5. Immutable Release、8成果物、checksums、全attestation、APK、実行可能なnative binary、release本文を検証
+5. Immutable Release、9成果物、checksums、全attestation、APK、実行可能なnative binary、release本文を検証
 6. stable releaseではHomebrew Formulaのtagとsource SHA-256を検証
 
 main CIまたはRelease workflowが失敗した場合、tagを動かしたり削除したりせず終了します。原因を修正して新しいpatch versionを作成してください。
