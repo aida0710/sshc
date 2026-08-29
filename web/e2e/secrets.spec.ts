@@ -131,7 +131,7 @@ test("keeps application controls in Settings and changes the master password the
   );
   await master.getByRole("button", { name: "Change the master password" }).click();
   expect((await changed).status()).toBe(200);
-  await expect(master.getByRole("status")).toContainText("local vault, sync settings, and local backups");
+  await expect(master.getByRole("status")).toContainText("local vault, snippets, sync settings, and local backups");
   await expect(master.getByLabel("Current master password", { exact: true })).toHaveValue("");
   await expect(master.getByLabel("New master password", { exact: true })).toHaveValue("");
   await expect(master.getByLabel("Confirm new master password", { exact: true })).toHaveValue("");
