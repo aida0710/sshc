@@ -71,9 +71,29 @@ sshc ssh <接続先>             # 保存済みの設定を使用して接続
 sshc ssh --list               # Host alias の一覧を表示
 sshc ssh <接続先> --non-interactive -- <コマンド>
                               # 対話端末を開かずリモートコマンドを実行
+sshc info <接続先>            # 実効接続先を表示（--json に対応、engine 不要）
 sshc status                   # エンジンの状態を表示（--json に対応）
 sshc update                   # Homebrew／install.sh経由の導入を更新
 ```
+
+`sshc info` は実際の接続と同じ解決処理を通り、`Include`、`Match`、`ProxyJump`、既定の `Port 22`、接続文字コードを反映します。保存済みパスワードや鍵パスフレーズは読みません。`SetEnv` の値と `ProxyCommand` のコマンド文字列も、任意の秘密を含み得るため表示しません。
+
+S3 互換ストレージとの同期は、起動済みの engine と解錠済みの vault を使用します。CLI が設定ファイルを直接復号したり、別の同期実装を持ったりはしません。
+
+```sh
+sshc sync setup               # 対話 TTY で接続先と資格情報を設定
+sshc sync                     # 同期状態を表示（--json に対応）
+sshc sync push                # 通常の条件付き push
+sshc sync push --force        # 確認した remote ETag にだけ force push
+sshc sync pull                # conflict／removal があれば適用せず拒否
+sshc sync pull --force        # exact preview を remote authoritative で適用
+sshc sync now                 # engine の同期巡回を今すぐ実行
+sshc sync auto on             # engine の自動同期設定を永続化（off で停止）
+```
+
+`sync setup` は stdin と prompt 出力の両方が対話端末の場合だけ動作し、access key、secret key、sync key を引数・環境変数・ファイルから受け取りません。空の同期先では生成された sync key をその端末に一度だけ表示します。別端末の復元に必要なので、安全な保管先へその場で保存してください。
+
+通常の push は remote が変化すると CAS で拒否されます。`push --force` も無条件上書きではなく、action token が確認時の exact ETag に結び付き、競合後の自動再確認・再試行をしません。通常の pull は conflict と removal を適用せず、`pull --force` も preview の ETag と revision が変化すれば拒否します。`--json` を持つ sync 操作は stdout に結果または安定した failure を一つだけ出します。
 
 SSH接続の文字コードは接続詳細で保存できます。UTF-8、Shift_JIS、EUC-JP、ISO-2022-JPに対応し、ブラウザのターミナル、`sshc ssh <接続先>`、`--non-interactive`で同じ設定を使用します。
 
