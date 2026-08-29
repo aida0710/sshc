@@ -101,9 +101,106 @@ func TestUnsupportedVaultCanRecoverTheNewestCompatibleGeneration(t *testing.T) {
 	}
 }
 
+func TestCompatibleBackupRecoveryReSealsProtectedDocumentsIntoTheRecoveredKeyGeneration(t *testing.T) {
+	service, workspace, manager := recoveryService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	protectedPath := filepath.Join(workspace.Root(), "sshc", "snippets.json")
+	plaintext := []byte(`{"schemaVersion":1,"snippets":[]}`)
+	if err := service.RegisterProtectedDocument(secret.ProtectedDocument{
+		Path: protectedPath,
+		Validate: func(document []byte) error {
+			if !bytes.Equal(document, plaintext) {
+				return errors.New("invalid protected document")
+			}
+			return nil
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sealedDocument, err := service.SealDocument(plaintext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(protectedPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(protectedPath, sealedDocument, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	candidate, err := secret.Create(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateSealed, err := candidate.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsupported, err := service.SealDocument([]byte(`{"schemaVersion":3,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vaultPath := filepath.Join(workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
+	if err := os.WriteFile(vaultPath, candidateSealed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Commit(storage.Request{
+		Operation: "test.install-unsupported-vault",
+		Changes: []storage.Change{{
+			Path: vaultPath, Contents: unsupported,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(candidateSealed)},
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service.Lock()
+
+	if err := service.RecoverCompatibleBackup(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	resealed, err := os.ReadFile(protectedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := service.OpenDocument(resealed)
+	if err != nil || !bytes.Equal(opened, plaintext) {
+		t.Fatalf("protected document after recovery = %q, %v", opened, err)
+	}
+}
+
 func TestUnsupportedVaultCanBeResetWithoutRemovingSSHFiles(t *testing.T) {
 	service, workspace, _ := recoveryService(t)
 	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	protectedPath := filepath.Join(workspace.Root(), "sshc", "snippets.json")
+	protectedPlaintext := []byte(`{"schemaVersion":1,"snippets":[{"command":"deploy --token=top-secret"}]}`)
+	if err := service.RegisterProtectedDocument(secret.ProtectedDocument{
+		Path: protectedPath,
+		Validate: func(document []byte) error {
+			if !bytes.Equal(document, protectedPlaintext) {
+				return errors.New("invalid protected document")
+			}
+			return nil
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	legacy := legacyVault(t, passphrase)
+	_, legacyKey, err := envelope.Open(legacy, passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	protectedSealed, err := legacyKey.Seal(protectedPlaintext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(protectedPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(protectedPath, protectedSealed, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.SetSyncSettings(secret.SyncSettings{
@@ -116,7 +213,7 @@ func TestUnsupportedVaultCanBeResetWithoutRemovingSSHFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	vaultPath := filepath.Join(workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
-	if err := os.WriteFile(vaultPath, legacyVault(t, passphrase), 0o600); err != nil {
+	if err := os.WriteFile(vaultPath, legacy, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	service.Lock()
@@ -136,6 +233,14 @@ func TestUnsupportedVaultCanBeResetWithoutRemovingSSHFiles(t *testing.T) {
 	}
 	if body, err := os.ReadFile(configPath); err != nil || string(body) != "Host bastion\n" {
 		t.Fatalf("SSH config = %q, %v", body, err)
+	}
+	resealed, err := os.ReadFile(protectedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := service.OpenDocument(resealed)
+	if err != nil || !bytes.Equal(opened, protectedPlaintext) {
+		t.Fatalf("protected document after reset = %q, %v", opened, err)
 	}
 	service.Lock()
 	if err := service.Unlock(passphrase); err != nil {
@@ -1073,6 +1178,76 @@ func TestChangingTheMasterPasswordReSealsTheVaultTheSettingsAndTheBackups(t *tes
 	}
 	if found == 0 {
 		t.Error("no backup was there to re-seal, so this proved nothing")
+	}
+}
+
+func TestChangingTheMasterPasswordAlsoSealsRegisteredApplicationDocuments(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".ssh", "sshc", "snippets.json")
+	plain := []byte(`{"schemaVersion":1,"snippets":[{"command":"deploy --token=top-secret"}]}`)
+	if err := service.RegisterProtectedDocument(secret.ProtectedDocument{
+		Path: path,
+		Validate: func(document []byte) error {
+			if !bytes.Contains(document, []byte(`"schemaVersion":1`)) {
+				return errors.New("invalid protected document")
+			}
+			return nil
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A legacy plaintext document can exist before its screen is first opened.
+	if err := os.WriteFile(path, plain, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sealedPath := filepath.Join(home, ".ssh", "sshc", "snippets-secondary")
+	if err := service.RegisterProtectedDocument(secret.ProtectedDocument{
+		Path: sealedPath, Validate: func(document []byte) error {
+			if !bytes.Equal(document, plain) {
+				return errors.New("invalid protected document")
+			}
+			return nil
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	oldSealed, err := service.SealDocument(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sealedPath, oldSealed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	const next = "a different master password"
+	if err := service.ChangeMasterPassword(passphrase, next); err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(sealed, []byte("top-secret")) {
+		t.Fatal("registered document remained plaintext after master password rotation")
+	}
+	service.Lock()
+	if err := service.Unlock(next); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := service.OpenDocument(sealed)
+	if err != nil || !bytes.Equal(opened, plain) {
+		t.Fatalf("OpenDocument = %q, %v", opened, err)
+	}
+	resealed, err := os.ReadFile(sealedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err = service.OpenDocument(resealed)
+	if err != nil || !bytes.Equal(opened, plain) {
+		t.Fatalf("OpenDocument(resealed) = %q, %v", opened, err)
 	}
 }
 

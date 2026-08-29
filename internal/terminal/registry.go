@@ -359,11 +359,16 @@ func (r *Registry) CommandTarget(id string) (CommandTarget, error) {
 
 // WriteCommand writes to the exact generation captured by CommandTarget.
 func (r *Registry) WriteCommand(ctx context.Context, target CommandTarget, command string) error {
+	return r.WriteCommandInput(ctx, target, command, true)
+}
+
+// WriteCommandInput writes to the exact generation and optionally appends Enter.
+func (r *Registry) WriteCommandInput(ctx context.Context, target CommandTarget, command string, submit bool) error {
 	session, ok := r.Lookup(target.ID)
 	if !ok {
 		return ErrNotFound
 	}
-	return session.WriteCommand(ctx, target.Generation, command)
+	return session.WriteCommandInput(ctx, target.Generation, command, submit)
 }
 
 // Reconnect は終了済みのSSHセッションを同じIDとscrollbackのまま開き直す。

@@ -34,6 +34,12 @@ func (r *commandRepository) Save(library snippets.Library) error {
 	return nil
 }
 
+func (r *commandRepository) Mutate(mutation func(*snippets.Library) error) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return mutation(&r.library)
+}
+
 func newTerminalCommandServer(t *testing.T) (*echo.Echo, session.Credentials, *terminal.Registry, *scriptedPTY, *snippets.Service) {
 	t.Helper()
 	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x4d}, 8192)))
@@ -124,6 +130,55 @@ func TestTerminalCommandPreviewAndDispatchUseTheExistingPTY(t *testing.T) {
 	}
 }
 
+func TestTerminalCommandInsertIsBoundToTheExactGenerationWithoutSubmitting(t *testing.T) {
+	engine, credentials, registry, process, _ := newTerminalCommandServer(t)
+	view := registry.Sessions()[0]
+	submit := false
+	request := terminalCommandPreviewRequest{
+		Command: stringPointer("printf ready"), Inputs: map[string]string{}, Submit: &submit,
+		Targets: []terminalCommandTargetRequest{{TargetId: "pane-a", SessionId: view.ID}},
+	}
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost,
+		"/api/v1/terminal/commands/preview", mustMarshal(t, request), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("preview = %d: %s", response.Code, response.Body.String())
+	}
+	var preview terminalCommandPreviewResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	dispatch := terminalCommandDispatchRequest{
+		Command: request.Command, Inputs: request.Inputs, Targets: request.Targets,
+		Submit: request.Submit, Evidence: preview.Evidence,
+	}
+	result := sendKeyRequest(t, engine, credentials, http.MethodPost,
+		"/api/v1/terminal/commands", mustMarshal(t, dispatch), preview.ActionToken)
+	if result.Code != http.StatusOK {
+		t.Fatalf("dispatch = %d: %s", result.Code, result.Body.String())
+	}
+	if got := process.keystrokes(); got != "printf ready" {
+		t.Fatalf("inserted input = %q", got)
+	}
+}
+
+func TestTerminalCommandInsertRefusesControlInput(t *testing.T) {
+	engine, credentials, registry, process, _ := newTerminalCommandServer(t)
+	view := registry.Sessions()[0]
+	submit := false
+	request := terminalCommandPreviewRequest{
+		Command: stringPointer("printf first\nprintf second"), Inputs: map[string]string{}, Submit: &submit,
+		Targets: []terminalCommandTargetRequest{{TargetId: "pane-a", SessionId: view.ID}},
+	}
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost,
+		"/api/v1/terminal/commands/preview", mustMarshal(t, request), "")
+	if response.Code != http.StatusBadRequest || problemCode(t, response.Body.Bytes()) != "terminal_command_insert_unsafe" {
+		t.Fatalf("unsafe insert = %d: %s", response.Code, response.Body.String())
+	}
+	if got := process.keystrokes(); got != "" {
+		t.Fatalf("unsafe insert wrote %q", got)
+	}
+}
+
 func TestTerminalCommandPreviewAndDispatchIncludeLocalShells(t *testing.T) {
 	engine, credentials, registry, sshProcess, _ := newTerminalCommandServer(t)
 	localProcess := newScriptedPTY()
@@ -167,7 +222,7 @@ func TestTerminalCommandPreviewAndDispatchIncludeLocalShells(t *testing.T) {
 	}
 }
 
-func TestTerminalCommandRefusesChangedPreviewAndSecretSnippet(t *testing.T) {
+func TestTerminalCommandRefusesChangedPreviewAndRedactsSecretUnlessExplicitlyRevealed(t *testing.T) {
 	engine, credentials, registry, process, service := newTerminalCommandServer(t)
 	sessionID := registry.Sessions()[0].ID
 	request := terminalCommandPreviewRequest{
@@ -202,12 +257,64 @@ func TestTerminalCommandRefusesChangedPreviewAndSecretSnippet(t *testing.T) {
 	secretRequest := terminalCommandPreviewRequest{
 		SnippetId: stringPointer(snippet.ID), Inputs: map[string]string{"token": "top-secret"}, Targets: request.Targets,
 	}
+	issueAction := false
+	secretRequest.IssueAction = &issueAction
 	secret := sendKeyRequest(t, engine, credentials, http.MethodPost,
 		"/api/v1/terminal/commands/preview", mustMarshal(t, secretRequest), "")
-	if secret.Code != http.StatusBadRequest || problemCode(t, secret.Body.Bytes()) != "terminal_command_secret_refused" {
+	if secret.Code != http.StatusOK || strings.Contains(secret.Body.String(), "top-secret") ||
+		!strings.Contains(secret.Body.String(), "[secret]") || process.keystrokes() != "" {
 		t.Fatalf("secret preview = %d: %s", secret.Code, secret.Body.String())
 	}
-	if strings.Contains(secret.Body.String(), "top-secret") || process.keystrokes() != "" {
-		t.Fatal("secret terminal command escaped or was written")
+	var passive terminalCommandPreviewResponse
+	if err := json.Unmarshal(secret.Body.Bytes(), &passive); err != nil {
+		t.Fatal(err)
+	}
+	if passive.ActionToken != "" || passive.ActionExpiresAt != "" {
+		t.Fatal("passive preview unexpectedly allocated an action token")
+	}
+	reveal := true
+	secretRequest.RevealCommand = &reveal
+	revealed := sendKeyRequest(t, engine, credentials, http.MethodPost,
+		"/api/v1/terminal/commands/preview", mustMarshal(t, secretRequest), "")
+	if revealed.Code != http.StatusOK || !strings.Contains(revealed.Body.String(), "top-secret") {
+		t.Fatalf("revealed secret preview = %d: %s", revealed.Code, revealed.Body.String())
+	}
+}
+
+func TestTerminalCommandRefusesAnActionWhenTheDisplayedPreviewChanged(t *testing.T) {
+	engine, credentials, registry, process, service := newTerminalCommandServer(t)
+	snippet, err := service.Create(snippets.Draft{Name: "Status", Command: "systemctl status sshd"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	issueAction := false
+	request := terminalCommandPreviewRequest{
+		SnippetId: stringPointer(snippet.ID), Inputs: map[string]string{}, IssueAction: &issueAction,
+		Targets: []terminalCommandTargetRequest{{TargetId: "pane-a", SessionId: registry.Sessions()[0].ID}},
+	}
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost,
+		"/api/v1/terminal/commands/preview", mustMarshal(t, request), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("passive preview = %d: %s", response.Code, response.Body.String())
+	}
+	var passive terminalCommandPreviewResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &passive); err != nil {
+		t.Fatal(err)
+	}
+	if passive.ReviewEvidence == "" {
+		t.Fatal("passive preview has no review evidence")
+	}
+	if _, err := service.Update(snippet.ID, snippets.Draft{Name: "Status", Command: "curl https://example.invalid"}); err != nil {
+		t.Fatal(err)
+	}
+	request.IssueAction = nil
+	request.ExpectedReviewEvidence = &passive.ReviewEvidence
+	rejected := sendKeyRequest(t, engine, credentials, http.MethodPost,
+		"/api/v1/terminal/commands/preview", mustMarshal(t, request), "")
+	if rejected.Code != http.StatusConflict || problemCode(t, rejected.Body.Bytes()) != "terminal_command_preview_changed" {
+		t.Fatalf("changed review = %d: %s", rejected.Code, rejected.Body.String())
+	}
+	if got := process.keystrokes(); got != "" {
+		t.Fatalf("changed review wrote %q", got)
 	}
 }

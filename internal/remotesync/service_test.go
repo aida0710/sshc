@@ -531,6 +531,77 @@ func TestASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	}
 }
 
+func TestSnippetDocumentIsResealedForTheReceivingMachine(t *testing.T) {
+	bucket := &fakeBucket{}
+	first := newInstallation(t, bucket, map[string]string{
+		remotesync.SnippetsPath: "ciphertext-from-machine-a",
+	})
+	logical := []byte(`{"schemaVersion":1,"snippets":[{"command":"deploy --token=top-secret"}]}`)
+	first.service.OpenSnippets = func() ([]byte, error) { return logical, nil }
+	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	second := newInstallation(t, bucket, map[string]string{})
+	second.service.OpenSnippets = func() ([]byte, error) { return nil, nil }
+	second.service.SealSnippets = func(document []byte) ([]byte, error) {
+		if !bytes.Equal(document, logical) {
+			t.Fatalf("SealSnippets received %q", document)
+		}
+		return []byte("ciphertext-from-machine-b"), nil
+	}
+	mutations := 0
+	second.service.SecretMutation = func(apply func() error) error {
+		mutations++
+		return apply()
+	}
+	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := second.service.Apply(result); err != nil {
+		t.Fatal(err)
+	}
+	if got := second.read(t, remotesync.SnippetsPath); got != "ciphertext-from-machine-b" {
+		t.Fatalf("local snippet file = %q", got)
+	}
+	if mutations != 1 {
+		t.Fatalf("secret mutation boundary entered %d times", mutations)
+	}
+}
+
+func TestSnippetApplyRejectsALocalEditMadeAfterPreview(t *testing.T) {
+	bucket := &fakeBucket{}
+	first := newInstallation(t, bucket, map[string]string{remotesync.SnippetsPath: "ciphertext-a"})
+	remoteDocument := []byte(`{"schemaVersion":1,"snippets":[{"command":"remote"}]}`)
+	first.service.OpenSnippets = func() ([]byte, error) { return remoteDocument, nil }
+	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	second := newInstallation(t, bucket, map[string]string{})
+	var localDocument []byte
+	second.service.OpenSnippets = func() ([]byte, error) { return localDocument, nil }
+	second.service.SealSnippets = func(document []byte) ([]byte, error) { return append([]byte("sealed:"), document...), nil }
+	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	localDocument = []byte(`{"schemaVersion":1,"snippets":[{"command":"local edit"}]}`)
+	second.write(t, remotesync.SnippetsPath, "ciphertext-local-edit")
+	if err := second.service.Apply(result); err == nil {
+		t.Fatal("Apply overwrote a snippet edit made after preview")
+	} else {
+		var conflict *storage.ConflictError
+		if !errors.As(err, &conflict) {
+			t.Fatalf("Apply = %v, want storage conflict", err)
+		}
+	}
+	if got := second.read(t, remotesync.SnippetsPath); got != "ciphertext-local-edit" {
+		t.Fatalf("local snippet file changed to %q", got)
+	}
+}
+
 func TestCollectDoesNotFollowSymbolicLinks(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host bastion\n"})
 	outsideDirectory := t.TempDir()
@@ -1032,6 +1103,7 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{
 		"config":                       "Include sshc/sync-settings\nHost bastion\n",
 		"sshc/secrets":                 "sealed vault bytes",
+		"sshc/snippets.json":           "device-master-key ciphertext",
 		"sshc/sync-settings":           "sealed access key",
 		"SSHC/SYNC-SETTINGS":           "case-variant sealed access key",
 		"sshc/cli":                     `{"url":"http://127.0.0.1:1","secret":"s"}`,
@@ -1046,6 +1118,9 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	})
 
 	installation.service.OpenVault = func() ([]byte, error) { return []byte(`{"schemaVersion":4}`), nil }
+	installation.service.OpenSnippets = func() ([]byte, error) {
+		return []byte(`{"schemaVersion":1,"snippets":[{"command":"top-secret"}]}`), nil
+	}
 	exchanged, contents, err := installation.service.Collect()
 	if err != nil {
 		t.Fatalf("Collect = %v", err)
@@ -1062,6 +1137,12 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	}
 	if string(contents[remotesync.TravelPath]) != `{"schemaVersion":4}` {
 		t.Errorf("what travelled was not the contents: %q", contents[remotesync.TravelPath])
+	}
+	if string(contents[remotesync.SnippetsPath]) != `{"schemaVersion":1,"snippets":[{"command":"top-secret"}]}` {
+		t.Errorf("snippet snapshot used local ciphertext instead of the logical document: %q", contents[remotesync.SnippetsPath])
+	}
+	if bytes.Contains(contents[remotesync.SnippetsPath], []byte("device-master-key ciphertext")) {
+		t.Fatal("device-specific snippet ciphertext travelled")
 	}
 	for _, excluded := range []string{
 		secret.SettingsPath,
@@ -2636,6 +2717,10 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	if len(result.Conflicts) != 0 {
 		t.Fatalf("a machine that has saved nothing conflicted: %+v", result.Conflicts)
 	}
+	const receiverMaster = "the receiver's rotated master password"
+	if err := receiver.ChangeMasterPassword("the second machine's own master", receiverMaster); err != nil {
+		t.Fatalf("ChangeMasterPassword between Pull and Apply = %v", err)
+	}
 	if err := second.service.Apply(result); err != nil {
 		t.Fatalf("Apply = %v", err)
 	}
@@ -2646,7 +2731,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	}
 	// そして 2 台目は、いまも自分のマスターパスワードで開く。
 	receiver.Lock()
-	if err := receiver.Unlock("the second machine's own master"); err != nil {
+	if err := receiver.Unlock(receiverMaster); err != nil {
 		t.Fatalf("the second machine can no longer open its own vault: %v", err)
 	}
 	if got := receiver.BoundPasswordFor("bastion", binding); got != "the password for bastion" {

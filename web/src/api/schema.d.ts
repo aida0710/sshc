@@ -2092,6 +2092,14 @@ export interface components {
         TerminalCommandPreviewRequest: {
             snippetId?: string;
             command?: string;
+            /** @description Return the expanded command for an explicit insert, run, or copy action. Normal previews remain redacted. */
+            revealCommand?: boolean;
+            /** @description Issue a one-time execution token. Defaults to true for compatibility; passive previews should set false. */
+            issueAction?: boolean;
+            /** @description Bind the preview to sending Enter after the command. Defaults to true. */
+            submit?: boolean;
+            /** @description Refuse to issue an action if the redacted command or exact target changed since the displayed passive preview. */
+            expectedReviewEvidence?: string;
             inputs: {
                 [key: string]: string;
             };
@@ -2100,6 +2108,8 @@ export interface components {
         TerminalCommandDispatchRequest: {
             snippetId?: string;
             command?: string;
+            /** @description Send Enter after the command. Defaults to true. */
+            submit?: boolean;
             inputs: {
                 [key: string]: string;
             };
@@ -2116,6 +2126,8 @@ export interface components {
         TerminalCommandPreview: {
             snippetId: string;
             evidence: string;
+            /** @description Stable evidence for the displayed redacted command and exact targets, independent of whether Enter will be sent. */
+            reviewEvidence: string;
             actionToken: string;
             actionExpiresAt: string;
             targets: components["schemas"]["TerminalCommandPreviewTarget"][];

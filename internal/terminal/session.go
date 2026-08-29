@@ -342,12 +342,24 @@ func (s *Session) CommandTarget() (CommandTarget, error) {
 // was previewed. It shares inputMutex with WebSocket keystrokes, so bytes from
 // the two sources cannot interleave inside this frame.
 func (s *Session) WriteCommand(ctx context.Context, generation uint64, command string) error {
+	return s.WriteCommandInput(ctx, generation, command, true)
+}
+
+// WriteCommandInput writes to the exact Process generation captured by a
+// preview. submit=false inserts bytes without a carriage return.
+func (s *Session) WriteCommandInput(ctx context.Context, generation uint64, command string, submit bool) error {
 	if len(command) == 0 || len(command) > MaxCommandBytes {
 		return ErrCommandTooLarge
 	}
-	payload := make([]byte, len(command)+1)
+	extra := 0
+	if submit {
+		extra = 1
+	}
+	payload := make([]byte, len(command)+extra)
 	copy(payload, command)
-	payload[len(command)] = '\r'
+	if submit {
+		payload[len(command)] = '\r'
+	}
 
 	s.inputMutex.Lock()
 	defer s.inputMutex.Unlock()

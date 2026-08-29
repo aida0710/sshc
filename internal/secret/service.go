@@ -132,6 +132,18 @@ type Service struct {
 	// unattended は、いま走っている「誰も見ていない」呼び出しの数。0 でない
 	// あいだ、use はアイドルの時計に触れない。
 	unattended int
+	// protectedDocuments are application documents sealed by the same master
+	// key as the vault. They participate in password rotation atomically, but
+	// keep their own plaintext schemas and package ownership.
+	protectedDocuments []ProtectedDocument
+}
+
+// ProtectedDocument registers one master-key encrypted application document.
+// Validate must reject malformed plaintext before a password rotation can
+// discard the old key generation.
+type ProtectedDocument struct {
+	Path     string
+	Validate func([]byte) error
 }
 
 // State は status surface が一度に公開する vault の状態である。
@@ -150,6 +162,51 @@ func NewService(workspace *storage.Workspace, transactions *storage.Manager, now
 		migrations:   registeredDocumentMigrations,
 		idle:         IdleTimeout,
 	}
+}
+
+// RegisterProtectedDocument makes path part of master-password rotation and
+// unsupported-vault reset. Registration happens during engine construction,
+// before the service is exposed to concurrent callers.
+func (s *Service) RegisterProtectedDocument(document ProtectedDocument) error {
+	if document.Path == "" || document.Validate == nil {
+		return errors.New("protected document registration is invalid")
+	}
+	resolved, err := s.workspace.ResolveForWrite(document.Path)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.protectedDocuments {
+		if existing.Path == resolved {
+			return errors.New("protected document is already registered")
+		}
+	}
+	document.Path = resolved
+	s.protectedDocuments = append(s.protectedDocuments, document)
+	return nil
+}
+
+// SealDocument and OpenDocument protect an application-owned document with
+// the current master key without exposing that key.
+func (s *Service) SealDocument(plaintext []byte) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.use()
+	if vault == nil {
+		return nil, ErrLocked
+	}
+	return vault.SealBytes(plaintext)
+}
+
+func (s *Service) OpenDocument(sealed []byte) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.use()
+	if vault == nil {
+		return nil, ErrLocked
+	}
+	return vault.OpenBytes(sealed)
 }
 
 // IdleTimeout は、いま設定されている時計を返す。配線が効いていることを、
@@ -380,7 +437,7 @@ func (s *Service) Unlock(passphrase string) error {
 		if sealErr != nil {
 			return &MigrationError{From: migration.From, To: migration.To, Cause: sealErr}
 		}
-		return s.replaceVault(sealed, migrated, vault, nil, "secret.migrate-vault", migration)
+		return s.replaceVault(sealed, migrated, vault, nil, nil, "secret.migrate-vault", migration)
 	}
 
 	s.mu.Lock()
@@ -439,7 +496,15 @@ func (s *Service) RecoverCompatibleBackup(passphrase string) error {
 				return &MigrationError{From: migration.From, To: migration.To, Cause: openErr}
 			}
 		}
-		return s.replaceVault(current, candidateSealed, candidate, nil, "secret.recover-compatible-backup", migration)
+		_, previous, keyErr := envelope.Open(current, passphrase)
+		if keyErr != nil {
+			return keyErr
+		}
+		documents, reSealErr := s.reSealProtectedDocuments(candidate, previous, true)
+		if reSealErr != nil {
+			return reSealErr
+		}
+		return s.replaceVault(current, candidateSealed, candidate, documents, nil, "secret.recover-compatible-backup", migration)
 	}
 	return ErrNoCompatibleBackup
 }
@@ -477,7 +542,15 @@ func (s *Service) ResetUnsupported(passphrase string) error {
 	default:
 		return readErr
 	}
-	return s.replaceVault(current, sealed, candidate, removals, "secret.reset-unsupported", Migration{})
+	_, previous, err := envelope.Open(current, passphrase)
+	if err != nil {
+		return err
+	}
+	documents, err := s.reSealProtectedDocuments(candidate, previous, true)
+	if err != nil {
+		return err
+	}
+	return s.replaceVault(current, sealed, candidate, documents, removals, "secret.reset-unsupported", Migration{})
 }
 
 func (s *Service) unsupportedVault(passphrase string) ([]byte, error) {
@@ -506,6 +579,7 @@ func (s *Service) replaceVault(
 	current []byte,
 	sealed []byte,
 	candidate *Vault,
+	changes []storage.Change,
 	removals []storage.Removal,
 	operation string,
 	migration Migration,
@@ -514,13 +588,14 @@ func (s *Service) replaceVault(
 	s.backupVault = candidate
 	s.mu.Unlock()
 
+	changes = append(changes, storage.Change{
+		Path: s.path(), Contents: sealed,
+		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(current)},
+	})
 	_, err := s.transactions.Commit(storage.Request{
 		Operation: operation,
-		Changes: []storage.Change{{
-			Path: s.path(), Contents: sealed,
-			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(current)},
-		}},
-		Removals: removals,
+		Changes:   changes,
+		Removals:  removals,
 	})
 	s.mu.Lock()
 	s.backupVault = nil
@@ -1431,7 +1506,10 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 // バックアップはマネージャ経由ではなく直接読む。マネージャは現在の新しい鍵を
 // 使用するため、古い鍵で暗号化されたバックアップを開けない。
 func (s *Service) reSealed(vault *Vault, previous envelope.Key) ([]storage.Change, error) {
-	changes := make([]storage.Change, 0, 8)
+	changes, err := s.reSealProtectedDocuments(vault, previous, false)
+	if err != nil {
+		return nil, err
+	}
 
 	settings, err := s.workspace.FileSystem().ReadFile(s.settingsPath())
 	switch {
@@ -1487,6 +1565,41 @@ func (s *Service) reSealed(vault *Vault, previous envelope.Key) ([]storage.Chang
 	})
 	if walkErr != nil && !errors.Is(walkErr, fs.ErrNotExist) {
 		return nil, walkErr
+	}
+	return changes, nil
+}
+
+func (s *Service) reSealProtectedDocuments(vault *Vault, previous envelope.Key, skipBackup bool) ([]storage.Change, error) {
+	changes := make([]storage.Change, 0, len(s.protectedDocuments))
+	for _, document := range s.protectedDocuments {
+		body, err := s.workspace.FileSystem().ReadFile(document.Path)
+		switch {
+		case err == nil:
+			plaintext, openErr := previous.Open(body)
+			if errors.Is(openErr, envelope.ErrNotAnEnvelope) {
+				// A valid legacy plaintext document may not have been opened since
+				// the encryption feature was installed. Rotate it directly into the
+				// candidate generation rather than publishing a new key first.
+				plaintext = body
+			} else if openErr != nil {
+				return nil, openErr
+			}
+			if validateErr := document.Validate(plaintext); validateErr != nil {
+				return nil, validateErr
+			}
+			resealed, sealErr := vault.SealBytes(plaintext)
+			if sealErr != nil {
+				return nil, sealErr
+			}
+			changes = append(changes, storage.Change{
+				Path: document.Path, Contents: resealed,
+				Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(body)},
+				SkipBackup:   skipBackup,
+			})
+		case errors.Is(err, fs.ErrNotExist):
+		default:
+			return nil, err
+		}
 	}
 	return changes, nil
 }

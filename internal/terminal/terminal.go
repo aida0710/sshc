@@ -191,6 +191,7 @@ var (
 	ErrGenerationChanged          = errors.New("the terminal session changed after preview")
 	ErrExactInputUnavailable      = errors.New("the terminal process cannot accept exact input")
 	ErrCommandTooLarge            = errors.New("the terminal command is too large")
+	ErrUnsafeInsert               = errors.New("the terminal command contains control input that cannot be inserted safely")
 	ErrShuttingDown               = errors.New("the terminal registry is shutting down")
 	ErrAgentResumeUnavailable     = errors.New("the agent session cannot be resumed")
 	ErrAgentResumeStale           = errors.New("the agent resume candidate has changed")

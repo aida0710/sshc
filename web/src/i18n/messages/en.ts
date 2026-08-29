@@ -170,7 +170,6 @@ export const en = {
   "workspace.command": "Command",
   "workspace.chooseSnippet": "Choose a snippet",
   "workspace.useDefault": "Use default",
-  "workspace.secretSnippetRefused": "Snippets with secret variables cannot be sent to a live terminal because the value may remain in terminal output and shell history.",
   "workspace.targetMode": "Connected terminals",
   "workspace.targetCount": "{count} targets",
   "workspace.paneNumber": "Pane {number}",
@@ -261,6 +260,8 @@ export const en = {
   "terminal.quickCommandInsert": "Insert",
   "terminal.quickCommandRun": "Run",
   "terminal.quickCommandCopy": "Copy",
+  "terminal.quickCommandChanged": "The snippet or pane changed. Review the updated preview before continuing.",
+  "terminal.quickCommandInsertUnsafe": "Commands with line breaks or control characters cannot be inserted without running them. Use Run or Copy instead.",
   "terminal.linkActions": "Terminal link actions",
   "terminal.linkOpenBrowser": "Open in browser",
   "terminal.linkBrowseSFTP": "Browse in SFTP",
@@ -473,7 +474,7 @@ export const en = {
   "secrets.metricAssignments": "Assignments",
   "secrets.loading": "Reading the vault…",
   "secrets.explainNew":
-    "One master password encrypts account passwords, key passphrases, and object-storage credentials. The master password is not stored and cannot be recovered. If you lose it, these credentials cannot be recovered; files read directly by OpenSSH are unaffected.",
+    "One master password encrypts account passwords, key passphrases, object-storage credentials, and snippets. The master password is not stored and cannot be recovered. If you lose it, this encrypted data cannot be recovered; files read directly by OpenSSH are unaffected.",
   "secrets.explainLocked": "The vault is locked. Enter the master password to access it.",
   "secrets.master": "Master password",
   "secrets.create": "Create the vault",
@@ -526,7 +527,7 @@ export const en = {
   "desktop.closeAll": "Close every connection",
   "secrets.changeHeading": "Master password",
   "secrets.changeNote":
-    "Changing the master password re-encrypts the local vault, sync settings, and every local backup. Remote snapshots use the separate synchronization key and are not rewritten.",
+    "Changing the master password re-encrypts the local vault, snippets, sync settings, and every local backup. Remote snapshots use the separate synchronization key and are not rewritten.",
   "secrets.currentMaster": "Current master password",
   "secrets.newMaster": "New master password",
   "secrets.confirmMaster": "Confirm new master password",
@@ -534,13 +535,13 @@ export const en = {
   "secrets.wrongCurrent": "The current master password is incorrect. Nothing was changed.",
   "secrets.changeFailed": "The master password could not be changed.",
   "secrets.changedMasterLocally":
-    "The master password was changed. The local vault, sync settings, and local backups now use the new password. Remote snapshots were not rewritten.",
+    "The master password was changed. The local vault, snippets, sync settings, and local backups now use the new password. Remote snapshots were not rewritten.",
   "section.secrets": "Secrets",
   "lock.explainNew":
-    "Choose a master password to encrypt stored passwords, key passphrases, sync settings, and all backups created by sshc.",
+    "Choose a master password to encrypt stored passwords, key passphrases, snippets, sync settings, and all backups created by sshc.",
   "lock.explainOpen": "Give your master password to open sshc.",
   "lock.noRecovery":
-    "The master password cannot be recovered. If you lose it, the vault and encrypted backups cannot be opened.",
+    "The master password cannot be recovered. If you lose it, the vault, snippets, and encrypted backups cannot be opened.",
   "lock.password": "Master password",
   "lock.confirm": "Confirm master password",
   "lock.create": "Create the vault",
