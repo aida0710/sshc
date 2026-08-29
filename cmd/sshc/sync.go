@@ -10,9 +10,12 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"sshc/internal/api"
 	"sshc/internal/handoff"
+	"sshc/internal/remotesync"
+	"sshc/internal/session"
 )
 
 type commandFailure struct {
@@ -27,6 +30,8 @@ type commandEnvelope struct {
 	Result        any             `json:"result,omitempty"`
 	Failure       *commandFailure `json:"failure,omitempty"`
 }
+
+var errSyncPullRequiresForce = errors.New("sync pull requires --force")
 
 func runSync(
 	ctx context.Context,
@@ -60,6 +65,58 @@ func runSync(
 			return finishSyncFailure(false, err, stdout, stderr)
 		}
 		return 0
+	case syncPush:
+		result, err := runSyncPush(ctx, engine, called.Force)
+		if err != nil {
+			return finishSyncFailure(called.JSON, err, stdout, stderr)
+		}
+		if called.JSON {
+			if err := writeCommandEnvelope(stdout, commandEnvelope{
+				SchemaVersion: 1, Success: true, Result: result,
+			}); err != nil {
+				return 1
+			}
+		} else {
+			writeSyncPushResult(stdout, result)
+		}
+		return 0
+	case syncPull:
+		result, err := runSyncPull(ctx, engine, called.Force)
+		if err != nil {
+			return finishSyncFailure(called.JSON, err, stdout, stderr)
+		}
+		if called.JSON {
+			if err := writeCommandEnvelope(stdout, commandEnvelope{
+				SchemaVersion: 1, Success: true, Result: result,
+			}); err != nil {
+				return 1
+			}
+		} else {
+			writeSyncPullResult(stdout, result)
+		}
+		return 0
+	case syncNow, syncAuto:
+		var status api.SyncStatus
+		var err error
+		if called.Action == syncNow {
+			err = engine.sendJSON(ctx, http.MethodPost, "/api/v1/sync/now", struct{}{}, &status)
+		} else {
+			err = engine.sendJSON(ctx, http.MethodPut, "/api/v1/sync/auto",
+				api.AutoSyncRequest{Enabled: called.Enabled}, &status)
+		}
+		if err != nil {
+			return finishSyncFailure(called.JSON, err, stdout, stderr)
+		}
+		if called.JSON {
+			if err := writeCommandEnvelope(stdout, commandEnvelope{
+				SchemaVersion: 1, Success: true, Result: status,
+			}); err != nil {
+				return 1
+			}
+		} else {
+			writeSyncStatus(stdout, status)
+		}
+		return 0
 	case syncStatus:
 		var status api.SyncStatus
 		if err := engine.getJSON(ctx, "/api/v1/sync", &status); err != nil {
@@ -78,6 +135,119 @@ func runSync(
 	default:
 		return finishSyncFailure(called.JSON, errors.New("sync action is not implemented"), stdout, stderr)
 	}
+}
+
+func runSyncPull(ctx context.Context, engine *engineAPI, force bool) (api.PullResponse, error) {
+	apply := false
+	previewRequest := api.PullRequest{Apply: &apply}
+	if force {
+		resolve := api.Remote
+		previewRequest.Resolve = &resolve
+	}
+	var preview api.PullResponse
+	if err := engine.sendJSON(ctx, http.MethodPost, "/api/v1/sync/pull", previewRequest, &preview); err != nil {
+		return api.PullResponse{}, err
+	}
+	if !validPullResponseShape(preview) || preview.Applied {
+		return api.PullResponse{}, errEngineInvalidResponse
+	}
+	if !force && (len(preview.Conflicts) != 0 || len(preview.Removed) != 0) {
+		return api.PullResponse{}, errSyncPullRequiresForce
+	}
+	if len(preview.Written) == 0 && len(preview.Removed) == 0 && len(preview.Conflicts) == 0 {
+		return preview, nil
+	}
+	if preview.RemoteETag == "" || len(preview.RemoteRevision) != 64 {
+		return api.PullResponse{}, errEngineInvalidResponse
+	}
+	apply = true
+	applyRequest := api.PullRequest{
+		Apply: &apply, ExpectedETag: &preview.RemoteETag, ExpectedRevision: &preview.RemoteRevision,
+	}
+	if force {
+		resolve := api.Remote
+		applyRequest.Resolve = &resolve
+	}
+	var applied api.PullResponse
+	if err := engine.sendJSON(ctx, http.MethodPost, "/api/v1/sync/pull", applyRequest, &applied); err != nil {
+		return api.PullResponse{}, err
+	}
+	if !validPullResponseShape(applied) || !applied.Applied {
+		return api.PullResponse{}, errEngineInvalidResponse
+	}
+	return applied, nil
+}
+
+func validPullResponseShape(response api.PullResponse) bool {
+	return response.Conflicts != nil && response.Written != nil && response.Removed != nil &&
+		response.DownloadedBytes >= 0 && response.Summary.FileCount >= 0 &&
+		response.Summary.SourceBytes >= 0 && response.Summary.SnapshotBytes >= 0
+}
+
+func writeSyncPullResult(out io.Writer, response api.PullResponse) {
+	if !response.Applied && len(response.Written) == 0 && len(response.Removed) == 0 && len(response.Conflicts) == 0 {
+		fmt.Fprintln(out, "sync pull: no changes")
+		return
+	}
+	result := "previewed"
+	if response.Applied {
+		result = "applied"
+	}
+	rows := [][2]string{
+		{"result", result},
+		{"completed", dash(response.CompletedAt)},
+		{"files", strconv.Itoa(response.Summary.FileCount)},
+		{"written", strconv.Itoa(len(response.Written))},
+		{"removed", strconv.Itoa(len(response.Removed))},
+		{"conflicts", strconv.Itoa(len(response.Conflicts))},
+		{"downloaded bytes", bytesValue(response.DownloadedBytes)},
+		{"source bytes", bytesValue(response.Summary.SourceBytes)},
+		{"snapshot bytes", bytesValue(response.Summary.SnapshotBytes)},
+	}
+	writeSyncRows(out, rows)
+}
+
+func runSyncPush(ctx context.Context, engine *engineAPI, force bool) (api.PushResponse, error) {
+	var draft api.SyncPushDraft
+	if err := engine.getJSON(ctx, "/api/v1/sync/push", &draft); err != nil {
+		return api.PushResponse{}, err
+	}
+	if strings.TrimSpace(draft.Message) == "" || draft.Added < 0 || draft.Modified < 0 || draft.Removed < 0 {
+		return api.PushResponse{}, errEngineInvalidResponse
+	}
+	request := api.SyncPushRequest{Message: draft.Message}
+	var response api.PushResponse
+	if force {
+		action, err := engine.issueAction(ctx, session.ActionSyncForcePush, remotesync.ForcePushTarget)
+		if err != nil {
+			return api.PushResponse{}, err
+		}
+		if err := engine.sendJSONWithAction(ctx, http.MethodPost, "/api/v1/sync/force-push",
+			action.Token, request, &response); err != nil {
+			return api.PushResponse{}, err
+		}
+	} else if err := engine.sendJSON(ctx, http.MethodPost, "/api/v1/sync/push", request, &response); err != nil {
+		return api.PushResponse{}, err
+	}
+	if response.Result.CompletedAt == "" || response.Result.ObjectCount < 0 ||
+		response.Result.UploadedBytes < 0 || response.Result.Summary.FileCount < 0 ||
+		response.Result.Summary.SourceBytes < 0 || response.Result.Summary.SnapshotBytes < 0 {
+		return api.PushResponse{}, errEngineInvalidResponse
+	}
+	return response, nil
+}
+
+func writeSyncPushResult(out io.Writer, response api.PushResponse) {
+	rows := [][2]string{
+		{"result", "pushed"},
+		{"completed", response.Result.CompletedAt},
+		{"files", strconv.Itoa(response.Result.Summary.FileCount)},
+		{"objects", strconv.Itoa(response.Result.ObjectCount)},
+		{"source bytes", bytesValue(response.Result.Summary.SourceBytes)},
+		{"snapshot bytes", bytesValue(response.Result.Summary.SnapshotBytes)},
+		{"uploaded bytes", bytesValue(response.Result.UploadedBytes)},
+	}
+	writeSyncRows(out, rows)
 }
 
 func writeCommandEnvelope(out io.Writer, envelope commandEnvelope) error {
@@ -120,6 +290,8 @@ func classifyCommandFailure(err error) commandFailure {
 		return commandFailure{Kind: "invalid_setup_input", Retryable: false}
 	case errors.Is(err, errSyncSetupIncomplete):
 		return commandFailure{Kind: "sync_setup_target_incomplete", Retryable: false}
+	case errors.Is(err, errSyncPullRequiresForce):
+		return commandFailure{Kind: "sync_pull_requires_force", Retryable: false}
 	case errors.Is(err, errEngineInvalidResponse), errors.Is(err, errEngineResponseTooLarge):
 		return commandFailure{Kind: "invalid_engine_response", Retryable: false}
 	}
@@ -153,6 +325,8 @@ func writeHumanSyncFailure(stderr io.Writer, failure commandFailure) {
 		fmt.Fprintln(stderr, "sshc: sync setup input is invalid; check the endpoint, bucket, path, region, direction, and credential lengths")
 	case "sync_setup_target_incomplete":
 		fmt.Fprintln(stderr, "sshc: the sync target contains an incomplete snapshot; inspect or repair the target before setup")
+	case "sync_pull_requires_force":
+		fmt.Fprintln(stderr, "sshc: pull includes conflicts or removals; inspect the preview and rerun with sshc sync pull --force to accept remote state")
 	case "sync_not_configured":
 		fmt.Fprintln(stderr, "sshc: sync is not configured; run sshc sync setup")
 	case "sync_remote_moved", "sync_remote_deleted", "preview_stale", "sync_setup_target_changed":
@@ -200,6 +374,10 @@ func writeSyncStatus(out io.Writer, status api.SyncStatus) {
 	} else {
 		rows = append(rows, [2]string{"last operation", "-"})
 	}
+	writeSyncRows(out, rows)
+}
+
+func writeSyncRows(out io.Writer, rows [][2]string) {
 	width := 0
 	for _, row := range rows {
 		if len(row[0]) > width {
