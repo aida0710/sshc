@@ -51,14 +51,18 @@ func (h Handlers) Bootstrap(c *echo.Context) error {
 		return problem(c, http.StatusInternalServerError, "bootstrap_failed")
 	}
 
+	setSessionCookie(c, credentials.SessionID)
+	return c.JSON(http.StatusOK, api.BootstrapResponse{CsrfToken: credentials.CSRFToken})
+}
+
+func setSessionCookie(c *echo.Context, sessionID string) {
 	c.SetCookie(&http.Cookie{
 		Name:     SessionCookie,
-		Value:    credentials.SessionID,
+		Value:    sessionID,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	})
-	return c.JSON(http.StatusOK, api.BootstrapResponse{CsrfToken: credentials.CSRFToken})
 }
 
 func (h Handlers) Health(c *echo.Context) error {
