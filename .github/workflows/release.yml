@@ -134,7 +134,7 @@ jobs:
       - name: Smoke the built CLI
         run: scripts/ci/cli-smoke.sh dist "$RELEASE_TAG"
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-macos
           path: dist/sshc-darwin-*
@@ -174,7 +174,7 @@ jobs:
       - name: Smoke the built CLI
         run: scripts/ci/cli-smoke.sh dist "$RELEASE_TAG"
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-linux
           path: dist/sshc-linux-*
@@ -227,7 +227,7 @@ jobs:
         shell: powershell
         run: ./scripts/ci/install-windows-smoke.ps1 -DistDir dist -ExpectedVersion "$env:RELEASE_TAG"
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-windows
           path: dist/sshc-windows-*
@@ -323,7 +323,7 @@ jobs:
           [ "$actual" = "$expected" ] || { echo "the APK was signed by an unexpected certificate" >&2; exit 1; }
           cp "$apk" "sshc-android-${RELEASE_TAG}.apk"
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-android
           path: sshc-android-*.apk
@@ -349,7 +349,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.verify-source.outputs.release-sha }}
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: incoming
 
