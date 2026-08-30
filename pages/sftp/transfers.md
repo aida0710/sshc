@@ -1,31 +1,31 @@
 ---
-title: Transfer Manager
-description: 大量のfileとfolderをqueueで転送し、pause、resume、retry、cancelする。
+title: 転送マネージャー
+description: ファイルやフォルダーの転送をまとめて管理し、一時停止、再開、再試行、キャンセルする。
 ---
 
-# Transfer Manager
+# 転送マネージャー
 
-![file転送中のTransfer Manager](/images/transfer-manager.png)
+![ファイル転送中の転送マネージャー](/images/transfer-manager.png)
 
-file upload、folder upload、file download、folder downloadを共通queueで管理します。既定の同時実行数は2件です。
+ファイルとフォルダーのアップロード／ダウンロードを、一つのキューで管理します。既定では、2件まで同時に転送します。
 
 ## 表示される情報
 
-- 全体とfile単位の進捗
-- 転送済みbyte／総byte
+- 全体とファイルごとの進捗
+- 転送済み／合計サイズ
 - 現在速度と残り時間
-- queued、running、paused、completed、failed、canceledの状態
+- 待機中、転送中、一時停止、完了、失敗、キャンセルの状態
 
 ## 操作
 
-- **Pause**: 新しいread／writeを止め、再開情報を保持
-- **Resume**: remoteまたはlocalの転送済みsizeから続行
-- **Retry**: 失敗したfileだけ再実行
-- **Cancel**: jobを中止してqueueから終了扱いにする
-- **Clear finished**: 完了済みjobだけ表示から除く
+- **一時停止**: 新しい読み書きを止め、再開に必要な情報を保持
+- **再開**: リモートまたはローカルの転送済みサイズから続行
+- **再実行**: 失敗したファイルだけを再度転送
+- **キャンセル**: 転送を中止
+- **完了分を消去**: 完了した項目を一覧から除去
 
-uploadは同じdirectoryの一時fileへ転送し、完了後にatomic renameします。既存fileへ上書きする場合は開始前に確認します。folder downloadはZIPとしてstreamし、Androidではsystem file pickerへ渡します。
+アップロードでは、同じディレクトリの一時ファイルへ転送し、完了後にアトミックに名前を変更します。既存のファイルへ上書きする場合は、転送前に確認します。フォルダーのダウンロードはZIPとして送信し、Androidではシステムのファイル選択画面へ渡します。
 
 ## 画面を離れた場合
 
-transferはWeb pageではなくengineが所有するため、SFTPから別pageへ移動しても続きます。engineを終了するとrunning jobは止まります。次回の自動復元ではなく、明示的なresume／retryを使用します。
+転送はエンジンが管理しているため、SFTPから別の画面へ移動しても続きます。エンジンを終了すると、実行中の転送も停止します。再起動後は自動では復元されないため、**再開**または**再実行**を選んでください。

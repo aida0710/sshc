@@ -5,7 +5,7 @@ description: Generate, import, edit, and register SSH keys; inspect server ident
 
 # Keys and known hosts
 
-The Keys screen shows private/public material, fingerprints, algorithms, and paths. It supports generation, import, rename, passphrase editing, public-key copy, and SSH agent loading.
+The Keys screen shows private and public keys, fingerprints, algorithms, and paths. It supports generation, import, rename, passphrase editing, public-key copy, and ssh-agent loading.
 
 Managed keys may live under `~/.ssh/keys/...` following the group structure. Make sure `IdentityFile` points to the resolved existing path. Private keys under `~/.ssh` are included in encrypted sync snapshots.
 

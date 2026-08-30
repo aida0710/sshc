@@ -1,26 +1,26 @@
 ---
-title: OpenSSH設定
-description: ~/.ssh/config、Include、Matchを壊さずに表示・編集する。
+title: SSH Config
+description: ~/.ssh/config、Include、Matchの構造を保ちながら表示・編集する。
 ---
 
-# OpenSSH設定
+# SSH Config
 
-sshcは`~/.ssh/config`を正本として読みます。`Include`階層を辿り、具体的な`Host` aliasを接続として表示します。
+sshcは`~/.ssh/config`を設定の正本として読み込みます。`Include`の階層をたどり、具体的な`Host`エイリアスを接続先として表示します。
 
-## Config Editor
+## 設定ファイルを編集する
 
-設定file画面では、読み込まれたfileと`Include`の対応を確認し、UTF-8 textを編集できます。保存時は一時fileへ書いてから置き換えます。
+SSH Configでは、読み込まれたファイルと`Include`の関係を確認しながら、UTF-8テキストを編集できます。保存するときは一時ファイルへ書き込み、成功してから元のファイルと置き換えます。
 
-UIで管理するgroup領域を除き、comment、空行、directiveの順序をできるだけ維持します。sshcが生成する範囲はmarkerで示されます。
+UIが管理するグループ領域を除き、コメント、空行、ディレクティブの順序はできるだけ維持されます。sshcが生成する範囲はマーカーで確認できます。
 
-## 接続詳細の4つのtab
+## 接続詳細の4つのタブ
 
-- **基本**: host、user、port、認証
-- **設定解析**: 解決値、出典、warning
-- **詳細設定**: ProxyJump、directive、raw block
+- **基本**: ホスト、ユーザー、ポート、認証
+- **設定解析**: 解決後の値、出典、警告
+- **詳細設定**: ProxyJump、ディレクティブ、未加工の設定ブロック
 - **sshc**: 文字コード、OSC 52などsshcだけが使う設定
 
-値を空にして保存したときはOpenSSHの継承値へ戻ります。画面上の「継承値・既定値に戻す」は、そのdirectiveを接続固有blockから削除する操作です。
+値を空にして保存すると、OpenSSHから継承した値に戻ります。画面上の「継承値・既定値に戻す」は、そのディレクティブを接続固有のブロックから削除する操作です。
 
 ## 安全に確認する
 
@@ -29,4 +29,4 @@ sshc info <alias>
 sshc info <alias> --json
 ```
 
-実接続と同じresolverで`Include`、`Match`、`ProxyJump`を解決しますが、password、passphrase、`SetEnv`の値、`ProxyCommand`本文は表示しません。
+実際の接続と同じ処理で`Include`、`Match`、`ProxyJump`を解決します。ただし、パスワード、パスフレーズ、`SetEnv`の値、`ProxyCommand`の本文は表示しません。

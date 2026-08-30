@@ -15,7 +15,7 @@ The master password cannot be recovered. It is not the sync encryption key, and 
 
 ## 2. Find or create a host
 
-Concrete `Host` aliases from an existing `~/.ssh/config` appear immediately. Quick access searches names, groups, tags, and `user@host:port`.
+Concrete `Host` aliases from an existing `~/.ssh/config` appear immediately. Quick Connect searches names, groups, tags, and `user@host:port`.
 
 To add one, open **Connections → New connection**, then enter an alias, host, user, and port. Add a key, password, or ProxyJump only when needed.
 
@@ -29,7 +29,7 @@ Confirm unknown host key fingerprints before saving them. sshc rejects a changed
 
 ## 4. Open it
 
-Use **Connect**, tap a Quick access panel, double-click it on desktop, or run:
+Use **Connect**, tap a Quick Connect panel, double-click it on desktop, or run:
 
 ```sh
 sshc ssh <alias>

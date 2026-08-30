@@ -1,27 +1,27 @@
 ---
 title: SFTP
-description: remote file操作と中断再開に対応したSFTP Transfer Manager。
+description: リモートファイルの操作と、中断・再開に対応したSFTP転送マネージャー。
 ---
 
 # SFTP
 
-![SFTPのfile browser](/images/sftp-desktop.png)
+![SFTPのファイルブラウザー](/images/sftp-desktop.png)
 
-接続先を選ぶまでSFTP接続を開始せず、保存済みのSSH設定、host key、資格情報を利用します。
+SFTPは、接続先を選んでから接続を始めます。認証には、保存済みのSSH設定、ホスト鍵、資格情報をそのまま利用します。
 
-## File操作
+## ファイル操作
 
-- remote directoryの移動、作成、rename、chmod、delete
-- file／folderの選択とDrag & Drop upload
-- file download、folderのZIP download
-- 2 MiB以下のUTF-8 textをMonaco Editorで編集
+- リモートディレクトリの移動、作成、名前変更、`chmod`、削除
+- ファイル／フォルダーの選択とドラッグ＆ドロップによるアップロード
+- ファイルのダウンロード、フォルダーのZIPダウンロード
+- 2 MiB以下のUTF-8テキストをMonaco Editorで編集
 
-一覧は名前、種別、byte、更新日時、権限などのcolumnでsortできます。選択中のdirectoryと接続先はURL stateへ反映されるため、Terminal上のremote pathから同じ場所へ移動できます。
+一覧は、名前、種類、サイズ、更新日時、権限などで並べ替えられます。選択中の接続先とディレクトリはURLにも反映されるため、Terminalで見つけたリモートパスをSFTPでそのまま開けます。
 
-## Transfer Manager
+## 転送マネージャー
 
-fileとfolderを一つのqueueで扱い、既定では同時2件まで転送します。file単位の進捗、速度、残り時間を表示し、pause、resume、retry、cancel、失敗fileだけの再実行が可能です。
+ファイルとフォルダーを一つのキューで管理し、既定では2件まで同時に転送します。ファイルごとの進捗、速度、残り時間を確認しながら、一時停止、再開、再試行、キャンセルができます。失敗したファイルだけをやり直すことも可能です。
 
-大きなuploadはremoteの一時fileへ送り、完了時にatomic renameします。接続が切れた場合はremote側の転送済みsizeから再開します。downloadはHTTP Rangeで再開し、SFTP画面を離れてもqueueはengine側で継続します。
+大きなファイルは、リモート側の一時ファイルへアップロードし、完了後にアトミックに名前を変更します。接続が切れても、転送済みの位置から再開できます。ダウンロードはHTTP Rangeに対応し、SFTP画面を離れてもエンジン側で転送を続けます。
 
-queueの操作と再開条件は[Transfer Manager](/sftp/transfers)を参照してください。
+操作方法や再開できる条件は、[転送マネージャー](/sftp/transfers)を参照してください。

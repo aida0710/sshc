@@ -5,7 +5,7 @@ description: Install and use the Android app, local shell, navigation, and file 
 
 # Android
 
-![Quick access on Android](/images/android-home.png)
+![Quick Connect on Android](/images/android-home.png)
 
 Install the signed APK from GitHub Releases. Android 13+ back navigation closes dialogs, Command Palette, the drawer, and Inspector before moving through page history.
 

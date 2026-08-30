@@ -1,38 +1,38 @@
 ---
 title: 最初の接続
-description: Vaultを作成し、既存または新しいSSH接続を開く。
+description: Vaultを作成し、既存または新しいSSH接続を開くまでの手順。
 ---
 
 # 最初の接続
 
 ## 1. Vaultを作成する
 
-初回起動ではmaster passwordを2回入力します。Vaultは保存済みaccount password、鍵passphrase、Snippetのsecret、同期credentialを暗号化します。
+初回起動では、マスターパスワードを2回入力します。Vaultは、保存したアカウントパスワード、鍵のパスフレーズ、スニペットのシークレット変数、同期用の資格情報を暗号化します。
 
 ::: warning
-master passwordは復旧できません。同期用の暗号化keyとは別物で、端末ごとに異なる値を使用できます。
+マスターパスワードは復旧できません。同期用の暗号化キーとは別のもので、端末ごとに異なる値を設定できます。
 :::
 
 ## 2. 接続先を確認する
 
-既存の`~/.ssh/config`があれば、具体的な`Host` aliasがConnectionsへ表示されます。HomeのQuick accessでは名前、group、tag、`user@host:port`で検索できます。
+既存の`~/.ssh/config`があれば、具体的な`Host`エイリアスがConnectionsに表示されます。HomeのQuick Connectでは、名前、グループ、タグ、`user@host:port`で検索できます。
 
-新規作成は**Connections → New connection**から行います。まずalias、host、user、portを入力し、必要なら鍵、password、ProxyJumpを設定します。
+新しく作る場合は、**Connections → 新しい接続**を開きます。まずエイリアス、ホスト、ユーザー、ポートを入力し、必要に応じて鍵、パスワード、ProxyJumpを設定してください。
 
 ## 3. 接続前に検査する
 
-- **到達性を確認**: DNS／TCP／host keyまでを確認
-- **保存済み設定で認証を確認**: 保存した鍵やpasswordで認証まで確認
+- **到達性を確認**: DNS／TCP／ホスト鍵までを確認
+- **保存済み設定で認証を確認**: 保存した鍵やパスワードで認証まで確認
 - **設定解析**: `Include`や`Match`を含む最終的な値と出典を確認
 
-未知のhost keyはfingerprintを確認してから登録します。保存済みhost keyが変化した場合、sshcは接続を拒否します。
+未知のホスト鍵は、フィンガープリントを確認してから登録します。保存済みのホスト鍵が変わっていた場合、sshcは接続を拒否します。
 
 ## 4. 開く
 
-Connectionsの**接続**、Homeのpanelをtap、またはdesktopでpanelをdouble clickするとTerminalを開きます。CLIなら次の通りです。
+Connectionsの**接続**を選ぶか、Homeのパネルをタップします。デスクトップでは、パネルのダブルクリックでもTerminalを開けます。CLIから開く場合は、次のコマンドを実行します。
 
 ```sh
 sshc ssh <alias>
 ```
 
-接続中は名前解決、踏み台、host key、認証、shell開始の段階が表示されます。失敗した場合は画面のerror codeと原因を確認してください。
+接続中は、名前解決、踏み台、ホスト鍵、認証、シェル開始までの進み具合が表示されます。失敗した場合は、画面に表示されたエラーコードと原因を確認してください。

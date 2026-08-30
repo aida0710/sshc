@@ -1,40 +1,40 @@
 ---
 title: 設定
-description: 外観、Terminal、input、notification、local shellの設定一覧。
+description: 外観、Terminalの入力、通知、ローカルシェルに関する設定。
 ---
 
 # 設定
 
-設定はMenu → Settingsから変更します。接続固有の項目はConnectionsのsshc tabに置かれます。
+設定はMenu → Settingsから変更します。接続先ごとの項目は、Connectionsのsshcタブにあります。
 
 ## 外観
 
-- system／light／dark theme
+- システム／ライト／ダークテーマ
 - 日本語／English
-- color palette、font、background、tint
+- カラーパレット、フォント、背景、色合い
 
-Vault作成／unlock画面にもthemeと言語切替を表示します。
+Vaultの作成／ロック解除画面でも、テーマと言語を切り替えられます。
 
 ## Terminal
 
-- font size
-- browser scrollback lines（16 KiB〜4 MiB相当の範囲で制限）
-- 選択時copy、右click paste
+- フォントサイズ
+- ブラウザー上のスクロールバック上限（16 KiB〜4 MiB相当）
+- 選択時のコピー、右クリックでの貼り付け
 - OSC 52の全体既定値
-- JIS円記号keyをbackslashとして送信
+- JISキーボードの円記号キーをバックスラッシュとして送信
 
-OSC 52と文字コードは接続ごとに上書きできます。OSC 8 linkやKitty keyboardはprotocolを検出して処理します。
+OSC 52と文字コードは、接続先ごとに上書きできます。OSC 8リンクやKitty keyboard protocolは、自動的に検出して処理します。
 
-描画はWebGLを優先し、利用できない環境では自動的にcanvasへfallbackします。この切替に利用者設定は不要です。
+描画にはWebGLを優先し、利用できない環境では自動的にCanvasへ切り替わります。利用者が設定する必要はありません。
 
-## Local shell
+## ローカルシェル
 
-OS上で利用可能なshell profileを選びます。WindowsではPowerShell系、Unix系ではzsh、fish、bashなど、検出された候補から選択します。
+OS上で利用できるシェルプロファイルを選びます。WindowsではPowerShell系、Unix系ではzsh、fish、bashなど、検出された候補が表示されます。
 
-## Notification
+## 通知
 
-browser notificationは明示した操作でのみpermissionを要求します。Coding Agent連携の入力待ち／完了について、通知音、音量、test notificationを設定できます。
+ブラウザーの通知権限は、利用者が通知を有効にしたときだけ要求します。Coding Agent連携の入力待ち／完了について、通知音、音量、テスト通知を設定できます。
 
 ## 保存場所
 
-外観などbrowserだけでよい設定はlocal storage、Terminal／接続に関わる設定はworkspaceへ保存します。Vault secretと同期credentialは平文設定fileへ保存しません。
+外観などブラウザーだけで使う設定はローカルストレージに、Terminalや接続に関わる設定はワークスペースに保存します。Vaultのシークレットと同期用の資格情報を、平文の設定ファイルへ保存することはありません。

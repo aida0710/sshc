@@ -1,30 +1,30 @@
 ---
 title: トラブルシューティング
-description: engine、vault、鍵、同期、SSH接続で問題が起きたときの確認項目。
+description: エンジン、Vault、鍵、同期、SSH接続で問題が起きたときの確認項目。
 ---
 
 # トラブルシューティング
 
-## Engineを起動できない
+## エンジンを起動できない
 
 ```sh
 sshc status
 sshc engine --replace
 ```
 
-CLIとengineのversionが違う場合は、古いengineを停止し、更新後のbinaryから起動し直します。Androidではエラー画面の「診断情報を表示」からversion、error code、operation、OS情報を確認できます。秘密は診断reportへ含めません。
+CLIとエンジンのバージョンが違う場合は、古いエンジンを停止し、更新後のバイナリから起動し直します。Androidでは、エラー画面の「診断情報を表示」からバージョン、エラーコード、操作、OS情報を確認できます。シークレットは診断レポートに含まれません。
 
 ## Vaultを開けない
 
-master passwordは復旧できません。初回作成直後から開けない場合は、表示されたerror codeと「原因」の詳細を確認してください。`vault_too_new`は現在のbinaryが対応する設定versionよりvaultが新しい状態です。新しいsshcへ更新してから再試行します。
+マスターパスワードは復旧できません。初回作成の直後から開けない場合は、表示されたエラーコードと「原因」の詳細を確認してください。`vault_too_new`は、現在のバイナリが対応している形式よりVaultの形式が新しいことを示します。sshcを更新してから、もう一度試してください。
 
 ## 同期後に秘密鍵が見つからない
 
-Connectionの`IdentityFile`が実際の同期先pathを指しているか確認します。sshcで管理した鍵はgroup構造に合わせて`~/.ssh/keys/...`へ置かれることがあります。絶対pathや古い直下pathを設定に残さず、接続詳細に表示される解決済みpathを確認してください。
+`IdentityFile`が、この端末に復元された鍵を指しているか確認します。sshcで管理した鍵は、グループ構造に合わせて`~/.ssh/keys/...`へ置かれることがあります。古い絶対パスを設定に残さず、Connectionsの詳細に表示される解決済みのパスを確認してください。
 
-## ProxyJumpでpasswordを求められる
+## ProxyJumpでパスワードを求められる
 
-最終接続先だけでなく、各jump hostに対応するpasswordまたはkey passphraseが保存されている必要があります。Connectionの認証testで、どのhopが失敗したかを確認します。sshcは2FAなど保存値で答えられないpromptをTerminalへ表示します。
+最終接続先だけでなく、各踏み台に対応するパスワードまたは鍵のパスフレーズも保存する必要があります。Connectionの認証テストで、どの接続先が失敗したかを確認してください。2FAなど、保存済みの値では答えられない確認はTerminalに表示されます。
 
 ## Syncが進まない
 
@@ -33,4 +33,4 @@ sshc sync
 sshc sync now
 ```
 
-vaultの解錠、sync方向、bucket state、last checkを確認します。`outcome_unknown`は変更送信後の結果を確定できない状態です。同じmutationをすぐ再実行せず、remote状態を更新してから判断してください。
+Vaultのロックが解除されているか、同期方向が合っているか、バケットの状態が最新か、最後の確認がいつ行われたかを確認します。`outcome_unknown`は、変更を送信したものの、結果を確定できなかった状態です。同じ操作をすぐに繰り返さず、リモートの状態を更新してから判断してください。

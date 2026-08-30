@@ -1,28 +1,28 @@
 ---
 title: インストール
-description: macOS、Linux、Windows、Androidへsshcを導入する。
+description: macOS、Linux、Windows、Androidにsshcをインストールする。
 ---
 
 # インストール
 
-sshcはmacOS、Linux、Windows、Androidで利用できます。Desktop版は一つの`sshc` binaryがengine、CLI、Web UIを提供します。
+sshcはmacOS、Linux、Windows、Androidで利用できます。デスクトップ版では、一つの`sshc`バイナリがエンジン、CLI、Web UIを提供します。
 
 ## macOS / Linux
 
-Homebrewを使う方法が最短です。
+Homebrewを使うのが、もっとも簡単です。
 
 ```sh
 brew install aida0710/tap/sshc
 ```
 
-Homebrewを使わない場合は、取得するinstallerとbinaryを同じRelease tagへ固定します。次は`v0.21.0`を導入する例です。
+Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.21.0`を導入する例です。
 
 ```sh
 SSHC_VERSION=v0.21.0 sh -c \
   'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.21.0/install.sh | sh'
 ```
 
-導入後は`sshc update`で、Homebrewまたはreceipt対応版installerの管理元へ更新を委ねられます。
+導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。
 
 ## Windows
 
@@ -32,13 +32,13 @@ Windows PowerShellから実行します。管理者権限は不要です。
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/aida0710/sshc/releases/latest/download/install.ps1 | iex"
 ```
 
-`%LOCALAPPDATA%\Programs\sshc`へ配置し、ユーザー`PATH`へ追加します。同じコマンドを再実行すると最新の安定版へ更新します。
+`%LOCALAPPDATA%\Programs\sshc`へインストールし、ユーザーの`PATH`へ追加します。更新するときも、同じコマンドを実行してください。
 
 ## Android
 
-[GitHub Releases](https://github.com/aida0710/sshc/releases)から`sshc-android-v<version>.apk`を取得します。APKはRelease workflowが署名fingerprintとchecksumを検査してから公開します。
+[GitHub Releases](https://github.com/aida0710/sshc/releases)から`sshc-android-v<version>.apk`をダウンロードします。APKは、Releaseワークフローで署名フィンガープリントとチェックサムを検査してから公開しています。
 
-詳しい起動方法とfile pickerの動作は[Android](/platform/android)を参照してください。
+起動方法やファイル選択の動作は、[Android](/platform/android)で詳しく説明しています。
 
 ## 初回起動
 
@@ -52,14 +52,14 @@ sshc engine
 sshc
 ```
 
-`sshc engine`はforegroundで動きます。常駐させる場合はtmux、systemd、launchdなど、OSのprocess管理機能を使用してください。
+`sshc engine`はフォアグラウンドで動作します。常駐させる場合は、tmux、systemd、launchdなど、OSのプロセス管理機能を使用してください。
 
-起動後、別のterminalから`sshc`を実行すると一度だけ使えるlocal UI URLを開きます。初回はVaultのmaster passwordを設定します。
+起動後、別のターミナルから`sshc`を実行すると、一度だけ使えるローカルUIのURLが開きます。初回はVaultのマスターパスワードを設定してください。
 
 ## 更新
 
 - Homebrew／`install.sh`: `sshc update`
-- Windows: install用PowerShell commandを再実行
-- Android: GitHub Releaseから新しいAPKをinstall
+- Windows: インストール用のPowerShellコマンドを再実行
+- Android: GitHub Releasesから新しいAPKをインストール
 
-更新後にCLIとengineのversionが異なる場合は`sshc engine --replace`でengineを再起動してください。
+更新後にCLIとエンジンのバージョンが異なる場合は、`sshc engine --replace`でエンジンを再起動してください。
