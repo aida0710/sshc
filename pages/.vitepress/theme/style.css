@@ -99,7 +99,7 @@ html:not(.dark) {
   text-transform: uppercase;
 }
 
-.sshc-title {
+.sshc-hero .sshc-title {
   margin: 0;
   color: var(--vp-c-text-1);
   font-size: clamp(42px, 5.4vw, 72px);
@@ -108,15 +108,15 @@ html:not(.dark) {
   line-height: 1.02;
 }
 
-.sshc-lead {
+.sshc-hero .sshc-lead {
   max-width: 620px;
-  margin: 24px auto 0;
+  margin: 20px auto 0;
   color: var(--vp-c-text-2);
   font-size: clamp(17px, 1.55vw, 21px);
   line-height: 1.75;
 }
 
-.sshc-platforms {
+.sshc-hero .sshc-platforms {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -224,6 +224,7 @@ html:not(.dark) {
   letter-spacing: -0.035em;
 }
 
+.sshc-hero .sshc-title::after,
 .sshc-section-heading h2::after {
   display: block;
   width: 56px;
