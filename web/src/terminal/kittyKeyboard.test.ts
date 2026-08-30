@@ -35,6 +35,28 @@ describe("kitty keyboard protocol", () => {
     expect(protocol.encode(shiftEnter)).toBeNull();
   });
 
+  it("bounds remotely controlled state nesting and discards the oldest state", () => {
+    const { handlers, protocol } = harness();
+    const shiftEnter = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true });
+    handlers.get("=")?.([1]);
+
+    for (let index = 0; index < 65; index += 1) handlers.get(">")?.([2]);
+    handlers.get("<")?.([64]);
+    expect(protocol.encode(shiftEnter)).toBe("\u001b[13;2u");
+
+    handlers.get("<")?.([1]);
+    expect(protocol.encode(shiftEnter)).toBeNull();
+  });
+
+  it("limits pop work to the number of retained states", () => {
+    const { handlers, protocol } = harness();
+    const shiftEnter = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true });
+    handlers.get(">")?.([1]);
+
+    handlers.get("<")?.([Number.MAX_SAFE_INTEGER]);
+    expect(protocol.encode(shiftEnter)).toBeNull();
+  });
+
   it("encodes modified navigation, tab and printable keys after negotiation", () => {
     const { handlers, protocol } = harness();
     handlers.get(">")?.([1]);
