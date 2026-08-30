@@ -16,5 +16,5 @@ Execution has a preview step showing targets, expanded commands, and required in
 With two or more panes, Command Center can target selected SSH and local-shell panes. It previews an ad-hoc command or Snippet before writing the command and Enter to each PTY.
 
 ::: warning Secrets
-Values sent to a terminal may remain in remote shell history, TTY echo, or scrollback. sshc refuses to send secret Snippet variables into a live terminal.
+The normal preview replaces secret variables with `[secret]`. After confirmation, sshc writes the expanded value to the PTY. It may remain in remote shell history, TTY echo, or scrollback, so verify the targets and command before sending it.
 :::

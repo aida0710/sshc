@@ -26,7 +26,7 @@ With **Do not auto-lock**, the Vault stays unlocked until you lock it manually o
 - Maximum concurrent sessions from 1 to 200, with a default of 50
 - Engine replay buffer from 16 KiB to 4 MiB, with a default of 256 KiB
 - Browser scrollback from 1,000 to 100,000 lines, with a default of 5,000
-- Connection-log verbosity
+- Reconnect attempts after a dropped connection and connection-log verbosity
 - Font size, color scheme, font, background, and tint
 - Copy on select and right-click paste
 - Global OSC 52 default
@@ -40,7 +40,7 @@ Rendering prefers WebGL and automatically falls back to canvas when unavailable;
 
 ## Local shell and notifications
 
-Choose a detected shell profile: PowerShell variants on Windows, or available zsh, fish, bash, and similar shells on Unix systems.
+Choose a default shell profile and start directory. Detected choices include PowerShell variants on Windows and available zsh, fish, bash, and similar shells on Unix systems.
 
 Browser notification permission is requested only after an explicit click. Configure Coding Agent attention/completion sounds, volume, and test delivery.
 
