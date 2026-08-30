@@ -142,8 +142,7 @@ export default defineConfig({
     search: { provider: "local" },
     socialLinks: [{ icon: "github", link: repository }],
     footer: {
-      message: "Apache License 2.0",
-      copyright: "Copyright © sshc contributors",
+      copyright: "Copyright © www.aida0710.work",
     },
   },
 });
