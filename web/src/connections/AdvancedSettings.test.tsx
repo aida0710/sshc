@@ -144,7 +144,9 @@ describe("AdvancedSettings", () => {
     const user = userEvent.setup();
     renderAdvanced("Forwards");
 
-    expect(screen.getByLabelText("Destination")).toHaveAttribute("placeholder", "127.0.0.1:5432");
+    const destination = screen.getByLabelText("Destination");
+    expect(destination).toHaveAttribute("placeholder", "127.0.0.1:5432");
+    expect(destination.closest("label")).not.toHaveTextContent("Enter the host name or IP address and port as seen from the SSH server.");
     expect(screen.getByText("Enter the host name or IP address and port as seen from the SSH server.")).toBeVisible();
     await user.selectOptions(screen.getByLabelText("Type"), "dynamic");
     expect(screen.queryByLabelText("Destination")).not.toBeInTheDocument();

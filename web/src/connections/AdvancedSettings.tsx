@@ -254,11 +254,11 @@ export function AdvancedSettings({
                 <label className="flex flex-col gap-1 text-xs text-ink-muted sm:col-span-2 2xl:col-span-1">
                   {t("conn.forwardDestination")}
                   <input aria-label={t("conn.forwardDestination")} placeholder="127.0.0.1:5432" value={newDestination} disabled={fieldsDisabled} onChange={(event) => setNewDestination(event.currentTarget.value)} className={control} />
-                  <span className={hintText}>{t("conn.forwardDestinationHint")}</span>
                 </label>
-              ) : <p className={`${hintText} sm:col-span-2 2xl:col-span-1`}>{t("conn.forwardDynamicHint")}</p>}
-              <Button className={`${narrowControl} sm:col-span-2 2xl:col-span-1`} disabled={fieldsDisabled} onClick={addForward}>{t("conn.forwardAdd")}</Button>
+              ) : null}
+              <Button className={`${narrowControl} sm:col-span-2 2xl:col-span-1 ${newForwardKind === "dynamic" ? "2xl:col-start-4" : ""}`} disabled={fieldsDisabled} onClick={addForward}>{t("conn.forwardAdd")}</Button>
             </div>
+            <p className={hintText}>{t(newForwardKind === "local" ? "conn.forwardDestinationHint" : "conn.forwardDynamicHint")}</p>
           </>
         ) : visibleFields.length === 0 ? <p className={hintText}>{t("conn.advancedNoFields")}</p> : (
           <Card>
