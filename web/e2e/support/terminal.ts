@@ -7,6 +7,7 @@ const SCREEN = ".xterm-screen";
 const KEYBOARD = ".xterm-helper-textarea";
 const SELECTION = ".xterm-selection div";
 const VIEWPORT = ".xterm-viewport";
+const SCROLLBAR_SLIDER = ".xterm-scrollable-element > .scrollbar.vertical > .slider";
 export function terminalRoot(page: Page): Locator {
   return page.locator(ROOT);
 }
@@ -21,6 +22,9 @@ export function terminalScreen(page: Page): Locator {
 }
 export function terminalKeyboard(page: Page): Locator {
   return page.locator(KEYBOARD);
+}
+export function terminalScrollbarSlider(page: Page): Locator {
+  return page.locator(SCROLLBAR_SLIDER);
 }
 export function selectionMarks(page: Page): Locator {
   return page.locator(SELECTION);

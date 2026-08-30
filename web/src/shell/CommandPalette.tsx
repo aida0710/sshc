@@ -198,7 +198,7 @@ export function CommandPalette({
             onChange={(event) => { setQuery(event.target.value); setSelected(0); }}
             onKeyDown={useKeyboard}
             placeholder={t("palette.placeholder")}
-            className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-subtle"
+            className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
           />
           <kbd className="border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">Esc</kbd>
         </label>
@@ -214,7 +214,7 @@ export function CommandPalette({
                 onClick={() => void choose(item)}
                 className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-select-fill"}`}
               >
-                <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-subtle">{t(`palette.kind.${item.kind}` as MessageKey)}</span>
+                <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-faint">{t(`palette.kind.${item.kind}` as MessageKey)}</span>
                 <span className="truncate font-medium text-ink">{item.label}</span>
                 <span className="truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>
               </button>
@@ -241,7 +241,7 @@ export function CommandPalette({
             <p className="px-3 py-8 text-center text-sm text-ink-muted">{loading ? t("palette.loading") : t("palette.empty")}</p>
           ) : null}
         </div>
-        <p className="shrink-0 border-t border-line px-3 py-2 text-[11px] text-ink-subtle">{t("palette.hint")}</p>
+        <p className="shrink-0 border-t border-line px-3 py-2 text-[11px] text-ink-faint">{t("palette.hint")}</p>
       </section>
     </div>
   );

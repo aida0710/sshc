@@ -31,6 +31,7 @@ export function ConnectionSummary({
   const passwordConflict = explicitKey && (
     summary.accountPassword.state === "dedicated" || summary.accountPassword.state === "named"
   );
+  const accountPasswordVisible = !explicitKey || passwordConflict;
   const reasonID = `connection-actions-${encodeURIComponent(summary.alias)}`;
 
   function privateKeyText() {
@@ -66,27 +67,30 @@ export function ConnectionSummary({
 
   return (
     <section data-connection-summary aria-labelledby="connection-summary-heading" className="sshc-card shrink-0 overflow-hidden rounded-md bg-card">
-      <header className="flex flex-wrap items-start justify-between gap-4 px-5 py-5">
+      <header className="px-4 py-4 sm:px-5 sm:py-5">
         <div className="flex min-w-0 items-start gap-3">
           <span aria-hidden="true" className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">
             <Icon name="terminal" className="size-5" />
           </span>
           <div className="min-w-0">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">{t("conn.summarySaved")}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">{t("conn.summarySaved")}</p>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${dirty ? "bg-notice text-notice-ink" : "bg-select-fill text-ink-muted"}`}>
+                {dirty ? t("conn.summaryUnsaved") : t("conn.summarySavedState")}
+              </span>
+            </div>
             <h2 id="connection-summary-heading" className="truncate text-2xl font-semibold tracking-tight text-ink">
               {summary.alias}
             </h2>
             <p className="mt-1 break-all font-mono text-sm text-ink-muted">{summary.endpoint}</p>
           </div>
         </div>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${dirty ? "bg-notice text-notice-ink" : "bg-select-fill text-ink-muted"}`}>
-          {dirty ? t("conn.summaryUnsaved") : t("conn.summarySavedState")}
-        </span>
       </header>
 
       <dl
-        className="grid gap-px border-y border-line bg-line"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(10.5rem, 100%), 1fr))" }}
+        className={`grid gap-px border-y border-line bg-line ${
+          accountPasswordVisible ? "grid-cols-2 2xl:grid-cols-4" : "grid-cols-2 md:grid-cols-3"
+        }`}
       >
         <div className="min-w-0 bg-card px-4 py-3">
           <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint">{t("conn.summaryGroup")}</dt>
@@ -94,9 +98,9 @@ export function ConnectionSummary({
         </div>
         <div className="min-w-0 bg-card px-4 py-3">
           <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint">{t("conn.summaryPrivateKey")}</dt>
-          <dd className="mt-1 break-all text-sm text-ink">{privateKeyText()}</dd>
+          <dd className="mt-1 break-words text-sm text-ink">{privateKeyText()}</dd>
         </div>
-        <div className="min-w-0 bg-card px-4 py-3">
+        <div className={`min-w-0 bg-card px-4 py-3 ${accountPasswordVisible ? "" : "col-span-2 md:col-span-1"}`}>
           <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint">{t("conn.summaryKeyPassphrase")}</dt>
           <dd className="mt-1 text-sm text-ink">{keyPassphraseText()}</dd>
         </div>

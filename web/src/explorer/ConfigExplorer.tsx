@@ -341,30 +341,32 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
             </div>
           ) : (
             <>
-              <div data-explorer-header="file" className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${modified ? "bg-notice-ink" : file.editable ? "bg-live" : "bg-ink-faint"}`} />
-                  <span className="truncate font-mono text-sm font-semibold text-ink">{file.file.path ?? file.file.absolute}</span>
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div data-explorer-header="file" className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${modified ? "bg-notice-ink" : file.editable ? "bg-live" : "bg-ink-faint"}`} />
+                    <span className="truncate font-mono text-sm font-semibold text-ink">{file.file.path ?? file.file.absolute}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-surface px-2 py-0.5 text-xs text-ink-muted">{file.editable ? t("explorer.editable") : t("explorer.readOnly")}</span>
+                    {modified ? <span className="rounded bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("explorer.unsaved")}</span> : null}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded bg-surface px-2 py-0.5 text-xs text-ink-muted">{file.editable ? t("explorer.editable") : t("explorer.readOnly")}</span>
-                  {modified ? <span className="rounded bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("explorer.unsaved")}</span> : null}
+                <label htmlFor="file-raw" className="sr-only">{t("explorer.fileText", { path: file.file.path ?? file.file.absolute })}</label>
+                <textarea
+                  id="file-raw"
+                  ref={editorRef}
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  rows={24}
+                  spellCheck={false}
+                  disabled={!file.editable}
+                  className="min-h-96 w-full flex-1 resize-y border-0 bg-control p-4 font-mono text-xs leading-6 text-ink focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent disabled:bg-surface-subtle disabled:text-ink-faint"
+                />
+                <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 border-t border-line bg-toolbar px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:static md:z-auto md:py-3">
+                  <Button className="min-h-10 md:min-h-0" onClick={() => void run("preview")}>{t("explorer.preview")}</Button>
+                  <Button kind="primary" className="min-h-10 md:min-h-0" onClick={() => void run("save")} disabled={!file.editable}>{t("explorer.saveFile")}</Button>
                 </div>
-              </div>
-              <label htmlFor="file-raw" className="sr-only">{t("explorer.fileText", { path: file.file.path ?? file.file.absolute })}</label>
-              <textarea
-                id="file-raw"
-                ref={editorRef}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                rows={24}
-                spellCheck={false}
-                disabled={!file.editable}
-                className="min-h-96 w-full flex-1 resize-y border-0 bg-control p-4 font-mono text-xs leading-6 text-ink focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent disabled:bg-surface-subtle disabled:text-ink-faint"
-              />
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-toolbar px-4 py-3">
-                <Button className="min-h-10 md:min-h-0" onClick={() => void run("preview")}>{t("explorer.preview")}</Button>
-                <Button kind="primary" className="min-h-10 md:min-h-0" onClick={() => void run("save")} disabled={!file.editable}>{t("explorer.saveFile")}</Button>
               </div>
 
               {file.file.path === undefined || !file.editable ? null : (

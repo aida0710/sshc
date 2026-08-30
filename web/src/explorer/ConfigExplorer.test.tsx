@@ -56,6 +56,7 @@ describe("ConfigExplorer", () => {
 
     await waitFor(() => expect(configApi.file).toHaveBeenCalledWith("config"));
     expect(await screen.findByLabelText(/File text.*config/)).toHaveValue("Include conf.d/*.conf\n");
+    expect(screen.getByRole("button", { name: "Save file" }).parentElement).toHaveClass("sticky", "bottom-0", "md:static");
   });
 
   it("keeps the latest file selection when the automatic entry load returns late", async () => {
