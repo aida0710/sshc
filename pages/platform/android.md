@@ -7,7 +7,7 @@ description: Android版のインストール、ローカルシェル、画面操
 
 ![AndroidのQuick Connect](/images/android-home.png)
 
-GitHub Releasesから署名済みのAPKをダウンロードできます。Android 13以降の戻るジェスチャーはsshc内の履歴と連動し、ページを戻るより先に、開いているダイアログ、Command Palette、メニュードロワー、Inspectorを閉じます。
+GitHub Releasesから署名済みのAPKをダウンロードできます。Android 13以降の戻るジェスチャーはsshc内の履歴と連動しています。ダイアログ、Command Palette、メニュードロワー、Inspectorが開いている場合は、ページを戻る前に閉じられます。
 
 ## モバイル版の違い
 
@@ -20,7 +20,7 @@ GitHub Releasesから署名済みのAPKをダウンロードできます。Andro
 
 ## ローカルシェル
 
-Androidアプリ専用のディレクトリで、ローカルシェルを開けます。完全なデスクトップLinux環境ではなく、Androidが提供するシェルとアプリのサンドボックス権限で動作します。`ll`のようなシェルエイリアスや、`dir`などの外部コマンドは、標準では利用できないことがあります。
+Androidアプリ専用のディレクトリで、ローカルシェルを開けます。完全なデスクトップLinux環境ではなく、Androidが提供するシェルとアプリのサンドボックス権限で動作しています。`ll`のようなシェルエイリアスや、`dir`などの外部コマンドは、標準では利用できないことがあります。
 
 ## 起動失敗時
 

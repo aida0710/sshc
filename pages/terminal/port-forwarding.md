@@ -11,7 +11,7 @@ sshcはLocal forwardingとDynamic SOCKS5に対応しています。Remote forwar
 
 ## Local forwarding
 
-ローカル側のアドレス／ポートで待ち受け、SSH接続先から転送先のホスト／ポートへ接続します。
+ローカル側のアドレス／ポートで待ち受け、SSH接続先から転送先のホスト／ポートへ接続できます。
 
 ```text
 127.0.0.1:8080  →  SSHホスト  →  127.0.0.1:80
@@ -21,7 +21,7 @@ sshcはLocal forwardingとDynamic SOCKS5に対応しています。Remote forwar
 
 ## Dynamic SOCKS
 
-ローカル側にSOCKS5エンドポイントを開き、アプリケーションが通信ごとに転送先を指定します。そのため、Dynamicの設定には固定の転送先入力欄がありません。
+ローカル側にSOCKS5エンドポイントを開き、アプリケーションから通信ごとに転送先を指定できます。そのため、Dynamicの設定には固定の転送先入力欄がありません。
 
 ```text
 SOCKSクライアント  →  127.0.0.1:1080  →  SSHホスト  →  通信先
