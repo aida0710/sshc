@@ -1,6 +1,6 @@
 ---
 layout: home
-title: sshc — OpenSSHを、そのまま使いやすく
+title: sshc
 description: OpenSSH設定の整理、認証情報の再利用、AIエージェント向けCLI、暗号化同期を一つに。
 sidebar: false
 outline: false
@@ -9,8 +9,7 @@ outline: false
 <main class="sshc-home">
   <section class="sshc-hero">
     <div>
-      <p class="sshc-eyebrow">Local-first SSH workspace</p>
-      <h1 class="sshc-title">OpenSSHを、<br>そのまま使いやすく。</h1>
+      <h1 class="sshc-title">sshc</h1>
       <p class="sshc-lead">いつもの <code>~/.ssh/config</code> をそのまま整理し、端末間で同期。保存した認証情報は、Terminal、SFTP、CLIから繰り返し使えます。</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">インストール</a>
@@ -25,7 +24,7 @@ outline: false
 
   <section class="sshc-home-section">
     <div class="sshc-section-heading">
-      <h2>一度整えれば、<br>人にもAIにも使いやすい。</h2>
+      <h2>OpenSSH設定と認証情報</h2>
       <p>設定の正本は、OpenSSHが読めるファイルのまま。VS CodeやCodexは同じエイリアスを使えます。AIエージェントからはsshcのCLIを呼び出し、保存済みの認証情報で接続できます。</p>
     </div>
     <div class="sshc-feature-grid">
@@ -40,7 +39,7 @@ outline: false
 
   <section class="sshc-home-section">
     <div class="sshc-section-heading">
-      <h2>まずは、一行から。</h2>
+      <h2>インストール</h2>
       <p>macOSとLinuxではHomebrewから。Windowsには、GitHub Releasesで配布する検証済みのPowerShellインストーラーがあります。</p>
     </div>
     <div class="sshc-command"><code>brew install aida0710/tap/sshc</code><span>macOS / Linux</span></div>

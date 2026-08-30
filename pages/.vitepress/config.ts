@@ -88,7 +88,7 @@ export default defineConfig({
   head: [
     ["meta", { name: "theme-color", content: "#111416" }],
     ["meta", { property: "og:type", content: "website" }],
-    ["meta", { property: "og:title", content: "sshc — OpenSSHを、そのまま使いやすく" }],
+    ["meta", { property: "og:title", content: "sshc" }],
     ["meta", { property: "og:description", content: "OpenSSH設定の整理、認証情報の再利用、AIエージェント向けCLI、暗号化同期を一つに。" }],
     ["meta", { property: "og:image", content: "https://aida0710.github.io/sshc/images/connections-desktop.png" }],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
@@ -118,7 +118,7 @@ export default defineConfig({
       link: "/en/",
       description: "Organize OpenSSH, reuse saved credentials from the CLI, and sync securely across devices.",
       head: [
-        ["meta", { property: "og:title", content: "sshc — Manage OpenSSH without replacing it" }],
+        ["meta", { property: "og:title", content: "sshc" }],
         ["meta", { property: "og:description", content: "Organize OpenSSH, reuse saved credentials from the CLI, and sync securely across devices." }],
       ],
       themeConfig: {
