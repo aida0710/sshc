@@ -55,6 +55,7 @@ const entryConfig = [
 const includedConfig = [
   "Host nas",
   "\tHostName 198.51.100.20",
+  "\tUser aida",
   '\tUnknownFutureDirective some "quoted value" 3',
   "",
 ].join("\n");
