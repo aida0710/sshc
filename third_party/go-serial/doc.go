@@ -12,20 +12,6 @@ line inside this repository is the following:
 
 	import "sshc/third_party/go-serial"
 
-It is possible to get the list of available serial ports with the
-GetPortsList function:
-
-	ports, err := serial.GetPortsList()
-	if err != nil {
-		log.Fatal(err)
-	}
-	if len(ports) == 0 {
-		log.Fatal("No serial ports found!")
-	}
-	for _, port := range ports {
-		fmt.Printf("Found port: %v\n", port)
-	}
-
 The serial port can be opened with the Open function:
 
 	mode := &serial.Mode{
@@ -79,35 +65,7 @@ serial port:
 		fmt.Printf("%v", string(buff[:n]))
 	}
 
-If a port is a virtual USB-CDC serial port (for example an USB-to-RS232
-cable or a microcontroller development board) is possible to retrieve
-the USB metadata, like VID/PID or USB Serial Number, with the
-GetDetailedPortsList function in the enumerator package:
-
-	import "sshc/third_party/go-serial/enumerator"
-
-	ports, err := enumerator.GetDetailedPortsList()
-	if err != nil {
-		log.Fatal(err)
-	}
-	if len(ports) == 0 {
-		fmt.Println("No serial ports found!")
-		return
-	}
-	for _, port := range ports {
-		fmt.Printf("Found port: %s\n", port.Name)
-		if port.IsUSB {
-			fmt.Printf("   USB ID     %s:%s\n", port.VID, port.PID)
-			fmt.Printf("   USB serial %s\n", port.SerialNumber)
-		}
-	}
-
-for details on USB port enumeration see the documentation of the specific package.
-
 This library tries to avoid the use of the "C" package (and consequently the need
 of cgo) to simplify cross compiling.
-Unfortunately the USB enumeration package for darwin (MacOSX) requires cgo
-to access the IOKit framework. This means that if you need USB enumeration
-on darwin you're forced to use cgo.
 */
 package serial

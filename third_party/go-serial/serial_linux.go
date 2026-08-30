@@ -6,15 +6,7 @@
 
 package serial
 
-import (
-	"regexp"
-
-	"golang.org/x/sys/unix"
-)
-
-const devFolder = "/dev"
-
-var osPortFilter = regexp.MustCompile("(ttyS|ttyHS|ttyUSB|ttyACM|ttyAMA|rfcomm|ttyO|ttymxc)[0-9]{1,3}")
+import "golang.org/x/sys/unix"
 
 // termios manipulation functions
 
