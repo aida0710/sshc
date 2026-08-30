@@ -58,9 +58,9 @@ const (
 
 // FlowControl は、送受信を止めるhandshakeの形式である。
 //
-// 現行のsystem backendはFlowControlNoneだけを実装する。RTS/CTSとXON/XOFFは
-// 将来のbackend用に契約へ含めるが、指定時は黙って無視せず
-// ErrUnsupportedFlowControlを返す。
+// desktop system backendはnone、RTS/CTS、XON/XOFFを実装する。別platformの
+// backendが認識できる値を実装しない場合は、黙って無視せず
+// ErrUnsupportedFlowControlを返さなければならない。
 type FlowControl string
 
 const (
