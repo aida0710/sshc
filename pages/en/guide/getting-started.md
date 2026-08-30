@@ -15,7 +15,7 @@ sshc is a terminal app that uses your existing OpenSSH configuration. Open SSH s
 - You want to organize OpenSSH while keeping it usable from regular ssh and VS Code.
 - You do not want to re-enter passwords and key passphrases for every tool.
 - You want Codex or another AI agent to use saved connections from the CLI.
-- You need encrypted configuration, key, and credential sync across devices.
+- You want to sync configuration, keys, and credentials across devices through S3-compatible storage you provide.
 
 ## Reuse saved credentials
 
@@ -31,7 +31,7 @@ The agent does not need the password itself; sshc uses the saved vault value for
 
 ## What it is not
 
-sshc is not an SSH server or a cloud relay. Connections and decryption happen on your device. It does not upload terminal scrollback or running processes. Because the OpenSSH files remain standard, VS Code, Codex, and the normal `ssh` command can use the same configuration.
+sshc is not an SSH server or a cloud relay. Connections and decryption happen on your device. It does not upload terminal scrollback or running processes. sshc does not provide hosted sync storage or retain your sync data; encrypted snapshots go to the S3-compatible storage you configure. Because the OpenSSH files remain standard, VS Code, Codex, and the normal `ssh` command can use the same configuration.
 
 ## At a glance
 
@@ -41,7 +41,7 @@ sshc is not an SSH server or a cloud relay. Connections and decryption happen on
 | Workspace | Up to four panes, drag splits, saved ratios, broadcast commands |
 | Connections | Host blocks, Include trees, groups, keys, passwords, known hosts |
 | SFTP | File browser, editor, folder transfer, resumable queue |
-| Sync | S3-compatible storage, local encryption, push, pull, history |
+| Sync | User-provided S3-compatible storage, local encryption, push, pull, history |
 | CLI | SSH, sync, terminal control, Serial, Telnet, JSON automation |
 
 Next, [install sshc](/en/guide/install) and open your [first connection](/en/guide/first-connection).
