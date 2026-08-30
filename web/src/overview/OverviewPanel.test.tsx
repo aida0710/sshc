@@ -77,7 +77,9 @@ describe("OverviewPanel", () => {
     );
 
     const quickConnect = await screen.findByRole("heading", { name: "Quick connect" });
+    const pageHeading = screen.getByRole("heading", { name: "Your connections" });
     const metrics = screen.getByRole("group", { name: "Connections, Groups, Needs attention" });
+    expect(pageHeading.parentElement?.querySelector("p")).toBeNull();
     expect(quickConnect.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(within(metrics).getByText("2")).toBeInTheDocument();
     expect(within(metrics).getAllByText("1")).toHaveLength(2);

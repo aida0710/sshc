@@ -95,10 +95,7 @@ export function OverviewPanel({
   return (
     <section aria-labelledby="home-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
-        <div>
-          <h2 id="home-heading" className="text-xl font-semibold tracking-tight">{t("home.heading")}</h2>
-          <p className="mt-1 text-sm text-ink-muted">{t("home.intro")}</p>
-        </div>
+        <h2 id="home-heading" className="text-xl font-semibold tracking-tight">{t("home.heading")}</h2>
         <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Connections")}>
           {t("home.manageConnections")}
         </Button>

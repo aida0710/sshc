@@ -23,7 +23,6 @@ export const en = {
   "shell.navConnections": "Connection files",
   "shell.navKeysHosts": "Keys and hosts",
   "shell.navMaintenance": "Maintenance",
-  "menu.description": "Open an area of sshc. Running terminals stay available in the left sidebar.",
   "menu.open": "Open {section}",
   "shell.inspectorShowNamed": "Show {label}",
   "shell.inspectorHideNamed": "Hide {label}",
@@ -629,7 +628,6 @@ export const en = {
   "section.history": "History",
 
   "home.heading": "Your connections",
-  "home.intro": "Find a host and open a console for it.",
   "home.manageConnections": "Manage connections",
   "home.connections": "Connections",
   "home.groups": "Groups",
