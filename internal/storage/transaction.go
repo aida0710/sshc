@@ -276,6 +276,10 @@ type Manager struct {
 	// 両方を設定する。
 	Seal   func(plaintext []byte) ([]byte, error)
 	Unseal func(sealed []byte) ([]byte, error)
+	// AfterCommit reports a completed file mutation after the workspace lock has
+	// been released. It is a notification only: the durable commit has already
+	// succeeded and the callback must not attempt to change its result.
+	AfterCommit func(operation string)
 }
 
 func NewManager(workspace *Workspace, now func() time.Time, random io.Reader) *Manager {
@@ -289,7 +293,11 @@ func NewManager(workspace *Workspace, now func() time.Time, random io.Reader) *M
 // は「完了させる」か「復元する」かを選べる。複数のファイルが関わるとき、それが
 // 唯一の誠実な選択肢である。
 func (m *Manager) Commit(request Request) (Result, error) {
-	return m.commit(request, false, false, nil)
+	result, err := m.commit(request, false, false, nil)
+	if err == nil {
+		m.notifyCommit(request.Operation)
+	}
+	return result, err
 }
 
 // CommitAtomic は Commit より厳しい失敗時規則で書き込みトランザクションを適用する。
@@ -308,7 +316,11 @@ func (m *Manager) CommitAtomic(request Request) (Result, error) {
 			return Result{}, ErrAtomicWriteOnly
 		}
 	}
-	return m.commit(request, true, false, nil)
+	result, err := m.commit(request, true, false, nil)
+	if err == nil {
+		m.notifyCommit(request.Operation)
+	}
+	return result, err
 }
 
 // CommitAtomicDiscardBackups atomically replaces a set of already-encrypted
@@ -327,7 +339,11 @@ func (m *Manager) CommitAtomicDiscardBackups(request Request) (Result, error) {
 			return Result{}, ErrAtomicWriteOnly
 		}
 	}
-	return m.commit(request, true, true, nil)
+	result, err := m.commit(request, true, true, nil)
+	if err == nil {
+		m.notifyCommit(request.Operation)
+	}
+	return result, err
 }
 
 // CommitAtomicDiscardBackupsAndPublish performs the narrow rekey transaction
@@ -349,7 +365,17 @@ func (m *Manager) CommitAtomicDiscardBackupsAndPublish(request Request, publish 
 			return Result{}, ErrAtomicWriteOnly
 		}
 	}
-	return m.commit(request, true, true, publish)
+	result, err := m.commit(request, true, true, publish)
+	if err == nil {
+		m.notifyCommit(request.Operation)
+	}
+	return result, err
+}
+
+func (m *Manager) notifyCommit(operation string) {
+	if m.AfterCommit != nil {
+		m.AfterCommit(operation)
+	}
 }
 
 // WithSnapshot holds the same process and OS mutation barrier as Commit while

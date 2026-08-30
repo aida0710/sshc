@@ -39,6 +39,9 @@ type Protection struct {
 	Seal         func([]byte) ([]byte, error)
 	Open         func([]byte) ([]byte, error)
 	WithMutation func(func() error) error
+	// AfterChange runs after a successfully sealed document replacement and
+	// after all mutation locks have been released.
+	AfterChange func()
 }
 
 // Store writes one private, atomically replaced document under ~/.ssh/sshc.
@@ -52,6 +55,10 @@ type Store struct {
 
 func NewStore(workspace *storage.Workspace, protection Protection) *Store {
 	return &Store{workspace: workspace, protect: protection}
+}
+
+func (s *Store) SetAfterChange(notify func()) {
+	s.protect.AfterChange = notify
 }
 
 func (s *Store) Path() string {
@@ -132,11 +139,15 @@ func (s *Store) Save(library Library) error {
 	if err != nil {
 		return err
 	}
-	return s.withMutation(func() error {
+	err = s.withMutation(func() error {
 		s.mutex.Lock()
 		defer s.mutex.Unlock()
 		return s.saveLocked(contents)
 	})
+	if err == nil && s.protect.AfterChange != nil {
+		s.protect.AfterChange()
+	}
+	return err
 }
 
 // Mutate keeps a complete read-modify-write under the same master-key and
@@ -146,7 +157,7 @@ func (s *Store) Mutate(mutation func(*Library) error) error {
 	if mutation == nil {
 		return nil
 	}
-	return s.withMutation(func() error {
+	err := s.withMutation(func() error {
 		s.mutex.Lock()
 		defer s.mutex.Unlock()
 		library, err := s.load(false)
@@ -165,6 +176,10 @@ func (s *Store) Mutate(mutation func(*Library) error) error {
 		}
 		return s.saveLocked(contents)
 	})
+	if err == nil && s.protect.AfterChange != nil {
+		s.protect.AfterChange()
+	}
+	return err
 }
 
 func (s *Store) saveLocked(contents []byte) error {

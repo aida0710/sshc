@@ -1086,7 +1086,7 @@ export const en = {
     "The endpoint is the account address only — no bucket name and no path. Put the bucket name in the field below.",
   "sync.auto": "Automatic sync",
   "sync.autoHint":
-    "Checks for changes about once a minute while the vault is unlocked. It downloads changes from other machines and uploads local changes. Conflicts and changes that remove files are not applied automatically; automatic sync stops and reports them.",
+    "Checks the remote for changes once a minute while the vault is unlocked. After settings on this machine change, it uploads once when no further changes occur for five seconds. Conflicts and changes that remove files are not applied automatically; automatic sync stops and reports them.",
   "sync.autoEnable": "Keep this machine in sync automatically",
   "sync.autoIdle": "Stopped",
   "sync.autoLastRan": "Last checked {at}.",
