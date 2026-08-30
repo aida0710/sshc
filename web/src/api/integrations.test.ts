@@ -115,6 +115,26 @@ describe("integrationsApi terminal sessions", () => {
     expect(new Headers(init.headers).get("X-SSHC-Action")).toBeNull();
   });
 
+  it("starts and stops a temporary forward on one encoded session", async () => {
+    const forwarded = {
+      ...session,
+      kind: "ssh",
+      forwards: [{ id: "pf-1", kind: "dynamic", listen: "127.0.0.1:1080", to: "", problem: "", temporary: true }],
+    };
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ sessions: [forwarded], maxSessions: 50 }, 201))
+      .mockResolvedValueOnce(jsonResponse({ sessions: [{ ...forwarded, forwards: [] }], maxSessions: 50 }));
+    vi.stubGlobal("fetch", fetcher);
+
+    await integrationsApi.startTerminalForward("session id", { kind: "dynamic", listenPort: 1080 });
+    await integrationsApi.stopTerminalForward("session id", "pf/1");
+
+    expect(fetcher.mock.calls[0]?.[0]).toBe("/api/v1/terminal/sessions/session%20id/forwards");
+    expect(sentJson(fetcher.mock.calls[0]?.[1] as RequestInit)).toEqual({ kind: "dynamic", listenPort: 1080 });
+    expect(fetcher.mock.calls[1]?.[0]).toBe("/api/v1/terminal/sessions/session%20id/forwards/pf%2F1");
+    expect((fetcher.mock.calls[1]?.[1] as RequestInit).method).toBe("DELETE");
+  });
+
   it.each([
     { sessions: [{ ...session, kind: "telnet" }], maxSessions: 50 },
     { sessions: [{ ...session, id: 3 }], maxSessions: 50 },
@@ -124,6 +144,8 @@ describe("integrationsApi terminal sessions", () => {
     { sessions: [{ ...session, progress: { phase: "authenticating", alias: "edge", hostName: "edge", user: "ops", hop: 3, hops: 2 } }], maxSessions: 50 },
     { sessions: [{ ...session, state: "reconnecting", reconnect: { attempt: 0, limit: 5, retryAt: "x", problem: "" } }], maxSessions: 50 },
     { sessions: [{ ...session, exited: { code: "0", signal: "", at: "" } }], maxSessions: 50 },
+    { sessions: [{ ...session, forwards: [{ id: "", kind: "remote", listen: "x", to: "y", problem: "", temporary: false }] }], maxSessions: 50 },
+    { sessions: [{ ...session, forwards: [{ kind: "local", listen: "x", to: "y", problem: "" }] }], maxSessions: 50 },
     { sessions: [], maxSessions: -1 },
     { sessions: {}, maxSessions: 50 },
   ])("rejects a malformed session list %#", async (body) => {

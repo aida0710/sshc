@@ -340,6 +340,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminal/sessions/{id}/forwards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Starts one loopback-only local or SOCKS5 forward on an existing connected SSH session. */
+        post: operations["startTerminalForward"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/sessions/{id}/forwards/{forwardId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["stopTerminalForward"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/sessions/{id}/reconnect": {
         parameters: {
             query?: never;
@@ -2024,10 +2057,17 @@ export interface components {
             acknowledged: boolean;
         };
         TerminalForward: {
+            id: string;
             kind: string;
             listen: string;
             to: string;
             problem: string;
+            temporary: boolean;
+        };
+        StartTerminalForwardRequest: {
+            kind: string;
+            listenPort: number;
+            destination?: string;
         };
         TerminalSession: {
             id: string;
@@ -3843,6 +3883,63 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    startTerminalForward: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartTerminalForwardRequest"];
+            };
+        };
+        responses: {
+            /** @description The session list containing the newly opened temporary forward */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    stopTerminalForward: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                forwardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session list after closing the selected forward */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];

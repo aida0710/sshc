@@ -330,9 +330,9 @@ describe("ConsoleList", () => {
       sessions: [{
         ...live,
         forwards: [
-          { kind: "local", listen: "127.0.0.1:8080", to: "10.0.0.5:80", problem: "" },
-          { kind: "dynamic", listen: "127.0.0.1:1080", to: "", problem: "" },
-          { kind: "agent", listen: "", to: "", problem: "" },
+          { id: "pf-1", kind: "local", listen: "127.0.0.1:8080", to: "10.0.0.5:80", problem: "", temporary: false },
+          { id: "pf-2", kind: "dynamic", listen: "127.0.0.1:1080", to: "", problem: "", temporary: false },
+          { id: "pf-3", kind: "agent", listen: "", to: "", problem: "", temporary: false },
         ],
       }],
     });
@@ -347,7 +347,7 @@ describe("ConsoleList", () => {
       sessions: [{
         ...live,
         forwards: [
-          { kind: "local", listen: "127.0.0.1:8080", to: "10.0.0.5:80", problem: "address already in use" },
+          { id: "pf-1", kind: "local", listen: "127.0.0.1:8080", to: "10.0.0.5:80", problem: "address already in use", temporary: false },
         ],
       }],
     });

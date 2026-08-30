@@ -30,6 +30,8 @@ const (
 
 // Forward は、そのセッションが開いている転送ひとつである。
 type Forward struct {
+	// ID は同じセッション内で一意な、停止操作用の不透明な識別子。
+	ID   string
 	Kind string
 	// Listen は、このマシンで開いている場所。agent 転送では空。
 	Listen string
@@ -37,10 +39,19 @@ type Forward struct {
 	To string
 	// Problem は、開けなかった理由。空なら開いている。
 	Problem string
+	// Temporary は接続後に追加され、設定ファイルには由来しない転送を表す。
+	Temporary bool
 }
 
 // Forwarder は、そのセッションが開いている転送を報告する。
 type Forwarder interface{ Forwards() []Forward }
+
+// ForwardController は接続済みSSHセッション上の一時ポート転送を操作する。
+// 実装しないローカルshellや接続途中のprocessへは公開しない。
+type ForwardController interface {
+	StartForward(kind, listenPort, destination string) (Forward, error)
+	StopForward(id string) error
+}
 
 // Readier reports when an asynchronously opened Process has completed the
 // connection work which makes it usable. A Process without this capability is
@@ -192,6 +203,9 @@ var (
 	ErrExactInputUnavailable      = errors.New("the terminal process cannot accept exact input")
 	ErrCommandTooLarge            = errors.New("the terminal command is too large")
 	ErrUnsafeInsert               = errors.New("the terminal command contains control input that cannot be inserted safely")
+	ErrForwardUnavailable         = errors.New("the terminal process cannot manage port forwards")
+	ErrForwardNotFound            = errors.New("no such terminal port forward")
+	ErrInvalidForward             = errors.New("the terminal port forward is invalid")
 	ErrShuttingDown               = errors.New("the terminal registry is shutting down")
 	ErrAgentResumeUnavailable     = errors.New("the agent session cannot be resumed")
 	ErrAgentResumeStale           = errors.New("the agent resume candidate has changed")

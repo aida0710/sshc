@@ -4,12 +4,14 @@ import { useTranslate } from "../i18n/context";
 export function TerminalOverflowMenu({
   osc52Enabled,
   onQuickCommands,
+  onPortForwarding,
   onCopyContext,
   onToggleOsc52,
   onClose,
 }: {
   osc52Enabled: boolean;
   onQuickCommands: () => void;
+  onPortForwarding?: (() => void) | undefined;
   onCopyContext: () => void;
   onToggleOsc52: () => void | Promise<void>;
   onClose: () => void;
@@ -47,6 +49,11 @@ export function TerminalOverflowMenu({
       <button type="button" role="menuitem" className="block w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill" onClick={action(onQuickCommands)}>
         {t("terminal.quickCommands")}
       </button>
+      {onPortForwarding === undefined ? null : (
+        <button type="button" role="menuitem" className="block w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill" onClick={action(onPortForwarding)}>
+          {t("terminal.portForwarding")}
+        </button>
+      )}
       <button type="button" role="menuitem" className="block w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill" title={t("terminal.copyContextHint")} onClick={action(onCopyContext)}>
         {t("terminal.copyContext")}
       </button>

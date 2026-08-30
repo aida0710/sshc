@@ -36,6 +36,9 @@ export function AdvancedSettings({
   const [additions, setAdditions] = useState<FieldEdit[]>([]);
   const [newKeyword, setNewKeyword] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [newForwardKind, setNewForwardKind] = useState<"local" | "dynamic">("local");
+  const [newListenPort, setNewListenPort] = useState("");
+  const [newDestination, setNewDestination] = useState("");
   const [blockRaw, setBlockRaw] = useState(detail.form.raw);
   const [localError, setLocalError] = useState("");
 
@@ -46,6 +49,9 @@ export function AdvancedSettings({
     setAdditions([]);
     setNewKeyword("");
     setNewValue("");
+    setNewForwardKind("local");
+    setNewListenPort("");
+    setNewDestination("");
     setBlockRaw(detail.form.raw);
     setLocalError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -54,7 +60,9 @@ export function AdvancedSettings({
   const visibleFields = useMemo(
     () => detail.form.fields.filter((field) =>
       area === "Directives"
-        ? field.category === "advanced" || field.category === "basic"
+        ? (field.category === "advanced" || field.category === "basic") && !isForwardField(field)
+        : area === "Forwards"
+          ? isForwardField(field)
         : area === "Jump" && field.category === "jump",
     ),
     [area, detail.form.fields],
@@ -76,6 +84,9 @@ export function AdvancedSettings({
     setAdditions([]);
     setNewKeyword("");
     setNewValue("");
+    setNewForwardKind("local");
+    setNewListenPort("");
+    setNewDestination("");
     setBlockRaw(detail.form.raw);
     setLocalError("");
   }, [detail.form.raw]);
@@ -122,8 +133,28 @@ export function AdvancedSettings({
     setLocalError("");
   }
 
-  const tabs: { area: AdvancedArea; label: "host.tabJump" | "conn.advancedDirectives" | "host.tabRaw" }[] = [
+  function addForward() {
+    if (!validPort(newListenPort)) {
+      setLocalError(t("conn.forwardInvalidPort"));
+      return;
+    }
+    if (newForwardKind === "local" && !validDestination(newDestination)) {
+      setLocalError(t("conn.forwardInvalidDestination"));
+      return;
+    }
+    setAdditions([...additions, {
+      action: "add",
+      keyword: newForwardKind === "local" ? "LocalForward" : "DynamicForward",
+      values: newForwardKind === "local" ? [newListenPort, newDestination] : [newListenPort],
+    }]);
+    setNewListenPort("");
+    setNewDestination("");
+    setLocalError("");
+  }
+
+  const tabs: { area: AdvancedArea; label: "host.tabJump" | "conn.portForwarding" | "conn.advancedDirectives" | "host.tabRaw" }[] = [
     { area: "Jump", label: "host.tabJump" },
+    { area: "Forwards", label: "conn.portForwarding" },
     { area: "Directives", label: "conn.advancedDirectives" },
     { area: "Raw", label: "host.tabRaw" },
   ];
@@ -161,7 +192,72 @@ export function AdvancedSettings({
 
       <div hidden={area === "Raw"} className="flex flex-col gap-3">
         {rawDirty ? <Notice>{t("conn.advancedRawBlocksFields")}</Notice> : null}
-        {visibleFields.length === 0 ? <p className={hintText}>{t("conn.advancedNoFields")}</p> : (
+        {area === "Forwards" ? (
+          <>
+            <Notice>{t("conn.forwardLoopbackOnly")}</Notice>
+            {visibleFields.length === 0 && additions.filter(isForwardAddition).length === 0
+              ? <p className={hintText}>{t("conn.forwardNoneSaved")}</p>
+              : <Card>
+                {visibleFields.map((field) => (
+                  <Row
+                    key={fieldKey(field)}
+                    label={field.keyword.toLowerCase() === "localforward" ? t("conn.forwardLocal") : t("conn.forwardDynamic")}
+                    stackOnNarrow
+                    action={(
+                      <Button
+                        className="px-2 py-1 text-xs"
+                        disabled={fieldsDisabled}
+                        onClick={() => setRemoved(
+                          removed.includes(field.line)
+                            ? removed.filter((line) => line !== field.line)
+                            : [...removed, field.line],
+                        )}
+                      >
+                        {removed.includes(field.line) ? t("host.keep") : t("host.remove")}
+                      </Button>
+                    )}
+                  >
+                    <input
+                      aria-label={`${field.keyword} ${field.line}`}
+                      value={draftFor(field)}
+                      disabled={fieldsDisabled || !field.editable || removed.includes(field.line)}
+                      onChange={(event) => setDrafts({ ...drafts, [fieldKey(field)]: event.target.value })}
+                      className={control}
+                    />
+                  </Row>
+                ))}
+                {additions.filter(isForwardAddition).map((addition, index) => (
+                  <Row
+                    key={`new-forward-${index}`}
+                    label={addition.keyword === "LocalForward" ? t("conn.forwardLocal") : t("conn.forwardDynamic")}
+                    hint={t("conn.forwardPendingSave")}
+                    stackOnNarrow
+                    action={<Button className="px-2 py-1 text-xs" disabled={fieldsDisabled} onClick={() => setAdditions(additions.filter((candidate) => candidate !== addition))}>{t("host.remove")}</Button>}
+                  >
+                    <span className="w-full truncate font-mono text-sm">{(addition.values ?? []).join(" ")}</span>
+                  </Row>
+                ))}
+              </Card>}
+            <div className="sshc-card grid gap-3 rounded-md bg-card p-4 sm:grid-cols-2 sm:items-end 2xl:grid-cols-[10rem_9rem_minmax(12rem,1fr)_auto]">
+              <label className="flex flex-col gap-1 text-xs text-ink-muted">
+                {t("conn.forwardType")}
+                <select value={newForwardKind} disabled={fieldsDisabled} onChange={(event) => setNewForwardKind(event.currentTarget.value as "local" | "dynamic")} className={control}>
+                  <option value="local">{t("conn.forwardLocal")}</option>
+                  <option value="dynamic">{t("conn.forwardDynamic")}</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-ink-muted">
+                {t("conn.forwardListenPort")}
+                <input inputMode="numeric" value={newListenPort} disabled={fieldsDisabled} onChange={(event) => setNewListenPort(event.currentTarget.value)} className={control} />
+              </label>
+              <label className={`flex flex-col gap-1 text-xs text-ink-muted sm:col-span-2 2xl:col-span-1 ${newForwardKind === "dynamic" ? "opacity-50" : ""}`}>
+                {t("conn.forwardDestination")}
+                <input placeholder="db.internal:5432" value={newDestination} disabled={fieldsDisabled || newForwardKind === "dynamic"} onChange={(event) => setNewDestination(event.currentTarget.value)} className={control} />
+              </label>
+              <Button className={`${narrowControl} sm:col-span-2 2xl:col-span-1`} disabled={fieldsDisabled} onClick={addForward}>{t("conn.forwardAdd")}</Button>
+            </div>
+          </>
+        ) : visibleFields.length === 0 ? <p className={hintText}>{t("conn.advancedNoFields")}</p> : (
           <Card>
             {visibleFields.map((field) => (
               <Row
@@ -249,4 +345,26 @@ export function AdvancedSettings({
       </div>
     </section>
   );
+}
+
+function isForwardField(field: FormField): boolean {
+  const keyword = field.keyword.toLowerCase();
+  return keyword === "localforward" || keyword === "dynamicforward";
+}
+
+function isForwardAddition(edit: FieldEdit): boolean {
+  return edit.action === "add" && (edit.keyword === "LocalForward" || edit.keyword === "DynamicForward");
+}
+
+function validPort(value: string): boolean {
+  const port = Number(value);
+  return /^\d+$/.test(value) && Number.isInteger(port) && port > 0 && port <= 65535;
+}
+
+function validDestination(value: string): boolean {
+  const bracketed = /^\[[^\]]+\]:(\d+)$/.exec(value);
+  if (bracketed !== null) return validPort(bracketed[1] ?? "");
+  const separator = value.lastIndexOf(":");
+  if (separator <= 0 || value.slice(0, separator).includes(":")) return false;
+  return validPort(value.slice(separator + 1));
 }

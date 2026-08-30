@@ -69,6 +69,10 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 	if _, attached := session.attach(nil, closers); !attached {
 		return
 	}
+	if !session.attachClient(client) {
+		closeAll(closers)
+		return
+	}
 	hops := len(target.JumpRoute()) + 1
 	trace.stage(terminal.ConnectionOpeningSession, target, hops, hops)
 	trace.say(Brief, "認証に成功しました。セッションを開始します。")

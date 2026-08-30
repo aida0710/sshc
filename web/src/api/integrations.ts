@@ -18,6 +18,7 @@ export type TerminalBackgroundList = components["schemas"]["TerminalBackgroundLi
 export type TerminalSessionList = components["schemas"]["TerminalSessionList"];
 export type OpenTerminalSessionRequest = components["schemas"]["OpenTerminalSessionRequest"];
 export type OpenTerminalSessionResponse = components["schemas"]["OpenTerminalSessionResponse"];
+export type StartTerminalForwardRequest = components["schemas"]["StartTerminalForwardRequest"];
 export type ResumeTerminalAgentRequest = components["schemas"]["ResumeTerminalAgentRequest"];
 export type TerminalStreamTicket = components["schemas"]["TerminalStreamTicket"];
 export type RecentConnection = components["schemas"]["RecentConnection"];
@@ -76,6 +77,8 @@ export type IntegrationsApi = {
   openTerminalSession(request: OpenTerminalSessionRequest): Promise<OpenTerminalSessionResponse>;
   terminalStreamTicket(id: string): Promise<TerminalStreamTicket>;
   reconnectTerminalSession(id: string): Promise<TerminalSessionList>;
+  startTerminalForward(id: string, request: StartTerminalForwardRequest): Promise<TerminalSessionList>;
+  stopTerminalForward(id: string, forwardId: string): Promise<TerminalSessionList>;
   resumeTerminalAgent?(id: string, request: ResumeTerminalAgentRequest): Promise<OpenTerminalSessionResponse>;
   renameTerminalSession(id: string, title: string | null): Promise<TerminalSessionList>;
   closeTerminalSession(id: string): Promise<TerminalSessionList>;
@@ -289,10 +292,13 @@ function validateTerminalSession(value: unknown): TerminalSession {
   if (record.forwards !== undefined) {
     for (const forward of asArray(record.forwards)) {
       const entry = asRecord(forward);
-      asString(entry.kind);
+      asString(entry.id);
+      const kind = asString(entry.kind);
+      if (kind !== "local" && kind !== "dynamic" && kind !== "agent") throw new Error("invalid_response");
       asString(entry.listen);
       asString(entry.to);
       asString(entry.problem);
+      asBoolean(entry.temporary);
     }
   }
   if (record.presentation !== undefined) {
@@ -710,6 +716,18 @@ export const integrationsApi: IntegrationsApi = {
   async reconnectTerminalSession(id) {
     return validateTerminalSessionList(
       await postJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/reconnect`, {}),
+    );
+  },
+  async startTerminalForward(id, request) {
+    return validateTerminalSessionList(
+      await postJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/forwards`, request),
+    );
+  },
+  async stopTerminalForward(id, forwardId) {
+    return validateTerminalSessionList(
+      await apiClient.mutate<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/forwards/${encodeURIComponent(forwardId)}`, {
+        method: "DELETE",
+      }),
     );
   },
   async resumeTerminalAgent(id, request) {

@@ -126,9 +126,28 @@ func (p *readinessPTY) Ready() <-chan error { return p.connected }
 type forwardingReadinessPTY struct {
 	*readinessPTY
 	forwards []terminal.Forward
+	next     int
 }
 
 func (p *forwardingReadinessPTY) Forwards() []terminal.Forward { return p.forwards }
+func (p *forwardingReadinessPTY) StartForward(kind, listenPort, destination string) (terminal.Forward, error) {
+	p.next++
+	forward := terminal.Forward{
+		ID: fmt.Sprintf("pf-%d", p.next), Kind: kind, Listen: "127.0.0.1:" + listenPort,
+		To: destination, Temporary: true,
+	}
+	p.forwards = append(p.forwards, forward)
+	return forward, nil
+}
+func (p *forwardingReadinessPTY) StopForward(id string) error {
+	for index, forward := range p.forwards {
+		if forward.ID == id {
+			p.forwards = append(p.forwards[:index], p.forwards[index+1:]...)
+			return nil
+		}
+	}
+	return terminal.ErrForwardNotFound
+}
 
 func (s *scriptedStarter) Start(_ context.Context, command terminal.Command, _ terminal.Size) (terminal.Process, error) {
 	s.mutex.Lock()
@@ -163,12 +182,14 @@ type terminalFixture struct {
 	origin   string
 	mutex    sync.Mutex
 	// connected は、プロセス内 SSH に渡された alias である。
-	connected []string
-	ssh       []*scriptedPTY
-	sshReady  []*readinessPTY
-	asyncSSH  bool
-	recorded  []string
-	resumed   []string
+	connected  []string
+	ssh        []*scriptedPTY
+	sshReady   []*readinessPTY
+	asyncSSH   bool
+	forwarding bool
+	forwarders []*forwardingReadinessPTY
+	recorded   []string
+	resumed    []string
 }
 
 func (f *terminalFixture) connect(alias string) terminal.Process {
@@ -177,12 +198,83 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 	f.connected = append(f.connected, alias)
 	process := newScriptedPTY()
 	f.ssh = append(f.ssh, process)
+	if f.forwarding {
+		ready := &readinessPTY{scriptedPTY: process, connected: make(chan error, 1)}
+		forwarder := &forwardingReadinessPTY{readinessPTY: ready}
+		f.forwarders = append(f.forwarders, forwarder)
+		ready.connected <- nil
+		close(ready.connected)
+		return forwarder
+	}
 	if f.asyncSSH {
 		ready := &readinessPTY{scriptedPTY: process, connected: make(chan error, 1)}
 		f.sshReady = append(f.sshReady, ready)
 		return ready
 	}
 	return process
+}
+
+func TestTemporaryForwardRoutesStartListAndStopOneListener(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	fixture.forwarding = true
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	var opened api.OpenTerminalSessionResponse
+	if err := json.Unmarshal([]byte(body), &opened); err != nil {
+		t.Fatal(err)
+	}
+
+	path := "/api/v1/terminal/sessions/" + opened.Session.Id + "/forwards"
+	response, body = fixture.do(t, http.MethodPost, path, `{"kind":"local","listenPort":18080,"destination":"db.internal:5432"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("start = %d: %s", response.StatusCode, body)
+	}
+	var listed api.TerminalSessionList
+	if err := json.Unmarshal([]byte(body), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Sessions) != 1 || listed.Sessions[0].Forwards == nil || len(*listed.Sessions[0].Forwards) != 1 {
+		t.Fatalf("sessions = %#v", listed.Sessions)
+	}
+	forward := (*listed.Sessions[0].Forwards)[0]
+	if forward.Id == "" || forward.Listen != "127.0.0.1:18080" || !forward.Temporary {
+		t.Fatalf("forward = %#v", forward)
+	}
+
+	response, body = fixture.do(t, http.MethodDelete, path+"/"+forward.Id, "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("stop = %d: %s", response.StatusCode, body)
+	}
+	listed = api.TerminalSessionList{}
+	if err := json.Unmarshal([]byte(body), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if listed.Sessions[0].Forwards != nil && len(*listed.Sessions[0].Forwards) != 0 {
+		t.Fatalf("forwards after stop = %#v", listed.Sessions[0].Forwards)
+	}
+}
+
+func TestTemporaryForwardRouteRejectsInvalidAndLocalShellRequests(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	id, _ := fixture.openShell(t)
+	path := "/api/v1/terminal/sessions/" + id + "/forwards"
+	for _, body := range []string{
+		`{"kind":"remote","listenPort":8080,"destination":"db:5432"}`,
+		`{"kind":"local","listenPort":0,"destination":"db:5432"}`,
+		`{"kind":"local","listenPort":8080}`,
+		`{"kind":"dynamic","listenPort":1080,"destination":"db:5432"}`,
+	} {
+		response, responseBody := fixture.do(t, http.MethodPost, path, body)
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("request %s = %d: %s", body, response.StatusCode, responseBody)
+		}
+	}
+	response, body := fixture.do(t, http.MethodPost, path, `{"kind":"dynamic","listenPort":1080}`)
+	if response.StatusCode != http.StatusConflict || !strings.Contains(body, "terminal_forward_unavailable") {
+		t.Fatalf("shell forward = %d: %s", response.StatusCode, body)
+	}
 }
 
 func (f *terminalFixture) record(alias string) {
@@ -433,6 +525,17 @@ func TestSSHSessionLifetimePreservesForwarderCapability(t *testing.T) {
 	}
 	if forwards := forwarder.Forwards(); len(forwards) != 1 || forwards[0] != underlying.forwards[0] {
 		t.Fatalf("forwards = %#v, want %#v", forwards, underlying.forwards)
+	}
+	controller, ok := process.(terminal.ForwardController)
+	if !ok {
+		t.Fatal("SSH lifetime wrapper dropped the ForwardController capability")
+	}
+	added, err := controller.StartForward(terminal.ForwardDynamic, "1080", "")
+	if err != nil || added.ID == "" {
+		t.Fatalf("start forward = %#v, %v", added, err)
+	}
+	if err := controller.StopForward(added.ID); err != nil {
+		t.Fatalf("stop forward: %v", err)
 	}
 	underlying.connected <- nil
 	close(underlying.connected)

@@ -42,6 +42,7 @@ type Session struct {
 	mutex    sync.Mutex
 	closed   bool
 	remote   *ssh.Session
+	client   *ssh.Client
 	size     terminal.Size
 	closers  []io.Closer
 	progress terminal.ConnectionProgress
@@ -69,6 +70,40 @@ func newSession(size terminal.Size, cancel context.CancelFunc) *Session {
 
 // Forwards は、このセッションが開いている転送を報告する。
 func (s *Session) Forwards() []terminal.Forward { return s.forwarded.list() }
+
+// StartForward opens one loopback-only local or SOCKS5 forward on the existing
+// authenticated transport.
+func (s *Session) StartForward(kind, listenPort, destination string) (terminal.Forward, error) {
+	var (
+		spec ForwardSpec
+		err  error
+	)
+	switch kind {
+	case terminal.ForwardLocal:
+		spec, err = ParseLocalForward(listenPort + " " + destination)
+	case terminal.ForwardDynamic:
+		if destination != "" {
+			return terminal.Forward{}, terminal.ErrInvalidForward
+		}
+		spec, err = ParseDynamicForward(listenPort)
+	default:
+		return terminal.Forward{}, terminal.ErrInvalidForward
+	}
+	if err != nil {
+		return terminal.Forward{}, terminal.ErrInvalidForward
+	}
+	s.mutex.Lock()
+	client, closed := s.client, s.closed
+	s.mutex.Unlock()
+	if client == nil || closed {
+		return terminal.Forward{}, terminal.ErrNotConnected
+	}
+	// 一時転送の成否は呼び出し元へ同期的に返す。端末の出力 pipe へも書くと、
+	// WebSocket の読者がまだ付いていない場面で StartForward 自体が止まり得る。
+	return s.forwarded.start(client, spec, true, nil, false)
+}
+
+func (s *Session) StopForward(id string) error { return s.forwarded.stop(id) }
 
 // Prompter は、この端末のストリームへ問いを出す。
 func (s *Session) Prompter() Prompter {
@@ -170,6 +205,7 @@ func (s *Session) Close() error {
 		s.mutex.Lock()
 		s.closed = true
 		remote, closers := s.remote, s.closers
+		s.client = nil
 		s.mutex.Unlock()
 		s.forwarded.close()
 		if remote != nil {
@@ -251,6 +287,16 @@ func (s *Session) attach(remote *ssh.Session, closers []io.Closer) (terminal.Siz
 	size := s.size
 	s.mutex.Unlock()
 	return size, true
+}
+
+func (s *Session) attachClient(client *ssh.Client) bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.closed {
+		return false
+	}
+	s.client = client
+	return true
 }
 
 // run は、シェルが終わるまで待ち、その理由を記録する。

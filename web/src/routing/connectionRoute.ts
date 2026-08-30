@@ -1,4 +1,4 @@
-export type AdvancedArea = "Jump" | "Directives" | "Raw";
+export type AdvancedArea = "Jump" | "Forwards" | "Directives" | "Raw";
 
 export type ConnectionPanel = "Basic" | "Analysis" | "Advanced" | "Sshc";
 
@@ -40,6 +40,7 @@ const panelsBySlug = new Map(
 
 const advancedSlugs: Record<AdvancedArea, string> = {
   Jump: "jump",
+  Forwards: "port-forwarding",
   Directives: "directives",
   Raw: "raw",
 };

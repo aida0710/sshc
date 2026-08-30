@@ -32,9 +32,9 @@ const detail: HostDetail = {
   },
 };
 
-function renderAdvanced(area: "Jump" | "Directives" | "Raw" = "Raw") {
+function renderAdvanced(area: "Jump" | "Forwards" | "Directives" | "Raw" = "Raw", selected = detail) {
   const props = {
-    detail,
+    detail: selected,
     area,
     onAreaChange: vi.fn(),
     onFieldEdits: vi.fn(),
@@ -113,5 +113,30 @@ describe("AdvancedSettings", () => {
     );
 
     expect(screen.getByText(/OpenSSH keeps the first one/)).toBeInTheDocument();
+  });
+
+  it("adds and removes Local and Dynamic forwarding through semantic edits", async () => {
+    const forwarded: HostDetail = {
+      ...detail,
+      form: {
+        ...detail.form,
+        fields: [
+          ...detail.form.fields,
+          { line: 4, keyword: "DynamicForward", values: ["1080"], category: "advanced", editable: true },
+        ],
+      },
+    };
+    const user = userEvent.setup();
+    const harness = renderAdvanced("Forwards", forwarded);
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.type(screen.getByLabelText("Local port"), "8080");
+    await user.type(screen.getByLabelText("Destination"), "db.internal:5432");
+    await user.click(screen.getByRole("button", { name: "Add forwarding" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(harness.props.onFieldEdits).toHaveBeenCalledWith([
+      { action: "remove", line: 4 },
+      { action: "add", keyword: "LocalForward", values: ["8080", "db.internal:5432"] },
+    ]);
   });
 });

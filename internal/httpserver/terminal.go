@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -83,6 +84,8 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	}
 	engine.POST("/api/v1/terminal/sessions/:id/stream", handlers.Ticket)
 	engine.POST("/api/v1/terminal/sessions/:id/reconnect", handlers.Reconnect)
+	engine.POST("/api/v1/terminal/sessions/:id/forwards", handlers.StartForward)
+	engine.DELETE("/api/v1/terminal/sessions/:id/forwards/:forwardId", handlers.StopForward)
 	engine.POST("/api/v1/terminal/sessions/:id/agent/resume", handlers.ResumeAgent)
 	engine.GET("/api/v1/terminal/sessions/:id/control", handlers.Control)
 	engine.PATCH("/api/v1/terminal/sessions/:id", handlers.Rename)
@@ -154,8 +157,8 @@ func describeSession(view terminal.View) api.TerminalSession {
 		forwards := make([]api.TerminalForward, 0, len(view.Forwards))
 		for _, forward := range view.Forwards {
 			forwards = append(forwards, api.TerminalForward{
-				Kind: forward.Kind, Listen: forward.Listen,
-				To: forward.To, Problem: forward.Problem,
+				Id: forward.ID, Kind: forward.Kind, Listen: forward.Listen,
+				To: forward.To, Problem: forward.Problem, Temporary: forward.Temporary,
 			})
 		}
 		described.Forwards = &forwards
@@ -168,6 +171,59 @@ func describeSession(view terminal.View) api.TerminalSession {
 		}
 	}
 	return described
+}
+
+// StartForward opens a loopback-only temporary forward on a connected SSH session.
+func (h TerminalHandlers) StartForward(c *echo.Context) error {
+	id := c.Param("id")
+	if id == "" || len(id) > maxSessionIdentifier {
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	}
+	var request api.StartTerminalForwardRequest
+	if err := decodeJSON(c, &request); err != nil || (request.Kind != "local" && request.Kind != "dynamic") {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	destination := ""
+	if request.Destination != nil {
+		destination = *request.Destination
+	}
+	if request.ListenPort < 1 || request.ListenPort > 65535 || len(destination) > 512 ||
+		(request.Kind == "local" && destination == "") ||
+		(request.Kind == "dynamic" && destination != "") {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	_, err := h.Registry.StartForward(id, string(request.Kind), strconv.Itoa(request.ListenPort), destination)
+	if err != nil {
+		return terminalForwardProblem(c, err)
+	}
+	return c.JSON(http.StatusCreated, h.list())
+}
+
+// StopForward closes one listener without ending the owning terminal session.
+func (h TerminalHandlers) StopForward(c *echo.Context) error {
+	id, forwardID := c.Param("id"), c.Param("forwardId")
+	if id == "" || len(id) > maxSessionIdentifier || forwardID == "" || len(forwardID) > maxSessionIdentifier {
+		return problem(c, http.StatusNotFound, "terminal_forward_not_found")
+	}
+	if err := h.Registry.StopForward(id, forwardID); err != nil {
+		return terminalForwardProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, h.list())
+}
+
+func terminalForwardProblem(c *echo.Context, err error) error {
+	switch {
+	case errors.Is(err, terminal.ErrNotFound):
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	case errors.Is(err, terminal.ErrForwardNotFound):
+		return problem(c, http.StatusNotFound, "terminal_forward_not_found")
+	case errors.Is(err, terminal.ErrInvalidForward):
+		return problem(c, http.StatusUnprocessableEntity, "invalid_terminal_forward")
+	case errors.Is(err, terminal.ErrNotConnected), errors.Is(err, terminal.ErrForwardUnavailable):
+		return problem(c, http.StatusConflict, "terminal_forward_unavailable")
+	default:
+		return problemDetail(c, http.StatusConflict, "terminal_forward_bind_failed", err.Error())
+	}
 }
 
 func (h TerminalHandlers) list() api.TerminalSessionList {
@@ -525,6 +581,24 @@ func (s *sessionLifetime) Forwards() []terminal.Forward {
 		return forwarder.Forwards()
 	}
 	return nil
+}
+
+// StartForward と StopForward も寿命wrapperを越えて同じ接続へ届ける。
+// 一覧だけを透過して操作能力を落とすと、表示はできても管理APIは必ず失敗する。
+func (s *sessionLifetime) StartForward(kind, listenPort, destination string) (terminal.Forward, error) {
+	controller, ok := s.Process.(terminal.ForwardController)
+	if !ok {
+		return terminal.Forward{}, terminal.ErrForwardUnavailable
+	}
+	return controller.StartForward(kind, listenPort, destination)
+}
+
+func (s *sessionLifetime) StopForward(id string) error {
+	controller, ok := s.Process.(terminal.ForwardController)
+	if !ok {
+		return terminal.ErrForwardUnavailable
+	}
+	return controller.StopForward(id)
 }
 
 // AwaitingPrompt preserves the optional pre-Ready input capability across the

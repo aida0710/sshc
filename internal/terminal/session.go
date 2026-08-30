@@ -265,6 +265,35 @@ func (s *Session) View() View {
 	return view
 }
 
+// StartForward は現在接続済みのprocess世代へ一時転送を追加する。
+// process交換と同時に古い輸送へlistenerを残さないよう、世代を所有するlock内で行う。
+func (s *Session) StartForward(kind, listenPort, destination string) (Forward, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.exited != nil || s.process == nil || s.state != StateConnected {
+		return Forward{}, ErrNotConnected
+	}
+	controller, ok := s.process.(ForwardController)
+	if !ok {
+		return Forward{}, ErrForwardUnavailable
+	}
+	return controller.StartForward(kind, listenPort, destination)
+}
+
+// StopForward は現在process世代の転送ひとつだけを閉じる。
+func (s *Session) StopForward(id string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.exited != nil || s.process == nil || s.state != StateConnected {
+		return ErrNotConnected
+	}
+	controller, ok := s.process.(ForwardController)
+	if !ok {
+		return ErrForwardUnavailable
+	}
+	return controller.StopForward(id)
+}
+
 // Snapshot は、いまスクロールバックに残っているバイト列を返す。
 func (s *Session) Snapshot() []byte {
 	s.mutex.Lock()
