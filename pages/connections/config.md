@@ -5,11 +5,11 @@ description: ~/.ssh/config、Include、Matchの構造を保ちながら表示・
 
 # SSH Config
 
-sshcは`~/.ssh/config`を設定の正本として読み込みます。`Include`の階層をたどり、具体的な`Host`エイリアスを接続先として表示します。
+sshcは`~/.ssh/config`を設定の正本として読み込んでいます。`Include`の階層をたどり、具体的な`Host`エイリアスを接続先として表示しています。
 
 ## 設定ファイルを編集する
 
-SSH Configでは、読み込まれたファイルと`Include`の関係を確認しながら、UTF-8テキストを編集できます。保存するときは一時ファイルへの書き込みを完了してから、元のファイルと置き換えます。
+SSH Configでは、読み込まれたファイルと`Include`の関係を確認しながら、UTF-8テキストを編集できます。保存時は、一時ファイルへの書き込みが完了してから元のファイルが置き換えられます。
 
 UIが管理するグループ領域を除き、コメント、空行、ディレクティブの順序はできるだけ維持されます。sshcが生成する範囲はマーカーで確認できます。
 
@@ -29,4 +29,4 @@ sshc info <alias>
 sshc info <alias> --json
 ```
 
-実際の接続と同じ処理で`Include`、`Match`、`ProxyJump`を解決します。ただし、パスワード、パスフレーズ、`SetEnv`の値、`ProxyCommand`の本文は表示しません。
+実際の接続と同じ処理による`Include`、`Match`、`ProxyJump`の解決結果を確認できます。パスワード、パスフレーズ、`SetEnv`の値、`ProxyCommand`の本文は表示されません。
