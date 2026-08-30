@@ -179,11 +179,11 @@ export function TerminalPortForwards({
                 <label className="flex flex-col gap-1 text-xs text-ink-muted sm:col-span-2">
                   {t("conn.forwardDestination")}
                   <input aria-label={t("conn.forwardDestination")} className={control} placeholder="127.0.0.1:5432" value={destination} disabled={!connected || busy} onChange={(event) => setDestination(event.currentTarget.value)} />
-                  <span className={hintText}>{t("conn.forwardDestinationHint")}</span>
                   {destinationError === "" ? null : <span className="text-danger">{destinationError}</span>}
                 </label>
-              ) : <p className={`${hintText} sm:col-span-2`}>{t("conn.forwardDynamicHint")}</p>}
+              ) : null}
             </div>
+            <p className={hintText}>{t(kind === "local" ? "conn.forwardDestinationHint" : "conn.forwardDynamicHint")}</p>
             <label className={`flex items-start gap-2 text-sm ${canSave ? "text-ink" : "text-ink-muted"}`}>
               <input type="checkbox" checked={save} disabled={!canSave || busy} onChange={(event) => setSave(event.currentTarget.checked)} className="mt-0.5 size-4" />
               <span>
