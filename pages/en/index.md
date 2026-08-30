@@ -11,6 +11,7 @@ outline: false
     <div>
       <h1 class="sshc-title">sshc</h1>
       <p class="sshc-lead">sshc is a terminal app that uses your existing OpenSSH configuration. It combines SSH and local shells with SFTP, reusable credentials, a CLI for AI agents, and encrypted sync across devices.</p>
+      <p class="sshc-platforms"><span>Platforms</span>macOS / Windows / Linux / Android</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">Install</a>
         <a class="sshc-action" href="./guide/getting-started">Get started</a>
