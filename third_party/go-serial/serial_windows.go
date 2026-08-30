@@ -18,50 +18,17 @@ package serial
 */
 
 import (
-	"errors"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
-	"golang.org/x/sys/windows/registry"
 )
 
 type windowsPort struct {
 	mu         sync.Mutex
 	handle     windows.Handle
 	hasTimeout bool
-}
-
-func nativeGetPortsList() ([]string, error) {
-	key, err := registry.OpenKey(windows.HKEY_LOCAL_MACHINE, `HARDWARE\DEVICEMAP\SERIALCOMM\`, windows.KEY_READ)
-	switch {
-	case errors.Is(err, syscall.ERROR_FILE_NOT_FOUND):
-		// On machines with no serial ports the registry key does not exist.
-		// Return this as no serial ports instead of an error.
-		return nil, nil
-	case err != nil:
-		return nil, &PortError{code: ErrorEnumeratingPorts, causedBy: err}
-	}
-	defer key.Close()
-
-	names, err := key.ReadValueNames(0)
-	if err != nil {
-		return nil, &PortError{code: ErrorEnumeratingPorts, causedBy: err}
-	}
-
-	var values []string
-	for _, n := range names {
-		v, _, err := key.GetStringValue(n)
-		if err != nil || v == "" {
-			continue
-		}
-
-		values = append(values, v)
-	}
-
-	return values, nil
 }
 
 func (port *windowsPort) Close() error {

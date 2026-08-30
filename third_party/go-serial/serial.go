@@ -93,11 +93,6 @@ func Open(portName string, mode *Mode) (Port, error) {
 	return port, err
 }
 
-// GetPortsList retrieve the list of available serial ports
-func GetPortsList() ([]string, error) {
-	return nativeGetPortsList()
-}
-
 // Mode describes a serial port configuration.
 type Mode struct {
 	BaudRate          int              // The serial port bitrate (aka Baudrate)

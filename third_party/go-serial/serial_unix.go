@@ -10,8 +10,6 @@ package serial
 
 import (
 	"fmt"
-	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -289,43 +287,6 @@ func nativeOpen(portName string, mode *Mode) (*unixPort, error) {
 	}
 
 	return port, nil
-}
-
-func nativeGetPortsList() ([]string, error) {
-	files, err := os.ReadDir(devFolder)
-	if err != nil {
-		return nil, err
-	}
-
-	ports := make([]string, 0, len(files))
-	for _, f := range files {
-		// Skip folders
-		if f.IsDir() {
-			continue
-		}
-
-		// Keep only devices with the correct name
-		if !osPortFilter.MatchString(f.Name()) {
-			continue
-		}
-
-		portName := devFolder + "/" + f.Name()
-
-		// Check if serial port is real or is a placeholder serial port "ttySxx" or "ttyHSxx"
-		if strings.HasPrefix(f.Name(), "ttyS") || strings.HasPrefix(f.Name(), "ttyHS") {
-			port, err := nativeOpen(portName, &Mode{})
-			if err != nil {
-				continue
-			} else {
-				port.Close()
-			}
-		}
-
-		// Save serial port in the resulting list
-		ports = append(ports, portName)
-	}
-
-	return ports, nil
 }
 
 // termios manipulation functions
