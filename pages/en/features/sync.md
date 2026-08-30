@@ -20,6 +20,8 @@ sshc encrypts the workspace on your device before storing snapshots in S3-compat
 
 Enter the same bucket path and sync key. When a remote snapshot already exists, sshc saves the configuration only after the key can decrypt it. Use another path if you intend to create a separate dataset.
 
+Choose bidirectional, send-only, or receive-only sync. Receive-only is useful for a secondary read-only device.
+
 ## Git-like flow
 
 - **Review changes** previews local and remote differences.
@@ -33,3 +35,5 @@ Automatic sync polls for remote changes. Local changes made through sshc trigger
 ::: warning Sync key
 Each device may have a different master password. Devices sharing one target must use the same sync key. Losing it makes remote snapshots impossible to decrypt.
 :::
+
+See [Push, pull, and history](/en/sync/workflow) for conflicts, force operations, and automatic sync.

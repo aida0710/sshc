@@ -24,3 +24,13 @@ description: SSHとlocal shellを最大4 paneへ分割し、配置を保存す�
 実行対象と展開後commandをpreviewした後、接続中の全paneへcommandとEnterを送れます。SSHとlocal shellが混在していても、現在のcwd、environment、shell状態を維持したまま各PTYへ入力します。
 
 mobileでは狭い画面へ分割を並べず、Workspace内のpaneを一つずつ切り替えます。
+
+## 作成と再利用
+
+1. 2台以上のTerminalを開く
+2. session一覧からTerminalを表示中のpaneへdragする
+3. 表示される上下左右のdrop zoneへ落とす
+4. dividerをdragして比率を調整する
+5. 必要なら名前を付けて保存する
+
+1接続だけのときはlayout保存や一括送信を常時表示せず、pane名と検索だけを残します。保存済みlayoutはHomeから開き、新しいsessionとして再現します。

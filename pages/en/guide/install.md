@@ -5,6 +5,8 @@ description: Install sshc on macOS, Linux, Windows or Android.
 
 # Installation
 
+sshc supports macOS, Linux, Windows, and Android. On desktop, one `sshc` binary provides the engine, CLI, and local web UI.
+
 ## macOS / Linux
 
 Homebrew is the shortest path.
@@ -36,6 +38,8 @@ It installs to `%LOCALAPPDATA%\Programs\sshc` and updates the user `PATH`. Run t
 
 Download `sshc-android-v<version>.apk` from [GitHub Releases](https://github.com/aida0710/sshc/releases). The release workflow verifies the signing fingerprint and checksum before publishing it.
 
+See [Android](/en/platform/android) for mobile startup and file picker behavior.
+
 ## Start
 
 ```sh
@@ -49,3 +53,13 @@ sshc
 ```
 
 The engine stays in the foreground. Use tmux, systemd, launchd or another OS process manager if you want it to stay running.
+
+The first launch asks you to create the vault master password. Run `sshc` from another terminal to open a one-time local UI URL.
+
+## Update
+
+- Homebrew or `install.sh`: `sshc update`
+- Windows: run the PowerShell installer again
+- Android: install the newer APK from GitHub Releases
+
+If the CLI and engine versions differ after an update, restart with `sshc engine --replace`.
