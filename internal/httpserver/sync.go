@@ -880,7 +880,7 @@ func (h SyncHandlers) SetAuto(c *echo.Context) error {
 	}
 	if request.Enabled && h.Auto != nil {
 		h.restore()
-		h.Auto.Now(c.Request().Context())
+		h.Auto.Poll(c.Request().Context())
 	}
 	return h.status(c)
 }
