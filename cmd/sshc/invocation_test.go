@@ -160,6 +160,14 @@ func TestHelpRejectsAnUnknownTopic(t *testing.T) {
 	}
 }
 
+func TestGlobalHelpAdvertisesCommandTopics(t *testing.T) {
+	var output strings.Builder
+	usage(&output)
+	if !strings.Contains(output.String(), "sshc help [<command> ...]") {
+		t.Fatalf("global help does not advertise command topics:\n%s", output.String())
+	}
+}
+
 func TestParseInfoAndSyncInvocations(t *testing.T) {
 	tests := []struct {
 		argv    []string

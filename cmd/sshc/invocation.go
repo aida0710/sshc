@@ -429,7 +429,8 @@ func usage(out io.Writer) {
   sshc vault change-password
                        change the password of an unlocked vault
   sshc version         print the version, and what it was built for
-  sshc help            print this
+  sshc help [<command> ...]
+                       print all commands or help for one command
 
 `)
 }
