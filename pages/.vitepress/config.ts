@@ -3,43 +3,79 @@ import { defineConfig } from "vitepress";
 const repository = "https://github.com/aida0710/sshc";
 const base = process.env.SSHC_DOCS_BASE ?? "/sshc/";
 
-const jaSidebar = {
-  "/guide/": [{ text: "はじめる", items: [
-    { text: "概要", link: "/guide/getting-started" },
+const jaSidebar = [
+  { text: "はじめる", items: [
+    { text: "sshcとは", link: "/guide/getting-started" },
     { text: "インストール", link: "/guide/install" },
-  ] }],
-  "/features/": [{ text: "機能", items: [
-    { text: "機能一覧", link: "/features/" },
-    { text: "接続と Terminal", link: "/features/terminal" },
+    { text: "最初の接続", link: "/guide/first-connection" },
+  ] },
+  { text: "接続を管理する", items: [
+    { text: "接続とグループ", link: "/connections/manage" },
+    { text: "OpenSSH設定", link: "/connections/config" },
+    { text: "認証情報とVault", link: "/connections/credentials" },
+    { text: "鍵とKnown Hosts", link: "/connections/keys" },
+    { text: "踏み台接続", link: "/connections/proxy" },
+  ] },
+  { text: "Terminal", items: [
+    { text: "Terminalを使う", link: "/features/terminal" },
+    { text: "Workspaceと分割", link: "/features/workspace" },
+    { text: "Quick Commands", link: "/terminal/commands" },
+    { text: "Port forwarding", link: "/terminal/port-forwarding" },
+  ] },
+  { text: "ファイルと同期", items: [
     { text: "SFTP", link: "/features/sftp" },
-    { text: "Workspace", link: "/features/workspace" },
-    { text: "同期", link: "/features/sync" },
-  ] }],
-  "/reference/": [{ text: "リファレンス", items: [
+    { text: "Transfer Manager", link: "/sftp/transfers" },
+    { text: "暗号化同期", link: "/features/sync" },
+    { text: "Push・Pull・履歴", link: "/sync/workflow" },
+  ] },
+  { text: "CLIとプラットフォーム", items: [
     { text: "CLI", link: "/reference/cli" },
-    { text: "トラブルシューティング", link: "/reference/troubleshooting" },
+    { text: "SerialとTelnet", link: "/cli/serial-telnet" },
+    { text: "Android", link: "/platform/android" },
+  ] },
+  { text: "リファレンス", items: [
+    { text: "設定", link: "/reference/settings" },
     { text: "セキュリティ", link: "/reference/security" },
-  ] }],
-};
+    { text: "トラブルシューティング", link: "/reference/troubleshooting" },
+  ] },
+];
 
-const enSidebar = {
-  "/en/guide/": [{ text: "Get started", items: [
-    { text: "Overview", link: "/en/guide/getting-started" },
-    { text: "Installation", link: "/en/guide/install" },
-  ] }],
-  "/en/features/": [{ text: "Features", items: [
-    { text: "Feature overview", link: "/en/features/" },
-    { text: "Connections and terminal", link: "/en/features/terminal" },
+const enSidebar = [
+  { text: "Start here", items: [
+    { text: "What is sshc?", link: "/en/guide/getting-started" },
+    { text: "Install", link: "/en/guide/install" },
+    { text: "First connection", link: "/en/guide/first-connection" },
+  ] },
+  { text: "Manage connections", items: [
+    { text: "Connections and groups", link: "/en/connections/manage" },
+    { text: "OpenSSH configuration", link: "/en/connections/config" },
+    { text: "Credentials and vault", link: "/en/connections/credentials" },
+    { text: "Keys and known hosts", link: "/en/connections/keys" },
+    { text: "Jump hosts", link: "/en/connections/proxy" },
+  ] },
+  { text: "Terminal", items: [
+    { text: "Use the terminal", link: "/en/features/terminal" },
+    { text: "Workspaces and splits", link: "/en/features/workspace" },
+    { text: "Quick Commands", link: "/en/terminal/commands" },
+    { text: "Port forwarding", link: "/en/terminal/port-forwarding" },
+  ] },
+  { text: "Files and sync", items: [
     { text: "SFTP", link: "/en/features/sftp" },
-    { text: "Workspaces", link: "/en/features/workspace" },
-    { text: "Sync", link: "/en/features/sync" },
-  ] }],
-  "/en/reference/": [{ text: "Reference", items: [
+    { text: "Transfer Manager", link: "/en/sftp/transfers" },
+    { text: "Encrypted sync", link: "/en/features/sync" },
+    { text: "Push, pull, and history", link: "/en/sync/workflow" },
+  ] },
+  { text: "CLI and platforms", items: [
     { text: "CLI", link: "/en/reference/cli" },
-    { text: "Troubleshooting", link: "/en/reference/troubleshooting" },
+    { text: "Serial and Telnet", link: "/en/cli/serial-telnet" },
+    { text: "Android", link: "/en/platform/android" },
+  ] },
+  { text: "Reference", items: [
+    { text: "Settings", link: "/en/reference/settings" },
     { text: "Security", link: "/en/reference/security" },
-  ] }],
-};
+    { text: "Troubleshooting", link: "/en/reference/troubleshooting" },
+  ] },
+];
 
 export default defineConfig({
   title: "sshc",

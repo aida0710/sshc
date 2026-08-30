@@ -24,3 +24,13 @@ The saved record contains pane kinds, targets, the split tree, ratios and focusâ
 Preview the targets and expanded command, then send the command and Enter to every connected pane. SSH and local shells can be mixed; each PTY keeps its current directory, environment and shell state.
 
 On mobile, sshc shows workspace panes one at a time instead of squeezing the split layout into a narrow screen.
+
+## Build and reuse a workspace
+
+1. Open at least two terminals.
+2. Drag a session from the session list onto the current pane.
+3. Drop on the top, bottom, left, or right zone.
+4. Drag the divider to tune the ratio.
+5. Optionally save a named layout.
+
+With one connection, sshc hides layout and broadcast controls and keeps the pane title and search. Saved layouts reopen from Home as new sessions.
