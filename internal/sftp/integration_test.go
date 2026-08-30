@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -275,6 +276,89 @@ func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
 	}
 	if _, err := service.Stat(t.Context(), "integration", cancelled); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("cancelled target = %v", err)
+	}
+}
+
+func TestConcurrentFilesAgainstOpenSSHSFTP(t *testing.T) {
+	service := integrationService(t)
+	manager := sftp.NewTransferManager(&service)
+	root := fmt.Sprintf("/tmp/sshc-sftp-concurrent-%d", time.Now().UnixNano())
+	t.Cleanup(func() {
+		_ = manager.Close()
+		for index := 0; index < 8; index++ {
+			_ = service.Delete(context.Background(), "integration", path.Join(root, fmt.Sprintf("file-%02d.bin", index)))
+		}
+		_ = service.Delete(context.Background(), "integration", root)
+	})
+	if _, err := service.Mkdir(t.Context(), "integration", root); err != nil {
+		t.Fatal(err)
+	}
+
+	const fileCount = 8
+	const fileSize = 4 << 20
+	payloads := make([][]byte, fileCount)
+	for index := range payloads {
+		payloads[index] = make([]byte, fileSize)
+		for offset := range payloads[index] {
+			payloads[index][offset] = byte((offset*31 + index*17) % 251)
+		}
+	}
+
+	errorsFound := make(chan error, fileCount)
+	var uploads sync.WaitGroup
+	for index := range payloads {
+		uploads.Add(1)
+		go func() {
+			defer uploads.Done()
+			target := path.Join(root, fmt.Sprintf("file-%02d.bin", index))
+			id := fmt.Sprintf("parallel_%02d", index)
+			started, err := manager.Start(t.Context(), "integration", id, target, sftp.StartUploadOptions{Size: fileSize})
+			if err != nil {
+				errorsFound <- fmt.Errorf("start file %d: %w", index, err)
+				return
+			}
+			for offset := 0; offset < fileSize; offset += 1 << 20 {
+				end := min(offset+(1<<20), fileSize)
+				if _, err := manager.Append(t.Context(), "integration", id, target, int64(offset), fileSize, payloads[index][offset:end]); err != nil {
+					errorsFound <- fmt.Errorf("append file %d at %d: %w", index, offset, err)
+					return
+				}
+			}
+			fingerprint, err := sftp.SourceFingerprint(t.Context(), bytes.NewReader(payloads[index]), fileSize)
+			if err != nil {
+				errorsFound <- fmt.Errorf("fingerprint file %d: %w", index, err)
+				return
+			}
+			if _, err := manager.Complete(t.Context(), "integration", id, target, fileSize, started.ExpectedRevision, fingerprint); err != nil {
+				errorsFound <- fmt.Errorf("complete file %d: %w", index, err)
+			}
+		}()
+	}
+	uploads.Wait()
+	close(errorsFound)
+	for err := range errorsFound {
+		t.Error(err)
+	}
+	if t.Failed() {
+		return
+	}
+
+	for index, payload := range payloads {
+		target := path.Join(root, fmt.Sprintf("file-%02d.bin", index))
+		prepared, err := service.PrepareDownload(t.Context(), "integration", target)
+		if err != nil {
+			t.Fatalf("prepare file %d: %v", index, err)
+		}
+		digest := sha256.New()
+		_, copyErr := prepared.WriteFrom(t.Context(), 0, digest)
+		closeErr := prepared.Close()
+		if err := errors.Join(copyErr, closeErr); err != nil {
+			t.Fatalf("download file %d: %v", index, err)
+		}
+		want := sha256.Sum256(payload)
+		if !bytes.Equal(digest.Sum(nil), want[:]) {
+			t.Fatalf("file %d digest = %x, want %x", index, digest.Sum(nil), want)
+		}
 	}
 }
 
