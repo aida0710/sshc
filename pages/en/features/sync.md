@@ -37,7 +37,7 @@ Receive-only is useful for a secondary read-only device. If its history diverges
 - Force Pull resolves conflicts and removals in favor of the remote, then applies only the previewed ETag and revision.
 - History reads earlier snapshots directly from the bucket.
 
-Automatic sync polls the remote once a minute without uploading. On bidirectional and send-only devices, local changes made through sshc trigger one push after a five-second quiet period. Another change restarts that five-second delay. Receive-only devices never push.
+When automatic sync is enabled, sshc polls the remote once a minute while the Vault is unlocked, without uploading during the check. On bidirectional and send-only devices, local changes made through sshc trigger one push after a five-second quiet period. Another change restarts that five-second delay. Receive-only devices never push.
 
 The Sync screen keeps routine operations separate from configuration. Bucket credentials and the encryption key live under Manage sync settings. Snapshot differences and S3 history are under Details and history. History initially shows the latest five entries; expand it or reveal S3 object names only when needed.
 

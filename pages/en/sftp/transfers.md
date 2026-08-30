@@ -15,7 +15,7 @@ Each job shows per-file progress, transferred and total bytes, current speed, re
 - Resume continues a file transfer when its recovery requirements are met.
 - Retry reruns failed files only.
 - Cancel ends the job.
-- Clear finished removes completed entries from the view.
+- Clear finished removes completed and canceled entries from the view.
 
 Uploads use a temporary file in the target directory and atomically rename it on completion. Existing destinations require confirmation. After a reload, select the same local file again. If its name, size, and modified time match and the remote temporary file is still usable, the upload continues from the transferred position.
 
