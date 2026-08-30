@@ -462,6 +462,8 @@ export const en = {
   "terminal.settingsSaved":
     "Saved. Clipboard choices apply now; new consoles use the other settings.",
   "terminal.settingsLoading": "Loading terminal settings…",
+  "terminal.settingsStorageHint":
+    "These settings, including terminal appearance, are stored in workspace metadata and follow backups and sync. Theme, language and notification sounds are stored only in this browser.",
   "terminal.maxSessionsLabel": "Consoles open at once",
   "terminal.maxSessionsHint":
     "Enter a value from 1 to 200. Leave it empty to use 50. When the limit is reached, no new console can be opened; existing consoles remain open.",
