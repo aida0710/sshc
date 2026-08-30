@@ -317,6 +317,22 @@ describe("SettingsPanel", () => {
     });
   });
 
+  it("distinguishes workspace settings from browser-only preferences", async () => {
+    render(<SettingsPanel api={buildApi()} />);
+
+    const terminal = await screen.findByRole("region", { name: "Terminal" });
+    expect(within(terminal).getByText(/stored in workspace metadata/i)).toHaveTextContent(
+      /Theme, language and notification sounds are stored only in this browser/,
+    );
+    expect(within(terminal).getByLabelText("Engine replay buffer (bytes)"))
+      .toHaveAttribute("max", "4194304");
+    expect(within(terminal).getByLabelText("Browser scrollback (lines)"))
+      .toHaveAttribute("max", "100000");
+    expect(within(terminal).getByLabelText("Consoles open at once"))
+      .toHaveAttribute("max", "200");
+    expect(within(terminal).getByLabelText("Connection log")).toBeVisible();
+  });
+
   it("shows both clipboard conveniences on by default and saves each disabled choice", async () => {
     const user = userEvent.setup();
     const setTerminalSettings = vi.fn().mockResolvedValue(undefined);

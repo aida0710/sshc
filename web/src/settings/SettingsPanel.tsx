@@ -506,6 +506,9 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
             disabled={!terminalLoaded || terminalBusy}
             className="min-w-0 border-0 p-0 disabled:opacity-70"
           >
+          <p className="mb-5 max-w-3xl text-sm leading-6 text-ink-muted">
+            {t("terminal.settingsStorageHint")}
+          </p>
           <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_19rem]">
             <div className="grid min-w-0 gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
