@@ -5,7 +5,7 @@ description: OpenSSH設定を整理し、認証情報をCLIやSFTPで再利用�
 
 # sshcとは
 
-sshcは、今あるOpenSSH環境を生かしたまま、接続設定と認証情報を使いやすくまとめるローカルアプリケーションです。`~/.ssh/config`、`Include`、秘密鍵、`known_hosts`を正本として、Terminal、SFTP、CLI、暗号化同期から同じ接続先を利用できます。
+sshcは、今あるOpenSSH環境を生かしたまま、接続設定と認証情報を一か所で管理するローカルアプリケーションです。`~/.ssh/config`、`Include`、秘密鍵、`known_hosts`を正本として、Terminal、SFTP、CLI、暗号化同期から同じ接続先を利用できます。
 
 ![接続管理画面](/images/connections-desktop.png)
 
