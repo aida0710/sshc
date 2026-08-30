@@ -10,7 +10,7 @@ sshc serial --json
 sshc serial /dev/ttyUSB0 --baud 115200 --encoding utf-8
 ```
 
-Serial options include data bits, parity, stop bits, flow control, DTR, RTS, and break duration.
+Serial options include data bits, parity, stop bits, DTR, RTS, and break duration. Flow control currently supports `none` only. The CLI parser accepts `--flow rtscts` and `--flow xonxoff`, but the current system backend rejects them when it opens the connection.
 
 ```sh
 sshc telnet 192.0.2.20:23 --encoding shift_jis
