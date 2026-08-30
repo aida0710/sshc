@@ -24,9 +24,15 @@ test("opens, reloads, and traverses section URLs", async ({ page, installation }
   await openSection(page, "History");
   await expect(page).toHaveURL(/\/history$/);
   await page.goBack();
+  await expect(page).toHaveURL(/\/menu$/);
+  await expect(page.getByRole("heading", { name: "Menu", level: 2 })).toBeVisible();
+  await page.goBack();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { name: "Settings", level: 2 })).toBeVisible();
 
+  await page.goForward();
+  await expect(page).toHaveURL(/\/menu$/);
+  await expect(page.getByRole("heading", { name: "Menu", level: 2 })).toBeVisible();
   await page.goForward();
   await expect(page).toHaveURL(/\/history$/);
   await expect(page.getByRole("heading", { name: "History", level: 2 })).toBeVisible();
@@ -78,6 +84,53 @@ test("restores a selected connection and editor tab from its URL", async ({
   await page.goBack();
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
   expect(new URL(page.url()).searchParams.get("panel")).toBe("basic");
+});
+
+test("keeps the back destination after rejecting navigation with an unsaved draft", async ({
+  page,
+  installation,
+}) => {
+  const historyPoint = () => page.evaluate(
+    () => (window.history.state as { __sshcNavigationPoint?: number } | null)?.__sshcNavigationPoint,
+  );
+  await openApplication(page, installation);
+  await expect.poll(historyPoint).toBe(0);
+  await openSection(page, "Connections");
+  await expect.poll(historyPoint).toBe(1);
+  await page
+    .getByRole("navigation", { name: "Connections" })
+    .getByRole("button", { name: "bastion" })
+    .click();
+  await expect.poll(historyPoint).toBe(2);
+
+  const detailURL = page.url();
+  await page.getByLabel("Port", { exact: true }).fill("2244");
+  await expect(page.getByText("Unsaved changes", { exact: true })).toBeVisible();
+
+  const dismissed = new Promise<void>((resolve) => {
+    page.once("dialog", async (dialog) => {
+      await dialog.dismiss();
+      resolve();
+    });
+  });
+  await page.evaluate(() => window.history.back());
+  await dismissed;
+
+  await expect(page).toHaveURL(detailURL);
+  await expect.poll(historyPoint).toBe(2);
+  await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
+
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeEnabled();
+  await page.goBack();
+  await expect.poll(historyPoint).toBe(1);
+  await expect.poll(() => new URL(page.url()).search).toBe("");
+  await expect(page.getByRole("navigation", { name: "Connections" })).toBeVisible();
+
+  await page.goBack();
+  await expect.poll(historyPoint).toBe(0);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "Your connections", level: 2 })).toBeVisible();
 });
 
 test("opens every canonical connection panel URL without starting an operation", async ({

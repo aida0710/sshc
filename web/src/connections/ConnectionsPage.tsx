@@ -121,6 +121,8 @@ export function ConnectionsPage({
     problem, setProblem,
     localError, setLocalError,
   } = useSaveFeedback();
+  const editorDirtyRef = useRef(editorDirty);
+  editorDirtyRef.current = editorDirty;
   const {
     creatingConnection: creating, setCreatingConnection: setCreating,
     launching, setLaunching,
@@ -291,6 +293,7 @@ export function ConnectionsPage({
       return;
     }
     const blocker: NavigationBlocker = (next) => {
+      if (!editorDirtyRef.current) return true;
       const parsed = parseConnectionLocation(next);
       if (parsed.kind === "valid" && selection !== null) {
         const target = parsed.target;

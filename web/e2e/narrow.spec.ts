@@ -624,7 +624,7 @@ async function expectNothingCutOff(page: import("@playwright/test").Page, where:
   expect(escaped, `${where}: 面からはみ出した操作がある`).toEqual([]);
 }
 
-test("navigates through the drawer and closes it behind itself", async ({ page, installation }) => {
+test("keeps Menu in mobile history after opening SSH Config", async ({ page, installation }) => {
   await openApplication(page, installation);
 
   const drawer = page.getByRole("navigation", { name: "Primary" });
@@ -639,12 +639,16 @@ test("navigates through the drawer and closes it behind itself", async ({ page, 
 
   await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
   await expect(hamburger).toHaveAttribute("aria-expanded", "false");
-  await page.getByRole("link", { name: "Open Keys", exact: true }).click();
+  await page.getByRole("link", { name: "Open Config", exact: true }).click();
 
-  await expect(page.getByRole("heading", { name: "Keys", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Configuration files", exact: true })).toBeVisible();
   await expect
     .poll(() => drawer.evaluate((element) => element.getBoundingClientRect().left))
     .toBeLessThan(0);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/menu$/);
+  await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
 });
 
 test("opens the drawer with a right swipe from the left edge", async ({ page, installation }) => {

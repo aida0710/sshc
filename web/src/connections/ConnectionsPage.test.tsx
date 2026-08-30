@@ -391,6 +391,10 @@ describe("ConnectionsPage", () => {
     confirm.mockReturnValue(true);
     expect(activeBlocker({ pathname: "/keys", search: "" })).toBe(true);
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    confirm.mockClear();
+    confirm.mockReturnValue(false);
+    expect(activeBlocker({ pathname: "/keys", search: "" })).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
     await waitFor(() => expect(onNavigationBlockerChange).toHaveBeenLastCalledWith(null));
   });
 
