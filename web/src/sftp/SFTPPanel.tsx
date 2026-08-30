@@ -328,7 +328,7 @@ export function SFTPPanel({
       const folderName = [...safeDirectories, ...safeFiles.map((source) => source.relativePath)]
         .map((value) => value.split("/")[0] ?? value).find((value) => value !== "") ?? t("sftp.manager.folder");
       const folderBatch = safeDirectories.length > 0 || safeFiles.length > 1 || safeFiles.some((source) => source.relativePath.includes("/"));
-      sftpTransferManager.addUploads(selections, {
+      await sftpTransferManager.addUploads(selections, {
         name: folderBatch ? folderName : safeFiles[0]?.relativePath ?? folderName,
         kind: folderBatch ? "folder" : "file",
       }, admission);
@@ -353,7 +353,7 @@ export function SFTPPanel({
     if (busy) return;
     setProblem("");
     try {
-      sftpTransferManager.addDownload(targetAlias, entry.path, entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1);
+      await sftpTransferManager.addDownload(targetAlias, entry.path, entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1);
     } catch (error) {
       setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
     }

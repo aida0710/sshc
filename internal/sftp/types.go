@@ -76,9 +76,10 @@ type ResumableUpload struct {
 }
 
 type StartUploadOptions struct {
-	Size             int64
-	Overwrite        bool
-	ExpectedRevision string
+	Size              int64
+	Overwrite         bool
+	ExpectedRevision  string
+	SourceFingerprint string
 }
 
 type WriteSeekCloser interface {

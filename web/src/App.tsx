@@ -303,7 +303,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
   }, [state, section]);
 
   useEffect(() => {
-    if (state === "ready") void sftpTransferManager.reconcile().catch(() => undefined);
+    if (state !== "ready") return;
+    const refresh = () => { void sftpTransferManager.reconcile().catch(() => undefined); };
+    refresh();
+    const timer = globalThis.setInterval(refresh, 2_000);
+    return () => globalThis.clearInterval(timer);
   }, [state]);
 
   useEffect(() => {

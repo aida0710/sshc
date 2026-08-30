@@ -36,7 +36,7 @@ export function TransferManagerList() {
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h3 id="transfer-manager-heading" className="font-medium">{t("sftp.manager.heading")}</h3>
         <span className="text-ink-muted">{t("sftp.manager.limit", { count: sftpTransferManager.getMaxConcurrent() })}</span>
-        <button type="button" className="ml-auto text-ink-muted hover:text-ink" onClick={() => sftpTransferManager.clearFinished()}>{t("sftp.transfer.clear")}</button>
+        <button type="button" className="ml-auto text-ink-muted hover:text-ink" onClick={() => void sftpTransferManager.clearFinished()}>{t("sftp.transfer.clear")}</button>
       </div>
       <div className="space-y-2">
         {batches.map(([batchId, items]) => {
@@ -50,11 +50,15 @@ export function TransferManagerList() {
                 <span className="min-w-0 grow truncate font-medium" title={first.batchName}>{first.batchName}</span>
                 <span className="text-ink-muted">{t(first.batchKind === "folder" ? "sftp.manager.folder" : "sftp.manager.file")}</span>
                 <span className="tabular-nums text-ink-muted">{completed}/{items.length}</span>
-                {failed > 0 ? <button type="button" className="text-accent" onClick={() => sftpTransferManager.retryFailed(batchId)}>{t("sftp.manager.retryFailed", { count: failed })}</button> : null}
+                {failed > 0 ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.retryFailed(batchId)}>{t("sftp.manager.retryFailed", { count: failed })}</button> : null}
               </div>
               <ul className="space-y-1" aria-label={t("sftp.manager.items")}>
                 {items.map((item) => {
                   const total = item.totalBytes >= 0 ? item.totalBytes : Math.max(item.transferredBytes, 1);
+                  const sourceMissing = item.direction === "upload" &&
+                    (item.status === "queued" || item.status === "paused" || item.status === "reattach") &&
+                    !sftpTransferManager.hasUploadSource(item.id);
+                  const displayedStatus: ManagedTransferJob["status"] = sourceMissing ? "reattach" : item.status;
                   return (
                     <li key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
                       <span className="truncate font-mono" title={`${item.alias}:${item.remotePath}`}>{item.name}</span>
@@ -65,11 +69,11 @@ export function TransferManagerList() {
                       <span className="tabular-nums text-ink-muted">{item.bytesPerSecond > 0 ? `${bytes(item.bytesPerSecond)}/s` : "—"}</span>
                       <span className="tabular-nums text-ink-muted">{item.remainingSeconds >= 0 && item.status === "running" ? t("sftp.manager.remaining", { duration: duration(item.remainingSeconds) }) : "—"}</span>
                       <span className="col-span-2 flex flex-wrap items-center justify-end gap-2 whitespace-nowrap">
-                        <span className={statusClass(item.status)}>{item.status === "failed" ? item.problem : t(`sftp.manager.status.${item.status}`)}</span>
-                        {(item.status === "running" || item.status === "queued") ? <button type="button" className="text-accent" onClick={() => sftpTransferManager.pause(item.id)}>{t("sftp.transfer.pause")}</button> : null}
-                        {(item.status === "paused" || item.status === "reattach") ? <button type="button" className="text-accent" onClick={() => sftpTransferManager.resume(item.id)}>{t("sftp.transfer.resume")}</button> : null}
-                        {item.status === "failed" ? <button type="button" className="text-accent" onClick={() => sftpTransferManager.retry(item.id)}>{t("sftp.manager.retry")}</button> : null}
-                        {item.status === "needs_overwrite" ? <button type="button" className="text-notice-ink" onClick={() => sftpTransferManager.overwrite(item.id)}>{t("sftp.overwrite")}</button> : null}
+                        <span className={statusClass(displayedStatus)}>{displayedStatus === "failed" ? item.problem : t(`sftp.manager.status.${displayedStatus}`)}</span>
+                        {!sourceMissing && (item.status === "running" || item.status === "queued") ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.pause(item.id)}>{t("sftp.transfer.pause")}</button> : null}
+                        {!sourceMissing && (item.status === "paused" || item.status === "reattach") ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.resume(item.id)}>{t("sftp.transfer.resume")}</button> : null}
+                        {item.status === "failed" ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.retry(item.id)}>{t("sftp.manager.retry")}</button> : null}
+                        {item.status === "needs_overwrite" ? <button type="button" className="text-notice-ink" onClick={() => void sftpTransferManager.overwrite(item.id)}>{t("sftp.overwrite")}</button> : null}
                         {!['completed', 'cancelled'].includes(item.status) ? <button type="button" className="text-danger" onClick={() => void sftpTransferManager.cancel(item.id)}>{t("sftp.cancel")}</button> : null}
                       </span>
                     </li>

@@ -21,6 +21,7 @@ const api = vi.hoisted(() => ({
   streamDownload: vi.fn(),
   saveDownload: vi.fn(),
   listTransfers: vi.fn(),
+  clearFinishedTransfers: vi.fn(),
 }));
 
 vi.mock("./api", () => ({ sftpApi: api }));
@@ -28,7 +29,7 @@ vi.mock("./api", () => ({ sftpApi: api }));
 describe("SFTPPanel uploads", () => {
   beforeEach(async () => {
 	await Promise.all(sftpTransferManager.getSnapshot().map((job) => sftpTransferManager.cancel(job.id)));
-	sftpTransferManager.clearFinished();
+	await sftpTransferManager.clearFinished();
     vi.clearAllMocks();
     api.list.mockResolvedValue({ path: "/remote", entries: [] });
     api.readText.mockResolvedValue({
@@ -45,20 +46,27 @@ describe("SFTPPanel uploads", () => {
     api.createTransfer.mockImplementation(async (input: Record<string, unknown>) => {
       const existing = server.get(input.id as string);
       if (existing !== undefined) return existing;
-      const created = { ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", attempt: 1, problem: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const created = { ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       server.set(input.id as string, created);
       return created;
     });
     api.updateTransfer.mockImplementation(async (id: string, action: string, options: { transferredBytes?: number; problem?: string } = {}) => {
       const current = server.get(id) ?? {};
       const statuses: Record<string, string> = { start: "running", pause: "paused", resume: "queued", retry: "queued", cancel: "cancelled", complete: "completed", fail: "failed", needs_overwrite: "needs_overwrite" };
-      const updated = { ...current, ...options, status: statuses[action] ?? current.status, problem: action === "fail" ? options.problem ?? "sftp_failed" : current.problem ?? "" };
+      const updated = { ...current, ...options, status: statuses[action] ?? current.status, overwrite: action === "resume" && current.status === "needs_overwrite" ? true : current.overwrite, problem: action === "fail" ? options.problem ?? "sftp_failed" : current.problem ?? "" };
       server.set(id, updated);
       return updated;
     });
     api.streamDownload.mockResolvedValue({ bytes: 10, total: 10 });
     api.saveDownload.mockReturnValue(undefined);
-    api.listTransfers.mockResolvedValue({ maxConcurrent: 2, jobs: [] });
+    api.completeUpload.mockImplementation(async (_alias: string, id: string, _path: string, size: number) => {
+      const current = server.get(id);
+      if (current !== undefined) server.set(id, { ...current, transferredBytes: size, status: "completed", remainingSeconds: 0 });
+    });
+    api.listTransfers.mockImplementation(async () => ({ maxConcurrent: 2, jobs: [...server.values()] }));
+    api.clearFinishedTransfers.mockImplementation(async () => {
+      for (const [id, job] of server) if (job.status === "completed" || job.status === "cancelled") server.delete(id);
+    });
   });
 
   it("uploads every dropped file separately and keeps per-file results", async () => {
@@ -78,8 +86,8 @@ describe("SFTPPanel uploads", () => {
     });
 
     await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(2));
-    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/first.txt", first.size, false, "");
-    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/second.txt", second.size, false, "");
+    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/first.txt", first.size, expect.stringMatching(/^tree-sha256:/));
+    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/second.txt", second.size, expect.stringMatching(/^tree-sha256:/));
     expect(await screen.findByText("Completed")).toBeInTheDocument();
     expect(await screen.findByText("upload_failed")).toBeInTheDocument();
   });
@@ -131,7 +139,7 @@ describe("SFTPPanel uploads", () => {
       path: "/var/log",
       entries: [{ name: "app.log", path: "/var/log/app.log", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" }],
     });
-    const addDownload = vi.spyOn(sftpTransferManager, "addDownload").mockReturnValue("download-one");
+    const addDownload = vi.spyOn(sftpTransferManager, "addDownload").mockResolvedValue("download-one");
 
     render(<SFTPPanel aliases={["edge"]} target={{ alias: "edge", path: "/var/log/app.log", action: "download", request: 3 }} />);
 
@@ -208,7 +216,7 @@ describe("SFTPPanel uploads", () => {
       ["edge", "/remote/project"],
       ["edge", "/remote/project/config"],
     ]);
-    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/project/config/file.txt", nested.size, false, "");
+    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/project/config/file.txt", nested.size, expect.stringMatching(/^tree-sha256:/));
   });
 
   it("rejects queue overflow before creating remote directories and always releases the busy state", async () => {
@@ -243,7 +251,7 @@ describe("SFTPPanel uploads", () => {
     expect(await screen.findByText("Confirm overwrite")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Overwrite" }));
     await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(2));
-    expect(api.startUpload).toHaveBeenLastCalledWith("edge", expect.any(String), "/remote/existing.txt", file.size, true, "");
+    expect(api.startUpload).toHaveBeenLastCalledWith("edge", expect.any(String), "/remote/existing.txt", file.size, expect.stringMatching(/^tree-sha256:/));
   });
 
   it("downloads folders as archives and changes permissions with the current revision", async () => {
