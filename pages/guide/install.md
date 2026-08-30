@@ -5,11 +5,11 @@ description: macOS、Linux、Windows、Androidにsshcをインストールする
 
 # インストール
 
-sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプリです。デスクトップ版では、一つの`sshc`バイナリがエンジン、CLI、Web UIを提供します。
+sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプリです。デスクトップ版では、1つの`sshc`バイナリがエンジン、CLI、Web UIを提供します。
 
 ## macOS / Linux
 
-Homebrewを使うのが、もっとも簡単です。
+もっとも簡単な方法はHomebrewです。
 
 ```sh
 brew install aida0710/tap/sshc
@@ -36,7 +36,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 
 ## Android
 
-[GitHub Releases](https://github.com/aida0710/sshc/releases)から`sshc-android-v<version>.apk`をダウンロードします。APKは、Releaseワークフローで署名フィンガープリントとチェックサムを検査してから公開しています。
+[GitHub Releases](https://github.com/aida0710/sshc/releases)から`sshc-android-v<version>.apk`をダウンロードします。APKはReleaseワークフローで署名フィンガープリントとチェックサムを検査してから公開しています。
 
 起動方法やファイル選択の動作は、[Android](/platform/android)で詳しく説明しています。
 
@@ -54,7 +54,7 @@ sshc
 
 `sshc engine`はフォアグラウンドで動作します。常駐させる場合は、tmux、systemd、launchdなど、OSのプロセス管理機能を使用してください。
 
-起動後、別のターミナルから`sshc`を実行すると、一度だけ使えるローカルUIのURLが開きます。初回はVaultのマスターパスワードを設定してください。
+起動後、別のターミナルから`sshc`を実行すると、一度だけ有効なローカルUIのURLがブラウザーで開きます。初回はVaultのマスターパスワードを設定してください。
 
 ## 更新
 
