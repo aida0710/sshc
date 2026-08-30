@@ -91,12 +91,21 @@ test("adds Local and SOCKS forwarding from the dedicated advanced view", async (
   await page.getByRole("tab", { name: "Port forwarding" }).click();
   await expect(page.getByText(/Listeners are bound to this device only/)).toBeVisible();
 
+  const forwardType = page.getByRole("combobox", { name: "Type", exact: true });
+  await forwardType.selectOption("dynamic");
+  await expect(page.getByLabel("Destination")).toHaveCount(0);
+  await expect(page.getByText("The application using this SOCKS proxy chooses the destination for each connection.")).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/port-forwarding-dynamic-desktop.png`, fullPage: true });
+  }
+  await forwardType.selectOption("local");
+  await expect(page.getByLabel("Destination")).toHaveAttribute("placeholder", "127.0.0.1:5432");
   await page.getByLabel("Local port").fill("18080");
-  await page.getByLabel("Destination").fill("db.internal:5432");
+  await page.getByLabel("Destination").fill("127.0.0.1:5432");
   await page.getByRole("button", { name: "Add forwarding" }).click();
   expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
-  await expect(page.getByRole("textbox", { name: /LocalForward/ })).toHaveValue("18080 db.internal:5432");
-  expect(await installation.read("config")).toContain("LocalForward 18080 db.internal:5432");
+  await expect(page.getByRole("textbox", { name: /LocalForward/ })).toHaveValue("18080 127.0.0.1:5432");
+  expect(await installation.read("config")).toContain("LocalForward 18080 127.0.0.1:5432");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/port-forwarding-settings-desktop.png`, fullPage: true });
