@@ -5,11 +5,11 @@ description: macOS、Linux、Windows、Androidにsshcをインストールする
 
 # インストール
 
-sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプリです。デスクトップ版では、1つの`sshc`バイナリがエンジン、CLI、Web UIを提供します。
+sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプリです。デスクトップ版では、1つの`sshc`バイナリがエンジン、CLI、Web UIを提供しています。
 
 ## macOS / Linux
 
-もっとも簡単な方法はHomebrewです。
+Homebrewに対応しています。
 
 ```sh
 brew install aida0710/tap/sshc
@@ -26,17 +26,17 @@ SSHC_VERSION=v0.21.1 sh -c \
 
 ## Windows
 
-Windows PowerShellから実行します。管理者権限は不要です。
+Windows PowerShellからインストールできます。管理者権限は不要です。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/aida0710/sshc/releases/latest/download/install.ps1 | iex"
 ```
 
-`%LOCALAPPDATA%\Programs\sshc`へインストールし、ユーザーの`PATH`へ追加します。更新するときも、同じコマンドを実行してください。
+`%LOCALAPPDATA%\Programs\sshc`へインストールされ、ユーザーの`PATH`へ追加されます。更新にも同じコマンドを使えます。
 
 ## Android
 
-[GitHub Releases](https://github.com/aida0710/sshc/releases)から`sshc-android-v<version>.apk`をダウンロードします。APKはReleaseワークフローで署名フィンガープリントとチェックサムを検査してから公開しています。
+[GitHub Releases](https://github.com/aida0710/sshc/releases)から`sshc-android-v<version>.apk`をダウンロードできます。APKはReleaseワークフローで署名フィンガープリントとチェックサムを検査してから公開しています。
 
 起動方法やファイル選択の動作は、[Android](/platform/android)で詳しく説明しています。
 
@@ -46,15 +46,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 sshc engine
 ```
 
-別のターミナルでUIを開きます。
+別のターミナルからUIを開けます。
 
 ```sh
 sshc
 ```
 
-`sshc engine`はフォアグラウンドで動作します。常駐させる場合は、tmux、systemd、launchdなど、OSのプロセス管理機能を使用してください。
+`sshc engine`で起動するエンジンは、フォアグラウンドプロセスです。常駐には、tmux、systemd、launchdなど、OSのプロセス管理機能を利用できます。
 
-起動後、別のターミナルから`sshc`を実行すると、一度だけ有効なローカルUIのURLがブラウザーで開きます。初回はVaultのマスターパスワードを設定してください。
+起動後、別のターミナルから`sshc`を実行すると、一度だけ有効なローカルUIのURLがブラウザーで開きます。初回起動時にVaultのマスターパスワードを設定できます。
 
 ## 更新
 

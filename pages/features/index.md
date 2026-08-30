@@ -25,7 +25,7 @@ sshcは、SSHとローカルシェルを扱うターミナルアプリです。S
 
 ## 認証情報
 
-パスワードと鍵のパスフレーズはVaultで暗号化し、接続先や鍵に割り当てます。Vaultへ一度登録すれば、Terminal、SFTP、ProxyJump、CLIから再利用できます。
+パスワードと鍵のパスフレーズはVaultで暗号化し、接続先や鍵に割り当てています。Vaultへ一度登録すれば、Terminal、SFTP、ProxyJump、CLIから再利用できます。
 
 ## SFTP
 
@@ -33,8 +33,8 @@ sshcは、SSHとローカルシェルを扱うターミナルアプリです。S
 
 ## CLI
 
-Web UIとCLIは、同じエンジン、OpenSSH設定、Vaultを使います。CodexなどのAIエージェントは`sshc ssh <alias> --non-interactive -- <command...>`を直接実行でき、Vaultが開いていればsshcが保存済みのパスワードや鍵のパスフレーズを認証に使います。
+Web UIとCLIは、同じエンジン、OpenSSH設定、Vaultを使っています。CodexなどのAIエージェントは`sshc ssh <alias> --non-interactive -- <command...>`を直接実行でき、Vaultが開いていれば、sshcが保存済みのパスワードや鍵のパスフレーズを認証に使っています。
 
 ## 暗号化同期
 
-[暗号化同期](./sync)は、接続設定、鍵、認証情報、スニペットを端末上で暗号化し、利用者が用意したS3互換ストレージへPush／Pullします。sshcは同期用ストレージを提供せず、同期データを預かりません。同期先へ平文は送信しません。
+[暗号化同期](./sync)では、接続設定、鍵、認証情報、スニペットを端末上で暗号化し、利用者が用意したS3互換ストレージへPush／Pullできます。sshcは同期用ストレージを提供せず、同期データを預かりません。同期先へ平文は送信されません。

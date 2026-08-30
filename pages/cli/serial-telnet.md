@@ -24,7 +24,7 @@ Telnetの通信は平文で、サーバー認証もありません。信頼で�
 
 ## 文字コード
 
-SerialとTelnetは、`utf-8`、`shift_jis`、`euc-jp`、`iso-2022-jp`に対応しています。SSHの文字コードは、接続先ごとのsshc設定に保存します。
+SerialとTelnetは、`utf-8`、`shift_jis`、`euc-jp`、`iso-2022-jp`に対応しています。SSHの文字コードは、接続先ごとのsshc設定に保存できます。
 
 ## 非対話の自動化
 
