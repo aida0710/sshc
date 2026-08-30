@@ -124,12 +124,12 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 6. 縦横それぞれのseparatorをDragして比率を変更し、保存・再オープン後に復元されることを確認する。矢印キーでも5%ずつ変更できることを確認する。
 7. 任意paneをFocus Modeへ切り替え、他paneの接続を閉じずに単一paneだけが表示されること、Escとtoolbarの両方で元layoutへ戻ることを確認する。
 
-## M10. Terminal検索・履歴・補完
+## M10. Terminal検索と入力
 
-1. 長い出力を作り、Ctrl/Cmd+Fでscrollback内の語を検索する。Enter／Shift+Enterと前後buttonで全一致を巡回できることを確認する。
-2. 同じprefixを持つcommandを複数回実行し、入力中に頻度順の候補が表示され、Tabまたは候補buttonで残りが入力されることを確認する。
-3. SSH terminalでabsolute remote pathを入力し、SFTPで読める親directoryの候補が表示されることを確認する。relative pathではcwdを推測した候補が出ないことを確認する。
-4. terminalを閉じて開き直し、以前のcommand履歴がdiskやWorkspaceから復元されないことを確認する。
+1. 長い出力を作り、Ctrl/Cmd+Fでscrollback内の語を検索する。Enter／Shift+Enterと前後buttonで一致を巡回できることを確認する。
+2. 大文字小文字、正規表現、全一致highlightを切り替え、それぞれの結果と件数が更新されることを確認する。
+3. 検索barの開閉でTerminalの高さ、PTY行数、描画位置が変わらないことを確認する。
+4. shell固有のTab補完や候補UIを妨げず、sshc独自の入力候補が重ならないことを確認する。
 
 ## M11. UI外枠とタブ階層
 

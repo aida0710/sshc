@@ -1,7 +1,42 @@
 import { join } from "node:path";
 import { expect, openApplication, openSection, test } from "./support/environment";
+import { terminalKeyboard, terminalScrollbarSlider } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
+
+test("uses a thin rounded scrollbar for terminal scrollback", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Local shell" }).click();
+
+  const terminal = page.getByRole("region", { name: /^Console for / });
+  await expect(terminal).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("i=1; while [ \"$i\" -le 120 ]; do printf 'scrollback-line-%03d\\n' \"$i\"; i=$((i+1)); done");
+  await page.keyboard.press("Enter");
+  await expect(terminal).toContainText("scrollback-line-120", { timeout: 20_000 });
+
+  await terminal.hover();
+  await page.mouse.wheel(0, -800);
+
+  const slider = terminalScrollbarSlider(page);
+  await expect(slider).toBeVisible();
+  const scrollbar = await slider.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      width: style.width,
+      radius: style.borderRadius,
+    };
+  });
+  expect(scrollbar).toEqual({
+    width: "6px",
+    radius: "999px",
+  });
+
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: join(visualDirectory, "terminal-modern-scrollbar-desktop.png"), fullPage: true });
+  }
+});
 
 test("keeps terminal actions compact and exposes the new terminal settings", async ({ page, installation }) => {
   await openApplication(page, installation);
