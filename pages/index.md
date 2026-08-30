@@ -11,6 +11,7 @@ outline: false
     <div>
       <h1 class="sshc-title">sshc</h1>
       <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。今あるOpenSSHの設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、端末間の暗号化同期に対応します。</p>
+      <p class="sshc-platforms"><span>対応OS</span>macOS / Windows / Linux / Android</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">インストール</a>
         <a class="sshc-action" href="./guide/getting-started">はじめる</a>

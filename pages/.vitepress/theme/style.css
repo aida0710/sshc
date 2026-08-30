@@ -116,6 +116,24 @@ html:not(.dark) {
   line-height: 1.75;
 }
 
+.sshc-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 12px;
+  margin: 18px auto 0;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.sshc-platforms span {
+  color: var(--vp-c-text-3);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 .sshc-actions {
   display: flex;
   flex-wrap: wrap;
