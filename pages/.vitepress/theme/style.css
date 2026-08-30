@@ -319,7 +319,8 @@ html:not(.dark) {
 }
 
 @media (max-width: 640px) {
-  .sshc-home { padding: 42px 18px 64px; }
+  .VPHome .vp-doc.container { padding-inline: 0; }
+  .sshc-home { padding: 42px 16px 64px; }
   .sshc-lead { font-size: 16px; }
   .sshc-actions { display: grid; grid-template-columns: 1fr; }
   .sshc-action { justify-content: center; }
