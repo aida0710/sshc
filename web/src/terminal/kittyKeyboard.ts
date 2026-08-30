@@ -8,6 +8,8 @@ type KittyParser = {
   ): Disposable;
 };
 
+const KITTY_KEYBOARD_STATE_STACK_LIMIT = 64;
+
 export type KittyKeyboard = {
   encode(event: KeyboardEvent): string | null;
   reset(): void;
@@ -53,6 +55,7 @@ export function attachKittyKeyboardProtocol(parser: KittyParser): KittyKeyboard 
     parser.registerCsiHandler({ prefix: ">", final: "u" }, (parameters) => {
       const next = firstParameter(parameters, 0);
       if (next === null) return true;
+      if (stack.length === KITTY_KEYBOARD_STATE_STACK_LIMIT) stack.shift();
       stack.push(flags);
       flags = next;
       return true;
@@ -64,7 +67,9 @@ export function attachKittyKeyboardProtocol(parser: KittyParser): KittyKeyboard 
     }),
     parser.registerCsiHandler({ prefix: "<", final: "u" }, (parameters) => {
       const count = Math.max(1, firstParameter(parameters, 1) ?? 1);
-      for (let index = 0; index < count; index += 1) flags = stack.pop() ?? 0;
+      const available = Math.min(count, stack.length);
+      for (let index = 0; index < available; index += 1) flags = stack.pop() ?? 0;
+      if (count > available) flags = 0;
       return true;
     }),
   ];
