@@ -17,6 +17,21 @@ export type NavigateLocationOptions = {
 
 export type NavigationBlocker = (next: BrowserLocation) => boolean;
 
+const navigationPointKey = "__sshcNavigationPoint";
+
+function navigationPoint(state: unknown): number | null {
+  if (typeof state !== "object" || state === null) return null;
+  const point = (state as Record<string, unknown>)[navigationPointKey];
+  return typeof point === "number" && Number.isSafeInteger(point) ? point : null;
+}
+
+function stateAtNavigationPoint(state: unknown, point: number): Record<string, unknown> {
+  const previous = typeof state === "object" && state !== null && !Array.isArray(state)
+    ? state as Record<string, unknown>
+    : {};
+  return { ...previous, [navigationPointKey]: point };
+}
+
 function readLocation(): BrowserLocation {
   return { pathname: window.location.pathname, search: window.location.search };
 }
@@ -31,6 +46,8 @@ export function useSectionRoute(): {
   const [location, setLocation] = useState<BrowserLocation>(readLocation);
   const locationRef = useRef(location);
   const blockerRef = useRef<NavigationBlocker | null>(null);
+  const navigationPointRef = useRef<number | null>(null);
+  const restoringPointRef = useRef<number | null>(null);
   const route = useMemo(() => parseSectionPath(location.pathname), [location.pathname]);
 
   const publish = useCallback((next: BrowserLocation) => {
@@ -43,20 +60,44 @@ export function useSectionRoute(): {
   }, []);
 
   useEffect(() => {
+    let initialPoint = navigationPoint(window.history.state);
+    if (initialPoint === null) {
+      initialPoint = 0;
+      window.history.replaceState(stateAtNavigationPoint(window.history.state, initialPoint), "");
+    }
+    navigationPointRef.current = initialPoint;
+
     const synchronize = () => {
       const current = readLocation();
+      const currentPoint = navigationPoint(window.history.state);
+      if (restoringPointRef.current !== null && currentPoint === restoringPointRef.current) {
+        navigationPointRef.current = currentPoint;
+        restoringPointRef.current = null;
+        return;
+      }
       const next = parseSectionPath(current.pathname);
       const candidate = next.kind === "section" && !next.canonical
         ? { pathname: next.canonicalPath, search: current.search }
         : current;
       if (blockerRef.current !== null && !blockerRef.current(candidate)) {
         const previous = locationRef.current;
-        window.history.replaceState(null, "", `${previous.pathname}${previous.search}`);
+        const previousPoint = navigationPointRef.current;
+        if (previousPoint !== null && currentPoint !== null && previousPoint !== currentPoint) {
+          restoringPointRef.current = previousPoint;
+          window.history.go(previousPoint - currentPoint);
+          return;
+        }
+        window.history.replaceState(
+          stateAtNavigationPoint(window.history.state, previousPoint ?? 0),
+          "",
+          `${previous.pathname}${previous.search}`,
+        );
         return;
       }
+      if (currentPoint !== null) navigationPointRef.current = currentPoint;
       if (next.kind === "section" && !next.canonical) {
         window.history.replaceState(
-          null,
+          stateAtNavigationPoint(window.history.state, navigationPointRef.current ?? 0),
           "",
           `${next.canonicalPath}${current.search}`,
         );
@@ -77,10 +118,16 @@ export function useSectionRoute(): {
     if (blockerRef.current !== null && !blockerRef.current(nextLocation)) return false;
     if (window.location.pathname === path) {
       if (window.location.search !== "" || window.location.hash !== "") {
-        window.history.replaceState(null, "", path);
+        window.history.replaceState(
+          stateAtNavigationPoint(window.history.state, navigationPointRef.current ?? 0),
+          "",
+          path,
+        );
       }
     } else {
-      window.history.pushState(null, "", path);
+      const point = (navigationPointRef.current ?? 0) + 1;
+      window.history.pushState(stateAtNavigationPoint(null, point), "", path);
+      navigationPointRef.current = point;
     }
     publish(nextLocation);
     return true;
@@ -94,8 +141,17 @@ export function useSectionRoute(): {
     const next = `${target.pathname}${target.search}`;
     const current = `${window.location.pathname}${window.location.search}`;
     if (next === current) return true;
-    if (options.replace === true) window.history.replaceState(null, "", next);
-    else window.history.pushState(null, "", next);
+    if (options.replace === true) {
+      window.history.replaceState(
+        stateAtNavigationPoint(window.history.state, navigationPointRef.current ?? 0),
+        "",
+        next,
+      );
+    } else {
+      const point = (navigationPointRef.current ?? 0) + 1;
+      window.history.pushState(stateAtNavigationPoint(null, point), "", next);
+      navigationPointRef.current = point;
+    }
     publish(nextLocation);
     return true;
   }, [publish]);

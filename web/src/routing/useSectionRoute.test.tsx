@@ -23,7 +23,11 @@ describe("useSectionRoute", () => {
       result.current.navigate("Keys");
     });
 
-    expect(pushed).toHaveBeenCalledWith(null, "", "/keys");
+    expect(pushed).toHaveBeenCalledWith(
+      expect.objectContaining({ __sshcNavigationPoint: 1 }),
+      "",
+      "/keys",
+    );
     expect(window.location.pathname).toBe("/keys");
     expect(result.current.route).toMatchObject({ kind: "section", section: "Keys" });
   });
@@ -37,7 +41,11 @@ describe("useSectionRoute", () => {
       result.current.navigateLocation("/connections/servers?path=config&host=bastion&panel=basic");
     });
 
-    expect(pushed).toHaveBeenCalledWith(null, "", "/connections/servers?path=config&host=bastion&panel=basic");
+    expect(pushed).toHaveBeenCalledWith(
+      expect.objectContaining({ __sshcNavigationPoint: 1 }),
+      "",
+      "/connections/servers?path=config&host=bastion&panel=basic",
+    );
     expect(result.current.location.search).toBe("?path=config&host=bastion&panel=basic");
     expect(result.current.route).toMatchObject({ kind: "section", section: "Connections" });
 
@@ -48,7 +56,11 @@ describe("useSectionRoute", () => {
       );
     });
 
-    expect(replaced).toHaveBeenCalledWith(null, "", "/connections/servers?path=config&host=bastion&panel=advanced&advanced=raw");
+    expect(replaced).toHaveBeenCalledWith(
+      expect.objectContaining({ __sshcNavigationPoint: 1 }),
+      "",
+      "/connections/servers?path=config&host=bastion&panel=advanced&advanced=raw",
+    );
     expect(result.current.location.search).toBe("?path=config&host=bastion&panel=advanced&advanced=raw");
   });
 
@@ -87,7 +99,11 @@ describe("useSectionRoute", () => {
 
     expect(window.location.pathname).toBe("/connections");
     expect(window.location.search).toBe("?source=test");
-    expect(replaced).toHaveBeenCalledWith(null, "", "/connections?source=test");
+    expect(replaced).toHaveBeenLastCalledWith(
+      expect.objectContaining({ __sshcNavigationPoint: 0 }),
+      "",
+      "/connections?source=test",
+    );
     expect(pushed).not.toHaveBeenCalled();
     expect(result.current.route).toEqual({
       kind: "section",
@@ -108,40 +124,54 @@ describe("useSectionRoute", () => {
     expect(window.location.pathname).toBe("/missing");
     expect(window.location.search).toBe("?source=test");
     expect(pushed).not.toHaveBeenCalled();
-    expect(replaced).not.toHaveBeenCalled();
+    expect(replaced).toHaveBeenCalledOnce();
+    expect(replaced).toHaveBeenCalledWith(
+      expect.objectContaining({ __sshcNavigationPoint: 0 }),
+      "",
+    );
   });
 
-  it("keeps the current URL when an in-memory blocker rejects direct and popstate navigation", () => {
+  it("restores the history position when an in-memory blocker rejects popstate navigation", () => {
     window.history.replaceState(null, "", "/connections/servers?path=config&host=bastion&panel=basic");
-    const replaced = vi.spyOn(window.history, "replaceState");
     const { result } = renderHook(() => useSectionRoute());
+    const detailState = window.history.state;
 
-    act(() => {
-      result.current.setNavigationBlocker(() => false);
-    });
     act(() => {
       result.current.navigate("Keys");
     });
-
-    expect(window.location.href).toBe(
-      `${window.location.origin}/connections/servers?path=config&host=bastion&panel=basic`,
-    );
-    expect(result.current.location).toEqual({
-      pathname: "/connections/servers",
-      search: "?path=config&host=bastion&panel=basic",
-    });
+    const keysState = window.history.state;
+    const blocker = vi.fn(() => false);
+    const moved = vi.spyOn(window.history, "go").mockImplementation(() => undefined);
 
     act(() => {
-      window.history.pushState(null, "", "/history");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      result.current.setNavigationBlocker(blocker);
+    });
+    act(() => {
+      result.current.navigate("History");
     });
 
-    expect(replaced).toHaveBeenLastCalledWith(
-      null,
-      "",
-      "/connections/servers?path=config&host=bastion&panel=basic",
-    );
-    expect(result.current.route).toMatchObject({ kind: "section", section: "Connections" });
+    expect(window.location.pathname).toBe("/keys");
+    expect(result.current.route).toMatchObject({ kind: "section", section: "Keys" });
+
+    act(() => {
+      window.history.replaceState(
+        detailState,
+        "",
+        "/connections/servers?path=config&host=bastion&panel=basic",
+      );
+      window.dispatchEvent(new PopStateEvent("popstate", { state: detailState }));
+    });
+
+    expect(moved).toHaveBeenCalledWith(1);
+    expect(result.current.route).toMatchObject({ kind: "section", section: "Keys" });
+
+    act(() => {
+      window.history.replaceState(keysState, "", "/keys");
+      window.dispatchEvent(new PopStateEvent("popstate", { state: keysState }));
+    });
+
+    expect(blocker).toHaveBeenCalledTimes(2);
+    expect(result.current.route).toMatchObject({ kind: "section", section: "Keys" });
   });
 
   it("allows navigation after the blocker is cleared", () => {
@@ -171,7 +201,11 @@ describe("useSectionRoute", () => {
     });
 
     expect(pushed).not.toHaveBeenCalled();
-    expect(replaced).toHaveBeenCalledWith(null, "", "/keys");
+    expect(replaced).toHaveBeenLastCalledWith(
+      expect.objectContaining({ __sshcNavigationPoint: 0 }),
+      "",
+      "/keys",
+    );
     expect(window.location.href).toBe(`${window.location.origin}/keys`);
   });
 });
