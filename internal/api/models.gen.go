@@ -380,6 +380,42 @@ func (e TerminalSessionState) Valid() bool {
 	}
 }
 
+// Defines values for VaultAutoLockSettingsMode.
+const (
+	Idle    VaultAutoLockSettingsMode = "idle"
+	Restart VaultAutoLockSettingsMode = "restart"
+)
+
+// Valid indicates whether the value is a known member of the VaultAutoLockSettingsMode enum.
+func (e VaultAutoLockSettingsMode) Valid() bool {
+	switch e {
+	case Idle:
+		return true
+	case Restart:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultAutoLockSettingsUnit.
+const (
+	Hours   VaultAutoLockSettingsUnit = "hours"
+	Minutes VaultAutoLockSettingsUnit = "minutes"
+)
+
+// Valid indicates whether the value is a known member of the VaultAutoLockSettingsUnit enum.
+func (e VaultAutoLockSettingsUnit) Valid() bool {
+	switch e {
+	case Hours:
+		return true
+	case Minutes:
+		return true
+	default:
+		return false
+	}
+}
+
 // AgentIdentitiesResponse defines model for AgentIdentitiesResponse.
 type AgentIdentitiesResponse struct {
 	AgentAvailable bool            `json:"agentAvailable"`
@@ -647,7 +683,8 @@ type EffectiveResponse struct {
 
 // EngineSettings defines model for EngineSettings.
 type EngineSettings struct {
-	Port *int `json:"port,omitempty"`
+	Port          *int                   `json:"port,omitempty"`
+	VaultAutoLock *VaultAutoLockSettings `json:"vaultAutoLock,omitempty"`
 }
 
 // ExecutableDirective defines model for ExecutableDirective.
@@ -1740,3 +1777,17 @@ type ValueSource struct {
 	Value     string `json:"value"`
 	Winner    bool   `json:"winner"`
 }
+
+// VaultAutoLockSettings defines model for VaultAutoLockSettings.
+type VaultAutoLockSettings struct {
+	// Mode idleは無操作時間後、restartは手動ロックまたはengine終了時だけロックする。
+	Mode  VaultAutoLockSettingsMode  `json:"mode"`
+	Unit  *VaultAutoLockSettingsUnit `json:"unit,omitempty"`
+	Value *int                       `json:"value,omitempty"`
+}
+
+// VaultAutoLockSettingsMode idleは無操作時間後、restartは手動ロックまたはengine終了時だけロックする。
+type VaultAutoLockSettingsMode string
+
+// VaultAutoLockSettingsUnit defines model for VaultAutoLockSettings.Unit.
+type VaultAutoLockSettingsUnit string

@@ -449,6 +449,31 @@ describe("integrationsApi terminal settings", () => {
   });
 });
 
+describe("integrationsApi engine settings", () => {
+  it("restores timed and restart-only Vault locking without inventing defaults", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        schemaVersion: 4,
+        engine: { port: 43123, vaultAutoLock: { mode: "idle", value: 45, unit: "minutes" } },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        schemaVersion: 4,
+        engine: { vaultAutoLock: { mode: "restart" } },
+      }))
+      .mockResolvedValueOnce(jsonResponse({ schemaVersion: 4 }));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.engineSettings()).resolves.toEqual({
+      port: 43123,
+      vaultAutoLock: { mode: "idle", value: 45, unit: "minutes" },
+    });
+    await expect(integrationsApi.engineSettings()).resolves.toEqual({
+      vaultAutoLock: { mode: "restart" },
+    });
+    await expect(integrationsApi.engineSettings()).resolves.toEqual({});
+  });
+});
+
 describe("integrationsApi.passwordVault", () => {
   it("accepts dedicated key-passphrase subjects", async () => {
     vi.stubGlobal(

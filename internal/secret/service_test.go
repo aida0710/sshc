@@ -1100,6 +1100,37 @@ func TestAVaultLeftUntouchedShutsItself(t *testing.T) {
 	}
 }
 
+func TestIdleTimeoutCanBeChangedOrDisabled(t *testing.T) {
+	clock := time.Date(2026, 8, 30, 0, 0, 0, 0, time.UTC)
+	service, _ := newClockedService(t, func() time.Time { return clock })
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+
+	service.SetIdleTimeout(15 * time.Minute)
+	clock = clock.Add(14 * time.Minute)
+	if !service.Unlocked() {
+		t.Fatal("the configured timeout locked the vault early")
+	}
+	clock = clock.Add(2 * time.Minute)
+	if service.Unlocked() {
+		t.Fatal("the configured timeout did not lock the vault")
+	}
+
+	if err := service.Unlock(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	service.SetIdleTimeout(0)
+	clock = clock.Add(999 * 24 * time.Hour)
+	if !service.Unlocked() {
+		t.Fatal("restart-only mode still auto-locked the vault")
+	}
+	service.Lock()
+	if service.Unlocked() {
+		t.Fatal("restart-only mode disabled an explicit lock")
+	}
+}
+
 func TestUsingASecretPutsTheClockBackToZero(t *testing.T) {
 	clock := time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
 	service, _ := newClockedService(t, func() time.Time { return clock })

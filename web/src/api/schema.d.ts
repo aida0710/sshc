@@ -2834,8 +2834,19 @@ export interface components {
             localShellProfile?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
         };
+        VaultAutoLockSettings: {
+            /**
+             * @description idleは無操作時間後、restartは手動ロックまたはengine終了時だけロックする。
+             * @enum {string}
+             */
+            mode: "idle" | "restart";
+            value?: number;
+            /** @enum {string} */
+            unit?: "minutes" | "hours";
+        };
         EngineSettings: {
             port?: number;
+            vaultAutoLock?: components["schemas"]["VaultAutoLockSettings"];
         };
         TerminalBackground: {
             name: string;

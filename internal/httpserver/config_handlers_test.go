@@ -15,6 +15,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/application"
+	"sshc/internal/secret"
 	"sshc/internal/session"
 	"sshc/internal/storage"
 )
@@ -22,11 +23,12 @@ import (
 const handlerConfig = "Host bastion\n\tHostName 203.0.113.10\n\tPort 22\n"
 
 type testHarness struct {
-	echo    *echo.Echo
-	cookie  *http.Cookie
-	csrf    string
-	root    string
-	service *application.Service
+	echo      *echo.Echo
+	cookie    *http.Cookie
+	csrf      string
+	root      string
+	service   *application.Service
+	workspace *storage.Workspace
 }
 
 func newConfigHarness(t *testing.T) *testHarness {
@@ -63,11 +65,12 @@ func newConfigHarness(t *testing.T) *testHarness {
 	registerConfigRoutes(engine, ConfigHandlers{Service: service})
 
 	return &testHarness{
-		echo:    engine,
-		cookie:  &http.Cookie{Name: SessionCookie, Value: credentials.SessionID},
-		csrf:    credentials.CSRFToken,
-		root:    workspace.Root(),
-		service: service,
+		echo:      engine,
+		cookie:    &http.Cookie{Name: SessionCookie, Value: credentials.SessionID},
+		csrf:      credentials.CSRFToken,
+		root:      workspace.Root(),
+		service:   service,
+		workspace: workspace,
 	}
 }
 
@@ -124,6 +127,81 @@ func TestConfigEndpointsRequireASessionAndCSRF(t *testing.T) {
 	}
 	if got := response.Result().Header.Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("cache control = %q", got)
+	}
+}
+
+func TestEngineSettingsStoreTheVaultAutoLockChoice(t *testing.T) {
+	harness := newConfigHarness(t)
+	response := harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
+		"port":          43123,
+		"vaultAutoLock": map[string]any{"mode": "idle", "value": 45, "unit": "minutes"},
+	}, true, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("save = %d, body %s", response.Code, response.Body.String())
+	}
+	settings := harness.service.EngineSettings()
+	if settings.Port != 43123 || settings.VaultAutoLock == nil ||
+		settings.VaultAutoLock.Mode != application.VaultAutoLockIdle ||
+		settings.VaultAutoLock.Value != 45 || settings.VaultAutoLock.Unit != application.VaultAutoLockMinutes {
+		t.Fatalf("settings = %#v", settings)
+	}
+
+	response = harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
+		"vaultAutoLock": map[string]any{"mode": "restart"},
+	}, true, true)
+	if response.Code != http.StatusOK || harness.service.EngineSettings().VaultAutoLock.Mode != application.VaultAutoLockRestart {
+		t.Fatalf("restart-only save = %d, settings %#v", response.Code, harness.service.EngineSettings())
+	}
+}
+
+func TestEngineSettingsRejectInvalidVaultAutoLockChoices(t *testing.T) {
+	harness := newConfigHarness(t)
+	for name, chosen := range map[string]any{
+		"missing duration": map[string]any{"mode": "idle"},
+		"too large":        map[string]any{"mode": "idle", "value": 1000, "unit": "hours"},
+		"restart duration": map[string]any{"mode": "restart", "value": 1, "unit": "hours"},
+		"unknown mode":     map[string]any{"mode": "forever"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			response := harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
+				"vaultAutoLock": chosen,
+			}, true, true)
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_vault_auto_lock") {
+				t.Fatalf("response = %d, body %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestSavingEngineSettingsAppliesTheVaultClockImmediately(t *testing.T) {
+	harness := newConfigHarness(t)
+	secrets := secret.NewService(harness.workspace,
+		storage.NewManager(harness.workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x33}, 4096))),
+		time.Now)
+	handler := ConfigHandlers{Service: harness.service, Secrets: secrets}
+
+	call := func(body string) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPut, "/api/v1/metadata/engine", strings.NewReader(body))
+		request.Header.Set(echo.HeaderContentType, "application/json")
+		response := httptest.NewRecorder()
+		if err := handler.SetEngine(harness.echo.NewContext(request, response)); err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
+
+	if response := call(`{"vaultAutoLock":{"mode":"idle","value":30,"unit":"minutes"}}`); response.Code != http.StatusOK {
+		t.Fatalf("timed save = %d, body %s", response.Code, response.Body.String())
+	}
+	if got := secrets.IdleTimeout(); got != 30*time.Minute {
+		t.Fatalf("IdleTimeout = %v, want 30m", got)
+	}
+	if response := call(`{"vaultAutoLock":{"mode":"restart"}}`); response.Code != http.StatusOK {
+		t.Fatalf("restart save = %d, body %s", response.Code, response.Body.String())
+	}
+	if got := secrets.IdleTimeout(); got != 0 {
+		t.Fatalf("IdleTimeout = %v, want disabled", got)
 	}
 }
 

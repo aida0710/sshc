@@ -15,6 +15,12 @@ Open Menu → Settings. Connection-specific behavior lives in the connection's s
 
 Theme and language controls are also available on vault create and unlock screens.
 
+## Vault auto-lock
+
+By default, the Vault locks after saved passwords and key passphrases have not been used for 12 hours. Select a value from 1 to 999 and either minutes or hours. Status checks, terminal output, and automatic sync do not extend the timer.
+
+With **Do not auto-lock**, the Vault stays unlocked until you lock it manually or restart sshc. Use this option only on a device you control.
+
 ## Terminal
 
 - Font size and bounded browser scrollback

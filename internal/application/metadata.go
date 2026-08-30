@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
@@ -28,6 +29,7 @@ var (
 	ErrMetadataPath     = errors.New("metadata host path must be relative to the ssh directory")
 	ErrMetadataGroup    = errors.New("metadata group definition is invalid")
 	ErrMetadataTerminal = errors.New("metadata terminal settings are invalid")
+	ErrMetadataEngine   = errors.New("metadata engine settings are invalid")
 	ErrMetadataEncoding = errors.New("metadata terminal encoding is invalid")
 	ErrMetadataOSC52    = errors.New("metadata OSC 52 policy is invalid")
 )
@@ -65,7 +67,40 @@ type HostMetadata struct {
 
 // EngineSettings は、engine そのものの設定である。
 type EngineSettings struct {
-	Port int `json:"port,omitempty"`
+	Port          int            `json:"port,omitempty"`
+	VaultAutoLock *VaultAutoLock `json:"vaultAutoLock,omitempty"`
+}
+
+// VaultAutoLock は、導出済みのVault鍵をmemoryから破棄する条件である。
+// restartは自動タイマーを無効にするが、手動ロックとengine終了は引き続き鍵を破棄する。
+type VaultAutoLock struct {
+	Mode  string `json:"mode"`
+	Value int    `json:"value,omitempty"`
+	Unit  string `json:"unit,omitempty"`
+}
+
+const (
+	VaultAutoLockIdle    = "idle"
+	VaultAutoLockRestart = "restart"
+	VaultAutoLockMinutes = "minutes"
+	VaultAutoLockHours   = "hours"
+)
+
+// VaultIdleTimeout は保存済みの選択を実行時の時間へ変換する。
+// 未設定はfallbackを使い、restartは自動ロックなしを表す0を返す。
+func (settings EngineSettings) VaultIdleTimeout(fallback time.Duration) time.Duration {
+	chosen := settings.VaultAutoLock
+	if chosen == nil {
+		return fallback
+	}
+	if chosen.Mode == VaultAutoLockRestart {
+		return 0
+	}
+	unit := time.Minute
+	if chosen.Unit == VaultAutoLockHours {
+		unit = time.Hour
+	}
+	return time.Duration(chosen.Value) * unit
 }
 
 // TerminalAppearance は、端末の見た目の選択である。
@@ -216,6 +251,26 @@ func EncodeMetadata(metadata Metadata) ([]byte, error) {
 
 // ValidateMetadata は設計の不変条件を破る文書を拒否する。
 func ValidateMetadata(metadata Metadata) error {
+	if settings := metadata.Engine; settings != nil {
+		if settings.Port != 0 && (settings.Port < 1024 || settings.Port > 65535) {
+			return fmt.Errorf("%w: port %d", ErrMetadataEngine, settings.Port)
+		}
+		if chosen := settings.VaultAutoLock; chosen != nil {
+			switch chosen.Mode {
+			case VaultAutoLockRestart:
+				if chosen.Value != 0 || chosen.Unit != "" {
+					return fmt.Errorf("%w: restart-only auto lock has a duration", ErrMetadataEngine)
+				}
+			case VaultAutoLockIdle:
+				if chosen.Value < 1 || chosen.Value > 999 ||
+					(chosen.Unit != VaultAutoLockMinutes && chosen.Unit != VaultAutoLockHours) {
+					return fmt.Errorf("%w: idle auto lock duration", ErrMetadataEngine)
+				}
+			default:
+				return fmt.Errorf("%w: auto lock mode", ErrMetadataEngine)
+			}
+		}
+	}
 	if settings := metadata.EmbeddedTerminal; settings != nil {
 		if settings.MaxSessions != 0 &&
 			(settings.MaxSessions < terminal.MinMaxSessions || settings.MaxSessions > terminal.MaxMaxSessions) {
