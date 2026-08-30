@@ -9,11 +9,16 @@
 package sshdconformance_test
 
 import (
+	"bufio"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,11 +29,12 @@ import (
 )
 
 const (
-	addressVariable    = "SSHC_TEST_SSH_ADDR"
-	userVariable       = "SSHC_TEST_SSH_USER"
-	passwordVariable   = "SSHC_TEST_SSH_PASSWORD"
-	keyVariable        = "SSHC_TEST_SSH_KEY"
-	passphraseVariable = "SSHC_TEST_SSH_KEY_PASSPHRASE"
+	addressVariable     = "SSHC_TEST_SSH_ADDR"
+	userVariable        = "SSHC_TEST_SSH_USER"
+	passwordVariable    = "SSHC_TEST_SSH_PASSWORD"
+	keyVariable         = "SSHC_TEST_SSH_KEY"
+	passphraseVariable  = "SSHC_TEST_SSH_KEY_PASSPHRASE"
+	forwardDestVariable = "SSHC_TEST_FORWARD_DEST_ADDR"
 )
 
 // server は、コンテナの sshd の住所と、そこへ入るための資格情報である。
@@ -131,6 +137,20 @@ func (s server) keyTarget() sshclient.Target {
 	return target
 }
 
+func (s server) passwordDialer(t *testing.T) sshclient.Dialer {
+	t.Helper()
+	if s.password == "" {
+		t.Skipf("%s is not set", passwordVariable)
+	}
+	known := s.knownHosts(t)
+	return sshclient.Dialer{
+		Auth: sshclient.Auth{Password: func(target sshclient.Target) (string, bool) {
+			return s.password, target.Alias == "integration"
+		}},
+		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return known, nil }},
+	}
+}
+
 // TestRunAuthenticatesWithAKeyAgainstRealSshd は、非対話実行でパスフレーズ付き鍵を
 // 復号し、OpenSSH sshd に公開鍵認証できることを検証する。
 func TestRunAuthenticatesWithAKeyAgainstRealSshd(t *testing.T) {
@@ -164,6 +184,35 @@ func TestRunCarriesTheRemoteExitCode(t *testing.T) {
 	}
 	if output.ExitCode != 17 {
 		t.Fatalf("exit code = %d, want 17", output.ExitCode)
+	}
+}
+
+func TestConcurrentCommandsAgainstRealOpenSSH(t *testing.T) {
+	remote := integrationServer(t)
+	dialer := remote.keyDialer(t, nil)
+	target := remote.keyTarget()
+	const sessions = 16
+	errorsFound := make(chan error, sessions)
+	var group sync.WaitGroup
+	for index := 0; index < sessions; index++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			want := fmt.Sprintf("concurrent-%02d", index)
+			output, err := dialer.Run(t.Context(), target, "printf "+want, nil)
+			if err != nil {
+				errorsFound <- fmt.Errorf("session %d: %w", index, err)
+				return
+			}
+			if got := string(output.Stdout); got != want {
+				errorsFound <- fmt.Errorf("session %d output = %q, want %q", index, got, want)
+			}
+		}()
+	}
+	group.Wait()
+	close(errorsFound)
+	for err := range errorsFound {
+		t.Error(err)
 	}
 }
 
@@ -213,6 +262,167 @@ func TestOpenAsksForThePasswordAndRunsAShell(t *testing.T) {
 		t.Fatalf("writing to the shell: %v", err)
 	}
 	readUntil(t, process, "interactive-canary")
+}
+
+// Local Forwardのlistener、SSH direct-tcpip channel、container network、転送先を
+// 一続きで検証する。転送先OpenSSHのbannerまで届けば、往復の経路が通っている。
+func TestLocalForwardCarriesTrafficThroughRealOpenSSH(t *testing.T) {
+	remote := integrationServer(t)
+	destination := forwardDestination(t)
+	port := freePort(t)
+	target := remote.keyTarget()
+	target.Forwards = []sshclient.ForwardSpec{{
+		Kind: terminal.ForwardLocal, ListenPort: port, To: destination,
+	}}
+	process, err := remote.keyDialer(t, nil).Open(t.Context(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatalf("opening a session with local forwarding: %v", err)
+	}
+	t.Cleanup(func() { _ = process.Close() })
+	readUntil(t, process, "sshc: forwarding ")
+
+	connection, err := dialEventually(net.JoinHostPort(sshclient.LoopbackHost, port), 10*time.Second)
+	if err != nil {
+		t.Fatalf("connecting to the local forward: %v", err)
+	}
+	defer func() { _ = connection.Close() }()
+	if banner := readSSHBanner(t, connection); !strings.HasPrefix(banner, "SSH-2.0-") {
+		t.Fatalf("destination banner = %q", banner)
+	}
+}
+
+// Dynamic ForwardはSOCKS5のhandshakeから始め、OpenSSH server側でcontainer名を
+// 解決して転送先へ接続するところまでを検証する。
+func TestDynamicForwardCarriesSOCKSTrafficThroughRealOpenSSH(t *testing.T) {
+	remote := integrationServer(t)
+	destination := forwardDestination(t)
+	port := freePort(t)
+	target := remote.target()
+	target.IdentitiesOnly = true
+	target.Forwards = []sshclient.ForwardSpec{{Kind: terminal.ForwardDynamic, ListenPort: port}}
+	process, err := remote.passwordDialer(t).Open(t.Context(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatalf("opening a session with dynamic forwarding: %v", err)
+	}
+	t.Cleanup(func() { _ = process.Close() })
+	readUntil(t, process, "sshc: forwarding ")
+
+	connection, err := dialEventually(net.JoinHostPort(sshclient.LoopbackHost, port), 10*time.Second)
+	if err != nil {
+		t.Fatalf("connecting to the SOCKS listener: %v", err)
+	}
+	defer func() { _ = connection.Close() }()
+	_ = connection.SetDeadline(time.Now().Add(10 * time.Second))
+	if _, err := connection.Write([]byte{0x05, 0x01, 0x00}); err != nil {
+		t.Fatal(err)
+	}
+	greeting := make([]byte, 2)
+	if _, err := io.ReadFull(connection, greeting); err != nil {
+		t.Fatal(err)
+	}
+	if greeting[0] != 0x05 || greeting[1] != 0x00 {
+		t.Fatalf("SOCKS greeting = %v", greeting)
+	}
+
+	host, portText, err := net.SplitHostPort(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portNumber, err := strconv.Atoi(portText)
+	if err != nil || len(host) > 255 {
+		t.Fatalf("forward destination = %q", destination)
+	}
+	request := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))}
+	request = append(request, host...)
+	encodedPort := make([]byte, 2)
+	binary.BigEndian.PutUint16(encodedPort, uint16(portNumber))
+	request = append(request, encodedPort...)
+	if _, err := connection.Write(request); err != nil {
+		t.Fatal(err)
+	}
+	readSOCKSReply(t, connection)
+	if banner := readSSHBanner(t, connection); !strings.HasPrefix(banner, "SSH-2.0-") {
+		t.Fatalf("destination banner through SOCKS = %q", banner)
+	}
+}
+
+func forwardDestination(t *testing.T) string {
+	t.Helper()
+	destination := os.Getenv(forwardDestVariable)
+	if destination == "" {
+		t.Skipf("%s is not set", forwardDestVariable)
+	}
+	if _, _, err := net.SplitHostPort(destination); err != nil {
+		t.Fatalf("%s=%q is not host:port: %v", forwardDestVariable, destination, err)
+	}
+	return destination
+}
+
+func freePort(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", net.JoinHostPort(sshclient.LoopbackHost, "0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return port
+}
+
+func dialEventually(address string, wait time.Duration) (net.Conn, error) {
+	deadline := time.Now().Add(wait)
+	var last error
+	for time.Now().Before(deadline) {
+		connection, err := net.DialTimeout("tcp", address, time.Second)
+		if err == nil {
+			return connection, nil
+		}
+		last = err
+		time.Sleep(20 * time.Millisecond)
+	}
+	return nil, last
+}
+
+func readSOCKSReply(t *testing.T, connection net.Conn) {
+	t.Helper()
+	header := make([]byte, 4)
+	if _, err := io.ReadFull(connection, header); err != nil {
+		t.Fatal(err)
+	}
+	if header[0] != 0x05 || header[1] != 0x00 {
+		t.Fatalf("SOCKS reply = %v", header)
+	}
+	addressBytes := 0
+	switch header[3] {
+	case 0x01:
+		addressBytes = net.IPv4len
+	case 0x03:
+		length := make([]byte, 1)
+		if _, err := io.ReadFull(connection, length); err != nil {
+			t.Fatal(err)
+		}
+		addressBytes = int(length[0])
+	case 0x04:
+		addressBytes = net.IPv6len
+	default:
+		t.Fatalf("SOCKS address type = %d", header[3])
+	}
+	if _, err := io.ReadFull(connection, make([]byte, addressBytes+2)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readSSHBanner(t *testing.T, connection net.Conn) string {
+	t.Helper()
+	_ = connection.SetReadDeadline(time.Now().Add(10 * time.Second))
+	banner, err := bufio.NewReader(connection).ReadString('\n')
+	if err != nil {
+		t.Fatalf("reading destination SSH banner: %v", err)
+	}
+	return strings.TrimSpace(banner)
 }
 
 // readUntil は、その断片が現れるまで読む。

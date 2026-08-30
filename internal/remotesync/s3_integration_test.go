@@ -343,6 +343,141 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	}
 }
 
+// 4台が同じ履歴へ参加したとき、同期方向が操作制限だけでなく実際のS3転送にも
+// 反映され、競合時にどの端末も勝手に上書きしないことを確認する。
+func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *testing.T) {
+	ctx := context.Background()
+	remotePath := uniqueRealPath(t)
+	author := realInstallationAt(t, remotePath, map[string]string{
+		"config": "Host shared\n  HostName initial.example\n",
+	})
+	receiver := realInstallationAt(t, remotePath, map[string]string{})
+	sender := realInstallationAt(t, remotePath, map[string]string{})
+	peer := realInstallationAt(t, remotePath, map[string]string{})
+
+	if _, err := author.service.Push(ctx, syncPassphrase, "initial state"); err != nil {
+		t.Fatalf("author initial Push = %v", err)
+	}
+	for name, machine := range map[string]installation{
+		"receiver": receiver,
+		"sender":   sender,
+		"peer":     peer,
+	} {
+		result, err := machine.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone)
+		if err != nil {
+			t.Fatalf("%s initial Pull = %v", name, err)
+		}
+		if err := machine.service.Apply(result); err != nil {
+			t.Fatalf("%s initial Apply = %v", name, err)
+		}
+	}
+	receiver.direct(remotesync.DirectionPull)
+	sender.direct(remotesync.DirectionPush)
+
+	writeRealWorkspace(t, receiver, "receiver-local.conf", "Host receiver-local\n")
+	if _, err := receiver.service.Push(ctx, syncPassphrase, "must not travel"); !errors.Is(err, remotesync.ErrPushRefused) {
+		t.Fatalf("receive-only Push = %v, want ErrPushRefused", err)
+	}
+
+	writeRealWorkspace(t, sender, "sender.conf", "Host sender\n  HostName sender.example\n")
+	if _, err := sender.service.Push(ctx, syncPassphrase, "sender update"); err != nil {
+		t.Fatalf("send-only Push = %v", err)
+	}
+
+	for name, machine := range map[string]installation{
+		"receiver": receiver,
+		"author":   author,
+		"peer":     peer,
+	} {
+		result, err := machine.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone)
+		if err != nil {
+			t.Fatalf("%s Pull of sender update = %v", name, err)
+		}
+		if err := machine.service.Apply(result); err != nil {
+			t.Fatalf("%s Apply of sender update = %v", name, err)
+		}
+		if got := machine.read(t, "sender.conf"); !strings.Contains(got, "sender.example") {
+			t.Fatalf("%s did not receive the send-only update: %q", name, got)
+		}
+	}
+
+	// authorとpeerは同じbaseを持つ。同じfileを別々に変更してpeerだけが送る。
+	writeRealWorkspace(t, author, "config", "Host shared\n  HostName author-choice.example\n")
+	writeRealWorkspace(t, peer, "config", "Host shared\n  HostName peer-choice.example\n")
+	if _, err := peer.service.Push(ctx, syncPassphrase, "peer choice"); err != nil {
+		t.Fatalf("peer Push before conflict = %v", err)
+	}
+
+	conflicted, err := author.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("author conflict preview = %v", err)
+	}
+	if len(conflicted.Conflicts) != 1 || conflicted.Conflicts[0].Path != "config" {
+		t.Fatalf("author conflicts = %#v, want config", conflicted.Conflicts)
+	}
+	if err := author.service.Apply(conflicted); !errors.Is(err, remotesync.ErrConflicts) {
+		t.Fatalf("author unresolved Apply = %v, want ErrConflicts", err)
+	}
+	if got := author.read(t, "config"); !strings.Contains(got, "author-choice.example") {
+		t.Fatalf("unresolved conflict overwrote author: %q", got)
+	}
+
+	remoteChoice, err := author.service.Pull(ctx, syncPassphrase, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatalf("author remote conflict choice = %v", err)
+	}
+	if err := author.service.Apply(remoteChoice); err != nil {
+		t.Fatalf("author Apply of remote conflict choice = %v", err)
+	}
+	if got := author.read(t, "config"); !strings.Contains(got, "peer-choice.example") {
+		t.Fatalf("author did not apply the selected remote side: %q", got)
+	}
+
+	// 受信専用端末も同じfileをlocal変更しているため、自動受信は競合として停止する。
+	writeRealWorkspace(t, receiver, "config", "Host shared\n  HostName receiver-choice.example\n")
+	receiverView := autoFor(t, receiver, true).Poll(ctx)
+	if receiverView.Phase != remotesync.AutoBlocked || receiverView.Detail != "conflicts" {
+		t.Fatalf("receive-only conflict view = %+v, want blocked conflicts", receiverView)
+	}
+	if got := receiver.read(t, "config"); !strings.Contains(got, "receiver-choice.example") {
+		t.Fatalf("automatic receive overwrote a conflict: %q", got)
+	}
+	receiverChoice, err := receiver.service.Pull(ctx, syncPassphrase, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatalf("receive-only remote conflict choice = %v", err)
+	}
+	if err := receiver.service.Apply(receiverChoice); err != nil {
+		t.Fatalf("receive-only Apply of chosen side = %v", err)
+	}
+	if got := receiver.read(t, "config"); !strings.Contains(got, "peer-choice.example") {
+		t.Fatalf("receive-only machine did not apply the chosen side: %q", got)
+	}
+
+	// 送信専用端末はremoteが先へ進んだことだけを検出し、受信も上書きも行わない。
+	senderView := autoFor(t, sender, true).Poll(ctx)
+	if senderView.Phase != remotesync.AutoBlocked || senderView.Detail != "remote_moved" {
+		t.Fatalf("send-only moved remote view = %+v, want blocked remote_moved", senderView)
+	}
+	preview, err := sender.service.Pull(ctx, syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("send-only preview = %v", err)
+	}
+	if err := sender.service.Apply(preview); !errors.Is(err, remotesync.ErrApplyRefused) {
+		t.Fatalf("send-only Apply = %v, want ErrApplyRefused", err)
+	}
+	if got := sender.read(t, "config"); !strings.Contains(got, "initial.example") {
+		t.Fatalf("send-only machine was overwritten: %q", got)
+	}
+
+	view, err := author.service.BucketStatus(ctx)
+	if err != nil {
+		t.Fatalf("BucketStatus after four-machine lifecycle = %v", err)
+	}
+	if view.Live == nil || len(view.History) < 3 {
+		t.Fatalf("four-machine bucket history = %#v", view)
+	}
+}
+
 func TestAgainstARealBucketForcePushUsesTheConfirmedGeneration(t *testing.T) {
 	ctx := context.Background()
 	remotePath := uniqueRealPath(t)

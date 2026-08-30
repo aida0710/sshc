@@ -226,9 +226,11 @@ integration-sshd-relax:
 		for configuration in $$found; do \
 			grep -q "^PerSourcePenalties" "$$configuration" || \
 				printf "\nPerSourcePenalties no\n" >> "$$configuration"; \
+			grep -q "^MaxStartups" "$$configuration" || \
+				printf "\nMaxStartups 64:64:64\n" >> "$$configuration"; \
 			sed -i "s/^AllowTcpForwarding no$$/AllowTcpForwarding yes/" "$$configuration"; \
 		done; \
-		echo "PerSourcePenalties no; AllowTcpForwarding yes ->" $$found'
+		echo "PerSourcePenalties no; MaxStartups 64:64:64; AllowTcpForwarding yes ->" $$found'
 	docker restart sshc-sshd
 	@ready=0; for i in $$(seq 1 60); do \
 		if ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q .; then ready=1; break; fi; \
@@ -270,6 +272,7 @@ integration: build
 	SSHC_TEST_SSH_PASSWORD=$(SSH_PASS) \
 	SSHC_TEST_SSH_KEY="$(CURDIR)/.integration-key/id_integration" \
 	SSHC_TEST_SSH_KEY_PASSPHRASE="$(SSH_KEY_PASSPHRASE)" \
+	SSHC_TEST_FORWARD_DEST_ADDR=sshc-sshd-destination:2222 \
 	go test ./internal/objectstore ./internal/remotesync ./internal/sftp ./internal/sshdconformance -count=1 -v
 	SSHC_TEST_PROXY_JUMP_ADDR=127.0.0.1:$(SSHD_PORT) \
 	SSHC_TEST_PROXY_JUMP_USER=$(SSH_USER) \
