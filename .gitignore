@@ -2,6 +2,9 @@
 /dist/
 /coverage/
 /web/node_modules/
+/pages/node_modules/
+/pages/.vitepress/cache/
+/pages/.vitepress/dist/
 /node_modules/
 /web/tsconfig.tsbuildinfo
 /web/.playwright-browsers/

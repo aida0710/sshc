@@ -242,6 +242,24 @@ jobs:
       - name: Build
         run: npm run build
 
+  pages:
+    name: Documentation site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: pages
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pages/package-lock.json
+      - run: npm ci
+      - name: Build Japanese and English documentation
+        run: npm run build
+
   # 3 OS の到達可能性をまとめて解析する。OS 固有シンボルを誤検出しないよう、
   # OS ごとの go ジョブとは分離する。
   deadcode:
@@ -272,6 +290,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
+      - run: npm ci --prefix pages
 
       # api/openapi.yaml は、Go のモデルと TypeScript の型にとって唯一の源で
       # ある。ここで両方を再生成し、差分があれば失敗させる。これにより、手で
@@ -351,4 +370,6 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
           govulncheck ./...
       - name: npm vulnerability audit
-        run: npm audit --prefix web --audit-level=high
+        run: |
+          npm audit --prefix web --audit-level=high
+          npm audit --prefix pages --audit-level=high

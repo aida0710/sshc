@@ -1,0 +1,36 @@
+---
+title: Troubleshooting
+description: Checks for engine, vault, keys, sync and SSH connection failures.
+---
+
+# Troubleshooting
+
+## The engine does not start
+
+```sh
+sshc status
+sshc engine --replace
+```
+
+When the CLI and engine versions differ, stop the old engine and start it from the updated binary. On Android, open **Diagnostic details** to see the version, error code, operation and OS information. The report excludes secrets.
+
+## The vault does not unlock
+
+A master password cannot be recovered. If a new vault fails immediately, inspect the error code and detailed cause. `vault_too_new` means the vault format is newer than this binary supports; update sshc and try again.
+
+## A private key is missing after sync
+
+Check whether `IdentityFile` points to the path restored on this device. Keys managed by sshc may be under a group path such as `~/.ssh/keys/...`. Remove stale absolute paths and inspect the resolved path in connection details.
+
+## ProxyJump asks for a password
+
+Every jump host as well as the final host needs the matching saved password or key passphrase. Run the authentication check to identify the failing hop. Prompts that cannot be answered from saved values, such as 2FA, remain visible in the terminal.
+
+## Sync does not advance
+
+```sh
+sshc sync
+sshc sync now
+```
+
+Check that the vault is unlocked, the direction permits the operation, the bucket status is current and a recent check is recorded. `outcome_unknown` means a write may have reached storage but its result was not confirmed. Refresh remote state before deciding whether to retry.
