@@ -25,4 +25,4 @@ sshc vault lock
 sshc vault change-password
 ```
 
-Locking the vault does not close existing SSH sessions, but blocks new secret operations. The vault also locks after 12 hours without activity.
+Locking the Vault does not close existing SSH sessions, but blocks new secret operations. It locks after 12 hours of inactivity by default; Settings can change the duration or disable automatic locking.

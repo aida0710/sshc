@@ -42,6 +42,69 @@ async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("SettingsPanel", () => {
+  it("loads the twelve-hour default and saves a timed Vault lock with the port", async () => {
+    const user = userEvent.setup();
+    const setEngineSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({
+      engineSettings: vi.fn().mockResolvedValue({ port: 43123 }),
+      setEngineSettings,
+    })} />);
+
+    const region = screen.getByRole("region", { name: "Engine" });
+    const mode = within(region).getByLabelText("Vault auto-lock");
+    await waitFor(() => expect(mode).toBeEnabled());
+    expect(mode).toHaveValue("idle");
+    expect(within(region).getByLabelText("Time")).toHaveValue(12);
+    expect(within(region).getByLabelText("Unit")).toHaveValue("hours");
+
+    await user.clear(within(region).getByLabelText("Time"));
+    await user.type(within(region).getByLabelText("Time"), "45");
+    await user.selectOptions(within(region).getByLabelText("Unit"), "minutes");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setEngineSettings).toHaveBeenCalledWith({
+      port: 43123,
+      vaultAutoLock: { mode: "idle", value: 45, unit: "minutes" },
+    });
+    expect(await within(region).findByText(/Auto-lock applies now/)).toBeVisible();
+  });
+
+  it("shows a persistent warning and saves restart-only locking", async () => {
+    const user = userEvent.setup();
+    const setEngineSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setEngineSettings })} />);
+
+    const region = screen.getByRole("region", { name: "Engine" });
+    const mode = within(region).getByLabelText("Vault auto-lock");
+    await waitFor(() => expect(mode).toBeEnabled());
+    await user.selectOptions(mode, "restart");
+
+    expect(within(region).queryByLabelText("Time")).toBeNull();
+    expect(within(region).getByText(/remains unlocked until sshc is restarted/i)).toBeVisible();
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+    expect(setEngineSettings).toHaveBeenCalledWith({ vaultAutoLock: { mode: "restart" } });
+  });
+
+  it("restores restart-only locking and rejects a duration outside 1 to 999", async () => {
+    const user = userEvent.setup();
+    const setEngineSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({
+      engineSettings: vi.fn().mockResolvedValue({ vaultAutoLock: { mode: "restart" } }),
+      setEngineSettings,
+    })} />);
+
+    const region = screen.getByRole("region", { name: "Engine" });
+    const mode = within(region).getByLabelText("Vault auto-lock");
+    await waitFor(() => expect(mode).toHaveValue("restart"));
+    await user.selectOptions(mode, "idle");
+    await user.clear(within(region).getByLabelText("Time"));
+    await user.type(within(region).getByLabelText("Time"), "1000");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setEngineSettings).not.toHaveBeenCalled();
+    expect(within(region).getByText(/whole number from 1 to 999/i)).toBeVisible();
+  });
+
   it("requests browser notification permission from an explicit click and confirms delivery", async () => {
     const delivered: Array<{ title: string; options: NotificationOptions | undefined }> = [];
     class FakeNotification {

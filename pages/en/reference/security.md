@@ -11,7 +11,7 @@ The engine serves its Web UI and API on a loopback address. UI URLs are issued o
 
 ## Vault
 
-Account passwords, key passphrases and snippet secrets are encrypted with the master password. sshc does not accept that password through command-line arguments or environment variables. The vault locks after 12 hours without activity.
+Account passwords, key passphrases and snippet secrets are encrypted with the master password. sshc does not accept that password through command-line arguments or environment variables. The Vault locks after 12 hours of inactivity by default; Settings can select 1–999 minutes or hours, or disable automatic locking.
 
 ## SSH host keys
 

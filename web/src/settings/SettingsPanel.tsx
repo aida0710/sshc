@@ -155,6 +155,10 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
   const [browserScrollbackLines, setBrowserScrollbackLines] = useState("");
   const [fontSize, setFontSize] = useState("");
   const [port, setPort] = useState("");
+  const [vaultAutoLockMode, setVaultAutoLockMode] = useState<"idle" | "restart">("idle");
+  const [vaultAutoLockValue, setVaultAutoLockValue] = useState("12");
+  const [vaultAutoLockUnit, setVaultAutoLockUnit] = useState<"minutes" | "hours">("hours");
+  const [engineLoaded, setEngineLoaded] = useState(false);
   const [portBusy, setPortBusy] = useState(false);
   const [portError, setPortError] = useState("");
   const [portSaved, setPortSaved] = useState(false);
@@ -219,9 +223,20 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
     void api
       .engineSettings()
       .then((settings) => {
-        if (active) setPort(settings.port === undefined ? "" : String(settings.port));
+        if (!active) return;
+        setPort(settings.port === undefined ? "" : String(settings.port));
+        if (settings.vaultAutoLock?.mode === "restart") {
+          setVaultAutoLockMode("restart");
+        } else if (settings.vaultAutoLock?.mode === "idle") {
+          setVaultAutoLockMode("idle");
+          setVaultAutoLockValue(String(settings.vaultAutoLock.value ?? 12));
+          setVaultAutoLockUnit(settings.vaultAutoLock.unit ?? "hours");
+        }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setEngineLoaded(true);
+      });
     if (api.localShellProfiles !== undefined) {
       void api.localShellProfiles()
         .then((answer) => {
@@ -262,7 +277,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
     }
   }
 
-  async function savePort() {
+  async function saveEngine() {
     const trimmed = port.trim();
     const chosen = trimmed === "" ? undefined : Number(trimmed);
     if (chosen !== undefined && (!Number.isSafeInteger(chosen) || chosen < 1024 || chosen > 65535)) {
@@ -270,11 +285,23 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
       setPortSaved(false);
       return;
     }
+    const idleValue = Number(vaultAutoLockValue);
+    if (vaultAutoLockMode === "idle" &&
+        (!Number.isSafeInteger(idleValue) || idleValue < 1 || idleValue > 999)) {
+      setPortError(t("engine.vaultAutoLockOutOfRange"));
+      setPortSaved(false);
+      return;
+    }
     setPortBusy(true);
     setPortError("");
     setPortSaved(false);
     try {
-      await api.setEngineSettings(chosen === undefined ? {} : { port: chosen });
+      await api.setEngineSettings({
+        ...(chosen === undefined ? {} : { port: chosen }),
+        vaultAutoLock: vaultAutoLockMode === "restart"
+          ? { mode: "restart" }
+          : { mode: "idle", value: idleValue, unit: vaultAutoLockUnit },
+      });
       setPortSaved(true);
     } catch {
       setPortError(t("engine.saveFailed"));
@@ -402,18 +429,72 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
                 className={control}
                 value={port}
                 placeholder="30000-60000"
-                disabled={portBusy}
+                disabled={!engineLoaded || portBusy}
                 onChange={(event) => {
                   setPort(event.target.value);
                   setPortSaved(false);
                 }}
               />
             </Field>
+            <div className="mt-5 border-t border-line pt-5">
+              <Field label={t("engine.vaultAutoLockLabel")} hint={t("engine.vaultAutoLockHint")}>
+                <select
+                  className={control}
+                  value={vaultAutoLockMode}
+                  disabled={!engineLoaded || portBusy}
+                  onChange={(event) => {
+                    setVaultAutoLockMode(event.target.value as "idle" | "restart");
+                    setPortSaved(false);
+                  }}
+                >
+                  <option value="idle">{t("engine.vaultAutoLockIdle")}</option>
+                  <option value="restart">{t("engine.vaultAutoLockRestart")}</option>
+                </select>
+              </Field>
+              {vaultAutoLockMode === "idle" ? (
+                <div className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.65fr)] gap-3">
+                  <Field label={t("engine.vaultAutoLockValue")}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      className={control}
+                      value={vaultAutoLockValue}
+                      disabled={!engineLoaded || portBusy}
+                      onChange={(event) => {
+                        setVaultAutoLockValue(event.target.value);
+                        setPortSaved(false);
+                      }}
+                    />
+                  </Field>
+                  <Field label={t("engine.vaultAutoLockUnit")}>
+                    <select
+                      className={control}
+                      value={vaultAutoLockUnit}
+                      disabled={!engineLoaded || portBusy}
+                      onChange={(event) => {
+                        setVaultAutoLockUnit(event.target.value as "minutes" | "hours");
+                        setPortSaved(false);
+                      }}
+                    >
+                      <option value="minutes">{t("engine.vaultAutoLockMinutes")}</option>
+                      <option value="hours">{t("engine.vaultAutoLockHours")}</option>
+                    </select>
+                  </Field>
+                </div>
+              ) : (
+                <div className="mt-4">
+                  <Notice>{t("engine.vaultAutoLockRestartWarning")}</Notice>
+                </div>
+              )}
+            </div>
             <ActionArea status={portError === ""
-              ? (!portSaved ? undefined : <Notice tone="notice">{t("engine.saved")}</Notice>)
+              ? (!engineLoaded
+                  ? <p role="status" className="text-sm text-ink-muted">{t("engine.loading")}</p>
+                  : !portSaved ? undefined : <Notice tone="notice">{t("engine.saved")}</Notice>)
               : <Notice tone="danger">{portError}</Notice>}
             >
-              <Button kind="primary" disabled={portBusy} onClick={() => void savePort()}>
+              <Button kind="primary" disabled={!engineLoaded || portBusy} onClick={() => void saveEngine()}>
                 {t("terminal.startSave")}
               </Button>
             </ActionArea>

@@ -74,6 +74,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 
 	// パスワード保管用の vault も設定のトランザクションマネージャを共有する。~/.ssh
 	passwordService := secret.NewService(workspace, transactions, time.Now)
+	passwordService.SetIdleTimeout(configService.EngineSettings().VaultIdleTimeout(secret.IdleTimeout))
 	recentStore := recent.NewStore(workspace, time.Now)
 
 	// プロセス内 SSH クライアントの依存関係をここで一度だけ組み立てる。

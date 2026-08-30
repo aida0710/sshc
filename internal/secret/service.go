@@ -218,6 +218,19 @@ func (s *Service) IdleTimeout() time.Duration {
 	return s.idle
 }
 
+// SetIdleTimeout は、これ以降に使う自動ロック時間を変更する。
+// 0は自動ロックなしであり、手動Lockとengine終了による破棄は変えない。
+func (s *Service) SetIdleTimeout(timeout time.Duration) {
+	if timeout < 0 {
+		panic("secret: negative idle timeout")
+	}
+	s.mu.Lock()
+	s.idle = timeout
+	// すでに新しい期限を超えていれば、次のrequestを待たずに破棄する。
+	s.open()
+	s.mu.Unlock()
+}
+
 // open は vault を返す。IdleTimeout より長く触れられていなければ、先にそれを
 // 閉じる。
 //
