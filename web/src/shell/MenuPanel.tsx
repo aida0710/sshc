@@ -46,7 +46,7 @@ export function MenuPanel({
         <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">{t("menu.description")}</p>
       </div>
 
-      <div className="grid items-start gap-x-8 gap-y-7 lg:grid-cols-2">
+      <div className="grid items-start gap-x-8 gap-y-7 lg:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => (
           <section key={group.label} aria-labelledby={`menu-${group.label}`}>
             <h3

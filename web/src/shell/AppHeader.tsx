@@ -122,11 +122,11 @@ export function AppHeader({
           type="button"
           aria-label={t("palette.open")}
           onClick={onOpenCommandPalette}
-          className="mr-1 flex h-8 min-w-44 items-center gap-2 rounded border border-control-line bg-control px-2.5 text-xs text-ink-muted hover:border-control-line-strong hover:text-ink"
+          className="mr-1 flex h-8 min-w-44 items-center gap-2 rounded border border-control-line bg-control px-2.5 text-xs text-ink-muted hover:border-accent hover:text-ink"
         >
           <Icon name="search" className="h-3.5 w-3.5" />
           <span className="flex-1 text-left">{t("palette.open")}</span>
-          <kbd className="font-mono text-[10px] text-ink-subtle">Ctrl K</kbd>
+          <kbd className="font-mono text-[10px] text-ink-faint">Ctrl K</kbd>
         </button>
         {activeTransfers > 0 ? (
           <button

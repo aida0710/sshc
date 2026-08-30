@@ -114,6 +114,38 @@ describe("ConnectionSummary", () => {
     expect(screen.queryByText(/is not used and will be unassigned/i)).not.toBeInTheDocument();
   });
 
+  it("uses a complete three-cell layout when no account password is shown", () => {
+    render(
+      <ConnectionSummary
+        state={{
+          ...state,
+          credentials: { status: "ready", value: [] },
+          vault: {
+            status: "ready",
+            value: {
+              exists: true,
+              unlocked: true,
+              aliases: [],
+              dedicatedKeyPassphrases: ["id_work"],
+              minPassphraseLength: 12,
+            },
+          },
+        }}
+        dirty={false}
+        refreshing={false}
+        onConnect={vi.fn()}
+        connecting={false}
+        onToggleManage={vi.fn()}
+        managing={false}
+      />,
+    );
+
+    const summary = screen.getByText("Group").closest("dl");
+    expect(summary).toHaveClass("grid-cols-2", "md:grid-cols-3");
+    expect(screen.getByText("Key passphrase").closest("div")).toHaveClass("col-span-2", "md:col-span-1");
+    expect(screen.queryByText("Account password")).not.toBeInTheDocument();
+  });
+
   it("keeps committed text while disabling saved-state actions for a draft", async () => {
     const user = userEvent.setup();
     const onConnect = vi.fn();

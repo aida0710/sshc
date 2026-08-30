@@ -535,7 +535,7 @@ export function TerminalWorkspace({
         {workspacePaneCount > 0 ? (
           <div className="mr-2 flex min-w-0 items-center gap-2 border-r border-line pr-4">
             <span className="max-w-52 truncate text-xs font-semibold text-ink">{workspaceDisplayName}</span>
-            <span className="whitespace-nowrap text-[11px] text-ink-subtle">{t("workspace.groupCount", { count: String(workspacePaneCount) })}</span>
+            <span className="whitespace-nowrap text-[11px] text-ink-faint">{t("workspace.groupCount", { count: String(workspacePaneCount) })}</span>
           </div>
         ) : null}
         <Button disabled={connectedCommandTargets === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
