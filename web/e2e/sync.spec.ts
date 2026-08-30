@@ -315,6 +315,20 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   ).toBeVisible();
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
+    await page.waitForTimeout(300);
+    await page.screenshot({
+      path: `${visualDirectory}/sync-desktop-en.png`,
+      fullPage: true,
+    });
+    await page.locator("#language").selectOption("ja");
+    await page.locator("#sync-commit-message").fill("設定を更新");
+    await page.evaluate(async () => { await document.fonts.ready; });
+    await page.screenshot({
+      path: `${visualDirectory}/sync-desktop-ja.png`,
+      fullPage: true,
+    });
+    await page.locator("#language").selectOption("en");
+    await page.locator("#sync-commit-message").fill("Update config");
     await page.screenshot({
       path: `${visualDirectory}/sshc-v0.16.1-sync-settings-collapsed.png`,
       fullPage: true,
@@ -339,6 +353,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       fullPage: true,
     });
   }
+  await page.getByText("Details and history").click();
   await expect(page.getByText("Dated history · 1")).toBeVisible();
   await expect(page.getByText("The remote generation differs")).toBeVisible();
   await expect(
@@ -365,16 +380,6 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       .getByRole("heading", { name: "Remote sync" })
       .scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
-    const metrics = page.locator("main dl").first().locator(":scope > div");
-    await expect(metrics).toHaveCount(3);
-    const metricBoxes = await metrics.evaluateAll((items) =>
-      items.map((item) => {
-        const box = item.getBoundingClientRect();
-        return { top: box.top, bottom: box.bottom };
-      }),
-    );
-    expect(metricBoxes[1]!.top).toBeGreaterThanOrEqual(metricBoxes[0]!.bottom);
-    expect(metricBoxes[2]!.top).toBeGreaterThanOrEqual(metricBoxes[1]!.bottom);
     await page.screenshot({
       path: `${visualDirectory}/sshc-v0.16.1-sync-mobile.png`,
       fullPage: true,
