@@ -5,7 +5,7 @@ description: Install sshc on macOS, Linux, Windows or Android.
 
 # Installation
 
-sshc supports macOS, Linux, Windows, and Android. On desktop, one `sshc` binary provides the engine, CLI, and local web UI.
+sshc is a terminal app for macOS, Linux, Windows, and Android. On desktop, one `sshc` binary provides the engine, CLI, and local web UI.
 
 ## macOS / Linux
 

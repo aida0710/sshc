@@ -9,18 +9,18 @@ const jaSidebar = [
     { text: "インストール", link: "/guide/install" },
     { text: "最初の接続", link: "/guide/first-connection" },
   ] },
+  { text: "Terminal", items: [
+    { text: "Terminalを使う", link: "/features/terminal" },
+    { text: "Workspaceと分割", link: "/features/workspace" },
+    { text: "クイックコマンド", link: "/terminal/commands" },
+    { text: "ポート転送", link: "/terminal/port-forwarding" },
+  ] },
   { text: "接続を管理する", items: [
     { text: "接続とグループ", link: "/connections/manage" },
     { text: "SSH Config", link: "/connections/config" },
     { text: "認証情報とVault", link: "/connections/credentials" },
     { text: "SSH鍵とKnown Hosts", link: "/connections/keys" },
     { text: "踏み台接続", link: "/connections/proxy" },
-  ] },
-  { text: "Terminal", items: [
-    { text: "Terminalを使う", link: "/features/terminal" },
-    { text: "Workspaceと分割", link: "/features/workspace" },
-    { text: "クイックコマンド", link: "/terminal/commands" },
-    { text: "ポート転送", link: "/terminal/port-forwarding" },
   ] },
   { text: "ファイルと同期", items: [
     { text: "SFTP", link: "/features/sftp" },
@@ -46,18 +46,18 @@ const enSidebar = [
     { text: "Install", link: "/en/guide/install" },
     { text: "First connection", link: "/en/guide/first-connection" },
   ] },
+  { text: "Terminal", items: [
+    { text: "Use the terminal", link: "/en/features/terminal" },
+    { text: "Workspaces and splits", link: "/en/features/workspace" },
+    { text: "Quick Commands", link: "/en/terminal/commands" },
+    { text: "Port forwarding", link: "/en/terminal/port-forwarding" },
+  ] },
   { text: "Manage connections", items: [
     { text: "Connections and groups", link: "/en/connections/manage" },
     { text: "OpenSSH configuration", link: "/en/connections/config" },
     { text: "Credentials and vault", link: "/en/connections/credentials" },
     { text: "Keys and known hosts", link: "/en/connections/keys" },
     { text: "Jump hosts", link: "/en/connections/proxy" },
-  ] },
-  { text: "Terminal", items: [
-    { text: "Use the terminal", link: "/en/features/terminal" },
-    { text: "Workspaces and splits", link: "/en/features/workspace" },
-    { text: "Quick Commands", link: "/en/terminal/commands" },
-    { text: "Port forwarding", link: "/en/terminal/port-forwarding" },
   ] },
   { text: "Files and sync", items: [
     { text: "SFTP", link: "/en/features/sftp" },
@@ -79,7 +79,7 @@ const enSidebar = [
 
 export default defineConfig({
   title: "sshc",
-  description: "OpenSSH configuration, terminal, SFTP, workspaces and encrypted sync in one local application.",
+  description: "A terminal app for SSH and local shells that uses existing OpenSSH configuration.",
   lang: "ja",
   base,
   cleanUrls: true,
@@ -89,8 +89,8 @@ export default defineConfig({
     ["meta", { name: "theme-color", content: "#111416" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:title", content: "sshc" }],
-    ["meta", { property: "og:description", content: "OpenSSH設定の整理、認証情報の再利用、AIエージェント向けCLI、暗号化同期を一つに。" }],
-    ["meta", { property: "og:image", content: "https://aida0710.github.io/sshc/images/connections-desktop.png" }],
+    ["meta", { property: "og:description", content: "SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、暗号化同期に対応。" }],
+    ["meta", { property: "og:image", content: "https://aida0710.github.io/sshc/images/terminal-desktop.png" }],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
     ["link", { rel: "icon", href: `${base}logo.svg`, type: "image/svg+xml" }],
   ],
@@ -116,10 +116,10 @@ export default defineConfig({
       label: "English",
       lang: "en",
       link: "/en/",
-      description: "Organize OpenSSH, reuse saved credentials from the CLI, and sync securely across devices.",
+      description: "A terminal app that uses existing OpenSSH configuration, with SFTP, reusable credentials, an AI-friendly CLI, and encrypted sync.",
       head: [
         ["meta", { property: "og:title", content: "sshc" }],
-        ["meta", { property: "og:description", content: "Organize OpenSSH, reuse saved credentials from the CLI, and sync securely across devices." }],
+        ["meta", { property: "og:description", content: "A terminal app that uses existing OpenSSH configuration, with SFTP, reusable credentials, an AI-friendly CLI, and encrypted sync." }],
       ],
       themeConfig: {
         nav: [

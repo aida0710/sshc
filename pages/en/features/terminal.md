@@ -1,9 +1,11 @@
 ---
-title: Connections and terminal
-description: Browser terminals, connection stages, search, encodings and port forwarding.
+title: Terminal
+description: Open SSH and local shells with search, reconnect, encodings, and port forwarding.
 ---
 
-# Connections and terminal
+# Terminal
+
+Open SSH and local shells in the same interface, with multiple-pane workspaces, search, Quick Commands, and port forwarding.
 
 ![A connected terminal and its action menu](/images/terminal-desktop.png)
 
