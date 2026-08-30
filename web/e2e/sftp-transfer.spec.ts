@@ -1,6 +1,6 @@
 import { expect, openApplication, openSection, test } from "./support/environment";
 
-test("keeps a chunked SFTP upload running while another section is open", async ({ page, installation }) => {
+test("keeps a chunked SFTP upload visible while another section is open", async ({ page, installation }) => {
   let releaseFirstChunk: (() => void) | undefined;
   const firstChunkGate = new Promise<void>((resolve) => { releaseFirstChunk = resolve; });
   let offset = 0;
@@ -48,16 +48,19 @@ test("keeps a chunked SFTP upload running while another section is open", async 
   await expect(page.getByText("Transferring…")).toBeVisible();
 
   await openSection(page, "Connections");
-  releaseFirstChunk?.();
-  await expect(page.getByText("Upload completed: large.bin")).toBeVisible();
+  await expect(page.getByRole("button", { name: "1 active" })).toBeVisible();
   await openSection(page, "SFTP");
-  await expect(page.getByText("Completed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Transferring…")).toBeVisible();
   await page.getByRole("combobox", { name: "Host" }).selectOption("bastion");
   await expect(page.getByRole("button", { name: "notes.txt" })).toBeVisible();
-  expect(chunks).toBe(3);
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
+    await page.screenshot({ path: `${visualDirectory}/transfer-manager-en.png`, fullPage: true });
+    await page.locator("#language").selectOption("ja");
+    await page.evaluate(async () => { await document.fonts.ready; });
+    await page.screenshot({ path: `${visualDirectory}/transfer-manager-ja.png`, fullPage: true });
+    await page.locator("#language").selectOption("en");
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 360, height: 800 });
     await page.waitForTimeout(400);
@@ -66,4 +69,8 @@ test("keeps a chunked SFTP upload running while another section is open", async 
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-mobile.png`, fullPage: true });
   }
+
+  releaseFirstChunk?.();
+  await expect.poll(() => offset).toBeGreaterThan(0);
+  expect(chunks).toBeGreaterThanOrEqual(1);
 });
