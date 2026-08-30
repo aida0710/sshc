@@ -1021,11 +1021,6 @@ export const ja = {
   "sync.role.send": "このマシンでは送信のみ",
   "sync.pageDescription":
     "この SSH ワークスペースを暗号化スナップショットとして保存し、オブジェクトストレージ経由でマシン間に同期します。",
-  "sync.metricConfiguration": "設定",
-  "sync.metricDirection": "同期方向",
-  "sync.metricSnapshot": "スナップショットのファイル",
-  "sync.stateConfigured": "設定済み",
-  "sync.stateNotConfigured": "未設定",
   "sync.flowHeading": "同期を始める手順",
   "sync.flowBucket": "バケットを設定",
   "sync.flowKey": "共通の暗号化キーを設定",
@@ -1064,15 +1059,11 @@ export const ja = {
     "このマシンからの送信のみを行います。他のマシンの変更は適用されませんが、変更内容の確認はできます。",
   "sync.direction.pull.hint":
     "このマシンでは受信のみを行います。ローカルの変更はバケットや他のマシンへ送信されません。",
-  "sync.direction.push.active":
-    "送信のみに設定されています。ワークスペースを送信できますが、スナップショットは適用できません。",
-  "sync.direction.pull.active":
-    "受信のみに設定されています。スナップショットを適用できますが、ワークスペースは送信できません。",
   "sync.configure": "このバケットを使う",
   "sync.editSettings": "バケット設定を編集",
   "sync.cancelSettings": "編集をキャンセル",
   "sync.configureFailed": "そのバケットを設定できませんでした。",
-  "sync.snapshotHeading": "スナップショット",
+  "sync.detailsHeading": "詳細・履歴",
   "sync.neverSynced": "このマシンはまだ同期していません。",
   "sync.lastSynced": "最終同期 {at}、{count} ファイル。",
   "sync.key": "暗号化キー",
@@ -1106,8 +1097,12 @@ export const ja = {
   "sync.endpointPath":
     "エンドポイントはアカウントのアドレスだけです。バケット名やパスは含めません。バケット名は下の欄に入れてください。",
   "sync.auto": "自動同期",
-  "sync.autoHint":
+  "sync.autoHint.both":
     "Vault が開いている間、1 分ごとにリモートの更新を確認します。このマシンの設定を変更した場合は、最後の変更から 5 秒後に一度だけ送信します。競合は自動解決せず、ファイルを削除する変更も自動適用しません。どちらの場合も自動同期を停止して通知します。",
+  "sync.autoHint.pull":
+    "Vault が開いている間、1 分ごとにリモートの更新を確認します。このマシンの変更は送信しません。競合やファイルを削除する変更を見つけた場合は、自動受信を停止して通知します。",
+  "sync.autoHint.push":
+    "Vault が開いている間、リモートが更新されていないか確認します。このマシンの設定を変更した場合は、最後の変更から 5 秒後に一度だけ送信します。リモートの内容は受信しません。",
   "sync.autoEnable": "このマシンを自動で同期する",
   "sync.autoIdle": "停止中",
   "sync.autoLastRan": "最後に確認したのは {at} です。",
@@ -1122,6 +1117,7 @@ export const ja = {
   "sync.remoteHeadReviewHint":
     "受信専用では、現在のリモートを正として明示的に受信できます。作成日時・作成元・変更されるファイルを確認してから適用します。",
   "sync.remoteHeadReview": "現在のリモートを確認",
+  "sync.checkRemoteChanges": "リモートの変更を確認",
   "sync.remoteHeadPreviewHeading": "現在のリモートを受信",
   "sync.remoteHeadPreview":
     "作成 {at}・作成元 {origin} のリモートを確認しています。適用時にも同じ世代であることを再確認し、途中で変わっていた場合は何も書き込みません。",
@@ -1138,8 +1134,10 @@ export const ja = {
   "sync.autoNow": "今すぐ同期",
   "sync.autoNowFailed": "その確認を実行できませんでした。",
   "sync.transferHeading": "送信・変更確認",
-  "sync.transferHint":
+  "sync.transferHint.both":
     "このマシンの内容を送信するか、他のマシンの変更を確認してから適用します。",
+  "sync.transferHint.push":
+    "このマシンの内容を送信します。リモートの内容はこのマシンへ適用しません。",
   "sync.commitMessage": "コミットメッセージ",
   "sync.commitMessagePlaceholder": "このスナップショットの変更内容",
   "sync.commitMessageHint":
@@ -1162,6 +1160,10 @@ export const ja = {
   "sync.bucketLocalBehind":
     "リモートスナップショットが、このマシンで最後に確認した内容から更新されています。",
   "sync.bucketHistory": "日付付き履歴 · {count} 件",
+  "sync.bucketHistoryShowing": "{count} 件のうち最新 {shown} 件を表示しています。",
+  "sync.bucketHistoryExpand": "すべての履歴を表示",
+  "sync.bucketHistoryCollapse": "最新 5 件だけ表示",
+  "sync.bucketObjectName": "S3 オブジェクト名を表示",
   "sync.bucketHistoryTruncated":
     "最新 10,000 件を表示しています。これより古い履歴もバケットにあります。",
   "sync.bucketHistoryEmpty": "日付付き履歴は見つかりませんでした。",

@@ -222,6 +222,28 @@ describe("SyncPanel", () => {
     await waitFor(() => expect(api.syncBucketStatus).toHaveBeenCalledTimes(2));
   });
 
+  it("shows only the five newest bucket objects until history is expanded", async () => {
+    const history = Array.from({ length: 8 }, (_, index) => ({
+      key: `snapshots/history-${index}.tar.gz.enc`,
+      size: 900 + index,
+      lastModified: `2026-08-25T01:${String(59 - index).padStart(2, "0")}:00Z`,
+    }));
+    const api = buildApi(configured, nothingToDo, {
+      syncBucketStatus: vi.fn().mockResolvedValue({
+        ...bucketStatus,
+        history,
+      }),
+    });
+    render(<SyncPanel api={api} />);
+
+    expect(await screen.findByText(/latest 5 of 8 entries/i)).toBeInTheDocument();
+    expect(screen.getByText("snapshots/history-4.tar.gz.enc")).toBeInTheDocument();
+    expect(screen.queryByText("snapshots/history-5.tar.gz.enc")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show all history" }));
+    expect(screen.getByText("snapshots/history-7.tar.gz.enc")).toBeInTheDocument();
+  });
+
   it("does not offer a push when the local workspace is unchanged", async () => {
     const api = buildApi(configured, nothingToDo, {
       syncPushDraft: vi.fn().mockResolvedValue({
@@ -420,7 +442,7 @@ describe("SyncPanel", () => {
       screen.getByRole("heading", { name: "Encryption key" }),
     );
     expect(settings).not.toContainElement(
-      screen.getByRole("heading", { name: "Snapshot" }),
+      screen.getByText("Details and history").closest("summary"),
     );
     expect(
       screen.getByText("https://acc.r2.cloudflarestorage.com/sshc"),
@@ -693,10 +715,15 @@ describe("SyncPanel", () => {
     const api = buildApi({ ...configured, direction: "pull" }, nothingToDo);
     render(<SyncPanel api={api} />);
 
+    await screen.findByRole("button", { name: "Review remote changes" });
     expect(
-      await screen.findByRole("button", { name: "Push this workspace" }),
-    ).toBeDisabled();
-    expect(screen.getByText(/Set to receive only/)).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Push this workspace" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Commit message")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Changes on this machine are never pushed/),
+    ).toBeInTheDocument();
+    expect(api.syncPushDraft).not.toHaveBeenCalled();
   });
 
   it("lets a receive-only machine explicitly review and accept a diverged remote head", async () => {
@@ -753,6 +780,34 @@ describe("SyncPanel", () => {
         true,
       ),
     );
+  });
+
+  it("keeps the specific receive-only recovery state instead of adding a generic error", async () => {
+    const status: SyncStatus = {
+      ...configured,
+      direction: "pull",
+      auto: { enabled: false, phase: "blocked", detail: "remote_moved" },
+    };
+    const syncStatus = vi.fn().mockResolvedValue(status);
+    const api = buildApi(status, nothingToDo, {
+      syncStatus,
+      pullSnapshot: vi
+        .fn()
+        .mockRejectedValue(new ApiError("sync_remote_moved", 409, null)),
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Review current remote" }),
+    );
+
+    await waitFor(() => expect(syncStatus).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /diverged.*last revision received/i,
+    );
+    expect(
+      screen.queryByText(/snapshot could not be received/i),
+    ).not.toBeInTheDocument();
   });
 
   it("offers no apply on a machine set to send only, but still shows what would change", async () => {
@@ -1135,8 +1190,8 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     expect(
-      await screen.findByText(/checks the remote for changes once a minute/i),
-    ).toHaveTextContent(/no further changes occur for five seconds/i);
+      await screen.findByText(/checks the remote once a minute/i),
+    ).toHaveTextContent(/five seconds pass without another change/i);
 
     await userEvent.click(
       await screen.findByRole("checkbox", {

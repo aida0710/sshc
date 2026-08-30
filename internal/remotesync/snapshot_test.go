@@ -199,6 +199,7 @@ func TestReadRefusesDeviceLocalAndRawVaultPaths(t *testing.T) {
 		"sshc/sync-state.json",
 		"sshc/sync-key-recovery.json",
 		"sshc/cli/request.json",
+		"sshc/.cli.mutation.lock",
 		"sshc/journal/20260830T000000.000000000Z-aaaaaaaaaaaaaaaa.json",
 		"sshc/backups/foreign/config",
 		"sshc/history/entry.json",
