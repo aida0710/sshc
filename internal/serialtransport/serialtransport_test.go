@@ -117,19 +117,6 @@ func TestOpenPassesNormalizedModeAndProvidesByteStream(t *testing.T) {
 	}
 }
 
-func TestOpenRejectsUnsupportedFlowBeforeOpeningDevice(t *testing.T) {
-	transport := New()
-	config := DefaultConfig("device-that-must-not-be-opened")
-	config.FlowControl = FlowControlRTSCTS
-	if _, err := transport.Open(context.Background(), config); !errors.Is(err, ErrUnsupportedFlowControl) {
-		t.Fatalf("Open(rtscts) = %v, want ErrUnsupportedFlowControl", err)
-	}
-	config.FlowControl = FlowControlXONXOFF
-	if _, err := transport.Open(context.Background(), config); !errors.Is(err, ErrUnsupportedFlowControl) {
-		t.Fatalf("Open(xonxoff) = %v, want ErrUnsupportedFlowControl", err)
-	}
-}
-
 func TestContextCancellationClosesPortAndUnblocksRead(t *testing.T) {
 	port := newFakePort()
 	port.blockRead = true

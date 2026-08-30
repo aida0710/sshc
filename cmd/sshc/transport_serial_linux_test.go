@@ -18,7 +18,7 @@ import (
 
 // This test deliberately does not inject transportDependencies. A Linux PTY
 // is not an electrical UART, but opening its slave exercises the production
-// go.bug.st/serial backend and termios setup before the run/expect path sees it.
+// production serial backend and termios setup before the run/expect path sees it.
 func TestRunSerialPTYEndToEnd(t *testing.T) {
 	master, keepSlaveOpen, device := openSerialPTY(t)
 	routerResult := make(chan virtualSerialResult, 1)
