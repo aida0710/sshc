@@ -24,11 +24,12 @@ Choose bidirectional, send-only, or receive-only sync. Receive-only is useful fo
 
 ## Git-like flow
 
-- **Review changes** previews local and remote differences.
-- **Push** writes conditionally against the reviewed remote revision.
-- **Pull** applies only when there are no conflicts or removals.
-- **Force** remains bound to the exact ETag and revision that you previewed.
-- **History** reads earlier snapshots directly from the bucket.
+- Review changes previews local and remote differences.
+- Push writes conditionally against the remote ETag last acknowledged by this device.
+- Pull applies only when the previewed ETag and revision still match.
+- Force Push replaces the remote through a confirmation token bound to the configured target and its current live ETag.
+- Force Pull resolves conflicts and removals in favor of the remote, then applies only the previewed ETag and revision.
+- History reads earlier snapshots directly from the bucket.
 
 Automatic sync polls the remote once a minute without uploading. Local changes made through sshc trigger one push after a five-second quiet period; unchanged snapshots are not uploaded repeatedly.
 

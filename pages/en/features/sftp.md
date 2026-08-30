@@ -22,6 +22,8 @@ Sort by name, type, bytes, modified time, permissions, and other columns. The se
 
 Files and folders share one queue, with two concurrent transfers by default. See per-file progress, speed and remaining time, then pause, resume, retry or cancel. A failed batch can retry only its failed files.
 
-Large uploads use a remote temporary file and an atomic rename after completion. After a disconnect, they resume from the transferred remote size. Downloads resume through HTTP Range, and the engine keeps the queue running when you leave the SFTP screen.
+Large uploads use a remote temporary file and an atomic rename after completion. After a disconnect, they can resume from the transferred remote size. File downloads use HTTP Range and resume when the retained local prefix still matches the remote revision.
+
+The engine Transfer Manager owns the queue and its state, while the browser or WebView handles local file I/O. Transfers continue when you navigate away from SFTP within the same application, but byte transfer stops when the browser or WebView closes. After a reload, an upload requires you to select the same local file again. A folder ZIP download restarts from byte zero rather than resuming.
 
 See [Transfer Manager](/en/sftp/transfers) for states, recovery, and cancellation.

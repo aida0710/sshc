@@ -17,6 +17,10 @@ Account passwords, key passphrases and snippet secrets are encrypted with the ma
 
 Unknown host keys require confirmation, and changed saved keys are rejected. Non-interactive SSH, SFTP and public-key installation require known keys for the final host and every ProxyJump hop.
 
+## ProxyCommand
+
+When SSH configuration contains `ProxyCommand`, sshc runs that command locally while connecting. Treat the SSH configuration and any included files as executable configuration. Use only files that you have inspected and trust.
+
 ## Sync
 
 Snapshots are encrypted on-device with a dedicated sync key before upload. Anyone with bucket credentials can obtain the ciphertext and continue offline guessing, so use a sufficiently long key.
