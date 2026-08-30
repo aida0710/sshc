@@ -250,10 +250,13 @@ export function AdvancedSettings({
                 {t("conn.forwardListenPort")}
                 <input inputMode="numeric" value={newListenPort} disabled={fieldsDisabled} onChange={(event) => setNewListenPort(event.currentTarget.value)} className={control} />
               </label>
-              <label className={`flex flex-col gap-1 text-xs text-ink-muted sm:col-span-2 2xl:col-span-1 ${newForwardKind === "dynamic" ? "opacity-50" : ""}`}>
-                {t("conn.forwardDestination")}
-                <input placeholder="db.internal:5432" value={newDestination} disabled={fieldsDisabled || newForwardKind === "dynamic"} onChange={(event) => setNewDestination(event.currentTarget.value)} className={control} />
-              </label>
+              {newForwardKind === "local" ? (
+                <label className="flex flex-col gap-1 text-xs text-ink-muted sm:col-span-2 2xl:col-span-1">
+                  {t("conn.forwardDestination")}
+                  <input aria-label={t("conn.forwardDestination")} placeholder="127.0.0.1:5432" value={newDestination} disabled={fieldsDisabled} onChange={(event) => setNewDestination(event.currentTarget.value)} className={control} />
+                  <span className={hintText}>{t("conn.forwardDestinationHint")}</span>
+                </label>
+              ) : <p className={`${hintText} sm:col-span-2 2xl:col-span-1`}>{t("conn.forwardDynamicHint")}</p>}
               <Button className={`${narrowControl} sm:col-span-2 2xl:col-span-1`} disabled={fieldsDisabled} onClick={addForward}>{t("conn.forwardAdd")}</Button>
             </div>
           </>

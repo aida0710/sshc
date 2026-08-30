@@ -77,6 +77,8 @@ describe("TerminalPortForwards", () => {
     };
     render(<LanguageProvider><TerminalPortForwards session={session} api={api} saveApi={saveApi as never} onClose={vi.fn()} /></LanguageProvider>);
     await userEvent.selectOptions(screen.getByLabelText("Type"), "dynamic");
+    expect(screen.queryByLabelText("Destination")).not.toBeInTheDocument();
+    expect(screen.getByText("The application using this SOCKS proxy chooses the destination for each connection.")).toBeVisible();
     await userEvent.type(screen.getByLabelText("Local port"), "1080");
     await userEvent.click(screen.getByRole("checkbox", { name: /Save to this connection/ }));
     await userEvent.click(screen.getByRole("button", { name: "Start" }));

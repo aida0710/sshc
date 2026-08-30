@@ -1526,6 +1526,8 @@ export const ja = {
   "conn.forwardType": "種類",
   "conn.forwardListenPort": "ローカルポート",
   "conn.forwardDestination": "転送先",
+  "conn.forwardDestinationHint": "SSH接続先から見たホスト名またはIPアドレスとポートです。",
+  "conn.forwardDynamicHint": "接続先は、このSOCKSプロキシを使うアプリが通信ごとに指定します。",
   "conn.forwardAdd": "転送を追加",
   "conn.forwardPendingSave": "変更を保存すると、この転送が設定へ書き込まれます。",
   "conn.forwardInvalidPort": "1〜65535のローカルポートを入力してください。",

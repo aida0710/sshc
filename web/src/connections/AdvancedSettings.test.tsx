@@ -139,4 +139,15 @@ describe("AdvancedSettings", () => {
       { action: "add", keyword: "LocalForward", values: ["8080", "db.internal:5432"] },
     ]);
   });
+
+  it("hides the fixed destination for a Dynamic SOCKS proxy", async () => {
+    const user = userEvent.setup();
+    renderAdvanced("Forwards");
+
+    expect(screen.getByLabelText("Destination")).toHaveAttribute("placeholder", "127.0.0.1:5432");
+    expect(screen.getByText("Enter the host name or IP address and port as seen from the SSH server.")).toBeVisible();
+    await user.selectOptions(screen.getByLabelText("Type"), "dynamic");
+    expect(screen.queryByLabelText("Destination")).not.toBeInTheDocument();
+    expect(screen.getByText("The application using this SOCKS proxy chooses the destination for each connection.")).toBeVisible();
+  });
 });
