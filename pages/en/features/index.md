@@ -1,11 +1,11 @@
 ---
 title: Features
-description: Connections, terminal, SFTP, workspaces and encrypted sync around OpenSSH.
+description: OpenSSH organization, reusable credentials, an AI-friendly CLI, and encrypted sync.
 ---
 
 # Features
 
-sshc keeps OpenSSH configuration as the source of truth and adds a focused management surface around it.
+sshc keeps OpenSSH configuration as the source of truth, then adds reusable credentials, CLI automation, and encrypted sync around it.
 
 ## Connection management
 
@@ -13,6 +13,11 @@ sshc keeps OpenSSH configuration as the source of truth and adds a focused manag
 - Preserve comments, ordering and whitespace while editing
 - Search hosts, configuration files, snippets and settings with `Ctrl/Cmd+K`
 - Use ProxyJump, keys and saved credentials along the same resolved route, while exposing ProxyCommand for analysis
+- Keep the same aliases available to regular ssh, VS Code, Codex, and other OpenSSH clients
+
+## Credentials
+
+Passwords and key passphrases are encrypted in the vault and assigned to connections or keys. Save them once, then reuse them from the terminal, SFTP, ProxyJump routes, and CLI.
 
 ## Daily workflows
 
@@ -23,4 +28,4 @@ sshc keeps OpenSSH configuration as the source of truth and adds a focused manag
 
 ## CLI
 
-The Web UI and CLI share the same engine and configuration resolver. Use interactive SSH, non-interactive commands, status, sync, Serial and Telnet from your shell.
+The Web UI and CLI share the same engine, OpenSSH configuration, and vault. Codex or another AI agent can run `sshc ssh <alias> --non-interactive -- <command...>` directly; with the vault unlocked, sshc supplies the saved password or key passphrase.

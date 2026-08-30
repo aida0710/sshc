@@ -1,29 +1,31 @@
 ---
 title: 認証情報とVault
-description: Account password、鍵passphrase、master passwordの役割と編集方法。
+description: アカウントパスワード、鍵のパスフレーズ、マスターパスワードの役割と管理方法。
 ---
 
 # 認証情報とVault
 
-## 3種類のsecret
+## 3種類の認証情報
 
-| secret | 用途 | 共有 |
+| 種類 | 用途 | 共有範囲 |
 | --- | --- | --- |
-| Master password | この端末のVaultを開く | 端末ごとでよい |
-| Account password | SSH serverのpassword認証 | 接続先に紐付く |
-| Key passphrase | 秘密鍵の復号 | 鍵に紐付く |
+| マスターパスワード | この端末のVaultを開く | 端末ごとに設定できる |
+| アカウントパスワード | SSHサーバーのパスワード認証 | 接続先に紐付く |
+| 鍵のパスフレーズ | 秘密鍵を復号する | 鍵に紐付く |
 
-同期を使う場合は、これとは別にsync keyがあります。
+同期には、これらとは別に同期キーを使います。
 
-## Account passwordを保存する
+## アカウントパスワードを保存する
 
-Secretsでlabelとpasswordを作成し、接続先へ割り当てます。編集時は保存済み値をVaultから復号してinputへ戻せます。画面を離れる、Vaultをlockする、保存を完了すると平文stateを破棄します。
+Secretsでラベルとパスワードを作成し、接続先に割り当てます。編集するときは、保存済みの値をVaultから復号して入力欄へ戻せます。画面を離れたとき、Vaultをロックしたとき、保存が完了したときには、画面上の平文を破棄します。
 
-## 鍵passphrase
+割り当てたパスワードは、Terminal、SFTP、ProxyJump、CLIで同じ接続先を開くときに利用されます。機能ごとに同じパスワードを設定し直す必要はありません。
 
-鍵画面から秘密鍵ごとに保存、編集、削除できます。ProxyJumpでは最終接続先だけでなく各hopの鍵passphrase／account passwordを別々に解決します。
+## 鍵のパスフレーズ
 
-## Lockとpassword変更
+鍵画面から、秘密鍵ごとに保存、編集、削除できます。ProxyJumpでは、最終接続先だけでなく、各踏み台の鍵のパスフレーズとアカウントパスワードも個別に解決します。
+
+## ロックとパスワード変更
 
 ```sh
 sshc vault status
@@ -31,4 +33,4 @@ sshc vault lock
 sshc vault change-password
 ```
 
-Vaultをlockしても既に開いているSSH sessionは閉じませんが、新しいsecret操作はできなくなります。12時間操作がない場合は自動lockします。
+Vaultをロックしても、すでに開いているSSHセッションは切断されません。ただし、新たに認証情報を使う操作はできなくなります。12時間操作がないと、自動的にロックされます。

@@ -11,20 +11,20 @@ const jaSidebar = [
   ] },
   { text: "接続を管理する", items: [
     { text: "接続とグループ", link: "/connections/manage" },
-    { text: "OpenSSH設定", link: "/connections/config" },
+    { text: "SSH Config", link: "/connections/config" },
     { text: "認証情報とVault", link: "/connections/credentials" },
-    { text: "鍵とKnown Hosts", link: "/connections/keys" },
+    { text: "SSH鍵とKnown Hosts", link: "/connections/keys" },
     { text: "踏み台接続", link: "/connections/proxy" },
   ] },
   { text: "Terminal", items: [
     { text: "Terminalを使う", link: "/features/terminal" },
     { text: "Workspaceと分割", link: "/features/workspace" },
-    { text: "Quick Commands", link: "/terminal/commands" },
-    { text: "Port forwarding", link: "/terminal/port-forwarding" },
+    { text: "クイックコマンド", link: "/terminal/commands" },
+    { text: "ポート転送", link: "/terminal/port-forwarding" },
   ] },
   { text: "ファイルと同期", items: [
     { text: "SFTP", link: "/features/sftp" },
-    { text: "Transfer Manager", link: "/sftp/transfers" },
+    { text: "転送マネージャー", link: "/sftp/transfers" },
     { text: "暗号化同期", link: "/features/sync" },
     { text: "Push・Pull・履歴", link: "/sync/workflow" },
   ] },
@@ -88,8 +88,8 @@ export default defineConfig({
   head: [
     ["meta", { name: "theme-color", content: "#111416" }],
     ["meta", { property: "og:type", content: "website" }],
-    ["meta", { property: "og:title", content: "sshc — OpenSSHを、そのまま管理する" }],
-    ["meta", { property: "og:description", content: "接続、Terminal、SFTP、Workspace、暗号化同期を一つのローカルアプリケーションで。" }],
+    ["meta", { property: "og:title", content: "sshc — OpenSSHを、そのまま使いやすく" }],
+    ["meta", { property: "og:description", content: "OpenSSH設定の整理、認証情報の再利用、AIエージェント向けCLI、暗号化同期を一つに。" }],
     ["meta", { property: "og:image", content: "https://aida0710.github.io/sshc/images/connections-desktop.png" }],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
     ["link", { rel: "icon", href: `${base}logo.svg`, type: "image/svg+xml" }],
@@ -116,10 +116,10 @@ export default defineConfig({
       label: "English",
       lang: "en",
       link: "/en/",
-      description: "Connections, terminals, SFTP, workspaces and encrypted sync in one local application.",
+      description: "Organize OpenSSH, reuse saved credentials from the CLI, and sync securely across devices.",
       head: [
         ["meta", { property: "og:title", content: "sshc — Manage OpenSSH without replacing it" }],
-        ["meta", { property: "og:description", content: "Connections, terminals, SFTP, workspaces and encrypted sync in one local application." }],
+        ["meta", { property: "og:description", content: "Organize OpenSSH, reuse saved credentials from the CLI, and sync securely across devices." }],
       ],
       themeConfig: {
         nav: [

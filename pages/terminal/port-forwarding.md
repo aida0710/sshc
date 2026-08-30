@@ -1,34 +1,34 @@
 ---
-title: Port forwarding
-description: 保存済みまたは一時的なLocal forwardingとDynamic SOCKSを管理する。
+title: ポート転送
+description: 接続設定に保存した、または一時的に使うLocal forwardingとDynamic SOCKSを管理する。
 ---
 
-# Port forwarding
+# ポート転送
 
 ![Local forwardingの設定](/images/port-forwarding.png)
 
-sshcはLocal forwardingとDynamic SOCKS5を提供します。Remote forwardingは提供しません。
+sshcはLocal forwardingとDynamic SOCKS5に対応しています。Remote forwardingには対応していません。
 
 ## Local forwarding
 
-local側のaddress／portで待ち受け、SSH接続先からdestination host／portへ接続します。
+ローカル側のアドレス／ポートで待ち受け、SSH接続先から転送先のホスト／ポートへ接続します。
 
 ```text
-127.0.0.1:8080  →  SSH host  →  127.0.0.1:80
+127.0.0.1:8080  →  SSHホスト  →  127.0.0.1:80
 ```
 
-destinationはSSH serverから見える任意のhostを指定できます。同じserver上のserviceなら`127.0.0.1`が分かりやすい既定例です。
+転送先には、SSHサーバーから見える任意のホストを指定できます。同じサーバー上のサービスへつなぐ場合は、`127.0.0.1`が分かりやすい例です。
 
 ## Dynamic SOCKS
 
-local側にSOCKS5 endpointを開き、applicationごとにdestinationを指定します。そのためDynamic設定には固定destination fieldがありません。
+ローカル側にSOCKS5エンドポイントを開き、アプリケーションが通信ごとに転送先を指定します。そのため、Dynamicの設定には固定の転送先入力欄がありません。
 
 ```text
-SOCKS client  →  127.0.0.1:1080  →  SSH host  →  requested destination
+SOCKSクライアント  →  127.0.0.1:1080  →  SSHホスト  →  通信先
 ```
 
-## 保存と一時forward
+## 保存する転送と一時的な転送
 
-Connectionsのsshc tabでは接続先へ設定を保存できます。接続中のTerminalからは、そのSSH transportを再利用して一時forwardを開始、停止できます。
+Connectionsのsshcタブでは、接続先ごとに転送設定を保存できます。接続中のTerminalからは、現在のSSH接続を使って一時的な転送を開始、停止できます。
 
-listenerはloopbackへ限定されます。ただし同じ端末上の別process／userを強く隔離するsecurity boundaryではありません。forward先のserviceにも適切な認証を設定してください。
+待受先はループバックアドレスに限られます。ただし、同じ端末上の別プロセスや別ユーザーを強く隔離するセキュリティ境界ではありません。転送先のサービスにも、適切な認証を設定してください。

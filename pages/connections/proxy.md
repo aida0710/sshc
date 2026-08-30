@@ -5,7 +5,7 @@ description: ProxyJumpを使う多段SSH接続と認証の考え方。
 
 # 踏み台接続
 
-sshcは`ProxyJump`をprocess内で辿り、最終接続先まで同じhost key／credential policyを適用します。
+sshcは`ProxyJump`を内部でたどり、踏み台から最終接続先まで、同じホスト鍵と資格情報の方針を適用します。
 
 ```ssh-config
 Host bastion
@@ -20,10 +20,10 @@ Host internal
 
 ## 認証
 
-踏み台と最終hostは別の認証先です。それぞれのaliasへ鍵、key passphrase、account passwordを保存してください。保存値で回答できない2FAなどのpromptはinteractive Terminalへ表示します。
+踏み台と最終接続先は、別々の認証先です。それぞれのエイリアスに、必要な鍵、鍵のパスフレーズ、アカウントパスワードを保存してください。保存済みの値では答えられない2FAなどの確認は、対話Terminalに表示されます。
 
-接続中は「踏み台へ接続」「踏み台のhost key」「踏み台の認証」「接続先の認証」のように段階を区別します。失敗時はどのhopで止まったかを診断に含めます。
+接続中は「踏み台へ接続」「踏み台のホスト鍵」「踏み台の認証」「接続先の認証」のように、段階を分けて表示します。失敗した場合は、どの接続先で止まったのかを診断情報で確認できます。
 
 ## ProxyCommand
 
-設定解析では`ProxyCommand`を表示できますが、sshcのprocess内SSH clientは任意の外部commandを実行しません。sshcで接続するaliasには`ProxyJump`を使用してください。
+設定解析では`ProxyCommand`の内容を確認できます。ただし、sshc内蔵のSSHクライアントは任意の外部コマンドを実行しません。sshcから接続するエイリアスには、`ProxyJump`を使用してください。
