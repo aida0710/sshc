@@ -12,7 +12,7 @@ sshcはOpenSSH設定を正本のまま扱い、その周囲に操作画面とaut
 - `~/.ssh/config`、`Include`、`Match`を解析
 - コメント、記述順、空白を保った編集
 - host、設定file、Snippet、設定を`Ctrl/Cmd+K`から横断検索
-- ProxyJump、ProxyCommand、鍵、保存済み資格情報を同じ接続経路で利用
+- ProxyJump、鍵、保存済み資格情報を同じ接続経路で利用し、ProxyCommandは解析結果として表示
 
 ## 日常の操作
 

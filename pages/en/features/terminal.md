@@ -16,14 +16,34 @@ Reconnect an exited SSH session in the same pane while retaining its scrollback.
 ## Terminal controls
 
 - Scrollback search with `Ctrl/Cmd+F`
-- URL and remote-path actions, including OSC 8 links
+- Case, regex, match highlighting, and result navigation
+- URL and remote-path context actions, including OSC 8 links
 - Quick Commands and snippets
 - OSC 52 clipboard, Kitty keyboard protocol and JIS keyboards
 - Per-connection UTF-8, Shift_JIS, EUC-JP and ISO-2022-JP
 - Configurable 16 KiB–4 MiB scrollback limit and font size
+- WebGL rendering with a canvas fallback
 
 Scrollback stays in memory. It is not written to the vault, backups or sync snapshots.
+
+## Input and clipboard
+
+Configure copy-on-select and right-click paste in Settings. OSC 52 has a global default and a per-SSH-host allow/deny override. Because it lets remote software write to your clipboard, enable it only for hosts you trust.
+
+Kitty keyboard mode follows requests from the remote application. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows.
+
+OSC 8 links and detected URLs open in the system browser. A detected remote path can open SFTP at the same host and directory.
+
+Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply.
+
+## Coding Agent integration
+
+After explicitly installing [sshc-agent-bridge](https://github.com/aida0710/sshc-agent-bridge), pane headers can show working, attention, and completion states from Claude Code, Codex, and OpenCode. Background attention/completion may trigger notifications. When the agent provides its own session ID, you can explicitly resume it in the same or a new pane.
+
+The integration is opt-in. Without it, sshc does not infer agent state from ordinary shell output or automatically rerun arbitrary commands.
 
 ## Port forwarding
 
 Manage Local forwarding and Dynamic SOCKS per SSH connection. Local forwarding has a local bind endpoint and a destination host and port. Dynamic forwarding opens a local SOCKS endpoint. Remote forwarding is intentionally not provided.
+
+See [Port forwarding](/en/terminal/port-forwarding) for setup details.

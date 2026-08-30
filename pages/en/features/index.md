@@ -12,7 +12,7 @@ sshc keeps OpenSSH configuration as the source of truth and adds a focused manag
 - Parse `~/.ssh/config`, `Include` and `Match`
 - Preserve comments, ordering and whitespace while editing
 - Search hosts, configuration files, snippets and settings with `Ctrl/Cmd+K`
-- Use ProxyJump, ProxyCommand, keys and saved credentials along the same resolved route
+- Use ProxyJump, keys and saved credentials along the same resolved route, while exposing ProxyCommand for analysis
 
 ## Daily workflows
 

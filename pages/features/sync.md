@@ -20,6 +20,8 @@ sshcはworkspaceを端末上で暗号化してから、S3互換object storageへ
 
 同じbucket pathとsync keyを入力します。remoteに既存snapshotがある場合、正しいkeyで復号できてから設定を保存します。別のdatasetを作る場合はbucket内のpathを変えます。
 
+同期方向は送受信、送信専用、受信専用から選べます。2台目を閲覧用にする場合は受信専用を選びます。
+
 ## Git風の操作
 
 - **変更を確認**: localとremoteの差分をpreview
@@ -33,3 +35,5 @@ sshcはworkspaceを端末上で暗号化してから、S3互換object storageへ
 ::: warning Sync key
 master passwordは端末ごとに異なって構いません。sync keyは同じ保存先を使う端末で共通です。紛失するとremote snapshotを復号できません。
 :::
+
+詳しい競合処理と履歴は[Push・Pull・履歴](/sync/workflow)を参照してください。

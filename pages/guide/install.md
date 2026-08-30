@@ -5,6 +5,8 @@ description: macOS、Linux、Windows、Androidへsshcを導入する。
 
 # インストール
 
+sshcはmacOS、Linux、Windows、Androidで利用できます。Desktop版は一つの`sshc` binaryがengine、CLI、Web UIを提供します。
+
 ## macOS / Linux
 
 Homebrewを使う方法が最短です。
@@ -36,7 +38,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 
 [GitHub Releases](https://github.com/aida0710/sshc/releases)から`sshc-android-v<version>.apk`を取得します。APKはRelease workflowが署名fingerprintとchecksumを検査してから公開します。
 
-## 起動
+詳しい起動方法とfile pickerの動作は[Android](/platform/android)を参照してください。
+
+## 初回起動
 
 ```sh
 sshc engine
@@ -49,3 +53,13 @@ sshc
 ```
 
 `sshc engine`はforegroundで動きます。常駐させる場合はtmux、systemd、launchdなど、OSのprocess管理機能を使用してください。
+
+起動後、別のterminalから`sshc`を実行すると一度だけ使えるlocal UI URLを開きます。初回はVaultのmaster passwordを設定します。
+
+## 更新
+
+- Homebrew／`install.sh`: `sshc update`
+- Windows: install用PowerShell commandを再実行
+- Android: GitHub Releaseから新しいAPKをinstall
+
+更新後にCLIとengineのversionが異なる場合は`sshc engine --replace`でengineを再起動してください。
