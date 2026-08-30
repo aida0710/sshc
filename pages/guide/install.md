@@ -5,7 +5,7 @@ description: macOS、Linux、Windows、Androidにsshcをインストールする
 
 # インストール
 
-sshcはmacOS、Linux、Windows、Androidで利用できます。デスクトップ版では、一つの`sshc`バイナリがエンジン、CLI、Web UIを提供します。
+sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプリです。デスクトップ版では、一つの`sshc`バイナリがエンジン、CLI、Web UIを提供します。
 
 ## macOS / Linux
 
