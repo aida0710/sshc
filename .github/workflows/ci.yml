@@ -149,7 +149,7 @@ jobs:
       # 完全な形で取得できるよう、失敗したWindows runだけlogを保存する。
       - name: Upload Windows test logs
         if: ${{ failure() && runner.os == 'Windows' }}
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: go-test-logs-windows
           path: ${{ runner.temp }}/go-test-*-windows.log
@@ -199,7 +199,7 @@ jobs:
 
       # 実機に入れられるものを置いていく。debug 署名なので配布物ではないが、
       # 「main の今の APK」を取りに行ける場所がここ以外に無い。
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sshc-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
