@@ -210,12 +210,10 @@ html:not(.dark) {
 }
 
 .sshc-section-heading {
-  display: grid;
-  grid-template-columns: minmax(0, 0.7fr) minmax(360px, 1fr);
-  gap: 40px;
-  align-items: end;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--vp-c-divider);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .sshc-section-heading h2 {
@@ -226,8 +224,18 @@ html:not(.dark) {
   letter-spacing: -0.035em;
 }
 
+.sshc-section-heading h2::after {
+  display: block;
+  width: 56px;
+  height: 1px;
+  margin: 20px auto 0;
+  background: var(--vp-c-divider);
+  content: "";
+}
+
 .sshc-section-heading p {
-  margin: 0;
+  max-width: 720px;
+  margin: 20px 0 0;
   color: var(--vp-c-text-2);
   line-height: 1.8;
 }
@@ -307,7 +315,6 @@ html:not(.dark) {
 @media (max-width: 960px) {
   .sshc-home { padding-top: 52px; }
   .sshc-preview { max-width: 760px; }
-  .sshc-section-heading { grid-template-columns: 1fr; gap: 14px; }
 }
 
 @media (max-width: 640px) {
