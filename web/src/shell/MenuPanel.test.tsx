@@ -43,7 +43,9 @@ describe("MenuPanel", () => {
       </LanguageProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: "Menu" })).toBeInTheDocument();
+    const heading = screen.getByRole("heading", { name: "Menu" });
+    expect(heading).toBeInTheDocument();
+    expect(heading.parentElement?.querySelector("p")).toBeNull();
     expect(screen.getByRole("link", { name: "Open Config" })).toHaveAttribute("href", "/config");
     expect(screen.queryByRole("link", { name: "Open Home" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open Terminal" })).not.toBeInTheDocument();

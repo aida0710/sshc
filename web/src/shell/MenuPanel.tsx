@@ -39,11 +39,10 @@ export function MenuPanel({
 
   return (
     <section aria-labelledby="menu-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      <div className="border-b border-line pb-5">
+      <div className="border-b border-line pb-3">
         <h2 id="menu-heading" className="text-xl font-semibold tracking-tight text-ink">
           {t("section.menu")}
         </h2>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">{t("menu.description")}</p>
       </div>
 
       <div className="grid items-start gap-x-8 gap-y-7 lg:grid-cols-2 xl:grid-cols-3">

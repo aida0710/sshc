@@ -25,7 +25,6 @@ export const ja = {
   "shell.navConnections": "Configuration",
   "shell.navKeysHosts": "Security",
   "shell.navMaintenance": "Tools",
-  "menu.description": "sshcの各機能をここから開きます。接続中のターミナルは左ペインに残ります。",
   "menu.open": "{section}を開く",
   "shell.inspectorShowNamed": "{label}を表示",
   "shell.inspectorHideNamed": "{label}を隠す",
@@ -631,7 +630,6 @@ export const ja = {
   "section.history": "History",
 
   "home.heading": "Connections",
-  "home.intro": "ホストを探してターミナルを開きます。",
   "home.manageConnections": "Connections を管理",
   "home.connections": "Connections",
   "home.groups": "グループ",
