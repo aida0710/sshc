@@ -184,7 +184,16 @@ func (b *measuredSyncBucket) uploadedBytes() (int, int) {
 	return len(b.putBytes), total
 }
 
-func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[string]string) (*echo.Echo, *remotesync.Service, *secret.Service) {
+type measuredSyncInstallation struct {
+	engine      *echo.Echo
+	service     *remotesync.Service
+	secrets     *secret.Service
+	config      remotesync.Config
+	credentials objectstore.Credentials
+	client      *objectstore.Client
+}
+
+func newMeasuredSyncInstallation(t *testing.T, bucket *measuredSyncBucket, files map[string]string) measuredSyncInstallation {
 	t.Helper()
 	home := t.TempDir()
 	root := filepath.Join(home, ".ssh")
@@ -214,9 +223,10 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 	t.Cleanup(server.Close)
 	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
 	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
-	if err := service.Configure(config, credentials, &objectstore.Client{
+	client := &objectstore.Client{
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
-	}); err != nil {
+	}
+	if err := service.Configure(config, credentials, client); err != nil {
 		t.Fatal(err)
 	}
 	secrets := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
@@ -232,7 +242,15 @@ func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[stri
 	service.VaultAdopted = secrets.Reload
 	engine := echo.New()
 	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable})
-	return engine, service, secrets
+	return measuredSyncInstallation{
+		engine: engine, service: service, secrets: secrets,
+		config: config, credentials: credentials, client: client,
+	}
+}
+
+func measuredSyncEngine(t *testing.T, bucket *measuredSyncBucket, files map[string]string) (*echo.Echo, *remotesync.Service, *secret.Service) {
+	installation := newMeasuredSyncInstallation(t, bucket, files)
+	return installation.engine, installation.service, installation.secrets
 }
 
 func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *testing.T) {
@@ -473,6 +491,70 @@ func TestPullCanPreviewAndApplyRemoteWinsForAConflictingWorkspace(t *testing.T) 
 	applied := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", string(request))
 	if applied.Code != http.StatusOK || !strings.Contains(applied.Body.String(), `"applied":true`) {
 		t.Fatalf("remote-wins apply = %d: %s", applied.Code, applied.Body.String())
+	}
+}
+
+func TestReceiveOnlyCanPreviewAndApplyAnExplicitRemoteHead(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	receiver := newMeasuredSyncInstallation(t, bucket, map[string]string{"config": "Host original\n"})
+	if _, err := receiver.service.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, replacement, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host replacement\n"})
+	if _, err := replacement.ForcePush(
+		context.Background(), measuredSyncKey, bucket.liveETag(), "Replace head",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	receiveOnly := receiver.config
+	receiveOnly.Direction = remotesync.DirectionPull
+	if err := receiver.service.Configure(receiveOnly, receiver.credentials, receiver.client); err != nil {
+		t.Fatal(err)
+	}
+	preview := sendSync(t, receiver.engine, http.MethodPost, "/api/v1/sync/pull",
+		`{"apply":false,"resolve":"remote","acceptRemoteHead":true}`)
+	if preview.Code != http.StatusOK {
+		t.Fatalf("explicit remote preview = %d: %s", preview.Code, preview.Body.String())
+	}
+	var generation struct {
+		RemoteETag     string `json:"remoteETag"`
+		RemoteRevision string `json:"remoteRevision"`
+	}
+	if err := json.Unmarshal(preview.Body.Bytes(), &generation); err != nil {
+		t.Fatal(err)
+	}
+	request, err := json.Marshal(map[string]any{
+		"apply": true, "resolve": "remote", "acceptRemoteHead": true,
+		"expectedETag": generation.RemoteETag, "expectedRevision": generation.RemoteRevision,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied := sendSync(t, receiver.engine, http.MethodPost, "/api/v1/sync/pull", string(request))
+	if applied.Code != http.StatusOK || !strings.Contains(applied.Body.String(), `"applied":true`) {
+		t.Fatalf("explicit remote apply = %d: %s", applied.Code, applied.Body.String())
+	}
+	_, contents, err := receiver.service.Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(contents["config"]); got != "Host replacement\n" {
+		t.Fatalf("received config = %q", got)
+	}
+}
+
+func TestExplicitRemoteHeadIsRestrictedToReceiveOnly(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	engine, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := producer.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull",
+		`{"apply":false,"resolve":"remote","acceptRemoteHead":true}`)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("explicit remote head in bidirectional mode = %d, want 400: %s", response.Code, response.Body.String())
 	}
 }
 

@@ -37,14 +37,28 @@ describe("integrationsApi.addKnownHost", () => {
   it("mints a token bound to the host and sends no evidence of its own", async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ token: actionToken, expiresAt: "2026-08-05T09:02:00Z" }, 201))
-      .mockResolvedValueOnce(jsonResponse({ changed: true, transactionId: "tx-2" }));
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { token: actionToken, expiresAt: "2026-08-05T09:02:00Z" },
+          201,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ changed: true, transactionId: "tx-2" }),
+      );
     vi.stubGlobal("fetch", fetcher);
 
-    const result = await integrationsApi.addKnownHost(candidate, "SHA256:proof", false);
+    const result = await integrationsApi.addKnownHost(
+      candidate,
+      "SHA256:proof",
+      false,
+    );
     expect(result.transactionId).toBe("tx-2");
 
-    const [actionPath, actionInit] = fetcher.mock.calls[0] as [string, RequestInit];
+    const [actionPath, actionInit] = fetcher.mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
     expect(actionPath).toBe("/api/v1/actions");
     expect(sentJson(actionInit)).toEqual({
       kind: "known_hosts.add",
@@ -68,13 +82,23 @@ describe("integrationsApi.addKnownHost", () => {
   it("raises the server's refusal code when the add is rejected", async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ token: actionToken, expiresAt: "2026-08-05T09:02:00Z" }, 201))
       .mockResolvedValueOnce(
-        jsonResponse({ code: "unverified_candidate", message: "not proven" }, 409),
+        jsonResponse(
+          { token: actionToken, expiresAt: "2026-08-05T09:02:00Z" },
+          201,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { code: "unverified_candidate", message: "not proven" },
+          409,
+        ),
       );
     vi.stubGlobal("fetch", fetcher);
 
-    const failure = await integrationsApi.addKnownHost(candidate, "", false).catch((error: unknown) => error);
+    const failure = await integrationsApi
+      .addKnownHost(candidate, "", false)
+      .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(ApiError);
     expect((failure as ApiError).code).toBe("unverified_candidate");
     expect((failure as ApiError).status).toBe(409);
@@ -83,16 +107,23 @@ describe("integrationsApi.addKnownHost", () => {
 
 describe("integrationsApi terminal sessions", () => {
   const session = {
-    id: "3f9c", kind: "shell", title: "zsh", startedAt: "2026-08-13T09:00:00Z",
-    state: "connected", problem: "",
+    id: "3f9c",
+    kind: "shell",
+    title: "zsh",
+    startedAt: "2026-08-13T09:00:00Z",
+    state: "connected",
+    problem: "",
   };
 
   it("opens a session and returns the single-use stream ticket", async () => {
-    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ session, streamTicket: "one-time" }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ session, streamTicket: "one-time" }));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.openTerminalSession({ kind: "shell" }))
-      .resolves.toEqual({ session, streamTicket: "one-time" });
+    await expect(
+      integrationsApi.openTerminalSession({ kind: "shell" }),
+    ).resolves.toEqual({ session, streamTicket: "one-time" });
 
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/terminal/sessions");
@@ -102,11 +133,16 @@ describe("integrationsApi terminal sessions", () => {
   });
 
   it("reconnects an exited session without an action token", async () => {
-    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ sessions: [session], maxSessions: 50 }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ sessions: [session], maxSessions: 50 }),
+      );
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.reconnectTerminalSession("session id"))
-      .resolves.toEqual({ sessions: [session], maxSessions: 50 });
+    await expect(
+      integrationsApi.reconnectTerminalSession("session id"),
+    ).resolves.toEqual({ sessions: [session], maxSessions: 50 });
 
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/terminal/sessions/session%20id/reconnect");
@@ -119,19 +155,46 @@ describe("integrationsApi terminal sessions", () => {
     const forwarded = {
       ...session,
       kind: "ssh",
-      forwards: [{ id: "pf-1", kind: "dynamic", listen: "127.0.0.1:1080", to: "", problem: "", temporary: true }],
+      forwards: [
+        {
+          id: "pf-1",
+          kind: "dynamic",
+          listen: "127.0.0.1:1080",
+          to: "",
+          problem: "",
+          temporary: true,
+        },
+      ],
     };
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ sessions: [forwarded], maxSessions: 50 }, 201))
-      .mockResolvedValueOnce(jsonResponse({ sessions: [{ ...forwarded, forwards: [] }], maxSessions: 50 }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ sessions: [forwarded], maxSessions: 50 }, 201),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          sessions: [{ ...forwarded, forwards: [] }],
+          maxSessions: 50,
+        }),
+      );
     vi.stubGlobal("fetch", fetcher);
 
-    await integrationsApi.startTerminalForward("session id", { kind: "dynamic", listenPort: 1080 });
+    await integrationsApi.startTerminalForward("session id", {
+      kind: "dynamic",
+      listenPort: 1080,
+    });
     await integrationsApi.stopTerminalForward("session id", "pf/1");
 
-    expect(fetcher.mock.calls[0]?.[0]).toBe("/api/v1/terminal/sessions/session%20id/forwards");
-    expect(sentJson(fetcher.mock.calls[0]?.[1] as RequestInit)).toEqual({ kind: "dynamic", listenPort: 1080 });
-    expect(fetcher.mock.calls[1]?.[0]).toBe("/api/v1/terminal/sessions/session%20id/forwards/pf%2F1");
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      "/api/v1/terminal/sessions/session%20id/forwards",
+    );
+    expect(sentJson(fetcher.mock.calls[0]?.[1] as RequestInit)).toEqual({
+      kind: "dynamic",
+      listenPort: 1080,
+    });
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "/api/v1/terminal/sessions/session%20id/forwards/pf%2F1",
+    );
     expect((fetcher.mock.calls[1]?.[1] as RequestInit).method).toBe("DELETE");
   });
 
@@ -140,18 +203,87 @@ describe("integrationsApi terminal sessions", () => {
     { sessions: [{ ...session, id: 3 }], maxSessions: 50 },
     { sessions: [{ ...session, state: "lost" }], maxSessions: 50 },
     { sessions: [{ ...session, problem: 3 }], maxSessions: 50 },
-    { sessions: [{ ...session, progress: { phase: "waiting", alias: "edge", hostName: "edge", user: "ops", hop: 1, hops: 2 } }], maxSessions: 50 },
-    { sessions: [{ ...session, progress: { phase: "authenticating", alias: "edge", hostName: "edge", user: "ops", hop: 3, hops: 2 } }], maxSessions: 50 },
-    { sessions: [{ ...session, state: "reconnecting", reconnect: { attempt: 0, limit: 5, retryAt: "x", problem: "" } }], maxSessions: 50 },
-    { sessions: [{ ...session, exited: { code: "0", signal: "", at: "" } }], maxSessions: 50 },
-    { sessions: [{ ...session, forwards: [{ id: "", kind: "remote", listen: "x", to: "y", problem: "", temporary: false }] }], maxSessions: 50 },
-    { sessions: [{ ...session, forwards: [{ kind: "local", listen: "x", to: "y", problem: "" }] }], maxSessions: 50 },
+    {
+      sessions: [
+        {
+          ...session,
+          progress: {
+            phase: "waiting",
+            alias: "edge",
+            hostName: "edge",
+            user: "ops",
+            hop: 1,
+            hops: 2,
+          },
+        },
+      ],
+      maxSessions: 50,
+    },
+    {
+      sessions: [
+        {
+          ...session,
+          progress: {
+            phase: "authenticating",
+            alias: "edge",
+            hostName: "edge",
+            user: "ops",
+            hop: 3,
+            hops: 2,
+          },
+        },
+      ],
+      maxSessions: 50,
+    },
+    {
+      sessions: [
+        {
+          ...session,
+          state: "reconnecting",
+          reconnect: { attempt: 0, limit: 5, retryAt: "x", problem: "" },
+        },
+      ],
+      maxSessions: 50,
+    },
+    {
+      sessions: [{ ...session, exited: { code: "0", signal: "", at: "" } }],
+      maxSessions: 50,
+    },
+    {
+      sessions: [
+        {
+          ...session,
+          forwards: [
+            {
+              id: "",
+              kind: "remote",
+              listen: "x",
+              to: "y",
+              problem: "",
+              temporary: false,
+            },
+          ],
+        },
+      ],
+      maxSessions: 50,
+    },
+    {
+      sessions: [
+        {
+          ...session,
+          forwards: [{ kind: "local", listen: "x", to: "y", problem: "" }],
+        },
+      ],
+      maxSessions: 50,
+    },
     { sessions: [], maxSessions: -1 },
     { sessions: {}, maxSessions: 50 },
   ])("rejects a malformed session list %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
-    await expect(integrationsApi.terminalSessions()).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.terminalSessions()).rejects.toThrow(
+      "invalid_response",
+    );
   });
 });
 
@@ -165,11 +297,18 @@ describe("integrationsApi recent connections", () => {
   };
 
   it("reads the current target without persisting anything in browser storage", async () => {
-    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ connections: [connection] }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ connections: [connection] }));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.recentConnections()).resolves.toEqual({ connections: [connection] });
-    expect(fetcher).toHaveBeenCalledWith("/api/v1/connections/recent", expect.any(Object));
+    await expect(integrationsApi.recentConnections()).resolves.toEqual({
+      connections: [connection],
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/v1/connections/recent",
+      expect.any(Object),
+    );
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
   });
@@ -180,7 +319,9 @@ describe("integrationsApi recent connections", () => {
     { connections: [{ ...connection, lastConnectedAt: false }] },
   ])("rejects malformed recent connection data %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
-    await expect(integrationsApi.recentConnections()).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.recentConnections()).rejects.toThrow(
+      "invalid_response",
+    );
   });
 });
 
@@ -196,8 +337,9 @@ describe("integrationsApi vault format recovery", () => {
     const fetcher = vi.fn().mockResolvedValue(jsonResponse(status));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.recoverCompatibleVault("master password"))
-      .resolves.toEqual(status);
+    await expect(
+      integrationsApi.recoverCompatibleVault("master password"),
+    ).resolves.toEqual(status);
 
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/passwords/recover-compatible-backup");
@@ -208,21 +350,30 @@ describe("integrationsApi vault format recovery", () => {
     const fetcher = vi.fn().mockResolvedValue(jsonResponse(status));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.resetUnsupportedVault("master password"))
-      .resolves.toEqual(status);
+    await expect(
+      integrationsApi.resetUnsupportedVault("master password"),
+    ).resolves.toEqual(status);
 
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/passwords/reset-unsupported");
-    expect(sentJson(init)).toEqual({ passphrase: "master password", acknowledged: true });
+    expect(sentJson(init)).toEqual({
+      passphrase: "master password",
+      acknowledged: true,
+    });
   });
 });
 
 describe("integrationsApi terminal settings", () => {
   it("keeps explicitly disabled clipboard choices and leaves absent defaults unset", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      schemaVersion: 3,
-      embeddedTerminal: { copyOnSelect: false, rightClickPaste: false },
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          schemaVersion: 3,
+          embeddedTerminal: { copyOnSelect: false, rightClickPaste: false },
+        }),
+      ),
+    );
 
     await expect(integrationsApi.terminalSettings()).resolves.toEqual({
       copyOnSelect: false,
@@ -231,21 +382,26 @@ describe("integrationsApi terminal settings", () => {
   });
 
   it("brings every stored field back", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      schemaVersion: 3,
-      embeddedTerminal: {
-        startDirectory: "~/work",
-        maxSessions: 4,
-        scrollbackBytes: 65536,
-        browserScrollbackLines: 12000,
-        fontSize: 18,
-        copyOnSelect: false,
-        rightClickPaste: false,
-        osc52: true,
-        jisYenBackslash: true,
-        localShellProfile: "fish",
-      },
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          schemaVersion: 3,
+          embeddedTerminal: {
+            startDirectory: "~/work",
+            maxSessions: 4,
+            scrollbackBytes: 65536,
+            browserScrollbackLines: 12000,
+            fontSize: 18,
+            copyOnSelect: false,
+            rightClickPaste: false,
+            osc52: true,
+            jisYenBackslash: true,
+            localShellProfile: "fish",
+          },
+        }),
+      ),
+    );
 
     await expect(integrationsApi.terminalSettings()).resolves.toEqual({
       startDirectory: "~/work",
@@ -262,25 +418,51 @@ describe("integrationsApi terminal settings", () => {
   });
 
   it("validates detected local shell profiles", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      profiles: [{ id: "fish", label: "fish", path: "/usr/bin/fish", arguments: [], default: true }],
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          profiles: [
+            {
+              id: "fish",
+              label: "fish",
+              path: "/usr/bin/fish",
+              arguments: [],
+              default: true,
+            },
+          ],
+        }),
+      ),
+    );
 
     await expect(integrationsApi.localShellProfiles?.()).resolves.toEqual({
-      profiles: [{ id: "fish", label: "fish", path: "/usr/bin/fish", arguments: [], default: true }],
+      profiles: [
+        {
+          id: "fish",
+          label: "fish",
+          path: "/usr/bin/fish",
+          arguments: [],
+          default: true,
+        },
+      ],
     });
   });
 });
 
 describe("integrationsApi.passwordVault", () => {
   it("accepts dedicated key-passphrase subjects", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      exists: true,
-      unlocked: true,
-      aliases: ["edge"],
-      dedicatedKeyPassphrases: ["keys/id_edge"],
-      minPassphraseLength: 12,
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          exists: true,
+          unlocked: true,
+          aliases: ["edge"],
+          dedicatedKeyPassphrases: ["keys/id_edge"],
+          minPassphraseLength: 12,
+        }),
+      ),
+    );
 
     await expect(integrationsApi.passwordVault()).resolves.toMatchObject({
       dedicatedKeyPassphrases: ["keys/id_edge"],
@@ -288,14 +470,19 @@ describe("integrationsApi.passwordVault", () => {
   });
 
   it("accepts the safe version pair reported after a vault migration", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      exists: true,
-      unlocked: true,
-      aliases: [],
-      dedicatedKeyPassphrases: [],
-      migratedFromVersion: 4,
-      migratedToVersion: 5,
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          exists: true,
+          unlocked: true,
+          aliases: [],
+          dedicatedKeyPassphrases: [],
+          migratedFromVersion: 4,
+          migratedToVersion: 5,
+        }),
+      ),
+    );
 
     await expect(integrationsApi.passwordVault()).resolves.toMatchObject({
       migratedFromVersion: 4,
@@ -307,38 +494,74 @@ describe("integrationsApi.passwordVault", () => {
     { migratedFromVersion: "4", migratedToVersion: 5 },
     { migratedFromVersion: 4, migratedToVersion: "5" },
   ])("rejects a malformed migration status", async (migration) => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      exists: true,
-      unlocked: true,
-      aliases: [],
-      dedicatedKeyPassphrases: [],
-      ...migration,
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          exists: true,
+          unlocked: true,
+          aliases: [],
+          dedicatedKeyPassphrases: [],
+          ...migration,
+        }),
+      ),
+    );
 
-    await expect(integrationsApi.passwordVault()).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.passwordVault()).rejects.toThrow(
+      "invalid_response",
+    );
   });
 
   it.each([
     { exists: true, unlocked: true, aliases: [] },
-    { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: "keys/id_edge" },
-    { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [false] },
+    {
+      exists: true,
+      unlocked: true,
+      aliases: [],
+      dedicatedKeyPassphrases: "keys/id_edge",
+    },
+    {
+      exists: true,
+      unlocked: true,
+      aliases: [],
+      dedicatedKeyPassphrases: [false],
+    },
   ])("rejects a malformed dedicated key-passphrase status", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
-    await expect(integrationsApi.passwordVault()).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.passwordVault()).rejects.toThrow(
+      "invalid_response",
+    );
   });
 });
 
 describe("integrationsApi.credentials", () => {
   it("accepts named and dedicated host assignments", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      credentials: [
-        { kind: "password", name: "office", uses: ["web-1"], hosts: ["web-1"] },
-        { kind: "key_passphrase", name: "team", uses: ["keys/id_team"], hosts: ["build"] },
-      ],
-      dedicatedKeyPassphrases: [{ key: "keys/id_owned", hosts: ["deploy"] }],
-      keyHostUsageComplete: true,
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          credentials: [
+            {
+              kind: "password",
+              name: "office",
+              uses: ["web-1"],
+              hosts: ["web-1"],
+            },
+            {
+              kind: "key_passphrase",
+              name: "team",
+              uses: ["keys/id_team"],
+              hosts: ["build"],
+            },
+          ],
+          dedicatedKeyPassphrases: [
+            { key: "keys/id_owned", hosts: ["deploy"] },
+          ],
+          keyHostUsageComplete: true,
+        }),
+      ),
+    );
 
     await expect(integrationsApi.credentials()).resolves.toMatchObject({
       dedicatedKeyPassphrases: [{ key: "keys/id_owned", hosts: ["deploy"] }],
@@ -349,31 +572,66 @@ describe("integrationsApi.credentials", () => {
   it.each([
     {
       credentials: [{ kind: "password", name: "office", uses: [] }],
-      dedicatedKeyPassphrases: [], keyHostUsageComplete: true,
+      dedicatedKeyPassphrases: [],
+      keyHostUsageComplete: true,
     },
-    { credentials: [], dedicatedKeyPassphrases: "keys/id_owned", keyHostUsageComplete: true },
-    { credentials: [], dedicatedKeyPassphrases: [{ key: false, hosts: [] }], keyHostUsageComplete: true },
-    { credentials: [], dedicatedKeyPassphrases: [{ key: "keys/id_owned", hosts: [false] }], keyHostUsageComplete: true },
-    { credentials: [], dedicatedKeyPassphrases: [], keyHostUsageComplete: "yes" },
+    {
+      credentials: [],
+      dedicatedKeyPassphrases: "keys/id_owned",
+      keyHostUsageComplete: true,
+    },
+    {
+      credentials: [],
+      dedicatedKeyPassphrases: [{ key: false, hosts: [] }],
+      keyHostUsageComplete: true,
+    },
+    {
+      credentials: [],
+      dedicatedKeyPassphrases: [{ key: "keys/id_owned", hosts: [false] }],
+      keyHostUsageComplete: true,
+    },
+    {
+      credentials: [],
+      dedicatedKeyPassphrases: [],
+      keyHostUsageComplete: "yes",
+    },
   ])("rejects malformed credential usage", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
-    await expect(integrationsApi.credentials()).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.credentials()).rejects.toThrow(
+      "invalid_response",
+    );
   });
 
   it("uses a one-time token to reveal one explicitly edited credential", async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ token: actionToken, expiresAt: "2026-08-05T09:02:00Z" }, 201))
-      .mockResolvedValueOnce(jsonResponse({ kind: "password", name: "office vm", secret: "saved-value" }));
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { token: actionToken, expiresAt: "2026-08-05T09:02:00Z" },
+          201,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          kind: "password",
+          name: "office vm",
+          secret: "saved-value",
+        }),
+      );
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.revealCredential("password", "office vm")).resolves.toEqual({
-      kind: "password", name: "office vm", secret: "saved-value",
+    await expect(
+      integrationsApi.revealCredential("password", "office vm"),
+    ).resolves.toEqual({
+      kind: "password",
+      name: "office vm",
+      secret: "saved-value",
     });
     const [, actionInit] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(sentJson(actionInit)).toEqual({
-      kind: "credential.reveal", target: "password\noffice vm",
+      kind: "credential.reveal",
+      target: "password\noffice vm",
     });
     const [path, init] = fetcher.mock.calls[1] as [string, RequestInit];
     expect(path).toBe("/api/v1/credentials/password/office%20vm/reveal");
@@ -381,12 +639,22 @@ describe("integrationsApi.credentials", () => {
   });
 
   it("patches the old name with the edited name and value", async () => {
-    const response = { credentials: [], dedicatedKeyPassphrases: [], keyHostUsageComplete: true };
+    const response = {
+      credentials: [],
+      dedicatedKeyPassphrases: [],
+      keyHostUsageComplete: true,
+    };
     const fetcher = vi.fn().mockResolvedValue(jsonResponse(response));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.updateCredential("key_passphrase", "old name", "new name", "new phrase"))
-      .resolves.toEqual(response);
+    await expect(
+      integrationsApi.updateCredential(
+        "key_passphrase",
+        "old name",
+        "new name",
+        "new phrase",
+      ),
+    ).resolves.toEqual(response);
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/credentials/key_passphrase/old%20name");
     expect(init.method).toBe("PATCH");
@@ -432,7 +700,9 @@ describe("integrationsApi remote sync measurements", () => {
     const fetcher = vi.fn().mockResolvedValue(jsonResponse(response));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.pushSnapshot("Update config")).resolves.toEqual(response);
+    await expect(
+      integrationsApi.pushSnapshot("Update config"),
+    ).resolves.toEqual(response);
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/sync/push");
     expect(sentJson(init)).toEqual({ message: "Update config" });
@@ -441,17 +711,30 @@ describe("integrationsApi remote sync measurements", () => {
   it("binds a force push to a one-time confirmation token", async () => {
     const response = {
       status,
-      result: { summary, objectCount: 2, uploadedBytes: 1800, completedAt: "2026-08-12T01:02:04Z" },
+      result: {
+        summary,
+        objectCount: 2,
+        uploadedBytes: 1800,
+        completedAt: "2026-08-12T01:02:04Z",
+      },
     };
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ token: "action-token", expiresAt: "2026-08-12T01:04:04Z" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          token: "action-token",
+          expiresAt: "2026-08-12T01:04:04Z",
+        }),
+      )
       .mockResolvedValueOnce(jsonResponse(response));
     vi.stubGlobal("fetch", fetcher);
 
-    await expect(integrationsApi.forcePushSnapshot("Replace remote workspace")).resolves.toEqual(response);
+    await expect(
+      integrationsApi.forcePushSnapshot("Replace remote workspace"),
+    ).resolves.toEqual(response);
     expect(fetcher).toHaveBeenCalledTimes(2);
-    const firstCall = fetcher.mock.calls[0] as [string, RequestInit] | undefined;
+    const firstCall = fetcher.mock.calls[0] as
+      [string, RequestInit] | undefined;
     expect(firstCall).toBeDefined();
     expect(sentJson(firstCall![1])).toEqual({
       kind: "sync.force_push",
@@ -468,7 +751,11 @@ describe("integrationsApi remote sync measurements", () => {
       checkedAt: "2026-08-25T01:55:00Z",
       localIsLive: false,
       historyTruncated: false,
-      live: { key: "workspace.tar.gz.enc", size: 900, lastModified: "2026-08-25T01:54:00Z" },
+      live: {
+        key: "workspace.tar.gz.enc",
+        size: 900,
+        lastModified: "2026-08-25T01:54:00Z",
+      },
       history: [{ key: "snapshots/one.tar.gz.enc", size: 901 }],
     };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(response)));
@@ -490,27 +777,108 @@ describe("integrationsApi remote sync measurements", () => {
     };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(response)));
 
-    await expect(integrationsApi.pullSnapshot(true, undefined, undefined, response)).resolves.toEqual(response);
+    await expect(
+      integrationsApi.pullSnapshot(true, undefined, undefined, response),
+    ).resolves.toEqual(response);
+  });
+
+  it("marks an explicit receive-only remote-head preview and apply", async () => {
+    const response = {
+      applied: false,
+      conflicts: [],
+      written: ["config"],
+      removed: [],
+      summary,
+      downloadedBytes: 900,
+      completedAt: "2026-08-12T01:03:00Z",
+      remoteETag: '"generation-2"',
+      remoteRevision: "b".repeat(64),
+    };
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse(response));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(
+      integrationsApi.pullSnapshot(false, "remote", undefined, undefined, true),
+    ).resolves.toEqual(response);
+    const [, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(sentJson(init)).toEqual({
+      apply: false,
+      resolve: "remote",
+      acceptRemoteHead: true,
+    });
   });
 
   it.each([
-    { status, result: { summary, objectCount: 2, uploadedBytes: -1, completedAt: "now" } },
-    { status, result: { summary: { ...summary, fileCount: "three" }, objectCount: 2, uploadedBytes: 1800, completedAt: "now" } },
-    { status: { ...status, lastOperation: { ...status.lastOperation, kind: "copy" } }, result: { summary, objectCount: 2, uploadedBytes: 1800, completedAt: "now" } },
+    {
+      status,
+      result: {
+        summary,
+        objectCount: 2,
+        uploadedBytes: -1,
+        completedAt: "now",
+      },
+    },
+    {
+      status,
+      result: {
+        summary: { ...summary, fileCount: "three" },
+        objectCount: 2,
+        uploadedBytes: 1800,
+        completedAt: "now",
+      },
+    },
+    {
+      status: {
+        ...status,
+        lastOperation: { ...status.lastOperation, kind: "copy" },
+      },
+      result: {
+        summary,
+        objectCount: 2,
+        uploadedBytes: 1800,
+        completedAt: "now",
+      },
+    },
   ])("rejects malformed push measurements %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
-    await expect(integrationsApi.pushSnapshot("Update config")).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.pushSnapshot("Update config")).rejects.toThrow(
+      "invalid_response",
+    );
   });
 
   it.each([
-    { applied: false, conflicts: [], written: [], removed: [], downloadedBytes: 900, completedAt: "now" },
-    { applied: false, conflicts: [], written: [], removed: [], summary, downloadedBytes: "900", completedAt: "now" },
-    { applied: false, conflicts: [], written: [], removed: [], summary, downloadedBytes: 900 },
+    {
+      applied: false,
+      conflicts: [],
+      written: [],
+      removed: [],
+      downloadedBytes: 900,
+      completedAt: "now",
+    },
+    {
+      applied: false,
+      conflicts: [],
+      written: [],
+      removed: [],
+      summary,
+      downloadedBytes: "900",
+      completedAt: "now",
+    },
+    {
+      applied: false,
+      conflicts: [],
+      written: [],
+      removed: [],
+      summary,
+      downloadedBytes: 900,
+    },
   ])("rejects malformed pull measurements %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 
-    await expect(integrationsApi.pullSnapshot(false)).rejects.toThrow("invalid_response");
+    await expect(integrationsApi.pullSnapshot(false)).rejects.toThrow(
+      "invalid_response",
+    );
   });
 });
 
@@ -529,7 +897,10 @@ describe("integrationsApi.syncStatus", () => {
   };
 
   it("accepts the complete unconfigured status returned by a fresh engine", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(cleanInstall)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(cleanInstall)),
+    );
 
     await expect(integrationsApi.syncStatus()).resolves.toEqual(cleanInstall);
   });
@@ -546,10 +917,17 @@ describe("integrationsApi.syncStatus", () => {
 
 describe("integrationsApi.setSyncKey", () => {
   it("sends the destructive history confirmation only when the caller supplies it", async () => {
-    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ key: "a sufficiently long synchronization key" }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ key: "a sufficiently long synchronization key" }),
+      );
     vi.stubGlobal("fetch", fetcher);
 
-    await integrationsApi.setSyncKey("a sufficiently long synchronization key", true);
+    await integrationsApi.setSyncKey(
+      "a sufficiently long synchronization key",
+      true,
+    );
 
     const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(path).toBe("/api/v1/sync/key");

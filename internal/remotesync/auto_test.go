@@ -199,6 +199,10 @@ func TestLiveReplayIsBlockedButExplicitHistoryRestoreRemainsAvailable(t *testing
 	if err := consumer.service.Apply(preview); err != nil {
 		t.Fatalf("Apply explicit history = %v", err)
 	}
+	auto.ManualApplyCompleted()
+	if view := auto.View(); view.Phase != remotesync.AutoIdle || view.Detail != "" {
+		t.Fatalf("manual apply left a stale blocked view: %+v", view)
+	}
 	if got := consumer.read(t, "config"); got != "Host first\n" {
 		t.Fatalf("explicit history restored %q", got)
 	}

@@ -135,6 +135,17 @@ func (a *Auto) Now(ctx context.Context) AutoView {
 	return a.runEnabled(ctx, false)
 }
 
+// ManualApplyCompleted clears a decision which was satisfied by an explicit
+// preview-and-apply operation. Serialize with a running cycle so an older cycle
+// cannot restore a stale blocked view after the apply has advanced local state.
+func (a *Auto) ManualApplyCompleted() {
+	a.cycleMu.Lock()
+	defer a.cycleMu.Unlock()
+	a.clearBlocked()
+	a.clearFailed()
+	a.enter(AutoIdle, "")
+}
+
 func (a *Auto) run(ctx context.Context) AutoView {
 	return a.runEnabled(ctx, true)
 }

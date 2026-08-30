@@ -972,6 +972,7 @@ type PublicKeyResponse struct {
 
 // PullRequest defines model for PullRequest.
 type PullRequest struct {
+	AcceptRemoteHead *bool               `json:"acceptRemoteHead,omitempty"`
 	Apply            *bool               `json:"apply,omitempty"`
 	ExpectedETag     *string             `json:"expectedETag,omitempty"`
 	ExpectedRevision *string             `json:"expectedRevision,omitempty"`

@@ -3110,6 +3110,10 @@ components:
         apply: { type: boolean }
         # 両側で変更されたファイルの採用元。省略時は衝突を報告して停止する。
         resolve: { type: string, enum: [local, remote] }
+        # 受信専用のマシンで、既知の履歴につながらないlive headを利用者が
+        # 明示的に確認して受け取る。resolve=remoteかつhistoryKeyなしの場合だけ有効。
+        # apply時は通常pullと同じく直前のETagとrevisionを必須とする。
+        acceptRemoteHead: { type: boolean }
         # 省略時はlive head。指定時はconfigured snapshots/配下のimmutable historyを
         # preview／applyする。remote head自体はこの操作では巻き戻さない。
         historyKey: { type: string, minLength: 1, maxLength: 1024 }
