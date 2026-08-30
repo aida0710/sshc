@@ -28,7 +28,7 @@ func main() {
 		os.Exit(2)
 	}
 	if called.Kind == invocationHelp {
-		usage(os.Stdout)
+		usageFor(os.Stdout, called.HelpTopic)
 		os.Exit(0)
 	}
 	if called.Kind == invocationVersion {
