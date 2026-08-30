@@ -2,11 +2,10 @@ package app
 
 import (
 	"crypto/rand"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
+	"sshc/internal/application"
 	"sshc/internal/handoff"
 	"sshc/internal/secret"
 )
@@ -38,29 +37,38 @@ func TestTheClockIsTwelveHours(t *testing.T) {
 }
 
 func TestTheEngineRestoresTheConfiguredVaultClock(t *testing.T) {
-	for name, document := range map[string]struct {
-		autoLock string
+	for name, test := range map[string]struct {
+		autoLock application.VaultAutoLock
 		want     time.Duration
 	}{
-		"minutes": {autoLock: `{"mode":"idle","value":45,"unit":"minutes"}`, want: 45 * time.Minute},
-		"restart": {autoLock: `{"mode":"restart"}`, want: 0},
+		"minutes": {
+			autoLock: application.VaultAutoLock{
+				Mode: application.VaultAutoLockIdle, Value: 45, Unit: application.VaultAutoLockMinutes,
+			},
+			want: 45 * time.Minute,
+		},
+		"restart": {
+			autoLock: application.VaultAutoLock{Mode: application.VaultAutoLockRestart},
+			want:     0,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()
-			state := filepath.Join(home, ".ssh", "sshc")
-			if err := os.MkdirAll(state, 0o700); err != nil {
+			first, err := newEngineServices(Dependencies{Home: home, Random: rand.Reader})
+			if err != nil {
 				t.Fatal(err)
 			}
-			contents := []byte(`{"schemaVersion":4,"engine":{"vaultAutoLock":` + document.autoLock + `}}`)
-			if err := os.WriteFile(filepath.Join(state, "metadata.json"), contents, 0o600); err != nil {
+			if _, err := first.config.SetEngineSettings(application.EngineSettings{
+				VaultAutoLock: &test.autoLock,
+			}); err != nil {
 				t.Fatal(err)
 			}
 			services, err := newEngineServices(Dependencies{Home: home, Random: rand.Reader})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := services.passwords.IdleTimeout(); got != document.want {
-				t.Fatalf("IdleTimeout = %v, want %v", got, document.want)
+			if got := services.passwords.IdleTimeout(); got != test.want {
+				t.Fatalf("IdleTimeout = %v, want %v", got, test.want)
 			}
 		})
 	}
