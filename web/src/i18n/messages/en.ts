@@ -504,8 +504,21 @@ export const en = {
   "engine.portHint":
     "Leave this empty to select a random port from 30000 to 60000. Applies the next time the engine starts.",
   "engine.portOutOfRange": "The port must be between 1024 and 65535.",
-  "engine.saved": "Saved. The change applies the next time the engine starts.",
+  "engine.loading": "Loading engine settings…",
+  "engine.saved": "Saved. Auto-lock applies now; a port change applies the next time the engine starts.",
   "engine.saveFailed": "The engine setting could not be saved.",
+  "engine.vaultAutoLockLabel": "Vault auto-lock",
+  "engine.vaultAutoLockHint":
+    "Lock the Vault after no saved credential or key passphrase has been used for this long. Status checks, terminal output, and background sync do not extend the timer.",
+  "engine.vaultAutoLockIdle": "Lock after inactivity",
+  "engine.vaultAutoLockRestart": "Do not auto-lock",
+  "engine.vaultAutoLockValue": "Time",
+  "engine.vaultAutoLockUnit": "Unit",
+  "engine.vaultAutoLockMinutes": "Minutes",
+  "engine.vaultAutoLockHours": "Hours",
+  "engine.vaultAutoLockOutOfRange": "Enter a whole number from 1 to 999 for the auto-lock time.",
+  "engine.vaultAutoLockRestartWarning":
+    "The Vault will not lock automatically. Unless you lock it manually, it remains unlocked until sshc is restarted. Use this setting only on a device you control.",
   "terminal.fontLabel": "Font family",
   "terminal.backgroundLabel": "Background image",
   "terminal.backgroundHint":

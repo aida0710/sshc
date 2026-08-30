@@ -508,8 +508,21 @@ export const ja = {
   "engine.portHint":
     "空欄の場合は 30000〜60000 からランダムに選択します。次回のエンジン起動時から適用されます。",
   "engine.portOutOfRange": "ポートは 1024〜65535 の範囲で指定してください。",
-  "engine.saved": "保存しました。次回のエンジン起動時から適用されます。",
+  "engine.loading": "エンジン設定を読み込んでいます…",
+  "engine.saved": "保存しました。自動ロックはすぐに、ポートの変更は次回のエンジン起動時から適用されます。",
   "engine.saveFailed": "保存できませんでした。",
+  "engine.vaultAutoLockLabel": "Vault の自動ロック",
+  "engine.vaultAutoLockHint":
+    "保存済みパスワードや鍵パスフレーズを使用しない時間が続いた場合に Vault をロックします。状態確認、Terminal の出力、バックグラウンド同期では時間を延長しません。",
+  "engine.vaultAutoLockIdle": "操作がない場合にロック",
+  "engine.vaultAutoLockRestart": "自動ロックしない",
+  "engine.vaultAutoLockValue": "時間",
+  "engine.vaultAutoLockUnit": "単位",
+  "engine.vaultAutoLockMinutes": "分",
+  "engine.vaultAutoLockHours": "時間",
+  "engine.vaultAutoLockOutOfRange": "自動ロック時間は 1〜999 の整数で指定してください。",
+  "engine.vaultAutoLockRestartWarning":
+    "Vault は自動でロックされません。手動でロックしない限り、sshc を再起動するまでロック解除状態が続きます。自分で管理している端末でのみ使用してください。",
   "terminal.fontLabel": "フォント",
   "terminal.backgroundLabel": "背景画像",
   "terminal.backgroundHint":

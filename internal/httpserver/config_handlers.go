@@ -319,9 +319,31 @@ func (h ConfigHandlers) SetEngine(c *echo.Context) error {
 		}
 		settings.Port = *request.Port
 	}
+	if request.VaultAutoLock != nil {
+		chosen := request.VaultAutoLock
+		settings.VaultAutoLock = &application.VaultAutoLock{Mode: string(chosen.Mode)}
+		switch chosen.Mode {
+		case api.Restart:
+			if chosen.Value != nil || chosen.Unit != nil {
+				return problem(c, http.StatusBadRequest, "invalid_vault_auto_lock")
+			}
+		case api.Idle:
+			if chosen.Value == nil || *chosen.Value < 1 || *chosen.Value > 999 || chosen.Unit == nil ||
+				(*chosen.Unit != api.Minutes && *chosen.Unit != api.Hours) {
+				return problem(c, http.StatusBadRequest, "invalid_vault_auto_lock")
+			}
+			settings.VaultAutoLock.Value = *chosen.Value
+			settings.VaultAutoLock.Unit = string(*chosen.Unit)
+		default:
+			return problem(c, http.StatusBadRequest, "invalid_vault_auto_lock")
+		}
+	}
 	result, err := h.Service.SetEngineSettings(settings)
 	if err != nil {
 		return serviceProblem(c, err)
+	}
+	if h.Secrets != nil {
+		h.Secrets.SetIdleTimeout(settings.VaultIdleTimeout(secret.IdleTimeout))
 	}
 	return c.JSON(http.StatusOK, result)
 }

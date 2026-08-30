@@ -1001,7 +1001,22 @@ export const integrationsApi: IntegrationsApi = {
     const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
     if (metadata.engine === undefined) return {};
     const engine = asRecord(metadata.engine);
-    return typeof engine.port === "number" ? { port: engine.port } : {};
+    const settings: EngineSettings = typeof engine.port === "number" ? { port: engine.port } : {};
+    if (engine.vaultAutoLock !== undefined) {
+      const autoLock = asRecord(engine.vaultAutoLock);
+      const mode = asString(autoLock.mode);
+      if (mode === "restart") {
+        settings.vaultAutoLock = { mode };
+      } else if (mode === "idle") {
+        const value = asNumber(autoLock.value);
+        const unit = asString(autoLock.unit);
+        if (Number.isSafeInteger(value) && value >= 1 && value <= 999 &&
+            (unit === "minutes" || unit === "hours")) {
+          settings.vaultAutoLock = { mode, value, unit };
+        }
+      }
+    }
+    return settings;
   },
   async setEngineSettings(settings) {
     await apiClient.mutate("/api/v1/metadata/engine", {

@@ -144,3 +144,49 @@ test("keeps application controls in Settings and changes the master password the
   await page.getByRole("button", { name: "Open" }).click();
   await expect(sessionStatus(page)).toContainText("Local session active");
 });
+
+test("saves the Vault auto-lock policy and warns when automatic locking is disabled", async ({
+  page,
+  installation,
+}) => {
+  await openApplication(page, installation);
+  await openSection(page, "Settings");
+
+  const engine = page.getByRole("region", { name: "Engine" });
+  const policy = engine.getByLabel("Vault auto-lock");
+  await expect(policy).toHaveValue("idle");
+  await expect(engine.getByLabel("Time")).toHaveValue("12");
+  await expect(engine.getByLabel("Unit")).toHaveValue("hours");
+
+  await policy.selectOption("restart");
+  await expect(engine.getByText(
+    "The Vault will not lock automatically. Unless you lock it manually, it remains unlocked until sshc is restarted. Use this setting only on a device you control.",
+  )).toBeVisible();
+
+  const saved = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/v1/metadata/engine" &&
+      response.request().method() === "PUT",
+  );
+  await engine.getByRole("button", { name: "Save", exact: true }).click();
+  expect((await saved).status()).toBe(200);
+
+  await page.reload();
+  const restored = page.getByRole("region", { name: "Engine" });
+  await expect(restored.getByLabel("Vault auto-lock")).toHaveValue("restart");
+  await expect(restored.getByText("The Vault will not lock automatically.", { exact: false })).toBeVisible();
+
+  const visualDirectory = process.env.SSHC_VISUAL_DIR;
+  if (visualDirectory !== undefined) {
+    await restored.scrollIntoViewIfNeeded();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.screenshot({ path: `${visualDirectory}/vault-auto-lock-desktop.png`, fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const navigation = page.getByRole("button", { name: "Navigation" });
+    if (await navigation.getAttribute("aria-expanded") === "true") await navigation.click();
+    await restored.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await page.screenshot({ path: `${visualDirectory}/vault-auto-lock-mobile.png`, fullPage: true });
+  }
+});
