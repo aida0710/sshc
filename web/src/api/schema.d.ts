@@ -1430,6 +1430,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/transfers/finished": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["clearFinishedSFTPTransferJobs"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/transfers/{id}/actions": {
         parameters: {
             query?: never;
@@ -3075,6 +3091,9 @@ export interface components {
         SFTPTransferJob: {
             id: string;
             batchId: string;
+            batchName: string;
+            /** @enum {string} */
+            batchKind: "file" | "folder";
             alias: string;
             /** @enum {string} */
             direction: "upload" | "download";
@@ -3094,6 +3113,12 @@ export interface components {
             status: "queued" | "running" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
             attempt: number;
             problem: string;
+            /** Format: int64 */
+            lastModified: number;
+            expectedRevision: string;
+            sourceFingerprint: string;
+            overwrite: boolean;
+            downloadRevision: string;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -3106,6 +3131,9 @@ export interface components {
         SFTPCreateTransferJobRequest: {
             id: string;
             batchId: string;
+            batchName: string;
+            /** @enum {string} */
+            batchKind: "file" | "folder";
             alias: string;
             /** @enum {string} */
             direction: "upload" | "download";
@@ -3115,6 +3143,8 @@ export interface components {
             remotePath: string;
             /** Format: int64 */
             totalBytes: number;
+            /** Format: int64 */
+            lastModified: number;
         };
         SFTPTransferJobActionRequest: {
             /** @enum {string} */
@@ -3135,8 +3165,7 @@ export interface components {
             path: string;
             /** Format: int64 */
             size: number;
-            overwrite: boolean;
-            expectedRevision?: string;
+            sourceFingerprint: string;
         };
         SFTPCompleteUploadRequest: {
             path: string;
@@ -6085,6 +6114,24 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    clearFinishedSFTPTransferJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Finished transfer jobs removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     updateSFTPTransferJob: {

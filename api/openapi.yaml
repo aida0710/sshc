@@ -1780,6 +1780,11 @@ paths:
         "201": { description: Transfer job registered, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJob" } } } }
         "400": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/transfers/finished:
+    delete:
+      operationId: clearFinishedSFTPTransferJobs
+      responses:
+        "204": { description: Finished transfer jobs removed }
   /api/v1/sftp/transfers/{id}/actions:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
@@ -4128,10 +4133,12 @@ components:
     SFTPTransferJob:
       type: object
       additionalProperties: false
-      required: [id, batchId, alias, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, attempt, problem, createdAt, updatedAt]
+      required: [id, batchId, batchName, batchKind, alias, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, attempt, problem, lastModified, expectedRevision, sourceFingerprint, overwrite, downloadRevision, createdAt, updatedAt]
       properties:
         id: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
+        batchName: { type: string, minLength: 1, maxLength: 1024 }
+        batchKind: { type: string, enum: [file, folder] }
         alias: { type: string, minLength: 1, maxLength: 255 }
         direction: { type: string, enum: [upload, download] }
         kind: { type: string, enum: [file, folder] }
@@ -4144,6 +4151,11 @@ components:
         status: { type: string, enum: [queued, running, paused, reattach, needs_overwrite, completed, failed, cancelled] }
         attempt: { type: integer, minimum: 1 }
         problem: { type: string, maxLength: 128 }
+        lastModified: { type: integer, format: int64, minimum: 0 }
+        expectedRevision: { type: string, maxLength: 256 }
+        sourceFingerprint: { type: string, maxLength: 128 }
+        overwrite: { type: boolean }
+        downloadRevision: { type: string, maxLength: 256 }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     SFTPTransferJobList:
@@ -4156,16 +4168,19 @@ components:
     SFTPCreateTransferJobRequest:
       type: object
       additionalProperties: false
-      required: [id, batchId, alias, direction, kind, name, remotePath, totalBytes]
+      required: [id, batchId, batchName, batchKind, alias, direction, kind, name, remotePath, totalBytes, lastModified]
       properties:
         id: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
+        batchName: { type: string, minLength: 1, maxLength: 1024 }
+        batchKind: { type: string, enum: [file, folder] }
         alias: { type: string, minLength: 1, maxLength: 255 }
         direction: { type: string, enum: [upload, download] }
         kind: { type: string, enum: [file, folder] }
         name: { type: string, minLength: 1, maxLength: 1024 }
         remotePath: { type: string, minLength: 1 }
         totalBytes: { type: integer, format: int64, minimum: -1 }
+        lastModified: { type: integer, format: int64, minimum: 0 }
     SFTPTransferJobActionRequest:
       type: object
       additionalProperties: false
@@ -4186,12 +4201,11 @@ components:
     SFTPStartUploadRequest:
       type: object
       additionalProperties: false
-      required: [path, size, overwrite]
+      required: [path, size, sourceFingerprint]
       properties:
         path: { type: string }
         size: { type: integer, format: int64, minimum: 0 }
-        overwrite: { type: boolean }
-        expectedRevision: { type: string }
+        sourceFingerprint: { type: string, pattern: '^tree-sha256:[0-9a-f]{64}$' }
     SFTPCompleteUploadRequest:
       type: object
       additionalProperties: false

@@ -28,6 +28,22 @@ describe("sftpApi resumable download", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it("sends only source identity when starting an engine-owned upload", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      id: "transfer_test01", path: "/remote/file.bin", offset: 0, size: 4, expectedRevision: "absent",
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await sftpApi.startUpload("edge", "transfer_test01", "/remote/file.bin", 4, `tree-sha256:${"a".repeat(64)}`);
+
+    const request = fetchMock.mock.calls[0];
+    expect(request?.[0]).toBe("/api/v1/sftp/edge/uploads/transfer_test01");
+    const body = request?.[1]?.body;
+    expect(typeof body).toBe("string");
+    expect(JSON.parse(body as string)).toEqual({
+      path: "/remote/file.bin", size: 4, sourceFingerprint: `tree-sha256:${"a".repeat(64)}`,
+    });
+  });
+
   it("streams a resumed file with Range and If-Range", async () => {
     let reads = 0;
     const first = new ReadableStream<Uint8Array>({
