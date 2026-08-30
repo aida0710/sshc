@@ -1,53 +1,53 @@
 ---
 title: 接続とTerminal
-description: sshcのブラウザTerminal、接続状態、検索、文字コード、port forwarding。
+description: ブラウザーで使えるTerminal、接続状態、検索、文字コード、ポート転送。
 ---
 
 # 接続とTerminal
 
 ![接続中のTerminalと操作メニュー](/images/terminal-desktop.png)
 
-## 接続の状態を見失わない
+## 接続の進み具合が分かる
 
-名前解決、踏み台接続、host key確認、認証、shell開始、再接続、終了を段階として表示します。利用者の確認が必要なhost keyや認証失敗を、無条件には再試行しません。
+名前解決、踏み台接続、ホスト鍵の確認、認証、シェルの開始、再接続、終了。それぞれを別の段階として表示します。利用者の判断が必要なホスト鍵や認証の失敗を、無条件に再試行することはありません。
 
-終了したSSH sessionは同じpaneとscrollbackのまま再接続できます。利用者が閉じたSSH／local shellは即座に強制停止し、一覧から取り除きます。
+終了したSSHセッションは、同じペインとスクロールバックを残したまま再接続できます。明示的に閉じたSSH／ローカルシェルはすぐに停止し、一覧から取り除きます。
 
 ## Terminal操作
 
-- `Ctrl/Cmd+F`によるscrollback検索
-- 大文字小文字、正規表現、全一致highlightと検索結果移動
-- URLとremote pathのcontext action、OSC 8 link
-- Quick CommandsとSnippet
-- OSC 52 clipboard、Kitty keyboard protocol、JIS keyboard
+- `Ctrl/Cmd+F`によるスクロールバック検索
+- 大文字／小文字、正規表現、該当箇所の強調、検索結果の移動
+- URLとリモートパスのコンテキスト操作、OSC 8リンク
+- クイックコマンドとスニペット
+- OSC 52クリップボード、Kitty keyboard protocol、JISキーボード
 - 接続ごとのUTF-8、Shift_JIS、EUC-JP、ISO-2022-JP
-- 16 KiB〜4 MiBのscrollback上限とfont size設定
-- WebGL rendererとcanvas fallback
+- 16 KiB〜4 MiBのスクロールバック上限とフォントサイズ設定
+- WebGLによる描画とCanvasへの自動切り替え
 
-scrollbackはmemoryだけに保持し、vault、backup、sync snapshotへ保存しません。
+スクロールバックはメモリにだけ保持し、Vault、バックアップ、同期スナップショットには保存しません。
 
-## 入力とClipboard
+## 入力とクリップボード
 
-選択時copyと右click pasteはSettingsで切り替えます。OSC 52は全体の既定値に加え、SSH接続ごとに許可／拒否を保存できます。remoteからclipboardへ書き込める機能なので、信頼できる接続だけで有効にしてください。
+選択時のコピーと右クリックでの貼り付けは、Settingsで切り替えられます。OSC 52は全体の既定値に加え、SSH接続ごとに許可／拒否を保存できます。リモート側からクリップボードへ書き込める機能なので、信頼できる接続だけで有効にしてください。
 
-Kitty keyboard protocolはremote applicationの要求に合わせて切り替わります。JIS keyboardでは円記号keyをbackslashとして送る設定を利用できます。mobileではCtrl、Alt、Esc、Tab、矢印などの特殊key rowを表示します。
+Kitty keyboard protocolは、リモートアプリケーションからの要求に応じて切り替わります。JISキーボードでは、円記号キーをバックスラッシュとして送るよう設定できます。モバイルでは、Ctrl、Alt、Esc、Tab、矢印などの特殊キーを画面に表示します。
 
-## Linkとremote path
+## リンクとリモートパス
 
-OSC 8 linkと画面上のURLはsystem browserで開けます。検出したremote pathは、そのsessionと同じ接続先を選んだSFTP画面で開けます。
+OSC 8リンクと画面上のURLは、OS標準のブラウザーで開けます。検出したリモートパスは、同じ接続先を選んだSFTP画面で直接開けます。
 
-## Local shell
+## ローカルシェル
 
-Local shellはSSHと同じTerminal subsystemとして扱われます。Settingsでshell profileを選択でき、Workspace、検索、Quick Commands、一括commandの対象にできます。
+ローカルシェルも、SSHと同じTerminalの仕組みで動きます。Settingsでシェルプロファイルを選び、ワークスペース、検索、クイックコマンド、一括コマンドを同じように利用できます。
 
 ## Coding Agent連携
 
-別repositoryの[sshc-agent-bridge](https://github.com/aida0710/sshc-agent-bridge)を明示的に導入すると、Claude Code、Codex、OpenCodeの作業中、入力待ち、完了をpane headerへ表示できます。完了／確認待ちはbackground notificationの対象にでき、Agent自身のsession IDがある場合だけ同じpaneまたは新しいpaneで再開します。
+別リポジトリの[sshc-agent-bridge](https://github.com/aida0710/sshc-agent-bridge)を導入すると、Claude Code、Codex、OpenCodeの作業中、入力待ち、完了をペインの見出しに表示できます。完了や確認待ちはバックグラウンド通知の対象にでき、Agent自身のセッションIDがある場合に限り、同じペインまたは新しいペインで再開できます。
 
-連携はopt-inです。導入しない通常のshell出力を解析して、任意commandを自動再実行することはありません。
+この連携は任意です。導入していない環境で通常のシェル出力を解析したり、コマンドを自動的に再実行したりすることはありません。
 
-## Port forwarding
+## ポート転送
 
-SSH接続ごとにLocal forwardingとDynamic SOCKSを管理します。Localはlocal bind address／portと接続先host／portを指定し、Dynamicはlocal SOCKS endpointを開きます。Remote forwardingは提供しません。
+SSH接続ごとにLocal forwardingとDynamic SOCKSを管理します。Localではローカルの待受アドレス／ポートと転送先のホスト／ポートを指定し、DynamicではローカルにSOCKSエンドポイントを開きます。Remote forwardingには対応していません。
 
-詳しい設定は[Port forwarding](/terminal/port-forwarding)を参照してください。
+設定方法は、[ポート転送](/terminal/port-forwarding)を参照してください。

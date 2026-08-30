@@ -9,6 +9,8 @@ Use `sshc help` and each command's `--help` for the exact options supported by y
 
 The CLI uses the same OpenSSH configuration and the running engine's vault and sessions. For automation, use supported `--json` output instead of parsing human-readable text.
 
+Codex and other AI agents can call the CLI directly. When the vault is unlocked and the host key and credentials are already saved, non-interactive SSH uses the stored password or key passphrase. The agent does not need the credential itself.
+
 ## Engine and vault
 
 ```sh

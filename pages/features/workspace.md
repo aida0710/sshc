@@ -1,36 +1,36 @@
 ---
 title: Workspace
-description: SSHとlocal shellを最大4 paneへ分割し、配置を保存する。
+description: SSHとローカルシェルを最大4ペインに並べ、配置を保存する。
 ---
 
 # Workspace
 
-![4つのTerminalを開いたWorkspace](/images/workspace-desktop.png)
+![4つのTerminalを開いたワークスペース](/images/workspace-desktop.png)
 
-接続済みTerminalを表示中のpaneへDrag & Dropすると、drop位置に合わせて上下左右へ分割します。SSHとlocal shellを区別せず、一つのWorkspaceとして扱います。
+接続済みのTerminalを表示中のペインへドラッグ＆ドロップすると、落とした位置に合わせて上下左右に分割します。SSHとローカルシェルを同じワークスペースに並べられます。
 
-## Layout
+## レイアウト
 
-- 最大4 pane
-- dividerのDragで比率を10〜90%へ変更
-- paneの入れ替え
-- 単一paneへ集中するFocus Mode
-- 名前を付けてlayoutを端末内へ保存
+- 最大4ペイン
+- 仕切りのドラッグで比率を10〜90%に変更
+- ペインの入れ替え
+- 一つのペインに集中するフォーカス表示
+- 名前を付けてレイアウトを端末内に保存
 
-保存するのはpane種別、接続先、分割木、比率、focusだけです。session ID、remote process、scrollbackは保存しません。Homeから開き直すと、新しいSSH sessionまたはlocal shellを開始します。
+保存するのは、ペインの種類、接続先、分割構造、比率、フォーカスだけです。セッションID、リモートプロセス、スクロールバックは保存しません。Homeから開き直すと、新しいSSHセッションまたはローカルシェルが始まります。
 
-## Command Center
+## コマンドを一括送信
 
-実行対象と展開後commandをpreviewした後、接続中の全paneへcommandとEnterを送れます。SSHとlocal shellが混在していても、現在のcwd、environment、shell状態を維持したまま各PTYへ入力します。
+実行先と展開後のコマンドを確認してから、接続中のペインへコマンドとEnterをまとめて送れます。SSHとローカルシェルが混在していても、それぞれの作業ディレクトリ、環境変数、シェルの状態はそのままです。
 
-mobileでは狭い画面へ分割を並べず、Workspace内のpaneを一つずつ切り替えます。
+モバイルでは分割画面を縮めて並べず、ワークスペース内のペインを一つずつ切り替えて表示します。
 
 ## 作成と再利用
 
-1. 2台以上のTerminalを開く
-2. session一覧からTerminalを表示中のpaneへdragする
-3. 表示される上下左右のdrop zoneへ落とす
-4. dividerをdragして比率を調整する
+1. Terminalを2つ以上開く
+2. セッション一覧から、表示中のペインへTerminalをドラッグする
+3. 表示された上下左右の領域へドロップする
+4. 仕切りをドラッグして比率を調整する
 5. 必要なら名前を付けて保存する
 
-1接続だけのときはlayout保存や一括送信を常時表示せず、pane名と検索だけを残します。保存済みlayoutはHomeから開き、新しいsessionとして再現します。
+接続が一つだけのときは、レイアウト保存や一括送信を隠し、ペイン名と検索だけを表示します。保存済みのレイアウトはHomeから開き、新しいセッションとして再現できます。

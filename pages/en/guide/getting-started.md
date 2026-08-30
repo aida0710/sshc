@@ -1,25 +1,37 @@
 ---
 title: What is sshc?
-description: A local application for OpenSSH configuration, connections, terminals, SFTP, workspaces, and encrypted sync.
+description: Organize OpenSSH, reuse saved credentials from the CLI, and sync securely across devices.
 ---
 
 # What is sshc?
 
-sshc makes an existing OpenSSH environment easier to operate without replacing it. It builds connection management, terminals, SFTP, multi-pane workspaces, and encrypted sync around `~/.ssh/config`, `Include`, private keys, and `known_hosts`.
+sshc organizes an existing OpenSSH environment without replacing it. Connections, the terminal, SFTP, the CLI, and encrypted sync all use the same `~/.ssh/config`, `Include` files, private keys, and `known_hosts`.
 
 ![Connection management](/images/connections-desktop.png)
 
 ## When to use it
 
-- You want the same OpenSSH configuration in a CLI and a GUI.
-- Your hosts, keys, jump routes, and groups no longer fit in your head.
-- You want SFTP and port forwarding without leaving the terminal workflow.
-- You need encrypted workspace sync across devices.
-- You use the same connection set on desktop and Android.
+- You want to organize OpenSSH while keeping it usable from regular ssh and VS Code.
+- You want Codex or another AI agent to use saved connections from the CLI.
+- You do not want to re-enter passwords and key passphrases for every tool.
+- You need encrypted configuration, key, and credential sync across devices.
+- You want SFTP, port forwarding, and workspaces around the same connection set.
+
+## Reuse saved credentials
+
+Passwords assigned to connections and passphrases saved for private keys are encrypted in the vault. With the vault unlocked, the terminal, SFTP, ProxyJump routes, and CLI resolve the credentials they need. You do not configure the same value separately for each feature.
+
+An AI agent can call the non-interactive CLI directly:
+
+```sh
+sshc ssh <alias> --non-interactive -- <command...>
+```
+
+The agent does not need the password itself; sshc uses the saved vault value for authentication. Non-interactive SSH stops when it needs a human decision or action, such as accepting an unknown host key, completing 2FA, or unlocking the vault.
 
 ## What it is not
 
-sshc is not an SSH server or a cloud relay. Connections and decryption happen on your device. It does not upload terminal scrollback or running processes. OpenSSH files remain usable by the normal `ssh` command.
+sshc is not an SSH server or a cloud relay. Connections and decryption happen on your device. It does not upload terminal scrollback or running processes. Because the OpenSSH files remain standard, VS Code, Codex, and the normal `ssh` command can use the same configuration.
 
 ## At a glance
 

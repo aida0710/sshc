@@ -15,6 +15,8 @@ Sync uses a separate sync key.
 
 Create labelled account passwords in Secrets and assign them to connections. Editing decrypts the saved value back into the form; leaving the page, locking the vault, or saving discards plaintext UI state.
 
+The assigned password is reused when the same connection is opened from the terminal, SFTP, a ProxyJump route, or the CLI. It does not need to be configured separately for each feature.
+
 Key passphrases can be saved, edited, and removed per private key. A ProxyJump route resolves credentials independently for every hop and the final host.
 
 ```sh

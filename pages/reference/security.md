@@ -1,30 +1,30 @@
 ---
 title: セキュリティ
-description: sshcのlocal boundary、vault、host key、同期とTelnetの扱い。
+description: sshcのローカル境界、Vault、ホスト鍵、同期、Telnetの安全性。
 ---
 
 # セキュリティ
 
-## Local application
+## ローカルアプリケーション
 
-engineはloopback addressでWeb UIとAPIを提供します。UI URLは要求ごとに発行し、起動時のlogへ長期有効なURLを残しません。同じOS userとして実行できるprocessは、利用者のSSH fileへも到達できる前提です。
+エンジンはループバックアドレスでWeb UIとAPIを提供します。UIのURLは要求ごとに発行し、長期間使えるURLを起動ログには残しません。同じOSユーザーとして動くプロセスは、その利用者のSSHファイルにもアクセスできる前提で扱います。
 
 ## Vault
 
-account password、key passphrase、Snippetのsecretはmaster passwordで暗号化します。master passwordはcommand line引数やenvironment variableから受け取りません。12時間操作がない場合、vaultは自動lockします。
+アカウントパスワード、鍵のパスフレーズ、Snippetのシークレット変数は、マスターパスワードで暗号化します。マスターパスワードをコマンドライン引数や環境変数から受け取ることはありません。12時間操作がない場合、Vaultは自動的にロックされます。
 
-## SSH host key
+## SSHホスト鍵
 
-未知のhost keyは利用者へ確認し、保存済みkeyの変更は拒否します。非対話SSH、SFTP、公開鍵登録では、最終hostと全ProxyJump hopが既知である必要があります。
+未知のホスト鍵は利用者に確認し、保存済みの鍵が変わっていた場合は接続を拒否します。非対話SSH、SFTP、公開鍵登録では、最終接続先とすべてのProxyJump踏み台が既知でなければなりません。
 
 ## Sync
 
-snapshotは端末上で専用sync keyにより暗号化してからuploadします。bucket credentialを持つ第三者は暗号文を取得し、keyの総当たりをofflineで続けられるため、十分に長いkeyを使用してください。
+スナップショットは、専用の同期キーで端末上で暗号化してからアップロードします。バケットの資格情報を持つ第三者は暗号文を取得し、オフラインでキーの総当たりを続けられます。十分に長い同期キーを使用してください。
 
-## Terminal data
+## Terminalのデータ
 
-scrollbackはmemoryだけに保持し、diskやsyncへ保存しません。OSC 52 clipboardは設定で制御できます。remote shellへ送ったsecretは、remote history、TTY echo、Terminal outputへ残る可能性があります。
+スクロールバックはメモリにだけ保持し、ディスクや同期先には保存しません。OSC 52によるクリップボード操作は設定で制御できます。リモートシェルへ送ったシークレットは、シェルの履歴、TTYのエコー、Terminalの出力に残る可能性があります。
 
 ## Telnet
 
-Telnetは暗号化もserver認証もしません。sshcは警告を表示しますが、protocol自体を保護しません。資格情報を送る場合は、信頼できる隔離networkなど別の保護境界が必要です。
+Telnetは通信を暗号化せず、サーバー認証も行いません。sshcは接続前に警告しますが、プロトコル自体を安全にすることはできません。資格情報を送る場合は、信頼できる隔離ネットワークなど、別の保護が必要です。

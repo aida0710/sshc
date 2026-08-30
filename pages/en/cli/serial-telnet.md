@@ -30,4 +30,4 @@ sshc telnet 192.0.2.20:23 --non-interactive \
   --script ./steps.json --json -- ''
 ```
 
-Control expectation or read duration, timeout, settle time, maximum bytes, line endings, and required output. JSON mode returns one result object including warnings.
+Set an expected pattern or a fixed read duration, along with the timeout, settle time, maximum bytes, line endings, and required output. JSON mode returns the result and any warnings in one object.

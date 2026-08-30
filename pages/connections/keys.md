@@ -1,24 +1,24 @@
 ---
-title: 鍵とKnown Hosts
-description: SSH鍵の生成、import、編集、agent、remote登録、host key管理。
+title: SSH鍵とKnown Hosts
+description: SSH鍵の生成、インポート、編集、ssh-agentへの追加、公開鍵登録、ホスト鍵の管理。
 ---
 
-# 鍵とKnown Hosts
+# SSH鍵とKnown Hosts
 
 ## 鍵
 
-鍵画面ではprivate／public key、fingerprint、algorithm、配置先を確認できます。生成、import、名前変更、passphrase編集、公開鍵copy、SSH agentへの追加に対応します。
+Keysでは、秘密鍵と公開鍵、フィンガープリント、アルゴリズム、保存先を確認できます。鍵の生成、インポート、名前変更、パスフレーズの編集、公開鍵のコピー、ssh-agentへの追加に対応しています。
 
-sshcが管理する鍵はgroup構造に合わせて`~/.ssh/keys/...`へ置かれることがあります。接続設定では実際に存在する`IdentityFile`を使用してください。同期対象には`~/.ssh`配下の秘密鍵も含まれ、端末上で暗号化されてから送信されます。
+sshcが管理する鍵は、グループ構造に合わせて`~/.ssh/keys/...`へ置かれることがあります。接続設定では、実際に存在するファイルを`IdentityFile`に指定してください。`~/.ssh`配下の秘密鍵も同期対象に含まれ、端末上で暗号化してから送信されます。
 
-## Serverへ公開鍵を登録
+## サーバーへ公開鍵を登録
 
-複数のremote keyを検索・選択し、対象serverへ登録できます。接続先の設定を解決してから実行するため、その接続が使用しない別aliasの`ProxyCommand` warningを混ぜません。
+複数のRemote Keysを検索・選択し、対象のサーバーへ登録できます。対象の接続設定だけを解決するため、その接続では使わない別エイリアスの`ProxyCommand`警告が混ざることはありません。
 
 ## Known Hosts
 
-known hosts画面はhost、algorithm、fingerprintなどの列でsortできます。未知のkeyは接続時に確認し、変更されたkeyは自動上書きしません。
+Known Hostsでは、ホスト、アルゴリズム、フィンガープリントなどで並べ替えられます。未知の鍵は接続時に確認し、保存済みの鍵が変わっていても自動では上書きしません。
 
 ::: warning
-fingerprintの変更がserver再構築によるものだと確認できるまで、古いentryを削除しないでください。
+フィンガープリントが変わった理由を確認できるまで、古いエントリーを削除しないでください。
 :::

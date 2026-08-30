@@ -1,29 +1,29 @@
 ---
 title: Android
-description: Android版のinstall、local shell、navigation、file transfer。
+description: Android版のインストール、ローカルシェル、画面操作、ファイル転送。
 ---
 
 # Android
 
-![AndroidのQuick access](/images/android-home.png)
+![AndroidのQuick Connect](/images/android-home.png)
 
-GitHub Releasesから署名済みAPKを取得します。Android 13以降では戻るgestureがsshc内の履歴へ接続され、dialog、Command Palette、navigation drawer、Inspectorを先に閉じます。
+GitHub Releasesから署名済みのAPKをダウンロードできます。Android 13以降の戻るジェスチャーはsshc内の履歴と連動し、ページを戻る前に、開いているダイアログ、Command Palette、メニュードロワー、Inspectorを閉じます。
 
-## Mobile向けの違い
+## モバイル版の違い
 
-- 固定bottom navigationを置かず、menu drawerで画面領域を優先
-- Workspaceは分割を並べず、paneを一つずつ切り替え
-- Ctrl、Alt、Esc、Tab、矢印などの特殊key row
-- system file picker／Storage Access Frameworkを使うSFTP upload・download
-- 外部URLはsystem browserで開く
-- 転送完了／失敗をAndroid notificationで通知
+- 固定のボトムナビゲーションを置かず、メニュードロワーで画面領域を確保
+- ワークスペースは分割表示せず、ペインを一つずつ切り替え
+- Ctrl、Alt、Esc、Tab、矢印などの特殊キーを画面に表示
+- システムのファイル選択画面／Storage Access Frameworkを使ったSFTP転送
+- 外部URLはOS標準のブラウザーで表示
+- 転送の完了／失敗をAndroidの通知でお知らせ
 
-## Local shell
+## ローカルシェル
 
-Android app専用directory内のlocal shellを開けます。これは完全なdesktop Linux環境ではなく、Androidが提供するshellとapp sandboxの権限で動作します。`ll`や`dir`などshell alias／外部commandは標準では存在しないことがあります。
+Androidアプリ専用のディレクトリで、ローカルシェルを開けます。完全なデスクトップLinux環境ではなく、Androidが提供するシェルとアプリのサンドボックス権限で動作します。`ll`のようなシェルエイリアスや、`dir`などの外部コマンドは、標準では利用できないことがあります。
 
 ## 起動失敗時
 
-error screenの**診断情報を表示**を開き、Version、Code、Detail、Android SDK、device、ABIを確認します。workspace pathが`/`になる、local portを確保できない、別engineと誤認する、といった起動段階の原因も詳細へ含めます。
+エラー画面の**診断情報を表示**を開き、Version、Code、Detail、Android SDK、端末、ABIを確認してください。ワークスペースのパスが`/`になる、ローカルポートを確保できない、別のエンジンを誤検出するといった、起動時の原因も表示されます。
 
-秘密鍵、password、token、bucket secretは診断reportへ含めません。
+秘密鍵、パスワード、トークン、バケットのシークレットは、診断レポートに含まれません。
