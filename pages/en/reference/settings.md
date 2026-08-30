@@ -23,10 +23,16 @@ With **Do not auto-lock**, the Vault stays unlocked until you lock it manually o
 
 ## Terminal
 
-- Font size and bounded browser scrollback
+- Maximum concurrent sessions from 1 to 200, with a default of 50
+- Engine replay buffer from 16 KiB to 4 MiB, with a default of 256 KiB
+- Browser scrollback from 1,000 to 100,000 lines, with a default of 5,000
+- Connection-log verbosity
+- Font size, color scheme, font, background, and tint
 - Copy on select and right-click paste
 - Global OSC 52 default
 - JIS yen-key to backslash behavior
+
+The engine replay buffer retains bytes in memory so it can replay output when a browser reconnects. Browser scrollback is the separate number of display lines retained by xterm. Neither setting writes terminal output to disk.
 
 OSC 52 and encoding may be overridden per connection. OSC 8 and Kitty keyboard behavior are protocol-driven.
 
@@ -38,4 +44,4 @@ Choose a detected shell profile: PowerShell variants on Windows, or available zs
 
 Browser notification permission is requested only after an explicit click. Configure Coding Agent attention/completion sounds, volume, and test delivery.
 
-Browser-only appearance preferences use local storage. Terminal and connection behavior is stored with the workspace. Vault secrets and sync credentials are never written to plaintext settings.
+The application theme, display language, and notification sounds use browser local storage. Terminal settings, including the terminal color scheme, font, background, and tint, are stored in workspace metadata together with connection-specific settings. Vault secrets and sync credentials are never written to plaintext settings.
