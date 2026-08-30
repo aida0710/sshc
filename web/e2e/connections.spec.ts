@@ -84,6 +84,28 @@ test("separates classification, filtered results, and connection detail without 
   }
 });
 
+test("adds Local and SOCKS forwarding from the dedicated advanced view", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await openBastion(page, installation.url);
+  await page.getByRole("tab", { name: "Advanced" }).click();
+  await page.getByRole("tab", { name: "Port forwarding" }).click();
+  await expect(page.getByText(/Listeners are bound to this device only/)).toBeVisible();
+
+  await page.getByLabel("Local port").fill("18080");
+  await page.getByLabel("Destination").fill("db.internal:5432");
+  await page.getByRole("button", { name: "Add forwarding" }).click();
+  expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
+  await expect(page.getByRole("textbox", { name: /LocalForward/ })).toHaveValue("18080 db.internal:5432");
+  expect(await installation.read("config")).toContain("LocalForward 18080 db.internal:5432");
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/port-forwarding-settings-desktop.png`, fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/port-forwarding-settings-mobile.png`, fullPage: true });
+  }
+});
+
 test("keeps the selected connection open when its tree item is clicked again", async ({
   page,
   installation,

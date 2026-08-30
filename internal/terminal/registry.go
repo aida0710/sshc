@@ -371,6 +371,24 @@ func (r *Registry) WriteCommandInput(ctx context.Context, target CommandTarget, 
 	return session.WriteCommandInput(ctx, target.Generation, command, submit)
 }
 
+// StartForward adds one temporary forward to an existing connected SSH session.
+func (r *Registry) StartForward(id, kind, listenPort, destination string) (Forward, error) {
+	session, ok := r.Lookup(id)
+	if !ok {
+		return Forward{}, ErrNotFound
+	}
+	return session.StartForward(kind, listenPort, destination)
+}
+
+// StopForward closes one forward without ending its terminal session.
+func (r *Registry) StopForward(id, forwardID string) error {
+	session, ok := r.Lookup(id)
+	if !ok {
+		return ErrNotFound
+	}
+	return session.StopForward(forwardID)
+}
+
 // Reconnect は終了済みのSSHセッションを同じIDとscrollbackのまま開き直す。
 // 新規Openと同じ上限に数え、closeやengine停止が先行したProcessは公開しない。
 func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {

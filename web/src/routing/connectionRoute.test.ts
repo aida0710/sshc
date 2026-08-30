@@ -57,6 +57,14 @@ describe("connection routes", () => {
     });
   });
 
+  it("round-trips the port-forwarding advanced view", () => {
+    const target = { path: "config", alias: "bastion", panel: "Advanced", advanced: "Forwards" } as const;
+    const location = connectionLocation(target);
+    expect(location).toBe("/connections/servers?path=config&host=bastion&panel=advanced&advanced=port-forwarding");
+    expect(parseConnectionLocation({ pathname: "/connections/servers", search: location.slice(location.indexOf("?")) }))
+      .toEqual({ kind: "valid", target });
+  });
+
   it.each([
     ["/connections/files", ""],
     ["/connections/groups", ""],

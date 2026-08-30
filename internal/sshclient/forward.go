@@ -19,9 +19,8 @@ import (
 // LoopbackHost は、転送が bind する唯一のアドレスである。
 //
 // OpenSSH は `LocalForward 0.0.0.0:8080` や `GatewayPorts yes` で他の機械へ
-// 開けるが、このアプリケーションは開かない。常駐するプロセスが同じ機械の
-// 他の面。HTTP サーバーも vault も。をループバックに閉じているのと同じ判断で
-// ある。
+// 開けるが、このアプリケーションは開かない。常駐プロセスが持つHTTPサーバーや
+// vaultと同様に、外部へ意図せず公開される面を増やさないためである。
 const LoopbackHost = "127.0.0.1"
 
 // ErrInvalidForward は、読めない転送の指定を報告する。
@@ -112,27 +111,39 @@ func isLoopback(host string) bool {
 
 // forwards は、ひとつのセッションが開いた転送の全体である。
 type forwards struct {
-	mutex     sync.Mutex
-	opened    []terminal.Forward
-	listeners []net.Listener
+	mutex  sync.Mutex
+	opened []managedForward
+	next   uint64
+	closed bool
+}
+
+type managedForward struct {
+	view     terminal.Forward
+	listener net.Listener
+}
+
+func (f *forwards) nextID() string {
+	f.next++
+	return "pf-" + strconv.FormatUint(f.next, 10)
 }
 
 func (f *forwards) note(entry terminal.Forward) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
-	f.opened = append(f.opened, entry)
-}
-
-func (f *forwards) keep(listener net.Listener) {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
-	f.listeners = append(f.listeners, listener)
+	if entry.ID == "" {
+		entry.ID = f.nextID()
+	}
+	f.opened = append(f.opened, managedForward{view: entry})
 }
 
 func (f *forwards) list() []terminal.Forward {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
-	return append([]terminal.Forward(nil), f.opened...)
+	result := make([]terminal.Forward, 0, len(f.opened))
+	for _, entry := range f.opened {
+		result = append(result, entry.view)
+	}
+	return result
 }
 
 // close は、開いた listener をすべて閉じる。
@@ -140,8 +151,13 @@ func (f *forwards) list() []terminal.Forward {
 // 閉じ忘れたポートは、そのプロセスが終了するまで埋まる。
 func (f *forwards) close() {
 	f.mutex.Lock()
-	listeners := f.listeners
-	f.listeners = nil
+	f.closed = true
+	listeners := make([]net.Listener, 0, len(f.opened))
+	for _, entry := range f.opened {
+		if entry.listener != nil {
+			listeners = append(listeners, entry.listener)
+		}
+	}
 	f.mutex.Unlock()
 	for _, listener := range listeners {
 		_ = listener.Close()
@@ -155,20 +171,68 @@ func (f *forwards) close() {
 // Problem に残り、端末にも 1 行出る。
 func (f *forwards) open(client *ssh.Client, specs []ForwardSpec, report io.Writer) {
 	for _, spec := range specs {
-		listener, err := net.Listen("tcp", spec.Address())
-		entry := terminal.Forward{Kind: spec.Kind, Listen: spec.Address(), To: spec.To}
-		if err != nil {
-			entry.Problem = err.Error()
-			f.note(entry)
-			_, _ = io.WriteString(report, "sshc: "+spec.Address()+" could not be opened: "+err.Error()+"\r\n")
-			continue
-		}
-		f.keep(listener)
-		f.note(entry)
-		_, _ = io.WriteString(report, "sshc: forwarding "+describe(spec)+"\r\n")
-
-		go accept(listener, client, spec)
+		_, _ = f.start(client, spec, false, report, true)
 	}
+}
+
+// start opens one forwarding listener. Configuration-derived failures remain in
+// the session list; an explicitly requested temporary failure is returned and
+// leaves no misleading entry behind.
+func (f *forwards) start(
+	client *ssh.Client, spec ForwardSpec, temporary bool, report io.Writer, keepFailure bool,
+) (terminal.Forward, error) {
+	listener, err := net.Listen("tcp", spec.Address())
+	entry := terminal.Forward{Kind: spec.Kind, Listen: spec.Address(), To: spec.To, Temporary: temporary}
+	if err != nil {
+		entry.Problem = err.Error()
+		if keepFailure {
+			f.note(entry)
+		}
+		if report != nil {
+			_, _ = io.WriteString(report, "sshc: "+spec.Address()+" could not be opened: "+err.Error()+"\r\n")
+		}
+		return entry, err
+	}
+
+	f.mutex.Lock()
+	if f.closed {
+		f.mutex.Unlock()
+		_ = listener.Close()
+		return terminal.Forward{}, terminal.ErrNotConnected
+	}
+	entry.ID = f.nextID()
+	entry.Listen = listener.Addr().String()
+	f.opened = append(f.opened, managedForward{view: entry, listener: listener})
+	f.mutex.Unlock()
+	if report != nil {
+		_, _ = io.WriteString(report, "sshc: forwarding "+describe(spec)+"\r\n")
+	}
+	go accept(listener, client, spec)
+	return entry, nil
+}
+
+func (f *forwards) stop(id string) error {
+	f.mutex.Lock()
+	index := -1
+	var listener net.Listener
+	for at, entry := range f.opened {
+		if entry.view.ID == id {
+			index = at
+			listener = entry.listener
+			break
+		}
+	}
+	if index < 0 {
+		f.mutex.Unlock()
+		return terminal.ErrForwardNotFound
+	}
+	if listener == nil {
+		f.mutex.Unlock()
+		return terminal.ErrForwardUnavailable
+	}
+	f.opened = append(f.opened[:index], f.opened[index+1:]...)
+	f.mutex.Unlock()
+	return listener.Close()
 }
 
 func describe(spec ForwardSpec) string {
@@ -178,15 +242,39 @@ func describe(spec ForwardSpec) string {
 	return spec.Address() + " to " + spec.To
 }
 
+// maxConcurrentForwardConnections は、ひとつの listener が同時に扱う接続数である。
+//
+// loopback は外の機械から隠す境界であり、同じ機械の別ユーザーを隔離する境界では
+// ない。共有機械の別ユーザーが接続を握ったままにしても、SSH セッション全体の
+// goroutine とファイル記述子を際限なく増やせないようにする。
+const maxConcurrentForwardConnections = 64
+
 // accept は、開いた listener に届く接続を、この SSH の上へ流し続ける。
 func accept(listener net.Listener, client *ssh.Client, spec ForwardSpec) {
+	acceptLimited(listener, maxConcurrentForwardConnections, func(local net.Conn) {
+		serve(local, client, spec)
+	})
+}
+
+// acceptLimited は、ひとつの listener から同時に生やす処理数を制限する。
+// 上限を超えた接続は goroutine を作る前に閉じる。
+func acceptLimited(listener net.Listener, limit int, handle func(net.Conn)) {
+	active := make(chan struct{}, limit)
 	for {
 		local, err := listener.Accept()
 		if err != nil {
 			// listener が閉じた。セッションが終わったということである。
 			return
 		}
-		go serve(local, client, spec)
+		select {
+		case active <- struct{}{}:
+			go func() {
+				defer func() { <-active }()
+				handle(local)
+			}()
+		default:
+			_ = local.Close()
+		}
 	}
 }
 

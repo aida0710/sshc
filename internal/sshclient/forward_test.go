@@ -178,6 +178,62 @@ func TestClosingTheSessionReleasesTheForwardedPort(t *testing.T) {
 	t.Fatal("the port is still held after the session closed")
 }
 
+func TestATemporaryForwardCanBeAddedAndStoppedWithoutClosingTheSession(t *testing.T) {
+	destination := echoServer(t)
+	port := freePort(t)
+	process, server := forwardingSession(t, nil)
+	server.allow(destination)
+
+	controller := process.(terminal.ForwardController)
+	forward, err := controller.StartForward(terminal.ForwardLocal, port, destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forward.ID == "" || !forward.Temporary || forward.Listen != "127.0.0.1:"+port {
+		t.Fatalf("forward = %#v", forward)
+	}
+	if conn, err := net.Dial("tcp", forward.Listen); err != nil {
+		t.Fatalf("temporary forward is not listening: %v", err)
+	} else {
+		_ = conn.Close()
+	}
+
+	if err := controller.StopForward(forward.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := process.(terminal.Forwarder).Forwards(); len(got) != 0 {
+		t.Fatalf("forwards after stop = %#v", got)
+	}
+	if listener, err := net.Listen("tcp", forward.Listen); err != nil {
+		t.Fatalf("stopped port is still occupied: %v", err)
+	} else {
+		_ = listener.Close()
+	}
+	if _, err := process.Write([]byte("still connected\r")); err != nil {
+		t.Fatalf("stopping the forward ended the terminal: %v", err)
+	}
+}
+
+func TestATemporaryForwardBindFailureLeavesNoPhantomEntry(t *testing.T) {
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = taken.Close() }()
+	_, port, err := net.SplitHostPort(taken.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, _ := forwardingSession(t, nil)
+	controller := process.(terminal.ForwardController)
+	if _, err := controller.StartForward(terminal.ForwardDynamic, port, ""); err == nil {
+		t.Fatal("occupied port was accepted")
+	}
+	if got := process.(terminal.Forwarder).Forwards(); len(got) != 0 {
+		t.Fatalf("failed temporary forward was listed: %#v", got)
+	}
+}
+
 func TestADynamicForwardSpeaksSOCKS5Connect(t *testing.T) {
 	destination := echoServer(t)
 	port := freePort(t)
