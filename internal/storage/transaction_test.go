@@ -122,6 +122,28 @@ func TestCommitWritesEveryChangeAndRecordsHistory(t *testing.T) {
 	}
 }
 
+func TestAfterCommitReportsOnlySuccessfulMutations(t *testing.T) {
+	manager, workspace := newTestManager(t)
+	path := filepath.Join(workspace.Root(), "config")
+	var operations []string
+	manager.AfterCommit = func(operation string) {
+		operations = append(operations, operation)
+	}
+
+	if _, err := manager.Commit(Request{
+		Operation: "config.save",
+		Changes:   []Change{{Path: path, Contents: []byte("Host saved\n")}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Commit(Request{}); !errors.Is(err, ErrInvalidOperation) {
+		t.Fatalf("invalid Commit = %v, want ErrInvalidOperation", err)
+	}
+	if len(operations) != 1 || operations[0] != "config.save" {
+		t.Fatalf("AfterCommit operations = %v, want [config.save]", operations)
+	}
+}
+
 func TestCommitRejectsExternalChangesWithThreeWayData(t *testing.T) {
 	manager, workspace := newTestManager(t)
 	path := writeWorkspaceFile(t, workspace, "config", "Host disk\n", 0o600)

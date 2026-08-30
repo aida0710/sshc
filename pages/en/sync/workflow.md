@@ -14,7 +14,7 @@ sshc does not auto-merge snapshots. It compares local and remote revisions and m
 
 `sshc sync now` follows the configured direction and performs only decisions that are safe to automate.
 
-Automatic sync polls remote state but does not upload every minute unconditionally. It compares content digests after changes from sshc or external editors and uploads only when needed.
+Automatic sync polls remote state once a minute without uploading. Changes made through sshc are pushed once after a five-second quiet period. Changes from external editors are detected by the next remote poll and use the same delay. A remote update is handled before any local push.
 
 Force push or pull requires a short-lived token bound to the exact ETag and revision you previewed. A later remote write, or switching buckets, invalidates that confirmation.
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -94,6 +95,121 @@ func TestAutoPushesWhatChangedHere(t *testing.T) {
 	after, _ := bucket.uploads()
 	if after != before {
 		t.Fatalf("a second cycle uploaded again: %d then %d", before, after)
+	}
+}
+
+func TestAutomaticPollQueuesLocalChangesWithoutUploadingImmediately(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	auto := autoFor(t, machine, true)
+	auto.PushDelay = 20 * time.Millisecond
+
+	view := auto.Poll(context.Background())
+	if view.Phase != remotesync.AutoIdle {
+		t.Fatalf("Poll view = %+v, want idle", view)
+	}
+	// Poll is the once-per-minute receive path. Even after the debounce deadline,
+	// it must not upload by itself; Run owns the separate push scheduler.
+	time.Sleep(40 * time.Millisecond)
+	if keys := bucket.keys(); len(keys) != 0 {
+		t.Fatalf("receive-only poll uploaded %v", keys)
+	}
+}
+
+func TestAutomaticPushWaitsForFiveSecondsOfQuietAndCoalescesChanges(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	auto := autoFor(t, machine, true)
+	auto.PushDelay = 200 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		auto.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+
+	auto.NotifyLocalChange()
+	time.Sleep(80 * time.Millisecond)
+	auto.NotifyLocalChange()
+	time.Sleep(80 * time.Millisecond)
+	auto.NotifyLocalChange()
+	time.Sleep(120 * time.Millisecond)
+	if keys := bucket.keys(); len(keys) != 0 {
+		t.Fatalf("push happened before the latest quiet deadline: %v", keys)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for len(bucket.object(remotesync.ObjectName)) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(bucket.object(remotesync.ObjectName)) == 0 {
+		t.Fatal("debounced push never wrote the live object")
+	}
+	objects, _ := bucket.uploads()
+	if objects != 2 {
+		t.Fatalf("one push stored %d objects, want one live and one history object", objects)
+	}
+	time.Sleep(250 * time.Millisecond)
+	if after, _ := bucket.uploads(); after != objects {
+		t.Fatalf("coalesced notifications created another snapshot: %d objects became %d", objects, after)
+	}
+}
+
+func TestDebouncedPushReadsSyncSecretsInsideTheUnattendedFrame(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	auto := autoFor(t, machine, true)
+	auto.PushDelay = 20 * time.Millisecond
+	var inside atomic.Bool
+	var readOutside atomic.Bool
+	auto.Unattended = func(run func()) {
+		inside.Store(true)
+		run()
+		inside.Store(false)
+	}
+	auto.Enabled = func() bool {
+		if !inside.Load() {
+			readOutside.Store(true)
+		}
+		return true
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		auto.Run(ctx)
+	}()
+	auto.NotifyLocalChange()
+	deadline := time.Now().Add(3 * time.Second)
+	for len(bucket.object(remotesync.ObjectName)) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if len(bucket.object(remotesync.ObjectName)) == 0 {
+		t.Fatal("debounced push did not complete")
+	}
+	if readOutside.Load() {
+		t.Fatal("debounced push read automatic sync settings outside the unattended frame")
+	}
+}
+
+func TestAutomaticOperationsPreparePersistedConfigurationBeforeNetworkUse(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	auto := autoFor(t, machine, true)
+	prepared := 0
+	auto.Prepare = func() { prepared++ }
+
+	auto.Poll(context.Background())
+	if prepared != 1 {
+		t.Fatalf("Prepare called %d times, want 1", prepared)
 	}
 }
 

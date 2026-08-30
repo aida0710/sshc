@@ -518,6 +518,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               />
               {t("sync.autoEnable")}
             </label>
+            <p className={hintText}>{t("sync.autoHint")}</p>
             {remoteHeadBlocked ? (
               <div className="flex flex-col gap-3">
                 <Notice tone="danger">

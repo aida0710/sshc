@@ -7,8 +7,12 @@ import (
 	"time"
 )
 
-// AutoInterval は自動同期の確認間隔。
+// AutoInterval はリモート更新を受信確認する間隔。
 const AutoInterval = time.Minute
+
+// AutoPushDelay は、最後のローカル変更から自動送信まで待つ時間。
+// ひとつの画面操作が複数の永続化処理を伴っても、1つのsnapshotへまとめる。
+const AutoPushDelay = 5 * time.Second
 
 // AutoPhase は自動同期の現在状態。
 type AutoPhase string
@@ -49,9 +53,20 @@ type Auto struct {
 	// Clock はbackoff判定に使う単調時計である。未指定ならtime.Nowを使う。
 	// testは実時間のsleepに依存せず、期限の前後を明示的に進められる。
 	Clock func() time.Time
+	// Prepare restores the persisted binding after the vault is unlocked. It is
+	// called before every user-requested or scheduled operation and must not
+	// perform network I/O.
+	Prepare func()
+	// PushDelay is configurable only to keep scheduler tests fast. Production
+	// leaves it at AutoPushDelay.
+	PushDelay time.Duration
 
 	interval time.Duration
 	now      func() string
+	pushWake chan struct{}
+	pushMu   sync.Mutex
+	pushDue  time.Time
+	pending  bool
 
 	// cycleMu は、一巡が重ならないようにする。時計が来たときと、ユーザーが「今すぐ」を
 	// 押したときが同時に起きうる。
@@ -83,11 +98,13 @@ func NewAuto(service *Service, interval time.Duration, now func() string) *Auto 
 		interval = AutoInterval
 	}
 	return &Auto{
-		service:  service,
-		interval: interval,
-		now:      now,
-		Clock:    time.Now,
-		view:     AutoView{Phase: AutoIdle},
+		service:   service,
+		interval:  interval,
+		now:       now,
+		Clock:     time.Now,
+		PushDelay: AutoPushDelay,
+		pushWake:  make(chan struct{}, 1),
+		view:      AutoView{Phase: AutoIdle},
 	}
 }
 
@@ -106,14 +123,165 @@ func (a *Auto) enabled() bool { return a.Enabled != nil && a.Enabled() }
 func (a *Auto) Run(ctx context.Context) {
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
+	var pushTimer *time.Timer
+	var pushTimerC <-chan time.Time
+	defer func() {
+		if pushTimer != nil {
+			pushTimer.Stop()
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			a.Once(ctx)
+			a.Poll(ctx)
+		case <-a.pushWake:
+			delay, ok := a.pushWait()
+			if !ok {
+				continue
+			}
+			if pushTimer == nil {
+				pushTimer = time.NewTimer(delay)
+			} else {
+				if !pushTimer.Stop() {
+					select {
+					case <-pushTimer.C:
+					default:
+					}
+				}
+				pushTimer.Reset(delay)
+			}
+			pushTimerC = pushTimer.C
+		case <-pushTimerC:
+			delay, due := a.takeScheduledPush()
+			if !due {
+				if pushTimer != nil {
+					pushTimer.Reset(delay)
+					pushTimerC = pushTimer.C
+				}
+				continue
+			}
+			pushTimerC = nil
+			a.sendScheduled(ctx)
 		}
 	}
+}
+
+// NotifyLocalChange schedules one upload after local changes have been quiet
+// for five seconds. Repeated notifications move the same deadline instead of
+// creating one timer or snapshot per write.
+func (a *Auto) NotifyLocalChange() {
+	delay := a.PushDelay
+	if delay <= 0 {
+		delay = AutoPushDelay
+	}
+	a.pushMu.Lock()
+	a.pending = true
+	a.pushDue = time.Now().Add(delay)
+	a.pushMu.Unlock()
+	select {
+	case a.pushWake <- struct{}{}:
+	default:
+	}
+}
+
+func (a *Auto) pushWait() (time.Duration, bool) {
+	a.pushMu.Lock()
+	defer a.pushMu.Unlock()
+	if !a.pending {
+		return 0, false
+	}
+	return max(time.Until(a.pushDue), 0), true
+}
+
+func (a *Auto) takeScheduledPush() (time.Duration, bool) {
+	a.pushMu.Lock()
+	defer a.pushMu.Unlock()
+	if !a.pending {
+		return 0, true
+	}
+	if wait := time.Until(a.pushDue); wait > 0 {
+		return wait, false
+	}
+	a.pending = false
+	a.pushDue = time.Time{}
+	return 0, true
+}
+
+// Poll performs only the receive half of automatic synchronization. If it
+// observes local divergence, upload is scheduled through the debounce path.
+func (a *Auto) Poll(ctx context.Context) AutoView {
+	a.cycleMu.Lock()
+	defer a.cycleMu.Unlock()
+	if a.Unattended != nil {
+		var view AutoView
+		a.Unattended(func() { view = a.poll(ctx) })
+		return view
+	}
+	return a.poll(ctx)
+}
+
+func (a *Auto) poll(ctx context.Context) AutoView {
+	if !a.enabled() {
+		return a.View()
+	}
+	a.prepare()
+	a.service.operationMu.Lock()
+	key, ok := a.keyFor()
+	if !ok {
+		a.service.operationMu.Unlock()
+		return a.View()
+	}
+	a.enter(AutoRunning, "")
+	phase, detail, done := a.receive(ctx, key)
+	shouldPush := false
+	if !done && a.service.Direction() != DirectionPull {
+		changed, err := a.service.diverged()
+		if err != nil {
+			phase, detail, done = AutoFailed, failureDetail(err), true
+		} else {
+			shouldPush = changed
+		}
+	}
+	a.service.operationMu.Unlock()
+	if done {
+		a.enter(phase, detail)
+		return a.View()
+	}
+	a.enter(AutoIdle, "")
+	if shouldPush {
+		a.NotifyLocalChange()
+	}
+	return a.View()
+}
+
+func (a *Auto) sendScheduled(ctx context.Context) AutoView {
+	a.cycleMu.Lock()
+	defer a.cycleMu.Unlock()
+	if a.Unattended != nil {
+		var view AutoView
+		a.Unattended(func() { view = a.sendScheduledEnabled(ctx) })
+		return view
+	}
+	return a.sendScheduledEnabled(ctx)
+}
+
+func (a *Auto) sendScheduledEnabled(ctx context.Context) AutoView {
+	if !a.enabled() {
+		return a.View()
+	}
+	a.prepare()
+	a.service.operationMu.Lock()
+	defer a.service.operationMu.Unlock()
+	key, ok := a.keyFor()
+	if !ok {
+		return a.View()
+	}
+	a.enter(AutoRunning, "")
+	phase, detail := a.send(ctx, key)
+	a.enter(phase, detail)
+	return a.View()
 }
 
 // Once は同期を一巡し、その結果を返す。リモート更新の取込後にローカル変更を送信する。
@@ -154,6 +322,7 @@ func (a *Auto) runEnabled(ctx context.Context, requireEnabled bool) AutoView {
 	if requireEnabled && !a.enabled() {
 		return a.View()
 	}
+	a.prepare()
 	a.service.operationMu.Lock()
 	defer a.service.operationMu.Unlock()
 	// Read the key only after winning the same operation boundary as ReplaceKey.
@@ -172,6 +341,12 @@ func (a *Auto) runEnabled(ctx context.Context, requireEnabled bool) AutoView {
 	phase, detail := a.send(ctx, key)
 	a.enter(phase, detail)
 	return a.View()
+}
+
+func (a *Auto) prepare() {
+	if a.Prepare != nil {
+		a.Prepare()
+	}
 }
 
 func (a *Auto) keyFor() (string, bool) {

@@ -30,7 +30,7 @@ Choose bidirectional, send-only, or receive-only sync. Receive-only is useful fo
 - **Force** remains bound to the exact ETag and revision that you previewed.
 - **History** reads earlier snapshots directly from the bucket.
 
-Automatic sync polls for remote changes. Local changes made through sshc trigger the needed push; unchanged snapshots are not uploaded every minute.
+Automatic sync polls the remote once a minute without uploading. Local changes made through sshc trigger one push after a five-second quiet period; unchanged snapshots are not uploaded repeatedly.
 
 ::: warning Sync key
 Each device may have a different master password. Devices sharing one target must use the same sync key. Losing it makes remote snapshots impossible to decrypt.

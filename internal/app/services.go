@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -160,6 +161,16 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		sftp: sftpService, workspaces: workspaceService, snippets: snippetService, ssh: ssh,
 	}
 	services.sync, services.autoSync = buildSync(workspace, transactions, passwordService, snippetStore, dependencies)
+	notifyLocalChange := func(operation string) {
+		// Remote apply and local synchronization bookkeeping are not user edits.
+		// Scheduling them would immediately echo a received snapshot back to S3.
+		if !strings.HasPrefix(operation, "sync.") {
+			services.autoSync.NotifyLocalChange()
+		}
+	}
+	transactions.AfterCommit = notifyLocalChange
+	keyTransactions.AfterCommit = notifyLocalChange
+	snippetStore.SetAfterChange(services.autoSync.NotifyLocalChange)
 	services.terminals = buildTerminals(configService, dependencies)
 	return services, nil
 }
@@ -216,6 +227,29 @@ func buildSync(
 			return "", false
 		}
 		return settings.Key, true
+	}
+	autoSync.Prepare = func() {
+		if syncService.Configured() || !passwordService.Unlocked() {
+			return
+		}
+		settings, err := passwordService.SyncSettings()
+		if err != nil || settings.Bucket == "" {
+			return
+		}
+		direction, ok := remotesync.ParseDirection(settings.Direction)
+		if !ok {
+			return
+		}
+		config := remotesync.Config{
+			Endpoint: settings.Endpoint, Bucket: settings.Bucket, Path: settings.Path,
+			Region: settings.Region, Direction: direction,
+		}
+		credentials := remotesync.Credentials{
+			AccessKeyID: settings.AccessKeyID, SecretAccessKey: settings.SecretAccessKey,
+		}
+		_, _ = syncService.ConfigureIfUnconfigured(
+			config, credentials, remotesync.NewClient(config, credentials),
+		)
 	}
 
 	return syncService, autoSync

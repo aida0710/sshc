@@ -1134,6 +1134,10 @@ describe("SyncPanel", () => {
     const api = buildApi(configured, nothingToDo, { setAutoSync });
     render(<SyncPanel api={api} />);
 
+    expect(
+      await screen.findByText(/checks the remote for changes once a minute/i),
+    ).toHaveTextContent(/no further changes occur for five seconds/i);
+
     await userEvent.click(
       await screen.findByRole("checkbox", {
         name: /Keep this machine in sync/i,

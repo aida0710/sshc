@@ -76,6 +76,34 @@ func TestStoreRoundTripsAndAtomicallyReplacesOnePrivateDocument(t *testing.T) {
 	}
 }
 
+func TestStoreReportsOnlySuccessfulChanges(t *testing.T) {
+	store, _ := newFileStore(t)
+	changed := 0
+	store.SetAfterChange(func() { changed++ })
+
+	if err := store.Save(validLibrary()); err != nil {
+		t.Fatal(err)
+	}
+	rejected := validLibrary()
+	rejected.Startup[0].SnippetID = "missing"
+	if err := store.Save(rejected); !errors.Is(err, ErrUnknownSnippet) {
+		t.Fatalf("invalid Save = %v, want ErrUnknownSnippet", err)
+	}
+	if err := store.Mutate(func(library *Library) error {
+		library.Snippets[0].Name = "Changed"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wantFailure := errors.New("stop mutation")
+	if err := store.Mutate(func(*Library) error { return wantFailure }); !errors.Is(err, wantFailure) {
+		t.Fatalf("rejected Mutate = %v, want %v", err, wantFailure)
+	}
+	if changed != 2 {
+		t.Fatalf("AfterChange called %d times, want 2 successful writes", changed)
+	}
+}
+
 func TestStoreRefusesADocumentWhichItsBoundedReaderCannotOpen(t *testing.T) {
 	store, _ := newFileStore(t)
 	moment := time.Date(2026, 8, 30, 0, 0, 0, 0, time.UTC)
