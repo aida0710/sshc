@@ -31,6 +31,7 @@ import { findTerminalLinks, modifierOpensLink, osc8Link } from "./links";
 import { openTerminalURL, TerminalLinkPopover, type RemotePathAction, type TerminalLinkSelection } from "./TerminalLinkPopover";
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
+import { TerminalPortForwards } from "./TerminalPortForwards";
 import { attachWebglRenderer } from "./webgl";
 import { Icon } from "../ui/icons";
 
@@ -51,6 +52,7 @@ type TerminalViewProps = {
   osc52Enabled?: boolean;
   scrollbackLines?: number;
   onOsc52Change?: (enabled: boolean) => void | Promise<void>;
+  onForwardsChanged?: () => void | Promise<void>;
   jisYenBackslash?: boolean;
 };
 
@@ -81,6 +83,7 @@ export function TerminalView({
   osc52Enabled: initialOsc52Enabled = false,
   scrollbackLines = 5000,
   onOsc52Change,
+  onForwardsChanged,
   jisYenBackslash = false,
 }: TerminalViewProps) {
   const t = useTranslate();
@@ -119,6 +122,7 @@ export function TerminalView({
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
   const [quickCommandSelection, setQuickCommandSelection] = useState("");
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [portForwardsOpen, setPortForwardsOpen] = useState(false);
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
   const control = useRef<{ now: () => void; stop: () => void }>({ now: () => {}, stop: () => {} });
 
@@ -568,6 +572,7 @@ export function TerminalView({
               setQuickCommandSelection(terminal.current?.getSelection() ?? "");
               setQuickCommandsOpen(true);
             }}
+            onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
             onCopyContext={() => copyContext.current()}
             onToggleOsc52={async () => {
               const next = !osc52Enabled;
@@ -753,6 +758,13 @@ export function TerminalView({
           session={session}
           initialCommand={quickCommandSelection}
           onClose={() => setQuickCommandsOpen(false)}
+        />
+      ) : null}
+      {portForwardsOpen ? (
+        <TerminalPortForwards
+          session={session}
+          {...(onForwardsChanged === undefined ? {} : { onChanged: onForwardsChanged })}
+          onClose={() => setPortForwardsOpen(false)}
         />
       ) : null}
       {linkSelection === null ? null : (

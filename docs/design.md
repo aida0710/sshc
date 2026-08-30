@@ -164,7 +164,7 @@
 - 未使用になった外部コマンド実行インターフェース `RunOutput` は削除しました。現在、Go の製品コードから外部プログラムを起動する場所は 4 箇所です。`cmd/sshc/browser.go` はアクセス URL をブラウザへ渡し、`internal/terminal/pty_unix.go` はローカルシェル用の PTY を起動し、`internal/nativebuild/nativebuild.go` は配布物に含まれないビルドコマンドを実行し、`internal/sshclient/proxycommand.go` は利用者が設定した `ProxyCommand` を実行します。いずれも `os/exec` を直接使用します。`TestOnlyTheNamedSubsystemsStartAProgram` は `.go` ファイルを走査し、この allowlist 以外に外部プロセス起動が追加された場合に失敗します。
 - 未対応の設定は無視せず、理由を警告として表示します。対象は `RemoteForward`（リモート側の listen と `AllowTcpForwarding` に依存）、`ForwardX11`（接続先となる X server がない）、`ControlMaster` / `ControlPath`（プロセス内の `ssh.Client` を再利用するため不要）、`SendEnv`（engine の環境変数は利用者の shell 環境と一致しない）、`CertificateFile`、`LocalCommand`（接続後のローカルコマンド実行は未対応）です。
 - ポート転送（`LocalForward` / `DynamicForward`）と agent 転送（`ForwardAgent`）に対応します。有効な転送はコンソール一覧に表示し、設定ファイルから暗黙に開かれたローカルポートを確認できるようにします。
-- 転送用 listener はループバックにだけ bind します。`LocalForward 0.0.0.0:8080` や `GatewayPorts yes` が設定されていても、他のマシンには公開しません。ループバック以外の指定は警告します。ポートを確保できない転送があっても SSH 接続は継続し、失敗理由を一覧に表示します。
+- 転送用 listener はループバックにだけ bind します。`LocalForward 0.0.0.0:8080` や `GatewayPorts yes` が設定されていても、他のマシンには公開しません。ただしループバックは同一OSユーザーへの隔離ではなく、共有ホストでは別のローカルユーザーから利用される可能性があります。ループバック以外の指定は警告します。ポートを確保できない転送があっても SSH 接続は継続し、失敗理由を一覧に表示します。
 - 転送の存続期間はセッションと同じです。コンソールを閉じると listener も閉じます。`DynamicForward` は SOCKS5 の CONNECT だけに対応します。agent 転送では鍵データではなく、agent を通じて署名する機能をリモートへ提供します。
 - 接続中に対話が必要になるのは、未知のホスト鍵、鍵のパスフレーズ、パスワード、keyboard-interactive の 4 種類です。保管庫に対応する値がない場合、または保存値が拒否された場合に端末へプロンプトを表示します。入力値は端末に再表示せず、接続中に入力した鍵パスフレーズも保存しません。保存は Secrets 画面から明示的に行います。
 - ホスト鍵が `known_hosts` と一致しない場合は、確認を求めず接続を拒否します。未知のホストは `StrictHostKeyChecking` に従い、承認した鍵は Known Hosts 画面と同じトランザクションで保存します。読み取りには同じ parser を使用します。

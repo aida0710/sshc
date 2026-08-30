@@ -1206,6 +1206,13 @@ type SnapshotSummary struct {
 	SourceBytes   int64  `json:"sourceBytes"`
 }
 
+// StartTerminalForwardRequest defines model for StartTerminalForwardRequest.
+type StartTerminalForwardRequest struct {
+	Destination *string `json:"destination,omitempty"`
+	Kind        string  `json:"kind"`
+	ListenPort  int     `json:"listenPort"`
+}
+
 // StoreCredentialRequest defines model for StoreCredentialRequest.
 type StoreCredentialRequest struct {
 	Secret string `json:"secret"`
@@ -1554,10 +1561,12 @@ type TerminalExit struct {
 
 // TerminalForward defines model for TerminalForward.
 type TerminalForward struct {
-	Kind    string `json:"kind"`
-	Listen  string `json:"listen"`
-	Problem string `json:"problem"`
-	To      string `json:"to"`
+	Id        string `json:"id"`
+	Kind      string `json:"kind"`
+	Listen    string `json:"listen"`
+	Problem   string `json:"problem"`
+	Temporary bool   `json:"temporary"`
+	To        string `json:"to"`
 }
 
 // TerminalPresentation defines model for TerminalPresentation.

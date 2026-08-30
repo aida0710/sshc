@@ -381,6 +381,52 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/sessions/{id}/forwards:
+    post:
+      operationId: startTerminalForward
+      description: Starts one loopback-only local or SOCKS5 forward on an existing connected SSH session.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartTerminalForwardRequest" }
+      responses:
+        "201":
+          description: The session list containing the newly opened temporary forward
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/sessions/{id}/forwards/{forwardId}:
+    delete:
+      operationId: stopTerminalForward
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: forwardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: The session list after closing the selected forward
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/sessions/{id}/reconnect:
     post:
       operationId: reconnectTerminalSession
@@ -2481,12 +2527,22 @@ components:
     TerminalForward:
       type: object
       additionalProperties: false
-      required: [kind, listen, to, problem]
+      required: [id, kind, listen, to, problem, temporary]
       properties:
-        kind: { type: string }
+        id: { type: string, minLength: 1, maxLength: 64 }
+        kind: { type: string, pattern: "^(local|dynamic|agent)$" }
         listen: { type: string }
         to: { type: string }
         problem: { type: string }
+        temporary: { type: boolean }
+    StartTerminalForwardRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, listenPort]
+      properties:
+        kind: { type: string, pattern: "^(local|dynamic)$" }
+        listenPort: { type: integer, minimum: 1, maximum: 65535 }
+        destination: { type: string, maxLength: 512 }
     TerminalSession:
       type: object
       additionalProperties: false
