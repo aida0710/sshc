@@ -101,7 +101,7 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
               label={valueLabel}
               value={secret}
               onChange={setSecret}
-              initialShown
+              initialShown={kind !== "password"}
               disabled={saving}
             />
           </>

@@ -169,6 +169,9 @@ describe("SecretsPanel", () => {
     const value = within(dialog).getByLabelText("Password");
     expect(name).toHaveValue("office-vm");
     expect(value).toHaveValue("original-password");
+    expect(value).toHaveAttribute("type", "password");
+
+    await user.click(within(dialog).getByRole("button", { name: "Show Password" }));
     expect(value).toHaveAttribute("type", "text");
 
     await user.clear(name);

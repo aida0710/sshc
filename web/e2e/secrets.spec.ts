@@ -71,7 +71,7 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
   await expect(panel.getByRole("option", { name: "build-key" })).toHaveCount(0);
 });
 
-test("edits a named password from its current visible value", async ({ page, installation }) => {
+test("opens a named password masked and reveals it only on request", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Secrets");
 
@@ -82,9 +82,10 @@ test("edits a named password from its current visible value", async ({ page, ins
   await passwords.getByRole("button", { name: "Edit office-vm" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Edit account password" });
+  const password = dialog.getByLabel("Password", { exact: true });
   await expect(dialog.getByLabel("Name")).toHaveValue("office-vm");
-  await expect(dialog.getByRole("textbox", { name: "Password", exact: true })).toHaveValue("original-test-password");
-  await expect(dialog.getByRole("textbox", { name: "Password", exact: true })).toHaveAttribute("type", "text");
+  await expect(password).toHaveValue("original-test-password");
+  await expect(password).toHaveAttribute("type", "password");
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
@@ -97,8 +98,10 @@ test("edits a named password from its current visible value", async ({ page, ins
     await page.screenshot({ path: `${visualDirectory}/sshc-credential-edit-mobile.png`, fullPage: true });
   }
 
+  await dialog.getByRole("button", { name: "Show Password" }).click();
+  await expect(password).toHaveAttribute("type", "text");
   await dialog.getByLabel("Name").fill("office-shared");
-  await dialog.getByRole("textbox", { name: "Password", exact: true }).fill("rotated-test-password");
+  await password.fill("rotated-test-password");
   await dialog.getByRole("button", { name: "Save changes" }).click();
 
   await expect(page.getByRole("article", { name: "office-shared" })).toBeVisible();
