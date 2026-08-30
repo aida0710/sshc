@@ -466,6 +466,8 @@ export const ja = {
   "terminal.settingsSaved":
     "保存しました。クリップボード設定はすぐに反映され、その他はこれから開くターミナルが使います。",
   "terminal.settingsLoading": "ターミナル設定を読み込んでいます…",
+  "terminal.settingsStorageHint":
+    "ターミナルの外観を含むこれらの設定はworkspace metadataに保存され、バックアップと同期の対象になります。テーマ、言語、通知音はこのブラウザにだけ保存されます。",
   "terminal.maxSessionsLabel": "最大セッション数",
   "terminal.maxSessionsHint":
     "1〜200。空欄の場合は 50 です。上限に達すると新しいセッションを開けません。既存のセッションは自動的に閉じられません。",
