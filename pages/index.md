@@ -10,7 +10,7 @@ outline: false
   <section class="sshc-hero">
     <div>
       <h1 class="sshc-title">sshc</h1>
-      <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。今ある<br>OpenSSH設定をそのまま使えます。SFTP、認証情報の再利用、AIエージェント向けCLIに加え、利用者が用意したS3互換ストレージを介した暗号化同期にも対応しています。</p>
+      <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。<br>今あるOpenSSH設定をそのまま使えます。SFTP、認証情報の再利用、AIエージェント向けCLIに加え、利用者が用意したS3互換ストレージを介した暗号化同期にも対応しています。</p>
       <p class="sshc-platforms"><span>対応OS</span>macOS / Windows / Linux / Android</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">インストール</a>
