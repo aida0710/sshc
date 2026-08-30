@@ -1532,6 +1532,8 @@ export const en = {
   "conn.forwardType": "Type",
   "conn.forwardListenPort": "Local port",
   "conn.forwardDestination": "Destination",
+  "conn.forwardDestinationHint": "Enter the host name or IP address and port as seen from the SSH server.",
+  "conn.forwardDynamicHint": "The application using this SOCKS proxy chooses the destination for each connection.",
   "conn.forwardAdd": "Add forwarding",
   "conn.forwardPendingSave": "This forwarding will be written when you save the changes.",
   "conn.forwardInvalidPort": "Enter a local port from 1 to 65535.",

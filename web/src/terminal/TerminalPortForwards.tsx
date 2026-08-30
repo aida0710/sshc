@@ -175,11 +175,14 @@ export function TerminalPortForwards({
                 <input autoFocus inputMode="numeric" className={control} value={listenPort} disabled={!connected || busy} onChange={(event) => setListenPort(event.currentTarget.value)} />
                 {listenError === "" ? null : <span className="text-danger">{listenError}</span>}
               </label>
-              <label className={`flex flex-col gap-1 text-xs text-ink-muted sm:col-span-2 ${kind === "dynamic" ? "opacity-50" : ""}`}>
-                {t("conn.forwardDestination")}
-                <input className={control} placeholder="db.internal:5432" value={destination} disabled={!connected || busy || kind === "dynamic"} onChange={(event) => setDestination(event.currentTarget.value)} />
-                {destinationError === "" ? null : <span className="text-danger">{destinationError}</span>}
-              </label>
+              {kind === "local" ? (
+                <label className="flex flex-col gap-1 text-xs text-ink-muted sm:col-span-2">
+                  {t("conn.forwardDestination")}
+                  <input aria-label={t("conn.forwardDestination")} className={control} placeholder="127.0.0.1:5432" value={destination} disabled={!connected || busy} onChange={(event) => setDestination(event.currentTarget.value)} />
+                  <span className={hintText}>{t("conn.forwardDestinationHint")}</span>
+                  {destinationError === "" ? null : <span className="text-danger">{destinationError}</span>}
+                </label>
+              ) : <p className={`${hintText} sm:col-span-2`}>{t("conn.forwardDynamicHint")}</p>}
             </div>
             <label className={`flex items-start gap-2 text-sm ${canSave ? "text-ink" : "text-ink-muted"}`}>
               <input type="checkbox" checked={save} disabled={!canSave || busy} onChange={(event) => setSave(event.currentTarget.checked)} className="mt-0.5 size-4" />
