@@ -40,7 +40,7 @@ sshc is not an SSH server or a cloud relay. Connections and decryption happen on
 | Terminal | SSH/local shells, search, links, encodings, Quick Commands |
 | Workspace | Up to four panes, drag splits, saved ratios, broadcast commands |
 | Connections | Host blocks, Include trees, groups, keys, passwords, known hosts |
-| SFTP | File browser, editor, folder transfer, resumable queue |
+| SFTP | File browser, editor, folder transfer, and a queue that can resume files when recovery requirements are met |
 | Sync | User-provided S3-compatible storage, local encryption, push, pull, history |
 | CLI | SSH, sync, terminal control, Serial, Telnet, JSON automation |
 

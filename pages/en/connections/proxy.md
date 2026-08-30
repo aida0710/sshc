@@ -22,4 +22,10 @@ The jump and final host are separate authentication targets. Save the appropriat
 
 Progress and diagnostics identify the exact hop and phase that failed.
 
-The analyzer can display `ProxyCommand`, but sshc's in-process SSH client does not execute arbitrary external commands. Use `ProxyJump` for aliases opened by sshc.
+## ProxyCommand
+
+For a host configured with `ProxyCommand`, sshc runs the command on the local machine and uses its standard input and output as the SSH transport. It starts through `/bin/sh` on Unix systems or the command interpreter on Windows. The connection log shows the command before it runs.
+
+sshc rejects a host that specifies both `ProxyJump` and `ProxyCommand`. It also rejects `ProxyCommand` on a hop reached through an earlier jump because the command would run locally rather than on that jump host.
+
+`ProxyCommand` makes SSH configuration executable. Use it only with configuration that you have inspected and trust.
