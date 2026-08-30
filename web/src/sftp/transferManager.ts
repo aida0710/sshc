@@ -13,17 +13,8 @@ import {
 const chunkBytes = 1 << 20;
 const fallbackDownloadLimit = 64 << 20;
 const maxTransferJobs = 200;
-const persistenceKey = "sshc.sftp.transfer-manager.v3";
 
-export type ManagedTransferJob = TransferJob & {
-  batchName: string;
-  batchKind: TransferKind;
-  lastModified: number;
-  expectedRevision: string;
-  downloadRevision: string;
-  sourceFingerprint: string;
-  overwrite: boolean;
-};
+export type ManagedTransferJob = TransferJob;
 
 export type UploadSelection = {
   alias: string;
@@ -49,10 +40,11 @@ export type TransferNotice = {
 type ManagerAPI = {
   listTransfers(): Promise<{ maxConcurrent: number; jobs: TransferJob[] }>;
   createTransfer(input: CreateTransferJob): Promise<TransferJob>;
+  clearFinishedTransfers(): Promise<void>;
   updateTransfer(id: string, action: TransferJobAction, options?: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean }): Promise<TransferJob>;
   checkpointDownload(id: string, offset: number, revision: string): Promise<TransferJob>;
   verifyDownload(alias: string, jobId: string, remotePath: string, revision: string): Promise<void>;
-  startUpload(alias: string, id: string, remotePath: string, size: number, overwrite: boolean, expectedRevision?: string): Promise<ResumableUpload>;
+  startUpload(alias: string, id: string, remotePath: string, size: number, sourceFingerprint: string): Promise<ResumableUpload>;
   appendUpload(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload>;
   completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string, sourceFingerprint: string): Promise<void>;
   cancelUpload(alias: string, id: string, remotePath: string): Promise<void>;
@@ -69,14 +61,8 @@ type DownloadSink = {
   reset: boolean;
 };
 
-type StoredJob = Omit<ManagedTransferJob, "bytesPerSecond" | "remainingSeconds">;
-
 function identifier(prefix: string): string {
   return globalThis.crypto?.randomUUID?.() ?? `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
-function isoNow(): string {
-  return new Date().toISOString();
 }
 
 function baseName(remotePath: string): string {
@@ -84,41 +70,15 @@ function baseName(remotePath: string): string {
   return components[components.length - 1] ?? remotePath;
 }
 
-function restorable(value: unknown): ManagedTransferJob[] {
-  if (!Array.isArray(value)) return [];
-  if (value.length > maxTransferJobs) throw new Error("sftp_transfer_limit");
-  return value.flatMap((candidate) => {
-    if (candidate === null || typeof candidate !== "object") return [];
-    const job = candidate as Partial<StoredJob>;
-    if (typeof job.id !== "string" || typeof job.batchId !== "string" || typeof job.alias !== "string" ||
-        (job.direction !== "upload" && job.direction !== "download") || (job.kind !== "file" && job.kind !== "folder") ||
-        typeof job.name !== "string" || typeof job.remotePath !== "string" || typeof job.totalBytes !== "number" ||
-        typeof job.transferredBytes !== "number" || typeof job.status !== "string" || typeof job.attempt !== "number" ||
-        typeof job.batchName !== "string" || (job.batchKind !== "file" && job.batchKind !== "folder") ||
-        typeof job.lastModified !== "number" || typeof job.expectedRevision !== "string" ||
-        typeof job.downloadRevision !== "string" || typeof job.sourceFingerprint !== "string" ||
-        typeof job.overwrite !== "boolean") return [];
-    let status = job.status;
-    let transferredBytes = job.transferredBytes;
-    if (!['completed', 'cancelled', 'failed', 'needs_overwrite'].includes(status)) status = "reattach";
-    let downloadRevision = job.downloadRevision;
-    if (job.direction === "download" && job.kind === "folder" && !["completed", "cancelled"].includes(status) &&
-        (transferredBytes > 0 || downloadRevision !== "")) {
-      status = "queued";
-      transferredBytes = 0;
-      downloadRevision = "";
-    }
-    return [{
-      ...job as StoredJob, status, transferredBytes, downloadRevision, bytesPerSecond: 0, remainingSeconds: -1,
-      problem: typeof job.problem === "string" ? job.problem : "",
-      createdAt: typeof job.createdAt === "string" ? job.createdAt : isoNow(),
-      updatedAt: typeof job.updatedAt === "string" ? job.updatedAt : isoNow(),
-    }];
-  });
-}
-
 function networkReady(job: ManagedTransferJob, files: Map<string, File>): boolean {
   return job.direction === "download" || files.has(job.id);
+}
+
+function reattachableUpload(job: ManagedTransferJob, selection: UploadSelection, files: Map<string, File>): boolean {
+  return job.direction === "upload" && !files.has(job.id) &&
+    ["queued", "running", "paused", "reattach", "failed", "needs_overwrite"].includes(job.status) &&
+    job.alias === selection.alias && job.remotePath === selection.remotePath &&
+    job.totalBytes === selection.file.size && job.lastModified === selection.file.lastModified;
 }
 
 export class SFTPTransferManager {
@@ -132,29 +92,24 @@ export class SFTPTransferManager {
   private readonly uploadAdmissions = new Set<UploadAdmission>();
   private readonly samples = new Map<string, { at: number; bytes: number }>();
   private readonly controlOperations = new Map<string, Promise<void>>();
+  private readonly retryAfter = new Map<string, number>();
   private readonly listeners = new Set<() => void>();
   private readonly noticeListeners = new Set<() => void>();
   private active = 0;
+  private maxConcurrent: number;
 
   constructor(
     private readonly api: ManagerAPI = sftpApi,
-    private readonly concurrency = 2,
+    concurrency = 2,
     private readonly now = () => Date.now(),
   ) {
-    try {
-      const stored = globalThis.localStorage?.getItem(persistenceKey);
-      this.jobs = restorable(JSON.parse(stored ?? "[]"));
-    } catch {
-      this.jobs = [];
-      // Keep an invalid document untouched until server reconciliation can
-      // replace it. Clearing it here would turn a bounded-load refusal into
-      // irreversible, silent loss of the only local transfer metadata.
-    }
+    this.maxConcurrent = concurrency;
   }
 
   getSnapshot = (): readonly ManagedTransferJob[] => this.jobs;
   getNoticeSnapshot = (): readonly TransferNotice[] => this.notices;
-  getMaxConcurrent = (): number => this.concurrency;
+  getMaxConcurrent = (): number => this.maxConcurrent;
+  hasUploadSource = (id: string): boolean => this.files.has(id);
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -167,50 +122,16 @@ export class SFTPTransferManager {
   };
 
   async reconcile(): Promise<void> {
-    await this.cleanupOrphanDownloads(new Set(this.jobs
-      .filter((job) => !["completed", "cancelled"].includes(job.status))
-      .map((job) => job.id)));
     const listed = await this.api.listTransfers();
     const serverIDs = new Set(listed.jobs.map((job) => job.id));
     if (listed.jobs.length > maxTransferJobs || serverIDs.size !== listed.jobs.length) {
       throw new Error("sftp_transfer_limit");
     }
-    const localOnly = this.jobs.filter((job) => !serverIDs.has(job.id));
-    const localCapacity = maxTransferJobs - listed.jobs.length;
-    const retainedLocalIDs = new Set(localOnly
-      .map((job, index) => ({ job, index }))
-      .sort((left, right) => reconcilePriority(left.job) - reconcilePriority(right.job) || left.index - right.index)
-      .slice(0, localCapacity)
-      .map(({ job }) => job.id));
-    const merged = this.jobs.filter((job) => serverIDs.has(job.id) || retainedLocalIDs.has(job.id));
-    for (const serverJob of listed.jobs) {
-      const index = merged.findIndex((job) => job.id === serverJob.id);
-      const local = index < 0 ? undefined : merged[index];
-      let status = serverJob.status;
-      let transferredBytes = serverJob.transferredBytes;
-      if (local?.status === "running") continue;
-      if (serverJob.direction === "upload" && !this.files.has(serverJob.id) && !["completed", "cancelled", "failed", "needs_overwrite"].includes(status)) {
-        status = "reattach";
-      } else if (serverJob.direction === "download" && status === "running") {
-        status = "queued";
-      }
-      const restored: ManagedTransferJob = {
-        ...serverJob, status, transferredBytes,
-        batchName: local?.batchName ?? serverJob.name, batchKind: local?.batchKind ?? serverJob.kind,
-        lastModified: local?.lastModified ?? 0, expectedRevision: local?.expectedRevision ?? "",
-        downloadRevision: local?.downloadRevision ?? "", sourceFingerprint: local?.sourceFingerprint ?? "",
-        overwrite: local?.overwrite ?? false,
-      };
-      if (restored.direction === "download" && restored.kind === "folder" && local?.status === "queued" &&
-          !["completed", "cancelled"].includes(restored.status)) {
-        restored.status = "queued";
-        restored.transferredBytes = 0;
-        restored.downloadRevision = "";
-      }
-      if (index < 0) merged.push(restored);
-      else merged[index] = restored;
-    }
-    this.commit(merged);
+    this.maxConcurrent = listed.maxConcurrent;
+    this.commit(listed.jobs);
+    await this.cleanupOrphanDownloads(new Set(listed.jobs
+      .filter((job) => !["completed", "cancelled"].includes(job.status))
+      .map((job) => job.id)));
     this.kick();
   }
 
@@ -231,10 +152,8 @@ export class SFTPTransferManager {
     return admission;
   }
 
-  addUploads(selections: UploadSelection[], batch?: { id?: string; name: string; kind: TransferKind }, admission?: UploadAdmission): string {
-    const newSelections = selections.filter((selection) => !this.jobs.some((job) => job.direction === "upload" &&
-      job.alias === selection.alias && job.remotePath === selection.remotePath && job.totalBytes === selection.file.size &&
-      job.lastModified === selection.file.lastModified && job.status === "reattach"));
+  async addUploads(selections: UploadSelection[], batch?: { id?: string; name: string; kind: TransferKind }, admission?: UploadAdmission): Promise<string> {
+    const newSelections = selections.filter((selection) => !this.jobs.some((job) => reattachableUpload(job, selection, this.files)));
     const otherReserved = [...this.uploadAdmissions].reduce((sum, current) => sum + (current === admission ? 0 : current.count), 0);
     if (admission !== undefined && (!this.uploadAdmissions.has(admission) || newSelections.length > admission.count)) {
       throw new Error("sftp_transfer_limit");
@@ -244,61 +163,61 @@ export class SFTPTransferManager {
     const batchId = batch?.id ?? identifier("batch");
     const batchName = batch?.name ?? selections[0]?.localName ?? "upload";
     const batchKind = batch?.kind ?? (selections.length > 1 ? "folder" : "file");
-    const additions: ManagedTransferJob[] = [];
     for (const selection of selections) {
-      const existing = this.jobs.find((job) => job.direction === "upload" && job.alias === selection.alias &&
-        job.remotePath === selection.remotePath && job.totalBytes === selection.file.size &&
-        job.lastModified === selection.file.lastModified && job.status === "reattach");
+      const existing = this.jobs.find((job) => reattachableUpload(job, selection, this.files));
       if (existing !== undefined) {
         this.files.set(existing.id, selection.file);
-        this.replace(existing.id, { status: "queued", problem: "" });
+        if (existing.status === "running") {
+          await this.api.updateTransfer(existing.id, "pause");
+          const resumed = await this.api.updateTransfer(existing.id, "resume");
+          this.replaceServer(resumed);
+        } else if (existing.status === "paused" || existing.status === "reattach") {
+          const resumed = await this.api.updateTransfer(existing.id, "resume");
+          this.replaceServer(resumed);
+        } else if (existing.status === "failed") {
+          const retried = await this.api.updateTransfer(existing.id, "retry");
+          this.replaceServer(retried);
+        }
         continue;
       }
       const id = identifier("transfer");
-      const now = isoNow();
-      const job: ManagedTransferJob = {
-        id, batchId, alias: selection.alias, direction: "upload", kind: "file", name: selection.localName,
-        remotePath: selection.remotePath, totalBytes: selection.file.size, transferredBytes: 0,
-        bytesPerSecond: 0, remainingSeconds: -1, status: "queued", attempt: 1, problem: "",
-        createdAt: now, updatedAt: now, batchName, batchKind, lastModified: selection.file.lastModified,
-        expectedRevision: "", overwrite: false,
-        downloadRevision: "", sourceFingerprint: "",
-      };
+      const job = await this.api.createTransfer({
+        id, batchId, batchName, batchKind, alias: selection.alias, direction: "upload", kind: "file",
+        name: selection.localName, remotePath: selection.remotePath, totalBytes: selection.file.size,
+        lastModified: selection.file.lastModified,
+      });
       this.files.set(id, selection.file);
-      additions.push(job);
+      this.commit([...this.jobs, job]);
     }
-    if (additions.length > 0) this.commit([...this.jobs, ...additions]);
     this.kick();
     return batchId;
   }
 
-  addDownload(alias: string, remotePath: string, kind: TransferKind, totalBytes: number): string {
+  async addDownload(alias: string, remotePath: string, kind: TransferKind, totalBytes: number): Promise<string> {
     const reserved = [...this.uploadAdmissions].reduce((sum, admission) => sum + admission.count, 0);
     if (this.jobs.length + reserved >= maxTransferJobs) throw new Error("sftp_transfer_limit");
     const id = identifier("transfer");
-    const now = isoNow();
-    const job: ManagedTransferJob = {
-      id, batchId: identifier("batch"), alias, direction: "download", kind, name: baseName(remotePath),
-      remotePath, totalBytes, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1,
-      status: "queued", attempt: 1, problem: "", createdAt: now, updatedAt: now,
-      batchName: baseName(remotePath), batchKind: kind, lastModified: 0, expectedRevision: "", overwrite: false,
-      downloadRevision: "", sourceFingerprint: "",
-    };
+    const name = baseName(remotePath);
+    const job = await this.api.createTransfer({
+      id, batchId: identifier("batch"), batchName: name, batchKind: kind, alias,
+      direction: "download", kind, name, remotePath, totalBytes, lastModified: 0,
+    });
     this.downloadChunks.set(id, []);
     this.commit([...this.jobs, job]);
     this.kick();
     return id;
   }
 
-  pause(id: string): void {
+  async pause(id: string): Promise<void> {
     const job = this.find(id);
     if (job === undefined || (job.status !== "running" && job.status !== "queued")) return;
-    this.replace(id, { status: "paused" });
     this.controllers.get(id)?.abort();
-    this.trackControl(id, this.api.updateTransfer(id, "pause").then(() => undefined).catch(() => undefined));
+    const operation = this.api.updateTransfer(id, "pause").then((updated) => { this.replaceServer(updated); });
+    this.trackControl(id, operation);
+    await operation;
   }
 
-  resume(id: string): void {
+  async resume(id: string): Promise<void> {
     const job = this.find(id);
     if (job === undefined || !["paused", "reattach", "needs_overwrite"].includes(job.status) || !networkReady(job, this.files)) return;
     if (job.direction === "download" && job.kind === "folder") {
@@ -307,11 +226,12 @@ export class SFTPTransferManager {
       if (sink !== undefined) sink.reset = true;
       this.replace(id, { transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1 });
     }
-    this.replace(id, { status: "queued", problem: "" });
+    const updated = await this.api.updateTransfer(id, "resume", { resetProgress: job.direction === "download" && job.kind === "folder" });
+    this.replaceServer(updated);
     this.kick();
   }
 
-  retry(id: string): void {
+  async retry(id: string): Promise<void> {
     const job = this.find(id);
     if (job === undefined || job.status !== "failed" || !networkReady(job, this.files)) return;
     const reset = job.direction === "download" && job.kind === "folder";
@@ -320,22 +240,19 @@ export class SFTPTransferManager {
       const sink = this.downloadSinks.get(id);
       if (sink !== undefined) sink.reset = true;
     }
-    this.replace(id, {
-      status: "queued", problem: "", attempt: job.attempt + 1, bytesPerSecond: 0, remainingSeconds: -1,
-      ...(reset ? { transferredBytes: 0 } : {}),
-    });
+    const updated = await this.api.updateTransfer(id, "retry", { resetProgress: reset });
+    this.replaceServer(updated);
     this.kick();
   }
 
-  retryFailed(batchId: string): void {
-    for (const job of this.jobs) if (job.batchId === batchId && job.status === "failed") this.retry(job.id);
+  async retryFailed(batchId: string): Promise<void> {
+    await Promise.all(this.jobs.filter((job) => job.batchId === batchId && job.status === "failed").map((job) => this.retry(job.id)));
   }
 
-  overwrite(id: string): void {
+  async overwrite(id: string): Promise<void> {
     const job = this.find(id);
     if (job === undefined || job.status !== "needs_overwrite" || !this.files.has(id)) return;
-    this.replace(id, { overwrite: true, status: "queued", problem: "" });
-    this.kick();
+    await this.resume(id);
   }
 
   async cancel(id: string): Promise<void> {
@@ -348,27 +265,29 @@ export class SFTPTransferManager {
       } catch (error) {
         if (missingServerTransfer(error)) {
           this.files.delete(id);
-          this.replace(id, { status: "cancelled", problem: "" });
+          await this.reconcile();
           return;
         }
-        this.replace(id, { status: "failed", problem: "sftp_cleanup_pending" });
+        await this.reconcile().catch(() => undefined);
         return;
       }
       this.files.delete(id);
     } else {
       try {
-        await this.api.updateTransfer(id, "cancel");
+        const updated = await this.api.updateTransfer(id, "cancel");
+        this.replaceServer(updated);
       } catch (error) {
         if (!missingServerTransfer(error)) throw error;
       }
       this.downloadChunks.delete(id);
       await this.cleanupDownload(id);
     }
-    this.replace(id, { status: "cancelled", problem: "" });
+    await this.reconcile();
   }
 
-  clearFinished(): void {
+  async clearFinished(): Promise<void> {
     const removed = this.jobs.filter((job) => job.status === "completed" || job.status === "cancelled").map((job) => job.id);
+    await this.api.clearFinishedTransfers();
     this.commit(this.jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled"));
     for (const id of removed) void this.cleanupDownload(id);
   }
@@ -379,13 +298,13 @@ export class SFTPTransferManager {
   }
 
   private kick(): void {
-    while (this.active < this.concurrency) {
+    while (this.active < this.maxConcurrent) {
       const job = this.jobs.find((candidate) => candidate.status === "queued" &&
-        !this.inFlight.has(candidate.id) && networkReady(candidate, this.files));
+        !this.inFlight.has(candidate.id) && (this.retryAfter.get(candidate.id) ?? 0) <= this.now() &&
+        networkReady(candidate, this.files));
       if (job === undefined) return;
       this.active += 1;
       this.inFlight.add(job.id);
-      this.replace(job.id, { status: "running", updatedAt: isoNow() });
       this.samples.set(job.id, { at: this.now(), bytes: job.transferredBytes });
       void this.run(job.id).finally(() => {
         this.active -= 1;
@@ -406,13 +325,12 @@ export class SFTPTransferManager {
         if (file === undefined) return;
         const controller = new AbortController();
         this.controllers.set(id, controller);
-        sourceFingerprint = await fingerprintFile(file, controller.signal, () => this.find(id)?.status === "running");
+        sourceFingerprint = await fingerprintFile(file, controller.signal, () => this.find(id)?.status === "queued");
         const current = this.find(id);
-        if (current === undefined || current.status !== "running") return;
-        if (current.sourceFingerprint !== "" && current.sourceFingerprint !== sourceFingerprint) {
+        if (current === undefined || current.status !== "queued") return;
+        if (current.sourceFingerprint && current.sourceFingerprint !== sourceFingerprint) {
           throw new Error("sftp_upload_source_changed");
         }
-        this.replace(id, { sourceFingerprint });
         job = this.find(id)!;
       }
       if (!await this.prepareServer(job)) return;
@@ -425,61 +343,45 @@ export class SFTPTransferManager {
       if (job === undefined || job.status === "paused" || job.status === "cancelled" ||
           (error instanceof DOMException && error.name === "AbortError")) return;
       const code = failureCode(error) || (error instanceof Error ? error.message : "sftp_failed");
-      if (code === "sftp_exists" && job.direction === "upload" && !job.overwrite) {
-        await this.api.updateTransfer(id, "needs_overwrite").catch(() => undefined);
-        this.replace(id, { status: "needs_overwrite", problem: "sftp_exists" });
+      if (code === "sftp_transfer_limit" || code === "sftp_transfer_state") {
+        this.retryAfter.set(id, this.now() + 500);
+        await this.reconcile().catch(() => undefined);
+        globalThis.setTimeout(() => {
+          this.retryAfter.delete(id);
+          this.kick();
+        }, 500);
         return;
       }
-      await this.api.updateTransfer(id, "fail", { problem: code }).catch(() => undefined);
-      this.replace(id, { status: "failed", problem: code });
-      this.notify(this.find(id)!);
+      if (code === "sftp_exists" && job.direction === "upload" && !job.overwrite) {
+        const updated = await this.api.updateTransfer(id, "needs_overwrite").catch(() => null);
+        if (updated !== null) this.replaceServer(updated);
+        return;
+      }
+      const failed = await this.api.updateTransfer(id, "fail", { problem: code }).catch(() => null);
+      if (failed !== null) {
+        this.replaceServer(failed);
+        this.notify(failed);
+      } else {
+        await this.reconcile().catch(() => undefined);
+      }
     }
   }
 
   private async prepareServer(job: ManagedTransferJob): Promise<boolean> {
     await this.controlOperations.get(job.id);
-    const created = await this.api.createTransfer({
-      id: job.id, batchId: job.batchId, alias: job.alias, direction: job.direction, kind: job.kind,
-      name: job.name, remotePath: job.remotePath, totalBytes: job.totalBytes,
-    });
-    let status = created.status;
-    if (status === "completed") {
-      this.files.delete(job.id);
-      this.replace(job.id, { status: "completed", transferredBytes: created.totalBytes, remainingSeconds: 0 });
-      this.notify(this.find(job.id)!);
-      return false;
-    }
-    const resetProgress = job.direction === "download" && job.kind === "folder" && job.transferredBytes === 0;
-    if (status === "running") status = (await this.api.updateTransfer(job.id, "pause")).status;
-    if (status === "paused" || status === "reattach" || status === "needs_overwrite") {
-      status = (await this.api.updateTransfer(job.id, "resume", { resetProgress })).status;
-    } else if (status === "failed") {
-      status = (await this.api.updateTransfer(job.id, "retry", { resetProgress })).status;
-    }
-    if (status !== "queued") throw new Error("sftp_transfer_state");
     const current = this.find(job.id);
-    if (current?.status !== "running") {
-      await this.api.updateTransfer(job.id, current?.status === "cancelled" ? "cancel" : "pause").catch(() => undefined);
-      return false;
-    }
-    await this.api.updateTransfer(job.id, "start");
-    const afterStart = this.find(job.id);
-    if (afterStart?.status !== "running") {
-      await this.api.updateTransfer(job.id, afterStart?.status === "cancelled" ? "cancel" : "pause").catch(() => undefined);
-      return false;
-    }
-    if (job.direction === "download" && job.kind === "folder") {
-      await this.api.updateTransfer(job.id, "progress", { transferredBytes: 0, resetProgress: true });
-      this.replace(job.id, { transferredBytes: 0, downloadRevision: "" });
-    }
-    return true;
+    if (current?.status !== "queued") return false;
+    const started = await this.api.updateTransfer(job.id, "start");
+    this.retryAfter.delete(job.id);
+    this.replaceServer(started);
+    return started.status === "running";
   }
 
   private async runUpload(id: string, sourceFingerprint: string): Promise<void> {
     const file = this.files.get(id);
     let job = this.find(id);
     if (file === undefined || job === undefined) return;
-    const started = await this.api.startUpload(job.alias, id, job.remotePath, job.totalBytes, job.overwrite, job.expectedRevision);
+    const started = await this.api.startUpload(job.alias, id, job.remotePath, job.totalBytes, sourceFingerprint);
     this.replace(id, { transferredBytes: started.offset, expectedRevision: started.expectedRevision });
     let offset = started.offset;
     while (offset < file.size) {
@@ -496,8 +398,9 @@ export class SFTPTransferManager {
     if (job === undefined || job.status !== "running") return;
     await this.api.completeUpload(job.alias, id, job.remotePath, job.totalBytes, job.expectedRevision, sourceFingerprint);
     this.files.delete(id);
-    this.replace(id, { transferredBytes: job.totalBytes, status: "completed", remainingSeconds: 0 });
-    this.notify(this.find(id)!);
+    await this.reconcile();
+    const completed = this.find(id);
+    if (completed !== undefined) this.notify(completed);
   }
 
   private async runDownload(id: string): Promise<void> {
@@ -626,10 +529,10 @@ export class SFTPTransferManager {
       this.recordProgress(id, bufferedBytes, acknowledged.totalBytes >= 0 ? acknowledged.totalBytes : bufferedBytes);
       job = this.find(id)!;
     }
-    await this.api.updateTransfer(id, "complete");
+    const completed = await this.api.updateTransfer(id, "complete");
     this.downloadChunks.delete(id);
-    this.replace(id, { status: "completed", remainingSeconds: 0, downloadRevision: "" });
-    this.notify(this.find(id)!);
+    this.replaceServer(completed);
+    this.notify(completed);
   }
 
   private recordProgress(id: string, transferredBytes: number, totalBytes: number): void {
@@ -647,7 +550,7 @@ export class SFTPTransferManager {
     const resolvedTotal = totalBytes >= 0 ? totalBytes : job.totalBytes;
     const remainingSeconds = resolvedTotal >= 0 && bytesPerSecond > 0
       ? Math.max(0, Math.round((resolvedTotal - transferredBytes) / bytesPerSecond)) : -1;
-    this.replace(id, { transferredBytes, totalBytes: resolvedTotal, bytesPerSecond, remainingSeconds, updatedAt: isoNow() });
+    this.replace(id, { transferredBytes, totalBytes: resolvedTotal, bytesPerSecond, remainingSeconds });
   }
 
   private async openDownloadSink(job: ManagedTransferJob): Promise<DownloadSink | null> {
@@ -746,23 +649,21 @@ export class SFTPTransferManager {
   }
 
   private pendingUploadCount(selections: UploadSelection[]): number {
-    return selections.filter((selection) => !this.jobs.some((job) => job.direction === "upload" &&
-      job.alias === selection.alias && job.remotePath === selection.remotePath && job.totalBytes === selection.file.size &&
-      job.lastModified === selection.file.lastModified && job.status === "reattach")).length;
+    return selections.filter((selection) => !this.jobs.some((job) => reattachableUpload(job, selection, this.files))).length;
   }
 
   private replace(id: string, changes: Partial<ManagedTransferJob>): void {
     this.commit(this.jobs.map((job) => job.id === id ? { ...job, ...changes } : job));
   }
 
+  private replaceServer(updated: TransferJob): void {
+    this.commit(this.jobs.some((job) => job.id === updated.id)
+      ? this.jobs.map((job) => job.id === updated.id ? updated : job)
+      : [...this.jobs, updated]);
+  }
+
   private commit(jobs: ManagedTransferJob[]): void {
     this.jobs = jobs;
-    try {
-      if (jobs.length === 0) globalThis.localStorage?.removeItem(persistenceKey);
-      else globalThis.localStorage?.setItem(persistenceKey, JSON.stringify(jobs));
-    } catch {
-      // In-memory transfers remain available when storage is disabled or full.
-    }
     for (const listener of this.listeners) listener();
   }
 }
@@ -770,12 +671,6 @@ export class SFTPTransferManager {
 function missingServerTransfer(error: unknown): boolean {
   const code = failureCode(error) || (error instanceof Error ? error.message : "");
   return code === "sftp_transfer_not_found";
-}
-
-function reconcilePriority(job: ManagedTransferJob): number {
-  if (job.direction === "upload" && job.problem === "sftp_cleanup_pending") return 0;
-  if (job.status !== "completed" && job.status !== "cancelled") return 1;
-  return 2;
 }
 
 async function fingerprintFile(file: File, signal?: AbortSignal, running: () => boolean = () => true): Promise<string> {

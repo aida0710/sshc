@@ -43,8 +43,9 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 
 	create := func(id string) map[string]any {
 		body, err := json.Marshal(map[string]any{
-			"id": id, "batchId": "batch_http001", "alias": "edge", "direction": "upload",
-			"kind": "file", "name": id + ".bin", "remotePath": "/" + id + ".bin", "totalBytes": 10,
+			"id": id, "batchId": "batch_http001", "batchName": "HTTP batch", "batchKind": "file",
+			"alias": "edge", "direction": "upload", "kind": "file", "name": id + ".bin",
+			"remotePath": "/" + id + ".bin", "totalBytes": 10, "lastModified": 123,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -83,6 +84,12 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	if response := action("transfer_http02", "start", nil); response.Code != http.StatusConflict || !bytes.Contains(response.Body.Bytes(), []byte("sftp_transfer_limit")) {
 		t.Fatalf("limit = %d: %s", response.Code, response.Body.String())
 	}
+	missingFingerprint := httptest.NewRecorder()
+	engine.ServeHTTP(missingFingerprint, httptest.NewRequest(http.MethodPost,
+		"/api/v1/sftp/edge/uploads/transfer_http01", bytes.NewBufferString(`{"path":"/transfer_http01.bin","size":10}`)))
+	if missingFingerprint.Code != http.StatusBadRequest {
+		t.Fatalf("upload without source fingerprint = %d: %s", missingFingerprint.Code, missingFingerprint.Body.String())
+	}
 	progress := int64(4)
 	if response := action("transfer_http01", "progress", &progress); response.Code != http.StatusConflict {
 		t.Fatalf("client-authored upload progress = %d: %s", response.Code, response.Body.String())
@@ -97,6 +104,7 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 		MaxConcurrent int `json:"maxConcurrent"`
 		Jobs          []struct {
 			ID               string `json:"id"`
+			BatchName        string `json:"batchName"`
 			Status           string `json:"status"`
 			TransferredBytes int64  `json:"transferredBytes"`
 		} `json:"jobs"`
@@ -104,7 +112,25 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if listed.MaxConcurrent != 1 || len(listed.Jobs) != 2 || listed.Jobs[0].Status != "running" || listed.Jobs[0].TransferredBytes != 0 {
+	if listed.MaxConcurrent != 1 || len(listed.Jobs) != 2 || listed.Jobs[0].BatchName != "HTTP batch" || listed.Jobs[0].Status != "running" || listed.Jobs[0].TransferredBytes != 0 {
 		t.Fatalf("listed = %+v", listed)
+	}
+	if _, err := manager.UpdateJob("transfer_http01", sshcSFTP.UpdateTransferJob{Action: sshcSFTP.TransferCancelAction}); err != nil {
+		t.Fatalf("cancel transfer before clear: %v", err)
+	}
+	response = httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/sftp/transfers/finished", nil))
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("clear finished = %d: %s", response.Code, response.Body.String())
+	}
+	response = httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/sftp/transfers", nil))
+	var remaining struct {
+		Jobs []struct {
+			ID string `json:"id"`
+		} `json:"jobs"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &remaining) != nil || len(remaining.Jobs) != 1 || remaining.Jobs[0].ID != "transfer_http02" {
+		t.Fatalf("remaining after clear = %d: %s", response.Code, response.Body.String())
 	}
 }

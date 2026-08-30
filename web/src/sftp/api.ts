@@ -58,17 +58,23 @@ function transferJob(value: unknown): TransferJob {
   const job = asRecord(value);
   const direction = asString(job.direction);
   const kind = asString(job.kind);
+  const batchKind = asString(job.batchKind);
   const status = asString(job.status);
   if ((direction !== "upload" && direction !== "download") || (kind !== "file" && kind !== "folder") ||
+      (batchKind !== "file" && batchKind !== "folder") || typeof job.overwrite !== "boolean" ||
       !["queued", "running", "paused", "reattach", "needs_overwrite", "completed", "failed", "cancelled"].includes(status)) {
     throw new Error("invalid_response");
   }
   return {
-    id: asString(job.id), batchId: asString(job.batchId), alias: asString(job.alias), direction, kind,
+    id: asString(job.id), batchId: asString(job.batchId), batchName: asString(job.batchName), batchKind,
+    alias: asString(job.alias), direction, kind,
     name: asString(job.name), remotePath: asString(job.remotePath), totalBytes: asNumber(job.totalBytes),
     transferredBytes: asNumber(job.transferredBytes), bytesPerSecond: asNumber(job.bytesPerSecond),
     remainingSeconds: asNumber(job.remainingSeconds), status: status as TransferJobStatus,
-    attempt: asNumber(job.attempt), problem: asString(job.problem), createdAt: asString(job.createdAt), updatedAt: asString(job.updatedAt),
+    attempt: asNumber(job.attempt), problem: asString(job.problem), lastModified: asNumber(job.lastModified),
+    expectedRevision: asString(job.expectedRevision), sourceFingerprint: asString(job.sourceFingerprint),
+    overwrite: job.overwrite, downloadRevision: asString(job.downloadRevision),
+    createdAt: asString(job.createdAt), updatedAt: asString(job.updatedAt),
   };
 }
 
@@ -81,6 +87,9 @@ export const sftpApi = {
     return transferJob(await apiClient.mutate<unknown>("/api/v1/sftp/transfers", {
       method: "POST", headers: jsonHeaders, body: JSON.stringify(input),
     }));
+  },
+  async clearFinishedTransfers(): Promise<void> {
+    await apiClient.mutate<unknown>("/api/v1/sftp/transfers/finished", { method: "DELETE" });
   },
   async updateTransfer(id: string, action: TransferJobAction, options: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean } = {}): Promise<TransferJob> {
     return transferJob(await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/actions`, {
@@ -140,11 +149,11 @@ export const sftpApi = {
     });
     if (!response.ok) throw new Error("delete_failed");
   },
-  async startUpload(alias: string, id: string, remotePath: string, size: number, overwrite: boolean, expectedRevision = ""): Promise<ResumableUpload> {
+  async startUpload(alias: string, id: string, remotePath: string, size: number, sourceFingerprint: string): Promise<ResumableUpload> {
     return resumableUpload(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, {
       method: "POST",
       headers: jsonHeaders,
-      body: JSON.stringify({ path: remotePath, size, overwrite, ...(expectedRevision === "" ? {} : { expectedRevision }) }),
+      body: JSON.stringify({ path: remotePath, size, sourceFingerprint }),
     }));
   },
   async appendUpload(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload> {

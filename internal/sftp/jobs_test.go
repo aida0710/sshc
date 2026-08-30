@@ -106,6 +106,43 @@ func TestTransferJobCreateIsIdempotentAndRejectsChangedIdentity(t *testing.T) {
 	}
 }
 
+func TestTransferLedgerOwnsBatchMetadataAndClearsOnlyFinishedJobs(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	completed, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "transfer_metadata", BatchID: "batch_metadata1", BatchName: "project", BatchKind: sftp.TransferFolder,
+		Alias: "edge", Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: "file.bin",
+		RemotePath: "/project/file.bin", TotalBytes: 4, LastModified: 123,
+	})
+	if err != nil || completed.BatchName != "project" || completed.BatchKind != sftp.TransferFolder || completed.LastModified != 123 {
+		t.Fatalf("created metadata = %+v, %v", completed, err)
+	}
+	if _, err := manager.UpdateJob(completed.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	progress := int64(4)
+	if _, err := manager.UpdateJob(completed.ID, sftp.UpdateTransferJob{Action: sftp.TransferProgressAction, TransferredBytes: &progress}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(completed.ID, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction}); err != nil {
+		t.Fatal(err)
+	}
+	active, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "transfer_active1", BatchID: "batch_metadata1", BatchName: "project", BatchKind: sftp.TransferFolder,
+		Alias: "edge", Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: "active.bin",
+		RemotePath: "/project/active.bin", TotalBytes: 8,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed := manager.ClearFinished(); removed != 1 {
+		t.Fatalf("removed = %d, want 1", removed)
+	}
+	jobs := manager.ListJobs()
+	if len(jobs) != 1 || jobs[0].ID != active.ID {
+		t.Fatalf("remaining jobs = %+v", jobs)
+	}
+}
+
 func TestStaleRunningTransferReleasesItsSlot(t *testing.T) {
 	now := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
 	manager := sftp.NewTransferManager(nil)

@@ -437,6 +437,44 @@ func TestStartOwnedResumesFromAnExistingRemotePart(t *testing.T) {
 	}
 }
 
+func TestStartOwnedUsesEngineOverwriteApprovalInsteadOfClientOptions(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/remote":          directory("remote"),
+		"/remote/file.bin": file("file.bin", "old", 0o600),
+	})
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})
+	input := sftp.CreateTransferJob{
+		ID: "transfer_approval", BatchID: "batch_approval1", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "file.bin", RemotePath: "/remote/file.bin", TotalBytes: 3,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	fingerprint := transferFingerprint(t, []byte("new"))
+	if _, err := manager.StartOwned(t.Context(), input.Alias, input.ID, input.RemotePath, sftp.StartUploadOptions{
+		Size: 3, Overwrite: true, ExpectedRevision: "client-supplied", SourceFingerprint: fingerprint,
+	}); !errors.Is(err, sftp.ErrAlreadyExists) {
+		t.Fatalf("client overwrite bypass = %v", err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferNeedsOverwriteAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferResumeAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.StartOwned(t.Context(), input.Alias, input.ID, input.RemotePath, sftp.StartUploadOptions{
+		Size: 3, SourceFingerprint: fingerprint,
+	}); err != nil {
+		t.Fatalf("engine-approved overwrite = %v", err)
+	}
+}
+
 func TestAppendOwnedReplaysAnAcknowledgedChunkAfterResponseLoss(t *testing.T) {
 	remote := remoteWith(map[string]node{"/remote": directory("remote")})
 	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})

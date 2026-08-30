@@ -22,6 +22,7 @@ import (
 const AbsentRevision = "absent"
 
 var transferIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,128}$`)
+var sourceFingerprintPattern = regexp.MustCompile(`^tree-sha256:[0-9a-f]{64}$`)
 var uploadPartNamePattern = regexp.MustCompile(`^\..+\.sshc-upload-[A-Za-z0-9_-]{8,128}\.part$`)
 var editorTemporaryNamePattern = regexp.MustCompile(`^\..+\.sshc-[0-9a-f]{24}\.tmp$`)
 
@@ -451,11 +452,35 @@ func (m *TransferManager) StartOwned(ctx context.Context, alias, id, remotePath 
 	if err := m.AuthorizeUpload(id, alias, remotePath, options.Size, false); err != nil {
 		return ResumableUpload{}, err
 	}
+	if options.SourceFingerprint != "" && !sourceFingerprintPattern.MatchString(options.SourceFingerprint) {
+		return ResumableUpload{}, ErrInvalidTransfer
+	}
+	m.jobsMutex.Lock()
+	record := m.jobs[id]
+	if record == nil {
+		m.jobsMutex.Unlock()
+		return ResumableUpload{}, ErrTransferNotFound
+	}
+	if options.SourceFingerprint != "" && record.job.SourceFingerprint != "" && record.job.SourceFingerprint != options.SourceFingerprint {
+		m.jobsMutex.Unlock()
+		return ResumableUpload{}, ErrConflict
+	}
+	if options.SourceFingerprint != "" && record.job.SourceFingerprint == "" {
+		record.job.SourceFingerprint = options.SourceFingerprint
+	}
+	options.Overwrite = record.job.Overwrite
+	options.ExpectedRevision = record.job.ExpectedRevision
+	m.jobsMutex.Unlock()
 	upload, err := m.Start(ctx, alias, id, remotePath, options)
 	if err != nil {
 		return ResumableUpload{}, err
 	}
 	total, offset := options.Size, upload.Offset
+	m.jobsMutex.Lock()
+	if record := m.jobs[id]; record != nil {
+		record.job.ExpectedRevision = upload.ExpectedRevision
+	}
+	m.jobsMutex.Unlock()
 	if _, err := m.updateUploadJob(id, UpdateTransferJob{
 		Action: TransferProgressAction, TransferredBytes: &offset, TotalBytes: &total, ResetProgress: true,
 	}); err != nil {
@@ -513,6 +538,18 @@ func (m *TransferManager) CompleteOwned(ctx context.Context, alias, id, remotePa
 	if err := m.AuthorizeUpload(id, alias, remotePath, total, false); err != nil {
 		return Transfer{}, err
 	}
+	m.jobsMutex.Lock()
+	record := m.jobs[id]
+	if record == nil || record.job.ExpectedRevision == "" || sourceFingerprint == "" ||
+		record.job.ExpectedRevision != expectedRevision ||
+		(record.job.SourceFingerprint != "" && record.job.SourceFingerprint != sourceFingerprint) {
+		m.jobsMutex.Unlock()
+		return Transfer{}, ErrConflict
+	}
+	if record.job.SourceFingerprint == "" {
+		record.job.SourceFingerprint = sourceFingerprint
+	}
+	m.jobsMutex.Unlock()
 	transfer, err := m.Complete(ctx, alias, id, remotePath, total, expectedRevision, sourceFingerprint)
 	if err != nil {
 		return Transfer{}, err

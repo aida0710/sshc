@@ -55,33 +55,43 @@ const (
 )
 
 type TransferJob struct {
-	ID               string
-	BatchID          string
-	Alias            string
-	Direction        TransferDirection
-	Kind             TransferKind
-	Name             string
-	RemotePath       string
-	TotalBytes       int64
-	TransferredBytes int64
-	BytesPerSecond   float64
-	RemainingSeconds int64
-	Status           TransferJobStatus
-	Attempt          int
-	Problem          string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                string
+	BatchID           string
+	BatchName         string
+	BatchKind         TransferKind
+	Alias             string
+	Direction         TransferDirection
+	Kind              TransferKind
+	Name              string
+	RemotePath        string
+	TotalBytes        int64
+	TransferredBytes  int64
+	BytesPerSecond    float64
+	RemainingSeconds  int64
+	Status            TransferJobStatus
+	Attempt           int
+	Problem           string
+	LastModified      int64
+	ExpectedRevision  string
+	SourceFingerprint string
+	Overwrite         bool
+	DownloadRevision  string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type CreateTransferJob struct {
-	ID         string
-	BatchID    string
-	Alias      string
-	Direction  TransferDirection
-	Kind       TransferKind
-	Name       string
-	RemotePath string
-	TotalBytes int64
+	ID           string
+	BatchID      string
+	BatchName    string
+	BatchKind    TransferKind
+	Alias        string
+	Direction    TransferDirection
+	Kind         TransferKind
+	Name         string
+	RemotePath   string
+	TotalBytes   int64
+	LastModified int64
 }
 
 type UpdateTransferJob struct {
@@ -225,11 +235,13 @@ func (m *TransferManager) BeginDownload(id string, total int64, revision string,
 	changed := record.revision != revision || (total >= 0 && job.TotalBytes != total)
 	if changed {
 		record.revision, record.sentBytes = revision, 0
+		job.DownloadRevision = revision
 		job.TransferredBytes = 0
 		job.TotalBytes = total
 		job.BytesPerSecond, job.RemainingSeconds = 0, -1
 		record.sampleAt, record.sampleBytes = m.now().UTC(), 0
 	}
+	job.DownloadRevision = record.revision
 	if offset != job.TransferredBytes || offset > record.sentBytes {
 		return TransferJob{}, ErrOffsetMismatch
 	}
@@ -385,7 +397,7 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 	if !transferIDPattern.MatchString(input.ID) || !transferIDPattern.MatchString(input.BatchID) ||
 		strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 255 || input.TotalBytes < -1 ||
 		(input.Direction != TransferUpload && input.Direction != TransferDownload) ||
-		(input.Kind != TransferFile && input.Kind != TransferFolder) {
+		(input.Kind != TransferFile && input.Kind != TransferFolder) || input.LastModified < 0 {
 		return TransferJob{}, ErrInvalidTransfer
 	}
 	if err := validateAlias(input.Alias); err != nil {
@@ -400,6 +412,17 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 		name = path.Base(cleaned)
 	}
 	if len(name) > 1024 {
+		return TransferJob{}, ErrInvalidTransfer
+	}
+	batchName := strings.TrimSpace(input.BatchName)
+	if batchName == "" {
+		batchName = name
+	}
+	batchKind := input.BatchKind
+	if batchKind == "" {
+		batchKind = input.Kind
+	}
+	if len(batchName) > 1024 || (batchKind != TransferFile && batchKind != TransferFolder) {
 		return TransferJob{}, ErrInvalidTransfer
 	}
 
@@ -490,9 +513,11 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 	}
 	now := m.now().UTC()
 	job := TransferJob{
-		ID: input.ID, BatchID: input.BatchID, Alias: input.Alias, Direction: input.Direction,
+		ID: input.ID, BatchID: input.BatchID, BatchName: batchName, BatchKind: batchKind,
+		Alias: input.Alias, Direction: input.Direction,
 		Kind: input.Kind, Name: name, RemotePath: cleaned, TotalBytes: input.TotalBytes,
-		Status: TransferQueued, Attempt: 1, CreatedAt: now, UpdatedAt: now,
+		LastModified: input.LastModified,
+		Status:       TransferQueued, Attempt: 1, CreatedAt: now, UpdatedAt: now,
 		RemainingSeconds: -1,
 	}
 	m.jobs[input.ID] = &transferJobRecord{job: job, sampleAt: now}
@@ -535,6 +560,31 @@ func (m *TransferManager) ListJobs() []TransferJob {
 	m.jobsMutex.Unlock()
 	closeRemotes(staleRemotes)
 	return result
+}
+
+// ClearFinished removes terminal records from the engine-owned ledger. Active,
+// paused and failed work remains available for control or diagnosis.
+func (m *TransferManager) ClearFinished() int {
+	m.jobsMutex.Lock()
+	m.initializeJobsLocked()
+	removed := make([]string, 0)
+	kept := m.jobOrder[:0]
+	for _, id := range m.jobOrder {
+		record := m.jobs[id]
+		if record != nil && (record.job.Status == TransferCompleted || record.job.Status == TransferCancelled) {
+			delete(m.jobs, id)
+			delete(m.dataPlane, id)
+			removed = append(removed, id)
+			continue
+		}
+		kept = append(kept, id)
+	}
+	m.jobOrder = kept
+	m.jobsMutex.Unlock()
+	for _, id := range removed {
+		m.releasePreparedDownload(id)
+	}
+	return len(removed)
 }
 
 func (m *TransferManager) UpdateJob(id string, update UpdateTransferJob) (TransferJob, error) {
@@ -634,8 +684,12 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 			if job.Direction == TransferDownload {
 				record.sentBytes, record.revision = 0, ""
 			}
+			job.DownloadRevision = ""
 			job.BytesPerSecond, job.RemainingSeconds = 0, -1
 			record.sampleAt, record.sampleBytes = now, 0
+		}
+		if job.Status == TransferNeedsOverwrite && job.Direction == TransferUpload {
+			job.Overwrite = true
 		}
 		job.Status = TransferQueued
 		job.Problem = ""
@@ -647,6 +701,7 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 			job.TransferredBytes = 0
 			if job.Direction == TransferDownload {
 				record.sentBytes, record.revision = 0, ""
+				job.DownloadRevision = ""
 			}
 		}
 		job.Status, job.Problem = TransferQueued, ""
@@ -863,8 +918,17 @@ func (m *TransferManager) releaseJobLocked(status TransferJobStatus) {
 }
 
 func sameTransferIdentity(job TransferJob, input CreateTransferJob, cleaned, name string) bool {
+	batchName := strings.TrimSpace(input.BatchName)
+	if batchName == "" {
+		batchName = name
+	}
+	batchKind := input.BatchKind
+	if batchKind == "" {
+		batchKind = input.Kind
+	}
 	return job.BatchID == input.BatchID && job.Alias == input.Alias && job.Direction == input.Direction &&
-		job.Kind == input.Kind && job.Name == name && job.RemotePath == cleaned && job.TotalBytes == input.TotalBytes
+		job.Kind == input.Kind && job.Name == name && job.RemotePath == cleaned && job.TotalBytes == input.TotalBytes &&
+		job.BatchName == batchName && job.BatchKind == batchKind && job.LastModified == input.LastModified
 }
 
 func terminalTransferStatus(status TransferJobStatus) bool {
