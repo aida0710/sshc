@@ -12,7 +12,7 @@ sshc serial --json
 sshc serial /dev/ttyUSB0 --baud 115200 --encoding utf-8
 ```
 
-データビット、パリティ、ストップビット、フロー制御、DTR、RTS、ブレーク時間を指定できます。デバイス名はOSによって異なります。
+データビット、パリティ、ストップビット、DTR、RTS、ブレーク時間を指定できます。フロー制御は現在`none`だけを利用できます。CLIは`--flow rtscts`と`--flow xonxoff`も受け付けますが、現行のシステムバックエンドでは接続時にエラーになります。デバイス名はOSによって異なります。
 
 ## Telnet
 
