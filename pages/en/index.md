@@ -10,7 +10,7 @@ outline: false
   <section class="sshc-hero">
     <div>
       <h1 class="sshc-title">sshc</h1>
-      <p class="sshc-lead">sshc is a terminal app that uses your existing OpenSSH configuration. It combines SSH and local shells with SFTP, reusable credentials, a CLI for AI agents, and encrypted sync across devices.</p>
+      <p class="sshc-lead">sshc is a terminal app that uses your existing OpenSSH configuration. It combines SSH and local shells with SFTP, reusable credentials, a CLI for AI agents, and encrypted sync across devices through S3-compatible storage you provide.</p>
       <p class="sshc-platforms"><span>Platforms</span>macOS / Windows / Linux / Android</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">Install</a>
@@ -34,7 +34,7 @@ outline: false
       <article class="sshc-feature"><span class="index">03</span><h3>Save credentials once</h3><p>Store passwords and key passphrases in the vault, then reuse them from the terminal, SFTP, and CLI.</p></article>
       <article class="sshc-feature"><span class="index">04</span><h3>CLI for AI agents</h3><p>Codex and other agents can call sshc directly and connect with saved credentials.</p></article>
       <article class="sshc-feature"><span class="index">05</span><h3>SFTP</h3><p>Edit remote files and pause or resume folder transfers alongside an active terminal.</p></article>
-      <article class="sshc-feature"><span class="index">06</span><h3>Encrypted sync</h3><p>Encrypt connections, keys, credentials, and snippets before syncing through S3-compatible storage.</p></article>
+      <article class="sshc-feature"><span class="index">06</span><h3>Encrypted sync</h3><p>Encrypt connections, keys, credentials, and snippets before syncing through S3-compatible storage you provide. sshc does not host or retain the synced data.</p></article>
     </div>
   </section>
 

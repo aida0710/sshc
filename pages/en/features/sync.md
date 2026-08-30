@@ -1,13 +1,13 @@
 ---
 title: Encrypted sync
-description: Encrypted snapshots on S3-compatible object storage.
+description: Encrypted snapshots on S3-compatible object storage you provide.
 ---
 
 # Encrypted sync
 
 ![Sync status and change review](/images/sync-desktop.png)
 
-sshc encrypts the workspace on your device before storing snapshots in S3-compatible object storage. The storage provider does not receive plaintext.
+sshc does not provide hosted sync storage or retain your sync data. You choose and configure S3-compatible object storage; sshc encrypts the workspace on your device before storing snapshots there. The storage provider does not receive plaintext.
 
 ## First device
 

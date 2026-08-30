@@ -10,7 +10,7 @@ outline: false
   <section class="sshc-hero">
     <div>
       <h1 class="sshc-title">sshc</h1>
-      <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。今あるOpenSSHの設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、端末間の暗号化同期に対応します。</p>
+      <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。今あるOpenSSHの設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、利用者が用意するS3互換ストレージを介した端末間の暗号化同期に対応します。</p>
       <p class="sshc-platforms"><span>対応OS</span>macOS / Windows / Linux / Android</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">インストール</a>
@@ -34,7 +34,7 @@ outline: false
       <article class="sshc-feature"><span class="index">03</span><h3>認証情報は一度保存</h3><p>パスワードや鍵のパスフレーズをVaultに保存し、Terminal、SFTP、CLIから再利用できます。</p></article>
       <article class="sshc-feature"><span class="index">04</span><h3>AIからCLIで操作</h3><p>CodexなどのAIエージェントがsshcを直接実行し、保存済みの認証情報で接続できます。</p></article>
       <article class="sshc-feature"><span class="index">05</span><h3>SFTP</h3><p>リモートファイルの編集、フォルダー転送、中断と再開を、接続中のTerminalと並行して行えます。</p></article>
-      <article class="sshc-feature"><span class="index">06</span><h3>暗号化同期</h3><p>接続設定、鍵、資格情報、スニペットを端末上で暗号化し、S3互換ストレージを介して同期します。</p></article>
+      <article class="sshc-feature"><span class="index">06</span><h3>暗号化同期</h3><p>接続設定、鍵、資格情報、スニペットを端末上で暗号化し、利用者が用意したS3互換ストレージを介して同期します。sshcは同期用ストレージを提供せず、データを預かりません。</p></article>
     </div>
   </section>
 

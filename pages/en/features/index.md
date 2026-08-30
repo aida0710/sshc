@@ -36,4 +36,4 @@ The Web UI and CLI share the same engine, OpenSSH configuration, and vault. Code
 
 ## Encrypted sync
 
-[Encrypted sync](./sync) encrypts connections, keys, credentials, and snippets on the device before pushing or pulling them through S3-compatible storage. Plaintext is not sent to the storage provider.
+[Encrypted sync](./sync) encrypts connections, keys, credentials, and snippets on the device before pushing or pulling them through S3-compatible storage you provide. sshc does not provide hosted storage or retain the synced data. Plaintext is not sent to the storage provider.
