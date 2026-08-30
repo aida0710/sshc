@@ -74,6 +74,92 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 	}
 }
 
+func TestEveryPublishedCommandAcceptsItsOwnHelpFlag(t *testing.T) {
+	tests := []struct {
+		argv  []string
+		topic string
+		want  string
+	}{
+		{[]string{"sshc", "engine", "--help"}, "engine", "sshc engine [--port <n>] [--replace]"},
+		{[]string{"sshc", "ssh", "--help"}, "ssh", "sshc ssh <alias>"},
+		{[]string{"sshc", "info", "--help"}, "info", "sshc info <alias> [--json]"},
+		{[]string{"sshc", "sync", "--help"}, "sync", "sshc sync push"},
+		{[]string{"sshc", "sync", "setup", "--help"}, "sync setup", "sshc sync setup"},
+		{[]string{"sshc", "sync", "push", "--help"}, "sync push", "sshc sync push [--force] [--json]"},
+		{[]string{"sshc", "sync", "pull", "--help"}, "sync pull", "sshc sync pull [--force] [--json]"},
+		{[]string{"sshc", "sync", "now", "--help"}, "sync now", "sshc sync now [--json]"},
+		{[]string{"sshc", "sync", "auto", "--help"}, "sync auto", "sshc sync auto on|off [--json]"},
+		{[]string{"sshc", "terminal", "--help"}, "terminal", "sshc terminal send"},
+		{[]string{"sshc", "terminal", "list", "--help"}, "terminal list", "sshc terminal list [--json]"},
+		{[]string{"sshc", "terminal", "show", "--help"}, "terminal show", "sshc terminal show <session-id>"},
+		{[]string{"sshc", "terminal", "read", "--help"}, "terminal read", "sshc terminal read <session-id>"},
+		{[]string{"sshc", "terminal", "send", "--help"}, "terminal send", "sshc terminal send <session-id> --text <text>"},
+		{[]string{"sshc", "terminal", "wait", "--help"}, "terminal wait", "sshc terminal wait <session-id> --for <state>"},
+		{[]string{"sshc", "terminal", "create", "--help"}, "terminal create", "sshc terminal create ssh <alias>"},
+		{[]string{"sshc", "terminal", "rename", "--help"}, "terminal rename", "sshc terminal rename <session-id> <title>"},
+		{[]string{"sshc", "terminal", "close", "--help"}, "terminal close", "sshc terminal close <session-id>"},
+		{[]string{"sshc", "serial", "--help"}, "serial", "sshc serial <device> [options]"},
+		{[]string{"sshc", "telnet", "--help"}, "telnet", "sshc telnet <host>[:port] [options]"},
+		{[]string{"sshc", "open", "--help"}, "open", "sshc open"},
+		{[]string{"sshc", "status", "--help"}, "status", "sshc status [--json]"},
+		{[]string{"sshc", "update", "--help"}, "update", "sshc update"},
+		{[]string{"sshc", "vault", "--help"}, "vault", "sshc vault status"},
+		{[]string{"sshc", "vault", "status", "--help"}, "vault status", "sshc vault status"},
+		{[]string{"sshc", "vault", "create", "--help"}, "vault create", "sshc vault create"},
+		{[]string{"sshc", "vault", "unlock", "--help"}, "vault unlock", "sshc vault unlock"},
+		{[]string{"sshc", "vault", "lock", "--help"}, "vault lock", "sshc vault lock"},
+		{[]string{"sshc", "vault", "change-password", "--help"}, "vault change-password", "sshc vault change-password"},
+		{[]string{"sshc", "version", "--help"}, "version", "sshc version"},
+		{[]string{"sshc", "help", "sync", "push"}, "sync push", "sshc sync push [--force] [--json]"},
+	}
+	for _, test := range tests {
+		t.Run(strings.Join(test.argv[1:], "_"), func(t *testing.T) {
+			called, err := parseInvocation(test.argv)
+			if err != nil || called.Kind != invocationHelp || called.HelpTopic != test.topic {
+				t.Fatalf("parseInvocation(%q) = %#v, %v", test.argv, called, err)
+			}
+			var output strings.Builder
+			usageFor(&output, called.HelpTopic)
+			if !strings.Contains(output.String(), test.want) {
+				t.Errorf("help for %q does not contain %q:\n%s", test.topic, test.want, output.String())
+			}
+		})
+	}
+}
+
+func TestHelpFlagsAfterCommandDelimiterRemainCommandArguments(t *testing.T) {
+	called, err := parseInvocation([]string{
+		"sshc", "ssh", "edge", "--non-interactive", "--", "tool", "--help",
+	})
+	if err != nil || called.Kind != invocationRun || called.Args[len(called.Args)-1] != "--help" {
+		t.Fatalf("remote --help = %#v, %v", called, err)
+	}
+
+	called, err = parseInvocation([]string{
+		"sshc", "serial", "/dev/ttyUSB0", "--non-interactive", "--read-for", "1s", "--", "--help",
+	})
+	if err != nil || called.Kind != invocationRunTransport || called.Transport == nil ||
+		len(called.Transport.Command) != 1 || called.Transport.Command[0] != "--help" {
+		t.Fatalf("serial command --help = %#v, %v", called, err)
+	}
+}
+
+func TestHelpFlagUsedAsAFlagValueIsNotIntercepted(t *testing.T) {
+	called, err := parseInvocation([]string{
+		"sshc", "terminal", "send", "01234567", "--text", "--help",
+	})
+	if err != nil || called.Kind != invocationTerminal || called.Terminal == nil ||
+		called.Terminal.Action != terminalSend || called.Terminal.Text != "--help" {
+		t.Fatalf("terminal text --help = %#v, %v", called, err)
+	}
+}
+
+func TestHelpRejectsAnUnknownTopic(t *testing.T) {
+	if called, err := parseInvocation([]string{"sshc", "help", "unknown"}); err == nil || called.Kind != invocationInvalid {
+		t.Fatalf("unknown help topic = %#v, %v", called, err)
+	}
+}
+
 func TestParseInfoAndSyncInvocations(t *testing.T) {
 	tests := []struct {
 		argv    []string

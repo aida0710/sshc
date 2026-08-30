@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 )
 
 type invocationKind uint8
@@ -51,6 +52,8 @@ type syncInvocation struct {
 type invocation struct {
 	Kind invocationKind
 	Args []string
+	// HelpTopic は個別helpで表示するcommand path。空文字列は全体helpを表す。
+	HelpTopic string
 	// Port は `sshc engine --port N` の待受ポートで、0 は未指定を表す。
 	Port int
 	// Replace は既存の engine を確認なしで停止して置き換える。
@@ -94,16 +97,13 @@ func parseInvocation(argv []string) (invocation, error) {
 	args := argv[2:]
 	switch word {
 	case engineSubcommand:
+		if helpRequested(args) {
+			return helpInvocation(engineSubcommand), nil
+		}
 		return parseEngineFlags(args)
 	case serialSubcommand:
-		if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-			return invocation{Kind: invocationHelp}, nil
-		}
 		return parseTransportInvocation(transportSerial, args)
 	case telnetSubcommand:
-		if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-			return invocation{Kind: invocationHelp}, nil
-		}
 		return parseTransportInvocation(transportTelnet, args)
 	case sshSubcommand:
 		return parseSSHInvocation(args)
@@ -114,15 +114,30 @@ func parseInvocation(argv []string) (invocation, error) {
 	case terminalSubcommand:
 		return parseTerminalInvocation(args)
 	case OpenSubcommand:
+		if helpRequested(args) {
+			return helpInvocation(OpenSubcommand), nil
+		}
 		return noArguments(invocationOpen, word, args)
 	case StatusSubcommand:
+		if helpRequested(args) {
+			return helpInvocation(StatusSubcommand), nil
+		}
 		if len(args) == 1 && args[0] == "--json" {
 			return invocation{Kind: invocationStatus, JSON: true}, nil
 		}
 		return noArguments(invocationStatus, word, args)
 	case updateSubcommand:
+		if helpRequested(args) {
+			return helpInvocation(updateSubcommand), nil
+		}
 		return noArguments(invocationUpdate, word, args)
 	case vaultSubcommand:
+		if helpRequested(args) {
+			return helpInvocation(vaultSubcommand), nil
+		}
+		if len(args) > 1 && validVaultAction(args[0]) && isHelpFlag(args[1]) {
+			return helpInvocation(vaultSubcommand + " " + args[0]), nil
+		}
 		if len(args) != 1 {
 			return invalidInvocation("vault requires one action")
 		}
@@ -132,21 +147,54 @@ func parseInvocation(argv []string) (invocation, error) {
 		default:
 			return invalidInvocation(fmt.Sprintf("unknown vault action %q", args[0]))
 		}
-	case helpSubcommand, "-h", "--help":
+	case helpSubcommand:
+		if len(args) == 0 {
+			return helpInvocation(""), nil
+		}
+		topic := strings.Join(args, " ")
+		if !validHelpTopic(topic) {
+			return invalidInvocation(fmt.Sprintf("unknown help topic %q", topic))
+		}
+		return helpInvocation(topic), nil
+	case "-h", "--help":
 		return noArguments(invocationHelp, word, args)
 	// 旗も語も、同じところへ着く。`sshc version` が正式だが、`--version` は
 	// 誰もが最初に打つ形である。受けないと、入れた直後の一行目が usage と
 	// 終了コード 2 になる。実際 docs/release-install.md はそれを案内していた。
 	case versionSubcommand, "-v", "--version":
+		if word == versionSubcommand && helpRequested(args) {
+			return helpInvocation(versionSubcommand), nil
+		}
 		return noArguments(invocationVersion, word, args)
 	}
 
 	return invalidInvocation(fmt.Sprintf("unknown command %q", word))
 }
 
+func helpInvocation(topic string) invocation {
+	return invocation{Kind: invocationHelp, HelpTopic: topic}
+}
+
+func helpRequested(args []string) bool {
+	return len(args) > 0 && isHelpFlag(args[0])
+}
+
+func isHelpFlag(argument string) bool {
+	return argument == "-h" || argument == "--help"
+}
+
+func validVaultAction(action string) bool {
+	switch action {
+	case "status", "create", "unlock", "lock", "change-password":
+		return true
+	default:
+		return false
+	}
+}
+
 func parseInfoInvocation(args []string) (invocation, error) {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		return invocation{Kind: invocationHelp}, nil
+	if helpRequested(args) {
+		return helpInvocation(infoSubcommand), nil
 	}
 	if len(args) < 1 || len(args) > 2 || args[0] == "" || args[0][0] == '-' {
 		return invalidInvocation("info requires one alias followed by optional --json")
@@ -162,8 +210,11 @@ func parseInfoInvocation(args []string) (invocation, error) {
 }
 
 func parseSyncInvocation(args []string) (invocation, error) {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		return invocation{Kind: invocationHelp}, nil
+	if helpRequested(args) {
+		return helpInvocation(syncSubcommand), nil
+	}
+	if len(args) > 1 && validSyncAction(args[0]) && isHelpFlag(args[1]) {
+		return helpInvocation(syncSubcommand + " " + args[0]), nil
 	}
 	if len(args) == 0 {
 		return newSyncInvocation(syncInvocation{Action: syncStatus}), nil
@@ -224,6 +275,15 @@ func parseSyncInvocation(args []string) (invocation, error) {
 	}
 }
 
+func validSyncAction(action string) bool {
+	switch action {
+	case "setup", "push", "pull", "now", "auto":
+		return true
+	default:
+		return false
+	}
+}
+
 func parseOptionalJSON(args []string, command string) (bool, error) {
 	if len(args) == 0 {
 		return false, nil
@@ -241,6 +301,9 @@ func newSyncInvocation(sync syncInvocation) invocation {
 // parseSSHInvocation は alias を ssh namespace の内側だけで解釈する。
 // transport や将来の top-level command と同名でも、alias の意味は変わらない。
 func parseSSHInvocation(args []string) (invocation, error) {
+	if helpRequested(args) {
+		return helpInvocation(sshSubcommand), nil
+	}
 	if len(args) == 0 {
 		return invocation{Kind: invocationChoose}, nil
 	}
@@ -248,8 +311,6 @@ func parseSSHInvocation(args []string) (invocation, error) {
 		switch args[0] {
 		case "--list":
 			return invocation{Kind: invocationList}, nil
-		case "-h", "--help":
-			return invocation{Kind: invocationHelp}, nil
 		}
 		if args[0] == "" || args[0][0] == '-' {
 			return invalidInvocation("ssh requires an alias")
@@ -371,4 +432,209 @@ func usage(out io.Writer) {
   sshc help            print this
 
 `)
+}
+
+func validHelpTopic(topic string) bool {
+	switch topic {
+	case engineSubcommand, sshSubcommand, infoSubcommand,
+		syncSubcommand, "sync setup", "sync push", "sync pull", "sync now", "sync auto",
+		terminalSubcommand, "terminal list", "terminal show", "terminal read", "terminal send",
+		"terminal wait", "terminal create", "terminal rename", "terminal close",
+		serialSubcommand, telnetSubcommand, OpenSubcommand, StatusSubcommand, updateSubcommand,
+		vaultSubcommand, "vault status", "vault create", "vault unlock", "vault lock",
+		"vault change-password", versionSubcommand:
+		return true
+	default:
+		return false
+	}
+}
+
+func usageFor(out io.Writer, topic string) {
+	if topic == "" {
+		usage(out)
+		return
+	}
+	help := map[string]string{
+		engineSubcommand: `usage:
+  sshc engine [--port <n>] [--replace]
+
+Start the engine in the foreground.
+  --port <n>  listen on a port from 1024 to 65535
+  --replace   stop the running engine first, without asking
+`,
+		sshSubcommand: `usage:
+  sshc ssh
+  sshc ssh --list
+  sshc ssh <alias>
+  sshc ssh <alias> --non-interactive -- <command>
+
+Choose or connect to a Host alias from ~/.ssh/config.
+`,
+		infoSubcommand: `usage:
+  sshc info <alias> [--json]
+
+Print the resolved SSH target without connecting.
+`,
+		syncSubcommand: `usage:
+  sshc sync [--json]
+  sshc sync setup
+  sshc sync push [--force] [--json]
+  sshc sync pull [--force] [--json]
+  sshc sync now [--json]
+  sshc sync auto on|off [--json]
+`,
+		"sync setup": `usage:
+  sshc sync setup
+
+Configure synchronization in an interactive terminal.
+`,
+		"sync push": `usage:
+  sshc sync push [--force] [--json]
+
+Push local synchronization changes through the running engine.
+`,
+		"sync pull": `usage:
+  sshc sync pull [--force] [--json]
+
+Pull synchronization changes through the running engine.
+`,
+		"sync now": `usage:
+  sshc sync now [--json]
+
+Run one synchronization cycle through the running engine.
+`,
+		"sync auto": `usage:
+  sshc sync auto on|off [--json]
+
+Enable or disable automatic synchronization.
+`,
+		terminalSubcommand: `usage:
+  sshc terminal list [--json]
+  sshc terminal show <session-id> [--json]
+  sshc terminal read <session-id> [--cursor N] [--limit N] [--json]
+  sshc terminal send <session-id> --text <text> [--no-enter] [--json]
+  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]
+  sshc terminal create shell [--json]
+  sshc terminal create ssh <alias> [--json]
+  sshc terminal rename <session-id> <title> [--json]
+  sshc terminal close <session-id> [--json]
+`,
+		"terminal list": `usage:
+  sshc terminal list [--json]
+
+List terminals owned by the running engine.
+`,
+		"terminal show": `usage:
+  sshc terminal show <session-id> [--json]
+
+Show one terminal. The ID may be a unique lowercase hexadecimal prefix.
+`,
+		"terminal read": `usage:
+  sshc terminal read <session-id> [--cursor N] [--limit N] [--json]
+
+Read retained terminal output from a byte cursor.
+`,
+		"terminal send": `usage:
+  sshc terminal send <session-id> --text <text> [--no-enter] [--json]
+
+Send text to the current process generation. A carriage return is appended
+unless --no-enter is set.
+`,
+		"terminal wait": `usage:
+  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]
+
+States: connecting, connected, reconnecting, exited, agent-working,
+agent-attention, agent-ready, agent-ended.
+`,
+		"terminal create": `usage:
+  sshc terminal create shell [--json]
+  sshc terminal create ssh <alias> [--json]
+
+Create a local shell or SSH terminal in the running engine.
+`,
+		"terminal rename": `usage:
+  sshc terminal rename <session-id> <title> [--json]
+
+Set the title of a terminal owned by the running engine.
+`,
+		"terminal close": `usage:
+  sshc terminal close <session-id> [--json]
+
+Close a terminal owned by the running engine.
+`,
+		serialSubcommand: `usage:
+  sshc serial [--json]
+  sshc serial <device> [options]
+  sshc serial <device> [options] --non-interactive [automation] -- <text>
+
+Options: --baud N --data-bits 5..8 --parity none|odd|even|mark|space
+         --stop-bits 1|1.5|2 --flow none|rtscts|xonxoff
+         --dtr on|off --rts on|off --break D --encoding NAME
+Automation: --expect REGEX | --read-for D | --script FILE|-
+            --timeout D --settle D --max-bytes N --line-ending MODE
+            --require-output --json
+`,
+		telnetSubcommand: `usage:
+  sshc telnet <host>[:port] [options]
+  sshc telnet <host>[:port] [options] --non-interactive [automation] -- <text>
+
+Options: --connect-timeout D --terminal-type TYPE --encoding NAME
+Automation: --expect REGEX | --read-for D | --script FILE|-
+            --timeout D --settle D --max-bytes N --line-ending MODE
+            --require-output --json
+`,
+		OpenSubcommand: `usage:
+  sshc open
+
+Print a one-time UI URL for the running engine.
+`,
+		StatusSubcommand: `usage:
+  sshc status [--json]
+
+Print what the running engine is doing.
+`,
+		updateSubcommand: `usage:
+  sshc update
+
+Update an installation managed by Homebrew or install.sh.
+`,
+		vaultSubcommand: `usage:
+  sshc vault status
+  sshc vault create
+  sshc vault unlock
+  sshc vault lock
+  sshc vault change-password
+`,
+		"vault status": `usage:
+  sshc vault status
+
+Describe the running engine and Vault.
+`,
+		"vault create": `usage:
+  sshc vault create
+
+Create and unlock a new Vault.
+`,
+		"vault unlock": `usage:
+  sshc vault unlock
+
+Unlock the Vault in the running engine.
+`,
+		"vault lock": `usage:
+  sshc vault lock
+
+Lock the Vault without closing SSH sessions.
+`,
+		"vault change-password": `usage:
+  sshc vault change-password
+
+Change the password of an unlocked Vault.
+`,
+		versionSubcommand: `usage:
+  sshc version
+
+Print the version and target operating system/architecture.
+`,
+	}
+	fmt.Fprint(out, help[topic])
 }

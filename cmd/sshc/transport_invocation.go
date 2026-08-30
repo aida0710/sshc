@@ -71,6 +71,9 @@ func defaultTransportInvocation(kind transportKind, run bool) transportInvocatio
 }
 
 func parseTransportInvocation(kind transportKind, args []string) (invocation, error) {
+	if helpRequested(args) {
+		return helpInvocation(string(kind)), nil
+	}
 	called := defaultTransportInvocation(kind, false)
 	if kind == transportSerial && (len(args) == 0 || len(args) == 1 && args[0] == "--json") {
 		called.List = true

@@ -42,8 +42,11 @@ func parseTerminalInvocation(args []string) (invocation, error) {
 	if len(args) == 0 {
 		return invalidInvocation("terminal requires an action")
 	}
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		return invocation{Kind: invocationHelp}, nil
+	if helpRequested(args) {
+		return helpInvocation(terminalSubcommand), nil
+	}
+	if len(args) > 1 && validTerminalAction(args[0]) && isHelpFlag(args[1]) {
+		return helpInvocation(terminalSubcommand + " " + args[0]), nil
 	}
 	parsed := terminalInvocation{Submit: true, Limit: 32 << 10, Timeout: 5 * time.Minute}
 	action, rest := args[0], args[1:]
@@ -219,6 +222,15 @@ func parseTerminalInvocation(args []string) (invocation, error) {
 		return invalidInvocation(fmt.Sprintf("unknown terminal action %q", action))
 	}
 	return invocation{Kind: invocationTerminal, JSON: parsed.JSON, Terminal: &parsed}, nil
+}
+
+func validTerminalAction(action string) bool {
+	switch action {
+	case "list", "show", "read", "send", "wait", "create", "rename", "close":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseTerminalJSONOnly(args []string, parsed *terminalInvocation) error {
