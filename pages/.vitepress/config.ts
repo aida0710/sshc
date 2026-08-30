@@ -90,7 +90,7 @@ export default defineConfig({
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:title", content: "sshc" }],
     ["meta", { property: "og:description", content: "SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、暗号化同期に対応。" }],
-    ["meta", { property: "og:image", content: "https://aida0710.github.io/sshc/images/terminal-desktop.png" }],
+    ["meta", { property: "og:image", content: "https://aida0710.github.io/sshc/images/workspace-desktop.png" }],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
     ["link", { rel: "icon", href: `${base}logo.svg`, type: "image/svg+xml" }],
   ],

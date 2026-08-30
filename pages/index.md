@@ -18,7 +18,7 @@ outline: false
       </div>
     </div>
     <div class="sshc-preview">
-      <img src="/images/terminal-desktop.png" alt="sshcでSSH接続を開いたTerminal画面" width="1280" height="720">
+      <img src="/images/workspace-desktop.png" alt="sshcで四つのSSH接続を開いたTerminal画面" width="1280" height="720">
     </div>
   </section>
 
