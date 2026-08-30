@@ -2098,6 +2098,84 @@ func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
 	}
 }
 
+func TestReceiveOnlyCanExplicitlyAcceptAnUnrelatedRemoteHead(t *testing.T) {
+	bucket := &fakeBucket{}
+	receiver := newInstallation(t, bucket, map[string]string{"config": "Host original\n"})
+	if _, err := receiver.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	receiver.direct(remotesync.DirectionPull)
+
+	replacement := newInstallation(t, bucket, map[string]string{"config": "Host replacement\n"})
+	confirmation, err := replacement.service.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := replacement.service.ForcePush(context.Background(), syncPassphrase, confirmation.ETag, "Replace head"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := receiver.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("ordinary Pull = %v, want ErrRemoteMoved", err)
+	}
+	preview, err := receiver.service.PullRemoteHead(context.Background(), syncPassphrase)
+	if err != nil {
+		t.Fatalf("PullRemoteHead = %v", err)
+	}
+	if preview.ETag == "" || preview.Manifest.Revision == "" {
+		t.Fatalf("preview was not bound to one remote generation: %#v", preview)
+	}
+	if _, err := receiver.service.PullAndApplyRemoteHeadUsing(
+		context.Background(),
+		func() (string, error) { return syncPassphrase, nil },
+		preview.ETag,
+		preview.Manifest.Revision,
+	); err != nil {
+		t.Fatalf("PullAndApplyRemoteHeadUsing = %v", err)
+	}
+	if got := receiver.read(t, "config"); got != "Host replacement\n" {
+		t.Fatalf("received config = %q", got)
+	}
+}
+
+func TestExplicitRemoteHeadApplyRejectsAChangedGeneration(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host remote\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "Remote setup"); err != nil {
+		t.Fatal(err)
+	}
+	receiver := newInstallation(t, bucket, map[string]string{"config": "Host local\n"})
+	receiver.direct(remotesync.DirectionPull)
+	preview, err := receiver.service.PullRemoteHead(context.Background(), syncPassphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket.replace(remotesync.ObjectName, `"changed-after-preview"`)
+	_, err = receiver.service.PullAndApplyRemoteHeadUsing(
+		context.Background(),
+		func() (string, error) { return syncPassphrase, nil },
+		preview.ETag,
+		preview.Manifest.Revision,
+	)
+	if !errors.Is(err, remotesync.ErrPreviewStale) {
+		t.Fatalf("changed remote apply = %v, want ErrPreviewStale", err)
+	}
+	if got := receiver.read(t, "config"); got != "Host local\n" {
+		t.Fatalf("stale apply changed config to %q", got)
+	}
+}
+
+func TestExplicitRemoteHeadRequiresReceiveOnlyDirection(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host local\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := machine.service.PullRemoteHead(context.Background(), syncPassphrase); !errors.Is(err, remotesync.ErrApplyRefused) {
+		t.Fatalf("PullRemoteHead in bidirectional mode = %v, want ErrApplyRefused", err)
+	}
+}
+
 func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{})

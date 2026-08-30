@@ -651,17 +651,29 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 	if request.HistoryKey != nil {
 		historyKey = *request.HistoryKey
 	}
+	acceptRemoteHead := request.AcceptRemoteHead != nil && *request.AcceptRemoteHead
+	if acceptRemoteHead && (h.Service.Direction() != remotesync.DirectionPull ||
+		historyKey != "" || resolve != remotesync.ResolveRemote) {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
 	var result remotesync.PullResult
 	var err error
 	if request.Apply != nil && *request.Apply {
-		result, err = h.Service.PullAndApplyUsing(c.Request().Context(), h.keyProvider(), resolve, historyKey,
-			*request.ExpectedETag, *request.ExpectedRevision)
+		if acceptRemoteHead {
+			result, err = h.Service.PullAndApplyRemoteHeadUsing(c.Request().Context(), h.keyProvider(),
+				*request.ExpectedETag, *request.ExpectedRevision)
+		} else {
+			result, err = h.Service.PullAndApplyUsing(c.Request().Context(), h.keyProvider(), resolve, historyKey,
+				*request.ExpectedETag, *request.ExpectedRevision)
+		}
 	} else {
 		key, ok, keyErr := h.sealingKey(c)
 		if !ok {
 			return keyErr
 		}
-		if historyKey == "" {
+		if acceptRemoteHead {
+			result, err = h.Service.PullRemoteHead(c.Request().Context(), key)
+		} else if historyKey == "" {
 			result, err = h.Service.Pull(c.Request().Context(), key, resolve)
 		} else {
 			result, err = h.Service.PullHistory(c.Request().Context(), key, historyKey, resolve)
@@ -699,6 +711,9 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 
 	if request.Apply != nil && *request.Apply {
 		response.Applied = true
+		if h.Auto != nil {
+			h.Auto.ManualApplyCompleted()
+		}
 		// Apply is a second request and therefore a second download. Its
 		// completion is the point after the workspace transaction and state
 		// write, not the earlier moment when this request finished downloading.

@@ -1234,6 +1234,12 @@ func (s *Service) liveSnapshotFollows(
 		}
 		object, err := binding.client.Get(ctx, info.Key)
 		if err != nil {
+			if errors.Is(err, objectstore.ErrNotFound) {
+				// LIST described this immutable history object but it disappeared
+				// before GET. Its absence cannot prove ancestry and is a changed
+				// remote graph, not a generic connectivity failure.
+				return false, ErrRemoteMoved
+			}
 			return false, err
 		}
 		if info.ETag == "" || object.ETag != info.ETag {
@@ -1425,6 +1431,17 @@ func (s *Service) Pull(ctx context.Context, passphrase string, resolve Resolutio
 	return s.pull(ctx, passphrase, resolve, "")
 }
 
+// PullRemoteHead previews the current live head after the user explicitly chose
+// to trust it. This is the receive-only recovery path for a legitimate force
+// push which cannot be proven to descend from this installation's acknowledged
+// revision. The snapshot is still authenticated and the later apply is bound to
+// its exact ETag and revision.
+func (s *Service) PullRemoteHead(ctx context.Context, passphrase string) (PullResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	return s.pullWithRemoteAcceptance(ctx, passphrase, ResolveRemote, "", true)
+}
+
 // PullHistory previews one immutable dated snapshot. Applying it writes local
 // files and records the current live ETag, but keeps the selected manifest as
 // Base. The next push therefore creates a new head whose parent is the restored
@@ -1436,6 +1453,19 @@ func (s *Service) PullHistory(ctx context.Context, passphrase, historyKey string
 }
 
 func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolution, historyKey string) (PullResult, error) {
+	return s.pullWithRemoteAcceptance(ctx, passphrase, resolve, historyKey, false)
+}
+
+func (s *Service) pullWithRemoteAcceptance(
+	ctx context.Context,
+	passphrase string,
+	resolve Resolution,
+	historyKey string,
+	acceptRemoteHead bool,
+) (PullResult, error) {
+	if acceptRemoteHead && s.Direction() != DirectionPull {
+		return PullResult{}, ErrApplyRefused
+	}
 	binding, bindingVersion, err := s.configuredBindingVersion()
 	if err != nil {
 		return PullResult{}, err
@@ -1494,7 +1524,7 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 	// an older, authentic ciphertext. Prove that a changed live head descends
 	// from the locally acknowledged revision before treating it as an ordinary
 	// pull. PullHistory remains the explicit rollback path.
-	if historyKey == "" {
+	if historyKey == "" && !acceptRemoteHead {
 		follows, lineageErr := s.liveSnapshotFollows(ctx, binding, passphrase, base, manifest, Digest(object.Body))
 		if lineageErr != nil {
 			return PullResult{}, lineageErr
@@ -1542,7 +1572,7 @@ func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolutio
 func (s *Service) PullAndApply(ctx context.Context, passphrase string, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
-	return s.pullAndApply(ctx, passphrase, resolve, historyKey, expectedETag, expectedRevision)
+	return s.pullAndApply(ctx, passphrase, resolve, historyKey, expectedETag, expectedRevision, false)
 }
 
 func (s *Service) PullAndApplyUsing(ctx context.Context, key KeyProvider, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
@@ -1552,11 +1582,29 @@ func (s *Service) PullAndApplyUsing(ctx context.Context, key KeyProvider, resolv
 	if err != nil {
 		return PullResult{}, err
 	}
-	return s.pullAndApply(ctx, passphrase, resolve, historyKey, expectedETag, expectedRevision)
+	return s.pullAndApply(ctx, passphrase, resolve, historyKey, expectedETag, expectedRevision, false)
 }
 
-func (s *Service) pullAndApply(ctx context.Context, passphrase string, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
-	result, err := s.pull(ctx, passphrase, resolve, historyKey)
+// PullAndApplyRemoteHeadUsing applies only the exact live head returned by an
+// earlier PullRemoteHead preview. It deliberately exists only as an explicit
+// receive-only recovery operation; ordinary pulls retain ancestry protection.
+func (s *Service) PullAndApplyRemoteHeadUsing(
+	ctx context.Context,
+	key KeyProvider,
+	expectedETag string,
+	expectedRevision string,
+) (PullResult, error) {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	passphrase, err := currentOperationKey(key)
+	if err != nil {
+		return PullResult{}, err
+	}
+	return s.pullAndApply(ctx, passphrase, ResolveRemote, "", expectedETag, expectedRevision, true)
+}
+
+func (s *Service) pullAndApply(ctx context.Context, passphrase string, resolve Resolution, historyKey, expectedETag, expectedRevision string, acceptRemoteHead bool) (PullResult, error) {
+	result, err := s.pullWithRemoteAcceptance(ctx, passphrase, resolve, historyKey, acceptRemoteHead)
 	if err != nil && !errors.Is(err, ErrNothingToApply) {
 		return PullResult{}, err
 	}

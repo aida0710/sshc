@@ -2428,6 +2428,7 @@ export interface components {
             apply?: boolean;
             /** @enum {string} */
             resolve?: "local" | "remote";
+            acceptRemoteHead?: boolean;
             historyKey?: string;
             expectedETag?: string;
             expectedRevision?: string;
