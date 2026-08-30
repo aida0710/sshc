@@ -4,6 +4,8 @@ OpenSSHの設定を正本のまま使う、local-firstなSSH workspaceです。�
 
 [日本語ドキュメント](https://aida0710.github.io/sshc/) · [English documentation](https://aida0710.github.io/sshc/en/) · [Releases](https://github.com/aida0710/sshc/releases)
 
+[![sshcのHome画面](docs/images/home.png)](https://aida0710.github.io/sshc/)
+
 ## インストール
 
 macOS / Linux:
