@@ -1,6 +1,6 @@
 ---
 layout: home
-title: sshc — Manage OpenSSH without replacing it
+title: sshc
 description: Organize OpenSSH, reuse saved credentials from the CLI, and sync securely across devices.
 sidebar: false
 outline: false
@@ -9,8 +9,7 @@ outline: false
 <main class="sshc-home">
   <section class="sshc-hero">
     <div>
-      <p class="sshc-eyebrow">Local-first SSH workspace</p>
-      <h1 class="sshc-title">Your OpenSSH setup.<br>Now easier to use.</h1>
+      <h1 class="sshc-title">sshc</h1>
       <p class="sshc-lead">Organize your existing <code>~/.ssh/config</code>, sync it across devices, and reuse saved credentials from the terminal, SFTP, or CLI.</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">Install</a>
@@ -25,7 +24,7 @@ outline: false
 
   <section class="sshc-home-section">
     <div class="sshc-section-heading">
-      <h2>Set it up once.<br>Use it yourself or from an AI agent.</h2>
+      <h2>OpenSSH configuration and credentials</h2>
       <p>Your OpenSSH files remain the source of truth, so VS Code, Codex, and regular ssh commands use the same aliases. AI agents can call the sshc CLI while sshc supplies credentials from the unlocked vault.</p>
     </div>
     <div class="sshc-feature-grid">
@@ -40,7 +39,7 @@ outline: false
 
   <section class="sshc-home-section">
     <div class="sshc-section-heading">
-      <h2>Start with one command.</h2>
+      <h2>Install</h2>
       <p>Install through Homebrew on macOS and Linux, or use the verified PowerShell installer from GitHub Releases on Windows.</p>
     </div>
     <div class="sshc-command"><code>brew install aida0710/tap/sshc</code><span>macOS / Linux</span></div>
