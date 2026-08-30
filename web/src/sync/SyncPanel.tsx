@@ -145,6 +145,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [busy, setBusy] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bucketHistoryExpanded, setBucketHistoryExpanded] = useState(false);
   const [pushDraft, setPushDraft] = useState<SyncPushDraft | null>(null);
   const [pushMessage, setPushMessage] = useState("");
   const pushMessageDirty = useRef(false);
@@ -215,8 +216,20 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       else setBucketState({ phase: "idle" });
       if (next.configured && next.keyConfigured) void refreshHistory();
       else setHistoryState({ phase: "idle" });
-      if (next.configured) void refreshPushDraft();
-      else setPushDraft(null);
+      if (next.configured && next.direction !== "pull") {
+        void refreshPushDraft();
+      } else {
+        setPushDraft(null);
+        setPushMessage("");
+        pushMessageDirty.current = false;
+      }
+      if (
+        next.direction === "pull" &&
+        next.auto.phase === "blocked" &&
+        next.auto.detail === "remote_moved"
+      ) {
+        setError("");
+      }
     } catch {
       setStatusState({ phase: "error", message: t("sync.statusFailed") });
     }
@@ -255,6 +268,14 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       apply(await operation());
     } catch (caught) {
       const code = failureCode(caught);
+      if (
+        code === "sync_remote_moved" &&
+        statusState.phase === "ready" &&
+        statusState.value.direction === "pull"
+      ) {
+        await reload();
+        return;
+      }
       const named = refusals[code];
       setError(explain?.(code) || (named === undefined ? failure : t(named)));
     } finally {
@@ -410,6 +431,89 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           (revision) => revision.key === selectedHistoryKey,
         )
       : undefined;
+  const bucketHistoryItems =
+    bucketState.phase === "ready" ? bucketState.value.history : [];
+  const visibleBucketHistory = bucketHistoryExpanded
+    ? bucketHistoryItems
+    : bucketHistoryItems.slice(0, 5);
+  const transferPanel =
+    status.configured && status.direction !== "pull" ? (
+      <section
+        aria-labelledby="sync-transfer-heading"
+        className="sshc-card flex flex-col gap-3 rounded-md bg-card p-4"
+      >
+        <h3 id="sync-transfer-heading" className={sectionHeading}>
+          {t("sync.transferHeading")}
+        </h3>
+        <p className="text-sm leading-6 text-ink-muted">
+          {t(`sync.transferHint.${status.direction}` as MessageKey)}
+        </p>
+        <div className="flex flex-col gap-1 border-t border-line pt-3 text-sm text-ink">
+          <label htmlFor="sync-commit-message" className="font-medium">
+            {t("sync.commitMessage")}
+          </label>
+          <input
+            id="sync-commit-message"
+            aria-describedby="sync-commit-message-hint"
+            value={pushMessage}
+            maxLength={240}
+            onChange={(event) => {
+              pushMessageDirty.current = true;
+              setPushMessage(event.target.value);
+            }}
+            className={control}
+            placeholder={t("sync.commitMessagePlaceholder")}
+          />
+          <span id="sync-commit-message-hint" className={hintText}>
+            {pushDraft === null
+              ? t("sync.commitMessageHint")
+              : pushChangeCount === 0
+                ? t("sync.noLocalChanges")
+                : t("sync.commitMessageChanges", {
+                    added: pushDraft.added,
+                    modified: pushDraft.modified,
+                    removed: pushDraft.removed,
+                  })}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+          <Button
+            kind="primary"
+            disabled={
+              busy ||
+              !status.keyConfigured ||
+              pushMessage.trim() === "" ||
+              pushChangeCount === null ||
+              pushChangeCount === 0
+            }
+            onClick={() =>
+              void run(
+                () => api.pushSnapshot(pushMessage.trim()),
+                (next) => {
+                  setStatusState({ phase: "ready", value: next.status });
+                  setPreview(null);
+                  setResultView({ kind: "push", result: next.result });
+                  setNotice(t("sync.pushed"));
+                  pushMessageDirty.current = false;
+                  void refreshPushDraft();
+                  void refreshBucket();
+                  void refreshHistory();
+                },
+                t("sync.pushFailed"),
+              )
+            }
+          >
+            {t("sync.push")}
+          </Button>
+          <Button
+            disabled={busy || !status.keyConfigured}
+            onClick={() => void previewWith(undefined)}
+          >
+            {t("sync.preview")}
+          </Button>
+        </div>
+      </section>
+    ) : null;
 
   return (
     <div
@@ -419,33 +523,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         title={t("sync.heading")}
         description={t("sync.pageDescription")}
       />
-      <dl className="sshc-card grid overflow-hidden rounded-md bg-toolbar sm:grid-cols-3">
-        {[
-          [
-            t("sync.metricConfiguration"),
-            t(
-              status.configured
-                ? "sync.stateConfigured"
-                : "sync.stateNotConfigured",
-            ),
-          ],
-          [t("sync.metricDirection"), t(`sync.direction.${status.direction}`)],
-          [
-            t("sync.metricSnapshot"),
-            status.synced ? (status.fileCount ?? 0) : "—",
-          ],
-        ].map(([label, value]) => (
-          <div
-            key={String(label)}
-            className="flex min-w-0 items-center justify-between gap-4 border-t border-hairline px-4 py-2.5 first:border-t-0 sm:border-l sm:border-t-0 sm:first:border-l-0"
-          >
-            <dt className="text-xs font-medium text-ink-muted">{label}</dt>
-            <dd className="min-w-0 text-right font-mono text-sm font-semibold text-ink">
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
 
       {status.configured ? null : (
         <ol
@@ -468,7 +545,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         </ol>
       )}
 
-      <p className={hintText}>{t("sync.warning")}</p>
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {notice === "" ? null : (
         <p role="status" className="text-sm text-ink-muted">
@@ -518,7 +594,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               />
               {t("sync.autoEnable")}
             </label>
-            <p className={hintText}>{t("sync.autoHint")}</p>
+            <p className={hintText}>
+              {t(`sync.autoHint.${status.direction}` as MessageKey)}
+            </p>
             {remoteHeadBlocked ? (
               <div className="flex flex-col gap-3">
                 <Notice tone="danger">
@@ -554,13 +632,21 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               </p>
             )}
             <div className="flex flex-wrap gap-2">
-              {remoteHeadBlocked && status.direction === "pull" ? (
+              {status.direction === "pull" ? (
                 <Button
                   kind="primary"
                   disabled={busy || !status.keyConfigured}
-                  onClick={() => void previewCurrentRemoteHead()}
+                  onClick={() =>
+                    void (remoteHeadBlocked
+                      ? previewCurrentRemoteHead()
+                      : previewWith(undefined))
+                  }
                 >
-                  {t("sync.remoteHeadReview")}
+                  {t(
+                    remoteHeadBlocked
+                      ? "sync.remoteHeadReview"
+                      : "sync.checkRemoteChanges",
+                  )}
                 </Button>
               ) : (
                 <Button
@@ -577,7 +663,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   {t("sync.autoNow")}
                 </Button>
               )}
-              {status.direction === "push" || remoteHeadBlocked ? null : (
+              {status.direction !== "both" || remoteHeadBlocked ? null : (
                 <Button
                   disabled={busy || !status.keyConfigured}
                   onClick={() => void previewWith(undefined)}
@@ -619,6 +705,9 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               : "flex flex-col gap-6"
           }
         >
+          <p className={`rounded-md bg-toolbar px-4 py-3 ${hintText}`}>
+            {t("sync.warning")}
+          </p>
           <section className="overflow-hidden rounded-md border border-line bg-card">
             <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
               <div className="flex items-center gap-2">
@@ -951,107 +1040,30 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         </div>
       </details>
 
+      {transferPanel}
+
       {status.configured ? (
-        <section className="sshc-card overflow-hidden rounded-md bg-card">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Icon name="sync" className="h-4 w-4 text-ink-muted" />
-              <h3 className={sectionHeading}>{t("sync.snapshotHeading")}</h3>
-            </div>
-            <p className={hintText}>
+        <details className="group overflow-hidden rounded-md border border-control-line bg-card">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 bg-toolbar px-4 py-3 marker:hidden hover:bg-select-fill">
+            <span className="flex items-center gap-3 text-sm font-medium text-ink">
+              <span
+                aria-hidden="true"
+                className="inline-flex size-5 shrink-0 items-center justify-center text-base text-ink-muted transition-transform group-open:rotate-90"
+              >
+                ›
+              </span>
+              {t("sync.detailsHeading")}
+            </span>
+            <span className={hintText}>
               {status.synced
                 ? t("sync.lastSynced", {
                     at: status.lastSyncedAt ?? "",
                     count: status.fileCount ?? 0,
                   })
                 : t("sync.neverSynced")}
-            </p>
-          </header>
-          <div className="grid gap-4 p-4 lg:grid-cols-2">
-            <section
-              aria-labelledby="sync-transfer-heading"
-              className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4"
-            >
-              <h4 id="sync-transfer-heading" className={sectionHeading}>
-                {t("sync.transferHeading")}
-              </h4>
-              <p className="text-sm leading-6 text-ink-muted">
-                {t("sync.transferHint")}
-              </p>
-              <div className="flex flex-col gap-1 border-t border-line pt-3 text-sm text-ink">
-                <label htmlFor="sync-commit-message" className="font-medium">
-                  {t("sync.commitMessage")}
-                </label>
-                <input
-                  id="sync-commit-message"
-                  aria-describedby="sync-commit-message-hint"
-                  value={pushMessage}
-                  maxLength={240}
-                  onChange={(event) => {
-                    pushMessageDirty.current = true;
-                    setPushMessage(event.target.value);
-                  }}
-                  className={control}
-                  placeholder={t("sync.commitMessagePlaceholder")}
-                />
-                <span id="sync-commit-message-hint" className={hintText}>
-                  {pushDraft === null
-                    ? t("sync.commitMessageHint")
-                    : pushChangeCount === 0
-                      ? t("sync.noLocalChanges")
-                      : t("sync.commitMessageChanges", {
-                          added: pushDraft.added,
-                          modified: pushDraft.modified,
-                          removed: pushDraft.removed,
-                        })}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2 border-t border-line pt-3">
-                <Button
-                  kind="primary"
-                  disabled={
-                    busy ||
-                    !status.configured ||
-                    !status.keyConfigured ||
-                    status.direction === "pull" ||
-                    pushMessage.trim() === "" ||
-                    pushChangeCount === null ||
-                    pushChangeCount === 0
-                  }
-                  onClick={() =>
-                    void run(
-                      () => api.pushSnapshot(pushMessage.trim()),
-                      (next) => {
-                        setStatusState({
-                          phase: "ready",
-                          value: next.status,
-                        });
-                        setPreview(null);
-                        setResultView({
-                          kind: "push",
-                          result: next.result,
-                        });
-                        setNotice(t("sync.pushed"));
-                        pushMessageDirty.current = false;
-                        void refreshPushDraft();
-                        void refreshBucket();
-                        void refreshHistory();
-                      },
-                      t("sync.pushFailed"),
-                    )
-                  }
-                >
-                  {t("sync.push")}
-                </Button>
-                <Button
-                  disabled={busy || !status.configured || !status.keyConfigured}
-                  onClick={() => void previewWith(undefined)}
-                >
-                  {t("sync.preview")}
-                </Button>
-              </div>
-            </section>
-
+            </span>
+          </summary>
+          <div className="grid gap-4 border-t border-line bg-surface-subtle p-4 lg:grid-cols-2">
             <section
               aria-labelledby="sync-bucket-state-heading"
               className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4 lg:col-span-2"
@@ -1093,9 +1105,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                       </p>
                     ) : (
                       <div className="mt-2 flex flex-col gap-1">
-                        <p className="break-all font-mono text-xs text-ink">
-                          {bucketState.value.live.key}
-                        </p>
                         <p className={hintText}>
                           {t("sync.bucketObjectMeta", {
                             size: formatBytes(
@@ -1114,6 +1123,14 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                               : "sync.bucketLocalBehind",
                           )}
                         </p>
+                        <details className="mt-1 text-xs text-ink-muted">
+                          <summary className="cursor-pointer">
+                            {t("sync.bucketObjectName")}
+                          </summary>
+                          <p className="mt-1 break-all font-mono text-ink">
+                            {bucketState.value.live.key}
+                          </p>
+                        </details>
                       </div>
                     )}
                   </div>
@@ -1134,24 +1151,51 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                         {t("sync.bucketHistoryEmpty")}
                       </p>
                     ) : (
-                      <ul className="mt-2 max-h-48 space-y-2 overflow-auto pr-1">
-                        {bucketState.value.history.map((item) => (
-                          <li
-                            key={item.key}
-                            className="rounded border border-hairline px-2 py-1.5"
+                      <div className="mt-2 flex flex-col gap-2">
+                        <p className={hintText}>
+                          {t("sync.bucketHistoryShowing", {
+                            shown: visibleBucketHistory.length,
+                            count: bucketState.value.history.length,
+                          })}
+                        </p>
+                        <ul className="max-h-64 space-y-2 overflow-auto pr-1">
+                          {visibleBucketHistory.map((item) => (
+                            <li
+                              key={item.key}
+                              className="rounded border border-hairline px-2 py-1.5"
+                            >
+                              <p className={hintText}>
+                                {t("sync.bucketObjectMeta", {
+                                  size: formatBytes(item.size, locale),
+                                  at: item.lastModified ?? "—",
+                                })}
+                              </p>
+                              <details className="mt-1 text-xs text-ink-muted">
+                                <summary className="cursor-pointer">
+                                  {t("sync.bucketObjectName")}
+                                </summary>
+                                <p className="mt-1 break-all font-mono text-ink">
+                                  {item.key}
+                                </p>
+                              </details>
+                            </li>
+                          ))}
+                        </ul>
+                        {bucketState.value.history.length <= 5 ? null : (
+                          <Button
+                            onClick={() =>
+                              setBucketHistoryExpanded((current) => !current)
+                            }
+                            className="self-start"
                           >
-                            <p className="break-all font-mono text-xs text-ink">
-                              {item.key}
-                            </p>
-                            <p className={hintText}>
-                              {t("sync.bucketObjectMeta", {
-                                size: formatBytes(item.size, locale),
-                                at: item.lastModified ?? "—",
-                              })}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
+                            {t(
+                              bucketHistoryExpanded
+                                ? "sync.bucketHistoryCollapse"
+                                : "sync.bucketHistoryExpand",
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -1413,15 +1457,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               )}
             </section>
           </div>
-          {status.direction === "both" ? null : (
-            <p
-              role="status"
-              className="border-t border-notice-line bg-notice px-4 py-3 text-sm text-notice-ink"
-            >
-              {t(`sync.direction.${status.direction}.active`)}
-            </p>
-          )}
-        </section>
+        </details>
       ) : null}
 
       {resultView !== null ? (

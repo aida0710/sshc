@@ -1013,11 +1013,6 @@ export const en = {
   "sync.role.send": "Send-only device",
   "sync.pageDescription":
     "Synchronise an encrypted snapshot of this SSH workspace between machines through an object-storage bucket.",
-  "sync.metricConfiguration": "Configuration",
-  "sync.metricDirection": "Direction",
-  "sync.metricSnapshot": "Snapshot files",
-  "sync.stateConfigured": "Configured",
-  "sync.stateNotConfigured": "Not configured",
   "sync.flowHeading": "Steps to start syncing",
   "sync.flowBucket": "Configure a bucket",
   "sync.flowKey": "Set the shared encryption key",
@@ -1057,15 +1052,11 @@ export const en = {
     "This machine only sends changes. Changes from other machines are not applied, but you can still preview them.",
   "sync.direction.pull.hint":
     "This machine only receives changes. Local changes are not sent to the bucket or other machines.",
-  "sync.direction.push.active":
-    "Set to send only: this workspace can be pushed, and a snapshot cannot be applied to it.",
-  "sync.direction.pull.active":
-    "Set to receive only: a snapshot can be applied here, and this workspace cannot be pushed.",
   "sync.configure": "Use this bucket",
   "sync.editSettings": "Edit bucket settings",
   "sync.cancelSettings": "Cancel editing",
   "sync.configureFailed": "The bucket could not be configured.",
-  "sync.snapshotHeading": "Snapshot",
+  "sync.detailsHeading": "Details and history",
   "sync.neverSynced": "This machine has not synced yet.",
   "sync.lastSynced": "Last synced {at}, {count} files.",
   "sync.key": "Encryption key",
@@ -1100,8 +1091,12 @@ export const en = {
   "sync.endpointPath":
     "The endpoint is the account address only — no bucket name and no path. Put the bucket name in the field below.",
   "sync.auto": "Automatic sync",
-  "sync.autoHint":
-    "Checks the remote for changes once a minute while the vault is unlocked. After settings on this machine change, it uploads once when no further changes occur for five seconds. Conflicts and changes that remove files are not applied automatically; automatic sync stops and reports them.",
+  "sync.autoHint.both":
+    "While the Vault is unlocked, sshc checks the remote once a minute. After a local setting changes, it waits until five seconds pass without another change and pushes once. Conflicts and changes that remove files are not applied automatically; automatic sync stops and reports them.",
+  "sync.autoHint.pull":
+    "While the Vault is unlocked, sshc checks the remote once a minute. Changes on this machine are never pushed. Automatic receiving stops and reports conflicts or changes that would remove files.",
+  "sync.autoHint.push":
+    "While the Vault is unlocked, sshc checks whether the remote has changed. After a local setting changes, it waits until five seconds pass without another change and pushes once. Remote content is never applied to this machine.",
   "sync.autoEnable": "Keep this machine in sync automatically",
   "sync.autoIdle": "Stopped",
   "sync.autoLastRan": "Last checked {at}.",
@@ -1116,6 +1111,7 @@ export const en = {
   "sync.remoteHeadReviewHint":
     "A receive-only machine can explicitly accept the current remote as authoritative. Review when it was created, its source, and the affected files before applying it.",
   "sync.remoteHeadReview": "Review current remote",
+  "sync.checkRemoteChanges": "Review remote changes",
   "sync.remoteHeadPreviewHeading": "Receive current remote",
   "sync.remoteHeadPreview":
     "Reviewing the remote created at {at} by {origin}. Apply verifies the same exact generation again and writes nothing if it changed in the meantime.",
@@ -1132,8 +1128,10 @@ export const en = {
   "sync.autoNow": "Sync now",
   "sync.autoNowFailed": "The sync check could not be run.",
   "sync.transferHeading": "Send or review changes",
-  "sync.transferHint":
+  "sync.transferHint.both":
     "Push this machine's workspace, or review the remote snapshot before applying it.",
+  "sync.transferHint.push":
+    "Push this machine's workspace. Remote content is not applied to this machine.",
   "sync.commitMessage": "Commit message",
   "sync.commitMessagePlaceholder": "Describe this snapshot",
   "sync.commitMessageHint":
@@ -1156,6 +1154,10 @@ export const en = {
   "sync.bucketLocalBehind":
     "The remote generation differs from this machine's last acknowledged snapshot.",
   "sync.bucketHistory": "Dated history · {count}",
+  "sync.bucketHistoryShowing": "Showing the latest {shown} of {count} entries.",
+  "sync.bucketHistoryExpand": "Show all history",
+  "sync.bucketHistoryCollapse": "Show only the latest 5",
+  "sync.bucketObjectName": "Show S3 object name",
   "sync.bucketHistoryTruncated":
     "Showing the newest 10,000 entries. The bucket contains older history too.",
   "sync.bucketHistoryEmpty": "No dated history objects were found.",
