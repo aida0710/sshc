@@ -5,7 +5,7 @@ description: The main sshc CLI commands.
 
 # CLI
 
-Use `sshc help` for the exact commands and arguments supported by your installed version. Some nested subcommands do not provide their own `--help` option.
+Use `sshc help` for the full command list. Use `sshc <command...> --help` or `sshc help <command...>` for the exact arguments accepted by an individual command, for example `sshc sync push --help` or `sshc help terminal send`.
 
 The CLI uses the same OpenSSH configuration and the running engine's vault and sessions. For automation, use supported `--json` output instead of parsing human-readable text.
 
