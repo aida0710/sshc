@@ -1,9 +1,11 @@
 ---
-title: 接続とTerminal
-description: ブラウザーで使えるTerminal、接続状態、検索、文字コード、ポート転送。
+title: Terminal
+description: SSHとローカルシェルを開き、検索、再接続、文字コード、ポート転送を利用する。
 ---
 
-# 接続とTerminal
+# Terminal
+
+SSHとローカルシェルを同じ画面で開き、複数ペインのWorkspace、検索、クイックコマンド、ポート転送を利用できます。
 
 ![接続中のTerminalと操作メニュー](/images/terminal-desktop.png)
 

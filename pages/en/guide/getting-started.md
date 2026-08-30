@@ -1,21 +1,21 @@
 ---
 title: What is sshc?
-description: Organize OpenSSH, reuse saved credentials from the CLI, and sync securely across devices.
+description: A terminal app that uses existing OpenSSH configuration, with SSH, SFTP, reusable credentials, a CLI, and encrypted sync.
 ---
 
 # What is sshc?
 
-sshc organizes an existing OpenSSH environment without replacing it. Connections, the terminal, SFTP, the CLI, and encrypted sync all use the same `~/.ssh/config`, `Include` files, private keys, and `known_hosts`.
+sshc is a terminal app that uses your existing OpenSSH configuration. Open SSH sessions and local shells in multiple panes, then use SFTP and port forwarding with the same connections. The terminal, SFTP, CLI, and encrypted sync share the same `~/.ssh/config`, `Include` files, private keys, and `known_hosts` without converting them to a proprietary format.
 
-![Connection management](/images/connections-desktop.png)
+![An SSH connection open in the terminal](/images/terminal-desktop.png)
 
 ## When to use it
 
+- You want SSH, local shells, SFTP, and port forwarding in one app.
 - You want to organize OpenSSH while keeping it usable from regular ssh and VS Code.
-- You want Codex or another AI agent to use saved connections from the CLI.
 - You do not want to re-enter passwords and key passphrases for every tool.
+- You want Codex or another AI agent to use saved connections from the CLI.
 - You need encrypted configuration, key, and credential sync across devices.
-- You want SFTP, port forwarding, and workspaces around the same connection set.
 
 ## Reuse saved credentials
 
@@ -37,9 +37,9 @@ sshc is not an SSH server or a cloud relay. Connections and decryption happen on
 
 | Area | What it covers |
 | --- | --- |
-| Connections | Host blocks, Include trees, groups, keys, passwords, known hosts |
 | Terminal | SSH/local shells, search, links, encodings, Quick Commands |
 | Workspace | Up to four panes, drag splits, saved ratios, broadcast commands |
+| Connections | Host blocks, Include trees, groups, keys, passwords, known hosts |
 | SFTP | File browser, editor, folder transfer, resumable queue |
 | Sync | S3-compatible storage, local encryption, push, pull, history |
 | CLI | SSH, sync, terminal control, Serial, Telnet, JSON automation |
