@@ -105,7 +105,6 @@ describe("ConsoleList", () => {
 
   it("renames the live workspace from its row menu", async () => {
     const user = userEvent.setup();
-    const prompt = vi.spyOn(window, "prompt").mockReturnValue("Production");
     const props = renderList({
       workspace: {
         id: "live-workspace",
@@ -117,9 +116,30 @@ describe("ConsoleList", () => {
 
     await user.click(screen.getByRole("button", { name: "Actions for bastion + db-primary" }));
     await user.click(screen.getByRole("menuitem", { name: "Rename workspace" }));
+    const field = screen.getByRole("textbox", { name: "New name for bastion + db-primary" });
+    await user.clear(field);
+    await user.type(field, "Production{Enter}");
 
-    expect(prompt).toHaveBeenCalledWith("Live workspace name", "bastion + db-primary");
     expect(props.onRenameWorkspace).toHaveBeenCalledWith("Production");
+  });
+
+  it("keeps the workspace name when its inline rename is abandoned", async () => {
+    const user = userEvent.setup();
+    const props = renderList({
+      workspace: {
+        id: "live-workspace",
+        name: "bastion + db-primary",
+        memberSessionIds: [live.id, dead.id],
+        focusedSessionId: live.id,
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Actions for bastion + db-primary" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename workspace" }));
+    await user.type(screen.getByRole("textbox", { name: "New name for bastion + db-primary" }), "x{Escape}");
+
+    expect(props.onRenameWorkspace).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "bastion + db-primary" })).toBeVisible();
   });
 
   it("renames a session in place and leaves its destination alone", async () => {
