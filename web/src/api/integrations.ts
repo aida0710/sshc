@@ -799,6 +799,13 @@ function validatePullResponse(value: unknown): PullResponse {
     asString(entry.path);
     asBoolean(entry.changedHere);
     asBoolean(entry.changedThere);
+    for (const key of ["baseMode", "localMode", "remoteMode"] as const) {
+      if (entry[key] === undefined) continue;
+      const mode = asString(entry[key]);
+      if (mode !== "0600" && mode !== "0700") {
+        throw new Error("invalid_response");
+      }
+    }
   }
   for (const path of asArray(record.written)) asString(path);
   for (const path of asArray(record.removed)) asString(path);

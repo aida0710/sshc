@@ -1575,10 +1575,26 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 <p className="text-sm text-notice-ink">
                   {t("sync.conflictExplain")}
                 </p>
-                <ul className="flex flex-col gap-1 font-mono text-xs text-notice-ink">
-                  {preview.conflicts.map((conflict) => (
-                    <li key={conflict.path}>{conflict.path}</li>
-                  ))}
+                <ul className="flex flex-col gap-2 text-xs text-notice-ink">
+                  {preview.conflicts.map((conflict) => {
+                    const modeChanged =
+                      conflict.baseMode !== conflict.localMode ||
+                      conflict.baseMode !== conflict.remoteMode;
+                    return (
+                      <li key={conflict.path} className="flex flex-col gap-0.5">
+                        <span className="font-mono">{conflict.path}</span>
+                        {modeChanged ? (
+                          <span className="text-ink-muted">
+                            {t("sync.conflictPermissions", {
+                              base: conflict.baseMode ?? "—",
+                              local: conflict.localMode ?? "—",
+                              remote: conflict.remoteMode ?? "—",
+                            })}
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
 
                 <div className="flex flex-wrap gap-2">

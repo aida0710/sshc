@@ -2481,6 +2481,9 @@ export interface components {
             path: string;
             changedHere: boolean;
             changedThere: boolean;
+            baseMode?: string;
+            localMode?: string;
+            remoteMode?: string;
         };
         PullResponse: {
             applied: boolean;

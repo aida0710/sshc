@@ -736,11 +736,7 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 		RemoteETag: result.ETag, RemoteRevision: result.Manifest.Revision,
 	}
 	for _, conflict := range result.Conflicts {
-		response.Conflicts = append(response.Conflicts, api.SyncConflict{
-			Path:         conflict.Path,
-			ChangedHere:  conflict.LocalDigest != "" && conflict.LocalDigest != conflict.BaseDigest,
-			ChangedThere: conflict.RemoteDigest != conflict.BaseDigest,
-		})
+		response.Conflicts = append(response.Conflicts, syncConflictResponse(conflict))
 	}
 	for _, change := range result.Request.Changes {
 		response.Written = append(response.Written, h.Service.DisplayPath(change.Path))
@@ -767,6 +763,25 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 		}
 	}
 	return c.JSON(http.StatusOK, response)
+}
+
+func syncConflictResponse(conflict remotesync.Conflict) api.SyncConflict {
+	response := api.SyncConflict{
+		Path: conflict.Path,
+		ChangedHere: (conflict.LocalDigest != "" || conflict.LocalMode != "") &&
+			(conflict.LocalDigest != conflict.BaseDigest || conflict.LocalMode != conflict.BaseMode),
+		ChangedThere: conflict.RemoteDigest != conflict.BaseDigest || conflict.RemoteMode != conflict.BaseMode,
+	}
+	if conflict.BaseMode != "" {
+		response.BaseMode = &conflict.BaseMode
+	}
+	if conflict.LocalMode != "" {
+		response.LocalMode = &conflict.LocalMode
+	}
+	if conflict.RemoteMode != "" {
+		response.RemoteMode = &conflict.RemoteMode
+	}
+	return response
 }
 
 func validSyncRevision(value string) bool {

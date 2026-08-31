@@ -1275,6 +1275,8 @@ export const en = {
   "sync.previewHeading": "What a pull would change",
   "sync.conflictExplain":
     "These files changed on this machine and another machine. The same configuration block cannot be merged automatically, so nothing was applied. Merge the files manually in the Configuration files screen, or upload from the machine whose version you want to keep.",
+  "sync.conflictPermissions":
+    "Permissions: last sync {base} · this machine {local} · remote {remote}",
   "sync.keepMine": "Keep this machine's version",
   "sync.takeTheirs": "Use the other machine's version",
   "sync.wouldWrite": "{count} files would be written:",
