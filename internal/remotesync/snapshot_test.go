@@ -297,6 +297,7 @@ func TestBuildRefusesCaseInsensitivePathCollisions(t *testing.T) {
 		paths []string
 	}{
 		{name: "file name", paths: []string{"config", "CONFIG"}},
+		{name: "unicode simple fold", paths: []string{"Σ.conf", "ς.conf"}},
 		{name: "directory spelling", paths: []string{"Connections/a.conf", "connections/b.conf"}},
 		{name: "file and directory", paths: []string{"keys", "KEYS/id_ed25519"}},
 		{name: "duplicate", paths: []string{"config", "config"}},
@@ -317,6 +318,20 @@ func TestBuildRefusesCaseInsensitivePathCollisions(t *testing.T) {
 				t.Fatalf("Build = %v, want ErrUnsafePath", err)
 			}
 		})
+	}
+}
+
+func TestBuildKeepsDistinctUnicodeNamesOutsideTheSameSimpleFold(t *testing.T) {
+	contents := map[string][]byte{"İ.conf": []byte("dotted"), "i.conf": []byte("plain")}
+	manifest := remotesync.Manifest{
+		CreatedAt: "2026-08-31T00:00:00Z", Origin: "origin", Message: "Distinct Unicode names",
+		Files: []remotesync.Entry{entry("İ.conf", "dotted"), entry("i.conf", "plain")},
+	}
+	if err := remotesync.FinalizeManifest(&manifest, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := remotesync.Build(manifest, contents); err != nil {
+		t.Fatalf("Build = %v", err)
 	}
 }
 

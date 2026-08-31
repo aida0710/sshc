@@ -27,6 +27,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"unicode"
 
 	"sshc/internal/storage"
 )
@@ -563,7 +564,7 @@ func (paths *portablePathSet) add(name string) error {
 		if node.file {
 			return ErrUnsafePath
 		}
-		folded := strings.ToLower(segment)
+		folded := portableCaseFold(segment)
 		child := node.children[folded]
 		if child == nil {
 			child = &portablePathNode{spelling: segment, children: map[string]*portablePathNode{}}
@@ -580,6 +581,23 @@ func (paths *portablePathSet) add(name string) error {
 		}
 	}
 	return nil
+}
+
+// portableCaseFold returns one stable representative for every rune in a Go
+// simple-fold orbit. Lowercasing is not equivalent to case folding: it misses
+// pairs such as Greek sigma/final-sigma and merges unrelated dotted-I names.
+func portableCaseFold(segment string) string {
+	var folded strings.Builder
+	for _, current := range segment {
+		representative := current
+		for candidate := unicode.SimpleFold(current); candidate != current; candidate = unicode.SimpleFold(candidate) {
+			if candidate < representative {
+				representative = candidate
+			}
+		}
+		folded.WriteRune(representative)
+	}
+	return folded.String()
 }
 
 // checkMode は、このアプリケーションが書く二つの権限セットだけを受け付ける。それ
